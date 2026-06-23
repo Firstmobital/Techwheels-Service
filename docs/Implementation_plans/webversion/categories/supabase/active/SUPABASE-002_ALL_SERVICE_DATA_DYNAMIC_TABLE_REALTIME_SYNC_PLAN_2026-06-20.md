@@ -90,7 +90,7 @@ This prevents false rejection caused by non-business metadata defaults.
 
 ## Active Inclusion Conditions (Authority)
 
-At present, `public.all_service_data_dynamic` includes a row from `public.all_service_data` when either condition below is true:
+At present, `public.all_service_data_dynamic` includes a row from `public.all_service_data` when any condition below is true:
 
 1. **Condition A - Null-bundle rule**
 - `chassis_no` is present.
@@ -108,12 +108,21 @@ At present, `public.all_service_data_dynamic` includes a row from `public.all_se
 - Include rows when `last_service_type` is `NULL` or blank.
 - Include rows when `last_service_type` does not contain `Service` text.
 
+4. **Condition D - Robot update flag rule**
+- `chassis_no` is present.
+- Include rows when `updated_by_robot` is `NULL`.
+- Include rows when `updated_by_robot` is `FALSE`.
+- Include rows when source compatibility inputs represent the flag as blank.
+
 Effective implementation source:
 - `supabase/migrations/20260620210000_all_service_data_dynamic_add_yyyy_mm_dd_parser.sql` (historical parser enhancement for scheduled-date version)
 - Condition-B pivot to `assumed_next_service_date`: documented in this plan and pending dedicated migration rollout.
 - Condition-C (`last_service_type` null/blank/non-service-text) inclusion:
   - `supabase/migrations/20260621141000_all_service_data_dynamic_add_condition_c_last_service_type_filter.sql`
   - `supabase/sql_checks/20260621141000_all_service_data_dynamic_add_condition_c_last_service_type_filter_checks.sql`
+- Condition-D (`updated_by_robot` blank/null/false) inclusion:
+  - `supabase/migrations/20260623170000_all_service_data_dynamic_add_condition_d_updated_by_robot_filter.sql`
+  - `supabase/sql_checks/20260623170000_all_service_data_dynamic_add_condition_d_updated_by_robot_filter_checks.sql`
 
 ## Priority Ordering for Third-Party Consumers
 
@@ -283,6 +292,8 @@ Pre-trigger operating note:
 - [ ] **Task 2.4:** Verify idempotence and re-runnable deployment behavior.
 - [ ] **Task 2.8:** Add `updated_by_robot` and `updated_by_robot_at` columns to `public.all_service_data_dynamic`.
 - [ ] **Task 2.9:** Update `public.sync_all_service_data_dynamic()` and backfill path to project robot-audit fields from `public.all_service_data`.
+- [ ] **Task 2.10:** Add Condition D predicate branch for `updated_by_robot` inclusion (`NULL`/`FALSE` and compatibility-blank handling) with OR semantics against Conditions A/B/C.
+- [ ] **Task 2.11:** Add and run read-only checks for Condition D parity between source predicate result and `public.all_service_data_dynamic`.
 
 ### Phase 3: Validation, Monitoring, and Handover
 - [ ] **Task 3.1:** Validate row counts and row-level parity with source-side predicate query.
@@ -315,7 +326,7 @@ Pre-trigger operating note:
 - [ ] **Task 4.9:** Add reusable temp backfill script for PV/EV -> `all_service_data` with idempotent column guards.
 - [ ] **Task 4.10:** Add `engine_no` and `scheduled_next_service_type` target columns (created only if missing).
 - [ ] **Task 4.11:** Lock final source-to-target remap contract for temp backfill execution.
-- [ ] **Task 4.12:** Validate realtime source compatibility for `EV_Service_History`/`PV_Service_History` -> `all_service_data`.
+- [ ] **Task 4.12:** Validate realtime source compatibility for `EV_service_history_test`/`PV_service_history_test` -> `all_service_data`.
 - [ ] **Task 4.13:** Implement realtime update flow with one-row-per-chassis selector (business rule pending).
 
 ### Robot Update Audit Columns (`all_service_data`)
@@ -392,14 +403,14 @@ Safety contract:
 
 Scope:
 
-- Source event tables: `public."EV_Service_History"`, `public."PV_Service_History"`
+- Source event tables: `public."EV_service_history_test"`, `public."PV_service_history_test"`
 - Target table: `public.all_service_data`
 - Join key: normalized `chassis_no` (`upper(btrim(...))`)
 
 Validation result from authoritative schema audit:
 
 - The full approved remap list is not directly available from Service-History tables alone.
-- `EV_Service_History`/`PV_Service_History` contain only:
+- `EV_service_history_test`/`PV_service_history_test` contain only:
   - `id`, `chassis_no`, `registration_no`, `odometer_reading`, `serviced_at_dealer`, `sr_type`, `service_date_time`, `contact_full_name`, `created_at`
 
 Final mappings approved from Service-History:
@@ -891,6 +902,8 @@ EXECUTE FUNCTION public.sync_all_service_data_dynamic();
 ✅ 2.7 | Add dynamic vehicle_sale_date source projection | Platform Team | 2026-06-21 | 2026-06-21 | Implemented via supabase/migrations/20260621143000_all_service_data_dynamic_add_vehicle_sale_date.sql + supabase/sql_checks/20260621143000_all_service_data_dynamic_add_vehicle_sale_date_checks.sql
 ⏳ 2.8 | Add dynamic robot-audit columns | Platform Team | - | - | Pending migration to add updated_by_robot and updated_by_robot_at on all_service_data_dynamic
 ⏳ 2.9 | Project robot-audit fields in realtime sync + backfill | Platform Team | - | - | Pending sync function update and one-time dynamic-table backfill
+🔄 2.10 | Add Condition D predicate branch (`updated_by_robot` null/false/compat-blank) | Platform Team | 2026-06-23 | - | Migration drafted: supabase/migrations/20260623170000_all_service_data_dynamic_add_condition_d_updated_by_robot_filter.sql (pending DB apply)
+🔄 2.11 | Add Condition D parity checks | Platform Team | 2026-06-23 | - | Checks drafted: supabase/sql_checks/20260623170000_all_service_data_dynamic_add_condition_d_updated_by_robot_filter_checks.sql (pending run)
 ```
 
 ### Phase 3
@@ -908,7 +921,7 @@ EXECUTE FUNCTION public.sync_all_service_data_dynamic();
 ✅ 4.9 | Add reusable temp backfill script (PV/EV -> all_service_data) | Platform Team | 2026-06-22 | 2026-06-22 | Implemented via scripts/20260622_reusable_backfill_all_service_data_from_pv_ev.sql
 ✅ 4.10 | Add guarded target columns for remap | Platform Team | 2026-06-22 | 2026-06-22 | Implemented via supabase/migrations/20260622131000_all_service_data_add_engine_no_and_scheduled_next_service_type.sql and script-level IF NOT EXISTS guards
 ✅ 4.11 | Lock final remap contract | Platform Team | 2026-06-22 | 2026-06-22 | Mapping finalized in script and checks artifacts
-🔄 4.13 | Implement realtime update flow with one-row-per-chassis selector (rule finalized) | Platform Team | 2026-06-22 | - | Migration + checks updated via supabase/migrations/20260622180000_all_service_data_realtime_sync_from_service_history.sql and supabase/sql_checks/20260622180000_all_service_data_realtime_sync_from_service_history_checks.sql (Service-text-first + latest service_date_time selector + target last_service_date normalization to DD/MM/YY)
+✅ 4.13 | Implement realtime update flow with one-row-per-chassis selector (rule finalized) | Platform Team | 2026-06-22 | 2026-06-23 | Executed and validated through layered rollout: 20260623153000 (source retarget), 20260623195500 (contact-name compatibility), 20260623183000 (post-insert replay), 20260623193000 (delayed queue worker + backlog processing)
 ✅ 4.17 | Optimize Service_History realtime sync to typed service_date_time + reattach source triggers | Platform Team | 2026-06-22 | 2026-06-22 | Executed via supabase/migrations/20260622204500_optimize_service_history_sync_use_typed_datetime.sql + supabase/sql_checks/20260622204500_optimize_service_history_sync_use_typed_datetime_checks.sql; trigger/function presence and typed-path proof passed
 🔄 4.14 | Add canonical typed date companions + backfill (source + dynamic) | Platform Team | 2026-06-22 | - | Drafted via supabase/migrations/20260622193000_all_service_data_add_canonical_date_columns_backfill.sql (all_service_data + all_service_data_dynamic + dynamic sync projection update)
 🔄 4.15 | Upgrade Service-History sync to canonical typed writes | Platform Team | 2026-06-22 | - | Drafted via supabase/migrations/20260622194000_service_history_sync_write_canonical_datetime_columns.sql
@@ -982,6 +995,83 @@ EXECUTE FUNCTION public.sync_all_service_data_dynamic();
 ---
 
 ## Execution Notes
+
+### 2026-06-23 - Service-History winner-sync durability rollout executed and validated
+
+- Compatibility hotfix executed successfully:
+  - `supabase/migrations/20260623195500_service_history_refresh_contact_name_compat_fix.sql`
+  - Validation confirmed function now supports both source column variants:
+    - `contact_full_name`
+    - `conatct_full_name`
+  - Environment drift validated:
+    - `EV_service_history_test`: `has_contact_full_name=0`, `has_conatct_full_name=1`
+    - `PV_service_history_test`: `has_contact_full_name=1`, `has_conatct_full_name=0`
+- Post-insert replay migration executed successfully:
+  - `supabase/migrations/20260623183000_all_service_data_post_insert_history_sync_and_backfill.sql`
+  - Checks passed for trigger/function presence and sample parity (`target_matches_chosen=true`).
+  - Backfill coverage snapshot: `target_rows_with_any_history=95`.
+- Delayed queue migration executed successfully:
+  - `supabase/migrations/20260623193000_all_service_history_delayed_sync_queue_and_backfill.sql`
+  - Worker processing result: `processed_count=96`, `remaining_due_count=0`.
+  - Queue/worker checks passed:
+    - `all_service_history_sync_queue` table exists
+    - enqueue + processor functions exist
+    - trigger helpers enqueue and do not call direct refresh
+    - cron job active: `all-service-history-sync-queue-worker` on `* * * * *`
+  - Known chassis parity proof (`MAT627165JLJ40356`):
+    - chosen source id `cc7ea02f-2df7-4e2e-bc37-0b694a69cebb`
+    - target alignment passed (`target_matches_chosen=true`) for `last_service_type`, `last_service_date`, `last_service_km`
+
+Operational conclusion:
+
+- Final objective is met: winning Service-History candidate now updates target `all_service_data.last_service_type` and `all_service_data.last_service_date` correctly, including late-created targets and batch/delay race windows.
+
+### 2026-06-23 - Condition D implementation artifacts drafted (`updated_by_robot` null/false/blank)
+
+- Dedicated migration drafted:
+  - `supabase/migrations/20260623170000_all_service_data_dynamic_add_condition_d_updated_by_robot_filter.sql`
+- Dedicated read-only checks drafted:
+  - `supabase/sql_checks/20260623170000_all_service_data_dynamic_add_condition_d_updated_by_robot_filter_checks.sql`
+- Migration scope:
+  - updates `public.is_all_service_dynamic_match(public.all_service_data)` to add OR Condition D using compatibility-safe normalization on `updated_by_robot::text`
+  - preserves existing Conditions A/B/C branches
+  - updates function comment to include Condition D
+  - triggers immediate dynamic reconcile (`refresh_all_service_data_dynamic_full()` when available, fallback inline upsert/delete reconcile when not)
+- Status:
+  - artifacts are drafted in repo; DB apply and check execution pending.
+
+### 2026-06-23 - Authoritative dump audit + source-table retarget fix (`*_test`)
+
+- Audit source used (authority preserved):
+  - `local_folder/backups/chunks/full_database.sql.part_000`
+  - `local_folder/backups/chunks/full_database.sql.part_004`
+- Confirmed drift in active DB dump:
+  - Both legacy and test service-history tables exist.
+  - Realtime triggers were still attached to legacy sources:
+    - `trg_sync_all_service_data_from_ev_service_history` on `public."EV_Service_History"`
+    - `trg_sync_all_service_data_from_pv_service_history` on `public."PV_Service_History"`
+  - `public.refresh_all_service_data_from_service_history(text)` still selected from legacy tables.
+  - Function body contained stale `all_service_data.last_service_at` references not present in current authoritative `public.all_service_data` table definition.
+- Corrective migration artifact created (pending DB apply):
+  - `supabase/migrations/20260623153000_rewire_service_history_realtime_sync_to_test_tables.sql`
+- Read-only verification artifact created:
+  - `supabase/sql_checks/20260623153000_rewire_service_history_realtime_sync_to_test_tables_checks.sql`
+- Fix scope implemented in migration:
+  - rewires source union to `public."EV_service_history_test"` and `public."PV_service_history_test"`
+  - removes stale `last_service_at` writes/compare logic
+  - detaches legacy-table triggers and reattaches same trigger names on `*_test` tables
+- Late-target durability artifacts created (pending DB apply):
+  - `supabase/migrations/20260623183000_all_service_data_post_insert_history_sync_and_backfill.sql`
+  - `supabase/sql_checks/20260623183000_all_service_data_post_insert_history_sync_and_backfill_checks.sql`
+  - Adds `AFTER INSERT` trigger on `public.all_service_data` to invoke `public.refresh_all_service_data_from_service_history(NEW.chassis_no)`.
+  - Replays historical chassis keys once so old cases are auto-corrected from existing `*_test` history rows.
+- Validation outcomes (post-apply checks):
+  - function text checks passed: `uses_ev_test=true`, `uses_pv_test=true`, `still_uses_ev_legacy=false`, `still_uses_pv_legacy=false`, `still_references_last_service_at=false`
+  - trigger binding checks passed on test tables:
+    - `trg_sync_all_service_data_from_ev_service_history` on `public."EV_service_history_test"`
+    - `trg_sync_all_service_data_from_pv_service_history` on `public."PV_service_history_test"`
+  - legacy-trigger absence check returned `0` rows (no stale realtime trigger on legacy tables)
+  - source-row sanity: `EV_service_history_test=39`, `PV_service_history_test=704`
 
 ### 2026-06-22 - Service_History sync optimization (typed datetime path) executed and validated
 
@@ -1542,12 +1632,22 @@ DROP TABLE IF EXISTS public.all_service_data_dynamic;
 - `supabase/sql_checks/20260622124500_one_time_backfill_all_service_data_from_pv_ev_vehicle_data_checks.sql`
 - `supabase/migrations/20260622180000_all_service_data_realtime_sync_from_service_history.sql`
 - `supabase/sql_checks/20260622180000_all_service_data_realtime_sync_from_service_history_checks.sql`
+- `supabase/migrations/20260623153000_rewire_service_history_realtime_sync_to_test_tables.sql`
+- `supabase/sql_checks/20260623153000_rewire_service_history_realtime_sync_to_test_tables_checks.sql`
+- `supabase/migrations/20260623183000_all_service_data_post_insert_history_sync_and_backfill.sql`
+- `supabase/sql_checks/20260623183000_all_service_data_post_insert_history_sync_and_backfill_checks.sql`
+- `supabase/migrations/20260623193000_all_service_history_delayed_sync_queue_and_backfill.sql`
+- `supabase/sql_checks/20260623193000_all_service_history_delayed_sync_queue_and_backfill_checks.sql`
+- `supabase/migrations/20260623195500_service_history_refresh_contact_name_compat_fix.sql`
+- `supabase/sql_checks/20260623195500_service_history_refresh_contact_name_compat_fix_checks.sql`
 - `supabase/migrations/20260622193000_all_service_data_add_canonical_date_columns_backfill.sql`
 - `supabase/migrations/20260622194000_service_history_sync_write_canonical_datetime_columns.sql`
 - `supabase/sql_checks/20260622195000_all_service_data_canonical_dates_and_service_history_sync_checks.sql`
+- `supabase/migrations/20260623170000_all_service_data_dynamic_add_condition_d_updated_by_robot_filter.sql`
+- `supabase/sql_checks/20260623170000_all_service_data_dynamic_add_condition_d_updated_by_robot_filter_checks.sql`
 - `scripts/20260622_reusable_backfill_all_service_data_from_pv_ev.sql`
 
 ---
 
-**Last Updated:** 2026-06-22 (includes completed checkpoint 0.3.1 Service_History in-place datetime type correction) by GitHub Copilot  
-**Status:** 🟡 IN PROGRESS (Checkpoint 0.3.1 completed and validated: EV/PV Service_History `service_date_time` -> `timestamptz`)
+**Last Updated:** 2026-06-23 (Service-History winner-sync durability rollout executed: retarget + compat hotfix + post-insert replay + delayed queue worker) by GitHub Copilot  
+**Status:** 🟡 IN PROGRESS (Core winner-sync objective validated; remaining unrelated checklist items continue)
