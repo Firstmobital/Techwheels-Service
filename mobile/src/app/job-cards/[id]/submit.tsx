@@ -597,7 +597,8 @@ Estimates attached as per the warranty policy. Need your kind approval for the s
       if (serviceHistAttachment) attachments.push(serviceHistAttachment)
       if (walkaroundDoc) attachments.push(buildAttachment(walkaroundDoc, 'Vehicle_Walkaround.mp4'))
 
-      // Inject edited body back into HTML template (same as web version)
+      // Inject edited body back into HTML template
+      // Strategy: replace the amber description block (fef9f0 background) with user's edited text
       const safeBody = editedBody
         .replace(/&/g, '&amp;')
         .replace(/</g, '&lt;')
@@ -606,14 +607,20 @@ Estimates attached as per the warranty policy. Need your kind approval for the s
 
       let finalHtml = emailContent.html
       try {
+        // Match the entire amber description div block and replace its content
         const replaced = emailContent.html.replace(
-          /<p style="margin:0 0 6px 0;font-size:14px">Dear Sir,<\/p>[\s\S]*?<div style="margin-bottom:24px">/,
-          `<p style="margin:0 0 6px 0;font-size:14px">Dear Sir,</p>
-        <p style="margin:0 0 18px 0;font-size:14px">Greetings for the Day</p>
-        <div style="padding:14px 18px;background:#fef9f0;border-left:4px solid #f59e0b;border-radius:0 6px 6px 0;margin-bottom:24px;font-size:14px;line-height:1.8;white-space:pre-wrap">${safeBody}</div>
-        <div style="margin-bottom:24px">`
+          /(<div style="padding:14px 18px;background:#fef9f0[^"]*">[\s\S]*?<\/div>)/,
+          `<div style="padding:14px 18px;background:#fef9f0;border-left:4px solid #f59e0b;border-radius:0 6px 6px 0;margin-bottom:24px;font-size:14px;line-height:1.8;white-space:pre-wrap">${safeBody}</div>`
         )
-        finalHtml = replaced
+        if (replaced !== emailContent.html) {
+          finalHtml = replaced
+        } else {
+          // Fallback: insert after Greetings paragraph
+          finalHtml = emailContent.html.replace(
+            /(<p style="margin:0 0 18px 0;font-size:14px">Greetings for the Day<\/p>)[\s\S]*?(<div style="margin-bottom:24px">)/,
+            `$1\n<div style="padding:14px 18px;background:#fef9f0;border-left:4px solid #f59e0b;border-radius:0 6px 6px 0;margin-bottom:24px;font-size:14px;line-height:1.8;white-space:pre-wrap">${safeBody}</div>\n$2`
+          )
+        }
       } catch (e) {
         console.warn('HTML body injection failed, sending original template', e)
       }

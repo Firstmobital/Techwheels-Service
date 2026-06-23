@@ -2970,13 +2970,21 @@ Estimates attached as per the warranty policy. Need your kind approval for the s
         .replace(/>/g,'&gt;')
         .replace(/\n/g,'<br>')
       
-      const finalHtml = emailContent.html.replace(
-        /<p style="margin:0 0 6px 0;font-size:14px">Dear Sir,<\/p>.*?<div style="margin-bottom:24px">/s,
-        `<p style="margin:0 0 6px 0;font-size:14px">Dear Sir,</p>
-        <p style="margin:0 0 18px 0;font-size:14px">Greetings for the Day</p>
-        <div style="padding:14px 18px;background:#fef9f0;border-left:4px solid #f59e0b;border-radius:0 6px 6px 0;margin-bottom:24px;font-size:14px;line-height:1.8;white-space:pre-wrap">${safeBody}</div>
-        <div style="margin-bottom:24px">`
+      // Replace the amber description block with user's edited text
+      let finalHtml = emailContent.html
+      const replaced = emailContent.html.replace(
+        /(<div style="padding:14px 18px;background:#fef9f0[^"]*">[\s\S]*?<\/div>)/,
+        `<div style="padding:14px 18px;background:#fef9f0;border-left:4px solid #f59e0b;border-radius:0 6px 6px 0;margin-bottom:24px;font-size:14px;line-height:1.8;white-space:pre-wrap">${safeBody}</div>`
       )
+      if (replaced !== emailContent.html) {
+        finalHtml = replaced
+      } else {
+        // Fallback: insert after Greetings paragraph
+        finalHtml = emailContent.html.replace(
+          /(<p style="margin:0 0 18px 0;font-size:14px">Greetings for the Day<\/p>)[\s\S]*?(<div style="margin-bottom:24px">)/s,
+          `$1\n<div style="padding:14px 18px;background:#fef9f0;border-left:4px solid #f59e0b;border-radius:0 6px 6px 0;margin-bottom:24px;font-size:14px;line-height:1.8;white-space:pre-wrap">${safeBody}</div>\n$2`
+        )
+      }
 
       const sendRes = await sendClaimEmail(jobCardId, {
         to: ['vinodexodus@gmail.com'],
