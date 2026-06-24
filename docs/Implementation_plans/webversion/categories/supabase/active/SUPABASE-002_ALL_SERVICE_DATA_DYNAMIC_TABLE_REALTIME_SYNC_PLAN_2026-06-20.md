@@ -923,6 +923,7 @@ EXECUTE FUNCTION public.sync_all_service_data_dynamic();
 ✅ 4.11 | Lock final remap contract | Platform Team | 2026-06-22 | 2026-06-22 | Mapping finalized in script and checks artifacts
 ✅ 4.13 | Implement realtime update flow with one-row-per-chassis selector (rule finalized) | Platform Team | 2026-06-22 | 2026-06-23 | Executed and validated through layered rollout: 20260623153000 (source retarget), 20260623195500 (contact-name compatibility), 20260623183000 (post-insert replay), 20260623193000 (delayed queue worker + backlog processing)
 ✅ 4.17 | Optimize Service_History realtime sync to typed service_date_time + reattach source triggers | Platform Team | 2026-06-22 | 2026-06-22 | Executed via supabase/migrations/20260622204500_optimize_service_history_sync_use_typed_datetime.sql + supabase/sql_checks/20260622204500_optimize_service_history_sync_use_typed_datetime_checks.sql; trigger/function presence and typed-path proof passed
+✅ 4.18 | Soft-deprecate legacy Service_History source tables (write-block + deprecation comment) | Platform Team | 2026-06-24 | 2026-06-24 | Executed+verified and promoted: supabase/exec_success_migrations/sql/20260624103000_soft_deprecate_legacy_service_history_tables.sql + supabase/exec_success_migrations/sql_check/20260624103000_soft_deprecate_legacy_service_history_tables_checks.sql
 🔄 4.14 | Add canonical typed date companions + backfill (source + dynamic) | Platform Team | 2026-06-22 | - | Drafted via supabase/migrations/20260622193000_all_service_data_add_canonical_date_columns_backfill.sql (all_service_data + all_service_data_dynamic + dynamic sync projection update)
 🔄 4.15 | Upgrade Service-History sync to canonical typed writes | Platform Team | 2026-06-22 | - | Drafted via supabase/migrations/20260622194000_service_history_sync_write_canonical_datetime_columns.sql
 🔄 4.16 | Canonical date parse coverage + mismatch checks (source + dynamic) | Platform Team | 2026-06-22 | - | Drafted via supabase/sql_checks/20260622195000_all_service_data_canonical_dates_and_service_history_sync_checks.sql (includes dynamic typed-column parity)
@@ -995,6 +996,33 @@ EXECUTE FUNCTION public.sync_all_service_data_dynamic();
 ---
 
 ## Execution Notes
+
+### 2026-06-24 - Authority audit using baseline dump + post-dump overlay (current truth)
+
+- Baseline marker used:
+  - `supabase/evidence/authoritative_dump_manifest.json`
+  - `created_at_utc`: `2026-06-24T10:21:01Z`
+  - `sha256`: `56bc9448d6f2f00ff5be1bb7f6d4f6abb9de558893ec3e22c7e71de1205c839d`
+- Access mirror source for dump-sized reads:
+  - `local_folder/backups/chunks/full_database.sql.part_*`
+- Post-dump overlay source used:
+  - `supabase/evidence/post_dump_verified_promotions.md`
+  - Verified promotion window entry:
+    - prefix `20260624103000`
+    - migration `20260624103000_soft_deprecate_legacy_service_history_tables.sql`
+    - checks `20260624103000_soft_deprecate_legacy_service_history_tables_checks.sql`
+- Overlay execution status (validated via check output):
+  - Legacy source tables marked deprecated:
+    - `public."EV_Service_History"`
+    - `public."PV_Service_History"`
+  - App-facing write privileges removed on legacy tables for `anon` and `authenticated`.
+  - Realtime sync triggers remain correctly bound to test source tables:
+    - `public."EV_service_history_test"`
+    - `public."PV_service_history_test"`
+
+Operational truth note:
+
+- For this plan, current DB truth is interpreted as `baseline dump` + `post-dump verified overlay` until the next dump refresh resets overlay window.
 
 ### 2026-06-23 - Service-History winner-sync durability rollout executed and validated
 
@@ -1645,9 +1673,11 @@ DROP TABLE IF EXISTS public.all_service_data_dynamic;
 - `supabase/sql_checks/20260622195000_all_service_data_canonical_dates_and_service_history_sync_checks.sql`
 - `supabase/migrations/20260623170000_all_service_data_dynamic_add_condition_d_updated_by_robot_filter.sql`
 - `supabase/sql_checks/20260623170000_all_service_data_dynamic_add_condition_d_updated_by_robot_filter_checks.sql`
+- `supabase/exec_success_migrations/sql/20260624103000_soft_deprecate_legacy_service_history_tables.sql`
+- `supabase/exec_success_migrations/sql_check/20260624103000_soft_deprecate_legacy_service_history_tables_checks.sql`
 - `scripts/20260622_reusable_backfill_all_service_data_from_pv_ev.sql`
 
 ---
 
-**Last Updated:** 2026-06-23 (Service-History winner-sync durability rollout executed: retarget + compat hotfix + post-insert replay + delayed queue worker) by GitHub Copilot  
-**Status:** 🟡 IN PROGRESS (Core winner-sync objective validated; remaining unrelated checklist items continue)
+**Last Updated:** 2026-06-24 (Authority audit refreshed to baseline+overlay model; soft-deprecation of legacy Service_History tables executed+verified and promoted) by GitHub Copilot  
+**Status:** 🟡 IN PROGRESS (Core winner-sync objective validated; legacy source tables now soft-deprecated; remaining unrelated checklist items continue)
