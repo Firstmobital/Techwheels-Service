@@ -935,52 +935,46 @@ export default function ReceptionPage() {
         onChange={handleImportChange}
       />
 
-      {/* ── TOP CONTROL BAR ───────────────────────────────────────────────── */}
-      <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '0.6rem 0.85rem', marginBottom: '0.6rem', display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '0.5rem' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginRight: '0.5rem' }}>
-          <span style={{ fontSize: '0.95rem', fontWeight: 700, color: '#1e293b' }}>🏢 Reception</span>
-          <span style={{ fontSize: '0.72rem', color: '#94a3b8' }}>{locationFilterBaseEntries.length} records</span>
+      {/* ── COMPACT FILTER TOOLBAR ─────────────────────────────────────────── */}
+      <div className="cft">
+        <div className="cft__brand">
+          <span className="cft__icon">🏢</span>
+          <span className="cft__title">Reception</span>
+          <span className="cft__count">{locationFilterBaseEntries.length} records</span>
         </div>
+        <div className="cft__sep" />
 
         <DateRangeFilter range={dateRange} onChange={setDateRange} label="Period:" disabledPresets={disabledPeriodPresets} />
+        <div className="cft__sep" />
 
-        <span style={{ width: '1px', height: '22px', background: '#e2e8f0', flexShrink: 0 }} />
+        <span className="cft__label">Loc:</span>
+        <select className="cft__sel" value={selectedLocation} onChange={e => setSelectedLocation(e.target.value)}>
+          <option value="all">All ({locationFilterBaseEntries.length})</option>
+          {locationOptions.map(loc => (
+            <option key={loc} value={loc}>{loc} ({locationFilterBaseEntries.filter(e => getLocationLabel(e.branch) === loc).length})</option>
+          ))}
+        </select>
 
-        <span style={{ fontSize: '0.72rem', fontWeight: 600, color: '#64748b' }}>Loc:</span>
-        <button type="button" onClick={() => setSelectedLocation('all')}
-          className={`btn btn--sm ${selectedLocation === 'all' ? 'btn--primary' : 'btn--ghost'}`}
-          style={{ padding: '0.2rem 0.6rem', fontSize: '0.75rem' }}>
-          All ({locationFilterBaseEntries.length})
-        </button>
-        {locationOptions.map((location) => (
-          <button key={location} type="button" onClick={() => setSelectedLocation(location)}
-            className={`btn btn--sm ${selectedLocation === location ? 'btn--primary' : 'btn--ghost'}`}
-            style={{ padding: '0.2rem 0.6rem', fontSize: '0.75rem' }}>
-            {location} ({locationFilterBaseEntries.filter((entry) => getLocationLabel(entry.branch) === location).length})
-          </button>
-        ))}
+        <span className="cft__label">Portal:</span>
+        <select className="cft__sel" value={selectedFuelType} onChange={e => setSelectedFuelType(e.target.value)}>
+          <option value="all">All ({fuelFilterBaseEntries.length})</option>
+          {fuelTypeOptions.map(ft => (
+            <option key={ft} value={ft}>{ft} ({fuelFilterBaseEntries.filter(e => getEntryFuelTypeLabel(e) === ft).length})</option>
+          ))}
+        </select>
 
-        <span style={{ width: '1px', height: '22px', background: '#e2e8f0', flexShrink: 0 }} />
+        <span className="cft__label">SR Type:</span>
+        <select className="cft__sel" value={selectedServiceType} onChange={e => { setSelectedListFilter('default'); setSelectedServiceType(e.target.value) }}>
+          <option value="all">All ({serviceTypeBaseEntries.length})</option>
+          {serviceTypeOptions.map(st => (
+            <option key={st} value={st}>{st} ({serviceTypeCounts.get(st) ?? 0})</option>
+          ))}
+        </select>
 
-        <span style={{ fontSize: '0.72rem', fontWeight: 600, color: '#64748b' }}>Portal:</span>
-        <button type="button" onClick={() => setSelectedFuelType('all')}
-          className={`btn btn--sm ${selectedFuelType === 'all' ? 'btn--primary' : 'btn--ghost'}`}
-          style={{ padding: '0.2rem 0.6rem', fontSize: '0.75rem' }}>
-          All ({fuelFilterBaseEntries.length})
-        </button>
-        {fuelTypeOptions.map((fuelType) => (
-          <button key={fuelType} type="button" onClick={() => setSelectedFuelType(fuelType)}
-            className={`btn btn--sm ${selectedFuelType === fuelType ? 'btn--primary' : 'btn--ghost'}`}
-            style={{ padding: '0.2rem 0.6rem', fontSize: '0.75rem' }}>
-            {fuelType} ({fuelFilterBaseEntries.filter((entry) => getEntryFuelTypeLabel(entry) === fuelType).length})
-          </button>
-        ))}
-
-        <span style={{ flex: 1 }} />
+        <div className="cft__spacer" />
 
         {canImport && (
-          <button type="button" className="btn btn--soft" onClick={() => fileInputRef.current?.click()} disabled={uploading}
-            style={{ padding: '0.3rem 0.75rem', fontSize: '0.78rem' }}>
+          <button type="button" className="btn btn--soft cft__action" onClick={() => fileInputRef.current?.click()} disabled={uploading}>
             {uploading ? '⏳ Importing…' : '📥 Import XLSX'}
           </button>
         )}
@@ -989,49 +983,25 @@ export default function ReceptionPage() {
       {error && <div className="alert alert--err mb-gap" style={{ marginBottom: '0.5rem' }}>{error}</div>}
       {notice && <div className="alert alert--ok mb-gap" style={{ marginBottom: '0.5rem' }}>{notice}</div>}
 
-      <div className="statsrow">
-        <button
-          type="button"
-          onClick={() => setSelectedListFilter('today')}
-          disabled={todayEntries.length === 0}
-          className={`stat stat--btn ${selectedListFilter === 'today' ? 'is-active' : ''}`}
-        >
-          <div className="stat__n">{todayEntries.length}</div>
-          <div className="stat__l">Today</div>
+      {/* ── METRIC SUMMARY ROW ────────────────────────────────────────────── */}
+      <div className="msr">
+        <button type="button" onClick={() => setSelectedListFilter('today')} disabled={todayEntries.length === 0}
+          className={`msr__tile msr__tile--btn ${selectedListFilter === 'today' ? 'msr__tile--active' : ''}`}>
+          <div className="msr__n">{todayEntries.length}</div>
+          <div className="msr__l">Today</div>
         </button>
-
-        <button
-          type="button"
-          onClick={() => {
-            setSelectedListFilter('default')
-            setSelectedServiceType('all')
-          }}
-          className={`stat stat--btn ${selectedListFilter === 'default' && selectedServiceType === 'all' ? 'is-active' : ''}`}
-        >
-          <div className="stat__n">{serviceTypeBaseEntries.length}</div>
-          <div className="stat__l">All SR</div>
+        <button type="button" onClick={() => { setSelectedListFilter('default'); setSelectedServiceType('all') }}
+          className={`msr__tile msr__tile--btn ${selectedListFilter === 'default' && selectedServiceType === 'all' ? 'msr__tile--active' : ''}`}>
+          <div className="msr__n">{serviceTypeBaseEntries.length}</div>
+          <div className="msr__l">All SR</div>
         </button>
-
-        <div className="svcard">
-          <div className="svcard__head">
-            <span className="t">By service type</span>
-            <button type="button" className="all" onClick={() => setSelectedServiceType('all')}>Show all</button>
-          </div>
-          <div className="svchips scroll">
-            {serviceTypeOptions.map((serviceType) => (
-              <button
-                key={serviceType}
-                type="button"
-                onClick={() => setSelectedServiceType(serviceType)}
-                className={`svchip ${selectedServiceType === serviceType ? 'on' : ''}`}
-                title={serviceType}
-              >
-                <span className="n">{serviceTypeCounts.get(serviceType) ?? 0}</span>
-                <span className="ab">{getServiceTypeAbbreviation(serviceType)}</span>
-              </button>
-            ))}
-          </div>
-        </div>
+        {serviceTypeOptions.map(st => (
+          <button key={st} type="button" onClick={() => { setSelectedListFilter('default'); setSelectedServiceType(st) }}
+            className={`msr__tile msr__tile--btn ${selectedServiceType === st ? 'msr__tile--active' : ''}`}>
+            <div className="msr__n">{serviceTypeCounts.get(st) ?? 0}</div>
+            <div className="msr__l" title={st}>{getServiceTypeAbbreviation(st)}</div>
+          </button>
+        ))}
       </div>
 
       <div className="recep-grid">
