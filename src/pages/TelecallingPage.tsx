@@ -259,6 +259,7 @@ function TelecalerDashboard({ activeCampaign }: { activeCampaign: Campaign | nul
   const [editCallbackDate, setEditCallbackDate] = useState('')
   const [editStatus, setEditStatus] = useState('')
   const [editBusy, setEditBusy] = useState(false)
+  const [bookingConfirmation, setBookingConfirmation] = useState<{ id: number } | null>(null)
 
   // Fetch queue + summary on mount and campaign change
   const refreshQueue = useCallback(async () => {
@@ -311,7 +312,7 @@ function TelecalerDashboard({ activeCampaign }: { activeCampaign: Campaign | nul
     setBusy(true)
     setError(null)
     try {
-      await callEdge('update_status', {
+      const result = await callEdge('update_status', {
         assignment_id: currentAssignment.id,
         campaign_id: activeCampaign.id,
         status,
@@ -319,6 +320,11 @@ function TelecalerDashboard({ activeCampaign }: { activeCampaign: Campaign | nul
         booking_date: status === 'booked' ? bookingDate : undefined,
         callback_date: status === 'callback_later' ? callbackDate : undefined,
       })
+      // Show bridge confirmation when booking was auto-created
+      if (result?.service_booking_created && result?.service_booking_id) {
+        setBookingConfirmation({ id: result.service_booking_id })
+        setTimeout(() => setBookingConfirmation(null), 6000)
+      }
       // Reset + refresh
       setCurrentAssignment(null)
       setNotes('')
@@ -431,6 +437,22 @@ function TelecalerDashboard({ activeCampaign }: { activeCampaign: Campaign | nul
               onUpdateStatus={handleUpdateStatus}
             />
           )}
+        </div>
+      )}
+
+      {/* ── Booking Bridge Confirmation Toast ── */}
+      {bookingConfirmation && (
+        <div className="rounded-xl border border-green-200 bg-green-50 px-4 py-3 flex items-start gap-3 shadow-sm">
+          <span className="text-xl">✅</span>
+          <div className="flex-1">
+            <div className="font-semibold text-green-800 text-sm">Service Booking Created Automatically</div>
+            <div className="text-xs text-green-700 mt-0.5">
+              Booking #{bookingConfirmation.id} is now live in{' '}
+              <a href="/service-booking" className="underline font-semibold hover:text-green-900">Service Booking →</a>
+              {' '}with status <strong>New</strong>, ready for the service team to confirm.
+            </div>
+          </div>
+          <button onClick={() => setBookingConfirmation(null)} className="text-green-500 hover:text-green-700 text-lg leading-none">✕</button>
         </div>
       )}
 
