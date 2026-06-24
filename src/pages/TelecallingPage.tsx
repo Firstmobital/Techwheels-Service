@@ -253,6 +253,12 @@ function TelecalerDashboard({ activeCampaign }: { activeCampaign: Campaign | nul
   const [bookingDate, setBookingDate] = useState('')
   const [callbackDate, setCallbackDate] = useState('')
   const [activeView, setActiveView] = useState<'call' | 'queue' | 'summary'>('call')
+  const [editingId, setEditingId] = useState<number | null>(null)
+  const [editNotes, setEditNotes] = useState('')
+  const [editBookingDate, setEditBookingDate] = useState('')
+  const [editCallbackDate, setEditCallbackDate] = useState('')
+  const [editStatus, setEditStatus] = useState('')
+  const [editBusy, setEditBusy] = useState(false)
 
   // Fetch queue + summary on mount and campaign change
   const refreshQueue = useCallback(async () => {
@@ -325,6 +331,25 @@ function TelecalerDashboard({ activeCampaign }: { activeCampaign: Campaign | nul
       setError((err as Error).message)
     } finally {
       setBusy(false)
+    }
+  }
+
+  const handleEditSave = async (assignmentId: number) => {
+    setEditBusy(true)
+    try {
+      await callEdge('edit_assignment', {
+        assignment_id: assignmentId,
+        call_notes: editNotes,
+        booking_date: editBookingDate || undefined,
+        callback_date: editCallbackDate || undefined,
+        status: editStatus || undefined,
+      })
+      setEditingId(null)
+      refreshQueue()
+    } catch (err) {
+      setError((err as Error).message)
+    } finally {
+      setEditBusy(false)
     }
   }
 
@@ -420,7 +445,7 @@ function TelecalerDashboard({ activeCampaign }: { activeCampaign: Campaign | nul
             queue.map((asgn) => (
               <div key={asgn.id} className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
                 <div className="flex items-center justify-between">
-                  <div>
+                  <div className="flex-1 min-w-0">
                     <div className="font-medium text-gray-900">
                       {asgn.customer.first_name} {asgn.customer.last_name || ''}
                     </div>
@@ -434,10 +459,98 @@ function TelecalerDashboard({ activeCampaign }: { activeCampaign: Campaign | nul
                       <div className="mt-1 text-xs text-green-600">✅ Booked for {formatDate(asgn.booking_date)}</div>
                     )}
                   </div>
-                  <StatusBadge status={asgn.status} />
+                  <div className="flex items-center gap-2 ml-3 flex-shrink-0">
+                    <StatusBadge status={asgn.status} />
+                    <button
+                      onClick={() => {
+                        setEditingId(asgn.id)
+                        setEditNotes(asgn.call_notes || '')
+                        setEditBookingDate(asgn.booking_date || '')
+                        setEditCallbackDate(asgn.callback_date || '')
+                        setEditStatus(asgn.status)
+                      }}
+                      className="rounded-lg border border-gray-200 px-2.5 py-1 text-xs text-gray-500 hover:bg-gray-50 hover:text-gray-700"
+                    >
+                      ✏️ Edit
+                    </button>
+                  </div>
                 </div>
-                {asgn.call_notes && (
+                {asgn.call_notes && editingId !== asgn.id && (
                   <div className="mt-2 rounded bg-gray-50 px-3 py-1.5 text-xs text-gray-600">📝 {asgn.call_notes}</div>
+                )}
+                {/* ── Inline Edit Panel ── */}
+                {editingId === asgn.id && (
+                  <div className="mt-3 rounded-lg border border-blue-200 bg-blue-50 p-3 space-y-3">
+                    <div className="text-xs font-semibold text-blue-700 mb-1">Edit Assignment</div>
+                    {/* Status */}
+                    <div>
+                      <label className="text-xs font-medium text-gray-600">Status</label>
+                      <select
+                        value={editStatus}
+                        onChange={(e) => setEditStatus(e.target.value)}
+                        className="mt-1 w-full rounded-lg border border-gray-200 px-2.5 py-1.5 text-sm bg-white"
+                      >
+                        <option value="assigned">Assigned</option>
+                        <option value="booked">Booked</option>
+                        <option value="callback_later">Callback Later</option>
+                        <option value="no_answer">No Answer</option>
+                        <option value="not_reachable">Not Reachable</option>
+                        <option value="wrong_number">Wrong Number</option>
+                        <option value="not_interested">Not Interested</option>
+                      </select>
+                    </div>
+                    {/* Notes */}
+                    <div>
+                      <label className="text-xs font-medium text-gray-600">Remarks / Notes</label>
+                      <textarea
+                        value={editNotes}
+                        onChange={(e) => setEditNotes(e.target.value)}
+                        placeholder="Update call notes or remarks…"
+                        rows={2}
+                        className="mt-1 w-full rounded-lg border border-gray-200 px-2.5 py-1.5 text-sm resize-none"
+                      />
+                    </div>
+                    {/* Booking date if booked */}
+                    {editStatus === 'booked' && (
+                      <div>
+                        <label className="text-xs font-medium text-gray-600">Booking Date</label>
+                        <input
+                          type="date"
+                          value={editBookingDate}
+                          onChange={(e) => setEditBookingDate(e.target.value)}
+                          className="mt-1 w-full rounded-lg border border-gray-200 px-2.5 py-1.5 text-sm"
+                        />
+                      </div>
+                    )}
+                    {/* Callback date if callback_later */}
+                    {editStatus === 'callback_later' && (
+                      <div>
+                        <label className="text-xs font-medium text-gray-600">Callback Date</label>
+                        <input
+                          type="date"
+                          value={editCallbackDate}
+                          onChange={(e) => setEditCallbackDate(e.target.value)}
+                          className="mt-1 w-full rounded-lg border border-gray-200 px-2.5 py-1.5 text-sm"
+                        />
+                      </div>
+                    )}
+                    {/* Actions */}
+                    <div className="flex gap-2 pt-1">
+                      <button
+                        onClick={() => handleEditSave(asgn.id)}
+                        disabled={editBusy}
+                        className="rounded-lg bg-blue-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+                      >
+                        {editBusy ? 'Saving…' : '💾 Save'}
+                      </button>
+                      <button
+                        onClick={() => setEditingId(null)}
+                        className="rounded-lg border border-gray-200 px-4 py-1.5 text-sm text-gray-600 hover:bg-gray-50"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
                 )}
               </div>
             ))
