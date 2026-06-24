@@ -142,6 +142,8 @@ function TopNav({
   isDirty,
   effectiveDealerCode,
   effectiveDealerName,
+  impersonating,
+  onStopImpersonating,
 }: {
   visibleItems: NavItem[]
   pathname: string
@@ -151,6 +153,8 @@ function TopNav({
   isDirty: boolean
   effectiveDealerCode: string | null
   effectiveDealerName: string | null
+  impersonating?: { id: string; email: string; name: string } | null
+  onStopImpersonating?: () => void
 }) {
   const [open, setOpen] = useState<string | null>(null)
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false)
@@ -578,6 +582,35 @@ function TopNav({
         </div>
       </div>
     </div>
+
+    {/* ── Impersonation Banner ── */}
+    {impersonating && (
+      <div style={{
+        position: 'fixed', top: 0, left: 0, right: 0, zIndex: 9999,
+        background: 'linear-gradient(90deg, #b45309 0%, #d97706 100%)',
+        color: '#fff', display: 'flex', alignItems: 'center',
+        gap: '0.75rem', padding: '0.45rem 1.25rem',
+        fontSize: '0.8rem', fontWeight: 600, boxShadow: '0 2px 8px rgba(0,0,0,0.18)',
+      }}>
+        <span style={{ fontSize: '1rem' }}>👁</span>
+        <span>
+          Viewing as&nbsp;<strong>{impersonating.name || impersonating.email}</strong>
+          <span style={{ marginLeft: 8, opacity: 0.8, fontWeight: 400 }}>({impersonating.email})</span>
+          <span style={{ marginLeft: 8, opacity: 0.7, fontWeight: 400 }}>— you see exactly what this user sees</span>
+        </span>
+        <div style={{ flex: 1 }} />
+        <button
+          onClick={onStopImpersonating}
+          style={{
+            background: 'rgba(255,255,255,0.18)', border: '1px solid rgba(255,255,255,0.4)',
+            color: '#fff', borderRadius: 6, padding: '0.28rem 0.9rem',
+            fontSize: '0.76rem', fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap',
+          }}
+        >
+          ✕ Exit · Back to Admin
+        </button>
+      </div>
+    )}
   )
 }
 
@@ -591,7 +624,7 @@ function canAccessPath(pathname: string, allowedModules: Set<string>) {
   if (pathname.startsWith('/reports')) return hasAnyModuleAccess(allowedModules, ROUTE_MODULE_MAP['/reports'])
   if (pathname.startsWith('/import')) return hasAnyModuleAccess(allowedModules, ROUTE_MODULE_MAP['/import'])
   if (pathname.startsWith('/settings')) return hasAnyModuleAccess(allowedModules, ROUTE_MODULE_MAP['/settings'])
-  if (pathname.startsWith('/admin')) return hasAnyModuleAccess(allowedModules, ROUTE_MODULE_MAP['/admin'])
+  if (pathname.startsWith('/admin')) return true // Admin always reachable (incl. during impersonation)
   if (pathname.startsWith('/autodoc')) return hasAnyModuleAccess(allowedModules, ROUTE_MODULE_MAP['/autodoc'])
   if (pathname.startsWith('/reception')) return hasAnyModuleAccess(allowedModules, ROUTE_MODULE_MAP['/reception'])
   if (pathname.startsWith('/service-advisor')) return hasAnyModuleAccess(allowedModules, ROUTE_MODULE_MAP['/service-advisor'])
@@ -780,6 +813,23 @@ function AppInner() {
   const [effectiveDealerName, setEffectiveDealerName] = useState<string | null>(null)
   const [allowedModules, setAllowedModules] = useState<Set<string>>(new Set())
   const [permissionsLoading, setPermissionsLoading] = useState(true)
+  const [isAdmin, setIsAdmin] = useState(false)
+
+  // ── Impersonation (View-as-user) ─────────────────────────────────────────
+  const [impersonating, setImpersonating] = useState<{ id: string; email: string; name: string } | null>(() => {
+    try { return JSON.parse(localStorage.getItem('tw_impersonate') || 'null') } catch { return null }
+  })
+
+  const startImpersonating = (id: string, email: string, name: string) => {
+    const data = { id, email, name }
+    localStorage.setItem('tw_impersonate', JSON.stringify(data))
+    setImpersonating(data)
+  }
+
+  const stopImpersonating = () => {
+    localStorage.removeItem('tw_impersonate')
+    setImpersonating(null)
+  }
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => setUser(data.session?.user ?? null))
@@ -845,6 +895,7 @@ function AppInner() {
       const nextModules = new Set<string>(((permissionRows ?? []) as PermissionRow[]).map((row) => row.module_name))
 
       if (profile?.role === 'admin') {
+        if (mounted) setIsAdmin(true)
         ALL_ROUTE_MODULES.forEach((moduleName) => nextModules.add(moduleName))
 
         const { data: activeModules } = await supabase
@@ -864,12 +915,33 @@ function AppInner() {
       }
     }
 
-    void loadAccess()
+    // When impersonating: fetch that user's permissions via service role
+    async function loadImpersonatedAccess() {
+      if (!userId || !impersonating) return
+      setPermissionsLoading(true)
+      try {
+        const { data: rows } = await supabase
+          .rpc('get_permissions_for_user', { target_user_id: impersonating.id })
+        const modules = new Set<string>(((rows ?? []) as PermissionRow[]).map((r) => r.module_name))
+        if (mounted) {
+          setAllowedModules(modules)
+          setPermissionsLoading(false)
+        }
+      } catch {
+        if (mounted) setPermissionsLoading(false)
+      }
+    }
+
+    if (impersonating) {
+      void loadImpersonatedAccess()
+    } else {
+      void loadAccess()
+    }
 
     return () => {
       mounted = false
     }
-  }, [userId])
+  }, [userId, impersonating])
 
   const handleSignOut   = () => supabase.auth.signOut()
   const defaultRoute    = useMemo(() => getDefaultRoute(allowedModules), [allowedModules])
@@ -942,6 +1014,8 @@ VITE_SUPABASE_ANON_KEY=your-anon-key`}
           isDirty={isDirty}
           effectiveDealerCode={effectiveDealerCode}
           effectiveDealerName={effectiveDealerName}
+          impersonating={impersonating}
+          onStopImpersonating={stopImpersonating}
         />
 
         <main className="main">
@@ -1007,7 +1081,7 @@ VITE_SUPABASE_ANON_KEY=your-anon-key`}
                   path="/admin"
                   element={(
                     <RequireAccess allowedModules={allowedModules} modules={ROUTE_MODULE_MAP['/admin']}>
-                      <AdminPage />
+                      <AdminPage onViewAsUser={isAdmin ? startImpersonating : undefined} />
                     </RequireAccess>
                   )}
                 />
