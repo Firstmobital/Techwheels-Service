@@ -1284,331 +1284,138 @@ export default function ServiceAdvisorPage() {
         </div>
       )}
 
-      {/* Page Head */}
-      <div className="pagehead">
-        <div>
-          <p className="greet"><Icon name="admin" size={13} strokeWidth={2} className="icon-inline-shift" />Service Advisor</p>
-        <h1>
-          {isAdmin ? 'All assigned vehicles' : 
-            (rows.length > 0 && advisorCode && rows.some(row => row.sa_employee_code !== advisorCode)) ? 
-            'All dealer vehicles' : 
-            'My assigned vehicles'}
-        </h1>
-        <p>
-          {isAdmin ? (
-            <>
-              Showing all service advisor entries across all advisors.
-              {availableBranches.length > 0 && ` Use branch filter to manage your cases.`}
-            </>
-          ) : (rows.length > 0 && advisorCode && rows.some(row => row.sa_employee_code !== advisorCode)) ? (
-            <>
-              Showing all service advisor entries for your dealer. Manage and track all assigned cases.
-              {availableBranches.length > 0 && ` Use branch filter to refine your view.`}
-            </>
-          ) : (
-            <>
-              Showing only rows assigned to <b className="text-ink-2">{advisorName}</b> ({advisorCode}). For Accident entries, update JC Number and Customer Type, attach vehicle photos, then save.
-            </>
-          )}
-        </p>
+      {/* ── COMPACT FILTER TOOLBAR ─────────────────────────────────────────── */}
+      <div className="cft">
+        <div className="cft__brand">
+          <span className="cft__icon">🔧</span>
+          <span className="cft__title">Service Advisor</span>
+          <span className="cft__count">{displayedRows.length} JCs</span>
         </div>
+        <div className="cft__sep" />
+
+        <DateRangeFilter
+          range={dateRange}
+          onChange={setDateRange}
+          label="Period:"
+          disabledPresets={disabledPeriodPresets}
+          includeAll
+          defaultPreset="all"
+        />
+        <div className="cft__sep" />
+
+        {showLocationFilter && (
+          <>
+            <span className="cft__label">Loc:</span>
+            <select className="cft__sel" value={selectedBranch} onChange={e => setSelectedBranch(e.target.value)}>
+              <option value="all">All ({locationCountRows.length})</option>
+              {availableBranches.map(branch => (
+                <option key={branch} value={branch}>{branch} ({locationCountRows.filter(r => r.branch === branch).length})</option>
+              ))}
+            </select>
+            <div className="cft__sep" />
+          </>
+        )}
+
+        {showFuelTypeFilter && fuelTypeOptions.length > 0 && (
+          <>
+            <span className="cft__label">Portal:</span>
+            <select className="cft__sel" value={selectedFuelType} onChange={e => setSelectedFuelType(e.target.value)}>
+              <option value="all">All</option>
+              {fuelTypeOptions.map(ft => (
+                <option key={ft} value={ft}>{ft}</option>
+              ))}
+            </select>
+          </>
+        )}
+
+        {showCategoryFilter && (
+          <>
+            <span className="cft__label">Dept:</span>
+            <select className="cft__sel" value={selectedCategory} onChange={e => setSelectedCategory(e.target.value as typeof selectedCategory)}>
+              <option value="all">All ({categoryCounts.all})</option>
+              <option value="floor">Floor ({categoryCounts.floor})</option>
+              <option value="bodyshop">Bodyshop ({categoryCounts.bodyshop})</option>
+              <option value="others">Others ({categoryCounts.others})</option>
+              <option value="null">Null ({categoryCounts.null})</option>
+            </select>
+          </>
+        )}
+
+        {showAdvisorFilter && (
+          <>
+            <span className="cft__label">Advisor:</span>
+            <select className="cft__sel" value={selectedAdvisor} onChange={e => setSelectedAdvisor(e.target.value)}>
+              <option value="all">All ({advisorCountRows.length})</option>
+              {advisorOptions.map(a => (
+                <option key={a.value} value={a.value}>{a.label} ({a.count})</option>
+              ))}
+            </select>
+          </>
+        )}
+
+        <div className="cft__spacer" />
 
         {error && (
-          <div className="alert alert--error mt-12">
+          <div className="alert alert--error" style={{ margin: 0, fontSize: '0.76rem', padding: '0.25rem 0.6rem' }}>
             {error}
           </div>
         )}
-
-        {/* Branch & Fuel Type Filters (Admin or Multi-Dealer Users) */}
-        {showScopeFilters && (
-          <>
-              <DateRangeFilter
-                range={dateRange}
-                onChange={setDateRange}
-                label="Period:"
-                disabledPresets={disabledPeriodPresets}
-                includeAll
-                defaultPreset="all"
-              />
-
-              {showLocationFilter && (
-                <div className="toolbar toolbar--tight">
-                <span className="toolbar__label">Filter by location:</span>
-                <button
-                  type="button"
-                  onClick={() => setSelectedBranch('all')}
-                  className={`btn btn--sm ${
-                    selectedBranch === 'all'
-                      ? 'btn--primary'
-                      : 'btn--ghost'
-                  }`}
-                >
-                  All ({locationCountRows.length})
-                </button>
-                {availableBranches.map((branch) => {
-                  const count = locationCountRows.filter((row) => row.branch === branch).length
-                  return (
-                    <button
-                      key={branch}
-                      type="button"
-                      onClick={() => setSelectedBranch(branch)}
-                      className={`btn btn--sm ${
-                        selectedBranch === branch
-                          ? 'btn--primary'
-                          : 'btn--ghost'
-                      }`}
-                    >
-                      {branch} ({count})
-                    </button>
-                  )
-                })}
-              </div>
-            )}
-
-            {showAdvisorFilter && (
-              <div className="toolbar toolbar--tight">
-                <span className="toolbar__label">Filter by advisor:</span>
-                <select
-                  value={selectedAdvisor}
-                  onChange={(event) => setSelectedAdvisor(event.target.value)}
-                  className="sel sel--advisor-filter"
-                  aria-label="Filter by advisor"
-                >
-                  <option value="all">All ({advisorCountRows.length})</option>
-                  {advisorOptions.map((advisor) => (
-                    <option key={advisor.value} value={advisor.value}>
-                      {advisor.label} ({advisor.count})
-                    </option>
-                  ))}
-                </select>
-              </div>
-            )}
-
-            {showFuelTypeFilter && fuelTypeOptions.length > 0 && (
-              <div className="toolbar toolbar--tight">
-                <span className="toolbar__label">Filter by fuel type:</span>
-                <button
-                  type="button"
-                  onClick={() => setSelectedFuelType('all')}
-                  className={`btn btn--sm ${
-                    selectedFuelType === 'all'
-                      ? 'btn--primary'
-                      : 'btn--ghost'
-                  }`}
-                >
-                  All ({fuelTypeCountRows.length})
-                </button>
-                {fuelTypeOptions.map((fuelType) => {
-                  const count = fuelTypeCountRows.filter((row) => getFuelTypeLabel(row.fuel_type) === fuelType).length
-                  return (
-                    <button
-                      key={fuelType}
-                      type="button"
-                      onClick={() => setSelectedFuelType(fuelType)}
-                      className={`btn btn--sm ${
-                        selectedFuelType === fuelType
-                          ? 'btn--primary'
-                          : 'btn--ghost'
-                      }`}
-                    >
-                      {fuelType} ({count})
-                    </button>
-                  )
-                })}
-              </div>
-            )}
-
-            {showCategoryFilter && (
-              <div className="toolbar toolbar--tight">
-                <span className="toolbar__label">Filter by category:</span>
-                <button
-                  type="button"
-                  onClick={() => setSelectedCategory('all')}
-                  className={`btn btn--sm ${
-                    selectedCategory === 'all'
-                      ? 'btn--primary'
-                      : 'btn--ghost'
-                  }`}
-                >
-                  All ({categoryCounts.all})
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setSelectedCategory('floor')}
-                  className={`btn btn--sm ${
-                    selectedCategory === 'floor'
-                      ? 'btn--primary'
-                      : 'btn--ghost'
-                  }`}
-                >
-                  Floor ({categoryCounts.floor})
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setSelectedCategory('bodyshop')}
-                  className={`btn btn--sm ${
-                    selectedCategory === 'bodyshop'
-                      ? 'btn--primary'
-                      : 'btn--ghost'
-                  }`}
-                >
-                  Bodyshop ({categoryCounts.bodyshop})
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setSelectedCategory('others')}
-                  className={`btn btn--sm ${
-                    selectedCategory === 'others'
-                      ? 'btn--primary'
-                      : 'btn--ghost'
-                  }`}
-                >
-                  Others ({categoryCounts.others})
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setSelectedCategory('null')}
-                  className={`btn btn--sm ${
-                    selectedCategory === 'null'
-                      ? 'btn--primary'
-                      : 'btn--ghost'
-                  }`}
-                >
-                  Null ({categoryCounts.null})
-                </button>
-              </div>
-            )}
-          </>
-        )}
       </div>
 
-      {/* Summary Chips */}
+      {/* ── METRIC SUMMARY ROW ──────────────────────────────────────────────── */}
       {hasBaseRows && (
-        <div className="summary">
-          <button
-            type="button"
-            onClick={() => setSelectedSummaryCard('all')}
-            disabled={displayedRows.length === 0}
-            className={`schip schip--btn ${selectedSummaryCard === 'all' ? 'schip--active' : ''}`}
-          >
-            <span className="ic"><Icon name="admin" size={16} strokeWidth={2} /></span>
-            <div>
-              <div className="n">{displayedRows.length}</div>
-              <div className="l">{isAdmin ? 'Filtered entries' : 'Assigned'}</div>
-            </div>
+        <div className="msr">
+          <button type="button" onClick={() => setSelectedSummaryCard('all')} disabled={displayedRows.length === 0}
+            className={`msr__tile msr__tile--btn ${selectedSummaryCard === 'all' ? 'msr__tile--active' : ''}`}>
+            <div className="msr__n">{displayedRows.length}</div>
+            <div className="msr__l">{isAdmin ? 'Filtered' : 'Assigned'}</div>
           </button>
-
-          <button
-            type="button"
-            onClick={() => setSelectedSummaryCard('sr_type_pending')}
-            disabled={pendingServiceTypeCount === 0}
-            className={`schip schip--btn ${selectedSummaryCard === 'sr_type_pending' ? 'schip--active' : ''}`}
-          >
-            <span className="ic schip__ic--warn"><Icon name="doc" size={16} strokeWidth={2} /></span>
-            <div>
-              <div className="n">{pendingServiceTypeCount}</div>
-              <div className="l">SR Type</div>
-            </div>
+          <button type="button" onClick={() => setSelectedSummaryCard('sr_type_pending')} disabled={pendingServiceTypeCount === 0}
+            className={`msr__tile msr__tile--btn msr__tile--warn ${selectedSummaryCard === 'sr_type_pending' ? 'msr__tile--active' : ''}`}>
+            <div className="msr__n">{pendingServiceTypeCount}</div>
+            <div className="msr__l">SR Type ⚠</div>
           </button>
-
-          <button
-            type="button"
-            onClick={() => setSelectedSummaryCard('job_card_pending')}
-            disabled={pendingJobCardCount === 0}
-            className={`schip schip--btn ${selectedSummaryCard === 'job_card_pending' ? 'schip--active' : ''}`}
-          >
-            <span className="ic schip__ic--warn"><Icon name="doc" size={16} strokeWidth={2} /></span>
-            <div>
-              <div className="n">{pendingJobCardCount}</div>
-              <div className="l">Job Card</div>
-            </div>
+          <button type="button" onClick={() => setSelectedSummaryCard('job_card_pending')} disabled={pendingJobCardCount === 0}
+            className={`msr__tile msr__tile--btn msr__tile--warn ${selectedSummaryCard === 'job_card_pending' ? 'msr__tile--active' : ''}`}>
+            <div className="msr__n">{pendingJobCardCount}</div>
+            <div className="msr__l">JC Pending ⚠</div>
           </button>
-
-          <button
-            type="button"
-            onClick={() => setSelectedSummaryCard('estimate_pending')}
-            disabled={pendingEstimateCount === 0}
-            className={`schip schip--btn ${selectedSummaryCard === 'estimate_pending' ? 'schip--active' : ''}`}
-          >
-            <span className="ic schip__ic--warn"><Icon name="doc" size={16} strokeWidth={2} /></span>
-            <div>
-              <div className="n">{pendingEstimateCount}</div>
-              <div className="l">Estimate</div>
-            </div>
+          <button type="button" onClick={() => setSelectedSummaryCard('estimate_pending')} disabled={pendingEstimateCount === 0}
+            className={`msr__tile msr__tile--btn msr__tile--warn ${selectedSummaryCard === 'estimate_pending' ? 'msr__tile--active' : ''}`}>
+            <div className="msr__n">{pendingEstimateCount}</div>
+            <div className="msr__l">Estimate ⚠</div>
           </button>
-
-          <button
-            type="button"
-            onClick={() => setSelectedSummaryCard('invoice_pending')}
-            disabled={pendingInvoiceCount === 0}
-            className={`schip schip--btn ${selectedSummaryCard === 'invoice_pending' ? 'schip--active' : ''}`}
-          >
-            <span className="ic schip__ic--warn"><Icon name="doc" size={16} strokeWidth={2} /></span>
-            <div>
-              <div className="n">{pendingInvoiceCount}</div>
-              <div className="l">Invoice</div>
-            </div>
+          <button type="button" onClick={() => setSelectedSummaryCard('invoice_pending')} disabled={pendingInvoiceCount === 0}
+            className={`msr__tile msr__tile--btn msr__tile--warn ${selectedSummaryCard === 'invoice_pending' ? 'msr__tile--active' : ''}`}>
+            <div className="msr__n">{pendingInvoiceCount}</div>
+            <div className="msr__l">Invoice ⚠</div>
           </button>
-
-          <button
-            type="button"
-            onClick={() => setSelectedSummaryCard('no_technician')}
-            disabled={noTechnicianCount === 0}
-            className={`schip schip--btn ${selectedSummaryCard === 'no_technician' ? 'schip--active' : ''}`}
-          >
-            <span className="ic schip__ic--warn"><Icon name="clock" size={16} strokeWidth={2} /></span>
-            <div>
-              <div className="n">{noTechnicianCount}</div>
-              <div className="l">No Technician</div>
-            </div>
+          <button type="button" onClick={() => setSelectedSummaryCard('no_technician')} disabled={noTechnicianCount === 0}
+            className={`msr__tile msr__tile--btn msr__tile--warn ${selectedSummaryCard === 'no_technician' ? 'msr__tile--active' : ''}`}>
+            <div className="msr__n">{noTechnicianCount}</div>
+            <div className="msr__l">No Tech ⚠</div>
           </button>
-
-          <button
-            type="button"
-            onClick={() => setSelectedSummaryCard('floor_hold')}
-            disabled={floorHoldCount === 0}
-            className={`schip schip--btn ${selectedSummaryCard === 'floor_hold' ? 'schip--active' : ''}`}
-          >
-            <span className="ic schip__ic--warn"><Icon name="clock" size={16} strokeWidth={2} /></span>
-            <div>
-              <div className="n">{floorHoldCount}</div>
-              <div className="l">Floor Hold</div>
-            </div>
+          <button type="button" onClick={() => setSelectedSummaryCard('floor_hold')} disabled={holdCount === 0}
+            className={`msr__tile msr__tile--btn msr__tile--hold ${selectedSummaryCard === 'floor_hold' ? 'msr__tile--active' : ''}`}>
+            <div className="msr__n">{holdCount}</div>
+            <div className="msr__l">Hold</div>
           </button>
-
-          <button
-            type="button"
-            onClick={() => setSelectedSummaryCard('in_process')}
-            disabled={inProcessCount === 0}
-            className={`schip schip--btn ${selectedSummaryCard === 'in_process' ? 'schip--active' : ''}`}
-          >
-            <span className="ic schip__ic--warn"><Icon name="clock" size={16} strokeWidth={2} /></span>
-            <div>
-              <div className="n">{inProcessCount}</div>
-              <div className="l">In-Process</div>
-            </div>
+          <button type="button" onClick={() => setSelectedSummaryCard('in_process')} disabled={inProcessCount === 0}
+            className={`msr__tile msr__tile--btn ${selectedSummaryCard === 'in_process' ? 'msr__tile--active' : ''}`}>
+            <div className="msr__n">{inProcessCount}</div>
+            <div className="msr__l">In-Process</div>
           </button>
-
-          <button
-            type="button"
-            onClick={() => setSelectedSummaryCard('completed')}
-            disabled={completedCount === 0}
-            className={`schip schip--btn ${selectedSummaryCard === 'completed' ? 'schip--active' : ''}`}
-          >
-            <span className="ic"><Icon name="checksm" size={16} strokeWidth={2.4} /></span>
-            <div>
-              <div className="n">{completedCount}</div>
-              <div className="l">Completed</div>
-            </div>
+          <button type="button" onClick={() => setSelectedSummaryCard('completed')} disabled={completedCount === 0}
+            className={`msr__tile msr__tile--btn msr__tile--ok ${selectedSummaryCard === 'completed' ? 'msr__tile--active' : ''}`}>
+            <div className="msr__n">{completedCount}</div>
+            <div className="msr__l">Completed</div>
           </button>
-
-          <div className="schip">
-            <span className="ic"><Icon name="building" size={16} strokeWidth={2} /></span>
-            <div>
-              <div className="n">{advisorBranch}</div>
-              <div className="l">Branch</div>
+          {advisorBranch && (
+            <div className="msr__tile msr__tile--info">
+              <div className="msr__n" style={{ fontSize: '0.85rem' }}>{advisorBranch}</div>
+              <div className="msr__l">Branch</div>
             </div>
-          </div>
+          )}
         </div>
       )}
 
