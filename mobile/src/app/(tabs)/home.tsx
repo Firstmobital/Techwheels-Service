@@ -14,7 +14,7 @@ type ModuleRow = {
   icon: IconName
   iconBg: string
   description: string
-  route?: '/(tabs)/autodoc' | '/(tabs)/reports' | '/(tabs)/import' | '/(tabs)/admin' | '/(tabs)/settings' | '/(tabs)/floor-incharge' | '/(tabs)/reception'
+  route?: '/(tabs)/autodoc' | '/(tabs)/reports' | '/(tabs)/import' | '/(tabs)/admin' | '/(tabs)/settings' | '/(tabs)/floor-incharge' | '/(tabs)/reception' | '/(tabs)/telecalling'
 }
 
 const MODULES: ModuleRow[] = [
@@ -25,6 +25,7 @@ const MODULES: ModuleRow[] = [
   { key: 'settings', label: 'Settings', icon: 'settings', iconBg: 'bg-amber-100', description: 'Preferences & device', route: '/(tabs)/settings' },
   { key: 'reception', label: 'Reception', icon: 'check-circle', iconBg: 'bg-green-100', description: 'Vehicle intake & entries', route: '/(tabs)/reception' },
   { key: 'floor-incharge', label: 'Floor Incharge', icon: 'grid', iconBg: 'bg-indigo-100', description: 'Technician assignments · bay · status', route: '/(tabs)/floor-incharge' },
+  { key: 'telecalling', label: 'Telecalling', icon: 'phone', iconBg: 'bg-cyan-100', description: 'Service reminders · call leads', route: '/(tabs)/telecalling' },
 ]
 
 const DEFAULT_METRICS: HomeDashboardMetrics = {
@@ -86,7 +87,7 @@ export default function PlatformHomeScreen() {
       )
       // Admins get everything
       if ((profile as { role?: string } | null)?.role === 'admin') {
-        ;['reception','floor_incharge','service_advisor','reports','import','admin','settings','autodoc'].forEach(m => mods.add(m))
+        ;['reception','floor_incharge','service_advisor','reports','import','admin','settings','autodoc','telecalling'].forEach(m => mods.add(m))
       }
       if (mounted) setAllowedModules(mods)
     }
@@ -140,6 +141,7 @@ export default function PlatformHomeScreen() {
     settings:       'settings',
     reception:      'reception',
     'floor-incharge': 'floor_incharge',
+    'telecalling':    'telecalling',
   }
 
   const modulesWithStatus = useMemo(() => {
