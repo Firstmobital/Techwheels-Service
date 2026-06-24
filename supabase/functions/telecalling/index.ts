@@ -368,6 +368,61 @@ export default async function handler(req: Request) {
       }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
     }
 
+
+    // ── ACTION: edit_assignment (update notes/date on an existing assignment) ──
+    if (action === 'edit_assignment') {
+      const { assignment_id, call_notes, booking_date, callback_date, status } = body
+      if (!assignment_id) throw new Error('Missing assignment_id')
+
+      // Verify this assignment belongs to the calling user
+      const { data: existing } = await serviceClient
+        .from('telecall_assignments')
+        .select('id, assigned_to, status, campaign_id')
+        .eq('id', assignment_id)
+        .single()
+
+      if (!existing) throw new Error('Assignment not found')
+      if (existing.assigned_to !== userEmail) throw new Error('Not authorised to edit this assignment')
+
+      const update: Record<string, unknown> = {
+        updated_at: new Date().toISOString(),
+      }
+
+      if (call_notes !== undefined) update.call_notes = call_notes
+      if (booking_date !== undefined) update.booking_date = booking_date || null
+      if (callback_date !== undefined) update.callback_date = callback_date || null
+      if (status !== undefined) update.status = status
+
+      const { error: updateErr } = await serviceClient
+        .from('telecall_assignments')
+        .update(update)
+        .eq('id', assignment_id)
+
+      if (updateErr) throw new Error(`Failed to edit: ${updateErr.message}`)
+
+      // Refresh campaign counts if status changed
+      if (status !== undefined) {
+        const { data: counts } = await serviceClient
+          .from('telecall_assignments')
+          .select('status')
+          .eq('campaign_id', existing.campaign_id)
+
+        if (counts) {
+          const pending = counts.filter(c => ['pending','assigned','calling'].includes(c.status)).length
+          const completed = counts.filter(c => ['completed','no_answer','not_reachable','wrong_number','not_interested'].includes(c.status)).length
+          const booked = counts.filter(c => c.status === 'booked').length
+          await serviceClient
+            .from('telecall_campaigns')
+            .update({ pending_count: pending, completed_count: completed, booked_count: booked, updated_at: new Date().toISOString() })
+            .eq('id', existing.campaign_id)
+        }
+      }
+
+      return new Response(JSON.stringify({ success: true, message: 'Assignment updated' }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      })
+    }
+
     // ── ACTION: my_queue (telecaler's active assignments) ─────────────────
     if (action === 'my_queue') {
       const { campaign_id } = body
