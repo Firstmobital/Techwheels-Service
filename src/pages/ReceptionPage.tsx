@@ -1244,6 +1244,11 @@ export default function ReceptionPage() {
                       <span className="mono recep-item__reg">{entry.reg_number}</span>
                       <span className={[`pill`, sourceTone(entry.source)].join(' ').trim()}>{entry.source}</span>
                     </div>
+                    {entry.jc_number && (
+                      <div style={{ fontSize: '11px', color: '#6b7280', marginTop: '2px', fontFamily: 'monospace', letterSpacing: '0.03em' }}>
+                        JC# <span style={{ fontWeight: 600, color: '#374151' }}>{entry.jc_number}</span>
+                      </div>
+                    )}
                     <div className="recep-item__meta">
                       <span>{entry.model ?? '-'}</span>
                       <span className="dot2" />
