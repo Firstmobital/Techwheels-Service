@@ -1138,77 +1138,59 @@ export default function FloorInchargePage() {
         </div>
       )}
 
-      {/* ── TOP CONTROL BAR ───────────────────────────────────────────────── */}
-      <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '0.6rem 0.85rem', marginBottom: '0.6rem', display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '0.5rem' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginRight: '0.5rem' }}>
-          <span style={{ fontSize: '0.95rem', fontWeight: 700, color: '#1e293b' }}>🏭 Floor Incharge</span>
-          <span style={{ fontSize: '0.72rem', color: '#94a3b8' }}>{searchScopedRows.length} JCs</span>
+      {/* ── COMPACT FILTER TOOLBAR ─────────────────────────────────────────── */}
+      <div className="cft">
+        <div className="cft__brand">
+          <span className="cft__icon">🏭</span>
+          <span className="cft__title">Floor Incharge</span>
+          <span className="cft__count">{searchScopedRows.length} JCs</span>
         </div>
+        <div className="cft__sep" />
 
         <DateRangeFilter range={dateRange} onChange={setDateRange} label="Period:" />
+        <div className="cft__sep" />
 
-        <span style={{ width: '1px', height: '22px', background: '#e2e8f0', flexShrink: 0 }} />
+        <span className="cft__label">Loc:</span>
+        <select className="cft__sel" value={branchFilter} onChange={e => setBranchFilter(e.target.value)}>
+          <option value="all">All ({searchScopedRows.length})</option>
+          {branches.map(branch => (
+            <option key={branch} value={branch}>{branch} ({searchScopedRows.filter(jc => getLocationLabel(jc.location ?? jc.branch) === branch).length})</option>
+          ))}
+        </select>
 
-        <span style={{ fontSize: '0.72rem', fontWeight: 600, color: '#64748b' }}>Loc:</span>
-        <button type="button" onClick={() => setBranchFilter('all')}
-          className={`btn btn--sm ${branchFilter === 'all' ? 'btn--primary' : 'btn--ghost'}`}
-          style={{ padding: '0.2rem 0.6rem', fontSize: '0.75rem' }}>
-          All ({searchScopedRows.length})
-        </button>
-        {branches.map((branch) => (
-          <button key={branch} type="button" onClick={() => setBranchFilter(branch)}
-            className={`btn btn--sm ${branchFilter === branch ? 'btn--primary' : 'btn--ghost'}`}
-            style={{ padding: '0.2rem 0.6rem', fontSize: '0.75rem' }}>
-            {branch} ({searchScopedRows.filter((jc) => getLocationLabel(jc.location ?? jc.branch) === branch).length})
-          </button>
-        ))}
+        <span className="cft__label">Portal:</span>
+        <select className="cft__sel" value={fuelTypeFilter} onChange={e => setFuelTypeFilter(e.target.value)}>
+          <option value="all">All ({statusScopedBranchRows.length})</option>
+          {fuelTypeOptions.map(ft => (
+            <option key={ft} value={ft}>{ft} ({statusScopedBranchRows.filter(jc => getPortalLabel(jc.portal ?? jc.fuel_type) === ft).length})</option>
+          ))}
+        </select>
 
-        <span style={{ width: '1px', height: '22px', background: '#e2e8f0', flexShrink: 0 }} />
-
-        <span style={{ fontSize: '0.72rem', fontWeight: 600, color: '#64748b' }}>Portal:</span>
-        <button type="button" onClick={() => setFuelTypeFilter('all')}
-          className={`btn btn--sm ${fuelTypeFilter === 'all' ? 'btn--primary' : 'btn--ghost'}`}
-          style={{ padding: '0.2rem 0.6rem', fontSize: '0.75rem' }}>
-          All ({statusScopedBranchRows.length})
-        </button>
-        {fuelTypeOptions.map((fuelType) => (
-          <button key={fuelType} type="button" onClick={() => setFuelTypeFilter(fuelType)}
-            className={`btn btn--sm ${fuelTypeFilter === fuelType ? 'btn--primary' : 'btn--ghost'}`}
-            style={{ padding: '0.2rem 0.6rem', fontSize: '0.75rem' }}>
-            {fuelType} ({statusScopedBranchRows.filter((jc) => getPortalLabel(jc.portal ?? jc.fuel_type) === fuelType).length})
-          </button>
-        ))}
-
-        <span style={{ width: '1px', height: '22px', background: '#e2e8f0', flexShrink: 0 }} />
-
-        <span style={{ fontSize: '0.72rem', fontWeight: 600, color: '#64748b' }}>Tech:</span>
-        <select value={technicianFilter} onChange={(event) => setTechnicianFilter(event.target.value)}
-          className="sel sel--advisor-filter" aria-label="Filter by technician"
-          style={{ padding: '0.2rem 0.5rem', fontSize: '0.75rem', minWidth: '140px' }}>
+        <span className="cft__label">Tech:</span>
+        <select className="cft__sel" value={technicianFilter} onChange={e => setTechnicianFilter(e.target.value)}>
           <option value="all">All ({statusScopedFuelRows.length})</option>
-          {technicianOptions.map((option) => {
-            const count = statusScopedFuelRows.filter((jc) => {
-              const assignment = assignments[jc.assignment_key]
-              return getTechnicianFilterKey(assignment) === option.value
-            }).length
-            return <option key={option.value} value={option.value}>{option.label} ({count})</option>
+          {technicianOptions.map(opt => {
+            const cnt = statusScopedFuelRows.filter(jc => getTechnicianFilterKey(assignments[jc.assignment_key]) === opt.value).length
+            return <option key={opt.value} value={opt.value}>{opt.label} ({cnt})</option>
           })}
         </select>
       </div>
 
-      {/* ── STATUS TABS ──────────────────────────────────────────────────── */}
-      <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap', marginBottom: '0.6rem' }}>
+      {/* ── METRIC SUMMARY ROW (status tabs) ─────────────────────────────── */}
+      <div className="msr">
         {([
-          { key: 'all',            label: 'All',        count: scopedJobCards.length,  color: '#6366f1', bg: '#eef2ff' },
-          { key: 'unassigned',     label: 'Unassigned', count: unassignedCount,        color: '#ef4444', bg: '#fef2f2' },
-          { key: 'assigned',       label: 'Assigned',   count: assignedCount,          color: '#2563eb', bg: '#eff6ff' },
-          { key: 'hold',           label: 'Hold',       count: holdCount,              color: '#f59e0b', bg: '#fffbeb' },
-          { key: 'work_inprocess', label: 'In-Process', count: inProcessCount,         color: '#0ea5e9', bg: '#f0f9ff' },
-          { key: 'completed',      label: 'Completed',  count: completedCount,         color: '#16a34a', bg: '#f0fdf4' },
-        ] as { key: typeof assignmentView; label: string; count: number; color: string; bg: string }[]).map(({ key, label, count, color, bg }) => (
+          { key: 'all',            label: 'All',        count: scopedJobCards.length,  accent: '#6366f1' },
+          { key: 'unassigned',     label: 'Unassigned', count: unassignedCount,        accent: '#ef4444' },
+          { key: 'assigned',       label: 'Assigned',   count: assignedCount,          accent: '#2563eb' },
+          { key: 'hold',           label: 'Hold',       count: holdCount,              accent: '#f59e0b' },
+          { key: 'work_inprocess', label: 'In-Process', count: inProcessCount,         accent: '#0ea5e9' },
+          { key: 'completed',      label: 'Completed',  count: completedCount,         accent: '#16a34a' },
+        ] as { key: typeof assignmentView; label: string; count: number; accent: string }[]).map(({ key, label, count, accent }) => (
           <button key={key} type="button" onClick={() => setAssignmentView(key)} disabled={count === 0}
-            style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', padding: '0.3rem 0.75rem', background: assignmentView === key ? color : bg, color: assignmentView === key ? '#fff' : color, border: `1.5px solid ${color}44`, borderRadius: '20px', fontWeight: assignmentView === key ? 700 : 500, fontSize: '0.78rem', cursor: count === 0 ? 'not-allowed' : 'pointer', opacity: count === 0 ? 0.5 : 1, transition: 'all 0.15s' }}>
-            <span style={{ fontWeight: 800 }}>{count}</span> {label}
+            className={`msr__tile msr__tile--btn ${assignmentView === key ? 'msr__tile--active' : ''}`}
+            style={assignmentView === key ? { borderTopColor: accent } : {}}>
+            <div className="msr__n" style={{ color: accent }}>{count}</div>
+            <div className="msr__l">{label}</div>
           </button>
         ))}
       </div>
