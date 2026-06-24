@@ -346,7 +346,13 @@ Operational expectation:
 - Set `updated_by_robot_at` to the write timestamp for the same robot-driven mutation.
 - For non-robot/manual writes, keep `updated_by_robot = false` (or `NULL` if not asserted) and `updated_by_robot_at = NULL`.
 
-### Temporary Backfill Script Contract (PV/EV -> `all_service_data`)
+### Temporary Backfill Script Contract (PV/EV -> `all_service_data`) - Historical (Retired)
+
+Retirement update (2026-06-24):
+
+- This temporary backfill workflow is no longer operational.
+- Legacy source tables `public."EV_Vehicle_Data"` and `public."PV_Vehicle_Data"` are now scheduled for drop.
+- Historical script remains in repo only for audit traceability and must not be used in active operations.
 
 Execution mode:
 
@@ -924,6 +930,9 @@ EXECUTE FUNCTION public.sync_all_service_data_dynamic();
 ✅ 4.13 | Implement realtime update flow with one-row-per-chassis selector (rule finalized) | Platform Team | 2026-06-22 | 2026-06-23 | Executed and validated through layered rollout: 20260623153000 (source retarget), 20260623195500 (contact-name compatibility), 20260623183000 (post-insert replay), 20260623193000 (delayed queue worker + backlog processing)
 ✅ 4.17 | Optimize Service_History realtime sync to typed service_date_time + reattach source triggers | Platform Team | 2026-06-22 | 2026-06-22 | Executed via supabase/migrations/20260622204500_optimize_service_history_sync_use_typed_datetime.sql + supabase/sql_checks/20260622204500_optimize_service_history_sync_use_typed_datetime_checks.sql; trigger/function presence and typed-path proof passed
 ✅ 4.18 | Soft-deprecate legacy Service_History source tables (write-block + deprecation comment) | Platform Team | 2026-06-24 | 2026-06-24 | Executed+verified and promoted: supabase/exec_success_migrations/sql/20260624103000_soft_deprecate_legacy_service_history_tables.sql + supabase/exec_success_migrations/sql_check/20260624103000_soft_deprecate_legacy_service_history_tables_checks.sql
+✅ 4.19 | Enforce robot-flag freshness for +2 due rows (`assumed_next_service_date = current_date + 2`) | Platform Team | 2026-06-24 | 2026-06-24 | Executed+verified+promoted: supabase/exec_success_migrations/sql/20260624170000_all_service_data_robot_flag_freshness_for_plus2_due.sql + supabase/exec_success_migrations/sql_check/20260624170000_all_service_data_robot_flag_freshness_for_plus2_due_checks.sql (`reconcile` updated 3 rows; `stale_robot_true_plus2_rows=0`; parity 288=288)
+✅ 4.20 | Schedule daily IST reconcile for robot-flag freshness | Platform Team | 2026-06-24 | 2026-06-24 | Executed+verified+promoted: supabase/exec_success_migrations/sql/20260624173000_schedule_daily_ist_robot_flag_freshness_reconcile.sql + supabase/exec_success_migrations/sql_check/20260624173000_schedule_daily_ist_robot_flag_freshness_reconcile_checks.sql (`matching_job_rows=1`; cron `30 18 * * *` UTC = `00:00 IST`)
+✅ 4.21 | Drop legacy service/vehicle source tables (`EV_Service_History`, `PV_Service_History`, `EV_Vehicle_Data`, `PV_Vehicle_Data`) | Platform Team | 2026-06-24 | 2026-06-24 | Executed+verified+promoted: supabase/exec_success_migrations/sql/20260624190000_drop_legacy_service_and_vehicle_source_tables.sql + supabase/exec_success_migrations/sql_check/20260624190000_drop_legacy_service_and_vehicle_source_tables_checks.sql (all four `to_regclass` checks null; `dropped_table_count=4`; `remaining_table_count=0`; no rows in guardrail scans)
 🔄 4.14 | Add canonical typed date companions + backfill (source + dynamic) | Platform Team | 2026-06-22 | - | Drafted via supabase/migrations/20260622193000_all_service_data_add_canonical_date_columns_backfill.sql (all_service_data + all_service_data_dynamic + dynamic sync projection update)
 🔄 4.15 | Upgrade Service-History sync to canonical typed writes | Platform Team | 2026-06-22 | - | Drafted via supabase/migrations/20260622194000_service_history_sync_write_canonical_datetime_columns.sql
 🔄 4.16 | Canonical date parse coverage + mismatch checks (source + dynamic) | Platform Team | 2026-06-22 | - | Drafted via supabase/sql_checks/20260622195000_all_service_data_canonical_dates_and_service_history_sync_checks.sql (includes dynamic typed-column parity)
@@ -996,6 +1005,75 @@ EXECUTE FUNCTION public.sync_all_service_data_dynamic();
 ---
 
 ## Execution Notes
+
+### 2026-06-24 - Full legacy source retirement (all 4 legacy tables) executed, verified, and promoted
+
+- Decision update:
+  - Legacy tables are approved for immediate retirement to remove operational confusion.
+  - Scope: `public."EV_Service_History"`, `public."PV_Service_History"`, `public."EV_Vehicle_Data"`, `public."PV_Vehicle_Data"`.
+- Executed migration (now promoted):
+  - `supabase/exec_success_migrations/sql/20260624190000_drop_legacy_service_and_vehicle_source_tables.sql`
+- Executed read-only verification (now promoted):
+  - `supabase/exec_success_migrations/sql_check/20260624190000_drop_legacy_service_and_vehicle_source_tables_checks.sql`
+- Validation gates in checks file:
+  - all four tables absent via `to_regclass(...) is null`
+  - hard assertion summary: dropped count 4, remaining count 0
+  - no public function text references to dropped table names
+  - no triggers attached to dropped table names
+- Validation snapshot (reported from execution):
+  - `ev_service_history_regclass = null`
+  - `pv_service_history_regclass = null`
+  - `ev_vehicle_data_regclass = null`
+  - `pv_vehicle_data_regclass = null`
+  - `dropped_table_count = 4`
+  - `remaining_table_count = 0`
+  - no rows returned in remaining guardrail scans
+
+### 2026-06-24 - Daily IST pg_cron schedule for robot-flag freshness executed, verified, and promoted
+
+- Executed migration (now promoted):
+  - `supabase/exec_success_migrations/sql/20260624173000_schedule_daily_ist_robot_flag_freshness_reconcile.sql`
+- Executed read-only verification (now promoted):
+  - `supabase/exec_success_migrations/sql_check/20260624173000_schedule_daily_ist_robot_flag_freshness_reconcile_checks.sql`
+- Job contract:
+  - job name: `all-service-data-robot-flag-freshness-daily-ist`
+  - schedule: `30 18 * * *` (UTC), which aligns to `00:00 IST` daily
+  - command: `SELECT public.reconcile_all_service_data_robot_flag_freshness_for_plus2_due();`
+- Idempotence behavior in migration:
+  - checks `pg_cron` extension presence
+  - unschedules existing same-name job when present
+  - re-schedules canonical daily job definition
+- Validation snapshot:
+  - `pg_cron` present (`extversion=1.6.4`)
+  - job present and active in `cron.job`
+  - `matching_job_rows=1`
+
+### 2026-06-24 - Robot-flag freshness guard for +2 due condition executed, verified, and promoted
+
+- Executed migration (now promoted):
+  - `supabase/exec_success_migrations/sql/20260624170000_all_service_data_robot_flag_freshness_for_plus2_due.sql`
+- Executed read-only verification (now promoted):
+  - `supabase/exec_success_migrations/sql_check/20260624170000_all_service_data_robot_flag_freshness_for_plus2_due_checks.sql`
+- Rule enforced in source table (`public.all_service_data`):
+  - when `assumed_next_service_date = current_date + 2`
+  - and `updated_by_robot = true`
+  - and `updated_by_robot_at` is null or not today (IST),
+  - then force `updated_by_robot = false` and `updated_by_robot_at = NULL`.
+- Implementation details:
+  - BEFORE trigger function: `public.enforce_all_service_data_robot_flag_freshness_for_plus2_due()`
+  - Trigger: `trg_enforce_all_service_data_robot_flag_freshness_for_plus2_due` on `public.all_service_data`
+  - Reconcile helper: `public.reconcile_all_service_data_robot_flag_freshness_for_plus2_due()`
+  - Migration includes immediate reconcile call so existing stale rows are corrected once at apply time.
+- Dynamic-table effect:
+  - no direct dynamic-table trigger change required; existing source->dynamic sync reflects `updated_by_robot=false` automatically after source update.
+- Validation snapshot:
+  - immediate reconcile returned `3` updated rows
+  - `stale_robot_true_plus2_rows=0`
+  - parity check matched: `expected_false_count=288`, `actual_false_count=288`
+
+Operational caveat:
+
+- Trigger handles future row writes. For day-rollover correction when rows are not written, run reconcile helper periodically (manual or cron).
 
 ### 2026-06-24 - Authority audit using baseline dump + post-dump overlay (current truth)
 
@@ -1673,11 +1751,17 @@ DROP TABLE IF EXISTS public.all_service_data_dynamic;
 - `supabase/sql_checks/20260622195000_all_service_data_canonical_dates_and_service_history_sync_checks.sql`
 - `supabase/migrations/20260623170000_all_service_data_dynamic_add_condition_d_updated_by_robot_filter.sql`
 - `supabase/sql_checks/20260623170000_all_service_data_dynamic_add_condition_d_updated_by_robot_filter_checks.sql`
+- `supabase/exec_success_migrations/sql/20260624170000_all_service_data_robot_flag_freshness_for_plus2_due.sql`
+- `supabase/exec_success_migrations/sql_check/20260624170000_all_service_data_robot_flag_freshness_for_plus2_due_checks.sql`
+- `supabase/exec_success_migrations/sql/20260624173000_schedule_daily_ist_robot_flag_freshness_reconcile.sql`
+- `supabase/exec_success_migrations/sql_check/20260624173000_schedule_daily_ist_robot_flag_freshness_reconcile_checks.sql`
+- `supabase/exec_success_migrations/sql/20260624190000_drop_legacy_service_and_vehicle_source_tables.sql`
+- `supabase/exec_success_migrations/sql_check/20260624190000_drop_legacy_service_and_vehicle_source_tables_checks.sql`
 - `supabase/exec_success_migrations/sql/20260624103000_soft_deprecate_legacy_service_history_tables.sql`
 - `supabase/exec_success_migrations/sql_check/20260624103000_soft_deprecate_legacy_service_history_tables_checks.sql`
-- `scripts/20260622_reusable_backfill_all_service_data_from_pv_ev.sql`
+- `scripts/20260622_reusable_backfill_all_service_data_from_pv_ev.sql` (historical; retired from active operations)
 
 ---
 
-**Last Updated:** 2026-06-24 (Authority audit refreshed to baseline+overlay model; soft-deprecation of legacy Service_History tables executed+verified and promoted) by GitHub Copilot  
+**Last Updated:** 2026-06-24 (All-4 legacy source tables dropped, verified, and promoted; plan state synchronized) by GitHub Copilot  
 **Status:** 🟡 IN PROGRESS (Core winner-sync objective validated; legacy source tables now soft-deprecated; remaining unrelated checklist items continue)
