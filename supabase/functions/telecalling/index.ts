@@ -339,6 +339,74 @@ export default async function handler(req: Request) {
 
       if (updateErr) throw new Error(`Failed to update: ${updateErr.message}`)
 
+      // ── BRIDGE: If status = booked, auto-create a service_bookings record ──
+      let servicebooking_id: number | null = null
+      if (status === 'booked' && booking_date) {
+        // Fetch full customer data for this assignment
+        const { data: asgn } = await serviceClient
+          .from('telecall_assignments')
+          .select('customer_id, assigned_to, campaign_id')
+          .eq('id', assignment_id)
+          .single()
+
+        if (asgn) {
+          const { data: cust } = await serviceClient
+            .from('all_service_data')
+            .select('first_name, last_name, contact_phones, vehicle_registration_number, model, powertrain_type, assumed_next_service_type')
+            .eq('id', asgn.customer_id)
+            .single()
+
+          if (cust) {
+            // Check if a booking already exists for this assignment (avoid duplicates on re-marking)
+            const { data: existingBooking } = await serviceClient
+              .from('service_bookings')
+              .select('id')
+              .eq('telecall_assignment_id', assignment_id)
+              .maybeSingle()
+
+            if (!existingBooking) {
+              // Build a clean 10-digit phone
+              const rawPhone = String(cust.contact_phones || '').replace(/\D/g, '').slice(-10)
+
+              const { data: newBooking, error: bookingErr } = await serviceClient
+                .from('service_bookings')
+                .insert([{
+                  booking_source: 'Telecalling',
+                  status: 'New',
+                  booking_date: new Date().toISOString().split('T')[0],
+                  appointment_date: booking_date,
+                  customer_name: [cust.first_name, cust.last_name].filter(Boolean).join(' ').trim() || 'Unknown',
+                  customer_phone: rawPhone || '0000000000',
+                  reg_number: (cust.vehicle_registration_number || '').toUpperCase().trim(),
+                  model: cust.model || null,
+                  fuel_type: cust.powertrain_type || null,
+                  service_type: cust.assumed_next_service_type || null,
+                  caller_name: asgn.assigned_to,
+                  call_attempt: 1,
+                  call_outcome: 'Connected',
+                  call_notes: call_notes || null,
+                  telecall_assignment_id: assignment_id,
+                  telecall_campaign_id: asgn.campaign_id,
+                }])
+                .select('id')
+                .single()
+
+              if (!bookingErr && newBooking) {
+                servicebooking_id = (newBooking as { id: number }).id
+
+                // Back-link the assignment to the booking
+                await serviceClient
+                  .from('telecall_assignments')
+                  .update({ service_booking_id: servicebooking_id })
+                  .eq('id', assignment_id)
+              }
+            } else {
+              servicebooking_id = existingBooking.id
+            }
+          }
+        }
+      }
+
       // Update campaign counts
       const { data: counts } = await serviceClient
         .from('telecall_assignments')
@@ -365,6 +433,8 @@ export default async function handler(req: Request) {
         success: true,
         message: 'Status updated',
         auto_marked_unreachable: status === 'no_answer' && (update.no_answer_count as number) >= 3,
+        service_booking_id: servicebooking_id,
+        service_booking_created: servicebooking_id !== null,
       }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
     }
 
