@@ -202,6 +202,12 @@ export default function TelecallingScreen() {
   const [summary, setSummary] = useState<DailySummary | null>(null)
   const [busy, setBusy] = useState(false)
   const [waBusy, setWaBusy] = useState(false)
+  const [editingQueueId, setEditingQueueId] = useState<number | null>(null)
+  const [editNotes, setEditNotes] = useState('')
+  const [editBookingDate, setEditBookingDate] = useState('')
+  const [editCallbackDate, setEditCallbackDate] = useState('')
+  const [editStatus, setEditStatus] = useState('')
+  const [editBusy, setEditBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [notes, setNotes] = useState('')
   const [showBookingModal, setShowBookingModal] = useState(false)
@@ -347,6 +353,25 @@ export default function TelecallingScreen() {
     )
   }
 
+  const handleEditSave = async (assignmentId: number) => {
+    setEditBusy(true)
+    try {
+      await callEdge('edit_assignment', {
+        assignment_id: assignmentId,
+        call_notes: editNotes,
+        booking_date: editBookingDate || undefined,
+        callback_date: editCallbackDate || undefined,
+        status: editStatus || undefined,
+      })
+      setEditingQueueId(null)
+      await refreshQueue()
+    } catch (e) {
+      Alert.alert('Error', (e as Error).message)
+    } finally {
+      setEditBusy(false)
+    }
+  }
+
   const onRefresh = async () => {
     setRefreshing(true)
     await init()
@@ -488,7 +513,31 @@ export default function TelecallingScreen() {
               <Text style={s.emptyMsg}>Go to Call tab and get your next customer.</Text>
             </View>
           ) : (
-            queue.map(asgn => <QueueItem key={asgn.id} assignment={asgn} />)
+            queue.map(asgn => (
+              <QueueItem
+                key={asgn.id}
+                assignment={asgn}
+                isEditing={editingQueueId === asgn.id}
+                editNotes={editNotes}
+                editStatus={editStatus}
+                editBookingDate={editBookingDate}
+                editCallbackDate={editCallbackDate}
+                editBusy={editBusy}
+                onStartEdit={() => {
+                  setEditingQueueId(asgn.id)
+                  setEditNotes(asgn.call_notes || '')
+                  setEditStatus(asgn.status)
+                  setEditBookingDate(asgn.booking_date || '')
+                  setEditCallbackDate(asgn.callback_date || '')
+                }}
+                onCancelEdit={() => setEditingQueueId(null)}
+                onSaveEdit={() => handleEditSave(asgn.id)}
+                setEditNotes={setEditNotes}
+                setEditStatus={setEditStatus}
+                setEditBookingDate={setEditBookingDate}
+                setEditCallbackDate={setEditCallbackDate}
+              />
+            ))
           )
         )}
 
@@ -793,28 +842,154 @@ function DetailCell({ label, value, highlight = false }: { label: string; value:
 }
 
 // ── Queue Item ────────────────────────────────────────────────────────────────
-function QueueItem({ assignment }: { assignment: Assignment }) {
+function QueueItem({
+  assignment, isEditing, editNotes, editStatus, editBookingDate, editCallbackDate, editBusy,
+  onStartEdit, onCancelEdit, onSaveEdit,
+  setEditNotes, setEditStatus, setEditBookingDate, setEditCallbackDate,
+}: {
+  assignment: Assignment
+  isEditing: boolean
+  editNotes: string
+  editStatus: string
+  editBookingDate: string
+  editCallbackDate: string
+  editBusy: boolean
+  onStartEdit: () => void
+  onCancelEdit: () => void
+  onSaveEdit: () => void
+  setEditNotes: (v: string) => void
+  setEditStatus: (v: string) => void
+  setEditBookingDate: (v: string) => void
+  setEditCallbackDate: (v: string) => void
+}) {
   const c = assignment.customer
   const cfg = STATUS_CONFIG[assignment.status] || STATUS_CONFIG.pending
+
+  const STATUS_OPTIONS = [
+    { value: 'assigned',      label: '👤 Assigned' },
+    { value: 'booked',        label: '✅ Booked' },
+    { value: 'callback_later',label: '📅 Callback Later' },
+    { value: 'no_answer',     label: '😶 No Answer' },
+    { value: 'not_reachable', label: '🚫 Not Reachable' },
+    { value: 'wrong_number',  label: '⚠️ Wrong Number' },
+    { value: 'not_interested',label: '😑 Not Interested' },
+  ]
+
   return (
     <View style={s.queueItem}>
-      <View style={{ flex: 1 }}>
-        <Text style={s.queueName}>{c.first_name} {c.last_name || ''}</Text>
-        <Text style={s.queueSub}>📱 {c.contact_phones || '—'} · 🚗 {c.model || '—'}</Text>
-        <Text style={s.queueDue}>Due: {fmtDate(c.assumed_next_service_date, true)} · {c.assumed_next_service_type || '—'}</Text>
-        {assignment.status === 'callback_later' && assignment.callback_date && (
-          <Text style={s.queueCallback}>📅 Callback: {fmtDate(assignment.callback_date, true)}</Text>
-        )}
-        {assignment.status === 'booked' && assignment.booking_date && (
-          <Text style={s.queueBooked}>✅ Booked: {fmtDate(assignment.booking_date, true)}</Text>
-        )}
-        {assignment.call_notes ? (
-          <Text style={s.queueNotes}>📝 {assignment.call_notes}</Text>
-        ) : null}
+      {/* Main row */}
+      <View style={{ flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+        <View style={{ flex: 1 }}>
+          <Text style={s.queueName}>{c.first_name} {c.last_name || ''}</Text>
+          <Text style={s.queueSub}>📱 {c.contact_phones || '—'} · 🚗 {c.model || '—'}</Text>
+          <Text style={s.queueDue}>Due: {fmtDate(c.assumed_next_service_date, true)} · {c.assumed_next_service_type || '—'}</Text>
+          {assignment.status === 'callback_later' && assignment.callback_date && (
+            <Text style={s.queueCallback}>📅 Callback: {fmtDate(assignment.callback_date, true)}</Text>
+          )}
+          {assignment.status === 'booked' && assignment.booking_date && (
+            <Text style={s.queueBooked}>✅ Booked: {fmtDate(assignment.booking_date, true)}</Text>
+          )}
+          {!isEditing && assignment.call_notes ? (
+            <Text style={s.queueNotes}>📝 {assignment.call_notes}</Text>
+          ) : null}
+        </View>
+        <View style={{ alignItems: 'flex-end', gap: 6 }}>
+          <View style={[s.statusChip, { backgroundColor: cfg.bg }]}>
+            <Text style={[s.statusChipText, { color: cfg.text }]}>{cfg.emoji} {cfg.label}</Text>
+          </View>
+          <TouchableOpacity onPress={onStartEdit} style={s.editBtn}>
+            <Text style={s.editBtnText}>✏️ Edit</Text>
+          </TouchableOpacity>
+        </View>
       </View>
-      <View style={[s.statusChip, { backgroundColor: cfg.bg }]}>
-        <Text style={[s.statusChipText, { color: cfg.text }]}>{cfg.emoji} {cfg.label}</Text>
-      </View>
+
+      {/* ── Inline Edit Panel ── */}
+      {isEditing && (
+        <View style={s.editPanel}>
+          <Text style={s.editPanelTitle}>Edit Assignment</Text>
+
+          {/* Status picker */}
+          <Text style={s.editFieldLabel}>Status</Text>
+          <View style={s.statusPickerRow}>
+            {STATUS_OPTIONS.map(opt => (
+              <TouchableOpacity
+                key={opt.value}
+                onPress={() => setEditStatus(opt.value)}
+                style={[
+                  s.statusPickerChip,
+                  editStatus === opt.value && s.statusPickerChipActive,
+                ]}
+              >
+                <Text style={[
+                  s.statusPickerChipText,
+                  editStatus === opt.value && s.statusPickerChipTextActive,
+                ]}>
+                  {opt.label}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+
+          {/* Notes */}
+          <Text style={[s.editFieldLabel, { marginTop: 10 }]}>Remarks / Notes</Text>
+          <TextInput
+            value={editNotes}
+            onChangeText={setEditNotes}
+            placeholder="Update call notes or remarks…"
+            placeholderTextColor="#9ca3af"
+            multiline
+            numberOfLines={3}
+            style={s.editNotesInput}
+            textAlignVertical="top"
+          />
+
+          {/* Booking date */}
+          {editStatus === 'booked' && (
+            <View style={{ marginTop: 8 }}>
+              <Text style={s.editFieldLabel}>Booking Date (YYYY-MM-DD)</Text>
+              <TextInput
+                value={editBookingDate}
+                onChangeText={setEditBookingDate}
+                placeholder="2026-07-15"
+                placeholderTextColor="#9ca3af"
+                keyboardType="numbers-and-punctuation"
+                style={s.editDateInput}
+              />
+            </View>
+          )}
+
+          {/* Callback date */}
+          {editStatus === 'callback_later' && (
+            <View style={{ marginTop: 8 }}>
+              <Text style={s.editFieldLabel}>Callback Date (YYYY-MM-DD)</Text>
+              <TextInput
+                value={editCallbackDate}
+                onChangeText={setEditCallbackDate}
+                placeholder="2026-07-10"
+                placeholderTextColor="#9ca3af"
+                keyboardType="numbers-and-punctuation"
+                style={s.editDateInput}
+              />
+            </View>
+          )}
+
+          {/* Save / Cancel */}
+          <View style={s.editActions}>
+            <TouchableOpacity
+              onPress={onSaveEdit}
+              disabled={editBusy}
+              style={[s.editSaveBtn, editBusy && s.btnDisabled]}
+            >
+              {editBusy
+                ? <ActivityIndicator color="#fff" size="small" />
+                : <Text style={s.editSaveBtnText}>💾 Save Changes</Text>}
+            </TouchableOpacity>
+            <TouchableOpacity onPress={onCancelEdit} style={s.editCancelBtn}>
+              <Text style={s.editCancelBtnText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
     </View>
   )
 }
@@ -1136,4 +1311,51 @@ const s = StyleSheet.create({
   dateModalCancelText: { fontSize: 14, fontWeight: '600', color: '#374151' },
   dateModalConfirm: { flex: 2, paddingVertical: 13, borderRadius: 10, alignItems: 'center' },
   dateModalConfirmText: { fontSize: 14, fontWeight: '700', color: '#fff' },
+
+  // Edit button + panel
+  editBtn: {
+    borderWidth: 1, borderColor: '#d1d5db', borderRadius: 8,
+    paddingHorizontal: 10, paddingVertical: 5, backgroundColor: '#f9fafb',
+  },
+  editBtnText: { fontSize: 12, color: '#374151', fontWeight: '600' },
+
+  editPanel: {
+    marginTop: 12, borderTopWidth: 1, borderTopColor: '#e5e7eb',
+    paddingTop: 12, backgroundColor: '#eff6ff',
+    borderRadius: 10, padding: 12,
+  },
+  editPanelTitle: { fontSize: 13, fontWeight: '800', color: '#1d4ed8', marginBottom: 8 },
+  editFieldLabel: { fontSize: 12, fontWeight: '600', color: '#374151', marginBottom: 4 },
+
+  statusPickerRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
+  statusPickerChip: {
+    borderWidth: 1, borderColor: '#d1d5db', borderRadius: 20,
+    paddingHorizontal: 10, paddingVertical: 5, backgroundColor: '#fff',
+  },
+  statusPickerChipActive: { backgroundColor: '#2563eb', borderColor: '#2563eb' },
+  statusPickerChipText: { fontSize: 12, color: '#374151', fontWeight: '500' },
+  statusPickerChipTextActive: { color: '#fff', fontWeight: '700' },
+
+  editNotesInput: {
+    borderWidth: 1, borderColor: '#d1d5db', borderRadius: 10,
+    paddingHorizontal: 12, paddingVertical: 8,
+    fontSize: 14, color: '#111827', backgroundColor: '#fff',
+    minHeight: 70,
+  },
+  editDateInput: {
+    borderWidth: 1, borderColor: '#d1d5db', borderRadius: 10,
+    paddingHorizontal: 12, paddingVertical: 10,
+    fontSize: 14, color: '#111827', backgroundColor: '#fff',
+  },
+  editActions: { flexDirection: 'row', gap: 10, marginTop: 12 },
+  editSaveBtn: {
+    flex: 2, backgroundColor: '#2563eb', borderRadius: 10,
+    paddingVertical: 12, alignItems: 'center',
+  },
+  editSaveBtnText: { color: '#fff', fontSize: 14, fontWeight: '700' },
+  editCancelBtn: {
+    flex: 1, borderWidth: 1, borderColor: '#d1d5db', borderRadius: 10,
+    paddingVertical: 12, alignItems: 'center', backgroundColor: '#fff',
+  },
+  editCancelBtnText: { fontSize: 14, color: '#374151', fontWeight: '600' },
 })
