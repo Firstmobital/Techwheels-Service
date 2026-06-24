@@ -1,6 +1,6 @@
 # Database Change Protocol
 
-Last Updated: 2026-05-23
+Last Updated: 2026-06-24
 Status: Mandatory
 
 ## Goal
@@ -24,14 +24,30 @@ Prevent schema drift and prevent assumption-based development by enforcing one w
 6. Apply migration manually in target environment.
 7. Update ledger status to APPLIED and add execution evidence.
 8. Run paired sql_checks script, capture output, and set status VERIFIED.
-9. Move successfully executed migration file from supabase/migrations to supabase/exec_success_migrations.
-10. Delete the paired sql_checks file after verification evidence is recorded to keep supabase/sql_checks temporary-only.
-11. Update handbook docs: CURRENT_STATE.md, CHANGE_LOG.md, README.md if behavior changed.
+9. Move successfully executed migration file from supabase/migrations to supabase/exec_success_migrations/sql.
+10. Move the paired sql_checks file from supabase/sql_checks to supabase/exec_success_migrations/sql_check.
+11. Record promotion in supabase/evidence/execution_promotion_log.md and supabase/evidence/post_dump_verified_promotions.md.
+12. Update handbook docs: CURRENT_STATE.md, CHANGE_LOG.md, README.md if behavior changed.
+
+## Human-In-The-Loop Validation Cycle
+
+1. Operator runs migration manually.
+2. Operator runs sql_checks manually and shares outputs.
+3. Reviewer validates pass/fail from outputs.
+4. If fail: fix migration/checks, rerun checks.
+5. If pass: promote files to exec_success_migrations/sql and exec_success_migrations/sql_check.
+
+## SQL Check File Header Rule (Mandatory)
+
+Every file under supabase/sql_checks must include an explicit execution note near the top:
+
+- `Execution: This file can be run in one go.`
+- `Execution option: You may also run section-by-section for investigation; expected validation is against full-run output.`
 
 ## Minimum Evidence Required
 
 - Migration filename
-- Paired sql_checks filename (recorded in evidence even if the check file is later deleted)
+- Paired sql_checks filename
 - Execution timestamp and environment
 - Validation proof (query output, test result, or functional verification)
 - Rollback command/file reference

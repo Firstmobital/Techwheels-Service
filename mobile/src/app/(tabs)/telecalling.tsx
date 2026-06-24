@@ -137,15 +137,27 @@ async function fetchServiceHistory(
   if (chassis) {
     query = query.eq('chassis_no', chassis)
   } else if (reg) {
-    query = query.eq('vehicle_registration_number', reg)
+    query = query.eq('registration_no', reg)
   }
 
-  const { data, error } = await query.order('service_date', { ascending: false }).limit(20)
+  const { data, error } = await query
+    .order('service_date_time', { ascending: false })
+    .order('created_at', { ascending: false })
+    .limit(20)
   if (error) {
     console.warn('Service history fetch error:', error.message)
     return []
   }
-  return (data || []) as ServiceHistoryRow[]
+
+  // Canonical service-history columns are normalized to the UI shape expected below.
+  return (data || []).map((row: any) => ({
+    service_date: row.service_date_time ?? row.service_date ?? null,
+    service_type: row.sr_type ?? row.service_type ?? null,
+    kms_at_service: row.odometer_reading ?? row.kms_at_service ?? null,
+    dealer_name: row.serviced_at_dealer ?? row.dealer_name ?? null,
+    job_card_no: row.job_card_no ?? null,
+    labour_amount: row.labour_amount ?? null,
+  })) as ServiceHistoryRow[]
 }
 
 // ── WhatsApp helper ──────────────────────────────────────────────────────────
