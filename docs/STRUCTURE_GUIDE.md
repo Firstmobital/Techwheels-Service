@@ -1,484 +1,730 @@
 # Documentation Structure Guide - Truth/Implementation State Machine Model
 
-**Last Updated:** 2026-06-23  
+**Last Updated:** 2026-06-24  
 **Authority:** Techwheels Development Team  
-**Status:** Active - Governs all docs/ placement and state transitions
+**Status:** Active - Governs all docs placement and state transitions
 
 ---
 
 ## 1) Core Concept: Truth vs Implementation State Machine
 
-Techwheels documentation follows a **two-state model**:
+Documentation follows a two-state model:
 
-### **TRUTH STATE** (Current Documented Reality)
+### TRUTH STATE (Current Documented Reality)
 - What exists now: completed implementations, validated specifications, verified architecture
-- Three tiers: **Platform-specific** (web, mobile) + **Shared** (both platforms)
-- Location: `docs/web/`, `docs/mobile/`, `docs/shared/`
-- Authority: This is the single source of truth for each platform and shared concepts
-- Update frequency: Only when implementation is actually completed and committed
+- Three tiers: platform-specific (web, mobile) and shared (both platforms)
+- Location: docs/web/, docs/mobile/, docs/shared/
+- Authority: single source of truth for each platform/shared concept
+- Update frequency: only when implementation is completed and committed
 
-### **IMPLEMENTATION STATE** (Uncommitted Work & Planned Changes)
+### IMPLEMENTATION STATE (Uncommitted Work and Planned Changes)
 - What is being worked on: execution plans, feature designs, implementation roadmaps
-- Organized by **platform + category + lifecycle**
-- Location: `docs/Implementation_plans/webversion/`, `docs/Implementation_plans/mobileversion/`
-- Purpose: Track planned work until it becomes truth
-- Lifecycle: active → evidence (testing completed) → completed (implementation done)
+- Organized by platform + category + lifecycle
+- Location: docs/Implementation_plans/webversion/, docs/Implementation_plans/mobileversion/
+- Purpose: track planned work until it becomes truth
+- Lifecycle: active -> evidence -> inactive -> completed archive
 
-### **STATE TRANSITION (Critical Workflow)**
-```
-Implementation Plan Created
-    ↓
-docs/Implementation_plans/webversion/categories/feature/active/FEATURE_PLAN.md
-    ↓
-[Development Work Happens]
-    ↓
-Move to Evidence (tests written)
-docs/Implementation_plans/webversion/categories/feature/evidence/FEATURE_TEST_REPORT.md
-    ↓
-[Feature Completed & Merged]
-    ↓
-1. Archive implementation: docs/Implementation_plans/completed/feature/
-2. Update truth docs: docs/web/modules/feature/reference/FEATURE_SPEC.md
-3. Delete from Implementation_plans/webversion/ (no longer needed)
-4. NEW TRUTH ESTABLISHED ✓
-```
+### STATE TRANSITION (Critical Workflow)
+Implementation plan created
+-> docs/Implementation_plans/webversion/categories/feature/active/FEATURE_PLAN.md
+-> development work
+-> docs/Implementation_plans/webversion/categories/feature/evidence/FEATURE_TEST_REPORT.md
+-> feature completed and merged
+-> archive implementation at docs/Implementation_plans/completed/feature/
+-> update truth docs at docs/web/modules/feature/reference/FEATURE_SPEC.md
+-> remove implementation copy from active trackers
 
-**Anti-Duplication Rule:** Once implementation moves to truth, remove from Implementation_plans
+**Anti-duplication rule:** once implementation becomes truth, keep one authoritative doc in truth location and remove implementation duplicates.
 
 ---
 
 ## 2) Directory Hierarchy
 
-### 2.1 Root Level (Meta & Governance)
+### 2.0 Project Root (Repository Root) Policy
 
-```
-docs/
-├── README.md                          [Navigation hub - lists all sections]
-├── MASTER_INDEX.md                    [Searchable index of all docs]
-├── STRUCTURE_GUIDE.md                 [This file - placement rules]
-├── DOCS_IMPACT_MATRIX.md              [Audit: which docs affect what]
-└── DOCS_DEDUP_CONFLICT_MATRIX_*.md    [Audit: doc duplication analysis]
-```
+Allowed documentation file at repository root:
+- README.md only
 
-**Rule:** Only meta/governance files at root. No content documentation.
+Disallowed at repository root:
+- ad-hoc documentation and analysis files (`.md`, `.txt`, `.sql`, `.guide`, `.audit`, `.notes`, `.log`)
 
-### 2.2 Shared Truth State (Both Platforms)
+When such files are created during investigation/planning, move them immediately to staging:
+- markdown/text -> `docs/_unstructured_staging/project_root_docs/`
+- non-md doc-like -> `docs/_unstructured_staging/project_root_docs_non_md/`
 
-Applies to **web AND mobile equally**. Use when:
-- Rule, policy, or protocol applies to both platforms
-- Architectural decision affects both platforms
-- Shared templates, procedures, or specifications
+Reason:
+- keeps project root focused on runtime/build/config artifacts
+- prevents documentation drift and root clutter
+- enforces staging-first classification before truth placement
 
-```
-docs/shared/
-├── README.md                          [Anchor: scopes to shared truth]
-├── reference/                         [Authoritative specifications & decisions]
-│   ├── CURRENT_STATE.md               [Truth about current state]
-│   ├── DB_CHANGE_PROTOCOL.md          [How database changes are managed]
-│   ├── SYNC_PROTOCOL.md               [Module sync/state contract]
-│   ├── MODULE_ROUTE_CONTRACT.md       [Route & module architecture]
-│   ├── ROUTE_STRATEGY_DECISION.md     [Architectural decisions]
-│   ├── ONBOARDING_POLICY.md           [User onboarding specification]
-│   ├── DB_CHANGE_LEDGER.md            [Specification: database changes]
-│   └── catalog/
-│       └── UPDATE_TEMPLATE.md         [Reusable template]
-├── runbooks/                          [Operational procedures shared by both]
-│   └── ONBOARDING_GATING_ENFORCEMENT.md [Procedure: enforce onboarding gates]
-└── active/                            [Live tracking across both platforms]
-    └── CHANGE_LOG.md                  [Shared changelog]
-```
+### 2.1 Root Level (Meta and Governance only)
 
-**Subcategories:**
-- `reference/` → specifications, decisions, policies (immutable authority)
-- `runbooks/` → procedures, operational guides
-- `active/` → live tracking, changelogs
-- `catalog/` → reusable templates and libraries
+Allowed at docs/ root:
+- README.md
+- MASTER_INDEX.md
+- STRUCTURE_GUIDE.md
+- DOCS_IMPACT_MATRIX.md
+- DOCS_DEDUP_CONFLICT_MATRIX_*.md
+- ai-context.md (repo operating contract)
+- db-changes.md (manual change ledger)
+- codex-logs.md (agent change log)
 
-### 2.3 Web Platform Truth State
+No module content documents should remain at docs/ root.
+No non-markdown implementation artifacts should remain at docs/ root.
 
-```
-docs/web/
-├── README.md                          [Anchor: scopes to web documentation]
-├── modules/                           [Web-specific implementations]
-│   ├── autodoc/
-│   │   ├── README.md
-│   │   ├── reference/                 [Spec: API contract, data model]
-│   │   ├── evidence/                  [Tests: validation reports]
-│   │   └── runbooks/                  [Procedures: how to use/debug]
-│   ├── complaints/
-│   ├── telecalling/
-│   ├── warranty/
-│   └── [other modules as needed]
-└── cross-cutting/                     [Web infrastructure & shared systems]
-    ├── rbac/
-    │   ├── README.md
-    │   ├── reference/                 [Web RLS policies]
-    │   ├── evidence/                  [Validation: security tests]
-    │   └── runbooks/                  [Procedures: debugging RLS]
-    ├── supabase/
-    │   ├── reference/                 [DB schemas, migrations]
-    │   ├── evidence/                  [Audit: DB validation]
-    │   └── runbooks/                  [Procedures: DB operations]
-    ├── security/
-    ├── uploads/
-    ├── wa_templates/
-    └── [other cross-cutting as needed]
-```
+Non-markdown placement policy:
+- SQL diagnostics/check scripts -> sql/ or sql-checks/
+- JS/TS test helpers and tooling -> scripts/ (or platform test folders)
+- Transitional leftovers -> docs/_unstructured_staging/non_md/
 
-**Pattern:** `docs/web/<domain>/README.md` + subfolders for subcategories
+### 2.2 Shared Truth State
 
-**Domain Types:**
-- **modules/** → Standalone features (autodoc, complaints, telecalling, warranty)
-- **cross-cutting/** → Infrastructure & shared systems (rbac, supabase, security, uploads, wa_templates)
+Path: docs/shared/
 
-**Subcategories (created only when content exists):**
-- `reference/` → specifications, API contracts, data models, architecture
-- `evidence/` → validation reports, test results, audits, compliance checks
-- `runbooks/` → operational procedures, troubleshooting guides, how-tos
-- `active/` → live policies, current configurations
+Subcategories:
+- reference/ -> specifications, policies, decisions
+- evidence/ -> audits, validations, verification reports
+- runbooks/ -> operational procedures
+- active/ -> live tracking/changelog
+- reference/catalog/ -> reusable templates
 
-### 2.4 Mobile Platform Truth State
+### 2.3 Web Truth State
 
-```
-docs/mobile/
-├── README.md                          [Anchor: scopes to mobile documentation]
-├── modules/                           [Mobile-specific implementations]
-│   ├── [Same structure as web/modules/]
-│   ├── [Populated only when mobile implementation differs from web]
-│   └── [Can reference web/modules/ when identical]
-└── cross-cutting/                     [Mobile infrastructure]
-    ├── push-registration/
-    │   ├── README.md
-    │   ├── reference/                 [Push token flow spec]
-    │   ├── evidence/                  [Testing: push delivery validation]
-    │   └── runbooks/                  [Procedures: debug push issues]
-    └── [other mobile-specific infrastructure]
-```
+Path: docs/web/
 
-**Principle:** Document mobile-only content. Reuse web docs when identical.
+- modules/<module>/
+  - README.md
+  - reference/
+  - evidence/
+  - runbooks/
+  - active/ (only if required)
+- cross-cutting/<domain>/
+  - README.md
+  - reference/
+  - evidence/
+  - runbooks/
+  - active/ (only if required)
 
-### 2.5 Implementation Plans (Uncommitted Work)
+### 2.4 Mobile Truth State
 
-```
-docs/Implementation_plans/
-├── README.md                          [Anchor: scopes to execution plans]
-├── webversion/
-│   ├── categories/
-│   │   ├── autodoc/active|evidence|inactive/        [Web feature work]
-│   │   ├── complaints/active|evidence|inactive/
-│   │   ├── telecalling/active|evidence|inactive/
-│   │   ├── rbac/active|evidence|inactive/
-│   │   ├── supabase/active|evidence|inactive/
-│   │   ├── [other categories as needed]
-│   │   └── [lifecycle: active → evidence → inactive → archived to completed/]
-│   ├── INDEX.md                       [Web implementation tracker]
-│   └── IMPLEMENTATION_TRACKER.md      [Active plans with status]
-├── mobileversion/
-│   ├── categories/
-│   │   ├── auth/active|evidence|inactive/            [Mobile feature work]
-│   │   ├── autodoc/active|evidence|inactive/
-│   │   ├── [other categories as needed]
-│   │   └── [lifecycle: active → evidence → inactive → archived to completed/]
-│   ├── INDEX.md                       [Mobile implementation tracker]
-│   └── IMPLEMENTATION_TRACKER.md      [Active plans with status]
-└── completed/
-    ├── autodoc/                       [Archived: implementation complete]
-    ├── complaints/
-    ├── rbac/
-    └── [other completed implementations]
-```
+Path: docs/mobile/
 
-**Lifecycle:**
-- `active/` → Being worked on, under discussion
-- `evidence/` → Implementation done, tests written, ready for review
-- `inactive/` → Paused, on-hold, or archived-pending-completion
-- `completed/` → Fully merged, truth has been updated
+- modules/<module>/ (same structure as web when mobile differs)
+- cross-cutting/<domain>/ (for mobile infrastructure, eg push-registration)
+
+Principle: mobile-only differences are documented in mobile paths; shared-identical behavior references shared/web truth docs.
+
+### 2.5 Implementation Plans
+
+Path: docs/Implementation_plans/
+
+- webversion/categories/<category>/active|evidence|inactive/
+- mobileversion/categories/<category>/active|evidence|inactive/
+- completed/<category>/
+- INDEX.md and IMPLEMENTATION_TRACKER.md per platform
+
+Note: existing legacy folder docs/impliment_plans/ should be treated as transitional and gradually normalized into docs/Implementation_plans/.
+
+### 2.6 Transitional Staging (Controlled Migration)
+
+Path: docs/_unstructured_staging/
+
+Purpose:
+- preserve unclassified legacy docs while preventing root-level sprawl
+- support one-file-at-a-time relocation into truth/implementation targets
+
+Buckets:
+- root_md/ -> root markdown files awaiting classification
+- legacy_dirs/ -> legacy folders moved from old docs hierarchy
+- non_md/ -> non-markdown artifacts discovered during cleanup
 
 ---
 
 ## 3) Placement Decision Tree
 
-**Execute this decision tree in order when creating ANY new markdown file:**
+1. Shared truth (applies to both web and mobile)?
+- Yes -> docs/shared/<subcategory>/
 
-```
-START
+2. Execution plan or roadmap?
+- Yes -> docs/Implementation_plans/<platform>/categories/<feature>/<lifecycle>/
 
-1. Is this SHARED TRUTH?
-   (Policy, protocol, decision, or specification applying to BOTH web and mobile?)
-   YES → docs/shared/<subcategory>/
-          Choose subcategory:
-          - Specification/Policy → reference/
-          - Procedure → runbooks/
-          - Live Tracking → active/
-          - Reusable Template → reference/catalog/
-   NO → continue
+3. Platform-specific completed truth?
+- Yes -> docs/<platform>/modules/<module>/<subcategory>/ or docs/<platform>/cross-cutting/<domain>/<subcategory>/
 
-2. Is this an EXECUTION PLAN?
-   (Feature design, implementation roadmap, timeline, tracking?)
-   YES → docs/Implementation_plans/<platform>/categories/<feature>/<lifecycle>/
-          Where:
-          - platform = webversion OR mobileversion
-          - feature = autocompleting category (autodoc, rbac, etc.)
-          - lifecycle = active OR evidence OR inactive
-   NO → continue
-
-3. Is this PLATFORM-SPECIFIC TRUTH?
-   (Specification, validation, or procedure for web OR mobile implementation?)
-   YES → docs/<platform>/modules/<module>/<subcategory>/
-          OR
-          docs/<platform>/cross-cutting/<domain>/<subcategory>/
-          Where:
-          - platform = web OR mobile
-          - module = autodoc, complaints, telecalling, warranty, etc.
-          - domain = rbac, supabase, security, uploads, wa_templates, etc.
-          - subcategory = reference, evidence, runbooks, active, catalog
-   NO → continue
-
-4. NO MATCH
-   STOP. File type not recognized. Escalate to team.
-```
+4. No match?
+- Stop and classify before creating docs.
 
 ---
 
 ## 4) Naming Rules
 
-1. **Descriptive, searchable names** (avoid generic: notes.md, temp.md, new.md)
-2. **Plan IDs for implementation docs** (PLAN-NAME format: TELECALLING-FEATURE-001)
-3. **Date suffixes for audit/snapshot docs** (_YYYY-MM-DD or _YYYYMMDD)
-4. **Filenames should indicate content type**:
-   - `*_REFERENCE.md` → specification/authority
-   - `*_PLAN.md` → execution plan
-   - `*_AUDIT.md` → validation/testing
-   - `*_RUNBOOK.md` → procedure/how-to
-5. **Use UPPERCASE for module names** in filenames (TELECALLING, AUTODOC, RBAC)
+1. Use descriptive, searchable names; avoid notes.md/temp.md/new.md.
+2. Use PLAN suffix for implementation docs: *_PLAN.md.
+3. Use date suffix for audits/snapshots where appropriate: _YYYY-MM-DD or _YYYYMMDD.
+4. Content suffix guidance:
+- *_REFERENCE.md
+- *_PLAN.md
+- *_AUDIT.md
+- *_RUNBOOK.md
+5. Prefer uppercase module tokens in filenames when needed (RBAC, AUTODOC, TELECALLING).
 
 ---
 
 ## 5) File Organization Rules
 
-### 5.1 No Files Directly in Primary Categories
-
-❌ **WRONG:**
-```
-docs/autodoc/SPEC.md                 [file at category root]
-docs/rbac/TESTING_REPORT.md          [file at category root]
-```
-
-✅ **CORRECT:**
-```
-docs/web/modules/autodoc/reference/AUTODOC_SPEC.md
-docs/web/cross-cutting/rbac/evidence/RBAC_TESTING_REPORT.md
-```
-
-**Exception:** README.md at category root is required (anchor file only)
-
-### 5.2 Subcategories Created Only When Content Exists
-
-❌ **WRONG:**
-```
-docs/web/modules/feature/reference/  [empty]
-docs/web/modules/feature/evidence/   [empty]
-```
-
-✓ **CORRECT:**
-```
-docs/web/modules/feature/reference/  [contains FEATURE_SPEC.md]
-[no evidence/ until tests are created]
-```
-
-### 5.3 Category README.md Requirements
-
-Every primary category folder must have README.md stating:
-- **Scope:** What type of documentation lives here
-- **Subcategories:** What each subfolder contains
-- **Navigation:** Links to key documents
-- **Lifecycle:** How files move within this category
-
-Example:
-```markdown
-# RBACDocs
-
-**Scope:** Web platform role-based access control.
-
-## Subfolders
-
-- `reference/` → RLS policies, RBAC architecture specifications
-- `evidence/` → Security validation tests, RBAC role matrix tests
-- `runbooks/` → RBAC debugging procedures, role assignment guide
-
-## Navigation
-
-- [RLS Policy Reference](reference/RBAC_RLS_POLICIES.md)
-- [Role Matrix Validation](evidence/RBAC_ROLE_MATRIX_TESTING.md)
-- [RLS Debugging Runbook](runbooks/RBAC_OPERATIONS_RUNBOOK.md)
-
-## Lifecycle
-
-Implementation plans: `docs/Implementation_plans/webversion/categories/rbac/`
-Completed work is moved here to establish new truth.
-```
+1. No content files at category root. Only README.md anchors at category roots.
+2. Create subfolders only when content exists.
+3. Every primary category must have README.md with:
+- scope
+- subfolder purpose
+- navigation links
+- lifecycle transition guidance
 
 ---
 
 ## 6) State Transition Procedure
 
-### When Implementation is Completed:
-
-**Step 1: Archive Implementation Plan**
-```bash
-# Move from active to completed
-mv docs/Implementation_plans/webversion/categories/feature/active/PLAN.md \
-   docs/Implementation_plans/completed/feature/PLAN_COMPLETION_REPORT.md
-```
-
-**Step 2: Update/Create Truth Documentation**
-```bash
-# Create or update specification in truth location
-docs/web/modules/feature/reference/FEATURE_SPEC.md  [new or updated]
-docs/web/modules/feature/evidence/FEATURE_TESTS.md  [new or updated]
-```
-
-**Step 3: Verify No Duplication**
-```bash
-# Ensure plan is removed from active
-rm docs/Implementation_plans/webversion/categories/feature/active/PLAN.md
-
-# Ensure no copy remains in web/
-grep -r "feature" docs/web/modules/feature/ | wc -l  [should have docs]
-grep -r "feature" docs/Implementation_plans/webversion/categories/ | wc -l  [should be 0]
-```
-
-**Step 4: Update Shared Changelog**
-```bash
-# Record state transition
-docs/shared/active/CHANGE_LOG.md  [add entry]
-```
+When implementation completes:
+1. Move plan out of active into completed archive.
+2. Create/update truth docs in web/mobile/shared proper paths.
+3. Remove duplicate implementation-state copies.
+4. Update the repository docs changelog anchor (for example `docs/shared/active/CHANGE_LOG.md` when that path exists).
 
 ---
 
 ## 7) Anti-Duplication Enforcement
 
-### Single Source of Truth Rule
+Single source of truth policy:
+- A specification or runbook should exist in exactly one authoritative location.
+- Implementation plans are temporary and must not compete with truth docs.
 
-**Every specification/procedure must exist in exactly ONE place:**
-
-```
-WRONG (Duplication):
-- docs/web/modules/telecalling/reference/SPEC.md
-- docs/Implementation_plans/webversion/categories/telecalling/active/SPEC.md
-  [Same file exists in two places - which is truth?]
-
-CORRECT (Single Location):
-- During development:
-  docs/Implementation_plans/webversion/categories/telecalling/active/PLAN.md
-
-- After completion:
-  docs/web/modules/telecalling/reference/SPEC.md
-  [Implementation plan DELETED, truth established]
-```
-
-### Reference Management
-
-When a document is moved/deleted, update all links:
-```bash
-# Find all references
-rg -n "old/path/file.md" docs/
-
-# Update references
-# (use multi_replace_string_in_file for efficiency)
-
-# Verify old path is gone
-rg "old/path/" docs/  [should return 0 results]
-```
+Reference update checklist:
+1. Search old paths in docs/.
+2. Update references.
+3. Confirm no stale links remain.
 
 ---
 
-## 8) Governance for Future Work
+## 8) Governance Checklist (Before Creating Any .md)
 
-### Pre-Creation Checklist (For Every New .md)
+- Is it shared truth?
+- Is it implementation state?
+- Is it completed platform-specific truth?
+- Tier selected (web/mobile/shared)?
+- Subcategory selected (reference/evidence/runbooks/active/catalog)?
+- Duplication check completed?
+- Category README navigation updated?
+- Is this being created at repository root? (If yes, stop and place in docs hierarchy or staging.)
 
-Before creating ANY markdown file, answer these questions:
-
-```
-□ Is this shared truth (applies to both web & mobile)?
-  → YES: Create in docs/shared/<subcategory>/
-  → NO: Continue
-
-□ Is this an implementation plan or execution roadmap?
-  → YES: Create in docs/Implementation_plans/<platform>/categories/<feature>/<lifecycle>/
-  → NO: Continue
-
-□ Is this documentation of a COMPLETED implementation?
-  → YES: Create in docs/<platform>/modules|cross-cutting/<domain>/<subcategory>/
-  → NO: This is uncommitted work → Should be in Implementation_plans
-
-□ Primary tier determined? (web, mobile, shared)
-□ Subcategory determined? (reference, evidence, runbooks, active)
-□ Will this file be moved when work is complete?
-□ Are there existing related documents? (Check for duplication)
-□ Is README.md updated with navigation?
-```
-
-### Version Control Workflow
-
-```
-1. Determine correct placement using decision tree
-2. Create file in correct location (never root of category)
-3. Add/update README.md navigation
-4. Verify no duplicates elsewhere
-5. Commit with message: "docs: Add <title> to <path>"
-6. When implementation complete: Move to truth, archive implementation
-```
+For cross-platform audits and validation artifacts:
+- place under docs/shared/evidence/
 
 ---
 
-## 9) Appendix: Tier Reference
+## 9) Tier Reference
 
-| Tier | Type | Contains | Scope |
-|---|---|---|---|
-| web/ | Truth State | Completed web implementations & infrastructure | Web only |
-| mobile/ | Truth State | Completed mobile implementations & infrastructure | Mobile only |
-| shared/ | Truth State | Policies, protocols, decisions, shared specs | Both platforms |
-| Implementation_plans/ | Execution Plans | Feature designs, roadmaps, tracking | Both platforms |
-
-### Allowed Module Names (web/modules/ & mobile/modules/)
-- autodoc
-- complaints
-- telecalling
-- warranty
-- (and others as created)
-
-### Allowed Cross-Cutting Names (web/cross-cutting/ & mobile/cross-cutting/)
-- rbac
-- supabase
-- security
-- uploads
-- wa_templates
-- push-registration (mobile only)
-- (and others as created)
-
-### Implementation_plans Categories
-Mirror web/mobile module and cross-cutting names
+- docs/web/ -> completed web truth
+- docs/mobile/ -> completed mobile truth
+- docs/shared/ -> completed shared truth
+- docs/Implementation_plans/ -> uncommitted work
 
 ---
 
-## 10) Quick Reference
+## 10) Immediate Migration Policy For This Repo
 
-### "Where does X go?"
+To safely start from current unstructured state:
+1. Project root guard:
+   - keep only `README.md` as root documentation file
+   - move other root docs/doc-like files to:
+     - `docs/_unstructured_staging/project_root_docs/`
+     - `docs/_unstructured_staging/project_root_docs_non_md/`
+2. Keep governance anchors at docs root: ai-context.md, db-changes.md, codex-logs.md, MASTER_INDEX.md, STRUCTURE_GUIDE.md (and README.md when created).
+3. Move all other root-level markdown files to staging bucket:
+   - docs/_unstructured_staging/root_md/
+4. Move legacy unstructured folders to:
+   - docs/_unstructured_staging/legacy_dirs/
+5. Move non-markdown docs leftovers to:
+   - docs/_unstructured_staging/non_md/
+6. Re-home one file at a time from staging to final truth/implementation path.
+7. After each move:
+   - update links
+   - update relevant README navigation
+   - record in changelog (when applicable)
 
-| Document Type | Location |
-|---|---|
-| Module specification (web, completed) | `docs/web/modules/<name>/reference/<name>_SPEC.md` |
-| Module specification (mobile, completed) | `docs/mobile/modules/<name>/reference/<name>_SPEC.md` |
-| RBAC policy (web, completed) | `docs/web/cross-cutting/rbac/reference/RBAC_POLICY.md` |
-| Feature implementation plan | `docs/Implementation_plans/webversion/categories/<name>/active/PLAN.md` |
-| Feature test report (during implementation) | `docs/Implementation_plans/webversion/categories/<name>/evidence/TEST_REPORT.md` |
-| Shared protocol (both platforms) | `docs/shared/reference/PROTOCOL.md` |
-| Operational runbook (web) | `docs/web/modules/<name>/runbooks/RUNBOOK.md` |
-| Mobile-specific push procedure | `docs/mobile/cross-cutting/push-registration/runbooks/RUNBOOK.md` |
+This allows controlled migration without blocking day-to-day development.
+
+Pre-commit recommended checks:
+1. `find . -maxdepth 1 -type f \( -name '*.md' -o -name '*.txt' -o -name '*.sql' -o -name '*.guide' -o -name '*.audit' -o -name '*.notes' -o -name '*.log' \) | sed 's#^\./##' | sort`
+2. `find docs -mindepth 1 -maxdepth 1 -type f | sort`
+
+Expected:
+- project root docs/doc-like: `README.md` only
+- docs root: governance anchors only
 
 ---
 
-**Last Updated:** 2026-06-23  
-**Review Frequency:** When new module categories added, or every 6 months  
+## 11) Repository Override: Database Truth Audit Guardrail (Techwheels-Specific)
+
+This section is a repository-specific override for Techwheels.
+For other repositories, replace or remove this section and define equivalent local DB authority rules.
+
+For any docs/planning task that references schema/database state:
+
+1. Authority order is strict and never downgraded:
+- local_folder/backups/full_database.sql (authoritative schema and full database dump; authority never downgrades)
+- local_folder/backups/chunks/full_database.sql.part_* (access mirror of that same dump)
+- supabase/migrations/latest_remote_schema.sql (fallback only if present)
+
+2. If direct file access to full_database.sql is blocked by size limits, read/search local_folder/backups/chunks/full_database.sql.part_* as the access mirror of the same dump; do not switch authority to fallback.
+
+3. Before documenting schema assumptions, verify object existence against authoritative dump/chunks.
+
+4. Keep schema-sensitive docs aligned with the latest authoritative snapshot date.
+
+---
+
+## 12) Cross-Project Portability Profile (Reusable In Any Repository)
+
+This guide is intentionally reusable across projects.
+For a new repository, keep the state machine and update only the path profile below.
+
+Default portable profile:
+- `DOCS_ROOT = docs/`
+- `TRUTH_ROOTS = { web/, mobile/, shared/ }`
+- `IMPLEMENTATION_ROOT = Implementation_plans/`
+- `STAGING_ROOT = _unstructured_staging/`
+- `TRUTH_SUBCATEGORIES = { reference/, evidence/, runbooks/, active/ }`
+- `IMPLEMENTATION_LIFECYCLE = { active/, evidence/, inactive/, completed/ }`
+
+### 12.1) Mandatory Per-Repository Customization (Required Before Reuse)
+
+When this guide is copied to another repository, the following values must be customized in that repo before execution begins.
+
+Required customization set:
+1. Surface map
+- Replace `web/mobile/shared` with that repository's real product surfaces.
+- Keep at least one truth surface and one implementation surface.
+
+2. Repository authority contracts
+- Define source-of-truth authorities (for schema, APIs, generated artifacts, and operational policies).
+- Define strict fallback order for each authority source.
+
+3. Folder profile and lifecycle
+- Confirm `DOCS_ROOT`, truth roots, implementation root, and staging root.
+- Confirm lifecycle folders (`active/evidence/inactive/completed`) or equivalent.
+
+4. Status vocabulary
+- Define one canonical status set and use it in guide, trackers, and templates.
+- Do not allow per-file status variations.
+
+5. Validation commands
+- Provide local validation command names (for example `docs:validate` and `docs:validate:ci`).
+- Ensure commands exist before referencing them in docs.
+
+6. CI enforcement
+- Add repository CI gate that fails on docs validation errors.
+- Validation must run on pull requests to prevent drift.
+
+7. Copilot operating contract
+- Add repository instruction file with mandatory read order and no-guessing constraints.
+- Include required deliverables for task completion (docs impact, DB impact, verification evidence).
+
+8. Ownership model
+- Assign owner/team per module or cross-cutting domain.
+- Define review cadence and stale-doc remediation SLA.
+
+Execution gate:
+1. If any item above is undefined, this guide is in `porting` state only.
+2. Do not treat the guide as active governance until all items are configured.
+
+### 12.2) Portable Implementation Plans Authority Model (Drop-In)
+
+Use this section as a reusable template in any repository.
+Keep universal rules unchanged and customize only placeholders.
+
+Template header:
+- Last Updated: `<YYYY-MM-DD>`
+- Status: `ACTIVE AUTHORITY`
+- Owner: `<Product + Engineering + Copilot governance owner>`
+
+Universal purpose:
+1. No guesswork for plan placement.
+2. No scope drift across workstreams.
+3. Consistent lifecycle from active planning to completed archive.
+4. Copilot-safe structure for long-term continuity.
+
+Canonical structure template:
+1. Live workstream roots:
+- `docs/Implementation_plans/<surface_a>/`
+- `docs/Implementation_plans/<surface_b>/`
+2. Completed archive roots:
+- `docs/Implementation_plans/completed/<surface_a>/`
+- `docs/Implementation_plans/completed/<surface_b>/`
+3. Category lifecycle folders:
+- `categories/<category>/active/`
+- `categories/<category>/evidence/`
+- `categories/<category>/inactive/`
+
+Decision tree template for new plan files:
+1. Decide scope owner surface.
+2. Decide category (from repository-approved category list).
+3. Decide lifecycle folder (`active`, `evidence`, `inactive`).
+4. Update control files in the same change:
+- `<surface>/INDEX.md`
+- `<surface>/IMPLEMENTATION_TRACKER.md`
+
+Completion and archive gate:
+1. Implementation done.
+2. Validation/testing done.
+3. Owner sign-off recorded in plan body.
+4. Move to matching completed mirror path without flattening category path.
+5. Update tracker/index links in the same change.
+
+Naming model template:
+1. Prefix pattern (customize per repo):
+- `<SURFACE_A>-###_SHORT_TITLE.md`
+- `<SURFACE_B>-###_SHORT_TITLE.md`
+2. Optional suffixes:
+- `_TRACKER.md`
+- `_AUDIT.md`
+- `_TEST_REPORT.md`
+3. Disallow generic names such as `notes.md` and `plan.md`.
+
+Mandatory control files template:
+1. Root implementation authority:
+- `docs/Implementation_plans/INDEX.md`
+- `docs/Implementation_plans/IMPLEMENTATION_TRACKER.md`
+- `docs/Implementation_plans/STRUCTURE_AND_WORKFLOW.md`
+2. Per-surface controls:
+- `docs/Implementation_plans/<surface>/INDEX.md`
+- `docs/Implementation_plans/<surface>/IMPLEMENTATION_TRACKER.md`
+3. Completed authority:
+- `docs/Implementation_plans/completed/INDEX.md`
+
+Copilot workflow contract template:
+1. Place plan files only in approved implementation structure.
+2. Update relevant index and tracker in the same session.
+3. Never guess category; resolve by module ownership and route/module location.
+4. Never leave new plans in implementation root.
+5. Preserve path history with migration notes when moving files.
+
+Legacy migration mode template:
+1. Legacy folders may remain during staged migration.
+2. New files must use approved surface structure only.
+3. Existing files move in controlled batches with immediate link/tracker updates.
+
+Universal vs override boundaries for this model:
+1. Universal:
+- lifecycle folders (`active/evidence/inactive`)
+- decision tree sequence
+- archive gate and same-change control-file updates
+- no-guessing Copilot contract
+2. Repository override:
+- surface names
+- approved category lists
+- naming prefixes
+- owner/sign-off policy
+- mandatory control file variations
+
+Repository-specific overrides:
+- You may rename `web/` and `mobile/` to other product surfaces (for example `backend/`, `platform/`, `data/`) as long as state intent remains unchanged.
+- You may keep additional governance anchors at `docs/` root, but module content must stay out of docs root.
+- If a repo has only one runtime surface, keep `shared/` and one platform root; do not create empty tiers.
+
+Invariant rules across all repos:
+1. Truth docs are authoritative and stable.
+2. Implementation docs are temporary and lifecycle-driven.
+3. One specification/runbook has one authoritative home.
+4. Staging is a transit area, not a final destination.
+
+Universal vs repository-specific split:
+- Universal core: sections 1-9 and 12-16.
+- Repository overrides: sections 10-11.
+
+---
+
+## 13) Auto-Restructuring Workflow For Existing Files
+
+Use this workflow to normalize legacy docs safely in any project.
+
+### Step A: Inventory
+1. Build a full file list from project root and `docs/`.
+2. Tag each file by type: governance, truth, implementation, evidence, runbook, unknown.
+
+### Step B: Classify State
+1. Decide if each document describes current truth or planned/uncommitted work.
+2. If uncertain, classify as implementation first and promote only after verification.
+
+### Step C: Map Target Path
+1. Select tier: shared or platform-specific.
+2. Select subcategory: reference, evidence, runbooks, active.
+3. For implementation docs, select lifecycle: active, evidence, inactive, completed.
+
+### Step D: Move Incrementally
+1. Move one document (or one tightly related batch) at a time.
+2. Update internal links and module README navigation immediately after each move.
+3. Avoid bulk moves without link validation.
+
+### Step E: Deduplicate
+1. If equivalent content exists in multiple places, keep the most authoritative copy.
+2. Delete or archive duplicates in implementation/completed paths.
+
+### Step F: Validate
+1. Verify no content docs remain at disallowed root levels.
+2. Verify no dead links from old paths.
+3. Verify every module/category has a README navigation anchor.
+
+Suggested command checks (adapt paths per repo):
+1. `find . -maxdepth 1 -type f \( -name '*.md' -o -name '*.txt' -o -name '*.sql' -o -name '*.guide' -o -name '*.audit' -o -name '*.notes' -o -name '*.log' \) | sed 's#^\./##' | sort`
+2. `find docs -type f | sort`
+3. `rg -n "old/path/to/moved/doc.md|legacy-folder-name" docs`
+
+---
+
+## 14) New File Placement Protocol (For Correct Placement At Creation Time)
+
+Before creating any new document, apply this protocol:
+
+1. Intent check:
+- Is this describing implemented reality? place in truth.
+- Is this planning or in-progress work? place in implementation.
+
+2. Scope check:
+- Shared across surfaces? place in `shared/`.
+- Specific to one surface/module? place in matching module/cross-cutting path.
+
+3. Subcategory check:
+- Specs/policies/decisions -> `reference/`
+- Validation/audit output -> `evidence/`
+- Operational procedures/deploy/setup -> `runbooks/`
+- Live trackers/changelogs -> `active/`
+
+4. Naming check:
+- Use intent suffixes (`*_REFERENCE.md`, `*_PLAN.md`, `*_AUDIT.md`, `*_RUNBOOK.md`).
+- Avoid generic names (`notes.md`, `temp.md`, `new.md`).
+
+5. Duplication check:
+- Search for equivalent docs first.
+- If content overlaps, update existing source of truth instead of creating a parallel file.
+
+6. Navigation check:
+- Add/update parent README links in the same change.
+
+---
+
+## 15) Guide Maintenance Contract
+
+To keep this guide usable in this repo and reusable elsewhere:
+1. Update this guide whenever a new docs tier/category/lifecycle is introduced.
+2. Keep a clear separation between universal rules and repo-specific overrides.
+3. Preserve reusable workflow sections (12-14) as the canonical migration/placement playbook.
+4. During docs cleanup initiatives, treat this guide as the source of placement decisions.
+
+---
+
+## 16) Rule Capture Protocol (General-First, Reusable)
+
+When new rules are discovered during implementation, document them here immediately using generalized language.
+
+Rule capture requirements:
+1. Write the rule as a reusable policy, not as a one-off incident note.
+2. Avoid project-event references in core rules (no PR IDs, no ticket IDs, no one-time evidence links).
+3. Use placeholders for paths and modules where possible (for example `<platform>`, `<module>`, `<subcategory>`).
+4. If a rule is repo-specific, place it in an override section and label it clearly.
+5. Add a short rationale so the rule remains understandable later.
+
+Rule entry template:
+1. `Rule:` one-line policy statement
+2. `Scope:` universal or repo-specific
+3. `Applies to:` existing files, new files, or both
+4. `Placement impact:` which folders/states are affected
+5. `Rationale:` why this rule exists
+
+Example (generalized):
+- Rule: Operational setup docs must be stored in `runbooks/`, while architecture/specification content must be stored in `reference/`.
+- Scope: Universal
+- Applies to: Both existing-file migration and new-file creation
+- Placement impact: Truth-state module folders
+- Rationale: Prevents mixed intent and improves discoverability
+
+---
+
+## 17) Mandatory Classification Gate (Do Not Move Without It)
+
+Every move or split operation must pass this gate first.
+
+Required classification record per file:
+1. `state`: truth or implementation
+2. `scope`: shared, web, mobile (or repository-defined surfaces)
+3. `intent`: reference, runbook, evidence, active, completed
+
+Gate rules:
+1. If any required field is unknown, stop. Do not move.
+2. Filename is not authority. Content state is authority.
+3. Words like `IMPLEMENTATION`, `FINAL`, `COMPLETE` in file names are hints only.
+4. When uncertain, keep in implementation and mark `needs-classification`.
+
+---
+
+## 18) Mixed-Content Split Policy
+
+If a single document contains mixed intent, split it before final placement.
+
+Split triggers:
+1. Architecture/specification and setup/deployment are in one file.
+2. Audit evidence and operational runbook are in one file.
+3. Planning roadmap and completed truth are in one file.
+
+Mandatory split mapping:
+1. Architecture/spec -> `reference/`
+2. Setup/deploy/operations -> `runbooks/`
+3. Validation outputs -> `evidence/`
+4. In-progress planning -> `Implementation_plans/.../active/`
+
+Post-split rule:
+1. Remove original mixed file after links are updated.
+
+---
+
+## 19) Move Transaction Checklist (Atomic)
+
+A move is valid only when all steps are completed in one change set.
+
+1. Pre-check source exists and target folder exists/created.
+2. Classify file using Section 17.
+3. Move or split file.
+4. Update parent README navigation in same change.
+5. Update references to old path in same change.
+6. Verify file exists at target path.
+7. Verify old path is removed/deprecated.
+8. Record status in tracker (targeted/moved/split/blocked/deprecated).
+
+If any step fails:
+1. Mark operation as `blocked`.
+2. Do not mark as completed.
+
+---
+
+## 20) No-Empty-Category Policy
+
+Default rule:
+1. Do not keep empty category folders under implementation paths.
+2. Create category folders only when first real content file is added.
+3. Delete category folders when they become empty after moves.
+
+Optional repository override:
+1. Keep empty categories only when an explicit anchor file policy exists.
+
+---
+
+## 21) Tracker Truthfulness Policy
+
+Restructuring plans and trackers must reflect current reality, not historical intention.
+
+Required status vocabulary:
+1. `targeted`
+2. `moved`
+3. `split`
+4. `blocked`
+5. `deprecated`
+
+Rules:
+1. Update tracker entries immediately after each move/split.
+2. Remove stale destination paths once actual placement changes.
+3. Track intended future destinations explicitly as `targeted`, not `moved`.
+
+---
+
+## 22) Do-Not-Auto-Move Conditions
+
+Automatic/bulk move must stop and require manual review when any condition matches:
+1. File ownership or module ownership is ambiguous.
+2. Scope is ambiguous (shared vs platform-specific).
+3. File includes security, legal, compliance, or data-retention policy content.
+4. File has unresolved inbound references from many locations.
+5. File mixes implementation planning and completed truth.
+
+Manual review outcome must include explicit classification record from Section 17.
+
+---
+
+## 23) Universal vs Override Boundaries
+
+To remain reusable across repositories:
+1. Keep universal rules in core sections.
+2. Keep repository-specific constraints in clearly labeled override sections.
+3. Never place project-only constraints in universal sections.
+4. When porting to another repo, update override sections first, not core rules.
+
+---
+
+## 24) Mandatory Verification Evidence
+
+After each move batch, capture verification evidence.
+
+Minimum required checks:
+1. Target files exist.
+2. Old source paths are removed or intentionally deprecated.
+3. Reference scan for old paths returns expected results.
+4. Parent README navigation includes moved docs.
+5. Empty categories are removed per Section 20.
+
+Recommended command set (adapt paths per repo):
+1. `find docs -type f | sort`
+2. `rg -n "old/path|old_filename" docs`
+3. `find docs/Implementation_plans -type d -empty | sort`
+
+Repository enforcement command:
+1. `npm run docs:validate`
+2. CI gate should run `npm run docs:validate:ci`
+
+---
+
+## 25) Rollback and Reclassification Rule
+
+If a move is found wrong after verification:
+1. Revert that specific move.
+2. Reclassify with Section 17.
+3. Reapply move using Section 19.
+4. Update tracker status and rationale.
+
+This prevents drift and preserves trust in documentation state.
+
+---
+
+## 26) Cross-Project Reuse Checklist
+
+Before using this guide in a new repository:
+1. Define docs root and platform/surface names.
+2. Define implementation lifecycle folders.
+3. Define repository override sections (security, DB, release constraints).
+4. Confirm status vocabulary and tracker location.
+5. Confirm no-empty-category behavior for that repo.
+
+After adoption:
+1. Enforce Section 17 and Section 19 for every move.
+2. Enforce Section 21 for tracker accuracy.
+3. Record new generalized rules via Section 16.
+
+---
+
+## 27) Cross-Project Starter Pack (One-Shot Drop-In)
+
+For fast adoption in another repository, use the starter pack document:
+- `docs/shared/reference/catalog/CROSS_PROJECT_DOCS_STARTER_PACK.md`
+
+Starter pack scope:
+1. Required file set to create in a new repo.
+2. Minimal validator checklist for no-drift baseline.
+3. Copy/paste snippets for scripts and CI gate.
+4. Porting checklist that must be completed before this guide is considered active.
+
+Adoption rule:
+1. Copy starter pack and guide together.
+2. Complete Section 12.1 customization first.
+3. Enable validator + CI before broad team usage.
+
+---
+
+**Review Frequency:** every 6 months or when new categories are introduced  
 **Owner:** Techwheels Development Team
