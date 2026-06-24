@@ -475,7 +475,7 @@ Function also supports these compatible names:
 ## Related Documentation
 
 - [Implementation Plans Index](../../INDEX.md)
-- [Project Handbook README](../../../Project_Handbook/README.md)
+- [Project Handbook README](docs/shared/README.md)
 - [Supabase Migrations README](../../../../supabase/migrations/README.md)
 
 ---

@@ -51,7 +51,7 @@ Blockers:
 - [ ] None
 
 DB change reference:
-- Ledger row IDs from docs/Project_Handbook/DB_CHANGE_LEDGER.md:
+- Ledger row IDs from docs/shared/reference/DB_CHANGE_LEDGER.md:
 
 Evidence links:
 - PR/Commit:
@@ -82,7 +82,7 @@ Blockers:
 - [ ] Pending decision: canonical route strategy (DB route vs frontend mapping layer).
 
 DB change reference:
-- Ledger row IDs from docs/Project_Handbook/DB_CHANGE_LEDGER.md: DBL-0002 (VERIFIED)
+- Ledger row IDs from docs/shared/reference/DB_CHANGE_LEDGER.md: DBL-0002 (VERIFIED)
 
 Evidence links:
 - PR/Commit: Local working tree update
@@ -109,7 +109,7 @@ Blockers:
 - [ ] External approvals pending from stakeholders.
 
 DB change reference:
-- Ledger row IDs from docs/Project_Handbook/DB_CHANGE_LEDGER.md: DBL-0002 (VERIFIED)
+- Ledger row IDs from docs/shared/reference/DB_CHANGE_LEDGER.md: DBL-0002 (VERIFIED)
 
 Evidence links:
 - PR/Commit: Local working tree update
@@ -135,7 +135,7 @@ Blockers:
 - [ ] External review/apply step pending.
 
 DB change reference:
-- Ledger row IDs from docs/Project_Handbook/DB_CHANGE_LEDGER.md: DBL-0004 (PROPOSED)
+- Ledger row IDs from docs/shared/reference/DB_CHANGE_LEDGER.md: DBL-0004 (PROPOSED)
 
 Evidence links:
 - PR/Commit: Local working tree update
@@ -164,7 +164,7 @@ Blockers:
 - [ ] Runtime lock contention/timeout in SQL Editor on busy target tables.
 
 DB change reference:
-- Ledger row IDs from docs/Project_Handbook/DB_CHANGE_LEDGER.md: DBL-0004 (PROPOSED)
+- Ledger row IDs from docs/shared/reference/DB_CHANGE_LEDGER.md: DBL-0004 (PROPOSED)
 
 Evidence links:
 - PR/Commit: Local working tree update
@@ -191,7 +191,7 @@ Blockers:
 - [ ] Ongoing lock contention on target parts/import tables in production activity window.
 
 DB change reference:
-- Ledger row IDs from docs/Project_Handbook/DB_CHANGE_LEDGER.md: DBL-0004 (PROPOSED)
+- Ledger row IDs from docs/shared/reference/DB_CHANGE_LEDGER.md: DBL-0004 (PROPOSED)
 
 Evidence links:
 - PR/Commit: Local working tree update
@@ -218,7 +218,7 @@ Blockers:
 - [ ] None.
 
 DB change reference:
-- Ledger row IDs from docs/Project_Handbook/DB_CHANGE_LEDGER.md: DBL-0004 (VERIFIED)
+- Ledger row IDs from docs/shared/reference/DB_CHANGE_LEDGER.md: DBL-0004 (VERIFIED)
 
 Evidence links:
 - PR/Commit: Local working tree update
@@ -244,7 +244,7 @@ Blockers:
 - [ ] None.
 
 DB change reference:
-- Ledger row IDs from docs/Project_Handbook/DB_CHANGE_LEDGER.md: DBL-0002 (VERIFIED), DBL-0004 (VERIFIED)
+- Ledger row IDs from docs/shared/reference/DB_CHANGE_LEDGER.md: DBL-0002 (VERIFIED), DBL-0004 (VERIFIED)
 
 Evidence links:
 - PR/Commit: Local working tree update

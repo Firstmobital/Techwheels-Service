@@ -13,12 +13,12 @@ A task is not complete until docs are updated in the same change set.
 
 Mandatory files to review on each change:
 
-1. `docs/Project_Handbook/CURRENT_STATE.md`
-2. `docs/Project_Handbook/CHANGE_LOG.md`
-3. `docs/Project_Handbook/README.md`
-4. `docs/Project_Handbook/DOCS_IMPACT_MATRIX.md`
-5. `docs/Project_Handbook/DB_CHANGE_LEDGER.md` (required for schema/RLS/function/view/index changes)
-6. `docs/Project_Handbook/DB_CHANGE_PROTOCOL.md` (required reference for DB workflow)
+1. `docs/shared/reference/CURRENT_STATE.md`
+2. `docs/shared/active/CHANGE_LOG.md`
+3. `docs/shared/README.md`
+4. `docs/DOCS_IMPACT_MATRIX.md`
+5. `docs/shared/reference/DB_CHANGE_LEDGER.md` (required for schema/RLS/function/view/index changes)
+6. `docs/shared/reference/DB_CHANGE_PROTOCOL.md` (required reference for DB workflow)
 
 ## Update Triggers
 

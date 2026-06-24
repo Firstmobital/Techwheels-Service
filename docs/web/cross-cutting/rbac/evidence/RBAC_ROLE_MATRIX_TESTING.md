@@ -258,9 +258,9 @@ test('new user sees helpful AccessDenied message', async ({ page }) => {
 ## Related Documentation
 
 - [RBAC-001_DYNAMIC_RBAC_AND_MODULE_WIRING.md](../../Implementation_plans/webversion/categories/rbac/active/RBAC_IMPLEMENTATION_MASTER_2026-06-01.md) — Overall plan
-- [MODULE_ROUTE_CONTRACT.md](../../Project_Handbook/MODULE_ROUTE_CONTRACT.md) — Module/route mapping
-- [ROUTE_STRATEGY_DECISION.md](../../Project_Handbook/ROUTE_STRATEGY_DECISION.md) — Route design
-- [ONBOARDING_POLICY.md](../../Project_Handbook/ONBOARDING_POLICY.md) — New user behavior
+- [MODULE_ROUTE_CONTRACT.md](docs/shared/reference/MODULE_ROUTE_CONTRACT.md) — Module/route mapping
+- [ROUTE_STRATEGY_DECISION.md](docs/shared/reference/ROUTE_STRATEGY_DECISION.md) — Route design
+- [ONBOARDING_POLICY.md](docs/shared/reference/ONBOARDING_POLICY.md) — New user behavior
 - [RBAC_TABLE_ACCESS_VALIDATION_TESTS.md](RBAC_TABLE_ACCESS_VALIDATION_TESTS.md) — Backend validation
 
 ---

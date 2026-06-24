@@ -355,7 +355,7 @@ DONE | 5.4 | Final sign-off and archive transition | Team | 2026-06-11 | 2026-06
 ## Related Documentation
 
 - docs/supabase/evidence/DB_CODE_COMPARISON_9JUNE_VS_CURRENT_2026-06-11.md
-- docs/Implementation_plans/TEMPLATE.md
+- docs/shared/reference/catalog/IMPLEMENTATION_PLAN_TEMPLATE.md
 - docs/Implementation_plans/webversion/categories/supabase/active/SUPABASE-001_PRODUCTION_HARDENING_MASTER_PLAN.md
 - docs/Implementation_plans/webversion/categories/supabase/README.md
 

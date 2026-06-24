@@ -300,7 +300,7 @@ Where:
 ## Related Documentation
 
 - [docs/STRUCTURE_GUIDE.md](docs/STRUCTURE_GUIDE.md)
-- [docs/Implementation_plans/TEMPLATE.md](docs/Implementation_plans/TEMPLATE.md)
+- [docs/shared/reference/catalog/IMPLEMENTATION_PLAN_TEMPLATE.md](../../../../../shared/reference/catalog/IMPLEMENTATION_PLAN_TEMPLATE.md)
 - [src/pages/TechnicianPage.tsx](src/pages/TechnicianPage.tsx)
 - [src/pages/SettingsPage.tsx](src/pages/SettingsPage.tsx)
 - [supabase/functions/send-transactional-email/index.ts](supabase/functions/send-transactional-email/index.ts)

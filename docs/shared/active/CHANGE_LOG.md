@@ -11,7 +11,7 @@ Tracks documentation-sync updates for business logic, architecture, and access c
 
 ## 2026-05-22
 
-- Added initial living handbook system under `docs/Project_Handbook/`.
+- Added initial living handbook system under `docs/shared/`.
 - Added full handbook (`README.md`) covering architecture, domains, RBAC/RLS, runbook, and risks.
 - Added mandatory docs-sync protocol (`SYNC_PROTOCOL.md`).
 - Added impact mapping matrix (`DOCS_IMPACT_MATRIX.md`).
@@ -21,8 +21,8 @@ Tracks documentation-sync updates for business logic, architecture, and access c
 
 - Added RBAC daily standup checklist: `docs/Implementation_plans/RBAC-001_DAILY_STANDUP_CHECKLIST.md`.
 - Added DB governance files:
-	- `docs/Project_Handbook/DB_CHANGE_LEDGER.md`
-	- `docs/Project_Handbook/DB_CHANGE_PROTOCOL.md`
+	- `docs/shared/reference/DB_CHANGE_LEDGER.md`
+	- `docs/shared/reference/DB_CHANGE_PROTOCOL.md`
 - Added RBAC migration foundation file: `supabase/migrations/20260523120000_add_module_permission_helper_functions.sql`.
 - Added DB ledger proposal entry: `DBL-0002`.
 - Added executed migration archive folder: `supabase/exec_success_migrations/` with usage README.

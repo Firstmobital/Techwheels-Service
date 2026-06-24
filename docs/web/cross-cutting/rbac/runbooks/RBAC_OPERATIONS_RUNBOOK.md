@@ -363,7 +363,7 @@ LIMIT 20;
 
 **Recommended Workflow:**
 
-1. **Daily standup check** (see [RBAC-001_DAILY_STANDUP_CHECKLIST.md](../../Implementation_plans/completed/RBAC-001_DAILY_STANDUP_CHECKLIST.md))
+1. **Daily standup check** (see [RBAC-001_DAILY_STANDUP_CHECKLIST.md](../../../../Implementation_plans/completed/rbac/RBAC-001_DAILY_STANDUP_CHECKLIST.md))
 2. **Weekly permission audit:**
    - Count users per role
    - Flag any unexpected permission combinations
@@ -580,9 +580,9 @@ Then:
 
 | Document | Purpose |
 |----------|---------|
-| [RBAC-001_DAILY_STANDUP_CHECKLIST.md](../../Implementation_plans/completed/RBAC-001_DAILY_STANDUP_CHECKLIST.md) | Daily tracking |
-| [MODULE_ROUTE_CONTRACT.md](../../Project_Handbook/MODULE_ROUTE_CONTRACT.md) | Module/route mapping |
-| [ONBOARDING_POLICY.md](../../Project_Handbook/ONBOARDING_POLICY.md) | New user behavior |
+| [RBAC-001_DAILY_STANDUP_CHECKLIST.md](../../../../Implementation_plans/completed/rbac/RBAC-001_DAILY_STANDUP_CHECKLIST.md) | Daily tracking |
+| [MODULE_ROUTE_CONTRACT.md](docs/shared/reference/MODULE_ROUTE_CONTRACT.md) | Module/route mapping |
+| [ONBOARDING_POLICY.md](docs/shared/reference/ONBOARDING_POLICY.md) | New user behavior |
 | [RBAC_ROLE_MATRIX_TESTING.md](../evidence/RBAC_ROLE_MATRIX_TESTING.md) | QA test procedures |
 | [RBAC_SECURITY_TESTING.md](../evidence/RBAC_SECURITY_TESTING.md) | Security test procedures |
 

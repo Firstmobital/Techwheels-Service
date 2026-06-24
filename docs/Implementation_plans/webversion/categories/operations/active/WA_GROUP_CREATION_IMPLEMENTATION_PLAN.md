@@ -192,7 +192,7 @@ New scope:
 ## Files and Structure (Target)
 
 - docs/Implementation_plans/webversion/categories/operations/active/WA_GROUP_CREATION_IMPLEMENTATION_PLAN.md (this document; now re-scoped)
-- docs/wa_templates/catalog/sa_floor_completed_wa.md (template documentation)
+- docs/web/cross-cutting/wa_templates/reference/sa_floor_completed_wa.md (template documentation)
 - src/lib/waTemplates/index.ts (template exports)
 - src/lib/waTemplates/sa_floor_completed_wa.ts (template builder)
 - src/pages/ServiceAdvisorPage.tsx (Send WA action wiring)

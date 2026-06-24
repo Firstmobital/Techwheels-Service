@@ -266,12 +266,12 @@ All remaining tasks for RBAC-001: Dynamic RBAC and Module Wiring have been compl
 ### For Operations Team (Rollout & Maintenance)
 1. Read [RBAC_OPERATIONS_RUNBOOK.md](../runbooks/RBAC_OPERATIONS_RUNBOOK.md) — Learn all procedures
 2. Bookmark quick reference table at top
-3. Check [RBAC-001_DAILY_STANDUP_CHECKLIST.md](../../Implementation_plans/completed/RBAC-001_DAILY_STANDUP_CHECKLIST.md) — Daily tracking
+3. Check [RBAC-001_DAILY_STANDUP_CHECKLIST.md](../../../../Implementation_plans/completed/rbac/RBAC-001_DAILY_STANDUP_CHECKLIST.md) — Daily tracking
 
 ### For Engineering (Reference)
-1. Read [MODULE_ROUTE_CONTRACT.md](../../Project_Handbook/MODULE_ROUTE_CONTRACT.md) — Understand module-route mapping
-2. Read [ROUTE_STRATEGY_DECISION.md](../../Project_Handbook/ROUTE_STRATEGY_DECISION.md) — Understand design decision
-3. Read [ONBOARDING_POLICY.md](../../Project_Handbook/ONBOARDING_POLICY.md) — Understand new user behavior
+1. Read [MODULE_ROUTE_CONTRACT.md](docs/shared/reference/MODULE_ROUTE_CONTRACT.md) — Understand module-route mapping
+2. Read [ROUTE_STRATEGY_DECISION.md](docs/shared/reference/ROUTE_STRATEGY_DECISION.md) — Understand design decision
+3. Read [ONBOARDING_POLICY.md](docs/shared/reference/ONBOARDING_POLICY.md) — Understand new user behavior
 4. Review code changes in App.tsx and SignUpPage.tsx
 
 ---

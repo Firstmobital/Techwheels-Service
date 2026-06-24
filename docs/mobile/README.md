@@ -37,5 +37,5 @@ When implementation is completed:
 ## Navigation
 
 For implementation plans → See [docs/Implementation_plans/mobileversion/](../Implementation_plans/mobileversion/)
-For shared governance → See [docs/Project_Handbook/](../Project_Handbook/)
+For shared governance → See [docs/shared/](docs/shared/)
 For platform guide → See [docs/STRUCTURE_GUIDE.md](../STRUCTURE_GUIDE.md)

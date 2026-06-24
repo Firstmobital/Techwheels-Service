@@ -322,14 +322,14 @@ cat .env.local | grep VITE_SUPABASE_SERVICE_KEY
 ## 📚 Related Documentation
 
 **Implementation Plans (Archived):**
-- `docs/Implementation_plans/completed/SECURITY_REFACTOR_SERVICE_KEY.md` - Full 1334-line technical plan
-- `docs/Implementation_plans/completed/SEC-001_DEPLOYMENT.md` - Deployment checklist
-- `docs/Implementation_plans/completed/SEC-001_QUICK_START.md` - Getting started guide
+- `docs/Implementation_plans/completed/security/SECURITY_REFACTOR_SERVICE_KEY.md` - Full 1334-line technical plan
+- `docs/Implementation_plans/completed/security/SEC-001_DEPLOYMENT.md` - Deployment checklist
+- `docs/Implementation_plans/completed/security/SEC-001_QUICK_START.md` - Getting started guide
 
 **Detailed Docs (Archived):**
-- `docs/archived/ADMIN_OPERATIONS_SECURITY.md` - Detailed pattern explanation
-- `docs/archived/DEPLOYMENT_FINAL_STATUS.md` - Final deployment summary
-- `docs/archived/SECURITY_REFACTOR_COMPLETION.md` - Completion report
+- `docs/_unstructured_staging/legacy_dirs/archived/ADMIN_OPERATIONS_SECURITY.md` - Detailed pattern explanation
+- `docs/_unstructured_staging/legacy_dirs/archived/DEPLOYMENT_FINAL_STATUS.md` - Final deployment summary
+- `docs/_unstructured_staging/legacy_dirs/archived/SECURITY_REFACTOR_COMPLETION.md` - Completion report
 
 **Code References:**
 - `src/pages/AdminPage.tsx` - Frontend using Edge Functions

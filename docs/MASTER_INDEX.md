@@ -8,9 +8,9 @@ Last Updated: 2026-06-18
 
 1. [README.md](README.md) - docs root overview
 2. [STRUCTURE_GUIDE.md](STRUCTURE_GUIDE.md) - canonical placement rules
-3. [Project_Handbook/CURRENT_STATE.md](Project_Handbook/CURRENT_STATE.md) - audited current web/mobile/database snapshot
+3. [shared/reference/CURRENT_STATE.md](docs/shared/reference/CURRENT_STATE.md) - audited current web/mobile/database snapshot
 4. [Implementation_plans](Implementation_plans) - execution plans and trackers
-5. [Project_Handbook](Project_Handbook) - durable governance and architecture docs
+5. [shared](docs/shared/) - durable governance and architecture docs
 6. [Project_Instructions](Project_Instructions) - contributor/agent instructions
 7. [autodoc](autodoc) - autodoc operations docs
 8. [complaints](complaints) - complaints authority/reference docs
@@ -43,7 +43,7 @@ Platform indexes:
 
 ## Category-Level READMEs
 
-1. [Project_Handbook/README.md](Project_Handbook/README.md)
+1. [shared/README.md](docs/shared/README.md)
 2. [Project_Instructions/README.md](Project_Instructions/README.md)
 3. [autodoc/README.md](autodoc/README.md)
 4. [complaints/README.md](complaints/README.md)
@@ -60,8 +60,8 @@ Platform indexes:
 
 1. [STRUCTURE_GUIDE.md](STRUCTURE_GUIDE.md) - Complete placement authority and decision tree
 2. [Project_Instructions/reference/DOCS_PLACEMENT_GUIDE.md](Project_Instructions/reference/DOCS_PLACEMENT_GUIDE.md) - Human-friendly guide with examples for contributors
-3. [Project_Handbook/CURRENT_STATE.md](Project_Handbook/CURRENT_STATE.md) - Audited current-state authority
-4. [Project_Handbook/DOCS_DEDUP_CONFLICT_MATRIX_2026-06-18.md](Project_Handbook/DOCS_DEDUP_CONFLICT_MATRIX_2026-06-18.md) - Non-Implementation_plans overlap matrix and authority mapping
+3. [shared/reference/CURRENT_STATE.md](docs/shared/reference/CURRENT_STATE.md) - Audited current-state authority
+4. [DOCS_DEDUP_CONFLICT_MATRIX_2026-06-18.md](docs/DOCS_DEDUP_CONFLICT_MATRIX_2026-06-18.md) - Non-Implementation_plans overlap matrix and authority mapping
 5. [README.md](README.md) - Top-level docs overview
 
 ---
@@ -71,5 +71,5 @@ Platform indexes:
 1. Markdown files should not be left in `docs/` root except authority/index files.
 2. Every move should include link-fix and validation in the same change.
 3. For placement workflow, follow [STRUCTURE_GUIDE.md](STRUCTURE_GUIDE.md) or [DOCS_PLACEMENT_GUIDE.md](Project_Instructions/reference/DOCS_PLACEMENT_GUIDE.md).
-4. For web/mobile/database factual status, treat [Project_Handbook/CURRENT_STATE.md](Project_Handbook/CURRENT_STATE.md) as the single snapshot authority.
+4. For web/mobile/database factual status, treat [shared/reference/CURRENT_STATE.md](docs/shared/reference/CURRENT_STATE.md) as the single snapshot authority.
 

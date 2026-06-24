@@ -299,7 +299,7 @@ This plan translates that SOP into an implementable app module in the same Techw
 ## Related Documentation
 
 - [Implementation Plans Index](../../INDEX.md)
-- [Project Handbook README](../../../Project_Handbook/README.md)
+- [Project Handbook README](docs/shared/README.md)
 - [AutoDoc Execution Status](../../autodoc/evidence/AUTODOC_EXECUTION_STATUS_2026-05-22.md)
 
 ---

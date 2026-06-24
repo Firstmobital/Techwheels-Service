@@ -171,11 +171,11 @@ Observed issue: new signup users could see all modules/pages despite no explicit
 ## Related Documentation
 
 **Project Handbook (Reference & Configuration):**
-- [docs/Project_Handbook/MODULE_ROUTE_CONTRACT.md](../../Project_Handbook/MODULE_ROUTE_CONTRACT.md) — Module-route mapping matrix
-- [docs/Project_Handbook/ROUTE_STRATEGY_DECISION.md](../../Project_Handbook/ROUTE_STRATEGY_DECISION.md) — Decision to keep explicit mapping layer
-- [docs/Project_Handbook/ONBOARDING_POLICY.md](../../Project_Handbook/ONBOARDING_POLICY.md) — New user default state (active, no modules)
-- [docs/Project_Handbook/ONBOARDING_GATING_ENFORCEMENT.md](../../Project_Handbook/ONBOARDING_GATING_ENFORCEMENT.md) — How gating is enforced (frontend + backend)
-- [docs/Project_Handbook/CURRENT_STATE.md](../../Project_Handbook/CURRENT_STATE.md) — Project state snapshot
+- [docs/shared/reference/MODULE_ROUTE_CONTRACT.md](docs/shared/reference/MODULE_ROUTE_CONTRACT.md) — Module-route mapping matrix
+- [docs/shared/reference/ROUTE_STRATEGY_DECISION.md](docs/shared/reference/ROUTE_STRATEGY_DECISION.md) — Decision to keep explicit mapping layer
+- [docs/shared/reference/ONBOARDING_POLICY.md](docs/shared/reference/ONBOARDING_POLICY.md) — New user default state (active, no modules)
+- [docs/shared/runbooks/ONBOARDING_GATING_ENFORCEMENT.md](docs/shared/runbooks/ONBOARDING_GATING_ENFORCEMENT.md) — How gating is enforced (frontend + backend)
+- [docs/shared/reference/CURRENT_STATE.md](docs/shared/reference/CURRENT_STATE.md) — Project state snapshot
 
 **Operations & Testing (Procedures & Checklists):**
 - [docs/rbac/evidence/RBAC_TABLE_ACCESS_VALIDATION_TESTS.md](../../rbac/evidence/RBAC_TABLE_ACCESS_VALIDATION_TESTS.md) — Backend table access test suites
@@ -186,8 +186,8 @@ Observed issue: new signup users could see all modules/pages despite no explicit
 
 **Supporting Documentation:**
 - [docs/Implementation_plans/INDEX.md](../INDEX.md)
-- [docs/Project_Handbook/DB_CHANGE_LEDGER.md](../../Project_Handbook/DB_CHANGE_LEDGER.md)
-- [docs/Project_Handbook/DB_CHANGE_PROTOCOL.md](../../Project_Handbook/DB_CHANGE_PROTOCOL.md)
+- [docs/shared/reference/DB_CHANGE_LEDGER.md](docs/shared/reference/DB_CHANGE_LEDGER.md)
+- [docs/shared/reference/DB_CHANGE_PROTOCOL.md](docs/shared/reference/DB_CHANGE_PROTOCOL.md)
 - [local_folder/backups/full_database.sql](../../../local_folder/backups/full_database.sql) — Authoritative schema
 
 ---

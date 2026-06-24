@@ -238,7 +238,7 @@ Pending (runtime validation only):
 - Cache hit scenario: Test cache expiry behavior (first call hits provider API, second call within TTL returns from rto_cache)
 - Error edge cases: malformed input, provider timeout, stale cache fallback
 
-Implementation plan moved to: [docs/Implementation_plans/completed/RC_LOOKUP_EDGE_FUNCTION_IMPLEMENTATION_PLAN.md](../../completed/RC_LOOKUP_EDGE_FUNCTION_IMPLEMENTATION_PLAN.md)
+Implementation plan moved to: [docs/Implementation_plans/completed/autodoc/RC_LOOKUP_EDGE_FUNCTION_IMPLEMENTATION_PLAN.md](../../../../completed/autodoc/RC_LOOKUP_EDGE_FUNCTION_IMPLEMENTATION_PLAN.md)
 
 ### Execution Delta (2026-05-26 — dashboard workflow/status redesign request)
 

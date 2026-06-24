@@ -17,7 +17,7 @@ Prevent schema drift and prevent assumption-based development by enforcing one w
 ## Required Workflow
 
 1. Create/Update plan item in docs/Implementation_plans/*.md.
-2. Add ledger row in docs/Project_Handbook/DB_CHANGE_LEDGER.md with status PROPOSED.
+2. Add ledger row in docs/shared/reference/DB_CHANGE_LEDGER.md with status PROPOSED.
 3. Create migration SQL in supabase/migrations with reversible strategy.
 4. Create paired read-only verification SQL in supabase/sql_checks using same timestamp prefix.
 5. Update ledger status to APPROVED once reviewer signs off.

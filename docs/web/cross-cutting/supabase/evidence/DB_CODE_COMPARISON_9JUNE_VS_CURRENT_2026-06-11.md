@@ -280,7 +280,7 @@ This section captures issues found after auditing documentation across the full 
 ### 13.1 Critical: Module-Route contract is stale and no longer authoritative
 
 Current document status:
-1. `docs/Project_Handbook/MODULE_ROUTE_CONTRACT.md` is last updated on 2026-05-23.
+1. `docs/shared/reference/MODULE_ROUTE_CONTRACT.md` is last updated on 2026-05-23.
 2. It lists older module coverage and misses currently deployed modules such as `complaints`, `service_advisor`, `floor_incharge`, `technician`, `sa_tracker`, `bodyshop_tracker`, `bodyshop_floor`, and `bodyshop_repair`.
 
 Why this matters:
@@ -360,7 +360,7 @@ If you are not technical, this is the important takeaway:
 
 ## 15) Documentation Correction Checklist
 
-1. Update `docs/Project_Handbook/MODULE_ROUTE_CONTRACT.md` to include all currently deployed modules and routes.
+1. Update `docs/shared/reference/MODULE_ROUTE_CONTRACT.md` to include all currently deployed modules and routes.
 2. Add a change note in the contract documenting the bodyshop and tracker module additions.
 3. Add a governance note in RBAC docs that bodyshop policies are pending hardening and must not use permissive `true` predicates.
 4. Amend Supabase hardening tracker with a new entry documenting post-hardening regressions and closure plan.
