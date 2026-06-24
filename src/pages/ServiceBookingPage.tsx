@@ -58,6 +58,8 @@ interface ServiceBooking {
   caller_name: string | null; call_attempt: number | null; call_outcome: string | null
   wa_conversation_id: string | null; wa_opt_in: boolean; jc_number: string | null
   converted_at: string | null; created_at: string; updated_at: string
+  telecall_assignment_id: number | null; telecall_campaign_id: number | null
+  call_notes: string | null
 }
 interface FollowUp {
   id: number; booking_id: number; follow_up_date: string; channel: string | null
@@ -172,6 +174,7 @@ export default function ServiceBookingPage() {
     cancelled: filtered.filter(b => b.status === 'Cancelled' || b.status === 'No-Show').length,
     converted: filtered.filter(b => b.jc_number).length,
     telecalling: filtered.filter(b => b.booking_source === 'Telecalling').length,
+    linked: filtered.filter(b => b.telecall_assignment_id !== null).length,
     whatsapp: filtered.filter(b => b.booking_source === 'WhatsApp').length,
   }), [filtered])
 
@@ -281,6 +284,7 @@ export default function ServiceBookingPage() {
           { label: 'Cancelled', value: stats.cancelled, color: '#dc2626', bg: '#fef2f2', border: '#fecaca' },
           { label: 'Converted →JC', value: stats.converted, color: '#b45309', bg: '#fffbeb', border: '#fde68a' },
           { label: '📞 Telecalling', value: stats.telecalling, color: '#0369a1', bg: '#f0f9ff', border: '#bae6fd' },
+        { label: '🔗 Linked from Telecaller', value: stats.linked, color: '#7c3aed', bg: '#faf5ff', border: '#e9d5ff' },
           { label: '💬 WhatsApp', value: stats.whatsapp, color: '#16a34a', bg: '#f0fdf4', border: '#bbf7d0' },
         ].map(({ label, value, color, bg, border }) => (
           <div key={label} style={{ background: bg, border: `1px solid ${border}`, borderRadius: '8px', padding: '0.3rem 0.7rem', textAlign: 'center', minWidth: '68px' }}>
@@ -372,7 +376,12 @@ export default function ServiceBookingPage() {
                       onMouseLeave={e => { if (!isSelected) (e.currentTarget as HTMLElement).style.background = '#fff' }}>
                       {/* Lead # */}
                       <td style={{ padding: '0.5rem 0.65rem', whiteSpace: 'nowrap' }}>
-                        <div style={{ fontWeight: 700, color: '#2563eb', fontSize: '0.78rem' }}>{b.lead_number || `#${b.id}`}</div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', flexWrap: 'wrap' }}>
+                          <div style={{ fontWeight: 700, color: '#2563eb', fontSize: '0.78rem' }}>{b.lead_number || `#${b.id}`}</div>
+                          {b.telecall_assignment_id && (
+                            <span style={{ fontSize: '0.6rem', background: '#ede9fe', color: '#6d28d9', borderRadius: 4, padding: '1px 5px', fontWeight: 600 }}>🔗 Telecalling</span>
+                          )}
+                        </div>
                         {b.jc_number && <div style={{ fontSize: '0.63rem', color: '#16a34a', fontWeight: 600 }}>✓ {b.jc_number}</div>}
                       </td>
                       {/* Source (full view only) */}
@@ -719,9 +728,28 @@ export default function ServiceBookingPage() {
                 )}
 
                 {/* Source-specific info */}
-                {selectedBooking.booking_source === 'Telecalling' && (selectedBooking.caller_name || selectedBooking.call_outcome) && (
-                  <div style={{ background: '#f0f9ff', borderRadius: '8px', padding: '0.6rem 0.85rem', marginBottom: '0.85rem', border: '1px solid #bae6fd', fontSize: '0.78rem', color: '#0369a1' }}>
-                    📞 <strong>Call:</strong> {[selectedBooking.caller_name, selectedBooking.call_attempt ? `Attempt #${selectedBooking.call_attempt}` : null, selectedBooking.call_outcome].filter(Boolean).join(' · ')}
+                {selectedBooking.booking_source === 'Telecalling' && (
+                  <div style={{ background: '#f0f9ff', borderRadius: '8px', padding: '0.75rem 1rem', marginBottom: '0.85rem', border: '1px solid #bae6fd', fontSize: '0.78rem', color: '#0369a1' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: selectedBooking.call_notes ? '0.4rem' : 0 }}>
+                      <span style={{ fontWeight: 800 }}>📞 Booked via Telecalling</span>
+                      {selectedBooking.telecall_assignment_id && (
+                        <span style={{ background: '#ddd6fe', color: '#5b21b6', borderRadius: 4, fontSize: '0.65rem', padding: '1px 6px', fontWeight: 700 }}>
+                          🔗 Assignment #{selectedBooking.telecall_assignment_id}
+                        </span>
+                      )}
+                    </div>
+                    {(selectedBooking.caller_name || selectedBooking.call_outcome) && (
+                      <div style={{ color: '#0369a1' }}>
+                        👤 <strong>{selectedBooking.caller_name || '—'}</strong>
+                        {selectedBooking.call_attempt ? ` · Attempt #${selectedBooking.call_attempt}` : ''}
+                        {selectedBooking.call_outcome ? ` · ${selectedBooking.call_outcome}` : ''}
+                      </div>
+                    )}
+                    {selectedBooking.call_notes && (
+                      <div style={{ marginTop: '0.35rem', color: '#1e40af', fontStyle: 'italic' }}>
+                        📝 &ldquo;{selectedBooking.call_notes}&rdquo;
+                      </div>
+                    )}
                   </div>
                 )}
 
