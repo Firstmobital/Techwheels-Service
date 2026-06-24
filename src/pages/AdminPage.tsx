@@ -185,7 +185,7 @@ async function extractFunctionErrorMessage(error: unknown): Promise<string> {
 }
 
 // ── Component ──────────────────────────────────────────────────────────────────
-export default function AdminPage() {
+export default function AdminPage({ onViewAsUser }: { onViewAsUser?: (id: string, email: string, name: string) => void }) {
   const [tab, setTab]         = useState<'users' | 'permissions' | 'modules' | 'mappings'>('users')
   const [users, setUsers]     = useState<AppUser[]>([])
   const [modules, setModules] = useState<Module[]>([])
@@ -1064,6 +1064,18 @@ export default function AdminPage() {
                           >
                             {u.is_active ? 'Deactivate' : 'Activate'}
                           </button>
+                          {onViewAsUser && u.role !== 'admin' && (
+                            <button
+                              className="tbtn tbtn--view"
+                              title={`See the app exactly as ${u.email} sees it`}
+                              onClick={() => {
+                                onViewAsUser(u.id, u.email, u.full_name || u.email)
+                                window.location.href = '/home'
+                              }}
+                            >
+                              👁 View as
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>
