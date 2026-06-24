@@ -544,6 +544,8 @@ table.tbl { width: 100%; border-collapse: collapse; font-size: 13.5px; }
 .tbtn--danger:hover { background: #f8dfe2; }
 .tbtn--ok { background: var(--success-bg); color: var(--success); border-color: transparent; }
 .tbtn--ok:hover { background: #d7f0e4; }
+.tbtn--view { background: #ede9fe; color: #6d28d9; border-color: transparent; }
+.tbtn--view:hover { background: #ddd6fe; }
 .tactions { display: inline-flex; gap: 6px; align-items: center; }
 
 /* Matrix quick-set mini buttons */
