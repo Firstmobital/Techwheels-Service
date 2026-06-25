@@ -8,7 +8,6 @@ export type DateRange = { from: string; to: string }
 export type DateRangePreset = 'this-month' | 'last-month' | 'this-week' | 'last-7' | 'last-30' | 'custom'
 
 function toIST(d: Date) {
-  // returns YYYY-MM-DD in Asia/Kolkata
   return d.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
 }
 
@@ -35,7 +34,7 @@ function getRange(preset: DateRangePreset, custom: DateRange): DateRange {
   }
 
   if (preset === 'this-week') {
-    const day = now.getDay() // 0=Sun
+    const day = now.getDay()
     const mon = new Date(now); mon.setDate(now.getDate() - ((day + 6) % 7))
     return { from: toIST(mon), to: today }
   }
@@ -73,71 +72,63 @@ export default function DateRangeFilter({ range, onChange, label, disabledPreset
 
   function apply(p: DateRangePreset, c?: DateRange) {
     const resolved = c ?? custom
-    const r = getRange(p, resolved)
-    onChange(r)
+    onChange(getRange(p, resolved))
   }
 
-  function handlePreset(p: DateRangePreset | 'all') {
+  function handleSelect(p: DateRangePreset | 'all') {
     if (p === 'all') {
       setPreset('all')
       onChange({ from: '', to: '' })
       return
     }
-
     if (disabledSet.has(p)) return
     setPreset(p)
     if (p !== 'custom') apply(p)
   }
 
-  const PRESETS: Array<{ key: DateRangePreset | 'all'; label: string }> = [
+  const OPTIONS: Array<{ key: DateRangePreset | 'all'; label: string }> = [
     ...(includeAll ? [{ key: 'all' as const, label: 'All' }] : []),
-    { key: 'this-month', label: 'This Month' },
-    { key: 'last-month', label: 'Last Month' },
-    { key: 'this-week',  label: 'This Week'  },
-    { key: 'last-7',     label: 'Last 7 Days'},
+    { key: 'this-month', label: 'This Month'  },
+    { key: 'last-month', label: 'Last Month'  },
+    { key: 'this-week',  label: 'This Week'   },
+    { key: 'last-7',     label: 'Last 7 Days' },
     { key: 'last-30',    label: 'Last 30 Days'},
-    { key: 'custom',     label: 'Custom'      },
+    { key: 'custom',     label: 'Custom'       },
   ]
 
   return (
-    <div className="toolbar toolbar--tight" style={{ flexWrap: 'wrap', rowGap: 6 }}>
-      {label && <span className="toolbar__label">{label}</span>}
-      {PRESETS.map((p) => (
-        (() => {
-          const isDisabled = p.key !== 'all' && disabledSet.has(p.key)
-          return (
-        <button
-          key={p.key}
-          type="button"
-          disabled={isDisabled}
-          className={`btn btn--sm ${preset === p.key ? 'btn--primary' : 'btn--ghost'}`}
-          style={isDisabled ? { opacity: 0.5, cursor: 'not-allowed' } : undefined}
-          onClick={() => handlePreset(p.key)}
-        >
-          {p.label}
-        </button>
-          )
-        })()
-      ))}
+    <>
+      {label && <span className="cft__label">{label}</span>}
+      <select
+        className="cft__sel"
+        value={preset}
+        onChange={(e) => handleSelect(e.target.value as DateRangePreset | 'all')}
+      >
+        {OPTIONS.map((o) => (
+          <option key={o.key} value={o.key} disabled={o.key !== 'all' && disabledSet.has(o.key as DateRangePreset)}>
+            {o.label}
+          </option>
+        ))}
+      </select>
       {preset === 'custom' && (
         <>
           <input
             type="date"
-            className="inp inp-sm"
+            className="cft__sel"
             value={custom.from}
-            style={{ width: 140 }}
+            style={{ width: 130 }}
             onChange={(e) => {
               const next = { ...custom, from: e.target.value }
               setCustom(next)
               apply('custom', next)
             }}
           />
-          <span style={{ fontSize: 12, color: 'var(--muted)', alignSelf: 'center' }}>→</span>
+          <span className="cft__label">→</span>
           <input
             type="date"
-            className="inp inp-sm"
+            className="cft__sel"
             value={custom.to}
-            style={{ width: 140 }}
+            style={{ width: 130 }}
             onChange={(e) => {
               const next = { ...custom, to: e.target.value }
               setCustom(next)
@@ -146,6 +137,6 @@ export default function DateRangeFilter({ range, onChange, label, disabledPreset
           />
         </>
       )}
-    </div>
+    </>
   )
 }
