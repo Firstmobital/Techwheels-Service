@@ -70,6 +70,10 @@ All date/time columns in `public.all_service_data` must follow Supabase/PostgreS
 8. Add robot-audit projection columns in `public.all_service_data_dynamic` sourced from `public.all_service_data`:
   - `updated_by_robot` (boolean)
   - `updated_by_robot_at` (timestamp with time zone)
+9. Add a chassis-keyed update flow from `public.job_card_closed_data` to `public.all_service_data`, starting with value-verified source-to-target column mapping.
+10. Add closed-job audit columns in `public.all_service_data`:
+  - `updated_by_closed_job` (boolean)
+  - `updated_by_closed_job_at` (timestamp with time zone)
 
 ---
 
@@ -328,6 +332,15 @@ Pre-trigger operating note:
 - [ ] **Task 4.11:** Lock final source-to-target remap contract for temp backfill execution.
 - [ ] **Task 4.12:** Validate realtime source compatibility for `EV_service_history_test`/`PV_service_history_test` -> `all_service_data`.
 - [ ] **Task 4.13:** Implement realtime update flow with one-row-per-chassis selector (business rule pending).
+- [ ] **Task 4.22:** Finalize value-based column mapping from `job_card_closed_data` -> `all_service_data` using same-chassis evidence from authoritative dump rows.
+- [ ] **Task 4.23:** Implement idempotent update/backfill migration from `job_card_closed_data` into `all_service_data` keyed by normalized chassis (`upper(btrim(...))`).
+- [ ] **Task 4.24:** Add read-only parity checks for mapped columns after `job_card_closed_data` backfill/sync rollout.
+- [ ] **Task 4.25:** Add `updated_by_closed_job boolean` and `updated_by_closed_job_at timestamptz` to `public.all_service_data`.
+- [ ] **Task 4.26:** Enforce source gate: process only source rows where `sr_type` contains `Service` (case-insensitive).
+- [ ] **Task 4.27:** Apply target match order: first by normalized chassis; if not found then by normalized `vehicle_registration_number`; if still not found then insert new target row.
+- [ ] **Task 4.28:** Enforce latest-winner rule for duplicates: for repeated source rows per normalized chassis/registration, only the latest `sr_type`-contains-`Service` row is eligible.
+- [ ] **Task 4.29:** Apply update freshness gate on matched target rows: update only when source `last_service_date` is greater than target `last_service_date` (or target `last_service_date` is `NULL`).
+- [ ] **Task 4.30:** Add timeout-safe chunked reconcile helper and schedule daily IST cron to run chunked reconcile (instead of full-table one-shot reconcile).
 
 ### Robot Update Audit Columns (`all_service_data`)
 
@@ -458,6 +471,67 @@ Implementation direction (approved and selector finalized):
   - source `service_date_time` is parsed from `DD/MM/YYYY HH12:MI AM`
   - target `last_service_date` is written in canonical target text format `DD/MM/YY`
   - if parsing fails, target `last_service_date` is not overwritten for that row
+
+### `job_card_closed_data` -> `all_service_data` Mapping Discovery (Value-based, chassis-matched)
+
+Primary goal update (locked):
+
+- Update target `public.all_service_data` from source `public.job_card_closed_data` using only the finalized mapping list below.
+- Primary join key contract: `upper(btrim(job_card_closed_data.chassis_number)) = upper(btrim(all_service_data.chassis_no))`.
+- Fallback join key contract: if chassis not found in target, match by `upper(btrim(vehicle_registration_number))`.
+- Source gate: only process source rows where `sr_type` contains `Service` (case-insensitive).
+- Duplicate-source winner rule: when multiple source rows exist for the same normalized `chassis_number` or `vehicle_registration_number`, only the latest row that satisfies the `Service` gate is valid for target write.
+- If neither chassis nor registration match exists in target, insert a new target row using mapped fields.
+
+Authoritative evidence basis:
+
+- Source table dump rows from `COPY public.job_card_closed_data (...)` in `local_folder/backups/chunks/full_database.sql.part_001`.
+- Target table dump rows from `COPY public.all_service_data (...)` in `local_folder/backups/chunks/full_database.sql.part_000`.
+- Same-chassis sample rows verified during audit:
+  - `MAT867013SPKD1967` (Punch / Punch Pure CNG / RJ60CG4298)
+  - `MAT627611SLD13788` (Nexon / Nexon Pure + 1.5 / RJ60CE7528)
+  - `MAT627502PLN35530` (Nexon / Nexon Smart + 1.2 / 23BH1070M)
+  - `MAT631555MPK89557` (Harrier / Harrier XZ+ Dark Edition New / RJ45CR5016)
+
+Final mapping list (source -> target, approved):
+
+| Source (`job_card_closed_data`) | Target (`all_service_data`) | Value evidence on same chassis | Confidence |
+|---|---|---|---|
+| `chassis_number` | `chassis_no` | Exact VIN/chassis equality in verified pairs above | HIGH |
+| `vehicle_registration_number` | `vehicle_registration_number` | Exact match (`RJ60CG4298`, `RJ60CE7528`, `23BH1070M`, `RJ45CR5016`) | HIGH |
+| `first_name` | `first_name` | Name equality observed (`BHAWNA`, `CANTEEN STORES DEPARTMENT`, `VINOD`) | HIGH |
+| `last_name` | `last_name` | Equality when present (`SHARMA`, `BELANI`); both nullable | HIGH |
+| `account_phone_number` | `contact_phones` | Phone values align (`7014743487`, `9785239697`, `9610850646`) | HIGH |
+| `parent_product_line` | `model` | Model-family alignment (`Punch`, `Nexon`, `Harrier`) | HIGH |
+| `product_line` | `product_line` | Exact/near-exact variant text alignment (`Punch Pure CNG`, `Nexon Pure + 1.5`) | HIGH |
+| `vehicle_sale_date` | `vehicle_sale_date` | Same date values on sample chassis (`2025-12-10`, `2025-07-17`, `2023-12-22`, `2022-01-19`) | HIGH |
+| `sr_type` | `last_service_type` | Service-type equality (`First/Second Free Service`, `Running Repairs`, `Paid Service`) | HIGH |
+| `last_service_km` | `last_service_km` | Numeric alignment on same chassis (e.g., `3500`, `14526`, `65226`) | HIGH |
+| `last_service_date` | `last_service_date` | Same date semantics; source is `date`, target is `timestamptz` (midnight cast rule needed) | HIGH |
+| constant `'FIRST MOBITAL PVT. LTD.'` | `last_service_dealer` | Business-mandated fixed dealer stamp for this sync flow | HIGH |
+
+Closed-job audit columns to write on successful update/insert from this flow:
+
+- `updated_by_closed_job = true`
+- `updated_by_closed_job_at = now()`
+- `last_service_dealer = 'FIRST MOBITAL PVT. LTD.'`
+
+Execution contract for this source flow:
+
+1. Filter source rows to only those with `sr_type ILIKE '%Service%'`.
+2. Build a deterministic winner set from filtered rows:
+  - For same normalized `chassis_number`, keep only latest row.
+  - If chassis is null/blank, group by normalized `vehicle_registration_number` and keep only latest row.
+  - Latest-order sort key: `COALESCE(closed_date_time, created_date_time, updated_at, created_at) DESC`, then `id DESC` as deterministic tie-break.
+3. For each winner row, attempt target match by normalized chassis (`chassis_number` -> `chassis_no`).
+4. If not matched, attempt target match by normalized registration (`vehicle_registration_number`).
+5. If matched, update only when source `last_service_date` is newer than target `last_service_date` (or target `last_service_date` is `NULL`); when source date is older/equal, skip update.
+6. If matched and freshness gate passes, update mapped target columns and stamp `last_service_dealer='FIRST MOBITAL PVT. LTD.'`.
+7. If not matched by either key, insert new target row populated with mapped fields and `last_service_dealer='FIRST MOBITAL PVT. LTD.'`.
+8. For both update and insert paths, set `updated_by_closed_job=true` and `updated_by_closed_job_at=now()`.
+9. Use timeout-safe reconcile strategy for scheduled runs:
+  - daily cron executes `public.reconcile_all_service_data_from_job_card_closed_data_chunked(...)`
+  - realtime source trigger continues to call `public.refresh_all_service_data_from_job_card_closed_data(...)` per row event.
 
 Execution order (must follow):
 
@@ -933,6 +1007,15 @@ EXECUTE FUNCTION public.sync_all_service_data_dynamic();
 ✅ 4.19 | Enforce robot-flag freshness for +2 due rows (`assumed_next_service_date = current_date + 2`) | Platform Team | 2026-06-24 | 2026-06-24 | Executed+verified+promoted: supabase/exec_success_migrations/sql/20260624170000_all_service_data_robot_flag_freshness_for_plus2_due.sql + supabase/exec_success_migrations/sql_check/20260624170000_all_service_data_robot_flag_freshness_for_plus2_due_checks.sql (`reconcile` updated 3 rows; `stale_robot_true_plus2_rows=0`; parity 288=288)
 ✅ 4.20 | Schedule daily IST reconcile for robot-flag freshness | Platform Team | 2026-06-24 | 2026-06-24 | Executed+verified+promoted: supabase/exec_success_migrations/sql/20260624173000_schedule_daily_ist_robot_flag_freshness_reconcile.sql + supabase/exec_success_migrations/sql_check/20260624173000_schedule_daily_ist_robot_flag_freshness_reconcile_checks.sql (`matching_job_rows=1`; cron `30 18 * * *` UTC = `00:00 IST`)
 ✅ 4.21 | Drop legacy service/vehicle source tables (`EV_Service_History`, `PV_Service_History`, `EV_Vehicle_Data`, `PV_Vehicle_Data`) | Platform Team | 2026-06-24 | 2026-06-24 | Executed+verified+promoted: supabase/exec_success_migrations/sql/20260624190000_drop_legacy_service_and_vehicle_source_tables.sql + supabase/exec_success_migrations/sql_check/20260624190000_drop_legacy_service_and_vehicle_source_tables_checks.sql (all four `to_regclass` checks null; `dropped_table_count=4`; `remaining_table_count=0`; no rows in guardrail scans)
+✅ 4.22 | Finalize value-based mapping (`job_card_closed_data` -> `all_service_data`) | Platform Team | 2026-06-25 | 2026-06-25 | Mapping locked in plan and implemented in `20260625113000`; includes source gate, winner selector, chassis-first/VRN-fallback matching
+✅ 4.23 | Implement idempotent winner-sync migration for closed-job source | Platform Team | 2026-06-25 | 2026-06-25 | Executed via `supabase/migrations/20260625113000_all_service_data_sync_from_job_card_closed_data_service_winner.sql`
+✅ 4.24 | Add read-only parity/validation checks for closed-job sync | Platform Team | 2026-06-25 | 2026-06-25 | Implemented via `supabase/sql_checks/20260625113000_all_service_data_sync_from_job_card_closed_data_service_winner_checks.sql`
+✅ 4.25 | Add closed-job audit columns on all_service_data | Platform Team | 2026-06-25 | 2026-06-25 | `updated_by_closed_job`, `updated_by_closed_job_at` added in migration `20260625113000`
+✅ 4.26 | Enforce source Service gate | Platform Team | 2026-06-25 | 2026-06-25 | `sr_type ILIKE '%Service%'` implemented in source filter
+✅ 4.27 | Enforce target match order (chassis -> VRN -> insert) | Platform Team | 2026-06-25 | 2026-06-25 | Implemented in migration `20260625113000`
+✅ 4.28 | Enforce latest winner selection for duplicate source keys | Platform Team | 2026-06-25 | 2026-06-25 | Winner sort: `COALESCE(closed_date_time, created_date_time, updated_at, created_at) DESC, id DESC`
+✅ 4.29 | Apply freshness gate + dealer backfill exception | Platform Team | 2026-06-25 | 2026-06-25 | Update path requires newer source `last_service_date` OR target null OR target dealer null; dealer stamped to `FIRST MOBITAL PVT. LTD.`
+✅ 4.30 | Add chunked reconcile helper and daily IST chunked cron | Platform Team | 2026-06-25 | 2026-06-25 | Added `public.reconcile_all_service_data_from_job_card_closed_data_chunked(...)`; scheduler now calls chunked helper via `20260625123000`
 🔄 4.14 | Add canonical typed date companions + backfill (source + dynamic) | Platform Team | 2026-06-22 | - | Drafted via supabase/migrations/20260622193000_all_service_data_add_canonical_date_columns_backfill.sql (all_service_data + all_service_data_dynamic + dynamic sync projection update)
 🔄 4.15 | Upgrade Service-History sync to canonical typed writes | Platform Team | 2026-06-22 | - | Drafted via supabase/migrations/20260622194000_service_history_sync_write_canonical_datetime_columns.sql
 🔄 4.16 | Canonical date parse coverage + mismatch checks (source + dynamic) | Platform Team | 2026-06-22 | - | Drafted via supabase/sql_checks/20260622195000_all_service_data_canonical_dates_and_service_history_sync_checks.sql (includes dynamic typed-column parity)
@@ -1005,6 +1088,33 @@ EXECUTE FUNCTION public.sync_all_service_data_dynamic();
 ---
 
 ## Execution Notes
+
+### 2026-06-25 - Closed-job winner-sync rollout executed (with chunked daily reconcile)
+
+- Core migration executed:
+  - `supabase/migrations/20260625113000_all_service_data_sync_from_job_card_closed_data_service_winner.sql`
+- Scheduler migration executed:
+  - `supabase/migrations/20260625123000_schedule_daily_ist_job_card_closed_service_winner_reconcile.sql`
+- Supporting read-only checks:
+  - `supabase/sql_checks/20260625113000_all_service_data_sync_from_job_card_closed_data_service_winner_checks.sql`
+  - `supabase/sql_checks/20260625123000_schedule_daily_ist_job_card_closed_service_winner_reconcile_checks.sql`
+  - `supabase/sql_checks/20260625124000_manual_chunked_backfill_job_card_closed_service_winner.sql`
+- Implemented contracts:
+  - source gate: `sr_type ILIKE '%Service%'`
+  - winner selector per normalized key using latest timestamp (`COALESCE(...) DESC, id DESC`)
+  - target match order: chassis -> VRN fallback -> insert
+  - freshness gate: update when source `last_service_date` is newer than target, with dealer-backfill exception when target dealer is null
+  - dealer stamp: `last_service_dealer = 'FIRST MOBITAL PVT. LTD.'`
+  - audit stamp: `updated_by_closed_job=true`, `updated_by_closed_job_at=now()`
+- Daily job status:
+  - job name: `all-service-data-closed-job-winner-sync-daily-ist`
+  - schedule: `30 18 * * *` (UTC) => `00:00 IST`
+  - command now calls chunked reconcile helper:
+    `select public.reconcile_all_service_data_from_job_card_closed_data_chunked(1000, null);`
+- Runtime verification outcome:
+  - `pg_cron` installed (`extversion=1.6.4`)
+  - exactly one active matching job
+  - checks confirm cron command uses chunked reconcile helper
 
 ### 2026-06-24 - Full legacy source retirement (all 4 legacy tables) executed, verified, and promoted
 
@@ -1751,6 +1861,11 @@ DROP TABLE IF EXISTS public.all_service_data_dynamic;
 - `supabase/sql_checks/20260622195000_all_service_data_canonical_dates_and_service_history_sync_checks.sql`
 - `supabase/migrations/20260623170000_all_service_data_dynamic_add_condition_d_updated_by_robot_filter.sql`
 - `supabase/sql_checks/20260623170000_all_service_data_dynamic_add_condition_d_updated_by_robot_filter_checks.sql`
+- `supabase/migrations/20260625113000_all_service_data_sync_from_job_card_closed_data_service_winner.sql`
+- `supabase/sql_checks/20260625113000_all_service_data_sync_from_job_card_closed_data_service_winner_checks.sql`
+- `supabase/migrations/20260625123000_schedule_daily_ist_job_card_closed_service_winner_reconcile.sql`
+- `supabase/sql_checks/20260625123000_schedule_daily_ist_job_card_closed_service_winner_reconcile_checks.sql`
+- `supabase/sql_checks/20260625124000_manual_chunked_backfill_job_card_closed_service_winner.sql`
 - `supabase/exec_success_migrations/sql/20260624170000_all_service_data_robot_flag_freshness_for_plus2_due.sql`
 - `supabase/exec_success_migrations/sql_check/20260624170000_all_service_data_robot_flag_freshness_for_plus2_due_checks.sql`
 - `supabase/exec_success_migrations/sql/20260624173000_schedule_daily_ist_robot_flag_freshness_reconcile.sql`
@@ -1763,5 +1878,5 @@ DROP TABLE IF EXISTS public.all_service_data_dynamic;
 
 ---
 
-**Last Updated:** 2026-06-24 (All-4 legacy source tables dropped, verified, and promoted; plan state synchronized) by GitHub Copilot  
-**Status:** 🟡 IN PROGRESS (Core winner-sync objective validated; legacy source tables now soft-deprecated; remaining unrelated checklist items continue)
+**Last Updated:** 2026-06-25 (Closed-job winner-sync + daily IST chunked reconcile implemented and validated) by GitHub Copilot  
+**Status:** 🟡 IN PROGRESS (Closed-job winner-sync objectives complete; remaining unrelated roadmap items continue)
