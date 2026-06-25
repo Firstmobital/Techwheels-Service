@@ -361,6 +361,7 @@ function TopNav({
   const homeActive = pathname === '/' || pathname.startsWith('/home')
 
   return (
+    <>
     <div ref={navRef}>
       <div className="util">
         <div className="util__dealer">
@@ -611,6 +612,7 @@ function TopNav({
         </button>
       </div>
     )}
+    </>
   )
 }
 
