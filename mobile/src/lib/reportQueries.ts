@@ -4003,15 +4003,22 @@ export async function getNetPriceFinalRevenueVariance(
   branch: BranchFilter,
   dateFilter: DateRangeFilter,
 ): Promise<NetPriceFinalRevenueVarianceReport> {
-  let vasFrom = 0
+  let cursorCreatedAt: string | null = null
+  let cursorId: number | null = null
   const vasRows: Record<string, unknown>[] = []
   const bounds = getDateRangeBounds(dateFilter)
+  const vasSelectColumns = appendSelectColumns(
+    'branch, job_card_number, job_code, net_price, jc_closed_date_time',
+    ['id', 'created_at'],
+  )
 
   while (true) {
     let query = supabase
       .from('service_vas_jc_data')
-      .select('branch, job_card_number, job_code, net_price, jc_closed_date_time')
-      .range(vasFrom, vasFrom + QUERY_PAGE_SIZE - 1)
+      .select(vasSelectColumns)
+      .order('created_at', { ascending: false })
+      .order('id', { ascending: false })
+      .limit(QUERY_PAGE_SIZE)
 
     query = applyBranchFilterToQuery(query, branch)
 
@@ -4019,6 +4026,10 @@ export async function getNetPriceFinalRevenueVariance(
       query = applyDateFilterToQuery(query, bounds, {
         closedDateField: 'jc_closed_date_time',
       })
+    }
+
+    if (cursorCreatedAt && cursorId !== null) {
+      query = query.or(`created_at.lt.${cursorCreatedAt},and(created_at.eq.${cursorCreatedAt},id.lt.${cursorId})`)
     }
 
     const { data, error } = await query
@@ -4033,7 +4044,15 @@ export async function getNetPriceFinalRevenueVariance(
       break
     }
 
-    vasFrom += QUERY_PAGE_SIZE
+    const lastRow = batch[batch.length - 1] as { created_at?: unknown; id?: unknown }
+    cursorCreatedAt = typeof lastRow.created_at === 'string' ? lastRow.created_at : null
+
+    const parsedId = Number(lastRow.id)
+    cursorId = Number.isFinite(parsedId) ? parsedId : null
+
+    if (!cursorCreatedAt || cursorId === null) {
+      break
+    }
   }
 
   const jcRows = await fetchAllJobCardClosedRows('job_card_number, total_invoice_amount', {

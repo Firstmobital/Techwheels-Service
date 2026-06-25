@@ -316,6 +316,24 @@ export async function listServiceAdvisorEntries(): Promise<ApiResult<ReceptionEn
   return ok(enriched)
 }
 
+export async function listServiceAdvisorEntriesByDateRange(range: { from: string; to: string }): Promise<ApiResult<ReceptionEntryRow[]>> {
+  const from = String(range.from ?? '').trim()
+  const to = String(range.to ?? '').trim()
+
+  if (!from || !to) return fail('Date range is required')
+
+  const createdAtFrom = `${from}T00:00:00+05:30`
+  const createdAtTo = `${to}T23:59:59+05:30`
+
+  const { data, error } = await fetchReceptionEntriesWithKeyset(undefined, createdAtFrom, createdAtTo)
+
+  if (error) return fail(error)
+
+  const entries = (data ?? []) as ReceptionEntryRow[]
+  const enriched = await enrichEntriesWithEmployeeBranch(entries)
+  return ok(enriched)
+}
+
 export async function listFloorInchargeEntries(): Promise<ApiResult<ReceptionEntryRow[]>> {
   const { data, error } = await fetchReceptionEntriesWithKeyset(
     FLOOR_INCHARGE_ALLOWED_SERVICE_TYPES,

@@ -669,17 +669,18 @@ export default function ReceptionPage() {
     const presetAvailability = await Promise.all(
       PERIOD_PRESETS.map(async (preset) => {
         const presetRange = getRangeFromPreset(preset)
-        const { count, error: countError } = await supabase
+        const { data: probeRows, error: probeError } = await supabase
           .from('service_reception_entries')
-          .select('id', { count: 'exact', head: true })
+          .select('id')
           .gte('created_at', `${presetRange.from}T00:00:00+05:30`)
           .lte('created_at', `${presetRange.to}T23:59:59+05:30`)
+          .limit(1)
 
-        if (countError) {
+        if (probeError) {
           return { preset, hasData: true }
         }
 
-        return { preset, hasData: (count ?? 0) > 0 }
+        return { preset, hasData: Array.isArray(probeRows) && probeRows.length > 0 }
       }),
     )
 
