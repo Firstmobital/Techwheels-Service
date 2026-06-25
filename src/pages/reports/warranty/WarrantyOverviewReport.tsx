@@ -800,14 +800,14 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
               .select('id, branch, location, portal, source_file_name, source_row_data, created_at')
               .order('id', { ascending: true })
               .range(from, to)
-            if (retryErr) throw new Error(\`\${tableName}: \${retryErr.message}\`)
+            if (retryErr) throw new Error(`${tableName}: ${retryErr.message}`)
             const retryRows = (retry as WarrantySourceRow[] | null) ?? []
             allRows.push(...retryRows)
             if (retryRows.length < pageSize) break
             from += pageSize
             continue
           }
-          throw new Error(\`\${tableName}: \${pageError.message}\`)
+          throw new Error(`${tableName}: ${pageError.message}`)
         }
 
         const rows = (data as WarrantySourceRow[] | null) ?? []
