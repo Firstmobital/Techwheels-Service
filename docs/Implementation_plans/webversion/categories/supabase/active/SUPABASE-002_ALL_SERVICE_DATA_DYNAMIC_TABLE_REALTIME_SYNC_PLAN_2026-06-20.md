@@ -339,7 +339,7 @@ Pre-trigger operating note:
 - [ ] **Task 4.26:** Enforce source gate: process only source rows where `sr_type` contains `Service` (case-insensitive).
 - [ ] **Task 4.27:** Apply target match order: first by normalized chassis; if not found then by normalized `vehicle_registration_number`; if still not found then insert new target row.
 - [ ] **Task 4.28:** Enforce latest-winner rule for duplicates: for repeated source rows per normalized chassis/registration, only the latest `sr_type`-contains-`Service` row is eligible.
-- [ ] **Task 4.29:** Apply update freshness gate on matched target rows: update only when source `last_service_date` is greater than target `last_service_date` (or target `last_service_date` is `NULL`).
+- [ ] **Task 4.29:** Apply update freshness gate on matched target rows: update only when source `closed_date_time` is greater than target `last_service_date` (or target `last_service_date` is `NULL`).
 - [ ] **Task 4.30:** Add timeout-safe chunked reconcile helper and schedule daily IST cron to run chunked reconcile (instead of full-table one-shot reconcile).
 
 ### Robot Update Audit Columns (`all_service_data`)
@@ -507,7 +507,7 @@ Final mapping list (source -> target, approved):
 | `vehicle_sale_date` | `vehicle_sale_date` | Same date values on sample chassis (`2025-12-10`, `2025-07-17`, `2023-12-22`, `2022-01-19`) | HIGH |
 | `sr_type` | `last_service_type` | Service-type equality (`First/Second Free Service`, `Running Repairs`, `Paid Service`) | HIGH |
 | `last_service_km` | `last_service_km` | Numeric alignment on same chassis (e.g., `3500`, `14526`, `65226`) | HIGH |
-| `last_service_date` | `last_service_date` | Same date semantics; source is `date`, target is `timestamptz` (midnight cast rule needed) | HIGH |
+| `closed_date_time` | `last_service_date` | Same service-close datetime semantics; source is datetime, target is `timestamptz` | HIGH |
 | constant `'FIRST MOBITAL PVT. LTD.'` | `last_service_dealer` | Business-mandated fixed dealer stamp for this sync flow | HIGH |
 
 Closed-job audit columns to write on successful update/insert from this flow:
@@ -525,7 +525,7 @@ Execution contract for this source flow:
   - Latest-order sort key: `COALESCE(closed_date_time, created_date_time, updated_at, created_at) DESC`, then `id DESC` as deterministic tie-break.
 3. For each winner row, attempt target match by normalized chassis (`chassis_number` -> `chassis_no`).
 4. If not matched, attempt target match by normalized registration (`vehicle_registration_number`).
-5. If matched, update only when source `last_service_date` is newer than target `last_service_date` (or target `last_service_date` is `NULL`); when source date is older/equal, skip update.
+5. If matched, update only when source `closed_date_time` is newer than target `last_service_date` (or target `last_service_date` is `NULL`); when source datetime is older/equal, skip update.
 6. If matched and freshness gate passes, update mapped target columns and stamp `last_service_dealer='FIRST MOBITAL PVT. LTD.'`.
 7. If not matched by either key, insert new target row populated with mapped fields and `last_service_dealer='FIRST MOBITAL PVT. LTD.'`.
 8. For both update and insert paths, set `updated_by_closed_job=true` and `updated_by_closed_job_at=now()`.
@@ -1014,7 +1014,7 @@ EXECUTE FUNCTION public.sync_all_service_data_dynamic();
 ✅ 4.26 | Enforce source Service gate | Platform Team | 2026-06-25 | 2026-06-25 | `sr_type ILIKE '%Service%'` implemented in source filter
 ✅ 4.27 | Enforce target match order (chassis -> VRN -> insert) | Platform Team | 2026-06-25 | 2026-06-25 | Implemented in migration `20260625113000`
 ✅ 4.28 | Enforce latest winner selection for duplicate source keys | Platform Team | 2026-06-25 | 2026-06-25 | Winner sort: `COALESCE(closed_date_time, created_date_time, updated_at, created_at) DESC, id DESC`
-✅ 4.29 | Apply freshness gate + dealer backfill exception | Platform Team | 2026-06-25 | 2026-06-25 | Update path requires newer source `last_service_date` OR target null OR target dealer null; dealer stamped to `FIRST MOBITAL PVT. LTD.`
+✅ 4.29 | Apply freshness gate + dealer backfill exception | Platform Team | 2026-06-25 | 2026-06-25 | Update path requires newer source `closed_date_time` OR target null OR target dealer null; dealer stamped to `FIRST MOBITAL PVT. LTD.`
 ✅ 4.30 | Add chunked reconcile helper and daily IST chunked cron | Platform Team | 2026-06-25 | 2026-06-25 | Added `public.reconcile_all_service_data_from_job_card_closed_data_chunked(...)`; scheduler now calls chunked helper via `20260625123000`
 🔄 4.14 | Add canonical typed date companions + backfill (source + dynamic) | Platform Team | 2026-06-22 | - | Drafted via supabase/migrations/20260622193000_all_service_data_add_canonical_date_columns_backfill.sql (all_service_data + all_service_data_dynamic + dynamic sync projection update)
 🔄 4.15 | Upgrade Service-History sync to canonical typed writes | Platform Team | 2026-06-22 | - | Drafted via supabase/migrations/20260622194000_service_history_sync_write_canonical_datetime_columns.sql
@@ -1103,7 +1103,7 @@ EXECUTE FUNCTION public.sync_all_service_data_dynamic();
   - source gate: `sr_type ILIKE '%Service%'`
   - winner selector per normalized key using latest timestamp (`COALESCE(...) DESC, id DESC`)
   - target match order: chassis -> VRN fallback -> insert
-  - freshness gate: update when source `last_service_date` is newer than target, with dealer-backfill exception when target dealer is null
+  - freshness gate: update when source `closed_date_time` is newer than target, with dealer-backfill exception when target dealer is null
   - dealer stamp: `last_service_dealer = 'FIRST MOBITAL PVT. LTD.'`
   - audit stamp: `updated_by_closed_job=true`, `updated_by_closed_job_at=now()`
 - Daily job status:

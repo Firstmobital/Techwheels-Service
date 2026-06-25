@@ -1,10 +1,11 @@
--- Read-only diagnostic check:
--- Superseded by:
---   supabase/sql_checks/20260625151500_all_service_data_closed_job_null_last_service_date_followup_closed_date_time_checks.sql
--- Find all rows in public.all_service_data where closed-job audit says updated,
--- but target last_service_date is still NULL.
--- Context: closed-job winner sync/backfill flow from:
+-- Read-only follow-up diagnostic check (replacement for 20260625132000):
+-- Find rows in public.all_service_data where closed-job audit says updated,
+-- but target last_service_date is still NULL, using closed_date_time-based source diagnostics.
+-- Context:
 --   supabase/migrations/20260625150000_all_service_data_sync_from_job_card_closed_data_use_closed_date_time.sql
+-- Execution modes:
+--   1) Run entire file in one go.
+--   2) Or run section-by-section (1..5) for targeted diagnostics.
 
 -- 1) Quick summary count.
 select
@@ -31,7 +32,7 @@ where t.updated_by_closed_job is true
 order by t.updated_by_closed_job_at desc nulls last, t.id desc;
 
 -- 3) Source-context diagnostics for the same target rows.
---    Helps explain whether source Service rows exist and if closed_date_time is NULL/non-NULL.
+--    Explains whether source Service rows exist and if closed_date_time is NULL/non-NULL.
 with target_rows as (
   select
     t.id,
@@ -82,7 +83,7 @@ left join source_match sm
   on sm.target_id = tr.id
 order by tr.updated_by_closed_job_at desc nulls last, tr.id desc;
 
--- 4) Source-to-target existence check (winner logic parity with migration).
+-- 4) Source-to-target existence check (winner logic parity with replacement migration).
 --    Finds Service winners in job_card_closed_data that currently have no match in all_service_data.
 with source_base as (
   select
