@@ -397,7 +397,6 @@ interface WarrantySourceRow {
   tml_comments?: string
   tmcv_job_card_id?: string
   sap_comments?: string
-  total_amount_jc?: string
   total_labour_amount_jc?: string
   total_material_amount_jc?: string
   total_spl_lab_charges_jc?: string
