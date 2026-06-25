@@ -814,6 +814,7 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
         )
 
         if (!active) return
+        setLastRefreshed(new Date())
 
         const now = Date.now()
         const normalizedRecords: WarrantyRecord[] = []
@@ -907,10 +908,12 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
     return () => {
       active = false
     }
-  }, [])
+  }, [mainRefreshKey])
 
   // ── Load SPL Codes from warranty_spl_codes_data ──────────────────────────
   const [splRefreshKey, setSplRefreshKey] = useState(0)
+  const [mainRefreshKey, setMainRefreshKey] = useState(0)
+  const [lastRefreshed, setLastRefreshed] = useState<Date>(new Date())
 
   useEffect(() => {
     let active = true
@@ -2044,6 +2047,18 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
           <p style={{ fontSize: '14px', color: 'var(--muted)', lineHeight: 1.5, maxWidth: '800px' }}>
             {dealerScopeLabel} · claims, settlement, SLA risk, revenue & operations. Values are computed from warranty source tables with dealer-code branch/fuel scoping.
           </p>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 8 }}>
+            <button
+              onClick={() => { setMainRefreshKey(k => k + 1); setSplRefreshKey(k => k + 1) }}
+              disabled={isLoading || splLoading}
+              style={{ fontSize: 13, padding: '6px 16px', borderRadius: 8, border: '1px solid var(--border)', background: '#fff', cursor: (isLoading || splLoading) ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', gap: 6, color: 'var(--ink-2)', fontWeight: 600, boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}
+            >
+              {(isLoading || splLoading) ? '⏳ Loading…' : '🔄 Refresh Data'}
+            </button>
+            <span style={{ fontSize: 12, color: 'var(--muted)' }}>
+              Last refreshed: {lastRefreshed.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+            </span>
+          </div>
         </div>
 
         {/* Filters */}
