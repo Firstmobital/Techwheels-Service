@@ -1,17 +1,19 @@
 # SUPABASE-001: Production Hardening Master Plan + Activity Tracker
 
-Last updated: 2026-06-08
+Last updated: 2026-06-25
 Scope: Security, performance, reliability, operations hygiene, and tracking discipline for the Supabase project `techwheels-services` (Free plan).
 
 ## 1) Current Snapshot (Baseline)
 
 - Plan: Free (Nano compute), region ap-south-1 (Mumbai)
-- Runtime: RAM 64%, CPU 2%, disk 27%, connections 16/60
-- Traffic (last 60 min): 446 DB requests, 43 Auth requests, 496 total requests (Storage 0, Realtime 7)
-- Advisory state: 22 issues, mostly Security/Critical
+- Runtime (latest, 2026-06-25): RAM 64%, CPU 15%, disk 36%, connections 25/60
+- Traffic (latest capture window): Query Performance reports 935 slow queries in window; top load concentrated in PostgREST list/count family on `service_reception_entries`
+- Advisory state: Security Advisor Errors already cleared (0 on 2026-06-08 milestone); current operational risk moved to Disk IO budget depletion warning
 - Migration visibility: last migration shown as `parts_phase1_alignment`
 - Operational flags: no backups configured, no repo connected in dashboard
-- DB observability window (2026-06-08 08:53-09:53 IST): memory usage ~408 MB, memory commitment ~1.33 GB, sustained cache-heavy read profile
+- DB observability windows:
+	- 2026-06-08 08:53-09:53 IST: memory usage ~408 MB, memory commitment ~1.33 GB, sustained cache-heavy read profile
+	- 2026-06-25: Disk IO budget warning active in dashboard banner; Query Performance + EXPLAIN evidence indicates query-shape and list/count frequency as primary driver
 - Authoritative dump audit source: `local_folder/backups/full_database.sql` (80 MB), mirrored as `local_folder/backups/chunks/full_database.sql.part_*` (5 parts)
 - Authoritative dump timestamp: Started on 2026-06-05 10:06:12 IST (pg_dump 17.7, DB 17.6)
 
@@ -110,14 +112,16 @@ Status legend: `Not Started` | `In Progress` | `Blocked` | `Done`
 | P1-03 | High | Analyze top 3-5 slow queries in dashboard | Team | Done | 2026-06-08 | 2026-06-08 | Comprehensive slow query analysis completed: ranked top 10 query families by proportional DB time (20.82% down to 1.88%), identified root causes (OFFSET pagination, missing indexes, wide projections), provided EXPLAIN strategy + recommended indexes. Analysis: `docs/Implementation_plans/webversion/categories/supabase/evidence/P1_03_SLOW_QUERY_ANALYSIS.md` | 2026-06-08 | - |
 | P1-04 | High | Add and verify indexes for sequential scans | Team | Done | 2026-06-08 | 2026-06-08 | 4 migration files created and audited against authoritative dump (full_database.sql). 2 CRITICAL + 2 OPTIONAL indexes: `idx_reception_entries_branch_created_at_desc` (missing branch+created index for Query 2), `idx_vas_jc_data_branch_created_at_desc` (missing branch+created for Query 7), `idx_parts_consumption_branch_fiscal_year_desc` (complementary to portal-based index), `idx_stock_snapshot_branch_snapshot_date_desc` (optional complement). All columns/tables verified in authoritative dump. Ready for execution. | 2026-06-08 | - |
 | P1-04 | High | Add and verify indexes for sequential scans | Team | Done | 2026-06-08 | 2026-06-08 | 4 migration files created, audited, and DEPLOYED in Supabase. All indexes confirmed in production: idx_reception_entries_branch_created_at_desc, idx_vas_jc_data_branch_created_at_desc, idx_parts_consumption_branch_fiscal_year_desc, idx_stock_snapshot_branch_snapshot_date_desc. Ready for P1-05 query rewrites. | 2026-06-08 | Execute P1-05 query rewrites (keyset pagination) |
-| P1-05 | Critical | Remove fetch-all patterns from reports and warranty JSON extractors | Team | In Progress | 2026-06-08 |  | P1-04 indexes complete. P1-05 implementation started in app layer: keyset pagination shipped for `service_vas_jc_data` and `service_parts_consumption_data` fetchers (web+mobile), reception list APIs switched to keyset ordered reads, and exact-count switched to estimated in warranty extraction/dashboard metrics. Post-change build regression fixed in `src/lib/api/reception.ts` (safe array normalization cast in keyset helper); local `npm run build` now passes (`tsc -b --force && vite build`). | 2026-06-08 | Run performance capture (Query Performance + EXPLAIN) and complete remaining list paths still using range/OFFSET |
-| P1-06 | High | Replace OFFSET scans with cursor pagination in large tables/views | Team | Not Started |  |  |  | 2026-06-05 | Use id/date cursors and verify no timeout regressions |
-| P1-07 | High | Add targeted composite/partial indexes for timeout hotlist queries | Team | Not Started |  |  |  | 2026-06-05 | Ship migration files and attach EXPLAIN evidence |
-| P1-08 | High | Reduce Realtime WAL polling cost and fan-out | Team | Not Started |  |  |  | 2026-06-08 | Audit active subscriptions/channels and cap noisy clients |
-| P1-09 | High | Eliminate expensive exact-count list patterns in PostgREST paths | Team | Not Started |  |  |  | 2026-06-08 | Replace exact counts with planned/estimated counts or dedicated aggregate RPC |
+| P1-05 | Critical | Remove fetch-all patterns from reports and warranty JSON extractors | Team | In Progress | 2026-06-08 |  | New 2026-06-25 logs confirm remaining heavy list/count pressure despite prior rewrites; `service_reception_entries` family still dominates total time and call volume. | 2026-06-25 | Complete code audit for any remaining `count=exact` + broad list projections in web/mobile reception/report paths, then re-capture logs |
+| P1-06 | High | Replace OFFSET scans with cursor pagination in large tables/views | Team | In Progress | 2026-06-25 |  | EXPLAIN for reception list (`ORDER BY created_at DESC, id DESC LIMIT 100`) shows Seq Scan + Sort, indicating missing direct sort-path index and/or residual OFFSET/list patterns. | 2026-06-25 | Ship cursor contract uniformly and validate via EXPLAIN that index scan path is selected |
+| P1-07 | High | Add targeted composite/partial indexes for timeout hotlist queries | Team | In Progress | 2026-06-25 |  | Full check-pack confirms sort-path/index mismatch on hot lists: EXPLAIN shows Seq Scan + Sort for `service_reception_entries`, `technician_assignments`, `service_vas_jc_data`; seq_scan_pct is `19.06%`, `53.26%`, `94.20%` respectively. | 2026-06-25 | Create migration + sql_checks for four indexes (reception sort, reception service_type partial, technician sort, VAS date-window), then validate plans |
+| P1-08 | High | Reduce Realtime WAL polling cost and fan-out | Team | In Progress | 2026-06-25 |  | `realtime.list_changes` remains high-frequency (`queryid=-2876120296317350531`, `calls=612039`, `total_ms=3832695.82`, `mean_ms=6.26`). | 2026-06-25 | Inventory channels per screen and remove duplicate subscriptions; verify drop in calls and proportional time in next capture |
+| P1-09 | High | Eliminate expensive exact-count list patterns in PostgREST paths | Team | In Progress | 2026-06-25 |  | Dominant query family is exact-count reception path (`queryid=6416750758406621842`, `calls=38386`, `total_ms=82854948.73`, `mean_ms=2158.47`). | 2026-06-25 | Remove default exact count on reception/report lists and keep exact only for explicit export/summary actions |
+| P1-10 | Critical | Disk IO budget incident response (query-shape mitigation first) | Team | In Progress | 2026-06-25 | 2026-06-27 | Disk IO warning remains active; top read-heavy COPY workloads include `service_parts_stock_snapshot_data` (`shared_blks_read=12499`, `total_ms=1017022.47`) and `service_invoice_order_data` (`shared_blks_read=9715`, `total_ms=684328.33`). | 2026-06-25 | Execute Section 14 fix pack in order and add before/after totals for top 5 query families plus COPY workload share |
+| P1-11 | Critical | Log-driven performance tracker (rolling updates from every new capture) | Team | In Progress | 2026-06-25 |  | Established explicit update protocol in Section 14.5 with required evidence fields from each new log drop (top queries, plans, index/seq-scan deltas, action status). | 2026-06-25 | For each new log bundle: update Section 14.1/14.2 table rows, then sync affected tracker lines P1-05..P1-10 same day |
 | P2-01 | High | Add free-plan inactivity prevention ping | Team | Not Started |  |  |  | 2026-06-04 | Define endpoint + schedule + monitoring |
 | P2-02 | Medium | Connect GitHub repo in Supabase dashboard | Team | Not Started |  |  |  | 2026-06-04 | Validate migration linkage after connection |
-| P2-03 | Critical | Reconcile deployed schema with migration history | Team | In Progress | 2026-06-05 |  | Authoritative dump audit completed (header + object/RLS/index extracts from `local_folder/backups/full_database.sql`) | 2026-06-05 | Convert confirmed schema drift points into migration/status actions without overriding dump authority |
+| P2-03 | Critical | Reconcile deployed schema with migration history | Team | In Progress | 2026-06-05 |  | Fresh authoritative dump refreshed and audited on 2026-06-25 using manifest baseline (`sha256=56cc1ef74d7c5482200b1f04d7b6404bf71a2d29c3f5addc7b4788472f7f9e35`, `created_at_utc=2026-06-25T15:02:12Z`) plus overlay file `supabase/evidence/post_dump_verified_promotions.md`. | 2026-06-25 | Use Section 10 + Section 14 truth to generate migration/check files for performance index fixes, then validate via post-change EXPLAIN |
 | P2-04 | High | Define backup/restore runbook and drill date | Team | Not Started |  |  |  | 2026-06-04 | Add restore checklist and owner |
 | P2-05 | High | Resolve schema drift where app queries depend on objects not present in authoritative dump | Team | Blocked | 2026-06-05 |  | Dump shows `vw_parts_stock_health` exists but no current `vw_parts_latest_stock` or `vw_parts_consumption_trend` object definitions | 2026-06-05 | Validate intended source-of-truth object set and prepare explicit migration/backport decision |
 | P3-01 | Medium | Weekly Advisor regression sweep | Team | Not Started |  |  |  | 2026-06-04 | Schedule recurring review |
@@ -132,6 +136,10 @@ Use one line per update so trend changes are visible over time.
 | 2026-06-04 | 55% | 2% | 28% | 9/60 | 3 (from screenshot section counters) | 1+ | 194 | 10 | Baseline from dashboard screenshot |
 | 2026-06-08 | 64% | 2% | 27% | 16/60 | 3 (unchanged in latest screenshot context) | 1+ | 446 | 43 | Added Query Performance hotlist from production logs; memory usage ~408 MB and commitment ~1.33 GB during observed hour |
 | 2026-06-08 10:08 | - | - | - | - | 0 | 121 | - | - | Security Advisor milestone reached: no errors detected after Fix 4 execution |
+| 2026-06-25 | 64% | 15% | 36% | 25/60 | - | - | - | - | New Disk IO budget warning visible in Observability; Query Performance shows 935 slow queries with `service_reception_entries` exact-count/list family as primary load driver |
+| 2026-06-25 (SQL audit) | - | - | - | - | - | - | - | - | `pg_stat_statements` confirmed in `extensions` schema; reception list EXPLAIN still uses Seq Scan + Sort for `ORDER BY created_at DESC, id DESC`; date-range count path is fast in isolation but high-frequency in production |
+| 2026-06-25 (dump refresh audit) | - | - | - | - | - | - | - | - | Authoritative dump refreshed: `local_folder/backups/full_database.sql` (105 MB) + chunk mirror (`part_000`..`part_005`), baseline marker from `supabase/evidence/authoritative_dump_manifest.json`; overlay promotions file currently contains no promoted SQL entries in active window |
+| 2026-06-25 (full SQL check pack) | - | - | - | - | - | - | - | - | Top total-time family is reception exact-count (`queryid=6416750758406621842`, `total_ms=82854948.73`); EXPLAIN for reception/technician/VAS list paths all show Seq Scan + Sort; top IO-heavy queries are COPY exports |
 
 ## 6) Change Log (What Was Updated in This Plan)
 
@@ -170,6 +178,10 @@ Use one line per update so trend changes are visible over time.
 | 2026-06-08 | Copilot | Crash-recovery continuation: appended P1-05 execution pack (query rewrite batches, exact-count removal strategy, validation SQL, rollback, and completion gates) so implementation can resume without context loss. |
 | 2026-06-08 | Copilot | Implemented first P1-05 code batch: web/mobile `reportQueries` switched core VAS + parts-consumption loops from OFFSET (`.range`) to keyset (`order+limit+cursor`), reception list APIs moved to keyset ordered reads, and `count: 'exact'` replaced with `count: 'estimated'` in high-frequency dashboard/warranty count paths. |
 | 2026-06-08 | Copilot | Resolved follow-up build regression from P1-05 reception keyset helper (`src/lib/api/reception.ts`): fixed TypeScript cast mismatch surfaced on Vercel (`GenericStringError[]` overlap), verified clean local build (`npm run build` success). |
+| 2026-06-25 | Copilot | Updated this plan for the next active work item only: moved P1-08 and P1-09 to In Progress using latest Query Performance evidence, added P1-10 Disk IO budget incident response row, and appended current Observability metrics snapshot. |
+| 2026-06-25 | Copilot | Integrated latest provided SQL/performance logs into baseline + tracker: marked P1-06/P1-07 as In Progress, added P1-11 rolling log tracker, and appended Section 14 with DB-truth-backed fix pack + update template for future log captures. |
+| 2026-06-25 | Copilot | Audited freshly refreshed authoritative dump using manifest baseline marker and post-dump overlay rules; replaced Section 10 with current dump truth (counts, key table/index presence, candidate index gaps) and synced tracker/metrics for next fix phase. |
+| 2026-06-25 | Copilot | Ingested full SQL check pack results (columns, top-time/top-IO queries, seq/index scans, table IO, plan checks) and updated tracker evidence with exact query IDs/numbers plus a concrete ranked capture block in Section 14. |
 
 ## 7) Update Protocol For Future Chats
 
@@ -332,51 +344,68 @@ Immediate success criteria for next measurement cycle:
 3. Keep connection usage below 70% of pool under normal peak.
 4. Re-capture logs after each index/query-shape batch and append to Sections 5 and 6.
 
-## 10) Authoritative Database Truth Audit (From Active Dump)
+## 10) Authoritative Database Truth Audit (Fresh Dump Baseline + Overlay)
 
-Audit date: 2026-06-05  
+Audit date: 2026-06-25  
 Authority source used: `local_folder/backups/full_database.sql`  
 Mirror used for large-file access fallback: `local_folder/backups/chunks/full_database.sql.part_*`
 
-Evidence snapshot captured from dump:
-- Header confirms: Dump started `2026-06-05 10:06:12 IST`, dumped by `pg_dump 17.7`, DB version `17.6`.
-- Public schema object declarations (`CREATE TABLE/VIEW/MATERIALIZED VIEW` + public alter-table declarations counted in audit command): `139` matches.
-- Public functions count (`CREATE FUNCTION public.*`): `29`.
-- Public triggers count (`CREATE TRIGGER ... ON public.*`): `40`.
-- Public RLS-enabled tables count (`ALTER TABLE public.* ENABLE ROW LEVEL SECURITY`): `24`.
-- Public policies count (`CREATE POLICY ... ON public.*`): `95`.
+Baseline marker (manifest truth):
+- Manifest file: `supabase/evidence/authoritative_dump_manifest.json`
+- Dump path marker: `local_folder/backups/full_database.sql`
+- Chunk marker: `local_folder/backups/chunks/full_database.sql.part_*`
+- Baseline `created_at_utc`: `2026-06-25T15:02:12Z`
+- Baseline `sha256`: `56cc1ef74d7c5482200b1f04d7b6404bf71a2d29c3f5addc7b4788472f7f9e35`
+- Baseline size marker: `109744753` bytes (~105 MB)
 
-Timeout-hot relations confirmed present in authoritative dump:
-- `job_card_closed_data`
-- `part_master`
+Overlay truth (post-dump execution state):
+- Overlay file: `supabase/evidence/post_dump_verified_promotions.md`
+- Active overlay window matches baseline timestamp and sha.
+- Current overlay state in this window: no promoted SQL/SQL-check entries listed yet.
+
+Dump header verification from fresh baseline:
+- Dump started: `2026-06-25 20:29:17 IST`
+- Dumped from DB version: `17.6`
+- Dumped by `pg_dump`: `17.7`
+
+Current object-count snapshot (fresh dump):
+- `CREATE TABLE public.*`: `91`
+- `CREATE VIEW public.*`: `6`
+- `CREATE MATERIALIZED VIEW public.*`: `0`
+- `CREATE FUNCTION public.*`: `130`
+- `CREATE TRIGGER ... ON public.*`: `83`
+- Public tables with `ENABLE ROW LEVEL SECURITY`: `77`
+- `CREATE POLICY ... ON public.*`: `310`
+
+Performance-critical table presence confirmed:
+- `service_reception_entries`
+- `technician_assignments`
+- `service_vas_jc_data`
 - `service_parts_consumption_data`
 - `service_parts_stock_snapshot_data`
-- `service_reception_entries`
-- `service_vas_jc_data`
-- `warranty_claim_settlement_report_data`
-- `warranty_fsb_data`
-- `warranty_updation_claim_data`
-- `warranty_wc_data`
 
-Index truth (authoritative dump excerpts):
-- `service_parts_consumption_data` has branch/date and branch/portal/fiscal indexes (`idx_parts_consumption_branch_date`, `idx_parts_consumption_branch_portal_fiscal`) plus part-number and uniqueness indexes.
-- `service_parts_stock_snapshot_data` has branch/date and branch/portal/date-desc indexes (`idx_parts_stock_branch_date`, `idx_parts_stock_branch_portal_date`) plus part-number indexes.
-- `service_reception_entries` has dealer+created, jc_number, reg_number, and SA lookup indexes.
-- `service_vas_jc_data` has employee_code, job_card+branch, and sr_type indexes.
-- Warranty tables have branch+portal indexes for listed hot tables.
+Index truth (fresh dump, relevant to current IO fix path):
+- Present:
+	- `idx_service_reception_entries_dealer_created`
+	- `idx_service_reception_entries_jc_number`
+	- `idx_service_reception_sa_lookup`
+	- `idx_technician_assignments_assigned_at`
+	- `idx_vas_jc_data_branch_created_at_desc`
+	- `idx_parts_consumption_branch_portal_fiscal`
+	- `idx_parts_stock_branch_portal_date`
+- Not present (candidate indexes identified from 2026-06-25 log + EXPLAIN audit):
+	- `idx_sre_created_at_id_desc`
+	- `idx_sre_service_type_created_at_id_desc`
+	- `idx_ta_updated_assigned_desc`
+	- `idx_vas_jc_closed_branch`
 
-RLS and policy truth for timeout-hot relations:
-- RLS enabled and policy-backed in dump: `part_master`, `service_parts_consumption_data`, `service_parts_stock_snapshot_data`, `service_reception_entries`.
-- No `ALTER TABLE ... ENABLE ROW LEVEL SECURITY` or `CREATE POLICY ... ON ...` statements found in dump for: `job_card_closed_data`, `service_vas_jc_data`, `warranty_wc_data`, `warranty_updation_claim_data`, `warranty_claim_settlement_report_data`, `warranty_fsb_data`.
-
-View truth and detected schema drift (authoritative-first):
-- Current view definition found: `public.vw_parts_stock_health`.
-- No current `CREATE VIEW public.vw_parts_latest_stock` or `CREATE VIEW public.vw_parts_consumption_trend` object definitions found in active dump object section.
-- References to `vw_parts_latest_stock` and `vw_parts_consumption_trend` appear in migration history SQL text payloads, not as current dumped objects.
+Operational interpretation from fresh truth:
+- Existing reception indexes are dealer/lookup-oriented; plain ordered-list query path (`ORDER BY created_at DESC, id DESC`) still lacks dedicated sort/seek index.
+- RLS/policy baseline is materially broader than earlier snapshots, so policy-hardening and performance tasks must use this refreshed baseline as authority.
 
 Conflict handling applied:
-- Per Rules R7-R10, this plan prefers active local dump truth without reconciliation to prior assumptions.
-- Any remediation/migration decisions must start from this audited object set and not from inferred/missing objects.
+- Per Rules R7-R10, this section supersedes older audit counts and remains authoritative until next dump refresh.
+- Post-dump executed-state deltas must be layered only through overlay promotions file and not inferred from memory.
 
 ## 11) Full Frontend + Dump Compatibility Audit (Pre-Tightening, 2026-06-08)
 
@@ -666,3 +695,141 @@ P1-05 can move to `Done` only when all gates pass:
 2. Replace exact-count default in `src/lib/warranty/jsonExtraction.ts` and any list UIs relying on default exact count.
 3. Re-measure performance and append new rows in Sections 5 and 6.
 4. Update tracker rows P1-05/P1-06/P1-09 based on measured outcomes.
+
+## 14) 2026-06-25 Log Audit + DB-Truth Fix Plan (Rolling)
+
+Purpose:
+- Keep one continuously updated performance-audit section tied to real logs and authoritative DB truth.
+- Every new log bundle updates this section first, then Section 4 tracker rows.
+
+### 14.1 Evidence Ingested (Current Batch)
+
+Sources provided (2026-06-25):
+- Supabase Observability screenshots: Disk IO warning, Query Performance overview.
+- SQL outputs from:
+  - `extensions.pg_stat_statements` query-family export.
+  - `pg_stat_user_indexes` high-usage index inventory.
+  - `pg_stat_user_tables` seq-scan pressure inventory.
+  - `EXPLAIN (ANALYZE, BUFFERS)` for reception list order query.
+  - `EXPLAIN (ANALYZE, BUFFERS)` for reception date-window count query.
+
+Validated DB-truth notes:
+- `pg_stat_statements` relation is in schema `extensions` (not `public` on this project).
+- Existing reception index set includes `idx_service_reception_entries_dealer_created` and lookup indexes, but EXPLAIN confirms no direct sort-path index for plain `ORDER BY created_at DESC, id DESC` list query.
+
+### 14.2 Ranked Findings (From Current Batch)
+
+1. Primary bottleneck: PostgREST `service_reception_entries` list + exact-count family.
+- Evidence: high call volume and highest proportional total time (~56.7% for exact-count-shaped family in provided Query Performance table).
+- Effect: sustained IO/CPU pressure from frequent count/list execution.
+
+2. Reception ordered list plan still non-optimal.
+- Evidence: EXPLAIN shows `Seq Scan` + `Sort (top-N heapsort)` for `ORDER BY created_at DESC, id DESC LIMIT 100`.
+- Effect: repeated sort and broader heap traversal than needed.
+
+3. Date-window count query itself is not slow, but high-frequency count usage is expensive at system level.
+- Evidence: isolated EXPLAIN count ~3.38 ms via index-only scan, yet count family dominates total workload share due to call frequency.
+
+4. Additional scan pressure persists in `technician_assignments` and `service_vas_jc_data`.
+- Evidence: `pg_stat_user_tables` shows notable seq_scan counts; current index usage suggests partial mismatch to active list/order query shapes.
+
+5. Export (`COPY ... TO stdout`) workload is a meaningful IO consumer.
+- Evidence: high `shared_blks_read` and large total time in provided top query rows.
+
+### 14.3 Fix Plan (Execute In Order; DB-Truth Aligned)
+
+Fix A (query-shape, no schema change):
+1. Remove default exact-count from high-traffic list APIs (`service_reception_entries` first).
+2. Keep exact counts only for explicit, user-triggered reporting/export actions.
+3. Enforce narrow list projection (no broad row payload in list endpoints).
+
+Fix B (query-shape, app layer):
+1. Standardize keyset pagination on `(created_at, id)` for reception lists (web + mobile parity).
+2. Ensure cursor predicate uses `(created_at < cursor_created_at) OR (created_at = cursor_created_at AND id < cursor_id)`.
+
+Fix C (schema migration set, from log audit):
+1. Add `service_reception_entries` sort-path index:
+	- `(created_at DESC, id DESC)`
+2. Add filtered reception index for service-type path:
+	- `(service_type, created_at DESC, id DESC)` with predicate `jc_number IS NOT NULL AND jc_number <> ''`
+3. Add technician assignment order index:
+	- `(updated_at DESC, assigned_at DESC)`
+4. Add VAS date-window support index:
+	- `(jc_closed_date_time DESC, branch)`
+
+Fix D (operational load control):
+1. Schedule/export throttle for `COPY ... TO stdout` tasks outside peak interactive windows.
+2. Cap concurrent export jobs.
+
+Execution governance:
+- Follow migration workflow rule already active in repo:
+  - add migration SQL under `supabase/migrations/`
+  - add matching checks under `supabase/sql_checks/`
+  - after successful user execution, promote to executed folders and log in `docs/db-changes.md`
+
+### 14.4 Success Criteria + Verification Pack
+
+Primary targets for next 24-48h capture:
+1. Reduce `service_reception_entries` count/list family proportional total time by at least 30%.
+2. Remove Seq Scan + Sort for plain reception ordered list; plan should use index scan path.
+3. Stabilize connections under 70% pool utilization during normal peak.
+
+Verification SQL (post-fix):
+1. Re-run top query-family extract from `extensions.pg_stat_statements`.
+2. Re-run `EXPLAIN (ANALYZE, BUFFERS)` for:
+	- reception ordered list
+	- reception date-window count
+3. Re-run `pg_stat_user_tables` seq/index scan snapshot for:
+	- `service_reception_entries`
+	- `technician_assignments`
+	- `service_vas_jc_data`
+
+### 14.5 Rolling Update Template (Use For Every New Log Drop)
+
+For each new log bundle, append one update block here with:
+1. Timestamp + source window.
+2. Top 5 query families by total_time share.
+3. One-line plan status per fix bucket (A/B/C/D): `Not Started` | `In Progress` | `Done`.
+4. Plan delta summary:
+	- improved
+	- unchanged
+	- regressed
+5. Tracker sync checklist:
+	- update Section 4 rows P1-05, P1-06, P1-07, P1-08, P1-09, P1-10, P1-11 as needed
+	- append one metrics row in Section 5
+	- append one change log row in Section 6
+
+### 14.6 Capture Snapshot: 2026-06-25 (Full SQL Check Pack)
+
+Capture status:
+- Complete check pack received for `extensions.pg_stat_statements`, `pg_stat_user_tables`, `pg_statio_user_tables`, low-usage indexes, and four EXPLAIN plans.
+
+Top findings from this capture:
+1. Dominant total-time query family:
+- `queryid=6416750758406621842` (`service_reception_entries` exact-count/list CTE path)
+- `calls=38386`, `total_ms=82854948.73`, `mean_ms=2158.47`
+
+2. Additional high total-time families:
+- `service_reception_entries` wide list path: `queryid=-5344960703026327435`, `calls=6585`, `total_ms=13889043.53`
+- `technician_assignments` list path: `queryid=-6712128630152386476`, `calls=5091`, `total_ms=9968420.04`
+
+3. IO-heavy export/query families (top read pressure):
+- `COPY service_parts_stock_snapshot_data`: `queryid=-5633448213020496946`, `shared_blks_read=12499`, `total_ms=1017022.47`
+- `COPY service_invoice_order_data`: `queryid=8277935260341689633`, `shared_blks_read=9715`, `total_ms=684328.33`
+
+4. Seq-scan pressure highlights:
+- `service_vas_jc_data`: `seq_scan_pct=94.20`
+- `technician_assignments`: `seq_scan_pct=53.26`
+- `service_reception_entries`: `seq_scan_pct=19.06` (still material due to very high call volume)
+
+5. Plan checks (all three hot list paths still sort over seq scan):
+- Reception list: Seq Scan + Sort on `ORDER BY created_at DESC, id DESC`
+- Technician list: Seq Scan + Sort on `ORDER BY updated_at DESC, assigned_at DESC`
+- VAS date-window list: Seq Scan + Sort on `ORDER BY jc_closed_date_time DESC`
+- Reception date-window count remains fast via index-only scan (isolated query), but expensive as a high-frequency default list behavior.
+
+Fix status against A/B/C/D buckets:
+- A (remove default exact-count): In Progress (highest priority, not complete)
+- B (keyset + narrow projections): In Progress
+- C (index additions for active sort/filter paths): Not Started (awaiting migration/check files)
+- D (COPY/export scheduling and throttling): Not Started

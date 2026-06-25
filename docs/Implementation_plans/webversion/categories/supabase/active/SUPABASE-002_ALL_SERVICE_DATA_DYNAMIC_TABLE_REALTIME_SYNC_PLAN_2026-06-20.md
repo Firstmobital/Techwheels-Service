@@ -506,7 +506,20 @@ Execution update (2026-06-25):
   - `date_not_equal_vehicle_sale_date = 0`
 - Operational status:
   - One-time historical backfill: completed.
-  - Recurring incremental scheduler wiring: pending (run `booking-source-sync` every 5-15 minutes).
+  - Recurring incremental scheduler wiring: completed and verified (job `booking-source-sync-daily-ist-plus1h`, schedule `30 19 * * *` UTC = `01:00 IST`).
+
+Scheduler runbook (daily IST +1h):
+
+- Desired trigger: once daily at `01:00 IST` (one hour after IST date change).
+- UTC cron equivalent: `30 19 * * *`.
+- Migration artifact:
+  - `supabase/migrations/20260625200500_schedule_daily_ist_plus1h_booking_source_sync_incremental.sql`
+- Check artifact:
+  - `supabase/sql_checks/20260625200500_schedule_daily_ist_plus1h_booking_source_sync_incremental_checks.sql`
+- Invocation mode in scheduler:
+  - edge function `booking-source-sync` with body `{ "dry_run": false, "batch_size": 200 }`.
+- Auth mode for scheduler invocation:
+  - `booking-source-sync` is configured with `verify_jwt = false` in `supabase/config.toml` so cron can call without vault bearer-token dependency.
 
 ### Robot Update Audit Columns (`all_service_data`)
 
@@ -1219,7 +1232,7 @@ EXECUTE FUNCTION public.sync_all_service_data_dynamic();
 ✅ 7.3 | Build incremental source extraction contract | Platform Team | 2026-06-25 | 2026-06-25 | Watermark state (`public.integration_sync_state`) and cursor `(COALESCE(updated_at, created_at), id)` implemented in `supabase/functions/booking-source-sync/index.ts`
 ✅ 7.4 | Implement wave-1 mapping merge (rto_date -> vehicle_sale_date) | Platform Team | 2026-06-25 | 2026-06-25 | Insert-only helper live; mapping extended with `last_service_type='New'` and `last_service_date=rto_date` via executed migration `20260625174500...`
 ✅ 7.5 | Add read-only parity + safety checks | Platform Team | 2026-06-25 | 2026-06-25 | Executed checks archived under `supabase/exec_success_migrations/sql_check/` for prefixes `20260625201000`, `20260625174500`, and `20260625181500`; validation passed
-🔄 7.6 | Rollout runbook + scheduler | Platform Team | 2026-06-25 | - | One-time historical backfill completed (`20260625181500...`); recurring 5-15 minute incremental scheduler wiring pending
+✅ 7.6 | Rollout runbook + scheduler | Platform Team | 2026-06-25 | 2026-06-25 | One-time historical backfill completed (`20260625181500...`); daily IST+1h scheduler executed and verified via prefix `20260625200500`
 ⏳ 7.7 | Extend mapping matrix wave-2+ | Platform Team | - | - | Pending additional business mapping rules
 ```
 

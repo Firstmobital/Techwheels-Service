@@ -22,3 +22,15 @@
     - missing_last_service_type = 0
     - missing_last_service_date = 0
     - date_not_equal_vehicle_sale_date = 0
+
+### Prefix 20260625200500
+- Migration: 20260625200500_schedule_daily_ist_plus1h_booking_source_sync_incremental.sql
+- Check: 20260625200500_schedule_daily_ist_plus1h_booking_source_sync_incremental_checks.sql
+- Status: Executed and verified
+- Notes:
+  - Scheduler job created: booking-source-sync-daily-ist-plus1h
+  - Schedule: 30 19 * * * (UTC) = 01:00 IST daily
+  - Verification passed:
+    - wrapper_exists = true
+    - matching_job_rows = 1
+    - active_matching_job_rows = 1

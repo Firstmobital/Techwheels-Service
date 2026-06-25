@@ -61,3 +61,9 @@ Tracks migration/check files promoted to supabase/exec_success_migrations after 
 - moved migration: 20260625181500_all_service_data_booking_source_backfill_last_service_seed.sql
 - moved checks: 20260625181500_all_service_data_booking_source_backfill_last_service_seed_checks.sql
 - dump reference: size=108501831, sha256=d0aea82f0236674ada0d6b0aee8a48ecb7dc3f1fbe10226f0208113d8a0b63c8
+
+## 2026-06-25T13:33:40Z
+- prefix: 20260625200500
+- moved migration: 20260625200500_schedule_daily_ist_plus1h_booking_source_sync_incremental.sql
+- moved checks: 20260625200500_schedule_daily_ist_plus1h_booking_source_sync_incremental_checks.sql
+- dump reference: size=108501831, sha256=d0aea82f0236674ada0d6b0aee8a48ecb7dc3f1fbe10226f0208113d8a0b63c8
