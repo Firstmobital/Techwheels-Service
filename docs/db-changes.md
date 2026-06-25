@@ -34,3 +34,18 @@
     - wrapper_exists = true
     - matching_job_rows = 1
     - active_matching_job_rows = 1
+
+### Prefix 20260625221000
+- Migration: 20260625221000_p1_07_disk_io_hotlist_indexes.sql
+- Check: 20260625221000_p1_07_disk_io_hotlist_indexes_checks.sql
+- Status: Executed and verified
+- Notes:
+  - Added indexes:
+    - idx_sre_created_at_id_desc
+    - idx_sre_service_type_created_at_id_desc
+    - idx_ta_updated_assigned_desc
+    - idx_vas_jc_closed_branch
+  - Verification EXPLAIN now shows Index Scan for:
+    - service_reception_entries ordered list
+    - technician_assignments ordered list
+    - service_vas_jc_data date-window ordered list

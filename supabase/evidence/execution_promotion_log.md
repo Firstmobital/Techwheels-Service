@@ -67,3 +67,9 @@ Tracks migration/check files promoted to supabase/exec_success_migrations after 
 - moved migration: 20260625200500_schedule_daily_ist_plus1h_booking_source_sync_incremental.sql
 - moved checks: 20260625200500_schedule_daily_ist_plus1h_booking_source_sync_incremental_checks.sql
 - dump reference: size=108501831, sha256=d0aea82f0236674ada0d6b0aee8a48ecb7dc3f1fbe10226f0208113d8a0b63c8
+
+## 2026-06-25T15:36:30Z
+- prefix: 20260625221000
+- moved migration: 20260625221000_p1_07_disk_io_hotlist_indexes.sql
+- moved checks: 20260625221000_p1_07_disk_io_hotlist_indexes_checks.sql
+- dump reference: size=109744753, sha256=56cc1ef74d7c5482200b1f04d7b6404bf71a2d29c3f5addc7b4788472f7f9e35

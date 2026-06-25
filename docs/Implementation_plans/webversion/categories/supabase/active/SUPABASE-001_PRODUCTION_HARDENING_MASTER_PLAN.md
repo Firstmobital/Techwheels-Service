@@ -112,12 +112,12 @@ Status legend: `Not Started` | `In Progress` | `Blocked` | `Done`
 | P1-03 | High | Analyze top 3-5 slow queries in dashboard | Team | Done | 2026-06-08 | 2026-06-08 | Comprehensive slow query analysis completed: ranked top 10 query families by proportional DB time (20.82% down to 1.88%), identified root causes (OFFSET pagination, missing indexes, wide projections), provided EXPLAIN strategy + recommended indexes. Analysis: `docs/Implementation_plans/webversion/categories/supabase/evidence/P1_03_SLOW_QUERY_ANALYSIS.md` | 2026-06-08 | - |
 | P1-04 | High | Add and verify indexes for sequential scans | Team | Done | 2026-06-08 | 2026-06-08 | 4 migration files created and audited against authoritative dump (full_database.sql). 2 CRITICAL + 2 OPTIONAL indexes: `idx_reception_entries_branch_created_at_desc` (missing branch+created index for Query 2), `idx_vas_jc_data_branch_created_at_desc` (missing branch+created for Query 7), `idx_parts_consumption_branch_fiscal_year_desc` (complementary to portal-based index), `idx_stock_snapshot_branch_snapshot_date_desc` (optional complement). All columns/tables verified in authoritative dump. Ready for execution. | 2026-06-08 | - |
 | P1-04 | High | Add and verify indexes for sequential scans | Team | Done | 2026-06-08 | 2026-06-08 | 4 migration files created, audited, and DEPLOYED in Supabase. All indexes confirmed in production: idx_reception_entries_branch_created_at_desc, idx_vas_jc_data_branch_created_at_desc, idx_parts_consumption_branch_fiscal_year_desc, idx_stock_snapshot_branch_snapshot_date_desc. Ready for P1-05 query rewrites. | 2026-06-08 | Execute P1-05 query rewrites (keyset pagination) |
-| P1-05 | Critical | Remove fetch-all patterns from reports and warranty JSON extractors | Team | In Progress | 2026-06-08 |  | New 2026-06-25 logs confirm remaining heavy list/count pressure despite prior rewrites; `service_reception_entries` family still dominates total time and call volume. | 2026-06-25 | Complete code audit for any remaining `count=exact` + broad list projections in web/mobile reception/report paths, then re-capture logs |
+| P1-05 | Critical | Remove fetch-all patterns from reports and warranty JSON extractors | Team | In Progress | 2026-06-08 |  | Tier A code pass applied (exact-count probe removal + date-scoped SA fetch + VAS keyset loop), but immediate recapture still shows unchanged cumulative totals on top query IDs. | 2026-06-25 | Validate deployed build is serving traffic, then run time-window delta capture (before/after snapshot method) instead of relying on cumulative totals |
 | P1-06 | High | Replace OFFSET scans with cursor pagination in large tables/views | Team | In Progress | 2026-06-25 |  | Post-index verification now shows Index Scan plans for reception, technician, and VAS ordered list checks; residual load is now primarily query-shape/call-frequency (`OFFSET` + default exact-count) rather than missing sort-path indexes. | 2026-06-25 | Execute Tier A code patches from exact-count checklist and complete cursor contract rollout in web/mobile list endpoints |
 | P1-07 | High | Add targeted composite/partial indexes for timeout hotlist queries | Team | Done | 2026-06-25 | 2026-06-25 | Migration executed successfully (`supabase/migrations/20260625221000_p1_07_disk_io_hotlist_indexes.sql`); check output confirms all 4 indexes exist and all 3 hot EXPLAINs switched from Seq Scan + Sort to Index Scan (`idx_sre_created_at_id_desc`, `idx_ta_updated_assigned_desc`, `idx_vas_jc_closed_branch`). | 2026-06-25 | - |
 | P1-08 | High | Reduce Realtime WAL polling cost and fan-out | Team | In Progress | 2026-06-25 |  | `realtime.list_changes` remains high-frequency (`queryid=-2876120296317350531`, `calls=612039`, `total_ms=3832695.82`, `mean_ms=6.26`). | 2026-06-25 | Inventory channels per screen and remove duplicate subscriptions; verify drop in calls and proportional time in next capture |
-| P1-09 | High | Eliminate expensive exact-count list patterns in PostgREST paths | Team | In Progress | 2026-06-25 |  | Dominant query family is exact-count reception path (`queryid=6416750758406621842`, `calls=38386`, `total_ms=82854948.73`, `mean_ms=2158.47`). Code-side checklist created: `docs/Implementation_plans/webversion/categories/supabase/evidence/P1_09_EXACT_COUNT_REMOVAL_CHECKLIST_2026-06-25.md`. | 2026-06-25 | Execute checklist Tier A patches first, then capture before/after query ID deltas |
-| P1-10 | Critical | Disk IO budget incident response (query-shape mitigation first) | Team | In Progress | 2026-06-25 | 2026-06-27 | Index batch validated, but top total-time family remains reception exact-count (`queryid=6416750758406621842`, `total_ms=82854948.73`) and high-frequency Realtime/COPY workloads still contribute IO pressure. | 2026-06-25 | Complete code-side exact-count removal + keyset cleanup, then capture fresh post-change window to measure queryid deltas |
+| P1-09 | High | Eliminate expensive exact-count list patterns in PostgREST paths | Team | In Progress | 2026-06-25 |  | Dominant query family remains exact-count reception path (`queryid=6416750758406621842`, `calls=38386`, `total_ms=82854948.73`, `mean_ms=2158.47`) in latest recapture; indicates no measurable delta yet in cumulative window. Code-side checklist: `docs/Implementation_plans/webversion/categories/supabase/evidence/P1_09_EXACT_COUNT_REMOVAL_CHECKLIST_2026-06-25.md`. | 2026-06-25 | Capture 30-60 minute post-deploy window and compare queryid call/time deltas; prioritize any remaining exact-count paths if still flat |
+| P1-10 | Critical | Disk IO budget incident response (query-shape mitigation first) | Team | In Progress | 2026-06-25 | 2026-06-27 | Index batch validated; latest recapture still shows unchanged cumulative top IDs and COPY/Realtime contributors (`queryid=6416750758406621842`, `queryid=-2876120296317350531`, COPY IDs unchanged). | 2026-06-25 | Run controlled post-deploy measurement window (delta method), then execute next optimization batch based on actual interval movement |
 | P1-11 | Critical | Log-driven performance tracker (rolling updates from every new capture) | Team | In Progress | 2026-06-25 |  | Established explicit update protocol in Section 14.5 with required evidence fields from each new log drop (top queries, plans, index/seq-scan deltas, action status). | 2026-06-25 | For each new log bundle: update Section 14.1/14.2 table rows, then sync affected tracker lines P1-05..P1-10 same day |
 | P2-01 | High | Add free-plan inactivity prevention ping | Team | Not Started |  |  |  | 2026-06-04 | Define endpoint + schedule + monitoring |
 | P2-02 | Medium | Connect GitHub repo in Supabase dashboard | Team | Not Started |  |  |  | 2026-06-04 | Validate migration linkage after connection |
@@ -141,6 +141,7 @@ Use one line per update so trend changes are visible over time.
 | 2026-06-25 (dump refresh audit) | - | - | - | - | - | - | - | - | Authoritative dump refreshed: `local_folder/backups/full_database.sql` (105 MB) + chunk mirror (`part_000`..`part_005`), baseline marker from `supabase/evidence/authoritative_dump_manifest.json`; overlay promotions file currently contains no promoted SQL entries in active window |
 | 2026-06-25 (full SQL check pack) | - | - | - | - | - | - | - | - | Top total-time family is reception exact-count (`queryid=6416750758406621842`, `total_ms=82854948.73`); EXPLAIN for reception/technician/VAS list paths all show Seq Scan + Sort; top IO-heavy queries are COPY exports |
 | 2026-06-25 (post-index verification) | - | - | - | - | - | - | - | - | Migration `20260625221000` executed and verified: all new indexes present; reception/technician/VAS verification EXPLAINs now use Index Scan paths; next impact step is code-side exact-count and OFFSET reduction |
+| 2026-06-25 (post-code recapture) | - | - | - | - | - | - | - | - | Latest top-query outputs remain effectively unchanged vs prior capture (`queryid=6416750758406621842` still `calls=38386`, `total_ms=82854948.73`), indicating cumulative-window/no-traffic-delta view; shift measurement to interval delta method |
 
 ## 6) Change Log (What Was Updated in This Plan)
 
@@ -185,6 +186,7 @@ Use one line per update so trend changes are visible over time.
 | 2026-06-25 | Copilot | Ingested full SQL check pack results (columns, top-time/top-IO queries, seq/index scans, table IO, plan checks) and updated tracker evidence with exact query IDs/numbers plus a concrete ranked capture block in Section 14. |
 | 2026-06-25 | Copilot | Created pending execution artifacts for fix rollout: migration `20260625221000_p1_07_disk_io_hotlist_indexes.sql`, verification checks `20260625221000_p1_07_disk_io_hotlist_indexes_checks.sql`, and code-side checklist `P1_09_EXACT_COUNT_REMOVAL_CHECKLIST_2026-06-25.md`; linked all three into tracker rows. |
 | 2026-06-25 | Copilot | Recorded successful execution/verification of migration `20260625221000`: marked P1-07 Done, logged Index Scan plan shifts for reception/technician/VAS, and moved next priority to code-side exact-count and OFFSET reduction (P1-06/P1-09). |
+| 2026-06-25 | Copilot | Logged latest post-code query capture from user: top query totals/calls still match prior cumulative values, so plan now requires interval-based delta measurement before judging code impact; updated tracker next actions accordingly. |
 
 ## 7) Update Protocol For Future Chats
 
@@ -865,3 +867,29 @@ Verification results received:
 Interpretation:
 - Index objective is achieved (plans no longer seq-scan sorting on the validated paths).
 - Next measurable gains now depend on code/query-shape work (remove default exact-count, reduce OFFSET fan-out, narrow projections), then capture a fresh time window to observe queryid total-time deltas.
+
+### 14.8 Capture Snapshot: 2026-06-25 (Post-Code Recapture, Unchanged)
+
+What was received:
+- Re-capture output for tracked query IDs, top total-time list, and target table scan summary after code-side Tier A pass.
+
+Observed result:
+- Dominant query remained unchanged in cumulative stats:
+	- `queryid=6416750758406621842`, `calls=38386`, `total_ms=82854948.73`, `mean_ms=2158.47`
+- Other top IDs also remained materially unchanged in reported totals/calls.
+
+Interpretation:
+- This capture appears to reflect the same cumulative `pg_stat_statements` window (or insufficient post-deploy traffic), so it does not yet prove/deny code impact.
+- Plan-shape improvements from index rollout remain valid (Index Scan confirmed), but workload-level effect must be measured by interval deltas.
+
+Measurement protocol for next capture:
+1. Take snapshot A for tracked query IDs (calls/total_ms/mean_ms).
+2. Let production traffic run for 30-60 minutes after confirmed deploy.
+3. Take snapshot B for same query IDs.
+4. Compare deltas (`B - A`) instead of absolute cumulative totals.
+
+Current bucket status:
+- A (remove default exact-count): In Progress
+- B (keyset + narrow projections): In Progress
+- C (index additions): Done
+- D (COPY/export throttling): Not Started
