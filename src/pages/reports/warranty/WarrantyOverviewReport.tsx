@@ -443,8 +443,6 @@ const SOURCE_TABLES: SourceTableConfig[] = [
   { tableName: 'warranty_wc_data', category: 'Warranty Claim' },
 ]
 
-const STATUS_KEYS = ['claim_status', 'current_status', 'settlement_status', 'approval_status', 'stage', 'status']
-
 
 
 
@@ -461,18 +459,6 @@ function recordMatchesDateFilter(record: WarrantyRecord, year: string, month: st
   return true
 }
 
-function toNumber(value: unknown): number {
-  if (typeof value === 'number' && Number.isFinite(value)) return value
-  const str = String(value ?? '')
-    .replace(/rs\.?/gi, '')
-    .replace(/inr/gi, '')
-    .replace(/₹/g, '')
-    .replace(/,/g, '')
-    .replace(/[^0-9.-]/g, '')
-    .trim()
-  const num = Number(str)
-  return Number.isFinite(num) ? num : 0
-}
 
 
 
