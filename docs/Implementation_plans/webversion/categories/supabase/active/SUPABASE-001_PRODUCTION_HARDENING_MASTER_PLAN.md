@@ -116,8 +116,8 @@ Status legend: `Not Started` | `In Progress` | `Blocked` | `Done`
 | P1-06 | High | Replace OFFSET scans with cursor pagination in large tables/views | Team | In Progress | 2026-06-25 |  | Post-index verification now shows Index Scan plans for reception, technician, and VAS ordered list checks; residual load is now primarily query-shape/call-frequency (`OFFSET` + default exact-count) rather than missing sort-path indexes. | 2026-06-25 | Execute Tier A code patches from exact-count checklist and complete cursor contract rollout in web/mobile list endpoints |
 | P1-07 | High | Add targeted composite/partial indexes for timeout hotlist queries | Team | Done | 2026-06-25 | 2026-06-25 | Migration executed successfully (`supabase/migrations/20260625221000_p1_07_disk_io_hotlist_indexes.sql`); check output confirms all 4 indexes exist and all 3 hot EXPLAINs switched from Seq Scan + Sort to Index Scan (`idx_sre_created_at_id_desc`, `idx_ta_updated_assigned_desc`, `idx_vas_jc_closed_branch`). | 2026-06-25 | - |
 | P1-08 | High | Reduce Realtime WAL polling cost and fan-out | Team | In Progress | 2026-06-25 |  | `realtime.list_changes` remains high-frequency (`queryid=-2876120296317350531`, `calls=612039`, `total_ms=3832695.82`, `mean_ms=6.26`). | 2026-06-25 | Inventory channels per screen and remove duplicate subscriptions; verify drop in calls and proportional time in next capture |
-| P1-09 | High | Eliminate expensive exact-count list patterns in PostgREST paths | Team | In Progress | 2026-06-25 |  | Dominant query family remains exact-count reception path (`queryid=6416750758406621842`, `calls=38386`, `total_ms=82854948.73`, `mean_ms=2158.47`) in latest recapture; indicates no measurable delta yet in cumulative window. Code-side checklist: `docs/Implementation_plans/webversion/categories/supabase/evidence/P1_09_EXACT_COUNT_REMOVAL_CHECKLIST_2026-06-25.md`. | 2026-06-25 | Capture 30-60 minute post-deploy window and compare queryid call/time deltas; prioritize any remaining exact-count paths if still flat |
-| P1-10 | Critical | Disk IO budget incident response (query-shape mitigation first) | Team | In Progress | 2026-06-25 | 2026-06-27 | Index batch validated; latest recapture still shows unchanged cumulative top IDs and COPY/Realtime contributors (`queryid=6416750758406621842`, `queryid=-2876120296317350531`, COPY IDs unchanged). | 2026-06-25 | Run controlled post-deploy measurement window (delta method), then execute next optimization batch based on actual interval movement |
+| P1-09 | High | Eliminate expensive exact-count list patterns in PostgREST paths | Team | In Progress | 2026-06-25 |  | Dominant reception family still tops cumulative totals and additional reception list IDs surfaced in latest capture (`-225245605736690330`, `-922008049376959953`, `852176900607336119`, `2744925251257801673`) with `OFFSET` signatures. | 2026-06-25 | Run strict A/B interval delta capture after deploy traffic and rank by `delta_total_ms` (not cumulative totals) before next code batch |
+| P1-10 | Critical | Disk IO budget incident response (query-shape mitigation first) | Team | In Progress | 2026-06-25 | 2026-06-27 | Latest post-deploy check remains cumulative-flat on prior top IDs while reception query family spread increased across additional list IDs; Realtime/COPY still persistent secondary contributors. | 2026-06-25 | Execute 10-minute controlled delta protocol (A/B snapshots on tracked + newly surfaced IDs), then target top `delta_total_ms` family first |
 | P1-11 | Critical | Log-driven performance tracker (rolling updates from every new capture) | Team | In Progress | 2026-06-25 |  | Established explicit update protocol in Section 14.5 with required evidence fields from each new log drop (top queries, plans, index/seq-scan deltas, action status). | 2026-06-25 | For each new log bundle: update Section 14.1/14.2 table rows, then sync affected tracker lines P1-05..P1-10 same day |
 | P2-01 | High | Add free-plan inactivity prevention ping | Team | Not Started |  |  |  | 2026-06-04 | Define endpoint + schedule + monitoring |
 | P2-02 | Medium | Connect GitHub repo in Supabase dashboard | Team | Not Started |  |  |  | 2026-06-04 | Validate migration linkage after connection |
@@ -142,6 +142,7 @@ Use one line per update so trend changes are visible over time.
 | 2026-06-25 (full SQL check pack) | - | - | - | - | - | - | - | - | Top total-time family is reception exact-count (`queryid=6416750758406621842`, `total_ms=82854948.73`); EXPLAIN for reception/technician/VAS list paths all show Seq Scan + Sort; top IO-heavy queries are COPY exports |
 | 2026-06-25 (post-index verification) | - | - | - | - | - | - | - | - | Migration `20260625221000` executed and verified: all new indexes present; reception/technician/VAS verification EXPLAINs now use Index Scan paths; next impact step is code-side exact-count and OFFSET reduction |
 | 2026-06-25 (post-code recapture) | - | - | - | - | - | - | - | - | Latest top-query outputs remain effectively unchanged vs prior capture (`queryid=6416750758406621842` still `calls=38386`, `total_ms=82854948.73`), indicating cumulative-window/no-traffic-delta view; shift measurement to interval delta method |
+| 2026-06-25 (post-deploy reception family recapture) | - | - | - | - | - | - | - | - | New reception IDs entered hotlist while legacy top IDs remained cumulative-flat (`6416750758406621842`, `-5344960703026327435`, `-225245605736690330`, `2744925251257801673` etc.); classify as insufficient interval evidence until A/B delta window is captured |
 
 ## 6) Change Log (What Was Updated in This Plan)
 
@@ -187,6 +188,7 @@ Use one line per update so trend changes are visible over time.
 | 2026-06-25 | Copilot | Created pending execution artifacts for fix rollout: migration `20260625221000_p1_07_disk_io_hotlist_indexes.sql`, verification checks `20260625221000_p1_07_disk_io_hotlist_indexes_checks.sql`, and code-side checklist `P1_09_EXACT_COUNT_REMOVAL_CHECKLIST_2026-06-25.md`; linked all three into tracker rows. |
 | 2026-06-25 | Copilot | Recorded successful execution/verification of migration `20260625221000`: marked P1-07 Done, logged Index Scan plan shifts for reception/technician/VAS, and moved next priority to code-side exact-count and OFFSET reduction (P1-06/P1-09). |
 | 2026-06-25 | Copilot | Logged latest post-code query capture from user: top query totals/calls still match prior cumulative values, so plan now requires interval-based delta measurement before judging code impact; updated tracker next actions accordingly. |
+| 2026-06-25 | Copilot | Appended post-deploy reception-family capture from user showing unchanged cumulative leaders plus newly surfaced reception list query IDs; updated plan to require strict A/B interval delta scoring before next patch batch. |
 
 ## 7) Update Protocol For Future Chats
 
@@ -893,3 +895,28 @@ Current bucket status:
 - B (keyset + narrow projections): In Progress
 - C (index additions): Done
 - D (COPY/export throttling): Not Started
+
+### 14.9 Capture Snapshot: 2026-06-25 (Post-Deploy Reception Family, Mixed/Unresolved)
+
+What was received:
+- User supplied refreshed reception-family hotlist and classifier flags (`has_count_cte`, `has_offset`, `has_select_star`) for top reception query IDs.
+
+Observed result:
+- Legacy dominant IDs remained cumulative-flat:
+	- `6416750758406621842` (`calls=38386`, `total_ms=82854948.73`, `has_count_cte=true`, `has_offset=true`)
+	- `-5344960703026327435` (`calls=6585`, `total_ms=13889043.53`, `has_offset=true`)
+- Additional reception query IDs now appear in top set:
+	- `-225245605736690330` (`calls=3177`, `total_ms=4150753.83`, `has_offset=true`)
+	- `-922008049376959953` (`calls=2248`, `total_ms=2637205.96`, `has_offset=true`)
+	- `852176900607336119` (`calls=2199`, `total_ms=2581855.21`, `has_offset=true`)
+	- `2744925251257801673` (`calls=885`, `total_ms=1875153.82`, `has_count_cte=true`, `has_offset=true`, `has_select_star=true`)
+
+Interpretation:
+- Capture still reflects cumulative statement state, so no direct before/after attribution is possible yet.
+- Reception hotspot has broadened across multiple OFFSET list signatures; next optimization decisions must be based on interval deltas, not cumulative totals.
+
+Required next measurement (strict):
+1. Snapshot A: tracked + newly surfaced reception IDs (calls/total_ms/mean_ms).
+2. Wait 10 minutes under real production traffic.
+3. Snapshot B: same ID set.
+4. Compute `delta_calls` and `delta_total_ms` for each ID and rank descending by `delta_total_ms`.
