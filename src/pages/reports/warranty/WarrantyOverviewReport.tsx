@@ -776,11 +776,14 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
     let active = true
 
     const fetchAllRowsForTable = async (tableName: string): Promise<WarrantySourceRow[]> => {
-      const pageSize = 1000
+      const pageSize = 2000
       let from = 0
       const allRows: WarrantySourceRow[] = []
+      let attempts = 0
 
       while (true) {
+        attempts++
+        if (attempts > 20) break // safety cap — max 40,000 rows per table
         const to = from + pageSize - 1
         const { data, error: pageError } = await supabase
           .from(tableName)
@@ -789,7 +792,22 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
           .range(from, to)
 
         if (pageError) {
-          throw new Error(`${tableName}: ${pageError.message}`)
+          // Retry once on timeout
+          if (pageError.message?.includes('timeout') || pageError.message?.includes('canceling')) {
+            await new Promise(r => setTimeout(r, 1500))
+            const { data: retry, error: retryErr } = await supabase
+              .from(tableName)
+              .select('id, branch, location, portal, source_file_name, source_row_data, created_at')
+              .order('id', { ascending: true })
+              .range(from, to)
+            if (retryErr) throw new Error(\`\${tableName}: \${retryErr.message}\`)
+            const retryRows = (retry as WarrantySourceRow[] | null) ?? []
+            allRows.push(...retryRows)
+            if (retryRows.length < pageSize) break
+            from += pageSize
+            continue
+          }
+          throw new Error(\`\${tableName}: \${pageError.message}\`)
         }
 
         const rows = (data as WarrantySourceRow[] | null) ?? []
@@ -807,13 +825,14 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
       setError(null)
 
       try {
-        const tableResults = await Promise.all(
-          SOURCE_TABLES.map(async ({ tableName, category }) => {
-            const data = await fetchAllRowsForTable(tableName)
-            const rows = data.map((row) => ({ row, category, tableName }))
-            return { tableName, rows }
-          }),
-        )
+        // Fetch tables sequentially to avoid DB statement timeout from concurrent queries
+        const tableResults: { tableName: string; rows: { row: WarrantySourceRow; category: string; tableName: string }[] }[] = []
+        for (const { tableName, category } of SOURCE_TABLES) {
+          if (!active) return
+          const data = await fetchAllRowsForTable(tableName)
+          const rows = data.map((row) => ({ row, category, tableName }))
+          tableResults.push({ tableName, rows })
+        }
 
         if (!active) return
         setLastRefreshed(new Date())
