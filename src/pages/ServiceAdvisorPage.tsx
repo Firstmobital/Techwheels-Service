@@ -388,7 +388,7 @@ export default function ServiceAdvisorPage() {
     return summaryScoped.filter((row) => matchesSearch(row))
   }, [rows, selectedFuelType, selectedCategory, selectedAdvisor, selectedSummaryCard, completedJobCardNumbers, holdJobCardNumbers, inProcessJobCardNumbers, allAssignedJobCardNumbers, searchQuery])
 
-  const fuelTypeCountRows = useMemo(() => {
+  const _fuelTypeCountRows = useMemo(() => {
     let scoped = rows
 
     if (selectedBranch !== 'all') {
@@ -554,7 +554,7 @@ export default function ServiceAdvisorPage() {
   const showCategoryFilter = availableCategories.length > 1
   const showAdvisorFilter = totalAdvisorOptionCount > 1
 
-  const showScopeFilters = useMemo(() => {
+  const _showScopeFilters = useMemo(() => {
     if (isSuperAdmin) return false
     return (
       isAdmin
@@ -589,11 +589,11 @@ export default function ServiceAdvisorPage() {
     setSelectedAdvisor('all')
   }, [advisorOptions, selectedAdvisor])
 
-  const advisorName = useMemo(() => {
+  const _advisorName = useMemo(() => {
     if (isAdmin) return 'All Service Advisors'
     return rows[0]?.sa_display_name || rows[0]?.sa_name || 'Unknown'
   }, [rows, isAdmin])
-  const advisorCode = useMemo(() => {
+  const _advisorCode = useMemo(() => {
     if (isAdmin) return ''
     return rows[0]?.sa_employee_code || ''
   }, [rows, isAdmin])
@@ -645,7 +645,7 @@ export default function ServiceAdvisorPage() {
     })
     console.log(`[DEBUG] Floor rows: ${floorRows.length}, No Technician: ${noTech.length}, Without JC: ${withoutJc.length}, No Assignment (with JC): ${noAssignment.length}`)
   }, [displayedRows, allAssignedJobCardNumbers])
-  const floorHoldCount = useMemo(
+  const holdCount = useMemo(
     () => displayedRows.filter((r) => isWorkHold(r)).length,
     [displayedRows, holdJobCardNumbers],
   )
