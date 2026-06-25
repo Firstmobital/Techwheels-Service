@@ -369,7 +369,41 @@ interface WarrantySourceRow {
   location: string | null
   portal: 'PV' | 'EV' | null
   source_file_name: string | null
-  source_row_data: Record<string, unknown>
+  // Flat extracted fields (no source_row_data blob)
+  claim_status?: string
+  total_amount?: string
+  total_amount_jc?: string
+  claimed_total_amount?: string
+  material_amount?: string
+  labour_amount?: string
+  parent_product_line_name?: string
+  chassis_type?: string
+  job_card_no?: string
+  cmpl_report_date?: string
+  veh_repair_date?: string
+  vcm_comments?: string
+  claim_category?: string
+  pcr_creation_date?: string
+  pcr_created_date?: string
+  sr_status?: string
+  service_type?: string
+  invoice_no?: string
+  invoice_date?: string
+  service_date?: string
+  posting_document_number?: string
+  dealer_invc_no?: string
+  invc_date_yyyy_mm_dd?: string
+  list_price?: string
+  labour_chgs?: string
+  misc_chgs?: string
+  ndp?: string
+  spl_labour_chgs?: string
+  job_card_number_number?: string
+  dealer_invoice_no?: string
+  dealer_invoice_date?: string
+  tml_comments?: string
+  tmcv_job_card_id?: string
+  sap_comments?: string
   created_at: string
 }
 
@@ -775,29 +809,38 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
   useEffect(() => {
     let active = true
 
+    // Per-table flat selects — extract only what's needed from JSONB server-side
+    // This avoids fetching full source_row_data blobs (was 5s/1000 rows, now <1s/2000 rows)
+    const TABLE_FLAT_SELECTS: Record<string, string> = {
+      warranty_wc_data: 'id,branch,location,portal,source_file_name,created_at,source_row_data->>claim_status,source_row_data->>total_amount,source_row_data->>material_amount,source_row_data->>labour_amount,source_row_data->>parent_product_line_name,source_row_data->>chassis_type,source_row_data->>job_card_no,source_row_data->>cmpl_report_date,source_row_data->>veh_repair_date,source_row_data->>vcm_comments,source_row_data->>claim_category,source_row_data->>pcr_creation_date',
+      warranty_updation_claim_data: 'id,branch,location,portal,source_file_name,created_at,source_row_data->>claim_status,source_row_data->>total_amount_jc,source_row_data->>material_amount,source_row_data->>parent_product_line_name,source_row_data->>chassis_type,source_row_data->>job_card_no,source_row_data->>cmpl_report_date,source_row_data->>veh_repair_date,source_row_data->>vcm_comments,source_row_data->>claim_category,source_row_data->>pcr_creation_date',
+      warranty_claim_settlement_report_data: 'id,branch,location,portal,source_file_name,created_at,source_row_data->>posting_document_number,source_row_data->>dealer_invc_no,source_row_data->>invc_date_yyyy_mm_dd,source_row_data->>list_price,source_row_data->>labour_chgs,source_row_data->>misc_chgs,source_row_data->>ndp,source_row_data->>spl_labour_chgs,source_row_data->>job_card_number_number',
+      warranty_amc_data: 'id,branch,location,portal,source_file_name,created_at,source_row_data->>claim_status,source_row_data->>total_amount,source_row_data->>claimed_total_amount,source_row_data->>material_amount,source_row_data->>labour_amount,source_row_data->>dealer_invoice_no,source_row_data->>dealer_invoice_date,source_row_data->>cmpl_report_date,source_row_data->>pcr_created_date,source_row_data->>claim_category,source_row_data->>tml_comments,source_row_data->>tmcv_job_card_id',
+      warranty_goodwill_data: 'id,branch,location,portal,source_file_name,created_at,source_row_data->>claim_status,source_row_data->>total_amount,source_row_data->>material_amount,source_row_data->>parent_product_line_name,source_row_data->>chassis_type,source_row_data->>job_card_no,source_row_data->>cmpl_report_date,source_row_data->>veh_repair_date,source_row_data->>sap_comments,source_row_data->>claim_category,source_row_data->>pcr_creation_date',
+      warranty_fsb_data: 'id,branch,location,portal,source_file_name,created_at,source_row_data->>claim_status,source_row_data->>sr_status,source_row_data->>service_type,source_row_data->>vcm_comments,source_row_data->>invoice_no,source_row_data->>invoice_date,source_row_data->>service_date,source_row_data->>chassis_type',
+      warranty_part_wc_data: 'id,branch,location,portal,source_file_name,created_at,source_row_data->>claim_status,source_row_data->>total_amount,source_row_data->>material_amount,source_row_data->>labour_amount,source_row_data->>parent_product_line_name,source_row_data->>chassis_type,source_row_data->>job_card_no,source_row_data->>cmpl_report_date,source_row_data->>veh_repair_date,source_row_data->>vcm_comments,source_row_data->>claim_category,source_row_data->>pcr_creation_date',
+    }
+
     const fetchAllRowsForTable = async (tableName: string): Promise<WarrantySourceRow[]> => {
       const pageSize = 2000
       let from = 0
       const allRows: WarrantySourceRow[] = []
-      let attempts = 0
+      const selectCols = TABLE_FLAT_SELECTS[tableName] ?? 'id,branch,location,portal,source_file_name,created_at,source_row_data->>claim_status,source_row_data->>total_amount'
 
       while (true) {
-        attempts++
-        if (attempts > 20) break // safety cap — max 40,000 rows per table
         const to = from + pageSize - 1
         const { data, error: pageError } = await supabase
           .from(tableName)
-          .select('id, branch, location, portal, source_file_name, source_row_data, created_at')
+          .select(selectCols)
           .order('id', { ascending: true })
           .range(from, to)
 
         if (pageError) {
-          // Retry once on timeout
           if (pageError.message?.includes('timeout') || pageError.message?.includes('canceling')) {
-            await new Promise(r => setTimeout(r, 1500))
+            await new Promise(r => setTimeout(r, 2000))
             const { data: retry, error: retryErr } = await supabase
               .from(tableName)
-              .select('id, branch, location, portal, source_file_name, source_row_data, created_at')
+              .select(selectCols)
               .order('id', { ascending: true })
               .range(from, to)
             if (retryErr) throw new Error(`${tableName}: ${retryErr.message}`)
@@ -815,6 +858,8 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
 
         if (rows.length < pageSize) break
         from += pageSize
+
+        if (from > 100000) break // safety cap
       }
 
       return allRows
@@ -842,32 +887,28 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
 
         for (const tableResult of tableResults) {
           for (const { row, category, tableName } of tableResult.rows) {
-            const source = row.source_row_data ?? {}
-            const status = extractStatusValue(source)
-            const claimCategory = extractByPreferredKeys(source, CLAIM_CATEGORY_KEYS)
-            const serviceType = extractByPreferredKeys(source, SERVICE_TYPE_KEYS)
-            const vcmComments = extractByPreferredKeys(source, ['vcm_comments'])
-            const rejectionReason =
-              extractByPreferredKeys(source, ['vcm_comments']) ||
-              extractByPreferredKeys(source, ['rejection_reason']) ||
-              extractByPreferredKeys(source, ['reason_for_rejection'])
-            const postingDocNo = extractByPreferredKeys(source, POSTING_DOC_KEYS)
-            const dealerInvoiceNo = extractByPreferredKeys(source, DEALER_INVOICE_KEYS)
-            const invoiceDateRaw = extractByPreferredKeys(source, INVOICE_DATE_KEYS)
-            const closedDateRaw = extractByPreferredKeys(source, CLOSED_DATE_KEYS)
-            const partsAmount = sumByKeys(source, PARTS_AMOUNT_KEYS)
-            const labourAmount = sumByKeys(source, LABOUR_AMOUNT_KEYS)
-            const specialAmount = sumByKeys(source, SPECIAL_AMOUNT_KEYS)
-            const miscAmount = sumByKeys(source, MISC_AMOUNT_KEYS)
-            const claimAmountFromKnown = sumByKeys(source, CLAIM_AMOUNT_KEYS)
-            const totalAmount = extractNumericByPreferredKeys(source, ['total_amount'])
-            const claimedTotalAmount = extractNumericByPreferredKeys(source, ['claimed_total_amount'])
-            const settlementAmount =
-              extractNumericByPreferredKeys(source, ['list_price']) +
-              extractNumericByPreferredKeys(source, ['labour_chgs']) +
-              extractNumericByPreferredKeys(source, ['misc_chgs'])
+            // Flat fields are now extracted by PostgREST server-side (no JSONB blob transfer)
+            const toNum = (v: unknown) => (v ? parseFloat(String(v)) || 0 : 0)
+            const str = (v: unknown) => (v ? String(v).trim() : '')
 
-            let claimAmount = claimAmountFromKnown > 0 ? claimAmountFromKnown : partsAmount + labourAmount + specialAmount + miscAmount
+            const status = str(row.claim_status) || str(row.sr_status)
+            const claimCategory = str(row.claim_category)
+            const serviceType = str(row.service_type)
+            const vcmComments = str(row.vcm_comments) || str(row.tml_comments) || str(row.sap_comments)
+            const rejectionReason = vcmComments
+            const postingDocNo = str(row.posting_document_number)
+            const dealerInvoiceNo = str(row.dealer_invoice_no) || str(row.dealer_invc_no) || str(row.invoice_no)
+            const invoiceDateRaw = str(row.invc_date_yyyy_mm_dd) || str(row.invoice_date) || str(row.dealer_invoice_date)
+            const closedDateRaw = str(row.cmpl_report_date) || str(row.veh_repair_date) || str(row.service_date)
+            const partsAmount = toNum(row.material_amount) || toNum(row.ndp)
+            const labourAmount = toNum(row.labour_amount) || toNum(row.labour_chgs)
+            const specialAmount = toNum(row.spl_labour_chgs)
+            const miscAmount = toNum(row.misc_chgs)
+            const totalAmount = toNum(row.total_amount) || toNum(row.total_amount_jc)
+            const claimedTotalAmount = toNum(row.claimed_total_amount)
+            const settlementAmount = toNum(row.list_price) + toNum(row.labour_chgs) + toNum(row.misc_chgs)
+
+            let claimAmount = partsAmount + labourAmount + specialAmount + miscAmount
             if (category === 'Claim Settlement') {
               claimAmount = settlementAmount
             } else if (category === 'AMC') {
@@ -876,13 +917,17 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
               claimAmount = totalAmount > 0 ? totalAmount : claimAmount
             }
 
-            // Calculate age strictly from source-sheet business dates; do not use import timestamp fallback.
-            const parsedAgeSourceDate = extractFirstParsableDateByPreferredKeys(source, AGE_DATE_KEYS)
+            const ageDateRaw = closedDateRaw || str(row.pcr_creation_date) || str(row.pcr_created_date)
             let ageDays = 0
-            if (parsedAgeSourceDate) {
-              const ageSourceMs = new Date(parsedAgeSourceDate).getTime()
-              ageDays = Math.max(0, Math.floor((now - ageSourceMs) / (1000 * 60 * 60 * 24)))
+            if (ageDateRaw) {
+              const ageSourceMs = new Date(ageDateRaw).getTime()
+              if (!isNaN(ageSourceMs)) {
+                ageDays = Math.max(0, Math.floor((now - ageSourceMs) / (1000 * 60 * 60 * 24)))
+              }
             }
+
+            const model = str(row.parent_product_line_name) || str(row.chassis_type)
+            const jobCardNumber = str(row.job_card_no) || str(row.job_card_number_number) || str(row.tmcv_job_card_id)
 
             normalizedRecords.push({
               tableName,
@@ -903,9 +948,9 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
               postingDocNo,
               dealerInvoiceNo,
               vcmComments,
-              model: extractByPreferredKeys(source, MODEL_KEYS),
-              parentProductLine: extractByPreferredKeys(source, ['parent_product_line_name']),
-              jobCardNumber: extractByPreferredKeys(source, JC_KEYS),
+              model,
+              parentProductLine: str(row.parent_product_line_name),
+              jobCardNumber,
               createdAt: row.created_at,
               invoiceDate: parsePotentialDate(invoiceDateRaw),
               closedDate: parsePotentialDate(closedDateRaw),
