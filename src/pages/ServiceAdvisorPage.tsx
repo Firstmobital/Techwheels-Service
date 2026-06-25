@@ -301,7 +301,7 @@ export default function ServiceAdvisorPage() {
   const [selectedFuelType, setSelectedFuelType] = useState<string | 'all'>('all')
   const [selectedAdvisor, setSelectedAdvisor] = useState<string>('all')
   const [search, setSearch] = useState('')
-  const [hasMultipleDealers, setHasMultipleDealers] = useState(false)
+  const [, setHasMultipleDealers] = useState(false)
   const [canModifyReception, setCanModifyReception] = useState(false)
   const [canModifyServiceAdvisor, setCanModifyServiceAdvisor] = useState(false)
 
