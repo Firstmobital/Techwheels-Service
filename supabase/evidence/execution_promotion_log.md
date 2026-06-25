@@ -25,3 +25,21 @@ Tracks migration/check files promoted to supabase/exec_success_migrations after 
 - moved migration: 20260624190000_drop_legacy_service_and_vehicle_source_tables.sql
 - moved checks: 20260624190000_drop_legacy_service_and_vehicle_source_tables_checks.sql
 - dump reference: size=109942639, sha256=56bc9448d6f2f00ff5be1bb7f6d4f6abb9de558893ec3e22c7e71de1205c839d
+
+## 2026-06-25T10:01:42Z
+- prefix: 20260625113000
+- moved migration: 20260625113000_all_service_data_sync_from_job_card_closed_data_service_winner.sql
+- moved checks: 20260625113000_all_service_data_sync_from_job_card_closed_data_service_winner_checks.sql
+- dump reference: size=108501831, sha256=d0aea82f0236674ada0d6b0aee8a48ecb7dc3f1fbe10226f0208113d8a0b63c8
+
+## 2026-06-25T10:01:42Z
+- prefix: 20260625123000
+- moved migration: 20260625123000_schedule_daily_ist_job_card_closed_service_winner_reconcile.sql
+- moved checks: 20260625123000_schedule_daily_ist_job_card_closed_service_winner_reconcile_checks.sql
+- dump reference: size=108501831, sha256=d0aea82f0236674ada0d6b0aee8a48ecb7dc3f1fbe10226f0208113d8a0b63c8
+
+## 2026-06-25T10:01:43Z
+- prefix: 20260625150000
+- moved migration: 20260625150000_all_service_data_sync_from_job_card_closed_data_use_closed_date_time.sql
+- moved checks: 20260625150000_all_service_data_sync_from_job_card_closed_data_use_closed_date_time_checks.sql
+- dump reference: size=108501831, sha256=d0aea82f0236674ada0d6b0aee8a48ecb7dc3f1fbe10226f0208113d8a0b63c8
