@@ -342,6 +342,172 @@ Pre-trigger operating note:
 - [ ] **Task 4.29:** Apply update freshness gate on matched target rows: update only when source `closed_date_time` is greater than target `last_service_date` (or target `last_service_date` is `NULL`).
 - [ ] **Task 4.30:** Add timeout-safe chunked reconcile helper and schedule daily IST cron to run chunked reconcile (instead of full-table one-shot reconcile).
 
+### Phase 7: Cross-Project `booking` -> `all_service_data` Sync (Source to Target)
+
+Scope baseline (wave 1):
+
+- Source project: `tnakgaoqyumgfxklkujl` (table: `public.booking`)
+- Target project: `jmdndcphkmaljhwgzqxq` (table: `public.all_service_data`)
+- Match key: normalized chassis key (`upper(btrim(...))`) on source `chassis_no` -> target `chassis_no`
+- First approved mapping: source `rto_date` -> target `vehicle_sale_date`
+- Additional column mappings and guards will be appended incrementally as separate sub-tasks under this phase.
+
+Practical source -> target mapping list (documented 2026-06-25):
+
+1. `booking.chassis_no` -> `all_service_data.chassis_no`
+2. `booking.rto_date` -> `all_service_data.vehicle_sale_date`
+3. `booking.engine_no` -> `all_service_data.engine_no`
+4. `booking.customer_phone` -> `all_service_data.contact_phones`
+5. `booking.customer_name` -> `all_service_data.first_name`
+6. `booking.insurance_company_name` -> `all_service_data.last_insurance_comapny`
+7. `booking.insurance_date + interval '1 year'` -> `all_service_data.last_insurance_expiry_date`
+8. `booking.updated_at` -> `all_service_data.last_updated_at` (implementation may stamp system sync time where required)
+9. Constant `'Techwheels'` -> `all_service_data.sold_dealer` for newly inserted target rows
+10. Constant `TRUE` -> `all_service_data.updated_by_sale` for newly inserted target rows
+11. Constant `now()` -> `all_service_data.updated_by_sale_at` for newly inserted target rows
+12. Constant `'New'` -> `all_service_data.last_service_type` for newly inserted target rows
+13. `booking.rto_date` -> `all_service_data.last_service_date` for newly inserted target rows
+
+Derived mappings from source JSON (`booking.quote_snapshot`) for inclusion in this phase:
+
+1. `quote_snapshot.car.name` -> `all_service_data.model`
+2. `quote_snapshot.variant.name` -> `all_service_data.product_line`
+3. `quote_snapshot.variant.fuel_type.label` -> deferred (do not map in this phase)
+
+Powertrain mapping note:
+
+- Do not map `powertrain_type` in current phase.
+- Derive later from variant/product-line logic when rule set is finalized.
+
+#### Deferred Powertrain Derivation Rule (Placeholder)
+
+Status:
+
+- Queued for later phase (post Wave-1 insert-only stabilization).
+
+Scope for deferred implementation:
+
+1. Populate `all_service_data.powertrain_type` using deterministic derivation from variant/product-line signals.
+2. Keep current Phase 7 flow unchanged until derivation rules are approved and validated.
+
+Acceptance criteria (required before enabling):
+
+1. **Rule contract finalized:** approved mapping table/spec exists for variant/product-line -> powertrain bucket values.
+2. **Deterministic output:** same input always produces same `powertrain_type`; no ambiguous fallback path.
+3. **Backfill safety:** historical backfill runs idempotently and does not modify non-target columns.
+4. **Coverage threshold:** at least 95% of eligible rows derive a non-null `powertrain_type` after rule application.
+5. **Unknown bucket governance:** unresolved rows are explicitly tagged (`UNKNOWN` or agreed equivalent) and measurable via checks.
+6. **Read-only validation checks:** SQL checks include distribution, null-rate, and top-unresolved variants/product-lines.
+7. **Rollback path:** reversible migration path documented to disable derivation without impacting Wave-1 insert-only ingestion.
+
+Locked decisions (2026-06-25):
+
+- Sync mode: continuous incremental sync.
+- Source chassis key column: `public.booking.chassis_no`.
+- Target uniqueness: `public.all_service_data` is treated as no-duplicate on chassis for this integration contract.
+- Update guard: target mutations occur only when mapped source value is non-null.
+
+Locked insert-only behavior (must stay):
+
+1. Match row by source `chassis_no` to target `chassis_no`.
+2. Do not update existing target row when chassis already exists.
+3. Insert new target row only if no chassis match exists.
+
+Two-layer insert gate (approved):
+
+1. Hard gate (mandatory core fields for insert): `chassis_no`, `rto_date`, `engine_no`, `customer_phone`, `customer_name`, `insurance_company_name`, `insurance_date` (for `+1 year` expiry derivation), and source sync timestamp (`updated_at` or equivalent cursor timestamp).
+2. Soft gate (optional derived JSON fields): `quote_snapshot.car.name` (`model`), `quote_snapshot.variant.name` (`product_line`), `quote_snapshot.variant.fuel_type.label` (`powertrain_type`). Missing derived values must not block insert.
+
+Source audit snapshot (2026-06-25, provided by user from source project SQL editor):
+
+- Confirmed source table contract fields and types:
+  - `id uuid not null` (primary key)
+  - `chassis_no text` (nullable)
+  - `rto_date date` (nullable)
+  - `engine_no text` (nullable)
+  - `customer_phone text not null`
+  - `customer_name text not null`
+  - `insurance_company_name text` (nullable)
+  - `insurance_date date` (nullable)
+  - `quote_snapshot jsonb` (nullable)
+  - `updated_at timestamptz` (nullable)
+  - `created_at timestamptz not null`
+- Confirmed key contract:
+  - `PRIMARY KEY (id)` only.
+- Confirmed hard-gate eligible count:
+  - `eligible_insert_rows = 706` out of `total_rows = 1656`.
+- Hard-gate completeness counts:
+  - `missing_chassis_no = 878`
+  - `missing_rto_date = 899`
+  - `missing_engine_no = 879`
+  - `missing_customer_phone = 0`
+  - `missing_customer_name = 0`
+  - `missing_insurance_company_name = 896`
+  - `missing_insurance_date = 941`
+  - `missing_both_timestamps = 0`
+- Duplicate chassis evidence:
+  - duplicate query returned no rows (`COUNT > 1` by normalized chassis), so source currently has one row per non-null normalized chassis.
+- Watermark tie evidence:
+  - timestamp ties exist and require deterministic tie-break by source `id`:
+    - `2026-04-23 05:18:53.208261+00` -> 8 rows
+    - `2026-05-21 07:21:12.318249+00` -> 7 rows
+    - `2026-06-12 11:34:00.226659+00` -> 2 rows
+- Fuel label evidence from `quote_snapshot.variant.fuel_type.label`:
+  - `NULL = 1292`, `EV = 282`, `CNG = 45`, `PETROL = 19`, `DIESEL = 18`.
+- Hardening decisions from evidence:
+  - Keep two-layer gate (hard core fields + optional derived JSON).
+  - Keep direct fuel-label pass-through (`EV/CNG/PETROL/DIESEL`) to `powertrain_type` with trim/case normalization only.
+  - Use incremental watermark cursor as `(COALESCE(updated_at, created_at), id)` for stable replay-safe ordering.
+
+Execution principles:
+
+- Do not perform cross-project joins directly inside target SQL.
+- Use an integration worker (Edge Function or controlled external job) that reads source rows and applies deterministic insert-only logic to target.
+- Preserve target data quality with non-destructive update rules (default: no overwrite with null/blank unless explicitly approved).
+
+- [x] **Task 7.1:** Lock source and target contracts.
+  - Confirm source primary key / change cursor field (`updated_at` or equivalent) in `public.booking`.
+  - Confirm duplicate policy in target when multiple rows share normalized `chassis_no`.
+- [x] **Task 7.2:** Add target-side support indexes and deterministic matcher contract.
+  - Ensure normalized index exists on `public.all_service_data(chassis_no)` expression path.
+  - Define one-row target winner rule for updates (latest `last_updated_at`, then `id DESC`).
+- [x] **Task 7.3:** Build source extraction contract for incremental batches.
+  - Batch by stable cursor (`updated_at`, `id`) with restart-safe watermark.
+  - Filter out null/blank chassis from source feed.
+- [x] **Task 7.4:** Implement wave-1 mapping and merge behavior.
+  - Skip matched target rows by normalized chassis (insert-only mode).
+  - Insert new target row when no normalized chassis match exists.
+  - Apply mapping `booking.rto_date` -> `all_service_data.vehicle_sale_date` with safe date parsing.
+- [x] **Task 7.5:** Add read-only validation SQL checks for parity and safety.
+  - Count checks: source eligible rows, target matched rows, inserted rows, skipped rows.
+  - Sample parity checks for chassis and mapped `vehicle_sale_date`.
+  - Drift checks for null/blank overwrite violations.
+- [ ] **Task 7.6:** Add operational rollout and scheduling.
+  - One-time historical backfill runbook.
+  - Recurring incremental schedule with retry + idempotence guarantees.
+  - Execution logging: processed, updated, inserted, skipped, failed.
+- [ ] **Task 7.7:** Extend mapping matrix (wave 2+).
+  - Add new source->target mappings one by one with explicit freshness and overwrite rules.
+  - For each added mapping, include matching SQL checks and evidence update in this plan.
+
+Execution update (2026-06-25):
+
+- Executed and verified migrations/checks promoted:
+  - `20260625201000_all_service_data_booking_source_sync_contract.sql`
+  - `20260625174500_all_service_data_booking_source_add_last_service_seed_from_rto_date.sql`
+  - `20260625181500_all_service_data_booking_source_backfill_last_service_seed.sql`
+- Booking-sync seed behavior now active for new inserts:
+  - `last_service_type = 'New'`
+  - `last_service_date = rto_date` (stored in target as IST timestamptz)
+- Historical backfill verification (sale-sync rows):
+  - `sale_rows = 85`
+  - `missing_last_service_type = 0`
+  - `missing_last_service_date = 0`
+  - `date_not_equal_vehicle_sale_date = 0`
+- Operational status:
+  - One-time historical backfill: completed.
+  - Recurring incremental scheduler wiring: pending (run `booking-source-sync` every 5-15 minutes).
+
 ### Robot Update Audit Columns (`all_service_data`)
 
 Required schema additions in `public.all_service_data`:
@@ -1044,6 +1210,17 @@ EXECUTE FUNCTION public.sync_all_service_data_dynamic();
 ✅ 6.7 | Ordered top-N validation checks | Platform Team | 2026-06-21 | 2026-06-21 | Created supabase/sql_checks/20260621142000_all_service_data_dynamic_priority_ordering_layer_checks.sql
 ✅ 6.8 | Add vehicle_sale_date as tertiary score condition | Platform Team | 2026-06-21 | 2026-06-21 | Implemented via supabase/migrations/20260621144000_all_service_data_dynamic_priority_score_add_vehicle_sale_date.sql + supabase/sql_checks/20260621144000_all_service_data_dynamic_priority_score_add_vehicle_sale_date_checks.sql
 ✅ 6.9 | Make tertiary vehicle_sale_date ordering exact (day-level) | Platform Team | 2026-06-21 | 2026-06-21 | Implemented via supabase/migrations/20260621150000_all_service_data_dynamic_priority_score_exact_vehicle_sale_date.sql + supabase/sql_checks/20260621150000_all_service_data_dynamic_priority_score_exact_vehicle_sale_date_checks.sql
+```
+
+### Phase 7 (Cross-Project booking -> all_service_data Sync)
+```text
+✅ 7.1 | Lock source/target contracts and duplicate policy | Platform Team | 2026-06-25 | 2026-06-25 | Locked: continuous sync, source key=booking.chassis_no, target no-duplicate policy, existing chassis rows are skipped
+✅ 7.2 | Add target matcher/index contract | Platform Team | 2026-06-25 | 2026-06-25 | Verified indexes (`idx_all_service_data_chassis_no_norm`, `idx_all_service_data_new_chassis_number_unique`) and executed contract migration `supabase/exec_success_migrations/sql/20260625201000_all_service_data_booking_source_sync_contract.sql`
+✅ 7.3 | Build incremental source extraction contract | Platform Team | 2026-06-25 | 2026-06-25 | Watermark state (`public.integration_sync_state`) and cursor `(COALESCE(updated_at, created_at), id)` implemented in `supabase/functions/booking-source-sync/index.ts`
+✅ 7.4 | Implement wave-1 mapping merge (rto_date -> vehicle_sale_date) | Platform Team | 2026-06-25 | 2026-06-25 | Insert-only helper live; mapping extended with `last_service_type='New'` and `last_service_date=rto_date` via executed migration `20260625174500...`
+✅ 7.5 | Add read-only parity + safety checks | Platform Team | 2026-06-25 | 2026-06-25 | Executed checks archived under `supabase/exec_success_migrations/sql_check/` for prefixes `20260625201000`, `20260625174500`, and `20260625181500`; validation passed
+🔄 7.6 | Rollout runbook + scheduler | Platform Team | 2026-06-25 | - | One-time historical backfill completed (`20260625181500...`); recurring 5-15 minute incremental scheduler wiring pending
+⏳ 7.7 | Extend mapping matrix wave-2+ | Platform Team | - | - | Pending additional business mapping rules
 ```
 
 ---

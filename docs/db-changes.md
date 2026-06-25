@@ -1,0 +1,24 @@
+# DB Changes Ledger
+
+## 2026-06-25
+
+### Prefix 20260625174500
+- Migration: 20260625174500_all_service_data_booking_source_add_last_service_seed_from_rto_date.sql
+- Check: 20260625174500_all_service_data_booking_source_add_last_service_seed_from_rto_date_checks.sql
+- Status: Executed and verified
+- Notes:
+  - Booking-source insert mapping now seeds:
+    - last_service_type = 'New'
+    - last_service_date = rto_date (stored as timestamptz in IST)
+
+### Prefix 20260625181500
+- Migration: 20260625181500_all_service_data_booking_source_backfill_last_service_seed.sql
+- Check: 20260625181500_all_service_data_booking_source_backfill_last_service_seed_checks.sql
+- Status: Executed and verified
+- Notes:
+  - One-time backfill fixed historical booking-sync rows with updated_by_sale = true.
+  - Validation passed:
+    - sale_rows = 85
+    - missing_last_service_type = 0
+    - missing_last_service_date = 0
+    - date_not_equal_vehicle_sale_date = 0
