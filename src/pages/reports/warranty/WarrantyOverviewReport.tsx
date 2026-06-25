@@ -229,13 +229,6 @@ const WR_AMC = {
   ],
 }
 
-const WR_SPECIAL = [
-  { code: '980016', label: 'Rusting / Body SPL', pvL: '₹29.08L', evL: '₹8.64L', note: 'Highest rusting claim volume', tone: 'var(--danger)' },
-  { code: '980019', label: 'Loaner Car', pvL: '₹4.12L', evL: '₹1.54L', note: 'Daily reimbursement rate', tone: 'var(--accent)' },
-  { code: '980025', label: 'Special Misc', pvL: '₹0.06L', evL: '₹10.13L', note: 'EV avg ₹46K/JC — audit', tone: 'var(--warn)' },
-  { code: '980001', label: 'Loading / Unloading', pvL: '₹0.18L', evL: '₹0.04L', note: 'Under-claimed — leakage', tone: 'var(--muted)' },
-  { code: '980002', label: 'Crane charges', pvL: '₹0.09L', evL: '₹0.02L', note: 'Under-claimed — leakage', tone: 'var(--muted)' },
-]
 
 const WR_TOP_PARTS = {
   pv: [
@@ -452,51 +445,10 @@ const SOURCE_TABLES: SourceTableConfig[] = [
 
 const STATUS_KEYS = ['claim_status', 'current_status', 'settlement_status', 'approval_status', 'stage', 'status']
 
-const POSTING_DOC_KEYS = [
-  'posting_document_no',
-  'posting_document_number',
-  'posting_doc_no',
-  'posting_no',
-  'posting_document',
-]
 
-const DEALER_INVOICE_KEYS = ['dealer_invoice_no', 'dealer_invoice_number', 'invoice_no', 'dealer_inv_no']
 
-const CLAIM_AMOUNT_KEYS = [
-  'total_amount',
-  'claimed_total_amount',
-  'claimed_amount',
-  'claim_amount',
-  'total_claim_amount',
-  'settlement_amount',
-]
 
-const PARTS_AMOUNT_KEYS = [
-  'material',
-  'material_amount',
-  'parts',
-  'parts_amount',
-  'part_amount',
-  'spares_amount',
-  'parts_value',
-  'list_price',
-  'mrp',
-]
 
-const LABOUR_AMOUNT_KEYS = [
-  'labour',
-  'labor',
-  'labour_amount',
-  'labor_amount',
-  'labour_chgs',
-  'special_labour',
-  'spl_labour',
-]
-
-const SPECIAL_AMOUNT_KEYS = ['980016', '980019', '980025', 'special', 'loaner', 'rusting', 'spl']
-const MISC_AMOUNT_KEYS = ['misc', 'misc_chgs', '980001', '980002', '980003', '980004']
-const MODEL_KEYS = ['parent_product_line_name', 'model', 'product', 'product_line', 'vehicle_model', 'model_name', 'chassis_type']
-const JC_KEYS = ['job_card_number', 'job_card_no', 'jc_no', 'jc_number']
 function recordMatchesDateFilter(record: WarrantyRecord, year: string, month: string): boolean {
   if (year === 'ALL') return true
   // Prefer invoiceDate, fall back to createdAt
@@ -508,29 +460,6 @@ function recordMatchesDateFilter(record: WarrantyRecord, year: string, month: st
   if (month !== 'ALL' && String(d.getMonth() + 1).padStart(2, '0') !== month) return false
   return true
 }
-const CLAIM_CATEGORY_KEYS = ['claim_category']
-const SERVICE_TYPE_KEYS = ['service_type', 'stype']
-const INVOICE_DATE_KEYS = ['invoice_date', 'invoice_dt', 'invoice date', 'inv_date']
-const CLOSED_DATE_KEYS = ['closed_date', 'job_closed_date', 'close_date', 'compl_report_date', 'repair_date']
-const AGE_DATE_KEYS = [
-  'job_card_date',
-  'jc_date',
-  'job_date',
-  'original_claim_submitted_date',
-  'goodwill_request_date',
-  'created_date',
-  'date_created',
-  'cmpl_report_date',
-  'compl_report_date',
-  'service_date',
-  'invc_date_yyyy_mm_dd',
-  'posting_date_yyyy_mm_dd',
-  'pcr_created_date',
-  'pcr_creation_date',
-  'pcr_raising_date',
-  'veh_repair_date',
-  'repair_date',
-]
 
 function toNumber(value: unknown): number {
   if (typeof value === 'number' && Number.isFinite(value)) return value
@@ -545,63 +474,9 @@ function toNumber(value: unknown): number {
   return Number.isFinite(num) ? num : 0
 }
 
-function extractByPreferredKeys(row: Record<string, unknown>, keys: string[]): string {
-  const entries = Object.entries(row)
 
-  for (const key of keys) {
-    const needle = key.toLowerCase()
 
-    const exactInsensitive = entries.find(([candidate]) => candidate.toLowerCase() === needle)
-    if (exactInsensitive && exactInsensitive[1] != null && String(exactInsensitive[1]).trim() !== '') {
-      return String(exactInsensitive[1]).trim()
-    }
 
-    const partialInsensitive = entries.find(([candidate]) => candidate.toLowerCase().includes(needle))
-    if (partialInsensitive && partialInsensitive[1] != null && String(partialInsensitive[1]).trim() !== '') {
-      return String(partialInsensitive[1]).trim()
-    }
-  }
-  return ''
-}
-
-function sumByKeys(row: Record<string, unknown>, keys: string[]): number {
-  let total = 0
-  for (const [key, value] of Object.entries(row)) {
-    const normalizedKey = key.toLowerCase()
-    if (keys.some((needle) => normalizedKey.includes(needle.toLowerCase()))) {
-      total += toNumber(value)
-    }
-  }
-  return total
-}
-
-function extractNumericByPreferredKeys(row: Record<string, unknown>, keys: string[]): number {
-  return toNumber(extractByPreferredKeys(row, keys))
-}
-
-function extractStatusValue(row: Record<string, unknown>): string {
-  // Avoid treating fields like status_code (e.g. "Sold Chassis") as workflow status.
-  for (const key of STATUS_KEYS) {
-    const exact = row[key]
-    if (exact != null && String(exact).trim() !== '') return String(exact).trim()
-  }
-
-  const normalizedKeyMap = new Map<string, string>()
-  for (const key of Object.keys(row)) {
-    const normalizedKey = key.toLowerCase().replace(/[^a-z0-9]/g, '')
-    if (!normalizedKeyMap.has(normalizedKey)) normalizedKeyMap.set(normalizedKey, key)
-  }
-
-  const normalizedStatusKeys = ['claimstatus', 'currentstatus', 'settlementstatus', 'approvalstatus', 'stage', 'status']
-  for (const normalizedCandidate of normalizedStatusKeys) {
-    const matchedKey = normalizedKeyMap.get(normalizedCandidate)
-    if (!matchedKey) continue
-    const value = row[matchedKey]
-    if (value != null && String(value).trim() !== '') return String(value).trim()
-  }
-
-  return ''
-}
 
 function money(v: number | null | undefined): string {
   if (v === null || v === undefined || !Number.isFinite(v)) return '—'
@@ -668,27 +543,6 @@ function parsePotentialDate(value: string): string | null {
   return null
 }
 
-function extractFirstParsableDateByPreferredKeys(row: Record<string, unknown>, keys: string[]): string | null {
-  const entries = Object.entries(row)
-
-  for (const key of keys) {
-    const needle = key.toLowerCase()
-
-    const exactInsensitive = entries.find(([candidate]) => candidate.toLowerCase() === needle)
-    if (exactInsensitive && exactInsensitive[1] != null) {
-      const parsed = parsePotentialDate(String(exactInsensitive[1]))
-      if (parsed) return parsed
-    }
-
-    const partialInsensitive = entries.find(([candidate]) => candidate.toLowerCase().includes(needle))
-    if (partialInsensitive && partialInsensitive[1] != null) {
-      const parsed = parsePotentialDate(String(partialInsensitive[1]))
-      if (parsed) return parsed
-    }
-  }
-
-  return null
-}
 
 // KPI Component using design-system classes
 function Kpi({ icon, label, value, sub, tone }: { icon: string; label: string; value: string; sub?: string; tone?: string }) {
@@ -844,7 +698,7 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
               .order('id', { ascending: true })
               .range(from, to)
             if (retryErr) throw new Error(`${tableName}: ${retryErr.message}`)
-            const retryRows = (retry as WarrantySourceRow[] | null) ?? []
+            const retryRows = (retry as unknown as WarrantySourceRow[] | null) ?? []
             allRows.push(...retryRows)
             if (retryRows.length < pageSize) break
             from += pageSize
@@ -853,7 +707,7 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
           throw new Error(`${tableName}: ${pageError.message}`)
         }
 
-        const rows = (data as WarrantySourceRow[] | null) ?? []
+        const rows = (data as unknown as WarrantySourceRow[] | null) ?? []
         allRows.push(...rows)
 
         if (rows.length < pageSize) break
