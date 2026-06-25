@@ -26,6 +26,7 @@ interface SplCodeRow {
   invc_date: string | null
   posting_document_number: string
   posting_date: string
+  tml_reference_number?: string | null
 }
 
 const SPL_CODE_LABELS: Record<string, string> = {
@@ -134,6 +135,34 @@ const WARRANTY_AGGREGATES = {
 const WR_HEADER = { atRisk: 2572135, atRiskL: '₹25.72L' }
 
 // Financial KPIs and Alerts are now computed from filteredRecords in useMemo hooks (see computedFinancialKpis and computedAlerts)
+
+// ── Derive month from tml_reference_number when invc_date is null ────────────
+// Format: "DDDDDDDDWWYYYY" or "3000840WWYYYY" (dealer + week-number + year)
+// Week number is 2 digits before the 4-digit year
+function deriveDateFromRef(ref: string | null | undefined): string | null {
+  if (!ref) return null
+  // Extract last 6 chars: WWYYYY
+  const match = ref.match(/(\d{2})(\d{4})$/)
+  if (!match) return null
+  const week = parseInt(match[1], 10)
+  const year = parseInt(match[2], 10)
+  if (isNaN(week) || isNaN(year) || week < 1 || week > 53) return null
+  // ISO week → approximate date (week 1 = Jan 4, each week = 7 days)
+  const jan4 = new Date(year, 0, 4)
+  const monday = new Date(jan4)
+  monday.setDate(jan4.getDate() - jan4.getDay() + 1) // Monday of week 1
+  monday.setDate(monday.getDate() + (week - 1) * 7)
+  // Return YYYY-MM-01 (use the 1st of that month for grouping)
+  const y = monday.getFullYear()
+  const m = String(monday.getMonth() + 1).padStart(2, '0')
+  return `${y}-${m}-01`
+}
+
+function getEffectiveDate(r: SplCodeRow): string | null {
+  if (r.invc_date) return r.invc_date
+  return deriveDateFromRef(r.tml_reference_number as string | null)
+}
+
 
 const WR_REVENUE = {
   blocks: [
@@ -881,6 +910,8 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
   }, [])
 
   // ── Load SPL Codes from warranty_spl_codes_data ──────────────────────────
+  const [splRefreshKey, setSplRefreshKey] = useState(0)
+
   useEffect(() => {
     let active = true
     const loadSplCodes = async () => {
@@ -892,7 +923,7 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
         while (true) {
           const { data, error: pageErr } = await supabase
             .from('warranty_spl_codes_data')
-            .select('id,dealer_code,portal,job_card_number,prowac_no,sap_claim,job_code,code_label,part_number,description,ndp,list_price,misc_chgs,labour_chgs,spl_labour_chgs,dealer_invc_no,invc_date,posting_document_number,posting_date')
+            .select('id,dealer_code,portal,job_card_number,prowac_no,sap_claim,job_code,code_label,part_number,description,ndp,list_price,misc_chgs,labour_chgs,spl_labour_chgs,dealer_invc_no,invc_date,posting_document_number,posting_date,tml_reference_number')
             .order('invc_date', { ascending: true })
             .range(from, from + pageSize - 1)
           if (pageErr) break
@@ -910,7 +941,7 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
     }
     void loadSplCodes()
     return () => { active = false }
-  }, [])
+  }, [splRefreshKey])
 
   // ── Load Non-9800xx Labour data ──────────────────────────────────────────
   useEffect(() => {
@@ -1819,8 +1850,9 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
   const splAvailableMonths = useMemo(() => {
     const months = new Set<string>()
     for (const r of splCodes) {
-      if (!r.invc_date) continue
-      months.add(r.invc_date.slice(0, 7)) // YYYY-MM
+      const effDate = getEffectiveDate(r)
+      if (!effDate) continue
+      months.add(effDate.slice(0, 7)) // YYYY-MM
     }
     return Array.from(months).sort()
   }, [splCodes])
@@ -1837,7 +1869,8 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
       if (splPortalFilter !== 'ALL' && r.portal !== splPortalFilter) return false
       // Month multi-select (empty = ALL), value is YYYY-MM
       if (splMonthFilters.length > 0) {
-        const ym = r.invc_date ? r.invc_date.slice(0, 7) : ''
+        const eff = getEffectiveDate(r)
+        const ym = eff ? eff.slice(0, 7) : ''
         if (!splMonthFilters.includes(ym)) return false
       }
       return true
@@ -1857,8 +1890,9 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
     const partLabMap  = new Map<string, Record<string, number>>() // Labour (N) for part-rows
 
     for (const r of splFiltered) {
-      if (!r.invc_date) continue
-      const monthKey   = r.invc_date.slice(0, 7)
+      const effDate = getEffectiveDate(r)
+      if (!effDate) continue
+      const monthKey   = effDate.slice(0, 7)
       const spl        = r.spl_labour_chgs || 0
       const hasPart    = !!(r.part_number && r.part_number.trim().length > 0)
       const ndp        = hasPart ? (r.ndp || 0) : 0
@@ -1906,7 +1940,7 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
 
   // Detail table: sorted by date
   const splDetailRows = useMemo(() => {
-    return splFiltered.slice().sort((a, b) => (a.invc_date || '').localeCompare(b.invc_date || ''))
+    return splFiltered.slice().sort((a, b) => (getEffectiveDate(a) || '').localeCompare(getEffectiveDate(b) || ''))
   }, [splFiltered])
 
   // Part-rows: 9800xx rows that have a Part Number in Col E
@@ -1917,7 +1951,7 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
   // ── Non-9800xx Labour computed data ──────────────────────────────────────
   const labourAvailableMonths = useMemo(() => {
     const s = new Set<string>()
-    for (const r of labourData) { if (r.invc_date) s.add(r.invc_date.slice(0, 7)) }
+    for (const r of labourData) { const ed = getEffectiveDate(r); if (ed) s.add(ed.slice(0, 7)) }
     return Array.from(s).sort()
   }, [labourData])
 
@@ -1930,7 +1964,8 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
       if (labourCodeFilters.length > 0 && !labourCodeFilters.includes(r.job_code)) return false
       if (labourPortalFilter !== 'ALL' && r.portal !== labourPortalFilter) return false
       if (labourMonthFilters.length > 0) {
-        const ym = r.invc_date ? r.invc_date.slice(0, 7) : ''
+        const eff2 = getEffectiveDate(r)
+        const ym = eff2 ? eff2.slice(0, 7) : ''
         if (!labourMonthFilters.includes(ym)) return false
       }
       return true
@@ -1947,8 +1982,9 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
     }
     const monthMap = new Map<string, { labourTotal: number; ndp: number; rows: number }>()
     for (const r of labourFiltered) {
-      if (!r.invc_date) continue
-      const ym = r.invc_date.slice(0, 7)
+      const effDate3 = getEffectiveDate(r)
+      if (!effDate3) continue
+      const ym = effDate3.slice(0, 7)
       if (!monthMap.has(ym)) monthMap.set(ym, { labourTotal: 0, ndp: 0, rows: 0 })
       const e = monthMap.get(ym)!
       // Labour = Labour Chgs + Misc Chgs (whether or not part number exists)
@@ -3260,8 +3296,15 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
           {/* ══════════════════════════════════════════════════════════════════
               SECTION A — 9800xx SPECIAL CODES
           ══════════════════════════════════════════════════════════════════ */}
-          <div style={{ fontWeight: 800, fontSize: 15, color: 'var(--ink)', borderBottom: '2px solid var(--border)', paddingBottom: 8 }}>
-            📋 Section A — 9800xx Special Codes
+          <div style={{ fontWeight: 800, fontSize: 15, color: 'var(--ink)', borderBottom: '2px solid var(--border)', paddingBottom: 8, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <span>📋 Section A — 9800xx Special Codes</span>
+            <button
+              onClick={() => setSplRefreshKey(k => k + 1)}
+              disabled={splLoading}
+              style={{ fontSize: 12, padding: '4px 12px', borderRadius: 6, border: '1px solid var(--border)', background: '#fff', cursor: splLoading ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', gap: 6, color: 'var(--ink-2)', fontWeight: 500 }}
+            >
+              {splLoading ? '⏳ Refreshing…' : '🔄 Refresh'}
+            </button>
           </div>
 
           {/* ── Filter Bar ── */}
