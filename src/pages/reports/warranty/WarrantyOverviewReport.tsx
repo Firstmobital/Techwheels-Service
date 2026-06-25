@@ -397,6 +397,13 @@ interface WarrantySourceRow {
   tml_comments?: string
   tmcv_job_card_id?: string
   sap_comments?: string
+  total_amount_jc?: string
+  total_labour_amount_jc?: string
+  total_material_amount_jc?: string
+  total_spl_lab_charges_jc?: string
+  claimed_material_amount?: string
+  claimed_labour_amount?: string
+  spl_labour_charge_jc?: string
   created_at: string
 }
 
@@ -652,13 +659,13 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
     // Per-table flat selects — extract only what's needed from JSONB server-side
     // This avoids fetching full source_row_data blobs (was 5s/1000 rows, now <1s/2000 rows)
     const TABLE_FLAT_SELECTS: Record<string, string> = {
-      warranty_wc_data: 'id,branch,location,portal,source_file_name,created_at,source_row_data->>claim_status,source_row_data->>total_amount,source_row_data->>material_amount,source_row_data->>labour_amount,source_row_data->>parent_product_line_name,source_row_data->>chassis_type,source_row_data->>job_card_no,source_row_data->>cmpl_report_date,source_row_data->>veh_repair_date,source_row_data->>vcm_comments,source_row_data->>claim_category,source_row_data->>pcr_creation_date',
-      warranty_updation_claim_data: 'id,branch,location,portal,source_file_name,created_at,source_row_data->>claim_status,source_row_data->>total_amount_jc,source_row_data->>material_amount,source_row_data->>parent_product_line_name,source_row_data->>chassis_type,source_row_data->>job_card_no,source_row_data->>cmpl_report_date,source_row_data->>veh_repair_date,source_row_data->>vcm_comments,source_row_data->>claim_category,source_row_data->>pcr_creation_date',
+      warranty_wc_data: 'id,branch,location,portal,source_file_name,created_at,source_row_data->>claim_status,source_row_data->>total_amount,source_row_data->>total_amount_jc,source_row_data->>material_amount,source_row_data->>labour_amount,source_row_data->>total_labour_amount_jc,source_row_data->>total_material_amount_jc,source_row_data->>total_spl_lab_charges_jc,source_row_data->>parent_product_line_name,source_row_data->>chassis_type,source_row_data->>job_card_no,source_row_data->>cmpl_report_date,source_row_data->>veh_repair_date,source_row_data->>vcm_comments,source_row_data->>claim_category,source_row_data->>pcr_creation_date',
+      warranty_updation_claim_data: 'id,branch,location,portal,source_file_name,created_at,source_row_data->>claim_status,source_row_data->>total_amount_jc,source_row_data->>material_amount,source_row_data->>labour_amount,source_row_data->>total_labour_amount_jc,source_row_data->>total_material_amount_jc,source_row_data->>total_spl_lab_charges_jc,source_row_data->>parent_product_line_name,source_row_data->>chassis_type,source_row_data->>job_card_no,source_row_data->>cmpl_report_date,source_row_data->>veh_repair_date,source_row_data->>vcm_comments,source_row_data->>claim_category,source_row_data->>pcr_creation_date',
       warranty_claim_settlement_report_data: 'id,branch,location,portal,source_file_name,created_at,source_row_data->>posting_document_number,source_row_data->>dealer_invc_no,source_row_data->>invc_date_yyyy_mm_dd,source_row_data->>list_price,source_row_data->>labour_chgs,source_row_data->>misc_chgs,source_row_data->>ndp,source_row_data->>spl_labour_chgs,source_row_data->>job_card_number_number',
-      warranty_amc_data: 'id,branch,location,portal,source_file_name,created_at,source_row_data->>claim_status,source_row_data->>total_amount,source_row_data->>claimed_total_amount,source_row_data->>material_amount,source_row_data->>labour_amount,source_row_data->>dealer_invoice_no,source_row_data->>dealer_invoice_date,source_row_data->>cmpl_report_date,source_row_data->>pcr_created_date,source_row_data->>claim_category,source_row_data->>tml_comments,source_row_data->>tmcv_job_card_id',
-      warranty_goodwill_data: 'id,branch,location,portal,source_file_name,created_at,source_row_data->>claim_status,source_row_data->>total_amount,source_row_data->>material_amount,source_row_data->>parent_product_line_name,source_row_data->>chassis_type,source_row_data->>job_card_no,source_row_data->>cmpl_report_date,source_row_data->>veh_repair_date,source_row_data->>sap_comments,source_row_data->>claim_category,source_row_data->>pcr_creation_date',
+      warranty_amc_data: 'id,branch,location,portal,source_file_name,created_at,source_row_data->>claim_status,source_row_data->>total_amount,source_row_data->>claimed_total_amount,source_row_data->>material_amount,source_row_data->>claimed_material_amount,source_row_data->>labour_amount,source_row_data->>claimed_labour_amount,source_row_data->>spl_labour_charge_jc,source_row_data->>dealer_invoice_no,source_row_data->>dealer_invoice_date,source_row_data->>cmpl_report_date,source_row_data->>pcr_created_date,source_row_data->>claim_category,source_row_data->>tml_comments,source_row_data->>tmcv_job_card_id',
+      warranty_goodwill_data: 'id,branch,location,portal,source_file_name,created_at,source_row_data->>claim_status,source_row_data->>total_amount,source_row_data->>total_amount_jc,source_row_data->>material_amount,source_row_data->>labour_amount,source_row_data->>total_labour_amount_jc,source_row_data->>total_material_amount_jc,source_row_data->>total_spl_lab_charges_jc,source_row_data->>parent_product_line_name,source_row_data->>chassis_type,source_row_data->>job_card_no,source_row_data->>cmpl_report_date,source_row_data->>veh_repair_date,source_row_data->>sap_comments,source_row_data->>claim_category,source_row_data->>pcr_creation_date',
       warranty_fsb_data: 'id,branch,location,portal,source_file_name,created_at,source_row_data->>claim_status,source_row_data->>sr_status,source_row_data->>service_type,source_row_data->>vcm_comments,source_row_data->>invoice_no,source_row_data->>invoice_date,source_row_data->>service_date,source_row_data->>chassis_type',
-      warranty_part_wc_data: 'id,branch,location,portal,source_file_name,created_at,source_row_data->>claim_status,source_row_data->>total_amount,source_row_data->>material_amount,source_row_data->>labour_amount,source_row_data->>parent_product_line_name,source_row_data->>chassis_type,source_row_data->>job_card_no,source_row_data->>cmpl_report_date,source_row_data->>veh_repair_date,source_row_data->>vcm_comments,source_row_data->>claim_category,source_row_data->>pcr_creation_date',
+      warranty_part_wc_data: 'id,branch,location,portal,source_file_name,created_at,source_row_data->>claim_status,source_row_data->>total_amount,source_row_data->>total_amount_jc,source_row_data->>material_amount,source_row_data->>labour_amount,source_row_data->>total_labour_amount_jc,source_row_data->>total_material_amount_jc,source_row_data->>total_spl_lab_charges_jc,source_row_data->>parent_product_line_name,source_row_data->>chassis_type,source_row_data->>job_card_no,source_row_data->>cmpl_report_date,source_row_data->>veh_repair_date,source_row_data->>vcm_comments,source_row_data->>claim_category,source_row_data->>pcr_creation_date',
     }
 
     const fetchAllRowsForTable = async (tableName: string): Promise<WarrantySourceRow[]> => {
@@ -728,7 +735,12 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
         for (const tableResult of tableResults) {
           for (const { row, category, tableName } of tableResult.rows) {
             // Flat fields are now extracted by PostgREST server-side (no JSONB blob transfer)
-            const toNum = (v: unknown) => (v ? parseFloat(String(v)) || 0 : 0)
+            // Strip "Rs." prefix and thousands commas before parsing (e.g. "Rs.1,234.56" -> 1234.56)
+            const toNum = (v: unknown) => {
+              if (!v) return 0
+              const cleaned = String(v).replace(/Rs\.?/g, '').replace(/,/g, '').trim()
+              return parseFloat(cleaned) || 0
+            }
             const str = (v: unknown) => (v ? String(v).trim() : '')
 
             const status = str(row.claim_status) || str(row.sr_status)
@@ -740,13 +752,13 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
             const dealerInvoiceNo = str(row.dealer_invoice_no) || str(row.dealer_invc_no) || str(row.invoice_no)
             const invoiceDateRaw = str(row.invc_date_yyyy_mm_dd) || str(row.invoice_date) || str(row.dealer_invoice_date)
             const closedDateRaw = str(row.cmpl_report_date) || str(row.veh_repair_date) || str(row.service_date)
-            const partsAmount = toNum(row.material_amount) || toNum(row.ndp)
-            const labourAmount = toNum(row.labour_amount) || toNum(row.labour_chgs)
-            const specialAmount = toNum(row.spl_labour_chgs)
+            const partsAmount = toNum(row.material_amount) || toNum(row.claimed_material_amount) || toNum(row.total_material_amount_jc) || toNum(row.ndp)
+            const labourAmount = toNum(row.labour_amount) || toNum(row.claimed_labour_amount) || toNum(row.total_labour_amount_jc) || toNum(row.labour_chgs)
+            const specialAmount = toNum(row.spl_labour_chgs) || toNum(row.total_spl_lab_charges_jc) || toNum(row.spl_labour_charge_jc)
             const miscAmount = toNum(row.misc_chgs)
             const totalAmount = toNum(row.total_amount) || toNum(row.total_amount_jc)
             const claimedTotalAmount = toNum(row.claimed_total_amount)
-            const settlementAmount = toNum(row.list_price) + toNum(row.labour_chgs) + toNum(row.misc_chgs)
+            const settlementAmount = toNum(row.list_price) + toNum(row.labour_chgs) + toNum(row.spl_labour_chgs) + toNum(row.misc_chgs)
 
             let claimAmount = partsAmount + labourAmount + specialAmount + miscAmount
             if (category === 'Claim Settlement') {
