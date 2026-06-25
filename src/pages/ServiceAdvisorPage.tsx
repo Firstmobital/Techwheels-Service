@@ -388,29 +388,6 @@ export default function ServiceAdvisorPage() {
     return summaryScoped.filter((row) => matchesSearch(row))
   }, [rows, selectedFuelType, selectedCategory, selectedAdvisor, selectedSummaryCard, completedJobCardNumbers, holdJobCardNumbers, inProcessJobCardNumbers, allAssignedJobCardNumbers, searchQuery])
 
-  const _fuelTypeCountRows = useMemo(() => {
-    let scoped = rows
-
-    if (selectedBranch !== 'all') {
-      scoped = scoped.filter((row) => row.branch === selectedBranch)
-    }
-    if (selectedCategory !== 'all') {
-      scoped = scoped.filter((row) => getCategoryForServiceType(row.service_type) === selectedCategory)
-    }
-    if (selectedAdvisor !== 'all') {
-      scoped = scoped.filter((row) => getAdvisorFilterKey(row) === selectedAdvisor)
-    }
-
-    const summaryScoped = applySummaryCardFilter(
-      scoped,
-      selectedSummaryCard,
-      completedJobCardNumbers,
-      holdJobCardNumbers,
-      inProcessJobCardNumbers,
-      allAssignedJobCardNumbers,
-    )
-    return summaryScoped.filter((row) => matchesSearch(row))
-  }, [rows, selectedBranch, selectedCategory, selectedAdvisor, selectedSummaryCard, completedJobCardNumbers, holdJobCardNumbers, inProcessJobCardNumbers, allAssignedJobCardNumbers, searchQuery])
 
   const categoryCountRows = useMemo(() => {
     let scoped = rows
@@ -554,18 +531,6 @@ export default function ServiceAdvisorPage() {
   const showCategoryFilter = availableCategories.length > 1
   const showAdvisorFilter = totalAdvisorOptionCount > 1
 
-  const _showScopeFilters = useMemo(() => {
-    if (isSuperAdmin) return false
-    return (
-      isAdmin
-      || hasMultipleDealers
-      || showLocationFilter
-      || showFuelTypeFilter
-      || showCategoryFilter
-      || showAdvisorFilter
-    )
-  }, [isSuperAdmin, isAdmin, hasMultipleDealers, showLocationFilter, showFuelTypeFilter, showCategoryFilter, showAdvisorFilter])
-
   const categoryCounts = useMemo(() => {
     const floor = categoryCountRows.filter((row) => getCategoryForServiceType(row.service_type) === 'floor').length
     const bodyshop = categoryCountRows.filter((row) => getCategoryForServiceType(row.service_type) === 'bodyshop').length
@@ -589,14 +554,6 @@ export default function ServiceAdvisorPage() {
     setSelectedAdvisor('all')
   }, [advisorOptions, selectedAdvisor])
 
-  const _advisorName = useMemo(() => {
-    if (isAdmin) return 'All Service Advisors'
-    return rows[0]?.sa_display_name || rows[0]?.sa_name || 'Unknown'
-  }, [rows, isAdmin])
-  const _advisorCode = useMemo(() => {
-    if (isAdmin) return ''
-    return rows[0]?.sa_employee_code || ''
-  }, [rows, isAdmin])
   const advisorBranch = useMemo(() => {
     if (isAdmin && selectedBranch !== 'all') return selectedBranch
     if (isAdmin) return 'All branches'
