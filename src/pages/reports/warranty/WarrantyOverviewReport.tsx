@@ -724,6 +724,8 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
   const [selectedFuelType, setSelectedFuelType] = useState<FuelTypeFilter>('ALL')
   const [activeTab, setActiveTab] = useState<DashboardTab>('overview')
   const [activeAlertStatus, setActiveAlertStatus] = useState<Record<string, string>>({})
+  const [mainRefreshKey, setMainRefreshKey] = useState(0)
+  const [lastRefreshed, setLastRefreshed] = useState<Date>(new Date())
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   // ── Date filter ────────────────────────────────────────────────────────────
@@ -912,8 +914,6 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
 
   // ── Load SPL Codes from warranty_spl_codes_data ──────────────────────────
   const [splRefreshKey, setSplRefreshKey] = useState(0)
-  const [mainRefreshKey, setMainRefreshKey] = useState(0)
-  const [lastRefreshed, setLastRefreshed] = useState<Date>(new Date())
 
   useEffect(() => {
     let active = true
@@ -3048,23 +3048,34 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
                     </tr>
                   </thead>
                   <tbody>
-                    {WR_SPECIAL.map((s, i) => (
-                      <tr key={i}>
-                        <td className="mono" style={{ color: s.tone }}>
-                          {s.code}
-                        </td>
-                        <td>
-                          {s.label}
-                          <div style={{ fontSize: 11, color: 'var(--faint)' }}>{s.note}</div>
-                        </td>
-                        <td style={{ textAlign: 'right' }} className="mono">
-                          {s.pvL}
-                        </td>
-                        <td style={{ textAlign: 'right' }} className="mono">
-                          {s.evL}
-                        </td>
-                      </tr>
-                    ))}
+                    {(() => {
+                      // Compute live SPL totals by code+portal from splCodes state
+                      const splTotals: Record<string, {pv:number,ev:number}> = {}
+                      for (const r of splCodes) {
+                        if (!splTotals[r.job_code]) splTotals[r.job_code] = {pv:0,ev:0}
+                        if (r.portal === 'PV') splTotals[r.job_code].pv += r.spl_labour_chgs || 0
+                        else splTotals[r.job_code].ev += r.spl_labour_chgs || 0
+                      }
+                      const codeOrder = ['980016','980019','980025','980001','980002','980003','980009','980011']
+                      const tones: Record<string,string> = {'980016':'var(--danger)','980019':'var(--accent)','980025':'var(--warn)'}
+                      const allCodes = Array.from(new Set([...codeOrder, ...Object.keys(splTotals)]))
+                        .filter(c => splTotals[c])
+                        .sort((a,b) => ((splTotals[b]?.pv||0)+(splTotals[b]?.ev||0)) - ((splTotals[a]?.pv||0)+(splTotals[a]?.ev||0)))
+                      return allCodes.map((code, i) => {
+                        const t = splTotals[code] || {pv:0,ev:0}
+                        const label = SPL_CODE_LABELS[code] || code
+                        const tone = tones[code] || 'var(--muted)'
+                        const fmtL = (v:number) => `₹${(v/100000).toFixed(2)}L`
+                        return (
+                          <tr key={i}>
+                            <td className="mono" style={{ color: tone }}>{code}</td>
+                            <td>{label}</td>
+                            <td style={{ textAlign: 'right' }} className="mono">{fmtL(t.pv)}</td>
+                            <td style={{ textAlign: 'right' }} className="mono">{fmtL(t.ev)}</td>
+                          </tr>
+                        )
+                      })
+                    })()}
                   </tbody>
                 </table>
               </div>
