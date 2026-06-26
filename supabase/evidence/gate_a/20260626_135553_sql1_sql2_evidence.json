@@ -1,0 +1,18 @@
+{
+  "generated_at": "2026-06-26T08:26:00Z",
+  "project_ref": "jmdndcphkmaljhwgzqxq",
+  "sql1": [
+    {
+      "total_rows": 12554,
+      "missing_location": 0,
+      "missing_portal": 0,
+      "invalid_portal": 0
+    }
+  ],
+  "sql2": [
+    {
+      "branch_location_mismatch": 767,
+      "branch_label_location_mismatch": 0
+    }
+  ]
+}

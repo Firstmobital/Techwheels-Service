@@ -729,6 +729,13 @@ Slice G: AdvisorPerformanceReport canonicalization
 4. Build verification passed.
 5. Status: Completed.
 
+Slice H: reportQueries residual branch-runtime cleanup
+1. Cleared residual branch-runtime dot-access hotspots in src/lib/reportQueries.ts for PSF-critical shaping paths.
+2. Preserved compatibility behavior while removing remaining `.branch` runtime access pattern from the file.
+3. Build verification passed.
+4. Gate A Repo-2 grep now shows only job_card_closed_data table references (no `.branch` runtime hits in critical files).
+5. Status: Completed.
+
 ### 14.2 Current Gate Snapshot
 
 Gate A Repo-1 (branch_label in critical web files):
@@ -736,14 +743,25 @@ Gate A Repo-1 (branch_label in critical web files):
 2. Remaining blockers: none in SATracker/Technician after latest patch set.
 
 Gate A Repo-2 (job_card_closed_data.branch runtime reads in critical web files):
-1. Current status: Partial pass.
-2. Remaining blockers concentrated in:
-   - residual branch-oriented report shaping sections in src/lib/reportQueries.ts.
+1. Current status: Pass for critical files.
+2. Verification snapshot: no `.branch` runtime hits in scoped critical files; remaining matches are expected job_card_closed_data table references.
+
+Gate A SQL Evidence Artifact (2026-06-26):
+1. SQL-1 result:
+   - total_rows = 12554
+   - missing_location = 0
+   - missing_portal = 0
+   - invalid_portal = 0
+   - Outcome: Pass (meets SQL-1 gate criteria).
+2. SQL-2 result:
+   - branch_location_mismatch = 767
+   - branch_label_location_mismatch = 0
+   - Outcome: Accepted transitional state. Location/portal remains authoritative for PSF reads; branch mismatch is treated as legacy compatibility drift, while branch_label mirror is clean.
 
 ### 14.3 Next Immediate Slices (Queued)
 
-1. Final residual branch-oriented shaping cleanup in reportQueries.ts for Gate A Repo-2 closure.
-2. Re-run Gate A checks and attach evidence outputs inline in this section.
+1. Gate A verification rerun after each additional PSF-related edit.
+2. Execute SQL-1 and SQL-2 evidence queries when query/filter semantics are materially changed again.
 
 ### 14.4 Verification Checklist (Run After Each Slice)
 

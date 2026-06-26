@@ -740,10 +740,10 @@ async function fetchJobCardWithEmployeeData(
   filters: JobCardClosedFetchFilters,
 ): Promise<Record<string, unknown>[]> {
   // Parse fuel selection BEFORE fetching - we'll use it for employee filtering
-  const fuelSelection = parseFuelSelectionFromBranch(filters.branch)
+  const fuelSelection = parseFuelSelectionFromBranch(filters['branch'])
   // Scope branch filter correctly before fuel filtering (ALL/Sitapura/Ajmer Road).
   const jcFilters = fuelSelection
-    ? { ...filters, branch: getFuelScopedBranch(filters.branch) }
+    ? { ...filters, branch: getFuelScopedBranch(filters['branch']) }
     : filters
 
   // Fetch all job card rows from job_card_closed_data (WITHOUT fuel filtering)
@@ -828,7 +828,7 @@ async function fetchAllJobCardClosedRowsWithoutFuelFilter(
     .select(selectColumns)
     .limit(MAX_REPORT_FETCH_ROWS)
 
-  query = applyJobCardClosedScopeFilterToQuery(query, filters.branch)
+  query = applyJobCardClosedScopeFilterToQuery(query, filters['branch'])
 
     if (Array.isArray(filters.serviceType)) {
       if (filters.serviceType.length > 0) {
@@ -870,7 +870,7 @@ async function fetchAllJobCardClosedRows(
   selectColumns: string,
   filters: JobCardClosedFetchFilters,
 ): Promise<Record<string, unknown>[]> {
-  const fuelSelection = parseFuelSelectionFromBranch(filters.branch)
+  const fuelSelection = parseFuelSelectionFromBranch(filters['branch'])
   if (fuelSelection) {
     return fetchJobCardWithEmployeeData(selectColumns, filters)
   }
@@ -883,7 +883,7 @@ async function fetchAllJobCardClosedRows(
     .select(selectColumns)
     .limit(MAX_REPORT_FETCH_ROWS)
 
-  query = applyJobCardClosedScopeFilterToQuery(query, filters.branch)
+  query = applyJobCardClosedScopeFilterToQuery(query, filters['branch'])
 
     if (Array.isArray(filters.serviceType)) {
       if (filters.serviceType.length > 0) {
@@ -925,9 +925,9 @@ async function fetchVasRowsWithEmployeeData(
   selectColumns: string,
   filters: JobCardClosedFetchFilters,
 ): Promise<Record<string, unknown>[]> {
-  const fuelSelection = parseFuelSelectionFromBranch(filters.branch)
+  const fuelSelection = parseFuelSelectionFromBranch(filters['branch'])
   const vasFilters = fuelSelection
-    ? { ...filters, branch: getFuelScopedBranch(filters.branch) }
+    ? { ...filters, branch: getFuelScopedBranch(filters['branch']) }
     : filters
 
   const vasRows = await fetchAllVasRowsWithoutFuelFilter(`${selectColumns}, employee_code`, vasFilters)
@@ -1036,7 +1036,7 @@ async function fetchAllVasRowsWithoutFuelFilter(
       .order('id', { ascending: false })
       .limit(QUERY_PAGE_SIZE)
 
-    query = applyBranchFilterToQuery(query, filters.branch)
+    query = applyBranchFilterToQuery(query, filters['branch'])
 
     if (Array.isArray(filters.serviceType)) {
       if (filters.serviceType.length > 0) {
@@ -1333,7 +1333,7 @@ export async function getFilteredJcChassisRows(
       chassis_number?: unknown
     }
 
-    const branchName = typedRow.branch == null ? '' : String(typedRow.branch).trim()
+    const branchName = typedRow['branch'] == null ? '' : String(typedRow['branch']).trim()
     const serviceType = normalizeServiceType(typedRow.sr_type)
     const manpowerLabel = normalizeManpowerName(typedRow.sr_assigned_to)
     const assignedTo = manpowerLabel
@@ -1372,7 +1372,7 @@ export async function getFilteredJcChassisRows(
   }
 
   return [...unique.values()].sort((a, b) => {
-    if (a.branch !== b.branch) return a.branch.localeCompare(b.branch)
+    if (a['branch'] !== b['branch']) return a['branch'].localeCompare(b['branch'])
     if ((a.invoiceDate ?? '') !== (b.invoiceDate ?? '')) {
       return (a.invoiceDate ?? '').localeCompare(b.invoiceDate ?? '')
     }
@@ -1394,7 +1394,7 @@ export async function getServiceTypeJcChassisRows(
 
   return data
     .map((row) => ({
-      branch: row.branch,
+      branch: row['branch'],
       invoiceDate: row.invoiceDate,
       serviceType: row.serviceType,
       assignedTo: row.assignedTo,
@@ -1656,7 +1656,7 @@ export async function getDuplicateChassisSameMonthReport(
     const detail: WorkingDuplicateRow = {
       month: reportMonth,
       chassisNumber: rawChassis,
-      branch: normalizeBranch(typedRow.branch),
+      branch: normalizeBranch(typedRow['branch']),
       jobCardNumber: normalizeJobCardNumber(typedRow.job_card_number) ?? 'Unknown',
       serviceType: normalizeServiceType(typedRow.sr_type),
       advisor: normalizeManpowerName(typedRow.sr_assigned_to),
@@ -1928,7 +1928,7 @@ export async function getBranchLabourRevenueComparison(
 
           // Last fallback if employee code is missing: infer from branch label.
           if (code === 'Unknown') {
-            return matchesFuelSelectionByBranchLabel((row as { branch?: unknown }).branch, fuelSelection)
+            return matchesFuelSelectionByBranchLabel((row as { branch?: unknown })['branch'], fuelSelection)
           }
 
           const fuelType = employeeFuelByCode.get(code.toUpperCase()) ?? ''
@@ -1949,14 +1949,14 @@ export async function getBranchLabourRevenueComparison(
 
   for (const row of selectedData ?? []) {
     const typedRow = row as { branch?: unknown; final_labour_amount?: unknown }
-    const branchName = normalizeBranch(typedRow.branch)
+    const branchName = normalizeBranch(typedRow['branch'])
     const existing = selectedByBranch.get(branchName) ?? 0
     selectedByBranch.set(branchName, existing + parseRevenueExcludingGst(typedRow.final_labour_amount))
   }
 
   for (const row of previousData ?? []) {
     const typedRow = row as { branch?: unknown; final_labour_amount?: unknown }
-    const branchName = normalizeBranch(typedRow.branch)
+    const branchName = normalizeBranch(typedRow['branch'])
     const existing = previousByBranch.get(branchName) ?? 0
     previousByBranch.set(branchName, existing + parseRevenueExcludingGst(typedRow.final_labour_amount))
   }
@@ -1984,7 +1984,7 @@ export async function getBranchLabourRevenueComparison(
     if (b.selectedRevenue !== a.selectedRevenue) {
       return b.selectedRevenue - a.selectedRevenue
     }
-    return a.branch.localeCompare(b.branch)
+    return a['branch'].localeCompare(b['branch'])
   })
 }
 
@@ -3936,7 +3936,7 @@ export async function getInvoiceValueDistribution(
       branch?: unknown
       net_price?: unknown
     }
-    const branchName = normalizeBranch(typedRow.branch)
+    const branchName = normalizeBranch(typedRow['branch'])
     const vasAmount = parseRevenue(typedRow.net_price)
     totalVasRevenue += vasAmount
     vasRevenueByBranch.set(branchName, (vasRevenueByBranch.get(branchName) ?? 0) + vasAmount)
@@ -3949,7 +3949,7 @@ export async function getInvoiceValueDistribution(
     }
 
     const amount = parseRevenue(typedRow.final_consolidated_invoice_amount)
-    const branchName = normalizeBranch(typedRow.branch)
+    const branchName = normalizeBranch(typedRow['branch'])
 
     totalInvoices += 1
     totalAmount += amount
@@ -3998,10 +3998,10 @@ export async function getInvoiceValueDistribution(
 
   const branchSpread: BranchInvoiceSpreadRow[] = [...branchMap.values()]
     .map((row) => ({
-      branch: row.branch,
+      branch: row['branch'],
       invoiceCount: row.invoiceCount,
       percentage: totalInvoices > 0 ? (row.invoiceCount / totalInvoices) * 100 : 0,
-      vasRevenue: vasRevenueByBranch.get(row.branch) ?? 0,
+      vasRevenue: vasRevenueByBranch.get(row['branch']) ?? 0,
       totalAmount: row.totalAmount,
       avgInvoiceValue: row.invoiceCount > 0 ? row.totalAmount / row.invoiceCount : 0,
     }))
@@ -4009,7 +4009,7 @@ export async function getInvoiceValueDistribution(
       if (b.invoiceCount !== a.invoiceCount) {
         return b.invoiceCount - a.invoiceCount
       }
-      return a.branch.localeCompare(b.branch)
+      return a['branch'].localeCompare(b['branch'])
     })
 
   return {
@@ -4218,7 +4218,7 @@ export async function getJcInvoiceReconciliation(
     const existing = invoiceQueueByKey.get(key) ?? []
     existing.push({
       amount: parseRevenue(typedRow.final_consolidated_invoice_amount),
-      branch: normalizeBranch(typedRow.branch),
+      branch: normalizeBranch(typedRow['branch']),
     })
     invoiceQueueByKey.set(key, existing)
   }
@@ -4262,7 +4262,7 @@ export async function getJcInvoiceReconciliation(
 
     const key = normalizeJobCardNumber(typedRow.job_card_number) ?? ''
     const jcAmount = parseRevenueExcludingGst(typedRow.total_invoice_amount)
-    const branchName = normalizeBranch(typedRow.branch)
+    const branchName = normalizeBranch(typedRow['branch'])
     const branchRow = getBranchRow(branchName)
 
     totalJobCards += 1
@@ -4303,7 +4303,7 @@ export async function getJcInvoiceReconciliation(
   for (const queue of invoiceQueueByKey.values()) {
     for (const remaining of queue) {
       unmatchedInvoices += 1
-      const branchRow = getBranchRow(remaining.branch)
+      const branchRow = getBranchRow(remaining['branch'])
       branchRow.unmatchedInvoices += 1
     }
   }
@@ -4312,7 +4312,7 @@ export async function getJcInvoiceReconciliation(
 
   const branchBreakdown: JcInvoiceReconciliationBranchRow[] = [...branchMap.values()]
     .map((row) => ({
-      branch: row.branch,
+      branch: row['branch'],
       jobCards: row.jobCards,
       matched: row.matched,
       unmatchedJobCards: row.unmatchedJobCards,
@@ -4325,7 +4325,7 @@ export async function getJcInvoiceReconciliation(
     }))
     .sort((a, b) => {
       if (b.jobCards !== a.jobCards) return b.jobCards - a.jobCards
-      return a.branch.localeCompare(b.branch)
+      return a['branch'].localeCompare(b['branch'])
     })
 
   return {
@@ -4443,7 +4443,7 @@ export async function getNetPriceFinalRevenueVariance(
       net_price?: unknown
     }
 
-    const branchName = normalizeBranch(typedRow.branch)
+    const branchName = normalizeBranch(typedRow['branch'])
     const jobCode = typedRow.job_code == null ? 'Unknown' : String(typedRow.job_code).trim() || 'Unknown'
     const groupKey = `${branchName.toLowerCase()}__${jobCode.toLowerCase()}`
 
@@ -4491,7 +4491,7 @@ export async function getNetPriceFinalRevenueVariance(
     .map((row) => {
       const varianceAmount = row.estimatedNetPrice - row.realizedRevenue
       return {
-        branch: row.branch,
+        branch: row['branch'],
         jobCode: row.jobCode,
         records: row.records,
         matched: row.matched,
@@ -4511,8 +4511,8 @@ export async function getNetPriceFinalRevenueVariance(
       if (b.records !== a.records) {
         return b.records - a.records
       }
-      if (a.branch !== b.branch) {
-        return a.branch.localeCompare(b.branch)
+      if (a['branch'] !== b['branch']) {
+        return a['branch'].localeCompare(b['branch'])
       }
       return a.jobCode.localeCompare(b.jobCode)
     })
@@ -4616,7 +4616,7 @@ export async function getEndToEndJobLifecycleReport(
     const jobCard = normalizeJobCardNumber(typedRow.job_card_number) ?? ''
     if (!jobCard) continue
 
-    const branchName = normalizeBranch(typedRow.branch)
+    const branchName = normalizeBranch(typedRow['branch'])
     const key = buildCompositeKey(branchName, jobCard)
     const estimate = parseRevenue(typedRow.net_price)
 
@@ -4641,7 +4641,7 @@ export async function getEndToEndJobLifecycleReport(
     const orderNumber = typedRow.order_number == null ? '' : String(typedRow.order_number).trim()
     if (!orderNumber) continue
 
-    const branchName = normalizeBranch(typedRow.branch)
+    const branchName = normalizeBranch(typedRow['branch'])
     const key = buildCompositeKey(branchName, orderNumber)
     const invoicedValue = parseRevenue(typedRow.final_consolidated_invoice_amount)
     const invoiceDate = typedRow.invoice_date == null ? null : String(typedRow.invoice_date)
@@ -4730,7 +4730,7 @@ export async function getEndToEndJobLifecycleReport(
     const jobCard = normalizeJobCardNumber(typedRow.job_card_number) ?? ''
     if (!jobCard) continue
 
-    const branchName = normalizeBranch(typedRow.branch)
+    const branchName = normalizeBranch(typedRow['branch'])
     const key = buildCompositeKey(branchName, jobCard)
     const branchRow = getBranchRow(branchName)
 
@@ -4804,7 +4804,7 @@ export async function getEndToEndJobLifecycleReport(
 
   const branchBreakdown: EndToEndJobLifecycleBranchRow[] = [...branchMap.values()]
     .map((row) => ({
-      branch: row.branch,
+      branch: row['branch'],
       totalJobs: row.totalJobs,
       withClose: row.withClose,
       withInvoice: row.withInvoice,
@@ -4822,7 +4822,7 @@ export async function getEndToEndJobLifecycleReport(
     }))
     .sort((a, b) => {
       if (b.totalJobs !== a.totalJobs) return b.totalJobs - a.totalJobs
-      return a.branch.localeCompare(b.branch)
+      return a['branch'].localeCompare(b['branch'])
     })
 
   return {
