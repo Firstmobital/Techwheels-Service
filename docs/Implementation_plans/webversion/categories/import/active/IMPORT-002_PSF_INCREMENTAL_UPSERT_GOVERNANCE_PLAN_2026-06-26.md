@@ -783,7 +783,11 @@ Slice L: Structural hardening - move PSF import write-path to server-side stagin
    - keep browser upsert fallback behind flag/path until Slice L production validation passes.
 6. Local verification:
    - `npm run build` passed after Slice L UI wiring and single-slot PSF update.
-7. Status: Implemented (production validation pending).
+7. Production validation evidence:
+   - real run recorded with `id = 4`, `status = completed`, `source_file_name = JC Revenue Report for PSF (26).csv`.
+   - run counters: `total_rows = 1455`, `staged_rows = 1455`, `valid_rows = 1455`, `inserted_rows = 0`, `updated_rows = 0`, `skipped_rows = 1455`, `rejected_rows = 0`, `error_message = null`.
+   - retention assertion after real run: `latest_completed_run_id = 4`, `retained_staging_rows = 0`.
+8. Status: Completed.
 
 Slice M: Slice L hotfix - resolve ambiguous output-column reference in RPC
 1. Incident observed during Slice L SQL smoke test: empty-run call returned `failed` with `column reference "import_run_id" is ambiguous`.
@@ -810,6 +814,47 @@ Slice N: Slice L retention hardening - purge successful run staging rows
    - smoke run `id = 3` returned `status = completed` with all counters = 0.
    - retention check returned `latest_completed_run_id = 3`, `retained_staging_rows = 0`.
 4. Status: Completed.
+
+Slice O: Production timeout guardrail - chunk PSF server-side RPC runs
+1. Incident observed on larger real upload (`~6,777 rows`): UI error `Upload failed` with `canceling statement due to statement timeout`.
+2. Root cause: single RPC run for full file still produced one heavy statement window in production.
+3. Fix applied in web importer:
+   - PSF RPC path now sends deduped rows in chunks (`PSF_SERVER_STAGING_RPC_CHUNK_SIZE = 1000`).
+   - each chunk executes `run_psf_import_via_staging` as an independent run and aggregates counters in UI.
+   - chunk label includes source file chunk marker for audit readability in `psf_import_runs`.
+4. Verification:
+   - local `npm run build` passed after chunking patch.
+5. Status: Implemented (controlled production retry pending).
+
+Slice P: Async queue architecture - instant frontend acceptance + background processing
+1. Objective: make frontend upload return quickly with run_id while heavy merge work runs in background.
+2. Backend additions:
+   - `enqueue_psf_import_run(...)`: creates `psf_import_runs` row in `queued` state and stages payload rows.
+   - `process_psf_import_run(import_run_id)`: processes one queued run, merges into `job_card_closed_data`, updates counters, and purges staging rows.
+   - `process_next_psf_import_run()`: worker helper to pick next queued run (`for update skip locked`) and process it.
+   - migration file: `supabase/migrations/20260626190000_slice_p_psf_async_queue_worker.sql`.
+3. Worker runtime additions:
+   - edge function: `supabase/functions/psf-import-worker/index.ts`.
+   - supports explicit `importRunId` processing and fallback `process_next_psf_import_run` execution path.
+4. Frontend behavior changes:
+   - PSF upload path now enqueues chunked runs and returns without waiting for merge completion.
+   - UI starts polling `psf_import_runs` and marks final success/error when queued runs complete.
+5. Verification:
+   - local `npm run build` passed after async queue wiring.
+   - SQL checks prepared: `supabase/sql_checks/20260626190000_slice_p_psf_async_queue_worker_checks.sql`.
+6. Status: Implemented (DB migration + edge deploy + controlled production validation pending).
+
+Slice Q: Slice P hotfix - resolve ambiguous `status` predicate in queue worker function
+1. Incident observed during Slice P queue smoke processing: run moved to `failed` with `column reference "status" is ambiguous`.
+2. Root cause: `process_psf_import_run` used unqualified `and status in (...)` in a function that also returns `status` column.
+3. Fixes applied:
+   - base Slice P migration updated to `and public.psf_import_runs.status in ('queued', 'running')`.
+   - corrective migration added: `supabase/migrations/20260626195500_slice_p_fix_process_status_ambiguity.sql`.
+4. Re-validation evidence:
+   - function signatures present for `enqueue_psf_import_run`, `process_psf_import_run`, and `process_next_psf_import_run`.
+   - new smoke run `id = 7` enqueued and processed successfully (`status = completed`, `error_message = null`).
+   - prior failed run `id = 6` retained as expected historical pre-hotfix evidence.
+5. Status: Completed.
 
 ### 14.2 Current Gate Snapshot
 
@@ -848,9 +893,12 @@ Gate A SQL Evidence Artifact (2026-06-26):
 3. Slice I/J/K closure gates: complete controlled production validation and capture evidence deltas.
 4. Slice M closure gate: Completed (hotfix migration executed; smoke test now `completed` with zero counts).
 5. Slice N closure gate: Completed (retention check shows `retained_staging_rows = 0` for latest completed run).
-6. Slice L production closure: run controlled production validation for server-side staging merge path and capture returned run metrics.
-7. Gate A verification rerun after each additional PSF-related edit.
-8. Execute SQL-1 and SQL-2 evidence queries when query/filter semantics are materially changed again.
+6. Slice L production closure: Completed (real run id 4 recorded with retention = 0 and no errors).
+7. Slice O closure gate: execute one controlled production retry of the previously timing-out large file and capture per-chunk run metrics from `psf_import_runs`.
+8. Slice P closure gate: apply queue migration + deploy worker function + run one large-file upload proving immediate frontend acceptance and background completion.
+9. Slice Q closure gate: Completed (smoke run `id = 7` processed to `completed`).
+10. Gate A verification rerun after each additional PSF-related edit.
+11. Execute SQL-1 and SQL-2 evidence queries when query/filter semantics are materially changed again.
 
 ### 14.4 Verification Checklist (Run After Each Slice)
 

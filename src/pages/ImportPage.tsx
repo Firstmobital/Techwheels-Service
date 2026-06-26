@@ -1,4 +1,4 @@
-import { useCallback, useId, useRef, useState } from 'react'
+import { useCallback, useEffect, useId, useRef, useState } from 'react'
 import Papa from 'papaparse'
 import * as XLSX from 'xlsx'
 import { Icon } from '../components/Icon'
@@ -230,6 +230,8 @@ const SYSTEM_COLS = new Set(['id', 'created_at', 'updated_at', 'branch'])
 const MAX_PARALLEL_BRANCH_UPLOADS = 2
 const PSF_REVENUE_REPLACE_ALL_ON_IMPORT = false
 const PSF_SERVER_STAGING_RPC_ENABLED = true
+const PSF_SERVER_STAGING_RPC_CHUNK_SIZE = 1000
+const PSF_ASYNC_ENQUEUE_ENABLED = true
 const PARTS_REPLACE_ALL_ON_IMPORT = true
 
 const DEALER_CODE_LOCATION_PORTAL_RULES = [
@@ -992,6 +994,8 @@ function ImportCard({ config, state, branches, onSlotFile, onSlotClear, onUpload
 
 export default function ImportPage() {
   const parsedRowsCacheRef = useRef<Map<string, { fileSignature: string; rows: Record<string, unknown>[] }>>(new Map())
+  const psfPollIntervalRef = useRef<number | null>(null)
+  const activePsfRunIdsRef = useRef<Set<number>>(new Set())
   const [cards, setCards] = useState<Record<string, CardState>>(() =>
     Object.fromEntries(CARDS.map((c) => [c.tableName, emptyCard(c.branches ?? PORTAL_BRANCHES)])),
   )
@@ -1032,6 +1036,84 @@ export default function ImportPage() {
     },
     [],
   )
+
+  const stopPsfPolling = useCallback(() => {
+    if (psfPollIntervalRef.current != null) {
+      window.clearInterval(psfPollIntervalRef.current)
+      psfPollIntervalRef.current = null
+    }
+  }, [])
+
+  const pollPsfRuns = useCallback(async () => {
+    const runIds = Array.from(activePsfRunIdsRef.current)
+    if (runIds.length === 0) {
+      stopPsfPolling()
+      return
+    }
+
+    const { data, error } = await supabase
+      .from('psf_import_runs')
+      .select('id,status,error_message,valid_rows,total_rows')
+      .in('id', runIds)
+
+    if (error || !data) return
+
+    let hasPending = false
+    let totalValidRows = 0
+    for (const row of data) {
+      const status = String(row.status ?? '').toLowerCase()
+      if (status === 'queued' || status === 'running') {
+        hasPending = true
+      }
+      if (status === 'completed') {
+        totalValidRows += Number(row.valid_rows ?? row.total_rows ?? 0)
+      }
+      if (status === 'failed') {
+        updateCard('job_card_closed_data', (prev) => ({
+          ...prev,
+          status: 'error',
+          uploadError: String(row.error_message ?? 'PSF async import run failed'),
+          uploadProgress: {
+            ...prev.uploadProgress,
+            currentBranch: null,
+            currentStep: null,
+          },
+        }))
+        activePsfRunIdsRef.current.clear()
+        stopPsfPolling()
+        return
+      }
+    }
+
+    if (hasPending) return
+
+    updateCard('job_card_closed_data', (prev) => ({
+      ...prev,
+      status: 'success',
+      insertedCount: totalValidRows,
+      uploadProgress: {
+        ...prev.uploadProgress,
+        processedBranches: prev.uploadProgress.totalBranches,
+        currentBranch: null,
+        processedRows: prev.uploadProgress.totalRows,
+        currentStep: null,
+      },
+    }))
+
+    activePsfRunIdsRef.current.clear()
+    stopPsfPolling()
+  }, [stopPsfPolling, updateCard])
+
+  const startPsfPolling = useCallback(() => {
+    if (psfPollIntervalRef.current != null) return
+    psfPollIntervalRef.current = window.setInterval(() => {
+      void pollPsfRuns()
+    }, 2000)
+  }, [pollPsfRuns])
+
+  useEffect(() => {
+    return () => stopPsfPolling()
+  }, [stopPsfPolling])
 
   const handleSlotFile = useCallback(
     (tableName: string, branch: Branch, file: File) => {
@@ -1673,6 +1755,7 @@ export default function ImportPage() {
         }
 
         let processedBranches = 0
+        let psfQueuedAsync = false
 
         const processBranch = async (branch: Branch): Promise<void> => {
           updateCard(tableName, (prev) => ({
@@ -1957,27 +2040,84 @@ export default function ImportPage() {
 
             if (PSF_REVENUE_REPLACE_ALL_ON_IMPORT) {
               totalInserted += await insertRowsInChunks(dedupedJcRows)
-            } else if (PSF_SERVER_STAGING_RPC_ENABLED) {
-              const { data: rpcData, error: rpcError } = await supabase.rpc('run_psf_import_via_staging', {
-                p_branch_slot: branch,
-                p_source_file_name: file.name,
-                p_rows: dedupedJcRows,
-              })
+            } else if (PSF_ASYNC_ENQUEUE_ENABLED) {
+              let chunkStart = 0
+              while (chunkStart < dedupedJcRows.length) {
+                const chunkEnd = Math.min(chunkStart + PSF_SERVER_STAGING_RPC_CHUNK_SIZE, dedupedJcRows.length)
+                const chunkRows = dedupedJcRows.slice(chunkStart, chunkEnd)
+                const chunkLabel =
+                  dedupedJcRows.length > PSF_SERVER_STAGING_RPC_CHUNK_SIZE
+                    ? `${file.name} [chunk ${Math.floor(chunkStart / PSF_SERVER_STAGING_RPC_CHUNK_SIZE) + 1}/${Math.ceil(dedupedJcRows.length / PSF_SERVER_STAGING_RPC_CHUNK_SIZE)}]`
+                    : file.name
 
-              if (rpcError) {
-                const rpcMessage = rpcError.message ?? 'PSF server-side staging import failed'
-                const lower = rpcMessage.toLowerCase()
-                const rpcUnavailable =
-                  lower.includes('could not find the function') ||
-                  lower.includes('function') && lower.includes('run_psf_import_via_staging')
+                const { data: enqueueData, error: enqueueError } = await supabase.rpc('enqueue_psf_import_run', {
+                  p_branch_slot: branch,
+                  p_source_file_name: chunkLabel,
+                  p_rows: chunkRows,
+                })
 
-                if (!rpcUnavailable) {
-                  throw new Error(rpcMessage)
+                if (enqueueError) {
+                  throw new Error(enqueueError.message ?? 'Failed to enqueue PSF async import run')
                 }
 
-                // Backward-compatible fallback for environments where Slice L migration is not yet applied.
-                totalInserted += await upsertJcClosedRowsByBusinessKey(dedupedJcRows)
-              } else {
+                const rows = (enqueueData as Array<Record<string, unknown>> | null) ?? []
+                const result = rows[0]
+                if (!result) {
+                  throw new Error('PSF enqueue returned no result')
+                }
+
+                const queuedStatus = String(result.status ?? '').toLowerCase()
+                if (queuedStatus !== 'queued') {
+                  throw new Error(String(result.error_message ?? 'PSF enqueue failed'))
+                }
+
+                const runId = Number(result.import_run_id)
+                if (Number.isFinite(runId)) {
+                  activePsfRunIdsRef.current.add(runId)
+                  void supabase.functions.invoke('psf-import-worker', {
+                    body: { importRunId: runId },
+                  })
+                }
+
+                // Frontend accepts upload instantly after enqueue; worker updates in background.
+                totalInserted += Number(result.staged_rows ?? chunkRows.length)
+                incrementProcessedRows(chunkRows.length)
+                chunkStart = chunkEnd
+              }
+              psfQueuedAsync = true
+            } else if (PSF_SERVER_STAGING_RPC_ENABLED) {
+              let chunkStart = 0
+              while (chunkStart < dedupedJcRows.length) {
+                const chunkEnd = Math.min(chunkStart + PSF_SERVER_STAGING_RPC_CHUNK_SIZE, dedupedJcRows.length)
+                const chunkRows = dedupedJcRows.slice(chunkStart, chunkEnd)
+                const chunkLabel =
+                  dedupedJcRows.length > PSF_SERVER_STAGING_RPC_CHUNK_SIZE
+                    ? `${file.name} [chunk ${Math.floor(chunkStart / PSF_SERVER_STAGING_RPC_CHUNK_SIZE) + 1}/${Math.ceil(dedupedJcRows.length / PSF_SERVER_STAGING_RPC_CHUNK_SIZE)}]`
+                    : file.name
+
+                const { data: rpcData, error: rpcError } = await supabase.rpc('run_psf_import_via_staging', {
+                  p_branch_slot: branch,
+                  p_source_file_name: chunkLabel,
+                  p_rows: chunkRows,
+                })
+
+                if (rpcError) {
+                  const rpcMessage = rpcError.message ?? 'PSF server-side staging import failed'
+                  const lower = rpcMessage.toLowerCase()
+                  const rpcUnavailable =
+                    lower.includes('could not find the function') ||
+                    lower.includes('function') && lower.includes('run_psf_import_via_staging')
+
+                  if (!rpcUnavailable) {
+                    throw new Error(rpcMessage)
+                  }
+
+                  // Backward-compatible fallback for environments where Slice L migration is not yet applied.
+                  totalInserted += await upsertJcClosedRowsByBusinessKey(dedupedJcRows)
+                  incrementProcessedRows(dedupedJcRows.length)
+                  break
+                }
+
                 const rows = (rpcData as Array<Record<string, unknown>> | null) ?? []
                 const result = rows[0]
 
@@ -1990,11 +2130,12 @@ export default function ImportPage() {
                   throw new Error(String(result.error_message ?? 'PSF server-side staging import failed'))
                 }
 
-                const validRows = Number(result.valid_rows ?? dedupedJcRows.length)
-                totalInserted += Number.isFinite(validRows) ? validRows : dedupedJcRows.length
+                const validRows = Number(result.valid_rows ?? chunkRows.length)
+                totalInserted += Number.isFinite(validRows) ? validRows : chunkRows.length
 
                 // JC upload uses 2-phase row progress (processing + upload).
-                incrementProcessedRows(dedupedJcRows.length)
+                incrementProcessedRows(chunkRows.length)
+                chunkStart = chunkEnd
               }
             } else {
               totalInserted += await upsertJcClosedRowsByBusinessKey(dedupedJcRows)
@@ -2354,6 +2495,22 @@ export default function ImportPage() {
 
         if (uploadFailure) {
           throw uploadFailure
+        }
+
+        if (psfQueuedAsync) {
+          updateCard(tableName, (prev) => ({
+            ...prev,
+            status: 'uploading',
+            uploadError: null,
+            uploadProgress: {
+              ...prev.uploadProgress,
+              currentBranch: null,
+              currentStep: 'uploading',
+            },
+          }))
+
+          startPsfPolling()
+          return
         }
 
         await insertMappingIssues(mappingIssues)
