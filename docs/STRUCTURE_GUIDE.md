@@ -726,5 +726,135 @@ Adoption rule:
 
 ---
 
+## 28) Implementation Plan Retention Policy (All Plans, Mandatory)
+
+This policy applies to every implementation plan across all categories and platforms.
+
+Rule:
+1. Implementation plans are working-state documents and must remain compact.
+2. Do not allow unbounded growth of historical narrative in active plans.
+3. Keep only decision-relevant evidence in active plan files.
+
+Mandatory retention limits for active plan files:
+1. Metrics section: keep latest two automated audit rows only.
+2. Changelog section: keep latest two automated update rows only.
+3. Snapshot/evidence section: keep latest two capture snapshots only.
+4. Historical phase playbooks that are already executed and verified must be removed from active plans.
+
+Where historical detail must live:
+1. Raw run evidence: `docs/Implementation_plans/<platform>/categories/<category>/evidence/` and tool output folders.
+2. Completion history: `docs/Implementation_plans/completed/` mirror structure.
+3. Durable specification truth: `docs/web/`, `docs/mobile/`, `docs/shared/` per state-machine rules.
+
+Active-plan minimum content standard:
+1. Current status tracker.
+2. Latest two evidences with comparison.
+3. Next actions only.
+
+Anti-patterns (disallowed in active plan files):
+1. Multi-hundred-line completed execution diaries.
+2. Repeated copy-forward of historical checks after completion.
+3. Duplicate evidence already present in evidence folders.
+
+---
+
+## 29) Plan Automation Architecture Recommendation (Project-Wide)
+
+Current state:
+1. Single-plan updater scripts are useful but do not scale when multiple plans are auto-created and updated.
+
+Recommended target model:
+1. Replace one-off updaters with a generic plan updater engine.
+2. Keep thin adapters for domain-specific enrichment when needed.
+
+Recommended structure:
+1. Generic engine:
+- `scripts/plan_autoupdate.mjs`
+2. Shared lifecycle policy module:
+- `scripts/lib/plan_retention_policy.mjs`
+3. Optional domain adapters:
+- `scripts/adapters/supabase_plan_adapter.mjs`
+- `scripts/adapters/<domain>_plan_adapter.mjs`
+
+Recommended per-plan contract (in plan frontmatter or companion config):
+1. `plan_id`
+2. `platform`
+3. `category`
+4. `retention`: metrics/changelog/snapshots limits
+5. `sections`: canonical headers used by the updater
+6. `adapter`: optional domain enrichment key
+
+Updater behavior requirements:
+1. Idempotent updates.
+2. Retention enforcement on every write.
+3. Append latest evidence, then prune to policy limits.
+4. Never rewrite truth-state docs from implementation updater.
+5. Fail-safe behavior when required sections are missing (report and skip, do not corrupt file).
+
+Scope boundary clarification (important):
+1. Evidence collectors are domain-specific by design (for example Supabase, RBAC, warranty, mobile telemetry) and may remain separate scripts.
+2. Plan-writing, retention, and snapshot-pruning behavior should be centralized in the generic updater layer.
+3. A domain script may update one plan only when that domain owns one active master plan.
+4. If a domain owns multiple active plans, use the same generic updater with per-plan config and run once per target plan.
+
+Operational workflow recommendation:
+1. Create plan from template with retention defaults.
+2. Run feature/domain evidence collection.
+3. Update corresponding plan through generic updater.
+4. Promote completed work to truth docs and archive implementation state.
+
+Validation gate recommendation (pre-commit and CI):
+1. Add a docs validator rule that fails if active plans exceed retention policy in automated sections.
+2. Add a docs validator rule that flags completed playbook blocks in active plans.
+3. Keep a machine-readable report for drift fixes.
+
+Migration recommendation for existing plans:
+1. Introduce policy in this guide first (done).
+2. Normalize active plans to retention policy with one-time cleanup.
+3. Move historical details to evidence/completed paths.
+4. Migrate single-plan scripts to generic engine incrementally.
+
+Decision statement:
+1. `supabase_plan_autoupdate.mjs` should be treated as transitional.
+2. New automation investment should go to generic multi-plan updater architecture.
+
+---
+
+## 30) Mandatory Plan Update Protocol (All Plans, Human and AI)
+
+Trigger:
+1. Any instruction such as "update this plan accordingly" after a fix, verification, rollout, or rollback.
+
+Required pre-read gate (must happen before editing the target plan):
+1. Read the target active plan fully enough to identify current phase/status/evidence sections.
+2. Read all directly linked references in that plan that affect status truth:
+- sibling implementation docs in same category (`active/`, `evidence/`, `inactive/`)
+- platform tracker and platform index
+- relevant truth/evidence/runbook docs referenced by path
+3. Read referenced validation outputs used as decision evidence (SQL checks, test reports, audit artifacts).
+4. If any referenced source is missing or stale, mark the update as partial and record the gap explicitly.
+
+Required update scope gate (do not update one line only):
+1. Update status/phase rows impacted by the fix.
+2. Update evidence summary with latest comparison/result.
+3. Update change log/metrics entries when applicable.
+4. Update next actions to reflect the new state.
+5. Enforce retention policy limits after update (latest two automated rows/snapshots only).
+
+Cross-file consistency gate (same change set):
+1. Update platform tracker entry when plan status changes.
+2. Update platform/category index links if plan path/state changes.
+3. Ensure no contradiction between active plan and linked evidence docs.
+
+Verification gate (required):
+1. Run docs plan retention validation (`npm run docs:validate:plans`).
+2. If domain has additional verification command, run it and record outcome in change log/evidence.
+3. If verification cannot be run, document that limitation in the plan update note.
+
+Completion standard:
+1. A plan update request is considered complete only when linked-reference sweep, scoped updates, consistency sync, and validation gates are all satisfied.
+
+---
+
 **Review Frequency:** every 6 months or when new categories are introduced  
 **Owner:** Techwheels Development Team

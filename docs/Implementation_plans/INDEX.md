@@ -8,6 +8,9 @@ Status: ACTIVE AUTHORITY
 ## Start Here
 
 1. Structure authority:
+- `docs/STRUCTURE_GUIDE.md`
+
+Compatibility pointer (legacy links only):
 - `docs/Implementation_plans/STRUCTURE_AND_WORKFLOW.md`
 
 2. Root tracker:
