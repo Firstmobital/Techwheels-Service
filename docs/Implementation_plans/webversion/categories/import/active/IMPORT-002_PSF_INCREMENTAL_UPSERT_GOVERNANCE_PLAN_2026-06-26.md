@@ -447,3 +447,113 @@ Exit criteria:
 1. Keep reversible migration sequence until post-cutover validation completes.
 2. If parity breaks, revert read-path switch first, then constraint switch, then column drops.
 3. Never perform destructive column drops and key switch in the same deployment step.
+
+---
+
+## 13. Deep Frontend Audit (Web + Mobile) And Step-by-Step Execution Matrix
+
+Audit date:
+1. 2026-06-26
+
+Audit scope:
+1. Web frontend: src/**
+2. Mobile frontend: mobile/src/**
+3. Focus: branch/branch_label/location/portal usage and job_card_closed_data query dependencies
+
+### 13.1 Quantified Impact Summary
+
+1. Total keyword surface (web + mobile): 2,188 matches.
+2. Web keyword matches: 1,454.
+3. Mobile keyword matches: 734.
+4. Web branch-sensitive job_card_closed_data query matches: 58.
+5. Mobile branch-sensitive job_card_closed_data query matches: 14.
+
+Interpretation:
+1. This is a high-blast-radius schema change.
+2. branch/branch_label drop must be staged with explicit compatibility gates.
+
+### 13.2 job_card_closed_data-Specific Critical Files
+
+Web (direct references):
+1. src/lib/reportQueries.ts
+2. src/pages/ImportPage.tsx
+3. src/pages/TechnicianPage.tsx
+4. src/pages/reports/performance/AdvisorPerformanceReport.tsx
+5. src/pages/SettingsPage.tsx
+6. src/pages/SATrackerPage.tsx
+7. src/pages/BodyshopTrackerPage.tsx
+8. src/lib/getTableColumns.ts
+9. src/lib/database.types.ts
+
+Mobile (direct references):
+1. mobile/src/lib/reportQueries.ts
+2. mobile/src/components/reports/AdvisorPerformanceMobile.tsx
+3. mobile/src/app/(tabs)/import.tsx
+4. mobile/src/lib/getTableColumns.ts
+5. mobile/src/lib/database.types.ts
+
+### 13.3 Highest-Risk Breakpoints (Observed)
+
+1. Import write path still writes branch and branch_label for PSF rows.
+2. Report query layer still applies branch-based filtering for job_card_closed_data.
+3. Several UI filter experiences use location fallback to branch; dropping branch early will break fallback assumptions.
+4. Mobile report query layer mirrors branch-based filtering patterns and must be migrated in lockstep before schema drop.
+
+### 13.4 Step-by-Step Implementation Matrix (Execution Sequence)
+
+Step 1: Create compatibility contract
+1. Keep branch and branch_label present during transition.
+2. Force branch and branch_label to mirror location on write.
+3. Freeze new feature work touching PSF branch semantics until cutover complete.
+
+Step 2: Web read-path migration first
+1. Primary file: src/lib/reportQueries.ts
+2. Replace job_card_closed_data branch filters with location-based filters.
+3. Preserve portal behavior unchanged.
+4. Update dependent pages incrementally:
+   - src/pages/SATrackerPage.tsx
+   - src/pages/TechnicianPage.tsx
+   - src/pages/reports/performance/AdvisorPerformanceReport.tsx
+   - src/pages/BodyshopTrackerPage.tsx
+
+Step 3: Mobile read-path migration second
+1. Primary file: mobile/src/lib/reportQueries.ts
+2. Replace job_card_closed_data branch filters with location-based filters.
+3. Update dependent mobile consumers:
+   - mobile/src/components/reports/AdvisorPerformanceMobile.tsx
+   - mobile/src/app/(tabs)/import.tsx (read/display consistency)
+
+Step 4: Shared schema adapters and typing updates
+1. Update src/lib/getTableColumns.ts and mobile/src/lib/getTableColumns.ts contracts.
+2. Update src/lib/database.types.ts and mobile/src/lib/database.types.ts to remove branch_label usage and deprecate branch for PSF rows.
+3. Keep temporary optional branch typing only during compatibility window.
+
+Step 5: Constraint and upsert cutover
+1. Add canonical unique key using location + portal + job_card_number + invoice_date.
+2. Switch importer conflict target to canonical key.
+3. Validate idempotent re-upload behavior on all canonical dealer/fuel mappings.
+
+Step 6: Column drop (final)
+1. Drop branch_label after web+mobile read-path parity is verified.
+2. Drop branch only after canonical key switch and no-runtime-reference gate passes.
+
+### 13.5 Mandatory Gates Between Steps
+
+Gate A (after Step 2):
+1. Web regression suite green for PSF reports and trackers.
+2. No web critical query path reads job_card_closed_data.branch_label.
+
+Gate B (after Step 3):
+1. Mobile report flows parity-verified for PSF-derived widgets.
+2. No mobile critical query path reads job_card_closed_data.branch_label.
+
+Gate C (before Step 6):
+1. Code search: zero runtime references to job_card_closed_data.branch in web+mobile report query layers.
+2. Code search: zero runtime references to job_card_closed_data.branch_label.
+3. Production dry-run evidence captured for importer, reports, and tracker pages.
+
+### 13.6 Out-of-Scope Clarifier For This Audit Section
+
+1. This section audits full frontend impact for safe planning.
+2. It does not expand IMPORT-002 functional execution beyond PSF scope.
+3. Non-PSF tables that legitimately use branch are not part of this migration.
