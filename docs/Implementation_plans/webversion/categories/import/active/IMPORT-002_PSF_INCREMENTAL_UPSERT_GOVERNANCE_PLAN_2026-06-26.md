@@ -743,6 +743,16 @@ Slice I: Emergency hotfix - PSF import timeout during clear-all step
 4. Local verification: `npm run build` passed after change.
 5. Status: Implemented (production import validation pending).
 
+Slice J: Emergency hotfix step 2 - reduce conflict/retry churn in PSF upsert
+1. Root cause extension: chunk retry loop with multi-candidate conflicts produced heavy `409 Conflict` churn and elevated timeout risk.
+2. Hotfix applied in importer:
+   - reduced `job_card_closed_data` chunk size to 250.
+   - switched PSF upsert path to canonical-only conflict key (`location,portal,job_card_number,invoice_date`).
+   - removed multi-candidate conflict fallback loop for PSF rows.
+   - aligned PSF dedupe key to canonical dimensions (`location|portal|job_card_number|invoice_date`).
+3. Local verification: `npm run build` passed after change.
+4. Status: Implemented (production validation pending).
+
 ### 14.2 Current Gate Snapshot
 
 Gate A Repo-1 (branch_label in critical web files):
@@ -779,8 +789,9 @@ Gate A SQL Evidence Artifact (2026-06-26):
 2. Deferred backlog: unresolved_rule_rows = 92 (manual SA mapping/data enrichment). No DB correction action in current cycle.
 3. Slice I closure gate: run one controlled production PSF import after deploy and capture outcome evidence.
 4. Slice I closure gate: rerun SQL-1 plus rule-alignment summary after production import and append outputs.
-5. Gate A verification rerun after each additional PSF-related edit.
-6. Execute SQL-1 and SQL-2 evidence queries when query/filter semantics are materially changed again.
+5. Slice J closure gate: verify `409 Conflict` flood is materially reduced and no statement-timeout occurs on controlled production import.
+6. Gate A verification rerun after each additional PSF-related edit.
+7. Execute SQL-1 and SQL-2 evidence queries when query/filter semantics are materially changed again.
 
 ### 14.4 Verification Checklist (Run After Each Slice)
 
@@ -788,3 +799,5 @@ Gate A SQL Evidence Artifact (2026-06-26):
 2. Repo-1 branch_label check for critical files.
 3. Repo-2 job_card_closed_data.branch runtime-read check for critical files.
 4. If query/filter semantics changed, run SQL-1 and SQL-2 from 13.5.1 and capture outputs.
+5. Production retry guardrail: if a PSF import run fails with statement timeout, stop repeated production retries immediately and open/activate a hotfix slice in this tracker before any further production import attempt.
+6. Production retry guardrail: after two timeout failures in the same incident window, no additional production retries are allowed until a code fix is merged, deployed, and one controlled validation retry is executed with evidence logged here.

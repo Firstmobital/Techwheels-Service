@@ -1200,7 +1200,7 @@ export default function ImportPage() {
               'part_number,branch,order_date',
             ].filter((candidate) => partsOrderIncludesAll(candidate.split(',')))
           : []
-        const CHUNK = isVasTable || isJcClosedTable ? 5000 : 2000
+        const CHUNK = isJcClosedTable ? 250 : isVasTable ? 2000 : 2000
         let totalInserted = 0
         let processedRows = 0
         const mappingIssues: MappingIssueInsert[] = []
@@ -1432,21 +1432,13 @@ export default function ImportPage() {
             jcClosedColumnSet.has('location') && jcClosedColumnSet.has('portal')
           const hasCanonicalConflictKey = Boolean(jcInvoiceConflictColumn && jcClosedHasLocationPortalKey)
 
-          const conflictCandidates = hasCanonicalConflictKey
-            ? [`location,portal,job_card_number,${jcInvoiceConflictColumn}`]
-            : jcInvoiceConflictColumn
-              ? [
-                  `branch,job_card_number,${jcInvoiceConflictColumn}`,
-                  `job_card_number,branch,${jcInvoiceConflictColumn}`,
-                ]
-            : jcClosedHasLocationPortalKey
-              ? [
-                  'location,portal,job_card_number',
-                  'portal,location,job_card_number',
-                  'branch,job_card_number',
-                  'job_card_number,branch',
-                ]
-              : ['branch,job_card_number', 'job_card_number,branch']
+          if (!hasCanonicalConflictKey || !jcInvoiceConflictColumn) {
+            throw new Error(
+              'PSF import requires canonical conflict key (location, portal, job_card_number, invoice_date).',
+            )
+          }
+
+          const canonicalOnConflict = `location,portal,job_card_number,${jcInvoiceConflictColumn}`
           type JcClosedUpsertRow = Record<string, unknown> & {
             branch?: string
             location?: string
@@ -1455,7 +1447,6 @@ export default function ImportPage() {
           }
           const normalizedRows = rows
             .map((row) => {
-              const branchKey = String(row.branch ?? '').trim()
               const jobCardKey = String(row.job_card_number ?? '').trim().toUpperCase()
               const locationKey = String(row.location ?? '').trim()
               const portalKey = String(row.portal ?? '').trim()
@@ -1467,11 +1458,9 @@ export default function ImportPage() {
               if (!jobCardKey) return null
               if (jcInvoiceConflictColumn && !invoiceDateKey) return null
               if (hasCanonicalConflictKey && (!locationKey || !portalKey)) return null
-              if (!hasCanonicalConflictKey && !branchKey) return null
 
               return {
                 ...row,
-                ...(branchKey ? { branch: branchKey } : {}),
                 job_card_number: jobCardKey,
                 ...(jcInvoiceConflictColumn
                   ? {
@@ -1488,188 +1477,34 @@ export default function ImportPage() {
             })
             .filter((row): row is JcClosedUpsertRow => row !== null)
 
+          const dedupedByCanonicalKey = dedupeRowsByKeys(
+            normalizedRows,
+            (row) =>
+              `${String(row.location ?? '').trim().toLowerCase()}|${String(row.portal ?? '')
+                .trim()
+                .toUpperCase()}|${String(row.job_card_number ?? '')
+                .trim()
+                .toUpperCase()}|${String(row[jcInvoiceConflictColumn] ?? '')
+                .trim()
+                .slice(0, 10)}`,
+          )
+
           let processed = 0
 
-          const tryUpdateExistingJcClosedRow = async (payload: JcClosedUpsertRow): Promise<boolean> => {
-            // First try: use the explicit conflict candidates (most specific)
-            for (const onConflict of conflictCandidates) {
-              const conflictColumns = onConflict
-                .split(',')
-                .map((column) => column.trim())
-                .filter(Boolean)
-
-              if (conflictColumns.length === 0) continue
-
-              const hasAllConflictValues = conflictColumns.every((column) => {
-                const value = payload[column]
-                if (value == null) return false
-                if (typeof value === 'string' && value.trim() === '') return false
-                return true
-              })
-
-              if (!hasAllConflictValues) continue
-
-              let updateQuery = supabase.from(tableName).update(payload)
-              for (const column of conflictColumns) {
-                updateQuery = updateQuery.eq(column, payload[column] as never)
-              }
-
-              const { data, error } = await updateQuery.select('id')
-              if (error) {
-                const lower = (error.message ?? '').toLowerCase()
-                const missingColumn = lower.includes('could not find the') && lower.includes('column of')
-                if (missingColumn) {
-                  continue
-                }
-                // Log but don't throw - try next candidate
-                continue
-              }
-
-              if ((data?.length ?? 0) > 0) {
-                return true
-              }
-            }
-
-            // Second try: fallback to minimum business key (branch + job_card_number)
-            // Keep fallback aligned to the active conflict contract to avoid broad updates.
-            if (
-              hasCanonicalConflictKey &&
-              payload.location &&
-              payload.portal &&
-              payload.job_card_number &&
-              jcInvoiceConflictColumn &&
-              payload[jcInvoiceConflictColumn]
-            ) {
-              const { error } = await supabase
-                .from(tableName)
-                .update(payload)
-                .eq('location', payload.location)
-                .eq('portal', payload.portal)
-                .eq('job_card_number', payload.job_card_number)
-                .eq(jcInvoiceConflictColumn, payload[jcInvoiceConflictColumn] as never)
-                .select('id')
-
-              if (!error) {
-                return true
-              }
-            }
-
-            // Legacy fallback (used only when canonical key is not active).
-            if (!hasCanonicalConflictKey && payload.branch && payload.job_card_number) {
-              const { error } = await supabase
-                .from(tableName)
-                .update(payload)
-                .eq('branch', payload.branch)
-                .eq('job_card_number', payload.job_card_number)
-                .eq(jcInvoiceConflictColumn ?? 'job_card_number', (jcInvoiceConflictColumn ? payload[jcInvoiceConflictColumn] : payload.job_card_number) as never)
-                .select('id')
-
-              if (!error) {
-                return true
-              }
-            }
-
-            return false
-          }
-
-          const upsertSingleRow = async (payload: JcClosedUpsertRow): Promise<void> => {
-            // Try each upsert conflict candidate
-            for (const onConflict of conflictCandidates) {
-              const { error } = await supabase.from(tableName).upsert([payload], { onConflict })
-              if (!error) return
-
-              const lower = (error.message ?? '').toLowerCase()
-              const missingConflictConstraint = lower.includes(
-                'no unique or exclusion constraint matching the on conflict specification',
-              )
-              const duplicateViolation =
-                error.code === '23505' || lower.includes('duplicate key value violates unique constraint')
-
-              if (missingConflictConstraint) continue
-
-              if (duplicateViolation) {
-                // Try update fallback immediately on duplicate key
-                const updated = await tryUpdateExistingJcClosedRow(payload)
-                if (updated) return
-                // If update didn't work, try next conflict candidate
-                continue
-              }
-
-              // For other errors, continue trying other conflict candidates
-              continue
-            }
-
-            // All upsert attempts failed, try insert as fallback
-            const { error: insertError } = await supabase.from(tableName).insert([payload])
-            if (!insertError) return
-
-            // Insert also failed, try update as final fallback
-            const isDuplicate = insertError.code === '23505' || (insertError.message ?? '').toLowerCase().includes('duplicate')
-            if (isDuplicate) {
-              const updated = await tryUpdateExistingJcClosedRow(payload)
-              if (updated) return
-            }
-
-            // All options exhausted - this should rarely happen
-            throw new Error(insertError.message ?? 'JC Closed row upsert/insert/update all failed')
-          }
-
-          for (let i = 0; i < normalizedRows.length; i += CHUNK) {
-            const chunkRows = normalizedRows.slice(i, i + CHUNK)
+          for (let i = 0; i < dedupedByCanonicalKey.length; i += CHUNK) {
+            const chunkRows = dedupedByCanonicalKey.slice(i, i + CHUNK)
             if (chunkRows.length === 0) continue
 
-            let chunkHandled = false
+            const { error } = await supabase.from(tableName).upsert(chunkRows, {
+              onConflict: canonicalOnConflict,
+            })
 
-            for (const onConflict of conflictCandidates) {
-              const { error } = await supabase.from(tableName).upsert(chunkRows, { onConflict })
-
-              if (!error) {
-                processed += chunkRows.length
-                incrementProcessedRows(chunkRows.length)
-                chunkHandled = true
-                break
-              }
-
-              const lower = (error.message ?? '').toLowerCase()
-              const missingConflictConstraint = lower.includes(
-                'no unique or exclusion constraint matching the on conflict specification',
-              )
-
-              if (missingConflictConstraint) {
-                continue
-              }
-
-              const requiresRowWiseRetry =
-                lower.includes('cannot affect row a second time') ||
-                lower.includes('duplicate key value violates unique constraint')
-
-              if (!requiresRowWiseRetry) {
-                throw new Error(error.message ?? 'JC Closed chunk upsert failed')
-              }
-
-              for (const row of chunkRows) {
-                await upsertSingleRow(row)
-                processed += 1
-              }
-
-              incrementProcessedRows(chunkRows.length)
-
-              chunkHandled = true
-              break
+            if (error) {
+              throw new Error(error.message ?? 'JC Closed canonical upsert failed')
             }
 
-            if (!chunkHandled) {
-              try {
-                processed += await insertRowsWithDuplicateSkip(chunkRows, { trackProgress: false })
-                incrementProcessedRows(chunkRows.length)
-              } catch (insertFallbackError) {
-                const fallbackMessage =
-                  insertFallbackError instanceof Error
-                    ? insertFallbackError.message
-                    : String(insertFallbackError)
-                throw new Error(fallbackMessage)
-              }
-            }
+            processed += chunkRows.length
+            incrementProcessedRows(chunkRows.length)
           }
 
           return processed
@@ -2039,7 +1874,9 @@ export default function ImportPage() {
             const dedupedJcRows = dedupeRowsByKeys(
               insertRows,
               (row) =>
-                `${String(row.branch ?? '').trim().toLowerCase()}|${String(row.job_card_number ?? '')
+                `${String(row.location ?? '').trim().toLowerCase()}|${String(row.portal ?? '')
+                  .trim()
+                  .toUpperCase()}|${String(row.job_card_number ?? '')
                   .trim()
                   .toUpperCase()}|${String(
                   row[jcInvoiceDateColumnKey ?? 'invoice_date'] ?? row.invoice_date ?? row.Invoice_date ?? '',
