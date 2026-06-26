@@ -1,0 +1,8 @@
+{
+  "status": "error",
+  "label": "top_slow_queries_detailed",
+  "error": {
+    "message": "Failed to run sql query: ERROR:  42883: function round(double precision, integer) does not exist\nLINE 11:   round((s.total_exec_time / nullif(sum(s.total_exec_time) OVER (), 0)) * 100, 16) AS prop_total_time,\n           ^\nHINT:  No function matches the given name and argument types. You might need to add explicit type casts.\n"
+  },
+  "rows": []
+}

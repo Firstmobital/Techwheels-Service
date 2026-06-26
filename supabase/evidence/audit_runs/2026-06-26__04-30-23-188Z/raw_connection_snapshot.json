@@ -1,0 +1,13 @@
+{
+  "status": "ok",
+  "label": "connection_snapshot",
+  "rows": [
+    {
+      "max_connections": 60,
+      "total_connections": 20,
+      "active_connections": 5,
+      "idle_connections": 13,
+      "waiting_connections": 17
+    }
+  ]
+}

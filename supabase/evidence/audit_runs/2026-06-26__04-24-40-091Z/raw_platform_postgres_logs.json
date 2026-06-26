@@ -1,0 +1,63 @@
+{
+  "status": "ok",
+  "endpoint": "/v1/projects/jmdndcphkmaljhwgzqxq/analytics/endpoints/logs.all?sql=select%20timestamp%2C%20event_message%20from%20postgres_logs%20order%20by%20timestamp%20desc%20limit%20100",
+  "count": 14,
+  "records": [
+    {
+      "event_message": "function round(double precision, integer) does not exist",
+      "timestamp": 1782447857136000
+    },
+    {
+      "event_message": "connection received: host=2a05:d018:1e14:201:8102:66de:10d8:9960 port=55486",
+      "timestamp": 1782447856725000
+    },
+    {
+      "event_message": "connection received: host=2a05:d018:1e14:201:f1c8:5ae0:ef:a664 port=52850",
+      "timestamp": 1782447856330000
+    },
+    {
+      "event_message": "connection received: host=2a05:d018:1e14:204:7f50:e0ac:749c:201d port=38244",
+      "timestamp": 1782447856316000
+    },
+    {
+      "event_message": "connection received: host=2a05:d018:1e14:204:9e9a:ca60:8f5d:8e02 port=57426",
+      "timestamp": 1782447856300000
+    },
+    {
+      "event_message": "connection received: host=2a05:d018:1e14:204:528b:2b36:ab71:ef54 port=47670",
+      "timestamp": 1782447856299000
+    },
+    {
+      "event_message": "connection received: host=2a05:d018:1e14:204:7f50:e0ac:749c:201d port=38230",
+      "timestamp": 1782447856299000
+    },
+    {
+      "event_message": "connection received: host=2a05:d018:1e14:205:d8d9:660d:82de:7da8 port=38426",
+      "timestamp": 1782447856299000
+    },
+    {
+      "event_message": "connection received: host=2a05:d018:1e14:206:22c4:b1b8:f5d5:b66b port=41862",
+      "timestamp": 1782447856299000
+    },
+    {
+      "event_message": "canceling statement due to statement timeout",
+      "timestamp": 1782447848721000
+    },
+    {
+      "event_message": "canceling statement due to statement timeout",
+      "timestamp": 1782447848710000
+    },
+    {
+      "event_message": "canceling statement due to statement timeout",
+      "timestamp": 1782447848088000
+    },
+    {
+      "event_message": "connection authenticated: user=\"postgres\" method=trust (/etc/postgresql/pg_hba.conf:85)",
+      "timestamp": 1782447840216000
+    },
+    {
+      "event_message": "connection received: host=2a05:d018:1e14:205:3630:e020:f42d:e9a port=48652",
+      "timestamp": 1782447835287000
+    }
+  ]
+}

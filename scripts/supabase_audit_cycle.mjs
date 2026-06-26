@@ -462,7 +462,76 @@ function makeMarkdownSummary(summary) {
     }
   }
   lines.push('')
+  lines.push('## Performance KPIs')
+  lines.push('')
+  if (summary.performance_kpis.length === 0) {
+    lines.push('- unavailable')
+  } else {
+    for (const row of summary.performance_kpis) {
+      lines.push(`- slow_queries_total_time_gt_1000=${row.slow_queries_total_time_gt_1000}, cache_hit_rate_pct=${row.cache_hit_rate_pct}, avg_rows_per_call=${row.avg_rows_per_call}`)
+    }
+  }
+  lines.push('')
+  lines.push('## Connection Snapshot')
+  lines.push('')
+  if (summary.connection_snapshot.length === 0) {
+    lines.push('- unavailable')
+  } else {
+    for (const row of summary.connection_snapshot) {
+      lines.push(`- total_connections=${row.total_connections}, active_connections=${row.active_connections}, idle_connections=${row.idle_connections}, waiting_connections=${row.waiting_connections}, max_connections=${row.max_connections}`)
+    }
+  }
+  lines.push('')
+  lines.push('## Postgres Log Severity (Recent)')
+  lines.push('')
+  const sev = summary.postgres_log_severity || {}
+  lines.push(`- error=${sev.error ?? 0}, warning=${sev.warning ?? 0}, fatal=${sev.fatal ?? 0}, panic=${sev.panic ?? 0}, total_records=${sev.total_records ?? 0}`)
+  lines.push('')
   return lines.join('\n')
+}
+
+function makeTopSlowQueriesMarkdown(rows, capturedAt) {
+  const lines = []
+  lines.push(`# Top 10 Slow Queries (Detailed) - ${capturedAt}`)
+  lines.push('')
+  lines.push('| queryid | role | calls | mean_time | min_time | max_time | total_time | rows_read | cache_hit_rate | prop_total_time |')
+  lines.push('|---|---|---:|---:|---:|---:|---:|---:|---:|---:|')
+  for (const row of Array.isArray(rows) ? rows : []) {
+    lines.push(`| ${row.queryid} | ${row.rolname ?? 'unknown'} | ${row.calls} | ${row.mean_time} | ${row.min_time} | ${row.max_time} | ${row.total_time} | ${row.rows_read} | ${row.cache_hit_rate} | ${row.prop_total_time} |`)
+  }
+  lines.push('')
+  lines.push('## Query Text')
+  lines.push('')
+  for (const row of Array.isArray(rows) ? rows : []) {
+    lines.push(`### queryid ${row.queryid}`)
+    lines.push('')
+    lines.push('```sql')
+    lines.push(String(row.query || '').trim())
+    lines.push('```')
+    lines.push('')
+  }
+  return lines.join('\n')
+}
+
+function summarizePostgresLogSeverity(records) {
+  const out = {
+    error: 0,
+    warning: 0,
+    fatal: 0,
+    panic: 0,
+    total_records: Array.isArray(records) ? records.length : 0,
+  }
+
+  for (const row of Array.isArray(records) ? records : []) {
+    const text = String(row?.event_message ?? '').toUpperCase()
+    if (!text) continue
+    if (text.includes(' PANIC ') || text.startsWith('PANIC') || text.includes('PANIC:')) out.panic += 1
+    else if (text.includes(' FATAL ') || text.startsWith('FATAL') || text.includes('FATAL:')) out.fatal += 1
+    else if (text.includes(' ERROR ') || text.startsWith('ERROR') || text.includes('ERROR:')) out.error += 1
+    else if (text.includes(' WARNING ') || text.startsWith('WARNING') || text.includes('WARNING:')) out.warning += 1
+  }
+
+  return out
 }
 
 async function writeArtifacts(repoRoot, runTimestamp, payloads) {
@@ -525,6 +594,26 @@ ORDER BY total_exec_time DESC
 LIMIT 25;
   `.trim()
 
+  const sqlTopSlowQueriesDetailed = `
+SELECT
+  s.query,
+  r.rolname,
+  s.calls,
+  round(s.mean_exec_time::numeric, 12) AS mean_time,
+  round(s.min_exec_time::numeric, 6) AS min_time,
+  round(s.max_exec_time::numeric, 6) AS max_time,
+  round(s.total_exec_time::numeric, 6) AS total_time,
+  s.rows AS rows_read,
+  round((s.shared_blks_hit::numeric / nullif(s.shared_blks_hit + s.shared_blks_read, 0)) * 100, 16) AS cache_hit_rate,
+  round((((s.total_exec_time / nullif(sum(s.total_exec_time) OVER (), 0)) * 100)::numeric), 16) AS prop_total_time,
+  null::text AS index_advisor_result,
+  s.queryid
+FROM extensions.pg_stat_statements s
+LEFT JOIN pg_roles r ON r.oid = s.userid
+ORDER BY s.total_exec_time DESC
+LIMIT 10;
+  `.trim()
+
   const sqlTrackedQueries = `
 SELECT
   queryid,
@@ -585,12 +674,70 @@ ORDER BY 1 DESC
 LIMIT 60;
   `.trim()
 
-  const [topQueries, trackedQueries, tableScans, dbHealth, authRecent] = await Promise.all([
+  const sqlPerformanceKpis = `
+WITH base AS (
+  SELECT
+    total_exec_time,
+    shared_blks_hit,
+    shared_blks_read,
+    rows,
+    calls
+  FROM extensions.pg_stat_statements
+)
+SELECT
+  count(*) FILTER (WHERE total_exec_time > 1000) AS slow_queries_total_time_gt_1000,
+  round((sum(shared_blks_hit)::numeric / nullif(sum(shared_blks_hit) + sum(shared_blks_read), 0)) * 100, 2) AS cache_hit_rate_pct,
+  round((sum(rows)::numeric / nullif(sum(calls), 0)), 2) AS avg_rows_per_call
+FROM base;
+  `.trim()
+
+  const sqlConnectionSnapshot = `
+SELECT
+  (SELECT setting::int FROM pg_settings WHERE name = 'max_connections') AS max_connections,
+  count(*) AS total_connections,
+  count(*) FILTER (WHERE state = 'active') AS active_connections,
+  count(*) FILTER (WHERE state = 'idle') AS idle_connections,
+  count(*) FILTER (WHERE wait_event_type IS NOT NULL) AS waiting_connections
+FROM pg_stat_activity
+WHERE datname = current_database();
+  `.trim()
+
+  const sqlTableIoHotspots = `
+SELECT
+  relname AS table_name,
+  heap_blks_read,
+  heap_blks_hit,
+  idx_blks_read,
+  idx_blks_hit,
+  toast_blks_read,
+  toast_blks_hit,
+  round((heap_blks_hit::numeric / nullif(heap_blks_hit + heap_blks_read, 0)) * 100, 2) AS heap_cache_hit_rate_pct,
+  (coalesce(heap_blks_read, 0) + coalesce(idx_blks_read, 0) + coalesce(toast_blks_read, 0)) AS total_read_blocks
+FROM pg_statio_user_tables
+ORDER BY total_read_blocks DESC
+LIMIT 20;
+  `.trim()
+
+  const [
+    topQueries,
+    topSlowQueriesDetailed,
+    trackedQueries,
+    tableScans,
+    dbHealth,
+    authRecent,
+    performanceKpis,
+    connectionSnapshot,
+    tableIoHotspots,
+  ] = await Promise.all([
     runSql(projectRef, managementToken, sqlTopQueries, 'top_queries'),
+    runSql(projectRef, managementToken, sqlTopSlowQueriesDetailed, 'top_slow_queries_detailed'),
     runSql(projectRef, managementToken, sqlTrackedQueries, 'tracked_queries'),
     runSql(projectRef, managementToken, sqlTableScanRatios, 'table_scan_ratios'),
     runSql(projectRef, managementToken, sqlDbHealth, 'db_health'),
     runSql(projectRef, managementToken, sqlAuthRecent, 'auth_recent_events'),
+    runSql(projectRef, managementToken, sqlPerformanceKpis, 'performance_kpis'),
+    runSql(projectRef, managementToken, sqlConnectionSnapshot, 'connection_snapshot'),
+    runSql(projectRef, managementToken, sqlTableIoHotspots, 'table_io_hotspots'),
   ])
 
   enforceTopQueriesGate(topQueries)
@@ -613,6 +760,10 @@ LIMIT 60;
     table_scan_ratios: tableScans.rows,
     db_health: dbHealth.rows,
     auth_recent_events: authRecent.rows,
+    top_10_slow_queries_detailed: topSlowQueriesDetailed.rows,
+    performance_kpis: performanceKpis.rows,
+    connection_snapshot: connectionSnapshot.rows,
+    table_io_hotspots: tableIoHotspots.rows,
     platform_logs: {
       auth: { status: authLogs.status, count: authLogs.count, endpoint: authLogs.endpoint || null },
       edge_functions: { status: edgeLogs.status, count: edgeLogs.count, endpoint: edgeLogs.endpoint || null },
@@ -620,14 +771,19 @@ LIMIT 60;
       storage: { status: storageLogs.status, count: storageLogs.count, endpoint: storageLogs.endpoint || null },
       database_health: { status: dbHealthLogs.status, count: dbHealthLogs.count, endpoint: dbHealthLogs.endpoint || null },
     },
+    postgres_log_severity: summarizePostgresLogSeverity(dbHealthLogs.records),
     notes: summarizeTopQuery(topQueries.rows),
     top_query_summary: summarizeTopQuery(topQueries.rows),
     errors: {
       top_queries: topQueries.status === 'error' ? topQueries.error : null,
       tracked_queries: trackedQueries.status === 'error' ? trackedQueries.error : null,
+      top_slow_queries_detailed: topSlowQueriesDetailed.status === 'error' ? topSlowQueriesDetailed.error : null,
       table_scan_ratios: tableScans.status === 'error' ? tableScans.error : null,
       db_health: dbHealth.status === 'error' ? dbHealth.error : null,
       auth_recent_events: authRecent.status === 'error' ? authRecent.error : null,
+      performance_kpis: performanceKpis.status === 'error' ? performanceKpis.error : null,
+      connection_snapshot: connectionSnapshot.status === 'error' ? connectionSnapshot.error : null,
+      table_io_hotspots: tableIoHotspots.status === 'error' ? tableIoHotspots.error : null,
     },
   }
 
@@ -639,6 +795,7 @@ LIMIT 60;
   summary.regression_guard = evaluateRegressionGuard(summary, thresholds)
 
   const markdown = makeMarkdownSummary(summary)
+  const detailedTop10Markdown = makeTopSlowQueriesMarkdown(summary.top_10_slow_queries_detailed, capturedAt)
 
   let fixChecklist = null
   let fixChecklistPathRel = null
@@ -652,10 +809,14 @@ LIMIT 60;
     'summary.json': toSafeJson(summary),
     'summary.md': markdown,
     'raw_top_queries.json': toSafeJson(topQueries),
+    'raw_top_10_slow_queries_detailed.json': toSafeJson(topSlowQueriesDetailed),
     'raw_tracked_queries.json': toSafeJson(trackedQueries),
     'raw_table_scan_ratios.json': toSafeJson(tableScans),
     'raw_db_health.json': toSafeJson(dbHealth),
     'raw_auth_recent_events.json': toSafeJson(authRecent),
+    'raw_performance_kpis.json': toSafeJson(performanceKpis),
+    'raw_connection_snapshot.json': toSafeJson(connectionSnapshot),
+    'raw_table_io_hotspots.json': toSafeJson(tableIoHotspots),
     'raw_platform_auth_logs.json': toSafeJson(authLogs),
     'raw_platform_edge_logs.json': toSafeJson(edgeLogs),
     'raw_platform_realtime_logs.json': toSafeJson(realtimeLogs),
@@ -663,6 +824,14 @@ LIMIT 60;
     'raw_platform_postgres_logs.json': toSafeJson(dbHealthLogs),
     'comparison.json': toSafeJson(summary.comparison),
     'regression_guard.json': toSafeJson(summary.regression_guard),
+    'top_10_slow_queries_detailed.md': detailedTop10Markdown,
+    'performance_snapshot.json': toSafeJson({
+      performance_kpis: summary.performance_kpis,
+      connection_snapshot: summary.connection_snapshot,
+      table_io_hotspots: summary.table_io_hotspots,
+      postgres_log_severity: summary.postgres_log_severity,
+      platform_logs_status: summary.platform_logs,
+    }),
   }
 
   if (fixChecklist) {

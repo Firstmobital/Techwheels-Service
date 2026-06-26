@@ -389,17 +389,26 @@ export default function FloorInchargeScreen() {
 
       // Technician assignments
       const assignmentRows: TechnicianAssignment[] = []
-      let from = 0
+      let assignmentCursorId: number | null = null
       while (true) {
-        const { data: aData, error: aErr } = await supabase
+        let assignmentQuery = supabase
           .from('technician_assignments').select('*')
-          .order('updated_at', { ascending: false }).order('assigned_at', { ascending: false })
-          .range(from, from + QUERY_PAGE_SIZE - 1)
+          .order('id', { ascending: false })
+          .limit(QUERY_PAGE_SIZE)
+
+        if (assignmentCursorId !== null) {
+          assignmentQuery = assignmentQuery.lt('id', assignmentCursorId)
+        }
+
+        const { data: aData, error: aErr } = await assignmentQuery
         if (aErr) break
         const batch = (aData ?? []) as TechnicianAssignment[]
         assignmentRows.push(...batch)
         if (batch.length < QUERY_PAGE_SIZE) break
-        from += QUERY_PAGE_SIZE
+
+        const lastId = Number(batch[batch.length - 1]?.id)
+        if (!Number.isFinite(lastId) || lastId <= 0) break
+        assignmentCursorId = lastId
       }
       const assignMap: Record<string, TechnicianAssignment> = {}
       const nextDrafts: Record<string, StageDraft> = {}
@@ -416,16 +425,26 @@ export default function FloorInchargeScreen() {
 
       // Support assignments
       const supportRows: SupportAssignment[] = []
-      let sFrom = 0
+      let supportCursorId: number | null = null
       while (true) {
-        const { data: sData, error: sErr } = await supabase
+        let supportQuery = supabase
           .from('job_card_support_assignments').select('*').eq('is_active', true)
-          .range(sFrom, sFrom + QUERY_PAGE_SIZE - 1)
+          .order('id', { ascending: false })
+          .limit(QUERY_PAGE_SIZE)
+
+        if (supportCursorId !== null) {
+          supportQuery = supportQuery.lt('id', supportCursorId)
+        }
+
+        const { data: sData, error: sErr } = await supportQuery
         if (sErr) break
         const batch = (sData ?? []) as SupportAssignment[]
         supportRows.push(...batch)
         if (batch.length < QUERY_PAGE_SIZE) break
-        sFrom += QUERY_PAGE_SIZE
+
+        const lastId = Number(batch[batch.length - 1]?.id)
+        if (!Number.isFinite(lastId) || lastId <= 0) break
+        supportCursorId = lastId
       }
       const suppMap: Record<string, SupportAssignment[]> = {}
       for (const sa of supportRows) {

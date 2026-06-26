@@ -44,11 +44,89 @@ function appendTableRowInSection(markdown, sectionHeader, nextSectionHeader, row
   return `${before}${lines.join('\n')}${after}`
 }
 
+function pruneAutomatedRowsInSection(markdown, sectionHeader, nextSectionHeader, isAutomatedRow, keepLast = 2) {
+  const range = sectionRange(markdown, sectionHeader, nextSectionHeader)
+  if (!range) return markdown
+
+  const before = markdown.slice(0, range.start)
+  const section = markdown.slice(range.start, range.end)
+  const after = markdown.slice(range.end)
+
+  const lines = section.split('\n')
+  const automatedIndexes = []
+  lines.forEach((line, idx) => {
+    if (line.startsWith('|') && isAutomatedRow(line)) {
+      automatedIndexes.push(idx)
+    }
+  })
+
+  if (automatedIndexes.length <= keepLast) return markdown
+
+  const toDelete = automatedIndexes.slice(0, automatedIndexes.length - keepLast)
+  for (let i = toDelete.length - 1; i >= 0; i -= 1) {
+    lines.splice(toDelete[i], 1)
+  }
+
+  return `${before}${lines.join('\n')}${after}`
+}
+
 function getNextSnapshotNumber(markdown) {
   const matches = [...markdown.matchAll(/^### 14\.(\d+)/gm)]
   if (matches.length === 0) return 1
   const maxValue = matches.reduce((max, match) => Math.max(max, Number(match[1] || 0)), 0)
   return maxValue + 1
+}
+
+function pruneSnapshotBlocks(markdown, keepLast = 2) {
+  const headingRegex = /^### 14\.\d+ Capture Snapshot: .*$/gm
+  const matches = [...markdown.matchAll(headingRegex)]
+  if (matches.length === 0) return markdown
+
+  const blocks = matches.map((match, index) => {
+    const start = match.index
+    const end = index + 1 < matches.length ? matches[index + 1].index : markdown.length
+    const heading = match[0] || ''
+    return {
+      start,
+      end,
+      heading,
+    }
+  })
+
+  if (blocks.length <= keepLast) return markdown
+
+  const blocksToRemove = blocks
+    .slice(0, blocks.length - keepLast)
+    .sort((a, b) => b.start - a.start)
+
+  let next = markdown
+  for (const block of blocksToRemove) {
+    const before = next.slice(0, block.start).replace(/[ \t]*\n*$/, '\n\n')
+    const after = next.slice(block.end).replace(/^\n+/, '')
+    next = `${before}${after}`
+  }
+
+  return next
+}
+
+function buildCompactTop10Table(topQueries) {
+  const rows = Array.isArray(topQueries) ? topQueries.slice(0, 10) : []
+  if (rows.length === 0) {
+    return ['- Compact Top 10 table unavailable (no top query rows).']
+  }
+
+  const table = [
+    '| rank | queryid | calls | total_ms | mean_ms |',
+    '|---:|---|---:|---:|---:|',
+  ]
+
+  rows.forEach((row, index) => {
+    table.push(
+      `| ${index + 1} | ${sanitizeCell(row.queryid)} | ${sanitizeCell(row.calls)} | ${sanitizeCell(row.total_ms)} | ${sanitizeCell(row.mean_ms)} |`,
+    )
+  })
+
+  return table
 }
 
 function buildSnapshotBlock(summary, snapshotNumber) {
@@ -75,6 +153,8 @@ function buildSnapshotBlock(summary, snapshotNumber) {
     ? comparison.recommended_actions.slice(0, 3).map((item) => `- ${sanitizeCell(item)}`)
     : ['- Continue standard audit cycle and compare against next run.']
 
+  const compactTop10Table = buildCompactTop10Table(summary.top_queries)
+
   return [
     `### 14.${snapshotNumber} Capture Snapshot: ${summary.capture_date || ts.slice(0, 10)} (Automated Audit Cycle)`,
     '',
@@ -85,6 +165,9 @@ function buildSnapshotBlock(summary, snapshotNumber) {
     availabilityLine,
     comparisonLine,
     topRegressionLine,
+    '',
+    'Compact Top 10 (run-local):',
+    ...compactTop10Table,
     '',
     'Interpretation:',
     '- This snapshot is append-only and intended to keep log evidence current for the hardening cycle.',
@@ -118,6 +201,13 @@ export async function updateMasterPlanFromSummary(summary, options = {}) {
     '## 6) Change Log (What Was Updated in This Plan)',
     metricsRow,
   )
+  markdown = pruneAutomatedRowsInSection(
+    markdown,
+    '## 5) Real-Time Metrics Log (Append Only)',
+    '## 6) Change Log (What Was Updated in This Plan)',
+    (line) => line.includes('(automated audit cycle)'),
+    2,
+  )
 
   const changeLogRow = `| ${dateOnly} | Copilot | Automated Supabase audit cycle appended run summary (${capturedAt}) and refreshed plan evidence block from generated audit artifacts. |`
   markdown = appendTableRowInSection(
@@ -126,10 +216,18 @@ export async function updateMasterPlanFromSummary(summary, options = {}) {
     '## 7) Update Protocol For Future Chats',
     changeLogRow,
   )
+  markdown = pruneAutomatedRowsInSection(
+    markdown,
+    '## 6) Change Log (What Was Updated in This Plan)',
+    '## 7) Update Protocol For Future Chats',
+    (line) => line.includes('Automated Supabase audit cycle appended run summary'),
+    2,
+  )
 
   const nextSnapshot = getNextSnapshotNumber(markdown)
   const snapshotBlock = buildSnapshotBlock(summary, nextSnapshot)
   markdown = `${markdown.trimEnd()}\n\n${snapshotBlock}`
+  markdown = pruneSnapshotBlocks(markdown, 2)
 
   await fs.writeFile(planPath, markdown, 'utf8')
 
