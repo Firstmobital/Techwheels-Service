@@ -640,6 +640,47 @@ function getFuelScopedBranch(branch: BranchFilter): BranchFilter {
   return 'ALL'
 }
 
+function applyJobCardClosedScopeFilterToQuery(query: any, branch: BranchFilter): any {
+  const normalized = String(branch ?? '').trim().toLowerCase().replace(/\s+/g, ' ')
+
+  if (!normalized || normalized === 'all') return query
+
+  if (normalized === 'all_pv') {
+    return query.eq('portal', 'PV')
+  }
+
+  if (normalized === 'all_ev') {
+    return query.eq('portal', 'EV')
+  }
+
+  if (normalized === 'sitapura pv') {
+    return query.eq('location', 'Sitapura').eq('portal', 'PV')
+  }
+
+  if (normalized === 'sitapura ev') {
+    return query.eq('location', 'Sitapura').eq('portal', 'EV')
+  }
+
+  if (normalized === 'sitapura') {
+    return query.eq('location', 'Sitapura')
+  }
+
+  if (normalized === 'ajmer road pv') {
+    return query.eq('location', 'Ajmer Road').eq('portal', 'PV')
+  }
+
+  if (normalized === 'ajmer road ev') {
+    return query.eq('location', 'Ajmer Road').eq('portal', 'EV')
+  }
+
+  if (normalized === 'ajmer road') {
+    return query.eq('location', 'Ajmer Road')
+  }
+
+  // Keep compatibility for any legacy/custom branch filters outside canonical options.
+  return applyBranchFilterToQuery(query, branch)
+}
+
 function matchesFuelSelectionByBranchLabel(rawBranch: unknown, fuelType: 'PV' | 'EV'): boolean {
   const normalized = String(rawBranch ?? '').trim().toLowerCase()
   if (!normalized) return false
@@ -787,7 +828,7 @@ async function fetchAllJobCardClosedRowsWithoutFuelFilter(
     .select(selectColumns)
     .limit(MAX_REPORT_FETCH_ROWS)
 
-  query = applyBranchFilterToQuery(query, filters.branch)
+  query = applyJobCardClosedScopeFilterToQuery(query, filters.branch)
 
     if (Array.isArray(filters.serviceType)) {
       if (filters.serviceType.length > 0) {
@@ -842,7 +883,7 @@ async function fetchAllJobCardClosedRows(
     .select(selectColumns)
     .limit(MAX_REPORT_FETCH_ROWS)
 
-  query = applyBranchFilterToQuery(query, filters.branch)
+  query = applyJobCardClosedScopeFilterToQuery(query, filters.branch)
 
     if (Array.isArray(filters.serviceType)) {
       if (filters.serviceType.length > 0) {
@@ -1843,7 +1884,7 @@ export async function getBranchLabourRevenueComparison(
       .select('branch, final_labour_amount, job_card_number, employee_code')
       .limit(MAX_REPORT_FETCH_ROWS)
 
-    query = applyBranchFilterToQuery(query, queryBranch)
+    query = applyJobCardClosedScopeFilterToQuery(query, queryBranch)
 
       if (fuelSelection && fuelColumn) {
         query = query.eq(fuelColumn, fuelSelection)
@@ -3592,7 +3633,7 @@ export async function getServiceDueList(
     )
     .limit(MAX_REPORT_FETCH_ROWS)
 
-  query = applyBranchFilterToQuery(query, branch)
+  query = applyJobCardClosedScopeFilterToQuery(query, branch)
 
   const { data, error } = await query
   if (error) throw new Error(error.message)
