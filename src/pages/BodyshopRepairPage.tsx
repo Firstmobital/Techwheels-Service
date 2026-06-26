@@ -1469,6 +1469,73 @@ export default function BodyshopRepairPage() {
     return reg
   }
 
+  async function fetchAccidentReceptionRows(options: {
+    fromDate: string
+    toDate: string
+    saCodes?: string[] | null
+    saNames?: string[] | null
+    branches?: string[]
+    applySaScope: boolean
+  }): Promise<{ data: AccidentReceptionRow[] | null; error: unknown | null }> {
+    const PAGE_SIZE = 500
+    const rows: AccidentReceptionRow[] = []
+    let cursorId: number | null = null
+
+    while (true) {
+      let query = supabase
+        .from('service_reception_entries')
+        .select('id, jc_number, reg_number, owner_name, owner_phone, sa_employee_code, sa_name, sa_display_name, branch, created_at')
+        .eq('service_type', 'Accident')
+        .gte('created_at', options.fromDate + 'T00:00:00+05:30')
+        .lte('created_at', options.toDate + 'T23:59:59+05:30')
+        .order('id', { ascending: false })
+        .limit(PAGE_SIZE)
+
+      if (options.applySaScope) {
+        const scopedSaCodes = options.saCodes ?? []
+        const scopedSaNames = options.saNames ?? []
+
+        if (scopedSaCodes.length > 0 && scopedSaNames.length > 0) {
+          const codeCsv = scopedSaCodes.map((v) => `"${v.replace(/"/g, '')}"`).join(',')
+          const nameCsv = scopedSaNames.map((v) => `"${v.replace(/"/g, '')}"`).join(',')
+          query = query.or(`sa_employee_code.in.(${codeCsv}),sa_name.in.(${nameCsv}),sa_display_name.in.(${nameCsv})`)
+        } else if (scopedSaCodes.length > 0) {
+          query = query.in('sa_employee_code', scopedSaCodes)
+        } else if (scopedSaNames.length > 0) {
+          query = query.in('sa_name', scopedSaNames)
+        }
+      }
+
+      if ((options.branches ?? []).length > 0) {
+        query = query.in('branch', options.branches ?? [])
+      }
+
+      if (cursorId !== null) {
+        query = query.lt('id', cursorId)
+      }
+
+      const { data, error } = await query
+      if (error) {
+        return { data: null, error }
+      }
+
+      const batch = (data ?? []) as AccidentReceptionRow[]
+      rows.push(...batch)
+
+      if (batch.length < PAGE_SIZE) {
+        break
+      }
+
+      const lastId = Number(batch[batch.length - 1]?.id)
+      if (!Number.isFinite(lastId) || lastId <= 0) {
+        break
+      }
+      cursorId = lastId
+    }
+
+    return { data: rows, error: null }
+  }
+
   async function load() {
     setLoading(true)
     try {
@@ -1506,29 +1573,6 @@ export default function BodyshopRepairPage() {
         console.warn('[BodyshopRepair] No derived scope from employee links; falling back to RLS-scoped query')
       }
 
-      let accidentQuery = supabase
-        .from('service_reception_entries')
-        .select('id, jc_number, reg_number, owner_name, owner_phone, sa_employee_code, sa_name, sa_display_name, branch, created_at')
-        .eq('service_type', 'Accident')
-        .gte('created_at', dateRange.from + 'T00:00:00+05:30')
-        .lte('created_at', dateRange.to + 'T23:59:59+05:30')
-        .order('created_at', { ascending: false })
-
-      // For SA role: filter by sa_employee_code
-      if (scopedSaCodes && scopedSaCodes.length > 0 && scopedSaNames && scopedSaNames.length > 0) {
-        const codeCsv = scopedSaCodes.map((v) => `"${v.replace(/"/g, '')}"`).join(',')
-        const nameCsv = scopedSaNames.map((v) => `"${v.replace(/"/g, '')}"`).join(',')
-        accidentQuery = accidentQuery.or(`sa_employee_code.in.(${codeCsv}),sa_name.in.(${nameCsv}),sa_display_name.in.(${nameCsv})`)
-      } else if (scopedSaCodes && scopedSaCodes.length > 0) {
-        accidentQuery = accidentQuery.in('sa_employee_code', scopedSaCodes)
-      } else if (scopedSaNames && scopedSaNames.length > 0) {
-        accidentQuery = accidentQuery.in('sa_name', scopedSaNames)
-      }
-      // For SSA/SURVEY role: filter by branch
-      if (scopedBranches.length > 0) {
-        accidentQuery = accidentQuery.in('branch', scopedBranches)
-      }
-
       const [data, accidentRes] = await Promise.all([
         listRepairCards({
           from: dateRange.from,
@@ -1537,7 +1581,14 @@ export default function BodyshopRepairPage() {
           saNames: scopedSaNames ?? undefined,
           branches: scopedBranches.length > 0 ? scopedBranches : undefined,
         }),
-        accidentQuery,
+        fetchAccidentReceptionRows({
+          fromDate: dateRange.from,
+          toDate: dateRange.to,
+          saCodes: scopedSaCodes,
+          saNames: scopedSaNames,
+          branches: scopedBranches,
+          applySaScope: true,
+        }),
       ])
 
       let accidentRows = ((accidentRes.data ?? []) as AccidentReceptionRow[])
@@ -1545,19 +1596,12 @@ export default function BodyshopRepairPage() {
 
       if (accidentRows.length === 0 && !isAdminLikeUser && hasBodyshopSaAccess) {
         // Fallback: rely on server-side RLS for SA visibility when local SA filters are too strict.
-        let accidentRlsQuery = supabase
-          .from('service_reception_entries')
-          .select('id, jc_number, reg_number, owner_name, owner_phone, sa_employee_code, sa_name, sa_display_name, branch, created_at')
-          .eq('service_type', 'Accident')
-          .gte('created_at', dateRange.from + 'T00:00:00+05:30')
-          .lte('created_at', dateRange.to + 'T23:59:59+05:30')
-          .order('created_at', { ascending: false })
-
-        if (scopedBranches.length > 0) {
-          accidentRlsQuery = accidentRlsQuery.in('branch', scopedBranches)
-        }
-
-        const accidentRlsRes = await accidentRlsQuery
+        const accidentRlsRes = await fetchAccidentReceptionRows({
+          fromDate: dateRange.from,
+          toDate: dateRange.to,
+          branches: scopedBranches,
+          applySaScope: false,
+        })
         accidentRows = ((accidentRlsRes.data ?? []) as AccidentReceptionRow[])
           .filter((row) => Boolean(intakeKey(row)))
       }

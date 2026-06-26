@@ -24,6 +24,41 @@ interface AccidentCar {
   bodyshop_floor: string | null
 }
 
+async function fetchAccidentCarsByDateRange(range: DateRange): Promise<{ data: AccidentCar[] | null; error: unknown | null }> {
+  const PAGE_SIZE = 500
+  const rows: AccidentCar[] = []
+  let cursorId: number | null = null
+
+  while (true) {
+    let query = supabase
+      .from('service_reception_entries')
+      .select('id, jc_number, sa_employee_code, dealer_code, reg_number, model, owner_name, owner_phone, sa_name, sa_display_name, branch, created_at')
+      .eq('service_type', 'Accident')
+      .gte('created_at', range.from + 'T00:00:00+05:30')
+      .lte('created_at', range.to + 'T23:59:59+05:30')
+      .order('id', { ascending: false })
+      .limit(PAGE_SIZE)
+
+    if (cursorId !== null) {
+      query = query.lt('id', cursorId)
+    }
+
+    const { data, error } = await query
+    if (error) return { data: null, error }
+
+    const batch = (data ?? []) as AccidentCar[]
+    rows.push(...batch)
+
+    if (batch.length < PAGE_SIZE) break
+
+    const lastId = Number(batch[batch.length - 1]?.id)
+    if (!Number.isFinite(lastId) || lastId <= 0) break
+    cursorId = lastId
+  }
+
+  return { data: rows, error: null }
+}
+
 type AdditionalApprovalDecisionStatus = 'pending' | 'approved' | 'rejected'
 type AdditionalApprovalAggregateStatus = AdditionalApprovalDecisionStatus | 'none' | 'mixed'
 
@@ -748,13 +783,7 @@ export default function BodyshopFloorPage() {
         setCars([])
       } else {
         // 2. Accident reception entries (restricted to sent vehicles only)
-        const { data: recData, error: recErr } = await supabase
-        .from('service_reception_entries')
-        .select('id, jc_number, sa_employee_code, dealer_code, reg_number, model, owner_name, owner_phone, sa_name, sa_display_name, branch, created_at')
-        .eq('service_type', 'Accident')
-        .gte('created_at', dateRange.from + 'T00:00:00+05:30')
-        .lte('created_at', dateRange.to + 'T23:59:59+05:30')
-        .order('created_at', { ascending: false })
+        const { data: recData, error: recErr } = await fetchAccidentCarsByDateRange(dateRange)
         if (recErr) throw recErr
 
         const carList = ((recData ?? []) as AccidentCar[])
