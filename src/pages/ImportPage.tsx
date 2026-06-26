@@ -998,6 +998,7 @@ export default function ImportPage() {
   const psfPollIntervalRef = useRef<number | null>(null)
   const psfWorkerTickInFlightRef = useRef(false)
   const activePsfRunIdsRef = useRef<Set<number>>(new Set())
+  const [totalRowsInDb, setTotalRowsInDb] = useState(0)
   const [cards, setCards] = useState<Record<string, CardState>>(() =>
     Object.fromEntries(CARDS.map((c) => [c.tableName, emptyCard(c.branches ?? PORTAL_BRANCHES)])),
   )
@@ -1017,7 +1018,16 @@ export default function ImportPage() {
   )
 
   const totalCards = revenueReportCards.length + partsReportCards.length + warrantyReportCards.length + standaloneCards.length
-  const totalRowsInDb = Object.values(cards).reduce((sum, card) => sum + card.insertedCount, 0)
+
+  const refreshPsfRowCount = useCallback(async () => {
+    const { count } = await supabase
+      .from('job_card_closed_data')
+      .select('id', { head: true, count: 'exact' })
+
+    if (typeof count === 'number') {
+      setTotalRowsInDb(count)
+    }
+  }, [])
 
   const toggleGroup = useCallback((groupKey: string) => {
     setExpandedGroups((prev) => ({
@@ -1109,9 +1119,11 @@ export default function ImportPage() {
       },
     }))
 
+    void refreshPsfRowCount()
+
     activePsfRunIdsRef.current.clear()
     stopPsfPolling()
-  }, [stopPsfPolling, updateCard])
+  }, [refreshPsfRowCount, stopPsfPolling, updateCard])
 
   const startPsfPolling = useCallback(() => {
     if (psfPollIntervalRef.current != null) return
@@ -1123,6 +1135,10 @@ export default function ImportPage() {
   useEffect(() => {
     return () => stopPsfPolling()
   }, [stopPsfPolling])
+
+  useEffect(() => {
+    void refreshPsfRowCount()
+  }, [refreshPsfRowCount])
 
   const handleSlotFile = useCallback(
     (tableName: string, branch: Branch, file: File) => {
@@ -2598,6 +2614,10 @@ export default function ImportPage() {
             currentStep: null,
           },
         }))
+
+        if (tableName === 'job_card_closed_data') {
+          void refreshPsfRowCount()
+        }
       } catch (err) {
         const message = (err as Error).message
         const isSchemaCacheIssue =
@@ -2620,7 +2640,7 @@ export default function ImportPage() {
         }))
       }
     },
-    [cards, updateCard],
+    [cards, refreshPsfRowCount, updateCard],
   )
 
   const handleReset = useCallback((tableName: string) => {

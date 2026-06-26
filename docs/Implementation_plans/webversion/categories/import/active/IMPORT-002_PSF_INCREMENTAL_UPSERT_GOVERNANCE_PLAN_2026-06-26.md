@@ -846,7 +846,11 @@ Slice P: Async queue architecture - instant frontend acceptance + background pro
    - edge function `psf-import-worker` deployed to project `jmdndcphkmaljhwgzqxq`.
    - live function invoke returned `{"success":true,"rpc":"process_next_psf_import_run","data":null}` when queue was empty.
    - live end-to-end test run created (`id = 8`) via `enqueue_psf_import_run` and processed via deployed worker to `status = completed` with `error_message = null`.
-7. Status: Implemented (deploy smoke passed; large-file async UX validation pending).
+7. Large-file production evidence:
+   - real file processed through async queue as chunked runs (`JC Revenue Report for PSF (25).csv`, chunk labels up to `28/28`).
+   - sampled latest run window (`id = 26` to `id = 45`) shows `status = completed` and `error_message = null` for all returned rows.
+   - retention check after latest completion returned `latest_completed_run_id = 45`, `retained_staging_rows = 0`.
+8. Status: Completed.
 
 Slice Q: Slice P hotfix - resolve ambiguous `status` predicate in queue worker function
 1. Incident observed during Slice P queue smoke processing: run moved to `failed` with `column reference "status" is ambiguous`.
@@ -882,7 +886,10 @@ Slice S: Async enqueue timeout mitigation + partial-queue continuity
    - backend drain completed previously queued runs `id = 20` and `id = 21` to `status = completed` with `error_message = null`.
 5. Verification:
    - local `npm run build` passed after fix.
-6. Status: Implemented (frontend deploy pending for production UX parity).
+6. Production validation evidence:
+   - large-file re-import no longer stalled on partial queue window; chunk runs progressed and completed through latest reported window.
+   - latest reported chunks show mixed expected outcomes (insert/update/skip) with zero rejects and no run errors.
+7. Status: Completed.
 
 ### 14.2 Current Gate Snapshot
 
@@ -922,8 +929,8 @@ Gate A SQL Evidence Artifact (2026-06-26):
 4. Slice M closure gate: Completed (hotfix migration executed; smoke test now `completed` with zero counts).
 5. Slice N closure gate: Completed (retention check shows `retained_staging_rows = 0` for latest completed run).
 6. Slice L production closure: Completed (real run id 4 recorded with retention = 0 and no errors).
-7. Slice O closure gate: execute one controlled production retry of the previously timing-out large file and capture per-chunk run metrics from `psf_import_runs`.
-8. Slice P closure gate: apply queue migration + deploy worker function + run one large-file upload proving immediate frontend acceptance and background completion.
+7. Slice O closure gate: Completed (previously timing-out large-file path now completes via queued chunk runs).
+8. Slice P closure gate: Completed (large-file async upload validated in production with retention = 0).
 9. Slice Q closure gate: Completed (smoke run `id = 7` processed to `completed`).
 10. Gate A verification rerun after each additional PSF-related edit.
 11. Execute SQL-1 and SQL-2 evidence queries when query/filter semantics are materially changed again.
