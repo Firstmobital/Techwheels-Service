@@ -31,7 +31,6 @@ import {
 } from '../lib/jcClosedColumnMapper'
 import {
   buildEmployeeLookupIndex,
-  normalizeEmployeeBranch,
   resolveEmployeeForSr,
   type EmployeeLookupIndex,
   type EmployeeRecord,
@@ -1851,6 +1850,10 @@ export default function ImportPage() {
             // Use direct insert for VAS table after branch clear (keeps all uploaded rows).
             totalInserted += await insertRowsInChunks(insertRows)
           } else if (isJcClosedTable && jcHeaderMapping) {
+            if (!employeeLookup) {
+              throw new Error('Employee lookup is required for PSF Revenue Report import')
+            }
+
             const jcParseErrors: JcClosedParseError[] = []
             const insertRows: Record<string, unknown>[] = []
             let processingRowsBatch = 0
