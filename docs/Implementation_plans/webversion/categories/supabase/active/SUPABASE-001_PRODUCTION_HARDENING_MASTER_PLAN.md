@@ -137,8 +137,8 @@ Retention rule:
 | 2026-06-04 | 55% | 2% | 28% | 9/60 | 3 (from screenshot section counters) | 1+ | 194 | 10 | Baseline from dashboard screenshot |
 | 2026-06-25 | 64% | 15% | 36% | 25/60 | - | - | - | - | New Disk IO budget warning visible in Observability; Query Performance shows 935 slow queries with `service_reception_entries` exact-count/list family as primary load driver |
 | 2026-06-26 (manual dashboard checkpoint, 10:54 IST) | 65% | 15% | 34% | 24/60 | - | - | - | - | Observability Overview + Query Performance screenshot evidence: slow queries reported as 932/933 (panel variance), Disk IO 45%, API Gateway errors 14%, Database errors 5.3%, PostgREST requests 2,892 |
-| 2026-06-26 (automated audit cycle) | - | - | - | - | - | - | - | - | Top query 6416750758406621842 calls=38417 total_ms=82898400.68 mean_ms=2157.86; comparison=regressed; delta_total_ms_sum=159997.82 |
 | 2026-06-26 (automated audit cycle) | - | - | - | - | - | - | - | - | Top query 6416750758406621842 calls=38417 total_ms=82898400.68 mean_ms=2157.86; comparison=regressed; delta_total_ms_sum=35403.65 |
+| 2026-06-26 (automated audit cycle) | - | - | - | - | - | - | - | - | Top query 6416750758406621842 calls=38417 total_ms=82898400.68 mean_ms=2157.86; comparison=regressed; delta_total_ms_sum=237967 |
 
 ## 6) Change Log (What Was Updated in This Plan)
 
@@ -155,8 +155,8 @@ Retention rule:
 | 2026-06-26 | Copilot | Added code-path hotspot audit evidence for Batch A/B (`exact-count` + `.range` + fan-out targets) and updated P1-05/P1-06/P1-08/P1-09 next actions for immediate implementation sequence. |
 | 2026-06-26 | Copilot | Batch A implementation applied in shared report query modules: added bounded fetch guard (`MAX_REPORT_FETCH_ROWS=5000`) in web/mobile `reportQueries` core loops; validated via `npm run build`, `npm --prefix ./mobile run -s typecheck`, then recaptured snapshot 14.29. |
 | 2026-06-26 | Copilot | Added manual dashboard checkpoint evidence from Observability screenshots (10:54 IST): Runtime and slow-query counters refreshed in baseline, Section 5 manual metrics row appended, and P1-10/P1-11 evidence synchronized. |
-| 2026-06-26 | Copilot | Automated Supabase audit cycle appended run summary (2026-06-26 10:44:44 IST) and refreshed plan evidence block from generated audit artifacts. |
 | 2026-06-26 | Copilot | Automated Supabase audit cycle appended run summary (2026-06-26 10:48:08 IST) and refreshed plan evidence block from generated audit artifacts. |
+| 2026-06-26 | Copilot | Automated Supabase audit cycle appended run summary (2026-06-26 11:33:50 IST) and refreshed plan evidence block from generated audit artifacts. |
 
 ## 7) Update Protocol For Future Chats
 
@@ -248,40 +248,6 @@ Retention policy:
 - Keep comparison status and compact top-10 table in each retained snapshot.
 - Archive detailed historical logs under `supabase/evidence/audit_runs/`.
 
-### 14.28 Capture Snapshot: 2026-06-26 (Automated Audit Cycle)
-
-What was captured:
-- Timestamp (IST): 2026-06-26 10:44:44 IST
-- Capture mode: automated_supabase_audit_cycle
-- Top queryid: 6416750758406621842 (calls=38417, total_ms=82898400.68, mean_ms=2157.86)
-- Platform logs capture status: auth=ok, edge_functions=ok, realtime=ok, storage=ok, database_health=ok
-- Comparison vs previous run (2026-06-26__04-51-30-388Z): status=regressed, delta_total_ms_sum=159997.82, delta_calls_sum=889
-- Top regressions by delta_total_ms: -5344960703026327435 (68267.76); 3787216458397661678 (17038.27); -225245605736690330 (11505.89)
-
-Compact Top 10 (run-local):
-| rank | queryid | calls | total_ms | mean_ms |
-|---:|---|---:|---:|---:|
-| 1 | 6416750758406621842 | 38417 | 82898400.68 | 2157.86 |
-| 2 | -5344960703026327435 | 6691 | 14146203.89 | 2114.21 |
-| 3 | -6712128630152386476 | 5106 | 9985405.38 | 1955.62 |
-| 4 | -225245605736690330 | 3216 | 4192966.80 | 1303.78 |
-| 5 | -5044213774447814878 | 3056 | 3907298.51 | 1278.57 |
-| 6 | -2876120296317350531 | 612039 | 3832695.82 | 6.26 |
-| 7 | 3220864789079889211 | 4142 | 3039307.33 | 733.78 |
-| 8 | -2647655532108368607 | 4360 | 2909283.55 | 667.27 |
-| 9 | -922008049376959953 | 2257 | 2638989.76 | 1169.25 |
-| 10 | 852176900607336119 | 2259 | 2638492.51 | 1167.99 |
-
-Interpretation:
-- This snapshot is append-only and intended to keep log evidence current for the hardening cycle.
-- Prioritize fixes by highest delta_total_ms and call movement from run-to-run comparison.
-
-Self-heal plan:
-- Continue monitoring and prioritize top delta_total_ms queryids in next patch batch.
-
-Next action:
-- Re-run the cycle after the next production traffic window and validate that comparison status moves toward improved.
-
 ### 14.29 Capture Snapshot: 2026-06-26 (Automated Audit Cycle)
 
 What was captured:
@@ -305,6 +271,41 @@ Compact Top 10 (run-local):
 | 8 | -2647655532108368607 | 4360 | 2909283.55 | 667.27 |
 | 9 | 852176900607336119 | 2262 | 2640958.26 | 1167.53 |
 | 10 | -922008049376959953 | 2258 | 2639240.52 | 1168.84 |
+
+Interpretation:
+- This snapshot is append-only and intended to keep log evidence current for the hardening cycle.
+- Prioritize fixes by highest delta_total_ms and call movement from run-to-run comparison.
+
+Self-heal plan:
+- Count CTE patterns increased; prioritize removing default exact-count usage on reception/list endpoints.
+- OFFSET-heavy queries increased; prioritize keyset pagination on list endpoints still using range/offset.
+
+Next action:
+- Re-run the cycle after the next production traffic window and validate that comparison status moves toward improved.
+
+### 14.30 Capture Snapshot: 2026-06-26 (Automated Audit Cycle)
+
+What was captured:
+- Timestamp (IST): 2026-06-26 11:33:50 IST
+- Capture mode: automated_supabase_audit_cycle
+- Top queryid: 6416750758406621842 (calls=38417, total_ms=82898400.68, mean_ms=2157.86)
+- Platform logs capture status: auth=ok, edge_functions=ok, realtime=ok, storage=ok, database_health=ok
+- Comparison vs previous run (2026-06-26__05-21-05-658Z): status=regressed, delta_total_ms_sum=237967, delta_calls_sum=1629
+- Top regressions by delta_total_ms: -5344960703026327435 (65022.03); 3787216458397661678 (29160.41); 2744925251257801673 (24362.71)
+
+Compact Top 10 (run-local):
+| rank | queryid | calls | total_ms | mean_ms |
+|---:|---|---:|---:|---:|
+| 1 | 6416750758406621842 | 38417 | 82898400.68 | 2157.86 |
+| 2 | -5344960703026327435 | 6723 | 14235738.71 | 2117.47 |
+| 3 | -6712128630152386476 | 5106 | 9985405.38 | 1955.62 |
+| 4 | -225245605736690330 | 3235 | 4222601.22 | 1305.29 |
+| 5 | -5044213774447814878 | 3056 | 3907298.51 | 1278.57 |
+| 6 | -2876120296317350531 | 612039 | 3832695.82 | 6.26 |
+| 7 | 3220864789079889211 | 4191 | 3063395.29 | 730.95 |
+| 8 | -2647655532108368607 | 4376 | 2921432.41 | 667.60 |
+| 9 | 852176900607336119 | 2283 | 2658642.59 | 1164.54 |
+| 10 | -922008049376959953 | 2262 | 2640077.59 | 1167.14 |
 
 Interpretation:
 - This snapshot is append-only and intended to keep log evidence current for the hardening cycle.

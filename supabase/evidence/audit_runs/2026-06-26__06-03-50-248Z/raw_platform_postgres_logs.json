@@ -1,0 +1,39 @@
+{
+  "status": "ok",
+  "endpoint": "/v1/projects/jmdndcphkmaljhwgzqxq/analytics/endpoints/logs.all?sql=select%20timestamp%2C%20event_message%20from%20postgres_logs%20order%20by%20timestamp%20desc%20limit%20100",
+  "count": 8,
+  "records": [
+    {
+      "event_message": "duplicate key value violates unique constraint \"all_service_data_new_chassis_number_unique\"",
+      "timestamp": 1782453813100000
+    },
+    {
+      "event_message": "checkpoint complete: wrote 932 buffers (3.3%); 0 WAL file(s) added, 0 removed, 3 recycled; write=94.540 s, sync=0.005 s, total=94.581 s; sync files=74, longest=0.002 s, average=0.001 s; distance=33093 kB, estimate=47342 kB; lsn=2B/2C09AD88, redo lsn=2B/2B072D70",
+      "timestamp": 1782453809174000
+    },
+    {
+      "event_message": "connection received: host=2406:da1a:f3c:4501:21ca:b4fb:6508:4f5e port=54262",
+      "timestamp": 1782453794270000
+    },
+    {
+      "event_message": "connection received: host=2406:da1a:f3c:4501:21ca:b4fb:6508:4f5e port=54276",
+      "timestamp": 1782453794270000
+    },
+    {
+      "event_message": "connection received: host=2406:da1a:f3c:4501:21ca:b4fb:6508:4f5e port=54234",
+      "timestamp": 1782453794270000
+    },
+    {
+      "event_message": "connection received: host=2406:da1a:f3c:4501:21ca:b4fb:6508:4f5e port=54248",
+      "timestamp": 1782453794270000
+    },
+    {
+      "event_message": "connection authenticated: user=\"postgres\" method=trust (/etc/postgresql/pg_hba.conf:85)",
+      "timestamp": 1782453780212000
+    },
+    {
+      "event_message": "cron job 5 starting: SELECT public.process_all_service_history_sync_queue(500);",
+      "timestamp": 1782453780096000
+    }
+  ]
+}
