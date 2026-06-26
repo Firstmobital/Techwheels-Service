@@ -448,6 +448,24 @@ Exit criteria:
 2. If parity breaks, revert read-path switch first, then constraint switch, then column drops.
 3. Never perform destructive column drops and key switch in the same deployment step.
 
+### 12.8 Duplicate Business Rule And Transition Key Policy (Execution Lock)
+
+Decision:
+1. During transition, imports must continue to use the current live key (branch, job_card_number, invoice_date) until canonical key cutover is complete.
+2. Before dropping branch, platform must create canonical unique key (location, portal, job_card_number, invoice_date) and switch importer conflict target to it.
+3. Same job_card_number with different invoice_date is treated as version history, not a technical duplicate, under current contract.
+4. Reports that require one-row-per-job-card must use latest-version selection logic (invoice_date DESC, updated_at DESC, id DESC).
+
+Enforcement sequence:
+1. Preflight canonical duplicate check must be zero.
+2. Create canonical unique index.
+3. Switch app onConflict target.
+4. Remove old branch-based unique index.
+5. Drop branch and branch_label only after Gate C passes.
+
+Execution artifact:
+1. scripts/20260626_psf_jc_closed_canonical_key_cutover_runbook.sql
+
 ---
 
 ## 13. Deep Frontend Audit (Web + Mobile) And Step-by-Step Execution Matrix
@@ -542,6 +560,98 @@ Step 6: Column drop (final)
 Gate A (after Step 2):
 1. Web regression suite green for PSF reports and trackers.
 2. No web critical query path reads job_card_closed_data.branch_label.
+
+### 13.5.1 Exact Evidence Query Set For Gate A
+
+Run these in order and attach outputs to evidence bundle.
+
+SQL-1: Canonical dimension completeness (PSF)
+```sql
+select
+   count(*) as total_rows,
+   count(*) filter (where location is null or btrim(location) = '') as missing_location,
+   count(*) filter (where portal is null or btrim(portal) = '') as missing_portal,
+   count(*) filter (where portal is not null and upper(btrim(portal)) not in ('PV','EV')) as invalid_portal
+from public.job_card_closed_data;
+```
+
+SQL-2: Compatibility mirror integrity (branch and branch_label must mirror location)
+```sql
+select
+   count(*) filter (
+      where coalesce(btrim(branch), '') <> coalesce(btrim(location), '')
+   ) as branch_location_mismatch,
+   count(*) filter (
+      where coalesce(btrim(branch_label), '') <> coalesce(btrim(location), '')
+   ) as branch_label_location_mismatch
+from public.job_card_closed_data;
+```
+
+SQL-3: Canonical duplicate risk check before unique-key cutover
+```sql
+select
+   location,
+   portal,
+   upper(btrim(job_card_number)) as job_card_number_norm,
+   invoice_date,
+   count(*) as row_count
+from public.job_card_closed_data
+where btrim(coalesce(job_card_number, '')) <> ''
+   and invoice_date is not null
+group by
+   location,
+   portal,
+   upper(btrim(job_card_number)),
+   invoice_date
+having count(*) > 1
+order by row_count desc, location, portal, job_card_number_norm, invoice_date;
+```
+
+SQL-4: Existing branch-key duplicate risk check (current live conflict contract)
+```sql
+select
+   branch,
+   upper(btrim(job_card_number)) as job_card_number_norm,
+   invoice_date,
+   count(*) as row_count
+from public.job_card_closed_data
+where btrim(coalesce(job_card_number, '')) <> ''
+   and invoice_date is not null
+group by
+   branch,
+   upper(btrim(job_card_number)),
+   invoice_date
+having count(*) > 1
+order by row_count desc, branch, job_card_number_norm, invoice_date;
+```
+
+Repo-1: No branch_label runtime reads in Gate A web critical paths
+```bash
+rg -n "branch_label" \
+   src/lib/reportQueries.ts \
+   src/pages/SATrackerPage.tsx \
+   src/pages/TechnicianPage.tsx \
+   src/pages/reports/performance/AdvisorPerformanceReport.tsx \
+   src/pages/BodyshopTrackerPage.tsx
+```
+
+Repo-2: No job_card_closed_data.branch runtime reads in Gate A web critical query paths
+```bash
+rg -n "job_card_closed_data|\.branch\b" \
+   src/lib/reportQueries.ts \
+   src/pages/SATrackerPage.tsx \
+   src/pages/TechnicianPage.tsx \
+   src/pages/reports/performance/AdvisorPerformanceReport.tsx \
+   src/pages/BodyshopTrackerPage.tsx
+```
+
+Pass criteria:
+1. SQL-1: missing_location = 0, missing_portal = 0, invalid_portal = 0.
+2. SQL-2: branch_location_mismatch = 0 and branch_label_location_mismatch = 0.
+3. SQL-3: no rows returned (or approved remediation file attached).
+4. SQL-4: no rows returned.
+5. Repo-1: zero matches.
+6. Repo-2: zero branch runtime-read matches for job_card_closed_data paths after Step 2 migration.
 
 Gate B (after Step 3):
 1. Mobile report flows parity-verified for PSF-derived widgets.

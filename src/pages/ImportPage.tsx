@@ -1431,18 +1431,15 @@ export default function ImportPage() {
               : null
           const jcClosedHasLocationPortalKey =
             jcClosedColumnSet.has('location') && jcClosedColumnSet.has('portal')
+          const hasCanonicalConflictKey = Boolean(jcInvoiceConflictColumn && jcClosedHasLocationPortalKey)
 
-          const conflictCandidates = jcInvoiceConflictColumn
-            ? [
-                `branch,job_card_number,${jcInvoiceConflictColumn}`,
-                `job_card_number,branch,${jcInvoiceConflictColumn}`,
-                ...(jcClosedHasLocationPortalKey
-                  ? [
-                      `location,portal,job_card_number,${jcInvoiceConflictColumn}`,
-                      `portal,location,job_card_number,${jcInvoiceConflictColumn}`,
-                    ]
-                  : []),
-              ]
+          const conflictCandidates = hasCanonicalConflictKey
+            ? [`location,portal,job_card_number,${jcInvoiceConflictColumn}`]
+            : jcInvoiceConflictColumn
+              ? [
+                  `branch,job_card_number,${jcInvoiceConflictColumn}`,
+                  `job_card_number,branch,${jcInvoiceConflictColumn}`,
+                ]
             : jcClosedHasLocationPortalKey
               ? [
                   'location,portal,job_card_number',
@@ -1452,7 +1449,9 @@ export default function ImportPage() {
                 ]
               : ['branch,job_card_number', 'job_card_number,branch']
           type JcClosedUpsertRow = Record<string, unknown> & {
-            branch: string
+            branch?: string
+            location?: string
+            portal?: string
             job_card_number: string
           }
           const normalizedRows = rows
@@ -1466,12 +1465,14 @@ export default function ImportPage() {
                   ? ''
                   : String(row[jcInvoiceConflictColumn] ?? '').trim().slice(0, 10)
 
-              if (!branchKey || !jobCardKey) return null
+              if (!jobCardKey) return null
               if (jcInvoiceConflictColumn && !invoiceDateKey) return null
+              if (hasCanonicalConflictKey && (!locationKey || !portalKey)) return null
+              if (!hasCanonicalConflictKey && !branchKey) return null
 
               return {
                 ...row,
-                branch: branchKey,
+                ...(branchKey ? { branch: branchKey } : {}),
                 job_card_number: jobCardKey,
                 ...(jcInvoiceConflictColumn
                   ? {
@@ -1531,13 +1532,37 @@ export default function ImportPage() {
             }
 
             // Second try: fallback to minimum business key (branch + job_card_number)
-            // This handles cases where invoice_date is missing or constraint order doesn't match
-            if (payload.branch && payload.job_card_number) {
+            // Keep fallback aligned to the active conflict contract to avoid broad updates.
+            if (
+              hasCanonicalConflictKey &&
+              payload.location &&
+              payload.portal &&
+              payload.job_card_number &&
+              jcInvoiceConflictColumn &&
+              payload[jcInvoiceConflictColumn]
+            ) {
+              const { error } = await supabase
+                .from(tableName)
+                .update(payload)
+                .eq('location', payload.location)
+                .eq('portal', payload.portal)
+                .eq('job_card_number', payload.job_card_number)
+                .eq(jcInvoiceConflictColumn, payload[jcInvoiceConflictColumn] as never)
+                .select('id')
+
+              if (!error) {
+                return true
+              }
+            }
+
+            // Legacy fallback (used only when canonical key is not active).
+            if (!hasCanonicalConflictKey && payload.branch && payload.job_card_number) {
               const { error } = await supabase
                 .from(tableName)
                 .update(payload)
                 .eq('branch', payload.branch)
                 .eq('job_card_number', payload.job_card_number)
+                .eq(jcInvoiceConflictColumn ?? 'job_card_number', (jcInvoiceConflictColumn ? payload[jcInvoiceConflictColumn] : payload.job_card_number) as never)
                 .select('id')
 
               if (!error) {
@@ -1891,79 +1916,91 @@ export default function ImportPage() {
                   }
                 }
 
-                if (employeeLookup) {
-                  let matchedEmployeeLocation: 'Ajmer Road' | 'Sitapura' | null = null
-                  let matchedEmployeePortal: Portal | null = null
-                  const sheetEmployeeCodeRaw = row.employee_code
-                  const sheetEmployeeCode =
-                    sheetEmployeeCodeRaw == null ? '' : String(sheetEmployeeCodeRaw).trim()
+                let matchedEmployeeLocation: 'Ajmer Road' | 'Sitapura' | null = null
+                let matchedEmployeePortal: Portal | null = null
+                let fallbackByCode: LocationPortal | null = null
+                const sheetEmployeeCodeRaw = row.employee_code
+                const sheetEmployeeCode =
+                  sheetEmployeeCodeRaw == null ? '' : String(sheetEmployeeCodeRaw).trim()
 
-                  if (sheetEmployeeCode) {
-                    const byCodeMatch = employeeLookup.byCode.get(sheetEmployeeCode.toUpperCase())
-                    // Never insert an unknown employee_code because FK requires it to exist in employee_master.
-                    row.employee_code = byCodeMatch ? byCodeMatch.employee_code : null
-                    // If SA code is valid, prefer employee location-derived branch.
-                    row.branch = byCodeMatch ? normalizeEmployeeBranch(byCodeMatch.location) ?? standardBranch : standardBranch
-                    matchedEmployeeLocation = normalizeLocationValue(byCodeMatch?.location)
-                    matchedEmployeePortal = normalizePortalFromFuelType(byCodeMatch?.fuel_type)
+                if (sheetEmployeeCode) {
+                  const byCodeMatch = employeeLookup.byCode.get(sheetEmployeeCode.toUpperCase())
+                  // Never insert an unknown employee_code because FK requires it to exist in employee_master.
+                  row.employee_code = byCodeMatch ? byCodeMatch.employee_code : null
+                  matchedEmployeeLocation = normalizeLocationValue(byCodeMatch?.location)
+                  matchedEmployeePortal = normalizePortalFromFuelType(byCodeMatch?.fuel_type)
+                  fallbackByCode = resolveDealerCodeLocationAndPortal(sheetEmployeeCode)
 
-                    if (!byCodeMatch) {
-                      mappingIssues.push({
-                        source_table: 'job_card_closed_data',
-                        branch: standardBranch,
-                        row_number: rowIdx + 2,
-                        job_card_number:
-                          row.job_card_number == null ? null : String(row.job_card_number),
-                        sr_assigned_to: row.sr_assigned_to == null ? null : String(row.sr_assigned_to),
-                        reason: 'no_employee_match',
-                      })
-                    }
-                  } else {
-                    const srAssignedTo = row.sr_assigned_to
-                    const matched = resolveEmployeeForSr(srAssignedTo, employeeLookup)
-                    row.employee_code = matched.employeeCode
-                    // Prefer employee branch derived from employee_master.location, fallback to selected slot branch.
-                    row.branch = matched.employeeBranch ?? standardBranch
-
-                    const matchedByCode =
-                      matched.employeeCode == null
-                        ? null
-                        : employeeLookup.byCode.get(matched.employeeCode.trim().toUpperCase())
-                    matchedEmployeeLocation = normalizeLocationValue(matchedByCode?.location)
-                    matchedEmployeePortal = normalizePortalFromFuelType(matchedByCode?.fuel_type)
-
-                    if (matched.reason === 'no_employee_match') {
-                      mappingIssues.push({
-                        source_table: 'job_card_closed_data',
-                        branch: standardBranch,
-                        row_number: rowIdx + 2,
-                        job_card_number:
-                          row.job_card_number == null ? null : String(row.job_card_number),
-                        sr_assigned_to: srAssignedTo == null ? null : String(srAssignedTo),
-                        reason: matched.reason,
-                      })
-                    }
+                  if (!byCodeMatch) {
+                    mappingIssues.push({
+                      source_table: 'job_card_closed_data',
+                      branch: standardBranch,
+                      row_number: rowIdx + 2,
+                      job_card_number:
+                        row.job_card_number == null ? null : String(row.job_card_number),
+                      sr_assigned_to: row.sr_assigned_to == null ? null : String(row.sr_assigned_to),
+                      reason: 'no_employee_match',
+                    })
                   }
+                } else {
+                  const srAssignedTo = row.sr_assigned_to
+                  const matched = resolveEmployeeForSr(srAssignedTo, employeeLookup)
+                  row.employee_code = matched.employeeCode
 
-                  const slotLocationPortal = resolveLocationAndPortalFromSlotBranch(standardBranch)
-                  const fallbackByCode = resolveDealerCodeLocationAndPortal(row.employee_code)
-                  const resolvedLocation =
-                    matchedEmployeeLocation ?? fallbackByCode?.location ?? slotLocationPortal.location
-                  const resolvedPortal =
-                    matchedEmployeePortal ?? fallbackByCode?.portal ?? slotLocationPortal.portal
+                  const matchedByCode =
+                    matched.employeeCode == null
+                      ? null
+                      : employeeLookup.byCode.get(matched.employeeCode.trim().toUpperCase())
+                  matchedEmployeeLocation = normalizeLocationValue(matchedByCode?.location)
+                  matchedEmployeePortal = normalizePortalFromFuelType(matchedByCode?.fuel_type)
+                  fallbackByCode = resolveDealerCodeLocationAndPortal(matched.employeeCode)
 
-                  if (jcClosedColumnSet.has('location')) {
-                    row.location = resolvedLocation
-                  }
-                  if (jcClosedColumnSet.has('portal')) {
-                    row.portal = resolvedPortal
-                  }
-                  if (jcClosedColumnSet.has('branch_label')) {
-                    row.branch_label = resolvedLocation
+                  if (matched.reason === 'no_employee_match') {
+                    mappingIssues.push({
+                      source_table: 'job_card_closed_data',
+                      branch: standardBranch,
+                      row_number: rowIdx + 2,
+                      job_card_number:
+                        row.job_card_number == null ? null : String(row.job_card_number),
+                      sr_assigned_to: srAssignedTo == null ? null : String(srAssignedTo),
+                      reason: matched.reason,
+                    })
                   }
                 }
-                // Ensure branch is always set (fallback to selected branch if not set)
-                if (!row.branch) row.branch = standardBranch
+
+                const resolvedLocation = matchedEmployeeLocation ?? fallbackByCode?.location ?? null
+                const resolvedPortal = matchedEmployeePortal ?? fallbackByCode?.portal ?? null
+
+                if (!resolvedLocation || !resolvedPortal) {
+                  const missingDimensions = [
+                    !resolvedLocation ? 'location' : null,
+                    !resolvedPortal ? 'portal' : null,
+                  ]
+                    .filter(Boolean)
+                    .join(', ')
+
+                  jcParseErrors.push({
+                    rowNumber: rowIdx + 2,
+                    fieldName: 'employee_code',
+                    columnName: 'employee_code',
+                    value: sheetEmployeeCode || (row.sr_assigned_to == null ? '' : String(row.sr_assigned_to)),
+                    error: `Unable to resolve canonical ${missingDimensions} from employee master or fallback SA-code mapping`,
+                  })
+                  continue
+                }
+
+                if (jcClosedColumnSet.has('location')) {
+                  row.location = resolvedLocation
+                }
+                if (jcClosedColumnSet.has('portal')) {
+                  row.portal = resolvedPortal
+                }
+
+                // Step-1 compatibility mirrors: keep legacy columns aligned to canonical location.
+                row.branch = resolvedLocation
+                if (jcClosedColumnSet.has('branch_label')) {
+                  row.branch_label = resolvedLocation
+                }
 
                 const normalizedJobCardNumber =
                   row.job_card_number == null ? '' : String(row.job_card_number).trim().toUpperCase()
