@@ -870,6 +870,20 @@ Slice R: Fire-and-forget UX hardening - suppress late background error flip in P
    - local `npm run build` passed after change.
 4. Status: Implemented.
 
+Slice S: Async enqueue timeout mitigation + partial-queue continuity
+1. Incident observed on large file (`JC Revenue Report for PSF (25).csv`): enqueue path timed out before all chunks were queued, leaving partially queued runs and UI showing timeout.
+2. Root cause:
+   - enqueue chunk size (1000 rows) was still too heavy for some statement-timeout windows.
+   - if enqueue failed mid-file, frontend did not reach full queued-complete branch for that attempt.
+3. Fixes applied:
+   - introduced smaller enqueue chunk size (`PSF_ASYNC_ENQUEUE_CHUNK_SIZE = 250`).
+   - enqueue branch now tolerates partial enqueue success and continues background processing for queued chunks.
+4. Recovery evidence:
+   - backend drain completed previously queued runs `id = 20` and `id = 21` to `status = completed` with `error_message = null`.
+5. Verification:
+   - local `npm run build` passed after fix.
+6. Status: Implemented (frontend deploy pending for production UX parity).
+
 ### 14.2 Current Gate Snapshot
 
 Gate A Repo-1 (branch_label in critical web files):

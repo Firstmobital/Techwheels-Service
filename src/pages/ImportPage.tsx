@@ -232,6 +232,7 @@ const PSF_REVENUE_REPLACE_ALL_ON_IMPORT = false
 const PSF_SERVER_STAGING_RPC_ENABLED = true
 const PSF_SERVER_STAGING_RPC_CHUNK_SIZE = 1000
 const PSF_ASYNC_ENQUEUE_ENABLED = true
+const PSF_ASYNC_ENQUEUE_CHUNK_SIZE = 250
 const PARTS_REPLACE_ALL_ON_IMPORT = true
 
 const DEALER_CODE_LOCATION_PORTAL_RULES = [
@@ -2050,12 +2051,13 @@ export default function ImportPage() {
               totalInserted += await insertRowsInChunks(dedupedJcRows)
             } else if (PSF_ASYNC_ENQUEUE_ENABLED) {
               let chunkStart = 0
+              let enqueueFailureMessage: string | null = null
               while (chunkStart < dedupedJcRows.length) {
-                const chunkEnd = Math.min(chunkStart + PSF_SERVER_STAGING_RPC_CHUNK_SIZE, dedupedJcRows.length)
+                const chunkEnd = Math.min(chunkStart + PSF_ASYNC_ENQUEUE_CHUNK_SIZE, dedupedJcRows.length)
                 const chunkRows = dedupedJcRows.slice(chunkStart, chunkEnd)
                 const chunkLabel =
-                  dedupedJcRows.length > PSF_SERVER_STAGING_RPC_CHUNK_SIZE
-                    ? `${file.name} [chunk ${Math.floor(chunkStart / PSF_SERVER_STAGING_RPC_CHUNK_SIZE) + 1}/${Math.ceil(dedupedJcRows.length / PSF_SERVER_STAGING_RPC_CHUNK_SIZE)}]`
+                  dedupedJcRows.length > PSF_ASYNC_ENQUEUE_CHUNK_SIZE
+                    ? `${file.name} [chunk ${Math.floor(chunkStart / PSF_ASYNC_ENQUEUE_CHUNK_SIZE) + 1}/${Math.ceil(dedupedJcRows.length / PSF_ASYNC_ENQUEUE_CHUNK_SIZE)}]`
                     : file.name
 
                 const { data: enqueueData, error: enqueueError } = await supabase.rpc('enqueue_psf_import_run', {
@@ -2065,7 +2067,8 @@ export default function ImportPage() {
                 })
 
                 if (enqueueError) {
-                  throw new Error(enqueueError.message ?? 'Failed to enqueue PSF async import run')
+                  enqueueFailureMessage = enqueueError.message ?? 'Failed to enqueue PSF async import run'
+                  break
                 }
 
                 const rows = (enqueueData as Array<Record<string, unknown>> | null) ?? []
@@ -2092,6 +2095,15 @@ export default function ImportPage() {
                 incrementProcessedRows(chunkRows.length)
                 chunkStart = chunkEnd
               }
+
+              if (activePsfRunIdsRef.current.size === 0) {
+                throw new Error(enqueueFailureMessage ?? 'Failed to enqueue PSF async import run')
+              }
+
+              if (enqueueFailureMessage) {
+                console.warn(`PSF enqueue partially completed before failure: ${enqueueFailureMessage}`)
+              }
+
               psfQueuedAsync = true
             } else if (PSF_SERVER_STAGING_RPC_ENABLED) {
               let chunkStart = 0
