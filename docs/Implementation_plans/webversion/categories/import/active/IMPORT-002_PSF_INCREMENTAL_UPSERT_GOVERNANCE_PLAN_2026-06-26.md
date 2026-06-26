@@ -785,6 +785,14 @@ Slice L: Structural hardening - move PSF import write-path to server-side stagin
    - `npm run build` passed after Slice L UI wiring and single-slot PSF update.
 7. Status: Implemented (production validation pending).
 
+Slice M: Slice L hotfix - resolve ambiguous output-column reference in RPC
+1. Incident observed during Slice L SQL smoke test: empty-run call returned `failed` with `column reference "import_run_id" is ambiguous`.
+2. Root cause: PL/pgSQL output column `import_run_id` conflicted with unqualified staging-table predicate in function body.
+3. Fixes applied:
+   - updated Slice L base migration function body to qualify predicate as `s.import_run_id = v_run_id` for fresh deployments.
+   - added corrective migration `supabase/migrations/20260626174000_slice_l_fix_rpc_import_run_id_ambiguity.sql` to safely patch already-applied environments.
+4. Status: Implemented (re-run SQL smoke check pending).
+
 ### 14.2 Current Gate Snapshot
 
 Gate A Repo-1 (branch_label in critical web files):
@@ -820,7 +828,8 @@ Gate A SQL Evidence Artifact (2026-06-26):
 1. Documentation hygiene only: keep this tracker updated after any PSF change + verification cycle.
 2. Deferred backlog: unresolved_rule_rows = 92 (manual SA mapping/data enrichment). No DB correction action in current cycle.
 3. Slice I/J/K closure gates: complete controlled production validation and capture evidence deltas.
-4. Slice L production closure: run controlled production validation for server-side staging merge path and capture returned run metrics.
+4. Slice M closure gate: execute hotfix migration and re-run Slice L SQL checks; smoke test must return `completed` with zero counts.
+5. Slice L production closure: run controlled production validation for server-side staging merge path and capture returned run metrics.
 5. Gate A verification rerun after each additional PSF-related edit.
 6. Execute SQL-1 and SQL-2 evidence queries when query/filter semantics are materially changed again.
 
