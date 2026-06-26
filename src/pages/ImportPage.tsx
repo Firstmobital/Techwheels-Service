@@ -1487,9 +1487,55 @@ export default function ImportPage() {
                 .toUpperCase()}|${String(row[jcInvoiceConflictColumn] ?? '')
                 .trim()
                 .slice(0, 10)}`,
-          )
+          ) as JcClosedUpsertRow[]
 
           let processed = 0
+
+          const updateOrInsertByCanonicalKey = async (payload: JcClosedUpsertRow): Promise<void> => {
+            const invoiceDateValue = payload[jcInvoiceConflictColumn]
+
+            const { data: updatedRows, error: updateError } = await supabase
+              .from(tableName)
+              .update(payload)
+              .eq('location', payload.location as never)
+              .eq('portal', payload.portal as never)
+              .eq('job_card_number', payload.job_card_number as never)
+              .eq(jcInvoiceConflictColumn, invoiceDateValue as never)
+              .select('id')
+
+            if (updateError) {
+              throw new Error(updateError.message ?? 'JC Closed canonical update failed')
+            }
+
+            if ((updatedRows?.length ?? 0) > 0) {
+              return
+            }
+
+            const { error: insertError } = await supabase.from(tableName).insert([payload])
+            if (!insertError) {
+              return
+            }
+
+            const lower = (insertError.message ?? '').toLowerCase()
+            const duplicateViolation =
+              insertError.code === '23505' || lower.includes('duplicate key value violates unique constraint')
+
+            if (!duplicateViolation) {
+              throw new Error(insertError.message ?? 'JC Closed canonical insert failed')
+            }
+
+            const { error: retryUpdateError } = await supabase
+              .from(tableName)
+              .update(payload)
+              .eq('location', payload.location as never)
+              .eq('portal', payload.portal as never)
+              .eq('job_card_number', payload.job_card_number as never)
+              .eq(jcInvoiceConflictColumn, invoiceDateValue as never)
+
+            if (retryUpdateError) {
+              throw new Error(retryUpdateError.message ?? 'JC Closed canonical retry update failed')
+            }
+          }
 
           for (let i = 0; i < dedupedByCanonicalKey.length; i += CHUNK) {
             const chunkRows = dedupedByCanonicalKey.slice(i, i + CHUNK)
@@ -1500,7 +1546,21 @@ export default function ImportPage() {
             })
 
             if (error) {
-              throw new Error(error.message ?? 'JC Closed canonical upsert failed')
+              const lower = (error.message ?? '').toLowerCase()
+              const missingConflictConstraint = lower.includes(
+                'no unique or exclusion constraint matching the on conflict specification',
+              )
+
+              if (!missingConflictConstraint) {
+                throw new Error(error.message ?? 'JC Closed canonical upsert failed')
+              }
+
+              for (const row of chunkRows) {
+                await updateOrInsertByCanonicalKey(row)
+              }
+              processed += chunkRows.length
+              incrementProcessedRows(chunkRows.length)
+              continue
             }
 
             processed += chunkRows.length
