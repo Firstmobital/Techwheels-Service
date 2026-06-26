@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Icon } from '../components/Icon'
 import { supabase } from '../lib/supabase'
-import { listFloorInchargeEntries, listReceptionEntries, listServiceAdvisorEntries, type ReceptionEntryRow } from '../lib/api'
 
 type VisibleModule = {
   to: string
@@ -35,6 +34,29 @@ type ModuleMetaRow = {
 
 const UNKNOWN_FUEL_TYPE = 'Unknown'
 const QUERY_PAGE_SIZE = 1000
+const DASHBOARD_RECEPTION_PAGE_SIZE = 500
+const DASHBOARD_LOOKBACK_DAYS = 30
+const FLOOR_INCHARGE_ALLOWED_SERVICE_TYPES = [
+  'Running Repairs',
+  'First Free Service',
+  'Second Free Service',
+  'Third Free Service',
+  'Paid Service',
+  'Updation',
+  'E Breakdown',
+  'Campaign',
+]
+
+type DashboardStatusRow = {
+  id: number
+  created_at: string
+  service_type: string | null
+  jc_number: string | null
+  estimate_storage_path: string | null
+  invoice_done_at: string | null
+  branch: string | null
+  fuel_type: string | null
+}
 
 function normalizeRoute(value: string | null | undefined) {
   const trimmed = String(value ?? '').trim()
@@ -56,7 +78,7 @@ function normalizeWorkStatus(value: string | null | undefined) {
   return normalized || 'work_inprocess'
 }
 
-function getFloorAssignmentKey(row: ReceptionEntryRow) {
+function getFloorAssignmentKey(row: DashboardStatusRow) {
   const jc = String(row.jc_number ?? '').trim()
   return jc || `RECEPTION-${row.id}`
 }
@@ -75,6 +97,73 @@ function formatDateTime(value: string) {
 function toDisplayCount(value: number | null) {
   if (value === null) return '--'
   return value.toLocaleString('en-IN')
+}
+
+function formatIstDate(value: Date) {
+  return value.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
+}
+
+function getDashboardLookbackRange(days: number) {
+  const toDate = new Date()
+  const fromDate = new Date(toDate)
+  fromDate.setDate(toDate.getDate() - (days - 1))
+
+  return {
+    createdAtFrom: `${formatIstDate(fromDate)}T00:00:00+05:30`,
+    createdAtTo: `${formatIstDate(toDate)}T23:59:59+05:30`,
+  }
+}
+
+async function fetchDashboardStatusRows(options: {
+  createdAtFrom: string
+  createdAtTo: string
+  serviceTypes?: string[]
+  requireNonEmptyJcNumber?: boolean
+}): Promise<{ data: DashboardStatusRow[] | null; error: unknown | null }> {
+  const rows: DashboardStatusRow[] = []
+  let cursorCreatedAt: string | null = null
+  let cursorId: number | null = null
+
+  while (true) {
+    let query = supabase
+      .from('service_reception_entries')
+      .select('id, created_at, service_type, jc_number, estimate_storage_path, invoice_done_at, branch, fuel_type')
+      .gte('created_at', options.createdAtFrom)
+      .lte('created_at', options.createdAtTo)
+      .order('created_at', { ascending: false })
+      .order('id', { ascending: false })
+      .limit(DASHBOARD_RECEPTION_PAGE_SIZE)
+
+    if (options.serviceTypes && options.serviceTypes.length > 0) {
+      query = query.in('service_type', options.serviceTypes)
+    }
+
+    if (options.requireNonEmptyJcNumber) {
+      query = query.not('jc_number', 'is', null).neq('jc_number', '')
+    }
+
+    if (cursorCreatedAt && cursorId !== null) {
+      query = query.or(`created_at.lt.${cursorCreatedAt},and(created_at.eq.${cursorCreatedAt},id.lt.${cursorId})`)
+    }
+
+    const { data, error } = await query
+    if (error) return { data: null, error }
+
+    const batch = (data ?? []) as DashboardStatusRow[]
+    rows.push(...batch)
+
+    if (batch.length < DASHBOARD_RECEPTION_PAGE_SIZE) break
+
+    const last = batch[batch.length - 1]
+    const nextCreatedAt = typeof last?.created_at === 'string' ? last.created_at : null
+    const nextId = Number(last?.id)
+    if (!nextCreatedAt || !Number.isFinite(nextId) || nextId <= 0) break
+
+    cursorCreatedAt = nextCreatedAt
+    cursorId = nextId
+  }
+
+  return { data: rows, error: null }
 }
 
 async function fetchCount(tableName: string) {
@@ -99,11 +188,11 @@ export default function DashboardPage({
   const [userFirstName, setUserFirstName] = useState('User')
   const [moduleMetaByRoute, setModuleMetaByRoute] = useState<Record<string, ModuleMetaRow>>({})
   const [totalModulesCount, setTotalModulesCount] = useState<number | null>(null)
-  const [statusRows, setStatusRows] = useState<ReceptionEntryRow[]>([])
+  const [statusRows, setStatusRows] = useState<DashboardStatusRow[]>([])
   const [statusLoading, setStatusLoading] = useState(true)
   const [statusBranchFilter, setStatusBranchFilter] = useState<string | 'all'>('all')
   const [statusFuelTypeFilter, setStatusFuelTypeFilter] = useState<string | 'all'>('all')
-  const [floorStatusRows, setFloorStatusRows] = useState<ReceptionEntryRow[]>([])
+  const [floorStatusRows, setFloorStatusRows] = useState<DashboardStatusRow[]>([])
   const [floorStatusBranchFilter, setFloorStatusBranchFilter] = useState<string | 'all'>('all')
   const [assignmentStatusByJobCard, setAssignmentStatusByJobCard] = useState<Record<string, string>>({})
   const [statusCompletedJobCards, setStatusCompletedJobCards] = useState<Set<string>>(new Set())
@@ -136,7 +225,6 @@ export default function DashboardPage({
       ])
 
       const userId = authResult.data.session?.user?.id ?? null
-      let isAdminUser = false
       if (userId) {
         const { data: profile } = await supabase
           .from('users')
@@ -144,30 +232,40 @@ export default function DashboardPage({
           .eq('id', userId)
           .maybeSingle()
 
-        const role = String((profile as { role?: string | null } | null)?.role ?? '').trim().toLowerCase()
-        isAdminUser = role === 'admin' && (profile as { is_active?: boolean | null } | null)?.is_active === true
+        // Preserve current user resolution side effects used by greeting logic.
+        void profile
       }
 
       const hasFloorInchargeModule = visibleModules.some((module) => module.to === '/floor-incharge')
+      const lookbackRange = getDashboardLookbackRange(DASHBOARD_LOOKBACK_DAYS)
 
-      const statusRowsResult = isAdminUser
-        ? await listReceptionEntries()
-        : await listServiceAdvisorEntries()
+      const statusRowsResult = await fetchDashboardStatusRows(lookbackRange)
       const nextStatusRows = statusRowsResult.error ? [] : (statusRowsResult.data ?? [])
 
       const floorRowsResult = hasFloorInchargeModule
-        ? await listFloorInchargeEntries()
-        : { error: null, data: [] as ReceptionEntryRow[] }
+        ? await fetchDashboardStatusRows({
+            ...lookbackRange,
+            serviceTypes: FLOOR_INCHARGE_ALLOWED_SERVICE_TYPES,
+            requireNonEmptyJcNumber: true,
+          })
+        : { error: null, data: [] as DashboardStatusRow[] }
       const nextFloorStatusRows = floorRowsResult.error ? [] : (floorRowsResult.data ?? [])
 
       const assignmentRows: { job_card_number?: string | null; work_status?: string | null }[] = []
-      let from = 0
+      let assignmentCursorId: number | null = null
 
       while (true) {
-        const assignRes = await supabase
+        let assignQuery = supabase
           .from('technician_assignments')
-          .select('job_card_number, work_status')
-          .range(from, from + QUERY_PAGE_SIZE - 1)
+          .select('id, job_card_number, work_status')
+          .order('id', { ascending: false })
+          .limit(QUERY_PAGE_SIZE)
+
+        if (assignmentCursorId !== null) {
+          assignQuery = assignQuery.lt('id', assignmentCursorId)
+        }
+
+        const assignRes = await assignQuery
 
         if (assignRes.error) {
           throw new Error(assignRes.error.message)
@@ -177,7 +275,10 @@ export default function DashboardPage({
         assignmentRows.push(...batch)
 
         if (batch.length < QUERY_PAGE_SIZE) break
-        from += QUERY_PAGE_SIZE
+
+        const lastId = Number((batch[batch.length - 1] as { id?: number | null }).id)
+        if (!Number.isFinite(lastId) || lastId <= 0) break
+        assignmentCursorId = lastId
       }
 
       const nextCompleted = new Set<string>()

@@ -1,0 +1,15 @@
+{
+  "status": "ok",
+  "endpoint": "/v1/projects/jmdndcphkmaljhwgzqxq/analytics/endpoints/logs.all?sql=select%20timestamp%2C%20event_message%20from%20auth_logs%20order%20by%20timestamp%20desc%20limit%20100",
+  "count": 2,
+  "records": [
+    {
+      "event_message": "{\"action\":\"login\",\"instance_id\":\"00000000-0000-0000-0000-000000000000\",\"level\":\"info\",\"login_method\":\"password\",\"metering\":true,\"msg\":\"Login\",\"provider\":\"email\",\"time\":\"2026-06-26T04:03:54Z\",\"user_id\":\"fc9f36d8-aff1-43f3-92be-abbbc00de7e4\"}",
+      "timestamp": 1782446634000000
+    },
+    {
+      "event_message": "{\"auth_event\":{\"action\":\"login\",\"actor_id\":\"fc9f36d8-aff1-43f3-92be-abbbc00de7e4\",\"actor_name\":\"Pankaj Meena \",\"actor_username\":\"pmindia2054@gmail.com\",\"actor_via_sso\":false,\"log_type\":\"account\",\"traits\":{\"provider\":\"email\"}},\"component\":\"api\",\"duration\":437365415,\"grant_type\":\"password\",\"level\":\"info\",\"method\":\"POST\",\"msg\":\"request completed\",\"path\":\"/token\",\"referer\":\"https://techwheels-service.vercel.app/\",\"remote_addr\":\"49.43.178.64\",\"request_id\":\"019f0219-348d-7443-80a7-b0f691eb9c9f\",\"status\":200,\"time\":\"2026-06-26T04:03:54Z\"}",
+      "timestamp": 1782446634000000
+    }
+  ]
+}
