@@ -21,7 +21,7 @@ type TechnicianAssignmentRow = {
   created_at?: string | null
   updated_at?: string | null
   reg_number?: string | null
-  branch?: string | null
+  location?: string | null
   fuel_type?: string | null
   gross_labour_amount?: number
   technician_income?: number
@@ -74,7 +74,7 @@ type YesterdayRow = {
   technician_code: string
   job_card_number: string
   reg_number: string
-  branch: string
+  location: string
   fuel_type: string
   bay_no: string
   gross_labour_amount: number
@@ -159,7 +159,7 @@ function extractFuelFromBay(bayNo: string | null | undefined): 'PV' | 'EV' | nul
   return null
 }
 
-function getBranchLabel(value: string | null | undefined): string {
+function getLocationLabel(value: string | null | undefined): string {
   const trimmed = String(value ?? '').trim()
   return trimmed || UNKNOWN_LOCATION
 }
@@ -532,7 +532,7 @@ async function fetchYesterdayReportData(pvPct: number, evPct: number): Promise<{
 
   // Fetch reg numbers from reception entries
   const regMap = new Map<string, string>()
-  const branchMap = new Map<string, string>()
+  const locationMap = new Map<string, string>()
   const fuelMap = new Map<string, string>()
   const allJcs = new Set(assignmentRows.map(r => normalizeJobCardNumber(r.job_card_number)).filter(Boolean))
 
@@ -542,7 +542,7 @@ async function fetchYesterdayReportData(pvPct: number, evPct: number): Promise<{
       const key = String(r.jc_number ?? '').trim().toUpperCase()
       if (!allJcs.has(key)) return
       if (r.reg_number && !regMap.has(key)) regMap.set(key, String(r.reg_number).trim())
-      if (r.branch && !branchMap.has(key)) branchMap.set(key, String(r.branch).trim())
+      if (r['branch'] && !locationMap.has(key)) locationMap.set(key, String(r['branch']).trim())
       if (r.fuel_type && !fuelMap.has(key)) fuelMap.set(key, String(r.fuel_type).trim().toUpperCase())
     })
   }
@@ -560,7 +560,7 @@ async function fetchYesterdayReportData(pvPct: number, evPct: number): Promise<{
         technician_code: String(r.technician_code ?? '').trim(),
         job_card_number: jc,
         reg_number: regMap.get(jc) ?? '—',
-        branch: branchMap.get(jc) ?? inferBranchFromAssignment(r) ?? '—',
+        location: locationMap.get(jc) ?? inferBranchFromAssignment(r) ?? '—',
         fuel_type: fuelMap.get(jc) ?? (extractFuelFromBay(r.bay_no) ?? '—'),
         bay_no: String(r.bay_no ?? '').trim(),
         gross_labour_amount: gross,
@@ -829,9 +829,9 @@ export default function TechnicianPage() {
           .filter(Boolean),
       ))
 
-      // Reuse Floor Incharge API enrichment path to keep branch/fuel logic consistent.
+      // Reuse Floor Incharge API enrichment path to keep location/fuel logic consistent.
       let regNumberMap = new Map<string, string>()
-      let branchMap = new Map<string, string>()
+      let locationMap = new Map<string, string>()
       let fuelTypeMap = new Map<string, string>()
       let revenueMap = new Map<string, RevenueRow>()
 
@@ -849,9 +849,9 @@ export default function TechnicianPage() {
               regNumberMap.set(key, regNum)
             }
 
-            const branch = String((row as ReceptionEntryRow).branch ?? '').trim()
-            if (branch && !branchMap.has(key)) {
-              branchMap.set(key, branch)
+            const location = String((row as ReceptionEntryRow)['branch'] ?? '').trim()
+            if (location && !locationMap.has(key)) {
+              locationMap.set(key, location)
             }
 
             const fuelType = String((row as ReceptionEntryRow).fuel_type ?? '').trim().toUpperCase()
@@ -862,7 +862,7 @@ export default function TechnicianPage() {
         }
 
         // Fallback for technician JC rows outside Floor Incharge allowed service types.
-        const unresolvedJcNumbers = assignmentJcNumbers.filter((jc) => !branchMap.has(jc) || !regNumberMap.has(jc) || !fuelTypeMap.has(jc))
+        const unresolvedJcNumbers = assignmentJcNumbers.filter((jc) => !locationMap.has(jc) || !regNumberMap.has(jc) || !fuelTypeMap.has(jc))
         if (unresolvedJcNumbers.length > 0) {
           const unresolvedSet = new Set(unresolvedJcNumbers)
           const receptionEntriesRes = await listReceptionEntries()
@@ -877,9 +877,9 @@ export default function TechnicianPage() {
                 regNumberMap.set(key, regNum)
               }
 
-              const branch = String((row as ReceptionEntryRow).branch ?? '').trim()
-              if (branch && !branchMap.has(key)) {
-                branchMap.set(key, branch)
+              const location = String((row as ReceptionEntryRow)['branch'] ?? '').trim()
+              if (location && !locationMap.has(key)) {
+                locationMap.set(key, location)
               }
 
               const fuelType = String((row as ReceptionEntryRow).fuel_type ?? '').trim().toUpperCase()
@@ -950,7 +950,7 @@ export default function TechnicianPage() {
         return {
           ...row,
           reg_number: regNumberMap.get(jc) ?? null,
-          branch: branchMap.get(jc) ?? inferredBranch,
+          location: locationMap.get(jc) ?? inferredBranch,
           fuel_type: fuelTypeMap.get(jc) ?? null,
           gross_labour_amount: grossByJc.get(jc) ?? 0,
           assignment_split_count: splitCountByJc.get(jc) ?? 1,
@@ -992,7 +992,7 @@ export default function TechnicianPage() {
       // Primary filter: Fetch job_card_closed_data where invoice_date is in the range
       const jccRes = await supabase
         .from('job_card_closed_data')
-        .select('job_card_number, sr_type, branch, invoice_date, closed_date_time, vehicle_registration_number, final_labour_amount, sr_assigned_to, created_date_time')
+        .select('job_card_number, sr_type, location, invoice_date, closed_date_time, vehicle_registration_number, final_labour_amount, sr_assigned_to, created_date_time')
         .gte('invoice_date', fromDate)
         .lte('invoice_date', toDate)
 
@@ -1120,7 +1120,7 @@ export default function TechnicianPage() {
             return [{
               job_card_number: row.job_card_number ?? '',
               service_type: row.sr_type ?? '',
-              branch: row.branch ?? '',
+              location: row.location ?? '',
               out_ts: null,
               invoice_date: row.invoice_date ?? '',
               closed_date_time: row.closed_date_time ?? '',
@@ -1155,7 +1155,7 @@ export default function TechnicianPage() {
             return {
               job_card_number: row.job_card_number ?? '',
               service_type: row.sr_type ?? '',
-              branch: row.branch ?? '',
+              location: row.location ?? '',
               out_ts: outTs,
               invoice_date: row.invoice_date ?? '',
               closed_date_time: row.closed_date_time ?? '',
@@ -1180,13 +1180,13 @@ export default function TechnicianPage() {
 
       // Export to Excel
       const sheetData = [
-        ['Job Card Number', 'Service Type', 'Reception SR Type', 'Reg No', 'Branch', 'DMS Assigned To', 'DMS JC Created', 'SA Name', 'Technician Name', 'Status', 'Out TS', 'Invoice Date', 'Closed Date Time', 'Labour', 'Match Status'],
+        ['Job Card Number', 'Service Type', 'Reception SR Type', 'Reg No', 'Location', 'DMS Assigned To', 'DMS JC Created', 'SA Name', 'Technician Name', 'Status', 'Out TS', 'Invoice Date', 'Closed Date Time', 'Labour', 'Match Status'],
         ...issues.map((r: any) => [
           r.job_card_number,
           r.service_type,
           r.reception_sr_type,
           r.vehicle_registration_number,
-          r.branch,
+          r.location,
           r.dms_assigned_to,
           r.dms_jc_created ? new Date(r.dms_jc_created).toLocaleString('en-IN') : '',
           r.sa_name,
@@ -1211,13 +1211,13 @@ export default function TechnicianPage() {
 
   function downloadExcel(rows: YesterdayRow[], date: string) {
     const sheetData = [
-      ['Technician Name', 'Technician Code', 'Job Card No', 'Reg No', 'Branch', 'Fuel Type', 'Bay No', 'Labour Amount (₹)', 'Amount Paid (₹)'],
+      ['Technician Name', 'Technician Code', 'Job Card No', 'Reg No', 'Location', 'Fuel Type', 'Bay No', 'Labour Amount (₹)', 'Amount Paid (₹)'],
       ...rows.map(r => [
         r.technician_name,
         r.technician_code,
         r.job_card_number,
         r.reg_number,
-        r.branch,
+        r.location,
         r.fuel_type,
         r.bay_no,
         Math.round(r.gross_labour_amount),
@@ -1289,7 +1289,7 @@ export default function TechnicianPage() {
   }, [assignmentsWithIncome, fromDate, toDate])
 
   const branches = useMemo(() => {
-    const values = new Set(dateScopedAssignmentsWithIncome.map((row) => getBranchLabel(row.branch)))
+    const values = new Set(dateScopedAssignmentsWithIncome.map((row) => getLocationLabel(row.location)))
     return Array.from(values).sort((a, b) => {
       if (a === UNKNOWN_LOCATION) return 1
       if (b === UNKNOWN_LOCATION) return -1
@@ -1306,7 +1306,7 @@ export default function TechnicianPage() {
 
   const branchScopedAssignmentsWithIncome = useMemo(() => {
     if (branchFilter === 'all') return dateScopedAssignmentsWithIncome
-    return dateScopedAssignmentsWithIncome.filter((row) => getBranchLabel(row.branch) === branchFilter)
+    return dateScopedAssignmentsWithIncome.filter((row) => getLocationLabel(row.location) === branchFilter)
   }, [dateScopedAssignmentsWithIncome, branchFilter])
 
   const fuelTypeOptions = useMemo(() => {
@@ -1599,7 +1599,7 @@ export default function TechnicianPage() {
           <button key={branch} type="button" onClick={() => setBranchFilter(branch)}
             className={`btn btn--sm ${branchFilter === branch ? 'btn--primary' : 'btn--ghost'}`}
             style={{ padding: '0.2rem 0.6rem', fontSize: '0.75rem' }}>
-            {branch} ({dateScopedAssignmentsWithIncome.filter((row) => getBranchLabel(row.branch) === branch).length})
+            {branch} ({dateScopedAssignmentsWithIncome.filter((row) => getLocationLabel(row.location) === branch).length})
           </button>
         ))}
 
@@ -1838,7 +1838,7 @@ export default function TechnicianPage() {
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.82rem' }}>
                   <thead>
                     <tr style={{ background: '#f8fafc', position: 'sticky', top: 0 }}>
-                      {['Technician', 'Job Card', 'Reg No', 'Branch', 'Fuel', 'Labour Amount', 'Amount Paid'].map(h => (
+                      {['Technician', 'Job Card', 'Reg No', 'Location', 'Fuel', 'Labour Amount', 'Amount Paid'].map(h => (
                         <th key={h} style={{ padding: '0.55rem 0.75rem', textAlign: 'left', fontWeight: 600, color: '#475569', fontSize: '0.76rem', borderBottom: '2px solid #e2e8f0', whiteSpace: 'nowrap' }}>{h}</th>
                       ))}
                     </tr>
@@ -1867,7 +1867,7 @@ export default function TechnicianPage() {
                               <td style={{ padding: '0.5rem 0.75rem 0.5rem 1.5rem', color: '#64748b', fontSize: '0.78rem' }}>{r.technician_name}</td>
                               <td style={{ padding: '0.5rem 0.75rem', fontFamily: 'monospace', fontSize: '0.76rem', color: '#334155' }}>{r.job_card_number}</td>
                               <td style={{ padding: '0.5rem 0.75rem', fontWeight: 600, color: '#1e293b' }}>{r.reg_number}</td>
-                              <td style={{ padding: '0.5rem 0.75rem', color: '#64748b', fontSize: '0.78rem' }}>{r.branch}</td>
+                              <td style={{ padding: '0.5rem 0.75rem', color: '#64748b', fontSize: '0.78rem' }}>{r.location}</td>
                               <td style={{ padding: '0.5rem 0.75rem', color: '#64748b', fontSize: '0.78rem' }}>{r.fuel_type}</td>
                               <td style={{ padding: '0.5rem 0.75rem', color: '#334155' }}>₹{Math.round(r.gross_labour_amount).toLocaleString('en-IN')}</td>
                               <td style={{ padding: '0.5rem 0.75rem', fontWeight: 700, color: '#16a34a' }}>

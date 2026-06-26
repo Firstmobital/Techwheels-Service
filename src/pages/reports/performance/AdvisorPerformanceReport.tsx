@@ -15,7 +15,8 @@ interface EmployeeOption {
 }
 
 interface ReportRow {
-  branch: string | null
+  location: string | null
+  portal: string | null
   job_card_number: string | null
   sr_assigned_to: string | null
   employee_code: string | null
@@ -24,6 +25,47 @@ interface ReportRow {
 }
 
 const QUERY_PAGE_SIZE = 1000
+
+function applyJobCardClosedScopeFilterToQuery<T extends { eq: Function; in: Function }>(query: T, branch: BranchFilter): T {
+  const normalized = String(branch ?? '').trim().toLowerCase().replace(/\s+/g, ' ')
+
+  if (!normalized || normalized === 'all') return query
+
+  if (normalized === 'all_pv') {
+    return query.eq('portal', 'PV') as T
+  }
+
+  if (normalized === 'all_ev') {
+    return query.eq('portal', 'EV') as T
+  }
+
+  if (normalized === 'sitapura pv') {
+    return query.eq('location', 'Sitapura').eq('portal', 'PV') as T
+  }
+
+  if (normalized === 'sitapura ev') {
+    return query.eq('location', 'Sitapura').eq('portal', 'EV') as T
+  }
+
+  if (normalized === 'sitapura') {
+    return query.eq('location', 'Sitapura') as T
+  }
+
+  if (normalized === 'ajmer road pv') {
+    return query.eq('location', 'Ajmer Road').eq('portal', 'PV') as T
+  }
+
+  if (normalized === 'ajmer road ev') {
+    return query.eq('location', 'Ajmer Road').eq('portal', 'EV') as T
+  }
+
+  if (normalized === 'ajmer road') {
+    return query.eq('location', 'Ajmer Road') as T
+  }
+
+  // Keep compatibility for any legacy/custom branch filters outside canonical options.
+  return applyBranchFilterToQuery(query, branch)
+}
 
 export default function AdvisorPerformanceReport({ branch, dateFilter }: ReportViewProps) {
   const [sourceTable, setSourceTable] = useState<SourceTable>('service_vas_jc_data')
@@ -88,7 +130,10 @@ export default function AdvisorPerformanceReport({ branch, dateFilter }: ReportV
             .order('id', { ascending: false })
             .range(from, from + QUERY_PAGE_SIZE - 1)
 
-          query = applyBranchFilterToQuery(query, branch as BranchFilter)
+          query =
+            table === 'job_card_closed_data'
+              ? applyJobCardClosedScopeFilterToQuery(query, branch as BranchFilter)
+              : applyBranchFilterToQuery(query, branch as BranchFilter)
           if (employeeCode) query = query.eq('employee_code', employeeCode)
           if (bounds) query = query.gte(dateColumn, bounds.from).lt(dateColumn, bounds.toExclusive)
 
@@ -115,7 +160,8 @@ export default function AdvisorPerformanceReport({ branch, dateFilter }: ReportV
         )
 
         const mappedRows: ReportRow[] = data.map((row) => ({
-          branch: row.branch == null ? null : String(row.branch),
+          location: row['branch'] == null ? null : String(row['branch']),
+          portal: null,
           job_card_number: row.job_card_number == null ? null : String(row.job_card_number),
           sr_assigned_to: row.sr_assigned_to == null ? null : String(row.sr_assigned_to),
           employee_code: row.employee_code == null ? null : String(row.employee_code),
@@ -129,12 +175,13 @@ export default function AdvisorPerformanceReport({ branch, dateFilter }: ReportV
 
       const data = await fetchAllRows(
         'job_card_closed_data',
-        'branch, job_card_number, sr_assigned_to, employee_code, closed_date_time, total_invoice_amount',
+        'location, portal, job_card_number, sr_assigned_to, employee_code, closed_date_time, total_invoice_amount',
         'closed_date_time',
       )
 
       const mappedRows: ReportRow[] = data.map((row) => ({
-        branch: row.branch == null ? null : String(row.branch),
+        location: row.location == null ? null : String(row.location),
+        portal: row.portal == null ? null : String(row.portal),
         job_card_number: row.job_card_number == null ? null : String(row.job_card_number),
         sr_assigned_to: row.sr_assigned_to == null ? null : String(row.sr_assigned_to),
         employee_code: row.employee_code == null ? null : String(row.employee_code),
@@ -167,7 +214,8 @@ export default function AdvisorPerformanceReport({ branch, dateFilter }: ReportV
   const handleExport = () => {
     if (rows.length === 0) return
     const exportData = rows.map((row) => ({
-      branch: row.branch ?? '',
+      location: row.location ?? '',
+      portal: row.portal ?? '',
       jobCardNumber: row.job_card_number ?? '',
       advisorAssigned: row.sr_assigned_to ?? '',
       employeeCode: row.employee_code ?? '',
@@ -249,7 +297,7 @@ export default function AdvisorPerformanceReport({ branch, dateFilter }: ReportV
             <thead>
               <tr className="border-b border-gray-200 bg-gray-50 text-left text-gray-500">
                 <th className="px-3 py-2 font-semibold">Date</th>
-                <th className="px-3 py-2 font-semibold">Branch</th>
+                <th className="px-3 py-2 font-semibold">Location</th>
                 <th className="px-3 py-2 font-semibold">Job Card</th>
                 <th className="px-3 py-2 font-semibold">SR Assigned To</th>
                 <th className="px-3 py-2 font-semibold">Employee Code</th>
@@ -267,7 +315,7 @@ export default function AdvisorPerformanceReport({ branch, dateFilter }: ReportV
                     <td className="px-3 py-2 text-gray-500">
                       {row.event_time ? new Date(row.event_time).toLocaleString('en-IN') : '-'}
                     </td>
-                    <td className="px-3 py-2">{row.branch ?? '-'}</td>
+                    <td className="px-3 py-2">{row.location ?? '-'}</td>
                     <td className="px-3 py-2">{row.job_card_number ?? '-'}</td>
                     <td className="px-3 py-2">{row.sr_assigned_to ?? '-'}</td>
                     <td className="px-3 py-2">{row.employee_code ?? '-'}</td>

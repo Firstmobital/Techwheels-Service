@@ -15,7 +15,8 @@ type AccidentJCRow = {
   total_invoice_amount: number | string | null
   closed_date_time: string | null
   invoice_date: string | null
-  branch: string | null
+  location: string | null
+  portal: string | null
   vehicle_registration_number: string | null
   sr_type: string | null
 }
@@ -44,7 +45,7 @@ type TechJCRow = {
   technician_name: string
   technician_code: string
   labourAmt: number; sparesAmt: number; invoiceAmt: number
-  branch: string | null; sr_type: string | null
+  location: string | null; sr_type: string | null
   closed_date_time: string | null; invoice_date: string | null
   vehicle_registration_number: string | null
   dateKey: string | null
@@ -72,7 +73,7 @@ const TABS: TabMeta[] = [
 ]
 
 const QUERY_PAGE = 1000
-const UNKNOWN_BRANCH = 'Unknown'
+const UNKNOWN_LOCATION = 'Unknown location'
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -104,7 +105,7 @@ function dateKey(row: { closed_date_time?: string | null; invoice_date?: string 
 function dayLabel(key: string) {
   return key === 'unknown' ? 'No date' : new Date(key).toLocaleDateString('en-IN', { year: 'numeric', month: 'short', day: '2-digit' })
 }
-function branchOf(v: string | null | undefined) { return String(v ?? '').trim() || UNKNOWN_BRANCH }
+function locationOf(v: string | null | undefined) { return String(v ?? '').trim() || UNKNOWN_LOCATION }
 function income(labour: number, pct: number) { return labour > 0 ? labour * pct / 100 : 0 }
 function normPct(s: string, fallback: number) {
   const n = Number(s.trim()); return Number.isFinite(n) ? Math.min(100, Math.max(0, n)) : fallback
@@ -174,7 +175,7 @@ export default function BodyshopTrackerPage() {
       let from = 0
       while (true) {
         const res = await supabase.from('job_card_closed_data')
-          .select('id, job_card_number, sr_assigned_to, final_labour_amount, final_spares_amount, total_invoice_amount, closed_date_time, invoice_date, branch, vehicle_registration_number, sr_type')
+          .select('id, job_card_number, sr_assigned_to, final_labour_amount, final_spares_amount, total_invoice_amount, closed_date_time, invoice_date, location, portal, vehicle_registration_number, sr_type')
           .eq('sr_type', 'Accident')
           .gte('closed_date_time', dateRange.from + 'T00:00:00+05:30')
           .lte('closed_date_time', dateRange.to + 'T23:59:59+05:30')
@@ -210,7 +211,7 @@ export default function BodyshopTrackerPage() {
         for (let i = 0; i < jcNums.length; i += 50) {
           const batch = jcNums.slice(i, i + 50)
           const res2 = await supabase.from('job_card_closed_data')
-            .select('id, job_card_number, sr_assigned_to, final_labour_amount, final_spares_amount, total_invoice_amount, closed_date_time, invoice_date, branch, vehicle_registration_number, sr_type')
+            .select('id, job_card_number, sr_assigned_to, final_labour_amount, final_spares_amount, total_invoice_amount, closed_date_time, invoice_date, location, portal, vehicle_registration_number, sr_type')
             .in('job_card_number', batch)
           const rows2 = (res2.data ?? []) as AccidentJCRow[]
           rows2.forEach((r) => newMap.set(r.job_card_number, r))
@@ -266,7 +267,7 @@ export default function BodyshopTrackerPage() {
         labourAmt: parseAmt(jc?.final_labour_amount),
         sparesAmt: parseAmt(jc?.final_spares_amount),
         invoiceAmt: parseAmt(jc?.total_invoice_amount),
-        branch: jc?.branch ?? null,
+        location: jc?.location ?? null,
         sr_type: jc?.sr_type ?? null,
         closed_date_time: jc?.closed_date_time ?? null,
         invoice_date: jc?.invoice_date ?? null,
@@ -300,9 +301,9 @@ export default function BodyshopTrackerPage() {
   // ── Branch options ─────────────────────────────────────────────────────────
 
   const branches = useMemo(() => {
-    const s = new Set(dateScopedRows.map((r) => branchOf(r.branch)))
+    const s = new Set(dateScopedRows.map((r) => locationOf(r.location)))
     return Array.from(s).sort((a, b) => {
-      if (a === UNKNOWN_BRANCH) return 1; if (b === UNKNOWN_BRANCH) return -1
+      if (a === UNKNOWN_LOCATION) return 1; if (b === UNKNOWN_LOCATION) return -1
       return a.localeCompare(b)
     })
   }, [dateScopedRows])
@@ -310,7 +311,7 @@ export default function BodyshopTrackerPage() {
   // ── Branch filter ──────────────────────────────────────────────────────────
 
   const filteredRows = useMemo(() =>
-    branchFilter === 'all' ? dateScopedRows : dateScopedRows.filter((r) => branchOf(r.branch) === branchFilter),
+    branchFilter === 'all' ? dateScopedRows : dateScopedRows.filter((r) => locationOf(r.location) === branchFilter),
   [dateScopedRows, branchFilter])
 
   // ── Name extractor ─────────────────────────────────────────────────────────
@@ -425,7 +426,7 @@ export default function BodyshopTrackerPage() {
 
         <span style={{ width: '1px', height: '22px', background: '#e2e8f0', flexShrink: 0 }} />
 
-        <span style={{ fontSize: '0.72rem', fontWeight: 600, color: '#64748b' }}>Branch:</span>
+        <span style={{ fontSize: '0.72rem', fontWeight: 600, color: '#64748b' }}>Location:</span>
         <button type="button" onClick={() => setBranchFilter('all')}
           className={`btn btn--sm ${branchFilter === 'all' ? 'btn--primary' : 'btn--ghost'}`}
           style={{ padding: '0.2rem 0.6rem', fontSize: '0.75rem' }}>
@@ -435,7 +436,7 @@ export default function BodyshopTrackerPage() {
           <button key={b} type="button" onClick={() => setBranchFilter(b)}
             className={`btn btn--sm ${branchFilter === b ? 'btn--primary' : 'btn--ghost'}`}
             style={{ padding: '0.2rem 0.6rem', fontSize: '0.75rem' }}>
-            {b} ({allDateScoped.filter((r) => branchOf(r.branch) === b).length})
+            {b} ({allDateScoped.filter((r) => locationOf(r.location) === b).length})
           </button>
         ))}
       </div>
@@ -613,7 +614,7 @@ export default function BodyshopTrackerPage() {
                 <tr>
                   <th>Job Card</th>
                   <th>Reg No</th>
-                  <th>Branch</th>
+                  <th>Location</th>
                   <th>SR Type</th>
                   <th>Closed At</th>
                   <th style={{ textAlign: 'right' }}>Labour</th>
@@ -631,7 +632,7 @@ export default function BodyshopTrackerPage() {
                       </code>
                     </td>
                     <td>{r.vehicle_registration_number ?? '—'}</td>
-                    <td>{r.branch ?? '—'}</td>
+                    <td>{locationOf(r.location)}</td>
                     <td>{r.sr_type ?? '—'}</td>
                     <td style={{ fontSize: 12, color: '#64748b' }}>{fmtDate(r.closed_date_time)}</td>
                     <td style={{ textAlign: 'right', color: '#16a34a', fontWeight: 600 }}>{fmt(r.labourAmt)}</td>

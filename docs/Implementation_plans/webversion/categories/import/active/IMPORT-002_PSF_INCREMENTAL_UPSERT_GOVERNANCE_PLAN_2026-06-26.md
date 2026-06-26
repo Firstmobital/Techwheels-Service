@@ -667,3 +667,87 @@ Gate C (before Step 6):
 1. This section audits full frontend impact for safe planning.
 2. It does not expand IMPORT-002 functional execution beyond PSF scope.
 3. Non-PSF tables that legitimately use branch are not part of this migration.
+
+---
+
+## 14. Live Implementation Tracker (Execution + Verification)
+
+Last updated:
+1. 2026-06-26
+
+Rule for this tracker:
+1. Every implemented slice must be logged here with verification outcome before next slice starts.
+
+### 14.1 Completed Slices (Implemented + Verified)
+
+Slice A: Canonical key cutover runbook + DB key activation
+1. Added execution artifact: scripts/20260626_psf_jc_closed_canonical_key_cutover_runbook.sql.
+2. Canonical unique index created and verified:
+   - uq_jc_closed_location_portal_job_card_number_invoice_date.
+3. Canonical duplicate check returned 0 at cutover verification point.
+4. Status: Completed.
+
+Slice B: PSF importer write-path hardening + canonical upsert cutover
+1. Enforced canonical dimension resolution (location + portal) before insert/upsert.
+2. Rejected unresolved rows with explicit parse error reason.
+3. Mirrored compatibility fields during transition (branch/branch_label = location where present).
+4. Switched upsert conflict handling to canonical-first for PSF path.
+5. Build verification passed after fixups.
+6. Status: Completed.
+
+Slice C: Web report query layer PSF scope migration (partial)
+1. Added job_card_closed_data scope helper using canonical location/portal semantics.
+2. Updated direct job_card_closed_data fetch paths in src/lib/reportQueries.ts for PSF-critical flows.
+3. Build verification passed.
+4. Status: In progress (core query paths migrated; residual branch-oriented aggregations remain).
+
+Slice D: SATracker canonicalization
+1. Removed branch_label usage from SATracker runtime paths.
+2. Migrated filters/displays to location + portal representation.
+3. Updated job_card_closed_data selects to stop requiring branch_label.
+4. Build verification passed.
+5. Status: Completed.
+
+Slice E: Technician page canonicalization
+1. Migrated branch-oriented runtime display/filter/export paths to location semantics.
+2. Removed branch reads from job_card_closed_data select in issue export flow.
+3. Updated yesterday report and export columns from Branch to Location.
+4. Build verification passed.
+5. Status: Completed.
+
+Slice F: BodyshopTracker canonicalization
+1. Migrated runtime display/filter logic from branch to location semantics.
+2. Updated job_card_closed_data selects to request canonical location (+ portal) instead of branch.
+3. Updated UI labels/chips/detail table from Branch to Location.
+4. Build verification passed.
+5. Status: Completed.
+
+Slice G: AdvisorPerformanceReport canonicalization
+1. Added canonical scope filter for job_card_closed_data using location/portal semantics.
+2. Updated PSF Revenue Report path to read location + portal instead of branch.
+3. Migrated report row/export/table output from Branch to Location.
+4. Build verification passed.
+5. Status: Completed.
+
+### 14.2 Current Gate Snapshot
+
+Gate A Repo-1 (branch_label in critical web files):
+1. Current status: Pass for migrated slices.
+2. Remaining blockers: none in SATracker/Technician after latest patch set.
+
+Gate A Repo-2 (job_card_closed_data.branch runtime reads in critical web files):
+1. Current status: Partial pass.
+2. Remaining blockers concentrated in:
+   - residual branch-oriented report shaping sections in src/lib/reportQueries.ts.
+
+### 14.3 Next Immediate Slices (Queued)
+
+1. Final residual branch-oriented shaping cleanup in reportQueries.ts for Gate A Repo-2 closure.
+2. Re-run Gate A checks and attach evidence outputs inline in this section.
+
+### 14.4 Verification Checklist (Run After Each Slice)
+
+1. npm run build must pass.
+2. Repo-1 branch_label check for critical files.
+3. Repo-2 job_card_closed_data.branch runtime-read check for critical files.
+4. If query/filter semantics changed, run SQL-1 and SQL-2 from 13.5.1 and capture outputs.

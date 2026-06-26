@@ -15,10 +15,8 @@ type ClosedJCRow = {
   total_invoice_amount: number | string | null
   closed_date_time: string | null
   invoice_date: string | null
-  branch: string | null
   location: string | null
   portal: string | null
-  branch_label: string | null
   vehicle_registration_number: string | null
   sr_type: string | null
   product_line: string | null
@@ -93,7 +91,7 @@ type YesterdaySARow = {
   sa_name: string
   job_card_number: string
   reg_number: string
-  branch: string
+  location: string
   labour_amount: number
   sa_income: number
   date_key: string
@@ -161,7 +159,7 @@ function normalizeShareInput(value: string, fallback: number): number {
   return Math.min(100, Math.max(0, parsed))
 }
 
-function getBranchLabel(v: string | null | undefined): string {
+function getLocationLabel(v: string | null | undefined): string {
   return String(v ?? '').trim() || UNKNOWN_BRANCH
 }
 
@@ -333,7 +331,7 @@ export default function SATrackerPage() {
       while (true) {
         let query = supabase
           .from('job_card_closed_data')
-          .select('id, job_card_number, sr_assigned_to, final_labour_amount, final_spares_amount, total_invoice_amount, closed_date_time, invoice_date, branch, location, portal, branch_label, vehicle_registration_number, sr_type, product_line')
+          .select('id, job_card_number, sr_assigned_to, final_labour_amount, final_spares_amount, total_invoice_amount, closed_date_time, invoice_date, location, portal, vehicle_registration_number, sr_type, product_line')
           .not('sr_assigned_to', 'is', null)
           .gte('closed_date_time', dateRange.from + 'T00:00:00+05:30')
           .lte('closed_date_time', dateRange.to + 'T23:59:59+05:30')
@@ -383,7 +381,7 @@ export default function SATrackerPage() {
 
       const { data, error: err } = await supabase
         .from('job_card_closed_data')
-        .select('job_card_number, sr_assigned_to, final_labour_amount, vehicle_registration_number, branch_label, branch, closed_date_time, invoice_date')
+        .select('job_card_number, sr_assigned_to, final_labour_amount, vehicle_registration_number, location, closed_date_time, invoice_date')
         .gte('closed_date_time', fromTs)
         .lte('closed_date_time', toTs)
         .order('sr_assigned_to', { ascending: true })
@@ -399,7 +397,7 @@ export default function SATrackerPage() {
             sa_name: String(r.sr_assigned_to ?? '').trim(),
             job_card_number: String(r.job_card_number ?? '').trim(),
             reg_number: String(r.vehicle_registration_number ?? '—').trim(),
-            branch: String(r.branch_label ?? r.branch ?? '—').trim(),
+            location: String(r.location ?? '—').trim(),
             labour_amount: labour,
             sa_income: income,
             date_key: dateStr,
@@ -418,9 +416,9 @@ export default function SATrackerPage() {
 
   function downloadSAYesterdayExcel(rows: YesterdaySARow[], date: string) {
     const sheetData = [
-      ['SA Name', 'Job Card No', 'Reg No', 'Branch', 'Labour Amount (₹)', 'Amount Paid (₹)'],
+      ['SA Name', 'Job Card No', 'Reg No', 'Location', 'Labour Amount (₹)', 'Amount Paid (₹)'],
       ...rows.map(r => [
-        r.sa_name, r.job_card_number, r.reg_number, r.branch,
+        r.sa_name, r.job_card_number, r.reg_number, r.location,
         Math.round(r.labour_amount), Math.round(r.sa_income),
       ])
     ]
@@ -503,7 +501,7 @@ export default function SATrackerPage() {
   // ── Branch options + filter ───────────────────────────────────────────────
 
   const branches = useMemo(() => {
-    const s = new Set(dateScopedRows.map((r) => getBranchLabel(r.location ?? r.branch)))
+    const s = new Set(dateScopedRows.map((r) => getLocationLabel(r.location)))
     return Array.from(s).sort((a, b) => {
       if (a === UNKNOWN_BRANCH) return 1
       if (b === UNKNOWN_BRANCH) return -1
@@ -518,7 +516,7 @@ export default function SATrackerPage() {
   const branchFilteredRows = useMemo(() =>
     branchFilter === 'all'
       ? dateScopedRows
-      : dateScopedRows.filter((r) => getBranchLabel(r.location ?? r.branch) === branchFilter),
+      : dateScopedRows.filter((r) => getLocationLabel(r.location) === branchFilter),
   [dateScopedRows, branchFilter])
 
   const portalOptions = useMemo(() => {
@@ -576,7 +574,7 @@ export default function SATrackerPage() {
 
   // All distinct locations / portals / depts for payout multi-select
   const allLocations = useMemo(() => Array.from(new Set(
-    enrichedRows.map(r => getBranchLabel(r.location ?? r.branch)).filter(Boolean)
+    enrichedRows.map(r => getLocationLabel(r.location)).filter(Boolean)
   )).sort(), [enrichedRows])
 
   const allPortals = useMemo(() => Array.from(new Set(
@@ -700,7 +698,7 @@ export default function SATrackerPage() {
     const { selectedLocations, selectedPortals, selectedDepts } = payoutReport
     // Filter enrichedRows by selected criteria (empty = all)
     const rows = enrichedRows.filter(r => {
-      const loc  = getBranchLabel(r.location ?? r.branch)
+      const loc  = getLocationLabel(r.location)
       const por  = getPortalLabel(r.portal)
       const dept = saNameToDept.get(normSAName(r.sr_assigned_to)) ?? ''
       if (selectedLocations.length > 0 && !selectedLocations.includes(loc)) return false
@@ -716,7 +714,7 @@ export default function SATrackerPage() {
       if (!name) return
       const existing = saMap.get(name) ?? { labour: 0, loc: new Set(), por: new Set(), dept: '' }
       existing.labour += r.labourAmt
-      existing.loc.add(getBranchLabel(r.location ?? r.branch))
+      existing.loc.add(getLocationLabel(r.location))
       existing.por.add(getPortalLabel(r.portal))
       existing.dept = saNameToDept.get(normSAName(name)) ?? existing.dept
       saMap.set(name, existing)
@@ -880,7 +878,7 @@ export default function SATrackerPage() {
           <option value="all">All ({dateScopedRows.length})</option>
           {branches.map(b => (
             <option key={b} value={b}>
-              {b} ({dateScopedRows.filter(r => getBranchLabel(r.location ?? r.branch) === b).length})
+              {b} ({dateScopedRows.filter(r => getLocationLabel(r.location) === b).length})
             </option>
           ))}
         </select>
@@ -1144,7 +1142,7 @@ export default function SATrackerPage() {
                 <tr>
                   <th>Job Card</th>
                   <th>Reg No</th>
-                  <th>Branch</th>
+                  <th>Location</th>
                   <th>SR Type</th>
                   <th>Closed At</th>
                   <th style={{ textAlign: 'right' }}>Labour</th>
@@ -1162,7 +1160,7 @@ export default function SATrackerPage() {
                       </code>
                     </td>
                     <td>{r.vehicle_registration_number ?? '—'}</td>
-                    <td>{r.branch ?? '—'}</td>
+                    <td>{getLocationLabel(r.location)}</td>
                     <td>{r.sr_type ?? '—'}</td>
                     <td style={{ fontSize: '12px', color: '#64748b' }}>{formatDate(r.closed_date_time)}</td>
                     <td style={{ textAlign: 'right', color: '#16a34a', fontWeight: 600 }}>{formatCurrency(r.labourAmt)}</td>
@@ -1242,7 +1240,7 @@ export default function SATrackerPage() {
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.82rem' }}>
                   <thead>
                     <tr style={{ background: '#f8fafc', position: 'sticky', top: 0 }}>
-                      {['Service Advisor', 'Job Card', 'Reg No', 'Branch', 'Labour Amount', 'Amount Paid'].map(h => (
+                      {['Service Advisor', 'Job Card', 'Reg No', 'Location', 'Labour Amount', 'Amount Paid'].map(h => (
                         <th key={h} style={{ padding: '0.55rem 0.75rem', textAlign: h === 'Labour Amount' || h === 'Amount Paid' ? 'right' : 'left', fontWeight: 600, color: '#475569', fontSize: '0.76rem', borderBottom: '2px solid #e2e8f0', whiteSpace: 'nowrap' }}>{h}</th>
                       ))}
                     </tr>
@@ -1271,7 +1269,7 @@ export default function SATrackerPage() {
                               <td style={{ padding: '0.5rem 0.75rem 0.5rem 1.5rem', color: '#64748b', fontSize: '0.78rem' }}>{r.sa_name}</td>
                               <td style={{ padding: '0.5rem 0.75rem', fontFamily: 'monospace', fontSize: '0.76rem', color: '#334155' }}>{r.job_card_number}</td>
                               <td style={{ padding: '0.5rem 0.75rem', fontWeight: 600, color: '#1e293b' }}>{r.reg_number}</td>
-                              <td style={{ padding: '0.5rem 0.75rem', color: '#64748b', fontSize: '0.78rem' }}>{r.branch}</td>
+                              <td style={{ padding: '0.5rem 0.75rem', color: '#64748b', fontSize: '0.78rem' }}>{r.location}</td>
                               <td style={{ padding: '0.5rem 0.75rem', textAlign: 'right', color: '#334155' }}>₹{Math.round(r.labour_amount).toLocaleString('en-IN')}</td>
                               <td style={{ padding: '0.5rem 0.75rem', textAlign: 'right', fontWeight: 700, color: '#16a34a' }}>₹{Math.round(r.sa_income).toLocaleString('en-IN')}</td>
                             </tr>
