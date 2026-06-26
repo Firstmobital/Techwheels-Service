@@ -1,0 +1,19 @@
+{
+  "status": "ok",
+  "endpoint": "/v1/projects/jmdndcphkmaljhwgzqxq/analytics/endpoints/logs.all?sql=select%20timestamp%2C%20event_message%20from%20auth_logs%20order%20by%20timestamp%20desc%20limit%20100",
+  "count": 3,
+  "records": [
+    {
+      "event_message": "{\"action\":\"login\",\"instance_id\":\"00000000-0000-0000-0000-000000000000\",\"level\":\"info\",\"login_method\":\"token\",\"metering\":true,\"msg\":\"Login\",\"time\":\"2026-06-26T04:47:34Z\",\"user_id\":\"11dfb34b-2d02-4186-bc95-01719eca808b\"}",
+      "timestamp": 1782449254000000
+    },
+    {
+      "event_message": "{\"auth_event\":{\"action\":\"token_revoked\",\"actor_id\":\"11dfb34b-2d02-4186-bc95-01719eca808b\",\"actor_name\":\"Vijendra Singh jesawat \",\"actor_username\":\"9887623329\",\"actor_via_sso\":false,\"log_type\":\"token\"},\"component\":\"api\",\"duration\":147789352,\"grant_type\":\"refresh_token\",\"level\":\"info\",\"method\":\"POST\",\"msg\":\"request completed\",\"path\":\"/token\",\"referer\":\"https://techwheels-service.vercel.app/\",\"remote_addr\":\"49.43.178.64\",\"request_id\":\"019f0241-30d4-7eb6-9282-35e6898e3c32\",\"status\":200,\"time\":\"2026-06-26T04:47:34Z\"}",
+      "timestamp": 1782449254000000
+    },
+    {
+      "event_message": "{\"component\":\"api\",\"duration\":189533740,\"level\":\"info\",\"method\":\"GET\",\"msg\":\"request completed\",\"path\":\"/user\",\"referer\":\"https://techwheels-service.vercel.app/\",\"remote_addr\":\"49.43.178.64\",\"request_id\":\"019f0240-ecd3-7e84-8653-36623825678d\",\"status\":200,\"time\":\"2026-06-26T04:47:17Z\"}",
+      "timestamp": 1782449237000000
+    }
+  ]
+}

@@ -117,11 +117,11 @@ Status legend: `Not Started` | `In Progress` | `Blocked` | `Done`
 | P1-07 | High | Add targeted composite/partial indexes for timeout hotlist queries | Team | Done | 2026-06-25 | 2026-06-25 | Migration executed successfully (`supabase/migrations/20260625221000_p1_07_disk_io_hotlist_indexes.sql`); check output confirms all 4 indexes exist and all 3 hot EXPLAINs switched from Seq Scan + Sort to Index Scan (`idx_sre_created_at_id_desc`, `idx_ta_updated_assigned_desc`, `idx_vas_jc_closed_branch`). | 2026-06-25 | - |
 | P1-08 | High | Reduce Realtime WAL polling cost and fan-out | Team | In Progress | 2026-06-25 |  | `realtime.list_changes` remains high-frequency (`queryid=-2876120296317350531`, `calls=612039`, `total_ms=3832695.82`, `mean_ms=6.26`). | 2026-06-25 | Inventory channels per screen and remove duplicate subscriptions; verify drop in calls and proportional time in next capture |
 | P1-09 | High | Eliminate expensive exact-count list patterns in PostgREST paths | Team | In Progress | 2026-06-25 |  | Dominant reception family still tops cumulative totals and additional reception list IDs surfaced in latest capture (`-225245605736690330`, `-922008049376959953`, `852176900607336119`, `2744925251257801673`) with `OFFSET` signatures. | 2026-06-25 | Run strict A/B interval delta capture after deploy traffic and rank by `delta_total_ms` (not cumulative totals) before next code batch |
-| P1-10 | Critical | Disk IO budget incident response (query-shape mitigation first) | Team | In Progress | 2026-06-25 | 2026-06-27 | Latest post-deploy check remains cumulative-flat on prior top IDs while reception query family spread increased across additional list IDs; Realtime/COPY still persistent secondary contributors. | 2026-06-25 | Execute 10-minute controlled delta protocol (A/B snapshots on tracked + newly surfaced IDs), then target top `delta_total_ms` family first |
-| P1-11 | Critical | Log-driven performance tracker (rolling updates from every new capture) | Team | In Progress | 2026-06-25 |  | Rolling evidence model is active in Section 14 with latest-two automated snapshots, compact top-10 table, and run-to-run comparison status. | 2026-06-26 | For each new capture: confirm comparison movement, sync affected tracker lines (P1-05..P1-10), and keep retention bounds enforced |
+| P1-10 | Critical | Disk IO budget incident response (query-shape mitigation first) | Team | In Progress | 2026-06-25 | 2026-06-27 | Step 1 capture executed; latest run `2026-06-26__04-51-30-388Z` remains regressed (`delta_total_ms_sum=29937.12`, `delta_calls_sum=137`) with strongest regressions on reception-family query `-5344960703026327435` and `852176900607336119`. | 2026-06-26 | Execute immediate query-shape mitigation batch on top `delta_total_ms` regressions (exact-count + OFFSET paths first), then recapture interval delta in next traffic window |
+| P1-11 | Critical | Log-driven performance tracker (rolling updates from every new capture) | Team | In Progress | 2026-06-25 |  | Rolling evidence model is active in Section 14 with latest-two automated snapshots, compact top-10 table, and run-to-run comparison status; latest snapshot advanced to `14.27` from run `2026-06-26__04-51-30-388Z`. | 2026-06-26 | For each new capture: rank by `delta_total_ms`, update impacted tracker rows (P1-05..P1-10), and enforce retention bounds in Sections 5/6/14 |
 | P2-01 | High | Add free-plan inactivity prevention ping | Team | Not Started |  |  |  | 2026-06-04 | Define endpoint + schedule + monitoring |
 | P2-02 | Medium | Connect GitHub repo in Supabase dashboard | Team | Not Started |  |  |  | 2026-06-04 | Validate migration linkage after connection |
-| P2-03 | Critical | Reconcile deployed schema with migration history | Team | In Progress | 2026-06-05 |  | Fresh authoritative dump refreshed and audited on 2026-06-25 using manifest baseline (`sha256=56cc1ef74d7c5482200b1f04d7b6404bf71a2d29c3f5addc7b4788472f7f9e35`, `created_at_utc=2026-06-25T15:02:12Z`) plus overlay file `supabase/evidence/post_dump_verified_promotions.md`. | 2026-06-25 | Use Section 10 + Section 14 truth to generate migration/check files for performance index fixes, then validate via post-change EXPLAIN |
+| P2-03 | Critical | Reconcile deployed schema with migration history | Team | In Progress | 2026-06-05 |  | Fresh authoritative dump refreshed and audited on 2026-06-25 using manifest baseline (`sha256=56cc1ef74d7c5482200b1f04d7b6404bf71a2d29c3f5addc7b4788472f7f9e35`, `created_at_ist=2026-06-25 20:32:12 IST`) plus overlay file `supabase/evidence/post_dump_verified_promotions.md`. | 2026-06-25 | Use Section 10 + Section 14 truth to generate migration/check files for performance index fixes, then validate via post-change EXPLAIN |
 | P2-04 | High | Define backup/restore runbook and drill date | Team | Not Started |  |  |  | 2026-06-04 | Add restore checklist and owner |
 | P2-05 | High | Resolve schema drift where app queries depend on objects not present in authoritative dump | Team | Blocked | 2026-06-05 |  | Dump shows `vw_parts_stock_health` exists but no current `vw_parts_latest_stock` or `vw_parts_consumption_trend` object definitions | 2026-06-05 | Validate intended source-of-truth object set and prepare explicit migration/backport decision |
 | P3-01 | Medium | Weekly Advisor regression sweep | Team | Not Started |  |  |  | 2026-06-04 | Schedule recurring review |
@@ -136,8 +136,8 @@ Retention rule:
 |---|---|---|---|---|---|---|---|---|---|
 | 2026-06-04 | 55% | 2% | 28% | 9/60 | 3 (from screenshot section counters) | 1+ | 194 | 10 | Baseline from dashboard screenshot |
 | 2026-06-25 | 64% | 15% | 36% | 25/60 | - | - | - | - | New Disk IO budget warning visible in Observability; Query Performance shows 935 slow queries with `service_reception_entries` exact-count/list family as primary load driver |
-| 2026-06-26 (automated audit cycle) | - | - | - | - | - | - | - | - | Top query 6416750758406621842 calls=38414 total_ms=82890843.76 mean_ms=2157.83; comparison=regressed; delta_total_ms_sum=37711.57 |
-| 2026-06-26 (automated audit cycle) | - | - | - | - | - | - | - | - | Top query 6416750758406621842 calls=38414 total_ms=82890843.76 mean_ms=2157.83; comparison=regressed; delta_total_ms_sum=16722.77 |
+| 2026-06-26 (automated audit cycle) | - | - | - | - | - | - | - | - | Top query 6416750758406621842 calls=38414 total_ms=82890843.76 mean_ms=2157.83; comparison=regressed; delta_total_ms_sum=56778.05 |
+| 2026-06-26 (automated audit cycle) | - | - | - | - | - | - | - | - | Top query 6416750758406621842 calls=38414 total_ms=82890843.76 mean_ms=2157.83; comparison=regressed; delta_total_ms_sum=29937.12 |
 
 ## 6) Change Log (What Was Updated in This Plan)
 
@@ -150,8 +150,9 @@ Retention rule:
 | 2026-06-08 | Copilot | Security stabilization completed and validated (Advisor errors reduced to zero); plan moved to performance and reliability hardening. |
 | 2026-06-25 | Copilot | Performance hardening focus consolidated to P1-05..P1-11 with index verification complete and next-step emphasis on query-shape and exact-count reduction. |
 | 2026-06-26 | Copilot | Active plan compacted to bounded-evidence format: retained decision-relevant milestones and latest two automated audit updates only. |
-| 2026-06-26 | Copilot | Automated Supabase audit cycle appended run summary (2026-06-26T04:30:23.188Z) and refreshed plan evidence block from generated audit artifacts. |
-| 2026-06-26 | Copilot | Automated Supabase audit cycle appended run summary (2026-06-26T04:33:21.433Z) and refreshed plan evidence block from generated audit artifacts. |
+| 2026-06-26 | Copilot | Added explicit phase/subphase/task/ordered-step execution tracker for current cycle; preserved all pending/in-progress/unverified work visibility. |
+| 2026-06-26 | Copilot | Automated Supabase audit cycle appended run summary (2026-06-26 10:17:41 IST) and refreshed plan evidence block from generated audit artifacts. |
+| 2026-06-26 | Copilot | Automated Supabase audit cycle appended run summary (2026-06-26 10:21:30 IST) and refreshed plan evidence block from generated audit artifacts. |
 
 ## 7) Update Protocol For Future Chats
 
@@ -200,6 +201,32 @@ Only retain in this file:
 - latest two automated changelog rows in Section 6
 - latest two capture snapshots with compact top-10 and comparison in Section 14
 
+## 11) Active Fix Phase Plan (Current Cycle)
+
+Purpose:
+- Maintain explicit phase -> subphase -> task -> ordered-step tracking for this cycle.
+- Keep all pending/in-progress/blocked/unverified items visible until done and verified.
+
+Cycle anchor:
+- Latest snapshot: `14.27` (2026-06-26 10:21:30 IST)
+- Current movement: `regressed` (`delta_total_ms_sum=29937.12`)
+
+Execution tracker (this cycle):
+
+| Priority | Phase | Subphase | Task ID | Ordered Step | Status | Verification |
+|---|---|---|---|---|---|---|
+| P0 | Phase F1: Query-shape stabilization | F1.1 Reception list/count hardening | P1-09 | Step 1: Remove default exact-count from high-traffic reception list endpoints. | In Progress | Not Verified |
+| P0 | Phase F1: Query-shape stabilization | F1.1 Reception list/count hardening | P1-06 | Step 2: Complete keyset pagination rollout for `(created_at,id)` list paths. | In Progress | Not Verified |
+| P0 | Phase F1: Query-shape stabilization | F1.2 Fetch-all elimination | P1-05 | Step 3: Remove residual fetch-all report/query loops that still inflate list/count load. | In Progress | Not Verified |
+| P1 | Phase F2: Realtime load containment | F2.1 Subscription fan-out control | P1-08 | Step 4: Remove duplicate subscriptions and reduce channel scope per screen. | In Progress | Not Verified |
+| P1 | Phase F2: Realtime load containment | F2.1 Subscription fan-out control | P1-08 | Step 5: Verify unsubscribe/teardown behavior on navigation and unmount. | In Progress | Not Verified |
+| P0 | Phase F3: Delta verification gate | F3.1 Controlled interval recapture | P1-10 | Step 6: Run post-deploy interval recapture in next real traffic window. | In Progress | Not Verified |
+| P0 | Phase F3: Delta verification gate | F3.2 Evidence synchronization | P1-11 | Step 7: Re-rank regressions by `delta_total_ms` and sync tracker rows P1-05..P1-10. | In Progress | Not Verified |
+
+Completion guardrails (this cycle):
+1. No step can move to `Done` until evidence is reflected in Section 14 comparison output.
+2. Phase F3 can be marked `Done` only when movement is no longer `regressed` and top targeted IDs show sustained interval improvement.
+
 ## 14) Rolling Evidence (Latest Two Audits Only)
 
 Retention policy:
@@ -207,29 +234,29 @@ Retention policy:
 - Keep comparison status and compact top-10 table in each retained snapshot.
 - Archive detailed historical logs under `supabase/evidence/audit_runs/`.
 
-### 14.24 Capture Snapshot: 2026-06-26 (Automated Audit Cycle)
+### 14.26 Capture Snapshot: 2026-06-26 (Automated Audit Cycle)
 
 What was captured:
-- Timestamp: 2026-06-26T04:30:23.188Z
+- Timestamp (IST): 2026-06-26 10:17:41 IST
 - Capture mode: automated_supabase_audit_cycle
 - Top queryid: 6416750758406621842 (calls=38414, total_ms=82890843.76, mean_ms=2157.83)
 - Platform logs capture status: auth=ok, edge_functions=ok, realtime=ok, storage=ok, database_health=ok
-- Comparison vs previous run (2026-06-26__04-24-40-091Z): status=regressed, delta_total_ms_sum=37711.57, delta_calls_sum=217
-- Top regressions by delta_total_ms: -5344960703026327435 (16124.2); 7336725908253715888 (5670.2); -2647655532108368607 (3352.85)
+- Comparison vs previous run (2026-06-26__04-33-21-433Z): status=regressed, delta_total_ms_sum=56778.05, delta_calls_sum=537
+- Top regressions by delta_total_ms: -5344960703026327435 (23390.71); 3787216458397661678 (7823.84); 3220864789079889211 (6476.55)
 
 Compact Top 10 (run-local):
 | rank | queryid | calls | total_ms | mean_ms |
 |---:|---|---:|---:|---:|
 | 1 | 6416750758406621842 | 38414 | 82890843.76 | 2157.83 |
-| 2 | -5344960703026327435 | 6654 | 14037784.55 | 2109.68 |
+| 2 | -5344960703026327435 | 6665 | 14067554.50 | 2110.66 |
 | 3 | -6712128630152386476 | 5106 | 9985405.38 | 1955.62 |
-| 4 | -225245605736690330 | 3202 | 4172183.95 | 1302.99 |
+| 4 | -225245605736690330 | 3209 | 4181460.91 | 1303.04 |
 | 5 | -5044213774447814878 | 3056 | 3907298.51 | 1278.57 |
 | 6 | -2876120296317350531 | 612039 | 3832695.82 | 6.26 |
-| 7 | 3220864789079889211 | 4098 | 3018048.70 | 736.47 |
-| 8 | -2647655532108368607 | 4350 | 2903452.88 | 667.46 |
+| 7 | 3220864789079889211 | 4115 | 3026223.66 | 735.41 |
+| 8 | -2647655532108368607 | 4354 | 2905669.41 | 667.36 |
 | 9 | -922008049376959953 | 2254 | 2638086.09 | 1170.40 |
-| 10 | 852176900607336119 | 2236 | 2620111.02 | 1171.78 |
+| 10 | 852176900607336119 | 2242 | 2623870.19 | 1170.33 |
 
 Interpretation:
 - This snapshot is append-only and intended to keep log evidence current for the hardening cycle.
@@ -241,29 +268,29 @@ Self-heal plan:
 Next action:
 - Re-run the cycle after the next production traffic window and validate that comparison status moves toward improved.
 
-### 14.25 Capture Snapshot: 2026-06-26 (Automated Audit Cycle)
+### 14.27 Capture Snapshot: 2026-06-26 (Automated Audit Cycle)
 
 What was captured:
-- Timestamp: 2026-06-26T04:33:21.433Z
+- Timestamp (IST): 2026-06-26 10:21:30 IST
 - Capture mode: automated_supabase_audit_cycle
 - Top queryid: 6416750758406621842 (calls=38414, total_ms=82890843.76, mean_ms=2157.83)
 - Platform logs capture status: auth=ok, edge_functions=ok, realtime=ok, storage=ok, database_health=ok
-- Comparison vs previous run (2026-06-26__04-30-23-188Z): status=regressed, delta_total_ms_sum=16722.77, delta_calls_sum=109
-- Top regressions by delta_total_ms: -5344960703026327435 (6379.24); -225245605736690330 (4492.58); 3220864789079889211 (1698.41)
+- Comparison vs previous run (2026-06-26__04-47-41-244Z): status=regressed, delta_total_ms_sum=29937.12, delta_calls_sum=137
+- Top regressions by delta_total_ms: -5344960703026327435 (10381.63); 852176900607336119 (6729.88); 3787216458397661678 (6690.97)
 
 Compact Top 10 (run-local):
 | rank | queryid | calls | total_ms | mean_ms |
 |---:|---|---:|---:|---:|
 | 1 | 6416750758406621842 | 38414 | 82890843.76 | 2157.83 |
-| 2 | -5344960703026327435 | 6656 | 14044163.79 | 2110.00 |
+| 2 | -5344960703026327435 | 6668 | 14077936.13 | 2111.27 |
 | 3 | -6712128630152386476 | 5106 | 9985405.38 | 1955.62 |
-| 4 | -225245605736690330 | 3204 | 4176676.53 | 1303.58 |
+| 4 | -225245605736690330 | 3209 | 4181460.91 | 1303.04 |
 | 5 | -5044213774447814878 | 3056 | 3907298.51 | 1278.57 |
 | 6 | -2876120296317350531 | 612039 | 3832695.82 | 6.26 |
-| 7 | 3220864789079889211 | 4101 | 3019747.11 | 736.34 |
-| 8 | -2647655532108368607 | 4351 | 2903735.30 | 667.37 |
+| 7 | 3220864789079889211 | 4119 | 3028232.94 | 735.19 |
+| 8 | -2647655532108368607 | 4356 | 2906811.79 | 667.31 |
 | 9 | -922008049376959953 | 2254 | 2638086.09 | 1170.40 |
-| 10 | 852176900607336119 | 2237 | 2620244.08 | 1171.32 |
+| 10 | 852176900607336119 | 2247 | 2630600.07 | 1170.72 |
 
 Interpretation:
 - This snapshot is append-only and intended to keep log evidence current for the hardening cycle.

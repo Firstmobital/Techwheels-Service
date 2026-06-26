@@ -739,17 +739,35 @@ Mandatory retention limits for active plan files:
 1. Metrics section: keep latest two automated audit rows only.
 2. Changelog section: keep latest two automated update rows only.
 3. Snapshot/evidence section: keep latest two capture snapshots only.
-4. Historical phase playbooks that are already executed and verified must be removed from active plans.
+4. Historical execution narrative may be trimmed only when those items are `Done` and explicitly `Verified`.
+5. Retention trimming must never remove pending, in-progress, blocked, not-started, or unverified implementation items.
 
 Where historical detail must live:
 1. Raw run evidence: `docs/Implementation_plans/<platform>/categories/<category>/evidence/` and tool output folders.
 2. Completion history: `docs/Implementation_plans/completed/` mirror structure.
 3. Durable specification truth: `docs/web/`, `docs/mobile/`, `docs/shared/` per state-machine rules.
+4. Category reference summary: reference document related to that category must contain a concise implementation+verification outcome before active-plan removal.
 
 Active-plan minimum content standard:
 1. Current status tracker.
-2. Latest two evidences with comparison.
-3. Next actions only.
+2. Explicit implementation structure: phases, subphases, tasks, and ordered execution steps.
+3. Per-item status clarity: pending, in-progress, blocked, done, and verification state.
+4. Latest two evidences with comparison.
+5. Next actions only.
+
+Non-deletion guardrail (mandatory):
+1. Do not delete plan items that are not `Done`.
+2. Do not delete plan items that are `Done` but not `Verified`.
+3. Do not remove completed-and-verified items from active plan until promotion to category reference summary is completed and linked.
+4. If compaction is needed, move only completed-and-verified historical detail to evidence/archive while keeping traceable references in the active plan.
+
+Promotion-before-removal contract (mandatory):
+1. Identify completed-and-verified item in active plan.
+2. Write concise summary into category reference doc using template `docs/shared/reference/catalog/IMPLEMENTATION_PROMOTION_SUMMARY_TEMPLATE.md`.
+3. Link that reference summary from active plan/evidence context.
+4. Only then remove/compact detailed execution narrative from active plan.
+5. If category reference doc does not exist, create it first in the category-aligned reference path and then promote.
+6. Promotion record is invalid if template-required fields (task IDs, verification evidence, verified timestamp, impact) are missing.
 
 Anti-patterns (disallowed in active plan files):
 1. Multi-hundred-line completed execution diaries.
@@ -840,11 +858,16 @@ Required update scope gate (do not update one line only):
 3. Update change log/metrics entries when applicable.
 4. Update next actions to reflect the new state.
 5. Enforce retention policy limits after update (latest two automated rows/snapshots only).
+6. Preserve incomplete work visibility: pending/in-progress/blocked/unverified rows must remain in the active plan.
+7. Preserve plan structure: phase -> subphase -> task -> prioritized ordered steps.
+8. For any item becoming `Done` and `Verified`, perform promotion-before-removal to category reference doc in same update transaction.
+9. Use `docs/shared/reference/catalog/IMPLEMENTATION_PROMOTION_SUMMARY_TEMPLATE.md` for every promotion summary so format stays identical across categories.
 
 Cross-file consistency gate (same change set):
 1. Update platform tracker entry when plan status changes.
 2. Update platform/category index links if plan path/state changes.
 3. Ensure no contradiction between active plan and linked evidence docs.
+4. Ensure promoted reference summary path is present and linked when completed items are compacted from active plan.
 
 Verification gate (required):
 1. Run docs plan retention validation (`npm run docs:validate:plans`).
@@ -853,6 +876,26 @@ Verification gate (required):
 
 Completion standard:
 1. A plan update request is considered complete only when linked-reference sweep, scoped updates, consistency sync, and validation gates are all satisfied.
+
+---
+
+## 31) Timezone Standard (Project-Wide)
+
+Default timezone for documentation:
+1. All human-readable timestamps in project docs must be written in IST.
+2. Use explicit suffix `IST` in timestamp text.
+
+Formatting standard:
+1. Preferred format: `YYYY-MM-DD HH:mm:ss IST`.
+2. Date-only fields may use `YYYY-MM-DD` when time is not needed.
+
+Automation rule:
+1. Any script that writes timestamps into docs must emit IST-formatted values.
+2. If source evidence is UTC, convert to IST before writing to plan/change-log/snapshot text.
+
+Optional traceability rule:
+1. Raw artifact filenames may remain machine-native (for example UTC-based run directories).
+2. Human-facing narrative in docs must still present IST time.
 
 ---
 

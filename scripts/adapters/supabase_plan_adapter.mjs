@@ -10,6 +10,26 @@ const UPDATE_PROTOCOL_SECTION_HEADER = '## 7) Update Protocol For Future Chats'
 const SNAPSHOT_NUMBER_REGEX = /^### 14\.(\d+)/gm
 const SNAPSHOT_HEADING_REGEX = /^### 14\.\d+ Capture Snapshot: .*$/gm
 
+function formatIstFromIso(isoString) {
+  const date = new Date(String(isoString || ''))
+  if (Number.isNaN(date.getTime())) return sanitizeCell(isoString)
+
+  const formatter = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Kolkata',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+  })
+
+  const parts = formatter.formatToParts(date)
+  const valueByType = Object.fromEntries(parts.map((part) => [part.type, part.value]))
+  return `${valueByType.year}-${valueByType.month}-${valueByType.day} ${valueByType.hour}:${valueByType.minute}:${valueByType.second} IST`
+}
+
 function buildCompactTop10Table(topQueries) {
   const rows = Array.isArray(topQueries) ? topQueries.slice(0, 10) : []
   if (rows.length === 0) {
@@ -31,7 +51,7 @@ function buildCompactTop10Table(topQueries) {
 }
 
 function buildSnapshotBlock(summary, snapshotNumber) {
-  const ts = sanitizeCell(summary.captured_at_utc)
+  const tsIst = sanitizeCell(formatIstFromIso(summary.captured_at_utc))
   const top = summary.top_queries?.[0]
   const topText = top
     ? `- Top queryid: ${top.queryid} (calls=${top.calls}, total_ms=${top.total_ms}, mean_ms=${top.mean_ms})`
@@ -57,10 +77,10 @@ function buildSnapshotBlock(summary, snapshotNumber) {
   const compactTop10Table = buildCompactTop10Table(summary.top_queries)
 
   return [
-    `### 14.${snapshotNumber} Capture Snapshot: ${summary.capture_date || ts.slice(0, 10)} (Automated Audit Cycle)`,
+    `### 14.${snapshotNumber} Capture Snapshot: ${summary.capture_date || tsIst.slice(0, 10)} (Automated Audit Cycle)`,
     '',
     'What was captured:',
-    `- Timestamp: ${ts}`,
+    `- Timestamp (IST): ${tsIst}`,
     `- Capture mode: ${mode}`,
     topText,
     availabilityLine,
@@ -87,11 +107,11 @@ export function buildSupabasePlanMutation({ markdown, payload }) {
   const summary = payload || {}
 
   const notes = sanitizeCell(summary.notes || summary.top_query_summary || 'Automated Supabase audit cycle update')
-  const capturedAt = sanitizeCell(summary.captured_at_utc)
-  const dateOnly = sanitizeCell(summary.capture_date || capturedAt.slice(0, 10))
+  const capturedAtIst = sanitizeCell(formatIstFromIso(summary.captured_at_utc))
+  const dateOnly = sanitizeCell(capturedAtIst.slice(0, 10))
 
   const metricsRow = `| ${dateOnly} (automated audit cycle) | - | - | - | - | - | - | - | - | ${notes} |`
-  const changeLogRow = `| ${dateOnly} | Copilot | Automated Supabase audit cycle appended run summary (${capturedAt}) and refreshed plan evidence block from generated audit artifacts. |`
+  const changeLogRow = `| ${dateOnly} | Copilot | Automated Supabase audit cycle appended run summary (${capturedAtIst}) and refreshed plan evidence block from generated audit artifacts. |`
 
   const nextSnapshotNumber = getMaxNumberedSnapshot(markdown, SNAPSHOT_NUMBER_REGEX) + 1
   const snapshotAppendBlock = buildSnapshotBlock(summary, nextSnapshotNumber)
