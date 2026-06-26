@@ -684,7 +684,8 @@ export default function TechnicianPage() {
 
       // Fetch all technician assignments for the date range
       const assignmentRowsRaw: TechnicianAssignmentRow[] = []
-      let from = 0
+      let cursorAssignedAt: string | null = null
+      let cursorId: number | null = null
 
       while (true) {
         // Fetch technician assignments (no join - will map invoice_date separately)
@@ -692,7 +693,13 @@ export default function TechnicianPage() {
           .from(TECHNICIAN_INCOME_ASSIGNMENTS_SOURCE)
           .select('*')
           .order('assigned_at', { ascending: false })
-          .range(from, from + QUERY_PAGE_SIZE - 1)
+          .order('id', { ascending: false })
+          .limit(QUERY_PAGE_SIZE)
+
+        if (cursorAssignedAt && Number.isFinite(cursorId)) {
+          const safeAssignedAt = cursorAssignedAt.replace(/'/g, "''")
+          assignQuery = assignQuery.or(`assigned_at.lt.${safeAssignedAt},and(assigned_at.eq.${safeAssignedAt},id.lt.${cursorId})`)
+        }
 
         const assignRes = await assignQuery
 
@@ -710,7 +717,10 @@ export default function TechnicianPage() {
           break
         }
 
-        from += QUERY_PAGE_SIZE
+        const last = batch[batch.length - 1]
+        cursorAssignedAt = last?.assigned_at ?? null
+        cursorId = typeof last?.id === 'number' ? last.id : null
+        if (!cursorAssignedAt || cursorId === null) break
       }
 
       // Build map of invoice_date by job_card_number

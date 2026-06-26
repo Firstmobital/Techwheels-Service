@@ -69,8 +69,14 @@ export default function MasterDataNullCountsReport(_props: ReportViewProps) {
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [reloadKey, setReloadKey] = useState(0)
+  const [hasStarted, setHasStarted] = useState(false)
 
   useEffect(() => {
+    if (!hasStarted) {
+      setIsLoading(false)
+      return
+    }
+
     let active = true
 
     setIsLoading(true)
@@ -96,7 +102,7 @@ export default function MasterDataNullCountsReport(_props: ReportViewProps) {
     return () => {
       active = false
     }
-  }, [reloadKey])
+  }, [reloadKey, hasStarted])
 
   const summary = useMemo(() => {
     const totalNullCells = rows.reduce((sum, row) => sum + row.nullCount, 0)
@@ -117,6 +123,21 @@ export default function MasterDataNullCountsReport(_props: ReportViewProps) {
         <p className="mt-1 text-sm text-gray-500">
           Column-wise null analysis from all_service_data for data-quality monitoring.
         </p>
+
+        {!hasStarted ? (
+          <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-4">
+            <p className="text-sm text-amber-800">
+              This report runs heavy count queries. Start analysis only when needed.
+            </p>
+            <button
+              type="button"
+              onClick={() => setHasStarted(true)}
+              className="mt-3 inline-flex items-center rounded-md bg-amber-600 px-3 py-2 text-sm font-semibold text-white hover:bg-amber-700"
+            >
+              Run Null Count Analysis
+            </button>
+          </div>
+        ) : null}
 
         <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <div className="rounded-lg border border-blue-100 bg-blue-50 px-4 py-3">
@@ -141,7 +162,11 @@ export default function MasterDataNullCountsReport(_props: ReportViewProps) {
       {/* Upload section */}
       <MasterDataUploadSection onUploadComplete={() => setReloadKey((k) => k + 1)} />
 
-      {isLoading ? (
+      {!hasStarted ? (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 p-6 text-sm text-amber-800 shadow-sm">
+          Run analysis to load null-count results.
+        </div>
+      ) : isLoading ? (
         <div className="rounded-xl border border-gray-200 bg-white p-6 text-sm text-gray-500 shadow-sm">
           Loading master data null counts...
         </div>

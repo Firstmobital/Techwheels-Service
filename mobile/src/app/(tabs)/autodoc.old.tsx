@@ -205,8 +205,8 @@ export default function AutoDocScreen() {
       const [{ data }, dealerRes, summaryCountRes, jobCardsCountRes, sampleRowsRes] = await Promise.all([
         supabase.auth.getUser(),
         supabase.rpc('my_dealer_code'),
-        supabase.from('job_card_summary').select('job_card_id', { head: true, count: 'exact' }),
-        supabase.from('job_cards').select('id', { head: true, count: 'exact' }),
+        supabase.from('job_card_summary').select('job_card_id', { head: true, count: 'planned' }),
+        supabase.from('job_cards').select('id', { head: true, count: 'planned' }),
         supabase.from('job_cards').select('jc_number, status').order('created_at', { ascending: false }).limit(3),
       ])
 

@@ -327,23 +327,36 @@ export default function SATrackerPage() {
 
     try {
       const allRows: ClosedJCRow[] = []
-      let from = 0
+      let cursorClosedAt: string | null = null
+      let cursorId: number | null = null
 
       while (true) {
-        const res = await supabase
+        let query = supabase
           .from('job_card_closed_data')
           .select('id, job_card_number, sr_assigned_to, final_labour_amount, final_spares_amount, total_invoice_amount, closed_date_time, invoice_date, branch, location, portal, branch_label, vehicle_registration_number, sr_type, product_line')
           .not('sr_assigned_to', 'is', null)
           .gte('closed_date_time', dateRange.from + 'T00:00:00+05:30')
           .lte('closed_date_time', dateRange.to + 'T23:59:59+05:30')
           .order('closed_date_time', { ascending: false })
-          .range(from, from + QUERY_PAGE_SIZE - 1)
+          .order('id', { ascending: false })
+          .limit(QUERY_PAGE_SIZE)
+
+        if (cursorClosedAt && Number.isFinite(cursorId)) {
+          const safeClosedAt = cursorClosedAt.replace(/'/g, "''")
+          query = query.or(`closed_date_time.lt.${safeClosedAt},and(closed_date_time.eq.${safeClosedAt},id.lt.${cursorId})`)
+        }
+
+        const res = await query
 
         if (res.error) { setError(res.error.message); setLoading(false); return }
         const batch = (res.data ?? []) as ClosedJCRow[]
         allRows.push(...batch)
         if (batch.length < QUERY_PAGE_SIZE) break
-        from += QUERY_PAGE_SIZE
+
+        const last = batch[batch.length - 1]
+        cursorClosedAt = last?.closed_date_time ?? null
+        cursorId = typeof last?.id === 'number' ? last.id : null
+        if (!cursorClosedAt || cursorId === null) break
       }
 
       setRows(allRows)
