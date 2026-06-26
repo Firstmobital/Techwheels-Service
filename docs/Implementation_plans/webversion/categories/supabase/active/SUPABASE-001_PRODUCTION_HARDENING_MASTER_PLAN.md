@@ -1,6 +1,6 @@
 # SUPABASE-001: Production Hardening Master Plan + Activity Tracker
 
-Last updated: 2026-06-25
+Last updated: 2026-06-26
 Scope: Security, performance, reliability, operations hygiene, and tracking discipline for the Supabase project `techwheels-services` (Free plan).
 
 ## 1) Current Snapshot (Baseline)
@@ -118,7 +118,7 @@ Status legend: `Not Started` | `In Progress` | `Blocked` | `Done`
 | P1-08 | High | Reduce Realtime WAL polling cost and fan-out | Team | In Progress | 2026-06-25 |  | `realtime.list_changes` remains high-frequency (`queryid=-2876120296317350531`, `calls=612039`, `total_ms=3832695.82`, `mean_ms=6.26`). | 2026-06-25 | Inventory channels per screen and remove duplicate subscriptions; verify drop in calls and proportional time in next capture |
 | P1-09 | High | Eliminate expensive exact-count list patterns in PostgREST paths | Team | In Progress | 2026-06-25 |  | Dominant reception family still tops cumulative totals and additional reception list IDs surfaced in latest capture (`-225245605736690330`, `-922008049376959953`, `852176900607336119`, `2744925251257801673`) with `OFFSET` signatures. | 2026-06-25 | Run strict A/B interval delta capture after deploy traffic and rank by `delta_total_ms` (not cumulative totals) before next code batch |
 | P1-10 | Critical | Disk IO budget incident response (query-shape mitigation first) | Team | In Progress | 2026-06-25 | 2026-06-27 | Latest post-deploy check remains cumulative-flat on prior top IDs while reception query family spread increased across additional list IDs; Realtime/COPY still persistent secondary contributors. | 2026-06-25 | Execute 10-minute controlled delta protocol (A/B snapshots on tracked + newly surfaced IDs), then target top `delta_total_ms` family first |
-| P1-11 | Critical | Log-driven performance tracker (rolling updates from every new capture) | Team | In Progress | 2026-06-25 |  | Established explicit update protocol in Section 14.5 with required evidence fields from each new log drop (top queries, plans, index/seq-scan deltas, action status). | 2026-06-25 | For each new log bundle: update Section 14.1/14.2 table rows, then sync affected tracker lines P1-05..P1-10 same day |
+| P1-11 | Critical | Log-driven performance tracker (rolling updates from every new capture) | Team | In Progress | 2026-06-25 |  | Rolling evidence model is active in Section 14 with latest-two automated snapshots, compact top-10 table, and run-to-run comparison status. | 2026-06-26 | For each new capture: confirm comparison movement, sync affected tracker lines (P1-05..P1-10), and keep retention bounds enforced |
 | P2-01 | High | Add free-plan inactivity prevention ping | Team | Not Started |  |  |  | 2026-06-04 | Define endpoint + schedule + monitoring |
 | P2-02 | Medium | Connect GitHub repo in Supabase dashboard | Team | Not Started |  |  |  | 2026-06-04 | Validate migration linkage after connection |
 | P2-03 | Critical | Reconcile deployed schema with migration history | Team | In Progress | 2026-06-05 |  | Fresh authoritative dump refreshed and audited on 2026-06-25 using manifest baseline (`sha256=56cc1ef74d7c5482200b1f04d7b6404bf71a2d29c3f5addc7b4788472f7f9e35`, `created_at_utc=2026-06-25T15:02:12Z`) plus overlay file `supabase/evidence/post_dump_verified_promotions.md`. | 2026-06-25 | Use Section 10 + Section 14 truth to generate migration/check files for performance index fixes, then validate via post-change EXPLAIN |
@@ -129,70 +129,27 @@ Status legend: `Not Started` | `In Progress` | `Blocked` | `Done`
 
 ## 5) Real-Time Metrics Log (Append Only)
 
-Use one line per update so trend changes are visible over time.
+Retention rule:
+- Keep only current decision-relevant manual baselines plus latest two automated audit rows.
 
 | Date | RAM | CPU | Disk | Connections | Advisor Critical | Advisor Medium | DB Req/60m | Auth Req/60m | Notes |
 |---|---|---|---|---|---|---|---|---|---|
 | 2026-06-04 | 55% | 2% | 28% | 9/60 | 3 (from screenshot section counters) | 1+ | 194 | 10 | Baseline from dashboard screenshot |
-| 2026-06-08 | 64% | 2% | 27% | 16/60 | 3 (unchanged in latest screenshot context) | 1+ | 446 | 43 | Added Query Performance hotlist from production logs; memory usage ~408 MB and commitment ~1.33 GB during observed hour |
-| 2026-06-08 10:08 | - | - | - | - | 0 | 121 | - | - | Security Advisor milestone reached: no errors detected after Fix 4 execution |
 | 2026-06-25 | 64% | 15% | 36% | 25/60 | - | - | - | - | New Disk IO budget warning visible in Observability; Query Performance shows 935 slow queries with `service_reception_entries` exact-count/list family as primary load driver |
-| 2026-06-25 (SQL audit) | - | - | - | - | - | - | - | - | `pg_stat_statements` confirmed in `extensions` schema; reception list EXPLAIN still uses Seq Scan + Sort for `ORDER BY created_at DESC, id DESC`; date-range count path is fast in isolation but high-frequency in production |
-| 2026-06-25 (dump refresh audit) | - | - | - | - | - | - | - | - | Authoritative dump refreshed: `local_folder/backups/full_database.sql` (105 MB) + chunk mirror (`part_000`..`part_005`), baseline marker from `supabase/evidence/authoritative_dump_manifest.json`; overlay promotions file currently contains no promoted SQL entries in active window |
-| 2026-06-25 (full SQL check pack) | - | - | - | - | - | - | - | - | Top total-time family is reception exact-count (`queryid=6416750758406621842`, `total_ms=82854948.73`); EXPLAIN for reception/technician/VAS list paths all show Seq Scan + Sort; top IO-heavy queries are COPY exports |
-| 2026-06-25 (post-index verification) | - | - | - | - | - | - | - | - | Migration `20260625221000` executed and verified: all new indexes present; reception/technician/VAS verification EXPLAINs now use Index Scan paths; next impact step is code-side exact-count and OFFSET reduction |
-| 2026-06-25 (post-code recapture) | - | - | - | - | - | - | - | - | Latest top-query outputs remain effectively unchanged vs prior capture (`queryid=6416750758406621842` still `calls=38386`, `total_ms=82854948.73`), indicating cumulative-window/no-traffic-delta view; shift measurement to interval delta method |
-| 2026-06-25 (post-deploy reception family recapture) | - | - | - | - | - | - | - | - | New reception IDs entered hotlist while legacy top IDs remained cumulative-flat (`6416750758406621842`, `-5344960703026327435`, `-225245605736690330`, `2744925251257801673` etc.); classify as insufficient interval evidence until A/B delta window is captured |
-| 2026-06-26 (overnight no-delta snapshot) | - | - | - | - | - | - | - | - | Overnight capture remained numerically identical to prior baseline for all tracked IDs (including dominant reception IDs), indicating no measurable interval movement in sampled window |
 | 2026-06-26 (automated audit cycle) | - | - | - | - | - | - | - | - | Top query 6416750758406621842 calls=38414 total_ms=82890843.76 mean_ms=2157.83; comparison=regressed; delta_total_ms_sum=37711.57 |
 | 2026-06-26 (automated audit cycle) | - | - | - | - | - | - | - | - | Top query 6416750758406621842 calls=38414 total_ms=82890843.76 mean_ms=2157.83; comparison=regressed; delta_total_ms_sum=16722.77 |
 
 ## 6) Change Log (What Was Updated in This Plan)
 
+Retention rule:
+- Keep only key milestone manual records plus latest two automated audit updates.
+
 | Date | Updated By | Summary |
 |---|---|---|
 | 2026-06-04 | Copilot | Created initial master plan, phase model, activity tracker, and metrics log baseline |
-| 2026-06-04 | Copilot | Added authoritative dump governance rules (authority source, chunk mirror, no-invention, and conflict preference) |
-| 2026-06-05 | Copilot | Added statement-timeout mitigation actions, tracker rows P1-05 to P1-07, and hot-query remediation matrix |
-| 2026-06-05 | Copilot | Audited active authoritative dump and recorded schema/index/RLS/view truth plus drift findings in Section 10 |
-| 2026-06-08 | Copilot | Refreshed production baseline from dashboard screenshots, replaced hot-query section using latest Supabase logs, and added tracker tasks P1-08/P1-09 |
-| 2026-06-08 | Copilot | Logged Security Advisor Error export (23 errors), added first-3-fix execution order, and drafted Fix 1 migration file for `job_card_closed_data` RLS enablement |
-| 2026-06-08 | Copilot | Validated Fix 1 against authoritative dump mirror: `job_card_closed_data` table and policy names are present in active dump; migration confirmed as authority-consistent and non-invented |
-| 2026-06-08 | Copilot | Recorded post-Fix-1 Advisor delta (23 -> 21 errors) and created Fix 2 migration to set `vw_parts_stock_health` as `security_invoker` |
-| 2026-06-08 | Copilot | Logged Fix 2 execution; checked authoritative dump mirror for next sensitive tables (`audit_logs`, `user_employee_links`) and confirmed table presence with no current RLS/policy entries in active dump |
-| 2026-06-08 | Copilot | Logged post-Fix-2 Advisor delta (21 -> 20 errors, all RLS-disabled), and created Fix 3 migration for `user_employee_links` + `audit_logs` with baseline RBAC-safe policies |
-| 2026-06-08 | Copilot | Logged post-Fix-3 Advisor delta (20 -> 18 errors) and created Fix 4 migration to enable RLS + baseline authenticated policies for all remaining flagged tables |
-| 2026-06-08 | Copilot | Logged Fix 4 execution and Security Advisor milestone (Errors: 0); transitioned plan from error-clearance to least-privilege policy tightening |
-| 2026-06-08 | Copilot | Started tightening Step 1 draft for warranty domain: constrained `p0_auth_delete` only (existing policy name) and added pre/post execution validation checklist |
-| 2026-06-08 | Copilot | Logged Step 1 warranty tightening migration execution; next checkpoint is SQL + frontend/mobile validation before Step 2 |
-| 2026-06-08 | Copilot | Step 1 warranty tightening validated (policy + baseline + RLS checks passed); prepared Step 2 service-domain delete-policy tightening draft and SQL checks |
-| 2026-06-08 | Copilot | Step 2 service-domain tightening validated (policy + baseline + RLS checks passed); prepared Step 3 import/reconciliation delete-policy tightening draft and SQL checks |
-| 2026-06-08 | Copilot | Step 3 import/reconciliation tightening validated (policy + baseline + RLS checks passed); prepared Step 4 operational/staging delete-policy tightening draft and SQL checks |
-| 2026-06-08 | Copilot | Step 4 operational/staging tightening executed; delete-policy and baseline-policy checks passed for all 4 tables; awaiting explicit RLS output rows to close P0-03 |
-| 2026-06-08 | Copilot | Step 4 RLS confirmation received (`rls_enabled=true` for all 4 tables); closed P0-03 and marked staged `p0_auth_delete` tightening complete |
-| 2026-06-08 | Copilot | Started P0-04/P0-05 next steps: created anon-surface pre/post SQL check pack and leaked-password rollout checklist; moved both tracker rows to In Progress |
-| 2026-06-08 | Copilot | Logged P0-04 pre-check baseline output: 25 public/anon policy rows, 322 anon table grants, 31 anon function grants; queued dashboard restriction + post-check diff |
-| 2026-06-08 | Copilot | Logged P0-04 post-check attempt: no delta vs baseline (25/322/31). Marked P0-04 blocked until dashboard restriction is effectively applied and verified by reduced counts |
-| 2026-06-08 | Copilot | Prepared DB-level P0-04 unblock migration to re-scope `{public}` policies to `authenticated` and revoke anon public-schema grants; added dedicated post-migration check file |
-| 2026-06-08 | Copilot | Executed P0-04 migration; post-check confirms complete anon surface elimination (0/0/0 from baseline 25/322/31); closed P0-04 as Done and queued P0-05 validation |
-| 2026-06-08 | Copilot | Attempted P0-05 leaked-password protection enablement via dashboard. Feature requires Pro plan; techwheels-services is Free tier. Marked P0-05 as Blocked with rollout checklist prepared for future upgrade. |
-| 2026-06-08 | Copilot | Completed P1-01 audit: Connection string usage audited in web/mobile/edge-functions/scripts. Confirmed REST API pattern (pooling built-in), no direct postgres migration needed. Marked P1-01 Done. |
-| 2026-06-08 | Copilot | Completed P1-03 analysis: Top 10 slow queries ranked by proportional DB time. Root causes identified (OFFSET pagination, missing indexes, wide projections). 4 high-impact indexes recommended. Created P1_03_SLOW_QUERY_ANALYSIS.md. Marked P1-03 Done. |
-| 2026-06-08 | Copilot | Completed P1-04 migrations: Audited 4 target tables against authoritative dump (full_database.sql + chunks mirror). All columns verified in schema. Created 4 migration files: 2 CRITICAL (reception_entries, vas_jc_data branch+created indexes), 2 OPTIONAL (complementary fiscal/snapshot). Created P1_04_INDEX_AUDIT_REPORT.md with full governance audit. Marked P1-04 Done. |
-| 2026-06-08 | Copilot | Completed P1-04 migrations: Audited 4 target tables against authoritative dump (full_database.sql + chunks mirror). All columns verified in schema. Created 4 migration files: 2 CRITICAL (reception_entries, vas_jc_data branch+created indexes), 2 OPTIONAL (complementary fiscal/snapshot). Created P1_04_INDEX_AUDIT_REPORT.md with full governance audit. Marked P1-04 Done. |
-| 2026-06-08 | User | Executed all 4 P1-04 migration files in Supabase. Deployment confirmed: all indexes now present in production database. 2 CRITICAL indexes deployed (reception_entries, vas_jc_data); 2 OPTIONAL indexes deployed (parts_consumption, stock_snapshot). Ready for P1-05 query rewrites. |
-| 2026-06-08 | Copilot | Crash-recovery continuation: appended P1-05 execution pack (query rewrite batches, exact-count removal strategy, validation SQL, rollback, and completion gates) so implementation can resume without context loss. |
-| 2026-06-08 | Copilot | Implemented first P1-05 code batch: web/mobile `reportQueries` switched core VAS + parts-consumption loops from OFFSET (`.range`) to keyset (`order+limit+cursor`), reception list APIs moved to keyset ordered reads, and `count: 'exact'` replaced with `count: 'estimated'` in high-frequency dashboard/warranty count paths. |
-| 2026-06-08 | Copilot | Resolved follow-up build regression from P1-05 reception keyset helper (`src/lib/api/reception.ts`): fixed TypeScript cast mismatch surfaced on Vercel (`GenericStringError[]` overlap), verified clean local build (`npm run build` success). |
-| 2026-06-25 | Copilot | Updated this plan for the next active work item only: moved P1-08 and P1-09 to In Progress using latest Query Performance evidence, added P1-10 Disk IO budget incident response row, and appended current Observability metrics snapshot. |
-| 2026-06-25 | Copilot | Integrated latest provided SQL/performance logs into baseline + tracker: marked P1-06/P1-07 as In Progress, added P1-11 rolling log tracker, and appended Section 14 with DB-truth-backed fix pack + update template for future log captures. |
-| 2026-06-25 | Copilot | Audited freshly refreshed authoritative dump using manifest baseline marker and post-dump overlay rules; replaced Section 10 with current dump truth (counts, key table/index presence, candidate index gaps) and synced tracker/metrics for next fix phase. |
-| 2026-06-25 | Copilot | Ingested full SQL check pack results (columns, top-time/top-IO queries, seq/index scans, table IO, plan checks) and updated tracker evidence with exact query IDs/numbers plus a concrete ranked capture block in Section 14. |
-| 2026-06-25 | Copilot | Created pending execution artifacts for fix rollout: migration `20260625221000_p1_07_disk_io_hotlist_indexes.sql`, verification checks `20260625221000_p1_07_disk_io_hotlist_indexes_checks.sql`, and code-side checklist `P1_09_EXACT_COUNT_REMOVAL_CHECKLIST_2026-06-25.md`; linked all three into tracker rows. |
-| 2026-06-25 | Copilot | Recorded successful execution/verification of migration `20260625221000`: marked P1-07 Done, logged Index Scan plan shifts for reception/technician/VAS, and moved next priority to code-side exact-count and OFFSET reduction (P1-06/P1-09). |
-| 2026-06-25 | Copilot | Logged latest post-code query capture from user: top query totals/calls still match prior cumulative values, so plan now requires interval-based delta measurement before judging code impact; updated tracker next actions accordingly. |
-| 2026-06-25 | Copilot | Appended post-deploy reception-family capture from user showing unchanged cumulative leaders plus newly surfaced reception list query IDs; updated plan to require strict A/B interval delta scoring before next patch batch. |
-| 2026-06-26 | Copilot | Logged overnight tracked-ID snapshot from user as no-delta (all key counters unchanged), and tightened next step to a controlled synthetic-traffic A/B window to force measurable deltas. |
+| 2026-06-08 | Copilot | Security stabilization completed and validated (Advisor errors reduced to zero); plan moved to performance and reliability hardening. |
+| 2026-06-25 | Copilot | Performance hardening focus consolidated to P1-05..P1-11 with index verification complete and next-step emphasis on query-shape and exact-count reduction. |
+| 2026-06-26 | Copilot | Active plan compacted to bounded-evidence format: retained decision-relevant milestones and latest two automated audit updates only. |
 | 2026-06-26 | Copilot | Automated Supabase audit cycle appended run summary (2026-06-26T04:30:23.188Z) and refreshed plan evidence block from generated audit artifacts. |
 | 2026-06-26 | Copilot | Automated Supabase audit cycle appended run summary (2026-06-26T04:33:21.433Z) and refreshed plan evidence block from generated audit artifacts. |
 
@@ -202,8 +159,8 @@ When new Supabase information arrives, update this file in this order:
 
 1. Update Section 1 baseline snapshot (only fields that changed).
 2. Update tracker row status/evidence/next action for impacted tasks.
-3. Append one row to metrics log with the new timestamped readings.
-4. Add one line in change log summarizing what changed.
+3. Add one metrics record for the new reading, then enforce retention bounds in Section 5.
+4. Add one change-log record summarizing what changed, then enforce retention bounds in Section 6.
 5. If new risk appears, add a new tracker row with unique ID (for example `P1-05`).
 
 Definition of done for tracker row:
@@ -243,108 +200,12 @@ Only retain in this file:
 - latest two automated changelog rows in Section 6
 - latest two capture snapshots with compact top-10 and comparison in Section 14
 
-## 14) 2026-06-25 Log Audit + DB-Truth Fix Plan (Rolling)
+## 14) Rolling Evidence (Latest Two Audits Only)
 
-Purpose:
-- Keep one continuously updated performance-audit section tied to real logs and authoritative DB truth.
-- Every new log bundle updates this section first, then Section 4 tracker rows.
-
-### 14.1 Evidence Ingested (Current Batch)
-
-Sources provided (2026-06-25):
-- Supabase Observability screenshots: Disk IO warning, Query Performance overview.
-- SQL outputs from:
-  - `extensions.pg_stat_statements` query-family export.
-  - `pg_stat_user_indexes` high-usage index inventory.
-  - `pg_stat_user_tables` seq-scan pressure inventory.
-  - `EXPLAIN (ANALYZE, BUFFERS)` for reception list order query.
-  - `EXPLAIN (ANALYZE, BUFFERS)` for reception date-window count query.
-
-Validated DB-truth notes:
-- `pg_stat_statements` relation is in schema `extensions` (not `public` on this project).
-- Existing reception index set includes `idx_service_reception_entries_dealer_created` and lookup indexes, but EXPLAIN confirms no direct sort-path index for plain `ORDER BY created_at DESC, id DESC` list query.
-
-### 14.2 Ranked Findings (From Current Batch)
-
-1. Primary bottleneck: PostgREST `service_reception_entries` list + exact-count family.
-- Evidence: high call volume and highest proportional total time (~56.7% for exact-count-shaped family in provided Query Performance table).
-- Effect: sustained IO/CPU pressure from frequent count/list execution.
-
-2. Reception ordered list plan still non-optimal.
-- Evidence: EXPLAIN shows `Seq Scan` + `Sort (top-N heapsort)` for `ORDER BY created_at DESC, id DESC LIMIT 100`.
-- Effect: repeated sort and broader heap traversal than needed.
-
-3. Date-window count query itself is not slow, but high-frequency count usage is expensive at system level.
-- Evidence: isolated EXPLAIN count ~3.38 ms via index-only scan, yet count family dominates total workload share due to call frequency.
-
-4. Additional scan pressure persists in `technician_assignments` and `service_vas_jc_data`.
-- Evidence: `pg_stat_user_tables` shows notable seq_scan counts; current index usage suggests partial mismatch to active list/order query shapes.
-
-5. Export (`COPY ... TO stdout`) workload is a meaningful IO consumer.
-- Evidence: high `shared_blks_read` and large total time in provided top query rows.
-
-### 14.3 Fix Plan (Execute In Order; DB-Truth Aligned)
-
-Fix A (query-shape, no schema change):
-1. Remove default exact-count from high-traffic list APIs (`service_reception_entries` first).
-2. Keep exact counts only for explicit, user-triggered reporting/export actions.
-3. Enforce narrow list projection (no broad row payload in list endpoints).
-
-Fix B (query-shape, app layer):
-1. Standardize keyset pagination on `(created_at, id)` for reception lists (web + mobile parity).
-2. Ensure cursor predicate uses `(created_at < cursor_created_at) OR (created_at = cursor_created_at AND id < cursor_id)`.
-
-Fix C (schema migration set, from log audit):
-1. Add `service_reception_entries` sort-path index:
-	- `(created_at DESC, id DESC)`
-2. Add filtered reception index for service-type path:
-	- `(service_type, created_at DESC, id DESC)` with predicate `jc_number IS NOT NULL AND jc_number <> ''`
-3. Add technician assignment order index:
-	- `(updated_at DESC, assigned_at DESC)`
-4. Add VAS date-window support index:
-	- `(jc_closed_date_time DESC, branch)`
-
-Fix D (operational load control):
-1. Schedule/export throttle for `COPY ... TO stdout` tasks outside peak interactive windows.
-2. Cap concurrent export jobs.
-
-Execution governance:
-- Follow migration workflow rule already active in repo:
-  - add migration SQL under `supabase/migrations/`
-  - add matching checks under `supabase/sql_checks/`
-  - after successful user execution, promote to executed folders and log in `docs/db-changes.md`
-
-### 14.4 Success Criteria + Verification Pack
-
-Primary targets for next 24-48h capture:
-1. Reduce `service_reception_entries` count/list family proportional total time by at least 30%.
-2. Remove Seq Scan + Sort for plain reception ordered list; plan should use index scan path.
-3. Stabilize connections under 70% pool utilization during normal peak.
-
-Verification SQL (post-fix):
-1. Re-run top query-family extract from `extensions.pg_stat_statements`.
-2. Re-run `EXPLAIN (ANALYZE, BUFFERS)` for:
-	- reception ordered list
-	- reception date-window count
-3. Re-run `pg_stat_user_tables` seq/index scan snapshot for:
-	- `service_reception_entries`
-	- `technician_assignments`
-	- `service_vas_jc_data`
-
-### 14.5 Rolling Update Template (Use For Every New Log Drop)
-
-For each new log bundle, append one update block here with:
-1. Timestamp + source window.
-2. Top 5 query families by total_time share.
-3. One-line plan status per fix bucket (A/B/C/D): `Not Started` | `In Progress` | `Done`.
-4. Plan delta summary:
-	- improved
-	- unchanged
-	- regressed
-5. Tracker sync checklist:
-	- update Section 4 rows P1-05, P1-06, P1-07, P1-08, P1-09, P1-10, P1-11 as needed
-	- append one metrics row in Section 5
-	- append one change log row in Section 6
+Retention policy:
+- Keep only the latest two automated audit snapshots in this section.
+- Keep comparison status and compact top-10 table in each retained snapshot.
+- Archive detailed historical logs under `supabase/evidence/audit_runs/`.
 
 ### 14.24 Capture Snapshot: 2026-06-26 (Automated Audit Cycle)
 
