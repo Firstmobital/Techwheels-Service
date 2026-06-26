@@ -1,0 +1,8 @@
+{
+  "status": "error",
+  "label": "top_queries",
+  "error": {
+    "message": "Cannot POST /v1/projects/jmdndcphkmaljhwgzqxq/query"
+  },
+  "rows": []
+}

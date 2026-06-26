@@ -1,0 +1,13 @@
+{
+  "enabled": true,
+  "warn_triggered": false,
+  "block_triggered": false,
+  "delta_total_ms_sum": 1709.71,
+  "top_single_query_delta_ms": 565.01,
+  "thresholds": {
+    "warn_delta_total_ms_sum": 2000,
+    "block_delta_total_ms_sum": 5000,
+    "block_single_query_delta_ms": 1500
+  },
+  "status": "ok"
+}

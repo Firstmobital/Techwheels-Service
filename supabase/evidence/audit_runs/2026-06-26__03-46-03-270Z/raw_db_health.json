@@ -1,0 +1,8 @@
+{
+  "status": "error",
+  "label": "db_health",
+  "error": {
+    "message": "Cannot POST /v1/projects/jmdndcphkmaljhwgzqxq/query"
+  },
+  "rows": []
+}

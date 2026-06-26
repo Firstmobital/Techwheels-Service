@@ -1,0 +1,407 @@
+{
+  "status": "ok",
+  "endpoint": "/v1/projects/jmdndcphkmaljhwgzqxq/analytics/endpoints/logs.all?sql=select%20timestamp%2C%20event_message%20from%20edge_logs%20order%20by%20timestamp%20desc%20limit%20100",
+  "count": 100,
+  "records": [
+    {
+      "event_message": "POST | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/rpc/get_unread_complaint_notification_count | Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
+      "timestamp": 1782445724506000
+    },
+    {
+      "event_message": "POST | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/rpc/get_unread_complaint_notification_count | Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
+      "timestamp": 1782445718988000
+    },
+    {
+      "event_message": "POST | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/rpc/get_unread_complaint_notification_count | Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
+      "timestamp": 1782445714026000
+    },
+    {
+      "event_message": "GET | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/job_card_support_assignments?select=*&is_active=eq.true&offset=0&limit=1000 | okhttp/4.12.0",
+      "timestamp": 1782445709655000
+    },
+    {
+      "event_message": "GET | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/technician_assignments?select=*&order=updated_at.desc%2Cassigned_at.desc&offset=1000&limit=1000 | okhttp/4.12.0",
+      "timestamp": 1782445707026000
+    },
+    {
+      "event_message": "GET | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/auth/v1/user | okhttp/4.12.0",
+      "timestamp": 1782445705571000
+    },
+    {
+      "event_message": "GET | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/technician_assignments?select=*&order=updated_at.desc%2Cassigned_at.desc&offset=0&limit=1000 | okhttp/4.12.0",
+      "timestamp": 1782445705496000
+    },
+    {
+      "event_message": "GET | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/employee_master?select=employee_code%2Cfuel_type&employee_code=in.%28PS2_3000840%2CYS_500A840%2CSS1_500A840%2CBS_500A840%2CEAA_500A840%2CEPM_500A840%29 | okhttp/4.12.0",
+      "timestamp": 1782445704997000
+    },
+    {
+      "event_message": "GET | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/service_reception_entries?select=id%2Creg_number%2Cmodel%2Cservice_type%2Csa_name%2Csa_employee_code%2Cjc_number%2Cowner_name%2Cowner_phone%2Cbranch%2Clocation%2Cportal%2Cbranch_label%2Ckm_reading%2Csource%2Ccreated_at&service_type=in.%28Running+Repairs%2CFirst+Free+Service%2CSecond+Free+Service%2CThird+Free+Service%2CPaid+Service%2CUpdation%2CE+Breakdown%2CCampaign%29&jc_number=not.is.null&order=created_at.desc%2Cid.desc&limit=1000 | okhttp/4.12.0",
+      "timestamp": 1782445702216000
+    },
+    {
+      "event_message": "GET | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/employee_master?select=id%2Cemployee_code%2Cemployee_name%2Cdepartment%2Clocation%2Cfuel_type%2Crole&order=employee_name.asc | okhttp/4.12.0",
+      "timestamp": 1782445702147000
+    },
+    {
+      "event_message": "GET | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/panels?select=job_card_id%2Cpanel_name&job_card_id=in.%284bd010c3-0327-48b2-a480-2645f0c78b6f%2C7f61fb12-5811-43d2-a4e9-44b795dc2c75%2Cfc43d5a7-edc4-499e-ac8f-eccf2a29ece2%2Ce83b9573-4a48-4ef5-b8c1-a8c01630a13f%2Cbf924701-f703-4a01-a9f8-7442e71ac2fd%2C86e331dc-8a5f-493a-8628-7c354c258537%2C173243e7-fd0f-45f5-b59a-75aa7e087ae7%2C7a919ece-1aed-4701-86d4-8f85670fd943%2C064733a6-502d-4925-b255-98991e8eee1f%2Cb71d4928-d880-409a-9a6b-514890b3b50b%2Cd58f8815-f17a-4454-aa2e-c9f5d356d9e9%2C8549f13f-752c-4dbd-ba55-0041e502c64d%2C7888bbae-6319-43ba-a0a7-10575a626c31%2C58d9395e-c978-41c3-8204-f38c87593b28%2C3e2cd37b-0b56-4623-a4c3-154e7f2131bb%2C308a90f0-461c-438b-8b8c-b281549882cf%2C317004cf-d2a1-44cb-9ff3-16a57836c65b%2C37f1dcf1-e3ff-42de-bf0d-98f83e10cfa5%2Cf2f51d9b-b524-4f49-979e-558658c3dd34%2Cad5599af-1947-458d-9ceb-b6e21a96377a%2C13f7a7b7-e8e3-4107-8f07-5e1c4aca4d6a%2Cf23d2466-a2c2-4224-9a9f-bc876b0babb2%2C919e0896-14ea-4bce-a679-d2cbb804953d... | okhttp/4.12.0",
+      "timestamp": 1782445701109000
+    },
+    {
+      "event_message": "GET | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/panel_photos?select=job_card_id&job_card_id=in.%284bd010c3-0327-48b2-a480-2645f0c78b6f%2C7f61fb12-5811-43d2-a4e9-44b795dc2c75%2Cfc43d5a7-edc4-499e-ac8f-eccf2a29ece2%2Ce83b9573-4a48-4ef5-b8c1-a8c01630a13f%2Cbf924701-f703-4a01-a9f8-7442e71ac2fd%2C86e331dc-8a5f-493a-8628-7c354c258537%2C173243e7-fd0f-45f5-b59a-75aa7e087ae7%2C7a919ece-1aed-4701-86d4-8f85670fd943%2C064733a6-502d-4925-b255-98991e8eee1f%2Cb71d4928-d880-409a-9a6b-514890b3b50b%2Cd58f8815-f17a-4454-aa2e-c9f5d356d9e9%2C8549f13f-752c-4dbd-ba55-0041e502c64d%2C7888bbae-6319-43ba-a0a7-10575a626c31%2C58d9395e-c978-41c3-8204-f38c87593b28%2C3e2cd37b-0b56-4623-a4c3-154e7f2131bb%2C308a90f0-461c-438b-8b8c-b281549882cf%2C317004cf-d2a1-44cb-9ff3-16a57836c65b%2C37f1dcf1-e3ff-42de-bf0d-98f83e10cfa5%2Cf2f51d9b-b524-4f49-979e-558658c3dd34%2Cad5599af-1947-458d-9ceb-b6e21a96377a%2C13f7a7b7-e8e3-4107-8f07-5e1c4aca4d6a%2Cf23d2466-a2c2-4224-9a9f-bc876b0babb2%2C919e0896-14ea-4bce-a679-d2cbb804953d%2C0a8a... | okhttp/4.12.0",
+      "timestamp": 1782445701106000
+    },
+    {
+      "event_message": "GET | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/panels?select=job_card_id%2Cpanel_name&job_card_id=in.%284bd010c3-0327-48b2-a480-2645f0c78b6f%2C7f61fb12-5811-43d2-a4e9-44b795dc2c75%2Cfc43d5a7-edc4-499e-ac8f-eccf2a29ece2%2Ce83b9573-4a48-4ef5-b8c1-a8c01630a13f%2Cbf924701-f703-4a01-a9f8-7442e71ac2fd%2C86e331dc-8a5f-493a-8628-7c354c258537%2C173243e7-fd0f-45f5-b59a-75aa7e087ae7%2C7a919ece-1aed-4701-86d4-8f85670fd943%2C064733a6-502d-4925-b255-98991e8eee1f%2Cb71d4928-d880-409a-9a6b-514890b3b50b%2Cd58f8815-f17a-4454-aa2e-c9f5d356d9e9%2C8549f13f-752c-4dbd-ba55-0041e502c64d%2C7888bbae-6319-43ba-a0a7-10575a626c31%2C58d9395e-c978-41c3-8204-f38c87593b28%2C3e2cd37b-0b56-4623-a4c3-154e7f2131bb%2C308a90f0-461c-438b-8b8c-b281549882cf%2C317004cf-d2a1-44cb-9ff3-16a57836c65b%2C37f1dcf1-e3ff-42de-bf0d-98f83e10cfa5%2Cf2f51d9b-b524-4f49-979e-558658c3dd34%2Cad5599af-1947-458d-9ceb-b6e21a96377a%2C13f7a7b7-e8e3-4107-8f07-5e1c4aca4d6a%2Cf23d2466-a2c2-4224-9a9f-bc876b0babb2%2C919e0896-14ea-4bce-a679-d2cbb804953d... | okhttp/4.12.0",
+      "timestamp": 1782445701105000
+    },
+    {
+      "event_message": "GET | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/panel_photos?select=job_card_id&job_card_id=in.%284bd010c3-0327-48b2-a480-2645f0c78b6f%2C7f61fb12-5811-43d2-a4e9-44b795dc2c75%2Cfc43d5a7-edc4-499e-ac8f-eccf2a29ece2%2Ce83b9573-4a48-4ef5-b8c1-a8c01630a13f%2Cbf924701-f703-4a01-a9f8-7442e71ac2fd%2C86e331dc-8a5f-493a-8628-7c354c258537%2C173243e7-fd0f-45f5-b59a-75aa7e087ae7%2C7a919ece-1aed-4701-86d4-8f85670fd943%2C064733a6-502d-4925-b255-98991e8eee1f%2Cb71d4928-d880-409a-9a6b-514890b3b50b%2Cd58f8815-f17a-4454-aa2e-c9f5d356d9e9%2C8549f13f-752c-4dbd-ba55-0041e502c64d%2C7888bbae-6319-43ba-a0a7-10575a626c31%2C58d9395e-c978-41c3-8204-f38c87593b28%2C3e2cd37b-0b56-4623-a4c3-154e7f2131bb%2C308a90f0-461c-438b-8b8c-b281549882cf%2C317004cf-d2a1-44cb-9ff3-16a57836c65b%2C37f1dcf1-e3ff-42de-bf0d-98f83e10cfa5%2Cf2f51d9b-b524-4f49-979e-558658c3dd34%2Cad5599af-1947-458d-9ceb-b6e21a96377a%2C13f7a7b7-e8e3-4107-8f07-5e1c4aca4d6a%2Cf23d2466-a2c2-4224-9a9f-bc876b0babb2%2C919e0896-14ea-4bce-a679-d2cbb804953d%2C0a8a... | okhttp/4.12.0",
+      "timestamp": 1782445701076000
+    },
+    {
+      "event_message": "GET | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/estimate_rows?select=job_card_id%2Crow_total&job_card_id=in.%284bd010c3-0327-48b2-a480-2645f0c78b6f%2C7f61fb12-5811-43d2-a4e9-44b795dc2c75%2Cfc43d5a7-edc4-499e-ac8f-eccf2a29ece2%2Ce83b9573-4a48-4ef5-b8c1-a8c01630a13f%2Cbf924701-f703-4a01-a9f8-7442e71ac2fd%2C86e331dc-8a5f-493a-8628-7c354c258537%2C173243e7-fd0f-45f5-b59a-75aa7e087ae7%2C7a919ece-1aed-4701-86d4-8f85670fd943%2C064733a6-502d-4925-b255-98991e8eee1f%2Cb71d4928-d880-409a-9a6b-514890b3b50b%2Cd58f8815-f17a-4454-aa2e-c9f5d356d9e9%2C8549f13f-752c-4dbd-ba55-0041e502c64d%2C7888bbae-6319-43ba-a0a7-10575a626c31%2C58d9395e-c978-41c3-8204-f38c87593b28%2C3e2cd37b-0b56-4623-a4c3-154e7f2131bb%2C308a90f0-461c-438b-8b8c-b281549882cf%2C317004cf-d2a1-44cb-9ff3-16a57836c65b%2C37f1dcf1-e3ff-42de-bf0d-98f83e10cfa5%2Cf2f51d9b-b524-4f49-979e-558658c3dd34%2Cad5599af-1947-458d-9ceb-b6e21a96377a%2C13f7a7b7-e8e3-4107-8f07-5e1c4aca4d6a%2Cf23d2466-a2c2-4224-9a9f-bc876b0babb2%2C919e0896-14ea-4bce-a679-d2cbb8... | okhttp/4.12.0",
+      "timestamp": 1782445700923000
+    },
+    {
+      "event_message": "GET | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/estimate_rows?select=job_card_id%2Crow_total&job_card_id=in.%284bd010c3-0327-48b2-a480-2645f0c78b6f%2C7f61fb12-5811-43d2-a4e9-44b795dc2c75%2Cfc43d5a7-edc4-499e-ac8f-eccf2a29ece2%2Ce83b9573-4a48-4ef5-b8c1-a8c01630a13f%2Cbf924701-f703-4a01-a9f8-7442e71ac2fd%2C86e331dc-8a5f-493a-8628-7c354c258537%2C173243e7-fd0f-45f5-b59a-75aa7e087ae7%2C7a919ece-1aed-4701-86d4-8f85670fd943%2C064733a6-502d-4925-b255-98991e8eee1f%2Cb71d4928-d880-409a-9a6b-514890b3b50b%2Cd58f8815-f17a-4454-aa2e-c9f5d356d9e9%2C8549f13f-752c-4dbd-ba55-0041e502c64d%2C7888bbae-6319-43ba-a0a7-10575a626c31%2C58d9395e-c978-41c3-8204-f38c87593b28%2C3e2cd37b-0b56-4623-a4c3-154e7f2131bb%2C308a90f0-461c-438b-8b8c-b281549882cf%2C317004cf-d2a1-44cb-9ff3-16a57836c65b%2C37f1dcf1-e3ff-42de-bf0d-98f83e10cfa5%2Cf2f51d9b-b524-4f49-979e-558658c3dd34%2Cad5599af-1947-458d-9ceb-b6e21a96377a%2C13f7a7b7-e8e3-4107-8f07-5e1c4aca4d6a%2Cf23d2466-a2c2-4224-9a9f-bc876b0babb2%2C919e0896-14ea-4bce-a679-d2cbb8... | okhttp/4.12.0",
+      "timestamp": 1782445700890000
+    },
+    {
+      "event_message": "GET | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/users?select=role&id=eq.11dfb34b-2d02-4186-bc95-01719eca808b | okhttp/4.12.0",
+      "timestamp": 1782445700699000
+    },
+    {
+      "event_message": "HEAD | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/users?select=id&is_active=eq.true | okhttp/4.12.0",
+      "timestamp": 1782445700655000
+    },
+    {
+      "event_message": "GET | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/import_metadata?select=table_name%2Clast_updated_at&last_updated_at=not.is.null&limit=500 | okhttp/4.12.0",
+      "timestamp": 1782445700591000
+    },
+    {
+      "event_message": "GET | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/import_metadata?select=table_name%2Clast_updated_at&last_updated_at=not.is.null&limit=500 | okhttp/4.12.0",
+      "timestamp": 1782445700513000
+    },
+    {
+      "event_message": "GET | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/job_card_summary?select=job_card_id%2Cjc_number%2Creg_number%2Cmodel%2Cvehicle_year%2Ccolour%2Ccomplaint_date%2Cstatus%2Cwarranty_age_days%2Ctml_share_percent%2Ctotal_estimate_amount%2Cpanel_count%2Cphoto_count%2Chas_ppt_pre%2Chas_ppt_post%2Cowner_name%2Ckm_reading&order=jc_created_at.desc | okhttp/4.12.0",
+      "timestamp": 1782445700512000
+    },
+    {
+      "event_message": "HEAD | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/users?select=id&is_active=eq.true | okhttp/4.12.0",
+      "timestamp": 1782445700511000
+    },
+    {
+      "event_message": "GET | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/job_card_summary?select=job_card_id%2Cjc_number%2Creg_number%2Cmodel%2Cvehicle_year%2Ccolour%2Ccomplaint_date%2Cstatus%2Cwarranty_age_days%2Ctml_share_percent%2Ctotal_estimate_amount%2Cpanel_count%2Cphoto_count%2Chas_ppt_pre%2Chas_ppt_post%2Cowner_name%2Ckm_reading&order=jc_created_at.desc | okhttp/4.12.0",
+      "timestamp": 1782445700511000
+    },
+    {
+      "event_message": "POST | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/rpc/get_all_my_permissions | okhttp/4.12.0",
+      "timestamp": 1782445700477000
+    },
+    {
+      "event_message": "POST | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/auth/v1/token?grant_type=refresh_token | okhttp/4.12.0",
+      "timestamp": 1782445700039000
+    },
+    {
+      "event_message": "GET | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/job_card_closed_data?select=job_card_number%2Cclosed_date_time%2Cinvoice_date%2Cfinal_labour_amount&job_card_number=in.%28JC-MBTPLT-JP2-2627-002339%2CJC-MBTPLT-JP2-2627-002334%2CJC-MBTPLT-JP2-2627-002341%2CJC-MBTPLT-JP2-2627-002329%2CJC-MBTPLT-JP2-2627-002326%2CJC-MBTPLT-JP2-2627-002298%2CJC-MBTPLT-JP2-2627-002283%2CJC-MBTPLT-JP2-2627-002292%2CJC-MBTPLT-JP2-2627-002287%2CJC-MBTPLT-JP2-2627-002293%2CJC-MBTPLT-JP2-2627-002284%2CJC-MBTPLT-JP2-2627-002278%2CJC-MBTPLT-JP2-2627-002279%2CJC-MBTPLT-JP1-2627-002998%2CJC-MBTPLT-JP1-2627-003127%2CJC-MBTPLT-JP2-2627-002371%2CJC-MBTPLT-JP1-2627-003001%2CJC-MBTPLT-JP1-2627-003007%2CJC-MBTPLT-JP1-2627-003008%2CJC-MBTPLT-JP2-2627-002236%2CJC-MBTPLT-JP2-2627-002249%2CJC-MBTPLT-JP1-2627-002996%2CJC-MBTPLT-JP2-2627-002233%2CJC-MBTPLT-JP2-2627-002258%2CJC-MBTPLT-JP2-2627-002244%2CJC-MBTPLT-JP1-2627-002991%2CJC-MBTPLT-JP2-2627-002250%2CJC-MBTPLT-JP1-2627-002990%2CJC-MBTPLT-JP2-2627-002251%2CJC-MBTPLT-JP2-262... | Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
+      "timestamp": 1782445699491000
+    },
+    {
+      "event_message": "OPTIONS | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/job_card_closed_data?select=job_card_number%2Cclosed_date_time%2Cinvoice_date%2Cfinal_labour_amount&job_card_number=in.%28JC-MBTPLT-JP2-2627-002339%2CJC-MBTPLT-JP2-2627-002334%2CJC-MBTPLT-JP2-2627-002341%2CJC-MBTPLT-JP2-2627-002329%2CJC-MBTPLT-JP2-2627-002326%2CJC-MBTPLT-JP2-2627-002298%2CJC-MBTPLT-JP2-2627-002283%2CJC-MBTPLT-JP2-2627-002292%2CJC-MBTPLT-JP2-2627-002287%2CJC-MBTPLT-JP2-2627-002293%2CJC-MBTPLT-JP2-2627-002284%2CJC-MBTPLT-JP2-2627-002278%2CJC-MBTPLT-JP2-2627-002279%2CJC-MBTPLT-JP1-2627-002998%2CJC-MBTPLT-JP1-2627-003127%2CJC-MBTPLT-JP2-2627-002371%2CJC-MBTPLT-JP1-2627-003001%2CJC-MBTPLT-JP1-2627-003007%2CJC-MBTPLT-JP1-2627-003008%2CJC-MBTPLT-JP2-2627-002236%2CJC-MBTPLT-JP2-2627-002249%2CJC-MBTPLT-JP1-2627-002996%2CJC-MBTPLT-JP2-2627-002233%2CJC-MBTPLT-JP2-2627-002258%2CJC-MBTPLT-JP2-2627-002244%2CJC-MBTPLT-JP1-2627-002991%2CJC-MBTPLT-JP2-2627-002250%2CJC-MBTPLT-JP1-2627-002990%2CJC-MBTPLT-JP2-2627-002251%2CJC-MBTPLT-JP2-262... | Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
+      "timestamp": 1782445699471000
+    },
+    {
+      "event_message": "GET | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/job_card_closed_data?select=job_card_number%2Cclosed_date_time%2Cinvoice_date%2Cfinal_labour_amount&job_card_number=in.%28JC-MBTPLT-JP1-2627-003229%2CJC-MBTPLT-JP1-2627-003221%2CJC-MBTPLT-JP1-2627-003215%2CJC-MBTPLT-JP2-2627-002455%2CJC-MBTPLT-JP2-2627-002443%2CJC-MBTPLT-JP1-2627-003222%2CJC-MBTPLT-JP1-2627-003220%2CJC-MBTPLT-JP1-2627-003216%2CJC-MBTPLT-JP2-2627-002447%2CJC-MBTPLT-JP2-2627-002449%2CJC-MBTPLT-JP2-2627-002453%2CJC-MBTPLT-JP2-2627-002456%2CJC-MBTPLT-JP2-2627-002454%2CJC-MBTPLT-JP2-2627-002457%2CJC-MBTPLT-JP1-2627-003217%2CJC-MBTPLT-JP1-2627-003212%2CJC-MBTPLT-JP2-2627-002452%2CJC-MBTPLT-JP2-2627-002448%2CJC-MBTPLT-JP1-2627-003213%2CJC-MBTPLT-JP1-2627-003210%2CJC-MBTPLT-JP1-2627-003205%2CJC-MBTPLT-JP1-2627-003191%2CJC-MBTPLT-JP2-2627-002445%2CJC-MBTPLT-JP1-2627-003184%2CJC-MBTPLT-JP2-2627-002442%2CJC-MBTPLT-JP1-2627-003125%2CJC-MBTPLT-JP1-2627-003181%2CJC-MBTPLT-JP1-2627-003192%2CJC-MBTPLT-JP1-2627-003201%2CJC-MBTPLT-JP1-262... | Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
+      "timestamp": 1782445699409000
+    },
+    {
+      "event_message": "OPTIONS | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/job_card_closed_data?select=job_card_number%2Cclosed_date_time%2Cinvoice_date%2Cfinal_labour_amount&job_card_number=in.%28JC-MBTPLT-JP1-2627-003229%2CJC-MBTPLT-JP1-2627-003221%2CJC-MBTPLT-JP1-2627-003215%2CJC-MBTPLT-JP2-2627-002455%2CJC-MBTPLT-JP2-2627-002443%2CJC-MBTPLT-JP1-2627-003222%2CJC-MBTPLT-JP1-2627-003220%2CJC-MBTPLT-JP1-2627-003216%2CJC-MBTPLT-JP2-2627-002447%2CJC-MBTPLT-JP2-2627-002449%2CJC-MBTPLT-JP2-2627-002453%2CJC-MBTPLT-JP2-2627-002456%2CJC-MBTPLT-JP2-2627-002454%2CJC-MBTPLT-JP2-2627-002457%2CJC-MBTPLT-JP1-2627-003217%2CJC-MBTPLT-JP1-2627-003212%2CJC-MBTPLT-JP2-2627-002452%2CJC-MBTPLT-JP2-2627-002448%2CJC-MBTPLT-JP1-2627-003213%2CJC-MBTPLT-JP1-2627-003210%2CJC-MBTPLT-JP1-2627-003205%2CJC-MBTPLT-JP1-2627-003191%2CJC-MBTPLT-JP2-2627-002445%2CJC-MBTPLT-JP1-2627-003184%2CJC-MBTPLT-JP2-2627-002442%2CJC-MBTPLT-JP1-2627-003125%2CJC-MBTPLT-JP1-2627-003181%2CJC-MBTPLT-JP1-2627-003192%2CJC-MBTPLT-JP1-2627-003201%2CJC-MBTPLT-JP1-262... | Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
+      "timestamp": 1782445699387000
+    },
+    {
+      "event_message": "GET | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/job_card_closed_data?select=job_card_number%2Cclosed_date_time%2Cinvoice_date%2Cfinal_labour_amount&job_card_number=in.%28JC-MBTPLT-JP1-2627-003386%2CJC-MBTPLT-JP2-2627-002602%2CJC-MBTPLT-JP1-2627-003384%2CJC-MBTPLT-JP1-2627-003374%2CJC-MBTPLT-JP1-2627-003383%2CJC-MBTPLT-JP1-2627-003381%2CJC-MBTPLT-JP1-2627-003377%2CJC-MBTPLT-JP1-2627-003353%2CJC-MBTPLT-JP1-2627-003375%2CJC-MBTPLT-JP2-2627-002600%2CJC-MBTPLT-JP2-2627-002601%2CJC-MBTPLT-JP1-2627-003363%2CJC-MBTPLT-JP1-2627-003364%2CJC-MBTPLT-JP2-2627-002599%2CJC-MBTPLT-JP2-2627-002598%2CJC-MBTPLT-JP1-2627-003370%2CJC-MBTPLT-JP1-2627-003372%2CJC-MBTPLT-JP2-2627-002594%2CJC-MBTPLT-JP2-2627-002595%2CJC-MBTPLT-JP1-2627-003369%2CJC-MBTPLT-JP2-2627-002593%2CJC-MBTPLT-JP2-2627-002592%2CJC-MBTPLT-JP1-2627-003367%2CJC-MBTPLT-JP1-2627-003362%2CJC-MBTPLT-JP2-2627-002590%2CJC-MBTPLT-JP2-2627-002591%2CJC-MBTPLT-JP1-2627-003356%2CJC-MBTPLT-JP1-2627-003361%2CJC-MBTPLT-JP2-2627-002589%2CJC-MBTPLT-JP1-262... | Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
+      "timestamp": 1782445699329000
+    },
+    {
+      "event_message": "OPTIONS | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/job_card_closed_data?select=job_card_number%2Cclosed_date_time%2Cinvoice_date%2Cfinal_labour_amount&job_card_number=in.%28JC-MBTPLT-JP1-2627-003386%2CJC-MBTPLT-JP2-2627-002602%2CJC-MBTPLT-JP1-2627-003384%2CJC-MBTPLT-JP1-2627-003374%2CJC-MBTPLT-JP1-2627-003383%2CJC-MBTPLT-JP1-2627-003381%2CJC-MBTPLT-JP1-2627-003377%2CJC-MBTPLT-JP1-2627-003353%2CJC-MBTPLT-JP1-2627-003375%2CJC-MBTPLT-JP2-2627-002600%2CJC-MBTPLT-JP2-2627-002601%2CJC-MBTPLT-JP1-2627-003363%2CJC-MBTPLT-JP1-2627-003364%2CJC-MBTPLT-JP2-2627-002599%2CJC-MBTPLT-JP2-2627-002598%2CJC-MBTPLT-JP1-2627-003370%2CJC-MBTPLT-JP1-2627-003372%2CJC-MBTPLT-JP2-2627-002594%2CJC-MBTPLT-JP2-2627-002595%2CJC-MBTPLT-JP1-2627-003369%2CJC-MBTPLT-JP2-2627-002593%2CJC-MBTPLT-JP2-2627-002592%2CJC-MBTPLT-JP1-2627-003367%2CJC-MBTPLT-JP1-2627-003362%2CJC-MBTPLT-JP2-2627-002590%2CJC-MBTPLT-JP2-2627-002591%2CJC-MBTPLT-JP1-2627-003356%2CJC-MBTPLT-JP1-2627-003361%2CJC-MBTPLT-JP2-2627-002589%2CJC-MBTPLT-JP1-262... | Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
+      "timestamp": 1782445699311000
+    },
+    {
+      "event_message": "GET | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/job_card_closed_data?select=job_card_number%2Cclosed_date_time%2Cinvoice_date%2Cfinal_labour_amount&job_card_number=in.%28JC-MBTPLT-JP1-2627-003310%2CJC-MBTPLT-JP1-2627-003224%2CJC-MBTPLT-JP1-2627-003171%2CJC-MBTPLT-JP1-2627-003158%2CJC-MBTPLT-JP1-2627-003151%2CJC-MBTPLT-JP1-2627-003103%2CJC-MBTPLT-JP1-2627-002833%2CJC-MBTPLT-JP2-2627-002530%2CJC-MBTPLT-JP2-2627-002506%2CJC-MBTPLT-JP2-2627-002502%2CJC-MBTPLT-JP2-2627-002481%2CJC-MBTPLT-JP2-2627-002477%2CJC-MBTPLT-JP2-2627-002450%2CJC-MBTPLT-JP1-2627-002820%2CJC-MBTPLT-JP1-2627-002808%2CJC-MBTPLT-JP2-2627-002433%2CJC-MBTPLT-JP1-2627-002788%2CJC-MBTPLT-JP2-2627-002393%2CJC-MBTPLT-JP1-2627-002769%2CJC-MBTPLT-JP1-2627-002752%2CJC-MBTPLT-JP2-2627-002255%2CJC-MBTPLT-JP1-2627-002740%2CJC-MBTPLT-JP2-2627-002092%2CJC-MBTPLT-JP2-2627-002156%2CJC-MBTPLT-JP1-2627-002715%2CJC-MBTPLT-JP1-2627-002647%2CJC-MBTPLT-JP2-2627-002135%2CJC-MBTPLT-JP1-2627-002582%2CJC-MBTPLT-JP1-2627-002303%2CJC-MBTPLT-JP2-262... | Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
+      "timestamp": 1782445699240000
+    },
+    {
+      "event_message": "OPTIONS | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/job_card_closed_data?select=job_card_number%2Cclosed_date_time%2Cinvoice_date%2Cfinal_labour_amount&job_card_number=in.%28JC-MBTPLT-JP1-2627-003310%2CJC-MBTPLT-JP1-2627-003224%2CJC-MBTPLT-JP1-2627-003171%2CJC-MBTPLT-JP1-2627-003158%2CJC-MBTPLT-JP1-2627-003151%2CJC-MBTPLT-JP1-2627-003103%2CJC-MBTPLT-JP1-2627-002833%2CJC-MBTPLT-JP2-2627-002530%2CJC-MBTPLT-JP2-2627-002506%2CJC-MBTPLT-JP2-2627-002502%2CJC-MBTPLT-JP2-2627-002481%2CJC-MBTPLT-JP2-2627-002477%2CJC-MBTPLT-JP2-2627-002450%2CJC-MBTPLT-JP1-2627-002820%2CJC-MBTPLT-JP1-2627-002808%2CJC-MBTPLT-JP2-2627-002433%2CJC-MBTPLT-JP1-2627-002788%2CJC-MBTPLT-JP2-2627-002393%2CJC-MBTPLT-JP1-2627-002769%2CJC-MBTPLT-JP1-2627-002752%2CJC-MBTPLT-JP2-2627-002255%2CJC-MBTPLT-JP1-2627-002740%2CJC-MBTPLT-JP2-2627-002092%2CJC-MBTPLT-JP2-2627-002156%2CJC-MBTPLT-JP1-2627-002715%2CJC-MBTPLT-JP1-2627-002647%2CJC-MBTPLT-JP2-2627-002135%2CJC-MBTPLT-JP1-2627-002582%2CJC-MBTPLT-JP1-2627-002303%2CJC-MBTPLT-JP2-262... | Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
+      "timestamp": 1782445699218000
+    },
+    {
+      "event_message": "GET | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/job_card_closed_data?select=job_card_number%2Cclosed_date_time%2Cinvoice_date%2Cfinal_labour_amount&job_card_number=in.%28JC-MBTPLT-JP2-2627-002861%2CJC-MBTPLT-JP2-2627-002862%2CJC-MBTPLT-JP2-2627-002860%2CJC-MBTPLT-JP1-2627-003701%2CJC-MBTPLT-JP1-2627-003703%2CJC-MBTPLT-JP1-2627-003702%2CJC-MBTPLT-JP1-2627-003699%2CJC-MBTPLT-JP1-2627-003700%2CJC-MBTPLT-JP1-2627-003697%2CJC-MBTPLT-JP1-2627-003682%2CJC-MBTPLT-JP2-2627-002858%2CJC-MBTPLT-JP1-2627-003695%2CJC-MBTPLT-JP1-2627-003689%2CJC-MBTPLT-JP1-2627-003691%2CJC-MBTPLT-JP1-2627-003693%2CJC-MBTPLT-JP1-2627-003692%2CJC-MBTPLT-JP1-2627-003690%2CJC-MBTPLT-JP1-2627-003688%2CJC-MBTPLT-JP1-2627-003687%2CJC-MBTPLT-JP1-2627-003684%2CJC-MBTPLT-JP1-2627-003683%2CJC-MBTPLT-JP2-2627-002853%2CJC-MBTPLT-JP2-2627-002848%2CJC-MBTPLT-JP2-2627-002851%2CJC-MBTPLT-JP1-2627-003679%2CJC-MBTPLT-JP2-2627-002849%2CJC-MBTPLT-JP2-2627-002846%2CJC-MBTPLT-JP1-2627-003672%2CJC-MBTPLT-JP1-2627-003678%2CJC-MBTPLT-JP2-262... | Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
+      "timestamp": 1782445699154000
+    },
+    {
+      "event_message": "OPTIONS | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/job_card_closed_data?select=job_card_number%2Cclosed_date_time%2Cinvoice_date%2Cfinal_labour_amount&job_card_number=in.%28JC-MBTPLT-JP2-2627-002861%2CJC-MBTPLT-JP2-2627-002862%2CJC-MBTPLT-JP2-2627-002860%2CJC-MBTPLT-JP1-2627-003701%2CJC-MBTPLT-JP1-2627-003703%2CJC-MBTPLT-JP1-2627-003702%2CJC-MBTPLT-JP1-2627-003699%2CJC-MBTPLT-JP1-2627-003700%2CJC-MBTPLT-JP1-2627-003697%2CJC-MBTPLT-JP1-2627-003682%2CJC-MBTPLT-JP2-2627-002858%2CJC-MBTPLT-JP1-2627-003695%2CJC-MBTPLT-JP1-2627-003689%2CJC-MBTPLT-JP1-2627-003691%2CJC-MBTPLT-JP1-2627-003693%2CJC-MBTPLT-JP1-2627-003692%2CJC-MBTPLT-JP1-2627-003690%2CJC-MBTPLT-JP1-2627-003688%2CJC-MBTPLT-JP1-2627-003687%2CJC-MBTPLT-JP1-2627-003684%2CJC-MBTPLT-JP1-2627-003683%2CJC-MBTPLT-JP2-2627-002853%2CJC-MBTPLT-JP2-2627-002848%2CJC-MBTPLT-JP2-2627-002851%2CJC-MBTPLT-JP1-2627-003679%2CJC-MBTPLT-JP2-2627-002849%2CJC-MBTPLT-JP2-2627-002846%2CJC-MBTPLT-JP1-2627-003672%2CJC-MBTPLT-JP1-2627-003678%2CJC-MBTPLT-JP2-262... | Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
+      "timestamp": 1782445699136000
+    },
+    {
+      "event_message": "GET | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/job_card_closed_data?select=job_card_number%2Cclosed_date_time%2Cinvoice_date%2Cfinal_labour_amount&job_card_number=in.%28JC-MBTPLT-JP1-2627-003915%2CJC-MBTPLT-JP1-2627-003912%2CJC-MBTPLT-JP1-2627-003914%2CJC-MBTPLT-JP1-2627-003903%2CJC-MBTPLT-JP1-2627-003904%2CJC-MBTPLT-JP1-2627-003907%2CJC-MBTPLT-JP1-2627-003910%2CJC-MBTPLT-JP1-2627-003906%2CJC-MBTPLT-JP1-2627-003905%2CJC-MBTPLT-JP1-2627-003890%2CJC-MBTPLT-JP1-2627-003902%2CJC-MBTPLT-JP1-2627-003896%2CJC-MBTPLT-JP1-2627-003901%2CJC-MBTPLT-JP1-2627-003908%2CJC-MBTPLT-JP2-2627-002988%2CJC-MBTPLT-JP2-2627-002989%2CJC-MBTPLT-JP2-2627-002984%2CJC-MBTPLT-JP2-2627-002948%2CJC-MBTPLT-JP1-2627-003892%2CJC-MBTPLT-JP1-2627-003884%2CJC-MBTPLT-JP1-2627-003893%2CJC-MBTPLT-JP1-2627-003894%2CJC-MBTPLT-JP1-2627-003885%2CJC-MBTPLT-JP1-2627-003889%2CJC-MBTPLT-JP1-2627-003887%2CJC-MBTPLT-JP1-2627-003886%2CJC-MBTPLT-JP2-2627-002981%2CJC-MBTPLT-JP2-2627-002979%2CJC-MBTPLT-JP2-2627-002983%2CJC-MBTPLT-JP1-262... | Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
+      "timestamp": 1782445699070000
+    },
+    {
+      "event_message": "OPTIONS | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/job_card_closed_data?select=job_card_number%2Cclosed_date_time%2Cinvoice_date%2Cfinal_labour_amount&job_card_number=in.%28JC-MBTPLT-JP1-2627-003915%2CJC-MBTPLT-JP1-2627-003912%2CJC-MBTPLT-JP1-2627-003914%2CJC-MBTPLT-JP1-2627-003903%2CJC-MBTPLT-JP1-2627-003904%2CJC-MBTPLT-JP1-2627-003907%2CJC-MBTPLT-JP1-2627-003910%2CJC-MBTPLT-JP1-2627-003906%2CJC-MBTPLT-JP1-2627-003905%2CJC-MBTPLT-JP1-2627-003890%2CJC-MBTPLT-JP1-2627-003902%2CJC-MBTPLT-JP1-2627-003896%2CJC-MBTPLT-JP1-2627-003901%2CJC-MBTPLT-JP1-2627-003908%2CJC-MBTPLT-JP2-2627-002988%2CJC-MBTPLT-JP2-2627-002989%2CJC-MBTPLT-JP2-2627-002984%2CJC-MBTPLT-JP2-2627-002948%2CJC-MBTPLT-JP1-2627-003892%2CJC-MBTPLT-JP1-2627-003884%2CJC-MBTPLT-JP1-2627-003893%2CJC-MBTPLT-JP1-2627-003894%2CJC-MBTPLT-JP1-2627-003885%2CJC-MBTPLT-JP1-2627-003889%2CJC-MBTPLT-JP1-2627-003887%2CJC-MBTPLT-JP1-2627-003886%2CJC-MBTPLT-JP2-2627-002981%2CJC-MBTPLT-JP2-2627-002979%2CJC-MBTPLT-JP2-2627-002983%2CJC-MBTPLT-JP1-262... | Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
+      "timestamp": 1782445699052000
+    },
+    {
+      "event_message": "GET | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/employee_master?select=employee_code%2Clocation%2Cfuel_type&employee_code=in.%28PYS2_3000840%2CA6_3000840%2CPHS7_3000840%2CPS2_3000840%2CPJS1_3000840%2C3000840_625%2CGJ1_3000840%2CPGC_3000840%2CYS_500A840%2CSS1_500A840%2CPBK_3000840%2CVK1_3000840%2CPB1_3000840%2CPAK1_3000840%2CPAG1_3000840%2CPAS3_3000840%2CENS1_500A840%2CEPM_500A840%2CBS_500A840%2CPUM_3000840%2CSS2_3000840%2CPAA1_3000840%2CEAA_500A840%2CPMS1_3001440%2CPJA_3001440%2CHS2_3000840%29 | Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
+      "timestamp": 1782445699000000
+    },
+    {
+      "event_message": "GET | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/service_reception_entries?select=id%2Cdealer_code%2Creg_number%2Cmodel%2Cservice_type%2Csa_name%2Csa_employee_code%2Csa_display_name%2Cjc_number%2Cowner_name%2Cowner_phone%2Cbranch%2Clocation%2Cportal%2Cbranch_label%2Ckm_reading%2Csource%2Cremark%2Cestimate_storage_path%2Cestimate_file_name%2Cestimate_content_type%2Cestimate_uploaded_at%2Cestimate_uploaded_by%2Cestimate_drive_url%2Cestimate_drive_file_id%2Cinvoice_storage_path%2Cinvoice_file_name%2Cinvoice_content_type%2Cinvoice_uploaded_at%2Cinvoice_uploaded_by%2Cinvoice_drive_url%2Cinvoice_drive_file_id%2Cinvoice_done_at%2Cinvoice_done_by%2Ccreated_by%2Ccreated_at%2Cupdated_at&order=created_at.desc%2Cid.desc&limit=500&or=%28created_at.lt.2026-06-01T16%3A52%3A33%2B05%3A30%2Cand%28created_at.eq.2026-06-01T16%3A52%3A33%2B05%3A30%2Cid.lt.1843%29%29 | Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
+      "timestamp": 1782445698911000
+    },
+    {
+      "event_message": "GET | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/service_reception_entries?select=id%2Cdealer_code%2Creg_number%2Cmodel%2Cservice_type%2Csa_name%2Csa_employee_code%2Csa_display_name%2Cjc_number%2Cowner_name%2Cowner_phone%2Cbranch%2Clocation%2Cportal%2Cbranch_label%2Ckm_reading%2Csource%2Cremark%2Cestimate_storage_path%2Cestimate_file_name%2Cestimate_content_type%2Cestimate_uploaded_at%2Cestimate_uploaded_by%2Cestimate_drive_url%2Cestimate_drive_file_id%2Cinvoice_storage_path%2Cinvoice_file_name%2Cinvoice_content_type%2Cinvoice_uploaded_at%2Cinvoice_uploaded_by%2Cinvoice_drive_url%2Cinvoice_drive_file_id%2Cinvoice_done_at%2Cinvoice_done_by%2Ccreated_by%2Ccreated_at%2Cupdated_at&order=created_at.desc%2Cid.desc&limit=500&or=%28created_at.lt.2026-06-08T11%3A43%3A28.685256%2B05%3A30%2Cand%28created_at.eq.2026-06-08T11%3A43%3A28.685256%2B05%3A30%2Cid.lt.2052%29%29 | Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
+      "timestamp": 1782445698663000
+    },
+    {
+      "event_message": "GET | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/service_reception_entries?select=id%2Cdealer_code%2Creg_number%2Cmodel%2Cservice_type%2Csa_name%2Csa_employee_code%2Csa_display_name%2Cjc_number%2Cowner_name%2Cowner_phone%2Cbranch%2Clocation%2Cportal%2Cbranch_label%2Ckm_reading%2Csource%2Cremark%2Cestimate_storage_path%2Cestimate_file_name%2Cestimate_content_type%2Cestimate_uploaded_at%2Cestimate_uploaded_by%2Cestimate_drive_url%2Cestimate_drive_file_id%2Cinvoice_storage_path%2Cinvoice_file_name%2Cinvoice_content_type%2Cinvoice_uploaded_at%2Cinvoice_uploaded_by%2Cinvoice_drive_url%2Cinvoice_drive_file_id%2Cinvoice_done_at%2Cinvoice_done_by%2Ccreated_by%2Ccreated_at%2Cupdated_at&order=created_at.desc%2Cid.desc&limit=500&or=%28created_at.lt.2026-06-17T11%3A01%3A13.31005%2B05%3A30%2Cand%28created_at.eq.2026-06-17T11%3A01%3A13.31005%2B05%3A30%2Cid.lt.2762%29%29 | Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
+      "timestamp": 1782445698419000
+    },
+    {
+      "event_message": "GET | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/service_reception_entries?select=id%2Cdealer_code%2Creg_number%2Cmodel%2Cservice_type%2Csa_name%2Csa_employee_code%2Csa_display_name%2Cjc_number%2Cowner_name%2Cowner_phone%2Cbranch%2Clocation%2Cportal%2Cbranch_label%2Ckm_reading%2Csource%2Cremark%2Cestimate_storage_path%2Cestimate_file_name%2Cestimate_content_type%2Cestimate_uploaded_at%2Cestimate_uploaded_by%2Cestimate_drive_url%2Cestimate_drive_file_id%2Cinvoice_storage_path%2Cinvoice_file_name%2Cinvoice_content_type%2Cinvoice_uploaded_at%2Cinvoice_uploaded_by%2Cinvoice_drive_url%2Cinvoice_drive_file_id%2Cinvoice_done_at%2Cinvoice_done_by%2Ccreated_by%2Ccreated_at%2Cupdated_at&order=created_at.desc%2Cid.desc&limit=500 | Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
+      "timestamp": 1782445698177000
+    },
+    {
+      "event_message": "GET | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/employee_master?select=employee_code%2Clocation%2Cfuel_type&employee_code=in.%28PYS2_3000840%2CA6_3000840%2CPHS7_3000840%2CPJS1_3000840%2CPS2_3000840%2CPGC_3000840%2CYS_500A840%2CSS1_500A840%2CPBK_3000840%2CVK1_3000840%2CPB1_3000840%2CBS_500A840%2CPUM_3000840%2CSS2_3000840%2CPAA1_3000840%2CEAA_500A840%2CPMS1_3001440%2CPJA_3001440%2CHS2_3000840%2CEPM_500A840%29 | Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
+      "timestamp": 1782445698126000
+    },
+    {
+      "event_message": "GET | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/service_reception_entries?select=id%2Cdealer_code%2Creg_number%2Cmodel%2Cservice_type%2Csa_name%2Csa_employee_code%2Csa_display_name%2Cjc_number%2Cowner_name%2Cowner_phone%2Cbranch%2Clocation%2Cportal%2Cbranch_label%2Ckm_reading%2Csource%2Cremark%2Cestimate_storage_path%2Cestimate_file_name%2Cestimate_content_type%2Cestimate_uploaded_at%2Cestimate_uploaded_by%2Cestimate_drive_url%2Cestimate_drive_file_id%2Cinvoice_storage_path%2Cinvoice_file_name%2Cinvoice_content_type%2Cinvoice_uploaded_at%2Cinvoice_uploaded_by%2Cinvoice_drive_url%2Cinvoice_drive_file_id%2Cinvoice_done_at%2Cinvoice_done_by%2Ccreated_by%2Ccreated_at%2Cupdated_at&order=created_at.desc%2Cid.desc&limit=500&service_type=in.%28Running+Repairs%2CFirst+Free+Service%2CSecond+Free+Service%2CThird+Free+Service%2CPaid+Service%2CUpdation%2CE+Breakdown%2CCampaign%29&jc_number=not.is.null&jc_number=neq.&or=%28created_at.lt.2026-06-06T16%3A18%3A40.659818%2B05%3A30%2Cand%28created_at.eq... | Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
+      "timestamp": 1782445697885000
+    },
+    {
+      "event_message": "OPTIONS | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/service_reception_entries?select=id%2Cdealer_code%2Creg_number%2Cmodel%2Cservice_type%2Csa_name%2Csa_employee_code%2Csa_display_name%2Cjc_number%2Cowner_name%2Cowner_phone%2Cbranch%2Clocation%2Cportal%2Cbranch_label%2Ckm_reading%2Csource%2Cremark%2Cestimate_storage_path%2Cestimate_file_name%2Cestimate_content_type%2Cestimate_uploaded_at%2Cestimate_uploaded_by%2Cestimate_drive_url%2Cestimate_drive_file_id%2Cinvoice_storage_path%2Cinvoice_file_name%2Cinvoice_content_type%2Cinvoice_uploaded_at%2Cinvoice_uploaded_by%2Cinvoice_drive_url%2Cinvoice_drive_file_id%2Cinvoice_done_at%2Cinvoice_done_by%2Ccreated_by%2Ccreated_at%2Cupdated_at&order=created_at.desc%2Cid.desc&limit=500&service_type=in.%28Running+Repairs%2CFirst+Free+Service%2CSecond+Free+Service%2CThird+Free+Service%2CPaid+Service%2CUpdation%2CE+Breakdown%2CCampaign%29&jc_number=not.is.null&jc_number=neq.&or=%28created_at.lt.2026-06-06T16%3A18%3A40.659818%2B05%3A30%2Cand%28created_at.eq... | Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
+      "timestamp": 1782445697862000
+    },
+    {
+      "event_message": "GET | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/service_reception_entries?select=id%2Cdealer_code%2Creg_number%2Cmodel%2Cservice_type%2Csa_name%2Csa_employee_code%2Csa_display_name%2Cjc_number%2Cowner_name%2Cowner_phone%2Cbranch%2Clocation%2Cportal%2Cbranch_label%2Ckm_reading%2Csource%2Cremark%2Cestimate_storage_path%2Cestimate_file_name%2Cestimate_content_type%2Cestimate_uploaded_at%2Cestimate_uploaded_by%2Cestimate_drive_url%2Cestimate_drive_file_id%2Cinvoice_storage_path%2Cinvoice_file_name%2Cinvoice_content_type%2Cinvoice_uploaded_at%2Cinvoice_uploaded_by%2Cinvoice_drive_url%2Cinvoice_drive_file_id%2Cinvoice_done_at%2Cinvoice_done_by%2Ccreated_by%2Ccreated_at%2Cupdated_at&order=created_at.desc%2Cid.desc&limit=500&service_type=in.%28Running+Repairs%2CFirst+Free+Service%2CSecond+Free+Service%2CThird+Free+Service%2CPaid+Service%2CUpdation%2CE+Breakdown%2CCampaign%29&jc_number=not.is.null&jc_number=neq.&or=%28created_at.lt.2026-06-16T12%3A40%3A22.810293%2B05%3A30%2Cand%28created_at.eq... | Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
+      "timestamp": 1782445697571000
+    },
+    {
+      "event_message": "OPTIONS | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/service_reception_entries?select=id%2Cdealer_code%2Creg_number%2Cmodel%2Cservice_type%2Csa_name%2Csa_employee_code%2Csa_display_name%2Cjc_number%2Cowner_name%2Cowner_phone%2Cbranch%2Clocation%2Cportal%2Cbranch_label%2Ckm_reading%2Csource%2Cremark%2Cestimate_storage_path%2Cestimate_file_name%2Cestimate_content_type%2Cestimate_uploaded_at%2Cestimate_uploaded_by%2Cestimate_drive_url%2Cestimate_drive_file_id%2Cinvoice_storage_path%2Cinvoice_file_name%2Cinvoice_content_type%2Cinvoice_uploaded_at%2Cinvoice_uploaded_by%2Cinvoice_drive_url%2Cinvoice_drive_file_id%2Cinvoice_done_at%2Cinvoice_done_by%2Ccreated_by%2Ccreated_at%2Cupdated_at&order=created_at.desc%2Cid.desc&limit=500&service_type=in.%28Running+Repairs%2CFirst+Free+Service%2CSecond+Free+Service%2CThird+Free+Service%2CPaid+Service%2CUpdation%2CE+Breakdown%2CCampaign%29&jc_number=not.is.null&jc_number=neq.&or=%28created_at.lt.2026-06-16T12%3A40%3A22.810293%2B05%3A30%2Cand%28created_at.eq... | Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
+      "timestamp": 1782445697549000
+    },
+    {
+      "event_message": "GET | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/service_reception_entries?select=id%2Cdealer_code%2Creg_number%2Cmodel%2Cservice_type%2Csa_name%2Csa_employee_code%2Csa_display_name%2Cjc_number%2Cowner_name%2Cowner_phone%2Cbranch%2Clocation%2Cportal%2Cbranch_label%2Ckm_reading%2Csource%2Cremark%2Cestimate_storage_path%2Cestimate_file_name%2Cestimate_content_type%2Cestimate_uploaded_at%2Cestimate_uploaded_by%2Cestimate_drive_url%2Cestimate_drive_file_id%2Cinvoice_storage_path%2Cinvoice_file_name%2Cinvoice_content_type%2Cinvoice_uploaded_at%2Cinvoice_uploaded_by%2Cinvoice_drive_url%2Cinvoice_drive_file_id%2Cinvoice_done_at%2Cinvoice_done_by%2Ccreated_by%2Ccreated_at%2Cupdated_at&order=created_at.desc%2Cid.desc&limit=500&service_type=in.%28Running+Repairs%2CFirst+Free+Service%2CSecond+Free+Service%2CThird+Free+Service%2CPaid+Service%2CUpdation%2CE+Breakdown%2CCampaign%29&jc_number=not.is.null&jc_number=neq. | Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
+      "timestamp": 1782445697189000
+    },
+    {
+      "event_message": "GET | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/job_card_support_assignments?select=job_card_number%2Csupport_role%2Cemployee_code%2Cemployee_name%2Cassigned_at%2Cis_active&job_card_number=in.%28JC-MBTPLT-JP2-2627-002339%2CJC-MBTPLT-JP2-2627-002334%2CJC-MBTPLT-JP2-2627-002341%2CJC-MBTPLT-JP2-2627-002329%2CJC-MBTPLT-JP2-2627-002326%2CJC-MBTPLT-JP2-2627-002298%2CJC-MBTPLT-JP2-2627-002283%2CJC-MBTPLT-JP2-2627-002292%2CJC-MBTPLT-JP2-2627-002287%2CJC-MBTPLT-JP2-2627-002293%2CJC-MBTPLT-JP2-2627-002284%2CJC-MBTPLT-JP2-2627-002278%2CJC-MBTPLT-JP2-2627-002279%2CJC-MBTPLT-JP1-2627-002998%2CJC-MBTPLT-JP1-2627-003127%2CJC-MBTPLT-JP2-2627-002371%2CJC-MBTPLT-JP1-2627-003001%2CJC-MBTPLT-JP1-2627-003007%2CJC-MBTPLT-JP1-2627-003008%2CJC-MBTPLT-JP2-2627-002236%2CJC-MBTPLT-JP2-2627-002249%2CJC-MBTPLT-JP1-2627-002996%2CJC-MBTPLT-JP2-2627-002233%2CJC-MBTPLT-JP2-2627-002258%2CJC-MBTPLT-JP2-2627-002244%2CJC-MBTPLT-JP1-2627-002991%2CJC-MBTPLT-JP2-2627-002250%2CJC-MBTPLT-JP1-2627-002990%2CJC-MBTPLT-JP2-2627-0... | Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
+      "timestamp": 1782445697129000
+    },
+    {
+      "event_message": "OPTIONS | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/job_card_support_assignments?select=job_card_number%2Csupport_role%2Cemployee_code%2Cemployee_name%2Cassigned_at%2Cis_active&job_card_number=in.%28JC-MBTPLT-JP2-2627-002339%2CJC-MBTPLT-JP2-2627-002334%2CJC-MBTPLT-JP2-2627-002341%2CJC-MBTPLT-JP2-2627-002329%2CJC-MBTPLT-JP2-2627-002326%2CJC-MBTPLT-JP2-2627-002298%2CJC-MBTPLT-JP2-2627-002283%2CJC-MBTPLT-JP2-2627-002292%2CJC-MBTPLT-JP2-2627-002287%2CJC-MBTPLT-JP2-2627-002293%2CJC-MBTPLT-JP2-2627-002284%2CJC-MBTPLT-JP2-2627-002278%2CJC-MBTPLT-JP2-2627-002279%2CJC-MBTPLT-JP1-2627-002998%2CJC-MBTPLT-JP1-2627-003127%2CJC-MBTPLT-JP2-2627-002371%2CJC-MBTPLT-JP1-2627-003001%2CJC-MBTPLT-JP1-2627-003007%2CJC-MBTPLT-JP1-2627-003008%2CJC-MBTPLT-JP2-2627-002236%2CJC-MBTPLT-JP2-2627-002249%2CJC-MBTPLT-JP1-2627-002996%2CJC-MBTPLT-JP2-2627-002233%2CJC-MBTPLT-JP2-2627-002258%2CJC-MBTPLT-JP2-2627-002244%2CJC-MBTPLT-JP1-2627-002991%2CJC-MBTPLT-JP2-2627-002250%2CJC-MBTPLT-JP1-2627-002990%2CJC-MBTPLT-JP2-2627-0... | Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
+      "timestamp": 1782445697110000
+    },
+    {
+      "event_message": "GET | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/job_card_support_assignments?select=job_card_number%2Csupport_role%2Cemployee_code%2Cemployee_name%2Cassigned_at%2Cis_active&job_card_number=in.%28JC-MBTPLT-JP1-2627-003229%2CJC-MBTPLT-JP1-2627-003221%2CJC-MBTPLT-JP1-2627-003215%2CJC-MBTPLT-JP2-2627-002455%2CJC-MBTPLT-JP2-2627-002443%2CJC-MBTPLT-JP1-2627-003222%2CJC-MBTPLT-JP1-2627-003220%2CJC-MBTPLT-JP1-2627-003216%2CJC-MBTPLT-JP2-2627-002447%2CJC-MBTPLT-JP2-2627-002449%2CJC-MBTPLT-JP2-2627-002453%2CJC-MBTPLT-JP2-2627-002456%2CJC-MBTPLT-JP2-2627-002454%2CJC-MBTPLT-JP2-2627-002457%2CJC-MBTPLT-JP1-2627-003217%2CJC-MBTPLT-JP1-2627-003212%2CJC-MBTPLT-JP2-2627-002452%2CJC-MBTPLT-JP2-2627-002448%2CJC-MBTPLT-JP1-2627-003213%2CJC-MBTPLT-JP1-2627-003210%2CJC-MBTPLT-JP1-2627-003205%2CJC-MBTPLT-JP1-2627-003191%2CJC-MBTPLT-JP2-2627-002445%2CJC-MBTPLT-JP1-2627-003184%2CJC-MBTPLT-JP2-2627-002442%2CJC-MBTPLT-JP1-2627-003125%2CJC-MBTPLT-JP1-2627-003181%2CJC-MBTPLT-JP1-2627-003192%2CJC-MBTPLT-JP1-2627-0... | Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
+      "timestamp": 1782445697056000
+    },
+    {
+      "event_message": "OPTIONS | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/job_card_support_assignments?select=job_card_number%2Csupport_role%2Cemployee_code%2Cemployee_name%2Cassigned_at%2Cis_active&job_card_number=in.%28JC-MBTPLT-JP1-2627-003229%2CJC-MBTPLT-JP1-2627-003221%2CJC-MBTPLT-JP1-2627-003215%2CJC-MBTPLT-JP2-2627-002455%2CJC-MBTPLT-JP2-2627-002443%2CJC-MBTPLT-JP1-2627-003222%2CJC-MBTPLT-JP1-2627-003220%2CJC-MBTPLT-JP1-2627-003216%2CJC-MBTPLT-JP2-2627-002447%2CJC-MBTPLT-JP2-2627-002449%2CJC-MBTPLT-JP2-2627-002453%2CJC-MBTPLT-JP2-2627-002456%2CJC-MBTPLT-JP2-2627-002454%2CJC-MBTPLT-JP2-2627-002457%2CJC-MBTPLT-JP1-2627-003217%2CJC-MBTPLT-JP1-2627-003212%2CJC-MBTPLT-JP2-2627-002452%2CJC-MBTPLT-JP2-2627-002448%2CJC-MBTPLT-JP1-2627-003213%2CJC-MBTPLT-JP1-2627-003210%2CJC-MBTPLT-JP1-2627-003205%2CJC-MBTPLT-JP1-2627-003191%2CJC-MBTPLT-JP2-2627-002445%2CJC-MBTPLT-JP1-2627-003184%2CJC-MBTPLT-JP2-2627-002442%2CJC-MBTPLT-JP1-2627-003125%2CJC-MBTPLT-JP1-2627-003181%2CJC-MBTPLT-JP1-2627-003192%2CJC-MBTPLT-JP1-2627-0... | Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
+      "timestamp": 1782445697038000
+    },
+    {
+      "event_message": "GET | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/job_card_support_assignments?select=job_card_number%2Csupport_role%2Cemployee_code%2Cemployee_name%2Cassigned_at%2Cis_active&job_card_number=in.%28JC-MBTPLT-JP1-2627-003386%2CJC-MBTPLT-JP2-2627-002602%2CJC-MBTPLT-JP1-2627-003384%2CJC-MBTPLT-JP1-2627-003374%2CJC-MBTPLT-JP1-2627-003383%2CJC-MBTPLT-JP1-2627-003381%2CJC-MBTPLT-JP1-2627-003377%2CJC-MBTPLT-JP1-2627-003353%2CJC-MBTPLT-JP1-2627-003375%2CJC-MBTPLT-JP2-2627-002600%2CJC-MBTPLT-JP2-2627-002601%2CJC-MBTPLT-JP1-2627-003363%2CJC-MBTPLT-JP1-2627-003364%2CJC-MBTPLT-JP2-2627-002599%2CJC-MBTPLT-JP2-2627-002598%2CJC-MBTPLT-JP1-2627-003370%2CJC-MBTPLT-JP1-2627-003372%2CJC-MBTPLT-JP2-2627-002594%2CJC-MBTPLT-JP2-2627-002595%2CJC-MBTPLT-JP1-2627-003369%2CJC-MBTPLT-JP2-2627-002593%2CJC-MBTPLT-JP2-2627-002592%2CJC-MBTPLT-JP1-2627-003367%2CJC-MBTPLT-JP1-2627-003362%2CJC-MBTPLT-JP2-2627-002590%2CJC-MBTPLT-JP2-2627-002591%2CJC-MBTPLT-JP1-2627-003356%2CJC-MBTPLT-JP1-2627-003361%2CJC-MBTPLT-JP2-2627-0... | Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
+      "timestamp": 1782445696980000
+    },
+    {
+      "event_message": "OPTIONS | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/job_card_support_assignments?select=job_card_number%2Csupport_role%2Cemployee_code%2Cemployee_name%2Cassigned_at%2Cis_active&job_card_number=in.%28JC-MBTPLT-JP1-2627-003386%2CJC-MBTPLT-JP2-2627-002602%2CJC-MBTPLT-JP1-2627-003384%2CJC-MBTPLT-JP1-2627-003374%2CJC-MBTPLT-JP1-2627-003383%2CJC-MBTPLT-JP1-2627-003381%2CJC-MBTPLT-JP1-2627-003377%2CJC-MBTPLT-JP1-2627-003353%2CJC-MBTPLT-JP1-2627-003375%2CJC-MBTPLT-JP2-2627-002600%2CJC-MBTPLT-JP2-2627-002601%2CJC-MBTPLT-JP1-2627-003363%2CJC-MBTPLT-JP1-2627-003364%2CJC-MBTPLT-JP2-2627-002599%2CJC-MBTPLT-JP2-2627-002598%2CJC-MBTPLT-JP1-2627-003370%2CJC-MBTPLT-JP1-2627-003372%2CJC-MBTPLT-JP2-2627-002594%2CJC-MBTPLT-JP2-2627-002595%2CJC-MBTPLT-JP1-2627-003369%2CJC-MBTPLT-JP2-2627-002593%2CJC-MBTPLT-JP2-2627-002592%2CJC-MBTPLT-JP1-2627-003367%2CJC-MBTPLT-JP1-2627-003362%2CJC-MBTPLT-JP2-2627-002590%2CJC-MBTPLT-JP2-2627-002591%2CJC-MBTPLT-JP1-2627-003356%2CJC-MBTPLT-JP1-2627-003361%2CJC-MBTPLT-JP2-2627-0... | Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
+      "timestamp": 1782445696961000
+    },
+    {
+      "event_message": "GET | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/job_card_support_assignments?select=job_card_number%2Csupport_role%2Cemployee_code%2Cemployee_name%2Cassigned_at%2Cis_active&job_card_number=in.%28JC-MBTPLT-JP1-2627-003310%2CJC-MBTPLT-JP1-2627-003224%2CJC-MBTPLT-JP1-2627-003171%2CJC-MBTPLT-JP1-2627-003158%2CJC-MBTPLT-JP1-2627-003151%2CJC-MBTPLT-JP1-2627-003103%2CJC-MBTPLT-JP1-2627-002833%2CJC-MBTPLT-JP2-2627-002530%2CJC-MBTPLT-JP2-2627-002506%2CJC-MBTPLT-JP2-2627-002502%2CJC-MBTPLT-JP2-2627-002481%2CJC-MBTPLT-JP2-2627-002477%2CJC-MBTPLT-JP2-2627-002450%2CJC-MBTPLT-JP1-2627-002820%2CJC-MBTPLT-JP1-2627-002808%2CJC-MBTPLT-JP2-2627-002433%2CJC-MBTPLT-JP1-2627-002788%2CJC-MBTPLT-JP2-2627-002393%2CJC-MBTPLT-JP1-2627-002769%2CJC-MBTPLT-JP1-2627-002752%2CJC-MBTPLT-JP2-2627-002255%2CJC-MBTPLT-JP1-2627-002740%2CJC-MBTPLT-JP2-2627-002092%2CJC-MBTPLT-JP2-2627-002156%2CJC-MBTPLT-JP1-2627-002715%2CJC-MBTPLT-JP1-2627-002647%2CJC-MBTPLT-JP2-2627-002135%2CJC-MBTPLT-JP1-2627-002582%2CJC-MBTPLT-JP1-2627-0... | Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
+      "timestamp": 1782445696903000
+    },
+    {
+      "event_message": "OPTIONS | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/job_card_support_assignments?select=job_card_number%2Csupport_role%2Cemployee_code%2Cemployee_name%2Cassigned_at%2Cis_active&job_card_number=in.%28JC-MBTPLT-JP1-2627-003310%2CJC-MBTPLT-JP1-2627-003224%2CJC-MBTPLT-JP1-2627-003171%2CJC-MBTPLT-JP1-2627-003158%2CJC-MBTPLT-JP1-2627-003151%2CJC-MBTPLT-JP1-2627-003103%2CJC-MBTPLT-JP1-2627-002833%2CJC-MBTPLT-JP2-2627-002530%2CJC-MBTPLT-JP2-2627-002506%2CJC-MBTPLT-JP2-2627-002502%2CJC-MBTPLT-JP2-2627-002481%2CJC-MBTPLT-JP2-2627-002477%2CJC-MBTPLT-JP2-2627-002450%2CJC-MBTPLT-JP1-2627-002820%2CJC-MBTPLT-JP1-2627-002808%2CJC-MBTPLT-JP2-2627-002433%2CJC-MBTPLT-JP1-2627-002788%2CJC-MBTPLT-JP2-2627-002393%2CJC-MBTPLT-JP1-2627-002769%2CJC-MBTPLT-JP1-2627-002752%2CJC-MBTPLT-JP2-2627-002255%2CJC-MBTPLT-JP1-2627-002740%2CJC-MBTPLT-JP2-2627-002092%2CJC-MBTPLT-JP2-2627-002156%2CJC-MBTPLT-JP1-2627-002715%2CJC-MBTPLT-JP1-2627-002647%2CJC-MBTPLT-JP2-2627-002135%2CJC-MBTPLT-JP1-2627-002582%2CJC-MBTPLT-JP1-2627-0... | Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
+      "timestamp": 1782445696885000
+    },
+    {
+      "event_message": "GET | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/job_card_support_assignments?select=job_card_number%2Csupport_role%2Cemployee_code%2Cemployee_name%2Cassigned_at%2Cis_active&job_card_number=in.%28JC-MBTPLT-JP2-2627-002861%2CJC-MBTPLT-JP2-2627-002862%2CJC-MBTPLT-JP2-2627-002860%2CJC-MBTPLT-JP1-2627-003701%2CJC-MBTPLT-JP1-2627-003703%2CJC-MBTPLT-JP1-2627-003702%2CJC-MBTPLT-JP1-2627-003699%2CJC-MBTPLT-JP1-2627-003700%2CJC-MBTPLT-JP1-2627-003697%2CJC-MBTPLT-JP1-2627-003682%2CJC-MBTPLT-JP2-2627-002858%2CJC-MBTPLT-JP1-2627-003695%2CJC-MBTPLT-JP1-2627-003689%2CJC-MBTPLT-JP1-2627-003691%2CJC-MBTPLT-JP1-2627-003693%2CJC-MBTPLT-JP1-2627-003692%2CJC-MBTPLT-JP1-2627-003690%2CJC-MBTPLT-JP1-2627-003688%2CJC-MBTPLT-JP1-2627-003687%2CJC-MBTPLT-JP1-2627-003684%2CJC-MBTPLT-JP1-2627-003683%2CJC-MBTPLT-JP2-2627-002853%2CJC-MBTPLT-JP2-2627-002848%2CJC-MBTPLT-JP2-2627-002851%2CJC-MBTPLT-JP1-2627-003679%2CJC-MBTPLT-JP2-2627-002849%2CJC-MBTPLT-JP2-2627-002846%2CJC-MBTPLT-JP1-2627-003672%2CJC-MBTPLT-JP1-2627-0... | Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
+      "timestamp": 1782445696823000
+    },
+    {
+      "event_message": "OPTIONS | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/job_card_support_assignments?select=job_card_number%2Csupport_role%2Cemployee_code%2Cemployee_name%2Cassigned_at%2Cis_active&job_card_number=in.%28JC-MBTPLT-JP2-2627-002861%2CJC-MBTPLT-JP2-2627-002862%2CJC-MBTPLT-JP2-2627-002860%2CJC-MBTPLT-JP1-2627-003701%2CJC-MBTPLT-JP1-2627-003703%2CJC-MBTPLT-JP1-2627-003702%2CJC-MBTPLT-JP1-2627-003699%2CJC-MBTPLT-JP1-2627-003700%2CJC-MBTPLT-JP1-2627-003697%2CJC-MBTPLT-JP1-2627-003682%2CJC-MBTPLT-JP2-2627-002858%2CJC-MBTPLT-JP1-2627-003695%2CJC-MBTPLT-JP1-2627-003689%2CJC-MBTPLT-JP1-2627-003691%2CJC-MBTPLT-JP1-2627-003693%2CJC-MBTPLT-JP1-2627-003692%2CJC-MBTPLT-JP1-2627-003690%2CJC-MBTPLT-JP1-2627-003688%2CJC-MBTPLT-JP1-2627-003687%2CJC-MBTPLT-JP1-2627-003684%2CJC-MBTPLT-JP1-2627-003683%2CJC-MBTPLT-JP2-2627-002853%2CJC-MBTPLT-JP2-2627-002848%2CJC-MBTPLT-JP2-2627-002851%2CJC-MBTPLT-JP1-2627-003679%2CJC-MBTPLT-JP2-2627-002849%2CJC-MBTPLT-JP2-2627-002846%2CJC-MBTPLT-JP1-2627-003672%2CJC-MBTPLT-JP1-2627-0... | Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
+      "timestamp": 1782445696804000
+    },
+    {
+      "event_message": "GET | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/job_card_support_assignments?select=job_card_number%2Csupport_role%2Cemployee_code%2Cemployee_name%2Cassigned_at%2Cis_active&job_card_number=in.%28JC-MBTPLT-JP1-2627-003915%2CJC-MBTPLT-JP1-2627-003912%2CJC-MBTPLT-JP1-2627-003914%2CJC-MBTPLT-JP1-2627-003903%2CJC-MBTPLT-JP1-2627-003904%2CJC-MBTPLT-JP1-2627-003907%2CJC-MBTPLT-JP1-2627-003910%2CJC-MBTPLT-JP1-2627-003906%2CJC-MBTPLT-JP1-2627-003905%2CJC-MBTPLT-JP1-2627-003890%2CJC-MBTPLT-JP1-2627-003902%2CJC-MBTPLT-JP1-2627-003896%2CJC-MBTPLT-JP1-2627-003901%2CJC-MBTPLT-JP1-2627-003908%2CJC-MBTPLT-JP2-2627-002988%2CJC-MBTPLT-JP2-2627-002989%2CJC-MBTPLT-JP2-2627-002984%2CJC-MBTPLT-JP2-2627-002948%2CJC-MBTPLT-JP1-2627-003892%2CJC-MBTPLT-JP1-2627-003884%2CJC-MBTPLT-JP1-2627-003893%2CJC-MBTPLT-JP1-2627-003894%2CJC-MBTPLT-JP1-2627-003885%2CJC-MBTPLT-JP1-2627-003889%2CJC-MBTPLT-JP1-2627-003887%2CJC-MBTPLT-JP1-2627-003886%2CJC-MBTPLT-JP2-2627-002981%2CJC-MBTPLT-JP2-2627-002979%2CJC-MBTPLT-JP2-2627-0... | Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
+      "timestamp": 1782445696722000
+    },
+    {
+      "event_message": "OPTIONS | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/job_card_support_assignments?select=job_card_number%2Csupport_role%2Cemployee_code%2Cemployee_name%2Cassigned_at%2Cis_active&job_card_number=in.%28JC-MBTPLT-JP1-2627-003915%2CJC-MBTPLT-JP1-2627-003912%2CJC-MBTPLT-JP1-2627-003914%2CJC-MBTPLT-JP1-2627-003903%2CJC-MBTPLT-JP1-2627-003904%2CJC-MBTPLT-JP1-2627-003907%2CJC-MBTPLT-JP1-2627-003910%2CJC-MBTPLT-JP1-2627-003906%2CJC-MBTPLT-JP1-2627-003905%2CJC-MBTPLT-JP1-2627-003890%2CJC-MBTPLT-JP1-2627-003902%2CJC-MBTPLT-JP1-2627-003896%2CJC-MBTPLT-JP1-2627-003901%2CJC-MBTPLT-JP1-2627-003908%2CJC-MBTPLT-JP2-2627-002988%2CJC-MBTPLT-JP2-2627-002989%2CJC-MBTPLT-JP2-2627-002984%2CJC-MBTPLT-JP2-2627-002948%2CJC-MBTPLT-JP1-2627-003892%2CJC-MBTPLT-JP1-2627-003884%2CJC-MBTPLT-JP1-2627-003893%2CJC-MBTPLT-JP1-2627-003894%2CJC-MBTPLT-JP1-2627-003885%2CJC-MBTPLT-JP1-2627-003889%2CJC-MBTPLT-JP1-2627-003887%2CJC-MBTPLT-JP1-2627-003886%2CJC-MBTPLT-JP2-2627-002981%2CJC-MBTPLT-JP2-2627-002979%2CJC-MBTPLT-JP2-2627-0... | Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
+      "timestamp": 1782445696704000
+    },
+    {
+      "event_message": "GET | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/job_card_closed_data?select=job_card_number%2Cinvoice_date&job_card_number=in.%28JC-MBTPLT-JP1-2627-002938%2CJC-MBTPLT-JP1-2627-003110%2CJC-MBTPLT-JP2-2627-002260%2CJC-MBTPLT-JP1-2627-002930%2CJC-MBTPLT-JP2-2627-002252%2CJC-MBTPLT-JP2-2627-002246%2CJC-MBTPLT-JP2-2627-002245%2CJC-MBTPLT-JP2-2627-002242%2CJC-MBTPLT-JP2-2627-002241%2CJC-MBTPLT-JP2-2627-002232%2CJC-MBTPLT-JP2-2627-002238%2CJC-MBTPLT-JP1-2627-002924%2CJC-MBTPLT-JP1-2627-002923%2CJC-MBTPLT-JP2-2627-002179%2CJC-MBTPLT-JP1-2627-002921%2CJC-MBTPLT-JP2-2627-002234%2CJC-MBTPLT-JP1-2627-002920%2CJC-MBTPLT-JP1-2627-002917%2CJC-MBTPLT-JP2-2627-002285%2CJC-MBTPLT-SP2-2627-000074%2CJC-MBTPLT-JP1-2627-002934%2CJC-MBTPLT-JP1-2627-002913%2CJC-MBTPLT-JP2-2627-002222%2CJC-MBTPLT-JP1-2627-002919%2CJC-MBTPLT-JP1-2627-002908%2CJC-MBTPLT-JP1-2627-002905%2CJC-MBTPLT-JP2-2627-002218%2CJC-MBTPLT-JP2-2627-002213%2CJC-MBTPLT-JP1-2627-002903%2CJC-MBTPLT-JP2-2627-002212%2CJC-MBTPLT-JP2-2627-002214%2CJC... | Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
+      "timestamp": 1782445696642000
+    },
+    {
+      "event_message": "OPTIONS | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/job_card_closed_data?select=job_card_number%2Cinvoice_date&job_card_number=in.%28JC-MBTPLT-JP1-2627-002938%2CJC-MBTPLT-JP1-2627-003110%2CJC-MBTPLT-JP2-2627-002260%2CJC-MBTPLT-JP1-2627-002930%2CJC-MBTPLT-JP2-2627-002252%2CJC-MBTPLT-JP2-2627-002246%2CJC-MBTPLT-JP2-2627-002245%2CJC-MBTPLT-JP2-2627-002242%2CJC-MBTPLT-JP2-2627-002241%2CJC-MBTPLT-JP2-2627-002232%2CJC-MBTPLT-JP2-2627-002238%2CJC-MBTPLT-JP1-2627-002924%2CJC-MBTPLT-JP1-2627-002923%2CJC-MBTPLT-JP2-2627-002179%2CJC-MBTPLT-JP1-2627-002921%2CJC-MBTPLT-JP2-2627-002234%2CJC-MBTPLT-JP1-2627-002920%2CJC-MBTPLT-JP1-2627-002917%2CJC-MBTPLT-JP2-2627-002285%2CJC-MBTPLT-SP2-2627-000074%2CJC-MBTPLT-JP1-2627-002934%2CJC-MBTPLT-JP1-2627-002913%2CJC-MBTPLT-JP2-2627-002222%2CJC-MBTPLT-JP1-2627-002919%2CJC-MBTPLT-JP1-2627-002908%2CJC-MBTPLT-JP1-2627-002905%2CJC-MBTPLT-JP2-2627-002218%2CJC-MBTPLT-JP2-2627-002213%2CJC-MBTPLT-JP1-2627-002903%2CJC-MBTPLT-JP2-2627-002212%2CJC-MBTPLT-JP2-2627-002214%2CJC... | Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
+      "timestamp": 1782445696623000
+    },
+    {
+      "event_message": "GET | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/job_card_closed_data?select=job_card_number%2Cinvoice_date&job_card_number=in.%28JC-MBTPLT-JP1-2627-003073%2CJC-MBTPLT-JP1-2627-003044%2CJC-MBTPLT-JP1-2627-003054%2CJC-MBTPLT-JP1-2627-002993%2CJC-MBTPLT-JP1-2627-003020%2CJC-MBTPLT-JP1-2627-002916%2CJC-MBTPLT-JP1-2627-002911%2CJC-MBTPLT-JP1-2627-002935%2CJC-MBTPLT-JP1-2627-002867%2CJC-MBTPLT-JP1-2627-003095%2CJC-MBTPLT-JP1-2627-003168%2CJC-MBTPLT-JP1-2627-003166%2CJC-MBTPLT-JP1-2627-003043%2CJC-MBTPLT-JP1-2627-003153%2CJC-MBTPLT-JP1-2627-003045%2CJC-MBTPLT-JP1-2627-003042%2CJC-MBTPLT-JP1-2627-003061%2CJC-MBTPLT-JP1-2627-003048%2CJC-MBTPLT-JP1-2627-003047%2CJC-MBTPLT-JP1-2627-003052%2CJC-MBTPLT-JP1-2627-003165%2CJC-MBTPLT-JP1-2627-002982%2CJC-MBTPLT-JP1-2627-003173%2CJC-MBTPLT-JP1-2627-002933%2CJC-MBTPLT-JP1-2627-002863%2CJC-MBTPLT-JP1-2627-003128%2CJC-MBTPLT-JP1-2627-002929%2CJC-MBTPLT-JP1-2627-002859%2CJC-MBTPLT-JP1-2627-002862%2CJC-MBTPLT-JP2-2627-002408%2CJC-MBTPLT-JP1-2627-003167%2CJC... | Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
+      "timestamp": 1782445696564000
+    },
+    {
+      "event_message": "OPTIONS | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/job_card_closed_data?select=job_card_number%2Cinvoice_date&job_card_number=in.%28JC-MBTPLT-JP1-2627-003073%2CJC-MBTPLT-JP1-2627-003044%2CJC-MBTPLT-JP1-2627-003054%2CJC-MBTPLT-JP1-2627-002993%2CJC-MBTPLT-JP1-2627-003020%2CJC-MBTPLT-JP1-2627-002916%2CJC-MBTPLT-JP1-2627-002911%2CJC-MBTPLT-JP1-2627-002935%2CJC-MBTPLT-JP1-2627-002867%2CJC-MBTPLT-JP1-2627-003095%2CJC-MBTPLT-JP1-2627-003168%2CJC-MBTPLT-JP1-2627-003166%2CJC-MBTPLT-JP1-2627-003043%2CJC-MBTPLT-JP1-2627-003153%2CJC-MBTPLT-JP1-2627-003045%2CJC-MBTPLT-JP1-2627-003042%2CJC-MBTPLT-JP1-2627-003061%2CJC-MBTPLT-JP1-2627-003048%2CJC-MBTPLT-JP1-2627-003047%2CJC-MBTPLT-JP1-2627-003052%2CJC-MBTPLT-JP1-2627-003165%2CJC-MBTPLT-JP1-2627-002982%2CJC-MBTPLT-JP1-2627-003173%2CJC-MBTPLT-JP1-2627-002933%2CJC-MBTPLT-JP1-2627-002863%2CJC-MBTPLT-JP1-2627-003128%2CJC-MBTPLT-JP1-2627-002929%2CJC-MBTPLT-JP1-2627-002859%2CJC-MBTPLT-JP1-2627-002862%2CJC-MBTPLT-JP2-2627-002408%2CJC-MBTPLT-JP1-2627-003167%2CJC... | Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
+      "timestamp": 1782445696545000
+    },
+    {
+      "event_message": "GET | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/job_card_closed_data?select=job_card_number%2Cinvoice_date&job_card_number=in.%28JC-MBTPLT-JP2-2627-002559%2CJC-MBTPLT-JP2-2627-002560%2CJC-MBTPLT-JP2-2627-002564%2CJC-MBTPLT-JP2-2627-002557%2CJC-MBTPLT-JP1-2627-003300%2CJC-MBTPLT-JP1-2627-003304%2CJC-MBTPLT-JP1-2627-003303%2CJC-MBTPLT-JP1-2627-003301%2CJC-MBTPLT-JP2-2627-002558%2CJC-MBTPLT-JP1-2627-003298%2CJC-MBTPLT-JP1-2627-003299%2CJC-MBTPLT-JP1-2627-003297%2CJC-MBTPLT-JP1-2627-003286%2CJC-MBTPLT-JP1-2627-003293%2CJC-MBTPLT-JP1-2627-003282%2CJC-MBTPLT-JP1-2627-003294%2CJC-MBTPLT-JP1-2627-003281%2CJC-MBTPLT-JP1-2627-003275%2CJC-MBTPLT-JP2-2627-002542%2CJC-MBTPLT-JP2-2627-002545%2CJC-MBTPLT-JP2-2627-002546%2CJC-MBTPLT-JP2-2627-002524%2CJC-MBTPLT-JP2-2627-002539%2CRJ45CU8082JC-MBTPLT-JP2-%2CJC-MBTPLT-JP1-2627-003290%2CJC-MBTPLT-JP1-2627-003284%2CJC-MBTPLT-JP1-2627-003277%2CJC-MBTPLT-JP1-2627-003283%2CJC-MBTPLT-JP1-2627-003285%2CJC-MBTPLT-JP2-2627-002526%2CJC-MBTPLT-JP2-2627-002527%2CJC-... | Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
+      "timestamp": 1782445696486000
+    },
+    {
+      "event_message": "OPTIONS | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/job_card_closed_data?select=job_card_number%2Cinvoice_date&job_card_number=in.%28JC-MBTPLT-JP2-2627-002559%2CJC-MBTPLT-JP2-2627-002560%2CJC-MBTPLT-JP2-2627-002564%2CJC-MBTPLT-JP2-2627-002557%2CJC-MBTPLT-JP1-2627-003300%2CJC-MBTPLT-JP1-2627-003304%2CJC-MBTPLT-JP1-2627-003303%2CJC-MBTPLT-JP1-2627-003301%2CJC-MBTPLT-JP2-2627-002558%2CJC-MBTPLT-JP1-2627-003298%2CJC-MBTPLT-JP1-2627-003299%2CJC-MBTPLT-JP1-2627-003297%2CJC-MBTPLT-JP1-2627-003286%2CJC-MBTPLT-JP1-2627-003293%2CJC-MBTPLT-JP1-2627-003282%2CJC-MBTPLT-JP1-2627-003294%2CJC-MBTPLT-JP1-2627-003281%2CJC-MBTPLT-JP1-2627-003275%2CJC-MBTPLT-JP2-2627-002542%2CJC-MBTPLT-JP2-2627-002545%2CJC-MBTPLT-JP2-2627-002546%2CJC-MBTPLT-JP2-2627-002524%2CJC-MBTPLT-JP2-2627-002539%2CRJ45CU8082JC-MBTPLT-JP2-%2CJC-MBTPLT-JP1-2627-003290%2CJC-MBTPLT-JP1-2627-003284%2CJC-MBTPLT-JP1-2627-003277%2CJC-MBTPLT-JP1-2627-003283%2CJC-MBTPLT-JP1-2627-003285%2CJC-MBTPLT-JP2-2627-002526%2CJC-MBTPLT-JP2-2627-002527%2CJC-... | Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
+      "timestamp": 1782445696466000
+    },
+    {
+      "event_message": "GET | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/job_card_closed_data?select=job_card_number%2Cinvoice_date&job_card_number=in.%28JC-MBTPLT-JP2-2627-002669%2CJC-MBTPLT-JP1-2627-003468%2CJC-MBTPLT-JP1-2627-003472%2CJC-MBTPLT-JP1-2627-003469%2CJC-MBTPLT-JP1-2627-003466%2CJC-MBTPLT-JP1-2627-002946%2CJC-MBTPLT-JP2-2627-002660%2CJC-MBTPLT-JP1-2627-003458%2CJC-MBTPLT-JP1-2627-003460%2CJC-MBTPLT-JP1-2627-003465%2CJC-MBTPLT-JP2-2627-002666%2CJC-MBTPLT-JP1-2627-003454%2CJC-MBTPLT-JP1-2627-002922%2CJC-MBTPLT-JP1-2627-003457%2CJC-MBTPLT-JP2-2627-002657%2CJC-MBTPLT-JP1-2627-003455%2CJC-MBTPLT-JP2-2627-002662%2CJC-MBTPLT-JP2-2627-002654%2CJC-MBTPLT-JP2-2627-002661%2CJC-MBTPLT-JP1-2627-003453%2CJC-MBTPLT-JP2-2627-002655%2CJC-MBTPLT-JP2-2627-002656%2CJC-MBTPLT-JP1-2627-003451%2CJC-MBTPLT-JP1-2627-003449%2CJC-MBTPLT-JP1-2627-003452%2CJC-MBTPLT-JP1-2627-003450%2CJC-MBTPLT-JP1-2627-003448%2CJC-MBTPLT-JP1-2627-003446%2CJC-MBTPLT-JP1-2627-003445%2CJC-MBTPLT-JP1-2627-003447%2CJC-MBTPLT-JP1-2627-003442%2CJC... | Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
+      "timestamp": 1782445696406000
+    },
+    {
+      "event_message": "OPTIONS | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/job_card_closed_data?select=job_card_number%2Cinvoice_date&job_card_number=in.%28JC-MBTPLT-JP2-2627-002669%2CJC-MBTPLT-JP1-2627-003468%2CJC-MBTPLT-JP1-2627-003472%2CJC-MBTPLT-JP1-2627-003469%2CJC-MBTPLT-JP1-2627-003466%2CJC-MBTPLT-JP1-2627-002946%2CJC-MBTPLT-JP2-2627-002660%2CJC-MBTPLT-JP1-2627-003458%2CJC-MBTPLT-JP1-2627-003460%2CJC-MBTPLT-JP1-2627-003465%2CJC-MBTPLT-JP2-2627-002666%2CJC-MBTPLT-JP1-2627-003454%2CJC-MBTPLT-JP1-2627-002922%2CJC-MBTPLT-JP1-2627-003457%2CJC-MBTPLT-JP2-2627-002657%2CJC-MBTPLT-JP1-2627-003455%2CJC-MBTPLT-JP2-2627-002662%2CJC-MBTPLT-JP2-2627-002654%2CJC-MBTPLT-JP2-2627-002661%2CJC-MBTPLT-JP1-2627-003453%2CJC-MBTPLT-JP2-2627-002655%2CJC-MBTPLT-JP2-2627-002656%2CJC-MBTPLT-JP1-2627-003451%2CJC-MBTPLT-JP1-2627-003449%2CJC-MBTPLT-JP1-2627-003452%2CJC-MBTPLT-JP1-2627-003450%2CJC-MBTPLT-JP1-2627-003448%2CJC-MBTPLT-JP1-2627-003446%2CJC-MBTPLT-JP1-2627-003445%2CJC-MBTPLT-JP1-2627-003447%2CJC-MBTPLT-JP1-2627-003442%2CJC... | Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
+      "timestamp": 1782445696386000
+    },
+    {
+      "event_message": "GET | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/job_card_closed_data?select=job_card_number%2Cinvoice_date&job_card_number=in.%28JC-MBTPLT-JP2-2627-002775%2CJC-MBTPLT-JP2-2627-002774%2CJC-MBTPLT-JP1-2627-003601%2CJC-MBTPLT-JP1-2627-003599%2CJC-MBTPLT-JP1-2627-003598%2CJC-MBTPLT-JP1-2627-003597%2CJC-MBTPLT-JP1-2627-003596%2CJC-MBTPLT-JP2-2627-002772%2CJC-MBTPLT-JP1-2627-003595%2CJC-MBTPLT-JP1-2627-003594%2CJC-MBTPLT-JP2-2627-002771%2CJC-MBTPLT-JP1-2627-003545%2CJC-MBTPLT-JP1-2627-002663%2CJC-MBTPLT-JP1-2627-003577%2CJC-MBTPLT-JP1-2627-003569%2CJC-MBTPLT-JP1-2627-003582%2CJC-MBTPLT-JP1-2627-003571%2CJC-MBTPLT-JP1-2627-003580%2CJC-MBTPLT-JP1-2627-003576%2CJC-MBTPLT-JP1-2627-003581%2CJC-MBTPLT-JP1-2627-003579%2CJC-MBTPLT-JP1-2627-003578%2CJC-MBTPLT-JP1-2627-003559%2CJC-MBTPLT-JP1-2627-003561%2CJC-MBTPLT-JP2-2627-002764%2CJC-MBTPLT-JP1-2627-003573%2CJC-MBTPLT-JP1-2627-003572%2CJC-MBTPLT-JP2-2627-002763%2CJC-MBTPLT-JP1-2627-003574%2CJC-MBTPLT-JP2-2627-002762%2CJC-MBTPLT-JP1-2627-003570%2CJC... | Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
+      "timestamp": 1782445696311000
+    },
+    {
+      "event_message": "OPTIONS | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/job_card_closed_data?select=job_card_number%2Cinvoice_date&job_card_number=in.%28JC-MBTPLT-JP2-2627-002775%2CJC-MBTPLT-JP2-2627-002774%2CJC-MBTPLT-JP1-2627-003601%2CJC-MBTPLT-JP1-2627-003599%2CJC-MBTPLT-JP1-2627-003598%2CJC-MBTPLT-JP1-2627-003597%2CJC-MBTPLT-JP1-2627-003596%2CJC-MBTPLT-JP2-2627-002772%2CJC-MBTPLT-JP1-2627-003595%2CJC-MBTPLT-JP1-2627-003594%2CJC-MBTPLT-JP2-2627-002771%2CJC-MBTPLT-JP1-2627-003545%2CJC-MBTPLT-JP1-2627-002663%2CJC-MBTPLT-JP1-2627-003577%2CJC-MBTPLT-JP1-2627-003569%2CJC-MBTPLT-JP1-2627-003582%2CJC-MBTPLT-JP1-2627-003571%2CJC-MBTPLT-JP1-2627-003580%2CJC-MBTPLT-JP1-2627-003576%2CJC-MBTPLT-JP1-2627-003581%2CJC-MBTPLT-JP1-2627-003579%2CJC-MBTPLT-JP1-2627-003578%2CJC-MBTPLT-JP1-2627-003559%2CJC-MBTPLT-JP1-2627-003561%2CJC-MBTPLT-JP2-2627-002764%2CJC-MBTPLT-JP1-2627-003573%2CJC-MBTPLT-JP1-2627-003572%2CJC-MBTPLT-JP2-2627-002763%2CJC-MBTPLT-JP1-2627-003574%2CJC-MBTPLT-JP2-2627-002762%2CJC-MBTPLT-JP1-2627-003570%2CJC... | Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
+      "timestamp": 1782445696293000
+    },
+    {
+      "event_message": "GET | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/job_card_closed_data?select=job_card_number%2Cinvoice_date&job_card_number=in.%28JC-MBTPLT-JP2-2627-002913%2CJC-MBTPLT-JP2-2627-002908%2CJC-MBTPLT-JP2-2627-002857%2CJC-MBTPLT-JP2-2627-002889%2CJC-MBTPLT-JP1-2627-003779%2CJC-MBTPLT-JP1-2627-003780%2CJC-MBTPLT-JP1-2627-003773%2CJC-MBTPLT-JP1-2627-003778%2CJC-MBTPLT-JP1-2627-003775%2CJC-MBTPLT-JP1-2627-003774%2CJC-MBTPLT-JP1-2627-003776%2CJC-MBTPLT-JP1-2627-003777%2CJC-MBTPLT-JP2-2627-002906%2CJC-MBTPLT-JP2-2627-002907%2CJC-MBTPLT-JP1-2627-003772%2CJC-MBTPLT-JP2-2627-002905%2CJC-MBTPLT-JP1-2627-003771%2CJC-MBTPLT-JP2-2627-002904%2CJC-MBTPLT-JP1-2627-003769%2CJC-MBTPLT-JP1-2627-003768%2CJC-MBTPLT-JP2-2627-002903%2CJC-MBTPLT-JP1-2627-003767%2CJC-MBTPLT-JP1-2627-003765%2CJC-MBTPLT-JP1-2627-003761%2CJC-MBTPLT-JP1-2627-003763%2CJC-MBTPLT-JP2-2627-002896%2CJC-MBTPLT-JP1-2627-003760%2CJC-MBTPLT-JP2-2627-002895%2CJC-MBTPLT-JP1-2627-003759%2CJC-MBTPLT-JP1-2627-003758%2CJC-MBTPLT-JP1-2627-003757%2CJC... | Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
+      "timestamp": 1782445696225000
+    },
+    {
+      "event_message": "OPTIONS | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/job_card_closed_data?select=job_card_number%2Cinvoice_date&job_card_number=in.%28JC-MBTPLT-JP2-2627-002913%2CJC-MBTPLT-JP2-2627-002908%2CJC-MBTPLT-JP2-2627-002857%2CJC-MBTPLT-JP2-2627-002889%2CJC-MBTPLT-JP1-2627-003779%2CJC-MBTPLT-JP1-2627-003780%2CJC-MBTPLT-JP1-2627-003773%2CJC-MBTPLT-JP1-2627-003778%2CJC-MBTPLT-JP1-2627-003775%2CJC-MBTPLT-JP1-2627-003774%2CJC-MBTPLT-JP1-2627-003776%2CJC-MBTPLT-JP1-2627-003777%2CJC-MBTPLT-JP2-2627-002906%2CJC-MBTPLT-JP2-2627-002907%2CJC-MBTPLT-JP1-2627-003772%2CJC-MBTPLT-JP2-2627-002905%2CJC-MBTPLT-JP1-2627-003771%2CJC-MBTPLT-JP2-2627-002904%2CJC-MBTPLT-JP1-2627-003769%2CJC-MBTPLT-JP1-2627-003768%2CJC-MBTPLT-JP2-2627-002903%2CJC-MBTPLT-JP1-2627-003767%2CJC-MBTPLT-JP1-2627-003765%2CJC-MBTPLT-JP1-2627-003761%2CJC-MBTPLT-JP1-2627-003763%2CJC-MBTPLT-JP2-2627-002896%2CJC-MBTPLT-JP1-2627-003760%2CJC-MBTPLT-JP2-2627-002895%2CJC-MBTPLT-JP1-2627-003759%2CJC-MBTPLT-JP1-2627-003758%2CJC-MBTPLT-JP1-2627-003757%2CJC... | Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
+      "timestamp": 1782445696206000
+    },
+    {
+      "event_message": "GET | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/all_service_data?select=id%2Cvehicle_registration_number%2Cchassis_no%2Cchassis_update_status&chassis_no=is.null&chassis_update_status=is.null&vehicle_registration_number=not.is.null&limit=1 | null",
+      "timestamp": 1782445696144000
+    },
+    {
+      "event_message": "PATCH | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/all_service_data?id=eq.69593 | null",
+      "timestamp": 1782445696034000
+    },
+    {
+      "event_message": "GET | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/job_card_closed_data?select=job_card_number%2Cinvoice_date&job_card_number=in.%28JC-MBTPLT-JP2-2627-003017%2CJC-MBTPLT-JP1-2627-003955%2CJC-MBTPLT-JP1-2627-003952%2CJC-MBTPLT-JP1-2627-003951%2CJC-MBTPLT-JP1-2627-003953%2CJC-MBTPLT-JP2-2627-003025%2CJC-MBTPLT-JP2-2627-003032%2CJC-MBTPLT-JP2-2627-003031%2CJC-MBTPLT-JP1-2627-003926%2CJC-MBTPLT-JP1-2627-003944%2CJC-MBTPLT-JP1-2627-003947%2CJC-MBTPLT-JP2-2627-003030%2CJC-MBTPLT-JP2-2627-003014%2CJC-MBTPLT-JP1-2627-003946%2CJC-MBTPLT-JP2-2627-003022%2CJC-MBTPLT-JP2-2627-003023%2CJC-MBTPLT-JP1-2627-003940%2CJC-MBTPLT-JP1-2627-003942%2CJC-MBTPLT-JP1-2627-003941%2CJC-MBTPLT-JP2-2627-003021%2CJC-MBTPLT-JP1-2627-003939%2CJC-MBTPLT-JP1-2627-003830%2CJC-MBTPLT-JP1-2627-003936%2CJC-MBTPLT-JP1-2627-003938%2CJC-MBTPLT-JP1-2627-003929%2CJC-MBTPLT-JP2-2627-003012%2CJC-MBTPLT-JP2-2627-003013%2CJC-MBTPLT-JP2-2627-003011%2CJC-MBTPLT-JP1-2627-003937%2CJC-MBTPLT-JP2-2627-003016%2CJC-MBTPLT-JP1-2627-003935%2CJC... | Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
+      "timestamp": 1782445695594000
+    },
+    {
+      "event_message": "OPTIONS | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/job_card_closed_data?select=job_card_number%2Cinvoice_date&job_card_number=in.%28JC-MBTPLT-JP2-2627-003017%2CJC-MBTPLT-JP1-2627-003955%2CJC-MBTPLT-JP1-2627-003952%2CJC-MBTPLT-JP1-2627-003951%2CJC-MBTPLT-JP1-2627-003953%2CJC-MBTPLT-JP2-2627-003025%2CJC-MBTPLT-JP2-2627-003032%2CJC-MBTPLT-JP2-2627-003031%2CJC-MBTPLT-JP1-2627-003926%2CJC-MBTPLT-JP1-2627-003944%2CJC-MBTPLT-JP1-2627-003947%2CJC-MBTPLT-JP2-2627-003030%2CJC-MBTPLT-JP2-2627-003014%2CJC-MBTPLT-JP1-2627-003946%2CJC-MBTPLT-JP2-2627-003022%2CJC-MBTPLT-JP2-2627-003023%2CJC-MBTPLT-JP1-2627-003940%2CJC-MBTPLT-JP1-2627-003942%2CJC-MBTPLT-JP1-2627-003941%2CJC-MBTPLT-JP2-2627-003021%2CJC-MBTPLT-JP1-2627-003939%2CJC-MBTPLT-JP1-2627-003830%2CJC-MBTPLT-JP1-2627-003936%2CJC-MBTPLT-JP1-2627-003938%2CJC-MBTPLT-JP1-2627-003929%2CJC-MBTPLT-JP2-2627-003012%2CJC-MBTPLT-JP2-2627-003013%2CJC-MBTPLT-JP2-2627-003011%2CJC-MBTPLT-JP1-2627-003937%2CJC-MBTPLT-JP2-2627-003016%2CJC-MBTPLT-JP1-2627-003935%2CJC... | Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
+      "timestamp": 1782445695570000
+    },
+    {
+      "event_message": "GET | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/vw_technician_income_assignments?select=*&order=assigned_at.desc&offset=1000&limit=1000 | Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
+      "timestamp": 1782445695255000
+    },
+    {
+      "event_message": "GET | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/vw_technician_income_assignments?select=*&order=assigned_at.desc&offset=0&limit=1000 | Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
+      "timestamp": 1782445694774000
+    },
+    {
+      "event_message": "GET | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/employee_master?select=employee_code%2Crole | Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
+      "timestamp": 1782445694718000
+    },
+    {
+      "event_message": "GET | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/technician_earnings_settings?select=key%2Cvalue | Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
+      "timestamp": 1782445694663000
+    },
+    {
+      "event_message": "GET | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/users?select=role%2Cis_active&id=eq.8f0b07cb-7d3b-4127-a863-899c48c34fd3 | Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
+      "timestamp": 1782445694610000
+    },
+    {
+      "event_message": "POST | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/rpc/get_unread_complaint_notification_count | Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
+      "timestamp": 1782445694609000
+    },
+    {
+      "event_message": "GET | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/auth/v1/user | Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
+      "timestamp": 1782445694505000
+    },
+    {
+      "event_message": "GET | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/modules?select=name&is_active=eq.true | Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
+      "timestamp": 1782445694427000
+    },
+    {
+      "event_message": "GET | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/user_employee_links?select=dealer_code&user_id=eq.8f0b07cb-7d3b-4127-a863-899c48c34fd3 | Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
+      "timestamp": 1782445694420000
+    },
+    {
+      "event_message": "GET | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/users?select=role%2Cis_active&id=eq.8f0b07cb-7d3b-4127-a863-899c48c34fd3 | Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
+      "timestamp": 1782445694347000
+    },
+    {
+      "event_message": "POST | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/rpc/get_all_my_permissions | Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
+      "timestamp": 1782445694347000
+    },
+    {
+      "event_message": "GET | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/users?select=role&id=eq.8f0b07cb-7d3b-4127-a863-899c48c34fd3 | Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
+      "timestamp": 1782445694346000
+    },
+    {
+      "event_message": "POST | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/rpc/get_unread_complaint_notification_count | Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
+      "timestamp": 1782445694345000
+    },
+    {
+      "event_message": "POST | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/rpc/get_unread_complaint_notification_count | Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
+      "timestamp": 1782445690474000
+    },
+    {
+      "event_message": "POST | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/rpc/get_unread_complaint_notification_count | Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
+      "timestamp": 1782445688868000
+    },
+    {
+      "event_message": "GET | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/dealer_settings?select=setting_key%2Csetting_value&dealer_code=eq.3000840 | Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
+      "timestamp": 1782445687735000
+    },
+    {
+      "event_message": "OPTIONS | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/dealer_settings?select=setting_key%2Csetting_value&dealer_code=eq.3000840 | Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
+      "timestamp": 1782445687654000
+    },
+    {
+      "event_message": "POST | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/rpc/get_unread_complaint_notification_count | Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
+      "timestamp": 1782445687276000
+    },
+    {
+      "event_message": "POST | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/rpc/get_unread_complaint_notification_count | Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
+      "timestamp": 1782445687177000
+    },
+    {
+      "event_message": "POST | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/rpc/get_unread_complaint_notification_count | Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
+      "timestamp": 1782445686680000
+    },
+    {
+      "event_message": "POST | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/rpc/get_unread_complaint_notification_count | Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
+      "timestamp": 1782445673041000
+    },
+    {
+      "event_message": "OPTIONS | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/rpc/get_unread_complaint_notification_count | Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
+      "timestamp": 1782445673003000
+    },
+    {
+      "event_message": "POST | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/auth/v1/token?grant_type=refresh_token | Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
+      "timestamp": 1782445672726000
+    },
+    {
+      "event_message": "OPTIONS | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/auth/v1/token?grant_type=refresh_token | Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
+      "timestamp": 1782445672659000
+    }
+  ]
+}

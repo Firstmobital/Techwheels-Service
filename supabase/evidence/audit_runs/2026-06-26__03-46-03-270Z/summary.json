@@ -1,0 +1,57 @@
+{
+  "project_ref": "jmdndcphkmaljhwgzqxq",
+  "captured_at_utc": "2026-06-26T03:46:03.270Z",
+  "capture_date": "2026-06-26",
+  "capture_mode": "automated_supabase_audit_cycle",
+  "top_queries": [],
+  "tracked_queries": [],
+  "table_scan_ratios": [],
+  "db_health": [],
+  "auth_recent_events": [],
+  "platform_logs": {
+    "auth": {
+      "status": "unavailable",
+      "count": 0,
+      "endpoint": null
+    },
+    "edge_functions": {
+      "status": "unavailable",
+      "count": 0,
+      "endpoint": null
+    },
+    "realtime": {
+      "status": "unavailable",
+      "count": 0,
+      "endpoint": null
+    },
+    "storage": {
+      "status": "unavailable",
+      "count": 0,
+      "endpoint": null
+    },
+    "database_health": {
+      "status": "unavailable",
+      "count": 0,
+      "endpoint": null
+    }
+  },
+  "notes": "Top query unavailable",
+  "top_query_summary": "Top query unavailable",
+  "errors": {
+    "top_queries": {
+      "message": "Cannot POST /v1/projects/jmdndcphkmaljhwgzqxq/query"
+    },
+    "tracked_queries": {
+      "message": "Cannot POST /v1/projects/jmdndcphkmaljhwgzqxq/query"
+    },
+    "table_scan_ratios": {
+      "message": "Cannot POST /v1/projects/jmdndcphkmaljhwgzqxq/query"
+    },
+    "db_health": {
+      "message": "Cannot POST /v1/projects/jmdndcphkmaljhwgzqxq/query"
+    },
+    "auth_recent_events": {
+      "message": "Cannot POST /v1/projects/jmdndcphkmaljhwgzqxq/query"
+    }
+  }
+}

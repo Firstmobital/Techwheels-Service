@@ -11,6 +11,7 @@
     "build": "tsc -b --force && vite build",
     "lint": "eslint .",
     "preview": "vite preview",
+    "supabase:audit:cycle": "node scripts/supabase_audit_cycle.mjs",
     "mobile:start": "npm --prefix ./mobile run start -- --tunnel",
     "mobile:start:clear": "npm --prefix ./mobile run start -- --clear --tunnel",
     "mobile:typecheck": "npm --prefix ./mobile run -s typecheck"

@@ -1,0 +1,8 @@
+{
+  "status": "error",
+  "label": "auth_recent_events",
+  "error": {
+    "message": "Cannot POST /v1/projects/jmdndcphkmaljhwgzqxq/query"
+  },
+  "rows": []
+}

@@ -143,6 +143,14 @@ Use one line per update so trend changes are visible over time.
 | 2026-06-25 (post-index verification) | - | - | - | - | - | - | - | - | Migration `20260625221000` executed and verified: all new indexes present; reception/technician/VAS verification EXPLAINs now use Index Scan paths; next impact step is code-side exact-count and OFFSET reduction |
 | 2026-06-25 (post-code recapture) | - | - | - | - | - | - | - | - | Latest top-query outputs remain effectively unchanged vs prior capture (`queryid=6416750758406621842` still `calls=38386`, `total_ms=82854948.73`), indicating cumulative-window/no-traffic-delta view; shift measurement to interval delta method |
 | 2026-06-25 (post-deploy reception family recapture) | - | - | - | - | - | - | - | - | New reception IDs entered hotlist while legacy top IDs remained cumulative-flat (`6416750758406621842`, `-5344960703026327435`, `-225245605736690330`, `2744925251257801673` etc.); classify as insufficient interval evidence until A/B delta window is captured |
+| 2026-06-26 (overnight no-delta snapshot) | - | - | - | - | - | - | - | - | Overnight capture remained numerically identical to prior baseline for all tracked IDs (including dominant reception IDs), indicating no measurable interval movement in sampled window |
+| 2026-06-26 (automated audit cycle) | - | - | - | - | - | - | - | - | Top query unavailable |
+| 2026-06-26 (automated audit cycle) | - | - | - | - | - | - | - | - | Top query unavailable |
+| 2026-06-26 (automated audit cycle) | - | - | - | - | - | - | - | - | Top query 6416750758406621842 calls=38386 total_ms=82854948.73 mean_ms=2158.47 |
+| 2026-06-26 (automated audit cycle) | - | - | - | - | - | - | - | - | Top query 6416750758406621842 calls=38386 total_ms=82854948.73 mean_ms=2158.47 |
+| 2026-06-26 (automated audit cycle) | - | - | - | - | - | - | - | - | Top query 6416750758406621842 calls=38386 total_ms=82854948.73 mean_ms=2158.47; comparison=regressed; delta_total_ms_sum=2913.13 |
+| 2026-06-26 (automated audit cycle) | - | - | - | - | - | - | - | - | Top query 6416750758406621842 calls=38391 total_ms=82875942.96 mean_ms=2158.73; comparison=regressed; delta_total_ms_sum=65653.86 |
+| 2026-06-26 (automated audit cycle) | - | - | - | - | - | - | - | - | Top query 6416750758406621842 calls=38391 total_ms=82875942.96 mean_ms=2158.73; comparison=regressed; delta_total_ms_sum=1709.71 |
 
 ## 6) Change Log (What Was Updated in This Plan)
 
@@ -189,6 +197,14 @@ Use one line per update so trend changes are visible over time.
 | 2026-06-25 | Copilot | Recorded successful execution/verification of migration `20260625221000`: marked P1-07 Done, logged Index Scan plan shifts for reception/technician/VAS, and moved next priority to code-side exact-count and OFFSET reduction (P1-06/P1-09). |
 | 2026-06-25 | Copilot | Logged latest post-code query capture from user: top query totals/calls still match prior cumulative values, so plan now requires interval-based delta measurement before judging code impact; updated tracker next actions accordingly. |
 | 2026-06-25 | Copilot | Appended post-deploy reception-family capture from user showing unchanged cumulative leaders plus newly surfaced reception list query IDs; updated plan to require strict A/B interval delta scoring before next patch batch. |
+| 2026-06-26 | Copilot | Logged overnight tracked-ID snapshot from user as no-delta (all key counters unchanged), and tightened next step to a controlled synthetic-traffic A/B window to force measurable deltas. |
+| 2026-06-26 | Copilot | Automated Supabase audit cycle appended run summary (2026-06-26T03:44:53.427Z) and refreshed plan evidence block from generated audit artifacts. |
+| 2026-06-26 | Copilot | Automated Supabase audit cycle appended run summary (2026-06-26T03:46:03.270Z) and refreshed plan evidence block from generated audit artifacts. |
+| 2026-06-26 | Copilot | Automated Supabase audit cycle appended run summary (2026-06-26T03:48:45.813Z) and refreshed plan evidence block from generated audit artifacts. |
+| 2026-06-26 | Copilot | Automated Supabase audit cycle appended run summary (2026-06-26T03:50:23.506Z) and refreshed plan evidence block from generated audit artifacts. |
+| 2026-06-26 | Copilot | Automated Supabase audit cycle appended run summary (2026-06-26T03:51:50.883Z) and refreshed plan evidence block from generated audit artifacts. |
+| 2026-06-26 | Copilot | Automated Supabase audit cycle appended run summary (2026-06-26T03:54:36.313Z) and refreshed plan evidence block from generated audit artifacts. |
+| 2026-06-26 | Copilot | Automated Supabase audit cycle appended run summary (2026-06-26T03:55:13.986Z) and refreshed plan evidence block from generated audit artifacts. |
 
 ## 7) Update Protocol For Future Chats
 
@@ -920,3 +936,146 @@ Required next measurement (strict):
 2. Wait 10 minutes under real production traffic.
 3. Snapshot B: same ID set.
 4. Compute `delta_calls` and `delta_total_ms` for each ID and rank descending by `delta_total_ms`.
+
+### 14.10 Capture Snapshot: 2026-06-26 (Overnight No-Delta)
+
+What was received:
+- Timestamped tracked-ID output at `2026-06-26 03:32:09 UTC` covering the same hotlist used in prior recaptures.
+
+Observed result:
+- Tracked IDs remained unchanged versus previous baseline values across calls and total time, including:
+	- `6416750758406621842`: `calls=38386`, `total_ms=82854948.73`
+	- `-5344960703026327435`: `calls=6585`, `total_ms=13889043.53`
+	- `-6712128630152386476`: `calls=5091`, `total_ms=9968420.04`
+- No interval movement was observable in this sample.
+
+Interpretation:
+- This is still a non-diagnostic cumulative snapshot for optimization impact.
+- Without measurable delta in calls/total time during a known traffic interval, we cannot rank the next code fix by observed production gain.
+
+Immediate measurement action:
+1. Capture Snapshot A (same tracked IDs).
+2. Execute controlled reception workflow traffic for 10 minutes (load Reception + Service Advisor lists repeatedly in live app).
+3. Capture Snapshot B (same IDs).
+4. Compute per-ID delta and prioritize by `delta_total_ms`.
+
+### 14.11 Capture Snapshot: 2026-06-26 (Automated Audit Cycle)
+
+What was captured:
+- Timestamp: 2026-06-26T03:44:53.427Z
+- Capture mode: automated_supabase_audit_cycle
+- Top queryid: unavailable
+- Platform logs capture status: auth=unavailable, edge_functions=unavailable, realtime=unavailable, storage=unavailable, database_health=unavailable
+
+Interpretation:
+- This snapshot is append-only and intended to keep log evidence current for the hardening cycle.
+- Prioritize fixes by highest total_ms and call volume from the top query list.
+
+Next action:
+- Run the same command again after production traffic window, then compare delta across consecutive summaries.
+
+### 14.12 Capture Snapshot: 2026-06-26 (Automated Audit Cycle)
+
+What was captured:
+- Timestamp: 2026-06-26T03:46:03.270Z
+- Capture mode: automated_supabase_audit_cycle
+- Top queryid: unavailable
+- Platform logs capture status: auth=unavailable, edge_functions=unavailable, realtime=unavailable, storage=unavailable, database_health=unavailable
+
+Interpretation:
+- This snapshot is append-only and intended to keep log evidence current for the hardening cycle.
+- Prioritize fixes by highest total_ms and call volume from the top query list.
+
+Next action:
+- Run the same command again after production traffic window, then compare delta across consecutive summaries.
+
+### 14.13 Capture Snapshot: 2026-06-26 (Automated Audit Cycle)
+
+What was captured:
+- Timestamp: 2026-06-26T03:48:45.813Z
+- Capture mode: automated_supabase_audit_cycle
+- Top queryid: 6416750758406621842 (calls=38386, total_ms=82854948.73, mean_ms=2158.47)
+- Platform logs capture status: auth=ok, edge_functions=ok, realtime=ok, storage=ok, database_health=ok
+
+Interpretation:
+- This snapshot is append-only and intended to keep log evidence current for the hardening cycle.
+- Prioritize fixes by highest total_ms and call volume from the top query list.
+
+Next action:
+- Run the same command again after production traffic window, then compare delta across consecutive summaries.
+
+### 14.14 Capture Snapshot: 2026-06-26 (Automated Audit Cycle)
+
+What was captured:
+- Timestamp: 2026-06-26T03:50:23.506Z
+- Capture mode: automated_supabase_audit_cycle
+- Top queryid: 6416750758406621842 (calls=38386, total_ms=82854948.73, mean_ms=2158.47)
+- Platform logs capture status: auth=ok, edge_functions=ok, realtime=ok, storage=ok, database_health=ok
+
+Interpretation:
+- This snapshot is append-only and intended to keep log evidence current for the hardening cycle.
+- Prioritize fixes by highest total_ms and call volume from the top query list.
+
+Next action:
+- Run the same command again after production traffic window, then compare delta across consecutive summaries.
+
+### 14.15 Capture Snapshot: 2026-06-26 (Automated Audit Cycle)
+
+What was captured:
+- Timestamp: 2026-06-26T03:51:50.883Z
+- Capture mode: automated_supabase_audit_cycle
+- Top queryid: 6416750758406621842 (calls=38386, total_ms=82854948.73, mean_ms=2158.47)
+- Platform logs capture status: auth=ok, edge_functions=ok, realtime=ok, storage=ok, database_health=ok
+- Comparison vs previous run (2026-06-26__03-50-23-506Z): status=regressed, delta_total_ms_sum=2913.13, delta_calls_sum=36
+- Top regressions by delta_total_ms: 3787216458397661678 (1455.58); 852176900607336119 (688.19); 7336725908253715888 (252.49)
+
+Interpretation:
+- This snapshot is append-only and intended to keep log evidence current for the hardening cycle.
+- Prioritize fixes by highest delta_total_ms and call movement from run-to-run comparison.
+
+Self-heal plan:
+- Continue monitoring and prioritize top delta_total_ms queryids in next patch batch.
+
+Next action:
+- Re-run the cycle after the next production traffic window and validate that comparison status moves toward improved.
+
+### 14.16 Capture Snapshot: 2026-06-26 (Automated Audit Cycle)
+
+What was captured:
+- Timestamp: 2026-06-26T03:54:36.313Z
+- Capture mode: automated_supabase_audit_cycle
+- Top queryid: 6416750758406621842 (calls=38391, total_ms=82875942.96, mean_ms=2158.73)
+- Platform logs capture status: auth=ok, edge_functions=ok, realtime=ok, storage=ok, database_health=ok
+- Comparison vs previous run (2026-06-26__03-51-50-883Z): status=regressed, delta_total_ms_sum=65653.86, delta_calls_sum=93
+- Top regressions by delta_total_ms: 6416750758406621842 (20994.23); -5344960703026327435 (16656.81); -6712128630152386476 (13101.56)
+
+Interpretation:
+- This snapshot is append-only and intended to keep log evidence current for the hardening cycle.
+- Prioritize fixes by highest delta_total_ms and call movement from run-to-run comparison.
+
+Self-heal plan:
+- Count CTE patterns increased; prioritize removing default exact-count usage on reception/list endpoints.
+- OFFSET-heavy queries increased; prioritize keyset pagination on list endpoints still using range/offset.
+
+Next action:
+- Re-run the cycle after the next production traffic window and validate that comparison status moves toward improved.
+
+### 14.17 Capture Snapshot: 2026-06-26 (Automated Audit Cycle)
+
+What was captured:
+- Timestamp: 2026-06-26T03:55:13.986Z
+- Capture mode: automated_supabase_audit_cycle
+- Top queryid: 6416750758406621842 (calls=38391, total_ms=82875942.96, mean_ms=2158.73)
+- Platform logs capture status: auth=ok, edge_functions=ok, realtime=ok, storage=ok, database_health=ok
+- Comparison vs previous run (2026-06-26__03-54-36-313Z): status=regressed, delta_total_ms_sum=1709.71, delta_calls_sum=22
+- Top regressions by delta_total_ms: 4706629092485339489 (565.01); 7336725908253715888 (363.66); -7861961781374970658 (318.42)
+
+Interpretation:
+- This snapshot is append-only and intended to keep log evidence current for the hardening cycle.
+- Prioritize fixes by highest delta_total_ms and call movement from run-to-run comparison.
+
+Self-heal plan:
+- Continue monitoring and prioritize top delta_total_ms queryids in next patch batch.
+
+Next action:
+- Re-run the cycle after the next production traffic window and validate that comparison status moves toward improved.

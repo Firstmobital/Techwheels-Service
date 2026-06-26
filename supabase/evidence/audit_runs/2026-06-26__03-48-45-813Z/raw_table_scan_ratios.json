@@ -1,0 +1,24 @@
+{
+  "status": "ok",
+  "label": "table_scan_ratios",
+  "rows": [
+    {
+      "table_name": "service_vas_jc_data",
+      "seq_scan": 21479,
+      "idx_scan": 1331,
+      "seq_scan_pct": "94.16"
+    },
+    {
+      "table_name": "technician_assignments",
+      "seq_scan": 15396,
+      "idx_scan": 13523,
+      "seq_scan_pct": "53.24"
+    },
+    {
+      "table_name": "service_reception_entries",
+      "seq_scan": 45422,
+      "idx_scan": 192881,
+      "seq_scan_pct": "19.06"
+    }
+  ]
+}

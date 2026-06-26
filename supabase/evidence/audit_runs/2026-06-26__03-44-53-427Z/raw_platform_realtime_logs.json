@@ -1,0 +1,6 @@
+{
+  "status": "unavailable",
+  "count": 0,
+  "records": [],
+  "error": "No supported platform logs endpoint responded successfully for this service."
+}
