@@ -695,11 +695,11 @@ Slice B: PSF importer write-path hardening + canonical upsert cutover
 5. Build verification passed after fixups.
 6. Status: Completed.
 
-Slice C: Web report query layer PSF scope migration (partial)
+Slice C: Web report query layer PSF scope migration
 1. Added job_card_closed_data scope helper using canonical location/portal semantics.
 2. Updated direct job_card_closed_data fetch paths in src/lib/reportQueries.ts for PSF-critical flows.
 3. Build verification passed.
-4. Status: In progress (core query paths migrated; residual branch-oriented aggregations remain).
+4. Status: Completed (final residual cleanup closed in Slice H).
 
 Slice D: SATracker canonicalization
 1. Removed branch_label usage from SATracker runtime paths.
@@ -757,11 +757,20 @@ Gate A SQL Evidence Artifact (2026-06-26):
    - branch_location_mismatch = 767
    - branch_label_location_mismatch = 0
    - Outcome: Accepted transitional state. Location/portal remains authoritative for PSF reads; branch mismatch is treated as legacy compatibility drift, while branch_label mirror is clean.
+3. Post-correction rule-alignment validation (Employee Master-first + fallback policy):
+   - total_rows = 12554
+   - unresolved_rule_rows = 92
+   - location_mismatch_rows = 0
+   - portal_mismatch_rows = 0
+   - pass_rows = 12462
+   - Outcome: Rule alignment complete for all resolvable rows. Remaining 92 rows are unresolved mapping backlog.
 
-### 14.3 Next Immediate Slices (Queued)
+### 14.3 Next Immediate Actions (Governance)
 
-1. Gate A verification rerun after each additional PSF-related edit.
-2. Execute SQL-1 and SQL-2 evidence queries when query/filter semantics are materially changed again.
+1. Documentation hygiene only: keep this tracker updated after any PSF change + verification cycle.
+2. Deferred backlog: unresolved_rule_rows = 92 (manual SA mapping/data enrichment). No DB correction action in current cycle.
+3. Gate A verification rerun after each additional PSF-related edit.
+4. Execute SQL-1 and SQL-2 evidence queries when query/filter semantics are materially changed again.
 
 ### 14.4 Verification Checklist (Run After Each Slice)
 
