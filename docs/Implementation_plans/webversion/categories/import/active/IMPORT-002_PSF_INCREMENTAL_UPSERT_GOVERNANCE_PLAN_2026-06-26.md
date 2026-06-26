@@ -842,7 +842,11 @@ Slice P: Async queue architecture - instant frontend acceptance + background pro
 5. Verification:
    - local `npm run build` passed after async queue wiring.
    - SQL checks prepared: `supabase/sql_checks/20260626190000_slice_p_psf_async_queue_worker_checks.sql`.
-6. Status: Implemented (DB migration + edge deploy + controlled production validation pending).
+6. Deployment + live smoke evidence:
+   - edge function `psf-import-worker` deployed to project `jmdndcphkmaljhwgzqxq`.
+   - live function invoke returned `{"success":true,"rpc":"process_next_psf_import_run","data":null}` when queue was empty.
+   - live end-to-end test run created (`id = 8`) via `enqueue_psf_import_run` and processed via deployed worker to `status = completed` with `error_message = null`.
+7. Status: Implemented (deploy smoke passed; large-file async UX validation pending).
 
 Slice Q: Slice P hotfix - resolve ambiguous `status` predicate in queue worker function
 1. Incident observed during Slice P queue smoke processing: run moved to `failed` with `column reference "status" is ambiguous`.
@@ -855,6 +859,16 @@ Slice Q: Slice P hotfix - resolve ambiguous `status` predicate in queue worker f
    - new smoke run `id = 7` enqueued and processed successfully (`status = completed`, `error_message = null`).
    - prior failed run `id = 6` retained as expected historical pre-hotfix evidence.
 5. Status: Completed.
+
+Slice R: Fire-and-forget UX hardening - suppress late background error flip in PSF card
+1. Objective: after enqueue success, operator must be free to continue immediately without UI being forced back to error state by later background run failures.
+2. Frontend adjustment:
+   - PSF polling no longer flips card `status` to `error` when a background run reports `failed`.
+   - failed run ids are removed from active polling set; card remains non-blocking for subsequent uploads.
+   - background failures are logged to console for diagnostics.
+3. Verification:
+   - local `npm run build` passed after change.
+4. Status: Implemented.
 
 ### 14.2 Current Gate Snapshot
 

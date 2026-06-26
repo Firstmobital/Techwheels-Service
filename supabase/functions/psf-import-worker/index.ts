@@ -17,31 +17,55 @@ Deno.serve(async (req) => {
       throw new Error('Missing environment variables')
     }
 
-    const body = await req.json().catch(() => ({})) as { importRunId?: number }
+    const body = await req.json().catch(() => ({})) as { importRunId?: number; maxRuns?: number }
     const importRunId = body.importRunId
+    const maxRuns = Math.max(1, Math.min(Number(body.maxRuns ?? 5), 25))
 
-    const rpcName = typeof importRunId === 'number' ? 'process_psf_import_run' : 'process_next_psf_import_run'
-    const rpcPayload = typeof importRunId === 'number' ? { p_import_run_id: importRunId } : {}
+    const callRpc = async (rpcName: string, rpcPayload: Record<string, unknown>) => {
+      const rpcRes = await fetch(`${SUPABASE_URL}/rest/v1/rpc/${rpcName}`, {
+        method: 'POST',
+        headers: {
+          apikey: SERVICE_KEY,
+          Authorization: `Bearer ${SERVICE_KEY}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(rpcPayload),
+      })
 
-    const rpcRes = await fetch(`${SUPABASE_URL}/rest/v1/rpc/${rpcName}`, {
-      method: 'POST',
-      headers: {
-        apikey: SERVICE_KEY,
-        Authorization: `Bearer ${SERVICE_KEY}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(rpcPayload),
-    })
+      const payload = await rpcRes.json().catch(() => ({}))
+      if (!rpcRes.ok) {
+        return new Response(JSON.stringify({ error: 'Worker RPC failed', details: payload }), {
+          status: rpcRes.status,
+          headers,
+        })
+      }
 
-    const payload = await rpcRes.json().catch(() => ({}))
-    if (!rpcRes.ok) {
-      return new Response(JSON.stringify({ error: 'Worker RPC failed', details: payload }), {
-        status: rpcRes.status,
+      return payload
+    }
+
+    if (typeof importRunId === 'number') {
+      const payload = await callRpc('process_psf_import_run', { p_import_run_id: importRunId })
+      if (payload instanceof Response) return payload
+
+      return new Response(JSON.stringify({ success: true, rpc: 'process_psf_import_run', data: payload }), {
+        status: 200,
         headers,
       })
     }
 
-    return new Response(JSON.stringify({ success: true, rpc: rpcName, data: payload }), {
+    const processedRunIds: number[] = []
+    for (let i = 0; i < maxRuns; i += 1) {
+      const payload = await callRpc('process_next_psf_import_run', {})
+      if (payload instanceof Response) return payload
+
+      const nextRun = Number(payload)
+      if (!Number.isFinite(nextRun) || nextRun <= 0) {
+        break
+      }
+      processedRunIds.push(nextRun)
+    }
+
+    return new Response(JSON.stringify({ success: true, rpc: 'process_next_psf_import_run', processedRunIds }), {
       status: 200,
       headers,
     })

@@ -995,6 +995,7 @@ function ImportCard({ config, state, branches, onSlotFile, onSlotClear, onUpload
 export default function ImportPage() {
   const parsedRowsCacheRef = useRef<Map<string, { fileSignature: string; rows: Record<string, unknown>[] }>>(new Map())
   const psfPollIntervalRef = useRef<number | null>(null)
+  const psfWorkerTickInFlightRef = useRef(false)
   const activePsfRunIdsRef = useRef<Set<number>>(new Set())
   const [cards, setCards] = useState<Record<string, CardState>>(() =>
     Object.fromEntries(CARDS.map((c) => [c.tableName, emptyCard(c.branches ?? PORTAL_BRANCHES)])),
@@ -1059,6 +1060,7 @@ export default function ImportPage() {
     if (error || !data) return
 
     let hasPending = false
+    let hasFailures = false
     let totalValidRows = 0
     for (const row of data) {
       const status = String(row.status ?? '').toLowerCase()
@@ -1069,23 +1071,29 @@ export default function ImportPage() {
         totalValidRows += Number(row.valid_rows ?? row.total_rows ?? 0)
       }
       if (status === 'failed') {
-        updateCard('job_card_closed_data', (prev) => ({
-          ...prev,
-          status: 'error',
-          uploadError: String(row.error_message ?? 'PSF async import run failed'),
-          uploadProgress: {
-            ...prev.uploadProgress,
-            currentBranch: null,
-            currentStep: null,
-          },
-        }))
-        activePsfRunIdsRef.current.clear()
-        stopPsfPolling()
-        return
+        hasFailures = true
+        const failedRunId = Number((row as { id?: unknown }).id)
+        if (Number.isFinite(failedRunId)) {
+          activePsfRunIdsRef.current.delete(failedRunId)
+        }
       }
     }
 
-    if (hasPending) return
+    if (hasPending) {
+      if (!psfWorkerTickInFlightRef.current) {
+        psfWorkerTickInFlightRef.current = true
+        void supabase.functions
+          .invoke('psf-import-worker', { body: { maxRuns: 3 } })
+          .finally(() => {
+            psfWorkerTickInFlightRef.current = false
+          })
+      }
+      return
+    }
+
+    if (hasFailures) {
+      console.warn('PSF async import had one or more failed background runs; UI remains non-blocking')
+    }
 
     updateCard('job_card_closed_data', (prev) => ({
       ...prev,
@@ -2500,12 +2508,15 @@ export default function ImportPage() {
         if (psfQueuedAsync) {
           updateCard(tableName, (prev) => ({
             ...prev,
-            status: 'uploading',
+            status: 'success',
+            insertedCount: Math.max(totalInserted, totalReadyRowsForUpload),
             uploadError: null,
             uploadProgress: {
               ...prev.uploadProgress,
+              processedBranches: prev.uploadProgress.totalBranches,
               currentBranch: null,
-              currentStep: 'uploading',
+              processedRows: prev.uploadProgress.totalRows,
+              currentStep: null,
             },
           }))
 
