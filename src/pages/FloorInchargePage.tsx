@@ -499,17 +499,22 @@ export default function FloorInchargePage() {
 
       // Try to fetch assignments — graceful fallback if table doesn't exist yet
       const assignmentRows: TechnicianAssignment[] = []
-      let from = 0
+      let assignmentCursorId: number | null = null
 
       while (true) {
-        const assignRes = await supabase
+        let assignQuery = supabase
           .from('technician_assignments')
           .select('*')
           .gte('assigned_at', dateRange.from + 'T00:00:00+05:30')
           .lte('assigned_at', dateRange.to + 'T23:59:59+05:30')
-          .order('updated_at', { ascending: false })
-          .order('assigned_at', { ascending: false })
-          .range(from, from + QUERY_PAGE_SIZE - 1)
+          .order('id', { ascending: false })
+          .limit(QUERY_PAGE_SIZE)
+
+        if (assignmentCursorId !== null) {
+          assignQuery = assignQuery.lt('id', assignmentCursorId)
+        }
+
+        const assignRes = await assignQuery
 
         if (assignRes.error) break
 
@@ -517,7 +522,10 @@ export default function FloorInchargePage() {
         assignmentRows.push(...batch)
 
         if (batch.length < QUERY_PAGE_SIZE) break
-        from += QUERY_PAGE_SIZE
+
+        const lastId = Number(batch[batch.length - 1]?.id)
+        if (!Number.isFinite(lastId) || lastId <= 0) break
+        assignmentCursorId = lastId
       }
 
       if (assignmentRows.length > 0) {
@@ -547,14 +555,21 @@ export default function FloorInchargePage() {
       }
 
       const supportRows: SupportAssignment[] = []
-      let supportFrom = 0
+      let supportCursorId: number | null = null
 
       while (true) {
-        const supportRes = await supabase
+        let supportQuery = supabase
           .from('job_card_support_assignments')
           .select('*')
           .eq('is_active', true)
-          .range(supportFrom, supportFrom + QUERY_PAGE_SIZE - 1)
+          .order('id', { ascending: false })
+          .limit(QUERY_PAGE_SIZE)
+
+        if (supportCursorId !== null) {
+          supportQuery = supportQuery.lt('id', supportCursorId)
+        }
+
+        const supportRes = await supportQuery
 
         if (supportRes.error) break
 
@@ -562,7 +577,10 @@ export default function FloorInchargePage() {
         supportRows.push(...batch)
 
         if (batch.length < QUERY_PAGE_SIZE) break
-        supportFrom += QUERY_PAGE_SIZE
+
+        const lastId = Number(batch[batch.length - 1]?.id)
+        if (!Number.isFinite(lastId) || lastId <= 0) break
+        supportCursorId = lastId
       }
 
       if (supportRows.length > 0) {

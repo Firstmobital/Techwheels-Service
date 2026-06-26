@@ -151,6 +151,7 @@ Use one line per update so trend changes are visible over time.
 | 2026-06-26 (automated audit cycle) | - | - | - | - | - | - | - | - | Top query 6416750758406621842 calls=38386 total_ms=82854948.73 mean_ms=2158.47; comparison=regressed; delta_total_ms_sum=2913.13 |
 | 2026-06-26 (automated audit cycle) | - | - | - | - | - | - | - | - | Top query 6416750758406621842 calls=38391 total_ms=82875942.96 mean_ms=2158.73; comparison=regressed; delta_total_ms_sum=65653.86 |
 | 2026-06-26 (automated audit cycle) | - | - | - | - | - | - | - | - | Top query 6416750758406621842 calls=38391 total_ms=82875942.96 mean_ms=2158.73; comparison=regressed; delta_total_ms_sum=1709.71 |
+| 2026-06-26 (automated audit cycle) | - | - | - | - | - | - | - | - | Top query 6416750758406621842 calls=38391 total_ms=82875942.96 mean_ms=2158.73; comparison=regressed; delta_total_ms_sum=14507.92 |
 
 ## 6) Change Log (What Was Updated in This Plan)
 
@@ -205,6 +206,7 @@ Use one line per update so trend changes are visible over time.
 | 2026-06-26 | Copilot | Automated Supabase audit cycle appended run summary (2026-06-26T03:51:50.883Z) and refreshed plan evidence block from generated audit artifacts. |
 | 2026-06-26 | Copilot | Automated Supabase audit cycle appended run summary (2026-06-26T03:54:36.313Z) and refreshed plan evidence block from generated audit artifacts. |
 | 2026-06-26 | Copilot | Automated Supabase audit cycle appended run summary (2026-06-26T03:55:13.986Z) and refreshed plan evidence block from generated audit artifacts. |
+| 2026-06-26 | Copilot | Automated Supabase audit cycle appended run summary (2026-06-26T03:59:42.856Z) and refreshed plan evidence block from generated audit artifacts. |
 
 ## 7) Update Protocol For Future Chats
 
@@ -1069,6 +1071,26 @@ What was captured:
 - Platform logs capture status: auth=ok, edge_functions=ok, realtime=ok, storage=ok, database_health=ok
 - Comparison vs previous run (2026-06-26__03-54-36-313Z): status=regressed, delta_total_ms_sum=1709.71, delta_calls_sum=22
 - Top regressions by delta_total_ms: 4706629092485339489 (565.01); 7336725908253715888 (363.66); -7861961781374970658 (318.42)
+
+Interpretation:
+- This snapshot is append-only and intended to keep log evidence current for the hardening cycle.
+- Prioritize fixes by highest delta_total_ms and call movement from run-to-run comparison.
+
+Self-heal plan:
+- Continue monitoring and prioritize top delta_total_ms queryids in next patch batch.
+
+Next action:
+- Re-run the cycle after the next production traffic window and validate that comparison status moves toward improved.
+
+### 14.18 Capture Snapshot: 2026-06-26 (Automated Audit Cycle)
+
+What was captured:
+- Timestamp: 2026-06-26T03:59:42.856Z
+- Capture mode: automated_supabase_audit_cycle
+- Top queryid: 6416750758406621842 (calls=38391, total_ms=82875942.96, mean_ms=2158.73)
+- Platform logs capture status: auth=ok, edge_functions=ok, realtime=ok, storage=ok, database_health=ok
+- Comparison vs previous run (2026-06-26__03-55-13-986Z): status=regressed, delta_total_ms_sum=14507.92, delta_calls_sum=110
+- Top regressions by delta_total_ms: -5344960703026327435 (3764.96); -6712128630152386476 (3464.28); -5044213774447814878 (3044.99)
 
 Interpretation:
 - This snapshot is append-only and intended to keep log evidence current for the hardening cycle.

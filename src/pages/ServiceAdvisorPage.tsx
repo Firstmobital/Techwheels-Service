@@ -787,13 +787,20 @@ export default function ServiceAdvisorPage() {
     const fetchAssignmentStatusJobCards = async () => {
       try {
         const allRows: Record<string, unknown>[] = []
-        let from = 0
+        let assignmentCursorId: number | null = null
 
         while (true) {
-          const res = await supabase
+          let query = supabase
             .from('technician_assignments')
-            .select('job_card_number, work_status, technician_code')
-            .range(from, from + QUERY_PAGE_SIZE - 1)
+            .select('id, job_card_number, work_status, technician_code')
+            .order('id', { ascending: false })
+            .limit(QUERY_PAGE_SIZE)
+
+          if (assignmentCursorId !== null) {
+            query = query.lt('id', assignmentCursorId)
+          }
+
+          const res = await query
 
           if (res.error) {
             throw res.error
@@ -803,7 +810,10 @@ export default function ServiceAdvisorPage() {
           allRows.push(...batch)
 
           if (batch.length < QUERY_PAGE_SIZE) break
-          from += QUERY_PAGE_SIZE
+
+          const lastId = Number(batch[batch.length - 1]?.id)
+          if (!Number.isFinite(lastId) || lastId <= 0) break
+          assignmentCursorId = lastId
         }
 
         if (allRows.length > 0) {

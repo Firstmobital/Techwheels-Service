@@ -1,0 +1,318 @@
+{
+  "compared": true,
+  "previous_run_dir": "2026-06-26__03-55-13-986Z",
+  "previous_captured_at_utc": "2026-06-26T03:55:13.986Z",
+  "movement_status": "regressed",
+  "totals": {
+    "delta_calls_sum": 110,
+    "delta_total_ms_sum": 14507.92
+  },
+  "top_regressions": [
+    {
+      "queryid": "-5344960703026327435",
+      "delta_calls": 2,
+      "delta_total_ms": 3764.96,
+      "previous_calls": 6596,
+      "current_calls": 6598,
+      "previous_total_ms": 13906358.7,
+      "current_total_ms": 13910123.66,
+      "current_query_sample": "WITH pgrst_source AS ( SELECT \"public\".\"service_reception_entries\".\"id\", \"public\".\"service_reception_entries\".\"dealer_code\", \"public\".\"service_reception_entries\".\"reg_number\", \"public\".\"service_recept"
+    },
+    {
+      "queryid": "-6712128630152386476",
+      "delta_calls": 2,
+      "delta_total_ms": 3464.28,
+      "previous_calls": 5094,
+      "current_calls": 5096,
+      "previous_total_ms": 9981521.6,
+      "current_total_ms": 9984985.88,
+      "current_query_sample": "WITH pgrst_source AS ( SELECT \"public\".\"technician_assignments\".\"job_card_number\", \"public\".\"technician_assignments\".\"work_status\", \"public\".\"technician_assignments\".\"technician_code\" FROM \"public\".\"t"
+    },
+    {
+      "queryid": "-5044213774447814878",
+      "delta_calls": 2,
+      "delta_total_ms": 3044.99,
+      "previous_calls": 3046,
+      "current_calls": 3048,
+      "previous_total_ms": 3903933.47,
+      "current_total_ms": 3906978.46,
+      "current_query_sample": "WITH pgrst_source AS ( SELECT \"public\".\"technician_assignments\".* FROM \"public\".\"technician_assignments\" WHERE  \"public\".\"technician_assignments\".\"assigned_at\" >= $1 AND  \"public\".\"technician_assignme"
+    },
+    {
+      "queryid": "-225245605736690330",
+      "delta_calls": 2,
+      "delta_total_ms": 2313.12,
+      "previous_calls": 3185,
+      "current_calls": 3187,
+      "previous_total_ms": 4154036.43,
+      "current_total_ms": 4156349.55,
+      "current_query_sample": "WITH pgrst_source AS ( SELECT \"public\".\"service_reception_entries\".\"id\", \"public\".\"service_reception_entries\".\"dealer_code\", \"public\".\"service_reception_entries\".\"reg_number\", \"public\".\"service_recept"
+    },
+    {
+      "queryid": "-7861961781374970658",
+      "delta_calls": 3,
+      "delta_total_ms": 789.88,
+      "previous_calls": 3444,
+      "current_calls": 3447,
+      "previous_total_ms": 1009538.33,
+      "current_total_ms": 1010328.21,
+      "current_query_sample": "WITH pgrst_source AS ( SELECT \"public\".\"service_reception_entries\".\"id\", \"public\".\"service_reception_entries\".\"dealer_code\", \"public\".\"service_reception_entries\".\"reg_number\", \"public\".\"service_recept"
+    }
+  ],
+  "top_improvements": [],
+  "recommended_actions": [
+    "Continue monitoring and prioritize top delta_total_ms queryids in next patch batch."
+  ],
+  "deltas": [
+    {
+      "queryid": "6416750758406621842",
+      "delta_calls": 0,
+      "delta_total_ms": 0,
+      "previous_calls": 38391,
+      "current_calls": 38391,
+      "previous_total_ms": 82875942.96,
+      "current_total_ms": 82875942.96,
+      "current_query_sample": "WITH pgrst_source AS ( SELECT \"public\".\"service_reception_entries\".\"id\" FROM \"public\".\"service_reception_entries\" WHERE  \"public\".\"service_reception_entries\".\"created_at\" >= $1 AND  \"public\".\"service_"
+    },
+    {
+      "queryid": "-5344960703026327435",
+      "delta_calls": 2,
+      "delta_total_ms": 3764.96,
+      "previous_calls": 6596,
+      "current_calls": 6598,
+      "previous_total_ms": 13906358.7,
+      "current_total_ms": 13910123.66,
+      "current_query_sample": "WITH pgrst_source AS ( SELECT \"public\".\"service_reception_entries\".\"id\", \"public\".\"service_reception_entries\".\"dealer_code\", \"public\".\"service_reception_entries\".\"reg_number\", \"public\".\"service_recept"
+    },
+    {
+      "queryid": "-6712128630152386476",
+      "delta_calls": 2,
+      "delta_total_ms": 3464.28,
+      "previous_calls": 5094,
+      "current_calls": 5096,
+      "previous_total_ms": 9981521.6,
+      "current_total_ms": 9984985.88,
+      "current_query_sample": "WITH pgrst_source AS ( SELECT \"public\".\"technician_assignments\".\"job_card_number\", \"public\".\"technician_assignments\".\"work_status\", \"public\".\"technician_assignments\".\"technician_code\" FROM \"public\".\"t"
+    },
+    {
+      "queryid": "-225245605736690330",
+      "delta_calls": 2,
+      "delta_total_ms": 2313.12,
+      "previous_calls": 3185,
+      "current_calls": 3187,
+      "previous_total_ms": 4154036.43,
+      "current_total_ms": 4156349.55,
+      "current_query_sample": "WITH pgrst_source AS ( SELECT \"public\".\"service_reception_entries\".\"id\", \"public\".\"service_reception_entries\".\"dealer_code\", \"public\".\"service_reception_entries\".\"reg_number\", \"public\".\"service_recept"
+    },
+    {
+      "queryid": "-5044213774447814878",
+      "delta_calls": 2,
+      "delta_total_ms": 3044.99,
+      "previous_calls": 3046,
+      "current_calls": 3048,
+      "previous_total_ms": 3903933.47,
+      "current_total_ms": 3906978.46,
+      "current_query_sample": "WITH pgrst_source AS ( SELECT \"public\".\"technician_assignments\".* FROM \"public\".\"technician_assignments\" WHERE  \"public\".\"technician_assignments\".\"assigned_at\" >= $1 AND  \"public\".\"technician_assignme"
+    },
+    {
+      "queryid": "-2876120296317350531",
+      "delta_calls": 0,
+      "delta_total_ms": 0,
+      "previous_calls": 612039,
+      "current_calls": 612039,
+      "previous_total_ms": 3832695.82,
+      "current_total_ms": 3832695.82,
+      "current_query_sample": "SELECT wal->>$5 as type,\n       wal->>$6 as schema,\n       wal->>$7 as table,\n       COALESCE(wal->>$8, $9) as columns,\n       COALESCE(wal->>$10, $11) as record,\n       COALESCE(wal->>$12, $13) as ol"
+    },
+    {
+      "queryid": "3220864789079889211",
+      "delta_calls": 4,
+      "delta_total_ms": 54,
+      "previous_calls": 4063,
+      "current_calls": 4067,
+      "previous_total_ms": 3015491.74,
+      "current_total_ms": 3015545.74,
+      "current_query_sample": "SELECT public.process_all_service_history_sync_queue($1)"
+    },
+    {
+      "queryid": "-2647655532108368607",
+      "delta_calls": 0,
+      "delta_total_ms": 0,
+      "previous_calls": 4339,
+      "current_calls": 4339,
+      "previous_total_ms": 2894601.58,
+      "current_total_ms": 2894601.58,
+      "current_query_sample": "SELECT\n  e.name,\n  n.nspname AS schema,\n  e.default_version,\n  x.extversion AS installed_version,\n  e.comment,\n  ev.schema AS default_version_schema\nFROM\n  pg_available_extensions e\n  LEFT JOIN pg_ext"
+    },
+    {
+      "queryid": "-922008049376959953",
+      "delta_calls": 0,
+      "delta_total_ms": 0,
+      "previous_calls": 2250,
+      "current_calls": 2250,
+      "previous_total_ms": 2637552.57,
+      "current_total_ms": 2637552.57,
+      "current_query_sample": "WITH pgrst_source AS ( SELECT \"public\".\"service_reception_entries\".\"id\", \"public\".\"service_reception_entries\".\"created_at\", \"public\".\"service_reception_entries\".\"source\", \"public\".\"service_reception_e"
+    },
+    {
+      "queryid": "852176900607336119",
+      "delta_calls": 1,
+      "delta_total_ms": 143.42,
+      "previous_calls": 2201,
+      "current_calls": 2202,
+      "previous_total_ms": 2583241.94,
+      "current_total_ms": 2583385.36,
+      "current_query_sample": "WITH pgrst_source AS ( SELECT \"public\".\"service_reception_entries\".\"id\", \"public\".\"service_reception_entries\".\"dealer_code\", \"public\".\"service_reception_entries\".\"reg_number\", \"public\".\"service_recept"
+    },
+    {
+      "queryid": "7336725908253715888",
+      "delta_calls": 3,
+      "delta_total_ms": 331.71,
+      "previous_calls": 5719,
+      "current_calls": 5722,
+      "previous_total_ms": 2549731.23,
+      "current_total_ms": 2550062.94,
+      "current_query_sample": "WITH pgrst_source AS ( SELECT \"public\".\"service_reception_entries\".\"id\", \"public\".\"service_reception_entries\".\"dealer_code\", \"public\".\"service_reception_entries\".\"reg_number\", \"public\".\"service_recept"
+    },
+    {
+      "queryid": "8906853800206803563",
+      "delta_calls": 0,
+      "delta_total_ms": 0,
+      "previous_calls": 2055,
+      "current_calls": 2055,
+      "previous_total_ms": 2097410.73,
+      "current_total_ms": 2097410.73,
+      "current_query_sample": "WITH pgrst_source AS ( SELECT \"public\".\"service_reception_entries\".\"id\", \"public\".\"service_reception_entries\".\"dealer_code\", \"public\".\"service_reception_entries\".\"reg_number\", \"public\".\"service_recept"
+    },
+    {
+      "queryid": "3787216458397661678",
+      "delta_calls": 3,
+      "delta_total_ms": 256.95,
+      "previous_calls": 3878,
+      "current_calls": 3881,
+      "previous_total_ms": 1920439.05,
+      "current_total_ms": 1920696,
+      "current_query_sample": "WITH pgrst_source AS ( SELECT \"public\".\"service_reception_entries\".\"id\", \"public\".\"service_reception_entries\".\"dealer_code\", \"public\".\"service_reception_entries\".\"reg_number\", \"public\".\"service_recept"
+    },
+    {
+      "queryid": "-4471200446562181147",
+      "delta_calls": 0,
+      "delta_total_ms": 0,
+      "previous_calls": 2683,
+      "current_calls": 2683,
+      "previous_total_ms": 1897307.25,
+      "current_total_ms": 1897307.25,
+      "current_query_sample": "WITH pgrst_source AS ( SELECT \"public\".\"service_parts_consumption_data\".\"fiscal_year\" FROM \"public\".\"service_parts_consumption_data\" WHERE NOT \"public\".\"service_parts_consumption_data\".\"fiscal_year\" I"
+    },
+    {
+      "queryid": "2744925251257801673",
+      "delta_calls": 0,
+      "delta_total_ms": 0,
+      "previous_calls": 887,
+      "current_calls": 887,
+      "previous_total_ms": 1883362.16,
+      "current_total_ms": 1883362.16,
+      "current_query_sample": "WITH pgrst_source AS ( SELECT \"public\".\"service_reception_entries\".* FROM \"public\".\"service_reception_entries\"   LIMIT $1 OFFSET $2 ) , pgrst_source_count AS (SELECT $3  FROM \"public\".\"service_recepti"
+    },
+    {
+      "queryid": "-6531828952590653571",
+      "delta_calls": 0,
+      "delta_total_ms": 0,
+      "previous_calls": 2122,
+      "current_calls": 2122,
+      "previous_total_ms": 1324902.87,
+      "current_total_ms": 1324902.87,
+      "current_query_sample": "WITH pgrst_source AS ( SELECT \"public\".\"service_reception_entries\".* FROM \"public\".\"service_reception_entries\"  ORDER BY \"public\".\"service_reception_entries\".\"created_at\" DESC  LIMIT $1 OFFSET $2 )  S"
+    },
+    {
+      "queryid": "4672411056197643065",
+      "delta_calls": 0,
+      "delta_total_ms": 0,
+      "previous_calls": 1039,
+      "current_calls": 1039,
+      "previous_total_ms": 1288371.86,
+      "current_total_ms": 1288371.86,
+      "current_query_sample": "WITH pgrst_source AS ( SELECT \"public\".\"vw_parts_stock_health\".* FROM \"public\".\"vw_parts_stock_health\"   LIMIT $1 OFFSET $2 )  SELECT $3::bigint AS total_result_set, pg_catalog.count(_postgrest_t) AS "
+    },
+    {
+      "queryid": "-4430418172455327552",
+      "delta_calls": 0,
+      "delta_total_ms": 0,
+      "previous_calls": 1914,
+      "current_calls": 1914,
+      "previous_total_ms": 1271833.92,
+      "current_total_ms": 1271833.92,
+      "current_query_sample": "WITH pgrst_source AS ( SELECT \"public\".\"technician_assignments\".\"job_card_number\", \"public\".\"technician_assignments\".\"work_status\" FROM \"public\".\"technician_assignments\"   LIMIT $1 OFFSET $2 )  SELECT"
+    },
+    {
+      "queryid": "-4864666557527507574",
+      "delta_calls": 0,
+      "delta_total_ms": 0,
+      "previous_calls": 6026,
+      "current_calls": 6026,
+      "previous_total_ms": 1051198.94,
+      "current_total_ms": 1051198.94,
+      "current_query_sample": "with base_table_info as (\n        select\n            c.oid::int8 as id,\n            nc.nspname as schema,\n            c.relname as name,\n            c.relkind,\n            c.relrowsecurity as rls_enab"
+    },
+    {
+      "queryid": "-5633448213020496946",
+      "delta_calls": 0,
+      "delta_total_ms": 0,
+      "previous_calls": 151,
+      "current_calls": 151,
+      "previous_total_ms": 1017022.47,
+      "current_total_ms": 1017022.47,
+      "current_query_sample": "COPY public.service_parts_stock_snapshot_data (id, part_number, part_description, snapshot_date, on_hand_quantity, weighted_cost, inventory_value, source_row_hash, branch, created_at, updated_at, port"
+    },
+    {
+      "queryid": "-7861961781374970658",
+      "delta_calls": 3,
+      "delta_total_ms": 789.88,
+      "previous_calls": 3444,
+      "current_calls": 3447,
+      "previous_total_ms": 1009538.33,
+      "current_total_ms": 1010328.21,
+      "current_query_sample": "WITH pgrst_source AS ( SELECT \"public\".\"service_reception_entries\".\"id\", \"public\".\"service_reception_entries\".\"dealer_code\", \"public\".\"service_reception_entries\".\"reg_number\", \"public\".\"service_recept"
+    },
+    {
+      "queryid": "2713002948605393575",
+      "delta_calls": 0,
+      "delta_total_ms": 0,
+      "previous_calls": 12,
+      "current_calls": 12,
+      "previous_total_ms": 1001169.78,
+      "current_total_ms": 1001169.78,
+      "current_query_sample": "DO $$\ndeclare\n  v_process_name text := 'all_service_data_from_job_card_closed_service_winner';\n  v_chunk_size integer := 2000;\n  v_min_service_id bigint;\n  v_max_service_id bigint;\n  v_from_id bigint;"
+    },
+    {
+      "queryid": "4706629092485339489",
+      "delta_calls": 88,
+      "delta_total_ms": 344.61,
+      "previous_calls": 149878,
+      "current_calls": 149966,
+      "previous_total_ms": 917458.39,
+      "current_total_ms": 917803,
+      "current_query_sample": "WITH pgrst_source AS (SELECT pgrst_call.pgrst_scalar FROM (SELECT \"public\".\"get_unread_complaint_notification_count\"() pgrst_scalar) pgrst_call) SELECT $3::bigint AS total_result_set, $4 AS page_total"
+    },
+    {
+      "queryid": "4251000708073776526",
+      "delta_calls": 0,
+      "delta_total_ms": 0,
+      "previous_calls": 4917,
+      "current_calls": 4917,
+      "previous_total_ms": 856745.7,
+      "current_total_ms": 856745.7,
+      "current_query_sample": "WITH pgrst_source AS ( SELECT \"public\".\"all_service_data_dynamic\".\"chassis_no\", \"public\".\"all_service_data_dynamic\".\"fuel_tp\", \"public\".\"all_service_data_dynamic\".\"priority_bucket\", \"public\".\"all_serv"
+    },
+    {
+      "queryid": "-3076875962393720596",
+      "delta_calls": 0,
+      "delta_total_ms": 0,
+      "previous_calls": 666,
+      "current_calls": 666,
+      "previous_total_ms": 823543.61,
+      "current_total_ms": 823543.61,
+      "current_query_sample": "with f as (\n      \n-- CTE with sane arg_modes, arg_names, and arg_types.\n-- All three are always of the same length.\n-- All three include all args, including OUT and TABLE args.\nwith functions as (\n  "
+    }
+  ]
+}
