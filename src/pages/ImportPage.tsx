@@ -133,6 +133,7 @@ const CARDS: CardConfig[] = [
     tableName: 'job_card_closed_data',
     title: 'PSF Revenue Report',
     description: 'Closed job card records across all branches.',
+    branches: ['PSF Revenue Report (All Branches)'],
   },
   {
     tableName: 'service_invoice_order_data',
@@ -228,6 +229,7 @@ const WARRANTY_REPORT_TABLES = new Set([
 const SYSTEM_COLS = new Set(['id', 'created_at', 'updated_at', 'branch'])
 const MAX_PARALLEL_BRANCH_UPLOADS = 2
 const PSF_REVENUE_REPLACE_ALL_ON_IMPORT = false
+const PSF_SERVER_STAGING_RPC_ENABLED = true
 const PARTS_REPLACE_ALL_ON_IMPORT = true
 
 const DEALER_CODE_LOCATION_PORTAL_RULES = [
@@ -1768,7 +1770,7 @@ export default function ImportPage() {
             for (let rowIdx = 0; rowIdx < rawRows.length; rowIdx++) {
               const { row, errors } = buildJcClosedInsertRow(
                 rawRows[rowIdx],
-                standardBranch,
+                branch,
                 jcHeaderMapping,
                 rowIdx + 2,
               )
@@ -1832,7 +1834,7 @@ export default function ImportPage() {
                   if (!byCodeMatch) {
                     mappingIssues.push({
                       source_table: 'job_card_closed_data',
-                      branch: standardBranch,
+                      branch,
                       row_number: rowIdx + 2,
                       job_card_number:
                         row.job_card_number == null ? null : String(row.job_card_number),
@@ -1856,7 +1858,7 @@ export default function ImportPage() {
                   if (matched.reason === 'no_employee_match') {
                     mappingIssues.push({
                       source_table: 'job_card_closed_data',
-                      branch: standardBranch,
+                      branch,
                       row_number: rowIdx + 2,
                       job_card_number:
                         row.job_card_number == null ? null : String(row.job_card_number),
@@ -1955,6 +1957,45 @@ export default function ImportPage() {
 
             if (PSF_REVENUE_REPLACE_ALL_ON_IMPORT) {
               totalInserted += await insertRowsInChunks(dedupedJcRows)
+            } else if (PSF_SERVER_STAGING_RPC_ENABLED) {
+              const { data: rpcData, error: rpcError } = await supabase.rpc('run_psf_import_via_staging', {
+                p_branch_slot: branch,
+                p_source_file_name: file.name,
+                p_rows: dedupedJcRows,
+              })
+
+              if (rpcError) {
+                const rpcMessage = rpcError.message ?? 'PSF server-side staging import failed'
+                const lower = rpcMessage.toLowerCase()
+                const rpcUnavailable =
+                  lower.includes('could not find the function') ||
+                  lower.includes('function') && lower.includes('run_psf_import_via_staging')
+
+                if (!rpcUnavailable) {
+                  throw new Error(rpcMessage)
+                }
+
+                // Backward-compatible fallback for environments where Slice L migration is not yet applied.
+                totalInserted += await upsertJcClosedRowsByBusinessKey(dedupedJcRows)
+              } else {
+                const rows = (rpcData as Array<Record<string, unknown>> | null) ?? []
+                const result = rows[0]
+
+                if (!result) {
+                  throw new Error('PSF server-side staging import returned no result')
+                }
+
+                const status = String(result.status ?? '').toLowerCase()
+                if (status !== 'completed') {
+                  throw new Error(String(result.error_message ?? 'PSF server-side staging import failed'))
+                }
+
+                const validRows = Number(result.valid_rows ?? dedupedJcRows.length)
+                totalInserted += Number.isFinite(validRows) ? validRows : dedupedJcRows.length
+
+                // JC upload uses 2-phase row progress (processing + upload).
+                incrementProcessedRows(dedupedJcRows.length)
+              }
             } else {
               totalInserted += await upsertJcClosedRowsByBusinessKey(dedupedJcRows)
             }
@@ -2482,7 +2523,7 @@ export default function ImportPage() {
                     key={config.tableName}
                     config={config}
                     state={cards[config.tableName]}
-                    branches={PORTAL_BRANCHES}
+                    branches={config.branches ?? PORTAL_BRANCHES}
                     onSlotFile={(branch, file) => handleSlotFile(config.tableName, branch, file)}
                     onSlotClear={(branch) => handleSlotClear(config.tableName, branch)}
                     onUpload={() => handleUpload(config)}
@@ -2518,7 +2559,7 @@ export default function ImportPage() {
                     key={config.tableName}
                     config={config}
                     state={cards[config.tableName]}
-                    branches={PORTAL_BRANCHES}
+                    branches={config.branches ?? PORTAL_BRANCHES}
                     onSlotFile={(branch, file) => handleSlotFile(config.tableName, branch, file)}
                     onSlotClear={(branch) => handleSlotClear(config.tableName, branch)}
                     onUpload={() => handleUpload(config)}
@@ -2571,7 +2612,7 @@ export default function ImportPage() {
             key={config.tableName}
             config={config}
             state={cards[config.tableName]}
-            branches={PORTAL_BRANCHES}
+            branches={config.branches ?? PORTAL_BRANCHES}
             onSlotFile={(branch, file) => handleSlotFile(config.tableName, branch, file)}
             onSlotClear={(branch) => handleSlotClear(config.tableName, branch)}
             onUpload={() => handleUpload(config)}

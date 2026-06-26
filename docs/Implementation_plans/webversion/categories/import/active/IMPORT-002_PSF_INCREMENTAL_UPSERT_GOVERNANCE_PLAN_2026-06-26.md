@@ -753,6 +753,38 @@ Slice J: Emergency hotfix step 2 - reduce conflict/retry churn in PSF upsert
 3. Local verification: `npm run build` passed after change.
 4. Status: Implemented (production validation pending).
 
+Slice K: Emergency hotfix step 3 - canonical ON CONFLICT inference fallback
+1. Incident observed after Slice J deploy attempt: `there is no unique or exclusion constraint matching the ON CONFLICT specification` on PSF upload.
+2. Root cause: environments with canonical unique partial index can fail ON CONFLICT inference in PostgREST upsert path.
+3. Hotfix applied in importer:
+   - preserve canonical upsert attempt first.
+   - when ON CONFLICT inference error is returned, fallback to canonical key `update -> insert -> retry update` row path.
+   - keep canonical dedupe and reduced chunk size behavior from Slice J.
+4. Local verification: `npm run build` passed after change.
+5. Status: Implemented (production validation pending).
+
+Slice L: Structural hardening - move PSF import write-path to server-side staging + merge
+1. Decision: retire browser-driven PSF upsert as primary writer due timeout/conflict/retry complexity under load.
+2. New target architecture:
+   - UI uploads source file and starts an import run.
+   - server-side staging table stores normalized rows for the run.
+   - server-side merge applies canonical business rules and upserts into `job_card_closed_data`.
+   - run summary returns inserted/updated/skipped/rejected counts.
+3. Contract requirements:
+   - only rows that pass canonical rules are merged.
+   - unresolved rows are logged as rejected with reason.
+   - no client-side row-by-row conflict retry loops.
+4. Implemented artifacts:
+   - migration: `supabase/migrations/20260626153000_slice_l_psf_server_staging_merge_pipeline.sql`.
+   - sql checks: `supabase/sql_checks/20260626153000_slice_l_psf_server_staging_merge_pipeline_checks.sql`.
+   - web wiring: PSF upload now calls `run_psf_import_via_staging` with RPC-unavailable fallback to browser upsert path.
+   - UX simplification: PSF card now uses a single consolidated slot (`PSF Revenue Report (All Branches)`) because source file already carries cross-branch data.
+5. Rollout guard:
+   - keep browser upsert fallback behind flag/path until Slice L production validation passes.
+6. Local verification:
+   - `npm run build` passed after Slice L UI wiring and single-slot PSF update.
+7. Status: Implemented (production validation pending).
+
 ### 14.2 Current Gate Snapshot
 
 Gate A Repo-1 (branch_label in critical web files):
@@ -787,11 +819,10 @@ Gate A SQL Evidence Artifact (2026-06-26):
 
 1. Documentation hygiene only: keep this tracker updated after any PSF change + verification cycle.
 2. Deferred backlog: unresolved_rule_rows = 92 (manual SA mapping/data enrichment). No DB correction action in current cycle.
-3. Slice I closure gate: run one controlled production PSF import after deploy and capture outcome evidence.
-4. Slice I closure gate: rerun SQL-1 plus rule-alignment summary after production import and append outputs.
-5. Slice J closure gate: verify `409 Conflict` flood is materially reduced and no statement-timeout occurs on controlled production import.
-6. Gate A verification rerun after each additional PSF-related edit.
-7. Execute SQL-1 and SQL-2 evidence queries when query/filter semantics are materially changed again.
+3. Slice I/J/K closure gates: complete controlled production validation and capture evidence deltas.
+4. Slice L production closure: run controlled production validation for server-side staging merge path and capture returned run metrics.
+5. Gate A verification rerun after each additional PSF-related edit.
+6. Execute SQL-1 and SQL-2 evidence queries when query/filter semantics are materially changed again.
 
 ### 14.4 Verification Checklist (Run After Each Slice)
 
