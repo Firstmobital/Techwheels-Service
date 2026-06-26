@@ -736,6 +736,13 @@ Slice H: reportQueries residual branch-runtime cleanup
 4. Gate A Repo-2 grep now shows only job_card_closed_data table references (no `.branch` runtime hits in critical files).
 5. Status: Completed.
 
+Slice I: Emergency hotfix - PSF import timeout during clear-all step
+1. Incident observed in production import flow: `Upload failed` with `Failed to clear all PSF rows: canceling statement due to statement timeout`.
+2. Root cause: replace-all pre-clear path attempted full-table delete on `job_card_closed_data` before PSF upload.
+3. Hotfix applied in web importer: disabled PSF replace-all mode and forced canonical incremental upsert path (no pre-clear).
+4. Local verification: `npm run build` passed after change.
+5. Status: Implemented (production import validation pending).
+
 ### 14.2 Current Gate Snapshot
 
 Gate A Repo-1 (branch_label in critical web files):
@@ -745,6 +752,7 @@ Gate A Repo-1 (branch_label in critical web files):
 Gate A Repo-2 (job_card_closed_data.branch runtime reads in critical web files):
 1. Current status: Pass for critical files.
 2. Verification snapshot: no `.branch` runtime hits in scoped critical files; remaining matches are expected job_card_closed_data table references.
+3. Hotfix watch item: PSF import timeout regression test required after deployment.
 
 Gate A SQL Evidence Artifact (2026-06-26):
 1. SQL-1 result:
@@ -769,8 +777,10 @@ Gate A SQL Evidence Artifact (2026-06-26):
 
 1. Documentation hygiene only: keep this tracker updated after any PSF change + verification cycle.
 2. Deferred backlog: unresolved_rule_rows = 92 (manual SA mapping/data enrichment). No DB correction action in current cycle.
-3. Gate A verification rerun after each additional PSF-related edit.
-4. Execute SQL-1 and SQL-2 evidence queries when query/filter semantics are materially changed again.
+3. Slice I closure gate: run one controlled production PSF import after deploy and capture outcome evidence.
+4. Slice I closure gate: rerun SQL-1 plus rule-alignment summary after production import and append outputs.
+5. Gate A verification rerun after each additional PSF-related edit.
+6. Execute SQL-1 and SQL-2 evidence queries when query/filter semantics are materially changed again.
 
 ### 14.4 Verification Checklist (Run After Each Slice)
 

@@ -227,7 +227,7 @@ const WARRANTY_REPORT_TABLES = new Set([
 
 const SYSTEM_COLS = new Set(['id', 'created_at', 'updated_at', 'branch'])
 const MAX_PARALLEL_BRANCH_UPLOADS = 2
-const PSF_REVENUE_REPLACE_ALL_ON_IMPORT = true
+const PSF_REVENUE_REPLACE_ALL_ON_IMPORT = false
 const PARTS_REPLACE_ALL_ON_IMPORT = true
 
 const DEALER_CODE_LOCATION_PORTAL_RULES = [
