@@ -538,6 +538,7 @@ function normalizeJobCardNumber(raw: unknown): string | null {
 }
 
 const QUERY_PAGE_SIZE = 1000
+const MAX_REPORT_FETCH_ROWS = 5000
 
 interface JobCardClosedFetchFilters {
   branch: BranchFilter
@@ -827,6 +828,10 @@ async function fetchAllJobCardClosedRowsWithoutFuelFilter(
     const batch = (data as unknown as Record<string, unknown>[] | null) ?? []
     allRows.push(...batch)
 
+    if (allRows.length >= MAX_REPORT_FETCH_ROWS) {
+      return allRows.slice(0, MAX_REPORT_FETCH_ROWS)
+    }
+
     if (batch.length < QUERY_PAGE_SIZE) {
       break
     }
@@ -895,6 +900,10 @@ async function fetchAllJobCardClosedRows(
     const batch = (data as unknown as Record<string, unknown>[] | null) ?? []
     allRows.push(...batch)
 
+    if (allRows.length >= MAX_REPORT_FETCH_ROWS) {
+      break
+    }
+
     if (batch.length < QUERY_PAGE_SIZE) {
       break
     }
@@ -902,7 +911,7 @@ async function fetchAllJobCardClosedRows(
     from += QUERY_PAGE_SIZE
   }
 
-  return allRows
+  return allRows.slice(0, MAX_REPORT_FETCH_ROWS)
 }
 
 async function fetchVasRowsWithEmployeeData(

@@ -185,6 +185,35 @@ function toNumber(value) {
   return Number.isFinite(n) ? n : 0
 }
 
+function enforceManualPostDeployAuditGate(repoRoot, envFileVars) {
+  const confirmation = String(
+    process.env.SUPABASE_AUDIT_POST_DEPLOY_CONFIRM ||
+      envFileVars.SUPABASE_AUDIT_POST_DEPLOY_CONFIRM ||
+      '',
+  )
+    .trim()
+    .toUpperCase()
+
+  const requiredToken = 'VERCEL_PROD_DEPLOYED_AND_WAITED_15M'
+  if (confirmation === requiredToken) return
+
+  const commandHint =
+    'SUPABASE_AUDIT_POST_DEPLOY_CONFIRM=VERCEL_PROD_DEPLOYED_AND_WAITED_15M npm run supabase:audit:cycle:postdeploy'
+
+  const message = [
+    'Audit execution blocked by manual post-deploy guard.',
+    'Do not run audit immediately after local edits.',
+    'Required preconditions:',
+    '1) Vercel production deploy is complete.',
+    '2) Wait 10-15 minutes after deploy.',
+    '3) Real traffic has hit updated paths.',
+    `To run intentionally, execute: ${commandHint}`,
+    `Repo: ${repoRoot}`,
+  ].join('\n')
+
+  throw new Error(message)
+}
+
 function mapByQueryId(rows) {
   const map = new Map()
   for (const row of Array.isArray(rows) ? rows : []) {
@@ -549,6 +578,7 @@ async function writeArtifacts(repoRoot, runTimestamp, payloads) {
 async function main() {
   const repoRoot = process.cwd()
   const envFileVars = await loadLocalEnv(repoRoot)
+  enforceManualPostDeployAuditGate(repoRoot, envFileVars)
   const previousSummaryEnvelope = await loadPreviousSummary(repoRoot)
 
   const projectRef = normalizeProjectRef(

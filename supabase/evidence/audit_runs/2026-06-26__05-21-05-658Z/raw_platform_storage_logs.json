@@ -1,0 +1,19 @@
+{
+  "status": "ok",
+  "endpoint": "/v1/projects/jmdndcphkmaljhwgzqxq/analytics/endpoints/logs.all?sql=select%20timestamp%2C%20event_message%20from%20storage_logs%20order%20by%20timestamp%20desc%20limit%20100",
+  "count": 3,
+  "records": [
+    {
+      "event_message": "jmdndcphkmaljhwgzqxq | GET | 200 | 10.102.65.164 | req-db | /tenants/jmdndcphkmaljhwgzqxq/health | @supabase-infra/mgmt-api/2df7758",
+      "timestamp": 1782451228393000
+    },
+    {
+      "event_message": "[Cache] Tenant pool lookup",
+      "timestamp": 1782451228164000
+    },
+    {
+      "event_message": "jmdndcphkmaljhwgzqxq | GET | 200 | 10.102.65.164 | req-n4b | /tenants/jmdndcphkmaljhwgzqxq | @supabase-infra/mgmt-api/2df7758",
+      "timestamp": 1782451224185000
+    }
+  ]
+}

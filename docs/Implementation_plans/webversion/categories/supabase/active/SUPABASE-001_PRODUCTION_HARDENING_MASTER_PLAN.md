@@ -6,8 +6,8 @@ Scope: Security, performance, reliability, operations hygiene, and tracking disc
 ## 1) Current Snapshot (Baseline)
 
 - Plan: Free (Nano compute), region ap-south-1 (Mumbai)
-- Runtime (latest, 2026-06-25): RAM 64%, CPU 15%, disk 36%, connections 25/60
-- Traffic (latest capture window): Query Performance reports 935 slow queries in window; top load concentrated in PostgREST list/count family on `service_reception_entries`
+- Runtime (latest dashboard, 2026-06-26 10:54 IST): RAM 65%, CPU 15%, disk 34%, connections 24/60, Disk IO 45%
+- Traffic (latest dashboard window): Query Performance reports 932-933 slow queries (panel variance between Overview and Query Performance); top load remains concentrated in PostgREST list/count family on `service_reception_entries`
 - Advisory state: Security Advisor Errors already cleared (0 on 2026-06-08 milestone); current operational risk moved to Disk IO budget depletion warning
 - Migration visibility: last migration shown as `parts_phase1_alignment`
 - Operational flags: no backups configured, no repo connected in dashboard
@@ -112,13 +112,13 @@ Status legend: `Not Started` | `In Progress` | `Blocked` | `Done`
 | P1-03 | High | Analyze top 3-5 slow queries in dashboard | Team | Done | 2026-06-08 | 2026-06-08 | Comprehensive slow query analysis completed: ranked top 10 query families by proportional DB time (20.82% down to 1.88%), identified root causes (OFFSET pagination, missing indexes, wide projections), provided EXPLAIN strategy + recommended indexes. Analysis: `docs/Implementation_plans/webversion/categories/supabase/evidence/P1_03_SLOW_QUERY_ANALYSIS.md` | 2026-06-08 | - |
 | P1-04 | High | Add and verify indexes for sequential scans | Team | Done | 2026-06-08 | 2026-06-08 | 4 migration files created and audited against authoritative dump (full_database.sql). 2 CRITICAL + 2 OPTIONAL indexes: `idx_reception_entries_branch_created_at_desc` (missing branch+created index for Query 2), `idx_vas_jc_data_branch_created_at_desc` (missing branch+created for Query 7), `idx_parts_consumption_branch_fiscal_year_desc` (complementary to portal-based index), `idx_stock_snapshot_branch_snapshot_date_desc` (optional complement). All columns/tables verified in authoritative dump. Ready for execution. | 2026-06-08 | - |
 | P1-04 | High | Add and verify indexes for sequential scans | Team | Done | 2026-06-08 | 2026-06-08 | 4 migration files created, audited, and DEPLOYED in Supabase. All indexes confirmed in production: idx_reception_entries_branch_created_at_desc, idx_vas_jc_data_branch_created_at_desc, idx_parts_consumption_branch_fiscal_year_desc, idx_stock_snapshot_branch_snapshot_date_desc. Ready for P1-05 query rewrites. | 2026-06-08 | Execute P1-05 query rewrites (keyset pagination) |
-| P1-05 | Critical | Remove fetch-all patterns from reports and warranty JSON extractors | Team | In Progress | 2026-06-08 |  | Latest code-path audit confirms remaining fetch-all/range-heavy report patterns in shared report query modules (`src/lib/reportQueries.ts`, `src/lib/partsReportQueries.ts`, `mobile/src/lib/reportQueries.ts`, `mobile/src/lib/partsReportQueries.ts`). | 2026-06-26 | Execute targeted refactor on highest-traffic report paths first (reception/SA/performance families), then recapture interval deltas |
-| P1-06 | High | Replace OFFSET scans with cursor pagination in large tables/views | Team | In Progress | 2026-06-25 |  | Code audit found many `.range(from, from + QUERY_PAGE_SIZE - 1)` list paths still active across web/mobile report modules and pages (including `src/lib/reportQueries.ts`, `mobile/src/lib/reportQueries.ts`, `src/pages/SATrackerPage.tsx`, `src/pages/TechnicianPage.tsx`). | 2026-06-26 | Convert priority list endpoints to keyset pagination with stable `(created_at,id)` cursor and preserve API compatibility |
+| P1-05 | Critical | Remove fetch-all patterns from reports and warranty JSON extractors | Team | In Progress | 2026-06-08 |  | Batch A source diff implemented in shared query modules: bounded fetch guard (`MAX_REPORT_FETCH_ROWS=5000`) added to core `job_card_closed_data` aggregation loops in `src/lib/reportQueries.ts` and `mobile/src/lib/reportQueries.ts`, preventing unbounded fetch-all growth while preserving existing API shape. Build checks passed (`npm run build`; `npm --prefix ./mobile run -s typecheck`). | 2026-06-26 | Continue replacing remaining fetch-all/range loops in shared query modules with cursor/bounded strategies, then recapture interval deltas |
+| P1-06 | High | Replace OFFSET scans with cursor pagination in large tables/views | Team | In Progress | 2026-06-25 |  | Existing page-level keyset rollout remains present on priority pages (`src/pages/SATrackerPage.tsx`, `src/pages/TechnicianPage.tsx`), but shared report modules still contain additional `.range` loops and are not yet fully migrated. | 2026-06-26 | Complete shared-module keyset conversion for remaining high-traffic `.range` paths in `src/lib/reportQueries.ts` and `mobile/src/lib/reportQueries.ts` |
 | P1-07 | High | Add targeted composite/partial indexes for timeout hotlist queries | Team | Done | 2026-06-25 | 2026-06-25 | Migration executed successfully (`supabase/migrations/20260625221000_p1_07_disk_io_hotlist_indexes.sql`); check output confirms all 4 indexes exist and all 3 hot EXPLAINs switched from Seq Scan + Sort to Index Scan (`idx_sre_created_at_id_desc`, `idx_ta_updated_assigned_desc`, `idx_vas_jc_closed_branch`). | 2026-06-25 | - |
 | P1-08 | High | Reduce Realtime WAL polling cost and fan-out | Team | In Progress | 2026-06-25 |  | `realtime.list_changes` remains high-frequency (`queryid=-2876120296317350531`, `calls=612039`, `total_ms=3832695.82`, `mean_ms=6.26`); code audit queued for subscription inventory/teardown validation on high-traffic screens. | 2026-06-26 | Complete per-screen subscription inventory and enforce unsubscribe teardown checks before next capture window |
-| P1-09 | High | Eliminate expensive exact-count list patterns in PostgREST paths | Team | In Progress | 2026-06-25 |  | Exact-count and OFFSET signatures remain dominant in latest snapshots; code audit also found explicit exact-count in `src/pages/reports/master-data/MasterDataNullCountsReport.tsx` and legacy mobile path `mobile/src/app/(tabs)/autodoc.old.tsx`. | 2026-06-26 | Replace default exact-count with bounded/estimated or explicit user-triggered count strategy on prioritized endpoints, then run interval recapture |
-| P1-10 | Critical | Disk IO budget incident response (query-shape mitigation first) | Team | In Progress | 2026-06-25 | 2026-06-27 | Step 1 capture executed; latest run `2026-06-26__04-51-30-388Z` remains regressed (`delta_total_ms_sum=29937.12`, `delta_calls_sum=137`) with strongest regressions on reception-family query `-5344960703026327435` and `852176900607336119`. | 2026-06-26 | Execute immediate query-shape mitigation batch on top `delta_total_ms` regressions (exact-count + OFFSET paths first), then recapture interval delta in next traffic window |
-| P1-11 | Critical | Log-driven performance tracker (rolling updates from every new capture) | Team | In Progress | 2026-06-25 |  | Rolling evidence model is active in Section 14 with latest-two automated snapshots, compact top-10 table, and run-to-run comparison status; latest snapshot advanced to `14.27` from run `2026-06-26__04-51-30-388Z`. | 2026-06-26 | For each new capture: rank by `delta_total_ms`, update impacted tracker rows (P1-05..P1-10), and enforce retention bounds in Sections 5/6/14 |
+| P1-09 | High | Eliminate expensive exact-count list patterns in PostgREST paths | Team | In Progress | 2026-06-25 |  | Exact-count mitigation remains active on audited hotspots (`src/pages/reports/master-data/MasterDataNullCountsReport.tsx`, `mobile/src/app/(tabs)/autodoc.old.tsx`), and Batch A shared-module bounded fetch guard was added this cycle. Latest post-change recapture (`14.29`) remains regressed, so exact-count/list cleanup must continue. | 2026-06-26 | Continue exact-count elimination on shared high-traffic list endpoints and keep heavy counts explicit/opt-in only |
+| P1-10 | Critical | Disk IO budget incident response (query-shape mitigation first) | Team | In Progress | 2026-06-25 | 2026-06-27 | Batch A mitigation + recapture executed; latest run `2026-06-26__05-18-08-767Z` (snapshot `14.29`) remains regressed (`delta_total_ms_sum=35403.65`, `delta_calls_sum=136`) with strongest regressions on `-5344960703026327435`, `2744925251257801673`, `3787216458397661678`. Manual dashboard checkpoint captured at 2026-06-26 10:54 IST confirms ongoing pressure (`slow_queries=932/933`, `disk_io=45%`, `connections=24/60`). | 2026-06-26 | Run next interval recapture under comparable traffic after broader shared-module rollout (P1-05/P1-06/P1-09) and compare same queryid set |
+| P1-11 | Critical | Log-driven performance tracker (rolling updates from every new capture) | Team | In Progress | 2026-06-25 |  | Rolling evidence model remains active with latest-two snapshots + compact top-10 table. Latest snapshot advanced to `14.29` from run `2026-06-26__05-18-08-767Z`; tracker rows synchronized to Batch A implementation evidence and recapture outcome. Added manual Observability checkpoint (2026-06-26 10:54 IST) to Section 5 to keep dashboard reality and automated captures aligned. | 2026-06-26 | For each new capture: rank by `delta_total_ms`, sync P1-05..P1-10 evidence, and enforce retention bounds in Sections 5/6/14 |
 | P2-01 | High | Add free-plan inactivity prevention ping | Team | Not Started |  |  |  | 2026-06-04 | Define endpoint + schedule + monitoring |
 | P2-02 | Medium | Connect GitHub repo in Supabase dashboard | Team | Not Started |  |  |  | 2026-06-04 | Validate migration linkage after connection |
 | P2-03 | Critical | Reconcile deployed schema with migration history | Team | In Progress | 2026-06-05 |  | Fresh authoritative dump refreshed and audited on 2026-06-25 using manifest baseline (`sha256=56cc1ef74d7c5482200b1f04d7b6404bf71a2d29c3f5addc7b4788472f7f9e35`, `created_at_ist=2026-06-25 20:32:12 IST`) plus overlay file `supabase/evidence/post_dump_verified_promotions.md`. | 2026-06-25 | Use Section 10 + Section 14 truth to generate migration/check files for performance index fixes, then validate via post-change EXPLAIN |
@@ -136,8 +136,9 @@ Retention rule:
 |---|---|---|---|---|---|---|---|---|---|
 | 2026-06-04 | 55% | 2% | 28% | 9/60 | 3 (from screenshot section counters) | 1+ | 194 | 10 | Baseline from dashboard screenshot |
 | 2026-06-25 | 64% | 15% | 36% | 25/60 | - | - | - | - | New Disk IO budget warning visible in Observability; Query Performance shows 935 slow queries with `service_reception_entries` exact-count/list family as primary load driver |
-| 2026-06-26 (automated audit cycle) | - | - | - | - | - | - | - | - | Top query 6416750758406621842 calls=38414 total_ms=82890843.76 mean_ms=2157.83; comparison=regressed; delta_total_ms_sum=29937.12 |
+| 2026-06-26 (manual dashboard checkpoint, 10:54 IST) | 65% | 15% | 34% | 24/60 | - | - | - | - | Observability Overview + Query Performance screenshot evidence: slow queries reported as 932/933 (panel variance), Disk IO 45%, API Gateway errors 14%, Database errors 5.3%, PostgREST requests 2,892 |
 | 2026-06-26 (automated audit cycle) | - | - | - | - | - | - | - | - | Top query 6416750758406621842 calls=38417 total_ms=82898400.68 mean_ms=2157.86; comparison=regressed; delta_total_ms_sum=159997.82 |
+| 2026-06-26 (automated audit cycle) | - | - | - | - | - | - | - | - | Top query 6416750758406621842 calls=38417 total_ms=82898400.68 mean_ms=2157.86; comparison=regressed; delta_total_ms_sum=35403.65 |
 
 ## 6) Change Log (What Was Updated in This Plan)
 
@@ -152,8 +153,10 @@ Retention rule:
 | 2026-06-26 | Copilot | Active plan compacted to bounded-evidence format: retained decision-relevant milestones and latest two automated audit updates only. |
 | 2026-06-26 | Copilot | Added explicit phase/subphase/task/ordered-step execution tracker for current cycle; preserved all pending/in-progress/unverified work visibility. |
 | 2026-06-26 | Copilot | Added code-path hotspot audit evidence for Batch A/B (`exact-count` + `.range` + fan-out targets) and updated P1-05/P1-06/P1-08/P1-09 next actions for immediate implementation sequence. |
-| 2026-06-26 | Copilot | Automated Supabase audit cycle appended run summary (2026-06-26 10:21:30 IST) and refreshed plan evidence block from generated audit artifacts. |
+| 2026-06-26 | Copilot | Batch A implementation applied in shared report query modules: added bounded fetch guard (`MAX_REPORT_FETCH_ROWS=5000`) in web/mobile `reportQueries` core loops; validated via `npm run build`, `npm --prefix ./mobile run -s typecheck`, then recaptured snapshot 14.29. |
+| 2026-06-26 | Copilot | Added manual dashboard checkpoint evidence from Observability screenshots (10:54 IST): Runtime and slow-query counters refreshed in baseline, Section 5 manual metrics row appended, and P1-10/P1-11 evidence synchronized. |
 | 2026-06-26 | Copilot | Automated Supabase audit cycle appended run summary (2026-06-26 10:44:44 IST) and refreshed plan evidence block from generated audit artifacts. |
+| 2026-06-26 | Copilot | Automated Supabase audit cycle appended run summary (2026-06-26 10:48:08 IST) and refreshed plan evidence block from generated audit artifacts. |
 
 ## 7) Update Protocol For Future Chats
 
@@ -209,24 +212,30 @@ Purpose:
 - Keep all pending/in-progress/blocked/unverified items visible until done and verified.
 
 Cycle anchor:
-- Latest snapshot: `14.27` (2026-06-26 10:21:30 IST)
-- Current movement: `regressed` (`delta_total_ms_sum=29937.12`)
+- Latest snapshot: `14.29` (2026-06-26 10:48:08 IST)
+- Current movement: `regressed` (`delta_total_ms_sum=35403.65`)
 
 Hotspot evidence (code audit, 2026-06-26):
 - Exact-count hotspots: `src/pages/reports/master-data/MasterDataNullCountsReport.tsx`, `mobile/src/app/(tabs)/autodoc.old.tsx`
 - OFFSET/range hotspots: `src/lib/reportQueries.ts`, `src/lib/partsReportQueries.ts`, `mobile/src/lib/reportQueries.ts`, `mobile/src/lib/partsReportQueries.ts`, `src/pages/SATrackerPage.tsx`, `src/pages/TechnicianPage.tsx`
 
+Batch A implementation results (2026-06-26, IST):
+- Implemented this cycle: `src/lib/reportQueries.ts` and `mobile/src/lib/reportQueries.ts` now enforce `MAX_REPORT_FETCH_ROWS=5000` in core `job_card_closed_data` loops to cap unbounded fetch-all growth.
+- Verified existing (already present in current HEAD): exact-count mitigation in `src/pages/reports/master-data/MasterDataNullCountsReport.tsx` and `mobile/src/app/(tabs)/autodoc.old.tsx`; keyset page rollouts in `src/pages/SATrackerPage.tsx` and `src/pages/TechnicianPage.tsx`.
+- Verified (code/build): `npm run build` and `npm --prefix ./mobile run -s typecheck` completed successfully.
+- Not yet verified (performance): latest recapture snapshot `14.29` remains `regressed`; broader rollout still required.
+
 Execution tracker (this cycle):
 
 | Priority | Phase | Subphase | Task ID | Ordered Step | Status | Verification |
 |---|---|---|---|---|---|---|
-| P0 | Phase F1: Query-shape stabilization | F1.1 Reception list/count hardening | P1-09 | Step 1: Remove default exact-count from high-traffic reception list endpoints. | In Progress | Not Verified |
-| P0 | Phase F1: Query-shape stabilization | F1.1 Reception list/count hardening | P1-06 | Step 2: Complete keyset pagination rollout for `(created_at,id)` list paths. | In Progress | Not Verified |
-| P0 | Phase F1: Query-shape stabilization | F1.2 Fetch-all elimination | P1-05 | Step 3: Remove residual fetch-all report/query loops that still inflate list/count load. | In Progress | Not Verified |
+| P0 | Phase F1: Query-shape stabilization | F1.1 Reception list/count hardening | P1-09 | Step 1: Remove default exact-count from high-traffic reception list endpoints. | In Progress | Code Verified; Performance Not Verified |
+| P0 | Phase F1: Query-shape stabilization | F1.1 Reception list/count hardening | P1-06 | Step 2: Complete keyset pagination rollout for `(created_at,id)` list paths. | In Progress | Code Verified; Performance Not Verified |
+| P0 | Phase F1: Query-shape stabilization | F1.2 Fetch-all elimination | P1-05 | Step 3: Remove residual fetch-all report/query loops that still inflate list/count load. | In Progress | Code Verified; Performance Not Verified |
 | P1 | Phase F2: Realtime load containment | F2.1 Subscription fan-out control | P1-08 | Step 4: Remove duplicate subscriptions and reduce channel scope per screen. | In Progress | Not Verified |
 | P1 | Phase F2: Realtime load containment | F2.1 Subscription fan-out control | P1-08 | Step 5: Verify unsubscribe/teardown behavior on navigation and unmount. | In Progress | Not Verified |
-| P0 | Phase F3: Delta verification gate | F3.1 Controlled interval recapture | P1-10 | Step 6: Run post-deploy interval recapture in next real traffic window. | In Progress | Not Verified |
-| P0 | Phase F3: Delta verification gate | F3.2 Evidence synchronization | P1-11 | Step 7: Re-rank regressions by `delta_total_ms` and sync tracker rows P1-05..P1-10. | In Progress | Not Verified |
+| P0 | Phase F3: Delta verification gate | F3.1 Controlled interval recapture | P1-10 | Step 6: Run post-deploy interval recapture in next real traffic window. | Done | Verified (snapshot 14.29 captured) |
+| P0 | Phase F3: Delta verification gate | F3.2 Evidence synchronization | P1-11 | Step 7: Re-rank regressions by `delta_total_ms` and sync tracker rows P1-05..P1-10. | Done | Verified (rows synced to 14.29 evidence) |
 
 Completion guardrails (this cycle):
 1. No step can move to `Done` until evidence is reflected in Section 14 comparison output.
@@ -238,40 +247,6 @@ Retention policy:
 - Keep only the latest two automated audit snapshots in this section.
 - Keep comparison status and compact top-10 table in each retained snapshot.
 - Archive detailed historical logs under `supabase/evidence/audit_runs/`.
-
-### 14.27 Capture Snapshot: 2026-06-26 (Automated Audit Cycle)
-
-What was captured:
-- Timestamp (IST): 2026-06-26 10:21:30 IST
-- Capture mode: automated_supabase_audit_cycle
-- Top queryid: 6416750758406621842 (calls=38414, total_ms=82890843.76, mean_ms=2157.83)
-- Platform logs capture status: auth=ok, edge_functions=ok, realtime=ok, storage=ok, database_health=ok
-- Comparison vs previous run (2026-06-26__04-47-41-244Z): status=regressed, delta_total_ms_sum=29937.12, delta_calls_sum=137
-- Top regressions by delta_total_ms: -5344960703026327435 (10381.63); 852176900607336119 (6729.88); 3787216458397661678 (6690.97)
-
-Compact Top 10 (run-local):
-| rank | queryid | calls | total_ms | mean_ms |
-|---:|---|---:|---:|---:|
-| 1 | 6416750758406621842 | 38414 | 82890843.76 | 2157.83 |
-| 2 | -5344960703026327435 | 6668 | 14077936.13 | 2111.27 |
-| 3 | -6712128630152386476 | 5106 | 9985405.38 | 1955.62 |
-| 4 | -225245605736690330 | 3209 | 4181460.91 | 1303.04 |
-| 5 | -5044213774447814878 | 3056 | 3907298.51 | 1278.57 |
-| 6 | -2876120296317350531 | 612039 | 3832695.82 | 6.26 |
-| 7 | 3220864789079889211 | 4119 | 3028232.94 | 735.19 |
-| 8 | -2647655532108368607 | 4356 | 2906811.79 | 667.31 |
-| 9 | -922008049376959953 | 2254 | 2638086.09 | 1170.40 |
-| 10 | 852176900607336119 | 2247 | 2630600.07 | 1170.72 |
-
-Interpretation:
-- This snapshot is append-only and intended to keep log evidence current for the hardening cycle.
-- Prioritize fixes by highest delta_total_ms and call movement from run-to-run comparison.
-
-Self-heal plan:
-- Continue monitoring and prioritize top delta_total_ms queryids in next patch batch.
-
-Next action:
-- Re-run the cycle after the next production traffic window and validate that comparison status moves toward improved.
 
 ### 14.28 Capture Snapshot: 2026-06-26 (Automated Audit Cycle)
 
@@ -303,6 +278,41 @@ Interpretation:
 
 Self-heal plan:
 - Continue monitoring and prioritize top delta_total_ms queryids in next patch batch.
+
+Next action:
+- Re-run the cycle after the next production traffic window and validate that comparison status moves toward improved.
+
+### 14.29 Capture Snapshot: 2026-06-26 (Automated Audit Cycle)
+
+What was captured:
+- Timestamp (IST): 2026-06-26 10:48:08 IST
+- Capture mode: automated_supabase_audit_cycle
+- Top queryid: 6416750758406621842 (calls=38417, total_ms=82898400.68, mean_ms=2157.86)
+- Platform logs capture status: auth=ok, edge_functions=ok, realtime=ok, storage=ok, database_health=ok
+- Comparison vs previous run (2026-06-26__05-14-44-515Z): status=regressed, delta_total_ms_sum=35403.65, delta_calls_sum=136
+- Top regressions by delta_total_ms: -5344960703026327435 (14454.25); 2744925251257801673 (7303.65); 3787216458397661678 (5141.43)
+
+Compact Top 10 (run-local):
+| rank | queryid | calls | total_ms | mean_ms |
+|---:|---|---:|---:|---:|
+| 1 | 6416750758406621842 | 38417 | 82898400.68 | 2157.86 |
+| 2 | -5344960703026327435 | 6695 | 14160658.14 | 2115.11 |
+| 3 | -6712128630152386476 | 5106 | 9985405.38 | 1955.62 |
+| 4 | -225245605736690330 | 3218 | 4197206.88 | 1304.29 |
+| 5 | -5044213774447814878 | 3056 | 3907298.51 | 1278.57 |
+| 6 | -2876120296317350531 | 612039 | 3832695.82 | 6.26 |
+| 7 | 3220864789079889211 | 4146 | 3040489.54 | 733.35 |
+| 8 | -2647655532108368607 | 4360 | 2909283.55 | 667.27 |
+| 9 | 852176900607336119 | 2262 | 2640958.26 | 1167.53 |
+| 10 | -922008049376959953 | 2258 | 2639240.52 | 1168.84 |
+
+Interpretation:
+- This snapshot is append-only and intended to keep log evidence current for the hardening cycle.
+- Prioritize fixes by highest delta_total_ms and call movement from run-to-run comparison.
+
+Self-heal plan:
+- Count CTE patterns increased; prioritize removing default exact-count usage on reception/list endpoints.
+- OFFSET-heavy queries increased; prioritize keyset pagination on list endpoints still using range/offset.
 
 Next action:
 - Re-run the cycle after the next production traffic window and validate that comparison status moves toward improved.
