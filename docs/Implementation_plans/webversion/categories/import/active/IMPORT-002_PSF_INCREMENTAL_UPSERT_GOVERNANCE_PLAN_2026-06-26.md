@@ -791,7 +791,25 @@ Slice M: Slice L hotfix - resolve ambiguous output-column reference in RPC
 3. Fixes applied:
    - updated Slice L base migration function body to qualify predicate as `s.import_run_id = v_run_id` for fresh deployments.
    - added corrective migration `supabase/migrations/20260626174000_slice_l_fix_rpc_import_run_id_ambiguity.sql` to safely patch already-applied environments.
-4. Status: Implemented (re-run SQL smoke check pending).
+4. Re-run SQL smoke check evidence (post-hotfix):
+   - `psf_import_staging_exists` returned `psf_import_staging`.
+   - `function_signature` returned `run_psf_import_via_staging(text,text,jsonb)`.
+   - empty-run smoke call returned `status = completed` with all counters = 0.
+   - latest run snapshot recorded `id = 2`, `status = completed`, `branch_slot = SLICE_L_SMOKE`, `source_file_name = slice_l_smoke.json`.
+5. Status: Completed.
+
+Slice N: Slice L retention hardening - purge successful run staging rows
+1. Risk addressed: per-run staging accumulation would grow linearly with daily PSF imports, despite small net-new business rows.
+2. Fixes applied:
+   - updated server-side RPC to delete `psf_import_staging` rows for the completed run after counters are computed.
+   - added corrective migration `supabase/migrations/20260626181000_slice_l_purge_success_staging_rows.sql` for already-applied environments.
+   - extended SQL check file with retention assertion for latest completed run.
+3. Verification evidence:
+   - `psf_import_staging_exists` returned `psf_import_staging`.
+   - `function_signature` returned `run_psf_import_via_staging(text,text,jsonb)`.
+   - smoke run `id = 3` returned `status = completed` with all counters = 0.
+   - retention check returned `latest_completed_run_id = 3`, `retained_staging_rows = 0`.
+4. Status: Completed.
 
 ### 14.2 Current Gate Snapshot
 
@@ -828,10 +846,11 @@ Gate A SQL Evidence Artifact (2026-06-26):
 1. Documentation hygiene only: keep this tracker updated after any PSF change + verification cycle.
 2. Deferred backlog: unresolved_rule_rows = 92 (manual SA mapping/data enrichment). No DB correction action in current cycle.
 3. Slice I/J/K closure gates: complete controlled production validation and capture evidence deltas.
-4. Slice M closure gate: execute hotfix migration and re-run Slice L SQL checks; smoke test must return `completed` with zero counts.
-5. Slice L production closure: run controlled production validation for server-side staging merge path and capture returned run metrics.
-5. Gate A verification rerun after each additional PSF-related edit.
-6. Execute SQL-1 and SQL-2 evidence queries when query/filter semantics are materially changed again.
+4. Slice M closure gate: Completed (hotfix migration executed; smoke test now `completed` with zero counts).
+5. Slice N closure gate: Completed (retention check shows `retained_staging_rows = 0` for latest completed run).
+6. Slice L production closure: run controlled production validation for server-side staging merge path and capture returned run metrics.
+7. Gate A verification rerun after each additional PSF-related edit.
+8. Execute SQL-1 and SQL-2 evidence queries when query/filter semantics are materially changed again.
 
 ### 14.4 Verification Checklist (Run After Each Slice)
 

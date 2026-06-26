@@ -37,3 +37,19 @@ select
 from public.psf_import_runs
 order by id desc
 limit 10;
+
+-- 5) Retention behavior check: latest completed run should have no staging rows retained
+with latest_completed as (
+  select id
+  from public.psf_import_runs
+  where status = 'completed'
+  order by id desc
+  limit 1
+)
+select
+  lc.id as latest_completed_run_id,
+  count(s.id) as retained_staging_rows
+from latest_completed lc
+left join public.psf_import_staging s
+  on s.import_run_id = lc.id
+group by lc.id;
