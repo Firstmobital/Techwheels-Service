@@ -1171,12 +1171,10 @@ export default function TechnicianPage() {
             }
           })
         })
-        .filter((row: any) => row.match_status !== 'MATCH')
-
       if (issues.length === 0) {
-        alert('No issues found. All assignment rows match invoice dates in the selected range.')
+        alert('No records found in the selected range.')
         return
-      }
+        }
 
       // Export to Excel
       const sheetData = [
