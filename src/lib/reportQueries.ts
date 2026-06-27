@@ -823,12 +823,21 @@ async function fetchAllJobCardClosedRowsWithoutFuelFilter(
   const invoiceDateField =
     filters.dateFilter.dateFieldType === 'invoice_date' ? await getJobCardInvoiceDateColumn() : null
 
-  let query = supabase
-    .from('job_card_closed_data')
-    .select(selectColumns)
-    .limit(MAX_REPORT_FETCH_ROWS)
+  const bounds = getDateRangeBounds(filters.dateFilter)
+  const selectWithCursorColumns = appendSelectColumns(selectColumns, ['id', 'created_at'])
+  const allRows: Record<string, unknown>[] = []
+  let cursorCreatedAt: string | null = null
+  let cursorId: number | null = null
 
-  query = applyJobCardClosedScopeFilterToQuery(query, filters['branch'])
+  while (true) {
+    let query = supabase
+      .from('job_card_closed_data')
+      .select(selectWithCursorColumns)
+      .order('created_at', { ascending: false })
+      .order('id', { ascending: false })
+      .limit(QUERY_PAGE_SIZE)
+
+    query = applyJobCardClosedScopeFilterToQuery(query, filters['branch'])
 
     if (Array.isArray(filters.serviceType)) {
       if (filters.serviceType.length > 0) {
@@ -850,20 +859,43 @@ async function fetchAllJobCardClosedRowsWithoutFuelFilter(
       query = query.eq('sr_assigned_to', filters.manpower)
     }
 
-    const bounds = getDateRangeBounds(filters.dateFilter)
     query = applyDateFilterToQuery(query, bounds, {
       closedDateField: 'closed_date_time',
       invoiceDateField,
     })
 
-  const { data, error } = await query
+    if (cursorCreatedAt && cursorId !== null) {
+      query = query.or(`created_at.lt.${cursorCreatedAt},and(created_at.eq.${cursorCreatedAt},id.lt.${cursorId})`)
+    }
 
-  if (error) {
-    throw new Error(error.message)
+    const { data, error } = await query
+
+    if (error) {
+      throw new Error(error.message)
+    }
+
+    const batch = (data as unknown as Record<string, unknown>[] | null) ?? []
+    allRows.push(...batch)
+
+    if (batch.length < QUERY_PAGE_SIZE) {
+      break
+    }
+
+    if (allRows.length >= MAX_REPORT_FETCH_ROWS) {
+      break
+    }
+
+    const lastRow = batch[batch.length - 1] as { created_at?: unknown; id?: unknown }
+    cursorCreatedAt = typeof lastRow.created_at === 'string' ? lastRow.created_at : null
+    const parsedId = Number(lastRow.id)
+    cursorId = Number.isFinite(parsedId) ? parsedId : null
+
+    if (!cursorCreatedAt || cursorId === null) {
+      break
+    }
   }
 
-  const rows = (data as unknown as Record<string, unknown>[] | null) ?? []
-  return rows.slice(0, MAX_REPORT_FETCH_ROWS)
+  return allRows
 }
 
 async function fetchAllJobCardClosedRows(
@@ -878,12 +910,21 @@ async function fetchAllJobCardClosedRows(
   const invoiceDateField =
     filters.dateFilter.dateFieldType === 'invoice_date' ? await getJobCardInvoiceDateColumn() : null
 
-  let query = supabase
-    .from('job_card_closed_data')
-    .select(selectColumns)
-    .limit(MAX_REPORT_FETCH_ROWS)
+  const bounds = getDateRangeBounds(filters.dateFilter)
+  const selectWithCursorColumns = appendSelectColumns(selectColumns, ['id', 'created_at'])
+  const allRows: Record<string, unknown>[] = []
+  let cursorCreatedAt: string | null = null
+  let cursorId: number | null = null
 
-  query = applyJobCardClosedScopeFilterToQuery(query, filters['branch'])
+  while (true) {
+    let query = supabase
+      .from('job_card_closed_data')
+      .select(selectWithCursorColumns)
+      .order('created_at', { ascending: false })
+      .order('id', { ascending: false })
+      .limit(QUERY_PAGE_SIZE)
+
+    query = applyJobCardClosedScopeFilterToQuery(query, filters['branch'])
 
     if (Array.isArray(filters.serviceType)) {
       if (filters.serviceType.length > 0) {
@@ -905,20 +946,43 @@ async function fetchAllJobCardClosedRows(
       query = query.eq('sr_assigned_to', filters.manpower)
     }
 
-    const bounds = getDateRangeBounds(filters.dateFilter)
     query = applyDateFilterToQuery(query, bounds, {
       closedDateField: 'closed_date_time',
       invoiceDateField,
     })
 
-  const { data, error } = await query
+    if (cursorCreatedAt && cursorId !== null) {
+      query = query.or(`created_at.lt.${cursorCreatedAt},and(created_at.eq.${cursorCreatedAt},id.lt.${cursorId})`)
+    }
 
-  if (error) {
-    throw new Error(error.message)
+    const { data, error } = await query
+
+    if (error) {
+      throw new Error(error.message)
+    }
+
+    const batch = (data as unknown as Record<string, unknown>[] | null) ?? []
+    allRows.push(...batch)
+
+    if (batch.length < QUERY_PAGE_SIZE) {
+      break
+    }
+
+    if (allRows.length >= MAX_REPORT_FETCH_ROWS) {
+      break
+    }
+
+    const lastRow = batch[batch.length - 1] as { created_at?: unknown; id?: unknown }
+    cursorCreatedAt = typeof lastRow.created_at === 'string' ? lastRow.created_at : null
+    const parsedId = Number(lastRow.id)
+    cursorId = Number.isFinite(parsedId) ? parsedId : null
+
+    if (!cursorCreatedAt || cursorId === null) {
+      break
+    }
   }
 
-  const rows = (data as unknown as Record<string, unknown>[] | null) ?? []
-  return rows.slice(0, MAX_REPORT_FETCH_ROWS)
+  return allRows
 }
 
 async function fetchVasRowsWithEmployeeData(
@@ -5286,3 +5350,4 @@ export async function getPartsOrderJustification(
       return a.partNumber.localeCompare(b.partNumber)
     })
 }
+
