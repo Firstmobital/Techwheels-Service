@@ -143,6 +143,10 @@ VITE_DEFAULT_DEALER_NAME=Techwheels
 
 ---
 
+## AI Agent Operating Contract
+
+All AI agents/tools must follow the single generic operating contract at [`.instructions.md`](.instructions.md) — no vendor-specific instruction files. For documentation placement, read [`docs/STRUCTURE_GUIDE.md`](docs/STRUCTURE_GUIDE.md) before creating, moving, or editing any doc. For database truth, see [`docs/shared/reference/DATABASE_TRUTH.md`](docs/shared/reference/DATABASE_TRUTH.md).
+
 ## Related Documentation
 
 - [Secure Admin Operations Pattern](docs/ADMIN_OPERATIONS_SECURITY.md)

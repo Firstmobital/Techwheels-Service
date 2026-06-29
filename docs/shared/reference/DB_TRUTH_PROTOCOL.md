@@ -1,36 +1,46 @@
 # DB Truth Protocol (No Drift)
 
-Last Updated: 2026-06-24
+Last Updated: 2026-06-29
 
 ## Objective
 
 Keep schema understanding aligned with production reality between dump refreshes and prevent migration-state drift.
 
+This file covers the operational rules for staying in sync between dump refreshes. For the canonical Database Authority Hierarchy (which file is primary, which is secondary, why chunks exist, AI-agent inspection rules), see `docs/shared/reference/DATABASE_TRUTH.md` — that file is authoritative if anything below conflicts with it.
+
 ## Authority Model
 
-1. Primary authority is the latest dump snapshot:
+1. Primary authority for schema/object metadata (tables, columns, types, constraints, indexes, views, functions/RPCs, triggers, RLS, policies, grants):
+- supabase/backups/full_metadata.sql
+
+2. Primary authority for row data, seed/lookup/master data, and complete database evidence:
 - local_folder/backups/full_database.sql
 
-2. If direct file reads are blocked due to size limits, use exact mirror chunks:
+3. If direct file reads of full_database.sql are blocked due to size limits, use exact mirror chunks:
 - local_folder/backups/chunks/full_database.sql.part_*
 
-3. Between dump refreshes, use composite operational truth:
-- authoritative dump snapshot
+4. Between dump refreshes, use composite operational truth:
+- authoritative dump snapshots (metadata + full database)
 - plus migrations/checks already executed and verified, then promoted to:
 	- supabase/exec_success_migrations/sql
 	- supabase/exec_success_migrations/sql_check
 
-4. When a fresh dump is created, authority collapses back to the new dump snapshot as primary truth.
+5. When a fresh dump is created, authority collapses back to the new dump snapshot as primary truth.
 
 ## Automation Assets
 
-1. Dump refresh automation:
-- scripts/refresh_authoritative_dump.sh
+1. Metadata (schema) dump refresh automation:
+- scripts/backup-metadata.sh
 
-2. Verified migration promotion automation:
+2. Full database dump + chunk mirror refresh automation:
+- scripts/backup-full-db.sh
+- (scripts/refresh_authoritative_dump.sh still works — it now just calls scripts/backup-full-db.sh for backward compatibility)
+
+3. Verified migration promotion automation:
 - scripts/promote_verified_migration.sh
 
-3. Evidence files maintained automatically:
+4. Evidence files maintained automatically:
+- supabase/evidence/authoritative_metadata_manifest.json
 - supabase/evidence/authoritative_dump_manifest.json
 - supabase/evidence/post_dump_verified_promotions.md
 - supabase/evidence/execution_promotion_log.md
@@ -58,10 +68,11 @@ Use the promotion helper:
 scripts/promote_verified_migration.sh 20260624103000 --with-checks
 ```
 
-Use the dump refresh helper (after exporting PGPASSWORD):
+Use the dump refresh helpers (after exporting SUPABASE_DB_HOST/PORT/NAME/USER/PASSWORD — see .env.example):
 
 ```bash
-scripts/refresh_authoritative_dump.sh
+scripts/backup-metadata.sh   # supabase/backups/full_metadata.sql
+scripts/backup-full-db.sh    # local_folder/backups/full_database.sql + chunks
 ```
 
 ## Required Guardrails
@@ -85,7 +96,7 @@ scripts/refresh_authoritative_dump.sh
 - trust model = latest dump + promoted files listed in post_dump_verified_promotions.md
 
 2. If dump is created later:
-- refresh_authoritative_dump.sh resets post_dump_verified_promotions.md window
+- scripts/backup-full-db.sh resets post_dump_verified_promotions.md window
 - new dump manifest becomes the baseline truth
 - subsequent promotions become the new post-dump delta set
 

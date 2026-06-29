@@ -142,9 +142,11 @@ Snapshot Basis: Code and dump audit only (no inferred/assumed behavior)
 
 ### Dump Authority and Access Mirror
 
-- Canonical authority: `local_folder/backups/full_database.sql`.
-- Access mirror: `local_folder/backups/chunks/full_database.sql.part_*`.
-- Observed dump size: ~85 MB total (chunked into five parts).
+See `docs/shared/reference/DATABASE_TRUTH.md` for the full, current Database Authority Hierarchy. As of 2026-06-29, schema/object-metadata questions are authoritative via `supabase/backups/full_metadata.sql` first; this section's snapshot (taken 2026-06-18, basis below) remains a historical audit of `full_database.sql` and should be re-audited if precise current counts are needed.
+
+- Secondary/full-evidence authority: `local_folder/backups/full_database.sql`.
+- Access mirror (of the file above only): `local_folder/backups/chunks/full_database.sql.part_*`.
+- Observed dump size at snapshot time: ~85 MB total (chunked into five parts).
 
 ### Object Counts in Authority Dump
 

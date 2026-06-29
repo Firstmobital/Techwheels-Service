@@ -1,7 +1,7 @@
 # Database Change Ledger
 
-Last Updated: 2026-06-11
-Authority: local_folder/backups/full_database.sql is the authoritative schema reference.
+Last Updated: 2026-06-29
+Authority: See docs/shared/reference/DATABASE_TRUTH.md for the full hierarchy. supabase/backups/full_metadata.sql is primary for schema/object metadata; local_folder/backups/full_database.sql is primary for row/seed data and full DB evidence. Existing rows below predate this split and reference full_database.sql as written at the time — left as historical record, not rewritten.
 Purpose: Single source of truth for planned and applied DB changes so no one guesses schema state.
 
 ---

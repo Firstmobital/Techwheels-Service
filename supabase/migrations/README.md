@@ -16,14 +16,20 @@ This keeps `supabase/migrations/` focused on pending-to-apply files only.
 
 Do **not** keep full schema/data dump files here because they can be executed as active migrations and cause drift/conflicts.
 
-- Canonical authoritative dump for this repo is:
+See `docs/shared/reference/DATABASE_TRUTH.md` for the full Database Authority Hierarchy. Summary:
+
+- Primary schema/object-metadata authority for this repo is:
+
+- `supabase/backups/full_metadata.sql`
+
+- Secondary authority (row data, seed/lookup data, full DB evidence) is:
 
 - `local_folder/backups/full_database.sql`
 
-- For large-file reads, use chunk files:
+- For large-file reads of the secondary dump, use chunk files:
 
 - `local_folder/backups/chunks/full_database.sql.part_*`
 
-- Historical fallback/reference dump (not canonical authority) is kept at:
+- Historical fallback/reference dump (not canonical authority, superseded by full_metadata.sql) is kept at:
 
 - `supabase/backups/full_dump.sql`

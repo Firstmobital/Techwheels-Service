@@ -1,6 +1,6 @@
 # Database Change Protocol
 
-Last Updated: 2026-06-24
+Last Updated: 2026-06-29
 Status: Mandatory
 
 ## Goal
@@ -9,9 +9,12 @@ Prevent schema drift and prevent assumption-based development by enforcing one w
 
 ## Authority Rule
 
-- Authoritative source: local_folder/backups/full_database.sql
-- AI/large-file access layer: local_folder/backups/chunks/full_database.sql.part_*
-- Fallback reference only (non-canonical): supabase/backups/full_dump.sql
+See `docs/shared/reference/DATABASE_TRUTH.md` for the full, authoritative Database Authority Hierarchy. Summary:
+
+- Primary (schema/object metadata): supabase/backups/full_metadata.sql
+- Secondary (row data, seed/lookup data, full DB evidence): local_folder/backups/full_database.sql
+- AI/large-file access layer (mirror of the secondary file only): local_folder/backups/chunks/full_database.sql.part_*
+- Historical / non-canonical: supabase/backups/full_dump.sql (superseded by full_metadata.sql)
 - If code and migration assumptions differ from authority, authority wins until a new migration is authored and approved.
 
 ## Required Workflow

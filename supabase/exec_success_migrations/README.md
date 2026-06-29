@@ -16,13 +16,21 @@ Purpose: Store SQL migration files that have already been executed successfully 
 
 ## Automation
 
-1. Refresh authoritative dump + chunk mirror and reset post-dump promotion window:
+1. Refresh the primary metadata (schema) truth file:
 
 ```bash
-scripts/refresh_authoritative_dump.sh
+scripts/backup-metadata.sh
 ```
 
-2. Promote one verified migration bundle (migration + checks):
+2. Refresh the secondary full-database dump + chunk mirror and reset post-dump promotion window:
+
+```bash
+scripts/backup-full-db.sh
+```
+
+(`scripts/refresh_authoritative_dump.sh` still works and just calls `scripts/backup-full-db.sh`, kept for backward compatibility.)
+
+3. Promote one verified migration bundle (migration + checks):
 
 ```bash
 scripts/promote_verified_migration.sh <timestamp_prefix> --with-checks
@@ -33,7 +41,7 @@ scripts/promote_verified_migration.sh <timestamp_prefix> --with-checks
 1. Update docs/Project_Handbook/DB_CHANGE_LEDGER.md status to VERIFIED.
 2. Record execution evidence (timestamp, environment, validation result).
 3. Confirm docs sync updates are completed.
-4. Follow docs/shared/reference/DB_TRUTH_PROTOCOL.md for authority resolution between dump refreshes.
+4. Follow docs/shared/reference/DATABASE_TRUTH.md for the authority hierarchy and docs/shared/reference/DB_TRUTH_PROTOCOL.md for authority resolution between dump refreshes.
 
 ## Naming
 

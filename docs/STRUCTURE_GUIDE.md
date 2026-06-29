@@ -65,9 +65,10 @@ Allowed at docs/ root:
 - STRUCTURE_GUIDE.md
 - DOCS_IMPACT_MATRIX.md
 - DOCS_DEDUP_CONFLICT_MATRIX_*.md
-- ai-context.md (repo operating contract)
 - db-changes.md (manual change ledger)
-- codex-logs.md (agent change log)
+- agent-change-log.md (agent change log, if/when created — use a vendor-neutral name, never name this after a specific AI tool)
+
+Note: this repository's single generic AI-agent operating contract lives at the repository root as `.instructions.md`, not as a docs/ file. Do not create `docs/ai-context.md` or any vendor-specific contract file (`CLAUDE.md`, `CURSOR.md`, `.cursor/rules`, `copilot-instructions.md`, `GEMINI.md`, `CODEX.md`, or similar) — update `.instructions.md` instead. See `.instructions.md` for the full AI operating contract.
 
 No module content documents should remain at docs/ root.
 No non-markdown implementation artifacts should remain at docs/ root.
@@ -325,8 +326,8 @@ Required customization set:
 - Add repository CI gate that fails on docs validation errors.
 - Validation must run on pull requests to prevent drift.
 
-7. Copilot operating contract
-- Add repository instruction file with mandatory read order and no-guessing constraints.
+7. AI-agent operating contract
+- Add one generic, vendor-neutral repository instruction file with mandatory read order and no-guessing constraints.
 - Include required deliverables for task completion (docs impact, DB impact, verification evidence).
 
 8. Ownership model
@@ -345,13 +346,13 @@ Keep universal rules unchanged and customize only placeholders.
 Template header:
 - Last Updated: `<YYYY-MM-DD>`
 - Status: `ACTIVE AUTHORITY`
-- Owner: `<Product + Engineering + Copilot governance owner>`
+- Owner: `<Product + Engineering + AI-agent governance owner>`
 
 Universal purpose:
 1. No guesswork for plan placement.
 2. No scope drift across workstreams.
 3. Consistent lifecycle from active planning to completed archive.
-4. Copilot-safe structure for long-term continuity.
+4. AI-agent-safe structure for long-term continuity.
 
 Canonical structure template:
 1. Live workstream roots:
@@ -401,7 +402,7 @@ Mandatory control files template:
 3. Completed authority:
 - `docs/Implementation_plans/completed/INDEX.md`
 
-Copilot workflow contract template:
+AI-agent workflow contract template:
 1. Place plan files only in approved implementation structure.
 2. Update relevant index and tracker in the same session.
 3. Never guess category; resolve by module ownership and route/module location.
@@ -418,7 +419,7 @@ Universal vs override boundaries for this model:
 - lifecycle folders (`active/evidence/inactive`)
 - decision tree sequence
 - archive gate and same-change control-file updates
-- no-guessing Copilot contract
+- no-guessing AI-agent contract
 2. Repository override:
 - surface names
 - approved category lists

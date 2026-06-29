@@ -1,12 +1,12 @@
 # React + TypeScript + Vite
 
+## AI Agent Operating Contract (Project Policy)
+
+All AI agents/tools working in this repo follow one generic operating contract: [`.instructions.md`](.instructions.md) at the repository root. No vendor-specific instruction files (CLAUDE.md, CURSOR.md, copilot-instructions.md, etc.) are used. Documentation placement is governed by [`docs/STRUCTURE_GUIDE.md`](docs/STRUCTURE_GUIDE.md) — read it before creating, moving, or editing any doc.
+
 ## Database Authority Rule (Project Policy)
 
-- Canonical schema and full dump source: `local_folder/backups/full_database.sql`
-- Large-file access layer for AI/tools: `local_folder/backups/chunks/full_database.sql.part_*`
-- Historical fallback reference only (non-canonical): `supabase/backups/full_dump.sql`
-
-If any code, docs, or migration assumptions conflict with the canonical dump, treat `local_folder/backups/full_database.sql` as truth until a new migration is authored, executed, and verified.
+Database schema and data truth follow a documented authority hierarchy. See [`docs/shared/reference/DATABASE_TRUTH.md`](docs/shared/reference/DATABASE_TRUTH.md) for the full hierarchy, the purpose of each truth file, and the inspection rules AI agents must follow before assuming any DB object exists.
 
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
 
