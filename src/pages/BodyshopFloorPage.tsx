@@ -24,13 +24,13 @@ interface Employee {
   department: string | null
 }
 
-// BSRole = the DB column prefix (dentor_, painter_, technician_, electrician_, det_)
-type BSRole = 'DENTOR' | 'PAINTER' | 'TECHNICIAN' | 'ELECTRICIAN' | 'DET'
+// BSRole maps 1:1 to a DB column prefix (dentor_, painter_, technician_)
+type BSRole = 'DENTOR' | 'PAINTER' | 'TECHNICIAN'
 
-// Per-role assignment data read from the columnar DB row
+// Per-role assignment data — employee_code / employee_name may be comma-separated for multi-employee
 interface BSRoleAssignment {
-  employee_code: string | null
-  employee_name: string | null
+  employee_codes: string[]   // split from comma-separated DB value
+  employee_names: string[]   // split from comma-separated DB value
   work_status: string | null
   remark: string | null
   in_ts: string | null
@@ -48,7 +48,6 @@ interface BSAssignmentRow {
   repair_card_id: number | null
   reception_entry_id: number | null
   dealer_code: string | null
-  // per-role columns
   dentor_employee_code: string | null
   dentor_employee_name: string | null
   dentor_work_status: string | null
@@ -70,20 +69,6 @@ interface BSAssignmentRow {
   technician_in_ts: string | null
   technician_out_ts: string | null
   technician_completed_by: string | null
-  electrician_employee_code: string | null
-  electrician_employee_name: string | null
-  electrician_work_status: string | null
-  electrician_remark: string | null
-  electrician_in_ts: string | null
-  electrician_out_ts: string | null
-  electrician_completed_by: string | null
-  det_employee_code: string | null
-  det_employee_name: string | null
-  det_work_status: string | null
-  det_remark: string | null
-  det_in_ts: string | null
-  det_out_ts: string | null
-  det_completed_by: string | null
   bs_floor_completed_at: string | null
   bs_floor_completed_by: string | null
 }
@@ -93,14 +78,12 @@ type AssignmentView = 'all' | 'unassigned' | 'assigned' | 'work_inprocess' | 'ho
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const ROLE_META: Record<BSRole, { label: string; icon: string; col: string }> = {
-  DENTOR:      { label: 'Dentor',      icon: '🔨', col: 'dentor'      },
-  PAINTER:     { label: 'Painter',     icon: '🎨', col: 'painter'     },
-  TECHNICIAN:  { label: 'Technician',  icon: '🔧', col: 'technician'  },
-  ELECTRICIAN: { label: 'Electrician', icon: '⚡', col: 'electrician' },
-  DET:         { label: 'Det / SA',    icon: '📋', col: 'det'         },
+  DENTOR:     { label: 'Dentor',     icon: '🔨', col: 'dentor'     },
+  PAINTER:    { label: 'Painter',    icon: '🎨', col: 'painter'    },
+  TECHNICIAN: { label: 'Technician', icon: '🔧', col: 'technician' },
 }
 
-const ALL_ROLES: BSRole[] = ['DENTOR', 'PAINTER', 'TECHNICIAN', 'ELECTRICIAN', 'DET']
+const ALL_ROLES: BSRole[] = ['DENTOR', 'PAINTER', 'TECHNICIAN']
 
 const STATUS_OPTIONS = [
   { value: 'work_inprocess', label: 'Work Inprocess' },
@@ -110,17 +93,15 @@ const STATUS_OPTIONS = [
 
 const BS_DEPTS = new Set(['BODY SHOP', 'BODYSHOP'])
 
-// ─── Employee role → DB column mapping ───────────────────────────────────────
-// Maps each Employee Master role (from DB) to a BSRole DB column prefix.
-// Roles not listed here are ignored / shown under their closest match.
+// ─── Employee Master role → DB column mapping ─────────────────────────────────
+// Maps every Employee Master business role in Bodyshop to the correct DB column.
+// FLOOR INCHARGE is supervisory — not assigned to a car slot, so it is skipped.
 function normRole(empRole: string | null): BSRole | null {
   const v = String(empRole ?? '').trim().toUpperCase()
-  if (v === 'DENTOR' || v === 'DENTOR HELPER')          return 'DENTOR'
-  if (v === 'PAINTER' || v === 'PAINTER HELPER')        return 'PAINTER'
-  if (v === 'TECHNICIAN' || v === 'PDI')                return 'TECHNICIAN'
-  if (v === 'ELECTRICIAN')                              return 'ELECTRICIAN'
-  if (v === 'SA' || v === 'SSA' || v === 'DET' || v === 'SURVEY') return 'DET'
-  // FLOOR INCHARGE — supervisory; not assigned to a car role slot, skip
+  if (v === 'DENTOR' || v === 'DENTOR HELPER')      return 'DENTOR'
+  if (v === 'PAINTER' || v === 'PAINTER HELPER')    return 'PAINTER'
+  if (v === 'TECHNICIAN' || v === 'PDI')            return 'TECHNICIAN'
+  // FLOOR INCHARGE — supervisory, skip
   return null
 }
 
@@ -138,54 +119,36 @@ function jcKey(car: AccidentCar): string {
   return (car.jc_number ?? '').trim().toUpperCase()
 }
 
+// Split a comma-separated DB field into a clean string array
+function splitComma(v: string | null | undefined): string[] {
+  if (!v) return []
+  return v.split(',').map((s) => s.trim()).filter(Boolean)
+}
+
+// Join array back to comma-separated string for DB storage
+function joinComma(arr: string[]): string | null {
+  const s = arr.join(',')
+  return s || null
+}
+
 // Extract per-role assignment object from a columnar DB row
 function extractRoleData(row: BSAssignmentRow, role: BSRole): BSRoleAssignment {
   const col = ROLE_META[role].col
+  const r = row as unknown as Record<string, string | null>
   return {
-    employee_code: (row as unknown as Record<string, unknown>)[`${col}_employee_code`] as string | null,
-    employee_name: (row as unknown as Record<string, unknown>)[`${col}_employee_name`] as string | null,
-    work_status:   (row as unknown as Record<string, unknown>)[`${col}_work_status`]   as string | null,
-    remark:        (row as unknown as Record<string, unknown>)[`${col}_remark`]        as string | null,
-    in_ts:         (row as unknown as Record<string, unknown>)[`${col}_in_ts`]         as string | null,
-    out_ts:        (row as unknown as Record<string, unknown>)[`${col}_out_ts`]        as string | null,
-    completed_by:  (row as unknown as Record<string, unknown>)[`${col}_completed_by`]  as string | null,
+    employee_codes: splitComma(r[`${col}_employee_code`]),
+    employee_names: splitComma(r[`${col}_employee_name`]),
+    work_status:    r[`${col}_work_status`] ?? null,
+    remark:         r[`${col}_remark`]      ?? null,
+    in_ts:          r[`${col}_in_ts`]       ?? null,
+    out_ts:         r[`${col}_out_ts`]      ?? null,
+    completed_by:   r[`${col}_completed_by`]?? null,
   }
-}
-
-// Build a DB update payload for assigning an employee to a role column
-function buildAssignPayload(role: BSRole, empCode: string, empName: string, currentStatus: string) {
-  const col = ROLE_META[role].col
-  return {
-    [`${col}_employee_code`]: empCode,
-    [`${col}_employee_name`]: empName,
-    [`${col}_work_status`]: currentStatus,
-    [`${col}_in_ts`]: new Date().toISOString(),
-    assigned_at: new Date().toISOString(),
-  }
-}
-
-// Build a DB update payload for saving status/remark for a role
-function buildStagePayload(
-  role: BSRole,
-  work_status: string,
-  remark: string,
-  current: BSRoleAssignment,
-) {
-  const col = ROLE_META[role].col
-  const payload: Record<string, unknown> = {
-    [`${col}_work_status`]: work_status,
-    [`${col}_remark`]: remark.trim() || null,
-  }
-  if (work_status === 'completed' && !current.out_ts) {
-    payload[`${col}_out_ts`] = new Date().toISOString()
-  }
-  return payload
 }
 
 // ─── State types ──────────────────────────────────────────────────────────────
 
 type AssignmentMap = Record<string, { row: BSAssignmentRow; roles: Record<BSRole, BSRoleAssignment> }>
-
 type DraftMap = Record<string, Record<BSRole, { work_status: string; remark: string }>>
 
 // ─── Component ────────────────────────────────────────────────────────────────
@@ -195,10 +158,9 @@ export default function BodyshopFloorPage() {
   const [dataError, setDataError] = useState(false)
   const [toast, setToast]         = useState<{ msg: string; type: 'success' | 'error' } | null>(null)
 
-  // Data
   const [cars, setCars]           = useState<AccidentCar[]>([])
   const [employees, setEmployees] = useState<Employee[]>([])
-  // assignments keyed by JC_NUMBER (uppercase) — one entry per job card
+  // assignments keyed by JC_NUMBER (uppercase) — one entry per job card (no duplicates)
   const [assignments, setAssignments] = useState<AssignmentMap>({})
 
   // Filters
@@ -222,7 +184,6 @@ export default function BodyshopFloorPage() {
   async function loadAll() {
     setLoading(true); setDataError(false)
     try {
-      // 1. Accident reception entries
       const { data: recData, error: recErr } = await supabase
         .from('service_reception_entries')
         .select('id, jc_number, reg_number, model, owner_name, owner_phone, sa_name, sa_display_name, branch, created_at')
@@ -231,7 +192,6 @@ export default function BodyshopFloorPage() {
       if (recErr) throw recErr
       setCars((recData ?? []) as AccidentCar[])
 
-      // 2. Bodyshop employees from Employee Master
       const { data: empData } = await supabase
         .from('employee_master')
         .select('employee_code, employee_name, department, role')
@@ -242,7 +202,6 @@ export default function BodyshopFloorPage() {
         )
       )
 
-      // 3. Bodyshop assignments (columnar — one row per job card)
       const { data: assData, error: assErr } = await supabase
         .from('bodyshop_assignments')
         .select('*')
@@ -257,18 +216,15 @@ export default function BodyshopFloorPage() {
         const map: AssignmentMap = {}
         for (const row of (assData ?? []) as BSAssignmentRow[]) {
           const k = row.job_card_number.trim().toUpperCase()
-          // Only keep the latest active row per job card (in case of duplicates)
+          // Keep latest active row per job card
           if (!map[k] || new Date(row.assigned_at ?? 0) > new Date(map[k].row.assigned_at ?? 0)) {
             const roles = {} as Record<BSRole, BSRoleAssignment>
-            for (const role of ALL_ROLES) {
-              roles[role] = extractRoleData(row, role)
-            }
+            for (const role of ALL_ROLES) roles[role] = extractRoleData(row, role)
             map[k] = { row, roles }
           }
         }
         setAssignments(map)
 
-        // Build stage drafts from loaded data
         const drafts: DraftMap = {}
         for (const [k, entry] of Object.entries(map)) {
           drafts[k] = {} as Record<BSRole, { work_status: string; remark: string }>
@@ -291,13 +247,10 @@ export default function BodyshopFloorPage() {
 
   useEffect(() => { void loadAll() }, [])
 
-  // ── Employees by role ────────────────────────────────────────────────────
-  // Dynamic — reads all roles from Employee Master and maps to DB column roles.
+  // ── Employees by role (dynamic from Employee Master) ─────────────────────
 
   const empByRole = useMemo<Record<BSRole, Employee[]>>(() => {
-    const m: Record<BSRole, Employee[]> = {
-      DENTOR: [], PAINTER: [], TECHNICIAN: [], ELECTRICIAN: [], DET: [],
-    }
+    const m: Record<BSRole, Employee[]> = { DENTOR: [], PAINTER: [], TECHNICIAN: [] }
     employees.forEach((e) => {
       const r = normRole(e.role)
       if (r) m[r].push(e)
@@ -318,7 +271,7 @@ export default function BodyshopFloorPage() {
   function hasAnyAssignment(c: AccidentCar) {
     const e = getEntry(c)
     if (!e) return false
-    return ALL_ROLES.some((r) => e.roles[r].employee_code)
+    return ALL_ROLES.some((r) => e.roles[r].employee_codes.length > 0)
   }
   function hasStatus(c: AccidentCar, status: string) {
     const e = getEntry(c)
@@ -342,13 +295,10 @@ export default function BodyshopFloorPage() {
 
   const filtered = useMemo(() => {
     let list = [...cars]
-
     if (branchFilter !== 'all')
       list = list.filter((c) => (c.branch ?? 'Unknown') === branchFilter)
-
     if (roleFilter !== 'all')
-      list = list.filter((c) => getEntry(c)?.roles[roleFilter]?.employee_code)
-
+      list = list.filter((c) => (getEntry(c)?.roles[roleFilter]?.employee_codes.length ?? 0) > 0)
     if (search.trim()) {
       const q = search.trim().toLowerCase()
       list = list.filter((c) =>
@@ -359,7 +309,6 @@ export default function BodyshopFloorPage() {
         (c.sa_display_name ?? c.sa_name)?.toLowerCase().includes(q)
       )
     }
-
     if (assignmentView === 'unassigned')     return list.filter((c) => !hasAnyAssignment(c))
     if (assignmentView === 'assigned')       return list.filter((c) =>  hasAnyAssignment(c))
     if (assignmentView === 'work_inprocess') return list.filter((c) =>  hasStatus(c, 'work_inprocess'))
@@ -369,63 +318,76 @@ export default function BodyshopFloorPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cars, branchFilter, roleFilter, search, assignmentView, assignments])
 
-  // ── Assign employee to a role (update columnar row) ──────────────────────
+  // ── Add employee to a role (multi-employee: appends to existing) ──────────
 
-  async function assignRole(car: AccidentCar, role: BSRole, empCode: string) {
+  async function addEmployee(car: AccidentCar, role: BSRole, empCode: string) {
     if (!empCode) return
     const emp = empByRole[role].find((e) => e.employee_code === empCode)
     if (!emp) return
     const k = jcKey(car)
-    setSaving(`${k}-${role}`)
+    setSaving(`${k}-${role}-add`)
     try {
       const { data: { user } } = await supabase.auth.getUser()
       const existingRow = assignments[k]?.row
-      const currentStatus = stageDrafts[k]?.[role]?.work_status ?? 'work_inprocess'
-      const colPayload = buildAssignPayload(role, emp.employee_code, emp.employee_name, currentStatus)
+      const existingRa  = assignments[k]?.roles[role]
+
+      // Build new comma-separated lists (append if not already present)
+      const codes = existingRa?.employee_codes ?? []
+      const names = existingRa?.employee_names ?? []
+      if (codes.includes(emp.employee_code)) {
+        showToast(`${emp.employee_name} already assigned as ${ROLE_META[role].label}`, 'error')
+        return
+      }
+      const newCodes = [...codes, emp.employee_code]
+      const newNames = [...names, emp.employee_name]
+
+      const col = ROLE_META[role].col
+      const colPayload: Record<string, unknown> = {
+        [`${col}_employee_code`]: joinComma(newCodes),
+        [`${col}_employee_name`]: joinComma(newNames),
+        assigned_at: new Date().toISOString(),
+        assigned_by: user?.email ?? null,
+      }
+      // Set in_ts on first assignment for this role
+      if (codes.length === 0) {
+        colPayload[`${col}_in_ts`] = new Date().toISOString()
+        colPayload[`${col}_work_status`] = stageDrafts[k]?.[role]?.work_status ?? 'work_inprocess'
+      }
 
       let updatedRow: BSAssignmentRow
       if (existingRow?.id) {
-        // Update existing assignment row — only patch the role columns + assigned_at
         const { data, error } = await supabase
           .from('bodyshop_assignments')
-          .update({ ...colPayload, assigned_by: user?.email ?? null })
+          .update(colPayload)
           .eq('id', existingRow.id)
           .select()
           .single()
         if (error) throw error
         updatedRow = data as BSAssignmentRow
       } else {
-        // Insert new assignment row for this job card
         const { data, error } = await supabase
           .from('bodyshop_assignments')
-          .insert({
-            job_card_number: k,
-            assigned_by: user?.email ?? null,
-            is_active: true,
-            ...colPayload,
-          })
+          .insert({ job_card_number: k, is_active: true, ...colPayload })
           .select()
           .single()
         if (error) throw error
         updatedRow = data as BSAssignmentRow
       }
 
-      // Rebuild roles map from updated row
       const roles = {} as Record<BSRole, BSRoleAssignment>
       for (const r of ALL_ROLES) roles[r] = extractRoleData(updatedRow, r)
-
-      setAssignments((prev) => ({
-        ...prev,
-        [k]: { row: updatedRow, roles },
-      }))
+      setAssignments((prev) => ({ ...prev, [k]: { row: updatedRow, roles } }))
       setStageDrafts((prev) => ({
         ...prev,
         [k]: {
           ...(prev[k] ?? {}),
-          [role]: { work_status: roles[role].work_status ?? 'work_inprocess', remark: roles[role].remark ?? '' },
+          [role]: {
+            work_status: roles[role].work_status ?? 'work_inprocess',
+            remark: roles[role].remark ?? '',
+          },
         },
       }))
-      showToast(`${ROLE_META[role].label} assigned: ${emp.employee_name}`, 'success')
+      showToast(`${emp.employee_name} added as ${ROLE_META[role].label}`, 'success')
     } catch (err) {
       showToast(err instanceof Error ? err.message : 'Failed to assign', 'error')
     } finally {
@@ -433,26 +395,75 @@ export default function BodyshopFloorPage() {
     }
   }
 
-  // ── Save stage (status + remark for a role) ──────────────────────────────
+  // ── Remove one employee from a role ──────────────────────────────────────
+
+  async function removeEmployee(car: AccidentCar, role: BSRole, empCode: string) {
+    const k = jcKey(car)
+    const entry = assignments[k]
+    if (!entry?.row?.id) return
+    const ra = entry.roles[role]
+    setSaving(`${k}-${role}-rm-${empCode}`)
+    try {
+      const newCodes = ra.employee_codes.filter((c) => c !== empCode)
+      const newNames = ra.employee_names.filter((_, i) => ra.employee_codes[i] !== empCode)
+      const col = ROLE_META[role].col
+      const colPayload: Record<string, unknown> = {
+        [`${col}_employee_code`]: joinComma(newCodes),
+        [`${col}_employee_name`]: joinComma(newNames),
+      }
+      // If no employees left, also clear status/timestamps
+      if (newCodes.length === 0) {
+        colPayload[`${col}_work_status`]  = null
+        colPayload[`${col}_in_ts`]        = null
+        colPayload[`${col}_out_ts`]       = null
+        colPayload[`${col}_remark`]       = null
+        colPayload[`${col}_completed_by`] = null
+      }
+      const { data, error } = await supabase
+        .from('bodyshop_assignments')
+        .update(colPayload)
+        .eq('id', entry.row.id)
+        .select()
+        .single()
+      if (error) throw error
+      const updatedRow = data as BSAssignmentRow
+      const roles = {} as Record<BSRole, BSRoleAssignment>
+      for (const r of ALL_ROLES) roles[r] = extractRoleData(updatedRow, r)
+      setAssignments((prev) => ({ ...prev, [k]: { row: updatedRow, roles } }))
+      showToast('Employee removed', 'success')
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Failed to remove', 'error')
+    } finally {
+      setSaving(null)
+    }
+  }
+
+  // ── Save stage (status + remark) ─────────────────────────────────────────
 
   async function saveStage(car: AccidentCar, role: BSRole) {
     const k = jcKey(car)
     const entry = assignments[k]
     if (!entry?.row?.id) { showToast('Assign a person first', 'error'); return }
     const ra = entry.roles[role]
-    if (!ra.employee_code) { showToast('Assign a person first', 'error'); return }
+    if (ra.employee_codes.length === 0) { showToast('Assign a person first', 'error'); return }
     const draft = stageDrafts[k]?.[role] ?? { work_status: 'work_inprocess', remark: '' }
     setSaving(`${k}-${role}-stage`)
     try {
-      const stagePayload = buildStagePayload(role, draft.work_status, draft.remark, ra)
+      const col = ROLE_META[role].col
+      const payload: Record<string, unknown> = {
+        [`${col}_work_status`]: draft.work_status,
+        [`${col}_remark`]:      draft.remark.trim() || null,
+      }
+      if (draft.work_status === 'completed' && !ra.out_ts) {
+        payload[`${col}_out_ts`] = new Date().toISOString()
+      }
       const { data, error } = await supabase
         .from('bodyshop_assignments')
-        .update(stagePayload)
+        .update(payload)
         .eq('id', entry.row.id)
         .select()
         .single()
       if (error) throw error
-
       const updatedRow = data as BSAssignmentRow
       const roles = {} as Record<BSRole, BSRoleAssignment>
       for (const r of ALL_ROLES) roles[r] = extractRoleData(updatedRow, r)
@@ -477,7 +488,7 @@ export default function BodyshopFloorPage() {
 
   function hasDraftChanges(k: string, role: BSRole): boolean {
     const ra = assignments[k]?.roles[role]
-    if (!ra?.employee_code) return false
+    if (!ra || ra.employee_codes.length === 0) return false
     const draft = stageDrafts[k]?.[role]
     if (!draft) return false
     return draft.work_status !== (ra.work_status ?? 'work_inprocess') || draft.remark !== (ra.remark ?? '')
@@ -490,7 +501,7 @@ export default function BodyshopFloorPage() {
   async function saveModal() {
     if (!modalCar || !modalEmpCode) { showToast('Select an employee', 'error'); return }
     setModalSaving(true)
-    await assignRole(modalCar, modalRole, modalEmpCode)
+    await addEmployee(modalCar, modalRole, modalEmpCode)
     setModalSaving(false)
     closeModal()
   }
@@ -521,7 +532,7 @@ export default function BodyshopFloorPage() {
             Bodyshop Floor
           </p>
           <h1>Assign Bodyshop Team</h1>
-          <p>Accident vehicles received at reception — assign bodyshop team per car.</p>
+          <p>Accident vehicles — assign Dentor, Painter and Technician team per car.</p>
         </div>
 
         {/* Branch filter */}
@@ -630,16 +641,14 @@ export default function BodyshopFloorPage() {
                   {filtered.map((car) => {
                     const k = jcKey(car)
                     const entry = assignments[k]
-                    const roles = entry?.roles ?? Object.fromEntries(
-                      ALL_ROLES.map((r) => [r, {
-                        employee_code: null, employee_name: null,
-                        work_status: null, remark: null,
-                        in_ts: null, out_ts: null, completed_by: null,
-                      }])
-                    ) as Record<BSRole, BSRoleAssignment>
+                    const roles: Record<BSRole, BSRoleAssignment> = entry?.roles ?? {
+                      DENTOR:     { employee_codes: [], employee_names: [], work_status: null, remark: null, in_ts: null, out_ts: null, completed_by: null },
+                      PAINTER:    { employee_codes: [], employee_names: [], work_status: null, remark: null, in_ts: null, out_ts: null, completed_by: null },
+                      TECHNICIAN: { employee_codes: [], employee_names: [], work_status: null, remark: null, in_ts: null, out_ts: null, completed_by: null },
+                    }
 
                     return (
-                      // ONE row per car — never duplicated
+                      // ONE row per car — never duplicated regardless of how many employees are assigned
                       <tr key={car.id}>
                         <td style={{ fontSize: 12, whiteSpace: 'nowrap', color: 'var(--muted)' }}>{fmtDate(car.created_at)}</td>
                         <td style={{ fontWeight: 600 }}>{car.reg_number ?? '—'}</td>
@@ -656,42 +665,85 @@ export default function BodyshopFloorPage() {
                         </td>
                         <td style={{ fontSize: 12 }}>{car.branch ?? '—'}</td>
 
-                        {/* Role columns — one <td> per role, stays in the same row */}
+                        {/* Role columns — one <td> per role, always in the same single row */}
                         {ALL_ROLES.map((role) => {
                           const ra = roles[role]
+                          const isAssigned = ra.employee_codes.length > 0
                           const draft = stageDrafts[k]?.[role] ?? {
                             work_status: ra.work_status ?? 'work_inprocess',
                             remark: ra.remark ?? '',
                           }
-                          const isSavingThis = saving === `${k}-${role}` || saving === `${k}-${role}-stage`
-                          const changed = hasDraftChanges(k, role)
-                          const isAssigned = Boolean(ra.employee_code)
+                          const isSavingAdd   = saving === `${k}-${role}-add`
+                          const isSavingStage = saving === `${k}-${role}-stage`
+                          const isSavingAny   = isSavingAdd || isSavingStage || saving?.startsWith(`${k}-${role}-rm-`)
+                          const changed       = hasDraftChanges(k, role)
+
+                          // Employees available to add (exclude already assigned)
+                          const available = empByRole[role].filter(
+                            (e) => !ra.employee_codes.includes(e.employee_code)
+                          )
 
                           return (
-                            <td key={role} style={{ minWidth: 200, verticalAlign: 'top', paddingTop: 8, paddingBottom: 8 }}>
+                            <td key={role} style={{ minWidth: 220, verticalAlign: 'top', paddingTop: 8, paddingBottom: 8 }}>
                               <div className="fi-assignment-cell">
 
-                                {/* Employee selector */}
+                                {/* Assigned employee chips */}
+                                {isAssigned && (
+                                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginBottom: 6 }}>
+                                    {ra.employee_names.map((name, idx) => {
+                                      const code = ra.employee_codes[idx] ?? ''
+                                      const isRemoving = saving === `${k}-${role}-rm-${code}`
+                                      return (
+                                        <span key={code}
+                                          style={{
+                                            display: 'inline-flex', alignItems: 'center', gap: 4,
+                                            background: 'var(--blue-50,#eff6ff)', color: 'var(--blue-700,#1d4ed8)',
+                                            border: '1px solid var(--blue-200,#bfdbfe)',
+                                            borderRadius: 999, padding: '2px 8px 2px 10px', fontSize: 12, fontWeight: 500,
+                                          }}>
+                                          {name}
+                                          <button
+                                            type="button"
+                                            disabled={isRemoving || isSavingAny}
+                                            onClick={() => void removeEmployee(car, role, code)}
+                                            style={{
+                                              background: 'none', border: 'none', cursor: 'pointer',
+                                              padding: '0 2px', lineHeight: 1, fontSize: 14,
+                                              color: 'var(--blue-400,#60a5fa)', opacity: isRemoving ? 0.4 : 1,
+                                            }}
+                                            aria-label={`Remove ${name}`}
+                                            title={`Remove ${name}`}
+                                          >×</button>
+                                        </span>
+                                      )
+                                    })}
+                                  </div>
+                                )}
+
+                                {/* Add employee dropdown */}
                                 <div className="fi-assignment-row">
                                   <select
                                     className="sel sel-md"
-                                    value={ra.employee_code ?? ''}
-                                    disabled={isSavingThis}
-                                    onChange={(e) => void assignRole(car, role, e.target.value)}
+                                    value=""
+                                    disabled={isSavingAny || available.length === 0}
+                                    onChange={(e) => { if (e.target.value) void addEmployee(car, role, e.target.value) }}
                                   >
-                                    <option value="">— Select {ROLE_META[role].label} —</option>
-                                    {empByRole[role].map((emp) => (
+                                    <option value="">
+                                      {isSavingAdd
+                                        ? 'Saving…'
+                                        : available.length === 0 && isAssigned
+                                          ? '✓ All assigned'
+                                          : `+ Add ${ROLE_META[role].label}`}
+                                    </option>
+                                    {available.map((emp) => (
                                       <option key={emp.employee_code} value={emp.employee_code}>
                                         {emp.employee_name}
                                       </option>
                                     ))}
-                                    {empByRole[role].length === 0 && (
-                                      <option disabled value="">No employees found</option>
-                                    )}
                                   </select>
                                 </div>
 
-                                {/* Status + remark + save — only show when assigned */}
+                                {/* Status + remark + save — only when at least one assigned */}
                                 {isAssigned && (
                                   <div style={{ marginTop: 6, display: 'flex', flexDirection: 'column', gap: 4 }}>
                                     <select
@@ -711,11 +763,11 @@ export default function BodyshopFloorPage() {
                                     />
                                     <button
                                       className="btn btn--primary btn--sm"
-                                      disabled={!changed || isSavingThis}
-                                      style={{ opacity: changed && !isSavingThis ? 1 : 0.5 }}
+                                      disabled={!changed || isSavingStage}
+                                      style={{ opacity: changed && !isSavingStage ? 1 : 0.5 }}
                                       onClick={() => void saveStage(car, role)}
                                     >
-                                      {isSavingThis ? 'Saving…' : 'Save stage'}
+                                      {isSavingStage ? 'Saving…' : 'Save stage'}
                                     </button>
                                   </div>
                                 )}
@@ -724,27 +776,23 @@ export default function BodyshopFloorPage() {
                           )
                         })}
 
-                        {/* IN timestamp — earliest in_ts across all assigned roles */}
+                        {/* IN timestamp — earliest in_ts across assigned roles */}
                         <td className="ts-cell" style={{ fontSize: 11, color: 'var(--muted)', whiteSpace: 'nowrap' }}>
                           {(() => {
-                            const times = ALL_ROLES
-                              .map((r) => roles[r]?.in_ts)
-                              .filter(Boolean) as string[]
+                            const times = ALL_ROLES.map((r) => roles[r]?.in_ts).filter(Boolean) as string[]
                             if (!times.length) return '—'
                             return fmtDate(times.sort()[0])
                           })()}
                         </td>
 
-                        {/* OUT timestamp — latest out_ts once all assigned roles are completed */}
+                        {/* OUT timestamp — latest out_ts when all assigned roles are completed */}
                         <td className="ts-cell" style={{ fontSize: 11, color: 'var(--muted)', whiteSpace: 'nowrap' }}>
                           {(() => {
-                            const assignedRoles = ALL_ROLES.filter((r) => roles[r]?.employee_code)
+                            const assignedRoles = ALL_ROLES.filter((r) => roles[r]?.employee_codes.length > 0)
                             if (!assignedRoles.length) return '—'
-                            const allCompleted = assignedRoles.every((r) => roles[r]?.work_status === 'completed')
-                            if (!allCompleted) return '—'
-                            const times = assignedRoles
-                              .map((r) => roles[r]?.out_ts)
-                              .filter(Boolean) as string[]
+                            const allDone = assignedRoles.every((r) => roles[r]?.work_status === 'completed')
+                            if (!allDone) return '—'
+                            const times = assignedRoles.map((r) => roles[r]?.out_ts).filter(Boolean) as string[]
                             if (!times.length) return '—'
                             return fmtDate(times.sort().reverse()[0])
                           })()}
@@ -795,11 +843,13 @@ export default function BodyshopFloorPage() {
                   onChange={(e) => setModalEmpCode(e.target.value)}
                   disabled={modalSaving}>
                   <option value="">— Select Employee —</option>
-                  {empByRole[modalRole].map((emp) => (
-                    <option key={emp.employee_code} value={emp.employee_code}>
-                      {emp.employee_name} ({emp.employee_code})
-                    </option>
-                  ))}
+                  {empByRole[modalRole]
+                    .filter((e) => !(assignments[jcKey(modalCar)]?.roles[modalRole]?.employee_codes ?? []).includes(e.employee_code))
+                    .map((emp) => (
+                      <option key={emp.employee_code} value={emp.employee_code}>
+                        {emp.employee_name} ({emp.employee_code})
+                      </option>
+                    ))}
                 </select>
               </label>
 
@@ -810,17 +860,17 @@ export default function BodyshopFloorPage() {
               )}
 
               {/* Current assignments summary */}
-              {ALL_ROLES.some((r) => assignments[jcKey(modalCar)]?.roles[r]?.employee_code) && (
+              {ALL_ROLES.some((r) => (assignments[jcKey(modalCar)]?.roles[r]?.employee_codes.length ?? 0) > 0) && (
                 <div className="fi-support-existing">
                   <p>Current assignments</p>
                   {ALL_ROLES
-                    .filter((r) => assignments[jcKey(modalCar)]?.roles[r]?.employee_code)
+                    .filter((r) => (assignments[jcKey(modalCar)]?.roles[r]?.employee_codes.length ?? 0) > 0)
                     .map((r) => {
                       const ra = assignments[jcKey(modalCar)]!.roles[r]
                       return (
                         <div key={r} className="fi-support-existing__row">
                           <span className="fi-support-existing__label">
-                            {ROLE_META[r].icon} {ra.employee_name} • {ROLE_META[r].label} • {(ra.work_status ?? 'work_inprocess').replace('_', ' ')}
+                            {ROLE_META[r].icon} {ra.employee_names.join(', ')} • {ROLE_META[r].label} • {(ra.work_status ?? 'work_inprocess').replace('_', ' ')}
                           </span>
                         </div>
                       )
@@ -831,7 +881,7 @@ export default function BodyshopFloorPage() {
               <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
                 <button type="button" className="btn btn--primary" style={{ flex: 1 }}
                   disabled={modalSaving || !modalEmpCode} onClick={() => void saveModal()}>
-                  {modalSaving ? 'Saving…' : `Assign ${ROLE_META[modalRole].label}`}
+                  {modalSaving ? 'Saving…' : `Add ${ROLE_META[modalRole].label}`}
                 </button>
                 <button type="button" className="btn btn--ghost" onClick={closeModal} disabled={modalSaving}>
                   Cancel
