@@ -56,3 +56,5 @@ export function applyBranchFilterToQuery<T extends { eq: Function; in: Function 
 
 	return query.in('branch', aliases) as T
 }
+
+
