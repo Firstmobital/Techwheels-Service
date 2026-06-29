@@ -85,7 +85,7 @@ export default async function handler(req: Request) {
 
       const { data: campaign, error: campErr } = await serviceClient
         .from('telecall_campaigns')
-        .insert({ campaign_name, date_from, date_to, upcoming_days: upcoming_days || null, status: 'active', created_by: userEmail, customer_segment, priority_mode, warranty_expiry_days, powertrain_filter })
+        .insert({ campaign_name, date_from, date_to, status: 'active', created_by: userEmail, customer_segment, priority_mode, warranty_expiry_days, powertrain_filter })
         .select().single()
 
       if (campErr) throw new Error(`Failed to create campaign: ${campErr.message}`)
@@ -94,6 +94,7 @@ export default async function handler(req: Request) {
         .from('all_service_data')
         .select('id, chassis_no, sold_dealer, last_service_dealer, extended_warranty_end_date, assumed_next_service_date, powertrain_type, last_insurance_expiry_date')
         .not('contact_phones', 'is', null)
+        .neq('contact_phones', '')
 
       if (priority_mode === 'warranty_expiry' && warranty_expiry_days) {
         const today = new Date().toISOString().split('T')[0]
@@ -114,7 +115,7 @@ export default async function handler(req: Request) {
 
       if (!allCustomers || allCustomers.length === 0) {
         await serviceClient.from('telecall_campaigns').delete().eq('id', campaign.id)
-        return new Response(JSON.stringify({ success: true, campaign_id: null, total_leads: 0, message: 'No eligible customers found' }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+        return new Response(JSON.stringify({ success: true, campaign_id: null, total_leads: 0, message: `No customers found with service due between ${date_from} and ${date_to}. Check date range.` }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
       }
 
       // Deduplicate by chassis_no
@@ -165,7 +166,7 @@ export default async function handler(req: Request) {
         if (asgnErr) throw new Error(`Failed to create assignments: ${asgnErr.message}`)
       }
 
-      await serviceClient.from('telecall_campaigns').update({ total_leads: filtered.length, pending_count: filtered.length, segment_counts: segmentCounts }).eq('id', campaign.id)
+      await serviceClient.from('telecall_campaigns').update({ total_leads: filtered.length, pending_count: filtered.length }).eq('id', campaign.id)
 
       // Log stats for visibility
       const statsMsg = `Campaign "${campaign_name}": ${allCustomers.length} raw → ${uniqueCustomers.length} after chassis dedup → ${filtered.length} after segment filter. Date range: ${date_from} to ${date_to}`
