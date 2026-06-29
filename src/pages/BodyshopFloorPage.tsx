@@ -142,13 +142,13 @@ function jcKey(car: AccidentCar): string {
 function extractRoleData(row: BSAssignmentRow, role: BSRole): BSRoleAssignment {
   const col = ROLE_META[role].col
   return {
-    employee_code: (row as Record<string, unknown>)[`${col}_employee_code`] as string | null,
-    employee_name: (row as Record<string, unknown>)[`${col}_employee_name`] as string | null,
-    work_status:   (row as Record<string, unknown>)[`${col}_work_status`]   as string | null,
-    remark:        (row as Record<string, unknown>)[`${col}_remark`]        as string | null,
-    in_ts:         (row as Record<string, unknown>)[`${col}_in_ts`]         as string | null,
-    out_ts:        (row as Record<string, unknown>)[`${col}_out_ts`]        as string | null,
-    completed_by:  (row as Record<string, unknown>)[`${col}_completed_by`]  as string | null,
+    employee_code: (row as unknown as Record<string, unknown>)[`${col}_employee_code`] as string | null,
+    employee_name: (row as unknown as Record<string, unknown>)[`${col}_employee_name`] as string | null,
+    work_status:   (row as unknown as Record<string, unknown>)[`${col}_work_status`]   as string | null,
+    remark:        (row as unknown as Record<string, unknown>)[`${col}_remark`]        as string | null,
+    in_ts:         (row as unknown as Record<string, unknown>)[`${col}_in_ts`]         as string | null,
+    out_ts:        (row as unknown as Record<string, unknown>)[`${col}_out_ts`]        as string | null,
+    completed_by:  (row as unknown as Record<string, unknown>)[`${col}_completed_by`]  as string | null,
   }
 }
 
