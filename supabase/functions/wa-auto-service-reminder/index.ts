@@ -23,6 +23,11 @@
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+}
+
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL') ?? ''
 const SUPABASE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
 const sb = createClient(SUPABASE_URL, SUPABASE_KEY)
@@ -108,6 +113,10 @@ function buildBodyParams(
 // ─── Main handler ─────────────────────────────────────────────────────────────
 
 Deno.serve(async (req) => {
+  // Handle CORS preflight
+  if (req.method === 'OPTIONS') {
+    return new Response('ok', { headers: corsHeaders })
+  }
   if (req.method !== 'POST') return new Response('Method Not Allowed', { status: 405 })
 
   let body: Record<string, unknown> = {}
@@ -122,7 +131,7 @@ Deno.serve(async (req) => {
 
   if (!cfg) {
     console.error('ASR: wa_agent_config row not found')
-    return Response.json({ ok: false, error: 'Config not found' }, { status: 500 })
+    return Response.json({ ok: false, error: 'Config not found' }, { status: 500, headers: corsHeaders })
   }
 
   const envEnabled = Deno.env.get('AUTO_SERVICE_REMINDER_ENABLED')
@@ -140,24 +149,24 @@ Deno.serve(async (req) => {
 
   if (!phoneId || !token) {
     console.error('ASR: Meta credentials not configured in wa_agent_config')
-    return Response.json({ ok: false, error: 'Meta credentials missing' }, { status: 400 })
+    return Response.json({ ok: false, error: 'Meta credentials missing' }, { status: 400, headers: corsHeaders })
   }
 
   // ── Load approved template ──────────────────────────────────────────────
   const templateId = cfg.auto_reminder_template_id as number | undefined
   if (!templateId) {
     console.error('ASR: auto_reminder_template_id not set in wa_agent_config')
-    return Response.json({ ok: false, error: 'auto_reminder_template_id not configured' }, { status: 400 })
+    return Response.json({ ok: false, error: 'auto_reminder_template_id not configured' }, { status: 400, headers: corsHeaders })
   }
 
   const { data: tplArr } = await sb.from('wa_templates').select('*').eq('id', templateId).limit(1)
   const tpl = tplArr?.[0] as Record<string, unknown> | undefined
 
   if (!tpl) {
-    return Response.json({ ok: false, error: `Template id=${templateId} not found` }, { status: 400 })
+    return Response.json({ ok: false, error: `Template id=${templateId} not found` }, { status: 400, headers: corsHeaders })
   }
   if (tpl.status !== 'approved') {
-    return Response.json({ ok: false, error: `Template "${tpl.name}" is not approved (status: ${tpl.status})` }, { status: 400 })
+    return Response.json({ ok: false, error: `Template "${tpl.name}" is not approved (status: ${tpl.status})` }, { status: 400, headers: corsHeaders })
   }
 
   const templateName = tpl.name as string
@@ -198,7 +207,7 @@ Deno.serve(async (req) => {
 
   if (queryErr) {
     console.error('ASR: all_service_data query failed:', queryErr.message)
-    return Response.json({ ok: false, error: queryErr.message }, { status: 500 })
+    return Response.json({ ok: false, error: queryErr.message }, { status: 500, headers: corsHeaders })
   }
 
   const rows = (serviceRows || []) as Array<Record<string, unknown>>
