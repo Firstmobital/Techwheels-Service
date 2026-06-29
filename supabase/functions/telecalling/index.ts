@@ -222,10 +222,9 @@ export default async function handler(req: Request) {
         return new Response(JSON.stringify({ success: true, assignment: callbackDue }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
       }
 
-      // Step 1: pick highest priority_score pending row — NO assigned_to filter.
-      // Dots in emails break PostgREST .or() parsing. The atomic UPDATE below is the
-      // real race-condition guard — not the SELECT.
-      const { data: nextPending } = await serviceClient
+      // SIMPLE APPROACH: select top pending, update it, return full data
+      // No complex optimistic locking — serviceRole bypasses RLS anyway
+      const { data: rows, error: selErr } = await serviceClient
         .from('telecall_assignments')
         .select('id')
         .eq('campaign_id', campaign_id)
@@ -233,47 +232,30 @@ export default async function handler(req: Request) {
         .order('priority_score', { ascending: false })
         .order('id', { ascending: true })
         .limit(1)
-        .maybeSingle()
 
-      if (!nextPending) {
-        return new Response(JSON.stringify({ success: true, assignment: null }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+      if (selErr) throw new Error(`Select failed: ${selErr.message}`)
+      if (!rows || rows.length === 0) {
+        return new Response(JSON.stringify({ success: true, assignment: null, debug: { campaign_id, userEmail, msg: 'no pending rows found' } }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
       }
 
-      // Step 2: atomically claim — UPDATE only succeeds if status is STILL 'pending'
-      const { data: claimResult, error: claimErr } = await serviceClient
+      const rowId = rows[0].id
+
+      // Update to assigned
+      const { error: updErr } = await serviceClient
         .from('telecall_assignments')
         .update({ status: 'assigned', assigned_to: userEmail, assigned_at: new Date().toISOString() })
-        .eq('id', nextPending.id)
-        .eq('status', 'pending')
-        .select('id')
-        .maybeSingle()
+        .eq('id', rowId)
 
-      if (claimErr) throw new Error(`Claim failed: ${claimErr.message}`)
+      if (updErr) throw new Error(`Update failed: ${updErr.message}`)
 
-      // Step 3: if race condition (another telecaller claimed same row), retry once
-      if (!claimResult) {
-        const { data: retry } = await serviceClient
-          .from('telecall_assignments')
-          .select('id')
-          .eq('campaign_id', campaign_id)
-          .eq('status', 'pending')
-          .order('priority_score', { ascending: false })
-          .order('id', { ascending: true })
-          .limit(1)
-          .maybeSingle()
-        if (!retry) return new Response(JSON.stringify({ success: true, assignment: null }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
-        await serviceClient.from('telecall_assignments')
-          .update({ status: 'assigned', assigned_to: userEmail, assigned_at: new Date().toISOString() })
-          .eq('id', retry.id).eq('status', 'pending')
-        const { data: retryFull } = await serviceClient.from('telecall_assignments').select(CUST_SELECT).eq('id', retry.id).single()
-        return new Response(JSON.stringify({ success: true, assignment: retryFull }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
-      }
-
-      const { data: full } = await serviceClient
+      // Fetch full record with customer join
+      const { data: full, error: fetchErr } = await serviceClient
         .from('telecall_assignments')
         .select(CUST_SELECT)
-        .eq('id', nextPending.id)
+        .eq('id', rowId)
         .single()
+
+      if (fetchErr) throw new Error(`Fetch failed: ${fetchErr.message}`)
 
       return new Response(JSON.stringify({ success: true, assignment: full }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
     }
