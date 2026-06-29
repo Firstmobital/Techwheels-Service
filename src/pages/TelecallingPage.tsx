@@ -754,8 +754,10 @@ function AdminDashboard({ campaigns, activeCampaign, onRefresh }: { campaigns: C
     setPreviewing(true); setPreviewCounts(null)
     const effectiveDays = useCustomDays ? customUpcomingDays : upcomingDays
     const isServiceMode = priorityMode === 'service_date' || !priorityMode
+    const computedFrom = new Date().toISOString().split('T')[0]
+    const computedTo = new Date(Date.now() + effectiveDays * 86400000).toISOString().split('T')[0]
     const previewBody = isServiceMode
-      ? { upcoming_days: effectiveDays, customer_segment: segment, priority_mode: priorityMode, warranty_expiry_days: segment === 'warranty_expiring' ? warrantyDays : null, powertrain_filter: powertrainFilter !== 'all' ? powertrainFilter : null }
+      ? { upcoming_days: effectiveDays, date_from: computedFrom, date_to: computedTo, customer_segment: segment, priority_mode: priorityMode, warranty_expiry_days: segment === 'warranty_expiring' ? warrantyDays : null, powertrain_filter: powertrainFilter !== 'all' ? powertrainFilter : null }
       : { date_from: dateFrom, date_to: dateTo, customer_segment: segment, priority_mode: priorityMode, warranty_expiry_days: segment === 'warranty_expiring' ? warrantyDays : null, powertrain_filter: powertrainFilter !== 'all' ? powertrainFilter : null }
     try { const d = await callEdge('preview_campaign', previewBody); setPreviewCounts(d) }
     catch (err) { setError((err as Error).message) } finally { setPreviewing(false) }
@@ -768,11 +770,16 @@ function AdminDashboard({ campaigns, activeCampaign, onRefresh }: { campaigns: C
     if (!isServiceMode && (!dateFrom || !dateTo)) { setError('Please fill date range for this campaign type'); return }
     setCreating(true); setError(null)
     try {
+      // Always compute date_from/date_to from upcoming_days for service mode.
+      // We send BOTH upcoming_days (new edge) AND date_from/date_to (old edge fallback)
+      // so it works regardless of which edge function version is live in Supabase.
+      const computedFrom = new Date().toISOString().split('T')[0]
+      const computedTo = new Date(Date.now() + effectiveDays * 86400000).toISOString().split('T')[0]
       const createBody = isServiceMode
-        ? { campaign_name: campaignName, upcoming_days: effectiveDays, customer_segment: segment, priority_mode: priorityMode, warranty_expiry_days: segment === 'warranty_expiring' ? warrantyDays : null, powertrain_filter: powertrainFilter !== 'all' ? powertrainFilter : null }
+        ? { campaign_name: campaignName, upcoming_days: effectiveDays, date_from: computedFrom, date_to: computedTo, customer_segment: segment, priority_mode: priorityMode, warranty_expiry_days: segment === 'warranty_expiring' ? warrantyDays : null, powertrain_filter: powertrainFilter !== 'all' ? powertrainFilter : null }
         : { campaign_name: campaignName, date_from: dateFrom, date_to: dateTo, customer_segment: segment, priority_mode: priorityMode, warranty_expiry_days: segment === 'warranty_expiring' ? warrantyDays : null, powertrain_filter: powertrainFilter !== 'all' ? powertrainFilter : null }
       const data = await callEdge('create_campaign', createBody)
-      if (data.total_leads === 0) { setError('No eligible customers found for these filters.'); return }
+      if (data.total_leads === 0) { setError(`No eligible customers found. Date range checked: ${computedFrom} → ${computedTo}`); return }
       const statsInfo = data.stats ? ` (${data.stats.raw_from_db} found → ${data.stats.after_chassis_dedup} unique → ${data.stats.after_segment_filter} added, range: ${data.stats.date_from} to ${data.stats.date_to})` : ''
       setSuccess(`Campaign created with ${data.total_leads} leads!${statsInfo}`)
       setShowCreate(false); setCampaignName(''); setPreviewCounts(null); setSegment('all'); setPriorityMode('service_date'); setPowertrainFilter('all'); setUseCustomDays(false); setUpcomingDays(20); onRefresh()
