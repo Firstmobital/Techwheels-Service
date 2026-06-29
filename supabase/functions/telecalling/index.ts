@@ -47,18 +47,45 @@ export default async function handler(req: Request) {
       if (!isAdmin) throw new Error('Only admin can create campaigns')
 
       const {
-        campaign_name, date_from, date_to,
+        campaign_name,
+        date_from: date_from_raw,
+        date_to: date_to_raw,
+        upcoming_days = null,        // e.g. 20 → service due in next 20 days from today
         customer_segment = 'all',
         priority_mode = 'service_date',
         warranty_expiry_days = null,
         powertrain_filter = null,
       } = body
 
-      if (!campaign_name || !date_from || !date_to) throw new Error('Missing campaign_name, date_from, or date_to')
+      if (!campaign_name) throw new Error('Missing campaign_name')
+
+      // For service_date mode: derive date range from today + upcoming_days (server-side, IST)
+      // This ensures the range is always fresh relative to today
+      const todayIST = new Date(Date.now() + 5.5 * 3600000).toISOString().split('T')[0]
+      let date_from: string
+      let date_to: string
+
+      if (priority_mode === 'service_date' || (!priority_mode)) {
+        if (upcoming_days) {
+          // Dynamic mode: today → today + N days
+          date_from = todayIST
+          date_to = new Date(Date.now() + 5.5 * 3600000 + Number(upcoming_days) * 86400000).toISOString().split('T')[0]
+        } else if (date_from_raw && date_to_raw) {
+          // Legacy fixed-date mode: still supported
+          date_from = date_from_raw
+          date_to = date_to_raw
+        } else {
+          throw new Error('For service reminder campaigns, provide either upcoming_days (e.g. 20) or date_from + date_to')
+        }
+      } else {
+        // For warranty/insurance modes, dates are computed below; use raw or placeholder
+        date_from = date_from_raw || todayIST
+        date_to = date_to_raw || todayIST
+      }
 
       const { data: campaign, error: campErr } = await serviceClient
         .from('telecall_campaigns')
-        .insert({ campaign_name, date_from, date_to, status: 'active', created_by: userEmail, customer_segment, priority_mode, warranty_expiry_days, powertrain_filter })
+        .insert({ campaign_name, date_from, date_to, upcoming_days: upcoming_days || null, status: 'active', created_by: userEmail, customer_segment, priority_mode, warranty_expiry_days, powertrain_filter })
         .select().single()
 
       if (campErr) throw new Error(`Failed to create campaign: ${campErr.message}`)
@@ -140,7 +167,24 @@ export default async function handler(req: Request) {
 
       await serviceClient.from('telecall_campaigns').update({ total_leads: filtered.length, pending_count: filtered.length, segment_counts: segmentCounts }).eq('id', campaign.id)
 
-      return new Response(JSON.stringify({ success: true, campaign_id: campaign.id, total_leads: filtered.length, segment_counts: segmentCounts }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+      // Log stats for visibility
+      const statsMsg = `Campaign "${campaign_name}": ${allCustomers.length} raw → ${uniqueCustomers.length} after chassis dedup → ${filtered.length} after segment filter. Date range: ${date_from} to ${date_to}`
+      console.log(statsMsg)
+
+      return new Response(JSON.stringify({
+        success: true,
+        campaign_id: campaign.id,
+        total_leads: filtered.length,
+        segment_counts: segmentCounts,
+        stats: {
+          raw_from_db: allCustomers.length,
+          after_chassis_dedup: uniqueCustomers.length,
+          after_segment_filter: filtered.length,
+          date_from,
+          date_to,
+        },
+        message: statsMsg,
+      }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
     }
 
     // ── ACTION: get_next ──────────────────────────────────────────────────
@@ -485,22 +529,29 @@ export default async function handler(req: Request) {
     // ── ACTION: preview_campaign ──────────────────────────────────────────
     if (action === 'preview_campaign') {
       if (!isAdmin) throw new Error('Only admin can preview campaigns')
-      const { date_from, date_to, customer_segment = 'all', priority_mode = 'service_date', warranty_expiry_days = null, powertrain_filter = null } = body
+      const { date_from: dfr, date_to: dtr, upcoming_days: upd = null, customer_segment = 'all', priority_mode = 'service_date', warranty_expiry_days = null, powertrain_filter = null } = body
+
+      // Resolve date range for preview — same logic as create
+      const todayP = new Date(Date.now() + 5.5 * 3600000).toISOString().split('T')[0]
+      let previewFrom: string = dfr || todayP
+      let previewTo: string = dtr || todayP
+      if ((priority_mode === 'service_date' || !priority_mode) && upd) {
+        previewFrom = todayP
+        previewTo = new Date(Date.now() + 5.5 * 3600000 + Number(upd) * 86400000).toISOString().split('T')[0]
+      }
 
       let query = serviceClient.from('all_service_data')
-        .select('id, sold_dealer, last_service_dealer, extended_warranty_end_date, assumed_next_service_date, powertrain_type')
+        .select('id, sold_dealer, last_service_dealer, extended_warranty_end_date, assumed_next_service_date, powertrain_type, last_insurance_expiry_date')
         .not('contact_phones', 'is', null)
 
       if (priority_mode === 'warranty_expiry' && warranty_expiry_days) {
-        const today = new Date().toISOString().split('T')[0]
-        const expiry_to = new Date(Date.now() + warranty_expiry_days * 86400000).toISOString().split('T')[0]
-        query = query.not('extended_warranty_end_date', 'is', null).gte('extended_warranty_end_date', today).lte('extended_warranty_end_date', expiry_to)
+        const expiry_to = new Date(Date.now() + 5.5 * 3600000 + warranty_expiry_days * 86400000).toISOString().split('T')[0]
+        query = query.not('extended_warranty_end_date', 'is', null).gte('extended_warranty_end_date', todayP).lte('extended_warranty_end_date', expiry_to)
       } else if (priority_mode === 'insurance_expiry') {
-        const today = new Date().toISOString().split('T')[0]
-        const expiry_to = new Date(Date.now() + 60 * 86400000).toISOString().split('T')[0]
-        query = query.not('last_insurance_expiry_date', 'is', null).gte('last_insurance_expiry_date', today).lte('last_insurance_expiry_date', expiry_to)
-      } else if (date_from && date_to) {
-        query = query.not('assumed_next_service_date', 'is', null).gte('assumed_next_service_date', date_from).lte('assumed_next_service_date', date_to)
+        const expiry_to = new Date(Date.now() + 5.5 * 3600000 + 60 * 86400000).toISOString().split('T')[0]
+        query = query.not('last_insurance_expiry_date', 'is', null).gte('last_insurance_expiry_date', todayP).lte('last_insurance_expiry_date', expiry_to)
+      } else {
+        query = query.not('assumed_next_service_date', 'is', null).gte('assumed_next_service_date', previewFrom).lte('assumed_next_service_date', previewTo)
       }
 
       if (powertrain_filter && powertrain_filter !== 'all') query = query.eq('powertrain_type', powertrain_filter)
@@ -535,7 +586,7 @@ export default async function handler(req: Request) {
       else if (customer_segment === 'last_svc_others') filtered = counts.retain_atrisk + counts.conquest
       else if (customer_segment === 'warranty_expiring') filtered = counts.warranty_soon
 
-      return new Response(JSON.stringify({ success: true, counts, filtered_count: filtered }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+      return new Response(JSON.stringify({ success: true, counts, filtered_count: filtered, date_from: previewFrom, date_to: previewTo }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
     }
 
     throw new Error(`Unknown action: ${action}`)
