@@ -245,45 +245,36 @@ Deno.serve(async (req) => {
       continue
     }
 
-    // ── Skip if duplicate reminder already sent (non-failed) ─────────────
-    const { data: existingReminder } = await sb
-      .from('auto_service_reminders')
-      .select('id, status')
-      .eq('service_data_id', serviceDataId)
-      .eq('assumed_next_service_date', dueDate)
-      .eq('reminder_type', reminderType)
-      .not('status', 'eq', 'failed')
-      .limit(1)
+    // ── Skip checks: duplicate + booking queries run in parallel ─────────
+    const dateFrom = addDays(dueDate, -7)
+    const dateTo   = addDays(dueDate,  7)
+    const [{ data: existingReminder }, { count: bookingCount }] = await Promise.all([
+      sb.from('auto_service_reminders')
+        .select('id, status')
+        .eq('service_data_id', serviceDataId)
+        .eq('assumed_next_service_date', dueDate)
+        .eq('reminder_type', reminderType)
+        .not('status', 'eq', 'failed')
+        .limit(1),
+      sb.from('service_bookings')
+        .select('id', { count: 'exact', head: true })
+        .eq('customer_phone', phone.local10)
+        .gte('appointment_date', dateFrom)
+        .lte('appointment_date', dateTo)
+        .not('status', 'in', '("Cancelled","No Show")'),
+    ])
 
     if (existingReminder?.length) {
-      console.log(`ASR: SKIP duplicate reminder (${reminderType}) for service_data_id=${serviceDataId}`)
       stats.skipped_duplicate++
       log.push({ service_data_id: serviceDataId, reg_no: regNo, action: 'skip', reason: 'duplicate', reminder_type: reminderType })
       continue
     }
 
-    // ── Skip if customer already has a booking near this due date ─────────
-    // Check for any confirmed/arrived/completed booking within ±7 days of due date
-    const dateFrom = addDays(dueDate, -7)
-    const dateTo   = addDays(dueDate,  7)
-    const { count: bookingCount } = await sb
-      .from('service_bookings')
-      .select('id', { count: 'exact', head: true })
-      .eq('customer_phone', phone.local10)
-      .gte('appointment_date', dateFrom)
-      .lte('appointment_date', dateTo)
-      .not('status', 'in', '("Cancelled","No Show")')
-
     if ((bookingCount || 0) > 0) {
-      console.log(`ASR: SKIP already booked — service_data_id=${serviceDataId} phone=${phone.local10}`)
       stats.skipped_booked++
       log.push({ service_data_id: serviceDataId, reg_no: regNo, action: 'skip', reason: 'already_booked', reminder_type: reminderType })
       continue
     }
-
-    // ── Skip earlier reminder types if a later reminder already exists ────
-    // i.e. if 20_day was already sent and we're now at 9_day, that's fine.
-    // But if booking exists, we already skipped above.
 
     // ── Build body params ─────────────────────────────────────────────────
     const bodyParams = buildBodyParams(varExamples, variableMap, row)
@@ -380,7 +371,7 @@ Deno.serve(async (req) => {
 
     // Rate limiting: small delay between sends
     if (!dryRun && rows.length > 1) {
-      await new Promise(r => setTimeout(r, 500))
+      await new Promise(r => setTimeout(r, 100))
     }
   }
 
