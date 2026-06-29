@@ -705,6 +705,9 @@ function AdminDashboard({ campaigns, activeCampaign, onRefresh }: { campaigns: C
   const [previewCounts, setPreviewCounts] = useState<any>(null)
   const [previewing, setPreviewing] = useState(false)
   const [campaignName, setCampaignName] = useState('')
+  const [upcomingDays, setUpcomingDays] = useState<number>(20)
+  const [customUpcomingDays, setCustomUpcomingDays] = useState<number>(20)
+  const [useCustomDays, setUseCustomDays] = useState(false)
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
   const [creating, setCreating] = useState(false)
@@ -716,9 +719,10 @@ function AdminDashboard({ campaigns, activeCampaign, onRefresh }: { campaigns: C
   const [loadingTab, setLoadingTab] = useState(false)
 
   useEffect(() => {
+    // dateFrom/dateTo only needed for warranty/insurance modes
     if (!dateFrom) {
-      const today = new Date(); const plus20 = new Date(); plus20.setDate(plus20.getDate() + 20)
-      setDateFrom(today.toISOString().split('T')[0]); setDateTo(plus20.toISOString().split('T')[0])
+      const today = new Date(); const plus90 = new Date(); plus90.setDate(plus90.getDate() + 90)
+      setDateFrom(today.toISOString().split('T')[0]); setDateTo(plus90.toISOString().split('T')[0])
     }
   }, [])
 
@@ -748,17 +752,30 @@ function AdminDashboard({ campaigns, activeCampaign, onRefresh }: { campaigns: C
 
   async function handlePreview() {
     setPreviewing(true); setPreviewCounts(null)
-    try { const d = await callEdge('preview_campaign', { date_from: dateFrom, date_to: dateTo, customer_segment: segment, priority_mode: priorityMode, warranty_expiry_days: segment === 'warranty_expiring' ? warrantyDays : null, powertrain_filter: powertrainFilter !== 'all' ? powertrainFilter : null }); setPreviewCounts(d) }
+    const effectiveDays = useCustomDays ? customUpcomingDays : upcomingDays
+    const isServiceMode = priorityMode === 'service_date' || !priorityMode
+    const previewBody = isServiceMode
+      ? { upcoming_days: effectiveDays, customer_segment: segment, priority_mode: priorityMode, warranty_expiry_days: segment === 'warranty_expiring' ? warrantyDays : null, powertrain_filter: powertrainFilter !== 'all' ? powertrainFilter : null }
+      : { date_from: dateFrom, date_to: dateTo, customer_segment: segment, priority_mode: priorityMode, warranty_expiry_days: segment === 'warranty_expiring' ? warrantyDays : null, powertrain_filter: powertrainFilter !== 'all' ? powertrainFilter : null }
+    try { const d = await callEdge('preview_campaign', previewBody); setPreviewCounts(d) }
     catch (err) { setError((err as Error).message) } finally { setPreviewing(false) }
   }
 
   async function handleCreate() {
-    if (!campaignName || !dateFrom || !dateTo) { setError('Please fill campaign name and date range'); return }
+    if (!campaignName) { setError('Please fill campaign name'); return }
+    const effectiveDays = useCustomDays ? customUpcomingDays : upcomingDays
+    const isServiceMode = priorityMode === 'service_date' || !priorityMode
+    if (!isServiceMode && (!dateFrom || !dateTo)) { setError('Please fill date range for this campaign type'); return }
     setCreating(true); setError(null)
     try {
-      const data = await callEdge('create_campaign', { campaign_name: campaignName, date_from: dateFrom, date_to: dateTo, customer_segment: segment, priority_mode: priorityMode, warranty_expiry_days: segment === 'warranty_expiring' ? warrantyDays : null, powertrain_filter: powertrainFilter !== 'all' ? powertrainFilter : null })
+      const createBody = isServiceMode
+        ? { campaign_name: campaignName, upcoming_days: effectiveDays, customer_segment: segment, priority_mode: priorityMode, warranty_expiry_days: segment === 'warranty_expiring' ? warrantyDays : null, powertrain_filter: powertrainFilter !== 'all' ? powertrainFilter : null }
+        : { campaign_name: campaignName, date_from: dateFrom, date_to: dateTo, customer_segment: segment, priority_mode: priorityMode, warranty_expiry_days: segment === 'warranty_expiring' ? warrantyDays : null, powertrain_filter: powertrainFilter !== 'all' ? powertrainFilter : null }
+      const data = await callEdge('create_campaign', createBody)
       if (data.total_leads === 0) { setError('No eligible customers found for these filters.'); return }
-      setSuccess(`Campaign created with ${data.total_leads} leads!`); setShowCreate(false); setCampaignName(''); setPreviewCounts(null); setSegment('all'); setPriorityMode('service_date'); setPowertrainFilter('all'); onRefresh()
+      const statsInfo = data.stats ? ` (${data.stats.raw_from_db} found → ${data.stats.after_chassis_dedup} unique → ${data.stats.after_segment_filter} added, range: ${data.stats.date_from} to ${data.stats.date_to})` : ''
+      setSuccess(`Campaign created with ${data.total_leads} leads!${statsInfo}`)
+      setShowCreate(false); setCampaignName(''); setPreviewCounts(null); setSegment('all'); setPriorityMode('service_date'); setPowertrainFilter('all'); setUseCustomDays(false); setUpcomingDays(20); onRefresh()
     } catch (err) { setError((err as Error).message) } finally { setCreating(false) }
   }
 
@@ -825,20 +842,67 @@ function AdminDashboard({ campaigns, activeCampaign, onRefresh }: { campaigns: C
           {showCreate && (
             <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm space-y-4">
               <h3 className="font-medium text-gray-900">Create New Campaign</h3>
-              <div className="grid gap-4 sm:grid-cols-3">
+              <div className="grid gap-4 sm:grid-cols-2">
                 <div>
                   <label className="text-sm font-medium text-gray-700">Campaign Name</label>
                   <input value={campaignName} onChange={e => setCampaignName(e.target.value)} placeholder="e.g. July Service Reminders" className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm" />
                 </div>
-                <div>
-                  <label className="text-sm font-medium text-gray-700">Service Due — From</label>
-                  <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm" />
-                </div>
-                <div>
-                  <label className="text-sm font-medium text-gray-700">Service Due — To</label>
-                  <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm" />
-                </div>
+                {/* Service due window — shown for service_date mode */}
+                {(priorityMode === 'service_date' || !priorityMode) && (
+                  <div>
+                    <label className="text-sm font-medium text-gray-700">Service Due Window</label>
+                    <div className="mt-1 flex gap-2">
+                      <select
+                        value={useCustomDays ? 'custom' : String(upcomingDays)}
+                        onChange={e => {
+                          if (e.target.value === 'custom') { setUseCustomDays(true) }
+                          else { setUseCustomDays(false); setUpcomingDays(Number(e.target.value)) }
+                        }}
+                        className="flex-1 rounded-lg border border-gray-200 px-3 py-2 text-sm"
+                      >
+                        <option value="15">Next 15 days</option>
+                        <option value="20">Next 20 days</option>
+                        <option value="30">Next 30 days</option>
+                        <option value="45">Next 45 days</option>
+                        <option value="60">Next 60 days</option>
+                        <option value="custom">Custom…</option>
+                      </select>
+                      {useCustomDays && (
+                        <input
+                          type="number"
+                          min={1} max={365}
+                          value={customUpcomingDays}
+                          onChange={e => setCustomUpcomingDays(Number(e.target.value))}
+                          className="w-24 rounded-lg border border-gray-200 px-3 py-2 text-sm"
+                          placeholder="Days"
+                        />
+                      )}
+                    </div>
+                    <p className="mt-1 text-xs text-gray-400">
+                      From today: customers due between{' '}
+                      <span className="font-medium text-gray-600">
+                        {new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
+                      </span>{' '}→{' '}
+                      <span className="font-medium text-gray-600">
+                        {new Date(Date.now() + (useCustomDays ? customUpcomingDays : upcomingDays) * 86400000).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
+                      </span>
+                    </p>
+                  </div>
+                )}
               </div>
+              {/* Date pickers for warranty/insurance modes only */}
+              {priorityMode !== 'service_date' && priorityMode && (
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div>
+                    <label className="text-sm font-medium text-gray-700">From Date</label>
+                    <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm" />
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium text-gray-700">To Date</label>
+                    <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm" />
+                  </div>
+                </div>
+              )}
               <div className="grid gap-3 sm:grid-cols-4">
                 <div>
                   <label className="text-xs font-medium text-gray-600 uppercase tracking-wide">Customer Segment</label>
@@ -884,7 +948,10 @@ function AdminDashboard({ campaigns, activeCampaign, onRefresh }: { campaigns: C
                 <div className="rounded-xl border border-blue-200 bg-blue-50 p-4">
                   <div className="flex items-center justify-between mb-3">
                     <p className="text-sm font-semibold text-blue-900">Preview — <span className="text-blue-700">{previewCounts.filtered_count} customers</span></p>
-                    <p className="text-xs text-blue-600">Total in range: {previewCounts.counts?.total}</p>
+                    <div className="text-right">
+                      <p className="text-xs text-blue-600">Total in range: {previewCounts.counts?.total}</p>
+                      {previewCounts.date_from && <p className="text-xs text-blue-500">{previewCounts.date_from} → {previewCounts.date_to}</p>}
+                    </div>
                   </div>
                   <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
                     {[['🏆 Loyal', previewCounts.counts?.retain_loyal ?? 0, 'Sold + Svc us'], ['⚠️ At Risk', previewCounts.counts?.retain_atrisk ?? 0, 'Sold us, svc elsewhere'], ['💙 Svc Loyal', previewCounts.counts?.retain_service_loyal ?? 0, 'Sold others, svc us'], ['🎯 Conquest', previewCounts.counts?.conquest ?? 0, 'Sold + svc elsewhere']].map(([lbl, val, sub]) => (
@@ -917,7 +984,13 @@ function AdminDashboard({ campaigns, activeCampaign, onRefresh }: { campaigns: C
                       <StatusBadge status={c.status} />
                       {c.powertrain_filter && c.powertrain_filter !== 'all' && <span className="rounded-full bg-blue-50 border border-blue-200 px-2 py-0.5 text-xs text-blue-700">{c.powertrain_filter}</span>}
                     </div>
-                    <p className="mt-1 text-sm text-gray-500">{formatDate(c.date_from)} → {formatDate(c.date_to)} · by {c.created_by || '—'}</p>
+                    <p className="mt-1 text-sm text-gray-500">
+                      {(c as any).upcoming_days
+                        ? <span>Next <strong>{(c as any).upcoming_days} days</strong> from creation · {formatDate(c.date_from)} → {formatDate(c.date_to)}</span>
+                        : <span>{formatDate(c.date_from)} → {formatDate(c.date_to)}</span>
+                      }
+                      {' · by '}{c.created_by || '—'}
+                    </p>
                   </div>
                   <div className="flex items-center gap-2 flex-wrap">
                     {c.status === 'active' && <button onClick={() => handleClose(c.id)} className="rounded-lg border border-red-200 px-3 py-1.5 text-sm text-red-600 hover:bg-red-50">Close</button>}
