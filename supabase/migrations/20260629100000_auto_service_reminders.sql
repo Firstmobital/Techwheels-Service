@@ -67,9 +67,9 @@ alter table public.wa_agent_config
   add column if not exists auto_reminder_template_id   bigint   references public.wa_templates(id) on delete set null,
   add column if not exists auto_reminder_template_lang text     not null default 'en',
   add column if not exists auto_reminder_variable_map  jsonb    not null default '{
-    "name":        "cust_first_name",
-    "model":       "ppl",
-    "reg_no":      "registration_no",
+    "name":        "first_name",
+    "model":       "model",
+    "reg_no":      "vehicle_registration_number",
     "service_due": "assumed_next_service_date"
   }'::jsonb;
 

@@ -173,9 +173,9 @@ Deno.serve(async (req) => {
   const templateLang = (cfg.auto_reminder_template_lang as string) || (tpl.language as string) || 'en'
   const varExamples  = (tpl.variable_examples as Array<{ name?: string; example_value?: string }>) || []
   const variableMap  = (cfg.auto_reminder_variable_map as Record<string, string>) || {
-    name:        'cust_first_name',
-    model:       'ppl',
-    reg_no:      'registration_no',
+    name:        'first_name',
+    model:       'model',
+    reg_no:      'vehicle_registration_number',
     service_due: 'assumed_next_service_date',
   }
 
@@ -187,8 +187,8 @@ Deno.serve(async (req) => {
 
   // All columns needed (from variableMap values + required fields)
   const neededCols = Array.from(new Set([
-    'id', 'cust_first_name', 'cust_last_name', 'cust_mobile_no',
-    'registration_no', 'ppl', 'chassis_no', 'assumed_next_service_date',
+    'id', 'first_name', 'last_name', 'contact_phones',
+    'vehicle_registration_number', 'model', 'chassis_no', 'assumed_next_service_date',
     ...Object.values(variableMap),
   ])).join(', ')
 
@@ -196,7 +196,7 @@ Deno.serve(async (req) => {
   let query = sb.from('all_service_data')
     .select(neededCols)
     .not('assumed_next_service_date', 'is', null)
-    .not('cust_mobile_no', 'is', null)
+    .not('contact_phones', 'is', null)
     .in('assumed_next_service_date', [date20, date9, date3])
 
   if (testServiceDataId) {
@@ -228,10 +228,10 @@ Deno.serve(async (req) => {
     else if (dueDate === date3) reminderType = '3_day'
     else continue
 
-    const customerName = [row.cust_first_name, row.cust_last_name].filter(Boolean).join(' ') || 'Valued Customer'
-    const regNo        = (row.registration_no as string) || ''
+    const customerName = [row.first_name, row.last_name].filter(Boolean).join(' ') || 'Valued Customer'
+    const regNo        = (row.vehicle_registration_number as string) || ''
     const chassis      = (row.chassis_no as string) || ''
-    const rawPhone     = row.cust_mobile_no as string
+    const rawPhone     = row.contact_phones as string
 
     // ── Validate phone ────────────────────────────────────────────────────
     const phone = normalizePhone(rawPhone)

@@ -362,7 +362,7 @@ export default function AutoServiceReminderPage() {
                 ))}
               </div>
               <p className="text-xs text-gray-400 mt-1">
-                Common columns: <code>cust_first_name</code>, <code>ppl</code>, <code>registration_no</code>, <code>assumed_next_service_date</code>
+                Common columns: <code>first_name</code>, <code>last_name</code>, <code>model</code>, <code>vehicle_registration_number</code>, <code>contact_phones</code>, <code>assumed_next_service_date</code>
               </p>
             </div>
           )}
