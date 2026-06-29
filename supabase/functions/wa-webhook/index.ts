@@ -409,6 +409,44 @@ Deno.serve(async (req) => {
   const entry   = (payload.entry as unknown[])?.[0] as Record<string, unknown>
   const changes = (entry?.changes as unknown[])?.[0] as Record<string, unknown>
   const value   = changes?.value as Record<string, unknown>
+
+  // ── Status updates (delivered / read / failed) ─────────────────────────
+  // These arrive as value.statuses[], not value.messages[]
+  const statuses = value?.statuses as unknown[]
+  if (statuses?.length) {
+    for (const st of statuses) {
+      const s       = st as Record<string, unknown>
+      const msgId   = s.id as string
+      const newStat = s.status as string // sent, delivered, read, failed
+      if (!msgId || !newStat) continue
+
+      // Update wa_messages delivery status
+      await sb.from('wa_messages')
+        .update({ status: newStat })
+        .eq('wa_message_id', msgId)
+
+      // Update auto_service_reminders — only advance, never downgrade read→delivered
+      if (['delivered', 'read', 'failed'].includes(newStat)) {
+        const failReason = (s.errors as unknown[])?.[0]
+          ? JSON.stringify((s.errors as unknown[])[0])
+          : null
+        const asrUpdate: Record<string, unknown> = {
+          status:     newStat,
+          updated_at: new Date().toISOString(),
+        }
+        if (failReason) asrUpdate.failure_reason = failReason
+
+        let asrQuery = sb.from('auto_service_reminders')
+          .update(asrUpdate)
+          .eq('wa_message_id', msgId)
+        // Don't overwrite 'read' with 'delivered'
+        if (newStat === 'delivered') asrQuery = asrQuery.neq('status', 'read')
+        await asrQuery
+      }
+    }
+    return new Response('OK', { status: 200 })
+  }
+
   const msgs    = value?.messages as unknown[]
 
   if (!msgs?.length) return new Response('OK', { status: 200 })
@@ -484,6 +522,132 @@ Deno.serve(async (req) => {
 
   const convId = conv!.id as number
 
+
+  // ── AUTO SERVICE REMINDER: handle WhatsApp Flow form submission ──────────
+  // When customer taps "Book Now" on an auto reminder template and submits the
+  // Flow form, Meta sends an nfm_reply. Since reminders are sent directly (not
+  // via wa_campaigns flow path), flow_active will be false on the conversation.
+  // We detect this here before the flow_active router below.
+  if (msgType === 'interactive') {
+    const inter     = msg.interactive as Record<string, unknown>
+    const interType = inter?.type as string
+    if (interType === 'nfm_reply' && !conv?.flow_active) {
+      const nfm = (inter.nfm_reply as Record<string, unknown>) || {}
+      const rawResp = nfm.response_json
+      let flowFields: Record<string, unknown> = {}
+      if (typeof rawResp === 'string') {
+        try { flowFields = JSON.parse(rawResp) } catch { flowFields = {} }
+      } else if (rawResp && typeof rawResp === 'object') {
+        flowFields = rawResp as Record<string, unknown>
+      }
+
+      // Flow payload keys from the service_booking_cta Flow JSON:
+      // screen_0_Service_Date_0, screen_0_Preferred_time_1, screen_0_Service_Type_2,
+      // screen_0_Type_3, screen_0_Pickup_Address_4, screen_0_Issues_with_Vehicle_5
+      const rawDate        = (flowFields['screen_0_Service_Date_0']      as string) || ''
+      const rawTime        = (flowFields['screen_0_Preferred_time_1']    as string) || ''
+      const rawServiceType = flowFields['screen_0_Service_Type_2']  // CheckboxGroup → array or string
+      const rawVisitType   = (flowFields['screen_0_Type_3']             as string) || ''
+      const pickupAddress  = (flowFields['screen_0_Pickup_Address_4']   as string) || ''
+      const vehicleIssues  = (flowFields['screen_0_Issues_with_Vehicle_5'] as string) || ''
+
+      // Map radio/checkbox values to DB-friendly strings
+      const serviceTypeTitles = Array.isArray(rawServiceType)
+        ? (rawServiceType as string[]).map(v => v.replace(/^\d+_/, '').replace(/_/g, ' '))
+        : [String(rawServiceType).replace(/^\d+_/, '').replace(/_/g, ' ')]
+      const serviceTypeLabel = serviceTypeTitles[0] || 'Paid Service'
+      const serviceTypeMap: Record<string, string> = {
+        'Scheduled Service': 'Paid Service',
+        'Running Repair':    'Running Repairs',
+        'Accidental':        'Accident',
+      }
+      const bookingServiceType = serviceTypeMap[serviceTypeLabel] || 'Paid Service'
+
+      const timeMap: Record<string, string> = {
+        '0_Morning':   '09:00:00',
+        '1_Afternoon': '13:00:00',
+        '2_Evening':   '16:00:00',
+      }
+      const bookingTime = timeMap[rawTime] || null
+
+      const isPickup = rawVisitType.includes('PickUp') || rawVisitType.includes('Pickup')
+
+      // Appointment date from Flow (DatePicker returns YYYY-MM-DD)
+      const appointmentDate = rawDate
+        ? rawDate.split('T')[0]
+        : todayStr
+
+      const branchToUse = (config.available_branches as string[])?.[0] || 'Sitapura'
+
+      // Save inbound message
+      await sb.from('wa_messages').insert([{
+        conversation_id: convId, direction: 'inbound', sender: 'customer',
+        body: `[Flow submitted] Service: ${bookingServiceType}, Date: ${appointmentDate}, Time: ${rawTime}`,
+        wa_message_id: waMessageId, status: 'delivered', ai_generated: false,
+      }])
+      await sb.from('wa_conversations').update({ last_message_at: new Date().toISOString() }).eq('id', convId)
+
+      // Insert booking
+      const { data: newBkgArr, error: bkgErr } = await sb.from('service_bookings').insert([{
+        booking_source:       'WhatsApp Auto Reminder',
+        booking_date:         todayStr,
+        appointment_date:     appointmentDate,
+        booking_time:         bookingTime,
+        branch:               branchToUse,
+        reg_number:           (conv?.reg_number as string) || (vehicle?.registration_no as string) || 'UNKNOWN',
+        model:                (conv?.model as string) || (vehicle?.ppl as string) || null,
+        customer_name:        (conv?.customer_name as string) || 'Valued Customer',
+        customer_phone:       from10,
+        service_type:         bookingServiceType,
+        complaint_description: vehicleIssues || null,
+        pickup_required:      isPickup,
+        pickup_address:       isPickup && pickupAddress ? pickupAddress : null,
+        status:               'Confirmed',
+        wa_opt_in:            true,
+        wa_conversation_id:   String(convId),
+      }]).select()
+
+      if (bkgErr) {
+        console.error('ASR flow booking insert failed:', bkgErr.message)
+      } else {
+        const newBkg = newBkgArr?.[0] as Record<string, unknown>
+        const bkgId  = (newBkg?.lead_number as string) || `#${newBkg?.id}`
+
+        // Update conversation
+        await sb.from('wa_conversations').update({
+          status:           'Booked',
+          stage:            'booked',
+          booking_id:       newBkg?.id || null,
+          preferred_date:   appointmentDate,
+          preferred_branch: branchToUse,
+        }).eq('id', convId)
+
+        // Link booking back to auto_service_reminders
+        await sb.from('auto_service_reminders')
+          .update({
+            booking_id:       newBkg?.id || null,
+            flow_response_id: waMessageId,
+            updated_at:       new Date().toISOString(),
+          })
+          .eq('mobile_number', from10)
+          .is('booking_id', null)
+          .order('created_at', { ascending: false })
+          // Only update the most recent sent/delivered reminder for this phone
+          .limit(1)
+
+        const confirmMsg = `✅ *Booking Confirmed!*\n📋 Booking ID: ${bkgId}\n🔧 Service: ${bookingServiceType}\n📅 Date: ${appointmentDate}\n⏰ Time: ${rawTime.replace(/^\d+_/, '')}\n📍 Branch: ${branchToUse}${isPickup ? `\n🚗 Pickup from: ${pickupAddress || 'address provided'}` : ''}\n\nDhanyawad! Our team will confirm shortly. 🙏`
+
+        await sb.from('wa_messages').insert([{
+          conversation_id: convId, direction: 'outbound', sender: 'ai',
+          body: confirmMsg, ai_generated: true, status: 'sent',
+        }])
+        await sendWA(phoneId, metaToken, fromE164, confirmMsg)
+        console.log(`ASR flow booking ${bkgId} created for ${from10}`)
+      }
+
+      return new Response('OK', { status: 200 })
+    }
+  }
 
   // ── FLOW BOOT: customer tapped "Book My Service" from campaign blast ──────
   const convFlowStep = conv?.flow_step as string
