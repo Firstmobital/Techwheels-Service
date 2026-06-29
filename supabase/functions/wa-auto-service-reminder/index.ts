@@ -77,7 +77,10 @@ async function sendFlowTemplate(
       template: {
         name: templateName,
         language: { code: language || 'en' },
-        components: [{ type: 'body', parameters: params }],
+        components: [
+          { type: 'body', parameters: params },
+          { type: 'button', sub_type: 'flow', index: '0', parameters: [{ type: 'payload', payload: 'BOOK_NOW' }] },
+        ],
       },
     }),
   })
