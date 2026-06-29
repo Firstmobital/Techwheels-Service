@@ -195,7 +195,7 @@ export default async function handler(req: Request) {
       const { campaign_id } = body
       if (!campaign_id) throw new Error('Missing campaign_id')
 
-      const CUST_SELECT = `id, campaign_id, status, call_notes, booking_date, booking_time, callback_date, called_at, call_count, no_answer_count, whatsapp_sent, whatsapp_status, assigned_at,
+      const CUST_SELECT = `id, campaign_id, status, call_notes, booking_date, callback_date, called_at, call_count, no_answer_count, whatsapp_sent, whatsapp_status, assigned_at,
         customer:customer_id (
           id, chassis_no, vehicle_registration_number, first_name, last_name, contact_phones,
           model, powertrain_type, product_line,
@@ -264,7 +264,7 @@ export default async function handler(req: Request) {
 
     // ── ACTION: update_status ─────────────────────────────────────────────
     if (action === 'update_status') {
-      const { assignment_id, campaign_id, status, call_notes, booking_date, booking_time, callback_date, pickup_required, service_centre, pickup_address } = body
+      const { assignment_id, campaign_id, status, call_notes, booking_date, callback_date, pickup_required, service_centre, pickup_address } = body
       if (!assignment_id || !status) throw new Error('Missing assignment_id or status')
 
       const update: Record<string, unknown> = {
@@ -275,7 +275,6 @@ export default async function handler(req: Request) {
 
       if (call_notes !== undefined) update.call_notes = call_notes
       if (booking_date) update.booking_date = booking_date
-      if (booking_time) update.booking_time = booking_time
       if (callback_date) update.callback_date = callback_date
 
       if (status === 'no_answer') {
@@ -313,7 +312,7 @@ export default async function handler(req: Request) {
                 status: 'New',
                 booking_date: new Date().toISOString().split('T')[0],
                 appointment_date: booking_date,
-                appointment_time: booking_time || null,
+                appointment_time: null,
                 customer_name: [cust.first_name, cust.last_name].filter(Boolean).join(' ').trim() || 'Unknown',
                 customer_phone: rawPhone || '0000000000',
                 reg_number: (cust.vehicle_registration_number || '').toUpperCase().trim(),
@@ -407,7 +406,7 @@ export default async function handler(req: Request) {
     // ── ACTION: my_queue ──────────────────────────────────────────────────
     if (action === 'my_queue') {
       const { campaign_id } = body
-      const CUST_SEL = `id, campaign_id, status, call_notes, booking_date, booking_time, callback_date, called_at, call_count, no_answer_count, whatsapp_sent, whatsapp_status, assigned_at,
+      const CUST_SEL = `id, campaign_id, status, call_notes, booking_date, callback_date, called_at, call_count, no_answer_count, whatsapp_sent, whatsapp_status, assigned_at,
         customer:customer_id (
           id, chassis_no, vehicle_registration_number, first_name, last_name, contact_phones,
           model, powertrain_type, product_line,
@@ -469,7 +468,7 @@ export default async function handler(req: Request) {
     if (action === 'booking_list') {
       const { campaign_id } = body
       let q = serviceClient.from('telecall_assignments')
-        .select(`id, assigned_to, booking_date, booking_time, call_notes, status, whatsapp_sent,
+        .select(`id, assigned_to, booking_date, call_notes, status, whatsapp_sent,
           customer:customer_id (chassis_no, vehicle_registration_number, first_name, last_name, contact_phones, model, powertrain_type, assumed_next_service_type)`)
         .eq('status', 'booked')
       if (campaign_id) q = q.eq('campaign_id', campaign_id)
