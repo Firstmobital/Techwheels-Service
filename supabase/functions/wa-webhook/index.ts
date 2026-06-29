@@ -397,8 +397,6 @@ Deno.serve(async (req) => {
   let payload: Record<string, unknown>
   try { payload = await req.json() } catch { return new Response('OK', { status: 200 }) }
 
-  if (!config?.auto_reply_enabled) return new Response('OK', { status: 200 })
-
   const phoneId   = config.meta_phone_number_id as string
   const metaToken = config.meta_access_token as string
   const openaiKey = config.openai_api_key as string
@@ -521,7 +519,7 @@ Deno.serve(async (req) => {
   }
 
   const convId = conv!.id as number
-
+  const todayStr = new Date().toISOString().split('T')[0]
 
   // ── AUTO SERVICE REMINDER: handle WhatsApp Flow form submission ──────────
   // When customer taps "Book Now" on an auto reminder template and submits the
@@ -648,6 +646,9 @@ Deno.serve(async (req) => {
       return new Response('OK', { status: 200 })
     }
   }
+
+  // ── Guard: normal AI chat requires auto_reply_enabled ─────────────────────
+  if (!config?.auto_reply_enabled) return new Response('OK', { status: 200 })
 
   // ── FLOW BOOT: customer tapped "Book My Service" from campaign blast ──────
   const convFlowStep = conv?.flow_step as string
@@ -809,7 +810,6 @@ Deno.serve(async (req) => {
   const history = (histRows || []) as Array<{ direction: string; body: string }>
 
   // ── FIX 2: Extract all details (rich Hinglish NLU) ────────────────────────
-  const todayStr = new Date().toISOString().split('T')[0]
   const extracted = await extractDetails(openaiKey, history, todayStr)
   console.log('Extracted:', JSON.stringify(extracted))
 
