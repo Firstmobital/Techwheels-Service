@@ -97,6 +97,17 @@ function Field({ label, required, children, span }: { label: string; required?: 
   )
 }
 
+function timeLabel(t: string | null): string | null {
+  if (!t) return null
+  if (t === 'Morning' || t === 'Afternoon' || t === 'Evening') return t
+  // Legacy HH:MM:SS stored before the label fix
+  const hour = parseInt(t.split(':')[0])
+  if (isNaN(hour)) return t
+  if (hour < 12) return 'Morning'
+  if (hour < 16) return 'Afternoon'
+  return 'Evening'
+}
+
 // ─── Page ─────────────────────────────────────────────────────────────────────
 export default function ServiceBookingPage() {
   const [bookings, setBookings] = useState<ServiceBooking[]>([])
@@ -393,19 +404,23 @@ export default function ServiceBookingPage() {
                       )}
                       {/* Customer */}
                       <td style={{ padding: '0.5rem 0.65rem' }}>
-                        <div style={{ fontWeight: 600, color: '#1e293b' }}>{b.customer_name}</div>
-                        <div style={{ color: '#64748b', fontSize: '0.7rem' }}>{b.customer_phone}</div>
+                        <div style={{ fontWeight: 600, color: '#1e293b' }}>{b.customer_name || b.customer_phone}</div>
+                        {b.customer_name && <div style={{ color: '#64748b', fontSize: '0.7rem' }}>{b.customer_phone}</div>}
                       </td>
                       {/* Vehicle */}
                       <td style={{ padding: '0.5rem 0.65rem' }}>
-                        <div style={{ fontWeight: 700, color: '#334155', fontSize: '0.78rem' }}>{b.reg_number}</div>
-                        <div style={{ color: '#94a3b8', fontSize: '0.68rem' }}>{[b.model, b.fuel_type].filter(Boolean).join(' · ')}</div>
+                        {b.reg_number && b.reg_number !== 'UNKNOWN'
+                          ? <><div style={{ fontWeight: 700, color: '#334155', fontSize: '0.78rem' }}>{b.reg_number}</div>
+                              <div style={{ color: '#94a3b8', fontSize: '0.68rem' }}>{[b.model, b.fuel_type].filter(Boolean).join(' · ')}</div></>
+                          : <><div style={{ fontWeight: 600, color: '#334155', fontSize: '0.78rem' }}>{b.model || '—'}</div>
+                              {b.fuel_type && <div style={{ color: '#94a3b8', fontSize: '0.68rem' }}>{b.fuel_type}</div>}</>
+                        }
                       </td>
                       {/* Appointment */}
                       <td style={{ padding: '0.5rem 0.65rem', whiteSpace: 'nowrap' }}>
                         {b.appointment_date
                           ? <><div style={{ color: '#334155', fontWeight: 600, fontSize: '0.75rem' }}>{new Date(b.appointment_date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}</div>
-                            {b.booking_time && <div style={{ fontSize: '0.65rem', color: '#94a3b8' }}>{b.booking_time}</div>}</>
+                            {timeLabel(b.booking_time) && <div style={{ fontSize: '0.65rem', color: '#94a3b8' }}>{timeLabel(b.booking_time)}</div>}</>
                           : <span style={{ color: '#cbd5e1', fontSize: '0.75rem' }}>—</span>}
                       </td>
                       {/* Status */}
@@ -672,8 +687,10 @@ export default function ServiceBookingPage() {
                   {/* Vehicle Card */}
                   <div style={{ background: '#f8fafc', borderRadius: '10px', padding: '0.85rem', border: '1px solid #e2e8f0' }}>
                     <div style={{ fontSize: '0.68rem', fontWeight: 800, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.55rem' }}>🚗 Vehicle</div>
-                    <div style={{ fontWeight: 800, fontSize: '0.95rem', color: '#1e293b', letterSpacing: '0.03em' }}>{selectedBooking.reg_number}</div>
-                    <div style={{ fontSize: '0.82rem', color: '#475569', marginTop: '0.15rem' }}>{[selectedBooking.model, selectedBooking.variant].filter(Boolean).join(' ')}</div>
+                    {selectedBooking.reg_number && selectedBooking.reg_number !== 'UNKNOWN'
+                      ? <div style={{ fontWeight: 800, fontSize: '0.95rem', color: '#1e293b', letterSpacing: '0.03em' }}>{selectedBooking.reg_number}</div>
+                      : null}
+                    <div style={{ fontSize: '0.82rem', color: '#475569', marginTop: '0.15rem' }}>{[selectedBooking.model, selectedBooking.variant].filter(Boolean).join(' ') || '—'}</div>
                     <div style={{ fontSize: '0.72rem', color: '#64748b', marginTop: '0.15rem' }}>{[selectedBooking.fuel_type, selectedBooking.km_reading ? `${selectedBooking.km_reading.toLocaleString()} km` : null].filter(Boolean).join(' · ')}</div>
                   </div>
 
@@ -683,7 +700,7 @@ export default function ServiceBookingPage() {
                     <div style={{ fontWeight: 700, fontSize: '0.9rem', color: '#1e293b' }}>
                       {selectedBooking.appointment_date ? new Date(selectedBooking.appointment_date).toLocaleDateString('en-IN', { weekday: 'short', day: '2-digit', month: 'short', year: 'numeric' }) : 'Not scheduled'}
                     </div>
-                    {selectedBooking.booking_time && <div style={{ fontSize: '0.78rem', color: '#2563eb', fontWeight: 600 }}>⏰ {selectedBooking.booking_time}</div>}
+                    {timeLabel(selectedBooking.booking_time) && <div style={{ fontSize: '0.78rem', color: '#2563eb', fontWeight: 600 }}>⏰ {timeLabel(selectedBooking.booking_time)}</div>}
                     {selectedBooking.branch && <div style={{ fontSize: '0.75rem', color: '#475569', marginTop: '0.15rem' }}>📍 {selectedBooking.branch}</div>}
                   </div>
 
