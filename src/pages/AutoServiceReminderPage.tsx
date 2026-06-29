@@ -101,7 +101,6 @@ export default function AutoServiceReminderPage() {
 
   // Config editor
   const [templates, setTemplates] = useState<WATemplate[]>([])
-  const [config, setConfig] = useState<AgentConfig | null>(null)
   const [configDraft, setConfigDraft] = useState<AgentConfig | null>(null)
   const [savingConfig, setSavingConfig] = useState(false)
   const [configSaved, setConfigSaved] = useState(false)
@@ -149,9 +148,7 @@ export default function AutoServiceReminderPage() {
       setLogs((logsRes.data || []) as ReminderLog[])
 
       if (cfgRes.data) {
-        const c = cfgRes.data as AgentConfig
-        setConfig(c)
-        setConfigDraft({ ...c })
+        setConfigDraft({ ...(cfgRes.data as AgentConfig) })
       }
 
       setTemplates((tplRes.data || []) as WATemplate[])
@@ -177,7 +174,6 @@ export default function AutoServiceReminderPage() {
         })
         .eq('id', 1)
       if (e) throw e
-      setConfig({ ...configDraft })
       setConfigSaved(true)
       setTimeout(() => setConfigSaved(false), 2000)
     } catch (e: unknown) {
