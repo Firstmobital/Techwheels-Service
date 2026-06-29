@@ -598,4 +598,5 @@ export default async function handler(req: Request) {
   }
 }
 
+// v2 — dynamic upcoming_days, fixed DB columns
 Deno.serve(handler)
