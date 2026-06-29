@@ -34,12 +34,10 @@ const sb = createClient(SUPABASE_URL, SUPABASE_KEY)
 
 // ─── IST date helpers ─────────────────────────────────────────────────────────
 
-/** Returns today's date string in IST as YYYY-MM-DD */
 function todayIST(): string {
   return new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
 }
 
-/** Returns YYYY-MM-DD for today + N days (in IST) */
 function addDays(baseIST: string, days: number): string {
   const d = new Date(baseIST + 'T00:00:00+05:30')
   d.setDate(d.getDate() + days)
@@ -57,7 +55,7 @@ function normalizePhone(raw: string | null): { e164: string; local10: string } |
   return { e164, local10 }
 }
 
-// ─── Send Meta template with body params ─────────────────────────────────────
+// ─── Send Meta template ───────────────────────────────────────────────────────
 
 async function sendFlowTemplate(
   phoneId: string,
@@ -87,7 +85,7 @@ async function sendFlowTemplate(
   return res.json()
 }
 
-// ─── Build body params from variable map ─────────────────────────────────────
+// ─── Build body params ────────────────────────────────────────────────────────
 
 function buildBodyParams(
   varExamples: Array<{ name?: string; example_value?: string }>,
@@ -100,7 +98,6 @@ function buildBodyParams(
     let val = ''
     if (colName && serviceRow[colName] !== undefined && serviceRow[colName] !== null) {
       val = String(serviceRow[colName])
-      // Format date fields as DD/MMM for readability
       if (colName.includes('date') || colName.includes('Date')) {
         const d = new Date(val + 'T00:00:00+05:30')
         if (!isNaN(d.getTime())) {
@@ -113,10 +110,29 @@ function buildBodyParams(
   })
 }
 
+// ─── Parallel batch runner ────────────────────────────────────────────────────
+
+async function runBatched<T, R>(
+  items: T[],
+  batchSize: number,
+  delayMs: number,
+  fn: (item: T) => Promise<R>,
+): Promise<R[]> {
+  const results: R[] = []
+  for (let i = 0; i < items.length; i += batchSize) {
+    const batch = items.slice(i, i + batchSize)
+    const batchResults = await Promise.all(batch.map(fn))
+    results.push(...batchResults)
+    if (i + batchSize < items.length && delayMs > 0) {
+      await new Promise(r => setTimeout(r, delayMs))
+    }
+  }
+  return results
+}
+
 // ─── Main handler ─────────────────────────────────────────────────────────────
 
 Deno.serve(async (req) => {
-  // Handle CORS preflight
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
   }
@@ -144,11 +160,11 @@ Deno.serve(async (req) => {
 
   if (!enabled && !dryRun) {
     console.log('ASR: disabled via config. Use dry_run=true to test anyway.')
-    return Response.json({ ok: true, skipped: true, reason: 'disabled' })
+    return Response.json({ ok: true, skipped: true, reason: 'disabled' }, { headers: corsHeaders })
   }
 
-  const phoneId  = cfg.meta_phone_number_id as string
-  const token    = cfg.meta_access_token as string
+  const phoneId = cfg.meta_phone_number_id as string
+  const token   = cfg.meta_access_token as string
 
   if (!phoneId || !token) {
     console.error('ASR: Meta credentials not configured in wa_agent_config')
@@ -183,12 +199,11 @@ Deno.serve(async (req) => {
   }
 
   // ── Determine target dates (IST) ─────────────────────────────────────────
-  const today         = todayIST()
-  const date20        = addDays(today, 20)
-  const date9         = addDays(today, 9)
-  const date3         = addDays(today, 3)
+  const today  = todayIST()
+  const date20 = addDays(today, 20)
+  const date9  = addDays(today, 9)
+  const date3  = addDays(today, 3)
 
-  // All columns needed (from variableMap values + required fields)
   const neededCols = Array.from(new Set([
     'id', 'first_name', 'last_name', 'contact_phones',
     'vehicle_registration_number', 'model', 'chassis_no', 'assumed_next_service_date',
@@ -219,144 +234,204 @@ Deno.serve(async (req) => {
   const stats = { processed: 0, sent: 0, skipped_duplicate: 0, skipped_booked: 0, skipped_invalid_phone: 0, failed: 0, dry_run: dryRun }
   const log: Array<Record<string, unknown>> = []
 
+  // ── Phase 1: validate phones and determine reminder types ────────────────
+  type Candidate = {
+    row: Record<string, unknown>
+    serviceDataId: number
+    dueDate: string
+    reminderType: '20_day' | '9_day' | '3_day'
+    customerName: string
+    regNo: string
+    chassis: string
+    phone: { e164: string; local10: string }
+  }
+
+  const candidates: Candidate[] = []
+
   for (const row of rows) {
     stats.processed++
     const serviceDataId = row.id as number
     const dueDate       = row.assumed_next_service_date as string
 
-    // Determine reminder type
     let reminderType: '20_day' | '9_day' | '3_day'
     if (dueDate === date20) reminderType = '20_day'
     else if (dueDate === date9) reminderType = '9_day'
     else if (dueDate === date3) reminderType = '3_day'
     else continue
 
-    const customerName = [row.first_name, row.last_name].filter(Boolean).join(' ') || 'Valued Customer'
-    const regNo        = (row.vehicle_registration_number as string) || ''
-    const chassis      = (row.chassis_no as string) || ''
-    const rawPhone     = row.contact_phones as string
-
-    // ── Validate phone ────────────────────────────────────────────────────
-    const phone = normalizePhone(rawPhone)
+    const phone = normalizePhone(row.contact_phones as string)
     if (!phone) {
-      console.log(`ASR: SKIP invalid phone for service_data_id=${serviceDataId}`)
       stats.skipped_invalid_phone++
-      log.push({ service_data_id: serviceDataId, reg_no: regNo, action: 'skip', reason: 'invalid_phone' })
+      log.push({ service_data_id: serviceDataId, reg_no: row.vehicle_registration_number, action: 'skip', reason: 'invalid_phone' })
       continue
     }
 
-    // ── Skip if duplicate reminder already sent (non-failed) ─────────────
-    const { data: existingReminder } = await sb
-      .from('auto_service_reminders')
-      .select('id, status')
-      .eq('service_data_id', serviceDataId)
-      .eq('assumed_next_service_date', dueDate)
-      .eq('reminder_type', reminderType)
-      .not('status', 'eq', 'failed')
-      .limit(1)
+    candidates.push({
+      row,
+      serviceDataId,
+      dueDate,
+      reminderType,
+      customerName: [row.first_name, row.last_name].filter(Boolean).join(' ') || 'Valued Customer',
+      regNo: (row.vehicle_registration_number as string) || '',
+      chassis: (row.chassis_no as string) || '',
+      phone,
+    })
+  }
 
-    if (existingReminder?.length) {
-      console.log(`ASR: SKIP duplicate reminder (${reminderType}) for service_data_id=${serviceDataId}`)
-      stats.skipped_duplicate++
-      log.push({ service_data_id: serviceDataId, reg_no: regNo, action: 'skip', reason: 'duplicate', reminder_type: reminderType })
-      continue
+  // ── Phase 2: run all skip checks in parallel (batches of 30) ────────────
+  type SkipResult = { candidate: Candidate; skip: boolean; reason?: string }
+
+  const skipResults = await runBatched<Candidate, SkipResult>(
+    candidates,
+    30,
+    0,
+    async (c) => {
+      const dateFrom = addDays(c.dueDate, -7)
+      const dateTo   = addDays(c.dueDate,  7)
+      const [{ data: existingReminder }, { count: bookingCount }] = await Promise.all([
+        sb.from('auto_service_reminders')
+          .select('id, status')
+          .eq('service_data_id', c.serviceDataId)
+          .eq('assumed_next_service_date', c.dueDate)
+          .eq('reminder_type', c.reminderType)
+          .not('status', 'eq', 'failed')
+          .limit(1),
+        sb.from('service_bookings')
+          .select('id', { count: 'exact', head: true })
+          .eq('customer_phone', c.phone.local10)
+          .gte('appointment_date', dateFrom)
+          .lte('appointment_date', dateTo)
+          .not('status', 'in', '("Cancelled","No Show")'),
+      ])
+
+      if (existingReminder?.length) return { candidate: c, skip: true, reason: 'duplicate' }
+      if ((bookingCount || 0) > 0) return { candidate: c, skip: true, reason: 'already_booked' }
+      return { candidate: c, skip: false }
+    },
+  )
+
+  const toSend: Candidate[] = []
+  for (const r of skipResults) {
+    if (r.skip) {
+      if (r.reason === 'duplicate') {
+        stats.skipped_duplicate++
+        log.push({ service_data_id: r.candidate.serviceDataId, reg_no: r.candidate.regNo, action: 'skip', reason: 'duplicate', reminder_type: r.candidate.reminderType })
+      } else {
+        stats.skipped_booked++
+        log.push({ service_data_id: r.candidate.serviceDataId, reg_no: r.candidate.regNo, action: 'skip', reason: 'already_booked', reminder_type: r.candidate.reminderType })
+      }
+    } else {
+      toSend.push(r.candidate)
     }
+  }
 
-    // ── Skip if customer already has a booking near this due date ─────────
-    // Check for any confirmed/arrived/completed booking within ±7 days of due date
-    const dateFrom = addDays(dueDate, -7)
-    const dateTo   = addDays(dueDate,  7)
-    const { count: bookingCount } = await sb
-      .from('service_bookings')
-      .select('id', { count: 'exact', head: true })
-      .eq('customer_phone', phone.local10)
-      .gte('appointment_date', dateFrom)
-      .lte('appointment_date', dateTo)
-      .not('status', 'in', '("Cancelled","No Show")')
+  console.log(`ASR: ${toSend.length} to send after skip checks`)
 
-    if ((bookingCount || 0) > 0) {
-      console.log(`ASR: SKIP already booked — service_data_id=${serviceDataId} phone=${phone.local10}`)
-      stats.skipped_booked++
-      log.push({ service_data_id: serviceDataId, reg_no: regNo, action: 'skip', reason: 'already_booked', reminder_type: reminderType })
-      continue
+  // Dry run — log what would be sent and return early
+  if (dryRun) {
+    for (const c of toSend) {
+      const bodyParams = buildBodyParams(varExamples, variableMap, c.row)
+      stats.sent++
+      log.push({
+        service_data_id: c.serviceDataId,
+        reg_no:          c.regNo,
+        phone:           c.phone.e164,
+        action:          'dry_run_would_send',
+        reminder_type:   c.reminderType,
+        template:        templateName,
+        body_params:     bodyParams,
+      })
     }
+    console.log('ASR: dry run completed —', JSON.stringify(stats))
+    return Response.json({ ok: true, stats, log, today, target_dates: { '20_day': date20, '9_day': date9, '3_day': date3 } }, { headers: corsHeaders })
+  }
 
-    // ── Skip earlier reminder types if a later reminder already exists ────
-    // i.e. if 20_day was already sent and we're now at 9_day, that's fine.
-    // But if booking exists, we already skipped above.
+  // ── Phase 3: insert all reminder rows in parallel (batches of 20) ────────
+  type InsertResult = { candidate: Candidate; reminderId?: number; insertFailed: boolean }
 
-    // ── Build body params ─────────────────────────────────────────────────
-    const bodyParams = buildBodyParams(varExamples, variableMap, row)
-
-    console.log(`ASR: [${dryRun ? 'DRY_RUN' : 'SEND'}] ${reminderType} → ${phone.e164} (${regNo}, due ${dueDate})`)
-
-    // ── Insert reminder log (before send, so we capture intent) ──────────
-    const reminderInsert = {
-      service_data_id:             serviceDataId,
-      customer_name:               customerName,
-      mobile_number:               phone.local10,
-      vehicle_registration_number: regNo,
-      chassis_no:                  chassis,
-      assumed_next_service_date:   dueDate,
-      reminder_type:               reminderType,
-      scheduled_for_date:          today,
-      template_name:               templateName,
-      status:                      'pending' as const,
-    }
-
-    let reminderId: number | undefined
-
-    if (!dryRun) {
+  const insertResults = await runBatched<Candidate, InsertResult>(
+    toSend,
+    20,
+    0,
+    async (c) => {
       const { data: rInserted, error: rErr } = await sb
         .from('auto_service_reminders')
-        .insert([reminderInsert])
+        .insert([{
+          service_data_id:             c.serviceDataId,
+          customer_name:               c.customerName,
+          mobile_number:               c.phone.local10,
+          vehicle_registration_number: c.regNo,
+          chassis_no:                  c.chassis,
+          assumed_next_service_date:   c.dueDate,
+          reminder_type:               c.reminderType,
+          scheduled_for_date:          today,
+          template_name:               templateName,
+          status:                      'pending',
+        }])
         .select('id')
         .single()
 
       if (rErr) {
         if (rErr.code === '23505') {
-          // Race condition: another run inserted it between our check and insert
-          console.log(`ASR: SKIP race-condition duplicate for service_data_id=${serviceDataId}`)
-          stats.skipped_duplicate++
-          continue
+          console.log(`ASR: SKIP race-condition duplicate for service_data_id=${c.serviceDataId}`)
+          return { candidate: c, insertFailed: false }
         }
-        console.error(`ASR: reminder insert failed for service_data_id=${serviceDataId}:`, rErr.message)
-        stats.failed++
-        continue
+        console.error(`ASR: reminder insert failed for service_data_id=${c.serviceDataId}:`, rErr.message)
+        return { candidate: c, insertFailed: true }
       }
-      reminderId = rInserted?.id as number
-    }
+      return { candidate: c, reminderId: rInserted?.id as number, insertFailed: false }
+    },
+  )
 
-    // ── Send WhatsApp template ────────────────────────────────────────────
-    let waMessageId: string | undefined
-    if (!dryRun) {
+  type SendItem = { candidate: Candidate; reminderId: number }
+  const readyToSend: SendItem[] = []
+  for (const r of insertResults) {
+    if (r.insertFailed) {
+      stats.failed++
+    } else if (!r.reminderId) {
+      stats.skipped_duplicate++
+    } else {
+      readyToSend.push({ candidate: r.candidate, reminderId: r.reminderId })
+    }
+  }
+
+  // ── Phase 4: send WhatsApp messages in parallel batches ──────────────────
+  // Batches of 15 with 300ms gap stays well within Meta's rate limits
+  await runBatched<SendItem, void>(
+    readyToSend,
+    15,
+    300,
+    async ({ candidate: c, reminderId }) => {
+      const bodyParams = buildBodyParams(varExamples, variableMap, c.row)
+      console.log(`ASR: SEND ${c.reminderType} → ${c.phone.e164} (${c.regNo}, due ${c.dueDate})`)
+
       try {
-        const waRes = await sendFlowTemplate(phoneId, token, phone.e164, templateName, templateLang, bodyParams)
-        waMessageId = waRes.messages?.[0]?.id
+        const waRes = await sendFlowTemplate(phoneId, token, c.phone.e164, templateName, templateLang, bodyParams)
+        const waMessageId = waRes.messages?.[0]?.id
 
         if (waMessageId) {
           await sb.from('auto_service_reminders').update({
-            status:   'sent',
-            sent_at:  new Date().toISOString(),
+            status:        'sent',
+            sent_at:       new Date().toISOString(),
             wa_message_id: waMessageId,
             updated_at:    new Date().toISOString(),
           }).eq('id', reminderId)
           stats.sent++
-          log.push({ service_data_id: serviceDataId, reg_no: regNo, action: 'sent', reminder_type: reminderType, wa_message_id: waMessageId })
+          log.push({ service_data_id: c.serviceDataId, reg_no: c.regNo, action: 'sent', reminder_type: c.reminderType, wa_message_id: waMessageId })
         } else {
           const errStr = waRes.error ? JSON.stringify(waRes.error) : 'No message ID in response'
-          console.error(`ASR: send failed for ${phone.e164}:`, errStr)
+          console.error(`ASR: send failed for ${c.phone.e164}:`, errStr)
           await sb.from('auto_service_reminders').update({
             status:         'failed',
             failure_reason: errStr,
             updated_at:     new Date().toISOString(),
           }).eq('id', reminderId)
           stats.failed++
-          log.push({ service_data_id: serviceDataId, reg_no: regNo, action: 'failed', reminder_type: reminderType, reason: errStr })
+          log.push({ service_data_id: c.serviceDataId, reg_no: c.regNo, action: 'failed', reminder_type: c.reminderType, reason: errStr })
         }
       } catch (e) {
         const errStr = e instanceof Error ? e.message : String(e)
-        console.error(`ASR: exception for ${phone.e164}:`, errStr)
+        console.error(`ASR: exception for ${c.phone.e164}:`, errStr)
         await sb.from('auto_service_reminders').update({
           status:         'failed',
           failure_reason: errStr,
@@ -364,25 +439,8 @@ Deno.serve(async (req) => {
         }).eq('id', reminderId)
         stats.failed++
       }
-    } else {
-      // Dry run — just log what would be sent
-      stats.sent++ // count as "would send"
-      log.push({
-        service_data_id: serviceDataId,
-        reg_no:          regNo,
-        phone:           phone.e164,
-        action:          'dry_run_would_send',
-        reminder_type:   reminderType,
-        template:        templateName,
-        body_params:     bodyParams,
-      })
-    }
-
-    // Rate limiting: small delay between sends
-    if (!dryRun && rows.length > 1) {
-      await new Promise(r => setTimeout(r, 500))
-    }
-  }
+    },
+  )
 
   console.log('ASR: completed —', JSON.stringify(stats))
   return Response.json({ ok: true, stats, log, today, target_dates: { '20_day': date20, '9_day': date9, '3_day': date3 } }, { headers: corsHeaders })

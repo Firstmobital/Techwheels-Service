@@ -43,21 +43,20 @@ function normalizePhone(raw: string): { e164: string; local10: string } {
 }
 
 // ─── FIX 3: Load full vehicle history from DMS ────────────────────────────────
-async function loadVehicleHistory(phone10: string, phoneE164: string): Promise<Record<string, unknown> | null> {
+async function loadVehicleHistory(phone10: string, _phoneE164: string): Promise<Record<string, unknown> | null> {
   const { data } = await sb.from('all_service_data')
     .select(`
-      id, cust_first_name, cust_last_name, registration_no, ppl, pl,
-      vehicle_sale_date, chassis_no, fuel_type: intended_application,
+      id, first_name, last_name, vehicle_registration_number, model,
+      vehicle_sale_date, chassis_no,
       first_free_service_done_flag, first_free_service_date,
       second_free_service_done_flag, second_free_service_date,
       third_free_service_done_flag, third_free_service_date,
-      fourth_free_service_done_flag, fourth_free_service_done_date,
       scheduled_next_service_date, last_service_date, last_service_type,
       extended_warranty_product, extended_warranty_end_date,
       amc_no, amc_type, amc_end_date,
       service_churn_flag, amc_propensity_flag, extended_propensity_flag
     `)
-    .or(`cust_mobile_no.eq.${phone10},cust_mobile_no.eq.${phoneE164}`)
+    .ilike('contact_phones', `%${phone10}%`)
     .order('last_service_date', { ascending: false })
     .limit(1)
   return data?.[0] as Record<string, unknown> | null
@@ -334,7 +333,7 @@ async function escalateToSA(
     const saAlert = `⚠️ *Escalation Alert — Techwheels WA Bot*
 
 👤 Customer: *${conv.customer_name || 'Unknown'}* | 📞 ${(conv.phone as string)?.replace(/\d{4}$/, 'XXXX')}
-🚗 Vehicle: *${conv.model || vehicle?.ppl || 'Unknown'}* (${conv.reg_number || '—'})
+🚗 Vehicle: *${conv.model || vehicle?.model || 'Unknown'}* (${conv.reg_number || '—'})
 🔧 Issue: ${reason}
 📋 Service Type: ${conv.service_type || 'Not specified'}
 💬 Complaint: ${conv.complaint_description || 'None'}
@@ -360,7 +359,7 @@ View conversation: https://yourcrm.techwheels.in/wa-agent`
 <table style="border-collapse:collapse">
 <tr><td><b>Customer</b></td><td>${conv.customer_name || 'Unknown'}</td></tr>
 <tr><td><b>Phone</b></td><td>${conv.phone}</td></tr>
-<tr><td><b>Vehicle</b></td><td>${conv.model || vehicle?.ppl || 'Unknown'} (${conv.reg_number || '—'})</td></tr>
+<tr><td><b>Vehicle</b></td><td>${conv.model || vehicle?.model || 'Unknown'} (${conv.reg_number || '—'})</td></tr>
 <tr><td><b>Reg No</b></td><td>${conv.reg_number || '—'}</td></tr>
 <tr><td><b>Escalation Reason</b></td><td>${reason}</td></tr>
 <tr><td><b>Service Type</b></td><td>${conv.service_type || 'Not specified'}</td></tr>
@@ -498,15 +497,15 @@ Deno.serve(async (req) => {
 
   if (!conv) {
     const custName = vehicle
-      ? `${vehicle.cust_first_name || ''} ${vehicle.cust_last_name || ''}`.trim() || 'Valued Customer'
-      : 'Valued Customer'
+      ? `${vehicle.first_name || ''} ${vehicle.last_name || ''}`.trim() || null
+      : null
 
     const { data: newConvArr, error: convErr } = await sb.from('wa_conversations').insert([{
       phone: from10,
       customer_name: custName,
-      reg_number: (vehicle?.registration_no as string) || null,
-      model: (vehicle?.ppl as string) || null,
-      fuel_type: (vehicle?.intended_application as string) || null,
+      reg_number: (vehicle?.vehicle_registration_number as string) || null,
+      model: (vehicle?.model as string) || null,
+      fuel_type: null,
       mfg_year: vehicle?.vehicle_sale_date ? new Date(vehicle.vehicle_sale_date as string).getFullYear() : null,
       last_service_date: (vehicle?.last_service_date as string) || null,
       service_data_id: (vehicle?.id as number) || null,
@@ -562,9 +561,9 @@ Deno.serve(async (req) => {
       const bookingServiceType = serviceTypeMap[serviceTypeLabel] || 'Paid Service'
 
       const timeMap: Record<string, string> = {
-        '0_Morning':   '09:00:00',
-        '1_Afternoon': '13:00:00',
-        '2_Evening':   '16:00:00',
+        '0_Morning':   'Morning',
+        '1_Afternoon': 'Afternoon',
+        '2_Evening':   'Evening',
       }
       const bookingTime = timeMap[rawTime] || null
 
@@ -592,9 +591,9 @@ Deno.serve(async (req) => {
         appointment_date:     appointmentDate,
         booking_time:         bookingTime,
         branch:               branchToUse,
-        reg_number:           (conv?.reg_number as string) || (vehicle?.registration_no as string) || 'UNKNOWN',
-        model:                (conv?.model as string) || (vehicle?.ppl as string) || null,
-        customer_name:        (conv?.customer_name as string) || 'Valued Customer',
+        reg_number:           (conv?.reg_number as string) || (vehicle?.vehicle_registration_number as string) || null,
+        model:                (conv?.model as string) || (vehicle?.model as string) || null,
+        customer_name:        (conv?.customer_name as string) || `${vehicle?.first_name || ''} ${vehicle?.last_name || ''}`.trim() || null,
         customer_phone:       from10,
         service_type:         bookingServiceType,
         complaint_description: vehicleIssues || null,
@@ -881,9 +880,9 @@ Deno.serve(async (req) => {
       appointment_date: extracted.date,
       booking_time: bookingTime,
       branch: branchToUse,
-      reg_number: (conv!.reg_number as string) || 'UNKNOWN',
-      model: (conv!.model as string) || (vehicle?.ppl as string) || null,
-      customer_name: (conv!.customer_name as string) || 'Valued Customer',
+      reg_number: (conv!.reg_number as string) || (vehicle?.vehicle_registration_number as string) || null,
+      model: (conv!.model as string) || (vehicle?.model as string) || null,
+      customer_name: (conv!.customer_name as string) || `${vehicle?.first_name || ''} ${vehicle?.last_name || ''}`.trim() || null,
       customer_phone: from10,
       service_type: (conv!.service_type as string) || 'Paid Service',
       complaint_description: (conv!.complaint_description as string) || null,
