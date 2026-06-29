@@ -382,5 +382,5 @@ Deno.serve(async (req) => {
   }
 
   console.log('ASR: completed —', JSON.stringify(stats))
-  return Response.json({ ok: true, stats, log, today, target_dates: { '20_day': date20, '9_day': date9, '3_day': date3 } })
+  return Response.json({ ok: true, stats, log, today, target_dates: { '20_day': date20, '9_day': date9, '3_day': date3 } }, { headers: corsHeaders })
 })
