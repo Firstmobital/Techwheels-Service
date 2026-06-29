@@ -231,7 +231,7 @@ export default async function handler(req: Request) {
         .select('id, assigned_to')
         .eq('campaign_id', campaign_id)
         .eq('status', 'pending')
-        .neq('assigned_to', userEmail)          // don't re-pick something already ours
+        .or(`assigned_to.is.null,assigned_to.neq.${userEmail}`)  // NULL rows are unassigned — neq() alone skips them
         .order('priority_score', { ascending: false })
         .order('id', { ascending: true })        // stable secondary sort
         .limit(1)
@@ -278,7 +278,7 @@ export default async function handler(req: Request) {
           .select('id')
           .eq('campaign_id', campaign_id)
           .eq('status', 'pending')
-          .neq('assigned_to', userEmail)
+          .or(`assigned_to.is.null,assigned_to.neq.\${userEmail}`)
           .order('priority_score', { ascending: false })
           .order('id', { ascending: true })
           .limit(1)
