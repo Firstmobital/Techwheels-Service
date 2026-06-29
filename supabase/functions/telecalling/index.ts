@@ -222,29 +222,74 @@ export default async function handler(req: Request) {
         return new Response(JSON.stringify({ success: true, assignment: callbackDue }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
       }
 
-      // Atomic claim: pick highest priority_score pending that isn't assigned to anyone
+      // Atomic claim: pick highest priority_score unassigned pending
+      // Note: do NOT filter by assigned_to IS NULL — the column may have a DB default (e.g. auth.uid())
+      // Instead, pick any 'pending' row not yet assigned to THIS user, and claim it atomically.
+      // The UPDATE .eq('status','pending') guard prevents double-claiming (optimistic lock).
       const { data: nextPending } = await serviceClient
         .from('telecall_assignments')
-        .select('id')
+        .select('id, assigned_to')
         .eq('campaign_id', campaign_id)
         .eq('status', 'pending')
-        .is('assigned_to', null)
+        .neq('assigned_to', userEmail)          // don't re-pick something already ours
         .order('priority_score', { ascending: false })
+        .order('id', { ascending: true })        // stable secondary sort
         .limit(1)
         .maybeSingle()
 
       if (!nextPending) {
-        return new Response(JSON.stringify({ success: true, assignment: null }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+        // Also check if there's a 'pending' row already assigned to this user (resume)
+        const { data: myPending } = await serviceClient
+          .from('telecall_assignments')
+          .select('id')
+          .eq('campaign_id', campaign_id)
+          .eq('status', 'pending')
+          .eq('assigned_to', userEmail)
+          .order('priority_score', { ascending: false })
+          .limit(1)
+          .maybeSingle()
+        if (!myPending) {
+          return new Response(JSON.stringify({ success: true, assignment: null }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+        }
+        // Resume the user's own pending record
+        const { data: resumeFull } = await serviceClient
+          .from('telecall_assignments')
+          .select(CUST_SELECT)
+          .eq('id', myPending.id)
+          .single()
+        return new Response(JSON.stringify({ success: true, assignment: resumeFull }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
       }
 
-      // Claim it
-      const { error: claimErr } = await serviceClient
+      // Claim it atomically — status must still be 'pending' to prevent race
+      const { data: claimResult, error: claimErr } = await serviceClient
         .from('telecall_assignments')
         .update({ status: 'assigned', assigned_to: userEmail, assigned_at: new Date().toISOString() })
         .eq('id', nextPending.id)
         .eq('status', 'pending')
+        .select('id')
+        .maybeSingle()
 
       if (claimErr) throw new Error(`Claim failed: ${claimErr.message}`)
+
+      // If claim was stolen by another telecaller (race), retry once
+      if (!claimResult) {
+        const { data: retry } = await serviceClient
+          .from('telecall_assignments')
+          .select('id')
+          .eq('campaign_id', campaign_id)
+          .eq('status', 'pending')
+          .neq('assigned_to', userEmail)
+          .order('priority_score', { ascending: false })
+          .order('id', { ascending: true })
+          .limit(1)
+          .maybeSingle()
+        if (!retry) return new Response(JSON.stringify({ success: true, assignment: null }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+        await serviceClient.from('telecall_assignments')
+          .update({ status: 'assigned', assigned_to: userEmail, assigned_at: new Date().toISOString() })
+          .eq('id', retry.id).eq('status', 'pending')
+        const { data: retryFull } = await serviceClient.from('telecall_assignments').select(CUST_SELECT).eq('id', retry.id).single()
+        return new Response(JSON.stringify({ success: true, assignment: retryFull }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+      }
 
       const { data: full } = await serviceClient
         .from('telecall_assignments')
