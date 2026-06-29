@@ -222,45 +222,24 @@ export default async function handler(req: Request) {
         return new Response(JSON.stringify({ success: true, assignment: callbackDue }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
       }
 
-      // Atomic claim: pick highest priority_score unassigned pending
-      // Note: do NOT filter by assigned_to IS NULL — the column may have a DB default (e.g. auth.uid())
-      // Instead, pick any 'pending' row not yet assigned to THIS user, and claim it atomically.
-      // The UPDATE .eq('status','pending') guard prevents double-claiming (optimistic lock).
+      // Step 1: pick highest priority_score pending row — NO assigned_to filter.
+      // Dots in emails break PostgREST .or() parsing. The atomic UPDATE below is the
+      // real race-condition guard — not the SELECT.
       const { data: nextPending } = await serviceClient
         .from('telecall_assignments')
-        .select('id, assigned_to')
+        .select('id')
         .eq('campaign_id', campaign_id)
         .eq('status', 'pending')
-        .or(`assigned_to.is.null,assigned_to.neq.${userEmail}`)  // NULL rows are unassigned — neq() alone skips them
         .order('priority_score', { ascending: false })
-        .order('id', { ascending: true })        // stable secondary sort
+        .order('id', { ascending: true })
         .limit(1)
         .maybeSingle()
 
       if (!nextPending) {
-        // Also check if there's a 'pending' row already assigned to this user (resume)
-        const { data: myPending } = await serviceClient
-          .from('telecall_assignments')
-          .select('id')
-          .eq('campaign_id', campaign_id)
-          .eq('status', 'pending')
-          .eq('assigned_to', userEmail)
-          .order('priority_score', { ascending: false })
-          .limit(1)
-          .maybeSingle()
-        if (!myPending) {
-          return new Response(JSON.stringify({ success: true, assignment: null }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
-        }
-        // Resume the user's own pending record
-        const { data: resumeFull } = await serviceClient
-          .from('telecall_assignments')
-          .select(CUST_SELECT)
-          .eq('id', myPending.id)
-          .single()
-        return new Response(JSON.stringify({ success: true, assignment: resumeFull }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+        return new Response(JSON.stringify({ success: true, assignment: null }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
       }
 
-      // Claim it atomically — status must still be 'pending' to prevent race
+      // Step 2: atomically claim — UPDATE only succeeds if status is STILL 'pending'
       const { data: claimResult, error: claimErr } = await serviceClient
         .from('telecall_assignments')
         .update({ status: 'assigned', assigned_to: userEmail, assigned_at: new Date().toISOString() })
@@ -271,14 +250,13 @@ export default async function handler(req: Request) {
 
       if (claimErr) throw new Error(`Claim failed: ${claimErr.message}`)
 
-      // If claim was stolen by another telecaller (race), retry once
+      // Step 3: if race condition (another telecaller claimed same row), retry once
       if (!claimResult) {
         const { data: retry } = await serviceClient
           .from('telecall_assignments')
           .select('id')
           .eq('campaign_id', campaign_id)
           .eq('status', 'pending')
-          .or(`assigned_to.is.null,assigned_to.neq.\${userEmail}`)
           .order('priority_score', { ascending: false })
           .order('id', { ascending: true })
           .limit(1)
