@@ -17,17 +17,19 @@ export default async function handler(req: Request) {
 
     const authClient = createClient(supabaseUrl, anonKey)
     const { data: { user }, error: authErr } = await authClient.auth.getUser(token)
-    if (authErr || !user) throw new Error('Invalid token')
+    if (authErr || !user) throw new Error(`Auth failed: ${authErr?.message || 'no user returned for token'}`)
 
     const serviceClient = createClient(supabaseUrl, serviceRoleKey)
 
-    const { data: userData } = await serviceClient
+    const { data: userData, error: userErr } = await serviceClient
       .from('users')
       .select('email, role, full_name')
       .eq('id', user.id)
-      .single()
+      .maybeSingle()
 
-    if (!userData) throw new Error('User not found')
+    if (userErr) throw new Error(`DB error looking up user ${user.id}: ${userErr.message}`)
+    if (!userData) throw new Error(`User not found in public.users for auth id: ${user.id} email: ${user.email}`)
+    if (!userData.email) throw new Error(`User found but email is null for id: ${user.id}`)
     const userEmail = userData.email
     const isAdmin = userData.role === 'admin'
     const callerName = userData.full_name || userEmail
@@ -598,8 +600,10 @@ export default async function handler(req: Request) {
     throw new Error(`Unknown action: ${action}`)
 
   } catch (err) {
-    const message = err instanceof Error ? err.message : 'Unknown error'
-    return new Response(JSON.stringify({ success: false, error: message }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+    const message = err instanceof Error ? err.message : String(err)
+    const stack = err instanceof Error ? err.stack : ''
+    console.error('TELECALLING_ERROR:', message, stack)
+    return new Response(JSON.stringify({ success: false, error: message, stack }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
   }
 }
 
