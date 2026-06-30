@@ -409,12 +409,8 @@ export default function ServiceBookingPage() {
                       </td>
                       {/* Vehicle */}
                       <td style={{ padding: '0.5rem 0.65rem' }}>
-                        {b.reg_number && b.reg_number !== 'UNKNOWN'
-                          ? <><div style={{ fontWeight: 700, color: '#334155', fontSize: '0.78rem' }}>{b.reg_number}</div>
-                              <div style={{ color: '#94a3b8', fontSize: '0.68rem' }}>{[b.model, b.fuel_type].filter(Boolean).join(' · ')}</div></>
-                          : <><div style={{ fontWeight: 600, color: '#334155', fontSize: '0.78rem' }}>{b.model || '—'}</div>
-                              {b.fuel_type && <div style={{ color: '#94a3b8', fontSize: '0.68rem' }}>{b.fuel_type}</div>}</>
-                        }
+                        <div style={{ fontWeight: 700, color: '#334155', fontSize: '0.78rem' }}>{b.reg_number || '—'}</div>
+                        {(b.model || b.fuel_type) && <div style={{ color: '#94a3b8', fontSize: '0.68rem' }}>{[b.model, b.fuel_type].filter(Boolean).join(' · ')}</div>}
                       </td>
                       {/* Appointment */}
                       <td style={{ padding: '0.5rem 0.65rem', whiteSpace: 'nowrap' }}>

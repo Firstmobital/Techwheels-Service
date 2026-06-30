@@ -44,7 +44,7 @@ function normalizePhone(raw: string): { e164: string; local10: string } {
 
 // ─── FIX 3: Load full vehicle history from DMS ────────────────────────────────
 async function loadVehicleHistory(phone10: string, _phoneE164: string): Promise<Record<string, unknown> | null> {
-  const { data } = await sb.from('all_service_data')
+  const { data, error } = await sb.from('all_service_data')
     .select(`
       id, first_name, last_name, vehicle_registration_number, model,
       vehicle_sale_date, chassis_no,
@@ -59,6 +59,7 @@ async function loadVehicleHistory(phone10: string, _phoneE164: string): Promise<
     .ilike('contact_phones', `%${phone10}%`)
     .order('last_service_date', { ascending: false })
     .limit(1)
+  if (error) console.error(`loadVehicleHistory error for ${phone10}:`, error.message)
   return data?.[0] as Record<string, unknown> | null
 }
 
@@ -591,9 +592,9 @@ Deno.serve(async (req) => {
         appointment_date:     appointmentDate,
         booking_time:         bookingTime,
         branch:               branchToUse,
-        reg_number:           (conv?.reg_number as string) || (vehicle?.vehicle_registration_number as string) || null,
+        reg_number:           (conv?.reg_number as string) || (vehicle?.vehicle_registration_number as string) || 'UNKNOWN',
         model:                (conv?.model as string) || (vehicle?.model as string) || null,
-        customer_name:        (conv?.customer_name as string) || `${vehicle?.first_name || ''} ${vehicle?.last_name || ''}`.trim() || null,
+        customer_name:        (conv?.customer_name as string) || `${vehicle?.first_name || ''} ${vehicle?.last_name || ''}`.trim() || 'Valued Customer',
         customer_phone:       from10,
         service_type:         bookingServiceType,
         complaint_description: vehicleIssues || null,
@@ -880,9 +881,9 @@ Deno.serve(async (req) => {
       appointment_date: extracted.date,
       booking_time: bookingTime,
       branch: branchToUse,
-      reg_number: (conv!.reg_number as string) || (vehicle?.vehicle_registration_number as string) || null,
+      reg_number: (conv!.reg_number as string) || (vehicle?.vehicle_registration_number as string) || 'UNKNOWN',
       model: (conv!.model as string) || (vehicle?.model as string) || null,
-      customer_name: (conv!.customer_name as string) || `${vehicle?.first_name || ''} ${vehicle?.last_name || ''}`.trim() || null,
+      customer_name: (conv!.customer_name as string) || `${vehicle?.first_name || ''} ${vehicle?.last_name || ''}`.trim() || 'Valued Customer',
       customer_phone: from10,
       service_type: (conv!.service_type as string) || 'Paid Service',
       complaint_description: (conv!.complaint_description as string) || null,
