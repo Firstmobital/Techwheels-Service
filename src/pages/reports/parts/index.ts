@@ -4,6 +4,7 @@ import PartsOrderStatusReport from './PartsOrderStatusReport'
 import BackOrderPartsReport from './BackOrderPartsReport'
 import PartsInStockReport from './PartsInStockReport'
 import PartsHighDemandReport from './PartsHighDemandReport'
+import PartsStockDisciplineReport from './PartsStockDisciplineReport'
 
 import type { ReportCategoryDefinition, ReportDefinition } from '../types'
 
@@ -61,5 +62,13 @@ export const PARTS_REPORTS: ReportDefinition[] = [
     description: 'Parts with high demand identified using order and stock data analysis.',
     cardHint: 'Best for identifying critical parts needing inventory attention.',
     Component: PartsHighDemandReport,
+  },
+  {
+    id: 'parts-stock-discipline',
+    categoryId: 'parts',
+    label: 'Stock Discipline & Reorder',
+    description: '20-day cover analysis with pipeline deduction, dead stock flag, and order sheet export.',
+    cardHint: 'Best for generating a ready-to-place reorder list with shortage priorities.',
+    Component: PartsStockDisciplineReport,
   },
 ]
