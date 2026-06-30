@@ -17,7 +17,7 @@ const PV_MODELS = [
   'Harrier', 'Safari', 'Curvv', 'Hexa', 'Sierra',
 ]
 const EV_MODELS = [
-  'Nexon EV', 'Tigor EV', 'Harrier EV', 'Curvv EV', 'Xpres T EV',
+  'Nexon EV', 'Punch EV', 'Tigor EV', 'Harrier EV', 'Curvv EV', 'Xpres T EV',
 ]
 
 const TIME_SLOTS = [
@@ -59,7 +59,7 @@ interface ServiceBooking {
   wa_conversation_id: string | null; wa_opt_in: boolean; jc_number: string | null
   converted_at: string | null; created_at: string; updated_at: string
   telecall_assignment_id: number | null; telecall_campaign_id: number | null
-  call_notes: string | null
+  call_notes: string | null; cre_name: string | null; driver_name: string | null
 }
 interface FollowUp {
   id: number; booking_id: number; follow_up_date: string; channel: string | null
@@ -115,6 +115,8 @@ export default function ServiceBookingPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [branches, setBranches] = useState<string[]>([])
+  const [creUsers, setCreUsers] = useState<{ id: string; full_name: string }[]>([])
+  const [drivers, setDrivers] = useState<{ id: string; full_name: string }[]>([])
 
   const today = new Date()
   const firstOfMonth = new Date(today.getFullYear(), today.getMonth(), 1).toISOString().split('T')[0]
@@ -141,6 +143,10 @@ export default function ServiceBookingPage() {
   async function loadBranchesAndSAs() {
     const branchRes = await supabase.from('service_branches').select('name').order('name')
     if (branchRes.data) setBranches((branchRes.data as { name: string }[]).map(b => b.name))
+    const creRes = await supabase.from('users').select('id, full_name').in('role', ['admin', 'manager', 'staff']).order('full_name')
+    if (creRes.data) setCreUsers((creRes.data as { id: string; full_name: string }[]).filter(u => u.full_name))
+    const driverRes = await supabase.from('users').select('id, full_name').eq('role', 'driver').order('full_name')
+    if (driverRes.data) setDrivers((driverRes.data as { id: string; full_name: string }[]).filter(u => u.full_name))
   }
 
   async function loadBookings() {
@@ -516,10 +522,21 @@ export default function ServiceBookingPage() {
                     <input style={inp} inputMode="numeric" placeholder="10-digit mobile" value={form.customer_phone ?? ''} onChange={e => setForm(p => ({ ...p, customer_phone: e.target.value }))} />
                   </Field>
 
+                  <Field label="Alt Phone">
+                    <input style={inp} inputMode="numeric" placeholder="Alternative number (optional)" value={form.alt_phone ?? ''} onChange={e => setForm(p => ({ ...p, alt_phone: e.target.value || null }))} />
+                  </Field>
+
                   <FieldGroup title="Vehicle Details" icon="🚗" />
 
                   <Field label="Registration Number" required>
                     <input style={inp} placeholder="e.g. RJ14XX1234" value={form.reg_number ?? ''} onChange={e => setForm(p => ({ ...p, reg_number: e.target.value.toUpperCase() }))} />
+                  </Field>
+
+                  <Field label="Fuel Type">
+                    <select style={selInp} value={form.fuel_type ?? ''} onChange={e => setForm(p => ({ ...p, fuel_type: e.target.value, model: null }))}>
+                      <option value="">Select…</option>
+                      {FUEL_TYPES.map(f => <option key={f}>{f}</option>)}
+                    </select>
                   </Field>
 
                   <Field label="Model">
@@ -529,13 +546,6 @@ export default function ServiceBookingPage() {
                         ? PV_MODELS.map(m => <option key={m}>{m}</option>)
                         : EV_MODELS.map(m => <option key={m}>{m}</option>)
                       }
-                    </select>
-                  </Field>
-
-                  <Field label="Fuel Type">
-                    <select style={selInp} value={form.fuel_type ?? ''} onChange={e => setForm(p => ({ ...p, fuel_type: e.target.value }))}>
-                      <option value="">Select…</option>
-                      {FUEL_TYPES.map(f => <option key={f}>{f}</option>)}
                     </select>
                   </Field>
 
@@ -570,9 +580,24 @@ export default function ServiceBookingPage() {
                     </Field>
                   )}
 
+                  {form.pickup_required && (
+                    <Field label="Driver Name">
+                      <select style={selInp} value={form.driver_name ?? ''} onChange={e => setForm(p => ({ ...p, driver_name: e.target.value || null }))}>
+                        <option value="">Select driver…</option>
+                        {drivers.map(d => <option key={d.id} value={d.full_name}>{d.full_name}</option>)}
+                      </select>
+                    </Field>
+                  )}
+
                   {/* Telecalling section */}
                   {form.booking_source === 'Telecalling' && (<>
                     <FieldGroup title="Telecalling Details" icon="📞" />
+                    <Field label="CRE Name">
+                      <select style={selInp} value={form.cre_name ?? ''} onChange={e => setForm(p => ({ ...p, cre_name: e.target.value || null }))}>
+                        <option value="">Select CRE…</option>
+                        {creUsers.map(u => <option key={u.id} value={u.full_name}>{u.full_name}</option>)}
+                      </select>
+                    </Field>
                     <Field label="Caller Name">
                       <input style={inp} placeholder="Who made the call" value={form.caller_name ?? ''} onChange={e => setForm(p => ({ ...p, caller_name: e.target.value }))} />
                     </Field>
