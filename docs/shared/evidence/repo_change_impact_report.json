@@ -1,15 +1,23 @@
 {
-  "generated_at_utc": "2026-06-30T06:56:40.500Z",
+  "generated_at_utc": "2026-06-30T07:24:59.822Z",
   "mode": "pending_working_tree_changes",
   "advisory_only": true,
   "read_only": true,
   "note": "Informational pre-check for Repository Transaction Framework Stage 4 (Validation) / Stage 5 (Publication). Does not block either stage.",
   "commit_range": null,
   "commits": null,
-  "total_files_changed": 2,
+  "total_files_changed": 5,
   "files": [
     {
       "path": "docs/Implementation_plans/retention_validation_report.json",
+      "old_path": null,
+      "git_status": "modified",
+      "category": "generated_artifact",
+      "category_label": "Generated artifact",
+      "note": null
+    },
+    {
+      "path": "docs/shared/evidence/repo_change_impact_report.json",
       "old_path": null,
       "git_status": "modified",
       "category": "generated_artifact",
@@ -23,14 +31,48 @@
       "category": "generated_artifact",
       "category_label": "Generated artifact",
       "note": null
+    },
+    {
+      "path": "scripts/git-safe-publish.sh",
+      "old_path": null,
+      "git_status": "modified",
+      "category": "automation_script",
+      "category_label": "Automation script (general repository automation)",
+      "note": "Publication mechanism (Transaction Framework Stage 5) — highest sensitivity; this tool does not modify it and was explicitly instructed not to."
+    },
+    {
+      "path": "scripts/publish_readiness_check.mjs",
+      "old_path": null,
+      "git_status": "modified",
+      "category": "automation_script",
+      "category_label": "Automation script (general repository automation)",
+      "note": null
     }
   ],
   "categories_present": [
+    {
+      "category": "automation_script",
+      "label": "Automation script (general repository automation)",
+      "files": [
+        "scripts/git-safe-publish.sh",
+        "scripts/publish_readiness_check.mjs"
+      ],
+      "owning_authority": "docs/shared/reference/catalog/task_library/TRANSACTION_FRAMEWORK.md (names scripts/git-safe-publish.sh for Stage 5); SYNC_PROTOCOL.md Practical Verification Gate.",
+      "required_doc_updates": "None unless its documented behavior changes — then update whichever authority names it.",
+      "required_validation": [
+        "node --check <file> (or bash -n for .sh)"
+      ],
+      "practical_verification": "SYNC_PROTOCOL.md Practical Verification Gate, \"For scripts\" (mandatory). If the file is scripts/git-safe-publish.sh specifically, the five additional script-specific checks in that Gate also apply (no push during test; stops on validation failure; stops on rebase conflict; prints AUDIT_PROMPT; does not scan local_folder/backups/).",
+      "publish_safe_without_review": false,
+      "review_recommended": true,
+      "review_reason": "Always review — repository automation, and at maximum sensitivity if the file is scripts/git-safe-publish.sh (the Publication mechanism for every transaction type)."
+    },
     {
       "category": "generated_artifact",
       "label": "Generated artifact",
       "files": [
         "docs/Implementation_plans/retention_validation_report.json",
+        "docs/shared/evidence/repo_change_impact_report.json",
         "docs/shared/evidence/repo_health_audit_report.json"
       ],
       "owning_authority": "SYNC_PROTOCOL.md Generated Artifact Rule; docs/shared/reference/DATABASE_TRUTH.md for DB dumps/manifests specifically.",
@@ -45,9 +87,10 @@
     }
   ],
   "validation_commands_to_run": [
+    "node --check <file> (or bash -n for .sh)",
     "npm run docs:validate:health"
   ],
   "unknown_or_unmapped_files": [],
-  "independent_review_recommended_before_publication": false,
+  "independent_review_recommended_before_publication": true,
   "push_should_remain_stopped_until_reviewed": null
 }

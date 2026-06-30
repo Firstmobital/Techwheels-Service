@@ -23,6 +23,20 @@ const HEALTH_REPORT_PATH = path.resolve(ROOT, 'docs/shared/evidence/repo_health_
 const DISPOSITION_PATH = path.resolve(ROOT, 'docs/shared/evidence/publication_readiness_disposition.json')
 const DB_LEDGER_PATH = path.resolve(ROOT, 'docs/shared/reference/DB_CHANGE_LEDGER.md')
 
+// Repository-owned outputs rewritten by the publication validation pipeline
+// (docs:validate, docs:validate:health, docs:impact). They must not invalidate
+// readiness when they are the only working-tree delta after validation runs.
+const PUBLICATION_PIPELINE_ARTIFACTS = new Set([
+  'docs/shared/evidence/repo_change_impact_report.json',
+  'docs/shared/evidence/repo_health_audit_report.json',
+  'docs/Implementation_plans/retention_validation_report.json',
+])
+
+const READINESS_DISPOSITION_EVIDENCE = new Set([
+  'docs/shared/evidence/publication_readiness_disposition.json',
+  'docs/shared/evidence/PUBLICATION_READINESS_DISPOSITION_2026-06-30.md',
+])
+
 function rel(abs) {
   return path.relative(ROOT, abs).replace(/\\/g, '/')
 }
@@ -74,6 +88,56 @@ function sameSet(a, b) {
 
 function comparableImpactFiles(files) {
   return files.filter((file) => file !== 'docs/shared/evidence/repo_change_impact_report.json').sort()
+}
+
+function isPublicationPipelineArtifact(filePath) {
+  return PUBLICATION_PIPELINE_ARTIFACTS.has(filePath)
+}
+
+function isPipelineArtifactOnlyWorkingTreeDelta(workingTreeFiles) {
+  return (
+    workingTreeFiles.length > 0 &&
+    workingTreeFiles.every((file) => PUBLICATION_PIPELINE_ARTIFACTS.has(file))
+  )
+}
+
+function resolveReadinessScope(workingTreeFiles, unpushedCommitFiles, disposition) {
+  const fromUnpushed = publishableChangeSetFiles(
+    comparableImpactFiles(unpushedCommitFiles),
+    disposition,
+  )
+  const substantiveWorkingTree = comparableImpactFiles(workingTreeFiles)
+  const fromWorkingTree = publishableChangeSetFiles(substantiveWorkingTree, disposition)
+  const unpushedSet = new Set(comparableImpactFiles(unpushedCommitFiles))
+
+  const dispositionEvidenceOnly =
+    substantiveWorkingTree.length > 0 &&
+    substantiveWorkingTree.every((file) => READINESS_DISPOSITION_EVIDENCE.has(file))
+
+  const unpushedStackRefresh =
+    substantiveWorkingTree.length > 0 &&
+    substantiveWorkingTree.every((file) => unpushedSet.has(file)) &&
+    fromUnpushed.length > fromWorkingTree.length
+
+  const useUnpushed =
+    fromUnpushed.length > 0 &&
+    (substantiveWorkingTree.length === 0 ||
+      isPipelineArtifactOnlyWorkingTreeDelta(workingTreeFiles) ||
+      dispositionEvidenceOnly ||
+      unpushedStackRefresh)
+
+  if (useUnpushed) {
+    return { files: fromUnpushed, scope: 'unpushed commits' }
+  }
+  if (fromWorkingTree.length > 0) {
+    return { files: fromWorkingTree, scope: 'working tree' }
+  }
+  return { files: fromUnpushed, scope: 'unpushed commits' }
+}
+
+function impactModeAccepted(mode, readinessScope) {
+  if (mode === 'pending_working_tree_changes') return true
+  return readinessScope === 'unpushed commits' && mode === 'incoming_commit_range'
 }
 
 function fingerprintChangeSet(files) {
@@ -173,19 +237,26 @@ async function main() {
   const disposition = await readJson(DISPOSITION_PATH)
   const ledgerText = await readText(DB_LEDGER_PATH)
   const workingTreeFiles = getGitChanges()
-  const unpushedCommitFiles = workingTreeFiles.length === 0 ? getUnpushedCommitFiles() : []
-  const readinessFiles = workingTreeFiles.length > 0 ? workingTreeFiles : unpushedCommitFiles
-  const readinessScope = workingTreeFiles.length > 0 ? 'working tree' : 'unpushed commits'
-  const comparableReadinessFiles = publishableChangeSetFiles(
-    comparableImpactFiles(readinessFiles),
+  const unpushedCommitFiles = getUnpushedCommitFiles()
+  const { files: comparableReadinessFiles, scope: readinessScope } = resolveReadinessScope(
+    workingTreeFiles,
+    unpushedCommitFiles,
     disposition,
   )
   const dispositionReady = dispositionMatchesChangeSet(disposition, comparableReadinessFiles)
 
   if (impact.__read_error) {
     add(blockers, 'BLOCKER', 'impact', `Cannot read ${rel(IMPACT_REPORT_PATH)}: ${impact.__read_error}`, 'Run `npm run docs:impact` and inspect the generated report.')
-  } else if (impact.mode !== 'pending_working_tree_changes') {
-    add(blockers, 'BLOCKER', 'impact', `Impact report mode is ${impact.mode || '(missing)'}, not pending_working_tree_changes.`, 'Run `npm run docs:impact` immediately before `npm run publish:ready`.')
+  } else if (!impactModeAccepted(impact.mode, readinessScope)) {
+    add(
+      blockers,
+      'BLOCKER',
+      'impact',
+      `Impact report mode is ${impact.mode || '(missing)'}, not accepted for ${readinessScope}.`,
+      'Run `npm run docs:impact` immediately before `npm run publish:ready`. When the substantive working tree is clean and unpushed commits exist, git-safe-publish may refresh impact via `--range @{u}..HEAD`.',
+    )
+  } else if (readinessScope === 'unpushed commits') {
+    // Validation pipeline artifacts may refresh without changing the publishable commit stack.
   } else {
     const reportedFiles = (impact.files || []).map((file) => file.path).sort()
     const comparableReportedFiles = publishableChangeSetFiles(
@@ -230,7 +301,7 @@ async function main() {
     )
   }
 
-  if (!impact.__read_error && impact.mode === 'pending_working_tree_changes') {
+  if (!impact.__read_error && impactModeAccepted(impact.mode, readinessScope)) {
     const categories = impact.categories_present || []
     const categoryByName = new Map(categories.map((cat) => [cat.category, cat]))
     const unknown = impact.unknown_or_unmapped_files || []
@@ -312,6 +383,9 @@ async function main() {
     const generated = categoryByName.get('generated_artifact')
     if (generated) {
       for (const filePath of generated.files || []) {
+        if (isPublicationPipelineArtifact(filePath)) {
+          continue
+        }
         if (dispositionReady && generatedArtifactConfirmed(disposition, filePath)) {
           continue
         }

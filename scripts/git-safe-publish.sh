@@ -396,6 +396,34 @@ echo
 echo "No new commits came in from origin/main. Safe to push."
 
 echo
+echo "---- Refresh publication validation evidence before readiness gate ----"
+if ! npm run docs:validate; then
+  echo >&2
+  echo "Error: npm run docs:validate failed during pre-push readiness refresh. Nothing was pushed." >&2
+  exit 2
+fi
+
+if npm run docs:validate:health; then
+  : # no advisory findings
+else
+  health_exit_code=$?
+  echo "Note: health audit reported advisory findings during pre-push readiness refresh (exit code $health_exit_code)."
+  echo "This is informational only and does not block push (see docs/STRUCTURE_GUIDE.md Section 24)."
+fi
+
+publish_upstream="$(git rev-parse --abbrev-ref --symbolic-full-name @{u} 2>/dev/null || true)"
+unpushed_count=0
+if [[ -n "$publish_upstream" ]]; then
+  unpushed_count="$(git rev-list --count "${publish_upstream}..HEAD")"
+fi
+
+if [[ "$unpushed_count" -gt 0 ]]; then
+  node scripts/repo_change_impact.mjs --range "${publish_upstream}..HEAD"
+else
+  node scripts/repo_change_impact.mjs
+fi
+
+echo
 echo "---- npm run publish:ready (blocking readiness gate) ----"
 if ! npm run publish:ready; then
   echo >&2
