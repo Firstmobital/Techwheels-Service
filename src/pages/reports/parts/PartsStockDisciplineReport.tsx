@@ -3,7 +3,6 @@ import * as XLSX from 'xlsx'
 import { supabase } from '../../../lib/supabase'
 import type { ReportViewProps } from '../types'
 import { ReportLoadingState } from '../components/ReportLoadingState'
-import { ReportErrorState } from '../components/ReportErrorState'
 
 const DAYS_COVER = 20
 const CALENDAR_DAYS = 90
