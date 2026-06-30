@@ -1,47 +1,15 @@
 {
-  "generated_at_utc": "2026-06-30T06:48:50.473Z",
+  "generated_at_utc": "2026-06-30T06:56:40.500Z",
   "mode": "pending_working_tree_changes",
   "advisory_only": true,
   "read_only": true,
   "note": "Informational pre-check for Repository Transaction Framework Stage 4 (Validation) / Stage 5 (Publication). Does not block either stage.",
   "commit_range": null,
   "commits": null,
-  "total_files_changed": 25,
+  "total_files_changed": 2,
   "files": [
     {
       "path": "docs/Implementation_plans/retention_validation_report.json",
-      "old_path": null,
-      "git_status": "modified",
-      "category": "generated_artifact",
-      "category_label": "Generated artifact",
-      "note": null
-    },
-    {
-      "path": "docs/Implementation_plans/webversion/categories/bodyshop/active/BODYSHOP-QUEUE-001_CANONICAL_STAGE_WORKLIST_BACKEND_PLAN_2026-06-20.md",
-      "old_path": null,
-      "git_status": "modified",
-      "category": "implementation_plan",
-      "category_label": "Implementation plan",
-      "note": null
-    },
-    {
-      "path": "docs/Implementation_plans/webversion/categories/bodyshop/active/Bodyshop-Flow.md",
-      "old_path": null,
-      "git_status": "modified",
-      "category": "implementation_plan",
-      "category_label": "Implementation plan",
-      "note": null
-    },
-    {
-      "path": "docs/shared/active/CHANGE_LOG.md",
-      "old_path": null,
-      "git_status": "modified",
-      "category": "documentation_reference_truth",
-      "category_label": "Documentation / reference truth",
-      "note": null
-    },
-    {
-      "path": "docs/shared/evidence/repo_change_impact_report.json",
       "old_path": null,
       "git_status": "modified",
       "category": "generated_artifact",
@@ -55,276 +23,15 @@
       "category": "generated_artifact",
       "category_label": "Generated artifact",
       "note": null
-    },
-    {
-      "path": "docs/shared/reference/CURRENT_STATE.md",
-      "old_path": null,
-      "git_status": "modified",
-      "category": "documentation_reference_truth",
-      "category_label": "Documentation / reference truth",
-      "note": null
-    },
-    {
-      "path": "docs/shared/reference/DB_CHANGE_LEDGER.md",
-      "old_path": null,
-      "git_status": "modified",
-      "category": "database_schema_truth",
-      "category_label": "Database / schema truth (incl. change-control artifacts)",
-      "note": "DB process doc (DATABASE_TRUTH.md \"Related Process Docs\" — operational detail, not the authority itself)."
-    },
-    {
-      "path": "docs/shared/reference/SYNC_PROTOCOL.md",
-      "old_path": null,
-      "git_status": "modified",
-      "category": "repository_authority",
-      "category_label": "Repository authority (the operating contract itself)",
-      "note": null
-    },
-    {
-      "path": "docs/shared/reference/catalog/task_library/INDEX.md",
-      "old_path": null,
-      "git_status": "modified",
-      "category": "repository_authority",
-      "category_label": "Repository authority (the operating contract itself)",
-      "note": null
-    },
-    {
-      "path": "docs/shared/reference/catalog/task_library/TRANSACTION_FRAMEWORK.md",
-      "old_path": null,
-      "git_status": "modified",
-      "category": "repository_authority",
-      "category_label": "Repository authority (the operating contract itself)",
-      "note": null
-    },
-    {
-      "path": "package.json",
-      "old_path": null,
-      "git_status": "modified",
-      "category": "configuration",
-      "category_label": "Configuration",
-      "note": null
-    },
-    {
-      "path": "scripts/git-safe-publish.sh",
-      "old_path": null,
-      "git_status": "modified",
-      "category": "automation_script",
-      "category_label": "Automation script (general repository automation)",
-      "note": "Publication mechanism (Transaction Framework Stage 5) — highest sensitivity; this tool does not modify it and was explicitly instructed not to."
-    },
-    {
-      "path": "scripts/repo_change_impact.mjs",
-      "old_path": null,
-      "git_status": "modified",
-      "category": "automation_script",
-      "category_label": "Automation script (general repository automation)",
-      "note": null
-    },
-    {
-      "path": "src/lib/api/settings.ts",
-      "old_path": null,
-      "git_status": "modified",
-      "category": "application_code",
-      "category_label": "Application code",
-      "note": null
-    },
-    {
-      "path": "supabase/backups/full_metadata.sql",
-      "old_path": null,
-      "git_status": "modified",
-      "category": "generated_artifact",
-      "category_label": "Generated artifact",
-      "note": null
-    },
-    {
-      "path": "supabase/evidence/authoritative_metadata_manifest.json",
-      "old_path": null,
-      "git_status": "modified",
-      "category": "generated_artifact",
-      "category_label": "Generated artifact",
-      "note": null
-    },
-    {
-      "path": "supabase/evidence/execution_promotion_log.md",
-      "old_path": null,
-      "git_status": "modified",
-      "category": "evidence",
-      "category_label": "Evidence",
-      "note": "DB-domain evidence (DATABASE_TRUTH.md Inspection Rule 6 names supabase/evidence/post_dump_verified_promotions.md specifically as part of the DB_TRUTH_PROTOCOL.md composite-truth workflow)."
-    },
-    {
-      "path": "supabase/evidence/post_dump_verified_promotions.md",
-      "old_path": null,
-      "git_status": "modified",
-      "category": "evidence",
-      "category_label": "Evidence",
-      "note": "DB-domain evidence (DATABASE_TRUTH.md Inspection Rule 6 names supabase/evidence/post_dump_verified_promotions.md specifically as part of the DB_TRUTH_PROTOCOL.md composite-truth workflow)."
-    },
-    {
-      "path": "docs/shared/evidence/PUBLICATION_READINESS_DISPOSITION_2026-06-30.md",
-      "old_path": null,
-      "git_status": "untracked (new)",
-      "category": "evidence",
-      "category_label": "Evidence",
-      "note": null
-    },
-    {
-      "path": "docs/shared/evidence/publication_readiness_disposition.json",
-      "old_path": null,
-      "git_status": "untracked (new)",
-      "category": "evidence",
-      "category_label": "Evidence",
-      "note": null
-    },
-    {
-      "path": "scripts/publish_readiness_check.mjs",
-      "old_path": null,
-      "git_status": "untracked (new)",
-      "category": "automation_script",
-      "category_label": "Automation script (general repository automation)",
-      "note": null
-    },
-    {
-      "path": "supabase/exec_success_migrations/sql/20260630120000_global_settings_model_options.sql",
-      "old_path": null,
-      "git_status": "untracked (new)",
-      "category": "database_schema_truth",
-      "category_label": "Database / schema truth (incl. change-control artifacts)",
-      "note": "Change-control artifact (DATABASE_TRUTH.md inventory table) — not a truth dump."
-    },
-    {
-      "path": "supabase/exec_success_migrations/sql_check/20260630120000_global_settings_model_options_checks.sql",
-      "old_path": null,
-      "git_status": "untracked (new)",
-      "category": "database_schema_truth",
-      "category_label": "Database / schema truth (incl. change-control artifacts)",
-      "note": "Change-control artifact (DATABASE_TRUTH.md inventory table) — not a truth dump."
-    },
-    {
-      "path": "supabase/sql_checks/20260629100000_auto_service_reminders_checks.sql",
-      "old_path": null,
-      "git_status": "untracked (new)",
-      "category": "database_schema_truth",
-      "category_label": "Database / schema truth (incl. change-control artifacts)",
-      "note": "Change-control artifact (DATABASE_TRUTH.md inventory table) — not a truth dump."
     }
   ],
   "categories_present": [
-    {
-      "category": "application_code",
-      "label": "Application code",
-      "files": [
-        "src/lib/api/settings.ts"
-      ],
-      "owning_authority": ".instructions.md Section 2 item 1; docs/DOCS_IMPACT_MATRIX.md; docs/shared/README.md; docs/shared/reference/CURRENT_STATE.md",
-      "required_doc_updates": "Per docs/DOCS_IMPACT_MATRIX.md row for the matched path: CURRENT_STATE.md snapshot fields, CHANGE_LOG.md entry, README.md section if architecture/logic/contracts changed.",
-      "required_validation": [
-        "npm run docs:validate"
-      ],
-      "practical_verification": "Standard feature/bug-fix verification for the changed behavior. If the change touches business logic, the Cross-Platform Parity Protocol (SYNC_PROTOCOL.md) applies: run `npx --prefix mobile tsc --noEmit -p mobile/tsconfig.json` if mobile parity is affected, and the Practical Verification Gate does not apply unless the file is also a script/automation.",
-      "publish_safe_without_review": false,
-      "review_recommended": true,
-      "review_reason": "Business-logic changes require an explicit Web-Mobile Parity declaration before merge (SYNC_PROTOCOL.md Merge Guard); standard code review otherwise."
-    },
-    {
-      "category": "automation_script",
-      "label": "Automation script (general repository automation)",
-      "files": [
-        "scripts/git-safe-publish.sh",
-        "scripts/repo_change_impact.mjs",
-        "scripts/publish_readiness_check.mjs"
-      ],
-      "owning_authority": "docs/shared/reference/catalog/task_library/TRANSACTION_FRAMEWORK.md (names scripts/git-safe-publish.sh for Stage 5); SYNC_PROTOCOL.md Practical Verification Gate.",
-      "required_doc_updates": "None unless its documented behavior changes — then update whichever authority names it.",
-      "required_validation": [
-        "node --check <file> (or bash -n for .sh)"
-      ],
-      "practical_verification": "SYNC_PROTOCOL.md Practical Verification Gate, \"For scripts\" (mandatory). If the file is scripts/git-safe-publish.sh specifically, the five additional script-specific checks in that Gate also apply (no push during test; stops on validation failure; stops on rebase conflict; prints AUDIT_PROMPT; does not scan local_folder/backups/).",
-      "publish_safe_without_review": false,
-      "review_recommended": true,
-      "review_reason": "Always review — repository automation, and at maximum sensitivity if the file is scripts/git-safe-publish.sh (the Publication mechanism for every transaction type)."
-    },
-    {
-      "category": "configuration",
-      "label": "Configuration",
-      "files": [
-        "package.json"
-      ],
-      "owning_authority": ".instructions.md Section 2 item 6; SYNC_PROTOCOL.md Classification table row \"Configuration\".",
-      "required_doc_updates": "CHANGE_LOG.md entry if an env var or config dependency changed (SYNC_PROTOCOL.md Update Triggers).",
-      "required_validation": [
-        "npm run docs:validate"
-      ],
-      "practical_verification": "Confirm the app still builds/starts with the new configuration if the change is behavior-affecting.",
-      "publish_safe_without_review": true,
-      "review_recommended": false,
-      "review_reason": "Recommend review if it touches secret/credential-shaped values or changes a build/CI-relevant script entry; not needed for cosmetic comments."
-    },
-    {
-      "category": "database_schema_truth",
-      "label": "Database / schema truth (incl. change-control artifacts)",
-      "files": [
-        "docs/shared/reference/DB_CHANGE_LEDGER.md",
-        "supabase/exec_success_migrations/sql/20260630120000_global_settings_model_options.sql",
-        "supabase/exec_success_migrations/sql_check/20260630120000_global_settings_model_options_checks.sql",
-        "supabase/sql_checks/20260629100000_auto_service_reminders_checks.sql"
-      ],
-      "owning_authority": "docs/shared/reference/DATABASE_TRUTH.md; docs/shared/reference/DB_CHANGE_PROTOCOL.md; docs/shared/reference/DB_CHANGE_LEDGER.md; .instructions.md Section 2 item 2 / Section 8",
-      "required_doc_updates": "DB_CHANGE_LEDGER.md row (DATABASE_TRUTH.md table: scripts/0N_*.sql, supabase/migrations/**, supabase/sql_checks/**, supabase/exec_success_migrations/** are change-control artifacts, not truth dumps).",
-      "required_validation": [
-        "npm run docs:validate"
-      ],
-      "practical_verification": "Apply + verify migration per DB_CHANGE_PROTOCOL.md workflow; never hand-edit a truth dump (DATABASE_TRUTH.md Inspection Rule 7).",
-      "publish_safe_without_review": false,
-      "review_recommended": true,
-      "review_reason": "Schema/RLS/function changes are the highest-risk category in this repository's own DB_CHANGE_PROTOCOL.md."
-    },
-    {
-      "category": "documentation_reference_truth",
-      "label": "Documentation / reference truth",
-      "files": [
-        "docs/shared/active/CHANGE_LOG.md",
-        "docs/shared/reference/CURRENT_STATE.md"
-      ],
-      "owning_authority": "docs/STRUCTURE_GUIDE.md (placement, Sections 2-3, 14); the specific reference doc's own domain.",
-      "required_doc_updates": "SYNC_PROTOCOL.md Index Update Rule if the doc is new/moved/materially changed (update the owning category README.md and docs/MASTER_INDEX.md if it introduces a new section that index doesn't list).",
-      "required_validation": [
-        "npm run docs:validate",
-        "npm run docs:validate:health"
-      ],
-      "practical_verification": "Not applicable unless the doc is itself a script/contract/prompt (then use the repository_authority verification instead).",
-      "publish_safe_without_review": true,
-      "review_recommended": false,
-      "review_reason": "Safe for wording/clarity edits. Recommend review only if the edit redefines a policy/protocol meaning rather than clarifying existing text."
-    },
-    {
-      "category": "evidence",
-      "label": "Evidence",
-      "files": [
-        "supabase/evidence/execution_promotion_log.md",
-        "supabase/evidence/post_dump_verified_promotions.md",
-        "docs/shared/evidence/PUBLICATION_READINESS_DISPOSITION_2026-06-30.md",
-        "docs/shared/evidence/publication_readiness_disposition.json"
-      ],
-      "owning_authority": "The relevant module/category/plan evidence/ folder (docs/STRUCTURE_GUIDE.md Sections 2-3).",
-      "required_doc_updates": "None beyond the evidence file itself, unless it underpins a promotion claim (STRUCTURE_GUIDE.md Section 28).",
-      "required_validation": [
-        "npm run docs:validate:health"
-      ],
-      "practical_verification": "Confirm the evidence reflects an actually-run command/test — No Assumption Protocol (.instructions.md Section 4); never fabricated.",
-      "publish_safe_without_review": true,
-      "review_recommended": false,
-      "review_reason": "Low risk on its own. Recommend review only if it is being cited to justify a promotion or Done+Verified status."
-    },
     {
       "category": "generated_artifact",
       "label": "Generated artifact",
       "files": [
         "docs/Implementation_plans/retention_validation_report.json",
-        "docs/shared/evidence/repo_change_impact_report.json",
-        "docs/shared/evidence/repo_health_audit_report.json",
-        "supabase/backups/full_metadata.sql",
-        "supabase/evidence/authoritative_metadata_manifest.json"
+        "docs/shared/evidence/repo_health_audit_report.json"
       ],
       "owning_authority": "SYNC_PROTOCOL.md Generated Artifact Rule; docs/shared/reference/DATABASE_TRUTH.md for DB dumps/manifests specifically.",
       "required_doc_updates": "None — never hand-edit a generated artifact.",
@@ -335,51 +42,12 @@
       "publish_safe_without_review": true,
       "review_recommended": false,
       "review_reason": "Safe if produced by its own generator in this same change. Recommend review only if it appears hand-edited (drift) rather than regenerated."
-    },
-    {
-      "category": "implementation_plan",
-      "label": "Implementation plan",
-      "files": [
-        "docs/Implementation_plans/webversion/categories/bodyshop/active/BODYSHOP-QUEUE-001_CANONICAL_STAGE_WORKLIST_BACKEND_PLAN_2026-06-20.md",
-        "docs/Implementation_plans/webversion/categories/bodyshop/active/Bodyshop-Flow.md"
-      ],
-      "owning_authority": "docs/Implementation_plans/INDEX.md + platform IMPLEMENTATION_TRACKER.md; docs/STRUCTURE_GUIDE.md Sections 3.5/5/7/19/30.",
-      "required_doc_updates": "Platform INDEX.md / IMPLEMENTATION_TRACKER.md if status changed; promotion-before-removal summary (STRUCTURE_GUIDE.md Section 28) if any item became Done+Verified.",
-      "required_validation": [
-        "npm run docs:validate:plans"
-      ],
-      "practical_verification": "STRUCTURE_GUIDE.md Section 30 Mandatory Plan Update Protocol: pre-read gate, update-scope gate, cross-file consistency gate, then `npm run docs:validate:plans`.",
-      "publish_safe_without_review": true,
-      "review_recommended": false,
-      "review_reason": "Safe for routine progress updates. Recommend review if an item is marked Done+Verified without a completed promotion summary."
-    },
-    {
-      "category": "repository_authority",
-      "label": "Repository authority (the operating contract itself)",
-      "files": [
-        "docs/shared/reference/SYNC_PROTOCOL.md",
-        "docs/shared/reference/catalog/task_library/INDEX.md",
-        "docs/shared/reference/catalog/task_library/TRANSACTION_FRAMEWORK.md"
-      ],
-      "owning_authority": "The file is itself an authority; governed by .instructions.md Sections 1, 3, 5, 6 (placement/minimalism/no-duplicate-authority) and docs/STRUCTURE_GUIDE.md.",
-      "required_doc_updates": "None by default beyond the file itself — but check whether the edit invalidates any other authority's cross-reference (SYNC_PROTOCOL.md Index Update Rule).",
-      "required_validation": [
-        "npm run docs:validate",
-        "npm run docs:validate:health"
-      ],
-      "practical_verification": "SYNC_PROTOCOL.md Practical Verification Gate, \"For prompts/task contracts\": dry-run reasoning test against a realistic example; confirm authority routing, Artifact Intake result, and validation commands named are still accurate.",
-      "publish_safe_without_review": false,
-      "review_recommended": true,
-      "review_reason": "Governs every future agent's behavior in this repository — always review."
     }
   ],
   "validation_commands_to_run": [
-    "npm run docs:validate",
-    "node --check <file> (or bash -n for .sh)",
-    "npm run docs:validate:health",
-    "npm run docs:validate:plans"
+    "npm run docs:validate:health"
   ],
   "unknown_or_unmapped_files": [],
-  "independent_review_recommended_before_publication": true,
+  "independent_review_recommended_before_publication": false,
   "push_should_remain_stopped_until_reviewed": null
 }
