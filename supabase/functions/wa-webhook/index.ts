@@ -562,9 +562,9 @@ Deno.serve(async (req) => {
       const bookingServiceType = serviceTypeMap[serviceTypeLabel] || 'Paid Service'
 
       const timeMap: Record<string, string> = {
-        '0_Morning':   'Morning',
-        '1_Afternoon': 'Afternoon',
-        '2_Evening':   'Evening',
+        '0_Morning':   '09:00:00',
+        '1_Afternoon': '13:00:00',
+        '2_Evening':   '17:00:00',
       }
       const bookingTime = timeMap[rawTime] || null
 
