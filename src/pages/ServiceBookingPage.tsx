@@ -116,7 +116,7 @@ export default function ServiceBookingPage() {
   const [error, setError] = useState('')
   const [branches, setBranches] = useState<string[]>([])
   const [creUsers, setCreUsers] = useState<{ id: string; employee_name: string }[]>([])
-  const [drivers, setDrivers] = useState<{ id: string; full_name: string }[]>([])
+  const [drivers, setDrivers] = useState<{ id: string; employee_name: string }[]>([])
 
   const today = new Date()
   const firstOfMonth = new Date(today.getFullYear(), today.getMonth(), 1).toISOString().split('T')[0]
@@ -145,8 +145,8 @@ export default function ServiceBookingPage() {
     if (branchRes.data) setBranches((branchRes.data as { name: string }[]).map(b => b.name))
     const creRes = await supabase.from('employee_master').select('id, employee_name').eq('role', 'CRE').order('employee_name')
     if (creRes.data) setCreUsers((creRes.data as { id: string; employee_name: string }[]).filter(u => u.employee_name))
-    const driverRes = await supabase.from('users').select('id, full_name').eq('role', 'driver').order('full_name')
-    if (driverRes.data) setDrivers((driverRes.data as { id: string; full_name: string }[]).filter(u => u.full_name))
+    const driverRes = await supabase.from('employee_master').select('id, employee_name').eq('role', 'DRIVER').order('employee_name')
+    if (driverRes.data) setDrivers((driverRes.data as { id: string; employee_name: string }[]).filter(u => u.employee_name))
   }
 
   async function loadBookings() {
@@ -584,7 +584,7 @@ export default function ServiceBookingPage() {
                     <Field label="Driver Name">
                       <select style={selInp} value={form.driver_name ?? ''} onChange={e => setForm(p => ({ ...p, driver_name: e.target.value || null }))}>
                         <option value="">Select driver…</option>
-                        {drivers.map(d => <option key={d.id} value={d.full_name}>{d.full_name}</option>)}
+                        {drivers.map(d => <option key={d.id} value={d.employee_name}>{d.employee_name}</option>)}
                       </select>
                     </Field>
                   )}
