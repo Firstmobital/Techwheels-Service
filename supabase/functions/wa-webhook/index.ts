@@ -600,7 +600,7 @@ Deno.serve(async (req) => {
         complaint_description: vehicleIssues || null,
         pickup_required:      isPickup,
         pickup_address:       isPickup && pickupAddress ? pickupAddress : null,
-        status:               'Confirmed',
+        status:               'New',
         wa_opt_in:            true,
         wa_conversation_id:   String(convId),
       }]).select()
@@ -889,7 +889,7 @@ Deno.serve(async (req) => {
       service_type: (conv!.service_type as string) || 'Paid Service',
       complaint_description: (conv!.complaint_description as string) || null,
       km_reading: (conv!.km_reading as number) || null,
-      status: 'Confirmed', wa_opt_in: true, wa_conversation_id: String(convId),
+      status: 'New', wa_opt_in: true, wa_conversation_id: String(convId),
     }]).select()
 
     if (bkgErr) {
