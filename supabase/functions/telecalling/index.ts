@@ -9,17 +9,15 @@ export default async function handler(req: Request) {
   try {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!
     const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
-    const anonKey = Deno.env.get('SUPABASE_ANON_KEY')!
 
     const authHeader = req.headers.get('Authorization') || ''
     const token = authHeader.replace('Bearer ', '')
     if (!token) throw new Error('Missing auth token')
 
-    const authClient = createClient(supabaseUrl, anonKey)
-    const { data: { user }, error: authErr } = await authClient.auth.getUser(token)
-    if (authErr || !user) throw new Error(`Auth failed: ${authErr?.message || 'no user returned for token'}`)
-
+    // Use service-role client to validate the JWT — works for all session types
     const serviceClient = createClient(supabaseUrl, serviceRoleKey)
+    const { data: { user }, error: authErr } = await serviceClient.auth.getUser(token)
+    if (authErr || !user) throw new Error(`Auth failed: ${authErr?.message || 'no user returned for token'}`)
 
     const { data: userData, error: userErr } = await serviceClient
       .from('users')
@@ -444,24 +442,46 @@ export default async function handler(req: Request) {
     if (action === 'admin_stats') {
       if (!isAdmin) throw new Error('Admin only')
       const { campaign_id } = body
-      let q = serviceClient.from('telecall_assignments').select('assigned_to, status')
+      let q = serviceClient.from('telecall_assignments').select('assigned_to, status, call_count, no_answer_count, called_at')
       if (campaign_id) q = q.eq('campaign_id', campaign_id)
+      q = q.neq('status', 'pending')  // only rows that have been touched
       const { data: all } = await q
 
       const byAgent: Record<string, any> = {}
+      const RESULT_STATUSES = ['booked', 'no_answer', 'not_interested', 'callback_later', 'wrong_number', 'not_reachable', 'already_serviced', 'sold_vehicle']
+      const CONNECTED_STATUSES = ['booked', 'callback_later', 'not_interested', 'wrong_number', 'already_serviced', 'sold_vehicle', 'not_reachable']
+
       for (const row of (all || [])) {
         const agent = row.assigned_to || 'unassigned'
-        if (!byAgent[agent]) byAgent[agent] = { email: agent, total: 0, booked: 0, no_answer: 0, not_interested: 0, callback_later: 0, wrong_number: 0, not_reachable: 0, already_serviced: 0, sold_vehicle: 0, connected: 0 }
-        byAgent[agent].total++
+        if (agent === 'unassigned') continue
+        if (!byAgent[agent]) byAgent[agent] = {
+          email: agent,
+          calls_made: 0,     // rows they've touched
+          calls_connected: 0, // spoke to customer
+          booked: 0,
+          no_answer: 0,
+          not_interested: 0,
+          callback_later: 0,
+          wrong_number: 0,
+          not_reachable: 0,
+          already_serviced: 0,
+          sold_vehicle: 0,
+          still_assigned: 0, // assigned but no outcome yet
+        }
+        byAgent[agent].calls_made++
         const s = row.status
-        if (['booked', 'no_answer', 'not_interested', 'callback_later', 'wrong_number', 'not_reachable', 'already_serviced', 'sold_vehicle'].includes(s)) {
+        if (s === 'assigned' || s === 'calling') {
+          byAgent[agent].still_assigned++
+        } else if (RESULT_STATUSES.includes(s)) {
           byAgent[agent][s] = (byAgent[agent][s] || 0) + 1
         }
-        if (['booked', 'callback_later', 'not_interested', 'wrong_number', 'already_serviced', 'sold_vehicle'].includes(s)) {
-          byAgent[agent].connected++
+        if (CONNECTED_STATUSES.includes(s)) {
+          byAgent[agent].calls_connected++
         }
       }
-      return new Response(JSON.stringify({ success: true, agent_stats: Object.values(byAgent) }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+
+      const agent_stats = Object.values(byAgent).sort((a: any, b: any) => b.calls_made - a.calls_made)
+      return new Response(JSON.stringify({ success: true, agent_stats }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
     }
 
     // ── ACTION: booking_list ──────────────────────────────────────────────
