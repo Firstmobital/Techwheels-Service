@@ -71,26 +71,73 @@ export interface FuelOverrideRow {
   updated_at: string
 }
 
+function normalizeModelName(value: string): string {
+  return value.trim().replace(/\s+/g, ' ')
+}
+
+const GLOBAL_MODEL_DEALER_CODE = 'GLOBAL'
+
+type ModelOptionRow = ModelOption & { dealer_code?: string }
+
+function dedupeModelOptionRows(rows: ModelOptionRow[]): ModelOption[] {
+  const bestByKey = new Map<string, ModelOptionRow>()
+
+  for (const row of rows) {
+    const key = normalizeModelName(row.model_name).toLowerCase()
+    if (!key) continue
+
+    const existing = bestByKey.get(key)
+    if (!existing) {
+      bestByKey.set(key, row)
+      continue
+    }
+
+    const rowIsGlobal = row.dealer_code === GLOBAL_MODEL_DEALER_CODE
+    const existingIsGlobal = existing.dealer_code === GLOBAL_MODEL_DEALER_CODE
+    if (rowIsGlobal && !existingIsGlobal) {
+      bestByKey.set(key, row)
+      continue
+    }
+    if (!rowIsGlobal && existingIsGlobal) continue
+
+    if (row.sort_order < existing.sort_order || (row.sort_order === existing.sort_order && row.id < existing.id)) {
+      bestByKey.set(key, row)
+    }
+  }
+
+  return Array.from(bestByKey.values())
+    .sort((a, b) => a.sort_order - b.sort_order || a.model_name.localeCompare(b.model_name))
+    .map(({ id, model_name, sort_order, is_active, created_at, updated_at }) => ({
+      id,
+      model_name,
+      sort_order,
+      is_active,
+      created_at,
+      updated_at,
+    }))
+}
+
 export async function listModelOptions(): Promise<ApiResult<ModelOption[]>> {
   const { data, error } = await supabase
     .from('settings_model_options')
-    .select('id, model_name, sort_order, is_active, created_at, updated_at')
+    .select('id, model_name, sort_order, is_active, created_at, updated_at, dealer_code')
     .eq('is_active', true)
     .order('sort_order', { ascending: true })
     .order('model_name', { ascending: true })
 
   if (error) return fail(error)
-  return ok((data ?? []) as ModelOption[])
+  return ok(dedupeModelOptionRows((data ?? []) as ModelOptionRow[]))
 }
 
 export async function createModelOption(modelName: string, sortOrder?: number): Promise<ApiResult<ModelOption>> {
-  const trimmed = modelName.trim()
-  if (!trimmed) return fail('Model name is required')
+  const normalized = normalizeModelName(modelName)
+  if (!normalized) return fail('Model name is required')
 
   const { data, error } = await supabase
     .from('settings_model_options')
     .insert({
-      model_name: trimmed,
+      model_name: normalized,
+      dealer_code: GLOBAL_MODEL_DEALER_CODE,
       sort_order: sortOrder ?? 0,
       is_active: true,
     })
@@ -99,7 +146,7 @@ export async function createModelOption(modelName: string, sortOrder?: number): 
 
   if (error) {
     if (typeof error === 'object' && error !== null && 'code' in error && error.code === '23505') {
-      return fail(`Model '${trimmed}' already exists`)
+      return fail(`Model '${normalized}' already exists`)
     }
     return fail(error)
   }
@@ -114,9 +161,9 @@ export async function updateModelOption(
   const payload: Record<string, unknown> = {}
 
   if (updates.modelName !== undefined) {
-    const trimmed = updates.modelName.trim()
-    if (!trimmed) return fail('Model name is required')
-    payload.model_name = trimmed
+    const normalized = normalizeModelName(updates.modelName)
+    if (!normalized) return fail('Model name is required')
+    payload.model_name = normalized
   }
 
   if (updates.sortOrder !== undefined) {
@@ -156,15 +203,14 @@ export async function deleteModelOption(id: number): Promise<ApiResult<null>> {
 }
 
 export async function getModelNames(): Promise<ApiResult<string[]>> {
-  const { data, error } = await supabase
-    .from('settings_model_options')
-    .select('model_name')
-    .eq('is_active', true)
-    .order('sort_order', { ascending: true })
-    .order('model_name', { ascending: true })
+  const rpcResult = await supabase.rpc('get_canonical_model_names')
+  if (!rpcResult.error && Array.isArray(rpcResult.data)) {
+    return ok((rpcResult.data as { model_name: string }[]).map((row) => row.model_name))
+  }
 
-  if (error) return fail(error)
-  return ok((data ?? []).map((row: { model_name: string }) => row.model_name))
+  const listResult = await listModelOptions()
+  if (listResult.error) return fail(rpcResult.error ?? listResult.error)
+  return ok((listResult.data ?? []).map((row) => row.model_name))
 }
 
 export async function listBodyshopSurveyors(): Promise<ApiResult<BodyshopSurveyor[]>> {

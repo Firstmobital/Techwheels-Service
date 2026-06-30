@@ -177,7 +177,7 @@ See `docs/shared/reference/DATABASE_TRUTH.md` for the full, current Database Aut
 - Bodyshop domain: `bodyshop_repair_cards`, `bodyshop_assignments`, `bodyshop_floor_support_assignments`, `bodyshop_intake_vehicle_photos`, `bodyshop_repair_card_documents`, `settings_bodyshop_surveyors`.
 - Technician domain: `technician_assignments`, `technician_earnings_settings`, `sa_earnings_settings`.
 - Warranty domain: `warranty_amc_data`, `warranty_claim_settlement_report_data`, `warranty_fsb_data`, `warranty_goodwill_data`, `warranty_part_wc_data`, `warranty_updation_claim_data`, `warranty_wc_data`.
-- WhatsApp domain: `wa_templates`, `wa_messages`, `wa_campaigns`, `wa_campaign_contacts`, `wa_followup_queue`, `wa_followup_steps`, `wa_conversations`, `wa_agent_config`.
+- WhatsApp domain: `wa_templates`, `wa_messages`, `wa_campaigns`, `wa_campaign_contacts`, `wa_followup_queue`, `wa_followup_steps`, `wa_conversations`, `wa_agent_config`, `auto_service_reminders` (added 2026-06-29 — tracks automated WhatsApp service-reminder sends; `wa_agent_config` gained matching `auto_reminder_*` config columns in the same migration).
 
 ## Change Control Notes
 

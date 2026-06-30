@@ -144,11 +144,19 @@ For prompts/task contracts:
 
 For `scripts/git-safe-publish.sh` specifically, in addition to the above:
 
+Publication (when ready to commit/rebase/push): **`npm run publish:safe`** from the repository root. Do not bypass this script with manual git commit/push unless the script is proven unusable.
+
 1. Do not push during the test unless explicitly instructed.
-2. Verify it stops on validation failure.
-3. Verify it stops when incoming commits are pulled during the rebase.
-4. Verify it prints the required audit instruction (the `AUDIT_PROMPT` block).
-5. Verify it does not scan `local_folder/backups/` or its `chunks/` mirror.
+2. Verify it auto-generates the outgoing local-change intake report (`scripts/repo_change_impact.mjs` default mode) before commit confirmation whenever local working-tree changes exist, prints the report path, and requires explicit confirmation before commit when the report raises review-sensitive findings (independent review, DB ledger/protocol expectations, generated artifact refresh/validation expectations, or unmapped files).
+3. Verify it stops on local impact-analysis failure before commit.
+4. Verify it stops on validation failure.
+5. Verify it stops when incoming commits are pulled during the rebase.
+6. Verify it prints the required audit instruction (the `AUDIT_PROMPT` block).
+7. Verify it does not scan `local_folder/backups/` or its `chunks/` mirror.
+8. Verify it auto-generates the incoming-change intake report (`scripts/repo_change_impact.mjs --range`) before printing the audit instruction, and that a failure of that call does not change the exit-4 stop-before-push outcome.
+9. Verify it runs the executable publish-readiness proof (`npm run publish:ready`) before final push confirmation, and refuses to push when that verifier reports unresolved blockers.
+
+`npm run publish:ready` is read-only. It proves whether impact intake, self-healing/routing, DB protocol/ledger work, generated-artifact handling, validation obligations, practical-verification obligations, and review recommendations are resolved. It does not auto-edit files, self-heal, refresh generated artifacts, update the DB ledger, or replace the AI Output Intake Router; it reports `READY` or `NOT READY` with next actions.
 
 This gate belongs to Completion (Repository Transaction Framework Stage 6; a task contract's Completion Criteria) — it adds a test requirement to that existing stage, not a new lifecycle stage. A task involving any of the items above is not complete until this test evidence exists in the report, even when the change otherwise looks correct on inspection.
 

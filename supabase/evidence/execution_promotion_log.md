@@ -73,3 +73,10 @@ Tracks migration/check files promoted to supabase/exec_success_migrations after 
 - moved migration: 20260625221000_p1_07_disk_io_hotlist_indexes.sql
 - moved checks: 20260625221000_p1_07_disk_io_hotlist_indexes_checks.sql
 - dump reference: size=109744753, sha256=56cc1ef74d7c5482200b1f04d7b6404bf71a2d29c3f5addc7b4788472f7f9e35
+
+## 2026-06-30T06:43:38Z
+- prefix: 20260630120000
+- ledger: DBL-0008
+- moved migration: 20260630120000_global_settings_model_options.sql
+- moved checks: 20260630120000_global_settings_model_options_checks.sql
+- dump reference: size=1501071, sha256=dc1d49909baef9d9b02562a570bec29fd8bb3100f90db4e165d68a2e7e1b149d (supabase/backups/full_metadata.sql)

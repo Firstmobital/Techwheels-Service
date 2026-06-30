@@ -6,28 +6,39 @@ set -euo pipefail
 # This script is the Publication stage of the Repository Transaction Framework
 # (docs/shared/reference/catalog/task_library/TRANSACTION_FRAMEWORK.md). Every
 # transaction type defined there reaches "Publication" by running this script
-# (npm run git:safe-publish) — it is not an isolated script with its own
+# (npm run publish:safe) — it is not an isolated script with its own
 # separate workflow.
 #
 # What this does, in order:
 #   1. Verify the repo is on the "main" branch.
 #   2. Show git status, run docs validation, show the pending diff stat.
 #   3. Show the exact list of changed files.
-#   4. Ask for confirmation before committing.
-#   5. git add -A && git commit -m "Changes by Vinod"
-#   6. Record the local HEAD before pulling (for manual rollback reference).
-#   7. git pull --rebase origin main
-#   8. Detect whether that pull brought in new commits from origin/main.
-#   9. If new commits came in, stop and print an audit prompt to run before
+#   4. If local changes exist, automatically run a read-only outgoing
+#      local-change intake report (scripts/repo_change_impact.mjs) before
+#      commit confirmation.
+#   5. If the local report raises review-sensitive findings, require an
+#      explicit second confirmation before commit can proceed.
+#   6. Ask for confirmation before committing.
+#   7. git add -A, then unstage any DB paths deferred in
+#      publication_readiness_disposition.json, then commit.
+#   8. Record the local HEAD before pulling (for manual rollback reference).
+#   9. git pull --rebase origin main
+#  10. Detect whether that pull brought in new commits from origin/main.
+#  11. If new commits came in, automatically run a read-only incoming-change
+#      intake report (scripts/repo_change_impact.mjs --range) covering just
+#      those commits, then stop and print an audit prompt to run before
 #      pushing (does not push).
-#  10. If no new commits came in, ask for confirmation before pushing.
-#  11. git push origin main
+#  12. If no new commits came in, run publish-readiness verification.
+#  13. Ask for confirmation before pushing.
+#  14. git push origin main
 #
 # Safety rules (enforced, not optional):
 #   - Never pushes if the pull brought in new commits from origin/main.
 #   - Never pushes if the blocking docs validator (npm run docs:validate) fails.
 #   - Never pushes if the rebase produced conflicts.
 #   - Never commits if there are no changes.
+#   - Never commits if local change impact analysis fails.
+#   - Never pushes if publish-readiness verification fails.
 #   - Never commits or pushes without explicit interactive confirmation.
 #   - Reads no credentials and hardcodes none; git push/pull use whatever
 #     credential helper/SSH key is already configured for this repo.
@@ -44,8 +55,9 @@ set -euo pipefail
 #     abort because of it.
 #
 # Usage (must be run from the repository root):
+#   npm run publish:safe
 #   bash scripts/git-safe-publish.sh
-#   npm run git:safe-publish
+#   npm run git:safe-publish   # backward-compatible alias
 #
 # Exit codes:
 #   0  success (pushed), or a clean no-op (nothing to commit/push)
@@ -54,6 +66,8 @@ set -euo pipefail
 #   3  rebase produced conflicts (push withheld, manual resolution required)
 #   4  pull brought in new commits from origin/main (push withheld, audit required)
 #   5  .git/index.lock already exists (stale or live lock; see preflight check)
+#   6  local outgoing impact analysis failed before commit
+#   7  publish-readiness verification failed before push
 
 trap 'echo "git-safe-publish: unexpected error near line ${LINENO}. Nothing was pushed." >&2' ERR
 
@@ -163,7 +177,94 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# Step 4 + 5: confirm, then commit (skip cleanly if nothing to commit).
+# Step 4: local outgoing-change intake before commit confirmation.
+# ---------------------------------------------------------------------------
+if [[ -n "$changed_files" ]]; then
+  echo
+  echo "---- Auto-generating outgoing local-change intake report (read-only) ----"
+  if node scripts/repo_change_impact.mjs; then
+    local_impact_report="docs/shared/evidence/repo_change_impact_report.json"
+    echo "Local impact report: ${local_impact_report}"
+  else
+    impact_exit_code=$?
+    echo >&2
+    echo "Error: local impact analysis failed (exit code ${impact_exit_code}). Fix the impact tool/report issue before committing. Nothing committed or pushed." >&2
+    exit 6
+  fi
+
+  local_impact_summary="$(
+    node -e '
+      const fs = require("fs");
+      const report = JSON.parse(fs.readFileSync("docs/shared/evidence/repo_change_impact_report.json", "utf8"));
+      const cats = report.categories_present || [];
+      const hasCategory = (name) => cats.some((c) => c.category === name);
+      const independentReview = Boolean(report.independent_review_recommended_before_publication);
+      const unknown = Array.isArray(report.unknown_or_unmapped_files) ? report.unknown_or_unmapped_files : [];
+      const hasDb = hasCategory("database_schema_truth");
+      const hasGenerated = hasCategory("generated_artifact");
+      const needsCaution = independentReview || unknown.length > 0 || hasDb || hasGenerated;
+      const reasons = [];
+      if (independentReview) reasons.push("independent review recommended");
+      if (hasDb) reasons.push("DB ledger/protocol expectations present");
+      if (hasGenerated) reasons.push("generated artifact refresh/validation expectations present");
+      if (unknown.length > 0) reasons.push(`unmapped file review required (${unknown.length})`);
+      console.log(JSON.stringify({
+        needs_caution: needsCaution,
+        reasons,
+        validation_commands: report.validation_commands_to_run || [],
+        review_recommended: independentReview,
+        unknown_count: unknown.length
+      }));
+    '
+  )"
+
+  local_impact_needs_caution="$(
+    node -e 'const s = JSON.parse(process.argv[1]); console.log(s.needs_caution ? "yes" : "no")' "$local_impact_summary"
+  )"
+
+  if [[ "$local_impact_needs_caution" == "yes" ]]; then
+    echo
+    echo "Local impact intake raised review-sensitive findings:"
+    node -e '
+      const s = JSON.parse(process.argv[1]);
+      for (const reason of s.reasons) console.log(`  - ${reason}`);
+      if (s.validation_commands.length > 0) {
+        console.log("Recommended validation from impact report:");
+        for (const command of s.validation_commands) console.log(`  - ${command}`);
+      }
+    ' "$local_impact_summary"
+    echo
+    echo "This script will not auto-edit documentation, auto-self-heal, refresh generated artifacts, or update the DB ledger."
+    echo "Confirm those expectations have been reviewed/routed, or abort and address them before publishing."
+
+    if [[ ! -t 0 ]]; then
+      echo >&2
+      echo "Error: no interactive terminal detected. Refusing to commit local changes with review-sensitive impact findings." >&2
+      exit 1
+    fi
+
+    echo
+    read -r -p "Continue toward commit despite these local impact findings? [y/N] " confirm_local_impact
+    if [[ ! "$confirm_local_impact" =~ ^[Yy]$ ]]; then
+      echo "Aborted by user after local impact intake. Nothing committed or pushed."
+      exit 1
+    fi
+  else
+    echo "Local impact intake found no review-sensitive findings."
+  fi
+
+  echo
+  echo "---- Changed files after local impact intake ----"
+  changed_files="$(git --no-pager status --porcelain)"
+  if [[ -z "$changed_files" ]]; then
+    echo "(none)"
+  else
+    echo "$changed_files"
+  fi
+fi
+
+# ---------------------------------------------------------------------------
+# Step 5 + 6: confirm, then commit (skip cleanly if nothing to commit).
 # ---------------------------------------------------------------------------
 if [[ -z "$changed_files" ]]; then
   echo
@@ -184,6 +285,31 @@ else
   fi
 
   git add -A
+
+  deferred_from_publication="$(
+    node -e '
+      const fs = require("fs");
+      const dispositionPath = "docs/shared/evidence/publication_readiness_disposition.json";
+      try {
+        const disposition = JSON.parse(fs.readFileSync(dispositionPath, "utf8"));
+        const paths = (disposition.deferred_db_changes || [])
+          .filter((entry) => entry.deferred_from_publication === true && entry.reason)
+          .flatMap((entry) => entry.paths || []);
+        console.log([...new Set(paths)].join("\n"));
+      } catch (_) {}
+    '
+  )"
+
+  if [[ -n "$deferred_from_publication" ]]; then
+    echo
+    echo "Unstaging DB paths deferred from publication (publication_readiness_disposition.json):"
+    while IFS= read -r deferred_path; do
+      [[ -z "$deferred_path" ]] && continue
+      echo "  - ${deferred_path}"
+      git reset HEAD -- "$deferred_path" 2>/dev/null || true
+    done <<< "$deferred_from_publication"
+  fi
+
   git commit -m "Changes by Vinod"
   echo "Committed."
 fi
@@ -229,15 +355,33 @@ fi
 if [[ "$new_commit_count" -gt 0 ]]; then
   echo
   echo "== STOPPING: $new_commit_count new commit(s) were pulled from origin/main during rebase. =="
+
+  echo
+  echo "---- Auto-generating incoming-change intake report (advisory, read-only) ----"
+  if node scripts/repo_change_impact.mjs --range "${prev_head}..origin/main"; then
+    intake_report_status=0
+  else
+    intake_report_status=$?
+    echo "Note: intake report generation did not complete cleanly (exit code ${intake_report_status})." >&2
+    echo "This is advisory tooling only — it does not change the stop-before-push decision below." >&2
+  fi
+
+  echo
   echo "Push withheld. Run an audit before pushing. Suggested audit prompt:"
   echo
   cat <<'AUDIT_PROMPT'
   --------------------------------------------------------------------------
   Review the commits just pulled from origin/main onto the local main
-  branch during the most recent rebase. Confirm they do not conflict with,
-  duplicate, or invalidate the local changes just committed on top of them.
-  Run `npm run docs:validate` and `npm run docs:validate:health` and report
-  the results. Use the Repository Audit and Code Review task contracts in
+  branch during the most recent rebase. An automated incoming-change intake
+  report covering exactly those commits was just generated at
+  docs/shared/evidence/repo_change_impact_report.json (mode:
+  "incoming_commit_range") — read it first; it lists the upstream commits,
+  the files/categories they touched, the owning authority for each, and
+  which validation it recommends. Use it to confirm the upstream commits do
+  not conflict with, duplicate, or invalidate the local changes just
+  committed on top of them. Run `npm run docs:validate` and
+  `npm run docs:validate:health` and report the results. Use the Repository
+  Audit and Code Review task contracts in
   docs/shared/reference/catalog/task_library/generic/ as the basis for this
   review. Report whether it is safe to push, and what (if anything) needs
   to change first.
@@ -250,6 +394,14 @@ fi
 
 echo
 echo "No new commits came in from origin/main. Safe to push."
+
+echo
+echo "---- npm run publish:ready (blocking readiness gate) ----"
+if ! npm run publish:ready; then
+  echo >&2
+  echo "Error: publish-readiness verification failed. Resolve blockers before pushing. Nothing was pushed." >&2
+  exit 7
+fi
 
 if [[ ! -t 0 ]]; then
   echo >&2

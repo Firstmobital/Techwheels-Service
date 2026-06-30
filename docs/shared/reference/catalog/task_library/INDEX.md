@@ -16,7 +16,7 @@ This library does not duplicate or replace:
 
 ## Repository Transaction Framework
 
-A contract describes how to perform one kind of work. It does not describe how that completed work moves through the repository until it is safely published. That sequencing — Start, Execution, Repository Updates, Validation, Publication, Completion — is defined once in [`TRANSACTION_FRAMEWORK.md`](TRANSACTION_FRAMEWORK.md), which also maps common transaction types (Feature, Bug Fix, Refactor, Database Change, Migration, Documentation, Release, Hotfix) onto the contracts below. `scripts/git-safe-publish.sh` (`npm run git:safe-publish`) is that framework's Publication stage for every transaction type, not an isolated script.
+A contract describes how to perform one kind of work. It does not describe how that completed work moves through the repository until it is safely published. That sequencing — Start, Execution, Repository Updates, Validation, Publication, Completion — is defined once in [`TRANSACTION_FRAMEWORK.md`](TRANSACTION_FRAMEWORK.md), which also maps common transaction types (Feature, Bug Fix, Refactor, Database Change, Migration, Documentation, Release, Hotfix) onto the contracts below. **`npm run publish:safe`** (`scripts/git-safe-publish.sh`) is that framework's Publication stage for every transaction type, not an isolated script.
 
 ## Generic Contracts (`generic/`)
 

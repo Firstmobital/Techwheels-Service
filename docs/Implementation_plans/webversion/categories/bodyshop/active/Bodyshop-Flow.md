@@ -110,7 +110,7 @@ If any visual behavior is ambiguous in references:
 ### 3.3 Audited behavior-contract findings
 
 1. Stage catalog is 1-18 and must remain unchanged.
-2. Floor role model is fixed to DENTOR, PAINTER, TECHNICIAN, ELECTRICIAN, DET.
+2. Floor role model is DENTOR, PAINTER, TECHNICIAN (ELECTRICIAN and DET removed). Each role supports multi-employee assignment via comma-separated chips, replacing the prior single employee_code/employee_name fields. [Updated 2026-06-30 — upstream commit `1589dbb` changed this on 2026-06-29; this finding's original audit basis date (2026-06-16) predates that change.]
 3. Additional Approval supports multi-part request and per-part decisions.
 4. Stage 11 and Stage 12 have concurrent visibility/queue behavior.
 5. Survey and approved-parts gating must remain strict (including photo/doc dependencies).

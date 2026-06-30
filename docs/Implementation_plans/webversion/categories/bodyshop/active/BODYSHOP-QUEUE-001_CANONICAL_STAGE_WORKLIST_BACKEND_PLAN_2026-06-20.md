@@ -252,7 +252,7 @@ Authoritative schema audit confirms there is no existing database function/view 
 - Clicking `QC` now renders a QC-focused section for each vehicle and hides Floor workflow controls for that view.
 - QC panel includes:
 	- Vehicle identity/context block (reg/model/JC/customer/SA/IN-OUT inherited from card header)
-	- Workforce snapshot across Denter/Painter/Technician/Electrician/DET including status and remarks
+	- Workforce snapshot across Denter/Painter/Technician/Electrician/DET including status and remarks [Superseded 2026-06-29 — Electrician/DET roles removed; workforce snapshot now spans Dentor/Painter/Technician with multi-employee chip assignment per role. See Bodyshop-Flow.md §3.3.]
 	- Form fields: `QC Status`, `Fail Reason`, `QC Checked By`, `QC Checked At`
 - Save action persists QC payload directly to `bodyshop_repair_cards` and sets stage context to stage 13 (`Quality Check`).
 - Design kept in current Bodyshop Floor visual language (same cards, spacing, typography, chip/button conventions).
@@ -260,7 +260,7 @@ Authoritative schema audit confirms there is no existing database function/view 
 ### 2026-06-22 - QC Checker Selection Model (Web + Mobile)
 - Updated QC business logic so `qc_checked_by` is selected by Floor Incharge from people list, not auto-bound to logged-in actor.
 - Web QC section now supports multi-select `QC Checked By` from:
-	- Assigned workforce for that vehicle (primary + support across Dentor/Painter/Technician/Electrician/DET)
+	- Assigned workforce for that vehicle (primary + support across Dentor/Painter/Technician/Electrician/DET) [Superseded 2026-06-29 — now Dentor/Painter/Technician only, each with multi-employee chip assignment. See Bodyshop-Flow.md §3.3.]
 	- `Other` searchable bodyshop employees from employee master, excluding those already in assigned workforce list
 - Mobile Bodyshop Repair QC tab now mirrors the same checker selection model with assigned + searchable other lists.
 - Persistence logic:

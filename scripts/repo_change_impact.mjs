@@ -9,8 +9,25 @@
 //   - docs/shared/reference/DATABASE_TRUTH.md    (DB authority hierarchy + change-control artifacts)
 //   - docs/shared/reference/catalog/task_library/TRANSACTION_FRAMEWORK.md  (Stage 4 validation commands)
 //
-// It answers, for the repository's current pending Git changes:
-//   1. What files changed?
+// Two modes:
+//   1. Default (no args) — classifies the repository's current pending
+//      working-tree changes (`git status --porcelain`). Unchanged behavior
+//      from the original version of this script.
+//   2. `--range <rev>..<rev>` — classifies a closed commit range instead
+//      (`git diff --name-status <range>` for files, `git log <range>` for
+//      commits). Added so this tool can also answer "what came in from
+//      upstream during a rebase?" using the exact same category/authority
+//      model, instead of a second bespoke classifier. `git-safe-publish.sh`
+//      invokes this mode automatically (see Step 9 there) when its existing
+//      `new_commit_count` check detects new commits pulled from origin/main
+//      during a rebase — it passes `"${prev_head}..origin/main"`, the same
+//      range that check already computes. This does NOT make either script
+//      auto-edit documentation or self-heal anything: both modes only ever
+//      write this tool's own advisory report.
+//
+// It answers, for either the pending working-tree changes or a given commit
+// range:
+//   1. What files changed (and, in range mode, which commits changed them)?
 //   2. What category does each file belong to?
 //   3. Which authority owns each category?
 //   4. What repository artifacts may need updating?
@@ -21,18 +38,24 @@
 //
 // Design constraints (deliberate, do not relax without re-reading the brief
 // that produced this script):
-//   - Read-only. Runs exactly one git command (`git status --porcelain`).
-//     Never runs `git add/commit/checkout/reset/push`.
+//   - Read-only. Runs `git status --porcelain` (default mode) or
+//     `git diff --name-status` / `git log` against an already-resolved range
+//     (range mode). Never runs `git add/commit/checkout/reset/push`, and
+//     never fetches — range mode only ever inspects refs that already exist
+//     locally at call time (it does not run `git fetch`; the caller, e.g.
+//     git-safe-publish.sh, is responsible for that).
 //   - Writes only its own report, to docs/shared/evidence/repo_change_impact_report.json
-//     — same convention as scripts/repo_health_audit.mjs. Never modifies any
-//     other file.
-//   - Never modifies scripts/git-safe-publish.sh and is not called by it.
-//     This is an advisory pre-check an agent may run before Validation/
-//     Publication (Repository Transaction Framework Stage 4/5) — it is not
-//     wired into either stage's control flow and never blocks them.
-//   - Exit code is always 0 on a successful run. This is intentionally an
-//     information tool, not a second blocking gate — turning it into one
-//     would duplicate npm run docs:validate's role.
+//     — same convention as scripts/repo_health_audit.mjs, same path in both
+//     modes (the report's own `mode` field disambiguates which one produced
+//     it). Never modifies any other file.
+//   - May be called by scripts/git-safe-publish.sh (range mode only, at the
+//     existing exit-4 upstream-detection point) but never modifies that
+//     script and is never required for it to run — git-safe-publish.sh
+//     treats a failure of this call as non-fatal (advisory best-effort) and
+//     preserves its exit-4 stop-before-push behavior regardless.
+//   - Exit code is always 0 on a successful run (both modes). This is
+//     intentionally an information tool, not a second blocking gate —
+//     turning it into one would duplicate npm run docs:validate's role.
 
 import { execSync } from 'child_process'
 import fs from 'fs/promises'
@@ -258,6 +281,7 @@ function classify(relPath) {
   if (
     /^docs\/Implementation_plans\/.*\/evidence\//.test(relPath) ||
     /^docs\/(shared|web|mobile)\/.*\/evidence\//.test(relPath) ||
+    /^docs\/shared\/evidence\//.test(relPath) ||
     /^supabase\/evidence\//.test(relPath)
   ) {
     return {
@@ -328,18 +352,76 @@ function describeStatus(code) {
 }
 
 // ---------------------------------------------------------------------------
+// Range mode (`--range <rev>..<rev>`): commit-range parsing, read-only.
+// Used to classify files touched by a closed set of commits (e.g. commits
+// just pulled from origin/main during a rebase) instead of the working tree.
+// ---------------------------------------------------------------------------
+
+function parseRangeArg(argv) {
+  const flagIndex = argv.indexOf('--range')
+  if (flagIndex === -1) return null
+  const value = argv[flagIndex + 1]
+  if (!value || !value.includes('..')) {
+    throw new Error('--range requires a value of the form <rev>..<rev>, e.g. --range f6f474d..6dd9b82')
+  }
+  return value
+}
+
+function getRangeChanges(range) {
+  // --name-status: "STATUS\tpath" for normal changes, or
+  // "R<score>\toldpath\tnewpath" for renames/copies.
+  const raw = execSync(`git diff --name-status ${range} --`, { cwd: ROOT, encoding: 'utf8' })
+  const lines = raw.split('\n').filter((l) => l.length > 0)
+  return lines.map((line) => {
+    const parts = line.split('\t')
+    const statusCode = parts[0]
+    if (statusCode.startsWith('R') || statusCode.startsWith('C')) {
+      return { statusCode, path: parts[2], oldPath: parts[1] }
+    }
+    return { statusCode, path: parts[1], oldPath: null }
+  })
+}
+
+function describeRangeStatus(code) {
+  if (code.startsWith('R')) return 'renamed'
+  if (code.startsWith('C')) return 'copied'
+  if (code === 'A') return 'added'
+  if (code === 'D') return 'deleted'
+  if (code === 'M') return 'modified'
+  return code
+}
+
+function getCommitsInRange(range) {
+  // Unit separator (\x1f) avoids collisions with subjects that contain "|".
+  const format = '%H\x1f%h\x1f%an\x1f%ae\x1f%ad\x1f%s'
+  const raw = execSync(`git log ${range} --date=iso --pretty=format:'${format}'`, {
+    cwd: ROOT,
+    encoding: 'utf8',
+  })
+  const lines = raw.split('\n').filter((l) => l.length > 0)
+  return lines.map((line) => {
+    const [hash, short_hash, author_name, author_email, date, subject] = line.split('\x1f')
+    return { hash, short_hash, author_name, author_email, date, subject }
+  })
+}
+
+// ---------------------------------------------------------------------------
 // Main
 // ---------------------------------------------------------------------------
 
 async function main() {
-  const changes = getGitChanges()
+  const range = parseRangeArg(process.argv.slice(2))
+  const mode = range ? 'incoming_commit_range' : 'pending_working_tree_changes'
+
+  const changes = range ? getRangeChanges(range) : getGitChanges()
+  const commits = range ? getCommitsInRange(range) : null
 
   const files = changes.map((c) => {
     const { category, note } = classify(c.path)
     return {
       path: c.path,
       old_path: c.oldPath,
-      git_status: describeStatus(c.statusCode),
+      git_status: range ? describeRangeStatus(c.statusCode) : describeStatus(c.statusCode),
       category,
       category_label: CATEGORIES[category].label,
       note,
@@ -369,23 +451,44 @@ async function main() {
   const unknownFiles = files.filter((f) => f.category === 'unknown_unmapped').map((f) => f.path)
   const reviewRecommendedOverall = categorySummary.some((c) => c.review_recommended) || unknownFiles.length > 0
 
+  // In range mode, the only reason this tool is being asked to run is that
+  // new upstream commits were detected — always recommend the publish stop
+  // holds until the report is reviewed. Working-tree mode keeps its
+  // existing review heuristic.
+  const pushShouldRemainStopped = range ? true : null
+
   const report = {
     generated_at_utc: new Date().toISOString(),
+    mode,
     advisory_only: true,
     read_only: true,
-    note: 'Informational pre-check for Repository Transaction Framework Stage 4 (Validation) / Stage 5 (Publication). Does not block either stage and is not called by scripts/git-safe-publish.sh.',
+    note: range
+      ? 'Incoming-change intake report for a commit range (e.g. upstream commits pulled during a rebase). Auto-generated by scripts/git-safe-publish.sh at its existing exit-4 upstream-detection point, or runnable manually via: node scripts/repo_change_impact.mjs --range "<rev>..<rev>". Read-only — does not edit any documentation and performs no self-healing.'
+      : 'Informational pre-check for Repository Transaction Framework Stage 4 (Validation) / Stage 5 (Publication). Does not block either stage.',
+    commit_range: range || null,
+    commits,
     total_files_changed: files.length,
     files,
     categories_present: categorySummary,
     validation_commands_to_run: validationCommands,
     unknown_or_unmapped_files: unknownFiles,
     independent_review_recommended_before_publication: reviewRecommendedOverall,
+    push_should_remain_stopped_until_reviewed: pushShouldRemainStopped,
   }
 
   await fs.mkdir(path.dirname(REPORT_PATH), { recursive: true })
   await fs.writeFile(REPORT_PATH, JSON.stringify(report, null, 2), 'utf8')
 
-  console.log('Repository Change Impact Analysis (advisory only) — report only, no files modified, no git state changed.')
+  if (range) {
+    console.log('Incoming Change Intake Analysis (advisory only) — report only, no files modified, no docs edited, no self-healing.')
+    console.log(`Commit range: ${range}`)
+    console.log(`Upstream commits: ${commits.length}`)
+    for (const c of commits) {
+      console.log(`  - ${c.short_hash} | ${c.date} | ${c.author_name} <${c.author_email}> | ${c.subject}`)
+    }
+  } else {
+    console.log('Repository Change Impact Analysis (advisory only) — report only, no files modified, no git state changed.')
+  }
   console.log(`Files changed: ${files.length}`)
   for (const c of categorySummary) {
     console.log(`- ${c.label} [${c.category}]: ${c.files.length} file(s)`)
@@ -398,6 +501,9 @@ async function main() {
   }
   console.log(`\nValidation commands to run: ${validationCommands.length ? validationCommands.join(', ') : '(none — no changes detected)'}`)
   console.log(`Independent review recommended before publication: ${reviewRecommendedOverall ? 'YES' : 'no'}`)
+  if (range) {
+    console.log('Push should remain stopped until this report has been reviewed (this tool does not change that decision; scripts/git-safe-publish.sh already withholds push whenever new upstream commits were pulled).')
+  }
   console.log(`Full report: ${path.relative(ROOT, REPORT_PATH)}`)
 }
 

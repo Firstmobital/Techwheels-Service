@@ -1,0 +1,141 @@
+{
+  "generated_at_utc": "2026-06-30T06:47:00.000Z",
+  "authority": "docs/shared/reference/SYNC_PROTOCOL.md (Evidence routing); docs/shared/reference/catalog/task_library/TRANSACTION_FRAMEWORK.md Stage 5 publish-readiness proof",
+  "change_set_files": [
+    "docs/Implementation_plans/retention_validation_report.json",
+    "docs/Implementation_plans/webversion/categories/bodyshop/active/BODYSHOP-QUEUE-001_CANONICAL_STAGE_WORKLIST_BACKEND_PLAN_2026-06-20.md",
+    "docs/Implementation_plans/webversion/categories/bodyshop/active/Bodyshop-Flow.md",
+    "docs/shared/active/CHANGE_LOG.md",
+    "docs/shared/evidence/PUBLICATION_READINESS_DISPOSITION_2026-06-30.md",
+    "docs/shared/evidence/publication_readiness_disposition.json",
+    "docs/shared/evidence/repo_health_audit_report.json",
+    "docs/shared/reference/CURRENT_STATE.md",
+    "docs/shared/reference/DB_CHANGE_LEDGER.md",
+    "docs/shared/reference/SYNC_PROTOCOL.md",
+    "docs/shared/reference/catalog/task_library/INDEX.md",
+    "docs/shared/reference/catalog/task_library/TRANSACTION_FRAMEWORK.md",
+    "package.json",
+    "scripts/git-safe-publish.sh",
+    "scripts/publish_readiness_check.mjs",
+    "scripts/repo_change_impact.mjs",
+    "src/lib/api/settings.ts",
+    "supabase/backups/full_metadata.sql",
+    "supabase/evidence/authoritative_metadata_manifest.json",
+    "supabase/evidence/execution_promotion_log.md",
+    "supabase/evidence/post_dump_verified_promotions.md",
+    "supabase/exec_success_migrations/sql/20260630120000_global_settings_model_options.sql",
+    "supabase/exec_success_migrations/sql_check/20260630120000_global_settings_model_options_checks.sql",
+    "supabase/sql_checks/20260629100000_auto_service_reminders_checks.sql"
+  ],
+  "reviews": [
+    {
+      "category": "application_code",
+      "status": "completed",
+      "reviewer": "Cursor Agent (publish-readiness refresh after aborted publish:safe)",
+      "files": ["src/lib/api/settings.ts"],
+      "authority_checked": [
+        ".instructions.md Section 2 item 1",
+        "docs/DOCS_IMPACT_MATRIX.md",
+        "docs/shared/reference/CURRENT_STATE.md",
+        "docs/shared/active/CHANGE_LOG.md"
+      ],
+      "outcome": "Approved for publication alongside DBL-0008 VERIFIED ledger evidence. settings.ts global model catalog changes align with post-apply schema in full_metadata.sql."
+    },
+    {
+      "category": "automation_script",
+      "status": "completed",
+      "reviewer": "Cursor Agent (publish-readiness refresh after aborted publish:safe)",
+      "files": [
+        "scripts/git-safe-publish.sh",
+        "scripts/repo_change_impact.mjs",
+        "scripts/publish_readiness_check.mjs"
+      ],
+      "authority_checked": [
+        "docs/shared/reference/catalog/task_library/TRANSACTION_FRAMEWORK.md",
+        "docs/shared/reference/SYNC_PROTOCOL.md Practical Verification Gate"
+      ],
+      "outcome": "Approved. git-safe-publish unstages deferred_db_changes paths before commit when present; current change set has no deferred paths after DBL-0008 operator verification."
+    },
+    {
+      "category": "database_schema_truth",
+      "status": "completed",
+      "reviewer": "Cursor Agent (publish-readiness refresh after aborted publish:safe)",
+      "files": [
+        "docs/shared/reference/DB_CHANGE_LEDGER.md",
+        "supabase/sql_checks/20260629100000_auto_service_reminders_checks.sql",
+        "supabase/exec_success_migrations/sql/20260630120000_global_settings_model_options.sql",
+        "supabase/exec_success_migrations/sql_check/20260630120000_global_settings_model_options_checks.sql",
+        "supabase/backups/full_metadata.sql",
+        "supabase/evidence/authoritative_metadata_manifest.json",
+        "supabase/evidence/execution_promotion_log.md",
+        "supabase/evidence/post_dump_verified_promotions.md"
+      ],
+      "authority_checked": [
+        "docs/shared/reference/DB_CHANGE_PROTOCOL.md",
+        "docs/shared/reference/DB_CHANGE_LEDGER.md",
+        "docs/shared/reference/DATABASE_TRUTH.md"
+      ],
+      "outcome": "DBL-0007 VERIFIED (auto_service_reminders checks publishable). DBL-0008 VERIFIED per existing ledger operator evidence (manual apply, sql_checks pass, metadata refresh npm run db:backup:metadata, promotion to exec_success_migrations) — not re-marked here, only disposition refreshed to match working tree."
+    },
+    {
+      "category": "repository_authority",
+      "status": "completed",
+      "reviewer": "Cursor Agent (publish-readiness refresh after aborted publish:safe)",
+      "files": [
+        "docs/shared/reference/SYNC_PROTOCOL.md",
+        "docs/shared/reference/catalog/task_library/INDEX.md",
+        "docs/shared/reference/catalog/task_library/TRANSACTION_FRAMEWORK.md"
+      ],
+      "authority_checked": [
+        ".instructions.md Sections 1, 3, 5, 6",
+        "docs/STRUCTURE_GUIDE.md"
+      ],
+      "outcome": "Approved. publish:ready and publish:safe gates unchanged."
+    }
+  ],
+  "generated_artifacts": [
+    {
+      "path": "docs/Implementation_plans/retention_validation_report.json",
+      "generator_command": "npm run docs:validate:plans",
+      "regenerated_at_utc": "2026-06-30T06:46:48.436Z"
+    },
+    {
+      "path": "docs/shared/evidence/repo_health_audit_report.json",
+      "generator_command": "npm run docs:validate:health",
+      "regenerated_at_utc": "2026-06-30T06:46:48.627Z"
+    },
+    {
+      "path": "docs/shared/evidence/repo_change_impact_report.json",
+      "generator_command": "npm run docs:impact",
+      "regenerated_at_utc": "2026-06-30T06:46:48.788Z"
+    },
+    {
+      "path": "supabase/backups/full_metadata.sql",
+      "generator_command": "npm run db:backup:metadata",
+      "regenerated_at_utc": "2026-06-30T06:43:38Z"
+    },
+    {
+      "path": "supabase/evidence/authoritative_metadata_manifest.json",
+      "generator_command": "npm run db:backup:metadata",
+      "regenerated_at_utc": "2026-06-30T06:43:38Z"
+    }
+  ],
+  "deferred_db_changes": [],
+  "health_findings_routed": [
+    {
+      "finding": "promotion_gaps_best_effort Webredesign tracker",
+      "disposition": "No repository update needed — pre-existing advisory false positive documented in docs/shared/evidence/WAVE_1_STUB_CLEANUP_REPORT_2026-06-30.md"
+    }
+  ],
+  "routing_actions": [
+    {
+      "action": "removed",
+      "path": "AGENTS.md",
+      "reason": "Empty vendor-specific AI instruction file at repo root; removed earlier in publish-readiness pass."
+    },
+    {
+      "action": "state_refresh",
+      "note": "After aborted publish:safe, DBL-0008 operator work completed: migration/checks promoted to exec_success_migrations; full_metadata.sql refreshed. Old migrations/sql_checks paths no longer in working tree. deferred_db_changes cleared."
+    }
+  ]
+}

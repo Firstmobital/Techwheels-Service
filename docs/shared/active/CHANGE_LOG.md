@@ -2,6 +2,23 @@
 
 Tracks documentation-sync updates for business logic, architecture, and access control.
 
+## 2026-06-30
+
+- Applied DBL-0008: global vehicle model catalog on `public.settings_model_options` — deduped cross-dealer rows (54→19), forced `dealer_code = GLOBAL`, added global unique index on normalized active model name, normalize trigger, global Settings RLS, and `get_canonical_model_names()` RPC.
+- Updated web API `src/lib/api/settings.ts` to insert/read global models via `GLOBAL` dealer code and canonical RPC fallback.
+- Promoted migration/check pair to `supabase/exec_success_migrations/`; refreshed schema truth via `npm run db:backup:metadata` (sha256=dc1d49909baef9d9b02562a570bec29fd8bb3100f90db4e165d68a2e7e1b149d).
+
+## 2026-06-29 (upstream intake, audited and self-healed 2026-06-30)
+
+- Pulled 16 upstream commits (PRs #9-#12, branches `claude/auto-service-reminder-v2` and `claude/whatsapp-service-reminders-e0evte`) via rebase onto `origin/main`. 7 files touched, all application/infra code — no overlap with `docs/`, `scripts/`, or `.github/`.
+- Bodyshop Floor: removed `ELECTRICIAN`/`DET` roles, kept `DENTOR`/`PAINTER`/`TECHNICIAN`; replaced single employee_code/employee_name fields with multi-employee chip assignment.
+- Added `auto_service_reminders` tracking table, `wa_agent_config` reminder-config columns, and a pg_cron daily scheduler (`invoke_auto_service_reminder_daily`) — migration `supabase/migrations/20260629100000_auto_service_reminders.sql`.
+- Fixed `wa-auto-service-reminder` and `wa-webhook` edge functions (perf parallelization, Flow button component, `todayStr` ReferenceError, `auto_reply_enabled` block), `telecalling` edge function (removed nonexistent `booking_time` column references), and `ServiceBookingPage.tsx` display labels.
+- Business logic change: Bodyshop Floor role model (5 roles → 3 roles + multi-employee); new automated WhatsApp service-reminder pipeline.
+- Function-level contract change: `invoke_auto_service_reminder_daily()` (new), `wa-auto-service-reminder`/`wa-webhook`/`telecalling` edge function behavior.
+- Data/schema change: new table `public.auto_service_reminders`; new columns on `public.wa_agent_config` (`auto_reminder_enabled`, `auto_reminder_template_id`, `auto_reminder_template_lang`, `auto_reminder_variable_map`). Additive-only.
+- Docs updated by: Post-Publication Incoming Change Intake Audit + self-healing pass (2026-06-30) — added DB ledger row `DBL-0007`, added paired check `supabase/sql_checks/20260629100000_auto_service_reminders_checks.sql`, updated `CURRENT_STATE.md` WhatsApp domain table list, corrected the stale 5-role references in `Bodyshop-Flow.md` (§3.3) and `BODYSHOP-QUEUE-001_...md`.
+
 ## 2026-06-11
 
 - Added migration to change reception branch mapping precedence so Employee Master forced location wins before SA-code fallback mapping.
