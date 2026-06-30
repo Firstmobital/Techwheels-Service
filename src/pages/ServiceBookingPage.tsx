@@ -115,7 +115,7 @@ export default function ServiceBookingPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [branches, setBranches] = useState<string[]>([])
-  const [creUsers, setCreUsers] = useState<{ id: string; full_name: string }[]>([])
+  const [creUsers, setCreUsers] = useState<{ id: string; employee_name: string }[]>([])
   const [drivers, setDrivers] = useState<{ id: string; full_name: string }[]>([])
 
   const today = new Date()
@@ -143,8 +143,8 @@ export default function ServiceBookingPage() {
   async function loadBranchesAndSAs() {
     const branchRes = await supabase.from('service_branches').select('name').order('name')
     if (branchRes.data) setBranches((branchRes.data as { name: string }[]).map(b => b.name))
-    const creRes = await supabase.from('users').select('id, full_name').in('role', ['admin', 'manager', 'staff']).order('full_name')
-    if (creRes.data) setCreUsers((creRes.data as { id: string; full_name: string }[]).filter(u => u.full_name))
+    const creRes = await supabase.from('employee_master').select('id, employee_name').eq('role', 'CRE').order('employee_name')
+    if (creRes.data) setCreUsers((creRes.data as { id: string; employee_name: string }[]).filter(u => u.employee_name))
     const driverRes = await supabase.from('users').select('id, full_name').eq('role', 'driver').order('full_name')
     if (driverRes.data) setDrivers((driverRes.data as { id: string; full_name: string }[]).filter(u => u.full_name))
   }
@@ -595,7 +595,7 @@ export default function ServiceBookingPage() {
                     <Field label="CRE Name">
                       <select style={selInp} value={form.cre_name ?? ''} onChange={e => setForm(p => ({ ...p, cre_name: e.target.value || null }))}>
                         <option value="">Select CRE…</option>
-                        {creUsers.map(u => <option key={u.id} value={u.full_name}>{u.full_name}</option>)}
+                        {creUsers.map(u => <option key={u.id} value={u.employee_name}>{u.employee_name}</option>)}
                       </select>
                     </Field>
                     <Field label="Caller Name">
