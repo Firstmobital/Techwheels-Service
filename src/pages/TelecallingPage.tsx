@@ -253,8 +253,8 @@ function TelecallerDashboard({ activeCampaign }: { activeCampaign: Campaign | nu
   const [showCallback, setShowCallback] = useState(false)
   const [showNotes, setShowNotes] = useState(false)
   // CRE + driver users
-  const [creUsers, setCreUsers] = useState<{ id: string; full_name: string }[]>([])
-  const [drivers, setDrivers] = useState<{ id: string; full_name: string }[]>([])
+  const [creUsers, setCreUsers] = useState<{ id: string; employee_name: string }[]>([])
+  const [drivers, setDrivers] = useState<{ id: string; employee_name: string }[]>([])
   // Queue edit
   const [editingId, setEditingId] = useState<number | null>(null)
   const [editNotes, setEditNotes] = useState('')
@@ -277,10 +277,10 @@ function TelecallerDashboard({ activeCampaign }: { activeCampaign: Campaign | nu
   useEffect(() => { refreshQueue(); refreshSummary() }, [refreshQueue, refreshSummary])
 
   useEffect(() => {
-    supabase.from('users').select('id, full_name').in('role', ['admin', 'manager', 'staff']).order('full_name')
-      .then(({ data }) => { if (data) setCreUsers((data as { id: string; full_name: string }[]).filter(u => u.full_name)) })
-    supabase.from('users').select('id, full_name').eq('role', 'driver').order('full_name')
-      .then(({ data }) => { if (data) setDrivers((data as { id: string; full_name: string }[]).filter(u => u.full_name)) })
+    supabase.from('employee_master').select('id, employee_name').eq('role', 'CRE').order('employee_name')
+      .then(({ data }) => { if (data) setCreUsers((data as { id: string; employee_name: string }[]).filter(u => u.employee_name)) })
+    supabase.from('employee_master').select('id, employee_name').eq('role', 'DRIVER').order('employee_name')
+      .then(({ data }) => { if (data) setDrivers((data as { id: string; employee_name: string }[]).filter(u => u.employee_name)) })
   }, [])
 
   const resetCallForm = () => {
@@ -549,8 +549,8 @@ function CallCard({
   altPhone: string; setAltPhone: (v: string) => void
   creName: string; setCreName: (v: string) => void
   driverName: string; setDriverName: (v: string) => void
-  creUsers: { id: string; full_name: string }[]
-  drivers: { id: string; full_name: string }[]
+  creUsers: { id: string; employee_name: string }[]
+  drivers: { id: string; employee_name: string }[]
   showBooking: boolean; setShowBooking: (v: boolean) => void
   showCallback: boolean; setShowCallback: (v: boolean) => void
   onUpdateStatus: (s: CallStatus) => void
@@ -691,7 +691,7 @@ function CallCard({
                   <label className="text-xs font-medium text-gray-600">Driver Name</label>
                   <select value={driverName} onChange={e => setDriverName(e.target.value)} className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-1.5 text-sm bg-white">
                     <option value="">Select driver…</option>
-                    {drivers.map(d => <option key={d.id} value={d.full_name}>{d.full_name}</option>)}
+                    {drivers.map(d => <option key={d.id} value={d.employee_name}>{d.employee_name}</option>)}
                   </select>
                 </div>
               </div>
@@ -705,7 +705,7 @@ function CallCard({
                 <label className="text-xs font-medium text-gray-600">CRE Name</label>
                 <select value={creName} onChange={e => setCreName(e.target.value)} className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-1.5 text-sm bg-white">
                   <option value="">Select CRE…</option>
-                  {creUsers.map(u => <option key={u.id} value={u.full_name}>{u.full_name}</option>)}
+                  {creUsers.map(u => <option key={u.id} value={u.employee_name}>{u.employee_name}</option>)}
                 </select>
               </div>
             </div>
