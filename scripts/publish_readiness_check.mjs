@@ -37,6 +37,11 @@ const READINESS_DISPOSITION_EVIDENCE = new Set([
   'docs/shared/evidence/PUBLICATION_READINESS_DISPOSITION_2026-06-30.md',
 ])
 
+// Follow-on commits may publish a strict subset of a prior disposition batch when
+// every changed path is already covered by completed review evidence. High-risk
+// categories always require an exact disposition fingerprint match.
+const FOLLOW_ON_REVIEW_CATEGORIES = new Set(['automation_script', 'generated_artifact', 'evidence'])
+
 function rel(abs) {
   return path.relative(ROOT, abs).replace(/\\/g, '/')
 }
@@ -240,6 +245,88 @@ function dispositionMatchesChangeSet(disposition, comparableFiles) {
   return sameSet([...disposition.change_set_files].sort(), comparableFiles)
 }
 
+function getImpactFileCategory(impact, filePath) {
+  const entry = (impact.files || []).find((file) => file.path === filePath)
+  return entry?.category || null
+}
+
+function inferCategoryFromDisposition(disposition, filePath) {
+  for (const review of disposition.reviews || []) {
+    if (Array.isArray(review.files) && review.files.includes(filePath)) {
+      return review.category
+    }
+  }
+  if (isPublicationPipelineArtifact(filePath)) return 'generated_artifact'
+  if (READINESS_DISPOSITION_EVIDENCE.has(filePath)) return 'evidence'
+  return null
+}
+
+function resolveFileCategory(impact, disposition, filePath) {
+  return getImpactFileCategory(impact, filePath) || inferCategoryFromDisposition(disposition, filePath)
+}
+
+function fileCoveredByCompletedReview(disposition, filePath) {
+  return (disposition.reviews || []).some(
+    (entry) =>
+      entry.status === 'completed' &&
+      entry.outcome &&
+      Array.isArray(entry.files) &&
+      entry.files.includes(filePath),
+  )
+}
+
+function dispositionCoversFollowOnChangeSet(disposition, comparableFiles, impact) {
+  if (!disposition || disposition.__read_error || !Array.isArray(disposition.change_set_files)) {
+    return false
+  }
+  if (comparableFiles.length === 0) return false
+
+  const dispositionSet = new Set(disposition.change_set_files)
+  if (!comparableFiles.every((file) => dispositionSet.has(file))) return false
+  if (dispositionMatchesChangeSet(disposition, comparableFiles)) return true
+  if (comparableFiles.length >= disposition.change_set_files.length) return false
+
+  for (const filePath of comparableFiles) {
+    if (isPublicationPipelineArtifact(filePath)) {
+      if (!generatedArtifactConfirmed(disposition, filePath)) return false
+      continue
+    }
+
+    const category = resolveFileCategory(impact, disposition, filePath)
+    if (!category || !FOLLOW_ON_REVIEW_CATEGORIES.has(category)) return false
+    if (!reviewDispositionComplete(disposition, category)) return false
+
+    if (category === 'generated_artifact') {
+      if (!generatedArtifactConfirmed(disposition, filePath)) return false
+      continue
+    }
+
+    if (!fileCoveredByCompletedReview(disposition, filePath)) return false
+  }
+
+  return true
+}
+
+function impactFilesInReadinessScope(impactFiles, readinessScope, unpushedCommitFiles, comparableReadinessFiles) {
+  if (readinessScope === 'working tree') return impactFiles
+  const allowed = new Set([
+    ...unpushedCommitFiles,
+    ...comparableReadinessFiles,
+    ...PUBLICATION_PIPELINE_ARTIFACTS,
+  ])
+  return impactFiles.filter((file) => allowed.has(file.path))
+}
+
+function unknownFilesInReadinessScope(unknownFiles, readinessScope, unpushedCommitFiles, comparableReadinessFiles) {
+  if (readinessScope === 'working tree') return unknownFiles
+  const allowed = new Set([
+    ...unpushedCommitFiles,
+    ...comparableReadinessFiles,
+    ...PUBLICATION_PIPELINE_ARTIFACTS,
+  ])
+  return unknownFiles.filter((file) => allowed.has(file))
+}
+
 async function main() {
   const blockers = []
   const advisories = []
@@ -262,7 +349,9 @@ async function main() {
     unpushedCommitFiles,
     disposition,
   )
-  const dispositionReady = dispositionMatchesChangeSet(disposition, comparableReadinessFiles)
+  const dispositionReady =
+    dispositionMatchesChangeSet(disposition, comparableReadinessFiles) ||
+    dispositionCoversFollowOnChangeSet(disposition, comparableReadinessFiles, impact)
 
   if (impact.__read_error) {
     add(blockers, 'BLOCKER', 'impact', `Cannot read ${rel(IMPACT_REPORT_PATH)}: ${impact.__read_error}`, 'Run `npm run docs:impact` and inspect the generated report.')
@@ -321,10 +410,21 @@ async function main() {
   }
 
   if (!impact.__read_error && impactModeAccepted(impact.mode, readinessScope)) {
+    const scopedImpactFiles = impactFilesInReadinessScope(
+      impact.files || [],
+      readinessScope,
+      unpushedCommitFiles,
+      comparableReadinessFiles,
+    )
     const categories = impact.categories_present || []
     const categoryByName = new Map(categories.map((cat) => [cat.category, cat]))
-    const unknown = impact.unknown_or_unmapped_files || []
-    const files = impact.files || []
+    const unknown = unknownFilesInReadinessScope(
+      impact.unknown_or_unmapped_files || [],
+      readinessScope,
+      unpushedCommitFiles,
+      comparableReadinessFiles,
+    )
+    const files = scopedImpactFiles
 
     if (unknown.length > 0) {
       add(
@@ -339,6 +439,11 @@ async function main() {
     }
 
     for (const category of categories) {
+      const scopedCategoryFiles = (category.files || []).filter((filePath) =>
+        files.some((file) => file.path === filePath),
+      )
+      if (scopedCategoryFiles.length === 0) continue
+
       if (category.review_recommended) {
         if (dispositionReady && reviewDispositionComplete(disposition, category.category)) {
           continue
@@ -349,7 +454,7 @@ async function main() {
           'review',
           `${category.label} requires independent review before publication.`,
           `Complete and record the review/routing expected by ${category.owning_authority}, then rerun \`npm run docs:impact\` and \`npm run publish:ready\`.`,
-          category.files,
+          scopedCategoryFiles,
         )
       }
 
@@ -401,7 +506,9 @@ async function main() {
 
     const generated = categoryByName.get('generated_artifact')
     if (generated) {
-      for (const filePath of generated.files || []) {
+      for (const filePath of (generated.files || []).filter((filePath) =>
+        files.some((file) => file.path === filePath),
+      )) {
         if (isPublicationPipelineArtifact(filePath)) {
           continue
         }
@@ -419,7 +526,10 @@ async function main() {
       }
     }
 
-    if (impact.independent_review_recommended_before_publication) {
+    if (
+      impact.independent_review_recommended_before_publication &&
+      scopedImpactFiles.some((file) => file.category !== 'generated_artifact' || !isPublicationPipelineArtifact(file.path))
+    ) {
       obligations.self_heal_routing.push({ obligation: 'independent review recommended by impact report; record disposition before publication' })
     }
   }

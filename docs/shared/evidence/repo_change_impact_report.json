@@ -1,23 +1,15 @@
 {
-  "generated_at_utc": "2026-06-30T07:40:13.519Z",
+  "generated_at_utc": "2026-06-30T07:57:21.573Z",
   "mode": "pending_working_tree_changes",
   "advisory_only": true,
   "read_only": true,
   "note": "Informational pre-check for Repository Transaction Framework Stage 4 (Validation) / Stage 5 (Publication). Does not block either stage.",
   "commit_range": null,
   "commits": null,
-  "total_files_changed": 4,
+  "total_files_changed": 3,
   "files": [
     {
       "path": "docs/Implementation_plans/retention_validation_report.json",
-      "old_path": null,
-      "git_status": "modified",
-      "category": "generated_artifact",
-      "category_label": "Generated artifact",
-      "note": null
-    },
-    {
-      "path": "docs/shared/evidence/repo_change_impact_report.json",
       "old_path": null,
       "git_status": "modified",
       "category": "generated_artifact",
@@ -63,7 +55,6 @@
       "label": "Generated artifact",
       "files": [
         "docs/Implementation_plans/retention_validation_report.json",
-        "docs/shared/evidence/repo_change_impact_report.json",
         "docs/shared/evidence/repo_health_audit_report.json"
       ],
       "owning_authority": "SYNC_PROTOCOL.md Generated Artifact Rule; docs/shared/reference/DATABASE_TRUTH.md for DB dumps/manifests specifically.",
