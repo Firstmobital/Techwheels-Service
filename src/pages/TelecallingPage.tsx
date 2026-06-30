@@ -236,6 +236,8 @@ function TelecallerDashboard({ activeCampaign }: { activeCampaign: Campaign | nu
   const [error, setError] = useState<string | null>(null)
   const [activeView, setActiveView] = useState<'call' | 'queue' | 'summary'>('call')
   const [bookingConfirmation, setBookingConfirmation] = useState<{ id: number } | null>(null)
+  // Queue search
+  const [queueSearch, setQueueSearch] = useState('')
   // Call form
   const [notes, setNotes] = useState('')
   const [bookingDate, setBookingDate] = useState('')
@@ -244,9 +246,15 @@ function TelecallerDashboard({ activeCampaign }: { activeCampaign: Campaign | nu
   const [pickupRequired, setPickupRequired] = useState(false)
   const [serviceCentre, setServiceCentre] = useState('')
   const [pickupAddress, setPickupAddress] = useState('')
+  const [altPhone, setAltPhone] = useState('')
+  const [creName, setCreName] = useState('')
+  const [driverName, setDriverName] = useState('')
   const [showBooking, setShowBooking] = useState(false)
   const [showCallback, setShowCallback] = useState(false)
   const [showNotes, setShowNotes] = useState(false)
+  // CRE + driver users
+  const [creUsers, setCreUsers] = useState<{ id: string; full_name: string }[]>([])
+  const [drivers, setDrivers] = useState<{ id: string; full_name: string }[]>([])
   // Queue edit
   const [editingId, setEditingId] = useState<number | null>(null)
   const [editNotes, setEditNotes] = useState('')
@@ -268,9 +276,17 @@ function TelecallerDashboard({ activeCampaign }: { activeCampaign: Campaign | nu
 
   useEffect(() => { refreshQueue(); refreshSummary() }, [refreshQueue, refreshSummary])
 
+  useEffect(() => {
+    supabase.from('users').select('id, full_name').in('role', ['admin', 'manager', 'staff']).order('full_name')
+      .then(({ data }) => { if (data) setCreUsers((data as { id: string; full_name: string }[]).filter(u => u.full_name)) })
+    supabase.from('users').select('id, full_name').eq('role', 'driver').order('full_name')
+      .then(({ data }) => { if (data) setDrivers((data as { id: string; full_name: string }[]).filter(u => u.full_name)) })
+  }, [])
+
   const resetCallForm = () => {
     setNotes(''); setBookingDate(''); setBookingTime(''); setCallbackDate('')
     setPickupRequired(false); setServiceCentre(''); setPickupAddress('')
+    setAltPhone(''); setCreName(''); setDriverName('')
     setShowBooking(false); setShowCallback(false); setShowNotes(false)
   }
 
@@ -300,6 +316,9 @@ function TelecallerDashboard({ activeCampaign }: { activeCampaign: Campaign | nu
         pickup_required: status === 'booked' ? pickupRequired : undefined,
         service_centre: status === 'booked' ? serviceCentre : undefined,
         pickup_address: status === 'booked' && pickupRequired ? pickupAddress : undefined,
+        alt_phone: status === 'booked' && altPhone ? altPhone : undefined,
+        cre_name: status === 'booked' && creName ? creName : undefined,
+        driver_name: status === 'booked' && pickupRequired && driverName ? driverName : undefined,
       })
       if (result?.service_booking_created && result?.service_booking_id) {
         setBookingConfirmation({ id: result.service_booking_id })
@@ -377,6 +396,10 @@ function TelecallerDashboard({ activeCampaign }: { activeCampaign: Campaign | nu
             pickupRequired={pickupRequired} setPickupRequired={setPickupRequired}
             serviceCentre={serviceCentre} setServiceCentre={setServiceCentre}
             pickupAddress={pickupAddress} setPickupAddress={setPickupAddress}
+            altPhone={altPhone} setAltPhone={setAltPhone}
+            creName={creName} setCreName={setCreName}
+            driverName={driverName} setDriverName={setDriverName}
+            creUsers={creUsers} drivers={drivers}
             showBooking={showBooking} setShowBooking={setShowBooking}
             showCallback={showCallback} setShowCallback={setShowCallback}
             onUpdateStatus={handleUpdateStatus}
@@ -388,9 +411,32 @@ function TelecallerDashboard({ activeCampaign }: { activeCampaign: Campaign | nu
       {/* ── QUEUE VIEW ─────────────────────────────────────────────────────── */}
       {activeView === 'queue' && (
         <div className="space-y-2">
-          {queue.length === 0 ? (
-            <div className="rounded-xl border border-gray-200 bg-white p-8 text-center text-sm text-gray-400">No active assignments. Click &quot;Get Next Customer&quot; to start calling.</div>
-          ) : queue.map(asgn => (
+          <div className="relative">
+            <input
+              type="text"
+              value={queueSearch}
+              onChange={e => setQueueSearch(e.target.value)}
+              placeholder="Search by name, phone or reg number…"
+              className="w-full rounded-lg border border-gray-200 bg-white py-2 pl-9 pr-4 text-sm text-gray-900 placeholder:text-gray-400 focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-400"
+            />
+            <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">🔍</span>
+            {queueSearch && (
+              <button onClick={() => setQueueSearch('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 text-sm">✕</button>
+            )}
+          </div>
+          {(() => {
+            const q = queueSearch.trim().toLowerCase()
+            const filtered = q ? queue.filter(a =>
+              `${a.customer.first_name} ${a.customer.last_name || ''}`.toLowerCase().includes(q) ||
+              (a.customer.contact_phones || '').toLowerCase().includes(q) ||
+              (a.customer.vehicle_registration_number || '').toLowerCase().includes(q)
+            ) : queue
+            if (filtered.length === 0) return (
+              <div className="rounded-xl border border-gray-200 bg-white p-8 text-center text-sm text-gray-400">
+                {q ? `No results for "${queueSearch}"` : 'No active assignments. Click "Get Next Customer" to start calling.'}
+              </div>
+            )
+            return filtered.map((asgn: Assignment) => (
             <div key={asgn.id} className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
               <div className="flex items-start justify-between gap-3">
                 <div className="flex-1 min-w-0">
@@ -451,11 +497,12 @@ function TelecallerDashboard({ activeCampaign }: { activeCampaign: Campaign | nu
                 </div>
               )}
             </div>
-          ))}
+          ))
+          })()}
         </div>
       )}
 
-      {/* ── SUMMARY VIEW ───────────────────────────────────────────────────── */}
+      {/* ── SUMMARY VIEW ──────────────────────────────────────────────────── */}
       {activeView === 'summary' && summary && (
         <div className="grid grid-cols-3 gap-3 sm:grid-cols-5">
           <SummaryCard label="Total Calls" value={summary.total_calls} color="blue" icon="📞" />
@@ -482,6 +529,10 @@ function CallCard({
   pickupRequired, setPickupRequired,
   serviceCentre, setServiceCentre,
   pickupAddress, setPickupAddress,
+  altPhone, setAltPhone,
+  creName, setCreName,
+  driverName, setDriverName,
+  creUsers, drivers,
   showBooking, setShowBooking,
   showCallback, setShowCallback,
   onUpdateStatus, onLogWA,
@@ -495,6 +546,11 @@ function CallCard({
   pickupRequired: boolean; setPickupRequired: (v: boolean) => void
   serviceCentre: string; setServiceCentre: (v: string) => void
   pickupAddress: string; setPickupAddress: (v: string) => void
+  altPhone: string; setAltPhone: (v: string) => void
+  creName: string; setCreName: (v: string) => void
+  driverName: string; setDriverName: (v: string) => void
+  creUsers: { id: string; full_name: string }[]
+  drivers: { id: string; full_name: string }[]
   showBooking: boolean; setShowBooking: (v: boolean) => void
   showCallback: boolean; setShowCallback: (v: boolean) => void
   onUpdateStatus: (s: CallStatus) => void
@@ -626,11 +682,33 @@ function CallCard({
               </div>
             </div>
             {pickupRequired && (
-              <div>
-                <label className="text-xs font-medium text-gray-600">Pickup Address</label>
-                <input type="text" value={pickupAddress} onChange={e => setPickupAddress(e.target.value)} placeholder="Customer pickup address…" className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-1.5 text-sm" />
+              <div className="grid grid-cols-2 gap-3">
+                <div className="col-span-2">
+                  <label className="text-xs font-medium text-gray-600">Pickup Address</label>
+                  <input type="text" value={pickupAddress} onChange={e => setPickupAddress(e.target.value)} placeholder="Customer pickup address…" className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-1.5 text-sm" />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-gray-600">Driver Name</label>
+                  <select value={driverName} onChange={e => setDriverName(e.target.value)} className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-1.5 text-sm bg-white">
+                    <option value="">Select driver…</option>
+                    {drivers.map(d => <option key={d.id} value={d.full_name}>{d.full_name}</option>)}
+                  </select>
+                </div>
               </div>
             )}
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-xs font-medium text-gray-600">Alt Phone</label>
+                <input type="text" inputMode="numeric" value={altPhone} onChange={e => setAltPhone(e.target.value)} placeholder="Alternative number…" className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-1.5 text-sm" />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-gray-600">CRE Name</label>
+                <select value={creName} onChange={e => setCreName(e.target.value)} className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-1.5 text-sm bg-white">
+                  <option value="">Select CRE…</option>
+                  {creUsers.map(u => <option key={u.id} value={u.full_name}>{u.full_name}</option>)}
+                </select>
+              </div>
+            </div>
             <div className="flex flex-wrap gap-3">
               <button onClick={() => onUpdateStatus('booked')} disabled={busy || !bookingDate} className="rounded-lg bg-green-600 px-5 py-2 text-sm font-semibold text-white hover:bg-green-700 disabled:opacity-50">
                 {busy ? 'Confirming…' : '✅ Confirm Booking'}

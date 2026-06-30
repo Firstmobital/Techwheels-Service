@@ -262,7 +262,7 @@ export default async function handler(req: Request) {
 
     // ── ACTION: update_status ─────────────────────────────────────────────
     if (action === 'update_status') {
-      const { assignment_id, campaign_id, status, call_notes, booking_date, callback_date, pickup_required, service_centre, pickup_address } = body
+      const { assignment_id, campaign_id, status, call_notes, booking_date, callback_date, pickup_required, service_centre, pickup_address, alt_phone, cre_name, driver_name } = body
       if (!assignment_id || !status) throw new Error('Missing assignment_id or status')
 
       const update: Record<string, unknown> = {
@@ -321,6 +321,9 @@ export default async function handler(req: Request) {
                 pickup_required: pickup_required || false,
                 pickup_address: pickup_address || null,
                 service_centre: service_centre || null,
+                alt_phone: alt_phone || null,
+                cre_name: cre_name || null,
+                driver_name: (pickup_required && driver_name) ? driver_name : null,
                 caller_name: callerName,
                 call_attempt: 1,
                 call_outcome: 'Connected',
