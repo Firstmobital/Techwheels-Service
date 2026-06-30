@@ -95,9 +95,9 @@ export default function PartsStockDisciplineReport({ branch }: ReportViewProps) 
     setLoading(true)
     setError(null)
     try {
-      const branchFilter = branch && branch !== 'ALL' ? { branch } : {}
-      const portalFilter = portal !== 'ALL' ? { portal } : {}
-      const baseFilters = { ...branchFilter, ...portalFilter }
+      const baseFilters: Record<string, string | string[] | number[]> = {}
+      if (branch && branch !== 'ALL') baseFilters['branch'] = branch
+      if (portal !== 'ALL') baseFilters['portal'] = portal
 
       const [consumptionAll, stockAll, orderAll] = await Promise.all([
         fetchAll<ConsumptionRow>(
@@ -308,7 +308,12 @@ export default function PartsStockDisciplineReport({ branch }: ReportViewProps) 
   ]
 
   if (loading) return <ReportLoadingState />
-  if (error) return <ReportErrorState message={error} onRetry={fetchData} />
+  if (error) return (
+    <div style={{ padding: 24, color: '#dc2626', border: '1px solid #fca5a5', borderRadius: 8, background: '#fef2f2' }}>
+      <div style={{ fontWeight: 600, marginBottom: 8 }}>Failed to load report: {error}</div>
+      <button className="btn" onClick={fetchData}>↻ Retry</button>
+    </div>
+  )
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
