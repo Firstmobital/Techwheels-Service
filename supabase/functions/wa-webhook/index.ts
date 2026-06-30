@@ -620,18 +620,19 @@ Deno.serve(async (req) => {
           preferred_branch: branchToUse,
         }).eq('id', convId)
 
-        // Link booking back to auto_service_reminders
-        await sb.from('auto_service_reminders')
-          .update({
-            booking_id:       newBkg?.id || null,
-            flow_response_id: waMessageId,
-            updated_at:       new Date().toISOString(),
-          })
+        // Link booking back to auto_service_reminders (select then update — JS client doesn't support order+limit on update)
+        const { data: asrRow } = await sb.from('auto_service_reminders')
+          .select('id')
           .eq('mobile_number', from10)
           .is('booking_id', null)
           .order('created_at', { ascending: false })
-          // Only update the most recent sent/delivered reminder for this phone
           .limit(1)
+          .maybeSingle()
+        if (asrRow?.id) {
+          await sb.from('auto_service_reminders')
+            .update({ booking_id: newBkg?.id || null, flow_response_id: waMessageId, updated_at: new Date().toISOString() })
+            .eq('id', asrRow.id)
+        }
 
         const confirmMsg = `✅ *Booking Confirmed!*\n📋 Booking ID: ${bkgId}\n🔧 Service: ${bookingServiceType}\n📅 Date: ${appointmentDate}\n⏰ Time: ${rawTime.replace(/^\d+_/, '')}\n📍 Branch: ${branchToUse}${isPickup ? `\n🚗 Pickup from: ${pickupAddress || 'address provided'}` : ''}\n\nDhanyawad! Our team will confirm shortly. 🙏`
 
