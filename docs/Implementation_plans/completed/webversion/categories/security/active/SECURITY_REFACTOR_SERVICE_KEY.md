@@ -1368,3 +1368,6 @@ All admin operations must be implemented as Supabase Edge Functions, not fronten
 **Status:** 🟢 READY TO START PHASE 1  
 **Next Action:** Assign Phase 1 tasks and begin audit
 
+---
+
+**Archive Migration Note (2026-06-29):** Migrated from legacy path `docs/Implementation_plans/completed/security/SECURITY_REFACTOR_SERVICE_KEY.md` to this canonical archive location per `docs/Implementation_plans/completed/INDEX.md` ("Archive Roots" / mirror-structure policy), during Repository Self-Healing Wave 1. Content unchanged (historical references to `docs/ADMIN_OPERATIONS_SECURITY.md` above are preserved as-written at completion time; the live equivalent today is `docs/web/cross-cutting/security/reference/SECURITY_REFACTOR_REFERENCE.md`).

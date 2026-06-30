@@ -89,6 +89,23 @@ Subcategories:
 - active/ -> live tracking/changelog
 - reference/catalog/ -> reusable templates
 
+### 2.2.1 Reusable Task Contracts (Task Library)
+
+Path: docs/shared/reference/catalog/task_library/
+
+This is a structured extension of the `reference/catalog/ -> reusable templates` rule above, not a new tier. A task contract differs from a flat fill-in-the-blank template (such as `catalog/IMPLEMENTATION_PLAN_TEMPLATE.md`): it describes a repeatable repository workflow's structure (purpose, inputs, authorities, execution, outputs, routing, validation, completion) rather than one document's shape.
+
+Subcategories:
+- generic/ -> repository-wide task contracts, not specific to any module.
+- modules/ -> module-specific contract specializations, created only when a module needs to override or extend a generic contract (Section 20, No-Empty-Category Policy, applies; keep a README.md anchor per Section 5 item 3 until real content exists).
+- generated/ -> contract-derived artifacts produced by automation only; never hand-edited (Generated Artifact Rule, `docs/shared/reference/SYNC_PROTOCOL.md`).
+
+Index: `docs/shared/reference/catalog/task_library/INDEX.md` (which contract to use, when, required inputs, expected outputs — does not duplicate contract bodies).
+
+Contracts must stay vendor-neutral and must cross-reference, not duplicate, the Repository Lifecycle Protocol, AI Output Intake Router, and Repository Health Auditor already defined in `docs/shared/reference/SYNC_PROTOCOL.md` and `scripts/repo_health_audit.mjs`.
+
+This path also holds `TRANSACTION_FRAMEWORK.md`: the generic six-stage repository transaction lifecycle (Start, Execution, Repository Updates, Validation, Publication, Completion) that every contract above plugs into, plus a mapping of common transaction types onto these contracts. It does not duplicate contract bodies, the Repository Lifecycle Protocol, or Safe Publish (`scripts/git-safe-publish.sh`) — it sequences them, and names Safe Publish as the framework's single Publication stage.
+
 ### 2.3 Web Truth State
 
 Path: docs/web/
@@ -239,7 +256,7 @@ To safely start from current unstructured state:
    - move other root docs/doc-like files to:
      - `docs/_unstructured_staging/project_root_docs/`
      - `docs/_unstructured_staging/project_root_docs_non_md/`
-2. Keep governance anchors at docs root: ai-context.md, db-changes.md, codex-logs.md, MASTER_INDEX.md, STRUCTURE_GUIDE.md (and README.md when created).
+2. Keep governance anchors at docs root: db-changes.md, MASTER_INDEX.md, STRUCTURE_GUIDE.md (and README.md when created). Per Section 2.1, do not place `ai-context.md` or any vendor-specific log (e.g. `codex-logs.md`) here — use the single vendor-neutral `.instructions.md` at the repo root and, if a change-log file is needed, a vendor-neutral name such as `agent-change-log.md`.
 3. Move all other root-level markdown files to staging bucket:
    - docs/_unstructured_staging/root_md/
 4. Move legacy unstructured folders to:
@@ -269,18 +286,17 @@ Expected:
 This section is a repository-specific override for Techwheels.
 For other repositories, replace or remove this section and define equivalent local DB authority rules.
 
-For any docs/planning task that references schema/database state:
+For any docs/planning task that references schema/database state, the controlling authority is `docs/shared/reference/DATABASE_TRUTH.md`. Per that file's three-tier hierarchy:
 
-1. Authority order is strict and never downgraded:
-- local_folder/backups/full_database.sql (authoritative schema and full database dump; authority never downgrades)
-- local_folder/backups/chunks/full_database.sql.part_* (access mirror of that same dump)
-- supabase/migrations/latest_remote_schema.sql (fallback only if present)
+1. `supabase/backups/full_metadata.sql` — primary, schema/object metadata truth.
+2. `local_folder/backups/full_database.sql` — secondary, full database truth (schema + row data).
+3. `local_folder/backups/chunks/full_database.sql.part_*` — mirror of #2 only, used when direct access to #2 is blocked by size/token/context limits; never a separate version.
 
-2. If direct file access to full_database.sql is blocked by size limits, read/search local_folder/backups/chunks/full_database.sql.part_* as the access mirror of the same dump; do not switch authority to fallback.
+2. If direct file access to `full_database.sql` is blocked by size limits, read the chunk parts in `local_folder/backups/chunks/` in numeric order as the access mirror of the same dump; do not switch authority to a fallback file.
 
-3. Before documenting schema assumptions, verify object existence against authoritative dump/chunks.
+3. Before documenting schema assumptions, verify object existence against `full_metadata.sql` first, falling back to `full_database.sql`/chunks for row data or cross-checks.
 
-4. Keep schema-sensitive docs aligned with the latest authoritative snapshot date.
+4. Keep schema-sensitive docs aligned with the latest authoritative snapshot date. Per `DATABASE_TRUTH.md`'s Conflict Rule, that file is controlling; this section restates it for the migration-policy context above and must not be edited to assert a different hierarchy.
 
 ---
 
@@ -678,6 +694,7 @@ Recommended command set (adapt paths per repo):
 Repository enforcement command:
 1. `npm run docs:validate`
 2. CI gate should run `npm run docs:validate:ci`
+3. `npm run docs:validate:health` — advisory-only repository health audit (broken/stale governance links, root-level doc violations, vendor AI instruction files, DB truth hierarchy contradiction flags, generated DB truth file drift, best-effort Done/Verified-but-not-promoted flags). Report only; never auto-fixes; intentionally not part of the blocking gates above (#1/#2) — run on demand. See `docs/shared/reference/SYNC_PROTOCOL.md` Self-Heal Check for what it operationalizes.
 
 ---
 

@@ -14,7 +14,7 @@ set -euo pipefail
 # thin wrapper — no logic lives here anymore. Prefer calling
 # scripts/backup-full-db.sh directly going forward.
 #
-# See docs/database-truth.md for the full Database Authority Hierarchy.
+# See docs/shared/reference/DATABASE_TRUTH.md for the full Database Authority Hierarchy.
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 exec "$repo_root/scripts/backup-full-db.sh" "$@"

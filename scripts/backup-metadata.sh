@@ -7,8 +7,8 @@ set -euo pipefail
 # This is a schema-only pg_dump and is the authoritative source for tables,
 # columns, types/enums, constraints, indexes, views, materialized views,
 # functions/RPCs, triggers, RLS, policies, grants/privileges, extensions,
-# and comments. See docs/database-truth.md for the full Database Authority
-# Hierarchy.
+# and comments. See docs/shared/reference/DATABASE_TRUTH.md for the full
+# Database Authority Hierarchy.
 #
 # Credentials are read from environment variables only. Nothing is
 # hardcoded in this file — never commit real credentials.
@@ -26,6 +26,15 @@ set -euo pipefail
 #   scripts/backup-metadata.sh
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+env_local="$repo_root/.env.local"
+if [[ -f "$env_local" ]]; then
+  set -a
+  # shellcheck disable=SC1090
+  source "$env_local"
+  set +a
+fi
+
 out_dir="$repo_root/supabase/backups"
 out_file="$out_dir/full_metadata.sql"
 evidence_dir="$repo_root/supabase/evidence"

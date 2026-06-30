@@ -250,3 +250,7 @@ curl -X POST https://YOUR_PROJECT_ID.supabase.co/functions/v1/confirm-user-email
 **Status:** 🟢 READY FOR PRODUCTION  
 **Git Commit:** 7376427  
 **Time to Complete All Phases:** ~4 hours elapsed + 1 hour deployment = 5 hours total  
+
+---
+
+**Archive Migration Note (2026-06-29):** Migrated from legacy path `docs/Implementation_plans/completed/security/SEC-001_DEPLOYMENT.md` to this canonical archive location during Repository Self-Healing Wave 1. Content unchanged (historical references to `docs/ADMIN_OPERATIONS_SECURITY.md` above are preserved as-written at completion time; the live equivalent today is `docs/web/cross-cutting/security/reference/SECURITY_REFACTOR_REFERENCE.md`).

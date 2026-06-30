@@ -365,3 +365,7 @@ DONE | 5.4 | Final sign-off and archive transition | Team | 2026-06-11 | 2026-06
 **Last Updated:** 2026-06-11 by GitHub Copilot
 **Status:** COMPLETED
 **Archived:** 2026-06-11
+
+---
+
+**Archive Migration Note (2026-06-29):** Migrated from legacy path `docs/Implementation_plans/completed/supabase/SUPABASE-002_DB_CODE_COMPARISON_REMEDIATION_PLAN_2026-06-11.md` to this canonical archive location during Repository Self-Healing Wave 1. Content unchanged.

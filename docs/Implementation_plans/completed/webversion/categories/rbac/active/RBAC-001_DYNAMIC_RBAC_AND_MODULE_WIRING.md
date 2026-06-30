@@ -182,7 +182,7 @@ Observed issue: new signup users could see all modules/pages despite no explicit
 - [docs/rbac/evidence/RBAC_ROLE_MATRIX_TESTING.md](../../rbac/evidence/RBAC_ROLE_MATRIX_TESTING.md) — Role matrix regression test plan (9 suites)
 - [docs/rbac/evidence/RBAC_SECURITY_TESTING.md](../../rbac/evidence/RBAC_SECURITY_TESTING.md) — Security/bypass test plan (7 suites)
 - [docs/rbac/runbooks/RBAC_OPERATIONS_RUNBOOK.md](../../rbac/runbooks/RBAC_OPERATIONS_RUNBOOK.md) — Admin/ops procedures for onboarding, permissions, troubleshooting
-- [docs/Implementation_plans/RBAC-001_DAILY_STANDUP_CHECKLIST.md](./RBAC-001_DAILY_STANDUP_CHECKLIST.md) — Daily execution tracking
+- [RBAC-001_DAILY_STANDUP_CHECKLIST.md](./RBAC-001_DAILY_STANDUP_CHECKLIST.md) — Daily execution tracking
 
 **Supporting Documentation:**
 - [docs/Implementation_plans/INDEX.md](../INDEX.md)
@@ -201,3 +201,7 @@ Observed issue: new signup users could see all modules/pages despite no explicit
 
 **Implementation Summary:**
 All 5 phases completed. All decision documents, test plans, operational runbooks, and UX improvements delivered. No gating approvals required. QA team can immediately execute 16 test suites defined in RBAC_ROLE_MATRIX_TESTING.md and RBAC_SECURITY_TESTING.md. Ops team can begin user onboarding, permission assignment, and rollout per RBAC_OPERATIONS_RUNBOOK.md.
+
+---
+
+**Archive Migration Note (2026-06-29):** Migrated from legacy path `docs/Implementation_plans/completed/rbac/RBAC-001_DYNAMIC_RBAC_AND_MODULE_WIRING.md` to this canonical archive location per `docs/Implementation_plans/completed/INDEX.md` ("Archive Roots" / mirror-structure policy), during Repository Self-Healing Wave 1. Content unchanged; only location and inbound references were corrected.

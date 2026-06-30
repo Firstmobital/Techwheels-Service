@@ -31,6 +31,7 @@ Live tracking and ongoing documentation shared by both platforms:
 Reusable templates and standards:
 - Update templates
 - Common documentation templates
+- `task_library/` → reusable, vendor-neutral repository task contracts (see `catalog/task_library/INDEX.md`)
 
 ---
 

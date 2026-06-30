@@ -371,3 +371,7 @@ After you complete this plan, you should see:
 
 **Last Updated:** 2026-05-22  
 **Status:** 🟢 READY TO START PHASE 1
+
+---
+
+**Archive Migration Note (2026-06-29):** Migrated from legacy path `docs/Implementation_plans/completed/security/SEC-001_QUICK_START.md` to this canonical archive location during Repository Self-Healing Wave 1. Content unchanged (historical references to `docs/ADMIN_OPERATIONS_SECURITY.md` above are preserved as-written at completion time; the live equivalent today is `docs/web/cross-cutting/security/reference/SECURITY_REFACTOR_REFERENCE.md`).

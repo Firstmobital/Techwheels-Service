@@ -322,14 +322,12 @@ cat .env.local | grep VITE_SUPABASE_SERVICE_KEY
 ## 📚 Related Documentation
 
 **Implementation Plans (Archived):**
-- `docs/Implementation_plans/completed/security/SECURITY_REFACTOR_SERVICE_KEY.md` - Full 1334-line technical plan
-- `docs/Implementation_plans/completed/security/SEC-001_DEPLOYMENT.md` - Deployment checklist
-- `docs/Implementation_plans/completed/security/SEC-001_QUICK_START.md` - Getting started guide
+- `docs/Implementation_plans/completed/webversion/categories/security/active/SECURITY_REFACTOR_SERVICE_KEY.md` - Full 1334-line technical plan
+- `docs/Implementation_plans/completed/webversion/categories/security/active/SEC-001_DEPLOYMENT.md` - Deployment checklist
+- `docs/Implementation_plans/completed/webversion/categories/security/active/SEC-001_QUICK_START.md` - Getting started guide
 
 **Detailed Docs (Archived):**
-- `docs/_unstructured_staging/legacy_dirs/archived/ADMIN_OPERATIONS_SECURITY.md` - Detailed pattern explanation
-- `docs/_unstructured_staging/legacy_dirs/archived/DEPLOYMENT_FINAL_STATUS.md` - Final deployment summary
-- `docs/_unstructured_staging/legacy_dirs/archived/SECURITY_REFACTOR_COMPLETION.md` - Completion report
+- Note (2026-06-29): The pre-consolidation detail docs formerly cited here (`ADMIN_OPERATIONS_SECURITY.md`, `DEPLOYMENT_FINAL_STATUS.md`, `SECURITY_REFACTOR_COMPLETION.md`) are not present in this repository — `docs/_unstructured_staging/legacy_dirs/archived/` exists but is empty. This document (`SECURITY_REFACTOR_REFERENCE.md`) is the current, live, consolidated reference for the secure admin pattern; no separate archived detail docs are needed.
 
 **Code References:**
 - `src/pages/AdminPage.tsx` - Frontend using Edge Functions

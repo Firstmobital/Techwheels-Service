@@ -266,7 +266,7 @@ All remaining tasks for RBAC-001: Dynamic RBAC and Module Wiring have been compl
 ### For Operations Team (Rollout & Maintenance)
 1. Read [RBAC_OPERATIONS_RUNBOOK.md](../runbooks/RBAC_OPERATIONS_RUNBOOK.md) — Learn all procedures
 2. Bookmark quick reference table at top
-3. Check [RBAC-001_DAILY_STANDUP_CHECKLIST.md](../../../../Implementation_plans/completed/rbac/RBAC-001_DAILY_STANDUP_CHECKLIST.md) — Daily tracking
+3. Check [RBAC-001_DAILY_STANDUP_CHECKLIST.md](../../../../Implementation_plans/completed/webversion/categories/rbac/active/RBAC-001_DAILY_STANDUP_CHECKLIST.md) — Daily tracking
 
 ### For Engineering (Reference)
 1. Read [MODULE_ROUTE_CONTRACT.md](docs/shared/reference/MODULE_ROUTE_CONTRACT.md) — Understand module-route mapping

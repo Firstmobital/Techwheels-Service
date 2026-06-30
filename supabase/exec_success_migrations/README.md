@@ -38,7 +38,7 @@ scripts/promote_verified_migration.sh <timestamp_prefix> --with-checks
 
 ## Required Tracking Before Move
 
-1. Update docs/Project_Handbook/DB_CHANGE_LEDGER.md status to VERIFIED.
+1. Update docs/shared/reference/DB_CHANGE_LEDGER.md status to VERIFIED.
 2. Record execution evidence (timestamp, environment, validation result).
 3. Confirm docs sync updates are completed.
 4. Follow docs/shared/reference/DATABASE_TRUTH.md for the authority hierarchy and docs/shared/reference/DB_TRUTH_PROTOCOL.md for authority resolution between dump refreshes.

@@ -1,0 +1,24 @@
+{
+  "generated_at_utc": "2026-06-30T03:26:20.305Z",
+  "advisory_only": true,
+  "governance_docs_scanned": 34,
+  "checks": {
+    "broken_or_stale_links": [],
+    "root_level_doc_violations": [],
+    "vendor_ai_instruction_files": [],
+    "db_hierarchy_contradiction_flags": [],
+    "generated_artifact_drift": {
+      "checked": true,
+      "drifted": false,
+      "detail": "full_metadata.sql sha256 matches its manifest. No drift detected."
+    },
+    "promotion_gaps_best_effort": [
+      {
+        "file": "docs/Implementation_plans/webversion/categories/redesign/active/Webredesign_IMPLEMENTATION_PLAN_MASTER_TRACKER.md",
+        "done_verified_rows_detected": 6,
+        "note": "File contains Done+Verified table row(s) but no mention of \"promote/promoted/promotion\" anywhere in the file. Verify manually against STRUCTURE_GUIDE.md Section 28 (promotion-before-removal contract) — this is a coarse, file-level signal, not row-level proof."
+      }
+    ]
+  },
+  "total_issues": 1
+}

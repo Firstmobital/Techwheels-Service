@@ -127,3 +127,7 @@ All AUTH-001 objectives achieved. Email delivery is now resilient and user acces
 - Password rotated confirmed by:
 - SMTP/rate-limit follow-up owner:
 - Closure timestamp:
+
+---
+
+**Archive Migration Note (2026-06-29):** Migrated from legacy path `docs/Implementation_plans/completed/auth/AUTH-001_RUNBOOK.md` to this canonical archive location during Repository Self-Healing Wave 1. Content unchanged.

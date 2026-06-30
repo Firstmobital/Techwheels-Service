@@ -15,7 +15,7 @@ Should frontend application routes migrate to DB routes (e.g., `/job-cards` inst
 
 ## Decision: Keep Explicit Mapping Layer
 
-**Recommendation:** Continue using the explicit `ROUTE_MODULE_MAP` in [src/App.tsx](../../src/App.tsx) rather than migrate frontend paths to match DB module routes.
+**Recommendation:** Continue using the explicit `ROUTE_MODULE_MAP` in [src/App.tsx](../../../src/App.tsx) rather than migrate frontend paths to match DB module routes.
 
 ### Reasoning
 
@@ -117,8 +117,8 @@ If this decision needs reversal (i.e., migrate to DB routes):
 ## Related Documentation
 
 - [MODULE_ROUTE_CONTRACT.md](./MODULE_ROUTE_CONTRACT.md) — Authoritative mapping
-- [src/App.tsx](../../src/App.tsx) — Implementation
-- [RBAC_IMPLEMENTATION_MASTER_2026-06-01.md](../Implementation_plans/webversion/categories/rbac/active/RBAC_IMPLEMENTATION_MASTER_2026-06-01.md) — Overall RBAC hardening plan
+- [src/App.tsx](../../../src/App.tsx) — Implementation
+- [RBAC-001_MASTER_PLAN_ACTIVE.md](../../Implementation_plans/webversion/categories/rbac/active/RBAC-001_MASTER_PLAN_ACTIVE.md) — Overall RBAC hardening plan
 
 ---
 

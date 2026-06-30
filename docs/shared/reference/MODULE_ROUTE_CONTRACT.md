@@ -119,8 +119,8 @@ Run this checklist monthly to prevent drift:
 
 ## Related Files
 
-- [src/App.tsx](../../src/App.tsx) — Route guards and ROUTE_MODULE_MAP
-- [src/pages/AdminPage.tsx](../../src/pages/AdminPage.tsx) — User permission assignment
+- [src/App.tsx](../../../src/App.tsx) — Route guards and ROUTE_MODULE_MAP
+- [src/pages/AdminPage.tsx](../../../src/pages/AdminPage.tsx) — User permission assignment
 - [public.modules](../../../local_folder/backups/full_database.sql) — Authoritative module list
 - [CURRENT_STATE.md](./CURRENT_STATE.md) — Role and permission defaults
 

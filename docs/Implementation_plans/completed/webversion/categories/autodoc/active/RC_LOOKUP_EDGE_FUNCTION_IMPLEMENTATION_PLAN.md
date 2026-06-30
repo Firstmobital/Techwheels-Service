@@ -114,3 +114,5 @@ The table shape is compatible with RC lookup response persistence while tighteni
 - **Provider Status**: ✅ Verified working — tested 2026-05-26 with RJ14CR1912, returned full vehicle data.
 
 ---
+
+**Archive Migration Note (2026-06-29):** Migrated from legacy path `docs/Implementation_plans/completed/autodoc/RC_LOOKUP_EDGE_FUNCTION_IMPLEMENTATION_PLAN.md` to this canonical archive location during Repository Self-Healing Wave 1. Content unchanged.

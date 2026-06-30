@@ -1,8 +1,80 @@
 {
-  "generated_at_utc": "2026-06-26T06:10:33.491Z",
-  "scanned_files": 35,
+  "generated_at_utc": "2026-06-30T03:26:20.099Z",
+  "scanned_files": 45,
   "violations": 0,
   "scanned": [
+    {
+      "file": "docs/Implementation_plans/completed/webversion/categories/auth/active/AUTH-001_EMAIL_DELIVERY_RECOVERY_AND_USER_ACCESS.md",
+      "checks": {
+        "metrics_automated_rows": 0,
+        "changelog_automated_rows": 0,
+        "snapshot_blocks": 0
+      }
+    },
+    {
+      "file": "docs/Implementation_plans/completed/webversion/categories/auth/active/AUTH-001_RUNBOOK.md",
+      "checks": {
+        "metrics_automated_rows": 0,
+        "changelog_automated_rows": 0,
+        "snapshot_blocks": 0
+      }
+    },
+    {
+      "file": "docs/Implementation_plans/completed/webversion/categories/autodoc/active/RC_LOOKUP_EDGE_FUNCTION_IMPLEMENTATION_PLAN.md",
+      "checks": {
+        "metrics_automated_rows": 0,
+        "changelog_automated_rows": 0,
+        "snapshot_blocks": 0
+      }
+    },
+    {
+      "file": "docs/Implementation_plans/completed/webversion/categories/rbac/active/RBAC-001_DAILY_STANDUP_CHECKLIST.md",
+      "checks": {
+        "metrics_automated_rows": 0,
+        "changelog_automated_rows": 0,
+        "snapshot_blocks": 0
+      }
+    },
+    {
+      "file": "docs/Implementation_plans/completed/webversion/categories/rbac/active/RBAC-001_DYNAMIC_RBAC_AND_MODULE_WIRING.md",
+      "checks": {
+        "metrics_automated_rows": 0,
+        "changelog_automated_rows": 0,
+        "snapshot_blocks": 0
+      }
+    },
+    {
+      "file": "docs/Implementation_plans/completed/webversion/categories/security/active/SEC-001_DEPLOYMENT.md",
+      "checks": {
+        "metrics_automated_rows": 0,
+        "changelog_automated_rows": 0,
+        "snapshot_blocks": 0
+      }
+    },
+    {
+      "file": "docs/Implementation_plans/completed/webversion/categories/security/active/SEC-001_QUICK_START.md",
+      "checks": {
+        "metrics_automated_rows": 0,
+        "changelog_automated_rows": 0,
+        "snapshot_blocks": 0
+      }
+    },
+    {
+      "file": "docs/Implementation_plans/completed/webversion/categories/security/active/SECURITY_REFACTOR_SERVICE_KEY.md",
+      "checks": {
+        "metrics_automated_rows": 0,
+        "changelog_automated_rows": 0,
+        "snapshot_blocks": 0
+      }
+    },
+    {
+      "file": "docs/Implementation_plans/completed/webversion/categories/supabase/active/SUPABASE-002_DB_CODE_COMPARISON_REMEDIATION_PLAN_2026-06-11.md",
+      "checks": {
+        "metrics_automated_rows": 0,
+        "changelog_automated_rows": 0,
+        "snapshot_blocks": 0
+      }
+    },
     {
       "file": "docs/Implementation_plans/mobileversion/categories/autodoc/active/MOBILE-005_AUTODOC_GPS_STAMP_PARITY_PLAN.md",
       "checks": {
@@ -173,6 +245,14 @@
     },
     {
       "file": "docs/Implementation_plans/webversion/categories/drive/active/DRIVE-001_UNIVERSAL_DRIVE_UPLOAD_AND_STORAGE_OFFLOAD.md",
+      "checks": {
+        "metrics_automated_rows": 0,
+        "changelog_automated_rows": 0,
+        "snapshot_blocks": 0
+      }
+    },
+    {
+      "file": "docs/Implementation_plans/webversion/categories/import/active/IMPORT-002_PSF_INCREMENTAL_UPSERT_GOVERNANCE_PLAN_2026-06-26.md",
       "checks": {
         "metrics_automated_rows": 0,
         "changelog_automated_rows": 0,

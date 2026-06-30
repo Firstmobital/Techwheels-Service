@@ -203,3 +203,7 @@ This plan restores immediate user access without relying on email delivery, pres
 
 **Last Updated:** 2026-05-23 by GitHub Copilot  
 **Status:** ✅ COMPLETED (2026-05-23)
+
+---
+
+**Archive Migration Note (2026-06-29):** Migrated from legacy path `docs/Implementation_plans/completed/auth/AUTH-001_EMAIL_DELIVERY_RECOVERY_AND_USER_ACCESS.md` to this canonical archive location during Repository Self-Healing Wave 1. Content unchanged.

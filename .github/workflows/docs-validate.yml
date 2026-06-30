@@ -1,0 +1,30 @@
+name: Docs Validate
+
+on:
+  pull_request:
+    paths:
+      - 'docs/**'
+      - 'scripts/docs_plan_retention_validate.mjs'
+      - 'scripts/docs_plan_retention_cleanup.mjs'
+      - 'package.json'
+  push:
+    branches: [main]
+    paths:
+      - 'docs/**'
+      - 'scripts/docs_plan_retention_validate.mjs'
+      - 'scripts/docs_plan_retention_cleanup.mjs'
+      - 'package.json'
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Run docs validation gate
+        run: npm run docs:validate:ci

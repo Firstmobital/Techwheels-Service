@@ -80,8 +80,8 @@ const { error } = await supabase.functions.invoke('operation-name', {
    - Use `logAuditEvent()` from shared utilities
    - Include action, resource type, resource ID, and details
 
-4. **Document in ADMIN_OPERATIONS_SECURITY.md**
-   - Add to "Future Operations" section
+4. **Document in `docs/web/cross-cutting/security/reference/SECURITY_REFACTOR_REFERENCE.md`**
+   - Follow the existing "How to Add New Admin Features" pattern in that doc
    - Include input, operation, and audit log details
 
 5. **Test with Non-Admin JWT**
@@ -149,7 +149,7 @@ All AI agents/tools must follow the single generic operating contract at [`.inst
 
 ## Related Documentation
 
-- [Secure Admin Operations Pattern](docs/ADMIN_OPERATIONS_SECURITY.md)
+- [Secure Admin Operations Pattern](docs/web/cross-cutting/security/reference/SECURITY_REFACTOR_REFERENCE.md)
 - [Supabase Edge Functions](https://supabase.com/docs/guides/functions)
 - [JWT Best Practices](https://supabase.com/docs/guides/auth/auth-jwt)
 - [Row-Level Security](https://supabase.com/docs/guides/auth/row-level-security)

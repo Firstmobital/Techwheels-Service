@@ -250,3 +250,7 @@ Evidence links:
 - PR/Commit: Local working tree update
 - Plan status: RBAC-001 ready for immediate QA/rollout; all 5 phases complete
 - Next execution: QA test suites + ops rollout procedures
+
+---
+
+**Archive Migration Note (2026-06-29):** Migrated from legacy path `docs/Implementation_plans/completed/rbac/RBAC-001_DAILY_STANDUP_CHECKLIST.md` to this canonical archive location during Repository Self-Healing Wave 1. Content unchanged.
