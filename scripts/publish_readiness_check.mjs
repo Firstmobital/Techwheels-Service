@@ -126,6 +126,20 @@ function resolveReadinessScope(workingTreeFiles, unpushedCommitFiles, dispositio
       dispositionEvidenceOnly ||
       unpushedStackRefresh)
 
+  const usePublishedBaseline =
+    fromUnpushed.length === 0 &&
+    isPipelineArtifactOnlyWorkingTreeDelta(workingTreeFiles) &&
+    !disposition.__read_error &&
+    Array.isArray(disposition.change_set_files) &&
+    disposition.change_set_files.length > 0
+
+  if (usePublishedBaseline) {
+    return {
+      files: publishableChangeSetFiles([...disposition.change_set_files], disposition),
+      scope: 'published baseline',
+    }
+  }
+
   if (useUnpushed) {
     return { files: fromUnpushed, scope: 'unpushed commits' }
   }
@@ -137,7 +151,12 @@ function resolveReadinessScope(workingTreeFiles, unpushedCommitFiles, dispositio
 
 function impactModeAccepted(mode, readinessScope) {
   if (mode === 'pending_working_tree_changes') return true
+  if (readinessScope === 'published baseline') return mode === 'incoming_commit_range'
   return readinessScope === 'unpushed commits' && mode === 'incoming_commit_range'
+}
+
+function skipImpactFileSetComparison(readinessScope) {
+  return readinessScope === 'unpushed commits' || readinessScope === 'published baseline'
 }
 
 function fingerprintChangeSet(files) {
@@ -255,8 +274,8 @@ async function main() {
       `Impact report mode is ${impact.mode || '(missing)'}, not accepted for ${readinessScope}.`,
       'Run `npm run docs:impact` immediately before `npm run publish:ready`. When the substantive working tree is clean and unpushed commits exist, git-safe-publish may refresh impact via `--range @{u}..HEAD`.',
     )
-  } else if (readinessScope === 'unpushed commits') {
-    // Validation pipeline artifacts may refresh without changing the publishable commit stack.
+  } else if (skipImpactFileSetComparison(readinessScope)) {
+    // Pipeline validation artifacts may refresh without changing the publishable stack.
   } else {
     const reportedFiles = (impact.files || []).map((file) => file.path).sort()
     const comparableReportedFiles = publishableChangeSetFiles(
