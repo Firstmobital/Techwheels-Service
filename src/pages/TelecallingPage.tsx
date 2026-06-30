@@ -1021,44 +1021,77 @@ function AdminDashboard({ campaigns, activeCampaign, onRefresh }: { campaigns: C
 
       {/* ── Performance Tab ─────────────────────────────────────────────── */}
       {activeAdminTab === 'performance' && (
-        <div className="rounded-xl border border-gray-200 bg-white overflow-hidden shadow-sm">
-          <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
-            <h3 className="font-semibold text-gray-900">📊 Telecaller Performance</h3>
-            <button onClick={fetchAgentStats} className="text-sm text-blue-600 hover:text-blue-700">↻ Refresh</button>
-          </div>
-          {loadingTab ? <div className="p-8 text-center text-sm text-gray-400">Loading…</div> : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead className="bg-gray-50">
-                  <tr>
-                    {['Telecaller', 'Total', 'Booked', 'Callback', 'No Answer', 'Not Interested', 'Already Serviced', 'Sold Vehicle', 'Conversion %'].map(h => (
-                      <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide whitespace-nowrap">{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100">
-                  {agentStats.length === 0 ? (
-                    <tr><td colSpan={9} className="px-4 py-8 text-center text-gray-400">No data</td></tr>
-                  ) : agentStats.sort((a, b) => b.booked - a.booked).map((a, i) => {
-                    const convPct = a.connected > 0 ? ((a.booked / a.connected) * 100).toFixed(0) + '%' : '—'
-                    return (
-                      <tr key={i} className="hover:bg-gray-50">
-                        <td className="px-4 py-3 font-medium text-gray-900">{a.email}</td>
-                        <td className="px-4 py-3 text-gray-600">{a.total}</td>
-                        <td className="px-4 py-3 font-semibold text-green-700">{a.booked}</td>
-                        <td className="px-4 py-3 text-purple-700">{a.callback_later}</td>
-                        <td className="px-4 py-3 text-orange-700">{a.no_answer}</td>
-                        <td className="px-4 py-3 text-gray-600">{a.not_interested}</td>
-                        <td className="px-4 py-3 text-teal-700">{a.already_serviced}</td>
-                        <td className="px-4 py-3 text-yellow-700">{a.sold_vehicle}</td>
-                        <td className="px-4 py-3 font-semibold text-blue-700">{convPct}</td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
+        <div className="space-y-4">
+          {agentStats.length > 0 && (() => {
+            const totals = agentStats.reduce((acc: any, a: any) => ({
+              calls: acc.calls + (a.calls_made || 0),
+              connected: acc.connected + (a.calls_connected || 0),
+              booked: acc.booked + (a.booked || 0),
+              no_answer: acc.no_answer + (a.no_answer || 0),
+              callback: acc.callback + (a.callback_later || 0),
+              sold: acc.sold + (a.sold_vehicle || 0),
+            }), { calls: 0, connected: 0, booked: 0, no_answer: 0, callback: 0, sold: 0 })
+            return (
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+                {[
+                  { label: 'Total Calls', value: totals.calls, color: 'text-gray-900' },
+                  { label: 'Connected', value: totals.connected, color: 'text-blue-700' },
+                  { label: 'Booked', value: totals.booked, color: 'text-green-700' },
+                  { label: 'Callback', value: totals.callback, color: 'text-purple-700' },
+                  { label: 'No Answer', value: totals.no_answer, color: 'text-orange-700' },
+                  { label: 'Sold Vehicle', value: totals.sold, color: 'text-yellow-700' },
+                ].map(t => (
+                  <div key={t.label} className="rounded-xl border border-gray-200 bg-white px-4 py-3 shadow-sm">
+                    <p className="text-xs text-gray-500">{t.label}</p>
+                    <p className={`text-2xl font-bold mt-1 ${t.color}`}>{t.value}</p>
+                  </div>
+                ))}
+              </div>
+            )
+          })()}
+          <div className="rounded-xl border border-gray-200 bg-white overflow-hidden shadow-sm">
+            <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
+              <h3 className="font-semibold text-gray-900">📊 Telecaller Performance</h3>
+              <button onClick={fetchAgentStats} className="text-sm text-blue-600 hover:text-blue-700">↻ Refresh</button>
             </div>
-          )}
+            {loadingTab ? <div className="p-8 text-center text-sm text-gray-400">Loading…</div> : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      {['#', 'Telecaller', 'Calls Made', 'Connected', 'Booked', 'Callback', 'No Answer', 'Not Interested', 'Wrong No.', 'Svc Done', 'Sold Car', 'In Progress', 'Book Rate'].map(h => (
+                        <th key={h} className="px-3 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide whitespace-nowrap">{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {agentStats.length === 0 ? (
+                      <tr><td colSpan={13} className="px-4 py-8 text-center text-gray-400">No call activity yet for this campaign</td></tr>
+                    ) : agentStats.map((a: any, i: number) => {
+                      const bookRate = a.calls_connected > 0 ? ((a.booked / a.calls_connected) * 100).toFixed(0) + '%' : '—'
+                      return (
+                        <tr key={i} className={`hover:bg-gray-50 ${i === 0 ? 'bg-green-50' : ''}`}>
+                          <td className="px-3 py-3 text-gray-400 text-xs">{i + 1}</td>
+                          <td className="px-3 py-3 font-medium text-gray-900">{a.email.split('@')[0]}<span className="text-gray-400 text-xs"> @{a.email.split('@')[1]}</span></td>
+                          <td className="px-3 py-3 font-semibold text-gray-800">{a.calls_made || 0}</td>
+                          <td className="px-3 py-3 text-blue-700 font-medium">{a.calls_connected || 0}</td>
+                          <td className="px-3 py-3 font-bold text-green-700">{a.booked || 0}</td>
+                          <td className="px-3 py-3 text-purple-700">{a.callback_later || 0}</td>
+                          <td className="px-3 py-3 text-orange-700">{a.no_answer || 0}</td>
+                          <td className="px-3 py-3 text-gray-500">{a.not_interested || 0}</td>
+                          <td className="px-3 py-3 text-red-500">{a.wrong_number || 0}</td>
+                          <td className="px-3 py-3 text-teal-700">{a.already_serviced || 0}</td>
+                          <td className="px-3 py-3 text-yellow-700">{a.sold_vehicle || 0}</td>
+                          <td className="px-3 py-3 text-gray-400">{a.still_assigned || 0}</td>
+                          <td className="px-3 py-3 font-semibold text-blue-700">{bookRate}</td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
         </div>
       )}
 
