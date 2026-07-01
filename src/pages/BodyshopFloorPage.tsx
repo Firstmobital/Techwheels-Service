@@ -24,8 +24,8 @@ interface Employee {
   department: string | null
 }
 
-// BSRole maps 1:1 to a DB column prefix (dentor_, painter_, technician_)
-type BSRole = 'DENTOR' | 'PAINTER' | 'TECHNICIAN'
+// BSRole maps 1:1 to a DB column prefix (dentor_, painter_, technician_, etc.)
+type BSRole = 'SUPERVISOR' | 'DENTOR' | 'DENTOR_HELPER' | 'PAINTER' | 'PAINTER_HELPER' | 'TECHNICIAN' | 'RUBBING'
 
 // Per-role assignment data — employee_code / employee_name may be comma-separated for multi-employee
 interface BSRoleAssignment {
@@ -48,6 +48,13 @@ interface BSAssignmentRow {
   repair_card_id: number | null
   reception_entry_id: number | null
   dealer_code: string | null
+  supervisor_employee_code: string | null
+  supervisor_employee_name: string | null
+  supervisor_work_status: string | null
+  supervisor_remark: string | null
+  supervisor_in_ts: string | null
+  supervisor_out_ts: string | null
+  supervisor_completed_by: string | null
   dentor_employee_code: string | null
   dentor_employee_name: string | null
   dentor_work_status: string | null
@@ -55,6 +62,13 @@ interface BSAssignmentRow {
   dentor_in_ts: string | null
   dentor_out_ts: string | null
   dentor_completed_by: string | null
+  dentor_helper_employee_code: string | null
+  dentor_helper_employee_name: string | null
+  dentor_helper_work_status: string | null
+  dentor_helper_remark: string | null
+  dentor_helper_in_ts: string | null
+  dentor_helper_out_ts: string | null
+  dentor_helper_completed_by: string | null
   painter_employee_code: string | null
   painter_employee_name: string | null
   painter_work_status: string | null
@@ -62,6 +76,13 @@ interface BSAssignmentRow {
   painter_in_ts: string | null
   painter_out_ts: string | null
   painter_completed_by: string | null
+  painter_helper_employee_code: string | null
+  painter_helper_employee_name: string | null
+  painter_helper_work_status: string | null
+  painter_helper_remark: string | null
+  painter_helper_in_ts: string | null
+  painter_helper_out_ts: string | null
+  painter_helper_completed_by: string | null
   technician_employee_code: string | null
   technician_employee_name: string | null
   technician_work_status: string | null
@@ -69,6 +90,13 @@ interface BSAssignmentRow {
   technician_in_ts: string | null
   technician_out_ts: string | null
   technician_completed_by: string | null
+  rubbing_employee_code: string | null
+  rubbing_employee_name: string | null
+  rubbing_work_status: string | null
+  rubbing_remark: string | null
+  rubbing_in_ts: string | null
+  rubbing_out_ts: string | null
+  rubbing_completed_by: string | null
   bs_floor_completed_at: string | null
   bs_floor_completed_by: string | null
 }
@@ -78,12 +106,17 @@ type AssignmentView = 'all' | 'unassigned' | 'assigned' | 'work_inprocess' | 'ho
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const ROLE_META: Record<BSRole, { label: string; icon: string; col: string }> = {
-  DENTOR:     { label: 'Dentor',     icon: '🔨', col: 'dentor'     },
-  PAINTER:    { label: 'Painter',    icon: '🎨', col: 'painter'    },
-  TECHNICIAN: { label: 'Technician', icon: '🔧', col: 'technician' },
+  SUPERVISOR:     { label: 'Supervisor',     icon: '🧑‍💼', col: 'supervisor'     },
+  DENTOR:         { label: 'Dentor',         icon: '🔨',   col: 'dentor'         },
+  DENTOR_HELPER:  { label: 'Dentor Helper',  icon: '🪛',   col: 'dentor_helper'  },
+  PAINTER:        { label: 'Painter',        icon: '🎨',   col: 'painter'        },
+  PAINTER_HELPER: { label: 'Painter Helper', icon: '🖌️',   col: 'painter_helper' },
+  TECHNICIAN:     { label: 'Technician',     icon: '🔧',   col: 'technician'     },
+  RUBBING:        { label: 'Rubbing',        icon: '🧽',   col: 'rubbing'        },
 }
 
-const ALL_ROLES: BSRole[] = ['DENTOR', 'PAINTER', 'TECHNICIAN']
+// Order drives table column order: Branch | Supervisor | Dentor | Dentor Helper | Painter | Painter Helper | Technician | Rubbing
+const ALL_ROLES: BSRole[] = ['SUPERVISOR', 'DENTOR', 'DENTOR_HELPER', 'PAINTER', 'PAINTER_HELPER', 'TECHNICIAN', 'RUBBING']
 
 const STATUS_OPTIONS = [
   { value: 'work_inprocess', label: 'Work Inprocess' },
@@ -95,13 +128,15 @@ const BS_DEPTS = new Set(['BODY SHOP', 'BODYSHOP'])
 
 // ─── Employee Master role → DB column mapping ─────────────────────────────────
 // Maps every Employee Master business role in Bodyshop to the correct DB column.
-// FLOOR INCHARGE is supervisory — not assigned to a car slot, so it is skipped.
 function normRole(empRole: string | null): BSRole | null {
   const v = String(empRole ?? '').trim().toUpperCase()
-  if (v === 'DENTOR' || v === 'DENTOR HELPER')      return 'DENTOR'
-  if (v === 'PAINTER' || v === 'PAINTER HELPER')    return 'PAINTER'
-  if (v === 'TECHNICIAN' || v === 'PDI')            return 'TECHNICIAN'
-  // FLOOR INCHARGE — supervisory, skip
+  if (v === 'FLOOR INCHARGE')   return 'SUPERVISOR'
+  if (v === 'DENTOR')           return 'DENTOR'
+  if (v === 'DENTOR HELPER')    return 'DENTOR_HELPER'
+  if (v === 'PAINTER')          return 'PAINTER'
+  if (v === 'PAINTER HELPER')   return 'PAINTER_HELPER'
+  if (v === 'TECHNICIAN' || v === 'PDI') return 'TECHNICIAN'
+  if (v === 'RUBBING')          return 'RUBBING'
   return null
 }
 
@@ -129,6 +164,16 @@ function splitComma(v: string | null | undefined): string[] {
 function joinComma(arr: string[]): string | null {
   const s = arr.join(',')
   return s || null
+}
+
+function emptyRoleAssignment(): BSRoleAssignment {
+  return { employee_codes: [], employee_names: [], work_status: null, remark: null, in_ts: null, out_ts: null, completed_by: null }
+}
+
+function emptyRolesRecord(): Record<BSRole, BSRoleAssignment> {
+  const roles = {} as Record<BSRole, BSRoleAssignment>
+  for (const role of ALL_ROLES) roles[role] = emptyRoleAssignment()
+  return roles
 }
 
 // Extract per-role assignment object from a columnar DB row
@@ -250,7 +295,8 @@ export default function BodyshopFloorPage() {
   // ── Employees by role (dynamic from Employee Master) ─────────────────────
 
   const empByRole = useMemo<Record<BSRole, Employee[]>>(() => {
-    const m: Record<BSRole, Employee[]> = { DENTOR: [], PAINTER: [], TECHNICIAN: [] }
+    const m = {} as Record<BSRole, Employee[]>
+    for (const role of ALL_ROLES) m[role] = []
     employees.forEach((e) => {
       const r = normRole(e.role)
       if (r) m[r].push(e)
@@ -641,11 +687,7 @@ export default function BodyshopFloorPage() {
                   {filtered.map((car) => {
                     const k = jcKey(car)
                     const entry = assignments[k]
-                    const roles: Record<BSRole, BSRoleAssignment> = entry?.roles ?? {
-                      DENTOR:     { employee_codes: [], employee_names: [], work_status: null, remark: null, in_ts: null, out_ts: null, completed_by: null },
-                      PAINTER:    { employee_codes: [], employee_names: [], work_status: null, remark: null, in_ts: null, out_ts: null, completed_by: null },
-                      TECHNICIAN: { employee_codes: [], employee_names: [], work_status: null, remark: null, in_ts: null, out_ts: null, completed_by: null },
-                    }
+                    const roles: Record<BSRole, BSRoleAssignment> = entry?.roles ?? emptyRolesRecord()
 
                     return (
                       // ONE row per car — never duplicated regardless of how many employees are assigned
