@@ -36,7 +36,7 @@ import EWReminderPage from './pages/EWReminderPage'
 import ServiceBookingPage from './pages/ServiceBookingPage'
 import WAAgentPage from './pages/WAAgentPage'
 import TelecallingPage from './pages/TelecallingPage'
-import AutoServiceReminderPage from './pages/AutoServiceReminderPage'
+import WhatsAppAutomationsPage from './pages/WhatsAppAutomationsPage'
 import VerifyScreenPreview from './pages/VerifyScreenPreview'
 import { hasSupabaseEnv, supabase } from './lib/supabase'
 import { getDealerScopeContext } from './lib/api/auth'
@@ -66,7 +66,7 @@ const NAV_ITEMS = [
   { to: '/service-booking', label: 'Service Booking', icon: 'calendar' },
   { to: '/wa-agent', label: 'WA AI Agent', icon: 'message-circle' },
   { to: '/telecalling', label: 'Telecalling', icon: 'phone' },
-  { to: '/auto-service-reminder', label: 'Auto Reminders', icon: 'bell' },
+  { to: '/auto-service-reminder', label: 'WA Automations', icon: 'bell' },
   { to: '/cre-incentive', label: 'CRE Incentive', icon: 'reports' },
 ]
 type ModuleName =
@@ -1222,7 +1222,7 @@ VITE_SUPABASE_ANON_KEY=your-anon-key`}
                   path="/auto-service-reminder"
                   element={(
                     <RequireAccess allowedModules={allowedModules} modules={ROUTE_MODULE_MAP['/auto-service-reminder']}>
-                      <AutoServiceReminderPage />
+                      <WhatsAppAutomationsPage />
                     </RequireAccess>
                   )}
                 />
