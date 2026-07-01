@@ -521,6 +521,79 @@ Deno.serve(async (req) => {
   const convId = conv!.id as number
   const todayStr = new Date().toISOString().split('T')[0]
 
+  // ── POST SERVICE FEEDBACK: handle WhatsApp Flow feedback submission ──────
+  // When customer taps "Submit Feedback" on the post_service_feedback_v1
+  // template and submits the Flow form, Meta sends an nfm_reply keyed by that
+  // Flow's field names (screen_0_Choose_one_0 / screen_0_Remarks_1). Detect
+  // this before the auto-reminder booking-flow handler below, since both are
+  // nfm_reply on a non-flow_active conversation.
+  if (msgType === 'interactive') {
+    const inter     = msg.interactive as Record<string, unknown>
+    const interType = inter?.type as string
+    if (interType === 'nfm_reply' && !conv?.flow_active) {
+      const nfm = (inter.nfm_reply as Record<string, unknown>) || {}
+      const rawResp = nfm.response_json
+      let flowFields: Record<string, unknown> = {}
+      if (typeof rawResp === 'string') {
+        try { flowFields = JSON.parse(rawResp) } catch { flowFields = {} }
+      } else if (rawResp && typeof rawResp === 'object') {
+        flowFields = rawResp as Record<string, unknown>
+      }
+
+      const rawRating = flowFields['screen_0_Choose_one_0']
+      if (typeof rawRating === 'string') {
+        const remarks = (flowFields['screen_0_Remarks_1'] as string) || ''
+        // Rating options are labelled "... (N/5)" regardless of on-screen order
+        const ratingMatch = rawRating.match(/\((\d)\/5\)/)
+        const rating = ratingMatch ? parseInt(ratingMatch[1], 10) : null
+
+        await sb.from('wa_messages').insert([{
+          conversation_id: convId, direction: 'inbound', sender: 'customer',
+          body: `[Feedback submitted] Rating: ${rating ?? 'n/a'}/5, Remarks: ${remarks || '(none)'}`,
+          wa_message_id: waMessageId, status: 'delivered', ai_generated: false,
+        }])
+        await sb.from('wa_conversations').update({ last_message_at: new Date().toISOString() }).eq('id', convId)
+
+        // Find the pending feedback row for this customer (select then update —
+        // JS client doesn't support order+limit on update)
+        const { data: psfRow } = await sb.from('post_service_feedback_messages')
+          .select('id')
+          .eq('mobile_number', from10)
+          .is('rating', null)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle()
+
+        if (psfRow?.id) {
+          await sb.from('post_service_feedback_messages').update({
+            rating:        rating,
+            feedback_text: remarks || null,
+            responded_at:  new Date().toISOString(),
+            status:        'responded',
+            updated_at:    new Date().toISOString(),
+          }).eq('id', psfRow.id)
+
+          const reviewLink = (config.google_review_link as string) || ''
+          const replyMsg = rating !== null && rating >= 4 && reviewLink
+            ? `Thank you for the wonderful feedback! 🙏 We'd really appreciate it if you could share a quick Google review:\n${reviewLink}`
+            : `Thank you for your feedback! 🙏 We've noted your comments and our team will look into it.`
+
+          await sb.from('wa_messages').insert([{
+            conversation_id: convId, direction: 'outbound', sender: 'ai',
+            body: replyMsg, ai_generated: true, status: 'sent',
+          }])
+          await sendWA(phoneId, metaToken, fromE164, replyMsg)
+
+          if (rating !== null && rating >= 4 && reviewLink) {
+            await sb.from('post_service_feedback_messages').update({ review_link_sent: true }).eq('id', psfRow.id)
+          }
+        }
+
+        return new Response('OK', { status: 200 })
+      }
+    }
+  }
+
   // ── AUTO SERVICE REMINDER: handle WhatsApp Flow form submission ──────────
   // When customer taps "Book Now" on an auto reminder template and submits the
   // Flow form, Meta sends an nfm_reply. Since reminders are sent directly (not
