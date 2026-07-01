@@ -49,6 +49,7 @@ Snapshot Basis: Code and dump audit only (no inferred/assumed behavior)
 - `/reports`
 - `/reports/:categoryId`
 - `/reports/:categoryId/:reportId`
+- `/reports/parts/parts-stock-discipline` (Parts category; report id `parts-stock-discipline` — Stock Discipline & Reorder)
 - `/settings`
 - `/admin`
 - `/reception`

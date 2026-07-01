@@ -255,6 +255,19 @@ Capabilities:
 4. View telecaller performance table.
 5. View recent booked customers.
 
+### 8.4 Booking / lead form fields (CRE and Driver)
+
+When a telecaller records a booked visit or edits lead details on the web Telecalling page, the booking/lead form exposes **CRE Name** and **Driver** dropdowns.
+
+Dropdown sourcing (web):
+1. **CRE Name** — loaded from `public.employee_master` where `role = 'CRE'`, ordered by `employee_name`. Stored/submitted value is `employee_name`.
+2. **Driver** — loaded from `public.employee_master` where `role = 'DRIVER'`, ordered by `employee_name`. Stored/submitted value is `employee_name`.
+
+Notes:
+1. This replaces an earlier pattern that queried `public.users` by system role labels (`admin`/`manager`/`staff` for CRE; `driver` for Driver), which could show non-CRE staff or miss CRE roster entries.
+2. The same `employee_master` sourcing applies on `src/pages/ServiceBookingPage.tsx` for parity between telecalling bookings and the standalone service-booking module.
+3. Update this subsection whenever either dropdown query, role filter, or stored field changes.
+
 ---
 
 ## 9) Mobile Flow Parity
@@ -301,10 +314,11 @@ This file must be updated in the same change whenever any of the following chang
 3. Schema changes to `telecall_campaigns`, `telecall_assignments`, or lead-source fields from `all_service_data`.
 4. Access-control changes for `/telecalling` route or module permissions.
 5. Mobile/web parity behavior differences introduced intentionally.
+6. Booking/lead form dropdown sourcing changes for CRE or Driver fields (section 8.4).
 
 ### 12.1 Required update checklist
 
-1. Update sections 6, 7, and 10 in this file.
+1. Update sections 6, 7, 8.4, and 10 in this file.
 2. Add a dated entry to section 13 change log.
 3. Update operations indexes/trackers:
    - `docs/Implementation_plans/webversion/INDEX.md`
@@ -329,3 +343,4 @@ Compare action list from command output with section 7 before closing change.
 
 1. 2026-06-23: Initial full-flow baseline created from web/mobile source code, edge function, and authoritative schema dump mirror.
 2. 2026-06-23: Classified under web operations category as per docs tree governance.
+3. 2026-07-01: Documented CRE and Driver booking/lead form dropdown sourcing from `employee_master` by role (section 8.4); aligns with Service Booking page and upstream PR #16.

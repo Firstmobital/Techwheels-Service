@@ -2,6 +2,13 @@
 
 Tracks documentation-sync updates for business logic, architecture, and access control.
 
+## 2026-07-01 (upstream intake PR #16 + parts report, self-healed)
+
+- CRE dropdowns on Service Booking (`/service-booking`) and Telecalling booking/lead forms now source options from `employee_master` where `role = 'CRE'` (replacing prior `users`-table role filters).
+- Driver dropdowns on the same surfaces now source options from `employee_master` where `role = 'DRIVER'`.
+- Added Parts report **Stock Discipline & Reorder** at route `/reports/parts/parts-stock-discipline` (report id `parts-stock-discipline`): 20-day cover analysis with pipeline deduction, dead-stock flag, and reorder sheet export.
+- Docs updated by: incoming-change knowledge self-healing pass — `CHANGE_LOG.md`, `TELECALLING_MODULE_FLOW_AND_BUSINESS_LOGIC.md`, `CURRENT_STATE.md`, `README.md` §5.2.
+
 ## 2026-06-30
 
 - Applied DBL-0008: global vehicle model catalog on `public.settings_model_options` — deduped cross-dealer rows (54→19), forced `dealer_code = GLOBAL`, added global unique index on normalized active model name, normalize trigger, global Settings RLS, and `get_canonical_model_names()` RPC.

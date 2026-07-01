@@ -1,31 +1,14 @@
 {
-  "generated_at_utc": "2026-06-30T06:47:00.000Z",
+  "generated_at_utc": "2026-07-01T05:00:00.000Z",
   "authority": "docs/shared/reference/SYNC_PROTOCOL.md (Evidence routing); docs/shared/reference/catalog/task_library/TRANSACTION_FRAMEWORK.md Stage 5 publish-readiness proof",
   "change_set_files": [
     "docs/Implementation_plans/retention_validation_report.json",
-    "docs/Implementation_plans/webversion/categories/bodyshop/active/BODYSHOP-QUEUE-001_CANONICAL_STAGE_WORKLIST_BACKEND_PLAN_2026-06-20.md",
-    "docs/Implementation_plans/webversion/categories/bodyshop/active/Bodyshop-Flow.md",
+    "docs/shared/README.md",
     "docs/shared/active/CHANGE_LOG.md",
-    "docs/shared/evidence/PUBLICATION_READINESS_DISPOSITION_2026-06-30.md",
     "docs/shared/evidence/publication_readiness_disposition.json",
     "docs/shared/evidence/repo_health_audit_report.json",
     "docs/shared/reference/CURRENT_STATE.md",
-    "docs/shared/reference/DB_CHANGE_LEDGER.md",
-    "docs/shared/reference/SYNC_PROTOCOL.md",
-    "docs/shared/reference/catalog/task_library/INDEX.md",
-    "docs/shared/reference/catalog/task_library/TRANSACTION_FRAMEWORK.md",
-    "package.json",
-    "scripts/git-safe-publish.sh",
-    "scripts/publish_readiness_check.mjs",
-    "scripts/repo_change_impact.mjs",
-    "src/lib/api/settings.ts",
-    "supabase/backups/full_metadata.sql",
-    "supabase/evidence/authoritative_metadata_manifest.json",
-    "supabase/evidence/execution_promotion_log.md",
-    "supabase/evidence/post_dump_verified_promotions.md",
-    "supabase/exec_success_migrations/sql/20260630120000_global_settings_model_options.sql",
-    "supabase/exec_success_migrations/sql_check/20260630120000_global_settings_model_options_checks.sql",
-    "supabase/sql_checks/20260629100000_auto_service_reminders_checks.sql"
+    "docs/web/modules/telecalling/reference/TELECALLING_MODULE_FLOW_AND_BUSINESS_LOGIC.md"
   ],
   "reviews": [
     {

@@ -149,6 +149,7 @@ Capabilities:
 - Category + report-id routing and validation.
 - Branch/date range filtering and custom date validation.
 - Labour, performance, revenue, and parts report sets.
+- Parts **Stock Discipline & Reorder** report (`/reports/parts/parts-stock-discipline`): 20-day cover analysis with pipeline deduction, dead-stock flag, and reorder sheet export.
 - Aggregated query-based report generation with typed outputs.
 
 ## 5.3 AutoDoc Domain
