@@ -19,6 +19,7 @@ interface QueueRow {
   resolved_by_name: string | null
   service_advisor_name: string | null
   service_type: string | null
+  review_link_sent: boolean
 }
 
 interface RemarkRow {
@@ -35,6 +36,12 @@ interface Stats {
   open: number
   in_progress: number
   resolved: number
+}
+
+interface Overview {
+  totalSent: number
+  positiveCount: number
+  needsFollowupCount: number
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -87,7 +94,7 @@ function StatCard({ label, value, color = 'text-gray-800' }: { label: string; va
 
 // ─── Row detail panel ───────────────────────────────────────────────────────
 
-function RowDetail({ row, onUpdated }: { row: QueueRow; onUpdated: () => void }) {
+function RowDetail({ row, onUpdated, showActions }: { row: QueueRow; onUpdated: () => void; showActions: boolean }) {
   const [remarks, setRemarks] = useState<RemarkRow[]>([])
   const [loading, setLoading] = useState(true)
   const [draft, setDraft] = useState('')
@@ -95,8 +102,9 @@ function RowDetail({ row, onUpdated }: { row: QueueRow; onUpdated: () => void })
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    fetchRemarks()
-  }, [row.id])
+    if (showActions) fetchRemarks()
+    else setLoading(false)
+  }, [row.id, showActions])
 
   async function fetchRemarks() {
     setLoading(true)
@@ -156,28 +164,30 @@ function RowDetail({ row, onUpdated }: { row: QueueRow; onUpdated: () => void })
         </div>
       </div>
 
-      <div>
-        <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Call Log</h3>
-        {loading ? (
-          <p className="text-sm text-gray-400">Loading…</p>
-        ) : remarks.length === 0 ? (
-          <p className="text-sm text-gray-400">No remarks yet — this case hasn't been worked yet.</p>
-        ) : (
-          <ul className="space-y-2">
-            {remarks.map(r => (
-              <li key={r.id} className={`text-sm rounded p-2 ${r.is_resolution ? 'bg-green-50 border border-green-200' : 'bg-white border border-gray-200'}`}>
-                <div className="flex items-center justify-between text-xs text-gray-500 mb-1">
-                  <span className="font-medium text-gray-700">{r.created_by_name || 'Unknown'}{r.is_resolution ? ' · Resolved' : ''}</span>
-                  <span>{fmtDateTime(r.created_at)}</span>
-                </div>
-                <p className="text-gray-800">{r.remark}</p>
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
+      {showActions && (
+        <div>
+          <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Call Log</h3>
+          {loading ? (
+            <p className="text-sm text-gray-400">Loading…</p>
+          ) : remarks.length === 0 ? (
+            <p className="text-sm text-gray-400">No remarks yet — this case hasn't been worked yet.</p>
+          ) : (
+            <ul className="space-y-2">
+              {remarks.map(r => (
+                <li key={r.id} className={`text-sm rounded p-2 ${r.is_resolution ? 'bg-green-50 border border-green-200' : 'bg-white border border-gray-200'}`}>
+                  <div className="flex items-center justify-between text-xs text-gray-500 mb-1">
+                    <span className="font-medium text-gray-700">{r.created_by_name || 'Unknown'}{r.is_resolution ? ' · Resolved' : ''}</span>
+                    <span>{fmtDateTime(r.created_at)}</span>
+                  </div>
+                  <p className="text-gray-800">{r.remark}</p>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
 
-      {row.cre_status !== 'resolved' && (
+      {showActions && row.cre_status !== 'resolved' && (
         <div className="space-y-2">
           <textarea
             className="w-full border border-gray-300 rounded px-3 py-2 text-sm"
@@ -206,9 +216,17 @@ function RowDetail({ row, onUpdated }: { row: QueueRow; onUpdated: () => void })
         </div>
       )}
 
-      {row.cre_status === 'resolved' && (
+      {showActions && row.cre_status === 'resolved' && (
         <p className="text-sm text-green-700">
           ✓ Resolved by <span className="font-medium">{row.resolved_by_name}</span> on {fmtDateTime(row.resolved_at)}
+        </p>
+      )}
+
+      {!showActions && (
+        <p className="text-sm text-gray-500">
+          {row.review_link_sent
+            ? '✓ A Google review link was sent to this customer.'
+            : 'No Google review link was sent for this response.'}
         </p>
       )}
     </div>
@@ -219,10 +237,12 @@ function RowDetail({ row, onUpdated }: { row: QueueRow; onUpdated: () => void })
 
 export default function PostServiceFeedbackCREPage() {
   const [rows, setRows] = useState<QueueRow[]>([])
+  const [totalSent, setTotalSent] = useState(0)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [expandedId, setExpandedId] = useState<number | null>(null)
 
+  const [tier, setTier] = useState<'low' | 'high'>('low')
   const [filterStatus, setFilterStatus] = useState<'all' | 'open' | 'in_progress' | 'resolved'>('all')
   const [search, setSearch] = useState('')
 
@@ -233,37 +253,55 @@ export default function PostServiceFeedbackCREPage() {
   async function fetchAll() {
     setLoading(true)
     setError(null)
-    const { data, error: e } = await supabase
-      .from('post_service_feedback_cre_queue')
-      .select('*')
-      .order('responded_at', { ascending: false })
-      .limit(1000)
-    if (e) {
-      setError(e.message)
+    const [queueRes, sentRes] = await Promise.all([
+      supabase
+        .from('post_service_feedback_cre_queue')
+        .select('*')
+        .order('responded_at', { ascending: false })
+        .limit(1000),
+      supabase
+        .from('post_service_feedback_messages')
+        .select('id', { count: 'exact', head: true })
+        .not('sent_at', 'is', null),
+    ])
+    if (queueRes.error) {
+      setError(queueRes.error.message)
     } else {
-      setRows((data || []) as QueueRow[])
+      setRows((queueRes.data || []) as QueueRow[])
     }
+    if (!sentRes.error) setTotalSent(sentRes.count || 0)
     setLoading(false)
   }
 
+  const overview = useMemo<Overview>(() => ({
+    totalSent,
+    positiveCount:       rows.filter(r => r.rating >= 4).length,
+    needsFollowupCount:  rows.filter(r => r.rating <= 3).length,
+  }), [rows, totalSent])
+
+  const tierRows = useMemo(
+    () => rows.filter(r => (tier === 'low' ? r.rating <= 3 : r.rating >= 4)),
+    [rows, tier],
+  )
+
   const stats = useMemo<Stats>(() => ({
-    total:       rows.length,
-    open:        rows.filter(r => r.cre_status === 'open').length,
-    in_progress: rows.filter(r => r.cre_status === 'in_progress').length,
-    resolved:    rows.filter(r => r.cre_status === 'resolved').length,
-  }), [rows])
+    total:       tierRows.length,
+    open:        tierRows.filter(r => r.cre_status === 'open').length,
+    in_progress: tierRows.filter(r => r.cre_status === 'in_progress').length,
+    resolved:    tierRows.filter(r => r.cre_status === 'resolved').length,
+  }), [tierRows])
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase()
-    return rows.filter(r => {
-      if (filterStatus !== 'all' && r.cre_status !== filterStatus) return false
+    return tierRows.filter(r => {
+      if (tier === 'low' && filterStatus !== 'all' && r.cre_status !== filterStatus) return false
       if (q) {
         const hay = `${r.customer_name || ''} ${r.mobile_number} ${r.vehicle_registration_number || ''}`.toLowerCase()
         if (!hay.includes(q)) return false
       }
       return true
     })
-  }, [rows, filterStatus, search])
+  }, [tierRows, tier, filterStatus, search])
 
   if (loading) {
     return <div className="p-8 text-center text-gray-500">Loading Post Service Feedback queue…</div>
@@ -284,7 +322,7 @@ export default function PostServiceFeedbackCREPage() {
         <div>
           <h1 className="text-xl font-semibold text-gray-900">Post Service Feedback</h1>
           <p className="text-sm text-gray-500 mt-0.5">
-            Customers who rated their service 3 stars or lower — call them, log remarks, and mark resolved once handled.
+            Customers who responded to the post-service feedback message — follow up on low ratings, review the positive ones.
           </p>
         </div>
         <button
@@ -295,29 +333,57 @@ export default function PostServiceFeedbackCREPage() {
         </button>
       </div>
 
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <StatCard label="Total Cases" value={stats.total} />
-        <StatCard label="Open" value={stats.open} color="text-red-700" />
-        <StatCard label="In Progress" value={stats.in_progress} color="text-yellow-700" />
-        <StatCard label="Resolved" value={stats.resolved} color="text-green-700" />
+      <div>
+        <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Overview</h2>
+        <div className="grid grid-cols-3 gap-3">
+          <StatCard label="Messages Sent" value={overview.totalSent} />
+          <StatCard label="4★ & Above" value={overview.positiveCount} color="text-green-700" />
+          <StatCard label="3★ & Below" value={overview.needsFollowupCount} color="text-red-700" />
+        </div>
       </div>
+
+      <div className="border-b border-gray-200 flex gap-6">
+        <button
+          onClick={() => { setTier('low'); setExpandedId(null) }}
+          className={`py-2 text-sm font-medium border-b-2 transition-colors ${tier === 'low' ? 'border-red-600 text-red-700' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
+        >
+          Needs Follow-up (≤3★)
+        </button>
+        <button
+          onClick={() => { setTier('high'); setExpandedId(null) }}
+          className={`py-2 text-sm font-medium border-b-2 transition-colors ${tier === 'high' ? 'border-green-600 text-green-700' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
+        >
+          Positive (≥4★)
+        </button>
+      </div>
+
+      {tier === 'low' && (
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <StatCard label="Total Cases" value={stats.total} />
+          <StatCard label="Open" value={stats.open} color="text-red-700" />
+          <StatCard label="In Progress" value={stats.in_progress} color="text-yellow-700" />
+          <StatCard label="Resolved" value={stats.resolved} color="text-green-700" />
+        </div>
+      )}
 
       <div className="bg-white border border-gray-200 rounded-lg p-4">
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          <div>
-            <label className="block text-xs text-gray-500 mb-1">Status</label>
-            <select
-              className="w-full border border-gray-300 rounded px-2 py-1.5 text-sm"
-              value={filterStatus}
-              onChange={e => setFilterStatus(e.target.value as typeof filterStatus)}
-            >
-              <option value="all">All</option>
-              <option value="open">Open</option>
-              <option value="in_progress">In Progress</option>
-              <option value="resolved">Resolved</option>
-            </select>
-          </div>
-          <div className="sm:col-span-2">
+          {tier === 'low' && (
+            <div>
+              <label className="block text-xs text-gray-500 mb-1">Status</label>
+              <select
+                className="w-full border border-gray-300 rounded px-2 py-1.5 text-sm"
+                value={filterStatus}
+                onChange={e => setFilterStatus(e.target.value as typeof filterStatus)}
+              >
+                <option value="all">All</option>
+                <option value="open">Open</option>
+                <option value="in_progress">In Progress</option>
+                <option value="resolved">Resolved</option>
+              </select>
+            </div>
+          )}
+          <div className={tier === 'low' ? 'sm:col-span-2' : 'sm:col-span-3'}>
             <label className="block text-xs text-gray-500 mb-1">Search (name, mobile, reg no)</label>
             <input
               type="text"
@@ -343,7 +409,7 @@ export default function PostServiceFeedbackCREPage() {
                 <th className="px-4 py-3 font-medium">Mobile</th>
                 <th className="px-4 py-3 font-medium">Rating</th>
                 <th className="px-4 py-3 font-medium">Remark</th>
-                <th className="px-4 py-3 font-medium">Status</th>
+                <th className="px-4 py-3 font-medium">{tier === 'low' ? 'Status' : 'Review Link'}</th>
                 <th className="px-4 py-3 font-medium"></th>
               </tr>
             </thead>
@@ -367,16 +433,22 @@ export default function PostServiceFeedbackCREPage() {
                       {r.feedback_text || '—'}
                     </td>
                     <td className="px-4 py-3">
-                      <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_COLOR[r.cre_status]}`}>
-                        {STATUS_LABEL[r.cre_status]}
-                      </span>
+                      {tier === 'low' ? (
+                        <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_COLOR[r.cre_status]}`}>
+                          {STATUS_LABEL[r.cre_status]}
+                        </span>
+                      ) : (
+                        <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${r.review_link_sent ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
+                          {r.review_link_sent ? 'Sent' : '—'}
+                        </span>
+                      )}
                     </td>
                     <td className="px-4 py-3 text-gray-400 text-xs">{expandedId === r.id ? '▲' : '▼'}</td>
                   </tr>
                   {expandedId === r.id && (
                     <tr>
                       <td colSpan={9} className="p-0">
-                        <RowDetail row={r} onUpdated={fetchAll} />
+                        <RowDetail row={r} onUpdated={fetchAll} showActions={tier === 'low'} />
                       </td>
                     </tr>
                   )}
