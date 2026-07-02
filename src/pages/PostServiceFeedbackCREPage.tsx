@@ -149,6 +149,13 @@ function RowDetail({ row, onUpdated }: { row: QueueRow; onUpdated: () => void })
   return (
     <div className="bg-gray-50 border-t border-gray-200 p-4 space-y-3">
       <div>
+        <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Customer's Original Feedback</h3>
+        <div className="bg-white border border-gray-200 rounded p-3 text-sm text-gray-800 whitespace-pre-wrap">
+          {row.feedback_text || <span className="text-gray-400">No remark text provided.</span>}
+        </div>
+      </div>
+
+      <div>
         <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Call Log</h3>
         {loading ? (
           <p className="text-sm text-gray-400">Loading…</p>
