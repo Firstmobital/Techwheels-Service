@@ -2,6 +2,7 @@ import { useEffect, useState, useMemo } from 'react'
 import { supabase } from '../lib/supabase'
 import { Icon } from '../components/Icon'
 import DateRangeFilter from '../components/DateRangeFilter'
+import { exportToCSV, generateExportFilename } from '../lib/exportUtils'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 const BOOKING_SOURCES = ['Telecalling', 'WhatsApp', 'Walk-in', 'Self', 'Driver Pickup', 'Referral'] as const
@@ -122,6 +123,7 @@ export default function ServiceBookingPage() {
   const firstOfMonth = new Date(today.getFullYear(), today.getMonth(), 1).toISOString().split('T')[0]
   const todayStr = today.toISOString().split('T')[0]
   const [dateRange, setDateRange] = useState<DateRange>({ from: firstOfMonth, to: todayStr })
+  const [appointmentDateRange, setAppointmentDateRange] = useState<DateRange>({ from: '', to: '' })
   const [sourceFilter, setSourceFilter] = useState('all')
   const [statusFilter, setStatusFilter] = useState('all')
   const [branchFilter, setBranchFilter] = useState('all')
@@ -171,6 +173,8 @@ export default function ServiceBookingPage() {
     if (sourceFilter !== 'all') rows = rows.filter(b => b.booking_source === sourceFilter)
     if (statusFilter !== 'all') rows = rows.filter(b => b.status === statusFilter)
     if (branchFilter !== 'all') rows = rows.filter(b => b.branch === branchFilter)
+    if (appointmentDateRange.from) rows = rows.filter(b => b.appointment_date && b.appointment_date >= appointmentDateRange.from)
+    if (appointmentDateRange.to) rows = rows.filter(b => b.appointment_date && b.appointment_date <= appointmentDateRange.to)
     if (searchQuery.trim()) {
       const q = searchQuery.trim().toLowerCase()
       rows = rows.filter(b =>
@@ -180,7 +184,32 @@ export default function ServiceBookingPage() {
       )
     }
     return rows
-  }, [bookings, sourceFilter, statusFilter, branchFilter, searchQuery])
+  }, [bookings, sourceFilter, statusFilter, branchFilter, appointmentDateRange, searchQuery])
+
+  function handleExport() {
+    if (filtered.length === 0) return
+    const rows = filtered.map(b => ({
+      leadNumber: b.lead_number ?? '',
+      bookingSource: b.booking_source,
+      bookingDate: b.booking_date,
+      appointmentDate: b.appointment_date ?? '',
+      appointmentTime: timeLabel(b.booking_time) ?? '',
+      customerName: b.customer_name,
+      customerPhone: b.customer_phone,
+      regNumber: b.reg_number,
+      model: b.model ?? '',
+      fuelType: b.fuel_type ?? '',
+      serviceType: b.service_type ?? '',
+      branch: b.branch ?? '',
+      assignedSA: b.assigned_sa_name ?? '',
+      status: b.status,
+      jcNumber: b.jc_number ?? '',
+      pickupRequired: b.pickup_required ? 'Yes' : 'No',
+      dropRequired: b.drop_required ? 'Yes' : 'No',
+      createdAt: b.created_at,
+    }))
+    exportToCSV(rows, generateExportFilename('service-bookings'))
+  }
 
   const stats = useMemo(() => ({
     total: filtered.length,
@@ -283,7 +312,11 @@ export default function ServiceBookingPage() {
             <p style={{ margin: 0, fontSize: '0.72rem', color: '#94a3b8' }}>Manage appointments, telecalling & walk-ins</p>
           </div>
           <div style={{ flex: 1 }} />
-          <DateRangeFilter range={dateRange} onChange={setDateRange} />
+          <DateRangeFilter range={dateRange} onChange={setDateRange} label="Booked:" />
+          <button onClick={handleExport} disabled={filtered.length === 0} title="Export filtered bookings to CSV"
+            style={{ background: '#fff', color: '#334155', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '0.45rem 0.9rem', fontSize: '0.82rem', fontWeight: 700, cursor: filtered.length === 0 ? 'not-allowed' : 'pointer', opacity: filtered.length === 0 ? 0.5 : 1, whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+            <span style={{ fontSize: '0.9rem' }}>⬇</span> Export
+          </button>
           <button onClick={openNew} style={{ background: '#2563eb', color: '#fff', border: 'none', borderRadius: '8px', padding: '0.45rem 1rem', fontSize: '0.82rem', fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
             <span style={{ fontSize: '1rem' }}>＋</span> New Booking
           </button>
@@ -340,6 +373,8 @@ export default function ServiceBookingPage() {
             {branches.map(b => <option key={b}>{b}</option>)}
           </select>
         )}
+
+        <DateRangeFilter range={appointmentDateRange} onChange={setAppointmentDateRange} label="Appointment:" includeAll defaultPreset="all" />
 
         <div style={{ fontSize: '0.75rem', color: '#64748b', marginLeft: 'auto' }}>
           {filtered.length} record{filtered.length !== 1 ? 's' : ''}
