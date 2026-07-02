@@ -25,7 +25,7 @@ interface Employee {
 }
 
 // BSRole maps 1:1 to a DB column prefix (dentor_, painter_, technician_, etc.)
-type BSRole = 'SUPERVISOR' | 'DENTOR' | 'DENTOR_HELPER' | 'PAINTER' | 'PAINTER_HELPER' | 'TECHNICIAN' | 'RUBBING'
+type BSRole = 'SUPERVISOR' | 'DENTOR' | 'DENTOR_HELPER' | 'PAINTER' | 'PAINTER_HELPER' | 'TECHNICIAN' | 'RUBBING' | 'EDP'
 
 // Per-role assignment data — employee_code / employee_name may be comma-separated for multi-employee
 interface BSRoleAssignment {
@@ -97,6 +97,13 @@ interface BSAssignmentRow {
   rubbing_in_ts: string | null
   rubbing_out_ts: string | null
   rubbing_completed_by: string | null
+  edp_employee_code: string | null
+  edp_employee_name: string | null
+  edp_work_status: string | null
+  edp_remark: string | null
+  edp_in_ts: string | null
+  edp_out_ts: string | null
+  edp_completed_by: string | null
   bs_floor_completed_at: string | null
   bs_floor_completed_by: string | null
 }
@@ -113,10 +120,11 @@ const ROLE_META: Record<BSRole, { label: string; icon: string; col: string }> = 
   PAINTER_HELPER: { label: 'Painter Helper', icon: '🖌️',   col: 'painter_helper' },
   TECHNICIAN:     { label: 'Technician',     icon: '🔧',   col: 'technician'     },
   RUBBING:        { label: 'Rubbing',        icon: '🧽',   col: 'rubbing'        },
+  EDP:            { label: 'EDP',            icon: '📋',   col: 'edp'            },
 }
 
-// Order drives table column order: Branch | Supervisor | Dentor | Dentor Helper | Painter | Painter Helper | Technician | Rubbing
-const ALL_ROLES: BSRole[] = ['SUPERVISOR', 'DENTOR', 'DENTOR_HELPER', 'PAINTER', 'PAINTER_HELPER', 'TECHNICIAN', 'RUBBING']
+// Order drives table column order: Branch | Supervisor | Dentor | Dentor Helper | Painter | Painter Helper | Technician | Rubbing | EDP
+const ALL_ROLES: BSRole[] = ['SUPERVISOR', 'DENTOR', 'DENTOR_HELPER', 'PAINTER', 'PAINTER_HELPER', 'TECHNICIAN', 'RUBBING', 'EDP']
 
 const STATUS_OPTIONS = [
   { value: 'work_inprocess', label: 'Work Inprocess' },
@@ -137,6 +145,7 @@ function normRole(empRole: string | null): BSRole | null {
   if (v === 'PAINTER HELPER')   return 'PAINTER_HELPER'
   if (v === 'TECHNICIAN' || v === 'PDI') return 'TECHNICIAN'
   if (v === 'RUBBING')          return 'RUBBING'
+  if (v === 'EDP')              return 'EDP'
   return null
 }
 
