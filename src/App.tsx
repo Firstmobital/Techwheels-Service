@@ -37,6 +37,7 @@ import ServiceBookingPage from './pages/ServiceBookingPage'
 import WAAgentPage from './pages/WAAgentPage'
 import TelecallingPage from './pages/TelecallingPage'
 import WhatsAppAutomationsPage from './pages/WhatsAppAutomationsPage'
+import PostServiceFeedbackCREPage from './pages/PostServiceFeedbackCREPage'
 import VerifyScreenPreview from './pages/VerifyScreenPreview'
 import { hasSupabaseEnv, supabase } from './lib/supabase'
 import { getDealerScopeContext } from './lib/api/auth'
@@ -68,6 +69,7 @@ const NAV_ITEMS = [
   { to: '/telecalling', label: 'Telecalling', icon: 'phone' },
   { to: '/auto-service-reminder', label: 'WA Automations', icon: 'bell' },
   { to: '/cre-incentive', label: 'CRE Incentive', icon: 'reports' },
+  { to: '/post-service-feedback', label: 'Post Service Feedback', icon: 'message-circle' },
 ]
 type ModuleName =
   | 'job_cards'
@@ -94,8 +96,9 @@ type ModuleName =
   | 'telecalling'
   | 'auto_service_reminder'
   | 'cre_incentive'
+  | 'post_service_feedback_cre'
 
-type AppRoute = '/import' | '/reports' | '/settings' | '/admin' | '/autodoc' | '/reception' | '/service-advisor' | '/floor-incharge' | '/sa-tracker' | '/bodyshop-tracker' | '/bodyshop-floor' | '/technician' | '/complaints' | '/bodyshop-repair' | '/ew-reminder' | '/service-booking' | '/wa-agent' | '/telecalling' | '/auto-service-reminder' | '/cre-incentive'
+type AppRoute = '/import' | '/reports' | '/settings' | '/admin' | '/autodoc' | '/reception' | '/service-advisor' | '/floor-incharge' | '/sa-tracker' | '/bodyshop-tracker' | '/bodyshop-floor' | '/technician' | '/complaints' | '/bodyshop-repair' | '/ew-reminder' | '/service-booking' | '/wa-agent' | '/telecalling' | '/auto-service-reminder' | '/cre-incentive' | '/post-service-feedback'
 
 interface PermissionRow {
   module_name: string
@@ -122,6 +125,7 @@ const ROUTE_MODULE_MAP: Record<AppRoute, ModuleName[]> = {
   '/telecalling': ['telecalling'],
   '/auto-service-reminder': ['auto_service_reminder'],
   '/cre-incentive': ['cre_incentive'],
+  '/post-service-feedback': ['post_service_feedback_cre'],
 }
 
 type NavItem = {
@@ -651,6 +655,7 @@ function canAccessPath(pathname: string, allowedModules: Set<string>) {
   if (pathname.startsWith('/telecalling')) return hasAnyModuleAccess(allowedModules, ROUTE_MODULE_MAP['/telecalling'])
   if (pathname.startsWith('/auto-service-reminder')) return hasAnyModuleAccess(allowedModules, ROUTE_MODULE_MAP['/auto-service-reminder'])
   if (pathname.startsWith('/cre-incentive')) return hasAnyModuleAccess(allowedModules, ROUTE_MODULE_MAP['/cre-incentive'])
+  if (pathname.startsWith('/post-service-feedback')) return hasAnyModuleAccess(allowedModules, ROUTE_MODULE_MAP['/post-service-feedback'])
   if (pathname.startsWith('/c/')) return true
   if (pathname.startsWith('/reset-password') || pathname.startsWith('/auth/callback') || pathname.startsWith('/forgot-password')) return true
   return false
@@ -1231,6 +1236,14 @@ VITE_SUPABASE_ANON_KEY=your-anon-key`}
                   element={(
                     <RequireAccess allowedModules={allowedModules} modules={ROUTE_MODULE_MAP['/cre-incentive']}>
                       <CREIncentivePage />
+                    </RequireAccess>
+                  )}
+                />
+                <Route
+                  path="/post-service-feedback"
+                  element={(
+                    <RequireAccess allowedModules={allowedModules} modules={ROUTE_MODULE_MAP['/post-service-feedback']}>
+                      <PostServiceFeedbackCREPage />
                     </RequireAccess>
                   )}
                 />
