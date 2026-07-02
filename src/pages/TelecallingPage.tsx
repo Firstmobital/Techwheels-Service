@@ -792,6 +792,8 @@ function AdminDashboard({ campaigns, activeCampaign, onRefresh }: { campaigns: C
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
   const [agentStats, setAgentStats] = useState<any[]>([])
+  const [statsDateFrom, setStatsDateFrom] = useState('')
+  const [statsDateTo, setStatsDateTo] = useState('')
   const [bookings, setBookings] = useState<any[]>([])
   const [overdueList, setOverdueList] = useState<any[]>([])
   const [loadingTab, setLoadingTab] = useState(false)
@@ -808,12 +810,28 @@ function AdminDashboard({ campaigns, activeCampaign, onRefresh }: { campaigns: C
     if (activeAdminTab === 'performance') fetchAgentStats()
     else if (activeAdminTab === 'bookings') fetchBookings()
     else if (activeAdminTab === 'overdue') fetchOverdue()
-  }, [activeAdminTab, activeCampaign])
+  }, [activeAdminTab, activeCampaign, statsDateFrom, statsDateTo])
 
   async function fetchAgentStats() {
     setLoadingTab(true)
-    try { const d = await callEdge('admin_stats', { campaign_id: activeCampaign?.id }); setAgentStats(d.agent_stats || []) }
+    try {
+      const d = await callEdge('admin_stats', {
+        campaign_id: activeCampaign?.id,
+        date_from: statsDateFrom || undefined,
+        date_to: statsDateTo || undefined,
+      })
+      setAgentStats(d.agent_stats || [])
+    }
     catch (e) { console.error(e) } finally { setLoadingTab(false) }
+  }
+
+  function setStatsToday() {
+    const today = new Date().toISOString().split('T')[0]
+    setStatsDateFrom(today); setStatsDateTo(today)
+  }
+
+  function clearStatsRange() {
+    setStatsDateFrom(''); setStatsDateTo('')
   }
 
   async function fetchBookings() {
@@ -1100,6 +1118,40 @@ function AdminDashboard({ campaigns, activeCampaign, onRefresh }: { campaigns: C
       {/* ── Performance Tab ─────────────────────────────────────────────── */}
       {activeAdminTab === 'performance' && (
         <div className="space-y-4">
+          <div className="rounded-xl border border-gray-200 bg-white px-4 py-3 shadow-sm flex flex-wrap items-end gap-3">
+            <div>
+              <label className="block text-xs font-medium text-gray-500 mb-1">From</label>
+              <input
+                type="date"
+                value={statsDateFrom}
+                onChange={e => setStatsDateFrom(e.target.value)}
+                className="rounded-lg border border-gray-200 px-3 py-1.5 text-sm"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-500 mb-1">To</label>
+              <input
+                type="date"
+                value={statsDateTo}
+                onChange={e => setStatsDateTo(e.target.value)}
+                className="rounded-lg border border-gray-200 px-3 py-1.5 text-sm"
+              />
+            </div>
+            <button onClick={setStatsToday} className="rounded-lg bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700">
+              Today's Calls
+            </button>
+            {(statsDateFrom || statsDateTo) && (
+              <button onClick={clearStatsRange} className="rounded-lg border border-gray-200 px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-50">
+                Clear (All Time)
+              </button>
+            )}
+            <span className="text-xs text-gray-400 ml-auto">
+              {statsDateFrom || statsDateTo
+                ? `Showing calls ${statsDateFrom ? formatDate(statsDateFrom) : '…'} → ${statsDateTo ? formatDate(statsDateTo) : '…'}`
+                : 'Showing all-time performance'}
+            </span>
+          </div>
+
           {agentStats.length > 0 && (() => {
             const totals = agentStats.reduce((acc: any, a: any) => ({
               calls: acc.calls + (a.calls_made || 0),
@@ -1144,7 +1196,9 @@ function AdminDashboard({ campaigns, activeCampaign, onRefresh }: { campaigns: C
                   </thead>
                   <tbody className="divide-y divide-gray-100">
                     {agentStats.length === 0 ? (
-                      <tr><td colSpan={13} className="px-4 py-8 text-center text-gray-400">No call activity yet for this campaign</td></tr>
+                      <tr><td colSpan={13} className="px-4 py-8 text-center text-gray-400">
+                        {statsDateFrom || statsDateTo ? 'No call activity in this date range' : 'No call activity yet for this campaign'}
+                      </td></tr>
                     ) : agentStats.map((a: any, i: number) => {
                       const bookRate = a.calls_connected > 0 ? ((a.booked / a.calls_connected) * 100).toFixed(0) + '%' : '—'
                       return (

@@ -444,10 +444,15 @@ export default async function handler(req: Request) {
     // ── ACTION: admin_stats ───────────────────────────────────────────────
     if (action === 'admin_stats') {
       if (!isAdmin) throw new Error('Admin only')
-      const { campaign_id } = body
+      const { campaign_id, date_from, date_to } = body
       let q = serviceClient.from('telecall_assignments').select('assigned_to, status, call_count, no_answer_count, called_at')
       if (campaign_id) q = q.eq('campaign_id', campaign_id)
       q = q.neq('status', 'pending')  // only rows that have been touched
+      // date_from/date_to filter on called_at (when the call actually happened) —
+      // rows with no called_at yet (assigned but not called) are excluded once a
+      // range is applied, since they aren't "calls" within that window.
+      if (date_from) q = q.gte('called_at', `${date_from}T00:00:00`)
+      if (date_to) q = q.lte('called_at', `${date_to}T23:59:59`)
       const { data: all } = await q
 
       const byAgent: Record<string, any> = {}
