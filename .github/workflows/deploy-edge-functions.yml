@@ -52,3 +52,21 @@ jobs:
             --no-verify-jwt
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+
+      - name: Deploy wa-post-service-feedback
+        continue-on-error: true
+        run: |
+          supabase functions deploy wa-post-service-feedback \
+            --project-ref ${{ secrets.SUPABASE_PROJECT_REF || 'jmdndcphkmaljhwgzqxq' }} \
+            --no-verify-jwt
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+
+      - name: Deploy wa-webhook
+        continue-on-error: true
+        run: |
+          supabase functions deploy wa-webhook \
+            --project-ref ${{ secrets.SUPABASE_PROJECT_REF || 'jmdndcphkmaljhwgzqxq' }} \
+            --no-verify-jwt
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
