@@ -18,6 +18,7 @@ interface QueueRow {
   resolved_at: string | null
   resolved_by_name: string | null
   service_advisor_name: string | null
+  service_type: string | null
 }
 
 interface RemarkRow {
@@ -337,6 +338,7 @@ export default function PostServiceFeedbackCREPage() {
               <tr className="bg-gray-50 border-b border-gray-200 text-left text-xs text-gray-500 uppercase tracking-wide">
                 <th className="px-4 py-3 font-medium">Customer</th>
                 <th className="px-4 py-3 font-medium">Service Date</th>
+                <th className="px-4 py-3 font-medium">Service Type</th>
                 <th className="px-4 py-3 font-medium">Service Advisor</th>
                 <th className="px-4 py-3 font-medium">Mobile</th>
                 <th className="px-4 py-3 font-medium">Rating</th>
@@ -348,7 +350,7 @@ export default function PostServiceFeedbackCREPage() {
             <tbody className="divide-y divide-gray-100">
               {filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="px-4 py-8 text-center text-gray-400 text-sm">
+                  <td colSpan={9} className="px-4 py-8 text-center text-gray-400 text-sm">
                     No cases found.
                   </td>
                 </tr>
@@ -357,6 +359,7 @@ export default function PostServiceFeedbackCREPage() {
                   <tr className="hover:bg-gray-50 cursor-pointer" onClick={() => setExpandedId(expandedId === r.id ? null : r.id)}>
                     <td className="px-4 py-3 font-medium text-gray-800">{r.customer_name || '—'}</td>
                     <td className="px-4 py-3 text-gray-600">{fmtDate(r.closed_date)}</td>
+                    <td className="px-4 py-3 text-gray-600">{r.service_type || '—'}</td>
                     <td className="px-4 py-3 text-gray-600">{r.service_advisor_name || '—'}</td>
                     <td className="px-4 py-3 text-gray-600 font-mono">{r.mobile_number}</td>
                     <td className="px-4 py-3"><Stars rating={r.rating} /></td>
@@ -372,7 +375,7 @@ export default function PostServiceFeedbackCREPage() {
                   </tr>
                   {expandedId === r.id && (
                     <tr>
-                      <td colSpan={8} className="p-0">
+                      <td colSpan={9} className="p-0">
                         <RowDetail row={r} onUpdated={fetchAll} />
                       </td>
                     </tr>
