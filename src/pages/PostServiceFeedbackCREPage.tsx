@@ -20,6 +20,7 @@ interface QueueRow {
   service_advisor_name: string | null
   service_type: string | null
   review_link_sent: boolean
+  branch: string | null
 }
 
 interface RemarkRow {
@@ -296,7 +297,7 @@ export default function PostServiceFeedbackCREPage() {
     return tierRows.filter(r => {
       if (tier === 'low' && filterStatus !== 'all' && r.cre_status !== filterStatus) return false
       if (q) {
-        const hay = `${r.customer_name || ''} ${r.mobile_number} ${r.vehicle_registration_number || ''}`.toLowerCase()
+        const hay = `${r.customer_name || ''} ${r.mobile_number} ${r.vehicle_registration_number || ''} ${r.branch || ''}`.toLowerCase()
         if (!hay.includes(q)) return false
       }
       return true
@@ -384,7 +385,7 @@ export default function PostServiceFeedbackCREPage() {
             </div>
           )}
           <div className={tier === 'low' ? 'sm:col-span-2' : 'sm:col-span-3'}>
-            <label className="block text-xs text-gray-500 mb-1">Search (name, mobile, reg no)</label>
+            <label className="block text-xs text-gray-500 mb-1">Search (name, mobile, reg no, branch)</label>
             <input
               type="text"
               className="w-full border border-gray-300 rounded px-2 py-1.5 text-sm"
@@ -403,6 +404,8 @@ export default function PostServiceFeedbackCREPage() {
             <thead>
               <tr className="bg-gray-50 border-b border-gray-200 text-left text-xs text-gray-500 uppercase tracking-wide">
                 <th className="px-4 py-3 font-medium">Customer</th>
+                <th className="px-4 py-3 font-medium">Reg No</th>
+                <th className="px-4 py-3 font-medium">Branch</th>
                 <th className="px-4 py-3 font-medium">Service Date</th>
                 <th className="px-4 py-3 font-medium">Service Type</th>
                 <th className="px-4 py-3 font-medium">Service Advisor</th>
@@ -416,7 +419,7 @@ export default function PostServiceFeedbackCREPage() {
             <tbody className="divide-y divide-gray-100">
               {filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="px-4 py-8 text-center text-gray-400 text-sm">
+                  <td colSpan={11} className="px-4 py-8 text-center text-gray-400 text-sm">
                     No cases found.
                   </td>
                 </tr>
@@ -424,6 +427,8 @@ export default function PostServiceFeedbackCREPage() {
                 <Fragment key={r.id}>
                   <tr className="hover:bg-gray-50 cursor-pointer" onClick={() => setExpandedId(expandedId === r.id ? null : r.id)}>
                     <td className="px-4 py-3 font-medium text-gray-800">{r.customer_name || '—'}</td>
+                    <td className="px-4 py-3 text-gray-600 font-mono">{r.vehicle_registration_number || '—'}</td>
+                    <td className="px-4 py-3 text-gray-600">{r.branch || '—'}</td>
                     <td className="px-4 py-3 text-gray-600">{fmtDate(r.closed_date)}</td>
                     <td className="px-4 py-3 text-gray-600">{r.service_type || '—'}</td>
                     <td className="px-4 py-3 text-gray-600">{r.service_advisor_name || '—'}</td>
@@ -447,7 +452,7 @@ export default function PostServiceFeedbackCREPage() {
                   </tr>
                   {expandedId === r.id && (
                     <tr>
-                      <td colSpan={9} className="p-0">
+                      <td colSpan={11} className="p-0">
                         <RowDetail row={r} onUpdated={fetchAll} showActions={tier === 'low'} />
                       </td>
                     </tr>
