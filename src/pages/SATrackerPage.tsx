@@ -148,7 +148,8 @@ function dateLabel(key: string): string {
 
 function calculateSAIncome(labourAmount: number, saSharePercent: number): number {
   if (!Number.isFinite(labourAmount) || labourAmount <= 0) return 0
-  return labourAmount * (saSharePercent / 100)
+  const netBeforeShare = labourAmount / 1.18
+  return netBeforeShare * (saSharePercent / 100)
 }
 
 function normalizeShareInput(value: string, fallback: number): number {
@@ -172,7 +173,7 @@ function getPortalLabel(v: string | null | undefined): string {
 // ── Component ──────────────────────────────────────────────────────────────────
 
 // ── SA Yesterday Report helpers ───────────────────────────────────────────────
-function buildSAWAText(rows: YesterdaySARow[], date: string, saSharePct: number): string {
+function buildSAWAText(rows: YesterdaySARow[], date: string, pvPct: number, evPct: number): string {
   if (rows.length === 0) return `📊 *SA Report — ${date}*\n\nNo closed jobs yesterday.`
 
   const bySA = new Map<string, YesterdaySARow[]>()
@@ -185,7 +186,7 @@ function buildSAWAText(rows: YesterdaySARow[], date: string, saSharePct: number)
   const totalPaid   = rows.reduce((s, r) => s + r.sa_income, 0)
 
   let msg = `📊 *SA Earnings Report — ${date}*\n`
-  msg += `⚙️ SA Share: ${saSharePct}%\n`
+  msg += `⚙️ SA Share: PV ${pvPct}% / EV ${evPct}%\n`
   msg += `━━━━━━━━━━━━━━━━━━━━\n\n`
 
   bySA.forEach((saRows, name) => {
@@ -391,10 +392,12 @@ export default function SATrackerPage() {
       const saRows: YesterdaySARow[] = (data ?? [])
         .filter((r: any) => r.sr_assigned_to)
         .map((r: any) => {
-          const labour = parseAmount(r.final_labour_amount)
-          const income = calculateSAIncome(labour, saSharePercent)
+          const labour  = parseAmount(r.final_labour_amount)
+          const saName  = String(r.sr_assigned_to ?? '').trim()
+          const fuel    = normFuelBucket(empDetailMap.get(normSAName(saName))?.fuel_type)
+          const income  = calculateSAIncome(labour, fuel === 'EV' ? evSharePercent : saSharePercent)
           return {
-            sa_name: String(r.sr_assigned_to ?? '').trim(),
+            sa_name: saName,
             job_card_number: String(r.job_card_number ?? '').trim(),
             reg_number: String(r.vehicle_registration_number ?? '—').trim(),
             location: String(r.location ?? '—').trim(),
@@ -405,7 +408,7 @@ export default function SATrackerPage() {
         })
         .sort((a: YesterdaySARow, b: YesterdaySARow) => a.sa_name.localeCompare(b.sa_name) || b.sa_income - a.sa_income)
 
-      const waText = buildSAWAText(saRows, dateStr, saSharePercent)
+      const waText = buildSAWAText(saRows, dateStr, saSharePercent, evSharePercent)
       setYesterdaySAReport({ rows: saRows, date: dateStr, waText })
     } catch (e: any) {
       alert('Failed to generate SA report: ' + (e.message ?? 'Unknown error'))
@@ -630,12 +633,15 @@ export default function SATrackerPage() {
     })
 
     return Array.from(map.values())
-      .map(({ days: _d, ...card }) => ({
-        ...card,
-        totalIncome: calculateSAIncome(card.totalLabour, saSharePercent),
-      }))
-      .sort((a, b) => b.totalInvoice - a.totalInvoice || b.jcCount - a.jcCount)
-  }, [deptFilteredRows, saSharePercent])
+      .map(({ days: _d, ...card }) => {
+        const fuel = normFuelBucket(empDetailMap.get(normSAName(card.name))?.fuel_type)
+        return {
+          ...card,
+          totalIncome: calculateSAIncome(card.totalLabour, fuel === 'EV' ? evSharePercent : saSharePercent),
+        }
+      })
+      .sort((a, b) => b.totalIncome - a.totalIncome || b.jcCount - a.jcCount)
+  }, [deptFilteredRows, saSharePercent, evSharePercent, empDetailMap])
 
   // ── Day cards for selected SA ─────────────────────────────────────────────
 
@@ -645,6 +651,8 @@ export default function SATrackerPage() {
   }, [deptFilteredRows, selectedSA])
 
   const dayCards = useMemo<DayWiseCard[]>(() => {
+    const selectedFuel = normFuelBucket(empDetailMap.get(normSAName(selectedSA))?.fuel_type)
+    const saPct = selectedFuel === 'EV' ? evSharePercent : saSharePercent
     const map = new Map<string, DayWiseCard>()
     selectedSARows.forEach((r) => {
       const dateKey = r.dateKey ?? 'unknown'
@@ -656,7 +664,7 @@ export default function SATrackerPage() {
       existing.totalLabour += r.labourAmt
       existing.totalSpares += r.sparesAmt
       existing.totalInvoice += r.invoiceAmt
-      existing.totalIncome = calculateSAIncome(existing.totalLabour, saSharePercent)
+      existing.totalIncome = calculateSAIncome(existing.totalLabour, saPct)
       map.set(dateKey, existing)
     })
     return Array.from(map.values()).sort((a, b) => {
@@ -664,7 +672,7 @@ export default function SATrackerPage() {
       if (b.dateKey === 'unknown') return -1
       return b.dateKey.localeCompare(a.dateKey)
     })
-  }, [selectedSARows, saSharePercent])
+  }, [selectedSARows, saSharePercent, evSharePercent, empDetailMap, selectedSA])
 
   // ── JC detail rows for selected day ──────────────────────────────────────
 
@@ -681,6 +689,7 @@ export default function SATrackerPage() {
     invoice: deptFilteredRows.reduce((s, r) => s + r.invoiceAmt, 0),
     jcCount: deptFilteredRows.length,
     saCount: saCards.length,
+    totalIncome: saCards.reduce((s, c) => s + c.totalIncome, 0),
   }), [deptFilteredRows, saCards])
 
 
@@ -964,7 +973,7 @@ export default function SATrackerPage() {
           { label: 'Total Labour', value: formatCurrency(totals.labour), color: '#16a34a', bg: '#f0fdf4' },
           { label: 'Total Spares', value: formatCurrency(totals.spares), color: '#9333ea', bg: '#fdf4ff' },
           { label: 'Total Invoice', value: formatCurrency(totals.invoice), color: '#ea580c', bg: '#fff7ed' },
-          { label: `SA Income (${saSharePercent}%)`, value: formatCurrency(totals.labour * saSharePercent / 100), color: '#2563eb', bg: '#eff6ff', bold: true },
+          { label: `SA Income (PV ${saSharePercent}% / EV ${evSharePercent}%)`, value: formatCurrency(totals.totalIncome), color: '#2563eb', bg: '#eff6ff', bold: true },
         ].map(({ label, value, color, bg, bold }) => (
           <div key={label} style={{ background: bg, borderRadius: '8px', padding: '0.5rem 0.75rem', border: `1px solid ${color}22` }}>
             <div style={{ fontSize: bold ? '1rem' : '0.92rem', fontWeight: bold ? 800 : 700, color }}>{value}</div>
@@ -996,7 +1005,7 @@ export default function SATrackerPage() {
           <div className="card__head">
             <div>
               <h3>Earnings by Service Advisor</h3>
-              <div className="sub">Sorted by total invoice value. Income = Labour × {saSharePercent}%. Click an SA to drill down by day.</div>
+              <div className="sub">Sorted highest to lowest. Income = (Labour ÷ 1.18) × {saSharePercent}% (PV) or {evSharePercent}% (EV). Click an SA to drill down by day.</div>
             </div>
             {canEditSharePercent && (
               <div className="tech-share-corner">
@@ -1164,7 +1173,7 @@ export default function SATrackerPage() {
                   <th style={{ textAlign: 'right' }}>Labour</th>
                   <th style={{ textAlign: 'right' }}>Spares</th>
                   <th style={{ textAlign: 'right' }}>Total Invoice</th>
-                  <th style={{ textAlign: 'right', color: '#2563eb' }}>SA Income ({saSharePercent}%)</th>
+                  <th style={{ textAlign: 'right', color: '#2563eb' }}>SA Income ({normFuelBucket(empDetailMap.get(normSAName(selectedSA))?.fuel_type) === 'EV' ? evSharePercent : saSharePercent}%)</th>
                 </tr>
               </thead>
               <tbody>
@@ -1182,7 +1191,7 @@ export default function SATrackerPage() {
                     <td style={{ textAlign: 'right', color: '#16a34a', fontWeight: 600 }}>{formatCurrency(r.labourAmt)}</td>
                     <td style={{ textAlign: 'right', color: '#9333ea', fontWeight: 600 }}>{formatCurrency(r.sparesAmt)}</td>
                     <td style={{ textAlign: 'right', fontWeight: 700 }}>{formatCurrency(r.invoiceAmt)}</td>
-                    <td style={{ textAlign: 'right', color: '#2563eb', fontWeight: 700 }}>{formatCurrency(calculateSAIncome(r.labourAmt, saSharePercent))}</td>
+                    <td style={{ textAlign: 'right', color: '#2563eb', fontWeight: 700 }}>{formatCurrency(calculateSAIncome(r.labourAmt, normFuelBucket(empDetailMap.get(normSAName(selectedSA))?.fuel_type) === 'EV' ? evSharePercent : saSharePercent))}</td>
                   </tr>
                 ))}
               </tbody>
@@ -1199,7 +1208,7 @@ export default function SATrackerPage() {
                     {formatCurrency(dayDetailRows.reduce((s, r) => s + r.invoiceAmt, 0))}
                   </td>
                   <td style={{ textAlign: 'right', color: '#2563eb', fontWeight: 700 }}>
-                    {formatCurrency(dayDetailRows.reduce((s, r) => s + calculateSAIncome(r.labourAmt, saSharePercent), 0))}
+                    {formatCurrency(dayDetailRows.reduce((s, r) => s + calculateSAIncome(r.labourAmt, normFuelBucket(empDetailMap.get(normSAName(selectedSA))?.fuel_type) === 'EV' ? evSharePercent : saSharePercent), 0))}
                   </td>
                 </tr>
               </tfoot>

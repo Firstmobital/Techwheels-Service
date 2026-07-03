@@ -1,5 +1,5 @@
 {
-  "generated_at_utc": "2026-07-03T05:15:00.000Z",
+  "generated_at_utc": "2026-07-03T08:00:00.000Z",
   "authority": "docs/shared/reference/SYNC_PROTOCOL.md (Evidence routing); docs/shared/reference/catalog/task_library/TRANSACTION_FRAMEWORK.md Stage 5 publish-readiness proof",
   "change_set_files": [
     "docs/Implementation_plans/retention_validation_report.json",
@@ -12,7 +12,7 @@
     {
       "category": "application_code",
       "status": "completed",
-      "reviewer": "Claude (Cowork) — outgoing local-change review 2026-07-03",
+      "reviewer": "Claude (Cowork) — SA formula audit + outgoing local-change review 2026-07-03",
       "files": ["src/pages/SATrackerPage.tsx"],
       "authority_checked": [
         ".instructions.md Section 2 item 1",
@@ -20,7 +20,7 @@
         "docs/shared/README.md",
         "docs/shared/reference/CURRENT_STATE.md"
       ],
-      "outcome": "Approved. Change adds a client-side 📅 Range: date fine-filter to /sa-tracker, matching the existing filter on /technician. fromDate/toDate promoted from retired hardcoded empty-string consts to useState; dateScopedRows updated to filter by invoice_date (consistent with technician page). No new routes, module keys, DB tables, or RBAC changes. No mobile surface affected. CURRENT_STATE.md assessed — no new surface facts to record. CHANGE_LOG.md entry added 2026-07-03. TypeScript: tsc --noEmit clean."
+      "outcome": "Approved. Three change sets applied to SATrackerPage.tsx: (1) Added client-side 📅 Range: date fine-filter matching /technician. (2) Fixed SA earnings formula — calculateSAIncome now divides by 1.18 before applying SA%; fixes stats-bar tile, sort key, and display sub-label. (3) Applied per-SA EV/PV rate differentiation — all income call sites (saCards, dayCards, JC detail rows, stats tile, yesterday report) now look up each SA's fuel_type from employee_master and apply evSharePercent for EV SAs, saSharePercent for PV; both rates controlled by existing Earnings % settings. buildSAWAText updated to show PV/EV rates. Stats tile and sub-label updated to show both percentages. No new routes, module keys, DB tables, or RBAC changes. No mobile surface affected. CURRENT_STATE.md unchanged. TypeScript: tsc --noEmit clean."
     }
   ],
   "generated_artifacts": [

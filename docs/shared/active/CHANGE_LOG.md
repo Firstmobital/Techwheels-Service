@@ -4,6 +4,19 @@ Tracks documentation-sync updates for business logic, architecture, and access c
 
 ## 2026-07-03
 
+- Applied per-SA EV/PV percentage differentiation to `/sa-tracker` (`src/pages/SATrackerPage.tsx`): all income calculations (SA cards, day drill-down, JC detail rows, stats bar tile, yesterday SA report) now look up each SA's `fuel_type` from `employee_master` and apply `evSharePercent` for EV SAs and `saSharePercent` (PV) for all others — matching the logic already present in the payout report. Stats bar tile label updated to `SA Income (PV x% / EV y%)`. Sub-label updated to `Income = (Labour ÷ 1.18) × x% (PV) or y% (EV)`. Both percentages are controlled by the existing Earnings % settings on the same page. `buildSAWAText` updated to show both rates in the WhatsApp report header.
+- No new routes, module keys, DB tables, or RBAC changes. No mobile parity impact. `CURRENT_STATE.md` unchanged.
+- Business logic change: SA income rate is now per-SA (EV vs PV), not a single flat rate.
+- Docs updated by: EV/PV differentiation self-heal (`CHANGE_LOG.md`, `publication_readiness_disposition.json`).
+
+- Fixed SA earnings formula in `/sa-tracker` (`src/pages/SATrackerPage.tsx`): `calculateSAIncome` now divides `labourAmount` by 1.18 before applying the SA% share, matching the `÷ 1.18` GST-exclusion already in `calculateTechnicianIncome` on `/technician`. The old formula applied the percentage to GST-inclusive labour, overstating SA income by exactly 18%.
+- Fixed SA cards sort key: was `b.totalInvoice - a.totalIncome` (sorting by invoice total, wrong); corrected to `b.totalIncome - a.totalIncome` (sorts by actual SA income, consistent with technician page).
+- Fixed stats-bar SA Income tile formula: was `totals.labour * saSharePercent / 100`; corrected to `(totals.labour / 1.18) * saSharePercent / 100`.
+- Fixed display sub-label to read `Income = (Labour ÷ 1.18) × {saSharePercent}%` (was missing the `÷ 1.18` clause).
+- No new routes, module keys, DB tables, or RBAC changes. No mobile parity impact. `CURRENT_STATE.md` unchanged.
+- Business logic change: SA income calculation now excludes GST before applying share percentage (aligns with technician formula).
+- Docs updated by: SA formula audit self-heal (`CHANGE_LOG.md`, `publication_readiness_disposition.json`).
+
 - Added `📅 Range:` date fine-filter to `/sa-tracker` (`src/pages/SATrackerPage.tsx`), matching the existing filter already present on `/technician`.
 - Filter is client-side, sub-scoped within the already-loaded Period window; filters by `invoice_date` from `job_card_closed_data` (same column used on the technician page).
 - `fromDate`/`toDate` converted from retired hardcoded empty-string constants to `useState`; `dateScopedRows` updated to use `r.invoice_date.slice(0, 10)` instead of `r.dateKey` (which fell back to `closed_date_time`).
