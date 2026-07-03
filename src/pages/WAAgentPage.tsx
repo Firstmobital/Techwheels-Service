@@ -84,6 +84,27 @@ interface Conversation {
   preferred_branch: string | null
 }
 
+interface VehicleHistoryInfo {
+  model: string | null
+  vehicle_registration_number: string | null
+  vehicle_sale_date: string | null
+  last_service_date: string | null
+  last_service_type: string | null
+  scheduled_next_service_date: string | null
+  scheduled_next_service_type: string | null
+  extended_warranty_product: string | null
+  extended_warranty_end_date: string | null
+}
+
+interface JobCardHistoryRow {
+  job_card_number: string | null
+  closed_date_time: string | null
+  sr_type: string | null
+  total_invoice_amount: number | null
+  kms_run: number | null
+  branch: string | null
+}
+
 interface WAMessage {
   id: number
   conversation_id: number
@@ -157,6 +178,11 @@ export default function WAAgentPage() {
   const [convRegDraft, setConvRegDraft] = useState('')
   const [savingConvInfo, setSavingConvInfo] = useState(false)
   const [findingConvInfo, setFindingConvInfo] = useState(false)
+  const [showHistory, setShowHistory] = useState(false)
+  const [historyLoading, setHistoryLoading] = useState(false)
+  const [historyVehicle, setHistoryVehicle] = useState<VehicleHistoryInfo | null>(null)
+  const [historyJobCards, setHistoryJobCards] = useState<JobCardHistoryRow[]>([])
+  const [historyLoadedForConv, setHistoryLoadedForConv] = useState<number | null>(null)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [toast, setToast] = useState('')
@@ -208,7 +234,14 @@ export default function WAAgentPage() {
 
   // ── Load ────────────────────────────────────────────────────────────────────
   useEffect(() => { void loadAll() }, [])
-  useEffect(() => { if (selectedConv) void loadMessages(selectedConv.id); setEditingConvInfo(false) }, [selectedConv?.id])
+  useEffect(() => {
+    if (selectedConv) void loadMessages(selectedConv.id)
+    setEditingConvInfo(false)
+    setShowHistory(false)
+    setHistoryVehicle(null)
+    setHistoryJobCards([])
+    setHistoryLoadedForConv(null)
+  }, [selectedConv?.id])
 
   async function loadAll() {
     const [cfgRes, campRes, convRes, stepsRes, queueRes, tplRes] = await Promise.all([
@@ -470,6 +503,29 @@ export default function WAAgentPage() {
       showToast('❌ No match found in service data or job cards')
     }
     setFindingConvInfo(false)
+  }
+
+  // ── Load service history (vehicle summary + closed job cards) for a conv ───
+  async function loadServiceHistory() {
+    if (!selectedConv) return
+    setHistoryLoading(true)
+    const reg = selectedConv.reg_number
+    const phone = selectedConv.phone
+
+    let svcQuery = supabase.from('all_service_data')
+      .select('model, vehicle_registration_number, vehicle_sale_date, last_service_date, last_service_type, scheduled_next_service_date, scheduled_next_service_type, extended_warranty_product, extended_warranty_end_date')
+    svcQuery = reg ? svcQuery.ilike('vehicle_registration_number', reg) : svcQuery.ilike('contact_phones', `%${phone}%`)
+    const { data: svc } = await svcQuery.order('last_service_date', { ascending: false }).limit(1)
+
+    let jcQuery = supabase.from('job_card_closed_data')
+      .select('job_card_number, closed_date_time, sr_type, total_invoice_amount, kms_run, branch')
+    jcQuery = reg ? jcQuery.ilike('vehicle_registration_number', reg) : jcQuery.ilike('account_phone_number', `%${phone}%`)
+    const { data: jc } = await jcQuery.order('closed_date_time', { ascending: false }).limit(10)
+
+    setHistoryVehicle((svc?.[0] as VehicleHistoryInfo) || null)
+    setHistoryJobCards((jc || []) as JobCardHistoryRow[])
+    setHistoryLoadedForConv(selectedConv.id)
+    setHistoryLoading(false)
   }
 
   // ── Save customer name / reg number from inbox header ──────────────────────
@@ -954,6 +1010,14 @@ export default function WAAgentPage() {
                         onClick={() => { setConvNameDraft(selectedConv.customer_name || ''); setConvRegDraft(selectedConv.reg_number || ''); setEditingConvInfo(true) }}>
                         ✏️ Edit
                       </button>
+                      <button className="btn btn--ghost btn--sm" style={{ fontSize: '0.7rem', padding: '0.2rem 0.5rem' }} disabled={historyLoading}
+                        onClick={async () => {
+                          const next = !showHistory
+                          setShowHistory(next)
+                          if (next && historyLoadedForConv !== selectedConv.id) await loadServiceHistory()
+                        }}>
+                        {historyLoading ? '⏳' : showHistory ? '📜 Hide History' : '📜 Service History'}
+                      </button>
                     </>
                   )}
                   <div style={{ flex: 1 }} />
@@ -968,6 +1032,46 @@ export default function WAAgentPage() {
                     {Object.keys(STATUS_COLOR).map(s => <option key={s}>{s}</option>)}
                   </select>
                 </div>
+
+                {showHistory && (
+                  <div style={{ padding: '0.75rem 1rem', borderBottom: '1px solid #e2e8f0', background: '#fffbeb', flexShrink: 0, maxHeight: '260px', overflow: 'auto' }}>
+                    {historyLoading ? (
+                      <div style={{ fontSize: '0.78rem', color: '#94a3b8' }}>Loading service history…</div>
+                    ) : !historyVehicle && historyJobCards.length === 0 ? (
+                      <div style={{ fontSize: '0.78rem', color: '#94a3b8' }}>No service history found for this phone/reg number.</div>
+                    ) : (
+                      <>
+                        {historyVehicle && (
+                          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '0.4rem', marginBottom: '0.65rem', fontSize: '0.75rem' }}>
+                            <div><span style={{ color: '#92400e', fontWeight: 700 }}>Model: </span>{historyVehicle.model || '—'}</div>
+                            <div><span style={{ color: '#92400e', fontWeight: 700 }}>Reg No: </span>{historyVehicle.vehicle_registration_number || '—'}</div>
+                            <div><span style={{ color: '#92400e', fontWeight: 700 }}>Sale Date: </span>{historyVehicle.vehicle_sale_date ? new Date(historyVehicle.vehicle_sale_date).toLocaleDateString('en-IN') : '—'}</div>
+                            <div><span style={{ color: '#92400e', fontWeight: 700 }}>Last Service: </span>{historyVehicle.last_service_date ? new Date(historyVehicle.last_service_date).toLocaleDateString('en-IN') : '—'} {historyVehicle.last_service_type ? `(${historyVehicle.last_service_type})` : ''}</div>
+                            <div><span style={{ color: '#92400e', fontWeight: 700 }}>Next Due: </span>{historyVehicle.scheduled_next_service_date ? new Date(historyVehicle.scheduled_next_service_date).toLocaleDateString('en-IN') : '—'} {historyVehicle.scheduled_next_service_type ? `(${historyVehicle.scheduled_next_service_type})` : ''}</div>
+                            <div><span style={{ color: '#92400e', fontWeight: 700 }}>Ext. Warranty: </span>{historyVehicle.extended_warranty_product ? `${historyVehicle.extended_warranty_product} (till ${historyVehicle.extended_warranty_end_date ? new Date(historyVehicle.extended_warranty_end_date).toLocaleDateString('en-IN') : '—'})` : 'None'}</div>
+                          </div>
+                        )}
+                        {historyJobCards.length > 0 && (
+                          <div>
+                            <div style={{ fontWeight: 700, fontSize: '0.75rem', color: '#92400e', marginBottom: '0.3rem' }}>Past Job Cards ({historyJobCards.length})</div>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+                              {historyJobCards.map((jc, i) => (
+                                <div key={i} style={{ display: 'flex', gap: '0.75rem', fontSize: '0.72rem', color: '#78350f', flexWrap: 'wrap' }}>
+                                  <span style={{ fontWeight: 700 }}>{jc.job_card_number || '—'}</span>
+                                  <span>{jc.closed_date_time ? new Date(jc.closed_date_time).toLocaleDateString('en-IN') : '—'}</span>
+                                  <span>{jc.sr_type || ''}</span>
+                                  <span>{jc.branch || ''}</span>
+                                  <span>{jc.kms_run ? `${jc.kms_run} km` : ''}</span>
+                                  <span style={{ marginLeft: 'auto', fontWeight: 700 }}>{jc.total_invoice_amount != null ? `₹${jc.total_invoice_amount.toLocaleString('en-IN')}` : ''}</span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </>
+                    )}
+                  </div>
+                )}
 
                 <div style={{ flex: 1, overflow: 'auto', padding: '1rem', display: 'flex', flexDirection: 'column', gap: '0.6rem', background: '#f0f2f5' }}>
                   {messages.length === 0 && <div style={{ textAlign: 'center', color: '#94a3b8', fontSize: '0.78rem', padding: '2rem' }}>No messages yet</div>}

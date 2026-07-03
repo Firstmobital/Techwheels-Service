@@ -48,13 +48,9 @@ async function loadVehicleHistory(phone10: string, _phoneE164: string): Promise<
     .select(`
       id, first_name, last_name, vehicle_registration_number, model,
       vehicle_sale_date, chassis_no,
-      first_free_service_done_flag, first_free_service_date,
-      second_free_service_done_flag, second_free_service_date,
-      third_free_service_done_flag, third_free_service_date,
-      scheduled_next_service_date, last_service_date, last_service_type,
-      extended_warranty_product, extended_warranty_end_date,
-      amc_no, amc_type, amc_end_date,
-      service_churn_flag, amc_propensity_flag, extended_propensity_flag
+      scheduled_next_service_date, scheduled_next_service_type,
+      last_service_date, last_service_type, last_service_km,
+      extended_warranty_product, extended_warranty_end_date
     `)
     .ilike('contact_phones', `%${phone10}%`)
     .order('last_service_date', { ascending: false })
@@ -217,32 +213,15 @@ Language Preference: ${conv.customer_language || 'hinglish'}`
   // ── FIX 3: DMS vehicle history block ────────────────────────────────────────
   let dmsBlock = ''
   if (vehicle) {
-    const freeServicesStatus = []
-    if (vehicle.first_free_service_done_flag === 'Y') freeServicesStatus.push('1st ✅')
-    else freeServicesStatus.push('1st ❌ pending')
-    if (vehicle.second_free_service_done_flag === 'Y') freeServicesStatus.push('2nd ✅')
-    else freeServicesStatus.push('2nd ❌ pending')
-    if (vehicle.third_free_service_done_flag === 'Y') freeServicesStatus.push('3rd ✅')
-    else freeServicesStatus.push('3rd ❌ pending')
-    if (vehicle.fourth_free_service_done_flag === 'Y') freeServicesStatus.push('4th ✅')
-    else freeServicesStatus.push('4th ❌ pending')
-
-    const hasPendingFree = ['first_free_service_done_flag','second_free_service_done_flag','third_free_service_done_flag','fourth_free_service_done_flag']
-      .some(f => vehicle[f] !== 'Y')
-
     dmsBlock = `
 === VEHICLE HISTORY FROM DMS ===
-Model: ${vehicle.ppl} | Chassis: ${vehicle.chassis_no}
+Model: ${vehicle.model} | Chassis: ${vehicle.chassis_no}
 Sale Date: ${vehicle.vehicle_sale_date}
 Last Service: ${vehicle.last_service_date || 'never'} (${vehicle.last_service_type || 'unknown type'})
-Next Scheduled Service: ${vehicle.scheduled_next_service_date || 'overdue'}
-Free Services: ${freeServicesStatus.join(' | ')}
-Pending Free Service: ${hasPendingFree ? 'YES — customer is eligible for a free service' : 'No, all done'}
-AMC: ${vehicle.amc_no ? `Active (${vehicle.amc_type}, valid till ${vehicle.amc_end_date})` : 'None'}
+Next Scheduled Service: ${vehicle.scheduled_next_service_date || 'overdue'} (${vehicle.scheduled_next_service_type || 'type unknown'})
 Extended Warranty: ${vehicle.extended_warranty_product ? `Active (${vehicle.extended_warranty_product}, till ${vehicle.extended_warranty_end_date})` : 'None'}
-Service Churn Risk: ${vehicle.service_churn_flag === 'Y' ? 'HIGH — customer has not visited in a long time, be extra warm' : 'Normal'}
 
-USE THIS DATA: If customer asks "what service do I need?", check last service date and scheduled date. If they have a pending free service, TELL THEM — it's free!`
+USE THIS DATA: If customer asks "what service do I need?", check last service date and scheduled date.`
   }
 
   // ── Slot availability context ────────────────────────────────────────────────
