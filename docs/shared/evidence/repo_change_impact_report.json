@@ -1,12 +1,12 @@
 {
-  "generated_at_utc": "2026-07-01T05:00:30.881Z",
+  "generated_at_utc": "2026-07-03T05:14:13.271Z",
   "mode": "pending_working_tree_changes",
   "advisory_only": true,
   "read_only": true,
   "note": "Informational pre-check for Repository Transaction Framework Stage 4 (Validation) / Stage 5 (Publication). Does not block either stage.",
   "commit_range": null,
   "commits": null,
-  "total_files_changed": 8,
+  "total_files_changed": 3,
   "files": [
     {
       "path": "docs/Implementation_plans/retention_validation_report.json",
@@ -14,30 +14,6 @@
       "git_status": "modified",
       "category": "generated_artifact",
       "category_label": "Generated artifact",
-      "note": null
-    },
-    {
-      "path": "docs/shared/README.md",
-      "old_path": null,
-      "git_status": "modified",
-      "category": "documentation_reference_truth",
-      "category_label": "Documentation / reference truth",
-      "note": null
-    },
-    {
-      "path": "docs/shared/active/CHANGE_LOG.md",
-      "old_path": null,
-      "git_status": "modified",
-      "category": "documentation_reference_truth",
-      "category_label": "Documentation / reference truth",
-      "note": null
-    },
-    {
-      "path": "docs/shared/evidence/publication_readiness_disposition.json",
-      "old_path": null,
-      "git_status": "modified",
-      "category": "evidence",
-      "category_label": "Evidence",
       "note": null
     },
     {
@@ -55,61 +31,9 @@
       "category": "generated_artifact",
       "category_label": "Generated artifact",
       "note": null
-    },
-    {
-      "path": "docs/shared/reference/CURRENT_STATE.md",
-      "old_path": null,
-      "git_status": "modified",
-      "category": "documentation_reference_truth",
-      "category_label": "Documentation / reference truth",
-      "note": null
-    },
-    {
-      "path": "docs/web/modules/telecalling/reference/TELECALLING_MODULE_FLOW_AND_BUSINESS_LOGIC.md",
-      "old_path": null,
-      "git_status": "modified",
-      "category": "documentation_reference_truth",
-      "category_label": "Documentation / reference truth",
-      "note": null
     }
   ],
   "categories_present": [
-    {
-      "category": "documentation_reference_truth",
-      "label": "Documentation / reference truth",
-      "files": [
-        "docs/shared/README.md",
-        "docs/shared/active/CHANGE_LOG.md",
-        "docs/shared/reference/CURRENT_STATE.md",
-        "docs/web/modules/telecalling/reference/TELECALLING_MODULE_FLOW_AND_BUSINESS_LOGIC.md"
-      ],
-      "owning_authority": "docs/STRUCTURE_GUIDE.md (placement, Sections 2-3, 14); the specific reference doc's own domain.",
-      "required_doc_updates": "SYNC_PROTOCOL.md Index Update Rule if the doc is new/moved/materially changed (update the owning category README.md and docs/MASTER_INDEX.md if it introduces a new section that index doesn't list).",
-      "required_validation": [
-        "npm run docs:validate",
-        "npm run docs:validate:health"
-      ],
-      "practical_verification": "Not applicable unless the doc is itself a script/contract/prompt (then use the repository_authority verification instead).",
-      "publish_safe_without_review": true,
-      "review_recommended": false,
-      "review_reason": "Safe for wording/clarity edits. Recommend review only if the edit redefines a policy/protocol meaning rather than clarifying existing text."
-    },
-    {
-      "category": "evidence",
-      "label": "Evidence",
-      "files": [
-        "docs/shared/evidence/publication_readiness_disposition.json"
-      ],
-      "owning_authority": "The relevant module/category/plan evidence/ folder (docs/STRUCTURE_GUIDE.md Sections 2-3).",
-      "required_doc_updates": "None beyond the evidence file itself, unless it underpins a promotion claim (STRUCTURE_GUIDE.md Section 28).",
-      "required_validation": [
-        "npm run docs:validate:health"
-      ],
-      "practical_verification": "Confirm the evidence reflects an actually-run command/test — No Assumption Protocol (.instructions.md Section 4); never fabricated.",
-      "publish_safe_without_review": true,
-      "review_recommended": false,
-      "review_reason": "Low risk on its own. Recommend review only if it is being cited to justify a promotion or Done+Verified status."
-    },
     {
       "category": "generated_artifact",
       "label": "Generated artifact",
@@ -130,7 +54,6 @@
     }
   ],
   "validation_commands_to_run": [
-    "npm run docs:validate",
     "npm run docs:validate:health"
   ],
   "unknown_or_unmapped_files": [],

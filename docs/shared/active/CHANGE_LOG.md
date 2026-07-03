@@ -2,6 +2,14 @@
 
 Tracks documentation-sync updates for business logic, architecture, and access control.
 
+## 2026-07-03
+
+- Added `📅 Range:` date fine-filter to `/sa-tracker` (`src/pages/SATrackerPage.tsx`), matching the existing filter already present on `/technician`.
+- Filter is client-side, sub-scoped within the already-loaded Period window; filters by `invoice_date` from `job_card_closed_data` (same column used on the technician page).
+- `fromDate`/`toDate` converted from retired hardcoded empty-string constants to `useState`; `dateScopedRows` updated to use `r.invoice_date.slice(0, 10)` instead of `r.dateKey` (which fell back to `closed_date_time`).
+- No new routes, module keys, DB tables, or RBAC changes. No mobile parity impact. `CURRENT_STATE.md` unchanged — no new surface facts.
+- Docs updated by: outgoing local-change review self-heal (`CHANGE_LOG.md`, `publication_readiness_disposition.json`).
+
 ## 2026-07-01 (upstream intake PR #16 + parts report, self-healed)
 
 - CRE dropdowns on Service Booking (`/service-booking`) and Telecalling booking/lead forms now source options from `employee_master` where `role = 'CRE'` (replacing prior `users`-table role filters).

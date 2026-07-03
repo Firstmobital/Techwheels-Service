@@ -1,106 +1,43 @@
 {
-  "generated_at_utc": "2026-07-01T05:00:00.000Z",
+  "generated_at_utc": "2026-07-03T05:15:00.000Z",
   "authority": "docs/shared/reference/SYNC_PROTOCOL.md (Evidence routing); docs/shared/reference/catalog/task_library/TRANSACTION_FRAMEWORK.md Stage 5 publish-readiness proof",
   "change_set_files": [
     "docs/Implementation_plans/retention_validation_report.json",
-    "docs/shared/README.md",
     "docs/shared/active/CHANGE_LOG.md",
     "docs/shared/evidence/publication_readiness_disposition.json",
     "docs/shared/evidence/repo_health_audit_report.json",
-    "docs/shared/reference/CURRENT_STATE.md",
-    "docs/web/modules/telecalling/reference/TELECALLING_MODULE_FLOW_AND_BUSINESS_LOGIC.md"
+    "src/pages/SATrackerPage.tsx"
   ],
   "reviews": [
     {
       "category": "application_code",
       "status": "completed",
-      "reviewer": "Cursor Agent (publish-readiness refresh after aborted publish:safe)",
-      "files": ["src/lib/api/settings.ts"],
+      "reviewer": "Claude (Cowork) — outgoing local-change review 2026-07-03",
+      "files": ["src/pages/SATrackerPage.tsx"],
       "authority_checked": [
         ".instructions.md Section 2 item 1",
         "docs/DOCS_IMPACT_MATRIX.md",
-        "docs/shared/reference/CURRENT_STATE.md",
-        "docs/shared/active/CHANGE_LOG.md"
+        "docs/shared/README.md",
+        "docs/shared/reference/CURRENT_STATE.md"
       ],
-      "outcome": "Approved for publication alongside DBL-0008 VERIFIED ledger evidence. settings.ts global model catalog changes align with post-apply schema in full_metadata.sql."
-    },
-    {
-      "category": "automation_script",
-      "status": "completed",
-      "reviewer": "Cursor Agent (publish-readiness refresh after aborted publish:safe)",
-      "files": [
-        "scripts/git-safe-publish.sh",
-        "scripts/repo_change_impact.mjs",
-        "scripts/publish_readiness_check.mjs"
-      ],
-      "authority_checked": [
-        "docs/shared/reference/catalog/task_library/TRANSACTION_FRAMEWORK.md",
-        "docs/shared/reference/SYNC_PROTOCOL.md Practical Verification Gate"
-      ],
-      "outcome": "Approved. git-safe-publish unstages deferred_db_changes paths before commit when present; current change set has no deferred paths after DBL-0008 operator verification."
-    },
-    {
-      "category": "database_schema_truth",
-      "status": "completed",
-      "reviewer": "Cursor Agent (publish-readiness refresh after aborted publish:safe)",
-      "files": [
-        "docs/shared/reference/DB_CHANGE_LEDGER.md",
-        "supabase/sql_checks/20260629100000_auto_service_reminders_checks.sql",
-        "supabase/exec_success_migrations/sql/20260630120000_global_settings_model_options.sql",
-        "supabase/exec_success_migrations/sql_check/20260630120000_global_settings_model_options_checks.sql",
-        "supabase/backups/full_metadata.sql",
-        "supabase/evidence/authoritative_metadata_manifest.json",
-        "supabase/evidence/execution_promotion_log.md",
-        "supabase/evidence/post_dump_verified_promotions.md"
-      ],
-      "authority_checked": [
-        "docs/shared/reference/DB_CHANGE_PROTOCOL.md",
-        "docs/shared/reference/DB_CHANGE_LEDGER.md",
-        "docs/shared/reference/DATABASE_TRUTH.md"
-      ],
-      "outcome": "DBL-0007 VERIFIED (auto_service_reminders checks publishable). DBL-0008 VERIFIED per existing ledger operator evidence (manual apply, sql_checks pass, metadata refresh npm run db:backup:metadata, promotion to exec_success_migrations) — not re-marked here, only disposition refreshed to match working tree."
-    },
-    {
-      "category": "repository_authority",
-      "status": "completed",
-      "reviewer": "Cursor Agent (publish-readiness refresh after aborted publish:safe)",
-      "files": [
-        "docs/shared/reference/SYNC_PROTOCOL.md",
-        "docs/shared/reference/catalog/task_library/INDEX.md",
-        "docs/shared/reference/catalog/task_library/TRANSACTION_FRAMEWORK.md"
-      ],
-      "authority_checked": [
-        ".instructions.md Sections 1, 3, 5, 6",
-        "docs/STRUCTURE_GUIDE.md"
-      ],
-      "outcome": "Approved. publish:ready and publish:safe gates unchanged."
+      "outcome": "Approved. Change adds a client-side 📅 Range: date fine-filter to /sa-tracker, matching the existing filter on /technician. fromDate/toDate promoted from retired hardcoded empty-string consts to useState; dateScopedRows updated to filter by invoice_date (consistent with technician page). No new routes, module keys, DB tables, or RBAC changes. No mobile surface affected. CURRENT_STATE.md assessed — no new surface facts to record. CHANGE_LOG.md entry added 2026-07-03. TypeScript: tsc --noEmit clean."
     }
   ],
   "generated_artifacts": [
     {
       "path": "docs/Implementation_plans/retention_validation_report.json",
       "generator_command": "npm run docs:validate:plans",
-      "regenerated_at_utc": "2026-06-30T06:46:48.436Z"
+      "regenerated_at_utc": "2026-07-03T05:03:05.000Z"
     },
     {
       "path": "docs/shared/evidence/repo_health_audit_report.json",
       "generator_command": "npm run docs:validate:health",
-      "regenerated_at_utc": "2026-06-30T06:46:48.627Z"
+      "regenerated_at_utc": "2026-07-03T05:03:05.000Z"
     },
     {
       "path": "docs/shared/evidence/repo_change_impact_report.json",
       "generator_command": "npm run docs:impact",
-      "regenerated_at_utc": "2026-06-30T06:46:48.788Z"
-    },
-    {
-      "path": "supabase/backups/full_metadata.sql",
-      "generator_command": "npm run db:backup:metadata",
-      "regenerated_at_utc": "2026-06-30T06:43:38Z"
-    },
-    {
-      "path": "supabase/evidence/authoritative_metadata_manifest.json",
-      "generator_command": "npm run db:backup:metadata",
-      "regenerated_at_utc": "2026-06-30T06:43:38Z"
+      "regenerated_at_utc": "2026-07-03T05:03:05.070Z"
     }
   ],
   "deferred_db_changes": [],
@@ -112,13 +49,14 @@
   ],
   "routing_actions": [
     {
-      "action": "removed",
-      "path": "AGENTS.md",
-      "reason": "Empty vendor-specific AI instruction file at repo root; removed earlier in publish-readiness pass."
+      "action": "no_update_needed",
+      "path": "docs/shared/reference/CURRENT_STATE.md",
+      "reason": "Change adds a UI filter only; no new routes, module keys, or DB tables introduced. CURRENT_STATE.md has no filter-level detail for any page — nothing to update."
     },
     {
-      "action": "state_refresh",
-      "note": "After aborted publish:safe, DBL-0008 operator work completed: migration/checks promoted to exec_success_migrations; full_metadata.sql refreshed. Old migrations/sql_checks paths no longer in working tree. deferred_db_changes cleared."
+      "action": "updated",
+      "path": "docs/shared/active/CHANGE_LOG.md",
+      "reason": "DOCS_IMPACT_MATRIX.md application_code obligation: CHANGE_LOG.md entry required for all application code changes."
     }
   ]
 }

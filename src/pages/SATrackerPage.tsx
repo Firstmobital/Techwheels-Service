@@ -212,8 +212,8 @@ export default function SATrackerPage() {
   const [rows, setRows] = useState<ClosedJCRow[]>([])
 
   // Filters
-  const fromDate: string = ''   // fine-filter retired; kept for dateScopedRows guard
-  const toDate: string = ''
+  const [fromDate, setFromDate] = useState('')
+  const [toDate, setToDate] = useState('')
   const [branchFilter, setBranchFilter] = useState('all')
   const [portalFilter, setPortalFilter] = useState('all')
   const [deptFilter, setDeptFilter] = useState('all')         // 'all' | 'Service' | 'Bodyshop'
@@ -491,9 +491,10 @@ export default function SATrackerPage() {
   const dateScopedRows = useMemo(() => {
     if (!fromDate && !toDate) return enrichedRows
     return enrichedRows.filter((r) => {
-      if (!r.dateKey) return false
-      if (fromDate && r.dateKey < fromDate) return false
-      if (toDate && r.dateKey > toDate) return false
+      const invoiceDate = r.invoice_date ? r.invoice_date.slice(0, 10) : null
+      if (!invoiceDate) return false
+      if (fromDate && invoiceDate < fromDate) return false
+      if (toDate && invoiceDate > toDate) return false
       return true
     })
   }, [enrichedRows, fromDate, toDate])
@@ -971,7 +972,22 @@ export default function SATrackerPage() {
           </div>
         ))}
 
-
+        {/* Date range fine-filter */}
+        <div style={{ background: '#f8fafc', borderRadius: '8px', padding: '0.45rem 0.65rem', border: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', gap: '0.4rem', flexWrap: 'wrap', gridColumn: 'span 3' }}>
+          <span style={{ fontSize: '0.7rem', fontWeight: 600, color: '#64748b', whiteSpace: 'nowrap' }}>📅 Range:</span>
+          <input type="date" className="inp" style={{ padding: '0.2rem 0.5rem', fontSize: '0.75rem', width: '130px' }}
+            value={fromDate}
+            onChange={(e) => { const v = e.target.value; setFromDate(v); if (toDate && v && v > toDate) setToDate(v) }} />
+          <span style={{ fontSize: '0.72rem', color: '#94a3b8' }}>→</span>
+          <input type="date" className="inp" style={{ padding: '0.2rem 0.5rem', fontSize: '0.75rem', width: '130px' }}
+            value={toDate}
+            onChange={(e) => { const v = e.target.value; setToDate(v); if (fromDate && v && v < fromDate) setFromDate(v) }} />
+          {(fromDate || toDate) && (
+            <button type="button" className="btn btn--ghost btn--sm"
+              style={{ padding: '0.2rem 0.55rem', fontSize: '0.72rem' }}
+              onClick={() => { setFromDate(''); setToDate('') }}>✕</button>
+          )}
+        </div>
       </div>
 
       {/* ── SA Cards ── */}
