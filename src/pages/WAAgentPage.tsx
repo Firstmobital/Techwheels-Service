@@ -152,6 +152,10 @@ export default function WAAgentPage() {
   const [conversations, setConversations] = useState<Conversation[]>([])
   const [selectedConv, setSelectedConv] = useState<Conversation | null>(null)
   const [messages, setMessages] = useState<WAMessage[]>([])
+  const [editingConvInfo, setEditingConvInfo] = useState(false)
+  const [convNameDraft, setConvNameDraft] = useState('')
+  const [convRegDraft, setConvRegDraft] = useState('')
+  const [savingConvInfo, setSavingConvInfo] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [toast, setToast] = useState('')
@@ -203,7 +207,7 @@ export default function WAAgentPage() {
 
   // ── Load ────────────────────────────────────────────────────────────────────
   useEffect(() => { void loadAll() }, [])
-  useEffect(() => { if (selectedConv) void loadMessages(selectedConv.id) }, [selectedConv])
+  useEffect(() => { if (selectedConv) void loadMessages(selectedConv.id); setEditingConvInfo(false) }, [selectedConv?.id])
 
   async function loadAll() {
     const [cfgRes, campRes, convRes, stepsRes, queueRes, tplRes] = await Promise.all([
@@ -422,6 +426,24 @@ export default function WAAgentPage() {
     setManualMsg('')
     await loadMessages(selectedConv.id)
     setSendingManual(false)
+  }
+
+  // ── Save customer name / reg number from inbox header ──────────────────────
+  async function saveConvInfo() {
+    if (!selectedConv) return
+    setSavingConvInfo(true)
+    const name = convNameDraft.trim() || null
+    const reg = convRegDraft.trim().toUpperCase() || null
+    const { error: err } = await supabase.from('wa_conversations').update({ customer_name: name, reg_number: reg }).eq('id', selectedConv.id)
+    if (err) {
+      setError(err.message)
+    } else {
+      setSelectedConv(p => p ? { ...p, customer_name: name, reg_number: reg } : p)
+      setConversations(prev => prev.map(c => c.id === selectedConv.id ? { ...c, customer_name: name, reg_number: reg } : c))
+      setEditingConvInfo(false)
+      showToast('✅ Customer details updated')
+    }
+    setSavingConvInfo(false)
   }
 
   // ── Test simulator ─────────────────────────────────────────────────────────
@@ -860,10 +882,29 @@ export default function WAAgentPage() {
                   <div style={{ width: '36px', height: '36px', borderRadius: '50%', background: '#eff6ff', color: '#2563eb', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, flexShrink: 0 }}>
                     {(selectedConv.customer_name || selectedConv.phone).charAt(0).toUpperCase()}
                   </div>
-                  <div>
-                    <div style={{ fontWeight: 800, fontSize: '0.88rem', color: '#1e293b' }}>{selectedConv.customer_name || selectedConv.phone}</div>
-                    <div style={{ fontSize: '0.7rem', color: '#64748b' }}>{selectedConv.phone} · {selectedConv.model || ''} {selectedConv.reg_number || ''} · {selectedConv.ai_turns} AI turns</div>
-                  </div>
+                  {editingConvInfo ? (
+                    <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
+                      <input className="inp" placeholder="Customer name" value={convNameDraft} onChange={e => setConvNameDraft(e.target.value)}
+                        style={{ fontSize: '0.78rem', padding: '0.25rem 0.5rem', width: '150px' }} />
+                      <input className="inp" placeholder="Reg number" value={convRegDraft} onChange={e => setConvRegDraft(e.target.value)}
+                        style={{ fontSize: '0.78rem', padding: '0.25rem 0.5rem', width: '120px', textTransform: 'uppercase' }} />
+                      <button className="btn btn--primary btn--sm" style={{ fontSize: '0.72rem', padding: '0.25rem 0.6rem' }} disabled={savingConvInfo} onClick={saveConvInfo}>
+                        {savingConvInfo ? '⏳' : '✅ Save'}
+                      </button>
+                      <button className="btn btn--ghost btn--sm" style={{ fontSize: '0.72rem', padding: '0.25rem 0.6rem' }} onClick={() => setEditingConvInfo(false)}>Cancel</button>
+                    </div>
+                  ) : (
+                    <div>
+                      <div style={{ fontWeight: 800, fontSize: '0.88rem', color: '#1e293b' }}>{selectedConv.customer_name || selectedConv.phone}</div>
+                      <div style={{ fontSize: '0.7rem', color: '#64748b' }}>{selectedConv.phone} · {selectedConv.model || ''} {selectedConv.reg_number || ''} · {selectedConv.ai_turns} AI turns</div>
+                    </div>
+                  )}
+                  {!editingConvInfo && (
+                    <button className="btn btn--ghost btn--sm" style={{ fontSize: '0.7rem', padding: '0.2rem 0.5rem' }}
+                      onClick={() => { setConvNameDraft(selectedConv.customer_name || ''); setConvRegDraft(selectedConv.reg_number || ''); setEditingConvInfo(true) }}>
+                      ✏️ Edit
+                    </button>
+                  )}
                   <div style={{ flex: 1 }} />
                   {selectedConv.booking_id && <span style={{ background: '#dcfce7', color: '#15803d', padding: '0.2rem 0.6rem', borderRadius: '20px', fontSize: '0.72rem', fontWeight: 700 }}>✅ Booked #{selectedConv.booking_id}</span>}
                   <select value={selectedConv.status}
