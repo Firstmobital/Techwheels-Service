@@ -156,6 +156,7 @@ export default function WAAgentPage() {
   const [convNameDraft, setConvNameDraft] = useState('')
   const [convRegDraft, setConvRegDraft] = useState('')
   const [savingConvInfo, setSavingConvInfo] = useState(false)
+  const [findingConvInfo, setFindingConvInfo] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [toast, setToast] = useState('')
@@ -426,6 +427,49 @@ export default function WAAgentPage() {
     setManualMsg('')
     await loadMessages(selectedConv.id)
     setSendingManual(false)
+  }
+
+  // ── Look up customer name / reg number by phone across all_service_data ────
+  // and job_card_closed_data (closed job cards not yet synced into all_service_data)
+  async function findConvInfo() {
+    if (!selectedConv) return
+    setFindingConvInfo(true)
+    const phone = selectedConv.phone
+    let name = ''
+    let reg = ''
+
+    const { data: svc } = await supabase.from('all_service_data')
+      .select('first_name, last_name, vehicle_registration_number, model, product_line')
+      .ilike('contact_phones', `%${phone}%`)
+      .order('last_service_date', { ascending: false })
+      .limit(1)
+    const svcRow = svc?.[0]
+
+    if (svcRow) {
+      name = `${svcRow.first_name || ''} ${svcRow.last_name || ''}`.trim()
+      reg = svcRow.vehicle_registration_number || ''
+    } else {
+      const { data: jc } = await supabase.from('job_card_closed_data')
+        .select('first_name, last_name, vehicle_registration_number, product_line')
+        .ilike('account_phone_number', `%${phone}%`)
+        .order('closed_date_time', { ascending: false })
+        .limit(1)
+      const jcRow = jc?.[0]
+      if (jcRow) {
+        name = `${jcRow.first_name || ''} ${jcRow.last_name || ''}`.trim()
+        reg = jcRow.vehicle_registration_number || ''
+      }
+    }
+
+    if (name || reg) {
+      setConvNameDraft(name)
+      setConvRegDraft(reg)
+      setEditingConvInfo(true)
+      showToast('🔎 Found a match — review and save')
+    } else {
+      showToast('❌ No match found in service data or job cards')
+    }
+    setFindingConvInfo(false)
   }
 
   // ── Save customer name / reg number from inbox header ──────────────────────
@@ -900,10 +944,17 @@ export default function WAAgentPage() {
                     </div>
                   )}
                   {!editingConvInfo && (
-                    <button className="btn btn--ghost btn--sm" style={{ fontSize: '0.7rem', padding: '0.2rem 0.5rem' }}
-                      onClick={() => { setConvNameDraft(selectedConv.customer_name || ''); setConvRegDraft(selectedConv.reg_number || ''); setEditingConvInfo(true) }}>
-                      ✏️ Edit
-                    </button>
+                    <>
+                      {(!selectedConv.customer_name || !selectedConv.reg_number) && (
+                        <button className="btn btn--ghost btn--sm" style={{ fontSize: '0.7rem', padding: '0.2rem 0.5rem' }} disabled={findingConvInfo} onClick={findConvInfo}>
+                          {findingConvInfo ? '⏳' : '🔎 Auto-find'}
+                        </button>
+                      )}
+                      <button className="btn btn--ghost btn--sm" style={{ fontSize: '0.7rem', padding: '0.2rem 0.5rem' }}
+                        onClick={() => { setConvNameDraft(selectedConv.customer_name || ''); setConvRegDraft(selectedConv.reg_number || ''); setEditingConvInfo(true) }}>
+                        ✏️ Edit
+                      </button>
+                    </>
                   )}
                   <div style={{ flex: 1 }} />
                   {selectedConv.booking_id && <span style={{ background: '#dcfce7', color: '#15803d', padding: '0.2rem 0.6rem', borderRadius: '20px', fontSize: '0.72rem', fontWeight: 700 }}>✅ Booked #{selectedConv.booking_id}</span>}

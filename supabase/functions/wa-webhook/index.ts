@@ -63,6 +63,20 @@ async function loadVehicleHistory(phone10: string, _phoneE164: string): Promise<
   return data?.[0] as Record<string, unknown> | null
 }
 
+// ─── Fallback: match against closed job cards when all_service_data has no hit ─
+// Covers customers whose service history only exists in job_card_closed_data
+// (e.g. not yet synced into all_service_data), so the inbox can still show a
+// name/reg number instead of just the raw phone number.
+async function loadJobCardMatch(phone10: string): Promise<Record<string, unknown> | null> {
+  const { data, error } = await sb.from('job_card_closed_data')
+    .select('id, first_name, last_name, vehicle_registration_number, product_line, vehicle_sale_date, last_service_date')
+    .ilike('account_phone_number', `%${phone10}%`)
+    .order('closed_date_time', { ascending: false })
+    .limit(1)
+  if (error) console.error(`loadJobCardMatch error for ${phone10}:`, error.message)
+  return data?.[0] as Record<string, unknown> | null
+}
+
 // ─── FIX 3: Check slot availability for a date ───────────────────────────────
 async function checkSlotAvailability(
   date: string,
@@ -497,18 +511,22 @@ Deno.serve(async (req) => {
   const vehicle = await loadVehicleHistory(from10, fromE164)
 
   if (!conv) {
+    // Fallback to closed job cards for customers not yet in all_service_data
+    const jobCard = vehicle ? null : await loadJobCardMatch(from10)
     const custName = vehicle
       ? `${vehicle.first_name || ''} ${vehicle.last_name || ''}`.trim() || null
-      : null
+      : jobCard
+        ? `${jobCard.first_name || ''} ${jobCard.last_name || ''}`.trim() || null
+        : null
 
     const { data: newConvArr, error: convErr } = await sb.from('wa_conversations').insert([{
       phone: from10,
       customer_name: custName,
-      reg_number: (vehicle?.vehicle_registration_number as string) || null,
-      model: (vehicle?.model as string) || null,
+      reg_number: (vehicle?.vehicle_registration_number as string) || (jobCard?.vehicle_registration_number as string) || null,
+      model: (vehicle?.model as string) || (jobCard?.product_line as string) || null,
       fuel_type: null,
-      mfg_year: vehicle?.vehicle_sale_date ? new Date(vehicle.vehicle_sale_date as string).getFullYear() : null,
-      last_service_date: (vehicle?.last_service_date as string) || null,
+      mfg_year: vehicle?.vehicle_sale_date ? new Date(vehicle.vehicle_sale_date as string).getFullYear() : jobCard?.vehicle_sale_date ? new Date(jobCard.vehicle_sale_date as string).getFullYear() : null,
+      last_service_date: (vehicle?.last_service_date as string) || (jobCard?.last_service_date as string) || null,
       service_data_id: (vehicle?.id as number) || null,
       status: 'Open', stage: 'intro', ai_turns: 0,
       customer_language: 'hinglish',
