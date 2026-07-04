@@ -6,14 +6,16 @@ import { ReportLoadingState } from '../components/ReportLoadingState'
 
 const DAYS_COVER = 20
 const CALENDAR_DAYS = 90
-const TARGET_MONTHS = [1, 2, 3]
+const ROLLING_WINDOW_SIZE = 3
 const PIPELINE_STATUSES = ['Ordered', 'Confirmed', 'In-Transit']
 
 interface ConsumptionRow {
   part_number: string
   part_description: string | null
   portal: string
+  fiscal_year: number
   fiscal_month: number
+  month_name: string | null
   total_consumption: number
 }
 interface StockRow {
@@ -35,13 +37,14 @@ interface DisciplineRow {
   partNumber: string
   partDescription: string
   portal: string
-  aprQty: number
-  mayQty: number
-  junQty: number
+  m1Qty: number
+  m2Qty: number
+  m3Qty: number
   total3M: number
   monthsActive: number
   frequency: FrequencyLabel
   avgDailyConsumption: number
+  avgDailyConsumptionRaw: number
   weeklyAvgQty: number
   currentStock: number
   pipelineQty: number
@@ -85,6 +88,7 @@ export default function PartsStockDisciplineReport({ branch }: ReportViewProps) 
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [lastUpdated, setLastUpdated] = useState<string | null>(null)
+  const [activeMonthLabels, setActiveMonthLabels] = useState<string[]>(['M1', 'M2', 'M3'])
   const [sortKey, setSortKey] = useState<keyof DisciplineRow>('qtyToOrder')
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc')
   const abortRef = useRef<{ aborted: boolean }>({ aborted: false })
@@ -98,11 +102,13 @@ export default function PartsStockDisciplineReport({ branch }: ReportViewProps) 
       if (branch && branch !== 'ALL') baseFilters['branch'] = branch
       if (portal !== 'ALL') baseFilters['portal'] = portal
 
+      // Fetch ALL consumption rows (no month hardcoding) so the rolling window
+      // always reflects whatever months have actually been imported so far.
       const [consumptionAll, stockAll, orderAll] = await Promise.all([
         fetchAll<ConsumptionRow>(
           'service_parts_consumption_data',
-          'part_number,part_description,portal,fiscal_month,total_consumption',
-          { ...baseFilters, fiscal_month: TARGET_MONTHS }
+          'part_number,part_description,portal,fiscal_year,fiscal_month,month_name,total_consumption',
+          baseFilters
         ),
         fetchAll<StockRow>(
           'service_parts_stock_snapshot_data',
@@ -118,13 +124,35 @@ export default function PartsStockDisciplineReport({ branch }: ReportViewProps) 
 
       if (abortRef.current.aborted) return
 
-      // Consumption pivot
-      const consumpMap = new Map<string, { desc: string; portal: string; months: Record<number, number> }>()
+      // ── Determine rolling 3-month window from data actually present ────────
+      // (year, month) pairs sorted descending, take the most recent 3.
+      const periodSet = new Set<string>()
+      const periodLabel = new Map<string, string>()
       for (const row of consumptionAll) {
+        const py = row.fiscal_year ?? 0
+        const pm = row.fiscal_month ?? 0
+        const pkey = `${py}-${pm}`
+        periodSet.add(pkey)
+        if (row.month_name) periodLabel.set(pkey, row.month_name)
+      }
+      const sortedPeriods = Array.from(periodSet).sort((a, b) => {
+        const [ay, am] = a.split('-').map(Number)
+        const [by, bm] = b.split('-').map(Number)
+        return by !== ay ? by - ay : bm - am
+      })
+      const windowPeriods = sortedPeriods.slice(0, ROLLING_WINDOW_SIZE) // newest 3
+      const windowPeriodsAsc = [...windowPeriods].reverse() // oldest -> newest for column order
+      setActiveMonthLabels(windowPeriodsAsc.map((p) => periodLabel.get(p) ?? p))
+
+      // Consumption pivot — only accumulate months inside the rolling window
+      const consumpMap = new Map<string, { desc: string; portal: string; months: Record<string, number> }>()
+      for (const row of consumptionAll) {
+        const pkey = `${row.fiscal_year ?? 0}-${row.fiscal_month ?? 0}`
+        if (!windowPeriods.includes(pkey)) continue
         const key = `${row.part_number}|${row.portal}`
         if (!consumpMap.has(key)) consumpMap.set(key, { desc: row.part_description ?? row.part_number, portal: row.portal, months: {} })
         const e = consumpMap.get(key)!
-        e.months[row.fiscal_month] = (e.months[row.fiscal_month] ?? 0) + (row.total_consumption ?? 0)
+        e.months[pkey] = (e.months[pkey] ?? 0) + (row.total_consumption ?? 0)
       }
 
       // Stock map
@@ -153,22 +181,30 @@ export default function PartsStockDisciplineReport({ branch }: ReportViewProps) 
         const cEntry = consumpMap.get(key)
         const sEntry = stockMap.get(key)
         const desc = cEntry?.desc ?? sEntry?.desc ?? partNumber
-        const aprQty = cEntry?.months[1] ?? 0
-        const mayQty = cEntry?.months[2] ?? 0
-        const junQty = cEntry?.months[3] ?? 0
-        const total3M = aprQty + mayQty + junQty
-        const monthsActive = [aprQty, mayQty, junQty].filter((q) => q > 0).length
+        const m1Qty = cEntry?.months[windowPeriodsAsc[0]] ?? 0
+        const m2Qty = cEntry?.months[windowPeriodsAsc[1]] ?? 0
+        const m3Qty = cEntry?.months[windowPeriodsAsc[2]] ?? 0
+        const total3M = m1Qty + m2Qty + m3Qty
+        const monthsActive = [m1Qty, m2Qty, m3Qty].filter((q) => q > 0).length
         let frequency: FrequencyLabel
         if (monthsActive === 3) frequency = 'Daily/Regular Mover'
         else if (monthsActive === 2) frequency = 'Bi-Weekly Mover'
         else if (monthsActive === 1) frequency = 'Weekly/Occasional Mover'
         else frequency = 'No Recent Use'
-        const avgDailyConsumption = Math.round(total3M / CALENDAR_DAYS)
-        const weeklyAvgQty = Math.round(total3M / 12)
+
+        // IMPORTANT: keep full precision for the math that decides order quantities.
+        // Rounding this to a whole number BEFORE computing required stock was the bug
+        // that hid low-volume parts (e.g. accident/body panels — 1-5 units/quarter)
+        // from the Order Sheet entirely, since round(low qty / 90) collapses to 0.
+        const avgDailyConsumptionRaw = total3M / CALENDAR_DAYS
+        const avgDailyConsumption = Math.round(avgDailyConsumptionRaw) // display only
+        const weeklyAvgQty = Math.round(total3M / 12) // display only
         const currentStock = sEntry?.qty ?? 0
         const pipelineQty = pipelineMap.get(key) ?? 0
         const effectiveStock = currentStock + pipelineQty
-        const required20Day = Math.ceil(avgDailyConsumption * DAYS_COVER)
+        // Required stock computed from RAW (unrounded) daily consumption so any part
+        // with genuine recent usage always gets a non-zero required-stock floor.
+        const required20Day = total3M > 0 ? Math.max(1, Math.ceil(avgDailyConsumptionRaw * DAYS_COVER)) : 0
         const netShortfall = Math.max(required20Day - effectiveStock, 0)
         const qtyToOrder = Math.ceil(netShortfall)
         const stockStatus = effectiveStock < required20Day ? 'SHORTAGE - URGENT' : 'OK'
@@ -177,8 +213,8 @@ export default function PartsStockDisciplineReport({ branch }: ReportViewProps) 
 
         disciplineRows.push({
           partNumber, partDescription: desc, portal: partPortal,
-          aprQty, mayQty, junQty, total3M, monthsActive, frequency,
-          avgDailyConsumption, weeklyAvgQty,
+          m1Qty, m2Qty, m3Qty, total3M, monthsActive, frequency,
+          avgDailyConsumption, avgDailyConsumptionRaw, weeklyAvgQty,
           currentStock, pipelineQty, effectiveStock,
           required20Day, netShortfall, qtyToOrder,
           stockStatus, deadStock, inventoryValue,
@@ -245,8 +281,9 @@ export default function PartsStockDisciplineReport({ branch }: ReportViewProps) 
       [],
       ['METHODOLOGY'],
       ['20-Day Required Stock = ROUNDUP(Avg Daily Consumption × 20, 0)'],
-      ['Avg Daily Consumption = Total 3-Month Qty ÷ 90 calendar days (Apr+May+Jun)'],
-      ['Months Active = count of months (Apr/May/Jun) with consumption > 0'],
+      ['Avg Daily Consumption = Total 3-Month Qty ÷ 90 calendar days (rolling: latest 3 imported months, currently ' + activeMonthLabels.join('+') + ')'],
+      ['Months Active = count of months in the rolling 3-month window with consumption > 0'],
+      ['NOTE: Required Stock uses UNROUNDED daily consumption internally so low-volume/high-value parts (e.g. body panels, accident-repair parts used only 1-5x/quarter) are never zeroed out of the reorder list'],
       ['  3/3 → Daily/Regular Mover | 2/3 → Bi-Weekly Mover | 1/3 → Weekly/Occasional | 0/3 → No Recent Use'],
       ['Effective Stock = Current On-Hand + Pipeline (Ordered + Confirmed + In-Transit, net of already received)'],
       ['Qty to Order = ROUNDUP(MAX(Required − Effective, 0), 0) — pipeline deducted so you only order the true gap'],
@@ -259,8 +296,8 @@ export default function PartsStockDisciplineReport({ branch }: ReportViewProps) 
     XLSX.utils.book_append_sheet(wb, ws0, 'Read Me')
 
     // Full report
-    const h1 = ['Part No','Description','Portal','Apr Qty','May Qty','Jun Qty','Total 3M','Months Active','Frequency','Avg Daily','Weekly Avg','On-Hand','Pipeline','Effective Stock','20-Day Required','Net Shortfall','Qty to Order','Stock Status','Dead Stock?','Inventory Value (Rs)']
-    const d1 = rows.map((r) => [r.partNumber,r.partDescription,r.portal,r.aprQty,r.mayQty,r.junQty,r.total3M,r.monthsActive,r.frequency,r.avgDailyConsumption,r.weeklyAvgQty,r.currentStock,r.pipelineQty,r.effectiveStock,r.required20Day,r.netShortfall,r.qtyToOrder,r.stockStatus,r.deadStock?'YES':'NO',Math.round(r.inventoryValue)])
+    const h1 = ['Part No','Description','Portal',`${activeMonthLabels[0] ?? 'M1'} Qty`,`${activeMonthLabels[1] ?? 'M2'} Qty`,`${activeMonthLabels[2] ?? 'M3'} Qty`,'Total 3M','Months Active','Frequency','Avg Daily','Weekly Avg','On-Hand','Pipeline','Effective Stock','20-Day Required','Net Shortfall','Qty to Order','Stock Status','Dead Stock?','Inventory Value (Rs)']
+    const d1 = rows.map((r) => [r.partNumber,r.partDescription,r.portal,r.m1Qty,r.m2Qty,r.m3Qty,r.total3M,r.monthsActive,r.frequency,r.avgDailyConsumption,r.weeklyAvgQty,r.currentStock,r.pipelineQty,r.effectiveStock,r.required20Day,r.netShortfall,r.qtyToOrder,r.stockStatus,r.deadStock?'YES':'NO',Math.round(r.inventoryValue)])
     const ws1 = XLSX.utils.aoa_to_sheet([h1, ...d1])
     ws1['!cols'] = h1.map((_, i) => ({ wch: i < 2 ? 32 : 14 }))
     XLSX.utils.book_append_sheet(wb, ws1, 'Stock Discipline Report')
@@ -273,8 +310,8 @@ export default function PartsStockDisciplineReport({ branch }: ReportViewProps) 
     XLSX.utils.book_append_sheet(wb, ws2, 'Order Sheet')
 
     // Daily Consumption
-    const h3 = ['Part No','Description','Portal','Apr Qty','May Qty','Jun Qty','Total 3M','Avg Daily','Weekly Avg','Months Active','Frequency']
-    const d3 = rows.filter((r) => r.total3M > 0).sort((a,b) => b.avgDailyConsumption-a.avgDailyConsumption).map((r) => [r.partNumber,r.partDescription,r.portal,r.aprQty,r.mayQty,r.junQty,r.total3M,r.avgDailyConsumption,r.weeklyAvgQty,r.monthsActive,r.frequency])
+    const h3 = ['Part No','Description','Portal',`${activeMonthLabels[0] ?? 'M1'} Qty`,`${activeMonthLabels[1] ?? 'M2'} Qty`,`${activeMonthLabels[2] ?? 'M3'} Qty`,'Total 3M','Avg Daily','Weekly Avg','Months Active','Frequency']
+    const d3 = rows.filter((r) => r.total3M > 0).sort((a,b) => b.avgDailyConsumption-a.avgDailyConsumption).map((r) => [r.partNumber,r.partDescription,r.portal,r.m1Qty,r.m2Qty,r.m3Qty,r.total3M,r.avgDailyConsumption,r.weeklyAvgQty,r.monthsActive,r.frequency])
     const ws3 = XLSX.utils.aoa_to_sheet([h3, ...d3])
     ws3['!cols'] = h3.map((_, i) => ({ wch: i < 2 ? 32 : 14 }))
     XLSX.utils.book_append_sheet(wb, ws3, 'Daily Consumption')
@@ -298,7 +335,10 @@ export default function PartsStockDisciplineReport({ branch }: ReportViewProps) 
 
   const COLS: [keyof DisciplineRow, string][] = [
     ['partNumber','Part No'],['partDescription','Description'],['portal','Portal'],
-    ['aprQty','Apr'],['mayQty','May'],['junQty','Jun'],['total3M','Total 3M'],
+    ['m1Qty', activeMonthLabels[0] ?? 'M1'],
+    ['m2Qty', activeMonthLabels[1] ?? 'M2'],
+    ['m3Qty', activeMonthLabels[2] ?? 'M3'],
+    ['total3M','Total 3M'],
     ['monthsActive','Active'],['frequency','Frequency'],
     ['avgDailyConsumption','Avg Daily'],['weeklyAvgQty','Weekly'],
     ['currentStock','On-Hand'],['pipelineQty','Pipeline'],['effectiveStock','Effective'],
@@ -382,9 +422,9 @@ export default function PartsStockDisciplineReport({ branch }: ReportViewProps) 
                 <td style={{ fontFamily: 'monospace', fontWeight: 600 }}>{r.partNumber}</td>
                 <td title={r.partDescription} style={{ maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.partDescription}</td>
                 <td><span style={{ padding: '2px 6px', borderRadius: 4, fontSize: 10, fontWeight: 700, background: r.portal === 'EV' ? '#dbeafe' : '#f0fdf4', color: r.portal === 'EV' ? '#1d4ed8' : '#166534' }}>{r.portal}</span></td>
-                <td style={{ textAlign: 'right' }}>{r.aprQty || '—'}</td>
-                <td style={{ textAlign: 'right' }}>{r.mayQty || '—'}</td>
-                <td style={{ textAlign: 'right' }}>{r.junQty || '—'}</td>
+                <td style={{ textAlign: 'right' }}>{r.m1Qty || '—'}</td>
+                <td style={{ textAlign: 'right' }}>{r.m2Qty || '—'}</td>
+                <td style={{ textAlign: 'right' }}>{r.m3Qty || '—'}</td>
                 <td style={{ textAlign: 'right', fontWeight: 600 }}>{r.total3M || '—'}</td>
                 <td style={{ textAlign: 'center' }}>{r.monthsActive}/3</td>
                 <td><span style={{ fontSize: 10, padding: '2px 5px', borderRadius: 4, background: freqColor(r.frequency) + '22', color: freqColor(r.frequency), fontWeight: 600, whiteSpace: 'nowrap' }}>{r.frequency}</span></td>
@@ -411,7 +451,7 @@ export default function PartsStockDisciplineReport({ branch }: ReportViewProps) 
         </table>
       </div>
       <div style={{ fontSize: 12, opacity: 0.5, textAlign: 'right' }}>
-        {filteredRows.length} of {rows.length} parts · 20-day cover · Avg Daily = Total 3M ÷ 90 · All order qty rounded UP
+        {filteredRows.length} of {rows.length} parts · 20-day cover · window: {activeMonthLabels.join(' + ')} · All order qty rounded UP
       </div>
     </div>
   )
