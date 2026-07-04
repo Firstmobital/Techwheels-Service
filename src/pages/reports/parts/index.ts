@@ -67,7 +67,7 @@ export const PARTS_REPORTS: ReportDefinition[] = [
     id: 'parts-stock-discipline',
     categoryId: 'parts',
     label: 'Stock Discipline & Reorder',
-    description: '20-day cover analysis with pipeline deduction, dead stock flag, and order sheet export.',
+    description: '30-day cover analysis with pipeline deduction, dead stock flag, and order sheet export.',
     cardHint: 'Best for generating a ready-to-place reorder list with shortage priorities.',
     Component: PartsStockDisciplineReport,
   },

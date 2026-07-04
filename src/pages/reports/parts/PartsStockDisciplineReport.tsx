@@ -4,12 +4,22 @@ import { supabase } from '../../../lib/supabase'
 import type { ReportViewProps } from '../types'
 import { ReportLoadingState } from '../components/ReportLoadingState'
 
-const DAYS_COVER = 20
+const DAYS_COVER = 30
 const CALENDAR_DAYS = 90
 // Fixed to April/May/June only — per user instruction, do NOT roll into July automatically.
 const TARGET_FISCAL_YEAR = 2026
 const TARGET_MONTHS = [1, 2, 3] // 1=April, 2=May, 3=June
 const PIPELINE_STATUSES = ['Ordered', 'Confirmed', 'In-Transit']
+// True Accessories items (NOT genuine kits/consumables) to exclude entirely from Order Sheet,
+// order-qty calc, and stock planning. Identified within TML's "8855" trade-goods series:
+// 8855GOLD = Gold Club Membership Booklet, 8855EVCH = EV charger installation accessory.
+// Everything else under 8855 (lubricants, paints, tyres, batteries, coolant, brake fluid,
+// and pure-numeric kit codes like wiper-blade/clutch/bush kits) are genuine consumables/kits
+// and must stay in the report per explicit instruction.
+const ACCESSORY_PART_PREFIXES = ['8855GOLD', '8855EVCH']
+function isAccessoryPart(partNumber: string): boolean {
+  return ACCESSORY_PART_PREFIXES.some((p) => partNumber.toUpperCase().startsWith(p))
+}
 
 interface ConsumptionRow {
   part_number: string
@@ -124,11 +134,17 @@ export default function PartsStockDisciplineReport({ branch }: ReportViewProps) 
 
       if (abortRef.current.aborted) return
 
+      // Exclude true Accessories items completely — from consumption calc, stock-on-hand,
+      // and pipeline/order calc — before any aggregation happens.
+      const consumptionFiltered = consumptionAll.filter((r) => !isAccessoryPart(r.part_number))
+      const stockFiltered = stockAll.filter((r) => !isAccessoryPart(r.part_number))
+      const orderFiltered = orderAll.filter((r) => !isAccessoryPart(r.part_number))
+
       // Fixed window: April(1) / May(2) / June(3) of TARGET_FISCAL_YEAR — July excluded.
       const windowPeriods = TARGET_MONTHS.map((m) => `${TARGET_FISCAL_YEAR}-${m}`)
       const windowPeriodsAsc = windowPeriods // already in Apr->May->Jun order
       const periodLabel = new Map<string, string>()
-      for (const row of consumptionAll) {
+      for (const row of consumptionFiltered) {
         const pkey = `${row.fiscal_year ?? 0}-${row.fiscal_month ?? 0}`
         if (row.month_name) periodLabel.set(pkey, row.month_name)
       }
@@ -136,7 +152,7 @@ export default function PartsStockDisciplineReport({ branch }: ReportViewProps) 
 
       // Consumption pivot — only accumulate months inside the fixed Apr/May/Jun window
       const consumpMap = new Map<string, { desc: string; portal: string; months: Record<string, number> }>()
-      for (const row of consumptionAll) {
+      for (const row of consumptionFiltered) {
         const pkey = `${row.fiscal_year ?? 0}-${row.fiscal_month ?? 0}`
         if (!windowPeriods.includes(pkey)) continue
         const key = `${row.part_number}|${row.portal}`
@@ -147,7 +163,7 @@ export default function PartsStockDisciplineReport({ branch }: ReportViewProps) 
 
       // Stock map
       const stockMap = new Map<string, { desc: string; qty: number; cost: number }>()
-      for (const row of stockAll) {
+      for (const row of stockFiltered) {
         const key = `${row.part_number}|${row.portal}`
         if (!stockMap.has(key)) stockMap.set(key, { desc: row.part_description ?? row.part_number, qty: 0, cost: 0 })
         const e = stockMap.get(key)!
@@ -157,7 +173,7 @@ export default function PartsStockDisciplineReport({ branch }: ReportViewProps) 
 
       // Pipeline map
       const pipelineMap = new Map<string, number>()
-      for (const row of orderAll) {
+      for (const row of orderFiltered) {
         const key = `${row.part_number}|${row.portal}`
         const pending = Math.max(0, (row.ordered_quantity ?? 0) - (row.received_quantity ?? 0))
         pipelineMap.set(key, (pipelineMap.get(key) ?? 0) + pending)
@@ -270,7 +286,7 @@ export default function PartsStockDisciplineReport({ branch }: ReportViewProps) 
       ['Generated:', new Date().toLocaleString('en-IN')],
       [],
       ['METHODOLOGY'],
-      ['20-Day Required Stock = ROUNDUP(Avg Daily Consumption × 20, 0)'],
+      ['30-Day Required Stock = ROUNDUP(Avg Daily Consumption × 30, 0)'],
       ['Avg Daily Consumption = Total 3-Month Qty ÷ 90 calendar days (fixed window: April + May + June ' + TARGET_FISCAL_YEAR + ')'],
       ['Months Active = count of months (Apr/May/Jun) with consumption > 0'],
       ['NOTE: Required Stock uses UNROUNDED daily consumption internally so low-volume/high-value parts (e.g. body panels, accident-repair parts used only 1-5x/quarter) are never zeroed out of the reorder list'],
@@ -286,14 +302,14 @@ export default function PartsStockDisciplineReport({ branch }: ReportViewProps) 
     XLSX.utils.book_append_sheet(wb, ws0, 'Read Me')
 
     // Full report
-    const h1 = ['Part No','Description','Portal',`${activeMonthLabels[0] ?? 'M1'} Qty`,`${activeMonthLabels[1] ?? 'M2'} Qty`,`${activeMonthLabels[2] ?? 'M3'} Qty`,'Total 3M','Months Active','Frequency','Avg Daily','Weekly Avg','On-Hand','Pipeline','Effective Stock','20-Day Required','Net Shortfall','Qty to Order','Stock Status','Dead Stock?','Inventory Value (Rs)']
+    const h1 = ['Part No','Description','Portal',`${activeMonthLabels[0] ?? 'M1'} Qty`,`${activeMonthLabels[1] ?? 'M2'} Qty`,`${activeMonthLabels[2] ?? 'M3'} Qty`,'Total 3M','Months Active','Frequency','Avg Daily','Weekly Avg','On-Hand','Pipeline','Effective Stock','30-Day Required','Net Shortfall','Qty to Order','Stock Status','Dead Stock?','Inventory Value (Rs)']
     const d1 = rows.map((r) => [r.partNumber,r.partDescription,r.portal,r.m1Qty,r.m2Qty,r.m3Qty,r.total3M,r.monthsActive,r.frequency,r.avgDailyConsumption,r.weeklyAvgQty,r.currentStock,r.pipelineQty,r.effectiveStock,r.required20Day,r.netShortfall,r.qtyToOrder,r.stockStatus,r.deadStock?'YES':'NO',Math.round(r.inventoryValue)])
     const ws1 = XLSX.utils.aoa_to_sheet([h1, ...d1])
     ws1['!cols'] = h1.map((_, i) => ({ wch: i < 2 ? 32 : 14 }))
     XLSX.utils.book_append_sheet(wb, ws1, 'Stock Discipline Report')
 
     // Order Sheet
-    const h2 = ['Part No','Description','Portal','Frequency','20-Day Required','On-Hand','Pipeline','Effective Stock','Qty to Order']
+    const h2 = ['Part No','Description','Portal','Frequency','30-Day Required','On-Hand','Pipeline','Effective Stock','Qty to Order']
     const d2 = rows.filter((r) => r.qtyToOrder > 0 && !r.deadStock).sort((a,b) => b.qtyToOrder-a.qtyToOrder).map((r) => [r.partNumber,r.partDescription,r.portal,r.frequency,r.required20Day,r.currentStock,r.pipelineQty,r.effectiveStock,r.qtyToOrder])
     const ws2 = XLSX.utils.aoa_to_sheet([h2, ...d2])
     ws2['!cols'] = h2.map((_, i) => ({ wch: i < 2 ? 32 : 14 }))
@@ -332,7 +348,7 @@ export default function PartsStockDisciplineReport({ branch }: ReportViewProps) 
     ['monthsActive','Active'],['frequency','Frequency'],
     ['avgDailyConsumption','Avg Daily'],['weeklyAvgQty','Weekly'],
     ['currentStock','On-Hand'],['pipelineQty','Pipeline'],['effectiveStock','Effective'],
-    ['required20Day','20-Day Req'],['qtyToOrder','Qty to Order'],
+    ['required20Day','30-Day Req'],['qtyToOrder','Qty to Order'],
     ['stockStatus','Status'],['deadStock','Dead?'],
   ]
 
@@ -441,7 +457,7 @@ export default function PartsStockDisciplineReport({ branch }: ReportViewProps) 
         </table>
       </div>
       <div style={{ fontSize: 12, opacity: 0.5, textAlign: 'right' }}>
-        {filteredRows.length} of {rows.length} parts · 20-day cover · window: {activeMonthLabels.join(' + ')} · All order qty rounded UP
+        {filteredRows.length} of {rows.length} parts · 30-day cover · window: {activeMonthLabels.join(' + ')} · All order qty rounded UP
       </div>
     </div>
   )
