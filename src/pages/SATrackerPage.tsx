@@ -11,6 +11,7 @@ type ClosedJCRow = {
   job_card_number: string
   sr_assigned_to: string | null
   final_labour_amount: number | string | null
+  dms_final_labour_amount: number | string | null
   final_spares_amount: number | string | null
   total_invoice_amount: number | string | null
   closed_date_time: string | null
@@ -332,7 +333,7 @@ export default function SATrackerPage() {
       while (true) {
         let query = supabase
           .from('job_card_closed_data')
-          .select('id, job_card_number, sr_assigned_to, final_labour_amount, final_spares_amount, total_invoice_amount, closed_date_time, invoice_date, location, portal, vehicle_registration_number, sr_type, product_line')
+          .select('id, job_card_number, sr_assigned_to, final_labour_amount, dms_final_labour_amount, final_spares_amount, total_invoice_amount, closed_date_time, invoice_date, location, portal, vehicle_registration_number, sr_type, product_line')
           .not('sr_assigned_to', 'is', null)
           .gte('closed_date_time', dateRange.from + 'T00:00:00+05:30')
           .lte('closed_date_time', dateRange.to + 'T23:59:59+05:30')
@@ -382,7 +383,7 @@ export default function SATrackerPage() {
 
       const { data, error: err } = await supabase
         .from('job_card_closed_data')
-        .select('job_card_number, sr_assigned_to, final_labour_amount, vehicle_registration_number, location, closed_date_time, invoice_date')
+        .select('job_card_number, sr_assigned_to, dms_final_labour_amount, vehicle_registration_number, location, closed_date_time, invoice_date')
         .gte('closed_date_time', fromTs)
         .lte('closed_date_time', toTs)
         .order('sr_assigned_to', { ascending: true })
@@ -392,7 +393,7 @@ export default function SATrackerPage() {
       const saRows: YesterdaySARow[] = (data ?? [])
         .filter((r: any) => r.sr_assigned_to)
         .map((r: any) => {
-          const labour  = parseAmount(r.final_labour_amount)
+          const labour  = parseAmount(r.dms_final_labour_amount)
           const saName  = String(r.sr_assigned_to ?? '').trim()
           const fuel    = normFuelBucket(empDetailMap.get(normSAName(saName))?.fuel_type)
           const income  = calculateSAIncome(labour, fuel === 'EV' ? evSharePercent : saSharePercent)
@@ -482,7 +483,7 @@ export default function SATrackerPage() {
   const enrichedRows = useMemo<JCDetailRow[]>(() =>
     rows.map((r) => ({
       ...r,
-      labourAmt: parseAmount(r.final_labour_amount),
+      labourAmt: parseAmount(r.dms_final_labour_amount),
       sparesAmt: parseAmount(r.final_spares_amount),
       invoiceAmt: parseAmount(r.total_invoice_amount),
       dateKey: getDateKey(r),
@@ -1005,7 +1006,7 @@ export default function SATrackerPage() {
           <div className="card__head">
             <div>
               <h3>Earnings by Service Advisor</h3>
-              <div className="sub">Sorted highest to lowest. Income = (Labour ÷ 1.18) × {saSharePercent}% (PV) or {evSharePercent}% (EV). Click an SA to drill down by day.</div>
+              <div className="sub">Sorted highest to lowest. Income = (DMS Labour ÷ 1.18) × {saSharePercent}% (PV) or {evSharePercent}% (EV). Click an SA to drill down by day.</div>
             </div>
             {canEditSharePercent && (
               <div className="tech-share-corner">

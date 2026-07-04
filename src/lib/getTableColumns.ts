@@ -23,6 +23,8 @@ const FALLBACK_COLUMNS: Record<string, string[]> = {
     'final_labour_amount',
     'final_spares_amount',
     'total_invoice_amount',
+    'dms_final_labour_amount',
+    'dms_total_invoice_amount',
     // Datetime/date columns
     'created_date_time',
     'closed_date_time',

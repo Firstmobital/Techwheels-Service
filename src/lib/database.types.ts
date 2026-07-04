@@ -276,6 +276,8 @@ export type Database = {
           closed_date_time: string | null
           created_at: string
           created_date_time: string | null
+          dms_final_labour_amount: number | null
+          dms_total_invoice_amount: number | null
           employee_code: string | null
           final_labour_amount: number | null
           final_spares_amount: number | null
@@ -304,6 +306,8 @@ export type Database = {
           closed_date_time?: string | null
           created_at?: string
           created_date_time?: string | null
+          dms_final_labour_amount?: number | null
+          dms_total_invoice_amount?: number | null
           employee_code?: string | null
           final_labour_amount?: number | null
           final_spares_amount?: number | null
@@ -332,6 +336,8 @@ export type Database = {
           closed_date_time?: string | null
           created_at?: string
           created_date_time?: string | null
+          dms_final_labour_amount?: number | null
+          dms_total_invoice_amount?: number | null
           employee_code?: string | null
           final_labour_amount?: number | null
           final_spares_amount?: number | null
