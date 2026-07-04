@@ -6,7 +6,9 @@ import { ReportLoadingState } from '../components/ReportLoadingState'
 
 const DAYS_COVER = 20
 const CALENDAR_DAYS = 90
-const ROLLING_WINDOW_SIZE = 3
+// Fixed to April/May/June only — per user instruction, do NOT roll into July automatically.
+const TARGET_FISCAL_YEAR = 2026
+const TARGET_MONTHS = [1, 2, 3] // 1=April, 2=May, 3=June
 const PIPELINE_STATUSES = ['Ordered', 'Confirmed', 'In-Transit']
 
 interface ConsumptionRow {
@@ -102,13 +104,11 @@ export default function PartsStockDisciplineReport({ branch }: ReportViewProps) 
       if (branch && branch !== 'ALL') baseFilters['branch'] = branch
       if (portal !== 'ALL') baseFilters['portal'] = portal
 
-      // Fetch ALL consumption rows (no month hardcoding) so the rolling window
-      // always reflects whatever months have actually been imported so far.
       const [consumptionAll, stockAll, orderAll] = await Promise.all([
         fetchAll<ConsumptionRow>(
           'service_parts_consumption_data',
           'part_number,part_description,portal,fiscal_year,fiscal_month,month_name,total_consumption',
-          baseFilters
+          { ...baseFilters, fiscal_year: [TARGET_FISCAL_YEAR], fiscal_month: TARGET_MONTHS }
         ),
         fetchAll<StockRow>(
           'service_parts_stock_snapshot_data',
@@ -124,27 +124,17 @@ export default function PartsStockDisciplineReport({ branch }: ReportViewProps) 
 
       if (abortRef.current.aborted) return
 
-      // ── Determine rolling 3-month window from data actually present ────────
-      // (year, month) pairs sorted descending, take the most recent 3.
-      const periodSet = new Set<string>()
+      // Fixed window: April(1) / May(2) / June(3) of TARGET_FISCAL_YEAR — July excluded.
+      const windowPeriods = TARGET_MONTHS.map((m) => `${TARGET_FISCAL_YEAR}-${m}`)
+      const windowPeriodsAsc = windowPeriods // already in Apr->May->Jun order
       const periodLabel = new Map<string, string>()
       for (const row of consumptionAll) {
-        const py = row.fiscal_year ?? 0
-        const pm = row.fiscal_month ?? 0
-        const pkey = `${py}-${pm}`
-        periodSet.add(pkey)
+        const pkey = `${row.fiscal_year ?? 0}-${row.fiscal_month ?? 0}`
         if (row.month_name) periodLabel.set(pkey, row.month_name)
       }
-      const sortedPeriods = Array.from(periodSet).sort((a, b) => {
-        const [ay, am] = a.split('-').map(Number)
-        const [by, bm] = b.split('-').map(Number)
-        return by !== ay ? by - ay : bm - am
-      })
-      const windowPeriods = sortedPeriods.slice(0, ROLLING_WINDOW_SIZE) // newest 3
-      const windowPeriodsAsc = [...windowPeriods].reverse() // oldest -> newest for column order
       setActiveMonthLabels(windowPeriodsAsc.map((p) => periodLabel.get(p) ?? p))
 
-      // Consumption pivot — only accumulate months inside the rolling window
+      // Consumption pivot — only accumulate months inside the fixed Apr/May/Jun window
       const consumpMap = new Map<string, { desc: string; portal: string; months: Record<string, number> }>()
       for (const row of consumptionAll) {
         const pkey = `${row.fiscal_year ?? 0}-${row.fiscal_month ?? 0}`
@@ -281,8 +271,8 @@ export default function PartsStockDisciplineReport({ branch }: ReportViewProps) 
       [],
       ['METHODOLOGY'],
       ['20-Day Required Stock = ROUNDUP(Avg Daily Consumption × 20, 0)'],
-      ['Avg Daily Consumption = Total 3-Month Qty ÷ 90 calendar days (rolling: latest 3 imported months, currently ' + activeMonthLabels.join('+') + ')'],
-      ['Months Active = count of months in the rolling 3-month window with consumption > 0'],
+      ['Avg Daily Consumption = Total 3-Month Qty ÷ 90 calendar days (fixed window: April + May + June ' + TARGET_FISCAL_YEAR + ')'],
+      ['Months Active = count of months (Apr/May/Jun) with consumption > 0'],
       ['NOTE: Required Stock uses UNROUNDED daily consumption internally so low-volume/high-value parts (e.g. body panels, accident-repair parts used only 1-5x/quarter) are never zeroed out of the reorder list'],
       ['  3/3 → Daily/Regular Mover | 2/3 → Bi-Weekly Mover | 1/3 → Weekly/Occasional | 0/3 → No Recent Use'],
       ['Effective Stock = Current On-Hand + Pipeline (Ordered + Confirmed + In-Transit, net of already received)'],
