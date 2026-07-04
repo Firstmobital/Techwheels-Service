@@ -30,6 +30,12 @@ import {
   type JcClosedParseError,
 } from '../lib/jcClosedColumnMapper'
 import {
+  mapPsfRevenueDmsHeaders,
+  buildPsfRevenueDmsInsertRow,
+  formatPsfRevenueDmsParseErrors,
+  type PsfRevenueDmsParseError,
+} from '../lib/psfRevenueDmsColumnMapper'
+import {
   buildEmployeeLookupIndex,
   resolveEmployeeForSr,
   type EmployeeLookupIndex,
@@ -98,7 +104,7 @@ interface CardConfig {
 }
 
 interface MappingIssueInsert {
-  source_table: 'service_vas_jc_data' | 'job_card_closed_data'
+  source_table: 'service_vas_jc_data' | 'job_card_closed_data' | 'psf_revenue_dms'
   branch: string
   row_number: number
   job_card_number: string | null
@@ -134,6 +140,12 @@ const CARDS: CardConfig[] = [
     title: 'PSF Revenue Report',
     description: 'Closed job card records across all branches.',
     branches: ['PSF Revenue Report (All Branches)'],
+  },
+  {
+    tableName: 'psf_revenue_dms',
+    title: 'PSF Revenue Report (DMS)',
+    description: 'DMS invoice revenue rows with import-time employee, location, and portal mapping.',
+    branches: ['PSF Revenue Report (All Branches-DMS)'],
   },
   {
     tableName: 'service_invoice_order_data',
@@ -206,6 +218,7 @@ const CARDS: CardConfig[] = [
 
 const REVENUE_REPORT_TABLES = new Set([
   'job_card_closed_data',
+  'psf_revenue_dms',
   'service_invoice_order_data',
   'service_vas_jc_data',
 ])
@@ -1253,6 +1266,7 @@ export default function ImportPage() {
         const isInvoiceTable = tableName === 'service_invoice_data'
         const isInvoiceOrderTable = tableName === 'service_invoice_order_data'
         const isJcClosedTable = tableName === 'job_card_closed_data'
+        const isPsfRevenueDmsTable = tableName === 'psf_revenue_dms'
         const isPartsConsumptionTable = tableName === 'service_parts_consumption_data'
         const isPartsOrderTable = tableName === 'service_parts_order_data'
         const isPartsStockTable = tableName === 'service_parts_stock_snapshot_data'
@@ -1262,6 +1276,7 @@ export default function ImportPage() {
           isInvoiceTable ||
           isInvoiceOrderTable ||
           isJcClosedTable ||
+          isPsfRevenueDmsTable ||
           isPartsConsumptionTable ||
           isPartsOrderTable ||
           isPartsStockTable ||
@@ -1313,7 +1328,7 @@ export default function ImportPage() {
         let totalInserted = 0
         let processedRows = 0
         const mappingIssues: MappingIssueInsert[] = []
-        const requiresEmployeeLookup = isVasTable || isJcClosedTable
+        const requiresEmployeeLookup = isVasTable || isJcClosedTable || isPsfRevenueDmsTable
         const employeeLookup = requiresEmployeeLookup ? await getEmployeeLookupIndex() : null
 
         const incrementProcessedRows = (count: number): void => {
@@ -1679,6 +1694,119 @@ export default function ImportPage() {
           return processed
         }
 
+        const upsertPsfRevenueDmsRowsByBusinessKey = async (
+          rows: Record<string, unknown>[],
+        ): Promise<number> => {
+          type PsfRevenueDmsUpsertRow = Record<string, unknown> & {
+            branch: string
+            location: string
+            portal: string
+            job_card_number: string
+            invoice_date: string
+          }
+
+          const normalizedRows = rows
+            .map((row) => {
+              const location = String(row.location ?? '').trim()
+              const portal = String(row.portal ?? '').trim()
+              const jobCardNumber = String(row.job_card_number ?? '').trim().toUpperCase()
+              const invoiceDate = String(row.invoice_date ?? '').trim().slice(0, 10)
+
+              if (!location || !portal || !jobCardNumber || !invoiceDate) return null
+
+              return {
+                ...row,
+                location,
+                portal,
+                branch: location,
+                job_card_number: jobCardNumber,
+                invoice_date: invoiceDate,
+              }
+            })
+            .filter((row): row is PsfRevenueDmsUpsertRow => row !== null)
+
+          const dedupedRows = dedupeRowsByKeys(
+            normalizedRows,
+            (row) =>
+              `${String(row.location ?? '').trim().toLowerCase()}|${String(row.portal ?? '')
+                .trim()
+                .toUpperCase()}|${String(row.job_card_number ?? '')
+                .trim()
+                .toUpperCase()}|${String(row.invoice_date ?? '').trim().slice(0, 10)}`,
+          ) as PsfRevenueDmsUpsertRow[]
+
+          let processed = 0
+
+          const updateOrInsertByCanonicalKey = async (payload: PsfRevenueDmsUpsertRow): Promise<void> => {
+            const { data: updatedRows, error: updateError } = await supabase
+              .from(tableName)
+              .update(payload)
+              .eq('location', payload.location as never)
+              .eq('portal', payload.portal as never)
+              .eq('job_card_number', payload.job_card_number as never)
+              .eq('invoice_date', payload.invoice_date as never)
+              .select('id')
+
+            if (updateError) {
+              throw new Error(updateError.message ?? 'DMS revenue canonical update failed')
+            }
+
+            if ((updatedRows?.length ?? 0) > 0) return
+
+            const { error: insertError } = await supabase.from(tableName).insert([payload])
+            if (!insertError) return
+
+            const lower = (insertError.message ?? '').toLowerCase()
+            const duplicateViolation =
+              insertError.code === '23505' || lower.includes('duplicate key value violates unique constraint')
+
+            if (!duplicateViolation) {
+              throw new Error(insertError.message ?? 'DMS revenue canonical insert failed')
+            }
+
+            const { error: retryUpdateError } = await supabase
+              .from(tableName)
+              .update(payload)
+              .eq('location', payload.location as never)
+              .eq('portal', payload.portal as never)
+              .eq('job_card_number', payload.job_card_number as never)
+              .eq('invoice_date', payload.invoice_date as never)
+
+            if (retryUpdateError) {
+              throw new Error(retryUpdateError.message ?? 'DMS revenue canonical retry update failed')
+            }
+          }
+
+          for (let i = 0; i < dedupedRows.length; i += CHUNK) {
+            const chunkRows = dedupedRows.slice(i, i + CHUNK)
+            if (chunkRows.length === 0) continue
+
+            const { error } = await supabase.from(tableName).upsert(chunkRows, {
+              onConflict: 'location,portal,job_card_number,invoice_date',
+            })
+
+            if (error) {
+              const lower = (error.message ?? '').toLowerCase()
+              const missingConflictConstraint = lower.includes(
+                'no unique or exclusion constraint matching the on conflict specification',
+              )
+
+              if (!missingConflictConstraint) {
+                throw new Error(error.message ?? 'DMS revenue canonical upsert failed')
+              }
+
+              for (const row of chunkRows) {
+                await updateOrInsertByCanonicalKey(row)
+              }
+            }
+
+            processed += chunkRows.length
+            incrementProcessedRows(chunkRows.length)
+          }
+
+          return processed
+        }
+
         const dedupeRowsByKeys = (
           rows: Record<string, unknown>[],
           keyBuilder: (row: Record<string, unknown>) => string,
@@ -1719,6 +1847,22 @@ export default function ImportPage() {
           } catch (err) {
             throw new Error(
               `PSF Revenue Report: ${err instanceof Error ? err.message : String(err)}`,
+            )
+          }
+        }
+
+        let psfRevenueDmsHeaderMapping: Record<string, string> | null = null
+        if (isPsfRevenueDmsTable) {
+          try {
+            const excelHeaders = await getFirstAvailableHeaders()
+            if (excelHeaders.length === 0) {
+              throw new Error('No valid data found in uploaded files')
+            }
+
+            psfRevenueDmsHeaderMapping = mapPsfRevenueDmsHeaders(excelHeaders)
+          } catch (err) {
+            throw new Error(
+              `PSF Revenue Report (All Branches-DMS): ${err instanceof Error ? err.message : String(err)}`,
             )
           }
         }
@@ -2176,6 +2320,102 @@ export default function ImportPage() {
             } else {
               totalInserted += await upsertJcClosedRowsByBusinessKey(dedupedJcRows)
             }
+          } else if (isPsfRevenueDmsTable && psfRevenueDmsHeaderMapping) {
+            if (!employeeLookup) {
+              throw new Error('Employee lookup is required for PSF Revenue Report (All Branches-DMS) import')
+            }
+
+            const dmsParseErrors: PsfRevenueDmsParseError[] = []
+            const insertRows: Record<string, unknown>[] = []
+
+            for (let rowIdx = 0; rowIdx < rawRows.length; rowIdx++) {
+              const { row, errors } = buildPsfRevenueDmsInsertRow(
+                rawRows[rowIdx],
+                standardBranch,
+                psfRevenueDmsHeaderMapping,
+                rowIdx + 2,
+              )
+
+              if (errors.length > 0) {
+                dmsParseErrors.push(...errors)
+              } else if (row) {
+                let matchedEmployeeLocation: 'Ajmer Road' | 'Sitapura' | null = null
+                let matchedEmployeePortal: Portal | null = null
+                let fallbackByCode: LocationPortal | null = null
+                const srAssignedTo = row.sr_assigned_to
+                const matched = resolveEmployeeForSr(srAssignedTo, employeeLookup)
+                row.employee_code = matched.employeeCode
+
+                const matchedByCode =
+                  matched.employeeCode == null
+                    ? null
+                    : employeeLookup.byCode.get(matched.employeeCode.trim().toUpperCase())
+                matchedEmployeeLocation = normalizeLocationValue(matchedByCode?.location)
+                matchedEmployeePortal = normalizePortalFromFuelType(matchedByCode?.fuel_type)
+                fallbackByCode = resolveDealerCodeLocationAndPortal(matched.employeeCode ?? srAssignedTo)
+
+                if (matched.reason === 'no_employee_match') {
+                  mappingIssues.push({
+                    source_table: 'psf_revenue_dms',
+                    branch,
+                    row_number: rowIdx + 2,
+                    job_card_number:
+                      row.job_card_number == null ? null : String(row.job_card_number),
+                    sr_assigned_to: srAssignedTo == null ? null : String(srAssignedTo),
+                    reason: matched.reason,
+                  })
+                }
+
+                const resolvedLocation = matchedEmployeeLocation ?? fallbackByCode?.location ?? null
+                const resolvedPortal = matchedEmployeePortal ?? fallbackByCode?.portal ?? null
+
+                if (!resolvedLocation || !resolvedPortal) {
+                  const missingDimensions = [
+                    !resolvedLocation ? 'location' : null,
+                    !resolvedPortal ? 'portal' : null,
+                  ]
+                    .filter(Boolean)
+                    .join(', ')
+
+                  dmsParseErrors.push({
+                    rowNumber: rowIdx + 2,
+                    fieldName: 'SR Assigned To',
+                    columnName: 'sr_assigned_to',
+                    value: srAssignedTo == null ? '' : String(srAssignedTo),
+                    error: `Unable to resolve canonical ${missingDimensions} from employee master or fallback SA-code mapping`,
+                  })
+                  continue
+                }
+
+                row.location = resolvedLocation
+                row.portal = resolvedPortal
+                row.branch = resolvedLocation
+
+                const normalizedJobCardNumber =
+                  row.job_card_number == null ? '' : String(row.job_card_number).trim().toUpperCase()
+                if (!normalizedJobCardNumber) {
+                  dmsParseErrors.push({
+                    rowNumber: rowIdx + 2,
+                    fieldName: 'Order #',
+                    columnName: 'job_card_number',
+                    value: row.job_card_number == null ? '' : String(row.job_card_number),
+                    error: 'Order # is required for dedupe/update',
+                  })
+                  continue
+                }
+
+                row.job_card_number = normalizedJobCardNumber
+                insertRows.push(row)
+              }
+            }
+
+            if (dmsParseErrors.length > 0) {
+              throw new Error(
+                `PSF Revenue Report (All Branches-DMS) parse errors found:\n${formatPsfRevenueDmsParseErrors(dmsParseErrors.slice(0, 10))}`,
+              )
+            }
+
+            totalInserted += await upsertPsfRevenueDmsRowsByBusinessKey(insertRows)
           } else if (isInvoiceTable) {
             // Invoice table: map only required headers and parse date/amount fields
             const excelHeaders = Object.keys(rawRows[0] ?? {})

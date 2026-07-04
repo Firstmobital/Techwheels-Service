@@ -42,7 +42,7 @@ interface EmployeeRow {
 
 interface MappingIssueRow {
   id: number
-  source_table: 'service_vas_jc_data' | 'job_card_closed_data'
+  source_table: 'service_vas_jc_data' | 'job_card_closed_data' | 'psf_revenue_dms'
   branch: string
   row_number: number | null
   job_card_number: string | null
