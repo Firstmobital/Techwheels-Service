@@ -663,7 +663,9 @@ function canAccessPath(pathname: string, allowedModules: Set<string>) {
 
 function getDefaultRoute(allowedModules: Set<string>): AppRoute | null {
   const preferenceOrder: AppRoute[] = ['/import', '/reception', '/service-advisor', '/floor-incharge', '/technician', '/reports', '/telecalling', '/settings', '/autodoc', '/admin']
-  return preferenceOrder.find((route) => hasAnyModuleAccess(allowedModules, ROUTE_MODULE_MAP[route])) ?? null
+  return preferenceOrder.find((route) => hasAnyModuleAccess(allowedModules, ROUTE_MODULE_MAP[route]))
+    ?? (NAV_ITEMS as NavItem[]).find((item) => hasAnyModuleAccess(allowedModules, ROUTE_MODULE_MAP[item.to]))?.to
+    ?? null
 }
 
 const ALL_ROUTE_MODULES: ModuleName[] = Array.from(
