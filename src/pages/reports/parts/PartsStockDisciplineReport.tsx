@@ -11,12 +11,15 @@ const TARGET_FISCAL_YEAR = 2026
 const TARGET_MONTHS = [1, 2, 3] // 1=April, 2=May, 3=June
 const PIPELINE_STATUSES = ['Ordered', 'Confirmed', 'In-Transit']
 // True Accessories items (NOT genuine kits/consumables) to exclude entirely from Order Sheet,
-// order-qty calc, and stock planning. Identified within TML's "8855" trade-goods series:
-// 8855GOLD = Gold Club Membership Booklet, 8855EVCH = EV charger installation accessory.
-// Everything else under 8855 (lubricants, paints, tyres, batteries, coolant, brake fluid,
-// and pure-numeric kit codes like wiper-blade/clutch/bush kits) are genuine consumables/kits
-// and must stay in the report per explicit instruction.
-const ACCESSORY_PART_PREFIXES = ['8855GOLD', '8855EVCH']
+// order-qty calc, and stock planning.
+// - 8855GOLD = Gold Club Membership Booklet, 8855EVCH = EV charger installation accessory
+//   (sub-codes within the "8855" trade-goods series; everything else under 8855 — lubricants,
+//   paints, tyres, batteries, coolant, brake fluid, and pure-numeric kit codes like
+//   wiper-blade/clutch/bush kits — are genuine consumables/kits and must stay).
+// - The entire "8857" series is Tata's genuine retail Accessories catalog (mud flaps, floor
+//   mats, seat covers, alloy wheels, sunshades, music systems, chargers, etc.) — excluded
+//   in full per explicit instruction.
+const ACCESSORY_PART_PREFIXES = ['8855GOLD', '8855EVCH', '8857']
 function isAccessoryPart(partNumber: string): boolean {
   return ACCESSORY_PART_PREFIXES.some((p) => partNumber.toUpperCase().startsWith(p))
 }
