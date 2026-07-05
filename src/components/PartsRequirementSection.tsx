@@ -17,6 +17,7 @@ type Draft = {
   parts_description: string
   advisor_remarks: string
   entry_date: string
+  parts_number: string
 }
 
 function todayIST(): string {
@@ -29,6 +30,7 @@ const EMPTY_DRAFT: Draft = {
   parts_description: '',
   advisor_remarks: '',
   entry_date: todayIST(),
+  parts_number: '',
 }
 
 function StatusBadge({ status }: { status: PartsRequestRow['parts_status'] }) {
@@ -119,6 +121,7 @@ export default function PartsRequirementSection() {
       parts_description: row.parts_description ?? '',
       advisor_remarks: row.advisor_remarks ?? '',
       entry_date: row.entry_date,
+      parts_number: row.parts_number ?? '',
     })
     setShowForm(true)
   }
@@ -136,6 +139,7 @@ export default function PartsRequirementSection() {
       partsDescription: draft.parts_description.trim() || null,
       advisorRemarks: draft.advisor_remarks.trim() || null,
       entryDate: draft.entry_date || null,
+      partsNumber: draft.parts_number.trim() || null,
     }
     const res = editingId
       ? await updateMyPartsRequestFields({ id: editingId, ...payload })
@@ -240,6 +244,16 @@ export default function PartsRequirementSection() {
                 className={inputCls}
               />
             </label>
+            <label className={labelCls}>
+              Parts No <span className="font-normal normal-case text-gray-400">(optional)</span>
+              <input
+                type="text"
+                value={draft.parts_number}
+                onChange={(e) => setDraft((d) => ({ ...d, parts_number: e.target.value.toUpperCase() }))}
+                placeholder="Enter if already known"
+                className={inputCls}
+              />
+            </label>
             <label className={`${labelCls} sm:col-span-2 lg:col-span-3`}>
               Parts Description
               <textarea
@@ -263,6 +277,8 @@ export default function PartsRequirementSection() {
           </div>
           <p className="mt-1 text-xs text-gray-500">
             Parts Qty is calculated automatically from current stock once you submit — no need to enter it.
+            If you already know the Parts No, enter it above for faster stock matching; otherwise leave it
+            blank and Parts SPM will fill it in.
           </p>
           <div className="mt-4 flex gap-2">
             <button

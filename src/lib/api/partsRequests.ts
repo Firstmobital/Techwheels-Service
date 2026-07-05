@@ -78,6 +78,8 @@ export async function createPartsRequest(input: {
   partsDescription?: string | null
   advisorRemarks?: string | null
   entryDate?: string | null
+  /** Optional — advisor may already know the exact part number. Leave blank for Parts SPM to fill in later. */
+  partsNumber?: string | null
 }): Promise<ApiResult<number>> {
   const { data, error } = await supabase.rpc('parts_request_create', {
     p_registration_number: input.registrationNumber,
@@ -85,6 +87,7 @@ export async function createPartsRequest(input: {
     p_parts_description: input.partsDescription ?? null,
     p_advisor_remarks: input.advisorRemarks ?? null,
     p_entry_date: input.entryDate ?? null,
+    p_parts_number: input.partsNumber ?? null,
   })
 
   if (error) return fail(error)
@@ -98,6 +101,8 @@ export async function updateMyPartsRequestFields(input: {
   partsDescription?: string | null
   advisorRemarks?: string | null
   entryDate?: string | null
+  /** Optional — only overwrites the existing Parts Number when a non-empty value is sent. */
+  partsNumber?: string | null
 }): Promise<ApiResult<void>> {
   const { error } = await supabase.rpc('parts_request_update_advisor_fields', {
     p_id: input.id,
@@ -106,6 +111,7 @@ export async function updateMyPartsRequestFields(input: {
     p_parts_description: input.partsDescription ?? null,
     p_advisor_remarks: input.advisorRemarks ?? null,
     p_entry_date: input.entryDate ?? null,
+    p_parts_number: input.partsNumber ?? null,
   })
 
   if (error) return fail(error)
