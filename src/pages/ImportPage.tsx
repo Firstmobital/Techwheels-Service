@@ -2858,6 +2858,23 @@ export default function ImportPage() {
         if (tableName === 'job_card_closed_data') {
           void refreshPsfRowCount()
         }
+
+        if (tableName === 'warranty_claim_settlement_report_data') {
+          // Rebuild the 9800xx / Non-9800xx derived tables the Warranty Overview report
+          // reads from, so the report reflects this upload immediately. Runs server-side
+          // (service role) so it works regardless of the uploader's RBAC role. Never fails
+          // the upload itself if the sync has an issue — the raw data is already saved.
+          void supabase.functions
+            .invoke('warranty-spl-labour-sync', { body: {} })
+            .then(({ error: syncError }) => {
+              if (syncError) {
+                console.warn(`Warranty report sync failed: ${syncError.message}`)
+              }
+            })
+            .catch((syncErr) => {
+              console.warn(`Warranty report sync failed: ${(syncErr as Error).message}`)
+            })
+        }
       } catch (err) {
         const message = (err as Error).message
         const isSchemaCacheIssue =

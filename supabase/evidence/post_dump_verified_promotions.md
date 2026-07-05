@@ -12,3 +12,9 @@ When a new dump is refreshed, this window is reset.
 | Ledger | Prefix | Migration | Checks | Verified |
 |--------|--------|-----------|--------|----------|
 | DBL-0008 | 20260630120000 | supabase/exec_success_migrations/sql/20260630120000_global_settings_model_options.sql | supabase/exec_success_migrations/sql_check/20260630120000_global_settings_model_options_checks.sql | 2026-06-30 — global `settings_model_options` catalog (19 unique active models, all `dealer_code=GLOBAL`) |
+
+## 2026-07-05T06:25:08Z
+- prefix: 20260705110000
+- migration: 20260705110000_add_warranty_spl_labour_source_claim_id.sql
+- checks: 20260705110000_add_warranty_spl_labour_source_claim_id_checks.sql
+- baseline_dump_sha256: 3642cc29eab0d821b40e324ca702fd662e7e10d170ce29e0c31433dd8c9c83a8
