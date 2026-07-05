@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import * as XLSX from 'xlsx'
 import {
   listAllPartsRequests,
@@ -64,6 +64,23 @@ export default function PartsSPMDashboardPage() {
   const [editingId, setEditingId] = useState<number | null>(null)
   const [editDraft, setEditDraft] = useState<EditDraft | null>(null)
   const [saving, setSaving] = useState(false)
+  const [toast, setToast] = useState<{ kind: 'success' | 'error'; text: string } | null>(null)
+  const editingIdRef = useRef<number | null>(null)
+  const pendingRefreshRef = useRef(false)
+
+  useEffect(() => {
+    editingIdRef.current = editingId
+    if (editingId === null && pendingRefreshRef.current) {
+      pendingRefreshRef.current = false
+      void load()
+    }
+  }, [editingId])
+
+  useEffect(() => {
+    if (!toast) return
+    const t = setTimeout(() => setToast(null), 3000)
+    return () => clearTimeout(t)
+  }, [toast])
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -86,6 +103,13 @@ export default function PartsSPMDashboardPage() {
     const channel = supabase
       .channel('parts_requests_spm_all')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'parts_requests' }, () => {
+        // If a row is actively being edited, defer the reload until the edit finishes
+        // (Save or Cancel) so a concurrent change elsewhere never wipes out in-progress
+        // typing.
+        if (editingIdRef.current !== null) {
+          pendingRefreshRef.current = true
+          return
+        }
         void load()
       })
       .subscribe()
@@ -165,6 +189,7 @@ export default function PartsSPMDashboardPage() {
   const handleSave = async (id: number) => {
     if (!editDraft) return
     setSaving(true)
+    setError(null)
     const qtyTrimmed = editDraft.parts_qty.trim()
     const res = await spmUpdatePartsRequest({
       id,
@@ -178,11 +203,12 @@ export default function PartsSPMDashboardPage() {
     })
     setSaving(false)
     if (res.error) {
-      setError(res.error)
+      setToast({ kind: 'error', text: `Save failed: ${res.error}` })
       return
     }
     setEditingId(null)
     setEditDraft(null)
+    setToast({ kind: 'success', text: 'Saved — Parts Number, status, and other fields updated.' })
     void load()
   }
 
@@ -217,6 +243,15 @@ export default function PartsSPMDashboardPage() {
 
   return (
     <div className="space-y-4">
+      {toast && (
+        <div
+          className={`fixed right-4 top-4 z-50 rounded-lg px-4 py-2.5 text-sm font-medium shadow-lg ${
+            toast.kind === 'success' ? 'bg-emerald-600 text-white' : 'bg-red-600 text-white'
+          }`}
+        >
+          {toast.text}
+        </div>
+      )}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-xl font-bold text-gray-900">Parts SPM Dashboard</h1>

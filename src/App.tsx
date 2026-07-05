@@ -51,7 +51,6 @@ import type { User } from '@supabase/supabase-js'
 const NAV_ITEMS = [
   { to: '/reception', label: 'Reception', icon: 'reception' },
   { to: '/service-advisor', label: 'Service Advisor', icon: 'admin' },
-  { to: '/parts-spm', label: 'Parts SPM Dashboard', icon: 'truck' },
   { to: '/floor-incharge', label: 'Floor Incharge', icon: 'floor' },
   { to: '/sa-tracker', label: 'SA Tracker', icon: 'user' },
   { to: '/bodyshop-tracker', label: 'Bodyshop', icon: 'floor' },
@@ -72,6 +71,9 @@ const NAV_ITEMS = [
   { to: '/auto-service-reminder', label: 'WA Automations', icon: 'bell' },
   { to: '/cre-incentive', label: 'CRE Incentive', icon: 'reports' },
   { to: '/post-service-feedback', label: 'Post Service Feedback', icon: 'message-circle' },
+  // Kept at the end of the list on purpose so it always lands in the "More modules"
+  // overflow menu (per request) rather than the main inline nav row.
+  { to: '/parts-spm', label: 'Parts SPM Dashboard', icon: 'truck' },
 ]
 type ModuleName =
   | 'job_cards'
