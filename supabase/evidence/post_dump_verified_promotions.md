@@ -18,3 +18,15 @@ When a new dump is refreshed, this window is reset.
 - migration: 20260705110000_add_warranty_spl_labour_source_claim_id.sql
 - checks: 20260705110000_add_warranty_spl_labour_source_claim_id_checks.sql
 - baseline_dump_sha256: 3642cc29eab0d821b40e324ca702fd662e7e10d170ce29e0c31433dd8c9c83a8
+
+## 2026-07-05T16:46:55Z
+- prefix: 20260705220000
+- migration: 20260705220000_parts_requests_spm_workflow.sql
+- checks: 20260705220000_parts_requests_spm_workflow_checks.sql
+- baseline_dump_sha256: 3642cc29eab0d821b40e324ca702fd662e7e10d170ce29e0c31433dd8c9c83a8
+
+## 2026-07-05T17:04:54Z
+- prefix: 20260705223500
+- migration: 20260705223500_parts_requests_add_parts_qty.sql
+- checks: 20260705223500_parts_requests_add_parts_qty_checks.sql
+- baseline_dump_sha256: 3642cc29eab0d821b40e324ca702fd662e7e10d170ce29e0c31433dd8c9c83a8

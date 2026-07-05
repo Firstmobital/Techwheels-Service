@@ -86,3 +86,15 @@ Tracks migration/check files promoted to supabase/exec_success_migrations after 
 - moved migration: 20260705110000_add_warranty_spl_labour_source_claim_id.sql
 - moved checks: 20260705110000_add_warranty_spl_labour_source_claim_id_checks.sql
 - dump reference: dump_missing
+
+## 2026-07-05T16:46:55Z
+- prefix: 20260705220000
+- moved migration: 20260705220000_parts_requests_spm_workflow.sql
+- moved checks: 20260705220000_parts_requests_spm_workflow_checks.sql
+- dump reference: dump_missing
+
+## 2026-07-05T17:04:54Z
+- prefix: 20260705223500
+- moved migration: 20260705223500_parts_requests_add_parts_qty.sql
+- moved checks: 20260705223500_parts_requests_add_parts_qty_checks.sql
+- dump reference: dump_missing

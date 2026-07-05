@@ -2875,6 +2875,25 @@ export default function ImportPage() {
               console.warn(`Warranty report sync failed: ${(syncErr as Error).message}`)
             })
         }
+
+        if (isPartsOrderTable || isPartsStockTable) {
+          // Auto-match the freshly uploaded Parts Order Sheet / Stock Snapshot rows against
+          // advisor Parts Requests: Order Sheet drives status/order-date/tracking, Stock
+          // Snapshot drives the auto-computed Parts Qty column. Matches by Parts Number, or
+          // Parts Description as an unambiguous fallback. Runs server-side (service role)
+          // so it works regardless of uploader RBAC role. Never fails the upload itself if
+          // matching has an issue.
+          void supabase.functions
+            .invoke('parts-request-order-match', { body: {} })
+            .then(({ error: matchError }) => {
+              if (matchError) {
+                console.warn(`Parts request auto-match failed: ${matchError.message}`)
+              }
+            })
+            .catch((matchErr) => {
+              console.warn(`Parts request auto-match failed: ${(matchErr as Error).message}`)
+            })
+        }
       } catch (err) {
         const message = (err as Error).message
         const isSchemaCacheIssue =

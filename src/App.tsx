@@ -38,6 +38,7 @@ import WAAgentPage from './pages/WAAgentPage'
 import TelecallingPage from './pages/TelecallingPage'
 import WhatsAppAutomationsPage from './pages/WhatsAppAutomationsPage'
 import PostServiceFeedbackCREPage from './pages/PostServiceFeedbackCREPage'
+import PartsSPMDashboardPage from './pages/PartsSPMDashboardPage'
 import VerifyScreenPreview from './pages/VerifyScreenPreview'
 import { hasSupabaseEnv, supabase } from './lib/supabase'
 import { getDealerScopeContext } from './lib/api/auth'
@@ -50,6 +51,7 @@ import type { User } from '@supabase/supabase-js'
 const NAV_ITEMS = [
   { to: '/reception', label: 'Reception', icon: 'reception' },
   { to: '/service-advisor', label: 'Service Advisor', icon: 'admin' },
+  { to: '/parts-spm', label: 'Parts SPM Dashboard', icon: 'truck' },
   { to: '/floor-incharge', label: 'Floor Incharge', icon: 'floor' },
   { to: '/sa-tracker', label: 'SA Tracker', icon: 'user' },
   { to: '/bodyshop-tracker', label: 'Bodyshop', icon: 'floor' },
@@ -97,8 +99,9 @@ type ModuleName =
   | 'auto_service_reminder'
   | 'cre_incentive'
   | 'post_service_feedback_cre'
+  | 'parts_spm'
 
-type AppRoute = '/import' | '/reports' | '/settings' | '/admin' | '/autodoc' | '/reception' | '/service-advisor' | '/floor-incharge' | '/sa-tracker' | '/bodyshop-tracker' | '/bodyshop-floor' | '/technician' | '/complaints' | '/bodyshop-repair' | '/ew-reminder' | '/service-booking' | '/wa-agent' | '/telecalling' | '/auto-service-reminder' | '/cre-incentive' | '/post-service-feedback'
+type AppRoute = '/import' | '/reports' | '/settings' | '/admin' | '/autodoc' | '/reception' | '/service-advisor' | '/floor-incharge' | '/sa-tracker' | '/bodyshop-tracker' | '/bodyshop-floor' | '/technician' | '/complaints' | '/bodyshop-repair' | '/ew-reminder' | '/service-booking' | '/wa-agent' | '/telecalling' | '/auto-service-reminder' | '/cre-incentive' | '/post-service-feedback' | '/parts-spm'
 
 interface PermissionRow {
   module_name: string
@@ -126,6 +129,7 @@ const ROUTE_MODULE_MAP: Record<AppRoute, ModuleName[]> = {
   '/auto-service-reminder': ['auto_service_reminder'],
   '/cre-incentive': ['cre_incentive'],
   '/post-service-feedback': ['post_service_feedback_cre'],
+  '/parts-spm': ['parts_spm'],
 }
 
 type NavItem = {
@@ -1246,6 +1250,14 @@ VITE_SUPABASE_ANON_KEY=your-anon-key`}
                   element={(
                     <RequireAccess allowedModules={allowedModules} modules={ROUTE_MODULE_MAP['/post-service-feedback']}>
                       <PostServiceFeedbackCREPage />
+                    </RequireAccess>
+                  )}
+                />
+                <Route
+                  path="/parts-spm"
+                  element={(
+                    <RequireAccess allowedModules={allowedModules} modules={ROUTE_MODULE_MAP['/parts-spm']}>
+                      <PartsSPMDashboardPage />
                     </RequireAccess>
                   )}
                 />

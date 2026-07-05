@@ -14,6 +14,7 @@ import DateRangeFilter, { currentMonthRange, type DateRange, type DateRangePrese
 import { supabase } from '../lib/supabase'
 import Icon from '../components/Icon'
 import { buildSaFloorCompletedWaTemplate } from '../lib/waTemplates'
+import PartsRequirementSection from '../components/PartsRequirementSection'
 
 type RowDraft = {
   service_type: string
@@ -295,6 +296,7 @@ export default function ServiceAdvisorPage() {
   const [drafts, setDrafts] = useState<Record<number, RowDraft>>({})
   const [dirtyRowIds, setDirtyRowIds] = useState<Set<number>>(new Set())
   const [isAdmin, setIsAdmin] = useState(false)
+  const [pageMode, setPageMode] = useState<'jobcards' | 'parts'>('jobcards')
   const [isSuperAdmin, setIsSuperAdmin] = useState(false)
   const [selectedBranch, setSelectedBranch] = useState<string | 'all'>('all')
   const [selectedCategory, setSelectedCategory] = useState<CategoryFilter>('all')
@@ -1255,6 +1257,28 @@ export default function ServiceAdvisorPage() {
         </div>
       )}
 
+      {/* ── PAGE MODE TABS ──────────────────────────────────────────────────── */}
+      <div className="mb-4 flex gap-2">
+        <button
+          type="button"
+          onClick={() => setPageMode('jobcards')}
+          className={`rounded-lg px-4 py-2 text-sm font-semibold shadow-sm transition ${pageMode === 'jobcards' ? 'bg-blue-600 text-white' : 'border border-gray-300 bg-white text-gray-700 hover:bg-gray-50'}`}
+        >
+          Job Cards
+        </button>
+        <button
+          type="button"
+          onClick={() => setPageMode('parts')}
+          className={`rounded-lg px-4 py-2 text-sm font-semibold shadow-sm transition ${pageMode === 'parts' ? 'bg-blue-600 text-white' : 'border border-gray-300 bg-white text-gray-700 hover:bg-gray-50'}`}
+        >
+          Parts Requirement
+        </button>
+      </div>
+
+      {pageMode === 'parts' ? (
+        <PartsRequirementSection />
+      ) : (
+        <>
       {/* ── COMPACT FILTER TOOLBAR ─────────────────────────────────────────── */}
       <div className="cft">
         <div className="cft__brand">
@@ -1657,6 +1681,8 @@ export default function ServiceAdvisorPage() {
           )}
         </div>
       </div>
+        </>
+      )}
     </div>
   )
 }
