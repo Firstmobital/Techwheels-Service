@@ -557,6 +557,41 @@ export default function BodyshopTrackerPage() {
         </div>
       </div>
 
+      {/* ── Earnings % settings — always visible, regardless of whether this role has data yet ── */}
+      <div className="card mb-gap">
+        <div className="card__head">
+          <div>
+            <h3>{tabMeta.icon} {tabMeta.label} — Earnings %</h3>
+            <div className="sub">Income = Labour × {curPct}%. This is used to calculate payout for {tabMeta.label}.</div>
+          </div>
+          <div className="tech-share-corner">
+            <h3>Earnings % — {tabMeta.label}</h3>
+            <div className="tech-share-controls">
+              <label className="field field--no-gap tech-share-field">
+                <span className="label">{tabMeta.label} %</span>
+                <input className="inp" inputMode="decimal" value={curDraft}
+                  onChange={(e) => setDraftPct((p) => ({ ...p, [activeTab]: e.target.value }))}
+                  onBlur={() => setDraftPct((p) => ({ ...p, [activeTab]: String(parsed) }))}
+                  placeholder={String(tabMeta.defaultPct)} />
+              </label>
+              <div className="tech-share-actions">
+                <button type="button" className="btn btn--primary btn--sm" disabled={!hasPend}
+                  onClick={() => {
+                    setSharePct((p) => ({ ...p, [activeTab]: parsed }))
+                    void persistPct(activeTab, parsed)
+                  }}>Apply</button>
+                <button type="button" className="btn btn--ghost btn--sm"
+                  onClick={() => {
+                    setSharePct((p) => ({ ...p, [activeTab]: tabMeta.defaultPct }))
+                    setDraftPct((p) => ({ ...p, [activeTab]: String(tabMeta.defaultPct) }))
+                    void persistPct(activeTab, tabMeta.defaultPct)
+                  }}>Reset</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
       {/* ── Member cards ── */}
       {memberCards.length > 0 && (
         <div className="card mb-gap">
@@ -564,32 +599,6 @@ export default function BodyshopTrackerPage() {
             <div>
               <h3>{tabMeta.icon} {tabMeta.label} — Revenue</h3>
               <div className="sub">Income = Labour × {curPct}%. Click a member to drill down by day.</div>
-            </div>
-            {/* Earnings % settings — always visible */}
-            <div className="tech-share-corner">
-              <h3>Earnings % — {tabMeta.label}</h3>
-              <div className="tech-share-controls">
-                <label className="field field--no-gap tech-share-field">
-                  <span className="label">{tabMeta.label} %</span>
-                  <input className="inp" inputMode="decimal" value={curDraft}
-                    onChange={(e) => setDraftPct((p) => ({ ...p, [activeTab]: e.target.value }))}
-                    onBlur={() => setDraftPct((p) => ({ ...p, [activeTab]: String(parsed) }))}
-                    placeholder={String(tabMeta.defaultPct)} />
-                </label>
-                <div className="tech-share-actions">
-                  <button type="button" className="btn btn--primary btn--sm" disabled={!hasPend}
-                    onClick={() => {
-                      setSharePct((p) => ({ ...p, [activeTab]: parsed }))
-                      void persistPct(activeTab, parsed)
-                    }}>Apply</button>
-                  <button type="button" className="btn btn--ghost btn--sm"
-                    onClick={() => {
-                      setSharePct((p) => ({ ...p, [activeTab]: tabMeta.defaultPct }))
-                      setDraftPct((p) => ({ ...p, [activeTab]: String(tabMeta.defaultPct) }))
-                      void persistPct(activeTab, tabMeta.defaultPct)
-                    }}>Reset</button>
-                </div>
-              </div>
             </div>
           </div>
           <div className="card__body dense">
