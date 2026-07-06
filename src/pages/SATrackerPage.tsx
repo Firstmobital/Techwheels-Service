@@ -14,6 +14,7 @@ type ClosedJCRow = {
   dms_final_labour_amount: number | string | null
   final_spares_amount: number | string | null
   total_invoice_amount: number | string | null
+  dms_total_invoice_amount: number | string | null
   closed_date_time: string | null
   invoice_date: string | null
   location: string | null
@@ -45,8 +46,11 @@ type DayWiseCard = {
 
 type JCDetailRow = ClosedJCRow & {
   labourAmt: number
+  analyticLabourAmt: number
+  dmsLabourAmt: number
   sparesAmt: number
   invoiceAmt: number
+  dmsInvoiceAmt: number
   dateKey: string | null
 }
 
@@ -333,7 +337,7 @@ export default function SATrackerPage() {
       while (true) {
         let query = supabase
           .from('job_card_closed_data')
-          .select('id, job_card_number, sr_assigned_to, final_labour_amount, dms_final_labour_amount, final_spares_amount, total_invoice_amount, closed_date_time, invoice_date, location, portal, vehicle_registration_number, sr_type, product_line')
+          .select('id, job_card_number, sr_assigned_to, final_labour_amount, dms_final_labour_amount, final_spares_amount, total_invoice_amount, dms_total_invoice_amount, closed_date_time, invoice_date, location, portal, vehicle_registration_number, sr_type, product_line')
           .not('sr_assigned_to', 'is', null)
           .gte('closed_date_time', dateRange.from + 'T00:00:00+05:30')
           .lte('closed_date_time', dateRange.to + 'T23:59:59+05:30')
@@ -484,8 +488,11 @@ export default function SATrackerPage() {
     rows.map((r) => ({
       ...r,
       labourAmt: parseAmount(r.dms_final_labour_amount),
+      analyticLabourAmt: parseAmount(r.final_labour_amount),
+      dmsLabourAmt: parseAmount(r.dms_final_labour_amount),
       sparesAmt: parseAmount(r.final_spares_amount),
       invoiceAmt: parseAmount(r.total_invoice_amount),
+      dmsInvoiceAmt: parseAmount(r.dms_total_invoice_amount),
       dateKey: getDateKey(r),
     })),
   [rows])
@@ -1171,10 +1178,12 @@ export default function SATrackerPage() {
                   <th>Location</th>
                   <th>SR Type</th>
                   <th>Closed At</th>
-                  <th style={{ textAlign: 'right' }}>Labour</th>
-                  <th style={{ textAlign: 'right' }}>Spares</th>
-                  <th style={{ textAlign: 'right' }}>Total Invoice</th>
+                  <th style={{ textAlign: 'right' }}>Analytic Labour</th>
+                  <th style={{ textAlign: 'right' }}>Analytic Spares</th>
+                  <th style={{ textAlign: 'right' }}>Analytic Total Invoice</th>
                   <th style={{ textAlign: 'right', color: '#2563eb' }}>SA Income ({normFuelBucket(empDetailMap.get(normSAName(selectedSA))?.fuel_type) === 'EV' ? evSharePercent : saSharePercent}%)</th>
+                  <th style={{ textAlign: 'right', color: '#15803d' }}>DMS Labour</th>
+                  <th style={{ textAlign: 'right', color: '#0f766e' }}>DMS Total Invoice</th>
                 </tr>
               </thead>
               <tbody>
@@ -1189,10 +1198,12 @@ export default function SATrackerPage() {
                     <td>{getLocationLabel(r.location)}</td>
                     <td>{r.sr_type ?? '—'}</td>
                     <td style={{ fontSize: '12px', color: '#64748b' }}>{formatDate(r.closed_date_time)}</td>
-                    <td style={{ textAlign: 'right', color: '#16a34a', fontWeight: 600 }}>{formatCurrency(r.labourAmt)}</td>
+                    <td style={{ textAlign: 'right', color: '#16a34a', fontWeight: 600 }}>{formatCurrency(r.analyticLabourAmt)}</td>
                     <td style={{ textAlign: 'right', color: '#9333ea', fontWeight: 600 }}>{formatCurrency(r.sparesAmt)}</td>
                     <td style={{ textAlign: 'right', fontWeight: 700 }}>{formatCurrency(r.invoiceAmt)}</td>
                     <td style={{ textAlign: 'right', color: '#2563eb', fontWeight: 700 }}>{formatCurrency(calculateSAIncome(r.labourAmt, normFuelBucket(empDetailMap.get(normSAName(selectedSA))?.fuel_type) === 'EV' ? evSharePercent : saSharePercent))}</td>
+                    <td style={{ textAlign: 'right', color: '#15803d', fontWeight: 700 }}>{formatCurrency(r.dmsLabourAmt)}</td>
+                    <td style={{ textAlign: 'right', color: '#0f766e', fontWeight: 700 }}>{formatCurrency(r.dmsInvoiceAmt)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -1200,7 +1211,7 @@ export default function SATrackerPage() {
                 <tr style={{ background: '#f8fafc', fontWeight: 700 }}>
                   <td colSpan={5}>Day Total</td>
                   <td style={{ textAlign: 'right', color: '#16a34a' }}>
-                    {formatCurrency(dayDetailRows.reduce((s, r) => s + r.labourAmt, 0))}
+                    {formatCurrency(dayDetailRows.reduce((s, r) => s + r.analyticLabourAmt, 0))}
                   </td>
                   <td style={{ textAlign: 'right', color: '#9333ea' }}>
                     {formatCurrency(dayDetailRows.reduce((s, r) => s + r.sparesAmt, 0))}
@@ -1210,6 +1221,12 @@ export default function SATrackerPage() {
                   </td>
                   <td style={{ textAlign: 'right', color: '#2563eb', fontWeight: 700 }}>
                     {formatCurrency(dayDetailRows.reduce((s, r) => s + calculateSAIncome(r.labourAmt, normFuelBucket(empDetailMap.get(normSAName(selectedSA))?.fuel_type) === 'EV' ? evSharePercent : saSharePercent), 0))}
+                  </td>
+                  <td style={{ textAlign: 'right', color: '#15803d' }}>
+                    {formatCurrency(dayDetailRows.reduce((s, r) => s + r.dmsLabourAmt, 0))}
+                  </td>
+                  <td style={{ textAlign: 'right', color: '#0f766e' }}>
+                    {formatCurrency(dayDetailRows.reduce((s, r) => s + r.dmsInvoiceAmt, 0))}
                   </td>
                 </tr>
               </tfoot>
