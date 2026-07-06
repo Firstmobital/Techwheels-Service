@@ -485,12 +485,34 @@ export async function updateReceptionEntry(id: number, input: ReceptionEntryInpu
 }
 
 export async function deleteReceptionEntry(id: number): Promise<ApiResult<null>> {
-  const { error } = await supabase
-    .from('service_reception_entries')
-    .delete()
-    .eq('id', id)
+  // Call the cascade RPC — handles safe deletion order, blocks if bodyshop
+  // repair has a real DMS job card, deletes all loose jc_number references.
+  const { data, error } = await supabase
+    .rpc('delete_reception_entry_cascade', { p_id: id })
 
   if (error) return fail(error)
+
+  // Clean up Storage files returned by the RPC (bucket files are not DB rows
+  // so FK cascades cannot remove them automatically).
+  const result = data as {
+    estimate_storage_path: string | null
+    invoice_storage_path: string | null
+    intake_photo_paths: string[]
+  } | null
+
+  if (result) {
+    const pathsToDelete: string[] = [
+      result.estimate_storage_path,
+      result.invoice_storage_path,
+      ...(Array.isArray(result.intake_photo_paths) ? result.intake_photo_paths : []),
+    ].filter((p): p is string => typeof p === 'string' && p.length > 0)
+
+    if (pathsToDelete.length > 0) {
+      // Best-effort — do not fail the delete if Storage cleanup fails
+      await supabase.storage.from(AUTODOC_BUCKET).remove(pathsToDelete).catch(() => null)
+    }
+  }
+
   return ok(null)
 }
 
