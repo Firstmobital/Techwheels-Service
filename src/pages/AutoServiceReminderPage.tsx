@@ -35,6 +35,7 @@ interface AgentConfig {
   auto_reminder_template_id: number | null
   auto_reminder_template_lang: string
   auto_reminder_variable_map: Record<string, string>
+  auto_reminder_send_time: string
 }
 
 interface Stats {
@@ -134,7 +135,7 @@ export default function AutoServiceReminderPage() {
           .limit(1000),
         supabase
           .from('wa_agent_config')
-          .select('auto_reminder_enabled, auto_reminder_template_id, auto_reminder_template_lang, auto_reminder_variable_map')
+          .select('auto_reminder_enabled, auto_reminder_template_id, auto_reminder_template_lang, auto_reminder_variable_map, auto_reminder_send_time')
           .eq('id', 1)
           .single(),
         supabase
@@ -171,6 +172,7 @@ export default function AutoServiceReminderPage() {
           auto_reminder_template_id:   configDraft.auto_reminder_template_id,
           auto_reminder_template_lang: configDraft.auto_reminder_template_lang,
           auto_reminder_variable_map:  configDraft.auto_reminder_variable_map,
+          auto_reminder_send_time:     configDraft.auto_reminder_send_time,
         })
         .eq('id', 1)
       if (e) throw e
@@ -303,6 +305,17 @@ export default function AutoServiceReminderPage() {
             <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${configDraft.auto_reminder_enabled ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
               {configDraft.auto_reminder_enabled ? 'Enabled' : 'Disabled'}
             </span>
+          </div>
+
+          <div>
+            <label className="block text-xs font-medium text-gray-500 mb-1">Daily Send Time (IST)</label>
+            <input
+              type="time"
+              className="border border-gray-300 rounded px-3 py-2 text-sm"
+              value={configDraft.auto_reminder_send_time.slice(0, 5)}
+              onChange={e => setConfigDraft(d => d ? { ...d, auto_reminder_send_time: e.target.value + ':00' } : d)}
+            />
+            <p className="text-xs text-gray-400 mt-1">Time of day the daily reminder job runs, in Asia/Kolkata time.</p>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
