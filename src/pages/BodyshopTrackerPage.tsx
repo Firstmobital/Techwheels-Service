@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Icon } from '../components/Icon'
 import DateRangeFilter, { currentMonthRange, type DateRange } from '../components/DateRangeFilter'
-import { isBodyshopDepartment, isServiceDepartment } from '../lib/department'
+import { isBodyshopDepartment } from '../lib/department'
 import { supabase } from '../lib/supabase'
 
 // ── Types ──────────────────────────────────────────────────────────────────────
@@ -62,16 +62,20 @@ type DayCard = {
 
 // ── Tabs ───────────────────────────────────────────────────────────────────────
 
-type TabKey = 'SA' | 'DENTOR' | 'PAINTER' | 'TECHNICIAN' | 'ELECTRICIAN' | 'DET'
+type TabKey = 'SA' | 'FLOOR_INCHARGE' | 'DENTOR' | 'DENTOR_HELPER' | 'PAINTER' | 'PAINTER_HELPER' | 'TECHNICIAN' | 'RUBBING' | 'EDP'
 type TabMeta = { key: TabKey; label: string; icon: string; defaultPct: number; mode: 'sa' | 'tech' }
 
+// Mirrors Bodyshop Floor's current role set exactly (ROLE_META / ALL_ROLES in BodyshopFloorPage.tsx)
 const TABS: TabMeta[] = [
-  { key: 'SA',          label: 'SA',          icon: '🧑‍💼', defaultPct: 3, mode: 'sa'   },
-  { key: 'DENTOR',      label: 'Dentor',      icon: '🔨', defaultPct: 5, mode: 'tech' },
-  { key: 'PAINTER',     label: 'Painter',     icon: '🎨', defaultPct: 5, mode: 'tech' },
-  { key: 'TECHNICIAN',  label: 'Technician',  icon: '🔧', defaultPct: 4, mode: 'tech' },
-  { key: 'ELECTRICIAN', label: 'Electrician', icon: '⚡', defaultPct: 4, mode: 'tech' },
-  { key: 'DET',         label: 'DET',         icon: '🧰', defaultPct: 4, mode: 'tech' },
+  { key: 'SA',             label: 'SA',             icon: '🧑‍💼', defaultPct: 3, mode: 'sa'   },
+  { key: 'FLOOR_INCHARGE', label: 'Floor Incharge', icon: '👷', defaultPct: 3, mode: 'tech' },
+  { key: 'DENTOR',         label: 'Dentor',         icon: '🔨', defaultPct: 5, mode: 'tech' },
+  { key: 'DENTOR_HELPER',  label: 'Dentor Helper',  icon: '🔩', defaultPct: 3, mode: 'tech' },
+  { key: 'PAINTER',        label: 'Painter',        icon: '🎨', defaultPct: 5, mode: 'tech' },
+  { key: 'PAINTER_HELPER', label: 'Painter Helper', icon: '🖌️', defaultPct: 3, mode: 'tech' },
+  { key: 'TECHNICIAN',     label: 'Technician',     icon: '🔧', defaultPct: 4, mode: 'tech' },
+  { key: 'RUBBING',        label: 'Rubbing',        icon: '🪣', defaultPct: 2, mode: 'tech' },
+  { key: 'EDP',            label: 'EDP',            icon: '🧴', defaultPct: 2, mode: 'tech' },
 ]
 
 const QUERY_PAGE = 1000
@@ -137,10 +141,10 @@ export default function BodyshopTrackerPage() {
 
   // Per-tab earning %
   const [sharePct, setSharePct] = useState<Record<TabKey, number>>({
-    SA: 3, DENTOR: 5, PAINTER: 5, TECHNICIAN: 4, ELECTRICIAN: 4, DET: 4
+    SA: 3, FLOOR_INCHARGE: 3, DENTOR: 5, DENTOR_HELPER: 3, PAINTER: 5, PAINTER_HELPER: 3, TECHNICIAN: 4, RUBBING: 2, EDP: 2
   })
   const [draftPct, setDraftPct] = useState<Record<TabKey, string>>({
-    SA: '3', DENTOR: '5', PAINTER: '5', TECHNICIAN: '4', ELECTRICIAN: '4', DET: '4'
+    SA: '3', FLOOR_INCHARGE: '3', DENTOR: '5', DENTOR_HELPER: '3', PAINTER: '5', PAINTER_HELPER: '3', TECHNICIAN: '4', RUBBING: '2', EDP: '2'
   })
 
   const curPct    = sharePct[activeTab]
@@ -160,19 +164,25 @@ export default function BodyshopTrackerPage() {
       const emps = (empRes.data ?? []) as EmployeeRow[]
       setEmployees(emps)
 
-      // Bodyshop employee codes by role — mirrors Bodyshop Floor's eligibility rules:
-      // Dentor/Painter/Technician come from the BODY SHOP department; Electrician/DET
-      // are shared Service-department resources borrowed onto the bodyshop floor.
+      // Bodyshop employee codes by role — mirrors Bodyshop Floor's current role set
+      // (ROLE_META / ALL_ROLES in BodyshopFloorPage.tsx). All bodyshop-floor roles
+      // require the BODY SHOP department.
       const bsCodes: Record<string, Set<string>> = {
-        DENTOR: new Set(), PAINTER: new Set(), TECHNICIAN: new Set(), ELECTRICIAN: new Set(), DET: new Set(),
+        FLOOR_INCHARGE: new Set(), DENTOR: new Set(), DENTOR_HELPER: new Set(),
+        PAINTER: new Set(), PAINTER_HELPER: new Set(), TECHNICIAN: new Set(),
+        RUBBING: new Set(), EDP: new Set(),
       }
       emps.forEach((e) => {
+        if (!isBodyshopDepartment(e.department)) return
         const role = String(e.role ?? '').trim().toUpperCase()
-        if (role === 'DENTOR' && isBodyshopDepartment(e.department)) bsCodes.DENTOR.add(e.employee_code)
-        else if (role === 'PAINTER' && isBodyshopDepartment(e.department)) bsCodes.PAINTER.add(e.employee_code)
-        else if (role === 'TECHNICIAN' && isBodyshopDepartment(e.department)) bsCodes.TECHNICIAN.add(e.employee_code)
-        else if (role === 'ELECTRICIAN' && isServiceDepartment(e.department)) bsCodes.ELECTRICIAN.add(e.employee_code)
-        else if (role === 'DET' && isServiceDepartment(e.department)) bsCodes.DET.add(e.employee_code)
+        if (role === 'FLOOR INCHARGE') bsCodes.FLOOR_INCHARGE.add(e.employee_code)
+        else if (role === 'DENTOR') bsCodes.DENTOR.add(e.employee_code)
+        else if (role === 'DENTOR HELPER') bsCodes.DENTOR_HELPER.add(e.employee_code)
+        else if (role === 'PAINTER') bsCodes.PAINTER.add(e.employee_code)
+        else if (role === 'PAINTER HELPER') bsCodes.PAINTER_HELPER.add(e.employee_code)
+        else if (role === 'TECHNICIAN') bsCodes.TECHNICIAN.add(e.employee_code)
+        else if (role === 'RUBBING') bsCodes.RUBBING.add(e.employee_code)
+        else if (role === 'EDP') bsCodes.EDP.add(e.employee_code)
       })
 
       // 2. Accident JCs (for SA tab)
@@ -196,11 +206,14 @@ export default function BodyshopTrackerPage() {
 
       // 3. Technician assignments for ALL bodyshop codes (Dentor + Painter + Tech)
       const allBsCodes = [
+        ...Array.from(bsCodes.FLOOR_INCHARGE),
         ...Array.from(bsCodes.DENTOR),
+        ...Array.from(bsCodes.DENTOR_HELPER),
         ...Array.from(bsCodes.PAINTER),
+        ...Array.from(bsCodes.PAINTER_HELPER),
         ...Array.from(bsCodes.TECHNICIAN),
-        ...Array.from(bsCodes.ELECTRICIAN),
-        ...Array.from(bsCodes.DET),
+        ...Array.from(bsCodes.RUBBING),
+        ...Array.from(bsCodes.EDP),
       ]
 
       if (allBsCodes.length > 0) {
@@ -267,16 +280,21 @@ export default function BodyshopTrackerPage() {
 
   const bsCodesByRole = useMemo<Record<TabKey, Set<string>>>(() => {
     const map: Record<TabKey, Set<string>> = {
-      SA: new Set(), DENTOR: new Set(), PAINTER: new Set(), TECHNICIAN: new Set(), ELECTRICIAN: new Set(), DET: new Set(),
+      SA: new Set(), FLOOR_INCHARGE: new Set(), DENTOR: new Set(), DENTOR_HELPER: new Set(),
+      PAINTER: new Set(), PAINTER_HELPER: new Set(), TECHNICIAN: new Set(), RUBBING: new Set(), EDP: new Set(),
     }
     employees.forEach((e) => {
+      if (!isBodyshopDepartment(e.department)) return
       const role = String(e.role ?? '').trim().toUpperCase()
-      if (role === 'SA' && isBodyshopDepartment(e.department)) map.SA.add(e.employee_code)
-      else if (role === 'DENTOR' && isBodyshopDepartment(e.department)) map.DENTOR.add(e.employee_code)
-      else if (role === 'PAINTER' && isBodyshopDepartment(e.department)) map.PAINTER.add(e.employee_code)
-      else if (role === 'TECHNICIAN' && isBodyshopDepartment(e.department)) map.TECHNICIAN.add(e.employee_code)
-      else if (role === 'ELECTRICIAN' && isServiceDepartment(e.department)) map.ELECTRICIAN.add(e.employee_code)
-      else if (role === 'DET' && isServiceDepartment(e.department)) map.DET.add(e.employee_code)
+      if (role === 'SA') map.SA.add(e.employee_code)
+      else if (role === 'FLOOR INCHARGE') map.FLOOR_INCHARGE.add(e.employee_code)
+      else if (role === 'DENTOR') map.DENTOR.add(e.employee_code)
+      else if (role === 'DENTOR HELPER') map.DENTOR_HELPER.add(e.employee_code)
+      else if (role === 'PAINTER') map.PAINTER.add(e.employee_code)
+      else if (role === 'PAINTER HELPER') map.PAINTER_HELPER.add(e.employee_code)
+      else if (role === 'TECHNICIAN') map.TECHNICIAN.add(e.employee_code)
+      else if (role === 'RUBBING') map.RUBBING.add(e.employee_code)
+      else if (role === 'EDP') map.EDP.add(e.employee_code)
     })
     return map
   }, [employees])
