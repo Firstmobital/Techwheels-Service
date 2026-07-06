@@ -1110,7 +1110,7 @@ export default function BodyshopFloorPage() {
     })
     return list
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cars, branchFilter, floorFilter, roleFilter, search, assignmentView, assignments, bsFloorStatus, additionalApprovalByJc])
+  }, [cars, branchFilter, floorFilter, roleFilter, floorInchargeFilter, search, assignmentView, assignments, bsFloorStatus, additionalApprovalByJc])
 
   // ── Assign (inline select) ───────────────────────────────────────────────
 
