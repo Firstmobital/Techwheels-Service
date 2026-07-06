@@ -62,6 +62,24 @@ jobs:
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
 
+      - name: Deploy wa-ew-renewal-reminder
+        continue-on-error: true
+        run: |
+          supabase functions deploy wa-ew-renewal-reminder \
+            --project-ref ${{ secrets.SUPABASE_PROJECT_REF || 'jmdndcphkmaljhwgzqxq' }} \
+            --no-verify-jwt
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+
+      - name: Deploy wa-ew-service-reminder
+        continue-on-error: true
+        run: |
+          supabase functions deploy wa-ew-service-reminder \
+            --project-ref ${{ secrets.SUPABASE_PROJECT_REF || 'jmdndcphkmaljhwgzqxq' }} \
+            --no-verify-jwt
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+
       - name: Deploy wa-webhook
         continue-on-error: true
         run: |

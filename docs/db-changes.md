@@ -49,3 +49,47 @@
     - service_reception_entries ordered list
     - technician_assignments ordered list
     - service_vas_jc_data date-window ordered list
+
+## 2026-07-06
+
+### Prefix 20260706200000
+- Migration: 20260706200000_ew_renewal_reminders.sql
+- Check: 20260706200000_ew_renewal_reminders_checks.sql
+- Status: Executed and verified
+- Notes:
+  - New table ew_renewal_reminders tracks WhatsApp "Renew Now" reminders sent
+    10 days and 3 days before all_service_data.extended_warranty_end_date.
+  - New wa_agent_config columns: ew_renewal_enabled, ew_renewal_template_id,
+    ew_renewal_template_lang, ew_renewal_variable_map, ew_renewal_send_time.
+  - pg_cron job ew-renewal-reminder-daily-ist registered at 30 6 * * * (12:00 IST).
+  - Verification passed: table/columns/constraints/indexes present, cron job
+    active with expected schedule/command.
+
+### Prefix 20260706201000
+- Migration: 20260706201000_ew_service_reminders.sql
+- Check: 20260706201000_ew_service_reminders_checks.sql
+- Status: Executed and verified
+- Notes:
+  - New table ew_service_reminders tracks WhatsApp "Book Now / Call Us"
+    reminders sent 30 days and 15 days before
+    all_service_data.extended_warranty_end_date, nudging customers to get
+    serviced while EW coverage is still active.
+  - New wa_agent_config columns: ew_service_reminder_enabled,
+    ew_service_reminder_template_id, ew_service_reminder_template_lang,
+    ew_service_reminder_variable_map, ew_service_reminder_send_time.
+  - pg_cron job ew-service-reminder-daily-ist registered at 30 7 * * * (13:00 IST).
+  - Verification passed: table/columns/constraints/indexes present, cron job
+    active with expected schedule/command.
+
+### Prefix 20260706202000
+- Migration: 20260706202000_ew_reminder_wa_template_drafts.sql
+- Check: 20260706202000_ew_reminder_wa_template_drafts_checks.sql
+- Status: Executed and verified
+- Notes:
+  - Seeded two draft wa_templates rows: ew_renewal_reminder_v1
+    (campaign_type=ew_reminder, single "Renew Now" quick-reply button) and
+    ew_service_reminder_v1 (campaign_type=ew_service_reminder, "Book Now" +
+    "Call Us" quick-reply buttons). Both remain in draft status until an
+    admin reviews the copy and submits them to Meta for approval.
+  - Both new jobs stay disabled (*_enabled=false) until a template is
+    approved and wired up in the UI.

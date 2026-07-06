@@ -98,3 +98,21 @@ Tracks migration/check files promoted to supabase/exec_success_migrations after 
 - moved migration: 20260705223500_parts_requests_add_parts_qty.sql
 - moved checks: 20260705223500_parts_requests_add_parts_qty_checks.sql
 - dump reference: dump_missing
+
+## 2026-07-06T12:13:24Z
+- prefix: 20260706200000
+- moved migration: 20260706200000_ew_renewal_reminders.sql
+- moved checks: 20260706200000_ew_renewal_reminders_checks.sql
+- dump reference: dump_missing
+
+## 2026-07-06T12:13:24Z
+- prefix: 20260706201000
+- moved migration: 20260706201000_ew_service_reminders.sql
+- moved checks: 20260706201000_ew_service_reminders_checks.sql
+- dump reference: dump_missing
+
+## 2026-07-06T12:13:24Z
+- prefix: 20260706202000
+- moved migration: 20260706202000_ew_reminder_wa_template_drafts.sql
+- moved checks: 20260706202000_ew_reminder_wa_template_drafts_checks.sql
+- dump reference: dump_missing

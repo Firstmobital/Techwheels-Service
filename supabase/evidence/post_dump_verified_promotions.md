@@ -30,3 +30,21 @@ When a new dump is refreshed, this window is reset.
 - migration: 20260705223500_parts_requests_add_parts_qty.sql
 - checks: 20260705223500_parts_requests_add_parts_qty_checks.sql
 - baseline_dump_sha256: 3642cc29eab0d821b40e324ca702fd662e7e10d170ce29e0c31433dd8c9c83a8
+
+## 2026-07-06T12:13:24Z
+- prefix: 20260706200000
+- migration: 20260706200000_ew_renewal_reminders.sql
+- checks: 20260706200000_ew_renewal_reminders_checks.sql
+- baseline_dump_sha256: 3642cc29eab0d821b40e324ca702fd662e7e10d170ce29e0c31433dd8c9c83a8
+
+## 2026-07-06T12:13:24Z
+- prefix: 20260706201000
+- migration: 20260706201000_ew_service_reminders.sql
+- checks: 20260706201000_ew_service_reminders_checks.sql
+- baseline_dump_sha256: 3642cc29eab0d821b40e324ca702fd662e7e10d170ce29e0c31433dd8c9c83a8
+
+## 2026-07-06T12:13:24Z
+- prefix: 20260706202000
+- migration: 20260706202000_ew_reminder_wa_template_drafts.sql
+- checks: 20260706202000_ew_reminder_wa_template_drafts_checks.sql
+- baseline_dump_sha256: 3642cc29eab0d821b40e324ca702fd662e7e10d170ce29e0c31433dd8c9c83a8
