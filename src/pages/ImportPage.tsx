@@ -1725,15 +1725,37 @@ export default function ImportPage() {
             })
             .filter((row): row is PsfRevenueDmsUpsertRow => row !== null)
 
-          const dedupedRows = dedupeRowsByKeys(
-            normalizedRows,
-            (row) =>
-              `${String(row.location ?? '').trim().toLowerCase()}|${String(row.portal ?? '')
-                .trim()
-                .toUpperCase()}|${String(row.job_card_number ?? '')
-                .trim()
-                .toUpperCase()}|${String(row.invoice_date ?? '').trim().slice(0, 10)}`,
-          ) as PsfRevenueDmsUpsertRow[]
+          const isCancelledDmsInvoice = (row: PsfRevenueDmsUpsertRow): boolean =>
+            String(row.invoice_cancellation_date ?? '').trim() !== ''
+
+          const buildDmsCanonicalKey = (row: PsfRevenueDmsUpsertRow): string =>
+            `${String(row.location ?? '').trim().toLowerCase()}|${String(row.portal ?? '')
+              .trim()
+              .toUpperCase()}|${String(row.job_card_number ?? '')
+              .trim()
+              .toUpperCase()}|${String(row.invoice_date ?? '').trim().slice(0, 10)}`
+
+          const dedupedByCanonicalKey = new Map<string, PsfRevenueDmsUpsertRow>()
+          for (const row of normalizedRows) {
+            const key = buildDmsCanonicalKey(row)
+            const existing = dedupedByCanonicalKey.get(key)
+
+            if (!existing) {
+              dedupedByCanonicalKey.set(key, row)
+              continue
+            }
+
+            const existingCancelled = isCancelledDmsInvoice(existing)
+            const currentCancelled = isCancelledDmsInvoice(row)
+
+            // Prefer active invoices over cancelled invoices for the same canonical key.
+            // If cancellation status is the same, keep the later row, matching the previous rule.
+            if (existingCancelled === currentCancelled || !currentCancelled) {
+              dedupedByCanonicalKey.set(key, row)
+            }
+          }
+
+          const dedupedRows = Array.from(dedupedByCanonicalKey.values())
 
           let processed = 0
 
