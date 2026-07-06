@@ -34,10 +34,11 @@ async function fetchAccidentCarsByDateRange(range: DateRange): Promise<{ data: A
       .from('service_reception_entries')
       .select('id, jc_number, sa_employee_code, dealer_code, reg_number, model, owner_name, owner_phone, sa_name, sa_display_name, branch, created_at')
       .eq('service_type', 'Accident')
-      .gte('created_at', range.from + 'T00:00:00+05:30')
-      .lte('created_at', range.to + 'T23:59:59+05:30')
       .order('id', { ascending: false })
       .limit(PAGE_SIZE)
+
+    if (range.from) query = query.gte('created_at', range.from + 'T00:00:00+05:30')
+    if (range.to)   query = query.lte('created_at', range.to + 'T23:59:59+05:30')
 
     if (cursorId !== null) {
       query = query.lt('id', cursorId)
@@ -1788,7 +1789,7 @@ export default function BodyshopFloorPage() {
           <p className="bsf-subline">{cars.length} accident vehicles active for floor assignment · live assignment and status.</p>
         </div>
         <div className="bsf-top-actions">
-          <DateRangeFilter range={dateRange} onChange={setDateRange} label="Period:" />
+          <DateRangeFilter range={dateRange} onChange={setDateRange} label="Period:" includeAll />
           <button type="button" className="btn btn--ghost btn--sm" onClick={() => void loadAll()}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
               <path d="M3 12a9 9 0 0 1 15-6.7L21 8M21 3v5h-5M21 12a9 9 0 0 1-15 6.7L3 16M3 21v-5h5" />
