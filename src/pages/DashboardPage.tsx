@@ -55,7 +55,7 @@ type DashboardStatusRow = {
   estimate_storage_path: string | null
   invoice_done_at: string | null
   branch: string | null
-  fuel_type: string | null
+  portal: string | null
 }
 
 function normalizeRoute(value: string | null | undefined) {
@@ -127,7 +127,7 @@ async function fetchDashboardStatusRows(options: {
   while (true) {
     let query = supabase
       .from('service_reception_entries')
-      .select('id, created_at, service_type, jc_number, estimate_storage_path, invoice_done_at, branch, fuel_type')
+      .select('id, created_at, service_type, jc_number, estimate_storage_path, invoice_done_at, branch, portal')
       .gte('created_at', options.createdAtFrom)
       .lte('created_at', options.createdAtTo)
       .order('created_at', { ascending: false })
@@ -410,14 +410,14 @@ export default function DashboardPage({
   }, [statusRows, statusBranchFilter])
 
   const statusFuelTypes = useMemo(
-    () => Array.from(new Set(statusBranchFilteredRows.map((row) => getStatusFuelTypeLabel(row.fuel_type)))).sort(),
+    () => Array.from(new Set(statusBranchFilteredRows.map((row) => getStatusFuelTypeLabel(row.portal)))).sort(),
     [statusBranchFilteredRows],
   )
 
   const statusFilteredRows = useMemo(() => {
     if (statusFuelTypeFilter === 'all') return statusBranchFilteredRows
     return statusBranchFilteredRows.filter(
-      (row) => getStatusFuelTypeLabel(row.fuel_type) === statusFuelTypeFilter,
+      (row) => getStatusFuelTypeLabel(row.portal) === statusFuelTypeFilter,
     )
   }, [statusBranchFilteredRows, statusFuelTypeFilter])
 
@@ -457,7 +457,7 @@ export default function DashboardPage({
     const next: Record<string, number> = {}
     statusFuelTypes.forEach((fuelType) => {
       next[fuelType] = statusBranchFilteredRows.filter(
-        (row) => getStatusFuelTypeLabel(row.fuel_type) === fuelType,
+        (row) => getStatusFuelTypeLabel(row.portal) === fuelType,
       ).length
     })
     return next
