@@ -142,7 +142,7 @@ function isBodyshopSaRole(value: string | null | undefined): boolean {
 
 function isBodyshopSsaRole(value: string | null | undefined): boolean {
   const normalized = normalizeAccessToken(value)
-  return normalized === 'SSA' || normalized === 'SENIOR SERVICE ADVISOR'
+  return normalized === 'EDP' || normalized === 'SSA' || normalized === 'SENIOR SERVICE ADVISOR'
 }
 
 function isBodyshopSurveyRole(value: string | null | undefined): boolean {
@@ -467,7 +467,7 @@ function getAdvisorFilterLabel(card: RepairCard): string {
 }
 
 type DetailTab = 'overview' | 'sa' | 'approval' | 'survey' | 'floor' | 'qc' | 'billing'
-type PipelineFilter = 'all' | 'SA Intake' | 'SSA' | 'Survey' | 'Floor Work' | 'QC' | 'Billing' | 'Delivery' | 'Delivered'
+type PipelineFilter = 'all' | 'SA Intake' | 'EDP' | 'Survey' | 'Floor Work' | 'QC' | 'Billing' | 'Delivery' | 'Delivered'
 
 type AdditionalApprovalDecisionStatus = 'pending' | 'approved' | 'rejected'
 type AdditionalApprovalAggregateStatus = AdditionalApprovalDecisionStatus | 'none' | 'mixed'
@@ -4112,7 +4112,7 @@ export default function BodyshopRepairPage() {
         ) : loading ? (
           <div className="empty-state">Loading…</div>
         ) : !isAdminLikeUser && (hasBodyshopSsaAccess || hasBodyshopSurveyAccess) && supervisoryBranchSetForUser.size === 0 ? (
-          <div className="empty-state">No BODY SHOP branch scope is linked to this login. Please map SSA/SURVEY role with location in Employee Master and User-Employee Links.</div>
+          <div className="empty-state">No BODY SHOP branch scope is linked to this login. Please map EDP/SURVEY role with location in Employee Master and User-Employee Links.</div>
         ) : !isAdminLikeUser && hasBodyshopSaAccess && !hasBodyshopSsaAccess && !hasBodyshopSurveyAccess && bodyshopSaCodeSetForUser.size === 0 ? (
           <div className="empty-state">No BODY SHOP SA code is linked to this login. Please map this user in Employee Master and User-Employee Links.</div>
         ) : filtered.length === 0 ? (

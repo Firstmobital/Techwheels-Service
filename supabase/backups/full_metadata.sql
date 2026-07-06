@@ -2,12 +2,12 @@
 -- PostgreSQL database dump
 --
 
-\restrict oWFce9IOipwYQXkU4tgRr1pzUKcJbrihAEVafETCSxB4n3aAYIrKT3EqNtUuD3O
+\restrict zxFM1dANuVg4Bm9FUBQ79jPzbbm5Rxwj7M6b5BgpAbg27oBieL4MRVr15jpjRId
 
 -- Dumped from database version 17.6
 -- Dumped by pg_dump version 17.7 (Homebrew)
 
--- Started on 2026-07-06 17:45:38 IST
+-- Started on 2026-07-06 17:56:13 IST
 
 SET statement_timeout = 0;
 SET lock_timeout = 0;
@@ -12349,7 +12349,7 @@ CREATE TABLE public.bodyshop_floor_support_assignments (
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
     CONSTRAINT bodyshop_floor_support_assignments_emp_valid CHECK (((employee_code IS NOT NULL) AND (btrim(employee_code) <> ''::text))),
     CONSTRAINT bodyshop_floor_support_assignments_jc_valid CHECK (((job_card_number IS NOT NULL) AND (btrim(job_card_number) <> ''::text))),
-    CONSTRAINT bodyshop_floor_support_assignments_support_role_check CHECK ((upper(btrim(support_role)) = ANY (ARRAY['DENTOR'::text, 'PAINTER'::text, 'TECHNICIAN'::text, 'SUPERVISOR'::text, 'DENTOR_HELPER'::text, 'PAINTER_HELPER'::text])))
+    CONSTRAINT bodyshop_floor_support_assignments_support_role_check CHECK ((upper(btrim(support_role)) = ANY (ARRAY['DENTOR'::text, 'PAINTER'::text, 'TECHNICIAN'::text, 'FLOOR_INCHARGE'::text, 'DENTOR_HELPER'::text, 'PAINTER_HELPER'::text, 'RUBBING'::text, 'EDP'::text])))
 );
 
 
@@ -24354,7 +24354,7 @@ ALTER TABLE auth.sso_providers ENABLE ROW LEVEL SECURITY;
 ALTER TABLE auth.users ENABLE ROW LEVEL SECURITY;
 
 --
--- TOC entry 7826 (class 3256 OID 22016)
+-- TOC entry 7827 (class 3256 OID 22016)
 -- Name: email_logs Users can view email logs for their dealer's job cards; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -24365,7 +24365,7 @@ CREATE POLICY "Users can view email logs for their dealer's job cards" ON public
 
 
 --
--- TOC entry 7616 (class 3256 OID 22251)
+-- TOC entry 7617 (class 3256 OID 22251)
 -- Name: complaint_activity admin_bypass_complaint_activity_all_ops; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -24373,7 +24373,7 @@ CREATE POLICY admin_bypass_complaint_activity_all_ops ON public.complaint_activi
 
 
 --
--- TOC entry 7618 (class 3256 OID 22253)
+-- TOC entry 7619 (class 3256 OID 22253)
 -- Name: complaint_attachments admin_bypass_complaint_attachments_all_ops; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -24381,7 +24381,7 @@ CREATE POLICY admin_bypass_complaint_attachments_all_ops ON public.complaint_att
 
 
 --
--- TOC entry 7589 (class 3256 OID 22246)
+-- TOC entry 7590 (class 3256 OID 22246)
 -- Name: complaint_access_links admin_bypass_complaint_links_all_ops; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -24389,7 +24389,7 @@ CREATE POLICY admin_bypass_complaint_links_all_ops ON public.complaint_access_li
 
 
 --
--- TOC entry 7591 (class 3256 OID 22248)
+-- TOC entry 7592 (class 3256 OID 22248)
 -- Name: complaint_messages admin_bypass_complaint_messages_all_ops; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -24397,7 +24397,7 @@ CREATE POLICY admin_bypass_complaint_messages_all_ops ON public.complaint_messag
 
 
 --
--- TOC entry 7649 (class 3256 OID 22256)
+-- TOC entry 7650 (class 3256 OID 22256)
 -- Name: complaint_sla_policies admin_bypass_complaint_sla_policies_all_ops; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -24405,7 +24405,7 @@ CREATE POLICY admin_bypass_complaint_sla_policies_all_ops ON public.complaint_sl
 
 
 --
--- TOC entry 7579 (class 3256 OID 22242)
+-- TOC entry 7580 (class 3256 OID 22242)
 -- Name: complaint_tickets admin_bypass_complaints_all_ops; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -24413,7 +24413,7 @@ CREATE POLICY admin_bypass_complaints_all_ops ON public.complaint_tickets TO aut
 
 
 --
--- TOC entry 7593 (class 3256 OID 21717)
+-- TOC entry 7594 (class 3256 OID 21717)
 -- Name: audit_logs admin_unrestricted_all_ops_v1; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -24421,7 +24421,7 @@ CREATE POLICY admin_unrestricted_all_ops_v1 ON public.audit_logs TO authenticate
 
 
 --
--- TOC entry 7694 (class 3256 OID 21019)
+-- TOC entry 7695 (class 3256 OID 21019)
 -- Name: autodoc_panel_master admin_unrestricted_all_ops_v1; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -24429,7 +24429,7 @@ CREATE POLICY admin_unrestricted_all_ops_v1 ON public.autodoc_panel_master TO au
 
 
 --
--- TOC entry 7693 (class 3256 OID 21018)
+-- TOC entry 7694 (class 3256 OID 21018)
 -- Name: autodoc_rate_cards admin_unrestricted_all_ops_v1; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -24437,7 +24437,7 @@ CREATE POLICY admin_unrestricted_all_ops_v1 ON public.autodoc_rate_cards TO auth
 
 
 --
--- TOC entry 7695 (class 3256 OID 21020)
+-- TOC entry 7696 (class 3256 OID 21020)
 -- Name: autodoc_rate_rows admin_unrestricted_all_ops_v1; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -24445,7 +24445,7 @@ CREATE POLICY admin_unrestricted_all_ops_v1 ON public.autodoc_rate_rows TO authe
 
 
 --
--- TOC entry 7790 (class 3256 OID 32668)
+-- TOC entry 7791 (class 3256 OID 32668)
 -- Name: bodyshop_assignments admin_unrestricted_all_ops_v1; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -24453,7 +24453,7 @@ CREATE POLICY admin_unrestricted_all_ops_v1 ON public.bodyshop_assignments TO au
 
 
 --
--- TOC entry 7888 (class 3256 OID 33987)
+-- TOC entry 7576 (class 3256 OID 34042)
 -- Name: bodyshop_floor_support_assignments admin_unrestricted_all_ops_v1; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -24461,7 +24461,7 @@ CREATE POLICY admin_unrestricted_all_ops_v1 ON public.bodyshop_floor_support_ass
 
 
 --
--- TOC entry 7658 (class 3256 OID 24791)
+-- TOC entry 7659 (class 3256 OID 24791)
 -- Name: bodyshop_intake_vehicle_photos admin_unrestricted_all_ops_v1; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -24469,7 +24469,7 @@ CREATE POLICY admin_unrestricted_all_ops_v1 ON public.bodyshop_intake_vehicle_ph
 
 
 --
--- TOC entry 7659 (class 3256 OID 24792)
+-- TOC entry 7660 (class 3256 OID 24792)
 -- Name: bodyshop_repair_card_documents admin_unrestricted_all_ops_v1; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -24477,7 +24477,7 @@ CREATE POLICY admin_unrestricted_all_ops_v1 ON public.bodyshop_repair_card_docum
 
 
 --
--- TOC entry 7708 (class 3256 OID 27408)
+-- TOC entry 7709 (class 3256 OID 27408)
 -- Name: bodyshop_repair_cards admin_unrestricted_all_ops_v1; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -24485,7 +24485,7 @@ CREATE POLICY admin_unrestricted_all_ops_v1 ON public.bodyshop_repair_cards TO a
 
 
 --
--- TOC entry 7728 (class 3256 OID 21784)
+-- TOC entry 7729 (class 3256 OID 21784)
 -- Name: cancel_job_card admin_unrestricted_all_ops_v1; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -24493,7 +24493,7 @@ CREATE POLICY admin_unrestricted_all_ops_v1 ON public.cancel_job_card TO authent
 
 
 --
--- TOC entry 7731 (class 3256 OID 21789)
+-- TOC entry 7732 (class 3256 OID 21789)
 -- Name: closed_but_not_invoiced admin_unrestricted_all_ops_v1; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -24501,7 +24501,7 @@ CREATE POLICY admin_unrestricted_all_ops_v1 ON public.closed_but_not_invoiced TO
 
 
 --
--- TOC entry 7885 (class 3256 OID 33833)
+-- TOC entry 7886 (class 3256 OID 33833)
 -- Name: complaint_access_links admin_unrestricted_all_ops_v1; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -24509,7 +24509,7 @@ CREATE POLICY admin_unrestricted_all_ops_v1 ON public.complaint_access_links TO 
 
 
 --
--- TOC entry 7577 (class 3256 OID 22216)
+-- TOC entry 7578 (class 3256 OID 22216)
 -- Name: complaint_activity admin_unrestricted_all_ops_v1; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -24517,7 +24517,7 @@ CREATE POLICY admin_unrestricted_all_ops_v1 ON public.complaint_activity TO auth
 
 
 --
--- TOC entry 7578 (class 3256 OID 22240)
+-- TOC entry 7579 (class 3256 OID 22240)
 -- Name: complaint_attachments admin_unrestricted_all_ops_v1; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -24525,7 +24525,7 @@ CREATE POLICY admin_unrestricted_all_ops_v1 ON public.complaint_attachments TO a
 
 
 --
--- TOC entry 7576 (class 3256 OID 22197)
+-- TOC entry 7577 (class 3256 OID 22197)
 -- Name: complaint_messages admin_unrestricted_all_ops_v1; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -24533,7 +24533,7 @@ CREATE POLICY admin_unrestricted_all_ops_v1 ON public.complaint_messages TO auth
 
 
 --
--- TOC entry 7830 (class 3256 OID 26100)
+-- TOC entry 7831 (class 3256 OID 26100)
 -- Name: complaint_notifications admin_unrestricted_all_ops_v1; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -24549,7 +24549,7 @@ CREATE POLICY admin_unrestricted_all_ops_v1 ON public.complaint_sla_policies TO 
 
 
 --
--- TOC entry 7886 (class 3256 OID 33840)
+-- TOC entry 7887 (class 3256 OID 33840)
 -- Name: complaint_tickets admin_unrestricted_all_ops_v1; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -24557,7 +24557,7 @@ CREATE POLICY admin_unrestricted_all_ops_v1 ON public.complaint_tickets TO authe
 
 
 --
--- TOC entry 7838 (class 3256 OID 32395)
+-- TOC entry 7839 (class 3256 OID 32395)
 -- Name: cre_incentive_settings admin_unrestricted_all_ops_v1; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -24565,7 +24565,7 @@ CREATE POLICY admin_unrestricted_all_ops_v1 ON public.cre_incentive_settings TO 
 
 
 --
--- TOC entry 7828 (class 3256 OID 28881)
+-- TOC entry 7829 (class 3256 OID 28881)
 -- Name: dealer_settings admin_unrestricted_all_ops_v1; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -24573,7 +24573,7 @@ CREATE POLICY admin_unrestricted_all_ops_v1 ON public.dealer_settings TO authent
 
 
 --
--- TOC entry 7690 (class 3256 OID 21015)
+-- TOC entry 7691 (class 3256 OID 21015)
 -- Name: documents admin_unrestricted_all_ops_v1; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -24581,7 +24581,7 @@ CREATE POLICY admin_unrestricted_all_ops_v1 ON public.documents TO authenticated
 
 
 --
--- TOC entry 7692 (class 3256 OID 21017)
+-- TOC entry 7693 (class 3256 OID 21017)
 -- Name: email_logs admin_unrestricted_all_ops_v1; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -24589,7 +24589,7 @@ CREATE POLICY admin_unrestricted_all_ops_v1 ON public.email_logs TO authenticate
 
 
 --
--- TOC entry 7679 (class 3256 OID 27076)
+-- TOC entry 7680 (class 3256 OID 27076)
 -- Name: employee_master admin_unrestricted_all_ops_v1; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -24597,7 +24597,7 @@ CREATE POLICY admin_unrestricted_all_ops_v1 ON public.employee_master TO authent
 
 
 --
--- TOC entry 7698 (class 3256 OID 21024)
+-- TOC entry 7699 (class 3256 OID 21024)
 -- Name: estimate_rows admin_unrestricted_all_ops_v1; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -24605,7 +24605,7 @@ CREATE POLICY admin_unrestricted_all_ops_v1 ON public.estimate_rows TO authentic
 
 
 --
--- TOC entry 7880 (class 3256 OID 33094)
+-- TOC entry 7881 (class 3256 OID 33094)
 -- Name: import_employee_mapping_issues admin_unrestricted_all_ops_v1; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -24613,7 +24613,7 @@ CREATE POLICY admin_unrestricted_all_ops_v1 ON public.import_employee_mapping_is
 
 
 --
--- TOC entry 7665 (class 3256 OID 21004)
+-- TOC entry 7666 (class 3256 OID 21004)
 -- Name: import_metadata admin_unrestricted_all_ops_v1; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -24621,7 +24621,7 @@ CREATE POLICY admin_unrestricted_all_ops_v1 ON public.import_metadata TO authent
 
 
 --
--- TOC entry 7844 (class 3256 OID 26265)
+-- TOC entry 7845 (class 3256 OID 26265)
 -- Name: income_role_scope admin_unrestricted_all_ops_v1; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -24629,7 +24629,7 @@ CREATE POLICY admin_unrestricted_all_ops_v1 ON public.income_role_scope TO authe
 
 
 --
--- TOC entry 7791 (class 3256 OID 33191)
+-- TOC entry 7792 (class 3256 OID 33191)
 -- Name: job_card_closed_data admin_unrestricted_all_ops_v1; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -24637,7 +24637,7 @@ CREATE POLICY admin_unrestricted_all_ops_v1 ON public.job_card_closed_data TO au
 
 
 --
--- TOC entry 7748 (class 3256 OID 21809)
+-- TOC entry 7749 (class 3256 OID 21809)
 -- Name: job_card_closed_data_duplicates_backup admin_unrestricted_all_ops_v1; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -24645,7 +24645,7 @@ CREATE POLICY admin_unrestricted_all_ops_v1 ON public.job_card_closed_data_dupli
 
 
 --
--- TOC entry 7887 (class 3256 OID 33843)
+-- TOC entry 7888 (class 3256 OID 33843)
 -- Name: job_card_support_assignments admin_unrestricted_all_ops_v1; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -24653,7 +24653,7 @@ CREATE POLICY admin_unrestricted_all_ops_v1 ON public.job_card_support_assignmen
 
 
 --
--- TOC entry 7680 (class 3256 OID 29378)
+-- TOC entry 7681 (class 3256 OID 29378)
 -- Name: job_cards admin_unrestricted_all_ops_v1; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -24661,7 +24661,7 @@ CREATE POLICY admin_unrestricted_all_ops_v1 ON public.job_cards TO authenticated
 
 
 --
--- TOC entry 7652 (class 3256 OID 23593)
+-- TOC entry 7653 (class 3256 OID 23593)
 -- Name: modules admin_unrestricted_all_ops_v1; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -24669,7 +24669,7 @@ CREATE POLICY admin_unrestricted_all_ops_v1 ON public.modules TO authenticated U
 
 
 --
--- TOC entry 7653 (class 3256 OID 23594)
+-- TOC entry 7654 (class 3256 OID 23594)
 -- Name: nav_groups admin_unrestricted_all_ops_v1; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -24677,7 +24677,7 @@ CREATE POLICY admin_unrestricted_all_ops_v1 ON public.nav_groups TO authenticate
 
 
 --
--- TOC entry 7735 (class 3256 OID 21794)
+-- TOC entry 7736 (class 3256 OID 21794)
 -- Name: open_job_cards admin_unrestricted_all_ops_v1; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -24685,7 +24685,7 @@ CREATE POLICY admin_unrestricted_all_ops_v1 ON public.open_job_cards TO authenti
 
 
 --
--- TOC entry 7744 (class 3256 OID 21804)
+-- TOC entry 7745 (class 3256 OID 21804)
 -- Name: open_job_cards_import_staging admin_unrestricted_all_ops_v1; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -24693,7 +24693,7 @@ CREATE POLICY admin_unrestricted_all_ops_v1 ON public.open_job_cards_import_stag
 
 
 --
--- TOC entry 7696 (class 3256 OID 21021)
+-- TOC entry 7697 (class 3256 OID 21021)
 -- Name: panel_photos admin_unrestricted_all_ops_v1; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -24701,7 +24701,7 @@ CREATE POLICY admin_unrestricted_all_ops_v1 ON public.panel_photos TO authentica
 
 
 --
--- TOC entry 7697 (class 3256 OID 21022)
+-- TOC entry 7698 (class 3256 OID 21022)
 -- Name: panels admin_unrestricted_all_ops_v1; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -24709,7 +24709,7 @@ CREATE POLICY admin_unrestricted_all_ops_v1 ON public.panels TO authenticated US
 
 
 --
--- TOC entry 7667 (class 3256 OID 21007)
+-- TOC entry 7668 (class 3256 OID 21007)
 -- Name: part_master admin_unrestricted_all_ops_v1; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -24717,7 +24717,7 @@ CREATE POLICY admin_unrestricted_all_ops_v1 ON public.part_master TO authenticat
 
 
 --
--- TOC entry 7884 (class 3256 OID 33665)
+-- TOC entry 7885 (class 3256 OID 33665)
 -- Name: parts_requests admin_unrestricted_all_ops_v1; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -24725,7 +24725,7 @@ CREATE POLICY admin_unrestricted_all_ops_v1 ON public.parts_requests TO authenti
 
 
 --
--- TOC entry 7739 (class 3256 OID 21799)
+-- TOC entry 7740 (class 3256 OID 21799)
 -- Name: pending_drive_uploads admin_unrestricted_all_ops_v1; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -24733,7 +24733,7 @@ CREATE POLICY admin_unrestricted_all_ops_v1 ON public.pending_drive_uploads TO a
 
 
 --
--- TOC entry 7876 (class 3256 OID 32618)
+-- TOC entry 7877 (class 3256 OID 32618)
 -- Name: post_service_feedback_messages admin_unrestricted_all_ops_v1; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -24741,7 +24741,7 @@ CREATE POLICY admin_unrestricted_all_ops_v1 ON public.post_service_feedback_mess
 
 
 --
--- TOC entry 7877 (class 3256 OID 32619)
+-- TOC entry 7878 (class 3256 OID 32619)
 -- Name: post_service_feedback_remarks admin_unrestricted_all_ops_v1; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -24749,7 +24749,7 @@ CREATE POLICY admin_unrestricted_all_ops_v1 ON public.post_service_feedback_rema
 
 
 --
--- TOC entry 7853 (class 3256 OID 33087)
+-- TOC entry 7854 (class 3256 OID 33087)
 -- Name: psf_revenue_dms admin_unrestricted_all_ops_v1; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -24757,7 +24757,7 @@ CREATE POLICY admin_unrestricted_all_ops_v1 ON public.psf_revenue_dms TO authent
 
 
 --
--- TOC entry 7699 (class 3256 OID 21025)
+-- TOC entry 7700 (class 3256 OID 21025)
 -- Name: rto_cache admin_unrestricted_all_ops_v1; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -24765,7 +24765,7 @@ CREATE POLICY admin_unrestricted_all_ops_v1 ON public.rto_cache TO authenticated
 
 
 --
--- TOC entry 7800 (class 3256 OID 23577)
+-- TOC entry 7801 (class 3256 OID 23577)
 -- Name: sa_earnings_settings admin_unrestricted_all_ops_v1; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -24773,7 +24773,7 @@ CREATE POLICY admin_unrestricted_all_ops_v1 ON public.sa_earnings_settings TO au
 
 
 --
--- TOC entry 7858 (class 3256 OID 23927)
+-- TOC entry 7859 (class 3256 OID 23927)
 -- Name: service_booking_followups admin_unrestricted_all_ops_v1; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -24781,7 +24781,7 @@ CREATE POLICY admin_unrestricted_all_ops_v1 ON public.service_booking_followups 
 
 
 --
--- TOC entry 7836 (class 3256 OID 31856)
+-- TOC entry 7837 (class 3256 OID 31856)
 -- Name: service_bookings admin_unrestricted_all_ops_v1; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -24789,7 +24789,7 @@ CREATE POLICY admin_unrestricted_all_ops_v1 ON public.service_bookings TO authen
 
 
 --
--- TOC entry 7689 (class 3256 OID 21013)
+-- TOC entry 7690 (class 3256 OID 21013)
 -- Name: service_branches admin_unrestricted_all_ops_v1; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -24797,7 +24797,7 @@ CREATE POLICY admin_unrestricted_all_ops_v1 ON public.service_branches TO authen
 
 
 --
--- TOC entry 7648 (class 3256 OID 21734)
+-- TOC entry 7649 (class 3256 OID 21734)
 -- Name: service_invoice_data admin_unrestricted_all_ops_v1; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -24805,7 +24805,7 @@ CREATE POLICY admin_unrestricted_all_ops_v1 ON public.service_invoice_data TO au
 
 
 --
--- TOC entry 7684 (class 3256 OID 21744)
+-- TOC entry 7685 (class 3256 OID 21744)
 -- Name: service_invoice_order_data admin_unrestricted_all_ops_v1; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -24813,7 +24813,7 @@ CREATE POLICY admin_unrestricted_all_ops_v1 ON public.service_invoice_order_data
 
 
 --
--- TOC entry 7624 (class 3256 OID 21729)
+-- TOC entry 7625 (class 3256 OID 21729)
 -- Name: service_jc_parts_data admin_unrestricted_all_ops_v1; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -24821,7 +24821,7 @@ CREATE POLICY admin_unrestricted_all_ops_v1 ON public.service_jc_parts_data TO a
 
 
 --
--- TOC entry 7666 (class 3256 OID 21006)
+-- TOC entry 7667 (class 3256 OID 21006)
 -- Name: service_parts_consumption_data admin_unrestricted_all_ops_v1; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -24829,7 +24829,7 @@ CREATE POLICY admin_unrestricted_all_ops_v1 ON public.service_parts_consumption_
 
 
 --
--- TOC entry 7686 (class 3256 OID 21008)
+-- TOC entry 7687 (class 3256 OID 21008)
 -- Name: service_parts_order_data admin_unrestricted_all_ops_v1; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -24837,7 +24837,7 @@ CREATE POLICY admin_unrestricted_all_ops_v1 ON public.service_parts_order_data T
 
 
 --
--- TOC entry 7687 (class 3256 OID 21009)
+-- TOC entry 7688 (class 3256 OID 21009)
 -- Name: service_parts_stock_snapshot_data admin_unrestricted_all_ops_v1; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -24845,7 +24845,7 @@ CREATE POLICY admin_unrestricted_all_ops_v1 ON public.service_parts_stock_snapsh
 
 
 --
--- TOC entry 7787 (class 3256 OID 23254)
+-- TOC entry 7788 (class 3256 OID 23254)
 -- Name: service_reception_entries admin_unrestricted_all_ops_v1; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -24853,7 +24853,7 @@ CREATE POLICY admin_unrestricted_all_ops_v1 ON public.service_reception_entries 
 
 
 --
--- TOC entry 7619 (class 3256 OID 21724)
+-- TOC entry 7620 (class 3256 OID 21724)
 -- Name: service_vas_jc_data admin_unrestricted_all_ops_v1; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -24869,7 +24869,7 @@ CREATE POLICY admin_unrestricted_all_ops_v1 ON public.settings_bodyshop_surveyor
 
 
 --
--- TOC entry 7709 (class 3256 OID 31774)
+-- TOC entry 7710 (class 3256 OID 31774)
 -- Name: settings_model_options admin_unrestricted_all_ops_v1; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -24877,7 +24877,7 @@ CREATE POLICY admin_unrestricted_all_ops_v1 ON public.settings_model_options TO 
 
 
 --
--- TOC entry 7868 (class 3256 OID 24158)
+-- TOC entry 7869 (class 3256 OID 24158)
 -- Name: technician_assignments admin_unrestricted_all_ops_v1; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -24885,7 +24885,7 @@ CREATE POLICY admin_unrestricted_all_ops_v1 ON public.technician_assignments TO 
 
 
 --
--- TOC entry 7852 (class 3256 OID 29813)
+-- TOC entry 7853 (class 3256 OID 29813)
 -- Name: telecall_assignments admin_unrestricted_all_ops_v1; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -24893,7 +24893,7 @@ CREATE POLICY admin_unrestricted_all_ops_v1 ON public.telecall_assignments TO au
 
 
 --
--- TOC entry 7685 (class 3256 OID 29536)
+-- TOC entry 7686 (class 3256 OID 29536)
 -- Name: telecall_campaigns admin_unrestricted_all_ops_v1; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -24901,7 +24901,7 @@ CREATE POLICY admin_unrestricted_all_ops_v1 ON public.telecall_campaigns TO auth
 
 
 --
--- TOC entry 7592 (class 3256 OID 21716)
+-- TOC entry 7593 (class 3256 OID 21716)
 -- Name: user_employee_links admin_unrestricted_all_ops_v1; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -24909,7 +24909,7 @@ CREATE POLICY admin_unrestricted_all_ops_v1 ON public.user_employee_links TO aut
 
 
 --
--- TOC entry 7688 (class 3256 OID 21012)
+-- TOC entry 7689 (class 3256 OID 21012)
 -- Name: user_module_permissions admin_unrestricted_all_ops_v1; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -24917,7 +24917,7 @@ CREATE POLICY admin_unrestricted_all_ops_v1 ON public.user_module_permissions TO
 
 
 --
--- TOC entry 7837 (class 3256 OID 31859)
+-- TOC entry 7838 (class 3256 OID 31859)
 -- Name: users admin_unrestricted_all_ops_v1; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -24925,7 +24925,7 @@ CREATE POLICY admin_unrestricted_all_ops_v1 ON public.users TO authenticated USI
 
 
 --
--- TOC entry 7691 (class 3256 OID 21016)
+-- TOC entry 7692 (class 3256 OID 21016)
 -- Name: vehicles admin_unrestricted_all_ops_v1; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -24941,7 +24941,7 @@ CREATE POLICY admin_unrestricted_all_ops_v1 ON public.wa_agent_config TO authent
 
 
 --
--- TOC entry 7867 (class 3256 OID 24079)
+-- TOC entry 7868 (class 3256 OID 24079)
 -- Name: wa_campaign_contacts admin_unrestricted_all_ops_v1; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -24949,7 +24949,7 @@ CREATE POLICY admin_unrestricted_all_ops_v1 ON public.wa_campaign_contacts TO au
 
 
 --
--- TOC entry 7874 (class 3256 OID 24560)
+-- TOC entry 7875 (class 3256 OID 24560)
 -- Name: wa_campaigns admin_unrestricted_all_ops_v1; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -24957,7 +24957,7 @@ CREATE POLICY admin_unrestricted_all_ops_v1 ON public.wa_campaigns TO authentica
 
 
 --
--- TOC entry 7831 (class 3256 OID 26908)
+-- TOC entry 7832 (class 3256 OID 26908)
 -- Name: wa_conversations admin_unrestricted_all_ops_v1; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -24965,7 +24965,7 @@ CREATE POLICY admin_unrestricted_all_ops_v1 ON public.wa_conversations TO authen
 
 
 --
--- TOC entry 7631 (class 3256 OID 24774)
+-- TOC entry 7632 (class 3256 OID 24774)
 -- Name: wa_followup_queue admin_unrestricted_all_ops_v1; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -24973,7 +24973,7 @@ CREATE POLICY admin_unrestricted_all_ops_v1 ON public.wa_followup_queue TO authe
 
 
 --
--- TOC entry 7612 (class 3256 OID 24743)
+-- TOC entry 7613 (class 3256 OID 24743)
 -- Name: wa_followup_steps admin_unrestricted_all_ops_v1; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -24981,7 +24981,7 @@ CREATE POLICY admin_unrestricted_all_ops_v1 ON public.wa_followup_steps TO authe
 
 
 --
--- TOC entry 7861 (class 3256 OID 24063)
+-- TOC entry 7862 (class 3256 OID 24063)
 -- Name: wa_messages admin_unrestricted_all_ops_v1; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -24989,7 +24989,7 @@ CREATE POLICY admin_unrestricted_all_ops_v1 ON public.wa_messages TO authenticat
 
 
 --
--- TOC entry 7869 (class 3256 OID 24185)
+-- TOC entry 7870 (class 3256 OID 24185)
 -- Name: wa_templates admin_unrestricted_all_ops_v1; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -24997,7 +24997,7 @@ CREATE POLICY admin_unrestricted_all_ops_v1 ON public.wa_templates TO authentica
 
 
 --
--- TOC entry 7716 (class 3256 OID 21769)
+-- TOC entry 7717 (class 3256 OID 21769)
 -- Name: warranty_amc_data admin_unrestricted_all_ops_v1; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -25013,7 +25013,7 @@ CREATE POLICY admin_unrestricted_all_ops_v1 ON public.warranty_claim_settlement_
 
 
 --
--- TOC entry 7720 (class 3256 OID 21774)
+-- TOC entry 7721 (class 3256 OID 21774)
 -- Name: warranty_fsb_data admin_unrestricted_all_ops_v1; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -25021,7 +25021,7 @@ CREATE POLICY admin_unrestricted_all_ops_v1 ON public.warranty_fsb_data TO authe
 
 
 --
--- TOC entry 7712 (class 3256 OID 21764)
+-- TOC entry 7713 (class 3256 OID 21764)
 -- Name: warranty_goodwill_data admin_unrestricted_all_ops_v1; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -25029,7 +25029,7 @@ CREATE POLICY admin_unrestricted_all_ops_v1 ON public.warranty_goodwill_data TO 
 
 
 --
--- TOC entry 7793 (class 3256 OID 33609)
+-- TOC entry 7794 (class 3256 OID 33609)
 -- Name: warranty_labour_data admin_unrestricted_all_ops_v1; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -25045,7 +25045,7 @@ CREATE POLICY admin_unrestricted_all_ops_v1 ON public.warranty_part_wc_data TO a
 
 
 --
--- TOC entry 7792 (class 3256 OID 33608)
+-- TOC entry 7793 (class 3256 OID 33608)
 -- Name: warranty_spl_codes_data admin_unrestricted_all_ops_v1; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -25053,7 +25053,7 @@ CREATE POLICY admin_unrestricted_all_ops_v1 ON public.warranty_spl_codes_data TO
 
 
 --
--- TOC entry 7600 (class 3256 OID 21759)
+-- TOC entry 7601 (class 3256 OID 21759)
 -- Name: warranty_updation_claim_data admin_unrestricted_all_ops_v1; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -25061,7 +25061,7 @@ CREATE POLICY admin_unrestricted_all_ops_v1 ON public.warranty_updation_claim_da
 
 
 --
--- TOC entry 7724 (class 3256 OID 21779)
+-- TOC entry 7725 (class 3256 OID 21779)
 -- Name: warranty_wc_data admin_unrestricted_all_ops_v1; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -25069,7 +25069,7 @@ CREATE POLICY admin_unrestricted_all_ops_v1 ON public.warranty_wc_data TO authen
 
 
 --
--- TOC entry 7883 (class 3256 OID 33659)
+-- TOC entry 7884 (class 3256 OID 33659)
 -- Name: parts_requests advisor_view_own; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -25077,7 +25077,7 @@ CREATE POLICY advisor_view_own ON public.parts_requests FOR SELECT USING ((advis
 
 
 --
--- TOC entry 7872 (class 3256 OID 26555)
+-- TOC entry 7873 (class 3256 OID 26555)
 -- Name: settings_model_options all_authenticated_read_active_models; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -25085,7 +25085,7 @@ CREATE POLICY all_authenticated_read_active_models ON public.settings_model_opti
 
 
 --
--- TOC entry 7882 (class 3256 OID 32397)
+-- TOC entry 7883 (class 3256 OID 32397)
 -- Name: cre_incentive_settings allow_admin_write_cre_incentive_settings; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -25095,7 +25095,7 @@ CREATE POLICY allow_admin_write_cre_incentive_settings ON public.cre_incentive_s
 
 
 --
--- TOC entry 7843 (class 3256 OID 23579)
+-- TOC entry 7844 (class 3256 OID 23579)
 -- Name: sa_earnings_settings allow_admin_write_sa_settings; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -25105,7 +25105,7 @@ CREATE POLICY allow_admin_write_sa_settings ON public.sa_earnings_settings USING
 
 
 --
--- TOC entry 7638 (class 3256 OID 24775)
+-- TOC entry 7639 (class 3256 OID 24775)
 -- Name: wa_followup_queue allow_all_authenticated; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -25113,7 +25113,7 @@ CREATE POLICY allow_all_authenticated ON public.wa_followup_queue USING (true);
 
 
 --
--- TOC entry 7623 (class 3256 OID 24744)
+-- TOC entry 7624 (class 3256 OID 24744)
 -- Name: wa_followup_steps allow_all_authenticated; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -25121,7 +25121,7 @@ CREATE POLICY allow_all_authenticated ON public.wa_followup_steps USING (true);
 
 
 --
--- TOC entry 7839 (class 3256 OID 32396)
+-- TOC entry 7840 (class 3256 OID 32396)
 -- Name: cre_incentive_settings allow_read_cre_incentive_settings; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -25129,7 +25129,7 @@ CREATE POLICY allow_read_cre_incentive_settings ON public.cre_incentive_settings
 
 
 --
--- TOC entry 7802 (class 3256 OID 27624)
+-- TOC entry 7803 (class 3256 OID 27624)
 -- Name: warranty_labour_data allow_read_labour; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -25145,7 +25145,7 @@ CREATE POLICY allow_read_sa_settings ON public.sa_earnings_settings FOR SELECT U
 
 
 --
--- TOC entry 7773 (class 3256 OID 27574)
+-- TOC entry 7774 (class 3256 OID 27574)
 -- Name: warranty_spl_codes_data allow_read_spl; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -25161,7 +25161,7 @@ CREATE POLICY allow_read_spl ON public.warranty_spl_codes_data FOR SELECT TO aut
 ALTER TABLE public.audit_logs ENABLE ROW LEVEL SECURITY;
 
 --
--- TOC entry 7599 (class 3256 OID 21723)
+-- TOC entry 7600 (class 3256 OID 21723)
 -- Name: audit_logs audit_logs_insert_actor_or_admin; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -25169,7 +25169,7 @@ CREATE POLICY audit_logs_insert_actor_or_admin ON public.audit_logs FOR INSERT T
 
 
 --
--- TOC entry 7598 (class 3256 OID 21722)
+-- TOC entry 7599 (class 3256 OID 21722)
 -- Name: audit_logs audit_logs_select_admin; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -25177,7 +25177,7 @@ CREATE POLICY audit_logs_select_admin ON public.audit_logs FOR SELECT TO authent
 
 
 --
--- TOC entry 7651 (class 3256 OID 20494)
+-- TOC entry 7652 (class 3256 OID 20494)
 -- Name: service_branches authenticated_all; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -25193,7 +25193,7 @@ CREATE POLICY authenticated_all ON public.service_branches TO authenticated USIN
 ALTER TABLE public.autodoc_panel_master ENABLE ROW LEVEL SECURITY;
 
 --
--- TOC entry 7633 (class 3256 OID 19371)
+-- TOC entry 7634 (class 3256 OID 19371)
 -- Name: autodoc_panel_master autodoc_panel_master_select; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -25201,7 +25201,7 @@ CREATE POLICY autodoc_panel_master_select ON public.autodoc_panel_master FOR SEL
 
 
 --
--- TOC entry 7636 (class 3256 OID 19374)
+-- TOC entry 7637 (class 3256 OID 19374)
 -- Name: autodoc_panel_master autodoc_panel_master_write; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -25217,7 +25217,7 @@ CREATE POLICY autodoc_panel_master_write ON public.autodoc_panel_master TO authe
 ALTER TABLE public.autodoc_rate_cards ENABLE ROW LEVEL SECURITY;
 
 --
--- TOC entry 7632 (class 3256 OID 19370)
+-- TOC entry 7633 (class 3256 OID 19370)
 -- Name: autodoc_rate_cards autodoc_rate_cards_select; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -25225,7 +25225,7 @@ CREATE POLICY autodoc_rate_cards_select ON public.autodoc_rate_cards FOR SELECT 
 
 
 --
--- TOC entry 7635 (class 3256 OID 19373)
+-- TOC entry 7636 (class 3256 OID 19373)
 -- Name: autodoc_rate_cards autodoc_rate_cards_write; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -25241,7 +25241,7 @@ CREATE POLICY autodoc_rate_cards_write ON public.autodoc_rate_cards TO authentic
 ALTER TABLE public.autodoc_rate_rows ENABLE ROW LEVEL SECURITY;
 
 --
--- TOC entry 7634 (class 3256 OID 19372)
+-- TOC entry 7635 (class 3256 OID 19372)
 -- Name: autodoc_rate_rows autodoc_rate_rows_select; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -25249,7 +25249,7 @@ CREATE POLICY autodoc_rate_rows_select ON public.autodoc_rate_rows FOR SELECT TO
 
 
 --
--- TOC entry 7637 (class 3256 OID 19375)
+-- TOC entry 7638 (class 3256 OID 19375)
 -- Name: autodoc_rate_rows autodoc_rate_rows_write; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -25265,7 +25265,7 @@ CREATE POLICY autodoc_rate_rows_write ON public.autodoc_rate_rows TO authenticat
 ALTER TABLE public.bodyshop_assignments ENABLE ROW LEVEL SECURITY;
 
 --
--- TOC entry 7743 (class 3256 OID 23330)
+-- TOC entry 7744 (class 3256 OID 23330)
 -- Name: bodyshop_assignments bodyshop_assignments_delete_rbac_v2; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -25273,7 +25273,7 @@ CREATE POLICY bodyshop_assignments_delete_rbac_v2 ON public.bodyshop_assignments
 
 
 --
--- TOC entry 7671 (class 3256 OID 23328)
+-- TOC entry 7672 (class 3256 OID 23328)
 -- Name: bodyshop_assignments bodyshop_assignments_insert_rbac_v2; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -25281,7 +25281,7 @@ CREATE POLICY bodyshop_assignments_insert_rbac_v2 ON public.bodyshop_assignments
 
 
 --
--- TOC entry 7670 (class 3256 OID 23327)
+-- TOC entry 7671 (class 3256 OID 23327)
 -- Name: bodyshop_assignments bodyshop_assignments_select_rbac_v2; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -25289,7 +25289,7 @@ CREATE POLICY bodyshop_assignments_select_rbac_v2 ON public.bodyshop_assignments
 
 
 --
--- TOC entry 7770 (class 3256 OID 23331)
+-- TOC entry 7771 (class 3256 OID 23331)
 -- Name: bodyshop_assignments bodyshop_assignments_service_all; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -25297,7 +25297,7 @@ CREATE POLICY bodyshop_assignments_service_all ON public.bodyshop_assignments TO
 
 
 --
--- TOC entry 7706 (class 3256 OID 23329)
+-- TOC entry 7707 (class 3256 OID 23329)
 -- Name: bodyshop_assignments bodyshop_assignments_update_rbac_v2; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -25313,7 +25313,7 @@ CREATE POLICY bodyshop_assignments_update_rbac_v2 ON public.bodyshop_assignments
 ALTER TABLE public.bodyshop_floor_support_assignments ENABLE ROW LEVEL SECURITY;
 
 --
--- TOC entry 7657 (class 3256 OID 23682)
+-- TOC entry 7658 (class 3256 OID 23682)
 -- Name: bodyshop_floor_support_assignments bodyshop_floor_support_delete_policy; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -25329,7 +25329,7 @@ CREATE POLICY bodyshop_floor_support_insert_policy ON public.bodyshop_floor_supp
 
 
 --
--- TOC entry 7801 (class 3256 OID 23679)
+-- TOC entry 7802 (class 3256 OID 23679)
 -- Name: bodyshop_floor_support_assignments bodyshop_floor_support_read_policy; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -25337,7 +25337,7 @@ CREATE POLICY bodyshop_floor_support_read_policy ON public.bodyshop_floor_suppor
 
 
 --
--- TOC entry 7656 (class 3256 OID 23681)
+-- TOC entry 7657 (class 3256 OID 23681)
 -- Name: bodyshop_floor_support_assignments bodyshop_floor_support_update_policy; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -25361,7 +25361,7 @@ CREATE POLICY bodyshop_intake_vehicle_photos_delete_rbac_v2 ON public.bodyshop_i
 
 
 --
--- TOC entry 7705 (class 3256 OID 24800)
+-- TOC entry 7706 (class 3256 OID 24800)
 -- Name: bodyshop_intake_vehicle_photos bodyshop_intake_vehicle_photos_insert_rbac_v3; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -25369,7 +25369,7 @@ CREATE POLICY bodyshop_intake_vehicle_photos_insert_rbac_v3 ON public.bodyshop_i
 
 
 --
--- TOC entry 7704 (class 3256 OID 24799)
+-- TOC entry 7705 (class 3256 OID 24799)
 -- Name: bodyshop_intake_vehicle_photos bodyshop_intake_vehicle_photos_select_rbac_v3; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -25377,7 +25377,7 @@ CREATE POLICY bodyshop_intake_vehicle_photos_select_rbac_v3 ON public.bodyshop_i
 
 
 --
--- TOC entry 7711 (class 3256 OID 24801)
+-- TOC entry 7712 (class 3256 OID 24801)
 -- Name: bodyshop_intake_vehicle_photos bodyshop_intake_vehicle_photos_update_rbac_v3; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -25393,7 +25393,7 @@ CREATE POLICY bodyshop_intake_vehicle_photos_update_rbac_v3 ON public.bodyshop_i
 ALTER TABLE public.bodyshop_repair_card_documents ENABLE ROW LEVEL SECURITY;
 
 --
--- TOC entry 7829 (class 3256 OID 23339)
+-- TOC entry 7830 (class 3256 OID 23339)
 -- Name: bodyshop_repair_card_documents bodyshop_repair_card_documents_delete_rbac_v2; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -25401,7 +25401,7 @@ CREATE POLICY bodyshop_repair_card_documents_delete_rbac_v2 ON public.bodyshop_r
 
 
 --
--- TOC entry 7832 (class 3256 OID 26984)
+-- TOC entry 7833 (class 3256 OID 26984)
 -- Name: bodyshop_repair_card_documents bodyshop_repair_card_documents_insert_rbac_v4; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -25411,7 +25411,7 @@ CREATE POLICY bodyshop_repair_card_documents_insert_rbac_v4 ON public.bodyshop_r
 
 
 --
--- TOC entry 7881 (class 3256 OID 27010)
+-- TOC entry 7882 (class 3256 OID 27010)
 -- Name: bodyshop_repair_card_documents bodyshop_repair_card_documents_select_rbac_v4; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -25421,7 +25421,7 @@ CREATE POLICY bodyshop_repair_card_documents_select_rbac_v4 ON public.bodyshop_r
 
 
 --
--- TOC entry 7873 (class 3256 OID 26985)
+-- TOC entry 7874 (class 3256 OID 26985)
 -- Name: bodyshop_repair_card_documents bodyshop_repair_card_documents_update_rbac_v4; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -25441,7 +25441,7 @@ CREATE POLICY bodyshop_repair_card_documents_update_rbac_v4 ON public.bodyshop_r
 ALTER TABLE public.bodyshop_repair_cards ENABLE ROW LEVEL SECURITY;
 
 --
--- TOC entry 7702 (class 3256 OID 24795)
+-- TOC entry 7703 (class 3256 OID 24795)
 -- Name: bodyshop_repair_cards bodyshop_repair_cards_insert_rbac_v2; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -25451,7 +25451,7 @@ CREATE POLICY bodyshop_repair_cards_insert_rbac_v2 ON public.bodyshop_repair_car
 
 
 --
--- TOC entry 7660 (class 3256 OID 24793)
+-- TOC entry 7661 (class 3256 OID 24793)
 -- Name: bodyshop_repair_cards bodyshop_repair_cards_select_rbac_v2; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -25461,7 +25461,7 @@ CREATE POLICY bodyshop_repair_cards_select_rbac_v2 ON public.bodyshop_repair_car
 
 
 --
--- TOC entry 7703 (class 3256 OID 24796)
+-- TOC entry 7704 (class 3256 OID 24796)
 -- Name: bodyshop_repair_cards bodyshop_repair_cards_update_rbac_v2; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -25529,7 +25529,7 @@ ALTER TABLE public.complaint_messages ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.complaint_notifications ENABLE ROW LEVEL SECURITY;
 
 --
--- TOC entry 7827 (class 3256 OID 26089)
+-- TOC entry 7828 (class 3256 OID 26089)
 -- Name: complaint_notifications complaint_notifications_select; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -25537,7 +25537,7 @@ CREATE POLICY complaint_notifications_select ON public.complaint_notifications F
 
 
 --
--- TOC entry 7797 (class 3256 OID 26075)
+-- TOC entry 7798 (class 3256 OID 26075)
 -- Name: complaint_notifications complaint_notifications_service_role_all; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -25577,7 +25577,7 @@ ALTER TABLE public.cre_incentive_settings ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.dealer_settings ENABLE ROW LEVEL SECURITY;
 
 --
--- TOC entry 7850 (class 3256 OID 29013)
+-- TOC entry 7851 (class 3256 OID 29013)
 -- Name: dealer_settings dealer_settings_anon_read; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -25585,7 +25585,7 @@ CREATE POLICY dealer_settings_anon_read ON public.dealer_settings FOR SELECT TO 
 
 
 --
--- TOC entry 7833 (class 3256 OID 28882)
+-- TOC entry 7834 (class 3256 OID 28882)
 -- Name: dealer_settings dealer_settings_read; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -25593,7 +25593,7 @@ CREATE POLICY dealer_settings_read ON public.dealer_settings FOR SELECT TO authe
 
 
 --
--- TOC entry 7835 (class 3256 OID 28884)
+-- TOC entry 7836 (class 3256 OID 28884)
 -- Name: dealer_settings dealer_settings_update; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -25601,7 +25601,7 @@ CREATE POLICY dealer_settings_update ON public.dealer_settings FOR UPDATE TO aut
 
 
 --
--- TOC entry 7834 (class 3256 OID 28883)
+-- TOC entry 7835 (class 3256 OID 28883)
 -- Name: dealer_settings dealer_settings_write; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -25617,7 +25617,7 @@ CREATE POLICY dealer_settings_write ON public.dealer_settings FOR INSERT TO auth
 ALTER TABLE public.documents ENABLE ROW LEVEL SECURITY;
 
 --
--- TOC entry 7816 (class 3256 OID 21994)
+-- TOC entry 7817 (class 3256 OID 21994)
 -- Name: documents documents: own dealership insert; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -25628,7 +25628,7 @@ CREATE POLICY "documents: own dealership insert" ON public.documents FOR INSERT 
 
 
 --
--- TOC entry 7815 (class 3256 OID 21992)
+-- TOC entry 7816 (class 3256 OID 21992)
 -- Name: documents documents: own dealership select; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -25655,7 +25655,7 @@ ALTER TABLE public.email_logs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.employee_master ENABLE ROW LEVEL SECURITY;
 
 --
--- TOC entry 7664 (class 3256 OID 20585)
+-- TOC entry 7665 (class 3256 OID 20585)
 -- Name: employee_master employee_master_delete_admin; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -25663,7 +25663,7 @@ CREATE POLICY employee_master_delete_admin ON public.employee_master FOR DELETE 
 
 
 --
--- TOC entry 7662 (class 3256 OID 20583)
+-- TOC entry 7663 (class 3256 OID 20583)
 -- Name: employee_master employee_master_insert_admin; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -25671,7 +25671,7 @@ CREATE POLICY employee_master_insert_admin ON public.employee_master FOR INSERT 
 
 
 --
--- TOC entry 7661 (class 3256 OID 20582)
+-- TOC entry 7662 (class 3256 OID 20582)
 -- Name: employee_master employee_master_select_all; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -25679,7 +25679,7 @@ CREATE POLICY employee_master_select_all ON public.employee_master FOR SELECT TO
 
 
 --
--- TOC entry 7663 (class 3256 OID 20584)
+-- TOC entry 7664 (class 3256 OID 20584)
 -- Name: employee_master employee_master_update_admin; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -25695,7 +25695,7 @@ CREATE POLICY employee_master_update_admin ON public.employee_master FOR UPDATE 
 ALTER TABLE public.estimate_rows ENABLE ROW LEVEL SECURITY;
 
 --
--- TOC entry 7818 (class 3256 OID 21998)
+-- TOC entry 7819 (class 3256 OID 21998)
 -- Name: estimate_rows estimate_rows: own dealership insert; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -25706,7 +25706,7 @@ CREATE POLICY "estimate_rows: own dealership insert" ON public.estimate_rows FOR
 
 
 --
--- TOC entry 7817 (class 3256 OID 21996)
+-- TOC entry 7818 (class 3256 OID 21996)
 -- Name: estimate_rows estimate_rows: own dealership select; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -25717,7 +25717,7 @@ CREATE POLICY "estimate_rows: own dealership select" ON public.estimate_rows FOR
 
 
 --
--- TOC entry 7819 (class 3256 OID 22000)
+-- TOC entry 7820 (class 3256 OID 22000)
 -- Name: estimate_rows estimate_rows: own dealership update; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -25747,7 +25747,7 @@ ALTER TABLE public.import_employee_mapping_issues ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.import_metadata ENABLE ROW LEVEL SECURITY;
 
 --
--- TOC entry 7605 (class 3256 OID 19249)
+-- TOC entry 7606 (class 3256 OID 19249)
 -- Name: import_metadata import_metadata_read_rbac_v1; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -25755,7 +25755,7 @@ CREATE POLICY import_metadata_read_rbac_v1 ON public.import_metadata FOR SELECT 
 
 
 --
--- TOC entry 7606 (class 3256 OID 19250)
+-- TOC entry 7607 (class 3256 OID 19250)
 -- Name: import_metadata import_metadata_write_admin_v1; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -25771,7 +25771,7 @@ CREATE POLICY import_metadata_write_admin_v1 ON public.import_metadata TO authen
 ALTER TABLE public.income_role_scope ENABLE ROW LEVEL SECURITY;
 
 --
--- TOC entry 7848 (class 3256 OID 26269)
+-- TOC entry 7849 (class 3256 OID 26269)
 -- Name: income_role_scope income_role_scope_admin_delete; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -25779,7 +25779,7 @@ CREATE POLICY income_role_scope_admin_delete ON public.income_role_scope FOR DEL
 
 
 --
--- TOC entry 7846 (class 3256 OID 26267)
+-- TOC entry 7847 (class 3256 OID 26267)
 -- Name: income_role_scope income_role_scope_admin_insert; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -25787,7 +25787,7 @@ CREATE POLICY income_role_scope_admin_insert ON public.income_role_scope FOR INS
 
 
 --
--- TOC entry 7847 (class 3256 OID 26268)
+-- TOC entry 7848 (class 3256 OID 26268)
 -- Name: income_role_scope income_role_scope_admin_update; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -25795,7 +25795,7 @@ CREATE POLICY income_role_scope_admin_update ON public.income_role_scope FOR UPD
 
 
 --
--- TOC entry 7845 (class 3256 OID 26266)
+-- TOC entry 7846 (class 3256 OID 26266)
 -- Name: income_role_scope income_role_scope_select_all; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -25811,7 +25811,7 @@ CREATE POLICY income_role_scope_select_all ON public.income_role_scope FOR SELEC
 ALTER TABLE public.job_card_closed_data ENABLE ROW LEVEL SECURITY;
 
 --
--- TOC entry 7585 (class 3256 OID 21370)
+-- TOC entry 7586 (class 3256 OID 21370)
 -- Name: job_card_closed_data job_card_closed_data_delete_authenticated; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -25827,7 +25827,7 @@ CREATE POLICY job_card_closed_data_delete_authenticated ON public.job_card_close
 ALTER TABLE public.job_card_closed_data_duplicates_backup ENABLE ROW LEVEL SECURITY;
 
 --
--- TOC entry 7583 (class 3256 OID 21368)
+-- TOC entry 7584 (class 3256 OID 21368)
 -- Name: job_card_closed_data job_card_closed_data_insert_authenticated; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -25835,7 +25835,7 @@ CREATE POLICY job_card_closed_data_insert_authenticated ON public.job_card_close
 
 
 --
--- TOC entry 7582 (class 3256 OID 21367)
+-- TOC entry 7583 (class 3256 OID 21367)
 -- Name: job_card_closed_data job_card_closed_data_select_authenticated; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -25843,7 +25843,7 @@ CREATE POLICY job_card_closed_data_select_authenticated ON public.job_card_close
 
 
 --
--- TOC entry 7584 (class 3256 OID 21369)
+-- TOC entry 7585 (class 3256 OID 21369)
 -- Name: job_card_closed_data job_card_closed_data_update_authenticated; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -25859,7 +25859,7 @@ CREATE POLICY job_card_closed_data_update_authenticated ON public.job_card_close
 ALTER TABLE public.job_card_support_assignments ENABLE ROW LEVEL SECURITY;
 
 --
--- TOC entry 7678 (class 3256 OID 22423)
+-- TOC entry 7679 (class 3256 OID 22423)
 -- Name: job_card_support_assignments job_card_support_assignments_delete_rbac; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -25867,7 +25867,7 @@ CREATE POLICY job_card_support_assignments_delete_rbac ON public.job_card_suppor
 
 
 --
--- TOC entry 7676 (class 3256 OID 22421)
+-- TOC entry 7677 (class 3256 OID 22421)
 -- Name: job_card_support_assignments job_card_support_assignments_insert_rbac; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -25875,7 +25875,7 @@ CREATE POLICY job_card_support_assignments_insert_rbac ON public.job_card_suppor
 
 
 --
--- TOC entry 7675 (class 3256 OID 22420)
+-- TOC entry 7676 (class 3256 OID 22420)
 -- Name: job_card_support_assignments job_card_support_assignments_select_rbac; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -25883,7 +25883,7 @@ CREATE POLICY job_card_support_assignments_select_rbac ON public.job_card_suppor
 
 
 --
--- TOC entry 7677 (class 3256 OID 22422)
+-- TOC entry 7678 (class 3256 OID 22422)
 -- Name: job_card_support_assignments job_card_support_assignments_update_rbac; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -25899,7 +25899,7 @@ CREATE POLICY job_card_support_assignments_update_rbac ON public.job_card_suppor
 ALTER TABLE public.job_cards ENABLE ROW LEVEL SECURITY;
 
 --
--- TOC entry 7813 (class 3256 OID 21989)
+-- TOC entry 7814 (class 3256 OID 21989)
 -- Name: job_cards job_cards: own dealership insert; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -25909,7 +25909,7 @@ CREATE POLICY "job_cards: own dealership insert" ON public.job_cards FOR INSERT 
 
 
 --
--- TOC entry 7812 (class 3256 OID 21988)
+-- TOC entry 7813 (class 3256 OID 21988)
 -- Name: job_cards job_cards: own dealership select; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -25919,7 +25919,7 @@ CREATE POLICY "job_cards: own dealership select" ON public.job_cards FOR SELECT 
 
 
 --
--- TOC entry 7814 (class 3256 OID 21990)
+-- TOC entry 7815 (class 3256 OID 21990)
 -- Name: job_cards job_cards: own dealership update; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -25939,7 +25939,7 @@ CREATE POLICY "job_cards: own dealership update" ON public.job_cards FOR UPDATE 
 ALTER TABLE public.modules ENABLE ROW LEVEL SECURITY;
 
 --
--- TOC entry 7771 (class 3256 OID 18608)
+-- TOC entry 7772 (class 3256 OID 18608)
 -- Name: modules modules_admin_write; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -25947,7 +25947,7 @@ CREATE POLICY modules_admin_write ON public.modules TO authenticated USING (publ
 
 
 --
--- TOC entry 7772 (class 3256 OID 18607)
+-- TOC entry 7773 (class 3256 OID 18607)
 -- Name: modules modules_read_all; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -25963,7 +25963,7 @@ CREATE POLICY modules_read_all ON public.modules FOR SELECT TO authenticated USI
 ALTER TABLE public.nav_groups ENABLE ROW LEVEL SECURITY;
 
 --
--- TOC entry 7654 (class 3256 OID 23595)
+-- TOC entry 7655 (class 3256 OID 23595)
 -- Name: nav_groups nav_groups_read_all; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -25971,7 +25971,7 @@ CREATE POLICY nav_groups_read_all ON public.nav_groups FOR SELECT USING (true);
 
 
 --
--- TOC entry 7655 (class 3256 OID 23596)
+-- TOC entry 7656 (class 3256 OID 23596)
 -- Name: nav_groups nav_groups_write_service; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -25995,7 +25995,7 @@ ALTER TABLE public.open_job_cards ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.open_job_cards_import_staging ENABLE ROW LEVEL SECURITY;
 
 --
--- TOC entry 7766 (class 3256 OID 21828)
+-- TOC entry 7767 (class 3256 OID 21828)
 -- Name: cancel_job_card p0_auth_delete; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -26003,7 +26003,7 @@ CREATE POLICY p0_auth_delete ON public.cancel_job_card FOR DELETE TO authenticat
 
 
 --
--- TOC entry 7767 (class 3256 OID 21829)
+-- TOC entry 7768 (class 3256 OID 21829)
 -- Name: closed_but_not_invoiced p0_auth_delete; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -26011,7 +26011,7 @@ CREATE POLICY p0_auth_delete ON public.closed_but_not_invoiced FOR DELETE TO aut
 
 
 --
--- TOC entry 7763 (class 3256 OID 21825)
+-- TOC entry 7764 (class 3256 OID 21825)
 -- Name: import_employee_mapping_issues p0_auth_delete; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -26019,7 +26019,7 @@ CREATE POLICY p0_auth_delete ON public.import_employee_mapping_issues FOR DELETE
 
 
 --
--- TOC entry 7769 (class 3256 OID 21831)
+-- TOC entry 7770 (class 3256 OID 21831)
 -- Name: job_card_closed_data_duplicates_backup p0_auth_delete; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -26027,7 +26027,7 @@ CREATE POLICY p0_auth_delete ON public.job_card_closed_data_duplicates_backup FO
 
 
 --
--- TOC entry 7768 (class 3256 OID 21830)
+-- TOC entry 7769 (class 3256 OID 21830)
 -- Name: open_job_cards p0_auth_delete; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -26035,7 +26035,7 @@ CREATE POLICY p0_auth_delete ON public.open_job_cards FOR DELETE TO authenticate
 
 
 --
--- TOC entry 7765 (class 3256 OID 21827)
+-- TOC entry 7766 (class 3256 OID 21827)
 -- Name: open_job_cards_import_staging p0_auth_delete; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -26043,7 +26043,7 @@ CREATE POLICY p0_auth_delete ON public.open_job_cards_import_staging FOR DELETE 
 
 
 --
--- TOC entry 7764 (class 3256 OID 21826)
+-- TOC entry 7765 (class 3256 OID 21826)
 -- Name: pending_drive_uploads p0_auth_delete; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -26051,7 +26051,7 @@ CREATE POLICY p0_auth_delete ON public.pending_drive_uploads FOR DELETE TO authe
 
 
 --
--- TOC entry 7761 (class 3256 OID 21823)
+-- TOC entry 7762 (class 3256 OID 21823)
 -- Name: service_invoice_data p0_auth_delete; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -26059,7 +26059,7 @@ CREATE POLICY p0_auth_delete ON public.service_invoice_data FOR DELETE TO authen
 
 
 --
--- TOC entry 7762 (class 3256 OID 21824)
+-- TOC entry 7763 (class 3256 OID 21824)
 -- Name: service_invoice_order_data p0_auth_delete; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -26067,7 +26067,7 @@ CREATE POLICY p0_auth_delete ON public.service_invoice_order_data FOR DELETE TO 
 
 
 --
--- TOC entry 7760 (class 3256 OID 21822)
+-- TOC entry 7761 (class 3256 OID 21822)
 -- Name: service_jc_parts_data p0_auth_delete; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -26075,7 +26075,7 @@ CREATE POLICY p0_auth_delete ON public.service_jc_parts_data FOR DELETE TO authe
 
 
 --
--- TOC entry 7759 (class 3256 OID 21821)
+-- TOC entry 7760 (class 3256 OID 21821)
 -- Name: service_vas_jc_data p0_auth_delete; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -26083,7 +26083,7 @@ CREATE POLICY p0_auth_delete ON public.service_vas_jc_data FOR DELETE TO authent
 
 
 --
--- TOC entry 7756 (class 3256 OID 21818)
+-- TOC entry 7757 (class 3256 OID 21818)
 -- Name: warranty_amc_data p0_auth_delete; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -26091,7 +26091,7 @@ CREATE POLICY p0_auth_delete ON public.warranty_amc_data FOR DELETE TO authentic
 
 
 --
--- TOC entry 7752 (class 3256 OID 21814)
+-- TOC entry 7753 (class 3256 OID 21814)
 -- Name: warranty_claim_settlement_report_data p0_auth_delete; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -26099,7 +26099,7 @@ CREATE POLICY p0_auth_delete ON public.warranty_claim_settlement_report_data FOR
 
 
 --
--- TOC entry 7757 (class 3256 OID 21819)
+-- TOC entry 7758 (class 3256 OID 21819)
 -- Name: warranty_fsb_data p0_auth_delete; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -26107,7 +26107,7 @@ CREATE POLICY p0_auth_delete ON public.warranty_fsb_data FOR DELETE TO authentic
 
 
 --
--- TOC entry 7755 (class 3256 OID 21817)
+-- TOC entry 7756 (class 3256 OID 21817)
 -- Name: warranty_goodwill_data p0_auth_delete; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -26115,7 +26115,7 @@ CREATE POLICY p0_auth_delete ON public.warranty_goodwill_data FOR DELETE TO auth
 
 
 --
--- TOC entry 7753 (class 3256 OID 21815)
+-- TOC entry 7754 (class 3256 OID 21815)
 -- Name: warranty_part_wc_data p0_auth_delete; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -26123,7 +26123,7 @@ CREATE POLICY p0_auth_delete ON public.warranty_part_wc_data FOR DELETE TO authe
 
 
 --
--- TOC entry 7754 (class 3256 OID 21816)
+-- TOC entry 7755 (class 3256 OID 21816)
 -- Name: warranty_updation_claim_data p0_auth_delete; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -26131,7 +26131,7 @@ CREATE POLICY p0_auth_delete ON public.warranty_updation_claim_data FOR DELETE T
 
 
 --
--- TOC entry 7758 (class 3256 OID 21820)
+-- TOC entry 7759 (class 3256 OID 21820)
 -- Name: warranty_wc_data p0_auth_delete; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -26139,7 +26139,7 @@ CREATE POLICY p0_auth_delete ON public.warranty_wc_data FOR DELETE TO authentica
 
 
 --
--- TOC entry 7729 (class 3256 OID 21786)
+-- TOC entry 7730 (class 3256 OID 21786)
 -- Name: cancel_job_card p0_auth_insert; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -26147,7 +26147,7 @@ CREATE POLICY p0_auth_insert ON public.cancel_job_card FOR INSERT TO authenticat
 
 
 --
--- TOC entry 7733 (class 3256 OID 21791)
+-- TOC entry 7734 (class 3256 OID 21791)
 -- Name: closed_but_not_invoiced p0_auth_insert; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -26155,7 +26155,7 @@ CREATE POLICY p0_auth_insert ON public.closed_but_not_invoiced FOR INSERT TO aut
 
 
 --
--- TOC entry 7682 (class 3256 OID 21741)
+-- TOC entry 7683 (class 3256 OID 21741)
 -- Name: import_employee_mapping_issues p0_auth_insert; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -26163,7 +26163,7 @@ CREATE POLICY p0_auth_insert ON public.import_employee_mapping_issues FOR INSERT
 
 
 --
--- TOC entry 7750 (class 3256 OID 21811)
+-- TOC entry 7751 (class 3256 OID 21811)
 -- Name: job_card_closed_data_duplicates_backup p0_auth_insert; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -26171,7 +26171,7 @@ CREATE POLICY p0_auth_insert ON public.job_card_closed_data_duplicates_backup FO
 
 
 --
--- TOC entry 7737 (class 3256 OID 21796)
+-- TOC entry 7738 (class 3256 OID 21796)
 -- Name: open_job_cards p0_auth_insert; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -26179,7 +26179,7 @@ CREATE POLICY p0_auth_insert ON public.open_job_cards FOR INSERT TO authenticate
 
 
 --
--- TOC entry 7746 (class 3256 OID 21806)
+-- TOC entry 7747 (class 3256 OID 21806)
 -- Name: open_job_cards_import_staging p0_auth_insert; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -26187,7 +26187,7 @@ CREATE POLICY p0_auth_insert ON public.open_job_cards_import_staging FOR INSERT 
 
 
 --
--- TOC entry 7741 (class 3256 OID 21801)
+-- TOC entry 7742 (class 3256 OID 21801)
 -- Name: pending_drive_uploads p0_auth_insert; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -26195,7 +26195,7 @@ CREATE POLICY p0_auth_insert ON public.pending_drive_uploads FOR INSERT TO authe
 
 
 --
--- TOC entry 7672 (class 3256 OID 21736)
+-- TOC entry 7673 (class 3256 OID 21736)
 -- Name: service_invoice_data p0_auth_insert; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -26203,7 +26203,7 @@ CREATE POLICY p0_auth_insert ON public.service_invoice_data FOR INSERT TO authen
 
 
 --
--- TOC entry 7701 (class 3256 OID 21746)
+-- TOC entry 7702 (class 3256 OID 21746)
 -- Name: service_invoice_order_data p0_auth_insert; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -26211,7 +26211,7 @@ CREATE POLICY p0_auth_insert ON public.service_invoice_order_data FOR INSERT TO 
 
 
 --
--- TOC entry 7626 (class 3256 OID 21731)
+-- TOC entry 7627 (class 3256 OID 21731)
 -- Name: service_jc_parts_data p0_auth_insert; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -26219,7 +26219,7 @@ CREATE POLICY p0_auth_insert ON public.service_jc_parts_data FOR INSERT TO authe
 
 
 --
--- TOC entry 7621 (class 3256 OID 21726)
+-- TOC entry 7622 (class 3256 OID 21726)
 -- Name: service_vas_jc_data p0_auth_insert; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -26227,7 +26227,7 @@ CREATE POLICY p0_auth_insert ON public.service_vas_jc_data FOR INSERT TO authent
 
 
 --
--- TOC entry 7718 (class 3256 OID 21771)
+-- TOC entry 7719 (class 3256 OID 21771)
 -- Name: warranty_amc_data p0_auth_insert; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -26243,7 +26243,7 @@ CREATE POLICY p0_auth_insert ON public.warranty_claim_settlement_report_data FOR
 
 
 --
--- TOC entry 7722 (class 3256 OID 21776)
+-- TOC entry 7723 (class 3256 OID 21776)
 -- Name: warranty_fsb_data p0_auth_insert; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -26251,7 +26251,7 @@ CREATE POLICY p0_auth_insert ON public.warranty_fsb_data FOR INSERT TO authentic
 
 
 --
--- TOC entry 7714 (class 3256 OID 21766)
+-- TOC entry 7715 (class 3256 OID 21766)
 -- Name: warranty_goodwill_data p0_auth_insert; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -26259,7 +26259,7 @@ CREATE POLICY p0_auth_insert ON public.warranty_goodwill_data FOR INSERT TO auth
 
 
 --
--- TOC entry 7586 (class 3256 OID 21756)
+-- TOC entry 7587 (class 3256 OID 21756)
 -- Name: warranty_part_wc_data p0_auth_insert; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -26267,7 +26267,7 @@ CREATE POLICY p0_auth_insert ON public.warranty_part_wc_data FOR INSERT TO authe
 
 
 --
--- TOC entry 7602 (class 3256 OID 21761)
+-- TOC entry 7603 (class 3256 OID 21761)
 -- Name: warranty_updation_claim_data p0_auth_insert; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -26275,7 +26275,7 @@ CREATE POLICY p0_auth_insert ON public.warranty_updation_claim_data FOR INSERT T
 
 
 --
--- TOC entry 7726 (class 3256 OID 21781)
+-- TOC entry 7727 (class 3256 OID 21781)
 -- Name: warranty_wc_data p0_auth_insert; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -26283,7 +26283,7 @@ CREATE POLICY p0_auth_insert ON public.warranty_wc_data FOR INSERT TO authentica
 
 
 --
--- TOC entry 7603 (class 3256 OID 21785)
+-- TOC entry 7604 (class 3256 OID 21785)
 -- Name: cancel_job_card p0_auth_select; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -26291,7 +26291,7 @@ CREATE POLICY p0_auth_select ON public.cancel_job_card FOR SELECT TO authenticat
 
 
 --
--- TOC entry 7732 (class 3256 OID 21790)
+-- TOC entry 7733 (class 3256 OID 21790)
 -- Name: closed_but_not_invoiced p0_auth_select; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -26299,7 +26299,7 @@ CREATE POLICY p0_auth_select ON public.closed_but_not_invoiced FOR SELECT TO aut
 
 
 --
--- TOC entry 7681 (class 3256 OID 21740)
+-- TOC entry 7682 (class 3256 OID 21740)
 -- Name: import_employee_mapping_issues p0_auth_select; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -26307,7 +26307,7 @@ CREATE POLICY p0_auth_select ON public.import_employee_mapping_issues FOR SELECT
 
 
 --
--- TOC entry 7749 (class 3256 OID 21810)
+-- TOC entry 7750 (class 3256 OID 21810)
 -- Name: job_card_closed_data_duplicates_backup p0_auth_select; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -26315,7 +26315,7 @@ CREATE POLICY p0_auth_select ON public.job_card_closed_data_duplicates_backup FO
 
 
 --
--- TOC entry 7736 (class 3256 OID 21795)
+-- TOC entry 7737 (class 3256 OID 21795)
 -- Name: open_job_cards p0_auth_select; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -26323,7 +26323,7 @@ CREATE POLICY p0_auth_select ON public.open_job_cards FOR SELECT TO authenticate
 
 
 --
--- TOC entry 7745 (class 3256 OID 21805)
+-- TOC entry 7746 (class 3256 OID 21805)
 -- Name: open_job_cards_import_staging p0_auth_select; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -26331,7 +26331,7 @@ CREATE POLICY p0_auth_select ON public.open_job_cards_import_staging FOR SELECT 
 
 
 --
--- TOC entry 7740 (class 3256 OID 21800)
+-- TOC entry 7741 (class 3256 OID 21800)
 -- Name: pending_drive_uploads p0_auth_select; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -26339,7 +26339,7 @@ CREATE POLICY p0_auth_select ON public.pending_drive_uploads FOR SELECT TO authe
 
 
 --
--- TOC entry 7668 (class 3256 OID 21735)
+-- TOC entry 7669 (class 3256 OID 21735)
 -- Name: service_invoice_data p0_auth_select; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -26347,7 +26347,7 @@ CREATE POLICY p0_auth_select ON public.service_invoice_data FOR SELECT TO authen
 
 
 --
--- TOC entry 7700 (class 3256 OID 21745)
+-- TOC entry 7701 (class 3256 OID 21745)
 -- Name: service_invoice_order_data p0_auth_select; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -26355,7 +26355,7 @@ CREATE POLICY p0_auth_select ON public.service_invoice_order_data FOR SELECT TO 
 
 
 --
--- TOC entry 7625 (class 3256 OID 21730)
+-- TOC entry 7626 (class 3256 OID 21730)
 -- Name: service_jc_parts_data p0_auth_select; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -26363,7 +26363,7 @@ CREATE POLICY p0_auth_select ON public.service_jc_parts_data FOR SELECT TO authe
 
 
 --
--- TOC entry 7620 (class 3256 OID 21725)
+-- TOC entry 7621 (class 3256 OID 21725)
 -- Name: service_vas_jc_data p0_auth_select; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -26371,7 +26371,7 @@ CREATE POLICY p0_auth_select ON public.service_vas_jc_data FOR SELECT TO authent
 
 
 --
--- TOC entry 7717 (class 3256 OID 21770)
+-- TOC entry 7718 (class 3256 OID 21770)
 -- Name: warranty_amc_data p0_auth_select; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -26387,7 +26387,7 @@ CREATE POLICY p0_auth_select ON public.warranty_claim_settlement_report_data FOR
 
 
 --
--- TOC entry 7721 (class 3256 OID 21775)
+-- TOC entry 7722 (class 3256 OID 21775)
 -- Name: warranty_fsb_data p0_auth_select; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -26395,7 +26395,7 @@ CREATE POLICY p0_auth_select ON public.warranty_fsb_data FOR SELECT TO authentic
 
 
 --
--- TOC entry 7713 (class 3256 OID 21765)
+-- TOC entry 7714 (class 3256 OID 21765)
 -- Name: warranty_goodwill_data p0_auth_select; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -26411,7 +26411,7 @@ CREATE POLICY p0_auth_select ON public.warranty_part_wc_data FOR SELECT TO authe
 
 
 --
--- TOC entry 7601 (class 3256 OID 21760)
+-- TOC entry 7602 (class 3256 OID 21760)
 -- Name: warranty_updation_claim_data p0_auth_select; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -26419,7 +26419,7 @@ CREATE POLICY p0_auth_select ON public.warranty_updation_claim_data FOR SELECT T
 
 
 --
--- TOC entry 7725 (class 3256 OID 21780)
+-- TOC entry 7726 (class 3256 OID 21780)
 -- Name: warranty_wc_data p0_auth_select; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -26427,7 +26427,7 @@ CREATE POLICY p0_auth_select ON public.warranty_wc_data FOR SELECT TO authentica
 
 
 --
--- TOC entry 7730 (class 3256 OID 21787)
+-- TOC entry 7731 (class 3256 OID 21787)
 -- Name: cancel_job_card p0_auth_update; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -26435,7 +26435,7 @@ CREATE POLICY p0_auth_update ON public.cancel_job_card FOR UPDATE TO authenticat
 
 
 --
--- TOC entry 7734 (class 3256 OID 21792)
+-- TOC entry 7735 (class 3256 OID 21792)
 -- Name: closed_but_not_invoiced p0_auth_update; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -26443,7 +26443,7 @@ CREATE POLICY p0_auth_update ON public.closed_but_not_invoiced FOR UPDATE TO aut
 
 
 --
--- TOC entry 7683 (class 3256 OID 21742)
+-- TOC entry 7684 (class 3256 OID 21742)
 -- Name: import_employee_mapping_issues p0_auth_update; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -26451,7 +26451,7 @@ CREATE POLICY p0_auth_update ON public.import_employee_mapping_issues FOR UPDATE
 
 
 --
--- TOC entry 7751 (class 3256 OID 21812)
+-- TOC entry 7752 (class 3256 OID 21812)
 -- Name: job_card_closed_data_duplicates_backup p0_auth_update; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -26459,7 +26459,7 @@ CREATE POLICY p0_auth_update ON public.job_card_closed_data_duplicates_backup FO
 
 
 --
--- TOC entry 7738 (class 3256 OID 21797)
+-- TOC entry 7739 (class 3256 OID 21797)
 -- Name: open_job_cards p0_auth_update; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -26467,7 +26467,7 @@ CREATE POLICY p0_auth_update ON public.open_job_cards FOR UPDATE TO authenticate
 
 
 --
--- TOC entry 7747 (class 3256 OID 21807)
+-- TOC entry 7748 (class 3256 OID 21807)
 -- Name: open_job_cards_import_staging p0_auth_update; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -26475,7 +26475,7 @@ CREATE POLICY p0_auth_update ON public.open_job_cards_import_staging FOR UPDATE 
 
 
 --
--- TOC entry 7742 (class 3256 OID 21802)
+-- TOC entry 7743 (class 3256 OID 21802)
 -- Name: pending_drive_uploads p0_auth_update; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -26483,7 +26483,7 @@ CREATE POLICY p0_auth_update ON public.pending_drive_uploads FOR UPDATE TO authe
 
 
 --
--- TOC entry 7673 (class 3256 OID 21737)
+-- TOC entry 7674 (class 3256 OID 21737)
 -- Name: service_invoice_data p0_auth_update; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -26499,7 +26499,7 @@ CREATE POLICY p0_auth_update ON public.service_invoice_order_data FOR UPDATE TO 
 
 
 --
--- TOC entry 7627 (class 3256 OID 21732)
+-- TOC entry 7628 (class 3256 OID 21732)
 -- Name: service_jc_parts_data p0_auth_update; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -26507,7 +26507,7 @@ CREATE POLICY p0_auth_update ON public.service_jc_parts_data FOR UPDATE TO authe
 
 
 --
--- TOC entry 7622 (class 3256 OID 21727)
+-- TOC entry 7623 (class 3256 OID 21727)
 -- Name: service_vas_jc_data p0_auth_update; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -26515,7 +26515,7 @@ CREATE POLICY p0_auth_update ON public.service_vas_jc_data FOR UPDATE TO authent
 
 
 --
--- TOC entry 7719 (class 3256 OID 21772)
+-- TOC entry 7720 (class 3256 OID 21772)
 -- Name: warranty_amc_data p0_auth_update; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -26531,7 +26531,7 @@ CREATE POLICY p0_auth_update ON public.warranty_claim_settlement_report_data FOR
 
 
 --
--- TOC entry 7723 (class 3256 OID 21777)
+-- TOC entry 7724 (class 3256 OID 21777)
 -- Name: warranty_fsb_data p0_auth_update; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -26539,7 +26539,7 @@ CREATE POLICY p0_auth_update ON public.warranty_fsb_data FOR UPDATE TO authentic
 
 
 --
--- TOC entry 7715 (class 3256 OID 21767)
+-- TOC entry 7716 (class 3256 OID 21767)
 -- Name: warranty_goodwill_data p0_auth_update; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -26547,7 +26547,7 @@ CREATE POLICY p0_auth_update ON public.warranty_goodwill_data FOR UPDATE TO auth
 
 
 --
--- TOC entry 7587 (class 3256 OID 21757)
+-- TOC entry 7588 (class 3256 OID 21757)
 -- Name: warranty_part_wc_data p0_auth_update; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -26555,7 +26555,7 @@ CREATE POLICY p0_auth_update ON public.warranty_part_wc_data FOR UPDATE TO authe
 
 
 --
--- TOC entry 7710 (class 3256 OID 21762)
+-- TOC entry 7711 (class 3256 OID 21762)
 -- Name: warranty_updation_claim_data p0_auth_update; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -26563,7 +26563,7 @@ CREATE POLICY p0_auth_update ON public.warranty_updation_claim_data FOR UPDATE T
 
 
 --
--- TOC entry 7727 (class 3256 OID 21782)
+-- TOC entry 7728 (class 3256 OID 21782)
 -- Name: warranty_wc_data p0_auth_update; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -26579,7 +26579,7 @@ CREATE POLICY p0_auth_update ON public.warranty_wc_data FOR UPDATE TO authentica
 ALTER TABLE public.panel_photos ENABLE ROW LEVEL SECURITY;
 
 --
--- TOC entry 7821 (class 3256 OID 22005)
+-- TOC entry 7822 (class 3256 OID 22005)
 -- Name: panel_photos panel_photos: own dealership insert; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -26590,7 +26590,7 @@ CREATE POLICY "panel_photos: own dealership insert" ON public.panel_photos FOR I
 
 
 --
--- TOC entry 7820 (class 3256 OID 22003)
+-- TOC entry 7821 (class 3256 OID 22003)
 -- Name: panel_photos panel_photos: own dealership select; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -26609,7 +26609,7 @@ CREATE POLICY "panel_photos: own dealership select" ON public.panel_photos FOR S
 ALTER TABLE public.panels ENABLE ROW LEVEL SECURITY;
 
 --
--- TOC entry 7825 (class 3256 OID 22014)
+-- TOC entry 7826 (class 3256 OID 22014)
 -- Name: panels panels: own dealership delete; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -26620,7 +26620,7 @@ CREATE POLICY "panels: own dealership delete" ON public.panels FOR DELETE TO aut
 
 
 --
--- TOC entry 7823 (class 3256 OID 22009)
+-- TOC entry 7824 (class 3256 OID 22009)
 -- Name: panels panels: own dealership insert; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -26631,7 +26631,7 @@ CREATE POLICY "panels: own dealership insert" ON public.panels FOR INSERT TO aut
 
 
 --
--- TOC entry 7822 (class 3256 OID 22007)
+-- TOC entry 7823 (class 3256 OID 22007)
 -- Name: panels panels: own dealership select; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -26642,7 +26642,7 @@ CREATE POLICY "panels: own dealership select" ON public.panels FOR SELECT TO aut
 
 
 --
--- TOC entry 7824 (class 3256 OID 22011)
+-- TOC entry 7825 (class 3256 OID 22011)
 -- Name: panels panels: own dealership update; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -26664,7 +26664,7 @@ CREATE POLICY "panels: own dealership update" ON public.panels FOR UPDATE TO aut
 ALTER TABLE public.part_master ENABLE ROW LEVEL SECURITY;
 
 --
--- TOC entry 7607 (class 3256 OID 19251)
+-- TOC entry 7608 (class 3256 OID 19251)
 -- Name: part_master part_master_read_rbac_v1; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -26672,7 +26672,7 @@ CREATE POLICY part_master_read_rbac_v1 ON public.part_master FOR SELECT TO authe
 
 
 --
--- TOC entry 7608 (class 3256 OID 19252)
+-- TOC entry 7609 (class 3256 OID 19252)
 -- Name: part_master part_master_write_admin_v1; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -26688,7 +26688,7 @@ CREATE POLICY part_master_write_admin_v1 ON public.part_master TO authenticated 
 ALTER TABLE public.parts_requests ENABLE ROW LEVEL SECURITY;
 
 --
--- TOC entry 7794 (class 3256 OID 33658)
+-- TOC entry 7795 (class 3256 OID 33658)
 -- Name: parts_requests parts_spm_view_all; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -26704,7 +26704,7 @@ CREATE POLICY parts_spm_view_all ON public.parts_requests FOR SELECT USING (publ
 ALTER TABLE public.pending_drive_uploads ENABLE ROW LEVEL SECURITY;
 
 --
--- TOC entry 7774 (class 3256 OID 18610)
+-- TOC entry 7775 (class 3256 OID 18610)
 -- Name: user_module_permissions perms_admin_all; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -26712,7 +26712,7 @@ CREATE POLICY perms_admin_all ON public.user_module_permissions TO authenticated
 
 
 --
--- TOC entry 7775 (class 3256 OID 18609)
+-- TOC entry 7776 (class 3256 OID 18609)
 -- Name: user_module_permissions perms_self_read; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -26744,7 +26744,7 @@ ALTER TABLE public.post_service_feedback_remarks ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.psf_revenue_dms ENABLE ROW LEVEL SECURITY;
 
 --
--- TOC entry 7857 (class 3256 OID 33091)
+-- TOC entry 7858 (class 3256 OID 33091)
 -- Name: psf_revenue_dms psf_revenue_dms_delete_authenticated; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -26752,7 +26752,7 @@ CREATE POLICY psf_revenue_dms_delete_authenticated ON public.psf_revenue_dms FOR
 
 
 --
--- TOC entry 7855 (class 3256 OID 33089)
+-- TOC entry 7856 (class 3256 OID 33089)
 -- Name: psf_revenue_dms psf_revenue_dms_insert_authenticated; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -26760,7 +26760,7 @@ CREATE POLICY psf_revenue_dms_insert_authenticated ON public.psf_revenue_dms FOR
 
 
 --
--- TOC entry 7854 (class 3256 OID 33088)
+-- TOC entry 7855 (class 3256 OID 33088)
 -- Name: psf_revenue_dms psf_revenue_dms_select_authenticated; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -26768,7 +26768,7 @@ CREATE POLICY psf_revenue_dms_select_authenticated ON public.psf_revenue_dms FOR
 
 
 --
--- TOC entry 7856 (class 3256 OID 33090)
+-- TOC entry 7857 (class 3256 OID 33090)
 -- Name: psf_revenue_dms psf_revenue_dms_update_authenticated; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -26784,7 +26784,7 @@ CREATE POLICY psf_revenue_dms_update_authenticated ON public.psf_revenue_dms FOR
 ALTER TABLE public.rto_cache ENABLE ROW LEVEL SECURITY;
 
 --
--- TOC entry 7640 (class 3256 OID 19762)
+-- TOC entry 7641 (class 3256 OID 19762)
 -- Name: rto_cache rto_cache_insert; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -26792,7 +26792,7 @@ CREATE POLICY rto_cache_insert ON public.rto_cache FOR INSERT TO authenticated W
 
 
 --
--- TOC entry 7639 (class 3256 OID 19761)
+-- TOC entry 7640 (class 3256 OID 19761)
 -- Name: rto_cache rto_cache_select; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -26800,7 +26800,7 @@ CREATE POLICY rto_cache_select ON public.rto_cache FOR SELECT TO authenticated U
 
 
 --
--- TOC entry 7641 (class 3256 OID 19763)
+-- TOC entry 7642 (class 3256 OID 19763)
 -- Name: rto_cache rto_cache_update; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -26824,7 +26824,7 @@ ALTER TABLE public.sa_earnings_settings ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.service_booking_followups ENABLE ROW LEVEL SECURITY;
 
 --
--- TOC entry 7860 (class 3256 OID 23929)
+-- TOC entry 7861 (class 3256 OID 23929)
 -- Name: service_booking_followups service_booking_followups_all_auth; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -26840,7 +26840,7 @@ CREATE POLICY service_booking_followups_all_auth ON public.service_booking_follo
 ALTER TABLE public.service_bookings ENABLE ROW LEVEL SECURITY;
 
 --
--- TOC entry 7859 (class 3256 OID 23928)
+-- TOC entry 7860 (class 3256 OID 23928)
 -- Name: service_bookings service_bookings_all_auth; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -26888,7 +26888,7 @@ ALTER TABLE public.service_jc_parts_data ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.service_parts_consumption_data ENABLE ROW LEVEL SECURITY;
 
 --
--- TOC entry 7614 (class 3256 OID 19256)
+-- TOC entry 7615 (class 3256 OID 19256)
 -- Name: service_parts_consumption_data service_parts_consumption_delete_rbac_v1; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -26896,7 +26896,7 @@ CREATE POLICY service_parts_consumption_delete_rbac_v1 ON public.service_parts_c
 
 
 --
--- TOC entry 7610 (class 3256 OID 19254)
+-- TOC entry 7611 (class 3256 OID 19254)
 -- Name: service_parts_consumption_data service_parts_consumption_insert_rbac_v1; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -26904,7 +26904,7 @@ CREATE POLICY service_parts_consumption_insert_rbac_v1 ON public.service_parts_c
 
 
 --
--- TOC entry 7609 (class 3256 OID 19253)
+-- TOC entry 7610 (class 3256 OID 19253)
 -- Name: service_parts_consumption_data service_parts_consumption_select_rbac_v1; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -26912,7 +26912,7 @@ CREATE POLICY service_parts_consumption_select_rbac_v1 ON public.service_parts_c
 
 
 --
--- TOC entry 7613 (class 3256 OID 19255)
+-- TOC entry 7614 (class 3256 OID 19255)
 -- Name: service_parts_consumption_data service_parts_consumption_update_rbac_v1; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -26928,7 +26928,7 @@ CREATE POLICY service_parts_consumption_update_rbac_v1 ON public.service_parts_c
 ALTER TABLE public.service_parts_order_data ENABLE ROW LEVEL SECURITY;
 
 --
--- TOC entry 7809 (class 3256 OID 21980)
+-- TOC entry 7810 (class 3256 OID 21980)
 -- Name: service_parts_order_data service_parts_order_delete_rbac_v1; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -26936,7 +26936,7 @@ CREATE POLICY service_parts_order_delete_rbac_v1 ON public.service_parts_order_d
 
 
 --
--- TOC entry 7806 (class 3256 OID 21978)
+-- TOC entry 7807 (class 3256 OID 21978)
 -- Name: service_parts_order_data service_parts_order_insert_rbac_v1; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -26944,7 +26944,7 @@ CREATE POLICY service_parts_order_insert_rbac_v1 ON public.service_parts_order_d
 
 
 --
--- TOC entry 7805 (class 3256 OID 21977)
+-- TOC entry 7806 (class 3256 OID 21977)
 -- Name: service_parts_order_data service_parts_order_select_rbac_v1; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -26952,7 +26952,7 @@ CREATE POLICY service_parts_order_select_rbac_v1 ON public.service_parts_order_d
 
 
 --
--- TOC entry 7807 (class 3256 OID 21979)
+-- TOC entry 7808 (class 3256 OID 21979)
 -- Name: service_parts_order_data service_parts_order_update_rbac_v1; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -26960,7 +26960,7 @@ CREATE POLICY service_parts_order_update_rbac_v1 ON public.service_parts_order_d
 
 
 --
--- TOC entry 7630 (class 3256 OID 19264)
+-- TOC entry 7631 (class 3256 OID 19264)
 -- Name: service_parts_stock_snapshot_data service_parts_stock_delete_rbac_v1; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -26968,7 +26968,7 @@ CREATE POLICY service_parts_stock_delete_rbac_v1 ON public.service_parts_stock_s
 
 
 --
--- TOC entry 7628 (class 3256 OID 19262)
+-- TOC entry 7629 (class 3256 OID 19262)
 -- Name: service_parts_stock_snapshot_data service_parts_stock_insert_rbac_v1; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -26976,7 +26976,7 @@ CREATE POLICY service_parts_stock_insert_rbac_v1 ON public.service_parts_stock_s
 
 
 --
--- TOC entry 7611 (class 3256 OID 19261)
+-- TOC entry 7612 (class 3256 OID 19261)
 -- Name: service_parts_stock_snapshot_data service_parts_stock_select_rbac_v1; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -26992,7 +26992,7 @@ CREATE POLICY service_parts_stock_select_rbac_v1 ON public.service_parts_stock_s
 ALTER TABLE public.service_parts_stock_snapshot_data ENABLE ROW LEVEL SECURITY;
 
 --
--- TOC entry 7629 (class 3256 OID 19263)
+-- TOC entry 7630 (class 3256 OID 19263)
 -- Name: service_parts_stock_snapshot_data service_parts_stock_update_rbac_v1; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -27000,7 +27000,7 @@ CREATE POLICY service_parts_stock_update_rbac_v1 ON public.service_parts_stock_s
 
 
 --
--- TOC entry 7804 (class 3256 OID 21976)
+-- TOC entry 7805 (class 3256 OID 21976)
 -- Name: service_reception_entries service_reception_delete_rbac; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -27016,7 +27016,7 @@ CREATE POLICY service_reception_delete_rbac ON public.service_reception_entries 
 ALTER TABLE public.service_reception_entries ENABLE ROW LEVEL SECURITY;
 
 --
--- TOC entry 7799 (class 3256 OID 21974)
+-- TOC entry 7800 (class 3256 OID 21974)
 -- Name: service_reception_entries service_reception_insert_rbac; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -27024,7 +27024,7 @@ CREATE POLICY service_reception_insert_rbac ON public.service_reception_entries 
 
 
 --
--- TOC entry 7789 (class 3256 OID 28030)
+-- TOC entry 7790 (class 3256 OID 28030)
 -- Name: service_reception_entries service_reception_select_bodyshop_floor_incharge_v1; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -27063,7 +27063,7 @@ END) = 0) AND (EXISTS ( SELECT 1
 
 
 --
--- TOC entry 7788 (class 3256 OID 28029)
+-- TOC entry 7789 (class 3256 OID 28029)
 -- Name: service_reception_entries service_reception_select_floor_incharge; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -27071,7 +27071,7 @@ CREATE POLICY service_reception_select_floor_incharge ON public.service_receptio
 
 
 --
--- TOC entry 7798 (class 3256 OID 21973)
+-- TOC entry 7799 (class 3256 OID 21973)
 -- Name: service_reception_entries service_reception_select_rbac; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -27079,7 +27079,7 @@ CREATE POLICY service_reception_select_rbac ON public.service_reception_entries 
 
 
 --
--- TOC entry 7674 (class 3256 OID 20607)
+-- TOC entry 7675 (class 3256 OID 20607)
 -- Name: service_reception_entries service_reception_select_sa; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -27087,7 +27087,7 @@ CREATE POLICY service_reception_select_sa ON public.service_reception_entries FO
 
 
 --
--- TOC entry 7803 (class 3256 OID 21975)
+-- TOC entry 7804 (class 3256 OID 21975)
 -- Name: service_reception_entries service_reception_update_rbac; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -27165,7 +27165,7 @@ ALTER TABLE public.service_vas_jc_data ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.settings_bodyshop_surveyors ENABLE ROW LEVEL SECURITY;
 
 --
--- TOC entry 7842 (class 3256 OID 23534)
+-- TOC entry 7843 (class 3256 OID 23534)
 -- Name: settings_bodyshop_surveyors settings_bodyshop_surveyors_delete_v1; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -27173,7 +27173,7 @@ CREATE POLICY settings_bodyshop_surveyors_delete_v1 ON public.settings_bodyshop_
 
 
 --
--- TOC entry 7840 (class 3256 OID 23532)
+-- TOC entry 7841 (class 3256 OID 23532)
 -- Name: settings_bodyshop_surveyors settings_bodyshop_surveyors_insert_v1; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -27181,7 +27181,7 @@ CREATE POLICY settings_bodyshop_surveyors_insert_v1 ON public.settings_bodyshop_
 
 
 --
--- TOC entry 7707 (class 3256 OID 26978)
+-- TOC entry 7708 (class 3256 OID 26978)
 -- Name: settings_bodyshop_surveyors settings_bodyshop_surveyors_select_v10; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -27189,7 +27189,7 @@ CREATE POLICY settings_bodyshop_surveyors_select_v10 ON public.settings_bodyshop
 
 
 --
--- TOC entry 7841 (class 3256 OID 23533)
+-- TOC entry 7842 (class 3256 OID 23533)
 -- Name: settings_bodyshop_surveyors settings_bodyshop_surveyors_update_v1; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -27205,7 +27205,7 @@ CREATE POLICY settings_bodyshop_surveyors_update_v1 ON public.settings_bodyshop_
 ALTER TABLE public.settings_model_options ENABLE ROW LEVEL SECURITY;
 
 --
--- TOC entry 7782 (class 3256 OID 31781)
+-- TOC entry 7783 (class 3256 OID 31781)
 -- Name: settings_model_options settings_model_options_delete_v1; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -27213,7 +27213,7 @@ CREATE POLICY settings_model_options_delete_v1 ON public.settings_model_options 
 
 
 --
--- TOC entry 7780 (class 3256 OID 31779)
+-- TOC entry 7781 (class 3256 OID 31779)
 -- Name: settings_model_options settings_model_options_insert_v1; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -27221,7 +27221,7 @@ CREATE POLICY settings_model_options_insert_v1 ON public.settings_model_options 
 
 
 --
--- TOC entry 7779 (class 3256 OID 31778)
+-- TOC entry 7780 (class 3256 OID 31778)
 -- Name: settings_model_options settings_model_options_select_v1; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -27229,7 +27229,7 @@ CREATE POLICY settings_model_options_select_v1 ON public.settings_model_options 
 
 
 --
--- TOC entry 7781 (class 3256 OID 31780)
+-- TOC entry 7782 (class 3256 OID 31780)
 -- Name: settings_model_options settings_model_options_update_v1; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -27245,7 +27245,7 @@ CREATE POLICY settings_model_options_update_v1 ON public.settings_model_options 
 ALTER TABLE public.technician_assignments ENABLE ROW LEVEL SECURITY;
 
 --
--- TOC entry 7786 (class 3256 OID 21902)
+-- TOC entry 7787 (class 3256 OID 21902)
 -- Name: technician_assignments technician_assignments_delete_rbac; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -27253,7 +27253,7 @@ CREATE POLICY technician_assignments_delete_rbac ON public.technician_assignment
 
 
 --
--- TOC entry 7784 (class 3256 OID 21900)
+-- TOC entry 7785 (class 3256 OID 21900)
 -- Name: technician_assignments technician_assignments_insert_rbac; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -27261,7 +27261,7 @@ CREATE POLICY technician_assignments_insert_rbac ON public.technician_assignment
 
 
 --
--- TOC entry 7783 (class 3256 OID 21899)
+-- TOC entry 7784 (class 3256 OID 21899)
 -- Name: technician_assignments technician_assignments_select_rbac; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -27269,7 +27269,7 @@ CREATE POLICY technician_assignments_select_rbac ON public.technician_assignment
 
 
 --
--- TOC entry 7795 (class 3256 OID 21903)
+-- TOC entry 7796 (class 3256 OID 21903)
 -- Name: technician_assignments technician_assignments_select_sa_own_jobs; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -27283,7 +27283,7 @@ END));
 
 
 --
--- TOC entry 7796 (class 3256 OID 21904)
+-- TOC entry 7797 (class 3256 OID 21904)
 -- Name: technician_assignments technician_assignments_select_technician; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -27291,7 +27291,7 @@ CREATE POLICY technician_assignments_select_technician ON public.technician_assi
 
 
 --
--- TOC entry 7785 (class 3256 OID 21901)
+-- TOC entry 7786 (class 3256 OID 21901)
 -- Name: technician_assignments technician_assignments_update_rbac; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -27315,7 +27315,7 @@ CREATE POLICY telecall_assignments_insert ON public.telecall_assignments FOR INS
 
 
 --
--- TOC entry 7875 (class 3256 OID 28000)
+-- TOC entry 7876 (class 3256 OID 28000)
 -- Name: telecall_assignments telecall_assignments_read; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -27323,7 +27323,7 @@ CREATE POLICY telecall_assignments_read ON public.telecall_assignments FOR SELEC
 
 
 --
--- TOC entry 7669 (class 3256 OID 28002)
+-- TOC entry 7670 (class 3256 OID 28002)
 -- Name: telecall_assignments telecall_assignments_update; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -27339,7 +27339,7 @@ CREATE POLICY telecall_assignments_update ON public.telecall_assignments FOR UPD
 ALTER TABLE public.telecall_campaigns ENABLE ROW LEVEL SECURITY;
 
 --
--- TOC entry 7849 (class 3256 OID 27998)
+-- TOC entry 7850 (class 3256 OID 27998)
 -- Name: telecall_campaigns telecall_campaigns_read; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -27347,7 +27347,7 @@ CREATE POLICY telecall_campaigns_read ON public.telecall_campaigns FOR SELECT US
 
 
 --
--- TOC entry 7851 (class 3256 OID 27999)
+-- TOC entry 7852 (class 3256 OID 27999)
 -- Name: telecall_campaigns telecall_campaigns_write; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -27355,7 +27355,7 @@ CREATE POLICY telecall_campaigns_write ON public.telecall_campaigns USING (true)
 
 
 --
--- TOC entry 7588 (class 3256 OID 22245)
+-- TOC entry 7589 (class 3256 OID 22245)
 -- Name: complaint_tickets user_delete_own_dealer_complaints; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -27371,7 +27371,7 @@ CREATE POLICY user_delete_own_dealer_complaints ON public.complaint_tickets FOR 
 ALTER TABLE public.user_employee_links ENABLE ROW LEVEL SECURITY;
 
 --
--- TOC entry 7597 (class 3256 OID 21721)
+-- TOC entry 7598 (class 3256 OID 21721)
 -- Name: user_employee_links user_employee_links_delete_admin; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -27379,7 +27379,7 @@ CREATE POLICY user_employee_links_delete_admin ON public.user_employee_links FOR
 
 
 --
--- TOC entry 7595 (class 3256 OID 21719)
+-- TOC entry 7596 (class 3256 OID 21719)
 -- Name: user_employee_links user_employee_links_insert_admin; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -27387,7 +27387,7 @@ CREATE POLICY user_employee_links_insert_admin ON public.user_employee_links FOR
 
 
 --
--- TOC entry 7594 (class 3256 OID 21718)
+-- TOC entry 7595 (class 3256 OID 21718)
 -- Name: user_employee_links user_employee_links_select_scope; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -27395,7 +27395,7 @@ CREATE POLICY user_employee_links_select_scope ON public.user_employee_links FOR
 
 
 --
--- TOC entry 7596 (class 3256 OID 21720)
+-- TOC entry 7597 (class 3256 OID 21720)
 -- Name: user_employee_links user_employee_links_update_admin; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -27403,7 +27403,7 @@ CREATE POLICY user_employee_links_update_admin ON public.user_employee_links FOR
 
 
 --
--- TOC entry 7644 (class 3256 OID 22255)
+-- TOC entry 7645 (class 3256 OID 22255)
 -- Name: complaint_attachments user_insert_complaint_attachments; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -27411,7 +27411,7 @@ CREATE POLICY user_insert_complaint_attachments ON public.complaint_attachments 
 
 
 --
--- TOC entry 7615 (class 3256 OID 22250)
+-- TOC entry 7616 (class 3256 OID 22250)
 -- Name: complaint_messages user_insert_complaint_messages; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -27419,7 +27419,7 @@ CREATE POLICY user_insert_complaint_messages ON public.complaint_messages FOR IN
 
 
 --
--- TOC entry 7581 (class 3256 OID 22244)
+-- TOC entry 7582 (class 3256 OID 22244)
 -- Name: complaint_tickets user_modify_own_dealer_complaints; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -27435,7 +27435,7 @@ CREATE POLICY user_modify_own_dealer_complaints ON public.complaint_tickets FOR 
 ALTER TABLE public.user_module_permissions ENABLE ROW LEVEL SECURITY;
 
 --
--- TOC entry 7617 (class 3256 OID 22252)
+-- TOC entry 7618 (class 3256 OID 22252)
 -- Name: complaint_activity user_view_own_dealer_complaint_activity; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -27443,7 +27443,7 @@ CREATE POLICY user_view_own_dealer_complaint_activity ON public.complaint_activi
 
 
 --
--- TOC entry 7643 (class 3256 OID 22254)
+-- TOC entry 7644 (class 3256 OID 22254)
 -- Name: complaint_attachments user_view_own_dealer_complaint_attachments; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -27451,7 +27451,7 @@ CREATE POLICY user_view_own_dealer_complaint_attachments ON public.complaint_att
 
 
 --
--- TOC entry 7590 (class 3256 OID 22247)
+-- TOC entry 7591 (class 3256 OID 22247)
 -- Name: complaint_access_links user_view_own_dealer_complaint_links; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -27459,7 +27459,7 @@ CREATE POLICY user_view_own_dealer_complaint_links ON public.complaint_access_li
 
 
 --
--- TOC entry 7604 (class 3256 OID 22249)
+-- TOC entry 7605 (class 3256 OID 22249)
 -- Name: complaint_messages user_view_own_dealer_complaint_messages; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -27467,7 +27467,7 @@ CREATE POLICY user_view_own_dealer_complaint_messages ON public.complaint_messag
 
 
 --
--- TOC entry 7650 (class 3256 OID 22257)
+-- TOC entry 7651 (class 3256 OID 22257)
 -- Name: complaint_sla_policies user_view_own_dealer_complaint_sla_policies; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -27475,7 +27475,7 @@ CREATE POLICY user_view_own_dealer_complaint_sla_policies ON public.complaint_sl
 
 
 --
--- TOC entry 7580 (class 3256 OID 22243)
+-- TOC entry 7581 (class 3256 OID 22243)
 -- Name: complaint_tickets user_view_own_dealer_complaints; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -27491,7 +27491,7 @@ CREATE POLICY user_view_own_dealer_complaints ON public.complaint_tickets FOR SE
 ALTER TABLE public.users ENABLE ROW LEVEL SECURITY;
 
 --
--- TOC entry 7776 (class 3256 OID 18605)
+-- TOC entry 7777 (class 3256 OID 18605)
 -- Name: users users_admin_all; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -27499,7 +27499,7 @@ CREATE POLICY users_admin_all ON public.users FOR SELECT TO authenticated USING 
 
 
 --
--- TOC entry 7777 (class 3256 OID 18606)
+-- TOC entry 7778 (class 3256 OID 18606)
 -- Name: users users_admin_write; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -27507,7 +27507,7 @@ CREATE POLICY users_admin_write ON public.users TO authenticated USING (public.i
 
 
 --
--- TOC entry 7778 (class 3256 OID 18604)
+-- TOC entry 7779 (class 3256 OID 18604)
 -- Name: users users_self_read; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -27523,7 +27523,7 @@ CREATE POLICY users_self_read ON public.users FOR SELECT TO authenticated USING 
 ALTER TABLE public.vehicles ENABLE ROW LEVEL SECURITY;
 
 --
--- TOC entry 7811 (class 3256 OID 21986)
+-- TOC entry 7812 (class 3256 OID 21986)
 -- Name: vehicles vehicles: own dealership insert; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -27531,7 +27531,7 @@ CREATE POLICY "vehicles: own dealership insert" ON public.vehicles FOR INSERT TO
 
 
 --
--- TOC entry 7810 (class 3256 OID 21985)
+-- TOC entry 7811 (class 3256 OID 21985)
 -- Name: vehicles vehicles: own dealership select; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -27539,7 +27539,7 @@ CREATE POLICY "vehicles: own dealership select" ON public.vehicles FOR SELECT TO
 
 
 --
--- TOC entry 7808 (class 3256 OID 21987)
+-- TOC entry 7809 (class 3256 OID 21987)
 -- Name: vehicles vehicles: own dealership update; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -27547,7 +27547,7 @@ CREATE POLICY "vehicles: own dealership update" ON public.vehicles FOR UPDATE TO
 
 
 --
--- TOC entry 7878 (class 3256 OID 32620)
+-- TOC entry 7879 (class 3256 OID 32620)
 -- Name: post_service_feedback_messages view_post_service_feedback; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -27555,7 +27555,7 @@ CREATE POLICY view_post_service_feedback ON public.post_service_feedback_message
 
 
 --
--- TOC entry 7879 (class 3256 OID 32621)
+-- TOC entry 7880 (class 3256 OID 32621)
 -- Name: post_service_feedback_remarks view_post_service_feedback_remarks; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -27587,7 +27587,7 @@ ALTER TABLE public.wa_campaign_contacts ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.wa_campaigns ENABLE ROW LEVEL SECURITY;
 
 --
--- TOC entry 7863 (class 3256 OID 24066)
+-- TOC entry 7864 (class 3256 OID 24066)
 -- Name: wa_campaigns wa_campaigns_auth; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -27595,7 +27595,7 @@ CREATE POLICY wa_campaigns_auth ON public.wa_campaigns TO authenticated USING (t
 
 
 --
--- TOC entry 7866 (class 3256 OID 24069)
+-- TOC entry 7867 (class 3256 OID 24069)
 -- Name: wa_campaign_contacts wa_cc_auth; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -27603,7 +27603,7 @@ CREATE POLICY wa_cc_auth ON public.wa_campaign_contacts TO authenticated USING (
 
 
 --
--- TOC entry 7862 (class 3256 OID 24065)
+-- TOC entry 7863 (class 3256 OID 24065)
 -- Name: wa_agent_config wa_config_auth; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -27611,7 +27611,7 @@ CREATE POLICY wa_config_auth ON public.wa_agent_config TO authenticated USING (t
 
 
 --
--- TOC entry 7864 (class 3256 OID 24067)
+-- TOC entry 7865 (class 3256 OID 24067)
 -- Name: wa_conversations wa_conv_auth; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -27651,7 +27651,7 @@ ALTER TABLE public.wa_followup_steps ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.wa_messages ENABLE ROW LEVEL SECURITY;
 
 --
--- TOC entry 7865 (class 3256 OID 24068)
+-- TOC entry 7866 (class 3256 OID 24068)
 -- Name: wa_messages wa_msg_auth; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -27667,7 +27667,7 @@ CREATE POLICY wa_msg_auth ON public.wa_messages TO authenticated USING (true) WI
 ALTER TABLE public.wa_templates ENABLE ROW LEVEL SECURITY;
 
 --
--- TOC entry 7870 (class 3256 OID 24186)
+-- TOC entry 7871 (class 3256 OID 24186)
 -- Name: wa_templates wa_templates_read; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -27675,7 +27675,7 @@ CREATE POLICY wa_templates_read ON public.wa_templates FOR SELECT TO authenticat
 
 
 --
--- TOC entry 7871 (class 3256 OID 24187)
+-- TOC entry 7872 (class 3256 OID 24187)
 -- Name: wa_templates wa_templates_write; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -27763,7 +27763,7 @@ ALTER TABLE public.warranty_wc_data ENABLE ROW LEVEL SECURITY;
 ALTER TABLE realtime.messages ENABLE ROW LEVEL SECURITY;
 
 --
--- TOC entry 7647 (class 3256 OID 20997)
+-- TOC entry 7648 (class 3256 OID 20997)
 -- Name: objects autodoc objects: own dealer delete; Type: POLICY; Schema: storage; Owner: -
 --
 
@@ -27771,7 +27771,7 @@ CREATE POLICY "autodoc objects: own dealer delete" ON storage.objects FOR DELETE
 
 
 --
--- TOC entry 7645 (class 3256 OID 20995)
+-- TOC entry 7646 (class 3256 OID 20995)
 -- Name: objects autodoc objects: own dealer insert; Type: POLICY; Schema: storage; Owner: -
 --
 
@@ -27779,7 +27779,7 @@ CREATE POLICY "autodoc objects: own dealer insert" ON storage.objects FOR INSERT
 
 
 --
--- TOC entry 7642 (class 3256 OID 20994)
+-- TOC entry 7643 (class 3256 OID 20994)
 -- Name: objects autodoc objects: own dealer read; Type: POLICY; Schema: storage; Owner: -
 --
 
@@ -27787,7 +27787,7 @@ CREATE POLICY "autodoc objects: own dealer read" ON storage.objects FOR SELECT T
 
 
 --
--- TOC entry 7646 (class 3256 OID 20996)
+-- TOC entry 7647 (class 3256 OID 20996)
 -- Name: objects autodoc objects: own dealer update; Type: POLICY; Schema: storage; Owner: -
 --
 
@@ -46429,11 +46429,11 @@ CREATE EVENT TRIGGER trg_auto_admin_bypass_policy_on_ddl ON ddl_command_end
    EXECUTE FUNCTION public.apply_admin_bypass_policy_on_ddl();
 
 
--- Completed on 2026-07-06 17:46:27 IST
+-- Completed on 2026-07-06 17:57:00 IST
 
 --
 -- PostgreSQL database dump complete
 --
 
-\unrestrict oWFce9IOipwYQXkU4tgRr1pzUKcJbrihAEVafETCSxB4n3aAYIrKT3EqNtUuD3O
+\unrestrict zxFM1dANuVg4Bm9FUBQ79jPzbbm5Rxwj7M6b5BgpAbg27oBieL4MRVr15jpjRId
 
