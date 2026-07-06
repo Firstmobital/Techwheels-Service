@@ -3,7 +3,7 @@ import DateRangeFilter, { currentMonthRange, type DateRange } from '../component
 import { supabase } from '../lib/supabase'
 import Icon from '../components/Icon'
 import { AUTODOC_BUCKET } from '../lib/autodocStorage'
-import { isBodyshopDepartment, isServiceDepartment } from '../lib/department'
+import { isBodyshopDepartment } from '../lib/department'
 import { getDealerContext } from '../lib/api'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -184,8 +184,8 @@ interface Employee {
   department: string | null
 }
 
-type BSRole = 'DENTOR' | 'PAINTER' | 'TECHNICIAN' | 'ELECTRICIAN' | 'DET'
-type SupportRole = 'DENTOR' | 'PAINTER' | 'TECHNICIAN' | 'ELECTRICIAN' | 'DET'
+type BSRole = 'DENTOR' | 'PAINTER' | 'TECHNICIAN' | 'SUPERVISOR' | 'DENTOR_HELPER' | 'PAINTER_HELPER'
+type SupportRole = 'DENTOR' | 'PAINTER' | 'TECHNICIAN' | 'SUPERVISOR' | 'DENTOR_HELPER' | 'PAINTER_HELPER'
 
 interface DBPrimaryAssignmentRow {
   id: number
@@ -203,10 +203,12 @@ interface DBPrimaryAssignmentRow {
   painter_employee_name: string | null
   technician_employee_code: string | null
   technician_employee_name: string | null
-  electrician_employee_code: string | null
-  electrician_employee_name: string | null
-  det_employee_code: string | null
-  det_employee_name: string | null
+  supervisor_employee_code: string | null
+  supervisor_employee_name: string | null
+  dentor_helper_employee_code: string | null
+  dentor_helper_employee_name: string | null
+  painter_helper_employee_code: string | null
+  painter_helper_employee_name: string | null
   dentor_work_status: string | null
   dentor_in_ts: string | null
   dentor_remark: string | null
@@ -219,19 +221,24 @@ interface DBPrimaryAssignmentRow {
   technician_in_ts: string | null
   technician_remark: string | null
   technician_out_ts: string | null
-  electrician_work_status: string | null
-  electrician_in_ts: string | null
-  electrician_remark: string | null
-  electrician_out_ts: string | null
-  det_work_status: string | null
-  det_in_ts: string | null
-  det_remark: string | null
-  det_out_ts: string | null
+  supervisor_work_status: string | null
+  supervisor_in_ts: string | null
+  supervisor_remark: string | null
+  supervisor_out_ts: string | null
+  dentor_helper_work_status: string | null
+  dentor_helper_in_ts: string | null
+  dentor_helper_remark: string | null
+  dentor_helper_out_ts: string | null
+  painter_helper_work_status: string | null
+  painter_helper_in_ts: string | null
+  painter_helper_remark: string | null
+  painter_helper_out_ts: string | null
   dentor_completed_by: string | null
   painter_completed_by: string | null
   technician_completed_by: string | null
-  electrician_completed_by: string | null
-  det_completed_by: string | null
+  supervisor_completed_by: string | null
+  dentor_helper_completed_by: string | null
+  painter_helper_completed_by: string | null
   bs_floor_completed_at: string | null
   bs_floor_completed_by: string | null
 }
@@ -274,14 +281,15 @@ interface SupportAssignment {
 type AssignmentView = 'all' | 'unassigned' | 'assigned' | 'work_inprocess' | 'hold' | 'completed' | 'qc' | 'approvals'
 
 const ROLE_META: Record<BSRole, { label: string; icon: string }> = {
-  DENTOR:      { label: 'Dentor',      icon: '🔨' },
-  PAINTER:     { label: 'Painter',     icon: '🎨' },
-  TECHNICIAN:  { label: 'Technician',  icon: '🔧' },
-  ELECTRICIAN: { label: 'Electrician', icon: '⚡' },
-  DET:         { label: 'DET',         icon: '🧰' },
+  DENTOR:         { label: 'Dentor',          icon: '🔨' },
+  PAINTER:        { label: 'Painter',         icon: '🎨' },
+  TECHNICIAN:     { label: 'Technician',      icon: '🔧' },
+  SUPERVISOR:     { label: 'Floor Incharge',  icon: '👷' },
+  DENTOR_HELPER:  { label: 'Dentor Helper',   icon: '🔩' },
+  PAINTER_HELPER: { label: 'Painter Helper',  icon: '🖌️' },
 }
 
-const ALL_ROLES: BSRole[] = ['DENTOR', 'PAINTER', 'TECHNICIAN', 'ELECTRICIAN', 'DET']
+const ALL_ROLES: BSRole[] = ['DENTOR', 'PAINTER', 'TECHNICIAN', 'SUPERVISOR', 'DENTOR_HELPER', 'PAINTER_HELPER']
 
 const ROLE_COLUMNS: Record<BSRole, {
   employeeCode: keyof DBPrimaryAssignmentRow
@@ -319,23 +327,32 @@ const ROLE_COLUMNS: Record<BSRole, {
     outTs: 'technician_out_ts',
     completedBy: 'technician_completed_by',
   },
-  ELECTRICIAN: {
-    employeeCode: 'electrician_employee_code',
-    employeeName: 'electrician_employee_name',
-    workStatus: 'electrician_work_status',
-    inTs: 'electrician_in_ts',
-    remark: 'electrician_remark',
-    outTs: 'electrician_out_ts',
-    completedBy: 'electrician_completed_by',
+  SUPERVISOR: {
+    employeeCode: 'supervisor_employee_code',
+    employeeName: 'supervisor_employee_name',
+    workStatus: 'supervisor_work_status',
+    inTs: 'supervisor_in_ts',
+    remark: 'supervisor_remark',
+    outTs: 'supervisor_out_ts',
+    completedBy: 'supervisor_completed_by',
   },
-  DET: {
-    employeeCode: 'det_employee_code',
-    employeeName: 'det_employee_name',
-    workStatus: 'det_work_status',
-    inTs: 'det_in_ts',
-    remark: 'det_remark',
-    outTs: 'det_out_ts',
-    completedBy: 'det_completed_by',
+  DENTOR_HELPER: {
+    employeeCode: 'dentor_helper_employee_code',
+    employeeName: 'dentor_helper_employee_name',
+    workStatus: 'dentor_helper_work_status',
+    inTs: 'dentor_helper_in_ts',
+    remark: 'dentor_helper_remark',
+    outTs: 'dentor_helper_out_ts',
+    completedBy: 'dentor_helper_completed_by',
+  },
+  PAINTER_HELPER: {
+    employeeCode: 'painter_helper_employee_code',
+    employeeName: 'painter_helper_employee_name',
+    workStatus: 'painter_helper_work_status',
+    inTs: 'painter_helper_in_ts',
+    remark: 'painter_helper_remark',
+    outTs: 'painter_helper_out_ts',
+    completedBy: 'painter_helper_completed_by',
   },
 }
 
@@ -587,11 +604,12 @@ function emptyAdditionalApprovalDraftPart(): AdditionalApprovalDraftPart {
 
 function normRole(r: string | null): BSRole | null {
   const v = String(r ?? '').trim().toUpperCase()
-  if (v === 'DENTOR')     return 'DENTOR'
-  if (v === 'PAINTER')    return 'PAINTER'
-  if (v === 'TECHNICIAN') return 'TECHNICIAN'
-  if (v === 'ELECTRICIAN') return 'ELECTRICIAN'
-  if (v === 'DET')        return 'DET'
+  if (v === 'DENTOR')          return 'DENTOR'
+  if (v === 'PAINTER')         return 'PAINTER'
+  if (v === 'TECHNICIAN')      return 'TECHNICIAN'
+  if (v === 'FLOOR INCHARGE')  return 'SUPERVISOR'
+  if (v === 'DENTOR HELPER')   return 'DENTOR_HELPER'
+  if (v === 'PAINTER HELPER')  return 'PAINTER_HELPER'
   return null
 }
 
@@ -615,14 +633,13 @@ function deriveDealerCodeFromSaEmployeeCode(saEmployeeCode: string | null | unde
 }
 
 function isEmployeeEligibleForRole(role: BSRole, department: string | null): boolean {
-  if (role === 'ELECTRICIAN' || role === 'DET') {
-    return isServiceDepartment(department)
-  }
+  // All roles on this page are BODY SHOP department
+  void role
   return isBodyshopDepartment(department)
 }
 
 function emptyRoleMap() {
-  return { DENTOR: undefined, PAINTER: undefined, TECHNICIAN: undefined, ELECTRICIAN: undefined, DET: undefined } as Record<BSRole, BSAssignment | undefined>
+  return { DENTOR: undefined, PAINTER: undefined, TECHNICIAN: undefined, SUPERVISOR: undefined, DENTOR_HELPER: undefined, PAINTER_HELPER: undefined } as Record<BSRole, BSAssignment | undefined>
 }
 
 function mapRowToRoleMap(row: DBPrimaryAssignmentRow): Record<BSRole, BSAssignment | undefined> {
@@ -869,7 +886,7 @@ export default function BodyshopFloorPage() {
         for (const s of (supportData ?? []) as SupportAssignment[]) {
           const k = s.job_card_number.toUpperCase()
           const role = s.support_role as SupportRole
-          if (!supportMap[k]) supportMap[k] = { DENTOR: [], PAINTER: [], TECHNICIAN: [], ELECTRICIAN: [], DET: [] }
+          if (!supportMap[k]) supportMap[k] = { DENTOR: [], PAINTER: [], TECHNICIAN: [], SUPERVISOR: [], DENTOR_HELPER: [], PAINTER_HELPER: [] }
           supportMap[k][role].push(s)
         }
         // Sort each role array by assigned_at DESC
@@ -892,7 +909,7 @@ export default function BodyshopFloorPage() {
   // ── Employees by role ────────────────────────────────────────────────────
 
   const empByRole = useMemo<Record<BSRole, Employee[]>>(() => {
-    const m: Record<BSRole, Employee[]> = { DENTOR: [], PAINTER: [], TECHNICIAN: [], ELECTRICIAN: [], DET: [] }
+    const m: Record<BSRole, Employee[]> = { DENTOR: [], PAINTER: [], TECHNICIAN: [], SUPERVISOR: [], DENTOR_HELPER: [], PAINTER_HELPER: [] }
     employees.forEach((e) => {
       const r = normRole(e.role)
       if (!r) return
@@ -904,7 +921,7 @@ export default function BodyshopFloorPage() {
   }, [employees])
 
   const empBySupportRole = useMemo<Record<SupportRole, Employee[]>>(() => {
-    const m: Record<SupportRole, Employee[]> = { DENTOR: [], PAINTER: [], TECHNICIAN: [], ELECTRICIAN: [], DET: [] }
+    const m: Record<SupportRole, Employee[]> = { DENTOR: [], PAINTER: [], TECHNICIAN: [], SUPERVISOR: [], DENTOR_HELPER: [], PAINTER_HELPER: [] }
     employees.forEach((e) => {
       const r = normRole(e.role)
       if (!r) return
@@ -1197,7 +1214,7 @@ export default function BodyshopFloorPage() {
       setSupportAssignments((prev) => ({
         ...prev,
         [k]: {
-          ...(prev[k] ?? { DENTOR: [], PAINTER: [], TECHNICIAN: [], ELECTRICIAN: [], DET: [] }),
+          ...(prev[k] ?? { DENTOR: [], PAINTER: [], TECHNICIAN: [], SUPERVISOR: [], DENTOR_HELPER: [], PAINTER_HELPER: [] }),
           [role]: [...(prev[k]?.[role] ?? []), newSupport],
         },
       }))
@@ -1896,7 +1913,7 @@ export default function BodyshopFloorPage() {
           <div className="bsf-roster-list">
             {filtered.map((car) => {
               const k = jcKey(car)
-              const carMap = assignments[k] ?? { DENTOR: undefined, PAINTER: undefined, TECHNICIAN: undefined, ELECTRICIAN: undefined, DET: undefined }
+              const carMap = assignments[k] ?? { DENTOR: undefined, PAINTER: undefined, TECHNICIAN: undefined, SUPERVISOR: undefined, DENTOR_HELPER: undefined, PAINTER_HELPER: undefined }
               const qcDraft = qcByJc[k] ?? emptyQcEntryState()
               const selectedQcCheckerNames = parseQcCheckedByNames(qcDraft.qc_checked_by)
               const assignedQcCheckerNames = getAssignedQcCheckerNames(k)
@@ -1905,7 +1922,7 @@ export default function BodyshopFloorPage() {
               const otherCheckerNames = bodyshopEmployeeNames
                 .filter((name) => !assignedQcNameSet.has(name.toLowerCase()))
                 .filter((name) => !otherSearch || name.toLowerCase().includes(otherSearch))
-              const supportMap = supportAssignments[k] ?? { DENTOR: [], PAINTER: [], TECHNICIAN: [], ELECTRICIAN: [], DET: [] }
+              const supportMap = supportAssignments[k] ?? { DENTOR: [], PAINTER: [], TECHNICIAN: [], SUPERVISOR: [], DENTOR_HELPER: [], PAINTER_HELPER: [] }
               const floorStatus = bsFloorStatus[k] ?? { completedAt: null, completedBy: null }
               const isFloorCompleted = Boolean(floorStatus.completedAt)
               const isSavingFloorStatus = saving === `${k}-bs-floor`
