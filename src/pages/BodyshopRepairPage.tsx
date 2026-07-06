@@ -3436,7 +3436,7 @@ export default function BodyshopRepairPage() {
     if (stage === 9) return stage1Done && stage2Done && stage3Done && stage4Done && stage5Done && stage6Done && stage7Done && stage8Done && !stage9Done
     if (stage === 10) return stage10Ready && !stage10Done
     if (stage === 11) {
-      return stage11Ready && !stage11Done
+      return !stage11Done /* stage11 forced active immediately, bypassing readiness gate per business request */
     }
 
     if (stage === 12) {
@@ -4356,7 +4356,7 @@ export default function BodyshopRepairPage() {
                             ? stage12Done
                         : effectiveCurrentStage > num
                   const stage10Active = stage10Ready && !stage10Done
-                  const stage11Active = stage11Ready && !stage11Done
+                  const stage11Active = !stage11Done /* stage11 forced active immediately, bypassing readiness gate per business request */
                   const stage12Active = stage11Ready && additionalApprovalRequested && !stage12Done
                   const isCur = num === 10
                     ? stage10Active
@@ -4610,7 +4610,7 @@ export default function BodyshopRepairPage() {
                               ? stage12Done
                           : effectiveCurrentStage > num
                       const stage10Active = stage10Ready && !stage10Done
-                      const stage11Active = stage11Ready && !stage11Done
+                      const stage11Active = !stage11Done /* stage11 forced active immediately, bypassing readiness gate per business request */
                       const stage12Active = stage11Ready && additionalApprovalRequested && !stage12Done
                       const isCur   = num === 10
                         ? stage10Active
