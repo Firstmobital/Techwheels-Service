@@ -305,7 +305,7 @@ const ROLE_META: Record<BSRole, { label: string; icon: string }> = {
   EDP:            { label: 'EDP',             icon: '🧴' },
 }
 
-const ALL_ROLES: BSRole[] = ['DENTOR', 'PAINTER', 'TECHNICIAN', 'FLOOR_INCHARGE', 'DENTOR_HELPER', 'PAINTER_HELPER', 'RUBBING', 'EDP']
+const ALL_ROLES: BSRole[] = ['FLOOR_INCHARGE', 'DENTOR', 'DENTOR_HELPER', 'PAINTER', 'PAINTER_HELPER', 'TECHNICIAN', 'RUBBING', 'EDP']
 
 // Roles that do NOT get a support assignment section
 const ROLES_WITHOUT_SUPPORT = new Set<BSRole>(['FLOOR_INCHARGE'])
