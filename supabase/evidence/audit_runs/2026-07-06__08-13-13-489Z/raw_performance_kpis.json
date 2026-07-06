@@ -1,0 +1,11 @@
+{
+  "status": "ok",
+  "label": "performance_kpis",
+  "rows": [
+    {
+      "slow_queries_total_time_gt_1000": 18,
+      "cache_hit_rate_pct": "100.00",
+      "avg_rows_per_call": "1.27"
+    }
+  ]
+}

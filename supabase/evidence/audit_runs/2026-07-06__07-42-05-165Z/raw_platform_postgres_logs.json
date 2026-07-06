@@ -1,0 +1,55 @@
+{
+  "status": "ok",
+  "endpoint": "/v1/projects/jmdndcphkmaljhwgzqxq/analytics/endpoints/logs.all?sql=select%20timestamp%2C%20event_message%20from%20postgres_logs%20order%20by%20timestamp%20desc%20limit%20100",
+  "count": 12,
+  "records": [
+    {
+      "event_message": "connection authenticated: user=\"postgres\" method=trust (/etc/postgresql/pg_hba.conf:85)",
+      "timestamp": 1783323720072000
+    },
+    {
+      "event_message": "connection authenticated: user=\"postgres\" method=trust (/etc/postgresql/pg_hba.conf:85)",
+      "timestamp": 1783323720072000
+    },
+    {
+      "event_message": "cron job 10 starting: select public.process_next_psf_import_run();",
+      "timestamp": 1783323720025000
+    },
+    {
+      "event_message": "cron job 5 starting: SELECT public.process_all_service_history_sync_queue(500);",
+      "timestamp": 1783323720011000
+    },
+    {
+      "event_message": "connection authenticated: identity=\"postgres\" method=scram-sha-256 (/etc/postgresql/pg_hba.conf:94)",
+      "timestamp": 1783323707539000
+    },
+    {
+      "event_message": "connection received: host=2406:da1a:6b0:f600:82d6:1e52:5689:6b53 port=47424",
+      "timestamp": 1783323707533000
+    },
+    {
+      "event_message": "connection authorized: user=pgbouncer database=postgres application_name=Supavisor (auth_query)",
+      "timestamp": 1783323673461000
+    },
+    {
+      "event_message": "connection authenticated: identity=\"pgbouncer\" method=scram-sha-256 (/etc/postgresql/pg_hba.conf:94)",
+      "timestamp": 1783323673461000
+    },
+    {
+      "event_message": "connection authenticated: identity=\"postgres\" method=scram-sha-256 (/etc/postgresql/pg_hba.conf:94)",
+      "timestamp": 1783323673461000
+    },
+    {
+      "event_message": "connection authenticated: identity=\"pgbouncer\" method=scram-sha-256 (/etc/postgresql/pg_hba.conf:94)",
+      "timestamp": 1783323673219000
+    },
+    {
+      "event_message": "connection authorized: user=pgbouncer database=postgres application_name=Supavisor (auth_query)",
+      "timestamp": 1783323673219000
+    },
+    {
+      "event_message": "connection received: host=2406:da1a:6b0:f602:2274:c977:1939:c5a3 port=60624",
+      "timestamp": 1783323673194000
+    }
+  ]
+}

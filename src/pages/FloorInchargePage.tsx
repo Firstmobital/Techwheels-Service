@@ -276,13 +276,14 @@ interface Employee {
   role?: string | null
 }
 
-type SupportRole = 'DET' | 'ELECTRICIAN' | 'DENTOR' | 'TECHNICIAN'
+type SupportRole = 'DET' | 'ELECTRICIAN' | 'DENTOR' | 'TECHNICIAN' | 'ALIGNMENT'
 
 const SUPPORT_ROLE_OPTIONS: Array<{ value: SupportRole; label: string }> = [
   { value: 'DET', label: 'DET' },
   { value: 'ELECTRICIAN', label: 'Electrician' },
   { value: 'DENTOR', label: 'Dentor' },
   { value: 'TECHNICIAN', label: 'Technician' },
+  { value: 'ALIGNMENT', label: 'Alignment' },
 ]
 
 interface SupportAssignment {
@@ -298,7 +299,7 @@ interface SupportAssignment {
   updated_at?: string
 }
 
-type SupportRoleDb = 'DET' | 'ELECTRICIAN' | 'DENTER' | 'DENTOR' | 'TECHNICIAN'
+type SupportRoleDb = 'DET' | 'ELECTRICIAN' | 'DENTER' | 'DENTOR' | 'TECHNICIAN' | 'ALIGNMENT'
 
 function normalizeSupportRole(value: string | null | undefined): SupportRole | null {
   const normalized = String(value ?? '').trim().toUpperCase()
@@ -307,6 +308,7 @@ function normalizeSupportRole(value: string | null | undefined): SupportRole | n
   if (normalized.includes('TECHNICIAN')) return 'TECHNICIAN'
   if (normalized.includes('ELECTRICIAN')) return 'ELECTRICIAN'
   if (normalized.includes('DENTOR') || normalized.includes('DENTER')) return 'DENTOR'
+  if (normalized.includes('ALIGNMENT')) return 'ALIGNMENT'
   if (normalized.includes('DET')) return 'DET'
 
   return null
@@ -732,6 +734,7 @@ export default function FloorInchargePage() {
       ELECTRICIAN: [],
       DENTOR: [],
       TECHNICIAN: [],
+      ALIGNMENT: [],
     }
 
     allEmployees.forEach((employee) => {
@@ -745,6 +748,7 @@ export default function FloorInchargePage() {
       ELECTRICIAN: grouped.ELECTRICIAN.sort((a, b) => a.employee_name.localeCompare(b.employee_name)),
       DENTOR: grouped.DENTOR.sort((a, b) => a.employee_name.localeCompare(b.employee_name)),
       TECHNICIAN: grouped.TECHNICIAN.sort((a, b) => a.employee_name.localeCompare(b.employee_name)),
+      ALIGNMENT: grouped.ALIGNMENT.sort((a, b) => a.employee_name.localeCompare(b.employee_name)),
     }
   }, [allEmployees])
 

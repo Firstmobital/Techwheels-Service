@@ -1020,7 +1020,7 @@ export default function SATrackerPage() {
                 <h3>Earnings percentage settings</h3>
                 <div className="tech-share-controls">
                   <label className="field field--no-gap tech-share-field">
-                    <span className="label">SA %</span>
+                    <span className="label">PV %</span>
                     <input
                       className="inp"
                       inputMode="decimal"

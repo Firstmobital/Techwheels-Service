@@ -1,0 +1,407 @@
+{
+  "status": "ok",
+  "endpoint": "/v1/projects/jmdndcphkmaljhwgzqxq/analytics/endpoints/logs.all?sql=select%20timestamp%2C%20event_message%20from%20edge_logs%20order%20by%20timestamp%20desc%20limit%20100",
+  "count": 100,
+  "records": [
+    {
+      "event_message": "GET | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/telecall_assignments?select=id%2Ccampaign_id%2Cstatus%2Ccall_notes%2Cbooking_date%2Ccallback_date%2Ccalled_at%2Ccall_count%2Cno_answer_count%2Cwhatsapp_sent%2Cwhatsapp_status%2Cassigned_at%2Ccustomer%3Acustomer_id%28id%2Cchassis_no%2Cvehicle_registration_number%2Cfirst_name%2Clast_name%2Ccontact_phones%2Cmodel%2Cpowertrain_type%2Cproduct_line%2Cassumed_next_service_date%2Cassumed_next_service_type%2Cscheduled_next_service_date%2Cscheduled_next_service_type%2Clast_service_date%2Clast_service_type%2Clast_service_km%2Clast_service_dealer%2Csold_dealer%2Cextended_warranty_end_date%2Cextended_warranty_product%2Cextended_warranty_end_kms%2Cextended_warranty_policy_no%2Cextended_warranty_order_status%2Clast_insurance_expiry_date%2Clast_insurance_comapny%2Clast_insurance_policy_number%29&id=eq.11591 | Deno/2.1.4 (variant; SupabaseEdgeRuntime/1.74.2)",
+      "timestamp": 1783325590731000
+    },
+    {
+      "event_message": "PATCH | 204 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/telecall_assignments?id=eq.11591 | Deno/2.1.4 (variant; SupabaseEdgeRuntime/1.74.2)",
+      "timestamp": 1783325590689000
+    },
+    {
+      "event_message": "GET | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/telecall_assignments?select=id&campaign_id=eq.12&status=eq.pending&order=priority_score.desc%2Cid.asc&limit=1 | Deno/2.1.4 (variant; SupabaseEdgeRuntime/1.74.2)",
+      "timestamp": 1783325590653000
+    },
+    {
+      "event_message": "GET | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/telecall_assignments?select=id%2Ccampaign_id%2Cstatus%2Ccall_notes%2Cbooking_date%2Ccallback_date%2Ccalled_at%2Ccall_count%2Cno_answer_count%2Cwhatsapp_sent%2Cwhatsapp_status%2Cassigned_at%2Ccustomer%3Acustomer_id%28id%2Cchassis_no%2Cvehicle_registration_number%2Cfirst_name%2Clast_name%2Ccontact_phones%2Cmodel%2Cpowertrain_type%2Cproduct_line%2Cassumed_next_service_date%2Cassumed_next_service_type%2Cscheduled_next_service_date%2Cscheduled_next_service_type%2Clast_service_date%2Clast_service_type%2Clast_service_km%2Clast_service_dealer%2Csold_dealer%2Cextended_warranty_end_date%2Cextended_warranty_product%2Cextended_warranty_end_kms%2Cextended_warranty_policy_no%2Cextended_warranty_order_status%2Clast_insurance_expiry_date%2Clast_insurance_comapny%2Clast_insurance_policy_number%29&campaign_id=eq.12&assigned_to=eq.techwheelsanju2015%40gmail.com&status=eq.callback_later&callback_date=lte.2026-07-06&order=callback_date.asc&limit=1 | Deno/2.1.4 (variant; SupabaseEdgeRuntime/1.74.2)",
+      "timestamp": 1783325590595000
+    },
+    {
+      "event_message": "GET | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/users?select=email%2Crole%2Cfull_name&id=eq.a3505291-2429-43cb-be9b-de0edb27f7a5 | Deno/2.1.4 (variant; SupabaseEdgeRuntime/1.74.2)",
+      "timestamp": 1783325590561000
+    },
+    {
+      "event_message": "GET | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/auth/v1/user | Deno/2.1.4 (variant; SupabaseEdgeRuntime/1.74.2)",
+      "timestamp": 1783325590521000
+    },
+    {
+      "event_message": "POST | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/rpc/get_unread_complaint_notification_count | Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
+      "timestamp": 1783325589469000
+    },
+    {
+      "event_message": "GET | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/all_service_data_dynamic?select=chassis_no%2Cfuel_tp%2Cpriority_bucket%2Cpriority_score%2Cupdated_by_robot&fuel_tp=eq.EV&updated_by_robot=is.null&order=priority_bucket.asc%2Cpriority_score.asc&limit=1 | null",
+      "timestamp": 1783325588449000
+    },
+    {
+      "event_message": "PATCH | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/all_service_data?chassis_no=eq.MAT568003RKH62868 | null",
+      "timestamp": 1783325588271000
+    },
+    {
+      "event_message": "POST | 201 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/EV_service_history_test | null",
+      "timestamp": 1783325588129000
+    },
+    {
+      "event_message": "GET | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/telecall_assignments?select=status&assigned_to=eq.techwheelsanju2015%40gmail.com&called_at=gte.2026-07-06T00%3A00%3A00%2B00%3A00 | Deno/2.1.4 (variant; SupabaseEdgeRuntime/1.74.2)",
+      "timestamp": 1783325586923000
+    },
+    {
+      "event_message": "GET | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/users?select=email%2Crole%2Cfull_name&id=eq.a3505291-2429-43cb-be9b-de0edb27f7a5 | Deno/2.1.4 (variant; SupabaseEdgeRuntime/1.74.2)",
+      "timestamp": 1783325586899000
+    },
+    {
+      "event_message": "GET | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/auth/v1/user | Deno/2.1.4 (variant; SupabaseEdgeRuntime/1.74.2)",
+      "timestamp": 1783325586846000
+    },
+    {
+      "event_message": "GET | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/telecall_assignments?select=id%2Ccampaign_id%2Cstatus%2Ccall_notes%2Cbooking_date%2Ccallback_date%2Ccalled_at%2Ccall_count%2Cno_answer_count%2Cwhatsapp_sent%2Cwhatsapp_status%2Cassigned_at%2Ccustomer%3Acustomer_id%28id%2Cchassis_no%2Cvehicle_registration_number%2Cfirst_name%2Clast_name%2Ccontact_phones%2Cmodel%2Cpowertrain_type%2Cproduct_line%2Cassumed_next_service_date%2Cassumed_next_service_type%2Clast_service_date%2Clast_service_type%2Clast_service_km%2Clast_service_dealer%2Csold_dealer%2Cextended_warranty_end_date%2Cextended_warranty_product%2Cextended_warranty_order_status%2Clast_insurance_expiry_date%2Clast_insurance_comapny%29&assigned_to=eq.techwheelsanju2015%40gmail.com&status=in.%28assigned%2Ccalling%2Ccallback_later%2Cbooked%29&campaign_id=eq.12&order=assigned_at.desc | Deno/2.1.4 (variant; SupabaseEdgeRuntime/1.74.2)",
+      "timestamp": 1783325586491000
+    },
+    {
+      "event_message": "GET | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/users?select=email%2Crole%2Cfull_name&id=eq.a3505291-2429-43cb-be9b-de0edb27f7a5 | Deno/2.1.4 (variant; SupabaseEdgeRuntime/1.74.2)",
+      "timestamp": 1783325586423000
+    },
+    {
+      "event_message": "GET | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/auth/v1/user | Deno/2.1.4 (variant; SupabaseEdgeRuntime/1.74.2)",
+      "timestamp": 1783325586146000
+    },
+    {
+      "event_message": "POST | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/rpc/get_unread_complaint_notification_count | Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
+      "timestamp": 1783325584696000
+    },
+    {
+      "event_message": "GET | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/telecall_assignments?select=status&assigned_to=eq.techwheelsanju2015%40gmail.com&called_at=gte.2026-07-06T00%3A00%3A00%2B00%3A00 | Deno/2.1.4 (variant; SupabaseEdgeRuntime/1.74.2)",
+      "timestamp": 1783325584547000
+    },
+    {
+      "event_message": "GET | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/telecall_assignments?select=id%2Ccampaign_id%2Cstatus%2Ccall_notes%2Cbooking_date%2Ccallback_date%2Ccalled_at%2Ccall_count%2Cno_answer_count%2Cwhatsapp_sent%2Cwhatsapp_status%2Cassigned_at%2Ccustomer%3Acustomer_id%28id%2Cchassis_no%2Cvehicle_registration_number%2Cfirst_name%2Clast_name%2Ccontact_phones%2Cmodel%2Cpowertrain_type%2Cproduct_line%2Cassumed_next_service_date%2Cassumed_next_service_type%2Clast_service_date%2Clast_service_type%2Clast_service_km%2Clast_service_dealer%2Csold_dealer%2Cextended_warranty_end_date%2Cextended_warranty_product%2Cextended_warranty_order_status%2Clast_insurance_expiry_date%2Clast_insurance_comapny%29&assigned_to=eq.techwheelsanju2015%40gmail.com&status=in.%28assigned%2Ccalling%2Ccallback_later%2Cbooked%29&campaign_id=eq.12&order=assigned_at.desc | Deno/2.1.4 (variant; SupabaseEdgeRuntime/1.74.2)",
+      "timestamp": 1783325584545000
+    },
+    {
+      "event_message": "GET | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/users?select=email%2Crole%2Cfull_name&id=eq.a3505291-2429-43cb-be9b-de0edb27f7a5 | Deno/2.1.4 (variant; SupabaseEdgeRuntime/1.74.2)",
+      "timestamp": 1783325584451000
+    },
+    {
+      "event_message": "GET | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/users?select=email%2Crole%2Cfull_name&id=eq.a3505291-2429-43cb-be9b-de0edb27f7a5 | Deno/2.1.4 (variant; SupabaseEdgeRuntime/1.74.2)",
+      "timestamp": 1783325584439000
+    },
+    {
+      "event_message": "GET | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/auth/v1/user | Deno/2.1.4 (variant; SupabaseEdgeRuntime/1.74.2)",
+      "timestamp": 1783325584403000
+    },
+    {
+      "event_message": "GET | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/auth/v1/user | Deno/2.1.4 (variant; SupabaseEdgeRuntime/1.74.2)",
+      "timestamp": 1783325584386000
+    },
+    {
+      "event_message": "GET | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/employee_master?select=id%2Cemployee_name&role=eq.CRE&order=employee_name.asc | Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
+      "timestamp": 1783325583933000
+    },
+    {
+      "event_message": "GET | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/employee_master?select=id%2Cemployee_name&role=eq.DRIVER&order=employee_name.asc | Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
+      "timestamp": 1783325583933000
+    },
+    {
+      "event_message": "OPTIONS | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/employee_master?select=id%2Cemployee_name&role=eq.DRIVER&order=employee_name.asc | Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
+      "timestamp": 1783325583900000
+    },
+    {
+      "event_message": "OPTIONS | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/employee_master?select=id%2Cemployee_name&role=eq.CRE&order=employee_name.asc | Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
+      "timestamp": 1783325583899000
+    },
+    {
+      "event_message": "GET | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/telecall_campaigns?select=*&order=created_at.desc | Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
+      "timestamp": 1783325583570000
+    },
+    {
+      "event_message": "OPTIONS | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/telecall_campaigns?select=*&order=created_at.desc | Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
+      "timestamp": 1783325583549000
+    },
+    {
+      "event_message": "POST | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/rpc/get_unread_complaint_notification_count | Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
+      "timestamp": 1783325583540000
+    },
+    {
+      "event_message": "GET | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/users?select=role&id=eq.a3505291-2429-43cb-be9b-de0edb27f7a5 | Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
+      "timestamp": 1783325583230000
+    },
+    {
+      "event_message": "OPTIONS | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/users?select=role&id=eq.a3505291-2429-43cb-be9b-de0edb27f7a5 | Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
+      "timestamp": 1783325583208000
+    },
+    {
+      "event_message": "GET | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/wa_campaigns?select=*&order=created_at.desc | Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
+      "timestamp": 1783325582140000
+    },
+    {
+      "event_message": "GET | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/wa_followup_queue?select=*%2Cwa_followup_steps%21step_id%28message_template%2Cday_offset%29&order=scheduled_at.desc&limit=200 | Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
+      "timestamp": 1783325582139000
+    },
+    {
+      "event_message": "GET | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/wa_conversations?select=*&order=last_message_at.desc&limit=100 | Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
+      "timestamp": 1783325582137000
+    },
+    {
+      "event_message": "GET | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/wa_templates?select=*&order=created_at.desc | Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
+      "timestamp": 1783325582136000
+    },
+    {
+      "event_message": "GET | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/wa_followup_steps?select=*&sequence_id=eq.1&order=sort_order.asc | Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
+      "timestamp": 1783325582134000
+    },
+    {
+      "event_message": "GET | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/wa_agent_config?select=*&id=eq.1 | Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
+      "timestamp": 1783325582131000
+    },
+    {
+      "event_message": "OPTIONS | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/wa_conversations?select=*&order=last_message_at.desc&limit=100 | Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
+      "timestamp": 1783325582115000
+    },
+    {
+      "event_message": "OPTIONS | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/wa_followup_queue?select=*%2Cwa_followup_steps%21step_id%28message_template%2Cday_offset%29&order=scheduled_at.desc&limit=200 | Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
+      "timestamp": 1783325582115000
+    },
+    {
+      "event_message": "OPTIONS | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/wa_followup_steps?select=*&sequence_id=eq.1&order=sort_order.asc | Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
+      "timestamp": 1783325582113000
+    },
+    {
+      "event_message": "OPTIONS | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/wa_templates?select=*&order=created_at.desc | Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
+      "timestamp": 1783325582113000
+    },
+    {
+      "event_message": "OPTIONS | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/wa_agent_config?select=*&id=eq.1 | Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
+      "timestamp": 1783325582112000
+    },
+    {
+      "event_message": "OPTIONS | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/wa_campaigns?select=*&order=created_at.desc | Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
+      "timestamp": 1783325582112000
+    },
+    {
+      "event_message": "GET | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/temp_data?select=id%2Cvehicle_registration_number%2Cchassis_no%2Cfuel_type&chassis_no=is.null&fuel_type=eq.PV&order=id.asc&limit=1 | null",
+      "timestamp": 1783325581401000
+    },
+    {
+      "event_message": "PATCH | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/temp_data?id=eq.14491 | null",
+      "timestamp": 1783325581238000
+    },
+    {
+      "event_message": "POST | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/rpc/get_unread_complaint_notification_count | Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
+      "timestamp": 1783325579735000
+    },
+    {
+      "event_message": "GET | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/service_bookings?select=*&booking_date=gte.2026-06-30&booking_date=lte.2026-07-06&order=created_at.desc | Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
+      "timestamp": 1783325579367000
+    },
+    {
+      "event_message": "POST | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/rpc/get_unread_complaint_notification_count | Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
+      "timestamp": 1783325578967000
+    },
+    {
+      "event_message": "PATCH | 204 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/service_bookings?id=eq.210 | Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
+      "timestamp": 1783325578916000
+    },
+    {
+      "event_message": "OPTIONS | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/service_bookings?id=eq.210 | Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
+      "timestamp": 1783325578891000
+    },
+    {
+      "event_message": "POST | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/admin/v1/network-bans/retrieve | @supabase-infra/mgmt-api/af1e2e4",
+      "timestamp": 1783325577720000
+    },
+    {
+      "event_message": "POST | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/rpc/get_unread_complaint_notification_count | Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
+      "timestamp": 1783325576718000
+    },
+    {
+      "event_message": "POST | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/rpc/get_unread_complaint_notification_count | Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Mobile Safari/537.36",
+      "timestamp": 1783325576459000
+    },
+    {
+      "event_message": "GET | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/auth/v1/user | okhttp/4.12.0",
+      "timestamp": 1783325573627000
+    },
+    {
+      "event_message": "GET | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/service_bookings?select=*&booking_date=gte.2026-06-30&booking_date=lte.2026-07-06&order=created_at.desc | Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
+      "timestamp": 1783325572092000
+    },
+    {
+      "event_message": "OPTIONS | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/service_bookings?select=*&booking_date=gte.2026-06-30&booking_date=lte.2026-07-06&order=created_at.desc | Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
+      "timestamp": 1783325572062000
+    },
+    {
+      "event_message": "POST | 201 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/service_bookings?columns=%22booking_source%22%2C%22status%22%2C%22booking_date%22%2C%22pickup_required%22%2C%22drop_required%22%2C%22wa_opt_in%22%2C%22call_attempt%22%2C%22appointment_date%22%2C%22booking_time%22%2C%22branch%22%2C%22customer_name%22%2C%22customer_phone%22%2C%22reg_number%22%2C%22fuel_type%22%2C%22model%22%2C%22km_reading%22%2C%22service_type%22%2C%22cre_name%22%2C%22caller_name%22%2C%22call_outcome%22&select=* | Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
+      "timestamp": 1783325571652000
+    },
+    {
+      "event_message": "OPTIONS | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/service_bookings?columns=%22booking_source%22%2C%22status%22%2C%22booking_date%22%2C%22pickup_required%22%2C%22drop_required%22%2C%22wa_opt_in%22%2C%22call_attempt%22%2C%22appointment_date%22%2C%22booking_time%22%2C%22branch%22%2C%22customer_name%22%2C%22customer_phone%22%2C%22reg_number%22%2C%22fuel_type%22%2C%22model%22%2C%22km_reading%22%2C%22service_type%22%2C%22cre_name%22%2C%22caller_name%22%2C%22call_outcome%22&select=* | Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
+      "timestamp": 1783325571624000
+    },
+    {
+      "event_message": "POST | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/rpc/get_unread_complaint_notification_count | Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
+      "timestamp": 1783325565942000
+    },
+    {
+      "event_message": "GET | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/bodyshop_assignments?select=id%2Cjob_card_number%2Crepair_card_id%2Cdentor_employee_code%2Cdentor_employee_name%2Cpainter_employee_code%2Cpainter_employee_name%2Ctechnician_employee_code%2Ctechnician_employee_name%2Celectrician_employee_code%2Celectrician_employee_name%2Cdet_employee_code%2Cdet_employee_name%2Cdentor_work_status%2Cpainter_work_status%2Ctechnician_work_status%2Celectrician_work_status%2Cdet_work_status%2Cdentor_remark%2Cpainter_remark%2Ctechnician_remark%2Celectrician_remark%2Cdet_remark%2Cdentor_in_ts%2Cpainter_in_ts%2Ctechnician_in_ts%2Celectrician_in_ts%2Cdet_in_ts%2Cdentor_out_ts%2Cpainter_out_ts%2Ctechnician_out_ts%2Celectrician_out_ts%2Cdet_out_ts%2Cdentor_completed_by%2Cpainter_completed_by%2Ctechnician_completed_by%2Celectrician_completed_by%2Cdet_completed_by%2Cbs_floor_completed_at%2Cbs_floor_completed_by&is_active=eq.true&repair_card_id=eq.521&order=updated_at.desc&limit=1 | Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Mobile Safari/537.36",
+      "timestamp": 1783325565914000
+    },
+    {
+      "event_message": "GET | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/bodyshop_stage_worklist_projection?select=repair_card_id%2Cstage_no%2Cis_pending&is_pending=eq.true&repair_card_id=in.%28525%2C524%2C523%2C522%2C521%2C520%2C519%2C518%2C517%2C516%2C515%2C514%2C513%2C512%2C511%2C510%2C509%2C508%2C507%2C506%2C505%2C504%2C503%2C502%2C501%2C500%2C499%2C498%2C497%2C496%2C495%2C494%2C493%2C492%2C491%2C490%2C489%2C488%2C487%2C486%2C485%2C484%2C483%2C482%2C481%2C480%2C479%2C478%2C477%2C476%2C475%2C474%2C473%2C472%2C471%2C470%2C469%2C468%2C467%2C466%2C465%2C464%2C463%2C462%2C461%2C460%2C459%2C458%2C457%2C456%2C455%2C454%2C453%2C452%2C451%2C450%2C449%2C448%2C447%2C446%2C445%2C444%2C443%2C442%2C441%2C440%2C439%2C438%2C437%2C436%2C435%2C434%2C433%2C432%2C431%2C430%2C429%2C428%2C427%2C426%2C425%2C424%2C423%2C422%2C421%2C420%2C419%2C418%2C417%2C416%2C415%2C414%2C413%2C412%2C411%2C410%2C409%2C408%2C407%2C406%2C405%2C404%2C403%2C402%2C401%2C400%2C399%2C398%2C397%2C396%2C395%2C394%2C393%2C392%2C391%2C390%2C389%2C388%2C38... | Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Mobile Safari/537.36",
+      "timestamp": 1783325565504000
+    },
+    {
+      "event_message": "GET | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/bodyshop_assignments?select=id%2Cjob_card_number%2Crepair_card_id%2Cdentor_employee_code%2Cdentor_employee_name%2Cpainter_employee_code%2Cpainter_employee_name%2Ctechnician_employee_code%2Ctechnician_employee_name%2Celectrician_employee_code%2Celectrician_employee_name%2Cdet_employee_code%2Cdet_employee_name%2Cdentor_work_status%2Cpainter_work_status%2Ctechnician_work_status%2Celectrician_work_status%2Cdet_work_status%2Cdentor_remark%2Cpainter_remark%2Ctechnician_remark%2Celectrician_remark%2Cdet_remark%2Cdentor_in_ts%2Cpainter_in_ts%2Ctechnician_in_ts%2Celectrician_in_ts%2Cdet_in_ts%2Cdentor_out_ts%2Cpainter_out_ts%2Ctechnician_out_ts%2Celectrician_out_ts%2Cdet_out_ts%2Cdentor_completed_by%2Cpainter_completed_by%2Ctechnician_completed_by%2Celectrician_completed_by%2Cdet_completed_by%2Cbs_floor_completed_at%2Cbs_floor_completed_by&is_active=eq.true&job_card_number=eq.JC-MBTPLT-JP2-2627-003377&order=updated_at.desc&limit=1 | Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Mobile Safari/537.36",
+      "timestamp": 1783325565477000
+    },
+    {
+      "event_message": "OPTIONS | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/bodyshop_stage_worklist_projection?select=repair_card_id%2Cstage_no%2Cis_pending&is_pending=eq.true&repair_card_id=in.%28525%2C524%2C523%2C522%2C521%2C520%2C519%2C518%2C517%2C516%2C515%2C514%2C513%2C512%2C511%2C510%2C509%2C508%2C507%2C506%2C505%2C504%2C503%2C502%2C501%2C500%2C499%2C498%2C497%2C496%2C495%2C494%2C493%2C492%2C491%2C490%2C489%2C488%2C487%2C486%2C485%2C484%2C483%2C482%2C481%2C480%2C479%2C478%2C477%2C476%2C475%2C474%2C473%2C472%2C471%2C470%2C469%2C468%2C467%2C466%2C465%2C464%2C463%2C462%2C461%2C460%2C459%2C458%2C457%2C456%2C455%2C454%2C453%2C452%2C451%2C450%2C449%2C448%2C447%2C446%2C445%2C444%2C443%2C442%2C441%2C440%2C439%2C438%2C437%2C436%2C435%2C434%2C433%2C432%2C431%2C430%2C429%2C428%2C427%2C426%2C425%2C424%2C423%2C422%2C421%2C420%2C419%2C418%2C417%2C416%2C415%2C414%2C413%2C412%2C411%2C410%2C409%2C408%2C407%2C406%2C405%2C404%2C403%2C402%2C401%2C400%2C399%2C398%2C397%2C396%2C395%2C394%2C393%2C392%2C391%2C390%2C389%2C388%2C38... | Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Mobile Safari/537.36",
+      "timestamp": 1783325565476000
+    },
+    {
+      "event_message": "PATCH | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/bodyshop_repair_cards?id=eq.521&select=* | Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Mobile Safari/537.36",
+      "timestamp": 1783325564779000
+    },
+    {
+      "event_message": "POST | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/rpc/get_unread_complaint_notification_count | Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36",
+      "timestamp": 1783325564591000
+    },
+    {
+      "event_message": "GET | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/auth/v1/user | Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Mobile Safari/537.36",
+      "timestamp": 1783325564428000
+    },
+    {
+      "event_message": "POST | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/rpc/get_unread_complaint_notification_count | Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
+      "timestamp": 1783325564151000
+    },
+    {
+      "event_message": "POST | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/rpc/get_unread_complaint_notification_count | Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
+      "timestamp": 1783325563879000
+    },
+    {
+      "event_message": "GET | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/bodyshop_assignments?select=id%2Cjob_card_number%2Crepair_card_id%2Cdentor_employee_code%2Cdentor_employee_name%2Cpainter_employee_code%2Cpainter_employee_name%2Ctechnician_employee_code%2Ctechnician_employee_name%2Celectrician_employee_code%2Celectrician_employee_name%2Cdet_employee_code%2Cdet_employee_name%2Cdentor_work_status%2Cpainter_work_status%2Ctechnician_work_status%2Celectrician_work_status%2Cdet_work_status%2Cdentor_remark%2Cpainter_remark%2Ctechnician_remark%2Celectrician_remark%2Cdet_remark%2Cdentor_in_ts%2Cpainter_in_ts%2Ctechnician_in_ts%2Celectrician_in_ts%2Cdet_in_ts%2Cdentor_out_ts%2Cpainter_out_ts%2Ctechnician_out_ts%2Celectrician_out_ts%2Cdet_out_ts%2Cdentor_completed_by%2Cpainter_completed_by%2Ctechnician_completed_by%2Celectrician_completed_by%2Cdet_completed_by%2Cbs_floor_completed_at%2Cbs_floor_completed_by&is_active=eq.true&repair_card_id=eq.521&order=updated_at.desc&limit=1 | Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Mobile Safari/537.36",
+      "timestamp": 1783325563451000
+    },
+    {
+      "event_message": "GET | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/bodyshop_stage_worklist_projection?select=repair_card_id%2Cstage_no%2Cis_pending&is_pending=eq.true&repair_card_id=in.%28525%2C524%2C523%2C522%2C521%2C520%2C519%2C518%2C517%2C516%2C515%2C514%2C513%2C512%2C511%2C510%2C509%2C508%2C507%2C506%2C505%2C504%2C503%2C502%2C501%2C500%2C499%2C498%2C497%2C496%2C495%2C494%2C493%2C492%2C491%2C490%2C489%2C488%2C487%2C486%2C485%2C484%2C483%2C482%2C481%2C480%2C479%2C478%2C477%2C476%2C475%2C474%2C473%2C472%2C471%2C470%2C469%2C468%2C467%2C466%2C465%2C464%2C463%2C462%2C461%2C460%2C459%2C458%2C457%2C456%2C455%2C454%2C453%2C452%2C451%2C450%2C449%2C448%2C447%2C446%2C445%2C444%2C443%2C442%2C441%2C440%2C439%2C438%2C437%2C436%2C435%2C434%2C433%2C432%2C431%2C430%2C429%2C428%2C427%2C426%2C425%2C424%2C423%2C422%2C421%2C420%2C419%2C418%2C417%2C416%2C415%2C414%2C413%2C412%2C411%2C410%2C409%2C408%2C407%2C406%2C405%2C404%2C403%2C402%2C401%2C400%2C399%2C398%2C397%2C396%2C395%2C394%2C393%2C392%2C391%2C390%2C389%2C388%2C38... | Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Mobile Safari/537.36",
+      "timestamp": 1783325563102000
+    },
+    {
+      "event_message": "GET | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/bodyshop_assignments?select=id%2Cjob_card_number%2Crepair_card_id%2Cdentor_employee_code%2Cdentor_employee_name%2Cpainter_employee_code%2Cpainter_employee_name%2Ctechnician_employee_code%2Ctechnician_employee_name%2Celectrician_employee_code%2Celectrician_employee_name%2Cdet_employee_code%2Cdet_employee_name%2Cdentor_work_status%2Cpainter_work_status%2Ctechnician_work_status%2Celectrician_work_status%2Cdet_work_status%2Cdentor_remark%2Cpainter_remark%2Ctechnician_remark%2Celectrician_remark%2Cdet_remark%2Cdentor_in_ts%2Cpainter_in_ts%2Ctechnician_in_ts%2Celectrician_in_ts%2Cdet_in_ts%2Cdentor_out_ts%2Cpainter_out_ts%2Ctechnician_out_ts%2Celectrician_out_ts%2Cdet_out_ts%2Cdentor_completed_by%2Cpainter_completed_by%2Ctechnician_completed_by%2Celectrician_completed_by%2Cdet_completed_by%2Cbs_floor_completed_at%2Cbs_floor_completed_by&is_active=eq.true&job_card_number=eq.JC-MBTPLT-JP2-2627-003377&order=updated_at.desc&limit=1 | Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Mobile Safari/537.36",
+      "timestamp": 1783325563083000
+    },
+    {
+      "event_message": "OPTIONS | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/bodyshop_stage_worklist_projection?select=repair_card_id%2Cstage_no%2Cis_pending&is_pending=eq.true&repair_card_id=in.%28525%2C524%2C523%2C522%2C521%2C520%2C519%2C518%2C517%2C516%2C515%2C514%2C513%2C512%2C511%2C510%2C509%2C508%2C507%2C506%2C505%2C504%2C503%2C502%2C501%2C500%2C499%2C498%2C497%2C496%2C495%2C494%2C493%2C492%2C491%2C490%2C489%2C488%2C487%2C486%2C485%2C484%2C483%2C482%2C481%2C480%2C479%2C478%2C477%2C476%2C475%2C474%2C473%2C472%2C471%2C470%2C469%2C468%2C467%2C466%2C465%2C464%2C463%2C462%2C461%2C460%2C459%2C458%2C457%2C456%2C455%2C454%2C453%2C452%2C451%2C450%2C449%2C448%2C447%2C446%2C445%2C444%2C443%2C442%2C441%2C440%2C439%2C438%2C437%2C436%2C435%2C434%2C433%2C432%2C431%2C430%2C429%2C428%2C427%2C426%2C425%2C424%2C423%2C422%2C421%2C420%2C419%2C418%2C417%2C416%2C415%2C414%2C413%2C412%2C411%2C410%2C409%2C408%2C407%2C406%2C405%2C404%2C403%2C402%2C401%2C400%2C399%2C398%2C397%2C396%2C395%2C394%2C393%2C392%2C391%2C390%2C389%2C388%2C38... | Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Mobile Safari/537.36",
+      "timestamp": 1783325563081000
+    },
+    {
+      "event_message": "PATCH | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/bodyshop_repair_cards?id=eq.521&select=* | Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Mobile Safari/537.36",
+      "timestamp": 1783325562354000
+    },
+    {
+      "event_message": "OPTIONS | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/bodyshop_repair_cards?id=eq.521&select=* | Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Mobile Safari/537.36",
+      "timestamp": 1783325562329000
+    },
+    {
+      "event_message": "GET | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/auth/v1/user | Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Mobile Safari/537.36",
+      "timestamp": 1783325561859000
+    },
+    {
+      "event_message": "POST | 201 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/bodyshop_repair_card_documents?on_conflict=repair_card_id%2Cdoc_key&select=id%2Crepair_card_id%2Creception_entry_id%2Cdoc_key%2Cstorage_bucket%2Cstorage_path%2Cfile_name%2Ccontent_type%2Cfile_size_bytes%2Cdrive_url%2Cdrive_file_id%2Cuploaded_at%2Ccreated_at%2Cupdated_at | Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Mobile Safari/537.36",
+      "timestamp": 1783325561212000
+    },
+    {
+      "event_message": "GET | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/auth/v1/user | Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Mobile Safari/537.36",
+      "timestamp": 1783325560843000
+    },
+    {
+      "event_message": "POST | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/rpc/get_unread_complaint_notification_count | Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
+      "timestamp": 1783325559473000
+    },
+    {
+      "event_message": "POST | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/storage/v1/object/autodoc/3000840/service-advisor-bodyshop-docs/521/doc_survey_approval/1783325559328_6hcof_17833255489422348826001493166442.jpg | Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Mobile Safari/537.36",
+      "timestamp": 1783325559341000
+    },
+    {
+      "event_message": "OPTIONS | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/storage/v1/object/autodoc/3000840/service-advisor-bodyshop-docs/521/doc_survey_approval/1783325559328_6hcof_17833255489422348826001493166442.jpg | Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Mobile Safari/537.36",
+      "timestamp": 1783325558809000
+    },
+    {
+      "event_message": "GET | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/user_employee_links?select=dealer_code%2Cis_primary%2Cupdated_at&user_id=eq.e7e6d841-d096-4a36-b368-1e0217993f31&is_active=eq.true&order=is_primary.desc%2Cupdated_at.desc | Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Mobile Safari/537.36",
+      "timestamp": 1783325558458000
+    },
+    {
+      "event_message": "GET | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/users?select=role%2Cis_active&id=eq.e7e6d841-d096-4a36-b368-1e0217993f31 | Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Mobile Safari/537.36",
+      "timestamp": 1783325558128000
+    },
+    {
+      "event_message": "POST | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/rpc/get_unread_complaint_notification_count | Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
+      "timestamp": 1783325554907000
+    },
+    {
+      "event_message": "GET | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/telecall_assignments?select=id%2Ccampaign_id%2Cstatus%2Ccall_notes%2Cbooking_date%2Ccallback_date%2Ccalled_at%2Ccall_count%2Cno_answer_count%2Cwhatsapp_sent%2Cwhatsapp_status%2Cassigned_at%2Ccustomer%3Acustomer_id%28id%2Cchassis_no%2Cvehicle_registration_number%2Cfirst_name%2Clast_name%2Ccontact_phones%2Cmodel%2Cpowertrain_type%2Cproduct_line%2Cassumed_next_service_date%2Cassumed_next_service_type%2Cscheduled_next_service_date%2Cscheduled_next_service_type%2Clast_service_date%2Clast_service_type%2Clast_service_km%2Clast_service_dealer%2Csold_dealer%2Cextended_warranty_end_date%2Cextended_warranty_product%2Cextended_warranty_end_kms%2Cextended_warranty_policy_no%2Cextended_warranty_order_status%2Clast_insurance_expiry_date%2Clast_insurance_comapny%2Clast_insurance_policy_number%29&id=eq.11590 | Deno/2.1.4 (variant; SupabaseEdgeRuntime/1.74.2)",
+      "timestamp": 1783325554881000
+    },
+    {
+      "event_message": "PATCH | 204 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/telecall_assignments?id=eq.11590 | Deno/2.1.4 (variant; SupabaseEdgeRuntime/1.74.2)",
+      "timestamp": 1783325554848000
+    },
+    {
+      "event_message": "GET | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/telecall_assignments?select=id&campaign_id=eq.12&status=eq.pending&order=priority_score.desc%2Cid.asc&limit=1 | Deno/2.1.4 (variant; SupabaseEdgeRuntime/1.74.2)",
+      "timestamp": 1783325554821000
+    },
+    {
+      "event_message": "GET | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/telecall_assignments?select=id%2Ccampaign_id%2Cstatus%2Ccall_notes%2Cbooking_date%2Ccallback_date%2Ccalled_at%2Ccall_count%2Cno_answer_count%2Cwhatsapp_sent%2Cwhatsapp_status%2Cassigned_at%2Ccustomer%3Acustomer_id%28id%2Cchassis_no%2Cvehicle_registration_number%2Cfirst_name%2Clast_name%2Ccontact_phones%2Cmodel%2Cpowertrain_type%2Cproduct_line%2Cassumed_next_service_date%2Cassumed_next_service_type%2Cscheduled_next_service_date%2Cscheduled_next_service_type%2Clast_service_date%2Clast_service_type%2Clast_service_km%2Clast_service_dealer%2Csold_dealer%2Cextended_warranty_end_date%2Cextended_warranty_product%2Cextended_warranty_end_kms%2Cextended_warranty_policy_no%2Cextended_warranty_order_status%2Clast_insurance_expiry_date%2Clast_insurance_comapny%2Clast_insurance_policy_number%29&campaign_id=eq.12&assigned_to=eq.neetutechwheels77%40gmail.com&status=eq.callback_later&callback_date=lte.2026-07-06&order=callback_date.asc&limit=1 | Deno/2.1.4 (variant; SupabaseEdgeRuntime/1.74.2)",
+      "timestamp": 1783325554776000
+    },
+    {
+      "event_message": "GET | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/users?select=email%2Crole%2Cfull_name&id=eq.a445d7fe-a5bd-4c15-b26f-fb4c45585b60 | Deno/2.1.4 (variant; SupabaseEdgeRuntime/1.74.2)",
+      "timestamp": 1783325554742000
+    },
+    {
+      "event_message": "GET | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/auth/v1/user | Deno/2.1.4 (variant; SupabaseEdgeRuntime/1.74.2)",
+      "timestamp": 1783325554288000
+    },
+    {
+      "event_message": "GET | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/telecall_assignments?select=status&assigned_to=eq.neetutechwheels77%40gmail.com&called_at=gte.2026-07-06T00%3A00%3A00%2B00%3A00 | Deno/2.1.4 (variant; SupabaseEdgeRuntime/1.74.2)",
+      "timestamp": 1783325552935000
+    },
+    {
+      "event_message": "GET | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/users?select=email%2Crole%2Cfull_name&id=eq.a445d7fe-a5bd-4c15-b26f-fb4c45585b60 | Deno/2.1.4 (variant; SupabaseEdgeRuntime/1.74.2)",
+      "timestamp": 1783325552911000
+    },
+    {
+      "event_message": "GET | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/telecall_assignments?select=id%2Ccampaign_id%2Cstatus%2Ccall_notes%2Cbooking_date%2Ccallback_date%2Ccalled_at%2Ccall_count%2Cno_answer_count%2Cwhatsapp_sent%2Cwhatsapp_status%2Cassigned_at%2Ccustomer%3Acustomer_id%28id%2Cchassis_no%2Cvehicle_registration_number%2Cfirst_name%2Clast_name%2Ccontact_phones%2Cmodel%2Cpowertrain_type%2Cproduct_line%2Cassumed_next_service_date%2Cassumed_next_service_type%2Clast_service_date%2Clast_service_type%2Clast_service_km%2Clast_service_dealer%2Csold_dealer%2Cextended_warranty_end_date%2Cextended_warranty_product%2Cextended_warranty_order_status%2Clast_insurance_expiry_date%2Clast_insurance_comapny%29&assigned_to=eq.neetutechwheels77%40gmail.com&status=in.%28assigned%2Ccalling%2Ccallback_later%2Cbooked%29&campaign_id=eq.12&order=assigned_at.desc | Deno/2.1.4 (variant; SupabaseEdgeRuntime/1.74.2)",
+      "timestamp": 1783325552875000
+    },
+    {
+      "event_message": "GET | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/users?select=email%2Crole%2Cfull_name&id=eq.a445d7fe-a5bd-4c15-b26f-fb4c45585b60 | Deno/2.1.4 (variant; SupabaseEdgeRuntime/1.74.2)",
+      "timestamp": 1783325552855000
+    },
+    {
+      "event_message": "GET | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/auth/v1/user | Deno/2.1.4 (variant; SupabaseEdgeRuntime/1.74.2)",
+      "timestamp": 1783325552827000
+    },
+    {
+      "event_message": "GET | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/auth/v1/user | Deno/2.1.4 (variant; SupabaseEdgeRuntime/1.74.2)",
+      "timestamp": 1783325552823000
+    },
+    {
+      "event_message": "PATCH | 204 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/telecall_campaigns?id=eq.12 | Deno/2.1.4 (variant; SupabaseEdgeRuntime/1.74.2)",
+      "timestamp": 1783325552520000
+    },
+    {
+      "event_message": "GET | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/telecall_assignments?select=status&campaign_id=eq.12 | Deno/2.1.4 (variant; SupabaseEdgeRuntime/1.74.2)",
+      "timestamp": 1783325552483000
+    },
+    {
+      "event_message": "PATCH | 204 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/telecall_assignments?id=eq.11588 | Deno/2.1.4 (variant; SupabaseEdgeRuntime/1.74.2)",
+      "timestamp": 1783325552450000
+    },
+    {
+      "event_message": "GET | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/telecall_assignments?select=no_answer_count%2Ccall_count&id=eq.11588 | Deno/2.1.4 (variant; SupabaseEdgeRuntime/1.74.2)",
+      "timestamp": 1783325552424000
+    }
+  ]
+}

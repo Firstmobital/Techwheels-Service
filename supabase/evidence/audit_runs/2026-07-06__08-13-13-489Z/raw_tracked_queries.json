@@ -1,0 +1,18 @@
+{
+  "status": "ok",
+  "label": "tracked_queries",
+  "rows": [
+    {
+      "queryid": "852176900607336119",
+      "calls": 7,
+      "total_ms": "6122.21",
+      "mean_ms": "874.60"
+    },
+    {
+      "queryid": "-922008049376959953",
+      "calls": 1,
+      "total_ms": "147.49",
+      "mean_ms": "147.49"
+    }
+  ]
+}
