@@ -85,6 +85,20 @@ const FLOOR_INCHARGE_ALLOWED_SERVICE_TYPES = [
 
 const RECEPTION_LIST_PAGE_SIZE = 500
 
+// Default lookback for floor/technician pages — vehicles don't stay in service longer than this.
+const FLOOR_INCHARGE_LOOKBACK_DAYS = 60
+const TECHNICIAN_FALLBACK_LOOKBACK_DAYS = 90
+
+function getISOLookbackRange(days: number): { from: string; to: string } {
+  const now = new Date()
+  const from = new Date(now)
+  from.setDate(from.getDate() - days)
+  return {
+    from: from.toISOString(),
+    to: new Date(now.getTime() + 24 * 60 * 60 * 1000).toISOString(), // +1 day buffer
+  }
+}
+
 const RECEPTION_ENTRY_SELECT_COLUMNS = [
   'id',
   'dealer_code',
@@ -300,7 +314,23 @@ export async function listReceptionEntries(): Promise<ApiResult<ReceptionEntryRo
   const { data, error } = await fetchReceptionEntriesWithKeyset()
 
   if (error) return fail(error)
-  
+
+  const entries = (data ?? []) as ReceptionEntryRow[]
+  const enriched = await enrichEntriesWithEmployeeBranch(entries)
+  return ok(enriched)
+}
+
+/**
+ * Bounded variant for the technician page fallback lookup.
+ * Fetches reception entries within a default lookback window to avoid
+ * full-table scans when resolving JC metadata for recent assignments.
+ */
+export async function listReceptionEntriesWithDefaultLookback(): Promise<ApiResult<ReceptionEntryRow[]>> {
+  const range = getISOLookbackRange(TECHNICIAN_FALLBACK_LOOKBACK_DAYS)
+  const { data, error } = await fetchReceptionEntriesWithKeyset(undefined, range.from, range.to)
+
+  if (error) return fail(error)
+
   const entries = (data ?? []) as ReceptionEntryRow[]
   const enriched = await enrichEntriesWithEmployeeBranch(entries)
   return ok(enriched)
@@ -334,11 +364,15 @@ export async function listServiceAdvisorEntriesByDateRange(range: { from: string
   return ok(enriched)
 }
 
-export async function listFloorInchargeEntries(): Promise<ApiResult<ReceptionEntryRow[]>> {
+export async function listFloorInchargeEntries(
+  range?: { from: string; to: string },
+): Promise<ApiResult<ReceptionEntryRow[]>> {
+  // Default to last FLOOR_INCHARGE_LOOKBACK_DAYS days — vehicles don't stay in service longer.
+  const effectiveRange = range ?? getISOLookbackRange(FLOOR_INCHARGE_LOOKBACK_DAYS)
   const { data, error } = await fetchReceptionEntriesWithKeyset(
     FLOOR_INCHARGE_ALLOWED_SERVICE_TYPES,
-    undefined,
-    undefined,
+    effectiveRange.from,
+    effectiveRange.to,
     true,
   )
 

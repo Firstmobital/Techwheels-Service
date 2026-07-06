@@ -128,20 +128,28 @@ export default function EWReminderPage() {
       const today = new Date()
       const threeYearsAgo = new Date(today.getFullYear() - 3, today.getMonth(), today.getDate())
 
-      // Fetch vehicle records in batches
+      // Fetch vehicle records using keyset pagination (avoids OFFSET full-table scans).
+      // vehicle_sale_date is stored as DD/MM/YY so server-side date filtering is not
+      // possible — filtering is applied client-side after each page.
       const allRecords: EWRecord[] = []
-      let from = 0
       const batchSize = 1000
+      let cursorId: number | null = null
+      let totalFetched = 0
 
       while (true) {
-        const { data, error: err } = await supabase
+        let q = supabase
           .from('all_service_data')
           .select(`id, chassis_no, registration_no, cust_first_name, cust_last_name, cust_mobile_no,
                    ppl, pl, vehicle_sale_date, extended_warranty_policy_no, extended_warranty_product,
                    extended_warranty_order_status, extended_propensity_flag, vehicle_age_in_years`)
-          .range(from, from + batchSize - 1)
           .order('id', { ascending: false })
+          .limit(batchSize)
 
+        if (cursorId !== null) {
+          q = q.lt('id', cursorId)
+        }
+
+        const { data, error: err } = await q
         if (err) throw err
         if (!data || data.length === 0) break
 
@@ -151,10 +159,12 @@ export default function EWReminderPage() {
           return saleDate >= threeYearsAgo && saleDate <= today
         })
         allRecords.push(...filtered)
-        setLoadingProgress(from + data.length)
+        totalFetched += data.length
+        setLoadingProgress(totalFetched)
 
         if (data.length < batchSize) break
-        from += batchSize
+        cursorId = Number((data[data.length - 1] as { id: number }).id)
+        if (!Number.isFinite(cursorId) || cursorId <= 0) break
       }
 
       setRecords(allRecords)

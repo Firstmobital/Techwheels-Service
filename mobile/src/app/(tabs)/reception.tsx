@@ -195,16 +195,28 @@ function normalizeKm(v: string): number | null {
 }
 
 // ─── Supabase helpers (mirrors web reception.ts) ──────────────────────────────
+
+// Mobile reception shows recent entries only. 30-day default prevents full-table scans.
+const MOBILE_RECEPTION_LOOKBACK_DAYS = 30
+
+function getMobileLookbackFrom(): string {
+  const d = new Date()
+  d.setDate(d.getDate() - MOBILE_RECEPTION_LOOKBACK_DAYS)
+  return d.toISOString()
+}
+
 async function fetchAllEntries(): Promise<ReceptionEntry[]> {
   const PAGE = 500
   const rows: ReceptionEntry[] = []
   let cursorCreatedAt: string | null = null
   let cursorId: number | null = null
+  const lookbackFrom = getMobileLookbackFrom()
 
   while (true) {
     let q = supabase
       .from('service_reception_entries')
       .select(ENTRY_SELECT)
+      .gte('created_at', lookbackFrom)
       .order('created_at', { ascending: false })
       .order('id', { ascending: false })
       .limit(PAGE)

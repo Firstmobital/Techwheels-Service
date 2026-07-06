@@ -309,7 +309,7 @@ export default function ServiceAdvisorPage() {
   const [canModifyServiceAdvisor, setCanModifyServiceAdvisor] = useState(false)
 
   const [loading, setLoading] = useState(true)
-  const [dateRange, setDateRange] = useState<DateRange>({ from: '', to: '' })
+  const [dateRange, setDateRange] = useState<DateRange>(currentMonthRange())
   const [disabledPeriodPresets, setDisabledPeriodPresets] = useState<DateRangePreset[]>([])
   const [error, setError] = useState<string | null>(null)
   const [toastMsg, setToastMsg] = useState<string | null>(null)

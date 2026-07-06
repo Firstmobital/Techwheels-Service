@@ -18,9 +18,10 @@ async function getAllServiceDataNullCounts(): Promise<{ totalRows: number; rows:
     return { totalRows: 0, rows: [] }
   }
 
+  // Use estimated count for the total — exact count on a large table is expensive.
   const { count: totalRows, error: totalCountError } = await supabase
     .from('all_service_data')
-    .select('*', { count: 'exact', head: true })
+    .select('*', { count: 'estimated', head: true })
 
   if (totalCountError) {
     throw new Error(totalCountError.message)

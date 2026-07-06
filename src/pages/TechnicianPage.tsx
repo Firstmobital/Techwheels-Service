@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Icon } from '../components/Icon'
 import DateRangeFilter, { currentMonthRange, type DateRange } from '../components/DateRangeFilter'
 import { supabase } from '../lib/supabase'
-import { listFloorInchargeEntries, listReceptionEntries, type ReceptionEntryRow } from '../lib/api'
+import { listFloorInchargeEntries, listReceptionEntriesWithDefaultLookback, type ReceptionEntryRow } from '../lib/api'
 import { sendTechnicianDailyEarningsTestEmail } from '../lib/api/email'
 import * as XLSX from 'xlsx'
 
@@ -865,7 +865,8 @@ export default function TechnicianPage() {
         const unresolvedJcNumbers = assignmentJcNumbers.filter((jc) => !locationMap.has(jc) || !regNumberMap.has(jc) || !fuelTypeMap.has(jc))
         if (unresolvedJcNumbers.length > 0) {
           const unresolvedSet = new Set(unresolvedJcNumbers)
-          const receptionEntriesRes = await listReceptionEntries()
+          // Use bounded lookback (90 days) — technicians don't work on jobs older than this.
+          const receptionEntriesRes = await listReceptionEntriesWithDefaultLookback()
           if (!receptionEntriesRes.error && receptionEntriesRes.data) {
             ;(receptionEntriesRes.data ?? []).forEach((row) => {
               const key = String(row.jc_number ?? '').trim().toUpperCase()
@@ -1082,7 +1083,8 @@ export default function TechnicianPage() {
       // Build SA name map (Service Advisor page source) by JC number.
       const saNameMap = new Map<string, string>()
       const receptionSrTypeMap = new Map<string, string>()
-      const receptionRes = await listReceptionEntries()
+      // Use bounded lookback (90 days) — technician SA name lookups are for recent jobs only.
+      const receptionRes = await listReceptionEntriesWithDefaultLookback()
       if (!receptionRes.error && receptionRes.data) {
         const sourceJcSet = new Set(sourceJcNumbers.map((jc) => normalizeJobCardNumber(jc)))
         ;(receptionRes.data ?? []).forEach((row) => {
