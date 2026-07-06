@@ -26,14 +26,31 @@ function StatusBadge({ status }: { status: PartsStatus }) {
   )
 }
 
+const LOW_STOCK_THRESHOLD = 5
+
 function QtyBadge({ qty }: { qty: number | null }) {
   if (qty == null) {
     return <span className="text-xs font-medium text-gray-400">Not Available</span>
   }
   if (qty <= 0) {
-    return <span className="rounded-full bg-red-50 px-2 py-0.5 text-xs font-semibold text-red-600">0</span>
+    return (
+      <span className="inline-flex items-center gap-1.5 rounded-full bg-red-50 px-2 py-0.5 text-xs font-semibold text-red-600">
+        0 <span className="text-red-500">· Out of Stock</span>
+      </span>
+    )
   }
-  return <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-emerald-700">{qty}</span>
+  if (qty < LOW_STOCK_THRESHOLD) {
+    return (
+      <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-50 px-2 py-0.5 text-xs font-semibold text-amber-700">
+        {qty} <span className="text-amber-600">· Low Stock</span>
+      </span>
+    )
+  }
+  return (
+    <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-emerald-700">
+      {qty} <span className="text-emerald-600">· Available</span>
+    </span>
+  )
 }
 
 type EditDraft = {
