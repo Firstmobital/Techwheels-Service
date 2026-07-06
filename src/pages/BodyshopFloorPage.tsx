@@ -701,20 +701,19 @@ export default function BodyshopFloorPage() {
   async function loadAll() {
     setLoading(true); setDataError(false)
     try {
-      // 1. Vehicles explicitly sent to bodyshop floor from survey stage
+      // 1. Vehicles active at Stage 11 (Floor Assignment) — visible as soon as Stage 10+ is reached, no Floor 2/3 selection required
       const { data: sentCards, error: sentErr } = await supabase
         .from('bodyshop_repair_cards')
         .select('id, reception_entry_id, job_card_no, bodyshop_floor, current_stage, additional_approval, qc_status, qc_fail_reason, qc_checked_by, qc_checked_at, updated_at, created_at')
-        .in('bodyshop_floor', ['Floor 2', 'Floor 3'])
         .gte('current_stage', 10)
 
       if (sentErr) throw sentErr
 
-      const sentByJc = new Map<string, 'Floor 2' | 'Floor 3'>()
+      const sentByJc = new Map<string, 'Floor 2' | 'Floor 3' | null>()
       const additionalByJc: Record<string, AdditionalApprovalRowState> = {}
       const latestByJc = new Map<string, {
         repairCardId: number | null
-        floor: 'Floor 2' | 'Floor 3'
+        floor: 'Floor 2' | 'Floor 3' | null
         additionalApproval: string | null
         qcStatus: string | null
         qcFailReason: string | null
@@ -737,7 +736,6 @@ export default function BodyshopFloorPage() {
         created_at: string | null
       }>).forEach((row) => {
         const floor = row.bodyshop_floor
-        if (floor !== 'Floor 2' && floor !== 'Floor 3') return
 
         const jc = String(row.job_card_no ?? '').trim().toUpperCase()
         if (!jc) return
@@ -1781,9 +1779,9 @@ export default function BodyshopFloorPage() {
 
       <div className="pagehead">
         <div>
-          <div className="greet">Bodyshop · Floor 2 & 3</div>
+          <div className="greet">Bodyshop · Floor Assignment</div>
           <h1>Bodyshop Floor</h1>
-          <p className="bsf-subline">{cars.length} accident vehicles currently on Floor 2 & 3 · live assignment and status.</p>
+          <p className="bsf-subline">{cars.length} accident vehicles active for floor assignment · live assignment and status.</p>
         </div>
         <div className="bsf-top-actions">
           <DateRangeFilter range={dateRange} onChange={setDateRange} label="Period:" />
@@ -1887,7 +1885,7 @@ export default function BodyshopFloorPage() {
           <div className="empty-state">
             {search.trim() || branchFilter !== 'all' || floorFilter !== 'all' || assignmentView !== 'all'
               ? 'No cars match your filters.'
-              : 'No vehicles have been sent to Floor 2/Floor 3 yet.'}
+              : 'No vehicles are active for floor assignment yet.'}
           </div>
         ) : (
           <div className="bsf-roster-list">
