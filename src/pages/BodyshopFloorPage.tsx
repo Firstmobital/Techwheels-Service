@@ -184,8 +184,8 @@ interface Employee {
   department: string | null
 }
 
-type BSRole = 'DENTOR' | 'PAINTER' | 'TECHNICIAN' | 'SUPERVISOR' | 'DENTOR_HELPER' | 'PAINTER_HELPER'
-type SupportRole = 'DENTOR' | 'PAINTER' | 'TECHNICIAN' | 'SUPERVISOR' | 'DENTOR_HELPER' | 'PAINTER_HELPER'
+type BSRole = 'DENTOR' | 'PAINTER' | 'TECHNICIAN' | 'FLOOR_INCHARGE' | 'DENTOR_HELPER' | 'PAINTER_HELPER' | 'RUBBING' | 'EDP'
+type SupportRole = 'DENTOR' | 'PAINTER' | 'TECHNICIAN' | 'FLOOR_INCHARGE' | 'DENTOR_HELPER' | 'PAINTER_HELPER' | 'RUBBING' | 'EDP'
 
 interface DBPrimaryAssignmentRow {
   id: number
@@ -209,6 +209,10 @@ interface DBPrimaryAssignmentRow {
   dentor_helper_employee_name: string | null
   painter_helper_employee_code: string | null
   painter_helper_employee_name: string | null
+  rubbing_employee_code: string | null
+  rubbing_employee_name: string | null
+  edp_employee_code: string | null
+  edp_employee_name: string | null
   dentor_work_status: string | null
   dentor_in_ts: string | null
   dentor_remark: string | null
@@ -233,12 +237,22 @@ interface DBPrimaryAssignmentRow {
   painter_helper_in_ts: string | null
   painter_helper_remark: string | null
   painter_helper_out_ts: string | null
+  rubbing_work_status: string | null
+  rubbing_in_ts: string | null
+  rubbing_remark: string | null
+  rubbing_out_ts: string | null
+  edp_work_status: string | null
+  edp_in_ts: string | null
+  edp_remark: string | null
+  edp_out_ts: string | null
   dentor_completed_by: string | null
   painter_completed_by: string | null
   technician_completed_by: string | null
   supervisor_completed_by: string | null
   dentor_helper_completed_by: string | null
   painter_helper_completed_by: string | null
+  rubbing_completed_by: string | null
+  edp_completed_by: string | null
   bs_floor_completed_at: string | null
   bs_floor_completed_by: string | null
 }
@@ -284,12 +298,17 @@ const ROLE_META: Record<BSRole, { label: string; icon: string }> = {
   DENTOR:         { label: 'Dentor',          icon: '🔨' },
   PAINTER:        { label: 'Painter',         icon: '🎨' },
   TECHNICIAN:     { label: 'Technician',      icon: '🔧' },
-  SUPERVISOR:     { label: 'Floor Incharge',  icon: '👷' },
+  FLOOR_INCHARGE: { label: 'Floor Incharge',  icon: '👷' },
   DENTOR_HELPER:  { label: 'Dentor Helper',   icon: '🔩' },
   PAINTER_HELPER: { label: 'Painter Helper',  icon: '🖌️' },
+  RUBBING:        { label: 'Rubbing',         icon: '🪣' },
+  EDP:            { label: 'EDP',             icon: '🧴' },
 }
 
-const ALL_ROLES: BSRole[] = ['DENTOR', 'PAINTER', 'TECHNICIAN', 'SUPERVISOR', 'DENTOR_HELPER', 'PAINTER_HELPER']
+const ALL_ROLES: BSRole[] = ['DENTOR', 'PAINTER', 'TECHNICIAN', 'FLOOR_INCHARGE', 'DENTOR_HELPER', 'PAINTER_HELPER', 'RUBBING', 'EDP']
+
+// Roles that do NOT get a support assignment section
+const ROLES_WITHOUT_SUPPORT = new Set<BSRole>(['FLOOR_INCHARGE'])
 
 const ROLE_COLUMNS: Record<BSRole, {
   employeeCode: keyof DBPrimaryAssignmentRow
@@ -327,7 +346,7 @@ const ROLE_COLUMNS: Record<BSRole, {
     outTs: 'technician_out_ts',
     completedBy: 'technician_completed_by',
   },
-  SUPERVISOR: {
+  FLOOR_INCHARGE: {
     employeeCode: 'supervisor_employee_code',
     employeeName: 'supervisor_employee_name',
     workStatus: 'supervisor_work_status',
@@ -353,6 +372,24 @@ const ROLE_COLUMNS: Record<BSRole, {
     remark: 'painter_helper_remark',
     outTs: 'painter_helper_out_ts',
     completedBy: 'painter_helper_completed_by',
+  },
+  RUBBING: {
+    employeeCode: 'rubbing_employee_code',
+    employeeName: 'rubbing_employee_name',
+    workStatus: 'rubbing_work_status',
+    inTs: 'rubbing_in_ts',
+    remark: 'rubbing_remark',
+    outTs: 'rubbing_out_ts',
+    completedBy: 'rubbing_completed_by',
+  },
+  EDP: {
+    employeeCode: 'edp_employee_code',
+    employeeName: 'edp_employee_name',
+    workStatus: 'edp_work_status',
+    inTs: 'edp_in_ts',
+    remark: 'edp_remark',
+    outTs: 'edp_out_ts',
+    completedBy: 'edp_completed_by',
   },
 }
 
@@ -607,9 +644,11 @@ function normRole(r: string | null): BSRole | null {
   if (v === 'DENTOR')          return 'DENTOR'
   if (v === 'PAINTER')         return 'PAINTER'
   if (v === 'TECHNICIAN')      return 'TECHNICIAN'
-  if (v === 'FLOOR INCHARGE')  return 'SUPERVISOR'
+  if (v === 'FLOOR INCHARGE')  return 'FLOOR_INCHARGE'
   if (v === 'DENTOR HELPER')   return 'DENTOR_HELPER'
   if (v === 'PAINTER HELPER')  return 'PAINTER_HELPER'
+  if (v === 'RUBBING')         return 'RUBBING'
+  if (v === 'EDP')             return 'EDP'
   return null
 }
 
@@ -639,7 +678,7 @@ function isEmployeeEligibleForRole(role: BSRole, department: string | null): boo
 }
 
 function emptyRoleMap() {
-  return { DENTOR: undefined, PAINTER: undefined, TECHNICIAN: undefined, SUPERVISOR: undefined, DENTOR_HELPER: undefined, PAINTER_HELPER: undefined } as Record<BSRole, BSAssignment | undefined>
+  return { DENTOR: undefined, PAINTER: undefined, TECHNICIAN: undefined, FLOOR_INCHARGE: undefined, DENTOR_HELPER: undefined, PAINTER_HELPER: undefined, RUBBING: undefined, EDP: undefined } as Record<BSRole, BSAssignment | undefined>
 }
 
 function mapRowToRoleMap(row: DBPrimaryAssignmentRow): Record<BSRole, BSAssignment | undefined> {
@@ -886,7 +925,7 @@ export default function BodyshopFloorPage() {
         for (const s of (supportData ?? []) as SupportAssignment[]) {
           const k = s.job_card_number.toUpperCase()
           const role = s.support_role as SupportRole
-          if (!supportMap[k]) supportMap[k] = { DENTOR: [], PAINTER: [], TECHNICIAN: [], SUPERVISOR: [], DENTOR_HELPER: [], PAINTER_HELPER: [] }
+          if (!supportMap[k]) supportMap[k] = { DENTOR: [], PAINTER: [], TECHNICIAN: [], FLOOR_INCHARGE: [], DENTOR_HELPER: [], PAINTER_HELPER: [], RUBBING: [], EDP: [] }
           supportMap[k][role].push(s)
         }
         // Sort each role array by assigned_at DESC
@@ -909,7 +948,7 @@ export default function BodyshopFloorPage() {
   // ── Employees by role ────────────────────────────────────────────────────
 
   const empByRole = useMemo<Record<BSRole, Employee[]>>(() => {
-    const m: Record<BSRole, Employee[]> = { DENTOR: [], PAINTER: [], TECHNICIAN: [], SUPERVISOR: [], DENTOR_HELPER: [], PAINTER_HELPER: [] }
+    const m: Record<BSRole, Employee[]> = { DENTOR: [], PAINTER: [], TECHNICIAN: [], FLOOR_INCHARGE: [], DENTOR_HELPER: [], PAINTER_HELPER: [], RUBBING: [], EDP: [] }
     employees.forEach((e) => {
       const r = normRole(e.role)
       if (!r) return
@@ -921,7 +960,7 @@ export default function BodyshopFloorPage() {
   }, [employees])
 
   const empBySupportRole = useMemo<Record<SupportRole, Employee[]>>(() => {
-    const m: Record<SupportRole, Employee[]> = { DENTOR: [], PAINTER: [], TECHNICIAN: [], SUPERVISOR: [], DENTOR_HELPER: [], PAINTER_HELPER: [] }
+    const m: Record<SupportRole, Employee[]> = { DENTOR: [], PAINTER: [], TECHNICIAN: [], FLOOR_INCHARGE: [], DENTOR_HELPER: [], PAINTER_HELPER: [], RUBBING: [], EDP: [] }
     employees.forEach((e) => {
       const r = normRole(e.role)
       if (!r) return
@@ -1214,7 +1253,7 @@ export default function BodyshopFloorPage() {
       setSupportAssignments((prev) => ({
         ...prev,
         [k]: {
-          ...(prev[k] ?? { DENTOR: [], PAINTER: [], TECHNICIAN: [], SUPERVISOR: [], DENTOR_HELPER: [], PAINTER_HELPER: [] }),
+          ...(prev[k] ?? { DENTOR: [], PAINTER: [], TECHNICIAN: [], FLOOR_INCHARGE: [], DENTOR_HELPER: [], PAINTER_HELPER: [], RUBBING: [], EDP: [] }),
           [role]: [...(prev[k]?.[role] ?? []), newSupport],
         },
       }))
@@ -1913,7 +1952,7 @@ export default function BodyshopFloorPage() {
           <div className="bsf-roster-list">
             {filtered.map((car) => {
               const k = jcKey(car)
-              const carMap = assignments[k] ?? { DENTOR: undefined, PAINTER: undefined, TECHNICIAN: undefined, SUPERVISOR: undefined, DENTOR_HELPER: undefined, PAINTER_HELPER: undefined }
+              const carMap = assignments[k] ?? { DENTOR: undefined, PAINTER: undefined, TECHNICIAN: undefined, FLOOR_INCHARGE: undefined, DENTOR_HELPER: undefined, PAINTER_HELPER: undefined, RUBBING: undefined, EDP: undefined }
               const qcDraft = qcByJc[k] ?? emptyQcEntryState()
               const selectedQcCheckerNames = parseQcCheckedByNames(qcDraft.qc_checked_by)
               const assignedQcCheckerNames = getAssignedQcCheckerNames(k)
@@ -1922,7 +1961,7 @@ export default function BodyshopFloorPage() {
               const otherCheckerNames = bodyshopEmployeeNames
                 .filter((name) => !assignedQcNameSet.has(name.toLowerCase()))
                 .filter((name) => !otherSearch || name.toLowerCase().includes(otherSearch))
-              const supportMap = supportAssignments[k] ?? { DENTOR: [], PAINTER: [], TECHNICIAN: [], SUPERVISOR: [], DENTOR_HELPER: [], PAINTER_HELPER: [] }
+              const supportMap = supportAssignments[k] ?? { DENTOR: [], PAINTER: [], TECHNICIAN: [], FLOOR_INCHARGE: [], DENTOR_HELPER: [], PAINTER_HELPER: [], RUBBING: [], EDP: [] }
               const floorStatus = bsFloorStatus[k] ?? { completedAt: null, completedBy: null }
               const isFloorCompleted = Boolean(floorStatus.completedAt)
               const isSavingFloorStatus = saving === `${k}-bs-floor`
@@ -2209,14 +2248,16 @@ export default function BodyshopFloorPage() {
                             <div key={role} className={roleClass}>
                               <div className="bsf-lane__head">
                                 <span className="bsf-lane__role">{ROLE_META[role].label}</span>
-                                <button
-                                  type="button"
-                                  className="bsf-role-plus"
-                                  onClick={() => setInlinePickerOpen((prev) => ({ ...prev, [pickerKey]: !showPicker }))}
-                                  disabled={isSavingSupport}
-                                >
-                                  +
-                                </button>
+                                {!ROLES_WITHOUT_SUPPORT.has(role) && (
+                                  <button
+                                    type="button"
+                                    className="bsf-role-plus"
+                                    onClick={() => setInlinePickerOpen((prev) => ({ ...prev, [pickerKey]: !showPicker }))}
+                                    disabled={isSavingSupport}
+                                  >
+                                    +
+                                  </button>
+                                )}
                               </div>
 
                               <select
@@ -2243,7 +2284,7 @@ export default function BodyshopFloorPage() {
                                 </div>
                               )}
 
-                              {showPicker && (
+                              {showPicker && !ROLES_WITHOUT_SUPPORT.has(role) && (
                                 <div className="bsf-inline-picker bsf-inline-picker--boxed">
                                   <select
                                     className="sel sel-sm"
