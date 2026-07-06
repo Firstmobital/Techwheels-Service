@@ -72,6 +72,23 @@ export async function listAllPartsRequests(): Promise<ApiResult<PartsRequestRow[
   return ok(rows)
 }
 
+// Fire-and-forget: re-runs the same Order Sheet / Stock Snapshot matching that normally
+// only runs after an import, so a Part Number the advisor just typed in — which may have
+// been ordered/received in a PAST import — immediately picks up its existing order date,
+// status and tracking info instead of waiting for the next import to run. Idempotent and
+// safe to call anytime (matches by matched_order_row_id so it never double-applies).
+// Never surfaces an error to the advisor; save has already succeeded at this point.
+function triggerPartsOrderMatch(): void {
+  void supabase.functions
+    .invoke('parts-request-order-match', { body: {} })
+    .then(({ error }) => {
+      if (error) console.warn(`Parts request auto-match failed: ${error.message}`)
+    })
+    .catch((err) => {
+      console.warn(`Parts request auto-match failed: ${(err as Error).message}`)
+    })
+}
+
 export async function createPartsRequest(input: {
   registrationNumber: string
   partsRequired: string
@@ -91,6 +108,7 @@ export async function createPartsRequest(input: {
   })
 
   if (error) return fail(error)
+  if (input.partsNumber) triggerPartsOrderMatch()
   return ok(data as number)
 }
 
@@ -115,6 +133,7 @@ export async function updateMyPartsRequestFields(input: {
   })
 
   if (error) return fail(error)
+  if (input.partsNumber) triggerPartsOrderMatch()
   return ok(undefined)
 }
 
@@ -137,6 +156,7 @@ export async function spmUpdatePartsRequest(input: {
   })
 
   if (error) return fail(error)
+  if (input.partsNumber) triggerPartsOrderMatch()
   return ok(undefined)
 }
 
