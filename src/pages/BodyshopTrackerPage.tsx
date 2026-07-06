@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Icon } from '../components/Icon'
 import DateRangeFilter, { currentMonthRange, type DateRange } from '../components/DateRangeFilter'
-import { isBodyshopDepartment } from '../lib/department'
+import { isBodyshopDepartment, isServiceDepartment } from '../lib/department'
 import { supabase } from '../lib/supabase'
 
 // ── Types ──────────────────────────────────────────────────────────────────────
@@ -62,14 +62,16 @@ type DayCard = {
 
 // ── Tabs ───────────────────────────────────────────────────────────────────────
 
-type TabKey = 'SA' | 'DENTOR' | 'PAINTER' | 'TECHNICIAN'
+type TabKey = 'SA' | 'DENTOR' | 'PAINTER' | 'TECHNICIAN' | 'ELECTRICIAN' | 'DET'
 type TabMeta = { key: TabKey; label: string; icon: string; defaultPct: number; mode: 'sa' | 'tech' }
 
 const TABS: TabMeta[] = [
-  { key: 'SA',         label: 'SA',         icon: '🧑‍💼', defaultPct: 3, mode: 'sa'   },
-  { key: 'DENTOR',     label: 'Dentor',     icon: '🔨', defaultPct: 5, mode: 'tech' },
-  { key: 'PAINTER',    label: 'Painter',    icon: '🎨', defaultPct: 5, mode: 'tech' },
-  { key: 'TECHNICIAN', label: 'Technician', icon: '🔧', defaultPct: 4, mode: 'tech' },
+  { key: 'SA',          label: 'SA',          icon: '🧑‍💼', defaultPct: 3, mode: 'sa'   },
+  { key: 'DENTOR',      label: 'Dentor',      icon: '🔨', defaultPct: 5, mode: 'tech' },
+  { key: 'PAINTER',     label: 'Painter',     icon: '🎨', defaultPct: 5, mode: 'tech' },
+  { key: 'TECHNICIAN',  label: 'Technician',  icon: '🔧', defaultPct: 4, mode: 'tech' },
+  { key: 'ELECTRICIAN', label: 'Electrician', icon: '⚡', defaultPct: 4, mode: 'tech' },
+  { key: 'DET',         label: 'DET',         icon: '🧰', defaultPct: 4, mode: 'tech' },
 ]
 
 const QUERY_PAGE = 1000
@@ -135,10 +137,10 @@ export default function BodyshopTrackerPage() {
 
   // Per-tab earning %
   const [sharePct, setSharePct] = useState<Record<TabKey, number>>({
-    SA: 3, DENTOR: 5, PAINTER: 5, TECHNICIAN: 4
+    SA: 3, DENTOR: 5, PAINTER: 5, TECHNICIAN: 4, ELECTRICIAN: 4, DET: 4
   })
   const [draftPct, setDraftPct] = useState<Record<TabKey, string>>({
-    SA: '3', DENTOR: '5', PAINTER: '5', TECHNICIAN: '4'
+    SA: '3', DENTOR: '5', PAINTER: '5', TECHNICIAN: '4', ELECTRICIAN: '4', DET: '4'
   })
 
   const curPct    = sharePct[activeTab]
@@ -158,16 +160,19 @@ export default function BodyshopTrackerPage() {
       const emps = (empRes.data ?? []) as EmployeeRow[]
       setEmployees(emps)
 
-      // Bodyshop employee codes by role
-      const bsCodes: Record<string, Set<string>> = { DENTOR: new Set(), PAINTER: new Set(), TECHNICIAN: new Set() }
+      // Bodyshop employee codes by role — mirrors Bodyshop Floor's eligibility rules:
+      // Dentor/Painter/Technician come from the BODY SHOP department; Electrician/DET
+      // are shared Service-department resources borrowed onto the bodyshop floor.
+      const bsCodes: Record<string, Set<string>> = {
+        DENTOR: new Set(), PAINTER: new Set(), TECHNICIAN: new Set(), ELECTRICIAN: new Set(), DET: new Set(),
+      }
       emps.forEach((e) => {
-        if (!isBodyshopDepartment(e.department)) return
         const role = String(e.role ?? '').trim().toUpperCase()
-        if (role === 'DENTOR') bsCodes.DENTOR.add(e.employee_code)
-        else if (role === 'PAINTER') bsCodes.PAINTER.add(e.employee_code)
-        else if (role === 'TECHNICIAN') bsCodes.TECHNICIAN.add(e.employee_code)
-        // Also include DET as Painter
-        else if (role === 'DET') bsCodes.PAINTER.add(e.employee_code)
+        if (role === 'DENTOR' && isBodyshopDepartment(e.department)) bsCodes.DENTOR.add(e.employee_code)
+        else if (role === 'PAINTER' && isBodyshopDepartment(e.department)) bsCodes.PAINTER.add(e.employee_code)
+        else if (role === 'TECHNICIAN' && isBodyshopDepartment(e.department)) bsCodes.TECHNICIAN.add(e.employee_code)
+        else if (role === 'ELECTRICIAN' && isServiceDepartment(e.department)) bsCodes.ELECTRICIAN.add(e.employee_code)
+        else if (role === 'DET' && isServiceDepartment(e.department)) bsCodes.DET.add(e.employee_code)
       })
 
       // 2. Accident JCs (for SA tab)
@@ -194,6 +199,8 @@ export default function BodyshopTrackerPage() {
         ...Array.from(bsCodes.DENTOR),
         ...Array.from(bsCodes.PAINTER),
         ...Array.from(bsCodes.TECHNICIAN),
+        ...Array.from(bsCodes.ELECTRICIAN),
+        ...Array.from(bsCodes.DET),
       ]
 
       if (allBsCodes.length > 0) {
@@ -228,17 +235,48 @@ export default function BodyshopTrackerPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { void loadData() }, [dateRange])
 
+  // ── Earning % settings (persisted) ─────────────────────────────────────────
+  // Loaded once on mount from bodyshop_role_earning_settings so percentages
+  // survive reloads and are shared across everyone viewing the tracker.
+  async function loadEarningSettings() {
+    const res = await supabase.from('bodyshop_role_earning_settings').select('role, percentage')
+    if (!res.error && res.data) {
+      const loadedPct: Partial<Record<TabKey, number>> = {}
+      const loadedDraft: Partial<Record<TabKey, string>> = {}
+      ;(res.data as Array<{ role: string; percentage: number | string }>).forEach((row) => {
+        const key = row.role as TabKey
+        if (!TABS.some((t) => t.key === key)) return
+        const n = Number(row.percentage)
+        if (!Number.isFinite(n)) return
+        loadedPct[key] = n
+        loadedDraft[key] = String(n)
+      })
+      setSharePct((p) => ({ ...p, ...loadedPct }))
+      setDraftPct((p) => ({ ...p, ...loadedDraft }))
+    }
+  }
+
+  useEffect(() => { void loadEarningSettings() }, [])
+
+  async function persistPct(role: TabKey, pct: number) {
+    await supabase.from('bodyshop_role_earning_settings')
+      .upsert({ role, percentage: pct, updated_at: new Date().toISOString() }, { onConflict: 'role' })
+  }
+
   // ── Employee code sets by role (memo) ──────────────────────────────────────
 
   const bsCodesByRole = useMemo<Record<TabKey, Set<string>>>(() => {
-    const map: Record<TabKey, Set<string>> = { SA: new Set(), DENTOR: new Set(), PAINTER: new Set(), TECHNICIAN: new Set() }
+    const map: Record<TabKey, Set<string>> = {
+      SA: new Set(), DENTOR: new Set(), PAINTER: new Set(), TECHNICIAN: new Set(), ELECTRICIAN: new Set(), DET: new Set(),
+    }
     employees.forEach((e) => {
-      if (!isBodyshopDepartment(e.department)) return
       const role = String(e.role ?? '').trim().toUpperCase()
-      if (role === 'SA') map.SA.add(e.employee_code)
-      else if (role === 'DENTOR') map.DENTOR.add(e.employee_code)
-      else if (role === 'PAINTER' || role === 'DET') map.PAINTER.add(e.employee_code)
-      else if (role === 'TECHNICIAN') map.TECHNICIAN.add(e.employee_code)
+      if (role === 'SA' && isBodyshopDepartment(e.department)) map.SA.add(e.employee_code)
+      else if (role === 'DENTOR' && isBodyshopDepartment(e.department)) map.DENTOR.add(e.employee_code)
+      else if (role === 'PAINTER' && isBodyshopDepartment(e.department)) map.PAINTER.add(e.employee_code)
+      else if (role === 'TECHNICIAN' && isBodyshopDepartment(e.department)) map.TECHNICIAN.add(e.employee_code)
+      else if (role === 'ELECTRICIAN' && isServiceDepartment(e.department)) map.ELECTRICIAN.add(e.employee_code)
+      else if (role === 'DET' && isServiceDepartment(e.department)) map.DET.add(e.employee_code)
     })
     return map
   }, [employees])
@@ -522,11 +560,15 @@ export default function BodyshopTrackerPage() {
                 </label>
                 <div className="tech-share-actions">
                   <button type="button" className="btn btn--primary btn--sm" disabled={!hasPend}
-                    onClick={() => setSharePct((p) => ({ ...p, [activeTab]: parsed }))}>Apply</button>
+                    onClick={() => {
+                      setSharePct((p) => ({ ...p, [activeTab]: parsed }))
+                      void persistPct(activeTab, parsed)
+                    }}>Apply</button>
                   <button type="button" className="btn btn--ghost btn--sm"
                     onClick={() => {
                       setSharePct((p) => ({ ...p, [activeTab]: tabMeta.defaultPct }))
                       setDraftPct((p) => ({ ...p, [activeTab]: String(tabMeta.defaultPct) }))
+                      void persistPct(activeTab, tabMeta.defaultPct)
                     }}>Reset</button>
                 </div>
               </div>
