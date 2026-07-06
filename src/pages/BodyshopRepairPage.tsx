@@ -1486,10 +1486,11 @@ export default function BodyshopRepairPage() {
         .from('service_reception_entries')
         .select('id, jc_number, reg_number, owner_name, owner_phone, sa_employee_code, sa_name, sa_display_name, branch, created_at')
         .eq('service_type', 'Accident')
-        .gte('created_at', options.fromDate + 'T00:00:00+05:30')
-        .lte('created_at', options.toDate + 'T23:59:59+05:30')
         .order('id', { ascending: false })
         .limit(PAGE_SIZE)
+
+      if (options.fromDate) query = query.gte('created_at', options.fromDate + 'T00:00:00+05:30')
+      if (options.toDate)   query = query.lte('created_at', options.toDate + 'T23:59:59+05:30')
 
       if (options.applySaScope) {
         const scopedSaCodes = options.saCodes ?? []
@@ -4035,7 +4036,7 @@ export default function BodyshopRepairPage() {
 
       {/* ── TOP CONTROL BAR ─────────────────────────────────────────────── */}
       <div className="brx-toolbar">
-        <DateRangeFilter range={dateRange} onChange={setDateRange} label="Period:" />
+        <DateRangeFilter range={dateRange} onChange={setDateRange} label="Period:" includeAll />
 
         <span className="brx-sep" />
 
