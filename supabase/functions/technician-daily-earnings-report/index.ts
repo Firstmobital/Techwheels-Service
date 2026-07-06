@@ -166,7 +166,7 @@ type RevenueRow = {
   job_card_number: string | null
   closed_date_time: string | null
   invoice_date: string | null
-  final_labour_amount: number | string | null
+  dms_final_labour_amount: number | string | null
 }
 
 type EmployeeBankRow = {
@@ -603,7 +603,7 @@ Deno.serve(async (req) => {
       if (jcBatch.length === 0) continue
       const revenueRes = await supabase
         .from('job_card_closed_data')
-        .select('job_card_number, closed_date_time, invoice_date, final_labour_amount')
+        .select('job_card_number, closed_date_time, invoice_date, dms_final_labour_amount')
         .in('job_card_number', jcBatch)
 
       if (revenueRes.error) {
@@ -637,7 +637,7 @@ Deno.serve(async (req) => {
       const revenue = revenueMap.get(jc)
       if (!revenue) return
 
-      const gross = parseRevenueAmount(revenue.final_labour_amount)
+      const gross = parseRevenueAmount(revenue.dms_final_labour_amount)
       if (!Number.isFinite(gross) || gross <= 0) return
       grossByJc.set(jc, gross)
     })

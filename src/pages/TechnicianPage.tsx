@@ -42,7 +42,7 @@ type RevenueRow = {
   job_card_number: string | null
   closed_date_time: string | null
   invoice_date: string | null
-  final_labour_amount: number | string | null
+  dms_final_labour_amount: number | string | null
 }
 
 type TechnicianSummaryCard = {
@@ -519,12 +519,12 @@ async function fetchYesterdayReportData(pvPct: number, evPct: number): Promise<{
   if (completedJcs.length > 0) {
     const revRes = await supabase
       .from('job_card_closed_data')
-      .select('job_card_number, final_labour_amount')
+      .select('job_card_number, dms_final_labour_amount')
       .in('job_card_number', completedJcs)
     if (!revRes.error && revRes.data) {
       revRes.data.forEach((r: any) => {
         const key = normalizeJobCardNumber(r.job_card_number)
-        const amt = parseRevenueAmount(r.final_labour_amount)
+        const amt = parseRevenueAmount(r.dms_final_labour_amount)
         if (amt > 0 && !revenueMap.has(key)) revenueMap.set(key, amt)
       })
     }
@@ -597,13 +597,13 @@ function buildWAText(rows: YesterdayRow[], date: string, pvPct: number, evPct: n
     const techPaid = techRows.reduce((s, r) => s + r.technician_income, 0)
     msg += `🔧 *${name}*\n`
     techRows.forEach(r => {
-      msg += `  🚗 ${r.reg_number}  Labour: ₹${Math.round(r.gross_labour_amount).toLocaleString('en-IN')}  Paid: *₹${Math.round(r.technician_income).toLocaleString('en-IN')}*\n`
+      msg += `  🚗 ${r.reg_number}  DMS Labour: ₹${Math.round(r.gross_labour_amount).toLocaleString('en-IN')}  Paid: *₹${Math.round(r.technician_income).toLocaleString('en-IN')}*\n`
     })
-    msg += `  Total Labour: ₹${Math.round(techLabour).toLocaleString('en-IN')} | *Paid: ₹${Math.round(techPaid).toLocaleString('en-IN')}*\n\n`
+    msg += `  Total DMS Labour: ₹${Math.round(techLabour).toLocaleString('en-IN')} | *Paid: ₹${Math.round(techPaid).toLocaleString('en-IN')}*\n\n`
   })
 
   msg += `━━━━━━━━━━━━━━━━━━━━\n`
-  msg += `🏆 Total Labour: ₹${Math.round(totalLabour).toLocaleString('en-IN')}\n`
+  msg += `🏆 Total DMS Labour: ₹${Math.round(totalLabour).toLocaleString('en-IN')}\n`
   msg += `💰 Total Paid: *₹${Math.round(totalPaid).toLocaleString('en-IN')}*`
 
   return msg
@@ -898,7 +898,7 @@ export default function TechnicianPage() {
 
           const revenueRes = await supabase
             .from('job_card_closed_data')
-            .select('job_card_number, closed_date_time, invoice_date, final_labour_amount')
+            .select('job_card_number, closed_date_time, invoice_date, dms_final_labour_amount')
             .in('job_card_number', jcBatch)
 
           if (revenueRes.error) {
@@ -935,7 +935,7 @@ export default function TechnicianPage() {
         const revenue = revenueMap.get(jc)
         if (!revenue) return
 
-        const gross = parseRevenueAmount(revenue.final_labour_amount)
+        const gross = parseRevenueAmount(revenue.dms_final_labour_amount)
         if (!Number.isFinite(gross) || gross <= 0) return
 
         const dateKey = getIncomeDateKey(assignment, revenue)
@@ -992,7 +992,7 @@ export default function TechnicianPage() {
       // Primary filter: Fetch job_card_closed_data where invoice_date is in the range
       const jccRes = await supabase
         .from('job_card_closed_data')
-        .select('job_card_number, sr_type, location, invoice_date, closed_date_time, vehicle_registration_number, final_labour_amount, sr_assigned_to, created_date_time')
+        .select('job_card_number, sr_type, location, invoice_date, closed_date_time, vehicle_registration_number, dms_final_labour_amount, sr_assigned_to, created_date_time')
         .gte('invoice_date', fromDate)
         .lte('invoice_date', toDate)
 
@@ -1132,7 +1132,7 @@ export default function TechnicianPage() {
               status: 'Unassigned',
               match_status: 'NO ASSIGNMENT',
               vehicle_registration_number: row.vehicle_registration_number ?? '',
-              labour: parseRevenueAmount(row.final_labour_amount) / 1.18,
+              labour: parseRevenueAmount(row.dms_final_labour_amount) / 1.18,
             }]
           }
 
@@ -1167,7 +1167,7 @@ export default function TechnicianPage() {
               status: workStatus ? statusLabel(workStatus) : 'Unassigned',
               match_status: matchStatus,
               vehicle_registration_number: row.vehicle_registration_number ?? '',
-              labour: parseRevenueAmount(row.final_labour_amount) / 1.18,
+              labour: parseRevenueAmount(row.dms_final_labour_amount) / 1.18,
             }
           })
         })
@@ -1178,7 +1178,7 @@ export default function TechnicianPage() {
 
       // Export to Excel
       const sheetData = [
-        ['Job Card Number', 'Service Type', 'Reception SR Type', 'Reg No', 'Location', 'DMS Assigned To', 'DMS JC Created', 'SA Name', 'Technician Name', 'Status', 'Out TS', 'Invoice Date', 'Closed Date Time', 'Labour', 'Match Status'],
+        ['Job Card Number', 'Service Type', 'Reception SR Type', 'Reg No', 'Location', 'DMS Assigned To', 'DMS JC Created', 'SA Name', 'Technician Name', 'Status', 'Out TS', 'Invoice Date', 'Closed Date Time', 'DMS Labour ÷ 1.18', 'Match Status'],
         ...issues.map((r: any) => [
           r.job_card_number,
           r.service_type,
@@ -1209,7 +1209,7 @@ export default function TechnicianPage() {
 
   function downloadExcel(rows: YesterdayRow[], date: string) {
     const sheetData = [
-      ['Technician Name', 'Technician Code', 'Job Card No', 'Reg No', 'Location', 'Fuel Type', 'Bay No', 'Labour Amount (₹)', 'Amount Paid (₹)'],
+      ['Technician Name', 'Technician Code', 'Job Card No', 'Reg No', 'Location', 'Fuel Type', 'Bay No', 'DMS Labour Amount (₹)', 'Amount Paid (₹)'],
       ...rows.map(r => [
         r.technician_name,
         r.technician_code,
@@ -1836,7 +1836,7 @@ export default function TechnicianPage() {
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.82rem' }}>
                   <thead>
                     <tr style={{ background: '#f8fafc', position: 'sticky', top: 0 }}>
-                      {['Technician', 'Job Card', 'Reg No', 'Location', 'Fuel', 'Labour Amount', 'Amount Paid'].map(h => (
+                      {['Technician', 'Job Card', 'Reg No', 'Location', 'Fuel', 'DMS Labour Amount', 'Amount Paid'].map(h => (
                         <th key={h} style={{ padding: '0.55rem 0.75rem', textAlign: 'left', fontWeight: 600, color: '#475569', fontSize: '0.76rem', borderBottom: '2px solid #e2e8f0', whiteSpace: 'nowrap' }}>{h}</th>
                       ))}
                     </tr>
@@ -1950,7 +1950,7 @@ export default function TechnicianPage() {
           <div className="card__head">
             <div>
               <h3>Earnings by technician</h3>
-              <div className="sub">Sorted highest to lowest. Income = (Labour ÷ 1.18) × {pvSharePercent}% (PV) or {evSharePercent}% (EV).</div>
+              <div className="sub">Sorted highest to lowest. Income = (DMS Labour ÷ 1.18) × {pvSharePercent}% (PV) or {evSharePercent}% (EV).</div>
             </div>
             {canEditSharePercent && (
               <div className="tech-share-corner">
@@ -2123,7 +2123,7 @@ export default function TechnicianPage() {
             <div>
               <h3>Job card details</h3>
               <div className="sub">
-                JC #, Reg #, Bay, Status, IN TS, OUT TS, Invoice Date, Time Diff, Labour ÷ 1.18, Remark
+                JC #, Reg #, Bay, Status, IN TS, OUT TS, Invoice Date, Time Diff, DMS Labour ÷ 1.18, Remark
                 {selectedDayKey && ` — ${dayCards.find((d) => d.dateKey === selectedDayKey)?.label || 'selected day'}`}
                 {selectedVehicleOnDayKey && ` — ${vehicleOnDayCards.find((v) => v.regKey === selectedVehicleOnDayKey)?.label || 'selected vehicle'}`}
               </div>
@@ -2147,7 +2147,7 @@ export default function TechnicianPage() {
                       <th className="ts-cell">OUT TS</th>
                       <th className="ts-cell">Invoice Date</th>
                       <th className="ctr">Time Diff</th>
-                      <th className="ctr">Labour ÷ 1.18</th>
+                      <th className="ctr">DMS Labour ÷ 1.18</th>
                       <th className="ctr">Split</th>
                       <th>Remark</th>
                     </tr>
