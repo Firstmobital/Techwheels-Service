@@ -739,6 +739,9 @@ export default function BodyshopFloorPage() {
   const [floorFilter, setFloorFilter]       = useState<'all' | 'Floor 2' | 'Floor 3'>('all')
   const [roleFilter, setRoleFilter]         = useState<BSRole | 'all'>('all')
   const [search, setSearch]                 = useState('')
+  // UI-only additions: card collapse/expand + Floor Incharge workload filter (no business logic changes)
+  const [floorInchargeFilter, setFloorInchargeFilter] = useState<string>('all')
+  const [expandedCards, setExpandedCards]   = useState<Set<string>>(new Set())
 
   // Inline draft: stageDrafts[jcKey][role] = { status, remark }
   const [stageDrafts, setStageDrafts] = useState<
@@ -1016,6 +1019,37 @@ export default function BodyshopFloorPage() {
     return Boolean(floor?.completedAt)
   }
 
+  function toggleExpanded(k: string) {
+    setExpandedCards((prev) => {
+      const next = new Set(prev)
+      if (next.has(k)) next.delete(k)
+      else next.add(k)
+      return next
+    })
+  }
+
+  // ── Floor Incharge workload summary — UI-only, reads existing assignment data ──
+  const floorInchargeSummary = useMemo(() => {
+    const map = new Map<string, { total: number; unassigned: number; inProcess: number; hold: number; completed: number }>()
+    let noInchargeCount = 0
+    cars.forEach((c) => {
+      const name = assignments[jcKey(c)]?.FLOOR_INCHARGE?.employee_name?.trim()
+      if (!name) { noInchargeCount += 1; return }
+      const entry = map.get(name) ?? { total: 0, unassigned: 0, inProcess: 0, hold: 0, completed: 0 }
+      entry.total += 1
+      if (isBsFloorCompleted(c)) entry.completed += 1
+      else if (hasStatus(c, 'hold')) entry.hold += 1
+      else if (hasAnyAssignment(c)) entry.inProcess += 1
+      else entry.unassigned += 1
+      map.set(name, entry)
+    })
+    const rows = Array.from(map.entries())
+      .map(([name, c]) => ({ name, ...c, pending: c.total - c.completed }))
+      .sort((a, b) => b.pending - a.pending || b.total - a.total)
+    return { rows, noInchargeCount }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cars, assignments, bsFloorStatus])
+
   const counts = useMemo(() => ({
     all:            cars.length,
     unassigned:     cars.filter((c) => !hasAnyAssignment(c)).length,
@@ -1044,6 +1078,14 @@ export default function BodyshopFloorPage() {
 
     if (roleFilter !== 'all')
       list = list.filter((c) => assignments[jcKey(c)]?.[roleFilter])
+
+    if (floorInchargeFilter !== 'all') {
+      if (floorInchargeFilter === '__unassigned__') {
+        list = list.filter((c) => !assignments[jcKey(c)]?.FLOOR_INCHARGE?.employee_name)
+      } else {
+        list = list.filter((c) => assignments[jcKey(c)]?.FLOOR_INCHARGE?.employee_name?.trim() === floorInchargeFilter)
+      }
+    }
 
     if (search.trim()) {
       const q = search.trim().toLowerCase()
@@ -1846,6 +1888,14 @@ export default function BodyshopFloorPage() {
         </div>
         <div className="bsf-top-actions">
           <DateRangeFilter range={dateRange} onChange={setDateRange} label="Period:" includeAll />
+          <button type="button" className="btn btn--ghost btn--sm"
+            onClick={() => setExpandedCards(new Set(filtered.map((c) => jcKey(c))))}>
+            Expand All
+          </button>
+          <button type="button" className="btn btn--ghost btn--sm"
+            onClick={() => setExpandedCards(new Set())}>
+            Collapse All
+          </button>
           <button type="button" className="btn btn--ghost btn--sm" onClick={() => void loadAll()}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
               <path d="M3 12a9 9 0 0 1 15-6.7L21 8M21 3v5h-5M21 12a9 9 0 0 1-15 6.7L3 16M3 21v-5h5" />
@@ -1877,6 +1927,46 @@ export default function BodyshopFloorPage() {
           </button>
         ))}
       </div>
+
+      {floorInchargeSummary.rows.length > 0 && (
+        <div className="bsf-filterbar" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 8 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+            <span className="bsf-label">Floor Incharge Workload</span>
+            <button type="button" onClick={() => setFloorInchargeFilter('all')}
+              className={`bsf-chip ${floorInchargeFilter === 'all' ? 'is-active' : ''}`}>
+              All <span className="bsf-chip__n">{cars.length}</span>
+            </button>
+            {floorInchargeSummary.noInchargeCount > 0 && (
+              <button type="button" onClick={() => setFloorInchargeFilter('__unassigned__')}
+                className={`bsf-chip ${floorInchargeFilter === '__unassigned__' ? 'is-active' : ''}`}>
+                Unassigned <span className="bsf-chip__n">{floorInchargeSummary.noInchargeCount}</span>
+              </button>
+            )}
+          </div>
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+            {floorInchargeSummary.rows.map((row) => (
+              <button
+                key={row.name}
+                type="button"
+                onClick={() => setFloorInchargeFilter(floorInchargeFilter === row.name ? 'all' : row.name)}
+                style={{
+                  textAlign: 'left', minWidth: 190, border: floorInchargeFilter === row.name ? '1.5px solid #2563eb' : '1px solid #e2e8f0',
+                  borderRadius: 10, padding: '8px 12px', background: floorInchargeFilter === row.name ? '#eff6ff' : '#fff', cursor: 'pointer',
+                }}
+              >
+                <div style={{ fontWeight: 700, fontSize: 13, color: '#1e293b' }}>{row.name}</div>
+                <div style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>
+                  <strong style={{ color: '#dc2626' }}>{row.pending}</strong> pending of {row.total}
+                </div>
+                <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 2 }}>
+                  {row.unassigned > 0 && <>Unassigned {row.unassigned} · </>}
+                  In-Process {row.inProcess} · Hold {row.hold} · Done {row.completed}
+                </div>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div className="bsf-filterbar">
         <div className="bsf-search">
@@ -1952,6 +2042,7 @@ export default function BodyshopFloorPage() {
           <div className="bsf-roster-list">
             {filtered.map((car) => {
               const k = jcKey(car)
+              const expanded = expandedCards.has(k)
               const carMap = assignments[k] ?? { DENTOR: undefined, PAINTER: undefined, TECHNICIAN: undefined, FLOOR_INCHARGE: undefined, DENTOR_HELPER: undefined, PAINTER_HELPER: undefined, RUBBING: undefined, EDP: undefined }
               const qcDraft = qcByJc[k] ?? emptyQcEntryState()
               const selectedQcCheckerNames = parseQcCheckedByNames(qcDraft.qc_checked_by)
@@ -2198,9 +2289,17 @@ export default function BodyshopFloorPage() {
                         </div>
                       </div>
                     )}
+
+                    <button
+                      type="button"
+                      className="btn btn--ghost btn--sm bsf-expand-toggle"
+                      onClick={(e) => { e.stopPropagation(); toggleExpanded(k) }}
+                    >
+                      {expanded ? '▲ Collapse' : '▼ Expand'}
+                    </button>
                   </div>
 
-                  {assignmentView === 'qc' ? (
+                  {expanded && (assignmentView === 'qc' ? (
                     <div className="bsf-qc-shell">
                       <div className="bsf-qc-workers">
                         {ALL_ROLES.map((role) => {
@@ -2428,7 +2527,7 @@ export default function BodyshopFloorPage() {
                     </div>
                       </div>
                     </>
-                  )}
+                  ))}
                 </article>
               )
             })}
