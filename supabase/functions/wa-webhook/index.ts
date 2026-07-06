@@ -609,27 +609,15 @@ Deno.serve(async (req) => {
         flowFields = rawResp as Record<string, unknown>
       }
 
-      // Flow payload keys from the service_booking_cta Flow JSON:
-      // screen_0_Service_Date_0, screen_0_Preferred_time_1, screen_0_Service_Type_2,
-      // screen_0_Type_3, screen_0_Pickup_Address_4, screen_0_Issues_with_Vehicle_5
-      const rawDate        = (flowFields['screen_0_Service_Date_0']      as string) || ''
-      const rawTime        = (flowFields['screen_0_Preferred_time_1']    as string) || ''
-      const rawServiceType = flowFields['screen_0_Service_Type_2']  // CheckboxGroup → array or string
-      const rawVisitType   = (flowFields['screen_0_Type_3']             as string) || ''
-      const pickupAddress  = (flowFields['screen_0_Pickup_Address_4']   as string) || ''
-      const vehicleIssues  = (flowFields['screen_0_Issues_with_Vehicle_5'] as string) || ''
-
-      // Map radio/checkbox values to DB-friendly strings
-      const serviceTypeTitles = Array.isArray(rawServiceType)
-        ? (rawServiceType as string[]).map(v => v.replace(/^\d+_/, '').replace(/_/g, ' '))
-        : [String(rawServiceType).replace(/^\d+_/, '').replace(/_/g, ' ')]
-      const serviceTypeLabel = serviceTypeTitles[0] || 'Paid Service'
-      const serviceTypeMap: Record<string, string> = {
-        'Scheduled Service': 'Paid Service',
-        'Running Repair':    'Running Repairs',
-        'Accidental':        'Accident',
-      }
-      const bookingServiceType = serviceTypeMap[serviceTypeLabel] || 'Paid Service'
+      // Flow payload keys from the service_booking_cta Flow JSON (category/service-type
+      // question was removed from the Flow, so service_type is no longer collected here):
+      // screen_0_Service_Date_2d2cde, screen_0_Preferred_time_63615e,
+      // screen_0_Type_b43167, screen_0_Pickup_Address_6019ce, screen_0_Issues_with_Vehicle_c8c7bc
+      const rawDate        = (flowFields['screen_0_Service_Date_2d2cde']        as string) || ''
+      const rawTime        = (flowFields['screen_0_Preferred_time_63615e']      as string) || ''
+      const rawVisitType   = (flowFields['screen_0_Type_b43167']                as string) || ''
+      const pickupAddress  = (flowFields['screen_0_Pickup_Address_6019ce']      as string) || ''
+      const vehicleIssues  = (flowFields['screen_0_Issues_with_Vehicle_c8c7bc'] as string) || ''
 
       const timeMap: Record<string, string> = {
         '0_Morning':   'Morning',
@@ -650,7 +638,7 @@ Deno.serve(async (req) => {
       // Save inbound message
       await sb.from('wa_messages').insert([{
         conversation_id: convId, direction: 'inbound', sender: 'customer',
-        body: `[Flow submitted] Service: ${bookingServiceType}, Date: ${appointmentDate}, Time: ${rawTime}`,
+        body: `[Flow submitted] Date: ${appointmentDate}, Time: ${rawTime}`,
         wa_message_id: waMessageId, status: 'delivered', ai_generated: false,
       }])
       await sb.from('wa_conversations').update({ last_message_at: new Date().toISOString() }).eq('id', convId)
@@ -666,7 +654,7 @@ Deno.serve(async (req) => {
         model:                (conv?.model as string) || (vehicle?.model as string) || null,
         customer_name:        (conv?.customer_name as string) || `${vehicle?.first_name || ''} ${vehicle?.last_name || ''}`.trim() || 'Valued Customer',
         customer_phone:       from10,
-        service_type:         bookingServiceType,
+        service_type:         null,
         complaint_description: vehicleIssues || null,
         pickup_required:      isPickup,
         pickup_address:       isPickup && pickupAddress ? pickupAddress : null,
@@ -704,7 +692,7 @@ Deno.serve(async (req) => {
             .eq('id', asrRow.id)
         }
 
-        const confirmMsg = `✅ *Booking Confirmed!*\n📋 Booking ID: ${bkgId}\n🔧 Service: ${bookingServiceType}\n📅 Date: ${appointmentDate}\n⏰ Time: ${rawTime.replace(/^\d+_/, '')}\n📍 Branch: ${branchToUse}${isPickup ? `\n🚗 Pickup from: ${pickupAddress || 'address provided'}` : ''}\n\nDhanyawad! Our team will confirm shortly. 🙏`
+        const confirmMsg = `✅ *Booking Confirmed!*\n📋 Booking ID: ${bkgId}\n📅 Date: ${appointmentDate}\n⏰ Time: ${rawTime.replace(/^\d+_/, '')}\n📍 Branch: ${branchToUse}${isPickup ? `\n🚗 Pickup from: ${pickupAddress || 'address provided'}` : ''}\n\nDhanyawad! Our team will confirm shortly. 🙏`
 
         await sb.from('wa_messages').insert([{
           conversation_id: convId, direction: 'outbound', sender: 'ai',
