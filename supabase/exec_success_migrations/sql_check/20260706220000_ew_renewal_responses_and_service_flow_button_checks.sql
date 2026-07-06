@@ -16,6 +16,13 @@ WHERE schemaname = 'public'
   AND tablename = 'ew_renewal_reminders'
   AND indexname = 'idx_err_responded_at';
 
+-- 2b) flow_response_id exists on ew_service_reminders.
+SELECT column_name, data_type
+FROM information_schema.columns
+WHERE table_schema = 'public'
+  AND table_name = 'ew_service_reminders'
+  AND column_name = 'flow_response_id';
+
 -- 3) ew_service_reminder_v1 buttons now match the ASR Flow + phone-number shape.
 SELECT id, name, status, buttons
 FROM public.wa_templates

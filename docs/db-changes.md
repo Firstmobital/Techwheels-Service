@@ -93,3 +93,18 @@
     admin reviews the copy and submits them to Meta for approval.
   - Both new jobs stay disabled (*_enabled=false) until a template is
     approved and wired up in the UI.
+
+### Prefix 20260706220000
+- Migration: 20260706220000_ew_renewal_responses_and_service_flow_button.sql
+- Check: 20260706220000_ew_renewal_responses_and_service_flow_button_checks.sql
+- Status: Executed and verified
+- Notes:
+  - ew_renewal_reminders gains responded_at/customer_response so a "Renew Now"
+    tap can be recorded and surfaced as an interested lead on the EW Reminder page.
+  - ew_service_reminders gains flow_response_id (mirrors auto_service_reminders)
+    since wa-webhook's booking-Flow link-back now writes to whichever of the
+    two tables the customer's reminder came from.
+  - ew_service_reminder_v1's draft buttons updated to reuse the approved
+    service_due_reminder_flow template's exact Flow ("Book Now", flow_id
+    1329781145787136) and PHONE_NUMBER button ("Call Us", +917045181062)
+    instead of static quick-replies.

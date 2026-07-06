@@ -14,6 +14,10 @@
  *  - Respects EW_SERVICE_REMINDER_ENABLED env var and wa_agent_config.ew_service_reminder_enabled.
  *  - dry_run=true in request body → full logic, no actual Meta API calls.
  *
+ * "Book Now" reuses the same WhatsApp Flow (date/time/branch picker) as the
+ * approved auto-service-reminder template — wa-webhook's nfm_reply handler
+ * links the resulting booking back to this table (see ew_service_reminders.booking_id).
+ *
  * Invoke manually:
  *   curl -X POST https://<project>.supabase.co/functions/v1/wa-ew-service-reminder \
  *     -H "Content-Type: application/json" \
@@ -57,9 +61,11 @@ function normalizePhone(raw: string | null): { e164: string; local10: string } |
   return { e164, local10 }
 }
 
-// ─── Send Meta template (no Flow — static "Book Now"/"Call Us" quick-reply buttons) ─
+// ─── Send Meta template ("Book Now" is a Flow button, same Flow the approved
+//     auto-reminder template uses; "Call Us" is a static PHONE_NUMBER button
+//     baked into the template, so it needs no component override) ───────────
 
-async function sendTemplate(
+async function sendFlowTemplate(
   phoneId: string,
   token: string,
   to: string,
@@ -79,6 +85,7 @@ async function sendTemplate(
         language: { code: language || 'en' },
         components: [
           { type: 'body', parameters: params },
+          { type: 'button', sub_type: 'flow', index: '0', parameters: [{ type: 'payload', payload: 'EW_SERVICE_BOOK_NOW' }] },
         ],
       },
     }),
@@ -405,7 +412,7 @@ Deno.serve(async (req) => {
       console.log(`ESR: SEND ${c.reminderType} → ${c.phone.e164} (${c.regNo}, expires ${c.dueDate})`)
 
       try {
-        const waRes = await sendTemplate(phoneId, token, c.phone.e164, templateName, templateLang, bodyParams)
+        const waRes = await sendFlowTemplate(phoneId, token, c.phone.e164, templateName, templateLang, bodyParams)
         const waMessageId = waRes.messages?.[0]?.id
 
         if (waMessageId) {

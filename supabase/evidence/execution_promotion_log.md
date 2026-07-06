@@ -116,3 +116,9 @@ Tracks migration/check files promoted to supabase/exec_success_migrations after 
 - moved migration: 20260706202000_ew_reminder_wa_template_drafts.sql
 - moved checks: 20260706202000_ew_reminder_wa_template_drafts_checks.sql
 - dump reference: dump_missing
+
+## 2026-07-06T15:39:47Z
+- prefix: 20260706220000
+- moved migration: 20260706220000_ew_renewal_responses_and_service_flow_button.sql
+- moved checks: 20260706220000_ew_renewal_responses_and_service_flow_button_checks.sql
+- dump reference: dump_missing

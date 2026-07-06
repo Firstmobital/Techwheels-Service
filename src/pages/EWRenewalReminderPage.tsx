@@ -17,6 +17,8 @@ interface ReminderLog {
   template_name: string | null
   status: 'pending' | 'sent' | 'delivered' | 'read' | 'failed'
   failure_reason: string | null
+  customer_response: string | null
+  responded_at: string | null
   created_at: string
 }
 
@@ -474,13 +476,14 @@ export default function EWRenewalReminderPage() {
                 <th className="px-4 py-3 font-medium">Reminder</th>
                 <th className="px-4 py-3 font-medium">Sent At</th>
                 <th className="px-4 py-3 font-medium">Status</th>
+                <th className="px-4 py-3 font-medium">Responded</th>
                 <th className="px-4 py-3 font-medium">Failure</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
               {pageRows.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="px-4 py-8 text-center text-gray-400 text-sm">
+                  <td colSpan={9} className="px-4 py-8 text-center text-gray-400 text-sm">
                     No reminder logs found.
                     {logs.length === 0 && ' Run the job to generate the first reminders.'}
                   </td>
@@ -503,6 +506,12 @@ export default function EWRenewalReminderPage() {
                     <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_COLOR[l.status] || 'bg-gray-100 text-gray-600'}`}>
                       {l.status}
                     </span>
+                  </td>
+                  <td className="px-4 py-3">
+                    {l.responded_at
+                      ? <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-700" title={fmtDateTime(l.responded_at)}>{l.customer_response || 'Responded'}</span>
+                      : <span className="text-gray-400 text-xs">—</span>
+                    }
                   </td>
                   <td className="px-4 py-3 text-xs text-red-600 max-w-[160px] truncate" title={l.failure_reason || ''}>
                     {l.failure_reason || '—'}

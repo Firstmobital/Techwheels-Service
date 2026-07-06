@@ -643,9 +643,34 @@ Deno.serve(async (req) => {
       }])
       await sb.from('wa_conversations').update({ last_message_at: new Date().toISOString() }).eq('id', convId)
 
+      // This same Flow is now triggered by both the auto-service-reminder and the
+      // EW service reminder templates. Find the most recent unlinked reminder row
+      // across both tables (by phone, booking_id still null) to decide which one
+      // this booking belongs to.
+      const [{ data: asrCandidate }, { data: ewCandidate }] = await Promise.all([
+        sb.from('auto_service_reminders')
+          .select('id, created_at')
+          .eq('mobile_number', from10)
+          .is('booking_id', null)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle(),
+        sb.from('ew_service_reminders')
+          .select('id, created_at')
+          .eq('mobile_number', from10)
+          .is('booking_id', null)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle(),
+      ])
+      const ewIsNewer = ewCandidate?.created_at && (!asrCandidate?.created_at || ewCandidate.created_at > asrCandidate.created_at)
+      const linkTable = ewIsNewer ? 'ew_service_reminders' : 'auto_service_reminders'
+      const linkRowId = ewIsNewer ? ewCandidate?.id : asrCandidate?.id
+      const bookingSource = ewIsNewer ? 'WhatsApp EW Service Reminder' : 'WhatsApp Auto Reminder'
+
       // Insert booking
       const { data: newBkgArr, error: bkgErr } = await sb.from('service_bookings').insert([{
-        booking_source:       'WhatsApp Auto Reminder',
+        booking_source:       bookingSource,
         booking_date:         todayStr,
         appointment_date:     appointmentDate,
         booking_time:         bookingTime,
@@ -678,18 +703,12 @@ Deno.serve(async (req) => {
           preferred_branch: branchToUse,
         }).eq('id', convId)
 
-        // Link booking back to auto_service_reminders (select then update — JS client doesn't support order+limit on update)
-        const { data: asrRow } = await sb.from('auto_service_reminders')
-          .select('id')
-          .eq('mobile_number', from10)
-          .is('booking_id', null)
-          .order('created_at', { ascending: false })
-          .limit(1)
-          .maybeSingle()
-        if (asrRow?.id) {
-          await sb.from('auto_service_reminders')
+        // Link booking back to whichever reminder table this Flow tap belongs to
+        // (auto_service_reminders or ew_service_reminders — both share this Flow).
+        if (linkRowId) {
+          await sb.from(linkTable)
             .update({ booking_id: newBkg?.id || null, flow_response_id: waMessageId, updated_at: new Date().toISOString() })
-            .eq('id', asrRow.id)
+            .eq('id', linkRowId)
         }
 
         const confirmMsg = `✅ *Booking Confirmed!*\n📋 Booking ID: ${bkgId}\n📅 Date: ${appointmentDate}\n⏰ Time: ${rawTime.replace(/^\d+_/, '')}\n📍 Branch: ${branchToUse}${isPickup ? `\n🚗 Pickup from: ${pickupAddress || 'address provided'}` : ''}\n\nDhanyawad! Our team will confirm shortly. 🙏`
@@ -699,10 +718,57 @@ Deno.serve(async (req) => {
           body: confirmMsg, ai_generated: true, status: 'sent',
         }])
         await sendWA(phoneId, metaToken, fromE164, confirmMsg)
-        console.log(`ASR flow booking ${bkgId} created for ${from10}`)
+        console.log(`${linkTable === 'ew_service_reminders' ? 'EW service' : 'ASR'} flow booking ${bkgId} created for ${from10}`)
       }
 
       return new Response('OK', { status: 200 })
+    }
+  }
+
+  // ── EW RENEWAL REMINDER: handle "Renew Now" button tap ────────────────────
+  // ew_renewal_reminders has no Flow attached — "Renew Now" is a static
+  // quick-reply, so it arrives as a plain button_reply (never nfm_reply).
+  // Mark the customer as an interested lead for staff follow-up; no booking
+  // is created here.
+  if (msgType === 'interactive' && !conv?.flow_active) {
+    const inter     = msg.interactive as Record<string, unknown>
+    const interType = inter?.type as string
+    if (interType === 'button_reply') {
+      const btnTitle = ((inter.button_reply as Record<string,string>)?.title || '').trim()
+      if (btnTitle.toLowerCase() === 'renew now') {
+        await sb.from('wa_messages').insert([{
+          conversation_id: convId, direction: 'inbound', sender: 'customer',
+          body: btnTitle, wa_message_id: waMessageId, status: 'delivered', ai_generated: false,
+        }])
+        await sb.from('wa_conversations').update({ last_message_at: new Date().toISOString() }).eq('id', convId)
+
+        // Select then update — JS client doesn't support order+limit on update.
+        const { data: errRow } = await sb.from('ew_renewal_reminders')
+          .select('id')
+          .eq('mobile_number', from10)
+          .is('responded_at', null)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle()
+
+        if (errRow?.id) {
+          await sb.from('ew_renewal_reminders').update({
+            responded_at:      new Date().toISOString(),
+            customer_response: btnTitle,
+            updated_at:         new Date().toISOString(),
+          }).eq('id', errRow.id)
+
+          const replyMsg = 'Thanks! Our team will call you shortly to help renew your Extended Warranty. 🙏'
+          await sb.from('wa_messages').insert([{
+            conversation_id: convId, direction: 'outbound', sender: 'ai',
+            body: replyMsg, ai_generated: true, status: 'sent',
+          }])
+          await sendWA(phoneId, metaToken, fromE164, replyMsg)
+          console.log(`EW renewal interest recorded for ${from10}`)
+        }
+
+        return new Response('OK', { status: 200 })
+      }
     }
   }
 

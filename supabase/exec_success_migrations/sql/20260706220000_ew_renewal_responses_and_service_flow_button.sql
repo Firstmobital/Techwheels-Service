@@ -1,7 +1,10 @@
 -- Wire up customer replies to the EW automations:
 --   1) ew_renewal_reminders gains responded_at / customer_response so a
 --      "Renew Now" tap can be recorded and surfaced as an interested lead.
---   2) ew_service_reminder_v1's "Book Now" button is switched from a static
+--   2) ew_service_reminders gains flow_response_id (mirrors auto_service_reminders)
+--      since wa-webhook's booking-Flow link-back now writes to whichever of the
+--      two tables the customer's reminder came from.
+--   3) ew_service_reminder_v1's "Book Now" button is switched from a static
 --      QUICK_REPLY to the same WhatsApp Flow (date/time/branch picker)
 --      already used by the approved auto-reminder template
 --      ("service_due_reminder_flow", flow_id 1329781145787136), and its
@@ -26,7 +29,14 @@ create index if not exists idx_err_responded_at
   on public.ew_renewal_reminders (responded_at desc)
   where responded_at is not null;
 
--- ─── 2. ew_service_reminder_v1: reuse the ASR booking Flow + phone button ──
+-- ─── 2. ew_service_reminders: flow_response_id (mirrors auto_service_reminders) ──
+alter table public.ew_service_reminders
+  add column if not exists flow_response_id text;
+
+comment on column public.ew_service_reminders.flow_response_id is
+  'wa_message_id of the inbound Flow submission that produced the linked booking_id.';
+
+-- ─── 3. ew_service_reminder_v1: reuse the ASR booking Flow + phone button ──
 update public.wa_templates
 set buttons = '[
   {"text": "Book Now", "type": "FLOW", "flow_id": 1329781145787136, "flow_action": "NAVIGATE", "navigate_screen": "QUESTION_ONE"},

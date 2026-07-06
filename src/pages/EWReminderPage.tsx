@@ -4,18 +4,28 @@ import { supabase } from '../lib/supabase'
 interface EWRecord {
   id: number
   chassis_no: string | null
-  registration_no: string | null
-  cust_first_name: string | null
-  cust_last_name: string | null
-  cust_mobile_no: string | null
-  ppl: string | null
-  pl: string | null
+  vehicle_registration_number: string | null
+  first_name: string | null
+  last_name: string | null
+  contact_phones: string | null
+  model: string | null
+  product_line: string | null
   vehicle_sale_date: string | null
   extended_warranty_policy_no: string | null
   extended_warranty_product: string | null
   extended_warranty_order_status: string | null
-  extended_propensity_flag: string | null
   vehicle_age_in_years: string | null
+}
+
+interface InterestedLead {
+  id: number
+  customer_name: string | null
+  mobile_number: string
+  vehicle_registration_number: string | null
+  extended_warranty_end_date: string
+  reminder_type: '10_day' | '3_day'
+  customer_response: string | null
+  responded_at: string
 }
 
 interface EWPrice {
@@ -32,14 +42,10 @@ interface EWPrice {
   price_above_730: number | null
 }
 
-// Parse DD/MM/YY or DD/MM/YYYY
+// vehicle_sale_date is a Postgres `date` column, returned as an ISO string (YYYY-MM-DD)
 function parseSaleDate(raw: string | null): Date | null {
   if (!raw) return null
-  const parts = raw.trim().split('/')
-  if (parts.length !== 3) return null
-  const [dd, mm, yy] = parts
-  const year = yy.length === 2 ? (parseInt(yy) >= 50 ? 1900 + parseInt(yy) : 2000 + parseInt(yy)) : parseInt(yy)
-  const d = new Date(year, parseInt(mm) - 1, parseInt(dd))
+  const d = new Date(raw.includes('T') ? raw : raw + 'T00:00:00')
   return isNaN(d.getTime()) ? null : d
 }
 
@@ -93,12 +99,24 @@ const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Se
 const fmt = (n: number | null) =>
   n == null ? '—' : '₹' + Math.round(n).toLocaleString('en-IN')
 
+function fmtDate(raw: string | null): string {
+  if (!raw) return '—'
+  const d = parseSaleDate(raw)
+  if (!d) return raw
+  return d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
+}
+
+const REMINDER_LABEL: Record<string, string> = { '10_day': '10 Days', '3_day': '3 Days' }
+
 export default function EWReminderPage() {
   const [records, setRecords] = useState<EWRecord[]>([])
   const [ewPrices, setEwPrices] = useState<EWPrice[]>([])
   const [loading, setLoading] = useState(true)
   const [loadingProgress, setLoadingProgress] = useState(0)
   const [error, setError] = useState<string | null>(null)
+
+  const [interestedLeads, setInterestedLeads] = useState<InterestedLead[]>([])
+  const [interestedLoading, setInterestedLoading] = useState(true)
 
   // Filters
   const [yearFilter, setYearFilter] = useState<string>('all')
@@ -109,7 +127,26 @@ export default function EWReminderPage() {
   const [page, setPage] = useState(1)
   const PAGE_SIZE = 50
 
-  useEffect(() => { fetchData() }, [])
+  useEffect(() => { fetchData(); fetchInterestedLeads() }, [])
+
+  async function fetchInterestedLeads() {
+    setInterestedLoading(true)
+    try {
+      const { data, error: err } = await supabase
+        .from('ew_renewal_reminders')
+        .select('id, customer_name, mobile_number, vehicle_registration_number, extended_warranty_end_date, reminder_type, customer_response, responded_at')
+        .not('responded_at', 'is', null)
+        .order('responded_at', { ascending: false })
+        .limit(200)
+      if (err) throw err
+      setInterestedLeads((data ?? []) as InterestedLead[])
+    } catch {
+      // Non-fatal — the main vehicle table still works if this fails.
+      setInterestedLeads([])
+    } finally {
+      setInterestedLoading(false)
+    }
+  }
 
   async function fetchData() {
     setLoading(true)
@@ -139,9 +176,9 @@ export default function EWReminderPage() {
       while (true) {
         let q = supabase
           .from('all_service_data')
-          .select(`id, chassis_no, registration_no, cust_first_name, cust_last_name, cust_mobile_no,
-                   ppl, pl, vehicle_sale_date, extended_warranty_policy_no, extended_warranty_product,
-                   extended_warranty_order_status, extended_propensity_flag, vehicle_age_in_years`)
+          .select(`id, chassis_no, vehicle_registration_number, first_name, last_name, contact_phones,
+                   model, product_line, vehicle_sale_date, extended_warranty_policy_no, extended_warranty_product,
+                   extended_warranty_order_status, vehicle_age_in_years`)
           .order('id', { ascending: false })
           .limit(batchSize)
 
@@ -175,17 +212,17 @@ export default function EWReminderPage() {
     }
   }
 
-  // Find EW prices for a vehicle — fuzzy match on pl → variant
+  // Find EW prices for a vehicle — fuzzy match on product_line → variant
   const getPricesForVehicle = (rec: EWRecord): { yr1: EWPrice | null, yr2: EWPrice | null, yr3: EWPrice | null } => {
-    if (!rec.pl && !rec.ppl) return { yr1: null, yr2: null, yr3: null }
+    if (!rec.product_line && !rec.model) return { yr1: null, yr2: null, yr3: null }
 
-    // Filter by model first (ppl = model)
-    const modelNorm = normalise(rec.ppl)
+    // Filter by model first
+    const modelNorm = normalise(rec.model)
     let candidates = ewPrices.filter(p => normalise(p.model) === modelNorm || modelNorm.includes(normalise(p.model)) || normalise(p.model).includes(modelNorm))
     if (candidates.length === 0) candidates = ewPrices // fallback to all
 
     // Score by variant match
-    const scored = candidates.map(p => ({ p, score: matchScore(p.variant, rec.pl ?? '') }))
+    const scored = candidates.map(p => ({ p, score: matchScore(p.variant, rec.product_line ?? '') }))
     scored.sort((a, b) => b.score - a.score)
     const best = scored.filter(x => x.score >= 60)
 
@@ -208,16 +245,15 @@ export default function EWReminderPage() {
     if (monthFilter !== 'all') res = res.filter(r => getSaleMonth(r.vehicle_sale_date) === parseInt(monthFilter))
     if (ewStatusFilter === 'no_ew') res = res.filter(r => !r.extended_warranty_policy_no && !r.extended_warranty_order_status)
     else if (ewStatusFilter === 'has_ew') res = res.filter(r => !!r.extended_warranty_policy_no || !!r.extended_warranty_order_status)
-    else if (ewStatusFilter === 'propensity') res = res.filter(r => r.extended_propensity_flag === 'Y' || r.extended_propensity_flag === '1' || r.extended_propensity_flag === 'Yes')
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase()
       res = res.filter(r =>
-        (r.cust_first_name ?? '').toLowerCase().includes(q) ||
-        (r.cust_last_name ?? '').toLowerCase().includes(q) ||
-        (r.registration_no ?? '').toLowerCase().includes(q) ||
+        (r.first_name ?? '').toLowerCase().includes(q) ||
+        (r.last_name ?? '').toLowerCase().includes(q) ||
+        (r.vehicle_registration_number ?? '').toLowerCase().includes(q) ||
         (r.chassis_no ?? '').toLowerCase().includes(q) ||
-        (r.cust_mobile_no ?? '').includes(q) ||
-        (r.ppl ?? '').toLowerCase().includes(q)
+        (r.contact_phones ?? '').includes(q) ||
+        (r.model ?? '').toLowerCase().includes(q)
       )
     }
     return res
@@ -274,7 +310,6 @@ export default function EWReminderPage() {
           <option value="all">All EW Status</option>
           <option value="no_ew">🔴 No EW (Opportunity)</option>
           <option value="has_ew">🟢 EW Sold</option>
-          <option value="propensity">⭐ High Propensity</option>
         </select>
 
         <span style={{ flex: 1 }} />
@@ -303,6 +338,45 @@ export default function EWReminderPage() {
       <div style={{ fontSize: '0.78rem', color: '#64748b', marginBottom: '0.65rem' }}>
         Showing {Math.min((page - 1) * PAGE_SIZE + 1, filtered.length)}–{Math.min(page * PAGE_SIZE, filtered.length)} of {filtered.length.toLocaleString()} vehicles
         {ewPrices.length > 0 && <span style={{ marginLeft: '1rem', color: '#22c55e' }}>✓ {ewPrices.length} EW products loaded</span>}
+      </div>
+
+      {/* ── INTERESTED IN RENEWAL ─────────────────────────────────────────── */}
+      <div style={{ background: '#fff', borderRadius: '10px', border: '1px solid #e2e8f0', overflow: 'hidden', marginBottom: '0.75rem' }}>
+        <div style={{ padding: '0.6rem 0.85rem', borderBottom: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+          <span style={{ fontSize: '0.88rem', fontWeight: 700, color: '#1e293b' }}>📞 Interested in Renewal</span>
+          <span style={{ fontSize: '0.72rem', background: '#dcfce7', color: '#16a34a', padding: '0.1rem 0.4rem', borderRadius: '4px', fontWeight: 600 }}>
+            {interestedLeads.length} tapped "Renew Now"
+          </span>
+        </div>
+        {interestedLoading ? (
+          <div style={{ padding: '1rem', textAlign: 'center', color: '#94a3b8', fontSize: '0.8rem' }}>Loading…</div>
+        ) : interestedLeads.length === 0 ? (
+          <div style={{ padding: '1rem', textAlign: 'center', color: '#94a3b8', fontSize: '0.8rem' }}>No customers have responded yet.</div>
+        ) : (
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8rem' }}>
+              <thead>
+                <tr style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
+                  {['Customer', 'Mobile', 'Reg No', 'EW Expiry', 'Reminder', 'Responded'].map(h => (
+                    <th key={h} style={{ padding: '0.5rem 0.75rem', textAlign: 'left', fontWeight: 600, color: '#475569', whiteSpace: 'nowrap', fontSize: '0.75rem' }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {interestedLeads.map(lead => (
+                  <tr key={lead.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                    <td style={{ padding: '0.5rem 0.75rem', fontWeight: 600, color: '#1e293b' }}>{lead.customer_name || '—'}</td>
+                    <td style={{ padding: '0.5rem 0.75rem', color: '#334155' }}>{lead.mobile_number}</td>
+                    <td style={{ padding: '0.5rem 0.75rem', color: '#334155', fontFamily: 'monospace', fontSize: '0.76rem' }}>{lead.vehicle_registration_number || '—'}</td>
+                    <td style={{ padding: '0.5rem 0.75rem', color: '#334155' }}>{fmtDate(lead.extended_warranty_end_date)}</td>
+                    <td style={{ padding: '0.5rem 0.75rem', color: '#64748b' }}>{REMINDER_LABEL[lead.reminder_type] || lead.reminder_type}</td>
+                    <td style={{ padding: '0.5rem 0.75rem', color: '#64748b', fontSize: '0.75rem' }}>{fmtDate(lead.responded_at)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
 
       {/* Table */}
@@ -349,17 +423,17 @@ export default function EWReminderPage() {
                       >
                         <td style={{ padding: '0.6rem 0.75rem', color: '#94a3b8' }}>{(page - 1) * PAGE_SIZE + idx + 1}</td>
                         <td style={{ padding: '0.6rem 0.75rem', fontWeight: 600, color: '#1e293b', whiteSpace: 'nowrap' }}>
-                          {[r.cust_first_name, r.cust_last_name].filter(Boolean).join(' ') || '—'}
+                          {[r.first_name, r.last_name].filter(Boolean).join(' ') || '—'}
                         </td>
-                        <td style={{ padding: '0.6rem 0.75rem', color: '#334155' }}>{r.cust_mobile_no || '—'}</td>
+                        <td style={{ padding: '0.6rem 0.75rem', color: '#334155' }}>{r.contact_phones || '—'}</td>
                         <td style={{ padding: '0.6rem 0.75rem', color: '#334155', fontFamily: 'monospace', fontSize: '0.76rem' }}>
-                          {r.registration_no && r.registration_no !== 'AF' ? r.registration_no : '—'}
+                          {r.vehicle_registration_number && r.vehicle_registration_number !== 'AF' ? r.vehicle_registration_number : '—'}
                         </td>
                         <td style={{ padding: '0.6rem 0.75rem' }}>
-                          <div style={{ fontWeight: 600, color: '#1e293b' }}>{r.ppl || '—'}</div>
-                          <div style={{ fontSize: '0.72rem', color: '#64748b' }}>{r.pl || ''}</div>
+                          <div style={{ fontWeight: 600, color: '#1e293b' }}>{r.model || '—'}</div>
+                          <div style={{ fontSize: '0.72rem', color: '#64748b' }}>{r.product_line || ''}</div>
                         </td>
-                        <td style={{ padding: '0.6rem 0.75rem', color: '#334155', whiteSpace: 'nowrap' }}>{r.vehicle_sale_date || '—'}</td>
+                        <td style={{ padding: '0.6rem 0.75rem', color: '#334155', whiteSpace: 'nowrap' }}>{fmtDate(r.vehicle_sale_date)}</td>
                         <td style={{ padding: '0.6rem 0.75rem' }}>{ageBadge(ageDays)}</td>
                         <td style={{ padding: '0.6rem 0.75rem' }}>
                           {r.extended_warranty_order_status ? (
@@ -395,8 +469,8 @@ export default function EWReminderPage() {
                                 <div style={{ fontWeight: 700, color: '#475569', marginBottom: '0.5rem', fontSize: '0.78rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Vehicle Details</div>
                                 <div style={{ fontSize: '0.82rem', color: '#334155', lineHeight: 1.8 }}>
                                   <div>🚗 <b>Chassis:</b> {r.chassis_no || '—'}</div>
-                                  <div>📋 <b>Reg No:</b> {r.registration_no || '—'}</div>
-                                  <div>📅 <b>Sale Date:</b> {r.vehicle_sale_date || '—'}</div>
+                                  <div>📋 <b>Reg No:</b> {r.vehicle_registration_number || '—'}</div>
+                                  <div>📅 <b>Sale Date:</b> {fmtDate(r.vehicle_sale_date)}</div>
                                   <div>⏱️ <b>Age:</b> {ageDays != null ? `${ageDays} days` : '—'}</div>
                                   <div>📦 <b>EW Product:</b> {r.extended_warranty_product || 'None'}</div>
                                 </div>
