@@ -595,7 +595,13 @@ function normRole(r: string | null): BSRole | null {
 }
 
 function jcKey(car: AccidentCar): string {
-  return (car.jc_number ?? '').trim().toUpperCase()
+  const jc = (car.jc_number ?? '').trim().toUpperCase()
+  if (jc) return jc
+  // Some Accident reception entries are created without a JC number yet.
+  // Bodyshop Repair falls back to reg_number as the job_card_no in that case
+  // (see intakeKey() in BodyshopRepairPage.tsx) — mirror that here so these
+  // vehicles still resolve to the same bodyshop_repair_cards / bodyshop_assignments row.
+  return (car.reg_number ?? '').trim().toUpperCase()
 }
 
 function deriveDealerCodeFromSaEmployeeCode(saEmployeeCode: string | null | undefined): string | null {
@@ -785,12 +791,11 @@ export default function BodyshopFloorPage() {
 
         const carList = ((recData ?? []) as AccidentCar[])
           .filter((car) => {
-            const jc = String(car.jc_number ?? '').trim().toUpperCase()
-            const byJc = jc ? sentByJc.has(jc) : false
-            return byJc
+            const jc = jcKey(car)
+            return jc ? sentByJc.has(jc) : false
           })
           .map((car) => {
-            const jc = String(car.jc_number ?? '').trim().toUpperCase()
+            const jc = jcKey(car)
             const floor = (jc ? sentByJc.get(jc) : undefined) ?? null
             return { ...car, bodyshop_floor: floor }
           })
