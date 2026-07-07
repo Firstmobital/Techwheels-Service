@@ -184,8 +184,8 @@ interface Employee {
   department: string | null
 }
 
-type BSRole = 'DENTOR' | 'PAINTER' | 'TECHNICIAN' | 'FLOOR_INCHARGE' | 'DENTOR_HELPER' | 'PAINTER_HELPER' | 'RUBBING' | 'EDP'
-type SupportRole = 'DENTOR' | 'PAINTER' | 'TECHNICIAN' | 'FLOOR_INCHARGE' | 'DENTOR_HELPER' | 'PAINTER_HELPER' | 'RUBBING' | 'EDP'
+type BSRole = 'DENTOR' | 'PAINTER' | 'TECHNICIAN' | 'FLOOR_INCHARGE' | 'DENTOR_HELPER' | 'PAINTER_HELPER' | 'RUBBING' | 'EDP' | 'PARTS_INCHARGE'
+type SupportRole = 'DENTOR' | 'PAINTER' | 'TECHNICIAN' | 'FLOOR_INCHARGE' | 'DENTOR_HELPER' | 'PAINTER_HELPER' | 'RUBBING' | 'EDP' | 'PARTS_INCHARGE'
 
 interface DBPrimaryAssignmentRow {
   id: number
@@ -213,6 +213,8 @@ interface DBPrimaryAssignmentRow {
   rubbing_employee_name: string | null
   edp_employee_code: string | null
   edp_employee_name: string | null
+  parts_incharge_employee_code: string | null
+  parts_incharge_employee_name: string | null
   dentor_work_status: string | null
   dentor_in_ts: string | null
   dentor_remark: string | null
@@ -245,6 +247,10 @@ interface DBPrimaryAssignmentRow {
   edp_in_ts: string | null
   edp_remark: string | null
   edp_out_ts: string | null
+  parts_incharge_work_status: string | null
+  parts_incharge_in_ts: string | null
+  parts_incharge_remark: string | null
+  parts_incharge_out_ts: string | null
   dentor_completed_by: string | null
   painter_completed_by: string | null
   technician_completed_by: string | null
@@ -253,6 +259,7 @@ interface DBPrimaryAssignmentRow {
   painter_helper_completed_by: string | null
   rubbing_completed_by: string | null
   edp_completed_by: string | null
+  parts_incharge_completed_by: string | null
   bs_floor_completed_at: string | null
   bs_floor_completed_by: string | null
 }
@@ -303,12 +310,13 @@ const ROLE_META: Record<BSRole, { label: string; icon: string }> = {
   PAINTER_HELPER: { label: 'Painter Helper',  icon: '🖌️' },
   RUBBING:        { label: 'Rubbing',         icon: '🪣' },
   EDP:            { label: 'EDP',             icon: '🧴' },
+  PARTS_INCHARGE: { label: 'Parts Incharge',  icon: '📦' },
 }
 
-const ALL_ROLES: BSRole[] = ['FLOOR_INCHARGE', 'DENTOR', 'DENTOR_HELPER', 'PAINTER', 'PAINTER_HELPER', 'TECHNICIAN', 'RUBBING', 'EDP']
+const ALL_ROLES: BSRole[] = ['FLOOR_INCHARGE', 'DENTOR', 'DENTOR_HELPER', 'PAINTER', 'PAINTER_HELPER', 'TECHNICIAN', 'RUBBING', 'EDP', 'PARTS_INCHARGE']
 
 // Roles that do NOT get a support assignment section
-const ROLES_WITHOUT_SUPPORT = new Set<BSRole>(['FLOOR_INCHARGE'])
+const ROLES_WITHOUT_SUPPORT = new Set<BSRole>(['FLOOR_INCHARGE', 'PARTS_INCHARGE'])
 
 const ROLE_COLUMNS: Record<BSRole, {
   employeeCode: keyof DBPrimaryAssignmentRow
@@ -390,6 +398,15 @@ const ROLE_COLUMNS: Record<BSRole, {
     remark: 'edp_remark',
     outTs: 'edp_out_ts',
     completedBy: 'edp_completed_by',
+  },
+  PARTS_INCHARGE: {
+    employeeCode: 'parts_incharge_employee_code',
+    employeeName: 'parts_incharge_employee_name',
+    workStatus: 'parts_incharge_work_status',
+    inTs: 'parts_incharge_in_ts',
+    remark: 'parts_incharge_remark',
+    outTs: 'parts_incharge_out_ts',
+    completedBy: 'parts_incharge_completed_by',
   },
 }
 
@@ -649,6 +666,8 @@ function normRole(r: string | null): BSRole | null {
   if (v === 'PAINTER HELPER')  return 'PAINTER_HELPER'
   if (v === 'RUBBING')         return 'RUBBING'
   if (v === 'EDP')             return 'EDP'
+  if (v === 'PARTS INCHARGE') return 'PARTS_INCHARGE'
+  if (v === 'PARTS_INCHARGE') return 'PARTS_INCHARGE'
   return null
 }
 
@@ -678,7 +697,7 @@ function isEmployeeEligibleForRole(role: BSRole, department: string | null): boo
 }
 
 function emptyRoleMap() {
-  return { DENTOR: undefined, PAINTER: undefined, TECHNICIAN: undefined, FLOOR_INCHARGE: undefined, DENTOR_HELPER: undefined, PAINTER_HELPER: undefined, RUBBING: undefined, EDP: undefined } as Record<BSRole, BSAssignment | undefined>
+  return { DENTOR: undefined, PAINTER: undefined, TECHNICIAN: undefined, FLOOR_INCHARGE: undefined, DENTOR_HELPER: undefined, PAINTER_HELPER: undefined, RUBBING: undefined, EDP: undefined, PARTS_INCHARGE: undefined } as Record<BSRole, BSAssignment | undefined>
 }
 
 function mapRowToRoleMap(row: DBPrimaryAssignmentRow): Record<BSRole, BSAssignment | undefined> {
@@ -928,7 +947,7 @@ export default function BodyshopFloorPage() {
         for (const s of (supportData ?? []) as SupportAssignment[]) {
           const k = s.job_card_number.toUpperCase()
           const role = s.support_role as SupportRole
-          if (!supportMap[k]) supportMap[k] = { DENTOR: [], PAINTER: [], TECHNICIAN: [], FLOOR_INCHARGE: [], DENTOR_HELPER: [], PAINTER_HELPER: [], RUBBING: [], EDP: [] }
+          if (!supportMap[k]) supportMap[k] = { DENTOR: [], PAINTER: [], TECHNICIAN: [], FLOOR_INCHARGE: [], DENTOR_HELPER: [], PAINTER_HELPER: [], RUBBING: [], EDP: [], PARTS_INCHARGE: [] }
           supportMap[k][role].push(s)
         }
         // Sort each role array by assigned_at DESC
@@ -951,7 +970,7 @@ export default function BodyshopFloorPage() {
   // ── Employees by role ────────────────────────────────────────────────────
 
   const empByRole = useMemo<Record<BSRole, Employee[]>>(() => {
-    const m: Record<BSRole, Employee[]> = { DENTOR: [], PAINTER: [], TECHNICIAN: [], FLOOR_INCHARGE: [], DENTOR_HELPER: [], PAINTER_HELPER: [], RUBBING: [], EDP: [] }
+    const m: Record<BSRole, Employee[]> = { DENTOR: [], PAINTER: [], TECHNICIAN: [], FLOOR_INCHARGE: [], DENTOR_HELPER: [], PAINTER_HELPER: [], RUBBING: [], EDP: [], PARTS_INCHARGE: [] }
     employees.forEach((e) => {
       const r = normRole(e.role)
       if (!r) return
@@ -963,7 +982,7 @@ export default function BodyshopFloorPage() {
   }, [employees])
 
   const empBySupportRole = useMemo<Record<SupportRole, Employee[]>>(() => {
-    const m: Record<SupportRole, Employee[]> = { DENTOR: [], PAINTER: [], TECHNICIAN: [], FLOOR_INCHARGE: [], DENTOR_HELPER: [], PAINTER_HELPER: [], RUBBING: [], EDP: [] }
+    const m: Record<SupportRole, Employee[]> = { DENTOR: [], PAINTER: [], TECHNICIAN: [], FLOOR_INCHARGE: [], DENTOR_HELPER: [], PAINTER_HELPER: [], RUBBING: [], EDP: [], PARTS_INCHARGE: [] }
     employees.forEach((e) => {
       const r = normRole(e.role)
       if (!r) return
@@ -1295,7 +1314,7 @@ export default function BodyshopFloorPage() {
       setSupportAssignments((prev) => ({
         ...prev,
         [k]: {
-          ...(prev[k] ?? { DENTOR: [], PAINTER: [], TECHNICIAN: [], FLOOR_INCHARGE: [], DENTOR_HELPER: [], PAINTER_HELPER: [], RUBBING: [], EDP: [] }),
+          ...(prev[k] ?? { DENTOR: [], PAINTER: [], TECHNICIAN: [], FLOOR_INCHARGE: [], DENTOR_HELPER: [], PAINTER_HELPER: [], RUBBING: [], EDP: [], PARTS_INCHARGE: [] }),
           [role]: [...(prev[k]?.[role] ?? []), newSupport],
         },
       }))
@@ -1928,46 +1947,6 @@ export default function BodyshopFloorPage() {
         ))}
       </div>
 
-      {floorInchargeSummary.rows.length > 0 && (
-        <div className="bsf-filterbar" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 8 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-            <span className="bsf-label">Floor Incharge Workload</span>
-            <button type="button" onClick={() => setFloorInchargeFilter('all')}
-              className={`bsf-chip ${floorInchargeFilter === 'all' ? 'is-active' : ''}`}>
-              All <span className="bsf-chip__n">{cars.length}</span>
-            </button>
-            {floorInchargeSummary.noInchargeCount > 0 && (
-              <button type="button" onClick={() => setFloorInchargeFilter('__unassigned__')}
-                className={`bsf-chip ${floorInchargeFilter === '__unassigned__' ? 'is-active' : ''}`}>
-                Unassigned <span className="bsf-chip__n">{floorInchargeSummary.noInchargeCount}</span>
-              </button>
-            )}
-          </div>
-          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-            {floorInchargeSummary.rows.map((row) => (
-              <button
-                key={row.name}
-                type="button"
-                onClick={() => setFloorInchargeFilter(floorInchargeFilter === row.name ? 'all' : row.name)}
-                style={{
-                  textAlign: 'left', minWidth: 190, border: floorInchargeFilter === row.name ? '1.5px solid #2563eb' : '1px solid #e2e8f0',
-                  borderRadius: 10, padding: '8px 12px', background: floorInchargeFilter === row.name ? '#eff6ff' : '#fff', cursor: 'pointer',
-                }}
-              >
-                <div style={{ fontWeight: 700, fontSize: 13, color: '#1e293b' }}>{row.name}</div>
-                <div style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>
-                  <strong style={{ color: '#dc2626' }}>{row.pending}</strong> pending of {row.total}
-                </div>
-                <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 2 }}>
-                  {row.unassigned > 0 && <>Unassigned {row.unassigned} · </>}
-                  In-Process {row.inProcess} · Hold {row.hold} · Done {row.completed}
-                </div>
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-
       <div className="bsf-filterbar">
         <div className="bsf-search">
           <Icon name="search" size={16} />
@@ -2052,7 +2031,7 @@ export default function BodyshopFloorPage() {
               const otherCheckerNames = bodyshopEmployeeNames
                 .filter((name) => !assignedQcNameSet.has(name.toLowerCase()))
                 .filter((name) => !otherSearch || name.toLowerCase().includes(otherSearch))
-              const supportMap = supportAssignments[k] ?? { DENTOR: [], PAINTER: [], TECHNICIAN: [], FLOOR_INCHARGE: [], DENTOR_HELPER: [], PAINTER_HELPER: [], RUBBING: [], EDP: [] }
+              const supportMap = supportAssignments[k] ?? { DENTOR: [], PAINTER: [], TECHNICIAN: [], FLOOR_INCHARGE: [], DENTOR_HELPER: [], PAINTER_HELPER: [], RUBBING: [], EDP: [], PARTS_INCHARGE: [] }
               const floorStatus = bsFloorStatus[k] ?? { completedAt: null, completedBy: null }
               const isFloorCompleted = Boolean(floorStatus.completedAt)
               const isSavingFloorStatus = saving === `${k}-bs-floor`

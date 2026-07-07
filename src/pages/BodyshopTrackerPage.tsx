@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import * as XLSX from 'xlsx'
 import { Icon } from '../components/Icon'
 import DateRangeFilter, { currentMonthRange, type DateRange } from '../components/DateRangeFilter'
 import { isBodyshopDepartment } from '../lib/department'
@@ -11,8 +12,10 @@ type AccidentJCRow = {
   job_card_number: string
   sr_assigned_to: string | null
   final_labour_amount: number | string | null
+  dms_final_labour_amount: number | string | null
   final_spares_amount: number | string | null
   total_invoice_amount: number | string | null
+  dms_total_invoice_amount: number | string | null
   closed_date_time: string | null
   invoice_date: string | null
   location: string | null
@@ -36,7 +39,13 @@ type EmployeeRow = {
 
 // Enriched closed JC (used for SA tab)
 type JCDetail = AccidentJCRow & {
-  labourAmt: number; sparesAmt: number; invoiceAmt: number; dateKey: string | null
+  labourAmt: number
+  analyticLabourAmt: number
+  dmsLabourAmt: number
+  sparesAmt: number
+  invoiceAmt: number
+  dmsInvoiceAmt: number
+  dateKey: string | null
 }
 
 // Enriched technician row (Dentor / Painter / Technician tabs)
@@ -44,7 +53,12 @@ type TechJCRow = {
   job_card_number: string
   technician_name: string
   technician_code: string
-  labourAmt: number; sparesAmt: number; invoiceAmt: number
+  labourAmt: number
+  analyticLabourAmt: number
+  dmsLabourAmt: number
+  sparesAmt: number
+  invoiceAmt: number
+  dmsInvoiceAmt: number
   location: string | null; sr_type: string | null
   closed_date_time: string | null; invoice_date: string | null
   vehicle_registration_number: string | null
@@ -62,7 +76,7 @@ type DayCard = {
 
 // ── Tabs ───────────────────────────────────────────────────────────────────────
 
-type TabKey = 'SA' | 'FLOOR_INCHARGE' | 'DENTOR' | 'DENTOR_HELPER' | 'PAINTER' | 'PAINTER_HELPER' | 'TECHNICIAN' | 'RUBBING' | 'EDP'
+type TabKey = 'SA' | 'FLOOR_INCHARGE' | 'DENTOR' | 'DENTOR_HELPER' | 'PAINTER' | 'PAINTER_HELPER' | 'TECHNICIAN' | 'RUBBING' | 'EDP' | 'PARTS_INCHARGE'
 type TabMeta = { key: TabKey; label: string; icon: string; defaultPct: number; mode: 'sa' | 'tech' }
 
 // Mirrors Bodyshop Floor's current role set exactly (ROLE_META / ALL_ROLES in BodyshopFloorPage.tsx)
@@ -76,6 +90,7 @@ const TABS: TabMeta[] = [
   { key: 'TECHNICIAN',     label: 'Technician',     icon: '🔧', defaultPct: 4, mode: 'tech' },
   { key: 'RUBBING',        label: 'Rubbing',        icon: '🪣', defaultPct: 2, mode: 'tech' },
   { key: 'EDP',            label: 'EDP',            icon: '🧴', defaultPct: 2, mode: 'tech' },
+  { key: 'PARTS_INCHARGE', label: 'Parts Incharge', icon: '📦', defaultPct: 2, mode: 'tech' },
 ]
 
 const QUERY_PAGE = 1000
@@ -113,6 +128,10 @@ function dayLabel(key: string) {
 }
 function locationOf(v: string | null | undefined) { return String(v ?? '').trim() || UNKNOWN_LOCATION }
 function income(labour: number, pct: number) { return labour > 0 ? labour * pct / 100 : 0 }
+function saIncome(dmsLabour: number, pct: number) {
+  if (!Number.isFinite(dmsLabour) || dmsLabour <= 0) return 0
+  return (dmsLabour / 1.18) * (pct / 100)
+}
 function normPct(s: string, fallback: number) {
   const n = Number(s.trim()); return Number.isFinite(n) ? Math.min(100, Math.max(0, n)) : fallback
 }
@@ -141,10 +160,10 @@ export default function BodyshopTrackerPage() {
 
   // Per-tab earning %
   const [sharePct, setSharePct] = useState<Record<TabKey, number>>({
-    SA: 3, FLOOR_INCHARGE: 3, DENTOR: 5, DENTOR_HELPER: 3, PAINTER: 5, PAINTER_HELPER: 3, TECHNICIAN: 4, RUBBING: 2, EDP: 2
+    SA: 3, FLOOR_INCHARGE: 3, DENTOR: 5, DENTOR_HELPER: 3, PAINTER: 5, PAINTER_HELPER: 3, TECHNICIAN: 4, RUBBING: 2, EDP: 2, PARTS_INCHARGE: 2
   })
   const [draftPct, setDraftPct] = useState<Record<TabKey, string>>({
-    SA: '3', FLOOR_INCHARGE: '3', DENTOR: '5', DENTOR_HELPER: '3', PAINTER: '5', PAINTER_HELPER: '3', TECHNICIAN: '4', RUBBING: '2', EDP: '2'
+    SA: '3', FLOOR_INCHARGE: '3', DENTOR: '5', DENTOR_HELPER: '3', PAINTER: '5', PAINTER_HELPER: '3', TECHNICIAN: '4', RUBBING: '2', EDP: '2', PARTS_INCHARGE: '2'
   })
 
   const curPct    = sharePct[activeTab]
@@ -170,7 +189,7 @@ export default function BodyshopTrackerPage() {
       const bsCodes: Record<string, Set<string>> = {
         FLOOR_INCHARGE: new Set(), DENTOR: new Set(), DENTOR_HELPER: new Set(),
         PAINTER: new Set(), PAINTER_HELPER: new Set(), TECHNICIAN: new Set(),
-        RUBBING: new Set(), EDP: new Set(),
+        RUBBING: new Set(), EDP: new Set(), PARTS_INCHARGE: new Set(),
       }
       emps.forEach((e) => {
         if (!isBodyshopDepartment(e.department)) return
@@ -183,6 +202,7 @@ export default function BodyshopTrackerPage() {
         else if (role === 'TECHNICIAN') bsCodes.TECHNICIAN.add(e.employee_code)
         else if (role === 'RUBBING') bsCodes.RUBBING.add(e.employee_code)
         else if (role === 'EDP') bsCodes.EDP.add(e.employee_code)
+        else if (role === 'PARTS INCHARGE' || role === 'PARTS_INCHARGE') bsCodes.PARTS_INCHARGE.add(e.employee_code)
       })
 
       // 2. Accident JCs (for SA tab)
@@ -190,7 +210,7 @@ export default function BodyshopTrackerPage() {
       let from = 0
       while (true) {
         const res = await supabase.from('job_card_closed_data')
-          .select('id, job_card_number, sr_assigned_to, final_labour_amount, final_spares_amount, total_invoice_amount, closed_date_time, invoice_date, location, portal, vehicle_registration_number, sr_type')
+          .select('id, job_card_number, sr_assigned_to, final_labour_amount, dms_final_labour_amount, final_spares_amount, total_invoice_amount, dms_total_invoice_amount, closed_date_time, invoice_date, location, portal, vehicle_registration_number, sr_type')
           .eq('sr_type', 'Accident')
           .gte('closed_date_time', dateRange.from + 'T00:00:00+05:30')
           .lte('closed_date_time', dateRange.to + 'T23:59:59+05:30')
@@ -214,6 +234,7 @@ export default function BodyshopTrackerPage() {
         ...Array.from(bsCodes.TECHNICIAN),
         ...Array.from(bsCodes.RUBBING),
         ...Array.from(bsCodes.EDP),
+        ...Array.from(bsCodes.PARTS_INCHARGE),
       ]
 
       if (allBsCodes.length > 0) {
@@ -231,7 +252,7 @@ export default function BodyshopTrackerPage() {
         for (let i = 0; i < jcNums.length; i += 50) {
           const batch = jcNums.slice(i, i + 50)
           const res2 = await supabase.from('job_card_closed_data')
-            .select('id, job_card_number, sr_assigned_to, final_labour_amount, final_spares_amount, total_invoice_amount, closed_date_time, invoice_date, location, portal, vehicle_registration_number, sr_type')
+            .select('id, job_card_number, sr_assigned_to, final_labour_amount, dms_final_labour_amount, final_spares_amount, total_invoice_amount, dms_total_invoice_amount, closed_date_time, invoice_date, location, portal, vehicle_registration_number, sr_type')
             .in('job_card_number', batch)
           const rows2 = (res2.data ?? []) as AccidentJCRow[]
           rows2.forEach((r) => newMap.set(r.job_card_number, r))
@@ -281,7 +302,7 @@ export default function BodyshopTrackerPage() {
   const bsCodesByRole = useMemo<Record<TabKey, Set<string>>>(() => {
     const map: Record<TabKey, Set<string>> = {
       SA: new Set(), FLOOR_INCHARGE: new Set(), DENTOR: new Set(), DENTOR_HELPER: new Set(),
-      PAINTER: new Set(), PAINTER_HELPER: new Set(), TECHNICIAN: new Set(), RUBBING: new Set(), EDP: new Set(),
+      PAINTER: new Set(), PAINTER_HELPER: new Set(), TECHNICIAN: new Set(), RUBBING: new Set(), EDP: new Set(), PARTS_INCHARGE: new Set(),
     }
     employees.forEach((e) => {
       if (!isBodyshopDepartment(e.department)) return
@@ -295,6 +316,7 @@ export default function BodyshopTrackerPage() {
       else if (role === 'TECHNICIAN') map.TECHNICIAN.add(e.employee_code)
       else if (role === 'RUBBING') map.RUBBING.add(e.employee_code)
       else if (role === 'EDP') map.EDP.add(e.employee_code)
+      else if (role === 'PARTS INCHARGE' || role === 'PARTS_INCHARGE') map.PARTS_INCHARGE.add(e.employee_code)
     })
     return map
   }, [employees])
@@ -302,13 +324,20 @@ export default function BodyshopTrackerPage() {
   // ── Enrich accident JCs ────────────────────────────────────────────────────
 
   const enrichedAccident = useMemo<JCDetail[]>(() =>
-    accidentJCs.map((r) => ({
-      ...r,
-      labourAmt: parseAmt(r.final_labour_amount),
-      sparesAmt: parseAmt(r.final_spares_amount),
-      invoiceAmt: parseAmt(r.total_invoice_amount),
-      dateKey: dateKey(r),
-    })),
+    accidentJCs.map((r) => {
+      const analyticL = parseAmt(r.final_labour_amount)
+      const dmsL      = parseAmt(r.dms_final_labour_amount)
+      return {
+        ...r,
+        analyticLabourAmt: analyticL,
+        dmsLabourAmt:      dmsL,
+        labourAmt:         dmsL > 0 ? dmsL : analyticL,  // income base: prefer DMS
+        sparesAmt:         parseAmt(r.final_spares_amount),
+        invoiceAmt:        parseAmt(r.total_invoice_amount),
+        dmsInvoiceAmt:     parseAmt(r.dms_total_invoice_amount),
+        dateKey:           dateKey(r),
+      }
+    }),
   [accidentJCs])
 
   // ── Enrich tech assignments ────────────────────────────────────────────────
@@ -316,13 +345,18 @@ export default function BodyshopTrackerPage() {
   const enrichedTechRows = useMemo<TechJCRow[]>(() =>
     assignments.map((a) => {
       const jc = jcMap.get(a.job_card_number)
+      const analyticL = parseAmt(jc?.final_labour_amount)
+      const dmsL      = parseAmt(jc?.dms_final_labour_amount)
       return {
         job_card_number: a.job_card_number,
         technician_name: a.technician_name,
         technician_code: a.technician_code,
-        labourAmt: parseAmt(jc?.final_labour_amount),
+        analyticLabourAmt: analyticL,
+        dmsLabourAmt:      dmsL,
+        labourAmt:         analyticL,  // tech tabs: income from analytic labour
         sparesAmt: parseAmt(jc?.final_spares_amount),
         invoiceAmt: parseAmt(jc?.total_invoice_amount),
+        dmsInvoiceAmt: parseAmt(jc?.dms_total_invoice_amount),
         location: jc?.location ?? null,
         sr_type: jc?.sr_type ?? null,
         closed_date_time: jc?.closed_date_time ?? null,
@@ -380,7 +414,7 @@ export default function BodyshopTrackerPage() {
   // ── Member cards ───────────────────────────────────────────────────────────
 
   const memberCards = useMemo<MemberCard[]>(() => {
-    const map = new Map<string, MemberCard & { days: Set<string> }>()
+    const map = new Map<string, MemberCard & { days: Set<string>; totalDmsLabour: number }>()
     filteredRows.forEach((r) => {
       const name = nameOf(r)
       if (!name) return
@@ -388,19 +422,20 @@ export default function BodyshopTrackerPage() {
       const ex = map.get(name) ?? {
         name, jcCount: 0, dayCount: 0,
         totalLabour: 0, totalSpares: 0, totalInvoice: 0, totalIncome: 0,
-        days: new Set<string>(),
+        totalDmsLabour: 0, days: new Set<string>(),
       }
       ex.jcCount += 1
       ex.totalLabour += r.labourAmt
+      ex.totalDmsLabour += r.dmsLabourAmt
       ex.totalSpares += r.sparesAmt
       ex.totalInvoice += r.invoiceAmt
       ex.days.add(dk)
       ex.dayCount = ex.days.size
-      ex.totalIncome = income(ex.totalLabour, curPct)
+      ex.totalIncome = saIncome(ex.totalDmsLabour, curPct)
       map.set(name, ex)
     })
     return Array.from(map.values())
-      .map(({ days: _d, ...c }) => c)
+      .map(({ days: _d, totalDmsLabour: _dm, ...c }) => c)
       .sort((a, b) => b.totalInvoice - a.totalInvoice || b.jcCount - a.jcCount)
   }, [filteredRows, curPct])
 
@@ -411,12 +446,14 @@ export default function BodyshopTrackerPage() {
   [filteredRows, selectedMember])
 
   const dayCards = useMemo<DayCard[]>(() => {
+    const dmsMap = new Map<string, number>()
     const map = new Map<string, DayCard>()
     memberRows.forEach((r) => {
       const dk = r.dateKey ?? 'unknown'
       const ex = map.get(dk) ?? { dateKey: dk, label: dayLabel(dk), jcCount: 0, totalLabour: 0, totalSpares: 0, totalInvoice: 0, totalIncome: 0 }
       ex.jcCount += 1; ex.totalLabour += r.labourAmt; ex.totalSpares += r.sparesAmt; ex.totalInvoice += r.invoiceAmt
-      ex.totalIncome = income(ex.totalLabour, curPct)
+      dmsMap.set(dk, (dmsMap.get(dk) ?? 0) + r.dmsLabourAmt)
+      ex.totalIncome = saIncome(dmsMap.get(dk) ?? 0, curPct)
       map.set(dk, ex)
     })
     return Array.from(map.values()).sort((a, b) => {
@@ -458,6 +495,70 @@ export default function BodyshopTrackerPage() {
       return true
     })
   }, [tabMeta, activeTab, enrichedAccident, enrichedTechRows, bsCodesByRole, fromDate, toDate])
+
+  // ── Export Issues ──────────────────────────────────────────────────────────
+
+  function handleExportIssues() {
+    if (!fromDate || !toDate) {
+      alert('Select both start and end dates in the Range filter before exporting.')
+      return
+    }
+    if (filteredRows.length === 0) {
+      alert('No data to export for the current tab and date range.')
+      return
+    }
+
+    const label = tabMeta.label
+    const isSA  = tabMeta.mode === 'sa'
+
+    const headers = isSA
+      ? ['Job Card', 'Reg No', 'SA Name', 'Location', 'SR Type', 'Closed At', 'Analytic Labour', 'Analytic Spares', 'Analytic Total Invoice', `SA Income (${curPct}%)`, 'DMS Labour', 'DMS Total Invoice']
+      : ['Job Card', 'Reg No', `${label} Name`, `${label} Code`, 'Location', 'SR Type', 'Closed At', 'Analytic Labour', 'Analytic Spares', 'Analytic Total Invoice', `${label} Income (${curPct}%)`, 'DMS Labour', 'DMS Total Invoice']
+
+    const rows = filteredRows.map((r) => {
+      const inc = saIncome(r.dmsLabourAmt, curPct)
+      if (isSA) {
+        const jr = r as JCDetail
+        return [
+          jr.job_card_number,
+          jr.vehicle_registration_number ?? '',
+          String((jr as any).sr_assigned_to ?? '').trim(),
+          locationOf(jr.location),
+          jr.sr_type ?? '',
+          jr.closed_date_time ? new Date(jr.closed_date_time).toLocaleString('en-IN') : '',
+          jr.analyticLabourAmt,
+          jr.sparesAmt,
+          jr.invoiceAmt,
+          Number(inc.toFixed(2)),
+          jr.dmsLabourAmt,
+          jr.dmsInvoiceAmt,
+        ]
+      } else {
+        const tr = r as TechJCRow
+        return [
+          tr.job_card_number,
+          tr.vehicle_registration_number ?? '',
+          tr.technician_name,
+          tr.technician_code,
+          locationOf(tr.location),
+          tr.sr_type ?? '',
+          tr.closed_date_time ? new Date(tr.closed_date_time).toLocaleString('en-IN') : '',
+          tr.analyticLabourAmt,
+          tr.sparesAmt,
+          tr.invoiceAmt,
+          Number(inc.toFixed(2)),
+          tr.dmsLabourAmt,
+          tr.dmsInvoiceAmt,
+        ]
+      }
+    })
+
+    const wb = XLSX.utils.book_new()
+    const ws = XLSX.utils.aoa_to_sheet([headers, ...rows])
+    ws['!cols'] = headers.map((h) => ({ wch: Math.max(h.length + 2, 14) }))
+    XLSX.utils.book_append_sheet(wb, ws, label)
+    XLSX.writeFile(wb, `Bodyshop_${label}_${fromDate}_to_${toDate}.xlsx`)
+  }
 
   // ── Render ─────────────────────────────────────────────────────────────────
 
@@ -535,7 +636,7 @@ export default function BodyshopTrackerPage() {
           { label: 'Total Labour',                   value: fmt(totals.labour),                               color: '#16a34a', bg: '#f0fdf4' },
           { label: 'Total Spares',                   value: fmt(totals.spares),                               color: '#9333ea', bg: '#fdf4ff' },
           { label: 'Total Invoice',                  value: fmt(totals.invoice),                              color: '#ea580c', bg: '#fff7ed' },
-          { label: `${tabMeta.label} Income (${curPct}%)`, value: fmt(totals.labour * curPct / 100),          color: '#2563eb', bg: '#eff6ff', bold: true },
+          { label: `${tabMeta.label} Income (${curPct}%)`, value: fmt(saIncome(filteredRows.reduce((s, r) => s + r.dmsLabourAmt, 0), curPct)), color: '#2563eb', bg: '#eff6ff', bold: true },
         ].map(({ label, value, color, bg, bold }) => (
           <div key={label} style={{ background: bg, borderRadius: '8px', padding: '0.5rem 0.75rem', border: `1px solid ${color}22` }}>
             <div style={{ fontSize: bold ? '1rem' : '0.92rem', fontWeight: bold ? 800 : 700, color }}>{value}</div>
@@ -554,6 +655,14 @@ export default function BodyshopTrackerPage() {
             <button type="button" className="btn btn--ghost btn--sm" style={{ padding: '0.2rem 0.55rem', fontSize: '0.72rem' }}
               onClick={() => { setFromDate(''); setToDate('') }}>✕</button>
           )}
+          <button
+            type="button"
+            className="btn btn--primary btn--sm"
+            style={{ padding: '0.2rem 0.75rem', fontSize: '0.72rem', opacity: (fromDate && toDate) ? 1 : 0.5 }}
+            onClick={handleExportIssues}
+          >
+            📥 Export Issues
+          </button>
         </div>
       </div>
 
@@ -562,7 +671,7 @@ export default function BodyshopTrackerPage() {
         <div className="card__head">
           <div>
             <h3>{tabMeta.icon} {tabMeta.label} — Earnings %</h3>
-            <div className="sub">Income = Labour × {curPct}%. This is used to calculate payout for {tabMeta.label}.</div>
+            <div className="sub">Income = (DMS Labour ÷ 1.18) × {curPct}%. This is used to calculate payout for {tabMeta.label}.</div>
           </div>
           <div className="tech-share-corner">
             <h3>Earnings % — {tabMeta.label}</h3>
@@ -598,7 +707,7 @@ export default function BodyshopTrackerPage() {
           <div className="card__head">
             <div>
               <h3>{tabMeta.icon} {tabMeta.label} — Revenue</h3>
-              <div className="sub">Income = Labour × {curPct}%. Click a member to drill down by day.</div>
+              <div className="sub">Income = (DMS Labour ÷ 1.18) × {curPct}%. Click a member to drill down by day.</div>
             </div>
           </div>
           <div className="card__body dense">
@@ -686,10 +795,12 @@ export default function BodyshopTrackerPage() {
                   <th>Location</th>
                   <th>SR Type</th>
                   <th>Closed At</th>
-                  <th style={{ textAlign: 'right' }}>Labour</th>
-                  <th style={{ textAlign: 'right' }}>Spares</th>
-                  <th style={{ textAlign: 'right' }}>Total Invoice</th>
-                  <th style={{ textAlign: 'right', color: '#2563eb' }}>Income ({curPct}%)</th>
+                  <th style={{ textAlign: 'right' }}>Analytic Labour</th>
+                  <th style={{ textAlign: 'right' }}>Analytic Spares</th>
+                  <th style={{ textAlign: 'right' }}>Analytic Total Invoice</th>
+                  <th style={{ textAlign: 'right', color: '#2563eb' }}>{tabMeta.label} Income ({curPct}%)</th>
+                  <th style={{ textAlign: 'right', color: '#15803d' }}>DMS Labour</th>
+                  <th style={{ textAlign: 'right', color: '#0f766e' }}>DMS Total Invoice</th>
                 </tr>
               </thead>
               <tbody>
@@ -704,20 +815,28 @@ export default function BodyshopTrackerPage() {
                     <td>{locationOf(r.location)}</td>
                     <td>{r.sr_type ?? '—'}</td>
                     <td style={{ fontSize: 12, color: '#64748b' }}>{fmtDate(r.closed_date_time)}</td>
-                    <td style={{ textAlign: 'right', color: '#16a34a', fontWeight: 600 }}>{fmt(r.labourAmt)}</td>
+                    <td style={{ textAlign: 'right', color: '#16a34a', fontWeight: 600 }}>{fmt(r.analyticLabourAmt)}</td>
                     <td style={{ textAlign: 'right', color: '#9333ea', fontWeight: 600 }}>{fmt(r.sparesAmt)}</td>
                     <td style={{ textAlign: 'right', fontWeight: 700 }}>{fmt(r.invoiceAmt)}</td>
-                    <td style={{ textAlign: 'right', color: '#2563eb', fontWeight: 700 }}>{fmt(income(r.labourAmt, curPct))}</td>
+                    <td style={{ textAlign: 'right', color: '#2563eb', fontWeight: 700 }}>
+                      {fmt(saIncome(r.dmsLabourAmt, curPct))}
+                    </td>
+                    <td style={{ textAlign: 'right', color: '#15803d', fontWeight: 700 }}>{fmt(r.dmsLabourAmt)}</td>
+                    <td style={{ textAlign: 'right', color: '#0f766e', fontWeight: 700 }}>{fmt(r.dmsInvoiceAmt)}</td>
                   </tr>
                 ))}
               </tbody>
               <tfoot>
                 <tr style={{ background: '#f8fafc', fontWeight: 700 }}>
                   <td colSpan={5}>Day Total</td>
-                  <td style={{ textAlign: 'right', color: '#16a34a' }}>{fmt(dayDetailRows.reduce((s, r) => s + r.labourAmt, 0))}</td>
+                  <td style={{ textAlign: 'right', color: '#16a34a' }}>{fmt(dayDetailRows.reduce((s, r) => s + r.analyticLabourAmt, 0))}</td>
                   <td style={{ textAlign: 'right', color: '#9333ea' }}>{fmt(dayDetailRows.reduce((s, r) => s + r.sparesAmt, 0))}</td>
                   <td style={{ textAlign: 'right' }}>{fmt(dayDetailRows.reduce((s, r) => s + r.invoiceAmt, 0))}</td>
-                  <td style={{ textAlign: 'right', color: '#2563eb' }}>{fmt(dayDetailRows.reduce((s, r) => s + income(r.labourAmt, curPct), 0))}</td>
+                  <td style={{ textAlign: 'right', color: '#2563eb' }}>
+                    {fmt(saIncome(dayDetailRows.reduce((s, r) => s + r.dmsLabourAmt, 0), curPct))}
+                  </td>
+                  <td style={{ textAlign: 'right', color: '#15803d' }}>{fmt(dayDetailRows.reduce((s, r) => s + r.dmsLabourAmt, 0))}</td>
+                  <td style={{ textAlign: 'right', color: '#0f766e' }}>{fmt(dayDetailRows.reduce((s, r) => s + r.dmsInvoiceAmt, 0))}</td>
                 </tr>
               </tfoot>
             </table>

@@ -622,47 +622,75 @@ function parseApprovedPartsState(raw: string | null | undefined): ApprovedPartsS
   return state
 }
 
-type FloorRole = 'DENTOR' | 'PAINTER' | 'TECHNICIAN' | 'ELECTRICIAN' | 'DET'
+type FloorRole = 'FLOOR_INCHARGE' | 'DENTOR' | 'DENTOR_HELPER' | 'PAINTER' | 'PAINTER_HELPER' | 'TECHNICIAN' | 'RUBBING' | 'EDP' | 'PARTS_INCHARGE'
 
 type BodyshopFloorPrimaryRow = {
   id: number
   job_card_number: string
   repair_card_id: number
+  supervisor_employee_code: string | null
+  supervisor_employee_name: string | null
   dentor_employee_code: string | null
   dentor_employee_name: string | null
+  dentor_helper_employee_code: string | null
+  dentor_helper_employee_name: string | null
   painter_employee_code: string | null
   painter_employee_name: string | null
+  painter_helper_employee_code: string | null
+  painter_helper_employee_name: string | null
   technician_employee_code: string | null
   technician_employee_name: string | null
-  electrician_employee_code: string | null
-  electrician_employee_name: string | null
-  det_employee_code: string | null
-  det_employee_name: string | null
+  rubbing_employee_code: string | null
+  rubbing_employee_name: string | null
+  edp_employee_code: string | null
+  edp_employee_name: string | null
+  parts_incharge_employee_code: string | null
+  parts_incharge_employee_name: string | null
+  supervisor_work_status: string | null
   dentor_work_status: string | null
+  dentor_helper_work_status: string | null
   painter_work_status: string | null
+  painter_helper_work_status: string | null
   technician_work_status: string | null
-  electrician_work_status: string | null
-  det_work_status: string | null
+  rubbing_work_status: string | null
+  edp_work_status: string | null
+  parts_incharge_work_status: string | null
+  supervisor_remark: string | null
   dentor_remark: string | null
+  dentor_helper_remark: string | null
   painter_remark: string | null
+  painter_helper_remark: string | null
   technician_remark: string | null
-  electrician_remark: string | null
-  det_remark: string | null
+  rubbing_remark: string | null
+  edp_remark: string | null
+  parts_incharge_remark: string | null
+  supervisor_in_ts: string | null
   dentor_in_ts: string | null
+  dentor_helper_in_ts: string | null
   painter_in_ts: string | null
+  painter_helper_in_ts: string | null
   technician_in_ts: string | null
-  electrician_in_ts: string | null
-  det_in_ts: string | null
+  rubbing_in_ts: string | null
+  edp_in_ts: string | null
+  parts_incharge_in_ts: string | null
+  supervisor_out_ts: string | null
   dentor_out_ts: string | null
+  dentor_helper_out_ts: string | null
   painter_out_ts: string | null
+  painter_helper_out_ts: string | null
   technician_out_ts: string | null
-  electrician_out_ts: string | null
-  det_out_ts: string | null
+  rubbing_out_ts: string | null
+  edp_out_ts: string | null
+  parts_incharge_out_ts: string | null
+  supervisor_completed_by: string | null
   dentor_completed_by: string | null
+  dentor_helper_completed_by: string | null
   painter_completed_by: string | null
+  painter_helper_completed_by: string | null
   technician_completed_by: string | null
-  electrician_completed_by: string | null
-  det_completed_by: string | null
+  rubbing_completed_by: string | null
+  edp_completed_by: string | null
+  parts_incharge_completed_by: string | null
   bs_floor_completed_at: string | null
   bs_floor_completed_by: string | null
 }
@@ -682,14 +710,18 @@ type FloorRoleSnapshot = {
   doneBy: string | null
 }
 
-const FLOOR_ROLES: FloorRole[] = ['DENTOR', 'PAINTER', 'TECHNICIAN', 'ELECTRICIAN', 'DET']
+const FLOOR_ROLES: FloorRole[] = ['FLOOR_INCHARGE', 'DENTOR', 'DENTOR_HELPER', 'PAINTER', 'PAINTER_HELPER', 'TECHNICIAN', 'RUBBING', 'EDP', 'PARTS_INCHARGE']
 
 const FLOOR_ROLE_META: Record<FloorRole, { label: string }> = {
-  DENTOR: { label: 'Dentor' },
-  PAINTER: { label: 'Painter' },
-  TECHNICIAN: { label: 'Technician' },
-  ELECTRICIAN: { label: 'Electrician' },
-  DET: { label: 'DET' },
+  FLOOR_INCHARGE:  { label: 'Floor Incharge' },
+  DENTOR:          { label: 'Dentor' },
+  DENTOR_HELPER:   { label: 'Dentor Helper' },
+  PAINTER:         { label: 'Painter' },
+  PAINTER_HELPER:  { label: 'Painter Helper' },
+  TECHNICIAN:      { label: 'Technician' },
+  RUBBING:         { label: 'Rubbing' },
+  EDP:             { label: 'EDP' },
+  PARTS_INCHARGE:  { label: 'Parts Incharge' },
 }
 
 const FLOOR_ROLE_COLUMNS: Record<FloorRole, {
@@ -701,6 +733,15 @@ const FLOOR_ROLE_COLUMNS: Record<FloorRole, {
   outTs: keyof BodyshopFloorPrimaryRow
   completedBy: keyof BodyshopFloorPrimaryRow
 }> = {
+  FLOOR_INCHARGE: {
+    employeeCode: 'supervisor_employee_code',
+    employeeName: 'supervisor_employee_name',
+    workStatus: 'supervisor_work_status',
+    remark: 'supervisor_remark',
+    inTs: 'supervisor_in_ts',
+    outTs: 'supervisor_out_ts',
+    completedBy: 'supervisor_completed_by',
+  },
   DENTOR: {
     employeeCode: 'dentor_employee_code',
     employeeName: 'dentor_employee_name',
@@ -709,6 +750,15 @@ const FLOOR_ROLE_COLUMNS: Record<FloorRole, {
     inTs: 'dentor_in_ts',
     outTs: 'dentor_out_ts',
     completedBy: 'dentor_completed_by',
+  },
+  DENTOR_HELPER: {
+    employeeCode: 'dentor_helper_employee_code',
+    employeeName: 'dentor_helper_employee_name',
+    workStatus: 'dentor_helper_work_status',
+    remark: 'dentor_helper_remark',
+    inTs: 'dentor_helper_in_ts',
+    outTs: 'dentor_helper_out_ts',
+    completedBy: 'dentor_helper_completed_by',
   },
   PAINTER: {
     employeeCode: 'painter_employee_code',
@@ -719,6 +769,15 @@ const FLOOR_ROLE_COLUMNS: Record<FloorRole, {
     outTs: 'painter_out_ts',
     completedBy: 'painter_completed_by',
   },
+  PAINTER_HELPER: {
+    employeeCode: 'painter_helper_employee_code',
+    employeeName: 'painter_helper_employee_name',
+    workStatus: 'painter_helper_work_status',
+    remark: 'painter_helper_remark',
+    inTs: 'painter_helper_in_ts',
+    outTs: 'painter_helper_out_ts',
+    completedBy: 'painter_helper_completed_by',
+  },
   TECHNICIAN: {
     employeeCode: 'technician_employee_code',
     employeeName: 'technician_employee_name',
@@ -728,23 +787,32 @@ const FLOOR_ROLE_COLUMNS: Record<FloorRole, {
     outTs: 'technician_out_ts',
     completedBy: 'technician_completed_by',
   },
-  ELECTRICIAN: {
-    employeeCode: 'electrician_employee_code',
-    employeeName: 'electrician_employee_name',
-    workStatus: 'electrician_work_status',
-    remark: 'electrician_remark',
-    inTs: 'electrician_in_ts',
-    outTs: 'electrician_out_ts',
-    completedBy: 'electrician_completed_by',
+  RUBBING: {
+    employeeCode: 'rubbing_employee_code',
+    employeeName: 'rubbing_employee_name',
+    workStatus: 'rubbing_work_status',
+    remark: 'rubbing_remark',
+    inTs: 'rubbing_in_ts',
+    outTs: 'rubbing_out_ts',
+    completedBy: 'rubbing_completed_by',
   },
-  DET: {
-    employeeCode: 'det_employee_code',
-    employeeName: 'det_employee_name',
-    workStatus: 'det_work_status',
-    remark: 'det_remark',
-    inTs: 'det_in_ts',
-    outTs: 'det_out_ts',
-    completedBy: 'det_completed_by',
+  EDP: {
+    employeeCode: 'edp_employee_code',
+    employeeName: 'edp_employee_name',
+    workStatus: 'edp_work_status',
+    remark: 'edp_remark',
+    inTs: 'edp_in_ts',
+    outTs: 'edp_out_ts',
+    completedBy: 'edp_completed_by',
+  },
+  PARTS_INCHARGE: {
+    employeeCode: 'parts_incharge_employee_code',
+    employeeName: 'parts_incharge_employee_name',
+    workStatus: 'parts_incharge_work_status',
+    remark: 'parts_incharge_remark',
+    inTs: 'parts_incharge_in_ts',
+    outTs: 'parts_incharge_out_ts',
+    completedBy: 'parts_incharge_completed_by',
   },
 }
 
@@ -888,11 +956,15 @@ export default function BodyshopRepairPage() {
   const autoAdvanceDocsLockRef = useRef(false)
   const autoAdvanceStage11LockRef = useRef<Record<number, boolean>>({})
   const floorRoleRowRefs = useRef<Record<FloorRole, HTMLTableRowElement | null>>({
+    FLOOR_INCHARGE: null,
     DENTOR: null,
+    DENTOR_HELPER: null,
     PAINTER: null,
+    PAINTER_HELPER: null,
     TECHNICIAN: null,
-    ELECTRICIAN: null,
-    DET: null,
+    RUBBING: null,
+    EDP: null,
+    PARTS_INCHARGE: null,
   })
   const floorRoleHighlightTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -1242,16 +1314,30 @@ export default function BodyshopRepairPage() {
         'id',
         'job_card_number',
         'repair_card_id',
+        'supervisor_employee_code', 'supervisor_employee_name',
         'dentor_employee_code', 'dentor_employee_name',
+        'dentor_helper_employee_code', 'dentor_helper_employee_name',
         'painter_employee_code', 'painter_employee_name',
+        'painter_helper_employee_code', 'painter_helper_employee_name',
         'technician_employee_code', 'technician_employee_name',
-        'electrician_employee_code', 'electrician_employee_name',
-        'det_employee_code', 'det_employee_name',
-        'dentor_work_status', 'painter_work_status', 'technician_work_status', 'electrician_work_status', 'det_work_status',
-        'dentor_remark', 'painter_remark', 'technician_remark', 'electrician_remark', 'det_remark',
-        'dentor_in_ts', 'painter_in_ts', 'technician_in_ts', 'electrician_in_ts', 'det_in_ts',
-        'dentor_out_ts', 'painter_out_ts', 'technician_out_ts', 'electrician_out_ts', 'det_out_ts',
-        'dentor_completed_by', 'painter_completed_by', 'technician_completed_by', 'electrician_completed_by', 'det_completed_by',
+        'rubbing_employee_code', 'rubbing_employee_name',
+        'edp_employee_code', 'edp_employee_name',
+        'parts_incharge_employee_code', 'parts_incharge_employee_name',
+        'supervisor_work_status', 'dentor_work_status', 'dentor_helper_work_status',
+        'painter_work_status', 'painter_helper_work_status', 'technician_work_status',
+        'rubbing_work_status', 'edp_work_status', 'parts_incharge_work_status',
+        'supervisor_remark', 'dentor_remark', 'dentor_helper_remark',
+        'painter_remark', 'painter_helper_remark', 'technician_remark',
+        'rubbing_remark', 'edp_remark', 'parts_incharge_remark',
+        'supervisor_in_ts', 'dentor_in_ts', 'dentor_helper_in_ts',
+        'painter_in_ts', 'painter_helper_in_ts', 'technician_in_ts',
+        'rubbing_in_ts', 'edp_in_ts', 'parts_incharge_in_ts',
+        'supervisor_out_ts', 'dentor_out_ts', 'dentor_helper_out_ts',
+        'painter_out_ts', 'painter_helper_out_ts', 'technician_out_ts',
+        'rubbing_out_ts', 'edp_out_ts', 'parts_incharge_out_ts',
+        'supervisor_completed_by', 'dentor_completed_by', 'dentor_helper_completed_by',
+        'painter_completed_by', 'painter_helper_completed_by', 'technician_completed_by',
+        'rubbing_completed_by', 'edp_completed_by', 'parts_incharge_completed_by',
         'bs_floor_completed_at', 'bs_floor_completed_by',
       ].join(', ')
 
@@ -1770,11 +1856,15 @@ export default function BodyshopRepairPage() {
               'repair_card_id',
               'job_card_number',
               'bs_floor_completed_at',
+              'supervisor_employee_code', 'supervisor_employee_name', 'supervisor_work_status', 'supervisor_in_ts', 'supervisor_out_ts',
               'dentor_employee_code', 'dentor_employee_name', 'dentor_work_status', 'dentor_in_ts', 'dentor_out_ts',
+              'dentor_helper_employee_code', 'dentor_helper_employee_name', 'dentor_helper_work_status', 'dentor_helper_in_ts', 'dentor_helper_out_ts',
               'painter_employee_code', 'painter_employee_name', 'painter_work_status', 'painter_in_ts', 'painter_out_ts',
+              'painter_helper_employee_code', 'painter_helper_employee_name', 'painter_helper_work_status', 'painter_helper_in_ts', 'painter_helper_out_ts',
               'technician_employee_code', 'technician_employee_name', 'technician_work_status', 'technician_in_ts', 'technician_out_ts',
-              'electrician_employee_code', 'electrician_employee_name', 'electrician_work_status', 'electrician_in_ts', 'electrician_out_ts',
-              'det_employee_code', 'det_employee_name', 'det_work_status', 'det_in_ts', 'det_out_ts',
+              'rubbing_employee_code', 'rubbing_employee_name', 'rubbing_work_status', 'rubbing_in_ts', 'rubbing_out_ts',
+              'edp_employee_code', 'edp_employee_name', 'edp_work_status', 'edp_in_ts', 'edp_out_ts',
+              'parts_incharge_employee_code', 'parts_incharge_employee_name', 'parts_incharge_work_status', 'parts_incharge_in_ts', 'parts_incharge_out_ts',
             ].join(', '))
             .eq('is_active', true)
             .in('job_card_number', jcNumbers)
@@ -1789,11 +1879,15 @@ export default function BodyshopRepairPage() {
               'repair_card_id',
               'job_card_number',
               'bs_floor_completed_at',
+              'supervisor_employee_code', 'supervisor_employee_name', 'supervisor_work_status', 'supervisor_in_ts', 'supervisor_out_ts',
               'dentor_employee_code', 'dentor_employee_name', 'dentor_work_status', 'dentor_in_ts', 'dentor_out_ts',
+              'dentor_helper_employee_code', 'dentor_helper_employee_name', 'dentor_helper_work_status', 'dentor_helper_in_ts', 'dentor_helper_out_ts',
               'painter_employee_code', 'painter_employee_name', 'painter_work_status', 'painter_in_ts', 'painter_out_ts',
+              'painter_helper_employee_code', 'painter_helper_employee_name', 'painter_helper_work_status', 'painter_helper_in_ts', 'painter_helper_out_ts',
               'technician_employee_code', 'technician_employee_name', 'technician_work_status', 'technician_in_ts', 'technician_out_ts',
-              'electrician_employee_code', 'electrician_employee_name', 'electrician_work_status', 'electrician_in_ts', 'electrician_out_ts',
-              'det_employee_code', 'det_employee_name', 'det_work_status', 'det_in_ts', 'det_out_ts',
+              'rubbing_employee_code', 'rubbing_employee_name', 'rubbing_work_status', 'rubbing_in_ts', 'rubbing_out_ts',
+              'edp_employee_code', 'edp_employee_name', 'edp_work_status', 'edp_in_ts', 'edp_out_ts',
+              'parts_incharge_employee_code', 'parts_incharge_employee_name', 'parts_incharge_work_status', 'parts_incharge_in_ts', 'parts_incharge_out_ts',
             ].join(', '))
             .eq('is_active', true)
             .in('repair_card_id', cardIds)
