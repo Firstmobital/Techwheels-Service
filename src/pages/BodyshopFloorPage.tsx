@@ -758,7 +758,7 @@ export default function BodyshopFloorPage() {
   const [floorFilter, setFloorFilter]       = useState<'all' | 'Floor 2' | 'Floor 3'>('all')
   const [roleFilter, setRoleFilter]         = useState<BSRole | 'all'>('all')
   const [search, setSearch]                 = useState('')
-  // UI-only additions: card collapse/expand + Floor Incharge workload filter (no business logic changes)
+  const [fiFilter, setFiFilter]             = useState<string>('all')  // floor incharge name filter
   const [expandedCards, setExpandedCards]   = useState<Set<string>>(new Set())
 
   // Inline draft: stageDrafts[jcKey][role] = { status, remark }
@@ -1062,6 +1062,28 @@ export default function BodyshopFloorPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }), [cars, assignments, bsFloorStatus, additionalApprovalByJc])
 
+  // ── Floor Incharge workload summary ──────────────────────────────────────
+  const floorInchargeSummary = useMemo(() => {
+    const map = new Map<string, { total: number; unassigned: number; inProcess: number; hold: number; completed: number }>()
+    let noInchargeCount = 0
+    cars.forEach((c) => {
+      const name = assignments[jcKey(c)]?.FLOOR_INCHARGE?.employee_name?.trim()
+      if (!name) { noInchargeCount += 1; return }
+      const entry = map.get(name) ?? { total: 0, unassigned: 0, inProcess: 0, hold: 0, completed: 0 }
+      entry.total += 1
+      if (isBsFloorCompleted(c)) entry.completed += 1
+      else if (hasStatus(c, 'hold')) entry.hold += 1
+      else if (hasAnyAssignment(c)) entry.inProcess += 1
+      else entry.unassigned += 1
+      map.set(name, entry)
+    })
+    const rows = Array.from(map.entries())
+      .map(([name, c]) => ({ name, ...c, pending: c.total - c.completed }))
+      .sort((a, b) => b.pending - a.pending || b.total - a.total)
+    return { rows, noInchargeCount }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cars, assignments, bsFloorStatus])
+
   // ── Filtered rows ────────────────────────────────────────────────────────
 
   const filtered = useMemo(() => {
@@ -1075,6 +1097,9 @@ export default function BodyshopFloorPage() {
 
     if (roleFilter !== 'all')
       list = list.filter((c) => assignments[jcKey(c)]?.[roleFilter])
+
+    if (fiFilter !== 'all')
+      list = list.filter((c) => assignments[jcKey(c)]?.FLOOR_INCHARGE?.employee_name?.trim() === fiFilter)
 
     if (search.trim()) {
       const q = search.trim().toLowerCase()
@@ -1099,7 +1124,7 @@ export default function BodyshopFloorPage() {
     })
     return list
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cars, branchFilter, floorFilter, roleFilter, search, assignmentView, assignments, bsFloorStatus, additionalApprovalByJc])
+  }, [cars, branchFilter, floorFilter, roleFilter, fiFilter, search, assignmentView, assignments, bsFloorStatus, additionalApprovalByJc])
 
   // ── Assign (inline select) ───────────────────────────────────────────────
 
@@ -1916,6 +1941,36 @@ export default function BodyshopFloorPage() {
           </button>
         ))}
       </div>
+
+      {/* ── Floor Incharge workload cards ── */}
+      {floorInchargeSummary.rows.length > 0 && (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, padding: '10px 16px 4px' }}>
+          {floorInchargeSummary.rows.map((r) => {
+            const active = fiFilter === r.name
+            return (
+              <button
+                key={r.name}
+                type="button"
+                onClick={() => setFiFilter(active ? 'all' : r.name)}
+                style={{
+                  background: active ? 'var(--accent)' : '#fff',
+                  border: `1px solid ${active ? 'var(--accent)' : '#e2e8f0'}`,
+                  borderRadius: 10, padding: '10px 14px', minWidth: 180,
+                  textAlign: 'left', cursor: 'pointer',
+                }}
+              >
+                <div style={{ fontWeight: 700, fontSize: 13, textTransform: 'uppercase', letterSpacing: 0.3, color: active ? '#fff' : undefined }}>{r.name}</div>
+                <div style={{ fontSize: 13, color: active ? 'rgba(255,255,255,0.9)' : (r.pending > 0 ? '#ef4444' : '#22c55e'), fontWeight: 600, marginTop: 2 }}>
+                  {r.pending} pending of {r.total}
+                </div>
+                <div style={{ fontSize: 12, color: active ? 'rgba(255,255,255,0.7)' : '#94a3b8', marginTop: 2 }}>
+                  In-Process {r.inProcess} · Hold {r.hold} · Done {r.completed}
+                </div>
+              </button>
+            )
+          })}
+        </div>
+      )}
 
       <div className="bsf-filterbar">
         <div className="bsf-search">
