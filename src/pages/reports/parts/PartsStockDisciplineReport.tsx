@@ -1,5 +1,17 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import * as XLSX from 'xlsx'
+import {
+  Bar,
+  BarChart,
+  Cell,
+  Legend,
+  Pie,
+  PieChart,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from 'recharts'
 import { supabase } from '../../../lib/supabase'
 import type { ReportViewProps } from '../types'
 import { ReportLoadingState } from '../components/ReportLoadingState'
@@ -33,6 +45,7 @@ interface ConsumptionRow {
   part_number: string
   part_description: string | null
   portal: string
+  branch: string | null
   fiscal_year: number
   fiscal_month: number
   month_name: string | null
@@ -42,6 +55,7 @@ interface StockRow {
   part_number: string
   part_description: string | null
   portal: string
+  branch: string | null
   on_hand_quantity: number
   weighted_avg_cost: number | null
 }
@@ -79,6 +93,20 @@ interface DisciplineRow {
   critical: boolean
   rowStatus: RowStatus
   inventoryValue: number
+  /** Weighted-avg cost per unit (portal-wide across branches) — used only by the Inventory
+   * Status dashboard to value 3-month consumption ("Sales Value"); Order Sheet is unaffected. */
+  unitCost: number
+}
+
+/** Per-branch (location) rollup — used only by the Inventory Status dashboard. Computed from
+ * the exact same fetched data as the Order Sheet, with zero additional queries. */
+interface LocationAgg {
+  branch: string
+  inventoryValue: number
+  salesValue: number
+  stockableValue: number
+  nonStockableValue: number
+  nonMovingValue: number
 }
 
 type OrderPortal = 'PV' | 'EV'
@@ -128,6 +156,8 @@ export default function PartsStockDisciplineReport({ branch }: ReportViewProps) 
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'CRITICAL' | 'LOW' | 'EXCESS' | 'DEAD' | 'OK'>('ALL')
   const [searchText, setSearchText] = useState('')
   const [rowsByPortal, setRowsByPortal] = useState<Record<OrderPortal, DisciplineRow[]>>({ PV: [], EV: [] })
+  const [locationRowsByPortal, setLocationRowsByPortal] = useState<Record<OrderPortal, LocationAgg[]>>({ PV: [], EV: [] })
+  const [activeView, setActiveView] = useState<'order-sheet' | 'inventory-status'>('order-sheet')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [lastUpdated, setLastUpdated] = useState<Record<OrderPortal, string | null>>({ PV: null, EV: null })
@@ -148,12 +178,12 @@ export default function PartsStockDisciplineReport({ branch }: ReportViewProps) 
       const [consumptionAll, stockAll, orderAll] = await Promise.all([
         fetchAll<ConsumptionRow>(
           'service_parts_consumption_data',
-          'part_number,part_description,portal,fiscal_year,fiscal_month,month_name,total_consumption',
+          'part_number,part_description,portal,branch,fiscal_year,fiscal_month,month_name,total_consumption',
           { ...baseFilters, fiscal_year: [TARGET_FISCAL_YEAR], fiscal_month: TARGET_MONTHS }
         ),
         fetchAll<StockRow>(
           'service_parts_stock_snapshot_data',
-          'part_number,part_description,portal,on_hand_quantity,weighted_avg_cost',
+          'part_number,part_description,portal,branch,on_hand_quantity,weighted_avg_cost',
           baseFilters
         ),
         fetchAll<OrderRow>(
@@ -192,14 +222,17 @@ export default function PartsStockDisciplineReport({ branch }: ReportViewProps) 
         e.months[pkey] = (e.months[pkey] ?? 0) + (row.total_consumption ?? 0)
       }
 
-      // Stock map
-      const stockMap = new Map<string, { desc: string; qty: number; cost: number }>()
+      // Stock map — costSum/costCount capture raw weighted_avg_cost even for zero-qty rows
+      // so a per-unit cost is still derivable (used only by the Inventory Status dashboard
+      // to value consumption; Order Sheet's qty/cost fields below are untouched).
+      const stockMap = new Map<string, { desc: string; qty: number; cost: number; costSum: number; costCount: number }>()
       for (const row of stockFiltered) {
         const key = `${row.part_number}|${row.portal}`
-        if (!stockMap.has(key)) stockMap.set(key, { desc: row.part_description ?? row.part_number, qty: 0, cost: 0 })
+        if (!stockMap.has(key)) stockMap.set(key, { desc: row.part_description ?? row.part_number, qty: 0, cost: 0, costSum: 0, costCount: 0 })
         const e = stockMap.get(key)!
         e.qty += row.on_hand_quantity ?? 0
         e.cost += (row.on_hand_quantity ?? 0) * (row.weighted_avg_cost ?? 0)
+        if (row.weighted_avg_cost != null) { e.costSum += row.weighted_avg_cost; e.costCount += 1 }
       }
 
       // Pipeline map
@@ -257,6 +290,10 @@ export default function PartsStockDisciplineReport({ branch }: ReportViewProps) 
         else if (excessStock) rowStatus = 'EXCESS STOCK'
         else rowStatus = 'OK'
 
+        const unitCost = (sEntry?.qty ?? 0) > 0
+          ? (sEntry!.cost / sEntry!.qty)
+          : ((sEntry?.costCount ?? 0) > 0 ? sEntry!.costSum / sEntry!.costCount : 0)
+
         disciplineRows.push({
           partNumber, partDescription: desc, portal: partPortal,
           m1Qty, m2Qty, m3Qty, total3M, monthsActive, frequency,
@@ -264,10 +301,53 @@ export default function PartsStockDisciplineReport({ branch }: ReportViewProps) 
           currentStock, pipelineQty, effectiveStock, required20Day, netShortfall, qtyToOrder,
           stockStatus, deadStock, excessStock, critical, rowStatus,
           inventoryValue: sEntry?.cost ?? 0,
+          unitCost,
         })
       }
 
+      // --- Inventory Status dashboard only: per-branch (location) rollup. Reuses the exact
+      // same fetched rows above (zero extra queries). A part's movement-nature bucket
+      // (Stockable/Non-Stockable/Non-Moving) is the same portal-wide frequency classification
+      // computed above — a part's "nature" doesn't change by branch, only how much of its
+      // stock/sales sits in each branch does.
+      const partFrequency = new Map<string, FrequencyLabel>()
+      for (const r of disciplineRows) partFrequency.set(r.partNumber, r.frequency)
+      const partUnitCost = new Map<string, number>()
+      for (const r of disciplineRows) partUnitCost.set(r.partNumber, r.unitCost)
+
+      const locationMap = new Map<string, LocationAgg>()
+      function ensureLoc(branchName: string): LocationAgg {
+        const key = branchName || 'Unassigned'
+        if (!locationMap.has(key)) {
+          locationMap.set(key, { branch: key, inventoryValue: 0, salesValue: 0, stockableValue: 0, nonStockableValue: 0, nonMovingValue: 0 })
+        }
+        return locationMap.get(key)!
+      }
+      function bucketOf(freq: FrequencyLabel | undefined): 'stockable' | 'nonStockable' | 'nonMoving' {
+        if (freq === 'Daily/Regular Mover' || freq === 'Bi-Weekly Mover') return 'stockable'
+        if (freq === 'Weekly/Occasional Mover') return 'nonStockable'
+        return 'nonMoving'
+      }
+      for (const row of stockFiltered) {
+        const loc = ensureLoc(row.branch ?? '')
+        const value = (row.on_hand_quantity ?? 0) * (row.weighted_avg_cost ?? 0)
+        loc.inventoryValue += value
+        const bucket = bucketOf(partFrequency.get(row.part_number))
+        if (bucket === 'stockable') loc.stockableValue += value
+        else if (bucket === 'nonStockable') loc.nonStockableValue += value
+        else loc.nonMovingValue += value
+      }
+      for (const row of consumptionFiltered) {
+        const pkey = `${row.fiscal_year ?? 0}-${row.fiscal_month ?? 0}`
+        if (!windowPeriods.includes(pkey)) continue
+        const loc = ensureLoc(row.branch ?? '')
+        const uc = partUnitCost.get(row.part_number) ?? 0
+        loc.salesValue += (row.total_consumption ?? 0) * uc
+      }
+      const locationRows = Array.from(locationMap.values()).sort((a, b) => b.inventoryValue - a.inventoryValue)
+
       setRowsByPortal((prev) => ({ ...prev, [portalToLoad]: disciplineRows }))
+      setLocationRowsByPortal((prev) => ({ ...prev, [portalToLoad]: locationRows }))
       setLastUpdated((prev) => ({ ...prev, [portalToLoad]: new Date().toLocaleTimeString('en-IN') }))
     } catch (err: unknown) {
       setError((err as Error).message)
@@ -280,6 +360,7 @@ export default function PartsStockDisciplineReport({ branch }: ReportViewProps) 
   useEffect(() => { setCurrentPage(1) }, [activePortal, statusFilter, searchText])
 
   const rows = rowsByPortal[activePortal]
+  const locationRows = locationRowsByPortal[activePortal]
   const lastUpdatedForActive = lastUpdated[activePortal]
 
   const filteredRows = useMemo(() => {
@@ -330,6 +411,64 @@ export default function PartsStockDisciplineReport({ branch }: ReportViewProps) 
       deadValue: dead.reduce((s, r) => s + r.inventoryValue, 0),
     }
   }, [rows])
+
+  // ---- Inventory Status dashboard (new view, additive — Order Sheet logic above is untouched) ----
+  const inventoryStatus = useMemo(() => {
+    const totalInventoryValue = rows.reduce((s, r) => s + r.inventoryValue, 0)
+    const totalSalesValue = rows.reduce((s, r) => s + r.total3M * r.unitCost, 0)
+    const nmInventoryValue = rows.filter((r) => r.deadStock).reduce((s, r) => s + r.inventoryValue, 0)
+    // Standard Days-Inventory-Outstanding formula over the fixed 90-day (3-month) window.
+    const inventoryDays = totalSalesValue > 0 ? (totalInventoryValue / totalSalesValue) * CALENDAR_DAYS : 0
+
+    // New KPI requested: parts still needing a fresh order placed (shortfall not yet
+    // covered by anything already Ordered/Confirmed/In-Transit) — reuses the exact same
+    // qtyToOrder computed for the Order Sheet above, just aggregated for count + value.
+    const pendingPlacement = rows.filter((r) => r.qtyToOrder > 0 && !r.deadStock)
+    const pendingPlacementCount = pendingPlacement.length
+    const pendingPlacementValue = pendingPlacement.reduce((s, r) => s + r.qtyToOrder * r.unitCost, 0)
+
+    // Movement-code categorization (Regular/Medium/Slow/Dead) — reuses the same portal-wide
+    // frequency classification already computed for the Order Sheet, just re-labeled.
+    const NATURE_ORDER: { key: FrequencyLabel; label: 'Regular' | 'Medium' | 'Slow' | 'Dead' }[] = [
+      { key: 'Daily/Regular Mover', label: 'Regular' },
+      { key: 'Bi-Weekly Mover', label: 'Medium' },
+      { key: 'Weekly/Occasional Mover', label: 'Slow' },
+      { key: 'No Recent Use', label: 'Dead' },
+    ]
+    const byNature = NATURE_ORDER.map(({ key, label }) => {
+      const bucket = rows.filter((r) => r.frequency === key)
+      const inventoryValue = bucket.reduce((s, r) => s + r.inventoryValue, 0)
+      const salesValue = bucket.reduce((s, r) => s + r.total3M * r.unitCost, 0)
+      const days = salesValue > 0 ? (inventoryValue / salesValue) * CALENDAR_DAYS : 0
+      return { label, inventoryValue: inventoryValue / 100000, salesValue: salesValue / 100000, days: Math.round(days) }
+    })
+
+    // Stockable / Non-Stockable / Non-Moving categorization (Group View). No separate
+    // "stockable" master flag exists in current data, so this is derived from the same
+    // movement-frequency classification: Regular+Medium movers = Stockable, Slow movers =
+    // Non-Stockable (borderline), zero-consumption parts = Non-Moving.
+    const categoryTotals = {
+      stockable: rows.filter((r) => r.frequency === 'Daily/Regular Mover' || r.frequency === 'Bi-Weekly Mover').reduce((s, r) => s + r.inventoryValue, 0),
+      nonStockable: rows.filter((r) => r.frequency === 'Weekly/Occasional Mover').reduce((s, r) => s + r.inventoryValue, 0),
+      nonMoving: rows.filter((r) => r.frequency === 'No Recent Use').reduce((s, r) => s + r.inventoryValue, 0),
+    }
+
+    const locationChart = locationRows.map((l) => ({
+      branch: l.branch,
+      inventoryValue: l.inventoryValue / 100000,
+      salesValue: l.salesValue / 100000,
+      days: l.salesValue > 0 ? Math.round((l.inventoryValue / l.salesValue) * CALENDAR_DAYS) : 0,
+      stockableValue: l.stockableValue / 100000,
+      nonStockableValue: l.nonStockableValue / 100000,
+      nonMovingValue: l.nonMovingValue / 100000,
+    }))
+
+    return {
+      totalInventoryValue, totalSalesValue, nmInventoryValue, inventoryDays,
+      pendingPlacementCount, pendingPlacementValue,
+      byNature, categoryTotals, locationChart,
+    }
+  }, [rows, locationRows])
 
   function toggleSort(key: keyof DisciplineRow) {
     if (sortKey === key) setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'))
@@ -460,6 +599,28 @@ export default function PartsStockDisciplineReport({ branch }: ReportViewProps) 
             </button>
           ))}
         </div>
+
+        {/* View switcher */}
+        <div className="mt-3 inline-flex rounded-lg border border-gray-200 bg-gray-50 p-1">
+          <button
+            type="button"
+            onClick={() => setActiveView('order-sheet')}
+            className={`rounded-md px-4 py-1.5 text-xs font-semibold transition-all ${
+              activeView === 'order-sheet' ? 'bg-white text-gray-900 shadow-sm ring-1 ring-gray-200' : 'text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            Order Sheet
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveView('inventory-status')}
+            className={`rounded-md px-4 py-1.5 text-xs font-semibold transition-all ${
+              activeView === 'inventory-status' ? 'bg-white text-gray-900 shadow-sm ring-1 ring-gray-200' : 'text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            Current Inventory Status
+          </button>
+        </div>
       </div>
 
       {error && (
@@ -475,6 +636,8 @@ export default function PartsStockDisciplineReport({ branch }: ReportViewProps) 
         </div>
       )}
 
+      {activeView === 'order-sheet' && (
+      <>
       {/* Stat tiles */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
         <div className="rounded-lg border border-gray-200 bg-white px-4 py-3 shadow-sm">
@@ -668,6 +831,204 @@ export default function PartsStockDisciplineReport({ branch }: ReportViewProps) 
 
       <div className="text-right text-xs text-gray-400">
         {activePortal} Order Sheet · 30-day cover · window: {activeMonthLabels.join(' + ')} · all order qty rounded up · Accessories excluded (8855GOLD, 8855EVCH, 8857 series)
+      </div>
+      </>
+      )}
+
+      {activeView === 'inventory-status' && (
+        <InventoryStatusDashboard
+          portal={activePortal}
+          monthLabels={activeMonthLabels}
+          data={inventoryStatus}
+        />
+      )}
+    </div>
+  )
+}
+
+// ---- Current Inventory Status dashboard (new, additive view) ----
+function fmtLakh(value: number): string {
+  return value.toLocaleString('en-IN', { maximumFractionDigits: 1, minimumFractionDigits: 0 })
+}
+function fmtRupee(value: number): string {
+  return `₹${Math.round(value).toLocaleString('en-IN')}`
+}
+
+const CATEGORY_COLORS = { stockable: '#22c55e', nonStockable: '#fdba74', nonMoving: '#ef4444' }
+
+function InventoryStatusDashboard({
+  portal,
+  monthLabels,
+  data,
+}: {
+  portal: OrderPortal
+  monthLabels: string[]
+  data: {
+    totalInventoryValue: number
+    totalSalesValue: number
+    nmInventoryValue: number
+    inventoryDays: number
+    pendingPlacementCount: number
+    pendingPlacementValue: number
+    byNature: { label: 'Regular' | 'Medium' | 'Slow' | 'Dead'; inventoryValue: number; salesValue: number; days: number }[]
+    categoryTotals: { stockable: number; nonStockable: number; nonMoving: number }
+    locationChart: { branch: string; inventoryValue: number; salesValue: number; days: number; stockableValue: number; nonStockableValue: number; nonMovingValue: number }[]
+  }
+}) {
+  const terminalMonth = monthLabels[monthLabels.length - 1] ?? '—'
+  const categoryPieData = [
+    { name: 'Stockable', value: data.categoryTotals.stockable / 100000, color: CATEGORY_COLORS.stockable },
+    { name: 'Non-Stockable', value: data.categoryTotals.nonStockable / 100000, color: CATEGORY_COLORS.nonStockable },
+    { name: 'Non-Moving', value: data.categoryTotals.nonMoving / 100000, color: CATEGORY_COLORS.nonMoving },
+  ]
+  const categoryBarData = categoryPieData
+
+  return (
+    <div className="space-y-4">
+      {/* Header stat strip */}
+      <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h3 className="text-base font-semibold text-gray-900">{portal} Current Inventory Status</h3>
+          <span className="text-xs text-gray-400">Window: {monthLabels.join(' + ')}</span>
+        </div>
+        <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+          <div className="rounded-lg border border-gray-200 bg-white px-4 py-3 shadow-sm">
+            <p className="text-xs font-medium uppercase tracking-wide text-gray-500">Terminal Month</p>
+            <p className="mt-1 text-lg font-semibold text-gray-900">{terminalMonth}</p>
+          </div>
+          <div className="rounded-lg border border-gray-200 bg-white px-4 py-3 shadow-sm">
+            <p className="text-xs font-medium uppercase tracking-wide text-gray-500">Total Sales (₹ Lakhs)</p>
+            <p className="mt-1 text-lg font-semibold text-gray-900">{fmtLakh(data.totalSalesValue / 100000)}</p>
+          </div>
+          <div className="rounded-lg border border-gray-200 bg-white px-4 py-3 shadow-sm">
+            <p className="text-xs font-medium uppercase tracking-wide text-gray-500">Total Inventory (₹ Lakhs)</p>
+            <p className="mt-1 text-lg font-semibold text-gray-900">{fmtLakh(data.totalInventoryValue / 100000)}</p>
+          </div>
+          <div className="rounded-lg border border-amber-100 bg-amber-50 px-4 py-3 shadow-sm">
+            <p className="text-xs font-medium uppercase tracking-wide text-amber-600">NM Inventory (₹ Lakhs)</p>
+            <p className="mt-1 text-lg font-semibold text-amber-900">{fmtLakh(data.nmInventoryValue / 100000)}</p>
+          </div>
+          <div className="rounded-lg border border-gray-200 bg-white px-4 py-3 shadow-sm">
+            <p className="text-xs font-medium uppercase tracking-wide text-gray-500">Inventory Days</p>
+            <p className="mt-1 text-lg font-semibold text-gray-900">{Math.round(data.inventoryDays)}</p>
+          </div>
+          <div className="rounded-lg border border-violet-100 bg-violet-50 px-4 py-3 shadow-sm">
+            <p className="text-xs font-medium uppercase tracking-wide text-violet-600">Order Pending for Placement</p>
+            <p className="mt-1 text-lg font-semibold text-violet-900">{data.pendingPlacementCount.toLocaleString('en-IN')} · {fmtRupee(data.pendingPlacementValue)}</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Section 1: Inventory & Sales by Location */}
+      <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+        <h4 className="mb-3 text-sm font-semibold text-gray-700">Inventory &amp; Sales by Location (Value in ₹ Lakhs)</h4>
+        <div className="h-72">
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={data.locationChart} margin={{ top: 8, right: 12, left: 8, bottom: 8 }}>
+              <XAxis dataKey="branch" tick={{ fontSize: 12 }} />
+              <YAxis tick={{ fontSize: 12 }} />
+              <Tooltip formatter={(v: any) => Number(v).toFixed(1)} />
+              <Legend />
+              <Bar dataKey="inventoryValue" name="Inventory Value" fill="#9ca3af" radius={[4, 4, 0, 0]} />
+              <Bar dataKey="salesValue" name="Sales Value" fill="#22c55e" radius={[4, 4, 0, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      </div>
+
+      {/* Section 2: Inventory Categorization */}
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+          <h4 className="mb-1 text-sm font-semibold text-gray-700">Inventory Categorization — Location View (₹ Lakhs)</h4>
+          <p className="mb-3 text-xs text-gray-400">Stockable = Regular/Medium movers · Non-Stockable = Slow movers · Non-Moving = zero 3-month consumption</p>
+          <div className="h-64">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={categoryBarData} margin={{ top: 8, right: 12, left: 8, bottom: 8 }}>
+                <XAxis dataKey="name" tick={{ fontSize: 12 }} />
+                <YAxis tick={{ fontSize: 12 }} />
+                <Tooltip formatter={(v: any) => Number(v).toFixed(1)} />
+                <Bar dataKey="value" radius={[4, 4, 0, 0]}>
+                  {categoryBarData.map((entry, i) => <Cell key={i} fill={entry.color} />)}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+        <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+          <h4 className="mb-3 text-sm font-semibold text-gray-700">Inventory Categorization — Group View (₹ Lakhs)</h4>
+          <div className="h-64">
+            <ResponsiveContainer width="100%" height="100%">
+              <PieChart>
+                <Pie data={categoryPieData} dataKey="value" nameKey="name" innerRadius={55} outerRadius={85} paddingAngle={2}>
+                  {categoryPieData.map((entry, i) => <Cell key={i} fill={entry.color} />)}
+                </Pie>
+                <Tooltip formatter={(v: any) => Number(v).toFixed(1)} />
+                <Legend />
+              </PieChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+      </div>
+
+      {/* Section 3: by Movement Code */}
+      <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+        <h4 className="mb-1 text-sm font-semibold text-gray-700">Inventory &amp; Sales Categorization by Movement Code</h4>
+        <p className="mb-3 text-xs text-gray-400">
+          Regular = active all 3 months · Medium = 2 of 3 · Slow = 1 of 3 · Dead = no consumption in window.
+          &quot;Group Nature&quot; mirrors &quot;Location Nature&quot; below — no separate parts-group master data exists yet to split them further.
+        </p>
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-4">
+          <div className="h-56">
+            <p className="mb-1 text-center text-xs font-medium text-gray-500">Inventory &amp; Sales by Part Nature (Location)</p>
+            <ResponsiveContainer width="100%" height="90%">
+              <BarChart data={data.byNature} margin={{ top: 8, right: 8, left: 0, bottom: 8 }}>
+                <XAxis dataKey="label" tick={{ fontSize: 11 }} />
+                <YAxis tick={{ fontSize: 11 }} />
+                <Tooltip formatter={(v: any) => Number(v).toFixed(1)} />
+                <Bar dataKey="inventoryValue" name="Inventory" fill="#9ca3af" />
+                <Bar dataKey="salesValue" name="Sales" fill="#22c55e" />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+          <div className="h-56">
+            <p className="mb-1 text-center text-xs font-medium text-gray-500">Inventory &amp; Sales by Part Nature (Group)</p>
+            <ResponsiveContainer width="100%" height="90%">
+              <BarChart data={data.byNature} margin={{ top: 8, right: 8, left: 0, bottom: 8 }}>
+                <XAxis dataKey="label" tick={{ fontSize: 11 }} />
+                <YAxis tick={{ fontSize: 11 }} />
+                <Tooltip formatter={(v: any) => Number(v).toFixed(1)} />
+                <Bar dataKey="inventoryValue" name="Inventory" fill="#9ca3af" />
+                <Bar dataKey="salesValue" name="Sales" fill="#22c55e" />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+          <div className="h-56">
+            <p className="mb-1 text-center text-xs font-medium text-gray-500">Inventory Days by Location Nature</p>
+            <ResponsiveContainer width="100%" height="90%">
+              <BarChart data={data.byNature.filter((n) => n.label !== 'Dead')} margin={{ top: 8, right: 8, left: 0, bottom: 8 }}>
+                <XAxis dataKey="label" tick={{ fontSize: 11 }} />
+                <YAxis tick={{ fontSize: 11 }} />
+                <Tooltip />
+                <Bar dataKey="days" name="Days" fill="#6b7280" />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+          <div className="h-56">
+            <p className="mb-1 text-center text-xs font-medium text-gray-500">Inventory Days by Group Nature</p>
+            <ResponsiveContainer width="100%" height="90%">
+              <BarChart data={data.byNature.filter((n) => n.label !== 'Dead')} margin={{ top: 8, right: 8, left: 0, bottom: 8 }}>
+                <XAxis dataKey="label" tick={{ fontSize: 11 }} />
+                <YAxis tick={{ fontSize: 11 }} />
+                <Tooltip />
+                <Bar dataKey="days" name="Days" fill="#6b7280" />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+      </div>
+
+      <div className="text-right text-xs text-gray-400">
+        {portal} Current Inventory Status · derived entirely from the same {monthLabels.join(' + ')} consumption + stock + pipeline data as the Order Sheet
       </div>
     </div>
   )
