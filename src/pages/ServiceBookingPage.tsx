@@ -186,6 +186,16 @@ export default function ServiceBookingPage() {
     return rows
   }, [bookings, sourceFilter, statusFilter, branchFilter, appointmentDateRange, searchQuery])
 
+  // Filter dropdown must include ALL booking_source values actually present in the data
+  // (e.g. system-generated sources like 'WhatsApp Auto Reminder' / 'WhatsApp EW Service Reminder' /
+  // 'WhatsApp AI Agent'), not just the fixed manual-entry list — otherwise selecting those sources
+  // silently filters to zero rows because the option never matched any real value.
+  const sourceFilterOptions = useMemo(() => {
+    const set = new Set<string>(BOOKING_SOURCES)
+    bookings.forEach(b => { if (b.booking_source) set.add(b.booking_source) })
+    return Array.from(set).sort((a, b) => a.localeCompare(b))
+  }, [bookings])
+
   function handleExport() {
     if (filtered.length === 0) return
     const rows = filtered.map(b => ({
@@ -357,7 +367,7 @@ export default function ServiceBookingPage() {
         <select value={sourceFilter} onChange={e => setSourceFilter(e.target.value)}
           style={{ ...selInp, width: 'auto', fontSize: '0.78rem', padding: '0.38rem 0.6rem' }}>
           <option value="all">All Sources</option>
-          {BOOKING_SOURCES.map(s => <option key={s}>{s}</option>)}
+          {sourceFilterOptions.map(s => <option key={s}>{s}</option>)}
         </select>
 
         <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)}
