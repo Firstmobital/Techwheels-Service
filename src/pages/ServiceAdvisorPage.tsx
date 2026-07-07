@@ -67,8 +67,62 @@ const SOURCE_TONE_MAP: Record<string, string> = {
 }
 
 const UNKNOWN_FUEL_TYPE = 'Unknown'
-const QUERY_PAGE_SIZE = 1000
+const ASSIGNMENT_JOB_CARD_BATCH_SIZE = 100
 const PERIOD_PRESETS: DateRangePreset[] = ['this-month', 'last-month', 'this-week', 'last-7', 'last-30']
+
+type AssignmentStatusRow = {
+  job_card_number: string | null
+  work_status: string | null
+}
+
+type AssignmentStatusSets = {
+  completed: Set<string>
+  hold: Set<string>
+  inProcess: Set<string>
+  allAssigned: Set<string>
+}
+
+function normalizeJobCardKey(jobCardNumber: unknown): string {
+  return String(jobCardNumber ?? '').trim().toUpperCase()
+}
+
+function collectVisibleJobCardNumbers(rows: ReceptionEntryRow[]): string[] {
+  const numbers: string[] = []
+  const seen = new Set<string>()
+
+  for (const row of rows) {
+    const jc = String(row.jc_number ?? '').trim()
+    if (!jc) continue
+
+    const key = jc.toUpperCase()
+    if (seen.has(key)) continue
+
+    seen.add(key)
+    numbers.push(jc)
+  }
+
+  return numbers
+}
+
+function buildAssignmentStatusSets(rows: AssignmentStatusRow[]): AssignmentStatusSets {
+  const completed = new Set<string>()
+  const hold = new Set<string>()
+  const inProcess = new Set<string>()
+  const allAssigned = new Set<string>()
+
+  for (const row of rows) {
+    const jobCardNum = normalizeJobCardKey(row.job_card_number)
+    const status = String(row.work_status ?? '').trim().toLowerCase()
+    if (!jobCardNum) continue
+
+    allAssigned.add(jobCardNum)
+    if (status === 'completed') completed.add(jobCardNum)
+    if (status === 'hold') hold.add(jobCardNum)
+    if (status === 'work_inprocess') inProcess.add(jobCardNum)
+  }
+
+  return { completed, hold, inProcess, allAssigned }
+}
 function toISTDate(d: Date): string {
   return d.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
 }
@@ -291,6 +345,8 @@ function parseKmInput(value: string): number | null {
 
 export default function ServiceAdvisorPage() {
   const fileInputRefs = useRef<Record<number, HTMLInputElement | null>>({})
+  const assignmentRealtimeChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null)
+  const visibleJobCardKeysRef = useRef<Set<string>>(new Set())
 
   const [rows, setRows] = useState<ReceptionEntryRow[]>([])
   const [drafts, setDrafts] = useState<Record<number, RowDraft>>({})
@@ -328,6 +384,7 @@ export default function ServiceAdvisorPage() {
   const [generatingComplaintLink, setGeneratingComplaintLink] = useState<number | null>(null)
 
   const searchQuery = useMemo(() => search.trim().toLowerCase(), [search])
+  const visibleJobCardNumbers = useMemo(() => collectVisibleJobCardNumbers(rows), [rows])
 
   const matchesSearch = (row: ReceptionEntryRow): boolean => {
     if (!searchQuery) return true
@@ -783,80 +840,128 @@ export default function ServiceAdvisorPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dateRange])
 
-  // Subscribe to real-time updates for completed/hold/work-in-process job cards
   useEffect(() => {
-    // Fetch existing completed, hold and work-in-process job cards
-    const fetchAssignmentStatusJobCards = async () => {
+    visibleJobCardKeysRef.current = new Set(
+      visibleJobCardNumbers.map((jobCardNumber) => jobCardNumber.toUpperCase()),
+    )
+  }, [visibleJobCardNumbers])
+
+  // Load assignment status only for job cards visible in the current date-scoped rows.
+  useEffect(() => {
+    let cancelled = false
+
+    const fetchAssignmentStatusForJobCards = async (jobCardNumbers: string[]) => {
       try {
-        const allRows: Record<string, unknown>[] = []
-        let assignmentCursorId: number | null = null
+        if (jobCardNumbers.length === 0) {
+          if (cancelled) return
+          setCompletedJobCardNumbers(new Set())
+          setHoldJobCardNumbers(new Set())
+          setInProcessJobCardNumbers(new Set())
+          setAllAssignedJobCardNumbers(new Set())
+          return
+        }
 
-        while (true) {
-          let query = supabase
+        const allRows: AssignmentStatusRow[] = []
+
+        for (let offset = 0; offset < jobCardNumbers.length; offset += ASSIGNMENT_JOB_CARD_BATCH_SIZE) {
+          const chunk = jobCardNumbers.slice(offset, offset + ASSIGNMENT_JOB_CARD_BATCH_SIZE)
+          const res = await supabase
             .from('technician_assignments')
-            .select('id, job_card_number, work_status, technician_code')
-            .order('id', { ascending: false })
-            .limit(QUERY_PAGE_SIZE)
-
-          if (assignmentCursorId !== null) {
-            query = query.lt('id', assignmentCursorId)
-          }
-
-          const res = await query
+            .select('job_card_number, work_status')
+            .in('job_card_number', chunk)
 
           if (res.error) {
             throw res.error
           }
 
-          const batch = (res.data ?? []) as Record<string, unknown>[]
-          allRows.push(...batch)
-
-          if (batch.length < QUERY_PAGE_SIZE) break
-
-          const lastId = Number(batch[batch.length - 1]?.id)
-          if (!Number.isFinite(lastId) || lastId <= 0) break
-          assignmentCursorId = lastId
+          allRows.push(...((res.data ?? []) as AssignmentStatusRow[]))
         }
 
-        if (allRows.length > 0) {
-          const completed = new Set<string>()
-          const hold = new Set<string>()
-          const inProcess = new Set<string>()
-          const technicianAssigned = new Set<string>()
-          const allAssigned = new Set<string>()
-          allRows.forEach((row: Record<string, unknown>) => {
-            const jobCardNum = String(row.job_card_number ?? '').trim().toUpperCase()
-            const status = String(row.work_status ?? '').trim().toLowerCase()
-            const technicianCode = String(row.technician_code ?? '').trim()
-            if (jobCardNum) {
-              allAssigned.add(jobCardNum)
-              if (status === 'completed') completed.add(jobCardNum)
-              if (status === 'hold') hold.add(jobCardNum)
-              if (status === 'work_inprocess') inProcess.add(jobCardNum)
-              if (technicianCode) technicianAssigned.add(jobCardNum)
-            }
-          })
-          setCompletedJobCardNumbers(completed)
-          setHoldJobCardNumbers(hold)
-          setInProcessJobCardNumbers(inProcess)
-          setAllAssignedJobCardNumbers(technicianAssigned)
-          setAllAssignedJobCardNumbers(allAssigned)
-          console.log('Loaded all assigned job cards:', Array.from(allAssigned))
-          console.log('Loaded completed job cards:', Array.from(completed))
-          console.log('Loaded hold job cards:', Array.from(hold))
-          console.log('Loaded in-process job cards:', Array.from(inProcess))
-          console.log('Loaded technician-assigned job cards:', Array.from(technicianAssigned))
-        }
+        if (cancelled) return
+
+        const statusSets = buildAssignmentStatusSets(allRows)
+        setCompletedJobCardNumbers(statusSets.completed)
+        setHoldJobCardNumbers(statusSets.hold)
+        setInProcessJobCardNumbers(statusSets.inProcess)
+        setAllAssignedJobCardNumbers(statusSets.allAssigned)
       } catch (err) {
         console.error('Failed to fetch assignment status job cards:', err)
       }
     }
 
-    void fetchAssignmentStatusJobCards()
+    void fetchAssignmentStatusForJobCards(visibleJobCardNumbers)
 
-    // Subscribe to real-time updates
+    return () => {
+      cancelled = true
+    }
+  }, [visibleJobCardNumbers])
+
+  // Subscribe to real-time assignment updates; apply incremental changes for visible job cards only.
+  useEffect(() => {
+    if (assignmentRealtimeChannelRef.current) return
+
+    const applyAssignmentRealtimeChange = (payload: {
+      eventType: 'INSERT' | 'UPDATE' | 'DELETE'
+      new: Record<string, unknown>
+      old: Record<string, unknown>
+    }) => {
+      const record = payload.eventType === 'DELETE' ? payload.old : payload.new
+      const jobCardKey = normalizeJobCardKey(record?.job_card_number)
+      if (!jobCardKey || !visibleJobCardKeysRef.current.has(jobCardKey)) return
+
+      if (payload.eventType === 'DELETE') {
+        setCompletedJobCardNumbers((prev) => {
+          const next = new Set(prev)
+          next.delete(jobCardKey)
+          return next
+        })
+        setHoldJobCardNumbers((prev) => {
+          const next = new Set(prev)
+          next.delete(jobCardKey)
+          return next
+        })
+        setInProcessJobCardNumbers((prev) => {
+          const next = new Set(prev)
+          next.delete(jobCardKey)
+          return next
+        })
+        setAllAssignedJobCardNumbers((prev) => {
+          const next = new Set(prev)
+          next.delete(jobCardKey)
+          return next
+        })
+        return
+      }
+
+      const status = String(record.work_status ?? '').trim().toLowerCase()
+
+      setAllAssignedJobCardNumbers((prev) => {
+        const next = new Set(prev)
+        next.add(jobCardKey)
+        return next
+      })
+      setCompletedJobCardNumbers((prev) => {
+        const next = new Set(prev)
+        if (status === 'completed') next.add(jobCardKey)
+        else next.delete(jobCardKey)
+        return next
+      })
+      setHoldJobCardNumbers((prev) => {
+        const next = new Set(prev)
+        if (status === 'hold') next.add(jobCardKey)
+        else next.delete(jobCardKey)
+        return next
+      })
+      setInProcessJobCardNumbers((prev) => {
+        const next = new Set(prev)
+        if (status === 'work_inprocess') next.add(jobCardKey)
+        else next.delete(jobCardKey)
+        return next
+      })
+    }
+
     const channel = supabase
-      .channel('technician-assignments-changes')
+      .channel('service-advisor-technician-assignments')
       .on(
         'postgres_changes',
         {
@@ -864,14 +969,23 @@ export default function ServiceAdvisorPage() {
           schema: 'public',
           table: 'technician_assignments',
         },
-        () => {
-          void fetchAssignmentStatusJobCards()
+        (payload) => {
+          applyAssignmentRealtimeChange(payload as {
+            eventType: 'INSERT' | 'UPDATE' | 'DELETE'
+            new: Record<string, unknown>
+            old: Record<string, unknown>
+          })
         },
       )
       .subscribe()
 
+    assignmentRealtimeChannelRef.current = channel
+
     return () => {
-      void supabase.removeChannel(channel)
+      if (assignmentRealtimeChannelRef.current) {
+        void supabase.removeChannel(assignmentRealtimeChannelRef.current)
+        assignmentRealtimeChannelRef.current = null
+      }
     }
   }, [])
 

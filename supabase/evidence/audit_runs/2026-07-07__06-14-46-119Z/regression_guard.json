@@ -1,0 +1,14 @@
+{
+  "enabled": true,
+  "warn_triggered": true,
+  "block_triggered": true,
+  "delta_total_ms_sum": 3425053.57,
+  "top_single_query_delta_ms": 475741.16,
+  "thresholds": {
+    "warn_delta_total_ms_sum": 2000,
+    "block_delta_total_ms_sum": 5000,
+    "block_single_query_delta_ms": 1500
+  },
+  "status": "blocked_requires_checklist",
+  "fix_checklist_path": "supabase/evidence/audit_runs/2026-07-07__06-14-46-119Z/fix_checklist.md"
+}

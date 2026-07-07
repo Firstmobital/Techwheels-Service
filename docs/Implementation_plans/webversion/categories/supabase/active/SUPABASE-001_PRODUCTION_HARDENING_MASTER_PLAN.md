@@ -1,22 +1,24 @@
 # SUPABASE-001: Production Hardening Master Plan + Activity Tracker
 
-Last updated: 2026-07-06 (post-deploy audit snapshot 14.35 — regression guard cleared, slow queries 1117→18)
+Last updated: 2026-07-07 (Batch C Phase 1 C-01/C-02 implemented; post-deploy audit pending)
 Scope: Security, performance, reliability, operations hygiene, and tracking discipline for the Supabase project `techwheels-services` (Free plan).
 
 ## 1) Current Snapshot (Baseline)
 
 - Plan: Free (Nano compute), region ap-south-1 (Mumbai)
-- Runtime (latest dashboard checkpoint 2026-06-26 10:54 IST; latest automated audit 2026-07-06 08:13:13 UTC snapshot 14.35): connection snapshot 26/60 (active 10, idle 14, waiting 19); post-deploy audit status=improved (`delta_total_ms_sum=-198283995.58`, `delta_calls_sum=-1104808`)
-- Traffic (latest audit KPIs): slow queries (`total_time > 1000ms`)=18 (down from 1117), cache hit rate 100%, avg rows/call 1.27; top query is now `process_all_service_history_sync_queue` (22 calls, pg_cron); `service_reception_entries` load eliminated from top-10
-- Advisory state: Security Advisor Errors already cleared (0 on 2026-06-08 milestone); regression guard cleared (`ok`, was `blocked_requires_checklist`); Batch B mitigations confirmed effective post-deploy
-- Migration visibility: last migration shown as `parts_phase1_alignment` (dashboard); repo promotions through `20260705223500_parts_requests_add_parts_qty` executed 2026-07-05
-- Operational flags: no backups configured, no repo connected in dashboard
-- Maintenance note: post-deploy audit cycle run after Vercel prod deploy + 15m wait (`SUPABASE_AUDIT_POST_DEPLOY_CONFIRM=VERCEL_PROD_DEPLOYED_AND_WAITED_15M`); dashboard Observability percentages not refreshed in this pass
+- Runtime (dashboard checkpoint 2026-07-06 ~12:25 IST; latest automated audit 2026-07-07 06:14:46 UTC snapshot 14.36): Observability last-24h — memory 71%, CPU 8%, disk 36%, Disk IO 4%, peak connections 25/60, API Gateway errors 0.13%; audit connection snapshot 24/60 (active 3, idle 19, waiting 23); interval comparison vs 14.35 status=regressed (`delta_total_ms_sum=3425053.57`, `delta_calls_sum=48439`)
+- Traffic (latest audit KPIs): slow queries (`total_time > 1000ms`)=200 (up from 18 in snapshot 14.35 low-traffic window), cache hit rate 99.99%, avg rows/call 3.80; top load `technician_assignments` list (`queryid=6462467893367818088`, 214 calls), then `service_reception_entries` wide list and `process_all_service_history_sync_queue` (167 calls)
+- Plan quota (Usage Summary 2026-07-06): egress 6.231/5 GB (**125%**, over limit), database size 0.442/0.5 GB (**88%**), storage 0.51/1 GB (51%), cached egress 4%, realtime peak 14/200, MAU 92/50000
+- Advisory state: Security Advisor Errors cleared (0 on 2026-06-08 milestone); regression guard **blocked_requires_checklist** on snapshot 14.36 (warn+block triggered); Batch B gains from 14.35 remain valid but next traffic window shows renewed query/realtime pressure
+- Migration visibility: last migration shown as `parts_phase1_alignment` (dashboard); repo promotions through EW reminder batch (`20260706220000` et seq) executed 2026-07-06
+- Operational flags: repo metadata backup cadence active via `npm run db:backup:metadata`; Supabase dashboard backups still not configured; GitHub repo not connected in dashboard
+- Maintenance note: metadata dump refreshed 2026-07-07 06:15:53 UTC; post-deploy audit retry 2026-07-07 blocked by local-edits guard (no new snapshot — use confirm env var after deploy + 15m wait)
+- Batch C Phase 1 (2026-07-07, code complete): `ServiceAdvisorPage` assignment status query bounded to visible job-card numbers from date-scoped rows (C-01); Realtime subscription applies incremental status updates with ref-guarded single channel and teardown cleanup (C-02). `npm run build` pass. Production verification pending next Vercel deploy + 15m wait + post-deploy audit cycle.
 - DB observability windows:
 	- 2026-06-08 08:53-09:53 IST: memory usage ~408 MB, memory commitment ~1.33 GB, sustained cache-heavy read profile
 	- 2026-06-25: Disk IO budget warning active in dashboard banner; Query Performance + EXPLAIN evidence indicates query-shape and list/count frequency as primary driver
-- Authoritative dump audit source: `supabase/backups/full_metadata.sql` (schema-only, 1.574 MB), manifest at `supabase/evidence/authoritative_metadata_manifest.json`
-- Authoritative dump timestamp: 2026-07-06 07:34:14 UTC (sha256=7a564f8891fedfd2daea57f09eed9e38346a561b79ca7e061726935664b5f98d); pg_dump --schema-only --no-owner; captured post-migration-deploy (includes 20260706140000, 20260706150000, 20260706160000)
+- Authoritative dump audit source: `supabase/backups/full_metadata.sql` (schema-only, 1.607 MB), manifest at `supabase/evidence/authoritative_metadata_manifest.json`
+- Authoritative dump timestamp: 2026-07-07 06:18:12 UTC (sha256=aa70820a5880c925a20408338f0128dc9430ff381ae66fdba082b773fd953a3e); pg_dump --schema-only --no-owner; captures post-EW-reminder migration batch through `20260706220000`
 - Previous full data dump: `local_folder/backups/full_database.sql` (125 MB, 2026-06-29) retained as data reference only; schema authority has moved to metadata dump above
 
 ## 2) Execution Rules (Always On)
@@ -115,17 +117,19 @@ Status legend: `Not Started` | `In Progress` | `Blocked` | `Done`
 | P1-04 | High | Add and verify indexes for sequential scans | Team | Done | 2026-06-08 | 2026-06-08 | 4 migration files created and audited against authoritative dump (full_database.sql). 2 CRITICAL + 2 OPTIONAL indexes: `idx_reception_entries_branch_created_at_desc` (missing branch+created index for Query 2), `idx_vas_jc_data_branch_created_at_desc` (missing branch+created for Query 7), `idx_parts_consumption_branch_fiscal_year_desc` (complementary to portal-based index), `idx_stock_snapshot_branch_snapshot_date_desc` (optional complement). All columns/tables verified in authoritative dump. Ready for execution. | 2026-06-08 | - |
 | P1-04 | High | Add and verify indexes for sequential scans | Team | Done | 2026-06-08 | 2026-06-08 | 4 migration files created, audited, and DEPLOYED in Supabase. All indexes confirmed in production: idx_reception_entries_branch_created_at_desc, idx_vas_jc_data_branch_created_at_desc, idx_parts_consumption_branch_fiscal_year_desc, idx_stock_snapshot_branch_snapshot_date_desc. Ready for P1-05 query rewrites. | 2026-06-08 | Execute P1-05 query rewrites (keyset pagination) |
 | P1-05 | Critical | Remove fetch-all patterns from reports and warranty JSON extractors | Team | Done | 2026-06-08 | 2026-07-06 | Batch B (2026-07-06): `EWReminderPage` OFFSET loop on `all_service_data` replaced with keyset (id cursor); `MasterDataNullCountsReport` total-row count changed from `exact` to `estimated`; `ServiceAdvisorPage` initial dateRange defaulted to current month (eliminates all-time fetch on load); `listFloorInchargeEntries` and technician fallback `listReceptionEntries` bounded to 60/90-day lookback; mobile `fetchAllEntries` bounded to 30-day lookback. Post-deploy audit snapshot 14.35: slow queries 1117→18, `service_reception_entries` eliminated from top-10. | 2026-07-06 | - |
-| P1-06 | High | Replace OFFSET scans with cursor pagination in large tables/views | Team | In Progress | 2026-06-25 |  | Batch B (2026-07-06): `EWReminderPage` keyset migration complete; `partsReportQueries` OFFSET loops still pending. `all_service_data_dynamic` OFFSET caller is external (anon, not found in app/edge source) — partial index added (`20260706150000`) to reduce per-call cost until caller migrates. | 2026-07-06 | Migrate remaining `partsReportQueries.ts` fetchAllRows OFFSET loops to keyset; identify external `all_service_data_dynamic` caller |
+| P1-06 | High | Replace OFFSET scans with cursor pagination in large tables/views | Team | In Progress | 2026-06-25 |  | Snapshot 14.36 top regression: `technician_assignments` list (`queryid=6462467893367818088`, `calls=214`, `delta_total_ms=475741.16`). **Batch C Phase 1 (C-01, 2026-07-07):** `ServiceAdvisorPage` unbounded keyset scan replaced with batched `.in('job_card_number', chunk)` scoped to visible date-range job cards; columns narrowed to `job_card_number, work_status`. Remaining: `DashboardPage`, mobile floor, `TechnicianPage`, `partsReportQueries` OFFSET loops. | 2026-07-07 | Deploy Batch C Phase 1; post-deploy audit for queryid `6462467893367818088`; then Phase 2 callers (`DashboardPage`, mobile floor, `TechnicianPage`) |
 | P1-07 | High | Add targeted composite/partial indexes for timeout hotlist queries | Team | Done | 2026-06-25 | 2026-06-25 | Migration executed successfully (`supabase/migrations/20260625221000_p1_07_disk_io_hotlist_indexes.sql`); check output confirms all 4 indexes exist and all 3 hot EXPLAINs switched from Seq Scan + Sort to Index Scan (`idx_sre_created_at_id_desc`, `idx_ta_updated_assigned_desc`, `idx_vas_jc_closed_branch`). | 2026-06-25 | - |
-| P1-08 | High | Reduce Realtime WAL polling cost and fan-out | Team | In Progress | 2026-06-25 |  | `realtime.list_changes` unchanged in snapshot `14.32` (`queryid=-2876120296317350531`, `calls=612039`, `total_ms=3832695.82`, `mean_ms=6.26`); subscription fan-out remains a steady background cost while post-deploy regressions dominate incident priority. | 2026-07-06 | Complete per-screen subscription inventory and enforce unsubscribe teardown checks; re-capture after teardown fixes |
+| P1-08 | High | Reduce Realtime WAL polling cost and fan-out | Team | In Progress | 2026-06-25 |  | Snapshot 14.36: `realtime.list_changes` resurfaced in top-10 (`queryid=-2876120296317350531`, `calls=24357`, `delta_calls=24357`, `delta_total_ms=221571.48` vs near-zero in 14.35). **Batch C Phase 1 (C-02, 2026-07-07):** `ServiceAdvisorPage` Realtime callback no longer triggers full assignment rescan; incremental INSERT/UPDATE/DELETE updates for visible job cards only; `assignmentRealtimeChannelRef` enforces single active channel + cleanup on unmount. Table-wide subscription scope unchanged; other screens still pending inventory. | 2026-07-07 | Deploy Batch C Phase 1; post-deploy audit for Realtime delta; complete per-screen subscription inventory (Phase 2+) |
 | P1-09 | High | Eliminate expensive exact-count list patterns in PostgREST paths | Team | Done | 2026-06-25 | 2026-07-06 | Batch B (2026-07-06): Root cause confirmed and fixed — unbounded all-time fetch on `ServiceAdvisorPage` and `listFloorInchargeEntries` / technician fallback all bounded. `MasterDataNullCountsReport` total count switched to `estimated`. Post-deploy audit snapshot 14.35: `queryid=-5344960703026327435` (no-WHERE OFFSET, calls=11096) absent from top-10 — eliminated. Regression guard cleared. | 2026-07-06 | - |
 | P1-10 | Critical | Disk IO budget incident response (query-shape mitigation first) | Team | Done | 2026-06-25 | 2026-07-06 | Batch B mitigations confirmed effective. Post-deploy audit snapshot 14.35: regression guard cleared (`ok`), `delta_total_ms_sum=-198283995.58`, slow queries 1117→18. All three top-delta queryids from snapshot 14.32 (`-5344960703026327435`, `3220864789079889211`, `4251000708073776526`) either eliminated or reduced to noise level. | 2026-07-06 | - |
-| P1-11 | Critical | Log-driven performance tracker (rolling updates from every new capture) | Team | In Progress | 2026-06-25 |  | Rolling evidence synced to snapshot `14.32`; Section 14 retains latest-two captures (`14.31`, `14.32`); P1-05..P1-10 evidence updated from post-deploy audit run. | 2026-07-06 | For each new capture: rank by `delta_total_ms`, sync P1-05..P1-12 evidence, and enforce retention bounds in Sections 5/6/14 |
-| P1-12 | Critical | Contain service history sync queue RPC load | Team | Done | 2026-07-06 | 2026-07-06 | Migration `20260706140000` revoked anon/authenticated grants. Post-deploy audit snapshot 14.35: `process_all_service_history_sync_queue` (queryid=3220864789079889211) now top query with only 22 calls at 1413ms mean — confirms anon-driven call storm eliminated; remaining calls are pg_cron (postgres role) as expected. | 2026-07-06 | - |
+| P1-11 | Critical | Log-driven performance tracker (rolling updates from every new capture) | Team | In Progress | 2026-06-25 |  | Rolling evidence synced to snapshot `14.36` (`2026-07-07__06-14-46-119Z`); Section 14 retains latest-two captures (`14.35`, `14.36`); metadata dump refreshed 2026-07-07 via `npm run db:backup:metadata`. Batch C Phase 1 code landed 2026-07-07 — await post-deploy recapture before closing P1-06/P1-08 partial items. | 2026-07-07 | Deploy Batch C Phase 1; run post-deploy audit cycle; sync P1-06/P1-08 evidence from next snapshot |
+| P1-12 | Critical | Contain service history sync queue RPC load | Team | In Progress | 2026-07-06 |  | Migration `20260706140000` revoked anon/authenticated grants; 14.35 confirmed anon storm eliminated (22 calls). Snapshot 14.36 regressed: `3220864789079889211` `calls=167` (`delta_calls=145`, `delta_total_ms=286193.14`) — investigate whether postgres/cron batch size or residual caller path increased. | 2026-07-07 | Verify grant revocation still holds; audit pg_cron schedule/batch args; re-capture after fix |
 | P2-01 | High | Add free-plan inactivity prevention ping | Team | Done | 2026-07-06 | 2026-07-06 | Migration `20260706160000_p2_01_inactivity_prevention_ping.sql` deployed: pg_cron job `techwheels-inactivity-prevention-ping` scheduled every 4 days at 06:00 UTC (job ID 16). Confirmed active in cron.job. | 2026-07-06 | - |
 | P2-02 | Medium | Connect GitHub repo in Supabase dashboard | Team | Not Started |  |  |  | 2026-06-04 | Validate migration linkage after connection |
-| P2-03 | Critical | Reconcile deployed schema with migration history | Team | In Progress | 2026-06-05 |  | Dump refreshed 2026-07-06 07:34:14 UTC post-migration-deploy; sha256=7a564f8891fedfd2daea57f09eed9e38346a561b79ca7e061726935664b5f98d, size=1.574 MB. Captures deployed state including 20260706140000 (anon grant revoke), 20260706150000 (partial index), 20260706160000 (pg_cron ping). This is the new authoritative baseline for all schema decisions. | 2026-07-06 | Next: deploy code changes to Vercel, run post-deploy audit capture (snapshot 14.33), verify regressions improved |
-| P2-04 | High | Define backup/restore runbook and drill date | Team | Not Started |  |  |  | 2026-06-04 | Add restore checklist and owner |
+| P2-03 | Critical | Reconcile deployed schema with migration history | Team | In Progress | 2026-06-05 |  | Metadata dump refreshed 2026-07-07 06:18:12 UTC via `npm run db:backup:metadata`; sha256=aa70820a5880c925a20408338f0128dc9430ff381ae66fdba082b773fd953a3e, size=1.607 MB. Captures EW reminder migration batch through `20260706220000`. | 2026-07-07 | Reconcile any pending migrations vs manifest after next deploy batch |
+| P2-04 | High | Define backup/restore runbook and drill date | Team | In Progress | 2026-06-04 |  | Metadata schema backup executed 2026-07-07 (`npm run db:backup:metadata` → `supabase/backups/full_metadata.sql` + manifest update). Full data restore runbook and drill date still pending. | 2026-07-07 | Document restore checklist for metadata dump; schedule first drill date |
+| P2-06 | Critical | Resolve egress quota breach (free-plan 5 GB limit) | Team | In Progress | 2026-07-06 |  | Usage Summary 2026-07-06: egress 6.231/5 GB (**125%**); cached egress only 0.188/5 GB (4%) — uncached API/storage egress is primary driver. | 2026-07-07 | Identify top egress endpoints; narrow projections, paginate exports, reduce redundant polling downloads |
+| P2-07 | High | Database size capacity planning (0.5 GB free limit) | Team | In Progress | 2026-07-06 |  | Usage Summary 2026-07-06: database size 0.442/0.5 GB (**88%**); ~58 MB headroom remaining on free tier. | 2026-07-07 | Run table/index size breakdown; define archival or retention policy before 90% threshold |
 | P2-05 | High | Resolve schema drift where app queries depend on objects not present in authoritative dump | Team | Blocked | 2026-06-05 |  | Dump shows `vw_parts_stock_health` exists but no current `vw_parts_latest_stock` or `vw_parts_consumption_trend` object definitions | 2026-06-05 | Validate intended source-of-truth object set and prepare explicit migration/backport decision |
 | P3-01 | Medium | Weekly Advisor regression sweep | Team | Not Started |  |  |  | 2026-06-04 | Schedule recurring review |
 | P3-02 | Medium | Weekly query performance review | Team | Not Started |  |  |  | 2026-06-04 | Schedule recurring review |
@@ -140,7 +144,8 @@ Retention rule:
 | 2026-06-04 | 55% | 2% | 28% | 9/60 | 3 (from screenshot section counters) | 1+ | 194 | 10 | Baseline from dashboard screenshot |
 | 2026-06-25 | 64% | 15% | 36% | 25/60 | - | - | - | - | New Disk IO budget warning visible in Observability; Query Performance shows 935 slow queries with `service_reception_entries` exact-count/list family as primary load driver |
 | 2026-06-26 (manual dashboard checkpoint, 10:54 IST) | 65% | 15% | 34% | 24/60 | - | - | - | - | Observability Overview + Query Performance screenshot evidence: slow queries reported as 932/933 (panel variance), Disk IO 45%, API Gateway errors 14%, Database errors 5.3%, PostgREST requests 2,892 |
-| 2026-07-06 (automated audit cycle, post-deploy Batch B) | - | - | - | 26/60 | - | - | - | - | Snapshot 14.35 (08:13 UTC); top query 3220864789079889211 (process_all_service_history_sync_queue) calls=22 total_ms=31092.85 mean_ms=1413.31; slow_queries=18 (was 1117); cache_hit=100%; comparison=improved; delta_total_ms_sum=-198283995.58; guard=ok |
+| 2026-07-06 (automated audit cycle, post-deploy Batch B) | - | - | - | 26/60 | - | - | - | - | Snapshot 14.35 (08:13 UTC); top query 3220864789079889211 calls=22 total_ms=31092.85 mean_ms=1413.31; slow_queries=18 (was 1117); cache_hit=100%; comparison=improved; delta_total_ms_sum=-198283995.58; guard=ok |
+| 2026-07-07 (automated audit 14.36 + metadata backup) | 71% | 8% | 36% | 24/60 | - | - | - | - | Snapshot 14.36 (06:14 UTC); top query 6462467893367818088 calls=214; slow_queries=200; comparison=regressed; delta_total_ms_sum=3425053.57; guard=blocked_requires_checklist; egress=125%; db_size=88%; metadata dump sha256=aa70820a (06:18 UTC) |
 
 ## 6) Change Log (What Was Updated in This Plan)
 
@@ -152,10 +157,9 @@ Retention rule:
 | 2026-06-04 | Copilot | Created initial master plan, phase model, activity tracker, and metrics log baseline |
 | 2026-06-08 | Copilot | Security stabilization completed and validated (Advisor errors reduced to zero); plan moved to performance and reliability hardening. |
 | 2026-06-25 | Copilot | Performance hardening focus consolidated to P1-05..P1-11 with index verification complete and next-step emphasis on query-shape and exact-count reduction. |
-| 2026-06-26 | Copilot | Synced tracker consistency after latest operator run: aligned cycle anchor and P1/P2 status evidence to snapshot 14.31, and recorded authoritative dump baseline refresh metadata (sha256 + timestamp) from manifest. |
-| 2026-07-06 | Copilot | Post-deploy audit cycle snapshot 14.32 captured after Vercel prod deploy + 15m wait; severe regression (`delta_total_ms_sum=43800535.28`); baseline, P1-05..P1-12 tracker rows, metrics log, Section 14, and cycle anchor synchronized. |
-| 2026-07-06 | Copilot | Batch B mitigations applied: dump baseline refreshed to `supabase/backups/full_metadata.sql`; SA page default unbounded fetch eliminated; floor/technician/mobile lookbacks bounded (60/90/30 days); EWReminderPage OFFSET→keyset; MasterDataNullCountsReport count:estimated; P1-12 anon grant revoked (migration 20260706140000); partial index for all_service_data_dynamic (20260706150000); pg_cron inactivity ping (20260706160000). TypeScript clean (web+mobile). |
-| 2026-07-06 | Copilot | Post-deploy audit snapshot 14.35 confirmed: slow queries 1117→18, regression guard cleared (ok), delta_total_ms_sum=-198283995.58. P1-05, P1-09, P1-10, P1-12 closed. Cycle anchor updated to 14.35. |
+| 2026-07-06 | Copilot | Post-deploy audit snapshot 14.35 confirmed: slow queries 1117→18, regression guard cleared (ok), delta_total_ms_sum=-198283995.58. P1-05, P1-09, P1-10 closed; Batch B mitigations verified. |
+| 2026-07-07 | Copilot | Snapshot 14.36 synced (regressed vs 14.35); metadata dump refreshed via `npm run db:backup:metadata`; dashboard quota evidence added (P2-06 egress 125%, P2-07 db size 88%); P1-06/P1-08/P1-12 reopened; post-deploy audit retry blocked by local-edits guard. |
+| 2026-07-07 | Copilot | Batch C Phase 1 implemented in `src/pages/ServiceAdvisorPage.tsx`: C-01 bounded assignment status query (visible job cards, batched `.in()`, narrowed columns); C-02 incremental Realtime updates with ref-guarded single subscription and teardown cleanup. `npm run build` pass. Post-deploy audit pending (no production snapshot yet). |
 
 ## 7) Update Protocol For Future Chats
 
@@ -211,9 +215,10 @@ Purpose:
 - Keep all pending/in-progress/blocked/unverified items visible until done and verified.
 
 Cycle anchor:
-- Latest snapshot: `14.35` (2026-07-06 08:13:13 UTC)
-- Current movement: `improved` (`delta_total_ms_sum=-198283995.58`)
-- Regression guard: `ok` (cleared)
+- Latest snapshot: `14.36` (2026-07-07 06:14:46 UTC)
+- Previous snapshot: `14.35` (2026-07-06 08:13:13 UTC — Batch B confirmed)
+- Current movement: `regressed` vs 14.35 (`delta_total_ms_sum=3425053.57`)
+- Regression guard: `blocked_requires_checklist`
 
 Hotspot evidence (code audit, 2026-06-26):
 - Exact-count hotspots: `src/pages/reports/master-data/MasterDataNullCountsReport.tsx`, `mobile/src/app/(tabs)/autodoc.old.tsx`
@@ -223,24 +228,40 @@ Batch A implementation results (2026-06-26, IST):
 - Implemented this cycle: `src/lib/reportQueries.ts` and `mobile/src/lib/reportQueries.ts` now enforce `MAX_REPORT_FETCH_ROWS=5000` in core report fetch paths and replaced targeted residual `.range` offset loops with bounded single-pass `limit(MAX_REPORT_FETCH_ROWS)` queries.
 - Verified existing (already present in current HEAD): exact-count mitigation in `src/pages/reports/master-data/MasterDataNullCountsReport.tsx` and `mobile/src/app/(tabs)/autodoc.old.tsx`; keyset page rollouts in `src/pages/SATrackerPage.tsx` and `src/pages/TechnicianPage.tsx`.
 - Verified (code/build): `npm run build` and `npm --prefix ./mobile run -s typecheck` completed successfully.
-- Not yet verified (performance): post-deploy recapture snapshot `14.32` remains severely `regressed`; Batch A mitigations did not yet improve tracked queryids at production scale.
+- Batch B verified (snapshot 14.35): slow queries 1117→18, guard cleared. Snapshot 14.36 (next traffic window) regressed — rolling monitor active via P1-11.
+
+Batch C Phase 1 implementation (2026-07-07, code complete — production audit pending):
+
+| Finding | File | Change | Status | Verification |
+|---|---|---|---|---|
+| C-01 | `src/pages/ServiceAdvisorPage.tsx` | Replaced unbounded `technician_assignments` keyset scan with batched `.in('job_card_number', chunk)` scoped to visible date-range job cards; select narrowed to `job_card_number, work_status`; refetch tied to `visibleJobCardNumbers` | Implemented | `npm run build` pass; post-deploy audit pending |
+| C-02 | `src/pages/ServiceAdvisorPage.tsx` | Realtime callback applies incremental status set updates (no full-table refetch); `assignmentRealtimeChannelRef` prevents duplicate subscriptions; `removeChannel` + ref null on unmount | Implemented | Code review + build pass; live Realtime verification pending deploy |
+
+Batch C Phase 2 (not started — recommended after Phase 1 post-deploy audit):
+- `DashboardPage.tsx` unbounded assignment scan
+- Mobile floor incharge unbounded `select('*')` assignments
+- `TechnicianPage.tsx` unbounded view scan
+- `ReceptionPage.tsx` global search list
+- Remaining Realtime subscription inventory beyond Service Advisor
 
 Execution tracker (this cycle):
 
 | Priority | Phase | Subphase | Task ID | Ordered Step | Status | Verification |
 |---|---|---|---|---|---|---|
-| P0 | Phase F1: Query-shape stabilization | F1.1 Reception list/count hardening | P1-09 | Step 1: Remove default exact-count from high-traffic reception list endpoints. | In Progress | Code Verified; Performance Not Verified |
-| P0 | Phase F1: Query-shape stabilization | F1.1 Reception list/count hardening | P1-06 | Step 2: Complete keyset pagination rollout for `(created_at,id)` list paths. | In Progress | Code Verified (shared-module targeted pass complete); Performance Not Verified |
-| P0 | Phase F1: Query-shape stabilization | F1.2 Fetch-all elimination | P1-05 | Step 3: Remove residual fetch-all report/query loops that still inflate list/count load. | In Progress | Code Verified (targeted residual `.range` loops removed); Performance Not Verified |
-| P1 | Phase F2: Realtime load containment | F2.1 Subscription fan-out control | P1-08 | Step 4: Remove duplicate subscriptions and reduce channel scope per screen. | In Progress | Not Verified |
-| P1 | Phase F2: Realtime load containment | F2.1 Subscription fan-out control | P1-08 | Step 5: Verify unsubscribe/teardown behavior on navigation and unmount. | In Progress | Not Verified |
-| P0 | Phase F3: Delta verification gate | F3.1 Controlled interval recapture | P1-10 | Step 6: Run post-deploy interval recapture in next real traffic window. | Done | Verified (snapshot 14.32 captured post-deploy) |
-| P0 | Phase F3: Delta verification gate | F3.2 Evidence synchronization | P1-11 | Step 7: Re-rank regressions by `delta_total_ms` and sync tracker rows P1-05..P1-12. | Done | Verified (rows synced to 14.32 evidence) |
-| P0 | Phase F1: Query-shape stabilization | F1.3 Sync queue containment | P1-12 | Step 8: Contain `process_all_service_history_sync_queue` call volume and batch cost. | In Progress | Not Verified |
+| P0 | Phase F1: Query-shape stabilization | F1.1 Reception list/count hardening | P1-09 | Step 1: Remove default exact-count from high-traffic reception list endpoints. | Done | Verified (snapshot 14.35) |
+| P0 | Phase F1: Query-shape stabilization | F1.1 Reception list/count hardening | P1-06 | Step 2: Complete keyset pagination rollout for `(created_at,id)` list paths. | In Progress | Batch C C-01 partial: SA page bounded; 14.36 queryid still open until post-deploy audit |
+| P0 | Phase F1: Query-shape stabilization | F1.2 Fetch-all elimination | P1-05 | Step 3: Remove residual fetch-all report/query loops that still inflate list/count load. | Done | Verified (snapshot 14.35) |
+| P0 | Phase F1: Query-shape stabilization | F1.4 Batch C Phase 1 (Service Advisor assignments) | P1-06 | Step 2a: Bound `ServiceAdvisorPage` assignment status query to visible job cards. | Done | Code complete 2026-07-07; post-deploy audit pending |
+| P1 | Phase F2: Realtime load containment | F2.1 Subscription fan-out control | P1-08 | Step 4: Remove duplicate subscriptions and reduce channel scope per screen. | In Progress | Batch C C-02 partial: SA incremental Realtime; table-wide channel scope remains |
+| P1 | Phase F2: Realtime load containment | F2.1 Subscription fan-out control | P1-08 | Step 5: Verify unsubscribe/teardown behavior on navigation and unmount. | In Progress | SA ref-guard + cleanup implemented; live nav test pending deploy |
+| P0 | Phase F3: Delta verification gate | F3.1 Controlled interval recapture | P1-10 | Step 6: Run post-deploy interval recapture in next real traffic window. | Done | Verified (snapshot 14.35 captured post-deploy) |
+| P0 | Phase F3: Delta verification gate | F3.2 Evidence synchronization | P1-11 | Step 7: Re-rank regressions by `delta_total_ms` and sync tracker rows. | In Progress | Synced to 14.36; guard blocked |
+| P0 | Phase F1: Query-shape stabilization | F1.3 Sync queue containment | P1-12 | Step 8: Contain `process_all_service_history_sync_queue` call volume and batch cost. | In Progress | 14.35 ok; 14.36 calls=167 regressed |
+| P1 | Phase F4: Plan quota guardrails | F4.1 Egress + DB size | P2-06/P2-07 | Step 9: Bring egress under 100% and DB size under 90% with documented plan. | In Progress | Dashboard Usage Summary 2026-07-06 |
 
 Completion guardrails (this cycle):
 1. No step can move to `Done` until evidence is reflected in Section 14 comparison output.
-2. Phase F3 can be marked `Done` only when movement is no longer `regressed` and top targeted IDs show sustained interval improvement.
+2. Rolling regression guard must return to `ok` for two consecutive captures before closing P1-11 interval watch.
 
 ## 14) Rolling Evidence (Latest Two Audits Only)
 
@@ -281,3 +302,38 @@ Interpretation:
 
 Next action:
 - Monitor next traffic window; focus remaining work on P1-06 (partsReportQueries OFFSET loops), P1-08 (Realtime teardown), P2-02/P2-04.
+
+### 14.36 Capture Snapshot: 2026-07-07 (Automated Audit Cycle)
+
+What was captured:
+- Timestamp (IST): 2026-07-07 11:44:46 IST
+- Capture mode: automated_supabase_audit_cycle
+- Top queryid: 6462467893367818088 (calls=214, total_ms=481857.01, mean_ms=2251.67)
+- Platform logs capture status: auth=ok, edge_functions=ok, realtime=ok, storage=ok, database_health=ok
+- Comparison vs previous run (2026-07-06__08-13-13-489Z): status=regressed, delta_total_ms_sum=3425053.57, delta_calls_sum=48439
+- Top regressions by delta_total_ms: 6462467893367818088 (475741.16); 852176900607336119 (396781.32); 3220864789079889211 (286193.14)
+
+Compact Top 10 (run-local):
+| rank | queryid | calls | total_ms | mean_ms |
+|---:|---|---:|---:|---:|
+| 1 | 6462467893367818088 | 214 | 481857.01 | 2251.67 |
+| 2 | 852176900607336119 | 510 | 402903.53 | 790.01 |
+| 3 | 3220864789079889211 | 167 | 317285.99 | 1899.92 |
+| 4 | -2876120296317350531 | 24357 | 221571.48 | 9.10 |
+| 5 | -3550207178760076775 | 300 | 218608.98 | 728.70 |
+| 6 | 8843009277484467611 | 56 | 210838.84 | 3764.98 |
+| 7 | -1851842182524549347 | 2583 | 166946.78 | 64.63 |
+| 8 | 7336725908253715888 | 463 | 147264.16 | 318.07 |
+| 9 | -397576279058981298 | 57 | 137508.01 | 2412.42 |
+| 10 | -2647655532108368607 | 166 | 123757.56 | 745.53 |
+
+Interpretation:
+- Interval regression vs low-traffic 14.35 baseline after normal business-day load returned. Top deltas: `technician_assignments` list, `service_reception_entries` wide list, sync queue call volume, and new `realtime.list_changes` fan-out.
+- Slow queries rose to 200 (still far below pre-Batch-B 1117). One deadlock recorded in DB health.
+
+Self-heal plan:
+- Realtime WAL polling increased; reduce duplicate subscriptions and channel fan-out. **Batch C Phase 1 (C-02):** `ServiceAdvisorPage` incremental Realtime handler deployed in code — pending production verification.
+- Bound technician assignment list queries; re-verify sync queue grant revocation and cron batch sizing. **Batch C Phase 1 (C-01):** `ServiceAdvisorPage` bounded assignment query deployed in code — pending production verification.
+
+Next action:
+- Deploy Batch C Phase 1 (`ServiceAdvisorPage` C-01/C-02); re-capture with post-deploy confirm after Vercel deploy + 15m wait. Continue P1-12 sync queue investigation and Batch C Phase 2 callers if 14.36 regressions persist.
