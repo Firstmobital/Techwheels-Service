@@ -109,6 +109,11 @@ function timeLabel(t: string | null): string | null {
   return 'Evening'
 }
 
+// Normalize registration numbers for comparison (Reception vs Booking may differ in casing/spacing)
+function normReg(reg: string | null | undefined): string {
+  return (reg ?? '').trim().toUpperCase().replace(/\s+/g, '')
+}
+
 // ─── Page ─────────────────────────────────────────────────────────────────────
 export default function ServiceBookingPage() {
   const [bookings, setBookings] = useState<ServiceBooking[]>([])
@@ -118,6 +123,7 @@ export default function ServiceBookingPage() {
   const [branches, setBranches] = useState<string[]>([])
   const [creUsers, setCreUsers] = useState<{ id: string; employee_name: string }[]>([])
   const [drivers, setDrivers] = useState<{ id: string; employee_name: string }[]>([])
+  const [receptionEntries, setReceptionEntries] = useState<{ reg_number: string; created_at: string }[]>([])
 
   const today = new Date()
   const firstOfMonth = new Date(today.getFullYear(), today.getMonth(), 1).toISOString().split('T')[0]
@@ -140,6 +146,7 @@ export default function ServiceBookingPage() {
   const [waModal, setWaModal] = useState<{ booking: ServiceBooking; message: string } | null>(null)
 
   useEffect(() => { void loadBranchesAndSAs() }, [])
+  useEffect(() => { void loadReceptionEntries() }, [])
   useEffect(() => { void loadBookings() }, [dateRange])
 
   async function loadBranchesAndSAs() {
@@ -149,6 +156,13 @@ export default function ServiceBookingPage() {
     if (creRes.data) setCreUsers((creRes.data as { id: string; employee_name: string }[]).filter(u => u.employee_name))
     const driverRes = await supabase.from('employee_master').select('id, employee_name').eq('role', 'DRIVER').order('employee_name')
     if (driverRes.data) setDrivers((driverRes.data as { id: string; employee_name: string }[]).filter(u => u.employee_name))
+  }
+
+  // Fetch reg_number + created_at from Reception so we can flag which booked vehicles have
+  // already physically arrived / checked in at Reception (verified by reg number, per Reception team).
+  async function loadReceptionEntries() {
+    const { data } = await supabase.from('service_reception_entries').select('reg_number, created_at')
+    if (data) setReceptionEntries(data as { reg_number: string; created_at: string }[])
   }
 
   async function loadBookings() {
@@ -195,6 +209,27 @@ export default function ServiceBookingPage() {
     bookings.forEach(b => { if (b.booking_source) set.add(b.booking_source) })
     return Array.from(set).sort((a, b) => a.localeCompare(b))
   }, [bookings])
+
+  // Reg numbers considered "arrived at Reception": a Reception entry exists for that reg number
+  // created on/after the booking was made (so an old, unrelated past visit for the same reg number
+  // doesn't wrongly flag a brand-new booking as arrived).
+  const receptionByReg = useMemo(() => {
+    const map = new Map<string, string[]>()
+    receptionEntries.forEach(r => {
+      const key = normReg(r.reg_number)
+      if (!key) return
+      const arr = map.get(key) ?? []
+      arr.push(r.created_at)
+      map.set(key, arr)
+    })
+    return map
+  }, [receptionEntries])
+
+  function hasArrivedAtReception(b: ServiceBooking): boolean {
+    const entries = receptionByReg.get(normReg(b.reg_number))
+    if (!entries || entries.length === 0) return false
+    return entries.some(createdAt => createdAt.slice(0, 10) >= b.booking_date)
+  }
 
   function handleExport() {
     if (filtered.length === 0) return
@@ -431,11 +466,14 @@ export default function ServiceBookingPage() {
                 {filtered.map(b => {
                   const sc = STATUS_META[b.status] ?? { bg: '#f1f5f9', color: '#64748b', dot: '#94a3b8' }
                   const isSelected = selectedBooking?.id === b.id
+                  const arrived = hasArrivedAtReception(b)
+                  const rowBg = isSelected ? '#eff6ff' : arrived ? '#f0fdf4' : '#fff'
+                  const rowHoverBg = isSelected ? '#eff6ff' : arrived ? '#dcfce7' : '#f8fafc'
                   return (
                     <tr key={b.id} onClick={() => openDetail(b)}
-                      style={{ cursor: 'pointer', borderBottom: '1px solid #f1f5f9', background: isSelected ? '#eff6ff' : '#fff', transition: 'background 0.1s' }}
-                      onMouseEnter={e => { if (!isSelected) (e.currentTarget as HTMLElement).style.background = '#f8fafc' }}
-                      onMouseLeave={e => { if (!isSelected) (e.currentTarget as HTMLElement).style.background = '#fff' }}>
+                      style={{ cursor: 'pointer', borderBottom: '1px solid #f1f5f9', borderLeft: arrived ? '3px solid #22c55e' : '3px solid transparent', background: rowBg, transition: 'background 0.1s' }}
+                      onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = rowHoverBg }}
+                      onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = rowBg }}>
                       {/* Lead # */}
                       <td style={{ padding: '0.5rem 0.65rem', whiteSpace: 'nowrap' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', flexWrap: 'wrap' }}>
@@ -460,7 +498,12 @@ export default function ServiceBookingPage() {
                       </td>
                       {/* Vehicle */}
                       <td style={{ padding: '0.5rem 0.65rem' }}>
-                        <div style={{ fontWeight: 700, color: '#334155', fontSize: '0.78rem' }}>{b.reg_number || '—'}</div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', flexWrap: 'wrap' }}>
+                          <div style={{ fontWeight: 700, color: '#334155', fontSize: '0.78rem' }}>{b.reg_number || '—'}</div>
+                          {arrived && (
+                            <span title="Vehicle checked in at Reception" style={{ fontSize: '0.6rem', background: '#dcfce7', color: '#15803d', borderRadius: 4, padding: '1px 5px', fontWeight: 700, whiteSpace: 'nowrap' }}>🏁 Arrived</span>
+                          )}
+                        </div>
                         {(b.model || b.fuel_type) && <div style={{ color: '#94a3b8', fontSize: '0.68rem' }}>{[b.model, b.fuel_type].filter(Boolean).join(' · ')}</div>}
                       </td>
                       {/* Appointment */}
