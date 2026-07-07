@@ -143,6 +143,7 @@ Deno.serve(async (req) => {
 
   const dryRun = body.dry_run === true
   const testServiceDataId = body.test_service_data_id as number | undefined
+  const testPhone = typeof body.test_phone === 'string' ? body.test_phone : undefined
 
   // ── Load config ──────────────────────────────────────────────────────────
   const { data: cfgArr } = await sb.from('wa_agent_config').select('*').eq('id', 1).limit(1)
@@ -158,7 +159,7 @@ Deno.serve(async (req) => {
     ? envEnabled === 'true'
     : (cfg.auto_reminder_enabled as boolean) ?? false
 
-  if (!enabled && !dryRun) {
+  if (!enabled && !dryRun && !testPhone) {
     console.log('ASR: disabled via config. Use dry_run=true to test anyway.')
     return Response.json({ ok: true, skipped: true, reason: 'disabled' }, { headers: corsHeaders })
   }
@@ -196,6 +197,27 @@ Deno.serve(async (req) => {
     model:       'model',
     reg_no:      'vehicle_registration_number',
     service_due: 'assumed_next_service_date',
+  }
+
+  // ── Test send: fire one message to an arbitrary number using example values ─
+  if (testPhone) {
+    const phone = normalizePhone(testPhone)
+    if (!phone) {
+      return Response.json({ ok: false, error: 'Invalid test phone number' }, { status: 400, headers: corsHeaders })
+    }
+    const bodyParams = buildBodyParams(varExamples, variableMap, {})
+    if (dryRun) {
+      return Response.json({
+        ok: true, test: true, dry_run: true,
+        would_send: { phone: phone.e164, template: templateName, language: templateLang, body_params: bodyParams },
+      }, { headers: corsHeaders })
+    }
+    const waRes = await sendFlowTemplate(phoneId, token, phone.e164, templateName, templateLang, bodyParams)
+    const waMessageId = waRes.messages?.[0]?.id
+    if (waMessageId) {
+      return Response.json({ ok: true, test: true, sent: true, phone: phone.e164, wa_message_id: waMessageId }, { headers: corsHeaders })
+    }
+    return Response.json({ ok: false, test: true, error: waRes.error ? JSON.stringify(waRes.error) : 'No message ID in response' }, { status: 400, headers: corsHeaders })
   }
 
   // ── Determine target dates (IST) ─────────────────────────────────────────

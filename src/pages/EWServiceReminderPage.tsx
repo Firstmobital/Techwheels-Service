@@ -27,6 +27,9 @@ interface WATemplate {
   display_name: string
   status: string
   language: string
+  header_text: string | null
+  body_text: string | null
+  footer_text: string | null
   variable_examples: Array<{ name: string; example_value: string }> | null
 }
 
@@ -80,6 +83,16 @@ const STATUS_COLOR: Record<string, string> = {
   failed:    'bg-red-100 text-red-700',
 }
 
+// Highlights {{variable}} placeholders inside a template text string.
+function highlightVars(text: string | null | undefined) {
+  if (!text) return null
+  return text.split(/(\{\{\s*[\w.]+\s*\}\})/g).map((part, i) =>
+    /^\{\{.*\}\}$/.test(part)
+      ? <span key={i} className="bg-yellow-100 text-yellow-800 font-mono px-1 rounded">{part}</span>
+      : <span key={i}>{part}</span>
+  )
+}
+
 // ─── Stat Card ────────────────────────────────────────────────────────────────
 
 function StatCard({ label, value, color = 'text-gray-800' }: { label: string; value: number | string; color?: string }) {
@@ -108,6 +121,11 @@ export default function EWServiceReminderPage() {
   const [running, setRunning] = useState(false)
   const [runResult, setRunResult] = useState<Record<string, unknown> | null>(null)
   const [dryRun, setDryRun] = useState(true)
+
+  // Test send
+  const [testPhone, setTestPhone] = useState('')
+  const [sendingTest, setSendingTest] = useState(false)
+  const [testResult, setTestResult] = useState<Record<string, unknown> | null>(null)
 
   // Filters
   const [filterDate, setFilterDate] = useState('')
@@ -138,7 +156,7 @@ export default function EWServiceReminderPage() {
           .single(),
         supabase
           .from('wa_templates')
-          .select('id, name, display_name, status, language, variable_examples')
+          .select('id, name, display_name, status, language, header_text, body_text, footer_text, variable_examples')
           .eq('status', 'approved')
           .order('display_name'),
       ])
@@ -197,6 +215,26 @@ export default function EWServiceReminderPage() {
       setRunResult({ error: e instanceof Error ? e.message : String(e) })
     } finally {
       setRunning(false)
+    }
+  }
+
+  async function sendTestMessage() {
+    if (!testPhone.trim()) {
+      alert('Enter a 10-digit mobile number')
+      return
+    }
+    setSendingTest(true)
+    setTestResult(null)
+    try {
+      const { data, error: e } = await supabase.functions.invoke('wa-ew-service-reminder', {
+        body: { test_phone: testPhone.trim() },
+      })
+      if (e) throw e
+      setTestResult(data as Record<string, unknown>)
+    } catch (e: unknown) {
+      setTestResult({ error: e instanceof Error ? e.message : String(e) })
+    } finally {
+      setSendingTest(false)
     }
   }
 
@@ -340,6 +378,27 @@ export default function EWServiceReminderPage() {
             </div>
           </div>
 
+          {/* Template preview — shown when template is selected */}
+          {selectedTemplate && (
+            <div>
+              <label className="block text-xs font-medium text-gray-500 mb-2">Template Preview</label>
+              <div className="bg-white rounded-lg border border-gray-200 p-3 text-sm whitespace-pre-wrap">
+                {selectedTemplate.header_text && (
+                  <div className="font-semibold text-gray-800 mb-1">{highlightVars(selectedTemplate.header_text)}</div>
+                )}
+                <div className="text-gray-700">{highlightVars(selectedTemplate.body_text)}</div>
+                {selectedTemplate.footer_text && (
+                  <div className="text-gray-400 text-xs mt-1">{highlightVars(selectedTemplate.footer_text)}</div>
+                )}
+              </div>
+              {varExamples.length > 0 && (
+                <p className="text-xs text-gray-400 mt-1">
+                  Variables in this template: {varExamples.map(v => v.name).filter(Boolean).join(', ')}
+                </p>
+              )}
+            </div>
+          )}
+
           {/* Variable map — shown when template is selected */}
           {varExamples.length > 0 && (
             <div>
@@ -388,6 +447,35 @@ export default function EWServiceReminderPage() {
           </div>
         </div>
       )}
+
+      {/* ── Send Test Message ── */}
+      <div className="bg-white border border-gray-200 rounded-lg p-4 space-y-3">
+        <h2 className="text-sm font-semibold text-gray-700">Send Test Message</h2>
+        <p className="text-xs text-gray-400">
+          Sends the currently saved template to a single number using example values. Save config first if you just changed the template above.
+        </p>
+        <div className="flex items-center gap-2">
+          <input
+            type="tel"
+            className="border border-gray-300 rounded px-3 py-2 text-sm w-48"
+            placeholder="10-digit mobile number"
+            value={testPhone}
+            onChange={e => setTestPhone(e.target.value)}
+          />
+          <button
+            onClick={sendTestMessage}
+            disabled={sendingTest}
+            className="px-4 py-2 bg-purple-600 hover:bg-purple-700 disabled:opacity-50 text-white rounded text-sm font-medium"
+          >
+            {sendingTest ? 'Sending…' : 'Send Test'}
+          </button>
+        </div>
+        {testResult && (
+          <div className={`rounded p-3 text-xs font-mono whitespace-pre-wrap max-h-64 overflow-auto ${testResult.error || testResult.ok === false ? 'bg-red-50 text-red-700' : 'bg-green-50 text-green-700'}`}>
+            {JSON.stringify(testResult, null, 2)}
+          </div>
+        )}
+      </div>
 
       {/* ── Manual Job Runner ── */}
       <div className="bg-white border border-gray-200 rounded-lg p-4 space-y-3">
