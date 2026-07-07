@@ -43,20 +43,53 @@ function normalizePhone(raw: string): { e164: string; local10: string } {
 }
 
 // ─── FIX 3: Load full vehicle history from DMS ────────────────────────────────
-async function loadVehicleHistory(phone10: string, _phoneE164: string): Promise<Record<string, unknown> | null> {
-  const { data, error } = await sb.from('all_service_data')
-    .select(`
+const VEHICLE_HISTORY_SELECT = `
       id, first_name, last_name, vehicle_registration_number, model,
       vehicle_sale_date, chassis_no,
       scheduled_next_service_date, scheduled_next_service_type,
       last_service_date, last_service_type, last_service_km,
       extended_warranty_product, extended_warranty_end_date
-    `)
-    .ilike('contact_phones', `%${phone10}%`)
-    .order('last_service_date', { ascending: false })
-    .limit(1)
-  if (error) console.error(`loadVehicleHistory error for ${phone10}:`, error.message)
-  return data?.[0] as Record<string, unknown> | null
+    `
+
+// Small delay helper for the retry below.
+function sleep(ms: number) { return new Promise(resolve => setTimeout(resolve, ms)) }
+
+async function loadVehicleHistory(phone10: string, _phoneE164: string): Promise<Record<string, unknown> | null> {
+  // FIX: contact_phones is a plain 10-digit number for ~99.8% of rows (verified), and has a
+  // btree index — so try an exact match first (fast, index-backed) instead of always paying for
+  // a full-table ilike '%...%' scan across all_service_data (54k+ rows). Under the concurrent
+  // load of a reminder-reply burst, that scan was intermittently timing out/erroring, silently
+  // dropping the match and leaving bookings/conversations with placeholder 'UNKNOWN'/'Valued
+  // Customer' values even though the real record existed. A single retry covers any remaining
+  // transient DB blips; the ilike fallback still covers the rare rows with non-standard formatting.
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const { data: exact, error: exactErr } = await sb.from('all_service_data')
+      .select(VEHICLE_HISTORY_SELECT)
+      .eq('contact_phones', phone10)
+      .order('last_service_date', { ascending: false })
+      .limit(1)
+    if (exactErr) {
+      console.error(`loadVehicleHistory exact-match error for ${phone10} (attempt ${attempt + 1}):`, exactErr.message)
+    } else if (exact?.[0]) {
+      return exact[0] as Record<string, unknown>
+    }
+
+    const { data: fuzzy, error: fuzzyErr } = await sb.from('all_service_data')
+      .select(VEHICLE_HISTORY_SELECT)
+      .ilike('contact_phones', `%${phone10}%`)
+      .order('last_service_date', { ascending: false })
+      .limit(1)
+    if (fuzzyErr) {
+      console.error(`loadVehicleHistory fuzzy-match error for ${phone10} (attempt ${attempt + 1}):`, fuzzyErr.message)
+    } else if (fuzzy?.[0]) {
+      return fuzzy[0] as Record<string, unknown>
+    } else if (!exactErr) {
+      return null // both queries succeeded with no match — genuinely no record, no need to retry
+    }
+
+    if (attempt === 0) await sleep(300) // brief backoff before the one retry, only reached on a DB error above
+  }
+  return null
 }
 
 // ─── Fallback: match against closed job cards when all_service_data has no hit ─
@@ -64,13 +97,17 @@ async function loadVehicleHistory(phone10: string, _phoneE164: string): Promise<
 // (e.g. not yet synced into all_service_data), so the inbox can still show a
 // name/reg number instead of just the raw phone number.
 async function loadJobCardMatch(phone10: string): Promise<Record<string, unknown> | null> {
-  const { data, error } = await sb.from('job_card_closed_data')
-    .select('id, first_name, last_name, vehicle_registration_number, product_line, vehicle_sale_date, last_service_date')
-    .ilike('account_phone_number', `%${phone10}%`)
-    .order('closed_date_time', { ascending: false })
-    .limit(1)
-  if (error) console.error(`loadJobCardMatch error for ${phone10}:`, error.message)
-  return data?.[0] as Record<string, unknown> | null
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const { data, error } = await sb.from('job_card_closed_data')
+      .select('id, first_name, last_name, vehicle_registration_number, product_line, vehicle_sale_date, last_service_date')
+      .ilike('account_phone_number', `%${phone10}%`)
+      .order('closed_date_time', { ascending: false })
+      .limit(1)
+    if (!error) return data?.[0] as Record<string, unknown> | null
+    console.error(`loadJobCardMatch error for ${phone10} (attempt ${attempt + 1}):`, error.message)
+    if (attempt === 0) await sleep(300)
+  }
+  return null
 }
 
 // ─── FIX 3: Check slot availability for a date ───────────────────────────────
