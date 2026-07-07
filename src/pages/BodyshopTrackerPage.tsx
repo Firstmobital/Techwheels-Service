@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from 'react'
 import * as XLSX from 'xlsx'
 import { Icon } from '../components/Icon'
 import DateRangeFilter, { currentMonthRange, type DateRange } from '../components/DateRangeFilter'
-import { isBodyshopDepartment } from '../lib/department'
 import { supabase } from '../lib/supabase'
 
 // ── Types ──────────────────────────────────────────────────────────────────────
@@ -24,17 +23,27 @@ type AccidentJCRow = {
   sr_type: string | null
 }
 
-type AssignmentRow = {
+// One wide row per JC from bodyshop_assignments
+type BSAssignmentRow = {
   job_card_number: string
-  technician_name: string
-  technician_code: string
-}
-
-type EmployeeRow = {
-  employee_code: string
-  employee_name: string
-  department: string
-  role: string | null
+  supervisor_employee_code: string | null
+  supervisor_employee_name: string | null
+  dentor_employee_code: string | null
+  dentor_employee_name: string | null
+  dentor_helper_employee_code: string | null
+  dentor_helper_employee_name: string | null
+  painter_employee_code: string | null
+  painter_employee_name: string | null
+  painter_helper_employee_code: string | null
+  painter_helper_employee_name: string | null
+  technician_employee_code: string | null
+  technician_employee_name: string | null
+  rubbing_employee_code: string | null
+  rubbing_employee_name: string | null
+  edp_employee_code: string | null
+  edp_employee_name: string | null
+  parts_incharge_employee_code: string | null
+  parts_incharge_employee_name: string | null
 }
 
 // Enriched closed JC (used for SA tab)
@@ -63,6 +72,7 @@ type TechJCRow = {
   closed_date_time: string | null; invoice_date: string | null
   vehicle_registration_number: string | null
   dateKey: string | null
+  _role?: string
 }
 
 type MemberCard = {
@@ -144,11 +154,8 @@ export default function BodyshopTrackerPage() {
   const [error, setError]         = useState<string | null>(null)
 
   // Raw data
-  const [accidentJCs, setAccidentJCs] = useState<AccidentJCRow[]>([])
-  const [assignments, setAssignments] = useState<AssignmentRow[]>([])
-  const [employees, setEmployees]     = useState<EmployeeRow[]>([])
-  // Map jc_number → closed JC data (for tech tab join)
-  const [jcMap, setJcMap] = useState<Map<string, AccidentJCRow>>(new Map())
+  const [accidentJCs, setAccidentJCs]     = useState<AccidentJCRow[]>([])
+  const [bsAssignments, setBsAssignments] = useState<BSAssignmentRow[]>([])
 
   // UI state
   const [activeTab, setActiveTab]     = useState<TabKey>('SA')
@@ -177,37 +184,9 @@ export default function BodyshopTrackerPage() {
   async function loadData() {
     setLoading(true); setError(null)
     try {
-      // 1. Employees
-      const empRes = await supabase.from('employee_master')
-        .select('employee_code, employee_name, department, role').limit(500)
-      const emps = (empRes.data ?? []) as EmployeeRow[]
-      setEmployees(emps)
-
-      // Bodyshop employee codes by role — mirrors Bodyshop Floor's current role set
-      // (ROLE_META / ALL_ROLES in BodyshopFloorPage.tsx). All bodyshop-floor roles
-      // require the BODY SHOP department.
-      const bsCodes: Record<string, Set<string>> = {
-        FLOOR_INCHARGE: new Set(), DENTOR: new Set(), DENTOR_HELPER: new Set(),
-        PAINTER: new Set(), PAINTER_HELPER: new Set(), TECHNICIAN: new Set(),
-        RUBBING: new Set(), EDP: new Set(), PARTS_INCHARGE: new Set(),
-      }
-      emps.forEach((e) => {
-        if (!isBodyshopDepartment(e.department)) return
-        const role = String(e.role ?? '').trim().toUpperCase()
-        if (role === 'FLOOR INCHARGE') bsCodes.FLOOR_INCHARGE.add(e.employee_code)
-        else if (role === 'DENTOR') bsCodes.DENTOR.add(e.employee_code)
-        else if (role === 'DENTOR HELPER') bsCodes.DENTOR_HELPER.add(e.employee_code)
-        else if (role === 'PAINTER') bsCodes.PAINTER.add(e.employee_code)
-        else if (role === 'PAINTER HELPER') bsCodes.PAINTER_HELPER.add(e.employee_code)
-        else if (role === 'TECHNICIAN') bsCodes.TECHNICIAN.add(e.employee_code)
-        else if (role === 'RUBBING') bsCodes.RUBBING.add(e.employee_code)
-        else if (role === 'EDP') bsCodes.EDP.add(e.employee_code)
-        else if (role === 'PARTS INCHARGE' || role === 'PARTS_INCHARGE') bsCodes.PARTS_INCHARGE.add(e.employee_code)
-      })
-
-      // 2. Accident JCs (for SA tab)
+      // 1. Accident JCs in the selected period (SA tab source + join key for tech tabs)
       const accRows: AccidentJCRow[] = []
-      let from = 0
+      let offset = 0
       while (true) {
         const res = await supabase.from('job_card_closed_data')
           .select('id, job_card_number, sr_assigned_to, final_labour_amount, dms_final_labour_amount, final_spares_amount, total_invoice_amount, dms_total_invoice_amount, closed_date_time, invoice_date, location, portal, vehicle_registration_number, sr_type')
@@ -215,50 +194,40 @@ export default function BodyshopTrackerPage() {
           .gte('closed_date_time', dateRange.from + 'T00:00:00+05:30')
           .lte('closed_date_time', dateRange.to + 'T23:59:59+05:30')
           .order('closed_date_time', { ascending: false })
-          .range(from, from + QUERY_PAGE - 1)
+          .range(offset, offset + QUERY_PAGE - 1)
         if (res.error) { setError(res.error.message); setLoading(false); return }
         const batch = (res.data ?? []) as AccidentJCRow[]
         accRows.push(...batch)
         if (batch.length < QUERY_PAGE) break
-        from += QUERY_PAGE
+        offset += QUERY_PAGE
       }
       setAccidentJCs(accRows)
 
-      // 3. Technician assignments for ALL bodyshop codes (Dentor + Painter + Tech)
-      const allBsCodes = [
-        ...Array.from(bsCodes.FLOOR_INCHARGE),
-        ...Array.from(bsCodes.DENTOR),
-        ...Array.from(bsCodes.DENTOR_HELPER),
-        ...Array.from(bsCodes.PAINTER),
-        ...Array.from(bsCodes.PAINTER_HELPER),
-        ...Array.from(bsCodes.TECHNICIAN),
-        ...Array.from(bsCodes.RUBBING),
-        ...Array.from(bsCodes.EDP),
-        ...Array.from(bsCodes.PARTS_INCHARGE),
-      ]
-
-      if (allBsCodes.length > 0) {
-        const assRes = await supabase.from('technician_assignments')
-          .select('job_card_number, technician_name, technician_code')
-          .in('technician_code', allBsCodes)
-          .limit(5000)
-        const assRows = (assRes.data ?? []) as AssignmentRow[]
-        setAssignments(assRows)
-
-        // 4. Fetch closed JC data for those JC numbers (for labour/spares/invoice)
-        const jcNums = Array.from(new Set(assRows.map((a) => a.job_card_number)))
-        const newMap = new Map<string, AccidentJCRow>()
-        // batch 50 at a time
-        for (let i = 0; i < jcNums.length; i += 50) {
-          const batch = jcNums.slice(i, i + 50)
-          const res2 = await supabase.from('job_card_closed_data')
-            .select('id, job_card_number, sr_assigned_to, final_labour_amount, dms_final_labour_amount, final_spares_amount, total_invoice_amount, dms_total_invoice_amount, closed_date_time, invoice_date, location, portal, vehicle_registration_number, sr_type')
-            .in('job_card_number', batch)
-          const rows2 = (res2.data ?? []) as AccidentJCRow[]
-          rows2.forEach((r) => newMap.set(r.job_card_number, r))
-        }
-        setJcMap(newMap)
+      // 2. bodyshop_assignments for tech tabs — one wide row per JC
+      //    Use the same JC numbers as the accident JCs already fetched so period + Accident filters are respected
+      const accJcNumbers = Array.from(new Set(accRows.map((r) => r.job_card_number).filter(Boolean)))
+      const bsRows: BSAssignmentRow[] = []
+      for (let i = 0; i < accJcNumbers.length; i += 100) {
+        const batch = accJcNumbers.slice(i, i + 100)
+        const res = await supabase.from('bodyshop_assignments')
+          .select([
+            'job_card_number',
+            'supervisor_employee_code', 'supervisor_employee_name',
+            'dentor_employee_code', 'dentor_employee_name',
+            'dentor_helper_employee_code', 'dentor_helper_employee_name',
+            'painter_employee_code', 'painter_employee_name',
+            'painter_helper_employee_code', 'painter_helper_employee_name',
+            'technician_employee_code', 'technician_employee_name',
+            'rubbing_employee_code', 'rubbing_employee_name',
+            'edp_employee_code', 'edp_employee_name',
+            'parts_incharge_employee_code', 'parts_incharge_employee_name',
+          ].join(', '))
+          .eq('is_active', true)
+          .in('job_card_number', batch)
+        if (!res.error && res.data) bsRows.push(...(res.data as BSAssignmentRow[]))
       }
+      setBsAssignments(bsRows)
+
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load bodyshop data')
     } finally {
@@ -297,29 +266,19 @@ export default function BodyshopTrackerPage() {
       .upsert({ role, percentage: pct, updated_at: new Date().toISOString() }, { onConflict: 'role' })
   }
 
-  // ── Employee code sets by role (memo) ──────────────────────────────────────
+  // ── Role column mapping for BSAssignmentRow pivot ─────────────────────────
 
-  const bsCodesByRole = useMemo<Record<TabKey, Set<string>>>(() => {
-    const map: Record<TabKey, Set<string>> = {
-      SA: new Set(), FLOOR_INCHARGE: new Set(), DENTOR: new Set(), DENTOR_HELPER: new Set(),
-      PAINTER: new Set(), PAINTER_HELPER: new Set(), TECHNICIAN: new Set(), RUBBING: new Set(), EDP: new Set(), PARTS_INCHARGE: new Set(),
-    }
-    employees.forEach((e) => {
-      if (!isBodyshopDepartment(e.department)) return
-      const role = String(e.role ?? '').trim().toUpperCase()
-      if (role === 'SA') map.SA.add(e.employee_code)
-      else if (role === 'FLOOR INCHARGE') map.FLOOR_INCHARGE.add(e.employee_code)
-      else if (role === 'DENTOR') map.DENTOR.add(e.employee_code)
-      else if (role === 'DENTOR HELPER') map.DENTOR_HELPER.add(e.employee_code)
-      else if (role === 'PAINTER') map.PAINTER.add(e.employee_code)
-      else if (role === 'PAINTER HELPER') map.PAINTER_HELPER.add(e.employee_code)
-      else if (role === 'TECHNICIAN') map.TECHNICIAN.add(e.employee_code)
-      else if (role === 'RUBBING') map.RUBBING.add(e.employee_code)
-      else if (role === 'EDP') map.EDP.add(e.employee_code)
-      else if (role === 'PARTS INCHARGE' || role === 'PARTS_INCHARGE') map.PARTS_INCHARGE.add(e.employee_code)
-    })
-    return map
-  }, [employees])
+  const BS_ROLE_COLS: Record<Exclude<TabKey, 'SA'>, { code: keyof BSAssignmentRow; name: keyof BSAssignmentRow }> = {
+    FLOOR_INCHARGE: { code: 'supervisor_employee_code',      name: 'supervisor_employee_name' },
+    DENTOR:         { code: 'dentor_employee_code',          name: 'dentor_employee_name' },
+    DENTOR_HELPER:  { code: 'dentor_helper_employee_code',   name: 'dentor_helper_employee_name' },
+    PAINTER:        { code: 'painter_employee_code',         name: 'painter_employee_name' },
+    PAINTER_HELPER: { code: 'painter_helper_employee_code',  name: 'painter_helper_employee_name' },
+    TECHNICIAN:     { code: 'technician_employee_code',      name: 'technician_employee_name' },
+    RUBBING:        { code: 'rubbing_employee_code',         name: 'rubbing_employee_name' },
+    EDP:            { code: 'edp_employee_code',             name: 'edp_employee_name' },
+    PARTS_INCHARGE: { code: 'parts_incharge_employee_code',  name: 'parts_incharge_employee_name' },
+  } as const
 
   // ── Enrich accident JCs ────────────────────────────────────────────────────
 
@@ -340,41 +299,54 @@ export default function BodyshopTrackerPage() {
     }),
   [accidentJCs])
 
-  // ── Enrich tech assignments ────────────────────────────────────────────────
+  // ── accidentJCMap: jc_number → AccidentJCRow ──────────────────────────────
+  const accidentJCMap = useMemo(() => {
+    const m = new Map<string, AccidentJCRow>()
+    accidentJCs.forEach((r) => m.set(r.job_card_number, r))
+    return m
+  }, [accidentJCs])
 
-  const enrichedTechRows = useMemo<TechJCRow[]>(() =>
-    assignments.map((a) => {
-      const jc = jcMap.get(a.job_card_number)
-      const analyticL = parseAmt(jc?.final_labour_amount)
-      const dmsL      = parseAmt(jc?.dms_final_labour_amount)
-      return {
-        job_card_number: a.job_card_number,
-        technician_name: a.technician_name,
-        technician_code: a.technician_code,
+  // ── Enrich tech assignments (pivot BSAssignmentRow wide cols) ─────────────
+  const enrichedTechRows = useMemo<TechJCRow[]>(() => {
+    const rows: TechJCRow[] = []
+    const nonSaRoles = Object.keys(BS_ROLE_COLS) as Exclude<TabKey, 'SA'>[]
+    for (const bsRow of bsAssignments) {
+      const jc = accidentJCMap.get(bsRow.job_card_number)
+      if (!jc) continue  // not an accident JC in this period
+      const analyticL = parseAmt(jc.final_labour_amount)
+      const dmsL      = parseAmt(jc.dms_final_labour_amount)
+      const base = {
+        job_card_number: bsRow.job_card_number,
         analyticLabourAmt: analyticL,
         dmsLabourAmt:      dmsL,
-        labourAmt:         analyticL,  // tech tabs: income from analytic labour
-        sparesAmt: parseAmt(jc?.final_spares_amount),
-        invoiceAmt: parseAmt(jc?.total_invoice_amount),
-        dmsInvoiceAmt: parseAmt(jc?.dms_total_invoice_amount),
-        location: jc?.location ?? null,
-        sr_type: jc?.sr_type ?? null,
-        closed_date_time: jc?.closed_date_time ?? null,
-        invoice_date: jc?.invoice_date ?? null,
-        vehicle_registration_number: jc?.vehicle_registration_number ?? null,
-        dateKey: jc ? dateKey(jc) : null,
+        labourAmt:         analyticL,
+        sparesAmt:         parseAmt(jc.final_spares_amount),
+        invoiceAmt:        parseAmt(jc.total_invoice_amount),
+        dmsInvoiceAmt:     parseAmt(jc.dms_total_invoice_amount),
+        location:          jc.location ?? null,
+        sr_type:           jc.sr_type ?? null,
+        closed_date_time:  jc.closed_date_time ?? null,
+        invoice_date:      jc.invoice_date ?? null,
+        vehicle_registration_number: jc.vehicle_registration_number ?? null,
+        dateKey:           dateKey(jc),
       }
-    }),
-  [assignments, jcMap])
+      for (const role of nonSaRoles) {
+        const cols = BS_ROLE_COLS[role]
+        const code = bsRow[cols.code] as string | null
+        const name = bsRow[cols.name] as string | null
+        if (!code) continue
+        rows.push({ ...base, technician_code: code, technician_name: name ?? code, _role: role })
+      }
+    }
+    return rows
+  }, [bsAssignments, accidentJCMap])
 
   // ── Active rows (union of SA or Tech) ─────────────────────────────────────
 
   const activeRows = useMemo(() => {
     if (tabMeta.mode === 'sa') return enrichedAccident
-    // Filter tech rows by current tab role (via employee code set)
-    const codeSet = bsCodesByRole[activeTab]
-    return enrichedTechRows.filter((r) => codeSet.has(r.technician_code))
-  }, [tabMeta, activeTab, enrichedAccident, enrichedTechRows, bsCodesByRole])
+    return enrichedTechRows.filter((r) => (r as TechJCRow & { _role?: string })._role === activeTab)
+  }, [tabMeta, activeTab, enrichedAccident, enrichedTechRows])
 
   // ── Date scope ─────────────────────────────────────────────────────────────
 
@@ -485,8 +457,7 @@ export default function BodyshopTrackerPage() {
   // Use allDateScoped (before branch filter) for branch chip counts
   const allDateScoped = useMemo(() => {
     if (tabMeta.mode === 'sa') return enrichedAccident
-    const codeSet = bsCodesByRole[activeTab]
-    const rows = enrichedTechRows.filter((r) => codeSet.has(r.technician_code))
+    const rows = enrichedTechRows.filter((r) => (r as TechJCRow & { _role?: string })._role === activeTab)
     if (!fromDate && !toDate) return rows
     return rows.filter((r) => {
       if (!r.dateKey) return false
@@ -494,7 +465,7 @@ export default function BodyshopTrackerPage() {
       if (toDate && r.dateKey > toDate) return false
       return true
     })
-  }, [tabMeta, activeTab, enrichedAccident, enrichedTechRows, bsCodesByRole, fromDate, toDate])
+  }, [tabMeta, activeTab, enrichedAccident, enrichedTechRows, fromDate, toDate])
 
   // ── Export Issues ──────────────────────────────────────────────────────────
 
@@ -608,8 +579,7 @@ export default function BodyshopTrackerPage() {
           {TABS.map((tab) => {
             const tabCount = (() => {
               if (tab.mode === 'sa') return enrichedAccident.length
-              const codeSet = bsCodesByRole[tab.key]
-              return enrichedTechRows.filter((r) => codeSet.has(r.technician_code)).length
+              return enrichedTechRows.filter((r) => (r as TechJCRow & { _role?: string })._role === tab.key).length
             })()
             return (
               <button key={tab.key} type="button" onClick={() => setActiveTab(tab.key)}
@@ -851,7 +821,7 @@ export default function BodyshopTrackerPage() {
           <div style={{ fontSize: 15, fontWeight: 600, color: '#64748b' }}>No data for {tabMeta.label}</div>
           <div style={{ fontSize: 13, marginTop: 4 }}>
             {tabMeta.mode === 'tech'
-              ? 'No technician assignments found for bodyshop employees in this role. Check employee_master dept = BODY SHOP.'
+              ? 'No assignments found in bodyshop_assignments for this role in the selected period.'
               : fromDate || toDate ? 'Try widening the date range.' : 'No Accident job cards found.'}
           </div>
         </div>
