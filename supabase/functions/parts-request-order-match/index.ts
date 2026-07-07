@@ -17,6 +17,20 @@ import { corsHeaders } from '../_shared/cors.ts'
 // (checked via matched_order_row_id) so the advisor's notification badge only flips when
 // something genuinely changed.
 //
+// Order Date guard rails (added 2026-07-07, Advisor Panel restriction): an imported Order
+// Date is only ever applied — along with the status/tracking that ride alongside it — when
+// BOTH hold true:
+//   (a) it is the same as or later than the Order Date already stored on the request
+//       (never regress a date backwards because a differently-dated order-sheet row now
+//       resolves as the "best" match for that part number), and
+//   (b) it is the same as or later than the advisor's own Entry Date (the "Requirement
+//       Date" — the date the advisor raised the requirement), so an order can never appear
+//       to have happened before the requirement even existed.
+// If either check fails the entire status/order-date/tracking update for that request is
+// skipped for this run (exactly as if no match had been found) — the existing Order Date,
+// status and tracking are left untouched. Parts Qty refresh is completely independent of
+// this and is never affected by it.
+//
 // Parts Qty is refreshed for ALL requests (including terminal ones, for accurate
 // historical reference) every run, but only written when the value actually changed, and
 // never flips the advisor "unseen" notification badge on its own — that's reserved for
@@ -59,6 +73,7 @@ interface RequestRow {
   parts_order_date: string | null
   matched_order_row_id: number | null
   auto_match_note: string | null
+  entry_date: string | null
 }
 
 function norm(v: string | null | undefined): string {
@@ -71,6 +86,28 @@ function normDesc(v: string | null | undefined): string {
 
 function num(v: number | null | undefined): number {
   return typeof v === 'number' && !Number.isNaN(v) ? v : 0
+}
+
+// Compares two 'YYYY-MM-DD' date strings lexicographically (safe for ISO dates, matches
+// the comparison style already used elsewhere in this file, e.g. isNewer()).
+function dateStr(v: string | null | undefined): string {
+  return (v ?? '').trim().slice(0, 10)
+}
+
+// Order Date guard: reject an incoming order date if it would regress before the
+// currently-stored order date, or fall before the advisor's own requirement (entry) date.
+// Only compares when both sides of a given check are present — never blocks on missing data.
+function isOrderDateAllowed(newDate: string | null, existingOrderDate: string | null, requirementDate: string | null): boolean {
+  const nd = dateStr(newDate)
+  if (!nd) return true // nothing to validate against if the new date itself is blank
+
+  const existing = dateStr(existingOrderDate)
+  if (existing && nd < existing) return false // never move the order date backwards
+
+  const requirement = dateStr(requirementDate)
+  if (requirement && nd < requirement) return false // order can never predate the requirement
+
+  return true
 }
 
 function mapStatus(row: OrderRow): string {
@@ -117,13 +154,13 @@ Deno.serve(async (req) => {
     // matching below additionally filters out terminal-status rows)
     const { data: requestRows, error: reqErr } = await supabase
       .from('parts_requests')
-      .select('id, parts_number, parts_required, parts_description, parts_status, parts_qty, parts_order_date, matched_order_row_id, auto_match_note')
+      .select('id, parts_number, parts_required, parts_description, parts_status, parts_qty, parts_order_date, matched_order_row_id, auto_match_note, entry_date')
 
     if (reqErr) throw new Error(`Failed to load parts_requests: ${reqErr.message}`)
     const requests = (requestRows ?? []) as RequestRow[]
 
     if (requests.length === 0) {
-      return new Response(JSON.stringify({ success: true, statusMatched: 0, qtyUpdated: 0, checked: 0 }), {
+      return new Response(JSON.stringify({ success: true, statusMatched: 0, qtyUpdated: 0, checked: 0, orderDateRejected: 0 }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       })
     }
@@ -224,12 +261,13 @@ Deno.serve(async (req) => {
     // 6. Compute updates per request row
     let statusMatched = 0
     let qtyUpdated = 0
+    let orderDateRejected = 0
     const nowIso = new Date().toISOString()
 
     for (const reqRow of requests) {
       const updatePayload: Record<string, unknown> = {}
 
-      // -- Parts Qty refresh (all rows) --
+      // -- Parts Qty refresh (all rows) — entirely independent of the Order Date guard --
       const newQty = lookupStockQty(reqRow)
       const currentQty = reqRow.parts_qty
       const qtyChanged = (newQty ?? null) !== (currentQty ?? null) &&
@@ -256,19 +294,28 @@ Deno.serve(async (req) => {
         }
 
         if (matchRow && reqRow.matched_order_row_id !== matchRow.id) {
-          const status = mapStatus(matchRow)
-          const note = buildNote(matchRow, status)
-          updatePayload.parts_status = status
-          updatePayload.parts_order_date = matchRow.order_date ?? matchRow.expected_date ?? null
-          updatePayload.auto_match_note = note
-          updatePayload.last_matched_at = nowIso
-          updatePayload.matched_order_row_id = matchRow.id
-          updatePayload.advisor_seen = false
-          updatePayload.status_updated_at = nowIso
-          if (!reqRow.parts_number && matchedPartNumber) {
-            updatePayload.parts_number = matchedPartNumber
+          const candidateOrderDate = matchRow.order_date ?? matchRow.expected_date ?? null
+
+          if (isOrderDateAllowed(candidateOrderDate, reqRow.parts_order_date, reqRow.entry_date)) {
+            const status = mapStatus(matchRow)
+            const note = buildNote(matchRow, status)
+            updatePayload.parts_status = status
+            updatePayload.parts_order_date = candidateOrderDate
+            updatePayload.auto_match_note = note
+            updatePayload.last_matched_at = nowIso
+            updatePayload.matched_order_row_id = matchRow.id
+            updatePayload.advisor_seen = false
+            updatePayload.status_updated_at = nowIso
+            if (!reqRow.parts_number && matchedPartNumber) {
+              updatePayload.parts_number = matchedPartNumber
+            }
+            statusMatched += 1
+          } else {
+            // Imported Order Date would regress before the existing Order Date, or falls
+            // before the advisor's Requirement (Entry) Date — ignore this record entirely,
+            // keep the existing Order Date / status / tracking untouched this run.
+            orderDateRejected += 1
           }
-          statusMatched += 1
         }
       }
 
@@ -287,7 +334,7 @@ Deno.serve(async (req) => {
     }
 
     return new Response(
-      JSON.stringify({ success: true, checked: requests.length, statusMatched, qtyUpdated }),
+      JSON.stringify({ success: true, checked: requests.length, statusMatched, qtyUpdated, orderDateRejected }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
     )
   } catch (err) {
