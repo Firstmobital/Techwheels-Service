@@ -759,7 +759,7 @@ export default function BodyshopFloorPage() {
   const [roleFilter, setRoleFilter]         = useState<BSRole | 'all'>('all')
   const [search, setSearch]                 = useState('')
   // UI-only additions: card collapse/expand + Floor Incharge workload filter (no business logic changes)
-  const [floorInchargeFilter, setFloorInchargeFilter] = useState<string>('all')
+  const [_floorInchargeFilter, _setFloorInchargeFilter] = useState<string>('all')
   const [expandedCards, setExpandedCards]   = useState<Set<string>>(new Set())
 
   // Inline draft: stageDrafts[jcKey][role] = { status, remark }
@@ -1048,7 +1048,7 @@ export default function BodyshopFloorPage() {
   }
 
   // ── Floor Incharge workload summary — UI-only, reads existing assignment data ──
-  const floorInchargeSummary = useMemo(() => {
+  const _floorInchargeSummary = useMemo(() => {
     const map = new Map<string, { total: number; unassigned: number; inProcess: number; hold: number; completed: number }>()
     let noInchargeCount = 0
     cars.forEach((c) => {

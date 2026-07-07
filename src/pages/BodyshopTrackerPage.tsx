@@ -137,7 +137,6 @@ function dayLabel(key: string) {
   return key === 'unknown' ? 'No date' : new Date(key).toLocaleDateString('en-IN', { year: 'numeric', month: 'short', day: '2-digit' })
 }
 function locationOf(v: string | null | undefined) { return String(v ?? '').trim() || UNKNOWN_LOCATION }
-function income(labour: number, pct: number) { return labour > 0 ? labour * pct / 100 : 0 }
 function saIncome(dmsLabour: number, pct: number) {
   if (!Number.isFinite(dmsLabour) || dmsLabour <= 0) return 0
   return (dmsLabour / 1.18) * (pct / 100)
@@ -224,7 +223,7 @@ export default function BodyshopTrackerPage() {
           ].join(', '))
           .eq('is_active', true)
           .in('job_card_number', batch)
-        if (!res.error && res.data) bsRows.push(...(res.data as BSAssignmentRow[]))
+        if (!res.error && res.data) bsRows.push(...(res.data as unknown as BSAssignmentRow[]))
       }
       setBsAssignments(bsRows)
 
