@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   createPartsRequest,
+  fetchPartsOrderDescriptions,
   listMyPartsRequests,
   markAllPartsRequestsSeen,
   markPartsRequestSeen,
@@ -22,6 +23,12 @@ type Draft = {
 
 function todayIST(): string {
   return new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
+}
+
+// Matches the normalization used server-side (parts-order-descriptions edge function) so
+// lookups in the fetched Part Number -> Description map line up regardless of whitespace/case.
+function normPartNumber(v: string | null | undefined): string {
+  return (v ?? '').trim().toUpperCase().replace(/\s+/g, '')
 }
 
 const EMPTY_DRAFT: Draft = {
@@ -83,6 +90,15 @@ export default function PartsRequirementSection() {
   const [saving, setSaving] = useState(false)
   const [expandedId, setExpandedId] = useState<number | null>(null)
   const [toast, setToast] = useState<string | null>(null)
+  const [descriptions, setDescriptions] = useState<Record<string, string>>({})
+
+  // Part Number -> Description, sourced live from the Parts Order Sheet. Purely additive
+  // and read-only — never blocks or errors the page if it fails, just leaves the
+  // Description column showing "Description Not Available" until the next successful fetch.
+  const loadDescriptions = useCallback(async () => {
+    const res = await fetchPartsOrderDescriptions()
+    if (!res.error) setDescriptions(res.data ?? {})
+  }, [])
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -98,7 +114,8 @@ export default function PartsRequirementSection() {
 
   useEffect(() => {
     void load()
-  }, [load])
+    void loadDescriptions()
+  }, [load, loadDescriptions])
 
   // Realtime: refresh whenever any of my own parts_requests rows change (SPM update, or
   // auto-match from a Parts Order Sheet / Stock Snapshot import — status, order date, and
@@ -172,6 +189,7 @@ export default function PartsRequirementSection() {
     setEditingId(null)
     setDraft(EMPTY_DRAFT)
     void load()
+    void loadDescriptions()
   }
 
   const handleExpand = async (row: PartsRequestRow) => {
@@ -332,6 +350,7 @@ export default function PartsRequirementSection() {
                   <th className="px-4 py-3">Entry Date</th>
                   <th className="px-4 py-3">Reg. Number</th>
                   <th className="px-4 py-3">Parts Required</th>
+                  <th className="px-4 py-3">Description</th>
                   <th className="px-4 py-3">Parts Qty</th>
                   <th className="px-4 py-3">Parts Number</th>
                   <th className="px-4 py-3">Order Date</th>
@@ -351,6 +370,9 @@ export default function PartsRequirementSection() {
                       <td className="px-4 py-2.5 text-gray-700">{row.entry_date}</td>
                       <td className="px-4 py-2.5 font-semibold text-gray-900">{row.registration_number}</td>
                       <td className="px-4 py-2.5 text-gray-700">{row.parts_required}</td>
+                      <td className={`max-w-[240px] truncate px-4 py-2.5 ${descriptions[normPartNumber(row.parts_number)] ? 'text-gray-700' : 'text-gray-400'}`} title={descriptions[normPartNumber(row.parts_number)] || undefined}>
+                        {descriptions[normPartNumber(row.parts_number)] || 'Description Not Available'}
+                      </td>
                       <td className="px-4 py-2.5"><QtyBadge qty={row.parts_qty} /></td>
                       <td className={`px-4 py-2.5 ${row.parts_number ? 'text-gray-700' : 'text-gray-400'}`}>{row.parts_number || '—'}</td>
                       <td className={`px-4 py-2.5 ${row.parts_order_date ? 'text-gray-700' : 'text-gray-400'}`}>{row.parts_order_date || '—'}</td>
@@ -377,7 +399,7 @@ export default function PartsRequirementSection() {
                     </tr>
                     {expandedId === row.id && (
                       <tr key={`${row.id}-detail`} className="border-b border-gray-100 bg-gray-50/70">
-                        <td colSpan={9} className="px-6 py-3 text-xs text-gray-600">
+                        <td colSpan={10} className="px-6 py-3 text-xs text-gray-600">
                           <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">
                             <div><span className="font-semibold text-gray-800">Parts Description:</span> {row.parts_description || '—'}</div>
                             <div><span className="font-semibold text-gray-800">My Remarks:</span> {row.advisor_remarks || '—'}</div>

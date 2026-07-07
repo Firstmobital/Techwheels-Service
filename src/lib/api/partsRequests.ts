@@ -72,6 +72,15 @@ export async function listAllPartsRequests(): Promise<ApiResult<PartsRequestRow[
   return ok(rows)
 }
 
+// Read-only lookup of Part Number -> Part Description from the Parts Order Sheet, for the
+// Service Advisor page's Description column. Never fails the page — callers should treat
+// an error result as "no descriptions available yet" and fall back to the empty-state text.
+export async function fetchPartsOrderDescriptions(): Promise<ApiResult<Record<string, string>>> {
+  const { data, error } = await supabase.functions.invoke('parts-order-descriptions', { body: {} })
+  if (error) return fail(error)
+  return ok((data?.descriptions ?? {}) as Record<string, string>)
+}
+
 // Fire-and-forget: re-runs the same Order Sheet / Stock Snapshot matching that normally
 // only runs after an import, so a Part Number the advisor just typed in — which may have
 // been ordered/received in a PAST import — immediately picks up its existing order date,
