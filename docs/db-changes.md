@@ -1,5 +1,43 @@
 # DB Changes Ledger
 
+## 2026-07-07
+
+### Prefix 20260707070000
+- Migration: 20260707070000_all_service_data_last_service_date_to_date.sql
+- Check: 20260707070000_all_service_data_last_service_date_to_date_checks.sql
+- Status: Executed and verified (applied directly via Supabase MCP)
+- Notes:
+  - `all_service_data.last_service_date` changed from `timestamp with time zone`
+    to `date` (existing values truncated to their IST calendar date). Mirror
+    table `all_service_data_dynamic.last_service_date` converted the same way
+    to stay aligned with its source, per its existing column comment.
+  - Added a new `date`-typed overload of
+    `calc_all_service_assumed_next_service_date` so the
+    `trg_set_all_service_assumed_columns` trigger call resolves to an exact
+    type match; the pre-existing `text` and `timestamptz` overloads are left
+    in place (unused by this table now, but not called from app code so kept
+    for safety).
+  - Updated `refresh_all_service_data_from_job_card_closed_data`,
+    `refresh_all_service_data_from_service_history`, and
+    `upsert_all_service_data_from_booking_source` to write/compare
+    `last_service_date` as a plain date instead of timestamptz.
+  - Accepted tradeoff: the closed-job sync freshness gate in
+    `refresh_all_service_data_from_job_card_closed_data` now compares dates
+    instead of timestamps, so two same-day closures for the same vehicle are
+    indistinguishable for that gate (first-seen-wins, no update on a same-day
+    replay).
+  - Verification passed: both columns report `data_type = date`; three
+    `calc_all_service_assumed_next_service_date` overloads present
+    (date/text/timestamptz); forced-trigger spot checks matched a fresh
+    recompute exactly; `all_service_data_dynamic` has zero rows out of sync
+    with `all_service_data`; `refresh_all_service_data_from_job_card_closed_data`
+    and `upsert_all_service_data_from_booking_source` run cleanly.
+  - Pre-existing, unrelated finding surfaced during verification: 
+    `refresh_all_service_data_from_service_history` errors because table
+    `public."EV_service_history_test"` does not currently exist (only
+    `PV_service_history_test` does). This is not caused by this migration —
+    no table references were changed — and is left out of scope.
+
 ## 2026-06-25
 
 ### Prefix 20260625174500
