@@ -759,7 +759,6 @@ export default function BodyshopFloorPage() {
   const [roleFilter, setRoleFilter]         = useState<BSRole | 'all'>('all')
   const [search, setSearch]                 = useState('')
   // UI-only additions: card collapse/expand + Floor Incharge workload filter (no business logic changes)
-  const [_floorInchargeFilter, _setFloorInchargeFilter] = useState<string>('all')
   const [expandedCards, setExpandedCards]   = useState<Set<string>>(new Set())
 
   // Inline draft: stageDrafts[jcKey][role] = { status, remark }
@@ -1047,27 +1046,6 @@ export default function BodyshopFloorPage() {
     })
   }
 
-  // ── Floor Incharge workload summary — UI-only, reads existing assignment data ──
-  const _floorInchargeSummary = useMemo(() => {
-    const map = new Map<string, { total: number; unassigned: number; inProcess: number; hold: number; completed: number }>()
-    let noInchargeCount = 0
-    cars.forEach((c) => {
-      const name = assignments[jcKey(c)]?.FLOOR_INCHARGE?.employee_name?.trim()
-      if (!name) { noInchargeCount += 1; return }
-      const entry = map.get(name) ?? { total: 0, unassigned: 0, inProcess: 0, hold: 0, completed: 0 }
-      entry.total += 1
-      if (isBsFloorCompleted(c)) entry.completed += 1
-      else if (hasStatus(c, 'hold')) entry.hold += 1
-      else if (hasAnyAssignment(c)) entry.inProcess += 1
-      else entry.unassigned += 1
-      map.set(name, entry)
-    })
-    const rows = Array.from(map.entries())
-      .map(([name, c]) => ({ name, ...c, pending: c.total - c.completed }))
-      .sort((a, b) => b.pending - a.pending || b.total - a.total)
-    return { rows, noInchargeCount }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cars, assignments, bsFloorStatus])
 
   const counts = useMemo(() => ({
     all:            cars.length,
@@ -1098,14 +1076,6 @@ export default function BodyshopFloorPage() {
     if (roleFilter !== 'all')
       list = list.filter((c) => assignments[jcKey(c)]?.[roleFilter])
 
-    if (floorInchargeFilter !== 'all') {
-      if (floorInchargeFilter === '__unassigned__') {
-        list = list.filter((c) => !assignments[jcKey(c)]?.FLOOR_INCHARGE?.employee_name)
-      } else {
-        list = list.filter((c) => assignments[jcKey(c)]?.FLOOR_INCHARGE?.employee_name?.trim() === floorInchargeFilter)
-      }
-    }
-
     if (search.trim()) {
       const q = search.trim().toLowerCase()
       list = list.filter((c) =>
@@ -1129,7 +1099,7 @@ export default function BodyshopFloorPage() {
     })
     return list
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cars, branchFilter, floorFilter, roleFilter, floorInchargeFilter, search, assignmentView, assignments, bsFloorStatus, additionalApprovalByJc])
+  }, [cars, branchFilter, floorFilter, roleFilter, search, assignmentView, assignments, bsFloorStatus, additionalApprovalByJc])
 
   // ── Assign (inline select) ───────────────────────────────────────────────
 
