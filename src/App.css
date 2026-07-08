@@ -3748,8 +3748,13 @@ code.k--b { background: var(--accent-soft); color: var(--accent); }
   gap: 4px;
 }
 
-.brx-qbtn:hover {
+.brx-qbtn:hover:not(:disabled) {
   border-color: var(--accent);
+}
+
+.brx-qbtn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 
 .brx-qbtn.is-active {

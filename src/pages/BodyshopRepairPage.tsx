@@ -4167,6 +4167,7 @@ export default function BodyshopRepairPage() {
           <div className="brx-queue-grid">
             <button
               type="button"
+              disabled={advisorScopedCards.length === 0}
               onClick={() => {
                 setStageFilter('all')
                 setPipelineFilter('all')
@@ -4186,6 +4187,7 @@ export default function BodyshopRepairPage() {
                 <button
                   key={stageNum}
                   type="button"
+                  disabled={count === 0}
                   onClick={() => {
                     setStageFilter(stageNum)
                     setPipelineFilter('all')

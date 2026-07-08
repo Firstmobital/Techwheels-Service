@@ -134,12 +134,28 @@ const ROUTE_MODULE_MAP: Record<AppRoute, ModuleName[]> = {
   '/parts-spm': ['parts_spm'],
 }
 
+const BODYSHOP_GROUP_ROUTE = '__bodyshop-group__' as const
+const BODYSHOP_ROUTE_PATHS = ['/bodyshop-tracker', '/bodyshop-floor', '/bodyshop-repair'] as const
+
 type NavItem = {
   to: AppRoute
   label: string
   icon: string
+  key?: string
 }
 
+type BodyshopGroupNavItem = {
+  to: typeof BODYSHOP_GROUP_ROUTE
+  label: string
+  icon: string
+  key?: string
+}
+
+type DisplayNavItem = NavItem | BodyshopGroupNavItem
+
+function isBodyshopPath(pathname: string): boolean {
+  return BODYSHOP_ROUTE_PATHS.some((route) => pathname === route || pathname.startsWith(`${route}/`))
+}
 const HOME_ROUTE = '/home'
 
 function isPublicAuthPath(pathname: string): boolean {
@@ -309,21 +325,20 @@ function TopNav({
   // Collapse the three Bodyshop routes into a single dropdown group.
   // The group slot appears where the first Bodyshop-family item is found.
   // Dropdown order: Repair Tracker → Bodyshop Floor → Bodyshop
-  const BODYSHOP_ROUTES_SET = new Set(['/bodyshop-tracker', '/bodyshop-floor', '/bodyshop-repair'])
-  const BODYSHOP_GROUP_ROUTE = '__bodyshop-group__'
-  const BODYSHOP_GROUP_NAV_ITEM: NavItem = {
+  const BODYSHOP_ROUTES_SET = new Set<string>(BODYSHOP_ROUTE_PATHS)
+  const BODYSHOP_GROUP_NAV_ITEM: BodyshopGroupNavItem = {
     to: BODYSHOP_GROUP_ROUTE,
     label: 'Bodyshop',
     icon: 'floor',
     key: 'bodyshop-group',
   }
-  const BODYSHOP_DROPDOWN_ITEMS: NavItem[] = [
+  const BODYSHOP_DROPDOWN_ITEMS: NavItem[] = ([
     { to: '/bodyshop-repair', label: 'Repair Tracker', icon: 'floor', key: 'bodyshop-repair' },
     { to: '/bodyshop-floor', label: 'Bodyshop Floor', icon: 'floor', key: 'bodyshop-floor' },
     { to: '/bodyshop-tracker', label: 'Bodyshop', icon: 'floor', key: 'bodyshop-tracker' },
-  ].filter((g) => visibleItems.some((v) => v.to === g.to))
+  ] satisfies NavItem[]).filter((g) => visibleItems.some((v) => v.to === g.to))
 
-  const collapsedItems: NavItem[] = []
+  const collapsedItems: DisplayNavItem[] = []
   let bodyshopGroupInserted = false
   for (const item of visibleItems) {
     if (BODYSHOP_ROUTES_SET.has(item.to)) {
@@ -359,22 +374,24 @@ function TopNav({
 
   const navToReportsCategory = (categoryId: string) => onNavigate(`/reports/${categoryId}`)
 
-  function renderNavItem(item: NavItem) {
+  const isBodyshopGroupOpen = open === BODYSHOP_GROUP_ROUTE
+
+  function renderNavItem(item: DisplayNavItem) {
     // ── Bodyshop group dropdown ──
     if (item.to === BODYSHOP_GROUP_ROUTE) {
-      const isBodyshopActive = BODYSHOP_ROUTES_SET.has(pathname)
+      const isBodyshopActive = isBodyshopPath(pathname)
       return (
         <div key="bodyshop-group" className="navrel">
           <button
             type="button"
-            className={[`navitem`, isBodyshopActive ? 'is-active' : '', open === BODYSHOP_GROUP_ROUTE ? 'open' : ''].join(' ').trim()}
-            onClick={() => setOpen(open === BODYSHOP_GROUP_ROUTE ? null : BODYSHOP_GROUP_ROUTE)}
+            className={[`navitem`, isBodyshopActive ? 'is-active' : '', isBodyshopGroupOpen ? 'open' : ''].join(' ').trim()}
+            onClick={() => setOpen(isBodyshopGroupOpen ? null : BODYSHOP_GROUP_ROUTE)}
           >
             <span className="ic"><Icon name="floor" size={17} strokeWidth={1.7} /></span>
             Bodyshop
             <Icon name="chevron" size={14} strokeWidth={1.9} className="caret" />
           </button>
-          {open === BODYSHOP_GROUP_ROUTE && (
+          {isBodyshopGroupOpen && (
             <div className="menu menu--left">
               <div className="menu__label">Bodyshop</div>
               {BODYSHOP_DROPDOWN_ITEMS.map((g) => (
@@ -442,7 +459,7 @@ function TopNav({
 
   const overflowActive = overflowItems.some((item) =>
     item.to === BODYSHOP_GROUP_ROUTE
-      ? BODYSHOP_ROUTES_SET.has(pathname)
+      ? isBodyshopPath(pathname)
       : isNavItemActive(pathname, item.to)
   )
   const homeActive = pathname === '/' || pathname.startsWith('/home')
@@ -574,20 +591,54 @@ function TopNav({
               {open === 'more' && (
                 <div className="menu menu--left">
                   <div className="menu__label">More modules</div>
-                  {overflowItems.map((item) => (
-                    <button
-                      key={item.to}
-                      type="button"
-                      className={[`menu__item`, isNavItemActive(pathname, item.to) ? 'is-active' : ''].join(' ').trim()}
-                      onClick={() => {
-                        onNavigate(resolveNavTarget(item.to))
-                        setOpen(null)
-                      }}
-                    >
-                      <span className="ic"><Icon name={item.icon} size={16} strokeWidth={1.9} /></span>
-                      {item.label}
-                    </button>
-                  ))}
+              {overflowItems.map((item) => {
+                if (item.to === BODYSHOP_GROUP_ROUTE) {
+                  const isBodyshopActive = isBodyshopPath(pathname)
+                  return (
+                    <div key="bodyshop-group-overflow" className="navrel">
+                      <button
+                        type="button"
+                        className={[`menu__item`, isBodyshopGroupOpen ? 'open' : '', isBodyshopActive ? 'is-active' : ''].join(' ').trim()}
+                        onClick={() => setOpen(isBodyshopGroupOpen ? null : BODYSHOP_GROUP_ROUTE)}
+                      >
+                        <span className="ic"><Icon name="floor" size={16} strokeWidth={1.9} /></span>
+                        Bodyshop
+                        <Icon name="chevron" size={13} strokeWidth={1.9} className="caret" />
+                      </button>
+                      {isBodyshopGroupOpen && (
+                        <div className="menu menu--left">
+                          {BODYSHOP_DROPDOWN_ITEMS.map((g) => (
+                            <button
+                              key={g.to}
+                              type="button"
+                              className={[`menu__item`, pathname === g.to ? 'is-active' : ''].join(' ').trim()}
+                              onClick={() => { onNavigate(g.to); setOpen(null) }}
+                            >
+                              <span className="ic"><Icon name={g.icon} size={16} strokeWidth={1.9} /></span>
+                              {g.label}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )
+                }
+
+                return (
+                  <button
+                    key={item.to}
+                    type="button"
+                    className={[`menu__item`, isNavItemActive(pathname, item.to) ? 'is-active' : ''].join(' ').trim()}
+                    onClick={() => {
+                      onNavigate(resolveNavTarget(item.to))
+                      setOpen(null)
+                    }}
+                  >
+                    <span className="ic"><Icon name={item.icon} size={16} strokeWidth={1.9} /></span>
+                    {item.label}
+                  </button>
+                )
+              })}
                 </div>
               )}
             </div>

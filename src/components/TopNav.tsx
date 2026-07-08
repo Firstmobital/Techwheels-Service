@@ -66,6 +66,7 @@ export function TopNav({
   const visibleBodyshopItems = BODYSHOP_GROUP_ITEMS.filter(g =>
     visibleItems.some(v => v.to === g.to)
   )
+  const isBodyshopOverflowOpen = openMenu === 'bodyshop'
 
   // Close menus when clicking outside
   useEffect(() => {
@@ -199,8 +200,8 @@ export function TopNav({
                       return (
                         <div key="bodyshop-group-overflow" style={{ position: 'relative' }}>
                           <button
-                            className={`menu__item ${openMenu === 'bodyshop' ? 'open' : ''} ${isBodyshopActive ? 'is-active' : ''}`}
-                            onClick={() => setOpenMenu(openMenu === 'bodyshop' ? null : 'bodyshop')}
+                            className={`menu__item ${isBodyshopOverflowOpen ? 'open' : ''} ${isBodyshopActive ? 'is-active' : ''}`}
+                            onClick={() => setOpenMenu(isBodyshopOverflowOpen ? null : 'bodyshop')}
                             style={{ justifyContent: 'space-between' }}
                           >
                             <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
