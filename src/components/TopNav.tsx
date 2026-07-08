@@ -10,6 +10,15 @@ interface NavItem {
   icon?: string
 }
 
+// Bodyshop group: these three routes collapse into one dropdown tab.
+// Order in the dropdown: Repair Tracker → Bodyshop Floor → Bodyshop
+const BODYSHOP_GROUP_ITEMS = [
+  { to: '/bodyshop-repair', label: 'Repair Tracker', icon: 'floor' },
+  { to: '/bodyshop-floor', label: 'Bodyshop Floor', icon: 'floor' },
+  { to: '/bodyshop-tracker', label: 'Bodyshop', icon: 'floor' },
+]
+const BODYSHOP_ROUTES = new Set(BODYSHOP_GROUP_ITEMS.map(i => i.to))
+
 interface TopNavProps {
   visibleItems: NavItem[]
   activeRoute: string
@@ -32,10 +41,31 @@ export function TopNav({
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false)
   const navRef = useRef<HTMLDivElement>(null)
 
+  // Collapse the three Bodyshop routes into a single group slot.
+  // The group slot appears where the first Bodyshop-family item would have been.
+  const processedItems: (NavItem | { group: 'bodyshop' })[] = []
+  let bodyshopGroupInserted = false
+  for (const item of visibleItems) {
+    if (BODYSHOP_ROUTES.has(item.to)) {
+      if (!bodyshopGroupInserted) {
+        processedItems.push({ group: 'bodyshop' })
+        bodyshopGroupInserted = true
+      }
+      // Skip individual bodyshop items — they live inside the group dropdown.
+    } else {
+      processedItems.push(item)
+    }
+  }
+
   // Overflow: keep nav tidy when a user has many modules
   const MAX_INLINE = 6
-  const inline = visibleItems.length > MAX_INLINE ? visibleItems.slice(0, MAX_INLINE - 1) : visibleItems
-  const overflow = visibleItems.length > MAX_INLINE ? visibleItems.slice(MAX_INLINE - 1) : []
+  const inline = processedItems.length > MAX_INLINE ? processedItems.slice(0, MAX_INLINE - 1) : processedItems
+  const overflow = processedItems.length > MAX_INLINE ? processedItems.slice(MAX_INLINE - 1) : []
+
+  // Which bodyshop sub-routes are actually available for this user?
+  const visibleBodyshopItems = BODYSHOP_GROUP_ITEMS.filter(g =>
+    visibleItems.some(v => v.to === g.to)
+  )
 
   // Close menus when clicking outside
   useEffect(() => {
@@ -108,19 +138,52 @@ export function TopNav({
 
         {/* Horizontal nav items */}
         <nav className="nav__items">
-          {inline.map(item => (
-            <NavButton 
-              key={item.key} 
-              item={item} 
-              isActive={activeRoute === item.to}
-            />
-          ))}
+          {inline.map((item, idx) => {
+            if ('group' in item && item.group === 'bodyshop') {
+              const isBodyshopActive = BODYSHOP_ROUTES.has(activeRoute)
+              return (
+                <div key="bodyshop-group" style={{ position: 'relative' }}>
+                  <button
+                    className={`navitem ${openMenu === 'bodyshop' ? 'open' : ''} ${isBodyshopActive ? 'is-active' : ''}`}
+                    onClick={() => setOpenMenu(openMenu === 'bodyshop' ? null : 'bodyshop')}
+                  >
+                    <span className="ic"><Icon name="floor" size={17} /></span>
+                    Bodyshop
+                    <Icon name="chevron" size={14} className="caret" />
+                  </button>
+                  {openMenu === 'bodyshop' && (
+                    <div className="menu">
+                      <div className="menu__label">Bodyshop</div>
+                      {visibleBodyshopItems.map(g => (
+                        <button
+                          key={g.to}
+                          className={`menu__item ${activeRoute === g.to ? 'is-active' : ''}`}
+                          onClick={() => { navigate(g.to); setOpenMenu(null) }}
+                        >
+                          {g.icon && <span className="ic"><Icon name={g.icon} size={16} /></span>}
+                          {g.label}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )
+            }
+            const navItem = item as NavItem
+            return (
+              <NavButton
+                key={navItem.key ?? idx}
+                item={navItem}
+                isActive={activeRoute === navItem.to}
+              />
+            )
+          })}
 
           {/* More menu for overflow */}
           {overflow.length > 0 && (
             <div style={{ position: 'relative' }}>
               <button
-                className={`navitem ${openMenu === 'more' ? 'open' : ''} ${overflow.some((m) => activeRoute === m.to) ? 'is-active' : ''}`}
+                className={`navitem ${openMenu === 'more' ? 'open' : ''} ${overflow.some((m) => !('group' in m) && activeRoute === (m as NavItem).to) ? 'is-active' : ''}`}
                 onClick={() => setOpenMenu(openMenu === 'more' ? null : 'more')}
               >
                 <span className="ic"><Icon name="dots" size={17} /></span>
@@ -130,19 +193,37 @@ export function TopNav({
               {openMenu === 'more' && (
                 <div className="menu">
                   <div className="menu__label">More modules</div>
-                  {overflow.map(item => (
-                    <button
-                      key={item.key}
-                      className={`menu__item ${activeRoute === item.to ? 'is-active' : ''}`}
-                      onClick={() => {
-                        navigate(item.to)
-                        setOpenMenu(null)
-                      }}
-                    >
-                      {item.icon && <span className="ic"><Icon name={item.icon} size={16} /></span>}
-                      {item.label}
-                    </button>
-                  ))}
+                  {overflow.map((item, idx) => {
+                    if ('group' in item && item.group === 'bodyshop') {
+                      const isBodyshopActive = BODYSHOP_ROUTES.has(activeRoute)
+                      return (
+                        <div key="bodyshop-group-overflow" style={{ position: 'relative' }}>
+                          <button
+                            className={`menu__item ${openMenu === 'bodyshop' ? 'open' : ''} ${isBodyshopActive ? 'is-active' : ''}`}
+                            onClick={() => setOpenMenu(openMenu === 'bodyshop' ? null : 'bodyshop')}
+                            style={{ justifyContent: 'space-between' }}
+                          >
+                            <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                              <span className="ic"><Icon name="floor" size={16} /></span>
+                              Bodyshop
+                            </span>
+                            <Icon name="chevron" size={13} />
+                          </button>
+                        </div>
+                      )
+                    }
+                    const navItem = item as NavItem
+                    return (
+                      <button
+                        key={navItem.key ?? idx}
+                        className={`menu__item ${activeRoute === navItem.to ? 'is-active' : ''}`}
+                        onClick={() => { navigate(navItem.to); setOpenMenu(null) }}
+                      >
+                        {navItem.icon && <span className="ic"><Icon name={navItem.icon} size={16} /></span>}
+                        {navItem.label}
+                      </button>
+                    )
+                  })}
                 </div>
               )}
             </div>

@@ -306,8 +306,39 @@ function TopNav({
     return 4
   }, [windowWidth])
 
-  const inlineItems = visibleItems.slice(0, maxInlineItems)
-  const overflowItems = visibleItems.slice(maxInlineItems)
+  // Collapse the three Bodyshop routes into a single dropdown group.
+  // The group slot appears where the first Bodyshop-family item is found.
+  // Dropdown order: Repair Tracker → Bodyshop Floor → Bodyshop
+  const BODYSHOP_ROUTES_SET = new Set(['/bodyshop-tracker', '/bodyshop-floor', '/bodyshop-repair'])
+  const BODYSHOP_GROUP_ROUTE = '__bodyshop-group__'
+  const BODYSHOP_GROUP_NAV_ITEM: NavItem = {
+    to: BODYSHOP_GROUP_ROUTE,
+    label: 'Bodyshop',
+    icon: 'floor',
+    key: 'bodyshop-group',
+  }
+  const BODYSHOP_DROPDOWN_ITEMS: NavItem[] = [
+    { to: '/bodyshop-repair', label: 'Repair Tracker', icon: 'floor', key: 'bodyshop-repair' },
+    { to: '/bodyshop-floor', label: 'Bodyshop Floor', icon: 'floor', key: 'bodyshop-floor' },
+    { to: '/bodyshop-tracker', label: 'Bodyshop', icon: 'floor', key: 'bodyshop-tracker' },
+  ].filter((g) => visibleItems.some((v) => v.to === g.to))
+
+  const collapsedItems: NavItem[] = []
+  let bodyshopGroupInserted = false
+  for (const item of visibleItems) {
+    if (BODYSHOP_ROUTES_SET.has(item.to)) {
+      if (!bodyshopGroupInserted) {
+        collapsedItems.push(BODYSHOP_GROUP_NAV_ITEM)
+        bodyshopGroupInserted = true
+      }
+      // Individual bodyshop items go inside the group dropdown — skip here.
+    } else {
+      collapsedItems.push(item)
+    }
+  }
+
+  const inlineItems = collapsedItems.slice(0, maxInlineItems)
+  const overflowItems = collapsedItems.slice(maxInlineItems)
 
   const userName = user?.user_metadata?.full_name || user?.email || 'User'
   const userEmail = user?.email || ''
@@ -329,6 +360,40 @@ function TopNav({
   const navToReportsCategory = (categoryId: string) => onNavigate(`/reports/${categoryId}`)
 
   function renderNavItem(item: NavItem) {
+    // ── Bodyshop group dropdown ──
+    if (item.to === BODYSHOP_GROUP_ROUTE) {
+      const isBodyshopActive = BODYSHOP_ROUTES_SET.has(pathname)
+      return (
+        <div key="bodyshop-group" className="navrel">
+          <button
+            type="button"
+            className={[`navitem`, isBodyshopActive ? 'is-active' : '', open === BODYSHOP_GROUP_ROUTE ? 'open' : ''].join(' ').trim()}
+            onClick={() => setOpen(open === BODYSHOP_GROUP_ROUTE ? null : BODYSHOP_GROUP_ROUTE)}
+          >
+            <span className="ic"><Icon name="floor" size={17} strokeWidth={1.7} /></span>
+            Bodyshop
+            <Icon name="chevron" size={14} strokeWidth={1.9} className="caret" />
+          </button>
+          {open === BODYSHOP_GROUP_ROUTE && (
+            <div className="menu menu--left">
+              <div className="menu__label">Bodyshop</div>
+              {BODYSHOP_DROPDOWN_ITEMS.map((g) => (
+                <button
+                  key={g.to}
+                  type="button"
+                  className={[`menu__item`, pathname === g.to ? 'is-active' : ''].join(' ').trim()}
+                  onClick={() => { onNavigate(g.to); setOpen(null) }}
+                >
+                  <span className="ic"><Icon name={g.icon} size={16} strokeWidth={1.9} /></span>
+                  {g.label}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )
+    }
+
     const active = isNavItemActive(pathname, item.to)
     const hasMenu = item.to === '/reports'
 
@@ -375,7 +440,11 @@ function TopNav({
     )
   }
 
-  const overflowActive = overflowItems.some((item) => isNavItemActive(pathname, item.to))
+  const overflowActive = overflowItems.some((item) =>
+    item.to === BODYSHOP_GROUP_ROUTE
+      ? BODYSHOP_ROUTES_SET.has(pathname)
+      : isNavItemActive(pathname, item.to)
+  )
   const homeActive = pathname === '/' || pathname.startsWith('/home')
 
   return (
