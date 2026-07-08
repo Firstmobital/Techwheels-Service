@@ -10,27 +10,43 @@ export default async function handler(req: Request) {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!
     const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
 
-    const authHeader = req.headers.get('Authorization') || ''
-    const token = authHeader.replace('Bearer ', '')
-    if (!token) throw new Error('Missing auth token')
-
-    // Use service-role client to validate the JWT — works for all session types
     const serviceClient = createClient(supabaseUrl, serviceRoleKey)
-    const { data: { user }, error: authErr } = await serviceClient.auth.getUser(token)
-    if (authErr || !user) throw new Error(`Auth failed: ${authErr?.message || 'no user returned for token'}`)
 
-    const { data: userData, error: userErr } = await serviceClient
-      .from('users')
-      .select('email, role, full_name')
-      .eq('id', user.id)
-      .maybeSingle()
+    // ── Cron bypass: scheduled/system calls authenticate via shared secret ──
+    const cronSecret = req.headers.get('x-cron-secret') || ''
+    const CRON_SECRET = Deno.env.get('CRON_SECRET') || ''
+    const isCronCall = !!CRON_SECRET && cronSecret === CRON_SECRET
 
-    if (userErr) throw new Error(`DB error looking up user ${user.id}: ${userErr.message}`)
-    if (!userData) throw new Error(`User not found in public.users for auth id: ${user.id} email: ${user.email}`)
-    if (!userData.email) throw new Error(`User found but email is null for id: ${user.id}`)
-    const userEmail = userData.email
-    const isAdmin = userData.role === 'admin'
-    const callerName = userData.full_name || userEmail
+    let userEmail: string
+    let isAdmin: boolean
+    let callerName: string
+
+    if (isCronCall) {
+      userEmail = 'system@auto-refresh'
+      isAdmin = true
+      callerName = 'Automated Daily Refresh'
+    } else {
+      const authHeader = req.headers.get('Authorization') || ''
+      const token = authHeader.replace('Bearer ', '')
+      if (!token) throw new Error('Missing auth token')
+
+      // Use service-role client to validate the JWT — works for all session types
+      const { data: { user }, error: authErr } = await serviceClient.auth.getUser(token)
+      if (authErr || !user) throw new Error(`Auth failed: ${authErr?.message || 'no user returned for token'}`)
+
+      const { data: userData, error: userErr } = await serviceClient
+        .from('users')
+        .select('email, role, full_name')
+        .eq('id', user.id)
+        .maybeSingle()
+
+      if (userErr) throw new Error(`DB error looking up user ${user.id}: ${userErr.message}`)
+      if (!userData) throw new Error(`User not found in public.users for auth id: ${user.id} email: ${user.email}`)
+      if (!userData.email) throw new Error(`User found but email is null for id: ${user.id}`)
+      userEmail = userData.email
+      isAdmin = userData.role === 'admin'
+      callerName = userData.full_name || userEmail
+    }
 
     const body = await req.json()
     const action = body.action
@@ -186,6 +202,142 @@ export default async function handler(req: Request) {
         },
         message: statsMsg,
       }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+    }
+
+    // ── ACTION: refresh_campaign ────────────────────────────────────────────
+    // Rolls the campaign's date window forward to "today → today+N" and adds
+    // newly-eligible customers. Never touches assignments that have already
+    // been worked (any status other than 'pending'). Pending rows whose
+    // customer has drifted outside the new window are marked 'out_of_window'
+    // so they drop out of the active calling queue but stay in the audit trail.
+    if (action === 'refresh_campaign') {
+      if (!isAdmin) throw new Error('Admin only')
+      const { campaign_id: refreshCampaignId } = body
+
+      let campQuery = serviceClient.from('telecall_campaigns').select('*').eq('status', 'active').eq('priority_mode', 'service_date')
+      if (refreshCampaignId) campQuery = campQuery.eq('id', refreshCampaignId)
+      const { data: campaignsToRefresh, error: campListErr } = await campQuery
+      if (campListErr) throw new Error(`Failed to load campaigns: ${campListErr.message}`)
+      if (!campaignsToRefresh || campaignsToRefresh.length === 0) {
+        return new Response(JSON.stringify({ success: true, refreshed: [], message: 'No active service_date campaigns to refresh' }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+      }
+
+      const todayIST = new Date(Date.now() + 5.5 * 3600000).toISOString().split('T')[0]
+      const results: any[] = []
+
+      for (const camp of campaignsToRefresh) {
+        const oldFrom = new Date(camp.date_from + 'T00:00:00Z').getTime()
+        const oldTo = new Date(camp.date_to + 'T00:00:00Z').getTime()
+        const windowDays = Math.max(1, Math.round((oldTo - oldFrom) / 86400000))
+        const newDateFrom = todayIST
+        const newDateTo = new Date(Date.now() + 5.5 * 3600000 + windowDays * 86400000).toISOString().split('T')[0]
+
+        // 1) Pull currently-eligible customers under the NEW window
+        let q = serviceClient
+          .from('all_service_data')
+          .select('id, chassis_no, sold_dealer, last_service_dealer, extended_warranty_end_date, assumed_next_service_date, powertrain_type')
+          .not('contact_phones', 'is', null)
+          .neq('contact_phones', '')
+          .not('assumed_next_service_date', 'is', null)
+          .gte('assumed_next_service_date', newDateFrom)
+          .lte('assumed_next_service_date', newDateTo)
+
+        if (camp.powertrain_filter && camp.powertrain_filter !== 'all') q = q.eq('powertrain_type', camp.powertrain_filter)
+
+        const { data: eligible, error: eligErr } = await q
+        if (eligErr) throw new Error(`Campaign ${camp.id}: eligibility query failed: ${eligErr.message}`)
+
+        // Dedup by chassis
+        const seenChassis = new Set<string>()
+        const uniqueEligible = (eligible || []).filter((c: any) => {
+          if (!c.chassis_no) return true
+          if (seenChassis.has(c.chassis_no)) return false
+          seenChassis.add(c.chassis_no)
+          return true
+        })
+
+        // Segment + score (same logic as create_campaign)
+        const in30Days = new Date(Date.now() + 30 * 86400000).toISOString().split('T')[0]
+        const scored = uniqueEligible.map((c: any) => {
+          const soldUs = isOurDealer(c.sold_dealer)
+          const lastUs = isOurDealer(c.last_service_dealer)
+          const warrantyEndingSoon = c.extended_warranty_end_date && c.extended_warranty_end_date <= in30Days
+          let segment: string, score: number
+          if (soldUs && lastUs) { segment = 'retain_loyal'; score = 100 }
+          else if (soldUs && !lastUs) { segment = 'retain_atrisk'; score = 80 }
+          else if (!soldUs && lastUs) { segment = 'retain_service_loyal'; score = 60 }
+          else { segment = 'conquest'; score = 40 }
+          if (warrantyEndingSoon) score += 5
+          return { customer: c, segment, score }
+        })
+
+        let eligibleFiltered = scored
+        if (camp.customer_segment === 'sold_us') eligibleFiltered = scored.filter((r: any) => r.segment === 'retain_loyal' || r.segment === 'retain_atrisk')
+        else if (camp.customer_segment === 'sold_others') eligibleFiltered = scored.filter((r: any) => r.segment === 'conquest' || r.segment === 'retain_service_loyal')
+        else if (camp.customer_segment === 'last_svc_us') eligibleFiltered = scored.filter((r: any) => isOurDealer(r.customer.last_service_dealer))
+        else if (camp.customer_segment === 'last_svc_others') eligibleFiltered = scored.filter((r: any) => r.customer.last_service_dealer && !isOurDealer(r.customer.last_service_dealer))
+
+        const eligibleIds = new Set(eligibleFiltered.map((r: any) => r.customer.id))
+
+        // 2) Existing assignments for this campaign
+        const { data: existing, error: existErr } = await serviceClient
+          .from('telecall_assignments')
+          .select('id, customer_id, status')
+          .eq('campaign_id', camp.id)
+        if (existErr) throw new Error(`Campaign ${camp.id}: failed to load existing assignments: ${existErr.message}`)
+
+        const existingByCustomer = new Map<number, any>()
+        for (const row of existing || []) existingByCustomer.set(row.customer_id, row)
+
+        // 3) New customers = eligible now, but no assignment row yet
+        const toInsert = eligibleFiltered
+          .filter((r: any) => !existingByCustomer.has(r.customer.id))
+          .map((r: any) => ({ campaign_id: camp.id, customer_id: r.customer.id, status: 'pending', priority_score: r.score, customer_segment: r.segment }))
+
+        let insertedCount = 0
+        for (let i = 0; i < toInsert.length; i += 500) {
+          const chunk = toInsert.slice(i, i + 500)
+          const { error: insErr } = await serviceClient.from('telecall_assignments').insert(chunk)
+          if (insErr) throw new Error(`Campaign ${camp.id}: failed to insert new assignments: ${insErr.message}`)
+          insertedCount += chunk.length
+        }
+
+        // 4) Pending rows whose customer is no longer eligible → retire as 'out_of_window'
+        const stillPendingRows = (existing || []).filter((row: any) => row.status === 'pending')
+        const toRetireIds = stillPendingRows.filter((row: any) => !eligibleIds.has(row.customer_id)).map((row: any) => row.id)
+
+        let retiredCount = 0
+        for (let i = 0; i < toRetireIds.length; i += 500) {
+          const chunk = toRetireIds.slice(i, i + 500)
+          const { error: retErr } = await serviceClient.from('telecall_assignments').update({ status: 'out_of_window' }).in('id', chunk)
+          if (retErr) throw new Error(`Campaign ${camp.id}: failed to retire stale assignments: ${retErr.message}`)
+          retiredCount += chunk.length
+        }
+
+        // 5) Roll the campaign's window forward + refresh counts
+        const { count: totalCount } = await serviceClient.from('telecall_assignments').select('id', { count: 'exact', head: true }).eq('campaign_id', camp.id)
+        const { count: pendingCount } = await serviceClient.from('telecall_assignments').select('id', { count: 'exact', head: true }).eq('campaign_id', camp.id).eq('status', 'pending')
+
+        await serviceClient.from('telecall_campaigns').update({
+          date_from: newDateFrom,
+          date_to: newDateTo,
+          total_leads: totalCount ?? camp.total_leads,
+          pending_count: pendingCount ?? camp.pending_count,
+        }).eq('id', camp.id)
+
+        results.push({
+          campaign_id: camp.id,
+          campaign_name: camp.campaign_name,
+          window: `${newDateFrom} → ${newDateTo}`,
+          added: insertedCount,
+          retired_out_of_window: retiredCount,
+          total_leads: totalCount,
+          pending_count: pendingCount,
+        })
+      }
+
+      console.log(`Refresh completed by ${callerName}: ${JSON.stringify(results)}`)
+      return new Response(JSON.stringify({ success: true, refreshed: results }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
     }
 
     // ── ACTION: get_next ──────────────────────────────────────────────────
