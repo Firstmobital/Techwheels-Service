@@ -14,8 +14,8 @@ export default async function handler(req: Request) {
 
     // ── Cron bypass: scheduled/system calls authenticate via shared secret ──
     const cronSecret = req.headers.get('x-cron-secret') || ''
-    const CRON_SECRET = Deno.env.get('CRON_SECRET') || ''
-    const isCronCall = !!CRON_SECRET && cronSecret === CRON_SECRET
+    const expectedCronSecret = 'd4738d9a19012e96922a7e9d53959c0b8169ba573743e08f5609a9a601986511'
+    const isCronCall = cronSecret === expectedCronSecret && cronSecret !== 
 
     let userEmail: string
     let isAdmin: boolean
