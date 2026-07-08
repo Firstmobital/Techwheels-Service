@@ -1407,13 +1407,31 @@ export default function ImportPage() {
             },
           }))
 
-          const { error: clearExistingPartsError } = await supabase
-            .from(tableName)
-            .delete()
-            .not('id', 'is', null)
+          // BUGFIX: previously this deleted ALL rows in the table (both EV and PV, every
+          // branch) regardless of which slots were actually being re-imported. Since a
+          // single import batch commonly only includes some slots (e.g. just the PV files),
+          // that wiped out the OTHER portal's/branch's already-imported data — the exact
+          // "sometimes only EV shows, sometimes only PV shows" symptom. Now we scope the
+          // clear to only the (location, portal) combinations present in THIS batch's ready
+          // slots, so untouched portals/branches are never overwritten or lost.
+          const partsClearTargets = new Map<string, LocationPortal>()
+          for (const readyBranch of readyBranches) {
+            const target = resolveLocationAndPortalFromSlotBranch(readyBranch)
+            partsClearTargets.set(`${target.location}|${target.portal}`, target)
+          }
 
-          if (clearExistingPartsError) {
-            throw new Error(`Failed to clear old parts rows: ${clearExistingPartsError.message}`)
+          for (const target of partsClearTargets.values()) {
+            const { error: clearExistingPartsError } = await supabase
+              .from(tableName)
+              .delete()
+              .eq('branch', target.location)
+              .eq('portal', target.portal)
+
+            if (clearExistingPartsError) {
+              throw new Error(
+                `Failed to clear old parts rows for ${target.location} ${target.portal}: ${clearExistingPartsError.message}`,
+              )
+            }
           }
         }
 
