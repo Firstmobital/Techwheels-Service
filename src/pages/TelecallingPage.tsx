@@ -792,6 +792,8 @@ function AdminDashboard({ campaigns, activeCampaign, onRefresh }: { campaigns: C
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
   const [agentStats, setAgentStats] = useState<any[]>([])
+  const [refreshingCampaign, setRefreshingCampaign] = useState(false)
+  const [refreshResult, setRefreshResult] = useState<string | null>(null)
   const [statsDateFrom, setStatsDateFrom] = useState('')
   const [statsDateTo, setStatsDateTo] = useState('')
   const [bookings, setBookings] = useState<any[]>([])
@@ -823,6 +825,25 @@ function AdminDashboard({ campaigns, activeCampaign, onRefresh }: { campaigns: C
       setAgentStats(d.agent_stats || [])
     }
     catch (e) { console.error(e) } finally { setLoadingTab(false) }
+  }
+
+  async function refreshCampaignNow() {
+    setRefreshingCampaign(true)
+    setRefreshResult(null)
+    try {
+      const d = await callEdge('refresh_campaign', { campaign_id: activeCampaign?.id })
+      const r = (d.refreshed || [])[0]
+      if (r) {
+        setRefreshResult(`✅ Refreshed "${r.campaign_name}" — window now ${r.window}. Added ${r.added} new leads, retired ${r.retired_out_of_window} out-of-window. Pending: ${r.pending_count}, Total: ${r.total_leads}.`)
+      } else {
+        setRefreshResult('No active service-date campaigns to refresh.')
+      }
+      await onRefresh()
+    } catch (e: any) {
+      setRefreshResult(`❌ Refresh failed: ${e.message}`)
+    } finally {
+      setRefreshingCampaign(false)
+    }
   }
 
   function setStatsToday() {
@@ -923,8 +944,19 @@ function AdminDashboard({ campaigns, activeCampaign, onRefresh }: { campaigns: C
               <h2 className="text-lg font-semibold text-gray-900">Campaigns</h2>
               <button onClick={() => setShowServiceInfo(!showServiceInfo)} className="flex items-center justify-center w-5 h-5 rounded-full bg-gray-100 border border-gray-300 text-gray-500 hover:bg-blue-50 hover:border-blue-400 hover:text-blue-600 text-xs font-bold">i</button>
             </div>
-            <button onClick={() => setShowCreate(!showCreate)} className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700">+ New Campaign</button>
+            <div className="flex items-center gap-2">
+              <button onClick={refreshCampaignNow} disabled={refreshingCampaign} className="rounded-lg border border-green-300 bg-green-50 px-4 py-2 text-sm font-medium text-green-700 hover:bg-green-100 disabled:opacity-50">
+                {refreshingCampaign ? '↻ Refreshing…' : '↻ Refresh Now'}
+              </button>
+              <button onClick={() => setShowCreate(!showCreate)} className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700">+ New Campaign</button>
+            </div>
           </div>
+          {refreshResult && (
+            <div className="rounded-lg border border-gray-200 bg-gray-50 px-4 py-2 text-sm text-gray-700 flex items-center justify-between">
+              <span>{refreshResult}</span>
+              <button onClick={() => setRefreshResult(null)} className="text-gray-400 hover:text-gray-600 ml-3">×</button>
+            </div>
+          )}
 
           {showServiceInfo && (
             <div className="rounded-xl border border-blue-200 bg-blue-50 p-4 shadow-sm relative">
