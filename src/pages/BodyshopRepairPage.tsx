@@ -2189,7 +2189,7 @@ export default function BodyshopRepairPage() {
       return
     }
 
-    const floorChangeLocked = floorRoleSnapshots.some((role) => role.assigned)
+    const floorChangeLocked = false
     if (floorChangeLocked && (currentFloor === 'Floor 2' || currentFloor === 'Floor 3')) {
       toast_('Floor cannot be changed once technician/support assignment starts in Bodyshop Floor', false)
       return
@@ -5460,7 +5460,7 @@ export default function BodyshopRepairPage() {
                   ? (initialFloorByCardId[selectedCardId] ?? null)
                   : null
                 const floorChanged = Boolean(initialFloor && hasFloorSelection && initialFloor !== currentFloor)
-                const floorChangeLocked = floorRoleSnapshots.some((role) => role.assigned)
+                const floorChangeLocked = false
 
                 return (
                   <div className="brx-survey-wrap">
