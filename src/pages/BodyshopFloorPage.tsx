@@ -491,8 +491,18 @@ function labelForWorkStatus(status: string | null | undefined) {
 }
 
 const NOT_REQUIRED_CODE = 'NOT_REQUIRED'
+const NOT_REQUIRED_NAME = 'Not Required'
+const NOT_REQUIRED_STATUS = 'not_required'
 // Roles that are always required and cannot be marked "Not Required"
 const ALWAYS_REQUIRED_ROLES = new Set<BSRole>(['FLOOR_INCHARGE'])
+
+function isNotRequiredAssignment(ass: Pick<BSAssignment, 'employee_code' | 'employee_name' | 'work_status'> | null | undefined): boolean {
+  if (!ass) return false
+  const code = String(ass.employee_code ?? '').trim().toUpperCase()
+  if (code === NOT_REQUIRED_CODE) return true
+  if (String(ass.employee_name ?? '').trim().toLowerCase() === 'not required') return true
+  return String(ass.work_status ?? '').trim().toLowerCase() === NOT_REQUIRED_STATUS
+}
 
 function parseQcCheckedByNames(raw: string | null | undefined): string[] {
   const tokens = String(raw ?? '')
@@ -749,21 +759,24 @@ function mapRowToRoleMap(row: DBPrimaryAssignmentRow): Record<BSRole, BSAssignme
     const employeeCode = row[cols.employeeCode] as string | null
     const employeeName = row[cols.employeeName] as string | null
     const workStatus = (row[cols.workStatus] as string | null) ?? ''
-    // Include the role if it has a real employee OR if it was explicitly marked not_required
-    if (!employeeCode && workStatus !== 'not_required') continue
+    const notRequired = String(employeeCode ?? '').trim().toUpperCase() === NOT_REQUIRED_CODE
+      || String(employeeName ?? '').trim().toLowerCase() === 'not required'
+      || String(workStatus).trim().toLowerCase() === NOT_REQUIRED_STATUS
+    // Include the role if it has a real employee OR was marked Not Required
+    if (!employeeCode && !notRequired) continue
 
     m[role] = {
       id: row.id,
       job_card_number: row.job_card_number,
       role,
-      employee_code: employeeCode ?? '',
-      employee_name: employeeName ?? '',
-      work_status: workStatus || 'work_inprocess',
-      remark: (row[cols.remark] as string | null) ?? null,
+      employee_code: notRequired ? NOT_REQUIRED_CODE : (employeeCode ?? ''),
+      employee_name: notRequired ? NOT_REQUIRED_NAME : (employeeName ?? ''),
+      work_status: notRequired ? NOT_REQUIRED_STATUS : (workStatus || 'work_inprocess'),
+      remark: notRequired ? null : ((row[cols.remark] as string | null) ?? null),
       assigned_at: ((row[cols.inTs] as string | null) ?? row.assigned_at),
       assigned_by: row.assigned_by,
-      out_ts: (row[cols.outTs] as string | null) ?? null,
-      completed_by: (row[cols.completedBy] as string | null) ?? null,
+      out_ts: notRequired ? null : ((row[cols.outTs] as string | null) ?? null),
+      completed_by: notRequired ? null : ((row[cols.completedBy] as string | null) ?? null),
     }
   }
   return m
@@ -1295,12 +1308,15 @@ export default function BodyshopFloorPage() {
       const { data: { user } } = await supabase.auth.getUser()
       const draft = stageDrafts[k]?.[role] ?? { work_status: 'work_inprocess', remark: '' }
       const payload: Record<string, unknown> = {
-        // For "Not Required": clear employee columns, set special status
-        [cols.employeeCode]: isNotRequired ? null : emp!.employee_code,
-        [cols.employeeName]: isNotRequired ? null : emp!.employee_name,
-        [cols.workStatus]: isNotRequired ? 'not_required' : draft.work_status,
-        [cols.inTs]: existingRoleAssignment?.assigned_at ?? new Date().toISOString(),
+        // "Not Required" = assignment sentinel + matching status (not a person).
+        // Clear remark/out/completed so prior Completed work does not linger.
+        [cols.employeeCode]: isNotRequired ? NOT_REQUIRED_CODE : emp!.employee_code,
+        [cols.employeeName]: isNotRequired ? NOT_REQUIRED_NAME : emp!.employee_name,
+        [cols.workStatus]: isNotRequired ? NOT_REQUIRED_STATUS : draft.work_status,
+        [cols.inTs]: isNotRequired ? null : (existingRoleAssignment?.assigned_at ?? new Date().toISOString()),
         [cols.remark]: isNotRequired ? null : (draft.remark.trim() || null),
+        [cols.outTs]: isNotRequired ? null : (existingRoleAssignment?.out_ts ?? null),
+        [cols.completedBy]: isNotRequired ? null : (existingRoleAssignment?.completed_by ?? null),
         assigned_at: new Date().toISOString(),
         assigned_by: user?.email ?? null,
         is_active: true,
@@ -1312,9 +1328,9 @@ export default function BodyshopFloorPage() {
           id: -1,
           job_card_number: k,
           role,
-          employee_code: '',
-          employee_name: '',
-          work_status: 'not_required',
+          employee_code: NOT_REQUIRED_CODE,
+          employee_name: NOT_REQUIRED_NAME,
+          work_status: NOT_REQUIRED_STATUS,
           remark: null,
           assigned_at: new Date().toISOString(),
           assigned_by: user?.email ?? null,
@@ -1327,7 +1343,7 @@ export default function BodyshopFloorPage() {
         }))
         setStageDrafts((prev) => ({
           ...prev,
-          [k]: { ...(prev[k] ?? {}), [role]: { work_status: 'not_required', remark: '' } },
+          [k]: { ...(prev[k] ?? {}), [role]: { work_status: NOT_REQUIRED_STATUS, remark: '' } },
         }))
         showToast(`${ROLE_META[role].label} marked as Not Required`, 'success')
         setSaving(null)
@@ -1354,6 +1370,25 @@ export default function BodyshopFloorPage() {
       }
       if (result.error) throw result.error
 
+      // Marking Not Required clears leftover support people for that role
+      // (they render as blue name pills under the assignment dropdown).
+      if (isNotRequired && !ALWAYS_REQUIRED_ROLES.has(role)) {
+        const supportClear = await supabase
+          .from('bodyshop_floor_support_assignments')
+          .update({ is_active: false })
+          .eq('job_card_number', k)
+          .eq('support_role', role)
+          .eq('is_active', true)
+        if (supportClear.error) throw supportClear.error
+        setSupportAssignments((prev) => ({
+          ...prev,
+          [k]: {
+            ...(prev[k] ?? { DENTOR: [], PAINTER: [], TECHNICIAN: [], FLOOR_INCHARGE: [], DENTOR_HELPER: [], PAINTER_HELPER: [], RUBBING: [], EDP: [], PARTS_INCHARGE: [] }),
+            [role]: [],
+          },
+        }))
+      }
+
       const newA = mapRowToRoleMap(result.data as DBPrimaryAssignmentRow)[role]
       if (!newA) throw new Error('Failed to map updated primary assignment row')
       const updatedRow = result.data as DBPrimaryAssignmentRow
@@ -1370,7 +1405,12 @@ export default function BodyshopFloorPage() {
       }))
       setStageDrafts((prev) => ({
         ...prev,
-        [k]: { ...(prev[k] ?? {}), [role]: { work_status: newA.work_status, remark: newA.remark ?? '' } },
+        [k]: {
+          ...(prev[k] ?? {}),
+          [role]: isNotRequired
+            ? { work_status: NOT_REQUIRED_STATUS, remark: '' }
+            : { work_status: newA.work_status, remark: newA.remark ?? '' },
+        },
       }))
       showToast(`${ROLE_META[role].label} assigned: ${emp?.employee_name ?? 'Not Required'}`, 'success')
     } catch (err) {
@@ -2270,15 +2310,14 @@ export default function BodyshopFloorPage() {
               const additionalApprovalResolved = additionalApproval.status === 'none' || additionalApproval.pendingCount === 0
               const hasActiveRoleWork = ALL_ROLES.some((role) => {
                 const assignment = carMap[role]
-                if (!assignment) return false
+                if (!assignment || isNotRequiredAssignment(assignment)) return false
                 const status = String(assignment.work_status ?? '').trim().toLowerCase()
-                if (status === 'not_required') return false
                 return status === 'work_inprocess' || status === 'hold'
               })
               // Floor Incharge must be assigned (with a real person) before floor can be marked complete
               const floorInchargeAssigned = Boolean(
                 carMap.FLOOR_INCHARGE?.employee_code &&
-                carMap.FLOOR_INCHARGE.employee_code !== NOT_REQUIRED_CODE
+                !isNotRequiredAssignment(carMap.FLOOR_INCHARGE)
               )
               const canMarkFloorCompleted = !isFloorCompleted && !isSavingFloorStatus && !hasActiveRoleWork && additionalApprovalResolved && floorInchargeAssigned
               const isSavingAdditionalApproval = saving === `${k}-additional-approval`
@@ -2635,7 +2674,7 @@ export default function BodyshopFloorPage() {
                             <div key={role} className={roleClass}>
                               <div className="bsf-lane__head">
                                 <span className="bsf-lane__role">{ROLE_META[role].label}</span>
-                                {!ROLES_WITHOUT_SUPPORT.has(role) && (
+                                {!ROLES_WITHOUT_SUPPORT.has(role) && !isNotRequiredAssignment(ass) && (
                                   <button
                                     type="button"
                                     className="bsf-role-plus"
@@ -2649,7 +2688,7 @@ export default function BodyshopFloorPage() {
 
                               <select
                                 className="sel sel-md bsf-role-select"
-                                value={ass?.work_status === 'not_required' ? NOT_REQUIRED_CODE : (ass?.employee_code ?? '')}
+                                value={isNotRequiredAssignment(ass) ? NOT_REQUIRED_CODE : (ass?.employee_code ?? '')}
                                 disabled={isSavingThis}
                                 onChange={(e) => void assignRole(car, role, e.target.value)}
                               >
@@ -2664,7 +2703,7 @@ export default function BodyshopFloorPage() {
                                 ))}
                               </select>
 
-                              {supportList.length > 0 && (
+                              {!isNotRequiredAssignment(ass) && supportList.length > 0 && (
                                 <div className="fi-support-list bsf-support-list">
                                   {supportList.map((sp) => (
                                     <div key={sp.id} className="fi-support-pill bsf-support-pill">
@@ -2674,7 +2713,7 @@ export default function BodyshopFloorPage() {
                                 </div>
                               )}
 
-                              {showPicker && !ROLES_WITHOUT_SUPPORT.has(role) && (
+                              {showPicker && !ROLES_WITHOUT_SUPPORT.has(role) && !isNotRequiredAssignment(ass) && (
                                 <div className="bsf-inline-picker bsf-inline-picker--boxed">
                                   <select
                                     className="sel sel-sm"
@@ -2700,7 +2739,7 @@ export default function BodyshopFloorPage() {
                               )}
 
                               {ass ? (
-                                ass.work_status === 'not_required' ? (
+                                isNotRequiredAssignment(ass) ? (
                                   <div className="bsf-lane-empty" style={{ color: '#94a3b8', fontStyle: 'italic' }}>Not Required</div>
                                 ) : (
                                 <div className={`bsf-stage-editor ${statusTone}`}>
