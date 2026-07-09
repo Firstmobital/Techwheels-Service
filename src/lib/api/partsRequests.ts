@@ -50,6 +50,7 @@ export interface PartsRequestRow {
   job_card_number: string | null
   customer_name: string | null
   vehicle_model: string | null
+  customer_update: string | null
 }
 
 export async function listMyPartsRequests(): Promise<ApiResult<PartsRequestRow[]>> {
@@ -207,6 +208,18 @@ export async function markPartsRequestReady(id: number): Promise<ApiResult<void>
 
 export async function markPartsRequestDone(id: number): Promise<ApiResult<void>> {
   const { error } = await supabase.rpc('parts_request_advisor_mark_done', { p_id: id })
+  if (error) return fail(error)
+  return ok(undefined)
+}
+
+// Dedicated single-field inline-save for the Customer Update column — same
+// ownership/Done-lock rules as updateMyPartsRequestFields, kept separate so a quick
+// blur-save doesn't need to resend every other field.
+export async function updatePartsRequestCustomerUpdate(id: number, value: string | null): Promise<ApiResult<void>> {
+  const { error } = await supabase.rpc('parts_request_update_customer_update', {
+    p_id: id,
+    p_customer_update: value,
+  })
   if (error) return fail(error)
   return ok(undefined)
 }

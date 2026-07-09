@@ -27,6 +27,7 @@ import {
   markPartsRequestReady,
   markPartsRequestDone,
   updateMyPartsRequestFields,
+  updatePartsRequestCustomerUpdate,
   PARTS_STATUS_COLOR,
   type PartsRequestRow,
   type PartsStatus,
@@ -318,6 +319,18 @@ export default function PartsRequirementSection() {
     void load()
   }
 
+  // Inline Customer Update edit — saved on blur, same Done-lock rule as remarks.
+  const handleCustomerUpdateBlur = async (row: PartsRequestRow, value: string) => {
+    const trimmed = value.trim()
+    if ((row.customer_update ?? '') === trimmed) return
+    const res = await updatePartsRequestCustomerUpdate(row.id, trimmed || null)
+    if (res.error) {
+      setError(res.error)
+      return
+    }
+    void load()
+  }
+
   const handleExpand = async (row: PartsRequestRow) => {
     const next = expandedId === row.id ? null : row.id
     setExpandedId(next)
@@ -350,12 +363,19 @@ export default function PartsRequirementSection() {
     void load()
   }
 
+  // Locally-arranged / direct-vendor parts never go through a formal SPM order (no
+  // Order No. / Ordered Qty), so the advisor flags it by typing "PART RECEIVED" into
+  // Advisor Remarks — that alone surfaces the Mark Received action from Pending.
+  // Mirrored server-side in parts_request_advisor_mark_received.
+  const isDirectReceiveFlag = (row: PartsRequestRow) =>
+    row.parts_status === 'Pending' && /part received/i.test(row.advisor_remarks ?? '')
+
   const ActionButton = ({ row }: { row: PartsRequestRow }) => {
     const busy = actionBusyId === row.id
-    if (row.parts_status === 'Pending') {
+    if (row.parts_status === 'Pending' && !isDirectReceiveFlag(row)) {
       return <span className="text-xs text-gray-400">Awaiting SPM order</span>
     }
-    if (['Ordered', 'In Transit', 'Back Order', 'Partially Received'].includes(row.parts_status)) {
+    if (['Ordered', 'In Transit', 'Back Order', 'Partially Received'].includes(row.parts_status) || isDirectReceiveFlag(row)) {
       return (
         <button
           type="button"
@@ -635,6 +655,7 @@ export default function PartsRequirementSection() {
                   <th className="px-4 py-3 min-w-[200px]">Description</th>
                   <th className="px-4 py-3">Qty</th>
                   <th className="px-4 py-3 min-w-[180px]">Advisor Remarks</th>
+                  <th className="px-4 py-3 min-w-[180px]">Customer Update</th>
                   <th className="px-4 py-3">Status</th>
                   <th className="px-4 py-3">Timeline</th>
                   <th className="px-4 py-3" />
@@ -672,6 +693,16 @@ export default function PartsRequirementSection() {
                             className="w-full rounded-md border border-gray-300 px-2 py-1.5 text-xs focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:bg-gray-50 disabled:text-gray-400"
                           />
                         </td>
+                        <td className="px-4 py-2.5" onClick={(e) => e.stopPropagation()}>
+                          <input
+                            type="text"
+                            defaultValue={row.customer_update ?? ''}
+                            disabled={row.parts_status === 'Done'}
+                            onBlur={(e) => void handleCustomerUpdateBlur(row, e.target.value)}
+                            placeholder="e.g. Customer informed — parts received"
+                            className="w-full rounded-md border border-gray-300 px-2 py-1.5 text-xs focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:bg-gray-50 disabled:text-gray-400"
+                          />
+                        </td>
                         <td className="px-4 py-2.5">
                           <div className="flex items-center gap-2">
                             <StatusBadge status={row.parts_status} />
@@ -696,7 +727,7 @@ export default function PartsRequirementSection() {
                       </tr>
                       {expandedId === row.id && (
                         <tr key={`${row.id}-detail`} className="border-b border-gray-100 bg-gray-50/70">
-                          <td colSpan={12} className="px-6 py-3 text-xs text-gray-600">
+                          <td colSpan={13} className="px-6 py-3 text-xs text-gray-600">
                             <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">
                               <div><span className="font-semibold text-gray-800">Order Date:</span> {row.parts_order_date || '—'}</div>
                               <div><span className="font-semibold text-gray-800">SPM Remarks:</span> {row.spm_remarks || '—'}</div>
@@ -747,6 +778,14 @@ export default function PartsRequirementSection() {
                   disabled={row.parts_status === 'Done'}
                   onBlur={(e) => void handleRemarksBlur(row, e.target.value)}
                   placeholder="Advisor remarks…"
+                  className="mt-2 w-full rounded-md border border-gray-300 px-2 py-1.5 text-xs focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:bg-gray-50"
+                />
+                <input
+                  type="text"
+                  defaultValue={row.customer_update ?? ''}
+                  disabled={row.parts_status === 'Done'}
+                  onBlur={(e) => void handleCustomerUpdateBlur(row, e.target.value)}
+                  placeholder="Customer update…"
                   className="mt-2 w-full rounded-md border border-gray-300 px-2 py-1.5 text-xs focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:bg-gray-50"
                 />
                 <div className="mt-2 flex gap-2">

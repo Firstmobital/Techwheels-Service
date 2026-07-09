@@ -232,14 +232,14 @@ export default function PartsSPMDashboardPage() {
   const handleExport = () => {
     const header = [
       'Entry Date', 'Job Card', 'Advisor', 'Registration Number', 'Customer', 'Vehicle', 'Parts Required', 'Parts Description',
-      'Parts Qty', 'Parts Number', 'Parts Order Date', 'Parts Status', 'Advisor Remarks', 'SPM Remarks', 'Vehicle Type',
+      'Parts Qty', 'Parts Number', 'Parts Order Date', 'Parts Status', 'Advisor Remarks', 'Customer Update', 'SPM Remarks', 'Vehicle Type',
       'Received At', 'Received By', 'Done At', 'Done By',
     ]
     const dataRows = sorted.map((r) => [
       r.entry_date, r.job_card_number ?? '', r.advisor_name, r.registration_number, r.customer_name ?? '', r.vehicle_model ?? '',
       r.parts_required, r.parts_description ?? '',
       r.parts_qty ?? '', r.parts_number ?? '', r.parts_order_date ?? '', r.parts_status,
-      r.advisor_remarks ?? '', r.spm_remarks ?? '', r.vehicle_type ?? '',
+      r.advisor_remarks ?? '', r.customer_update ?? '', r.spm_remarks ?? '', r.vehicle_type ?? '',
       r.received_at ?? '', r.received_by_name ?? '', r.done_at ?? '', r.done_by_name ?? '',
     ])
     const wb = XLSX.utils.book_new()
@@ -388,6 +388,7 @@ export default function PartsSPMDashboardPage() {
                   <SortHeader label="Order Date" sortField="parts_order_date" />
                   <SortHeader label="Status" sortField="parts_status" />
                   <th className="px-4 py-3">Advisor Remarks</th>
+                  <th className="px-4 py-3">Customer Update</th>
                   <th className="px-4 py-3">SPM Remarks</th>
                   <th className="px-4 py-3">Vehicle</th>
                   <th className="px-4 py-3">Received</th>
@@ -446,6 +447,7 @@ export default function PartsSPMDashboardPage() {
                             </select>
                           </td>
                           <td className="max-w-[160px] truncate px-4 py-2.5 text-gray-500">{row.advisor_remarks || '—'}</td>
+                          <td className="max-w-[160px] truncate px-4 py-2.5 text-gray-500">{row.customer_update || '—'}</td>
                           <td className="px-4 py-2.5">
                             <input
                               type="text"
@@ -490,6 +492,7 @@ export default function PartsSPMDashboardPage() {
                           <td className={`px-4 py-2.5 ${row.parts_order_date ? 'text-gray-700' : 'text-gray-400'}`}>{row.parts_order_date || '—'}</td>
                           <td className="px-4 py-2.5"><StatusBadge status={row.parts_status} /></td>
                           <td className="max-w-[160px] truncate px-4 py-2.5 text-gray-500">{row.advisor_remarks || '—'}</td>
+                          <td className="max-w-[160px] truncate px-4 py-2.5 text-gray-500">{row.customer_update || '—'}</td>
                           <td className={`max-w-[180px] truncate px-4 py-2.5 ${row.spm_remarks ? 'text-gray-700' : 'text-gray-400'}`}>{row.spm_remarks || '—'}</td>
                           <td className="px-4 py-2.5 text-gray-500">{row.vehicle_type || '—'}</td>
                           <td className="whitespace-nowrap px-4 py-2.5 text-xs text-gray-500">
