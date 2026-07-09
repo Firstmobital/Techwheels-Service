@@ -712,15 +712,17 @@ function mapRowToRoleMap(row: DBPrimaryAssignmentRow): Record<BSRole, BSAssignme
     const cols = ROLE_COLUMNS[role]
     const employeeCode = row[cols.employeeCode] as string | null
     const employeeName = row[cols.employeeName] as string | null
-    if (!employeeCode || !employeeName) continue
+    const workStatus = (row[cols.workStatus] as string | null) ?? ''
+    // Include the role if it has a real employee OR if it was explicitly marked not_required
+    if (!employeeCode && workStatus !== 'not_required') continue
 
     m[role] = {
       id: row.id,
       job_card_number: row.job_card_number,
       role,
-      employee_code: employeeCode,
-      employee_name: employeeName,
-      work_status: (row[cols.workStatus] as string | null) ?? 'work_inprocess',
+      employee_code: employeeCode ?? '',
+      employee_name: employeeName ?? '',
+      work_status: workStatus || 'work_inprocess',
       remark: (row[cols.remark] as string | null) ?? null,
       assigned_at: ((row[cols.inTs] as string | null) ?? row.assigned_at),
       assigned_by: row.assigned_by,
@@ -1207,9 +1209,9 @@ export default function BodyshopFloorPage() {
     if (!empCode) return
     const isNotRequired = empCode === NOT_REQUIRED_CODE
     const emp = isNotRequired
-      ? { employee_code: NOT_REQUIRED_CODE, employee_name: NOT_REQUIRED_NAME }
+      ? null
       : empByRole[role].find((e) => e.employee_code === empCode)
-    if (!emp) return
+    if (!isNotRequired && !emp) return
     const k = jcKey(car)
     setSaving(`${k}-${role}`)
     try {
@@ -1220,14 +1222,43 @@ export default function BodyshopFloorPage() {
       const { data: { user } } = await supabase.auth.getUser()
       const draft = stageDrafts[k]?.[role] ?? { work_status: 'work_inprocess', remark: '' }
       const payload: Record<string, unknown> = {
-        [cols.employeeCode]: emp.employee_code,
-        [cols.employeeName]: emp.employee_name,
+        // For "Not Required": clear employee columns, set special status
+        [cols.employeeCode]: isNotRequired ? null : emp!.employee_code,
+        [cols.employeeName]: isNotRequired ? null : emp!.employee_name,
         [cols.workStatus]: isNotRequired ? 'not_required' : draft.work_status,
         [cols.inTs]: existingRoleAssignment?.assigned_at ?? new Date().toISOString(),
         [cols.remark]: isNotRequired ? null : (draft.remark.trim() || null),
         assigned_at: new Date().toISOString(),
         assigned_by: user?.email ?? null,
         is_active: true,
+      }
+
+      // If marking "Not Required" and no assignment row exists yet, just update local state
+      if (isNotRequired && !existingRowId) {
+        const syntheticAssignment: BSAssignment = {
+          id: -1,
+          job_card_number: k,
+          role,
+          employee_code: '',
+          employee_name: '',
+          work_status: 'not_required',
+          remark: null,
+          assigned_at: new Date().toISOString(),
+          assigned_by: user?.email ?? null,
+          out_ts: null,
+          completed_by: null,
+        }
+        setAssignments((prev) => ({
+          ...prev,
+          [k]: { ...(prev[k] ?? emptyRoleMap()), [role]: syntheticAssignment },
+        }))
+        setStageDrafts((prev) => ({
+          ...prev,
+          [k]: { ...(prev[k] ?? {}), [role]: { work_status: 'not_required', remark: '' } },
+        }))
+        showToast(`${ROLE_META[role].label} marked as Not Required`, 'success')
+        setSaving(null)
+        return
       }
 
       let result
@@ -2380,7 +2411,7 @@ export default function BodyshopFloorPage() {
 
                               <select
                                 className="sel sel-md bsf-role-select"
-                                value={ass?.employee_code ?? ''}
+                                value={ass?.work_status === 'not_required' ? NOT_REQUIRED_CODE : (ass?.employee_code ?? '')}
                                 disabled={isSavingThis}
                                 onChange={(e) => void assignRole(car, role, e.target.value)}
                               >
