@@ -2609,7 +2609,7 @@ export default function BodyshopFloorPage() {
                           <span className="ts">Received {fmtDate(car.created_at)}</span>
                         </div>
                         <div className="bsf-summary-row">
-                          <span className="bsf-assigned-count"><strong>{assignedCount}/5</strong> roles assigned</span>
+                          <span className="bsf-assigned-count"><strong>{assignedCount}/{ALL_ROLES.length}</strong> roles assigned</span>
                           <span className="ts">
                             IN {fmtDate(inTs)}{isFloorCompleted ? ` · OUT ${fmtDate(floorStatus.completedAt)}` : ''}
                           </span>
@@ -2674,7 +2674,10 @@ export default function BodyshopFloorPage() {
                             <div key={role} className={roleClass}>
                               <div className="bsf-lane__head">
                                 <span className="bsf-lane__role">{ROLE_META[role].label}</span>
-                                {!ROLES_WITHOUT_SUPPORT.has(role) && !isNotRequiredAssignment(ass) && (
+                                {!ROLES_WITHOUT_SUPPORT.has(role)
+                                  && ass
+                                  && !isNotRequiredAssignment(ass)
+                                  && Boolean(String(ass.employee_code ?? '').trim()) && (
                                   <button
                                     type="button"
                                     className="bsf-role-plus"
@@ -2713,7 +2716,11 @@ export default function BodyshopFloorPage() {
                                 </div>
                               )}
 
-                              {showPicker && !ROLES_WITHOUT_SUPPORT.has(role) && !isNotRequiredAssignment(ass) && (
+                              {showPicker
+                                && !ROLES_WITHOUT_SUPPORT.has(role)
+                                && ass
+                                && !isNotRequiredAssignment(ass)
+                                && Boolean(String(ass.employee_code ?? '').trim()) && (
                                 <div className="bsf-inline-picker bsf-inline-picker--boxed">
                                   <select
                                     className="sel sel-sm"
