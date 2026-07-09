@@ -6031,7 +6031,7 @@ export default function BodyshopRepairPage() {
                     {[
                       { k: 'qc_checked_by',   label: 'QC Checked By' },
                       { k: 'qc_fail_reason',  label: 'Fail Reason' },
-                      { k: 'reinspection_by', label: 'Re-Inspection By' },
+                      { k: 'reinspection_by', label: 'RI Done By (name)' },
                     ].map(({ k, label }) => (
                       <label key={k} className="brx-field">
                         <span className="brx-field-label">{label}</span>
@@ -6040,12 +6040,21 @@ export default function BodyshopRepairPage() {
                       </label>
                     ))}
                     <label className="brx-field">
-                      <span className="brx-field-label">Re-Inspection Type</span>
+                      <span className="brx-field-label">RI Status</span>
+                      <select className="sel" value={selected.reinspection_status ?? 'pending'}
+                        onChange={(e) => patch('reinspection_status', e.target.value)}>
+                        <option value="pending">Pending</option>
+                        <option value="completed">Completed</option>
+                      </select>
+                    </label>
+                    <label className="brx-field">
+                      <span className="brx-field-label">RI Done By</span>
                       <select className="sel" value={selected.reinspection_type ?? ''}
                         onChange={(e) => patch('reinspection_type', e.target.value)}>
                         <option value="">— None —</option>
-                        <option value="team_member">Team Member</option>
+                        <option value="floor_incharge">Floor Incharge</option>
                         <option value="surveyor">Surveyor</option>
+                        <option value="other">Other</option>
                       </select>
                     </label>
                     <label className="brx-field">

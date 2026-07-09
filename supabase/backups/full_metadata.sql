@@ -2,12 +2,12 @@
 -- PostgreSQL database dump
 --
 
-\restrict q2ubz2p2yknfQVaqB4CwJYsG2ajlgnYLOdQgVx53dUZwm3VMwDAj84AzRc67QpP
+\restrict jhnSCohqiSn2QyUAmOCngH8b8NJUOJslD416ZoNyhxrMuAhCans9kv1TodN2cpf
 
 -- Dumped from database version 17.6
 -- Dumped by pg_dump version 17.7 (Homebrew)
 
--- Started on 2026-07-07 14:16:19 IST
+-- Started on 2026-07-09 12:28:14 IST
 
 SET statement_timeout = 0;
 SET lock_timeout = 0;
@@ -327,7 +327,7 @@ CREATE TYPE auth.one_time_token_type AS ENUM (
 
 
 --
--- TOC entry 2855 (class 1247 OID 18842)
+-- TOC entry 2858 (class 1247 OID 18842)
 -- Name: doc_type; Type: TYPE; Schema: public; Owner: -
 --
 
@@ -343,7 +343,7 @@ CREATE TYPE public.doc_type AS ENUM (
 
 
 --
--- TOC entry 2846 (class 1247 OID 18816)
+-- TOC entry 2849 (class 1247 OID 18816)
 -- Name: job_card_status; Type: TYPE; Schema: public; Owner: -
 --
 
@@ -357,7 +357,7 @@ CREATE TYPE public.job_card_status AS ENUM (
 
 
 --
--- TOC entry 2849 (class 1247 OID 18828)
+-- TOC entry 2852 (class 1247 OID 18828)
 -- Name: panel_action; Type: TYPE; Schema: public; Owner: -
 --
 
@@ -368,7 +368,7 @@ CREATE TYPE public.panel_action AS ENUM (
 
 
 --
--- TOC entry 2852 (class 1247 OID 18834)
+-- TOC entry 2855 (class 1247 OID 18834)
 -- Name: photo_type; Type: TYPE; Schema: public; Owner: -
 --
 
@@ -380,7 +380,7 @@ CREATE TYPE public.photo_type AS ENUM (
 
 
 --
--- TOC entry 2750 (class 1247 OID 17406)
+-- TOC entry 2753 (class 1247 OID 17406)
 -- Name: action; Type: TYPE; Schema: realtime; Owner: -
 --
 
@@ -394,7 +394,7 @@ CREATE TYPE realtime.action AS ENUM (
 
 
 --
--- TOC entry 2741 (class 1247 OID 17367)
+-- TOC entry 2744 (class 1247 OID 17367)
 -- Name: equality_op; Type: TYPE; Schema: realtime; Owner: -
 --
 
@@ -416,7 +416,7 @@ CREATE TYPE realtime.equality_op AS ENUM (
 
 
 --
--- TOC entry 2744 (class 1247 OID 17381)
+-- TOC entry 2747 (class 1247 OID 17381)
 -- Name: user_defined_filter; Type: TYPE; Schema: realtime; Owner: -
 --
 
@@ -429,7 +429,7 @@ CREATE TYPE realtime.user_defined_filter AS (
 
 
 --
--- TOC entry 2756 (class 1247 OID 17448)
+-- TOC entry 2759 (class 1247 OID 17448)
 -- Name: wal_column; Type: TYPE; Schema: realtime; Owner: -
 --
 
@@ -444,7 +444,7 @@ CREATE TYPE realtime.wal_column AS (
 
 
 --
--- TOC entry 2753 (class 1247 OID 17419)
+-- TOC entry 2756 (class 1247 OID 17419)
 -- Name: wal_rls; Type: TYPE; Schema: realtime; Owner: -
 --
 
@@ -457,7 +457,7 @@ CREATE TYPE realtime.wal_rls AS (
 
 
 --
--- TOC entry 2726 (class 1247 OID 17297)
+-- TOC entry 2729 (class 1247 OID 17297)
 -- Name: buckettype; Type: TYPE; Schema: storage; Owner: -
 --
 
@@ -11788,24 +11788,6 @@ CREATE TABLE auth.webauthn_credentials (
 
 
 --
--- TOC entry 563 (class 1259 OID 28727)
--- Name: PV_service_history_test; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public."PV_service_history_test" (
-    id uuid DEFAULT gen_random_uuid() NOT NULL,
-    chassis_no text,
-    registration_no text,
-    odometer_reading text,
-    serviced_at_dealer text,
-    sr_type text,
-    service_date_time timestamp without time zone,
-    contact_full_name text,
-    created_at timestamp with time zone DEFAULT now()
-);
-
-
---
 -- TOC entry 552 (class 1259 OID 27445)
 -- Name: all_service_data_dynamic; Type: TABLE; Schema: public; Owner: -
 --
@@ -11833,7 +11815,7 @@ CREATE TABLE public.all_service_data_dynamic (
 
 
 --
--- TOC entry 9403 (class 0 OID 0)
+-- TOC entry 9402 (class 0 OID 0)
 -- Dependencies: 552
 -- Name: COLUMN all_service_data_dynamic.scheduled_next_service_date; Type: COMMENT; Schema: public; Owner: -
 --
@@ -11842,7 +11824,7 @@ COMMENT ON COLUMN public.all_service_data_dynamic.scheduled_next_service_date IS
 
 
 --
--- TOC entry 9404 (class 0 OID 0)
+-- TOC entry 9403 (class 0 OID 0)
 -- Dependencies: 552
 -- Name: COLUMN all_service_data_dynamic.last_service_date; Type: COMMENT; Schema: public; Owner: -
 --
@@ -11851,7 +11833,7 @@ COMMENT ON COLUMN public.all_service_data_dynamic.last_service_date IS 'Type ali
 
 
 --
--- TOC entry 9405 (class 0 OID 0)
+-- TOC entry 9404 (class 0 OID 0)
 -- Dependencies: 552
 -- Name: COLUMN all_service_data_dynamic.fuel_tp; Type: COMMENT; Schema: public; Owner: -
 --
@@ -11860,7 +11842,7 @@ COMMENT ON COLUMN public.all_service_data_dynamic.fuel_tp IS 'Deterministic from
 
 
 --
--- TOC entry 9406 (class 0 OID 0)
+-- TOC entry 9405 (class 0 OID 0)
 -- Dependencies: 552
 -- Name: COLUMN all_service_data_dynamic.sold_dealer; Type: COMMENT; Schema: public; Owner: -
 --
@@ -11869,7 +11851,7 @@ COMMENT ON COLUMN public.all_service_data_dynamic.sold_dealer IS 'Projected from
 
 
 --
--- TOC entry 9407 (class 0 OID 0)
+-- TOC entry 9406 (class 0 OID 0)
 -- Dependencies: 552
 -- Name: COLUMN all_service_data_dynamic.priority_bucket; Type: COMMENT; Schema: public; Owner: -
 --
@@ -11878,7 +11860,7 @@ COMMENT ON COLUMN public.all_service_data_dynamic.priority_bucket IS 'Priority b
 
 
 --
--- TOC entry 9408 (class 0 OID 0)
+-- TOC entry 9407 (class 0 OID 0)
 -- Dependencies: 552
 -- Name: COLUMN all_service_data_dynamic.priority_score; Type: COMMENT; Schema: public; Owner: -
 --
@@ -11887,7 +11869,7 @@ COMMENT ON COLUMN public.all_service_data_dynamic.priority_score IS 'Priority sc
 
 
 --
--- TOC entry 9409 (class 0 OID 0)
+-- TOC entry 9408 (class 0 OID 0)
 -- Dependencies: 552
 -- Name: COLUMN all_service_data_dynamic.vehicle_sale_date; Type: COMMENT; Schema: public; Owner: -
 --
@@ -11896,7 +11878,7 @@ COMMENT ON COLUMN public.all_service_data_dynamic.vehicle_sale_date IS 'Type ali
 
 
 --
--- TOC entry 9410 (class 0 OID 0)
+-- TOC entry 9409 (class 0 OID 0)
 -- Dependencies: 552
 -- Name: COLUMN all_service_data_dynamic.updated_by_robot; Type: COMMENT; Schema: public; Owner: -
 --
@@ -11905,7 +11887,7 @@ COMMENT ON COLUMN public.all_service_data_dynamic.updated_by_robot IS 'Projected
 
 
 --
--- TOC entry 9411 (class 0 OID 0)
+-- TOC entry 9410 (class 0 OID 0)
 -- Dependencies: 552
 -- Name: COLUMN all_service_data_dynamic.updated_by_robot_at; Type: COMMENT; Schema: public; Owner: -
 --
@@ -11927,7 +11909,7 @@ CREATE SEQUENCE public.all_service_data_id_seq1
 
 
 --
--- TOC entry 9413 (class 0 OID 0)
+-- TOC entry 9412 (class 0 OID 0)
 -- Dependencies: 544
 -- Name: all_service_data_id_seq1; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
 --
@@ -11954,7 +11936,7 @@ CREATE TABLE public.all_service_data_powertrain_overrides (
 
 
 --
--- TOC entry 9415 (class 0 OID 0)
+-- TOC entry 9414 (class 0 OID 0)
 -- Dependencies: 558
 -- Name: TABLE all_service_data_powertrain_overrides; Type: COMMENT; Schema: public; Owner: -
 --
@@ -11992,7 +11974,7 @@ CREATE TABLE public.all_service_history_sync_queue (
 
 
 --
--- TOC entry 9418 (class 0 OID 0)
+-- TOC entry 9417 (class 0 OID 0)
 -- Dependencies: 567
 -- Name: TABLE all_service_history_sync_queue; Type: COMMENT; Schema: public; Owner: -
 --
@@ -12018,7 +12000,7 @@ CREATE TABLE public.audit_logs (
 
 
 --
--- TOC entry 9420 (class 0 OID 0)
+-- TOC entry 9419 (class 0 OID 0)
 -- Dependencies: 434
 -- Name: TABLE audit_logs; Type: COMMENT; Schema: public; Owner: -
 --
@@ -12040,7 +12022,7 @@ CREATE SEQUENCE public.audit_logs_id_seq
 
 
 --
--- TOC entry 9422 (class 0 OID 0)
+-- TOC entry 9421 (class 0 OID 0)
 -- Dependencies: 433
 -- Name: audit_logs_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
 --
@@ -12078,7 +12060,7 @@ CREATE TABLE public.auto_service_reminders (
 
 
 --
--- TOC entry 9424 (class 0 OID 0)
+-- TOC entry 9423 (class 0 OID 0)
 -- Dependencies: 578
 -- Name: TABLE auto_service_reminders; Type: COMMENT; Schema: public; Owner: -
 --
@@ -12100,7 +12082,7 @@ CREATE SEQUENCE public.auto_service_reminders_id_seq
 
 
 --
--- TOC entry 9426 (class 0 OID 0)
+-- TOC entry 9425 (class 0 OID 0)
 -- Dependencies: 577
 -- Name: auto_service_reminders_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
 --
@@ -12272,7 +12254,7 @@ CREATE TABLE public.bodyshop_assignments (
 
 
 --
--- TOC entry 9431 (class 0 OID 0)
+-- TOC entry 9430 (class 0 OID 0)
 -- Dependencies: 500
 -- Name: COLUMN bodyshop_assignments.dentor_employee_code; Type: COMMENT; Schema: public; Owner: -
 --
@@ -12281,7 +12263,7 @@ COMMENT ON COLUMN public.bodyshop_assignments.dentor_employee_code IS 'Primary d
 
 
 --
--- TOC entry 9432 (class 0 OID 0)
+-- TOC entry 9431 (class 0 OID 0)
 -- Dependencies: 500
 -- Name: COLUMN bodyshop_assignments.painter_employee_code; Type: COMMENT; Schema: public; Owner: -
 --
@@ -12290,7 +12272,7 @@ COMMENT ON COLUMN public.bodyshop_assignments.painter_employee_code IS 'Primary 
 
 
 --
--- TOC entry 9433 (class 0 OID 0)
+-- TOC entry 9432 (class 0 OID 0)
 -- Dependencies: 500
 -- Name: COLUMN bodyshop_assignments.technician_employee_code; Type: COMMENT; Schema: public; Owner: -
 --
@@ -12299,7 +12281,7 @@ COMMENT ON COLUMN public.bodyshop_assignments.technician_employee_code IS 'Prima
 
 
 --
--- TOC entry 9434 (class 0 OID 0)
+-- TOC entry 9433 (class 0 OID 0)
 -- Dependencies: 500
 -- Name: COLUMN bodyshop_assignments.electrician_employee_code; Type: COMMENT; Schema: public; Owner: -
 --
@@ -12308,7 +12290,7 @@ COMMENT ON COLUMN public.bodyshop_assignments.electrician_employee_code IS 'Prim
 
 
 --
--- TOC entry 9435 (class 0 OID 0)
+-- TOC entry 9434 (class 0 OID 0)
 -- Dependencies: 500
 -- Name: COLUMN bodyshop_assignments.det_employee_code; Type: COMMENT; Schema: public; Owner: -
 --
@@ -12317,7 +12299,7 @@ COMMENT ON COLUMN public.bodyshop_assignments.det_employee_code IS 'Primary DET 
 
 
 --
--- TOC entry 9436 (class 0 OID 0)
+-- TOC entry 9435 (class 0 OID 0)
 -- Dependencies: 500
 -- Name: COLUMN bodyshop_assignments.dentor_in_ts; Type: COMMENT; Schema: public; Owner: -
 --
@@ -12326,7 +12308,7 @@ COMMENT ON COLUMN public.bodyshop_assignments.dentor_in_ts IS 'Role-specific IN 
 
 
 --
--- TOC entry 9437 (class 0 OID 0)
+-- TOC entry 9436 (class 0 OID 0)
 -- Dependencies: 500
 -- Name: COLUMN bodyshop_assignments.painter_in_ts; Type: COMMENT; Schema: public; Owner: -
 --
@@ -12335,7 +12317,7 @@ COMMENT ON COLUMN public.bodyshop_assignments.painter_in_ts IS 'Role-specific IN
 
 
 --
--- TOC entry 9438 (class 0 OID 0)
+-- TOC entry 9437 (class 0 OID 0)
 -- Dependencies: 500
 -- Name: COLUMN bodyshop_assignments.technician_in_ts; Type: COMMENT; Schema: public; Owner: -
 --
@@ -12344,7 +12326,7 @@ COMMENT ON COLUMN public.bodyshop_assignments.technician_in_ts IS 'Role-specific
 
 
 --
--- TOC entry 9439 (class 0 OID 0)
+-- TOC entry 9438 (class 0 OID 0)
 -- Dependencies: 500
 -- Name: COLUMN bodyshop_assignments.electrician_in_ts; Type: COMMENT; Schema: public; Owner: -
 --
@@ -12353,7 +12335,7 @@ COMMENT ON COLUMN public.bodyshop_assignments.electrician_in_ts IS 'Role-specifi
 
 
 --
--- TOC entry 9440 (class 0 OID 0)
+-- TOC entry 9439 (class 0 OID 0)
 -- Dependencies: 500
 -- Name: COLUMN bodyshop_assignments.det_in_ts; Type: COMMENT; Schema: public; Owner: -
 --
@@ -12362,7 +12344,7 @@ COMMENT ON COLUMN public.bodyshop_assignments.det_in_ts IS 'Role-specific IN tim
 
 
 --
--- TOC entry 9441 (class 0 OID 0)
+-- TOC entry 9440 (class 0 OID 0)
 -- Dependencies: 500
 -- Name: COLUMN bodyshop_assignments.dentor_completed_by; Type: COMMENT; Schema: public; Owner: -
 --
@@ -12371,7 +12353,7 @@ COMMENT ON COLUMN public.bodyshop_assignments.dentor_completed_by IS 'Completion
 
 
 --
--- TOC entry 9442 (class 0 OID 0)
+-- TOC entry 9441 (class 0 OID 0)
 -- Dependencies: 500
 -- Name: COLUMN bodyshop_assignments.painter_completed_by; Type: COMMENT; Schema: public; Owner: -
 --
@@ -12380,7 +12362,7 @@ COMMENT ON COLUMN public.bodyshop_assignments.painter_completed_by IS 'Completio
 
 
 --
--- TOC entry 9443 (class 0 OID 0)
+-- TOC entry 9442 (class 0 OID 0)
 -- Dependencies: 500
 -- Name: COLUMN bodyshop_assignments.technician_completed_by; Type: COMMENT; Schema: public; Owner: -
 --
@@ -12389,7 +12371,7 @@ COMMENT ON COLUMN public.bodyshop_assignments.technician_completed_by IS 'Comple
 
 
 --
--- TOC entry 9444 (class 0 OID 0)
+-- TOC entry 9443 (class 0 OID 0)
 -- Dependencies: 500
 -- Name: COLUMN bodyshop_assignments.electrician_completed_by; Type: COMMENT; Schema: public; Owner: -
 --
@@ -12398,7 +12380,7 @@ COMMENT ON COLUMN public.bodyshop_assignments.electrician_completed_by IS 'Compl
 
 
 --
--- TOC entry 9445 (class 0 OID 0)
+-- TOC entry 9444 (class 0 OID 0)
 -- Dependencies: 500
 -- Name: COLUMN bodyshop_assignments.det_completed_by; Type: COMMENT; Schema: public; Owner: -
 --
@@ -12407,7 +12389,7 @@ COMMENT ON COLUMN public.bodyshop_assignments.det_completed_by IS 'Completion ac
 
 
 --
--- TOC entry 9446 (class 0 OID 0)
+-- TOC entry 9445 (class 0 OID 0)
 -- Dependencies: 500
 -- Name: COLUMN bodyshop_assignments.bs_floor_completed_at; Type: COMMENT; Schema: public; Owner: -
 --
@@ -12416,7 +12398,7 @@ COMMENT ON COLUMN public.bodyshop_assignments.bs_floor_completed_at IS 'Timestam
 
 
 --
--- TOC entry 9447 (class 0 OID 0)
+-- TOC entry 9446 (class 0 OID 0)
 -- Dependencies: 500
 -- Name: COLUMN bodyshop_assignments.bs_floor_completed_by; Type: COMMENT; Schema: public; Owner: -
 --
@@ -12438,7 +12420,7 @@ CREATE SEQUENCE public.bodyshop_assignments_id_seq
 
 
 --
--- TOC entry 9449 (class 0 OID 0)
+-- TOC entry 9448 (class 0 OID 0)
 -- Dependencies: 499
 -- Name: bodyshop_assignments_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
 --
@@ -12469,7 +12451,7 @@ CREATE TABLE public.bodyshop_floor_support_assignments (
 
 
 --
--- TOC entry 9451 (class 0 OID 0)
+-- TOC entry 9450 (class 0 OID 0)
 -- Dependencies: 516
 -- Name: TABLE bodyshop_floor_support_assignments; Type: COMMENT; Schema: public; Owner: -
 --
@@ -12478,7 +12460,7 @@ COMMENT ON TABLE public.bodyshop_floor_support_assignments IS 'Stores multiple a
 
 
 --
--- TOC entry 9452 (class 0 OID 0)
+-- TOC entry 9451 (class 0 OID 0)
 -- Dependencies: 516
 -- Name: COLUMN bodyshop_floor_support_assignments.support_role; Type: COMMENT; Schema: public; Owner: -
 --
@@ -12487,7 +12469,7 @@ COMMENT ON COLUMN public.bodyshop_floor_support_assignments.support_role IS 'Sup
 
 
 --
--- TOC entry 9453 (class 0 OID 0)
+-- TOC entry 9452 (class 0 OID 0)
 -- Dependencies: 516
 -- Name: COLUMN bodyshop_floor_support_assignments.assigned_by; Type: COMMENT; Schema: public; Owner: -
 --
@@ -12544,7 +12526,7 @@ CREATE TABLE public.bodyshop_intake_vehicle_photos (
 
 
 --
--- TOC entry 9456 (class 0 OID 0)
+-- TOC entry 9455 (class 0 OID 0)
 -- Dependencies: 504
 -- Name: TABLE bodyshop_intake_vehicle_photos; Type: COMMENT; Schema: public; Owner: -
 --
@@ -12553,7 +12535,7 @@ COMMENT ON TABLE public.bodyshop_intake_vehicle_photos IS 'Bodyshop intake vehic
 
 
 --
--- TOC entry 9457 (class 0 OID 0)
+-- TOC entry 9456 (class 0 OID 0)
 -- Dependencies: 504
 -- Name: COLUMN bodyshop_intake_vehicle_photos.reception_entry_id; Type: COMMENT; Schema: public; Owner: -
 --
@@ -12562,7 +12544,7 @@ COMMENT ON COLUMN public.bodyshop_intake_vehicle_photos.reception_entry_id IS 'F
 
 
 --
--- TOC entry 9458 (class 0 OID 0)
+-- TOC entry 9457 (class 0 OID 0)
 -- Dependencies: 504
 -- Name: COLUMN bodyshop_intake_vehicle_photos.storage_path; Type: COMMENT; Schema: public; Owner: -
 --
@@ -12571,7 +12553,7 @@ COMMENT ON COLUMN public.bodyshop_intake_vehicle_photos.storage_path IS 'Supabas
 
 
 --
--- TOC entry 9459 (class 0 OID 0)
+-- TOC entry 9458 (class 0 OID 0)
 -- Dependencies: 504
 -- Name: COLUMN bodyshop_intake_vehicle_photos.drive_url; Type: COMMENT; Schema: public; Owner: -
 --
@@ -12580,7 +12562,7 @@ COMMENT ON COLUMN public.bodyshop_intake_vehicle_photos.drive_url IS 'Universal 
 
 
 --
--- TOC entry 9460 (class 0 OID 0)
+-- TOC entry 9459 (class 0 OID 0)
 -- Dependencies: 504
 -- Name: COLUMN bodyshop_intake_vehicle_photos.drive_file_id; Type: COMMENT; Schema: public; Owner: -
 --
@@ -12700,6 +12682,7 @@ CREATE TABLE public.bodyshop_repair_cards (
     reinspection_type text,
     reinspection_by text,
     reinspection_at timestamp with time zone,
+    reinspection_status text DEFAULT 'pending'::text,
     parts_entry_status text DEFAULT 'pending'::text,
     billed_amount numeric(12,2),
     do_status text DEFAULT 'pending'::text,
@@ -12746,13 +12729,14 @@ CREATE TABLE public.bodyshop_repair_cards (
     CONSTRAINT bodyshop_repair_cards_portal_check CHECK (((portal IS NULL) OR (portal = ANY (ARRAY['EV'::text, 'PV'::text])))),
     CONSTRAINT bodyshop_repair_cards_qc_pass_fields_check CHECK ((((qc_status = 'pass'::text) AND (qc_passed_by IS NOT NULL) AND (qc_passed_at IS NOT NULL)) OR (qc_status <> 'pass'::text))),
     CONSTRAINT bodyshop_repair_cards_qc_status_check CHECK ((qc_status = ANY (ARRAY['pending'::text, 'pass'::text, 'fail'::text]))),
-    CONSTRAINT bodyshop_repair_cards_reinspection_type_check CHECK ((reinspection_type = ANY (ARRAY['team_member'::text, 'surveyor'::text]))),
+    CONSTRAINT bodyshop_repair_cards_reinspection_status_check CHECK ((reinspection_status = ANY (ARRAY['pending'::text, 'completed'::text]))),
+    CONSTRAINT bodyshop_repair_cards_reinspection_type_check CHECK (((reinspection_type IS NULL) OR (reinspection_type = ANY (ARRAY['floor_incharge'::text, 'surveyor'::text, 'other'::text])))),
     CONSTRAINT bodyshop_repair_cards_survey_status_check CHECK ((survey_status = ANY (ARRAY['pending'::text, 'hold'::text, 'approved'::text])))
 );
 
 
 --
--- TOC entry 9465 (class 0 OID 0)
+-- TOC entry 9464 (class 0 OID 0)
 -- Dependencies: 502
 -- Name: COLUMN bodyshop_repair_cards.reception_entry_id; Type: COMMENT; Schema: public; Owner: -
 --
@@ -12761,7 +12745,7 @@ COMMENT ON COLUMN public.bodyshop_repair_cards.reception_entry_id IS 'Canonical 
 
 
 --
--- TOC entry 9466 (class 0 OID 0)
+-- TOC entry 9465 (class 0 OID 0)
 -- Dependencies: 502
 -- Name: COLUMN bodyshop_repair_cards.customer_group_wa_sent_at; Type: COMMENT; Schema: public; Owner: -
 --
@@ -12770,7 +12754,7 @@ COMMENT ON COLUMN public.bodyshop_repair_cards.customer_group_wa_sent_at IS 'Tim
 
 
 --
--- TOC entry 9467 (class 0 OID 0)
+-- TOC entry 9466 (class 0 OID 0)
 -- Dependencies: 502
 -- Name: COLUMN bodyshop_repair_cards.customer_group_wa_sent_by; Type: COMMENT; Schema: public; Owner: -
 --
@@ -12793,7 +12777,7 @@ CREATE SEQUENCE public.bodyshop_repair_cards_id_seq
 
 
 --
--- TOC entry 9469 (class 0 OID 0)
+-- TOC entry 9468 (class 0 OID 0)
 -- Dependencies: 501
 -- Name: bodyshop_repair_cards_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
 --
@@ -12802,7 +12786,7 @@ ALTER SEQUENCE public.bodyshop_repair_cards_id_seq OWNED BY public.bodyshop_repa
 
 
 --
--- TOC entry 600 (class 1259 OID 34062)
+-- TOC entry 598 (class 1259 OID 34062)
 -- Name: bodyshop_role_earning_settings; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -13205,7 +13189,7 @@ CREATE TABLE public.complaint_notifications (
 
 
 --
--- TOC entry 9487 (class 0 OID 0)
+-- TOC entry 9486 (class 0 OID 0)
 -- Dependencies: 541
 -- Name: TABLE complaint_notifications; Type: COMMENT; Schema: public; Owner: -
 --
@@ -13329,7 +13313,7 @@ ALTER TABLE public.complaint_tickets ALTER COLUMN id ADD GENERATED ALWAYS AS IDE
 
 
 --
--- TOC entry 580 (class 1259 OID 32387)
+-- TOC entry 579 (class 1259 OID 32387)
 -- Name: cre_incentive_settings; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -13369,7 +13353,7 @@ CREATE SEQUENCE public.dealer_settings_id_seq
 
 
 --
--- TOC entry 9496 (class 0 OID 0)
+-- TOC entry 9495 (class 0 OID 0)
 -- Dependencies: 565
 -- Name: dealer_settings_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
 --
@@ -13402,7 +13386,7 @@ CREATE TABLE public.documents (
 
 
 --
--- TOC entry 9498 (class 0 OID 0)
+-- TOC entry 9497 (class 0 OID 0)
 -- Dependencies: 432
 -- Name: TABLE documents; Type: COMMENT; Schema: public; Owner: -
 --
@@ -13411,7 +13395,7 @@ COMMENT ON TABLE public.documents IS 'Supporting documents attached to a job car
 
 
 --
--- TOC entry 9499 (class 0 OID 0)
+-- TOC entry 9498 (class 0 OID 0)
 -- Dependencies: 432
 -- Name: COLUMN documents.storage_path; Type: COMMENT; Schema: public; Owner: -
 --
@@ -13420,7 +13404,7 @@ COMMENT ON COLUMN public.documents.storage_path IS 'Supabase Storage object path
 
 
 --
--- TOC entry 9500 (class 0 OID 0)
+-- TOC entry 9499 (class 0 OID 0)
 -- Dependencies: 432
 -- Name: COLUMN documents.gps_lat; Type: COMMENT; Schema: public; Owner: -
 --
@@ -13429,7 +13413,7 @@ COMMENT ON COLUMN public.documents.gps_lat IS 'Latitude captured when document p
 
 
 --
--- TOC entry 9501 (class 0 OID 0)
+-- TOC entry 9500 (class 0 OID 0)
 -- Dependencies: 432
 -- Name: COLUMN documents.gps_lng; Type: COMMENT; Schema: public; Owner: -
 --
@@ -13438,7 +13422,7 @@ COMMENT ON COLUMN public.documents.gps_lng IS 'Longitude captured when document 
 
 
 --
--- TOC entry 9502 (class 0 OID 0)
+-- TOC entry 9501 (class 0 OID 0)
 -- Dependencies: 432
 -- Name: COLUMN documents.gps_city; Type: COMMENT; Schema: public; Owner: -
 --
@@ -13447,7 +13431,7 @@ COMMENT ON COLUMN public.documents.gps_city IS 'City name resolved from GPS coor
 
 
 --
--- TOC entry 9503 (class 0 OID 0)
+-- TOC entry 9502 (class 0 OID 0)
 -- Dependencies: 432
 -- Name: COLUMN documents.captured_at; Type: COMMENT; Schema: public; Owner: -
 --
@@ -13473,7 +13457,7 @@ CREATE TABLE public.email_logs (
 
 
 --
--- TOC entry 9505 (class 0 OID 0)
+-- TOC entry 9504 (class 0 OID 0)
 -- Dependencies: 441
 -- Name: TABLE email_logs; Type: COMMENT; Schema: public; Owner: -
 --
@@ -13504,7 +13488,7 @@ CREATE TABLE public.employee_master (
 
 
 --
--- TOC entry 9507 (class 0 OID 0)
+-- TOC entry 9506 (class 0 OID 0)
 -- Dependencies: 411
 -- Name: COLUMN employee_master.fuel_type; Type: COMMENT; Schema: public; Owner: -
 --
@@ -13513,7 +13497,7 @@ COMMENT ON COLUMN public.employee_master.fuel_type IS 'Fuel type for the service
 
 
 --
--- TOC entry 9508 (class 0 OID 0)
+-- TOC entry 9507 (class 0 OID 0)
 -- Dependencies: 411
 -- Name: COLUMN employee_master.role; Type: COMMENT; Schema: public; Owner: -
 --
@@ -13522,7 +13506,7 @@ COMMENT ON COLUMN public.employee_master.role IS 'Role label for employee assign
 
 
 --
--- TOC entry 9509 (class 0 OID 0)
+-- TOC entry 9508 (class 0 OID 0)
 -- Dependencies: 411
 -- Name: COLUMN employee_master.bank_name; Type: COMMENT; Schema: public; Owner: -
 --
@@ -13531,7 +13515,7 @@ COMMENT ON COLUMN public.employee_master.bank_name IS 'Bank name for employee pa
 
 
 --
--- TOC entry 9510 (class 0 OID 0)
+-- TOC entry 9509 (class 0 OID 0)
 -- Dependencies: 411
 -- Name: COLUMN employee_master.account_number; Type: COMMENT; Schema: public; Owner: -
 --
@@ -13540,7 +13524,7 @@ COMMENT ON COLUMN public.employee_master.account_number IS 'Bank account number 
 
 
 --
--- TOC entry 9511 (class 0 OID 0)
+-- TOC entry 9510 (class 0 OID 0)
 -- Dependencies: 411
 -- Name: COLUMN employee_master.ifsc; Type: COMMENT; Schema: public; Owner: -
 --
@@ -13600,7 +13584,7 @@ CREATE TABLE public.estimate_rows (
 
 
 --
--- TOC entry 9514 (class 0 OID 0)
+-- TOC entry 9513 (class 0 OID 0)
 -- Dependencies: 431
 -- Name: TABLE estimate_rows; Type: COMMENT; Schema: public; Owner: -
 --
@@ -13609,7 +13593,7 @@ COMMENT ON TABLE public.estimate_rows IS 'Line-item cost estimate rows for a job
 
 
 --
--- TOC entry 9515 (class 0 OID 0)
+-- TOC entry 9514 (class 0 OID 0)
 -- Dependencies: 431
 -- Name: COLUMN estimate_rows.ndp_value; Type: COMMENT; Schema: public; Owner: -
 --
@@ -13618,7 +13602,7 @@ COMMENT ON COLUMN public.estimate_rows.ndp_value IS 'Net Dealer Price per unit f
 
 
 --
--- TOC entry 9516 (class 0 OID 0)
+-- TOC entry 9515 (class 0 OID 0)
 -- Dependencies: 431
 -- Name: COLUMN estimate_rows.no_off; Type: COMMENT; Schema: public; Owner: -
 --
@@ -13627,7 +13611,7 @@ COMMENT ON COLUMN public.estimate_rows.no_off IS 'Number of operations (labour m
 
 
 --
--- TOC entry 9517 (class 0 OID 0)
+-- TOC entry 9516 (class 0 OID 0)
 -- Dependencies: 431
 -- Name: COLUMN estimate_rows.row_total; Type: COMMENT; Schema: public; Owner: -
 --
@@ -13697,7 +13681,7 @@ CREATE SEQUENCE public.ew_pricelist_id_seq
 
 
 --
--- TOC entry 9521 (class 0 OID 0)
+-- TOC entry 9520 (class 0 OID 0)
 -- Dependencies: 508
 -- Name: ew_pricelist_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
 --
@@ -13706,7 +13690,7 @@ ALTER SEQUENCE public.ew_pricelist_id_seq OWNED BY public.ew_pricelist.id;
 
 
 --
--- TOC entry 597 (class 1259 OID 33950)
+-- TOC entry 595 (class 1259 OID 33950)
 -- Name: ew_renewal_reminders; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -13735,8 +13719,8 @@ CREATE TABLE public.ew_renewal_reminders (
 
 
 --
--- TOC entry 9523 (class 0 OID 0)
--- Dependencies: 597
+-- TOC entry 9522 (class 0 OID 0)
+-- Dependencies: 595
 -- Name: TABLE ew_renewal_reminders; Type: COMMENT; Schema: public; Owner: -
 --
 
@@ -13744,8 +13728,8 @@ COMMENT ON TABLE public.ew_renewal_reminders IS 'Tracks automated WhatsApp Exten
 
 
 --
--- TOC entry 9524 (class 0 OID 0)
--- Dependencies: 597
+-- TOC entry 9523 (class 0 OID 0)
+-- Dependencies: 595
 -- Name: COLUMN ew_renewal_reminders.responded_at; Type: COMMENT; Schema: public; Owner: -
 --
 
@@ -13753,8 +13737,8 @@ COMMENT ON COLUMN public.ew_renewal_reminders.responded_at IS 'Set when the cust
 
 
 --
--- TOC entry 9525 (class 0 OID 0)
--- Dependencies: 597
+-- TOC entry 9524 (class 0 OID 0)
+-- Dependencies: 595
 -- Name: COLUMN ew_renewal_reminders.customer_response; Type: COMMENT; Schema: public; Owner: -
 --
 
@@ -13762,7 +13746,7 @@ COMMENT ON COLUMN public.ew_renewal_reminders.customer_response IS 'The button t
 
 
 --
--- TOC entry 596 (class 1259 OID 33949)
+-- TOC entry 594 (class 1259 OID 33949)
 -- Name: ew_renewal_reminders_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
@@ -13775,8 +13759,8 @@ CREATE SEQUENCE public.ew_renewal_reminders_id_seq
 
 
 --
--- TOC entry 9527 (class 0 OID 0)
--- Dependencies: 596
+-- TOC entry 9526 (class 0 OID 0)
+-- Dependencies: 594
 -- Name: ew_renewal_reminders_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
 --
 
@@ -13784,7 +13768,7 @@ ALTER SEQUENCE public.ew_renewal_reminders_id_seq OWNED BY public.ew_renewal_rem
 
 
 --
--- TOC entry 599 (class 1259 OID 33990)
+-- TOC entry 597 (class 1259 OID 33990)
 -- Name: ew_service_reminders; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -13813,8 +13797,8 @@ CREATE TABLE public.ew_service_reminders (
 
 
 --
--- TOC entry 9529 (class 0 OID 0)
--- Dependencies: 599
+-- TOC entry 9528 (class 0 OID 0)
+-- Dependencies: 597
 -- Name: TABLE ew_service_reminders; Type: COMMENT; Schema: public; Owner: -
 --
 
@@ -13822,8 +13806,8 @@ COMMENT ON TABLE public.ew_service_reminders IS 'Tracks automated WhatsApp Exten
 
 
 --
--- TOC entry 9530 (class 0 OID 0)
--- Dependencies: 599
+-- TOC entry 9529 (class 0 OID 0)
+-- Dependencies: 597
 -- Name: COLUMN ew_service_reminders.flow_response_id; Type: COMMENT; Schema: public; Owner: -
 --
 
@@ -13831,7 +13815,7 @@ COMMENT ON COLUMN public.ew_service_reminders.flow_response_id IS 'wa_message_id
 
 
 --
--- TOC entry 598 (class 1259 OID 33989)
+-- TOC entry 596 (class 1259 OID 33989)
 -- Name: ew_service_reminders_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
@@ -13844,8 +13828,8 @@ CREATE SEQUENCE public.ew_service_reminders_id_seq
 
 
 --
--- TOC entry 9532 (class 0 OID 0)
--- Dependencies: 598
+-- TOC entry 9531 (class 0 OID 0)
+-- Dependencies: 596
 -- Name: ew_service_reminders_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
 --
 
@@ -13935,7 +13919,7 @@ CREATE TABLE public.income_role_scope (
 
 
 --
--- TOC entry 9538 (class 0 OID 0)
+-- TOC entry 9537 (class 0 OID 0)
 -- Dependencies: 542
 -- Name: TABLE income_role_scope; Type: COMMENT; Schema: public; Owner: -
 --
@@ -13944,7 +13928,7 @@ COMMENT ON TABLE public.income_role_scope IS 'Income eligibility matrix by modul
 
 
 --
--- TOC entry 9539 (class 0 OID 0)
+-- TOC entry 9538 (class 0 OID 0)
 -- Dependencies: 542
 -- Name: COLUMN income_role_scope.module_key; Type: COMMENT; Schema: public; Owner: -
 --
@@ -13953,7 +13937,7 @@ COMMENT ON COLUMN public.income_role_scope.module_key IS 'Logical income module 
 
 
 --
--- TOC entry 9540 (class 0 OID 0)
+-- TOC entry 9539 (class 0 OID 0)
 -- Dependencies: 542
 -- Name: COLUMN income_role_scope.assignment_source; Type: COMMENT; Schema: public; Owner: -
 --
@@ -13962,7 +13946,7 @@ COMMENT ON COLUMN public.income_role_scope.assignment_source IS 'Assignment sour
 
 
 --
--- TOC entry 9541 (class 0 OID 0)
+-- TOC entry 9540 (class 0 OID 0)
 -- Dependencies: 542
 -- Name: COLUMN income_role_scope.employee_role; Type: COMMENT; Schema: public; Owner: -
 --
@@ -13985,7 +13969,7 @@ CREATE TABLE public.integration_sync_state (
 
 
 --
--- TOC entry 9543 (class 0 OID 0)
+-- TOC entry 9542 (class 0 OID 0)
 -- Dependencies: 570
 -- Name: TABLE integration_sync_state; Type: COMMENT; Schema: public; Owner: -
 --
@@ -13994,7 +13978,7 @@ COMMENT ON TABLE public.integration_sync_state IS 'Watermark state for external/
 
 
 --
--- TOC entry 9544 (class 0 OID 0)
+-- TOC entry 9543 (class 0 OID 0)
 -- Dependencies: 570
 -- Name: COLUMN integration_sync_state.sync_name; Type: COMMENT; Schema: public; Owner: -
 --
@@ -14003,7 +13987,7 @@ COMMENT ON COLUMN public.integration_sync_state.sync_name IS 'Stable unique sync
 
 
 --
--- TOC entry 9545 (class 0 OID 0)
+-- TOC entry 9544 (class 0 OID 0)
 -- Dependencies: 570
 -- Name: COLUMN integration_sync_state.last_source_cursor_id; Type: COMMENT; Schema: public; Owner: -
 --
@@ -14069,7 +14053,7 @@ CREATE TABLE public.job_card_closed_data (
 
 
 --
--- TOC entry 9548 (class 0 OID 0)
+-- TOC entry 9547 (class 0 OID 0)
 -- Dependencies: 409
 -- Name: COLUMN job_card_closed_data.kms_run; Type: COMMENT; Schema: public; Owner: -
 --
@@ -14078,7 +14062,7 @@ COMMENT ON COLUMN public.job_card_closed_data.kms_run IS 'Current odometer readi
 
 
 --
--- TOC entry 9549 (class 0 OID 0)
+-- TOC entry 9548 (class 0 OID 0)
 -- Dependencies: 409
 -- Name: COLUMN job_card_closed_data.last_service_km; Type: COMMENT; Schema: public; Owner: -
 --
@@ -14087,7 +14071,7 @@ COMMENT ON COLUMN public.job_card_closed_data.last_service_km IS 'Odometer at pr
 
 
 --
--- TOC entry 9550 (class 0 OID 0)
+-- TOC entry 9549 (class 0 OID 0)
 -- Dependencies: 409
 -- Name: COLUMN job_card_closed_data.last_service_date; Type: COMMENT; Schema: public; Owner: -
 --
@@ -14096,7 +14080,7 @@ COMMENT ON COLUMN public.job_card_closed_data.last_service_date IS 'Date of prev
 
 
 --
--- TOC entry 9551 (class 0 OID 0)
+-- TOC entry 9550 (class 0 OID 0)
 -- Dependencies: 409
 -- Name: COLUMN job_card_closed_data.lubs_revenue; Type: COMMENT; Schema: public; Owner: -
 --
@@ -14105,7 +14089,7 @@ COMMENT ON COLUMN public.job_card_closed_data.lubs_revenue IS 'Lubricants revenu
 
 
 --
--- TOC entry 9552 (class 0 OID 0)
+-- TOC entry 9551 (class 0 OID 0)
 -- Dependencies: 409
 -- Name: COLUMN job_card_closed_data.dms_final_labour_amount; Type: COMMENT; Schema: public; Owner: -
 --
@@ -14114,7 +14098,7 @@ COMMENT ON COLUMN public.job_card_closed_data.dms_final_labour_amount IS 'Mirror
 
 
 --
--- TOC entry 9553 (class 0 OID 0)
+-- TOC entry 9552 (class 0 OID 0)
 -- Dependencies: 409
 -- Name: COLUMN job_card_closed_data.dms_total_invoice_amount; Type: COMMENT; Schema: public; Owner: -
 --
@@ -14200,7 +14184,7 @@ CREATE TABLE public.job_cards (
 
 
 --
--- TOC entry 9557 (class 0 OID 0)
+-- TOC entry 9556 (class 0 OID 0)
 -- Dependencies: 428
 -- Name: TABLE job_cards; Type: COMMENT; Schema: public; Owner: -
 --
@@ -14209,7 +14193,7 @@ COMMENT ON TABLE public.job_cards IS 'One row per warranty repair job card raise
 
 
 --
--- TOC entry 9558 (class 0 OID 0)
+-- TOC entry 9557 (class 0 OID 0)
 -- Dependencies: 428
 -- Name: COLUMN job_cards.jc_number; Type: COMMENT; Schema: public; Owner: -
 --
@@ -14218,7 +14202,7 @@ COMMENT ON COLUMN public.job_cards.jc_number IS 'Human-readable job card referen
 
 
 --
--- TOC entry 9559 (class 0 OID 0)
+-- TOC entry 9558 (class 0 OID 0)
 -- Dependencies: 428
 -- Name: COLUMN job_cards.claim_type; Type: COMMENT; Schema: public; Owner: -
 --
@@ -14252,7 +14236,7 @@ CREATE TABLE public.panel_photos (
 
 
 --
--- TOC entry 9561 (class 0 OID 0)
+-- TOC entry 9560 (class 0 OID 0)
 -- Dependencies: 430
 -- Name: TABLE panel_photos; Type: COMMENT; Schema: public; Owner: -
 --
@@ -14261,7 +14245,7 @@ COMMENT ON TABLE public.panel_photos IS 'Before/during/after photos for each pan
 
 
 --
--- TOC entry 9562 (class 0 OID 0)
+-- TOC entry 9561 (class 0 OID 0)
 -- Dependencies: 430
 -- Name: COLUMN panel_photos.job_card_id; Type: COMMENT; Schema: public; Owner: -
 --
@@ -14270,7 +14254,7 @@ COMMENT ON COLUMN public.panel_photos.job_card_id IS 'Denormalised FK for effici
 
 
 --
--- TOC entry 9563 (class 0 OID 0)
+-- TOC entry 9562 (class 0 OID 0)
 -- Dependencies: 430
 -- Name: COLUMN panel_photos.storage_path; Type: COMMENT; Schema: public; Owner: -
 --
@@ -14279,7 +14263,7 @@ COMMENT ON COLUMN public.panel_photos.storage_path IS 'Supabase Storage object p
 
 
 --
--- TOC entry 9564 (class 0 OID 0)
+-- TOC entry 9563 (class 0 OID 0)
 -- Dependencies: 430
 -- Name: COLUMN panel_photos.repair_stage; Type: COMMENT; Schema: public; Owner: -
 --
@@ -14303,7 +14287,7 @@ CREATE TABLE public.panels (
 
 
 --
--- TOC entry 9566 (class 0 OID 0)
+-- TOC entry 9565 (class 0 OID 0)
 -- Dependencies: 429
 -- Name: TABLE panels; Type: COMMENT; Schema: public; Owner: -
 --
@@ -14336,7 +14320,7 @@ CREATE TABLE public.vehicles (
 
 
 --
--- TOC entry 9568 (class 0 OID 0)
+-- TOC entry 9567 (class 0 OID 0)
 -- Dependencies: 427
 -- Name: TABLE vehicles; Type: COMMENT; Schema: public; Owner: -
 --
@@ -14345,7 +14329,7 @@ COMMENT ON TABLE public.vehicles IS 'Master vehicle registry — one row per reg
 
 
 --
--- TOC entry 9569 (class 0 OID 0)
+-- TOC entry 9568 (class 0 OID 0)
 -- Dependencies: 427
 -- Name: COLUMN vehicles.paint_type; Type: COMMENT; Schema: public; Owner: -
 --
@@ -14354,7 +14338,7 @@ COMMENT ON COLUMN public.vehicles.paint_type IS 'Solid / Metallic / Pearl / Matt
 
 
 --
--- TOC entry 9570 (class 0 OID 0)
+-- TOC entry 9569 (class 0 OID 0)
 -- Dependencies: 427
 -- Name: COLUMN vehicles.bp_city_category; Type: COMMENT; Schema: public; Owner: -
 --
@@ -14457,7 +14441,7 @@ CREATE TABLE public.job_card_support_assignments (
 
 
 --
--- TOC entry 9573 (class 0 OID 0)
+-- TOC entry 9572 (class 0 OID 0)
 -- Dependencies: 489
 -- Name: TABLE job_card_support_assignments; Type: COMMENT; Schema: public; Owner: -
 --
@@ -14466,7 +14450,7 @@ COMMENT ON TABLE public.job_card_support_assignments IS 'Stores multiple active 
 
 
 --
--- TOC entry 9574 (class 0 OID 0)
+-- TOC entry 9573 (class 0 OID 0)
 -- Dependencies: 489
 -- Name: COLUMN job_card_support_assignments.support_role; Type: COMMENT; Schema: public; Owner: -
 --
@@ -14475,7 +14459,7 @@ COMMENT ON COLUMN public.job_card_support_assignments.support_role IS 'Support r
 
 
 --
--- TOC entry 9575 (class 0 OID 0)
+-- TOC entry 9574 (class 0 OID 0)
 -- Dependencies: 489
 -- Name: COLUMN job_card_support_assignments.is_active; Type: COMMENT; Schema: public; Owner: -
 --
@@ -14532,7 +14516,7 @@ CREATE SEQUENCE public.modules_id_seq
 
 
 --
--- TOC entry 9579 (class 0 OID 0)
+-- TOC entry 9578 (class 0 OID 0)
 -- Dependencies: 423
 -- Name: modules_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
 --
@@ -14568,7 +14552,7 @@ CREATE SEQUENCE public.nav_groups_id_seq
 
 
 --
--- TOC entry 9582 (class 0 OID 0)
+-- TOC entry 9581 (class 0 OID 0)
 -- Dependencies: 513
 -- Name: nav_groups_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
 --
@@ -14727,7 +14711,7 @@ CREATE TABLE public.part_master (
 
 
 --
--- TOC entry 594 (class 1259 OID 33635)
+-- TOC entry 592 (class 1259 OID 33635)
 -- Name: parts_requests; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -14761,8 +14745,8 @@ CREATE TABLE public.parts_requests (
 
 
 --
--- TOC entry 9589 (class 0 OID 0)
--- Dependencies: 594
+-- TOC entry 9588 (class 0 OID 0)
+-- Dependencies: 592
 -- Name: TABLE parts_requests; Type: COMMENT; Schema: public; Owner: -
 --
 
@@ -14770,8 +14754,8 @@ COMMENT ON TABLE public.parts_requests IS 'Parts Requirement requests raised by 
 
 
 --
--- TOC entry 9590 (class 0 OID 0)
--- Dependencies: 594
+-- TOC entry 9589 (class 0 OID 0)
+-- Dependencies: 592
 -- Name: COLUMN parts_requests.parts_qty; Type: COMMENT; Schema: public; Owner: -
 --
 
@@ -14779,7 +14763,7 @@ COMMENT ON COLUMN public.parts_requests.parts_qty IS 'Auto-computed available st
 
 
 --
--- TOC entry 593 (class 1259 OID 33634)
+-- TOC entry 591 (class 1259 OID 33634)
 -- Name: parts_requests_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
@@ -14792,8 +14776,8 @@ CREATE SEQUENCE public.parts_requests_id_seq
 
 
 --
--- TOC entry 9592 (class 0 OID 0)
--- Dependencies: 593
+-- TOC entry 9591 (class 0 OID 0)
+-- Dependencies: 591
 -- Name: parts_requests_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
 --
 
@@ -14824,7 +14808,7 @@ CREATE TABLE public.pending_drive_uploads (
 
 
 --
--- TOC entry 582 (class 1259 OID 32469)
+-- TOC entry 581 (class 1259 OID 32469)
 -- Name: post_service_feedback_messages; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -14859,8 +14843,8 @@ CREATE TABLE public.post_service_feedback_messages (
 
 
 --
--- TOC entry 9595 (class 0 OID 0)
--- Dependencies: 582
+-- TOC entry 9594 (class 0 OID 0)
+-- Dependencies: 581
 -- Name: TABLE post_service_feedback_messages; Type: COMMENT; Schema: public; Owner: -
 --
 
@@ -14868,8 +14852,8 @@ COMMENT ON TABLE public.post_service_feedback_messages IS 'Tracks automated What
 
 
 --
--- TOC entry 9596 (class 0 OID 0)
--- Dependencies: 582
+-- TOC entry 9595 (class 0 OID 0)
+-- Dependencies: 581
 -- Name: COLUMN post_service_feedback_messages.cre_status; Type: COMMENT; Schema: public; Owner: -
 --
 
@@ -14877,8 +14861,8 @@ COMMENT ON COLUMN public.post_service_feedback_messages.cre_status IS 'CRE follo
 
 
 --
--- TOC entry 9597 (class 0 OID 0)
--- Dependencies: 582
+-- TOC entry 9596 (class 0 OID 0)
+-- Dependencies: 581
 -- Name: COLUMN post_service_feedback_messages.resolved_by_id; Type: COMMENT; Schema: public; Owner: -
 --
 
@@ -14886,7 +14870,7 @@ COMMENT ON COLUMN public.post_service_feedback_messages.resolved_by_id IS 'auth.
 
 
 --
--- TOC entry 586 (class 1259 OID 32611)
+-- TOC entry 584 (class 1259 OID 32611)
 -- Name: post_service_feedback_cre_queue; Type: VIEW; Schema: public; Owner: -
 --
 
@@ -14915,8 +14899,8 @@ CREATE VIEW public.post_service_feedback_cre_queue AS
 
 
 --
--- TOC entry 9599 (class 0 OID 0)
--- Dependencies: 586
+-- TOC entry 9598 (class 0 OID 0)
+-- Dependencies: 584
 -- Name: VIEW post_service_feedback_cre_queue; Type: COMMENT; Schema: public; Owner: -
 --
 
@@ -14924,7 +14908,7 @@ COMMENT ON VIEW public.post_service_feedback_cre_queue IS 'All responded post-se
 
 
 --
--- TOC entry 581 (class 1259 OID 32468)
+-- TOC entry 580 (class 1259 OID 32468)
 -- Name: post_service_feedback_messages_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
@@ -14937,8 +14921,8 @@ CREATE SEQUENCE public.post_service_feedback_messages_id_seq
 
 
 --
--- TOC entry 9601 (class 0 OID 0)
--- Dependencies: 581
+-- TOC entry 9600 (class 0 OID 0)
+-- Dependencies: 580
 -- Name: post_service_feedback_messages_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
 --
 
@@ -14946,7 +14930,7 @@ ALTER SEQUENCE public.post_service_feedback_messages_id_seq OWNED BY public.post
 
 
 --
--- TOC entry 585 (class 1259 OID 32595)
+-- TOC entry 583 (class 1259 OID 32595)
 -- Name: post_service_feedback_remarks; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -14962,8 +14946,8 @@ CREATE TABLE public.post_service_feedback_remarks (
 
 
 --
--- TOC entry 9603 (class 0 OID 0)
--- Dependencies: 585
+-- TOC entry 9602 (class 0 OID 0)
+-- Dependencies: 583
 -- Name: TABLE post_service_feedback_remarks; Type: COMMENT; Schema: public; Owner: -
 --
 
@@ -14971,7 +14955,7 @@ COMMENT ON TABLE public.post_service_feedback_remarks IS 'Append-only call-log /
 
 
 --
--- TOC entry 584 (class 1259 OID 32594)
+-- TOC entry 582 (class 1259 OID 32594)
 -- Name: post_service_feedback_remarks_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
@@ -14984,8 +14968,8 @@ CREATE SEQUENCE public.post_service_feedback_remarks_id_seq
 
 
 --
--- TOC entry 9605 (class 0 OID 0)
--- Dependencies: 584
+-- TOC entry 9604 (class 0 OID 0)
+-- Dependencies: 582
 -- Name: post_service_feedback_remarks_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
 --
 
@@ -15089,7 +15073,7 @@ ALTER TABLE public.psf_import_staging ALTER COLUMN id ADD GENERATED ALWAYS AS ID
 
 
 --
--- TOC entry 590 (class 1259 OID 33067)
+-- TOC entry 588 (class 1259 OID 33067)
 -- Name: psf_revenue_dms; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -15154,7 +15138,7 @@ CREATE TABLE public.psf_revenue_dms (
 
 
 --
--- TOC entry 591 (class 1259 OID 33200)
+-- TOC entry 589 (class 1259 OID 33200)
 -- Name: psf_revenue_dms_backfill_progress; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -15170,7 +15154,7 @@ CREATE TABLE public.psf_revenue_dms_backfill_progress (
 
 
 --
--- TOC entry 589 (class 1259 OID 33066)
+-- TOC entry 587 (class 1259 OID 33066)
 -- Name: psf_revenue_dms_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
@@ -15181,6 +15165,24 @@ ALTER TABLE public.psf_revenue_dms ALTER COLUMN id ADD GENERATED ALWAYS AS IDENT
     NO MINVALUE
     NO MAXVALUE
     CACHE 1
+);
+
+
+--
+-- TOC entry 563 (class 1259 OID 28727)
+-- Name: pv_service_history_test; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.pv_service_history_test (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    chassis_no text,
+    registration_no text,
+    odometer_reading text,
+    serviced_at_dealer text,
+    sr_type text,
+    service_date_time timestamp without time zone,
+    contact_full_name text,
+    created_at timestamp with time zone DEFAULT now()
 );
 
 
@@ -17587,45 +17589,7 @@ PARTITION BY RANGE (inserted_at);
 
 
 --
--- TOC entry 579 (class 1259 OID 32270)
--- Name: messages_2026_07_04; Type: TABLE; Schema: realtime; Owner: -
---
-
-CREATE TABLE realtime.messages_2026_07_04 (
-    topic text NOT NULL,
-    extension text NOT NULL,
-    payload jsonb,
-    event text,
-    private boolean DEFAULT false,
-    updated_at timestamp without time zone DEFAULT now() NOT NULL,
-    inserted_at timestamp without time zone DEFAULT now() NOT NULL,
-    id uuid DEFAULT gen_random_uuid() NOT NULL,
-    binary_payload bytea,
-    CONSTRAINT messages_payload_exclusive CHECK (((payload IS NULL) OR (binary_payload IS NULL)))
-);
-
-
---
--- TOC entry 583 (class 1259 OID 32504)
--- Name: messages_2026_07_05; Type: TABLE; Schema: realtime; Owner: -
---
-
-CREATE TABLE realtime.messages_2026_07_05 (
-    topic text NOT NULL,
-    extension text NOT NULL,
-    payload jsonb,
-    event text,
-    private boolean DEFAULT false,
-    updated_at timestamp without time zone DEFAULT now() NOT NULL,
-    inserted_at timestamp without time zone DEFAULT now() NOT NULL,
-    id uuid DEFAULT gen_random_uuid() NOT NULL,
-    binary_payload bytea,
-    CONSTRAINT messages_payload_exclusive CHECK (((payload IS NULL) OR (binary_payload IS NULL)))
-);
-
-
---
--- TOC entry 587 (class 1259 OID 32718)
+-- TOC entry 585 (class 1259 OID 32718)
 -- Name: messages_2026_07_06; Type: TABLE; Schema: realtime; Owner: -
 --
 
@@ -17644,7 +17608,7 @@ CREATE TABLE realtime.messages_2026_07_06 (
 
 
 --
--- TOC entry 588 (class 1259 OID 32919)
+-- TOC entry 586 (class 1259 OID 32919)
 -- Name: messages_2026_07_07; Type: TABLE; Schema: realtime; Owner: -
 --
 
@@ -17663,7 +17627,7 @@ CREATE TABLE realtime.messages_2026_07_07 (
 
 
 --
--- TOC entry 592 (class 1259 OID 33564)
+-- TOC entry 590 (class 1259 OID 33564)
 -- Name: messages_2026_07_08; Type: TABLE; Schema: realtime; Owner: -
 --
 
@@ -17682,7 +17646,7 @@ CREATE TABLE realtime.messages_2026_07_08 (
 
 
 --
--- TOC entry 595 (class 1259 OID 33686)
+-- TOC entry 593 (class 1259 OID 33686)
 -- Name: messages_2026_07_09; Type: TABLE; Schema: realtime; Owner: -
 --
 
@@ -17701,11 +17665,49 @@ CREATE TABLE realtime.messages_2026_07_09 (
 
 
 --
--- TOC entry 601 (class 1259 OID 34088)
+-- TOC entry 599 (class 1259 OID 34088)
 -- Name: messages_2026_07_10; Type: TABLE; Schema: realtime; Owner: -
 --
 
 CREATE TABLE realtime.messages_2026_07_10 (
+    topic text NOT NULL,
+    extension text NOT NULL,
+    payload jsonb,
+    event text,
+    private boolean DEFAULT false,
+    updated_at timestamp without time zone DEFAULT now() NOT NULL,
+    inserted_at timestamp without time zone DEFAULT now() NOT NULL,
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    binary_payload bytea,
+    CONSTRAINT messages_payload_exclusive CHECK (((payload IS NULL) OR (binary_payload IS NULL)))
+);
+
+
+--
+-- TOC entry 600 (class 1259 OID 34398)
+-- Name: messages_2026_07_11; Type: TABLE; Schema: realtime; Owner: -
+--
+
+CREATE TABLE realtime.messages_2026_07_11 (
+    topic text NOT NULL,
+    extension text NOT NULL,
+    payload jsonb,
+    event text,
+    private boolean DEFAULT false,
+    updated_at timestamp without time zone DEFAULT now() NOT NULL,
+    inserted_at timestamp without time zone DEFAULT now() NOT NULL,
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    binary_payload bytea,
+    CONSTRAINT messages_payload_exclusive CHECK (((payload IS NULL) OR (binary_payload IS NULL)))
+);
+
+
+--
+-- TOC entry 601 (class 1259 OID 34542)
+-- Name: messages_2026_07_12; Type: TABLE; Schema: realtime; Owner: -
+--
+
+CREATE TABLE realtime.messages_2026_07_12 (
     topic text NOT NULL,
     extension text NOT NULL,
     payload jsonb,
@@ -17938,22 +17940,6 @@ CREATE TABLE supabase_migrations.schema_migrations (
 
 --
 -- TOC entry 5592 (class 0 OID 0)
--- Name: messages_2026_07_04; Type: TABLE ATTACH; Schema: realtime; Owner: -
---
-
-ALTER TABLE ONLY realtime.messages ATTACH PARTITION realtime.messages_2026_07_04 FOR VALUES FROM ('2026-07-04 00:00:00') TO ('2026-07-05 00:00:00');
-
-
---
--- TOC entry 5593 (class 0 OID 0)
--- Name: messages_2026_07_05; Type: TABLE ATTACH; Schema: realtime; Owner: -
---
-
-ALTER TABLE ONLY realtime.messages ATTACH PARTITION realtime.messages_2026_07_05 FOR VALUES FROM ('2026-07-05 00:00:00') TO ('2026-07-06 00:00:00');
-
-
---
--- TOC entry 5594 (class 0 OID 0)
 -- Name: messages_2026_07_06; Type: TABLE ATTACH; Schema: realtime; Owner: -
 --
 
@@ -17961,7 +17947,7 @@ ALTER TABLE ONLY realtime.messages ATTACH PARTITION realtime.messages_2026_07_06
 
 
 --
--- TOC entry 5595 (class 0 OID 0)
+-- TOC entry 5593 (class 0 OID 0)
 -- Name: messages_2026_07_07; Type: TABLE ATTACH; Schema: realtime; Owner: -
 --
 
@@ -17969,7 +17955,7 @@ ALTER TABLE ONLY realtime.messages ATTACH PARTITION realtime.messages_2026_07_07
 
 
 --
--- TOC entry 5596 (class 0 OID 0)
+-- TOC entry 5594 (class 0 OID 0)
 -- Name: messages_2026_07_08; Type: TABLE ATTACH; Schema: realtime; Owner: -
 --
 
@@ -17977,7 +17963,7 @@ ALTER TABLE ONLY realtime.messages ATTACH PARTITION realtime.messages_2026_07_08
 
 
 --
--- TOC entry 5597 (class 0 OID 0)
+-- TOC entry 5595 (class 0 OID 0)
 -- Name: messages_2026_07_09; Type: TABLE ATTACH; Schema: realtime; Owner: -
 --
 
@@ -17985,11 +17971,27 @@ ALTER TABLE ONLY realtime.messages ATTACH PARTITION realtime.messages_2026_07_09
 
 
 --
--- TOC entry 5598 (class 0 OID 0)
+-- TOC entry 5596 (class 0 OID 0)
 -- Name: messages_2026_07_10; Type: TABLE ATTACH; Schema: realtime; Owner: -
 --
 
 ALTER TABLE ONLY realtime.messages ATTACH PARTITION realtime.messages_2026_07_10 FOR VALUES FROM ('2026-07-10 00:00:00') TO ('2026-07-11 00:00:00');
+
+
+--
+-- TOC entry 5597 (class 0 OID 0)
+-- Name: messages_2026_07_11; Type: TABLE ATTACH; Schema: realtime; Owner: -
+--
+
+ALTER TABLE ONLY realtime.messages ATTACH PARTITION realtime.messages_2026_07_11 FOR VALUES FROM ('2026-07-11 00:00:00') TO ('2026-07-12 00:00:00');
+
+
+--
+-- TOC entry 5598 (class 0 OID 0)
+-- Name: messages_2026_07_12; Type: TABLE ATTACH; Schema: realtime; Owner: -
+--
+
+ALTER TABLE ONLY realtime.messages ATTACH PARTITION realtime.messages_2026_07_12 FOR VALUES FROM ('2026-07-12 00:00:00') TO ('2026-07-13 00:00:00');
 
 
 --
@@ -18057,7 +18059,7 @@ ALTER TABLE ONLY public.ew_pricelist ALTER COLUMN id SET DEFAULT nextval('public
 
 
 --
--- TOC entry 6168 (class 2604 OID 33953)
+-- TOC entry 6160 (class 2604 OID 33953)
 -- Name: ew_renewal_reminders id; Type: DEFAULT; Schema: public; Owner: -
 --
 
@@ -18065,7 +18067,7 @@ ALTER TABLE ONLY public.ew_renewal_reminders ALTER COLUMN id SET DEFAULT nextval
 
 
 --
--- TOC entry 6172 (class 2604 OID 33993)
+-- TOC entry 6164 (class 2604 OID 33993)
 -- Name: ew_service_reminders id; Type: DEFAULT; Schema: public; Owner: -
 --
 
@@ -18089,7 +18091,7 @@ ALTER TABLE ONLY public.nav_groups ALTER COLUMN id SET DEFAULT nextval('public.n
 
 
 --
--- TOC entry 6157 (class 2604 OID 33638)
+-- TOC entry 6149 (class 2604 OID 33638)
 -- Name: parts_requests id; Type: DEFAULT; Schema: public; Owner: -
 --
 
@@ -18097,7 +18099,7 @@ ALTER TABLE ONLY public.parts_requests ALTER COLUMN id SET DEFAULT nextval('publ
 
 
 --
--- TOC entry 6125 (class 2604 OID 32472)
+-- TOC entry 6121 (class 2604 OID 32472)
 -- Name: post_service_feedback_messages id; Type: DEFAULT; Schema: public; Owner: -
 --
 
@@ -18105,7 +18107,7 @@ ALTER TABLE ONLY public.post_service_feedback_messages ALTER COLUMN id SET DEFAU
 
 
 --
--- TOC entry 6135 (class 2604 OID 32598)
+-- TOC entry 6127 (class 2604 OID 32598)
 -- Name: post_service_feedback_remarks id; Type: DEFAULT; Schema: public; Owner: -
 --
 
@@ -18556,10 +18558,10 @@ ALTER TABLE ONLY public.ev_service_history_test
 
 --
 -- TOC entry 7007 (class 2606 OID 28735)
--- Name: PV_service_history_test PV_service_history_test_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+-- Name: pv_service_history_test PV_service_history_test_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
-ALTER TABLE ONLY public."PV_service_history_test"
+ALTER TABLE ONLY public.pv_service_history_test
     ADD CONSTRAINT "PV_service_history_test_pkey" PRIMARY KEY (id);
 
 
@@ -18708,7 +18710,7 @@ ALTER TABLE ONLY public.bodyshop_repair_cards
 
 
 --
--- TOC entry 7106 (class 2606 OID 34070)
+-- TOC entry 7100 (class 2606 OID 34070)
 -- Name: bodyshop_role_earning_settings bodyshop_role_earning_settings_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -18906,7 +18908,7 @@ ALTER TABLE ONLY public.complaint_tickets
 
 
 --
--- TOC entry 7042 (class 2606 OID 32393)
+-- TOC entry 7039 (class 2606 OID 32393)
 -- Name: cre_incentive_settings cre_incentive_settings_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -18996,7 +18998,7 @@ ALTER TABLE ONLY public.ew_pricelist
 
 
 --
--- TOC entry 7088 (class 2606 OID 33962)
+-- TOC entry 7082 (class 2606 OID 33962)
 -- Name: ew_renewal_reminders ew_renewal_reminders_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -19005,7 +19007,7 @@ ALTER TABLE ONLY public.ew_renewal_reminders
 
 
 --
--- TOC entry 7097 (class 2606 OID 34002)
+-- TOC entry 7091 (class 2606 OID 34002)
 -- Name: ew_service_reminders ew_service_reminders_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -19194,7 +19196,7 @@ ALTER TABLE ONLY public.part_master
 
 
 --
--- TOC entry 7083 (class 2606 OID 33649)
+-- TOC entry 7077 (class 2606 OID 33649)
 -- Name: parts_requests parts_requests_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -19212,7 +19214,7 @@ ALTER TABLE ONLY public.pending_drive_uploads
 
 
 --
--- TOC entry 7050 (class 2606 OID 32482)
+-- TOC entry 7047 (class 2606 OID 32482)
 -- Name: post_service_feedback_messages post_service_feedback_messages_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -19221,7 +19223,7 @@ ALTER TABLE ONLY public.post_service_feedback_messages
 
 
 --
--- TOC entry 7058 (class 2606 OID 32604)
+-- TOC entry 7052 (class 2606 OID 32604)
 -- Name: post_service_feedback_remarks post_service_feedback_remarks_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -19248,7 +19250,7 @@ ALTER TABLE ONLY public.psf_import_staging
 
 
 --
--- TOC entry 7073 (class 2606 OID 33210)
+-- TOC entry 7067 (class 2606 OID 33210)
 -- Name: psf_revenue_dms_backfill_progress psf_revenue_dms_backfill_progress_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -19257,7 +19259,7 @@ ALTER TABLE ONLY public.psf_revenue_dms_backfill_progress
 
 
 --
--- TOC entry 7070 (class 2606 OID 33076)
+-- TOC entry 7064 (class 2606 OID 33076)
 -- Name: psf_revenue_dms psf_revenue_dms_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -19500,7 +19502,7 @@ ALTER TABLE ONLY public.autodoc_rate_rows
 
 
 --
--- TOC entry 7095 (class 2606 OID 33964)
+-- TOC entry 7089 (class 2606 OID 33964)
 -- Name: ew_renewal_reminders uq_err_vehicle_date_type; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -19509,7 +19511,7 @@ ALTER TABLE ONLY public.ew_renewal_reminders
 
 
 --
--- TOC entry 7104 (class 2606 OID 34004)
+-- TOC entry 7098 (class 2606 OID 34004)
 -- Name: ew_service_reminders uq_esr_vehicle_date_type; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -19518,7 +19520,7 @@ ALTER TABLE ONLY public.ew_service_reminders
 
 
 --
--- TOC entry 7052 (class 2606 OID 32484)
+-- TOC entry 7049 (class 2606 OID 32484)
 -- Name: post_service_feedback_messages uq_psfm_job_card; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -19833,25 +19835,7 @@ ALTER TABLE ONLY realtime.messages
 
 
 --
--- TOC entry 7040 (class 2606 OID 32279)
--- Name: messages_2026_07_04 messages_2026_07_04_pkey; Type: CONSTRAINT; Schema: realtime; Owner: -
---
-
-ALTER TABLE ONLY realtime.messages_2026_07_04
-    ADD CONSTRAINT messages_2026_07_04_pkey PRIMARY KEY (id, inserted_at);
-
-
---
--- TOC entry 7055 (class 2606 OID 32513)
--- Name: messages_2026_07_05 messages_2026_07_05_pkey; Type: CONSTRAINT; Schema: realtime; Owner: -
---
-
-ALTER TABLE ONLY realtime.messages_2026_07_05
-    ADD CONSTRAINT messages_2026_07_05_pkey PRIMARY KEY (id, inserted_at);
-
-
---
--- TOC entry 7061 (class 2606 OID 32727)
+-- TOC entry 7055 (class 2606 OID 32727)
 -- Name: messages_2026_07_06 messages_2026_07_06_pkey; Type: CONSTRAINT; Schema: realtime; Owner: -
 --
 
@@ -19860,7 +19844,7 @@ ALTER TABLE ONLY realtime.messages_2026_07_06
 
 
 --
--- TOC entry 7064 (class 2606 OID 32928)
+-- TOC entry 7058 (class 2606 OID 32928)
 -- Name: messages_2026_07_07 messages_2026_07_07_pkey; Type: CONSTRAINT; Schema: realtime; Owner: -
 --
 
@@ -19869,7 +19853,7 @@ ALTER TABLE ONLY realtime.messages_2026_07_07
 
 
 --
--- TOC entry 7076 (class 2606 OID 33573)
+-- TOC entry 7070 (class 2606 OID 33573)
 -- Name: messages_2026_07_08 messages_2026_07_08_pkey; Type: CONSTRAINT; Schema: realtime; Owner: -
 --
 
@@ -19878,7 +19862,7 @@ ALTER TABLE ONLY realtime.messages_2026_07_08
 
 
 --
--- TOC entry 7086 (class 2606 OID 33695)
+-- TOC entry 7080 (class 2606 OID 33695)
 -- Name: messages_2026_07_09 messages_2026_07_09_pkey; Type: CONSTRAINT; Schema: realtime; Owner: -
 --
 
@@ -19887,12 +19871,30 @@ ALTER TABLE ONLY realtime.messages_2026_07_09
 
 
 --
--- TOC entry 7109 (class 2606 OID 34097)
+-- TOC entry 7103 (class 2606 OID 34097)
 -- Name: messages_2026_07_10 messages_2026_07_10_pkey; Type: CONSTRAINT; Schema: realtime; Owner: -
 --
 
 ALTER TABLE ONLY realtime.messages_2026_07_10
     ADD CONSTRAINT messages_2026_07_10_pkey PRIMARY KEY (id, inserted_at);
+
+
+--
+-- TOC entry 7106 (class 2606 OID 34407)
+-- Name: messages_2026_07_11 messages_2026_07_11_pkey; Type: CONSTRAINT; Schema: realtime; Owner: -
+--
+
+ALTER TABLE ONLY realtime.messages_2026_07_11
+    ADD CONSTRAINT messages_2026_07_11_pkey PRIMARY KEY (id, inserted_at);
+
+
+--
+-- TOC entry 7109 (class 2606 OID 34551)
+-- Name: messages_2026_07_12 messages_2026_07_12_pkey; Type: CONSTRAINT; Schema: realtime; Owner: -
+--
+
+ALTER TABLE ONLY realtime.messages_2026_07_12
+    ADD CONSTRAINT messages_2026_07_12_pkey PRIMARY KEY (id, inserted_at);
 
 
 --
@@ -21049,7 +21051,7 @@ CREATE INDEX idx_employee_master_name_normalized ON public.employee_master USING
 
 
 --
--- TOC entry 7089 (class 1259 OID 33965)
+-- TOC entry 7083 (class 1259 OID 33965)
 -- Name: idx_err_mobile; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -21057,7 +21059,7 @@ CREATE INDEX idx_err_mobile ON public.ew_renewal_reminders USING btree (mobile_n
 
 
 --
--- TOC entry 7090 (class 1259 OID 34085)
+-- TOC entry 7084 (class 1259 OID 34085)
 -- Name: idx_err_responded_at; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -21065,7 +21067,7 @@ CREATE INDEX idx_err_responded_at ON public.ew_renewal_reminders USING btree (re
 
 
 --
--- TOC entry 7091 (class 1259 OID 33968)
+-- TOC entry 7085 (class 1259 OID 33968)
 -- Name: idx_err_scheduled_for_date; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -21073,7 +21075,7 @@ CREATE INDEX idx_err_scheduled_for_date ON public.ew_renewal_reminders USING btr
 
 
 --
--- TOC entry 7092 (class 1259 OID 33967)
+-- TOC entry 7086 (class 1259 OID 33967)
 -- Name: idx_err_status; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -21081,7 +21083,7 @@ CREATE INDEX idx_err_status ON public.ew_renewal_reminders USING btree (status);
 
 
 --
--- TOC entry 7093 (class 1259 OID 33966)
+-- TOC entry 7087 (class 1259 OID 33966)
 -- Name: idx_err_wa_message_id; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -21089,7 +21091,7 @@ CREATE INDEX idx_err_wa_message_id ON public.ew_renewal_reminders USING btree (w
 
 
 --
--- TOC entry 7098 (class 1259 OID 34014)
+-- TOC entry 7092 (class 1259 OID 34014)
 -- Name: idx_esr_booking_id; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -21097,7 +21099,7 @@ CREATE INDEX idx_esr_booking_id ON public.ew_service_reminders USING btree (book
 
 
 --
--- TOC entry 7099 (class 1259 OID 34010)
+-- TOC entry 7093 (class 1259 OID 34010)
 -- Name: idx_esr_mobile; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -21105,7 +21107,7 @@ CREATE INDEX idx_esr_mobile ON public.ew_service_reminders USING btree (mobile_n
 
 
 --
--- TOC entry 7100 (class 1259 OID 34013)
+-- TOC entry 7094 (class 1259 OID 34013)
 -- Name: idx_esr_scheduled_for_date; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -21113,7 +21115,7 @@ CREATE INDEX idx_esr_scheduled_for_date ON public.ew_service_reminders USING btr
 
 
 --
--- TOC entry 7101 (class 1259 OID 34012)
+-- TOC entry 7095 (class 1259 OID 34012)
 -- Name: idx_esr_status; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -21121,7 +21123,7 @@ CREATE INDEX idx_esr_status ON public.ew_service_reminders USING btree (status);
 
 
 --
--- TOC entry 7102 (class 1259 OID 34011)
+-- TOC entry 7096 (class 1259 OID 34011)
 -- Name: idx_esr_wa_message_id; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -21457,7 +21459,7 @@ CREATE INDEX idx_parts_order_status ON public.service_parts_order_data USING btr
 
 
 --
--- TOC entry 7077 (class 1259 OID 33650)
+-- TOC entry 7071 (class 1259 OID 33650)
 -- Name: idx_parts_requests_advisor_user_id; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -21465,7 +21467,7 @@ CREATE INDEX idx_parts_requests_advisor_user_id ON public.parts_requests USING b
 
 
 --
--- TOC entry 7078 (class 1259 OID 33654)
+-- TOC entry 7072 (class 1259 OID 33654)
 -- Name: idx_parts_requests_entry_date; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -21473,7 +21475,7 @@ CREATE INDEX idx_parts_requests_entry_date ON public.parts_requests USING btree 
 
 
 --
--- TOC entry 7079 (class 1259 OID 33652)
+-- TOC entry 7073 (class 1259 OID 33652)
 -- Name: idx_parts_requests_parts_number; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -21481,7 +21483,7 @@ CREATE INDEX idx_parts_requests_parts_number ON public.parts_requests USING btre
 
 
 --
--- TOC entry 7080 (class 1259 OID 33651)
+-- TOC entry 7074 (class 1259 OID 33651)
 -- Name: idx_parts_requests_registration_number; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -21489,7 +21491,7 @@ CREATE INDEX idx_parts_requests_registration_number ON public.parts_requests USI
 
 
 --
--- TOC entry 7081 (class 1259 OID 33653)
+-- TOC entry 7075 (class 1259 OID 33653)
 -- Name: idx_parts_requests_status; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -21569,7 +21571,7 @@ CREATE INDEX idx_psf_import_staging_run ON public.psf_import_staging USING btree
 
 
 --
--- TOC entry 7065 (class 1259 OID 33084)
+-- TOC entry 7059 (class 1259 OID 33084)
 -- Name: idx_psf_revenue_dms_employee_code; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -21577,7 +21579,7 @@ CREATE INDEX idx_psf_revenue_dms_employee_code ON public.psf_revenue_dms USING b
 
 
 --
--- TOC entry 7066 (class 1259 OID 33083)
+-- TOC entry 7060 (class 1259 OID 33083)
 -- Name: idx_psf_revenue_dms_invoice_date; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -21585,7 +21587,7 @@ CREATE INDEX idx_psf_revenue_dms_invoice_date ON public.psf_revenue_dms USING bt
 
 
 --
--- TOC entry 7067 (class 1259 OID 33085)
+-- TOC entry 7061 (class 1259 OID 33085)
 -- Name: idx_psf_revenue_dms_location_portal; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -21593,7 +21595,7 @@ CREATE INDEX idx_psf_revenue_dms_location_portal ON public.psf_revenue_dms USING
 
 
 --
--- TOC entry 7068 (class 1259 OID 33193)
+-- TOC entry 7062 (class 1259 OID 33193)
 -- Name: idx_psf_revenue_dms_sync_key; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -21601,7 +21603,7 @@ CREATE INDEX idx_psf_revenue_dms_sync_key ON public.psf_revenue_dms USING btree 
 
 
 --
--- TOC entry 7043 (class 1259 OID 32593)
+-- TOC entry 7040 (class 1259 OID 32593)
 -- Name: idx_psfm_cre_status; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -21609,7 +21611,7 @@ CREATE INDEX idx_psfm_cre_status ON public.post_service_feedback_messages USING 
 
 
 --
--- TOC entry 7044 (class 1259 OID 32485)
+-- TOC entry 7041 (class 1259 OID 32485)
 -- Name: idx_psfm_mobile; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -21617,7 +21619,7 @@ CREATE INDEX idx_psfm_mobile ON public.post_service_feedback_messages USING btre
 
 
 --
--- TOC entry 7045 (class 1259 OID 32489)
+-- TOC entry 7042 (class 1259 OID 32489)
 -- Name: idx_psfm_rating; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -21625,7 +21627,7 @@ CREATE INDEX idx_psfm_rating ON public.post_service_feedback_messages USING btre
 
 
 --
--- TOC entry 7046 (class 1259 OID 32488)
+-- TOC entry 7043 (class 1259 OID 32488)
 -- Name: idx_psfm_scheduled_for_date; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -21633,7 +21635,7 @@ CREATE INDEX idx_psfm_scheduled_for_date ON public.post_service_feedback_message
 
 
 --
--- TOC entry 7047 (class 1259 OID 32487)
+-- TOC entry 7044 (class 1259 OID 32487)
 -- Name: idx_psfm_status; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -21641,7 +21643,7 @@ CREATE INDEX idx_psfm_status ON public.post_service_feedback_messages USING btre
 
 
 --
--- TOC entry 7048 (class 1259 OID 32486)
+-- TOC entry 7045 (class 1259 OID 32486)
 -- Name: idx_psfm_wa_message_id; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -21649,7 +21651,7 @@ CREATE INDEX idx_psfm_wa_message_id ON public.post_service_feedback_messages USI
 
 
 --
--- TOC entry 7056 (class 1259 OID 32610)
+-- TOC entry 7050 (class 1259 OID 32610)
 -- Name: idx_psfr_feedback_id; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -22507,7 +22509,7 @@ CREATE UNIQUE INDEX uq_parts_stock_conflict ON public.service_parts_stock_snapsh
 
 
 --
--- TOC entry 7071 (class 1259 OID 33082)
+-- TOC entry 7065 (class 1259 OID 33082)
 -- Name: uq_psf_revenue_dms_location_portal_job_card_invoice_date; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -22604,23 +22606,7 @@ CREATE INDEX messages_inserted_at_topic_index ON ONLY realtime.messages USING bt
 
 
 --
--- TOC entry 7038 (class 1259 OID 32280)
--- Name: messages_2026_07_04_inserted_at_topic_idx; Type: INDEX; Schema: realtime; Owner: -
---
-
-CREATE INDEX messages_2026_07_04_inserted_at_topic_idx ON realtime.messages_2026_07_04 USING btree (inserted_at DESC, topic) WHERE ((extension = 'broadcast'::text) AND (private IS TRUE));
-
-
---
--- TOC entry 7053 (class 1259 OID 32514)
--- Name: messages_2026_07_05_inserted_at_topic_idx; Type: INDEX; Schema: realtime; Owner: -
---
-
-CREATE INDEX messages_2026_07_05_inserted_at_topic_idx ON realtime.messages_2026_07_05 USING btree (inserted_at DESC, topic) WHERE ((extension = 'broadcast'::text) AND (private IS TRUE));
-
-
---
--- TOC entry 7059 (class 1259 OID 32728)
+-- TOC entry 7053 (class 1259 OID 32728)
 -- Name: messages_2026_07_06_inserted_at_topic_idx; Type: INDEX; Schema: realtime; Owner: -
 --
 
@@ -22628,7 +22614,7 @@ CREATE INDEX messages_2026_07_06_inserted_at_topic_idx ON realtime.messages_2026
 
 
 --
--- TOC entry 7062 (class 1259 OID 32929)
+-- TOC entry 7056 (class 1259 OID 32929)
 -- Name: messages_2026_07_07_inserted_at_topic_idx; Type: INDEX; Schema: realtime; Owner: -
 --
 
@@ -22636,7 +22622,7 @@ CREATE INDEX messages_2026_07_07_inserted_at_topic_idx ON realtime.messages_2026
 
 
 --
--- TOC entry 7074 (class 1259 OID 33574)
+-- TOC entry 7068 (class 1259 OID 33574)
 -- Name: messages_2026_07_08_inserted_at_topic_idx; Type: INDEX; Schema: realtime; Owner: -
 --
 
@@ -22644,7 +22630,7 @@ CREATE INDEX messages_2026_07_08_inserted_at_topic_idx ON realtime.messages_2026
 
 
 --
--- TOC entry 7084 (class 1259 OID 33696)
+-- TOC entry 7078 (class 1259 OID 33696)
 -- Name: messages_2026_07_09_inserted_at_topic_idx; Type: INDEX; Schema: realtime; Owner: -
 --
 
@@ -22652,11 +22638,27 @@ CREATE INDEX messages_2026_07_09_inserted_at_topic_idx ON realtime.messages_2026
 
 
 --
--- TOC entry 7107 (class 1259 OID 34098)
+-- TOC entry 7101 (class 1259 OID 34098)
 -- Name: messages_2026_07_10_inserted_at_topic_idx; Type: INDEX; Schema: realtime; Owner: -
 --
 
 CREATE INDEX messages_2026_07_10_inserted_at_topic_idx ON realtime.messages_2026_07_10 USING btree (inserted_at DESC, topic) WHERE ((extension = 'broadcast'::text) AND (private IS TRUE));
+
+
+--
+-- TOC entry 7104 (class 1259 OID 34408)
+-- Name: messages_2026_07_11_inserted_at_topic_idx; Type: INDEX; Schema: realtime; Owner: -
+--
+
+CREATE INDEX messages_2026_07_11_inserted_at_topic_idx ON realtime.messages_2026_07_11 USING btree (inserted_at DESC, topic) WHERE ((extension = 'broadcast'::text) AND (private IS TRUE));
+
+
+--
+-- TOC entry 7107 (class 1259 OID 34552)
+-- Name: messages_2026_07_12_inserted_at_topic_idx; Type: INDEX; Schema: realtime; Owner: -
+--
+
+CREATE INDEX messages_2026_07_12_inserted_at_topic_idx ON realtime.messages_2026_07_12 USING btree (inserted_at DESC, topic) WHERE ((extension = 'broadcast'::text) AND (private IS TRUE));
 
 
 --
@@ -22733,38 +22735,6 @@ CREATE UNIQUE INDEX vector_indexes_name_bucket_id_idx ON storage.vector_indexes 
 
 --
 -- TOC entry 7110 (class 0 OID 0)
--- Name: messages_2026_07_04_inserted_at_topic_idx; Type: INDEX ATTACH; Schema: realtime; Owner: -
---
-
-ALTER INDEX realtime.messages_inserted_at_topic_index ATTACH PARTITION realtime.messages_2026_07_04_inserted_at_topic_idx;
-
-
---
--- TOC entry 7111 (class 0 OID 0)
--- Name: messages_2026_07_04_pkey; Type: INDEX ATTACH; Schema: realtime; Owner: -
---
-
-ALTER INDEX realtime.messages_pkey ATTACH PARTITION realtime.messages_2026_07_04_pkey;
-
-
---
--- TOC entry 7112 (class 0 OID 0)
--- Name: messages_2026_07_05_inserted_at_topic_idx; Type: INDEX ATTACH; Schema: realtime; Owner: -
---
-
-ALTER INDEX realtime.messages_inserted_at_topic_index ATTACH PARTITION realtime.messages_2026_07_05_inserted_at_topic_idx;
-
-
---
--- TOC entry 7113 (class 0 OID 0)
--- Name: messages_2026_07_05_pkey; Type: INDEX ATTACH; Schema: realtime; Owner: -
---
-
-ALTER INDEX realtime.messages_pkey ATTACH PARTITION realtime.messages_2026_07_05_pkey;
-
-
---
--- TOC entry 7114 (class 0 OID 0)
 -- Name: messages_2026_07_06_inserted_at_topic_idx; Type: INDEX ATTACH; Schema: realtime; Owner: -
 --
 
@@ -22772,7 +22742,7 @@ ALTER INDEX realtime.messages_inserted_at_topic_index ATTACH PARTITION realtime.
 
 
 --
--- TOC entry 7115 (class 0 OID 0)
+-- TOC entry 7111 (class 0 OID 0)
 -- Name: messages_2026_07_06_pkey; Type: INDEX ATTACH; Schema: realtime; Owner: -
 --
 
@@ -22780,7 +22750,7 @@ ALTER INDEX realtime.messages_pkey ATTACH PARTITION realtime.messages_2026_07_06
 
 
 --
--- TOC entry 7116 (class 0 OID 0)
+-- TOC entry 7112 (class 0 OID 0)
 -- Name: messages_2026_07_07_inserted_at_topic_idx; Type: INDEX ATTACH; Schema: realtime; Owner: -
 --
 
@@ -22788,7 +22758,7 @@ ALTER INDEX realtime.messages_inserted_at_topic_index ATTACH PARTITION realtime.
 
 
 --
--- TOC entry 7117 (class 0 OID 0)
+-- TOC entry 7113 (class 0 OID 0)
 -- Name: messages_2026_07_07_pkey; Type: INDEX ATTACH; Schema: realtime; Owner: -
 --
 
@@ -22796,7 +22766,7 @@ ALTER INDEX realtime.messages_pkey ATTACH PARTITION realtime.messages_2026_07_07
 
 
 --
--- TOC entry 7118 (class 0 OID 0)
+-- TOC entry 7114 (class 0 OID 0)
 -- Name: messages_2026_07_08_inserted_at_topic_idx; Type: INDEX ATTACH; Schema: realtime; Owner: -
 --
 
@@ -22804,7 +22774,7 @@ ALTER INDEX realtime.messages_inserted_at_topic_index ATTACH PARTITION realtime.
 
 
 --
--- TOC entry 7119 (class 0 OID 0)
+-- TOC entry 7115 (class 0 OID 0)
 -- Name: messages_2026_07_08_pkey; Type: INDEX ATTACH; Schema: realtime; Owner: -
 --
 
@@ -22812,7 +22782,7 @@ ALTER INDEX realtime.messages_pkey ATTACH PARTITION realtime.messages_2026_07_08
 
 
 --
--- TOC entry 7120 (class 0 OID 0)
+-- TOC entry 7116 (class 0 OID 0)
 -- Name: messages_2026_07_09_inserted_at_topic_idx; Type: INDEX ATTACH; Schema: realtime; Owner: -
 --
 
@@ -22820,7 +22790,7 @@ ALTER INDEX realtime.messages_inserted_at_topic_index ATTACH PARTITION realtime.
 
 
 --
--- TOC entry 7121 (class 0 OID 0)
+-- TOC entry 7117 (class 0 OID 0)
 -- Name: messages_2026_07_09_pkey; Type: INDEX ATTACH; Schema: realtime; Owner: -
 --
 
@@ -22828,7 +22798,7 @@ ALTER INDEX realtime.messages_pkey ATTACH PARTITION realtime.messages_2026_07_09
 
 
 --
--- TOC entry 7122 (class 0 OID 0)
+-- TOC entry 7118 (class 0 OID 0)
 -- Name: messages_2026_07_10_inserted_at_topic_idx; Type: INDEX ATTACH; Schema: realtime; Owner: -
 --
 
@@ -22836,11 +22806,43 @@ ALTER INDEX realtime.messages_inserted_at_topic_index ATTACH PARTITION realtime.
 
 
 --
--- TOC entry 7123 (class 0 OID 0)
+-- TOC entry 7119 (class 0 OID 0)
 -- Name: messages_2026_07_10_pkey; Type: INDEX ATTACH; Schema: realtime; Owner: -
 --
 
 ALTER INDEX realtime.messages_pkey ATTACH PARTITION realtime.messages_2026_07_10_pkey;
+
+
+--
+-- TOC entry 7120 (class 0 OID 0)
+-- Name: messages_2026_07_11_inserted_at_topic_idx; Type: INDEX ATTACH; Schema: realtime; Owner: -
+--
+
+ALTER INDEX realtime.messages_inserted_at_topic_index ATTACH PARTITION realtime.messages_2026_07_11_inserted_at_topic_idx;
+
+
+--
+-- TOC entry 7121 (class 0 OID 0)
+-- Name: messages_2026_07_11_pkey; Type: INDEX ATTACH; Schema: realtime; Owner: -
+--
+
+ALTER INDEX realtime.messages_pkey ATTACH PARTITION realtime.messages_2026_07_11_pkey;
+
+
+--
+-- TOC entry 7122 (class 0 OID 0)
+-- Name: messages_2026_07_12_inserted_at_topic_idx; Type: INDEX ATTACH; Schema: realtime; Owner: -
+--
+
+ALTER INDEX realtime.messages_inserted_at_topic_index ATTACH PARTITION realtime.messages_2026_07_12_inserted_at_topic_idx;
+
+
+--
+-- TOC entry 7123 (class 0 OID 0)
+-- Name: messages_2026_07_12_pkey; Type: INDEX ATTACH; Schema: realtime; Owner: -
+--
+
+ALTER INDEX realtime.messages_pkey ATTACH PARTITION realtime.messages_2026_07_12_pkey;
 
 
 --
@@ -23461,10 +23463,10 @@ CREATE TRIGGER trg_sync_all_service_data_from_ev_service_history AFTER INSERT OR
 
 --
 -- TOC entry 7304 (class 2620 OID 29230)
--- Name: PV_service_history_test trg_sync_all_service_data_from_pv_service_history; Type: TRIGGER; Schema: public; Owner: -
+-- Name: pv_service_history_test trg_sync_all_service_data_from_pv_service_history; Type: TRIGGER; Schema: public; Owner: -
 --
 
-CREATE TRIGGER trg_sync_all_service_data_from_pv_service_history AFTER INSERT OR DELETE OR UPDATE ON public."PV_service_history_test" FOR EACH ROW EXECUTE FUNCTION public.trg_sync_all_service_data_from_service_history();
+CREATE TRIGGER trg_sync_all_service_data_from_pv_service_history AFTER INSERT OR DELETE OR UPDATE ON public.pv_service_history_test FOR EACH ROW EXECUTE FUNCTION public.trg_sync_all_service_data_from_service_history();
 
 
 --
@@ -25675,7 +25677,7 @@ CREATE POLICY bodyshop_repair_cards_update_rbac_v2 ON public.bodyshop_repair_car
 
 --
 -- TOC entry 7574 (class 0 OID 34062)
--- Dependencies: 600
+-- Dependencies: 598
 -- Name: bodyshop_role_earning_settings; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
@@ -25795,7 +25797,7 @@ ALTER TABLE public.complaint_tickets ENABLE ROW LEVEL SECURITY;
 
 --
 -- TOC entry 7569 (class 0 OID 32387)
--- Dependencies: 580
+-- Dependencies: 579
 -- Name: cre_incentive_settings; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
@@ -26914,7 +26916,7 @@ CREATE POLICY part_master_write_admin_v1 ON public.part_master TO authenticated 
 
 --
 -- TOC entry 7573 (class 0 OID 33635)
--- Dependencies: 594
+-- Dependencies: 592
 -- Name: parts_requests; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
@@ -26954,7 +26956,7 @@ CREATE POLICY perms_self_read ON public.user_module_permissions FOR SELECT TO au
 
 --
 -- TOC entry 7570 (class 0 OID 32469)
--- Dependencies: 582
+-- Dependencies: 581
 -- Name: post_service_feedback_messages; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
@@ -26962,7 +26964,7 @@ ALTER TABLE public.post_service_feedback_messages ENABLE ROW LEVEL SECURITY;
 
 --
 -- TOC entry 7571 (class 0 OID 32595)
--- Dependencies: 585
+-- Dependencies: 583
 -- Name: post_service_feedback_remarks; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
@@ -26970,7 +26972,7 @@ ALTER TABLE public.post_service_feedback_remarks ENABLE ROW LEVEL SECURITY;
 
 --
 -- TOC entry 7572 (class 0 OID 33067)
--- Dependencies: 590
+-- Dependencies: 588
 -- Name: psf_revenue_dms; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
@@ -44233,18 +44235,7 @@ GRANT ALL ON TABLE extensions.pg_stat_statements_info TO dashboard_user;
 
 
 --
--- TOC entry 9402 (class 0 OID 0)
--- Dependencies: 563
--- Name: TABLE "PV_service_history_test"; Type: ACL; Schema: public; Owner: -
---
-
-GRANT ALL ON TABLE public."PV_service_history_test" TO anon;
-GRANT ALL ON TABLE public."PV_service_history_test" TO authenticated;
-GRANT ALL ON TABLE public."PV_service_history_test" TO service_role;
-
-
---
--- TOC entry 9412 (class 0 OID 0)
+-- TOC entry 9411 (class 0 OID 0)
 -- Dependencies: 552
 -- Name: TABLE all_service_data_dynamic; Type: ACL; Schema: public; Owner: -
 --
@@ -44255,7 +44246,7 @@ GRANT ALL ON TABLE public.all_service_data_dynamic TO service_role;
 
 
 --
--- TOC entry 9414 (class 0 OID 0)
+-- TOC entry 9413 (class 0 OID 0)
 -- Dependencies: 544
 -- Name: SEQUENCE all_service_data_id_seq1; Type: ACL; Schema: public; Owner: -
 --
@@ -44266,7 +44257,7 @@ GRANT ALL ON SEQUENCE public.all_service_data_id_seq1 TO service_role;
 
 
 --
--- TOC entry 9416 (class 0 OID 0)
+-- TOC entry 9415 (class 0 OID 0)
 -- Dependencies: 558
 -- Name: TABLE all_service_data_powertrain_overrides; Type: ACL; Schema: public; Owner: -
 --
@@ -44277,7 +44268,7 @@ GRANT ALL ON TABLE public.all_service_data_powertrain_overrides TO service_role;
 
 
 --
--- TOC entry 9417 (class 0 OID 0)
+-- TOC entry 9416 (class 0 OID 0)
 -- Dependencies: 557
 -- Name: SEQUENCE all_service_data_powertrain_overrides_id_seq; Type: ACL; Schema: public; Owner: -
 --
@@ -44288,7 +44279,7 @@ GRANT ALL ON SEQUENCE public.all_service_data_powertrain_overrides_id_seq TO ser
 
 
 --
--- TOC entry 9419 (class 0 OID 0)
+-- TOC entry 9418 (class 0 OID 0)
 -- Dependencies: 567
 -- Name: TABLE all_service_history_sync_queue; Type: ACL; Schema: public; Owner: -
 --
@@ -44299,7 +44290,7 @@ GRANT ALL ON TABLE public.all_service_history_sync_queue TO service_role;
 
 
 --
--- TOC entry 9421 (class 0 OID 0)
+-- TOC entry 9420 (class 0 OID 0)
 -- Dependencies: 434
 -- Name: TABLE audit_logs; Type: ACL; Schema: public; Owner: -
 --
@@ -44309,7 +44300,7 @@ GRANT ALL ON TABLE public.audit_logs TO service_role;
 
 
 --
--- TOC entry 9423 (class 0 OID 0)
+-- TOC entry 9422 (class 0 OID 0)
 -- Dependencies: 433
 -- Name: SEQUENCE audit_logs_id_seq; Type: ACL; Schema: public; Owner: -
 --
@@ -44319,7 +44310,7 @@ GRANT ALL ON SEQUENCE public.audit_logs_id_seq TO service_role;
 
 
 --
--- TOC entry 9425 (class 0 OID 0)
+-- TOC entry 9424 (class 0 OID 0)
 -- Dependencies: 578
 -- Name: TABLE auto_service_reminders; Type: ACL; Schema: public; Owner: -
 --
@@ -44330,7 +44321,7 @@ GRANT ALL ON TABLE public.auto_service_reminders TO service_role;
 
 
 --
--- TOC entry 9427 (class 0 OID 0)
+-- TOC entry 9426 (class 0 OID 0)
 -- Dependencies: 577
 -- Name: SEQUENCE auto_service_reminders_id_seq; Type: ACL; Schema: public; Owner: -
 --
@@ -44341,7 +44332,7 @@ GRANT ALL ON SEQUENCE public.auto_service_reminders_id_seq TO service_role;
 
 
 --
--- TOC entry 9428 (class 0 OID 0)
+-- TOC entry 9427 (class 0 OID 0)
 -- Dependencies: 443
 -- Name: TABLE autodoc_panel_master; Type: ACL; Schema: public; Owner: -
 --
@@ -44351,7 +44342,7 @@ GRANT ALL ON TABLE public.autodoc_panel_master TO service_role;
 
 
 --
--- TOC entry 9429 (class 0 OID 0)
+-- TOC entry 9428 (class 0 OID 0)
 -- Dependencies: 442
 -- Name: TABLE autodoc_rate_cards; Type: ACL; Schema: public; Owner: -
 --
@@ -44361,7 +44352,7 @@ GRANT ALL ON TABLE public.autodoc_rate_cards TO service_role;
 
 
 --
--- TOC entry 9430 (class 0 OID 0)
+-- TOC entry 9429 (class 0 OID 0)
 -- Dependencies: 444
 -- Name: TABLE autodoc_rate_rows; Type: ACL; Schema: public; Owner: -
 --
@@ -44371,7 +44362,7 @@ GRANT ALL ON TABLE public.autodoc_rate_rows TO service_role;
 
 
 --
--- TOC entry 9448 (class 0 OID 0)
+-- TOC entry 9447 (class 0 OID 0)
 -- Dependencies: 500
 -- Name: TABLE bodyshop_assignments; Type: ACL; Schema: public; Owner: -
 --
@@ -44381,7 +44372,7 @@ GRANT ALL ON TABLE public.bodyshop_assignments TO service_role;
 
 
 --
--- TOC entry 9450 (class 0 OID 0)
+-- TOC entry 9449 (class 0 OID 0)
 -- Dependencies: 499
 -- Name: SEQUENCE bodyshop_assignments_id_seq; Type: ACL; Schema: public; Owner: -
 --
@@ -44391,7 +44382,7 @@ GRANT ALL ON SEQUENCE public.bodyshop_assignments_id_seq TO service_role;
 
 
 --
--- TOC entry 9454 (class 0 OID 0)
+-- TOC entry 9453 (class 0 OID 0)
 -- Dependencies: 516
 -- Name: TABLE bodyshop_floor_support_assignments; Type: ACL; Schema: public; Owner: -
 --
@@ -44402,7 +44393,7 @@ GRANT ALL ON TABLE public.bodyshop_floor_support_assignments TO service_role;
 
 
 --
--- TOC entry 9455 (class 0 OID 0)
+-- TOC entry 9454 (class 0 OID 0)
 -- Dependencies: 515
 -- Name: SEQUENCE bodyshop_floor_support_assignments_id_seq; Type: ACL; Schema: public; Owner: -
 --
@@ -44413,7 +44404,7 @@ GRANT ALL ON SEQUENCE public.bodyshop_floor_support_assignments_id_seq TO servic
 
 
 --
--- TOC entry 9461 (class 0 OID 0)
+-- TOC entry 9460 (class 0 OID 0)
 -- Dependencies: 504
 -- Name: TABLE bodyshop_intake_vehicle_photos; Type: ACL; Schema: public; Owner: -
 --
@@ -44424,7 +44415,7 @@ GRANT ALL ON TABLE public.bodyshop_intake_vehicle_photos TO service_role;
 
 
 --
--- TOC entry 9462 (class 0 OID 0)
+-- TOC entry 9461 (class 0 OID 0)
 -- Dependencies: 503
 -- Name: SEQUENCE bodyshop_intake_vehicle_photos_id_seq; Type: ACL; Schema: public; Owner: -
 --
@@ -44435,7 +44426,7 @@ GRANT ALL ON SEQUENCE public.bodyshop_intake_vehicle_photos_id_seq TO service_ro
 
 
 --
--- TOC entry 9463 (class 0 OID 0)
+-- TOC entry 9462 (class 0 OID 0)
 -- Dependencies: 507
 -- Name: TABLE bodyshop_repair_card_documents; Type: ACL; Schema: public; Owner: -
 --
@@ -44446,7 +44437,7 @@ GRANT ALL ON TABLE public.bodyshop_repair_card_documents TO service_role;
 
 
 --
--- TOC entry 9464 (class 0 OID 0)
+-- TOC entry 9463 (class 0 OID 0)
 -- Dependencies: 506
 -- Name: SEQUENCE bodyshop_repair_card_documents_id_seq; Type: ACL; Schema: public; Owner: -
 --
@@ -44457,7 +44448,7 @@ GRANT ALL ON SEQUENCE public.bodyshop_repair_card_documents_id_seq TO service_ro
 
 
 --
--- TOC entry 9468 (class 0 OID 0)
+-- TOC entry 9467 (class 0 OID 0)
 -- Dependencies: 502
 -- Name: TABLE bodyshop_repair_cards; Type: ACL; Schema: public; Owner: -
 --
@@ -44467,7 +44458,7 @@ GRANT ALL ON TABLE public.bodyshop_repair_cards TO service_role;
 
 
 --
--- TOC entry 9470 (class 0 OID 0)
+-- TOC entry 9469 (class 0 OID 0)
 -- Dependencies: 501
 -- Name: SEQUENCE bodyshop_repair_cards_id_seq; Type: ACL; Schema: public; Owner: -
 --
@@ -44477,8 +44468,8 @@ GRANT ALL ON SEQUENCE public.bodyshop_repair_cards_id_seq TO service_role;
 
 
 --
--- TOC entry 9471 (class 0 OID 0)
--- Dependencies: 600
+-- TOC entry 9470 (class 0 OID 0)
+-- Dependencies: 598
 -- Name: TABLE bodyshop_role_earning_settings; Type: ACL; Schema: public; Owner: -
 --
 
@@ -44488,7 +44479,7 @@ GRANT ALL ON TABLE public.bodyshop_role_earning_settings TO service_role;
 
 
 --
--- TOC entry 9472 (class 0 OID 0)
+-- TOC entry 9471 (class 0 OID 0)
 -- Dependencies: 549
 -- Name: TABLE bodyshop_stage_reason_codes; Type: ACL; Schema: public; Owner: -
 --
@@ -44499,7 +44490,7 @@ GRANT ALL ON TABLE public.bodyshop_stage_reason_codes TO service_role;
 
 
 --
--- TOC entry 9473 (class 0 OID 0)
+-- TOC entry 9472 (class 0 OID 0)
 -- Dependencies: 546
 -- Name: TABLE bodyshop_stage_rule_versions; Type: ACL; Schema: public; Owner: -
 --
@@ -44510,7 +44501,7 @@ GRANT ALL ON TABLE public.bodyshop_stage_rule_versions TO service_role;
 
 
 --
--- TOC entry 9474 (class 0 OID 0)
+-- TOC entry 9473 (class 0 OID 0)
 -- Dependencies: 547
 -- Name: TABLE bodyshop_stage_worklist_projection; Type: ACL; Schema: public; Owner: -
 --
@@ -44521,7 +44512,7 @@ GRANT ALL ON TABLE public.bodyshop_stage_worklist_projection TO service_role;
 
 
 --
--- TOC entry 9475 (class 0 OID 0)
+-- TOC entry 9474 (class 0 OID 0)
 -- Dependencies: 436
 -- Name: TABLE cancel_job_card; Type: ACL; Schema: public; Owner: -
 --
@@ -44531,7 +44522,7 @@ GRANT ALL ON TABLE public.cancel_job_card TO service_role;
 
 
 --
--- TOC entry 9476 (class 0 OID 0)
+-- TOC entry 9475 (class 0 OID 0)
 -- Dependencies: 435
 -- Name: SEQUENCE cancel_job_card_id_seq; Type: ACL; Schema: public; Owner: -
 --
@@ -44541,7 +44532,7 @@ GRANT ALL ON SEQUENCE public.cancel_job_card_id_seq TO service_role;
 
 
 --
--- TOC entry 9477 (class 0 OID 0)
+-- TOC entry 9476 (class 0 OID 0)
 -- Dependencies: 438
 -- Name: TABLE closed_but_not_invoiced; Type: ACL; Schema: public; Owner: -
 --
@@ -44551,7 +44542,7 @@ GRANT ALL ON TABLE public.closed_but_not_invoiced TO service_role;
 
 
 --
--- TOC entry 9478 (class 0 OID 0)
+-- TOC entry 9477 (class 0 OID 0)
 -- Dependencies: 437
 -- Name: SEQUENCE closed_but_not_invoiced_id_seq; Type: ACL; Schema: public; Owner: -
 --
@@ -44561,7 +44552,7 @@ GRANT ALL ON SEQUENCE public.closed_but_not_invoiced_id_seq TO service_role;
 
 
 --
--- TOC entry 9479 (class 0 OID 0)
+-- TOC entry 9478 (class 0 OID 0)
 -- Dependencies: 481
 -- Name: TABLE complaint_access_links; Type: ACL; Schema: public; Owner: -
 --
@@ -44572,7 +44563,7 @@ GRANT ALL ON TABLE public.complaint_access_links TO service_role;
 
 
 --
--- TOC entry 9480 (class 0 OID 0)
+-- TOC entry 9479 (class 0 OID 0)
 -- Dependencies: 480
 -- Name: SEQUENCE complaint_access_links_id_seq; Type: ACL; Schema: public; Owner: -
 --
@@ -44583,7 +44574,7 @@ GRANT ALL ON SEQUENCE public.complaint_access_links_id_seq TO service_role;
 
 
 --
--- TOC entry 9481 (class 0 OID 0)
+-- TOC entry 9480 (class 0 OID 0)
 -- Dependencies: 485
 -- Name: TABLE complaint_activity; Type: ACL; Schema: public; Owner: -
 --
@@ -44594,7 +44585,7 @@ GRANT ALL ON TABLE public.complaint_activity TO service_role;
 
 
 --
--- TOC entry 9482 (class 0 OID 0)
+-- TOC entry 9481 (class 0 OID 0)
 -- Dependencies: 484
 -- Name: SEQUENCE complaint_activity_id_seq; Type: ACL; Schema: public; Owner: -
 --
@@ -44605,7 +44596,7 @@ GRANT ALL ON SEQUENCE public.complaint_activity_id_seq TO service_role;
 
 
 --
--- TOC entry 9483 (class 0 OID 0)
+-- TOC entry 9482 (class 0 OID 0)
 -- Dependencies: 487
 -- Name: TABLE complaint_attachments; Type: ACL; Schema: public; Owner: -
 --
@@ -44616,7 +44607,7 @@ GRANT ALL ON TABLE public.complaint_attachments TO service_role;
 
 
 --
--- TOC entry 9484 (class 0 OID 0)
+-- TOC entry 9483 (class 0 OID 0)
 -- Dependencies: 486
 -- Name: SEQUENCE complaint_attachments_id_seq; Type: ACL; Schema: public; Owner: -
 --
@@ -44627,7 +44618,7 @@ GRANT ALL ON SEQUENCE public.complaint_attachments_id_seq TO service_role;
 
 
 --
--- TOC entry 9485 (class 0 OID 0)
+-- TOC entry 9484 (class 0 OID 0)
 -- Dependencies: 483
 -- Name: TABLE complaint_messages; Type: ACL; Schema: public; Owner: -
 --
@@ -44638,7 +44629,7 @@ GRANT ALL ON TABLE public.complaint_messages TO service_role;
 
 
 --
--- TOC entry 9486 (class 0 OID 0)
+-- TOC entry 9485 (class 0 OID 0)
 -- Dependencies: 482
 -- Name: SEQUENCE complaint_messages_id_seq; Type: ACL; Schema: public; Owner: -
 --
@@ -44649,7 +44640,7 @@ GRANT ALL ON SEQUENCE public.complaint_messages_id_seq TO service_role;
 
 
 --
--- TOC entry 9488 (class 0 OID 0)
+-- TOC entry 9487 (class 0 OID 0)
 -- Dependencies: 541
 -- Name: TABLE complaint_notifications; Type: ACL; Schema: public; Owner: -
 --
@@ -44660,7 +44651,7 @@ GRANT ALL ON TABLE public.complaint_notifications TO service_role;
 
 
 --
--- TOC entry 9489 (class 0 OID 0)
+-- TOC entry 9488 (class 0 OID 0)
 -- Dependencies: 540
 -- Name: SEQUENCE complaint_notifications_id_seq; Type: ACL; Schema: public; Owner: -
 --
@@ -44671,7 +44662,7 @@ GRANT ALL ON SEQUENCE public.complaint_notifications_id_seq TO service_role;
 
 
 --
--- TOC entry 9490 (class 0 OID 0)
+-- TOC entry 9489 (class 0 OID 0)
 -- Dependencies: 477
 -- Name: TABLE complaint_sla_policies; Type: ACL; Schema: public; Owner: -
 --
@@ -44682,7 +44673,7 @@ GRANT ALL ON TABLE public.complaint_sla_policies TO service_role;
 
 
 --
--- TOC entry 9491 (class 0 OID 0)
+-- TOC entry 9490 (class 0 OID 0)
 -- Dependencies: 476
 -- Name: SEQUENCE complaint_sla_policies_id_seq; Type: ACL; Schema: public; Owner: -
 --
@@ -44693,7 +44684,7 @@ GRANT ALL ON SEQUENCE public.complaint_sla_policies_id_seq TO service_role;
 
 
 --
--- TOC entry 9492 (class 0 OID 0)
+-- TOC entry 9491 (class 0 OID 0)
 -- Dependencies: 479
 -- Name: TABLE complaint_tickets; Type: ACL; Schema: public; Owner: -
 --
@@ -44704,7 +44695,7 @@ GRANT ALL ON TABLE public.complaint_tickets TO service_role;
 
 
 --
--- TOC entry 9493 (class 0 OID 0)
+-- TOC entry 9492 (class 0 OID 0)
 -- Dependencies: 478
 -- Name: SEQUENCE complaint_tickets_id_seq; Type: ACL; Schema: public; Owner: -
 --
@@ -44715,8 +44706,8 @@ GRANT ALL ON SEQUENCE public.complaint_tickets_id_seq TO service_role;
 
 
 --
--- TOC entry 9494 (class 0 OID 0)
--- Dependencies: 580
+-- TOC entry 9493 (class 0 OID 0)
+-- Dependencies: 579
 -- Name: TABLE cre_incentive_settings; Type: ACL; Schema: public; Owner: -
 --
 
@@ -44726,7 +44717,7 @@ GRANT ALL ON TABLE public.cre_incentive_settings TO service_role;
 
 
 --
--- TOC entry 9495 (class 0 OID 0)
+-- TOC entry 9494 (class 0 OID 0)
 -- Dependencies: 566
 -- Name: TABLE dealer_settings; Type: ACL; Schema: public; Owner: -
 --
@@ -44737,7 +44728,7 @@ GRANT ALL ON TABLE public.dealer_settings TO service_role;
 
 
 --
--- TOC entry 9497 (class 0 OID 0)
+-- TOC entry 9496 (class 0 OID 0)
 -- Dependencies: 565
 -- Name: SEQUENCE dealer_settings_id_seq; Type: ACL; Schema: public; Owner: -
 --
@@ -44748,7 +44739,7 @@ GRANT ALL ON SEQUENCE public.dealer_settings_id_seq TO service_role;
 
 
 --
--- TOC entry 9504 (class 0 OID 0)
+-- TOC entry 9503 (class 0 OID 0)
 -- Dependencies: 432
 -- Name: TABLE documents; Type: ACL; Schema: public; Owner: -
 --
@@ -44758,7 +44749,7 @@ GRANT ALL ON TABLE public.documents TO service_role;
 
 
 --
--- TOC entry 9506 (class 0 OID 0)
+-- TOC entry 9505 (class 0 OID 0)
 -- Dependencies: 441
 -- Name: TABLE email_logs; Type: ACL; Schema: public; Owner: -
 --
@@ -44768,7 +44759,7 @@ GRANT ALL ON TABLE public.email_logs TO service_role;
 
 
 --
--- TOC entry 9512 (class 0 OID 0)
+-- TOC entry 9511 (class 0 OID 0)
 -- Dependencies: 411
 -- Name: TABLE employee_master; Type: ACL; Schema: public; Owner: -
 --
@@ -44778,7 +44769,7 @@ GRANT ALL ON TABLE public.employee_master TO service_role;
 
 
 --
--- TOC entry 9513 (class 0 OID 0)
+-- TOC entry 9512 (class 0 OID 0)
 -- Dependencies: 410
 -- Name: SEQUENCE employee_master_id_seq; Type: ACL; Schema: public; Owner: -
 --
@@ -44788,7 +44779,7 @@ GRANT ALL ON SEQUENCE public.employee_master_id_seq TO service_role;
 
 
 --
--- TOC entry 9518 (class 0 OID 0)
+-- TOC entry 9517 (class 0 OID 0)
 -- Dependencies: 431
 -- Name: TABLE estimate_rows; Type: ACL; Schema: public; Owner: -
 --
@@ -44798,7 +44789,7 @@ GRANT ALL ON TABLE public.estimate_rows TO service_role;
 
 
 --
--- TOC entry 9519 (class 0 OID 0)
+-- TOC entry 9518 (class 0 OID 0)
 -- Dependencies: 564
 -- Name: TABLE ev_service_history_test; Type: ACL; Schema: public; Owner: -
 --
@@ -44809,7 +44800,7 @@ GRANT ALL ON TABLE public.ev_service_history_test TO service_role;
 
 
 --
--- TOC entry 9520 (class 0 OID 0)
+-- TOC entry 9519 (class 0 OID 0)
 -- Dependencies: 509
 -- Name: TABLE ew_pricelist; Type: ACL; Schema: public; Owner: -
 --
@@ -44820,7 +44811,7 @@ GRANT ALL ON TABLE public.ew_pricelist TO service_role;
 
 
 --
--- TOC entry 9522 (class 0 OID 0)
+-- TOC entry 9521 (class 0 OID 0)
 -- Dependencies: 508
 -- Name: SEQUENCE ew_pricelist_id_seq; Type: ACL; Schema: public; Owner: -
 --
@@ -44831,8 +44822,8 @@ GRANT ALL ON SEQUENCE public.ew_pricelist_id_seq TO service_role;
 
 
 --
--- TOC entry 9526 (class 0 OID 0)
--- Dependencies: 597
+-- TOC entry 9525 (class 0 OID 0)
+-- Dependencies: 595
 -- Name: TABLE ew_renewal_reminders; Type: ACL; Schema: public; Owner: -
 --
 
@@ -44842,8 +44833,8 @@ GRANT ALL ON TABLE public.ew_renewal_reminders TO service_role;
 
 
 --
--- TOC entry 9528 (class 0 OID 0)
--- Dependencies: 596
+-- TOC entry 9527 (class 0 OID 0)
+-- Dependencies: 594
 -- Name: SEQUENCE ew_renewal_reminders_id_seq; Type: ACL; Schema: public; Owner: -
 --
 
@@ -44853,8 +44844,8 @@ GRANT ALL ON SEQUENCE public.ew_renewal_reminders_id_seq TO service_role;
 
 
 --
--- TOC entry 9531 (class 0 OID 0)
--- Dependencies: 599
+-- TOC entry 9530 (class 0 OID 0)
+-- Dependencies: 597
 -- Name: TABLE ew_service_reminders; Type: ACL; Schema: public; Owner: -
 --
 
@@ -44864,8 +44855,8 @@ GRANT ALL ON TABLE public.ew_service_reminders TO service_role;
 
 
 --
--- TOC entry 9533 (class 0 OID 0)
--- Dependencies: 598
+-- TOC entry 9532 (class 0 OID 0)
+-- Dependencies: 596
 -- Name: SEQUENCE ew_service_reminders_id_seq; Type: ACL; Schema: public; Owner: -
 --
 
@@ -44875,7 +44866,7 @@ GRANT ALL ON SEQUENCE public.ew_service_reminders_id_seq TO service_role;
 
 
 --
--- TOC entry 9534 (class 0 OID 0)
+-- TOC entry 9533 (class 0 OID 0)
 -- Dependencies: 413
 -- Name: TABLE import_employee_mapping_issues; Type: ACL; Schema: public; Owner: -
 --
@@ -44885,7 +44876,7 @@ GRANT ALL ON TABLE public.import_employee_mapping_issues TO service_role;
 
 
 --
--- TOC entry 9535 (class 0 OID 0)
+-- TOC entry 9534 (class 0 OID 0)
 -- Dependencies: 412
 -- Name: SEQUENCE import_employee_mapping_issues_id_seq; Type: ACL; Schema: public; Owner: -
 --
@@ -44895,7 +44886,7 @@ GRANT ALL ON SEQUENCE public.import_employee_mapping_issues_id_seq TO service_ro
 
 
 --
--- TOC entry 9536 (class 0 OID 0)
+-- TOC entry 9535 (class 0 OID 0)
 -- Dependencies: 405
 -- Name: TABLE import_metadata; Type: ACL; Schema: public; Owner: -
 --
@@ -44905,7 +44896,7 @@ GRANT ALL ON TABLE public.import_metadata TO service_role;
 
 
 --
--- TOC entry 9537 (class 0 OID 0)
+-- TOC entry 9536 (class 0 OID 0)
 -- Dependencies: 404
 -- Name: SEQUENCE import_metadata_id_seq; Type: ACL; Schema: public; Owner: -
 --
@@ -44915,7 +44906,7 @@ GRANT ALL ON SEQUENCE public.import_metadata_id_seq TO service_role;
 
 
 --
--- TOC entry 9542 (class 0 OID 0)
+-- TOC entry 9541 (class 0 OID 0)
 -- Dependencies: 542
 -- Name: TABLE income_role_scope; Type: ACL; Schema: public; Owner: -
 --
@@ -44926,7 +44917,7 @@ GRANT ALL ON TABLE public.income_role_scope TO service_role;
 
 
 --
--- TOC entry 9546 (class 0 OID 0)
+-- TOC entry 9545 (class 0 OID 0)
 -- Dependencies: 570
 -- Name: TABLE integration_sync_state; Type: ACL; Schema: public; Owner: -
 --
@@ -44937,7 +44928,7 @@ GRANT ALL ON TABLE public.integration_sync_state TO service_role;
 
 
 --
--- TOC entry 9547 (class 0 OID 0)
+-- TOC entry 9546 (class 0 OID 0)
 -- Dependencies: 569
 -- Name: TABLE job_card_closed_backfill_progress; Type: ACL; Schema: public; Owner: -
 --
@@ -44948,7 +44939,7 @@ GRANT ALL ON TABLE public.job_card_closed_backfill_progress TO service_role;
 
 
 --
--- TOC entry 9554 (class 0 OID 0)
+-- TOC entry 9553 (class 0 OID 0)
 -- Dependencies: 409
 -- Name: TABLE job_card_closed_data; Type: ACL; Schema: public; Owner: -
 --
@@ -44958,7 +44949,7 @@ GRANT ALL ON TABLE public.job_card_closed_data TO service_role;
 
 
 --
--- TOC entry 9555 (class 0 OID 0)
+-- TOC entry 9554 (class 0 OID 0)
 -- Dependencies: 475
 -- Name: TABLE job_card_closed_data_duplicates_backup; Type: ACL; Schema: public; Owner: -
 --
@@ -44968,7 +44959,7 @@ GRANT ALL ON TABLE public.job_card_closed_data_duplicates_backup TO service_role
 
 
 --
--- TOC entry 9556 (class 0 OID 0)
+-- TOC entry 9555 (class 0 OID 0)
 -- Dependencies: 408
 -- Name: SEQUENCE job_card_closed_data_id_seq; Type: ACL; Schema: public; Owner: -
 --
@@ -44978,7 +44969,7 @@ GRANT ALL ON SEQUENCE public.job_card_closed_data_id_seq TO service_role;
 
 
 --
--- TOC entry 9560 (class 0 OID 0)
+-- TOC entry 9559 (class 0 OID 0)
 -- Dependencies: 428
 -- Name: TABLE job_cards; Type: ACL; Schema: public; Owner: -
 --
@@ -44988,7 +44979,7 @@ GRANT ALL ON TABLE public.job_cards TO service_role;
 
 
 --
--- TOC entry 9565 (class 0 OID 0)
+-- TOC entry 9564 (class 0 OID 0)
 -- Dependencies: 430
 -- Name: TABLE panel_photos; Type: ACL; Schema: public; Owner: -
 --
@@ -44998,7 +44989,7 @@ GRANT ALL ON TABLE public.panel_photos TO service_role;
 
 
 --
--- TOC entry 9567 (class 0 OID 0)
+-- TOC entry 9566 (class 0 OID 0)
 -- Dependencies: 429
 -- Name: TABLE panels; Type: ACL; Schema: public; Owner: -
 --
@@ -45008,7 +44999,7 @@ GRANT ALL ON TABLE public.panels TO service_role;
 
 
 --
--- TOC entry 9571 (class 0 OID 0)
+-- TOC entry 9570 (class 0 OID 0)
 -- Dependencies: 427
 -- Name: TABLE vehicles; Type: ACL; Schema: public; Owner: -
 --
@@ -45018,7 +45009,7 @@ GRANT ALL ON TABLE public.vehicles TO service_role;
 
 
 --
--- TOC entry 9572 (class 0 OID 0)
+-- TOC entry 9571 (class 0 OID 0)
 -- Dependencies: 568
 -- Name: TABLE job_card_summary; Type: ACL; Schema: public; Owner: -
 --
@@ -45029,7 +45020,7 @@ GRANT ALL ON TABLE public.job_card_summary TO service_role;
 
 
 --
--- TOC entry 9576 (class 0 OID 0)
+-- TOC entry 9575 (class 0 OID 0)
 -- Dependencies: 489
 -- Name: TABLE job_card_support_assignments; Type: ACL; Schema: public; Owner: -
 --
@@ -45040,7 +45031,7 @@ GRANT ALL ON TABLE public.job_card_support_assignments TO service_role;
 
 
 --
--- TOC entry 9577 (class 0 OID 0)
+-- TOC entry 9576 (class 0 OID 0)
 -- Dependencies: 488
 -- Name: SEQUENCE job_card_support_assignments_id_seq; Type: ACL; Schema: public; Owner: -
 --
@@ -45051,7 +45042,7 @@ GRANT ALL ON SEQUENCE public.job_card_support_assignments_id_seq TO service_role
 
 
 --
--- TOC entry 9578 (class 0 OID 0)
+-- TOC entry 9577 (class 0 OID 0)
 -- Dependencies: 424
 -- Name: TABLE modules; Type: ACL; Schema: public; Owner: -
 --
@@ -45061,7 +45052,7 @@ GRANT ALL ON TABLE public.modules TO service_role;
 
 
 --
--- TOC entry 9580 (class 0 OID 0)
+-- TOC entry 9579 (class 0 OID 0)
 -- Dependencies: 423
 -- Name: SEQUENCE modules_id_seq; Type: ACL; Schema: public; Owner: -
 --
@@ -45071,7 +45062,7 @@ GRANT ALL ON SEQUENCE public.modules_id_seq TO service_role;
 
 
 --
--- TOC entry 9581 (class 0 OID 0)
+-- TOC entry 9580 (class 0 OID 0)
 -- Dependencies: 514
 -- Name: TABLE nav_groups; Type: ACL; Schema: public; Owner: -
 --
@@ -45082,7 +45073,7 @@ GRANT ALL ON TABLE public.nav_groups TO service_role;
 
 
 --
--- TOC entry 9583 (class 0 OID 0)
+-- TOC entry 9582 (class 0 OID 0)
 -- Dependencies: 513
 -- Name: SEQUENCE nav_groups_id_seq; Type: ACL; Schema: public; Owner: -
 --
@@ -45093,7 +45084,7 @@ GRANT ALL ON SEQUENCE public.nav_groups_id_seq TO service_role;
 
 
 --
--- TOC entry 9584 (class 0 OID 0)
+-- TOC entry 9583 (class 0 OID 0)
 -- Dependencies: 440
 -- Name: TABLE open_job_cards; Type: ACL; Schema: public; Owner: -
 --
@@ -45103,7 +45094,7 @@ GRANT ALL ON TABLE public.open_job_cards TO service_role;
 
 
 --
--- TOC entry 9585 (class 0 OID 0)
+-- TOC entry 9584 (class 0 OID 0)
 -- Dependencies: 439
 -- Name: SEQUENCE open_job_cards_id_seq; Type: ACL; Schema: public; Owner: -
 --
@@ -45113,7 +45104,7 @@ GRANT ALL ON SEQUENCE public.open_job_cards_id_seq TO service_role;
 
 
 --
--- TOC entry 9586 (class 0 OID 0)
+-- TOC entry 9585 (class 0 OID 0)
 -- Dependencies: 474
 -- Name: TABLE open_job_cards_import_staging; Type: ACL; Schema: public; Owner: -
 --
@@ -45123,7 +45114,7 @@ GRANT ALL ON TABLE public.open_job_cards_import_staging TO service_role;
 
 
 --
--- TOC entry 9587 (class 0 OID 0)
+-- TOC entry 9586 (class 0 OID 0)
 -- Dependencies: 473
 -- Name: SEQUENCE open_job_cards_import_staging_id_seq; Type: ACL; Schema: public; Owner: -
 --
@@ -45133,7 +45124,7 @@ GRANT ALL ON SEQUENCE public.open_job_cards_import_staging_id_seq TO service_rol
 
 
 --
--- TOC entry 9588 (class 0 OID 0)
+-- TOC entry 9587 (class 0 OID 0)
 -- Dependencies: 420
 -- Name: TABLE part_master; Type: ACL; Schema: public; Owner: -
 --
@@ -45143,8 +45134,8 @@ GRANT ALL ON TABLE public.part_master TO service_role;
 
 
 --
--- TOC entry 9591 (class 0 OID 0)
--- Dependencies: 594
+-- TOC entry 9590 (class 0 OID 0)
+-- Dependencies: 592
 -- Name: TABLE parts_requests; Type: ACL; Schema: public; Owner: -
 --
 
@@ -45154,8 +45145,8 @@ GRANT ALL ON TABLE public.parts_requests TO service_role;
 
 
 --
--- TOC entry 9593 (class 0 OID 0)
--- Dependencies: 593
+-- TOC entry 9592 (class 0 OID 0)
+-- Dependencies: 591
 -- Name: SEQUENCE parts_requests_id_seq; Type: ACL; Schema: public; Owner: -
 --
 
@@ -45165,7 +45156,7 @@ GRANT ALL ON SEQUENCE public.parts_requests_id_seq TO service_role;
 
 
 --
--- TOC entry 9594 (class 0 OID 0)
+-- TOC entry 9593 (class 0 OID 0)
 -- Dependencies: 445
 -- Name: TABLE pending_drive_uploads; Type: ACL; Schema: public; Owner: -
 --
@@ -45175,8 +45166,8 @@ GRANT ALL ON TABLE public.pending_drive_uploads TO service_role;
 
 
 --
--- TOC entry 9598 (class 0 OID 0)
--- Dependencies: 582
+-- TOC entry 9597 (class 0 OID 0)
+-- Dependencies: 581
 -- Name: TABLE post_service_feedback_messages; Type: ACL; Schema: public; Owner: -
 --
 
@@ -45186,8 +45177,8 @@ GRANT ALL ON TABLE public.post_service_feedback_messages TO service_role;
 
 
 --
--- TOC entry 9600 (class 0 OID 0)
--- Dependencies: 586
+-- TOC entry 9599 (class 0 OID 0)
+-- Dependencies: 584
 -- Name: TABLE post_service_feedback_cre_queue; Type: ACL; Schema: public; Owner: -
 --
 
@@ -45197,8 +45188,8 @@ GRANT ALL ON TABLE public.post_service_feedback_cre_queue TO service_role;
 
 
 --
--- TOC entry 9602 (class 0 OID 0)
--- Dependencies: 581
+-- TOC entry 9601 (class 0 OID 0)
+-- Dependencies: 580
 -- Name: SEQUENCE post_service_feedback_messages_id_seq; Type: ACL; Schema: public; Owner: -
 --
 
@@ -45208,8 +45199,8 @@ GRANT ALL ON SEQUENCE public.post_service_feedback_messages_id_seq TO service_ro
 
 
 --
--- TOC entry 9604 (class 0 OID 0)
--- Dependencies: 585
+-- TOC entry 9603 (class 0 OID 0)
+-- Dependencies: 583
 -- Name: TABLE post_service_feedback_remarks; Type: ACL; Schema: public; Owner: -
 --
 
@@ -45219,8 +45210,8 @@ GRANT ALL ON TABLE public.post_service_feedback_remarks TO service_role;
 
 
 --
--- TOC entry 9606 (class 0 OID 0)
--- Dependencies: 584
+-- TOC entry 9605 (class 0 OID 0)
+-- Dependencies: 582
 -- Name: SEQUENCE post_service_feedback_remarks_id_seq; Type: ACL; Schema: public; Owner: -
 --
 
@@ -45230,7 +45221,7 @@ GRANT ALL ON SEQUENCE public.post_service_feedback_remarks_id_seq TO service_rol
 
 
 --
--- TOC entry 9607 (class 0 OID 0)
+-- TOC entry 9606 (class 0 OID 0)
 -- Dependencies: 574
 -- Name: TABLE psf_import_runs; Type: ACL; Schema: public; Owner: -
 --
@@ -45241,7 +45232,7 @@ GRANT ALL ON TABLE public.psf_import_runs TO service_role;
 
 
 --
--- TOC entry 9608 (class 0 OID 0)
+-- TOC entry 9607 (class 0 OID 0)
 -- Dependencies: 573
 -- Name: SEQUENCE psf_import_runs_id_seq; Type: ACL; Schema: public; Owner: -
 --
@@ -45252,7 +45243,7 @@ GRANT ALL ON SEQUENCE public.psf_import_runs_id_seq TO service_role;
 
 
 --
--- TOC entry 9609 (class 0 OID 0)
+-- TOC entry 9608 (class 0 OID 0)
 -- Dependencies: 576
 -- Name: TABLE psf_import_staging; Type: ACL; Schema: public; Owner: -
 --
@@ -45263,7 +45254,7 @@ GRANT ALL ON TABLE public.psf_import_staging TO service_role;
 
 
 --
--- TOC entry 9610 (class 0 OID 0)
+-- TOC entry 9609 (class 0 OID 0)
 -- Dependencies: 575
 -- Name: SEQUENCE psf_import_staging_id_seq; Type: ACL; Schema: public; Owner: -
 --
@@ -45274,8 +45265,8 @@ GRANT ALL ON SEQUENCE public.psf_import_staging_id_seq TO service_role;
 
 
 --
--- TOC entry 9611 (class 0 OID 0)
--- Dependencies: 590
+-- TOC entry 9610 (class 0 OID 0)
+-- Dependencies: 588
 -- Name: TABLE psf_revenue_dms; Type: ACL; Schema: public; Owner: -
 --
 
@@ -45285,8 +45276,8 @@ GRANT ALL ON TABLE public.psf_revenue_dms TO service_role;
 
 
 --
--- TOC entry 9612 (class 0 OID 0)
--- Dependencies: 591
+-- TOC entry 9611 (class 0 OID 0)
+-- Dependencies: 589
 -- Name: TABLE psf_revenue_dms_backfill_progress; Type: ACL; Schema: public; Owner: -
 --
 
@@ -45296,14 +45287,25 @@ GRANT ALL ON TABLE public.psf_revenue_dms_backfill_progress TO service_role;
 
 
 --
--- TOC entry 9613 (class 0 OID 0)
--- Dependencies: 589
+-- TOC entry 9612 (class 0 OID 0)
+-- Dependencies: 587
 -- Name: SEQUENCE psf_revenue_dms_id_seq; Type: ACL; Schema: public; Owner: -
 --
 
 GRANT ALL ON SEQUENCE public.psf_revenue_dms_id_seq TO anon;
 GRANT ALL ON SEQUENCE public.psf_revenue_dms_id_seq TO authenticated;
 GRANT ALL ON SEQUENCE public.psf_revenue_dms_id_seq TO service_role;
+
+
+--
+-- TOC entry 9613 (class 0 OID 0)
+-- Dependencies: 563
+-- Name: TABLE pv_service_history_test; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT ALL ON TABLE public.pv_service_history_test TO anon;
+GRANT ALL ON TABLE public.pv_service_history_test TO authenticated;
+GRANT ALL ON TABLE public.pv_service_history_test TO service_role;
 
 
 --
@@ -46169,27 +46171,7 @@ GRANT SELECT,INSERT,UPDATE ON TABLE realtime.messages TO service_role;
 
 --
 -- TOC entry 9753 (class 0 OID 0)
--- Dependencies: 579
--- Name: TABLE messages_2026_07_04; Type: ACL; Schema: realtime; Owner: -
---
-
-GRANT ALL ON TABLE realtime.messages_2026_07_04 TO postgres;
-GRANT ALL ON TABLE realtime.messages_2026_07_04 TO dashboard_user;
-
-
---
--- TOC entry 9754 (class 0 OID 0)
--- Dependencies: 583
--- Name: TABLE messages_2026_07_05; Type: ACL; Schema: realtime; Owner: -
---
-
-GRANT ALL ON TABLE realtime.messages_2026_07_05 TO postgres;
-GRANT ALL ON TABLE realtime.messages_2026_07_05 TO dashboard_user;
-
-
---
--- TOC entry 9755 (class 0 OID 0)
--- Dependencies: 587
+-- Dependencies: 585
 -- Name: TABLE messages_2026_07_06; Type: ACL; Schema: realtime; Owner: -
 --
 
@@ -46198,8 +46180,8 @@ GRANT ALL ON TABLE realtime.messages_2026_07_06 TO dashboard_user;
 
 
 --
--- TOC entry 9756 (class 0 OID 0)
--- Dependencies: 588
+-- TOC entry 9754 (class 0 OID 0)
+-- Dependencies: 586
 -- Name: TABLE messages_2026_07_07; Type: ACL; Schema: realtime; Owner: -
 --
 
@@ -46208,8 +46190,8 @@ GRANT ALL ON TABLE realtime.messages_2026_07_07 TO dashboard_user;
 
 
 --
--- TOC entry 9757 (class 0 OID 0)
--- Dependencies: 592
+-- TOC entry 9755 (class 0 OID 0)
+-- Dependencies: 590
 -- Name: TABLE messages_2026_07_08; Type: ACL; Schema: realtime; Owner: -
 --
 
@@ -46218,8 +46200,8 @@ GRANT ALL ON TABLE realtime.messages_2026_07_08 TO dashboard_user;
 
 
 --
--- TOC entry 9758 (class 0 OID 0)
--- Dependencies: 595
+-- TOC entry 9756 (class 0 OID 0)
+-- Dependencies: 593
 -- Name: TABLE messages_2026_07_09; Type: ACL; Schema: realtime; Owner: -
 --
 
@@ -46228,13 +46210,33 @@ GRANT ALL ON TABLE realtime.messages_2026_07_09 TO dashboard_user;
 
 
 --
--- TOC entry 9759 (class 0 OID 0)
--- Dependencies: 601
+-- TOC entry 9757 (class 0 OID 0)
+-- Dependencies: 599
 -- Name: TABLE messages_2026_07_10; Type: ACL; Schema: realtime; Owner: -
 --
 
 GRANT ALL ON TABLE realtime.messages_2026_07_10 TO postgres;
 GRANT ALL ON TABLE realtime.messages_2026_07_10 TO dashboard_user;
+
+
+--
+-- TOC entry 9758 (class 0 OID 0)
+-- Dependencies: 600
+-- Name: TABLE messages_2026_07_11; Type: ACL; Schema: realtime; Owner: -
+--
+
+GRANT ALL ON TABLE realtime.messages_2026_07_11 TO postgres;
+GRANT ALL ON TABLE realtime.messages_2026_07_11 TO dashboard_user;
+
+
+--
+-- TOC entry 9759 (class 0 OID 0)
+-- Dependencies: 601
+-- Name: TABLE messages_2026_07_12; Type: ACL; Schema: realtime; Owner: -
+--
+
+GRANT ALL ON TABLE realtime.messages_2026_07_12 TO postgres;
+GRANT ALL ON TABLE realtime.messages_2026_07_12 TO dashboard_user;
 
 
 --
@@ -46717,11 +46719,11 @@ CREATE EVENT TRIGGER trg_auto_admin_bypass_policy_on_ddl ON ddl_command_end
    EXECUTE FUNCTION public.apply_admin_bypass_policy_on_ddl();
 
 
--- Completed on 2026-07-07 14:17:17 IST
+-- Completed on 2026-07-09 12:30:10 IST
 
 --
 -- PostgreSQL database dump complete
 --
 
-\unrestrict q2ubz2p2yknfQVaqB4CwJYsG2ajlgnYLOdQgVx53dUZwm3VMwDAj84AzRc67QpP
+\unrestrict jhnSCohqiSn2QyUAmOCngH8b8NJUOJslD416ZoNyhxrMuAhCans9kv1TodN2cpf
 

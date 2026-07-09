@@ -66,6 +66,7 @@ interface RepairCard {
   qc_passed_by: string | null
   qc_passed_at: string | null
   qc_fail_reason: string | null
+  reinspection_status: string | null
   reinspection_type: string | null
   reinspection_by: string | null
   reinspection_at: string | null
@@ -108,6 +109,25 @@ const DISPLAY_STAGE_GROUPS: { label: string; stages: number[]; color: string; bg
 
 function getDisplayGroup(stage: number) {
   return DISPLAY_STAGE_GROUPS.find(g => g.stages.includes(stage)) ?? DISPLAY_STAGE_GROUPS[0]
+}
+
+const RI_DONE_BY_OPTIONS = [
+  { value: 'floor_incharge', label: 'Floor Incharge' },
+  { value: 'surveyor', label: 'Surveyor' },
+  { value: 'other', label: 'Other' },
+] as const
+
+function normalizeRiDoneBy(raw: string | null | undefined): string {
+  const value = String(raw ?? '').trim().toLowerCase()
+  if (value === 'team_member') return 'floor_incharge'
+  if (value === 'floor_incharge' || value === 'surveyor' || value === 'other') return value
+  return value
+}
+
+function labelForRiDoneBy(raw: string | null | undefined): string {
+  const value = normalizeRiDoneBy(raw)
+  const match = RI_DONE_BY_OPTIONS.find(opt => opt.value === value)
+  return match?.label ?? (value || '—')
 }
 
 type DocDef = { key: keyof RepairCard; label: string; mandatoryFor: CustomerType[] }
@@ -785,13 +805,66 @@ export default function BodyshopRepairScreen() {
                   ['Checked At',    fmtTs(card.qc_checked_at)],
                   ['Passed By',     card.qc_passed_by ?? '—'],
                   ['Passed At',     fmtTs(card.qc_passed_at)],
-                  ['Re-Inspection', card.reinspection_type ?? '—'],
                 ].map(([label, value]) => (
                   <View key={label} style={S.kvRow}>
                     <Text style={S.kvLabel}>{label}</Text>
                     <Text style={S.kvValue}>{value}</Text>
                   </View>
                 ))}
+              </View>
+
+              <Text style={[S.sectionTitle, { marginTop: 16 }]}>Re-Inspection</Text>
+              <Text style={S.fieldLabel}>RI Status</Text>
+              <View style={{ flexDirection: 'row', gap: 8, marginBottom: 14 }}>
+                {['pending', 'completed'].map(o => {
+                  const active = (card.reinspection_status ?? 'pending') === o
+                  const col = o === 'completed' ? '#1c8f63' : '#82858f'
+                  return (
+                    <TouchableOpacity key={o} style={{ flex: 1 }} onPress={() => applyPatch({ reinspection_status: o })}>
+                      <View style={[S.statusChip, active && { backgroundColor: `${col}15`, borderColor: col }]}>
+                        <Text style={{ fontSize: 12, fontWeight: active ? '700' : '500', color: active ? col : '#82858f', textTransform: 'capitalize' }}>{o}</Text>
+                      </View>
+                    </TouchableOpacity>
+                  )
+                })}
+              </View>
+
+              <Text style={S.fieldLabel}>RI Done By</Text>
+              <View style={{ flexDirection: 'row', gap: 6, marginBottom: 12, flexWrap: 'wrap' }}>
+                {RI_DONE_BY_OPTIONS.map(opt => {
+                  const active = normalizeRiDoneBy(card.reinspection_type) === opt.value
+                  return (
+                    <TouchableOpacity key={opt.value} style={{ flexGrow: 1, minWidth: '30%' }} onPress={() => applyPatch({
+                      reinspection_type: opt.value,
+                      reinspection_by: opt.value === 'other' ? (card.reinspection_by ?? '') : null,
+                    })}>
+                      <View style={[S.statusChip, active && { backgroundColor: '#e9effe', borderColor: '#2a4cd0' }]}>
+                        <Text style={{ fontSize: 11, fontWeight: active ? '700' : '500', color: active ? '#2a4cd0' : '#82858f' }}>{opt.label}</Text>
+                      </View>
+                    </TouchableOpacity>
+                  )
+                })}
+              </View>
+
+              {normalizeRiDoneBy(card.reinspection_type) === 'other' && (
+                <View style={{ marginBottom: 12 }}>
+                  <Text style={S.fieldLabel}>Other Name *</Text>
+                  <TextInput style={S.input} placeholder="Enter name" placeholderTextColor="#a7a99f"
+                    value={card.reinspection_by ?? ''} onChangeText={t => applyPatch({ reinspection_by: t || null })} />
+                </View>
+              )}
+
+              <View style={S.kvCard}>
+                <View style={S.kvRow}>
+                  <Text style={S.kvLabel}>RI Done At</Text>
+                  <Text style={S.kvValue}>{fmtTs(card.reinspection_at)}</Text>
+                </View>
+                {normalizeRiDoneBy(card.reinspection_type) && normalizeRiDoneBy(card.reinspection_type) !== 'other' && (
+                  <View style={S.kvRow}>
+                    <Text style={S.kvLabel}>Done By</Text>
+                    <Text style={S.kvValue}>{labelForRiDoneBy(card.reinspection_type)}</Text>
+                  </View>
+                )}
               </View>
             </>
           )}

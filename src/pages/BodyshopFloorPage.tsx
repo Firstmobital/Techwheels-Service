@@ -272,6 +272,20 @@ type QcEntryState = {
   qc_checked_at: string
 }
 
+type RiEntryState = {
+  repairCardId: number | null
+  reinspection_status: string
+  reinspection_type: string
+  reinspection_by: string
+  reinspection_at: string
+}
+
+const RI_DONE_BY_OPTIONS = [
+  { value: 'floor_incharge', label: 'Floor Incharge' },
+  { value: 'surveyor', label: 'Surveyor' },
+  { value: 'other', label: 'Other' },
+] as const
+
 interface BSAssignment {
   id: number
   job_card_number: string
@@ -299,7 +313,7 @@ interface SupportAssignment {
   updated_at?: string
 }
 
-type AssignmentView = 'all' | 'unassigned' | 'assigned' | 'work_inprocess' | 'hold' | 'completed' | 'qc' | 'approvals'
+type AssignmentView = 'all' | 'unassigned' | 'assigned' | 'work_inprocess' | 'hold' | 'completed' | 'qc' | 'ri' | 'approvals'
 
 const ROLE_META: Record<BSRole, { label: string; icon: string }> = {
   DENTOR:         { label: 'Dentor',          icon: '🔨' },
@@ -442,6 +456,29 @@ function emptyQcEntryState(): QcEntryState {
     qc_checked_by: '',
     qc_checked_at: '',
   }
+}
+
+function emptyRiEntryState(): RiEntryState {
+  return {
+    repairCardId: null,
+    reinspection_status: 'pending',
+    reinspection_type: '',
+    reinspection_by: '',
+    reinspection_at: '',
+  }
+}
+
+function normalizeRiDoneBy(raw: string | null | undefined): string {
+  const value = String(raw ?? '').trim().toLowerCase()
+  if (value === 'team_member') return 'floor_incharge'
+  if (value === 'floor_incharge' || value === 'surveyor' || value === 'other') return value
+  return value
+}
+
+function labelForRiDoneBy(raw: string | null | undefined): string {
+  const value = normalizeRiDoneBy(raw)
+  const match = RI_DONE_BY_OPTIONS.find((opt) => opt.value === value)
+  return match?.label ?? (value || '—')
 }
 
 function labelForWorkStatus(status: string | null | undefined) {
@@ -775,6 +812,7 @@ export default function BodyshopFloorPage() {
   const [saving, setSaving]   = useState<string | null>(null) // jcKey being saved
   const [bsFloorStatus, setBsFloorStatus] = useState<Record<string, { completedAt: string | null; completedBy: string | null }>>({})
   const [qcByJc, setQcByJc] = useState<Record<string, QcEntryState>>({})
+  const [riByJc, setRiByJc] = useState<Record<string, RiEntryState>>({})
   const [qcCheckerPickerOpen, setQcCheckerPickerOpen] = useState<Record<string, boolean>>({})
   const [qcCheckerOtherOpen, setQcCheckerOtherOpen] = useState<Record<string, boolean>>({})
   const [qcCheckerOtherSearch, setQcCheckerOtherSearch] = useState<Record<string, string>>({})
@@ -795,7 +833,7 @@ export default function BodyshopFloorPage() {
       // 1. All vehicles active on the Bodyshop Repair pipeline — Stage 11 (Floor Assignment) is treated as active for every one, no stage/floor gating
       const { data: sentCards, error: sentErr } = await supabase
         .from('bodyshop_repair_cards')
-        .select('id, reception_entry_id, job_card_no, bodyshop_floor, current_stage, additional_approval, qc_status, qc_fail_reason, qc_checked_by, qc_checked_at, updated_at, created_at')
+        .select('id, reception_entry_id, job_card_no, bodyshop_floor, current_stage, additional_approval, qc_status, qc_fail_reason, qc_checked_by, qc_checked_at, reinspection_status, reinspection_type, reinspection_by, reinspection_at, updated_at, created_at')
 
       if (sentErr) throw sentErr
 
@@ -809,6 +847,10 @@ export default function BodyshopFloorPage() {
         qcFailReason: string | null
         qcCheckedBy: string | null
         qcCheckedAt: string | null
+        reinspectionStatus: string | null
+        reinspectionType: string | null
+        reinspectionBy: string | null
+        reinspectionAt: string | null
         updatedAtMs: number
       }>()
 
@@ -822,6 +864,10 @@ export default function BodyshopFloorPage() {
         qc_fail_reason: string | null
         qc_checked_by: string | null
         qc_checked_at: string | null
+        reinspection_status: string | null
+        reinspection_type: string | null
+        reinspection_by: string | null
+        reinspection_at: string | null
         updated_at: string | null
         created_at: string | null
       }>).forEach((row) => {
@@ -846,12 +892,17 @@ export default function BodyshopFloorPage() {
             qcFailReason: row.qc_fail_reason,
             qcCheckedBy: row.qc_checked_by,
             qcCheckedAt: row.qc_checked_at,
+            reinspectionStatus: row.reinspection_status,
+            reinspectionType: row.reinspection_type,
+            reinspectionBy: row.reinspection_by,
+            reinspectionAt: row.reinspection_at,
             updatedAtMs,
           })
         }
       })
 
       const nextQcByJc: Record<string, QcEntryState> = {}
+      const nextRiByJc: Record<string, RiEntryState> = {}
       latestByJc.forEach((row, jc) => {
         sentByJc.set(jc, row.floor)
         additionalByJc[jc] = parseAdditionalApprovalState(row.additionalApproval)
@@ -862,10 +913,18 @@ export default function BodyshopFloorPage() {
           qc_checked_by: String(row.qcCheckedBy ?? ''),
           qc_checked_at: toLocalDateTimeInput(row.qcCheckedAt),
         }
+        nextRiByJc[jc] = {
+          repairCardId: row.repairCardId,
+          reinspection_status: String(row.reinspectionStatus ?? 'pending').trim().toLowerCase() || 'pending',
+          reinspection_type: normalizeRiDoneBy(row.reinspectionType),
+          reinspection_by: String(row.reinspectionBy ?? ''),
+          reinspection_at: toLocalDateTimeInput(row.reinspectionAt),
+        }
       })
 
       setAdditionalApprovalByJc(additionalByJc)
       setQcByJc(nextQcByJc)
+      setRiByJc(nextRiByJc)
 
       if (sentByJc.size === 0) {
         setCars([])
@@ -1044,6 +1103,19 @@ export default function BodyshopFloorPage() {
     return Boolean(floor?.completedAt)
   }
 
+  function isQcPassed(c: AccidentCar) {
+    const status = String(qcByJc[jcKey(c)]?.qc_status ?? '').trim().toLowerCase()
+    return status === 'pass'
+  }
+
+  function isInQcQueue(c: AccidentCar) {
+    return isBsFloorCompleted(c) && !isQcPassed(c)
+  }
+
+  function isInRiQueue(c: AccidentCar) {
+    return isBsFloorCompleted(c) && isQcPassed(c)
+  }
+
   function toggleExpanded(k: string) {
     setExpandedCards((prev) => {
       const next = new Set(prev)
@@ -1061,13 +1133,14 @@ export default function BodyshopFloorPage() {
     work_inprocess: cars.filter((c) => !isBsFloorCompleted(c) && hasStatus(c, 'work_inprocess')).length,
     hold:           cars.filter((c) => !isBsFloorCompleted(c) && hasStatus(c, 'hold')).length,
     completed:      cars.filter((c) => isBsFloorCompleted(c)).length,
-    qc:             cars.filter((c) => isBsFloorCompleted(c)).length,
+    qc:             cars.filter((c) => isInQcQueue(c)).length,
+    ri:             cars.filter((c) => isInRiQueue(c)).length,
     approvals:      cars.filter((c) => {
       const state = additionalApprovalByJc[jcKey(c)] ?? parseAdditionalApprovalState(null)
       return state.status !== 'none' && state.pendingCount > 0
     }).length,
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }), [cars, assignments, bsFloorStatus, additionalApprovalByJc])
+  }), [cars, assignments, bsFloorStatus, additionalApprovalByJc, qcByJc])
 
   // ── Floor Incharge workload summary ──────────────────────────────────────
   const floorInchargeSummary = useMemo(() => {
@@ -1124,14 +1197,15 @@ export default function BodyshopFloorPage() {
     if (assignmentView === 'work_inprocess') return list.filter((c) => !isBsFloorCompleted(c) && hasStatus(c, 'work_inprocess'))
     if (assignmentView === 'hold')           return list.filter((c) => !isBsFloorCompleted(c) && hasStatus(c, 'hold'))
     if (assignmentView === 'completed')      return list.filter((c) => isBsFloorCompleted(c))
-    if (assignmentView === 'qc')             return list.filter((c) => isBsFloorCompleted(c))
+    if (assignmentView === 'qc')             return list.filter((c) => isInQcQueue(c))
+    if (assignmentView === 'ri')             return list.filter((c) => isInRiQueue(c))
     if (assignmentView === 'approvals')      return list.filter((c) => {
       const state = additionalApprovalByJc[jcKey(c)] ?? parseAdditionalApprovalState(null)
       return state.status !== 'none' && state.pendingCount > 0
     })
     return list
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cars, branchFilter, floorFilter, roleFilter, fiFilter, search, assignmentView, assignments, bsFloorStatus, additionalApprovalByJc])
+  }, [cars, branchFilter, floorFilter, roleFilter, fiFilter, search, assignmentView, assignments, bsFloorStatus, additionalApprovalByJc, qcByJc])
 
   // ── Assign (inline select) ───────────────────────────────────────────────
 
@@ -1451,6 +1525,13 @@ export default function BodyshopFloorPage() {
     }))
   }
 
+  function patchRiDraft(k: string, patch: Partial<RiEntryState>) {
+    setRiByJc((prev) => ({
+      ...prev,
+      [k]: { ...(prev[k] ?? emptyRiEntryState()), ...patch },
+    }))
+  }
+
   function getAssignedQcCheckerNames(k: string): string[] {
     const names: string[] = []
     const primary = assignments[k]
@@ -1523,8 +1604,8 @@ export default function BodyshopFloorPage() {
         qc_checked_at: checkedAtIso,
         qc_passed_by: draft.qc_status === 'pass' ? checkedByText : null,
         qc_passed_at: draft.qc_status === 'pass' ? checkedAtIso : null,
-        current_stage: 13,
-        current_stage_name: 'Quality Check',
+        current_stage: draft.qc_status === 'pass' ? 14 : 13,
+        current_stage_name: draft.qc_status === 'pass' ? 'Re-Inspection' : 'Quality Check',
       }
 
       const result = await supabase
@@ -1547,13 +1628,93 @@ export default function BodyshopFloorPage() {
         },
       }))
 
+      setRiByJc((prev) => ({
+        ...prev,
+        [k]: {
+          ...(prev[k] ?? emptyRiEntryState()),
+          repairCardId: Number(result.data?.id ?? repairCardId),
+        },
+      }))
+
       setQcCheckerPickerOpen((prev) => ({ ...prev, [k]: false }))
       setQcCheckerOtherOpen((prev) => ({ ...prev, [k]: false }))
       setQcCheckerOtherSearch((prev) => ({ ...prev, [k]: '' }))
 
-      showToast('QC details saved', 'success')
+      if (draft.qc_status === 'pass') {
+        showToast('QC passed — moved to RI', 'success')
+        setAssignmentView('ri')
+      } else {
+        showToast('QC details saved', 'success')
+      }
     } catch (err) {
       showToast(err instanceof Error ? err.message : 'Failed to save QC details', 'error')
+    } finally {
+      setSaving(null)
+    }
+  }
+
+  async function saveRiDetails(car: AccidentCar) {
+    const k = jcKey(car)
+    const draft = riByJc[k] ?? emptyRiEntryState()
+    const doneByType = normalizeRiDoneBy(draft.reinspection_type)
+    const doneByName = String(draft.reinspection_by ?? '').trim()
+    const status = String(draft.reinspection_status ?? 'pending').trim().toLowerCase() || 'pending'
+
+    if (!doneByType) {
+      showToast('Select RI Done By', 'error')
+      return
+    }
+
+    if (doneByType === 'other' && !doneByName) {
+      showToast('Enter the name for RI Done By (Other)', 'error')
+      return
+    }
+
+    setSaving(`${k}-ri`)
+    try {
+      const { data: { user } } = await supabase.auth.getUser()
+      const doneAtIso = new Date().toISOString()
+      const repairCardId = draft.repairCardId
+        ?? qcByJc[k]?.repairCardId
+        ?? await findOrCreateRepairCard(car, user?.email ?? null)
+      if (!repairCardId) throw new Error('Unable to resolve bodyshop repair card for RI')
+
+      const resolvedBy = doneByType === 'other'
+        ? doneByName
+        : (doneByName || labelForRiDoneBy(doneByType))
+
+      const payload = {
+        reinspection_status: status,
+        reinspection_type: doneByType,
+        reinspection_by: resolvedBy,
+        reinspection_at: doneAtIso,
+        current_stage: 14,
+        current_stage_name: 'Re-Inspection',
+      }
+
+      const result = await supabase
+        .from('bodyshop_repair_cards')
+        .update(payload)
+        .eq('id', repairCardId)
+        .select('id, reinspection_status, reinspection_type, reinspection_by, reinspection_at')
+        .single()
+
+      if (result.error) throw result.error
+
+      setRiByJc((prev) => ({
+        ...prev,
+        [k]: {
+          repairCardId: Number(result.data?.id ?? repairCardId),
+          reinspection_status: String(result.data?.reinspection_status ?? status),
+          reinspection_type: normalizeRiDoneBy(result.data?.reinspection_type ?? doneByType),
+          reinspection_by: String(result.data?.reinspection_by ?? resolvedBy),
+          reinspection_at: toLocalDateTimeInput(result.data?.reinspection_at ?? doneAtIso),
+        },
+      }))
+
+      showToast('RI details saved', 'success')
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Failed to save RI details', 'error')
     } finally {
       setSaving(null)
     }
@@ -1966,6 +2127,7 @@ export default function BodyshopFloorPage() {
           { key: 'hold', label: 'On Hold', count: counts.hold },
           { key: 'completed', label: 'Completed', count: counts.completed },
           { key: 'qc', label: 'QC', count: counts.qc },
+          { key: 'ri', label: 'RI', count: counts.ri },
           { key: 'approvals', label: 'Approvals Pending', count: counts.approvals },
         ] as { key: AssignmentView; label: string; count: number }[]).map(({ key, label, count }) => (
           <button
@@ -2088,6 +2250,7 @@ export default function BodyshopFloorPage() {
               const expanded = expandedCards.has(k)
               const carMap = assignments[k] ?? { DENTOR: undefined, PAINTER: undefined, TECHNICIAN: undefined, FLOOR_INCHARGE: undefined, DENTOR_HELPER: undefined, PAINTER_HELPER: undefined, RUBBING: undefined, EDP: undefined }
               const qcDraft = qcByJc[k] ?? emptyQcEntryState()
+              const riDraft = riByJc[k] ?? emptyRiEntryState()
               const selectedQcCheckerNames = parseQcCheckedByNames(qcDraft.qc_checked_by)
               const assignedQcCheckerNames = getAssignedQcCheckerNames(k)
               const assignedQcNameSet = new Set(assignedQcCheckerNames.map((name) => name.toLowerCase()))
@@ -2100,7 +2263,9 @@ export default function BodyshopFloorPage() {
               const isFloorCompleted = Boolean(floorStatus.completedAt)
               const isSavingFloorStatus = saving === `${k}-bs-floor`
               const isSavingQc = saving === `${k}-qc`
+              const isSavingRi = saving === `${k}-ri`
               const qcFailReasonRequired = qcDraft.qc_status === 'fail' && !qcDraft.qc_fail_reason.trim()
+              const riOtherNameRequired = riDraft.reinspection_type === 'other' && !String(riDraft.reinspection_by ?? '').trim()
               const additionalApproval = additionalApprovalByJc[k] ?? parseAdditionalApprovalState(null)
               const additionalApprovalResolved = additionalApproval.status === 'none' || additionalApproval.pendingCount === 0
               const hasActiveRoleWork = ALL_ROLES.some((role) => {
@@ -2316,6 +2481,80 @@ export default function BodyshopFloorPage() {
                           </span>
                         </div>
                       </div>
+                    ) : assignmentView === 'ri' ? (
+                      <div className="bsf-summary bsf-summary--qc">
+                        <div className="bsf-qc-inline">
+                          <div className="bsf-qc-inline__title">Re-Inspection</div>
+                          <div className="bsf-qc-inline__controls">
+                            <label className="bsf-qc-inline__field">
+                              <span className="bsf-label">RI Status</span>
+                              <select
+                                className="sel"
+                                value={riDraft.reinspection_status || 'pending'}
+                                onChange={(e) => patchRiDraft(k, { reinspection_status: e.target.value })}
+                              >
+                                <option value="pending">Pending</option>
+                                <option value="completed">Completed</option>
+                              </select>
+                            </label>
+
+                            <label className={`bsf-qc-inline__field bsf-qc-inline__field--wide ${riDraft.reinspection_type === 'other' ? '' : 'is-hidden-slot'}`}>
+                              <span className="bsf-label">Other Name</span>
+                              <input
+                                className={`inp ${riOtherNameRequired ? 'is-required' : ''}`}
+                                value={riDraft.reinspection_by}
+                                onChange={(e) => patchRiDraft(k, { reinspection_by: e.target.value })}
+                                placeholder="Enter name"
+                                disabled={riDraft.reinspection_type !== 'other'}
+                              />
+                            </label>
+
+                            <button
+                              type="button"
+                              className={`btn btn--primary btn--sm bsf-qc-inline__save ${isSavingRi ? 'btn--dim' : ''}`}
+                              onClick={() => void saveRiDetails(car)}
+                              disabled={isSavingRi}
+                            >
+                              {isSavingRi ? 'Saving…' : 'Save RI'}
+                            </button>
+                          </div>
+                          <div className="bsf-qc-inline__meta-row">
+                            <label className="bsf-qc-inline__field bsf-qc-inline__field--wide">
+                              <span className="bsf-label">RI Done By</span>
+                              <select
+                                className="sel"
+                                value={riDraft.reinspection_type || ''}
+                                onChange={(e) => {
+                                  const nextType = e.target.value
+                                  patchRiDraft(k, {
+                                    reinspection_type: nextType,
+                                    reinspection_by: nextType === 'other' ? riDraft.reinspection_by : '',
+                                  })
+                                }}
+                              >
+                                <option value="">Select…</option>
+                                {RI_DONE_BY_OPTIONS.map((opt) => (
+                                  <option key={opt.value} value={opt.value}>{opt.label}</option>
+                                ))}
+                              </select>
+                            </label>
+
+                            <div className="bsf-qc-inline__field">
+                              <span className="bsf-label">RI Done At</span>
+                              <div className="bsf-qc-readonly">{riDraft.reinspection_at ? fmtDate(riDraft.reinspection_at) : '—'}</div>
+                            </div>
+                          </div>
+                          <div className={`bsf-stage-hint bsf-qc-inline__hint-slot ${riOtherNameRequired ? 'is-visible' : ''}`}>
+                            {riOtherNameRequired ? 'Enter the name when RI Done By is Other.' : ' '}
+                          </div>
+                        </div>
+                        <div className="bsf-summary-row">
+                          <span className="ts">Received {fmtDate(car.created_at)}</span>
+                          <span className="ts">
+                            IN {fmtDate(inTs)}{isFloorCompleted ? ` · OUT ${fmtDate(floorStatus.completedAt)}` : ''}
+                          </span>
+                        </div>
+                      </div>
                     ) : (
                       <div className="bsf-summary">
                         <div className="bsf-summary-row">
@@ -2348,7 +2587,7 @@ export default function BodyshopFloorPage() {
                     </button>
                   </div>
 
-                  {expanded && (assignmentView === 'qc' ? (
+                  {expanded && (assignmentView === 'qc' || assignmentView === 'ri' ? (
                     <div className="bsf-qc-shell">
                       <div className="bsf-qc-workers">
                         {ALL_ROLES.map((role) => {

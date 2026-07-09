@@ -2067,6 +2067,9 @@ code.k--b { background: var(--accent-soft); color: var(--accent); }
 .bsf-kpi--qc .bsf-kpi__count,
 .bsf-kpi--qc { border-color: var(--border); }
 .bsf-kpi--qc .bsf-kpi__count { color: #b45309; }
+.bsf-kpi--ri .bsf-kpi__count,
+.bsf-kpi--ri { border-color: var(--border); }
+.bsf-kpi--ri .bsf-kpi__count { color: #0f766e; }
 .bsf-kpi--approvals .bsf-kpi__count,
 .bsf-kpi--approvals { border-color: var(--border); }
 .bsf-kpi--approvals .bsf-kpi__count { color: #6d28d9; }
@@ -3171,6 +3174,8 @@ code.k--b { background: var(--accent-soft); color: var(--accent); }
 .bsf-kpi--work_inprocess,
 .bsf-kpi--hold,
 .bsf-kpi--completed,
+.bsf-kpi--qc,
+.bsf-kpi--ri,
 .bsf-kpi--approvals {
   border-color: var(--border);
 }

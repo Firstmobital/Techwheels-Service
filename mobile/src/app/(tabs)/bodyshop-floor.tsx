@@ -35,6 +35,10 @@ interface FloorCar {
   qc_fail_reason: string | null
   qc_checked_by: string | null
   qc_checked_at: string | null
+  reinspection_status: string | null
+  reinspection_type: string | null
+  reinspection_by: string | null
+  reinspection_at: string | null
   current_stage: number
   overall_status: string
   sa_name: string | null
@@ -148,7 +152,7 @@ interface SupportAssignment {
 
 type AssignmentView =
   | 'all' | 'unassigned' | 'assigned'
-  | 'work_inprocess' | 'hold' | 'completed' | 'qc' | 'approvals'
+  | 'work_inprocess' | 'hold' | 'completed' | 'qc' | 'ri' | 'approvals'
 
 type QcState = {
   repairCardId: number | null
@@ -157,6 +161,20 @@ type QcState = {
   qc_checked_by: string
   qc_checked_at: string
 }
+
+type RiState = {
+  repairCardId: number | null
+  reinspection_status: string
+  reinspection_type: string
+  reinspection_by: string
+  reinspection_at: string
+}
+
+const RI_DONE_BY_OPTIONS = [
+  { value: 'floor_incharge', label: 'Floor Incharge' },
+  { value: 'surveyor', label: 'Surveyor' },
+  { value: 'other', label: 'Other' },
+] as const
 
 type AdditionalApprovalPart = {
   partIndex: number
@@ -226,6 +244,7 @@ const VIEW_TABS: { key: AssignmentView; label: string }[] = [
   { key: 'hold',           label: 'Hold' },
   { key: 'completed',      label: 'Completed' },
   { key: 'qc',             label: 'QC' },
+  { key: 'ri',             label: 'RI' },
   { key: 'approvals',      label: 'Approvals' },
 ]
 
@@ -368,6 +387,29 @@ function joinQcNames(names: string[]): string {
   return names.filter(Boolean).join(', ')
 }
 
+function emptyRiState(): RiState {
+  return {
+    repairCardId: null,
+    reinspection_status: 'pending',
+    reinspection_type: '',
+    reinspection_by: '',
+    reinspection_at: '',
+  }
+}
+
+function normalizeRiDoneBy(raw: string | null | undefined): string {
+  const value = String(raw ?? '').trim().toLowerCase()
+  if (value === 'team_member') return 'floor_incharge'
+  if (value === 'floor_incharge' || value === 'surveyor' || value === 'other') return value
+  return value
+}
+
+function labelForRiDoneBy(raw: string | null | undefined): string {
+  const value = normalizeRiDoneBy(raw)
+  const match = RI_DONE_BY_OPTIONS.find(opt => opt.value === value)
+  return match?.label ?? (value || '—')
+}
+
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export default function BodyshopFloorScreen() {
@@ -382,6 +424,7 @@ export default function BodyshopFloorScreen() {
   const [supportAssignments,setSupportAssignments]= useState<Record<string, Record<SupportRole, SupportAssignment[]>>>({})
   const [bsFloorStatus,     setBsFloorStatus]     = useState<Record<string, { completedAt: string | null; completedBy: string | null }>>({})
   const [qcByJc,            setQcByJc]            = useState<Record<string, QcState>>({})
+  const [riByJc,            setRiByJc]            = useState<Record<string, RiState>>({})
 
   // List filters
   const [assignmentView, setAssignmentView] = useState<AssignmentView>('all')
@@ -422,7 +465,7 @@ export default function BodyshopFloorScreen() {
       // 1. Repair cards (all active/floor vehicles)
       const { data: cardData, error: cardErr } = await supabase
         .from('bodyshop_repair_cards')
-        .select('id, job_card_no, reg_number, customer_name, branch, bodyshop_floor, additional_approval, qc_status, qc_fail_reason, qc_checked_by, qc_checked_at, current_stage, overall_status, sa_name, reception_entry_id')
+        .select('id, job_card_no, reg_number, customer_name, branch, bodyshop_floor, additional_approval, qc_status, qc_fail_reason, qc_checked_by, qc_checked_at, reinspection_status, reinspection_type, reinspection_by, reinspection_at, current_stage, overall_status, sa_name, reception_entry_id')
         .order('created_at', { ascending: false })
       if (cardErr) throw cardErr
 
@@ -430,7 +473,10 @@ export default function BodyshopFloorScreen() {
         id: number; job_card_no: string | null; reg_number: string | null
         customer_name: string | null; branch: string | null; bodyshop_floor: string | null
         additional_approval: string | null; qc_status: string | null; qc_fail_reason: string | null
-        qc_checked_by: string | null; qc_checked_at: string | null; current_stage: number
+        qc_checked_by: string | null; qc_checked_at: string | null
+        reinspection_status: string | null; reinspection_type: string | null
+        reinspection_by: string | null; reinspection_at: string | null
+        current_stage: number
         overall_status: string; sa_name: string | null; reception_entry_id: number | null
       }>
 
@@ -462,6 +508,10 @@ export default function BodyshopFloorScreen() {
           qc_fail_reason: c.qc_fail_reason,
           qc_checked_by: c.qc_checked_by,
           qc_checked_at: c.qc_checked_at,
+          reinspection_status: c.reinspection_status,
+          reinspection_type: c.reinspection_type,
+          reinspection_by: c.reinspection_by,
+          reinspection_at: c.reinspection_at,
           current_stage: c.current_stage,
           overall_status: c.overall_status,
           sa_name: c.sa_name,
@@ -469,8 +519,9 @@ export default function BodyshopFloorScreen() {
         }))
       setCars(carList)
 
-      // QC state
+      // QC + RI state
       const nextQc: Record<string, QcState> = {}
+      const nextRi: Record<string, RiState> = {}
       carList.forEach(c => {
         const k = jcKey(c.job_card_no)
         nextQc[k] = {
@@ -480,8 +531,16 @@ export default function BodyshopFloorScreen() {
           qc_checked_by: String(c.qc_checked_by ?? ''),
           qc_checked_at: String(c.qc_checked_at ?? ''),
         }
+        nextRi[k] = {
+          repairCardId: c.id,
+          reinspection_status: String(c.reinspection_status ?? 'pending').trim().toLowerCase() || 'pending',
+          reinspection_type: normalizeRiDoneBy(c.reinspection_type),
+          reinspection_by: String(c.reinspection_by ?? ''),
+          reinspection_at: String(c.reinspection_at ?? ''),
+        }
       })
       setQcByJc(nextQc)
+      setRiByJc(nextRi)
 
       // 2. Employees
       const { data: empData } = await supabase
@@ -576,6 +635,16 @@ export default function BodyshopFloorScreen() {
   function isBsCompleted(c: FloorCar) {
     return Boolean(bsFloorStatus[jcKey(c.job_card_no)]?.completedAt)
   }
+  function isQcPassed(c: FloorCar) {
+    const status = String(qcByJc[jcKey(c.job_card_no)]?.qc_status ?? c.qc_status ?? '').trim().toLowerCase()
+    return status === 'pass'
+  }
+  function isInQcQueue(c: FloorCar) {
+    return isBsCompleted(c) && !isQcPassed(c)
+  }
+  function isInRiQueue(c: FloorCar) {
+    return isBsCompleted(c) && isQcPassed(c)
+  }
 
   const counts = useMemo(() => ({
     all:            cars.length,
@@ -584,10 +653,11 @@ export default function BodyshopFloorScreen() {
     work_inprocess: cars.filter(c => !isBsCompleted(c) && hasStatus(c, 'work_inprocess')).length,
     hold:           cars.filter(c => !isBsCompleted(c) && hasStatus(c, 'hold')).length,
     completed:      cars.filter(c => isBsCompleted(c)).length,
-    qc:             cars.filter(c => isBsCompleted(c)).length,
+    qc:             cars.filter(c => isInQcQueue(c)).length,
+    ri:             cars.filter(c => isInRiQueue(c)).length,
     approvals:      cars.filter(c => pendingApprovalCount(c.additional_approval) > 0).length,
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }), [cars, assignments, bsFloorStatus])
+  }), [cars, assignments, bsFloorStatus, qcByJc])
 
   const filtered = useMemo(() => {
     let list = [...cars]
@@ -608,11 +678,12 @@ export default function BodyshopFloorScreen() {
     if (assignmentView === 'work_inprocess') return list.filter(c => !isBsCompleted(c) && hasStatus(c, 'work_inprocess'))
     if (assignmentView === 'hold')           return list.filter(c => !isBsCompleted(c) && hasStatus(c, 'hold'))
     if (assignmentView === 'completed')      return list.filter(c => isBsCompleted(c))
-    if (assignmentView === 'qc')             return list.filter(c => isBsCompleted(c))
+    if (assignmentView === 'qc')             return list.filter(c => isInQcQueue(c))
+    if (assignmentView === 'ri')             return list.filter(c => isInRiQueue(c))
     if (assignmentView === 'approvals')      return list.filter(c => pendingApprovalCount(c.additional_approval) > 0)
     return list
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cars, branchFilter, floorFilter, search, assignmentView, assignments, bsFloorStatus])
+  }, [cars, branchFilter, floorFilter, search, assignmentView, assignments, bsFloorStatus, qcByJc])
 
   const branches = useMemo(() => Array.from(new Set(cars.map(c => c.branch ?? 'Unknown'))).sort(), [cars])
   const floors   = useMemo(() => Array.from(new Set(cars.map(c => c.bodyshop_floor ?? '').filter(Boolean))).sort(), [cars])
@@ -633,6 +704,10 @@ export default function BodyshopFloorScreen() {
 
   function patchQc(k: string, patch: Partial<QcState>) {
     setQcByJc(prev => ({ ...prev, [k]: { ...(prev[k] ?? { repairCardId: null, qc_status: 'pending', qc_fail_reason: '', qc_checked_by: '', qc_checked_at: '' }), ...patch } }))
+  }
+
+  function patchRi(k: string, patch: Partial<RiState>) {
+    setRiByJc(prev => ({ ...prev, [k]: { ...(prev[k] ?? emptyRiState()), ...patch } }))
   }
 
   async function assignRole(car: FloorCar, role: BSRole, empCode: string) {
@@ -767,7 +842,6 @@ export default function BodyshopFloorScreen() {
     if (draft.qc_status === 'fail' && !draft.qc_fail_reason.trim()) { showToast('Fail reason required', 'error'); return }
     setSaving(`${k}-qc`)
     try {
-      const { data: { user } } = await supabase.auth.getUser()
       const now = new Date().toISOString()
       const repairCardId = draft.repairCardId ?? car.id
       const payload: Record<string, unknown> = {
@@ -777,8 +851,8 @@ export default function BodyshopFloorScreen() {
         qc_checked_at: now,
         qc_passed_by: draft.qc_status === 'pass' ? joinQcNames(checkers) : null,
         qc_passed_at: draft.qc_status === 'pass' ? now : null,
-        current_stage: 13,
-        current_stage_name: 'Quality Check',
+        current_stage: draft.qc_status === 'pass' ? 14 : 13,
+        current_stage_name: draft.qc_status === 'pass' ? 'Re-Inspection' : 'Quality Check',
       }
       const result = await supabase.from('bodyshop_repair_cards').update(payload).eq('id', repairCardId).select('id, qc_status, qc_fail_reason, qc_checked_by, qc_checked_at').single()
       if (result.error) throw result.error
@@ -788,12 +862,90 @@ export default function BodyshopFloorScreen() {
         qc_checked_by: String(result.data?.qc_checked_by ?? joinQcNames(checkers)),
         qc_checked_at: String(result.data?.qc_checked_at ?? now),
       })
+      setRiByJc(prev => ({
+        ...prev,
+        [k]: { ...(prev[k] ?? emptyRiState()), repairCardId: Number(result.data?.id ?? repairCardId) },
+      }))
       // Update local car record
-      setCars(prev => prev.map(c => c.id === repairCardId ? { ...c, qc_status: String(result.data?.qc_status ?? draft.qc_status) } : c))
-      showToast('QC details saved', 'success')
+      setCars(prev => prev.map(c => c.id === repairCardId ? {
+        ...c,
+        qc_status: String(result.data?.qc_status ?? draft.qc_status),
+        current_stage: draft.qc_status === 'pass' ? 14 : 13,
+      } : c))
+      if (draft.qc_status === 'pass') {
+        showToast('QC passed — moved to RI', 'success')
+        setAssignmentView('ri')
+      } else {
+        showToast('QC details saved', 'success')
+      }
       setQcPickerOpen(false)
     } catch (err) {
       showToast(err instanceof Error ? err.message : 'Failed to save QC', 'error')
+    } finally { setSaving(null) }
+  }
+
+  async function saveRi(car: FloorCar) {
+    const k = jcKey(car.job_card_no)
+    const draft = riByJc[k] ?? emptyRiState()
+    const doneByType = normalizeRiDoneBy(draft.reinspection_type)
+    const doneByName = String(draft.reinspection_by ?? '').trim()
+    const status = String(draft.reinspection_status ?? 'pending').trim().toLowerCase() || 'pending'
+
+    if (!doneByType) { showToast('Select RI Done By', 'error'); return }
+    if (doneByType === 'other' && !doneByName) { showToast('Enter the name for RI Done By (Other)', 'error'); return }
+
+    setSaving(`${k}-ri`)
+    try {
+      const now = new Date().toISOString()
+      const repairCardId = draft.repairCardId ?? qcByJc[k]?.repairCardId ?? car.id
+      const resolvedBy = doneByType === 'other'
+        ? doneByName
+        : (doneByName || labelForRiDoneBy(doneByType))
+
+      const payload: Record<string, unknown> = {
+        reinspection_status: status,
+        reinspection_type: doneByType,
+        reinspection_by: resolvedBy,
+        reinspection_at: now,
+        current_stage: 14,
+        current_stage_name: 'Re-Inspection',
+      }
+      const result = await supabase
+        .from('bodyshop_repair_cards')
+        .update(payload)
+        .eq('id', repairCardId)
+        .select('id, reinspection_status, reinspection_type, reinspection_by, reinspection_at')
+        .single()
+      if (result.error) throw result.error
+
+      patchRi(k, {
+        repairCardId: Number(result.data?.id ?? repairCardId),
+        reinspection_status: String(result.data?.reinspection_status ?? status),
+        reinspection_type: normalizeRiDoneBy(result.data?.reinspection_type ?? doneByType),
+        reinspection_by: String(result.data?.reinspection_by ?? resolvedBy),
+        reinspection_at: String(result.data?.reinspection_at ?? now),
+      })
+      setCars(prev => prev.map(c => c.id === repairCardId ? {
+        ...c,
+        reinspection_status: String(result.data?.reinspection_status ?? status),
+        reinspection_type: normalizeRiDoneBy(result.data?.reinspection_type ?? doneByType),
+        reinspection_by: String(result.data?.reinspection_by ?? resolvedBy),
+        reinspection_at: String(result.data?.reinspection_at ?? now),
+        current_stage: 14,
+      } : c))
+      if (selectedCar?.id === repairCardId) {
+        setSelectedCar(prev => prev ? {
+          ...prev,
+          reinspection_status: String(result.data?.reinspection_status ?? status),
+          reinspection_type: normalizeRiDoneBy(result.data?.reinspection_type ?? doneByType),
+          reinspection_by: String(result.data?.reinspection_by ?? resolvedBy),
+          reinspection_at: String(result.data?.reinspection_at ?? now),
+          current_stage: 14,
+        } : prev)
+      }
+      showToast('RI details saved', 'success')
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Failed to save RI', 'error')
     } finally { setSaving(null) }
   }
 
@@ -903,6 +1055,8 @@ export default function BodyshopFloorScreen() {
     const assignedCount = roleMap ? ALL_ROLES.filter(r => Boolean(roleMap[r])).length : 0
     const anyHold = roleMap ? ALL_ROLES.some(r => roleMap[r]?.work_status === 'hold') : false
     const qc = qcByJc[k] ?? { repairCardId: car.id, qc_status: 'pending', qc_fail_reason: '', qc_checked_by: '', qc_checked_at: '' }
+    const ri = riByJc[k] ?? emptyRiState()
+    const showRiSection = qc.qc_status === 'pass' || assignmentView === 'ri'
     const approvalParts = parseAdditionalApprovalParts(car.additional_approval)
     const assignedCheckers = getAssignedCheckerNames(car)
     const selectedCheckers = parseQcNames(qc.qc_checked_by)
@@ -912,6 +1066,67 @@ export default function BodyshopFloorScreen() {
       if (otherNorm && !n.toLowerCase().includes(otherNorm)) return false
       return true
     })
+
+    function renderRiForm(titleMarginTop?: number) {
+      return (
+        <>
+          <Text style={[S.sectionTitle, titleMarginTop != null ? { marginTop: titleMarginTop } : null]}>Re-Inspection</Text>
+          <View style={S.qcCard}>
+            <Text style={S.fieldLabel}>RI Status</Text>
+            <View style={{ flexDirection: 'row', gap: 8, marginBottom: 12 }}>
+              {['pending', 'completed'].map(o => {
+                const active = (ri.reinspection_status || 'pending') === o
+                const col = o === 'completed' ? '#1c8f63' : '#82858f'
+                return (
+                  <TouchableOpacity key={o} style={{ flex: 1 }} onPress={() => patchRi(k, { reinspection_status: o })}>
+                    <View style={[S.statusChip, active && { backgroundColor: `${col}15`, borderColor: col }]}>
+                      <Text style={{ fontSize: 12, fontWeight: active ? '700' : '500', color: active ? col : '#82858f', textTransform: 'capitalize' }}>{o}</Text>
+                    </View>
+                  </TouchableOpacity>
+                )
+              })}
+            </View>
+
+            <Text style={S.fieldLabel}>RI Done By</Text>
+            <View style={{ flexDirection: 'row', gap: 6, marginBottom: 12, flexWrap: 'wrap' }}>
+              {RI_DONE_BY_OPTIONS.map(opt => {
+                const active = ri.reinspection_type === opt.value
+                return (
+                  <TouchableOpacity key={opt.value} style={{ flexGrow: 1, minWidth: '30%' }} onPress={() => patchRi(k, {
+                    reinspection_type: opt.value,
+                    reinspection_by: opt.value === 'other' ? ri.reinspection_by : '',
+                  })}>
+                    <View style={[S.statusChip, active && { backgroundColor: '#e9effe', borderColor: '#2a4cd0' }]}>
+                      <Text style={{ fontSize: 11, fontWeight: active ? '700' : '500', color: active ? '#2a4cd0' : '#82858f' }}>{opt.label}</Text>
+                    </View>
+                  </TouchableOpacity>
+                )
+              })}
+            </View>
+
+            {ri.reinspection_type === 'other' && (
+              <View style={{ marginBottom: 12 }}>
+                <Text style={S.fieldLabel}>Other Name *</Text>
+                <TextInput
+                  style={S.remarkInput}
+                  placeholder="Enter name"
+                  placeholderTextColor="#a7a99f"
+                  value={ri.reinspection_by}
+                  onChangeText={t => patchRi(k, { reinspection_by: t })}
+                />
+              </View>
+            )}
+
+            <Text style={S.fieldLabel}>RI Done At</Text>
+            <Text style={{ fontSize: 13, color: '#4b4e59', marginBottom: 12 }}>{fmtTs(ri.reinspection_at)}</Text>
+
+            <TouchableOpacity style={[S.saveBtn, saving?.includes('-ri') && { opacity: 0.5 }]} disabled={!!saving} onPress={() => saveRi(car)}>
+              {saving?.includes('-ri') ? <ActivityIndicator color="#fff" size="small" /> : <Text style={{ color: '#fff', fontWeight: '700' }}>Save RI</Text>}
+            </TouchableOpacity>
+          </View>
+        </>
+      )
+    }
 
     // Emp picker employees
     const empPickerCandidates = empPickerRole
@@ -968,6 +1183,9 @@ export default function BodyshopFloorScreen() {
               <Text style={{ color: '#fff', fontWeight: '700', fontSize: 13 }}>✓ Mark Floor Work Completed</Text>
             </TouchableOpacity>
           )}
+
+          {/* RI form prominent when opened from RI tab */}
+          {assignmentView === 'ri' && showRiSection && renderRiForm()}
 
           {/* Role Assignment */}
           <Text style={S.sectionTitle}>Role Assignment</Text>
@@ -1153,6 +1371,9 @@ export default function BodyshopFloorScreen() {
               {saving?.includes('-qc') ? <ActivityIndicator color="#fff" size="small" /> : <Text style={{ color: '#fff', fontWeight: '700' }}>Save QC</Text>}
             </TouchableOpacity>
           </View>
+
+          {/* Re-Inspection — below QC when QC passed (and not already shown from RI tab) */}
+          {showRiSection && assignmentView !== 'ri' && renderRiForm(20)}
 
           {/* Additional Approval */}
           <Text style={[S.sectionTitle, { marginTop: 20 }]}>Additional Approval</Text>
