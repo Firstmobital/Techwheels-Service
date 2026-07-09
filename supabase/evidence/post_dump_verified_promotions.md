@@ -54,3 +54,9 @@ When a new dump is refreshed, this window is reset.
 - migration: 20260706220000_ew_renewal_responses_and_service_flow_button.sql
 - checks: 20260706220000_ew_renewal_responses_and_service_flow_button_checks.sql
 - baseline_dump_sha256: 3642cc29eab0d821b40e324ca702fd662e7e10d170ce29e0c31433dd8c9c83a8
+
+## 2026-07-09T12:44:07Z
+- prefix: 20260709180000
+- migration: 20260709180000_updation_reminders.sql
+- checks: 20260709180000_updation_reminders_checks.sql
+- baseline_dump_sha256: 3642cc29eab0d821b40e324ca702fd662e7e10d170ce29e0c31433dd8c9c83a8

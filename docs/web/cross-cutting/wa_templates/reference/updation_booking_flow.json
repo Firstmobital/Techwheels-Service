@@ -1,0 +1,72 @@
+{
+  "version": "6.0",
+  "screens": [
+    {
+      "id": "BOOK_UPDATION_VISIT",
+      "title": "Book Your Visit",
+      "terminal": true,
+      "success": true,
+      "data": {},
+      "layout": {
+        "type": "SingleColumnLayout",
+        "children": [
+          {
+            "type": "Form",
+            "name": "updation_booking_form",
+            "children": [
+              {
+                "type": "TextHeading",
+                "text": "Schedule your update visit"
+              },
+              {
+                "type": "TextBody",
+                "text": "Pick a date, preferred time, and the branch you'd like to visit."
+              },
+              {
+                "type": "DatePicker",
+                "name": "booking_date",
+                "label": "Preferred Date",
+                "required": true
+              },
+              {
+                "type": "RadioButtonsGroup",
+                "name": "preferred_time",
+                "label": "Preferred Time",
+                "required": true,
+                "data-source": [
+                  { "id": "morning", "title": "Morning (9 AM - 12 PM)" },
+                  { "id": "afternoon", "title": "Afternoon (12 PM - 4 PM)" },
+                  { "id": "evening", "title": "Evening (4 PM - 6 PM)" }
+                ]
+              },
+              {
+                "type": "Dropdown",
+                "name": "branch",
+                "label": "Service Branch",
+                "required": true,
+                "data-source": [
+                  { "id": "ajmer_road", "title": "Ajmer Road" },
+                  { "id": "sitapura", "title": "Sitapura" },
+                  { "id": "tonk", "title": "Tonk" },
+                  { "id": "shahpura", "title": "Shahpura" }
+                ]
+              },
+              {
+                "type": "Footer",
+                "label": "Submit",
+                "on-click-action": {
+                  "name": "complete",
+                  "payload": {
+                    "booking_date": "${form.booking_date}",
+                    "preferred_time": "${form.preferred_time}",
+                    "branch": "${form.branch}"
+                  }
+                }
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

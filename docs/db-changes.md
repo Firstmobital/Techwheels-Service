@@ -146,3 +146,30 @@
     service_due_reminder_flow template's exact Flow ("Book Now", flow_id
     1329781145787136) and PHONE_NUMBER button ("Call Us", +917045181062)
     instead of static quick-replies.
+
+## 2026-07-09
+
+### Prefix 20260709180000
+- Migration: 20260709180000_updation_reminders.sql
+- Check: 20260709180000_updation_reminders_checks.sql
+- Status: Executed and verified
+- Notes:
+  - New tables updation_import_batches (one row per chassis-list import,
+    tracks matched-with-phone / matched-no-phone / unmatched counts) and
+    updation_reminders (2 rows per matched chassis — reminder_number 1 sent
+    immediately on import, reminder_number 2 scheduled gap_days later),
+    supporting the import-driven "Updation Reminder" WhatsApp automation
+    (Tata Motors recall/software-update campaigns).
+  - New wa_agent_config columns: updation_reminder_enabled (gates only the
+    day-N follow-up sweep — reminder 1 always sends on import),
+    updation_reminder_template_id, updation_reminder_template_lang,
+    updation_reminder_variable_map, updation_reminder_send_time,
+    updation_reminder_gap_days (default 3).
+  - pg_cron job updation-reminder-daily-ist registered at 30 4 * * *
+    (10:00 IST), driving the reminder-2 follow-up sweep only.
+  - No RLS / GRANT ALL to anon,authenticated,service_role, matching every
+    sibling reminder table (auto_service_reminders, ew_service_reminders,
+    ew_renewal_reminders) — verified via get_advisors that this introduces
+    no new findings beyond that already-accepted posture.
+  - Verification passed: tables/columns/constraints/indexes present, cron
+    job active with expected schedule/command, config row defaults correct.

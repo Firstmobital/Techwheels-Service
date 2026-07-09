@@ -3,8 +3,9 @@ import AutoServiceReminderPage from './AutoServiceReminderPage'
 import PostServiceFeedbackPage from './PostServiceFeedbackPage'
 import EWRenewalReminderPage from './EWRenewalReminderPage'
 import EWServiceReminderPage from './EWServiceReminderPage'
+import UpdationReminderPage from './UpdationReminderPage'
 
-type Tab = 'reminders' | 'feedback' | 'ew_renewal' | 'ew_service_reminder'
+type Tab = 'reminders' | 'feedback' | 'ew_renewal' | 'ew_service_reminder' | 'updation_reminder'
 
 export default function WhatsAppAutomationsPage() {
   const [tab, setTab] = useState<Tab>('reminders')
@@ -14,6 +15,7 @@ export default function WhatsAppAutomationsPage() {
     { key: 'feedback',            label: 'Post-Service Feedback' },
     { key: 'ew_renewal',          label: 'EW Renewal' },
     { key: 'ew_service_reminder', label: 'EW Service Reminder' },
+    { key: 'updation_reminder',   label: 'Updation Reminder' },
   ]
 
   return (
@@ -40,6 +42,7 @@ export default function WhatsAppAutomationsPage() {
       {tab === 'feedback' && <PostServiceFeedbackPage />}
       {tab === 'ew_renewal' && <EWRenewalReminderPage />}
       {tab === 'ew_service_reminder' && <EWServiceReminderPage />}
+      {tab === 'updation_reminder' && <UpdationReminderPage />}
     </div>
   )
 }

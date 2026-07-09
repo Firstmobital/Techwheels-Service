@@ -628,6 +628,118 @@ Deno.serve(async (req) => {
     }
   }
 
+  // ── UPDATION REMINDER: handle "Book My Visit" Flow form submission ───────
+  // This Flow's JSON is authored in-repo (docs/web/cross-cutting/wa_templates/
+  // reference/updation_booking_flow.json) with deterministic field names —
+  // booking_date/preferred_time/branch — unlike the legacy service_booking_cta
+  // Flow's auto-generated screen_0_X_<hash> keys. Detecting on those exact keys
+  // lets this branch run before the legacy handler below without ambiguity.
+  if (msgType === 'interactive') {
+    const inter     = msg.interactive as Record<string, unknown>
+    const interType = inter?.type as string
+    if (interType === 'nfm_reply' && !conv?.flow_active) {
+      const nfm = (inter.nfm_reply as Record<string, unknown>) || {}
+      const rawResp = nfm.response_json
+      let flowFields: Record<string, unknown> = {}
+      if (typeof rawResp === 'string') {
+        try { flowFields = JSON.parse(rawResp) } catch { flowFields = {} }
+      } else if (rawResp && typeof rawResp === 'object') {
+        flowFields = rawResp as Record<string, unknown>
+      }
+
+      if ('booking_date' in flowFields) {
+        const rawDate = (flowFields['booking_date'] as string) || ''
+        const rawTime = (flowFields['preferred_time'] as string) || ''
+        const rawBranch = (flowFields['branch'] as string) || ''
+
+        const timeMap: Record<string, string> = {
+          morning:   'Morning',
+          afternoon: 'Afternoon',
+          evening:   'Evening',
+        }
+        const branchMap: Record<string, string> = {
+          ajmer_road: 'Ajmer Road',
+          sitapura:   'Sitapura',
+          tonk:       'Tonk',
+          shahpura:   'Shahpura',
+        }
+        const bookingTime = timeMap[rawTime] || null
+        const branchToUse = branchMap[rawBranch] || (config.available_branches as string[])?.[0] || 'Sitapura'
+        const appointmentDate = rawDate ? rawDate.split('T')[0] : todayStr
+
+        // Save inbound message
+        await sb.from('wa_messages').insert([{
+          conversation_id: convId, direction: 'inbound', sender: 'customer',
+          body: `[Flow submitted] Date: ${appointmentDate}, Time: ${rawTime}, Branch: ${rawBranch}`,
+          wa_message_id: waMessageId, status: 'delivered', ai_generated: false,
+        }])
+        await sb.from('wa_conversations').update({ last_message_at: new Date().toISOString() }).eq('id', convId)
+
+        // Find the most recent unlinked updation_reminders row for this phone
+        // (booking_id still null) to pull the vehicle/campaign context from.
+        const { data: urCandidate } = await sb.from('updation_reminders')
+          .select('id, chassis_no, updation_name, vehicle_registration_number, model, customer_name')
+          .eq('mobile_number', from10)
+          .is('booking_id', null)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle()
+
+        const { data: newBkgArr, error: bkgErr } = await sb.from('service_bookings').insert([{
+          booking_source:       'WhatsApp Updation Reminder',
+          booking_date:         todayStr,
+          appointment_date:     appointmentDate,
+          booking_time:         bookingTime,
+          branch:               branchToUse,
+          reg_number:           (urCandidate?.vehicle_registration_number as string) || (conv?.reg_number as string) || (vehicle?.vehicle_registration_number as string) || 'UNKNOWN',
+          model:                (urCandidate?.model as string) || (conv?.model as string) || (vehicle?.model as string) || null,
+          customer_name:        (urCandidate?.customer_name as string) || (conv?.customer_name as string) || `${vehicle?.first_name || ''} ${vehicle?.last_name || ''}`.trim() || 'Valued Customer',
+          customer_phone:       from10,
+          service_type:         'Updation',
+          special_requests:     urCandidate?.updation_name ? `Updation campaign: ${urCandidate.updation_name}` : null,
+          status:               'Confirmed',
+          wa_opt_in:            true,
+          wa_conversation_id:   String(convId),
+        }]).select()
+
+        if (bkgErr) {
+          console.error('UR flow booking insert failed:', bkgErr.message)
+        } else {
+          const newBkg = newBkgArr?.[0] as Record<string, unknown>
+          const bkgId  = (newBkg?.lead_number as string) || `#${newBkg?.id}`
+
+          await sb.from('wa_conversations').update({
+            status:           'Booked',
+            stage:            'booked',
+            booking_id:       newBkg?.id || null,
+            preferred_date:   appointmentDate,
+            preferred_branch: branchToUse,
+          }).eq('id', convId)
+
+          // Link booking back onto every unlinked updation_reminders row for this
+          // chassis (both reminder 1 and reminder 2) so the day-3 sweep skips it.
+          if (urCandidate?.chassis_no) {
+            await sb.from('updation_reminders')
+              .update({ booking_id: newBkg?.id || null, flow_response_id: waMessageId, updated_at: new Date().toISOString() })
+              .eq('chassis_no', urCandidate.chassis_no)
+              .is('booking_id', null)
+          }
+
+          const confirmMsg = `✅ *Booking Confirmed!*\n📋 Booking ID: ${bkgId}\n📅 Date: ${appointmentDate}\n⏰ Time: ${bookingTime || rawTime}\n📍 Branch: ${branchToUse}\n\nDhanyawad! Our team will confirm shortly. 🙏`
+
+          await sb.from('wa_messages').insert([{
+            conversation_id: convId, direction: 'outbound', sender: 'ai',
+            body: confirmMsg, ai_generated: true, status: 'sent',
+          }])
+          await sendWA(phoneId, metaToken, fromE164, confirmMsg)
+          console.log(`Updation reminder flow booking ${bkgId} created for ${from10}`)
+        }
+
+        return new Response('OK', { status: 200 })
+      }
+    }
+  }
+
   // ── AUTO SERVICE REMINDER: handle WhatsApp Flow form submission ──────────
   // When customer taps "Book Now" on an auto reminder template and submits the
   // Flow form, Meta sends an nfm_reply. Since reminders are sent directly (not
