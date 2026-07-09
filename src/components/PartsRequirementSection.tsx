@@ -55,6 +55,16 @@ function fmtDateTime(v: string | null): string {
   return new Date(v).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', dateStyle: 'medium', timeStyle: 'short' })
 }
 
+// Formats a plain 'YYYY-MM-DD' date (e.g. parts_order_date) as DD/MM/YYYY without any
+// timezone conversion — it's a date, not a timestamp, so shifting it by locale/TZ would
+// risk displaying the wrong calendar day.
+function fmtDateDMY(v: string | null): string {
+  if (!v) return '-'
+  const m = v.match(/^(\d{4})-(\d{2})-(\d{2})/)
+  if (!m) return v
+  return `${m[3]}/${m[2]}/${m[1]}`
+}
+
 // Matches the normalization used server-side (parts-order-descriptions edge function) so
 // lookups in the fetched Part Number -> Description map line up regardless of whitespace/case.
 function normPartNumber(v: string | null | undefined): string {
@@ -151,6 +161,7 @@ export default function PartsRequirementSection() {
   const [expandedId, setExpandedId] = useState<number | null>(null)
   const [toast, setToast] = useState<string | null>(null)
   const [descriptions, setDescriptions] = useState<Record<string, string>>({})
+  const [orderNumbers, setOrderNumbers] = useState<Record<string, string>>({})
   const [quickFilter, setQuickFilter] = useState<QuickFilter>('all')
   const [search, setSearch] = useState('')
   const [confirmAction, setConfirmAction] = useState<ConfirmAction>(null)
@@ -161,7 +172,10 @@ export default function PartsRequirementSection() {
   // Description column showing "Description Not Available" until the next successful fetch.
   const loadDescriptions = useCallback(async () => {
     const res = await fetchPartsOrderDescriptions()
-    if (!res.error) setDescriptions(res.data ?? {})
+    if (!res.error) {
+      setDescriptions(res.data?.descriptions ?? {})
+      setOrderNumbers(res.data?.orderNumbers ?? {})
+    }
   }, [])
 
   const load = useCallback(async () => {
@@ -422,6 +436,12 @@ export default function PartsRequirementSection() {
     return descriptions[normPartNumber(row.parts_number)] || row.parts_description || ''
   }
 
+  // Order No. — matched Order Sheet order number (sap_order_number, falling back to
+  // crm_order_number), keyed by Parts Number. "-" when no order has been created/matched yet.
+  const orderNoOf = (row: PartsRequestRow): string => {
+    return orderNumbers[normPartNumber(row.parts_number)] || ''
+  }
+
   const pillCls = (active: boolean) =>
     `rounded-full px-3 py-1.5 text-xs font-semibold transition ${
       active ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
@@ -461,18 +481,22 @@ export default function PartsRequirementSection() {
         </button>
       </div>
 
-      {/* Dashboard summary cards */}
+      {/* Dashboard summary cards — color-coded to match each status's badge color
+          (see PARTS_STATUS_COLOR) so the whole page reads as one consistent palette. */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
         {[
-          { label: 'Pending Parts', value: counts.Pending },
-          { label: 'Ordered', value: counts.Ordered },
-          { label: 'Received', value: counts.Received },
-          { label: 'Ready', value: counts.Ready },
-          { label: 'Done Today', value: doneTodayCount },
+          { label: 'Pending Parts', value: counts.Pending, ring: 'ring-amber-200', bg: 'bg-amber-50', text: 'text-amber-700', dot: 'bg-amber-500' },
+          { label: 'Ordered', value: counts.Ordered, ring: 'ring-blue-200', bg: 'bg-blue-50', text: 'text-blue-700', dot: 'bg-blue-500' },
+          { label: 'Received', value: counts.Received, ring: 'ring-green-200', bg: 'bg-green-50', text: 'text-green-700', dot: 'bg-green-500' },
+          { label: 'Ready', value: counts.Ready, ring: 'ring-violet-200', bg: 'bg-violet-50', text: 'text-violet-700', dot: 'bg-violet-500' },
+          { label: 'Done Today', value: doneTodayCount, ring: 'ring-slate-200', bg: 'bg-slate-50', text: 'text-slate-700', dot: 'bg-slate-500' },
         ].map((s) => (
-          <div key={s.label} className="rounded-xl border border-gray-200 bg-white p-3.5 shadow-sm">
-            <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">{s.label}</p>
-            <p className="mt-1 text-2xl font-bold text-gray-900">{s.value}</p>
+          <div key={s.label} className={`rounded-xl border border-gray-200 ${s.bg} p-3.5 shadow-sm ring-1 ${s.ring}`}>
+            <p className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-gray-500">
+              <span className={`inline-block h-2 w-2 rounded-full ${s.dot}`} />
+              {s.label}
+            </p>
+            <p className={`mt-1 text-2xl font-bold ${s.text}`}>{s.value}</p>
           </div>
         ))}
       </div>
@@ -645,14 +669,15 @@ export default function PartsRequirementSection() {
         <div className="overflow-x-auto">
             <table className="w-full border-collapse text-sm">
               <thead>
-                <tr className="border-b border-gray-200 bg-gray-50 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
+                <tr className="border-b border-indigo-100 bg-gradient-to-r from-indigo-50 via-blue-50 to-violet-50 text-left text-xs font-semibold uppercase tracking-wide text-indigo-700">
                   <th className="px-4 py-3">Job Card</th>
                   <th className="px-4 py-3">Reg. Number</th>
                   <th className="px-4 py-3">Customer</th>
                   <th className="px-4 py-3">Vehicle</th>
                   <th className="px-4 py-3">Part No</th>
-                  <th className="px-4 py-3">Part Name</th>
                   <th className="px-4 py-3 min-w-[200px]">Description</th>
+                  <th className="px-4 py-3">Order No.</th>
+                  <th className="px-4 py-3">Order Date</th>
                   <th className="px-4 py-3">Qty</th>
                   <th className="px-4 py-3 min-w-[180px]">Advisor Remarks</th>
                   <th className="px-4 py-3 min-w-[180px]">Customer Update</th>
@@ -662,14 +687,16 @@ export default function PartsRequirementSection() {
                 </tr>
               </thead>
               <tbody>
-                {filteredRows.map((row) => {
+                {filteredRows.map((row, rowIdx) => {
                   const desc = descOf(row)
                   return (
                     <>
                       <tr
                         key={row.id}
                         onClick={() => void handleExpand(row)}
-                        className={`cursor-pointer border-b border-gray-100 transition hover:bg-gray-50 ${!row.advisor_seen ? 'bg-orange-50/60' : ''}`}
+                        className={`cursor-pointer border-b border-gray-100 transition hover:bg-indigo-50/60 ${
+                          !row.advisor_seen ? 'bg-orange-50/60' : rowIdx % 2 === 1 ? 'bg-slate-50/70' : 'bg-white'
+                        }`}
                       >
                         <td className="px-4 py-2.5 text-gray-700">{row.job_card_number || '—'}</td>
                         <td className="px-4 py-2.5 font-semibold text-gray-900">{row.registration_number}</td>
@@ -678,9 +705,26 @@ export default function PartsRequirementSection() {
                           {row.vehicle_model || '—'}{row.vehicle_type ? ` (${row.vehicle_type})` : ''}
                         </td>
                         <td className={`px-4 py-2.5 ${row.parts_number ? 'text-gray-700' : 'text-gray-400'}`}>{row.parts_number || '—'}</td>
-                        <td className="px-4 py-2.5 text-gray-700">{row.parts_required}</td>
                         <td className={`max-w-[220px] px-4 py-2.5 ${desc ? 'text-gray-700' : 'text-gray-400'}`} title={desc || undefined}>
                           <span className="line-clamp-2 whitespace-normal">{desc || 'Description Not Available'}</span>
+                        </td>
+                        <td className="px-4 py-2.5">
+                          {orderNoOf(row) ? (
+                            <span className="inline-flex items-center rounded-full bg-indigo-50 px-2.5 py-1 text-xs font-semibold text-indigo-700 ring-1 ring-indigo-200">
+                              {orderNoOf(row)}
+                            </span>
+                          ) : (
+                            <span className="text-gray-400">-</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-2.5">
+                          {row.parts_order_date ? (
+                            <span className="inline-flex items-center rounded-full bg-teal-50 px-2.5 py-1 text-xs font-semibold text-teal-700 ring-1 ring-teal-200">
+                              {fmtDateDMY(row.parts_order_date)}
+                            </span>
+                          ) : (
+                            <span className="text-gray-400">-</span>
+                          )}
                         </td>
                         <td className="px-4 py-2.5"><QtyBadge qty={row.parts_qty} /></td>
                         <td className="px-4 py-2.5" onClick={(e) => e.stopPropagation()}>
@@ -727,7 +771,7 @@ export default function PartsRequirementSection() {
                       </tr>
                       {expandedId === row.id && (
                         <tr key={`${row.id}-detail`} className="border-b border-gray-100 bg-gray-50/70">
-                          <td colSpan={13} className="px-6 py-3 text-xs text-gray-600">
+                          <td colSpan={14} className="px-6 py-3 text-xs text-gray-600">
                             <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">
                               <div><span className="font-semibold text-gray-800">Order Date:</span> {row.parts_order_date || '—'}</div>
                               <div><span className="font-semibold text-gray-800">SPM Remarks:</span> {row.spm_remarks || '—'}</div>
@@ -768,6 +812,18 @@ export default function PartsRequirementSection() {
                   <span className="font-semibold">{row.parts_required}</span>{row.parts_number ? ` (${row.parts_number})` : ''}
                 </p>
                 <p className={`mt-1 text-xs ${desc ? 'text-gray-500' : 'text-gray-400'}`}>{desc || 'Description Not Available'}</p>
+                <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                  {orderNoOf(row) ? (
+                    <span className="inline-flex items-center rounded-full bg-indigo-50 px-2.5 py-1 text-xs font-semibold text-indigo-700 ring-1 ring-indigo-200">
+                      Order: {orderNoOf(row)}
+                    </span>
+                  ) : null}
+                  {row.parts_order_date ? (
+                    <span className="inline-flex items-center rounded-full bg-teal-50 px-2.5 py-1 text-xs font-semibold text-teal-700 ring-1 ring-teal-200">
+                      {fmtDateDMY(row.parts_order_date)}
+                    </span>
+                  ) : null}
+                </div>
                 <div className="mt-2 flex items-center justify-between text-xs">
                   <QtyBadge qty={row.parts_qty} />
                   <MiniTimeline status={row.parts_status} />
