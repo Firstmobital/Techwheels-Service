@@ -82,6 +82,7 @@ export interface ReportDefinition {
   label: string
   description: string
   cardHint: string
+  group?: string
   Component: ComponentType<ReportViewProps>
 }
 

@@ -443,26 +443,64 @@ export default function ReportsPage() {
               })}
             </div>
 
-            <div className="flex flex-wrap gap-2">
-              {reportsInCategory.map((report) => {
-                const isActive = activeReport?.id === report.id
-                return (
-                  <button
-                    key={report.id}
-                    type="button"
-                    onClick={() => navigate(`/reports/${resolvedCategoryId}/${report.id}`)}
-                    className={[
-                      'rounded-lg px-3 py-2 text-sm font-medium transition-colors',
-                      isActive
-                        ? 'bg-blue-600 text-white'
-                        : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900',
-                    ].join(' ')}
-                  >
-                    {report.label}
-                  </button>
-                )
-              })}
-            </div>
+            {resolvedCategoryId === 'parts' ? (
+              /* Parts: grouped pill bar with Daily Operations section */
+              <div className="space-y-2">
+                {/* Analytics group (no group tag) */}
+                <div className="flex flex-wrap gap-2">
+                  {reportsInCategory.filter(r => !r.group).map((report) => {
+                    const isActive = activeReport?.id === report.id
+                    return (
+                      <button key={report.id} type="button"
+                        onClick={() => navigate(`/reports/${resolvedCategoryId}/${report.id}`)}
+                        className={['rounded-lg px-3 py-2 text-sm font-medium transition-colors', isActive ? 'bg-blue-600 text-white' : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'].join(' ')}>
+                        {report.label}
+                      </button>
+                    )
+                  })}
+                </div>
+                {/* Daily Operations group */}
+                {reportsInCategory.some(r => r.group === 'Daily Operations') && (
+                  <div className="flex items-center flex-wrap gap-2">
+                    <span className="inline-flex items-center gap-1 rounded-md bg-amber-50 px-2 py-1 text-[11px] font-semibold uppercase tracking-wide text-amber-700 ring-1 ring-amber-200">
+                      <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                      Daily Operations
+                    </span>
+                    {reportsInCategory.filter(r => r.group === 'Daily Operations').map((report) => {
+                      const isActive = activeReport?.id === report.id
+                      return (
+                        <button key={report.id} type="button"
+                          onClick={() => navigate(`/reports/${resolvedCategoryId}/${report.id}`)}
+                          className={['rounded-lg px-3 py-2 text-sm font-medium transition-colors', isActive ? 'bg-amber-600 text-white' : 'text-gray-600 hover:bg-amber-50 hover:text-amber-800'].join(' ')}>
+                          {report.label}
+                        </button>
+                      )
+                    })}
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="flex flex-wrap gap-2">
+                {reportsInCategory.map((report) => {
+                  const isActive = activeReport?.id === report.id
+                  return (
+                    <button
+                      key={report.id}
+                      type="button"
+                      onClick={() => navigate(`/reports/${resolvedCategoryId}/${report.id}`)}
+                      className={[
+                        'rounded-lg px-3 py-2 text-sm font-medium transition-colors',
+                        isActive
+                          ? 'bg-blue-600 text-white'
+                          : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900',
+                      ].join(' ')}
+                    >
+                      {report.label}
+                    </button>
+                  )
+                })}
+              </div>
+            )}
           </section>
         )}
 
