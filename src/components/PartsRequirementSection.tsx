@@ -1,4 +1,22 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+
+// JS-based breakpoint check — deliberately NOT relying on Tailwind's `hidden md:block` /
+// `md:hidden` CSS-only responsive pattern for the desktop/mobile switch below. Some browsers
+// / older WebViews don't support the modern CSS range media-query syntax Tailwind v4 emits
+// (`@media (width>=48rem)`), which silently fails the match and can hide BOTH containers at
+// once. Deciding the layout in JS guarantees one of the two always renders, on any device.
+function useIsDesktop(): boolean {
+  const [isDesktop, setIsDesktop] = useState(() =>
+    typeof window !== 'undefined' ? window.innerWidth >= 768 : true
+  )
+  useEffect(() => {
+    const onResize = () => setIsDesktop(window.innerWidth >= 768)
+    window.addEventListener('resize', onResize)
+    return () => window.removeEventListener('resize', onResize)
+  }, [])
+  return isDesktop
+}
+
 import {
   createPartsRequest,
   fetchPartsOrderDescriptions,
@@ -121,6 +139,7 @@ const labelCls = 'text-xs font-semibold text-gray-600'
 type ConfirmAction = { row: PartsRequestRow; kind: 'received' | 'ready' | 'done' } | null
 
 export default function PartsRequirementSection() {
+  const isDesktop = useIsDesktop()
   const [rows, setRows] = useState<PartsRequestRow[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -599,9 +618,10 @@ export default function PartsRequirementSection() {
         </div>
       )}
 
-      {/* Desktop table */}
-      {!loading && filteredRows.length > 0 && (
-      <div className="hidden overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm md:block">
+      {/* Desktop table — rendering is gated by the isDesktop JS check (not a CSS
+          hidden/md:block breakpoint) so it can never silently fail to paint. */}
+      {!loading && filteredRows.length > 0 && isDesktop && (
+      <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
         <div className="overflow-x-auto">
             <table className="w-full border-collapse text-sm">
               <thead>
@@ -701,9 +721,9 @@ export default function PartsRequirementSection() {
       </div>
       )}
 
-      {/* Mobile card list */}
-      {!loading && filteredRows.length > 0 && (
-      <div className="space-y-3 md:hidden">
+      {/* Mobile card list — same JS-gated approach as the desktop table above. */}
+      {!loading && filteredRows.length > 0 && !isDesktop && (
+      <div className="space-y-3">
         {filteredRows.map((row) => {
             const desc = descOf(row)
             return (
