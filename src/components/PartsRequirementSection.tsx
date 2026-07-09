@@ -586,16 +586,23 @@ export default function PartsRequirementSection() {
         </div>
       )}
 
+      {/* Loading / empty state — rendered unconditionally (not inside the responsive
+          hidden/md:block or md:hidden wrappers below) so it's never accidentally hidden
+          by a breakpoint mismatch. Only the populated table/cards are split by screen size. */}
+      {(loading || filteredRows.length === 0) && (
+        <div className="rounded-xl border border-gray-200 bg-white py-10 text-center text-sm text-gray-500 shadow-sm">
+          {loading
+            ? 'Loading...'
+            : rows.length === 0
+              ? 'No parts requests yet. Click "New Parts Requirement" to raise one.'
+              : 'No requests match the current filter/search.'}
+        </div>
+      )}
+
       {/* Desktop table */}
+      {!loading && filteredRows.length > 0 && (
       <div className="hidden overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm md:block">
-        {loading ? (
-          <div className="py-10 text-center text-sm text-gray-500">Loading...</div>
-        ) : filteredRows.length === 0 ? (
-          <div className="py-10 text-center text-sm text-gray-500">
-            {rows.length === 0 ? 'No parts requests yet. Click "New Parts Requirement" to raise one.' : 'No requests match the current filter/search.'}
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
+        <div className="overflow-x-auto">
             <table className="w-full border-collapse text-sm">
               <thead>
                 <tr className="border-b border-gray-200 bg-gray-50 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
@@ -691,19 +698,13 @@ export default function PartsRequirementSection() {
               </tbody>
             </table>
           </div>
-        )}
       </div>
+      )}
 
       {/* Mobile card list */}
+      {!loading && filteredRows.length > 0 && (
       <div className="space-y-3 md:hidden">
-        {loading ? (
-          <div className="rounded-xl border border-gray-200 bg-white py-10 text-center text-sm text-gray-500 shadow-sm">Loading...</div>
-        ) : filteredRows.length === 0 ? (
-          <div className="rounded-xl border border-gray-200 bg-white py-10 text-center text-sm text-gray-500 shadow-sm">
-            {rows.length === 0 ? 'No parts requests yet.' : 'No requests match the current filter/search.'}
-          </div>
-        ) : (
-          filteredRows.map((row) => {
+        {filteredRows.map((row) => {
             const desc = descOf(row)
             return (
               <div key={row.id} className={`rounded-xl border border-gray-200 bg-white p-3.5 shadow-sm ${!row.advisor_seen ? 'ring-1 ring-orange-300' : ''}`}>
@@ -756,9 +757,9 @@ export default function PartsRequirementSection() {
                 )}
               </div>
             )
-          })
-        )}
+          })}
       </div>
+      )}
     </div>
   )
 }
