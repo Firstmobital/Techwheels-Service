@@ -454,7 +454,6 @@ function labelForWorkStatus(status: string | null | undefined) {
 }
 
 const NOT_REQUIRED_CODE = 'NOT_REQUIRED'
-const NOT_REQUIRED_NAME = 'Not Required'
 // Roles that are always required and cannot be marked "Not Required"
 const ALWAYS_REQUIRED_ROLES = new Set<BSRole>(['FLOOR_INCHARGE'])
 
@@ -1299,7 +1298,7 @@ export default function BodyshopFloorPage() {
         ...prev,
         [k]: { ...(prev[k] ?? {}), [role]: { work_status: newA.work_status, remark: newA.remark ?? '' } },
       }))
-      showToast(`${ROLE_META[role].label} assigned: ${emp.employee_name}`, 'success')
+      showToast(`${ROLE_META[role].label} assigned: ${emp?.employee_name ?? 'Not Required'}`, 'success')
     } catch (err) {
       showToast(err instanceof Error ? err.message : 'Failed to assign', 'error')
     } finally {
