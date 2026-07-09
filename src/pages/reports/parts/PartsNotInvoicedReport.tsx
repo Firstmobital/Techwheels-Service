@@ -1,6 +1,6 @@
 // Parts Shipped But Not Invoiced — Job-Card level tracking dashboard
 // EV (500A840-SITAPURA) | PV-SITAPURA (3000840) | PV-AJMER ROAD (3001440)
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import * as XLSX from 'xlsx'
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
@@ -11,12 +11,6 @@ import type { ReportViewProps } from '../types'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 const PAGE_SIZE = 50
-const UPLOAD_SLOTS = [
-  { key: 'EV_SITAPURA',   label: 'EV – Sitapura',   portal: 'EV', dealer_code: '500A840',  branch_label: 'SITAPURA',   btnColor: 'bg-emerald-600 hover:bg-emerald-700' },
-  { key: 'PV_SITAPURA',   label: 'PV – Sitapura',   portal: 'PV', dealer_code: '3000840',  branch_label: 'SITAPURA',   btnColor: 'bg-blue-600 hover:bg-blue-700' },
-  { key: 'PV_AJMERROAD',  label: 'PV – Ajmer Road', portal: 'PV', dealer_code: '3001440',  branch_label: 'AJMER ROAD', btnColor: 'bg-indigo-600 hover:bg-indigo-700' },
-] as const
-type SlotKey = typeof UPLOAD_SLOTS[number]['key']
 
 const TRACKING_STATUSES = [
   'Pending', 'Waiting for Repair', 'Vehicle Under Repair',
@@ -72,18 +66,6 @@ interface UploadRow {
 type SortKey = 'created_date' | 'job_card_no' | 'vehicle_reg_no' | 'final_spares_amount' | 'sr_assigned_to' | 'tracking_status' | 'pending_days'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
-function parseAmount(v: unknown): number {
-  if (v == null) return 0
-  if (typeof v === 'number') return v
-  return parseFloat(String(v).replace(/[^0-9.-]/g, '')) || 0
-}
-function parseDate(v: unknown): string | null {
-  if (!v) return null
-  if (v instanceof Date) return v.toISOString()
-  const s = String(v)
-  if (s.includes('T') || s.includes('-')) return new Date(s).toISOString()
-  return null
-}
 function pendingDays(created_date: string | null): number {
   if (!created_date) return 0
   const diff = Date.now() - new Date(created_date).getTime()
@@ -103,64 +85,7 @@ function rowColor(row: PniRow): string {
 }
 
 // ─── Excel Parser (XLSX + UTF-16 TSV) ────────────────────────────────────────
-async function parseExcelFile(file: File): Promise<Record<string, unknown>[]> {
-  const ab = await file.arrayBuffer()
-  const ext = file.name.toLowerCase()
-  if (ext.endsWith('.xlsx') || ext.endsWith('.xls')) {
-    const wb = XLSX.read(ab, { type: 'array', cellDates: true })
-    return XLSX.utils.sheet_to_json<Record<string, unknown>>(wb.Sheets[wb.SheetNames[0]], { defval: null })
-  }
-  const bytes = new Uint8Array(ab)
-  let text: string
-  if (bytes[0] === 0xff && bytes[1] === 0xfe) text = new TextDecoder('utf-16le').decode(ab)
-  else text = new TextDecoder('utf-8').decode(ab)
-  const lines = text.replace(/\r\n/g, '\n').split('\n')
-  if (lines.length < 2) return []
-  const delim = lines[0].includes('\t') ? '\t' : ','
-  const headers = lines[0].split(delim).map(h => h.replace(/^"|"$/g, '').trim())
-  return lines.slice(1).filter(l => l.trim()).map(l => {
-    const vals = l.split(delim)
-    const rec: Record<string, unknown> = {}
-    headers.forEach((h, i) => { rec[h] = vals[i]?.replace(/^"|"$/g, '').trim() || null })
-    return rec
-  })
-}
 
-function mapToDbRow(raw: Record<string, unknown>, portal: string, dealer_code: string, branch_label: string, sessionId: string) {
-  const g = (k: string) => raw[k]
-  const firstName = String(g('First Name') ?? '').trim()
-  const lastName  = String(g('Last Name') ?? '').trim()
-  const customerName = [firstName, lastName].filter(Boolean).join(' ') || null
-  return {
-    portal, dealer_code, branch_label, upload_session_id: sessionId,
-    job_card_no:          String(g('Job Card #') ?? '').trim(),
-    jc_status:            String(g('Status') ?? '').trim() || null,
-    vehicle_reg_no:       String(g('Vehicle Registration Number') ?? '').trim() || null,
-    chassis_no:           String(g('Chassis No') ?? '').trim() || null,
-    customer_name:        customerName,
-    sr_assigned_to:       String(g('SR Assigned To') ?? '').trim() || null,
-    supervisor:           String(g('Supervisor') ?? '').trim() || null,
-    product_line:         String(g('Product Line') ?? '').trim() || null,
-    parent_product_line:  String(g('Parent Product Line') ?? '').trim() || null,
-    sr_type:              String(g('SR Type') ?? '').trim() || null,
-    payment_type:         String(g('Payment Type') ?? '').trim() || null,
-    division:             String(g('Division') ?? '').trim() || null,
-    created_date:         parseDate(g('Created Date Time')),
-    closed_date:          parseDate(g('Closed Date Time')),
-    completed_date:       parseDate(g('Completed Date Time')),
-    final_spares_amount:  parseAmount(g('Final Spares Amount')),
-    final_labour_amount:  parseAmount(g('Final Labour Amount')),
-    total_order_value:    parseAmount(g('Total Order Value')),
-    total_invoice_amount: parseAmount(g('Total Invoice Amount')),
-    invoiced:             String(g('Invoiced ?') ?? '').trim() || null,
-    kms:                  Number(g('Kms')) || null,
-    warranty:             String(g('Warranty') ?? '').trim() || null,
-    delay_reason:         String(g('Delay Reason') ?? '').trim() || null,
-    open_for_days:        Number(g('Open For Days')) || null,
-    tracking_status:      'Pending',
-    remarks:              null,
-  }
-}
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
 function KpiCard({ label, value, sub, color, active, onClick }: {
@@ -205,9 +130,6 @@ export default function PartsNotInvoicedReport(_props: ReportViewProps) {
   const [rows, setRows] = useState<PniRow[]>([])
   const [uploads, setUploads] = useState<UploadRow[]>([])
   const [loading, setLoading] = useState(false)
-  const [uploading, setUploading] = useState(false)
-  const [uploadMsg, setUploadMsg] = useState('')
-  const [uploadErr, setUploadErr] = useState('')
   const [showHistory, setShowHistory] = useState(false)
   const [showCharts, setShowCharts] = useState(false)
   const [activeKpi, setActiveKpi] = useState<string | null>(null)
@@ -231,9 +153,6 @@ export default function PartsNotInvoicedReport(_props: ReportViewProps) {
   const [detailRow, setDetailRow] = useState<PniRow | null>(null)
   const [editingStatus, setEditingStatus] = useState<{ id: number; status: string; remarks: string } | null>(null)
 
-  const fileRefs = useRef<Record<SlotKey, HTMLInputElement | null>>({
-    EV_SITAPURA: null, PV_SITAPURA: null, PV_AJMERROAD: null,
-  })
 
   // ── Load all rows ──────────────────────────────────────────────────────────
   const loadData = useCallback(async () => {
@@ -270,39 +189,7 @@ export default function PartsNotInvoicedReport(_props: ReportViewProps) {
 
   useEffect(() => { void loadData() }, [loadData])
 
-  // ── Upload ─────────────────────────────────────────────────────────────────
-  const handleUpload = useCallback(async (file: File, slot: typeof UPLOAD_SLOTS[number]) => {
-    setUploading(true); setUploadErr(''); setUploadMsg(`Parsing ${file.name}…`)
-    try {
-      const raw = await parseExcelFile(file)
-      if (!raw.length) throw new Error('No rows found')
-      // Filter: only Invoiced?=N (pending parts)
-      const pending = raw.filter(r => String(r['Invoiced ?'] ?? '').trim().toUpperCase() === 'N')
-      setUploadMsg(`Found ${pending.length} pending rows, uploading…`)
-      const sessionId = crypto.randomUUID()
-      const dbRows = pending.map(r => mapToDbRow(r, slot.portal, slot.dealer_code, slot.branch_label, sessionId))
-      for (let i = 0; i < dbRows.length; i += 500) {
-        const { error } = await supabase.from('parts_not_invoiced_data').insert(dbRows.slice(i, i + 500))
-        if (error) throw error
-        setUploadMsg(`Uploading… ${Math.min(i + 500, dbRows.length)} / ${dbRows.length}`)
-      }
-      const { data: { user } } = await supabase.auth.getUser()
-      await supabase.from('parts_not_invoiced_uploads').insert({
-        portal: slot.portal, dealer_code: slot.dealer_code, branch_label: slot.branch_label,
-        upload_session_id: sessionId, uploaded_by_email: user?.email ?? null,
-        row_count: raw.length, pending_count: pending.length, file_name: file.name,
-      })
-      setUploadMsg(`✅ ${pending.length} pending rows uploaded for ${slot.label}`)
-      setTimeout(() => setUploadMsg(''), 4000)
-      await loadData()
-    } catch (e) {
-      setUploadErr(`Upload failed: ${e instanceof Error ? e.message : String(e)}`)
-      setUploadMsg('')
-    } finally {
-      setUploading(false)
-      Object.values(fileRefs.current).forEach(r => { if (r) r.value = '' })
-    }
-  }, [loadData])
+
 
   // ── Save status inline ─────────────────────────────────────────────────────
   const saveStatus = useCallback(async () => {
@@ -453,23 +340,11 @@ export default function PartsNotInvoicedReport(_props: ReportViewProps) {
 
   return (
     <div className="space-y-4 px-1">
-      {/* ── Upload buttons row ──────────────────────────────────────────────── */}
+      {/* ── Actions row ──────────────────────────────────────────────────────── */}
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex flex-wrap gap-2">
-          {UPLOAD_SLOTS.map(slot => (
-            <span key={slot.key}>
-              <input type="file" accept=".xlsx,.xls,.csv" className="hidden" id={`pni-upload-${slot.key}`}
-                ref={el => { fileRefs.current[slot.key] = el }}
-                onChange={e => { const f = e.target.files?.[0]; if (f && !uploading) void handleUpload(f, slot) }} />
-              <label htmlFor={`pni-upload-${slot.key}`}
-                className={`inline-flex cursor-pointer items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold text-white shadow-sm transition ${uploading ? 'cursor-not-allowed bg-gray-400' : slot.btnColor}`}>
-                <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
-                </svg>
-                Upload {slot.label}
-              </label>
-            </span>
-          ))}
+        <div className="flex items-center gap-2 rounded-lg bg-blue-50 px-4 py-2.5 text-xs text-blue-700 ring-1 ring-blue-200">
+          <svg className="h-4 w-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+          <span>To upload new files, go to <a href="/import" className="font-semibold underline hover:text-blue-900">Import Page → Parts Daily Reports → Parts Issue but not Invoiced</a></span>
         </div>
         <div className="flex gap-2">
           <button onClick={() => setShowCharts(v => !v)}
@@ -490,14 +365,6 @@ export default function PartsNotInvoicedReport(_props: ReportViewProps) {
           </button>
         </div>
       </div>
-
-      {/* Upload feedback */}
-      {(uploadMsg || uploadErr) && (
-        <div className={`rounded-lg px-4 py-3 text-sm font-medium ${uploadErr ? 'bg-red-50 text-red-700' : 'bg-emerald-50 text-emerald-700'}`}>
-          {uploadErr || uploadMsg}
-          {uploadErr && <button className="ml-3 text-xs underline" onClick={() => setUploadErr('')}>Dismiss</button>}
-        </div>
-      )}
 
       {/* Upload history */}
       {showHistory && (

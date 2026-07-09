@@ -1,5 +1,5 @@
 // GRN Report — Goods Receipt Note tracking for EV & PV portals
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import * as XLSX from 'xlsx'
 import { supabase } from '../../../lib/supabase'
 import type { ReportViewProps } from '../types'
@@ -60,97 +60,8 @@ type SortKey =
   | 'sap_order_num'
   | 'sap_order_num'
 
-// ── UTF-16 TSV / Excel parser ─────────────────────────────────────────────────
-function parseGRNFile(file: File): Promise<Record<string, string>[]> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader()
-    reader.onload = (e) => {
-      try {
-        const ab = e.target?.result as ArrayBuffer
-        const ext = file.name.toLowerCase()
-        if (ext.endsWith('.xlsx') || ext.endsWith('.xls')) {
-          const wb = XLSX.read(ab, { type: 'array' })
-          const ws = wb.Sheets[wb.SheetNames[0]]
-          resolve(XLSX.utils.sheet_to_json<Record<string, string>>(ws, { defval: '' }))
-          return
-        }
-        const bytes = new Uint8Array(ab)
-        let text: string
-        if (bytes[0] === 0xff && bytes[1] === 0xfe) text = new TextDecoder('utf-16le').decode(ab)
-        else if (bytes[0] === 0xfe && bytes[1] === 0xff) text = new TextDecoder('utf-16be').decode(ab)
-        else text = new TextDecoder('utf-8').decode(ab)
 
-        const lines = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n')
-        if (lines.length < 2) { resolve([]); return }
-        const delim = lines[0].includes('\t') ? '\t' : ','
-        const headers = splitLine(lines[0], delim)
-        const rows: Record<string, string>[] = []
-        for (let i = 1; i < lines.length; i++) {
-          const line = lines[i].trim()
-          if (!line) continue
-          const vals = splitLine(line, delim)
-          const rec: Record<string, string> = {}
-          headers.forEach((h, idx) => { rec[h.trim()] = (vals[idx] ?? '').replace(/^"|"$/g, '').trim() })
-          rows.push(rec)
-        }
-        resolve(rows)
-      } catch (err) { reject(err) }
-    }
-    reader.onerror = () => reject(reader.error)
-    reader.readAsArrayBuffer(file)
-  })
-}
 
-function splitLine(line: string, delim: string): string[] {
-  const result: string[] = []
-  let cur = '', inQ = false
-  for (let i = 0; i < line.length; i++) {
-    const c = line[i]
-    if (c === '"') inQ = !inQ
-    else if (c === delim && !inQ) { result.push(cur); cur = '' }
-    else cur += c
-  }
-  result.push(cur)
-  return result
-}
-
-function g(raw: Record<string, string>, key: string) { return raw[key]?.trim() ?? '' }
-
-function mapRow(raw: Record<string, string>, portal: Portal, branch: string, sessionId: string) {
-  return {
-    portal, branch, upload_session_id: sessionId,
-    sap_invoice_no: g(raw, 'SAP Invoice #') || null,
-    order_no: g(raw, 'Order #') || null,
-    transaction_number: g(raw, 'Transaction Number') || null,
-    part_no: g(raw, 'Part #') || null,
-    invoice_date: g(raw, 'Invoice_Date') || null,
-    status: g(raw, 'Status') || null,
-    warehouse_name: g(raw, 'Ware House Name') || null,
-    commit_flag: g(raw, 'Commit Flag') || null,
-    recd_qty: g(raw, 'Recd Qty') ? (parseInt(g(raw, 'Recd Qty'), 10) || null) : null,
-    spares_order_type: g(raw, 'Spares Order Type') || null,
-    condition: g(raw, 'Condition') || null,
-    transaction_date: g(raw, 'Transaction Date') || null,
-    vendor_invoice_no: g(raw, 'Vendor Invoice #') || null,
-    net_amount: g(raw, 'Net Amount') || null,
-    total_invoice_amount: g(raw, 'Total_Invoice_Amount') || null,
-    vendor_name: g(raw, 'Vendor Name') || null,
-    sap_order_num: g(raw, 'SAP Order Num') || null,
-    gst_invoice_no: g(raw, 'GST Invoice #') || null,
-    lr_docket_no: g(raw, 'LR #/Docket #') || null,
-    challan_no: g(raw, 'Challan #') || null,
-    challan_date: g(raw, 'Challan Date') || null,
-    challan_qty: g(raw, 'Challan Quantity') ? (parseInt(g(raw, 'Challan Quantity'), 10) || null) : null,
-    purchase_order_date: g(raw, 'Purchase_Order_Date') || null,
-    division_name: g(raw, 'Division Name') || null,
-    order_type: g(raw, 'Order Type') || null,
-  }
-}
-
-function fmtDate(v: string | null | undefined): string {
-  if (!v) return '—'
-  return v.split(' ')[0]
-}
 
 function normDate(v: string): string {
   if (!v) return ''
@@ -184,6 +95,12 @@ function Th({ label, field, cur, dir, onSort }: { label: string; field: SortKey;
   )
 }
 
+function fmtDate(v: string | null | undefined): string {
+  if (!v) return '—'
+  try { return new Date(v).toLocaleDateString('en-IN', { day:'2-digit', month:'short', year:'numeric' }) }
+  catch { return v }
+}
+
 export default function PartsGRNReport(_props: ReportViewProps) {
   const [portal, setPortal] = useState<Portal>('EV')
   const [rows, setRows] = useState<GrnRow[]>([])
@@ -191,9 +108,6 @@ export default function PartsGRNReport(_props: ReportViewProps) {
   const [latestSession, setLatestSession] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [loadingMsg, setLoadingMsg] = useState('')
-  const [uploading, setUploading] = useState(false)
-  const [uploadMsg, setUploadMsg] = useState('')
-  const [uploadError, setUploadError] = useState('')
   const [showHistory, setShowHistory] = useState(false)
   const [search, setSearch] = useState('')
   const [dateFrom, setDateFrom] = useState('')
@@ -202,8 +116,6 @@ export default function PartsGRNReport(_props: ReportViewProps) {
   const [sortKey, setSortKey] = useState<SortKey>('invoice_date')
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc')
   const [page, setPage] = useState(1)
-  const fileRefEV = useRef<HTMLInputElement>(null)
-  const fileRefPV = useRef<HTMLInputElement>(null)
 
   const loadData = useCallback(async (p: Portal) => {
     setLoading(true); setLoadingMsg('Loading latest GRN upload…'); setRows([]); setLatestSession(null)
@@ -235,39 +147,7 @@ export default function PartsGRNReport(_props: ReportViewProps) {
     setSearch(''); setDateFrom(''); setDateTo(''); setStatusFilter('all'); setPage(1)
   }, [portal, loadData])
 
-  const handleUpload = useCallback(async (file: File, p: Portal) => {
-    setUploading(true); setUploadError(''); setUploadMsg(`Parsing ${file.name}…`)
-    try {
-      const rawRows = await parseGRNFile(file)
-      if (rawRows.length === 0) throw new Error('No data rows found in file.')
-      const branch = p === 'EV' ? EV_BRANCH : PV_BRANCH
-      const sessionId = crypto.randomUUID()
-      setUploadMsg(`Uploading ${rawRows.length.toLocaleString('en-IN')} rows…`)
-      const dbRows = rawRows.map((r) => mapRow(r, p, branch, sessionId))
-      for (let i = 0; i < dbRows.length; i += 500) {
-        const { error } = await supabase.from('grn_report_data').insert(dbRows.slice(i, i + 500))
-        if (error) throw error
-        setUploadMsg(`Uploading… ${Math.min(i + 500, dbRows.length)} / ${dbRows.length}`)
-      }
-      const { data: { user } } = await supabase.auth.getUser()
-      await supabase.from('grn_upload_history').insert({
-        portal: p, branch, upload_session_id: sessionId,
-        uploaded_by_user_id: user?.id ?? null,
-        uploaded_by_name: user?.email ?? null,
-        row_count: dbRows.length, file_name: file.name,
-      })
-      setUploadMsg(`✅ Uploaded ${dbRows.length.toLocaleString('en-IN')} rows for ${p}`)
-      setTimeout(() => setUploadMsg(''), 4000)
-      await loadData(p)
-    } catch (err) {
-      setUploadError(`Upload failed: ${err instanceof Error ? err.message : String(err)}`)
-      setUploadMsg('')
-    } finally {
-      setUploading(false)
-      if (fileRefEV.current) fileRefEV.current.value = ''
-      if (fileRefPV.current) fileRefPV.current.value = ''
-    }
-  }, [loadData])
+
 
   const filtered = useMemo(() => {
     let list = rows
@@ -335,7 +215,12 @@ export default function PartsGRNReport(_props: ReportViewProps) {
 
 
   return (
-    <div className="space-y-4 px-1">
+<div className="space-y-4 px-1">
+      {/* Import via Import page */}
+      <div className="flex items-center gap-2 rounded-lg bg-blue-50 px-4 py-2.5 text-xs text-blue-700 ring-1 ring-blue-200">
+        <svg className="h-4 w-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+        <span>To upload new GRN files, go to <a href="/import" className="font-semibold underline hover:text-blue-900">Import Page → Parts Daily Reports → GRN Report</a></span>
+      </div>
       {/* Portal tabs + upload buttons */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex rounded-xl border border-gray-200 bg-gray-50 p-1 gap-1">
@@ -351,32 +236,6 @@ export default function PartsGRNReport(_props: ReportViewProps) {
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          {/* Upload EV */}
-          <input ref={fileRefEV} type="file" accept=".xlsx,.xls,.csv,.txt" className="hidden" id="grn-upload-ev"
-            onChange={(e) => { const f = e.target.files?.[0]; if (f && !uploading) void handleUpload(f, 'EV') }} />
-          <label htmlFor="grn-upload-ev"
-            className={`inline-flex cursor-pointer items-center gap-1.5 rounded-lg px-3.5 py-2 text-sm font-semibold text-white shadow-sm transition ${
-              uploading ? 'cursor-not-allowed bg-gray-400' : 'bg-emerald-600 hover:bg-emerald-700'
-            }`}>
-            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
-            </svg>
-            Upload EV GRN
-          </label>
-
-          {/* Upload PV */}
-          <input ref={fileRefPV} type="file" accept=".xlsx,.xls,.csv,.txt" className="hidden" id="grn-upload-pv"
-            onChange={(e) => { const f = e.target.files?.[0]; if (f && !uploading) void handleUpload(f, 'PV') }} />
-          <label htmlFor="grn-upload-pv"
-            className={`inline-flex cursor-pointer items-center gap-1.5 rounded-lg px-3.5 py-2 text-sm font-semibold text-white shadow-sm transition ${
-              uploading ? 'cursor-not-allowed bg-gray-400' : 'bg-blue-600 hover:bg-blue-700'
-            }`}>
-            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
-            </svg>
-            Upload PV GRN
-          </label>
-
           <button onClick={() => setShowHistory((v) => !v)}
             className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-medium text-gray-600 hover:bg-gray-50">
             <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -395,13 +254,7 @@ export default function PartsGRNReport(_props: ReportViewProps) {
         </div>
       </div>
 
-      {/* Upload feedback */}
-      {(uploadMsg || uploadError) && (
-        <div className={`rounded-lg px-4 py-3 text-sm font-medium ${uploadError ? 'bg-red-50 text-red-700' : 'bg-emerald-50 text-emerald-700'}`}>
-          {uploadError || uploadMsg}
-          {uploadError && <button className="ml-3 text-xs underline" onClick={() => setUploadError('')}>Dismiss</button>}
-        </div>
-      )}
+
 
       {/* Upload history */}
       {showHistory && (
