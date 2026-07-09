@@ -5,6 +5,7 @@ import BackOrderPartsReport from './BackOrderPartsReport'
 import PartsInStockReport from './PartsInStockReport'
 import PartsHighDemandReport from './PartsHighDemandReport'
 import PartsStockDisciplineReport from './PartsStockDisciplineReport'
+import PartsGRNReport from './PartsGRNReport'
 
 import type { ReportCategoryDefinition, ReportDefinition } from '../types'
 
@@ -70,5 +71,13 @@ export const PARTS_REPORTS: ReportDefinition[] = [
     description: '30-day cover analysis with pipeline deduction, dead stock flag, and order sheet export.',
     cardHint: 'Best for generating a ready-to-place reorder list with shortage priorities.',
     Component: PartsStockDisciplineReport,
+  },
+  {
+    id: 'parts-grn-report',
+    categoryId: 'parts',
+    label: 'GRN Report',
+    description: 'Daily EV & PV Goods Receipt Note tracking — GRN received vs pending with order details.',
+    cardHint: 'Best for real-time GRN position and pending receipt follow-up.',
+    Component: PartsGRNReport,
   },
 ]

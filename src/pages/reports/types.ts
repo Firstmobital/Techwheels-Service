@@ -48,6 +48,7 @@ export type ReportId =
   | 'parts-in-stock'
   | 'parts-high-demand'
   | 'parts-stock-discipline'
+  | 'parts-grn-report'
   | 'parts-inventory-turnover'
   | 'parts-order-status'
   | 'parts-in-transit'
