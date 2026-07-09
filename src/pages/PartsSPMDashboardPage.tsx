@@ -5,6 +5,7 @@ import {
   spmUpdatePartsRequest,
   PARTS_STATUS_VALUES,
   PARTS_STATUS_COLOR,
+  computedStatusBadge,
   type PartsRequestRow,
   type PartsStatus,
 } from '../lib/api'
@@ -16,12 +17,16 @@ type SortDir = 'asc' | 'desc'
 
 const PAGE_SIZE = 50
 
-function StatusBadge({ status }: { status: PartsStatus }) {
-  const c = PARTS_STATUS_COLOR[status] ?? PARTS_STATUS_COLOR.Pending
+// qty enables the same dynamic "Available" override used on the Service Advisor page (see
+// computedStatusBadge) — Admin sees the identical live-stock-derived label, computed fresh
+// on every render, never persisted, never overriding any status that reflects a real action
+// already taken (Ordered/Received/Ready/Done/etc.).
+function StatusBadge({ status, qty = null }: { status: PartsStatus; qty?: number | null }) {
+  const c = computedStatusBadge(status, qty)
   return (
     <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold ${c.bg} ${c.text}`}>
       <span className={`inline-block h-1.5 w-1.5 rounded-full ${c.dot}`} />
-      {status}
+      {c.label}
     </span>
   )
 }
@@ -490,7 +495,7 @@ export default function PartsSPMDashboardPage() {
                           <td className="px-4 py-2.5"><QtyBadge qty={row.parts_qty} /></td>
                           <td className={`px-4 py-2.5 ${row.parts_number ? 'text-gray-700' : 'text-gray-400'}`}>{row.parts_number || '—'}</td>
                           <td className={`px-4 py-2.5 ${row.parts_order_date ? 'text-gray-700' : 'text-gray-400'}`}>{row.parts_order_date || '—'}</td>
-                          <td className="px-4 py-2.5"><StatusBadge status={row.parts_status} /></td>
+                          <td className="px-4 py-2.5"><StatusBadge status={row.parts_status} qty={row.parts_qty} /></td>
                           <td className="max-w-[160px] truncate px-4 py-2.5 text-gray-500">{row.advisor_remarks || '—'}</td>
                           <td className="max-w-[160px] truncate px-4 py-2.5 text-gray-500">{row.customer_update || '—'}</td>
                           <td className={`max-w-[180px] truncate px-4 py-2.5 ${row.spm_remarks ? 'text-gray-700' : 'text-gray-400'}`}>{row.spm_remarks || '—'}</td>

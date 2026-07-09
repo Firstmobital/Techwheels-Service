@@ -247,3 +247,35 @@ export const PARTS_STATUS_COLOR: Record<PartsStatus, { dot: string; bg: string; 
 
 // Workflow order used for the Service Advisor page's mini-timeline + quick-filter counts.
 export const ADVISOR_WORKFLOW_STAGES: PartsStatus[] = ['Ordered', 'Received', 'Ready', 'Done']
+
+// Display-only "Available" override for the Status column/badge.
+//
+// parts_status itself is NEVER changed by this — it stays exactly the real workflow value
+// (Pending/Ordered/Received/Ready/Done/etc.), driven only by explicit advisor/SPM actions,
+// with its timestamps, RBAC (Done hidden from advisors), and every existing filter/sort
+// continuing to read the real value untouched.
+//
+// What this adds: while a request is still 'Pending' (no order has been placed yet), if the
+// live on-hand stock (parts_qty, kept in sync from the Stock Snapshot via
+// parts-request-order-match) shows units already in stock, the *badge shown to the user* is
+// swapped to "Available" — because there is nothing to order, the part can be issued
+// straight away. This is computed fresh from parts_qty on every render (never hardcoded/
+// persisted), so it updates the instant a new stock import changes the on-hand quantity.
+//
+// There's no separate "required quantity" field advisors fill in per request — parts_qty is
+// the only quantity captured (on-hand stock) — so "Available" fires whenever qty > 0. A qty
+// of exactly 0, or qty not yet matched to any stock-snapshot row (null), is left showing the
+// real 'Pending' label as-is (both are valid per spec — nothing to differentiate without a
+// stored required-qty to compare against). Every other status (Ordered, Received, Ready,
+// Done, Back Order, In Transit, Partially Received, Cancelled, Delivered to Workshop)
+// reflects an actual action already taken and is never overridden by stock level.
+export function computedStatusBadge(
+  status: PartsStatus,
+  qty: number | null,
+): { label: string; dot: string; bg: string; text: string } {
+  if (status === 'Pending' && qty != null && qty > 0) {
+    return { label: 'Available', dot: 'bg-emerald-500', bg: 'bg-emerald-50', text: 'text-emerald-700' }
+  }
+  const c = PARTS_STATUS_COLOR[status] ?? PARTS_STATUS_COLOR.Pending
+  return { label: status, ...c }
+}

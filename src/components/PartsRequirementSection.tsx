@@ -28,7 +28,7 @@ import {
   markPartsRequestDone,
   updateMyPartsRequestFields,
   updatePartsRequestCustomerUpdate,
-  PARTS_STATUS_COLOR,
+  computedStatusBadge,
   type PartsRequestRow,
   type PartsStatus,
 } from '../lib/api'
@@ -80,12 +80,15 @@ const EMPTY_DRAFT: Draft = {
   parts_number: '',
 }
 
-function StatusBadge({ status }: { status: PartsRequestRow['parts_status'] }) {
-  const c = PARTS_STATUS_COLOR[status] ?? PARTS_STATUS_COLOR.Pending
+// qty is optional so every existing call site (which only ever passed `status`) keeps
+// compiling and rendering exactly as before; passing it enables the dynamic "Available"
+// override (see computedStatusBadge) for Pending rows with in-stock quantity.
+function StatusBadge({ status, qty = null }: { status: PartsRequestRow['parts_status']; qty?: number | null }) {
+  const c = computedStatusBadge(status, qty)
   return (
     <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold ${c.bg} ${c.text}`}>
       <span className={`inline-block h-1.5 w-1.5 rounded-full ${c.dot}`} />
-      {status}
+      {c.label}
     </span>
   )
 }
@@ -749,7 +752,7 @@ export default function PartsRequirementSection() {
                         </td>
                         <td className="px-4 py-2.5">
                           <div className="flex items-center gap-2">
-                            <StatusBadge status={row.parts_status} />
+                            <StatusBadge status={row.parts_status} qty={row.parts_qty} />
                             {!row.advisor_seen && <span className="inline-block h-2 w-2 rounded-full bg-red-500" />}
                           </div>
                         </td>
@@ -805,7 +808,7 @@ export default function PartsRequirementSection() {
               <div key={row.id} className={`rounded-xl border border-gray-200 bg-white p-3.5 shadow-sm ${!row.advisor_seen ? 'ring-1 ring-orange-300' : ''}`}>
                 <div className="flex items-center justify-between">
                   <p className="text-sm font-semibold text-gray-900">{row.job_card_number || row.registration_number}</p>
-                  <StatusBadge status={row.parts_status} />
+                  <StatusBadge status={row.parts_status} qty={row.parts_qty} />
                 </div>
                 <p className="mt-0.5 text-xs text-gray-500">{row.registration_number} · {row.customer_name || 'Customer N/A'}</p>
                 <p className="mt-1 text-xs text-gray-700">
