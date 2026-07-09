@@ -14,7 +14,7 @@ type ModuleRow = {
   icon: IconName
   iconBg: string
   description: string
-  route?: '/(tabs)/autodoc' | '/(tabs)/reports' | '/(tabs)/import' | '/(tabs)/admin' | '/(tabs)/settings' | '/(tabs)/floor-incharge' | '/(tabs)/reception' | '/(tabs)/telecalling'
+  route?: '/(tabs)/autodoc' | '/(tabs)/reports' | '/(tabs)/import' | '/(tabs)/admin' | '/(tabs)/settings' | '/(tabs)/floor-incharge' | '/(tabs)/reception' | '/(tabs)/telecalling' | '/(tabs)/bodyshop-repair' | '/(tabs)/bodyshop-floor'
 }
 
 const MODULES: ModuleRow[] = [
@@ -26,6 +26,8 @@ const MODULES: ModuleRow[] = [
   { key: 'reception', label: 'Reception', icon: 'check-circle', iconBg: 'bg-green-100', description: 'Vehicle intake & entries', route: '/(tabs)/reception' },
   { key: 'floor-incharge', label: 'Floor Incharge', icon: 'grid', iconBg: 'bg-indigo-100', description: 'Technician assignments · bay · status', route: '/(tabs)/floor-incharge' },
   { key: 'telecalling', label: 'Telecalling', icon: 'phone', iconBg: 'bg-cyan-100', description: 'Service reminders · call leads', route: '/(tabs)/telecalling' },
+  { key: 'bodyshop-repair', label: 'Bodyshop Repair', icon: 'package', iconBg: 'bg-violet-100', description: '18-stage accident repair pipeline', route: '/(tabs)/bodyshop-repair' },
+  { key: 'bodyshop-floor', label: 'Bodyshop Floor', icon: 'sliders', iconBg: 'bg-rose-100', description: '9-role floor assignment · QC · approvals', route: '/(tabs)/bodyshop-floor' },
 ]
 
 const DEFAULT_METRICS: HomeDashboardMetrics = {
@@ -87,7 +89,7 @@ export default function PlatformHomeScreen() {
       )
       // Admins get everything
       if ((profile as { role?: string } | null)?.role === 'admin') {
-        ;['reception','floor_incharge','service_advisor','reports','import','admin','settings','autodoc','telecalling'].forEach(m => mods.add(m))
+        ;['reception','floor_incharge','service_advisor','reports','import','admin','settings','autodoc','telecalling','bodyshop_repair','bodyshop_floor'].forEach(m => mods.add(m))
       }
       if (mounted) setAllowedModules(mods)
     }
@@ -140,8 +142,10 @@ export default function PlatformHomeScreen() {
     admin:          'admin',
     settings:       'settings',
     reception:      'reception',
-    'floor-incharge': 'floor_incharge',
-    'telecalling':    'telecalling',
+    'floor-incharge':   'floor_incharge',
+    'telecalling':      'telecalling',
+    'bodyshop-repair':  'bodyshop_repair',
+    'bodyshop-floor':   'bodyshop_floor',
   }
 
   const modulesWithStatus = useMemo(() => {

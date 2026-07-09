@@ -449,8 +449,14 @@ function labelForWorkStatus(status: string | null | undefined) {
   if (normalized === 'completed') return 'Completed'
   if (normalized === 'hold') return 'Hold'
   if (normalized === 'work_inprocess') return 'Work Inprocess'
+  if (normalized === 'not_required') return 'Not Required'
   return 'Pending'
 }
+
+const NOT_REQUIRED_CODE = 'NOT_REQUIRED'
+const NOT_REQUIRED_NAME = 'Not Required'
+// Roles that are always required and cannot be marked "Not Required"
+const ALWAYS_REQUIRED_ROLES = new Set<BSRole>(['FLOOR_INCHARGE'])
 
 function parseQcCheckedByNames(raw: string | null | undefined): string[] {
   const tokens = String(raw ?? '')
@@ -1199,7 +1205,10 @@ export default function BodyshopFloorPage() {
 
   async function assignRole(car: AccidentCar, role: BSRole, empCode: string) {
     if (!empCode) return
-    const emp = empByRole[role].find((e) => e.employee_code === empCode)
+    const isNotRequired = empCode === NOT_REQUIRED_CODE
+    const emp = isNotRequired
+      ? { employee_code: NOT_REQUIRED_CODE, employee_name: NOT_REQUIRED_NAME }
+      : empByRole[role].find((e) => e.employee_code === empCode)
     if (!emp) return
     const k = jcKey(car)
     setSaving(`${k}-${role}`)
@@ -1213,9 +1222,9 @@ export default function BodyshopFloorPage() {
       const payload: Record<string, unknown> = {
         [cols.employeeCode]: emp.employee_code,
         [cols.employeeName]: emp.employee_name,
-        [cols.workStatus]: draft.work_status,
+        [cols.workStatus]: isNotRequired ? 'not_required' : draft.work_status,
         [cols.inTs]: existingRoleAssignment?.assigned_at ?? new Date().toISOString(),
-        [cols.remark]: draft.remark.trim() || null,
+        [cols.remark]: isNotRequired ? null : (draft.remark.trim() || null),
         assigned_at: new Date().toISOString(),
         assigned_by: user?.email ?? null,
         is_active: true,
@@ -2068,9 +2077,15 @@ export default function BodyshopFloorPage() {
                 const assignment = carMap[role]
                 if (!assignment) return false
                 const status = String(assignment.work_status ?? '').trim().toLowerCase()
+                if (status === 'not_required') return false
                 return status === 'work_inprocess' || status === 'hold'
               })
-              const canMarkFloorCompleted = !isFloorCompleted && !isSavingFloorStatus && !hasActiveRoleWork && additionalApprovalResolved
+              // Floor Incharge must be assigned (with a real person) before floor can be marked complete
+              const floorInchargeAssigned = Boolean(
+                carMap.FLOOR_INCHARGE?.employee_code &&
+                carMap.FLOOR_INCHARGE.employee_code !== NOT_REQUIRED_CODE
+              )
+              const canMarkFloorCompleted = !isFloorCompleted && !isSavingFloorStatus && !hasActiveRoleWork && additionalApprovalResolved && floorInchargeAssigned
               const isSavingAdditionalApproval = saving === `${k}-additional-approval`
               const additionalApprovalLabel = additionalApproval.status === 'approved'
                 ? 'All Approved'
@@ -2370,6 +2385,9 @@ export default function BodyshopFloorPage() {
                                 onChange={(e) => void assignRole(car, role, e.target.value)}
                               >
                                 <option value="">— Select {ROLE_META[role].label} —</option>
+                                {!ALWAYS_REQUIRED_ROLES.has(role) && (
+                                  <option value={NOT_REQUIRED_CODE}>Not Required</option>
+                                )}
                                 {empByRole[role].map((emp) => (
                                   <option key={emp.employee_code} value={emp.employee_code}>
                                     {emp.employee_name}
@@ -2413,6 +2431,9 @@ export default function BodyshopFloorPage() {
                               )}
 
                               {ass ? (
+                                ass.work_status === 'not_required' ? (
+                                  <div className="bsf-lane-empty" style={{ color: '#94a3b8', fontStyle: 'italic' }}>Not Required</div>
+                                ) : (
                                 <div className={`bsf-stage-editor ${statusTone}`}>
                                   <span className={`bsf-statpill ${statusTone}`}>{draft.work_status === 'work_inprocess' ? 'In Process' : draft.work_status === 'hold' ? 'Hold' : 'Completed'}</span>
                                   <select
@@ -2439,6 +2460,7 @@ export default function BodyshopFloorPage() {
                                     {isSavingThis ? 'Saving…' : 'Save stage'}
                                   </button>
                                 </div>
+                                )
                               ) : (
                                 <div className="bsf-lane-empty">Not assigned</div>
                               )}
@@ -2454,17 +2476,24 @@ export default function BodyshopFloorPage() {
                         <button
                           className={`btn btn--sm ${isFloorCompleted ? 'btn--ghost' : 'btn--primary'} ${canMarkFloorCompleted ? '' : 'btn--dim'}`}
                           disabled={!canMarkFloorCompleted}
-                          title={hasActiveRoleWork
-                            ? 'Complete or resolve Hold for all assigned roles before marking BS Floor Completed'
-                            : !additionalApprovalResolved
-                              ? 'Resolve Additional Approval first (none requested, or all requested parts approved/rejected)'
-                              : undefined}
+                          title={!floorInchargeAssigned
+                            ? 'Assign a Floor Incharge before marking BS Floor Completed'
+                            : hasActiveRoleWork
+                              ? 'Complete or resolve Hold for all assigned roles before marking BS Floor Completed'
+                              : !additionalApprovalResolved
+                                ? 'Resolve Additional Approval first (none requested, or all requested parts approved/rejected)'
+                                : undefined}
                           onClick={() => void markBsFloorCompleted(car)}
                         >
                           {isSavingFloorStatus ? 'Saving…' : isFloorCompleted ? 'Completed' : 'Mark Floor Completed'}
                         </button>
                       </div>
-                      {!isFloorCompleted && hasActiveRoleWork && (
+                      {!isFloorCompleted && !floorInchargeAssigned && (
+                        <div className="bsf-floor-note is-warn">
+                          Assign a Floor Incharge to enable.
+                        </div>
+                      )}
+                      {!isFloorCompleted && floorInchargeAssigned && hasActiveRoleWork && (
                         <div className="bsf-floor-note is-warn">
                           Disabled until all assigned roles are not Work In Process/Hold.
                         </div>

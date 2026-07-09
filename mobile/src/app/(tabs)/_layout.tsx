@@ -227,6 +227,22 @@ export default function TabsLayout() {
         }}
       />
       <Tabs.Screen
+        name="bodyshop-repair"
+        options={{
+          title: 'Bodyshop Repair',
+          headerShown: false,
+          href: null,
+        }}
+      />
+      <Tabs.Screen
+        name="bodyshop-floor"
+        options={{
+          title: 'Bodyshop Floor',
+          headerShown: false,
+          href: null,
+        }}
+      />
+      <Tabs.Screen
         name="reception"
         options={{
           title: 'Reception',
