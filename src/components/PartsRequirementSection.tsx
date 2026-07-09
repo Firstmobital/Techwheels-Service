@@ -5,9 +5,13 @@ import {
   listMyPartsRequests,
   markAllPartsRequestsSeen,
   markPartsRequestSeen,
+  markPartsRequestReceived,
+  markPartsRequestReady,
+  markPartsRequestDone,
   updateMyPartsRequestFields,
   PARTS_STATUS_COLOR,
   type PartsRequestRow,
+  type PartsStatus,
 } from '../lib/api'
 import { supabase } from '../lib/supabase'
 import Icon from '../components/Icon'
@@ -21,8 +25,15 @@ type Draft = {
   parts_number: string
 }
 
+type QuickFilter = 'all' | 'Pending' | 'Ordered' | 'Received' | 'Ready' | 'mine'
+
 function todayIST(): string {
   return new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
+}
+
+function fmtDateTime(v: string | null): string {
+  if (!v) return '—'
+  return new Date(v).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', dateStyle: 'medium', timeStyle: 'short' })
 }
 
 // Matches the normalization used server-side (parts-order-descriptions edge function) so
@@ -77,8 +88,37 @@ function QtyBadge({ qty }: { qty: number | null }) {
   )
 }
 
+// Mini progress timeline: Ordered -> Received -> Ready -> Done
+const TIMELINE_STAGES: PartsStatus[] = ['Ordered', 'Received', 'Ready', 'Done']
+
+function MiniTimeline({ status }: { status: PartsStatus }) {
+  const idx = TIMELINE_STAGES.indexOf(status)
+  return (
+    <div className="flex items-center gap-1">
+      {TIMELINE_STAGES.map((stage, i) => {
+        const reached = idx >= i
+        return (
+          <span key={stage} className="flex items-center">
+            <span
+              title={stage}
+              className={`flex h-4 w-4 items-center justify-center rounded-full text-[9px] font-bold ${
+                reached ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-400'
+              }`}
+            >
+              {reached ? '\u2713' : '\u25CB'}
+            </span>
+            {i < TIMELINE_STAGES.length - 1 && <span className="mx-0.5 h-px w-2 bg-gray-300" />}
+          </span>
+        )
+      })}
+    </div>
+  )
+}
+
 const inputCls = 'mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500'
 const labelCls = 'text-xs font-semibold text-gray-600'
+
+type ConfirmAction = { row: PartsRequestRow; kind: 'received' | 'ready' | 'done' } | null
 
 export default function PartsRequirementSection() {
   const [rows, setRows] = useState<PartsRequestRow[]>([])
@@ -91,6 +131,10 @@ export default function PartsRequirementSection() {
   const [expandedId, setExpandedId] = useState<number | null>(null)
   const [toast, setToast] = useState<string | null>(null)
   const [descriptions, setDescriptions] = useState<Record<string, string>>({})
+  const [quickFilter, setQuickFilter] = useState<QuickFilter>('all')
+  const [search, setSearch] = useState('')
+  const [confirmAction, setConfirmAction] = useState<ConfirmAction>(null)
+  const [actionBusyId, setActionBusyId] = useState<number | null>(null)
 
   // Part Number -> Description, sourced live from the Parts Order Sheet. Purely additive
   // and read-only — never blocks or errors the page if it fails, just leaves the
@@ -140,6 +184,49 @@ export default function PartsRequirementSection() {
   }, [toast])
 
   const unseenCount = useMemo(() => rows.filter((r) => !r.advisor_seen).length, [rows])
+
+  // Done jobs are hidden from the advisor's own panel entirely once completed — they
+  // remain fully visible/searchable in the Admin Panel (Parts SPM dashboard).
+  const visibleRows = useMemo(() => rows.filter((r) => r.parts_status !== 'Done'), [rows])
+
+  const counts = useMemo(() => {
+    const c = { all: visibleRows.length, Pending: 0, Ordered: 0, Received: 0, Ready: 0, mine: unseenCount }
+    for (const r of visibleRows) {
+      if (r.parts_status === 'Pending') c.Pending++
+      else if (r.parts_status === 'Ordered' || r.parts_status === 'In Transit' || r.parts_status === 'Back Order' || r.parts_status === 'Partially Received') c.Ordered++
+      else if (r.parts_status === 'Received') c.Received++
+      else if (r.parts_status === 'Ready') c.Ready++
+    }
+    return c
+  }, [visibleRows, unseenCount])
+
+  const doneTodayCount = useMemo(() => {
+    const today = todayIST()
+    return rows.filter((r) => r.parts_status === 'Done' && r.done_at && r.done_at.slice(0, 10) === today).length
+  }, [rows])
+
+  const filteredRows = useMemo(() => {
+    let list = visibleRows
+    if (quickFilter === 'mine') {
+      list = list.filter((r) => !r.advisor_seen)
+    } else if (quickFilter === 'Pending') {
+      list = list.filter((r) => r.parts_status === 'Pending')
+    } else if (quickFilter === 'Ordered') {
+      list = list.filter((r) => ['Ordered', 'In Transit', 'Back Order', 'Partially Received'].includes(r.parts_status))
+    } else if (quickFilter === 'Received') {
+      list = list.filter((r) => r.parts_status === 'Received')
+    } else if (quickFilter === 'Ready') {
+      list = list.filter((r) => r.parts_status === 'Ready')
+    }
+    const q = search.trim().toLowerCase()
+    if (q) {
+      list = list.filter((r) =>
+        [r.job_card_number, r.registration_number, r.customer_name, r.parts_number, r.parts_required]
+          .some((v) => (v ?? '').toLowerCase().includes(q)),
+      )
+    }
+    return list
+  }, [visibleRows, quickFilter, search])
 
   const openCreateForm = () => {
     setEditingId(null)
@@ -192,6 +279,26 @@ export default function PartsRequirementSection() {
     void loadDescriptions()
   }
 
+  // Inline Advisor Remarks edit — saved on blur, editable for any row that isn't Done yet.
+  const handleRemarksBlur = async (row: PartsRequestRow, value: string) => {
+    const trimmed = value.trim()
+    if ((row.advisor_remarks ?? '') === trimmed) return
+    const res = await updateMyPartsRequestFields({
+      id: row.id,
+      registrationNumber: row.registration_number,
+      partsRequired: row.parts_required,
+      partsDescription: row.parts_description,
+      advisorRemarks: trimmed || null,
+      entryDate: row.entry_date,
+      partsNumber: row.parts_number,
+    })
+    if (res.error) {
+      setError(res.error)
+      return
+    }
+    void load()
+  }
+
   const handleExpand = async (row: PartsRequestRow) => {
     const next = expandedId === row.id ? null : row.id
     setExpandedId(next)
@@ -205,6 +312,81 @@ export default function PartsRequirementSection() {
     await markAllPartsRequestsSeen()
     void load()
   }
+
+  const runConfirmedAction = async () => {
+    if (!confirmAction) return
+    const { row, kind } = confirmAction
+    setActionBusyId(row.id)
+    const res =
+      kind === 'received' ? await markPartsRequestReceived(row.id)
+      : kind === 'ready' ? await markPartsRequestReady(row.id)
+      : await markPartsRequestDone(row.id)
+    setActionBusyId(null)
+    setConfirmAction(null)
+    if (res.error) {
+      setError(res.error)
+      return
+    }
+    setToast(kind === 'received' ? 'Marked Received' : kind === 'ready' ? 'Marked Ready' : 'Marked Done')
+    void load()
+  }
+
+  const ActionButton = ({ row }: { row: PartsRequestRow }) => {
+    const busy = actionBusyId === row.id
+    if (row.parts_status === 'Pending') {
+      return <span className="text-xs text-gray-400">Awaiting SPM order</span>
+    }
+    if (['Ordered', 'In Transit', 'Back Order', 'Partially Received'].includes(row.parts_status)) {
+      return (
+        <button
+          type="button"
+          disabled={busy}
+          onClick={(e) => { e.stopPropagation(); setConfirmAction({ row, kind: 'received' }) }}
+          className="rounded-md bg-green-600 px-2.5 py-1 text-xs font-semibold text-white hover:bg-green-700 disabled:opacity-50"
+        >
+          Mark Received
+        </button>
+      )
+    }
+    if (row.parts_status === 'Received') {
+      return (
+        <button
+          type="button"
+          disabled={busy}
+          onClick={(e) => { e.stopPropagation(); setConfirmAction({ row, kind: 'ready' }) }}
+          className="rounded-md bg-purple-600 px-2.5 py-1 text-xs font-semibold text-white hover:bg-purple-700 disabled:opacity-50"
+        >
+          Mark Ready
+        </button>
+      )
+    }
+    if (row.parts_status === 'Ready') {
+      return (
+        <button
+          type="button"
+          disabled={busy}
+          onClick={(e) => { e.stopPropagation(); setConfirmAction({ row, kind: 'done' }) }}
+          className="rounded-md bg-gray-800 px-2.5 py-1 text-xs font-semibold text-white hover:bg-black disabled:opacity-50"
+        >
+          Mark Done
+        </button>
+      )
+    }
+    return null
+  }
+
+  const descOf = (row: PartsRequestRow): string => {
+    // Prefer the matched Order Sheet description (keyed by Parts Number); fall back to the
+    // advisor's own free-text description entered at request time — previously this column
+    // ignored that field entirely, so it showed "Not Available" even when the advisor had
+    // already typed a description.
+    return descriptions[normPartNumber(row.parts_number)] || row.parts_description || ''
+  }
+
+  const pillCls = (active: boolean) =>
+    `rounded-full px-3 py-1.5 text-xs font-semibold transition ${
+      active ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+    }`
 
   return (
     <div className="space-y-4">
@@ -238,6 +420,41 @@ export default function PartsRequirementSection() {
           <Icon name="plus" size={15} strokeWidth={2.2} />
           New Parts Requirement
         </button>
+      </div>
+
+      {/* Dashboard summary cards */}
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+        {[
+          { label: 'Pending Parts', value: counts.Pending },
+          { label: 'Ordered', value: counts.Ordered },
+          { label: 'Received', value: counts.Received },
+          { label: 'Ready', value: counts.Ready },
+          { label: 'Done Today', value: doneTodayCount },
+        ].map((s) => (
+          <div key={s.label} className="rounded-xl border border-gray-200 bg-white p-3.5 shadow-sm">
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">{s.label}</p>
+            <p className="mt-1 text-2xl font-bold text-gray-900">{s.value}</p>
+          </div>
+        ))}
+      </div>
+
+      {/* Quick filters + search */}
+      <div className="flex flex-col gap-3 rounded-xl border border-gray-200 bg-white p-3 shadow-sm sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-wrap gap-2">
+          <button type="button" className={pillCls(quickFilter === 'all')} onClick={() => setQuickFilter('all')}>All ({counts.all})</button>
+          <button type="button" className={pillCls(quickFilter === 'Pending')} onClick={() => setQuickFilter('Pending')}>Pending ({counts.Pending})</button>
+          <button type="button" className={pillCls(quickFilter === 'Ordered')} onClick={() => setQuickFilter('Ordered')}>Ordered ({counts.Ordered})</button>
+          <button type="button" className={pillCls(quickFilter === 'Received')} onClick={() => setQuickFilter('Received')}>Received ({counts.Received})</button>
+          <button type="button" className={pillCls(quickFilter === 'Ready')} onClick={() => setQuickFilter('Ready')}>Ready ({counts.Ready})</button>
+          <button type="button" className={pillCls(quickFilter === 'mine')} onClick={() => setQuickFilter('mine')}>My Jobs ({counts.mine})</button>
+        </div>
+        <input
+          type="text"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Search Job Card, Reg No., Customer, Part No./Name…"
+          className="w-full rounded-lg border border-gray-300 px-3 py-1.5 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 sm:w-72"
+        />
       </div>
 
       {error && (
@@ -300,7 +517,7 @@ export default function PartsRequirementSection() {
               />
             </label>
             <label className={`${labelCls} sm:col-span-2 lg:col-span-3`}>
-              Remarks
+              Advisor Remarks
               <textarea
                 value={draft.advisor_remarks}
                 onChange={(e) => setDraft((d) => ({ ...d, advisor_remarks: e.target.value }))}
@@ -335,90 +552,211 @@ export default function PartsRequirementSection() {
         </div>
       )}
 
-      <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
+      {/* Confirmation dialog */}
+      {confirmAction && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setConfirmAction(null)}>
+          <div className="w-full max-w-sm rounded-xl bg-white p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
+            <h4 className="text-sm font-bold text-gray-900">
+              {confirmAction.kind === 'received' && 'Mark parts as Received?'}
+              {confirmAction.kind === 'ready' && 'Mark vehicle as Ready?'}
+              {confirmAction.kind === 'done' && 'Mark vehicle as Done?'}
+            </h4>
+            <p className="mt-2 text-xs text-gray-600">
+              {confirmAction.kind === 'received' && 'Are you sure the parts have been received? This records the received date/time and your name.'}
+              {confirmAction.kind === 'ready' && 'Are you sure the vehicle is ready? This moves the job to the Ready stage.'}
+              {confirmAction.kind === 'done' && 'Are you sure this vehicle is completed? It will be removed from the Service Advisor dashboard and remain visible only to Admin.'}
+            </p>
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setConfirmAction(null)}
+                className="rounded-lg border border-gray-300 bg-white px-3.5 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => void runConfirmedAction()}
+                className="rounded-lg bg-blue-600 px-3.5 py-1.5 text-xs font-semibold text-white hover:bg-blue-700"
+              >
+                Confirm
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Desktop table */}
+      <div className="hidden overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm md:block">
         {loading ? (
           <div className="py-10 text-center text-sm text-gray-500">Loading...</div>
-        ) : rows.length === 0 ? (
+        ) : filteredRows.length === 0 ? (
           <div className="py-10 text-center text-sm text-gray-500">
-            No parts requests yet. Click "New Parts Requirement" to raise one.
+            {rows.length === 0 ? 'No parts requests yet. Click "New Parts Requirement" to raise one.' : 'No requests match the current filter/search.'}
           </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full border-collapse text-sm">
               <thead>
                 <tr className="border-b border-gray-200 bg-gray-50 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
-                  <th className="px-4 py-3">Entry Date</th>
+                  <th className="px-4 py-3">Job Card</th>
                   <th className="px-4 py-3">Reg. Number</th>
-                  <th className="px-4 py-3">Parts Required</th>
-                  <th className="px-4 py-3">Description</th>
-                  <th className="px-4 py-3">Parts Qty</th>
-                  <th className="px-4 py-3">Parts Number</th>
-                  <th className="px-4 py-3">Order Date</th>
+                  <th className="px-4 py-3">Customer</th>
+                  <th className="px-4 py-3">Vehicle</th>
+                  <th className="px-4 py-3">Part No</th>
+                  <th className="px-4 py-3">Part Name</th>
+                  <th className="px-4 py-3 min-w-[200px]">Description</th>
+                  <th className="px-4 py-3">Qty</th>
+                  <th className="px-4 py-3 min-w-[180px]">Advisor Remarks</th>
                   <th className="px-4 py-3">Status</th>
-                  <th className="px-4 py-3">SPM Remarks</th>
+                  <th className="px-4 py-3">Timeline</th>
                   <th className="px-4 py-3" />
                 </tr>
               </thead>
               <tbody>
-                {rows.map((row) => (
-                  <>
-                    <tr
-                      key={row.id}
-                      onClick={() => void handleExpand(row)}
-                      className={`cursor-pointer border-b border-gray-100 transition hover:bg-gray-50 ${!row.advisor_seen ? 'bg-orange-50/60' : ''}`}
-                    >
-                      <td className="px-4 py-2.5 text-gray-700">{row.entry_date}</td>
-                      <td className="px-4 py-2.5 font-semibold text-gray-900">{row.registration_number}</td>
-                      <td className="px-4 py-2.5 text-gray-700">{row.parts_required}</td>
-                      <td className={`max-w-[240px] truncate px-4 py-2.5 ${descriptions[normPartNumber(row.parts_number)] ? 'text-gray-700' : 'text-gray-400'}`} title={descriptions[normPartNumber(row.parts_number)] || undefined}>
-                        {descriptions[normPartNumber(row.parts_number)] || 'Description Not Available'}
-                      </td>
-                      <td className="px-4 py-2.5"><QtyBadge qty={row.parts_qty} /></td>
-                      <td className={`px-4 py-2.5 ${row.parts_number ? 'text-gray-700' : 'text-gray-400'}`}>{row.parts_number || '—'}</td>
-                      <td className={`px-4 py-2.5 ${row.parts_order_date ? 'text-gray-700' : 'text-gray-400'}`}>{row.parts_order_date || '—'}</td>
-                      <td className="px-4 py-2.5">
-                        <div className="flex items-center gap-2">
-                          <StatusBadge status={row.parts_status} />
-                          {!row.advisor_seen && <span className="inline-block h-2 w-2 rounded-full bg-red-500" />}
-                        </div>
-                      </td>
-                      <td className={`max-w-[220px] truncate px-4 py-2.5 ${row.spm_remarks ? 'text-gray-700' : 'text-gray-400'}`}>
-                        {row.spm_remarks || '—'}
-                      </td>
-                      <td className="px-4 py-2.5">
-                        {row.parts_status === 'Pending' && (
-                          <button
-                            type="button"
-                            onClick={(e) => { e.stopPropagation(); openEditForm(row) }}
-                            className="rounded-md border border-gray-300 bg-white px-2.5 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50"
-                          >
-                            Edit
-                          </button>
-                        )}
-                      </td>
-                    </tr>
-                    {expandedId === row.id && (
-                      <tr key={`${row.id}-detail`} className="border-b border-gray-100 bg-gray-50/70">
-                        <td colSpan={10} className="px-6 py-3 text-xs text-gray-600">
-                          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">
-                            <div><span className="font-semibold text-gray-800">Parts Description:</span> {row.parts_description || '—'}</div>
-                            <div><span className="font-semibold text-gray-800">My Remarks:</span> {row.advisor_remarks || '—'}</div>
-                            <div><span className="font-semibold text-gray-800">Vehicle Type:</span> {row.vehicle_type || '—'}</div>
-                            <div><span className="font-semibold text-gray-800">Last Update:</span> {new Date(row.status_updated_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}</div>
-                            {row.auto_match_note && (
-                              <div className="sm:col-span-2 lg:col-span-4">
-                                <span className="font-semibold text-gray-800">Auto-match info:</span> {row.auto_match_note}
-                              </div>
+                {filteredRows.map((row) => {
+                  const desc = descOf(row)
+                  return (
+                    <>
+                      <tr
+                        key={row.id}
+                        onClick={() => void handleExpand(row)}
+                        className={`cursor-pointer border-b border-gray-100 transition hover:bg-gray-50 ${!row.advisor_seen ? 'bg-orange-50/60' : ''}`}
+                      >
+                        <td className="px-4 py-2.5 text-gray-700">{row.job_card_number || '—'}</td>
+                        <td className="px-4 py-2.5 font-semibold text-gray-900">{row.registration_number}</td>
+                        <td className="px-4 py-2.5 text-gray-700">{row.customer_name || '—'}</td>
+                        <td className="px-4 py-2.5 text-gray-700">
+                          {row.vehicle_model || '—'}{row.vehicle_type ? ` (${row.vehicle_type})` : ''}
+                        </td>
+                        <td className={`px-4 py-2.5 ${row.parts_number ? 'text-gray-700' : 'text-gray-400'}`}>{row.parts_number || '—'}</td>
+                        <td className="px-4 py-2.5 text-gray-700">{row.parts_required}</td>
+                        <td className={`max-w-[220px] px-4 py-2.5 ${desc ? 'text-gray-700' : 'text-gray-400'}`} title={desc || undefined}>
+                          <span className="line-clamp-2 whitespace-normal">{desc || 'Description Not Available'}</span>
+                        </td>
+                        <td className="px-4 py-2.5"><QtyBadge qty={row.parts_qty} /></td>
+                        <td className="px-4 py-2.5" onClick={(e) => e.stopPropagation()}>
+                          <input
+                            type="text"
+                            defaultValue={row.advisor_remarks ?? ''}
+                            disabled={row.parts_status === 'Done'}
+                            onBlur={(e) => void handleRemarksBlur(row, e.target.value)}
+                            placeholder="Add remark…"
+                            className="w-full rounded-md border border-gray-300 px-2 py-1.5 text-xs focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:bg-gray-50 disabled:text-gray-400"
+                          />
+                        </td>
+                        <td className="px-4 py-2.5">
+                          <div className="flex items-center gap-2">
+                            <StatusBadge status={row.parts_status} />
+                            {!row.advisor_seen && <span className="inline-block h-2 w-2 rounded-full bg-red-500" />}
+                          </div>
+                        </td>
+                        <td className="px-4 py-2.5"><MiniTimeline status={row.parts_status} /></td>
+                        <td className="px-4 py-2.5" onClick={(e) => e.stopPropagation()}>
+                          <div className="flex items-center gap-1.5">
+                            <ActionButton row={row} />
+                            {row.parts_status === 'Pending' && (
+                              <button
+                                type="button"
+                                onClick={(e) => { e.stopPropagation(); openEditForm(row) }}
+                                className="rounded-md border border-gray-300 bg-white px-2.5 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50"
+                              >
+                                Edit
+                              </button>
                             )}
                           </div>
                         </td>
                       </tr>
-                    )}
-                  </>
-                ))}
+                      {expandedId === row.id && (
+                        <tr key={`${row.id}-detail`} className="border-b border-gray-100 bg-gray-50/70">
+                          <td colSpan={12} className="px-6 py-3 text-xs text-gray-600">
+                            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">
+                              <div><span className="font-semibold text-gray-800">Order Date:</span> {row.parts_order_date || '—'}</div>
+                              <div><span className="font-semibold text-gray-800">SPM Remarks:</span> {row.spm_remarks || '—'}</div>
+                              <div><span className="font-semibold text-gray-800">Received:</span> {fmtDateTime(row.received_at)}{row.received_by_name ? ` · ${row.received_by_name}` : ''}</div>
+                              <div><span className="font-semibold text-gray-800">Done:</span> {fmtDateTime(row.done_at)}{row.done_by_name ? ` · ${row.done_by_name}` : ''}</div>
+                              <div><span className="font-semibold text-gray-800">Last Update:</span> {fmtDateTime(row.status_updated_at)}</div>
+                              {row.auto_match_note && (
+                                <div className="sm:col-span-2 lg:col-span-4">
+                                  <span className="font-semibold text-gray-800">Auto-match info:</span> {row.auto_match_note}
+                                </div>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </>
+                  )
+                })}
               </tbody>
             </table>
           </div>
+        )}
+      </div>
+
+      {/* Mobile card list */}
+      <div className="space-y-3 md:hidden">
+        {loading ? (
+          <div className="rounded-xl border border-gray-200 bg-white py-10 text-center text-sm text-gray-500 shadow-sm">Loading...</div>
+        ) : filteredRows.length === 0 ? (
+          <div className="rounded-xl border border-gray-200 bg-white py-10 text-center text-sm text-gray-500 shadow-sm">
+            {rows.length === 0 ? 'No parts requests yet.' : 'No requests match the current filter/search.'}
+          </div>
+        ) : (
+          filteredRows.map((row) => {
+            const desc = descOf(row)
+            return (
+              <div key={row.id} className={`rounded-xl border border-gray-200 bg-white p-3.5 shadow-sm ${!row.advisor_seen ? 'ring-1 ring-orange-300' : ''}`}>
+                <div className="flex items-center justify-between">
+                  <p className="text-sm font-semibold text-gray-900">{row.job_card_number || row.registration_number}</p>
+                  <StatusBadge status={row.parts_status} />
+                </div>
+                <p className="mt-0.5 text-xs text-gray-500">{row.registration_number} · {row.customer_name || 'Customer N/A'}</p>
+                <p className="mt-1 text-xs text-gray-700">
+                  <span className="font-semibold">{row.parts_required}</span>{row.parts_number ? ` (${row.parts_number})` : ''}
+                </p>
+                <p className={`mt-1 text-xs ${desc ? 'text-gray-500' : 'text-gray-400'}`}>{desc || 'Description Not Available'}</p>
+                <div className="mt-2 flex items-center justify-between text-xs">
+                  <QtyBadge qty={row.parts_qty} />
+                  <MiniTimeline status={row.parts_status} />
+                </div>
+                <input
+                  type="text"
+                  defaultValue={row.advisor_remarks ?? ''}
+                  disabled={row.parts_status === 'Done'}
+                  onBlur={(e) => void handleRemarksBlur(row, e.target.value)}
+                  placeholder="Advisor remarks…"
+                  className="mt-2 w-full rounded-md border border-gray-300 px-2 py-1.5 text-xs focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:bg-gray-50"
+                />
+                <div className="mt-2 flex gap-2">
+                  <ActionButton row={row} />
+                  {row.parts_status === 'Pending' && (
+                    <button
+                      type="button"
+                      onClick={() => openEditForm(row)}
+                      className="rounded-md border border-gray-300 bg-white px-2.5 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50"
+                    >
+                      Edit
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => void handleExpand(row)}
+                    className="ml-auto text-xs font-medium text-blue-600"
+                  >
+                    {expandedId === row.id ? 'Hide details' : 'Details'}
+                  </button>
+                </div>
+                {expandedId === row.id && (
+                  <div className="mt-2 space-y-1 border-t border-gray-100 pt-2 text-xs text-gray-600">
+                    <div><span className="font-semibold text-gray-800">Order Date:</span> {row.parts_order_date || '—'}</div>
+                    <div><span className="font-semibold text-gray-800">SPM Remarks:</span> {row.spm_remarks || '—'}</div>
+                    <div><span className="font-semibold text-gray-800">Received:</span> {fmtDateTime(row.received_at)}{row.received_by_name ? ` · ${row.received_by_name}` : ''}</div>
+                  </div>
+                )}
+              </div>
+            )
+          })
         )}
       </div>
     </div>

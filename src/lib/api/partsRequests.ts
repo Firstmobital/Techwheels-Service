@@ -13,6 +13,8 @@ export const PARTS_STATUS_VALUES = [
   'Partially Received',
   'Cancelled',
   'Delivered to Workshop',
+  'Ready',
+  'Done',
 ] as const
 
 export type PartsStatus = (typeof PARTS_STATUS_VALUES)[number]
@@ -41,6 +43,13 @@ export interface PartsRequestRow {
   status_updated_at: string
   created_at: string
   updated_at: string
+  received_at: string | null
+  received_by_name: string | null
+  done_at: string | null
+  done_by_name: string | null
+  job_card_number: string | null
+  customer_name: string | null
+  vehicle_model: string | null
 }
 
 export async function listMyPartsRequests(): Promise<ApiResult<PartsRequestRow[]>> {
@@ -181,6 +190,27 @@ export async function markAllPartsRequestsSeen(): Promise<ApiResult<void>> {
   return ok(undefined)
 }
 
+// Advisor self-service workflow actions. Each is owner-or-admin enforced and status-gated
+// server-side (see parts_request_advisor_mark_* in the DB) — the RPC itself raises if the
+// transition isn't valid, so the UI never needs to duplicate that logic to stay safe.
+export async function markPartsRequestReceived(id: number): Promise<ApiResult<void>> {
+  const { error } = await supabase.rpc('parts_request_advisor_mark_received', { p_id: id })
+  if (error) return fail(error)
+  return ok(undefined)
+}
+
+export async function markPartsRequestReady(id: number): Promise<ApiResult<void>> {
+  const { error } = await supabase.rpc('parts_request_advisor_mark_ready', { p_id: id })
+  if (error) return fail(error)
+  return ok(undefined)
+}
+
+export async function markPartsRequestDone(id: number): Promise<ApiResult<void>> {
+  const { error } = await supabase.rpc('parts_request_advisor_mark_done', { p_id: id })
+  if (error) return fail(error)
+  return ok(undefined)
+}
+
 export const PARTS_STATUS_COLOR: Record<PartsStatus, { dot: string; bg: string; text: string }> = {
   'Pending':               { dot: 'bg-amber-500',   bg: 'bg-amber-50',   text: 'text-amber-700' },
   'Ordered':               { dot: 'bg-blue-500',    bg: 'bg-blue-50',    text: 'text-blue-700' },
@@ -190,4 +220,9 @@ export const PARTS_STATUS_COLOR: Record<PartsStatus, { dot: string; bg: string; 
   'Partially Received':    { dot: 'bg-teal-500',    bg: 'bg-teal-50',    text: 'text-teal-700' },
   'Cancelled':             { dot: 'bg-gray-500',    bg: 'bg-gray-100',   text: 'text-gray-700' },
   'Delivered to Workshop': { dot: 'bg-emerald-600', bg: 'bg-emerald-50', text: 'text-emerald-700' },
+  'Ready':                 { dot: 'bg-violet-500',  bg: 'bg-violet-50',  text: 'text-violet-700' },
+  'Done':                  { dot: 'bg-slate-500',   bg: 'bg-slate-100',  text: 'text-slate-600' },
 }
+
+// Workflow order used for the Service Advisor page's mini-timeline + quick-filter counts.
+export const ADVISOR_WORKFLOW_STAGES: PartsStatus[] = ['Ordered', 'Received', 'Ready', 'Done']

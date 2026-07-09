@@ -231,13 +231,16 @@ export default function PartsSPMDashboardPage() {
 
   const handleExport = () => {
     const header = [
-      'Entry Date', 'Advisor', 'Registration Number', 'Parts Required', 'Parts Description',
+      'Entry Date', 'Job Card', 'Advisor', 'Registration Number', 'Customer', 'Vehicle', 'Parts Required', 'Parts Description',
       'Parts Qty', 'Parts Number', 'Parts Order Date', 'Parts Status', 'Advisor Remarks', 'SPM Remarks', 'Vehicle Type',
+      'Received At', 'Received By', 'Done At', 'Done By',
     ]
     const dataRows = sorted.map((r) => [
-      r.entry_date, r.advisor_name, r.registration_number, r.parts_required, r.parts_description ?? '',
+      r.entry_date, r.job_card_number ?? '', r.advisor_name, r.registration_number, r.customer_name ?? '', r.vehicle_model ?? '',
+      r.parts_required, r.parts_description ?? '',
       r.parts_qty ?? '', r.parts_number ?? '', r.parts_order_date ?? '', r.parts_status,
       r.advisor_remarks ?? '', r.spm_remarks ?? '', r.vehicle_type ?? '',
+      r.received_at ?? '', r.received_by_name ?? '', r.done_at ?? '', r.done_by_name ?? '',
     ])
     const wb = XLSX.utils.book_new()
     const ws = XLSX.utils.aoa_to_sheet([header, ...dataRows])
@@ -374,8 +377,10 @@ export default function PartsSPMDashboardPage() {
               <thead className="sticky top-0 z-10 bg-gray-50 text-left text-xs font-semibold uppercase tracking-wide text-gray-500 shadow-sm">
                 <tr>
                   <SortHeader label="Entry Date" sortField="entry_date" />
+                  <th className="px-4 py-3">Job Card</th>
                   <SortHeader label="Advisor" sortField="advisor_name" />
                   <SortHeader label="Reg. Number" sortField="registration_number" />
+                  <th className="px-4 py-3">Customer</th>
                   <th className="px-4 py-3">Parts Required</th>
                   <th className="px-4 py-3">Description</th>
                   <th className="px-4 py-3">Parts Qty</th>
@@ -385,6 +390,8 @@ export default function PartsSPMDashboardPage() {
                   <th className="px-4 py-3">Advisor Remarks</th>
                   <th className="px-4 py-3">SPM Remarks</th>
                   <th className="px-4 py-3">Vehicle</th>
+                  <th className="px-4 py-3">Received</th>
+                  <th className="px-4 py-3">Done</th>
                   <th className="px-4 py-3" />
                 </tr>
               </thead>
@@ -394,8 +401,10 @@ export default function PartsSPMDashboardPage() {
                   return (
                     <tr key={row.id} className="border-b border-gray-100 hover:bg-gray-50">
                       <td className="whitespace-nowrap px-4 py-2.5 text-gray-700">{row.entry_date}</td>
+                      <td className="whitespace-nowrap px-4 py-2.5 text-gray-700">{row.job_card_number || '—'}</td>
                       <td className="whitespace-nowrap px-4 py-2.5 text-gray-700">{row.advisor_name}</td>
                       <td className="whitespace-nowrap px-4 py-2.5 font-semibold text-gray-900">{row.registration_number}</td>
+                      <td className="whitespace-nowrap px-4 py-2.5 text-gray-700">{row.customer_name || '—'}</td>
                       <td className="px-4 py-2.5 text-gray-700">{row.parts_required}</td>
                       <td className="max-w-[180px] truncate px-4 py-2.5 text-gray-600">{row.parts_description || '—'}</td>
 
@@ -446,6 +455,14 @@ export default function PartsSPMDashboardPage() {
                             />
                           </td>
                           <td className="px-4 py-2.5 text-gray-500">{row.vehicle_type || '—'}</td>
+                          <td className="whitespace-nowrap px-4 py-2.5 text-xs text-gray-500">
+                            {row.received_at ? new Date(row.received_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', dateStyle: 'short', timeStyle: 'short' }) : '—'}
+                            {row.received_by_name ? <div className="text-gray-400">{row.received_by_name}</div> : null}
+                          </td>
+                          <td className="whitespace-nowrap px-4 py-2.5 text-xs text-gray-500">
+                            {row.done_at ? new Date(row.done_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', dateStyle: 'short', timeStyle: 'short' }) : '—'}
+                            {row.done_by_name ? <div className="text-gray-400">{row.done_by_name}</div> : null}
+                          </td>
                           <td className="whitespace-nowrap px-4 py-2.5">
                             <div className="flex gap-1.5">
                               <button
@@ -475,6 +492,14 @@ export default function PartsSPMDashboardPage() {
                           <td className="max-w-[160px] truncate px-4 py-2.5 text-gray-500">{row.advisor_remarks || '—'}</td>
                           <td className={`max-w-[180px] truncate px-4 py-2.5 ${row.spm_remarks ? 'text-gray-700' : 'text-gray-400'}`}>{row.spm_remarks || '—'}</td>
                           <td className="px-4 py-2.5 text-gray-500">{row.vehicle_type || '—'}</td>
+                          <td className="whitespace-nowrap px-4 py-2.5 text-xs text-gray-500">
+                            {row.received_at ? new Date(row.received_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', dateStyle: 'short', timeStyle: 'short' }) : '—'}
+                            {row.received_by_name ? <div className="text-gray-400">{row.received_by_name}</div> : null}
+                          </td>
+                          <td className="whitespace-nowrap px-4 py-2.5 text-xs text-gray-500">
+                            {row.done_at ? new Date(row.done_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', dateStyle: 'short', timeStyle: 'short' }) : '—'}
+                            {row.done_by_name ? <div className="text-gray-400">{row.done_by_name}</div> : null}
+                          </td>
                           <td className="px-4 py-2.5">
                             <button
                               type="button"
