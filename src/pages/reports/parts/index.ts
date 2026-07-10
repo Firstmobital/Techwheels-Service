@@ -7,6 +7,7 @@ import PartsHighDemandReport from './PartsHighDemandReport'
 import PartsStockDisciplineReport from './PartsStockDisciplineReport'
 import PartsGRNReport from './PartsGRNReport'
 import PartsNotInvoicedReport from './PartsNotInvoicedReport'
+import JcClosedInvoicedReport from './JcClosedInvoicedReport'
 
 import type { ReportCategoryDefinition, ReportDefinition } from '../types'
 
@@ -90,5 +91,14 @@ export const PARTS_REPORTS: ReportDefinition[] = [
     description: 'EV & PV job-cards where parts have been shipped but not yet invoiced — with aging analysis and status tracking.',
     cardHint: 'Best for tracking pending invoice reconciliation across EV and PV dealers.',
     Component: PartsNotInvoicedReport,
+  },
+  {
+    id: 'jc-closed-invoiced',
+    categoryId: 'parts',
+    label: 'JC Closed but Invoiced',
+    group: 'Daily Operations',
+    description: 'Dashboard, advisor-wise, monthly, spare vs labour, and JC status reports for closed and invoiced job cards.',
+    cardHint: 'Best for daily operational tracking of closed & invoiced JCs across EV and PV.',
+    Component: JcClosedInvoicedReport,
   },
 ]

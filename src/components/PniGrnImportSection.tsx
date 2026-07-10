@@ -41,6 +41,13 @@ const GRN_SLOTS: UploadSlot[] = [
   { key: 'GRN_PV_SITAPURA',   label: 'PV – Sitapura',   portal: 'PV', dealer_code: '3000840',  branch_label: 'SITAPURA',   btnColor: '#2563eb', badge: 'PV' },
 ]
 
+// ─── JC Closed but Invoiced slots ─────────────────────────────────────────────
+const JCI_SLOTS: UploadSlot[] = [
+  { key: 'JCI_EV_SITAPURA',   label: 'EV – Sitapura',   portal: 'EV', dealer_code: '500A840',  branch_label: 'SITAPURA',   btnColor: '#059669', badge: 'EV' },
+  { key: 'JCI_PV_SITAPURA',   label: 'PV – Sitapura',   portal: 'PV', dealer_code: '3000840',  branch_label: 'SITAPURA',   btnColor: '#2563eb', badge: 'PV' },
+  { key: 'JCI_PV_AJMERROAD',  label: 'PV – Ajmer Road', portal: 'PV', dealer_code: '3001440',  branch_label: 'AJMER ROAD', btnColor: '#7c3aed', badge: 'PV' },
+]
+
 // ─── Parse helpers ────────────────────────────────────────────────────────────
 async function parseExcelOrCsv(file: File): Promise<Record<string, unknown>[]> {
   const ab = await file.arrayBuffer()
@@ -266,6 +273,9 @@ export function PniGrnImportSection() {
   const [grnMsgs, setGrnMsgs] = useState<Record<string, SlotMsg | null>>({})
   const [pniLast, setPniLast] = useState<Record<string, LastUpload | null>>({})
   const [grnLast, setGrnLast] = useState<Record<string, LastUpload | null>>({})
+  const [jciUploading, setJciUploading] = useState<Record<string, boolean>>({})
+  const [jciMsgs, setJciMsgs] = useState<Record<string, SlotMsg | null>>({})
+  const [jciLast, setJciLast] = useState<Record<string, LastUpload | null>>({})
 
   // ── Load last upload per slot ──────────────────────────────────────────────
   const loadLastUploads = useCallback(async () => {
@@ -303,6 +313,24 @@ export function PniGrnImportSection() {
       } : null
     }
     setGrnLast(grnMap)
+
+    // JCI
+    const { data: jciHist } = await supabase
+      .from('jc_closed_invoiced_uploads').select('*')
+      .order('uploaded_at', { ascending: false })
+    const jciMap: Record<string, LastUpload | null> = {}
+    for (const slot of JCI_SLOTS) {
+      const found = (jciHist ?? []).find((h: Record<string, unknown>) =>
+        h.dealer_code === slot.dealer_code && h.branch_label === slot.branch_label
+      )
+      jciMap[slot.key] = found ? {
+        file_name: found.file_name as string | null,
+        uploaded_at: found.uploaded_at as string,
+        row_count: found.row_count as number,
+        pending_count: found.invoiced_count as number,
+      } : null
+    }
+    setJciLast(jciMap)
   }, [])
 
   useEffect(() => { void loadLastUploads() }, [loadLastUploads])
@@ -391,7 +419,87 @@ export function PniGrnImportSection() {
     }
   }, [loadLastUploads])
 
-  const anyUploading = Object.values(pniUploading).some(Boolean) || Object.values(grnUploading).some(Boolean)
+  // ── JCI upload ─────────────────────────────────────────────────────────────
+  const handleJciFile = useCallback(async (file: File, slot: UploadSlot) => {
+    setJciUploading(p => ({ ...p, [slot.key]: true }))
+    setJciMsgs(p => ({ ...p, [slot.key]: { type: 'progress', text: `Parsing ${file.name}…` } }))
+    try {
+      if (!file.name.match(/\.(xlsx|xls|csv|txt)$/i)) throw new Error('Please upload an Excel or CSV file.')
+      const raw = await parseExcelOrCsv(file)
+      if (!raw.length) throw new Error('No data rows found in file.')
+      setJciMsgs(p => ({ ...p, [slot.key]: { type: 'progress', text: `Found ${raw.length} rows, uploading…` } }))
+
+      // Delete old data for this slot
+      const { error: delErr } = await supabase.from('jc_closed_invoiced_data')
+        .delete().eq('dealer_code', slot.dealer_code).eq('branch_label', slot.branch_label)
+      if (delErr) throw delErr
+
+      const sessionId = crypto.randomUUID()
+      const gs2 = (r: Record<string, unknown>, k: string) => { const v = r[k]; return v != null && String(v).trim() ? String(v).trim() : null }
+      const pa = (v: unknown) => { if (!v) return null; const s = String(v).replace('Rs.','').replace(/,/g,'').trim(); const n = parseFloat(s); return isNaN(n) ? null : n }
+      const pd = (v: unknown) => { if (!v) return null; const s = String(v).trim(); for (const fmt of [/^(\d{2})\/(\d{2})\/(\d{4}) (\d{2}):(\d{2}):(\d{2}) (AM|PM)$/i]) { const m = s.match(fmt); if (m) { try { return new Date(s).toISOString() } catch {/**/} } }; try { return new Date(s).toISOString() } catch { return null } }
+
+      const portalFromDiv = (div: string | null) => {
+        if (!div) return slot.portal
+        if (div.includes('500A840')) return 'EV'
+        return 'PV'
+      }
+
+      const dbRows = raw.map((r: Record<string, unknown>) => {
+        const fn = gs2(r, 'First Name') || ''; const ln = gs2(r, 'Last Name') || ''
+        const ph = gs2(r, 'Contact Phones (Res, Off, Mob)') || ''
+        const mobile = ph.split(',').map((x: string) => x.trim()).filter(Boolean).pop() || null
+        const kmsRaw = gs2(r, 'Kms'); let kmsVal = null; try { kmsVal = kmsRaw ? parseInt(String(kmsRaw).replace(/,/g,'')) : null } catch {/**/}
+        return {
+          portal: portalFromDiv(gs2(r, 'Division')),
+          dealer_code: slot.dealer_code, branch_label: slot.branch_label,
+          upload_session_id: sessionId,
+          job_card_no: gs2(r, 'Job Card #'), jc_status: gs2(r, 'Status'),
+          vehicle_reg_no: gs2(r, 'Vehicle Registration Number'), chassis_no: gs2(r, 'Chassis No'),
+          customer_name: (fn + ' ' + ln).trim() || null, contact_phone: mobile,
+          account: gs2(r, 'Account'), sr_assigned_to: gs2(r, 'SR Assigned To'),
+          supervisor: gs2(r, 'Supervisor'), product_line: gs2(r, 'Product Line'),
+          parent_product_line: gs2(r, 'Parent Product Line'), sr_type: gs2(r, 'SR Type'),
+          payment_type: gs2(r, 'Payment Type'), division: gs2(r, 'Division'),
+          kms: kmsVal, warranty: gs2(r, 'Warranty'), amc: gs2(r, 'AMC'),
+          invoice_format: gs2(r, 'Invoice Format'),
+          final_labour_amount: pa(r['Final Labour Amount']),
+          final_spares_amount: pa(r['Final Spares Amount']),
+          total_invoice_amount: pa(r['Total Invoice Amount']),
+          total_order_value: pa(r['Total Order Value']),
+          invoiced: gs2(r, 'Invoiced ?'), parts_entry_complete: gs2(r, 'Parts Entry Complete'),
+          jobs_entry_complete: gs2(r, 'Jobs Entry Complete'),
+          created_date: pd(r['Created Date Time']), closed_date: pd(r['Closed Date Time']),
+          completed_date: pd(r['Completed Date Time']), delay_reason: gs2(r, 'Delay Reason'),
+          open_for_days: null,
+        }
+      })
+
+      for (let i = 0; i < dbRows.length; i += 500) {
+        const { error } = await supabase.from('jc_closed_invoiced_data').insert(dbRows.slice(i, i + 500))
+        if (error) throw error
+        setJciMsgs(p => ({ ...p, [slot.key]: { type: 'progress', text: `Uploading… ${Math.min(i+500, dbRows.length)}/${dbRows.length}` } }))
+      }
+
+      const { data: { user } } = await supabase.auth.getUser()
+      await supabase.from('jc_closed_invoiced_uploads').insert({
+        portal: slot.portal, dealer_code: slot.dealer_code, branch_label: slot.branch_label,
+        upload_session_id: sessionId, uploaded_by_email: user?.email ?? null,
+        row_count: raw.length, invoiced_count: dbRows.filter((r: Record<string, unknown>) => r.invoiced === 'Y').length,
+        file_name: file.name,
+      })
+      setJciMsgs(p => ({ ...p, [slot.key]: { type: 'success', text: `✅ ${raw.length.toLocaleString('en-IN')} rows imported` } }))
+      setTimeout(() => setJciMsgs(p => ({ ...p, [slot.key]: null })), 5000)
+      await loadLastUploads()
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e)
+      setJciMsgs(p => ({ ...p, [slot.key]: { type: 'error', text: `❌ ${msg}` } }))
+    } finally {
+      setJciUploading(p => ({ ...p, [slot.key]: false }))
+    }
+  }, [loadLastUploads])
+
+  const anyUploading = Object.values(pniUploading).some(Boolean) || Object.values(grnUploading).some(Boolean) || Object.values(jciUploading).some(Boolean)
   const pniCount = PNI_SLOTS.length
   const grnCount = GRN_SLOTS.length
 
@@ -407,7 +515,7 @@ export function PniGrnImportSection() {
         <span style={{ flex: 1, textAlign: 'left', minWidth: 0 }}>
           <span className="imp-group__title">
             Parts Daily Reports
-            <span className="imp-group__count">{pniCount + grnCount}</span>
+            <span className="imp-group__count">{pniCount + grnCount + JCI_SLOTS.length}</span>
           </span>
           <span className="imp-group__desc">
             Parts Issue but not Invoiced &amp; GRN Report — daily upload per EV/PV dealer.
@@ -479,6 +587,36 @@ export function PniGrnImportSection() {
             </div>
             <p className="mt-2 text-[11px] text-gray-400">
               Dashboard: <a href="/reports/parts/parts-grn-report" className="text-indigo-500 underline hover:text-indigo-700">Reports → Parts Reports → GRN Report</a>
+            </p>
+          </div>
+
+          {/* ── JC Closed but Invoiced ───────────────────────────────────── */}
+          <div className="mt-6">
+            <div className="mb-3 flex items-center gap-2">
+              <span className="inline-flex items-center gap-1.5 rounded-lg bg-green-50 px-3 py-1.5 text-xs font-bold text-green-800 ring-1 ring-green-200">
+                <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                JC Closed but Invoiced
+              </span>
+              <span className="text-xs text-gray-400">
+                Upload daily — all rows stored, portal auto-detected from Division column
+              </span>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-3">
+              {JCI_SLOTS.map(slot => (
+                <MiniUploadCard
+                  key={slot.key}
+                  slot={slot}
+                  lastUpload={jciLast[slot.key] ?? null}
+                  msg={jciMsgs[slot.key] ?? null}
+                  uploading={!!jciUploading[slot.key]}
+                  onFile={file => void handleJciFile(file, slot)}
+                />
+              ))}
+            </div>
+            <p className="mt-2 text-[11px] text-gray-400">
+              Dashboard: <a href="/reports/parts/jc-closed-invoiced" className="text-indigo-500 underline hover:text-indigo-700">Reports → Parts Reports → JC Closed but Invoiced</a>
             </p>
           </div>
         </div>
