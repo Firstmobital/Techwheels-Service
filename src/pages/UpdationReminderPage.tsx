@@ -101,6 +101,24 @@ function findColumnKey(headers: string[], aliases: string[]): string | null {
   return null
 }
 
+// supabase-js's functions.invoke() only exposes a generic "non-2xx status
+// code" message on error — the actual { ok: false, error: "..." } body we
+// return is on error.context (a Response). Unwrap it so failures are
+// diagnosable from the UI instead of just "Edge Function returned a non-2xx
+// status code".
+async function extractFunctionErrorMessage(e: unknown): Promise<string> {
+  if (e && typeof e === 'object' && 'context' in e) {
+    const ctx = (e as { context?: unknown }).context
+    if (ctx instanceof Response) {
+      try {
+        const body = await ctx.clone().json()
+        if (body?.error) return typeof body.error === 'string' ? body.error : JSON.stringify(body.error)
+      } catch { /* response wasn't JSON — fall through to generic message */ }
+    }
+  }
+  return e instanceof Error ? e.message : String(e)
+}
+
 // ─── Date/time helpers ────────────────────────────────────────────────────────
 
 function fmtDate(s: string | null): string {
@@ -363,7 +381,7 @@ export default function UpdationReminderPage() {
       setImportResult(data as ImportResult)
       if (!dry) await fetchAll()
     } catch (e: unknown) {
-      setImportResult({ ok: false, error: e instanceof Error ? e.message : String(e) })
+      setImportResult({ ok: false, error: await extractFunctionErrorMessage(e) })
     } finally {
       setImporting(false)
     }
@@ -383,7 +401,7 @@ export default function UpdationReminderPage() {
       if (e) throw e
       setTestResult(data as Record<string, unknown>)
     } catch (e: unknown) {
-      setTestResult({ error: e instanceof Error ? e.message : String(e) })
+      setTestResult({ error: await extractFunctionErrorMessage(e) })
     } finally {
       setSendingTest(false)
     }
@@ -400,7 +418,7 @@ export default function UpdationReminderPage() {
       setRunResult(data as Record<string, unknown>)
       if (!dryRun) await fetchAll()
     } catch (e: unknown) {
-      setRunResult({ error: e instanceof Error ? e.message : String(e) })
+      setRunResult({ error: await extractFunctionErrorMessage(e) })
     } finally {
       setRunning(false)
     }
