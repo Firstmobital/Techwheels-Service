@@ -2,7 +2,7 @@
 // Reads from jc_closed_invoiced_data — EV (500A840) | PV-Sitapura (3000840) | PV-AjmerRd (3001440)
 
 import { useState, useEffect, useMemo, useCallback } from 'react'
-import { supabase } from '../../../lib/supabaseClient'
+import { supabase } from '../../../lib/supabase'
 import type { ReportViewProps } from '../types'
 import * as XLSX from 'xlsx'
 
