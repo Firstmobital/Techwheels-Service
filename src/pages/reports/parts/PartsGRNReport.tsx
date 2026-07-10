@@ -166,7 +166,13 @@ export default function PartsGRNReport(_props: ReportViewProps) {
 
   const filtered = useMemo(() => {
     let list = rows
-    if (statusFilter !== 'all') list = list.filter((r) => r.grn_status === statusFilter)
+    if (statusFilter !== 'all') {
+      if (statusFilter === 'In Transit') {
+        list = list.filter((r) => r.status === 'In Transit')
+      } else {
+        list = list.filter((r) => r.grn_status === statusFilter)
+      }
+    }
     if (search.trim()) {
       const q = search.toLowerCase()
       list = list.filter((r) =>
@@ -185,9 +191,11 @@ export default function PartsGRNReport(_props: ReportViewProps) {
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
   const pageRows = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
-  const totalReceived = rows.filter((r) => r.grn_status === 'GRN Received').length
-  const totalInTransit = rows.filter((r) => r.grn_status === 'In Transit').length
-  const totalPending = rows.filter((r) => r.grn_status === 'GRN Pending').length
+  // grn_status (DB generated) is only 'GRN Received' | 'GRN Pending'
+  // 'In Transit' comes from the raw status column (from Excel)
+  const totalReceived    = rows.filter((r) => r.grn_status === 'GRN Received').length
+  const totalInTransit   = rows.filter((r) => r.status    === 'In Transit').length
+  const totalPending     = rows.filter((r) => r.grn_status !== 'GRN Received' && r.status !== 'In Transit').length
   // Build order-level totals for In Transit rows.
   // Total_Invoice_Amount repeats the same value on every line of an order — 
   // we must take it ONCE per order to avoid double-counting multi-line orders.
@@ -209,7 +217,7 @@ export default function PartsGRNReport(_props: ReportViewProps) {
   const inTransitOrderSummaries = useMemo((): OrderSummary[] => {
     const map = new Map<string, OrderSummary>()
     rows
-      .filter((r) => r.grn_status === 'In Transit')
+      .filter((r) => r.status === 'In Transit')
       .forEach((r) => {
         const key = r.order_no ?? `__noorder_${r.id}`
         if (!map.has(key)) {
@@ -261,7 +269,7 @@ export default function PartsGRNReport(_props: ReportViewProps) {
       'Recd Qty': r.recd_qty ?? '',
       'Spares Order Type': r.spares_order_type ?? '',
       'Condition': r.condition ?? '',
-      'Total Invoice Amount (Pending GRN)': r.grn_status === 'In Transit' ? (r.total_invoice_amount ?? '') : '',
+      'Total Invoice Amount (Pending GRN)': r.status === 'In Transit' ? (r.total_invoice_amount ?? '') : '',
       'Net Amount': r.net_amount ?? '',
       'Vendor Name': r.vendor_name ?? '',
       'SAP Order Num': r.sap_order_num ?? '',
@@ -484,15 +492,15 @@ export default function PartsGRNReport(_props: ReportViewProps) {
                   <tr key={row.id}
                     className={`border-b border-gray-100 transition hover:bg-indigo-50/40 ${idx % 2 === 1 ? 'bg-slate-50/60' : 'bg-white'}`}>
                     <td className="px-3 py-2.5 text-xs text-gray-400">{(page - 1) * PAGE_SIZE + idx + 1}</td>
-                    <td className="px-3 py-2.5"><GrnBadge status={row.grn_status} /></td>
+                    <td className="px-3 py-2.5"><GrnBadge status={row.status === 'In Transit' ? 'In Transit' : row.grn_status} /></td>
                     <td className="px-3 py-2.5 font-mono text-xs text-gray-700">{row.sap_invoice_no || <span className="text-gray-300">—</span>}</td>
                     <td className="max-w-[180px] px-3 py-2.5 text-xs text-gray-600"><span className="block truncate" title={row.order_no ?? ''}>{row.order_no || '—'}</span></td>
                     <td className="px-3 py-2.5 font-mono text-xs font-semibold text-gray-800">{row.part_no || '—'}</td>
                     <td className="px-3 py-2.5 text-xs text-gray-600 whitespace-nowrap">{fmtDate(row.invoice_date)}</td>
                     <td className="px-3 py-2.5 text-center text-xs font-semibold text-gray-700">{row.recd_qty ?? '—'}</td>
                     <td className="px-3 py-2.5 text-xs text-gray-600 whitespace-nowrap">{row.spares_order_type || '—'}</td>
-                    <td className={`px-3 py-2.5 text-right text-xs whitespace-nowrap font-semibold ${row.grn_status === 'In Transit' ? 'text-violet-700' : 'text-gray-300'}`}>
-                      {row.grn_status === 'In Transit'
+                    <td className={`px-3 py-2.5 text-right text-xs whitespace-nowrap font-semibold ${row.status === 'In Transit' ? 'text-violet-700' : 'text-gray-300'}`}>
+                      {row.status === 'In Transit'
                         ? (row.total_invoice_amount || '—')
                         : '—'}
                     </td>
