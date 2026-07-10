@@ -104,6 +104,16 @@ type YesterdaySARow = {
 
 const DEFAULT_SA_SHARE_PERCENT = 3
 const DEFAULT_EV_SHARE_PERCENT = 4
+const FLOOR_INCHARGE_ALLOWED_SERVICE_TYPES = [
+  'Running Repairs',
+  'First Free Service',
+  'Second Free Service',
+  'Third Free Service',
+  'Paid Service',
+  'Updation',
+  'E Breakdown',
+  'Campaign',
+]
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -339,6 +349,7 @@ export default function SATrackerPage() {
           .from('job_card_closed_data')
           .select('id, job_card_number, sr_assigned_to, final_labour_amount, dms_final_labour_amount, final_spares_amount, total_invoice_amount, dms_total_invoice_amount, closed_date_time, invoice_date, location, portal, vehicle_registration_number, sr_type, product_line')
           .not('sr_assigned_to', 'is', null)
+          .in('sr_type', FLOOR_INCHARGE_ALLOWED_SERVICE_TYPES)
           .gte('closed_date_time', dateRange.from + 'T00:00:00+05:30')
           .lte('closed_date_time', dateRange.to + 'T23:59:59+05:30')
           .order('closed_date_time', { ascending: false })
@@ -387,7 +398,8 @@ export default function SATrackerPage() {
 
       const { data, error: err } = await supabase
         .from('job_card_closed_data')
-        .select('job_card_number, sr_assigned_to, dms_final_labour_amount, vehicle_registration_number, location, closed_date_time, invoice_date')
+        .select('job_card_number, sr_assigned_to, dms_final_labour_amount, vehicle_registration_number, location, closed_date_time, invoice_date, sr_type')
+        .in('sr_type', FLOOR_INCHARGE_ALLOWED_SERVICE_TYPES)
         .gte('closed_date_time', fromTs)
         .lte('closed_date_time', toTs)
         .order('sr_assigned_to', { ascending: true })
