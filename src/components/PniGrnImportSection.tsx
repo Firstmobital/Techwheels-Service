@@ -447,7 +447,7 @@ export function PniGrnImportSection() {
                 GRN Report
               </span>
               <span className="text-xs text-gray-400">
-                Goods Receipt Note — <span className="font-semibold">SAP Invoice # present = GRN Received</span>
+                Goods Receipt Note — <span className="font-semibold">Status from Excel: In Transit = In Transit · SAP Invoice # present = GRN Received · else GRN Pending</span>
               </span>
             </div>
             <div className="grid gap-3 sm:grid-cols-2">

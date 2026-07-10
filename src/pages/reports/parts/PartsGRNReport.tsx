@@ -79,6 +79,13 @@ function GrnBadge({ status }: { status: string | null }) {
       </span>
     )
   }
+  if (status === 'In Transit') {
+    return (
+      <span className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2.5 py-0.5 text-xs font-semibold text-blue-700 ring-1 ring-blue-200">
+        <span className="h-1.5 w-1.5 rounded-full bg-blue-500 inline-block" />In Transit
+      </span>
+    )
+  }
   return (
     <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2.5 py-0.5 text-xs font-semibold text-amber-700 ring-1 ring-amber-200">
       <span className="h-1.5 w-1.5 rounded-full bg-amber-500 inline-block" />GRN Pending
@@ -112,7 +119,7 @@ export default function PartsGRNReport(_props: ReportViewProps) {
   const [search, setSearch] = useState('')
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
-  const [statusFilter, setStatusFilter] = useState<'all' | 'GRN Received' | 'GRN Pending'>('all')
+  const [statusFilter, setStatusFilter] = useState<'all' | 'GRN Received' | 'In Transit' | 'GRN Pending'>('all')
   const [sortKey, setSortKey] = useState<SortKey>('invoice_date')
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc')
   const [page, setPage] = useState(1)
@@ -171,6 +178,7 @@ export default function PartsGRNReport(_props: ReportViewProps) {
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
   const pageRows = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
   const totalReceived = rows.filter((r) => r.grn_status === 'GRN Received').length
+  const totalInTransit = rows.filter((r) => r.grn_status === 'In Transit').length
   const totalPending = rows.filter((r) => r.grn_status === 'GRN Pending').length
   const latestUpload = history.find((h) => h.upload_session_id === latestSession)
 
@@ -184,7 +192,7 @@ export default function PartsGRNReport(_props: ReportViewProps) {
     const exportRows = filtered.map((r) => ({
       'GRN Status': r.grn_status ?? '',
       'SAP Invoice #': r.sap_invoice_no ?? '',
-      'Order #': r.order_no ?? '',
+      'Order No.': r.order_no ?? '',
       'Transaction Number': r.transaction_number ?? '',
       'Part #': r.part_no ?? '',
       'Invoice Date': fmtDate(r.invoice_date),
@@ -290,7 +298,7 @@ export default function PartsGRNReport(_props: ReportViewProps) {
 
       {/* KPI tiles */}
       {!loading && rows.length > 0 && (
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
           <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
             <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Total Rows</p>
             <p className="mt-1 text-2xl font-bold text-gray-900">{rows.length.toLocaleString('en-IN')}</p>
@@ -302,6 +310,13 @@ export default function PartsGRNReport(_props: ReportViewProps) {
             </p>
             <p className="mt-1 text-2xl font-bold text-emerald-700">{totalReceived.toLocaleString('en-IN')}</p>
             <p className="text-[11px] text-emerald-600">{rows.length ? Math.round((totalReceived / rows.length) * 100) : 0}% of total</p>
+          </div>
+          <div className="rounded-xl border border-blue-200 bg-blue-50 p-4 shadow-sm">
+            <p className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-gray-500">
+              <span className="h-2 w-2 rounded-full bg-blue-500 inline-block" />In Transit
+            </p>
+            <p className="mt-1 text-2xl font-bold text-blue-700">{totalInTransit.toLocaleString('en-IN')}</p>
+            <p className="text-[11px] text-blue-600">Pending GRN completion</p>
           </div>
           <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 shadow-sm">
             <p className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-gray-500">
@@ -324,13 +339,14 @@ export default function PartsGRNReport(_props: ReportViewProps) {
       <div className="flex flex-wrap items-center gap-2">
         <input type="text" value={search}
           onChange={(e) => { setSearch(e.target.value); setPage(1) }}
-          placeholder="Search Part #, Order #, SAP Invoice, Challan #, Vendor…"
+          placeholder="Search Part #, Order No., SAP Invoice, Challan #, Vendor…"
           className="h-9 w-80 rounded-lg border border-gray-300 px-3 text-sm focus:border-indigo-400 focus:outline-none focus:ring-1 focus:ring-indigo-300"
         />
         <select value={statusFilter} onChange={(e) => { setStatusFilter(e.target.value as typeof statusFilter); setPage(1) }}
           className="h-9 rounded-lg border border-gray-300 px-2 text-sm focus:outline-none">
           <option value="all">All GRN Status</option>
           <option value="GRN Received">GRN Received</option>
+          <option value="In Transit">In Transit</option>
           <option value="GRN Pending">GRN Pending</option>
         </select>
         <label className="flex items-center gap-1 text-xs text-gray-500">
@@ -374,7 +390,7 @@ export default function PartsGRNReport(_props: ReportViewProps) {
                   <th className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide text-indigo-700">#</th>
                   <Th label="GRN Status" field="grn_status" cur={sortKey} dir={sortDir} onSort={handleSort} />
                   <Th label="SAP Invoice #" field="sap_invoice_no" cur={sortKey} dir={sortDir} onSort={handleSort} />
-                  <Th label="Order #" field="order_no" cur={sortKey} dir={sortDir} onSort={handleSort} />
+                  <Th label="Order No." field="order_no" cur={sortKey} dir={sortDir} onSort={handleSort} />
                   <Th label="Part #" field="part_no" cur={sortKey} dir={sortDir} onSort={handleSort} />
                   <Th label="Invoice Date" field="invoice_date" cur={sortKey} dir={sortDir} onSort={handleSort} />
                   <Th label="Recd Qty" field="recd_qty" cur={sortKey} dir={sortDir} onSort={handleSort} />
