@@ -324,6 +324,11 @@ export function PniGrnImportSection() {
       const pending = raw.filter(r => String(r['Invoiced ?'] ?? '').trim().toUpperCase() === 'N')
       setPniMsgs(p => ({ ...p, [slot.key]: { type: 'progress', text: `Found ${pending.length} pending rows, uploading…` } }))
       const sessionId = crypto.randomUUID()
+      // Delete all previous data for this exact slot (dealer_code + branch_label)
+      // so re-uploads always reflect the latest file exactly — no stale rows remain.
+      const { error: delErr } = await supabase.from('parts_not_invoiced_data')
+        .delete().eq('dealer_code', slot.dealer_code).eq('branch_label', slot.branch_label)
+      if (delErr) throw delErr
       const dbRows = pending.map(r => mapPniRow(r, slot, sessionId))
       for (let i = 0; i < dbRows.length; i += 500) {
         const { error } = await supabase.from('parts_not_invoiced_data').insert(dbRows.slice(i, i + 500))

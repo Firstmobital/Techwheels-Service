@@ -164,10 +164,12 @@ export default function PartsNotInvoicedReport(_props: ReportViewProps) {
         .order('uploaded_at', { ascending: false })
       setUploads((hist ?? []) as UploadRow[])
 
-      // Get latest session per dealer_code
+      // Get latest session per dealer_code + branch_label (compound key)
+      // Uploads are already sorted desc by uploaded_at — first occurrence IS the latest.
       const latestByDealer: Record<string, string> = {}
       for (const h of (hist ?? []) as UploadRow[]) {
-        if (!latestByDealer[h.dealer_code]) latestByDealer[h.dealer_code] = h.upload_session_id
+        const slotKey = `${h.dealer_code}::${h.branch_label}`
+        if (!latestByDealer[slotKey]) latestByDealer[slotKey] = h.upload_session_id
       }
       const sessionIds = Object.values(latestByDealer)
       if (sessionIds.length === 0) { setRows([]); setLoading(false); return }
@@ -210,15 +212,20 @@ export default function PartsNotInvoicedReport(_props: ReportViewProps) {
   const today = new Date().toDateString()
 
   // ── KPI counts ─────────────────────────────────────────────────────────────
+  // KPIs count only active (non-Closed, non-Invoiced) records
+  const active = useMemo(() =>
+    enriched.filter(r => r.tracking_status !== 'Closed' && r.tracking_status !== 'Invoiced'),
+  [enriched])
+
   const kpis = useMemo(() => ({
-    total: enriched.length,
-    ev: enriched.filter(r => r.portal === 'EV').length,
-    pv: enriched.filter(r => r.portal === 'PV').length,
-    todayPending: enriched.filter(r => r.created_date && new Date(r.created_date).toDateString() === today).length,
-    gt3: enriched.filter(r => r._days > 3).length,
-    gt7: enriched.filter(r => r._days > 7).length,
-    gt15: enriched.filter(r => r._days > 15).length,
-  }), [enriched, today])
+    total: active.length,
+    ev: active.filter(r => r.portal === 'EV').length,
+    pv: active.filter(r => r.portal === 'PV').length,
+    todayPending: active.filter(r => r.created_date && new Date(r.created_date).toDateString() === today).length,
+    gt3: active.filter(r => r._days > 3).length,
+    gt7: active.filter(r => r._days > 7).length,
+    gt15: active.filter(r => r._days > 15).length,
+  }), [active, today])
 
   // ── Filter ─────────────────────────────────────────────────────────────────
   const filtered = useMemo(() => {
@@ -280,9 +287,9 @@ export default function PartsNotInvoicedReport(_props: ReportViewProps) {
     { range: '15d+', count: enriched.filter(r => r._days > 15).length },
   ], [enriched])
   const chartEvPv = useMemo(() => [
-    { name: 'EV – Sitapura', value: enriched.filter(r => r.portal === 'EV').length },
-    { name: 'PV – Sitapura', value: enriched.filter(r => r.portal === 'PV' && r.branch_label === 'SITAPURA').length },
-    { name: 'PV – Ajmer Rd', value: enriched.filter(r => r.portal === 'PV' && r.branch_label === 'AJMER ROAD').length },
+    { name: 'EV – Sitapura', value: active.filter(r => r.portal === 'EV').length },
+    { name: 'PV – Sitapura', value: active.filter(r => r.portal === 'PV' && r.branch_label === 'SITAPURA').length },
+    { name: 'PV – Ajmer Rd', value: active.filter(r => r.portal === 'PV' && r.branch_label === 'AJMER ROAD').length },
   ].filter(d => d.value > 0), [enriched])
 
   // ── Export ─────────────────────────────────────────────────────────────────
