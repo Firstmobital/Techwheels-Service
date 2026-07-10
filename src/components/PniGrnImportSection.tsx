@@ -123,11 +123,18 @@ function mapPniRow(raw: Record<string, unknown>, slot: UploadSlot, sessionId: st
 
 // ─── GRN row mapper ───────────────────────────────────────────────────────────
 function mapGrnRow(raw: Record<string, unknown>, slot: UploadSlot, sessionId: string) {
+  const statusVal = (gs(raw, 'Status') || '').trim()
+  const sapInv    = (gs(raw, 'SAP Invoice #') || '').trim()
+  const grnStatus =
+    /^in.?transit$/i.test(statusVal) ? 'In Transit' :
+    /^(receiv|grn.receiv|done|complet)/i.test(statusVal) ? 'GRN Received' :
+    (!statusVal && sapInv) ? 'GRN Received' :
+    'GRN Pending'
   return {
     portal: slot.portal,
     branch: slot.dealer_code,
     upload_session_id: sessionId,
-    sap_invoice_no:      gs(raw, 'SAP Invoice #')           || null,
+    sap_invoice_no:      sapInv || null,
     order_no:            gs(raw, 'Order #')                 || null,
     transaction_number:  gs(raw, 'Transaction Number')      || null,
     part_no:             gs(raw, 'Part #')                  || null,
@@ -152,6 +159,7 @@ function mapGrnRow(raw: Record<string, unknown>, slot: UploadSlot, sessionId: st
     purchase_order_date: gs(raw, 'Purchase_Order_Date')     || null,
     division_name:       gs(raw, 'Division Name')           || null,
     order_type:          gs(raw, 'Order Type')              || null,
+    grn_status:          grnStatus,
     line_item_invoice_total: gs(raw, 'Line Item Invoice Total') || null,
     weighted_avg:        gs(raw, 'Weighted Avg')             || null,
   }
@@ -449,7 +457,7 @@ export function PniGrnImportSection() {
                 GRN Report
               </span>
               <span className="text-xs text-gray-400">
-                Goods Receipt Note — <span className="font-semibold">Status from Excel: In Transit = In Transit · SAP Invoice # present = GRN Received · else GRN Pending</span>
+                Goods Receipt Note — <span className="font-semibold">Status from Excel: In Transit → In Transit · Received/Done/Completed → GRN Received · else → GRN Pending</span>
               </span>
             </div>
             <div className="grid gap-3 sm:grid-cols-2">

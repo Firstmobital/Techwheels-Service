@@ -131,6 +131,42 @@ export default function PartsGRNReport(_props: ReportViewProps) {
   const [page, setPage] = useState(1)
   const [oPage, setOPage] = useState(1)
   const [showOrderSummary, setShowOrderSummary] = useState(true)
+  // Separate EV/PV invoice totals — always shown regardless of active portal tab
+  const [evInvoiceTotal, setEvInvoiceTotal] = useState<number | null>(null)
+  const [pvInvoiceTotal, setPvInvoiceTotal] = useState<number | null>(null)
+
+  // Load Total_Invoice_Amount totals for both portals independently
+  const loadPortalTotals = useCallback(async () => {
+    const fetchTotal = async (p: Portal): Promise<number> => {
+      const branch = p === 'EV' ? EV_BRANCH : PV_BRANCH
+      const { data: hist } = await supabase
+        .from('grn_upload_history').select('upload_session_id')
+        .eq('portal', p).eq('branch', branch)
+        .order('uploaded_at', { ascending: false }).limit(1)
+      const sess = (hist ?? [])[0]?.upload_session_id ?? null
+      if (!sess) return 0
+      let total = 0
+      for (let from = 0; ; from += 1000) {
+        const { data } = await supabase.from('grn_report_data')
+          .select('total_invoice_amount')
+          .eq('portal', p).eq('upload_session_id', sess)
+          .range(from, from + 999)
+        for (const r of (data ?? [])) {
+          const raw = String(r.total_invoice_amount ?? '').replace(/[^0-9.]/g, '')
+          if (raw) total += parseFloat(raw) || 0
+        }
+        if ((data ?? []).length < 1000) break
+      }
+      return total
+    }
+    const [ev, pv] = await Promise.all([fetchTotal('EV'), fetchTotal('PV')])
+    setEvInvoiceTotal(ev)
+    setPvInvoiceTotal(pv)
+  }, [])
+
+  useEffect(() => {
+    void loadPortalTotals()
+  }, [loadPortalTotals])
 
   const loadData = useCallback(async (p: Portal) => {
     setLoading(true); setLoadingMsg('Loading latest GRN upload…'); setRows([]); setLatestSession(null)
@@ -153,9 +189,11 @@ export default function PartsGRNReport(_props: ReportViewProps) {
         if ((data ?? []).length < 1000) break
       }
       setRows(allRows)
+      // Refresh portal totals whenever data is reloaded (catches new uploads)
+      void loadPortalTotals()
     } catch (err) { console.error('GRN load error', err) }
     finally { setLoading(false); setLoadingMsg('') }
-  }, [])
+  }, [loadPortalTotals])
 
   useEffect(() => {
     void loadData(portal)
@@ -168,7 +206,7 @@ export default function PartsGRNReport(_props: ReportViewProps) {
     let list = rows
     if (statusFilter !== 'all') {
       if (statusFilter === 'In Transit') {
-        list = list.filter((r) => r.status === 'In Transit')
+        list = list.filter((r) => r.grn_status === 'In Transit' || r.status === 'In Transit')
       } else {
         list = list.filter((r) => r.grn_status === statusFilter)
       }
@@ -191,11 +229,12 @@ export default function PartsGRNReport(_props: ReportViewProps) {
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
   const pageRows = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
-  // grn_status (DB generated) is only 'GRN Received' | 'GRN Pending'
-  // 'In Transit' comes from the raw status column (from Excel)
+  // grn_status is now set from the Excel Status column during import:
+  //   'In Transit' → 'In Transit', received statuses → 'GRN Received', else → 'GRN Pending'
+  // Fallback: also check raw status column for older rows where grn_status may be null.
   const totalReceived    = rows.filter((r) => r.grn_status === 'GRN Received').length
-  const totalInTransit   = rows.filter((r) => r.status    === 'In Transit').length
-  const totalPending     = rows.filter((r) => r.grn_status !== 'GRN Received' && r.status !== 'In Transit').length
+  const totalInTransit   = rows.filter((r) => r.grn_status === 'In Transit' || r.status === 'In Transit').length
+  const totalPending     = rows.filter((r) => r.grn_status === 'GRN Pending' || (r.grn_status === null && r.status !== 'In Transit' && !r.sap_invoice_no)).length
   // Build order-level totals for In Transit rows.
   // Total_Invoice_Amount repeats the same value on every line of an order — 
   // we must take it ONCE per order to avoid double-counting multi-line orders.
@@ -217,7 +256,7 @@ export default function PartsGRNReport(_props: ReportViewProps) {
   const inTransitOrderSummaries = useMemo((): OrderSummary[] => {
     const map = new Map<string, OrderSummary>()
     rows
-      .filter((r) => r.status === 'In Transit')
+      .filter((r) => r.grn_status === 'In Transit' || r.status === 'In Transit')
       .forEach((r) => {
         const key = r.order_no ?? `__noorder_${r.id}`
         if (!map.has(key)) {
@@ -364,6 +403,32 @@ export default function PartsGRNReport(_props: ReportViewProps) {
           )}
         </div>
       )}
+
+      {/* EV / PV Invoice Total tiles — always visible, portal-independent */}
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <div className="rounded-xl border border-emerald-300 bg-emerald-50 p-4 shadow-sm">
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">EV Total Invoice Value</p>
+          <p className="mt-1 text-xl font-bold text-emerald-700">
+            {evInvoiceTotal === null
+              ? '—'
+              : evInvoiceTotal === 0
+                ? 'No EV data'
+                : '₹' + evInvoiceTotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+          </p>
+          <p className="text-[11px] text-emerald-600">Sum of Total_Invoice_Amount (Col AA) — latest EV upload</p>
+        </div>
+        <div className="rounded-xl border border-indigo-300 bg-indigo-50 p-4 shadow-sm">
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">PV Total Invoice Value</p>
+          <p className="mt-1 text-xl font-bold text-indigo-700">
+            {pvInvoiceTotal === null
+              ? '—'
+              : pvInvoiceTotal === 0
+                ? 'No PV data'
+                : '₹' + pvInvoiceTotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+          </p>
+          <p className="text-[11px] text-indigo-600">Sum of Total_Invoice_Amount (Col AA) — latest PV upload</p>
+        </div>
+      </div>
 
       {/* KPI tiles */}
       {!loading && rows.length > 0 && (
