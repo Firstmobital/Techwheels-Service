@@ -44,7 +44,7 @@ interface JciRow {
   delay_reason: string | null
 }
 
-type TabId = 'dashboard' | 'summary' | 'advisor' | 'monthly' | 'jc-status' | 'status-report'
+type TabId = 'dashboard' | 'summary' | 'advisor' | 'monthly' | 'jc-status' | 'status-report' | 'value-report'
 
 const TABS: { id: TabId; label: string }[] = [
   { id: 'dashboard',     label: '📊 Dashboard' },
@@ -53,6 +53,7 @@ const TABS: { id: TabId; label: string }[] = [
   { id: 'monthly',       label: 'Month / Year Wise' },
   { id: 'jc-status',     label: 'Invoice Status' },
   { id: 'status-report', label: '🔖 JC Status Report' },
+  { id: 'value-report',  label: '💰 Order / Labour / Spares' },
 ]
 
 const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
@@ -245,6 +246,16 @@ export default function JcClosedInvoicedReport(_props: ReportViewProps) {
       pvInvValue:  filtered.filter(r => r.portal === 'PV' && r.invoiced === 'Y').reduce((s,r) => s + (r.total_invoice_amount ?? 0), 0),
       evPendValue: filtered.filter(r => r.portal === 'EV' && r.invoiced === 'N').reduce((s,r) => s + (r.total_invoice_amount ?? 0), 0),
       pvPendValue: filtered.filter(r => r.portal === 'PV' && r.invoiced === 'N').reduce((s,r) => s + (r.total_invoice_amount ?? 0), 0),
+      // Order / Labour / Spares totals for dashboard
+      totalOrder:   filtered.reduce((s,r) => s + (r.total_order_value ?? 0), 0),
+      evOrder:      filtered.filter(r => r.portal === 'EV').reduce((s,r) => s + (r.total_order_value ?? 0), 0),
+      pvOrder:      filtered.filter(r => r.portal === 'PV').reduce((s,r) => s + (r.total_order_value ?? 0), 0),
+      totalLabour:  filtered.reduce((s,r) => s + (r.final_labour_amount ?? 0), 0),
+      evLabour:     filtered.filter(r => r.portal === 'EV').reduce((s,r) => s + (r.final_labour_amount ?? 0), 0),
+      pvLabour:     filtered.filter(r => r.portal === 'PV').reduce((s,r) => s + (r.final_labour_amount ?? 0), 0),
+      totalSpares:  filtered.reduce((s,r) => s + (r.final_spares_amount ?? 0), 0),
+      evSpares:     filtered.filter(r => r.portal === 'EV').reduce((s,r) => s + (r.final_spares_amount ?? 0), 0),
+      pvSpares:     filtered.filter(r => r.portal === 'PV').reduce((s,r) => s + (r.final_spares_amount ?? 0), 0),
     }
   }, [filtered])
 
@@ -318,6 +329,69 @@ export default function JcClosedInvoicedReport(_props: ReportViewProps) {
         rows: sr,
       }
     })
+  }, [filtered])
+
+  // ── Order / Labour / Spares aggregation ─────────────────────────────────────
+  const valueReport = useMemo(() => {
+    const sum = (arr: JciRow[], fn: (r: JciRow) => number) => arr.reduce((s, r) => s + fn(r), 0)
+    const evRows = filtered.filter(r => r.portal === 'EV')
+    const pvRows = filtered.filter(r => r.portal === 'PV')
+
+    // Monthly trend
+    const monthMap = new Map<string, { label: string; order: number; labour: number; spares: number; invoice: number; ev: number; pv: number }>()
+    filtered.forEach(r => {
+      const d = bestDate(r); if (!d) return
+      const k = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`
+      if (!monthMap.has(k)) monthMap.set(k, { label: `${MONTHS[d.getMonth()]} ${d.getFullYear()}`, order:0, labour:0, spares:0, invoice:0, ev:0, pv:0 })
+      const e = monthMap.get(k)!
+      e.order   += r.total_order_value ?? 0
+      e.labour  += r.final_labour_amount ?? 0
+      e.spares  += r.final_spares_amount ?? 0
+      e.invoice += r.total_invoice_amount ?? 0
+      if (r.portal === 'EV') e.ev++; else e.pv++
+    })
+    const monthly = Array.from(monthMap.entries()).sort().map(([,v]) => v)
+
+    // Advisor breakdown
+    const advMap = new Map<string, { name: string; ev: number; pv: number; jcQty: number; order: number; labour: number; spares: number; invoice: number }>()
+    filtered.forEach(r => {
+      const k = r.sr_assigned_to || '—'
+      if (!advMap.has(k)) advMap.set(k, { name: adv(r.sr_assigned_to), ev:0, pv:0, jcQty:0, order:0, labour:0, spares:0, invoice:0 })
+      const e = advMap.get(k)!
+      e.jcQty++
+      if (r.portal === 'EV') e.ev++; else e.pv++
+      e.order   += r.total_order_value ?? 0
+      e.labour  += r.final_labour_amount ?? 0
+      e.spares  += r.final_spares_amount ?? 0
+      e.invoice += r.total_invoice_amount ?? 0
+    })
+    const advisors = Array.from(advMap.values()).sort((a,b) => b.order - a.order)
+
+    return {
+      ev: {
+        count: evRows.length,
+        order:   sum(evRows, r => r.total_order_value ?? 0),
+        labour:  sum(evRows, r => r.final_labour_amount ?? 0),
+        spares:  sum(evRows, r => r.final_spares_amount ?? 0),
+        invoice: sum(evRows, r => r.total_invoice_amount ?? 0),
+      },
+      pv: {
+        count: pvRows.length,
+        order:   sum(pvRows, r => r.total_order_value ?? 0),
+        labour:  sum(pvRows, r => r.final_labour_amount ?? 0),
+        spares:  sum(pvRows, r => r.final_spares_amount ?? 0),
+        invoice: sum(pvRows, r => r.total_invoice_amount ?? 0),
+      },
+      grand: {
+        count:   filtered.length,
+        order:   sum(filtered, r => r.total_order_value ?? 0),
+        labour:  sum(filtered, r => r.final_labour_amount ?? 0),
+        spares:  sum(filtered, r => r.final_spares_amount ?? 0),
+        invoice: sum(filtered, r => r.total_invoice_amount ?? 0),
+      },
+      monthly,
+      advisors,
+    }
   }, [filtered])
 
   // ── Filter Bar ────────────────────────────────────────────────────────────
@@ -396,6 +470,31 @@ export default function JcClosedInvoicedReport(_props: ReportViewProps) {
     'Pending Value (₹)':    a.pendValue,
     'Portal':               Array.from(a.portal).join('/'),
   })), 'Advisor_JC_Not_Invoiced')
+
+  const exportValueReport = () => exportXLSX(valueReport.advisors.map(a => ({
+    'Advisor':              a.name,
+    'Portal':               a.ev > 0 && a.pv > 0 ? 'EV+PV' : a.ev > 0 ? 'EV' : 'PV',
+    'EV JCs':               a.ev,
+    'PV JCs':               a.pv,
+    'Total JC Qty':         a.jcQty,
+    'Order Value (₹)':      a.order,
+    'Labour Amount (₹)':    a.labour,
+    'Spares Amount (₹)':    a.spares,
+    'Invoice Value (₹)':    a.invoice,
+    'Avg Order/JC (₹)':     a.jcQty > 0 ? Math.round(a.order / a.jcQty) : 0,
+    'Avg Labour/JC (₹)':    a.jcQty > 0 ? Math.round(a.labour / a.jcQty) : 0,
+    'Avg Spares/JC (₹)':    a.jcQty > 0 ? Math.round(a.spares / a.jcQty) : 0,
+  })), 'Order_Labour_Spares_Report')
+
+  const exportValueMonthly = () => exportXLSX(valueReport.monthly.map(m => ({
+    'Month':             m.label,
+    'Order Value (₹)':   m.order,
+    'Labour Amount (₹)': m.labour,
+    'Spares Amount (₹)': m.spares,
+    'Invoice Value (₹)': m.invoice,
+    'EV JCs':            m.ev,
+    'PV JCs':            m.pv,
+  })), 'Monthly_Order_Labour_Spares')
 
   const exportStatusReport = () => exportXLSX(statusReport.flatMap(s => s.rows.map(r => ({
     'JC Status (Col K)':  r.jc_status,
@@ -545,6 +644,36 @@ export default function JcClosedInvoicedReport(_props: ReportViewProps) {
                 </div>
               )
             )}
+          </div>
+
+          {/* Order / Labour / Spares EV vs PV summary */}
+          <div className="rounded-xl border border-gray-100 bg-white p-4">
+            <p className="text-sm font-semibold text-gray-700 mb-3">Order Value / Labour / Spares — EV vs PV</p>
+            <div className="overflow-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-gray-50 border-b border-gray-200">
+                  <tr>
+                    <Th>Metric</Th><Th right>EV</Th><Th right>PV</Th><Th right>Grand Total</Th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {[
+                    { label: 'Total JCs',         ev: agg.evTotal,   pv: agg.pvTotal,   total: agg.total,       isNum: true },
+                    { label: 'Total Order Value',  ev: agg.evOrder,   pv: agg.pvOrder,   total: agg.totalOrder,  isNum: false },
+                    { label: 'Final Labour Amount',ev: agg.evLabour,  pv: agg.pvLabour,  total: agg.totalLabour, isNum: false },
+                    { label: 'Final Spare Amount', ev: agg.evSpares,  pv: agg.pvSpares,  total: agg.totalSpares, isNum: false },
+                    { label: 'Invoice Value',      ev: agg.evInvValue,pv: agg.pvInvValue,total: agg.invValue,    isNum: false },
+                  ].map(row => (
+                    <tr key={row.label} className="border-t border-gray-50 hover:bg-gray-50">
+                      <Td bold>{row.label}</Td>
+                      <Td right cls="text-emerald-700">{row.isNum ? row.ev.toLocaleString('en-IN') : rs(row.ev)}</Td>
+                      <Td right cls="text-blue-700">{row.isNum ? row.pv.toLocaleString('en-IN') : rs(row.pv)}</Td>
+                      <Td right bold>{row.isNum ? row.total.toLocaleString('en-IN') : rs(row.total)}</Td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
 
           {/* Advisor mini bars */}
@@ -1017,6 +1146,261 @@ export default function JcClosedInvoicedReport(_props: ReportViewProps) {
           })}
         </div>
       )}
+
+      {/* ── ORDER / LABOUR / SPARES REPORT ──────────────────────────────── */}
+      {tab === 'value-report' && (
+        <div className="space-y-5">
+          {filterBar}
+          <div className="flex gap-2 flex-wrap print:hidden">
+            <ExportBtn onClick={exportValueReport}  label="⬇ Advisor Excel" />
+            <ExportBtn onClick={exportValueMonthly} label="⬇ Monthly Excel" />
+            <button onClick={() => window.print()}
+              className="rounded-lg bg-gray-100 px-3 py-1.5 text-xs font-semibold text-gray-700 hover:bg-gray-200">
+              🖨 Print
+            </button>
+          </div>
+
+          {/* Portal Summary Cards */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <PortalCard label="EV"        data={valueReport.ev}    color="border-emerald-100 bg-emerald-50 text-emerald-900" />
+            <PortalCard label="PV"        data={valueReport.pv}    color="border-blue-100 bg-blue-50 text-blue-900" />
+            <PortalCard label="Grand Total (EV + PV)" data={valueReport.grand} color="border-gray-200 bg-white text-gray-900" />
+          </div>
+
+          {/* EV vs PV charts */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <MiniBar label="Order Value: EV vs PV"   ev={valueReport.ev.order}   pv={valueReport.pv.order} />
+            <MiniBar label="Labour Amount: EV vs PV"  ev={valueReport.ev.labour}  pv={valueReport.pv.labour} />
+            <MiniBar label="Spares Amount: EV vs PV"  ev={valueReport.ev.spares}  pv={valueReport.pv.spares} />
+          </div>
+
+          {/* Monthly Trend table */}
+          <div className="rounded-xl border border-gray-100 bg-white overflow-auto">
+            <div className="px-4 py-2.5 border-b bg-gray-50 font-semibold text-sm text-gray-700">
+              Monthly Trend — Order Value / Labour / Spares
+            </div>
+            <table className="w-full text-sm">
+              <thead className="bg-gray-50 border-b border-gray-200">
+                <tr>
+                  <Th>Month</Th>
+                  <Th right>EV JCs</Th><Th right>PV JCs</Th>
+                  <Th right>Order Value</Th>
+                  <Th right>Labour Amount</Th>
+                  <Th right>Spares Amount</Th>
+                  <Th right>Invoice Value</Th>
+                </tr>
+              </thead>
+              <tbody>
+                {valueReport.monthly.map(m => (
+                  <tr key={m.label} className="border-t border-gray-50 hover:bg-gray-50">
+                    <Td bold>{m.label}</Td>
+                    <Td right cls="text-emerald-700">{m.ev}</Td>
+                    <Td right cls="text-blue-700">{m.pv}</Td>
+                    <Td right bold>{rs(m.order)}</Td>
+                    <Td right cls="text-amber-700">{rs(m.labour)}</Td>
+                    <Td right cls="text-violet-700">{rs(m.spares)}</Td>
+                    <Td right cls="text-blue-700">{rs(m.invoice)}</Td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot className="bg-gray-50 border-t-2 border-gray-300">
+                <tr>
+                  <td className="px-4 py-2.5 text-xs font-bold">GRAND TOTAL</td>
+                  <Td right cls="text-emerald-700 font-bold">{valueReport.ev.count}</Td>
+                  <Td right cls="text-blue-700 font-bold">{valueReport.pv.count}</Td>
+                  <Td right bold>{rs(valueReport.grand.order)}</Td>
+                  <Td right cls="text-amber-700 font-bold">{rs(valueReport.grand.labour)}</Td>
+                  <Td right cls="text-violet-700 font-bold">{rs(valueReport.grand.spares)}</Td>
+                  <Td right cls="text-blue-700 font-bold">{rs(valueReport.grand.invoice)}</Td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+
+          {/* Advisor breakdown — Order Value */}
+          <div className="rounded-xl border border-gray-100 bg-white overflow-auto">
+            <div className="px-4 py-2.5 border-b bg-indigo-50 border-indigo-100 font-semibold text-sm text-indigo-800">
+              Total Order Value — by Advisor
+            </div>
+            <table className="w-full text-sm">
+              <thead className="bg-gray-50 border-b border-gray-200">
+                <tr>
+                  <Th>#</Th><Th>Advisor</Th>
+                  <Th right>JC Qty</Th><Th right>EV</Th><Th right>PV</Th>
+                  <Th right>Order Value</Th><Th right>Avg Order/JC</Th>
+                </tr>
+              </thead>
+              <tbody>
+                {valueReport.advisors.map((a, i) => (
+                  <tr key={a.name} className="border-t border-gray-50 hover:bg-gray-50">
+                    <Td cls="text-gray-400">{i + 1}</Td>
+                    <Td bold>{a.name}</Td>
+                    <Td right>{a.jcQty}</Td>
+                    <Td right cls="text-emerald-700">{a.ev}</Td>
+                    <Td right cls="text-blue-700">{a.pv}</Td>
+                    <Td right bold>{rs(a.order)}</Td>
+                    <Td right cls="text-gray-500">{rs(a.jcQty > 0 ? a.order / a.jcQty : 0)}</Td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot className="bg-gray-50 border-t-2 border-gray-300">
+                <tr>
+                  <td colSpan={2} className="px-4 py-2.5 text-xs font-bold">TOTAL</td>
+                  <Td right bold>{valueReport.grand.count}</Td>
+                  <Td right cls="text-emerald-700 font-bold">{valueReport.ev.count}</Td>
+                  <Td right cls="text-blue-700 font-bold">{valueReport.pv.count}</Td>
+                  <Td right bold>{rs(valueReport.grand.order)}</Td>
+                  <td />
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+
+          {/* Advisor breakdown — Labour Amount */}
+          <div className="rounded-xl border border-gray-100 bg-white overflow-auto">
+            <div className="px-4 py-2.5 border-b bg-amber-50 border-amber-100 font-semibold text-sm text-amber-800">
+              Final Labour Amount — by Advisor
+            </div>
+            <table className="w-full text-sm">
+              <thead className="bg-gray-50 border-b border-gray-200">
+                <tr>
+                  <Th>#</Th><Th>Advisor</Th>
+                  <Th right>JC Qty</Th><Th right>EV</Th><Th right>PV</Th>
+                  <Th right>Labour Amount</Th><Th right>Avg Labour/JC</Th>
+                </tr>
+              </thead>
+              <tbody>
+                {[...valueReport.advisors].sort((a,b) => b.labour - a.labour).map((a, i) => (
+                  <tr key={a.name} className="border-t border-gray-50 hover:bg-gray-50">
+                    <Td cls="text-gray-400">{i + 1}</Td>
+                    <Td bold>{a.name}</Td>
+                    <Td right>{a.jcQty}</Td>
+                    <Td right cls="text-emerald-700">{a.ev}</Td>
+                    <Td right cls="text-blue-700">{a.pv}</Td>
+                    <Td right cls="text-amber-700 font-bold">{rs(a.labour)}</Td>
+                    <Td right cls="text-gray-500">{rs(a.jcQty > 0 ? a.labour / a.jcQty : 0)}</Td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot className="bg-gray-50 border-t-2 border-gray-300">
+                <tr>
+                  <td colSpan={2} className="px-4 py-2.5 text-xs font-bold">TOTAL</td>
+                  <Td right bold>{valueReport.grand.count}</Td>
+                  <Td right cls="text-emerald-700 font-bold">{valueReport.ev.count}</Td>
+                  <Td right cls="text-blue-700 font-bold">{valueReport.pv.count}</Td>
+                  <Td right cls="text-amber-700 font-bold">{rs(valueReport.grand.labour)}</Td>
+                  <Td right cls="text-gray-500">{rs(valueReport.grand.count > 0 ? valueReport.grand.labour / valueReport.grand.count : 0)}</Td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+
+          {/* Advisor breakdown — Spare Amount */}
+          <div className="rounded-xl border border-gray-100 bg-white overflow-auto">
+            <div className="px-4 py-2.5 border-b bg-violet-50 border-violet-100 font-semibold text-sm text-violet-800">
+              Final Spare Amount — by Advisor
+            </div>
+            <table className="w-full text-sm">
+              <thead className="bg-gray-50 border-b border-gray-200">
+                <tr>
+                  <Th>#</Th><Th>Advisor</Th>
+                  <Th right>JC Qty</Th><Th right>EV</Th><Th right>PV</Th>
+                  <Th right>Spare Amount</Th><Th right>Avg Spare/JC</Th>
+                </tr>
+              </thead>
+              <tbody>
+                {[...valueReport.advisors].sort((a,b) => b.spares - a.spares).map((a, i) => (
+                  <tr key={a.name} className="border-t border-gray-50 hover:bg-gray-50">
+                    <Td cls="text-gray-400">{i + 1}</Td>
+                    <Td bold>{a.name}</Td>
+                    <Td right>{a.jcQty}</Td>
+                    <Td right cls="text-emerald-700">{a.ev}</Td>
+                    <Td right cls="text-blue-700">{a.pv}</Td>
+                    <Td right cls="text-violet-700 font-bold">{rs(a.spares)}</Td>
+                    <Td right cls="text-gray-500">{rs(a.jcQty > 0 ? a.spares / a.jcQty : 0)}</Td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot className="bg-gray-50 border-t-2 border-gray-300">
+                <tr>
+                  <td colSpan={2} className="px-4 py-2.5 text-xs font-bold">TOTAL</td>
+                  <Td right bold>{valueReport.grand.count}</Td>
+                  <Td right cls="text-emerald-700 font-bold">{valueReport.ev.count}</Td>
+                  <Td right cls="text-blue-700 font-bold">{valueReport.pv.count}</Td>
+                  <Td right cls="text-violet-700 font-bold">{rs(valueReport.grand.spares)}</Td>
+                  <Td right cls="text-gray-500">{rs(valueReport.grand.count > 0 ? valueReport.grand.spares / valueReport.grand.count : 0)}</Td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ─── Value Report Tab ────────────────────────────────────────────────────────
+function PortalCard({ label, data, color }: {
+  label: string
+  data: { count: number; order: number; labour: number; spares: number; invoice: number }
+  color: string
+}) {
+  const rs2 = (v: number) => `₹${v.toLocaleString('en-IN', { maximumFractionDigits: 0 })}`
+  return (
+    <div className={`rounded-xl border p-4 ${color}`}>
+      <p className="text-xs font-bold uppercase tracking-wide opacity-60 mb-2">{label}</p>
+      <div className="grid grid-cols-2 gap-2 text-xs">
+        <div>
+          <p className="opacity-50">Total JCs</p>
+          <p className="text-xl font-bold">{data.count.toLocaleString('en-IN')}</p>
+        </div>
+        <div>
+          <p className="opacity-50">Order Value</p>
+          <p className="text-base font-bold">{rs2(data.order)}</p>
+        </div>
+        <div>
+          <p className="opacity-50">Labour</p>
+          <p className="font-semibold text-amber-700">{rs2(data.labour)}</p>
+        </div>
+        <div>
+          <p className="opacity-50">Spares</p>
+          <p className="font-semibold text-violet-700">{rs2(data.spares)}</p>
+        </div>
+        <div className="col-span-2">
+          <p className="opacity-50">Invoice Value</p>
+          <p className="font-bold text-blue-700">{rs2(data.invoice)}</p>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function MiniBar({ label, ev, pv }: { label: string; ev: number; pv: number }) {
+  const max = Math.max(ev, pv, 1)
+  const rs2 = (v: number) => `₹${v.toLocaleString('en-IN', { maximumFractionDigits: 0 })}`
+  return (
+    <div className="rounded-xl border border-gray-100 bg-white p-4">
+      <p className="text-sm font-semibold text-gray-700 mb-3">{label}</p>
+      <div className="space-y-2">
+        <div>
+          <div className="flex justify-between text-xs mb-1">
+            <span className="font-medium text-emerald-700">EV</span>
+            <span>{rs2(ev)}</span>
+          </div>
+          <div className="h-4 rounded-full bg-gray-100">
+            <div className="h-4 rounded-full bg-emerald-500" style={{ width: `${(ev / max) * 100}%` }} />
+          </div>
+        </div>
+        <div>
+          <div className="flex justify-between text-xs mb-1">
+            <span className="font-medium text-blue-700">PV</span>
+            <span>{rs2(pv)}</span>
+          </div>
+          <div className="h-4 rounded-full bg-gray-100">
+            <div className="h-4 rounded-full bg-blue-500" style={{ width: `${(pv / max) * 100}%` }} />
+          </div>
+        </div>
+      </div>
     </div>
   )
 }
