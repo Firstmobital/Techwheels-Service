@@ -129,6 +129,8 @@ export default function PartsGRNReport(_props: ReportViewProps) {
   const [sortKey, setSortKey] = useState<SortKey>('invoice_date')
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc')
   const [page, setPage] = useState(1)
+  const [oPage, setOPage] = useState(1)
+  const [showOrderSummary, setShowOrderSummary] = useState(true)
 
   const loadData = useCallback(async (p: Portal) => {
     setLoading(true); setLoadingMsg('Loading latest GRN upload…'); setRows([]); setLatestSession(null)
@@ -189,23 +191,56 @@ export default function PartsGRNReport(_props: ReportViewProps) {
   // Build order-level totals for In Transit rows.
   // Total_Invoice_Amount repeats the same value on every line of an order — 
   // we must take it ONCE per order to avoid double-counting multi-line orders.
-  const inTransitOrderMap = useMemo(() => {
-    const m = new Map<string, number>()
+  // Order-level grouping for In Transit rows.
+  // Total_Invoice_Amount in the Excel is the FULL PAYABLE invoice total per order (incl. GST + freight).
+  // It repeats the same value on every part-line of the same order — we take it ONCE per order.
+  // Fallback: sum of Line Item Invoice Total if Total_Invoice_Amount is blank.
+  interface OrderSummary {
+    orderNo: string
+    vendorName: string
+    sapInvoiceNo: string
+    invoiceDate: string
+    poDate: string
+    partCount: number
+    totalInvoiceAmount: number   // from Total_Invoice_Amount column (order-level, incl. GST)
+    lineSum: number              // fallback: sum of Line Item Invoice Total
+  }
+
+  const inTransitOrderSummaries = useMemo((): OrderSummary[] => {
+    const map = new Map<string, OrderSummary>()
     rows
       .filter((r) => r.grn_status === 'In Transit')
       .forEach((r) => {
         const key = r.order_no ?? `__noorder_${r.id}`
-        if (!m.has(key)) {
-          // Use total_invoice_amount (order-level); fallback to line_item_invoice_total
-          const v = parseRs(r.total_invoice_amount ?? r.line_item_invoice_total ?? r.net_amount)
-          m.set(key, v)
+        if (!map.has(key)) {
+          map.set(key, {
+            orderNo: r.order_no ?? '(no order no.)',
+            vendorName: r.vendor_name ?? '',
+            sapInvoiceNo: r.sap_invoice_no ?? '',
+            invoiceDate: r.invoice_date ?? '',
+            poDate: r.purchase_order_date ?? '',
+            partCount: 0,
+            totalInvoiceAmount: parseRs(r.total_invoice_amount),
+            lineSum: 0,
+          })
+        }
+        const entry = map.get(key)!
+        entry.partCount += 1
+        // Line Item Invoice Total is per-part — accumulate for fallback
+        entry.lineSum += parseRs(r.line_item_invoice_total ?? r.net_amount)
+        // Take first non-zero Total_Invoice_Amount found for this order
+        if (!entry.totalInvoiceAmount && parseRs(r.total_invoice_amount) > 0) {
+          entry.totalInvoiceAmount = parseRs(r.total_invoice_amount)
         }
       })
-    return m
+    // Convert to array sorted by totalInvoiceAmount desc (highest pending invoice first)
+    return Array.from(map.values()).sort((a, b) => b.totalInvoiceAmount - a.totalInvoiceAmount)
   }, [rows])
 
-  const totalInTransitOrders = inTransitOrderMap.size
-  const totalInTransitAmount = Array.from(inTransitOrderMap.values()).reduce((s, v) => s + v, 0)
+  const totalInTransitOrders = inTransitOrderSummaries.length
+  const totalInTransitAmount = inTransitOrderSummaries.reduce(
+    (sum, s) => sum + (s.totalInvoiceAmount || s.lineSum), 0
+  )
   const latestUpload = history.find((h) => h.upload_session_id === latestSession)
 
   const handleSort = (k: SortKey) => {
@@ -515,6 +550,124 @@ export default function PartsGRNReport(_props: ReportViewProps) {
             </div>
           )}
         </>
+      )}
+
+      {/* ── Pending GRN Order Summary (order-grouped view) ───────────────── */}
+      {!loading && inTransitOrderSummaries.length > 0 && (
+        <div className="mt-2 rounded-xl border border-violet-200 bg-violet-50/40 shadow-sm">
+          {/* Header */}
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-violet-200 px-4 py-3">
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => setShowOrderSummary((v) => !v)}
+                className="flex items-center gap-2 text-sm font-bold text-violet-800 hover:text-violet-600"
+              >
+                <svg className={`h-4 w-4 transition-transform ${showOrderSummary ? 'rotate-90' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                </svg>
+                Pending GRN Order Summary
+              </button>
+              <span className="rounded-full bg-violet-600 px-2.5 py-0.5 text-[11px] font-bold text-white">
+                {totalInTransitOrders} Pending Orders
+              </span>
+            </div>
+            <div className="flex items-center gap-4 text-sm">
+              <span className="text-[11px] font-semibold text-violet-600">Grand Total Pending Invoice Value:</span>
+              <span className="text-base font-bold text-violet-800">
+                ₹{totalInTransitAmount.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
+              </span>
+            </div>
+          </div>
+
+          {showOrderSummary && (() => {
+            const O_PAGE_SIZE = 50
+            const oTotalPages = Math.max(1, Math.ceil(inTransitOrderSummaries.length / O_PAGE_SIZE))
+            const oPageRows = inTransitOrderSummaries.slice((oPage - 1) * O_PAGE_SIZE, oPage * O_PAGE_SIZE)
+            return (
+              <>
+                <div className="overflow-x-auto">
+                  <table className="min-w-full border-collapse text-sm">
+                    <thead>
+                      <tr className="border-b border-violet-200 bg-violet-100/60">
+                        <th className="px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wide text-violet-700">#</th>
+                        <th className="px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wide text-violet-700 whitespace-nowrap">Order No.</th>
+                        <th className="px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wide text-violet-700 whitespace-nowrap">SAP Invoice #</th>
+                        <th className="px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wide text-violet-700 whitespace-nowrap">Invoice Date</th>
+                        <th className="px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wide text-violet-700 whitespace-nowrap">PO Date</th>
+                        <th className="px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wide text-violet-700">Supplier Name</th>
+                        <th className="px-3 py-2.5 text-center text-[11px] font-semibold uppercase tracking-wide text-violet-700">Parts</th>
+                        <th className="px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wide text-violet-700 whitespace-nowrap">GRN Status</th>
+                        <th className="px-3 py-2.5 text-right text-[11px] font-semibold uppercase tracking-wide text-violet-700 whitespace-nowrap">Total Invoice Value</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {oPageRows.map((order, idx) => {
+                        const invoiceValue = order.totalInvoiceAmount || order.lineSum
+                        return (
+                          <tr key={order.orderNo}
+                            className={`border-b border-violet-100 transition hover:bg-violet-50 ${idx % 2 === 1 ? 'bg-white/50' : 'bg-white/80'}`}>
+                            <td className="px-3 py-2 text-xs text-gray-400">{(oPage - 1) * O_PAGE_SIZE + idx + 1}</td>
+                            <td className="px-3 py-2 font-mono text-xs font-semibold text-gray-800 whitespace-nowrap">{order.orderNo}</td>
+                            <td className="px-3 py-2 font-mono text-xs text-gray-600">{order.sapInvoiceNo || <span className="text-gray-300">—</span>}</td>
+                            <td className="px-3 py-2 text-xs text-gray-600 whitespace-nowrap">{fmtDate(order.invoiceDate)}</td>
+                            <td className="px-3 py-2 text-xs text-gray-600 whitespace-nowrap">{fmtDate(order.poDate)}</td>
+                            <td className="px-3 py-2 text-xs text-gray-600">{order.vendorName || <span className="text-gray-300">—</span>}</td>
+                            <td className="px-3 py-2 text-center text-xs font-medium text-gray-600">{order.partCount}</td>
+                            <td className="px-3 py-2">
+                              <span className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2 py-0.5 text-[11px] font-semibold text-blue-700 ring-1 ring-blue-200">
+                                <span className="h-1.5 w-1.5 rounded-full bg-blue-500 inline-block" />In Transit
+                              </span>
+                            </td>
+                            <td className="px-3 py-2 text-right">
+                              {invoiceValue > 0 ? (
+                                <span className="text-sm font-bold text-violet-800">
+                                  ₹{invoiceValue.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
+                                </span>
+                              ) : (
+                                <span className="text-xs text-gray-300">—</span>
+                              )}
+                            </td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                    <tfoot>
+                      <tr className="border-t-2 border-violet-300 bg-violet-100">
+                        <td colSpan={7} className="px-3 py-3 text-right text-[11px] font-bold uppercase tracking-wide text-violet-700">
+                          Total Pending GRNs: {totalInTransitOrders}
+                        </td>
+                        <td className="px-3 py-3 text-right text-[11px] font-bold uppercase tracking-wide text-violet-700 whitespace-nowrap">
+                          Grand Total:
+                        </td>
+                        <td className="px-3 py-3 text-right text-base font-bold text-violet-900 whitespace-nowrap">
+                          ₹{totalInTransitAmount.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
+                        </td>
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
+
+                {/* Order summary pagination */}
+                {oTotalPages > 1 && (
+                  <div className="flex items-center justify-between border-t border-violet-200 px-4 py-2">
+                    <p className="text-xs text-violet-600">Page {oPage} of {oTotalPages} · {inTransitOrderSummaries.length} orders</p>
+                    <div className="flex gap-1">
+                      <button onClick={() => setOPage(1)} disabled={oPage === 1} className="rounded border border-violet-200 px-2 py-1 text-xs disabled:opacity-30 hover:bg-violet-100">«</button>
+                      <button onClick={() => setOPage((p) => Math.max(1, p - 1))} disabled={oPage === 1} className="rounded border border-violet-200 px-2 py-1 text-xs disabled:opacity-30 hover:bg-violet-100">‹</button>
+                      {Array.from({ length: Math.min(5, oTotalPages) }, (_, i) => Math.max(1, Math.min(oPage - 2, oTotalPages - 4)) + i).map((p2) => (
+                        <button key={p2} onClick={() => setOPage(p2)}
+                          className={`rounded border px-2.5 py-1 text-xs ${p2 === oPage ? 'border-violet-500 bg-violet-600 text-white' : 'border-violet-200 hover:bg-violet-100'}`}
+                        >{p2}</button>
+                      ))}
+                      <button onClick={() => setOPage((p) => Math.min(oTotalPages, p + 1))} disabled={oPage === oTotalPages} className="rounded border border-violet-200 px-2 py-1 text-xs disabled:opacity-30 hover:bg-violet-100">›</button>
+                      <button onClick={() => setOPage(oTotalPages)} disabled={oPage === oTotalPages} className="rounded border border-violet-200 px-2 py-1 text-xs disabled:opacity-30 hover:bg-violet-100">»</button>
+                    </div>
+                  </div>
+                )}
+              </>
+            )
+          })()}
+        </div>
       )}
     </div>
   )
