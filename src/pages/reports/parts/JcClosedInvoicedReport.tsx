@@ -623,13 +623,6 @@ export default function JcClosedInvoicedReport(_props: ReportViewProps) {
           <ExportBtn onClick={exportMonthly} />
           {/* EV months */}
           {(['EV','PV'] as const).map(portal => {
-            const pMonths = monthlyData.filter(m => {
-              const rows2 = filtered.filter(r => r.portal === portal)
-              return rows2.some(r => {
-                const d = bestDate(r)
-                return d && `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}` === `${m.year}-${String(m.month+1).padStart(2,'0')}`
-              })
-            })
             const pAll = filtered.filter(r => r.portal === portal)
             if (!pAll.length) return null
             // recompute per portal
