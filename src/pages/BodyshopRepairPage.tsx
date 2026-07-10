@@ -3618,8 +3618,9 @@ export default function BodyshopRepairPage() {
   }
 
   function isCardInStageQueue(card: RepairCard, stage: number): boolean {
-    // Keep QC/RI aligned with floor board even when stage projection is loaded.
-    if (stage === 13 || stage === 14) {
+    // Keep QC/RI/Billing aligned: projection has no knowledge of reinspection_status,
+    // so stages 13-16 always use worklist logic which applies clampStageUntilRiComplete.
+    if (stage === 13 || stage === 14 || stage === 15 || stage === 16) {
       return isCardInStageWorklist(card, stage)
     }
     if (!projectionPendingLoaded) return isCardInStageWorklist(card, stage)
