@@ -111,7 +111,8 @@ function fmtDate(v: string | null | undefined): string {
 
 function parseRs(v: string | null | undefined): number {
   if (!v) return 0
-  return parseFloat(String(v).replace(/[^0-9.-]/g, '')) || 0
+  // Strip 'Rs.' prefix first, then commas — avoids double-dot issue ("Rs.10,000" → ".10000")
+  return parseFloat(String(v).replace(/Rs\./gi, '').replace(/,/g, '').trim()) || 0
 }
 
 export default function PartsGRNReport(_props: ReportViewProps) {
@@ -152,8 +153,8 @@ export default function PartsGRNReport(_props: ReportViewProps) {
           .eq('portal', p).eq('upload_session_id', sess)
           .range(from, from + 999)
         for (const r of (data ?? [])) {
-          const raw = String(r.total_invoice_amount ?? '').replace(/[^0-9.]/g, '')
-          if (raw) total += parseFloat(raw) || 0
+          // Use same parseRs logic: strip 'Rs.' first, then commas
+          total += parseRs(r.total_invoice_amount)
         }
         if ((data ?? []).length < 1000) break
       }
