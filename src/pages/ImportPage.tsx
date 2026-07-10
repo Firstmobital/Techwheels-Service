@@ -60,6 +60,7 @@ import {
   type PartsStockParseError,
 } from '../lib/partsStockColumnMapper'
 import { PORTAL_BRANCHES } from '../lib/branches'
+import { PniGrnImportSection } from '../components/PniGrnImportSection'
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
@@ -3086,6 +3087,9 @@ export default function ImportPage() {
             )}
           </section>
         )}
+
+        {/* ── Parts Daily Reports (PNI + GRN) ─────────────────────────────── */}
+        <PniGrnImportSection />
 
         {warrantyReportCards.length > 0 && (
           <section className="imp-group">

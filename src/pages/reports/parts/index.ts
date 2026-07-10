@@ -6,6 +6,7 @@ import PartsInStockReport from './PartsInStockReport'
 import PartsHighDemandReport from './PartsHighDemandReport'
 import PartsStockDisciplineReport from './PartsStockDisciplineReport'
 import PartsGRNReport from './PartsGRNReport'
+import PartsNotInvoicedReport from './PartsNotInvoicedReport'
 
 import type { ReportCategoryDefinition, ReportDefinition } from '../types'
 
@@ -76,8 +77,18 @@ export const PARTS_REPORTS: ReportDefinition[] = [
     id: 'parts-grn-report',
     categoryId: 'parts',
     label: 'GRN Report',
+    group: 'Daily Operations',
     description: 'Daily EV & PV Goods Receipt Note tracking — GRN received vs pending with order details.',
     cardHint: 'Best for real-time GRN position and pending receipt follow-up.',
     Component: PartsGRNReport,
+  },
+  {
+    id: 'parts-not-invoiced',
+    categoryId: 'parts',
+    label: 'Parts Issue but not Invoiced',
+    group: 'Daily Operations',
+    description: 'EV & PV job-cards where parts have been shipped but not yet invoiced — with aging analysis and status tracking.',
+    cardHint: 'Best for tracking pending invoice reconciliation across EV and PV dealers.',
+    Component: PartsNotInvoicedReport,
   },
 ]
