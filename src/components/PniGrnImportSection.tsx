@@ -152,6 +152,8 @@ function mapGrnRow(raw: Record<string, unknown>, slot: UploadSlot, sessionId: st
     purchase_order_date: gs(raw, 'Purchase_Order_Date')     || null,
     division_name:       gs(raw, 'Division Name')           || null,
     order_type:          gs(raw, 'Order Type')              || null,
+    line_item_invoice_total: gs(raw, 'Line Item Invoice Total') || null,
+    weighted_avg:        gs(raw, 'Weighted Avg')             || null,
   }
 }
 

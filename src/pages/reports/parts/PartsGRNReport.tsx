@@ -41,6 +41,7 @@ interface GrnRow {
   division_name: string | null
   order_type: string | null
   grn_status: string | null
+  line_item_invoice_total: string | null
 }
 
 interface UploadHistoryRow {
@@ -56,7 +57,7 @@ interface UploadHistoryRow {
 type SortKey =
   | 'sap_invoice_no' | 'order_no' | 'part_no' | 'invoice_date'
   | 'recd_qty' | 'spares_order_type' | 'challan_no' | 'challan_date'
-  | 'vendor_name' | 'grn_status' | 'net_amount' | 'purchase_order_date'
+  | 'vendor_name' | 'grn_status' | 'net_amount' | 'purchase_order_date' | 'line_item_invoice_total'
   | 'sap_order_num'
   | 'sap_order_num'
 
@@ -106,6 +107,11 @@ function fmtDate(v: string | null | undefined): string {
   if (!v) return '—'
   try { return new Date(v).toLocaleDateString('en-IN', { day:'2-digit', month:'short', year:'numeric' }) }
   catch { return v }
+}
+
+function parseRs(v: string | null | undefined): number {
+  if (!v) return 0
+  return parseFloat(String(v).replace(/[^0-9.-]/g, '')) || 0
 }
 
 export default function PartsGRNReport(_props: ReportViewProps) {
@@ -180,6 +186,9 @@ export default function PartsGRNReport(_props: ReportViewProps) {
   const totalReceived = rows.filter((r) => r.grn_status === 'GRN Received').length
   const totalInTransit = rows.filter((r) => r.grn_status === 'In Transit').length
   const totalPending = rows.filter((r) => r.grn_status === 'GRN Pending').length
+  const totalInTransitAmount = rows
+    .filter((r) => r.grn_status === 'In Transit')
+    .reduce((sum, r) => sum + parseRs(r.line_item_invoice_total ?? r.net_amount), 0)
   const latestUpload = history.find((h) => h.upload_session_id === latestSession)
 
   const handleSort = (k: SortKey) => {
@@ -200,6 +209,7 @@ export default function PartsGRNReport(_props: ReportViewProps) {
       'Recd Qty': r.recd_qty ?? '',
       'Spares Order Type': r.spares_order_type ?? '',
       'Condition': r.condition ?? '',
+      'Invoice Amount': r.grn_status === 'In Transit' ? (r.line_item_invoice_total ?? r.net_amount ?? '') : '',
       'Net Amount': r.net_amount ?? '',
       'Total Invoice Amount': r.total_invoice_amount ?? '',
       'Vendor Name': r.vendor_name ?? '',
@@ -298,7 +308,7 @@ export default function PartsGRNReport(_props: ReportViewProps) {
 
       {/* KPI tiles */}
       {!loading && rows.length > 0 && (
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
           <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
             <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Total Rows</p>
             <p className="mt-1 text-2xl font-bold text-gray-900">{rows.length.toLocaleString('en-IN')}</p>
@@ -324,6 +334,17 @@ export default function PartsGRNReport(_props: ReportViewProps) {
             </p>
             <p className="mt-1 text-2xl font-bold text-amber-700">{totalPending.toLocaleString('en-IN')}</p>
             <p className="text-[11px] text-amber-600">{rows.length ? Math.round((totalPending / rows.length) * 100) : 0}% of total</p>
+          </div>
+          <div className="rounded-xl border border-violet-200 bg-violet-50 p-4 shadow-sm">
+            <p className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-gray-500">
+              <span className="h-2 w-2 rounded-full bg-violet-500 inline-block" />Pending Inv. Amt
+            </p>
+            <p className="mt-1 text-lg font-bold text-violet-700">
+              {totalInTransitAmount > 0
+                ? '₹' + totalInTransitAmount.toLocaleString('en-IN', { maximumFractionDigits: 0 })
+                : '—'}
+            </p>
+            <p className="text-[11px] text-violet-600">In Transit invoice value</p>
           </div>
           <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
             <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Last Uploaded</p>
@@ -395,6 +416,7 @@ export default function PartsGRNReport(_props: ReportViewProps) {
                   <Th label="Invoice Date" field="invoice_date" cur={sortKey} dir={sortDir} onSort={handleSort} />
                   <Th label="Recd Qty" field="recd_qty" cur={sortKey} dir={sortDir} onSort={handleSort} />
                   <Th label="Spares Order Type" field="spares_order_type" cur={sortKey} dir={sortDir} onSort={handleSort} />
+                  <Th label="Invoice Amount" field="line_item_invoice_total" cur={sortKey} dir={sortDir} onSort={handleSort} />
                   <Th label="Net Amount" field="net_amount" cur={sortKey} dir={sortDir} onSort={handleSort} />
                   <Th label="Vendor" field="vendor_name" cur={sortKey} dir={sortDir} onSort={handleSort} />
                   <Th label="SAP Order Num" field="sap_order_num" cur={sortKey} dir={sortDir} onSort={handleSort} />
@@ -418,6 +440,11 @@ export default function PartsGRNReport(_props: ReportViewProps) {
                     <td className="px-3 py-2.5 text-xs text-gray-600 whitespace-nowrap">{fmtDate(row.invoice_date)}</td>
                     <td className="px-3 py-2.5 text-center text-xs font-semibold text-gray-700">{row.recd_qty ?? '—'}</td>
                     <td className="px-3 py-2.5 text-xs text-gray-600 whitespace-nowrap">{row.spares_order_type || '—'}</td>
+                    <td className={`px-3 py-2.5 text-right text-xs whitespace-nowrap font-semibold ${row.grn_status === 'In Transit' ? 'text-violet-700' : 'text-gray-300'}`}>
+                      {row.grn_status === 'In Transit'
+                        ? (row.line_item_invoice_total || row.net_amount || '—')
+                        : '—'}
+                    </td>
                     <td className="px-3 py-2.5 text-right text-xs text-gray-700 whitespace-nowrap">{row.net_amount || '—'}</td>
                     <td className="px-3 py-2.5 text-xs text-gray-600">{row.vendor_name || '—'}</td>
                     <td className="px-3 py-2.5 font-mono text-xs text-gray-600">{row.sap_order_num || '—'}</td>
@@ -430,6 +457,20 @@ export default function PartsGRNReport(_props: ReportViewProps) {
                   </tr>
                 ))}
               </tbody>
+              {/* Total Pending Invoice Amount summary row */}
+              {totalInTransitAmount > 0 && (
+                <tfoot>
+                  <tr className="border-t-2 border-violet-300 bg-violet-50">
+                    <td colSpan={9} className="px-3 py-3 text-xs font-bold text-violet-800 text-right uppercase tracking-wide">
+                      Total Pending Invoice Amount (In Transit)
+                    </td>
+                    <td className="px-3 py-3 text-right text-sm font-bold text-violet-800 whitespace-nowrap">
+                      ₹{totalInTransitAmount.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
+                    </td>
+                    <td colSpan={8} />
+                  </tr>
+                </tfoot>
+              )}
             </table>
           </div>
 
