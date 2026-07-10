@@ -138,6 +138,7 @@ type SAIssueExportRow = {
   floor_status: string
   dms_labour: number
   eligible_income: number
+  issue_status: string
   issue_type: string
   issue_detail: string
   department: string
@@ -576,6 +577,7 @@ export default function SATrackerPage() {
         let query = supabase
           .from('job_card_closed_data')
           .select('id, job_card_number, sr_assigned_to, final_labour_amount, dms_final_labour_amount, final_spares_amount, total_invoice_amount, dms_total_invoice_amount, closed_date_time, invoice_date, location, portal, vehicle_registration_number, sr_type, product_line')
+          .in('sr_type', FLOOR_INCHARGE_ALLOWED_SERVICE_TYPES)
           .gte('invoice_date', fromDate)
           .lte('invoice_date', toDate)
           .order('invoice_date', { ascending: false })
@@ -611,7 +613,7 @@ export default function SATrackerPage() {
         exportRows.map((row) => row.job_card_number),
       )
 
-      const issueRows: SAIssueExportRow[] = []
+      const exportIssueRows: SAIssueExportRow[] = []
       exportRows.forEach((row) => {
         const jobCardNumber = normalizeJobCardNumber(row.job_card_number)
         const serviceAdvisor = String(row.sr_assigned_to ?? '').trim()
@@ -630,18 +632,15 @@ export default function SATrackerPage() {
 
         if (!jobCardNumber) issues.push('Missing job card number')
         if (!serviceAdvisor) issues.push('Missing service advisor')
-        if (!serviceTypeAllowed) issues.push('Service type excluded from Floor Incharge parity')
-        if (serviceTypeAllowed && !assignment) issues.push('No Floor Incharge assignment/status')
-        if (serviceTypeAllowed && assignment && !floorCompleted) issues.push('Floor status not Completed')
+        if (!assignment) issues.push('No Floor Incharge assignment/status')
+        if (assignment && !floorCompleted) issues.push('Floor status not Completed')
         if (labour <= 0) issues.push('DMS labour is zero or missing')
         if (serviceAdvisor && !emp) issues.push('SA missing in employee master')
         if (emp && (!String(emp.bank_name ?? '').trim() || !String(emp.account_number ?? '').trim() || !String(emp.ifsc ?? '').trim())) {
           issues.push('SA bank details incomplete')
         }
 
-        if (issues.length === 0) return
-
-        issueRows.push({
+        exportIssueRows.push({
           job_card_number: String(row.job_card_number ?? '').trim(),
           service_type: String(row.sr_type ?? '').trim(),
           reg_number: String(row.vehicle_registration_number ?? '').trim(),
@@ -653,11 +652,9 @@ export default function SATrackerPage() {
           floor_status: floorStatus,
           dms_labour: labour,
           eligible_income: eligibleIncome,
+          issue_status: issues.length > 0 ? 'Issue' : 'OK',
           issue_type: issues.join(' | '),
           issue_detail: issues.map((issue) => {
-            if (issue === 'Service type excluded from Floor Incharge parity') {
-              return `${issue}: ${String(row.sr_type ?? 'blank').trim() || 'blank'}`
-            }
             if (issue === 'Floor status not Completed') return `${issue}: ${floorStatus}`
             return issue
           }).join(' | '),
@@ -669,14 +666,14 @@ export default function SATrackerPage() {
         })
       })
 
-      if (issueRows.length === 0) {
-        alert('No SA Tracker issues found in the selected range.')
+      if (exportIssueRows.length === 0) {
+        alert('No SA Tracker rows found in the selected range.')
         return
       }
 
       const sheetData = [
-        ['Job Card Number', 'Service Type', 'Reg No', 'Location', 'Portal', 'Service Advisor', 'Invoice Date', 'Closed Date Time', 'Floor Status', 'DMS Labour', 'Eligible SA Income', 'Issue Type', 'Issue Detail', 'Department', 'Fuel Type', 'Bank Name', 'Account Number', 'IFSC'],
-        ...issueRows.map((row) => [
+        ['Job Card Number', 'Service Type', 'Reg No', 'Location', 'Portal', 'Service Advisor', 'Invoice Date', 'Closed Date Time', 'Floor Status', 'DMS Labour', 'Eligible SA Income', 'Issue Status', 'Issue Type', 'Issue Detail', 'Department', 'Fuel Type', 'Bank Name', 'Account Number', 'IFSC'],
+        ...exportIssueRows.map((row) => [
           row.job_card_number,
           row.service_type,
           row.reg_number,
@@ -688,6 +685,7 @@ export default function SATrackerPage() {
           row.floor_status,
           Number(row.dms_labour.toFixed(2)),
           Number(row.eligible_income.toFixed(2)),
+          row.issue_status,
           row.issue_type,
           row.issue_detail,
           row.department,
@@ -700,7 +698,7 @@ export default function SATrackerPage() {
 
       const wb = XLSX.utils.book_new()
       const ws = XLSX.utils.aoa_to_sheet(sheetData)
-      ws['!cols'] = [18, 22, 14, 18, 12, 28, 14, 24, 18, 14, 18, 42, 52, 16, 12, 22, 22, 16].map((wch) => ({ wch }))
+      ws['!cols'] = [18, 22, 14, 18, 12, 28, 14, 24, 18, 14, 18, 14, 42, 52, 16, 12, 22, 22, 16].map((wch) => ({ wch }))
       XLSX.utils.book_append_sheet(wb, ws, 'SA Issues')
       XLSX.writeFile(wb, `SA_Tracker_Issues_${fromDate}_to_${toDate}.xlsx`)
     } catch (e: any) {
