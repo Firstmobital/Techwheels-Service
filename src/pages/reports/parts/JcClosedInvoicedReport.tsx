@@ -1430,10 +1430,6 @@ export default function JcClosedInvoicedReport(_props: ReportViewProps) {
           </div>
         </div>
       )}
-    </div>
-  )
-}
-
       {/* ── SR TYPE REPORT ─────────────────────────────────────────────────── */}
       {tab === 'srtype-report' && (
         <div className="space-y-5">
