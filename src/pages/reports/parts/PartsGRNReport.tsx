@@ -57,7 +57,7 @@ interface UploadHistoryRow {
 type SortKey =
   | 'sap_invoice_no' | 'order_no' | 'part_no' | 'invoice_date'
   | 'recd_qty' | 'spares_order_type' | 'challan_no' | 'challan_date'
-  | 'vendor_name' | 'grn_status' | 'net_amount' | 'purchase_order_date' | 'line_item_invoice_total'
+  | 'vendor_name' | 'grn_status' | 'net_amount' | 'purchase_order_date' | 'total_invoice_amount'
   | 'sap_order_num'
   | 'sap_order_num'
 
@@ -186,9 +186,26 @@ export default function PartsGRNReport(_props: ReportViewProps) {
   const totalReceived = rows.filter((r) => r.grn_status === 'GRN Received').length
   const totalInTransit = rows.filter((r) => r.grn_status === 'In Transit').length
   const totalPending = rows.filter((r) => r.grn_status === 'GRN Pending').length
-  const totalInTransitAmount = rows
-    .filter((r) => r.grn_status === 'In Transit')
-    .reduce((sum, r) => sum + parseRs(r.line_item_invoice_total ?? r.net_amount), 0)
+  // Build order-level totals for In Transit rows.
+  // Total_Invoice_Amount repeats the same value on every line of an order — 
+  // we must take it ONCE per order to avoid double-counting multi-line orders.
+  const inTransitOrderMap = useMemo(() => {
+    const m = new Map<string, number>()
+    rows
+      .filter((r) => r.grn_status === 'In Transit')
+      .forEach((r) => {
+        const key = r.order_no ?? `__noorder_${r.id}`
+        if (!m.has(key)) {
+          // Use total_invoice_amount (order-level); fallback to line_item_invoice_total
+          const v = parseRs(r.total_invoice_amount ?? r.line_item_invoice_total ?? r.net_amount)
+          m.set(key, v)
+        }
+      })
+    return m
+  }, [rows])
+
+  const totalInTransitOrders = inTransitOrderMap.size
+  const totalInTransitAmount = Array.from(inTransitOrderMap.values()).reduce((s, v) => s + v, 0)
   const latestUpload = history.find((h) => h.upload_session_id === latestSession)
 
   const handleSort = (k: SortKey) => {
@@ -209,9 +226,8 @@ export default function PartsGRNReport(_props: ReportViewProps) {
       'Recd Qty': r.recd_qty ?? '',
       'Spares Order Type': r.spares_order_type ?? '',
       'Condition': r.condition ?? '',
-      'Invoice Amount': r.grn_status === 'In Transit' ? (r.line_item_invoice_total ?? r.net_amount ?? '') : '',
+      'Total Invoice Amount (Pending GRN)': r.grn_status === 'In Transit' ? (r.total_invoice_amount ?? '') : '',
       'Net Amount': r.net_amount ?? '',
-      'Total Invoice Amount': r.total_invoice_amount ?? '',
       'Vendor Name': r.vendor_name ?? '',
       'SAP Order Num': r.sap_order_num ?? '',
       'GST Invoice #': r.gst_invoice_no ?? '',
@@ -337,14 +353,14 @@ export default function PartsGRNReport(_props: ReportViewProps) {
           </div>
           <div className="rounded-xl border border-violet-200 bg-violet-50 p-4 shadow-sm">
             <p className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-gray-500">
-              <span className="h-2 w-2 rounded-full bg-violet-500 inline-block" />Pending Inv. Amt
+              <span className="h-2 w-2 rounded-full bg-violet-500 inline-block" />Pending GRN Value
             </p>
-            <p className="mt-1 text-lg font-bold text-violet-700">
+            <p className="mt-1 text-base font-bold text-violet-700">
               {totalInTransitAmount > 0
                 ? '₹' + totalInTransitAmount.toLocaleString('en-IN', { maximumFractionDigits: 0 })
                 : '—'}
             </p>
-            <p className="text-[11px] text-violet-600">In Transit invoice value</p>
+            <p className="text-[11px] text-violet-600">{totalInTransitOrders} pending orders</p>
           </div>
           <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
             <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Last Uploaded</p>
@@ -416,7 +432,7 @@ export default function PartsGRNReport(_props: ReportViewProps) {
                   <Th label="Invoice Date" field="invoice_date" cur={sortKey} dir={sortDir} onSort={handleSort} />
                   <Th label="Recd Qty" field="recd_qty" cur={sortKey} dir={sortDir} onSort={handleSort} />
                   <Th label="Spares Order Type" field="spares_order_type" cur={sortKey} dir={sortDir} onSort={handleSort} />
-                  <Th label="Invoice Amount" field="line_item_invoice_total" cur={sortKey} dir={sortDir} onSort={handleSort} />
+                  <Th label="Total Invoice Amount" field="total_invoice_amount" cur={sortKey} dir={sortDir} onSort={handleSort} />
                   <Th label="Net Amount" field="net_amount" cur={sortKey} dir={sortDir} onSort={handleSort} />
                   <Th label="Vendor" field="vendor_name" cur={sortKey} dir={sortDir} onSort={handleSort} />
                   <Th label="SAP Order Num" field="sap_order_num" cur={sortKey} dir={sortDir} onSort={handleSort} />
@@ -442,7 +458,7 @@ export default function PartsGRNReport(_props: ReportViewProps) {
                     <td className="px-3 py-2.5 text-xs text-gray-600 whitespace-nowrap">{row.spares_order_type || '—'}</td>
                     <td className={`px-3 py-2.5 text-right text-xs whitespace-nowrap font-semibold ${row.grn_status === 'In Transit' ? 'text-violet-700' : 'text-gray-300'}`}>
                       {row.grn_status === 'In Transit'
-                        ? (row.line_item_invoice_total || row.net_amount || '—')
+                        ? (row.total_invoice_amount || '—')
                         : '—'}
                     </td>
                     <td className="px-3 py-2.5 text-right text-xs text-gray-700 whitespace-nowrap">{row.net_amount || '—'}</td>
@@ -457,17 +473,24 @@ export default function PartsGRNReport(_props: ReportViewProps) {
                   </tr>
                 ))}
               </tbody>
-              {/* Total Pending Invoice Amount summary row */}
+              {/* Summary footer: pending orders + grand total invoice amount */}
               {totalInTransitAmount > 0 && (
                 <tfoot>
                   <tr className="border-t-2 border-violet-300 bg-violet-50">
-                    <td colSpan={9} className="px-3 py-3 text-xs font-bold text-violet-800 text-right uppercase tracking-wide">
-                      Total Pending Invoice Amount (In Transit)
+                    <td colSpan={9} className="px-3 py-3 text-right uppercase tracking-wide">
+                      <span className="text-[11px] font-semibold text-violet-600">
+                        Total Pending Orders:&nbsp;
+                      </span>
+                      <span className="text-sm font-bold text-violet-800">{totalInTransitOrders}</span>
+                      <span className="mx-4 text-violet-300">|</span>
+                      <span className="text-[11px] font-semibold text-violet-600">
+                        Grand Total Pending GRN Invoice Amount:&nbsp;
+                      </span>
+                      <span className="text-sm font-bold text-violet-800">
+                        ₹{totalInTransitAmount.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
+                      </span>
                     </td>
-                    <td className="px-3 py-3 text-right text-sm font-bold text-violet-800 whitespace-nowrap">
-                      ₹{totalInTransitAmount.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
-                    </td>
-                    <td colSpan={8} />
+                    <td colSpan={9} />
                   </tr>
                 </tfoot>
               )}
