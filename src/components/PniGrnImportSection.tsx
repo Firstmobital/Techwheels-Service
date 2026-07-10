@@ -445,7 +445,12 @@ export function PniGrnImportSection() {
         return 'PV'
       }
 
-      const dbRows = raw.map((r: Record<string, unknown>) => {
+      // Exclude PDI job cards at import time
+      const nonPdiRaw = raw.filter((r: Record<string, unknown>) => {
+        const srType = String(r['SR Type'] ?? '').trim().toUpperCase()
+        return srType !== 'PDI'
+      })
+      const dbRows = nonPdiRaw.map((r: Record<string, unknown>) => {
         const fn = gs2(r, 'First Name') || ''; const ln = gs2(r, 'Last Name') || ''
         const ph = gs2(r, 'Contact Phones (Res, Off, Mob)') || ''
         const mobile = ph.split(',').map((x: string) => x.trim()).filter(Boolean).pop() || null
@@ -485,10 +490,11 @@ export function PniGrnImportSection() {
       await supabase.from('jc_closed_invoiced_uploads').insert({
         portal: slot.portal, dealer_code: slot.dealer_code, branch_label: slot.branch_label,
         upload_session_id: sessionId, uploaded_by_email: user?.email ?? null,
-        row_count: raw.length, invoiced_count: dbRows.filter((r: Record<string, unknown>) => r.invoiced === 'Y').length,
+        row_count: dbRows.length, invoiced_count: dbRows.filter((r: Record<string, unknown>) => r.invoiced === 'Y').length,
         file_name: file.name,
       })
-      setJciMsgs(p => ({ ...p, [slot.key]: { type: 'success', text: `✅ ${raw.length.toLocaleString('en-IN')} rows imported` } }))
+      const pdiExcluded = raw.length - dbRows.length
+      setJciMsgs(p => ({ ...p, [slot.key]: { type: 'success', text: `✅ ${dbRows.length.toLocaleString('en-IN')} rows imported${pdiExcluded > 0 ? ` (${pdiExcluded} PDI excluded)` : ''}` } }))
       setTimeout(() => setJciMsgs(p => ({ ...p, [slot.key]: null })), 5000)
       await loadLastUploads()
     } catch (e) {

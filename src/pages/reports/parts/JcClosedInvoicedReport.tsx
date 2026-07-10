@@ -166,7 +166,8 @@ export default function JcClosedInvoicedReport(_props: ReportViewProps) {
           if ((data ?? []).length < 1000) break
         }
       }
-      setRows(all)
+      // Exclude PDI job cards — they must never appear in any report
+      setRows(all.filter(r => (r.sr_type ?? '').trim().toUpperCase() !== 'PDI'))
     } finally { setLoading(false) }
   }, [])
 
@@ -332,7 +333,7 @@ export default function JcClosedInvoicedReport(_props: ReportViewProps) {
     'Spares (₹)':       r.final_spares_amount,
     'Invoice Value (₹)':r.total_invoice_amount,
     'Closed Date':      r.closed_date ? new Date(r.closed_date).toLocaleDateString('en-IN') : '',
-  })), 'JC_Closed_NotInvoiced')
+  })), 'JC_Closed_Not_Invoiced')
 
   const exportAdvisor = () => exportXLSX(advisorData.map(a => ({
     'Advisor':              a.name,
@@ -342,7 +343,7 @@ export default function JcClosedInvoicedReport(_props: ReportViewProps) {
     'Invoiced Value (₹)':   a.invValue,
     'Pending Value (₹)':    a.pendValue,
     'Portal':               Array.from(a.portal).join('/'),
-  })), 'Advisor_JCI')
+  })), 'Advisor_JC_Not_Invoiced')
 
   const exportMonthly = () => exportXLSX(monthlyData.map(m => ({
     'Month':                m.label,
@@ -353,7 +354,7 @@ export default function JcClosedInvoicedReport(_props: ReportViewProps) {
     'Pending Value (₹)':    m.pendValue,
     'EV JCs':               m.ev,
     'PV JCs':               m.pv,
-  })), 'Monthly_JCI')
+  })), 'Monthly_JC_Not_Invoiced')
 
   // ─────────────────────────────────────────────────────────────────────────
   if (loading) return (
@@ -378,7 +379,7 @@ export default function JcClosedInvoicedReport(_props: ReportViewProps) {
       <div className="flex items-center justify-between flex-wrap gap-2 print:hidden">
         <div>
           <h2 className="text-base font-bold text-gray-800">JC Closed but Not Invoiced</h2>
-          {lastUpload && <p className="text-xs text-gray-400">Last imported: {lastUpload} · {rows.length.toLocaleString('en-IN')} total records (Y: {rows.filter(r=>r.invoiced==='Y').length.toLocaleString('en-IN')} · N: {rows.filter(r=>r.invoiced==='N').length.toLocaleString('en-IN')})</p>}
+          {lastUpload && <p className="text-xs text-gray-400">Last imported: {lastUpload} · {rows.length.toLocaleString('en-IN')} records (PDI excluded) · Y: {rows.filter(r=>r.invoiced==='Y').length.toLocaleString('en-IN')} · N: {rows.filter(r=>r.invoiced==='N').length.toLocaleString('en-IN')}</p>}
         </div>
         <div className="flex gap-2">
           <ExportBtn onClick={exportAll} label="⬇ Export All" />
