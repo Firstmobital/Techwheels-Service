@@ -639,11 +639,15 @@ export default function BodyshopFloorScreen() {
     const status = String(qcByJc[jcKey(c.job_card_no)]?.qc_status ?? c.qc_status ?? '').trim().toLowerCase()
     return status === 'pass'
   }
+  function isRiCompleted(c: FloorCar) {
+    const status = String(riByJc[jcKey(c.job_card_no)]?.reinspection_status ?? c.reinspection_status ?? '').trim().toLowerCase()
+    return status === 'completed'
+  }
   function isInQcQueue(c: FloorCar) {
     return isBsCompleted(c) && !isQcPassed(c)
   }
   function isInRiQueue(c: FloorCar) {
-    return isBsCompleted(c) && isQcPassed(c)
+    return isBsCompleted(c) && isQcPassed(c) && !isRiCompleted(c)
   }
 
   const counts = useMemo(() => ({
@@ -657,7 +661,7 @@ export default function BodyshopFloorScreen() {
     ri:             cars.filter(c => isInRiQueue(c)).length,
     approvals:      cars.filter(c => pendingApprovalCount(c.additional_approval) > 0).length,
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }), [cars, assignments, bsFloorStatus, qcByJc])
+  }), [cars, assignments, bsFloorStatus, qcByJc, riByJc])
 
   const filtered = useMemo(() => {
     let list = [...cars]
@@ -902,22 +906,24 @@ export default function BodyshopFloorScreen() {
         ? doneByName
         : (doneByName || labelForRiDoneBy(doneByType))
 
+      const riCompleted = status === 'completed'
       const payload: Record<string, unknown> = {
         reinspection_status: status,
         reinspection_type: doneByType,
         reinspection_by: resolvedBy,
         reinspection_at: now,
-        current_stage: 14,
-        current_stage_name: 'Re-Inspection',
+        current_stage: riCompleted ? 15 : 14,
+        current_stage_name: riCompleted ? 'Billing' : 'Re-Inspection',
       }
       const result = await supabase
         .from('bodyshop_repair_cards')
         .update(payload)
         .eq('id', repairCardId)
-        .select('id, reinspection_status, reinspection_type, reinspection_by, reinspection_at')
+        .select('id, reinspection_status, reinspection_type, reinspection_by, reinspection_at, current_stage')
         .single()
       if (result.error) throw result.error
 
+      const nextStage = Number(result.data?.current_stage ?? (riCompleted ? 15 : 14))
       patchRi(k, {
         repairCardId: Number(result.data?.id ?? repairCardId),
         reinspection_status: String(result.data?.reinspection_status ?? status),
@@ -931,7 +937,7 @@ export default function BodyshopFloorScreen() {
         reinspection_type: normalizeRiDoneBy(result.data?.reinspection_type ?? doneByType),
         reinspection_by: String(result.data?.reinspection_by ?? resolvedBy),
         reinspection_at: String(result.data?.reinspection_at ?? now),
-        current_stage: 14,
+        current_stage: nextStage,
       } : c))
       if (selectedCar?.id === repairCardId) {
         setSelectedCar(prev => prev ? {
@@ -940,10 +946,10 @@ export default function BodyshopFloorScreen() {
           reinspection_type: normalizeRiDoneBy(result.data?.reinspection_type ?? doneByType),
           reinspection_by: String(result.data?.reinspection_by ?? resolvedBy),
           reinspection_at: String(result.data?.reinspection_at ?? now),
-          current_stage: 14,
+          current_stage: nextStage,
         } : prev)
       }
-      showToast('RI details saved', 'success')
+      showToast(riCompleted ? 'RI completed — moved to Billing' : 'RI details saved', 'success')
     } catch (err) {
       showToast(err instanceof Error ? err.message : 'Failed to save RI', 'error')
     } finally { setSaving(null) }
