@@ -3645,8 +3645,48 @@ export default function BodyshopRepairPage() {
       return floorCompleted && qcPassed && !riDone
     }
 
-    // For stage 15+: clamp so a card whose DB stage is 15+ but RI isn't done
-    // still appears in stage 14 (RI), not in Billing.
+    // ── Billing stages 15 & 16: data-driven, concurrent with stage 14 ──────
+    //
+    // Stage 15 (Billing) active  = any billing field has been saved
+    // Stage 15 completed         = parts=billed + billed_amount + do=received + do_amount + payment=received
+    //
+    // Stage 16 (DO Status) active  = parts_entry_status=billed AND billed_amount filled
+    // Stage 16 completed           = do_status=received
+    //
+    // Both stages can be active simultaneously with stage 14 (RI pending).
+
+    const partsStatus   = String(card.parts_entry_status ?? '').trim().toLowerCase()
+    const billedAmt     = card.billed_amount
+    const doStatus      = String(card.do_status ?? '').trim().toLowerCase()
+    const doAmt         = card.do_amount
+    const paymentStatus = String(card.payment_status ?? '').trim().toLowerCase()
+
+    const hasBilledAmt  = billedAmt !== null && billedAmt !== undefined
+    const hasDoAmt      = doAmt !== null && doAmt !== undefined
+
+    // Stage 16 done = DO received
+    const stage16Done = doStatus === 'received'
+
+    // Stage 15 done = all billing fields complete
+    const stage15Done = partsStatus === 'billed'
+      && hasBilledAmt
+      && doStatus === 'received'
+      && hasDoAmt
+      && paymentStatus === 'received'
+
+    // Any billing field saved = at least one field has a non-default value
+    const anyBillingData = partsStatus === 'billed'
+      || partsStatus === 'entered'
+      || hasBilledAmt
+      || (doStatus !== '' && doStatus !== 'pending')
+      || hasDoAmt
+      || (paymentStatus !== '' && paymentStatus !== 'pending')
+
+    if (stage === 15) return anyBillingData && !stage15Done
+    if (stage === 16) return partsStatus === 'billed' && hasBilledAmt && !stage16Done
+
+    // For stage 17+: clamp so a card whose DB stage is 17+ but RI isn't done
+    // still appears in stage 14 (RI), not in Delivery.
     const clampedStage = clampStageUntilRiComplete(card, effectiveCurrentStage)
 
     // When billing is done (payment received) the vehicle moves to Delivery (17) AND Payment (18)
@@ -3657,9 +3697,9 @@ export default function BodyshopRepairPage() {
   }
 
   function isCardInStageQueue(card: RepairCard, stage: number): boolean {
-    // Keep QC/RI/Billing aligned: projection has no knowledge of reinspection_status,
-    // so stages 13-16 always use worklist logic which applies clampStageUntilRiComplete.
-    if (stage === 13 || stage === 14 || stage === 15 || stage === 16) {
+    // Stages 13-18: always use worklist logic — projection has no knowledge of
+    // reinspection_status gate, concurrent billing stages, or 17+18 simultaneous active.
+    if (stage >= 13) {
       return isCardInStageWorklist(card, stage)
     }
     if (!projectionPendingLoaded) return isCardInStageWorklist(card, stage)
@@ -4552,6 +4592,30 @@ export default function BodyshopRepairPage() {
                     && surveyApproved
                     && surveyApprovalDoc
                   const stage11Ready = stage10Ready && stage9Done
+
+                  // Billing stages — data-driven, concurrent with stage 14
+                  const billingPartsStatus   = String(selected.parts_entry_status ?? '').trim().toLowerCase()
+                  const billingBilledAmt     = selected.billed_amount
+                  const billingDoStatus      = String(selected.do_status ?? '').trim().toLowerCase()
+                  const billingDoAmt         = selected.do_amount
+                  const billingPaymentStatus = String(selected.payment_status ?? '').trim().toLowerCase()
+                  const billingHasBilledAmt  = billingBilledAmt !== null && billingBilledAmt !== undefined
+                  const billingHasDoAmt      = billingDoAmt !== null && billingDoAmt !== undefined
+                  const stage16Done = billingDoStatus === 'received'
+                  const stage15Done = billingPartsStatus === 'billed'
+                    && billingHasBilledAmt
+                    && billingDoStatus === 'received'
+                    && billingHasDoAmt
+                    && billingPaymentStatus === 'received'
+                  const anyBillingData = billingPartsStatus === 'billed'
+                    || billingPartsStatus === 'entered'
+                    || billingHasBilledAmt
+                    || (billingDoStatus !== '' && billingDoStatus !== 'pending')
+                    || billingHasDoAmt
+                    || (billingPaymentStatus !== '' && billingPaymentStatus !== 'pending')
+                  const stage15Active = anyBillingData && !stage15Done
+                  const stage16Active = billingPartsStatus === 'billed' && billingHasBilledAmt && !stage16Done
+
                   const num    = Number(numStr)
                   const isDone = num <= 4
                     ? num === 1
@@ -4573,12 +4637,17 @@ export default function BodyshopRepairPage() {
                             ? isQcPassed(selected)
                           : num === 14
                             ? isRiCompleted(selected)
+                          : num === 15
+                            ? stage15Done
+                          : num === 16
+                            ? stage16Done
                         : effectiveCurrentStage > num
                   const stage10Active = stage10Ready && !stage10Done
                   const stage11Active = !stage11Done /* stage11 forced active immediately, bypassing readiness gate per business request */
                   const stage12Active = stage11Ready && additionalApprovalRequested && !stage12Done
                   const stage13Active = floorStageCompleted && !isQcPassed(selected)
                   const stage14Active = floorStageCompleted && isQcPassed(selected) && !isRiCompleted(selected)
+
                   const isCur = num === 10
                     ? stage10Active
                     : num === 11
@@ -4589,6 +4658,10 @@ export default function BodyshopRepairPage() {
                           ? stage13Active
                           : num === 14
                             ? stage14Active
+                            : num === 15
+                              ? stage15Active
+                              : num === 16
+                                ? stage16Active
                         : isStageConcurrentActive(num, effectiveCurrentStage, floorWorkStarted && !floorStageCompleted)
                   const grp    = getGroupForStage(num)
                   const rows = [
