@@ -2159,7 +2159,7 @@ export default function BodyshopRepairPage() {
       }
 
       // ── Billing save logic ──────────────────────────────────────────────────
-      const billingKeysTouched = ['parts_entry_status', 'billed_amount', 'do_status', 'do_amount', 'customer_diff_amount', 'payment_status'].some((key) => key in editPatch)
+      const billingKeysTouched = ['parts_entry_status', 'billed_amount', 'do_status', 'do_amount', 'payment_status'].some((key) => key in editPatch)
       if (billingKeysTouched && selected.current_stage === 15) {
         const nextDoStatus = String(editPatch.do_status ?? selected.do_status ?? 'pending').trim().toLowerCase()
         const nextDoAmount = editPatch.do_amount ?? selected.do_amount ?? null
@@ -6354,11 +6354,14 @@ export default function BodyshopRepairPage() {
                         </label>
                       )
                     })()}
-                    <label className="brx-field">
+                    <div className="brx-field">
                       <span className="brx-field-label">Customer Diff Amount (₹)</span>
-                      <input className="inp" type="number" value={selected.customer_diff_amount ?? ''}
-                        onChange={(e) => patch('customer_diff_amount', e.target.value ? Number(e.target.value) : null)} />
-                    </label>
+                      <div className="inp" style={{ display: 'flex', alignItems: 'center', background: 'var(--bg)', color: 'var(--text-2)' }}>
+                        {selected.customer_diff_amount !== null && selected.customer_diff_amount !== undefined
+                          ? `₹${Number(selected.customer_diff_amount).toLocaleString('en-IN')}`
+                          : '—'}
+                      </div>
+                    </div>
                     <label className="brx-field">
                       <span className="brx-field-label">Payment Status</span>
                       <select className="sel" value={selected.payment_status ?? 'pending'}
