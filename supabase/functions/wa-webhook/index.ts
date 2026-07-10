@@ -628,12 +628,12 @@ Deno.serve(async (req) => {
     }
   }
 
-  // ── UPDATION REMINDER: handle "Book My Visit" Flow form submission ───────
-  // This Flow's JSON is authored in-repo (docs/web/cross-cutting/wa_templates/
-  // reference/updation_booking_flow.json) with deterministic field names —
-  // booking_date/preferred_time/branch — unlike the legacy service_booking_cta
-  // Flow's auto-generated screen_0_X_<hash> keys. Detecting on those exact keys
-  // lets this branch run before the legacy handler below without ambiguity.
+  // ── UPDATION REMINDER: handle "Book Service" Flow form submission ────────
+  // This Flow ("DETAILS" screen) was published directly in Meta WhatsApp
+  // Manager with these exact field/payload keys — see
+  // docs/web/cross-cutting/wa_templates/reference/updation_booking_flow.json
+  // for the authoritative copy. Detecting on screen_0_Service_Date_0 lets
+  // this branch run before the legacy handler below without ambiguity.
   if (msgType === 'interactive') {
     const inter     = msg.interactive as Record<string, unknown>
     const interType = inter?.type as string
@@ -647,21 +647,19 @@ Deno.serve(async (req) => {
         flowFields = rawResp as Record<string, unknown>
       }
 
-      if ('booking_date' in flowFields) {
-        const rawDate = (flowFields['booking_date'] as string) || ''
-        const rawTime = (flowFields['preferred_time'] as string) || ''
-        const rawBranch = (flowFields['branch'] as string) || ''
+      if ('screen_0_Service_Date_0' in flowFields) {
+        const rawDate   = (flowFields['screen_0_Service_Date_0']             as string) || ''
+        const rawTime   = (flowFields['screen_0_Preferred_Time_1']           as string) || ''
+        const rawBranch = (flowFields['screen_0_Service_Centre_Location_2']  as string) || ''
 
         const timeMap: Record<string, string> = {
-          morning:   'Morning',
-          afternoon: 'Afternoon',
-          evening:   'Evening',
+          '0_Morning':   'Morning',
+          '1_Afternoon': 'Afternoon',
+          '2_Evening':   'Evening',
         }
         const branchMap: Record<string, string> = {
-          ajmer_road: 'Ajmer Road',
-          sitapura:   'Sitapura',
-          tonk:       'Tonk',
-          shahpura:   'Shahpura',
+          '0_Ajmer_Road': 'Ajmer Road',
+          '1_Sitapura':   'Sitapura',
         }
         const bookingTime = timeMap[rawTime] || null
         const branchToUse = branchMap[rawBranch] || (config.available_branches as string[])?.[0] || 'Sitapura'

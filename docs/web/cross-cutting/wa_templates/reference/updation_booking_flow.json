@@ -1,72 +1,61 @@
 {
-  "version": "6.0",
   "screens": [
     {
-      "id": "BOOK_UPDATION_VISIT",
-      "title": "Book Your Visit",
-      "terminal": true,
-      "success": true,
       "data": {},
+      "id": "DETAILS",
       "layout": {
-        "type": "SingleColumnLayout",
         "children": [
           {
-            "type": "Form",
-            "name": "updation_booking_form",
             "children": [
               {
-                "type": "TextHeading",
-                "text": "Schedule your update visit"
+                "label": "Service Date",
+                "name": "Service_Date_401615",
+                "required": true,
+                "type": "DatePicker"
               },
               {
-                "type": "TextBody",
-                "text": "Pick a date, preferred time, and the branch you'd like to visit."
-              },
-              {
-                "type": "DatePicker",
-                "name": "booking_date",
-                "label": "Preferred Date",
-                "required": true
-              },
-              {
-                "type": "RadioButtonsGroup",
-                "name": "preferred_time",
+                "data-source": [
+                  { "id": "0_Morning", "title": "Morning" },
+                  { "id": "1_Afternoon", "title": "Afternoon" },
+                  { "id": "2_Evening", "title": "Evening" }
+                ],
                 "label": "Preferred Time",
+                "name": "Preferred_Time_7de7b2",
                 "required": true,
-                "data-source": [
-                  { "id": "morning", "title": "Morning (9 AM - 12 PM)" },
-                  { "id": "afternoon", "title": "Afternoon (12 PM - 4 PM)" },
-                  { "id": "evening", "title": "Evening (4 PM - 6 PM)" }
-                ]
+                "type": "RadioButtonsGroup"
               },
               {
-                "type": "Dropdown",
-                "name": "branch",
-                "label": "Service Branch",
-                "required": true,
                 "data-source": [
-                  { "id": "ajmer_road", "title": "Ajmer Road" },
-                  { "id": "sitapura", "title": "Sitapura" },
-                  { "id": "tonk", "title": "Tonk" },
-                  { "id": "shahpura", "title": "Shahpura" }
-                ]
+                  { "id": "0_Ajmer_Road", "title": "Ajmer Road" },
+                  { "id": "1_Sitapura", "title": "Sitapura" }
+                ],
+                "label": "Service Centre Location",
+                "name": "Service_Centre_Location_5aad9a",
+                "required": true,
+                "type": "RadioButtonsGroup"
               },
               {
-                "type": "Footer",
-                "label": "Submit",
+                "label": "Done",
                 "on-click-action": {
                   "name": "complete",
                   "payload": {
-                    "booking_date": "${form.booking_date}",
-                    "preferred_time": "${form.preferred_time}",
-                    "branch": "${form.branch}"
+                    "screen_0_Service_Date_0": "${form.Service_Date_401615}",
+                    "screen_0_Preferred_Time_1": "${form.Preferred_Time_7de7b2}",
+                    "screen_0_Service_Centre_Location_2": "${form.Service_Centre_Location_5aad9a}"
                   }
-                }
+                },
+                "type": "Footer"
               }
-            ]
+            ],
+            "name": "flow_path",
+            "type": "Form"
           }
-        ]
-      }
+        ],
+        "type": "SingleColumnLayout"
+      },
+      "terminal": true,
+      "title": "Book Service"
     }
-  ]
+  ],
+  "version": "7.3"
 }

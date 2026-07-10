@@ -92,7 +92,15 @@ async function sendFlowTemplate(
   templateName: string,
   language: string,
   params: Array<{ type: 'text'; text: string }>,
+  hasFlowButton: boolean,
 ): Promise<{ messages?: Array<{ id: string }>; error?: Record<string, unknown> }> {
+  const components: Record<string, unknown>[] = [{ type: 'body', parameters: params }]
+  // Only attach the button component if the approved template actually has a
+  // Flow button — Meta rejects the whole send if the components array doesn't
+  // match what the template was approved with (e.g. a plain body-only template).
+  if (hasFlowButton) {
+    components.push({ type: 'button', sub_type: 'flow', index: '0', parameters: [{ type: 'payload', payload: 'UPDATION_BOOK_NOW' }] })
+  }
   const res = await fetch(`https://graph.facebook.com/v19.0/${phoneId}/messages`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
@@ -103,10 +111,7 @@ async function sendFlowTemplate(
       template: {
         name: templateName,
         language: { code: language || 'en' },
-        components: [
-          { type: 'body', parameters: params },
-          { type: 'button', sub_type: 'flow', index: '0', parameters: [{ type: 'payload', payload: 'UPDATION_BOOK_NOW' }] },
-        ],
+        components,
       },
     }),
   })
@@ -171,6 +176,7 @@ type LoadedConfig = {
   varExamples: Array<{ name?: string; example_value?: string }>
   variableMap: Record<string, string>
   gapDays: number
+  hasFlowButton: boolean
 }
 
 async function loadConfigAndTemplate(): Promise<{ ok: true; value: LoadedConfig } | { ok: false; error: string; status: number }> {
@@ -197,6 +203,9 @@ async function loadConfigAndTemplate(): Promise<{ ok: true; value: LoadedConfig 
     reason:  'updation_name',
   }
 
+  const buttons = tpl.buttons as Array<{ type?: string }> | null
+  const hasFlowButton = Array.isArray(buttons) && buttons.some(b => b.type === 'FLOW')
+
   return {
     ok: true,
     value: {
@@ -208,6 +217,7 @@ async function loadConfigAndTemplate(): Promise<{ ok: true; value: LoadedConfig 
       varExamples: (tpl.variable_examples as Array<{ name?: string; example_value?: string }>) || [],
       variableMap,
       gapDays: (cfg.updation_reminder_gap_days as number) ?? 3,
+      hasFlowButton,
     },
   }
 }
@@ -232,7 +242,7 @@ Deno.serve(async (req) => {
     console.error('UR: config/template load failed:', loaded.error)
     return Response.json({ ok: false, error: loaded.error }, { status: loaded.status, headers: corsHeaders })
   }
-  const { cfg, phoneId, token, templateName, templateLang, varExamples, variableMap, gapDays } = loaded.value
+  const { cfg, phoneId, token, templateName, templateLang, varExamples, variableMap, gapDays, hasFlowButton } = loaded.value
 
   // ── Test send: fire one message to an arbitrary number using example values ─
   if (testPhone) {
@@ -247,7 +257,7 @@ Deno.serve(async (req) => {
         would_send: { phone: phone.e164, template: templateName, language: templateLang, body_params: bodyParams },
       }, { headers: corsHeaders })
     }
-    const waRes = await sendFlowTemplate(phoneId, token, phone.e164, templateName, templateLang, bodyParams)
+    const waRes = await sendFlowTemplate(phoneId, token, phone.e164, templateName, templateLang, bodyParams, hasFlowButton)
     const waMessageId = waRes.messages?.[0]?.id
     if (waMessageId) {
       return Response.json({ ok: true, test: true, sent: true, phone: phone.e164, wa_message_id: waMessageId }, { headers: corsHeaders })
@@ -448,7 +458,7 @@ Deno.serve(async (req) => {
         const bodyParams = buildBodyParams(varExamples, variableMap, mergedRow)
 
         try {
-          const waRes = await sendFlowTemplate(phoneId, token, c.phone.e164, templateName, templateLang, bodyParams)
+          const waRes = await sendFlowTemplate(phoneId, token, c.phone.e164, templateName, templateLang, bodyParams, hasFlowButton)
           const waMessageId = waRes.messages?.[0]?.id
 
           if (waMessageId) {
@@ -581,7 +591,7 @@ Deno.serve(async (req) => {
       vehicle_registration_number: row.vehicle_registration_number, updation_name: row.updation_name,
     })
     try {
-      const waRes = await sendFlowTemplate(phoneId, token, phone.e164, templateName, templateLang, bodyParams)
+      const waRes = await sendFlowTemplate(phoneId, token, phone.e164, templateName, templateLang, bodyParams, hasFlowButton)
       const waMessageId = waRes.messages?.[0]?.id
       if (waMessageId) {
         await sb.from('updation_reminders').update({

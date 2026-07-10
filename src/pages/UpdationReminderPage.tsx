@@ -45,6 +45,7 @@ interface WATemplate {
   header_text: string | null
   body_text: string | null
   footer_text: string | null
+  buttons: Array<{ type: string }> | null
   variable_examples: Array<{ name: string; example_value: string }> | null
 }
 
@@ -227,7 +228,7 @@ export default function UpdationReminderPage() {
           .single(),
         supabase
           .from('wa_templates')
-          .select('id, name, display_name, status, language, header_text, body_text, footer_text, variable_examples')
+          .select('id, name, display_name, status, language, header_text, body_text, footer_text, buttons, variable_examples')
           .eq('status', 'approved')
           .order('display_name'),
       ])
@@ -666,6 +667,11 @@ export default function UpdationReminderPage() {
                   <div className="text-gray-400 text-xs mt-1">{highlightVars(selectedTemplate.footer_text)}</div>
                 )}
               </div>
+              {!selectedTemplate.buttons?.some(b => b.type === 'FLOW') && (
+                <div className="mt-2 bg-yellow-50 border border-yellow-200 rounded p-2 text-xs text-yellow-800">
+                  This template has no "Book My Visit" Flow button attached — reminders will send as plain text with no booking form. See <code>updation_reminder_wa.md</code> to create a template with the Flow button.
+                </div>
+              )}
             </div>
           )}
 

@@ -8,63 +8,73 @@ Motors update campaign (software/hardware "updation"), with a Flow-based booking
 
 No Flow-creation API is used anywhere in this repo — the existing `service_booking_cta`
 Flow (used by Auto Service Reminder / EW Service Reminder) was built manually in Meta's
-WhatsApp Manager. This Flow follows the same manual-publish pattern, but with a JSON we
-author ourselves so the response field names are deterministic (`booking_date`,
-`preferred_time`, `branch`) instead of the auto-generated `screen_0_X_<hash>` names Meta's
-drag-and-drop builder produces.
+WhatsApp Manager, and this Flow follows the same manual-publish pattern.
 
-## 1. Publish the Flow (one-time, in Meta Business Manager)
+## 1. Flow — published
 
-1. Go to **WhatsApp Manager → Account tools → Flows → Create Flow**.
-2. Name it e.g. `Updation Booking Flow`, category `APPOINTMENT_BOOKING`.
-3. In the Flow editor, switch to the **JSON** tab (not the drag-and-drop builder) and
-   paste the contents of [`updation_booking_flow.json`](./updation_booking_flow.json).
-4. Save, then **Publish** the Flow.
-5. Copy the numeric **Flow ID** shown in the Flow's details — you'll need it in step 3
-   below.
+The Flow (screen id `DETAILS`, title "Book Service") has been published in Meta
+WhatsApp Manager. Its exact JSON is captured in
+[`updation_booking_flow.json`](./updation_booking_flow.json) for reference. Fields:
 
-## 2. Create the WhatsApp message template
+| Field | Component | Options |
+|---|---|---|
+| `Service_Date_401615` | DatePicker | — |
+| `Preferred_Time_7de7b2` | RadioButtonsGroup | `0_Morning`, `1_Afternoon`, `2_Evening` |
+| `Service_Centre_Location_5aad9a` | RadioButtonsGroup | `0_Ajmer_Road`, `1_Sitapura` |
 
-In this app's **WhatsApp Automations → Templates** tab (`WAAgentPage.tsx`), click
-**+ Create Template** and fill in:
+On submit, the Footer's `on-click-action.payload` sends back exactly these keys (this is
+what `wa-webhook` parses):
+- `screen_0_Service_Date_0`
+- `screen_0_Preferred_Time_1`
+- `screen_0_Service_Centre_Location_2`
 
-- **Category**: `UTILITY`
-- **Body text**, using variables for the customer/campaign details, e.g.:
-  > Hi {{1}}, your {{2}} ({{3}}) is due for an important update: *{{4}}*. Please book a
-  > free visit at your nearest Techwheels branch.
-  - `{{1}}` = customer name, `{{2}}` = model, `{{3}}` = registration number,
-    `{{4}}` = updation reason (`updation_name` from the import file) — matches
-    `updation_reminder_variable_map` default (`name`, `model`, `reg_no`, `reason`).
-- **Buttons (JSON array)** — paste this, replacing `<FLOW_ID>` with the ID from step 1:
+Note the Flow only offers **Ajmer Road** and **Sitapura** as branches (not the full
+`REPORT_BRANCH_OPTIONS` list) — if Tonk/Shahpura need to be bookable via this Flow too,
+add them as additional `data-source` options in Meta WhatsApp Manager and update the
+`branchMap` in `wa-webhook`'s UPDATION REMINDER handler to match.
 
-  ```json
-  [
-    {
-      "type": "FLOW",
-      "text": "Book My Visit",
-      "flow_id": "<FLOW_ID>",
-      "flow_action": "navigate",
-      "navigate_screen": "BOOK_UPDATION_VISIT"
-    }
-  ]
-  ```
+## 2. Attach the Flow button to the WhatsApp template — outstanding
 
-- Save, then **Submit for Meta approval** from the Templates tab. Approval is required
-  before the template can be selected in the Updation Reminder config or used to send
-  live messages.
+The template currently wired into Updation Reminder config (`updation_service`, approved)
+has **no button attached yet** — `wa_templates.buttons` is `null` for it. WhatsApp won't
+let you edit buttons on an already-approved template in place, so:
+
+1. In this app's **WhatsApp Automations → Templates** tab (`WAAgentPage.tsx`), open
+   `updation_service` for editing (or create a new template if Meta requires a new name
+   for a component change).
+2. Set **Buttons (JSON array)** to:
+
+   ```json
+   [
+     {
+       "type": "FLOW",
+       "text": "Book Service",
+       "flow_id": "<FLOW_ID from Meta WhatsApp Manager>",
+       "flow_action": "navigate",
+       "navigate_screen": "DETAILS"
+     }
+   ]
+   ```
+
+3. Save, then **Submit for Meta approval** from the Templates tab. The reminder job will
+   only attach this Flow button when sending once `wa_templates.buttons` contains a
+   `FLOW`-type entry — `wa-updation-reminder` checks this automatically (`hasFlowButton`
+   in `loadConfigAndTemplate()`), so a body-only template still sends fine as plain text
+   in the meantime, just without the booking button.
 
 ## 3. Wire it into the automation
 
-Once approved, open **WhatsApp Automations → Updation Reminder → Configuration** and
-select this template. The reminder job (`wa-updation-reminder`) sends it with body
-parameters built from `updation_reminder_variable_map`.
+Once the template has the Flow button and is approved, open **WhatsApp Automations →
+Updation Reminder → Configuration** and (re)select it. The reminder job
+(`wa-updation-reminder`) sends it with body parameters built from
+`updation_reminder_variable_map`.
 
 ## 4. How a booking reply is captured
 
-When a customer taps **Book My Visit** and submits the form, Meta sends an `nfm_reply`
-webhook event whose `response_json` has exactly the keys defined in the Flow's Footer
-`on-click-action.payload`: `booking_date`, `preferred_time`, `branch`. `wa-webhook`
-detects these deterministic keys (as opposed to the legacy `screen_0_...` keys used by
-the older `service_booking_cta` Flow) and creates a `service_bookings` row with
-`booking_source: 'WhatsApp Updation Reminder'`, linking it back to the matching
-`updation_reminders` row so the day-3 follow-up is skipped once a customer has booked.
+When a customer taps the Flow button and submits the form, Meta sends an `nfm_reply`
+webhook event whose `response_json` has the three `screen_0_...` keys listed in section 1.
+`wa-webhook` detects `screen_0_Service_Date_0` (distinct from the legacy
+`service_booking_cta` Flow's `screen_0_Service_Date_2d2cde` key) and creates a
+`service_bookings` row with `booking_source: 'WhatsApp Updation Reminder'`, linking it
+back to the matching `updation_reminders` row so the day-N follow-up is skipped once a
+customer has booked.
