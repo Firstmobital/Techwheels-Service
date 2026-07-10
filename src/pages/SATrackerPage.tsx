@@ -10,6 +10,7 @@ type ClosedJCRow = {
   id: number
   job_card_number: string
   sr_assigned_to: string | null
+  employee_code: string | null
   final_labour_amount: number | string | null
   dms_final_labour_amount: number | string | null
   final_spares_amount: number | string | null
@@ -56,6 +57,7 @@ type JCDetailRow = ClosedJCRow & {
 
 // SA employee → department + bank detail mapping (from employee_master)
 type SaEmployee = {
+  employee_code: string | null
   employee_name: string
   department: string | null
   fuel_type: string | null
@@ -132,6 +134,7 @@ type SAIssueExportRow = {
   reg_number: string
   location: string
   portal: string
+  assigned_to_id: string
   service_advisor: string
   invoice_date: string
   closed_date_time: string
@@ -422,7 +425,7 @@ export default function SATrackerPage() {
       while (true) {
         let query = supabase
           .from('job_card_closed_data')
-          .select('id, job_card_number, sr_assigned_to, final_labour_amount, dms_final_labour_amount, final_spares_amount, total_invoice_amount, dms_total_invoice_amount, closed_date_time, invoice_date, location, portal, vehicle_registration_number, sr_type, product_line')
+          .select('id, job_card_number, sr_assigned_to, employee_code, final_labour_amount, dms_final_labour_amount, final_spares_amount, total_invoice_amount, dms_total_invoice_amount, closed_date_time, invoice_date, location, portal, vehicle_registration_number, sr_type, product_line')
           .not('sr_assigned_to', 'is', null)
           .in('sr_type', FLOOR_INCHARGE_ALLOWED_SERVICE_TYPES)
           .gte('closed_date_time', dateRange.from + 'T00:00:00+05:30')
@@ -521,7 +524,7 @@ export default function SATrackerPage() {
 
       const { data, error: err } = await supabase
         .from('job_card_closed_data')
-        .select('job_card_number, sr_assigned_to, dms_final_labour_amount, vehicle_registration_number, location, closed_date_time, invoice_date, sr_type')
+        .select('job_card_number, sr_assigned_to, employee_code, dms_final_labour_amount, vehicle_registration_number, location, closed_date_time, invoice_date, sr_type')
         .in('sr_type', FLOOR_INCHARGE_ALLOWED_SERVICE_TYPES)
         .gte('closed_date_time', fromTs)
         .lte('closed_date_time', toTs)
@@ -576,7 +579,7 @@ export default function SATrackerPage() {
       while (true) {
         let query = supabase
           .from('job_card_closed_data')
-          .select('id, job_card_number, sr_assigned_to, final_labour_amount, dms_final_labour_amount, final_spares_amount, total_invoice_amount, dms_total_invoice_amount, closed_date_time, invoice_date, location, portal, vehicle_registration_number, sr_type, product_line')
+          .select('id, job_card_number, sr_assigned_to, employee_code, final_labour_amount, dms_final_labour_amount, final_spares_amount, total_invoice_amount, dms_total_invoice_amount, closed_date_time, invoice_date, location, portal, vehicle_registration_number, sr_type, product_line')
           .in('sr_type', FLOOR_INCHARGE_ALLOWED_SERVICE_TYPES)
           .gte('invoice_date', fromDate)
           .lte('invoice_date', toDate)
@@ -623,6 +626,7 @@ export default function SATrackerPage() {
         const floorCompleted = normalizeStatusValue(assignment?.work_status) === 'completed'
         const labour = parseAmount(row.dms_final_labour_amount)
         const emp = empDetailMap.get(normSAName(serviceAdvisor))
+        const assignedToId = String(row.employee_code ?? emp?.employee_code ?? '').trim()
         const fuel = normFuelBucket(emp?.fuel_type)
         const payoutPercent = fuel === 'EV' ? evSharePercent : saSharePercent
         const eligibleIncome = serviceAdvisor && serviceTypeAllowed && floorCompleted
@@ -646,6 +650,7 @@ export default function SATrackerPage() {
           reg_number: String(row.vehicle_registration_number ?? '').trim(),
           location: getLocationLabel(row.location),
           portal: getPortalLabel(row.portal),
+          assigned_to_id: assignedToId,
           service_advisor: serviceAdvisor,
           invoice_date: String(row.invoice_date ?? '').trim(),
           closed_date_time: String(row.closed_date_time ?? '').trim(),
@@ -672,13 +677,14 @@ export default function SATrackerPage() {
       }
 
       const sheetData = [
-        ['Job Card Number', 'Service Type', 'Reg No', 'Location', 'Portal', 'Service Advisor', 'Invoice Date', 'Closed Date Time', 'Floor Status', 'DMS Labour', 'Eligible SA Income', 'Issue Status', 'Issue Type', 'Issue Detail', 'Department', 'Fuel Type', 'Bank Name', 'Account Number', 'IFSC'],
+        ['Job Card Number', 'Service Type', 'Reg No', 'Location', 'Portal', 'Assigned To ID', 'Service Advisor', 'Invoice Date', 'Closed Date Time', 'Floor Status', 'DMS Labour', 'Eligible SA Income', 'Issue Status', 'Issue Type', 'Issue Detail', 'Department', 'Fuel Type', 'Bank Name', 'Account Number', 'IFSC'],
         ...exportIssueRows.map((row) => [
           row.job_card_number,
           row.service_type,
           row.reg_number,
           row.location,
           row.portal,
+          row.assigned_to_id,
           row.service_advisor,
           row.invoice_date,
           row.closed_date_time ? new Date(row.closed_date_time).toLocaleString('en-IN') : '',
@@ -698,7 +704,7 @@ export default function SATrackerPage() {
 
       const wb = XLSX.utils.book_new()
       const ws = XLSX.utils.aoa_to_sheet(sheetData)
-      ws['!cols'] = [18, 22, 14, 18, 12, 28, 14, 24, 18, 14, 18, 14, 42, 52, 16, 12, 22, 22, 16].map((wch) => ({ wch }))
+      ws['!cols'] = [18, 22, 14, 18, 12, 18, 28, 14, 24, 18, 14, 18, 14, 42, 52, 16, 12, 22, 22, 16].map((wch) => ({ wch }))
       XLSX.utils.book_append_sheet(wb, ws, 'SA Issues')
       XLSX.writeFile(wb, `SA_Tracker_Issues_${fromDate}_to_${toDate}.xlsx`)
     } catch (e: any) {
@@ -749,7 +755,7 @@ export default function SATrackerPage() {
     try {
       const { data, error: err } = await supabase
         .from('employee_master')
-        .select('employee_name, department, fuel_type, bank_name, account_number, ifsc')
+        .select('employee_code, employee_name, department, fuel_type, bank_name, account_number, ifsc')
         .not('employee_name', 'is', null)
         .limit(1000)
       if (!err && data) {
