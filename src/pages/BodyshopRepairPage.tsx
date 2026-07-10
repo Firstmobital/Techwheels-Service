@@ -2158,6 +2158,40 @@ export default function BodyshopRepairPage() {
         }
       }
 
+      // ── Billing save logic ──────────────────────────────────────────────────
+      const billingKeysTouched = ['parts_entry_status', 'billed_amount', 'do_status', 'do_amount', 'customer_diff_amount', 'payment_status'].some((key) => key in editPatch)
+      if (billingKeysTouched && selected.current_stage === 15) {
+        const nextDoStatus = String(editPatch.do_status ?? selected.do_status ?? 'pending').trim().toLowerCase()
+        const nextDoAmount = editPatch.do_amount ?? selected.do_amount ?? null
+        const nextPaymentStatus = String(editPatch.payment_status ?? selected.payment_status ?? 'pending').trim().toLowerCase()
+
+        // DO Amount required when DO Status = Received
+        if (nextDoStatus === 'received' && (nextDoAmount === null || nextDoAmount === undefined || String(nextDoAmount).trim() === '')) {
+          toast_('DO Amount is required when DO Status is Received', false)
+          setSaving(false)
+          return
+        }
+
+        // Auto-calc customer diff = billed - DO (only when DO received)
+        const nextBilledAmount = editPatch.billed_amount ?? selected.billed_amount ?? null
+        if (nextDoStatus === 'received' && nextBilledAmount !== null && nextDoAmount !== null) {
+          patchToSave = {
+            ...patchToSave,
+            customer_diff_amount: Number(nextBilledAmount) - Number(nextDoAmount),
+          }
+        }
+
+        // Payment received → advance to stage 17 (Delivery) + 18 (Payment) simultaneously
+        // Both stages become active at once — set current_stage to 17 (Delivery first)
+        if (nextPaymentStatus === 'received') {
+          patchToSave = {
+            ...patchToSave,
+            current_stage: 17,
+            current_stage_name: STAGE_LABELS[17] ?? 'Delivery',
+          }
+        }
+      }
+
       const updated = await updateRepairCard(selected.id, patchToSave)
       setSelected(updated)
       setCards((prev) => prev.map((c) => c.id === updated.id ? updated : c))
@@ -3614,6 +3648,11 @@ export default function BodyshopRepairPage() {
     // For stage 15+: clamp so a card whose DB stage is 15+ but RI isn't done
     // still appears in stage 14 (RI), not in Billing.
     const clampedStage = clampStageUntilRiComplete(card, effectiveCurrentStage)
+
+    // When billing is done (payment received) the vehicle moves to Delivery (17) AND Payment (18)
+    // simultaneously — both stages are active at the same time at current_stage = 17.
+    if (clampedStage === 17 && (stage === 17 || stage === 18)) return true
+
     return clampedStage === stage
   }
 
@@ -6194,7 +6233,16 @@ export default function BodyshopRepairPage() {
                     <label className="brx-field">
                       <span className="brx-field-label">Billed Amount (₹)</span>
                       <input className="inp" type="number" value={selected.billed_amount ?? ''}
-                        onChange={(e) => patch('billed_amount', e.target.value ? Number(e.target.value) : null)} />
+                        onChange={(e) => {
+                          const billedVal = e.target.value ? Number(e.target.value) : null
+                          patch('billed_amount', billedVal)
+                          // Auto-calc customer diff when DO is received
+                          const doStatus = String(editPatch.do_status ?? selected.do_status ?? '').trim().toLowerCase()
+                          const doAmt = editPatch.do_amount ?? selected.do_amount ?? null
+                          if (doStatus === 'received' && billedVal !== null && doAmt !== null) {
+                            patch('customer_diff_amount', Number(billedVal) - Number(doAmt))
+                          }
+                        }} />
                     </label>
                     <label className="brx-field">
                       <span className="brx-field-label">DO Status</span>
@@ -6205,11 +6253,34 @@ export default function BodyshopRepairPage() {
                         <option value="not_received">Not Received</option>
                       </select>
                     </label>
-                    <label className="brx-field">
-                      <span className="brx-field-label">DO Amount (₹)</span>
-                      <input className="inp" type="number" value={selected.do_amount ?? ''}
-                        onChange={(e) => patch('do_amount', e.target.value ? Number(e.target.value) : null)} />
-                    </label>
+                    {(() => {
+                      const doStatus = String(editPatch.do_status ?? selected.do_status ?? '').trim().toLowerCase()
+                      const doRequired = doStatus === 'received'
+                      const doMissing = doRequired && (editPatch.do_amount ?? selected.do_amount) === null
+                      return (
+                        <label className="brx-field">
+                          <span className="brx-field-label">
+                            DO Amount (₹){doRequired && <span style={{ color: '#ef4444', marginLeft: 4 }}>*</span>}
+                          </span>
+                          <input
+                            className={`inp${doMissing ? ' is-required' : ''}`}
+                            type="number"
+                            value={selected.do_amount ?? ''}
+                            onChange={(e) => {
+                              const doVal = e.target.value ? Number(e.target.value) : null
+                              patch('do_amount', doVal)
+                              // Auto-calc customer diff
+                              if (doRequired) {
+                                const billedAmt = editPatch.billed_amount ?? selected.billed_amount ?? null
+                                if (billedAmt !== null && doVal !== null) {
+                                  patch('customer_diff_amount', Number(billedAmt) - Number(doVal))
+                                }
+                              }
+                            }}
+                          />
+                        </label>
+                      )
+                    })()}
                     <label className="brx-field">
                       <span className="brx-field-label">Customer Diff Amount (₹)</span>
                       <input className="inp" type="number" value={selected.customer_diff_amount ?? ''}
