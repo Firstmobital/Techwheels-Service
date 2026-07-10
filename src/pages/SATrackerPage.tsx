@@ -126,6 +126,27 @@ type TechnicianAssignmentStatusRow = {
   created_at: string | null
 }
 
+type SAIssueExportRow = {
+  job_card_number: string
+  service_type: string
+  reg_number: string
+  location: string
+  portal: string
+  service_advisor: string
+  invoice_date: string
+  closed_date_time: string
+  floor_status: string
+  dms_labour: number
+  eligible_income: number
+  issue_type: string
+  issue_detail: string
+  department: string
+  fuel_type: string
+  bank_name: string
+  account_number: string
+  ifsc: string
+}
+
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
 function formatCurrency(value: number): string {
@@ -184,6 +205,23 @@ function normalizeJobCardNumber(value: string | null | undefined): string {
 
 function normalizeStatusValue(value: string | null | undefined): string {
   return String(value ?? '').trim().toLowerCase() || 'work_inprocess'
+}
+
+function statusLabel(value: string | null | undefined): string {
+  const normalized = normalizeStatusValue(value)
+  if (normalized === 'completed') return 'Completed'
+  if (normalized === 'hold') return 'Hold'
+  if (normalized === 'work_inprocess') return 'Work Inprocess'
+  return String(value ?? '').trim() || 'Not assigned'
+}
+
+function normalizeServiceType(value: string | null | undefined): string {
+  return String(value ?? '').trim().replace(/\s+/g, ' ').toLowerCase()
+}
+
+function isFloorInchargeAllowedServiceType(value: string | null | undefined): boolean {
+  const normalized = normalizeServiceType(value)
+  return FLOOR_INCHARGE_ALLOWED_SERVICE_TYPES.some((serviceType) => normalizeServiceType(serviceType) === normalized)
 }
 
 function getAssignmentRecencyMs(assignment: TechnicianAssignmentStatusRow): number {
@@ -425,6 +463,19 @@ export default function SATrackerPage() {
   }
 
   async function fetchCompletedJobCards(jobCardNumbers: Array<string | null | undefined>): Promise<Set<string>> {
+    const latestByJobCard = await fetchLatestAssignmentStatusByJobCards(jobCardNumbers)
+    const completed = new Set<string>()
+    latestByJobCard.forEach((assignment, jobCardNumber) => {
+      if (normalizeStatusValue(assignment.work_status) === 'completed') {
+        completed.add(jobCardNumber)
+      }
+    })
+    return completed
+  }
+
+  async function fetchLatestAssignmentStatusByJobCards(
+    jobCardNumbers: Array<string | null | undefined>,
+  ): Promise<Map<string, TechnicianAssignmentStatusRow>> {
     const normalizedJobCards = Array.from(new Set(
       jobCardNumbers.map(normalizeJobCardNumber).filter(Boolean),
     ))
@@ -451,13 +502,7 @@ export default function SATrackerPage() {
       })
     }
 
-    const completed = new Set<string>()
-    latestByJobCard.forEach((assignment, jobCardNumber) => {
-      if (normalizeStatusValue(assignment.work_status) === 'completed') {
-        completed.add(jobCardNumber)
-      }
-    })
-    return completed
+    return latestByJobCard
   }
 
   // ── Yesterday Report ──────────────────────────────────────────────────────
@@ -513,6 +558,153 @@ export default function SATrackerPage() {
       alert('Failed to generate SA report: ' + (e.message ?? 'Unknown error'))
     } finally {
       setGeneratingReport(false)
+    }
+  }
+
+  async function handleExportSAIssues() {
+    if (!fromDate || !toDate) {
+      alert('Select both start and end dates')
+      return
+    }
+
+    try {
+      const exportRows: ClosedJCRow[] = []
+      let cursorInvoiceDate: string | null = null
+      let cursorId: number | null = null
+
+      while (true) {
+        let query = supabase
+          .from('job_card_closed_data')
+          .select('id, job_card_number, sr_assigned_to, final_labour_amount, dms_final_labour_amount, final_spares_amount, total_invoice_amount, dms_total_invoice_amount, closed_date_time, invoice_date, location, portal, vehicle_registration_number, sr_type, product_line')
+          .gte('invoice_date', fromDate)
+          .lte('invoice_date', toDate)
+          .order('invoice_date', { ascending: false })
+          .order('id', { ascending: false })
+          .limit(QUERY_PAGE_SIZE)
+
+        if (cursorInvoiceDate && cursorId !== null) {
+          query = query.or(`invoice_date.lt.${cursorInvoiceDate},and(invoice_date.eq.${cursorInvoiceDate},id.lt.${cursorId})`)
+        }
+
+        const { data, error: exportErr } = await query
+        if (exportErr) {
+          alert('Failed to fetch SA issue source rows: ' + exportErr.message)
+          return
+        }
+
+        const batch = (data ?? []) as ClosedJCRow[]
+        exportRows.push(...batch)
+        if (batch.length < QUERY_PAGE_SIZE) break
+
+        const last = batch[batch.length - 1]
+        cursorInvoiceDate = last?.invoice_date ?? null
+        cursorId = typeof last?.id === 'number' ? last.id : null
+        if (!cursorInvoiceDate || cursorId === null) break
+      }
+
+      if (exportRows.length === 0) {
+        alert('No closed job cards found in the selected invoice date range.')
+        return
+      }
+
+      const assignmentMap = await fetchLatestAssignmentStatusByJobCards(
+        exportRows.map((row) => row.job_card_number),
+      )
+
+      const issueRows: SAIssueExportRow[] = []
+      exportRows.forEach((row) => {
+        const jobCardNumber = normalizeJobCardNumber(row.job_card_number)
+        const serviceAdvisor = String(row.sr_assigned_to ?? '').trim()
+        const serviceTypeAllowed = isFloorInchargeAllowedServiceType(row.sr_type)
+        const assignment = jobCardNumber ? assignmentMap.get(jobCardNumber) : undefined
+        const floorStatus = assignment ? statusLabel(assignment.work_status) : 'Not assigned'
+        const floorCompleted = normalizeStatusValue(assignment?.work_status) === 'completed'
+        const labour = parseAmount(row.dms_final_labour_amount)
+        const emp = empDetailMap.get(normSAName(serviceAdvisor))
+        const fuel = normFuelBucket(emp?.fuel_type)
+        const payoutPercent = fuel === 'EV' ? evSharePercent : saSharePercent
+        const eligibleIncome = serviceAdvisor && serviceTypeAllowed && floorCompleted
+          ? calculateSAIncome(labour, payoutPercent)
+          : 0
+        const issues: string[] = []
+
+        if (!jobCardNumber) issues.push('Missing job card number')
+        if (!serviceAdvisor) issues.push('Missing service advisor')
+        if (!serviceTypeAllowed) issues.push('Service type excluded from Floor Incharge parity')
+        if (serviceTypeAllowed && !assignment) issues.push('No Floor Incharge assignment/status')
+        if (serviceTypeAllowed && assignment && !floorCompleted) issues.push('Floor status not Completed')
+        if (labour <= 0) issues.push('DMS labour is zero or missing')
+        if (serviceAdvisor && !emp) issues.push('SA missing in employee master')
+        if (emp && (!String(emp.bank_name ?? '').trim() || !String(emp.account_number ?? '').trim() || !String(emp.ifsc ?? '').trim())) {
+          issues.push('SA bank details incomplete')
+        }
+
+        if (issues.length === 0) return
+
+        issueRows.push({
+          job_card_number: String(row.job_card_number ?? '').trim(),
+          service_type: String(row.sr_type ?? '').trim(),
+          reg_number: String(row.vehicle_registration_number ?? '').trim(),
+          location: getLocationLabel(row.location),
+          portal: getPortalLabel(row.portal),
+          service_advisor: serviceAdvisor,
+          invoice_date: String(row.invoice_date ?? '').trim(),
+          closed_date_time: String(row.closed_date_time ?? '').trim(),
+          floor_status: floorStatus,
+          dms_labour: labour,
+          eligible_income: eligibleIncome,
+          issue_type: issues.join(' | '),
+          issue_detail: issues.map((issue) => {
+            if (issue === 'Service type excluded from Floor Incharge parity') {
+              return `${issue}: ${String(row.sr_type ?? 'blank').trim() || 'blank'}`
+            }
+            if (issue === 'Floor status not Completed') return `${issue}: ${floorStatus}`
+            return issue
+          }).join(' | '),
+          department: emp?.department ?? '',
+          fuel_type: emp?.fuel_type ?? '',
+          bank_name: emp?.bank_name ?? '',
+          account_number: emp?.account_number ?? '',
+          ifsc: emp?.ifsc ?? '',
+        })
+      })
+
+      if (issueRows.length === 0) {
+        alert('No SA Tracker issues found in the selected range.')
+        return
+      }
+
+      const sheetData = [
+        ['Job Card Number', 'Service Type', 'Reg No', 'Location', 'Portal', 'Service Advisor', 'Invoice Date', 'Closed Date Time', 'Floor Status', 'DMS Labour', 'Eligible SA Income', 'Issue Type', 'Issue Detail', 'Department', 'Fuel Type', 'Bank Name', 'Account Number', 'IFSC'],
+        ...issueRows.map((row) => [
+          row.job_card_number,
+          row.service_type,
+          row.reg_number,
+          row.location,
+          row.portal,
+          row.service_advisor,
+          row.invoice_date,
+          row.closed_date_time ? new Date(row.closed_date_time).toLocaleString('en-IN') : '',
+          row.floor_status,
+          Number(row.dms_labour.toFixed(2)),
+          Number(row.eligible_income.toFixed(2)),
+          row.issue_type,
+          row.issue_detail,
+          row.department,
+          row.fuel_type,
+          row.bank_name,
+          row.account_number,
+          row.ifsc,
+        ]),
+      ]
+
+      const wb = XLSX.utils.book_new()
+      const ws = XLSX.utils.aoa_to_sheet(sheetData)
+      ws['!cols'] = [18, 22, 14, 18, 12, 28, 14, 24, 18, 14, 18, 42, 52, 16, 12, 22, 22, 16].map((wch) => ({ wch }))
+      XLSX.utils.book_append_sheet(wb, ws, 'SA Issues')
+      XLSX.writeFile(wb, `SA_Tracker_Issues_${fromDate}_to_${toDate}.xlsx`)
+    } catch (e: any) {
+      alert('SA issue export failed: ' + (e.message ?? 'Unknown error'))
     }
   }
 
@@ -1100,6 +1292,28 @@ export default function SATrackerPage() {
               style={{ padding: '0.2rem 0.55rem', fontSize: '0.72rem' }}
               onClick={() => { setFromDate(''); setToDate('') }}>✕</button>
           )}
+          <button
+            type="button"
+            onClick={() => void handleExportSAIssues()}
+            disabled={!fromDate || !toDate}
+            title={fromDate && toDate ? 'Export SA Tracker issue rows' : 'Select both start and end dates'}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.3rem',
+              padding: '0.35rem 0.75rem',
+              background: '#ef4444',
+              color: '#fff',
+              border: 'none',
+              borderRadius: '6px',
+              fontWeight: 700,
+              fontSize: '0.76rem',
+              cursor: fromDate && toDate ? 'pointer' : 'not-allowed',
+              opacity: fromDate && toDate ? 1 : 0.55,
+            }}
+          >
+            🧰 Export Issues
+          </button>
         </div>
       </div>
 
