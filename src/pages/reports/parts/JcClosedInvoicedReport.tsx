@@ -1,12 +1,14 @@
-// JC Closed but Invoiced Report
-// Reads from jc_closed_invoiced_data — EV (500A840) | PV-Sitapura (3000840) | PV-AjmerRd (3001440)
+// JC Closed but Not Invoiced — Report
+// Source: jc_closed_invoiced_data
+// Primary classification: "invoiced" column  →  'Y' = Invoiced,  'N' = Not Invoiced
+// ALL 1771 rows shown; counts split strictly by Invoiced? column value
 
 import { useState, useEffect, useMemo, useCallback } from 'react'
 import { supabase } from '../../../lib/supabase'
 import type { ReportViewProps } from '../types'
 import * as XLSX from 'xlsx'
 
-// ─── Types ───────────────────────────────────────────────────────────────────
+// ─── Types ────────────────────────────────────────────────────────────────────
 interface JciRow {
   id: number
   portal: string
@@ -33,7 +35,7 @@ interface JciRow {
   final_spares_amount: number | null
   total_invoice_amount: number | null
   total_order_value: number | null
-  invoiced: string | null
+  invoiced: string | null          // 'Y' | 'N'  ← PRIMARY FIELD
   parts_entry_complete: string | null
   jobs_entry_complete: string | null
   created_date: string | null
@@ -42,32 +44,31 @@ interface JciRow {
   delay_reason: string | null
 }
 
-type TabId = 'dashboard' | 'summary' | 'advisor' | 'monthly' | 'spare-labour' | 'jc-status'
+type TabId = 'dashboard' | 'summary' | 'advisor' | 'monthly' | 'jc-status'
 
 const TABS: { id: TabId; label: string }[] = [
   { id: 'dashboard', label: '📊 Dashboard' },
   { id: 'summary',   label: 'Summary' },
   { id: 'advisor',   label: 'Advisor Wise' },
   { id: 'monthly',   label: 'Month / Year Wise' },
-  { id: 'spare-labour', label: 'Spare vs Labour' },
-  { id: 'jc-status', label: 'JC Status' },
+  { id: 'jc-status', label: 'Invoice Status' },
 ]
 
 const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
 
-// ─── Helpers ─────────────────────────────────────────────────────────────────
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 const rs = (v: number | null | undefined) =>
-  `₹${(v ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`
+  `₹${(v ?? 0).toLocaleString('en-IN', { maximumFractionDigits: 0 })}`
 
-const num = (v: number | null | undefined) => (v ?? 0).toLocaleString('en-IN')
+const pct = (a: number, b: number) => (b > 0 ? ((a / b) * 100).toFixed(1) : '0.0') + '%'
 
-function parseAdvisor(sa: string | null) {
+function adv(sa: string | null) {
   if (!sa) return '—'
   return sa.split('_')[0] || sa
 }
 
-function closedDate(row: JciRow): Date | null {
-  const s = row.closed_date || row.created_date
+function bestDate(row: JciRow): Date | null {
+  const s = row.closed_date || row.completed_date || row.created_date
   if (!s) return null
   const d = new Date(s)
   return isNaN(d.getTime()) ? null : d
@@ -80,32 +81,44 @@ function exportXLSX(data: Record<string, unknown>[], fileName: string) {
   XLSX.writeFile(wb, `${fileName}.xlsx`)
 }
 
-// ─── KPI Card ────────────────────────────────────────────────────────────────
-function KpiCard({ label, value, sub, color }: { label: string; value: string; sub?: string; color: string }) {
+// ─── Small UI Atoms ───────────────────────────────────────────────────────────
+function Badge({ v }: { v: string | null }) {
+  const isY = v === 'Y'
   return (
-    <div className={`rounded-xl border p-4 ${color}`}>
-      <p className="text-xs font-semibold uppercase tracking-wide opacity-70">{label}</p>
+    <span className={`inline-block rounded-full px-2 py-0.5 text-[10px] font-bold ${isY ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'}`}>
+      {isY ? 'Invoiced' : 'Not Invoiced'}
+    </span>
+  )
+}
+
+function Kpi({ label, value, sub, accent }: { label: string; value: string; sub?: string; accent: string }) {
+  return (
+    <div className={`rounded-xl border p-4 ${accent}`}>
+      <p className="text-xs font-semibold uppercase tracking-wide opacity-60">{label}</p>
       <p className="mt-1 text-2xl font-bold">{value}</p>
       {sub && <p className="mt-0.5 text-xs opacity-60">{sub}</p>}
     </div>
   )
 }
 
-// ─── Mini Bar Chart ──────────────────────────────────────────────────────────
-function MiniBar({ label, value, max, color }: { label: string; value: number; max: number; color: string }) {
-  const pct = max > 0 ? (value / max) * 100 : 0
+function Th({ children, right }: { children: React.ReactNode; right?: boolean }) {
+  return <th className={`px-4 py-2.5 text-xs font-semibold text-gray-500 ${right ? 'text-right' : 'text-left'} whitespace-nowrap`}>{children}</th>
+}
+
+function Td({ children, right, bold, cls }: { children: React.ReactNode; right?: boolean; bold?: boolean; cls?: string }) {
+  return <td className={`px-4 py-2.5 ${right ? 'text-right' : 'text-left'} ${bold ? 'font-semibold' : ''} ${cls ?? ''} whitespace-nowrap`}>{children}</td>
+}
+
+function ExportBtn({ onClick, label = '⬇ Excel' }: { onClick: () => void; label?: string }) {
   return (
-    <div className="flex items-center gap-2 text-xs">
-      <span className="w-28 truncate text-gray-600">{label}</span>
-      <div className="flex-1 rounded-full bg-gray-100 h-2">
-        <div className={`h-2 rounded-full ${color}`} style={{ width: `${pct}%` }} />
-      </div>
-      <span className="w-20 text-right font-medium text-gray-800">{rs(value)}</span>
-    </div>
+    <button onClick={onClick}
+      className="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700">
+      {label}
+    </button>
   )
 }
 
-// ─── Main Component ──────────────────────────────────────────────────────────
+// ─── Main Component ───────────────────────────────────────────────────────────
 export default function JcClosedInvoicedReport(_props: ReportViewProps) {
   const [rows, setRows] = useState<JciRow[]>([])
   const [loading, setLoading] = useState(true)
@@ -113,159 +126,160 @@ export default function JcClosedInvoicedReport(_props: ReportViewProps) {
   const [lastUpload, setLastUpload] = useState<string | null>(null)
 
   // Filters
-  const [filterPortal, setFilterPortal] = useState<'all' | 'EV' | 'PV'>('all')
-  const [filterDealer, setFilterDealer] = useState('all')
+  const [filterPortal,  setFilterPortal]  = useState<'all'|'EV'|'PV'>('all')
+  const [filterDealer,  setFilterDealer]  = useState('all')
   const [filterAdvisor, setFilterAdvisor] = useState('all')
-  const [filterMonth, setFilterMonth] = useState('all')
-  const [filterYear, setFilterYear] = useState('all')
-  const [filterStatus, setFilterStatus] = useState('all')
-  const [search, setSearch] = useState('')
+  const [filterMonth,   setFilterMonth]   = useState('all')
+  const [filterYear,    setFilterYear]    = useState('all')
+  const [filterInv,     setFilterInv]     = useState<'all'|'Y'|'N'>('all')   // Invoiced? filter
+  const [search,        setSearch]        = useState('')
 
-  // ── Load data ───────────────────────────────────────────────────────────────
-  const loadData = useCallback(async () => {
+  // ── Load ──────────────────────────────────────────────────────────────────
+  const load = useCallback(async () => {
     setLoading(true)
     try {
-      // Latest session per dealer_code + branch_label
       const { data: hist } = await supabase
         .from('jc_closed_invoiced_uploads').select('*')
         .order('uploaded_at', { ascending: false })
 
       const latestBySlot: Record<string, string> = {}
+      let latestDate: string | null = null
       for (const h of (hist ?? []) as Record<string, string>[]) {
         const key = `${h.dealer_code}::${h.branch_label}`
         if (!latestBySlot[key]) {
           latestBySlot[key] = h.upload_session_id
-          if (!latestBySlot['__date']) latestBySlot['__date'] = h.uploaded_at
+          if (!latestDate) latestDate = h.uploaded_at
         }
       }
-      if (latestBySlot['__date']) {
-        setLastUpload(new Date(latestBySlot['__date']).toLocaleString('en-IN'))
-      }
+      if (latestDate) setLastUpload(new Date(latestDate).toLocaleString('en-IN'))
 
-      const sessionIds = Object.entries(latestBySlot)
-        .filter(([k]) => k !== '__date')
-        .map(([, v]) => v)
+      const sessionIds = Object.values(latestBySlot)
+      if (!sessionIds.length) { setRows([]); return }
 
-      if (!sessionIds.length) { setRows([]); setLoading(false); return }
-
-      const allRows: JciRow[] = []
+      const all: JciRow[] = []
       for (const sid of sessionIds) {
         for (let from = 0; ; from += 1000) {
           const { data, error } = await supabase.from('jc_closed_invoiced_data')
             .select('*').eq('upload_session_id', sid).range(from, from + 999)
           if (error) break
-          allRows.push(...((data ?? []) as JciRow[]))
+          all.push(...((data ?? []) as JciRow[]))
           if ((data ?? []).length < 1000) break
         }
       }
-      setRows(allRows)
-    } catch (e) { console.error(e) }
-    finally { setLoading(false) }
+      setRows(all)
+    } finally { setLoading(false) }
   }, [])
 
-  useEffect(() => { void loadData() }, [loadData])
+  useEffect(() => { void load() }, [load])
 
-  // ── Derived ────────────────────────────────────────────────────────────────
-  const advisors = useMemo(() => {
+  // ── Derived ───────────────────────────────────────────────────────────────
+  const advisorOpts = useMemo(() => {
     const s = new Set(rows.map(r => r.sr_assigned_to).filter(Boolean))
     return ['all', ...Array.from(s).sort()] as string[]
   }, [rows])
 
-  const years = useMemo(() => {
+  const yearOpts = useMemo(() => {
     const s = new Set<string>()
-    rows.forEach(r => { const d = closedDate(r); if (d) s.add(String(d.getFullYear())) })
+    rows.forEach(r => { const d = bestDate(r); if (d) s.add(String(d.getFullYear())) })
     return ['all', ...Array.from(s).sort().reverse()]
   }, [rows])
 
   const filtered = useMemo(() => {
     let list = rows
-    if (filterPortal !== 'all') list = list.filter(r => r.portal === filterPortal)
-    if (filterDealer !== 'all') list = list.filter(r => r.dealer_code === filterDealer)
+    if (filterPortal  !== 'all') list = list.filter(r => r.portal === filterPortal)
+    if (filterDealer  !== 'all') list = list.filter(r => r.dealer_code === filterDealer)
     if (filterAdvisor !== 'all') list = list.filter(r => r.sr_assigned_to === filterAdvisor)
-    if (filterYear !== 'all') list = list.filter(r => { const d = closedDate(r); return d && String(d.getFullYear()) === filterYear })
-    if (filterMonth !== 'all') list = list.filter(r => { const d = closedDate(r); return d && d.getMonth() === Number(filterMonth) })
-    if (filterStatus !== 'all') list = list.filter(r => r.jc_status === filterStatus)
+    if (filterYear    !== 'all') list = list.filter(r => { const d = bestDate(r); return d && String(d.getFullYear()) === filterYear })
+    if (filterMonth   !== 'all') list = list.filter(r => { const d = bestDate(r); return d && d.getMonth() === Number(filterMonth) })
+    if (filterInv     !== 'all') list = list.filter(r => r.invoiced === filterInv)
     if (search.trim()) {
       const q = search.toLowerCase()
       list = list.filter(r =>
-        (r.job_card_no || '').toLowerCase().includes(q) ||
-        (r.vehicle_reg_no || '').toLowerCase().includes(q) ||
-        (r.customer_name || '').toLowerCase().includes(q) ||
-        (r.sr_assigned_to || '').toLowerCase().includes(q) ||
-        (r.chassis_no || '').toLowerCase().includes(q)
+        (r.job_card_no    ?? '').toLowerCase().includes(q) ||
+        (r.vehicle_reg_no ?? '').toLowerCase().includes(q) ||
+        (r.customer_name  ?? '').toLowerCase().includes(q) ||
+        (r.sr_assigned_to ?? '').toLowerCase().includes(q) ||
+        (r.chassis_no     ?? '').toLowerCase().includes(q)
       )
     }
     return list
-  }, [rows, filterPortal, filterDealer, filterAdvisor, filterYear, filterMonth, filterStatus, search])
+  }, [rows, filterPortal, filterDealer, filterAdvisor, filterYear, filterMonth, filterInv, search])
 
-  // KPIs
-  const kpis = useMemo(() => ({
-    total: filtered.length,
-    ev: filtered.filter(r => r.portal === 'EV').length,
-    pv: filtered.filter(r => r.portal === 'PV').length,
-    totalInvoice: filtered.reduce((s, r) => s + (r.total_invoice_amount ?? 0), 0),
-    totalLabour: filtered.reduce((s, r) => s + (r.final_labour_amount ?? 0), 0),
-    totalSpares: filtered.reduce((s, r) => s + (r.final_spares_amount ?? 0), 0),
-    avgRO: filtered.length > 0
-      ? filtered.reduce((s, r) => s + (r.total_invoice_amount ?? 0), 0) / filtered.length
-      : 0,
-    evValue: filtered.filter(r => r.portal === 'EV').reduce((s, r) => s + (r.total_invoice_amount ?? 0), 0),
-    pvValue: filtered.filter(r => r.portal === 'PV').reduce((s, r) => s + (r.total_invoice_amount ?? 0), 0),
-  }), [filtered])
+  // ── Aggregates strictly on Invoiced? column ────────────────────────────────
+  const agg = useMemo(() => {
+    const inv  = filtered.filter(r => r.invoiced === 'Y')
+    const notInv = filtered.filter(r => r.invoiced === 'N')
+    return {
+      total:       filtered.length,
+      invQty:      inv.length,
+      notInvQty:   notInv.length,
+      invValue:    inv.reduce((s,r)    => s + (r.total_invoice_amount ?? 0), 0),
+      pendingValue: notInv.reduce((s,r) => s + (r.total_invoice_amount ?? 0), 0),
+      labourInv:   inv.reduce((s,r)    => s + (r.final_labour_amount  ?? 0), 0),
+      sparesInv:   inv.reduce((s,r)    => s + (r.final_spares_amount  ?? 0), 0),
+      avgRO:       inv.length > 0
+        ? inv.reduce((s,r) => s + (r.total_invoice_amount ?? 0), 0) / inv.length : 0,
+      evTotal:     filtered.filter(r => r.portal === 'EV').length,
+      pvTotal:     filtered.filter(r => r.portal === 'PV').length,
+      evInv:       filtered.filter(r => r.portal === 'EV' && r.invoiced === 'Y').length,
+      pvInv:       filtered.filter(r => r.portal === 'PV' && r.invoiced === 'Y').length,
+      evNotInv:    filtered.filter(r => r.portal === 'EV' && r.invoiced === 'N').length,
+      pvNotInv:    filtered.filter(r => r.portal === 'PV' && r.invoiced === 'N').length,
+      evInvValue:  filtered.filter(r => r.portal === 'EV' && r.invoiced === 'Y').reduce((s,r) => s + (r.total_invoice_amount ?? 0), 0),
+      pvInvValue:  filtered.filter(r => r.portal === 'PV' && r.invoiced === 'Y').reduce((s,r) => s + (r.total_invoice_amount ?? 0), 0),
+      evPendValue: filtered.filter(r => r.portal === 'EV' && r.invoiced === 'N').reduce((s,r) => s + (r.total_invoice_amount ?? 0), 0),
+      pvPendValue: filtered.filter(r => r.portal === 'PV' && r.invoiced === 'N').reduce((s,r) => s + (r.total_invoice_amount ?? 0), 0),
+    }
+  }, [filtered])
 
   // Advisor aggregation
   const advisorData = useMemo(() => {
-    const map = new Map<string, { name: string; qty: number; invoice: number; spares: number; labour: number; portal: Set<string> }>()
+    const map = new Map<string, {
+      name: string; portal: Set<string>
+      total: number; inv: number; notInv: number
+      invValue: number; pendValue: number
+    }>()
     filtered.forEach(r => {
       const k = r.sr_assigned_to || '—'
-      if (!map.has(k)) map.set(k, { name: parseAdvisor(r.sr_assigned_to), qty: 0, invoice: 0, spares: 0, labour: 0, portal: new Set() })
+      if (!map.has(k)) map.set(k, { name: adv(r.sr_assigned_to), portal: new Set(), total: 0, inv: 0, notInv: 0, invValue: 0, pendValue: 0 })
       const e = map.get(k)!
-      e.qty++
-      e.invoice += r.total_invoice_amount ?? 0
-      e.spares += r.final_spares_amount ?? 0
-      e.labour += r.final_labour_amount ?? 0
+      e.total++
       if (r.portal) e.portal.add(r.portal)
+      if (r.invoiced === 'Y') { e.inv++; e.invValue += r.total_invoice_amount ?? 0 }
+      else                    { e.notInv++; e.pendValue += r.total_invoice_amount ?? 0 }
     })
-    return Array.from(map.values()).sort((a, b) => b.invoice - a.invoice)
+    return Array.from(map.values()).sort((a, b) => b.invValue - a.invValue)
   }, [filtered])
 
   // Monthly aggregation
   const monthlyData = useMemo(() => {
-    const map = new Map<string, { year: number; month: number; label: string; qty: number; invoice: number; spares: number; labour: number; ev: number; pv: number }>()
+    const map = new Map<string, {
+      year: number; month: number; label: string
+      total: number; inv: number; notInv: number
+      invValue: number; pendValue: number; ev: number; pv: number
+    }>()
     filtered.forEach(r => {
-      const d = closedDate(r)
-      if (!d) return
-      const k = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+      const d = bestDate(r); if (!d) return
+      const k = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`
       if (!map.has(k)) map.set(k, {
         year: d.getFullYear(), month: d.getMonth(),
         label: `${MONTHS[d.getMonth()]} ${d.getFullYear()}`,
-        qty: 0, invoice: 0, spares: 0, labour: 0, ev: 0, pv: 0
+        total: 0, inv: 0, notInv: 0, invValue: 0, pendValue: 0, ev: 0, pv: 0
       })
       const e = map.get(k)!
-      e.qty++
-      e.invoice += r.total_invoice_amount ?? 0
-      e.spares += r.final_spares_amount ?? 0
-      e.labour += r.final_labour_amount ?? 0
-      if (r.portal === 'EV') e.ev++
-      else e.pv++
+      e.total++
+      if (r.portal === 'EV') e.ev++; else e.pv++
+      if (r.invoiced === 'Y') { e.inv++; e.invValue += r.total_invoice_amount ?? 0 }
+      else                    { e.notInv++; e.pendValue += r.total_invoice_amount ?? 0 }
     })
-    return Array.from(map.values()).sort((a, b) => a.year !== b.year ? a.year - b.year : a.month - b.month)
+    return Array.from(map.values()).sort((a,b) => a.year !== b.year ? a.year - b.year : a.month - b.month)
   }, [filtered])
 
-  // Status aggregation
-  const statusData = useMemo(() => {
-    const map = new Map<string, number>()
-    filtered.forEach(r => {
-      const k = r.jc_status || '—'
-      map.set(k, (map.get(k) ?? 0) + 1)
-    })
-    return Array.from(map.entries()).sort((a, b) => b[1] - a[1])
-  }, [filtered])
-
-  // ── Filter bar ─────────────────────────────────────────────────────────────
+  // ── Filter Bar ────────────────────────────────────────────────────────────
   const filterBar = (
-    <div className="flex flex-wrap gap-2 items-center mb-4">
-      <input type="text" placeholder="Search JC, Reg, Customer…" value={search} onChange={e => setSearch(e.target.value)}
+    <div className="flex flex-wrap gap-2 items-center mb-4 print:hidden">
+      <input type="text" placeholder="Search JC, Reg, Customer…" value={search}
+        onChange={e => setSearch(e.target.value)}
         className="rounded-lg border border-gray-200 px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300 w-52" />
       <select value={filterPortal} onChange={e => setFilterPortal(e.target.value as 'all'|'EV'|'PV')}
         className="rounded-lg border border-gray-200 px-2 py-1.5 text-sm focus:outline-none">
@@ -282,70 +296,70 @@ export default function JcClosedInvoicedReport(_props: ReportViewProps) {
       </select>
       <select value={filterAdvisor} onChange={e => setFilterAdvisor(e.target.value)}
         className="rounded-lg border border-gray-200 px-2 py-1.5 text-sm focus:outline-none">
-        {advisors.map(a => <option key={a} value={a}>{a === 'all' ? 'All Advisors' : parseAdvisor(a)}</option>)}
+        {advisorOpts.map(a => <option key={a} value={a}>{a === 'all' ? 'All Advisors' : adv(a)}</option>)}
       </select>
       <select value={filterYear} onChange={e => setFilterYear(e.target.value)}
         className="rounded-lg border border-gray-200 px-2 py-1.5 text-sm focus:outline-none">
-        {years.map(y => <option key={y} value={y}>{y === 'all' ? 'All Years' : y}</option>)}
+        {yearOpts.map(y => <option key={y} value={y}>{y === 'all' ? 'All Years' : y}</option>)}
       </select>
       <select value={filterMonth} onChange={e => setFilterMonth(e.target.value)}
         className="rounded-lg border border-gray-200 px-2 py-1.5 text-sm focus:outline-none">
         <option value="all">All Months</option>
-        {MONTHS.map((m, i) => <option key={i} value={i}>{m}</option>)}
+        {MONTHS.map((m,i) => <option key={i} value={i}>{m}</option>)}
       </select>
-      <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)}
+      <select value={filterInv} onChange={e => setFilterInv(e.target.value as 'all'|'Y'|'N')}
         className="rounded-lg border border-gray-200 px-2 py-1.5 text-sm focus:outline-none">
-        <option value="all">All Statuses</option>
-        {['Closed','Open','Completed','Cancel'].map(s => <option key={s} value={s}>{s}</option>)}
+        <option value="all">Invoiced? — All</option>
+        <option value="Y">Invoiced (Y)</option>
+        <option value="N">Not Invoiced (N)</option>
       </select>
     </div>
   )
 
-  // ── Export helpers ─────────────────────────────────────────────────────────
-  const exportFiltered = () => exportXLSX(filtered.map(r => ({
-    'Job Card #': r.job_card_no,
-    'Status': r.jc_status,
-    'Invoiced?': r.invoiced,
-    'Portal': r.portal,
-    'Dealer': r.dealer_code,
-    'Reg No': r.vehicle_reg_no,
-    'Customer': r.customer_name,
-    'Advisor': parseAdvisor(r.sr_assigned_to),
-    'Model': r.product_line,
-    'SR Type': r.sr_type,
-    'Labour (₹)': r.final_labour_amount,
-    'Spares (₹)': r.final_spares_amount,
-    'Invoice Value (₹)': r.total_invoice_amount,
-    'Closed Date': r.closed_date ? new Date(r.closed_date).toLocaleDateString('en-IN') : '',
-  })), 'JC_Closed_Invoiced')
+  // ── Exports ───────────────────────────────────────────────────────────────
+  const exportAll = () => exportXLSX(filtered.map(r => ({
+    'Job Card #':       r.job_card_no,
+    'Invoiced?':        r.invoiced,
+    'Status':           r.jc_status,
+    'Portal':           r.portal,
+    'Dealer':           r.dealer_code,
+    'Reg No':           r.vehicle_reg_no,
+    'Customer':         r.customer_name,
+    'Advisor':          adv(r.sr_assigned_to),
+    'Model':            r.product_line,
+    'SR Type':          r.sr_type,
+    'Labour (₹)':       r.final_labour_amount,
+    'Spares (₹)':       r.final_spares_amount,
+    'Invoice Value (₹)':r.total_invoice_amount,
+    'Closed Date':      r.closed_date ? new Date(r.closed_date).toLocaleDateString('en-IN') : '',
+  })), 'JC_Closed_NotInvoiced')
 
   const exportAdvisor = () => exportXLSX(advisorData.map(a => ({
-    'Advisor': a.name,
-    'JC Qty': a.qty,
-    'Total Invoice (₹)': a.invoice,
-    'Spares (₹)': a.spares,
-    'Labour (₹)': a.labour,
-    'Avg RO (₹)': a.qty > 0 ? +(a.invoice / a.qty).toFixed(0) : 0,
-    'Portal': Array.from(a.portal).join('/'),
-  })), 'Advisor_Wise_JCI')
+    'Advisor':              a.name,
+    'Total JC':             a.total,
+    'Invoiced (Y)':         a.inv,
+    'Not Invoiced (N)':     a.notInv,
+    'Invoiced Value (₹)':   a.invValue,
+    'Pending Value (₹)':    a.pendValue,
+    'Portal':               Array.from(a.portal).join('/'),
+  })), 'Advisor_JCI')
 
   const exportMonthly = () => exportXLSX(monthlyData.map(m => ({
-    'Month': m.label,
-    'JC Qty': m.qty,
-    'Invoice Value (₹)': m.invoice,
-    'Spares (₹)': m.spares,
-    'Labour (₹)': m.labour,
-    'EV JCs': m.ev,
-    'PV JCs': m.pv,
+    'Month':                m.label,
+    'Total JC':             m.total,
+    'Invoiced (Y)':         m.inv,
+    'Not Invoiced (N)':     m.notInv,
+    'Invoice Value (₹)':    m.invValue,
+    'Pending Value (₹)':    m.pendValue,
+    'EV JCs':               m.ev,
+    'PV JCs':               m.pv,
   })), 'Monthly_JCI')
 
-  // ── Print ───────────────────────────────────────────────────────────────────
-  const handlePrint = () => window.print()
-
+  // ─────────────────────────────────────────────────────────────────────────
   if (loading) return (
     <div className="flex items-center justify-center h-48">
       <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500" />
-      <span className="ml-3 text-gray-500">Loading JC data…</span>
+      <span className="ml-3 text-gray-500">Loading…</span>
     </div>
   )
 
@@ -353,7 +367,7 @@ export default function JcClosedInvoicedReport(_props: ReportViewProps) {
     <div className="rounded-xl border border-dashed border-gray-200 bg-gray-50 p-10 text-center">
       <p className="text-gray-500 font-medium">No data imported yet.</p>
       <p className="text-sm text-gray-400 mt-1">
-        Go to <a href="/import" className="text-blue-500 underline">Import Page → Parts Daily Reports → JC Closed but Invoiced</a> to upload.
+        Go to <a href="/import" className="text-blue-500 underline">Import → Parts Daily Reports → JC Closed but Not Invoiced</a>
       </p>
     </div>
   )
@@ -361,25 +375,22 @@ export default function JcClosedInvoicedReport(_props: ReportViewProps) {
   return (
     <div className="space-y-4">
       {/* Header */}
-      <div className="flex items-center justify-between flex-wrap gap-2">
+      <div className="flex items-center justify-between flex-wrap gap-2 print:hidden">
         <div>
-          <h2 className="text-base font-bold text-gray-800">JC Closed but Invoiced</h2>
-          {lastUpload && <p className="text-xs text-gray-400">Last imported: {lastUpload}</p>}
+          <h2 className="text-base font-bold text-gray-800">JC Closed but Not Invoiced</h2>
+          {lastUpload && <p className="text-xs text-gray-400">Last imported: {lastUpload} · {rows.length.toLocaleString('en-IN')} total records (Y: {rows.filter(r=>r.invoiced==='Y').length.toLocaleString('en-IN')} · N: {rows.filter(r=>r.invoiced==='N').length.toLocaleString('en-IN')})</p>}
         </div>
         <div className="flex gap-2">
-          <button onClick={exportFiltered}
-            className="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700">
-            ⬇ Excel
-          </button>
-          <button onClick={handlePrint}
+          <ExportBtn onClick={exportAll} label="⬇ Export All" />
+          <button onClick={() => window.print()}
             className="rounded-lg bg-gray-100 px-3 py-1.5 text-xs font-semibold text-gray-700 hover:bg-gray-200">
             🖨 Print
           </button>
         </div>
       </div>
 
-      {/* Tab bar */}
-      <div className="flex gap-1 border-b border-gray-100 overflow-x-auto pb-1">
+      {/* Tabs */}
+      <div className="flex gap-1 border-b border-gray-100 overflow-x-auto pb-1 print:hidden">
         {TABS.map(t => (
           <button key={t.id} onClick={() => setTab(t.id)}
             className={['whitespace-nowrap rounded-t-lg px-4 py-2 text-sm font-medium transition-colors',
@@ -389,177 +400,201 @@ export default function JcClosedInvoicedReport(_props: ReportViewProps) {
         ))}
       </div>
 
-      {/* ── DASHBOARD ────────────────────────────────────────────────────────── */}
+      {/* ── DASHBOARD ────────────────────────────────────────────────────── */}
       {tab === 'dashboard' && (
         <div className="space-y-5">
           {filterBar}
-          {/* KPI Cards */}
+          {/* KPI row */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            <KpiCard label="Total JC Qty" value={num(kpis.total)} color="border-gray-200 bg-white text-gray-900" />
-            <KpiCard label="Total Invoice Value" value={rs(kpis.totalInvoice)} color="border-blue-100 bg-blue-50 text-blue-900" />
-            <KpiCard label="Total Spares Value" value={rs(kpis.totalSpares)} color="border-violet-100 bg-violet-50 text-violet-900" />
-            <KpiCard label="Total Labour Value" value={rs(kpis.totalLabour)} color="border-amber-100 bg-amber-50 text-amber-900" />
-            <KpiCard label="Average RO Value" value={rs(kpis.avgRO)} color="border-emerald-100 bg-emerald-50 text-emerald-900" />
-            <KpiCard label="EV Total JCs" value={num(kpis.ev)} sub={rs(kpis.evValue)} color="border-emerald-100 bg-emerald-50 text-emerald-800" />
-            <KpiCard label="PV Total JCs" value={num(kpis.pv)} sub={rs(kpis.pvValue)} color="border-blue-100 bg-blue-50 text-blue-800" />
-            <KpiCard label="EV vs PV Value"
-              value={`${kpis.totalInvoice > 0 ? ((kpis.evValue / kpis.totalInvoice) * 100).toFixed(0) : 0}% EV`}
-              sub={`${kpis.totalInvoice > 0 ? ((kpis.pvValue / kpis.totalInvoice) * 100).toFixed(0) : 0}% PV`}
-              color="border-orange-100 bg-orange-50 text-orange-900" />
+            <Kpi label="Total Job Cards"    value={agg.total.toLocaleString('en-IN')}      accent="border-gray-200 bg-white text-gray-900" />
+            <Kpi label="Invoiced (Y)"       value={agg.invQty.toLocaleString('en-IN')}     sub={pct(agg.invQty,agg.total)+' of total'} accent="border-emerald-100 bg-emerald-50 text-emerald-900" />
+            <Kpi label="Not Invoiced (N)"   value={agg.notInvQty.toLocaleString('en-IN')}  sub={pct(agg.notInvQty,agg.total)+' of total'} accent="border-rose-100 bg-rose-50 text-rose-900" />
+            <Kpi label="Invoice Value"      value={rs(agg.invValue)}                        sub="Invoiced records only" accent="border-blue-100 bg-blue-50 text-blue-900" />
+            <Kpi label="Pending Value"      value={rs(agg.pendingValue)}                    sub="Not-Invoiced records" accent="border-orange-100 bg-orange-50 text-orange-900" />
+            <Kpi label="Avg RO (Invoiced)"  value={rs(agg.avgRO)}                           accent="border-violet-100 bg-violet-50 text-violet-900" />
+            <Kpi label="EV Total JCs"       value={agg.evTotal.toLocaleString('en-IN')}     sub={`Y:${agg.evInv} N:${agg.evNotInv}`} accent="border-emerald-100 bg-emerald-50 text-emerald-800" />
+            <Kpi label="PV Total JCs"       value={agg.pvTotal.toLocaleString('en-IN')}     sub={`Y:${agg.pvInv} N:${agg.pvNotInv}`} accent="border-blue-100 bg-blue-50 text-blue-800" />
           </div>
-          {/* Month-wise trend */}
+
+          {/* Invoice status bar */}
           <div className="rounded-xl border border-gray-100 bg-white p-4">
-            <p className="text-sm font-semibold text-gray-700 mb-3">Month-wise Invoice Trend</p>
-            <div className="space-y-2">
-              {monthlyData.map(m => (
-                <MiniBar key={m.label} label={m.label} value={m.invoice}
-                  max={Math.max(...monthlyData.map(x => x.invoice))} color="bg-blue-500" />
+            <p className="text-sm font-semibold text-gray-700 mb-3">Invoiced ? — Overall Split</p>
+            <div className="space-y-3">
+              {[
+                { label: `Invoiced (Y) — ${agg.invQty} JCs`, val: agg.invQty, color: 'bg-emerald-500' },
+                { label: `Not Invoiced (N) — ${agg.notInvQty} JCs`, val: agg.notInvQty, color: 'bg-rose-500' },
+              ].map(x => (
+                <div key={x.label}>
+                  <div className="flex justify-between text-xs mb-1 font-medium">
+                    <span>{x.label}</span>
+                    <span>{pct(x.val, agg.total)}</span>
+                  </div>
+                  <div className="h-4 rounded-full bg-gray-100">
+                    <div className={`h-4 rounded-full ${x.color}`} style={{ width: pct(x.val, agg.total) }} />
+                  </div>
+                </div>
               ))}
             </div>
           </div>
-          {/* Advisor performance */}
-          <div className="rounded-xl border border-gray-100 bg-white p-4">
-            <p className="text-sm font-semibold text-gray-700 mb-3">Top Advisor Performance (Invoice Value)</p>
-            <div className="space-y-2">
-              {advisorData.slice(0, 10).map(a => (
-                <MiniBar key={a.name} label={a.name} value={a.invoice}
-                  max={advisorData[0]?.invoice || 1} color="bg-violet-500" />
-              ))}
-            </div>
-          </div>
-          {/* EV vs PV + Spare vs Labour */}
+
+          {/* EV/PV side-by-side */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="rounded-xl border border-gray-100 bg-white p-4">
-              <p className="text-sm font-semibold text-gray-700 mb-3">EV vs PV Comparison</p>
-              <div className="space-y-3">
-                {[{label:'EV', val:kpis.evValue, color:'bg-emerald-500'},{label:'PV', val:kpis.pvValue, color:'bg-blue-500'}].map(x => (
-                  <div key={x.label}>
-                    <div className="flex justify-between text-xs mb-1"><span>{x.label}</span><span>{rs(x.val)}</span></div>
-                    <div className="h-3 rounded-full bg-gray-100">
-                      <div className={`h-3 rounded-full ${x.color}`}
-                        style={{ width: `${kpis.totalInvoice > 0 ? (x.val / kpis.totalInvoice) * 100 : 0}%` }} />
+            {([['EV','emerald', agg.evTotal, agg.evInv, agg.evNotInv, agg.evInvValue, agg.evPendValue],
+               ['PV','blue',    agg.pvTotal, agg.pvInv, agg.pvNotInv, agg.pvInvValue, agg.pvPendValue]] as const).map(
+              ([portal, col, tot, inv2, notInv2, invVal, pendVal]) => (
+                <div key={portal} className={`rounded-xl border border-${col}-100 bg-${col}-50 p-4`}>
+                  <div className="flex items-center gap-2 mb-3">
+                    <span className={`rounded-full bg-${col}-600 px-2 py-0.5 text-xs font-bold text-white`}>{portal}</span>
+                    <span className="text-sm font-semibold text-gray-700">{tot.toLocaleString('en-IN')} Total JCs</span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 text-xs">
+                    <div className="rounded-lg bg-white p-2 border border-emerald-100">
+                      <p className="text-gray-400">Invoiced (Y)</p>
+                      <p className="font-bold text-emerald-700 text-base">{inv2.toLocaleString('en-IN')}</p>
+                      <p className="text-gray-400">{rs(invVal)}</p>
+                    </div>
+                    <div className="rounded-lg bg-white p-2 border border-rose-100">
+                      <p className="text-gray-400">Not Invoiced (N)</p>
+                      <p className="font-bold text-rose-700 text-base">{notInv2.toLocaleString('en-IN')}</p>
+                      <p className="text-gray-400">{rs(pendVal)}</p>
                     </div>
                   </div>
-                ))}
-              </div>
-            </div>
-            <div className="rounded-xl border border-gray-100 bg-white p-4">
-              <p className="text-sm font-semibold text-gray-700 mb-3">Spare vs Labour Split</p>
-              <div className="space-y-3">
-                {[{label:'Spares', val:kpis.totalSpares, color:'bg-violet-500'},{label:'Labour', val:kpis.totalLabour, color:'bg-amber-500'}].map(x => (
-                  <div key={x.label}>
-                    <div className="flex justify-between text-xs mb-1"><span>{x.label}</span><span>{rs(x.val)}</span></div>
-                    <div className="h-3 rounded-full bg-gray-100">
-                      <div className={`h-3 rounded-full ${x.color}`}
-                        style={{ width: `${(kpis.totalSpares + kpis.totalLabour) > 0 ? (x.val / (kpis.totalSpares + kpis.totalLabour)) * 100 : 0}%` }} />
+                </div>
+              )
+            )}
+          </div>
+
+          {/* Advisor mini bars */}
+          <div className="rounded-xl border border-gray-100 bg-white p-4">
+            <p className="text-sm font-semibold text-gray-700 mb-3">Advisor — Invoiced Value (Top 10)</p>
+            <div className="space-y-2">
+              {advisorData.slice(0,10).map(a => {
+                const maxV = advisorData[0]?.invValue || 1
+                return (
+                  <div key={a.name} className="flex items-center gap-2 text-xs">
+                    <span className="w-24 truncate text-gray-600">{a.name}</span>
+                    <div className="flex-1 rounded-full bg-gray-100 h-2">
+                      <div className="h-2 rounded-full bg-blue-500" style={{ width: `${(a.invValue/maxV)*100}%` }} />
                     </div>
+                    <span className="w-16 text-right font-medium">{a.inv}Y/{a.notInv}N</span>
+                    <span className="w-20 text-right text-blue-700 font-semibold">{rs(a.invValue)}</span>
                   </div>
-                ))}
-              </div>
+                )
+              })}
             </div>
           </div>
         </div>
       )}
 
-      {/* ── SUMMARY ──────────────────────────────────────────────────────────── */}
+      {/* ── SUMMARY ──────────────────────────────────────────────────────── */}
       {tab === 'summary' && (
         <div className="space-y-5">
           {filterBar}
-          {(['EV', 'PV'] as const).map(portal => {
-            const pRows = filtered.filter(r => r.portal === portal)
-            if (!pRows.length) return null
-            // Group by advisor
-            const adv = new Map<string, { name: string; qty: number; value: number }>()
-            pRows.forEach(r => {
+          <ExportBtn onClick={exportAll} />
+          {(['EV','PV'] as const).map(portal => {
+            const pr = filtered.filter(r => r.portal === portal)
+            if (!pr.length) return null
+            const pInv    = pr.filter(r => r.invoiced === 'Y')
+            const pNotInv = pr.filter(r => r.invoiced === 'N')
+            const pInvVal    = pInv.reduce((s,r) => s+(r.total_invoice_amount??0), 0)
+            const pPendVal   = pNotInv.reduce((s,r) => s+(r.total_invoice_amount??0), 0)
+            // Advisor breakdown
+            const advMap = new Map<string, { name:string; total:number; inv:number; notInv:number; invVal:number; pendVal:number }>()
+            pr.forEach(r => {
               const k = r.sr_assigned_to || '—'
-              if (!adv.has(k)) adv.set(k, { name: parseAdvisor(r.sr_assigned_to), qty: 0, value: 0 })
-              const e = adv.get(k)!
-              e.qty++; e.value += r.total_invoice_amount ?? 0
+              if (!advMap.has(k)) advMap.set(k, { name: adv(r.sr_assigned_to), total:0, inv:0, notInv:0, invVal:0, pendVal:0 })
+              const e = advMap.get(k)!
+              e.total++
+              if (r.invoiced === 'Y') { e.inv++; e.invVal += r.total_invoice_amount??0 }
+              else                    { e.notInv++; e.pendVal += r.total_invoice_amount??0 }
             })
-            const advArr = Array.from(adv.values()).sort((a, b) => b.value - a.value)
-            const totalQty = pRows.length
-            const totalVal = pRows.reduce((s, r) => s + (r.total_invoice_amount ?? 0), 0)
+            const advArr = Array.from(advMap.values()).sort((a,b) => b.invVal - a.invVal)
             return (
               <div key={portal} className="rounded-xl border border-gray-100 bg-white overflow-hidden">
-                <div className={`px-4 py-3 flex items-center justify-between ${portal === 'EV' ? 'bg-emerald-50 border-b border-emerald-100' : 'bg-blue-50 border-b border-blue-100'}`}>
-                  <div className="flex items-center gap-2">
-                    <span className={`rounded-full px-2 py-0.5 text-xs font-bold text-white ${portal === 'EV' ? 'bg-emerald-600' : 'bg-blue-600'}`}>{portal}</span>
-                    <span className="text-sm font-semibold text-gray-800">{portal === 'EV' ? 'EV Sitapura (500A840)' : 'PV'}</span>
-                  </div>
-                  <div className="text-right text-xs text-gray-600">
-                    <span className="font-bold">{num(totalQty)} JCs</span> · <span className="font-bold">{rs(totalVal)}</span>
-                  </div>
+                <div className={`px-4 py-3 flex flex-wrap items-center gap-4 ${portal==='EV' ? 'bg-emerald-50 border-b border-emerald-100' : 'bg-blue-50 border-b border-blue-100'}`}>
+                  <span className={`rounded-full px-2 py-0.5 text-xs font-bold text-white ${portal==='EV'?'bg-emerald-600':'bg-blue-600'}`}>{portal}</span>
+                  <span className="text-sm font-semibold text-gray-800">Total: <strong>{pr.length}</strong></span>
+                  <span className="text-sm text-emerald-700">Invoiced Y: <strong>{pInv.length}</strong> ({rs(pInvVal)})</span>
+                  <span className="text-sm text-rose-700">Not Invoiced N: <strong>{pNotInv.length}</strong> ({rs(pPendVal)})</span>
                 </div>
                 <table className="w-full text-sm">
-                  <thead className="bg-gray-50">
+                  <thead className="bg-gray-50 border-b border-gray-200">
                     <tr>
-                      <th className="text-left px-4 py-2 text-xs font-semibold text-gray-500">#</th>
-                      <th className="text-left px-4 py-2 text-xs font-semibold text-gray-500">Advisor</th>
-                      <th className="text-right px-4 py-2 text-xs font-semibold text-gray-500">JC Qty</th>
-                      <th className="text-right px-4 py-2 text-xs font-semibold text-gray-500">JC Value</th>
+                      <Th>#</Th><Th>Advisor</Th>
+                      <Th right>Total JCs</Th><Th right>Invoiced (Y)</Th><Th right>Not Inv (N)</Th>
+                      <Th right>Invoice Value</Th><Th right>Pending Value</Th>
                     </tr>
                   </thead>
                   <tbody>
-                    {advArr.map((a, i) => (
+                    {advArr.map((a,i) => (
                       <tr key={a.name} className="border-t border-gray-50 hover:bg-gray-50">
-                        <td className="px-4 py-2 text-gray-400">{i + 1}</td>
-                        <td className="px-4 py-2 font-medium">{a.name}</td>
-                        <td className="px-4 py-2 text-right">{num(a.qty)}</td>
-                        <td className="px-4 py-2 text-right font-semibold">{rs(a.value)}</td>
+                        <Td cls="text-gray-400">{i+1}</Td>
+                        <Td bold>{a.name}</Td>
+                        <Td right>{a.total}</Td>
+                        <Td right cls="text-emerald-700 font-semibold">{a.inv}</Td>
+                        <Td right cls="text-rose-700 font-semibold">{a.notInv}</Td>
+                        <Td right bold>{rs(a.invVal)}</Td>
+                        <Td right cls="text-orange-600">{rs(a.pendVal)}</Td>
                       </tr>
                     ))}
                   </tbody>
-                  <tfoot className="bg-gray-50 border-t border-gray-200">
+                  <tfoot className="bg-gray-50 border-t-2 border-gray-300">
                     <tr>
-                      <td colSpan={2} className="px-4 py-2 text-xs font-bold text-gray-700">TOTAL</td>
-                      <td className="px-4 py-2 text-right text-xs font-bold text-gray-800">{num(totalQty)}</td>
-                      <td className="px-4 py-2 text-right text-xs font-bold text-gray-800">{rs(totalVal)}</td>
+                      <td colSpan={2} className="px-4 py-2.5 text-xs font-bold text-gray-700">TOTAL</td>
+                      <Td right bold>{pr.length}</Td>
+                      <Td right cls="text-emerald-700 font-bold">{pInv.length}</Td>
+                      <Td right cls="text-rose-700 font-bold">{pNotInv.length}</Td>
+                      <Td right bold>{rs(pInvVal)}</Td>
+                      <Td right cls="text-orange-600 font-bold">{rs(pPendVal)}</Td>
                     </tr>
                   </tfoot>
                 </table>
               </div>
             )
           })}
+          {/* Grand total across all portals */}
+          <div className="rounded-xl border-2 border-gray-300 bg-gray-50 px-4 py-3 flex flex-wrap gap-6 text-sm">
+            <span className="font-bold text-gray-700">GRAND TOTAL</span>
+            <span>Total JCs: <strong>{agg.total}</strong></span>
+            <span className="text-emerald-700">Invoiced Y: <strong>{agg.invQty}</strong></span>
+            <span className="text-rose-700">Not Invoiced N: <strong>{agg.notInvQty}</strong></span>
+            <span className="text-blue-700">Invoice Value: <strong>{rs(agg.invValue)}</strong></span>
+            <span className="text-orange-600">Pending Value: <strong>{rs(agg.pendingValue)}</strong></span>
+          </div>
         </div>
       )}
 
-      {/* ── ADVISOR WISE ─────────────────────────────────────────────────────── */}
+      {/* ── ADVISOR WISE ─────────────────────────────────────────────────── */}
       {tab === 'advisor' && (
         <div className="space-y-4">
           {filterBar}
-          <div className="flex gap-2 mb-2">
-            <button onClick={exportAdvisor}
-              className="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700">
-              ⬇ Export Excel
-            </button>
-          </div>
-          <div className="rounded-xl border border-gray-100 bg-white overflow-hidden">
+          <ExportBtn onClick={exportAdvisor} />
+          <div className="rounded-xl border border-gray-100 bg-white overflow-auto">
             <table className="w-full text-sm">
               <thead className="bg-gray-50 border-b border-gray-200">
                 <tr>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500">#</th>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500">Advisor</th>
-                  <th className="text-right px-4 py-3 text-xs font-semibold text-gray-500">JC Qty</th>
-                  <th className="text-right px-4 py-3 text-xs font-semibold text-gray-500">Invoice Value</th>
-                  <th className="text-right px-4 py-3 text-xs font-semibold text-gray-500">Spares</th>
-                  <th className="text-right px-4 py-3 text-xs font-semibold text-gray-500">Labour</th>
-                  <th className="text-right px-4 py-3 text-xs font-semibold text-gray-500">Avg RO</th>
-                  <th className="text-center px-4 py-3 text-xs font-semibold text-gray-500">Portal</th>
+                  <Th>#</Th><Th>Advisor</Th>
+                  <Th right>Total JCs</Th>
+                  <Th right>Invoiced (Y)</Th>
+                  <Th right>Not Inv (N)</Th>
+                  <Th right>Inv Value</Th>
+                  <Th right>Pending Value</Th>
+                  <Th>Portal</Th>
                 </tr>
               </thead>
               <tbody>
-                {advisorData.map((a, i) => (
+                {advisorData.map((a,i) => (
                   <tr key={a.name} className="border-t border-gray-50 hover:bg-gray-50">
-                    <td className="px-4 py-2.5 text-gray-400">{i + 1}</td>
-                    <td className="px-4 py-2.5 font-medium text-gray-800">{a.name}</td>
-                    <td className="px-4 py-2.5 text-right">{num(a.qty)}</td>
-                    <td className="px-4 py-2.5 text-right font-semibold">{rs(a.invoice)}</td>
-                    <td className="px-4 py-2.5 text-right text-violet-700">{rs(a.spares)}</td>
-                    <td className="px-4 py-2.5 text-right text-amber-700">{rs(a.labour)}</td>
-                    <td className="px-4 py-2.5 text-right text-blue-700">{rs(a.qty > 0 ? a.invoice / a.qty : 0)}</td>
-                    <td className="px-4 py-2.5 text-center">
+                    <Td cls="text-gray-400">{i+1}</Td>
+                    <Td bold>{a.name}</Td>
+                    <Td right>{a.total}</Td>
+                    <Td right cls="text-emerald-700 font-semibold">{a.inv}</Td>
+                    <Td right cls="text-rose-700 font-semibold">{a.notInv}</Td>
+                    <Td right bold>{rs(a.invValue)}</Td>
+                    <Td right cls="text-orange-600">{rs(a.pendValue)}</Td>
+                    <td className="px-4 py-2.5">
                       {Array.from(a.portal).map(p => (
-                        <span key={p} className={`inline-block rounded-full px-2 py-0.5 text-[10px] font-bold text-white mr-1 ${p === 'EV' ? 'bg-emerald-500' : 'bg-blue-500'}`}>{p}</span>
+                        <span key={p} className={`mr-1 inline-block rounded-full px-2 py-0.5 text-[10px] font-bold text-white ${p==='EV'?'bg-emerald-500':'bg-blue-500'}`}>{p}</span>
                       ))}
                     </td>
                   </tr>
@@ -568,11 +603,11 @@ export default function JcClosedInvoicedReport(_props: ReportViewProps) {
               <tfoot className="bg-gray-50 border-t-2 border-gray-300">
                 <tr>
                   <td colSpan={2} className="px-4 py-2.5 text-xs font-bold text-gray-700">GRAND TOTAL</td>
-                  <td className="px-4 py-2.5 text-right text-xs font-bold">{num(kpis.total)}</td>
-                  <td className="px-4 py-2.5 text-right text-xs font-bold">{rs(kpis.totalInvoice)}</td>
-                  <td className="px-4 py-2.5 text-right text-xs font-bold text-violet-700">{rs(kpis.totalSpares)}</td>
-                  <td className="px-4 py-2.5 text-right text-xs font-bold text-amber-700">{rs(kpis.totalLabour)}</td>
-                  <td className="px-4 py-2.5 text-right text-xs font-bold">{rs(kpis.avgRO)}</td>
+                  <Td right bold>{agg.total}</Td>
+                  <Td right cls="text-emerald-700 font-bold">{agg.invQty}</Td>
+                  <Td right cls="text-rose-700 font-bold">{agg.notInvQty}</Td>
+                  <Td right bold>{rs(agg.invValue)}</Td>
+                  <Td right cls="text-orange-600 font-bold">{rs(agg.pendingValue)}</Td>
                   <td />
                 </tr>
               </tfoot>
@@ -581,51 +616,107 @@ export default function JcClosedInvoicedReport(_props: ReportViewProps) {
         </div>
       )}
 
-      {/* ── MONTHLY ──────────────────────────────────────────────────────────── */}
+      {/* ── MONTHLY ──────────────────────────────────────────────────────── */}
       {tab === 'monthly' && (
         <div className="space-y-4">
           {filterBar}
-          <div className="flex gap-2 mb-2">
-            <button onClick={exportMonthly}
-              className="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700">
-              ⬇ Export Excel
-            </button>
-          </div>
-          <div className="rounded-xl border border-gray-100 bg-white overflow-hidden">
+          <ExportBtn onClick={exportMonthly} />
+          {/* EV months */}
+          {(['EV','PV'] as const).map(portal => {
+            const pMonths = monthlyData.filter(m => {
+              const rows2 = filtered.filter(r => r.portal === portal)
+              return rows2.some(r => {
+                const d = bestDate(r)
+                return d && `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}` === `${m.year}-${String(m.month+1).padStart(2,'0')}`
+              })
+            })
+            const pAll = filtered.filter(r => r.portal === portal)
+            if (!pAll.length) return null
+            // recompute per portal
+            const pMonthMap = new Map<string, { label:string; total:number; inv:number; notInv:number; invVal:number; pendVal:number }>()
+            pAll.forEach(r => {
+              const d = bestDate(r); if (!d) return
+              const k = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`
+              if (!pMonthMap.has(k)) pMonthMap.set(k, { label:`${MONTHS[d.getMonth()]} ${d.getFullYear()}`, total:0,inv:0,notInv:0,invVal:0,pendVal:0 })
+              const e = pMonthMap.get(k)!
+              e.total++
+              if (r.invoiced==='Y') { e.inv++; e.invVal+=r.total_invoice_amount??0 }
+              else { e.notInv++; e.pendVal+=r.total_invoice_amount??0 }
+            })
+            const pArr = Array.from(pMonthMap.entries()).sort().map(([,v])=>v)
+            return (
+              <div key={portal} className="rounded-xl border border-gray-100 bg-white overflow-auto">
+                <div className={`px-4 py-2.5 border-b font-semibold text-sm ${portal==='EV'?'bg-emerald-50 border-emerald-100':'bg-blue-50 border-blue-100'}`}>
+                  <span className={`rounded-full px-2 py-0.5 text-xs font-bold text-white mr-2 ${portal==='EV'?'bg-emerald-600':'bg-blue-600'}`}>{portal}</span>
+                  Month-wise Breakdown
+                </div>
+                <table className="w-full text-sm">
+                  <thead className="bg-gray-50 border-b border-gray-200">
+                    <tr>
+                      <Th>Month</Th><Th right>Total JCs</Th><Th right>Invoiced (Y)</Th>
+                      <Th right>Not Inv (N)</Th><Th right>Invoice Value</Th><Th right>Pending Value</Th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {pArr.map(m => (
+                      <tr key={m.label} className="border-t border-gray-50 hover:bg-gray-50">
+                        <Td bold>{m.label}</Td>
+                        <Td right>{m.total}</Td>
+                        <Td right cls="text-emerald-700 font-semibold">{m.inv}</Td>
+                        <Td right cls="text-rose-700 font-semibold">{m.notInv}</Td>
+                        <Td right bold>{rs(m.invVal)}</Td>
+                        <Td right cls="text-orange-600">{rs(m.pendVal)}</Td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot className="bg-gray-50 border-t-2 border-gray-300">
+                    <tr>
+                      <td className="px-4 py-2.5 text-xs font-bold">TOTAL</td>
+                      <Td right bold>{pArr.reduce((s,m)=>s+m.total,0)}</Td>
+                      <Td right cls="text-emerald-700 font-bold">{pArr.reduce((s,m)=>s+m.inv,0)}</Td>
+                      <Td right cls="text-rose-700 font-bold">{pArr.reduce((s,m)=>s+m.notInv,0)}</Td>
+                      <Td right bold>{rs(pArr.reduce((s,m)=>s+m.invVal,0))}</Td>
+                      <Td right cls="text-orange-600 font-bold">{rs(pArr.reduce((s,m)=>s+m.pendVal,0))}</Td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            )
+          })}
+          {/* Overall monthly (all portals) */}
+          <div className="rounded-xl border border-gray-100 bg-white overflow-auto">
+            <div className="px-4 py-2.5 border-b bg-gray-50 font-semibold text-sm text-gray-700">All Portals — Combined</div>
             <table className="w-full text-sm">
               <thead className="bg-gray-50 border-b border-gray-200">
                 <tr>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500">Month</th>
-                  <th className="text-right px-4 py-3 text-xs font-semibold text-gray-500">JC Qty</th>
-                  <th className="text-right px-4 py-3 text-xs font-semibold text-gray-500">Invoice Value</th>
-                  <th className="text-right px-4 py-3 text-xs font-semibold text-gray-500">Spares</th>
-                  <th className="text-right px-4 py-3 text-xs font-semibold text-gray-500">Labour</th>
-                  <th className="text-right px-4 py-3 text-xs font-semibold text-gray-500">EV JCs</th>
-                  <th className="text-right px-4 py-3 text-xs font-semibold text-gray-500">PV JCs</th>
+                  <Th>Month</Th><Th right>Total JCs</Th><Th right>Invoiced (Y)</Th>
+                  <Th right>Not Inv (N)</Th><Th right>Invoice Value</Th><Th right>Pending Value</Th><Th right>EV</Th><Th right>PV</Th>
                 </tr>
               </thead>
               <tbody>
                 {monthlyData.map(m => (
                   <tr key={m.label} className="border-t border-gray-50 hover:bg-gray-50">
-                    <td className="px-4 py-2.5 font-semibold text-gray-800">{m.label}</td>
-                    <td className="px-4 py-2.5 text-right">{num(m.qty)}</td>
-                    <td className="px-4 py-2.5 text-right font-semibold">{rs(m.invoice)}</td>
-                    <td className="px-4 py-2.5 text-right text-violet-700">{rs(m.spares)}</td>
-                    <td className="px-4 py-2.5 text-right text-amber-700">{rs(m.labour)}</td>
-                    <td className="px-4 py-2.5 text-right text-emerald-700">{num(m.ev)}</td>
-                    <td className="px-4 py-2.5 text-right text-blue-700">{num(m.pv)}</td>
+                    <Td bold>{m.label}</Td>
+                    <Td right>{m.total}</Td>
+                    <Td right cls="text-emerald-700 font-semibold">{m.inv}</Td>
+                    <Td right cls="text-rose-700 font-semibold">{m.notInv}</Td>
+                    <Td right bold>{rs(m.invValue)}</Td>
+                    <Td right cls="text-orange-600">{rs(m.pendValue)}</Td>
+                    <Td right cls="text-emerald-600">{m.ev}</Td>
+                    <Td right cls="text-blue-600">{m.pv}</Td>
                   </tr>
                 ))}
               </tbody>
               <tfoot className="bg-gray-50 border-t-2 border-gray-300">
                 <tr>
-                  <td className="px-4 py-2.5 text-xs font-bold text-gray-700">YEARLY GRAND TOTAL</td>
-                  <td className="px-4 py-2.5 text-right text-xs font-bold">{num(monthlyData.reduce((s,m)=>s+m.qty,0))}</td>
-                  <td className="px-4 py-2.5 text-right text-xs font-bold">{rs(monthlyData.reduce((s,m)=>s+m.invoice,0))}</td>
-                  <td className="px-4 py-2.5 text-right text-xs font-bold text-violet-700">{rs(monthlyData.reduce((s,m)=>s+m.spares,0))}</td>
-                  <td className="px-4 py-2.5 text-right text-xs font-bold text-amber-700">{rs(monthlyData.reduce((s,m)=>s+m.labour,0))}</td>
-                  <td className="px-4 py-2.5 text-right text-xs font-bold text-emerald-700">{num(monthlyData.reduce((s,m)=>s+m.ev,0))}</td>
-                  <td className="px-4 py-2.5 text-right text-xs font-bold text-blue-700">{num(monthlyData.reduce((s,m)=>s+m.pv,0))}</td>
+                  <td className="px-4 py-2.5 text-xs font-bold">YEARLY TOTAL</td>
+                  <Td right bold>{agg.total}</Td>
+                  <Td right cls="text-emerald-700 font-bold">{agg.invQty}</Td>
+                  <Td right cls="text-rose-700 font-bold">{agg.notInvQty}</Td>
+                  <Td right bold>{rs(agg.invValue)}</Td>
+                  <Td right cls="text-orange-600 font-bold">{rs(agg.pendingValue)}</Td>
+                  <Td right cls="text-emerald-600 font-bold">{agg.evTotal}</Td>
+                  <Td right cls="text-blue-600 font-bold">{agg.pvTotal}</Td>
                 </tr>
               </tfoot>
             </table>
@@ -633,81 +724,30 @@ export default function JcClosedInvoicedReport(_props: ReportViewProps) {
         </div>
       )}
 
-      {/* ── SPARE vs LABOUR ──────────────────────────────────────────────────── */}
-      {tab === 'spare-labour' && (
-        <div className="space-y-4">
-          {filterBar}
-          {(['EV', 'PV'] as const).map(portal => {
-            const pAdv = advisorData.filter(a => a.portal.has(portal))
-            if (!pAdv.length) return null
-            const totSpares = pAdv.reduce((s, a) => s + a.spares, 0)
-            const totLabour = pAdv.reduce((s, a) => s + a.labour, 0)
-            const totInv = pAdv.reduce((s, a) => s + a.invoice, 0)
-            return (
-              <div key={portal} className="rounded-xl border border-gray-100 bg-white overflow-hidden">
-                <div className={`px-4 py-3 border-b ${portal === 'EV' ? 'bg-emerald-50 border-emerald-100' : 'bg-blue-50 border-blue-100'}`}>
-                  <span className={`rounded-full px-2 py-0.5 text-xs font-bold text-white ${portal === 'EV' ? 'bg-emerald-600' : 'bg-blue-600'}`}>{portal}</span>
-                  <span className="ml-2 text-sm font-semibold text-gray-800">Spare vs Labour Breakdown</span>
-                </div>
-                <table className="w-full text-sm">
-                  <thead className="bg-gray-50 border-b border-gray-200">
-                    <tr>
-                      <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500">Advisor</th>
-                      <th className="text-right px-4 py-3 text-xs font-semibold text-gray-500">Spares</th>
-                      <th className="text-right px-4 py-3 text-xs font-semibold text-gray-500">Labour</th>
-                      <th className="text-right px-4 py-3 text-xs font-semibold text-gray-500">Invoice Total</th>
-                      <th className="text-right px-4 py-3 text-xs font-semibold text-gray-500">Spare %</th>
-                      <th className="text-right px-4 py-3 text-xs font-semibold text-gray-500">Labour %</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {pAdv.map(a => {
-                      const total = a.spares + a.labour
-                      const sp = total > 0 ? (a.spares / total) * 100 : 0
-                      const lp = total > 0 ? (a.labour / total) * 100 : 0
-                      return (
-                        <tr key={a.name} className="border-t border-gray-50 hover:bg-gray-50">
-                          <td className="px-4 py-2.5 font-medium">{a.name}</td>
-                          <td className="px-4 py-2.5 text-right text-violet-700">{rs(a.spares)}</td>
-                          <td className="px-4 py-2.5 text-right text-amber-700">{rs(a.labour)}</td>
-                          <td className="px-4 py-2.5 text-right font-semibold">{rs(a.invoice)}</td>
-                          <td className="px-4 py-2.5 text-right">{sp.toFixed(1)}%</td>
-                          <td className="px-4 py-2.5 text-right">{lp.toFixed(1)}%</td>
-                        </tr>
-                      )
-                    })}
-                  </tbody>
-                  <tfoot className="bg-gray-50 border-t-2 border-gray-300">
-                    <tr>
-                      <td className="px-4 py-2.5 text-xs font-bold">TOTAL</td>
-                      <td className="px-4 py-2.5 text-right text-xs font-bold text-violet-700">{rs(totSpares)}</td>
-                      <td className="px-4 py-2.5 text-right text-xs font-bold text-amber-700">{rs(totLabour)}</td>
-                      <td className="px-4 py-2.5 text-right text-xs font-bold">{rs(totInv)}</td>
-                      <td className="px-4 py-2.5 text-right text-xs font-bold">{(totSpares+totLabour)>0?((totSpares/(totSpares+totLabour))*100).toFixed(1):0}%</td>
-                      <td className="px-4 py-2.5 text-right text-xs font-bold">{(totSpares+totLabour)>0?((totLabour/(totSpares+totLabour))*100).toFixed(1):0}%</td>
-                    </tr>
-                  </tfoot>
-                </table>
-              </div>
-            )
-          })}
-        </div>
-      )}
-
-      {/* ── JC STATUS ────────────────────────────────────────────────────────── */}
+      {/* ── INVOICE STATUS ────────────────────────────────────────────────── */}
       {tab === 'jc-status' && (
         <div className="space-y-4">
           {filterBar}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
-            {statusData.map(([status, count]) => (
-              <div key={status} className="rounded-xl border border-gray-100 bg-white p-4">
-                <p className="text-xs text-gray-500 font-medium uppercase tracking-wide">{status}</p>
-                <p className="text-2xl font-bold text-gray-900 mt-1">{num(count)}</p>
-                <p className="text-xs text-gray-400 mt-0.5">{filtered.length > 0 ? ((count / filtered.length) * 100).toFixed(1) : 0}% of total</p>
+          <ExportBtn onClick={exportAll} />
+          {/* Status KPI cards — strictly 2 values from Invoiced? column */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {[
+              { label: 'Invoiced (Y)', count: agg.invQty,    value: agg.invValue,    color: 'border-emerald-200 bg-emerald-50', badge: 'bg-emerald-600' },
+              { label: 'Not Invoiced (N)', count: agg.notInvQty, value: agg.pendingValue, color: 'border-rose-200 bg-rose-50', badge: 'bg-rose-600' },
+            ].map(s => (
+              <div key={s.label} className={`rounded-xl border p-5 ${s.color}`}>
+                <div className="flex items-center gap-2 mb-2">
+                  <span className={`rounded-full px-2 py-0.5 text-xs font-bold text-white ${s.badge}`}>{s.label}</span>
+                </div>
+                <p className="text-3xl font-bold text-gray-900">{s.count.toLocaleString('en-IN')}</p>
+                <p className="text-sm text-gray-500 mt-1">Job Cards</p>
+                <p className="text-lg font-semibold text-gray-700 mt-2">{rs(s.value)}</p>
+                <p className="text-xs text-gray-400">Total Value</p>
+                <p className="text-xs text-gray-500 mt-1">{pct(s.count, agg.total)} of total {agg.total} JCs</p>
               </div>
             ))}
           </div>
-          {/* Full list with pagination */}
+          {/* Paginated detail table */}
           <JciTable rows={filtered} />
         </div>
       )}
@@ -719,42 +759,44 @@ export default function JcClosedInvoicedReport(_props: ReportViewProps) {
 function JciTable({ rows }: { rows: JciRow[] }) {
   const [page, setPage] = useState(0)
   const PAGE_SIZE = 50
-  const total = rows.length
-  const slice = rows.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE)
-  const pages = Math.ceil(total / PAGE_SIZE)
+  const pages = Math.ceil(rows.length / PAGE_SIZE)
+  const slice = rows.slice(page * PAGE_SIZE, (page+1) * PAGE_SIZE)
 
   return (
     <div>
-      <p className="text-xs text-gray-400 mb-2">{total.toLocaleString('en-IN')} records</p>
+      <p className="text-xs text-gray-400 mb-2">{rows.length.toLocaleString('en-IN')} records</p>
       <div className="rounded-xl border border-gray-100 bg-white overflow-auto">
         <table className="w-full text-xs">
           <thead className="bg-gray-50 border-b border-gray-200">
             <tr>
-              {['#','Job Card','Status','Portal','Reg No','Customer','Advisor','Spares','Labour','Invoice','Closed Date'].map(h => (
-                <th key={h} className="px-3 py-2.5 text-left font-semibold text-gray-500 whitespace-nowrap">{h}</th>
+              {['#','Job Card','Invoiced?','Status','Portal','Reg No','Customer','Advisor','Labour','Spares','Invoice Value','Date'].map(h => (
+                <th key={h} className="px-3 py-2.5 text-left text-xs font-semibold text-gray-500 whitespace-nowrap">{h}</th>
               ))}
             </tr>
           </thead>
           <tbody>
-            {slice.map((r, i) => (
+            {slice.map((r,i) => (
               <tr key={r.id} className="border-t border-gray-50 hover:bg-gray-50">
-                <td className="px-3 py-2 text-gray-400">{page * PAGE_SIZE + i + 1}</td>
-                <td className="px-3 py-2 font-medium whitespace-nowrap">{r.job_card_no || '—'}</td>
-                <td className="px-3 py-2">
-                  <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${r.jc_status === 'Closed' ? 'bg-green-100 text-green-700' : r.jc_status === 'Open' ? 'bg-amber-100 text-amber-700' : 'bg-gray-100 text-gray-600'}`}>
-                    {r.jc_status || '—'}
+                <td className="px-3 py-2 text-gray-400">{page*PAGE_SIZE+i+1}</td>
+                <td className="px-3 py-2 font-medium whitespace-nowrap">{r.job_card_no||'—'}</td>
+                <td className="px-3 py-2"><Badge v={r.invoiced} /></td>
+                <td className="px-3 py-2 whitespace-nowrap">
+                  <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${r.jc_status==='Closed'?'bg-green-100 text-green-700':r.jc_status==='Open'?'bg-amber-100 text-amber-700':'bg-gray-100 text-gray-600'}`}>
+                    {r.jc_status||'—'}
                   </span>
                 </td>
                 <td className="px-3 py-2">
-                  <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold text-white ${r.portal === 'EV' ? 'bg-emerald-500' : 'bg-blue-500'}`}>{r.portal}</span>
+                  <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold text-white ${r.portal==='EV'?'bg-emerald-500':'bg-blue-500'}`}>{r.portal}</span>
                 </td>
-                <td className="px-3 py-2">{r.vehicle_reg_no || '—'}</td>
-                <td className="px-3 py-2 truncate max-w-[120px]">{r.customer_name || '—'}</td>
-                <td className="px-3 py-2">{r.sr_assigned_to?.split('_')[0] || '—'}</td>
-                <td className="px-3 py-2 text-right text-violet-700">₹{(r.final_spares_amount ?? 0).toLocaleString('en-IN',{maximumFractionDigits:0})}</td>
-                <td className="px-3 py-2 text-right text-amber-700">₹{(r.final_labour_amount ?? 0).toLocaleString('en-IN',{maximumFractionDigits:0})}</td>
-                <td className="px-3 py-2 text-right font-semibold">₹{(r.total_invoice_amount ?? 0).toLocaleString('en-IN',{maximumFractionDigits:0})}</td>
-                <td className="px-3 py-2 whitespace-nowrap">{r.closed_date ? new Date(r.closed_date).toLocaleDateString('en-IN') : '—'}</td>
+                <td className="px-3 py-2">{r.vehicle_reg_no||'—'}</td>
+                <td className="px-3 py-2 truncate max-w-[100px]">{r.customer_name||'—'}</td>
+                <td className="px-3 py-2">{adv(r.sr_assigned_to)}</td>
+                <td className="px-3 py-2 text-right text-amber-700">₹{(r.final_labour_amount??0).toLocaleString('en-IN',{maximumFractionDigits:0})}</td>
+                <td className="px-3 py-2 text-right text-violet-700">₹{(r.final_spares_amount??0).toLocaleString('en-IN',{maximumFractionDigits:0})}</td>
+                <td className="px-3 py-2 text-right font-semibold">₹{(r.total_invoice_amount??0).toLocaleString('en-IN',{maximumFractionDigits:0})}</td>
+                <td className="px-3 py-2 whitespace-nowrap">
+                  {r.closed_date ? new Date(r.closed_date).toLocaleDateString('en-IN') : r.created_date ? new Date(r.created_date).toLocaleDateString('en-IN') : '—'}
+                </td>
               </tr>
             ))}
           </tbody>
@@ -762,10 +804,10 @@ function JciTable({ rows }: { rows: JciRow[] }) {
       </div>
       {pages > 1 && (
         <div className="flex items-center justify-between mt-3">
-          <button disabled={page === 0} onClick={() => setPage(p => p - 1)}
+          <button disabled={page===0} onClick={()=>setPage(p=>p-1)}
             className="rounded-lg border px-3 py-1.5 text-xs disabled:opacity-40 hover:bg-gray-50">← Prev</button>
-          <span className="text-xs text-gray-500">Page {page + 1} of {pages}</span>
-          <button disabled={page >= pages - 1} onClick={() => setPage(p => p + 1)}
+          <span className="text-xs text-gray-500">Page {page+1} of {pages}</span>
+          <button disabled={page>=pages-1} onClick={()=>setPage(p=>p+1)}
             className="rounded-lg border px-3 py-1.5 text-xs disabled:opacity-40 hover:bg-gray-50">Next →</button>
         </div>
       )}

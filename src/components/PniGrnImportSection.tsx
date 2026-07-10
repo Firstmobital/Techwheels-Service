@@ -616,7 +616,7 @@ export function PniGrnImportSection() {
               ))}
             </div>
             <p className="mt-2 text-[11px] text-gray-400">
-              Dashboard: <a href="/reports/parts/jc-closed-invoiced" className="text-indigo-500 underline hover:text-indigo-700">Reports → Parts Reports → JC Closed but Invoiced</a>
+              Dashboard: <a href="/reports/parts/jc-closed-invoiced" className="text-indigo-500 underline hover:text-indigo-700">Reports → Parts Reports → JC Closed but Not Invoiced</a>
             </p>
           </div>
         </div>

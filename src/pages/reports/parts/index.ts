@@ -95,10 +95,10 @@ export const PARTS_REPORTS: ReportDefinition[] = [
   {
     id: 'jc-closed-invoiced',
     categoryId: 'parts',
-    label: 'JC Closed but Invoiced',
+    label: 'JC Closed but Not Invoiced',
     group: 'Daily Operations',
-    description: 'Dashboard, advisor-wise, monthly, spare vs labour, and JC status reports for closed and invoiced job cards.',
-    cardHint: 'Best for daily operational tracking of closed & invoiced JCs across EV and PV.',
+    description: 'Full report showing all JCs — split strictly by Invoiced? column (Y=Invoiced / N=Not Invoiced) — with advisor, monthly, and status breakdowns.',
+    cardHint: 'Best for daily tracking of JC invoice status — counts match Excel Invoiced? column exactly.',
     Component: JcClosedInvoicedReport,
   },
 ]
