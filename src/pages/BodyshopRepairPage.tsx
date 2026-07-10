@@ -3611,7 +3611,10 @@ export default function BodyshopRepairPage() {
       return floorCompleted && qcPassed && !riDone
     }
 
-    return effectiveCurrentStage === stage
+    // For stage 15+: clamp so a card whose DB stage is 15+ but RI isn't done
+    // still appears in stage 14 (RI), not in Billing.
+    const clampedStage = clampStageUntilRiComplete(card, effectiveCurrentStage)
+    return clampedStage === stage
   }
 
   function isCardInStageQueue(card: RepairCard, stage: number): boolean {
