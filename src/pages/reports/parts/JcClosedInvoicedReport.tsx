@@ -44,14 +44,15 @@ interface JciRow {
   delay_reason: string | null
 }
 
-type TabId = 'dashboard' | 'summary' | 'advisor' | 'monthly' | 'jc-status'
+type TabId = 'dashboard' | 'summary' | 'advisor' | 'monthly' | 'jc-status' | 'status-report'
 
 const TABS: { id: TabId; label: string }[] = [
-  { id: 'dashboard', label: '📊 Dashboard' },
-  { id: 'summary',   label: 'Summary' },
-  { id: 'advisor',   label: 'Advisor Wise' },
-  { id: 'monthly',   label: 'Month / Year Wise' },
-  { id: 'jc-status', label: 'Invoice Status' },
+  { id: 'dashboard',     label: '📊 Dashboard' },
+  { id: 'summary',       label: 'Summary' },
+  { id: 'advisor',       label: 'Advisor Wise' },
+  { id: 'monthly',       label: 'Month / Year Wise' },
+  { id: 'jc-status',     label: 'Invoice Status' },
+  { id: 'status-report', label: '🔖 JC Status Report' },
 ]
 
 const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
@@ -132,6 +133,8 @@ export default function JcClosedInvoicedReport(_props: ReportViewProps) {
   const [filterMonth,   setFilterMonth]   = useState('all')
   const [filterYear,    setFilterYear]    = useState('all')
   const [filterInv,     setFilterInv]     = useState<'all'|'Y'|'N'>('all')   // Invoiced? filter
+  const [filterStatus,  setFilterStatus]  = useState('all')                   // Column K status filter
+  const [filterModel,   setFilterModel]   = useState('all')
   const [search,        setSearch]        = useState('')
 
   // ── Load ──────────────────────────────────────────────────────────────────
@@ -179,6 +182,16 @@ export default function JcClosedInvoicedReport(_props: ReportViewProps) {
     return ['all', ...Array.from(s).sort()] as string[]
   }, [rows])
 
+  const statusOpts = useMemo(() => {
+    const s = new Set(rows.map(r => r.jc_status).filter(Boolean))
+    return ['all', ...Array.from(s).sort()] as string[]
+  }, [rows])
+
+  const modelOpts = useMemo(() => {
+    const s = new Set(rows.map(r => r.product_line).filter(Boolean))
+    return ['all', ...Array.from(s).sort()] as string[]
+  }, [rows])
+
   const yearOpts = useMemo(() => {
     const s = new Set<string>()
     rows.forEach(r => { const d = bestDate(r); if (d) s.add(String(d.getFullYear())) })
@@ -193,6 +206,8 @@ export default function JcClosedInvoicedReport(_props: ReportViewProps) {
     if (filterYear    !== 'all') list = list.filter(r => { const d = bestDate(r); return d && String(d.getFullYear()) === filterYear })
     if (filterMonth   !== 'all') list = list.filter(r => { const d = bestDate(r); return d && d.getMonth() === Number(filterMonth) })
     if (filterInv     !== 'all') list = list.filter(r => r.invoiced === filterInv)
+    if (filterStatus  !== 'all') list = list.filter(r => r.jc_status === filterStatus)
+    if (filterModel   !== 'all') list = list.filter(r => r.product_line === filterModel)
     if (search.trim()) {
       const q = search.toLowerCase()
       list = list.filter(r =>
@@ -276,6 +291,35 @@ export default function JcClosedInvoicedReport(_props: ReportViewProps) {
     return Array.from(map.values()).sort((a,b) => a.year !== b.year ? a.year - b.year : a.month - b.month)
   }, [filtered])
 
+  // ── JC Status aggregation (Column K = jc_status) ─────────────────────────
+  const statusReport = useMemo(() => {
+    // Get all unique statuses directly from jc_status column (Column K)
+    const statusSet = new Set<string>()
+    filtered.forEach(r => { if (r.jc_status) statusSet.add(r.jc_status) })
+    const statuses = Array.from(statusSet).sort()
+
+    return statuses.map(status => {
+      const sr = filtered.filter(r => r.jc_status === status)
+      const evRows = sr.filter(r => r.portal === 'EV')
+      const pvRows = sr.filter(r => r.portal === 'PV')
+      const invY = sr.filter(r => r.invoiced === 'Y')
+      const invN = sr.filter(r => r.invoiced === 'N')
+      return {
+        status,
+        total: sr.length,
+        ev: evRows.length,
+        pv: pvRows.length,
+        invValue:    invY.reduce((s, r) => s + (r.total_invoice_amount ?? 0), 0),
+        pendValue:   invN.reduce((s, r) => s + (r.total_invoice_amount ?? 0), 0),
+        totalValue:  sr.reduce((s, r) => s + (r.total_invoice_amount ?? 0), 0),
+        spares:      sr.reduce((s, r) => s + (r.final_spares_amount ?? 0), 0),
+        labour:      sr.reduce((s, r) => s + (r.final_labour_amount ?? 0), 0),
+        pctOfTotal:  filtered.length > 0 ? (sr.length / filtered.length) * 100 : 0,
+        rows: sr,
+      }
+    })
+  }, [filtered])
+
   // ── Filter Bar ────────────────────────────────────────────────────────────
   const filterBar = (
     <div className="flex flex-wrap gap-2 items-center mb-4 print:hidden">
@@ -314,6 +358,14 @@ export default function JcClosedInvoicedReport(_props: ReportViewProps) {
         <option value="Y">Invoiced (Y)</option>
         <option value="N">Not Invoiced (N)</option>
       </select>
+      <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)}
+        className="rounded-lg border border-gray-200 px-2 py-1.5 text-sm focus:outline-none">
+        {statusOpts.map(s => <option key={s} value={s}>{s === 'all' ? 'All JC Statuses' : s}</option>)}
+      </select>
+      <select value={filterModel} onChange={e => setFilterModel(e.target.value)}
+        className="rounded-lg border border-gray-200 px-2 py-1.5 text-sm focus:outline-none max-w-[160px]">
+        {modelOpts.map(m => <option key={m} value={m}>{m === 'all' ? 'All Models' : m}</option>)}
+      </select>
     </div>
   )
 
@@ -344,6 +396,36 @@ export default function JcClosedInvoicedReport(_props: ReportViewProps) {
     'Pending Value (₹)':    a.pendValue,
     'Portal':               Array.from(a.portal).join('/'),
   })), 'Advisor_JC_Not_Invoiced')
+
+  const exportStatusReport = () => exportXLSX(statusReport.flatMap(s => s.rows.map(r => ({
+    'JC Status (Col K)':  r.jc_status,
+    'Job Card #':         r.job_card_no,
+    'Invoiced?':          r.invoiced,
+    'Portal':             r.portal,
+    'Dealer':             r.dealer_code,
+    'Reg No':             r.vehicle_reg_no,
+    'Customer':           r.customer_name,
+    'Advisor':            adv(r.sr_assigned_to),
+    'Model':              r.product_line,
+    'SR Type':            r.sr_type,
+    'Labour (₹)':         r.final_labour_amount,
+    'Spares (₹)':         r.final_spares_amount,
+    'Invoice Value (₹)':  r.total_invoice_amount,
+    'Date':               r.closed_date ? new Date(r.closed_date).toLocaleDateString('en-IN') : '',
+  }))), 'JC_Status_Report')
+
+  const exportStatusSummary = () => exportXLSX(statusReport.map(s => ({
+    'JC Status (Col K)': s.status,
+    'Total JC Qty':      s.total,
+    'EV JCs':            s.ev,
+    'PV JCs':            s.pv,
+    'Invoice Value (₹)': s.invValue,
+    'Pending Value (₹)': s.pendValue,
+    'Total Value (₹)':   s.totalValue,
+    'Spares (₹)':        s.spares,
+    'Labour (₹)':        s.labour,
+    '% of Total':        s.pctOfTotal.toFixed(1) + '%',
+  })), 'JC_Status_Summary')
 
   const exportMonthly = () => exportXLSX(monthlyData.map(m => ({
     'Month':                m.label,
@@ -743,6 +825,196 @@ export default function JcClosedInvoicedReport(_props: ReportViewProps) {
           </div>
           {/* Paginated detail table */}
           <JciTable rows={filtered} />
+        </div>
+      )}
+
+      {/* ── JC STATUS REPORT (Column K) ─────────────────────────────────── */}
+      {tab === 'status-report' && (
+        <div className="space-y-5">
+          {filterBar}
+          <div className="flex gap-2 flex-wrap print:hidden">
+            <ExportBtn onClick={exportStatusSummary} label="⬇ Summary Excel" />
+            <ExportBtn onClick={exportStatusReport}  label="⬇ Full Detail Excel" />
+            <button onClick={() => window.print()}
+              className="rounded-lg bg-gray-100 px-3 py-1.5 text-xs font-semibold text-gray-700 hover:bg-gray-200">
+              🖨 Print
+            </button>
+          </div>
+
+          {/* Source note */}
+          <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+            ⚑ Status values are read directly from <strong>Column K ("Status")</strong> of the imported Excel — no derivation applied.
+          </p>
+
+          {/* Summary KPI cards — one per status */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            {statusReport.map(s => {
+              const colorMap: Record<string, string> = {
+                'Closed':              'border-emerald-200 bg-emerald-50 text-emerald-900',
+                'Open':                'border-amber-200 bg-amber-50 text-amber-900',
+                'Cancel':              'border-rose-200 bg-rose-50 text-rose-900',
+                'Completed':           'border-blue-200 bg-blue-50 text-blue-900',
+                'Ready for Delivery':  'border-violet-200 bg-violet-50 text-violet-900',
+              }
+              const col = colorMap[s.status] ?? 'border-gray-200 bg-white text-gray-900'
+              return (
+                <div key={s.status} className={`rounded-xl border p-4 ${col}`}>
+                  <p className="text-xs font-semibold uppercase tracking-wide opacity-60">{s.status}</p>
+                  <p className="mt-1 text-3xl font-bold">{s.total.toLocaleString('en-IN')}</p>
+                  <p className="text-xs opacity-60 mt-0.5">{s.pctOfTotal.toFixed(1)}% of total</p>
+                  <div className="mt-2 grid grid-cols-2 gap-1 text-xs">
+                    <span className="text-emerald-700">EV: <strong>{s.ev}</strong></span>
+                    <span className="text-blue-700">PV: <strong>{s.pv}</strong></span>
+                  </div>
+                  <p className="text-xs font-semibold mt-2">{rs(s.totalValue)}</p>
+                  <p className="text-[10px] opacity-50">Total Value</p>
+                </div>
+              )
+            })}
+          </div>
+
+          {/* Status bar chart */}
+          <div className="rounded-xl border border-gray-100 bg-white p-4">
+            <p className="text-sm font-semibold text-gray-700 mb-3">Status Distribution (JC Count)</p>
+            <div className="space-y-3">
+              {statusReport.map(s => {
+                const maxQty = Math.max(...statusReport.map(x => x.total), 1)
+                const barMap: Record<string, string> = { 'Closed': 'bg-emerald-500', 'Open': 'bg-amber-500', 'Cancel': 'bg-rose-500', 'Completed': 'bg-blue-500', 'Ready for Delivery': 'bg-violet-500' }
+                const bar = barMap[s.status] ?? 'bg-gray-400'
+                return (
+                  <div key={s.status}>
+                    <div className="flex justify-between text-xs mb-1">
+                      <span className="font-medium text-gray-700">{s.status}</span>
+                      <span className="text-gray-500">{s.total.toLocaleString('en-IN')} JCs ({s.pctOfTotal.toFixed(1)}%) · {rs(s.totalValue)}</span>
+                    </div>
+                    <div className="h-5 rounded-full bg-gray-100 flex overflow-hidden">
+                      <div className={`h-5 rounded-full ${bar} transition-all`} style={{ width: `${(s.total / maxQty) * 100}%` }} />
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+
+          {/* EV vs PV per status */}
+          <div className="rounded-xl border border-gray-100 bg-white p-4">
+            <p className="text-sm font-semibold text-gray-700 mb-3">EV vs PV breakdown by Status</p>
+            <div className="overflow-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-gray-50 border-b border-gray-200">
+                  <tr>
+                    <Th>Status (Col K)</Th>
+                    <Th right>Total JCs</Th>
+                    <Th right>EV</Th>
+                    <Th right>PV</Th>
+                    <Th right>Invoice Value</Th>
+                    <Th right>Pending Value</Th>
+                    <Th right>Spares</Th>
+                    <Th right>Labour</Th>
+                    <Th right>% of Total</Th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {statusReport.map(s => (
+                    <tr key={s.status} className="border-t border-gray-50 hover:bg-gray-50">
+                      <Td bold>{s.status}</Td>
+                      <Td right>{s.total.toLocaleString('en-IN')}</Td>
+                      <Td right cls="text-emerald-700">{s.ev}</Td>
+                      <Td right cls="text-blue-700">{s.pv}</Td>
+                      <Td right bold>{rs(s.invValue)}</Td>
+                      <Td right cls="text-orange-600">{rs(s.pendValue)}</Td>
+                      <Td right cls="text-violet-700">{rs(s.spares)}</Td>
+                      <Td right cls="text-amber-700">{rs(s.labour)}</Td>
+                      <Td right>{s.pctOfTotal.toFixed(1)}%</Td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot className="bg-gray-50 border-t-2 border-gray-300">
+                  <tr>
+                    <td className="px-4 py-2.5 text-xs font-bold">TOTAL</td>
+                    <Td right bold>{agg.total}</Td>
+                    <Td right cls="text-emerald-700 font-bold">{agg.evTotal}</Td>
+                    <Td right cls="text-blue-700 font-bold">{agg.pvTotal}</Td>
+                    <Td right bold>{rs(agg.invValue)}</Td>
+                    <Td right cls="text-orange-600 font-bold">{rs(agg.pendingValue)}</Td>
+                    <Td right cls="text-violet-700 font-bold">{rs(agg.sparesInv)}</Td>
+                    <Td right cls="text-amber-700 font-bold">{rs(agg.labourInv)}</Td>
+                    <Td right>100%</Td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          </div>
+
+          {/* Advisor breakdown per status */}
+          {statusReport.map(s => {
+            if (!s.rows.length) return null
+            const advMap = new Map<string, { name: string; total: number; ev: number; pv: number; val: number; spares: number; labour: number; invY: number; invN: number }>()
+            s.rows.forEach(r => {
+              const k = r.sr_assigned_to || '—'
+              if (!advMap.has(k)) advMap.set(k, { name: adv(r.sr_assigned_to), total: 0, ev: 0, pv: 0, val: 0, spares: 0, labour: 0, invY: 0, invN: 0 })
+              const e = advMap.get(k)!
+              e.total++
+              if (r.portal === 'EV') e.ev++; else e.pv++
+              e.val   += r.total_invoice_amount ?? 0
+              e.spares += r.final_spares_amount ?? 0
+              e.labour += r.final_labour_amount ?? 0
+              if (r.invoiced === 'Y') e.invY++; else e.invN++
+            })
+            const advArr = Array.from(advMap.values()).sort((a, b) => b.val - a.val)
+            const statusColorHd: Record<string, string> = {
+              'Closed': 'bg-emerald-50 border-emerald-100', 'Open': 'bg-amber-50 border-amber-100',
+              'Cancel': 'bg-rose-50 border-rose-100', 'Completed': 'bg-blue-50 border-blue-100',
+              'Ready for Delivery': 'bg-violet-50 border-violet-100',
+            }
+            const hdColor = statusColorHd[s.status] ?? 'bg-gray-50 border-gray-200'
+            return (
+              <div key={s.status} className="rounded-xl border border-gray-100 bg-white overflow-auto">
+                <div className={`px-4 py-2.5 border-b font-semibold text-sm ${hdColor}`}>
+                  {s.status} — Advisor Breakdown ({s.total} JCs · {rs(s.totalValue)})
+                </div>
+                <table className="w-full text-sm">
+                  <thead className="bg-gray-50 border-b border-gray-200">
+                    <tr>
+                      <Th>#</Th><Th>Advisor</Th>
+                      <Th right>JC Qty</Th><Th right>EV</Th><Th right>PV</Th>
+                      <Th right>Inv (Y)</Th><Th right>Not Inv (N)</Th>
+                      <Th right>Value</Th><Th right>Spares</Th><Th right>Labour</Th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {advArr.map((a, i) => (
+                      <tr key={a.name} className="border-t border-gray-50 hover:bg-gray-50">
+                        <Td cls="text-gray-400">{i + 1}</Td>
+                        <Td bold>{a.name}</Td>
+                        <Td right>{a.total}</Td>
+                        <Td right cls="text-emerald-700">{a.ev}</Td>
+                        <Td right cls="text-blue-700">{a.pv}</Td>
+                        <Td right cls="text-emerald-700 font-semibold">{a.invY}</Td>
+                        <Td right cls="text-rose-700 font-semibold">{a.invN}</Td>
+                        <Td right bold>{rs(a.val)}</Td>
+                        <Td right cls="text-violet-700">{rs(a.spares)}</Td>
+                        <Td right cls="text-amber-700">{rs(a.labour)}</Td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot className="bg-gray-50 border-t-2 border-gray-300">
+                    <tr>
+                      <td colSpan={2} className="px-4 py-2.5 text-xs font-bold">TOTAL</td>
+                      <Td right bold>{s.total}</Td>
+                      <Td right cls="text-emerald-700 font-bold">{s.ev}</Td>
+                      <Td right cls="text-blue-700 font-bold">{s.pv}</Td>
+                      <Td right cls="text-emerald-700 font-bold">{s.rows.filter(r=>r.invoiced==='Y').length}</Td>
+                      <Td right cls="text-rose-700 font-bold">{s.rows.filter(r=>r.invoiced==='N').length}</Td>
+                      <Td right bold>{rs(s.totalValue)}</Td>
+                      <Td right cls="text-violet-700 font-bold">{rs(s.spares)}</Td>
+                      <Td right cls="text-amber-700 font-bold">{rs(s.labour)}</Td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            )
+          })}
         </div>
       )}
     </div>
