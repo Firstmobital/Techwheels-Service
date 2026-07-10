@@ -1,6 +1,12 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Icon } from '../components/Icon'
 import { currentMonthRange, type DateRange } from '../components/DateRangeFilter'
+import {
+  buildEmployeeLookupIndex,
+  normalizeEmployeeCode,
+  resolveEmployeeForSr,
+  type EmployeeLookupIndex,
+} from '../lib/employeeMatcher'
 import { supabase } from '../lib/supabase'
 import * as XLSX from 'xlsx'
 
@@ -540,7 +546,7 @@ export default function SATrackerPage() {
         .map((r: any) => {
           const labour  = parseAmount(r.dms_final_labour_amount)
           const saName  = String(r.sr_assigned_to ?? '').trim()
-          const fuel    = normFuelBucket(empDetailMap.get(normSAName(saName))?.fuel_type)
+          const fuel    = normFuelBucket(resolveSaEmployee(saName, r.employee_code)?.fuel_type)
           const income  = completedYesterdayJobCards.has(normalizeJobCardNumber(r.job_card_number))
             ? calculateSAIncome(labour, fuel === 'EV' ? evSharePercent : saSharePercent)
             : 0
@@ -625,7 +631,7 @@ export default function SATrackerPage() {
         const floorStatus = assignment ? statusLabel(assignment.work_status) : 'Not assigned'
         const floorCompleted = normalizeStatusValue(assignment?.work_status) === 'completed'
         const labour = parseAmount(row.dms_final_labour_amount)
-        const emp = empDetailMap.get(normSAName(serviceAdvisor))
+        const emp = resolveSaEmployee(serviceAdvisor, row.employee_code)
         const assignedToId = String(row.employee_code ?? emp?.employee_code ?? '').trim()
         const fuel = normFuelBucket(emp?.fuel_type)
         const payoutPercent = fuel === 'EV' ? evSharePercent : saSharePercent
@@ -753,16 +759,29 @@ export default function SATrackerPage() {
   // ── Load SA department mapping from employee_master ──────────────
   async function loadEmployees() {
     try {
-      const { data, error: err } = await supabase
-        .from('employee_master')
-        .select('employee_code, employee_name, department, fuel_type, bank_name, account_number, ifsc')
-        .not('employee_name', 'is', null)
-        .limit(1000)
-      if (!err && data) {
-        setSaEmployees((data as SaEmployee[]).filter(e => e.employee_name?.trim()))
-      } else if (err) {
-        console.error('employee_master fetch error:', err.message)
+      const allEmployees: SaEmployee[] = []
+      let from = 0
+
+      while (true) {
+        const { data, error: err } = await supabase
+          .from('employee_master')
+          .select('employee_code, employee_name, department, fuel_type, bank_name, account_number, ifsc')
+          .not('employee_name', 'is', null)
+          .order('employee_code', { ascending: true })
+          .range(from, from + QUERY_PAGE_SIZE - 1)
+
+        if (err) {
+          console.error('employee_master fetch error:', err.message)
+          return
+        }
+
+        const batch = ((data as SaEmployee[]) ?? []).filter((e) => e.employee_name?.trim())
+        allEmployees.push(...batch)
+        if (batch.length < QUERY_PAGE_SIZE) break
+        from += QUERY_PAGE_SIZE
       }
+
+      setSaEmployees(allEmployees)
     } catch (e) {
       console.error('loadEmployees error:', e)
     }
@@ -841,38 +860,49 @@ export default function SATrackerPage() {
       : branchFilteredRows.filter((r) => getPortalLabel(r.portal) === portalFilter),
   [branchFilteredRows, portalFilter])
 
-  // ── Department filter ──────────────────────────────────────────────────────
-  // Build a map of SA name → department (case-insensitive, trim-safe match)
-  const saNameToDept = useMemo(() => {
-    const map = new Map<string, string>()
-    saEmployees.forEach(e => {
-      if (e.employee_name && e.department) {
-        // Normalize: uppercase + collapse multiple spaces
-        const key = e.employee_name.trim().replace(/\s+/g, ' ').toUpperCase()
-        map.set(key, e.department.trim())
-      }
+  const employeeIndex = useMemo<EmployeeLookupIndex>(() =>
+    buildEmployeeLookupIndex(
+      saEmployees.map((e) => ({
+        employee_code: String(e.employee_code ?? ''),
+        employee_name: e.employee_name,
+        location: null,
+        department: e.department,
+        fuel_type: e.fuel_type,
+      })),
+    ),
+  [saEmployees])
+
+  const empByCode = useMemo(() => {
+    const map = new Map<string, SaEmployee>()
+    saEmployees.forEach((e) => {
+      const code = normalizeEmployeeCode(String(e.employee_code ?? ''))
+      if (code) map.set(code, e)
     })
     return map
   }, [saEmployees])
 
-  // Helper: normalize SA name for map lookup
-  function normSAName(raw: string | null | undefined): string {
-    return String(raw ?? '').trim().replace(/\s+/g, ' ').toUpperCase()
-  }
+  const resolveSaEmployee = useCallback((
+    srAssignedTo: string | null | undefined,
+    employeeCode?: string | null | undefined,
+  ): SaEmployee | undefined => {
+    const normalizedCode = normalizeEmployeeCode(String(employeeCode ?? ''))
+    if (normalizedCode) {
+      const byCode = empByCode.get(normalizedCode)
+      if (byCode) return byCode
+    }
+
+    const match = resolveEmployeeForSr(srAssignedTo, employeeIndex)
+    if (match.employeeCode) {
+      return empByCode.get(normalizeEmployeeCode(match.employeeCode))
+    }
+
+    return undefined
+  }, [employeeIndex, empByCode])
 
   // Helper: normalize fuel type string to EV or PV bucket
   function normFuelBucket(v: string | null | undefined): 'EV' | 'PV' {
     return String(v ?? '').trim().toUpperCase().includes('EV') ? 'EV' : 'PV'
   }
-
-  // Full employee detail map: normalized name → SaEmployee (for payout report)
-  const empDetailMap = useMemo(() => {
-    const map = new Map<string, SaEmployee>()
-    saEmployees.forEach(e => {
-      if (e.employee_name) map.set(normSAName(e.employee_name), e)
-    })
-    return map
-  }, [saEmployees])
 
   // All distinct locations / portals / depts for payout multi-select
   const allLocations = useMemo(() => Array.from(new Set(
@@ -884,26 +914,26 @@ export default function SATrackerPage() {
   )).sort(), [enrichedRows])
 
   const allDepts = useMemo(() => Array.from(new Set(
-    enrichedRows.map(r => saNameToDept.get(normSAName(r.sr_assigned_to)) ?? '').filter(Boolean)
-  )).sort(), [enrichedRows, saNameToDept])
+    enrichedRows.map(r => resolveSaEmployee(r.sr_assigned_to, r.employee_code)?.department?.trim() ?? '').filter(Boolean)
+  )).sort(), [enrichedRows, resolveSaEmployee])
 
   // Collect distinct departments present in current filteredRows
   const deptOptions = useMemo(() => {
     const depts = new Set<string>()
     filteredRows.forEach(r => {
-      const dept = saNameToDept.get(normSAName(r.sr_assigned_to))
+      const dept = resolveSaEmployee(r.sr_assigned_to, r.employee_code)?.department?.trim()
       if (dept) depts.add(dept)
     })
     return Array.from(depts).sort()
-  }, [filteredRows, saNameToDept])
+  }, [filteredRows, resolveSaEmployee])
 
   const deptFilteredRows = useMemo(() => {
     if (deptFilter === 'all') return filteredRows
     return filteredRows.filter(r => {
-      const dept = saNameToDept.get(normSAName(r.sr_assigned_to)) ?? ''
+      const dept = resolveSaEmployee(r.sr_assigned_to, r.employee_code)?.department?.trim() ?? ''
       return dept.toLowerCase() === deptFilter.toLowerCase()
     })
-  }, [filteredRows, deptFilter, saNameToDept])
+  }, [filteredRows, deptFilter, resolveSaEmployee])
 
   // ── SA summary cards ──────────────────────────────────────────────────────
 
@@ -926,7 +956,7 @@ export default function SATrackerPage() {
       existing.totalSpares += r.sparesAmt
       existing.totalInvoice += r.invoiceAmt
       existing.days.add(dateKey)
-      const fuel = normFuelBucket(empDetailMap.get(normSAName(name))?.fuel_type)
+      const fuel = normFuelBucket(resolveSaEmployee(name, r.employee_code)?.fuel_type)
       existing.totalIncome += calculateEligibleSAIncome(
         r,
         fuel === 'EV' ? evSharePercent : saSharePercent,
@@ -939,7 +969,7 @@ export default function SATrackerPage() {
     return Array.from(map.values())
       .map(({ days: _d, ...card }) => card)
       .sort((a, b) => b.totalIncome - a.totalIncome || b.jcCount - a.jcCount)
-  }, [deptFilteredRows, saSharePercent, evSharePercent, empDetailMap, completedJobCards])
+  }, [deptFilteredRows, saSharePercent, evSharePercent, resolveSaEmployee, completedJobCards])
 
   // ── Day cards for selected SA ─────────────────────────────────────────────
 
@@ -948,8 +978,13 @@ export default function SATrackerPage() {
     return deptFilteredRows.filter((r) => String(r.sr_assigned_to ?? '').trim() === selectedSA)
   }, [deptFilteredRows, selectedSA])
 
+  const selectedSaEmployee = useMemo(
+    () => resolveSaEmployee(selectedSA, selectedSARows[0]?.employee_code),
+    [selectedSA, selectedSARows, resolveSaEmployee],
+  )
+
   const dayCards = useMemo<DayWiseCard[]>(() => {
-    const selectedFuel = normFuelBucket(empDetailMap.get(normSAName(selectedSA))?.fuel_type)
+    const selectedFuel = normFuelBucket(selectedSaEmployee?.fuel_type)
     const saPct = selectedFuel === 'EV' ? evSharePercent : saSharePercent
     const map = new Map<string, DayWiseCard>()
     selectedSARows.forEach((r) => {
@@ -970,7 +1005,7 @@ export default function SATrackerPage() {
       if (b.dateKey === 'unknown') return -1
       return b.dateKey.localeCompare(a.dateKey)
     })
-  }, [selectedSARows, saSharePercent, evSharePercent, empDetailMap, selectedSA, completedJobCards])
+  }, [selectedSARows, saSharePercent, evSharePercent, selectedSaEmployee, completedJobCards])
 
   // ── JC detail rows for selected day ──────────────────────────────────────
 
@@ -1008,7 +1043,7 @@ export default function SATrackerPage() {
     const rows = enrichedRows.filter(r => {
       const loc  = getLocationLabel(r.location)
       const por  = getPortalLabel(r.portal)
-      const dept = saNameToDept.get(normSAName(r.sr_assigned_to)) ?? ''
+      const dept = resolveSaEmployee(r.sr_assigned_to, r.employee_code)?.department?.trim() ?? ''
       if (selectedLocations.length > 0 && !selectedLocations.includes(loc)) return false
       if (selectedPortals.length > 0   && !selectedPortals.includes(por))  return false
       if (selectedDepts.length > 0     && !selectedDepts.includes(dept))    return false
@@ -1016,23 +1051,24 @@ export default function SATrackerPage() {
     })
 
     // Aggregate by SA name
-    const saMap = new Map<string, { labour: number; loc: Set<string>; por: Set<string>; dept: string }>()
+    const saMap = new Map<string, { labour: number; loc: Set<string>; por: Set<string>; dept: string; employeeCode: string | null }>()
     rows.forEach(r => {
       const name = String(r.sr_assigned_to ?? '').trim()
       if (!name) return
-      const existing = saMap.get(name) ?? { labour: 0, loc: new Set(), por: new Set(), dept: '' }
+      const existing = saMap.get(name) ?? { labour: 0, loc: new Set(), por: new Set(), dept: '', employeeCode: null }
       if (completedJobCards.has(normalizeJobCardNumber(r.job_card_number))) {
         existing.labour += r.labourAmt
       }
       existing.loc.add(getLocationLabel(r.location))
       existing.por.add(getPortalLabel(r.portal))
-      existing.dept = saNameToDept.get(normSAName(name)) ?? existing.dept
+      existing.employeeCode = String(r.employee_code ?? existing.employeeCode ?? '').trim() || existing.employeeCode
+      existing.dept = resolveSaEmployee(name, existing.employeeCode)?.department?.trim() ?? existing.dept
       saMap.set(name, existing)
     })
 
     const reportRows: PayoutReportRow[] = []
     saMap.forEach((data, name) => {
-      const emp = empDetailMap.get(normSAName(name))
+      const emp = resolveSaEmployee(name, data.employeeCode)
       // Determine payout % based on fuel type
       const fuel = normFuelBucket(emp?.fuel_type)
       const pct  = fuel === 'EV' ? evSharePercent : saSharePercent
@@ -1230,7 +1266,7 @@ export default function SATrackerPage() {
           <option value="all">All ({filteredRows.length})</option>
           {deptOptions.map(dept => (
             <option key={dept} value={dept}>
-              {dept} ({filteredRows.filter(r => (saNameToDept.get(normSAName(r.sr_assigned_to)) ?? '').toLowerCase() === dept.toLowerCase()).length})
+              {dept} ({filteredRows.filter(r => (resolveSaEmployee(r.sr_assigned_to, r.employee_code)?.department?.trim() ?? '').toLowerCase() === dept.toLowerCase()).length})
             </option>
           ))}
         </select>
@@ -1495,7 +1531,7 @@ export default function SATrackerPage() {
                   <th style={{ textAlign: 'right' }}>Analytic Labour</th>
                   <th style={{ textAlign: 'right' }}>Analytic Spares</th>
                   <th style={{ textAlign: 'right' }}>Analytic Total Invoice</th>
-                  <th style={{ textAlign: 'right', color: '#2563eb' }}>SA Income ({normFuelBucket(empDetailMap.get(normSAName(selectedSA))?.fuel_type) === 'EV' ? evSharePercent : saSharePercent}%)</th>
+                  <th style={{ textAlign: 'right', color: '#2563eb' }}>SA Income ({normFuelBucket(selectedSaEmployee?.fuel_type) === 'EV' ? evSharePercent : saSharePercent}%)</th>
                   <th style={{ textAlign: 'right', color: '#15803d' }}>DMS Labour</th>
                   <th style={{ textAlign: 'right', color: '#0f766e' }}>DMS Total Invoice</th>
                 </tr>
@@ -1515,7 +1551,7 @@ export default function SATrackerPage() {
                     <td style={{ textAlign: 'right', color: '#16a34a', fontWeight: 600 }}>{formatCurrency(r.analyticLabourAmt)}</td>
                     <td style={{ textAlign: 'right', color: '#9333ea', fontWeight: 600 }}>{formatCurrency(r.sparesAmt)}</td>
                     <td style={{ textAlign: 'right', fontWeight: 700 }}>{formatCurrency(r.invoiceAmt)}</td>
-                    <td style={{ textAlign: 'right', color: '#2563eb', fontWeight: 700 }}>{formatCurrency(calculateEligibleSAIncome(r, normFuelBucket(empDetailMap.get(normSAName(selectedSA))?.fuel_type) === 'EV' ? evSharePercent : saSharePercent, completedJobCards))}</td>
+                    <td style={{ textAlign: 'right', color: '#2563eb', fontWeight: 700 }}>{formatCurrency(calculateEligibleSAIncome(r, normFuelBucket(selectedSaEmployee?.fuel_type) === 'EV' ? evSharePercent : saSharePercent, completedJobCards))}</td>
                     <td style={{ textAlign: 'right', color: '#15803d', fontWeight: 700 }}>{formatCurrency(r.dmsLabourAmt)}</td>
                     <td style={{ textAlign: 'right', color: '#0f766e', fontWeight: 700 }}>{formatCurrency(r.dmsInvoiceAmt)}</td>
                   </tr>
@@ -1534,7 +1570,7 @@ export default function SATrackerPage() {
                     {formatCurrency(dayDetailRows.reduce((s, r) => s + r.invoiceAmt, 0))}
                   </td>
                   <td style={{ textAlign: 'right', color: '#2563eb', fontWeight: 700 }}>
-                    {formatCurrency(dayDetailRows.reduce((s, r) => s + calculateEligibleSAIncome(r, normFuelBucket(empDetailMap.get(normSAName(selectedSA))?.fuel_type) === 'EV' ? evSharePercent : saSharePercent, completedJobCards), 0))}
+                    {formatCurrency(dayDetailRows.reduce((s, r) => s + calculateEligibleSAIncome(r, normFuelBucket(selectedSaEmployee?.fuel_type) === 'EV' ? evSharePercent : saSharePercent, completedJobCards), 0))}
                   </td>
                   <td style={{ textAlign: 'right', color: '#15803d' }}>
                     {formatCurrency(dayDetailRows.reduce((s, r) => s + r.dmsLabourAmt, 0))}
@@ -1665,7 +1701,7 @@ export default function SATrackerPage() {
           if (!dateKey) return
           const saName  = String(r.sr_assigned_to ?? '').trim()
           if (!saName) return
-          const fuel    = normFuelBucket(empDetailMap.get(normSAName(saName))?.fuel_type)
+          const fuel    = normFuelBucket(resolveSaEmployee(saName, r.employee_code)?.fuel_type)
           const income  = calculateEligibleSAIncome(r, fuel === 'EV' ? evSharePercent : saSharePercent, completedJobCards)
           if (income <= 0) return
 
