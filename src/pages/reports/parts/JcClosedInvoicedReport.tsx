@@ -44,7 +44,7 @@ interface JciRow {
   delay_reason: string | null
 }
 
-type TabId = 'dashboard' | 'summary' | 'advisor' | 'monthly' | 'jc-status' | 'status-report' | 'value-report'
+type TabId = 'dashboard' | 'summary' | 'advisor' | 'monthly' | 'jc-status' | 'status-report' | 'value-report' | 'srtype-report'
 
 const TABS: { id: TabId; label: string }[] = [
   { id: 'dashboard',     label: '📊 Dashboard' },
@@ -53,10 +53,24 @@ const TABS: { id: TabId; label: string }[] = [
   { id: 'monthly',       label: 'Month / Year Wise' },
   { id: 'jc-status',     label: 'Invoice Status' },
   { id: 'status-report', label: '🔖 JC Status Report' },
-  { id: 'value-report',  label: '💰 Order / Labour / Spares' },
+  { id: 'value-report',   label: '💰 Order / Labour / Spares' },
+  { id: 'srtype-report',  label: '🔧 SR Type Report' },
 ]
 
 const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
+
+const SR_COLORS: Record<string, { bg: string; text: string; bar: string; hd: string }> = {
+  'Running Repairs':    { bg: 'bg-blue-50 border-blue-100',     text: 'text-blue-800',    bar: 'bg-blue-500',    hd: 'bg-blue-50 border-blue-100' },
+  'Paid Service':       { bg: 'bg-emerald-50 border-emerald-100', text: 'text-emerald-800', bar: 'bg-emerald-500', hd: 'bg-emerald-50 border-emerald-100' },
+  'Second Free Service':{ bg: 'bg-teal-50 border-teal-100',      text: 'text-teal-800',    bar: 'bg-teal-500',    hd: 'bg-teal-50 border-teal-100' },
+  'Accident':           { bg: 'bg-rose-50 border-rose-100',      text: 'text-rose-800',    bar: 'bg-rose-500',    hd: 'bg-rose-50 border-rose-100' },
+  'Third Free Service': { bg: 'bg-cyan-50 border-cyan-100',      text: 'text-cyan-800',    bar: 'bg-cyan-500',    hd: 'bg-cyan-50 border-cyan-100' },
+  'First Free Service': { bg: 'bg-sky-50 border-sky-100',        text: 'text-sky-800',     bar: 'bg-sky-500',     hd: 'bg-sky-50 border-sky-100' },
+  'Campaign':           { bg: 'bg-violet-50 border-violet-100',  text: 'text-violet-800',  bar: 'bg-violet-500',  hd: 'bg-violet-50 border-violet-100' },
+  'E Breakdown':        { bg: 'bg-amber-50 border-amber-100',    text: 'text-amber-800',   bar: 'bg-amber-500',   hd: 'bg-amber-50 border-amber-100' },
+}
+const getSRColor = (sr: string) => SR_COLORS[sr] ?? { bg: 'bg-gray-50 border-gray-100', text: 'text-gray-800', bar: 'bg-gray-500', hd: 'bg-gray-50 border-gray-100' }
+
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 const rs = (v: number | null | undefined) =>
@@ -394,6 +408,58 @@ export default function JcClosedInvoicedReport(_props: ReportViewProps) {
     }
   }, [filtered])
 
+  // ── SR Type aggregation (PDI already excluded at import + load) ─────────────
+  const srTypeReport = useMemo(() => {
+    // PDI is never in 'filtered' — excluded at import time and at load time
+    const srSet = new Set<string>()
+    filtered.forEach(r => { if (r.sr_type) srSet.add(r.sr_type) })
+    const types = Array.from(srSet).sort()
+
+    const grandTotal = filtered.length || 1
+
+    return types.map(sr => {
+      const srRows = filtered.filter(r => r.sr_type === sr)
+      const evRows = srRows.filter(r => r.portal === 'EV')
+      const pvRows = srRows.filter(r => r.portal === 'PV')
+      const sum = (arr: JciRow[], fn: (r: JciRow) => number) => arr.reduce((s, r) => s + fn(r), 0)
+      const order   = sum(srRows, r => r.total_order_value ?? 0)
+      const labour  = sum(srRows, r => r.final_labour_amount ?? 0)
+      const spares  = sum(srRows, r => r.final_spares_amount ?? 0)
+      const invoice = sum(srRows, r => r.total_invoice_amount ?? 0)
+
+      // Advisor breakdown per SR type
+      const advMap = new Map<string, { name: string; ev: number; pv: number; total: number; order: number; labour: number; spares: number; invoice: number }>()
+      srRows.forEach(r => {
+        const k = r.sr_assigned_to || '—'
+        if (!advMap.has(k)) advMap.set(k, { name: adv(r.sr_assigned_to), ev: 0, pv: 0, total: 0, order: 0, labour: 0, spares: 0, invoice: 0 })
+        const e = advMap.get(k)!
+        e.total++
+        if (r.portal === 'EV') e.ev++; else e.pv++
+        e.order   += r.total_order_value ?? 0
+        e.labour  += r.final_labour_amount ?? 0
+        e.spares  += r.final_spares_amount ?? 0
+        e.invoice += r.total_invoice_amount ?? 0
+      })
+
+      return {
+        sr,
+        total: srRows.length,
+        ev: evRows.length,
+        pv: pvRows.length,
+        order, labour, spares, invoice,
+        pctOfTotal: (srRows.length / grandTotal) * 100,
+        evOrder:   sum(evRows, r => r.total_order_value ?? 0),
+        pvOrder:   sum(pvRows, r => r.total_order_value ?? 0),
+        evLabour:  sum(evRows, r => r.final_labour_amount ?? 0),
+        pvLabour:  sum(pvRows, r => r.final_labour_amount ?? 0),
+        evSpares:  sum(evRows, r => r.final_spares_amount ?? 0),
+        pvSpares:  sum(pvRows, r => r.final_spares_amount ?? 0),
+        advisors:  Array.from(advMap.values()).sort((a, b) => b.order - a.order),
+        rows: srRows,
+      }
+    })
+  }, [filtered])
+
   // ── Filter Bar ────────────────────────────────────────────────────────────
   const filterBar = (
     <div className="flex flex-wrap gap-2 items-center mb-4 print:hidden">
@@ -495,6 +561,35 @@ export default function JcClosedInvoicedReport(_props: ReportViewProps) {
     'EV JCs':            m.ev,
     'PV JCs':            m.pv,
   })), 'Monthly_Order_Labour_Spares')
+
+  const exportSrTypeSummary = () => exportXLSX(srTypeReport.map(s => ({
+    'SR Type':             s.sr,
+    'JC Qty':              s.total,
+    'EV JCs':              s.ev,
+    'PV JCs':              s.pv,
+    'Order Value (₹)':     s.order,
+    'Labour Amount (₹)':   s.labour,
+    'Spare Amount (₹)':    s.spares,
+    'Invoice Value (₹)':   s.invoice,
+    '% of Total':          s.pctOfTotal.toFixed(1) + '%',
+  })), 'SR_Type_Summary')
+
+  const exportSrTypeDetail = () => exportXLSX(srTypeReport.flatMap(s => s.rows.map(r => ({
+    'SR Type':             r.sr_type,
+    'Job Card #':          r.job_card_no,
+    'Invoiced?':           r.invoiced,
+    'JC Status (Col K)':   r.jc_status,
+    'Portal':              r.portal,
+    'Reg No':              r.vehicle_reg_no,
+    'Customer':            r.customer_name,
+    'Advisor':             adv(r.sr_assigned_to),
+    'Model':               r.product_line,
+    'Order Value (₹)':     r.total_order_value,
+    'Labour Amount (₹)':   r.final_labour_amount,
+    'Spare Amount (₹)':    r.final_spares_amount,
+    'Invoice Value (₹)':   r.total_invoice_amount,
+    'Date':                r.closed_date ? new Date(r.closed_date).toLocaleDateString('en-IN') : '',
+  }))), 'SR_Type_Detail')
 
   const exportStatusReport = () => exportXLSX(statusReport.flatMap(s => s.rows.map(r => ({
     'JC Status (Col K)':  r.jc_status,
@@ -1333,6 +1428,286 @@ export default function JcClosedInvoicedReport(_props: ReportViewProps) {
               </tfoot>
             </table>
           </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+      {/* ── SR TYPE REPORT ─────────────────────────────────────────────────── */}
+      {tab === 'srtype-report' && (
+        <div className="space-y-5">
+          {filterBar}
+          <div className="flex gap-2 flex-wrap print:hidden">
+            <ExportBtn onClick={exportSrTypeSummary} label="⬇ Summary Excel" />
+            <ExportBtn onClick={exportSrTypeDetail}  label="⬇ Detail Excel" />
+            <button onClick={() => window.print()}
+              className="rounded-lg bg-gray-100 px-3 py-1.5 text-xs font-semibold text-gray-700 hover:bg-gray-200">
+              🖨 Print
+            </button>
+          </div>
+          <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+            ⚑ PDI Job Cards are automatically excluded from all calculations. SR Type is read directly from the imported Excel.
+          </p>
+
+          {/* KPI Summary cards: EV / PV / Grand */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <PortalCard label="EV" data={valueReport.ev} color="border-emerald-100 bg-emerald-50 text-emerald-900" />
+            <PortalCard label="PV" data={valueReport.pv} color="border-blue-100 bg-blue-50 text-blue-900" />
+            <PortalCard label="Grand Total (EV + PV)" data={valueReport.grand} color="border-gray-200 bg-white text-gray-900" />
+          </div>
+
+          {/* SR Type KPI cards */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            {srTypeReport.map(s => {
+              const c = getSRColor(s.sr)
+              return (
+                <div key={s.sr} className={`rounded-xl border p-3 ${c.bg}`}>
+                  <p className={`text-[10px] font-bold uppercase tracking-wide opacity-60 mb-1 ${c.text}`}>{s.sr}</p>
+                  <p className="text-2xl font-bold text-gray-900">{s.total.toLocaleString('en-IN')}</p>
+                  <p className="text-[10px] text-gray-400">{s.pctOfTotal.toFixed(1)}% of total</p>
+                  <div className="mt-1.5 grid grid-cols-2 gap-1 text-[10px]">
+                    <span className="text-emerald-700">EV: <strong>{s.ev}</strong></span>
+                    <span className="text-blue-700">PV: <strong>{s.pv}</strong></span>
+                  </div>
+                  <p className="text-xs font-semibold mt-1.5 text-gray-700">{rs(s.order)}</p>
+                  <p className="text-[10px] text-gray-400">Order Value</p>
+                </div>
+              )
+            })}
+          </div>
+
+          {/* Charts: SR-wise JC Count */}
+          <div className="rounded-xl border border-gray-100 bg-white p-4">
+            <p className="text-sm font-semibold text-gray-700 mb-3">SR Type — Job Card Count</p>
+            <div className="space-y-2">
+              {srTypeReport.map(s => {
+                const maxQty = Math.max(...srTypeReport.map(x => x.total), 1)
+                const c = getSRColor(s.sr)
+                return (
+                  <div key={s.sr}>
+                    <div className="flex justify-between text-xs mb-0.5">
+                      <span className="font-medium text-gray-700 w-40 truncate">{s.sr}</span>
+                      <span className="text-gray-500">{s.total} JCs ({s.pctOfTotal.toFixed(1)}%)</span>
+                    </div>
+                    <div className="h-4 rounded-full bg-gray-100">
+                      <div className={`h-4 rounded-full ${c.bar}`} style={{ width: `${(s.total / maxQty) * 100}%` }} />
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+
+          {/* Charts: SR-wise Order Value */}
+          <div className="rounded-xl border border-gray-100 bg-white p-4">
+            <p className="text-sm font-semibold text-gray-700 mb-3">SR Type — Order Value</p>
+            <div className="space-y-2">
+              {[...srTypeReport].sort((a,b) => b.order - a.order).map(s => {
+                const maxOrd = Math.max(...srTypeReport.map(x => x.order), 1)
+                const c = getSRColor(s.sr)
+                return (
+                  <div key={s.sr}>
+                    <div className="flex justify-between text-xs mb-0.5">
+                      <span className="font-medium text-gray-700 w-40 truncate">{s.sr}</span>
+                      <span className="text-gray-500">{rs(s.order)}</span>
+                    </div>
+                    <div className="h-4 rounded-full bg-gray-100">
+                      <div className={`h-4 rounded-full ${c.bar}`} style={{ width: `${(s.order / maxOrd) * 100}%` }} />
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+
+          {/* Charts: Labour & Spare side by side */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="rounded-xl border border-gray-100 bg-white p-4">
+              <p className="text-sm font-semibold text-gray-700 mb-3">SR Type — Labour Amount</p>
+              <div className="space-y-2">
+                {[...srTypeReport].sort((a,b) => b.labour - a.labour).map(s => {
+                  const maxL = Math.max(...srTypeReport.map(x => x.labour), 1)
+                  return (
+                    <div key={s.sr}>
+                      <div className="flex justify-between text-xs mb-0.5">
+                        <span className="font-medium text-gray-700 w-32 truncate">{s.sr}</span>
+                        <span className="text-amber-700">{rs(s.labour)}</span>
+                      </div>
+                      <div className="h-3 rounded-full bg-gray-100">
+                        <div className="h-3 rounded-full bg-amber-500" style={{ width: `${(s.labour / maxL) * 100}%` }} />
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+            <div className="rounded-xl border border-gray-100 bg-white p-4">
+              <p className="text-sm font-semibold text-gray-700 mb-3">SR Type — Spare Amount</p>
+              <div className="space-y-2">
+                {[...srTypeReport].sort((a,b) => b.spares - a.spares).map(s => {
+                  const maxS = Math.max(...srTypeReport.map(x => x.spares), 1)
+                  return (
+                    <div key={s.sr}>
+                      <div className="flex justify-between text-xs mb-0.5">
+                        <span className="font-medium text-gray-700 w-32 truncate">{s.sr}</span>
+                        <span className="text-violet-700">{rs(s.spares)}</span>
+                      </div>
+                      <div className="h-3 rounded-full bg-gray-100">
+                        <div className="h-3 rounded-full bg-violet-500" style={{ width: `${(s.spares / maxS) * 100}%` }} />
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          </div>
+
+          {/* Master summary table */}
+          <div className="rounded-xl border border-gray-100 bg-white overflow-auto">
+            <div className="px-4 py-2.5 border-b bg-gray-50 font-semibold text-sm text-gray-700">
+              SR Type — Full Summary (PDI Excluded)
+            </div>
+            <table className="w-full text-sm">
+              <thead className="bg-gray-50 border-b border-gray-200">
+                <tr>
+                  <Th>SR Type</Th>
+                  <Th right>JC Qty</Th><Th right>EV</Th><Th right>PV</Th>
+                  <Th right>Order Value</Th>
+                  <Th right>Labour</Th>
+                  <Th right>Spares</Th>
+                  <Th right>Invoice Value</Th>
+                  <Th right>% Total</Th>
+                </tr>
+              </thead>
+              <tbody>
+                {srTypeReport.map(s => {
+                  const c = getSRColor(s.sr)
+                  return (
+                    <tr key={s.sr} className="border-t border-gray-50 hover:bg-gray-50">
+                      <td className="px-4 py-2.5">
+                        <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold border ${c.bg} ${c.text}`}>{s.sr}</span>
+                      </td>
+                      <Td right bold>{s.total.toLocaleString('en-IN')}</Td>
+                      <Td right cls="text-emerald-700">{s.ev}</Td>
+                      <Td right cls="text-blue-700">{s.pv}</Td>
+                      <Td right bold>{rs(s.order)}</Td>
+                      <Td right cls="text-amber-700">{rs(s.labour)}</Td>
+                      <Td right cls="text-violet-700">{rs(s.spares)}</Td>
+                      <Td right cls="text-blue-700">{rs(s.invoice)}</Td>
+                      <Td right>{s.pctOfTotal.toFixed(1)}%</Td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+              <tfoot className="bg-gray-50 border-t-2 border-gray-300">
+                <tr>
+                  <td className="px-4 py-2.5 text-xs font-bold">GRAND TOTAL</td>
+                  <Td right bold>{agg.total}</Td>
+                  <Td right cls="text-emerald-700 font-bold">{agg.evTotal}</Td>
+                  <Td right cls="text-blue-700 font-bold">{agg.pvTotal}</Td>
+                  <Td right bold>{rs(agg.totalOrder)}</Td>
+                  <Td right cls="text-amber-700 font-bold">{rs(agg.totalLabour)}</Td>
+                  <Td right cls="text-violet-700 font-bold">{rs(agg.totalSpares)}</Td>
+                  <Td right cls="text-blue-700 font-bold">{rs(agg.invValue)}</Td>
+                  <Td right>100%</Td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+
+          {/* EV vs PV comparison per SR Type */}
+          <div className="rounded-xl border border-gray-100 bg-white overflow-auto">
+            <div className="px-4 py-2.5 border-b bg-gray-50 font-semibold text-sm text-gray-700">
+              EV vs PV — Comparison by SR Type
+            </div>
+            <table className="w-full text-sm">
+              <thead className="bg-gray-50 border-b border-gray-200">
+                <tr>
+                  <Th>SR Type</Th>
+                  <Th right>EV JCs</Th><Th right>EV Order</Th><Th right>EV Labour</Th><Th right>EV Spares</Th>
+                  <Th right>PV JCs</Th><Th right>PV Order</Th><Th right>PV Labour</Th><Th right>PV Spares</Th>
+                </tr>
+              </thead>
+              <tbody>
+                {srTypeReport.map(s => (
+                  <tr key={s.sr} className="border-t border-gray-50 hover:bg-gray-50">
+                    <Td bold>{s.sr}</Td>
+                    <Td right cls="text-emerald-700">{s.ev}</Td>
+                    <Td right cls="text-emerald-700">{rs(s.evOrder)}</Td>
+                    <Td right cls="text-amber-700">{rs(s.evLabour)}</Td>
+                    <Td right cls="text-violet-700">{rs(s.evSpares)}</Td>
+                    <Td right cls="text-blue-700">{s.pv}</Td>
+                    <Td right cls="text-blue-700">{rs(s.pvOrder)}</Td>
+                    <Td right cls="text-amber-700">{rs(s.pvLabour)}</Td>
+                    <Td right cls="text-violet-700">{rs(s.pvSpares)}</Td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot className="bg-gray-50 border-t-2 border-gray-300">
+                <tr>
+                  <td className="px-4 py-2.5 text-xs font-bold">TOTAL</td>
+                  <Td right cls="text-emerald-700 font-bold">{agg.evTotal}</Td>
+                  <Td right cls="text-emerald-700 font-bold">{rs(valueReport.ev.order)}</Td>
+                  <Td right cls="text-amber-700 font-bold">{rs(valueReport.ev.labour)}</Td>
+                  <Td right cls="text-violet-700 font-bold">{rs(valueReport.ev.spares)}</Td>
+                  <Td right cls="text-blue-700 font-bold">{agg.pvTotal}</Td>
+                  <Td right cls="text-blue-700 font-bold">{rs(valueReport.pv.order)}</Td>
+                  <Td right cls="text-amber-700 font-bold">{rs(valueReport.pv.labour)}</Td>
+                  <Td right cls="text-violet-700 font-bold">{rs(valueReport.pv.spares)}</Td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+
+          {/* Per SR Type advisor breakdown */}
+          {srTypeReport.map(s => {
+            if (!s.advisors.length) return null
+            const c = getSRColor(s.sr)
+            return (
+              <div key={s.sr} className="rounded-xl border border-gray-100 bg-white overflow-auto">
+                <div className={`px-4 py-2.5 border-b font-semibold text-sm ${c.hd} ${c.text}`}>
+                  {s.sr} — Advisor Breakdown ({s.total} JCs · {rs(s.order)})
+                </div>
+                <table className="w-full text-sm">
+                  <thead className="bg-gray-50 border-b border-gray-200">
+                    <tr>
+                      <Th>#</Th><Th>Advisor</Th>
+                      <Th right>JC Qty</Th><Th right>EV</Th><Th right>PV</Th>
+                      <Th right>Order Value</Th><Th right>Labour</Th><Th right>Spares</Th><Th right>Invoice</Th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {s.advisors.map((a, i) => (
+                      <tr key={a.name} className="border-t border-gray-50 hover:bg-gray-50">
+                        <Td cls="text-gray-400">{i + 1}</Td>
+                        <Td bold>{a.name}</Td>
+                        <Td right>{a.total}</Td>
+                        <Td right cls="text-emerald-700">{a.ev}</Td>
+                        <Td right cls="text-blue-700">{a.pv}</Td>
+                        <Td right bold>{rs(a.order)}</Td>
+                        <Td right cls="text-amber-700">{rs(a.labour)}</Td>
+                        <Td right cls="text-violet-700">{rs(a.spares)}</Td>
+                        <Td right cls="text-blue-700">{rs(a.invoice)}</Td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot className="bg-gray-50 border-t-2 border-gray-300">
+                    <tr>
+                      <td colSpan={2} className="px-4 py-2.5 text-xs font-bold">TOTAL</td>
+                      <Td right bold>{s.total}</Td>
+                      <Td right cls="text-emerald-700 font-bold">{s.ev}</Td>
+                      <Td right cls="text-blue-700 font-bold">{s.pv}</Td>
+                      <Td right bold>{rs(s.order)}</Td>
+                      <Td right cls="text-amber-700 font-bold">{rs(s.labour)}</Td>
+                      <Td right cls="text-violet-700 font-bold">{rs(s.spares)}</Td>
+                      <Td right cls="text-blue-700 font-bold">{rs(s.invoice)}</Td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            )
+          })}
         </div>
       )}
     </div>
