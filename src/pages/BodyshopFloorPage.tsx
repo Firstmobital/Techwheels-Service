@@ -826,6 +826,8 @@ export default function BodyshopFloorPage() {
   const [bsFloorStatus, setBsFloorStatus] = useState<Record<string, { completedAt: string | null; completedBy: string | null }>>({})
   const [qcByJc, setQcByJc] = useState<Record<string, QcEntryState>>({})
   const [riByJc, setRiByJc] = useState<Record<string, RiEntryState>>({})
+  // Unsaved draft edits — separate from riByJc so queue membership isn't affected until Save RI
+  const [riDraftByJc, setRiDraftByJc] = useState<Record<string, RiEntryState>>({})
   const [qcCheckerPickerOpen, setQcCheckerPickerOpen] = useState<Record<string, boolean>>({})
   const [qcCheckerOtherOpen, setQcCheckerOtherOpen] = useState<Record<string, boolean>>({})
   const [qcCheckerOtherSearch, setQcCheckerOtherSearch] = useState<Record<string, string>>({})
@@ -938,6 +940,7 @@ export default function BodyshopFloorPage() {
       setAdditionalApprovalByJc(additionalByJc)
       setQcByJc(nextQcByJc)
       setRiByJc(nextRiByJc)
+      setRiDraftByJc(nextRiByJc)
 
       if (sentByJc.size === 0) {
         setCars([])
@@ -1571,9 +1574,9 @@ export default function BodyshopFloorPage() {
   }
 
   function patchRiDraft(k: string, patch: Partial<RiEntryState>) {
-    setRiByJc((prev) => ({
+    setRiDraftByJc((prev) => ({
       ...prev,
-      [k]: { ...(prev[k] ?? emptyRiEntryState()), ...patch },
+      [k]: { ...(prev[k] ?? riByJc[k] ?? emptyRiEntryState()), ...patch },
     }))
   }
 
@@ -1700,7 +1703,8 @@ export default function BodyshopFloorPage() {
 
   async function saveRiDetails(car: AccidentCar) {
     const k = jcKey(car)
-    const draft = riByJc[k] ?? emptyRiEntryState()
+    // Read from draft (unsaved edits), fall back to committed state
+    const draft = riDraftByJc[k] ?? riByJc[k] ?? emptyRiEntryState()
     const doneByType = normalizeRiDoneBy(draft.reinspection_type)
     const doneByName = String(draft.reinspection_by ?? '').trim()
     const status = String(draft.reinspection_status ?? 'pending').trim().toLowerCase() || 'pending'
@@ -1747,16 +1751,17 @@ export default function BodyshopFloorPage() {
 
       if (result.error) throw result.error
 
-      setRiByJc((prev) => ({
-        ...prev,
-        [k]: {
-          repairCardId: Number(result.data?.id ?? repairCardId),
-          reinspection_status: String(result.data?.reinspection_status ?? status),
-          reinspection_type: normalizeRiDoneBy(result.data?.reinspection_type ?? doneByType),
-          reinspection_by: String(result.data?.reinspection_by ?? resolvedBy),
-          reinspection_at: toLocalDateTimeInput(result.data?.reinspection_at ?? doneAtIso),
-        },
-      }))
+      const committed: RiEntryState = {
+        repairCardId: Number(result.data?.id ?? repairCardId),
+        reinspection_status: String(result.data?.reinspection_status ?? status),
+        reinspection_type: normalizeRiDoneBy(result.data?.reinspection_type ?? doneByType),
+        reinspection_by: String(result.data?.reinspection_by ?? resolvedBy),
+        reinspection_at: toLocalDateTimeInput(result.data?.reinspection_at ?? doneAtIso),
+      }
+      // Commit to persisted state (this drives queue membership)
+      setRiByJc((prev) => ({ ...prev, [k]: committed }))
+      // Sync draft to match so no stale diff remains
+      setRiDraftByJc((prev) => ({ ...prev, [k]: committed }))
 
       showToast(riCompleted ? 'RI completed — moved to Billing' : 'RI details saved', 'success')
     } catch (err) {
@@ -2296,7 +2301,7 @@ export default function BodyshopFloorPage() {
               const expanded = expandedCards.has(k)
               const carMap = assignments[k] ?? { DENTOR: undefined, PAINTER: undefined, TECHNICIAN: undefined, FLOOR_INCHARGE: undefined, DENTOR_HELPER: undefined, PAINTER_HELPER: undefined, RUBBING: undefined, EDP: undefined }
               const qcDraft = qcByJc[k] ?? emptyQcEntryState()
-              const riDraft = riByJc[k] ?? emptyRiEntryState()
+              const riDraft = riDraftByJc[k] ?? riByJc[k] ?? emptyRiEntryState()
               const selectedQcCheckerNames = parseQcCheckedByNames(qcDraft.qc_checked_by)
               const assignedQcCheckerNames = getAssignedQcCheckerNames(k)
               const assignedQcNameSet = new Set(assignedQcCheckerNames.map((name) => name.toLowerCase()))
