@@ -167,9 +167,31 @@ function getIntakeMilestones(card: RepairCard, intakePhotoCount: number, hasKmRe
   return { stage1Done, stage2Done, stage3Done, stage4Done, activeStage }
 }
 
+function isQcPassed(card: Pick<RepairCard, 'qc_status'>): boolean {
+  return String(card.qc_status ?? '').trim().toLowerCase() === 'pass'
+}
+
+function isRiCompleted(card: Pick<RepairCard, 'reinspection_status'>): boolean {
+  return String(card.reinspection_status ?? '').trim().toLowerCase() === 'completed'
+}
+
+/**
+ * Align displayed/current stage with Floor QC → RI flow:
+ * - QC not Pass → cannot show past Quality Check (13)
+ * - QC Pass and RI not Completed → always show Re-Inspection (14)
+ * - RI Completed → allow Billing+ as stored
+ */
+function clampStageUntilRiComplete(card: Pick<RepairCard, 'qc_status' | 'reinspection_status'>, stage: number): number {
+  if (!Number.isFinite(stage) || stage < 1) return 1
+  if (isQcPassed(card) && !isRiCompleted(card)) return 14
+  if (!isQcPassed(card) && stage > 13) return 13
+  return stage
+}
+
 function getEffectiveStageFlow(card: RepairCard, intakePhotoCount: number, hasKmReading: boolean) {
   const milestones = getIntakeMilestones(card, intakePhotoCount, hasKmReading)
-  const effectiveCurrentStage = card.current_stage <= 4 ? milestones.activeStage : card.current_stage
+  const rawStage = card.current_stage <= 4 ? milestones.activeStage : card.current_stage
+  const effectiveCurrentStage = clampStageUntilRiComplete(card, rawStage)
 
   let effectiveNextStage = Math.min(18, effectiveCurrentStage + 1)
   if (effectiveCurrentStage <= 4) {
@@ -184,6 +206,9 @@ function getEffectiveStageFlow(card: RepairCard, intakePhotoCount: number, hasKm
     done[effectiveCurrentStage as 1 | 2 | 3 | 4] = true
     const pending = ([1, 2, 3, 4] as const).find((n) => !done[n])
     effectiveNextStage = pending ?? 5
+  } else if (effectiveCurrentStage === 14 && !isRiCompleted(card)) {
+    // Stay on RI until Floor marks RI Status Completed.
+    effectiveNextStage = 14
   }
 
   return { milestones, effectiveCurrentStage, effectiveNextStage }
@@ -467,7 +492,7 @@ function getAdvisorFilterLabel(card: RepairCard): string {
 }
 
 type DetailTab = 'overview' | 'sa' | 'approval' | 'survey' | 'floor' | 'qc' | 'billing'
-type PipelineFilter = 'all' | 'SA Intake' | 'EDP' | 'Survey' | 'Floor Work' | 'QC' | 'Billing' | 'Delivery' | 'Delivered'
+type PipelineFilter = 'all' | 'SA Intake' | 'EDP' | 'Survey' | 'Floor Work' | 'QC' | 'RI' | 'Billing' | 'Delivery' | 'Delivered'
 
 type AdditionalApprovalDecisionStatus = 'pending' | 'approved' | 'rejected'
 type AdditionalApprovalAggregateStatus = AdditionalApprovalDecisionStatus | 'none' | 'mixed'
@@ -2025,6 +2050,16 @@ export default function BodyshopRepairPage() {
         return
       }
 
+      if (flow.effectiveCurrentStage === 13 && !isQcPassed(selected)) {
+        toast_('Complete QC Pass on Bodyshop Floor before leaving Quality Check', false)
+        return
+      }
+
+      if (flow.effectiveCurrentStage === 14 && !isRiCompleted(selected)) {
+        toast_('Set RI Status to Completed and Save RI on Bodyshop Floor before advancing to Billing', false)
+        return
+      }
+
       let updated: RepairCard
       if (flow.effectiveCurrentStage <= 4) {
         updated = await updateRepairCard(selected.id, {
@@ -2041,6 +2076,11 @@ export default function BodyshopRepairPage() {
         updated = await updateRepairCard(selected.id, {
           current_stage: targetStage,
           current_stage_name: STAGE_LABELS[targetStage] ?? '',
+        })
+      } else if (flow.effectiveCurrentStage === 14) {
+        updated = await updateRepairCard(selected.id, {
+          current_stage: 15,
+          current_stage_name: STAGE_LABELS[15] ?? 'Billing',
         })
       } else {
         updated = await advanceStage(selected.id, selected)
@@ -2093,13 +2133,28 @@ export default function BodyshopRepairPage() {
             qc_checked_at: nextCheckedAt || nowIso,
             qc_passed_by: nextCheckedBy || actor,
             qc_passed_at: nextCheckedAt || nowIso,
+            current_stage: 14,
+            current_stage_name: STAGE_LABELS[14] ?? 'Re-Inspection',
           }
         } else {
           patchToSave = {
             ...editPatch,
             qc_passed_by: null,
             qc_passed_at: null,
+            current_stage: 13,
+            current_stage_name: STAGE_LABELS[13] ?? 'Quality Check',
           }
+        }
+      }
+
+      const riKeysTouched = ['reinspection_status', 'reinspection_type', 'reinspection_by', 'reinspection_at'].some((key) => key in editPatch)
+      if (riKeysTouched) {
+        const nowIso = new Date().toISOString()
+        patchToSave = {
+          ...patchToSave,
+          reinspection_at: String((patchToSave.reinspection_at ?? selected.reinspection_at ?? nowIso)).trim() || nowIso,
+          current_stage: 14,
+          current_stage_name: STAGE_LABELS[14] ?? 'Re-Inspection',
         }
       }
 
@@ -3421,18 +3476,21 @@ export default function BodyshopRepairPage() {
   }
 
   function getEffectiveStageForCard(card: RepairCard): number {
+    let stage = Number(card.current_stage ?? 1)
     if (projectionPendingLoaded) {
       const pendingStages = projectionPendingStagesByCard[card.id] ?? []
       if (pendingStages.length > 0) {
         // Projection can contain earlier pending worklist stages; keep current-stage
         // display anchored to persisted pointer stage to avoid visual regressions.
-        return Math.max(Number(card.current_stage ?? 1), Math.min(...pendingStages))
+        stage = Math.max(Number(card.current_stage ?? 1), Math.min(...pendingStages))
       }
+    } else {
+      const intakePhotoCount = photoCountByReceptionId[Number(card.reception_entry_id)] ?? 0
+      const hasKmReading = kmPresentByReceptionId[Number(card.reception_entry_id)] ?? false
+      stage = getEffectiveStageFlow(card, intakePhotoCount, hasKmReading).effectiveCurrentStage
     }
 
-    const intakePhotoCount = photoCountByReceptionId[Number(card.reception_entry_id)] ?? 0
-    const hasKmReading = kmPresentByReceptionId[Number(card.reception_entry_id)] ?? false
-    return getEffectiveStageFlow(card, intakePhotoCount, hasKmReading).effectiveCurrentStage
+    return clampStageUntilRiComplete(card, stage)
   }
 
   function getFloorStageCompletedForCard(card: RepairCard): boolean {
@@ -3540,10 +3598,27 @@ export default function BodyshopRepairPage() {
         && !stage12Done
     }
 
+    // QC / RI queues mirror bodyshop-floor:
+    // QC = floor completed and QC not Pass
+    // RI = floor completed, QC Pass, and RI Status not Completed
+    const qcPassed = isQcPassed(card)
+    const riDone = isRiCompleted(card)
+
+    if (stage === 13) {
+      return floorCompleted && !qcPassed
+    }
+    if (stage === 14) {
+      return floorCompleted && qcPassed && !riDone
+    }
+
     return effectiveCurrentStage === stage
   }
 
   function isCardInStageQueue(card: RepairCard, stage: number): boolean {
+    // Keep QC/RI aligned with floor board even when stage projection is loaded.
+    if (stage === 13 || stage === 14) {
+      return isCardInStageWorklist(card, stage)
+    }
     if (!projectionPendingLoaded) return isCardInStageWorklist(card, stage)
     const pendingStages = projectionPendingStagesByCard[card.id] ?? []
     return pendingStages.includes(stage)
@@ -4451,16 +4526,26 @@ export default function BodyshopRepairPage() {
                           ? stage11Done
                           : num === 12
                             ? stage12Done
+                          : num === 13
+                            ? isQcPassed(selected)
+                          : num === 14
+                            ? isRiCompleted(selected)
                         : effectiveCurrentStage > num
                   const stage10Active = stage10Ready && !stage10Done
                   const stage11Active = !stage11Done /* stage11 forced active immediately, bypassing readiness gate per business request */
                   const stage12Active = stage11Ready && additionalApprovalRequested && !stage12Done
+                  const stage13Active = floorStageCompleted && !isQcPassed(selected)
+                  const stage14Active = floorStageCompleted && isQcPassed(selected) && !isRiCompleted(selected)
                   const isCur = num === 10
                     ? stage10Active
                     : num === 11
                       ? stage11Active
                       : num === 12
                         ? stage12Active
+                        : num === 13
+                          ? stage13Active
+                          : num === 14
+                            ? stage14Active
                         : isStageConcurrentActive(num, effectiveCurrentStage, floorWorkStarted && !floorStageCompleted)
                   const grp    = getGroupForStage(num)
                   const rows = [
@@ -4592,7 +4677,7 @@ export default function BodyshopRepairPage() {
               <div className="brx-tabbar">
                 {tabs.map((t) => (
                   <button key={t} onClick={() => setDetailTab(t)} className={`brx-tab ${detailTab === t ? 'is-active' : ''}`}>
-                    {t === 'sa' ? 'SA' : t.charAt(0).toUpperCase() + t.slice(1)}
+                    {t === 'sa' ? 'SA' : t === 'qc' ? 'QC/RI' : t.charAt(0).toUpperCase() + t.slice(1)}
                   </button>
                 ))}
               </div>
@@ -4705,16 +4790,26 @@ export default function BodyshopRepairPage() {
                             ? stage11Done
                             : num === 12
                               ? stage12Done
+                          : num === 13
+                            ? isQcPassed(selected)
+                          : num === 14
+                            ? isRiCompleted(selected)
                           : effectiveCurrentStage > num
                       const stage10Active = stage10Ready && !stage10Done
                       const stage11Active = !stage11Done /* stage11 forced active immediately, bypassing readiness gate per business request */
                       const stage12Active = stage11Ready && additionalApprovalRequested && !stage12Done
+                      const stage13Active = floorStageCompleted && !isQcPassed(selected)
+                      const stage14Active = floorStageCompleted && isQcPassed(selected) && !isRiCompleted(selected)
                       const isCur   = num === 10
                         ? stage10Active
                         : num === 11
                           ? stage11Active
                           : num === 12
                             ? stage12Active
+                            : num === 13
+                              ? stage13Active
+                              : num === 14
+                                ? stage14Active
                             : isStageConcurrentActive(num, effectiveCurrentStage, floorWorkStarted && !floorStageCompleted)
                       const grp     = getGroupForStage(num)
                       return (
@@ -6014,64 +6109,66 @@ export default function BodyshopRepairPage() {
                 </div>
               )}
 
-              {/* ── QC ── */}
+              {/* ── QC/RI (read-only mirror of bodyshop-floor) ── */}
               {detailTab === 'qc' && (
                 <div className="brx-panel">
                   <div className="brx-panel-h">Quality Check & Re-Inspection</div>
+                  <div className="brx-floor-additional-note" style={{ marginBottom: 12 }}>
+                    Read-only. Values are set on Bodyshop Floor (QC / RI) and shown here.
+                  </div>
                   <div className="brx-form-grid-2">
-                    <label className="brx-field">
+                    <div className="brx-field">
                       <span className="brx-field-label">QC Status</span>
-                      <select className="sel" value={selected.qc_status ?? 'pending'}
-                        onChange={(e) => patch('qc_status', e.target.value)}>
-                        <option value="pending">Pending</option>
-                        <option value="pass">Pass</option>
-                        <option value="fail">Fail</option>
-                      </select>
-                    </label>
-                    {[
-                      { k: 'qc_checked_by',   label: 'QC Checked By' },
-                      { k: 'qc_fail_reason',  label: 'Fail Reason' },
-                      { k: 'reinspection_by', label: 'RI Done By (name)' },
-                    ].map(({ k, label }) => (
-                      <label key={k} className="brx-field">
-                        <span className="brx-field-label">{label}</span>
-                        <input className="inp" value={(selected as any)[k] ?? ''}
-                          onChange={(e) => patch(k as keyof RepairCard, e.target.value)} />
-                      </label>
-                    ))}
-                    <label className="brx-field">
-                      <span className="brx-field-label">RI Status</span>
-                      <select className="sel" value={selected.reinspection_status ?? 'pending'}
-                        onChange={(e) => patch('reinspection_status', e.target.value)}>
-                        <option value="pending">Pending</option>
-                        <option value="completed">Completed</option>
-                      </select>
-                    </label>
-                    <label className="brx-field">
-                      <span className="brx-field-label">RI Done By</span>
-                      <select className="sel" value={selected.reinspection_type ?? ''}
-                        onChange={(e) => patch('reinspection_type', e.target.value)}>
-                        <option value="">— None —</option>
-                        <option value="floor_incharge">Floor Incharge</option>
-                        <option value="surveyor">Surveyor</option>
-                        <option value="other">Other</option>
-                      </select>
-                    </label>
-                    <label className="brx-field">
-                      <span className="brx-field-label">Delivery Status</span>
-                      <select className="sel" value={selected.delivery_status ?? 'pending'}
-                        onChange={(e) => patch('delivery_status', e.target.value)}>
-                        <option value="pending">Pending</option>
-                        <option value="done">Done</option>
-                      </select>
-                    </label>
-                    {Object.keys(editPatch).length > 0 && (
-                      <div className="brx-grid-full">
-                        <button className="btn btn--primary" onClick={() => void handleSavePatch()} disabled={saving}>
-                          {saving ? 'Saving…' : 'Save QC'}
-                        </button>
+                      <div className="inp" style={{ display: 'flex', alignItems: 'center', background: 'var(--bg)', color: 'var(--text)' }}>
+                        {String(selected.qc_status ?? 'pending').trim()
+                          ? String(selected.qc_status).charAt(0).toUpperCase() + String(selected.qc_status).slice(1).toLowerCase()
+                          : 'Pending'}
                       </div>
-                    )}
+                    </div>
+                    <div className="brx-field">
+                      <span className="brx-field-label">QC Checked By</span>
+                      <div className="inp" style={{ display: 'flex', alignItems: 'center', background: 'var(--bg)' }}>
+                        {selected.qc_checked_by?.trim() || '—'}
+                      </div>
+                    </div>
+                    <div className="brx-field">
+                      <span className="brx-field-label">QC Checked At</span>
+                      <div className="inp" style={{ display: 'flex', alignItems: 'center', background: 'var(--bg)' }}>
+                        {fmt(selected.qc_checked_at)}
+                      </div>
+                    </div>
+                    <div className="brx-field">
+                      <span className="brx-field-label">Fail Reason</span>
+                      <div className="inp" style={{ display: 'flex', alignItems: 'center', background: 'var(--bg)' }}>
+                        {selected.qc_fail_reason?.trim() || '—'}
+                      </div>
+                    </div>
+                    <div className="brx-field">
+                      <span className="brx-field-label">RI Status</span>
+                      <div className="inp" style={{ display: 'flex', alignItems: 'center', background: 'var(--bg)' }}>
+                        {String(selected.reinspection_status ?? 'pending').trim()
+                          ? String(selected.reinspection_status).charAt(0).toUpperCase() + String(selected.reinspection_status).slice(1).toLowerCase()
+                          : 'Pending'}
+                      </div>
+                    </div>
+                    <div className="brx-field">
+                      <span className="brx-field-label">RI Done By</span>
+                      <div className="inp" style={{ display: 'flex', alignItems: 'center', background: 'var(--bg)' }}>
+                        {(() => {
+                          const type = String(selected.reinspection_type ?? '').trim().toLowerCase()
+                          if (type === 'floor_incharge' || type === 'team_member') return 'Floor Incharge'
+                          if (type === 'surveyor') return 'Surveyor'
+                          if (type === 'other') return selected.reinspection_by?.trim() ? `Other · ${selected.reinspection_by}` : 'Other'
+                          return selected.reinspection_by?.trim() || '—'
+                        })()}
+                      </div>
+                    </div>
+                    <div className="brx-field">
+                      <span className="brx-field-label">RI Done At</span>
+                      <div className="inp" style={{ display: 'flex', alignItems: 'center', background: 'var(--bg)' }}>
+                        {fmt(selected.reinspection_at)}
+                      </div>
+                    </div>
                   </div>
                 </div>
               )}

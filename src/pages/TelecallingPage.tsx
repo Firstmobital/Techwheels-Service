@@ -42,6 +42,7 @@ interface Assignment {
   called_at: string | null
   call_count: number
   no_answer_count: number
+  retry_after: string | null
   whatsapp_sent: boolean
   whatsapp_status: string | null
   assigned_at: string | null
@@ -323,6 +324,10 @@ function TelecallerDashboard({ activeCampaign }: { activeCampaign: Campaign | nu
       if (result?.service_booking_created && result?.service_booking_id) {
         setBookingConfirmation({ id: result.service_booking_id })
         setTimeout(() => setBookingConfirmation(null), 6000)
+      }
+      if (result?.retry_queued) {
+        setError('📵 No answer — lead will return to queue tomorrow (attempt ' + (result?.no_answer_count ?? '') + '/3)')
+        setTimeout(() => setError(null), 4000)
       }
       setCurrentAssignment(null); resetCallForm()
       refreshQueue(); refreshSummary()
@@ -627,7 +632,7 @@ function CallCard({
       {/* Previous call info */}
       {assignment.call_count > 0 && (
         <div className="px-6 py-3 bg-amber-50 border-b border-amber-100 text-sm text-amber-700">
-          ⚠️ Called {assignment.call_count} time(s).{assignment.no_answer_count > 0 ? ` (${assignment.no_answer_count} no-answers — auto-marks unreachable after 3)` : ''}
+          {assignment.retry_after ? `🔁 Retry attempt ${assignment.no_answer_count}/3 — did not answer previously` : `⚠️ Called ${assignment.call_count} time(s).`}{assignment.no_answer_count > 0 && !assignment.retry_after ? ` (${assignment.no_answer_count} no-answers — 3rd marks unreachable)` : ''}
           {assignment.call_notes && <div className="mt-1 text-xs">Last note: {assignment.call_notes}</div>}
           {assignment.whatsapp_sent && <div className="mt-1 text-xs text-green-700">✓ WhatsApp sent ({assignment.whatsapp_status || 'sent'})</div>}
         </div>

@@ -1121,12 +1121,17 @@ export default function BodyshopFloorPage() {
     return status === 'pass'
   }
 
+  function isRiCompleted(c: AccidentCar) {
+    const status = String(riByJc[jcKey(c)]?.reinspection_status ?? '').trim().toLowerCase()
+    return status === 'completed'
+  }
+
   function isInQcQueue(c: AccidentCar) {
     return isBsFloorCompleted(c) && !isQcPassed(c)
   }
 
   function isInRiQueue(c: AccidentCar) {
-    return isBsFloorCompleted(c) && isQcPassed(c)
+    return isBsFloorCompleted(c) && isQcPassed(c) && !isRiCompleted(c)
   }
 
   function toggleExpanded(k: string) {
@@ -1153,7 +1158,7 @@ export default function BodyshopFloorPage() {
       return state.status !== 'none' && state.pendingCount > 0
     }).length,
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }), [cars, assignments, bsFloorStatus, additionalApprovalByJc, qcByJc])
+  }), [cars, assignments, bsFloorStatus, additionalApprovalByJc, qcByJc, riByJc])
 
   // ── Floor Incharge workload summary ──────────────────────────────────────
   const floorInchargeSummary = useMemo(() => {
@@ -1218,7 +1223,7 @@ export default function BodyshopFloorPage() {
     })
     return list
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cars, branchFilter, floorFilter, roleFilter, fiFilter, search, assignmentView, assignments, bsFloorStatus, additionalApprovalByJc, qcByJc])
+  }, [cars, branchFilter, floorFilter, roleFilter, fiFilter, search, assignmentView, assignments, bsFloorStatus, additionalApprovalByJc, qcByJc, riByJc])
 
   // ── Assign (inline select) ───────────────────────────────────────────────
 
@@ -1723,20 +1728,21 @@ export default function BodyshopFloorPage() {
         ? doneByName
         : (doneByName || labelForRiDoneBy(doneByType))
 
+      const riCompleted = status === 'completed'
       const payload = {
         reinspection_status: status,
         reinspection_type: doneByType,
         reinspection_by: resolvedBy,
         reinspection_at: doneAtIso,
-        current_stage: 14,
-        current_stage_name: 'Re-Inspection',
+        current_stage: riCompleted ? 15 : 14,
+        current_stage_name: riCompleted ? 'Billing' : 'Re-Inspection',
       }
 
       const result = await supabase
         .from('bodyshop_repair_cards')
         .update(payload)
         .eq('id', repairCardId)
-        .select('id, reinspection_status, reinspection_type, reinspection_by, reinspection_at')
+        .select('id, reinspection_status, reinspection_type, reinspection_by, reinspection_at, current_stage, current_stage_name')
         .single()
 
       if (result.error) throw result.error
@@ -1752,7 +1758,7 @@ export default function BodyshopFloorPage() {
         },
       }))
 
-      showToast('RI details saved', 'success')
+      showToast(riCompleted ? 'RI completed — moved to Billing' : 'RI details saved', 'success')
     } catch (err) {
       showToast(err instanceof Error ? err.message : 'Failed to save RI details', 'error')
     } finally {

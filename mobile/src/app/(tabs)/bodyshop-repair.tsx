@@ -102,7 +102,8 @@ const STAGE_LABELS: Record<number, string> = {
 const DISPLAY_STAGE_GROUPS: { label: string; stages: number[]; color: string; bg: string }[] = [
   { label: 'SA Intake', stages: [1,2,3,4,5,6,7,8,9,10], color: '#2f63cf', bg: '#e9f0fd' },
   { label: 'Floor',     stages: [11,12],                 color: '#7048cf', bg: '#efeafb' },
-  { label: 'QC',        stages: [13,14],                 color: '#c9751b', bg: '#fbefdd' },
+  { label: 'QC',        stages: [13],                    color: '#c9751b', bg: '#fbefdd' },
+  { label: 'RI',        stages: [14],                    color: '#0f766e', bg: '#e6f7f4' },
   { label: 'Billing',   stages: [15,16],                 color: '#1c8f63', bg: '#e4f4ec' },
   { label: 'Delivery',  stages: [17,18],                 color: '#41617f', bg: '#e9eef3' },
 ]
@@ -434,7 +435,7 @@ export default function BodyshopRepairScreen() {
         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#e7e3d9', maxHeight: 44 }} contentContainerStyle={{ paddingHorizontal: 8, alignItems: 'center', gap: 4 }}>
           {(['overview','docs','survey','floor','qc','billing'] as RepairTab[]).map(tab => {
             const active = activeTab === tab
-            const labels: Record<RepairTab, string> = { overview: 'Overview', docs: 'SA & Docs', survey: 'Survey', floor: 'Floor', qc: 'QC', billing: 'Billing' }
+            const labels: Record<RepairTab, string> = { overview: 'Overview', docs: 'SA & Docs', survey: 'Survey', floor: 'Floor', qc: 'QC/RI', billing: 'Billing' }
             return (
               <TouchableOpacity key={tab} onPress={() => setActiveTab(tab)} style={[S.tabBtn, active && S.tabBtnActive]}>
                 <Text style={[S.tabBtnText, active && S.tabBtnTextActive]}>{labels[tab]}</Text>
