@@ -376,14 +376,34 @@ export default async function handler(req: Request) {
 
       // SIMPLE APPROACH: select top pending, update it, return full data
       // No complex optimistic locking — serviceRole bypasses RLS anyway
-      const { data: rows, error: selErr } = await serviceClient
+      const todayForRetry = new Date(Date.now() + 5.5 * 3600000).toISOString().split('T')[0]
+
+      // First: check retry leads whose retry_after is today or earlier (no-answer callbacks)
+      const { data: retryRows } = await serviceClient
         .from('telecall_assignments')
         .select('id')
         .eq('campaign_id', campaign_id)
         .eq('status', 'pending')
+        .not('retry_after', 'is', null)
+        .lte('retry_after', todayForRetry)
+        .order('retry_after', { ascending: true })
+        .order('priority_score', { ascending: false })
+        .limit(1)
+
+      // Then: fresh pending leads with no retry_after set
+      const { data: freshRows } = await serviceClient
+        .from('telecall_assignments')
+        .select('id')
+        .eq('campaign_id', campaign_id)
+        .eq('status', 'pending')
+        .is('retry_after', null)
         .order('priority_score', { ascending: false })
         .order('id', { ascending: true })
         .limit(1)
+
+      // Prefer retry leads over fresh leads
+      const rows = (retryRows && retryRows.length > 0) ? retryRows : (freshRows || [])
+      const selErr = null
 
       if (selErr) throw new Error(`Select failed: ${selErr.message}`)
       if (!rows || rows.length === 0) {
@@ -432,7 +452,18 @@ export default async function handler(req: Request) {
         const newNoAnswer = (current?.no_answer_count || 0) + 1
         update.no_answer_count = newNoAnswer
         update.call_count = (current?.call_count || 0) + 1
-        if (newNoAnswer >= 3) update.status = 'not_reachable'
+        if (newNoAnswer >= 3) {
+          // 3rd no-answer — permanently done
+          update.status = 'not_reachable'
+          update.retry_after = null
+        } else {
+          // 1st or 2nd no-answer — put back in queue for next day
+          const tomorrowIST = new Date(Date.now() + 5.5 * 3600000 + 86400000).toISOString().split('T')[0]
+          update.status = 'pending'
+          update.retry_after = tomorrowIST
+          update.assigned_to = null
+          update.assigned_at = null
+        }
       } else {
         const { data: current } = await serviceClient.from('telecall_assignments').select('call_count').eq('id', assignment_id).single()
         update.call_count = (current?.call_count || 0) + 1
@@ -512,6 +543,7 @@ export default async function handler(req: Request) {
         success: true,
         message: 'Status updated',
         auto_marked_unreachable: status === 'no_answer' && Number(update.no_answer_count) >= 3,
+        retry_queued: status === 'no_answer' && Number(update.no_answer_count) < 3,
         service_booking_id: servicebooking_id,
         service_booking_created: servicebooking_id !== null,
       }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
