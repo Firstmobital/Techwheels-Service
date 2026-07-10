@@ -114,6 +114,17 @@ const FLOOR_INCHARGE_ALLOWED_SERVICE_TYPES = [
   'E Breakdown',
   'Campaign',
 ]
+const ASSIGNMENT_QUERY_CHUNK_SIZE = 200
+
+type TechnicianAssignmentStatusRow = {
+  id: number | null
+  job_card_number: string | null
+  work_status: string | null
+  updated_at: string | null
+  out_ts: string | null
+  assigned_at: string | null
+  created_at: string | null
+}
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -165,6 +176,30 @@ function calculateSAIncome(labourAmount: number, saSharePercent: number): number
   if (!Number.isFinite(labourAmount) || labourAmount <= 0) return 0
   const netBeforeShare = labourAmount / 1.18
   return netBeforeShare * (saSharePercent / 100)
+}
+
+function normalizeJobCardNumber(value: string | null | undefined): string {
+  return String(value ?? '').trim().toUpperCase()
+}
+
+function normalizeStatusValue(value: string | null | undefined): string {
+  return String(value ?? '').trim().toLowerCase() || 'work_inprocess'
+}
+
+function getAssignmentRecencyMs(assignment: TechnicianAssignmentStatusRow): number {
+  const source = assignment.updated_at ?? assignment.out_ts ?? assignment.assigned_at ?? assignment.created_at ?? null
+  const parsed = source ? new Date(source).getTime() : Number.NaN
+  if (Number.isFinite(parsed)) return parsed
+  return Number(assignment.id ?? 0)
+}
+
+function calculateEligibleSAIncome(
+  row: Pick<JCDetailRow, 'job_card_number' | 'labourAmt'>,
+  saSharePercent: number,
+  completedJobCards: Set<string>,
+): number {
+  if (!completedJobCards.has(normalizeJobCardNumber(row.job_card_number))) return 0
+  return calculateSAIncome(row.labourAmt, saSharePercent)
 }
 
 function normalizeShareInput(value: string, fallback: number): number {
@@ -226,6 +261,7 @@ export default function SATrackerPage() {
   const [periodPreset, setPeriodPreset] = useState<string>('this-month')
   const [error, setError] = useState<string | null>(null)
   const [rows, setRows] = useState<ClosedJCRow[]>([])
+  const [completedJobCards, setCompletedJobCards] = useState<Set<string>>(() => new Set())
 
   // Filters
   const [fromDate, setFromDate] = useState('')
@@ -374,13 +410,54 @@ export default function SATrackerPage() {
         if (!cursorClosedAt || cursorId === null) break
       }
 
+      const nextCompletedJobCards = await fetchCompletedJobCards(
+        allRows.map((row) => row.job_card_number),
+      )
+      setCompletedJobCards(nextCompletedJobCards)
       setRows(allRows)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load SA data')
       setRows([])
+      setCompletedJobCards(new Set())
     } finally {
       setLoading(false)
     }
+  }
+
+  async function fetchCompletedJobCards(jobCardNumbers: Array<string | null | undefined>): Promise<Set<string>> {
+    const normalizedJobCards = Array.from(new Set(
+      jobCardNumbers.map(normalizeJobCardNumber).filter(Boolean),
+    ))
+    const latestByJobCard = new Map<string, TechnicianAssignmentStatusRow>()
+
+    for (let i = 0; i < normalizedJobCards.length; i += ASSIGNMENT_QUERY_CHUNK_SIZE) {
+      const chunk = normalizedJobCards.slice(i, i + ASSIGNMENT_QUERY_CHUNK_SIZE)
+      const { data, error: err } = await supabase
+        .from('technician_assignments')
+        .select('id, job_card_number, work_status, updated_at, out_ts, assigned_at, created_at')
+        .in('job_card_number', chunk)
+
+      if (err) {
+        console.error('technician_assignments status fetch error:', err.message)
+        continue
+      }
+
+      ;((data ?? []) as TechnicianAssignmentStatusRow[]).forEach((assignment) => {
+        const key = normalizeJobCardNumber(assignment.job_card_number)
+        if (!key) return
+        const existing = latestByJobCard.get(key)
+        if (existing && getAssignmentRecencyMs(existing) >= getAssignmentRecencyMs(assignment)) return
+        latestByJobCard.set(key, assignment)
+      })
+    }
+
+    const completed = new Set<string>()
+    latestByJobCard.forEach((assignment, jobCardNumber) => {
+      if (normalizeStatusValue(assignment.work_status) === 'completed') {
+        completed.add(jobCardNumber)
+      }
+    })
+    return completed
   }
 
   // ── Yesterday Report ──────────────────────────────────────────────────────
@@ -405,6 +482,9 @@ export default function SATrackerPage() {
         .order('sr_assigned_to', { ascending: true })
 
       if (err) throw err
+      const completedYesterdayJobCards = await fetchCompletedJobCards(
+        (data ?? []).map((r: any) => r.job_card_number),
+      )
 
       const saRows: YesterdaySARow[] = (data ?? [])
         .filter((r: any) => r.sr_assigned_to)
@@ -412,7 +492,9 @@ export default function SATrackerPage() {
           const labour  = parseAmount(r.dms_final_labour_amount)
           const saName  = String(r.sr_assigned_to ?? '').trim()
           const fuel    = normFuelBucket(empDetailMap.get(normSAName(saName))?.fuel_type)
-          const income  = calculateSAIncome(labour, fuel === 'EV' ? evSharePercent : saSharePercent)
+          const income  = completedYesterdayJobCards.has(normalizeJobCardNumber(r.job_card_number))
+            ? calculateSAIncome(labour, fuel === 'EV' ? evSharePercent : saSharePercent)
+            : 0
           return {
             sa_name: saName,
             job_card_number: String(r.job_card_number ?? '').trim(),
@@ -648,20 +730,20 @@ export default function SATrackerPage() {
       existing.totalSpares += r.sparesAmt
       existing.totalInvoice += r.invoiceAmt
       existing.days.add(dateKey)
+      const fuel = normFuelBucket(empDetailMap.get(normSAName(name))?.fuel_type)
+      existing.totalIncome += calculateEligibleSAIncome(
+        r,
+        fuel === 'EV' ? evSharePercent : saSharePercent,
+        completedJobCards,
+      )
       existing.dayCount = existing.days.size
       map.set(name, existing)
     })
 
     return Array.from(map.values())
-      .map(({ days: _d, ...card }) => {
-        const fuel = normFuelBucket(empDetailMap.get(normSAName(card.name))?.fuel_type)
-        return {
-          ...card,
-          totalIncome: calculateSAIncome(card.totalLabour, fuel === 'EV' ? evSharePercent : saSharePercent),
-        }
-      })
+      .map(({ days: _d, ...card }) => card)
       .sort((a, b) => b.totalIncome - a.totalIncome || b.jcCount - a.jcCount)
-  }, [deptFilteredRows, saSharePercent, evSharePercent, empDetailMap])
+  }, [deptFilteredRows, saSharePercent, evSharePercent, empDetailMap, completedJobCards])
 
   // ── Day cards for selected SA ─────────────────────────────────────────────
 
@@ -684,7 +766,7 @@ export default function SATrackerPage() {
       existing.totalLabour += r.labourAmt
       existing.totalSpares += r.sparesAmt
       existing.totalInvoice += r.invoiceAmt
-      existing.totalIncome = calculateSAIncome(existing.totalLabour, saPct)
+      existing.totalIncome += calculateEligibleSAIncome(r, saPct, completedJobCards)
       map.set(dateKey, existing)
     })
     return Array.from(map.values()).sort((a, b) => {
@@ -692,7 +774,7 @@ export default function SATrackerPage() {
       if (b.dateKey === 'unknown') return -1
       return b.dateKey.localeCompare(a.dateKey)
     })
-  }, [selectedSARows, saSharePercent, evSharePercent, empDetailMap, selectedSA])
+  }, [selectedSARows, saSharePercent, evSharePercent, empDetailMap, selectedSA, completedJobCards])
 
   // ── JC detail rows for selected day ──────────────────────────────────────
 
@@ -743,7 +825,9 @@ export default function SATrackerPage() {
       const name = String(r.sr_assigned_to ?? '').trim()
       if (!name) return
       const existing = saMap.get(name) ?? { labour: 0, loc: new Set(), por: new Set(), dept: '' }
-      existing.labour += r.labourAmt
+      if (completedJobCards.has(normalizeJobCardNumber(r.job_card_number))) {
+        existing.labour += r.labourAmt
+      }
       existing.loc.add(getLocationLabel(r.location))
       existing.por.add(getPortalLabel(r.portal))
       existing.dept = saNameToDept.get(normSAName(name)) ?? existing.dept
@@ -764,7 +848,7 @@ export default function SATrackerPage() {
         jcCount:       rows.filter(r => String(r.sr_assigned_to ?? '').trim() === name).length,
         totalLabour:   data.labour,
         payoutPercent: pct,
-        payoutAmount:  data.labour * (pct / 100),
+        payoutAmount:  calculateSAIncome(data.labour, pct),
         bankName:      emp?.bank_name ?? '—',
         accountNumber: emp?.account_number ?? '—',
         ifsc:          emp?.ifsc ?? '—',
@@ -1213,7 +1297,7 @@ export default function SATrackerPage() {
                     <td style={{ textAlign: 'right', color: '#16a34a', fontWeight: 600 }}>{formatCurrency(r.analyticLabourAmt)}</td>
                     <td style={{ textAlign: 'right', color: '#9333ea', fontWeight: 600 }}>{formatCurrency(r.sparesAmt)}</td>
                     <td style={{ textAlign: 'right', fontWeight: 700 }}>{formatCurrency(r.invoiceAmt)}</td>
-                    <td style={{ textAlign: 'right', color: '#2563eb', fontWeight: 700 }}>{formatCurrency(calculateSAIncome(r.labourAmt, normFuelBucket(empDetailMap.get(normSAName(selectedSA))?.fuel_type) === 'EV' ? evSharePercent : saSharePercent))}</td>
+                    <td style={{ textAlign: 'right', color: '#2563eb', fontWeight: 700 }}>{formatCurrency(calculateEligibleSAIncome(r, normFuelBucket(empDetailMap.get(normSAName(selectedSA))?.fuel_type) === 'EV' ? evSharePercent : saSharePercent, completedJobCards))}</td>
                     <td style={{ textAlign: 'right', color: '#15803d', fontWeight: 700 }}>{formatCurrency(r.dmsLabourAmt)}</td>
                     <td style={{ textAlign: 'right', color: '#0f766e', fontWeight: 700 }}>{formatCurrency(r.dmsInvoiceAmt)}</td>
                   </tr>
@@ -1232,7 +1316,7 @@ export default function SATrackerPage() {
                     {formatCurrency(dayDetailRows.reduce((s, r) => s + r.invoiceAmt, 0))}
                   </td>
                   <td style={{ textAlign: 'right', color: '#2563eb', fontWeight: 700 }}>
-                    {formatCurrency(dayDetailRows.reduce((s, r) => s + calculateSAIncome(r.labourAmt, normFuelBucket(empDetailMap.get(normSAName(selectedSA))?.fuel_type) === 'EV' ? evSharePercent : saSharePercent), 0))}
+                    {formatCurrency(dayDetailRows.reduce((s, r) => s + calculateEligibleSAIncome(r, normFuelBucket(empDetailMap.get(normSAName(selectedSA))?.fuel_type) === 'EV' ? evSharePercent : saSharePercent, completedJobCards), 0))}
                   </td>
                   <td style={{ textAlign: 'right', color: '#15803d' }}>
                     {formatCurrency(dayDetailRows.reduce((s, r) => s + r.dmsLabourAmt, 0))}
@@ -1363,7 +1447,8 @@ export default function SATrackerPage() {
           if (!dateKey) return
           const saName  = String(r.sr_assigned_to ?? '').trim()
           if (!saName) return
-          const income  = calculateSAIncome(r.labourAmt, saSharePercent)
+          const fuel    = normFuelBucket(empDetailMap.get(normSAName(saName))?.fuel_type)
+          const income  = calculateEligibleSAIncome(r, fuel === 'EV' ? evSharePercent : saSharePercent, completedJobCards)
           if (income <= 0) return
 
           if (!pivot.has(dateKey)) pivot.set(dateKey, new Map())
