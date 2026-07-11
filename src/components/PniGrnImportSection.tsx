@@ -376,11 +376,11 @@ export function PniGrnImportSection() {
       // so re-uploads always reflect the latest file exactly — no stale rows remain.
       const { error: delErr } = await supabase.from('parts_not_invoiced_data')
         .delete().eq('dealer_code', slot.dealer_code).eq('branch_label', slot.branch_label)
-      if (delErr) throw delErr
+      if (delErr) throw new Error(`Delete failed: ${delErr.message ?? JSON.stringify(delErr)}`)
       const dbRows = pending.map(r => mapPniRow(r, slot, sessionId))
       for (let i = 0; i < dbRows.length; i += 500) {
         const { error } = await supabase.from('parts_not_invoiced_data').insert(dbRows.slice(i, i + 500))
-        if (error) throw error
+        if (error) throw new Error(`Insert failed at row ~${i + 1}: ${error.message ?? JSON.stringify(error)}`)
         const done = Math.min(i + 500, dbRows.length)
         setPniMsgs(p => ({ ...p, [slot.key]: { type: 'progress', text: `Uploading… ${done}/${dbRows.length}` } }))
       }
@@ -394,7 +394,7 @@ export function PniGrnImportSection() {
       setTimeout(() => setPniMsgs(p => ({ ...p, [slot.key]: null })), 5000)
       await loadLastUploads()
     } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e)
+      const msg = e instanceof Error ? e.message : (e as { message?: string })?.message ?? JSON.stringify(e)
       setPniMsgs(p => ({ ...p, [slot.key]: { type: 'error', text: `❌ ${msg}` } }))
     } finally {
       setPniUploading(p => ({ ...p, [slot.key]: false }))
@@ -478,7 +478,7 @@ export function PniGrnImportSection() {
       setTimeout(() => setGrnMsgs(p => ({ ...p, [slot.key]: null })), 8000)
       await loadLastUploads()
     } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e)
+      const msg = e instanceof Error ? e.message : (e as { message?: string })?.message ?? JSON.stringify(e)
       console.error('GRN upload error:', e)
       setGrnMsgs(p => ({ ...p, [slot.key]: { type: 'error', text: `❌ ${msg}` } }))
     } finally {
@@ -499,7 +499,7 @@ export function PniGrnImportSection() {
       // Delete old data for this slot
       const { error: delErr } = await supabase.from('jc_closed_invoiced_data')
         .delete().eq('dealer_code', slot.dealer_code).eq('branch_label', slot.branch_label)
-      if (delErr) throw delErr
+      if (delErr) throw new Error(`Delete failed: ${delErr.message ?? JSON.stringify(delErr)}`)
 
       const sessionId = crypto.randomUUID()
       const gs2 = (r: Record<string, unknown>, k: string) => { const v = r[k]; return v != null && String(v).trim() ? String(v).trim() : null }
@@ -549,7 +549,7 @@ export function PniGrnImportSection() {
 
       for (let i = 0; i < dbRows.length; i += 500) {
         const { error } = await supabase.from('jc_closed_invoiced_data').insert(dbRows.slice(i, i + 500))
-        if (error) throw error
+        if (error) throw new Error(`Insert failed at row ~${i + 1}: ${error.message ?? JSON.stringify(error)}`)
         setJciMsgs(p => ({ ...p, [slot.key]: { type: 'progress', text: `Uploading… ${Math.min(i+500, dbRows.length)}/${dbRows.length}` } }))
       }
 
@@ -565,7 +565,7 @@ export function PniGrnImportSection() {
       setTimeout(() => setJciMsgs(p => ({ ...p, [slot.key]: null })), 5000)
       await loadLastUploads()
     } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e)
+      const msg = e instanceof Error ? e.message : (e as { message?: string })?.message ?? JSON.stringify(e)
       setJciMsgs(p => ({ ...p, [slot.key]: { type: 'error', text: `❌ ${msg}` } }))
     } finally {
       setJciUploading(p => ({ ...p, [slot.key]: false }))
