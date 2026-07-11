@@ -533,15 +533,7 @@ export default function PartsRequirementSection() {
         <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
           <h3 className="mb-3 text-sm font-bold text-gray-900">{editingId ? 'Edit Parts Requirement' : 'New Parts Requirement'}</h3>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            <label className={labelCls}>
-              Entry Date
-              <input
-                type="date"
-                value={draft.entry_date}
-                onChange={(e) => setDraft((d) => ({ ...d, entry_date: e.target.value }))}
-                className={inputCls}
-              />
-            </label>
+{/* Entry Date is captured automatically at creation — not shown as editable field */}
             <label className={labelCls}>
               Registration Number *
               <input
@@ -673,6 +665,7 @@ export default function PartsRequirementSection() {
             <table className="w-full border-collapse text-sm">
               <thead>
                 <tr className="border-b border-indigo-100 bg-gradient-to-r from-indigo-50 via-blue-50 to-violet-50 text-left text-xs font-semibold uppercase tracking-wide text-indigo-700">
+                  <th className="px-4 py-3">Entry Date</th>
                   <th className="px-4 py-3">Job Card</th>
                   <th className="px-4 py-3">Reg. Number</th>
                   <th className="px-4 py-3">Customer</th>
@@ -701,6 +694,15 @@ export default function PartsRequirementSection() {
                           !row.advisor_seen ? 'bg-orange-50/60' : rowIdx % 2 === 1 ? 'bg-slate-50/70' : 'bg-white'
                         }`}
                       >
+                        <td className="px-4 py-2.5">
+                          {row.entry_date ? (
+                            <span className="inline-flex items-center rounded-full bg-violet-50 px-2.5 py-1 text-xs font-semibold text-violet-700 ring-1 ring-violet-200">
+                              {fmtDateDMY(row.entry_date)}
+                            </span>
+                          ) : (
+                            <span className="text-gray-400 text-xs">—</span>
+                          )}
+                        </td>
                         <td className="px-4 py-2.5 text-gray-700">{row.job_card_number || '—'}</td>
                         <td className="px-4 py-2.5 font-semibold text-gray-900">{row.registration_number}</td>
                         <td className="px-4 py-2.5 text-gray-700">{row.customer_name || '—'}</td>
@@ -811,6 +813,11 @@ export default function PartsRequirementSection() {
                   <StatusBadge status={row.parts_status} qty={row.parts_qty} />
                 </div>
                 <p className="mt-0.5 text-xs text-gray-500">{row.registration_number} · {row.customer_name || 'Customer N/A'}</p>
+                {row.entry_date && (
+                  <p className="mt-0.5 text-[10px] text-violet-600 font-medium">
+                    Entry: {fmtDateDMY(row.entry_date)}
+                  </p>
+                )}
                 <p className="mt-1 text-xs text-gray-700">
                   <span className="font-semibold">{row.parts_required}</span>{row.parts_number ? ` (${row.parts_number})` : ''}
                 </p>
