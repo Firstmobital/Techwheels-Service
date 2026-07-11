@@ -76,7 +76,11 @@ async function parseExcelOrCsv(file: File): Promise<Record<string, unknown>[]> {
 function parseAmount(v: unknown): number {
   if (v == null) return 0
   if (typeof v === 'number') return v
-  return parseFloat(String(v).replace(/[^0-9.-]/g, '')) || 0
+  // Strip currency prefix (Rs., ₹) BEFORE removing other characters,
+  // otherwise "Rs.3,971.50" → ".3971.50" → parseFloat = 0.3971 (wrong).
+  // Correct: strip "Rs." → "3,971.50" → remove commas → "3971.50" → 3971.50
+  const s = String(v).replace(/^Rs\.?\s*/i, '').replace(/^₹\s*/, '').replace(/,/g, '').trim()
+  return parseFloat(s) || 0
 }
 function parseDate(v: unknown): string | null {
   if (!v) return null

@@ -211,6 +211,30 @@ export default function PartsNotInvoicedReport(_props: ReportViewProps) {
   const enriched = useMemo(() => rows.map(r => ({ ...r, _days: pendingDays(r.created_date) })), [rows])
   const today = new Date().toDateString()
 
+  // ── Status Report (jc_status from Excel) ────────────────────────────────────
+  const JC_STATUS_SHOW = ['Closed', 'Cancel', 'Completed', 'Shipped'] as const
+  const statusSummary = useMemo(() => {
+    return JC_STATUS_SHOW.map(st => {
+      const rows_s = enriched.filter(r => r.jc_status === st)
+      const total_ov = rows_s.reduce((sum, r) => sum + (r.total_order_value ?? 0), 0)
+      return { status: st, count: rows_s.length, total_order_value: total_ov }
+    })
+  }, [enriched])
+
+  // ── Invoiced? = N Report ─────────────────────────────────────────────────
+  const invoicedNSummary = useMemo(() => {
+    const rows_n = enriched.filter(r => r.invoiced === 'N')
+    return {
+      count: rows_n.length,
+      total_order_value: rows_n.reduce((sum, r) => sum + (r.total_order_value ?? 0), 0),
+    }
+  }, [enriched])
+
+  // ── Total Order Value for all records ──────────────────────────────────────
+  const totalOrderValue = useMemo(() =>
+    enriched.reduce((sum, r) => sum + (r.total_order_value ?? 0), 0),
+  [enriched])
+
   // ── KPI counts ─────────────────────────────────────────────────────────────
   // KPIs count only active (non-Closed, non-Invoiced) records
   const active = useMemo(() =>
@@ -404,10 +428,73 @@ export default function PartsNotInvoicedReport(_props: ReportViewProps) {
         </div>
       )}
 
+      {/* ── 1. Status Report ────────────────────────────────────────────────── */}
+      {!loading && rows.length > 0 && (
+        <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+          <h3 className="mb-3 text-sm font-bold text-gray-800 flex items-center gap-2">
+            <span className="inline-block h-2.5 w-2.5 rounded-full bg-indigo-500" />
+            1. Status Report
+            <span className="text-[10px] font-normal text-gray-400 ml-1">(from Excel "Status" column)</span>
+          </h3>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            {statusSummary.map(({ status, count, total_order_value }) => {
+              const colorMap: Record<string, string> = {
+                Closed:    'border-emerald-200 bg-emerald-50',
+                Cancel:    'border-red-200 bg-red-50',
+                Completed: 'border-blue-200 bg-blue-50',
+                Shipped:   'border-violet-200 bg-violet-50',
+              }
+              const textMap: Record<string, string> = {
+                Closed:    'text-emerald-800',
+                Cancel:    'text-red-800',
+                Completed: 'text-blue-800',
+                Shipped:   'text-violet-800',
+              }
+              return (
+                <div key={status} className={`rounded-lg border p-3 ${colorMap[status] ?? 'border-gray-200 bg-gray-50'}`}>
+                  <p className={`text-[10px] font-bold uppercase tracking-wide ${textMap[status] ?? 'text-gray-600'}`}>{status}</p>
+                  <p className={`mt-1 text-xl font-bold ${textMap[status] ?? 'text-gray-800'}`}>{count.toLocaleString('en-IN')}</p>
+                  <p className="text-[10px] text-gray-500 mt-0.5">JC Count</p>
+                  <p className={`mt-2 text-sm font-semibold ${textMap[status] ?? 'text-gray-700'}`}>
+                    ₹{total_order_value.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </p>
+                  <p className="text-[10px] text-gray-500">Total Order Value</p>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* ── 2. Invoiced? = N Report ─────────────────────────────────────────── */}
+      {!loading && rows.length > 0 && (
+        <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+          <h3 className="mb-3 text-sm font-bold text-gray-800 flex items-center gap-2">
+            <span className="inline-block h-2.5 w-2.5 rounded-full bg-amber-500" />
+            2. Invoiced? Report
+            <span className="text-[10px] font-normal text-gray-400 ml-1">(Invoiced? = N only)</span>
+          </h3>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 max-w-sm">
+            <div className="rounded-lg border border-amber-200 bg-amber-50 p-3">
+              <p className="text-[10px] font-bold uppercase tracking-wide text-amber-700">Total JC Count</p>
+              <p className="mt-1 text-2xl font-bold text-amber-900">{invoicedNSummary.count.toLocaleString('en-IN')}</p>
+              <p className="text-[10px] text-gray-500 mt-0.5">Where Invoiced? = N</p>
+            </div>
+            <div className="rounded-lg border border-orange-200 bg-orange-50 p-3">
+              <p className="text-[10px] font-bold uppercase tracking-wide text-orange-700">Total Order Value</p>
+              <p className="mt-1 text-2xl font-bold text-orange-900">
+                ₹{invoicedNSummary.total_order_value.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </p>
+              <p className="text-[10px] text-gray-500 mt-0.5">Sum of Total Order Value</p>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ── KPI tiles ─────────────────────────────────────────────────────────── */}
       {!loading && rows.length > 0 && (
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-8">
-          <KpiCard label="Total Pending JCs" value={kpis.total} color="border-gray-200 bg-white text-gray-900" active={activeKpi === null} onClick={() => setActiveKpi(null)} />
+          <KpiCard label="Total JC Pending" value={kpis.total} sub={`₹${totalOrderValue.toLocaleString('en-IN', { maximumFractionDigits: 0 })} Order Value`} color="border-gray-200 bg-white text-gray-900" active={activeKpi === null} onClick={() => setActiveKpi(null)} />
           <KpiCard label="EV Pending" value={kpis.ev} color="border-emerald-200 bg-emerald-50 text-emerald-800" active={activeKpi === 'ev'} onClick={() => setActiveKpi(v => v === 'ev' ? null : 'ev')} />
           <KpiCard label="PV Pending" value={kpis.pv} color="border-blue-200 bg-blue-50 text-blue-800" active={activeKpi === 'pv'} onClick={() => setActiveKpi(v => v === 'pv' ? null : 'pv')} />
           <KpiCard label="Today's New" value={kpis.todayPending} sub="Created today" color="border-violet-200 bg-violet-50 text-violet-800" active={activeKpi === 'today'} onClick={() => setActiveKpi(v => v === 'today' ? null : 'today')} />
