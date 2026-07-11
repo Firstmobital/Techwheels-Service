@@ -230,6 +230,24 @@ export default function PartsNotInvoicedReport(_props: ReportViewProps) {
     }
   }, [enriched])
 
+  // ── Branch-wise summary ─────────────────────────────────────────────────
+  const BRANCH_MAP = [
+    { code: '3000840', name: 'PV Sitapura',   portal: 'PV', branch_label: 'SITAPURA'   },
+    { code: '3001440', name: 'PV Ajmer Road', portal: 'PV', branch_label: 'AJMER ROAD' },
+    { code: '500A840', name: 'EV Sitapura',   portal: 'EV', branch_label: 'SITAPURA'   },
+  ] as const
+  const branchSummary = useMemo(() => {
+    return BRANCH_MAP.map(({ code, name }) => {
+      const br = enriched.filter(r => r.dealer_code === code)
+      return {
+        code,
+        name,
+        count: br.length,
+        total_order_value: br.reduce((sum, r) => sum + (r.total_order_value ?? 0), 0),
+      }
+    })
+  }, [enriched])
+
   // ── Total Order Value for all records ──────────────────────────────────────
   const totalOrderValue = useMemo(() =>
     enriched.reduce((sum, r) => sum + (r.total_order_value ?? 0), 0),
@@ -428,12 +446,26 @@ export default function PartsNotInvoicedReport(_props: ReportViewProps) {
         </div>
       )}
 
+      {/* ── KPI tiles ─────────────────────────────────────────────────────────── */}
+      {!loading && rows.length > 0 && (
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-8">
+          <KpiCard label="Total JC Pending" value={kpis.total} sub={`₹${totalOrderValue.toLocaleString('en-IN', { maximumFractionDigits: 0 })} Order Value`} color="border-gray-200 bg-white text-gray-900" active={activeKpi === null} onClick={() => setActiveKpi(null)} />
+          <KpiCard label="EV Pending" value={kpis.ev} color="border-emerald-200 bg-emerald-50 text-emerald-800" active={activeKpi === 'ev'} onClick={() => setActiveKpi(v => v === 'ev' ? null : 'ev')} />
+          <KpiCard label="PV Pending" value={kpis.pv} color="border-blue-200 bg-blue-50 text-blue-800" active={activeKpi === 'pv'} onClick={() => setActiveKpi(v => v === 'pv' ? null : 'pv')} />
+          <KpiCard label="Today's New" value={kpis.todayPending} sub="Created today" color="border-violet-200 bg-violet-50 text-violet-800" active={activeKpi === 'today'} onClick={() => setActiveKpi(v => v === 'today' ? null : 'today')} />
+          <KpiCard label="3+ Days" value={kpis.gt3} color="border-amber-200 bg-amber-50 text-amber-800" active={activeKpi === 'gt3'} onClick={() => setActiveKpi(v => v === 'gt3' ? null : 'gt3')} />
+          <KpiCard label="7+ Days" value={kpis.gt7} color="border-orange-200 bg-orange-50 text-orange-800" active={activeKpi === 'gt7'} onClick={() => setActiveKpi(v => v === 'gt7' ? null : 'gt7')} />
+          <KpiCard label="15+ Days" value={kpis.gt15} color="border-red-200 bg-red-50 text-red-800" active={activeKpi === 'gt15'} onClick={() => setActiveKpi(v => v === 'gt15' ? null : 'gt15')} />
+          <KpiCard label="Showing" value={filtered.length} sub={`of ${enriched.length}`} color="border-gray-100 bg-gray-50 text-gray-700" />
+        </div>
+      )}
+
       {/* ── 1. Status Report ────────────────────────────────────────────────── */}
       {!loading && rows.length > 0 && (
         <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
           <h3 className="mb-3 text-sm font-bold text-gray-800 flex items-center gap-2">
             <span className="inline-block h-2.5 w-2.5 rounded-full bg-indigo-500" />
-            1. Status Report
+            2. Status Report
             <span className="text-[10px] font-normal text-gray-400 ml-1">(from Excel "Status" column)</span>
           </h3>
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
@@ -471,7 +503,7 @@ export default function PartsNotInvoicedReport(_props: ReportViewProps) {
         <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
           <h3 className="mb-3 text-sm font-bold text-gray-800 flex items-center gap-2">
             <span className="inline-block h-2.5 w-2.5 rounded-full bg-amber-500" />
-            2. Invoiced? Report
+            3. Invoiced? Report
             <span className="text-[10px] font-normal text-gray-400 ml-1">(Invoiced? = N only)</span>
           </h3>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 max-w-sm">
@@ -491,17 +523,47 @@ export default function PartsNotInvoicedReport(_props: ReportViewProps) {
         </div>
       )}
 
-      {/* ── KPI tiles ─────────────────────────────────────────────────────────── */}
+      {/* ── Branch-wise Report ──────────────────────────────────────────────── */}
       {!loading && rows.length > 0 && (
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-8">
-          <KpiCard label="Total JC Pending" value={kpis.total} sub={`₹${totalOrderValue.toLocaleString('en-IN', { maximumFractionDigits: 0 })} Order Value`} color="border-gray-200 bg-white text-gray-900" active={activeKpi === null} onClick={() => setActiveKpi(null)} />
-          <KpiCard label="EV Pending" value={kpis.ev} color="border-emerald-200 bg-emerald-50 text-emerald-800" active={activeKpi === 'ev'} onClick={() => setActiveKpi(v => v === 'ev' ? null : 'ev')} />
-          <KpiCard label="PV Pending" value={kpis.pv} color="border-blue-200 bg-blue-50 text-blue-800" active={activeKpi === 'pv'} onClick={() => setActiveKpi(v => v === 'pv' ? null : 'pv')} />
-          <KpiCard label="Today's New" value={kpis.todayPending} sub="Created today" color="border-violet-200 bg-violet-50 text-violet-800" active={activeKpi === 'today'} onClick={() => setActiveKpi(v => v === 'today' ? null : 'today')} />
-          <KpiCard label="3+ Days" value={kpis.gt3} color="border-amber-200 bg-amber-50 text-amber-800" active={activeKpi === 'gt3'} onClick={() => setActiveKpi(v => v === 'gt3' ? null : 'gt3')} />
-          <KpiCard label="7+ Days" value={kpis.gt7} color="border-orange-200 bg-orange-50 text-orange-800" active={activeKpi === 'gt7'} onClick={() => setActiveKpi(v => v === 'gt7' ? null : 'gt7')} />
-          <KpiCard label="15+ Days" value={kpis.gt15} color="border-red-200 bg-red-50 text-red-800" active={activeKpi === 'gt15'} onClick={() => setActiveKpi(v => v === 'gt15' ? null : 'gt15')} />
-          <KpiCard label="Showing" value={filtered.length} sub={`of ${enriched.length}`} color="border-gray-100 bg-gray-50 text-gray-700" />
+        <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+          <h3 className="mb-3 text-sm font-bold text-gray-800 flex items-center gap-2">
+            <span className="inline-block h-2.5 w-2.5 rounded-full bg-teal-500" />
+            3. Branch-wise Report
+          </h3>
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs border-collapse">
+              <thead>
+                <tr className="border-b border-gray-200 bg-gray-50 text-left">
+                  <th className="px-4 py-2.5 text-[10px] font-semibold uppercase tracking-wide text-gray-500">Branch Code</th>
+                  <th className="px-4 py-2.5 text-[10px] font-semibold uppercase tracking-wide text-gray-500">Branch Name</th>
+                  <th className="px-4 py-2.5 text-[10px] font-semibold uppercase tracking-wide text-gray-500 text-center">Total JC Count</th>
+                  <th className="px-4 py-2.5 text-[10px] font-semibold uppercase tracking-wide text-gray-500 text-right">Total Order Value</th>
+                </tr>
+              </thead>
+              <tbody>
+                {branchSummary.map(({ code, name, count, total_order_value }, i) => (
+                  <tr key={code} className={`border-b border-gray-100 ${i % 2 === 0 ? 'bg-white' : 'bg-gray-50/60'}`}>
+                    <td className="px-4 py-2.5 font-mono text-xs font-semibold text-gray-700">{code}</td>
+                    <td className="px-4 py-2.5 font-medium text-gray-800">{name}</td>
+                    <td className="px-4 py-2.5 text-center font-bold text-gray-900">{count.toLocaleString('en-IN')}</td>
+                    <td className="px-4 py-2.5 text-right font-semibold text-teal-700">
+                      ₹{total_order_value.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </td>
+                  </tr>
+                ))}
+                {/* Total row */}
+                <tr className="border-t-2 border-gray-300 bg-gray-100 font-bold">
+                  <td className="px-4 py-2.5 text-xs text-gray-600" colSpan={2}>Total</td>
+                  <td className="px-4 py-2.5 text-center text-gray-900">
+                    {branchSummary.reduce((s, b) => s + b.count, 0).toLocaleString('en-IN')}
+                  </td>
+                  <td className="px-4 py-2.5 text-right text-teal-800">
+                    ₹{branchSummary.reduce((s, b) => s + b.total_order_value, 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
 
