@@ -129,46 +129,66 @@ function mapPniRow(raw: Record<string, unknown>, slot: UploadSlot, sessionId: st
 }
 
 // ─── GRN row mapper ───────────────────────────────────────────────────────────
+// NOTE: grn_status is a GENERATED COLUMN in the DB (computed from 'status').
+// Do NOT include it in insert payload — Postgres will reject with error 428C9.
+// challan_qty maps to Excel column 'Challan Quantity' (not 'Challan Qty').
 function mapGrnRow(raw: Record<string, unknown>, slot: UploadSlot, sessionId: string) {
-  const statusVal = (gs(raw, 'Status') || '').trim()
-  const sapInv    = (gs(raw, 'SAP Invoice #') || '').trim()
-  const grnStatus =
-    /^in.?transit$/i.test(statusVal) ? 'In Transit' :
-    /^(receiv|grn.receiv|done|complet)/i.test(statusVal) ? 'GRN Received' :
-    (!statusVal && sapInv) ? 'GRN Received' :
-    'GRN Pending'
+  const sapInv = (gs(raw, 'SAP Invoice #') || '').trim()
+  // Parse numeric amounts — strip currency prefix like "Rs." then parse float
+  const parseAmt = (v: unknown) => {
+    if (v == null || v === '') return null
+    const n = parseFloat(String(v).replace(/[^0-9.-]/g, ''))
+    return isNaN(n) ? null : n
+  }
+  // Parse integer qty — Excel may export as float (e.g. 2.0)
+  const parseQty = (v: unknown) => {
+    if (v == null || v === '') return null
+    const n = Math.round(parseFloat(String(v).replace(/[^0-9.-]/g, '')))
+    return isNaN(n) ? null : n
+  }
   return {
-    portal: slot.portal,
-    branch: slot.dealer_code,
-    upload_session_id: sessionId,
+    portal:              slot.portal,
+    branch:              slot.dealer_code,
+    upload_session_id:   sessionId,
     sap_invoice_no:      sapInv || null,
-    order_no:            gs(raw, 'Order #')                 || null,
-    transaction_number:  gs(raw, 'Transaction Number')      || null,
-    part_no:             gs(raw, 'Part #')                  || null,
-    invoice_date:        gs(raw, 'Invoice_Date')            || null,
-    status:              gs(raw, 'Status')                  || null,
-    warehouse_name:      gs(raw, 'Ware House Name')         || null,
-    commit_flag:         gs(raw, 'Commit Flag')             || null,
-    recd_qty:            Number(g(raw, 'Recd Qty'))         || null,
-    spares_order_type:   gs(raw, 'Spares Order Type')       || null,
-    condition:           gs(raw, 'Condition')               || null,
-    transaction_date:    gs(raw, 'Transaction Date')        || null,
-    vendor_invoice_no:   gs(raw, 'Vendor Invoice #')        || null,
-    net_amount:          gs(raw, 'Net Amount')              || null,
-    total_invoice_amount: gs(raw, 'Total_Invoice_Amount')   || null,
-    vendor_name:         gs(raw, 'Vendor Name')             || null,
-    sap_order_num:       gs(raw, 'SAP Order Num')           || null,
-    gst_invoice_no:      gs(raw, 'GST Invoice #')           || null,
-    lr_docket_no:        gs(raw, 'LR #/Docket #')          || null,
-    challan_no:          gs(raw, 'Challan #')               || null,
-    challan_date:        gs(raw, 'Challan Date')            || null,
-    challan_qty:         Number(g(raw, 'Challan Quantity'))  || null,
-    purchase_order_date: gs(raw, 'Purchase_Order_Date')     || null,
-    division_name:       gs(raw, 'Division Name')           || null,
-    order_type:          gs(raw, 'Order Type')              || null,
-    grn_status:          grnStatus,
+    order_no:            gs(raw, 'Order #')                   || null,
+    transaction_number:  gs(raw, 'Transaction Number')        || null,
+    part_no:             gs(raw, 'Part #')                    || null,
+    invoice_date:        gs(raw, 'Invoice_Date')              || null,
+    status:              gs(raw, 'Status')                    || null,
+    // grn_status intentionally omitted — it is a DB generated column
+    warehouse_name:      gs(raw, 'Ware House Name')           || null,
+    commit_flag:         gs(raw, 'Commit Flag')               || null,
+    recd_qty:            parseQty(g(raw, 'Recd Qty')),
+    spares_order_type:   gs(raw, 'Spares Order Type')         || null,
+    condition:           gs(raw, 'Condition')                 || null,
+    transaction_date:    gs(raw, 'Transaction Date')          || null,
+    vendor_invoice_no:   gs(raw, 'Vendor Invoice #')          || null,
+    discount_amount:     gs(raw, 'Discount Amount')           || null,
+    net_amount:          gs(raw, 'Net Amount')                || null,
+    other_charges_amount: gs(raw, 'Other Charges Amount')     || null,
+    total_invoice_amount: gs(raw, 'Total_Invoice_Amount')     || null,
+    vendor_name:         gs(raw, 'Vendor Name')               || null,
+    payer_code:          gs(raw, 'Payer Code')                || null,
+    sap_order_num:       gs(raw, 'SAP Order Num')             || null,
+    irn:                 gs(raw, 'IRN')                       || null,
+    irn_date:            gs(raw, 'IRN Date')                  || null,
+    gst_invoice_no:      gs(raw, 'GST Invoice #')             || null,
+    tcs_amount:          parseAmt(g(raw, 'TCS Amount')),
+    lr_docket_no:        gs(raw, 'LR #/Docket #')            || null,
+    challan_no:          gs(raw, 'Challan #')                 || null,
+    challan_date:        gs(raw, 'Challan Date')              || null,
+    challan_qty:         parseQty(g(raw, 'Challan Quantity')), // Excel: 'Challan Quantity' not 'Challan Qty'
+    purchase_order_date: gs(raw, 'Purchase_Order_Date')       || null,
+    division_name:       gs(raw, 'Division Name')             || null,
+    order_type:          gs(raw, 'Order Type')                || null,
+    movement_type:       gs(raw, 'Movement Type')             || null,
     line_item_invoice_total: gs(raw, 'Line Item Invoice Total') || null,
-    weighted_avg:        gs(raw, 'Weighted Avg')             || null,
+    weighted_avg:        gs(raw, 'Weighted Avg')              || null,
+    cgst:                gs(raw, 'CGST')                      || null,
+    igst:                gs(raw, 'IGST')                      || null,
+    sgst:                gs(raw, 'SGST')                      || null,
+    source:              gs(raw, 'Source')                    || null,
   }
 }
 
@@ -387,32 +407,79 @@ export function PniGrnImportSection() {
     setGrnMsgs(p => ({ ...p, [slot.key]: { type: 'progress', text: `Parsing ${file.name}…` } }))
     try {
       if (!file.name.match(/\.(xlsx|xls|csv|txt)$/i)) throw new Error('Please upload an Excel or CSV file.')
+
       const raw = await parseExcelOrCsv(file)
       if (!raw.length) throw new Error('No data rows found in file.')
-      const keys = Object.keys(raw[0])
-      if (!keys.some(k => k.includes('SAP Invoice') || k.includes('Order #') || k.includes('Recd Qty'))) {
-        throw new Error('File format invalid — GRN file should contain "SAP Invoice #", "Order #" or "Recd Qty" columns.')
+
+      // Validate format — accept files with at least one of these anchor columns
+      const keys = Object.keys(raw[0]).map(k => k.replace(/\ufeff/g, '').trim())
+      const hasGrnCols = keys.some(k =>
+        k === 'SAP Invoice #' || k === 'Order #' || k === 'Recd Qty' ||
+        k === 'Transaction Number' || k === 'Part #'
+      )
+      if (!hasGrnCols) {
+        throw new Error(
+          `File format invalid — expected GRN columns (SAP Invoice #, Order #, Part #). ` +
+          `Found columns: ${keys.slice(0, 6).join(', ')}…`
+        )
       }
+
+      // Delete existing rows for this portal+branch before inserting fresh data
+      setGrnMsgs(p => ({ ...p, [slot.key]: { type: 'progress', text: `Clearing old data for ${slot.label}…` } }))
+      const { error: delErr } = await supabase
+        .from('grn_report_data')
+        .delete()
+        .eq('portal', slot.portal)
+        .eq('branch', slot.dealer_code)
+      if (delErr) throw new Error(`Failed to clear old GRN data: ${delErr.message}`)
+
       setGrnMsgs(p => ({ ...p, [slot.key]: { type: 'progress', text: `Uploading ${raw.length.toLocaleString('en-IN')} rows…` } }))
       const sessionId = crypto.randomUUID()
-      const dbRows = raw.map(r => mapGrnRow(r, slot, sessionId))
-      for (let i = 0; i < dbRows.length; i += 500) {
-        const { error } = await supabase.from('grn_report_data').insert(dbRows.slice(i, i + 500))
-        if (error) throw error
-        const done = Math.min(i + 500, dbRows.length)
-        setGrnMsgs(p => ({ ...p, [slot.key]: { type: 'progress', text: `Uploading… ${done}/${dbRows.length}` } }))
+
+      // Map rows and track any mapping errors for user feedback
+      const mapErrors: string[] = []
+      const dbRows = raw.map((r, idx) => {
+        try {
+          return mapGrnRow(r, slot, sessionId)
+        } catch (err) {
+          mapErrors.push(`Row ${idx + 2}: ${err instanceof Error ? err.message : String(err)}`)
+          return null
+        }
+      }).filter((r): r is NonNullable<typeof r> => r !== null)
+
+      if (mapErrors.length > 0) {
+        console.warn('GRN mapping warnings:', mapErrors.slice(0, 10))
       }
+
+      let inserted = 0
+      for (let i = 0; i < dbRows.length; i += 500) {
+        const batch = dbRows.slice(i, i + 500)
+        const { error } = await supabase.from('grn_report_data').insert(batch)
+        if (error) {
+          throw new Error(
+            `Insert failed at row ~${i + 1}: ${error.message}` +
+            (error.details ? ` | Details: ${error.details}` : '') +
+            (error.hint ? ` | Hint: ${error.hint}` : '')
+          )
+        }
+        inserted += batch.length
+        setGrnMsgs(p => ({ ...p, [slot.key]: { type: 'progress', text: `Uploading… ${inserted.toLocaleString('en-IN')}/${dbRows.length.toLocaleString('en-IN')} rows` } }))
+      }
+
       const { data: { user } } = await supabase.auth.getUser()
       await supabase.from('grn_upload_history').insert({
         portal: slot.portal, branch: slot.dealer_code,
         upload_session_id: sessionId, uploaded_by_user_id: user?.id ?? null,
-        uploaded_by_name: user?.email ?? null, row_count: dbRows.length, file_name: file.name,
+        uploaded_by_name: user?.email ?? null, row_count: inserted, file_name: file.name,
       })
-      setGrnMsgs(p => ({ ...p, [slot.key]: { type: 'success', text: `✅ ${dbRows.length.toLocaleString('en-IN')} rows imported successfully` } }))
-      setTimeout(() => setGrnMsgs(p => ({ ...p, [slot.key]: null })), 5000)
+
+      const warnText = mapErrors.length > 0 ? ` (${mapErrors.length} rows skipped — check console)` : ''
+      setGrnMsgs(p => ({ ...p, [slot.key]: { type: 'success', text: `✅ ${inserted.toLocaleString('en-IN')} rows imported successfully${warnText}` } }))
+      setTimeout(() => setGrnMsgs(p => ({ ...p, [slot.key]: null })), 8000)
       await loadLastUploads()
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e)
+      console.error('GRN upload error:', e)
       setGrnMsgs(p => ({ ...p, [slot.key]: { type: 'error', text: `❌ ${msg}` } }))
     } finally {
       setGrnUploading(p => ({ ...p, [slot.key]: false }))
