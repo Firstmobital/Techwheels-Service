@@ -248,6 +248,20 @@ export default function PartsNotInvoicedReport(_props: ReportViewProps) {
     })
   }, [enriched])
 
+  // ── Advisor-wise summary ────────────────────────────────────────────────
+  const advisorSummary = useMemo(() => {
+    const map: Record<string, { count: number; tov: number }> = {}
+    enriched.forEach(r => {
+      const key = r.sr_assigned_to ?? 'Unknown'
+      if (!map[key]) map[key] = { count: 0, tov: 0 }
+      map[key].count += 1
+      map[key].tov += r.total_order_value ?? 0
+    })
+    return Object.entries(map)
+      .map(([advisor, d]) => ({ advisor, count: d.count, total_order_value: d.tov }))
+      .sort((a, b) => b.total_order_value - a.total_order_value)
+  }, [enriched])
+
   // ── Total Order Value for all records ──────────────────────────────────────
   const totalOrderValue = useMemo(() =>
     enriched.reduce((sum, r) => sum + (r.total_order_value ?? 0), 0),
@@ -446,6 +460,47 @@ export default function PartsNotInvoicedReport(_props: ReportViewProps) {
         </div>
       )}
 
+      {/* ── Filters ───────────────────────────────────────────────────────────── */}
+      <div className="rounded-xl border border-gray-200 bg-gray-50 p-3">
+        <div className="flex flex-wrap gap-2">
+          <input type="text" value={search} onChange={e => { setSearch(e.target.value); setPage(1) }}
+            placeholder="Search JC, Reg No, Customer, Chassis…"
+            className="h-8 w-64 rounded-lg border border-gray-300 px-3 text-xs focus:border-indigo-400 focus:outline-none" />
+          <select value={filterPortal} onChange={e => { setFilterPortal(e.target.value as typeof filterPortal); setPage(1) }} className="h-8 rounded-lg border border-gray-300 px-2 text-xs focus:outline-none">
+            <option value="all">All Portals</option><option value="EV">EV</option><option value="PV">PV</option>
+          </select>
+          <select value={filterDealer} onChange={e => { setFilterDealer(e.target.value); setPage(1) }} className="h-8 rounded-lg border border-gray-300 px-2 text-xs focus:outline-none">
+            <option value="all">All Dealers</option>
+            <option value="500A840">500A840 – Sitapura EV</option>
+            <option value="3000840">3000840 – Sitapura PV</option>
+            <option value="3001440">3001440 – Ajmer Road PV</option>
+          </select>
+          <select value={filterStatus} onChange={e => { setFilterStatus(e.target.value); setPage(1) }} className="h-8 rounded-lg border border-gray-300 px-2 text-xs focus:outline-none">
+            <option value="all">All Status</option>
+            {TRACKING_STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
+          </select>
+          <select value={filterAdvisor} onChange={e => { setFilterAdvisor(e.target.value); setPage(1) }} className="h-8 rounded-lg border border-gray-300 px-2 text-xs focus:outline-none">
+            <option value="all">All Advisors</option>
+            {allAdvisors.map(a => <option key={a} value={a!}>{a}</option>)}
+          </select>
+          <select value={filterModel} onChange={e => { setFilterModel(e.target.value); setPage(1) }} className="h-8 rounded-lg border border-gray-300 px-2 text-xs focus:outline-none">
+            <option value="all">All Models</option>
+            {allModels.map(m => <option key={m} value={m!}>{m}</option>)}
+          </select>
+          <label className="flex items-center gap-1 text-xs text-gray-500">
+            Days <input type="number" placeholder="Min" value={filterDaysMin} onChange={e => { setFilterDaysMin(e.target.value); setPage(1) }} className="h-8 w-14 rounded border border-gray-300 px-2 text-xs" />
+            – <input type="number" placeholder="Max" value={filterDaysMax} onChange={e => { setFilterDaysMax(e.target.value); setPage(1) }} className="h-8 w-14 rounded border border-gray-300 px-2 text-xs" />
+          </label>
+          <label className="flex items-center gap-1 text-xs text-gray-500">
+            From <input type="date" value={dateFrom} onChange={e => { setDateFrom(e.target.value); setPage(1) }} className="h-8 rounded border border-gray-300 px-2 text-xs" />
+          </label>
+          <label className="flex items-center gap-1 text-xs text-gray-500">
+            To <input type="date" value={dateTo} onChange={e => { setDateTo(e.target.value); setPage(1) }} className="h-8 rounded border border-gray-300 px-2 text-xs" />
+          </label>
+          <button onClick={clearFilters} className="text-xs text-gray-400 underline hover:text-red-600">Clear all</button>
+        </div>
+      </div>
+
       {/* ── KPI tiles ─────────────────────────────────────────────────────────── */}
       {!loading && rows.length > 0 && (
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-8">
@@ -567,6 +622,51 @@ export default function PartsNotInvoicedReport(_props: ReportViewProps) {
         </div>
       )}
 
+      {/* ── Advisor-wise Report ─────────────────────────────────────────────── */}
+      {!loading && rows.length > 0 && (
+        <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+          <h3 className="mb-3 text-sm font-bold text-gray-800 flex items-center gap-2">
+            <span className="inline-block h-2.5 w-2.5 rounded-full bg-violet-500" />
+            4. Advisor-wise Report
+            <span className="text-[10px] font-normal text-gray-400 ml-1">(grouped by SR Assigned To)</span>
+          </h3>
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs border-collapse">
+              <thead>
+                <tr className="border-b border-gray-200 bg-gray-50 text-left">
+                  <th className="px-4 py-2.5 text-[10px] font-semibold uppercase tracking-wide text-gray-500">#</th>
+                  <th className="px-4 py-2.5 text-[10px] font-semibold uppercase tracking-wide text-gray-500">Advisor ID</th>
+                  <th className="px-4 py-2.5 text-[10px] font-semibold uppercase tracking-wide text-gray-500 text-center">Total JC Count</th>
+                  <th className="px-4 py-2.5 text-[10px] font-semibold uppercase tracking-wide text-gray-500 text-right">Total Order Value</th>
+                </tr>
+              </thead>
+              <tbody>
+                {advisorSummary.map(({ advisor, count, total_order_value }, i) => (
+                  <tr key={advisor} className={`border-b border-gray-100 ${i % 2 === 0 ? 'bg-white' : 'bg-gray-50/60'}`}>
+                    <td className="px-4 py-2.5 text-gray-400 text-[11px]">{i + 1}</td>
+                    <td className="px-4 py-2.5 font-mono text-xs font-semibold text-gray-800">{advisor}</td>
+                    <td className="px-4 py-2.5 text-center font-bold text-gray-900">{count.toLocaleString('en-IN')}</td>
+                    <td className="px-4 py-2.5 text-right font-semibold text-violet-700">
+                      ₹{total_order_value.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </td>
+                  </tr>
+                ))}
+                {/* Grand total row */}
+                <tr className="border-t-2 border-gray-300 bg-gray-100 font-bold">
+                  <td className="px-4 py-2.5 text-xs text-gray-600" colSpan={2}>Total</td>
+                  <td className="px-4 py-2.5 text-center text-gray-900">
+                    {advisorSummary.reduce((s, a) => s + a.count, 0).toLocaleString('en-IN')}
+                  </td>
+                  <td className="px-4 py-2.5 text-right text-violet-800">
+                    ₹{advisorSummary.reduce((s, a) => s + a.total_order_value, 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
       {/* ── Charts ────────────────────────────────────────────────────────────── */}
       {showCharts && enriched.length > 0 && (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -619,47 +719,6 @@ export default function PartsNotInvoicedReport(_props: ReportViewProps) {
           </div>
         </div>
       )}
-
-      {/* ── Filters ───────────────────────────────────────────────────────────── */}
-      <div className="rounded-xl border border-gray-200 bg-gray-50 p-3">
-        <div className="flex flex-wrap gap-2">
-          <input type="text" value={search} onChange={e => { setSearch(e.target.value); setPage(1) }}
-            placeholder="Search JC, Reg No, Customer, Chassis…"
-            className="h-8 w-64 rounded-lg border border-gray-300 px-3 text-xs focus:border-indigo-400 focus:outline-none" />
-          <select value={filterPortal} onChange={e => { setFilterPortal(e.target.value as typeof filterPortal); setPage(1) }} className="h-8 rounded-lg border border-gray-300 px-2 text-xs focus:outline-none">
-            <option value="all">All Portals</option><option value="EV">EV</option><option value="PV">PV</option>
-          </select>
-          <select value={filterDealer} onChange={e => { setFilterDealer(e.target.value); setPage(1) }} className="h-8 rounded-lg border border-gray-300 px-2 text-xs focus:outline-none">
-            <option value="all">All Dealers</option>
-            <option value="500A840">500A840 – Sitapura EV</option>
-            <option value="3000840">3000840 – Sitapura PV</option>
-            <option value="3001440">3001440 – Ajmer Road PV</option>
-          </select>
-          <select value={filterStatus} onChange={e => { setFilterStatus(e.target.value); setPage(1) }} className="h-8 rounded-lg border border-gray-300 px-2 text-xs focus:outline-none">
-            <option value="all">All Status</option>
-            {TRACKING_STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
-          </select>
-          <select value={filterAdvisor} onChange={e => { setFilterAdvisor(e.target.value); setPage(1) }} className="h-8 rounded-lg border border-gray-300 px-2 text-xs focus:outline-none">
-            <option value="all">All Advisors</option>
-            {allAdvisors.map(a => <option key={a} value={a!}>{a}</option>)}
-          </select>
-          <select value={filterModel} onChange={e => { setFilterModel(e.target.value); setPage(1) }} className="h-8 rounded-lg border border-gray-300 px-2 text-xs focus:outline-none">
-            <option value="all">All Models</option>
-            {allModels.map(m => <option key={m} value={m!}>{m}</option>)}
-          </select>
-          <label className="flex items-center gap-1 text-xs text-gray-500">
-            Days <input type="number" placeholder="Min" value={filterDaysMin} onChange={e => { setFilterDaysMin(e.target.value); setPage(1) }} className="h-8 w-14 rounded border border-gray-300 px-2 text-xs" />
-            – <input type="number" placeholder="Max" value={filterDaysMax} onChange={e => { setFilterDaysMax(e.target.value); setPage(1) }} className="h-8 w-14 rounded border border-gray-300 px-2 text-xs" />
-          </label>
-          <label className="flex items-center gap-1 text-xs text-gray-500">
-            From <input type="date" value={dateFrom} onChange={e => { setDateFrom(e.target.value); setPage(1) }} className="h-8 rounded border border-gray-300 px-2 text-xs" />
-          </label>
-          <label className="flex items-center gap-1 text-xs text-gray-500">
-            To <input type="date" value={dateTo} onChange={e => { setDateTo(e.target.value); setPage(1) }} className="h-8 rounded border border-gray-300 px-2 text-xs" />
-          </label>
-          <button onClick={clearFilters} className="text-xs text-gray-400 underline hover:text-red-600">Clear all</button>
-        </div>
-      </div>
 
       {/* ── Table ─────────────────────────────────────────────────────────────── */}
       {loading ? (
