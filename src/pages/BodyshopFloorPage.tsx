@@ -505,10 +505,13 @@ function isNotRequiredAssignment(ass: Pick<BSAssignment, 'employee_code' | 'empl
 }
 
 function parseQcCheckedByNames(raw: string | null | undefined): string[] {
-  const tokens = String(raw ?? '')
-    .split(',')
-    .map((item) => item.trim())
-    .filter(Boolean)
+  const str = String(raw ?? '').trim()
+  if (!str) return []
+  // New format uses '|' as delimiter so "LASTNAME, FIRSTNAME" names are preserved intact.
+  // Old format used ', ' — fall back to that only when no '|' is present.
+  const tokens = str.includes('|')
+    ? str.split('|').map((s) => s.trim()).filter(Boolean)
+    : str.split(',').map((s) => s.trim()).filter(Boolean)
 
   const seen = new Set<string>()
   const result: string[] = []
@@ -522,7 +525,8 @@ function parseQcCheckedByNames(raw: string | null | undefined): string[] {
 }
 
 function joinQcCheckedByNames(names: string[]): string {
-  return names.map((name) => name.trim()).filter(Boolean).join(', ')
+  // Use '|' as delimiter — avoids conflict with "LASTNAME, FIRSTNAME" style employee names.
+  return names.map((name) => name.trim()).filter(Boolean).join('|')
 }
 
 function safeFileName(raw: string): string {
