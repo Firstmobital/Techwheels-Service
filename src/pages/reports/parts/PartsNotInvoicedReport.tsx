@@ -149,6 +149,9 @@ export default function PartsNotInvoicedReport(_props: ReportViewProps) {
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc')
   const [page, setPage] = useState(1)
 
+  // Invoiced Status filter
+  const [filterInvoicedStatus, setFilterInvoicedStatus] = useState<'all' | 'Y' | 'N'>('all')
+
   // Detail popup
   const [detailRow, setDetailRow] = useState<PniRow | null>(null)
   const [editingStatus, setEditingStatus] = useState<{ id: number; status: string; remarks: string } | null>(null)
@@ -227,6 +230,22 @@ export default function PartsNotInvoicedReport(_props: ReportViewProps) {
     return {
       count: rows_n.length,
       total_order_value: rows_n.reduce((sum, r) => sum + (r.total_order_value ?? 0), 0),
+    }
+  }, [enriched])
+
+  // ── Invoiced Status Y/N Summary ────────────────────────────────────────
+  const invoicedStatusSummary = useMemo(() => {
+    const yRows = enriched.filter(r => (r.invoiced ?? '').toUpperCase() === 'Y')
+    const nRows = enriched.filter(r => (r.invoiced ?? '').toUpperCase() === 'N')
+    const allR = enriched
+
+    const sumInvoice = (arr: typeof enriched) =>
+      arr.reduce((s, r) => s + (r.total_invoice_amount ?? 0), 0)
+
+    return {
+      all:  { count: allR.length,  invoice: sumInvoice(allR)  },
+      Y:    { count: yRows.length, invoice: sumInvoice(yRows) },
+      N:    { count: nRows.length, invoice: sumInvoice(nRows) },
     }
   }, [enriched])
 
@@ -606,6 +625,119 @@ export default function PartsNotInvoicedReport(_props: ReportViewProps) {
               <p className="text-[10px] text-gray-500 mt-0.5">Sum of Total Order Value</p>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* ── NEW: Invoiced Status (Y/N) Report ───────────────────────────────── */}
+      {!loading && rows.length > 0 && (
+        <div className="rounded-xl border border-indigo-200 bg-white p-4 shadow-sm">
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+            <h3 className="text-sm font-bold text-gray-800 flex items-center gap-2">
+              <span className="inline-block h-2.5 w-2.5 rounded-full bg-indigo-500" />
+              Invoiced Status (Y / N) Report
+              <span className="text-[10px] font-normal text-gray-400 ml-1">(from Excel "Invoiced?" column)</span>
+            </h3>
+            {/* Filter pills */}
+            <div className="flex items-center gap-1 rounded-lg border border-gray-200 bg-gray-50 p-1">
+              {(['all', 'Y', 'N'] as const).map(v => (
+                <button key={v}
+                  onClick={() => setFilterInvoicedStatus(v)}
+                  className={`rounded-md px-3 py-1 text-xs font-semibold transition-all ${
+                    filterInvoicedStatus === v
+                      ? 'bg-indigo-600 text-white shadow-sm'
+                      : 'text-gray-500 hover:bg-gray-100'
+                  }`}>
+                  {v === 'all' ? 'All' : v === 'Y' ? 'Y – Invoiced' : 'N – Not Invoiced'}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Summary cards */}
+          {filterInvoicedStatus === 'all' && (
+            <div className="mb-4 overflow-x-auto">
+              <table className="w-full text-sm border-collapse">
+                <thead>
+                  <tr className="border-b border-gray-200 bg-gray-50">
+                    <th className="px-4 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wide text-gray-500">Invoiced Status</th>
+                    <th className="px-4 py-2.5 text-center text-[10px] font-semibold uppercase tracking-wide text-gray-500">Total JC Count</th>
+                    <th className="px-4 py-2.5 text-right text-[10px] font-semibold uppercase tracking-wide text-gray-500">Total Invoice Value</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(['Y', 'N'] as const).map((status, i) => {
+                    const d = invoicedStatusSummary[status]
+                    const isY = status === 'Y'
+                    return (
+                      <tr key={status} className={`border-b border-gray-100 ${i % 2 === 0 ? 'bg-white' : 'bg-gray-50/60'}`}>
+                        <td className="px-4 py-3">
+                          <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-bold ${
+                            isY ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
+                          }`}>
+                            {isY ? '✓' : '✗'} {isY ? 'Y – Invoiced' : 'N – Not Invoiced'}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-center text-base font-bold text-gray-900">
+                          {d.count.toLocaleString('en-IN')}
+                        </td>
+                        <td className={`px-4 py-3 text-right text-base font-bold ${isY ? 'text-emerald-700' : 'text-amber-700'}`}>
+                          ₹{d.invoice.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </td>
+                      </tr>
+                    )
+                  })}
+                  {/* Grand total row */}
+                  <tr className="border-t-2 border-gray-300 bg-gray-100 font-bold">
+                    <td className="px-4 py-2.5 text-xs font-bold text-gray-700 uppercase tracking-wide">Grand Total</td>
+                    <td className="px-4 py-2.5 text-center text-base text-gray-900">
+                      {invoicedStatusSummary.all.count.toLocaleString('en-IN')}
+                    </td>
+                    <td className="px-4 py-2.5 text-right text-base text-indigo-800">
+                      ₹{invoicedStatusSummary.all.invoice.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {/* Filtered single-status view */}
+          {filterInvoicedStatus !== 'all' && (
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 max-w-md">
+              <div className={`rounded-lg border p-4 ${
+                filterInvoicedStatus === 'Y'
+                  ? 'border-emerald-200 bg-emerald-50'
+                  : 'border-amber-200 bg-amber-50'
+              }`}>
+                <p className={`text-[10px] font-bold uppercase tracking-wide ${
+                  filterInvoicedStatus === 'Y' ? 'text-emerald-700' : 'text-amber-700'
+                }`}>Total JC Count</p>
+                <p className={`mt-1 text-3xl font-bold ${
+                  filterInvoicedStatus === 'Y' ? 'text-emerald-900' : 'text-amber-900'
+                }`}>
+                  {invoicedStatusSummary[filterInvoicedStatus].count.toLocaleString('en-IN')}
+                </p>
+                <p className="mt-1 text-[10px] text-gray-500">
+                  Where Invoiced? = {filterInvoicedStatus}
+                </p>
+              </div>
+              <div className={`rounded-lg border p-4 ${
+                filterInvoicedStatus === 'Y'
+                  ? 'border-emerald-300 bg-emerald-100'
+                  : 'border-orange-200 bg-orange-50'
+              }`}>
+                <p className={`text-[10px] font-bold uppercase tracking-wide ${
+                  filterInvoicedStatus === 'Y' ? 'text-emerald-800' : 'text-orange-700'
+                }`}>Total Invoice Value</p>
+                <p className={`mt-1 text-3xl font-bold ${
+                  filterInvoicedStatus === 'Y' ? 'text-emerald-900' : 'text-orange-900'
+                }`}>
+                  ₹{invoicedStatusSummary[filterInvoicedStatus].invoice.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </p>
+                <p className="mt-1 text-[10px] text-gray-500">Sum of Total Invoice Amount</p>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
