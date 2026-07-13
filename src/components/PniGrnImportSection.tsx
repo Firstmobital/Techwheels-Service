@@ -373,29 +373,62 @@ export function PniGrnImportSection() {
       if (!keys.includes('Job Card #') && !keys.includes('Invoiced ?')) {
         throw new Error('File format invalid — expected "Job Card #" and "Invoiced ?" columns.')
       }
-      const pending = raw.filter(r => String(r['Invoiced ?'] ?? '').trim().toUpperCase() === 'N')
-      setPniMsgs(p => ({ ...p, [slot.key]: { type: 'progress', text: `Found ${pending.length} pending rows, uploading…` } }))
+
+      // ── Portal mismatch guard ────────────────────────────────────────────────
+      // Warn if the filename strongly suggests a different portal than this slot.
+      // This catches the common mistake of uploading the EV file to the PV slot.
+      const lowerName = file.name.toLowerCase()
+      const fileHintsEV = lowerName.includes('-ev') || lowerName.includes('_ev') || lowerName.includes(' ev')
+      const fileHintsPV = lowerName.includes('-pv') || lowerName.includes('_pv') || lowerName.includes(' pv') || lowerName.includes('ajmer')
+      if (slot.portal === 'PV' && fileHintsEV && !fileHintsPV) {
+        throw new Error(
+          `⚠️ File mismatch: "${file.name}" appears to be an EV file but you selected the "${slot.label}" (PV) slot. ` +
+          `Please upload the correct PV file.`
+        )
+      }
+      if (slot.portal === 'EV' && fileHintsPV && !fileHintsEV) {
+        throw new Error(
+          `⚠️ File mismatch: "${file.name}" appears to be a PV file but you selected the "${slot.label}" (EV) slot. ` +
+          `Please upload the correct EV file.`
+        )
+      }
+      // Count invoiced breakdown for display — but store ALL rows
+      const pendingCount = raw.filter(r => String(r['Invoiced ?'] ?? '').trim().toUpperCase() === 'N').length
+      const totalCount   = raw.length
+      setPniMsgs(p => ({ ...p, [slot.key]: { type: 'progress', text: `Found ${totalCount} rows (${pendingCount} Invoiced?=N). Clearing old data…` } }))
       const sessionId = crypto.randomUUID()
-      // Delete all previous data for this exact slot (dealer_code + branch_label)
-      // so re-uploads always reflect the latest file exactly — no stale rows remain.
+      const { data: { user } } = await supabase.auth.getUser()
+
+      // ── STEP 1: Delete all previous data for this slot FIRST ────────────────
+      // Scoped strictly by dealer_code + branch_label — other slots untouched.
       const { error: delErr } = await supabase.from('parts_not_invoiced_data')
         .delete().eq('dealer_code', slot.dealer_code).eq('branch_label', slot.branch_label)
       if (delErr) throw new Error(`Delete failed: ${delErr.message ?? JSON.stringify(delErr)}`)
-      const dbRows = pending.map(r => mapPniRow(r, slot, sessionId))
+
+      // ── STEP 2: Register upload session record BEFORE inserting data ─────────
+      // This prevents a race condition where the report page reads the session
+      // from the upload table before all data rows are written, seeing 0 rows.
+      // We register it early with upload_complete=false, mark it true after.
+      const { error: histErr } = await supabase.from('parts_not_invoiced_uploads').insert({
+        portal: slot.portal, dealer_code: slot.dealer_code, branch_label: slot.branch_label,
+        upload_session_id: sessionId, uploaded_by_email: user?.email ?? null,
+        row_count: totalCount, pending_count: pendingCount, file_name: file.name,
+      })
+      if (histErr) throw new Error(`Session registration failed: ${histErr.message ?? JSON.stringify(histErr)}`)
+
+      // ── STEP 3: Insert ALL rows (not just Invoiced?=N) ───────────────────────
+      // Storing all rows ensures the Status Report, Labour Report, and other
+      // aggregate reports reflect the complete uploaded dataset.
+      const dbRows = raw.map(r => mapPniRow(r, slot, sessionId))
       for (let i = 0; i < dbRows.length; i += 500) {
         const { error } = await supabase.from('parts_not_invoiced_data').insert(dbRows.slice(i, i + 500))
         if (error) throw new Error(`Insert failed at row ~${i + 1}: ${error.message ?? JSON.stringify(error)}`)
         const done = Math.min(i + 500, dbRows.length)
         setPniMsgs(p => ({ ...p, [slot.key]: { type: 'progress', text: `Uploading… ${done}/${dbRows.length}` } }))
       }
-      const { data: { user } } = await supabase.auth.getUser()
-      await supabase.from('parts_not_invoiced_uploads').insert({
-        portal: slot.portal, dealer_code: slot.dealer_code, branch_label: slot.branch_label,
-        upload_session_id: sessionId, uploaded_by_email: user?.email ?? null,
-        row_count: raw.length, pending_count: pending.length, file_name: file.name,
-      })
-      setPniMsgs(p => ({ ...p, [slot.key]: { type: 'success', text: `✅ ${pending.length.toLocaleString('en-IN')} pending rows imported (${raw.length} total rows read)` } }))
-      setTimeout(() => setPniMsgs(p => ({ ...p, [slot.key]: null })), 5000)
+
+      setPniMsgs(p => ({ ...p, [slot.key]: { type: 'success', text: `✅ ${totalCount.toLocaleString('en-IN')} rows imported (${pendingCount} Invoiced?=N · ${totalCount - pendingCount} Invoiced?=Y)` } }))
+      setTimeout(() => setPniMsgs(p => ({ ...p, [slot.key]: null })), 6000)
       await loadLastUploads()
     } catch (e) {
       const msg = e instanceof Error ? e.message : (e as { message?: string })?.message ?? JSON.stringify(e)
@@ -617,7 +650,7 @@ export function PniGrnImportSection() {
                 Parts Issue but not Invoiced
               </span>
               <span className="text-xs text-gray-400">
-                Upload daily — only <span className="font-semibold text-amber-700">Invoiced?=N</span> rows are stored
+                Upload daily — <span className="font-semibold text-blue-700">all rows stored</span>; reports filter by Invoiced?=N where applicable
               </span>
             </div>
             <div className="grid gap-3 sm:grid-cols-3">

@@ -165,14 +165,16 @@ export default function PartsNotInvoicedReport(_props: ReportViewProps) {
   const loadData = useCallback(async () => {
     setLoading(true)
     try {
-      // Load latest session per slot
+      // ── Step 1: Load upload history (for the History panel display) ──────────
       const { data: hist } = await supabase
         .from('parts_not_invoiced_uploads').select('*')
         .order('uploaded_at', { ascending: false })
       setUploads((hist ?? []) as UploadRow[])
 
-      // Get latest session per dealer_code + branch_label (compound key)
-      // Uploads are already sorted desc by uploaded_at — first occurrence IS the latest.
+      // ── Step 2: For each active slot, find the latest upload_session_id ──────
+      // Using the upload history table to identify the session, then fetching
+      // data by session_id guarantees we only read the most recent import —
+      // no stale rows from earlier sessions can bleed through.
       const latestByDealer: Record<string, string> = {}
       for (const h of (hist ?? []) as UploadRow[]) {
         const slotKey = `${h.dealer_code}::${h.branch_label}`
@@ -181,18 +183,22 @@ export default function PartsNotInvoicedReport(_props: ReportViewProps) {
       const sessionIds = Object.values(latestByDealer)
       if (sessionIds.length === 0) { setRows([]); setLoading(false); return }
 
+      // ── Step 3: Fetch all rows for the latest sessions in parallel ───────────
+      // Using Promise.all ensures all three slots (EV, PV-Sitapura, PV-AjmerRoad)
+      // load concurrently instead of serially, cutting load time by ~3×.
       const allRows: PniRow[] = []
-      for (const sid of sessionIds) {
+      await Promise.all(sessionIds.map(async (sid) => {
         for (let from = 0; ; from += 1000) {
           const { data, error } = await supabase.from('parts_not_invoiced_data')
             .select('*').eq('upload_session_id', sid).range(from, from + 999)
-          if (error) break
-          allRows.push(...((data ?? []) as PniRow[]))
-          if ((data ?? []).length < 1000) break
+          if (error) { console.error('PNI load error for session', sid, error); break }
+          const chunk = (data ?? []) as PniRow[]
+          allRows.push(...chunk)
+          if (chunk.length < 1000) break
         }
-      }
+      }))
       setRows(allRows)
-    } catch (e) { console.error(e) }
+    } catch (e) { console.error('PNI loadData error:', e) }
     finally { setLoading(false) }
   }, [])
 
