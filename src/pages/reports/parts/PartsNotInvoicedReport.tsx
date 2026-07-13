@@ -501,17 +501,48 @@ export default function PartsNotInvoicedReport(_props: ReportViewProps) {
         </div>
       </div>
 
-      {/* ── KPI tiles ─────────────────────────────────────────────────────────── */}
+      {/* ── Advisor-wise Report ─────────────────────────────────────────────── */}
       {!loading && rows.length > 0 && (
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-8">
-          <KpiCard label="Total JC Pending" value={kpis.total} sub={`₹${totalOrderValue.toLocaleString('en-IN', { maximumFractionDigits: 0 })} Order Value`} color="border-gray-200 bg-white text-gray-900" active={activeKpi === null} onClick={() => setActiveKpi(null)} />
-          <KpiCard label="EV Pending" value={kpis.ev} color="border-emerald-200 bg-emerald-50 text-emerald-800" active={activeKpi === 'ev'} onClick={() => setActiveKpi(v => v === 'ev' ? null : 'ev')} />
-          <KpiCard label="PV Pending" value={kpis.pv} color="border-blue-200 bg-blue-50 text-blue-800" active={activeKpi === 'pv'} onClick={() => setActiveKpi(v => v === 'pv' ? null : 'pv')} />
-          <KpiCard label="Today's New" value={kpis.todayPending} sub="Created today" color="border-violet-200 bg-violet-50 text-violet-800" active={activeKpi === 'today'} onClick={() => setActiveKpi(v => v === 'today' ? null : 'today')} />
-          <KpiCard label="3+ Days" value={kpis.gt3} color="border-amber-200 bg-amber-50 text-amber-800" active={activeKpi === 'gt3'} onClick={() => setActiveKpi(v => v === 'gt3' ? null : 'gt3')} />
-          <KpiCard label="7+ Days" value={kpis.gt7} color="border-orange-200 bg-orange-50 text-orange-800" active={activeKpi === 'gt7'} onClick={() => setActiveKpi(v => v === 'gt7' ? null : 'gt7')} />
-          <KpiCard label="15+ Days" value={kpis.gt15} color="border-red-200 bg-red-50 text-red-800" active={activeKpi === 'gt15'} onClick={() => setActiveKpi(v => v === 'gt15' ? null : 'gt15')} />
-          <KpiCard label="Showing" value={filtered.length} sub={`of ${enriched.length}`} color="border-gray-100 bg-gray-50 text-gray-700" />
+        <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+          <h3 className="mb-3 text-sm font-bold text-gray-800 flex items-center gap-2">
+            <span className="inline-block h-2.5 w-2.5 rounded-full bg-violet-500" />
+            1. Advisor-wise Report
+            <span className="text-[10px] font-normal text-gray-400 ml-1">(grouped by SR Assigned To)</span>
+          </h3>
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs border-collapse">
+              <thead>
+                <tr className="border-b border-gray-200 bg-gray-50 text-left">
+                  <th className="px-4 py-2.5 text-[10px] font-semibold uppercase tracking-wide text-gray-500">#</th>
+                  <th className="px-4 py-2.5 text-[10px] font-semibold uppercase tracking-wide text-gray-500">Advisor ID</th>
+                  <th className="px-4 py-2.5 text-[10px] font-semibold uppercase tracking-wide text-gray-500 text-center">Total JC Count</th>
+                  <th className="px-4 py-2.5 text-[10px] font-semibold uppercase tracking-wide text-gray-500 text-right">Total Order Value</th>
+                </tr>
+              </thead>
+              <tbody>
+                {advisorSummary.map(({ advisor, count, total_order_value }, i) => (
+                  <tr key={advisor} className={`border-b border-gray-100 ${i % 2 === 0 ? 'bg-white' : 'bg-gray-50/60'}`}>
+                    <td className="px-4 py-2.5 text-gray-400 text-[11px]">{i + 1}</td>
+                    <td className="px-4 py-2.5 font-mono text-xs font-semibold text-gray-800">{advisor}</td>
+                    <td className="px-4 py-2.5 text-center font-bold text-gray-900">{count.toLocaleString('en-IN')}</td>
+                    <td className="px-4 py-2.5 text-right font-semibold text-violet-700">
+                      ₹{total_order_value.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </td>
+                  </tr>
+                ))}
+                {/* Grand total row */}
+                <tr className="border-t-2 border-gray-300 bg-gray-100 font-bold">
+                  <td className="px-4 py-2.5 text-xs text-gray-600" colSpan={2}>Total</td>
+                  <td className="px-4 py-2.5 text-center text-gray-900">
+                    {advisorSummary.reduce((s, a) => s + a.count, 0).toLocaleString('en-IN')}
+                  </td>
+                  <td className="px-4 py-2.5 text-right text-violet-800">
+                    ₹{advisorSummary.reduce((s, a) => s + a.total_order_value, 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
 
@@ -578,12 +609,26 @@ export default function PartsNotInvoicedReport(_props: ReportViewProps) {
         </div>
       )}
 
+      {/* ── KPI tiles ─────────────────────────────────────────────────────────── */}
+      {!loading && rows.length > 0 && (
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-8">
+          <KpiCard label="Total JC Pending" value={kpis.total} sub={`₹${totalOrderValue.toLocaleString('en-IN', { maximumFractionDigits: 0 })} Order Value`} color="border-gray-200 bg-white text-gray-900" active={activeKpi === null} onClick={() => setActiveKpi(null)} />
+          <KpiCard label="EV Pending" value={kpis.ev} color="border-emerald-200 bg-emerald-50 text-emerald-800" active={activeKpi === 'ev'} onClick={() => setActiveKpi(v => v === 'ev' ? null : 'ev')} />
+          <KpiCard label="PV Pending" value={kpis.pv} color="border-blue-200 bg-blue-50 text-blue-800" active={activeKpi === 'pv'} onClick={() => setActiveKpi(v => v === 'pv' ? null : 'pv')} />
+          <KpiCard label="Today's New" value={kpis.todayPending} sub="Created today" color="border-violet-200 bg-violet-50 text-violet-800" active={activeKpi === 'today'} onClick={() => setActiveKpi(v => v === 'today' ? null : 'today')} />
+          <KpiCard label="3+ Days" value={kpis.gt3} color="border-amber-200 bg-amber-50 text-amber-800" active={activeKpi === 'gt3'} onClick={() => setActiveKpi(v => v === 'gt3' ? null : 'gt3')} />
+          <KpiCard label="7+ Days" value={kpis.gt7} color="border-orange-200 bg-orange-50 text-orange-800" active={activeKpi === 'gt7'} onClick={() => setActiveKpi(v => v === 'gt7' ? null : 'gt7')} />
+          <KpiCard label="15+ Days" value={kpis.gt15} color="border-red-200 bg-red-50 text-red-800" active={activeKpi === 'gt15'} onClick={() => setActiveKpi(v => v === 'gt15' ? null : 'gt15')} />
+          <KpiCard label="Showing" value={filtered.length} sub={`of ${enriched.length}`} color="border-gray-100 bg-gray-50 text-gray-700" />
+        </div>
+      )}
+
       {/* ── Branch-wise Report ──────────────────────────────────────────────── */}
       {!loading && rows.length > 0 && (
         <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
           <h3 className="mb-3 text-sm font-bold text-gray-800 flex items-center gap-2">
             <span className="inline-block h-2.5 w-2.5 rounded-full bg-teal-500" />
-            3. Branch-wise Report
+            4. Branch-wise Report
           </h3>
           <div className="overflow-x-auto">
             <table className="w-full text-xs border-collapse">
@@ -614,51 +659,6 @@ export default function PartsNotInvoicedReport(_props: ReportViewProps) {
                   </td>
                   <td className="px-4 py-2.5 text-right text-teal-800">
                     ₹{branchSummary.reduce((s, b) => s + b.total_order_value, 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
-
-      {/* ── Advisor-wise Report ─────────────────────────────────────────────── */}
-      {!loading && rows.length > 0 && (
-        <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
-          <h3 className="mb-3 text-sm font-bold text-gray-800 flex items-center gap-2">
-            <span className="inline-block h-2.5 w-2.5 rounded-full bg-violet-500" />
-            4. Advisor-wise Report
-            <span className="text-[10px] font-normal text-gray-400 ml-1">(grouped by SR Assigned To)</span>
-          </h3>
-          <div className="overflow-x-auto">
-            <table className="w-full text-xs border-collapse">
-              <thead>
-                <tr className="border-b border-gray-200 bg-gray-50 text-left">
-                  <th className="px-4 py-2.5 text-[10px] font-semibold uppercase tracking-wide text-gray-500">#</th>
-                  <th className="px-4 py-2.5 text-[10px] font-semibold uppercase tracking-wide text-gray-500">Advisor ID</th>
-                  <th className="px-4 py-2.5 text-[10px] font-semibold uppercase tracking-wide text-gray-500 text-center">Total JC Count</th>
-                  <th className="px-4 py-2.5 text-[10px] font-semibold uppercase tracking-wide text-gray-500 text-right">Total Order Value</th>
-                </tr>
-              </thead>
-              <tbody>
-                {advisorSummary.map(({ advisor, count, total_order_value }, i) => (
-                  <tr key={advisor} className={`border-b border-gray-100 ${i % 2 === 0 ? 'bg-white' : 'bg-gray-50/60'}`}>
-                    <td className="px-4 py-2.5 text-gray-400 text-[11px]">{i + 1}</td>
-                    <td className="px-4 py-2.5 font-mono text-xs font-semibold text-gray-800">{advisor}</td>
-                    <td className="px-4 py-2.5 text-center font-bold text-gray-900">{count.toLocaleString('en-IN')}</td>
-                    <td className="px-4 py-2.5 text-right font-semibold text-violet-700">
-                      ₹{total_order_value.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                    </td>
-                  </tr>
-                ))}
-                {/* Grand total row */}
-                <tr className="border-t-2 border-gray-300 bg-gray-100 font-bold">
-                  <td className="px-4 py-2.5 text-xs text-gray-600" colSpan={2}>Total</td>
-                  <td className="px-4 py-2.5 text-center text-gray-900">
-                    {advisorSummary.reduce((s, a) => s + a.count, 0).toLocaleString('en-IN')}
-                  </td>
-                  <td className="px-4 py-2.5 text-right text-violet-800">
-                    ₹{advisorSummary.reduce((s, a) => s + a.total_order_value, 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </td>
                 </tr>
               </tbody>
