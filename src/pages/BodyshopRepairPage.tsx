@@ -1408,8 +1408,12 @@ export default function BodyshopRepairPage() {
       const employeeCode = (row?.[cols.employeeCode] as string | null) ?? null
       const employeeName = (row?.[cols.employeeName] as string | null) ?? null
       const assigned = Boolean(employeeCode && employeeName)
+      const rawStatus = String((row?.[cols.workStatus] as string | null) ?? '').trim().toLowerCase()
+      const isNotRequired =
+        String(employeeCode ?? '').trim().toUpperCase() === 'NOT_REQUIRED' ||
+        rawStatus === 'not_required'
 
-      if (!assigned) {
+      if (!assigned || isNotRequired) {
         return {
           role,
           roleLabel: FLOOR_ROLE_META[role].label,
@@ -1426,7 +1430,6 @@ export default function BodyshopRepairPage() {
         }
       }
 
-      const rawStatus = String((row?.[cols.workStatus] as string | null) ?? '').trim().toLowerCase()
       const normalizedStatus: FloorRoleSnapshot['normalizedStatus'] =
         rawStatus === 'hold' || rawStatus === 'completed' ? rawStatus : 'work_inprocess'
       const outTs = (row?.[cols.outTs] as string | null) ?? null
