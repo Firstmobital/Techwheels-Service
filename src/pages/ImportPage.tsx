@@ -2786,12 +2786,27 @@ export default function ImportPage() {
               )
             }
 
+            // ── Client-side dedup before insert ──────────────────────────────────
+            // The TM DMS Excel export frequently contains duplicate part_number rows
+            // (e.g. same part listed twice with different location codes or zero qty
+            // entries). Since the DB now has a unique index on (part_number, branch, portal),
+            // we must resolve duplicates here: keep the LAST occurrence per part_number
+            // (last wins = most recent data row in the sheet, typically the "active" one).
+            const dedupedRows = Array.from(
+              insertRows.reduce((map, row) => {
+                // Key = part_number (already scoped to branch+portal by the slot)
+                const key = String(row.part_number ?? '').toUpperCase()
+                if (key) map.set(key, row)   // last occurrence wins
+                return map
+              }, new Map<string, Record<string, unknown>>()).values()
+            )
+
             totalInserted += await upsertOrInsertRows(
-              insertRows,
+              dedupedRows,
               [
-                // Primary conflict key matching DB unique index uq_stock_part_branch_portal
-                // This is a content-based key that prevents duplicate rows regardless of
-                // source_row_hash or snapshot_date values. One row per part per location.
+                // Matches DB unique index uq_stock_part_branch_portal created by migration
+                // 20260713160000. Prevents double-counting when the same part appears
+                // multiple times in the source Excel or when a file is re-uploaded.
                 'part_number,branch,portal',
               ],
             )
