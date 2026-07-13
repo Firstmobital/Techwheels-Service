@@ -97,3 +97,20 @@ jobs:
             --no-verify-jwt
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      - name: Deploy apply-parts-indexes
+        continue-on-error: true
+        run: |
+          supabase functions deploy apply-parts-indexes \
+            --project-ref ${{ secrets.SUPABASE_PROJECT_REF || 'jmdndcphkmaljhwgzqxq' }} \
+            --no-verify-jwt
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+
+      - name: Deploy warranty-spl-labour-sync
+        continue-on-error: true
+        run: |
+          supabase functions deploy warranty-spl-labour-sync \
+            --project-ref ${{ secrets.SUPABASE_PROJECT_REF || 'jmdndcphkmaljhwgzqxq' }} \
+            --no-verify-jwt
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
