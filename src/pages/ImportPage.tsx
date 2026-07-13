@@ -708,7 +708,7 @@ function buildPartsSourceRowHash(
   // batch are treated as one logical record; the row number prevents the hash
   // from being 100% content-only so accidental true-duplicates in source files
   // don't silently collapse, but the dominant uniqueness comes from content.
-  const raw = \`\${tableName}|\${branch}|\${portal}|\${partNumber}|\${String(rawDate ?? '')}|\${String(rawQty ?? '')}|\${rowNumber}\`
+  const raw = `${tableName}|${branch}|${portal}|${partNumber}|${String(rawDate ?? '')}|${String(rawQty ?? '')}|${rowNumber}`
   return raw.replace(/\s+/g, ' ').trim()
 }
 
