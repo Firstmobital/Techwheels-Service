@@ -184,8 +184,16 @@ export default function JcClosedInvoicedReport(_props: ReportViewProps) {
           if ((data ?? []).length < 1000) break
         }
       }
-      // Exclude PDI job cards — they must never appear in any report
-      setRows(all.filter(r => (r.sr_type ?? '').trim().toUpperCase() !== 'PDI'))
+      // Exclude PDI job cards — they must never appear in any report.
+      // Also exclude Job Cards where BOTH Final Spare Amount AND Final Labour Amount
+      // are zero — these are empty/cancelled JCs with no real work done.
+      setRows(all.filter(r => {
+        if ((r.sr_type ?? '').trim().toUpperCase() === 'PDI') return false
+        const spares = r.final_spares_amount ?? 0
+        const labour = r.final_labour_amount ?? 0
+        if (spares === 0 && labour === 0) return false
+        return true
+      }))
     } finally { setLoading(false) }
   }, [])
 
