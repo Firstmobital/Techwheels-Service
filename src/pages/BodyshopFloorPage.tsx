@@ -1307,6 +1307,10 @@ export default function BodyshopFloorPage() {
       : empByRole[role].find((e) => e.employee_code === empCode)
     if (!isNotRequired && !emp) return
     const k = jcKey(car)
+    if (bsFloorStatus[k]?.completedAt) {
+      showToast('BS floor is already completed — role assignments are locked', 'error')
+      return
+    }
     setSaving(`${k}-${role}`)
     try {
       const roleMap = assignments[k]
@@ -1442,6 +1446,10 @@ export default function BodyshopFloorPage() {
     if (!emp) return
 
     const k = jcKey(car)
+    if (bsFloorStatus[k]?.completedAt) {
+      showToast('BS floor is already completed — support assignments are locked', 'error')
+      return
+    }
     setSaving(`${k}-${role}-support`)
     try {
       // Check if already assigned
@@ -1493,6 +1501,10 @@ export default function BodyshopFloorPage() {
     const k = jcKey(car)
     const assignment = assignments[k]?.[role]
     if (!assignment?.id) { showToast('Assign person first', 'error'); return }
+    if (bsFloorStatus[k]?.completedAt) {
+      showToast('BS floor is already completed — stage changes are locked', 'error')
+      return
+    }
     const draft = stageDrafts[k]?.[role] ?? { work_status: 'work_inprocess', remark: '' }
     const trimmedRemark = draft.remark.trim()
     if (draft.work_status === 'hold' && !trimmedRemark) {
@@ -2693,7 +2705,7 @@ export default function BodyshopFloorPage() {
                                     type="button"
                                     className="bsf-role-plus"
                                     onClick={() => setInlinePickerOpen((prev) => ({ ...prev, [pickerKey]: !showPicker }))}
-                                    disabled={isSavingSupport}
+                                    disabled={isFloorCompleted || isSavingSupport}
                                   >
                                     +
                                   </button>
@@ -2703,7 +2715,7 @@ export default function BodyshopFloorPage() {
                               <select
                                 className="sel sel-md bsf-role-select"
                                 value={isNotRequiredAssignment(ass) ? NOT_REQUIRED_CODE : (ass?.employee_code ?? '')}
-                                disabled={isSavingThis}
+                                disabled={isFloorCompleted || isSavingThis}
                                 onChange={(e) => void assignRole(car, role, e.target.value)}
                               >
                                 <option value="">— Select {ROLE_META[role].label} —</option>
@@ -2765,6 +2777,7 @@ export default function BodyshopFloorPage() {
                                   <select
                                     className={`sel sel-sm bsf-stage-status ${statusTone}`}
                                     value={draft.work_status}
+                                    disabled={isFloorCompleted}
                                     onChange={(e) => patchDraft(k, role, { work_status: e.target.value })}
                                   >
                                     {STATUS_OPTIONS.map((s) => (
@@ -2775,12 +2788,13 @@ export default function BodyshopFloorPage() {
                                     className={`inp inp-md bsf-stage-remark ${holdRemarkMissing ? 'is-required' : ''}`}
                                     placeholder="Add remark"
                                     value={draft.remark}
+                                    disabled={isFloorCompleted}
                                     onChange={(e) => patchDraft(k, role, { remark: e.target.value })}
                                   />
                                   {holdRemarkMissing && <div className="bsf-stage-hint">Remark is required when status is Hold.</div>}
                                   <button
-                                    className={`btn btn--primary btn--xs bsf-stage-save ${!changed || isSavingThis ? 'btn--dim' : ''}`}
-                                    disabled={!changed || isSavingThis}
+                                    className={`btn btn--primary btn--xs bsf-stage-save ${!changed || isFloorCompleted || isSavingThis ? 'btn--dim' : ''}`}
+                                    disabled={!changed || isFloorCompleted || isSavingThis}
                                     onClick={() => void saveStage(car, role)}
                                   >
                                     {isSavingThis ? 'Saving…' : 'Save stage'}
