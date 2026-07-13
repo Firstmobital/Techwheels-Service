@@ -124,6 +124,9 @@ function freqBadgeClasses(f: FrequencyLabel): string {
 }
 
 export default function PartsStockDisciplineReport({ branch }: ReportViewProps) {
+  // Strip the portal suffix (e.g. "Sitapura PV" → "Sitapura") because the DB branch
+  // column stores plain location names. Portal filtering is handled by the EV/PV tab.
+  const rawBranch = branch?.replace(/ (PV|EV)$/i, '').replace(/^ALL_?(PV|EV)?$/i, 'ALL') ?? 'ALL'
   const [activePortal, setActivePortal] = useState<OrderPortal>('PV')
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'CRITICAL' | 'LOW' | 'EXCESS' | 'DEAD' | 'OK'>('ALL')
   const [searchText, setSearchText] = useState('')
@@ -143,7 +146,7 @@ export default function PartsStockDisciplineReport({ branch }: ReportViewProps) 
     setError(null)
     try {
       const baseFilters: Record<string, string | string[] | number[]> = { portal: portalToLoad }
-      if (branch && branch !== 'ALL') baseFilters['branch'] = branch
+      if (rawBranch && rawBranch !== 'ALL') baseFilters['branch'] = rawBranch
 
       const [consumptionAll, stockAll, orderAll] = await Promise.all([
         fetchAll<ConsumptionRow>(
