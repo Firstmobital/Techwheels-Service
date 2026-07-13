@@ -671,22 +671,44 @@ function buildPartsSourceRowHash(
   portal: Portal,
   row: Record<string, unknown>,
   rowNumber: number,
+  // Optional: pass the Excel-column-level header keys so we can extract
+  // actual cell values from the raw (unmapped) row instead of falling back
+  // to the post-mapping field names that don't exist on raw rows yet.
+  excelKeys?: { partNumberKey?: string; dateKey?: string; qtyKey?: string },
 ): string {
-  const partNumber = row.part_number == null ? '' : String(row.part_number).trim().toUpperCase()
-  const dateKey =
-    tableName === 'service_parts_consumption_data'
+  // Try to resolve partNumber from the actual Excel column header first,
+  // then fall back to the already-mapped field name (used by consumption/order paths
+  // where the row IS already mapped before this function is called).
+  const rawPartNumber =
+    excelKeys?.partNumberKey != null
+      ? row[excelKeys.partNumberKey]
+      : row.part_number
+  const partNumber = rawPartNumber == null ? '' : String(rawPartNumber).trim().toUpperCase()
+
+  const rawDate =
+    excelKeys?.dateKey != null
+      ? row[excelKeys.dateKey]
+      : tableName === 'service_parts_consumption_data'
       ? row.transaction_date
       : tableName === 'service_parts_order_data'
       ? row.order_date
       : row.snapshot_date
-  const qtyKey =
-    tableName === 'service_parts_consumption_data'
+
+  const rawQty =
+    excelKeys?.qtyKey != null
+      ? row[excelKeys.qtyKey]
+      : tableName === 'service_parts_consumption_data'
       ? row.quantity_consumed
       : tableName === 'service_parts_order_data'
       ? row.ordered_quantity
       : row.on_hand_quantity
 
-  const raw = `${tableName}|${branch}|${portal}|${partNumber}|${String(dateKey ?? '')}|${String(qtyKey ?? '')}|${rowNumber}`
+  // Include rowNumber as a tiebreaker only — the content fields are the primary
+  // identity. Two rows with identical part+date+qty in the same branch/portal
+  // batch are treated as one logical record; the row number prevents the hash
+  // from being 100% content-only so accidental true-duplicates in source files
+  // don't silently collapse, but the dominant uniqueness comes from content.
+  const raw = \`\${tableName}|\${branch}|\${portal}|\${partNumber}|\${String(rawDate ?? '')}|\${String(rawQty ?? '')}|\${rowNumber}\`
   return raw.replace(/\s+/g, ' ').trim()
 }
 
@@ -2572,6 +2594,11 @@ export default function ImportPage() {
                 portal,
                 rawRows[rowIdx],
                 rowIdx + 2,
+                {
+                  partNumberKey: partsConsumptionHeaderMapping.partNumber,
+                  qtyKey: partsConsumptionHeaderMapping.totalConsumption,
+                  dateKey: partsConsumptionHeaderMapping.transactionDate,
+                },
               )
               const { row, errors } = buildPartsConsumptionInsertRow(
                 rawRows[rowIdx],
@@ -2635,6 +2662,11 @@ export default function ImportPage() {
                 portal,
                 rawRows[rowIdx],
                 rowIdx + 2,
+                {
+                  partNumberKey: partsOrderHeaderMapping.partNumber,
+                  qtyKey: partsOrderHeaderMapping.orderedQuantity,
+                  dateKey: partsOrderHeaderMapping.orderDate,
+                },
               )
               const { row, errors } = buildPartsOrderInsertRow(
                 rawRows[rowIdx],
@@ -2714,12 +2746,21 @@ export default function ImportPage() {
             const portal = slotLocationPortal.portal
 
             for (let rowIdx = 0; rowIdx < rawRows.length; rowIdx++) {
+              // Pass the actual Excel column header names so the hash uses real cell
+              // values (part number, quantity) instead of undefined mapped-field names.
+              // This makes the hash content-based and prevents duplicate rows when the
+              // same file is imported multiple times or when re-imports overlap.
               const sourceRowHash = buildPartsSourceRowHash(
                 tableName,
                 slotLocationPortal.location,
                 portal,
                 rawRows[rowIdx],
                 rowIdx + 2,
+                {
+                  partNumberKey: partsStockHeaderMapping.partNumber,
+                  qtyKey: partsStockHeaderMapping.onHandQuantity,
+                  dateKey: partsStockHeaderMapping.snapshotDate,
+                },
               )
               const { row, errors } = buildPartsStockInsertRow(
                 rawRows[rowIdx],
@@ -2748,10 +2789,10 @@ export default function ImportPage() {
             totalInserted += await upsertOrInsertRows(
               insertRows,
               [
-                // Exact key matching DB unique index uq_stock_part_branch_portal_snap_hash
-                'part_number,branch,portal,snapshot_date,source_row_hash',
-                // Fallback: if snapshot_date column is missing in source file
-                'part_number,branch,portal,source_row_hash',
+                // Primary conflict key matching DB unique index uq_stock_part_branch_portal
+                // This is a content-based key that prevents duplicate rows regardless of
+                // source_row_hash or snapshot_date values. One row per part per location.
+                'part_number,branch,portal',
               ],
             )
           } else if (isWarrantyTable) {
