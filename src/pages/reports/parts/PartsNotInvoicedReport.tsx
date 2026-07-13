@@ -152,6 +152,10 @@ export default function PartsNotInvoicedReport(_props: ReportViewProps) {
   // Invoiced Status filter
   const [filterInvoicedStatus, setFilterInvoicedStatus] = useState<'all' | 'Y' | 'N'>('all')
 
+  // New filters — JC Status (complete) + Month
+  const [filterJcStatus, setFilterJcStatus] = useState('all')
+  const [filterMonth, setFilterMonth] = useState('all')
+
   // Detail popup
   const [detailRow, setDetailRow] = useState<PniRow | null>(null)
   const [editingStatus, setEditingStatus] = useState<{ id: number; status: string; remarks: string } | null>(null)
@@ -248,6 +252,72 @@ export default function PartsNotInvoicedReport(_props: ReportViewProps) {
       N:    { count: nRows.length, invoice: sumInvoice(nRows) },
     }
   }, [enriched])
+
+  // ── All unique JC Statuses (from Excel "Status" / jc_status column) ────────
+  const allJcStatuses = useMemo(() =>
+    [...new Set(enriched.map(r => r.jc_status).filter((v): v is string => !!v))].sort()
+  , [enriched])
+
+  // ── All unique months from Created Date Time ─────────────────────────────
+  const allMonths = useMemo(() => {
+    const monthSet = new Set<string>()
+    enriched.forEach(r => {
+      if (r.created_date) {
+        const d = new Date(r.created_date)
+        if (!isNaN(d.getTime())) {
+          const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+          monthSet.add(key)
+        }
+      }
+    })
+    return [...monthSet].sort()
+  }, [enriched])
+
+  // ── Month-filtered base (applies to all new reports) ─────────────────────
+  const monthFiltered = useMemo(() => {
+    if (filterMonth === 'all') return enriched
+    return enriched.filter(r => {
+      if (!r.created_date) return false
+      const d = new Date(r.created_date)
+      if (isNaN(d.getTime())) return false
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+      return key === filterMonth
+    })
+  }, [enriched, filterMonth])
+
+  // ── Complete Status Report (all jc_status values from Excel) ─────────────
+  const fullStatusSummary = useMemo(() => {
+    const base = filterJcStatus === 'all'
+      ? monthFiltered
+      : monthFiltered.filter(r => r.jc_status === filterJcStatus)
+    const byStatus: Record<string, { count: number; tov: number }> = {}
+    base.forEach(r => {
+      const key = r.jc_status ?? '(blank)'
+      if (!byStatus[key]) byStatus[key] = { count: 0, tov: 0 }
+      byStatus[key].count += 1
+      byStatus[key].tov += r.total_order_value ?? 0
+    })
+    return {
+      rows: Object.entries(byStatus)
+        .map(([status, d]) => ({ status, count: d.count, total_order_value: d.tov }))
+        .sort((a, b) => b.count - a.count),
+      total: base.length,
+      totalOrderValue: base.reduce((s, r) => s + (r.total_order_value ?? 0), 0),
+    }
+  }, [monthFiltered, filterJcStatus])
+
+  // ── Labour + Spare Report ────────────────────────────────────────────────
+  const labourSummary = useMemo(() => {
+    const base = monthFiltered
+    const totalLabour = base.reduce((s, r) => s + (r.final_labour_amount ?? 0), 0)
+    const totalSpare  = base.reduce((s, r) => s + (r.final_spares_amount ?? 0), 0)
+    return {
+      count: base.length,
+      totalLabour,
+      totalSpare,
+      grandTotal: totalLabour + totalSpare,
+    }
+  }, [monthFiltered])
 
   // ── Branch-wise summary ─────────────────────────────────────────────────
   const BRANCH_MAP = [
@@ -418,7 +488,7 @@ export default function PartsNotInvoicedReport(_props: ReportViewProps) {
     </th>
   )
 
-  const clearFilters = () => { setSearch(''); setFilterPortal('all'); setFilterDealer('all'); setFilterStatus('all'); setFilterAdvisor('all'); setFilterModel('all'); setFilterDaysMin(''); setFilterDaysMax(''); setDateFrom(''); setDateTo(''); setActiveKpi(null); setPage(1) }
+  const clearFilters = () => { setSearch(''); setFilterPortal('all'); setFilterDealer('all'); setFilterStatus('all'); setFilterAdvisor('all'); setFilterModel('all'); setFilterDaysMin(''); setFilterDaysMax(''); setDateFrom(''); setDateTo(''); setActiveKpi(null); setFilterJcStatus('all'); setFilterMonth('all'); setPage(1) }
 
   return (
     <div className="space-y-4 px-1">
@@ -516,6 +586,18 @@ export default function PartsNotInvoicedReport(_props: ReportViewProps) {
           <label className="flex items-center gap-1 text-xs text-gray-500">
             To <input type="date" value={dateTo} onChange={e => { setDateTo(e.target.value); setPage(1) }} className="h-8 rounded border border-gray-300 px-2 text-xs" />
           </label>
+          <select value={filterJcStatus} onChange={e => { setFilterJcStatus(e.target.value); setPage(1) }} className="h-8 rounded-lg border border-gray-300 px-2 text-xs focus:outline-none">
+            <option value="all">All JC Status</option>
+            {allJcStatuses.map(s => <option key={s} value={s}>{s}</option>)}
+          </select>
+          <select value={filterMonth} onChange={e => { setFilterMonth(e.target.value); setPage(1) }} className="h-8 rounded-lg border border-gray-300 px-2 text-xs focus:outline-none">
+            <option value="all">All Months</option>
+            {allMonths.map(m => {
+              const [yr, mo] = m.split('-')
+              const label = new Date(Number(yr), Number(mo) - 1, 1).toLocaleString('en-IN', { month: 'long', year: 'numeric' })
+              return <option key={m} value={m}>{label}</option>
+            })}
+          </select>
           <button onClick={clearFilters} className="text-xs text-gray-400 underline hover:text-red-600">Clear all</button>
         </div>
       </div>
@@ -738,6 +820,128 @@ export default function PartsNotInvoicedReport(_props: ReportViewProps) {
               </div>
             </div>
           )}
+        </div>
+      )}
+
+      {/* ── Complete Status Report (all jc_status values from Excel) ─────────── */}
+      {!loading && rows.length > 0 && (
+        <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+            <h3 className="text-sm font-bold text-gray-800 flex items-center gap-2">
+              <span className="inline-block h-2.5 w-2.5 rounded-full bg-sky-500" />
+              Complete Status Report
+              <span className="text-[10px] font-normal text-gray-400 ml-1">(Excel "Status" column — all values)</span>
+            </h3>
+            <div className="flex items-center gap-2">
+              {filterMonth !== 'all' && (
+                <span className="rounded-full bg-sky-100 px-2.5 py-0.5 text-[10px] font-semibold text-sky-700">
+                  {new Date(Number(filterMonth.split('-')[0]), Number(filterMonth.split('-')[1]) - 1, 1).toLocaleString('en-IN', { month: 'long', year: 'numeric' })}
+                </span>
+              )}
+              <select
+                value={filterJcStatus}
+                onChange={e => setFilterJcStatus(e.target.value)}
+                className="h-8 rounded-lg border border-sky-200 bg-sky-50 px-2 text-xs font-medium text-sky-800 focus:outline-none focus:ring-1 focus:ring-sky-400"
+              >
+                <option value="all">All Statuses</option>
+                {allJcStatuses.map(s => <option key={s} value={s}>{s}</option>)}
+              </select>
+            </div>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs border-collapse">
+              <thead>
+                <tr className="border-b border-gray-200 bg-gray-50">
+                  <th className="px-4 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wide text-gray-500">#</th>
+                  <th className="px-4 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wide text-gray-500">Status</th>
+                  <th className="px-4 py-2.5 text-center text-[10px] font-semibold uppercase tracking-wide text-gray-500">Total JC Count</th>
+                  <th className="px-4 py-2.5 text-right text-[10px] font-semibold uppercase tracking-wide text-gray-500">Total Order Value</th>
+                </tr>
+              </thead>
+              <tbody>
+                {fullStatusSummary.rows.map(({ status, count, total_order_value }, i) => (
+                  <tr key={status} className={`border-b border-gray-100 ${i % 2 === 0 ? 'bg-white' : 'bg-gray-50/60'}`}>
+                    <td className="px-4 py-2.5 text-[11px] text-gray-400">{i + 1}</td>
+                    <td className="px-4 py-2.5">
+                      <span className="inline-flex items-center rounded-full bg-sky-50 px-2.5 py-0.5 text-xs font-semibold text-sky-800 border border-sky-100">
+                        {status}
+                      </span>
+                    </td>
+                    <td className="px-4 py-2.5 text-center text-sm font-bold text-gray-900">
+                      {count.toLocaleString('en-IN')}
+                    </td>
+                    <td className="px-4 py-2.5 text-right text-sm font-semibold text-sky-700">
+                      ₹{total_order_value.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </td>
+                  </tr>
+                ))}
+                {fullStatusSummary.rows.length === 0 && (
+                  <tr><td colSpan={4} className="px-4 py-6 text-center text-xs text-gray-400">No data for selected filter</td></tr>
+                )}
+              </tbody>
+              <tfoot>
+                <tr className="border-t-2 border-gray-300 bg-gray-100 font-bold">
+                  <td className="px-4 py-2.5 text-xs text-gray-600" colSpan={2}>Grand Total</td>
+                  <td className="px-4 py-2.5 text-center text-sm text-gray-900">
+                    {fullStatusSummary.total.toLocaleString('en-IN')}
+                  </td>
+                  <td className="px-4 py-2.5 text-right text-sm text-sky-800">
+                    ₹{fullStatusSummary.totalOrderValue.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* ── Labour & Spare Report ─────────────────────────────────────────────── */}
+      {!loading && rows.length > 0 && (
+        <div className="rounded-xl border border-green-200 bg-white p-4 shadow-sm">
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+            <h3 className="text-sm font-bold text-gray-800 flex items-center gap-2">
+              <span className="inline-block h-2.5 w-2.5 rounded-full bg-green-500" />
+              Labour &amp; Spare Report
+              <span className="text-[10px] font-normal text-gray-400 ml-1">(Final Labour Amount + Final Spare Amount)</span>
+            </h3>
+            {filterMonth !== 'all' && (
+              <span className="rounded-full bg-green-100 px-2.5 py-0.5 text-[10px] font-semibold text-green-700">
+                {new Date(Number(filterMonth.split('-')[0]), Number(filterMonth.split('-')[1]) - 1, 1).toLocaleString('en-IN', { month: 'long', year: 'numeric' })}
+              </span>
+            )}
+          </div>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            {/* Total JC Count */}
+            <div className="rounded-lg border border-gray-200 bg-gray-50 p-4">
+              <p className="text-[10px] font-bold uppercase tracking-wide text-gray-500">Total JC Count</p>
+              <p className="mt-1 text-2xl font-bold text-gray-900">{labourSummary.count.toLocaleString('en-IN')}</p>
+              <p className="mt-0.5 text-[10px] text-gray-400">Job cards in selection</p>
+            </div>
+            {/* Total Final Labour */}
+            <div className="rounded-lg border border-green-200 bg-green-50 p-4">
+              <p className="text-[10px] font-bold uppercase tracking-wide text-green-700">Total Final Labour</p>
+              <p className="mt-1 text-2xl font-bold text-green-900">
+                ₹{labourSummary.totalLabour.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </p>
+              <p className="mt-0.5 text-[10px] text-gray-400">Sum of Final Labour Amount</p>
+            </div>
+            {/* Total Final Spare */}
+            <div className="rounded-lg border border-blue-200 bg-blue-50 p-4">
+              <p className="text-[10px] font-bold uppercase tracking-wide text-blue-700">Total Final Spare</p>
+              <p className="mt-1 text-2xl font-bold text-blue-900">
+                ₹{labourSummary.totalSpare.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </p>
+              <p className="mt-0.5 text-[10px] text-gray-400">Sum of Final Spare Amount</p>
+            </div>
+            {/* Grand Total */}
+            <div className="rounded-lg border border-indigo-200 bg-indigo-50 p-4">
+              <p className="text-[10px] font-bold uppercase tracking-wide text-indigo-700">Grand Total (Labour + Spare)</p>
+              <p className="mt-1 text-2xl font-bold text-indigo-900">
+                ₹{labourSummary.grandTotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </p>
+              <p className="mt-0.5 text-[10px] text-gray-400">Labour + Spare combined</p>
+            </div>
+          </div>
         </div>
       )}
 
