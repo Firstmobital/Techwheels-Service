@@ -824,7 +824,12 @@ export default function BodyshopFloorPage() {
   >({})
   const [saving, setSaving]   = useState<string | null>(null) // jcKey being saved
   const [bsFloorStatus, setBsFloorStatus] = useState<Record<string, { completedAt: string | null; completedBy: string | null }>>({})
+  // qcByJc = live draft used by the form (updated as user edits)
+  // qcCommittedByJc = last DB-saved state used for filter logic (isQcPassed)
+  // Keeping them separate means editing the QC form never removes the card from the QC tab
+  // until Save QC is actually clicked and the DB write succeeds.
   const [qcByJc, setQcByJc] = useState<Record<string, QcEntryState>>({})
+  const [qcCommittedByJc, setQcCommittedByJc] = useState<Record<string, QcEntryState>>({})
   const [riByJc, setRiByJc] = useState<Record<string, RiEntryState>>({})
   // Unsaved draft edits — separate from riByJc so queue membership isn't affected until Save RI
   const [riDraftByJc, setRiDraftByJc] = useState<Record<string, RiEntryState>>({})
@@ -939,6 +944,7 @@ export default function BodyshopFloorPage() {
 
       setAdditionalApprovalByJc(additionalByJc)
       setQcByJc(nextQcByJc)
+      setQcCommittedByJc(nextQcByJc)
       setRiByJc(nextRiByJc)
       setRiDraftByJc(nextRiByJc)
 
@@ -1120,7 +1126,9 @@ export default function BodyshopFloorPage() {
   }
 
   function isQcPassed(c: AccidentCar) {
-    const status = String(qcByJc[jcKey(c)]?.qc_status ?? '').trim().toLowerCase()
+    // Read from committed (DB-saved) state, NOT the draft, so editing the QC
+    // form dropdown never prematurely removes the card from the QC filter tab.
+    const status = String(qcCommittedByJc[jcKey(c)]?.qc_status ?? '').trim().toLowerCase()
     return status === 'pass'
   }
 
@@ -1161,7 +1169,7 @@ export default function BodyshopFloorPage() {
       return state.status !== 'none' && state.pendingCount > 0
     }).length,
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }), [cars, assignments, bsFloorStatus, additionalApprovalByJc, qcByJc, riByJc])
+  }), [cars, assignments, bsFloorStatus, additionalApprovalByJc, qcCommittedByJc, riByJc])
 
   // ── Floor Incharge workload summary ──────────────────────────────────────
   const floorInchargeSummary = useMemo(() => {
@@ -1226,7 +1234,7 @@ export default function BodyshopFloorPage() {
     })
     return list
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cars, branchFilter, floorFilter, roleFilter, fiFilter, search, assignmentView, assignments, bsFloorStatus, additionalApprovalByJc, qcByJc, riByJc])
+  }, [cars, branchFilter, floorFilter, roleFilter, fiFilter, search, assignmentView, assignments, bsFloorStatus, additionalApprovalByJc, qcCommittedByJc, riByJc])
 
   // ── Assign (inline select) ───────────────────────────────────────────────
 
@@ -1677,16 +1685,16 @@ export default function BodyshopFloorPage() {
 
       if (result.error) throw result.error
 
-      setQcByJc((prev) => ({
-        ...prev,
-        [k]: {
-          repairCardId: Number(result.data?.id ?? repairCardId),
-          qc_status: String(result.data?.qc_status ?? draft.qc_status ?? 'pending'),
-          qc_fail_reason: String(result.data?.qc_fail_reason ?? ''),
-          qc_checked_by: String(result.data?.qc_checked_by ?? checkedByText),
-          qc_checked_at: toLocalDateTimeInput(result.data?.qc_checked_at ?? checkedAtIso),
-        },
-      }))
+      const savedQcEntry: QcEntryState = {
+        repairCardId: Number(result.data?.id ?? repairCardId),
+        qc_status: String(result.data?.qc_status ?? draft.qc_status ?? 'pending'),
+        qc_fail_reason: String(result.data?.qc_fail_reason ?? ''),
+        qc_checked_by: String(result.data?.qc_checked_by ?? checkedByText),
+        qc_checked_at: toLocalDateTimeInput(result.data?.qc_checked_at ?? checkedAtIso),
+      }
+      setQcByJc((prev) => ({ ...prev, [k]: savedQcEntry }))
+      // Update committed state so isQcPassed / filter tabs reflect the saved result
+      setQcCommittedByJc((prev) => ({ ...prev, [k]: savedQcEntry }))
 
       setRiByJc((prev) => ({
         ...prev,
