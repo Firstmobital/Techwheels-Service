@@ -183,7 +183,7 @@ async function resolveActiveWindow(
   const seen = new Set<string>()
   const pairs: { fy: number; fm: number }[] = []
   for (const row of latestData) {
-    const key = \`\${row.fiscal_year}-\${row.fiscal_month}\`
+    const key = `${row.fiscal_year}-${row.fiscal_month}`
     if (!seen.has(key)) { seen.add(key); pairs.push({ fy: Number(row.fiscal_year), fm: Number(row.fiscal_month) }) }
     if (pairs.length >= WINDOW_SIZE) break
   }
