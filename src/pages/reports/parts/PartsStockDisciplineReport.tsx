@@ -192,6 +192,9 @@ export default function PartsStockDisciplineReport({ branch }: ReportViewProps) 
   const [error, setError] = useState<string | null>(null)
   const [lastUpdated, setLastUpdated] = useState<Record<OrderPortal, string | null>>({ PV: null, EV: null })
   const [activeMonthLabels, setActiveMonthLabels] = useState<string[]>(['M1', 'M2', 'M3'])
+  const [activeWindow, setActiveWindow] = useState<{ fiscal_year: number; fiscal_months: number[]; calendar_days: number }>(
+    { fiscal_year: 2026, fiscal_months: [1, 2, 3], calendar_days: 90 }
+  )
   const [sortKey, setSortKey] = useState<keyof DisciplineRow>('qtyToOrder')
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc')
   const [currentPage, setCurrentPage] = useState(1)
@@ -206,8 +209,9 @@ export default function PartsStockDisciplineReport({ branch }: ReportViewProps) 
       if (rawBranch && rawBranch !== 'ALL') baseFilters['branch'] = rawBranch
 
       // Resolve the active consumption window dynamically from DB
-      const { fiscal_year: TARGET_FISCAL_YEAR, fiscal_months: TARGET_MONTHS, calendar_days: CALENDAR_DAYS_DYNAMIC } =
-        await resolveActiveWindow(baseFilters.branch as string, activePortal)
+      const resolvedWindow = await resolveActiveWindow(baseFilters.branch as string, activePortal)
+      const { fiscal_year: TARGET_FISCAL_YEAR, fiscal_months: TARGET_MONTHS, calendar_days: CALENDAR_DAYS_DYNAMIC } = resolvedWindow
+      setActiveWindow(resolvedWindow)
 
       const [consumptionAll, stockAll, orderAll] = await Promise.all([
         fetchAll<ConsumptionRow>(
@@ -413,7 +417,7 @@ export default function PartsStockDisciplineReport({ branch }: ReportViewProps) 
       [],
       ['METHODOLOGY'],
       ['30-Day Required Stock = ROUNDUP(Avg Daily Consumption × 30, 0)'],
-      [`Avg Daily Consumption = Total ${TARGET_MONTHS.length}-Month Qty ÷ ${CALENDAR_DAYS_DYNAMIC || CALENDAR_DAYS} calendar days (FY${TARGET_FISCAL_YEAR} months: ${TARGET_MONTHS.join(', ')})`],
+      [`Avg Daily Consumption = Total ${activeWindow.fiscal_months.length}-Month Qty ÷ ${activeWindow.calendar_days} calendar days (FY${activeWindow.fiscal_year} months: ${activeWindow.fiscal_months.join(', ')})`],
       ['Months Active = count of months (Apr/May/Jun) with consumption > 0'],
       ['NOTE: Required Stock uses UNROUNDED daily consumption internally so low-volume/high-value parts (e.g. body panels, accident-repair parts used only 1-5x/quarter) are never zeroed out of the reorder list'],
       ['  3/3 → Daily/Regular Mover | 2/3 → Bi-Weekly Mover | 1/3 → Weekly/Occasional | 0/3 → No Recent Use'],
