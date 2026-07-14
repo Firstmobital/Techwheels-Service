@@ -51,6 +51,7 @@ interface OrderRow {
   order_status: string
   ordered_quantity: number
   received_quantity: number
+  confirmation_qty: number | null
 }
 type FrequencyLabel = 'Daily/Regular Mover' | 'Bi-Weekly Mover' | 'Weekly/Occasional Mover' | 'No Recent Use'
 type RowStatus = 'CRITICAL' | 'LOW STOCK' | 'EXCESS STOCK' | 'DEAD STOCK' | 'OK'
@@ -298,7 +299,7 @@ export default function PartsStockDisciplineReport({ branch }: ReportViewProps) 
         ),
         fetchAll<OrderRow>(
           'service_parts_order_data',
-          'part_number,portal,order_status,ordered_quantity,received_quantity',
+          'part_number,portal,order_status,ordered_quantity,received_quantity,confirmation_qty',
           // Only include pipeline orders from current fiscal year (Apr 2026+).
           // Pre-FY orders (2022-2023) are phantom entries that inflate effective stock.
           { ...baseFilters, order_status: PIPELINE_STATUSES, order_date_gte: '2026-04-01' }
@@ -344,12 +345,18 @@ export default function PartsStockDisciplineReport({ branch }: ReportViewProps) 
         e.cost += (row.on_hand_quantity ?? 0) * (row.weighted_avg_cost ?? 0)
       }
 
-      // Pipeline map
+      // Confirmation Qty map — uses confirmation_qty (from TML/SAP order sheet) as the
+      // authoritative confirmed quantity. We subtract received_quantity to get only the
+      // portion still in-transit (not yet on shelf). Falls back to ordered_quantity
+      // for Ordered-status rows where confirmation_qty is null (not yet confirmed).
       const pipelineMap = new Map<string, number>()
       for (const row of orderFiltered) {
         const key = `${row.part_number}|${row.portal}`
-        const pending = Math.max(0, (row.ordered_quantity ?? 0) - (row.received_quantity ?? 0))
-        pipelineMap.set(key, (pipelineMap.get(key) ?? 0) + pending)
+        const baseQty = row.confirmation_qty != null
+          ? (row.confirmation_qty ?? 0)          // confirmed by supplier — authoritative
+          : (row.ordered_quantity ?? 0)           // fallback: not yet confirmed
+        const confirmedPending = Math.max(0, baseQty - (row.received_quantity ?? 0))
+        pipelineMap.set(key, (pipelineMap.get(key) ?? 0) + confirmedPending)
       }
 
       const allKeys = new Set([...consumpMap.keys(), ...stockMap.keys()])
@@ -493,8 +500,8 @@ export default function PartsStockDisciplineReport({ branch }: ReportViewProps) 
       [`Months Active = count of the ${activeMonthLabels.length} consumption months with qty > 0`],
       ['NOTE: Required Stock uses UNROUNDED daily consumption internally so low-volume/high-value parts (e.g. body panels, accident-repair parts used only 1-5x/quarter) are never zeroed out of the reorder list'],
       ['  3/3 → Daily/Regular Mover | 2/3 → Bi-Weekly Mover | 1/3 → Weekly/Occasional | 0/3 → No Recent Use'],
-      ['Effective Stock = Current On-Hand + Pipeline (Ordered + Confirmed + In-Transit, net of already received)'],
-      ['Qty to Order = ROUNDUP(MAX(Required − Effective, 0), 0) — pipeline deducted so you only order the true gap'],
+      ['Effective Stock = Current On-Hand + Conf. Qty pipeline (= max(0, Confirmation Qty − Received Qty); falls back to Ordered Qty for unconfirmed rows)'],
+      ['Qty to Order = ROUNDUP(MAX(Required − Effective, 0), 0) — Confirmation Qty (net of received) deducted so you only order the true remaining gap'],
       ['Dead Stock = On-Hand > 0 AND total 3-month consumption = 0 (working-capital risk)'],
       ['Critical = Shortage AND a Daily/Regular or Bi-Weekly mover — highest reorder priority'],
       ['Excess Stock = Effective Stock more than ' + EXCESS_STOCK_MULTIPLE + 'x the 30-day requirement'],
@@ -508,14 +515,14 @@ export default function PartsStockDisciplineReport({ branch }: ReportViewProps) 
     XLSX.utils.book_append_sheet(wb, ws0, 'Read Me')
 
     // Full report
-    const h1 = ['Part No','Description',`${activeMonthLabels[0] ?? 'M1'} Qty`,`${activeMonthLabels[1] ?? 'M2'} Qty`,`${activeMonthLabels[2] ?? 'M3'} Qty`,'Total 3M','Months Active','Frequency','Avg Daily','Weekly Avg','On-Hand','Pipeline','Effective Stock','30-Day Required','Net Shortfall','Qty to Order','Row Status','Inventory Value (Rs)']
+    const h1 = ['Part No','Description',`${activeMonthLabels[0] ?? 'M1'} Qty`,`${activeMonthLabels[1] ?? 'M2'} Qty`,`${activeMonthLabels[2] ?? 'M3'} Qty`,'Total 3M','Months Active','Frequency','Avg Daily','Weekly Avg','On-Hand','Conf. Qty (Pipeline)','Effective Stock','30-Day Required','Net Shortfall','Qty to Order','Row Status','Inventory Value (Rs)']
     const d1 = rows.map((r) => [r.partNumber,r.partDescription,r.m1Qty,r.m2Qty,r.m3Qty,r.total3M,r.monthsActive,r.frequency,r.avgDailyConsumption,r.weeklyAvgQty,r.currentStock,r.pipelineQty,r.effectiveStock,r.required20Day,r.netShortfall,r.qtyToOrder,r.rowStatus,Math.round(r.inventoryValue)])
     const ws1 = XLSX.utils.aoa_to_sheet([h1, ...d1])
     ws1['!cols'] = h1.map((_, i) => ({ wch: i < 2 ? 32 : 14 }))
     XLSX.utils.book_append_sheet(wb, ws1, `${portalLabel} Stock Discipline`)
 
     // Order Sheet
-    const h2 = ['Part No','Description','Frequency','Row Status','30-Day Required','On-Hand','Pipeline','Effective Stock','Qty to Order']
+    const h2 = ['Part No','Description','Frequency','Row Status','30-Day Required','On-Hand','Conf. Qty (Pipeline)','Effective Stock','Qty to Order']
     const d2 = rows.filter((r) => r.qtyToOrder > 0 && !r.deadStock).sort((a,b) => b.qtyToOrder-a.qtyToOrder).map((r) => [r.partNumber,r.partDescription,r.frequency,r.rowStatus,r.required20Day,r.currentStock,r.pipelineQty,r.effectiveStock,r.qtyToOrder])
     const ws2 = XLSX.utils.aoa_to_sheet([h2, ...d2])
     ws2['!cols'] = h2.map((_, i) => ({ wch: i < 2 ? 32 : 14 }))
@@ -550,7 +557,7 @@ export default function PartsStockDisciplineReport({ branch }: ReportViewProps) 
     ['avgDailyConsumption','Avg Daily'],
     ['weeklyAvgQty','Weekly'],
     ['currentStock','On-Hand'],
-    ['pipelineQty','Pipeline'],
+    ['pipelineQty','Conf. Qty'],
     ['effectiveStock','Effective'],
     ['required20Day','30-Day Req'],
     ['qtyToOrder','Qty to Order'],
@@ -700,7 +707,7 @@ export default function PartsStockDisciplineReport({ branch }: ReportViewProps) 
           </button>
         </div>
         <div className="mt-3 rounded-lg border border-emerald-100 bg-emerald-50 px-3 py-2 text-xs text-emerald-800">
-          <strong>Pipeline deduction applied:</strong> Effective Stock = On-Hand + Ordered/Confirmed/In-Transit qty. "Qty to Order" only covers the true remaining gap after orders already in-flight.
+          <strong>Confirmation Qty applied:</strong> Effective Stock = On-Hand + Confirmation Qty from the imported order sheet. For unconfirmed (Ordered-status) rows, falls back to Ordered − Received. "Qty to Order" only covers the true remaining gap after confirmed orders already in-flight.
         </div>
       </div>
 
