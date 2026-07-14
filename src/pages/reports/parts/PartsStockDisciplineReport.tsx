@@ -6,9 +6,9 @@ import { ReportLoadingState } from '../components/ReportLoadingState'
 
 const DAYS_COVER = 30
 const CALENDAR_DAYS = 90
-// Fixed to April/May/June only — per user instruction, do NOT roll into July automatically.
-const TARGET_FISCAL_YEAR = 2026
-const TARGET_MONTHS = [1, 2, 3] // 1=April, 2=May, 3=June
+// Active window is resolved at fetch-time from DB (latest 3 fiscal months with data).
+// No hardcoded months — automatically rolls forward after each consumption upload.
+const WINDOW_SIZE = 3  // always use the 3 most-recent months
 const PIPELINE_STATUSES = ['Ordered', 'Confirmed', 'In-Transit']
 const PAGE_SIZE = 50
 // A part is flagged Excess Stock when effective stock covers more than this many
@@ -83,6 +83,51 @@ interface DisciplineRow {
 
 type OrderPortal = 'PV' | 'EV'
 
+// ── Resolve the 3 most-recent fiscal months from DB ──────────────────────────────
+// Queries consumption data once per fetch to find the latest WINDOW_SIZE months
+// with actual rows. If fewer than WINDOW_SIZE months exist, uses what's available.
+async function resolveActiveWindow(
+  branch: string,
+  portal: string,
+): Promise<{ fiscal_year: number; fiscal_months: number[]; calendar_days: number }> {
+  const { data, error } = await (supabase.from('service_parts_consumption_data') as any)
+    .select('fiscal_year,fiscal_month')
+    .eq('branch', branch)
+    .eq('portal', portal)
+    .order('fiscal_year', { ascending: false })
+    .order('fiscal_month', { ascending: false })
+    .limit(500)
+
+  if (error || !data?.length) {
+    // Fallback to FY2026 Apr/May/Jun if no data
+    return { fiscal_year: 2026, fiscal_months: [1, 2, 3], calendar_days: 90 }
+  }
+
+  // Collect unique (fiscal_year, fiscal_month) pairs, newest first
+  const seen = new Set<string>()
+  const pairs: { fy: number; fm: number }[] = []
+  for (const row of data) {
+    const key = `${row.fiscal_year}-${row.fiscal_month}`
+    if (!seen.has(key)) {
+      seen.add(key)
+      pairs.push({ fy: Number(row.fiscal_year), fm: Number(row.fiscal_month) })
+    }
+    if (pairs.length >= WINDOW_SIZE) break
+  }
+
+  if (!pairs.length) {
+    return { fiscal_year: 2026, fiscal_months: [1, 2, 3], calendar_days: 90 }
+  }
+
+  // All pairs should be from the same fiscal year (within a 3-month window)
+  const fiscal_year = pairs[0].fy
+  // Re-sort ascending (Apr=1, May=2, Jun=3, Jul=4...) for proper display
+  const fiscal_months = pairs.map((p) => p.fm).sort((a, b) => a - b)
+  const calendar_days = fiscal_months.length * 30  // 30 days per month
+
+  return { fiscal_year, fiscal_months, calendar_days }
+}
+
 async function fetchAll<T>(
   tableName: string,
   select: string,
@@ -94,8 +139,20 @@ async function fetchAll<T>(
   while (true) {
     let q = (supabase.from(tableName) as any).select(select).range(from, from + pageSize - 1)
     for (const [k, v] of Object.entries(filters)) {
-      if (Array.isArray(v)) q = q.in(k, v)
-      else if (v !== 'ALL') q = q.eq(k, v)
+      // Keys ending in _gte/_lte/_gt/_lt are range comparisons, not equality
+      if (k.endsWith('_gte') && typeof v === 'string') {
+        q = q.gte(k.slice(0, -4), v)
+      } else if (k.endsWith('_lte') && typeof v === 'string') {
+        q = q.lte(k.slice(0, -4), v)
+      } else if (k.endsWith('_gt') && typeof v === 'string') {
+        q = q.gt(k.slice(0, -3), v)
+      } else if (k.endsWith('_lt') && typeof v === 'string') {
+        q = q.lt(k.slice(0, -3), v)
+      } else if (Array.isArray(v)) {
+        q = q.in(k, v)
+      } else if (v !== 'ALL') {
+        q = q.eq(k, v)
+      }
     }
     const { data, error } = await q
     if (error) throw new Error(error.message)
@@ -148,6 +205,10 @@ export default function PartsStockDisciplineReport({ branch }: ReportViewProps) 
       const baseFilters: Record<string, string | string[] | number[]> = { portal: portalToLoad }
       if (rawBranch && rawBranch !== 'ALL') baseFilters['branch'] = rawBranch
 
+      // Resolve the active consumption window dynamically from DB
+      const { fiscal_year: TARGET_FISCAL_YEAR, fiscal_months: TARGET_MONTHS, calendar_days: CALENDAR_DAYS_DYNAMIC } =
+        await resolveActiveWindow(baseFilters.branch as string, activePortal)
+
       const [consumptionAll, stockAll, orderAll] = await Promise.all([
         fetchAll<ConsumptionRow>(
           'service_parts_consumption_data',
@@ -162,7 +223,9 @@ export default function PartsStockDisciplineReport({ branch }: ReportViewProps) 
         fetchAll<OrderRow>(
           'service_parts_order_data',
           'part_number,portal,order_status,ordered_quantity,received_quantity',
-          { ...baseFilters, order_status: PIPELINE_STATUSES }
+          // Only include pipeline orders from current fiscal year (Apr 2026+).
+          // Pre-FY orders (2022-2023) are phantom entries that inflate effective stock.
+          { ...baseFilters, order_status: PIPELINE_STATUSES, order_date_gte: '2026-04-01' }
         ),
       ])
 
@@ -174,7 +237,7 @@ export default function PartsStockDisciplineReport({ branch }: ReportViewProps) 
       const stockFiltered = stockAll.filter((r) => !isAccessoryPart(r.part_number))
       const orderFiltered = orderAll.filter((r) => !isAccessoryPart(r.part_number))
 
-      // Fixed window: April(1) / May(2) / June(3) of TARGET_FISCAL_YEAR — July excluded.
+      // Dynamic window: the 3 most-recent fiscal months resolved from DB
       const windowPeriods = TARGET_MONTHS.map((m) => `${TARGET_FISCAL_YEAR}-${m}`)
       const windowPeriodsAsc = windowPeriods // already in Apr->May->Jun order
       const periodLabel = new Map<string, string>()
@@ -236,7 +299,7 @@ export default function PartsStockDisciplineReport({ branch }: ReportViewProps) 
         // Rounding this to a whole number BEFORE computing required stock was the bug
         // that hid low-volume parts (e.g. accident/body panels — 1-5 units/quarter)
         // from the Order Sheet entirely, since round(low qty / 90) collapses to 0.
-        const avgDailyConsumptionRaw = total3M / CALENDAR_DAYS
+        const avgDailyConsumptionRaw = total3M / (CALENDAR_DAYS_DYNAMIC || CALENDAR_DAYS)
         const avgDailyConsumption = Math.round(avgDailyConsumptionRaw) // display only
         const weeklyAvgQty = Math.round(total3M / 12) // display only
         const currentStock = sEntry?.qty ?? 0
@@ -350,7 +413,7 @@ export default function PartsStockDisciplineReport({ branch }: ReportViewProps) 
       [],
       ['METHODOLOGY'],
       ['30-Day Required Stock = ROUNDUP(Avg Daily Consumption × 30, 0)'],
-      ['Avg Daily Consumption = Total 3-Month Qty ÷ 90 calendar days (fixed window: April + May + June ' + TARGET_FISCAL_YEAR + ')'],
+      [`Avg Daily Consumption = Total ${TARGET_MONTHS.length}-Month Qty ÷ ${CALENDAR_DAYS_DYNAMIC || CALENDAR_DAYS} calendar days (FY${TARGET_FISCAL_YEAR} months: ${TARGET_MONTHS.join(', ')})`],
       ['Months Active = count of months (Apr/May/Jun) with consumption > 0'],
       ['NOTE: Required Stock uses UNROUNDED daily consumption internally so low-volume/high-value parts (e.g. body panels, accident-repair parts used only 1-5x/quarter) are never zeroed out of the reorder list'],
       ['  3/3 → Daily/Regular Mover | 2/3 → Bi-Weekly Mover | 1/3 → Weekly/Occasional | 0/3 → No Recent Use'],

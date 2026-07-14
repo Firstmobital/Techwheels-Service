@@ -2724,6 +2724,20 @@ export default function ImportPage() {
                 row.branch = resolved.location
                 row.portal = resolved.portal
 
+                // ── Fiscal year guard ────────────────────────────────────────
+                // Skip orders placed before the current fiscal year (Apr 1, 2026).
+                // The TMS DMS challan export includes ALL historical orders (some from
+                // 2022-2023 that were never received/cancelled). These phantom orders
+                // inflate the pipeline qty → effective stock appears higher than actual
+                // → report wrongly marks parts as "OK" when physical stock is at zero.
+                // Rows with no order_date are kept (date unknown = assume current FY).
+                // Current FY starts Apr 1, 2026. Update PARTS_ORDER_FY_START each April.
+                const PARTS_ORDER_FY_START = '2026-04-01'
+                const orderDateStr = row.order_date ? String(row.order_date).slice(0, 10) : ''
+                if (orderDateStr && orderDateStr < PARTS_ORDER_FY_START) {
+                  continue  // skip pre-FY orders silently
+                }
+
                 insertRows.push(row)
               }
             }
