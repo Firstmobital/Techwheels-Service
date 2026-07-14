@@ -9,6 +9,7 @@ const CALENDAR_DAYS = 90
 // Active window is resolved at fetch-time from DB (latest 3 fiscal months with data).
 // No hardcoded months — automatically rolls forward after each consumption upload.
 const WINDOW_SIZE = 3  // always use the 3 most-recent months
+const PIPELINE_STATUSES = ['Ordered', 'Confirmed', 'In-Transit']
 const PAGE_SIZE = 50
 // A part is flagged Excess Stock when effective stock covers more than this many
 // multiples of the 30-day requirement (only applies to parts that actually move).
@@ -47,11 +48,10 @@ interface StockRow {
 interface OrderRow {
   part_number: string
   portal: string
-  order_status: string | null
+  order_status: string
   ordered_quantity: number
   received_quantity: number
   confirmation_qty: number | null
-  order_date: string | null
 }
 type FrequencyLabel = 'Daily/Regular Mover' | 'Bi-Weekly Mover' | 'Weekly/Occasional Mover' | 'No Recent Use'
 type RowStatus = 'CRITICAL' | 'LOW STOCK' | 'EXCESS STOCK' | 'DEAD STOCK' | 'OK'
@@ -250,7 +250,6 @@ export default function PartsStockDisciplineReport({ branch }: ReportViewProps) 
   // column stores plain location names. Portal filtering is handled by the EV/PV tab.
   const rawBranch = branch?.replace(/ (PV|EV)$/i, '').replace(/^ALL_?(PV|EV)?$/i, 'ALL') ?? 'ALL'
   const [activePortal, setActivePortal] = useState<OrderPortal>('PV')
-  const [pipelineSummary, setPipelineSummary] = useState<Record<OrderPortal, { parts: number; units: number; byDate: Array<{ date: string; parts: number; units: number }> }>>({ PV: { parts: 0, units: 0, byDate: [] }, EV: { parts: 0, units: 0, byDate: [] } })
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'CRITICAL' | 'LOW' | 'EXCESS' | 'DEAD' | 'OK'>('ALL')
   const [searchText, setSearchText] = useState('')
   const [rowsByPortal, setRowsByPortal] = useState<Record<OrderPortal, DisciplineRow[]>>({ PV: [], EV: [] })
@@ -300,12 +299,10 @@ export default function PartsStockDisciplineReport({ branch }: ReportViewProps) 
         ),
         fetchAll<OrderRow>(
           'service_parts_order_data',
-          'part_number,portal,order_status,ordered_quantity,received_quantity,confirmation_qty,order_date',
-          // Fetch all orders from current fiscal year (Apr 2026+).
-          // We filter by confirmation_qty > 0 AND not fully received in code below —
-          // this is more reliable than filtering by order_status string since the
-          // source CSV uses confirmation_qty as the ground truth for confirmed orders.
-          { ...baseFilters, order_date_gte: '2026-04-01' }
+          'part_number,portal,order_status,ordered_quantity,received_quantity,confirmation_qty',
+          // Only include pipeline orders from current fiscal year (Apr 2026+).
+          // Pre-FY orders (2022-2023) are phantom entries that inflate effective stock.
+          { ...baseFilters, order_status: PIPELINE_STATUSES, order_date_gte: '2026-04-01' }
         ),
       ])
 
@@ -348,58 +345,19 @@ export default function PartsStockDisciplineReport({ branch }: ReportViewProps) 
         e.cost += (row.on_hand_quantity ?? 0) * (row.weighted_avg_cost ?? 0)
       }
 
-      // ── Confirmation Qty Pipeline ────────────────────────────────────────────
-      // Logic (matches user requirement exactly):
-      //   1. Use confirmation_qty (Column L) as the authoritative confirmed order qty
-      //   2. Subtract received_quantity so only undelivered portions count as pipeline
-      //   3. For unconfirmed rows (conf_qty null / 0 but status=Ordered): use ordered_qty
-      //   4. Exclude rows where confirmation_qty <= received_quantity (fully received)
-      //   5. Exclude rows with order_status='Received' (fully delivered via GRN)
-      //
-      // This automatically handles:
-      //   • July 11 orders: deducted from recommended qty until GRN receipt
-      //   • Future uploads: new conf_qty values replace old via scoped delete+insert
-      //   • GRN receipt: once received_qty ≥ conf_qty → excluded from pipeline
+      // Confirmation Qty map — uses confirmation_qty (from TML/SAP order sheet) as the
+      // authoritative confirmed quantity. We subtract received_quantity to get only the
+      // portion still in-transit (not yet on shelf). Falls back to ordered_quantity
+      // for Ordered-status rows where confirmation_qty is null (not yet confirmed).
       const pipelineMap = new Map<string, number>()
-      // Also track pipeline breakdown by date for the summary panel
-      const pipelineDateMap = new Map<string, Map<string, number>>() // date → partKey → qty
       for (const row of orderFiltered) {
-        // Skip fully received rows (order_status = Received OR received_qty ≥ conf_qty)
-        const confQty = row.confirmation_qty ?? 0
-        const orderedQty = row.ordered_quantity ?? 0
-        const receivedQty = row.received_quantity ?? 0
-        const isFullyReceived = row.order_status === 'Received' || (confQty > 0 && receivedQty >= confQty)
-        if (isFullyReceived) continue
-
-        // Use confirmation_qty as base; fallback to ordered_qty for unconfirmed rows
-        const baseQty = confQty > 0 ? confQty : orderedQty
-        const pendingQty = Math.max(0, baseQty - receivedQty)
-        if (pendingQty === 0) continue
-
         const key = `${row.part_number}|${row.portal}`
-        pipelineMap.set(key, (pipelineMap.get(key) ?? 0) + pendingQty)
-
-        // Track by order date for pipeline summary
-        const orderDate = (row.order_date ?? '').substring(0, 10)
-        if (orderDate) {
-          if (!pipelineDateMap.has(orderDate)) pipelineDateMap.set(orderDate, new Map())
-          const dateEntry = pipelineDateMap.get(orderDate)!
-          dateEntry.set(key, (dateEntry.get(key) ?? 0) + pendingQty)
-        }
+        const baseQty = row.confirmation_qty != null
+          ? (row.confirmation_qty ?? 0)          // confirmed by supplier — authoritative
+          : (row.ordered_quantity ?? 0)           // fallback: not yet confirmed
+        const confirmedPending = Math.max(0, baseQty - (row.received_quantity ?? 0))
+        pipelineMap.set(key, (pipelineMap.get(key) ?? 0) + confirmedPending)
       }
-
-      // Build pipeline summary for UI display
-      const pipelineDateSummary: Array<{ date: string; parts: number; units: number }> = []
-      for (const [date, partMap] of Array.from(pipelineDateMap.entries()).sort((a, b) => b[0].localeCompare(a[0]))) {
-        const units = Array.from(partMap.values()).reduce((s, v) => s + v, 0)
-        pipelineDateSummary.push({ date, parts: partMap.size, units })
-      }
-      const totalPipelineParts = new Set(Array.from(pipelineDateMap.values()).flatMap((m) => Array.from(m.keys()))).size
-      const totalPipelineUnits = Array.from(pipelineMap.values()).reduce((s, v) => s + v, 0)
-      setPipelineSummary((prev) => ({
-        ...prev,
-        [portalToLoad]: { parts: totalPipelineParts, units: totalPipelineUnits, byDate: pipelineDateSummary }
-      }))
 
       const allKeys = new Set([...consumpMap.keys(), ...stockMap.keys()])
       const disciplineRows: DisciplineRow[] = []
@@ -519,8 +477,6 @@ export default function PartsStockDisciplineReport({ branch }: ReportViewProps) 
       ok: ok.length,
       totalOrderQty: toOrder.reduce((s, r) => s + r.qtyToOrder, 0),
       deadValue: dead.reduce((s, r) => s + r.inventoryValue, 0),
-      partsWithPipeline: rows.filter((r) => r.pipelineQty > 0).length,
-      totalPipelineQty: rows.reduce((s, r) => s + r.pipelineQty, 0),
     }
   }, [rows])
 
@@ -544,8 +500,8 @@ export default function PartsStockDisciplineReport({ branch }: ReportViewProps) 
       [`Months Active = count of the ${activeMonthLabels.length} consumption months with qty > 0`],
       ['NOTE: Required Stock uses UNROUNDED daily consumption internally so low-volume/high-value parts (e.g. body panels, accident-repair parts used only 1-5x/quarter) are never zeroed out of the reorder list'],
       ['  3/3 → Daily/Regular Mover | 2/3 → Bi-Weekly Mover | 1/3 → Weekly/Occasional | 0/3 → No Recent Use'],
-      ['Effective Stock = Current On-Hand + Pipeline (= max(0, Confirmation Qty − Received Qty); for unconfirmed rows: max(0, Ordered Qty − Received Qty))'],
-      ['Qty to Order = ROUNDUP(MAX(Required − Effective, 0), 0) — confirmed pipeline already deducted; only fresh gap is recommended for ordering'],
+      ['Effective Stock = Current On-Hand + Conf. Qty pipeline (= max(0, Confirmation Qty − Received Qty); falls back to Ordered Qty for unconfirmed rows)'],
+      ['Qty to Order = ROUNDUP(MAX(Required − Effective, 0), 0) — Confirmation Qty (net of received) deducted so you only order the true remaining gap'],
       ['Dead Stock = On-Hand > 0 AND total 3-month consumption = 0 (working-capital risk)'],
       ['Critical = Shortage AND a Daily/Regular or Bi-Weekly mover — highest reorder priority'],
       ['Excess Stock = Effective Stock more than ' + EXCESS_STOCK_MULTIPLE + 'x the 30-day requirement'],
@@ -701,45 +657,16 @@ export default function PartsStockDisciplineReport({ branch }: ReportViewProps) 
         </button>
       </div>
 
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <div className="rounded-lg border border-violet-100 bg-violet-50 px-4 py-3 shadow-sm">
           <p className="text-xs font-medium uppercase tracking-wide text-violet-600">Total Qty to Order</p>
           <p className="mt-1 text-2xl font-semibold text-violet-900">{stats.totalOrderQty.toLocaleString('en-IN')}</p>
-          <p className="mt-0.5 text-[10px] text-violet-500">Net after pipeline deduction</p>
-        </div>
-        <div className="rounded-lg border border-sky-100 bg-sky-50 px-4 py-3 shadow-sm">
-          <p className="text-xs font-medium uppercase tracking-wide text-sky-600">Confirmed Orders (Pipeline)</p>
-          <p className="mt-1 text-2xl font-semibold text-sky-900">{pipelineSummary[activePortal].units.toLocaleString('en-IN')} units</p>
-          <p className="mt-0.5 text-[10px] text-sky-500">{pipelineSummary[activePortal].parts} parts · conf_qty − received</p>
         </div>
         <div className="rounded-lg border border-amber-100 bg-amber-50 px-4 py-3 shadow-sm">
           <p className="text-xs font-medium uppercase tracking-wide text-amber-600">Dead Stock Value</p>
           <p className="mt-1 text-2xl font-semibold text-amber-900">₹{Math.round(stats.deadValue).toLocaleString('en-IN')}</p>
         </div>
       </div>
-
-      {/* Pipeline breakdown by order date */}
-      {pipelineSummary[activePortal].byDate.length > 0 && (
-        <div className="rounded-xl border border-sky-100 bg-sky-50 px-4 py-3 shadow-sm">
-          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-sky-700">
-            Confirmed Orders by Date — deducted from Qty-to-Order
-          </p>
-          <div className="flex flex-wrap gap-2">
-            {pipelineSummary[activePortal].byDate.map(({ date, parts, units }) => (
-              <div key={date} className="rounded-lg border border-sky-200 bg-white px-3 py-1.5 text-xs shadow-sm">
-                <span className="font-medium text-sky-800">
-                  {new Date(date + 'T00:00:00').toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}
-                </span>
-                <span className="ml-2 text-sky-600">{units.toLocaleString('en-IN')} units</span>
-                <span className="ml-1 text-sky-400">({parts} parts)</span>
-              </div>
-            ))}
-          </div>
-          <p className="mt-2 text-[10px] text-sky-500">
-            Parts auto-removed from pipeline once received via GRN. Upload fresh order sheet to sync latest confirmation quantities.
-          </p>
-        </div>
-      )}
 
       {/* Toolbar */}
       <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
@@ -780,7 +707,7 @@ export default function PartsStockDisciplineReport({ branch }: ReportViewProps) 
           </button>
         </div>
         <div className="mt-3 rounded-lg border border-emerald-100 bg-emerald-50 px-3 py-2 text-xs text-emerald-800">
-          <strong>Confirmation Qty logic:</strong> Pipeline = max(0, Confirmation Qty − Received Qty) from the imported order sheet. Fully received items are auto-excluded. Net order qty = Required − (On-Hand + Pipeline). Uploads auto-refresh — no manual changes needed.
+          <strong>Confirmation Qty applied:</strong> Effective Stock = On-Hand + Confirmation Qty from the imported order sheet. For unconfirmed (Ordered-status) rows, falls back to Ordered − Received. "Qty to Order" only covers the true remaining gap after confirmed orders already in-flight.
         </div>
       </div>
 
