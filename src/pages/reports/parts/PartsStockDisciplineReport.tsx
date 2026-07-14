@@ -85,18 +85,22 @@ type OrderPortal = 'PV' | 'EV'
 
 // ── Resolve the 3 most-recent fiscal months from DB ──────────────────────────────
 // Queries consumption data once per fetch to find the latest WINDOW_SIZE months
-// with actual rows. If fewer than WINDOW_SIZE months exist, uses what's available.
+// with actual rows. Works for both a specific branch and 'ALL' branches.
 async function resolveActiveWindow(
   branch: string,
   portal: string,
 ): Promise<{ fiscal_year: number; fiscal_months: number[]; calendar_days: number }> {
-  const { data, error } = await (supabase.from('service_parts_consumption_data') as any)
+  // Build the query — omit branch filter when branch is 'ALL' so we find
+  // the latest months across the entire dataset (important for the default page load).
+  let q = (supabase.from('service_parts_consumption_data') as any)
     .select('fiscal_year,fiscal_month')
-    .eq('branch', branch)
     .eq('portal', portal)
     .order('fiscal_year', { ascending: false })
     .order('fiscal_month', { ascending: false })
     .limit(500)
+  if (branch !== 'ALL') q = q.eq('branch', branch)
+
+  const { data, error } = await q
 
   if (error || !data?.length) {
     // Fallback to FY2026 Apr/May/Jun if no data
@@ -209,7 +213,8 @@ export default function PartsStockDisciplineReport({ branch }: ReportViewProps) 
       if (rawBranch && rawBranch !== 'ALL') baseFilters['branch'] = rawBranch
 
       // Resolve the active consumption window dynamically from DB
-      const resolvedWindow = await resolveActiveWindow(baseFilters.branch as string, activePortal)
+      // Pass rawBranch directly (may be 'ALL') — resolveActiveWindow handles 'ALL' by omitting branch filter
+      const resolvedWindow = await resolveActiveWindow(rawBranch || 'ALL', activePortal)
       const { fiscal_year: TARGET_FISCAL_YEAR, fiscal_months: TARGET_MONTHS, calendar_days: CALENDAR_DAYS_DYNAMIC } = resolvedWindow
       setActiveWindow(resolvedWindow)
 

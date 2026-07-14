@@ -2800,17 +2800,29 @@ export default function ImportPage() {
               )
             }
 
-            // ── Client-side dedup before insert ──────────────────────────────────
-            // The TM DMS Excel export frequently contains duplicate part_number rows
-            // (e.g. same part listed twice with different location codes or zero qty
-            // entries). Since the DB now has a unique index on (part_number, branch, portal),
-            // we must resolve duplicates here: keep the LAST occurrence per part_number
-            // (last wins = most recent data row in the sheet, typically the "active" one).
+            // ── Multi-bin aggregation before insert ──────────────────────────────
+            // The TM DMS stock export lists EACH warehouse bin as a separate row for
+            // the same part number (e.g. "Sitapura Ground", "Sitapura First Floor", etc).
+            // The DB has a unique index on (part_number, branch, portal), so we must
+            // consolidate multi-bin rows by SUMMING on_hand_quantity and total_price_value.
+            // Using "last wins" (the old approach) silently discarded most of the stock,
+            // causing the DB qty to be 2x-3x lower than actual physical inventory.
             const dedupedRows = Array.from(
               insertRows.reduce((map, row) => {
-                // Key = part_number (already scoped to branch+portal by the slot)
                 const key = String(row.part_number ?? '').toUpperCase()
-                if (key) map.set(key, row)   // last occurrence wins
+                if (!key) return map
+                if (map.has(key)) {
+                  // Part already seen — aggregate qty and value from this additional bin
+                  const existing = map.get(key)!
+                  existing.on_hand_quantity =
+                    (Number(existing.on_hand_quantity) || 0) + (Number(row.on_hand_quantity) || 0)
+                  existing.total_price_value =
+                    (Number(existing.total_price_value) || 0) + (Number(row.total_price_value) || 0)
+                  // Keep the weighted_avg_cost from the first occurrence (primary bin)
+                  // as it's the same part; value is now aggregated above.
+                } else {
+                  map.set(key, { ...row })
+                }
                 return map
               }, new Map<string, Record<string, unknown>>()).values()
             )
