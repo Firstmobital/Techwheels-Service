@@ -83,53 +83,113 @@ interface DisciplineRow {
 
 type OrderPortal = 'PV' | 'EV'
 
-// ── Resolve the 3 most-recent fiscal months from DB ──────────────────────────────
-// Queries consumption data once per fetch to find the latest WINDOW_SIZE months
-// with actual rows. Works for both a specific branch and 'ALL' branches.
+// ── Calendar-based: always use the 3 complete months BEFORE the current month ────
+//
+// Mapping: Indian fiscal year starts April 1.
+//   April=FM1, May=FM2, June=FM3, July=FM4, ..., March=FM12
+//   fiscal_month = ((calendarMonth - 4 + 12) % 12) + 1
+//
+// Rolling forward automatically:
+//   Current month = July (FM4)  → window = FM1,FM2,FM3 = April, May, June
+//   Current month = August(FM5) → window = FM2,FM3,FM4 = May,   June, July
+//   Current month = April (FM1) → window = FM10,FM11,FM12 = Jan,  Feb,  Mar (prev FY)
+//
+// If DB data is missing for the target months, falls back to the latest 3 available months.
 async function resolveActiveWindow(
   branch: string,
   portal: string,
-): Promise<{ fiscal_year: number; fiscal_months: number[]; calendar_days: number }> {
-  // Build the query — omit branch filter when branch is 'ALL' so we find
-  // the latest months across the entire dataset (important for the default page load).
+): Promise<{ fiscal_year: number; fiscal_months: number[]; calendar_days: number; windowBasis: 'calendar' | 'fallback' }> {
+  // ── Step 1: Compute target window from today's calendar date ─────────────────
+  const today = new Date()
+  const calMonth = today.getMonth() + 1  // 1-12, Jan=1
+  const calYear  = today.getFullYear()
+
+  // Current fiscal month (April = FM1)
+  const fmCurrent = ((calMonth - 4 + 12) % 12) + 1
+  // Fiscal year start: if calendar month is Jan/Feb/Mar, FY started previous calendar year
+  const fyStart   = calMonth >= 4 ? calYear : calYear - 1
+
+  // The 3 complete months BEFORE the current fiscal month
+  const targetFMs: number[] = []
+  for (let i = 3; i >= 1; i--) {
+    let fm = fmCurrent - i
+    if (fm <= 0) fm += 12  // wrap into previous FY (FM10=Jan, FM11=Feb, FM12=Mar)
+    targetFMs.push(fm)
+  }
+  // targetFMs is already ascending (oldest → newest)
+
+  // Determine which fiscal year(s) the target months fall in
+  // If the smallest target FM crossed the FY boundary (> fmCurrent), it's in the PREV FY
+  // For simplicity: if all targetFMs < fmCurrent they share the same FY; otherwise split.
+  // In practice, for months Apr–Jun of any year, all 3 prior months share one FY.
+  // For months July–March, all 3 prior months share one FY.
+  // Cross-FY only happens when fmCurrent <= 3 (April/May/June = FM1/2/3).
+  let targetFY = fyStart
+  const hasCrossYear = targetFMs.some((m) => m > fmCurrent)
+  // If we wrap (e.g. current=April/FM1, targets=[FM10,FM11,FM12]), those belong to prev FY
+  // We keep a single fiscal_year (the dominant one — where 2 of 3 months fall)
+  if (hasCrossYear) {
+    // Most months belong to previous FY
+    targetFY = fyStart - 1
+  }
+
+  // ── Step 2: Check which target months actually have data in DB ───────────────
   let q = (supabase.from('service_parts_consumption_data') as any)
+    .select('fiscal_year,fiscal_month')
+    .eq('portal', portal)
+    .in('fiscal_month', targetFMs)
+    .limit(500)
+  if (branch !== 'ALL') q = q.eq('branch', branch)
+
+  const { data: targetData } = await q
+  const foundFMs = new Set((targetData ?? []).map((r: any) => Number(r.fiscal_month)))
+  const availableTargetFMs = targetFMs.filter((m) => foundFMs.has(m))
+
+  // If all 3 target months have data → use calendar window (primary path)
+  if (availableTargetFMs.length === WINDOW_SIZE) {
+    return {
+      fiscal_year: targetFY,
+      fiscal_months: targetFMs,       // already ascending
+      calendar_days: WINDOW_SIZE * 30,
+      windowBasis: 'calendar',
+    }
+  }
+
+  // ── Step 3: Fallback — use however many target months have data ──────────────
+  // (e.g., early in a new FY when only 1-2 months of consumption exist)
+  if (availableTargetFMs.length > 0) {
+    return {
+      fiscal_year: targetFY,
+      fiscal_months: availableTargetFMs,
+      calendar_days: availableTargetFMs.length * 30,
+      windowBasis: 'fallback',
+    }
+  }
+
+  // ── Step 4: No data at all for target months — find latest available months ──
+  let qLatest = (supabase.from('service_parts_consumption_data') as any)
     .select('fiscal_year,fiscal_month')
     .eq('portal', portal)
     .order('fiscal_year', { ascending: false })
     .order('fiscal_month', { ascending: false })
     .limit(500)
-  if (branch !== 'ALL') q = q.eq('branch', branch)
+  if (branch !== 'ALL') qLatest = qLatest.eq('branch', branch)
 
-  const { data, error } = await q
-
-  if (error || !data?.length) {
-    // Fallback to FY2026 Apr/May/Jun if no data
-    return { fiscal_year: 2026, fiscal_months: [1, 2, 3], calendar_days: 90 }
+  const { data: latestData } = await qLatest
+  if (!latestData?.length) {
+    return { fiscal_year: 2026, fiscal_months: [1, 2, 3], calendar_days: 90, windowBasis: 'fallback' }
   }
 
-  // Collect unique (fiscal_year, fiscal_month) pairs, newest first
   const seen = new Set<string>()
   const pairs: { fy: number; fm: number }[] = []
-  for (const row of data) {
-    const key = `${row.fiscal_year}-${row.fiscal_month}`
-    if (!seen.has(key)) {
-      seen.add(key)
-      pairs.push({ fy: Number(row.fiscal_year), fm: Number(row.fiscal_month) })
-    }
+  for (const row of latestData) {
+    const key = \`\${row.fiscal_year}-\${row.fiscal_month}\`
+    if (!seen.has(key)) { seen.add(key); pairs.push({ fy: Number(row.fiscal_year), fm: Number(row.fiscal_month) }) }
     if (pairs.length >= WINDOW_SIZE) break
   }
-
-  if (!pairs.length) {
-    return { fiscal_year: 2026, fiscal_months: [1, 2, 3], calendar_days: 90 }
-  }
-
-  // All pairs should be from the same fiscal year (within a 3-month window)
-  const fiscal_year = pairs[0].fy
-  // Re-sort ascending (Apr=1, May=2, Jun=3, Jul=4...) for proper display
+  const fiscal_year = pairs[0]?.fy ?? 2026
   const fiscal_months = pairs.map((p) => p.fm).sort((a, b) => a - b)
-  const calendar_days = fiscal_months.length * 30  // 30 days per month
-
-  return { fiscal_year, fiscal_months, calendar_days }
+  return { fiscal_year, fiscal_months, calendar_days: fiscal_months.length * 30, windowBasis: 'fallback' }
 }
 
 async function fetchAll<T>(
@@ -196,8 +256,8 @@ export default function PartsStockDisciplineReport({ branch }: ReportViewProps) 
   const [error, setError] = useState<string | null>(null)
   const [lastUpdated, setLastUpdated] = useState<Record<OrderPortal, string | null>>({ PV: null, EV: null })
   const [activeMonthLabels, setActiveMonthLabels] = useState<string[]>(['M1', 'M2', 'M3'])
-  const [activeWindow, setActiveWindow] = useState<{ fiscal_year: number; fiscal_months: number[]; calendar_days: number }>(
-    { fiscal_year: 2026, fiscal_months: [1, 2, 3], calendar_days: 90 }
+  const [activeWindow, setActiveWindow] = useState<{ fiscal_year: number; fiscal_months: number[]; calendar_days: number; windowBasis?: 'calendar' | 'fallback' }>(
+    { fiscal_year: 2026, fiscal_months: [1, 2, 3], calendar_days: 90, windowBasis: 'calendar' }
   )
   const [sortKey, setSortKey] = useState<keyof DisciplineRow>('qtyToOrder')
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc')
@@ -218,11 +278,18 @@ export default function PartsStockDisciplineReport({ branch }: ReportViewProps) 
       const { fiscal_year: TARGET_FISCAL_YEAR, fiscal_months: TARGET_MONTHS, calendar_days: CALENDAR_DAYS_DYNAMIC } = resolvedWindow
       setActiveWindow(resolvedWindow)
 
+      // When the 3-month window straddles a fiscal-year boundary (rare, only May-Jun of new FY),
+      // include both fiscal years in the consumption query so no month is missed.
+      const hasCrossYearWindow = TARGET_MONTHS.some((m) => m > TARGET_MONTHS[TARGET_MONTHS.length - 1])
+      const TARGET_FISCAL_YEARS: number[] = hasCrossYearWindow
+        ? [TARGET_FISCAL_YEAR, TARGET_FISCAL_YEAR + 1]
+        : [TARGET_FISCAL_YEAR]
+
       const [consumptionAll, stockAll, orderAll] = await Promise.all([
         fetchAll<ConsumptionRow>(
           'service_parts_consumption_data',
           'part_number,part_description,portal,fiscal_year,fiscal_month,month_name,total_consumption',
-          { ...baseFilters, fiscal_year: [TARGET_FISCAL_YEAR], fiscal_month: TARGET_MONTHS }
+          { ...baseFilters, fiscal_year: TARGET_FISCAL_YEARS, fiscal_month: TARGET_MONTHS }
         ),
         fetchAll<StockRow>(
           'service_parts_stock_snapshot_data',
@@ -422,8 +489,8 @@ export default function PartsStockDisciplineReport({ branch }: ReportViewProps) 
       [],
       ['METHODOLOGY'],
       ['30-Day Required Stock = ROUNDUP(Avg Daily Consumption × 30, 0)'],
-      [`Avg Daily Consumption = Total ${activeWindow.fiscal_months.length}-Month Qty ÷ ${activeWindow.calendar_days} calendar days (FY${activeWindow.fiscal_year} months: ${activeWindow.fiscal_months.join(', ')})`],
-      ['Months Active = count of months (Apr/May/Jun) with consumption > 0'],
+      [`Avg Daily Consumption = Total ${activeWindow.fiscal_months.length}-Month Qty ÷ ${activeWindow.calendar_days} calendar days · Window: ${activeMonthLabels.join(' + ')} (previous 3 months before current month, auto-rolls monthly)`],
+      [`Months Active = count of the ${activeMonthLabels.length} consumption months with qty > 0`],
       ['NOTE: Required Stock uses UNROUNDED daily consumption internally so low-volume/high-value parts (e.g. body panels, accident-repair parts used only 1-5x/quarter) are never zeroed out of the reorder list'],
       ['  3/3 → Daily/Regular Mover | 2/3 → Bi-Weekly Mover | 1/3 → Weekly/Occasional | 0/3 → No Recent Use'],
       ['Effective Stock = Current On-Hand + Pipeline (Ordered + Confirmed + In-Transit, net of already received)'],
@@ -503,7 +570,7 @@ export default function PartsStockDisciplineReport({ branch }: ReportViewProps) 
           <div>
             <h2 className="text-lg font-semibold text-gray-900">Stock Discipline &amp; Reorder — Order Sheets</h2>
             <p className="mt-1 text-sm text-gray-500">
-              Independent PV and EV order sheets · 30-day consumption cover · window: {activeMonthLabels.join(' + ')}
+              Independent PV and EV order sheets · 30-day consumption cover · consumption window: {activeMonthLabels.join(' + ')}{activeWindow.windowBasis === 'fallback' ? ' (partial data)' : ''}
             </p>
           </div>
           {lastUpdatedForActive && (
