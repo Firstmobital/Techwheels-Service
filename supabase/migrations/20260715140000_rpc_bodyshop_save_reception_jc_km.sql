@@ -25,12 +25,12 @@
 CREATE OR REPLACE FUNCTION public.bodyshop_save_reception_jc_km(
   p_reception_entry_id bigint,
   p_jc_number          text    DEFAULT NULL,
-  p_km_reading         numeric DEFAULT NULL
+  p_km_reading         integer DEFAULT NULL
 )
 RETURNS TABLE (
   id          bigint,
   jc_number   text,
-  km_reading  numeric
+  km_reading  integer
 )
 LANGUAGE plpgsql
 SECURITY DEFINER
@@ -85,7 +85,7 @@ BEGIN
 END;
 $$;
 
-COMMENT ON FUNCTION public.bodyshop_save_reception_jc_km(bigint, text, numeric)
+COMMENT ON FUNCTION public.bodyshop_save_reception_jc_km(bigint, text, integer)
 IS 'SECURITY DEFINER RPC: updates jc_number and/or km_reading on a single '
    'service_reception_entries row. Bypasses expensive authenticated-role RLS '
    'policies (which cause statement_timeout) while enforcing the same '
@@ -94,5 +94,5 @@ IS 'SECURITY DEFINER RPC: updates jc_number and/or km_reading on a single '
    'the SA on the row (or admin).';
 
 -- Grant execute to authenticated users (anon cannot call this).
-GRANT EXECUTE ON FUNCTION public.bodyshop_save_reception_jc_km(bigint, text, numeric)
+GRANT EXECUTE ON FUNCTION public.bodyshop_save_reception_jc_km(bigint, text, integer)
   TO authenticated;

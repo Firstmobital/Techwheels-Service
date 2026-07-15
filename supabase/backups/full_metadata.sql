@@ -2,12 +2,12 @@
 -- PostgreSQL database dump
 --
 
-\restrict b1x73Ruzxr3B5zvnUZdJRGSb6Nz6edlq1Up5JEIecRhf8F8Yd8agoGLXvglOI2h
+\restrict ewMfFKmFhrIJ66iSi4UBmt2dtsrGbsF4Z1SzEYAod6FjJL5eTvxadnUNymt88qT
 
 -- Dumped from database version 17.6
 -- Dumped by pg_dump version 17.7 (Homebrew)
 
--- Started on 2026-07-15 17:13:54 IST
+-- Started on 2026-07-15 17:21:59 IST
 
 SET statement_timeout = 0;
 SET lock_timeout = 0;
@@ -1607,11 +1607,11 @@ $$;
 
 
 --
--- TOC entry 2008 (class 1255 OID 36118)
--- Name: bodyshop_save_reception_jc_km(bigint, text, numeric); Type: FUNCTION; Schema: public; Owner: -
+-- TOC entry 2008 (class 1255 OID 36121)
+-- Name: bodyshop_save_reception_jc_km(bigint, text, integer); Type: FUNCTION; Schema: public; Owner: -
 --
 
-CREATE FUNCTION public.bodyshop_save_reception_jc_km(p_reception_entry_id bigint, p_jc_number text DEFAULT NULL::text, p_km_reading numeric DEFAULT NULL::numeric) RETURNS TABLE(id bigint, jc_number text, km_reading numeric)
+CREATE FUNCTION public.bodyshop_save_reception_jc_km(p_reception_entry_id bigint, p_jc_number text DEFAULT NULL::text, p_km_reading integer DEFAULT NULL::integer) RETURNS TABLE(id bigint, jc_number text, km_reading integer)
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO 'public'
     AS $$
@@ -1668,10 +1668,10 @@ $$;
 --
 -- TOC entry 8410 (class 0 OID 0)
 -- Dependencies: 2008
--- Name: FUNCTION bodyshop_save_reception_jc_km(p_reception_entry_id bigint, p_jc_number text, p_km_reading numeric); Type: COMMENT; Schema: public; Owner: -
+-- Name: FUNCTION bodyshop_save_reception_jc_km(p_reception_entry_id bigint, p_jc_number text, p_km_reading integer); Type: COMMENT; Schema: public; Owner: -
 --
 
-COMMENT ON FUNCTION public.bodyshop_save_reception_jc_km(p_reception_entry_id bigint, p_jc_number text, p_km_reading numeric) IS 'SECURITY DEFINER RPC: updates jc_number and/or km_reading on a single service_reception_entries row. Bypasses expensive authenticated-role RLS policies (which cause statement_timeout) while enforcing the same authorization rules as the service_reception_update_sa policy. Caller must have module_modify(service_advisor) or be admin, and must be the SA on the row (or admin).';
+COMMENT ON FUNCTION public.bodyshop_save_reception_jc_km(p_reception_entry_id bigint, p_jc_number text, p_km_reading integer) IS 'SECURITY DEFINER RPC: updates jc_number and/or km_reading on a single service_reception_entries row. Bypasses expensive authenticated-role RLS policies (which cause statement_timeout) while enforcing the same authorization rules as the service_reception_update_sa policy. Caller must have module_modify(service_advisor) or be admin, and must be the SA on the row (or admin).';
 
 
 --
@@ -33301,12 +33301,12 @@ GRANT ALL ON FUNCTION public.bag_ne(text, text, text) TO service_role;
 --
 -- TOC entry 8411 (class 0 OID 0)
 -- Dependencies: 2008
--- Name: FUNCTION bodyshop_save_reception_jc_km(p_reception_entry_id bigint, p_jc_number text, p_km_reading numeric); Type: ACL; Schema: public; Owner: -
+-- Name: FUNCTION bodyshop_save_reception_jc_km(p_reception_entry_id bigint, p_jc_number text, p_km_reading integer); Type: ACL; Schema: public; Owner: -
 --
 
-GRANT ALL ON FUNCTION public.bodyshop_save_reception_jc_km(p_reception_entry_id bigint, p_jc_number text, p_km_reading numeric) TO anon;
-GRANT ALL ON FUNCTION public.bodyshop_save_reception_jc_km(p_reception_entry_id bigint, p_jc_number text, p_km_reading numeric) TO authenticated;
-GRANT ALL ON FUNCTION public.bodyshop_save_reception_jc_km(p_reception_entry_id bigint, p_jc_number text, p_km_reading numeric) TO service_role;
+GRANT ALL ON FUNCTION public.bodyshop_save_reception_jc_km(p_reception_entry_id bigint, p_jc_number text, p_km_reading integer) TO anon;
+GRANT ALL ON FUNCTION public.bodyshop_save_reception_jc_km(p_reception_entry_id bigint, p_jc_number text, p_km_reading integer) TO authenticated;
+GRANT ALL ON FUNCTION public.bodyshop_save_reception_jc_km(p_reception_entry_id bigint, p_jc_number text, p_km_reading integer) TO service_role;
 
 
 --
@@ -48560,11 +48560,11 @@ CREATE EVENT TRIGGER trg_auto_admin_bypass_policy_on_ddl ON ddl_command_end
    EXECUTE FUNCTION public.apply_admin_bypass_policy_on_ddl();
 
 
--- Completed on 2026-07-15 17:14:42 IST
+-- Completed on 2026-07-15 17:22:48 IST
 
 --
 -- PostgreSQL database dump complete
 --
 
-\unrestrict b1x73Ruzxr3B5zvnUZdJRGSb6Nz6edlq1Up5JEIecRhf8F8Yd8agoGLXvglOI2h
+\unrestrict ewMfFKmFhrIJ66iSi4UBmt2dtsrGbsF4Z1SzEYAod6FjJL5eTvxadnUNymt88qT
 
