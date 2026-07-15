@@ -3406,21 +3406,22 @@ export default function BodyshopRepairPage() {
     setSavingReceiving(true)
     try {
       if ((kmDirty || jcDirty) && selectedReception?.id) {
-        const receptionPatch: { km_reading?: number | null; jc_number?: string | null } = {}
-        if (kmDirty) receptionPatch.km_reading = kmValue
-        if (jcDirty) receptionPatch.jc_number = jcValue
-
-        const { data: updatedReceptionRow, error: kmError } = await supabase
-          .from('service_reception_entries')
-          .update(receptionPatch)
-          .eq('id', selectedReception.id)
-          .select('id, km_reading, jc_number')
-          .maybeSingle()
+        // Use SECURITY DEFINER RPC to bypass expensive authenticated-role RLS
+        // policies on service_reception_entries (which were causing 57014
+        // statement_timeout). The RPC enforces the same auth rules as the
+        // service_reception_update_sa policy but runs as postgres (~5 ms).
+        const { data: rpcRows, error: kmError } = await supabase
+          .rpc('bodyshop_save_reception_jc_km', {
+            p_reception_entry_id: selectedReception.id,
+            ...(jcDirty ? { p_jc_number: jcValue } : {}),
+            ...(kmDirty ? { p_km_reading: kmValue } : {}),
+          })
 
         if (kmError) {
           console.error('[BodyshopSA:KM] manual-save db update failed', {
             receptionEntryId: selectedReception.id,
-            receptionPatch,
+            jcDirty,
+            kmDirty,
             errorMessage: kmError.message,
             errorCode: (kmError as any)?.code ?? null,
             errorDetails: (kmError as any)?.details ?? null,
@@ -3430,11 +3431,11 @@ export default function BodyshopRepairPage() {
           return
         }
 
+        const updatedReceptionRow = Array.isArray(rpcRows) ? rpcRows[0] : null
         if (!updatedReceptionRow) {
           const message = 'Save skipped: no matching reception row updated (scope/RLS).'
           console.error('[BodyshopSA:KM] manual-save no rows updated', {
             receptionEntryId: selectedReception.id,
-            receptionPatch,
           })
           failReceivingSave(message)
           return
