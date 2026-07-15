@@ -1099,8 +1099,24 @@ export default function ServiceAdvisorPage() {
       next.delete(id)
       return next
     })
-    showToast(`Saved ${rows.find((r) => r.id === id)?.reg_number || 'entry'}`)
-    await loadRows()
+    const savedReg = rows.find((r) => r.id === id)?.reg_number || 'entry'
+    showToast(`Saved ${savedReg}`)
+    // Patch local state with the updated row instead of reloading the full list
+    // (a full reload with period="All" runs an unbounded table scan and can hit
+    // the Supabase statement_timeout — code 57014).
+    const updatedRow = res.data as ReceptionEntryRow
+    if (updatedRow) {
+      setRows((prev) => prev.map((r) => (r.id === id ? updatedRow : r)))
+      setDrafts((prev) => ({
+        ...prev,
+        [id]: {
+          service_type: typeof updatedRow.service_type === 'string' ? updatedRow.service_type : '',
+          jc_number: updatedRow.jc_number ?? '',
+          km_reading: updatedRow.km_reading != null ? String(updatedRow.km_reading) : '',
+          remark: updatedRow.remark ?? '',
+        },
+      }))
+    }
   }
 
   async function handleEstimateUpload(id: number, file: File) {
@@ -1132,7 +1148,11 @@ export default function ServiceAdvisorPage() {
     }
 
     showToast('Estimate uploaded')
-    await loadRows()
+    // Patch local row instead of full reload to avoid statement_timeout on unbounded scans.
+    if (res.data) {
+      const updatedRow = res.data as ReceptionEntryRow
+      setRows((prev) => prev.map((r) => (r.id === id ? updatedRow : r)))
+    }
   }
 
   async function handleInvoiceDone(row: ReceptionEntryRow) {
@@ -1161,9 +1181,13 @@ export default function ServiceAdvisorPage() {
       }
 
       showToast('Invoice marked as done')
+      // Patch local row instead of full reload to avoid statement_timeout on unbounded scans.
+      if (res.data) {
+        const updatedRow = res.data as ReceptionEntryRow
+        setRows((prev) => prev.map((r) => (r.id === updatedRow.id ? updatedRow : r)))
+      }
       // Reuse the existing WA compose flow so Mark Done always triggers one WA send action.
       await handleSendWhatsApp(row)
-      await loadRows()
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unable to mark invoice as done'
       setError(message)
