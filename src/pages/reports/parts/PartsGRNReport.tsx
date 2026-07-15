@@ -149,12 +149,12 @@ export default function PartsGRNReport(_props: ReportViewProps) {
       let total = 0
       for (let from = 0; ; from += 1000) {
         const { data } = await supabase.from('grn_report_data')
-          .select('total_invoice_amount')
+          .select('line_item_invoice_total')
           .eq('portal', p).eq('upload_session_id', sess)
           .range(from, from + 999)
         for (const r of (data ?? [])) {
           // Use same parseRs logic: strip 'Rs.' first, then commas
-          total += parseRs(r.total_invoice_amount)
+          total += parseRs(r.line_item_invoice_total)
         }
         if ((data ?? []).length < 1000) break
       }
@@ -250,7 +250,7 @@ export default function PartsGRNReport(_props: ReportViewProps) {
     invoiceDate: string
     poDate: string
     partCount: number
-    totalInvoiceAmount: number   // from Total_Invoice_Amount column (order-level, incl. GST)
+    totalInvoiceAmount: number   // from Line Item Invoice Total column (per-part, sum per order)
     lineSum: number              // fallback: sum of Line Item Invoice Total
   }
 
@@ -268,18 +268,16 @@ export default function PartsGRNReport(_props: ReportViewProps) {
             invoiceDate: r.invoice_date ?? '',
             poDate: r.purchase_order_date ?? '',
             partCount: 0,
-            totalInvoiceAmount: parseRs(r.total_invoice_amount),
+            totalInvoiceAmount: 0,
             lineSum: 0,
           })
         }
         const entry = map.get(key)!
         entry.partCount += 1
-        // Line Item Invoice Total is per-part — accumulate for fallback
+        // Line Item Invoice Total is per-part — sum all lines for the order total
         entry.lineSum += parseRs(r.line_item_invoice_total ?? r.net_amount)
-        // Take first non-zero Total_Invoice_Amount found for this order
-        if (!entry.totalInvoiceAmount && parseRs(r.total_invoice_amount) > 0) {
-          entry.totalInvoiceAmount = parseRs(r.total_invoice_amount)
-        }
+        // Use line_item_invoice_total as the primary amount (additive per part)
+        entry.totalInvoiceAmount += parseRs(r.line_item_invoice_total ?? r.net_amount)
       })
     // Convert to array sorted by totalInvoiceAmount desc (highest pending invoice first)
     return Array.from(map.values()).sort((a, b) => b.totalInvoiceAmount - a.totalInvoiceAmount)
@@ -287,7 +285,7 @@ export default function PartsGRNReport(_props: ReportViewProps) {
 
   const totalInTransitOrders = inTransitOrderSummaries.length
   const totalInTransitAmount = inTransitOrderSummaries.reduce(
-    (sum, s) => sum + (s.totalInvoiceAmount || s.lineSum), 0
+    (sum, s) => sum + s.totalInvoiceAmount, 0
   )
   const latestUpload = history.find((h) => h.upload_session_id === latestSession)
 
@@ -309,7 +307,7 @@ export default function PartsGRNReport(_props: ReportViewProps) {
       'Recd Qty': r.recd_qty ?? '',
       'Spares Order Type': r.spares_order_type ?? '',
       'Condition': r.condition ?? '',
-      'Total Invoice Amount (Pending GRN)': r.status === 'In Transit' ? (r.total_invoice_amount ?? '') : '',
+      'Line Item Invoice Total': r.line_item_invoice_total ?? r.net_amount ?? '',
       'Net Amount': r.net_amount ?? '',
       'Vendor Name': r.vendor_name ?? '',
       'SAP Order Num': r.sap_order_num ?? '',
@@ -408,7 +406,7 @@ export default function PartsGRNReport(_props: ReportViewProps) {
       {/* EV / PV Invoice Total tiles — always visible, portal-independent */}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <div className="rounded-xl border border-emerald-300 bg-emerald-50 p-4 shadow-sm">
-          <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">EV Total Invoice Value</p>
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">EV Line Item Invoice Total</p>
           <p className="mt-1 text-xl font-bold text-emerald-700">
             {evInvoiceTotal === null
               ? '—'
@@ -416,10 +414,10 @@ export default function PartsGRNReport(_props: ReportViewProps) {
                 ? 'No EV data'
                 : '₹' + evInvoiceTotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </p>
-          <p className="text-[11px] text-emerald-600">Sum of Total_Invoice_Amount (Col AA) — latest EV upload</p>
+          <p className="text-[11px] text-emerald-600">Sum of Line Item Invoice Total — latest EV upload</p>
         </div>
         <div className="rounded-xl border border-indigo-300 bg-indigo-50 p-4 shadow-sm">
-          <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">PV Total Invoice Value</p>
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">PV Line Item Invoice Total</p>
           <p className="mt-1 text-xl font-bold text-indigo-700">
             {pvInvoiceTotal === null
               ? '—'
@@ -427,7 +425,7 @@ export default function PartsGRNReport(_props: ReportViewProps) {
                 ? 'No PV data'
                 : '₹' + pvInvoiceTotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </p>
-          <p className="text-[11px] text-indigo-600">Sum of Total_Invoice_Amount (Col AA) — latest PV upload</p>
+          <p className="text-[11px] text-indigo-600">Sum of Line Item Invoice Total — latest PV upload</p>
         </div>
       </div>
 
@@ -469,7 +467,7 @@ export default function PartsGRNReport(_props: ReportViewProps) {
                 ? '₹' + totalInTransitAmount.toLocaleString('en-IN', { maximumFractionDigits: 0 })
                 : '—'}
             </p>
-            <p className="text-[11px] text-violet-600">{totalInTransitOrders} pending orders</p>
+            <p className="text-[11px] text-violet-600">{totalInTransitOrders} pending orders (Line Item sum)</p>
           </div>
           <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
             <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Last Uploaded</p>
@@ -541,7 +539,7 @@ export default function PartsGRNReport(_props: ReportViewProps) {
                   <Th label="Invoice Date" field="invoice_date" cur={sortKey} dir={sortDir} onSort={handleSort} />
                   <Th label="Recd Qty" field="recd_qty" cur={sortKey} dir={sortDir} onSort={handleSort} />
                   <Th label="Spares Order Type" field="spares_order_type" cur={sortKey} dir={sortDir} onSort={handleSort} />
-                  <Th label="Total Invoice Amount" field="total_invoice_amount" cur={sortKey} dir={sortDir} onSort={handleSort} />
+                  <Th label="Line Item Invoice Total" field="total_invoice_amount" cur={sortKey} dir={sortDir} onSort={handleSort} />
                   <Th label="Net Amount" field="net_amount" cur={sortKey} dir={sortDir} onSort={handleSort} />
                   <Th label="Vendor" field="vendor_name" cur={sortKey} dir={sortDir} onSort={handleSort} />
                   <Th label="SAP Order Num" field="sap_order_num" cur={sortKey} dir={sortDir} onSort={handleSort} />
@@ -565,10 +563,8 @@ export default function PartsGRNReport(_props: ReportViewProps) {
                     <td className="px-3 py-2.5 text-xs text-gray-600 whitespace-nowrap">{fmtDate(row.invoice_date)}</td>
                     <td className="px-3 py-2.5 text-center text-xs font-semibold text-gray-700">{row.recd_qty ?? '—'}</td>
                     <td className="px-3 py-2.5 text-xs text-gray-600 whitespace-nowrap">{row.spares_order_type || '—'}</td>
-                    <td className={`px-3 py-2.5 text-right text-xs whitespace-nowrap font-semibold ${row.status === 'In Transit' ? 'text-violet-700' : 'text-gray-300'}`}>
-                      {row.status === 'In Transit'
-                        ? (row.total_invoice_amount || '—')
-                        : '—'}
+                    <td className="px-3 py-2.5 text-right text-xs whitespace-nowrap font-semibold text-gray-800">
+                      {row.line_item_invoice_total || row.net_amount || '—'}
                     </td>
                     <td className="px-3 py-2.5 text-right text-xs text-gray-700 whitespace-nowrap">{row.net_amount || '—'}</td>
                     <td className="px-3 py-2.5 text-xs text-gray-600">{row.vendor_name || '—'}</td>
