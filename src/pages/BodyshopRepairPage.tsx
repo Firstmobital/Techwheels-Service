@@ -7,7 +7,7 @@ import { isBodyshopDepartment } from '../lib/department'
 import DateRangeFilter, { currentMonthRange, type DateRange } from '../components/DateRangeFilter'
 import { fetchVehicleFromRcLookup } from '../lib/api/rcLookup'
 import {
-  listRepairCards, createRepairCard, updateRepairCard, advanceStage,
+  listRepairCards, createRepairCard, updateRepairCard, getRepairCard, advanceStage,
   getGroupForStage, STAGE_LABELS, STAGE_GROUPS,
   type RepairCard, type CustomerType,
 } from '../lib/api/bodyshopRepair'
@@ -3465,7 +3465,13 @@ export default function BodyshopRepairPage() {
         }
 
         if (jcDirty && jcValue) {
-          const updated = await updateRepairCard(selected.id, { job_card_no: jcValue })
+          // trg_sync_bodyshop_card_from_reception already synced job_card_no to
+          // bodyshop_repair_cards when we updated service_reception_entries above.
+          // Calling updateRepairCard here is redundant and causes a second expensive
+          // authenticated RLS evaluation on service_reception_entries (via the
+          // bodyshop_repair_cards UPDATE policy), which is the primary cause of the
+          // statement_timeout (error 57014). Just refetch the card to get fresh state.
+          const updated = await getRepairCard(selected.id)
           setSelected(updated)
           setCards((prev) => prev.map((c) => c.id === updated.id ? updated : c))
         }
