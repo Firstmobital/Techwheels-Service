@@ -3443,7 +3443,6 @@ export default function BodyshopRepairPage() {
 
         console.debug('[BodyshopSA:KM] manual-save db update success', {
           receptionEntryId: selectedReception.id,
-          receptionPatch,
           persisted: {
             km_reading: updatedReceptionRow.km_reading,
             jc_number: updatedReceptionRow.jc_number,
