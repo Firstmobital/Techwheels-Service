@@ -9,7 +9,6 @@ const CALENDAR_DAYS = 90
 // Active window is resolved at fetch-time from DB (latest 3 fiscal months with data).
 // No hardcoded months — automatically rolls forward after each consumption upload.
 const WINDOW_SIZE = 3  // always use the 3 most-recent months
-const PIPELINE_STATUSES = ['Ordered', 'Confirmed', 'In-Transit']
 const PAGE_SIZE = 50
 // A part is flagged Excess Stock when effective stock covers more than this many
 // multiples of the 30-day requirement (only applies to parts that actually move).
@@ -48,10 +47,11 @@ interface StockRow {
 interface OrderRow {
   part_number: string
   portal: string
-  order_status: string
+  order_status: string | null
   ordered_quantity: number
   received_quantity: number
   confirmation_qty: number | null
+  order_date: string | null
 }
 type FrequencyLabel = 'Daily/Regular Mover' | 'Bi-Weekly Mover' | 'Weekly/Occasional Mover' | 'No Recent Use'
 type RowStatus = 'CRITICAL' | 'LOW STOCK' | 'EXCESS STOCK' | 'DEAD STOCK' | 'OK'
@@ -62,6 +62,7 @@ interface DisciplineRow {
   m1Qty: number
   m2Qty: number
   m3Qty: number
+  m4Qty: number
   total3M: number
   monthsActive: number
   frequency: FrequencyLabel
@@ -84,57 +85,46 @@ interface DisciplineRow {
 
 type OrderPortal = 'PV' | 'EV'
 
-// ── Calendar-based: always use the 3 complete months BEFORE the current month ────
+// ── Rolling window: April through CURRENT month (inclusive) ───────────────────
 //
 // Mapping: Indian fiscal year starts April 1.
 //   April=FM1, May=FM2, June=FM3, July=FM4, ..., March=FM12
 //   fiscal_month = ((calendarMonth - 4 + 12) % 12) + 1
 //
-// Rolling forward automatically:
-//   Current month = July (FM4)  → window = FM1,FM2,FM3 = April, May, June
-//   Current month = August(FM5) → window = FM2,FM3,FM4 = May,   June, July
-//   Current month = April (FM1) → window = FM10,FM11,FM12 = Jan,  Feb,  Mar (prev FY)
+// Window always runs from FM1 (April) through current fiscal month:
+//   Current month = July (FM4)   → window = FM1,FM2,FM3,FM4 = Apr,May,Jun,Jul
+//   Current month = August (FM5) → window = FM1,FM2,FM3,FM4,FM5 = Apr–Aug
+//   Current month = April (FM1)  → window = FM1 only = April
 //
-// If DB data is missing for the target months, falls back to the latest 3 available months.
+// Calendar days = actual elapsed days from April 1 to today (for accurate daily avg).
+// If DB data is missing for some months, only available months are used.
+// Average daily consumption = total_consumption / elapsed_calendar_days.
 async function resolveActiveWindow(
   branch: string,
   portal: string,
 ): Promise<{ fiscal_year: number; fiscal_months: number[]; calendar_days: number; windowBasis: 'calendar' | 'fallback' }> {
-  // ── Step 1: Compute target window from today's calendar date ─────────────────
+  // ── Step 1: Compute window = FM1 (April) through current fiscal month ────────
   const today = new Date()
   const calMonth = today.getMonth() + 1  // 1-12, Jan=1
   const calYear  = today.getFullYear()
 
-  // Current fiscal month (April = FM1)
+  // Fiscal year start: April 1 of current calendar year (if Apr-Dec) or previous year (Jan-Mar)
+  const fyStart = calMonth >= 4 ? calYear : calYear - 1
+  const fyStartDate = new Date(fyStart, 3, 1)  // April 1 of FY start year
+
+  // Current fiscal month (April = FM1, July = FM4, March = FM12)
   const fmCurrent = ((calMonth - 4 + 12) % 12) + 1
-  // Fiscal year start: if calendar month is Jan/Feb/Mar, FY started previous calendar year
-  const fyStart   = calMonth >= 4 ? calYear : calYear - 1
 
-  // The 3 complete months BEFORE the current fiscal month
+  // Target = FM1 through fmCurrent inclusive (all months in current FY so far)
+  // e.g. July → [1, 2, 3, 4] = Apr, May, Jun, Jul
   const targetFMs: number[] = []
-  for (let i = 3; i >= 1; i--) {
-    let fm = fmCurrent - i
-    if (fm <= 0) fm += 12  // wrap into previous FY (FM10=Jan, FM11=Feb, FM12=Mar)
-    targetFMs.push(fm)
-  }
-  // targetFMs is already ascending (oldest → newest)
+  for (let fm = 1; fm <= fmCurrent; fm++) targetFMs.push(fm)
 
-  // Determine which fiscal year(s) the target months fall in
-  // If the smallest target FM crossed the FY boundary (> fmCurrent), it's in the PREV FY
-  // For simplicity: if all targetFMs < fmCurrent they share the same FY; otherwise split.
-  // In practice, for months Apr–Jun of any year, all 3 prior months share one FY.
-  // For months July–March, all 3 prior months share one FY.
-  // Cross-FY only happens when fmCurrent <= 3 (April/May/June = FM1/2/3).
-  let targetFY = fyStart
-  const hasCrossYear = targetFMs.some((m) => m > fmCurrent)
-  // If we wrap (e.g. current=April/FM1, targets=[FM10,FM11,FM12]), those belong to prev FY
-  // We keep a single fiscal_year (the dominant one — where 2 of 3 months fall)
-  if (hasCrossYear) {
-    // Most months belong to previous FY
-    targetFY = fyStart - 1
-  }
+  // Actual calendar days from April 1 to today (inclusive) — for accurate daily average
+  const elapsedMs = today.getTime() - fyStartDate.getTime()
+  const elapsedDays = Math.max(1, Math.floor(elapsedMs / (1000 * 60 * 60 * 24)) + 1)
 
-  // ── Step 2: Check which target months actually have data in DB ───────────────
+  // ── Step 2: Check which target months have data in DB ───────────────────────
   let q = (supabase.from('service_parts_consumption_data') as any)
     .select('fiscal_year,fiscal_month')
     .eq('portal', portal)
@@ -146,28 +136,17 @@ async function resolveActiveWindow(
   const foundFMs = new Set((targetData ?? []).map((r: any) => Number(r.fiscal_month)))
   const availableTargetFMs = targetFMs.filter((m) => foundFMs.has(m))
 
-  // If all 3 target months have data → use calendar window (primary path)
-  if (availableTargetFMs.length === WINDOW_SIZE) {
+  if (availableTargetFMs.length > 0) {
+    // calendar_days covers Apr 1 → today (exact elapsed days)
     return {
-      fiscal_year: targetFY,
-      fiscal_months: targetFMs,       // already ascending
-      calendar_days: WINDOW_SIZE * 30,
+      fiscal_year: fyStart,
+      fiscal_months: availableTargetFMs,
+      calendar_days: elapsedDays,
       windowBasis: 'calendar',
     }
   }
 
-  // ── Step 3: Fallback — use however many target months have data ──────────────
-  // (e.g., early in a new FY when only 1-2 months of consumption exist)
-  if (availableTargetFMs.length > 0) {
-    return {
-      fiscal_year: targetFY,
-      fiscal_months: availableTargetFMs,
-      calendar_days: availableTargetFMs.length * 30,
-      windowBasis: 'fallback',
-    }
-  }
-
-  // ── Step 4: No data at all for target months — find latest available months ──
+  // ── Step 3: Fallback — find any available months when FY data is missing ──────
   let qLatest = (supabase.from('service_parts_consumption_data') as any)
     .select('fiscal_year,fiscal_month')
     .eq('portal', portal)
@@ -178,7 +157,7 @@ async function resolveActiveWindow(
 
   const { data: latestData } = await qLatest
   if (!latestData?.length) {
-    return { fiscal_year: 2026, fiscal_months: [1, 2, 3], calendar_days: 90, windowBasis: 'fallback' }
+    return { fiscal_year: 2026, fiscal_months: [1, 2, 3, 4], calendar_days: elapsedDays, windowBasis: 'fallback' }
   }
 
   const seen = new Set<string>()
@@ -190,7 +169,7 @@ async function resolveActiveWindow(
   }
   const fiscal_year = pairs[0]?.fy ?? 2026
   const fiscal_months = pairs.map((p) => p.fm).sort((a, b) => a - b)
-  return { fiscal_year, fiscal_months, calendar_days: fiscal_months.length * 30, windowBasis: 'fallback' }
+  return { fiscal_year, fiscal_months, calendar_days: elapsedDays, windowBasis: 'fallback' }
 }
 
 async function fetchAll<T>(
@@ -258,7 +237,7 @@ export default function PartsStockDisciplineReport({ branch }: ReportViewProps) 
   const [lastUpdated, setLastUpdated] = useState<Record<OrderPortal, string | null>>({ PV: null, EV: null })
   const [activeMonthLabels, setActiveMonthLabels] = useState<string[]>(['M1', 'M2', 'M3'])
   const [activeWindow, setActiveWindow] = useState<{ fiscal_year: number; fiscal_months: number[]; calendar_days: number; windowBasis?: 'calendar' | 'fallback' }>(
-    { fiscal_year: 2026, fiscal_months: [1, 2, 3], calendar_days: 90, windowBasis: 'calendar' }
+    { fiscal_year: 2026, fiscal_months: [1, 2, 3, 4], calendar_days: 106, windowBasis: 'calendar' }
   )
   const [sortKey, setSortKey] = useState<keyof DisciplineRow>('qtyToOrder')
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc')
@@ -279,12 +258,9 @@ export default function PartsStockDisciplineReport({ branch }: ReportViewProps) 
       const { fiscal_year: TARGET_FISCAL_YEAR, fiscal_months: TARGET_MONTHS, calendar_days: CALENDAR_DAYS_DYNAMIC } = resolvedWindow
       setActiveWindow(resolvedWindow)
 
-      // When the 3-month window straddles a fiscal-year boundary (rare, only May-Jun of new FY),
-      // include both fiscal years in the consumption query so no month is missed.
-      const hasCrossYearWindow = TARGET_MONTHS.some((m) => m > TARGET_MONTHS[TARGET_MONTHS.length - 1])
-      const TARGET_FISCAL_YEARS: number[] = hasCrossYearWindow
-        ? [TARGET_FISCAL_YEAR, TARGET_FISCAL_YEAR + 1]
-        : [TARGET_FISCAL_YEAR]
+      // Window = FM1 (April) through current FM — always within a single fiscal year.
+      // No cross-year wrapping needed since we never go backwards from April.
+      const TARGET_FISCAL_YEARS: number[] = [TARGET_FISCAL_YEAR]
 
       const [consumptionAll, stockAll, orderAll] = await Promise.all([
         fetchAll<ConsumptionRow>(
@@ -299,10 +275,11 @@ export default function PartsStockDisciplineReport({ branch }: ReportViewProps) 
         ),
         fetchAll<OrderRow>(
           'service_parts_order_data',
-          'part_number,portal,order_status,ordered_quantity,received_quantity,confirmation_qty',
-          // Only include pipeline orders from current fiscal year (Apr 2026+).
-          // Pre-FY orders (2022-2023) are phantom entries that inflate effective stock.
-          { ...baseFilters, order_status: PIPELINE_STATUSES, order_date_gte: '2026-04-01' }
+          'part_number,portal,order_status,ordered_quantity,received_quantity,confirmation_qty,order_date',
+          // Fetch ALL orders from Apr 2026+. No order_status filter here — we evaluate
+          // pipeline status directly from confirmation_qty vs received_quantity in code below.
+          // This is more reliable than filtering by a computed status string.
+          { ...baseFilters, order_date_gte: '2026-04-01' }
         ),
       ])
 
@@ -345,18 +322,38 @@ export default function PartsStockDisciplineReport({ branch }: ReportViewProps) 
         e.cost += (row.on_hand_quantity ?? 0) * (row.weighted_avg_cost ?? 0)
       }
 
-      // Confirmation Qty map — uses confirmation_qty (from TML/SAP order sheet) as the
-      // authoritative confirmed quantity. We subtract received_quantity to get only the
-      // portion still in-transit (not yet on shelf). Falls back to ordered_quantity
-      // for Ordered-status rows where confirmation_qty is null (not yet confirmed).
+      // ── Confirmation Qty Pipeline (direct qty-based, matches uploaded order sheet) ──
+      //
+      // Logic (per user requirement — matches Col L of order sheet exactly):
+      //   1. Use confirmation_qty (Col L) as authoritative confirmed qty when > 0
+      //   2. Fallback to ordered_quantity for unconfirmed rows (conf_qty = null/0)
+      //   3. Subtract received_quantity to get only the undelivered portion
+      //   4. Skip rows where: order_status = 'Received' (fully delivered via GRN/invoice)
+      //      OR where confirmation_qty > 0 AND received_qty >= confirmation_qty (fully delivered)
+      //
+      // This ensures:
+      //   • Yesterday's orders → appear in pipeline immediately after upload ✅
+      //   • GRN receipt → auto-removed from pipeline (DB trigger sets Received) ✅
+      //   • Duplicate rows → eliminated by dedup in DB before this runs ✅
+      //   • Old pre-FY orders → excluded by order_date_gte filter above ✅
       const pipelineMap = new Map<string, number>()
       for (const row of orderFiltered) {
+        const confQty   = row.confirmation_qty ?? 0
+        const ordQty    = row.ordered_quantity ?? 0
+        const recvQty   = row.received_quantity ?? 0
+        const status    = row.order_status ?? ''
+
+        // Skip fully received rows
+        const isReceived = status === 'Received' || (confQty > 0 && recvQty >= confQty)
+        if (isReceived) continue
+
+        // Base qty: confirmed (authoritative) or ordered (fallback)
+        const baseQty = confQty > 0 ? confQty : ordQty
+        const pendingQty = Math.max(0, baseQty - recvQty)
+        if (pendingQty === 0) continue
+
         const key = `${row.part_number}|${row.portal}`
-        const baseQty = row.confirmation_qty != null
-          ? (row.confirmation_qty ?? 0)          // confirmed by supplier — authoritative
-          : (row.ordered_quantity ?? 0)           // fallback: not yet confirmed
-        const confirmedPending = Math.max(0, baseQty - (row.received_quantity ?? 0))
-        pipelineMap.set(key, (pipelineMap.get(key) ?? 0) + confirmedPending)
+        pipelineMap.set(key, (pipelineMap.get(key) ?? 0) + pendingQty)
       }
 
       const allKeys = new Set([...consumpMap.keys(), ...stockMap.keys()])
@@ -370,8 +367,9 @@ export default function PartsStockDisciplineReport({ branch }: ReportViewProps) 
         const m1Qty = cEntry?.months[windowPeriodsAsc[0]] ?? 0
         const m2Qty = cEntry?.months[windowPeriodsAsc[1]] ?? 0
         const m3Qty = cEntry?.months[windowPeriodsAsc[2]] ?? 0
-        const total3M = m1Qty + m2Qty + m3Qty
-        const monthsActive = [m1Qty, m2Qty, m3Qty].filter((q) => q > 0).length
+        const m4Qty = cEntry?.months[windowPeriodsAsc[3]] ?? 0
+        const total3M = m1Qty + m2Qty + m3Qty + m4Qty
+        const monthsActive = [m1Qty, m2Qty, m3Qty, m4Qty].filter((q) => q > 0).length
         let frequency: FrequencyLabel
         if (monthsActive === 3) frequency = 'Daily/Regular Mover'
         else if (monthsActive === 2) frequency = 'Bi-Weekly Mover'
@@ -408,7 +406,7 @@ export default function PartsStockDisciplineReport({ branch }: ReportViewProps) 
 
         disciplineRows.push({
           partNumber, partDescription: desc, portal: partPortal,
-          m1Qty, m2Qty, m3Qty, total3M, monthsActive, frequency,
+          m1Qty, m2Qty, m3Qty, m4Qty, total3M, monthsActive, frequency,
           avgDailyConsumption, avgDailyConsumptionRaw, weeklyAvgQty,
           currentStock, pipelineQty, effectiveStock, required20Day, netShortfall, qtyToOrder,
           stockStatus, deadStock, excessStock, critical, rowStatus,
@@ -496,11 +494,11 @@ export default function PartsStockDisciplineReport({ branch }: ReportViewProps) 
       [],
       ['METHODOLOGY'],
       ['30-Day Required Stock = ROUNDUP(Avg Daily Consumption × 30, 0)'],
-      [`Avg Daily Consumption = Total ${activeWindow.fiscal_months.length}-Month Qty ÷ ${activeWindow.calendar_days} calendar days · Window: ${activeMonthLabels.join(' + ')} (previous 3 months before current month, auto-rolls monthly)`],
+      [`Avg Daily Consumption = Total Qty ÷ ${activeWindow.calendar_days} calendar days elapsed (Apr 1 → today) · Window: ${activeMonthLabels.join(' + ')} (April through current month)`],
       [`Months Active = count of the ${activeMonthLabels.length} consumption months with qty > 0`],
       ['NOTE: Required Stock uses UNROUNDED daily consumption internally so low-volume/high-value parts (e.g. body panels, accident-repair parts used only 1-5x/quarter) are never zeroed out of the reorder list'],
       ['  3/3 → Daily/Regular Mover | 2/3 → Bi-Weekly Mover | 1/3 → Weekly/Occasional | 0/3 → No Recent Use'],
-      ['Effective Stock = Current On-Hand + Conf. Qty pipeline (= max(0, Confirmation Qty − Received Qty); falls back to Ordered Qty for unconfirmed rows)'],
+      ['Effective Stock = Current On-Hand + Pipeline (= max(0, Conf. Qty − Received Qty); fallback: Ordered Qty for unconfirmed rows where Conf. Qty = 0)'],
       ['Qty to Order = ROUNDUP(MAX(Required − Effective, 0), 0) — Confirmation Qty (net of received) deducted so you only order the true remaining gap'],
       ['Dead Stock = On-Hand > 0 AND total 3-month consumption = 0 (working-capital risk)'],
       ['Critical = Shortage AND a Daily/Regular or Bi-Weekly mover — highest reorder priority'],
@@ -515,8 +513,8 @@ export default function PartsStockDisciplineReport({ branch }: ReportViewProps) 
     XLSX.utils.book_append_sheet(wb, ws0, 'Read Me')
 
     // Full report
-    const h1 = ['Part No','Description',`${activeMonthLabels[0] ?? 'M1'} Qty`,`${activeMonthLabels[1] ?? 'M2'} Qty`,`${activeMonthLabels[2] ?? 'M3'} Qty`,'Total 3M','Months Active','Frequency','Avg Daily','Weekly Avg','On-Hand','Conf. Qty (Pipeline)','Effective Stock','30-Day Required','Net Shortfall','Qty to Order','Row Status','Inventory Value (Rs)']
-    const d1 = rows.map((r) => [r.partNumber,r.partDescription,r.m1Qty,r.m2Qty,r.m3Qty,r.total3M,r.monthsActive,r.frequency,r.avgDailyConsumption,r.weeklyAvgQty,r.currentStock,r.pipelineQty,r.effectiveStock,r.required20Day,r.netShortfall,r.qtyToOrder,r.rowStatus,Math.round(r.inventoryValue)])
+    const h1 = ['Part No','Description',`${activeMonthLabels[0] ?? 'M1'} Qty`,`${activeMonthLabels[1] ?? 'M2'} Qty`,`${activeMonthLabels[2] ?? 'M3'} Qty`,`${activeMonthLabels[3] ?? 'M4'} Qty`,'Total Qty','Months Active','Frequency','Avg Daily','Weekly Avg','On-Hand','Conf. Qty (Pipeline)','Effective Stock','30-Day Required','Net Shortfall','Qty to Order','Row Status','Inventory Value (Rs)']
+    const d1 = rows.map((r) => [r.partNumber,r.partDescription,r.m1Qty,r.m2Qty,r.m3Qty,r.m4Qty,r.total3M,r.monthsActive,r.frequency,r.avgDailyConsumption,r.weeklyAvgQty,r.currentStock,r.pipelineQty,r.effectiveStock,r.required20Day,r.netShortfall,r.qtyToOrder,r.rowStatus,Math.round(r.inventoryValue)])
     const ws1 = XLSX.utils.aoa_to_sheet([h1, ...d1])
     ws1['!cols'] = h1.map((_, i) => ({ wch: i < 2 ? 32 : 14 }))
     XLSX.utils.book_append_sheet(wb, ws1, `${portalLabel} Stock Discipline`)
@@ -551,7 +549,8 @@ export default function PartsStockDisciplineReport({ branch }: ReportViewProps) 
     ['m1Qty', activeMonthLabels[0] ?? 'M1'],
     ['m2Qty', activeMonthLabels[1] ?? 'M2'],
     ['m3Qty', activeMonthLabels[2] ?? 'M3'],
-    ['total3M','Total 3M'],
+    ['m4Qty', activeMonthLabels[3] ?? 'M4'],
+    ['total3M','Total Qty'],
     ['monthsActive','Active'],
     ['frequency','Frequency'],
     ['avgDailyConsumption','Avg Daily'],
@@ -577,7 +576,7 @@ export default function PartsStockDisciplineReport({ branch }: ReportViewProps) 
           <div>
             <h2 className="text-lg font-semibold text-gray-900">Stock Discipline &amp; Reorder — Order Sheets</h2>
             <p className="mt-1 text-sm text-gray-500">
-              Independent PV and EV order sheets · 30-day consumption cover · consumption window: {activeMonthLabels.join(' + ')}{activeWindow.windowBasis === 'fallback' ? ' (partial data)' : ''}
+              Independent PV and EV order sheets · 30-day consumption cover · consumption: {activeMonthLabels.join(' + ')} ({activeWindow.calendar_days} days · Apr 1→today){activeWindow.windowBasis === 'fallback' ? ' (partial data)' : ''}
             </p>
           </div>
           {lastUpdatedForActive && (
@@ -707,7 +706,9 @@ export default function PartsStockDisciplineReport({ branch }: ReportViewProps) 
           </button>
         </div>
         <div className="mt-3 rounded-lg border border-emerald-100 bg-emerald-50 px-3 py-2 text-xs text-emerald-800">
-          <strong>Confirmation Qty applied:</strong> Effective Stock = On-Hand + Confirmation Qty from the imported order sheet. For unconfirmed (Ordered-status) rows, falls back to Ordered − Received. "Qty to Order" only covers the true remaining gap after confirmed orders already in-flight.
+          <strong>Pipeline = Confirmation Qty (Col L) − Received Qty</strong> from the imported order sheet.
+          Fully received items auto-excluded. Consumption window = April through current month (actual elapsed days).
+          Net Qty to Order = 30-day Requirement − (On-Hand + Pipeline). Upload fresh order sheet to sync instantly.
         </div>
       </div>
 
