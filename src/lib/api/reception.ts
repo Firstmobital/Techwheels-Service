@@ -99,6 +99,16 @@ function getISOLookbackRange(days: number): { from: string; to: string } {
   }
 }
 
+function normalizeCreatedAtRange(range: { from: string; to: string }): { from: string; to: string } {
+  const from = String(range.from ?? '').trim()
+  const to = String(range.to ?? '').trim()
+
+  return {
+    from: from.includes('T') ? from : `${from}T00:00:00+05:30`,
+    to: to.includes('T') ? to : `${to}T23:59:59+05:30`,
+  }
+}
+
 const RECEPTION_ENTRY_SELECT_COLUMNS = [
   'id',
   'dealer_code',
@@ -368,7 +378,7 @@ export async function listFloorInchargeEntries(
   range?: { from: string; to: string },
 ): Promise<ApiResult<ReceptionEntryRow[]>> {
   // Default to last FLOOR_INCHARGE_LOOKBACK_DAYS days — vehicles don't stay in service longer.
-  const effectiveRange = range ?? getISOLookbackRange(FLOOR_INCHARGE_LOOKBACK_DAYS)
+  const effectiveRange = normalizeCreatedAtRange(range ?? getISOLookbackRange(FLOOR_INCHARGE_LOOKBACK_DAYS))
   const { data, error } = await fetchReceptionEntriesWithKeyset(
     FLOOR_INCHARGE_ALLOWED_SERVICE_TYPES,
     effectiveRange.from,

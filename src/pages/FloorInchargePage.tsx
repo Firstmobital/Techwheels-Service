@@ -359,8 +359,18 @@ function getTechnicianFilterLabel(assignment: TechnicianAssignment | undefined):
 type AssignmentView = 'all' | 'assigned' | 'unassigned' | 'hold' | 'work_inprocess' | 'completed'
 
 const QUERY_PAGE_SIZE = 1000
+const JOB_CARD_BATCH_SIZE = 100
 const NOT_REQUIRED_TECHNICIAN_CODE = '__NOT_REQUIRED__'
 const NOT_REQUIRED_TECHNICIAN_NAME = 'Not Required'
+
+function isWithinDateRange(createdAt: string | null | undefined, range: DateRange): boolean {
+  if (!range.from || !range.to) return true
+  const date = new Date(String(createdAt ?? ''))
+  if (Number.isNaN(date.getTime())) return false
+
+  const dateKey = date.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
+  return dateKey >= range.from && dateKey <= range.to
+}
 
 function getErrorMessage(err: unknown, fallback: string): string {
   if (err instanceof Error) return err.message
@@ -369,6 +379,61 @@ function getErrorMessage(err: unknown, fallback: string): string {
     if (typeof message === 'string' && message.trim()) return message
   }
   return fallback
+}
+
+function matchesTechnicianFilter(
+  jc: JobCard,
+  technicianFilter: string,
+  assignments: Record<string, TechnicianAssignment>,
+): boolean {
+  if (technicianFilter === 'all') return true
+  const assignment = assignments[jc.assignment_key]
+  return getTechnicianFilterKey(assignment) === technicianFilter
+}
+
+function matchesLocationFilter(jc: JobCard, branchFilter: string): boolean {
+  if (branchFilter === 'all') return true
+  return getLocationLabel(jc.location ?? jc.branch) === branchFilter
+}
+
+function matchesPortalFilter(jc: JobCard, fuelTypeFilter: string): boolean {
+  if (fuelTypeFilter === 'all') return true
+  return getPortalLabel(jc.portal ?? jc.fuel_type) === fuelTypeFilter
+}
+
+function jobCardMatchesSearch(
+  jc: JobCard,
+  searchQuery: string,
+  assignments: Record<string, TechnicianAssignment>,
+  supportAssignments: Record<string, SupportAssignment[]>,
+): boolean {
+  if (!searchQuery) return true
+
+  const assignment = assignments[jc.assignment_key]
+  const supportPeople = supportAssignments[jc.assignment_key] ?? []
+  const searchText = [
+    jc.jc_number ?? '',
+    jc.reg_number ?? '',
+    String(jc.km_reading ?? ''),
+    jc.model ?? '',
+    jc.service_type ?? '',
+    jc.sa_name ?? '',
+    jc.owner_name ?? '',
+    jc.owner_phone ?? '',
+    jc.source ?? '',
+    jc.branch ?? '',
+    jc.location ?? '',
+    jc.portal ?? '',
+    assignment?.technician_name ?? '',
+    assignment?.technician_code ?? '',
+    supportPeople.map((item) => item.employee_name).join(' '),
+    supportPeople.map((item) => item.employee_code).join(' '),
+    supportPeople.map((item) => item.support_role).join(' '),
+  ]
+    .join(' ')
+    .toLowerCase()
+
+  return searchText.includes(searchQuery)
 }
 
 function applyAssignmentViewFilter(
@@ -442,7 +507,7 @@ export default function FloorInchargePage() {
     setDataError(null)
     try {
       const [receptionRes, empRes] = await Promise.all([
-        listFloorInchargeEntries(),
+        listFloorInchargeEntries(dateRange),
         supabase
           .from('employee_master')
           .select('id, employee_code, employee_name, department, location, fuel_type, role')
@@ -457,6 +522,7 @@ export default function FloorInchargePage() {
         ? []
         : receptionRes.data
             .filter((row) => Boolean(row.jc_number?.trim()))
+            .filter((row) => isWithinDateRange(row.created_at, dateRange))
             .map(mapReceptionRowToJobCard)
 
       const saCodes = Array.from(new Set(
@@ -499,35 +565,27 @@ export default function FloorInchargePage() {
       setAllEmployees((empRes.data ?? []) as Employee[])
       setEmployees(technicianEmployees)
 
-      // Try to fetch assignments — graceful fallback if table doesn't exist yet
+      // Fetch latest assignment per visible job card (not scoped by assigned_at — period applies to JC created_at).
       const assignmentRows: TechnicianAssignment[] = []
-      let assignmentCursorId: number | null = null
+      const jobCardNumbers = Array.from(new Set(
+        baseRows
+          .map((row) => normalizeJobCardNumber(row.jc_number))
+          .filter(Boolean),
+      ))
 
-      while (true) {
-        let assignQuery = supabase
+      for (let offset = 0; offset < jobCardNumbers.length; offset += JOB_CARD_BATCH_SIZE) {
+        const batch = jobCardNumbers.slice(offset, offset + JOB_CARD_BATCH_SIZE)
+        if (batch.length === 0) continue
+
+        const assignRes = await supabase
           .from('technician_assignments')
           .select('*')
-          .gte('assigned_at', dateRange.from + 'T00:00:00+05:30')
-          .lte('assigned_at', dateRange.to + 'T23:59:59+05:30')
+          .in('job_card_number', batch)
           .order('id', { ascending: false })
-          .limit(QUERY_PAGE_SIZE)
-
-        if (assignmentCursorId !== null) {
-          assignQuery = assignQuery.lt('id', assignmentCursorId)
-        }
-
-        const assignRes = await assignQuery
 
         if (assignRes.error) break
 
-        const batch = (assignRes.data ?? []) as TechnicianAssignment[]
-        assignmentRows.push(...batch)
-
-        if (batch.length < QUERY_PAGE_SIZE) break
-
-        const lastId = Number(batch[batch.length - 1]?.id)
-        if (!Number.isFinite(lastId) || lastId <= 0) break
-        assignmentCursorId = lastId
+        assignmentRows.push(...((assignRes.data ?? []) as TechnicianAssignment[]))
       }
 
       if (assignmentRows.length > 0) {
@@ -992,71 +1050,64 @@ export default function FloorInchargePage() {
     }
   }
 
-  const statusScopedRows = useMemo(() => {
-    return applyAssignmentViewFilter(jobCards, assignmentView, assignments)
-  }, [jobCards, assignmentView, assignments])
-
   const searchQuery = useMemo(() => search.trim().toLowerCase(), [search])
 
-  const searchScopedRows = useMemo(() => {
-    if (!searchQuery) return statusScopedRows
+  const searchFilteredRows = useMemo(() => {
+    return jobCards.filter((jc) =>
+      jobCardMatchesSearch(jc, searchQuery, assignments, supportAssignments),
+    )
+  }, [jobCards, assignments, supportAssignments, searchQuery])
 
-    return statusScopedRows.filter((jc) => {
-      const assignment = assignments[jc.assignment_key]
-      const supportPeople = supportAssignments[jc.assignment_key] ?? []
-      const searchText = [
-        jc.jc_number ?? '',
-        jc.reg_number ?? '',
-        String(jc.km_reading ?? ''),
-        jc.model ?? '',
-        jc.service_type ?? '',
-        jc.sa_name ?? '',
-        jc.owner_name ?? '',
-        jc.owner_phone ?? '',
-        jc.source ?? '',
-        jc.branch ?? '',
-        jc.location ?? '',
-        jc.portal ?? '',
-        assignment?.technician_name ?? '',
-        assignment?.technician_code ?? '',
-        supportPeople.map((item) => item.employee_name).join(' '),
-        supportPeople.map((item) => item.employee_code).join(' '),
-        supportPeople.map((item) => item.support_role).join(' '),
-      ]
-        .join(' ')
-        .toLowerCase()
-
-      return searchText.includes(searchQuery)
+  const locCountRows = useMemo(() => {
+    return searchFilteredRows.filter((jc) => {
+      const matchesPortal = matchesPortalFilter(jc, fuelTypeFilter)
+      const matchesTechnician = matchesTechnicianFilter(jc, technicianFilter, assignments)
+      return matchesPortal && matchesTechnician
     })
-  }, [statusScopedRows, assignments, supportAssignments, searchQuery])
+  }, [searchFilteredRows, fuelTypeFilter, technicianFilter, assignments])
+
+  const portalCountRows = useMemo(() => {
+    return searchFilteredRows.filter((jc) => {
+      const matchesLocation = matchesLocationFilter(jc, branchFilter)
+      const matchesTechnician = matchesTechnicianFilter(jc, technicianFilter, assignments)
+      return matchesLocation && matchesTechnician
+    })
+  }, [searchFilteredRows, branchFilter, technicianFilter, assignments])
+
+  const techCountRows = useMemo(() => {
+    return searchFilteredRows.filter((jc) => {
+      const matchesLocation = matchesLocationFilter(jc, branchFilter)
+      const matchesPortal = matchesPortalFilter(jc, fuelTypeFilter)
+      return matchesLocation && matchesPortal
+    })
+  }, [searchFilteredRows, branchFilter, fuelTypeFilter])
+
+  const toolbarScopedRows = useMemo(() => {
+    return searchFilteredRows.filter((jc) => {
+      const matchesLocation = matchesLocationFilter(jc, branchFilter)
+      const matchesPortal = matchesPortalFilter(jc, fuelTypeFilter)
+      const matchesTechnician = matchesTechnicianFilter(jc, technicianFilter, assignments)
+      return matchesLocation && matchesPortal && matchesTechnician
+    })
+  }, [searchFilteredRows, branchFilter, fuelTypeFilter, technicianFilter, assignments])
 
   const branches = useMemo(() => {
-    const b = new Set(searchScopedRows.map((j) => getLocationLabel(j.location ?? j.branch)))
+    const b = new Set(locCountRows.map((j) => getLocationLabel(j.location ?? j.branch)))
     return Array.from(b).sort((a, b) => {
       if (a === UNKNOWN_LOCATION) return 1
       if (b === UNKNOWN_LOCATION) return -1
       return a.localeCompare(b)
     })
-  }, [searchScopedRows])
-
-  const statusScopedBranchRows = useMemo(() => {
-    if (branchFilter === 'all') return searchScopedRows
-    return searchScopedRows.filter((jc) => getLocationLabel(jc.location ?? jc.branch) === branchFilter)
-  }, [searchScopedRows, branchFilter])
-
-  const statusScopedFuelRows = useMemo(() => {
-    if (fuelTypeFilter === 'all') return statusScopedBranchRows
-    return statusScopedBranchRows.filter((jc) => getPortalLabel(jc.portal ?? jc.fuel_type) === fuelTypeFilter)
-  }, [statusScopedBranchRows, fuelTypeFilter])
+  }, [locCountRows])
 
   const fuelTypeOptions = useMemo(() => {
-    const fuelTypes = new Set(statusScopedBranchRows.map((jc) => getPortalLabel(jc.portal ?? jc.fuel_type)))
+    const fuelTypes = new Set(portalCountRows.map((jc) => getPortalLabel(jc.portal ?? jc.fuel_type)))
     return Array.from(fuelTypes).sort((a, b) => {
       if (a === UNKNOWN_PORTAL) return 1
       if (b === UNKNOWN_PORTAL) return -1
       return a.localeCompare(b)
     })
-  }, [statusScopedBranchRows])
+  }, [portalCountRows])
 
   useEffect(() => {
     if (fuelTypeFilter !== 'all' && !fuelTypeOptions.includes(fuelTypeFilter)) {
@@ -1064,16 +1115,10 @@ export default function FloorInchargePage() {
     }
   }, [fuelTypeFilter, fuelTypeOptions])
 
-  const technicianCountRows = useMemo(() => {
-    return statusScopedBranchRows.filter((jc) => {
-      return fuelTypeFilter === 'all' || getPortalLabel(jc.portal ?? jc.fuel_type) === fuelTypeFilter
-    })
-  }, [statusScopedBranchRows, fuelTypeFilter])
-
   const technicianOptions = useMemo(() => {
     const optionMap = new Map<string, string>()
 
-    statusScopedFuelRows.forEach((jc) => {
+    techCountRows.forEach((jc) => {
       const assignment = assignments[jc.assignment_key]
       optionMap.set(getTechnicianFilterKey(assignment), getTechnicianFilterLabel(assignment))
     })
@@ -1085,7 +1130,7 @@ export default function FloorInchargePage() {
         if (b.value === 'unassigned') return -1
         return a.label.localeCompare(b.label)
       })
-  }, [statusScopedFuelRows, assignments])
+  }, [techCountRows, assignments])
 
   useEffect(() => {
     if (technicianFilter === 'all') return
@@ -1093,62 +1138,47 @@ export default function FloorInchargePage() {
     if (!isValid) setTechnicianFilter('all')
   }, [technicianFilter, technicianOptions])
 
-  const scopedJobCards = useMemo(() => {
-    return technicianCountRows.filter((jc) => {
-      const assignment = assignments[jc.assignment_key]
-      const matchTechnician =
-        technicianFilter === 'all' || getTechnicianFilterKey(assignment) === technicianFilter
-      return matchTechnician
-    })
-  }, [technicianCountRows, assignments, technicianFilter])
-
-  const assignedCount = scopedJobCards.filter((jc) => !!assignments[jc.assignment_key]).length
-  const unassignedCount = scopedJobCards.filter((jc) => !assignments[jc.assignment_key]).length
-  const holdCount = scopedJobCards.filter((jc) => {
+  const assignedCount = toolbarScopedRows.filter((jc) => !!assignments[jc.assignment_key]).length
+  const unassignedCount = toolbarScopedRows.filter((jc) => !assignments[jc.assignment_key]).length
+  const holdCount = toolbarScopedRows.filter((jc) => {
     const assignment = assignments[jc.assignment_key]
     return Boolean(assignment) && normalizeStatusValue(assignment?.work_status) === 'hold'
   }).length
-  const inProcessCount = scopedJobCards.filter((jc) => {
+  const inProcessCount = toolbarScopedRows.filter((jc) => {
     const assignment = assignments[jc.assignment_key]
     return Boolean(assignment) && normalizeStatusValue(assignment?.work_status) === 'work_inprocess'
   }).length
-  const completedCount = scopedJobCards.filter((jc) => {
+  const completedCount = toolbarScopedRows.filter((jc) => {
     const assignment = assignments[jc.assignment_key]
     return Boolean(assignment) && normalizeStatusValue(assignment?.work_status) === 'completed'
   }).length
 
   const filtered = useMemo(() => {
-    if (assignmentView === 'assigned') {
-      return scopedJobCards.filter((jc) => Boolean(assignments[jc.assignment_key]))
+    return applyAssignmentViewFilter(toolbarScopedRows, assignmentView, assignments)
+  }, [toolbarScopedRows, assignmentView, assignments])
+
+  useEffect(() => {
+    if (assignmentView === 'all') return
+
+    const countByView: Record<Exclude<AssignmentView, 'all'>, number> = {
+      unassigned: unassignedCount,
+      assigned: assignedCount,
+      hold: holdCount,
+      work_inprocess: inProcessCount,
+      completed: completedCount,
     }
 
-    if (assignmentView === 'unassigned') {
-      return scopedJobCards.filter((jc) => !assignments[jc.assignment_key])
+    if (countByView[assignmentView] === 0) {
+      setAssignmentView('all')
     }
-
-    if (assignmentView === 'hold') {
-      return scopedJobCards.filter((jc) => {
-        const assignment = assignments[jc.assignment_key]
-        return Boolean(assignment) && normalizeStatusValue(assignment?.work_status) === 'hold'
-      })
-    }
-
-    if (assignmentView === 'work_inprocess') {
-      return scopedJobCards.filter((jc) => {
-        const assignment = assignments[jc.assignment_key]
-        return Boolean(assignment) && normalizeStatusValue(assignment?.work_status) === 'work_inprocess'
-      })
-    }
-
-    if (assignmentView === 'completed') {
-      return scopedJobCards.filter((jc) => {
-        const assignment = assignments[jc.assignment_key]
-        return Boolean(assignment) && normalizeStatusValue(assignment?.work_status) === 'completed'
-      })
-    }
-
-    return scopedJobCards
-  }, [assignmentView, assignments, scopedJobCards])
+  }, [
+    assignmentView,
+    unassignedCount,
+    assignedCount,
+    holdCount,
+    inProcessCount,
+    completedCount,
+  ])
 
   return (
     <div>
@@ -1165,7 +1195,7 @@ export default function FloorInchargePage() {
         <div className="cft__brand">
           <span className="cft__icon">🏭</span>
           <span className="cft__title">Floor Incharge</span>
-          <span className="cft__count">{searchScopedRows.length} JCs</span>
+          <span className="cft__count">{toolbarScopedRows.length} JCs</span>
         </div>
         <div className="cft__sep" />
 
@@ -1174,25 +1204,25 @@ export default function FloorInchargePage() {
 
         <span className="cft__label">Loc:</span>
         <select className="cft__sel" value={branchFilter} onChange={e => setBranchFilter(e.target.value)}>
-          <option value="all">All ({searchScopedRows.length})</option>
+          <option value="all">All ({locCountRows.length})</option>
           {branches.map(branch => (
-            <option key={branch} value={branch}>{branch} ({searchScopedRows.filter(jc => getLocationLabel(jc.location ?? jc.branch) === branch).length})</option>
+            <option key={branch} value={branch}>{branch} ({locCountRows.filter(jc => getLocationLabel(jc.location ?? jc.branch) === branch).length})</option>
           ))}
         </select>
 
         <span className="cft__label">Portal:</span>
         <select className="cft__sel" value={fuelTypeFilter} onChange={e => setFuelTypeFilter(e.target.value)}>
-          <option value="all">All ({statusScopedBranchRows.length})</option>
+          <option value="all">All ({portalCountRows.length})</option>
           {fuelTypeOptions.map(ft => (
-            <option key={ft} value={ft}>{ft} ({statusScopedBranchRows.filter(jc => getPortalLabel(jc.portal ?? jc.fuel_type) === ft).length})</option>
+            <option key={ft} value={ft}>{ft} ({portalCountRows.filter(jc => getPortalLabel(jc.portal ?? jc.fuel_type) === ft).length})</option>
           ))}
         </select>
 
         <span className="cft__label">Tech:</span>
         <select className="cft__sel" value={technicianFilter} onChange={e => setTechnicianFilter(e.target.value)}>
-          <option value="all">All ({statusScopedFuelRows.length})</option>
+          <option value="all">All ({techCountRows.length})</option>
           {technicianOptions.map(opt => {
-            const cnt = statusScopedFuelRows.filter(jc => getTechnicianFilterKey(assignments[jc.assignment_key]) === opt.value).length
+            const cnt = techCountRows.filter(jc => getTechnicianFilterKey(assignments[jc.assignment_key]) === opt.value).length
             return <option key={opt.value} value={opt.value}>{opt.label} ({cnt})</option>
           })}
         </select>
@@ -1201,7 +1231,7 @@ export default function FloorInchargePage() {
       {/* ── METRIC SUMMARY ROW (status tabs) ─────────────────────────────── */}
       <div className="msr">
         {([
-          { key: 'all',            label: 'All',        count: scopedJobCards.length,  accent: '#6366f1' },
+          { key: 'all',            label: 'All',        count: toolbarScopedRows.length, accent: '#6366f1' },
           { key: 'unassigned',     label: 'Unassigned', count: unassignedCount,        accent: '#ef4444' },
           { key: 'assigned',       label: 'Assigned',   count: assignedCount,          accent: '#2563eb' },
           { key: 'hold',           label: 'Hold',       count: holdCount,              accent: '#f59e0b' },
