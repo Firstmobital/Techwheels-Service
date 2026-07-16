@@ -508,10 +508,11 @@ function parseQcCheckedByNames(raw: string | null | undefined): string[] {
   const str = String(raw ?? '').trim()
   if (!str) return []
   // New format uses '|' as delimiter so "LASTNAME, FIRSTNAME" names are preserved intact.
-  // Old format used ', ' — fall back to that only when no '|' is present.
+  // Old DB values without '|' are treated as a single name (could be "SHARMA, KEDAR").
+  // Splitting on comma would incorrectly break "LASTNAME, FIRSTNAME" into two tokens.
   const tokens = str.includes('|')
     ? str.split('|').map((s) => s.trim()).filter(Boolean)
-    : str.split(',').map((s) => s.trim()).filter(Boolean)
+    : [str]
 
   const seen = new Set<string>()
   const result: string[] = []
