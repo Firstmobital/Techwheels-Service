@@ -58,6 +58,22 @@ export default async function handler(req: Request) {
       return OUR_DEALERS.some(d => n.includes(d))
     }
 
+    // Single source of truth for campaign bucket counts. Statuses must be
+    // mutually exclusive across buckets so total_leads == sum of buckets.
+    // 'pending' here means "actually callable via get_next" — claimed
+    // (assigned/calling) and deferred (callback_later) leads get their own
+    // buckets so the summary bar doesn't overstate what's left to call.
+    const computeCampaignCounts = (rows: { status: string }[]) => ({
+      pending: rows.filter(r => r.status === 'pending').length,
+      in_progress: rows.filter(r => r.status === 'assigned' || r.status === 'calling').length,
+      callback_later: rows.filter(r => r.status === 'callback_later').length,
+      out_of_window: rows.filter(r => r.status === 'out_of_window').length,
+      completed: rows.filter(r => ['completed', 'no_answer', 'not_reachable', 'wrong_number', 'not_interested', 'already_serviced', 'sold_vehicle'].includes(r.status)).length,
+      booked: rows.filter(r => r.status === 'booked').length,
+    })
+    // total_leads must equal the sum of every bucket returned above, or the
+    // campaign summary silently drops leads again (this was the original bug).
+
     // ── ACTION: create_campaign ───────────────────────────────────────────
     if (action === 'create_campaign') {
       if (!isAdmin) throw new Error('Only admin can create campaigns')
@@ -315,14 +331,19 @@ export default async function handler(req: Request) {
         }
 
         // 5) Roll the campaign's window forward + refresh counts
-        const { count: totalCount } = await serviceClient.from('telecall_assignments').select('id', { count: 'exact', head: true }).eq('campaign_id', camp.id)
-        const { count: pendingCount } = await serviceClient.from('telecall_assignments').select('id', { count: 'exact', head: true }).eq('campaign_id', camp.id).eq('status', 'pending')
+        const { data: refreshedStatuses, count: totalCount } = await serviceClient.from('telecall_assignments').select('status', { count: 'exact' }).eq('campaign_id', camp.id)
+        const b = computeCampaignCounts((refreshedStatuses || []) as any[])
 
         await serviceClient.from('telecall_campaigns').update({
           date_from: newDateFrom,
           date_to: newDateTo,
           total_leads: totalCount ?? camp.total_leads,
-          pending_count: pendingCount ?? camp.pending_count,
+          pending_count: b.pending,
+          in_progress_count: b.in_progress,
+          out_of_window_count: b.out_of_window,
+          callback_later_count: b.callback_later,
+          completed_count: b.completed,
+          booked_count: b.booked,
         }).eq('id', camp.id)
 
         results.push({
@@ -332,7 +353,7 @@ export default async function handler(req: Request) {
           added: insertedCount,
           retired_out_of_window: retiredCount,
           total_leads: totalCount,
-          pending_count: pendingCount,
+          pending_count: b.pending,
         })
       }
 
@@ -344,6 +365,23 @@ export default async function handler(req: Request) {
     if (action === 'get_next') {
       const { campaign_id } = body
       if (!campaign_id) throw new Error('Missing campaign_id')
+
+      // Reclaim stale 'assigned' rows (claimed by someone who never followed
+      // through, e.g. a crashed session/tab close) back into the pending pool
+      // so they don't sit invisible forever while still counting as "pending".
+      const staleCutoff = new Date(Date.now() - 24 * 3600000).toISOString()
+      const { data: staleRows } = await serviceClient
+        .from('telecall_assignments')
+        .select('id')
+        .eq('campaign_id', campaign_id)
+        .eq('status', 'assigned')
+        .lt('assigned_at', staleCutoff)
+      if (staleRows && staleRows.length > 0) {
+        await serviceClient
+          .from('telecall_assignments')
+          .update({ status: 'pending', assigned_to: null, assigned_at: null })
+          .in('id', staleRows.map((r: any) => r.id))
+      }
 
       const CUST_SELECT = `id, campaign_id, status, call_notes, booking_date, callback_date, called_at, call_count, no_answer_count, whatsapp_sent, whatsapp_status, assigned_at,
         customer:customer_id (
@@ -532,10 +570,16 @@ export default async function handler(req: Request) {
       if (campaign_id) {
         const { data: counts } = await serviceClient.from('telecall_assignments').select('status').eq('campaign_id', campaign_id)
         if (counts) {
-          const pending = counts.filter((c: any) => ['pending', 'assigned', 'calling', 'callback_later'].includes(c.status)).length
-          const completed = counts.filter((c: any) => ['completed', 'no_answer', 'not_reachable', 'wrong_number', 'not_interested', 'already_serviced', 'sold_vehicle'].includes(c.status)).length
-          const booked = counts.filter((c: any) => c.status === 'booked').length
-          await serviceClient.from('telecall_campaigns').update({ pending_count: pending, completed_count: completed, booked_count: booked, updated_at: new Date().toISOString() }).eq('id', campaign_id)
+          const b = computeCampaignCounts(counts as any[])
+          await serviceClient.from('telecall_campaigns').update({
+            pending_count: b.pending,
+            in_progress_count: b.in_progress,
+            out_of_window_count: b.out_of_window,
+            callback_later_count: b.callback_later,
+            completed_count: b.completed,
+            booked_count: b.booked,
+            updated_at: new Date().toISOString(),
+          }).eq('id', campaign_id)
         }
       }
 
@@ -578,10 +622,16 @@ export default async function handler(req: Request) {
       if (status !== undefined) {
         const { data: counts } = await serviceClient.from('telecall_assignments').select('status').eq('campaign_id', existing.campaign_id)
         if (counts) {
-          const pending = counts.filter((c: any) => ['pending', 'assigned', 'calling', 'callback_later'].includes(c.status)).length
-          const completed = counts.filter((c: any) => ['completed', 'no_answer', 'not_reachable', 'wrong_number', 'not_interested', 'already_serviced', 'sold_vehicle'].includes(c.status)).length
-          const booked = counts.filter((c: any) => c.status === 'booked').length
-          await serviceClient.from('telecall_campaigns').update({ pending_count: pending, completed_count: completed, booked_count: booked, updated_at: new Date().toISOString() }).eq('id', existing.campaign_id)
+          const b = computeCampaignCounts(counts as any[])
+          await serviceClient.from('telecall_campaigns').update({
+            pending_count: b.pending,
+            in_progress_count: b.in_progress,
+            out_of_window_count: b.out_of_window,
+            callback_later_count: b.callback_later,
+            completed_count: b.completed,
+            booked_count: b.booked,
+            updated_at: new Date().toISOString(),
+          }).eq('id', existing.campaign_id)
         }
       }
 
