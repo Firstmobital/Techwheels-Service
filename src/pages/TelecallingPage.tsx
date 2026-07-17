@@ -57,6 +57,9 @@ interface Campaign {
   status: string
   total_leads: number
   pending_count: number
+  in_progress_count: number
+  out_of_window_count: number
+  callback_later_count: number
   completed_count: number
   booked_count: number
   created_by: string | null
@@ -213,8 +216,11 @@ export default function TelecallingPage({ userRole }: { userRole?: string }) {
           {activeCampaign && (
             <div className="flex gap-4 text-xs">
               <span className="text-orange-600">⏳ {activeCampaign.pending_count} pending</span>
+              {activeCampaign.in_progress_count > 0 && <span className="text-blue-500">📞 {activeCampaign.in_progress_count} in progress</span>}
+              {activeCampaign.callback_later_count > 0 && <span className="text-purple-500">🔁 {activeCampaign.callback_later_count} callback later</span>}
               <span className="text-green-600">✅ {activeCampaign.booked_count} booked</span>
               <span className="text-gray-500">📊 {activeCampaign.completed_count} completed</span>
+              {activeCampaign.out_of_window_count > 0 && <span className="text-gray-400">🗓️ {activeCampaign.out_of_window_count} out of window</span>}
             </div>
           )}
         </div>
@@ -1138,8 +1144,8 @@ function AdminDashboard({ campaigns, activeCampaign, onRefresh }: { campaigns: C
                     <button onClick={() => handleDelete(c.id, c.campaign_name)} disabled={deleting === c.id} className="rounded-lg border border-red-200 px-3 py-1.5 text-sm text-red-600 hover:bg-red-50 disabled:opacity-50">{deleting === c.id ? 'Deleting…' : '🗑️'}</button>
                   </div>
                 </div>
-                <div className="mt-3 grid grid-cols-4 gap-3">
-                  {[['Total', c.total_leads, 'bg-gray-50 text-gray-500'], ['Pending', c.pending_count, 'bg-orange-50 text-orange-600'], ['Booked', c.booked_count, 'bg-green-50 text-green-600'], ['Completed', c.completed_count, 'bg-blue-50 text-blue-600']].map(([lbl, val, cls]) => (
+                <div className="mt-3 grid grid-cols-7 gap-3">
+                  {[['Total', c.total_leads, 'bg-gray-50 text-gray-500'], ['Pending', c.pending_count, 'bg-orange-50 text-orange-600'], ['In Progress', c.in_progress_count, 'bg-blue-50 text-blue-500'], ['Callback Later', c.callback_later_count, 'bg-purple-50 text-purple-500'], ['Booked', c.booked_count, 'bg-green-50 text-green-600'], ['Completed', c.completed_count, 'bg-blue-50 text-blue-600'], ['Out of Window', c.out_of_window_count, 'bg-gray-50 text-gray-400']].map(([lbl, val, cls]) => (
                     <div key={String(lbl)} className={`rounded-lg px-3 py-2 ${cls}`}>
                       <div className="text-xs">{lbl}</div>
                       <div className="text-xl font-bold text-gray-900">{val}</div>
