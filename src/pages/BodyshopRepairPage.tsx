@@ -4228,7 +4228,10 @@ export default function BodyshopRepairPage() {
       nextTabs.push('floor')
     }
     if (isAdminLikeUser) {
-      nextTabs.push('qc', 'billing')
+      nextTabs.push('qc')
+    }
+    if (isAdminLikeUser || hasBodyshopSsaAccess) {
+      nextTabs.push('billing')
     }
 
     return nextTabs
