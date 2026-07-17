@@ -4,7 +4,7 @@
 **Created:** 2026-07-17  
 **Priority:** HIGH  
 **Owner:** Bodyshop Team + Platform Team  
-**Status:** Active (requirements locked; implementation not started)
+**Status:** Active (Phases 1–4 implemented in web tracker; staging QA pending)
 
 ---
 
@@ -236,37 +236,37 @@ Each role tab computes its own pool on the **full DMS labour** for the job card.
 ### Phase 1
 
 ```text
-⏳ 1.1 | Create bodyshopEarnings.ts helpers | Engineering | - | - | Pending
-⏳ 1.2 | Add unit tests | Engineering | - | - | Pending
-⏳ 1.3 | Typecheck gate | Engineering | - | - | Pending
+✅ 1.1 | Create bodyshopEarnings.ts helpers | Engineering | 2026-07-17 | 2026-07-17 | src/lib/bodyshopEarnings.ts
+⏳ 1.2 | Add unit tests | Engineering | - | - | Deferred (no vitest/jest in repo)
+✅ 1.3 | Typecheck gate | Engineering | 2026-07-17 | 2026-07-17 | npm run build clean
 ```
 
 ### Phase 2
 
 ```text
-⏳ 2.1 | Load support assignments in tracker | Engineering | - | - | Pending
-⏳ 2.2 | Build lookup maps | Engineering | - | - | Pending
-⏳ 2.3 | Batch query support rows | Engineering | - | - | Pending
+✅ 2.1 | Load support assignments in tracker | Engineering | 2026-07-17 | 2026-07-17 | BodyshopTrackerPage loadData
+✅ 2.2 | Build lookup maps | Engineering | 2026-07-17 | 2026-07-17 | buildSupportByJcRole
+✅ 2.3 | Batch query support rows | Engineering | 2026-07-17 | 2026-07-17 | Parallel with assignments fetch
 ```
 
 ### Phase 3
 
 ```text
-⏳ 3.1 | Filter NOT_REQUIRED primaries | Engineering | - | - | Pending
-⏳ 3.2 | Enrich primary rows with income metadata | Engineering | - | - | Pending
-⏳ 3.3 | Expand support rows | Engineering | - | - | Pending
-⏳ 3.4 | Wire per-row technician_income | Engineering | - | - | Pending
+✅ 3.1 | Filter NOT_REQUIRED primaries | Engineering | 2026-07-17 | 2026-07-17 | resolveRoleIncomeMeta
+✅ 3.2 | Enrich primary rows with income metadata | Engineering | 2026-07-17 | 2026-07-17 | enrichedTechRows
+✅ 3.3 | Expand support rows | Engineering | 2026-07-17 | 2026-07-17 | Support expansion in enrichedTechRows
+✅ 3.4 | Wire per-row technician_income | Engineering | 2026-07-17 | 2026-07-17 | calculateBodyshopRoleIncome
 ```
 
 ### Phase 4
 
 ```text
-⏳ 4.1 | Fix member card totals | Engineering | - | - | Pending
-⏳ 4.2 | Fix day card totals | Engineering | - | - | Pending
-⏳ 4.3 | Fix stats bar income | Engineering | - | - | Pending
-⏳ 4.4 | JC detail columns + solo badge | Engineering | - | - | Pending
-⏳ 4.5 | Export column updates | Engineering | - | - | Pending
-⏳ 4.6 | Subtitle copy updates | Engineering | - | - | Pending
+✅ 4.1 | Fix member card totals | Engineering | 2026-07-17 | 2026-07-17 | Sum technician_income
+✅ 4.2 | Fix day card totals | Engineering | 2026-07-17 | 2026-07-17 | Sum technician_income
+✅ 4.3 | Fix stats bar income | Engineering | 2026-07-17 | 2026-07-17 | totals.totalIncome
+✅ 4.4 | JC detail columns + solo badge | Engineering | 2026-07-17 | 2026-07-17 | Effective %, split, +4% solo badge
+✅ 4.5 | Export column updates | Engineering | 2026-07-17 | 2026-07-17 | Base %, Effective %, Split, Assignment
+✅ 4.6 | Subtitle copy updates | Engineering | 2026-07-17 | 2026-07-17 | techIncomeSubtitle
 ```
 
 ### Phase 5

@@ -2,6 +2,17 @@ import { useEffect, useMemo, useState } from 'react'
 import * as XLSX from 'xlsx'
 import { Icon } from '../components/Icon'
 import DateRangeFilter, { currentMonthRange, type DateRange } from '../components/DateRangeFilter'
+import {
+  ALL_BODYSHOP_ROLES,
+  buildSupportByJcRole,
+  formatEffectivePercentLabel,
+  getActiveSupportForRole,
+  getRolePrimaryFields,
+  resolveRoleIncomeMeta,
+  type BodyshopAssignmentWideRow,
+  type BodyshopRole,
+  type BodyshopSupportRow,
+} from '../lib/bodyshopEarnings'
 import { supabase } from '../lib/supabase'
 
 // ── Types ──────────────────────────────────────────────────────────────────────
@@ -24,27 +35,7 @@ type AccidentJCRow = {
 }
 
 // One wide row per JC from bodyshop_assignments
-type BSAssignmentRow = {
-  job_card_number: string
-  supervisor_employee_code: string | null
-  supervisor_employee_name: string | null
-  dentor_employee_code: string | null
-  dentor_employee_name: string | null
-  dentor_helper_employee_code: string | null
-  dentor_helper_employee_name: string | null
-  painter_employee_code: string | null
-  painter_employee_name: string | null
-  painter_helper_employee_code: string | null
-  painter_helper_employee_name: string | null
-  technician_employee_code: string | null
-  technician_employee_name: string | null
-  rubbing_employee_code: string | null
-  rubbing_employee_name: string | null
-  edp_employee_code: string | null
-  edp_employee_name: string | null
-  parts_incharge_employee_code: string | null
-  parts_incharge_employee_name: string | null
-}
+type BSAssignmentRow = BodyshopAssignmentWideRow
 
 // Enriched closed JC (used for SA tab)
 type JCDetail = AccidentJCRow & {
@@ -72,7 +63,15 @@ type TechJCRow = {
   closed_date_time: string | null; invoice_date: string | null
   vehicle_registration_number: string | null
   dateKey: string | null
-  _role?: string
+  _role: BodyshopRole
+  _basePct: number
+  _effectivePct: number
+  _soloBonusApplied: boolean
+  _participantCount: number
+  _splitLabel: string
+  _isPrimary: boolean
+  _isSupport: boolean
+  technician_income: number
 }
 
 type MemberCard = {
@@ -144,6 +143,12 @@ function saIncome(dmsLabour: number, pct: number) {
 function normPct(s: string, fallback: number) {
   const n = Number(s.trim()); return Number.isFinite(n) ? Math.min(100, Math.max(0, n)) : fallback
 }
+function techIncomeOf(row: TechJCRow): number {
+  return Number.isFinite(row.technician_income) ? row.technician_income : 0
+}
+function techIncomeSubtitle(basePct: number): string {
+  return `Income = (DMS Labour ÷ 1.18) × role% (+4% solo when partner absent on bonus pairs) · split equally among primary + support on that role lane. Base setting: ${basePct}%.`
+}
 
 // ── Component ──────────────────────────────────────────────────────────────────
 
@@ -155,6 +160,7 @@ export default function BodyshopTrackerPage() {
   // Raw data
   const [accidentJCs, setAccidentJCs]     = useState<AccidentJCRow[]>([])
   const [bsAssignments, setBsAssignments] = useState<BSAssignmentRow[]>([])
+  const [supportAssignments, setSupportAssignments] = useState<BodyshopSupportRow[]>([])
 
   // UI state
   const [activeTab, setActiveTab]     = useState<TabKey>('SA')
@@ -206,26 +212,36 @@ export default function BodyshopTrackerPage() {
       //    Use the same JC numbers as the accident JCs already fetched so period + Accident filters are respected
       const accJcNumbers = Array.from(new Set(accRows.map((r) => r.job_card_number).filter(Boolean)))
       const bsRows: BSAssignmentRow[] = []
+      const supportRows: BodyshopSupportRow[] = []
+      const assignmentSelect = [
+        'job_card_number',
+        'supervisor_employee_code', 'supervisor_employee_name', 'supervisor_work_status',
+        'dentor_employee_code', 'dentor_employee_name', 'dentor_work_status',
+        'dentor_helper_employee_code', 'dentor_helper_employee_name', 'dentor_helper_work_status',
+        'painter_employee_code', 'painter_employee_name', 'painter_work_status',
+        'painter_helper_employee_code', 'painter_helper_employee_name', 'painter_helper_work_status',
+        'technician_employee_code', 'technician_employee_name', 'technician_work_status',
+        'rubbing_employee_code', 'rubbing_employee_name', 'rubbing_work_status',
+        'edp_employee_code', 'edp_employee_name', 'edp_work_status',
+        'parts_incharge_employee_code', 'parts_incharge_employee_name', 'parts_incharge_work_status',
+      ].join(', ')
       for (let i = 0; i < accJcNumbers.length; i += 100) {
         const batch = accJcNumbers.slice(i, i + 100)
-        const res = await supabase.from('bodyshop_assignments')
-          .select([
-            'job_card_number',
-            'supervisor_employee_code', 'supervisor_employee_name',
-            'dentor_employee_code', 'dentor_employee_name',
-            'dentor_helper_employee_code', 'dentor_helper_employee_name',
-            'painter_employee_code', 'painter_employee_name',
-            'painter_helper_employee_code', 'painter_helper_employee_name',
-            'technician_employee_code', 'technician_employee_name',
-            'rubbing_employee_code', 'rubbing_employee_name',
-            'edp_employee_code', 'edp_employee_name',
-            'parts_incharge_employee_code', 'parts_incharge_employee_name',
-          ].join(', '))
-          .eq('is_active', true)
-          .in('job_card_number', batch)
-        if (!res.error && res.data) bsRows.push(...(res.data as unknown as BSAssignmentRow[]))
+        const [assignRes, supportRes] = await Promise.all([
+          supabase.from('bodyshop_assignments')
+            .select(assignmentSelect)
+            .eq('is_active', true)
+            .in('job_card_number', batch),
+          supabase.from('bodyshop_floor_support_assignments')
+            .select('job_card_number, support_role, employee_code, employee_name, is_active')
+            .eq('is_active', true)
+            .in('job_card_number', batch),
+        ])
+        if (!assignRes.error && assignRes.data) bsRows.push(...(assignRes.data as unknown as BSAssignmentRow[]))
+        if (!supportRes.error && supportRes.data) supportRows.push(...(supportRes.data as BodyshopSupportRow[]))
       }
       setBsAssignments(bsRows)
+      setSupportAssignments(supportRows)
 
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load bodyshop data')
@@ -267,17 +283,10 @@ export default function BodyshopTrackerPage() {
 
   // ── Role column mapping for BSAssignmentRow pivot ─────────────────────────
 
-  const BS_ROLE_COLS: Record<Exclude<TabKey, 'SA'>, { code: keyof BSAssignmentRow; name: keyof BSAssignmentRow }> = {
-    FLOOR_INCHARGE: { code: 'supervisor_employee_code',      name: 'supervisor_employee_name' },
-    DENTOR:         { code: 'dentor_employee_code',          name: 'dentor_employee_name' },
-    DENTOR_HELPER:  { code: 'dentor_helper_employee_code',   name: 'dentor_helper_employee_name' },
-    PAINTER:        { code: 'painter_employee_code',         name: 'painter_employee_name' },
-    PAINTER_HELPER: { code: 'painter_helper_employee_code',  name: 'painter_helper_employee_name' },
-    TECHNICIAN:     { code: 'technician_employee_code',      name: 'technician_employee_name' },
-    RUBBING:        { code: 'rubbing_employee_code',         name: 'rubbing_employee_name' },
-    EDP:            { code: 'edp_employee_code',             name: 'edp_employee_name' },
-    PARTS_INCHARGE: { code: 'parts_incharge_employee_code',  name: 'parts_incharge_employee_name' },
-  } as const
+  const supportByJcRole = useMemo(
+    () => buildSupportByJcRole(supportAssignments),
+    [supportAssignments],
+  )
 
   // ── Enrich accident JCs ────────────────────────────────────────────────────
 
@@ -305,13 +314,13 @@ export default function BodyshopTrackerPage() {
     return m
   }, [accidentJCs])
 
-  // ── Enrich tech assignments (pivot BSAssignmentRow wide cols) ─────────────
+  // ── Enrich tech assignments (primary + support, per-JC effective % and split) ─
   const enrichedTechRows = useMemo<TechJCRow[]>(() => {
     const rows: TechJCRow[] = []
-    const nonSaRoles = Object.keys(BS_ROLE_COLS) as Exclude<TabKey, 'SA'>[]
+
     for (const bsRow of bsAssignments) {
       const jc = accidentJCMap.get(bsRow.job_card_number)
-      if (!jc) continue  // not an accident JC in this period
+      if (!jc) continue
       const analyticL = parseAmt(jc.final_labour_amount)
       const dmsL      = parseAmt(jc.dms_final_labour_amount)
       const base = {
@@ -329,22 +338,61 @@ export default function BodyshopTrackerPage() {
         vehicle_registration_number: jc.vehicle_registration_number ?? null,
         dateKey:           dateKey(jc),
       }
-      for (const role of nonSaRoles) {
-        const cols = BS_ROLE_COLS[role]
-        const code = bsRow[cols.code] as string | null
-        const name = bsRow[cols.name] as string | null
-        if (!code) continue
-        rows.push({ ...base, technician_code: code, technician_name: name ?? code, _role: role })
+
+      for (const role of ALL_BODYSHOP_ROLES) {
+        const basePct = sharePct[role]
+        const incomeMeta = resolveRoleIncomeMeta(bsRow, role, dmsL, basePct, supportByJcRole)
+        if (!incomeMeta) continue
+
+        const primary = getRolePrimaryFields(bsRow, role)
+        rows.push({
+          ...base,
+          technician_code: primary.employee_code ?? '',
+          technician_name: primary.employee_name ?? primary.employee_code ?? '',
+          _role: role,
+          _basePct: incomeMeta.basePct,
+          _effectivePct: incomeMeta.effectivePct,
+          _soloBonusApplied: incomeMeta.soloBonusApplied,
+          _participantCount: incomeMeta.participantCount,
+          _splitLabel: incomeMeta.splitLabel,
+          _isPrimary: true,
+          _isSupport: false,
+          technician_income: incomeMeta.technician_income,
+        })
+
+        const supportRows = getActiveSupportForRole(supportByJcRole, bsRow.job_card_number, role)
+        const primaryCode = String(primary.employee_code ?? '').trim().toUpperCase()
+        supportRows.forEach((supportRow) => {
+          const supportCode = String(supportRow.employee_code ?? '').trim()
+          if (!supportCode) return
+          if (supportCode.toUpperCase() === primaryCode) return
+
+          rows.push({
+            ...base,
+            technician_code: supportCode,
+            technician_name: String(supportRow.employee_name ?? '').trim() || supportCode,
+            _role: role,
+            _basePct: incomeMeta.basePct,
+            _effectivePct: incomeMeta.effectivePct,
+            _soloBonusApplied: incomeMeta.soloBonusApplied,
+            _participantCount: incomeMeta.participantCount,
+            _splitLabel: incomeMeta.splitLabel,
+            _isPrimary: false,
+            _isSupport: true,
+            technician_income: incomeMeta.technician_income,
+          })
+        })
       }
     }
+
     return rows
-  }, [bsAssignments, accidentJCMap])
+  }, [bsAssignments, accidentJCMap, supportByJcRole, sharePct])
 
   // ── Active rows (union of SA or Tech) ─────────────────────────────────────
 
   const activeRows = useMemo(() => {
     if (tabMeta.mode === 'sa') return enrichedAccident
-    return enrichedTechRows.filter((r) => (r as TechJCRow & { _role?: string })._role === activeTab)
+    return enrichedTechRows.filter((r) => r._role === activeTab)
   }, [tabMeta, activeTab, enrichedAccident, enrichedTechRows])
 
   // ── Date scope ─────────────────────────────────────────────────────────────
@@ -385,7 +433,7 @@ export default function BodyshopTrackerPage() {
   // ── Member cards ───────────────────────────────────────────────────────────
 
   const memberCards = useMemo<MemberCard[]>(() => {
-    const map = new Map<string, MemberCard & { days: Set<string>; totalDmsLabour: number }>()
+    const map = new Map<string, MemberCard & { days: Set<string>; jcs: Set<string> }>()
     filteredRows.forEach((r) => {
       const name = nameOf(r)
       if (!name) return
@@ -393,22 +441,26 @@ export default function BodyshopTrackerPage() {
       const ex = map.get(name) ?? {
         name, jcCount: 0, dayCount: 0,
         totalLabour: 0, totalSpares: 0, totalInvoice: 0, totalIncome: 0,
-        totalDmsLabour: 0, days: new Set<string>(),
+        days: new Set<string>(), jcs: new Set<string>(),
       }
-      ex.jcCount += 1
+      ex.jcs.add(r.job_card_number)
+      ex.jcCount = ex.jcs.size
       ex.totalLabour += r.labourAmt
-      ex.totalDmsLabour += r.dmsLabourAmt
       ex.totalSpares += r.sparesAmt
       ex.totalInvoice += r.invoiceAmt
       ex.days.add(dk)
       ex.dayCount = ex.days.size
-      ex.totalIncome = saIncome(ex.totalDmsLabour, curPct)
+      if (tabMeta.mode === 'sa') {
+        ex.totalIncome += saIncome(r.dmsLabourAmt, curPct)
+      } else {
+        ex.totalIncome += techIncomeOf(r as TechJCRow)
+      }
       map.set(name, ex)
     })
     return Array.from(map.values())
-      .map(({ days: _d, totalDmsLabour: _dm, ...c }) => c)
-      .sort((a, b) => b.totalInvoice - a.totalInvoice || b.jcCount - a.jcCount)
-  }, [filteredRows, curPct])
+      .map(({ days: _d, jcs: _j, ...c }) => c)
+      .sort((a, b) => b.totalIncome - a.totalIncome || b.totalInvoice - a.totalInvoice || b.jcCount - a.jcCount)
+  }, [filteredRows, curPct, tabMeta.mode])
 
   // ── Day cards ──────────────────────────────────────────────────────────────
 
@@ -417,21 +469,26 @@ export default function BodyshopTrackerPage() {
   [filteredRows, selectedMember])
 
   const dayCards = useMemo<DayCard[]>(() => {
-    const dmsMap = new Map<string, number>()
     const map = new Map<string, DayCard>()
     memberRows.forEach((r) => {
       const dk = r.dateKey ?? 'unknown'
       const ex = map.get(dk) ?? { dateKey: dk, label: dayLabel(dk), jcCount: 0, totalLabour: 0, totalSpares: 0, totalInvoice: 0, totalIncome: 0 }
-      ex.jcCount += 1; ex.totalLabour += r.labourAmt; ex.totalSpares += r.sparesAmt; ex.totalInvoice += r.invoiceAmt
-      dmsMap.set(dk, (dmsMap.get(dk) ?? 0) + r.dmsLabourAmt)
-      ex.totalIncome = saIncome(dmsMap.get(dk) ?? 0, curPct)
+      ex.jcCount += 1
+      ex.totalLabour += r.labourAmt
+      ex.totalSpares += r.sparesAmt
+      ex.totalInvoice += r.invoiceAmt
+      if (tabMeta.mode === 'sa') {
+        ex.totalIncome += saIncome(r.dmsLabourAmt, curPct)
+      } else {
+        ex.totalIncome += techIncomeOf(r as TechJCRow)
+      }
       map.set(dk, ex)
     })
     return Array.from(map.values()).sort((a, b) => {
       if (a.dateKey === 'unknown') return 1; if (b.dateKey === 'unknown') return -1
       return b.dateKey.localeCompare(a.dateKey)
     })
-  }, [memberRows, curPct])
+  }, [memberRows, curPct, tabMeta.mode])
 
   // ── JC detail ──────────────────────────────────────────────────────────────
 
@@ -441,13 +498,21 @@ export default function BodyshopTrackerPage() {
 
   // ── Totals ─────────────────────────────────────────────────────────────────
 
-  const totals = useMemo(() => ({
-    labour: filteredRows.reduce((s, r) => s + r.labourAmt, 0),
-    spares: filteredRows.reduce((s, r) => s + r.sparesAmt, 0),
-    invoice: filteredRows.reduce((s, r) => s + r.invoiceAmt, 0),
-    jcCount: filteredRows.length,
-    memberCount: memberCards.length,
-  }), [filteredRows, memberCards])
+  const totals = useMemo(() => {
+    const uniqueJcs = new Set(filteredRows.map((r) => r.job_card_number))
+    const totalIncome = tabMeta.mode === 'sa'
+      ? filteredRows.reduce((sum, r) => sum + saIncome(r.dmsLabourAmt, curPct), 0)
+      : filteredRows.reduce((sum, r) => sum + techIncomeOf(r as TechJCRow), 0)
+    return {
+      labour: filteredRows.reduce((s, r) => s + r.labourAmt, 0),
+      spares: filteredRows.reduce((s, r) => s + r.sparesAmt, 0),
+      invoice: filteredRows.reduce((s, r) => s + r.invoiceAmt, 0),
+      jcCount: tabMeta.mode === 'sa' ? filteredRows.length : uniqueJcs.size,
+      rowCount: filteredRows.length,
+      memberCount: memberCards.length,
+      totalIncome,
+    }
+  }, [filteredRows, memberCards, tabMeta.mode, curPct])
 
   // Reset drill-down on tab/filter change
   useEffect(() => { setSelectedMember(''); setSelectedDayKey('') }, [activeTab, branchFilter, fromDate, toDate])
@@ -456,7 +521,7 @@ export default function BodyshopTrackerPage() {
   // Use allDateScoped (before branch filter) for branch chip counts
   const allDateScoped = useMemo(() => {
     if (tabMeta.mode === 'sa') return enrichedAccident
-    const rows = enrichedTechRows.filter((r) => (r as TechJCRow & { _role?: string })._role === activeTab)
+    const rows = enrichedTechRows.filter((r) => r._role === activeTab)
     if (!fromDate && !toDate) return rows
     return rows.filter((r) => {
       if (!r.dateKey) return false
@@ -483,16 +548,16 @@ export default function BodyshopTrackerPage() {
 
     const headers = isSA
       ? ['Job Card', 'Reg No', 'SA Name', 'Location', 'SR Type', 'Closed At', 'Analytic Labour', 'Analytic Spares', 'Analytic Total Invoice', `SA Income (${curPct}%)`, 'DMS Labour', 'DMS Total Invoice']
-      : ['Job Card', 'Reg No', `${label} Name`, `${label} Code`, 'Location', 'SR Type', 'Closed At', 'Analytic Labour', 'Analytic Spares', 'Analytic Total Invoice', `${label} Income (${curPct}%)`, 'DMS Labour', 'DMS Total Invoice']
+      : ['Job Card', 'Reg No', `${label} Name`, `${label} Code`, 'Assignment', 'Location', 'SR Type', 'Closed At', 'Analytic Labour', 'Analytic Spares', 'Analytic Total Invoice', 'Base %', 'Effective %', 'Split', `${label} Income`, 'DMS Labour', 'DMS Total Invoice']
 
     const rows = filteredRows.map((r) => {
-      const inc = saIncome(r.dmsLabourAmt, curPct)
       if (isSA) {
         const jr = r as JCDetail
+        const inc = saIncome(r.dmsLabourAmt, curPct)
         return [
           jr.job_card_number,
           jr.vehicle_registration_number ?? '',
-          String((jr as any).sr_assigned_to ?? '').trim(),
+          String((jr as JCDetail).sr_assigned_to ?? '').trim(),
           locationOf(jr.location),
           jr.sr_type ?? '',
           jr.closed_date_time ? new Date(jr.closed_date_time).toLocaleString('en-IN') : '',
@@ -503,24 +568,29 @@ export default function BodyshopTrackerPage() {
           jr.dmsLabourAmt,
           jr.dmsInvoiceAmt,
         ]
-      } else {
-        const tr = r as TechJCRow
-        return [
-          tr.job_card_number,
-          tr.vehicle_registration_number ?? '',
-          tr.technician_name,
-          tr.technician_code,
-          locationOf(tr.location),
-          tr.sr_type ?? '',
-          tr.closed_date_time ? new Date(tr.closed_date_time).toLocaleString('en-IN') : '',
-          tr.analyticLabourAmt,
-          tr.sparesAmt,
-          tr.invoiceAmt,
-          Number(inc.toFixed(2)),
-          tr.dmsLabourAmt,
-          tr.dmsInvoiceAmt,
-        ]
       }
+
+      const tr = r as TechJCRow
+      const inc = techIncomeOf(tr)
+      return [
+        tr.job_card_number,
+        tr.vehicle_registration_number ?? '',
+        tr.technician_name,
+        tr.technician_code,
+        tr._isSupport ? 'Support' : 'Primary',
+        locationOf(tr.location),
+        tr.sr_type ?? '',
+        tr.closed_date_time ? new Date(tr.closed_date_time).toLocaleString('en-IN') : '',
+        tr.analyticLabourAmt,
+        tr.sparesAmt,
+        tr.invoiceAmt,
+        tr._basePct,
+        formatEffectivePercentLabel(tr._basePct, tr._effectivePct, tr._soloBonusApplied),
+        tr._splitLabel,
+        Number(inc.toFixed(2)),
+        tr.dmsLabourAmt,
+        tr.dmsInvoiceAmt,
+      ]
     })
 
     const wb = XLSX.utils.book_new()
@@ -578,7 +648,7 @@ export default function BodyshopTrackerPage() {
           {TABS.map((tab) => {
             const tabCount = (() => {
               if (tab.mode === 'sa') return enrichedAccident.length
-              return enrichedTechRows.filter((r) => (r as TechJCRow & { _role?: string })._role === tab.key).length
+              return enrichedTechRows.filter((r) => r._role === tab.key).length
             })()
             return (
               <button key={tab.key} type="button" onClick={() => setActiveTab(tab.key)}
@@ -602,10 +672,11 @@ export default function BodyshopTrackerPage() {
         {[
           { label: `${tabMeta.label}s`,             value: String(totals.memberCount),                      color: '#6366f1', bg: '#eef2ff' },
           { label: 'Job Cards',                      value: totals.jcCount.toLocaleString('en-IN'),           color: '#2563eb', bg: '#eff6ff' },
+          { label: tabMeta.mode === 'tech' ? 'Assignments' : 'Records', value: totals.rowCount.toLocaleString('en-IN'), color: '#7c3aed', bg: '#f5f3ff' },
           { label: 'Total Labour',                   value: fmt(totals.labour),                               color: '#16a34a', bg: '#f0fdf4' },
           { label: 'Total Spares',                   value: fmt(totals.spares),                               color: '#9333ea', bg: '#fdf4ff' },
           { label: 'Total Invoice',                  value: fmt(totals.invoice),                              color: '#ea580c', bg: '#fff7ed' },
-          { label: `${tabMeta.label} Income (${curPct}%)`, value: fmt(saIncome(filteredRows.reduce((s, r) => s + r.dmsLabourAmt, 0), curPct)), color: '#2563eb', bg: '#eff6ff', bold: true },
+          { label: `${tabMeta.label} Income`, value: fmt(totals.totalIncome), color: '#2563eb', bg: '#eff6ff', bold: true },
         ].map(({ label, value, color, bg, bold }) => (
           <div key={label} style={{ background: bg, borderRadius: '8px', padding: '0.5rem 0.75rem', border: `1px solid ${color}22` }}>
             <div style={{ fontSize: bold ? '1rem' : '0.92rem', fontWeight: bold ? 800 : 700, color }}>{value}</div>
@@ -640,7 +711,11 @@ export default function BodyshopTrackerPage() {
         <div className="card__head">
           <div>
             <h3>{tabMeta.icon} {tabMeta.label} — Earnings %</h3>
-            <div className="sub">Income = (DMS Labour ÷ 1.18) × {curPct}%. This is used to calculate payout for {tabMeta.label}.</div>
+            <div className="sub">
+              {tabMeta.mode === 'sa'
+                ? `Income = (DMS Labour ÷ 1.18) × ${curPct}%. This is used to calculate payout for ${tabMeta.label}.`
+                : techIncomeSubtitle(curPct)}
+            </div>
           </div>
           <div className="tech-share-corner">
             <h3>Earnings % — {tabMeta.label}</h3>
@@ -676,7 +751,11 @@ export default function BodyshopTrackerPage() {
           <div className="card__head">
             <div>
               <h3>{tabMeta.icon} {tabMeta.label} — Revenue</h3>
-              <div className="sub">Income = (DMS Labour ÷ 1.18) × {curPct}%. Click a member to drill down by day.</div>
+              <div className="sub">
+                {tabMeta.mode === 'sa'
+                  ? `Income = (DMS Labour ÷ 1.18) × ${curPct}%. Click a member to drill down by day.`
+                  : `${techIncomeSubtitle(curPct)} Click a member to drill down by day.`}
+              </div>
             </div>
           </div>
           <div className="card__body dense">
@@ -761,19 +840,31 @@ export default function BodyshopTrackerPage() {
                 <tr>
                   <th>Job Card</th>
                   <th>Reg No</th>
+                  {tabMeta.mode === 'tech' && <th>Assignment</th>}
                   <th>Location</th>
                   <th>SR Type</th>
                   <th>Closed At</th>
                   <th style={{ textAlign: 'right' }}>Analytic Labour</th>
                   <th style={{ textAlign: 'right' }}>Analytic Spares</th>
                   <th style={{ textAlign: 'right' }}>Analytic Total Invoice</th>
-                  <th style={{ textAlign: 'right', color: '#2563eb' }}>{tabMeta.label} Income ({curPct}%)</th>
+                  {tabMeta.mode === 'tech' ? (
+                    <>
+                      <th style={{ textAlign: 'right' }}>Effective %</th>
+                      <th style={{ textAlign: 'right' }}>Split</th>
+                    </>
+                  ) : null}
+                  <th style={{ textAlign: 'right', color: '#2563eb' }}>{tabMeta.label} Income</th>
                   <th style={{ textAlign: 'right', color: '#15803d' }}>DMS Labour</th>
                   <th style={{ textAlign: 'right', color: '#0f766e' }}>DMS Total Invoice</th>
                 </tr>
               </thead>
               <tbody>
-                {dayDetailRows.map((r, idx) => (
+                {dayDetailRows.map((r, idx) => {
+                  const income = tabMeta.mode === 'sa'
+                    ? saIncome(r.dmsLabourAmt, curPct)
+                    : techIncomeOf(r as TechJCRow)
+                  const tr = tabMeta.mode === 'tech' ? (r as TechJCRow) : null
+                  return (
                   <tr key={idx}>
                     <td>
                       <code style={{ fontSize: 11, background: '#eff6ff', color: '#2563eb', borderRadius: 4, padding: '2px 6px' }}>
@@ -781,28 +872,48 @@ export default function BodyshopTrackerPage() {
                       </code>
                     </td>
                     <td>{r.vehicle_registration_number ?? '—'}</td>
+                    {tabMeta.mode === 'tech' && (
+                      <td>
+                        {tr?._isSupport ? 'Support' : 'Primary'}
+                        {tr?._soloBonusApplied ? (
+                          <span style={{ marginLeft: 6, fontSize: 10, color: '#b45309', fontWeight: 600 }}>+4% solo</span>
+                        ) : null}
+                      </td>
+                    )}
                     <td>{locationOf(r.location)}</td>
                     <td>{r.sr_type ?? '—'}</td>
                     <td style={{ fontSize: 12, color: '#64748b' }}>{fmtDate(r.closed_date_time)}</td>
                     <td style={{ textAlign: 'right', color: '#16a34a', fontWeight: 600 }}>{fmt(r.analyticLabourAmt)}</td>
                     <td style={{ textAlign: 'right', color: '#9333ea', fontWeight: 600 }}>{fmt(r.sparesAmt)}</td>
                     <td style={{ textAlign: 'right', fontWeight: 700 }}>{fmt(r.invoiceAmt)}</td>
+                    {tabMeta.mode === 'tech' && tr ? (
+                      <>
+                        <td style={{ textAlign: 'right' }}>
+                          {formatEffectivePercentLabel(tr._basePct, tr._effectivePct, tr._soloBonusApplied)}
+                        </td>
+                        <td style={{ textAlign: 'right' }}>{tr._splitLabel}</td>
+                      </>
+                    ) : null}
                     <td style={{ textAlign: 'right', color: '#2563eb', fontWeight: 700 }}>
-                      {fmt(saIncome(r.dmsLabourAmt, curPct))}
+                      {fmt(income)}
                     </td>
                     <td style={{ textAlign: 'right', color: '#15803d', fontWeight: 700 }}>{fmt(r.dmsLabourAmt)}</td>
                     <td style={{ textAlign: 'right', color: '#0f766e', fontWeight: 700 }}>{fmt(r.dmsInvoiceAmt)}</td>
                   </tr>
-                ))}
+                  )
+                })}
               </tbody>
               <tfoot>
                 <tr style={{ background: '#f8fafc', fontWeight: 700 }}>
-                  <td colSpan={5}>Day Total</td>
+                  <td colSpan={tabMeta.mode === 'tech' ? 6 : 5}>Day Total</td>
                   <td style={{ textAlign: 'right', color: '#16a34a' }}>{fmt(dayDetailRows.reduce((s, r) => s + r.analyticLabourAmt, 0))}</td>
                   <td style={{ textAlign: 'right', color: '#9333ea' }}>{fmt(dayDetailRows.reduce((s, r) => s + r.sparesAmt, 0))}</td>
                   <td style={{ textAlign: 'right' }}>{fmt(dayDetailRows.reduce((s, r) => s + r.invoiceAmt, 0))}</td>
+                  {tabMeta.mode === 'tech' ? <td colSpan={2} /> : null}
                   <td style={{ textAlign: 'right', color: '#2563eb' }}>
-                    {fmt(saIncome(dayDetailRows.reduce((s, r) => s + r.dmsLabourAmt, 0), curPct))}
+                    {fmt(dayDetailRows.reduce((sum, r) => sum + (
+                      tabMeta.mode === 'sa' ? saIncome(r.dmsLabourAmt, curPct) : techIncomeOf(r as TechJCRow)
+                    ), 0))}
                   </td>
                   <td style={{ textAlign: 'right', color: '#15803d' }}>{fmt(dayDetailRows.reduce((s, r) => s + r.dmsLabourAmt, 0))}</td>
                   <td style={{ textAlign: 'right', color: '#0f766e' }}>{fmt(dayDetailRows.reduce((s, r) => s + r.dmsInvoiceAmt, 0))}</td>
@@ -820,7 +931,7 @@ export default function BodyshopTrackerPage() {
           <div style={{ fontSize: 15, fontWeight: 600, color: '#64748b' }}>No data for {tabMeta.label}</div>
           <div style={{ fontSize: 13, marginTop: 4 }}>
             {tabMeta.mode === 'tech'
-              ? 'No assignments found in bodyshop_assignments for this role in the selected period.'
+              ? 'No primary assignments or support staff found for this role in the selected period.'
               : fromDate || toDate ? 'Try widening the date range.' : 'No Accident job cards found.'}
           </div>
         </div>
