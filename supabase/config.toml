@@ -19,5 +19,11 @@ port = 54323
 [functions.technician-daily-earnings-report]
 verify_jwt = false
 
+[functions.sa-earnings-report]
+verify_jwt = false
+
+[functions.bodyshop-earnings-report]
+verify_jwt = false
+
 [functions.booking-source-sync]
 verify_jwt = false

@@ -48,6 +48,7 @@ Use this file as daily command center:
 | IMPORT-001 | import | Active | Import Team | `docs/Implementation_plans/webversion/categories/import/active/IMPORT_UPLOAD_GOVERNING_PLAN_2026-06-06.md` |
 | IMPORT-002 | import | Proposed (PSF-only, web /import) | Import Team + Platform Team + Ops | `docs/Implementation_plans/webversion/categories/import/active/IMPORT-002_PSF_INCREMENTAL_UPSERT_GOVERNANCE_PLAN_2026-06-26.md` |
 | TECH-EARNINGS-001 | operations | Active | Operations Team | `docs/Implementation_plans/webversion/categories/operations/active/TECH-EARNINGS-001_TECHNICIAN_DAILY_EARNINGS_EMAIL_AUTOMATION_PLAN_2026-06-09.md` |
+| EARNINGS-EMAIL-002 | operations | Active | Operations Team + Bodyshop Team | `docs/Implementation_plans/webversion/categories/operations/active/EARNINGS-EMAIL-002_SA_BODYSHOP_MANPOWER_EARNINGS_EMAIL_PLAN_2026-07-17.md` |
 | OPS-WA-GROUP | operations | Active | Operations Team | `docs/Implementation_plans/webversion/categories/operations/active/WA_GROUP_CREATION_IMPLEMENTATION_PLAN.md` |
 | OPS-INCOME-LEGACY | operations | Active | Operations Team | `docs/Implementation_plans/webversion/categories/operations/active/income_technician.md` |
 | OPS-UPDATION-001 | operations | Implemented (pending manual Meta setup) | Operations Team | `docs/Implementation_plans/webversion/categories/operations/active/OPS-UPDATION-001_UPDATION_REMINDER_WHATSAPP_AUTOMATION_PLAN.md` |

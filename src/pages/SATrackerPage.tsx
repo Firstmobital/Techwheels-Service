@@ -7,6 +7,7 @@ import {
   resolveEmployeeForSr,
   type EmployeeLookupIndex,
 } from '../lib/employeeMatcher'
+import { sendSAEarningsTestEmail } from '../lib/api/email'
 import { supabase } from '../lib/supabase'
 import * as XLSX from 'xlsx'
 
@@ -335,6 +336,8 @@ export default function SATrackerPage() {
   const [yesterdaySAReport, setYesterdaySAReport] = useState<{ rows: YesterdaySARow[]; date: string; waText: string } | null>(null)
   const [showPivotReport, setShowPivotReport] = useState(false)
   const [selectedDayKey, setSelectedDayKey] = useState('')
+  const [sendingReportEmail, setSendingReportEmail] = useState(false)
+  const [reportEmailState, setReportEmailState] = useState<{ type: 'success' | 'error'; message: string } | null>(null)
 
   // ── Load ───────────────────────────────────────────────────────────────────
 
@@ -971,6 +974,84 @@ export default function SATrackerPage() {
       .sort((a, b) => b.totalIncome - a.totalIncome || b.jcCount - a.jcCount)
   }, [deptFilteredRows, saSharePercent, evSharePercent, resolveSaEmployee, completedJobCards])
 
+  const saEmailRows = useMemo(() => {
+    const map = new Map<string, { employeeCode: string; employeeName: string; earnings: number }>()
+    deptFilteredRows.forEach((r) => {
+      const name = String(r.sr_assigned_to ?? '').trim()
+      if (!name) return
+      const emp = resolveSaEmployee(name, r.employee_code)
+      const employeeCode = normalizeEmployeeCode(String(emp?.employee_code ?? r.employee_code ?? '').trim()) || name
+      const fuel = normFuelBucket(emp?.fuel_type)
+      const income = calculateEligibleSAIncome(
+        r,
+        fuel === 'EV' ? evSharePercent : saSharePercent,
+        completedJobCards,
+      )
+      const existing = map.get(name) ?? { employeeCode, employeeName: name, earnings: 0 }
+      existing.earnings += income
+      map.set(name, existing)
+    })
+    return Array.from(map.values())
+      .filter((row) => row.earnings > 0)
+      .sort((a, b) => b.earnings - a.earnings)
+  }, [deptFilteredRows, saSharePercent, evSharePercent, resolveSaEmployee, completedJobCards])
+
+  const hasEmailRange = Boolean(fromDate) && Boolean(toDate)
+  const canSendRangeReportEmail = hasEmailRange && saEmailRows.length > 0
+
+  async function handleSendRangeReportEmail() {
+    if (!hasEmailRange) {
+      setReportEmailState({
+        type: 'error',
+        message: 'Select both start and end dates in \'Range\' before sending email report.',
+      })
+      return
+    }
+    if (saEmailRows.length === 0) {
+      setReportEmailState({
+        type: 'error',
+        message: 'No filtered SA rows available for the selected range.',
+      })
+      return
+    }
+
+    setSendingReportEmail(true)
+    setReportEmailState(null)
+
+    const reportScopeLabel = [
+      fromDate === toDate ? fromDate : `${fromDate} to ${toDate}`,
+      `Loc: ${branchFilter === 'all' ? 'All' : branchFilter}`,
+      `Portal: ${portalFilter === 'all' ? 'All' : portalFilter}`,
+      deptFilter !== 'all' ? `Dept: ${deptFilter}` : '',
+    ].filter(Boolean).join(' | ')
+
+    const res = await sendSAEarningsTestEmail({
+      runFromIst: fromDate,
+      runToIst: toDate,
+      reportScopeLabel,
+      rows: saEmailRows.map((row) => ({
+        employeeCode: row.employeeCode,
+        employeeName: row.employeeName,
+        earnings: Number(row.earnings.toFixed(2)),
+      })),
+    })
+
+    if (res.error || !res.data) {
+      setReportEmailState({
+        type: 'error',
+        message: res.error ?? 'Failed to send SA report email.',
+      })
+      setSendingReportEmail(false)
+      return
+    }
+
+    setReportEmailState({
+      type: 'success',
+      message: `Email sent for ${res.data.reportLabel ?? `${fromDate} to ${toDate}`}. Rows: ${res.data.rowCount}, Total: ${formatCurrency(res.data.totalEarnings)}.`,
+    })
+    setSendingReportEmail(false)
+  }
+
   // ── Day cards for selected SA ─────────────────────────────────────────────
 
   const selectedSARows = useMemo(() => {
@@ -1287,7 +1368,43 @@ export default function SATrackerPage() {
           style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', padding: '0.3rem 0.75rem', background: '#0f766e', color: '#fff', border: 'none', borderRadius: '6px', fontWeight: 600, fontSize: '0.78rem', cursor: 'pointer' }}>
           💰 Payout Report
         </button>
+        {canEditSharePercent && (
+          <button
+            type="button"
+            onClick={() => void handleSendRangeReportEmail()}
+            disabled={sendingReportEmail || !canSendRangeReportEmail}
+            title={
+              !hasEmailRange
+                ? 'Select both start and end date in Range to enable'
+                : saEmailRows.length > 0
+                  ? 'Send bank payout report for currently filtered SAs'
+                  : 'No filtered rows to send'
+            }
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.3rem',
+              padding: '0.3rem 0.75rem',
+              background: '#0ea5e9',
+              color: '#fff',
+              border: 'none',
+              borderRadius: '6px',
+              fontWeight: 600,
+              fontSize: '0.78rem',
+              cursor: sendingReportEmail || !canSendRangeReportEmail ? 'not-allowed' : 'pointer',
+              opacity: sendingReportEmail || !canSendRangeReportEmail ? 0.45 : 1,
+            }}>
+            ✉️ {sendingReportEmail ? 'Sending…' : 'Email Report'}
+          </button>
+        )}
       </div>
+
+      {reportEmailState && (
+        <div className={`toast ${reportEmailState.type === 'error' ? 'error' : 'success'}`} style={{ marginBottom: '0.6rem' }}>
+          <Icon name={reportEmailState.type === 'error' ? 'alert' : 'check'} size={14} />
+          {reportEmailState.message}
+        </div>
+      )}
 
       {error && (
         <div className="toast error" style={{ marginBottom: '0.6rem' }}>

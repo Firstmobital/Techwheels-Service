@@ -13,6 +13,7 @@ import {
   type BodyshopRole,
   type BodyshopSupportRow,
 } from '../lib/bodyshopEarnings'
+import { sendBodyshopEarningsTestEmail } from '../lib/api/email'
 import { supabase } from '../lib/supabase'
 
 // ── Types ──────────────────────────────────────────────────────────────────────
@@ -169,6 +170,9 @@ export default function BodyshopTrackerPage() {
   const [branchFilter, setBranchFilter] = useState('all')
   const [selectedMember, setSelectedMember] = useState('')
   const [selectedDayKey, setSelectedDayKey] = useState('')
+  const [canEditSharePercent, setCanEditSharePercent] = useState(false)
+  const [sendingReportEmail, setSendingReportEmail] = useState(false)
+  const [reportEmailState, setReportEmailState] = useState<{ type: 'success' | 'error'; message: string } | null>(null)
 
   // Per-tab earning %
   const [sharePct, setSharePct] = useState<Record<TabKey, number>>({
@@ -275,6 +279,26 @@ export default function BodyshopTrackerPage() {
   }
 
   useEffect(() => { void loadEarningSettings() }, [])
+
+  useEffect(() => {
+    void (async () => {
+      const authRes = await supabase.auth.getUser()
+      const userId = authRes.data.user?.id
+      if (!userId) {
+        setCanEditSharePercent(false)
+        return
+      }
+      const profileRes = await supabase
+        .from('users')
+        .select('role, is_active')
+        .eq('id', userId)
+        .maybeSingle()
+      const role = String((profileRes.data as { role?: string | null } | null)?.role ?? '').trim().toLowerCase()
+      const isActive = (profileRes.data as { is_active?: boolean | null } | null)?.is_active
+      const roleCanEdit = role === 'super_admin' || role === 'super admin' || role === 'admin'
+      setCanEditSharePercent(roleCanEdit && isActive !== false)
+    })()
+  }, [])
 
   async function persistPct(role: TabKey, pct: number) {
     await supabase.from('bodyshop_role_earning_settings')
@@ -462,6 +486,121 @@ export default function BodyshopTrackerPage() {
       .sort((a, b) => b.totalIncome - a.totalIncome || b.totalInvoice - a.totalInvoice || b.jcCount - a.jcCount)
   }, [filteredRows, curPct, tabMeta.mode])
 
+  const allManpowerEmailRows = useMemo(() => {
+    if (!fromDate || !toDate) return []
+
+    const inRange = (r: { dateKey: string | null }) => {
+      if (!r.dateKey) return false
+      if (r.dateKey < fromDate || r.dateKey > toDate) return false
+      return true
+    }
+    const inBranch = (r: { location: string | null }) =>
+      branchFilter === 'all' || locationOf(r.location) === branchFilter
+
+    type EmailRow = { employeeCode: string; employeeName: string; role: string; earnings: number; jcCount: number }
+    const map = new Map<string, EmailRow & { jcs: Set<string> }>()
+
+    enrichedAccident.filter(inRange).filter(inBranch).forEach((r) => {
+      const name = String(r.sr_assigned_to ?? '').trim()
+      if (!name) return
+      const key = `SA|${name}`
+      const ex = map.get(key) ?? {
+        employeeCode: name,
+        employeeName: name,
+        role: 'SA',
+        earnings: 0,
+        jcCount: 0,
+        jcs: new Set<string>(),
+      }
+      ex.jcs.add(r.job_card_number)
+      ex.jcCount = ex.jcs.size
+      ex.earnings += saIncome(r.dmsLabourAmt, sharePct.SA)
+      map.set(key, ex)
+    })
+
+    enrichedTechRows.filter(inRange).filter(inBranch).forEach((r) => {
+      const code = String(r.technician_code ?? '').trim() || String(r.technician_name ?? '').trim()
+      const name = String(r.technician_name ?? '').trim() || code
+      if (!code || !name) return
+      const roleLabel = TABS.find((t) => t.key === r._role)?.label ?? r._role
+      const key = `${r._role}|${code}`
+      const ex = map.get(key) ?? {
+        employeeCode: code,
+        employeeName: name,
+        role: roleLabel,
+        earnings: 0,
+        jcCount: 0,
+        jcs: new Set<string>(),
+      }
+      ex.jcs.add(r.job_card_number)
+      ex.jcCount = ex.jcs.size
+      ex.earnings += techIncomeOf(r)
+      map.set(key, ex)
+    })
+
+    return Array.from(map.values())
+      .map(({ jcs: _j, ...row }) => row)
+      .filter((row) => row.earnings > 0)
+      .sort((a, b) => b.earnings - a.earnings || a.role.localeCompare(b.role))
+  }, [fromDate, toDate, branchFilter, enrichedAccident, enrichedTechRows, sharePct])
+
+  const hasEmailRange = Boolean(fromDate) && Boolean(toDate)
+  const canSendRangeReportEmail = hasEmailRange && allManpowerEmailRows.length > 0
+
+  async function handleSendRangeReportEmail() {
+    if (!hasEmailRange) {
+      setReportEmailState({
+        type: 'error',
+        message: 'Select both start and end dates in \'Range\' before sending email report.',
+      })
+      return
+    }
+    if (allManpowerEmailRows.length === 0) {
+      setReportEmailState({
+        type: 'error',
+        message: 'No filtered bodyshop earnings rows available for the selected range.',
+      })
+      return
+    }
+
+    setSendingReportEmail(true)
+    setReportEmailState(null)
+
+    const reportScopeLabel = [
+      fromDate === toDate ? fromDate : `${fromDate} to ${toDate}`,
+      `Loc: ${branchFilter === 'all' ? 'All' : branchFilter}`,
+      'Roles: All',
+    ].join(' | ')
+
+    const res = await sendBodyshopEarningsTestEmail({
+      runFromIst: fromDate,
+      runToIst: toDate,
+      reportScopeLabel,
+      rows: allManpowerEmailRows.map((row) => ({
+        employeeCode: row.employeeCode,
+        employeeName: row.employeeName,
+        role: row.role,
+        earnings: Number(row.earnings.toFixed(2)),
+        jcCount: row.jcCount,
+      })),
+    })
+
+    if (res.error || !res.data) {
+      setReportEmailState({
+        type: 'error',
+        message: res.error ?? 'Failed to send bodyshop report email.',
+      })
+      setSendingReportEmail(false)
+      return
+    }
+
+    setReportEmailState({
+      type: 'success',
+      message: `Email sent for ${res.data.reportLabel ?? `${fromDate} to ${toDate}`}. Rows: ${res.data.rowCount}, Total: ${fmt(res.data.totalEarnings)}.`,
+    })
+    setSendingReportEmail(false)
+  }
+
   // ── Day cards ──────────────────────────────────────────────────────────────
 
   const memberRows = useMemo(() =>
@@ -636,7 +775,46 @@ export default function BodyshopTrackerPage() {
             {b} ({allDateScoped.filter((r) => locationOf(r.location) === b).length})
           </button>
         ))}
+
+        <span style={{ flex: 1 }} />
+
+        {canEditSharePercent && (
+          <button
+            type="button"
+            onClick={() => void handleSendRangeReportEmail()}
+            disabled={sendingReportEmail || !canSendRangeReportEmail}
+            title={
+              !hasEmailRange
+                ? 'Select both start and end date in Range to enable'
+                : allManpowerEmailRows.length > 0
+                  ? 'Send bank payout report for all bodyshop roles'
+                  : 'No filtered rows to send'
+            }
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.3rem',
+              padding: '0.3rem 0.75rem',
+              background: '#0ea5e9',
+              color: '#fff',
+              border: 'none',
+              borderRadius: '6px',
+              fontWeight: 600,
+              fontSize: '0.78rem',
+              cursor: sendingReportEmail || !canSendRangeReportEmail ? 'not-allowed' : 'pointer',
+              opacity: sendingReportEmail || !canSendRangeReportEmail ? 0.45 : 1,
+            }}>
+            ✉️ {sendingReportEmail ? 'Sending…' : 'Email Report'}
+          </button>
+        )}
       </div>
+
+      {reportEmailState && (
+        <div className={`toast ${reportEmailState.type === 'error' ? 'error' : 'success'}`} style={{ marginBottom: '0.6rem' }}>
+          <Icon name={reportEmailState.type === 'error' ? 'alert' : 'check'} size={14} />
+          {reportEmailState.message}
+        </div>
+      )}
 
       {error && (
         <div className="toast error"><Icon name="alert" size={14} />{error}</div>

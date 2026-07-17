@@ -566,3 +566,97 @@ export async function sendTechnicianDailyEarningsTestEmail(
     return fail(error instanceof Error ? error.message : 'Unknown error sending technician report email')
   }
 }
+
+export interface ManpowerEarningsTestResult {
+  success: boolean
+  reportFromIst?: string
+  reportToIst?: string
+  reportLabel?: string
+  recipients: string[]
+  rowCount: number
+  totalEarnings: number
+  attachment: {
+    bucket: string
+    storagePath: string
+    filename: string
+  }
+}
+
+export interface SAEarningsSendParams {
+  runFromIst?: string
+  runToIst?: string
+  reportScopeLabel?: string
+  rows?: Array<{
+    employeeCode: string
+    employeeName: string
+    earnings: number
+  }>
+}
+
+export interface BodyshopEarningsSendParams {
+  runFromIst?: string
+  runToIst?: string
+  reportScopeLabel?: string
+  rows?: Array<{
+    employeeCode: string
+    employeeName: string
+    role: string
+    earnings: number
+    jcCount: number
+  }>
+}
+
+async function sendManpowerEarningsTestEmail(
+  functionName: 'sa-earnings-report' | 'bodyshop-earnings-report',
+  params: { runFromIst?: string; runToIst?: string; reportScopeLabel?: string; rows?: unknown[] },
+): Promise<ApiResult<ManpowerEarningsTestResult>> {
+  try {
+    const { data: { session } } = await supabase.auth.getSession()
+    const accessToken = session?.access_token
+    if (!accessToken) return fail('No authenticated session for report email send')
+
+    const payload: Record<string, string> = { runMode: 'test' }
+    if (params.runFromIst) payload.runFromIst = params.runFromIst
+    if (params.runToIst) payload.runToIst = params.runToIst
+    if (params.reportScopeLabel) payload.reportScopeLabel = params.reportScopeLabel
+
+    const body: Record<string, unknown> = payload
+    if (params.rows && params.rows.length > 0) {
+      body.rows = params.rows
+    }
+
+    const response = await fetch(
+      `${(import.meta.env.VITE_SUPABASE_URL as string).replace(/\/$/, '')}/functions/v1/${functionName}`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify(body),
+      },
+    )
+
+    if (!response.ok) {
+      const details = await response.text()
+      return fail(`Report email failed: ${details}`)
+    }
+
+    const responsePayload = await response.json() as ManpowerEarningsTestResult
+    return ok<ManpowerEarningsTestResult>(responsePayload)
+  } catch (error) {
+    return fail(error instanceof Error ? error.message : 'Unknown error sending report email')
+  }
+}
+
+export async function sendSAEarningsTestEmail(
+  params: SAEarningsSendParams = {},
+): Promise<ApiResult<ManpowerEarningsTestResult>> {
+  return sendManpowerEarningsTestEmail('sa-earnings-report', params)
+}
+
+export async function sendBodyshopEarningsTestEmail(
+  params: BodyshopEarningsSendParams = {},
+): Promise<ApiResult<ManpowerEarningsTestResult>> {
+  return sendManpowerEarningsTestEmail('bodyshop-earnings-report', params)
+}

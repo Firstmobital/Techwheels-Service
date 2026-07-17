@@ -363,6 +363,26 @@ Same matrix as Dentor with Painter 5% / Painter Helper 3% defaults.
 
 ---
 
+## Phase 6: Manpower Earnings Email Report (EARNINGS-EMAIL-002)
+
+**Status:** Not started (tracked in operations plan; depends on Phases 1–4 ✅)
+
+Add `✉️ Email Report` to `/bodyshop-tracker` with the same Range-gated UX as `/technician`, emailing a bank-payout Excel for **all 10 role tabs** (not active tab only).
+
+| Task | Owner | Status |
+|------|-------|--------|
+| Admin RBAC gate (`canEditSharePercent`) on bodyshop tracker | Web | ⏳ |
+| `allManpowerEmailRows` aggregation across all `TABS` | Web | ⏳ |
+| `sendBodyshopEarningsTestEmail()` API + edge function | Platform | ⏳ |
+| Bank sheet (sum by `employee_code`) + Detail-by-Role audit sheet | Platform | ⏳ |
+| Staging QA against test matrix JCs | Bodyshop Ops | ⏳ |
+
+**Authority file:** [EARNINGS-EMAIL-002_SA_BODYSHOP_MANPOWER_EARNINGS_EMAIL_PLAN_2026-07-17.md](../../operations/active/EARNINGS-EMAIL-002_SA_BODYSHOP_MANPOWER_EARNINGS_EMAIL_PLAN_2026-07-17.md)
+
+**Prerequisite:** Phases 1–4 earnings logic must remain stable so WYSIWYG email rows match on-screen totals.
+
+---
+
 ## Communication & Sign-Off
 
 **Stakeholders:**

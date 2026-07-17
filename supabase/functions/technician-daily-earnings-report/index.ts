@@ -1,6 +1,15 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import * as XLSX from 'https://esm.sh/xlsx@0.18.5'
 import { validateRequest } from '../_shared/auth.ts'
+import {
+  buildBankPayoutWorksheetRows,
+  chunk,
+  DEFAULT_TEST_RECIPIENTS,
+  encodeStoragePath,
+  normalizeCode,
+  parseRecipients,
+  type EmployeeBankRow,
+} from '../_shared/bankPayoutExcel.ts'
 // ── Inlined email template (was: emailTemplates/technicianDailyEarningsTemplate.ts) ──
 interface TechnicianDailyEarningsTemplateInput {
   reportDateLabel: string
@@ -169,13 +178,6 @@ type RevenueRow = {
   dms_final_labour_amount: number | string | null
 }
 
-type EmployeeBankRow = {
-  employee_code: string | null
-  bank_name: string | null
-  account_number: string | null
-  ifsc: string | null
-}
-
 type RequestBody = {
   runMode?: 'test' | 'scheduled'
   runDateIst?: string
@@ -194,19 +196,6 @@ const QUERY_PAGE_SIZE = 1000
 const DEFAULT_PV_SHARE_PERCENT = 20 // fallback if DB setting missing
 const DEFAULT_EV_SHARE_PERCENT = 25 // fallback if DB setting missing
 const AUTODOC_BUCKET = 'autodoc'
-const TEST_RECIPIENTS = [
-  'shruti@indiraswitch.com',
-  'ritesh@indiraswitch.com',
-  'vinodexodus@gmail.com',
-]
-
-function parseRecipients(value: string | null | undefined, fallback: string[]): string[] {
-  const parsed = String(value ?? '')
-    .split(',')
-    .map((item) => item.trim())
-    .filter(Boolean)
-  return parsed.length > 0 ? parsed : fallback
-}
 
 function hasValidBearerAuth(req: Request): boolean {
   const auth = req.headers.get('Authorization') ?? ''
@@ -413,31 +402,6 @@ function getIncomeDateKey(assignment: TechnicianAssignmentRow, revenue: RevenueR
     assignment.assigned_at
 
   return getIstDateKey(source)
-}
-
-function normalizeCode(value: string | null | undefined): string {
-  return String(value ?? '').trim().toUpperCase()
-}
-
-function isSbiBank(bank: EmployeeBankRow | undefined): boolean {
-  const bankName = String(bank?.bank_name ?? '').trim().toUpperCase()
-  const ifsc = String(bank?.ifsc ?? '').trim().toUpperCase()
-  return bankName.includes('STATE BANK OF INDIA') || bankName === 'SBI' || ifsc.startsWith('SBIN')
-}
-
-function chunk<T>(input: T[], size: number): T[][] {
-  const out: T[][] = []
-  for (let i = 0; i < input.length; i += size) {
-    out.push(input.slice(i, i + size))
-  }
-  return out
-}
-
-function encodeStoragePath(path: string): string {
-  return path
-    .split('/')
-    .map((part) => encodeURIComponent(part))
-    .join('/')
 }
 
 Deno.serve(async (req) => {
@@ -716,34 +680,14 @@ Deno.serve(async (req) => {
       })
     }
 
-    // Build worksheet rows matching sample format (13 columns A-M)
-    // No header row in generated file.
-    // A: static 300971 for all rows
-    // B, C, D: static values as per sample
-    // E: Technician Name, F: Account Number, G: IFSC, H: Earnings
-    // I: Sequential counter (234+), J, K, L, M: static values as per sample
-    const worksheetRows: Array<Array<string | number>> = []
-    let sequenceCounter = 1
-
-    aggregatedRows.forEach((row) => {
-      const bank = bankByCode.get(row.technicianCode)
-      const paymentMode = isSbiBank(bank) ? 'DCR' : 'NEFT'
-      worksheetRows.push([
-        '300971', // A: static
-        'FIRST MOBITAL PRIVATE LIMITED', // B: static
-        '39171760445', // C: static
-        paymentMode, // D: DCR for SBI, NEFT for others
-        row.technicianName, // E: Technician Name
-        String(bank?.account_number ?? '').trim(), // F: Account Number
-        String(bank?.ifsc ?? '').trim().toUpperCase(), // G: IFSC
-        Number(row.earnings.toFixed(2)), // H: Earnings Amount
-        `SALARY${sequenceCounter++}`, // I: Sequential counter (SALARY1, SALARY2, ...)
-        'INR', // J: static
-        'JAIPUR', // K: static
-        'SHRUTI@INDIRASWITCH.COM', // L: static
-        'E', // M: static
-      ])
-    })
+    const worksheetRows = buildBankPayoutWorksheetRows(
+      aggregatedRows.map((row) => ({
+        employeeCode: row.technicianCode,
+        employeeName: row.technicianName,
+        earnings: row.earnings,
+      })),
+      bankByCode,
+    )
 
     const worksheet = XLSX.utils.aoa_to_sheet(worksheetRows)
     const workbook = XLSX.utils.book_new()
@@ -774,8 +718,8 @@ Deno.serve(async (req) => {
     }
 
     const recipients = runMode === 'scheduled'
-      ? parseRecipients(Deno.env.get('TECH_EARNINGS_SCHEDULED_RECIPIENTS'), TEST_RECIPIENTS)
-      : parseRecipients(Deno.env.get('TECH_EARNINGS_TEST_RECIPIENTS'), TEST_RECIPIENTS)
+      ? parseRecipients(Deno.env.get('TECH_EARNINGS_SCHEDULED_RECIPIENTS'), DEFAULT_TEST_RECIPIENTS)
+      : parseRecipients(Deno.env.get('TECH_EARNINGS_TEST_RECIPIENTS'), DEFAULT_TEST_RECIPIENTS)
 
     const internalDispatchSecret = Deno.env.get('INTERNAL_EMAIL_DISPATCH_SECRET') ?? ''
     const totalEarnings = aggregatedRows.reduce((sum, row) => sum + row.earnings, 0)

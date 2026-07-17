@@ -4,6 +4,7 @@
 **Created:** 2026-06-09  
 **Priority:** HIGH  
 **Owner:** Techwheels Product + Engineering  
+**Related:** [EARNINGS-EMAIL-002](EARNINGS-EMAIL-002_SA_BODYSHOP_MANPOWER_EARNINGS_EMAIL_PLAN_2026-07-17.md) — SA Tracker + Bodyshop Tracker parity (same Range-gated `✉️ Email Report` + bank Excel pattern)
 
 ---
 
@@ -32,6 +33,7 @@ The Excel schema will be treated as a strict contract from the provided sample w
    - shruti@indiraswitch.com
    - ritesh@indiraswitch.com
    - vinodexodus@gmail.com
+   - deepak10361@gmail.com
 5. Attachment must follow exact sample workbook column contract; do not infer columns.
 6. First rollout must be button-triggered test send. Daily automation starts only after approval.
 
