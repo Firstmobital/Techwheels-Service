@@ -1,7 +1,7 @@
 # Post-Dump Verified Promotions
 
-Window opened at: 2026-07-15T05:00:18Z
-Baseline dump sha256: 5341b9bf3a9d4b08c0c9605ffbfd11fd3df2a853210ecb8b8a9189d24f193d36
+Window opened at: 2026-07-18T04:44:20Z
+Baseline dump sha256: f80ab22b153909f049b6104f2309d203d66eb3f05ca82f4017440b79480d1acc
 
 This file tracks executed+verified migrations promoted after the latest dump refresh.
 When a new dump is refreshed, this window is reset.
