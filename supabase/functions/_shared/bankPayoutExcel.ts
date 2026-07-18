@@ -16,6 +16,7 @@ export const DEFAULT_TEST_RECIPIENTS = [
   'ritesh@indiraswitch.com',
   'vinodexodus@gmail.com',
   'deepak10361@gmail.com',
+  'mohan.techwheels@gmail.com',
 ]
 
 export function parseRecipients(value: string | null | undefined, fallback: string[]): string[] {
