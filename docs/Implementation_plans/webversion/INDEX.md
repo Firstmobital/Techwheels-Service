@@ -1,6 +1,6 @@
 # Web Version Plans Index
 
-Last Updated: 2026-07-17
+Last Updated: 2026-07-18
 Scope: Web project implementation plans only
 Authority: This index is the routing source for webversion plans
 
@@ -55,6 +55,7 @@ Use this file as daily command center:
 | RBAC-001 | rbac | Active | RBAC Team | `docs/Implementation_plans/webversion/categories/rbac/active/RBAC-001_MASTER_PLAN_ACTIVE.md` |
 | RBAC-HOME | rbac | Active | RBAC Team | `docs/Implementation_plans/webversion/categories/rbac/active/RBAC_HOME_DYNAMIC_ROLE_VISIBILITY_PLAN_2026-06-05.md` |
 | RBAC-002 | rbac | Pending Execution | RBAC Team + Bodyshop Team + Platform Team | `docs/Implementation_plans/webversion/categories/rbac/active/RBAC-002_BODYSHOP_STANDALONE_RECEPTION_RBAC_PLAN_2026-06-20.md` |
+| RBAC-003 | rbac | Active (Audit complete) | RBAC Team + Platform Team | `docs/Implementation_plans/webversion/categories/rbac/active/RBAC-003_EMPLOYEE_MASTER_MULTI_BUSINESS_ROLE_CSV_PLAN_2026-07-18.md` |
 | RECEPTION-001 | reception | Active | Reception Team | `docs/Implementation_plans/webversion/categories/reception/active/RECEPTION-001_RECEPTION_MODULE_PLAN.md` |
 | WEBREDESIGN-MASTER | redesign | In Progress | Web UX Team | `docs/Implementation_plans/webversion/categories/redesign/active/Webredesign_IMPLEMENTATION_PLAN_MASTER_TRACKER.md` |
 | SUPABASE-001 | supabase | Active | Platform Team | `docs/Implementation_plans/webversion/categories/supabase/active/SUPABASE-001_PRODUCTION_HARDENING_MASTER_PLAN.md` |
@@ -72,6 +73,8 @@ Use this file as daily command center:
 | bodyshop | `docs/Implementation_plans/webversion/categories/bodyshop/evidence/BODYSHOP-QUEUE-001_PARITY_CHECKLIST_2026-06-20.md` |
 | bodyshop | `docs/Implementation_plans/webversion/categories/bodyshop/evidence/BODYSHOP-EARNINGS-001_TEST_MATRIX.md` |
 | rbac | `docs/Implementation_plans/webversion/categories/rbac/evidence/runbooks/ADMIN_BYPASS_RLS_GOVERNANCE.md` |
+| rbac | `docs/Implementation_plans/webversion/categories/rbac/evidence/RBAC-003_BUSINESS_ROLES_CSV_AUDIT_2026-07-18.md` |
+| rbac | `docs/Implementation_plans/webversion/categories/rbac/evidence/RBAC-003_BUSINESS_ROLES_CSV_TEST_MATRIX.md` |
 | supabase | `docs/Implementation_plans/webversion/categories/supabase/evidence/P1_01_CONNECTION_POOLING_AUDIT.md` |
 | supabase | `docs/Implementation_plans/webversion/categories/supabase/evidence/P1_03_SLOW_QUERY_ANALYSIS.md` |
 | supabase | `docs/Implementation_plans/webversion/categories/supabase/evidence/P1_04_INDEX_AUDIT_REPORT.md` |
