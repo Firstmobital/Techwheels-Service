@@ -2,12 +2,12 @@
 -- PostgreSQL database dump
 --
 
-\restrict qeRXR5rqjtVS07vJ0FKvdd8i1SZnIAFlKEuduz7OPdk5DCh0IHprXKaVb5FrFxf
+\restrict 84fzYadwtqDWDcofLQEkEhwp9xoqYFN6xGsjvDJc9Vwgo36heg5oiXgJWn2djyt
 
 -- Dumped from database version 17.6
 -- Dumped by pg_dump version 17.7 (Homebrew)
 
--- Started on 2026-07-18 10:02:51 IST
+-- Started on 2026-07-18 13:56:04 IST
 
 SET statement_timeout = 0;
 SET lock_timeout = 0;
@@ -1617,7 +1617,7 @@ CREATE FUNCTION public.bodyshop_save_reception_jc_km(p_reception_entry_id bigint
     AS $$
 DECLARE
   v_sa_employee_code text;
-  v_caller_code      text;
+  v_card_sa_code     text;
   v_is_admin         boolean;
   v_has_sa_modify    boolean;
 BEGIN
@@ -1630,7 +1630,6 @@ BEGIN
       USING ERRCODE = '42501';
   END IF;
 
-  -- Fetch the SA employee code on the target row (runs as postgres, no RLS).
   SELECT sre.sa_employee_code
     INTO v_sa_employee_code
     FROM public.service_reception_entries sre
@@ -1641,19 +1640,25 @@ BEGIN
       USING ERRCODE = 'P0002';
   END IF;
 
-  -- Non-admins must be the SA on this row.
+  -- Non-admins must map to the SA on the reception row (or linked repair card).
   IF NOT v_is_admin THEN
-    v_caller_code := public.my_employee_code();
-    IF upper(btrim(coalesce(v_caller_code, ''))) <>
-       upper(btrim(coalesce(v_sa_employee_code, '')))
-    THEN
+    SELECT brc.sa_employee_code
+      INTO v_card_sa_code
+      FROM public.bodyshop_repair_cards brc
+     WHERE brc.reception_entry_id = p_reception_entry_id
+     ORDER BY brc.updated_at DESC NULLS LAST, brc.id DESC
+     LIMIT 1;
+
+    IF NOT (
+      (v_sa_employee_code IS NOT NULL AND public.user_has_employee_code(v_sa_employee_code))
+      OR (v_card_sa_code IS NOT NULL AND public.user_has_employee_code(v_card_sa_code))
+    ) THEN
       RAISE EXCEPTION 'permission denied: caller is not the SA on this reception entry'
         USING ERRCODE = '42501';
     END IF;
   END IF;
 
   -- ── 2. Build and execute the UPDATE ─────────────────────────────────────
-  -- Only update fields that were explicitly passed (non-NULL means "set it").
   RETURN QUERY
   UPDATE public.service_reception_entries sre
      SET jc_number  = COALESCE(p_jc_number,  sre.jc_number),
@@ -1671,7 +1676,7 @@ $$;
 -- Name: FUNCTION bodyshop_save_reception_jc_km(p_reception_entry_id bigint, p_jc_number text, p_km_reading integer); Type: COMMENT; Schema: public; Owner: -
 --
 
-COMMENT ON FUNCTION public.bodyshop_save_reception_jc_km(p_reception_entry_id bigint, p_jc_number text, p_km_reading integer) IS 'SECURITY DEFINER RPC: updates jc_number and/or km_reading on a single service_reception_entries row. Bypasses expensive authenticated-role RLS policies (which cause statement_timeout) while enforcing the same authorization rules as the service_reception_update_sa policy. Caller must have module_modify(service_advisor) or be admin, and must be the SA on the row (or admin).';
+COMMENT ON FUNCTION public.bodyshop_save_reception_jc_km(p_reception_entry_id bigint, p_jc_number text, p_km_reading integer) IS 'SECURITY DEFINER RPC: updates jc_number and/or km_reading on a single service_reception_entries row. Bypasses expensive authenticated-role RLS policies while enforcing the same authorization rules as service_reception_update_sa (user_has_employee_code on reception or linked bodyshop repair card SA code). Admin bypasses SA ownership check.';
 
 
 --
@@ -8212,15 +8217,26 @@ DECLARE
   v_is_accident boolean;
   v_job_card_no text;
   v_sa_name text;
+  v_card_job_card_no text;
 BEGIN
   v_is_accident := upper(trim(coalesce(NEW.service_type, ''))) = 'ACCIDENT';
   IF NOT v_is_accident THEN
     RETURN NEW;
   END IF;
 
-  -- Early-exit for UPDATE when only non-relevant fields changed and jc_number
-  -- is identical to the previous value.  This is the second-leg guard that
-  -- breaks the mutual sync loop with trg_sync_reception_jc_from_bodyshop_job_card.
+  v_job_card_no := upper(trim(coalesce(nullif(NEW.jc_number, ''), nullif(NEW.reg_number, ''))));
+  IF v_job_card_no IS NULL OR v_job_card_no = '' THEN
+    RETURN NEW;
+  END IF;
+
+  SELECT upper(trim(coalesce(brc.job_card_no, '')))
+    INTO v_card_job_card_no
+    FROM public.bodyshop_repair_cards brc
+   WHERE brc.reception_entry_id = NEW.id
+   ORDER BY brc.updated_at DESC NULLS LAST, brc.id DESC
+   LIMIT 1;
+
+  -- Early-exit only when synced fields are unchanged AND card already matches.
   IF TG_OP = 'UPDATE'
     AND upper(trim(coalesce(NEW.jc_number,     ''))) = upper(trim(coalesce(OLD.jc_number,     '')))
     AND upper(trim(coalesce(NEW.reg_number,    ''))) = upper(trim(coalesce(OLD.reg_number,    '')))
@@ -8230,12 +8246,8 @@ BEGIN
     AND upper(trim(coalesce(NEW.sa_employee_code, ''))) = upper(trim(coalesce(OLD.sa_employee_code, '')))
     AND upper(trim(coalesce(NEW.sa_name,       ''))) = upper(trim(coalesce(OLD.sa_name,       '')))
     AND upper(trim(coalesce(NEW.sa_display_name, ''))) = upper(trim(coalesce(OLD.sa_display_name, '')))
+    AND coalesce(v_card_job_card_no, '') = v_job_card_no
   THEN
-    RETURN NEW;
-  END IF;
-
-  v_job_card_no := upper(trim(coalesce(nullif(NEW.jc_number, ''), nullif(NEW.reg_number, ''))));
-  IF v_job_card_no IS NULL OR v_job_card_no = '' THEN
     RETURN NEW;
   END IF;
 
@@ -48563,11 +48575,11 @@ CREATE EVENT TRIGGER trg_auto_admin_bypass_policy_on_ddl ON ddl_command_end
    EXECUTE FUNCTION public.apply_admin_bypass_policy_on_ddl();
 
 
--- Completed on 2026-07-18 10:03:38 IST
+-- Completed on 2026-07-18 13:56:50 IST
 
 --
 -- PostgreSQL database dump complete
 --
 
-\unrestrict qeRXR5rqjtVS07vJ0FKvdd8i1SZnIAFlKEuduz7OPdk5DCh0IHprXKaVb5FrFxf
+\unrestrict 84fzYadwtqDWDcofLQEkEhwp9xoqYFN6xGsjvDJc9Vwgo36heg5oiXgJWn2djyt
 
