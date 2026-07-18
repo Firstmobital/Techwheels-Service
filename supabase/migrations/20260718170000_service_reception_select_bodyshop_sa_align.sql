@@ -1,3 +1,7 @@
+-- ⚠️ SUPERSEDED BY 20260718190000_revert_service_reception_rls_recursion.sql
+-- DO NOT apply this migration alone. Policy service_reception_select_bodyshop_card_sa_v1
+-- causes PostgreSQL 42P17 infinite recursion with bodyshop_repair_cards SELECT RLS.
+--
 -- Align service_reception_entries SELECT with bodyshop SA workflow.
 --
 -- Before: service_reception_select_sa required has_module_view + employee_code match.
