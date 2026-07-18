@@ -94,18 +94,63 @@ export function parseReportDateRange(body: {
   }
 }
 
-export async function fetchBankByCodeMap(
+function normalizeEmployeeName(value: string | null | undefined): string {
+  return String(value ?? '')
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+}
+
+async function loadEmployeeMasterBankIndex(
   supabase: SupabaseClient,
-  employeeCodes: string[],
+): Promise<{ byCode: Map<string, EmployeeBankRow>; byName: Map<string, EmployeeBankRow> }> {
+  const byCode = new Map<string, EmployeeBankRow>()
+  const byName = new Map<string, EmployeeBankRow>()
+  let from = 0
+
+  while (true) {
+    const bankRes = await supabase
+      .from('employee_master')
+      .select('employee_code, employee_name, bank_name, account_number, ifsc')
+      .not('employee_name', 'is', null)
+      .order('employee_code', { ascending: true })
+      .range(from, from + 999)
+
+    if (bankRes.error) {
+      throw new Error(bankRes.error.message)
+    }
+
+    const batch = (bankRes.data ?? []) as EmployeeBankRow[]
+    batch.forEach((row) => {
+      const code = normalizeCode(row.employee_code)
+      if (code) byCode.set(code, row)
+      const nameKey = normalizeEmployeeName(row.employee_name)
+      if (nameKey && !byName.has(nameKey)) byName.set(nameKey, row)
+    })
+
+    if (batch.length < 1000) break
+    from += 1000
+  }
+
+  return { byCode, byName }
+}
+
+/** Resolve bank rows keyed by payout row employeeCode (code first, then employee_name). */
+export async function fetchBankForPayoutRows(
+  supabase: SupabaseClient,
+  rows: BankPayoutInputRow[],
 ): Promise<Map<string, EmployeeBankRow>> {
-  const bankByCode = new Map<string, EmployeeBankRow>()
-  const uniqueCodes = Array.from(new Set(employeeCodes.map((code) => normalizeCode(code)).filter(Boolean)))
+  const bankByRowCode = new Map<string, EmployeeBankRow>()
+  if (rows.length === 0) return bankByRowCode
+
+  const uniqueCodes = Array.from(new Set(rows.map((row) => normalizeCode(row.employeeCode)).filter(Boolean)))
+  const bankByMasterCode = new Map<string, EmployeeBankRow>()
 
   for (const codeBatch of chunk(uniqueCodes, 500)) {
     if (codeBatch.length === 0) continue
     const bankRes = await supabase
       .from('employee_master')
-      .select('employee_code, bank_name, account_number, ifsc')
+      .select('employee_code, employee_name, bank_name, account_number, ifsc')
       .in('employee_code', codeBatch)
 
     if (bankRes.error) {
@@ -116,11 +161,47 @@ export async function fetchBankByCodeMap(
       const typed = row as EmployeeBankRow
       const code = normalizeCode(typed.employee_code)
       if (!code) return
-      bankByCode.set(code, typed)
+      bankByMasterCode.set(code, typed)
     })
   }
 
-  return bankByCode
+  const unresolved: BankPayoutInputRow[] = []
+  rows.forEach((row) => {
+    const key = normalizeCode(row.employeeCode)
+    if (!key) return
+    const byCode = bankByMasterCode.get(key)
+    if (byCode) {
+      bankByRowCode.set(key, byCode)
+      return
+    }
+    unresolved.push(row)
+  })
+
+  if (unresolved.length > 0) {
+    const { byName } = await loadEmployeeMasterBankIndex(supabase)
+    unresolved.forEach((row) => {
+      const key = normalizeCode(row.employeeCode)
+      if (!key || bankByRowCode.has(key)) return
+      const byNameMatch = byName.get(normalizeEmployeeName(row.employeeName))
+      if (byNameMatch) bankByRowCode.set(key, byNameMatch)
+    })
+  }
+
+  return bankByRowCode
+}
+
+export async function fetchBankByCodeMap(
+  supabase: SupabaseClient,
+  employeeCodes: string[],
+): Promise<Map<string, EmployeeBankRow>> {
+  return fetchBankForPayoutRows(
+    supabase,
+    employeeCodes.map((employeeCode) => ({
+      employeeCode,
+      employeeName: employeeCode,
+      earnings: 0,
+    })),
+  )
 }
 
 export type WorkbookSheet = {

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import * as XLSX from 'xlsx'
 import { Icon } from '../components/Icon'
 import DateRangeFilter, { currentMonthRange, type DateRange } from '../components/DateRangeFilter'
@@ -14,7 +14,20 @@ import {
   type BodyshopSupportRow,
 } from '../lib/bodyshopEarnings'
 import { sendBodyshopEarningsTestEmail } from '../lib/api/email'
+import {
+  buildEmployeeLookupIndex,
+  normalizeEmployeeCode,
+  resolveEmployeeForSr,
+  type EmployeeLookupIndex,
+  type EmployeeRecord,
+} from '../lib/employeeMatcher'
 import { supabase } from '../lib/supabase'
+
+type MasterEmployee = EmployeeRecord & {
+  bank_name: string | null
+  account_number: string | null
+  ifsc: string | null
+}
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -173,6 +186,7 @@ export default function BodyshopTrackerPage() {
   const [canEditSharePercent, setCanEditSharePercent] = useState(false)
   const [sendingReportEmail, setSendingReportEmail] = useState(false)
   const [reportEmailState, setReportEmailState] = useState<{ type: 'success' | 'error'; message: string } | null>(null)
+  const [masterEmployees, setMasterEmployees] = useState<MasterEmployee[]>([])
 
   // Per-tab earning %
   const [sharePct, setSharePct] = useState<Record<TabKey, number>>({
@@ -278,7 +292,50 @@ export default function BodyshopTrackerPage() {
     }
   }
 
-  useEffect(() => { void loadEarningSettings() }, [])
+  useEffect(() => { void loadEarningSettings(); void loadMasterEmployees() }, [])
+
+  async function loadMasterEmployees() {
+    try {
+      const allEmployees: MasterEmployee[] = []
+      let from = 0
+      while (true) {
+        const res = await supabase
+          .from('employee_master')
+          .select('employee_code, employee_name, location, department, fuel_type, role, bank_name, account_number, ifsc')
+          .not('employee_name', 'is', null)
+          .order('employee_code', { ascending: true })
+          .range(from, from + QUERY_PAGE - 1)
+        if (res.error) {
+          console.error('employee_master fetch error:', res.error.message)
+          return
+        }
+        const batch = ((res.data as MasterEmployee[]) ?? []).filter((e) => e.employee_name?.trim())
+        allEmployees.push(...batch)
+        if (batch.length < QUERY_PAGE) break
+        from += QUERY_PAGE
+      }
+      setMasterEmployees(allEmployees)
+    } catch (err) {
+      console.error('loadMasterEmployees error:', err)
+    }
+  }
+
+  const employeeIndex = useMemo<EmployeeLookupIndex>(
+    () => buildEmployeeLookupIndex(masterEmployees),
+    [masterEmployees],
+  )
+
+  const resolveMasterEmployeeCode = useCallback((
+    nameOrCode: string | null | undefined,
+  ): string => {
+    const raw = String(nameOrCode ?? '').trim()
+    if (!raw) return ''
+    const normalizedCode = normalizeEmployeeCode(raw)
+    if (employeeIndex.byCode.has(normalizedCode)) return normalizedCode
+    const match = resolveEmployeeForSr(raw, employeeIndex)
+    if (match.employeeCode) return normalizeEmployeeCode(match.employeeCode)
+    return normalizedCode
+  }, [employeeIndex])
 
   useEffect(() => {
     void (async () => {
@@ -503,9 +560,10 @@ export default function BodyshopTrackerPage() {
     enrichedAccident.filter(inRange).filter(inBranch).forEach((r) => {
       const name = String(r.sr_assigned_to ?? '').trim()
       if (!name) return
-      const key = `SA|${name}`
+      const employeeCode = resolveMasterEmployeeCode(name)
+      const key = `SA|${employeeCode || name}`
       const ex = map.get(key) ?? {
-        employeeCode: name,
+        employeeCode: employeeCode || name,
         employeeName: name,
         role: 'SA',
         earnings: 0,
@@ -519,13 +577,13 @@ export default function BodyshopTrackerPage() {
     })
 
     enrichedTechRows.filter(inRange).filter(inBranch).forEach((r) => {
-      const code = String(r.technician_code ?? '').trim() || String(r.technician_name ?? '').trim()
-      const name = String(r.technician_name ?? '').trim() || code
-      if (!code || !name) return
+      const name = String(r.technician_name ?? '').trim()
+      const employeeCode = resolveMasterEmployeeCode(r.technician_code || name)
+      if (!employeeCode || !name) return
       const roleLabel = TABS.find((t) => t.key === r._role)?.label ?? r._role
-      const key = `${r._role}|${code}`
+      const key = `${r._role}|${employeeCode}`
       const ex = map.get(key) ?? {
-        employeeCode: code,
+        employeeCode,
         employeeName: name,
         role: roleLabel,
         earnings: 0,
@@ -542,7 +600,7 @@ export default function BodyshopTrackerPage() {
       .map(({ jcs: _j, ...row }) => row)
       .filter((row) => row.earnings > 0)
       .sort((a, b) => b.earnings - a.earnings || a.role.localeCompare(b.role))
-  }, [fromDate, toDate, branchFilter, enrichedAccident, enrichedTechRows, sharePct])
+  }, [fromDate, toDate, branchFilter, enrichedAccident, enrichedTechRows, sharePct, resolveMasterEmployeeCode])
 
   const hasEmailRange = Boolean(fromDate) && Boolean(toDate)
   const canSendRangeReportEmail = hasEmailRange && allManpowerEmailRows.length > 0

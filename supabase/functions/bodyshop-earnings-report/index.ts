@@ -9,7 +9,7 @@ import {
   buildHeaders,
   buildWorkbookBytes,
   createServiceClient,
-  fetchBankByCodeMap,
+  fetchBankForPayoutRows,
   formatCurrency,
   IST_ZONE,
   json,
@@ -155,7 +155,7 @@ Deno.serve(async (req) => {
     }
 
     const bankRows = aggregateBankPayoutRows(detailRows)
-    const bankByCode = await fetchBankByCodeMap(supabase, bankRows.map((row) => row.employeeCode))
+    const bankByCode = await fetchBankForPayoutRows(supabase, bankRows)
 
     const detailSheetRows: Array<Array<string | number>> = [
       ['Role', 'Employee Code', 'Employee Name', 'JC Count', 'Earnings (₹)'],

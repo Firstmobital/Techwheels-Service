@@ -9,7 +9,7 @@ import {
   buildHeaders,
   buildWorkbookBytes,
   createServiceClient,
-  fetchBankByCodeMap,
+  fetchBankForPayoutRows,
   formatCurrency,
   IST_ZONE,
   json,
@@ -161,7 +161,7 @@ Deno.serve(async (req) => {
       return json(headers, { error: 'No positive earnings rows to send' }, 400)
     }
 
-    const bankByCode = await fetchBankByCodeMap(supabase, aggregatedRows.map((row) => row.employeeCode))
+    const bankByCode = await fetchBankForPayoutRows(supabase, aggregatedRows)
     const bankSheet = buildBankPayoutSheet(aggregatedRows, bankByCode)
     const fileBytes = await buildWorkbookBytes([{ ...bankSheet, name: 'SA Earnings' }])
 
