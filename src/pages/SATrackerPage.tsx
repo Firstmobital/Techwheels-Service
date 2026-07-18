@@ -977,24 +977,24 @@ export default function SATrackerPage() {
   const saEmailRows = useMemo(() => {
     const map = new Map<string, { employeeCode: string; employeeName: string; earnings: number }>()
     deptFilteredRows.forEach((r) => {
-      const name = String(r.sr_assigned_to ?? '').trim()
-      if (!name) return
-      const emp = resolveSaEmployee(name, r.employee_code)
-      const employeeCode = normalizeEmployeeCode(String(emp?.employee_code ?? r.employee_code ?? '').trim()) || name
+      const employeeCode = normalizeEmployeeCode(String(r.employee_code ?? '').trim())
+      if (!employeeCode) return
+      const name = String(r.sr_assigned_to ?? '').trim() || employeeCode
+      const emp = empByCode.get(employeeCode)
       const fuel = normFuelBucket(emp?.fuel_type)
       const income = calculateEligibleSAIncome(
         r,
         fuel === 'EV' ? evSharePercent : saSharePercent,
         completedJobCards,
       )
-      const existing = map.get(name) ?? { employeeCode, employeeName: name, earnings: 0 }
+      const existing = map.get(employeeCode) ?? { employeeCode, employeeName: name, earnings: 0 }
       existing.earnings += income
-      map.set(name, existing)
+      map.set(employeeCode, existing)
     })
     return Array.from(map.values())
       .filter((row) => row.earnings > 0)
       .sort((a, b) => b.earnings - a.earnings)
-  }, [deptFilteredRows, saSharePercent, evSharePercent, resolveSaEmployee, completedJobCards])
+  }, [deptFilteredRows, saSharePercent, evSharePercent, empByCode, completedJobCards])
 
   const hasEmailRange = Boolean(fromDate) && Boolean(toDate)
   const canSendRangeReportEmail = hasEmailRange && saEmailRows.length > 0

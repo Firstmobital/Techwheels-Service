@@ -29,6 +29,31 @@ export function normalizeEmployeeName(value: string): string {
     .replace(/\s+/g, ' ')
 }
 
+/** Alternate name keys for matching "GUPTA, AMAN" ↔ "AMAN GUPTA" etc. */
+export function expandNameKeys(value: string): string[] {
+  const normalized = normalizeEmployeeName(value)
+  if (!normalized) return []
+
+  const keys = new Set<string>()
+  keys.add(normalized)
+  keys.add(normalized.replace(/,/g, ' ').replace(/\s+/g, ' ').trim())
+  keys.add(normalized.replace(/,/g, '').replace(/\s+/g, ' ').trim())
+
+  const commaParts = normalized.split(',').map((part) => part.trim()).filter(Boolean)
+  if (commaParts.length === 2) {
+    keys.add(`${commaParts[0]} ${commaParts[1]}`)
+    keys.add(`${commaParts[1]} ${commaParts[0]}`)
+  }
+
+  const tokens = normalized.split(/[\s,]+/).filter(Boolean)
+  if (tokens.length >= 2) {
+    keys.add(tokens.join(' '))
+    keys.add([...tokens].reverse().join(' '))
+  }
+
+  return Array.from(keys).filter(Boolean)
+}
+
 export function normalizeEmployeeBranch(value: string | null | undefined): string | null {
   if (!value) return null
   return value.trim() || null
@@ -44,6 +69,12 @@ export function buildEmployeeLookupIndex(employees: EmployeeRecord[]): EmployeeL
 
     if (normalizedCode) {
       byCode.set(normalizedCode, employee)
+    }
+
+    for (const nameKey of expandNameKeys(employee.employee_name)) {
+      if (!byName.has(nameKey)) {
+        byName.set(nameKey, employee)
+      }
     }
 
     if (normalizedName && !byName.has(normalizedName)) {
@@ -87,14 +118,14 @@ export function resolveEmployeeForSr(
     }
   }
 
-  const normalizedName = normalizeEmployeeName(raw)
-  const byNameMatch = employeeIndex.byName.get(normalizedName)
-
-  if (byNameMatch) {
-    return {
-      employeeCode: byNameMatch.employee_code,
-      employeeBranch: normalizeEmployeeBranch(byNameMatch.location),
-      reason: 'matched_by_name',
+  for (const nameKey of expandNameKeys(raw)) {
+    const byNameMatch = employeeIndex.byName.get(nameKey)
+    if (byNameMatch) {
+      return {
+        employeeCode: byNameMatch.employee_code,
+        employeeBranch: normalizeEmployeeBranch(byNameMatch.location),
+        reason: 'matched_by_name',
+      }
     }
   }
 
