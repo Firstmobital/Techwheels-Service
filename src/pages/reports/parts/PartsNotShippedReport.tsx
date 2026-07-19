@@ -46,11 +46,13 @@ type StageFilter = 'ALL' | 'ORDER' | 'CONFIRMED' | 'CHALLAN' | 'INVOICED' | 'INT
 
 // ─── Stage logic ──────────────────────────────────────────────────────────────
 function getStage(r: OrderRow): string {
-  if ((r.received_quantity ?? 0) > 0 && (r.received_quantity ?? 0) >= (r.confirmation_qty ?? 0)) return 'RECEIVED'
-  if (r.docket_number) return 'DOCKET'
+  const confQty = r.confirmation_qty ?? 0
+  const recvQty = r.received_quantity ?? 0
+  if (confQty > 0 && recvQty >= confQty) return 'RECEIVED'
+  if (r.docket_number)  return 'DOCKET'
   if (r.invoice_number) return 'INVOICED'
-  if (r.challan_no)    return 'CHALLAN'
-  if (r.confirmation_qty && (r.confirmation_qty ?? 0) > 0) return 'CONFIRMED'
+  if (r.challan_no)     return 'CHALLAN'
+  if (confQty > 0)      return 'CONFIRMED'
   return 'ORDER'
 }
 
@@ -71,7 +73,10 @@ function getStageColor(stage: string): string {
 }
 
 function isShipped(r: OrderRow): boolean {
-  return (r.received_quantity ?? 0) > 0 && (r.received_quantity ?? 0) >= (r.confirmation_qty ?? r.ordered_quantity ?? 0)
+  // Only mark shipped if confirmation_qty is set AND received >= confirmation
+  const confQty = r.confirmation_qty ?? 0
+  if (confQty <= 0) return false
+  return (r.received_quantity ?? 0) >= confQty
 }
 
 // ─── Supabase fetch ────────────────────────────────────────────────────────────
