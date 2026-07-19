@@ -180,8 +180,13 @@ export default function PartsNotShippedReport({ branch, fuelType }: ReportViewPr
   const load = useCallback(async () => {
     setLoading(true); setErr(null)
     try {
+      // fuelType can be 'ALL', 'PV', 'EV'
       const portal = fuelType && fuelType !== 'ALL' ? fuelType : undefined
-      const branchArg = branch && branch !== 'All Branches' ? branch : undefined
+      // branch comes from ReportsPage effectiveBranchFilter which can be:
+      // 'ALL', 'Sitapura', 'Ajmer Road', 'ALL_PV', 'ALL_EV', 'Sitapura PV', etc.
+      // Strip the portal suffix and treat 'ALL*' as no-branch-filter
+      const rawBranch = (branch ?? '').replace(/ ?PV$/, '').replace(/ ?EV$/, '').trim()
+      const branchArg = rawBranch && rawBranch !== 'ALL' && rawBranch !== 'All Branches' ? rawBranch : undefined
       const data = await fetchOrders(portal, branchArg)
       setRows(data)
     } catch (e: unknown) { setErr(String(e)) }
