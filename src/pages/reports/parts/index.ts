@@ -8,6 +8,7 @@ import PartsStockDisciplineReport from './PartsStockDisciplineReport'
 import PartsGRNReport from './PartsGRNReport'
 import PartsNotInvoicedReport from './PartsNotInvoicedReport'
 import JcClosedInvoicedReport from './JcClosedInvoicedReport'
+import PartsNotShippedReport from './PartsNotShippedReport'
 
 import type { ReportCategoryDefinition, ReportDefinition } from '../types'
 
@@ -100,5 +101,14 @@ export const PARTS_REPORTS: ReportDefinition[] = [
     description: 'Full report showing all JCs — split strictly by Invoiced? column (Y=Invoiced / N=Not Invoiced) — with advisor, monthly, and status breakdowns.',
     cardHint: 'Best for daily tracking of JC invoice status — counts match Excel Invoiced? column exactly.',
     Component: JcClosedInvoicedReport,
+  },
+  {
+    id: 'parts-not-shipped',
+    categoryId: 'parts',
+    label: 'Parts Not Shipped',
+    group: 'Daily Operations',
+    description: 'Full order-to-delivery pipeline visibility — track every part from confirmation through challan, invoice, docket, ETA, to final receipt.',
+    cardHint: 'Best for tracking pending shipments and identifying pipeline bottlenecks.',
+    Component: PartsNotShippedReport,
   },
 ]

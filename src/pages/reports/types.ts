@@ -51,6 +51,7 @@ export type ReportId =
   | 'parts-grn-report'
   | 'parts-not-invoiced'
   | 'jc-closed-invoiced'
+  | 'parts-not-shipped'
   | 'parts-inventory-turnover'
   | 'parts-order-status'
   | 'parts-in-transit'
