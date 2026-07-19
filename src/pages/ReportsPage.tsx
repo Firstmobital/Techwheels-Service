@@ -359,8 +359,8 @@ export default function ReportsPage() {
     shouldShowServiceAdvisorFilter,
   ])
 
-  // Render warranty report full-page without parent Reports layout
-  if (activeReport?.id === 'warranty-overview') {
+  // Render ALL warranty category reports full-page (own dark theme + tab nav)
+  if (resolvedCategoryId === 'warranty' && activeReport) {
     return (
       <div className="page">
         <activeReport.Component

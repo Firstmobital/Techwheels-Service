@@ -60,6 +60,13 @@ export type ReportId =
   | 'parts-valuation'
   | 'parts-abc-classification'
   | 'warranty-overview'
+  | 'warranty-claims'
+  | 'warranty-ext'
+  | 'warranty-goodwill'
+  | 'warranty-rusting'
+  | 'warranty-pdi'
+  | 'warranty-amc'
+  | 'warranty-updation'
   | 'master-data-null-counts'
 
 export interface ReportViewProps {
