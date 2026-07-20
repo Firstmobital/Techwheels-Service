@@ -153,6 +153,39 @@ function techIncomeSubtitle(basePct: number): string {
   return `Income = (DMS Labour ÷ 1.18) × role% (+4% solo when partner absent on bonus pairs) · split equally among primary + support on that role lane. Base setting: ${basePct}%.`
 }
 
+function normalizeVehicleSearchInput(raw: string): string {
+  return String(raw ?? '').trim().toUpperCase().replace(/\s+/g, '')
+}
+
+function sanitizeVehicleSearchToken(raw: string): string {
+  return raw.replace(/[^A-Z0-9\-]/gi, '')
+}
+
+type VehicleSearchable = { job_card_number: string; vehicle_registration_number?: string | null }
+
+function rowMatchesVehicleSearch(row: VehicleSearchable, query: string): boolean {
+  const q = normalizeVehicleSearchInput(query)
+  if (!q) return true
+  const jc = String(row.job_card_number ?? '').trim().toUpperCase()
+  const reg = String(row.vehicle_registration_number ?? '').trim().toUpperCase()
+  return jc.includes(q) || reg.includes(q)
+}
+
+const CLOSED_JC_SELECT = 'id, job_card_number, sr_assigned_to, employee_code, final_labour_amount, dms_final_labour_amount, final_spares_amount, total_invoice_amount, dms_total_invoice_amount, closed_date_time, invoice_date, location, portal, vehicle_registration_number, sr_type'
+
+const BODYSHOP_ASSIGNMENT_SELECT = [
+  'job_card_number',
+  'supervisor_employee_code', 'supervisor_employee_name', 'supervisor_work_status',
+  'dentor_employee_code', 'dentor_employee_name', 'dentor_work_status',
+  'dentor_helper_employee_code', 'dentor_helper_employee_name', 'dentor_helper_work_status',
+  'painter_employee_code', 'painter_employee_name', 'painter_work_status',
+  'painter_helper_employee_code', 'painter_helper_employee_name', 'painter_helper_work_status',
+  'technician_employee_code', 'technician_employee_name', 'technician_work_status',
+  'rubbing_employee_code', 'rubbing_employee_name', 'rubbing_work_status',
+  'edp_employee_code', 'edp_employee_name', 'edp_work_status',
+  'parts_incharge_employee_code', 'parts_incharge_employee_name', 'parts_incharge_work_status',
+].join(', ')
+
 // ── Component ──────────────────────────────────────────────────────────────────
 
 export default function BodyshopTrackerPage() {
@@ -170,6 +203,10 @@ export default function BodyshopTrackerPage() {
   const [fromDate, setFromDate]       = useState('')
   const [toDate, setToDate]           = useState('')
   const [branchFilter, setBranchFilter] = useState('all')
+  const [vehicleSearchInput, setVehicleSearchInput] = useState('')
+  const [appliedVehicleSearch, setAppliedVehicleSearch] = useState('')
+  const [searchLoading, setSearchLoading] = useState(false)
+  const [searchNotice, setSearchNotice] = useState<string | null>(null)
   const [selectedMember, setSelectedMember] = useState('')
   const [selectedDayKey, setSelectedDayKey] = useState('')
   const [canEditSharePercent, setCanEditSharePercent] = useState(false)
@@ -192,6 +229,113 @@ export default function BodyshopTrackerPage() {
 
   // ── Load ───────────────────────────────────────────────────────────────────
 
+  async function fetchAssignmentsForJcNumbers(jcNumbers: string[]): Promise<{
+    bsRows: BSAssignmentRow[]
+    supportRows: BodyshopSupportRow[]
+  }> {
+    const unique = Array.from(new Set(jcNumbers.map((jc) => String(jc ?? '').trim()).filter(Boolean)))
+    const bsRows: BSAssignmentRow[] = []
+    const supportRows: BodyshopSupportRow[] = []
+    for (let i = 0; i < unique.length; i += 100) {
+      const batch = unique.slice(i, i + 100)
+      const [assignRes, supportRes] = await Promise.all([
+        supabase.from('bodyshop_assignments')
+          .select(BODYSHOP_ASSIGNMENT_SELECT)
+          .eq('is_active', true)
+          .in('job_card_number', batch),
+        supabase.from('bodyshop_floor_support_assignments')
+          .select('job_card_number, support_role, employee_code, employee_name, is_active')
+          .eq('is_active', true)
+          .in('job_card_number', batch),
+      ])
+      if (!assignRes.error && assignRes.data) bsRows.push(...(assignRes.data as unknown as BSAssignmentRow[]))
+      if (!supportRes.error && supportRes.data) supportRows.push(...(supportRes.data as BodyshopSupportRow[]))
+    }
+    return { bsRows, supportRows }
+  }
+
+  async function fetchAccidentClosedByVehicleOrJc(query: string): Promise<AccidentJCRow[]> {
+    const token = sanitizeVehicleSearchToken(normalizeVehicleSearchInput(query))
+    if (token.length < 3) return []
+    const pattern = `%${token}%`
+    const res = await supabase.from('job_card_closed_data')
+      .select(CLOSED_JC_SELECT)
+      .eq('sr_type', 'Accident')
+      .or(`job_card_number.ilike.${pattern},vehicle_registration_number.ilike.${pattern}`)
+      .order('closed_date_time', { ascending: false })
+      .limit(50)
+    if (res.error) throw res.error
+    return (res.data ?? []) as AccidentJCRow[]
+  }
+
+  async function applyVehicleSearch() {
+    const q = normalizeVehicleSearchInput(vehicleSearchInput)
+    setAppliedVehicleSearch(q)
+    setSearchNotice(null)
+    if (!q) return
+
+    if (sanitizeVehicleSearchToken(q).length < 3) {
+      setSearchNotice('Enter at least 3 characters (registration or job card number).')
+      return
+    }
+
+    setSearchLoading(true)
+    try {
+      const localHits = accidentJCs.filter((row) => rowMatchesVehicleSearch(row, q))
+      const remoteHits = await fetchAccidentClosedByVehicleOrJc(q)
+      const hitByJc = new Map<string, AccidentJCRow>()
+      ;[...localHits, ...remoteHits].forEach((row) => {
+        if (row.job_card_number) hitByJc.set(row.job_card_number, row)
+      })
+      const hits = Array.from(hitByJc.values())
+
+      if (hits.length === 0) {
+        setSearchNotice(`No accident closed job cards found for "${q}".`)
+        return
+      }
+
+      setAccidentJCs((prev) => {
+        const byJc = new Map(prev.map((row) => [row.job_card_number, row]))
+        hits.forEach((row) => { byJc.set(row.job_card_number, row) })
+        return Array.from(byJc.values())
+      })
+
+      const existingJcs = new Set(accidentJCs.map((row) => row.job_card_number))
+      const newJcs = hits.map((row) => row.job_card_number).filter((jc) => !existingJcs.has(jc))
+      if (newJcs.length > 0) {
+        const { bsRows: fetchedBs, supportRows: fetchedSupport } = await fetchAssignmentsForJcNumbers(newJcs)
+        setBsAssignments((prev) => {
+          const byJc = new Map(prev.map((row) => [row.job_card_number, row]))
+          fetchedBs.forEach((row) => { byJc.set(row.job_card_number, row) })
+          return Array.from(byJc.values())
+        })
+        setSupportAssignments((prev) => {
+          const supportKey = (row: BodyshopSupportRow) =>
+            `${row.job_card_number}|${row.support_role}|${String(row.employee_code ?? '').trim().toUpperCase()}`
+          const supportMap = new Map(prev.map((row) => [supportKey(row), row]))
+          fetchedSupport.forEach((row) => { supportMap.set(supportKey(row), row) })
+          return Array.from(supportMap.values())
+        })
+      }
+
+      setSearchNotice(
+        hits.length === 1
+          ? `Showing ${hits[0].job_card_number}${hits[0].vehicle_registration_number ? ` (${hits[0].vehicle_registration_number})` : ''} — switch role tabs to see earnings.`
+          : `Showing ${hits.length} matching job cards — switch role tabs to see earnings per role.`,
+      )
+    } catch (err) {
+      setSearchNotice(err instanceof Error ? err.message : 'Search failed')
+    } finally {
+      setSearchLoading(false)
+    }
+  }
+
+  function clearVehicleSearch() {
+    setVehicleSearchInput('')
+    setAppliedVehicleSearch('')
+    setSearchNotice(null)
+  }
+
   async function loadData() {
     setLoading(true); setError(null)
     try {
@@ -200,7 +344,7 @@ export default function BodyshopTrackerPage() {
       let offset = 0
       while (true) {
         const res = await supabase.from('job_card_closed_data')
-          .select('id, job_card_number, sr_assigned_to, employee_code, final_labour_amount, dms_final_labour_amount, final_spares_amount, total_invoice_amount, dms_total_invoice_amount, closed_date_time, invoice_date, location, portal, vehicle_registration_number, sr_type')
+          .select(CLOSED_JC_SELECT)
           .eq('sr_type', 'Accident')
           .gte('closed_date_time', dateRange.from + 'T00:00:00+05:30')
           .lte('closed_date_time', dateRange.to + 'T23:59:59+05:30')
@@ -214,38 +358,8 @@ export default function BodyshopTrackerPage() {
       }
       setAccidentJCs(accRows)
 
-      // 2. bodyshop_assignments for tech tabs — one wide row per JC
-      //    Use the same JC numbers as the accident JCs already fetched so period + Accident filters are respected
       const accJcNumbers = Array.from(new Set(accRows.map((r) => r.job_card_number).filter(Boolean)))
-      const bsRows: BSAssignmentRow[] = []
-      const supportRows: BodyshopSupportRow[] = []
-      const assignmentSelect = [
-        'job_card_number',
-        'supervisor_employee_code', 'supervisor_employee_name', 'supervisor_work_status',
-        'dentor_employee_code', 'dentor_employee_name', 'dentor_work_status',
-        'dentor_helper_employee_code', 'dentor_helper_employee_name', 'dentor_helper_work_status',
-        'painter_employee_code', 'painter_employee_name', 'painter_work_status',
-        'painter_helper_employee_code', 'painter_helper_employee_name', 'painter_helper_work_status',
-        'technician_employee_code', 'technician_employee_name', 'technician_work_status',
-        'rubbing_employee_code', 'rubbing_employee_name', 'rubbing_work_status',
-        'edp_employee_code', 'edp_employee_name', 'edp_work_status',
-        'parts_incharge_employee_code', 'parts_incharge_employee_name', 'parts_incharge_work_status',
-      ].join(', ')
-      for (let i = 0; i < accJcNumbers.length; i += 100) {
-        const batch = accJcNumbers.slice(i, i + 100)
-        const [assignRes, supportRes] = await Promise.all([
-          supabase.from('bodyshop_assignments')
-            .select(assignmentSelect)
-            .eq('is_active', true)
-            .in('job_card_number', batch),
-          supabase.from('bodyshop_floor_support_assignments')
-            .select('job_card_number, support_role, employee_code, employee_name, is_active')
-            .eq('is_active', true)
-            .in('job_card_number', batch),
-        ])
-        if (!assignRes.error && assignRes.data) bsRows.push(...(assignRes.data as unknown as BSAssignmentRow[]))
-        if (!supportRes.error && supportRes.data) supportRows.push(...(supportRes.data as BodyshopSupportRow[]))
-      }
+      const { bsRows, supportRows } = await fetchAssignmentsForJcNumbers(accJcNumbers)
       setBsAssignments(bsRows)
       setSupportAssignments(supportRows)
 
@@ -424,6 +538,9 @@ export default function BodyshopTrackerPage() {
   // ── Date scope ─────────────────────────────────────────────────────────────
 
   const dateScopedRows = useMemo(() => {
+    if (appliedVehicleSearch) {
+      return activeRows.filter((r) => rowMatchesVehicleSearch(r, appliedVehicleSearch))
+    }
     if (!fromDate && !toDate) return activeRows
     return activeRows.filter((r) => {
       if (!r.dateKey) return false
@@ -431,7 +548,7 @@ export default function BodyshopTrackerPage() {
       if (toDate && r.dateKey > toDate) return false
       return true
     })
-  }, [activeRows, fromDate, toDate])
+  }, [activeRows, fromDate, toDate, appliedVehicleSearch])
 
   // ── Branch options ─────────────────────────────────────────────────────────
 
@@ -657,13 +774,30 @@ export default function BodyshopTrackerPage() {
   }, [filteredRows, memberCards, tabMeta.mode, curPct])
 
   // Reset drill-down on tab/filter change
-  useEffect(() => { setSelectedMember(''); setSelectedDayKey('') }, [activeTab, branchFilter, fromDate, toDate])
+  useEffect(() => { setSelectedMember(''); setSelectedDayKey('') }, [activeTab, branchFilter, fromDate, toDate, appliedVehicleSearch])
+
+  useEffect(() => {
+    setVehicleSearchInput('')
+    setAppliedVehicleSearch('')
+    setSearchNotice(null)
+  }, [dateRange])
 
   // ── Branch counts ──────────────────────────────────────────────────────────
   // Use allDateScoped (before branch filter) for branch chip counts
   const allDateScoped = useMemo(() => {
-    if (tabMeta.mode === 'sa') return enrichedAccident
+    if (tabMeta.mode === 'sa') {
+      const rows = enrichedAccident
+      if (appliedVehicleSearch) return rows.filter((r) => rowMatchesVehicleSearch(r, appliedVehicleSearch))
+      if (!fromDate && !toDate) return rows
+      return rows.filter((r) => {
+        if (!r.dateKey) return false
+        if (fromDate && r.dateKey < fromDate) return false
+        if (toDate && r.dateKey > toDate) return false
+        return true
+      })
+    }
     const rows = enrichedTechRows.filter((r) => r._role === activeTab)
+    if (appliedVehicleSearch) return rows.filter((r) => rowMatchesVehicleSearch(r, appliedVehicleSearch))
     if (!fromDate && !toDate) return rows
     return rows.filter((r) => {
       if (!r.dateKey) return false
@@ -671,7 +805,7 @@ export default function BodyshopTrackerPage() {
       if (toDate && r.dateKey > toDate) return false
       return true
     })
-  }, [tabMeta, activeTab, enrichedAccident, enrichedTechRows, fromDate, toDate])
+  }, [tabMeta, activeTab, enrichedAccident, enrichedTechRows, fromDate, toDate, appliedVehicleSearch])
 
   // ── Export Issues ──────────────────────────────────────────────────────────
 
@@ -779,6 +913,40 @@ export default function BodyshopTrackerPage() {
           </button>
         ))}
 
+        <span style={{ width: '1px', height: '22px', background: '#e2e8f0', flexShrink: 0 }} />
+
+        <span style={{ fontSize: '0.72rem', fontWeight: 600, color: '#64748b', whiteSpace: 'nowrap' }}>Search:</span>
+        <input
+          type="search"
+          className="inp"
+          placeholder="Reg no or job card no"
+          value={vehicleSearchInput}
+          onChange={(e) => setVehicleSearchInput(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') void applyVehicleSearch()
+          }}
+          style={{ padding: '0.25rem 0.55rem', fontSize: '0.75rem', width: 'min(220px, 42vw)' }}
+        />
+        <button
+          type="button"
+          className="btn btn--primary btn--sm"
+          style={{ padding: '0.2rem 0.65rem', fontSize: '0.75rem' }}
+          disabled={searchLoading || !vehicleSearchInput.trim()}
+          onClick={() => void applyVehicleSearch()}
+        >
+          {searchLoading ? 'Searching…' : 'Find'}
+        </button>
+        {appliedVehicleSearch && (
+          <button
+            type="button"
+            className="btn btn--ghost btn--sm"
+            style={{ padding: '0.2rem 0.55rem', fontSize: '0.72rem' }}
+            onClick={clearVehicleSearch}
+          >
+            ✕ Clear search
+          </button>
+        )}
+
         <span style={{ flex: 1 }} />
 
         {canEditSharePercent && (
@@ -819,6 +987,16 @@ export default function BodyshopTrackerPage() {
         </div>
       )}
 
+      {searchNotice && (
+        <div
+          className={`toast ${searchNotice.startsWith('No ') || searchNotice.includes('failed') || searchNotice.includes('Enter at') ? 'error' : 'success'}`}
+          style={{ marginBottom: '0.6rem' }}
+        >
+          <Icon name={searchNotice.startsWith('Showing') ? 'check' : 'alert'} size={14} />
+          {searchNotice}
+        </div>
+      )}
+
       {error && (
         <div className="toast error"><Icon name="alert" size={14} />{error}</div>
       )}
@@ -828,8 +1006,16 @@ export default function BodyshopTrackerPage() {
         <div style={{ display: 'flex', borderBottom: '1px solid #e2e8f0', overflowX: 'auto' }}>
           {TABS.map((tab) => {
             const tabCount = (() => {
-              if (tab.mode === 'sa') return enrichedAccident.length
-              return enrichedTechRows.filter((r) => r._role === tab.key).length
+              if (tab.mode === 'sa') {
+                const rows = appliedVehicleSearch
+                  ? enrichedAccident.filter((r) => rowMatchesVehicleSearch(r, appliedVehicleSearch))
+                  : enrichedAccident
+                return rows.length
+              }
+              const roleRows = enrichedTechRows.filter((r) => r._role === tab.key)
+              return appliedVehicleSearch
+                ? roleRows.filter((r) => rowMatchesVehicleSearch(r, appliedVehicleSearch)).length
+                : roleRows.length
             })()
             return (
               <button key={tab.key} type="button" onClick={() => setActiveTab(tab.key)}
