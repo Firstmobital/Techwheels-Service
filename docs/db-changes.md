@@ -1,5 +1,17 @@
 # DB Changes Ledger
 
+## 2026-07-21 (planned — not applied)
+
+### SUPABASE-003 / P1-12 service history sync queue performance
+
+- Plan: `docs/Implementation_plans/webversion/categories/supabase/active/SUPABASE-003_SERVICE_HISTORY_SYNC_QUEUE_PERFORMANCE_PLAN_2026-07-21.md`
+- Status: **Proposed** (implementation not started)
+- Planned migrations (in apply order):
+  1. `20260721150000_p1_12_service_history_chassis_indexes.sql` + checks (DBL-0019)
+  2. `20260721151000_p1_12_refresh_service_history_sql_opt.sql` + checks (DBL-0020)
+  3. `20260721152000_p1_12_sync_queue_worker_and_cron.sql` + checks (DBL-0021)
+- Goal: eliminate pg_cron `57014` on `process_all_service_history_sync_queue` via EV/PV chassis indexes, leaner refresh SQL, batch 50 + cron alignment.
+
 ## 2026-07-07
 
 ### Prefix 20260707070000
