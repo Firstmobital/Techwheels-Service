@@ -6,6 +6,15 @@
 **Last Updated**: 2026-07-18  
 **Authority**: Single source of truth — supersedes all separate RBAC plan files
 
+### Execution Update (2026-07-21 - Parts SPM `/parts-spm` Route Guard Gap)
+
+- Symptom: Admin (and permitted SPM users) navigating to `/parts-spm` saw **Module access required** despite valid role/module posture; nav could still list **Parts SPM Dashboard** under More modules.
+- Root cause (frontend): `parts_spm` was added to `ROUTE_MODULE_MAP`, `ModuleName`, route `<RequireAccess>`, and `NAV_ITEMS`, but **`canAccessPath()` had no `/parts-spm` branch**. Outer guard (`!canSeeCurrentPath`) denied the path before routes rendered (deny-by-default contract in `MODULE_ROUTE_CONTRACT.md` / `ROUTE_STRATEGY_DECISION.md`).
+- Database truth (`supabase/backups/full_metadata.sql`): `parts_spm` module workflow present — `parts_requests` table, `parts_spm_view_all` RLS (`has_module_view('parts_spm')`), SPM RPCs use `is_admin() OR has_module_modify('parts_spm')`, admin bypass policy on `parts_requests`. Module seed + admin auto-grant triggers documented in migration `supabase/exec_success_migrations/sql/20260705220000_parts_requests_spm_workflow.sql`.
+- RBAC-001 gap: Master plan did not yet record `parts_spm`; treat as post-closure module extension under Phase 1C admin-unrestricted + module-gate pattern (DB admin bypass OK; frontend must keep `canAccessPath` in sync with every `ROUTE_MODULE_MAP` entry).
+- Fix: Add `canAccessPath` handler for `/parts-spm` in `src/App.tsx` (aligned with `/post-service-feedback` and other module routes).
+- Follow-up: When adding modules, run **Module-Route Audit Checklist** (`docs/shared/reference/MODULE_ROUTE_CONTRACT.md`) — especially `canAccessPath()` parity.
+
 ### Execution Update (2026-07-18 - RBAC-003 Multi Business Role CSV Plan Created)
 
 - Full project + database audit completed for comma-separated Business Roles in `employee_master.role` (Option B).
