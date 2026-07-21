@@ -381,7 +381,8 @@ export async function listReceptionEntriesByJobCardNumbers(
 
     if (error) return fail(error)
 
-    ;((data ?? []) as ReceptionEntryRow[]).forEach((row) => {
+    const batchRows = (Array.isArray(data) ? data : []) as unknown as ReceptionEntryRow[]
+    batchRows.forEach((row) => {
       const key = normalizeReceptionJcKey(row.jc_number)
       if (!key) return
 
