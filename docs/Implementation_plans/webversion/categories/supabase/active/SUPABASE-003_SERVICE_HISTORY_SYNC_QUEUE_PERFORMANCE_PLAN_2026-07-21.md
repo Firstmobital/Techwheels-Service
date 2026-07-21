@@ -4,7 +4,7 @@
 **Created:** 2026-07-21  
 **Priority:** CRITICAL  
 **Owner:** Platform Team (Supabase/Postgres)  
-**Status:** Proposed (ready to implement)  
+**Status:** Completed (verified 2026-07-21, audit snapshot 14.40)  
 **Parent initiative:** [SUPABASE-001 P1-12](SUPABASE-001_PRODUCTION_HARDENING_MASTER_PLAN.md) — Contain service history sync queue RPC load  
 
 **Depends on:**
@@ -251,6 +251,24 @@ Do **not** rollback P1-12 ACL revokes.
 
 ---
 
+## 8.1 Post-deploy verification (audit snapshot 14.40)
+
+**Run:** `supabase/evidence/audit_runs/2026-07-21__09-05-34-309Z` (2026-07-21T09:05:34Z UTC)  
+**Metadata dump:** `authoritative_metadata_manifest.json` → `2026-07-21T09:04:19Z`, sha256 `d09f040df05e3a9e7eae37245f6e53797ba3f8b4b1acdf709837235062d303b2`
+
+| Check | Evidence |
+|-------|----------|
+| V4 Cron batch 50 | `raw_platform_postgres_logs.json`: `cron job 24 starting: select public.process_all_service_history_sync_queue(50);` + `completed: 1 row` |
+| V6 No ranked timeout errors | `raw_top_postgres_errors.json`: empty records (24h ERROR/FATAL/WARNING digest) |
+| V5 / load | `process_all_service_history_sync_queue` / queryid `3220864789079889211` **not** in snapshot top-10 or `raw_tracked_queries.json` |
+| V1–V3 Schema | `full_metadata.sql`: chassis norm indexes; refresh uses `h.contact_full_name`; processor `DEFAULT 50` + `v_max_ms` |
+
+**Residual ops note:** Queue had large `remaining_due_count` at apply-time smoke test; drain under batch 50 is gradual — monitor `all_service_history_sync_queue` where `not_before <= now()`.
+
+**Out of scope for this closure:** Regression guard `blocked_requires_checklist` on snapshot 14.40 was driven by Realtime WAL + reception/technician query deltas, not the sync queue.
+
+---
+
 ## 9. Activity Tracker
 
 ### Legend
@@ -258,17 +276,11 @@ Do **not** rollback P1-12 ACL revokes.
 - ✅ COMPLETED · 🔄 IN PROGRESS · ⏳ PENDING · ❌ BLOCKED
 
 ```
-⏳ 0.1 | Confirm 20260721133000 in prod | Platform | — | — | —
-⏳ 0.2 | Baseline queue + cron.job capture | Platform | — | — | —
-⏳ 0.3 | Sample chassis keys | Platform | — | — | —
-⏳ 0.4 | Pre-index EXPLAIN artifacts | Platform | — | — | evidence/
-⏳ 1.1 | Index migration + checks | Platform | — | — | DBL-0019
-⏳ 1.2 | Apply indexes | Platform | — | — | —
-⏳ 2.1 | Refresh function migration | Platform | — | — | DBL-0020
-⏳ 3.1 | Worker + cron migration | Platform | — | — | DBL-0021
-⏳ 4.1 | Verification checklist | Platform | — | — | evidence/
-⏳ 4.2 | Post-deploy audit | Platform | — | — | queryid 3220864789079889211
-⏳ 4.3 | Close SUPABASE-001 P1-12 | Platform | — | — | —
+✅ 0.1 | Confirm 20260721133000 in prod | Platform | 2026-07-21 | 2026-07-21 | metadata dump
+✅ 1.1–3.1 | Migrations 20260721133000–152000 applied | Platform | 2026-07-21 | 2026-07-21 | checks passed
+✅ 4.2 | Post-deploy audit snapshot 14.40 | Platform | 2026-07-21 | 2026-07-21 | 2026-07-21__09-05-34-309Z
+✅ 4.3 | Close SUPABASE-001 P1-12 | Platform | 2026-07-21 | 2026-07-21 | P1-12 → Done
+⏳ 0.4 | Pre-index EXPLAIN artifacts | Platform | — | — | optional; not captured
 ```
 
 ---
@@ -279,9 +291,10 @@ Do **not** rollback P1-12 ACL revokes.
 - `supabase/migrations/20260721133000_fix_service_history_refresh_table_names.sql`
 - `supabase/exec_success_migrations/sql/20260706140000_p1_12_restrict_sync_queue_rpc_access.sql`
 - `docs/shared/reference/DB_CHANGE_LEDGER.md`
+- `docs/Implementation_plans/webversion/categories/supabase/evidence/P1_12_SERVICE_HISTORY_SYNC_VERIFICATION_2026-07-21.md`
 - `docs/db-changes.md` (post-apply entries)
 
 ---
 
 **Last Updated:** 2026-07-21  
-**Status:** 🟡 Proposed — awaiting Phase 0 kickoff
+**Status:** 🟢 Completed — verified audit snapshot 14.40
