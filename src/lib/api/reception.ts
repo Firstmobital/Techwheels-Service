@@ -346,6 +346,63 @@ export async function listReceptionEntriesWithDefaultLookback(): Promise<ApiResu
   return ok(enriched)
 }
 
+const RECEPTION_JC_LOOKUP_BATCH_SIZE = 100
+
+function normalizeReceptionJcKey(value: string | null | undefined): string {
+  return String(value ?? '').trim().toUpperCase()
+}
+
+/**
+ * Latest reception row per job card (no created_at lookback). Used for exports and JC-scoped metadata.
+ */
+export async function listReceptionEntriesByJobCardNumbers(
+  jobCardNumbers: string[],
+): Promise<ApiResult<ReceptionEntryRow[]>> {
+  const lookupKeys = Array.from(
+    new Set(
+      jobCardNumbers
+        .map((jc) => String(jc ?? '').trim())
+        .filter(Boolean),
+    ),
+  )
+
+  if (lookupKeys.length === 0) {
+    return ok([])
+  }
+
+  const latestByJc = new Map<string, ReceptionEntryRow>()
+
+  for (let i = 0; i < lookupKeys.length; i += RECEPTION_JC_LOOKUP_BATCH_SIZE) {
+    const batch = lookupKeys.slice(i, i + RECEPTION_JC_LOOKUP_BATCH_SIZE)
+    const { data, error } = await supabase
+      .from('service_reception_entries')
+      .select(RECEPTION_ENTRY_SELECT_COLUMNS)
+      .in('jc_number', batch)
+
+    if (error) return fail(error)
+
+    ;((data ?? []) as ReceptionEntryRow[]).forEach((row) => {
+      const key = normalizeReceptionJcKey(row.jc_number)
+      if (!key) return
+
+      const existing = latestByJc.get(key)
+      if (!existing) {
+        latestByJc.set(key, row)
+        return
+      }
+
+      const existingTs = new Date(existing.created_at ?? 0).getTime()
+      const candidateTs = new Date(row.created_at ?? 0).getTime()
+      if (candidateTs > existingTs || (candidateTs === existingTs && row.id > existing.id)) {
+        latestByJc.set(key, row)
+      }
+    })
+  }
+
+  const enriched = await enrichEntriesWithEmployeeBranch(Array.from(latestByJc.values()))
+  return ok(enriched)
+}
+
 export async function listServiceAdvisorEntries(): Promise<ApiResult<ReceptionEntryRow[]>> {
   const { data, error } = await fetchReceptionEntriesWithKeyset()
 

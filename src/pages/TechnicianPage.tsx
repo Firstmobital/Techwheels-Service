@@ -2,7 +2,12 @@ import { useEffect, useMemo, useState } from 'react'
 import { Icon } from '../components/Icon'
 import DateRangeFilter, { currentMonthRange, type DateRange } from '../components/DateRangeFilter'
 import { supabase } from '../lib/supabase'
-import { listFloorInchargeEntries, listReceptionEntriesWithDefaultLookback, type ReceptionEntryRow } from '../lib/api'
+import {
+  listFloorInchargeEntries,
+  listReceptionEntriesByJobCardNumbers,
+  listReceptionEntriesWithDefaultLookback,
+  type ReceptionEntryRow,
+} from '../lib/api'
 import { sendTechnicianDailyEarningsTestEmail } from '../lib/api/email'
 import * as XLSX from 'xlsx'
 
@@ -439,6 +444,75 @@ function getAssignmentDateKey(row: TechnicianAssignmentRow): string | null {
     month: '2-digit',
     day: '2-digit',
   }).format(parsed)
+}
+
+type ClosedJobCardExportRow = {
+  job_card_number: string | null
+  sr_type: string | null
+  location: string | null
+  invoice_date: string | null
+  closed_date_time: string | null
+  vehicle_registration_number: string | null
+  dms_final_labour_amount: number | string | null
+  sr_assigned_to: string | null
+  created_date_time: string | null
+  portal: string | null
+}
+
+function resolveExportFuelType(
+  jccPortal: string | null | undefined,
+  reception: ReceptionEntryRow | undefined,
+  bayNo: string | null | undefined,
+): string {
+  const receptionFuel = String(reception?.fuel_type ?? '').trim().toUpperCase()
+  if (receptionFuel) return receptionFuel
+
+  const receptionPortal = String(reception?.portal ?? '').trim().toUpperCase()
+  if (receptionPortal) return receptionPortal
+
+  const portal = String(jccPortal ?? '').trim().toUpperCase()
+  if (portal) return portal
+
+  const fromBay = extractFuelFromBay(bayNo)
+  if (fromBay) return fromBay
+
+  return UNKNOWN_FUEL_TYPE
+}
+
+async function fetchAllClosedJobsByInvoiceDateRange(
+  from: string,
+  to: string,
+): Promise<ClosedJobCardExportRow[]> {
+  const rows: ClosedJobCardExportRow[] = []
+  let offset = 0
+
+  while (true) {
+    const pageRes = await supabase
+      .from('job_card_closed_data')
+      .select(
+        'job_card_number, sr_type, location, invoice_date, closed_date_time, vehicle_registration_number, dms_final_labour_amount, sr_assigned_to, created_date_time, portal',
+      )
+      .gte('invoice_date', from)
+      .lte('invoice_date', to)
+      .order('invoice_date', { ascending: true })
+      .order('id', { ascending: true })
+      .range(offset, offset + QUERY_PAGE_SIZE - 1)
+
+    if (pageRes.error) {
+      throw new Error(pageRes.error.message)
+    }
+
+    const batch = (pageRes.data ?? []) as ClosedJobCardExportRow[]
+    rows.push(...batch)
+
+    if (batch.length < QUERY_PAGE_SIZE) {
+      break
+    }
+
+    offset += batch.length
+  }
+
+  return rows
 }
 
 function calculateTechnicianIncome(
@@ -984,26 +1058,19 @@ export default function TechnicianPage() {
   }
 
   async function handleExportIssues() {
-    if (!fromDate || !toDate) {
-      alert('Select both start and end dates')
+    const exportFrom = (fromDate || dateRange.from || '').trim()
+    const exportTo = (toDate || dateRange.to || '').trim()
+
+    if (!exportFrom || !exportTo) {
+      alert('Select both start and end dates (Range fields or Period filter).')
       return
     }
 
     try {
-      // Primary filter: Fetch job_card_closed_data where invoice_date is in the range
-      const jccRes = await supabase
-        .from('job_card_closed_data')
-        .select('job_card_number, sr_type, location, invoice_date, closed_date_time, vehicle_registration_number, dms_final_labour_amount, sr_assigned_to, created_date_time')
-        .gte('invoice_date', fromDate)
-        .lte('invoice_date', toDate)
-
-      if (jccRes.error) {
-        alert('Failed to fetch closed data: ' + jccRes.error.message)
-        return
-      }
+      const jccRecordsRaw = await fetchAllClosedJobsByInvoiceDateRange(exportFrom, exportTo)
 
       const excludedSrTypes = new Set(['ACCIDENT', 'PDI'])
-      const jccRecords = (jccRes.data ?? []).filter((row: any) => {
+      const jccRecords = jccRecordsRaw.filter((row) => {
         const srType = String(row?.sr_type ?? '').trim().toUpperCase()
         return !excludedSrTypes.has(srType)
       })
@@ -1012,21 +1079,17 @@ export default function TechnicianPage() {
         return
       }
 
-      // Get unique job card numbers from source records for a reliable DB lookup.
       const sourceJcNumbers = Array.from(new Set(
         jccRecords
-          .map((row: any) => String(row.job_card_number ?? '').trim())
+          .map((row) => String(row.job_card_number ?? '').trim())
           .filter(Boolean),
       ))
 
-      // Fetch assignment timestamps and status for those job cards in batches (Supabase .in() limit ~100 items)
       const assignmentsByJc = new Map<string, TechnicianAssignmentRow[]>()
-      const notRequiredJcSet = new Set<string>()
-      const BATCH_SIZE = 100
-      for (let i = 0; i < sourceJcNumbers.length; i += BATCH_SIZE) {
-        const batch = sourceJcNumbers.slice(i, i + BATCH_SIZE)
+      for (let i = 0; i < sourceJcNumbers.length; i += IN_FILTER_BATCH_SIZE) {
+        const batch = sourceJcNumbers.slice(i, i + IN_FILTER_BATCH_SIZE)
         const taRes = await supabase
-          .from(TECHNICIAN_INCOME_ASSIGNMENTS_SOURCE)
+          .from('technician_assignments')
           .select('*')
           .in('job_card_number', batch)
 
@@ -1043,33 +1106,8 @@ export default function TechnicianPage() {
           list.push(candidate)
           assignmentsByJc.set(key, list)
         })
-
-        // Export source view may omit Not Required assignments; query base table to detect and exclude them.
-        const baseAssignRes = await supabase
-          .from('technician_assignments')
-          .select('job_card_number, technician_code, technician_name')
-          .in('job_card_number', batch)
-
-        if (baseAssignRes.error) {
-          alert('Failed to validate Not Required assignments: ' + baseAssignRes.error.message)
-          return
-        }
-
-        ;(baseAssignRes.data ?? []).forEach((row: any) => {
-          const key = normalizeJobCardNumber(row.job_card_number)
-          if (!key) return
-
-          const isNotRequired =
-            String(row.technician_code ?? '').trim().toUpperCase() === NOT_REQUIRED_TECHNICIAN_CODE ||
-            String(row.technician_name ?? '').trim().toUpperCase().replace(/\s+/g, ' ') === 'NOT REQUIRED'
-
-          if (isNotRequired) {
-            notRequiredJcSet.add(key)
-          }
-        })
       }
 
-      // Sort latest-first so exported rows are stable and easy to review.
       assignmentsByJc.forEach((list, key) => {
         list.sort((a, b) => {
           const aTs = getAssignmentRecencyMs(a)
@@ -1080,68 +1118,71 @@ export default function TechnicianPage() {
         assignmentsByJc.set(key, list)
       })
 
-      // Build SA name map (Service Advisor page source) by JC number.
-      const saNameMap = new Map<string, string>()
-      const receptionSrTypeMap = new Map<string, string>()
-      // Use bounded lookback (90 days) — technician SA name lookups are for recent jobs only.
-      const receptionRes = await listReceptionEntriesWithDefaultLookback()
-      if (!receptionRes.error && receptionRes.data) {
-        const sourceJcSet = new Set(sourceJcNumbers.map((jc) => normalizeJobCardNumber(jc)))
-        ;(receptionRes.data ?? []).forEach((row) => {
-          const key = normalizeJobCardNumber(row.jc_number)
-          if (!key || !sourceJcSet.has(key)) return
-
-          const saName = String(row.sa_display_name ?? row.sa_name ?? '').trim()
-          if (saName && !saNameMap.has(key)) {
-            saNameMap.set(key, saName)
-          }
-
-          const receptionSrType = String(row.service_type ?? '').trim()
-          if (receptionSrType && !receptionSrTypeMap.has(key)) {
-            receptionSrTypeMap.set(key, receptionSrType)
-          }
-        })
+      const receptionByJc = new Map<string, ReceptionEntryRow>()
+      const receptionRes = await listReceptionEntriesByJobCardNumbers(sourceJcNumbers)
+      if (receptionRes.error) {
+        alert('Failed to fetch reception metadata: ' + receptionRes.error)
+        return
       }
+      ;(receptionRes.data ?? []).forEach((row) => {
+        const key = normalizeJobCardNumber(row.jc_number)
+        if (!key) return
+        receptionByJc.set(key, row)
+      })
 
-      // Combine data and include all assignment statuses; export only non-match issues.
-      const issues = jccRecords
-        .flatMap((row: any) => {
-          const jc = normalizeJobCardNumber(row.job_card_number)
-          const allAssignments = assignmentsByJc.get(jc) ?? []
-          const hasNotRequiredAssignment =
-            notRequiredJcSet.has(jc) ||
-            allAssignments.some((assignment) => isNotRequiredAssignment(assignment))
-          const assignments = allAssignments.filter((assignment) => !isNotRequiredAssignment(assignment))
+      const issues = jccRecords.flatMap((row) => {
+        const jc = normalizeJobCardNumber(row.job_card_number)
+        const reception = receptionByJc.get(jc)
+        const allAssignments = assignmentsByJc.get(jc) ?? []
+        const notRequiredAssignments = allAssignments.filter((assignment) => isNotRequiredAssignment(assignment))
+        const assignments = allAssignments.filter((assignment) => !isNotRequiredAssignment(assignment))
 
-          if (assignments.length === 0) {
-            if (hasNotRequiredAssignment) {
-              // Not Required is an intentional assignment state; do not export it as an issue.
-              return []
-            }
+        const buildBase = (assignment: TechnicianAssignmentRow | null) => {
+          const bayNo = assignment?.bay_no ?? notRequiredAssignments[0]?.bay_no ?? null
+          const fuelType = resolveExportFuelType(row.portal, reception, bayNo)
+          const saName = String(reception?.sa_display_name ?? reception?.sa_name ?? '').trim()
+          const receptionSrType = String(reception?.service_type ?? '').trim()
 
-            return [{
-              job_card_number: row.job_card_number ?? '',
-              service_type: row.sr_type ?? '',
-              location: row.location ?? '',
-              out_ts: null,
-              invoice_date: row.invoice_date ?? '',
-              closed_date_time: row.closed_date_time ?? '',
-              dms_assigned_to: row.sr_assigned_to ?? '',
-              dms_jc_created: row.created_date_time ?? '',
-              reception_sr_type: receptionSrTypeMap.get(jc) ?? '',
-              sa_name: saNameMap.get(jc) ?? '',
-              technician_name: '',
-              status: 'Unassigned',
-              match_status: 'NO ASSIGNMENT',
-              vehicle_registration_number: row.vehicle_registration_number ?? '',
-              labour: parseRevenueAmount(row.dms_final_labour_amount) / 1.18,
-            }]
+          return {
+            job_card_number: row.job_card_number ?? '',
+            service_type: row.sr_type ?? '',
+            location: row.location ?? '',
+            fuel_type: fuelType,
+            jcc_portal: String(row.portal ?? '').trim(),
+            out_ts: assignment?.out_ts ?? null,
+            bay_no: bayNo ?? '',
+            invoice_date: row.invoice_date ?? '',
+            closed_date_time: row.closed_date_time ?? '',
+            dms_assigned_to: row.sr_assigned_to ?? '',
+            dms_jc_created: row.created_date_time ?? '',
+            reception_sr_type: receptionSrType,
+            sa_name: saName,
+            technician_name: assignment ? String(assignment.technician_name ?? '').trim() : '',
+            status: assignment?.work_status ? statusLabel(assignment.work_status) : 'Unassigned',
+            vehicle_registration_number: row.vehicle_registration_number ?? '',
+            labour: parseRevenueAmount(row.dms_final_labour_amount) / 1.18,
           }
+        }
 
-          return assignments.map((assignment) => {
+        const rowsForJc: Array<ReturnType<typeof buildBase> & { match_status: string }> = []
+
+        if (assignments.length === 0 && notRequiredAssignments.length === 0) {
+          rowsForJc.push({
+            ...buildBase(null),
+            match_status: 'NO ASSIGNMENT',
+          })
+        } else if (assignments.length === 0 && notRequiredAssignments.length > 0) {
+          notRequiredAssignments.forEach((assignment) => {
+            rowsForJc.push({
+              ...buildBase(assignment),
+              technician_name: String(assignment.technician_name ?? '').trim() || 'Not Required',
+              status: statusLabel(assignment.work_status),
+              match_status: 'NOT REQUIRED',
+            })
+          })
+        } else {
+          assignments.forEach((assignment) => {
             const outTs = assignment.out_ts ?? null
-            const workStatus = assignment.work_status ?? null
-
             const invDate = normalizeInvoiceDate(row.invoice_date ?? '')
             const outDate = toIstDateKey(outTs)
 
@@ -1154,39 +1195,57 @@ export default function TechnicianPage() {
               matchStatus = 'MATCH'
             }
 
-            return {
-              job_card_number: row.job_card_number ?? '',
-              service_type: row.sr_type ?? '',
-              location: row.location ?? '',
-              out_ts: outTs,
-              invoice_date: row.invoice_date ?? '',
-              closed_date_time: row.closed_date_time ?? '',
-              dms_assigned_to: row.sr_assigned_to ?? '',
-              dms_jc_created: row.created_date_time ?? '',
-              reception_sr_type: receptionSrTypeMap.get(jc) ?? '',
-              sa_name: saNameMap.get(jc) ?? '',
-              technician_name: String(assignment.technician_name ?? '').trim(),
-              status: workStatus ? statusLabel(workStatus) : 'Unassigned',
+            rowsForJc.push({
+              ...buildBase(assignment),
               match_status: matchStatus,
-              vehicle_registration_number: row.vehicle_registration_number ?? '',
-              labour: parseRevenueAmount(row.dms_final_labour_amount) / 1.18,
-            }
+            })
           })
-        })
+        }
+
+        return rowsForJc
+      })
+
       if (issues.length === 0) {
         alert('No records found in the selected range.')
         return
-        }
+      }
 
-      // Export to Excel
+      issues.sort((a, b) => {
+        const dateCmp = String(a.invoice_date ?? '').localeCompare(String(b.invoice_date ?? ''))
+        if (dateCmp !== 0) return dateCmp
+        return String(a.job_card_number ?? '').localeCompare(String(b.job_card_number ?? ''))
+      })
+
       const sheetData = [
-        ['Job Card Number', 'Service Type', 'Reception SR Type', 'Reg No', 'Location', 'DMS Assigned To', 'DMS JC Created', 'SA Name', 'Technician Name', 'Status', 'Out TS', 'Invoice Date', 'Closed Date Time', 'DMS Labour ÷ 1.18', 'Match Status'],
-        ...issues.map((r: any) => [
+        [
+          'Job Card Number',
+          'Service Type',
+          'Reception SR Type',
+          'Reg No',
+          'Location',
+          'Fuel Type',
+          'JCC Portal',
+          'Bay No',
+          'DMS Assigned To',
+          'DMS JC Created',
+          'SA Name',
+          'Technician Name',
+          'Status',
+          'Out TS',
+          'Invoice Date',
+          'Closed Date Time',
+          'DMS Labour ÷ 1.18',
+          'Match Status',
+        ],
+        ...issues.map((r) => [
           r.job_card_number,
           r.service_type,
           r.reception_sr_type,
           r.vehicle_registration_number,
           r.location,
+          r.fuel_type,
+          r.jcc_portal,
+          r.bay_no,
           r.dms_assigned_to,
           r.dms_jc_created ? new Date(r.dms_jc_created).toLocaleString('en-IN') : '',
           r.sa_name,
@@ -1201,9 +1260,9 @@ export default function TechnicianPage() {
       ]
       const wb = XLSX.utils.book_new()
       const ws = XLSX.utils.aoa_to_sheet(sheetData)
-      ws['!cols'] = [18, 20, 20, 14, 16, 24, 25, 26, 24, 15, 25, 15, 25, 14, 15].map(w => ({ wch: w }))
+      ws['!cols'] = [18, 20, 20, 14, 16, 10, 10, 10, 24, 25, 26, 24, 15, 25, 15, 25, 14, 15].map((w) => ({ wch: w }))
       XLSX.utils.book_append_sheet(wb, ws, 'Date Issues')
-      XLSX.writeFile(wb, `JC_Date_Issues_${fromDate}_to_${toDate}.xlsx`)
+      XLSX.writeFile(wb, `JC_Date_Issues_${exportFrom}_to_${exportTo}.xlsx`)
     } catch (e: any) {
       alert('Export failed: ' + (e.message ?? 'Unknown error'))
     }
@@ -1925,21 +1984,25 @@ export default function TechnicianPage() {
           )}
           <button type="button"
             onClick={() => void handleExportIssues()}
-            disabled={!fromDate || !toDate}
-            title={fromDate && toDate ? 'Export date mismatch issues' : 'Select both start and end dates'}
+            disabled={!(fromDate && toDate) && !(dateRange.from && dateRange.to)}
+            title={
+              (fromDate && toDate) || (dateRange.from && dateRange.to)
+                ? 'Export all closed job cards for invoice date range (with fuel type)'
+                : 'Select both start and end dates or use Period filter'
+            }
             style={{
               display: 'flex',
               alignItems: 'center',
               gap: '0.3rem',
               padding: '0.3rem 0.7rem',
-              background: fromDate && toDate ? '#ef4444' : '#fca5a5',
+              background: (fromDate && toDate) || (dateRange.from && dateRange.to) ? '#ef4444' : '#fca5a5',
               color: '#fff',
               border: 'none',
               borderRadius: '5px',
               fontWeight: 600,
               fontSize: '0.75rem',
-              cursor: fromDate && toDate ? 'pointer' : 'not-allowed',
-              opacity: fromDate && toDate ? 1 : 0.6,
+              cursor: (fromDate && toDate) || (dateRange.from && dateRange.to) ? 'pointer' : 'not-allowed',
+              opacity: (fromDate && toDate) || (dateRange.from && dateRange.to) ? 1 : 0.6,
             }}>
             📥 Export Issues
           </button>
