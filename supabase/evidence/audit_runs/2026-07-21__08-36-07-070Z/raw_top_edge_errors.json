@@ -1,0 +1,5 @@
+{
+  "status": "ok",
+  "records": [],
+  "sql": "select event_message, sum(occurrences) as occurrences\n    from (\n      select\n        event_message,\n        count(*) as occurrences\n      from edge_logs\n      cross join unnest(edge_logs.metadata) as metadata\n      cross join unnest(metadata.response) as response\n      where cast(edge_logs.timestamp as datetime) > datetime_sub(current_datetime(), interval 24 hour)\n        and response.status_code >= 500\n      group by event_message\n\n      union all\n\n      select\n        event_message,\n        count(*) as occurrences\n      from function_logs\n      cross join unnest(function_logs.metadata) as metadata\n      where cast(function_logs.timestamp as datetime) > datetime_sub(current_datetime(), interval 24 hour)\n        and regexp_contains(coalesce(metadata.level, ''), '(?i)error|warning')\n      group by event_message\n    )\n    group by event_message\n    order by occurrences desc\n    limit 10"
+}

@@ -203,12 +203,16 @@ async function collectPlatformLogs(projectRef, token, sourceTable, limit = 100) 
 }
 
 async function collectTopPostgresErrors(projectRef, token) {
+  // postgres_logs has no top-level `level`; severity lives in metadata.parsed (Supabase Logs SQL).
   const sql = `
     select
       event_message,
       count(*) as occurrences
     from postgres_logs
-    where level in ('error', 'warning')
+    cross join unnest(postgres_logs.metadata) as metadata
+    cross join unnest(metadata.parsed) as parsed
+    where cast(postgres_logs.timestamp as datetime) > datetime_sub(current_datetime(), interval 24 hour)
+      and regexp_contains(parsed.error_severity, '(?i)ERROR|FATAL|PANIC|WARNING')
     group by event_message
     order by occurrences desc
     limit 15
@@ -216,19 +220,38 @@ async function collectTopPostgresErrors(projectRef, token) {
   const endpoint = `/v1/projects/${projectRef}/analytics/endpoints/logs.all?sql=${encodeURIComponent(sql)}`
   const response = await callManagementApi({ method: 'GET', pathName: endpoint, token })
   if (!response.ok) {
-    return { status: 'unavailable', records: [], error: response.data }
+    return { status: 'unavailable', records: [], error: response.data, sql }
   }
   const records = Array.isArray(response.data?.result) ? response.data.result : []
-  return { status: 'ok', records }
+  return { status: 'ok', records, sql }
 }
 
 async function collectEdgeFunctionErrors(projectRef, token) {
+  // edge_logs: HTTP failures via metadata.response.status_code; function_logs: runtime level.
   const sql = `
-    select
-      event_message,
-      count(*) as occurrences
-    from edge_logs
-    where level in ('error', 'warning')
+    select event_message, sum(occurrences) as occurrences
+    from (
+      select
+        event_message,
+        count(*) as occurrences
+      from edge_logs
+      cross join unnest(edge_logs.metadata) as metadata
+      cross join unnest(metadata.response) as response
+      where cast(edge_logs.timestamp as datetime) > datetime_sub(current_datetime(), interval 24 hour)
+        and response.status_code >= 500
+      group by event_message
+
+      union all
+
+      select
+        event_message,
+        count(*) as occurrences
+      from function_logs
+      cross join unnest(function_logs.metadata) as metadata
+      where cast(function_logs.timestamp as datetime) > datetime_sub(current_datetime(), interval 24 hour)
+        and regexp_contains(coalesce(metadata.level, ''), '(?i)error|warning')
+      group by event_message
+    )
     group by event_message
     order by occurrences desc
     limit 10
@@ -236,10 +259,10 @@ async function collectEdgeFunctionErrors(projectRef, token) {
   const endpoint = `/v1/projects/${projectRef}/analytics/endpoints/logs.all?sql=${encodeURIComponent(sql)}`
   const response = await callManagementApi({ method: 'GET', pathName: endpoint, token })
   if (!response.ok) {
-    return { status: 'unavailable', records: [], error: response.data }
+    return { status: 'unavailable', records: [], error: response.data, sql }
   }
   const records = Array.isArray(response.data?.result) ? response.data.result : []
-  return { status: 'ok', records }
+  return { status: 'ok', records, sql }
 }
 
 function summarizeTopQuery(topRows) {
@@ -700,12 +723,20 @@ function summarizePostgresLogSeverity(records) {
   }
 
   for (const row of Array.isArray(records) ? records : []) {
-    const text = String(row?.event_message ?? '').toUpperCase()
+    const text = String(row?.event_message ?? '')
+    const upper = text.toUpperCase()
     if (!text) continue
-    if (text.includes(' PANIC ') || text.startsWith('PANIC') || text.includes('PANIC:')) out.panic += 1
-    else if (text.includes(' FATAL ') || text.startsWith('FATAL') || text.includes('FATAL:')) out.fatal += 1
-    else if (text.includes(' ERROR ') || text.startsWith('ERROR') || text.includes('ERROR:')) out.error += 1
-    else if (text.includes(' WARNING ') || text.startsWith('WARNING') || text.includes('WARNING:')) out.warning += 1
+    if (upper.includes('PANIC:') || upper.startsWith('PANIC') || upper.includes(' PANIC ')) out.panic += 1
+    else if (upper.includes('FATAL:') || upper.startsWith('FATAL') || upper.includes(' FATAL ')) out.fatal += 1
+    else if (
+      upper.includes('ERROR:') ||
+      upper.startsWith('ERROR') ||
+      upper.includes(' ERROR ') ||
+      text.toLowerCase().includes('canceling statement due to statement timeout') ||
+      text.toLowerCase().includes('does not exist')
+    ) {
+      out.error += 1
+    } else if (upper.includes('WARNING:') || upper.startsWith('WARNING') || upper.includes(' WARNING ')) out.warning += 1
   }
 
   return out

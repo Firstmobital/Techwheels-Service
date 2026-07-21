@@ -1,0 +1,226 @@
+{
+  "status": "ok",
+  "label": "table_io_hotspots",
+  "rows": [
+    {
+      "table_name": "service_parts_stock_snapshot_data",
+      "heap_blks_read": 14486,
+      "heap_blks_hit": 133011924,
+      "idx_blks_read": 224675,
+      "idx_blks_hit": 15014954,
+      "toast_blks_read": 0,
+      "toast_blks_hit": 0,
+      "heap_cache_hit_rate_pct": "99.99",
+      "total_read_blocks": 239161
+    },
+    {
+      "table_name": "service_parts_consumption_data",
+      "heap_blks_read": 11373,
+      "heap_blks_hit": 50006007,
+      "idx_blks_read": 128556,
+      "idx_blks_hit": 10430537,
+      "toast_blks_read": 0,
+      "toast_blks_hit": 0,
+      "heap_cache_hit_rate_pct": "99.98",
+      "total_read_blocks": 139929
+    },
+    {
+      "table_name": "service_invoice_order_data",
+      "heap_blks_read": 76258,
+      "heap_blks_hit": 4650404,
+      "idx_blks_read": 27837,
+      "idx_blks_hit": 5282212,
+      "toast_blks_read": 0,
+      "toast_blks_hit": 0,
+      "heap_cache_hit_rate_pct": "98.39",
+      "total_read_blocks": 104095
+    },
+    {
+      "table_name": "all_service_data",
+      "heap_blks_read": 6681,
+      "heap_blks_hit": 256681012,
+      "idx_blks_read": 30178,
+      "idx_blks_hit": 12561365,
+      "toast_blks_read": 18,
+      "toast_blks_hit": 28,
+      "heap_cache_hit_rate_pct": "100.00",
+      "total_read_blocks": 36877
+    },
+    {
+      "table_name": "pv_service_history_test",
+      "heap_blks_read": 24562,
+      "heap_blks_hit": 69004951,
+      "idx_blks_read": 4797,
+      "idx_blks_hit": 679419,
+      "toast_blks_read": 0,
+      "toast_blks_hit": 0,
+      "heap_cache_hit_rate_pct": "99.96",
+      "total_read_blocks": 29359
+    },
+    {
+      "table_name": "warranty_wc_data",
+      "heap_blks_read": 19118,
+      "heap_blks_hit": 1676187,
+      "idx_blks_read": 725,
+      "idx_blks_hit": 192991,
+      "toast_blks_read": 0,
+      "toast_blks_hit": 0,
+      "heap_cache_hit_rate_pct": "98.87",
+      "total_read_blocks": 19843
+    },
+    {
+      "table_name": "all_service_data_dynamic",
+      "heap_blks_read": 9628,
+      "heap_blks_hit": 418951068,
+      "idx_blks_read": 8681,
+      "idx_blks_hit": 14076832,
+      "toast_blks_read": 0,
+      "toast_blks_hit": 0,
+      "heap_cache_hit_rate_pct": "100.00",
+      "total_read_blocks": 18309
+    },
+    {
+      "table_name": "warranty_updation_claim_data",
+      "heap_blks_read": 16813,
+      "heap_blks_hit": 1251642,
+      "idx_blks_read": 546,
+      "idx_blks_hit": 238750,
+      "toast_blks_read": 0,
+      "toast_blks_hit": 0,
+      "heap_cache_hit_rate_pct": "98.67",
+      "total_read_blocks": 17359
+    },
+    {
+      "table_name": "ev_service_history_test",
+      "heap_blks_read": 15362,
+      "heap_blks_hit": 28116549,
+      "idx_blks_read": 1145,
+      "idx_blks_hit": 204487,
+      "toast_blks_read": 0,
+      "toast_blks_hit": 0,
+      "heap_cache_hit_rate_pct": "99.95",
+      "total_read_blocks": 16507
+    },
+    {
+      "table_name": "warranty_fsb_data",
+      "heap_blks_read": 14066,
+      "heap_blks_hit": 1745114,
+      "idx_blks_read": 824,
+      "idx_blks_hit": 353697,
+      "toast_blks_read": 0,
+      "toast_blks_hit": 0,
+      "heap_cache_hit_rate_pct": "99.20",
+      "total_read_blocks": 14890
+    },
+    {
+      "table_name": "service_parts_order_data",
+      "heap_blks_read": 643,
+      "heap_blks_hit": 485248,
+      "idx_blks_read": 13985,
+      "idx_blks_hit": 1604167,
+      "toast_blks_read": 0,
+      "toast_blks_hit": 0,
+      "heap_cache_hit_rate_pct": "99.87",
+      "total_read_blocks": 14628
+    },
+    {
+      "table_name": "service_vas_jc_data",
+      "heap_blks_read": 3373,
+      "heap_blks_hit": 13722485,
+      "idx_blks_read": 11204,
+      "idx_blks_hit": 2828948,
+      "toast_blks_read": 0,
+      "toast_blks_hit": 0,
+      "heap_cache_hit_rate_pct": "99.98",
+      "total_read_blocks": 14577
+    },
+    {
+      "table_name": "warranty_claim_settlement_report_data",
+      "heap_blks_read": 13636,
+      "heap_blks_hit": 2078045,
+      "idx_blks_read": 848,
+      "idx_blks_hit": 263121,
+      "toast_blks_read": 0,
+      "toast_blks_hit": 0,
+      "heap_cache_hit_rate_pct": "99.35",
+      "total_read_blocks": 14484
+    },
+    {
+      "table_name": "job_run_details",
+      "heap_blks_read": 12270,
+      "heap_blks_hit": 368115,
+      "idx_blks_read": 126,
+      "idx_blks_hit": 272527,
+      "toast_blks_read": 0,
+      "toast_blks_hit": 0,
+      "heap_cache_hit_rate_pct": "96.77",
+      "total_read_blocks": 12396
+    },
+    {
+      "table_name": "job_card_closed_data",
+      "heap_blks_read": 4001,
+      "heap_blks_hit": 215803970,
+      "idx_blks_read": 8158,
+      "idx_blks_hit": 35303072,
+      "toast_blks_read": 0,
+      "toast_blks_hit": 0,
+      "heap_cache_hit_rate_pct": "100.00",
+      "total_read_blocks": 12159
+    },
+    {
+      "table_name": "warranty_part_wc_data",
+      "heap_blks_read": 4619,
+      "heap_blks_hit": 119826,
+      "idx_blks_read": 132,
+      "idx_blks_hit": 16546,
+      "toast_blks_read": 0,
+      "toast_blks_hit": 0,
+      "heap_cache_hit_rate_pct": "96.29",
+      "total_read_blocks": 4751
+    },
+    {
+      "table_name": "warranty_amc_data",
+      "heap_blks_read": 3878,
+      "heap_blks_hit": 289552,
+      "idx_blks_read": 196,
+      "idx_blks_hit": 31017,
+      "toast_blks_read": 0,
+      "toast_blks_hit": 0,
+      "heap_cache_hit_rate_pct": "98.68",
+      "total_read_blocks": 4074
+    },
+    {
+      "table_name": "warranty_goodwill_data",
+      "heap_blks_read": 3862,
+      "heap_blks_hit": 147526,
+      "idx_blks_read": 174,
+      "idx_blks_hit": 23965,
+      "toast_blks_read": 0,
+      "toast_blks_hit": 0,
+      "heap_cache_hit_rate_pct": "97.45",
+      "total_read_blocks": 4036
+    },
+    {
+      "table_name": "objects",
+      "heap_blks_read": 2082,
+      "heap_blks_hit": 65365,
+      "idx_blks_read": 1510,
+      "idx_blks_hit": 131917,
+      "toast_blks_read": 0,
+      "toast_blks_hit": 0,
+      "heap_cache_hit_rate_pct": "96.91",
+      "total_read_blocks": 3592
+    },
+    {
+      "table_name": "temp_data",
+      "heap_blks_read": 3216,
+      "heap_blks_hit": 20913271,
+      "idx_blks_read": 182,
+      "idx_blks_hit": 256238,
+      "toast_blks_read": 0,
+      "toast_blks_hit": 0,
+      "heap_cache_hit_rate_pct": "99.98",
+      "total_read_blocks": 3398
+    }
+  ]
+}
