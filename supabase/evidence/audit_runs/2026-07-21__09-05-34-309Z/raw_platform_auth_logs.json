@@ -1,0 +1,27 @@
+{
+  "status": "ok",
+  "endpoint": "/v1/projects/jmdndcphkmaljhwgzqxq/analytics/endpoints/logs.all?sql=select%20timestamp%2C%20event_message%20from%20auth_logs%20order%20by%20timestamp%20desc%20limit%20100",
+  "count": 5,
+  "records": [
+    {
+      "event_message": "{\"component\":\"api\",\"duration\":4087749,\"level\":\"info\",\"method\":\"GET\",\"msg\":\"request completed\",\"path\":\"/user\",\"referer\":\"https://techwheels-service.vercel.app\",\"remote_addr\":\"3.110.150.73\",\"request_id\":\"019f83eb-c6ff-7f9e-a3ab-7dd09f0ab21b\",\"status\":200,\"time\":\"2026-07-21T09:04:55Z\"}",
+      "timestamp": 1784624695000000
+    },
+    {
+      "event_message": "{\"component\":\"api\",\"duration\":17391079,\"level\":\"info\",\"method\":\"GET\",\"msg\":\"request completed\",\"path\":\"/user\",\"referer\":\"https://techwheels-service.vercel.app\",\"remote_addr\":\"13.207.27.154\",\"request_id\":\"019f83eb-c31d-7d80-81b8-ad6f749b678d\",\"status\":200,\"time\":\"2026-07-21T09:04:54Z\"}",
+      "timestamp": 1784624694000000
+    },
+    {
+      "event_message": "{\"component\":\"api\",\"duration\":3902576,\"level\":\"info\",\"method\":\"GET\",\"msg\":\"request completed\",\"path\":\"/user\",\"referer\":\"https://techwheels-service.vercel.app\",\"remote_addr\":\"3.6.150.57\",\"request_id\":\"019f83eb-c329-75ab-92a4-8a4ddeb872aa\",\"status\":200,\"time\":\"2026-07-21T09:04:54Z\"}",
+      "timestamp": 1784624694000000
+    },
+    {
+      "event_message": "{\"component\":\"api\",\"duration\":7353141,\"level\":\"info\",\"method\":\"GET\",\"msg\":\"request completed\",\"path\":\"/user\",\"referer\":\"https://techwheels-service.vercel.app\",\"remote_addr\":\"3.6.150.136\",\"request_id\":\"019f83eb-c072-77d0-9fd5-015314f5d2c9\",\"status\":200,\"time\":\"2026-07-21T09:04:53Z\"}",
+      "timestamp": 1784624693000000
+    },
+    {
+      "event_message": "{\"component\":\"api\",\"duration\":57609434,\"level\":\"info\",\"method\":\"GET\",\"msg\":\"request completed\",\"path\":\"/user\",\"referer\":\"https://techwheels-service.vercel.app\",\"remote_addr\":\"13.201.175.81\",\"request_id\":\"019f83eb-7cba-7e5f-9bc4-fdb3953e09d7\",\"status\":200,\"time\":\"2026-07-21T09:04:36Z\"}",
+      "timestamp": 1784624676000000
+    }
+  ]
+}

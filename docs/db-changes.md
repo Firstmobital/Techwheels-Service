@@ -1,16 +1,23 @@
 # DB Changes Ledger
 
-## 2026-07-21 (planned — not applied)
+## 2026-07-21
 
-### SUPABASE-003 / P1-12 service history sync queue performance
+### Prefix 20260721133000 (table name fix)
+
+- Migration: `20260721133000_fix_service_history_refresh_table_names.sql`
+- Check: `20260721133000_fix_service_history_refresh_table_names_checks.sql`
+- Status: **Executed and verified** (applied via Management API; confirmed in metadata dump `2026-07-21T09:04:19Z`, sha256 `d09f040d…`)
+
+### SUPABASE-003 / P1-12 — service history sync queue performance
 
 - Plan: `docs/Implementation_plans/webversion/categories/supabase/active/SUPABASE-003_SERVICE_HISTORY_SYNC_QUEUE_PERFORMANCE_PLAN_2026-07-21.md`
-- Status: **Proposed** (implementation not started)
-- Planned migrations (in apply order):
-  1. `20260721150000_p1_12_service_history_chassis_indexes.sql` + checks (DBL-0019)
-  2. `20260721151000_p1_12_refresh_service_history_sql_opt.sql` + checks (DBL-0020)
-  3. `20260721152000_p1_12_sync_queue_worker_and_cron.sql` + checks (DBL-0021)
-- Goal: eliminate pg_cron `57014` on `process_all_service_history_sync_queue` via EV/PV chassis indexes, leaner refresh SQL, batch 50 + cron alignment.
+- Status: **Executed and verified** (schema objects in `supabase/backups/full_metadata.sql` dump above)
+- Migrations (apply order):
+  1. `20260721150000_p1_12_service_history_chassis_indexes.sql` + checks — indexes `idx_ev_service_history_test_chassis_norm`, `idx_pv_service_history_test_chassis_norm`
+  2. `20260721151000_p1_12_refresh_service_history_sql_opt.sql` + checks — `h.contact_full_name`, no `to_jsonb(h)`
+  3. `20260721152000_p1_12_sync_queue_worker_and_cron.sql` + checks — default batch **50**, **60s** wall budget, pg_cron reschedule (job rows not in schema-only dump)
+- Post-apply smoke: `process_all_service_history_sync_queue(5)` returned `processed_count=5` with large `remaining_due_count` (~21k) — queue draining under new limits; monitor over 24–48h for `57014` in logs
+- Metadata authority: `supabase/evidence/authoritative_metadata_manifest.json` updated **2026-07-21T09:04:19Z**
 
 ## 2026-07-07
 
