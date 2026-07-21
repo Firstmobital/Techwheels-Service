@@ -70,6 +70,15 @@ function buildSnapshotBlock(summary, snapshotNumber) {
     ? `- Top regressions by delta_total_ms: ${comparison.top_regressions.slice(0, 3).map((row) => `${row.queryid} (${row.delta_total_ms})`).join('; ')}`
     : '- Top regressions by delta_total_ms: none detected or unavailable.'
 
+  const pgErrors = Array.isArray(summary.top_postgres_errors) ? summary.top_postgres_errors : []
+  const topPostgresErrorLine =
+    pgErrors.length > 0
+      ? `- Top postgres log messages (by frequency): ${pgErrors
+          .slice(0, 3)
+          .map((row) => `${sanitizeCell(String(row.event_message || '').slice(0, 80))} (${row.occurrences})`)
+          .join('; ')}`
+      : '- Top postgres log messages: unavailable (analytics query empty or failed).'
+
   const selfHealLines = Array.isArray(comparison?.recommended_actions)
     ? comparison.recommended_actions.slice(0, 3).map((item) => `- ${sanitizeCell(item)}`)
     : ['- Continue standard audit cycle and compare against next run.']
@@ -86,6 +95,7 @@ function buildSnapshotBlock(summary, snapshotNumber) {
     availabilityLine,
     comparisonLine,
     topRegressionLine,
+    topPostgresErrorLine,
     '',
     'Compact Top 10 (run-local):',
     ...compactTop10Table,

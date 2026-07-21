@@ -1,3 +1,35 @@
+/**
+ * supabase_audit_cycle.mjs
+ *
+ * Supabase performance audit script for Techwheels-Service.
+ *
+ * What it does:
+ * 1. Validates a manual post-deploy confirmation gate (prevents cold-data runs).
+ * 2. Fires parallel SQL queries against pg_stat_statements and pg_stat_* views.
+ * 3. Collects Supabase platform logs (auth, edge, realtime, storage, postgres).
+ * 4. Collects ranked postgres_logs / edge_logs error frequency (analytics SQL).
+ * 5. Compares results against the previous run stored in supabase/evidence/audit_runs/.
+ * 6. Evaluates a regression guard with configurable thresholds.
+ * 7. Writes all artifacts (JSON + Markdown) to a timestamped run directory.
+ * 8. Auto-updates SUPABASE-001_PRODUCTION_HARDENING_MASTER_PLAN.md via supabase_plan_autoupdate.mjs.
+ *
+ * Usage:
+ *   npm run supabase:audit:cycle            # dry-run safe test (will fail at gate)
+ *   npm run supabase:audit:cycle:postdeploy # real run after Vercel deploy + 15m wait
+ *
+ * Required env vars (typically in .env.local):
+ *   SUPABASE_PROJECT_REF      — project ref (e.g. jmdndcphkmaljhwgzqxq)
+ *   SUPABASE_MANAGEMENT_TOKEN — personal access token from supabase.com/dashboard/account/tokens
+ *                               (NOT the service role key)
+ *
+ * Optional env vars:
+ *   SUPABASE_AUDIT_AUTO_UPDATE_PLAN=false
+ *   SUPABASE_AUDIT_ALLOW_REGRESSION=true
+ *   SUPABASE_AUDIT_WARN_DELTA_TOTAL_MS_SUM=2000
+ *   SUPABASE_AUDIT_BLOCK_DELTA_TOTAL_MS_SUM=5000
+ *   SUPABASE_AUDIT_BLOCK_SINGLE_QUERY_DELTA_MS=1500
+ */
+
 import fs from 'fs/promises'
 import path from 'path'
 import updateMasterPlanFromSummary from './supabase_plan_autoupdate.mjs'
@@ -70,7 +102,13 @@ function ensureEnv(projectRef, managementToken) {
   if (!managementToken) missing.push('SUPABASE_MANAGEMENT_TOKEN')
 
   if (missing.length > 0) {
-    throw new Error(`Missing required environment variables: ${missing.join(', ')}`)
+    throw new Error(
+      `Missing required environment variables: ${missing.join(', ')}\n` +
+        `SUPABASE_MANAGEMENT_TOKEN must be a personal access token from:\n` +
+        `  https://supabase.com/dashboard/account/tokens\n` +
+        `(This is NOT your service role key.)\n` +
+        `Add it to .env.local as: SUPABASE_MANAGEMENT_TOKEN=sbp_xxxx...`,
+    )
   }
 }
 
@@ -162,6 +200,46 @@ async function collectPlatformLogs(projectRef, token, sourceTable, limit = 100) 
     count: records.length,
     records,
   }
+}
+
+async function collectTopPostgresErrors(projectRef, token) {
+  const sql = `
+    select
+      event_message,
+      count(*) as occurrences
+    from postgres_logs
+    where level in ('error', 'warning')
+    group by event_message
+    order by occurrences desc
+    limit 15
+  `.trim()
+  const endpoint = `/v1/projects/${projectRef}/analytics/endpoints/logs.all?sql=${encodeURIComponent(sql)}`
+  const response = await callManagementApi({ method: 'GET', pathName: endpoint, token })
+  if (!response.ok) {
+    return { status: 'unavailable', records: [], error: response.data }
+  }
+  const records = Array.isArray(response.data?.result) ? response.data.result : []
+  return { status: 'ok', records }
+}
+
+async function collectEdgeFunctionErrors(projectRef, token) {
+  const sql = `
+    select
+      event_message,
+      count(*) as occurrences
+    from edge_logs
+    where level in ('error', 'warning')
+    group by event_message
+    order by occurrences desc
+    limit 10
+  `.trim()
+  const endpoint = `/v1/projects/${projectRef}/analytics/endpoints/logs.all?sql=${encodeURIComponent(sql)}`
+  const response = await callManagementApi({ method: 'GET', pathName: endpoint, token })
+  if (!response.ok) {
+    return { status: 'unavailable', records: [], error: response.data }
+  }
+  const records = Array.isArray(response.data?.result) ? response.data.result : []
+  return { status: 'ok', records }
 }
 
 function summarizeTopQuery(topRows) {
@@ -332,6 +410,18 @@ function buildComparison(currentSummary, previousSummaryEnvelope) {
     recommendedActions.push('OFFSET-heavy queries increased; prioritize keyset pagination on list endpoints still using range/offset.')
   }
 
+  if (regressions.some((row) => String(row.current_query_sample || '').includes('process_refresh_queue'))) {
+    recommendedActions.push('process_refresh_queue() load increased; review cron cadence and scope controls.')
+  }
+
+  if (
+    regressions.some((row) => String(row.current_query_sample || '').includes('process_all_service_history_sync_queue'))
+  ) {
+    recommendedActions.push(
+      'process_all_service_history_sync_queue load increased; reduce pg_cron batch size and index chassis lookups on service history tables.',
+    )
+  }
+
   if (regressions.some((row) => row.queryid === '-2876120296317350531')) {
     recommendedActions.push('Realtime WAL polling increased; reduce duplicate subscriptions and channel fan-out.')
   }
@@ -353,6 +443,36 @@ function buildComparison(currentSummary, previousSummaryEnvelope) {
     top_improvements: improvements,
     recommended_actions: recommendedActions,
     deltas,
+  }
+}
+
+function appendPostgresLogRecommendedActions(summary) {
+  const comparison = summary.comparison
+  if (!comparison || !Array.isArray(comparison.recommended_actions)) return
+
+  const pgErrors = Array.isArray(summary.top_postgres_errors) ? summary.top_postgres_errors : []
+  const hasTimeout = pgErrors.some((row) =>
+    String(row.event_message || '').toLowerCase().includes('statement timeout'),
+  )
+  if (
+    hasTimeout &&
+    !comparison.recommended_actions.some((item) => String(item).toLowerCase().includes('statement timeout'))
+  ) {
+    comparison.recommended_actions.push(
+      'Postgres statement timeouts increased; reduce pg_cron batch sizes and add indexes for hot refresh/sync paths.',
+    )
+  }
+
+  const hasMissingRelation = pgErrors.some((row) =>
+    String(row.event_message || '').includes('does not exist'),
+  )
+  if (
+    hasMissingRelation &&
+    !comparison.recommended_actions.some((item) => String(item).includes('does not exist'))
+  ) {
+    comparison.recommended_actions.push(
+      'Postgres missing-relation errors in logs; verify function/table identifiers match live schema (quoted vs lowercase names).',
+    )
   }
 }
 
@@ -516,6 +636,34 @@ function makeMarkdownSummary(summary) {
   const sev = summary.postgres_log_severity || {}
   lines.push(`- error=${sev.error ?? 0}, warning=${sev.warning ?? 0}, fatal=${sev.fatal ?? 0}, panic=${sev.panic ?? 0}, total_records=${sev.total_records ?? 0}`)
   lines.push('')
+  lines.push('## Top Postgres Errors & Warnings (Ranked by Frequency)')
+  lines.push('')
+  const pgErrors = Array.isArray(summary.top_postgres_errors) ? summary.top_postgres_errors : []
+  if (pgErrors.length === 0) {
+    lines.push('- No errors/warnings captured or log query unavailable.')
+  } else {
+    lines.push('| # | occurrences | event_message |')
+    lines.push('|---|---:|---|')
+    pgErrors.slice(0, 10).forEach((row, i) => {
+      const msg = String(row.event_message || '').slice(0, 120).replace(/\|/g, '\\|')
+      lines.push(`| ${i + 1} | ${row.occurrences} | ${msg} |`)
+    })
+  }
+  lines.push('')
+  lines.push('## Top Edge Function Errors (Ranked by Frequency)')
+  lines.push('')
+  const edgeErrors = Array.isArray(summary.top_edge_errors) ? summary.top_edge_errors : []
+  if (edgeErrors.length === 0) {
+    lines.push('- No edge function errors captured or log query unavailable.')
+  } else {
+    lines.push('| # | occurrences | event_message |')
+    lines.push('|---|---:|---|')
+    edgeErrors.slice(0, 10).forEach((row, i) => {
+      const msg = String(row.event_message || '').slice(0, 120).replace(/\|/g, '\\|')
+      lines.push(`| ${i + 1} | ${row.occurrences} | ${msg} |`)
+    })
+  }
+  lines.push('')
   return lines.join('\n')
 }
 
@@ -607,6 +755,8 @@ async function main() {
   const capturedAt = isoNow()
   const runTimestamp = capturedAt.replace(/[:.]/g, '-').replace('T', '__').replace('Z', 'Z')
 
+  console.log(`Starting audit cycle for project ${projectRef} at ${capturedAt}`)
+
   const sqlTopQueries = `
 SELECT
   queryid,
@@ -634,9 +784,8 @@ SELECT
   round(s.max_exec_time::numeric, 6) AS max_time,
   round(s.total_exec_time::numeric, 6) AS total_time,
   s.rows AS rows_read,
-  round((s.shared_blks_hit::numeric / nullif(s.shared_blks_hit + s.shared_blks_read, 0)) * 100, 16) AS cache_hit_rate,
-  round((((s.total_exec_time / nullif(sum(s.total_exec_time) OVER (), 0)) * 100)::numeric), 16) AS prop_total_time,
-  null::text AS index_advisor_result,
+  round((s.shared_blks_hit::numeric / nullif(s.shared_blks_hit + s.shared_blks_read, 0)) * 100, 6) AS cache_hit_rate,
+  round((((s.total_exec_time / nullif(sum(s.total_exec_time) OVER (), 0)) * 100)::numeric), 6) AS prop_total_time,
   s.queryid
 FROM extensions.pg_stat_statements s
 LEFT JOIN pg_roles r ON r.oid = s.userid
@@ -649,22 +798,19 @@ SELECT
   queryid,
   calls,
   round(total_exec_time::numeric, 2) AS total_ms,
-  round(mean_exec_time::numeric, 2) AS mean_ms
+  round(mean_exec_time::numeric, 2) AS mean_ms,
+  left(query, 200) AS query_sample
 FROM extensions.pg_stat_statements
-WHERE queryid IN (
-  6416750758406621842::bigint,
-  -5344960703026327435::bigint,
-  -6712128630152386476::bigint,
-  -225245605736690330::bigint,
-  -5044213774447814878::bigint,
-  -2876120296317350531::bigint,
-  -922008049376959953::bigint,
-  852176900607336119::bigint,
-  2744925251257801673::bigint,
-  -5633448213020496946::bigint,
-  8277935260341689633::bigint
-)
-ORDER BY total_exec_time DESC;
+WHERE query ILIKE '%process_refresh_queue%'
+   OR query ILIKE '%process_all_service_history_sync_queue%'
+   OR query ILIKE '%refresh_all_service_data_from_service_history%'
+   OR query ILIKE '%booking_child_vc_family_lookup%'
+   OR query ILIKE '%vna_stock_logic_v%'
+   OR query ILIKE '%matched_stock_customers_logic_v%'
+   OR query ILIKE '%service_reception_entries%'
+   OR query ILIKE '%technician_assignments%'
+ORDER BY total_exec_time DESC
+LIMIT 20;
   `.trim()
 
   const sqlTableScanRatios = `
@@ -674,7 +820,17 @@ SELECT
   idx_scan,
   round((seq_scan::numeric / nullif(seq_scan + idx_scan, 0)) * 100, 2) AS seq_scan_pct
 FROM pg_stat_user_tables
-WHERE relname IN ('service_reception_entries', 'technician_assignments', 'service_vas_jc_data')
+WHERE relname IN (
+  'service_reception_entries',
+  'technician_assignments',
+  'service_vas_jc_data',
+  'booking_child_vc_family_lookup',
+  'matched_stock_refresh_queue',
+  'vna_stock_refresh_queue',
+  'all_service_history_sync_queue',
+  'ev_service_history_test',
+  'pv_service_history_test'
+)
 ORDER BY seq_scan_pct DESC NULLS LAST;
   `.trim()
 
@@ -772,13 +928,16 @@ LIMIT 20;
 
   enforceTopQueriesGate(topQueries)
 
-  const [authLogs, edgeLogs, realtimeLogs, storageLogs, dbHealthLogs] = await Promise.all([
-    collectPlatformLogs(projectRef, managementToken, 'auth_logs'),
-    collectPlatformLogs(projectRef, managementToken, 'edge_logs'),
-    collectPlatformLogs(projectRef, managementToken, 'realtime_logs'),
-    collectPlatformLogs(projectRef, managementToken, 'storage_logs'),
-    collectPlatformLogs(projectRef, managementToken, 'postgres_logs'),
-  ])
+  const [authLogs, edgeLogs, realtimeLogs, storageLogs, dbHealthLogs, topPostgresErrors, topEdgeErrors] =
+    await Promise.all([
+      collectPlatformLogs(projectRef, managementToken, 'auth_logs'),
+      collectPlatformLogs(projectRef, managementToken, 'edge_logs'),
+      collectPlatformLogs(projectRef, managementToken, 'realtime_logs'),
+      collectPlatformLogs(projectRef, managementToken, 'storage_logs'),
+      collectPlatformLogs(projectRef, managementToken, 'postgres_logs'),
+      collectTopPostgresErrors(projectRef, managementToken),
+      collectEdgeFunctionErrors(projectRef, managementToken),
+    ])
 
   const summary = {
     project_ref: projectRef,
@@ -802,6 +961,8 @@ LIMIT 20;
       database_health: { status: dbHealthLogs.status, count: dbHealthLogs.count, endpoint: dbHealthLogs.endpoint || null },
     },
     postgres_log_severity: summarizePostgresLogSeverity(dbHealthLogs.records),
+    top_postgres_errors: topPostgresErrors.records,
+    top_edge_errors: topEdgeErrors.records,
     notes: summarizeTopQuery(topQueries.rows),
     top_query_summary: summarizeTopQuery(topQueries.rows),
     errors: {
@@ -818,6 +979,7 @@ LIMIT 20;
   }
 
   summary.comparison = buildComparison(summary, previousSummaryEnvelope)
+  appendPostgresLogRecommendedActions(summary)
   if (summary.comparison?.compared) {
     summary.notes = `${summary.top_query_summary}; comparison=${summary.comparison.movement_status}; delta_total_ms_sum=${summary.comparison.totals.delta_total_ms_sum}`
   }
@@ -839,7 +1001,7 @@ LIMIT 20;
     'summary.json': toSafeJson(summary),
     'summary.md': markdown,
     'raw_top_queries.json': toSafeJson(topQueries),
-    'raw_top_10_slow_queries_detailed.json': toSafeJson(topSlowQueriesDetailed),
+    'raw_top_slow_queries_detailed.json': toSafeJson(topSlowQueriesDetailed),
     'raw_tracked_queries.json': toSafeJson(trackedQueries),
     'raw_table_scan_ratios.json': toSafeJson(tableScans),
     'raw_db_health.json': toSafeJson(dbHealth),
@@ -852,6 +1014,8 @@ LIMIT 20;
     'raw_platform_realtime_logs.json': toSafeJson(realtimeLogs),
     'raw_platform_storage_logs.json': toSafeJson(storageLogs),
     'raw_platform_postgres_logs.json': toSafeJson(dbHealthLogs),
+    'raw_top_postgres_errors.json': toSafeJson(topPostgresErrors),
+    'raw_top_edge_errors.json': toSafeJson(topEdgeErrors),
     'comparison.json': toSafeJson(summary.comparison),
     'regression_guard.json': toSafeJson(summary.regression_guard),
     'top_10_slow_queries_detailed.md': detailedTop10Markdown,
@@ -892,7 +1056,7 @@ LIMIT 20;
     console.log(`Plan updated: ${planUpdateResult.planPath} (snapshot 14.${planUpdateResult.snapshotNumber})`)
   } else if (shouldBlockPlanUpdate) {
     console.log('Plan update blocked by regression guard (set SUPABASE_AUDIT_ALLOW_REGRESSION=true to override).')
-  } else {
+  } else if (!autoUpdatePlan) {
     console.log('Plan auto-update skipped (SUPABASE_AUDIT_AUTO_UPDATE_PLAN=false).')
   }
 }
