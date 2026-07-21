@@ -247,6 +247,8 @@ const PSF_SERVER_STAGING_RPC_ENABLED = true
 const PSF_SERVER_STAGING_RPC_CHUNK_SIZE = 1000
 const PSF_ASYNC_ENQUEUE_ENABLED = true
 const PSF_ASYNC_ENQUEUE_CHUNK_SIZE = 250
+const PSF_DMS_SERVER_IMPORT_RPC_ENABLED = true
+const PSF_DMS_SERVER_IMPORT_CHUNK_SIZE = 500
 const PARTS_REPLACE_ALL_ON_IMPORT = true
 
 const DEALER_CODE_LOCATION_PORTAL_RULES = [
@@ -1349,7 +1351,7 @@ export default function ImportPage() {
               'part_number,branch,order_date,source_row_hash',
             ].filter((candidate) => partsOrderIncludesAll(candidate.split(',')))
           : []
-        const CHUNK = isJcClosedTable ? 250 : isVasTable ? 2000 : 2000
+        const CHUNK = isJcClosedTable ? 250 : isPsfRevenueDmsTable ? 250 : isVasTable ? 2000 : 2000
         let totalInserted = 0
         let processedRows = 0
         const mappingIssues: MappingIssueInsert[] = []
@@ -1737,9 +1739,15 @@ export default function ImportPage() {
           return processed
         }
 
-        const upsertPsfRevenueDmsRowsByBusinessKey = async (
+        const preparePsfRevenueDmsCanonicalRows = (
           rows: Record<string, unknown>[],
-        ): Promise<number> => {
+        ): Array<Record<string, unknown> & {
+          branch: string
+          location: string
+          portal: string
+          job_card_number: string
+          invoice_date: string
+        }> => {
           type PsfRevenueDmsUpsertRow = Record<string, unknown> & {
             branch: string
             location: string
@@ -1791,14 +1799,67 @@ export default function ImportPage() {
             const existingCancelled = isCancelledDmsInvoice(existing)
             const currentCancelled = isCancelledDmsInvoice(row)
 
-            // Prefer active invoices over cancelled invoices for the same canonical key.
-            // If cancellation status is the same, keep the later row, matching the previous rule.
             if (existingCancelled === currentCancelled || !currentCancelled) {
               dedupedByCanonicalKey.set(key, row)
             }
           }
 
-          const dedupedRows = Array.from(dedupedByCanonicalKey.values())
+          return Array.from(dedupedByCanonicalKey.values())
+        }
+
+        const importPsfRevenueDmsRowsViaServerBatch = async (
+          rows: Record<string, unknown>[],
+        ): Promise<number> => {
+          const dedupedRows = preparePsfRevenueDmsCanonicalRows(rows)
+          if (dedupedRows.length === 0) return 0
+
+          let processed = 0
+          let chunkStart = 0
+
+          while (chunkStart < dedupedRows.length) {
+            const chunkEnd = Math.min(chunkStart + PSF_DMS_SERVER_IMPORT_CHUNK_SIZE, dedupedRows.length)
+            const chunkRows = dedupedRows.slice(chunkStart, chunkEnd)
+
+            const { data, error } = await supabase.rpc('run_psf_revenue_dms_import_batch', {
+              p_rows: chunkRows,
+            })
+
+            if (error) {
+              const lower = (error.message ?? '').toLowerCase()
+              const rpcUnavailable =
+                lower.includes('could not find the function') ||
+                (lower.includes('function') && lower.includes('run_psf_revenue_dms_import_batch'))
+
+              if (rpcUnavailable) {
+                return upsertPsfRevenueDmsRowsByBusinessKey(dedupedRows)
+              }
+
+              throw new Error(error.message ?? 'PSF Revenue DMS server batch import failed')
+            }
+
+            const resultRows = (data as Array<Record<string, unknown>> | null) ?? []
+            const result = resultRows[0]
+            const chunkProcessed = Number(result?.processed_rows ?? chunkRows.length)
+            processed += Number.isFinite(chunkProcessed) ? chunkProcessed : chunkRows.length
+            incrementProcessedRows(chunkRows.length)
+            chunkStart = chunkEnd
+          }
+
+          return processed
+        }
+
+        const upsertPsfRevenueDmsRowsByBusinessKey = async (
+          rows: Record<string, unknown>[],
+        ): Promise<number> => {
+          type PsfRevenueDmsUpsertRow = Record<string, unknown> & {
+            branch: string
+            location: string
+            portal: string
+            job_card_number: string
+            invoice_date: string
+          }
+
+          const dedupedRows = preparePsfRevenueDmsCanonicalRows(rows) as PsfRevenueDmsUpsertRow[]
 
           let processed = 0
 
@@ -2480,7 +2541,9 @@ export default function ImportPage() {
               )
             }
 
-            totalInserted += await upsertPsfRevenueDmsRowsByBusinessKey(insertRows)
+            totalInserted += PSF_DMS_SERVER_IMPORT_RPC_ENABLED
+              ? await importPsfRevenueDmsRowsViaServerBatch(insertRows)
+              : await upsertPsfRevenueDmsRowsByBusinessKey(insertRows)
           } else if (isInvoiceTable) {
             // Invoice table: map only required headers and parse date/amount fields
             const excelHeaders = Object.keys(rawRows[0] ?? {})
