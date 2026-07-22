@@ -521,17 +521,13 @@ export default function PartsRequirementSection({ isAdmin = false }: Props) {
     return 'PV'
   }
 
-  // ── VOR check: order number starts with "33"
-  const isVOR = (row: PartsRequestRow): boolean => {
-    const no = orderNoOf_inner(row)
-    return no.startsWith('33')
-  }
-
-  const orderNoOf_inner = (row: PartsRequestRow): string =>
+  // ── Order number lookup (must be declared before isVOR uses it) ──────────
+  const orderNoOf = (row: PartsRequestRow): string =>
     orderNumbers[normPartNumber(row.parts_number)] || ''
 
-  const orderNoOf = (row: PartsRequestRow): string =>
-    orderNoOf_inner(row)
+  // ── VOR check: order number starts with "33"
+  const isVOR = (row: PartsRequestRow): boolean =>
+    orderNoOf(row).startsWith('33')
 
   const orderStatusOf = (row: PartsRequestRow): string =>
     orderStatuses[normPartNumber(row.parts_number)] || 'Order Pending'
