@@ -954,7 +954,9 @@ export default function PartsRequirementSection({ isAdmin = false }: Props) {
                 <th className="px-4 py-3 text-left">Stock Status</th>
                 <th className="px-4 py-3 text-left">Order Status</th>
                 <th className="px-4 py-3 text-left">Status</th>
-                {!isAdmin && <th className="px-4 py-3 text-left">Action</th>}
+                <th className="px-4 py-3 text-left">Order No.</th>
+                <th className="px-4 py-3 text-left">Order Date</th>
+                <th className="px-4 py-3 text-left">Action</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
@@ -969,11 +971,19 @@ export default function PartsRequirementSection({ isAdmin = false }: Props) {
                       className={`cursor-pointer transition hover:bg-gray-50 ${!row.advisor_seen && !isAdmin ? 'bg-blue-50/40' : ''}`}
                       onClick={() => void handleExpand(row)}
                     >
-                      <td className="whitespace-nowrap px-4 py-2.5 text-gray-700">{fmtDateDMY(row.entry_date)}</td>
+                      <td className="whitespace-nowrap px-4 py-2.5 text-gray-700">
+                        <div className="flex items-center gap-1.5">
+                          <span className={`inline-block transition-transform text-gray-400 text-[10px] ${isExpanded ? 'rotate-90' : ''}`}>&#9654;</span>
+                          {fmtDateDMY(row.entry_date)}
+                        </div>
+                      </td>
                       {isAdmin && <td className="whitespace-nowrap px-4 py-2.5 text-xs text-gray-700">{row.advisor_name}</td>}
                       <td className="whitespace-nowrap px-4 py-2.5 font-medium text-gray-900">{row.registration_number}</td>
                       <td className="px-4 py-2.5 text-xs text-gray-500">{row.job_card_number || '\u2014'}</td>
-                      <td className="px-4 py-2.5 text-gray-700">{row.customer_name || '\u2014'}</td>
+                      <td className="px-4 py-2.5">
+                        <div className="text-gray-900 font-medium">{row.customer_name || '—'}</div>
+                        {row.customer_mobile && <div className="text-xs text-gray-400 mt-0.5">{row.customer_mobile}</div>}
+                      </td>
                       <td className="px-4 py-2.5">
                         <div className="font-medium text-gray-900">{row.parts_required}</div>
                         {row.parts_number && <div className="text-xs text-gray-400">{row.parts_number}</div>}
@@ -984,11 +994,11 @@ export default function PartsRequirementSection({ isAdmin = false }: Props) {
                       <td className="px-4 py-2.5"><QtyBadge qty={row.parts_qty} /></td>
                       <td className="px-4 py-2.5"><OrderStatusBadge label={orderStatus} /></td>
                       <td className="px-4 py-2.5"><StatusBadge status={row.parts_status} qty={row.parts_qty} /></td>
-                      {!isAdmin && <td className="px-4 py-2.5"><ActionButton row={row} /></td>}
+                      <td className="px-4 py-2.5"><ActionButton row={row} /></td>
                     </tr>
                     {isExpanded && (
                       <tr key={`${row.id}-exp`} className="bg-gray-50">
-                        <td colSpan={isAdmin ? 10 : 11} className="px-6 py-4">
+                        <td colSpan={13} className="px-6 py-4">
                           <div className="grid grid-cols-2 gap-4 text-xs sm:grid-cols-3 lg:grid-cols-5">
                             <div>
                               <p className="font-bold text-gray-500">Order No.</p>
@@ -1034,7 +1044,7 @@ export default function PartsRequirementSection({ isAdmin = false }: Props) {
                             )}
                             <div className="sm:col-span-2">
                               <p className="font-bold text-gray-500">Advisor Remarks</p>
-                              {row.parts_status !== 'Done' && !isAdmin ? (
+                              {row.parts_status !== 'Done' ? (
                                 <textarea
                                   defaultValue={row.advisor_remarks ?? ''}
                                   onBlur={(e) => void handleRemarksBlur(row, e.target.value)}
@@ -1049,7 +1059,7 @@ export default function PartsRequirementSection({ isAdmin = false }: Props) {
                             </div>
                             <div className="sm:col-span-2">
                               <p className="font-bold text-gray-500">Customer Update</p>
-                              {row.parts_status !== 'Done' && !isAdmin ? (
+                              {row.parts_status !== 'Done' ? (
                                 <textarea
                                   defaultValue={row.customer_update ?? ''}
                                   onBlur={(e) => void handleCustomerUpdateBlur(row, e.target.value)}
@@ -1062,15 +1072,13 @@ export default function PartsRequirementSection({ isAdmin = false }: Props) {
                                 <p className="mt-0.5 text-gray-800">{row.customer_update || '\u2014'}</p>
                               )}
                             </div>
-                            {!isAdmin && (
-                              <div className="flex items-end gap-2">
-                                <button type="button"
-                                  onClick={(e) => { e.stopPropagation(); openEditForm(row) }}
-                                  className="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-xs font-semibold text-gray-700 hover:bg-gray-50">
-                                  Edit
-                                </button>
-                              </div>
-                            )}
+                            <div className="flex items-end gap-2">
+                              <button type="button"
+                                onClick={(e) => { e.stopPropagation(); openEditForm(row) }}
+                                className="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-xs font-semibold text-gray-700 hover:bg-gray-50">
+                                Edit
+                              </button>
+                            </div>
                           </div>
                         </td>
                       </tr>
@@ -1153,7 +1161,7 @@ export default function PartsRequirementSection({ isAdmin = false }: Props) {
                       )}
                       <div>
                         <p className="mb-0.5 font-bold text-gray-500">Advisor Remarks</p>
-                        {row.parts_status !== 'Done' && !isAdmin ? (
+                        {row.parts_status !== 'Done' ? (
                           <textarea defaultValue={row.advisor_remarks ?? ''}
                             onBlur={(e) => void handleRemarksBlur(row, e.target.value)}
                             rows={2}
@@ -1165,7 +1173,7 @@ export default function PartsRequirementSection({ isAdmin = false }: Props) {
                       </div>
                       <div>
                         <p className="mb-0.5 font-bold text-gray-500">Customer Update</p>
-                        {row.parts_status !== 'Done' && !isAdmin ? (
+                        {row.parts_status !== 'Done' ? (
                           <textarea defaultValue={row.customer_update ?? ''}
                             onBlur={(e) => void handleCustomerUpdateBlur(row, e.target.value)}
                             rows={2}
