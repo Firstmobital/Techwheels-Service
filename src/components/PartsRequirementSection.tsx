@@ -42,6 +42,7 @@ type DraftHeader = {
   registration_number: string
   job_card_number: string
   customer_name: string
+  customer_mobile: string
   vehicle_model: string
   entry_date: string
 }
@@ -53,6 +54,7 @@ type Draft = {
   advisor_remarks: string
   entry_date: string
   parts_number: string
+  customer_mobile: string
 }
 
 type QuickFilter = 'all' | 'Pending' | 'Ordered' | 'Received' | 'Ready' | 'mine'
@@ -81,6 +83,7 @@ const EMPTY_HEADER: DraftHeader = {
   registration_number: '',
   job_card_number: '',
   customer_name: '',
+  customer_mobile: '',
   vehicle_model: '',
   entry_date: todayIST(),
 }
@@ -99,6 +102,7 @@ const EMPTY_DRAFT: Draft = {
   advisor_remarks: '',
   entry_date: todayIST(),
   parts_number: '',
+  customer_mobile: '',
 }
 
 function StatusBadge({ status, qty = null }: { status: PartsRequestRow['parts_status']; qty?: number | null }) {
@@ -420,6 +424,7 @@ export default function PartsRequirementSection({ isAdmin = false }: Props) {
       advisor_remarks: row.advisor_remarks ?? '',
       entry_date: row.entry_date,
       parts_number: row.parts_number ?? '',
+      customer_mobile: row.customer_mobile ?? '',
     })
     setShowForm(true)
   }
@@ -454,6 +459,7 @@ export default function PartsRequirementSection({ isAdmin = false }: Props) {
         jobCardNumber: draftHeader.job_card_number.trim() || null,
         customerName: draftHeader.customer_name.trim() || null,
         vehicleModel: draftHeader.vehicle_model.trim() || null,
+        customerMobile: draftHeader.customer_mobile.trim() || null,
       })
       if (res.error) { anyError = res.error; break }
     }
@@ -483,6 +489,7 @@ export default function PartsRequirementSection({ isAdmin = false }: Props) {
       advisorRemarks: draft.advisor_remarks.trim() || null,
       entryDate: draft.entry_date || null,
       partsNumber: draft.parts_number.trim() || null,
+      customerMobile: draft.customer_mobile.trim() || null,
     })
     setSaving(false)
     if (res.error) { setError(res.error); return }
@@ -737,6 +744,13 @@ export default function PartsRequirementSection({ isAdmin = false }: Props) {
                   placeholder="Customer name" className={inputCls} />
               </label>
               <label className={labelCls}>
+                Customer Mobile
+                <input type="tel" value={draftHeader.customer_mobile}
+                  onChange={(e) => setDraftHeader((d) => ({ ...d, customer_mobile: e.target.value.replace(/\D/g, '').slice(0, 10) }))}
+                  placeholder="10-digit mobile no." maxLength={10}
+                  className={inputCls} />
+              </label>
+              <label className={labelCls}>
                 Vehicle Model
                 <input type="text" value={draftHeader.vehicle_model}
                   onChange={(e) => setDraftHeader((d) => ({ ...d, vehicle_model: e.target.value }))}
@@ -852,6 +866,13 @@ export default function PartsRequirementSection({ isAdmin = false }: Props) {
               <input type="text" value={draft.parts_number}
                 onChange={(e) => setDraft((d) => ({ ...d, parts_number: e.target.value.toUpperCase() }))}
                 placeholder="Enter if known" className={inputCls} />
+            </label>
+            <label className={labelCls}>
+              Customer Mobile <span className="font-normal normal-case text-gray-400">(optional)</span>
+              <input type="tel" value={draft.customer_mobile}
+                onChange={(e) => setDraft((d) => ({ ...d, customer_mobile: e.target.value.replace(/\D/g, '').slice(0, 10) }))}
+                placeholder="10-digit mobile no." maxLength={10}
+                className={inputCls} />
             </label>
             <label className={`${labelCls} sm:col-span-2 lg:col-span-3`}>
               Parts Description
@@ -982,6 +1003,10 @@ export default function PartsRequirementSection({ isAdmin = false }: Props) {
                               <p className="mt-0.5 text-gray-800">{row.vehicle_model || '\u2014'}</p>
                             </div>
                             <div>
+                              <p className="font-bold text-gray-500">Customer Mobile</p>
+                              <p className="mt-0.5 text-gray-800">{row.customer_mobile || '\u2014'}</p>
+                            </div>
+                            <div>
                               <p className="font-bold text-gray-500">Branch</p>
                               <p className="mt-0.5 text-gray-800">{row.branch || '\u2014'}</p>
                             </div>
@@ -1106,6 +1131,10 @@ export default function PartsRequirementSection({ isAdmin = false }: Props) {
                         <div>
                           <p className="font-bold text-gray-500">Order Date</p>
                           <p className="text-gray-800">{fmtDateDMY(row.parts_order_date)}</p>
+                        </div>
+                        <div>
+                          <p className="font-bold text-gray-500">Mobile</p>
+                          <p className="text-gray-800">{row.customer_mobile || '\u2014'}</p>
                         </div>
                       </div>
                       <div>
