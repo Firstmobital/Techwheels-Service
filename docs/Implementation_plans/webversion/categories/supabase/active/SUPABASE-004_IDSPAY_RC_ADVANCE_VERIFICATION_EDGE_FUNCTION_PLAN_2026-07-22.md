@@ -4,7 +4,7 @@
 **Created:** 2026-07-22  
 **Priority:** HIGH  
 **Owner:** Platform Team (Supabase Edge)  
-**Status:** Active — **Phase 3 verified 2026-07-22** (v1 deploy); Phase 4 optional (AutoDoc / admin config)  
+**Status:** Active — **Phase 3 verified 2026-07-22**; **Phase 5 planned** (`rto_idspay` → `all_service_data` insurance sync); Phase 4 optional (AutoDoc)  
 **Parent context:** Complements existing AutoDoc RC path documented in `docs/Implementation_plans/completed/webversion/categories/autodoc/active/RC_LOOKUP_EDGE_FUNCTION_IMPLEMENTATION_PLAN.md` (`invoke-ocean025` + Invincible Ocean + `public.rto_cache`). This plan adds a **separate IDSPay provider contract** aligned with TECHWHEELS-WEB `invoke-rc-provider` v3 — not a modification of `invoke-ocean025` unless explicitly decided in §4.
 
 **Reference implementation (external, read-only port source):**
@@ -14,6 +14,8 @@
 
 **Governance:** SUPABASE-001 rules R3–R9 (`supabase/migrations/` for schema; `supabase/backups/full_metadata.sql` for schema authority in **this** repo).
 
+**Schema authority snapshot (2026-07-22):** `supabase/evidence/authoritative_metadata_manifest.json` — sha256 `9fd90934d6c2541d47da3c77b412789012f95086267ea86df51a0e86cf75e68a` (includes deployed `public.rto_idspay`).
+
 **Vendor documentation (audited 2026-07-22):** IDSPay `ServiceDocumentation.pdf` — RC Advance Verification v1.0; audit report at `docs/Implementation_plans/webversion/categories/supabase/evidence/SUPABASE-004_IDSPAY_SERVICE_DOCUMENTATION_AUDIT_2026-07-22.md`.
 
 ---
@@ -22,7 +24,7 @@
 
 Deliver a production-ready Supabase Edge Function that calls **IDSPay RC Advance Verification** using the same upstream contract as Techwheels: **POST** JSON to `{prod|uat base}/srv2/validation/rc` with credentials **`api_id`, `api_key`, `token_id`, `reg_no` in the request body** (not headers), parse provider payload at dot path **`data`**, and return a stable normalized JSON envelope (`source`, `provider`, `vehicle_no_field_used`, `data_path_used`, `data`, `extra_fields`).
 
-On **successful** IDSPay RC validation, **upsert `public.rto_cache`** using the existing table (already in production metadata) — map IDSPay `data.*` fields into `api_rc_*` columns and store the **full upstream JSON** (including `status`, `message`, nested `data`) in `api_rc_response`. Do **not** create a second table; extend columns only if a field cannot live in `api_rc_response` (§5.3).
+On **successful** IDSPay RC validation, **upsert `public.rto_idspay`** with exact IDSPay `data.*` column names and full upstream JSON in `provider_response`. **Phase 5** (planned): on INSERT/UPDATE of `rto_idspay`, sync selected insurance fields into **`public.all_service_data`** (see §Phase 5).
 
 **Risk Level:** 🟡 MEDIUM (third-party API, credential handling, response normalization, dual response shapes)  
 **Estimated Duration:** 1–2 days (function + secrets + deploy verify); +0.5 day for `rto_cache` mapping parity with `invoke-ocean025`  
@@ -517,6 +519,7 @@ Record decisions in this file’s **Decision Log** table when approved.
 | 2026-07-22 | 4.1 | `invoke-rc-provider` + slug `idspay` | Product owner |
 | 2026-07-22 | 4.3 | Upsert **`public.rto_idspay`** (exact IDSPay column names) | Product owner |
 | 2026-07-22 | 4.5 | AutoDoc unchanged — `invoke-ocean025` (option A) | Product owner |
+| 2026-07-22 | 5.0 | Phase 5: insurance sync `rto_idspay` → `all_service_data`; audit columns `updated_by_rtoids` / `_at` | Product owner |
 
 ---
 
@@ -770,6 +773,83 @@ Alternate body (if supported):
 
 ---
 
+### Phase 5 — `rto_idspay` → `all_service_data` insurance sync (planned)
+
+**Objective:** When `public.rto_idspay` is inserted or updated (via `invoke-rc-provider` or direct DB write), push insurance fields into matching **`public.all_service_data`** rows and stamp IDSPay audit columns.
+
+**Metadata audit (2026-07-22 dump):** [`SUPABASE-004_METADATA_AUDIT_RTO_IDSPAY_SYNC_2026-07-22.md`](../evidence/SUPABASE-004_METADATA_AUDIT_RTO_IDSPAY_SYNC_2026-07-22.md)
+
+#### 5.5.1 Authority facts (from `full_metadata.sql`)
+
+| Object | State |
+|--------|--------|
+| `public.rto_idspay` | Deployed; insurance columns + `chassis`, `reg_no`, `registration_no` present |
+| `public.all_service_data` | Target columns exist: `last_insurance_comapny`, `last_insurance_expiry_date`, `last_insurance_policy_number` |
+| `updated_by_rtoids` / `updated_by_rtoids_at` | **Not in dump — add via migration** |
+| Sync function/trigger | **Absent — implement** |
+| Date parser | Reuse `public.parse_all_service_date_text` for `vehicle_insurance_upto` |
+| Pattern reference | `refresh_all_service_data_from_job_card_closed_data(text, text)` + `trg_refresh_all_service_data_from_job_card_closed_data` |
+
+#### 5.5.2 Field mapping (product owner)
+
+| Source (`rto_idspay`) | Target (`all_service_data`) |
+|------------------------|-----------------------------|
+| `vehicle_insurance_company_name` | `last_insurance_comapny` (keep existing typo) |
+| `vehicle_insurance_upto` (text) | `last_insurance_expiry_date` (`date`) |
+| `vehicle_insurance_policy_number` | `last_insurance_policy_number` |
+| (when any mapped field changes on target) | `updated_by_rtoids = true`, `updated_by_rtoids_at = now()` |
+| (recommended) | `last_updated_at = now()` |
+
+#### 5.5.3 Match keys
+
+Normalize with `upper(btrim(...))` (same as job-card sync):
+
+| Source | Target |
+|--------|--------|
+| `chassis` | `chassis_no` |
+| `coalesce(reg_no, registration_no)` | `vehicle_registration_number` |
+
+**Match policy (recommended — align with job-card winner sync):**
+
+1. If `chassis` present → update **one** target row: latest `last_updated_at` / `id` where chassis matches.
+2. Else if reg present → same by `vehicle_registration_number`.
+3. If both present → prefer chassis match first; VRN fallback only when chassis match finds no row.
+4. **UPDATE only** — no INSERT into `all_service_data`.
+5. Do **not** overwrite target insurance fields with NULL/blank when IDSPay sends empty strings.
+
+**Trigger:** fire when `verified = true` and any of: `chassis`, `reg_no`, `registration_no`, or the three insurance columns change.
+
+#### 5.5.4 Deliverables (implementation)
+
+| # | Artifact |
+|---|----------|
+| P5-D1 | Migration: `ALTER TABLE all_service_data ADD updated_by_rtoids boolean, updated_by_rtoids_at timestamptz` + comments |
+| P5-D2 | `refresh_all_service_data_from_rto_idspay(p_chassis text, p_registration text)` — `SECURITY DEFINER`, `search_path = public` |
+| P5-D3 | `trg_refresh_all_service_data_from_rto_idspay()` + `AFTER INSERT OR UPDATE` on `rto_idspay` |
+| P5-D4 | `supabase/sql_checks/<timestamp>_rto_idspay_all_service_data_sync_checks.sql` |
+| P5-D5 | Optional: `reconcile_all_service_data_from_rto_idspay_chunked(limit)` for backfill |
+| P5-D6 | `DB_CHANGE_LEDGER.md` entry before apply |
+| P5-D7 | Regenerate metadata backup post-apply (`npm run db:backup:metadata`) |
+
+**Grants:** `EXECUTE` on refresh/reconcile to `postgres`, `service_role` only (mirror job-card refresh).
+
+**Out of scope Phase 5:** `all_service_data_dynamic` projection (insurance not on dynamic table today); AutoDoc UI; Edge function changes (trigger covers Edge writes).
+
+#### 5.5.5 Verification (Phase 5 exit)
+
+| # | Test |
+|---|------|
+| P5-V1 | Upsert `rto_idspay` with known `chassis` matching an `all_service_data` row → insurance columns + `updated_by_rtoids` set |
+| P5-V2 | `invoke-rc-provider` live call → same side effect via trigger |
+| P5-V3 | Empty IDSPay insurance strings → existing target values preserved |
+| P5-V4 | No matching target → no error; zero rows updated |
+| P5-V5 | `vehicle_insurance_upto = '10-09-2026'` → `last_insurance_expiry_date = 2026-09-10` |
+
+**Evidence (on completion):**  
+`docs/Implementation_plans/webversion/categories/supabase/evidence/SUPABASE-004_PHASE5_RTO_IDSPAY_ALL_SERVICE_DATA_SYNC_2026-07-22.md`
+
+---
+
 ## 8. Validation Checklist
 
 | # | Scenario | Expected |
@@ -782,7 +862,8 @@ Alternate body (if supported):
 | V6 | Upstream error body §1.8 | No cache upsert; structured error JSON, `provider` set |
 | V7 | No credential leakage in logs | Manual log review |
 | V8 | Success + cache | Row in **`rto_idspay`**; `provider_response` contains full §1.7 JSON |
-| V9 | `status.code` 200 path | IDSPay-named columns populated per §5.0 / migration |
+| V9 | `status.code` 200 path | IDSPay-named columns populated on `rto_idspay` |
+| P5-V1 | Phase 5 sync | `all_service_data` insurance + `updated_by_rtoids` after `rto_idspay` write |
 
 ---
 
@@ -797,6 +878,8 @@ Alternate body (if supported):
 | Secrets + migration `rto_idspay` | ✅ Done | Applied + deployed 2026-07-22 |
 | **Phase 3 deploy + curl** | ✅ Done | [`evidence/SUPABASE-004_PHASE3_DEPLOY_CURL_2026-07-22.md`](../evidence/SUPABASE-004_PHASE3_DEPLOY_CURL_2026-07-22.md) |
 | Live + cache verification | ✅ Done | `RJ14CR1912` — live ~1.6s then `fromCache` |
+| **Phase 5 metadata audit** | ✅ Done | [`evidence/SUPABASE-004_METADATA_AUDIT_RTO_IDSPAY_SYNC_2026-07-22.md`](../evidence/SUPABASE-004_METADATA_AUDIT_RTO_IDSPAY_SYNC_2026-07-22.md) |
+| **Phase 5 sync implementation** | ✅ Code ready | Migration `20260722180000_*` — pending `supabase db push` |
 | Optional DB (`api_provider_config`) | ⏳ NS | §4.4 default skip |
 | Phase 4 — Frontend / AutoDoc | ⏳ NS | §4.5 option A — still `invoke-ocean025` |
 
@@ -810,7 +893,8 @@ Alternate body (if supported):
 | `src/lib/api/rcLookup.ts` | Client invoke pattern today |
 | `supabase/functions/_shared/cors.ts`, `_shared/auth.ts` | Reuse candidates |
 | `docs/Implementation_plans/webversion/categories/supabase/evidence/SUPABASE-004_IDSPAY_SERVICE_DOCUMENTATION_AUDIT_2026-07-22.md` | PDF audit, IP whitelist gap, error catalogue |
-| `docs/Implementation_plans/completed/webversion/categories/autodoc/active/RC_LOOKUP_EDGE_FUNCTION_IMPLEMENTATION_PLAN.md` | AutoDoc + Ocean integration history |
+| `docs/Implementation_plans/webversion/categories/supabase/evidence/SUPABASE-004_METADATA_AUDIT_RTO_IDSPAY_SYNC_2026-07-22.md` | Phase 5 metadata audit (2026-07-22 dump) |
+| `supabase/exec_success_migrations/sql/20260625113000_all_service_data_sync_from_job_card_closed_data_service_winner.sql` | Trigger + refresh pattern reference |
 
 ---
 
@@ -820,26 +904,25 @@ Alternate body (if supported):
 2. Fixed prod/UAT hosts and path `/srv2/validation/rc`.
 3. Response root path `data` for normalization input.
 4. Secrets only via Supabase secrets / env — never in git.
-5. On successful IDSPay validation, upsert **`public.rto_cache`** per §5.0 (do not create a differently named table).
+5. On successful IDSPay validation, upsert **`public.rto_idspay`**; Phase 5 syncs insurance into **`all_service_data`** via DB trigger (no Edge change).
 6. Upstream calls **HTTPS only**; IDSPay account **activated**; **IP whitelist** + matching **token_id** before production Edge traffic (§1.10).
 7. Prefer **UAT** (`IDSPAY_ENV=uat`) for first integration tests per PDF.
 
 ---
 
-## 12) Gaps / Owner Input Needed (Before Implementation)
+## 12) Open items / deferred
 
-| # | Topic | Question |
-|---|--------|----------|
-| G1 | **Provider slug** | Confirm `idspay` vs `idspay_v2` for `provider` metadata and `rto_cache.source`. |
-| G2 | **Edge function name** | `invoke-rc-provider` (Techwheels parity) vs new `idspay-rc-verify` vs replace `invoke-ocean025` for AutoDoc. |
-| G3 | **Dual response shapes** | Under what conditions does IDSPay return §1.7 vs §1.8 on the same `/srv2/validation/rc` endpoint? Capture one live failed trace in Phase 3. |
-| G4 | **HTTP status from IDSPay** | On §1.8 failure, does upstream HTTP stay 200 with JSON `status_code: 422`, or HTTP 422? Edge mapping depends on this. |
-| G5 | **Cache on failure** | Should failed lookups write `rto_cache` with `api_rc_verified = false` and raw §1.8 in `api_rc_response`, or skip DB write entirely? |
-| G6 | **Cache-first reads** | Should IDSPay function check `rto_cache` + TTL before calling IDSPay (like Ocean), or always live unless caller passes a flag? |
-| G7 | **Normalized edge envelope vs cache row** | Should HTTP response return Techwheels normalized `data`/`extra_fields` **plus** embedded `rto_cache` row (Ocean style), or normalized only? |
-| G8 | **Consent field** | AutoDoc sends `consent: 'Y'` to Ocean — required for IDSPay upstream or edge validation? |
-| G9 | **Extra columns** | Need dedicated DB columns for `rto_code`, `split_present_address`, `challan_details`, or is `api_rc_response` jsonb enough? |
-| G10 | **Reference v3 access** | Confirm TECHWHEELS-WEB repo availability for line-by-line parity on normalization helpers and error codes. |
-| G11 | **Credentials rotation** | Confirm API key / token rotated after out-of-band sharing; values live only in Supabase Edge secrets. |
-| G12 | **Edge egress IP whitelist** | Which IP(s) are whitelisted for **Supabase Edge** (not laptop)? Is `token_id` in secrets the one for that IP? (§1.10) |
-| G13 | **UAT-first** | Confirm Phase 3 runs against UAT base before prod (`IDSPAY_ENV`). |
+**Closed by implementation (2026-07-22):** G1 `idspay`, G2 `invoke-rc-provider` + option A, G6/G7 defaults (cache-first + `rto_idspay` response), G9 `rto_idspay` table + `provider_response`.
+
+| # | Topic | Status |
+|---|--------|--------|
+| G3 | Dual response shapes §1.7 vs §1.8 | Deferred — capture failed trace when needed |
+| G4 | HTTP status on verification failure | Deferred |
+| G5 | Cache on failure | Default: no write (unchanged) |
+| G8 | `consent` for IDSPay | Default: not required |
+| G10 | TECHWHEELS v3 diff file | Optional |
+| G11 | Credential rotation | Ops |
+| G12 | Edge egress IP | Resolved in prod (live curl OK) |
+| G13 | UAT-first | Prod used; UAT optional for future changes |
+
+**Phase 5:** Spec complete — see **Phase 5** section; implementation **NS**.

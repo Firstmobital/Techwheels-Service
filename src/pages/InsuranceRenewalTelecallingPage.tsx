@@ -676,6 +676,36 @@ function AdminDashboard({ campaigns, activeCampaign, onRefresh }: { campaigns: C
   const [statsDateTo, setStatsDateTo] = useState('')
   const [renewedList, setRenewedList] = useState<any[]>([])
   const [loadingTab, setLoadingTab] = useState(false)
+  const [rcStatusByCampaign, setRcStatusByCampaign] = useState<Record<string, any>>({})
+  const [rcEnqueueingId, setRcEnqueueingId] = useState<number | null>(null)
+
+  type RcCampaignStatus = {
+    pending_with_vrn?: number
+    pending_missing_vrn?: number
+    pending_stale?: number
+    fetch_enabled?: boolean
+    active_job?: { id: string; status: string; stats?: Record<string, number> } | null
+  }
+
+  const loadRcStatus = useCallback(async () => {
+    if (campaigns.length === 0) {
+      setRcStatusByCampaign({})
+      return
+    }
+    try {
+      const d = await callEdge('rc_fetch_status', { campaign_ids: campaigns.map(c => c.id) })
+      setRcStatusByCampaign(d.campaigns || {})
+    } catch (e) {
+      console.error('RC status load failed', e)
+    }
+  }, [campaigns])
+
+  useEffect(() => {
+    if (activeAdminTab !== 'campaigns') return
+    loadRcStatus()
+    const t = setInterval(loadRcStatus, 15000)
+    return () => clearInterval(t)
+  }, [activeAdminTab, loadRcStatus])
 
   useEffect(() => {
     if (activeAdminTab === 'performance') fetchAgentStats()
@@ -704,6 +734,7 @@ function AdminDashboard({ campaigns, activeCampaign, onRefresh }: { campaigns: C
       if (r) setRefreshResult(`✅ Refreshed "${r.campaign_name}" — window now ${r.window}. Added ${r.added} new leads, retired ${r.retired_out_of_window} out-of-window. Pending: ${r.pending_count}, Total: ${r.total_leads}.`)
       else setRefreshResult('No active campaigns to refresh.')
       await onRefresh()
+      await loadRcStatus()
     } catch (e: any) { setRefreshResult(`❌ Refresh failed: ${e.message}`) }
     finally { setRefreshingCampaign(false) }
   }
@@ -754,6 +785,48 @@ function AdminDashboard({ campaigns, activeCampaign, onRefresh }: { campaigns: C
     catch (err) { setError((err as Error).message) } finally { setDeleting(null) }
   }
 
+  async function handleRcFetchEnqueue(campaign: Campaign) {
+    const st: RcCampaignStatus = rcStatusByCampaign[String(campaign.id)] || {}
+    if (!st.fetch_enabled || rcEnqueueingId !== null) return
+    setError(null)
+    setSuccess(null)
+    const withVrn = st.pending_with_vrn ?? 0
+    const missingVrn = st.pending_missing_vrn ?? 0
+    const msg = [
+      `Queue background IDSPay RC fetch for "${campaign.campaign_name}"?`,
+      '',
+      `${withVrn} new lead(s) with VRN (insurance null or older than 365 days, never fetched before).`,
+      missingVrn > 0 ? `${missingVrn} stale lead(s) without VRN will be marked skipped when the job reaches them.` : '',
+      '',
+      'Processing runs automatically every ~2 minutes — you can close this tab.',
+    ].filter(Boolean).join('\n')
+    if (!confirm(msg)) return
+
+    setRcEnqueueingId(campaign.id)
+    try {
+      const data = await callEdge('rc_fetch_enqueue', { campaign_id: campaign.id })
+      setSuccess(data.message || 'RC fetch queued.')
+      await loadRcStatus()
+    } catch (err) {
+      setError((err as Error).message)
+    } finally {
+      setRcEnqueueingId(null)
+    }
+  }
+
+  function rcFetchButtonLabel(c: Campaign): string {
+    const st: RcCampaignStatus = rcStatusByCampaign[String(c.id)] || {}
+    if (st.active_job) {
+      const s = st.active_job.stats
+      const ok = s?.ok ?? 0
+      return st.active_job.status === 'queued' ? 'RC fetch queued…' : `RC fetch running… (${ok} OK)`
+    }
+    if ((st.pending_with_vrn ?? 0) > 0) {
+      return `Queue RC fetch (${st.pending_with_vrn} new)`
+    }
+    return 'RC fetch up to date'
+  }
+
   return (
     <div className="space-y-5">
       {error && <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</div>}
@@ -785,6 +858,9 @@ function AdminDashboard({ campaigns, activeCampaign, onRefresh }: { campaigns: C
               <button onClick={() => setRefreshResult(null)} className="text-gray-400 hover:text-gray-600 ml-3">×</button>
             </div>
           )}
+          <p className="text-xs text-gray-500">
+            RC fetch runs in the background (cron every ~2 min). Only campaign leads with null or 365+ day old insurance that have not been fetched before are processed.
+          </p>
 
           {showCreate && (
             <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm space-y-4">
@@ -836,7 +912,10 @@ function AdminDashboard({ campaigns, activeCampaign, onRefresh }: { campaigns: C
           <div className="space-y-3">
             {campaigns.length === 0 ? (
               <div className="rounded-xl border border-gray-200 bg-white p-8 text-center text-sm text-gray-400">No campaigns yet. Click &quot;New Campaign&quot; to create one.</div>
-            ) : campaigns.map(c => (
+            ) : campaigns.map(c => {
+              const rcSt: RcCampaignStatus = rcStatusByCampaign[String(c.id)] || {}
+              const rcDisabled = !rcSt.fetch_enabled || rcEnqueueingId !== null
+              return (
               <div key={c.id} className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
                 <div className="flex items-center justify-between flex-wrap gap-3">
                   <div>
@@ -849,6 +928,21 @@ function AdminDashboard({ campaigns, activeCampaign, onRefresh }: { campaigns: C
                     </p>
                   </div>
                   <div className="flex items-center gap-2 flex-wrap">
+                    <button
+                      type="button"
+                      onClick={() => handleRcFetchEnqueue(c)}
+                      disabled={rcDisabled}
+                      title={
+                        rcSt.active_job
+                          ? 'Background job in progress'
+                          : (rcSt.pending_with_vrn ?? 0) > 0
+                            ? 'Queue IDSPay lookup for new stale leads only'
+                            : 'All stale leads in this campaign were already fetched (or none qualify)'
+                      }
+                      className="rounded-lg border border-indigo-300 bg-indigo-50 px-3 py-1.5 text-sm font-medium text-indigo-800 hover:bg-indigo-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {rcEnqueueingId === c.id ? 'Queuing…' : rcFetchButtonLabel(c)}
+                    </button>
                     {c.status === 'active' && <button onClick={() => handleClose(c.id)} className="rounded-lg border border-red-200 px-3 py-1.5 text-sm text-red-600 hover:bg-red-50">Close</button>}
                     <button onClick={() => { setEditingCampaign(c); setEditName(c.campaign_name); setEditWindowDays(c.window_days) }} className="rounded-lg border border-gray-200 px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-50">✏️ Edit</button>
                     <button onClick={() => handleDelete(c.id, c.campaign_name)} disabled={deleting === c.id} className="rounded-lg border border-red-200 px-3 py-1.5 text-sm text-red-600 hover:bg-red-50 disabled:opacity-50">{deleting === c.id ? 'Deleting…' : '🗑️'}</button>
@@ -863,7 +957,7 @@ function AdminDashboard({ campaigns, activeCampaign, onRefresh }: { campaigns: C
                   ))}
                 </div>
               </div>
-            ))}
+            )})}
           </div>
         </div>
       )}

@@ -1,6 +1,270 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { corsHeaders } from '../_shared/cors.ts'
 
+const STALE_INSURANCE_DAYS = 365
+const RC_FETCH_DEFAULT_LOOKUPS = 8
+const RC_FETCH_MAX_LOOKUPS = 12
+const RC_FETCH_DELAY_MS = 250
+const RC_FETCH_WALL_MS = 52000
+
+type RcJobStats = {
+  ok: number
+  from_cache: number
+  failed: number
+  skipped_no_vrn: number
+  skipped_fresh: number
+}
+
+function emptyJobStats(): RcJobStats {
+  return { ok: 0, from_cache: 0, failed: 0, skipped_no_vrn: 0, skipped_fresh: 0 }
+}
+
+function parseJobStats(raw: unknown): RcJobStats {
+  const o = (raw && typeof raw === 'object') ? raw as Record<string, unknown> : {}
+  return {
+    ok: Number(o.ok ?? 0),
+    from_cache: Number(o.from_cache ?? 0),
+    failed: Number(o.failed ?? 0),
+    skipped_no_vrn: Number(o.skipped_no_vrn ?? 0),
+    skipped_fresh: Number(o.skipped_fresh ?? 0),
+  }
+}
+
+function mergeJobStats(base: RcJobStats, delta: Partial<RcJobStats>): RcJobStats {
+  return {
+    ok: base.ok + (delta.ok ?? 0),
+    from_cache: base.from_cache + (delta.from_cache ?? 0),
+    failed: base.failed + (delta.failed ?? 0),
+    skipped_no_vrn: base.skipped_no_vrn + (delta.skipped_no_vrn ?? 0),
+    skipped_fresh: base.skipped_fresh + (delta.skipped_fresh ?? 0),
+  }
+}
+
+async function loadPendingCounts(
+  serviceClient: ReturnType<typeof createClient>,
+  campaignId: number,
+) {
+  const { data, error } = await serviceClient.rpc('insurance_renewal_rc_fetch_pending_counts', {
+    p_campaign_id: campaignId,
+  })
+  if (error) throw new Error(error.message)
+  const row = Array.isArray(data) ? data[0] : data
+  return {
+    pending_stale: Number(row?.pending_stale ?? 0),
+    pending_with_vrn: Number(row?.pending_with_vrn ?? 0),
+    pending_missing_vrn: Number(row?.pending_missing_vrn ?? 0),
+  }
+}
+
+async function recordRcFetchAttempt(
+  serviceClient: ReturnType<typeof createClient>,
+  params: {
+    campaign_id: number
+    customer_id: number
+    job_id: string
+    outcome: 'success' | 'failed' | 'skipped_no_vrn' | 'skipped_fresh'
+    from_cache?: boolean
+    error_text?: string | null
+  },
+) {
+  const { error } = await serviceClient.from('insurance_renewal_rc_fetch_attempts').insert({
+    campaign_id: params.campaign_id,
+    customer_id: params.customer_id,
+    job_id: params.job_id,
+    outcome: params.outcome,
+    from_cache: params.from_cache ?? false,
+    error_text: params.error_text ?? null,
+  })
+  if (error) throw new Error(`Failed to record RC attempt: ${error.message}`)
+}
+
+async function processRcFetchJobSlice(
+  serviceClient: ReturnType<typeof createClient>,
+  supabaseUrl: string,
+  serviceRoleKey: string,
+  job: {
+    id: string
+    campaign_id: number
+    last_customer_id: number
+    stats: RcJobStats
+  },
+  maxLookups: number,
+  wallStartedMs: number,
+): Promise<{ jobFinished: boolean; lookupsDone: number }> {
+  const cutoff = staleInsuranceCutoffDate()
+  let stats = job.stats ?? emptyJobStats()
+  let cursor = Number(job.last_customer_id) || 0
+  let lookupsDone = 0
+
+  while (lookupsDone < maxLookups) {
+    if (performance.now() - wallStartedMs >= RC_FETCH_WALL_MS) break
+
+    const { data: candidates, error: candErr } = await serviceClient.rpc(
+      'insurance_renewal_rc_fetch_next_candidates',
+      {
+        p_campaign_id: job.campaign_id,
+        p_after_customer_id: cursor,
+        p_limit: 25,
+      },
+    )
+    if (candErr) throw new Error(candErr.message)
+
+    const rows = (candidates || []) as {
+      customer_id: number
+      vehicle_registration_number: string | null
+      last_insurance_expiry_date: string | null
+    }[]
+
+    if (rows.length === 0) {
+      await serviceClient.from('insurance_renewal_rc_fetch_jobs').update({
+        status: 'completed',
+        completed_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        last_customer_id: cursor,
+        stats,
+      }).eq('id', job.id)
+      return { jobFinished: true, lookupsDone }
+    }
+
+    for (const row of rows) {
+      if (performance.now() - wallStartedMs >= RC_FETCH_WALL_MS) break
+      cursor = row.customer_id
+
+      if (!isStaleOrMissingInsurance(row.last_insurance_expiry_date, cutoff)) {
+        await recordRcFetchAttempt(serviceClient, {
+          campaign_id: job.campaign_id,
+          customer_id: row.customer_id,
+          job_id: job.id,
+          outcome: 'skipped_fresh',
+        })
+        stats = mergeJobStats(stats, { skipped_fresh: 1 })
+        continue
+      }
+
+      const reg = normalizeRegNumber(row.vehicle_registration_number)
+      if (!reg) {
+        await recordRcFetchAttempt(serviceClient, {
+          campaign_id: job.campaign_id,
+          customer_id: row.customer_id,
+          job_id: job.id,
+          outcome: 'skipped_no_vrn',
+        })
+        stats = mergeJobStats(stats, { skipped_no_vrn: 1 })
+        continue
+      }
+
+      const rc = await invokeRcProviderForReg(supabaseUrl, serviceRoleKey, reg)
+      lookupsDone++
+      if (rc.ok) {
+        await recordRcFetchAttempt(serviceClient, {
+          campaign_id: job.campaign_id,
+          customer_id: row.customer_id,
+          job_id: job.id,
+          outcome: 'success',
+          from_cache: rc.fromCache ?? false,
+        })
+        stats = mergeJobStats(stats, {
+          ok: 1,
+          from_cache: rc.fromCache ? 1 : 0,
+        })
+      } else {
+        await recordRcFetchAttempt(serviceClient, {
+          campaign_id: job.campaign_id,
+          customer_id: row.customer_id,
+          job_id: job.id,
+          outcome: 'failed',
+          error_text: rc.error ?? 'unknown',
+        })
+        stats = mergeJobStats(stats, { failed: 1 })
+      }
+
+      await serviceClient.from('insurance_renewal_rc_fetch_jobs').update({
+        last_customer_id: cursor,
+        stats,
+        updated_at: new Date().toISOString(),
+      }).eq('id', job.id)
+
+      if (lookupsDone < maxLookups) await sleep(RC_FETCH_DELAY_MS)
+      if (lookupsDone >= maxLookups) break
+    }
+
+    if (lookupsDone >= maxLookups) break
+
+    const { data: more } = await serviceClient.rpc('insurance_renewal_rc_fetch_next_candidates', {
+      p_campaign_id: job.campaign_id,
+      p_after_customer_id: cursor,
+      p_limit: 1,
+    })
+    if (!more || (more as unknown[]).length === 0) {
+      await serviceClient.from('insurance_renewal_rc_fetch_jobs').update({
+        status: 'completed',
+        completed_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        last_customer_id: cursor,
+        stats,
+      }).eq('id', job.id)
+      return { jobFinished: true, lookupsDone }
+    }
+  }
+
+  await serviceClient.from('insurance_renewal_rc_fetch_jobs').update({
+    last_customer_id: cursor,
+    stats,
+    updated_at: new Date().toISOString(),
+  }).eq('id', job.id)
+
+  return { jobFinished: false, lookupsDone }
+}
+
+function normalizeRegNumber(value: string | null | undefined): string {
+  if (!value) return ''
+  return value.trim().toUpperCase().replace(/[^A-Z0-9]/g, '')
+}
+
+/** IST calendar date string for (today − N days). */
+function staleInsuranceCutoffDate(days = STALE_INSURANCE_DAYS): string {
+  const d = new Date(Date.now() + 5.5 * 3600000 - days * 86400000)
+  return d.toISOString().split('T')[0]
+}
+
+function isStaleOrMissingInsurance(expiry: string | null | undefined, cutoff: string): boolean {
+  if (!expiry) return true
+  return expiry < cutoff
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+async function invokeRcProviderForReg(
+  supabaseUrl: string,
+  serviceRoleKey: string,
+  regNo: string,
+): Promise<{ ok: boolean; fromCache?: boolean; error?: string }> {
+  try {
+    const res = await fetch(`${supabaseUrl}/functions/v1/invoke-rc-provider`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${serviceRoleKey}`,
+        apikey: serviceRoleKey,
+      },
+      body: JSON.stringify({ reg_no: regNo }),
+      signal: AbortSignal.timeout(28000),
+    })
+    const json = await res.json().catch(() => ({}))
+    if (!res.ok || json.error) {
+      return { ok: false, error: String(json.error ?? json.message ?? `HTTP ${res.status}`) }
+    }
+    if (json.success === false) {
+      return { ok: false, error: String(json.error ?? 'RC lookup failed') }
+    }
+    return { ok: true, fromCache: Boolean(json.fromCache) }
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : String(e) }
+  }
+}
+
 // Insurance Renewal Telecalling — proactive calling queue for customers whose
 // last_insurance_expiry_date is approaching. Structurally mirrors
 // supabase/functions/telecalling/index.ts (pull-based get_next, campaign
@@ -493,6 +757,217 @@ export default async function handler(req: Request) {
       const { error: delErr } = await serviceClient.from('insurance_renewal_campaigns').delete().eq('id', campaign_id)
       if (delErr) throw new Error(`Failed to delete campaign: ${delErr.message}`)
       return new Response(JSON.stringify({ success: true, message: 'Campaign deleted' }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+    }
+
+    // ── ACTION: rc_fetch_status ─────────────────────────────────────────────
+    if (action === 'rc_fetch_status') {
+      if (!isAdmin) throw new Error('Admin only')
+      const { campaign_ids: campaignIdsRaw } = body
+      let campaignIds: number[] = []
+      if (Array.isArray(campaignIdsRaw) && campaignIdsRaw.length > 0) {
+        campaignIds = campaignIdsRaw.map((id: unknown) => Number(id)).filter((id) => Number.isFinite(id))
+      } else {
+        const { data: camps } = await serviceClient.from('insurance_renewal_campaigns').select('id')
+        campaignIds = (camps || []).map((c: { id: number }) => c.id)
+      }
+
+      const cutoff = staleInsuranceCutoffDate()
+      const byCampaign: Record<string, unknown> = {}
+
+      for (const campaignId of campaignIds) {
+        const pending = await loadPendingCounts(serviceClient, campaignId)
+        const { data: activeJob } = await serviceClient
+          .from('insurance_renewal_rc_fetch_jobs')
+          .select('id, status, created_at, started_at, stats, last_error')
+          .eq('campaign_id', campaignId)
+          .in('status', ['queued', 'running'])
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle()
+
+        const { data: lastJob } = await serviceClient
+          .from('insurance_renewal_rc_fetch_jobs')
+          .select('id, status, completed_at, stats')
+          .eq('campaign_id', campaignId)
+          .in('status', ['completed', 'failed'])
+          .order('completed_at', { ascending: false })
+          .limit(1)
+          .maybeSingle()
+
+        byCampaign[String(campaignId)] = {
+          stale_cutoff_before: cutoff,
+          ...pending,
+          fetch_enabled: pending.pending_with_vrn > 0 && !activeJob,
+          active_job: activeJob
+            ? { ...activeJob, stats: parseJobStats(activeJob.stats) }
+            : null,
+          last_job: lastJob
+            ? { ...lastJob, stats: parseJobStats(lastJob.stats) }
+            : null,
+        }
+      }
+
+      return new Response(JSON.stringify({ success: true, campaigns: byCampaign }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      })
+    }
+
+    // ── ACTION: rc_fetch_preview (alias of pending counts + job flags) ───────
+    if (action === 'rc_fetch_preview') {
+      if (!isAdmin) throw new Error('Admin only')
+      const { campaign_id } = body
+      if (!campaign_id) throw new Error('Missing campaign_id')
+      const pending = await loadPendingCounts(serviceClient, Number(campaign_id))
+      const { data: activeJob } = await serviceClient
+        .from('insurance_renewal_rc_fetch_jobs')
+        .select('id, status')
+        .eq('campaign_id', campaign_id)
+        .in('status', ['queued', 'running'])
+        .limit(1)
+        .maybeSingle()
+
+      return new Response(JSON.stringify({
+        success: true,
+        campaign_id,
+        stale_cutoff_before: staleInsuranceCutoffDate(),
+        eligible_stale: pending.pending_stale,
+        eligible_with_vrn: pending.pending_with_vrn,
+        missing_vrn: pending.pending_missing_vrn,
+        fetch_enabled: pending.pending_with_vrn > 0 && !activeJob,
+        active_job: activeJob ?? null,
+      }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+    }
+
+    // ── ACTION: rc_fetch_enqueue ────────────────────────────────────────────
+    if (action === 'rc_fetch_enqueue') {
+      if (!isAdmin) throw new Error('Admin only')
+      const { campaign_id } = body
+      if (!campaign_id) throw new Error('Missing campaign_id')
+
+      const pending = await loadPendingCounts(serviceClient, Number(campaign_id))
+      if (pending.pending_with_vrn <= 0) {
+        return new Response(JSON.stringify({
+          success: true,
+          message: 'No new stale leads with registration numbers to fetch.',
+          job: null,
+          ...pending,
+        }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+      }
+
+      const { data: activeJob } = await serviceClient
+        .from('insurance_renewal_rc_fetch_jobs')
+        .select('id, status')
+        .eq('campaign_id', campaign_id)
+        .in('status', ['queued', 'running'])
+        .limit(1)
+        .maybeSingle()
+
+      if (activeJob) {
+        return new Response(JSON.stringify({
+          success: true,
+          message: 'RC fetch job already queued or running.',
+          job: activeJob,
+          ...pending,
+        }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+      }
+
+      const { data: job, error: jobErr } = await serviceClient
+        .from('insurance_renewal_rc_fetch_jobs')
+        .insert({
+          campaign_id,
+          status: 'queued',
+          created_by: userEmail,
+          stats: emptyJobStats(),
+        })
+        .select('id, status, created_at')
+        .single()
+      if (jobErr) throw new Error(`Failed to enqueue RC job: ${jobErr.message}`)
+
+      fetch(`${supabaseUrl}/functions/v1/insurance-renewal-telecalling`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-cron-secret': CRON_SECRET,
+        },
+        body: JSON.stringify({ action: 'process_rc_fetch_jobs' }),
+      }).catch((e) => console.error('RC fetch worker kickoff failed', e))
+
+      return new Response(JSON.stringify({
+        success: true,
+        message: `Queued background RC fetch for ${pending.pending_with_vrn} new lead(s). Processing started in the background.`,
+        job,
+        ...pending,
+      }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+    }
+
+    // ── ACTION: process_rc_fetch_jobs ───────────────────────────────────────
+    if (action === 'process_rc_fetch_jobs') {
+      if (!isCronCall && !isAdmin) throw new Error('Forbidden')
+
+      const wallStarted = performance.now()
+      const maxLookupsPerJob = Math.min(
+        RC_FETCH_MAX_LOOKUPS,
+        Number(body.max_lookups) || RC_FETCH_DEFAULT_LOOKUPS,
+      )
+      const processedJobs: Record<string, unknown>[] = []
+
+      while (performance.now() - wallStarted < RC_FETCH_WALL_MS) {
+        const { data: jobRow, error: jobPickErr } = await serviceClient
+          .from('insurance_renewal_rc_fetch_jobs')
+          .select('*')
+          .in('status', ['queued', 'running'])
+          .order('created_at', { ascending: true })
+          .limit(1)
+          .maybeSingle()
+        if (jobPickErr) throw new Error(jobPickErr.message)
+        if (!jobRow) break
+
+        if (jobRow.status === 'queued') {
+          await serviceClient.from('insurance_renewal_rc_fetch_jobs').update({
+            status: 'running',
+            started_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          }).eq('id', jobRow.id)
+        }
+
+        try {
+          const slice = await processRcFetchJobSlice(
+            serviceClient,
+            supabaseUrl,
+            serviceRoleKey,
+            {
+              id: jobRow.id,
+              campaign_id: jobRow.campaign_id,
+              last_customer_id: jobRow.last_customer_id ?? 0,
+              stats: parseJobStats(jobRow.stats),
+            },
+            maxLookupsPerJob,
+            wallStarted,
+          )
+          processedJobs.push({
+            job_id: jobRow.id,
+            campaign_id: jobRow.campaign_id,
+            finished: slice.jobFinished,
+            lookups_done: slice.lookupsDone,
+          })
+          if (!slice.jobFinished) break
+        } catch (jobErr) {
+          const msg = jobErr instanceof Error ? jobErr.message : String(jobErr)
+          await serviceClient.from('insurance_renewal_rc_fetch_jobs').update({
+            status: 'failed',
+            last_error: msg,
+            completed_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          }).eq('id', jobRow.id)
+          processedJobs.push({ job_id: jobRow.id, error: msg })
+          break
+        }
+      }
+
+      return new Response(JSON.stringify({
+        success: true,
+        processed_jobs: processedJobs,
+      }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
     }
 
     // ── ACTION: preview_campaign ──────────────────────────────────────────

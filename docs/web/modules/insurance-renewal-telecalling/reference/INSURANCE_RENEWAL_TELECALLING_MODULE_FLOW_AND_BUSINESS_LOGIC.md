@@ -88,7 +88,7 @@ a user granted this module.
 Same pattern as `telecalling`: bearer token validated via Supabase auth,
 resolved to `users.email`/`users.role`. Admin-only actions enforced
 server-side (`create_campaign`, `refresh_campaign`, `admin_stats`,
-`close_campaign`, `update_campaign`, `delete_campaign`, `preview_campaign`).
+`close_campaign`, `update_campaign`, `delete_campaign`, `preview_campaign`, `rc_fetch_status`, `rc_fetch_enqueue`).
 A shared `x-cron-secret` header bypass exists for the scheduled `refresh_campaign` call.
 
 ---
@@ -190,7 +190,7 @@ Endpoint: Supabase edge function `insurance-renewal-telecalling`
 2. `refresh_campaign` (admin/cron) — rolls window forward daily; adds newly-eligible leads; marks drifted pending rows `out_of_window`; never touches worked rows.
 3. `get_next` — own callback_later rows due today first, then RPC-based atomic pick.
 4. `update_status` — sets disposition; `renewed_via_us` accepts optional `quoted_premium`/`renewal_company`; `no_answer` follows 3-strike retry-then-`not_reachable` cadence (same as service module).
-5. `log_whatsapp`, `edit_assignment`, `my_queue`, `my_summary`, `admin_stats`, `renewed_list`, `close_campaign`, `update_campaign`, `delete_campaign`, `preview_campaign`.
+5. `log_whatsapp`, `edit_assignment`, `my_queue`, `my_summary`, `admin_stats`, `renewed_list`, `close_campaign`, `update_campaign`, `delete_campaign`, `preview_campaign`, `rc_fetch_status`, `rc_fetch_preview`, `rc_fetch_enqueue`, `process_rc_fetch_jobs` (cron).
 
 ---
 
@@ -236,3 +236,9 @@ rg -n "insurance_renewal_|InsuranceRenewalTelecalling|OPS-INSURANCE-RENEWAL-001"
    allotment RPC's ordering switched from `all_service_data.last_insurance_expiry_date`
    to `insurance_renewal_leads.effective_due_date`. Frontend mirrors the same logic
    client-side for display only (`computeInsuranceDueDate`).
+3. 2026-07-22: Admin **Fetch RC (IDSPay)** per campaign — background job queue
+   (`insurance_renewal_rc_fetch_jobs` + `insurance_renewal_rc_fetch_attempts`),
+   pg_cron worker every 2 min, edge actions `rc_fetch_status`, `rc_fetch_enqueue`,
+   `process_rc_fetch_jobs`. Only campaign assignment leads with
+   `last_insurance_expiry_date` null or older than 365 days **and no prior attempt
+   row** are called; refresh/new assignments become eligible again automatically.

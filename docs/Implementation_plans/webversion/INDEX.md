@@ -61,7 +61,7 @@ Use this file as daily command center:
 | SUPABASE-001 | supabase | Active | Platform Team | `docs/Implementation_plans/webversion/categories/supabase/active/SUPABASE-001_PRODUCTION_HARDENING_MASTER_PLAN.md` |
 | SUPABASE-002 | supabase | Active | Platform Team | `docs/Implementation_plans/webversion/categories/supabase/active/SUPABASE-002_ALL_SERVICE_DATA_DYNAMIC_TABLE_REALTIME_SYNC_PLAN_2026-06-20.md` |
 | SUPABASE-003 | supabase | Done (verify 14.40) | Platform Team | `docs/Implementation_plans/webversion/categories/supabase/active/SUPABASE-003_SERVICE_HISTORY_SYNC_QUEUE_PERFORMANCE_PLAN_2026-07-21.md` |
-| SUPABASE-004 | supabase | Phase 3 verified (v1); Phase 4 optional | Platform Team | `docs/Implementation_plans/webversion/categories/supabase/active/SUPABASE-004_IDSPAY_RC_ADVANCE_VERIFICATION_EDGE_FUNCTION_PLAN_2026-07-22.md` |
+| SUPABASE-004 | supabase | Phase 3 verified; Phase 5 insurance sync planned | Platform Team | `docs/Implementation_plans/webversion/categories/supabase/active/SUPABASE-004_IDSPAY_RC_ADVANCE_VERIFICATION_EDGE_FUNCTION_PLAN_2026-07-22.md` |
 | WARRANTY-001 | warranty | Active | Warranty Team | `docs/Implementation_plans/webversion/categories/warranty/active/WARRANTY-001_WARRANTY_REPORT_IMPORT_AND_REPORTING_PLAN.md` |
 
 ---
@@ -80,6 +80,7 @@ Use this file as daily command center:
 | supabase | `docs/Implementation_plans/webversion/categories/supabase/evidence/P1_01_CONNECTION_POOLING_AUDIT.md` |
 | supabase | `docs/Implementation_plans/webversion/categories/supabase/evidence/P1_03_SLOW_QUERY_ANALYSIS.md` |
 | supabase | `docs/Implementation_plans/webversion/categories/supabase/evidence/P1_04_INDEX_AUDIT_REPORT.md` |
+| supabase | `docs/Implementation_plans/webversion/categories/supabase/evidence/SUPABASE-004_METADATA_AUDIT_RTO_IDSPAY_SYNC_2026-07-22.md` |
 | supabase | `docs/Implementation_plans/webversion/categories/supabase/evidence/SUPABASE-004_PHASE3_DEPLOY_CURL_2026-07-22.md` |
 | supabase | `docs/Implementation_plans/webversion/categories/supabase/evidence/SUPABASE-004_IDSPAY_SERVICE_DOCUMENTATION_AUDIT_2026-07-22.md` |
 | supabase | `docs/Implementation_plans/webversion/categories/supabase/evidence/runbooks/SUPABASE_P0_05_LEAKED_PASSWORD_ROLLOUT_CHECKLIST.md` |

@@ -30,3 +30,6 @@ verify_jwt = false
 
 [functions.invoke-rc-provider]
 verify_jwt = true
+
+[functions.insurance-renewal-telecalling]
+verify_jwt = true
