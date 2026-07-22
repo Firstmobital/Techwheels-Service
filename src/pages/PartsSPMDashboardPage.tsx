@@ -578,13 +578,6 @@ export default function PartsSPMDashboardPage() {
                               onChange={(e) => setEditDraft((d) => d ? { ...d, spm_remarks: e.target.value } : d)}
                               className="w-40 rounded-md border border-gray-300 px-2 py-1 text-sm" />
                           </td>
-                          {/* Vehicle Model — auto-filled from Reception, shown read-only */}
-                          <td className="px-4 py-2.5">
-                            <div className="flex flex-col gap-0.5">
-                              <span className="text-sm text-gray-700">{editDraft?.vehicle_model || row.vehicle_model || '—'}</span>
-                              <span className="text-[9px] text-gray-400">From Reception</span>
-                            </div>
-                          </td>
                           <td className="whitespace-nowrap px-4 py-2.5 text-xs text-gray-500">
                             {row.received_at ? new Date(row.received_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', dateStyle: 'short', timeStyle: 'short' }) : '—'}
                             {row.received_by_name && <div className="text-gray-400">{row.received_by_name}</div>}
