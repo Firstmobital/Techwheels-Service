@@ -63,10 +63,6 @@ function todayIST(): string {
   return new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
 }
 
-function fmtDateTime(v: string | null): string {
-  if (!v) return '\u2014'
-  return new Date(v).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', dateStyle: 'medium', timeStyle: 'short' })
-}
 
 function fmtDateDMY(v: string | null): string {
   if (!v) return '-'
@@ -219,8 +215,6 @@ export default function PartsRequirementSection({ isAdmin = false }: Props) {
   const [actionBusyId, setActionBusyId] = useState<number | null>(null)
 
   const [advisorFilter, setAdvisorFilter] = useState('all')
-  const [dateFrom, setDateFrom] = useState('')
-  const [dateTo, setDateTo] = useState('')
   const [vehicleNoFilter, setVehicleNoFilter] = useState('')
   const [stockStatusFilter, setStockStatusFilter] = useState('all')
   const [orderStatusFilter, setOrderStatusFilter] = useState('all')
@@ -414,8 +408,6 @@ export default function PartsRequirementSection({ isAdmin = false }: Props) {
 
     if (isAdmin) {
       if (advisorFilter !== 'all') list = list.filter((r) => r.advisor_name === advisorFilter)
-      if (dateFrom) list = list.filter((r) => r.entry_date >= dateFrom)
-      if (dateTo) list = list.filter((r) => r.entry_date <= dateTo)
       if (vehicleNoFilter.trim()) {
         const q = vehicleNoFilter.trim().toLowerCase()
         list = list.filter((r) => (r.registration_number ?? '').toLowerCase().includes(q))
@@ -444,7 +436,7 @@ export default function PartsRequirementSection({ isAdmin = false }: Props) {
       )
     }
     return list
-  }, [visibleRows, quickFilter, search, isAdmin, advisorFilter, dateFrom, dateTo, vehicleNoFilter, stockStatusFilter, orderStatusFilter, orderStatuses])
+  }, [visibleRows, quickFilter, search, isAdmin, advisorFilter, vehicleNoFilter, stockStatusFilter, orderStatusFilter, orderStatuses])
 
   const hasPartsReceivedRemark = (row: PartsRequestRow): boolean => {
     const r = (row.advisor_remarks ?? '').toLowerCase()
@@ -681,11 +673,11 @@ export default function PartsRequirementSection({ isAdmin = false }: Props) {
     }`
 
   const hasAdminFiltersActive = isAdmin && (
-    advisorFilter !== 'all' || dateFrom || dateTo || vehicleNoFilter || stockStatusFilter !== 'all' || orderStatusFilter !== 'all'
+    advisorFilter !== 'all' || vehicleNoFilter || stockStatusFilter !== 'all' || orderStatusFilter !== 'all'
   )
 
   const clearAdminFilters = () => {
-    setAdvisorFilter('all'); setDateFrom(''); setDateTo('')
+    setAdvisorFilter('all')
     setVehicleNoFilter(''); setStockStatusFilter('all'); setOrderStatusFilter('all')
   }
 
@@ -761,7 +753,7 @@ export default function PartsRequirementSection({ isAdmin = false }: Props) {
               </button>
             )}
           </div>
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
             <label className="text-xs font-semibold text-gray-600">
               Advisor
               <select
@@ -775,16 +767,7 @@ export default function PartsRequirementSection({ isAdmin = false }: Props) {
                 ))}
               </select>
             </label>
-            <label className="text-xs font-semibold text-gray-600">
-              Date From
-              <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)}
-                className="mt-1 block w-full rounded-lg border border-gray-300 bg-white px-2 py-1.5 text-sm shadow-sm focus:border-blue-500 focus:outline-none" />
-            </label>
-            <label className="text-xs font-semibold text-gray-600">
-              Date To
-              <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)}
-                className="mt-1 block w-full rounded-lg border border-gray-300 bg-white px-2 py-1.5 text-sm shadow-sm focus:border-blue-500 focus:outline-none" />
-            </label>
+
             <label className="text-xs font-semibold text-gray-600">
               Vehicle / Reg No.
               <input type="text" value={vehicleNoFilter} onChange={(e) => setVehicleNoFilter(e.target.value)}
@@ -1127,13 +1110,13 @@ export default function PartsRequirementSection({ isAdmin = false }: Props) {
               <tr>
                 <th className="px-4 py-3 text-left">Flow / Date</th>
                 {isAdmin && <th className="px-4 py-3 text-left">Advisor</th>}
+                {isAdmin && <th className="px-4 py-3 text-left">EV/PV</th>}
                 <th className="px-4 py-3 text-left">Reg No.</th>
                 <th className="px-4 py-3 text-left">Order Date</th>
                 <th className="px-4 py-3 text-left">Order No.</th>
                 <th className="px-4 py-3 text-left">Order Status</th>
                 <th className="px-4 py-3 text-left">Part Name</th>
                 <th className="px-4 py-3 text-left">Part No.</th>
-                <th className="px-4 py-3 text-left">EV/PV</th>
                 <th className="px-4 py-3 text-left">Advisor Remarks</th>
                 <th className="px-4 py-3 text-left">Customer Update</th>
                 <th className="px-4 py-3 text-left">SPM Remarks</th>
@@ -1144,25 +1127,29 @@ export default function PartsRequirementSection({ isAdmin = false }: Props) {
             </thead>
             <tbody className="divide-y divide-gray-100">
               {filteredRows.map((row) => {
-                const desc = descOf(row)
                 const orderStatus = orderStatusOf(row)
-                const isExpanded = expandedId === row.id
                 return (
                   <>
                     <tr
                       key={row.id}
-                      className={`cursor-pointer transition hover:bg-gray-50
+                      className={`transition hover:bg-gray-50
                         ${isVOR(row) ? 'bg-yellow-50 border-l-4 border-yellow-400' : ''}
                         ${!row.advisor_seen && !isAdmin && !isVOR(row) ? 'bg-blue-50/40' : ''}`}
-                      onClick={() => void handleExpand(row)}
                     >
                       <td className="whitespace-nowrap px-4 py-2.5 text-gray-700">
                         <div className="flex items-center gap-1.5">
-                          <span className={`inline-block transition-transform text-gray-400 text-[10px] ${isExpanded ? 'rotate-90' : ''}`}>&#9654;</span>
                           {fmtDateDMY(row.entry_date)}
                         </div>
                       </td>
                       {isAdmin && <td className="whitespace-nowrap px-4 py-2.5 text-xs text-gray-700">{row.advisor_name}</td>}
+                      {isAdmin && (
+                        <td className="px-4 py-2.5">
+                          <span className={`inline-block rounded px-1.5 py-0.5 text-[10px] font-bold
+                            ${evpvOf(row) === 'EV' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'}`}>
+                            {evpvOf(row)}
+                          </span>
+                        </td>
+                      )}
                       <td className="whitespace-nowrap px-4 py-2.5 font-medium text-gray-900">{row.registration_number}</td>
                       <td className="whitespace-nowrap px-4 py-2.5 text-xs text-gray-600">{fmtDateDMY(row.parts_order_date)}</td>
                       <td className="whitespace-nowrap px-4 py-2.5 text-xs">
@@ -1176,12 +1163,6 @@ export default function PartsRequirementSection({ isAdmin = false }: Props) {
                         <p className="truncate">{row.parts_required}</p>
                       </td>
                       <td className="px-4 py-2.5 text-xs text-gray-500 font-mono">{row.parts_number || '\u2014'}</td>
-                      <td className="px-4 py-2.5">
-                        <span className={`inline-block rounded px-1.5 py-0.5 text-[10px] font-bold
-                          ${evpvOf(row) === 'EV' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'}`}>
-                          {evpvOf(row)}
-                        </span>
-                      </td>
                       <td className="px-4 py-2.5 text-xs text-gray-600 max-w-[140px]">
                         <p className="line-clamp-2">{row.advisor_remarks || '\u2014'}</p>
                       </td>
@@ -1195,97 +1176,7 @@ export default function PartsRequirementSection({ isAdmin = false }: Props) {
                       <td className="px-4 py-2.5"><StatusBadge status={row.parts_status} qty={row.parts_qty} /></td>
                       <td className="px-4 py-2.5"><ActionButton row={row} /></td>
                     </tr>
-                    {isExpanded && (
-                      <tr key={`${row.id}-exp`} className="bg-gray-50">
-                        <td colSpan={isAdmin ? 15 : 14} className="px-6 py-4">
-                          <div className="grid grid-cols-2 gap-4 text-xs sm:grid-cols-3 lg:grid-cols-5">
-                            <div>
-                              <p className="font-bold text-gray-500">Job Card</p>
-                              <p className="mt-0.5 text-gray-800">{row.job_card_number || '\u2014'}</p>
-                            </div>
-                            <div>
-                              <p className="font-bold text-gray-500">Customer</p>
-                              <p className="mt-0.5 text-gray-800">{row.customer_name || '\u2014'}</p>
-                            </div>
-                            <div>
-                              <p className="font-bold text-gray-500">Vehicle Model</p>
-                              <p className="mt-0.5 text-gray-800">{row.vehicle_model || '\u2014'}</p>
-                            </div>
-                            <div>
-                              <p className="font-bold text-gray-500">Customer Mobile</p>
-                              <p className="mt-0.5 text-gray-800">{row.customer_mobile || '\u2014'}</p>
-                            </div>
-                            <div>
-                              <p className="font-bold text-gray-500">Part Description</p>
-                              <p className="mt-0.5 text-gray-800">{desc || '\u2014'}</p>
-                            </div>
-                            <div>
-                              <p className="font-bold text-gray-500">Branch</p>
-                              <p className="mt-0.5 text-gray-800">{row.branch || '\u2014'}</p>
-                            </div>
-                            <div>
-                              <p className="font-bold text-gray-500">Progress</p>
-                              <div className="mt-1"><MiniTimeline status={row.parts_status} /></div>
-                            </div>
-                            {row.received_at && (
-                              <div>
-                                <p className="font-bold text-gray-500">Received At</p>
-                                <p className="mt-0.5 text-gray-800">{fmtDateTime(row.received_at)}</p>
-                              </div>
-                            )}
-                            {row.received_by_name && (
-                              <div>
-                                <p className="font-bold text-gray-500">Received By</p>
-                                <p className="mt-0.5 text-gray-800">{row.received_by_name}</p>
-                              </div>
-                            )}
-                            {row.spm_remarks && (
-                              <div className="sm:col-span-2">
-                                <p className="font-bold text-gray-500">SPM Remarks</p>
-                                <p className="mt-0.5 text-gray-800">{row.spm_remarks}</p>
-                              </div>
-                            )}
-                            <div className="sm:col-span-2">
-                              <p className="font-bold text-gray-500">Advisor Remarks</p>
-                              {row.parts_status !== 'Done' ? (
-                                <textarea
-                                  defaultValue={row.advisor_remarks ?? ''}
-                                  onBlur={(e) => void handleRemarksBlur(row, e.target.value)}
-                                  rows={2}
-                                  className="mt-0.5 w-full rounded-md border border-gray-300 px-2 py-1 text-xs font-sans focus:border-blue-400 focus:outline-none"
-                                  placeholder="Add remarks..."
-                                  onClick={(e) => e.stopPropagation()}
-                                />
-                              ) : (
-                                <p className="mt-0.5 text-gray-800">{row.advisor_remarks || '\u2014'}</p>
-                              )}
-                            </div>
-                            <div className="sm:col-span-2">
-                              <p className="font-bold text-gray-500">Customer Update</p>
-                              {row.parts_status !== 'Done' ? (
-                                <textarea
-                                  defaultValue={row.customer_update ?? ''}
-                                  onBlur={(e) => void handleCustomerUpdateBlur(row, e.target.value)}
-                                  rows={2}
-                                  className="mt-0.5 w-full rounded-md border border-gray-300 px-2 py-1 text-xs font-sans focus:border-blue-400 focus:outline-none"
-                                  placeholder="Latest update shared with customer..."
-                                  onClick={(e) => e.stopPropagation()}
-                                />
-                              ) : (
-                                <p className="mt-0.5 text-gray-800">{row.customer_update || '\u2014'}</p>
-                              )}
-                            </div>
-                            <div className="flex items-end gap-2">
-                              <button type="button"
-                                onClick={(e) => { e.stopPropagation(); openEditForm(row) }}
-                                className="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-xs font-semibold text-gray-700 hover:bg-gray-50">
-                                Edit
-                              </button>
-                            </div>
-                          </div>
-                        </td>
-                      </tr>
-                    )}
+
                   </>
                 )
               })}
