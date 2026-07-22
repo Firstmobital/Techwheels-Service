@@ -395,9 +395,15 @@ export default function PartsRequirementSection() {
   const isAvailableBadge = (row: PartsRequestRow): boolean =>
     row.parts_status === 'Pending' && (row.parts_qty ?? 0) > 0
 
-  // Show "Mark Received" if: Available badge shown, OR advisor remarks flag receipt
-  const showMarkReceived = (row: PartsRequestRow): boolean =>
-    isAvailableBadge(row) || hasPartsReceivedRemark(row)
+  // Show "Mark Received" only when the part is NOT already Received/Ready/Done.
+  // IMPORTANT: hasPartsReceivedRemark matches ANY status (e.g. a "Received" row where
+  // advisor wrote "parts received" in remarks). Without the guard below, such rows would
+  // hit the Mark-Received branch BEFORE the Mark-Ready check, causing the wrong button.
+  const showMarkReceived = (row: PartsRequestRow): boolean => {
+    // Never show Mark Received if the part is already at or past Received stage
+    if (['Received', 'Ready', 'Done', 'Delivered to Workshop', 'Cancelled'].includes(row.parts_status)) return false
+    return isAvailableBadge(row) || hasPartsReceivedRemark(row)
+  }
 
   const ActionButton = ({ row }: { row: PartsRequestRow }) => {
     const busy = actionBusyId === row.id
