@@ -78,6 +78,18 @@ async function recordRcFetchAttempt(
   if (error) throw new Error(`Failed to record RC attempt: ${error.message}`)
 }
 
+async function isRcFetchJobCancelled(
+  serviceClient: ReturnType<typeof createClient>,
+  jobId: string,
+): Promise<boolean> {
+  const { data } = await serviceClient
+    .from('insurance_renewal_rc_fetch_jobs')
+    .select('status')
+    .eq('id', jobId)
+    .maybeSingle()
+  return data?.status === 'cancelled'
+}
+
 async function processRcFetchJobSlice(
   serviceClient: ReturnType<typeof createClient>,
   supabaseUrl: string,
@@ -96,8 +108,15 @@ async function processRcFetchJobSlice(
   let cursor = Number(job.last_customer_id) || 0
   let lookupsDone = 0
 
+  if (await isRcFetchJobCancelled(serviceClient, job.id)) {
+    return { jobFinished: true, lookupsDone: 0 }
+  }
+
   while (lookupsDone < maxLookups) {
     if (performance.now() - wallStartedMs >= RC_FETCH_WALL_MS) break
+    if (await isRcFetchJobCancelled(serviceClient, job.id)) {
+      return { jobFinished: true, lookupsDone }
+    }
 
     const { data: candidates, error: candErr } = await serviceClient.rpc(
       'insurance_renewal_rc_fetch_next_candidates',
@@ -151,6 +170,10 @@ async function processRcFetchJobSlice(
         })
         stats = mergeJobStats(stats, { skipped_no_vrn: 1 })
         continue
+      }
+
+      if (await isRcFetchJobCancelled(serviceClient, job.id)) {
+        return { jobFinished: true, lookupsDone }
       }
 
       const rc = await invokeRcProviderForReg(supabaseUrl, serviceRoleKey, reg)
@@ -900,6 +923,37 @@ export default async function handler(req: Request) {
       }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
     }
 
+    // ── ACTION: rc_fetch_cancel ─────────────────────────────────────────────
+    if (action === 'rc_fetch_cancel') {
+      if (!isAdmin) throw new Error('Admin only')
+      const { campaign_id, job_id } = body
+      if (!campaign_id && !job_id) throw new Error('Missing campaign_id or job_id')
+
+      let q = serviceClient
+        .from('insurance_renewal_rc_fetch_jobs')
+        .update({
+          status: 'cancelled',
+          completed_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+          last_error: 'Cancelled by admin',
+        })
+        .in('status', ['queued', 'running'])
+
+      if (job_id) q = q.eq('id', job_id)
+      if (campaign_id) q = q.eq('campaign_id', campaign_id)
+
+      const { data: cancelled, error: cancelErr } = await q.select('id, campaign_id, status')
+      if (cancelErr) throw new Error(`Failed to cancel: ${cancelErr.message}`)
+
+      return new Response(JSON.stringify({
+        success: true,
+        message: cancelled?.length
+          ? `Stopped ${cancelled.length} RC fetch job(s). No further paid API calls for those jobs.`
+          : 'No queued or running RC fetch job to stop.',
+        cancelled: cancelled ?? [],
+      }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+    }
+
     // ── ACTION: process_rc_fetch_jobs ───────────────────────────────────────
     if (action === 'process_rc_fetch_jobs') {
       if (!isCronCall && !isAdmin) throw new Error('Forbidden')
@@ -921,6 +975,11 @@ export default async function handler(req: Request) {
           .maybeSingle()
         if (jobPickErr) throw new Error(jobPickErr.message)
         if (!jobRow) break
+
+        if (await isRcFetchJobCancelled(serviceClient, jobRow.id)) {
+          processedJobs.push({ job_id: jobRow.id, skipped: 'cancelled' })
+          continue
+        }
 
         if (jobRow.status === 'queued') {
           await serviceClient.from('insurance_renewal_rc_fetch_jobs').update({

@@ -785,6 +785,20 @@ function AdminDashboard({ campaigns, activeCampaign, onRefresh }: { campaigns: C
     catch (err) { setError((err as Error).message) } finally { setDeleting(null) }
   }
 
+  async function handleRcFetchCancel(campaign: Campaign) {
+    const st: RcCampaignStatus = rcStatusByCampaign[String(campaign.id)] || {}
+    if (!st.active_job) return
+    if (!confirm(`Stop background RC fetch for "${campaign.campaign_name}"?\n\nNo further IDSPay calls will be made for this job. Calls already completed cannot be undone.`)) return
+    setError(null)
+    try {
+      const data = await callEdge('rc_fetch_cancel', { campaign_id: campaign.id })
+      setSuccess(data.message || 'RC fetch stopped.')
+      await loadRcStatus()
+    } catch (err) {
+      setError((err as Error).message)
+    }
+  }
+
   async function handleRcFetchEnqueue(campaign: Campaign) {
     const st: RcCampaignStatus = rcStatusByCampaign[String(campaign.id)] || {}
     if (!st.fetch_enabled || rcEnqueueingId !== null) return
@@ -928,6 +942,15 @@ function AdminDashboard({ campaigns, activeCampaign, onRefresh }: { campaigns: C
                     </p>
                   </div>
                   <div className="flex items-center gap-2 flex-wrap">
+                    {rcSt.active_job && (
+                      <button
+                        type="button"
+                        onClick={() => handleRcFetchCancel(c)}
+                        className="rounded-lg border border-red-300 bg-red-50 px-3 py-1.5 text-sm font-medium text-red-700 hover:bg-red-100"
+                      >
+                        Stop RC fetch
+                      </button>
+                    )}
                     <button
                       type="button"
                       onClick={() => handleRcFetchEnqueue(c)}
