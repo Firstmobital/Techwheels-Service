@@ -36,6 +36,7 @@ import EWReminderPage from './pages/EWReminderPage'
 import ServiceBookingPage from './pages/ServiceBookingPage'
 import WAAgentPage from './pages/WAAgentPage'
 import TelecallingPage from './pages/TelecallingPage'
+import InsuranceRenewalTelecallingPage from './pages/InsuranceRenewalTelecallingPage'
 import WhatsAppAutomationsPage from './pages/WhatsAppAutomationsPage'
 import PostServiceFeedbackCREPage from './pages/PostServiceFeedbackCREPage'
 import PartsSPMDashboardPage from './pages/PartsSPMDashboardPage'
@@ -68,6 +69,7 @@ const NAV_ITEMS = [
   { to: '/service-booking', label: 'Service Booking', icon: 'calendar' },
   { to: '/wa-agent', label: 'WA AI Agent', icon: 'message-circle' },
   { to: '/telecalling', label: 'Telecalling', icon: 'phone' },
+  { to: '/insurance-renewal-telecalling', label: 'Insurance Renewal Telecalling', icon: 'shield' },
   { to: '/auto-service-reminder', label: 'WA Automations', icon: 'bell' },
   { to: '/cre-incentive', label: 'CRE Incentive', icon: 'reports' },
   { to: '/post-service-feedback', label: 'Post Service Feedback', icon: 'message-circle' },
@@ -98,12 +100,13 @@ type ModuleName =
   | 'service_booking'
   | 'wa_agent'
   | 'telecalling'
+  | 'insurance_renewal_telecalling'
   | 'auto_service_reminder'
   | 'cre_incentive'
   | 'post_service_feedback_cre'
   | 'parts_spm'
 
-type AppRoute = '/import' | '/reports' | '/settings' | '/admin' | '/autodoc' | '/reception' | '/service-advisor' | '/floor-incharge' | '/sa-tracker' | '/bodyshop-tracker' | '/bodyshop-floor' | '/technician' | '/complaints' | '/bodyshop-repair' | '/ew-reminder' | '/service-booking' | '/wa-agent' | '/telecalling' | '/auto-service-reminder' | '/cre-incentive' | '/post-service-feedback' | '/parts-spm'
+type AppRoute = '/import' | '/reports' | '/settings' | '/admin' | '/autodoc' | '/reception' | '/service-advisor' | '/floor-incharge' | '/sa-tracker' | '/bodyshop-tracker' | '/bodyshop-floor' | '/technician' | '/complaints' | '/bodyshop-repair' | '/ew-reminder' | '/service-booking' | '/wa-agent' | '/telecalling' | '/insurance-renewal-telecalling' | '/auto-service-reminder' | '/cre-incentive' | '/post-service-feedback' | '/parts-spm'
 
 interface PermissionRow {
   module_name: string
@@ -128,6 +131,7 @@ const ROUTE_MODULE_MAP: Record<AppRoute, ModuleName[]> = {
   '/service-booking': ['service_booking'],
   '/wa-agent': ['wa_agent'],
   '/telecalling': ['telecalling'],
+  '/insurance-renewal-telecalling': ['insurance_renewal_telecalling'],
   '/auto-service-reminder': ['auto_service_reminder'],
   '/cre-incentive': ['cre_incentive'],
   '/post-service-feedback': ['post_service_feedback_cre'],
@@ -779,6 +783,7 @@ function canAccessPath(pathname: string, allowedModules: Set<string>) {
   if (pathname.startsWith('/service-booking')) return hasAnyModuleAccess(allowedModules, ROUTE_MODULE_MAP['/service-booking'])
   if (pathname.startsWith('/wa-agent')) return hasAnyModuleAccess(allowedModules, ROUTE_MODULE_MAP['/wa-agent'])
   if (pathname.startsWith('/telecalling')) return hasAnyModuleAccess(allowedModules, ROUTE_MODULE_MAP['/telecalling'])
+  if (pathname.startsWith('/insurance-renewal-telecalling')) return hasAnyModuleAccess(allowedModules, ROUTE_MODULE_MAP['/insurance-renewal-telecalling'])
   if (pathname.startsWith('/auto-service-reminder')) return hasAnyModuleAccess(allowedModules, ROUTE_MODULE_MAP['/auto-service-reminder'])
   if (pathname.startsWith('/cre-incentive')) return hasAnyModuleAccess(allowedModules, ROUTE_MODULE_MAP['/cre-incentive'])
   if (pathname.startsWith('/post-service-feedback')) return hasAnyModuleAccess(allowedModules, ROUTE_MODULE_MAP['/post-service-feedback'])
@@ -1349,6 +1354,14 @@ VITE_SUPABASE_ANON_KEY=your-anon-key`}
                   element={(
                     <RequireAccess allowedModules={allowedModules} modules={ROUTE_MODULE_MAP['/telecalling']}>
                       <TelecallingPage />
+                    </RequireAccess>
+                  )}
+                />
+                <Route
+                  path="/insurance-renewal-telecalling"
+                  element={(
+                    <RequireAccess allowedModules={allowedModules} modules={ROUTE_MODULE_MAP['/insurance-renewal-telecalling']}>
+                      <InsuranceRenewalTelecallingPage />
                     </RequireAccess>
                   )}
                 />

@@ -1066,7 +1066,6 @@ function AdminDashboard({ campaigns, activeCampaign, onRefresh }: { campaigns: C
                   <select value={priorityMode} onChange={e => setPriorityMode(e.target.value)} className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm">
                     <option value="service_date">By Service Due Date</option>
                     <option value="warranty_expiry">By Warranty Expiry</option>
-                    <option value="insurance_expiry">By Insurance Expiry</option>
                     <option value="conquest">Conquest First</option>
                   </select>
                 </div>
