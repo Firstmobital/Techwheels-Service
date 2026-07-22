@@ -1410,7 +1410,7 @@ export default function ServiceAdvisorPage() {
       </div>
 
       {pageMode === 'parts' ? (
-        <PartsRequirementSection />
+        <PartsRequirementSection isAdmin={isAdmin || isSuperAdmin} />
       ) : (
         <>
       {/* ── COMPACT FILTER TOOLBAR ─────────────────────────────────────────── */}

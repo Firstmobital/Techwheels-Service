@@ -89,6 +89,7 @@ export async function listAllPartsRequests(): Promise<ApiResult<PartsRequestRow[
 export interface PartsOrderLookup {
   descriptions: Record<string, string>
   orderNumbers: Record<string, string>
+  orderStatuses: Record<string, string>
 }
 export async function fetchPartsOrderDescriptions(): Promise<ApiResult<PartsOrderLookup>> {
   const { data, error } = await supabase.functions.invoke('parts-order-descriptions', { body: {} })
@@ -96,6 +97,7 @@ export async function fetchPartsOrderDescriptions(): Promise<ApiResult<PartsOrde
   return ok({
     descriptions: (data?.descriptions ?? {}) as Record<string, string>,
     orderNumbers: (data?.orderNumbers ?? {}) as Record<string, string>,
+    orderStatuses: (data?.orderStatuses ?? {}) as Record<string, string>,
   })
 }
 
@@ -124,6 +126,10 @@ export async function createPartsRequest(input: {
   entryDate?: string | null
   /** Optional — advisor may already know the exact part number. Leave blank for Parts SPM to fill in later. */
   partsNumber?: string | null
+  /** Optional header fields — stored directly on parts_requests row when provided. */
+  jobCardNumber?: string | null
+  customerName?: string | null
+  vehicleModel?: string | null
 }): Promise<ApiResult<number>> {
   const { data, error } = await supabase.rpc('parts_request_create', {
     p_registration_number: input.registrationNumber,
@@ -132,6 +138,9 @@ export async function createPartsRequest(input: {
     p_advisor_remarks: input.advisorRemarks ?? null,
     p_entry_date: input.entryDate ?? null,
     p_parts_number: input.partsNumber ?? null,
+    p_job_card_number: input.jobCardNumber ?? null,
+    p_customer_name: input.customerName ?? null,
+    p_vehicle_model: input.vehicleModel ?? null,
   })
 
   if (error) return fail(error)
