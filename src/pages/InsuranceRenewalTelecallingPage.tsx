@@ -762,6 +762,10 @@ function AdminDashboard({ campaigns, activeCampaign, onRefresh }: { campaigns: C
   const [editingCampaign, setEditingCampaign] = useState<Campaign | null>(null)
   const [editName, setEditName] = useState('')
   const [editWindowDays, setEditWindowDays] = useState(30)
+  const [editPriorityMode, setEditPriorityMode] = useState('urgency')
+  const [editSelectedSoldDealers, setEditSelectedSoldDealers] = useState<string[]>([])
+  const [editSelectedSvcDealers, setEditSelectedSvcDealers] = useState<string[]>([])
+  const [editShowDealerFilter, setEditShowDealerFilter] = useState(false)
   const [editing, setEditing] = useState(false)
   const [deleting, setDeleting] = useState<number | null>(null)
   const [windowDays, setWindowDays] = useState(30)
@@ -973,7 +977,7 @@ function AdminDashboard({ campaigns, activeCampaign, onRefresh }: { campaigns: C
   async function handleEdit() {
     if (!editingCampaign || !editName) return
     setEditing(true); setError(null)
-    try { await callEdge('update_campaign', { campaign_id: editingCampaign.id, campaign_name: editName, window_days: editWindowDays }); setSuccess('Campaign updated!'); setEditingCampaign(null); onRefresh() }
+    try { await callEdge('update_campaign', { campaign_id: editingCampaign.id, campaign_name: editName, window_days: editWindowDays, priority_mode: editPriorityMode, sold_dealer_filter: editSelectedSoldDealers.length > 0 ? editSelectedSoldDealers : null, last_service_dealer_filter: editSelectedSvcDealers.length > 0 ? editSelectedSvcDealers : null }); setSuccess('Campaign updated!'); setEditingCampaign(null); onRefresh() }
     catch (err) { setError((err as Error).message) } finally { setEditing(false) }
   }
 
@@ -1333,7 +1337,7 @@ function AdminDashboard({ campaigns, activeCampaign, onRefresh }: { campaigns: C
                       {rcEnqueueingId === c.id ? 'Queuing…' : rcFetchButtonLabel(c)}
                     </button>
                     {c.status === 'active' && <button onClick={() => handleClose(c.id)} className="rounded-lg border border-red-200 px-3 py-1.5 text-sm text-red-600 hover:bg-red-50">Close</button>}
-                    <button onClick={() => { setEditingCampaign(c); setEditName(c.campaign_name); setEditWindowDays(c.window_days) }} className="rounded-lg border border-gray-200 px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-50">✏️ Edit</button>
+                    <button onClick={() => { setEditingCampaign(c); setEditName(c.campaign_name); setEditWindowDays(c.window_days); setEditPriorityMode(c.priority_mode || 'urgency'); setEditSelectedSoldDealers(c.sold_dealer_filter || []); setEditSelectedSvcDealers(c.last_service_dealer_filter || []); setEditShowDealerFilter(!!(c.sold_dealer_filter?.length || c.last_service_dealer_filter?.length)) }} className="rounded-lg border border-gray-200 px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-50">✏️ Edit</button>
                     <button onClick={() => handleDelete(c.id, c.campaign_name)} disabled={deleting === c.id} className="rounded-lg border border-red-200 px-3 py-1.5 text-sm text-red-600 hover:bg-red-50 disabled:opacity-50">{deleting === c.id ? 'Deleting…' : '🗑️'}</button>
                   </div>
                 </div>
@@ -1651,7 +1655,7 @@ function AdminDashboard({ campaigns, activeCampaign, onRefresh }: { campaigns: C
               <h3 className="text-base font-semibold text-gray-900">Edit Campaign</h3>
               <button onClick={() => setEditingCampaign(null)} className="text-gray-400 hover:text-gray-600 text-xl">×</button>
             </div>
-            <div className="grid gap-4">
+            <div className="grid gap-4 max-h-[65vh] overflow-y-auto pr-1">
               <div>
                 <label className="text-sm font-medium text-gray-700">Campaign Name</label>
                 <input value={editName} onChange={e => setEditName(e.target.value)} className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm" />
@@ -1659,8 +1663,94 @@ function AdminDashboard({ campaigns, activeCampaign, onRefresh }: { campaigns: C
               <div>
                 <label className="text-sm font-medium text-gray-700">Renewal Window (days before expiry)</label>
                 <input type="number" min={1} max={365} value={editWindowDays} onChange={e => setEditWindowDays(Number(e.target.value))} className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm" />
+                <p className="text-xs text-amber-600 bg-amber-50 rounded-lg px-3 py-2 mt-2 border border-amber-200">⚠️ Changing the window takes effect on the next "Refresh Now".</p>
               </div>
-              <p className="text-xs text-amber-600 bg-amber-50 rounded-lg px-3 py-2 border border-amber-200">⚠️ Changing the window takes effect on the next "Refresh Now".</p>
+              <div>
+                <label className="text-sm font-medium text-gray-700">Lead Priority Mode</label>
+                <select
+                  value={editPriorityMode}
+                  onChange={e => setEditPriorityMode(e.target.value)}
+                  className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm bg-white"
+                >
+                  <option value="urgency">⏰ Urgency (closest expiry first)</option>
+                  <option value="idv_value">💰 IDV Value (highest premium first)</option>
+                  <option value="loyalty">⭐ Customer Loyalty (most visits first)</option>
+                  <option value="mixed">🔀 Mixed (balanced scoring)</option>
+                </select>
+                <p className="text-xs text-gray-400 mt-1">Controls the order telecallers receive leads.</p>
+              </div>
+
+              {/* Dealer Filters */}
+              <div>
+                <button
+                  type="button"
+                  onClick={() => setEditShowDealerFilter(!editShowDealerFilter)}
+                  className="text-sm text-blue-600 hover:text-blue-700 flex items-center gap-1 font-medium"
+                >
+                  {editShowDealerFilter ? '▼' : '▶'} Advanced Filters (Dealer)
+                  {(editSelectedSoldDealers.length > 0 || editSelectedSvcDealers.length > 0) && (
+                    <span className="ml-2 rounded-full bg-blue-100 text-blue-700 text-xs px-2 py-0.5">
+                      {editSelectedSoldDealers.length + editSelectedSvcDealers.length} selected
+                    </span>
+                  )}
+                </button>
+
+                {editShowDealerFilter && (
+                  <div className="mt-2 rounded-lg border border-gray-200 bg-gray-50 p-4 space-y-3">
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <div>
+                        <label className="text-xs font-medium text-gray-600 uppercase">Sold By Dealer</label>
+                        <div className="mt-1 max-h-36 overflow-y-auto rounded-lg border border-gray-200 bg-white p-2">
+                          {soldDealers.length === 0 ? (
+                            <p className="text-xs text-gray-400 p-1">Loading dealers…</p>
+                          ) : soldDealers.map(d => (
+                            <label key={d} className="flex items-center gap-2 py-0.5 cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={editSelectedSoldDealers.includes(d)}
+                                onChange={e => {
+                                  if (e.target.checked) setEditSelectedSoldDealers([...editSelectedSoldDealers, d])
+                                  else setEditSelectedSoldDealers(editSelectedSoldDealers.filter(x => x !== d))
+                                }}
+                                className="w-3.5 h-3.5 accent-blue-600"
+                              />
+                              <span className="text-sm">{d}</span>
+                            </label>
+                          ))}
+                        </div>
+                      </div>
+                      <div>
+                        <label className="text-xs font-medium text-gray-600 uppercase">Last Serviced At</label>
+                        <div className="mt-1 max-h-36 overflow-y-auto rounded-lg border border-gray-200 bg-white p-2">
+                          {serviceDealers.length === 0 ? (
+                            <p className="text-xs text-gray-400 p-1">Loading dealers…</p>
+                          ) : serviceDealers.map(d => (
+                            <label key={d} className="flex items-center gap-2 py-0.5 cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={editSelectedSvcDealers.includes(d)}
+                                onChange={e => {
+                                  if (e.target.checked) setEditSelectedSvcDealers([...editSelectedSvcDealers, d])
+                                  else setEditSelectedSvcDealers(editSelectedSvcDealers.filter(x => x !== d))
+                                }}
+                                className="w-3.5 h-3.5 accent-blue-600"
+                              />
+                              <span className="text-sm">{d}</span>
+                            </label>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                    {(editSelectedSoldDealers.length > 0 || editSelectedSvcDealers.length > 0) && (
+                      <button
+                        type="button"
+                        onClick={() => { setEditSelectedSoldDealers([]); setEditSelectedSvcDealers([]) }}
+                        className="text-xs text-gray-500 hover:text-gray-700 font-semibold"
+                      >Clear all filters</button>
+                    )}
+                  </div>
+                )}
+              </div>
             </div>
             <div className="mt-5 flex gap-3">
               <button onClick={handleEdit} disabled={editing} className="rounded-lg bg-blue-600 px-5 py-2 text-sm font-medium text-white disabled:opacity-50">{editing ? 'Saving…' : 'Save Changes'}</button>
