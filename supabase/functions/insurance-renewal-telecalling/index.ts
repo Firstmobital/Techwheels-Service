@@ -56,6 +56,26 @@ async function loadPendingCounts(
   }
 }
 
+async function loadRcFetchDiagnostics(
+  serviceClient: ReturnType<typeof createClient>,
+  campaignId: number,
+) {
+  const { data, error } = await serviceClient.rpc('insurance_renewal_rc_fetch_diagnostics', {
+    p_campaign_id: campaignId,
+  })
+  if (error) return null
+  const row = Array.isArray(data) ? data[0] : data
+  if (!row) return null
+  return {
+    assignment_total: Number(row.assignment_total ?? 0),
+    stale_in_campaign: Number(row.stale_in_campaign ?? 0),
+    attempted_total: Number(row.attempted_total ?? 0),
+    pending_stale: Number(row.pending_stale ?? 0),
+    pending_with_vrn: Number(row.pending_with_vrn ?? 0),
+    pending_missing_vrn: Number(row.pending_missing_vrn ?? 0),
+  }
+}
+
 async function recordRcFetchAttempt(
   serviceClient: ReturnType<typeof createClient>,
   params: {
@@ -799,6 +819,7 @@ export default async function handler(req: Request) {
 
       for (const campaignId of campaignIds) {
         const pending = await loadPendingCounts(serviceClient, campaignId)
+        const diagnostics = await loadRcFetchDiagnostics(serviceClient, campaignId)
         const { data: activeJob } = await serviceClient
           .from('insurance_renewal_rc_fetch_jobs')
           .select('id, status, created_at, started_at, stats, last_error')
@@ -820,6 +841,7 @@ export default async function handler(req: Request) {
         byCampaign[String(campaignId)] = {
           stale_cutoff_before: cutoff,
           ...pending,
+          diagnostics,
           fetch_enabled: pending.pending_with_vrn > 0 && !activeJob,
           active_job: activeJob
             ? { ...activeJob, stats: parseJobStats(activeJob.stats) }

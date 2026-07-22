@@ -1,6 +1,9 @@
 -- Background IDSPay RC fetch for insurance renewal campaigns: job queue + per-lead
 -- attempt log so each campaign only calls the API for new stale leads (null or
 -- insurance expiry older than 365 days) that were never fetched before.
+-- Deploy insurance-renewal-telecalling with verify_jwt=false or cron gets HTTP 401.
+-- attempt log so each campaign only calls the API for new stale leads (null or
+-- insurance expiry older than 365 days) that were never fetched before.
 
 CREATE TABLE public.insurance_renewal_rc_fetch_jobs (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),

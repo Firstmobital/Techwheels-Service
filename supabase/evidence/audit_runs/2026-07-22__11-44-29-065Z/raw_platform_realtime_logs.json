@@ -1,0 +1,35 @@
+{
+  "status": "ok",
+  "endpoint": "/v1/projects/jmdndcphkmaljhwgzqxq/analytics/endpoints/logs.all?sql=select%20timestamp%2C%20event_message%20from%20realtime_logs%20order%20by%20timestamp%20desc%20limit%20100",
+  "count": 7,
+  "records": [
+    {
+      "event_message": "Sent 200 in 3ms",
+      "timestamp": 1784720683318000
+    },
+    {
+      "event_message": "PoolingReplicationPreparationError: %Postgrex.Error{\n  message: nil,\n  postgres: %{\n    code: :query_canceled,\n    line: \"3425\",\n    message: \"canceling statement due to user request\",\n    file: \"postgres.c\",\n    unknown: \"ERROR\",\n    severity: \"ERROR\",\n    pg_code: \"57014\",\n    routine: \"ProcessInterrupts\"\n  },\n  connection_id: 1877370,\n  query: nil\n}",
+      "timestamp": 1784720670648000
+    },
+    {
+      "event_message": "CheckOidsError: %DBConnection.ConnectionError{\n  message: \"[Elixir.Extensions.PostgresCdcRls.DynamicSupervisor] connection not available and request was dropped from queue after 12000ms. This means requests are coming in and your connection pool cannot serve them fast enough. You can address this by:\\n\\n  1. Ensuring your database is available and that you can connect to it\\n  2. Tracking down slow queries and making sure they are running fast enough\\n  3. Increasing the pool_size (although this increases resource consumption)\\n  4. Allowing requests to wait longer by increasing :queue_target and :queue_interval\\n\\nSee DBConnection.start_link/2 for more information\\n\",\n  severity: :error,\n  reason: :queue_timeout\n}",
+      "timestamp": 1784720651649000
+    },
+    {
+      "event_message": "Sent 200 in 455µs",
+      "timestamp": 1784720643053000
+    },
+    {
+      "event_message": "Sent 200 in 2ms",
+      "timestamp": 1784720642724000
+    },
+    {
+      "event_message": "Sent 200 in 523µs",
+      "timestamp": 1784720639868000
+    },
+    {
+      "event_message": "PoolingReplicationError: %DBConnection.ConnectionError{\n  message: \"[Elixir.Extensions.PostgresCdcRls.DynamicSupervisor] connection not available and request was dropped from queue after 11626ms. This means requests are coming in and your connection pool cannot serve them fast enough. You can address this by:\\n\\n  1. Ensuring your database is available and that you can connect to it\\n  2. Tracking down slow queries and making sure they are running fast enough\\n  3. Increasing the pool_size (although this increases resource consumption)\\n  4. Allowing requests to wait longer by increasing :queue_target and :queue_interval\\n\\nSee DBConnection.start_link/2 for more information\\n\",\n  severity: :error,\n  reason: :queue_timeout\n}",
+      "timestamp": 1784720639649000
+    }
+  ]
+}

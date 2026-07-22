@@ -32,4 +32,4 @@ verify_jwt = false
 verify_jwt = true
 
 [functions.insurance-renewal-telecalling]
-verify_jwt = true
+verify_jwt = false

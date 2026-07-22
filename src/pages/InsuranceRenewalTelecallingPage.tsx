@@ -678,6 +678,8 @@ function AdminDashboard({ campaigns, activeCampaign, onRefresh }: { campaigns: C
   const [loadingTab, setLoadingTab] = useState(false)
   const [rcStatusByCampaign, setRcStatusByCampaign] = useState<Record<string, any>>({})
   const [rcEnqueueingId, setRcEnqueueingId] = useState<number | null>(null)
+  const [rcStatusLoaded, setRcStatusLoaded] = useState(false)
+  const [rcStatusLoadError, setRcStatusLoadError] = useState<string | null>(null)
 
   type RcCampaignStatus = {
     pending_with_vrn?: number
@@ -685,18 +687,33 @@ function AdminDashboard({ campaigns, activeCampaign, onRefresh }: { campaigns: C
     pending_stale?: number
     fetch_enabled?: boolean
     active_job?: { id: string; status: string; stats?: Record<string, number> } | null
+    last_job?: { status: string; stats?: Record<string, number> } | null
+    diagnostics?: {
+      assignment_total?: number
+      stale_in_campaign?: number
+      attempted_total?: number
+    } | null
   }
 
-  const loadRcStatus = useCallback(async () => {
+  const loadRcStatus = useCallback(async (): Promise<Record<string, any>> => {
     if (campaigns.length === 0) {
       setRcStatusByCampaign({})
-      return
+      setRcStatusLoaded(true)
+      setRcStatusLoadError(null)
+      return {}
     }
     try {
       const d = await callEdge('rc_fetch_status', { campaign_ids: campaigns.map(c => c.id) })
-      setRcStatusByCampaign(d.campaigns || {})
+      const map = d.campaigns || {}
+      setRcStatusByCampaign(map)
+      setRcStatusLoadError(null)
+      setRcStatusLoaded(true)
+      return map
     } catch (e) {
       console.error('RC status load failed', e)
+      setRcStatusLoadError((e as Error).message)
+      setRcStatusLoaded(false)
+      throw e
     }
   }, [campaigns])
 
@@ -800,11 +817,40 @@ function AdminDashboard({ campaigns, activeCampaign, onRefresh }: { campaigns: C
   }
 
   async function handleRcFetchEnqueue(campaign: Campaign) {
-    const st: RcCampaignStatus = rcStatusByCampaign[String(campaign.id)] || {}
-    if (!st.fetch_enabled || rcEnqueueingId !== null) return
+    if (rcEnqueueingId !== null) return
     setError(null)
     setSuccess(null)
+
+    await loadRcStatus().catch(() => ({}))
+    let st: RcCampaignStatus = rcStatusByCampaign[String(campaign.id)] || {}
+    try {
+      const fresh = await callEdge('rc_fetch_status', { campaign_ids: [campaign.id] })
+      st = fresh.campaigns?.[String(campaign.id)] || st
+    } catch {
+      /* use cached st */
+    }
+
+    if (st.active_job) {
+      setError('RC fetch is already queued or running. Use “Stop RC fetch” to cancel.')
+      return
+    }
+
     const withVrn = st.pending_with_vrn ?? 0
+    const diag = st.diagnostics
+
+    if (withVrn <= 0) {
+      const total = diag?.assignment_total ?? campaign.total_leads
+      const stale = diag?.stale_in_campaign ?? '—'
+      const attempted = diag?.attempted_total ?? '—'
+      setError(
+        `Nothing to queue for “${campaign.campaign_name}”: 0 new stale leads with VRN. ` +
+        `Campaign assignments: ${total}; with null or >365-day insurance on file: ${stale}; ` +
+        `already attempted via RC job: ${attempted}. ` +
+        `RC fetch does not run for every telecalling lead—only stale insurance not yet attempted.`,
+      )
+      return
+    }
+
     const missingVrn = st.pending_missing_vrn ?? 0
     const msg = [
       `Queue background IDSPay RC fetch for "${campaign.campaign_name}"?`,
@@ -928,7 +974,8 @@ function AdminDashboard({ campaigns, activeCampaign, onRefresh }: { campaigns: C
               <div className="rounded-xl border border-gray-200 bg-white p-8 text-center text-sm text-gray-400">No campaigns yet. Click &quot;New Campaign&quot; to create one.</div>
             ) : campaigns.map(c => {
               const rcSt: RcCampaignStatus = rcStatusByCampaign[String(c.id)] || {}
-              const rcDisabled = !rcSt.fetch_enabled || rcEnqueueingId !== null
+              const canQueue = rcSt.fetch_enabled === true && rcEnqueueingId === null
+              const diag = rcSt.diagnostics
               return (
               <div key={c.id} className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
                 <div className="flex items-center justify-between flex-wrap gap-3">
@@ -940,6 +987,17 @@ function AdminDashboard({ campaigns, activeCampaign, onRefresh }: { campaigns: C
                     <p className="mt-1 text-sm text-gray-500">
                       Next <strong>{c.window_days} days</strong> · {formatDate(c.date_from)} → {formatDate(c.date_to)}{' '}· by {c.created_by || '—'}
                     </p>
+                    {rcStatusLoadError && (
+                      <p className="mt-1 text-xs text-red-600">RC status failed to load: {rcStatusLoadError}. Redeploy edge + apply DB migrations.</p>
+                    )}
+                    {rcStatusLoaded && !rcStatusLoadError && (
+                      <p className="mt-1 text-xs text-gray-600">
+                        IDSPay RC: <strong>{rcSt.pending_with_vrn ?? '…'}</strong> new to fetch
+                        {diag ? (
+                          <> · {diag.assignment_total} in campaign · {diag.stale_in_campaign} stale (null/&gt;365d) · {diag.attempted_total} already attempted</>
+                        ) : null}
+                      </p>
+                    )}
                   </div>
                   <div className="flex items-center gap-2 flex-wrap">
                     {rcSt.active_job && (
@@ -954,15 +1012,19 @@ function AdminDashboard({ campaigns, activeCampaign, onRefresh }: { campaigns: C
                     <button
                       type="button"
                       onClick={() => handleRcFetchEnqueue(c)}
-                      disabled={rcDisabled}
+                      disabled={rcEnqueueingId !== null || Boolean(rcSt.active_job)}
                       title={
                         rcSt.active_job
                           ? 'Background job in progress'
-                          : (rcSt.pending_with_vrn ?? 0) > 0
+                          : canQueue
                             ? 'Queue IDSPay lookup for new stale leads only'
-                            : 'All stale leads in this campaign were already fetched (or none qualify)'
+                            : 'Click for explanation if nothing to queue'
                       }
-                      className="rounded-lg border border-indigo-300 bg-indigo-50 px-3 py-1.5 text-sm font-medium text-indigo-800 hover:bg-indigo-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                      className={`rounded-lg border px-3 py-1.5 text-sm font-medium ${
+                        canQueue
+                          ? 'border-indigo-300 bg-indigo-50 text-indigo-800 hover:bg-indigo-100'
+                          : 'border-gray-200 bg-gray-50 text-gray-500 hover:bg-gray-100'
+                      } disabled:opacity-50 disabled:cursor-not-allowed`}
                     >
                       {rcEnqueueingId === c.id ? 'Queuing…' : rcFetchButtonLabel(c)}
                     </button>
