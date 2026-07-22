@@ -1108,21 +1108,27 @@ export default function PartsRequirementSection({ isAdmin = false }: Props) {
           <table className="min-w-full text-sm">
             <thead className="sticky top-0 z-10 bg-gray-50 text-xs font-semibold uppercase tracking-wide text-gray-500">
               <tr>
-                <th className="px-4 py-3 text-left">Flow / Date</th>
-                {isAdmin && <th className="px-4 py-3 text-left">Advisor</th>}
-                {isAdmin && <th className="px-4 py-3 text-left">EV/PV</th>}
-                <th className="px-4 py-3 text-left">Reg No.</th>
-                <th className="px-4 py-3 text-left">Order Date</th>
-                <th className="px-4 py-3 text-left">Order No.</th>
-                <th className="px-4 py-3 text-left">Order Status</th>
-                <th className="px-4 py-3 text-left">Part Name</th>
-                <th className="px-4 py-3 text-left">Part No.</th>
-                <th className="px-4 py-3 text-left">Advisor Remarks</th>
-                <th className="px-4 py-3 text-left">Customer Update</th>
-                <th className="px-4 py-3 text-left">SPM Remarks</th>
-                <th className="px-4 py-3 text-left">Stock</th>
-                <th className="px-4 py-3 text-left">Status</th>
-                <th className="px-4 py-3 text-left">Action</th>
+                <th className="whitespace-nowrap px-4 py-3 text-left">Entry Date</th>
+                <th className="whitespace-nowrap px-4 py-3 text-left">Job Card</th>
+                {isAdmin && <th className="whitespace-nowrap px-4 py-3 text-left">Advisor</th>}
+                <th className="whitespace-nowrap px-4 py-3 text-left">Reg No.</th>
+                <th className="whitespace-nowrap px-4 py-3 text-left">Customer Name</th>
+                {isAdmin && <th className="whitespace-nowrap px-4 py-3 text-left">Cust. Mobile</th>}
+                <th className="whitespace-nowrap px-4 py-3 text-left">Vehicle Model</th>
+                <th className="whitespace-nowrap px-4 py-3 text-left">Portal</th>
+                <th className="whitespace-nowrap px-4 py-3 text-left">Parts Required</th>
+                <th className="whitespace-nowrap px-4 py-3 text-left">Parts No.</th>
+                <th className="whitespace-nowrap px-4 py-3 text-left">Order No.</th>
+                <th className="whitespace-nowrap px-4 py-3 text-left">Order Date</th>
+                <th className="whitespace-nowrap px-4 py-3 text-left">Order Status</th>
+                <th className="whitespace-nowrap px-4 py-3 text-left">Stock</th>
+                <th className="whitespace-nowrap px-4 py-3 text-left">Status</th>
+                <th className="whitespace-nowrap px-4 py-3 text-left">Adv. Remarks</th>
+                <th className="whitespace-nowrap px-4 py-3 text-left">Cust. Update</th>
+                <th className="whitespace-nowrap px-4 py-3 text-left">SPM Remarks</th>
+                <th className="whitespace-nowrap px-4 py-3 text-left">Received</th>
+                <th className="whitespace-nowrap px-4 py-3 text-left">Done</th>
+                <th className="whitespace-nowrap px-4 py-3 text-left">Action</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
@@ -1136,47 +1142,77 @@ export default function PartsRequirementSection({ isAdmin = false }: Props) {
                         ${isVOR(row) ? 'bg-yellow-50 border-l-4 border-yellow-400' : ''}
                         ${!row.advisor_seen && !isAdmin && !isVOR(row) ? 'bg-blue-50/40' : ''}`}
                     >
-                      <td className="whitespace-nowrap px-4 py-2.5 text-gray-700">
-                        <div className="flex items-center gap-1.5">
-                          {fmtDateDMY(row.entry_date)}
-                        </div>
-                      </td>
+                      {/* Col 1: Entry Date */}
+                      <td className="whitespace-nowrap px-4 py-2.5 text-xs text-gray-700">{fmtDateDMY(row.entry_date)}</td>
+                      {/* Col 2: Job Card */}
+                      <td className="whitespace-nowrap px-4 py-2.5 text-xs text-gray-600">{row.job_card_number || '\u2014'}</td>
+                      {/* Col 3: Advisor (admin only) */}
                       {isAdmin && <td className="whitespace-nowrap px-4 py-2.5 text-xs text-gray-700">{row.advisor_name}</td>}
-                      {isAdmin && (
-                        <td className="px-4 py-2.5">
-                          <span className={`inline-block rounded px-1.5 py-0.5 text-[10px] font-bold
-                            ${evpvOf(row) === 'EV' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'}`}>
-                            {evpvOf(row)}
-                          </span>
-                        </td>
-                      )}
-                      <td className="whitespace-nowrap px-4 py-2.5 font-medium text-gray-900">{row.registration_number}</td>
-                      <td className="whitespace-nowrap px-4 py-2.5 text-xs text-gray-600">{fmtDateDMY(row.parts_order_date)}</td>
+                      {/* Col 4: Reg No. */}
+                      <td className="whitespace-nowrap px-4 py-2.5 text-sm font-semibold text-gray-900">{row.registration_number}</td>
+                      {/* Col 5: Customer Name */}
+                      <td className="whitespace-nowrap px-4 py-2.5 text-xs text-gray-700">{row.customer_name || '\u2014'}</td>
+                      {/* Col 6: Customer Mobile (admin only) */}
+                      {isAdmin && <td className="whitespace-nowrap px-4 py-2.5 text-xs text-gray-600">{row.customer_mobile || '\u2014'}</td>}
+                      {/* Col 7: Vehicle Model (from Reception) */}
+                      <td className="whitespace-nowrap px-4 py-2.5 text-xs text-gray-600">{row.vehicle_model || '\u2014'}</td>
+                      {/* Col 8: Portal (EV/PV badge) */}
+                      <td className="px-4 py-2.5">
+                        <span className={`inline-block rounded px-1.5 py-0.5 text-[10px] font-bold
+                          ${evpvOf(row) === 'EV' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'}`}>
+                          {evpvOf(row)}
+                        </span>
+                      </td>
+                      {/* Col 9: Parts Required */}
+                      <td className="px-4 py-2.5 text-xs font-medium text-gray-900 max-w-[160px]">
+                        <p className="truncate">{row.parts_required}</p>
+                      </td>
+                      {/* Col 10: Parts No. */}
+                      <td className="px-4 py-2.5 text-xs text-gray-500 font-mono">{row.parts_number || '\u2014'}</td>
+                      {/* Col 11: Order No. */}
                       <td className="whitespace-nowrap px-4 py-2.5 text-xs">
                         <div className="flex items-center gap-1">
                           {isVOR(row) && <span className="rounded bg-yellow-200 px-1 py-0.5 text-[9px] font-bold text-yellow-800">VOR</span>}
                           <span className="text-gray-700">{orderNoOf(row) || '\u2014'}</span>
                         </div>
                       </td>
+                      {/* Col 12: Order Date (from Parts Order sheet) */}
+                      <td className="whitespace-nowrap px-4 py-2.5 text-xs text-gray-600">{fmtDateDMY(row.parts_order_date)}</td>
+                      {/* Col 13: Order Status */}
                       <td className="px-4 py-2.5"><OrderStatusBadge label={orderStatus} /></td>
-                      <td className="px-4 py-2.5 font-medium text-gray-900 max-w-[160px]">
-                        <p className="truncate">{row.parts_required}</p>
-                      </td>
-                      <td className="px-4 py-2.5 text-xs text-gray-500 font-mono">{row.parts_number || '\u2014'}</td>
+                      {/* Col 14: Stock */}
+                      <td className="px-4 py-2.5"><QtyBadge qty={row.parts_qty} /></td>
+                      {/* Col 15: Status */}
+                      <td className="px-4 py-2.5"><StatusBadge status={row.parts_status} qty={row.parts_qty} /></td>
+                      {/* Col 16: Adv. Remarks */}
                       <td className="px-4 py-2.5 text-xs text-gray-600 max-w-[140px]">
                         <p className="line-clamp-2">{row.advisor_remarks || '\u2014'}</p>
                       </td>
+                      {/* Col 17: Cust. Update */}
                       <td className="px-4 py-2.5 text-xs text-gray-600 max-w-[140px]">
                         <p className="line-clamp-2">{row.customer_update || '\u2014'}</p>
                       </td>
+                      {/* Col 18: SPM Remarks */}
                       <td className="px-4 py-2.5 text-xs text-gray-500 max-w-[140px]">
                         <p className="line-clamp-2">{row.spm_remarks || '\u2014'}</p>
                       </td>
-                      <td className="px-4 py-2.5"><QtyBadge qty={row.parts_qty} /></td>
-                      <td className="px-4 py-2.5"><StatusBadge status={row.parts_status} qty={row.parts_qty} /></td>
+                      {/* Col 19: Received (timestamp + who) */}
+                      <td className="whitespace-nowrap px-4 py-2.5 text-xs text-gray-500">
+                        {row.received_at
+                          ? new Date(row.received_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', dateStyle: 'short', timeStyle: 'short' })
+                          : '\u2014'}
+                        {row.received_by_name && <div className="text-gray-400">{row.received_by_name}</div>}
+                      </td>
+                      {/* Col 20: Done (timestamp + who) */}
+                      <td className="whitespace-nowrap px-4 py-2.5 text-xs text-gray-500">
+                        {row.done_at
+                          ? new Date(row.done_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', dateStyle: 'short', timeStyle: 'short' })
+                          : '\u2014'}
+                        {row.done_by_name && <div className="text-gray-400">{row.done_by_name}</div>}
+                      </td>
+                      {/* Col 21: Action */}
                       <td className="px-4 py-2.5"><ActionButton row={row} /></td>
                     </tr>
-
                   </>
                 )
               })}
