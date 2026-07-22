@@ -380,19 +380,32 @@ export default function PartsRequirementSection() {
     void load()
   }
 
-  // Locally-arranged / direct-vendor parts never go through a formal SPM order (no
-  // Order No. / Ordered Qty), so the advisor flags it by typing "PART RECEIVED" into
-  // Advisor Remarks — that alone surfaces the Mark Received action from Pending.
-  // Mirrored server-side in parts_request_advisor_mark_received.
-  const isDirectReceiveFlag = (row: PartsRequestRow) =>
-    row.parts_status === 'Pending' && /part received/i.test(row.advisor_remarks ?? '')
+  // Surfaces "Mark Received" for two cases:
+  //   1. Status is "Available" (display badge) — i.e. Pending + parts_qty > 0 — part is in stock,
+  //      advisor can mark it directly received without placing an order.
+  //   2. Advisor typed "Parts Received" (or "Part Received" / any variation) in remarks,
+  //      indicating a locally-arranged / direct-vendor supply — regardless of current status.
+  // Case-insensitive; flexible match: contains both "part" AND "received".
+  const hasPartsReceivedRemark = (row: PartsRequestRow): boolean => {
+    const r = (row.advisor_remarks ?? '').toLowerCase()
+    return r.includes('part') && r.includes('received')
+  }
+
+  // "Available" badge = Pending status + in-stock qty > 0 (computed display only, never stored)
+  const isAvailableBadge = (row: PartsRequestRow): boolean =>
+    row.parts_status === 'Pending' && (row.parts_qty ?? 0) > 0
+
+  // Show "Mark Received" if: Available badge shown, OR advisor remarks flag receipt
+  const showMarkReceived = (row: PartsRequestRow): boolean =>
+    isAvailableBadge(row) || hasPartsReceivedRemark(row)
 
   const ActionButton = ({ row }: { row: PartsRequestRow }) => {
     const busy = actionBusyId === row.id
-    if (row.parts_status === 'Pending' && !isDirectReceiveFlag(row)) {
+    // Show "Awaiting SPM order" only for plain Pending rows with no receive signal
+    if (row.parts_status === 'Pending' && !showMarkReceived(row)) {
       return <span className="text-xs text-gray-400">Awaiting SPM order</span>
     }
-    if (['Ordered', 'In Transit', 'Back Order', 'Partially Received'].includes(row.parts_status) || isDirectReceiveFlag(row)) {
+    if (['Ordered', 'In Transit', 'Back Order', 'Partially Received'].includes(row.parts_status) || showMarkReceived(row)) {
       return (
         <button
           type="button"
