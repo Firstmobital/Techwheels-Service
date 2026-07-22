@@ -506,8 +506,32 @@ export default function PartsRequirementSection({ isAdmin = false }: Props) {
   const descOf = (row: PartsRequestRow): string =>
     descriptions[normPartNumber(row.parts_number)] || row.parts_description || ''
 
-  const orderNoOf = (row: PartsRequestRow): string =>
+  // ── EV/PV category — vehicle_type is the primary source.
+  // Special exception: SINGH, PANKAJ (employee_code PS2_3000840) is EV even though
+  // his suffix code contains 3000840 (normal PV prefix).
+  const evpvOf = (row: PartsRequestRow): string => {
+    const name = (row.advisor_name ?? '').toUpperCase()
+    const code = (row.advisor_employee_code ?? '').toUpperCase()
+    // Pankaj Singh exception — EV regardless of code
+    if (name.includes('PANKAJ') && (name.includes('SINGH') || code.includes('PS2_'))) return 'EV'
+    if (row.vehicle_type === 'EV') return 'EV'
+    if (row.vehicle_type === 'PV') return 'PV'
+    // Fallback: infer from employee code prefix
+    if (code.startsWith('500A') || code.includes('_500A')) return 'EV'
+    return 'PV'
+  }
+
+  // ── VOR check: order number starts with "33"
+  const isVOR = (row: PartsRequestRow): boolean => {
+    const no = orderNoOf_inner(row)
+    return no.startsWith('33')
+  }
+
+  const orderNoOf_inner = (row: PartsRequestRow): string =>
     orderNumbers[normPartNumber(row.parts_number)] || ''
+
+  const orderNoOf = (row: PartsRequestRow): string =>
+    orderNoOf_inner(row)
 
   const orderStatusOf = (row: PartsRequestRow): string =>
     orderStatuses[normPartNumber(row.parts_number)] || 'Order Pending'
@@ -1105,18 +1129,20 @@ export default function PartsRequirementSection({ isAdmin = false }: Props) {
           <table className="min-w-full text-sm">
             <thead className="sticky top-0 z-10 bg-gray-50 text-xs font-semibold uppercase tracking-wide text-gray-500">
               <tr>
-                <th className="px-4 py-3 text-left">Date</th>
+                <th className="px-4 py-3 text-left">Flow / Date</th>
                 {isAdmin && <th className="px-4 py-3 text-left">Advisor</th>}
                 <th className="px-4 py-3 text-left">Reg No.</th>
-                <th className="px-4 py-3 text-left">Job Card</th>
-                <th className="px-4 py-3 text-left">Customer</th>
-                <th className="px-4 py-3 text-left">Part Name / No.</th>
-                <th className="px-4 py-3 text-left">Description</th>
-                <th className="px-4 py-3 text-left">Stock Status</th>
-                <th className="px-4 py-3 text-left">Order Status</th>
-                <th className="px-4 py-3 text-left">Status</th>
-                <th className="px-4 py-3 text-left">Order No.</th>
                 <th className="px-4 py-3 text-left">Order Date</th>
+                <th className="px-4 py-3 text-left">Order No.</th>
+                <th className="px-4 py-3 text-left">Order Status</th>
+                <th className="px-4 py-3 text-left">Part Name</th>
+                <th className="px-4 py-3 text-left">Part No.</th>
+                <th className="px-4 py-3 text-left">EV/PV</th>
+                <th className="px-4 py-3 text-left">Advisor Remarks</th>
+                <th className="px-4 py-3 text-left">Customer Update</th>
+                <th className="px-4 py-3 text-left">SPM Remarks</th>
+                <th className="px-4 py-3 text-left">Stock</th>
+                <th className="px-4 py-3 text-left">Status</th>
                 <th className="px-4 py-3 text-left">Action</th>
               </tr>
             </thead>
@@ -1129,7 +1155,9 @@ export default function PartsRequirementSection({ isAdmin = false }: Props) {
                   <>
                     <tr
                       key={row.id}
-                      className={`cursor-pointer transition hover:bg-gray-50 ${!row.advisor_seen && !isAdmin ? 'bg-blue-50/40' : ''}`}
+                      className={`cursor-pointer transition hover:bg-gray-50
+                        ${isVOR(row) ? 'bg-yellow-50 border-l-4 border-yellow-400' : ''}
+                        ${!row.advisor_seen && !isAdmin && !isVOR(row) ? 'bg-blue-50/40' : ''}`}
                       onClick={() => void handleExpand(row)}
                     >
                       <td className="whitespace-nowrap px-4 py-2.5 text-gray-700">
@@ -1140,34 +1168,48 @@ export default function PartsRequirementSection({ isAdmin = false }: Props) {
                       </td>
                       {isAdmin && <td className="whitespace-nowrap px-4 py-2.5 text-xs text-gray-700">{row.advisor_name}</td>}
                       <td className="whitespace-nowrap px-4 py-2.5 font-medium text-gray-900">{row.registration_number}</td>
-                      <td className="px-4 py-2.5 text-xs text-gray-500">{row.job_card_number || '\u2014'}</td>
-                      <td className="px-4 py-2.5">
-                        <div className="text-gray-900 font-medium">{row.customer_name || '—'}</div>
-                        {row.customer_mobile && <div className="text-xs text-gray-400 mt-0.5">{row.customer_mobile}</div>}
+                      <td className="whitespace-nowrap px-4 py-2.5 text-xs text-gray-600">{fmtDateDMY(row.parts_order_date)}</td>
+                      <td className="whitespace-nowrap px-4 py-2.5 text-xs">
+                        <div className="flex items-center gap-1">
+                          {isVOR(row) && <span className="rounded bg-yellow-200 px-1 py-0.5 text-[9px] font-bold text-yellow-800">VOR</span>}
+                          <span className="text-gray-700">{orderNoOf(row) || '\u2014'}</span>
+                        </div>
                       </td>
-                      <td className="px-4 py-2.5">
-                        <div className="font-medium text-gray-900">{row.parts_required}</div>
-                        {row.parts_number && <div className="text-xs text-gray-400">{row.parts_number}</div>}
+                      <td className="px-4 py-2.5"><OrderStatusBadge label={orderStatus} /></td>
+                      <td className="px-4 py-2.5 font-medium text-gray-900 max-w-[160px]">
+                        <p className="truncate">{row.parts_required}</p>
                       </td>
-                      <td className="px-4 py-2.5 text-xs text-gray-500">
-                        <p className="line-clamp-2 whitespace-normal">{desc || 'Description Not Available'}</p>
+                      <td className="px-4 py-2.5 text-xs text-gray-500 font-mono">{row.parts_number || '\u2014'}</td>
+                      <td className="px-4 py-2.5">
+                        <span className={`inline-block rounded px-1.5 py-0.5 text-[10px] font-bold
+                          ${evpvOf(row) === 'EV' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'}`}>
+                          {evpvOf(row)}
+                        </span>
+                      </td>
+                      <td className="px-4 py-2.5 text-xs text-gray-600 max-w-[140px]">
+                        <p className="line-clamp-2">{row.advisor_remarks || '\u2014'}</p>
+                      </td>
+                      <td className="px-4 py-2.5 text-xs text-gray-600 max-w-[140px]">
+                        <p className="line-clamp-2">{row.customer_update || '\u2014'}</p>
+                      </td>
+                      <td className="px-4 py-2.5 text-xs text-gray-500 max-w-[140px]">
+                        <p className="line-clamp-2">{row.spm_remarks || '\u2014'}</p>
                       </td>
                       <td className="px-4 py-2.5"><QtyBadge qty={row.parts_qty} /></td>
-                      <td className="px-4 py-2.5"><OrderStatusBadge label={orderStatus} /></td>
                       <td className="px-4 py-2.5"><StatusBadge status={row.parts_status} qty={row.parts_qty} /></td>
                       <td className="px-4 py-2.5"><ActionButton row={row} /></td>
                     </tr>
                     {isExpanded && (
                       <tr key={`${row.id}-exp`} className="bg-gray-50">
-                        <td colSpan={13} className="px-6 py-4">
+                        <td colSpan={isAdmin ? 15 : 14} className="px-6 py-4">
                           <div className="grid grid-cols-2 gap-4 text-xs sm:grid-cols-3 lg:grid-cols-5">
                             <div>
-                              <p className="font-bold text-gray-500">Order No.</p>
-                              <p className="mt-0.5 text-gray-800">{orderNoOf(row) || '\u2014'}</p>
+                              <p className="font-bold text-gray-500">Job Card</p>
+                              <p className="mt-0.5 text-gray-800">{row.job_card_number || '\u2014'}</p>
                             </div>
                             <div>
-                              <p className="font-bold text-gray-500">Order Date</p>
-                              <p className="mt-0.5 text-gray-800">{fmtDateDMY(row.parts_order_date)}</p>
+                              <p className="font-bold text-gray-500">Customer</p>
+                              <p className="mt-0.5 text-gray-800">{row.customer_name || '\u2014'}</p>
                             </div>
                             <div>
                               <p className="font-bold text-gray-500">Vehicle Model</p>
@@ -1176,6 +1218,10 @@ export default function PartsRequirementSection({ isAdmin = false }: Props) {
                             <div>
                               <p className="font-bold text-gray-500">Customer Mobile</p>
                               <p className="mt-0.5 text-gray-800">{row.customer_mobile || '\u2014'}</p>
+                            </div>
+                            <div>
+                              <p className="font-bold text-gray-500">Part Description</p>
+                              <p className="mt-0.5 text-gray-800">{desc || '\u2014'}</p>
                             </div>
                             <div>
                               <p className="font-bold text-gray-500">Branch</p>
