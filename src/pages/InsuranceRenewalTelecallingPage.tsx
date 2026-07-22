@@ -832,12 +832,21 @@ function AdminDashboard({ campaigns, activeCampaign, onRefresh }: { campaigns: C
     return () => clearInterval(t)
   }, [activeAdminTab, loadRcStatus])
 
-  // Fetch distinct dealers for dropdown filters
+  // Fetch distinct dealers for dropdown filters (public endpoint - no auth needed)
   useEffect(() => {
-    callEdge('get_dealers', {}).then(res => {
-      setSoldDealers(res.dealers?.sold_dealers || [])
-      setServiceDealers(res.dealers?.service_dealers || [])
-    }).catch(console.error)
+    fetch(`${supabaseUrl}/functions/v1/insurance-renewal-telecalling`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', apikey: supabaseAnonKey },
+      body: JSON.stringify({ action: 'get_dealers' }),
+    })
+      .then(r => r.json())
+      .then(res => {
+        if (res.success) {
+          setSoldDealers(res.dealers?.sold_dealers || [])
+          setServiceDealers(res.dealers?.service_dealers || [])
+        }
+      })
+      .catch(console.error)
   }, [])
 
   // Initialize meta settings when active campaign changes

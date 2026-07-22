@@ -171,6 +171,13 @@ Deno.serve(async (req) => {
     }
   }
 
+  // ── Public endpoints (no auth needed) ──
+  if (action === "get_dealers") {
+    const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
+    const svcSupabase = createClient(SUPABASE_URL, serviceKey);
+    return handleGetDealers(svcSupabase);
+  }
+
   // ── Authenticated endpoints ──
   const authHeader = req.headers.get("Authorization");
   if (!authHeader) return errorResponse("Missing Authorization header", 401);
