@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 function useIsDesktop(): boolean {
   const [isDesktop, setIsDesktop] = useState(() =>
@@ -224,6 +224,112 @@ export default function PartsRequirementSection({ isAdmin = false }: Props) {
   const [vehicleNoFilter, setVehicleNoFilter] = useState('')
   const [stockStatusFilter, setStockStatusFilter] = useState('all')
   const [orderStatusFilter, setOrderStatusFilter] = useState('all')
+
+  // ── Reg No auto-fetch state ─────────────────────────────────────────────────
+  const [regFetchStatus, setRegFetchStatus] = useState<'idle' | 'loading' | 'found' | 'notfound' | 'error'>('idle')
+  const [regSuggestions, setRegSuggestions] = useState<string[]>([])
+  const [showRegSuggestions, setShowRegSuggestions] = useState(false)
+  const [autoFilledFields, setAutoFilledFields] = useState<Set<string>>(new Set())
+  const regDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const regInputRef = useRef<HTMLInputElement | null>(null)
+
+  // ── Fetch reception details for a given reg number ────────────────────────
+  const fetchReceptionDetails = useCallback(async (regNo: string) => {
+    if (!regNo.trim() || regNo.trim().length < 4) {
+      setRegFetchStatus('idle')
+      return
+    }
+    setRegFetchStatus('loading')
+    try {
+      const { data, error: err } = await supabase
+        .from('service_reception_entries')
+        .select('reg_number, jc_number, owner_name, owner_phone, model')
+        .ilike('reg_number', regNo.trim())
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .single()
+
+      if (err || !data) {
+        setRegFetchStatus('notfound')
+        return
+      }
+      // Auto-fill only fields that are currently empty (respect manual entries)
+      setDraftHeader((prev) => {
+        const filled = new Set<string>()
+        const next = { ...prev }
+        if (!prev.job_card_number && data.jc_number) {
+          next.job_card_number = data.jc_number
+          filled.add('job_card_number')
+        }
+        if (!prev.customer_name && data.owner_name) {
+          next.customer_name = data.owner_name
+          filled.add('customer_name')
+        }
+        if (!prev.customer_mobile && data.owner_phone) {
+          next.customer_mobile = data.owner_phone
+          filled.add('customer_mobile')
+        }
+        if (!prev.vehicle_model && data.model) {
+          next.vehicle_model = data.model
+          filled.add('vehicle_model')
+        }
+        setAutoFilledFields(filled)
+        return next
+      })
+      setRegFetchStatus('found')
+    } catch {
+      setRegFetchStatus('error')
+    }
+  }, [])
+
+  // ── Fetch reg number suggestions (autocomplete) ─────────────────────────────
+  const fetchRegSuggestions = useCallback(async (partial: string) => {
+    if (!partial || partial.length < 3) { setRegSuggestions([]); return }
+    try {
+      const { data } = await supabase
+        .from('service_reception_entries')
+        .select('reg_number')
+        .ilike('reg_number', `${partial}%`)
+        .order('created_at', { ascending: false })
+        .limit(8)
+      if (data) {
+        const unique = [...new Set(data.map((r) => r.reg_number as string))]
+        setRegSuggestions(unique)
+      }
+    } catch { setRegSuggestions([]) }
+  }, [])
+
+  // ── Debounced handler for reg no. input change ───────────────────────────────
+  const handleRegNoChange = useCallback((val: string) => {
+    const upper = val.toUpperCase()
+    setDraftHeader((d) => ({ ...d, registration_number: upper }))
+    setRegFetchStatus('idle')
+    setAutoFilledFields(new Set())
+    if (regDebounceRef.current) clearTimeout(regDebounceRef.current)
+    regDebounceRef.current = setTimeout(() => {
+      void fetchReceptionDetails(upper)
+      void fetchRegSuggestions(upper)
+    }, 400)
+    if (upper.length >= 3) setShowRegSuggestions(true)
+    else setShowRegSuggestions(false)
+  }, [fetchReceptionDetails, fetchRegSuggestions])
+
+  const handleRegSuggestionClick = useCallback((reg: string) => {
+    setDraftHeader((d) => ({ ...d, registration_number: reg }))
+    setShowRegSuggestions(false)
+    setRegSuggestions([])
+    void fetchReceptionDetails(reg)
+  }, [fetchReceptionDetails])
+
+  // Reset auto-fill state when form is closed
+  const resetFormState = useCallback(() => {
+    setShowForm(false)
+    setError(null)
+    setRegFetchStatus('idle')
+    setRegSuggestions([])
+    setShowRegSuggestions(false)
+    setAutoFilledFields(new Set())
+  }, [])
 
   const loadDescriptions = useCallback(async () => {
     const res = await fetchPartsOrderDescriptions()
@@ -718,42 +824,97 @@ export default function PartsRequirementSection({ isAdmin = false }: Props) {
         <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
           <div className="mb-4 flex items-center justify-between">
             <h3 className="text-sm font-bold text-gray-900">New Parts Requirement</h3>
-            <button type="button" onClick={() => { setShowForm(false); setError(null) }} className="text-gray-400 hover:text-gray-600">
+            <button type="button" onClick={resetFormState} className="text-gray-400 hover:text-gray-600">
               <Icon name="x" size={18} />
             </button>
           </div>
           <div className="mb-4 rounded-lg border border-gray-100 bg-gray-50 p-3">
             <p className="mb-2 text-[11px] font-bold uppercase tracking-wide text-gray-500">Vehicle / Job Card Details</p>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
+              <div className="flex flex-col gap-1">
+                <span className="text-[11px] font-semibold uppercase tracking-wide text-gray-600">Registration No. *</span>
+                <div className="relative">
+                  <input
+                    ref={regInputRef}
+                    type="text"
+                    value={draftHeader.registration_number}
+                    onChange={(e) => handleRegNoChange(e.target.value)}
+                    onFocus={() => { if (regSuggestions.length > 0) setShowRegSuggestions(true) }}
+                    onBlur={() => setTimeout(() => setShowRegSuggestions(false), 180)}
+                    placeholder="e.g. RJ14AB1234"
+                    className={inputCls + (regFetchStatus === 'found' ? ' border-green-400 bg-green-50' : regFetchStatus === 'notfound' ? ' border-amber-400' : '')}
+                    autoComplete="off"
+                  />
+                  {regFetchStatus === 'loading' && (
+                    <span className="absolute right-2 top-2 text-[10px] text-blue-500 animate-pulse">Fetching…</span>
+                  )}
+                  {regFetchStatus === 'found' && (
+                    <span className="absolute right-2 top-2 text-[10px] text-green-600">✓ Found</span>
+                  )}
+                  {showRegSuggestions && regSuggestions.length > 0 && (
+                    <ul className="absolute z-50 mt-1 max-h-40 w-full overflow-auto rounded-lg border border-gray-200 bg-white shadow-lg text-sm">
+                      {regSuggestions.map((s) => (
+                        <li key={s}
+                          onMouseDown={() => handleRegSuggestionClick(s)}
+                          className="cursor-pointer px-3 py-2 hover:bg-blue-50 text-gray-800">
+                          {s}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+                {regFetchStatus === 'notfound' && (
+                  <p className="text-[10px] text-amber-600 leading-tight">
+                    ⚠ Reception mein entry nahi mili. Manually fill karein ya pehle Reception mein entry karein.
+                  </p>
+                )}
+                {regFetchStatus === 'error' && (
+                  <p className="text-[10px] text-red-500">Fetch failed. Please retry.</p>
+                )}
+              </div>
               <label className={labelCls}>
-                Registration No. *
-                <input type="text" value={draftHeader.registration_number}
-                  onChange={(e) => setDraftHeader((d) => ({ ...d, registration_number: e.target.value.toUpperCase() }))}
-                  placeholder="e.g. RJ14AB1234" className={inputCls} />
-              </label>
-              <label className={labelCls}>
-                Job Card No.
+                <span className="flex items-center gap-1.5">
+                  Job Card No.
+                  {autoFilledFields.has('job_card_number') && (
+                    <span className="rounded bg-green-100 px-1 py-0.5 text-[9px] font-bold text-green-600">AUTO</span>
+                  )}
+                </span>
                 <input type="text" value={draftHeader.job_card_number}
-                  onChange={(e) => setDraftHeader((d) => ({ ...d, job_card_number: e.target.value }))}
+                  onChange={(e) => { setDraftHeader((d) => ({ ...d, job_card_number: e.target.value })); setAutoFilledFields((s) => { const n = new Set(s); n.delete('job_card_number'); return n }) }}
                   placeholder="JC-MbtPlt-JP1-..." className={inputCls} />
               </label>
               <label className={labelCls}>
-                Customer Name
+                <span className="flex items-center gap-1.5">
+                  Customer Name
+                  {autoFilledFields.has('customer_name') && (
+                    <span className="rounded bg-green-100 px-1 py-0.5 text-[9px] font-bold text-green-600">AUTO</span>
+                  )}
+                </span>
                 <input type="text" value={draftHeader.customer_name}
-                  onChange={(e) => setDraftHeader((d) => ({ ...d, customer_name: e.target.value }))}
+                  onChange={(e) => { setDraftHeader((d) => ({ ...d, customer_name: e.target.value })); setAutoFilledFields((s) => { const n = new Set(s); n.delete('customer_name'); return n }) }}
                   placeholder="Customer name" className={inputCls} />
               </label>
               <label className={labelCls}>
-                Customer Mobile
+                <span className="flex items-center gap-1.5">
+                  Customer Mobile
+                  {autoFilledFields.has('customer_mobile') && (
+                    <span className="rounded bg-green-100 px-1 py-0.5 text-[9px] font-bold text-green-600">AUTO</span>
+                  )}
+                </span>
                 <input type="tel" value={draftHeader.customer_mobile}
-                  onChange={(e) => setDraftHeader((d) => ({ ...d, customer_mobile: e.target.value.replace(/\D/g, '').slice(0, 10) }))}
+                  onChange={(e) => { setDraftHeader((d) => ({ ...d, customer_mobile: e.target.value.replace(/\D/g, '').slice(0, 10) })); setAutoFilledFields((s) => { const n = new Set(s); n.delete('customer_mobile'); return n }) }}
                   placeholder="10-digit mobile no." maxLength={10}
                   className={inputCls} />
               </label>
               <label className={labelCls}>
-                Vehicle Model
+                <span className="flex items-center gap-1.5">
+                  Vehicle Model
+                  {autoFilledFields.has('vehicle_model') && (
+                    <span className="rounded bg-green-100 px-1 py-0.5 text-[9px] font-bold text-green-600">AUTO</span>
+                  )}
+                </span>
                 <input type="text" value={draftHeader.vehicle_model}
-                  onChange={(e) => setDraftHeader((d) => ({ ...d, vehicle_model: e.target.value }))}
+                  onChange={(e) => { setDraftHeader((d) => ({ ...d, vehicle_model: e.target.value })); setAutoFilledFields((s) => { const n = new Set(s); n.delete('vehicle_model'); return n }) }}
                   placeholder="e.g. Nexon, Harrier" className={inputCls} />
               </label>
               <label className={labelCls}>
