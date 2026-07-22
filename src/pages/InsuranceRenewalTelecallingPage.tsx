@@ -96,7 +96,7 @@ async function callEdge(action: string, body: Record<string, unknown> = {}): Pro
     const msg = e instanceof Error ? e.message : String(e)
     throw new Error(
       msg === 'Failed to fetch' || msg.includes('NetworkError')
-        ? 'Could not reach Supabase Edge (network timeout or project under load — try Refresh, pause RC fetch/cron, wait a few minutes).'
+        ? 'Could not reach Supabase Edge (timeout, CORS, or gateway down). If DevTools shows CORS on insurance-renewal-telecalling, deploy that Edge function with JWT verification off; pause RC cron if the project is under load.'
         : msg,
     )
   }
@@ -716,6 +716,42 @@ function AdminDashboard({ campaigns, activeCampaign, onRefresh }: { campaigns: C
     } | null
   }
 
+  async function loadRcStatusForCampaign(campaignId: number): Promise<RcCampaignStatus> {
+    const { data, error } = await supabase.rpc('insurance_renewal_rc_fetch_campaign_status', {
+      p_campaign_id: campaignId,
+    })
+    if (error) throw new Error(error.message)
+    const st = (data ?? {}) as RcCampaignStatus
+    const { data: diagData, error: diagErr } = await supabase.rpc('insurance_renewal_rc_fetch_diagnostics', {
+      p_campaign_id: campaignId,
+    })
+    if (!diagErr && diagData) {
+      const row = Array.isArray(diagData) ? diagData[0] : diagData
+      if (row && typeof row === 'object') {
+        const r = row as Record<string, number>
+        st.diagnostics = {
+          assignment_total: Number(r.assignment_total ?? 0),
+          stale_in_campaign: Number(r.stale_in_campaign ?? 0),
+          attempted_total: Number(r.attempted_total ?? 0),
+        }
+      }
+    }
+    if (st.active_job?.stats && typeof st.active_job.stats === 'object') {
+      const s = st.active_job.stats as Record<string, unknown>
+      st.active_job = {
+        ...st.active_job,
+        stats: {
+          ok: Number(s.ok ?? 0),
+          from_cache: Number(s.from_cache ?? 0),
+          failed: Number(s.failed ?? 0),
+          skipped_no_vrn: Number(s.skipped_no_vrn ?? 0),
+          skipped_fresh: Number(s.skipped_fresh ?? 0),
+        },
+      }
+    }
+    return st
+  }
+
   const loadRcStatus = useCallback(async (): Promise<Record<string, any>> => {
     if (campaigns.length === 0) {
       setRcStatusByCampaign({})
@@ -724,8 +760,10 @@ function AdminDashboard({ campaigns, activeCampaign, onRefresh }: { campaigns: C
       return {}
     }
     try {
-      const d = await callEdge('rc_fetch_status', { campaign_ids: campaigns.map(c => c.id) })
-      const map = d.campaigns || {}
+      const map: Record<string, RcCampaignStatus> = {}
+      for (const c of campaigns) {
+        map[String(c.id)] = await loadRcStatusForCampaign(c.id)
+      }
       setRcStatusByCampaign(map)
       setRcStatusLoadError(null)
       setRcStatusLoaded(true)
@@ -733,17 +771,18 @@ function AdminDashboard({ campaigns, activeCampaign, onRefresh }: { campaigns: C
     } catch (e) {
       console.error('RC status load failed', e)
       setRcStatusLoadError((e as Error).message)
-      setRcStatusLoaded(false)
-      throw e
+      setRcStatusLoaded(true)
+      return {}
     }
   }, [campaigns])
 
   useEffect(() => {
     if (activeAdminTab !== 'campaigns') return
-    loadRcStatus()
-    const t = setInterval(loadRcStatus, 15000)
+    loadRcStatus().catch(() => {})
+    const ms = rcStatusLoadError ? 60000 : 20000
+    const t = setInterval(() => { loadRcStatus().catch(() => {}) }, ms)
     return () => clearInterval(t)
-  }, [activeAdminTab, loadRcStatus])
+  }, [activeAdminTab, loadRcStatus, rcStatusLoadError])
 
   useEffect(() => {
     if (activeAdminTab === 'performance') fetchAgentStats()
@@ -845,8 +884,7 @@ function AdminDashboard({ campaigns, activeCampaign, onRefresh }: { campaigns: C
     await loadRcStatus().catch(() => ({}))
     let st: RcCampaignStatus = rcStatusByCampaign[String(campaign.id)] || {}
     try {
-      const fresh = await callEdge('rc_fetch_status', { campaign_ids: [campaign.id] })
-      st = fresh.campaigns?.[String(campaign.id)] || st
+      st = await loadRcStatusForCampaign(campaign.id)
     } catch {
       /* use cached st */
     }

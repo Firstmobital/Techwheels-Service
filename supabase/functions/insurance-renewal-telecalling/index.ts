@@ -806,7 +806,8 @@ export default async function handler(req: Request) {
     // ── ACTION: rc_fetch_status ─────────────────────────────────────────────
     if (action === 'rc_fetch_status') {
       if (!isAdmin) throw new Error('Admin only')
-      const { campaign_ids: campaignIdsRaw } = body
+      const { campaign_ids: campaignIdsRaw, light: lightStatus } = body
+      const light = lightStatus === true
       let campaignIds: number[] = []
       if (Array.isArray(campaignIdsRaw) && campaignIdsRaw.length > 0) {
         campaignIds = campaignIdsRaw.map((id: unknown) => Number(id)).filter((id) => Number.isFinite(id))
@@ -819,8 +820,20 @@ export default async function handler(req: Request) {
       const byCampaign: Record<string, unknown> = {}
 
       for (const campaignId of campaignIds) {
-        const pending = await loadPendingCounts(serviceClient, campaignId)
-        const diagnostics = await loadRcFetchDiagnostics(serviceClient, campaignId)
+        let diagnostics: Awaited<ReturnType<typeof loadRcFetchDiagnostics>> = null
+        let pendingCounts: Awaited<ReturnType<typeof loadPendingCounts>>
+        if (light) {
+          pendingCounts = await loadPendingCounts(serviceClient, campaignId)
+        } else {
+          diagnostics = await loadRcFetchDiagnostics(serviceClient, campaignId)
+          pendingCounts = diagnostics
+            ? {
+                pending_stale: diagnostics.pending_stale,
+                pending_with_vrn: diagnostics.pending_with_vrn,
+                pending_missing_vrn: diagnostics.pending_missing_vrn,
+              }
+            : await loadPendingCounts(serviceClient, campaignId)
+        }
         const { data: activeJob } = await serviceClient
           .from('insurance_renewal_rc_fetch_jobs')
           .select('id, status, created_at, started_at, stats, last_error')
@@ -841,9 +854,9 @@ export default async function handler(req: Request) {
 
         byCampaign[String(campaignId)] = {
           stale_cutoff_before: cutoff,
-          ...pending,
+          ...pendingCounts,
           diagnostics,
-          fetch_enabled: pending.pending_with_vrn > 0 && !activeJob,
+          fetch_enabled: pendingCounts.pending_with_vrn > 0 && !activeJob,
           active_job: activeJob
             ? { ...activeJob, stats: parseJobStats(activeJob.stats) }
             : null,
