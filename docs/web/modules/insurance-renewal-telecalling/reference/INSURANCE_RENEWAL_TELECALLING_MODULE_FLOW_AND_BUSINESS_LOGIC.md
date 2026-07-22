@@ -95,14 +95,50 @@ A shared `x-cron-secret` header bypass exists for the scheduled `refresh_campaig
 
 ## 6) Data Model
 
-### 6.1 Lead source table
+### 6.1 Lead source table and due-date fallback
 
-`all_service_data`, filtered on `last_insurance_expiry_date` (not null) and
-`contact_phones` (not null/empty). Fields surfaced to the telecaller: `chassis_no`,
-`vehicle_registration_number`, `first_name`, `last_name`, `contact_phones`,
-`model`, `product_line`, `powertrain_type`, `vehicle_sale_date`,
-`vehicle_age_in_years`, `ex_showroom_price`, `idv`, `last_insurance_expiry_date`,
+`all_service_data`, filtered on `contact_phones` (not null/empty) and an
+**effective due date** — not the raw `last_insurance_expiry_date` column.
+Fields surfaced to the telecaller: `chassis_no`, `vehicle_registration_number`,
+`first_name`, `last_name`, `contact_phones`, `model`, `product_line`,
+`powertrain_type`, `vehicle_sale_date`, `vehicle_age_in_years`,
+`ex_showroom_price`, `idv`, `last_insurance_expiry_date`,
 `last_insurance_comapny`, `last_insurance_policy_number`, `sold_dealer`.
+
+**`last_insurance_expiry_date` is only populated for ~1.3% of `all_service_data`
+rows** (715 of 55,276 as of 2026-07-22). For every other row, the module falls
+back to a due date computed from `vehicle_sale_date`:
+
+1. Insurance renews annually off the sale-date anniversary, not a fixed
+   calendar date — a vehicle sold 24-Jan-2025 has its first renewal due
+   23-Jan-2026 (day before the 1-year anniversary), then every year after
+   that on the same day/month (23-Jan-2027, 23-Jan-2028, ...).
+2. `insurance_next_due_date(sale_date, as_of)` (SQL function) rolls the
+   candidate date forward year over year until it lands on or after `as_of`
+   (default `CURRENT_DATE`) — correctly handling vehicles many renewals into
+   their life, not just first-year cases.
+3. `last_insurance_expiry_date` remains authoritative whenever present (it
+   reflects the actual last-known policy) and is used verbatim — it is not
+   itself rolled forward across missed years.
+
+This is implemented as a database view, `insurance_renewal_leads`:
+
+```sql
+SELECT id, chassis_no, contact_phones, vehicle_sale_date, last_insurance_expiry_date,
+  COALESCE(last_insurance_expiry_date, insurance_next_due_date(vehicle_sale_date)) AS effective_due_date,
+  (last_insurance_expiry_date IS NULL) AS due_date_is_estimated
+FROM all_service_data
+```
+
+All eligibility queries (`create_campaign`, `refresh_campaign`,
+`preview_campaign`) and the allotment RPC's ordering read from
+`insurance_renewal_leads.effective_due_date`, not from `all_service_data`
+directly. The web page independently mirrors the same day/month-rollforward
+logic client-side (`computeInsuranceDueDate` in
+`InsuranceRenewalTelecallingPage.tsx`) purely for display — e.g. showing
+"Insurance Due (estimated)" and a "📅 Estimated from sale date" badge on the
+call card when `last_insurance_expiry_date` is null. Eligibility/ordering
+correctness always comes from the server-side view, not the client mirror.
 
 ### 6.2 Campaign table — `insurance_renewal_campaigns`
 
@@ -134,10 +170,12 @@ select-then-update despite an idle `SKIP LOCKED` RPC sitting unused), this
 module's `get_next` action calls this RPC directly:
 
 1. Prefer `pending` rows with `retry_after <= today` (no-answer retries),
-   ordered by `retry_after` then soonest `last_insurance_expiry_date`.
+   ordered by `retry_after` then soonest `insurance_renewal_leads.effective_due_date`
+   (see §6.1 — this is `last_insurance_expiry_date` when present, else the
+   sale-date-derived projection).
 2. Else pick fresh `pending` rows (`retry_after IS NULL`), ordered by
-   soonest `last_insurance_expiry_date` — urgency here is purely
-   time-to-expiry driven, not a weighted priority score like service segments.
+   soonest `effective_due_date` — urgency here is purely time-to-due-date
+   driven, not a weighted priority score like service segments.
 3. Row-lock with `FOR UPDATE SKIP LOCKED` so two telecallers calling
    `get_next` at the same instant can never receive the same customer.
 4. Update the row to `assigned` and return `(asgn_id, cust_id)`.
@@ -192,3 +230,9 @@ rg -n "insurance_renewal_|InsuranceRenewalTelecalling|OPS-INSURANCE-RENEWAL-001"
    into `src/App.tsx`. Removed the dead unwired `insurance_expiry`
    `priority_mode` branch from the existing `telecalling` edge function and
    the corresponding UI option in `TelecallingPage.tsx` admin dashboard.
+2. 2026-07-22: Added sale-date fallback due-date logic (§6.1) — `insurance_next_due_date()`
+   SQL function and `insurance_renewal_leads` view, since `last_insurance_expiry_date`
+   is populated for only ~1.3% of `all_service_data`. All eligibility queries and the
+   allotment RPC's ordering switched from `all_service_data.last_insurance_expiry_date`
+   to `insurance_renewal_leads.effective_due_date`. Frontend mirrors the same logic
+   client-side for display only (`computeInsuranceDueDate`).

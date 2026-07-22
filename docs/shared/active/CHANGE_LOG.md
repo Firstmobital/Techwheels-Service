@@ -2,6 +2,13 @@
 
 Tracks documentation-sync updates for business logic, architecture, and access control.
 
+## 2026-07-22 (2)
+
+- Insurance Renewal Telecalling now falls back to a sale-date-derived due date wherever `all_service_data.last_insurance_expiry_date` is null — which is the large majority of records (715 of 55,276 have it populated). Insurance renews annually off the vehicle's sale-date anniversary (sold 24-Jan-2025 → due 23-Jan-2026 → 23-Jan-2027, ...), not a fixed calendar date; the fallback correctly rolls forward across multiple years, not just the first renewal.
+- New SQL function `insurance_next_due_date(sale_date, as_of)` and view `insurance_renewal_leads` (`effective_due_date` = `COALESCE(last_insurance_expiry_date, insurance_next_due_date(vehicle_sale_date))`). All eligibility queries (`create_campaign`/`refresh_campaign`/`preview_campaign`) and the `insurance_renewal_get_next_assignment` allotment RPC's ordering now read from this view instead of the raw column.
+- Frontend (`InsuranceRenewalTelecallingPage.tsx`) mirrors the same computation client-side for display only, showing "Insurance Due (estimated)" / "📅 Estimated from sale date" on the call card when the date is derived rather than actual.
+- Full detail: `docs/web/modules/insurance-renewal-telecalling/reference/INSURANCE_RENEWAL_TELECALLING_MODULE_FLOW_AND_BUSINESS_LOGIC.md` §6.1.
+
 ## 2026-07-22
 
 - Added new module **Insurance Renewal Telecalling** at route `/insurance-renewal-telecalling`, module key `insurance_renewal_telecalling`. Proactive calling queue for customers whose vehicle insurance is nearing expiry (default 30-day window before `all_service_data.last_insurance_expiry_date`).

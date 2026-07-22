@@ -100,6 +100,24 @@ function daysFromToday(d: string | null): number | null {
   return Math.ceil((new Date(d).getTime() - Date.now()) / 86400000)
 }
 
+// Mirrors insurance_next_due_date() in the DB: insurance renews annually off
+// the sale-date anniversary (sold 24-Jan-2025 -> due 23-Jan-2026 -> ...),
+// rolled forward to whichever upcoming year applies. Used here only for
+// display when last_insurance_expiry_date is missing — the actual campaign
+// eligibility/ordering is computed server-side against the same logic.
+function computeInsuranceDueDate(lastExpiry: string | null, saleDate: string | null): { date: string | null; estimated: boolean } {
+  if (lastExpiry) return { date: lastExpiry, estimated: false }
+  if (!saleDate) return { date: null, estimated: false }
+  const sale = new Date(saleDate + 'T00:00:00Z')
+  if (isNaN(sale.getTime())) return { date: null, estimated: false }
+  let candidate = new Date(Date.UTC(sale.getUTCFullYear() + 1, sale.getUTCMonth(), sale.getUTCDate() - 1))
+  const today = new Date(new Date().toISOString().split('T')[0] + 'T00:00:00Z')
+  while (candidate < today) {
+    candidate = new Date(Date.UTC(candidate.getUTCFullYear() + 1, candidate.getUTCMonth(), candidate.getUTCDate()))
+  }
+  return { date: candidate.toISOString().split('T')[0], estimated: true }
+}
+
 function formatCurrency(v: number | null): string {
   if (v === null || v === undefined) return '—'
   return `₹${v.toLocaleString('en-IN')}`
@@ -112,12 +130,14 @@ function getWhatsAppLink(phone: string, message: string): string {
 
 function buildRenewalReminderMsg(c: Customer): string {
   const name = [c.first_name, c.last_name].filter(Boolean).join(' ')
-  return `Namaskar *${name}* ji! 🙏\n\nAapki *${c.model || ''}* (${c.vehicle_registration_number || ''}) ki insurance policy *${formatDate(c.last_insurance_expiry_date)}* ko expire ho rahi hai.\n\nAbhi renew karwayein aur bina rukawat drive karein! 🚗🛡️\n\n*Team Techwheels*`
+  const due = computeInsuranceDueDate(c.last_insurance_expiry_date, c.vehicle_sale_date).date
+  return `Namaskar *${name}* ji! 🙏\n\nAapki *${c.model || ''}* (${c.vehicle_registration_number || ''}) ki insurance policy *${formatDate(due)}* ko expire ho rahi hai.\n\nAbhi renew karwayein aur bina rukawat drive karein! 🚗🛡️\n\n*Team Techwheels*`
 }
 
 function buildNoPickMsg(c: Customer): string {
   const name = [c.first_name, c.last_name].filter(Boolean).join(' ')
-  return `Namaskar *${name}* ji! 🙏\n\nHumne aapko insurance renewal ke baare mein call kiya tha, par connect nahi ho paya.\n\nAapki *${c.model || ''}* (${c.vehicle_registration_number || ''}) ki insurance *${formatDate(c.last_insurance_expiry_date)}* ko expire ho rahi hai.\n\nKripya reply karein.\n\n*Team Techwheels* 🚗`
+  const due = computeInsuranceDueDate(c.last_insurance_expiry_date, c.vehicle_sale_date).date
+  return `Namaskar *${name}* ji! 🙏\n\nHumne aapko insurance renewal ke baare mein call kiya tha, par connect nahi ho paya.\n\nAapki *${c.model || ''}* (${c.vehicle_registration_number || ''}) ki insurance *${formatDate(due)}* ko expire ho rahi hai.\n\nKripya reply karein.\n\n*Team Techwheels* 🚗`
 }
 
 const STATUS_COLORS: Record<string, string> = {
@@ -392,7 +412,10 @@ function TelecallerDashboard({ activeCampaign }: { activeCampaign: Campaign | nu
                 <div className="flex-1 min-w-0">
                   <div className="font-medium text-gray-900">{asgn.customer.first_name} {asgn.customer.last_name || ''}</div>
                   <div className="text-sm text-gray-500 mt-0.5">📱 {asgn.customer.contact_phones} · 🚗 {asgn.customer.model} · {asgn.customer.vehicle_registration_number || '—'}</div>
-                  <div className="text-xs text-gray-400 mt-0.5">🛡️ Insurance expires {formatDate(asgn.customer.last_insurance_expiry_date)}</div>
+                  {(() => {
+                    const due = computeInsuranceDueDate(asgn.customer.last_insurance_expiry_date, asgn.customer.vehicle_sale_date)
+                    return <div className="text-xs text-gray-400 mt-0.5">🛡️ Insurance due {formatDate(due.date)}{due.estimated ? ' (estimated)' : ''}</div>
+                  })()}
                   {asgn.status === 'callback_later' && asgn.callback_date && <div className="mt-1 text-xs text-purple-600">📅 Callback on {formatDate(asgn.callback_date)}</div>}
                   {asgn.status === 'renewed_via_us' && <div className="mt-1 text-xs text-green-600">✅ Renewed via us{asgn.quoted_premium ? ` — ${formatCurrency(asgn.quoted_premium)}` : ''}</div>}
                   {asgn.call_notes && editingId !== asgn.id && <div className="mt-1 rounded bg-gray-50 px-3 py-1.5 text-xs text-gray-600">📝 {asgn.call_notes}</div>}
@@ -487,7 +510,8 @@ function CallCard({
 }) {
   const c = assignment.customer
   const phone = c.contact_phones || ''
-  const daysLeft = daysFromToday(c.last_insurance_expiry_date)
+  const dueInfo = computeInsuranceDueDate(c.last_insurance_expiry_date, c.vehicle_sale_date)
+  const daysLeft = daysFromToday(dueInfo.date)
   const isExpired = daysLeft !== null && daysLeft < 0
   const isDueToday = daysLeft === 0
 
@@ -506,6 +530,7 @@ function CallCard({
             {isExpired && <div className="rounded-full bg-red-900/40 px-2 py-0.5 text-xs font-semibold">⚠️ Expired {Math.abs(daysLeft!)}d ago</div>}
             {isDueToday && <div className="rounded-full bg-orange-900/30 px-2 py-0.5 text-xs font-semibold">⚡ Expires Today</div>}
             {!isExpired && !isDueToday && daysLeft !== null && <div className="rounded-full bg-white/20 px-2 py-0.5 text-xs">Expires in {daysLeft}d</div>}
+            {dueInfo.estimated && <div className="rounded-full bg-white/20 px-2 py-0.5 text-xs">📅 Estimated from sale date</div>}
           </div>
         </div>
       </div>
@@ -525,7 +550,7 @@ function CallCard({
 
       {/* Detail grid */}
       <div className="grid grid-cols-2 gap-px bg-gray-100">
-        <DetailRow label="Insurance Expiry" value={formatDate(c.last_insurance_expiry_date)} highlight={isExpired ? 'red' : isDueToday ? 'orange' : undefined} />
+        <DetailRow label={dueInfo.estimated ? 'Insurance Due (estimated)' : 'Insurance Expiry'} value={formatDate(dueInfo.date)} highlight={isExpired ? 'red' : isDueToday ? 'orange' : undefined} />
         <DetailRow label="Insurance Company" value={c.last_insurance_comapny || '—'} />
         <DetailRow label="Policy Number" value={c.last_insurance_policy_number || '—'} />
         <DetailRow label="IDV" value={formatCurrency(c.idv)} />

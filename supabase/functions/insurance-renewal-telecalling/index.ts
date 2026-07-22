@@ -86,20 +86,24 @@ export default async function handler(req: Request) {
         .select().single()
       if (campErr) throw new Error(`Failed to create campaign: ${campErr.message}`)
 
+      // insurance_renewal_leads coalesces last_insurance_expiry_date (preferred,
+      // reflects the actual policy) with a sale-date-derived due date rolled
+      // forward to whichever upcoming annual renewal applies — see
+      // insurance_next_due_date() in the schema.
       const { data: allCustomers, error: custErr } = await serviceClient
-        .from('all_service_data')
-        .select('id, chassis_no, last_insurance_expiry_date')
+        .from('insurance_renewal_leads')
+        .select('id, chassis_no, effective_due_date')
         .not('contact_phones', 'is', null)
         .neq('contact_phones', '')
-        .not('last_insurance_expiry_date', 'is', null)
-        .gte('last_insurance_expiry_date', date_from)
-        .lte('last_insurance_expiry_date', date_to)
+        .not('effective_due_date', 'is', null)
+        .gte('effective_due_date', date_from)
+        .lte('effective_due_date', date_to)
 
       if (custErr) throw new Error(`Failed to fetch customers: ${custErr.message}`)
 
       if (!allCustomers || allCustomers.length === 0) {
         await serviceClient.from('insurance_renewal_campaigns').delete().eq('id', campaign.id)
-        return new Response(JSON.stringify({ success: true, campaign_id: null, total_leads: 0, message: `No customers found with insurance expiring between ${date_from} and ${date_to}.` }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+        return new Response(JSON.stringify({ success: true, campaign_id: null, total_leads: 0, message: `No customers found with insurance renewal due between ${date_from} and ${date_to}.` }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
       }
 
       const seenChassis = new Set<string>()
@@ -150,13 +154,13 @@ export default async function handler(req: Request) {
         const newDateTo = new Date(Date.now() + 5.5 * 3600000 + camp.window_days * 86400000).toISOString().split('T')[0]
 
         const { data: eligible, error: eligErr } = await serviceClient
-          .from('all_service_data')
+          .from('insurance_renewal_leads')
           .select('id, chassis_no')
           .not('contact_phones', 'is', null)
           .neq('contact_phones', '')
-          .not('last_insurance_expiry_date', 'is', null)
-          .gte('last_insurance_expiry_date', newDateFrom)
-          .lte('last_insurance_expiry_date', newDateTo)
+          .not('effective_due_date', 'is', null)
+          .gte('effective_due_date', newDateFrom)
+          .lte('effective_due_date', newDateTo)
         if (eligErr) throw new Error(`Campaign ${camp.id}: eligibility query failed: ${eligErr.message}`)
 
         const seenChassis = new Set<string>()
@@ -498,12 +502,12 @@ export default async function handler(req: Request) {
       const todayP = new Date(Date.now() + 5.5 * 3600000).toISOString().split('T')[0]
       const previewTo = new Date(Date.now() + 5.5 * 3600000 + Number(window_days) * 86400000).toISOString().split('T')[0]
 
-      const { data: customers, error: custErr } = await serviceClient.from('all_service_data')
+      const { data: customers, error: custErr } = await serviceClient.from('insurance_renewal_leads')
         .select('id, chassis_no')
         .not('contact_phones', 'is', null)
-        .not('last_insurance_expiry_date', 'is', null)
-        .gte('last_insurance_expiry_date', todayP)
-        .lte('last_insurance_expiry_date', previewTo)
+        .not('effective_due_date', 'is', null)
+        .gte('effective_due_date', todayP)
+        .lte('effective_due_date', previewTo)
       if (custErr) throw new Error(`Preview fetch failed: ${custErr.message}`)
 
       const seenChassis = new Set<string>()
