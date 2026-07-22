@@ -132,10 +132,6 @@ export default async function handler(req: Request) {
         const today = new Date().toISOString().split('T')[0]
         const expiry_to = new Date(Date.now() + warranty_expiry_days * 86400000).toISOString().split('T')[0]
         query = query.not('extended_warranty_end_date', 'is', null).gte('extended_warranty_end_date', today).lte('extended_warranty_end_date', expiry_to)
-      } else if (priority_mode === 'insurance_expiry') {
-        const today = new Date().toISOString().split('T')[0]
-        const expiry_to = new Date(Date.now() + 60 * 86400000).toISOString().split('T')[0]
-        query = query.not('last_insurance_expiry_date', 'is', null).gte('last_insurance_expiry_date', today).lte('last_insurance_expiry_date', expiry_to)
       } else {
         query = query.not('assumed_next_service_date', 'is', null).gte('assumed_next_service_date', date_from).lte('assumed_next_service_date', date_to)
       }
@@ -816,9 +812,6 @@ export default async function handler(req: Request) {
       if (priority_mode === 'warranty_expiry' && warranty_expiry_days) {
         const expiry_to = new Date(Date.now() + 5.5 * 3600000 + warranty_expiry_days * 86400000).toISOString().split('T')[0]
         query = query.not('extended_warranty_end_date', 'is', null).gte('extended_warranty_end_date', todayP).lte('extended_warranty_end_date', expiry_to)
-      } else if (priority_mode === 'insurance_expiry') {
-        const expiry_to = new Date(Date.now() + 5.5 * 3600000 + 60 * 86400000).toISOString().split('T')[0]
-        query = query.not('last_insurance_expiry_date', 'is', null).gte('last_insurance_expiry_date', todayP).lte('last_insurance_expiry_date', expiry_to)
       } else {
         query = query.not('assumed_next_service_date', 'is', null).gte('assumed_next_service_date', previewFrom).lte('assumed_next_service_date', previewTo)
       }

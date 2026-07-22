@@ -344,3 +344,4 @@ Compare action list from command output with section 7 before closing change.
 1. 2026-06-23: Initial full-flow baseline created from web/mobile source code, edge function, and authoritative schema dump mirror.
 2. 2026-06-23: Classified under web operations category as per docs tree governance.
 3. 2026-07-01: Documented CRE and Driver booking/lead form dropdown sourcing from `employee_master` by role (section 8.4); aligns with Service Booking page and upstream PR #16.
+4. 2026-07-22: Removed the dead, unwired `insurance_expiry` `priority_mode` branch from `create_campaign`/`preview_campaign` in the edge function, and the corresponding dropdown option in the admin dashboard — insurance renewal now has its own dedicated module (`OPS-INSURANCE-RENEWAL-001`, route `/insurance-renewal-telecalling`) rather than being a priority mode on this one. No other action, schema, or access-control change to this module.

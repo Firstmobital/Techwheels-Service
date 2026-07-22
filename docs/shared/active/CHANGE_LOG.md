@@ -2,6 +2,23 @@
 
 Tracks documentation-sync updates for business logic, architecture, and access control.
 
+## 2026-07-22 (2)
+
+- Insurance Renewal Telecalling now falls back to a sale-date-derived due date wherever `all_service_data.last_insurance_expiry_date` is null — which is the large majority of records (715 of 55,276 have it populated). Insurance renews annually off the vehicle's sale-date anniversary (sold 24-Jan-2025 → due 23-Jan-2026 → 23-Jan-2027, ...), not a fixed calendar date; the fallback correctly rolls forward across multiple years, not just the first renewal.
+- New SQL function `insurance_next_due_date(sale_date, as_of)` and view `insurance_renewal_leads` (`effective_due_date` = `COALESCE(last_insurance_expiry_date, insurance_next_due_date(vehicle_sale_date))`). All eligibility queries (`create_campaign`/`refresh_campaign`/`preview_campaign`) and the `insurance_renewal_get_next_assignment` allotment RPC's ordering now read from this view instead of the raw column.
+- Frontend (`InsuranceRenewalTelecallingPage.tsx`) mirrors the same computation client-side for display only, showing "Insurance Due (estimated)" / "📅 Estimated from sale date" on the call card when the date is derived rather than actual.
+- Full detail: `docs/web/modules/insurance-renewal-telecalling/reference/INSURANCE_RENEWAL_TELECALLING_MODULE_FLOW_AND_BUSINESS_LOGIC.md` §6.1.
+
+## 2026-07-22
+
+- Added new module **Insurance Renewal Telecalling** at route `/insurance-renewal-telecalling`, module key `insurance_renewal_telecalling`. Proactive calling queue for customers whose vehicle insurance is nearing expiry (default 30-day window before `all_service_data.last_insurance_expiry_date`).
+- New dedicated tables `insurance_renewal_campaigns`/`insurance_renewal_assignments` (not reused from `telecall_campaigns`/`telecall_assignments`) — disposition set, re-attempt cadence, and reporting differ from service reminders. New concurrency-safe allotment RPC `insurance_renewal_get_next_assignment` using `FOR UPDATE SKIP LOCKED`.
+- New edge function `supabase/functions/insurance-renewal-telecalling/index.ts` and page `src/pages/InsuranceRenewalTelecallingPage.tsx`, following the same pull-based `get_next` allotment shape as the existing service Telecalling module.
+- Access is a new module permission (`insurance_renewal_telecalling`) granted per user via `user_module_permissions` — same mechanism as every other module, no new `employee_master` role or `users.role` value added.
+- Removed the dead, unwired `insurance_expiry` `priority_mode` branch from the existing `telecalling` edge function (`create_campaign`/`preview_campaign`) and the corresponding dropdown option in `TelecallingPage.tsx` admin dashboard, now superseded by the dedicated module above.
+- Full reference: `docs/web/modules/insurance-renewal-telecalling/reference/INSURANCE_RENEWAL_TELECALLING_MODULE_FLOW_AND_BUSINESS_LOGIC.md`.
+- Docs updated by: new-module build session (`CHANGE_LOG.md`, new module reference doc, `TELECALLING_MODULE_FLOW_AND_BUSINESS_LOGIC.md` change log).
+
 ## 2026-07-03
 
 - Applied per-SA EV/PV percentage differentiation to `/sa-tracker` (`src/pages/SATrackerPage.tsx`): all income calculations (SA cards, day drill-down, JC detail rows, stats bar tile, yesterday SA report) now look up each SA's `fuel_type` from `employee_master` and apply `evSharePercent` for EV SAs and `saSharePercent` (PV) for all others — matching the logic already present in the payout report. Stats bar tile label updated to `SA Income (PV x% / EV y%)`. Sub-label updated to `Income = (Labour ÷ 1.18) × x% (PV) or y% (EV)`. Both percentages are controlled by the existing Earnings % settings on the same page. `buildSAWAText` updated to show both rates in the WhatsApp report header.
