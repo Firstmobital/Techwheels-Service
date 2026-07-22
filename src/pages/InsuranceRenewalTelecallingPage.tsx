@@ -76,7 +76,8 @@ type CallStatus =
 
 const EDGE_URL = `${supabaseUrl}/functions/v1/insurance-renewal-telecalling`
 
-async function callEdge(action: string, body: Record<string, unknown> = {}) {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- edge actions return heterogeneous JSON (same pattern as TelecallingPage)
+async function callEdge(action: string, body: Record<string, unknown> = {}): Promise<any> {
   const { data: session } = await supabase.auth.getSession()
   const token = session?.session?.access_token
   if (!token) throw new Error('Not authenticated')
@@ -100,13 +101,13 @@ async function callEdge(action: string, body: Record<string, unknown> = {}) {
     )
   }
   const text = await res.text()
-  let data: { success?: boolean; error?: string }
+  let data: any
   try {
     data = text ? JSON.parse(text) : {}
   } catch {
     throw new Error(`Edge returned non-JSON (HTTP ${res.status}). Project may be overloaded.`)
   }
-  if (!res.ok || !data.success) throw new Error(data.error || `Edge error (HTTP ${res.status})`)
+  if (!res.ok || !data.success) throw new Error(String(data.error || `Edge error (HTTP ${res.status})`))
   return data
 }
 
