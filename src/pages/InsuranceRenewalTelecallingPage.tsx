@@ -38,6 +38,7 @@ interface Assignment {
   quoted_premium: number | null
   renewal_company: string | null
   customer: Customer
+  priority_score?: number
 }
 
 interface Campaign {
@@ -56,6 +57,15 @@ interface Campaign {
   renewed_count: number
   created_by: string | null
   created_at: string
+  sold_dealer_filter?: string[]
+  last_service_dealer_filter?: string[]
+  meta_enabled?: boolean
+  meta_template_name?: string
+  priority_mode?: string
+  auto_refresh_enabled?: boolean
+  drip_enabled?: boolean
+  self_renewal_link_enabled?: boolean
+  roi_target_premium?: number
 }
 
 interface DailySummary {
@@ -96,7 +106,7 @@ async function callEdge(action: string, body: Record<string, unknown> = {}): Pro
     const msg = e instanceof Error ? e.message : String(e)
     throw new Error(
       msg === 'Failed to fetch' || msg.includes('NetworkError')
-        ? 'Could not reach Supabase Edge (timeout, CORS, or gateway down). If DevTools shows CORS on insurance-renewal-telecalling, deploy that Edge function with JWT verification off; pause RC cron if the project is under load.'
+        ? 'Could not reach Supabase Edge (network timeout or project under load — try Refresh, pause RC fetch/cron, wait a few minutes).'
         : msg,
     )
   }
@@ -542,7 +552,14 @@ function CallCard({
       <div className={`px-6 py-4 text-white ${isExpired ? 'bg-gradient-to-r from-red-600 to-red-700' : isDueToday ? 'bg-gradient-to-r from-orange-500 to-orange-600' : 'bg-gradient-to-r from-blue-600 to-blue-700'}`}>
         <div className="flex items-start justify-between gap-4">
           <div>
-            <h2 className="text-xl font-bold">{c.first_name} {c.last_name || ''}</h2>
+            <h2 className="text-xl font-bold flex items-center gap-2 flex-wrap">
+              {c.first_name} {c.last_name || ''}
+              {assignment.priority_score && (
+                <span className="rounded-full bg-white/20 px-2 py-0.5 text-xs font-normal">
+                  🎯 Priority: {assignment.priority_score}
+                </span>
+              )}
+            </h2>
             <p className="text-sm opacity-90 mt-0.5">🚗 {c.model} · {c.powertrain_type || 'N/A'} · {c.product_line || '—'}</p>
             {c.chassis_no && <p className="text-xs opacity-70 mt-0.5">Chassis: {c.chassis_no}</p>}
           </div>
@@ -601,6 +618,42 @@ function CallCard({
           <button onClick={() => { setShowNotes(true); onUpdateStatus('wrong_number') }} disabled={busy} className="rounded-xl bg-red-400 px-4 py-3 text-sm font-semibold text-white hover:bg-red-500 disabled:opacity-50">⚠️ Wrong Number</button>
           <button onClick={() => { setShowNotes(true); onUpdateStatus('not_interested') }} disabled={busy} className="rounded-xl bg-gray-400 px-4 py-3 text-sm font-semibold text-white hover:bg-gray-500 disabled:opacity-50">😐 Not Interested</button>
           <button onClick={() => { setShowNotes(true); onUpdateStatus('already_renewed_unknown') }} disabled={busy} className="rounded-xl bg-teal-500 px-4 py-3 text-sm font-semibold text-white hover:bg-teal-600 disabled:opacity-50">🔧 Already Renewed</button>
+          <button
+            type="button"
+            onClick={async () => {
+              try {
+                const res = await callEdge('send_drip_message', {
+                  assignment_id: assignment.id,
+                  campaign_id: assignment.campaign_id,
+                })
+                if (res.success) alert(`WhatsApp drip step ${res.step} sent!`)
+                else alert(`Failed: ${res.error}`)
+              } catch (err: any) { alert(err.message) }
+            }}
+            disabled={busy}
+            className="rounded-xl border border-blue-300 bg-blue-50 px-4 py-3 text-sm font-semibold text-blue-700 hover:bg-blue-100 disabled:opacity-50"
+          >
+            💬 Send WA Drip
+          </button>
+          <button
+            type="button"
+            onClick={async () => {
+              try {
+                const res = await callEdge('generate_self_renewal_link', {
+                  assignment_id: assignment.id,
+                  campaign_id: assignment.campaign_id,
+                })
+                if (res.success) {
+                  navigator.clipboard.writeText(res.link.link_url)
+                  alert('Self-renewal link copied to clipboard!')
+                }
+              } catch (err: any) { alert(err.message) }
+            }}
+            disabled={busy}
+            className="rounded-xl border border-purple-300 bg-purple-50 px-4 py-3 text-sm font-semibold text-purple-700 hover:bg-purple-100 disabled:opacity-50"
+          >
+            🔗 Self-Renewal Link
+          </button>
         </div>
 
         {showNotes && (
@@ -674,7 +727,37 @@ function SummaryCard({ label, value, color, icon }: { label: string; value: stri
 
 // ── Admin Dashboard ─────────────────────────────────────────────────────────────
 function AdminDashboard({ campaigns, activeCampaign, onRefresh }: { campaigns: Campaign[]; activeCampaign: Campaign | null; onRefresh: () => void }) {
-  const [activeAdminTab, setActiveAdminTab] = useState<'campaigns' | 'performance' | 'renewed'>('campaigns')
+  const [activeAdminTab, setActiveAdminTab] = useState<'campaigns' | 'performance' | 'renewed' | 'leaderboard' | 'roi' | 'expired' | 'meta'>('campaigns')
+  
+  // Dealer filter state
+  const [soldDealers, setSoldDealers] = useState<string[]>([])
+  const [serviceDealers, setServiceDealers] = useState<string[]>([])
+  const [selectedSoldDealers, setSelectedSoldDealers] = useState<string[]>([])
+  const [selectedSvcDealers, setSelectedSvcDealers] = useState<string[]>([])
+  const [showDealerFilter, setShowDealerFilter] = useState(false)
+
+  // Priority mode state
+  const [priorityMode, setPriorityMode] = useState('urgency') // urgency, idv_value, loyalty, mixed
+
+  // Meta settings state
+  const [metaSettings, setMetaSettings] = useState({
+    meta_enabled: false,
+    meta_template_name: '',
+    meta_template_lang: 'en_US',
+    drip_enabled: true,
+    self_renewal_link_enabled: false,
+  })
+
+  // Leaderboard state
+  const [leaderboard, setLeaderboard] = useState<any[]>([])
+  const [leaderboardDate, setLeaderboardDate] = useState(new Date().toISOString().split('T')[0])
+
+  // ROI dashboard state
+  const [roiData, setRoiData] = useState<any>(null)
+  const [roiTarget, setRoiTarget] = useState(0)
+
+  // Expired leads state
+  const [expiredLeads, setExpiredLeads] = useState<any[]>([])
   const [showCreate, setShowCreate] = useState(false)
   const [editingCampaign, setEditingCampaign] = useState<Campaign | null>(null)
   const [editName, setEditName] = useState('')
@@ -716,42 +799,6 @@ function AdminDashboard({ campaigns, activeCampaign, onRefresh }: { campaigns: C
     } | null
   }
 
-  async function loadRcStatusForCampaign(campaignId: number): Promise<RcCampaignStatus> {
-    const { data, error } = await supabase.rpc('insurance_renewal_rc_fetch_campaign_status', {
-      p_campaign_id: campaignId,
-    })
-    if (error) throw new Error(error.message)
-    const st = (data ?? {}) as RcCampaignStatus
-    const { data: diagData, error: diagErr } = await supabase.rpc('insurance_renewal_rc_fetch_diagnostics', {
-      p_campaign_id: campaignId,
-    })
-    if (!diagErr && diagData) {
-      const row = Array.isArray(diagData) ? diagData[0] : diagData
-      if (row && typeof row === 'object') {
-        const r = row as Record<string, number>
-        st.diagnostics = {
-          assignment_total: Number(r.assignment_total ?? 0),
-          stale_in_campaign: Number(r.stale_in_campaign ?? 0),
-          attempted_total: Number(r.attempted_total ?? 0),
-        }
-      }
-    }
-    if (st.active_job?.stats && typeof st.active_job.stats === 'object') {
-      const s = st.active_job.stats as Record<string, unknown>
-      st.active_job = {
-        ...st.active_job,
-        stats: {
-          ok: Number(s.ok ?? 0),
-          from_cache: Number(s.from_cache ?? 0),
-          failed: Number(s.failed ?? 0),
-          skipped_no_vrn: Number(s.skipped_no_vrn ?? 0),
-          skipped_fresh: Number(s.skipped_fresh ?? 0),
-        },
-      }
-    }
-    return st
-  }
-
   const loadRcStatus = useCallback(async (): Promise<Record<string, any>> => {
     if (campaigns.length === 0) {
       setRcStatusByCampaign({})
@@ -760,10 +807,8 @@ function AdminDashboard({ campaigns, activeCampaign, onRefresh }: { campaigns: C
       return {}
     }
     try {
-      const map: Record<string, RcCampaignStatus> = {}
-      for (const c of campaigns) {
-        map[String(c.id)] = await loadRcStatusForCampaign(c.id)
-      }
+      const d = await callEdge('rc_fetch_status', { campaign_ids: campaigns.map(c => c.id) })
+      const map = d.campaigns || {}
       setRcStatusByCampaign(map)
       setRcStatusLoadError(null)
       setRcStatusLoaded(true)
@@ -771,23 +816,86 @@ function AdminDashboard({ campaigns, activeCampaign, onRefresh }: { campaigns: C
     } catch (e) {
       console.error('RC status load failed', e)
       setRcStatusLoadError((e as Error).message)
-      setRcStatusLoaded(true)
-      return {}
+      setRcStatusLoaded(false)
+      throw e
     }
   }, [campaigns])
 
   useEffect(() => {
     if (activeAdminTab !== 'campaigns') return
-    loadRcStatus().catch(() => {})
-    const ms = rcStatusLoadError ? 60000 : 20000
-    const t = setInterval(() => { loadRcStatus().catch(() => {}) }, ms)
+    loadRcStatus()
+    const t = setInterval(loadRcStatus, 15000)
     return () => clearInterval(t)
-  }, [activeAdminTab, loadRcStatus, rcStatusLoadError])
+  }, [activeAdminTab, loadRcStatus])
+
+  // Fetch distinct dealers for dropdown filters
+  useEffect(() => {
+    callEdge('get_dealers', {}).then(res => {
+      setSoldDealers(res.dealers?.sold_dealers || [])
+      setServiceDealers(res.dealers?.service_dealers || [])
+    }).catch(console.error)
+  }, [])
+
+  // Initialize meta settings when active campaign changes
+  useEffect(() => {
+    if (activeCampaign) {
+      setMetaSettings({
+        meta_enabled: activeCampaign.meta_enabled || false,
+        meta_template_name: activeCampaign.meta_template_name || '',
+        meta_template_lang: 'en_US',
+        drip_enabled: activeCampaign.drip_enabled ?? true,
+        self_renewal_link_enabled: activeCampaign.self_renewal_link_enabled || false,
+      })
+      setRoiTarget(activeCampaign.roi_target_premium || 0)
+    }
+  }, [activeCampaign])
+
+  const fetchLeaderboard = useCallback(async () => {
+    try {
+      const res = await callEdge('leaderboard', {
+        campaign_id: activeCampaign?.id,
+        date: leaderboardDate,
+      })
+      setLeaderboard(res.leaderboard || [])
+    } catch (e) { console.error(e) }
+  }, [activeCampaign?.id, leaderboardDate])
+
+  const fetchRoi = useCallback(async () => {
+    try {
+      const res = await callEdge('roi_dashboard', { campaign_id: activeCampaign?.id })
+      setRoiData(res.roi)
+      if (res.roi?.roi_target_premium !== undefined) {
+        setRoiTarget(res.roi.roi_target_premium)
+      }
+    } catch (e) { console.error(e) }
+  }, [activeCampaign?.id])
+
+  const fetchExpired = useCallback(async () => {
+    try {
+      const res = await callEdge('expired_leads', { campaign_id: activeCampaign?.id })
+      setExpiredLeads(res.expired || [])
+    } catch (e) { console.error(e) }
+  }, [activeCampaign?.id])
+
+  const saveMetaSettings = async () => {
+    try {
+      await callEdge('update_campaign_meta', {
+        campaign_id: activeCampaign?.id,
+        ...metaSettings,
+        roi_target_premium: roiTarget || undefined,
+      })
+      setSuccess('✅ Meta WhatsApp settings saved!')
+      onRefresh()
+    } catch (e: any) { setError(e.message) }
+  }
 
   useEffect(() => {
     if (activeAdminTab === 'performance') fetchAgentStats()
     else if (activeAdminTab === 'renewed') fetchRenewed()
-  }, [activeAdminTab, activeCampaign, statsDateFrom, statsDateTo])
+    else if (activeAdminTab === 'leaderboard') fetchLeaderboard()
+    else if (activeAdminTab === 'roi') fetchRoi()
+    else if (activeAdminTab === 'expired') fetchExpired()
+  }, [activeAdminTab, activeCampaign, statsDateFrom, statsDateTo, leaderboardDate, fetchLeaderboard, fetchRoi, fetchExpired])
 
   async function fetchAgentStats() {
     setLoadingTab(true)
@@ -825,7 +933,14 @@ function AdminDashboard({ campaigns, activeCampaign, onRefresh }: { campaigns: C
   async function handlePreview() {
     setPreviewing(true); setPreviewCounts(null)
     const effectiveDays = useCustomDays ? customWindowDays : windowDays
-    try { const d = await callEdge('preview_campaign', { window_days: effectiveDays }); setPreviewCounts(d) }
+    try {
+      const d = await callEdge('preview_campaign', {
+        window_days: effectiveDays,
+        sold_dealer_filter: selectedSoldDealers.length > 0 ? selectedSoldDealers : undefined,
+        last_service_dealer_filter: selectedSvcDealers.length > 0 ? selectedSvcDealers : undefined,
+      })
+      setPreviewCounts(d)
+    }
     catch (err) { setError((err as Error).message) } finally { setPreviewing(false) }
   }
 
@@ -834,11 +949,18 @@ function AdminDashboard({ campaigns, activeCampaign, onRefresh }: { campaigns: C
     const effectiveDays = useCustomDays ? customWindowDays : windowDays
     setCreating(true); setError(null)
     try {
-      const data = await callEdge('create_campaign', { campaign_name: campaignName, window_days: effectiveDays })
+      const data = await callEdge('create_campaign', {
+        campaign_name: campaignName,
+        window_days: effectiveDays,
+        sold_dealer_filter: selectedSoldDealers.length > 0 ? selectedSoldDealers : undefined,
+        last_service_dealer_filter: selectedSvcDealers.length > 0 ? selectedSvcDealers : undefined,
+        priority_mode: priorityMode,
+      })
       if (data.total_leads === 0) { setError(`No eligible customers found. ${data.message || ''}`); return }
       const statsInfo = data.stats ? ` (${data.stats.raw_from_db} found → ${data.stats.after_chassis_dedup} unique, range: ${data.stats.date_from} to ${data.stats.date_to})` : ''
       setSuccess(`Campaign created with ${data.total_leads} leads!${statsInfo}`)
       setShowCreate(false); setCampaignName(''); setPreviewCounts(null); setUseCustomDays(false); setWindowDays(30); onRefresh()
+      setSelectedSoldDealers([]); setSelectedSvcDealers([]); setPriorityMode('urgency')
     } catch (err) { setError((err as Error).message) } finally { setCreating(false) }
   }
 
@@ -884,7 +1006,8 @@ function AdminDashboard({ campaigns, activeCampaign, onRefresh }: { campaigns: C
     await loadRcStatus().catch(() => ({}))
     let st: RcCampaignStatus = rcStatusByCampaign[String(campaign.id)] || {}
     try {
-      st = await loadRcStatusForCampaign(campaign.id)
+      const fresh = await callEdge('rc_fetch_status', { campaign_ids: [campaign.id] })
+      st = fresh.campaigns?.[String(campaign.id)] || st
     } catch {
       /* use cached st */
     }
@@ -952,9 +1075,23 @@ function AdminDashboard({ campaigns, activeCampaign, onRefresh }: { campaigns: C
       {success && <div className="rounded-lg border border-green-200 bg-green-50 p-3 text-sm text-green-700">{success}</div>}
 
       <div className="flex gap-2 flex-wrap">
-        {(['campaigns', 'performance', 'renewed'] as const).map(tab => (
-          <button key={tab} onClick={() => setActiveAdminTab(tab)} className={`rounded-lg px-4 py-2 text-sm font-medium ${activeAdminTab === tab ? 'bg-blue-600 text-white' : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50'}`}>
-            {tab === 'campaigns' ? '📋 Campaigns' : tab === 'performance' ? '📊 Performance' : '✅ Renewed'}
+        {(['campaigns', 'performance', 'renewed', 'leaderboard', 'roi', 'expired', 'meta'] as const).map(tab => (
+          <button
+            key={tab}
+            onClick={() => setActiveAdminTab(tab)}
+            className={`rounded-lg px-4 py-2 text-sm font-medium ${
+              activeAdminTab === tab
+                ? 'bg-blue-600 text-white'
+                : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50'
+            }`}
+          >
+            {tab === 'campaigns' ? '📋 Campaigns' :
+             tab === 'performance' ? '📊 Performance' :
+             tab === 'renewed' ? '✅ Renewed' :
+             tab === 'leaderboard' ? '🏆 Leaderboard' :
+             tab === 'roi' ? '💰 ROI Dashboard' :
+             tab === 'expired' ? '🚨 Expired' :
+             '💬 Meta Settings'}
           </button>
         ))}
       </div>
@@ -969,6 +1106,35 @@ function AdminDashboard({ campaigns, activeCampaign, onRefresh }: { campaigns: C
                 {refreshingCampaign ? '↻ Refreshing…' : '↻ Refresh Now'}
               </button>
               <button onClick={() => setShowCreate(!showCreate)} className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700">+ New Campaign</button>
+              <button
+                type="button"
+                onClick={async () => {
+                  const name = prompt('Conquest campaign name:', 'Conquest - Insurance Renewals')
+                  if (!name) return
+                  try {
+                    // Fetch all dealers and exclude Techwheels
+                    const res = await callEdge('get_dealers', {})
+                    const techwheelsDealers = (res.dealers.sold_dealers || []).filter(
+                      (d: string) => d.toLowerCase().includes('techwheels') || d.toLowerCase().includes('firstmobital')
+                    )
+                    const conquestDealers = (res.dealers.sold_dealers || []).filter(
+                      (d: string) => !techwheelsDealers.includes(d)
+                    )
+                    
+                    const t = await callEdge('create_campaign', {
+                      campaign_name: name,
+                      window_days: 30,
+                      sold_dealer_filter: conquestDealers,
+                      priority_mode: 'idv_value',
+                    })
+                    alert(`Conquest campaign created with ${t.total_leads} leads!`)
+                    onRefresh()
+                  } catch (err: any) { alert(err.message) }
+                }}
+                className="rounded-lg border border-purple-300 bg-purple-50 px-4 py-2 text-sm font-medium text-purple-700 hover:bg-purple-100"
+              >
+                ⚔️ Conquest Campaign
+              </button>
             </div>
           </div>
           {refreshResult && (
@@ -1013,6 +1179,85 @@ function AdminDashboard({ campaigns, activeCampaign, onRefresh }: { campaigns: C
                     <span className="font-medium text-gray-600">{new Date(Date.now() + (useCustomDays ? customWindowDays : windowDays) * 86400000).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</span>
                   </p>
                 </div>
+
+                {/* Priority Mode selector */}
+                <div className="col-span-2 sm:col-span-1">
+                  <label className="text-sm font-medium text-gray-700">Lead Priority Mode</label>
+                  <select
+                    value={priorityMode}
+                    onChange={e => setPriorityMode(e.target.value)}
+                    className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm"
+                  >
+                    <option value="urgency">⏰ Urgency (closest expiry first)</option>
+                    <option value="idv_value">💰 Highest IDV Value first</option>
+                    <option value="loyalty">🤝 Loyal customers first (sold/serviced by us)</option>
+                    <option value="mixed">⚖️ Mixed (weighted combination)</option>
+                  </select>
+                  <p className="text-xs text-gray-400 mt-1">Controls the order telecallers receive leads.</p>
+                </div>
+
+                {/* Dealer Filter toggle */}
+                <div className="col-span-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowDealerFilter(!showDealerFilter)}
+                    className="text-sm text-blue-600 hover:text-blue-700 flex items-center gap-1 font-medium"
+                  >
+                    {showDealerFilter ? '▼' : '▶'} Advanced Filters (Dealer)
+                  </button>
+                </div>
+
+                {showDealerFilter && (
+                  <div className="col-span-2 rounded-lg border border-gray-200 bg-gray-50 p-4 space-y-3">
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <div>
+                        <label className="text-xs font-medium text-gray-600 uppercase">Sold By Dealer</label>
+                        <div className="mt-1 max-h-32 overflow-y-auto rounded-lg border border-gray-200 bg-white p-2">
+                          {soldDealers.map(d => (
+                            <label key={d} className="flex items-center gap-2 py-0.5 cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={selectedSoldDealers.includes(d)}
+                                onChange={e => {
+                                  if (e.target.checked) setSelectedSoldDealers([...selectedSoldDealers, d])
+                                  else setSelectedSoldDealers(selectedSoldDealers.filter(x => x !== d))
+                                }}
+                                className="w-3.5 h-3.5 accent-blue-600"
+                              />
+                              <span className="text-sm">{d}</span>
+                            </label>
+                          ))}
+                        </div>
+                      </div>
+                      <div>
+                        <label className="text-xs font-medium text-gray-600 uppercase">Last Serviced At</label>
+                        <div className="mt-1 max-h-32 overflow-y-auto rounded-lg border border-gray-200 bg-white p-2">
+                          {serviceDealers.map(d => (
+                            <label key={d} className="flex items-center gap-2 py-0.5 cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={selectedSvcDealers.includes(d)}
+                                onChange={e => {
+                                  if (e.target.checked) setSelectedSvcDealers([...selectedSvcDealers, d])
+                                  else setSelectedSvcDealers(selectedSvcDealers.filter(x => x !== d))
+                                }}
+                                className="w-3.5 h-3.5 accent-blue-600"
+                              />
+                              <span className="text-sm">{d}</span>
+                            </label>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                    {(selectedSoldDealers.length > 0 || selectedSvcDealers.length > 0) && (
+                      <button
+                        type="button"
+                        onClick={() => { setSelectedSoldDealers([]); setSelectedSvcDealers([]) }}
+                        className="text-xs text-gray-500 hover:text-gray-700 font-semibold"
+                      >Clear filters</button>
+                    )}
+                  </div>
+                )}
               </div>
               <div className="flex gap-3 flex-wrap">
                 <button onClick={handlePreview} disabled={previewing} className="rounded-lg border border-blue-300 bg-blue-50 px-4 py-2 text-sm font-medium text-blue-700 hover:bg-blue-100 disabled:opacity-50">{previewing ? 'Previewing…' : '🔍 Preview Leads'}</button>
@@ -1199,6 +1444,203 @@ function AdminDashboard({ campaigns, activeCampaign, onRefresh }: { campaigns: C
               </table>
             </div>
           )}
+        </div>
+      )}
+
+      {/* ── Leaderboard Tab ────────────────────────────────────────────── */}
+      {activeAdminTab === 'leaderboard' && (
+        <div className="space-y-4">
+          <div className="flex items-center gap-3 mb-4">
+            <input
+              type="date"
+              value={leaderboardDate}
+              onChange={e => { setLeaderboardDate(e.target.value); fetchLeaderboard() }}
+              className="rounded-lg border border-gray-200 px-3 py-1.5 text-sm"
+            />
+            <button onClick={fetchLeaderboard} className="text-sm text-blue-600 font-semibold hover:text-blue-700">↻ Refresh</button>
+          </div>
+          
+          {leaderboard.length === 0 ? (
+            <div className="rounded-xl border border-gray-200 bg-white p-8 text-center text-sm text-gray-400">
+              No leaderboard data for this date.
+            </div>
+          ) : (
+            <div className="rounded-xl border border-gray-200 bg-white overflow-hidden shadow-sm">
+              <div className="px-5 py-4 border-b border-gray-100">
+                <h3 className="font-semibold text-gray-900">🏆 Today's Leaderboard</h3>
+              </div>
+              <table className="w-full text-sm">
+                <thead className="bg-gray-50">
+                  <tr>
+                    {['Rank', 'Telecaller', 'Calls', 'Connected', 'Renewed (Us)', 'Premium', 'Score', 'Conversion %'].map(h => (
+                      <th key={h} className="px-3 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {leaderboard.map((agent: any, i: number) => (
+                    <tr key={i} className={i === 0 ? 'bg-yellow-50' : i === 1 ? 'bg-gray-50' : i === 2 ? 'bg-orange-50' : ''}>
+                      <td className="px-3 py-3 font-bold">{i + 1}{i === 0 ? ' 🥇' : i === 1 ? ' 🥈' : i === 2 ? ' 🥉' : ''}</td>
+                      <td className="px-3 py-3 font-medium text-gray-900">{agent.telecaller_name}</td>
+                      <td className="px-3 py-3 text-gray-600">{agent.calls_made}</td>
+                      <td className="px-3 py-3 text-blue-600">{agent.calls_connected}</td>
+                      <td className="px-3 py-3 text-green-600 font-medium">{agent.renewed_via_us}</td>
+                      <td className="px-3 py-3 text-green-700">₹{agent.premium_collected?.toLocaleString('en-IN')}</td>
+                      <td className="px-3 py-3 font-bold text-gray-900">{agent.score}</td>
+                      <td className="px-3 py-3 text-gray-600">{agent.conversion_rate?.toFixed(1)}%</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── ROI Dashboard Tab ─────────────────────────────────────────── */}
+      {activeAdminTab === 'roi' && (
+        <div className="space-y-4">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+              <div className="text-xs text-gray-500">Total Premium Collected</div>
+              <div className="mt-1 text-2xl font-bold text-green-600">₹{roiData?.total_premium_collected?.toLocaleString('en-IN') || 0}</div>
+            </div>
+            <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+              <div className="text-xs text-gray-500">Conversion Rate</div>
+              <div className="mt-1 text-2xl font-bold text-blue-600">{roiData?.conversion_rate?.toFixed(1) || 0}%</div>
+            </div>
+            <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+              <div className="text-xs text-gray-500">Avg Premium</div>
+              <div className="mt-1 text-2xl font-bold text-gray-900">₹{roiData?.avg_premium?.toLocaleString('en-IN') || 0}</div>
+            </div>
+            <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+              <div className="text-xs text-gray-500">Target Achievement</div>
+              <div className="mt-1 text-2xl font-bold text-purple-600">{roiData?.target_achievement?.toFixed(1) || 0}%</div>
+            </div>
+          </div>
+          
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <div className="rounded-lg border bg-white p-3"><div className="text-xs text-gray-500">Total Leads</div><div className="text-lg font-semibold">{roiData?.total_leads || 0}</div></div>
+            <div className="rounded-lg border bg-white p-3"><div className="text-xs text-gray-500">Renewed (Us)</div><div className="text-lg font-semibold text-green-600">{roiData?.renewed_via_us || 0}</div></div>
+            <div className="rounded-lg border bg-white p-3"><div className="text-xs text-gray-500">Renewed (Elsewhere)</div><div className="text-lg font-semibold text-yellow-600">{roiData?.renewed_elsewhere || 0}</div></div>
+            <div className="rounded-lg border bg-white p-3"><div className="text-xs text-gray-500">Pending</div><div className="text-lg font-semibold text-gray-600">{roiData?.pending || 0}</div></div>
+          </div>
+          
+          {roiData?.by_company?.length > 0 && (
+            <div className="rounded-xl border border-gray-200 bg-white overflow-hidden shadow-sm">
+              <div className="px-5 py-4 border-b border-gray-100"><h3 className="font-semibold text-gray-900">Revenue by Insurance Company</h3></div>
+              <table className="w-full text-sm">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-4 py-2 text-left">Company</th>
+                    <th className="px-4 py-2 text-right">Count</th>
+                    <th className="px-4 py-2 text-right">Premium</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {roiData.by_company.map((c: any) => (
+                    <tr key={c.company} className="border-b">
+                      <td className="px-4 py-2 font-medium">{c.company}</td>
+                      <td className="px-4 py-2 text-right">{c.count}</td>
+                      <td className="px-4 py-2 text-right text-green-600">₹{c.premium?.toLocaleString('en-IN')}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── Expired Leads Tab ─────────────────────────────────────────── */}
+      {activeAdminTab === 'expired' && (
+        <div className="space-y-4">
+          <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+            ⚠️ These customers' insurance has already expired. They are driving uninsured — highest urgency!
+          </div>
+          {expiredLeads.length === 0 ? (
+            <div className="rounded-xl border border-gray-200 bg-white p-8 text-center text-sm text-gray-400">No expired leads 🎉</div>
+          ) : (
+            expiredLeads.map((lead: any) => (
+              <div key={lead.customer.id} className="rounded-xl border border-red-200 bg-white p-4 shadow-sm">
+                <div className="flex items-start justify-between">
+                  <div>
+                    <div className="font-medium text-gray-900">{lead.customer.first_name} {lead.customer.last_name || ''}</div>
+                    <div className="text-sm text-gray-500">📱 {lead.customer.contact_phones} · 🚗 {lead.customer.model} · {lead.customer.vehicle_registration_number || '—'}</div>
+                    <div className="text-xs text-red-600 font-medium mt-1">⚠️ Expired {lead.days_expired} days ago ({formatDate(lead.customer.last_insurance_expiry_date)})</div>
+                  </div>
+                  <a href={`tel:${lead.customer.contact_phones}`} className="rounded-lg bg-red-500 px-4 py-2 text-sm font-semibold text-white hover:bg-red-600">📞 Call Now</a>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      )}
+
+      {/* ── Meta WhatsApp Settings Tab ────────────────────────────────── */}
+      {activeAdminTab === 'meta' && (
+        <div className="max-w-2xl space-y-5">
+          <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm space-y-4">
+            <h3 className="font-medium text-gray-900">💬 Meta WhatsApp Drip Settings</h3>
+            <p className="text-xs text-gray-500">
+              Uses the same Meta WhatsApp credentials from your WA Agent config (wa_agent_config).
+              Meta Cloud API will send approved template messages automatically.
+            </p>
+            
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input type="checkbox" checked={metaSettings.meta_enabled}
+                onChange={e => setMetaSettings(s => ({...s, meta_enabled: e.target.checked}))} className="w-4 h-4 accent-green-600" />
+              <span className="text-sm font-medium">Enable Meta WhatsApp for this campaign</span>
+            </label>
+            
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input type="checkbox" checked={metaSettings.drip_enabled}
+                onChange={e => setMetaSettings(s => ({...s, drip_enabled: e.target.checked}))} className="w-4 h-4 accent-green-600" />
+              <span className="text-sm font-medium">Enable 3-step drip on no-answer</span>
+            </label>
+            
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input type="checkbox" checked={metaSettings.self_renewal_link_enabled}
+                onChange={e => setMetaSettings(s => ({...s, self_renewal_link_enabled: e.target.checked}))} className="w-4 h-4 accent-green-600" />
+              <span className="text-sm font-medium">Send self-renewal link on final drip step</span>
+            </label>
+            
+            <div>
+              <label className="text-sm font-medium text-gray-700">Template Name Prefix</label>
+              <input value={metaSettings.meta_template_name}
+                onChange={e => setMetaSettings(s => ({...s, meta_template_name: e.target.value}))}
+                placeholder="insurance_renewal (uses _reminder, _urgent, _final suffixes)"
+                className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm" />
+              <p className="text-xs text-gray-400 mt-1">Leave empty to use default: insurance_renewal_reminder, insurance_renewal_urgent, insurance_renewal_final</p>
+            </div>
+            
+            <div>
+              <label className="text-sm font-medium text-gray-700">Template Language</label>
+              <select value={metaSettings.meta_template_lang}
+                onChange={e => setMetaSettings(s => ({...s, meta_template_lang: e.target.value}))}
+                className="mt-1 rounded-lg border border-gray-200 px-3 py-2 text-sm">
+                <option value="en_US">English (US)</option>
+                <option value="en">English</option>
+                <option value="hi">Hindi</option>
+                <option value="en_GB">English (UK)</option>
+              </select>
+            </div>
+          </div>
+          
+          <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm space-y-3">
+            <h3 className="font-medium text-gray-900">🎯 ROI Target</h3>
+            <div>
+              <label className="text-sm font-medium text-gray-700">Target Premium (₹)</label>
+              <input type="number" value={roiTarget}
+                onChange={e => setRoiTarget(Number(e.target.value))}
+                placeholder="e.g. 500000"
+                className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm" />
+            </div>
+          </div>
+          
+          <button onClick={saveMetaSettings} className="rounded-lg bg-blue-600 px-5 py-2 text-sm font-medium text-white hover:bg-blue-700">
+            💾 Save Settings
+          </button>
         </div>
       )}
 
