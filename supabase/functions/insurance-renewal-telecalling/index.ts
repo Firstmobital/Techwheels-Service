@@ -2,8 +2,9 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { corsHeaders } from '../_shared/cors.ts'
 
 const STALE_INSURANCE_DAYS = 365
-const RC_FETCH_DEFAULT_LOOKUPS = 8
-const RC_FETCH_MAX_LOOKUPS = 12
+/** Paid IDSPay attempts per worker invocation (cron ~every 2 min on prod). */
+const RC_FETCH_DEFAULT_LOOKUPS = 4
+const RC_FETCH_MAX_LOOKUPS = 6
 const RC_FETCH_DELAY_MS = 250
 const RC_FETCH_WALL_MS = 52000
 
@@ -934,7 +935,7 @@ export default async function handler(req: Request) {
           'Content-Type': 'application/json',
           'x-cron-secret': CRON_SECRET,
         },
-        body: JSON.stringify({ action: 'process_rc_fetch_jobs' }),
+        body: JSON.stringify({ action: 'process_rc_fetch_jobs', max_lookups: RC_FETCH_DEFAULT_LOOKUPS }),
       }).catch((e) => console.error('RC fetch worker kickoff failed', e))
 
       return new Response(JSON.stringify({

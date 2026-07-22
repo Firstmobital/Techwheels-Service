@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { supabase, supabaseUrl } from '../lib/supabase'
+import { supabase, supabaseAnonKey, supabaseUrl } from '../lib/supabase'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 interface Customer {
@@ -80,13 +80,33 @@ async function callEdge(action: string, body: Record<string, unknown> = {}) {
   const { data: session } = await supabase.auth.getSession()
   const token = session?.session?.access_token
   if (!token) throw new Error('Not authenticated')
-  const res = await fetch(EDGE_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-    body: JSON.stringify({ action, ...body }),
-  })
-  const data = await res.json()
-  if (!data.success) throw new Error(data.error || 'Unknown error')
+  let res: Response
+  try {
+    res = await fetch(EDGE_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+        apikey: supabaseAnonKey,
+      },
+      body: JSON.stringify({ action, ...body }),
+    })
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e)
+    throw new Error(
+      msg === 'Failed to fetch' || msg.includes('NetworkError')
+        ? 'Could not reach Supabase Edge (network timeout or project under load — try Refresh, pause RC fetch/cron, wait a few minutes).'
+        : msg,
+    )
+  }
+  const text = await res.text()
+  let data: { success?: boolean; error?: string }
+  try {
+    data = text ? JSON.parse(text) : {}
+  } catch {
+    throw new Error(`Edge returned non-JSON (HTTP ${res.status}). Project may be overloaded.`)
+  }
+  if (!res.ok || !data.success) throw new Error(data.error || `Edge error (HTTP ${res.status})`)
   return data
 }
 
@@ -988,7 +1008,7 @@ function AdminDashboard({ campaigns, activeCampaign, onRefresh }: { campaigns: C
                       Next <strong>{c.window_days} days</strong> · {formatDate(c.date_from)} → {formatDate(c.date_to)}{' '}· by {c.created_by || '—'}
                     </p>
                     {rcStatusLoadError && (
-                      <p className="mt-1 text-xs text-red-600">RC status failed to load: {rcStatusLoadError}. Redeploy edge + apply DB migrations.</p>
+                      <p className="mt-1 text-xs text-red-600">RC status: {rcStatusLoadError}</p>
                     )}
                     {rcStatusLoaded && !rcStatusLoadError && (
                       <p className="mt-1 text-xs text-gray-600">
