@@ -27,3 +27,6 @@ verify_jwt = false
 
 [functions.booking-source-sync]
 verify_jwt = false
+
+[functions.invoke-rc-provider]
+verify_jwt = true
