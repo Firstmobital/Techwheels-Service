@@ -83,7 +83,11 @@ const FLOOR_INCHARGE_ALLOWED_SERVICE_TYPES = [
   'Campaign',
 ]
 
-const RECEPTION_LIST_PAGE_SIZE = 500
+const RECEPTION_LIST_PAGE_SIZE = 200
+
+// "All" period and legacy list helpers use this cap — not a full-table scan.
+const RECEPTION_DEFAULT_LOOKBACK_DAYS = 90
+const RECEPTION_GLOBAL_SEARCH_LOOKBACK_DAYS = 90
 
 // Default lookback for floor/technician pages — vehicles don't stay in service longer than this.
 const FLOOR_INCHARGE_LOOKBACK_DAYS = 60
@@ -320,8 +324,29 @@ async function fetchReceptionEntriesWithKeyset(
   return { data: rows, error: null }
 }
 
+export function getDefaultReceptionLookbackDateRange(): { from: string; to: string } {
+  const range = getISOLookbackRange(RECEPTION_DEFAULT_LOOKBACK_DAYS)
+  return {
+    from: range.from.slice(0, 10),
+    to: range.to.slice(0, 10),
+  }
+}
+
 export async function listReceptionEntries(): Promise<ApiResult<ReceptionEntryRow[]>> {
-  const { data, error } = await fetchReceptionEntriesWithKeyset()
+  const range = getISOLookbackRange(RECEPTION_DEFAULT_LOOKBACK_DAYS)
+  const { data, error } = await fetchReceptionEntriesWithKeyset(undefined, range.from, range.to)
+
+  if (error) return fail(error)
+
+  const entries = (data ?? []) as ReceptionEntryRow[]
+  const enriched = await enrichEntriesWithEmployeeBranch(entries)
+  return ok(enriched)
+}
+
+/** Bounded pool for Reception page global search (avoids unbounded table scan). */
+export async function listReceptionEntriesForGlobalSearch(): Promise<ApiResult<ReceptionEntryRow[]>> {
+  const range = getISOLookbackRange(RECEPTION_GLOBAL_SEARCH_LOOKBACK_DAYS)
+  const { data, error } = await fetchReceptionEntriesWithKeyset(undefined, range.from, range.to)
 
   if (error) return fail(error)
 
@@ -405,7 +430,8 @@ export async function listReceptionEntriesByJobCardNumbers(
 }
 
 export async function listServiceAdvisorEntries(): Promise<ApiResult<ReceptionEntryRow[]>> {
-  const { data, error } = await fetchReceptionEntriesWithKeyset()
+  const range = getISOLookbackRange(RECEPTION_DEFAULT_LOOKBACK_DAYS)
+  const { data, error } = await fetchReceptionEntriesWithKeyset(undefined, range.from, range.to)
 
   if (error) return fail(error)
   

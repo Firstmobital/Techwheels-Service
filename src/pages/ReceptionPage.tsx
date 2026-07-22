@@ -7,7 +7,7 @@ import {
   bulkCreateReceptionEntries,
   createReceptionEntry,
   deleteReceptionEntry,
-  listReceptionEntries,
+  listReceptionEntriesForGlobalSearch,
   listReceptionEntriesByDateRange,
   listReceptionEmployees,
   type ReceptionEmployeeOption,
@@ -593,7 +593,7 @@ export default function ReceptionPage() {
     let cancelled = false
     setGlobalSearchLoading(true)
 
-    void listReceptionEntries().then((res) => {
+    void listReceptionEntriesForGlobalSearch().then((res) => {
       if (cancelled) return
       if (res.error) {
         setError(res.error)

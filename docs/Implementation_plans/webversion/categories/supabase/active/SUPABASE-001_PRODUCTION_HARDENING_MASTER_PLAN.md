@@ -117,7 +117,7 @@ Status legend: `Not Started` | `In Progress` | `Blocked` | `Done`
 | P1-04 | High | Add and verify indexes for sequential scans | Team | Done | 2026-06-08 | 2026-06-08 | 4 migration files created and audited against authoritative dump (full_database.sql). 2 CRITICAL + 2 OPTIONAL indexes: `idx_reception_entries_branch_created_at_desc` (missing branch+created index for Query 2), `idx_vas_jc_data_branch_created_at_desc` (missing branch+created for Query 7), `idx_parts_consumption_branch_fiscal_year_desc` (complementary to portal-based index), `idx_stock_snapshot_branch_snapshot_date_desc` (optional complement). All columns/tables verified in authoritative dump. Ready for execution. | 2026-06-08 | - |
 | P1-04 | High | Add and verify indexes for sequential scans | Team | Done | 2026-06-08 | 2026-06-08 | 4 migration files created, audited, and DEPLOYED in Supabase. All indexes confirmed in production: idx_reception_entries_branch_created_at_desc, idx_vas_jc_data_branch_created_at_desc, idx_parts_consumption_branch_fiscal_year_desc, idx_stock_snapshot_branch_snapshot_date_desc. Ready for P1-05 query rewrites. | 2026-06-08 | Execute P1-05 query rewrites (keyset pagination) |
 | P1-05 | Critical | Remove fetch-all patterns from reports and warranty JSON extractors | Team | Done | 2026-06-08 | 2026-07-06 | Batch B (2026-07-06): `EWReminderPage` OFFSET loop on `all_service_data` replaced with keyset (id cursor); `MasterDataNullCountsReport` total-row count changed from `exact` to `estimated`; `ServiceAdvisorPage` initial dateRange defaulted to current month (eliminates all-time fetch on load); `listFloorInchargeEntries` and technician fallback `listReceptionEntries` bounded to 60/90-day lookback; mobile `fetchAllEntries` bounded to 30-day lookback. Post-deploy audit snapshot 14.35: slow queries 1117→18, `service_reception_entries` eliminated from top-10. | 2026-07-06 | - |
-| P1-06 | High | Replace OFFSET scans with cursor pagination in large tables/views | Team | In Progress | 2026-06-25 |  | Snapshot 14.36 top regression: `technician_assignments` list (`queryid=6462467893367818088`, `calls=214`, `delta_total_ms=475741.16`). **Batch C Phase 1 (C-01, 2026-07-07):** `ServiceAdvisorPage` unbounded keyset scan replaced with batched `.in('job_card_number', chunk)` scoped to visible date-range job cards; columns narrowed to `job_card_number, work_status`. Remaining: `DashboardPage`, mobile floor, `TechnicianPage`, `partsReportQueries` OFFSET loops. | 2026-07-07 | Deploy Batch C Phase 1; post-deploy audit for queryid `6462467893367818088`; then Phase 2 callers (`DashboardPage`, mobile floor, `TechnicianPage`) |
+| P1-06 | High | Replace OFFSET scans with cursor pagination in large tables/views | Team | In Progress | 2026-06-25 |  | Snapshot 14.42: reception wide list `852176900607336119` still top-2 by total_ms. **Batch D (2026-07-22):** bound unbounded reception fetches — SA period All → 90d lookback; `listReceptionEntries` / global search / booking reg lookup capped. Evidence: [P1_06_RECEPTION_LIST_BOUNDING_2026-07-22.md](../evidence/P1_06_RECEPTION_LIST_BOUNDING_2026-07-22.md). Remaining: `DashboardPage`, mobile floor, `TechnicianPage`, column projection trim. | 2026-07-22 | Deploy Batch D; post-deploy audit for queryid `852176900607336119` |
 | P1-07 | High | Add targeted composite/partial indexes for timeout hotlist queries | Team | Done | 2026-06-25 | 2026-06-25 | Migration executed successfully (`supabase/migrations/20260625221000_p1_07_disk_io_hotlist_indexes.sql`); check output confirms all 4 indexes exist and all 3 hot EXPLAINs switched from Seq Scan + Sort to Index Scan (`idx_sre_created_at_id_desc`, `idx_ta_updated_assigned_desc`, `idx_vas_jc_closed_branch`). | 2026-06-25 | - |
 | P1-08 | High | Reduce Realtime WAL polling cost and fan-out | Team | In Progress | 2026-06-25 |  | Snapshot 14.36: `realtime.list_changes` resurfaced in top-10 (`queryid=-2876120296317350531`, `calls=24357`, `delta_calls=24357`, `delta_total_ms=221571.48` vs near-zero in 14.35). **Batch C Phase 1 (C-02, 2026-07-07):** `ServiceAdvisorPage` Realtime callback no longer triggers full assignment rescan; incremental INSERT/UPDATE/DELETE updates for visible job cards only; `assignmentRealtimeChannelRef` enforces single active channel + cleanup on unmount. Table-wide subscription scope unchanged; other screens still pending inventory. | 2026-07-07 | Deploy Batch C Phase 1; post-deploy audit for Realtime delta; complete per-screen subscription inventory (Phase 2+) |
 | P1-09 | High | Eliminate expensive exact-count list patterns in PostgREST paths | Team | Done | 2026-06-25 | 2026-07-06 | Batch B (2026-07-06): Root cause confirmed and fixed — unbounded all-time fetch on `ServiceAdvisorPage` and `listFloorInchargeEntries` / technician fallback all bounded. `MasterDataNullCountsReport` total count switched to `estimated`. Post-deploy audit snapshot 14.35: `queryid=-5344960703026327435` (no-WHERE OFFSET, calls=11096) absent from top-10 — eliminated. Regression guard cleared. | 2026-07-06 | - |
@@ -146,8 +146,8 @@ Retention rule:
 | 2026-06-26 (manual dashboard checkpoint, 10:54 IST) | 65% | 15% | 34% | 24/60 | - | - | - | - | Observability Overview + Query Performance screenshot evidence: slow queries reported as 932/933 (panel variance), Disk IO 45%, API Gateway errors 14%, Database errors 5.3%, PostgREST requests 2,892 |
 | 2026-07-06 (automated audit cycle, post-deploy Batch B) | - | - | - | 26/60 | - | - | - | - | Snapshot 14.35 (08:13 UTC); top query 3220864789079889211 calls=22 total_ms=31092.85 mean_ms=1413.31; slow_queries=18 (was 1117); cache_hit=100%; comparison=improved; delta_total_ms_sum=-198283995.58; guard=ok |
 | 2026-07-07 (automated audit 14.36 + metadata backup) | 71% | 8% | 36% | 24/60 | - | - | - | - | Snapshot 14.36 (06:14 UTC); top query 6462467893367818088 calls=214; slow_queries=200; comparison=regressed; delta_total_ms_sum=3425053.57; guard=blocked_requires_checklist; egress=125%; db_size=88%; metadata dump sha256=aa70820a (06:18 UTC) |
-| 2026-07-21 (automated audit cycle) | - | - | - | - | - | - | - | - | Top query -2876120296317350531 calls=428389 total_ms=4758262.51 mean_ms=11.11; comparison=regressed; delta_total_ms_sum=920265.31 |
 | 2026-07-21 (automated audit cycle) | - | - | - | - | - | - | - | - | Top query -2876120296317350531 calls=444412 total_ms=4897989.12 mean_ms=11.02; comparison=regressed; delta_total_ms_sum=599073.49 |
+| 2026-07-22 (automated audit cycle) | - | - | - | - | - | - | - | - | Top query -2876120296317350531 calls=492654 total_ms=5317036.58 mean_ms=10.79; comparison=regressed; delta_total_ms_sum=2162425.96 |
 
 ## 6) Change Log (What Was Updated in This Plan)
 
@@ -164,8 +164,8 @@ Retention rule:
 | 2026-07-07 | Copilot | Batch C Phase 1 implemented in `src/pages/ServiceAdvisorPage.tsx`: C-01 bounded assignment status query (visible job cards, batched `.in()`, narrowed columns); C-02 incremental Realtime updates with ref-guarded single subscription and teardown cleanup. `npm run build` pass. Post-deploy audit pending (no production snapshot yet). |
 | 2026-07-21 | Copilot | Audit cycle script parity with TECHWHEELS-WEB: ranked postgres/edge log digests, ILIKE tracked queries (incl. service-history sync), expanded scan watchlist, sync-queue/timeout comparison actions; plan Section 10A added. |
 | 2026-07-21 | Copilot | Ranked log SQL fixed for Supabase Logs API: postgres `unnest(metadata.parsed.error_severity)`, edge 5xx + function_logs level, 24h window (fills timeout/missing-relation frequency in audit artifacts). |
-| 2026-07-21 | Copilot | Automated Supabase audit cycle appended run summary (2026-07-21 14:35:34 IST) and refreshed plan evidence block from generated audit artifacts. |
 | 2026-07-21 | Copilot | Automated Supabase audit cycle appended run summary (2026-07-21 16:55:25 IST) and refreshed plan evidence block from generated audit artifacts. |
+| 2026-07-22 | Copilot | Automated Supabase audit cycle appended run summary (2026-07-22 13:02:07 IST) and refreshed plan evidence block from generated audit artifacts. |
 
 ## 7) Update Protocol For Future Chats
 
@@ -270,7 +270,7 @@ Execution tracker (this cycle):
 | Priority | Phase | Subphase | Task ID | Ordered Step | Status | Verification |
 |---|---|---|---|---|---|---|
 | P0 | Phase F1: Query-shape stabilization | F1.1 Reception list/count hardening | P1-09 | Step 1: Remove default exact-count from high-traffic reception list endpoints. | Done | Verified (snapshot 14.35) |
-| P0 | Phase F1: Query-shape stabilization | F1.1 Reception list/count hardening | P1-06 | Step 2: Complete keyset pagination rollout for `(created_at,id)` list paths. | In Progress | Batch C C-01 partial: SA page bounded; 14.36 queryid still open until post-deploy audit |
+| P0 | Phase F1: Query-shape stabilization | F1.1 Reception list/count hardening | P1-06 | Step 2: Complete keyset pagination rollout for `(created_at,id)` list paths. | In Progress | Batch D 2026-07-22: 90d bound on unbounded reception loads; deploy pending |
 | P0 | Phase F1: Query-shape stabilization | F1.2 Fetch-all elimination | P1-05 | Step 3: Remove residual fetch-all report/query loops that still inflate list/count load. | Done | Verified (snapshot 14.35) |
 | P0 | Phase F1: Query-shape stabilization | F1.4 Batch C Phase 1 (Service Advisor assignments) | P1-06 | Step 2a: Bound `ServiceAdvisorPage` assignment status query to visible job cards. | Done | Code complete 2026-07-07; post-deploy audit pending |
 | P1 | Phase F2: Realtime load containment | F2.1 Subscription fan-out control | P1-08 | Step 4: Remove duplicate subscriptions and reduce channel scope per screen. | In Progress | Batch C C-02 partial: SA incremental Realtime; table-wide channel scope remains |
@@ -290,42 +290,6 @@ Retention policy:
 - Keep only the latest two automated audit snapshots in this section.
 - Keep comparison status and compact top-10 table in each retained snapshot.
 - Archive detailed historical logs under `supabase/evidence/audit_runs/`.
-
-### 14.40 Capture Snapshot: 2026-07-21 (Automated Audit Cycle)
-
-What was captured:
-- Timestamp (IST): 2026-07-21 14:35:34 IST
-- Capture mode: automated_supabase_audit_cycle
-- Top queryid: -2876120296317350531 (calls=428389, total_ms=4758262.51, mean_ms=11.11)
-- Platform logs capture status: auth=ok, edge_functions=ok, realtime=ok, storage=ok, database_health=ok
-- Comparison vs previous run (2026-07-21__08-36-07-070Z): status=regressed, delta_total_ms_sum=920265.31, delta_calls_sum=3570
-- Top regressions by delta_total_ms: -2876120296317350531 (599278.73); 7336725908253715888 (102357.46); 852176900607336119 (54318.58)
-- Top postgres log messages: unavailable (analytics query empty or failed).
-
-Compact Top 10 (run-local):
-| rank | queryid | calls | total_ms | mean_ms |
-|---:|---|---:|---:|---:|
-| 1 | -2876120296317350531 | 428389 | 4758262.51 | 11.11 |
-| 2 | 852176900607336119 | 2177 | 3520775.86 | 1617.26 |
-| 3 | 7336725908253715888 | 2483 | 2182841.66 | 879.11 |
-| 4 | -1851842182524549347 | 10418 | 1017136.51 | 97.63 |
-| 5 | -397576279058981298 | 343 | 985218.63 | 2872.36 |
-| 6 | 8843009277484467611 | 245 | 980010.43 | 4000.04 |
-| 7 | -6279881906384027513 | 719 | 885173.73 | 1231.12 |
-| 8 | 3787216458397661678 | 2224 | 826378.14 | 371.57 |
-| 9 | -8535248155740750540 | 123 | 673873.49 | 5478.65 |
-| 10 | 4198387656238320733 | 332 | 654709.23 | 1972.02 |
-
-Interpretation:
-- This snapshot is append-only and intended to keep log evidence current for the hardening cycle.
-- Prioritize fixes by highest delta_total_ms and call movement from run-to-run comparison.
-- **P1-12 closed:** sync queue absent from top-10; ranked postgres errors empty; cron job 24 uses batch 50 (see SUPABASE-003 §8.1).
-
-Self-heal plan:
-- Realtime WAL polling increased; reduce duplicate subscriptions and channel fan-out.
-
-Next action:
-- Re-run the cycle after the next production traffic window and validate that comparison status moves toward improved.
 
 ### 14.41 Capture Snapshot: 2026-07-21 (Automated Audit Cycle)
 
@@ -358,6 +322,41 @@ Interpretation:
 
 Self-heal plan:
 - OFFSET-heavy queries increased; prioritize keyset pagination on list endpoints still using range/offset.
+- Realtime WAL polling increased; reduce duplicate subscriptions and channel fan-out.
+
+Next action:
+- Re-run the cycle after the next production traffic window and validate that comparison status moves toward improved.
+
+### 14.42 Capture Snapshot: 2026-07-22 (Automated Audit Cycle)
+
+What was captured:
+- Timestamp (IST): 2026-07-22 13:02:07 IST
+- Capture mode: automated_supabase_audit_cycle
+- Top queryid: -2876120296317350531 (calls=492654, total_ms=5317036.58, mean_ms=10.79)
+- Platform logs capture status: auth=ok, edge_functions=ok, realtime=ok, storage=ok, database_health=ok
+- Comparison vs previous run (2026-07-21__11-25-25-932Z): status=regressed, delta_total_ms_sum=2162425.96, delta_calls_sum=64397
+- Top regressions by delta_total_ms: 852176900607336119 (425284.36); -2876120296317350531 (419047.46); 7020006022636007382 (333742.24)
+- Top postgres log messages (by frequency): invalid input syntax for type uuid: "1709" (1)
+
+Compact Top 10 (run-local):
+| rank | queryid | calls | total_ms | mean_ms |
+|---:|---|---:|---:|---:|
+| 1 | -2876120296317350531 | 492654 | 5317036.58 | 10.79 |
+| 2 | 852176900607336119 | 2443 | 4013053.81 | 1642.67 |
+| 3 | 7336725908253715888 | 2577 | 2274688.03 | 882.69 |
+| 4 | 8843009277484467611 | 275 | 1103223.99 | 4011.72 |
+| 5 | -1851842182524549347 | 11715 | 1097862.58 | 93.71 |
+| 6 | -397576279058981298 | 382 | 1095271.78 | 2867.20 |
+| 7 | -6279881906384027513 | 821 | 1047743.20 | 1276.18 |
+| 8 | 3787216458397661678 | 2514 | 934997.93 | 371.92 |
+| 9 | 8976932172498995662 | 4940 | 809999.51 | 163.97 |
+| 10 | -8535248155740750540 | 141 | 783030.62 | 5553.41 |
+
+Interpretation:
+- This snapshot is append-only and intended to keep log evidence current for the hardening cycle.
+- Prioritize fixes by highest delta_total_ms and call movement from run-to-run comparison.
+
+Self-heal plan:
 - Realtime WAL polling increased; reduce duplicate subscriptions and channel fan-out.
 
 Next action:

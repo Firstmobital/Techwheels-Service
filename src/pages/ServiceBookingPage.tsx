@@ -161,7 +161,12 @@ export default function ServiceBookingPage() {
   // Fetch reg_number + created_at from Reception so we can flag which booked vehicles have
   // already physically arrived / checked in at Reception (verified by reg number, per Reception team).
   async function loadReceptionEntries() {
-    const { data } = await supabase.from('service_reception_entries').select('reg_number, created_at')
+    const from = new Date()
+    from.setDate(from.getDate() - 90)
+    const { data } = await supabase
+      .from('service_reception_entries')
+      .select('reg_number, created_at')
+      .gte('created_at', from.toISOString())
     if (data) setReceptionEntries(data as { reg_number: string; created_at: string }[])
   }
 

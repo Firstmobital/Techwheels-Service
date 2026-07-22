@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
-  listServiceAdvisorEntries,
   listServiceAdvisorEntriesByDateRange,
   listReceptionEntriesByDateRange,
+  getDefaultReceptionLookbackDateRange,
   updateServiceAdvisorEntry,
   uploadServiceAdvisorEstimate,
   markServiceAdvisorInvoiceDone,
@@ -777,17 +777,13 @@ export default function ServiceAdvisorPage() {
         .map((item) => item.preset),
     )
 
-    // Fetch appropriate data
-    let res
-    if (nextIsAdmin) {
-      res = dateRange.from && dateRange.to
-        ? await listReceptionEntriesByDateRange(dateRange) // Admin: date scoped
-        : await listServiceAdvisorEntries() // Admin: all rows when period is All
-    } else {
-      res = dateRange.from && dateRange.to
-        ? await listServiceAdvisorEntriesByDateRange(dateRange)
-        : await listServiceAdvisorEntries()
-    }
+    // Fetch appropriate data (Period "All" → bounded lookback, not full table)
+    const loadRange =
+      dateRange.from && dateRange.to ? dateRange : getDefaultReceptionLookbackDateRange()
+
+    const res = nextIsAdmin
+      ? await listReceptionEntriesByDateRange(loadRange)
+      : await listServiceAdvisorEntriesByDateRange(loadRange)
 
     if (res.error) {
       setRows([])
