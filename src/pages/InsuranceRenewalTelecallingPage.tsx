@@ -803,6 +803,58 @@ function AdminDashboard({ campaigns, activeCampaign, onRefresh }: { campaigns: C
     } | null
   }
 
+<<<<<<< HEAD
+=======
+  function isMissingSupabaseRpc(error: { code?: string; message?: string } | null): boolean {
+    if (!error) return false
+    if (error.code === 'PGRST202') return true
+    return /could not find the function/i.test(error.message ?? '')
+  }
+
+  function normalizeRcJobStats(st: RcCampaignStatus): RcCampaignStatus {
+    if (st.active_job?.stats && typeof st.active_job.stats === 'object') {
+      const s = st.active_job.stats as Record<string, unknown>
+      st.active_job = {
+        ...st.active_job,
+        stats: {
+          ok: Number(s.ok ?? 0),
+          from_cache: Number(s.from_cache ?? 0),
+          failed: Number(s.failed ?? 0),
+          skipped_no_vrn: Number(s.skipped_no_vrn ?? 0),
+          skipped_fresh: Number(s.skipped_fresh ?? 0),
+        },
+      }
+    }
+    return st
+  }
+
+  async function loadRcStatusForCampaign(campaignId: number): Promise<RcCampaignStatus> {
+    const { data, error } = await supabase.rpc('insurance_renewal_rc_fetch_campaign_status', {
+      p_campaign_id: campaignId,
+    })
+    if (!error && data) {
+      return normalizeRcJobStats((data ?? {}) as RcCampaignStatus)
+    }
+    if (!isMissingSupabaseRpc(error)) {
+      throw new Error(error?.message ?? 'RC status failed')
+    }
+
+    const { data: pendingRows, error: pendingErr } = await supabase.rpc(
+      'insurance_renewal_rc_fetch_pending_counts',
+      { p_campaign_id: campaignId },
+    )
+    if (pendingErr) throw new Error(pendingErr.message)
+    const row = Array.isArray(pendingRows) ? pendingRows[0] : pendingRows
+    const pendingWithVrn = Number(row?.pending_with_vrn ?? 0)
+    return {
+      pending_stale: Number(row?.pending_stale ?? 0),
+      pending_with_vrn: pendingWithVrn,
+      pending_missing_vrn: Number(row?.pending_missing_vrn ?? 0),
+      fetch_enabled: pendingWithVrn > 0,
+    }
+  }
+
+>>>>>>> 4aa3a52 (Changes by Vinod)
   const loadRcStatus = useCallback(async (): Promise<Record<string, any>> => {
     if (campaigns.length === 0) {
       setRcStatusByCampaign({})
@@ -819,9 +871,20 @@ function AdminDashboard({ campaigns, activeCampaign, onRefresh }: { campaigns: C
       return map
     } catch (e) {
       console.error('RC status load failed', e)
+<<<<<<< HEAD
       setRcStatusLoadError((e as Error).message)
       setRcStatusLoaded(false)
       throw e
+=======
+      const msg = (e as Error).message
+      setRcStatusLoadError(
+        msg.includes('Supabase Edge')
+          ? msg
+          : `Database (RPC): ${msg}. If this mentions a missing function, run supabase/scripts/apply_insurance_rc_fetch_ui_rpcs.sql in SQL Editor.`,
+      )
+      setRcStatusLoaded(true)
+      return {}
+>>>>>>> 4aa3a52 (Changes by Vinod)
     }
   }, [campaigns])
 
