@@ -2,6 +2,11 @@
 
 Tracks documentation-sync updates for business logic, architecture, and access control.
 
+## 2026-07-23
+
+- Added **Insurance Renewal Telecalling** call-card reference: `docs/web/modules/insurance-renewal-telecalling/reference/CALL_CARD_WORKFLOW_AND_IMPLEMENTATION_STATUS.md` — end-to-end telecaller workflow, every disposition/outreach button, working vs broken (including `no_answer` DB persistence bug, `get_next` vs RPC, refresh eligibility vs `effective_due_date`), My Queue/summary/counter gaps, ops SQL for stuck assignments, and prioritized remediation plan.
+- Updated `INSURANCE_RENEWAL_TELECALLING_MODULE_FLOW_AND_BUSINESS_LOGIC.md` with pointers and implementation notes where edge code diverges from target design.
+
 ## 2026-07-22 (2)
 
 - Insurance Renewal Telecalling now falls back to a sale-date-derived due date wherever `all_service_data.last_insurance_expiry_date` is null — which is the large majority of records (715 of 55,276 have it populated). Insurance renews annually off the vehicle's sale-date anniversary (sold 24-Jan-2025 → due 23-Jan-2026 → 23-Jan-2027, ...), not a fixed calendar date; the fallback correctly rolls forward across multiple years, not just the first renewal.

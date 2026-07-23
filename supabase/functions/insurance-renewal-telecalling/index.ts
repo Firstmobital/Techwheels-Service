@@ -24,6 +24,7 @@ import {
   handleRcFetchEnqueue,
   RC_FETCH_PG_CRON_SECRET,
 } from "./rc_fetch_worker.ts";
+import { corsHeaders } from "../_shared/cors.ts";
 type SupabaseClient = ReturnType<typeof createClient>;
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
@@ -35,7 +36,7 @@ const CRON_SECRET = "techwheels_cron_2026";
 function json(data: unknown, status = 200) {
   return new Response(JSON.stringify(data), {
     status,
-    headers: { "Content-Type": "application/json" },
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
   });
 }
 
@@ -150,6 +151,10 @@ function calculatePriorityScore(
 // ─── Main Handler ──────────────────────────────────────────────────────────
 
 Deno.serve(async (req) => {
+  if (req.method === "OPTIONS") {
+    return new Response("ok", { headers: corsHeaders });
+  }
+
   if (req.method !== "POST") {
     return errorResponse("Only POST allowed", 405);
   }

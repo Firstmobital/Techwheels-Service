@@ -1,9 +1,12 @@
 # OPS-INSURANCE-RENEWAL-001: Insurance Renewal Telecalling Module Flow and Business Logic
 
-Last Updated: 2026-07-22
+Last Updated: 2026-07-23
 Owner: Operations Team + Platform Team
 Scope: Web route `/insurance-renewal-telecalling`, dedicated Supabase edge function
 Status: Active operations authority for module behavior
+
+**Call card (telecaller buttons, WA/drip/link, working vs broken):**  
+`CALL_CARD_WORKFLOW_AND_IMPLEMENTATION_STATUS.md` in this folder — use that doc for day-to-day ops and engineering gaps. Sections §6.5, §7–§8 below describe **target design**; implementation may diverge (see companion doc §6).
 
 ---
 
@@ -27,6 +30,7 @@ Application sources:
 1. `src/pages/InsuranceRenewalTelecallingPage.tsx`
 2. `supabase/functions/insurance-renewal-telecalling/index.ts`
 3. `src/App.tsx` (web route and module access gate)
+4. `CALL_CARD_WORKFLOW_AND_IMPLEMENTATION_STATUS.md` (telecaller workflow + implementation status)
 
 Database sources:
 1. `supabase/migrations/20260722081242_insurance_renewal_telecalling_module.sql`
@@ -130,10 +134,13 @@ SELECT id, chassis_no, contact_phones, vehicle_sale_date, last_insurance_expiry_
 FROM all_service_data
 ```
 
-All eligibility queries (`create_campaign`, `refresh_campaign`,
-`preview_campaign`) and the allotment RPC's ordering read from
-`insurance_renewal_leads.effective_due_date`, not from `all_service_data`
-directly. The web page independently mirrors the same day/month-rollforward
+The **allotment RPC** and **view** use `insurance_renewal_leads.effective_due_date`.
+**Implementation note (2026-07-23):** Edge `create_campaign`, `refresh_campaign`,
+and `preview_campaign` still filter `all_service_data.last_insurance_expiry_date`
+in code — not the view — which can shrink the callable pool vs display-only
+sale-date estimates on the call card. See companion doc §6.
+
+The web page independently mirrors the same day/month-rollforward
 logic client-side (`computeInsuranceDueDate` in
 `InsuranceRenewalTelecallingPage.tsx`) purely for display — e.g. showing
 "Insurance Due (estimated)" and a "📅 Estimated from sale date" badge on the
@@ -165,9 +172,12 @@ correctness always comes from the server-side view, not the client mirror.
 
 Function: `insurance_renewal_get_next_assignment(p_campaign_id, p_user_email)`
 
-Unlike the existing `telecalling` edge function (which does a plain
-select-then-update despite an idle `SKIP LOCKED` RPC sitting unused), this
-module's `get_next` action calls this RPC directly:
+**Implementation note (2026-07-23):** The edge function `get_next` action currently
+does **not** call this RPC; it selects `pending` rows in JS and sets
+`in_progress`. The RPC remains in the database and sets status `assigned` with
+`assigned_to = email`. See `CALL_CARD_WORKFLOW_AND_IMPLEMENTATION_STATUS.md` §6.
+
+Target behavior (RPC — still the intended concurrency-safe picker):
 
 1. Prefer `pending` rows with `retry_after <= today` (no-answer retries),
    ordered by `retry_after` then soonest `insurance_renewal_leads.effective_due_date`
@@ -205,6 +215,8 @@ Endpoint: Supabase edge function `insurance-renewal-telecalling`
 5. `renewed_via_us` does not auto-create any downstream record — status + notes
    (+ optional premium/company) only, per current scope.
 6. Campaign counters are derived from assignment statuses after each update.
+   **Implementation note (2026-07-23):** Counters are recalculated on
+   create/refresh today, not on every `update_status` — see companion doc §5–§6.
 
 ---
 
@@ -242,3 +254,7 @@ rg -n "insurance_renewal_|InsuranceRenewalTelecalling|OPS-INSURANCE-RENEWAL-001"
    `process_rc_fetch_jobs`. Only campaign assignment leads with
    `last_insurance_expiry_date` null or older than 365 days **and no prior attempt
    row** are called; refresh/new assignments become eligible again automatically.
+4. 2026-07-23: Added **CALL_CARD_WORKFLOW_AND_IMPLEMENTATION_STATUS.md** —
+   telecaller call-card workflow, per-button business logic, working/broken matrix,
+   ops SQL for stuck `assigned`/`in_progress`, and engineering remediation plan.
+   Marked §6.1/§6.5/§7–§8 implementation gaps vs edge function in this file.
