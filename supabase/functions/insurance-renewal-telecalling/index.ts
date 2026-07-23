@@ -893,14 +893,31 @@ async function handleAdminStats(supabase: SupabaseClient, role: string, body: Re
   const { data, error } = await query;
   if (error) return errorResponse(error.message);
 
-  // Group by telecaller
+  const TERMINAL_COMPLETED = [
+    "renewed_via_us",
+    "renewed_elsewhere",
+    "not_interested",
+    "wrong_number",
+    "not_reachable",
+    "already_renewed_unknown",
+  ];
+
   const statsMap = new Map<string, Record<string, unknown>>();
   for (const row of data || []) {
-    const key = row.assigned_to || "unassigned";
+    // Skip idle pool rows (campaign counters still include these)
+    if (!row.assigned_to && (row.status === "pending" || row.status === "out_of_window")) {
+      continue;
+    }
+    // Include in-progress / completed even if assignee was cleared (legacy rows)
+    if (!row.assigned_to && row.status !== "pending" && row.status !== "out_of_window") {
+      // bucket unattributed dispositions so Performance is not empty
+    }
+
+    const key = row.assigned_to || `_unassigned_${row.status}`;
     if (!statsMap.has(key)) {
       statsMap.set(key, {
         telecaller_id: row.assigned_to,
-        telecaller_name: row.assigned_to_name || "Unknown",
+        telecaller_name: row.assigned_to_name || (row.assigned_to ? "Unknown" : "Unassigned"),
         calls_made: 0,
         calls_connected: 0,
         renewed_via_us: 0,
@@ -909,14 +926,20 @@ async function handleAdminStats(supabase: SupabaseClient, role: string, body: Re
         no_answer: 0,
         not_interested: 0,
         wrong_number: 0,
+        not_reachable: 0,
+        already_renewed_unknown: 0,
         in_progress: 0,
+        completed_total: 0,
         premium_collected: 0,
       });
     }
     const stats = statsMap.get(key)!;
     stats.calls_made = (stats.calls_made as number) + (row.call_count || 0);
-    if (["renewed_via_us", "renewed_elsewhere", "callback_later", "not_interested", "wrong_number", "not_reachable"].includes(row.status)) {
+    if (["renewed_via_us", "renewed_elsewhere", "callback_later", "not_interested", "wrong_number", "not_reachable", "already_renewed_unknown"].includes(row.status)) {
       stats.calls_connected = (stats.calls_connected as number) + 1;
+    }
+    if (TERMINAL_COMPLETED.includes(row.status)) {
+      stats.completed_total = (stats.completed_total as number) + 1;
     }
     if (row.status === "renewed_via_us") {
       stats.renewed_via_us = (stats.renewed_via_us as number) + 1;
@@ -927,10 +950,19 @@ async function handleAdminStats(supabase: SupabaseClient, role: string, body: Re
     if (row.status === "no_answer") stats.no_answer = (stats.no_answer as number) + 1;
     if (row.status === "not_interested") stats.not_interested = (stats.not_interested as number) + 1;
     if (row.status === "wrong_number") stats.wrong_number = (stats.wrong_number as number) + 1;
+    if (row.status === "not_reachable") stats.not_reachable = (stats.not_reachable as number) + 1;
+    if (row.status === "already_renewed_unknown") stats.already_renewed_unknown = (stats.already_renewed_unknown as number) + 1;
     if (row.status === "in_progress") stats.in_progress = (stats.in_progress as number) + 1;
   }
 
-  const agent_stats = Array.from(statsMap.values());
+  const agent_stats = Array.from(statsMap.values()).filter((s) => {
+    const activity = (s.calls_made as number) + (s.in_progress as number) + (s.completed_total as number) +
+      (s.callback_later as number) + (s.no_answer as number);
+    return activity > 0 || s.telecaller_id;
+  });
+
+  agent_stats.sort((a, b) => (b.calls_made as number) - (a.calls_made as number));
+
   return json({ success: true, agent_stats });
 }
 

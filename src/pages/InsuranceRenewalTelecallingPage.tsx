@@ -1208,7 +1208,11 @@ function AdminDashboard({ campaigns, activeCampaign, onRefresh }: { campaigns: C
     try {
       const d = await callEdge('admin_stats', { campaign_id: activeCampaign?.id, date_from: statsDateFrom || undefined, date_to: statsDateTo || undefined })
       setAgentStats(d.agent_stats || [])
-    } catch (e) { console.error(e) } finally { setLoadingTab(false) }
+    } catch (e) {
+      console.error(e)
+      setError((e as Error).message)
+      setAgentStats([])
+    } finally { setLoadingTab(false) }
   }
 
   async function fetchRenewed() {
@@ -1707,7 +1711,7 @@ function AdminDashboard({ campaigns, activeCampaign, onRefresh }: { campaigns: C
                   </thead>
                   <tbody className="divide-y divide-gray-100">
                     {agentStats.length === 0 ? (
-                      <tr><td colSpan={11} className="px-4 py-8 text-center text-gray-400">{statsDateFrom || statsDateTo ? 'No call activity in this date range' : 'No call activity yet for this campaign'}</td></tr>
+                      <tr><td colSpan={11} className="px-4 py-8 text-center text-gray-400">{statsDateFrom || statsDateTo ? 'No call activity in this date range (try Clear for all time).' : 'No telecaller activity yet — counts appear after Get next / dispositions (idle pending pool is excluded).'}</td></tr>
                     ) : agentStats.map((a: {
                       telecaller_id?: string
                       telecaller_name?: string
