@@ -481,7 +481,14 @@ function TelecallerDashboard({ activeCampaign }: { activeCampaign: Campaign | nu
         setError(res.error || res.message || 'RC fetch failed')
       }
     } catch (err) {
-      setError((err as Error).message)
+      const msg = (err as Error).message
+      if (msg === 'Failed to fetch' || /network/i.test(msg)) {
+        setError(
+          'Network blocked the fetch response. In DevTools → Network, the request must be POST to …/functions/v1/insurance-renewal-telecalling (action rc_fetch_single). If you see rest/v1/rpc/fetch_insurance_details, redeploy the latest web app on Vercel and hard-refresh (Cmd+Shift+R).',
+        )
+      } else {
+        setError(msg)
+      }
     } finally {
       setRcFetchBusy(false)
     }
