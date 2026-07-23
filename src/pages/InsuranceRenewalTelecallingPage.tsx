@@ -156,6 +156,10 @@ function insuranceCustomerKey(c: Customer): string {
   ].join('|')
 }
 
+function sleepMs(ms: number) {
+  return new Promise<void>(resolve => { setTimeout(resolve, ms) })
+}
+
 function formatDate(d: string | null): string {
   if (!d) return '—'
   try { return new Date(d).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) } catch { return d }
@@ -422,39 +426,48 @@ function TelecallerDashboard({ activeCampaign }: { activeCampaign: Campaign | nu
   }
 
   const applyAssignmentCustomer = (assignmentId: number, customer: Partial<Customer>) => {
+    const patch = (base: Customer): Customer => {
+      const next = { ...base }
+      for (const [k, v] of Object.entries(customer) as [keyof Customer, Customer[keyof Customer]][]) {
+        if (v !== null && v !== undefined && v !== '') {
+          (next as Record<string, unknown>)[k as string] = v
+        }
+      }
+      return next
+    }
     setQueue(prev => prev.map(a => (
-      a.id === assignmentId ? { ...a, customer: { ...a.customer, ...customer } } : a
+      a.id === assignmentId ? { ...a, customer: patch(a.customer) } : a
     )))
     setCurrentAssignment(prev => (
       prev?.id === assignmentId
-        ? { ...prev, customer: { ...prev.customer, ...customer } }
+        ? { ...prev, customer: patch(prev.customer) }
         : prev
     ))
     setCustomerUiEpoch(e => e + 1)
   }
 
-  const reloadAssignmentAfterRcFetch = async (assignment: Assignment, fallbackCustomer?: Partial<Customer>) => {
-    try {
-      const data = await callEdge('my_queue', { campaign_id: assignment.campaign_id })
-      const list: Assignment[] = data.queue || []
-      setQueue(list)
-      const fresh = list.find(a => a.id === assignment.id)
-      if (fresh) {
-        setCurrentAssignment(prev => (prev?.id === assignment.id ? { ...fresh } : prev))
-        setCustomerUiEpoch(e => e + 1)
-        return fresh
+  /** Poll DB until insurance fields change (covers trigger/sync delay after IDSPay). */
+  const syncCustomerToUiAfterFetch = async (assignment: Assignment, baselineKey: string) => {
+    for (let i = 0; i < 12; i++) {
+      if (i > 0) await sleepMs(400)
+      try {
+        const snap = await callEdge('assignment_customer', { assignment_id: assignment.id })
+        if (!snap.customer) continue
+        applyAssignmentCustomer(assignment.id, snap.customer)
+        const key = insuranceCustomerKey({ ...assignment.customer, ...snap.customer })
+        if (key !== baselineKey) return true
+      } catch (e) {
+        console.error('assignment_customer poll', e)
       }
-    } catch (e) {
-      console.error('Reload assignment after RC fetch:', e)
     }
-    if (fallbackCustomer) applyAssignmentCustomer(assignment.id, fallbackCustomer)
-    return null
+    return false
   }
 
   const handleRcFetchSingle = async (assignment: Assignment) => {
     setRcFetchBusy(true)
     setRcFetchMessage(null)
     setError(null)
+    const baselineKey = insuranceCustomerKey(assignment.customer)
     try {
       const res = await callEdgeRcFetchSingle({
         campaign_id: assignment.campaign_id,
@@ -462,11 +475,10 @@ function TelecallerDashboard({ activeCampaign }: { activeCampaign: Campaign | nu
       })
       if (res.customer) applyAssignmentCustomer(assignment.id, res.customer)
       if (res.success && res.outcome === 'success') {
-        await reloadAssignmentAfterRcFetch(assignment, res.customer)
+        await syncCustomerToUiAfterFetch(assignment, baselineKey)
         setRcFetchMessage(res.message || 'RC fetch completed.')
         setTimeout(() => setRcFetchMessage(null), 5000)
       } else if (res.outcome === 'skipped_fresh') {
-        await reloadAssignmentAfterRcFetch(assignment, res.customer)
         setRcFetchMessage(res.message || 'Insurance already fresh — no API call.')
         setTimeout(() => setRcFetchMessage(null), 5000)
       } else {

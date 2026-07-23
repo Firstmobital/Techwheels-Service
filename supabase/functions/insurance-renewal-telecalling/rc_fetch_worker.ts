@@ -118,6 +118,62 @@ function customerPayloadFromRow(v: Record<string, unknown>) {
   };
 }
 
+function insuranceFieldsFingerprint(v: Record<string, unknown>): string {
+  return `${v.last_insurance_expiry_date ?? ""}|${v.last_insurance_comapny ?? ""}|${v.last_insurance_policy_number ?? ""}`;
+}
+
+async function loadCustomerRow(serviceClient: SupabaseClient, customerId: number) {
+  const { data, error } = await serviceClient
+    .from("all_service_data")
+    .select(RC_FETCH_CUSTOMER_SELECT)
+    .eq("id", customerId)
+    .single();
+  if (error) throw new Error(error.message);
+  return data as Record<string, unknown>;
+}
+
+/** Re-read all_service_data until IDSPay trigger sync shows new insurance fields (or timeout). */
+async function loadCustomerAfterRcSync(
+  serviceClient: SupabaseClient,
+  customerId: number,
+  beforeFingerprint: string,
+  maxAttempts = 12,
+  delayMs = 350,
+) {
+  let last = await loadCustomerRow(serviceClient, customerId);
+  for (let i = 0; i < maxAttempts; i++) {
+    const fp = insuranceFieldsFingerprint(last);
+    const hasInsurance = Boolean(
+      last.last_insurance_comapny || last.last_insurance_policy_number || last.last_insurance_expiry_date,
+    );
+    if (fp !== beforeFingerprint && hasInsurance) return last;
+    if (i < maxAttempts - 1) {
+      await sleep(delayMs);
+      last = await loadCustomerRow(serviceClient, customerId);
+    }
+  }
+  return last;
+}
+
+/** Telecaller UI: fresh customer row for an assignment (no IDSPay call). */
+export async function handleAssignmentCustomerRefresh(
+  serviceClient: SupabaseClient,
+  body: Record<string, unknown>,
+) {
+  const assignmentId = Number(body.assignment_id);
+  if (!assignmentId) return json({ success: false, error: "Missing assignment_id" }, 400);
+
+  const { data: asgn, error: aErr } = await serviceClient
+    .from("insurance_renewal_assignments")
+    .select("id, customer_id")
+    .eq("id", assignmentId)
+    .single();
+  if (aErr || !asgn) return json({ success: false, error: "Assignment not found" }, 404);
+
+  const row = await loadCustomerRow(serviceClient, Number(asgn.customer_id));
+  return json({ success: true, customer: customerPayloadFromRow(row) });
+}
+
 /** One lead: same IDSPay path as bulk RC fetch (invoke-rc-provider → rto_idspay → all_service_data trigger). */
 export async function handleRcFetchSingleRecord(
   serviceClient: SupabaseClient,
@@ -151,6 +207,7 @@ export async function handleRcFetchSingleRecord(
 
   const cutoff = staleInsuranceCutoffDate();
   const vehicle = row as Record<string, unknown>;
+  const beforeFp = insuranceFieldsFingerprint(vehicle);
 
   if (!isStaleOrMissingInsurance(vehicle.last_insurance_expiry_date as string | null, cutoff)) {
     await recordRcFetchAttempt(serviceClient, {
@@ -192,12 +249,7 @@ export async function handleRcFetchSingleRecord(
       outcome: "success",
       from_cache: rc.fromCache ?? false,
     });
-    const { data: refreshed } = await serviceClient
-      .from("all_service_data")
-      .select(RC_FETCH_CUSTOMER_SELECT)
-      .eq("id", customerId)
-      .single();
-    const updated = (refreshed ?? row) as Record<string, unknown>;
+    const updated = await loadCustomerAfterRcSync(serviceClient, customerId, beforeFp);
     return json({
       success: true,
       outcome: "success",
