@@ -121,6 +121,41 @@ async function callEdge(action: string, body: Record<string, unknown> = {}): Pro
   return data
 }
 
+/** RC fetch may return success:false with a body; never throw before caller reads customer / outcome. */
+async function callEdgeRcFetchSingle(body: Record<string, unknown>): Promise<any> {
+  const { data: session } = await supabase.auth.getSession()
+  const token = session?.session?.access_token
+  if (!token) throw new Error('Not authenticated')
+  const res = await fetch(EDGE_URL, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+      apikey: supabaseAnonKey,
+    },
+    body: JSON.stringify({ action: 'rc_fetch_single', ...body }),
+  })
+  const text = await res.text()
+  let data: any
+  try {
+    data = text ? JSON.parse(text) : {}
+  } catch {
+    throw new Error(`Edge returned non-JSON (HTTP ${res.status}).`)
+  }
+  if (!res.ok && !data.customer) {
+    throw new Error(String(data.error || `Edge error (HTTP ${res.status})`))
+  }
+  return data
+}
+
+function insuranceCustomerKey(c: Customer): string {
+  return [
+    c.last_insurance_expiry_date ?? '',
+    c.last_insurance_comapny ?? '',
+    c.last_insurance_policy_number ?? '',
+  ].join('|')
+}
+
 function formatDate(d: string | null): string {
   if (!d) return '—'
   try { return new Date(d).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) } catch { return d }
@@ -298,6 +333,7 @@ function TelecallerDashboard({ activeCampaign }: { activeCampaign: Campaign | nu
   const [editBusy, setEditBusy] = useState(false)
   const [rcFetchBusy, setRcFetchBusy] = useState(false)
   const [rcFetchMessage, setRcFetchMessage] = useState<string | null>(null)
+  const [customerUiEpoch, setCustomerUiEpoch] = useState(0)
 
   const refreshQueue = useCallback(async () => {
     if (!activeCampaign) return
@@ -385,10 +421,34 @@ function TelecallerDashboard({ activeCampaign }: { activeCampaign: Campaign | nu
     catch (err) { console.error('WA log error:', err) }
   }
 
-  const mergeCustomerOntoAssignment = (assignment: Assignment, customer: Partial<Customer>) => {
-    const merged = { ...assignment, customer: { ...assignment.customer, ...customer } }
-    setCurrentAssignment(prev => (prev?.id === assignment.id ? merged : prev))
-    setQueue(prev => prev.map(a => (a.id === assignment.id ? merged : a)))
+  const applyAssignmentCustomer = (assignmentId: number, customer: Partial<Customer>) => {
+    setQueue(prev => prev.map(a => (
+      a.id === assignmentId ? { ...a, customer: { ...a.customer, ...customer } } : a
+    )))
+    setCurrentAssignment(prev => (
+      prev?.id === assignmentId
+        ? { ...prev, customer: { ...prev.customer, ...customer } }
+        : prev
+    ))
+    setCustomerUiEpoch(e => e + 1)
+  }
+
+  const reloadAssignmentAfterRcFetch = async (assignment: Assignment, fallbackCustomer?: Partial<Customer>) => {
+    try {
+      const data = await callEdge('my_queue', { campaign_id: assignment.campaign_id })
+      const list: Assignment[] = data.queue || []
+      setQueue(list)
+      const fresh = list.find(a => a.id === assignment.id)
+      if (fresh) {
+        setCurrentAssignment(prev => (prev?.id === assignment.id ? { ...fresh } : prev))
+        setCustomerUiEpoch(e => e + 1)
+        return fresh
+      }
+    } catch (e) {
+      console.error('Reload assignment after RC fetch:', e)
+    }
+    if (fallbackCustomer) applyAssignmentCustomer(assignment.id, fallbackCustomer)
+    return null
   }
 
   const handleRcFetchSingle = async (assignment: Assignment) => {
@@ -396,15 +456,17 @@ function TelecallerDashboard({ activeCampaign }: { activeCampaign: Campaign | nu
     setRcFetchMessage(null)
     setError(null)
     try {
-      const res = await callEdge('rc_fetch_single', {
+      const res = await callEdgeRcFetchSingle({
         campaign_id: assignment.campaign_id,
         assignment_id: assignment.id,
       })
-      if (res.customer) mergeCustomerOntoAssignment(assignment, res.customer)
+      if (res.customer) applyAssignmentCustomer(assignment.id, res.customer)
       if (res.success && res.outcome === 'success') {
+        await reloadAssignmentAfterRcFetch(assignment, res.customer)
         setRcFetchMessage(res.message || 'RC fetch completed.')
         setTimeout(() => setRcFetchMessage(null), 5000)
       } else if (res.outcome === 'skipped_fresh') {
+        await reloadAssignmentAfterRcFetch(assignment, res.customer)
         setRcFetchMessage(res.message || 'Insurance already fresh — no API call.')
         setTimeout(() => setRcFetchMessage(null), 5000)
       } else {
@@ -449,6 +511,7 @@ function TelecallerDashboard({ activeCampaign }: { activeCampaign: Campaign | nu
           </div>
         ) : (
           <CallCard
+            key={`call-${currentAssignment.id}-${customerUiEpoch}-${insuranceCustomerKey(currentAssignment.customer)}`}
             assignment={currentAssignment}
             busy={busy}
             notes={notes} setNotes={setNotes}
@@ -520,6 +583,7 @@ function TelecallerDashboard({ activeCampaign }: { activeCampaign: Campaign | nu
               {editingId === asgn.id && (
                 <div className="mt-3 space-y-3">
                   <CallCard
+                    key={`queue-${asgn.id}-${customerUiEpoch}-${insuranceCustomerKey(asgn.customer)}`}
                     assignment={asgn}
                     busy={busy}
                     notes={notes} setNotes={setNotes}
