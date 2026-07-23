@@ -247,22 +247,41 @@ export async function handleRcFetchSingleRecord(
 
   const rc = await invokeRcProviderForReg(supabaseUrl, serviceRoleKey, reg);
   if (rc.ok) {
-    await recordRcFetchAttempt(serviceClient, {
-      campaign_id: campaignId,
-      customer_id: customerId,
-      job_id: null,
-      outcome: "success",
-      from_cache: rc.fromCache ?? false,
-    });
-    const updated = await loadCustomerAfterRcSync(serviceClient, customerId, beforeFp);
+    if (rc.insurance) {
+      await syncAllServiceDataInsuranceFromRc(serviceClient, vehicle, reg, rc.insurance);
+    }
+    try {
+      await recordRcFetchAttempt(serviceClient, {
+        campaign_id: campaignId,
+        customer_id: customerId,
+        job_id: null,
+        outcome: "success",
+        from_cache: rc.fromCache ?? false,
+      });
+    } catch (recErr) {
+      console.warn("recordRcFetchAttempt:", recErr);
+    }
+    let updated = await loadCustomerRow(serviceClient, customerId);
+    const ins = rc.insurance;
+    const syncedOnRow = Boolean(
+      String(updated.last_insurance_comapny ?? "").trim() || String(updated.last_insurance_policy_number ?? "").trim(),
+    );
+    if (!syncedOnRow && ins?.company) {
+      updated = await loadCustomerAfterRcSync(serviceClient, customerId, beforeFp, 10, 350);
+    }
+    const stillBlank = !String(updated.last_insurance_comapny ?? "").trim() &&
+      !String(updated.last_insurance_policy_number ?? "").trim();
     return json({
       success: true,
       outcome: "success",
       from_cache: rc.fromCache ?? false,
-      message: rc.fromCache
+      message: stillBlank
+        ? "IDSPay returned but insurer fields are empty on this RC record — company/policy not in provider response."
+        : rc.fromCache
         ? "Insurance updated from RC cache (IDSPay)."
         : "Insurance fetched from IDSPay and synced to this customer.",
       customer: customerPayloadFromRow(updated),
+      idspay_insurance: ins ?? null,
     });
   }
 
@@ -318,11 +337,54 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+function insuranceFieldsFromInvokePayload(payload: Record<string, unknown>) {
+  const data = asObject(payload.data) ?? asObject(payload) ?? {};
+  const row = asObject(payload.rto_idspay) ?? data;
+  const pick = (key: string) => {
+    const v = row[key] ?? data[key];
+    if (v === null || v === undefined) return undefined;
+    const s = String(v).trim();
+    return s || undefined;
+  };
+  return {
+    company: pick("vehicle_insurance_company_name"),
+    upto: pick("vehicle_insurance_upto"),
+    policy: pick("vehicle_insurance_policy_number"),
+    chassis: pick("chassis"),
+  };
+}
+
+function asObject(value: unknown): Record<string, unknown> | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  return value as Record<string, unknown>;
+}
+
+async function syncAllServiceDataInsuranceFromRc(
+  serviceClient: SupabaseClient,
+  vehicle: Record<string, unknown>,
+  regNo: string,
+  ins: { company?: string; upto?: string; policy?: string; chassis?: string },
+) {
+  const { error } = await serviceClient.rpc("refresh_all_service_data_from_rto_idspay", {
+    p_chassis_key: ins.chassis ?? (vehicle.chassis_no as string | null) ?? null,
+    p_registration_key: regNo,
+    p_insurance_company: ins.company ?? null,
+    p_insurance_upto: ins.upto ?? null,
+    p_insurance_policy_number: ins.policy ?? null,
+  });
+  if (error) console.warn("refresh_all_service_data_from_rto_idspay:", error.message);
+}
+
 async function invokeRcProviderForReg(
   supabaseUrl: string,
   serviceRoleKey: string,
   regNo: string,
-): Promise<{ ok: boolean; fromCache?: boolean; error?: string }> {
+): Promise<{
+  ok: boolean;
+  fromCache?: boolean;
+  error?: string;
+  insurance?: { company?: string; upto?: string; policy?: string; chassis?: string };
+}> {
   try {
     const res = await fetch(`${supabaseUrl}/functions/v1/invoke-rc-provider`, {
       method: "POST",
@@ -334,14 +396,18 @@ async function invokeRcProviderForReg(
       body: JSON.stringify({ reg_no: regNo }),
       signal: AbortSignal.timeout(28000),
     });
-    const payload = await res.json().catch(() => ({}));
+    const payload = (await res.json().catch(() => ({}))) as Record<string, unknown>;
     if (!res.ok || payload.error) {
       return { ok: false, error: String(payload.error ?? payload.message ?? `HTTP ${res.status}`) };
     }
     if (payload.success === false) {
       return { ok: false, error: String(payload.error ?? "RC lookup failed") };
     }
-    return { ok: true, fromCache: Boolean(payload.fromCache) };
+    return {
+      ok: true,
+      fromCache: Boolean(payload.fromCache),
+      insurance: insuranceFieldsFromInvokePayload(payload),
+    };
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : String(e) };
   }

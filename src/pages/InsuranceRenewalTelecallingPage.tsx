@@ -138,7 +138,7 @@ async function callEdgeRcFetchSingle(body: Record<string, unknown>): Promise<any
         apikey: supabaseAnonKey,
       },
       body: JSON.stringify({ action: 'rc_fetch_single', ...body }),
-      signal: AbortSignal.timeout(120000),
+      signal: AbortSignal.timeout(90000),
     })
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e)
@@ -487,19 +487,15 @@ function TelecallerDashboard({ activeCampaign }: { activeCampaign: Campaign | nu
     setRcFetchMessage('Contacting IDSPay…')
     setError(null)
     const baselineKey = insuranceCustomerKey(assignment.customer)
+    let res: Awaited<ReturnType<typeof callEdgeRcFetchSingle>> | undefined
     try {
-      const res = await callEdgeRcFetchSingle({
+      res = await callEdgeRcFetchSingle({
         campaign_id: assignment.campaign_id,
         assignment_id: assignment.id,
       })
       if (res.customer) applyAssignmentCustomer(assignment.id, res.customer as Partial<Customer>)
       if (res.success && res.outcome === 'success') {
-        const synced = await syncCustomerToUiAfterFetch(assignment, baselineKey)
-        setRcFetchMessage(
-          (res.message || 'RC fetch completed.') +
-            (synced ? ' Card updated.' : ' DB updated slowly — card refreshed from latest read.'),
-        )
-        setTimeout(() => setRcFetchMessage(null), 10000)
+        setRcFetchMessage(res.message || 'RC fetch completed.')
       } else if (res.outcome === 'skipped_fresh') {
         const c = res.customer as Customer | undefined
         const stillBlank = !String(c?.last_insurance_comapny ?? '').trim() && !String(c?.last_insurance_policy_number ?? '').trim()
@@ -521,13 +517,21 @@ function TelecallerDashboard({ activeCampaign }: { activeCampaign: Campaign | nu
       const msg = (err as Error).message
       if (msg === 'Failed to fetch' || /network/i.test(msg)) {
         setError(
-          'Network blocked the fetch response. In DevTools → Network, the request must be POST to …/functions/v1/insurance-renewal-telecalling (action rc_fetch_single). If you see rest/v1/rpc/fetch_insurance_details, redeploy the latest web app on Vercel and hard-refresh (Cmd+Shift+R).',
+          'Network blocked or timed out. Open DevTools → Network → insurance-renewal-telecalling (rc_fetch_single). Deploy latest edge + hard-refresh.',
         )
       } else {
         setError(msg)
       }
     } finally {
       setRcFetchBusy(false)
+    }
+
+    if (res?.success && res.outcome === 'success') {
+      const synced = await syncCustomerToUiAfterFetch(assignment, baselineKey)
+      if (synced) {
+        setRcFetchMessage((res.message || 'RC fetch completed.') + ' Card updated.')
+      }
+      setTimeout(() => setRcFetchMessage(null), 10000)
     }
   }
 
