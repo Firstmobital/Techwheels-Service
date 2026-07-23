@@ -803,8 +803,6 @@ function AdminDashboard({ campaigns, activeCampaign, onRefresh }: { campaigns: C
     } | null
   }
 
-<<<<<<< HEAD
-=======
   function isMissingSupabaseRpc(error: { code?: string; message?: string } | null): boolean {
     if (!error) return false
     if (error.code === 'PGRST202') return true
@@ -854,7 +852,6 @@ function AdminDashboard({ campaigns, activeCampaign, onRefresh }: { campaigns: C
     }
   }
 
->>>>>>> 4aa3a52 (Changes by Vinod)
   const loadRcStatus = useCallback(async (): Promise<Record<string, any>> => {
     if (campaigns.length === 0) {
       setRcStatusByCampaign({})
@@ -863,19 +860,16 @@ function AdminDashboard({ campaigns, activeCampaign, onRefresh }: { campaigns: C
       return {}
     }
     try {
-      const d = await callEdge('rc_fetch_status', { campaign_ids: campaigns.map(c => c.id) })
-      const map = d.campaigns || {}
+      const map: Record<string, RcCampaignStatus> = {}
+      for (const c of campaigns) {
+        map[String(c.id)] = await loadRcStatusForCampaign(c.id)
+      }
       setRcStatusByCampaign(map)
       setRcStatusLoadError(null)
       setRcStatusLoaded(true)
       return map
     } catch (e) {
       console.error('RC status load failed', e)
-<<<<<<< HEAD
-      setRcStatusLoadError((e as Error).message)
-      setRcStatusLoaded(false)
-      throw e
-=======
       const msg = (e as Error).message
       setRcStatusLoadError(
         msg.includes('Supabase Edge')
@@ -884,16 +878,16 @@ function AdminDashboard({ campaigns, activeCampaign, onRefresh }: { campaigns: C
       )
       setRcStatusLoaded(true)
       return {}
->>>>>>> 4aa3a52 (Changes by Vinod)
     }
   }, [campaigns])
 
   useEffect(() => {
     if (activeAdminTab !== 'campaigns') return
-    loadRcStatus()
-    const t = setInterval(loadRcStatus, 15000)
+    loadRcStatus().catch(() => {})
+    const ms = rcStatusLoadError ? 60000 : 20000
+    const t = setInterval(() => { loadRcStatus().catch(() => {}) }, ms)
     return () => clearInterval(t)
-  }, [activeAdminTab, loadRcStatus])
+  }, [activeAdminTab, loadRcStatus, rcStatusLoadError])
 
   // Fetch distinct dealers for dropdown filters (public endpoint - no auth needed)
   useEffect(() => {
@@ -1082,8 +1076,7 @@ function AdminDashboard({ campaigns, activeCampaign, onRefresh }: { campaigns: C
     await loadRcStatus().catch(() => ({}))
     let st: RcCampaignStatus = rcStatusByCampaign[String(campaign.id)] || {}
     try {
-      const fresh = await callEdge('rc_fetch_status', { campaign_ids: [campaign.id] })
-      st = fresh.campaigns?.[String(campaign.id)] || st
+      st = await loadRcStatusForCampaign(campaign.id)
     } catch {
       /* use cached st */
     }
