@@ -326,12 +326,13 @@ function TelecallerDashboard({ activeCampaign }: { activeCampaign: Campaign | nu
     finally { setBusy(false) }
   }
 
-  const handleUpdateStatus = async (status: CallStatus) => {
-    if (!currentAssignment || !activeCampaign) return
+  const handleUpdateStatus = async (status: CallStatus, fromQueue?: Assignment) => {
+    const target = fromQueue ?? currentAssignment
+    if (!target || !activeCampaign) return
     setBusy(true); setError(null)
     try {
       const result = await callEdge('update_status', {
-        assignment_id: currentAssignment.id,
+        assignment_id: target.id,
         campaign_id: activeCampaign.id,
         status,
         call_notes: notes || undefined,
@@ -343,10 +344,29 @@ function TelecallerDashboard({ activeCampaign }: { activeCampaign: Campaign | nu
         setError('📵 No answer — lead will return to queue tomorrow (attempt ' + (result?.no_answer_count ?? '') + '/3)')
         setTimeout(() => setError(null), 4000)
       }
-      setCurrentAssignment(null); resetCallForm()
+      if (fromQueue) {
+        setEditingId(null)
+      } else {
+        setCurrentAssignment(null)
+      }
+      resetCallForm()
       refreshQueue(); refreshSummary()
     } catch (err) { setError((err as Error).message) }
     finally { setBusy(false) }
+  }
+
+  const openQueueEdit = (asgn: Assignment) => {
+    setEditingId(asgn.id)
+    setEditNotes(asgn.call_notes || '')
+    setEditCallbackDate(asgn.callback_date || '')
+    setEditStatus(asgn.status)
+    setNotes(asgn.call_notes || '')
+    setCallbackDate(asgn.callback_date || '')
+    setQuotedPremium(asgn.quoted_premium != null ? String(asgn.quoted_premium) : '')
+    setRenewalCompany(asgn.renewal_company || '')
+    setShowNotes(false)
+    setShowRenewed(false)
+    setShowCallback(false)
   }
 
   const handleEditSave = async (assignmentId: number) => {
@@ -453,7 +473,7 @@ function TelecallerDashboard({ activeCampaign }: { activeCampaign: Campaign | nu
                 </div>
                 <div className="flex items-center gap-1.5 flex-shrink-0 flex-wrap justify-end">
                   <StatusBadge status={asgn.status} />
-                  <button onClick={() => { setEditingId(asgn.id); setEditNotes(asgn.call_notes || ''); setEditCallbackDate(asgn.callback_date || ''); setEditStatus(asgn.status) }} className="rounded-lg border border-gray-200 px-2.5 py-1 text-xs text-gray-500 hover:bg-gray-50">✏️ Edit</button>
+                  <button onClick={() => openQueueEdit(asgn)} className="rounded-lg border border-gray-200 px-2.5 py-1 text-xs text-gray-500 hover:bg-gray-50">✏️ Edit</button>
                   {asgn.status === 'no_answer' && asgn.customer.contact_phones && (
                     <a href={getWhatsAppLink(asgn.customer.contact_phones, buildNoPickMsg(asgn.customer))} target="_blank" rel="noreferrer" onClick={() => handleLogWA(asgn.id, 'not_picked')} className="rounded-lg border border-green-200 bg-green-50 px-2.5 py-1 text-xs text-green-700 hover:bg-green-100">💬 WA</a>
                   )}
@@ -461,7 +481,21 @@ function TelecallerDashboard({ activeCampaign }: { activeCampaign: Campaign | nu
               </div>
 
               {editingId === asgn.id && (
-                <div className="mt-3 rounded-lg border border-blue-200 bg-blue-50 p-3 space-y-3">
+                <div className="mt-3 space-y-3">
+                  <CallCard
+                    assignment={asgn}
+                    busy={busy}
+                    notes={notes} setNotes={setNotes}
+                    showNotes={showNotes} setShowNotes={setShowNotes}
+                    callbackDate={callbackDate} setCallbackDate={setCallbackDate}
+                    quotedPremium={quotedPremium} setQuotedPremium={setQuotedPremium}
+                    renewalCompany={renewalCompany} setRenewalCompany={setRenewalCompany}
+                    showRenewed={showRenewed} setShowRenewed={setShowRenewed}
+                    showCallback={showCallback} setShowCallback={setShowCallback}
+                    onUpdateStatus={status => handleUpdateStatus(status, asgn)}
+                    onLogWA={handleLogWA}
+                  />
+                <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 space-y-3">
                   <div className="text-xs font-semibold text-blue-700">Edit Assignment</div>
                   <div className="grid grid-cols-2 gap-3">
                     <div>
@@ -489,8 +523,9 @@ function TelecallerDashboard({ activeCampaign }: { activeCampaign: Campaign | nu
                   </div>
                   <div className="flex gap-2">
                     <button onClick={() => handleEditSave(asgn.id)} disabled={editBusy} className="rounded-lg bg-blue-600 px-4 py-1.5 text-sm font-medium text-white disabled:opacity-50">{editBusy ? 'Saving…' : 'Save'}</button>
-                    <button onClick={() => setEditingId(null)} className="rounded-lg border border-gray-200 px-4 py-1.5 text-sm text-gray-600 hover:bg-gray-50">Cancel</button>
+                    <button onClick={() => { setEditingId(null); resetCallForm() }} className="rounded-lg border border-gray-200 px-4 py-1.5 text-sm text-gray-600 hover:bg-gray-50">Cancel</button>
                   </div>
+                </div>
                 </div>
               )}
             </div>
