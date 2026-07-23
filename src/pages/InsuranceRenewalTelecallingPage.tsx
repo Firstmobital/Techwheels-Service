@@ -1163,7 +1163,12 @@ function AdminDashboard({ campaigns, activeCampaign, onRefresh }: { campaigns: C
     try {
       const d = await callEdge('refresh_campaign', { campaign_id: activeCampaign?.id })
       const r = (d.refreshed || [])[0]
-      if (r) setRefreshResult(`✅ Refreshed "${r.campaign_name}" — window now ${r.window}. Added ${r.added} new, retired ${r.retired_out_of_window} out-of-window, re-opened ${r.reactivated_to_pending ?? 0} to pending. Pending: ${r.pending_count}, Total: ${r.total_leads}.`)
+      if (r) {
+        const dup = r.retired_cross_campaign_duplicates
+          ? `, removed ${r.retired_cross_campaign_duplicates} duplicate lead(s) (owned by another active campaign)`
+          : ''
+        setRefreshResult(`✅ Refreshed "${r.campaign_name}" — window now ${r.window}. Added ${r.added} new, retired ${r.retired_out_of_window} out-of-window, re-opened ${r.reactivated_to_pending ?? 0} to pending${dup}. Pending: ${r.pending_count}, Total: ${r.total_leads}.`)
+      }
       else setRefreshResult('No active campaigns to refresh.')
       await onRefresh()
       await loadRcStatus()
@@ -1524,6 +1529,9 @@ function AdminDashboard({ campaigns, activeCampaign, onRefresh }: { campaigns: C
                 <div className="rounded-xl border border-blue-200 bg-blue-50 p-4">
                   <p className="text-sm font-semibold text-blue-900">Preview — <span className="text-blue-700">{previewCounts.filtered_count} customers</span></p>
                   <p className="text-xs text-blue-500 mt-1">{previewCounts.date_from} → {previewCounts.date_to} · raw match: {previewCounts.raw_count}</p>
+                  {(previewCounts.excluded_cross_campaign ?? 0) > 0 && (
+                    <p className="text-xs text-amber-700 mt-1">{previewCounts.excluded_cross_campaign} already in another active campaign — not counted.</p>
+                  )}
                 </div>
               )}
             </div>

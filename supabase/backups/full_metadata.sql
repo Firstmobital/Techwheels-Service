@@ -2,12 +2,12 @@
 -- PostgreSQL database dump
 --
 
-\restrict YWdIbWFszjFceOb4mVWhxs0ncIqIyuvk4S7nu6SnGEMwjp3wwbQcivxXSFepoiX
+\restrict A5FC9fHkpVKWbujaX81V7LDhHxg2Hm9MrE4VzR7VoK0R19MbJEdqOhqE8CBtQ2m
 
 -- Dumped from database version 17.6
 -- Dumped by pg_dump version 17.7 (Homebrew)
 
--- Started on 2026-07-23 12:18:04 IST
+-- Started on 2026-07-23 17:42:23 IST
 
 SET statement_timeout = 0;
 SET lock_timeout = 0;
@@ -4264,6 +4264,7 @@ CREATE TABLE public.all_service_data (
     updated_by_sale_at timestamp with time zone,
     updated_by_rtoids boolean,
     updated_by_rtoids_at timestamp with time zone,
+    veh_sold_dealer text,
     CONSTRAINT all_service_data_sold_dealer_chk CHECK (((sold_dealer IS NULL) OR (sold_dealer = ANY (ARRAY['Techwheels'::text, 'Others'::text]))))
 );
 
@@ -18582,8 +18583,8 @@ ALTER SEQUENCE public.temp_data_id_seq OWNED BY public.temp_data.id;
 CREATE TABLE public.temp_ex_showroom_update (
     id bigint NOT NULL,
     chassis_no text NOT NULL,
-    ex_showroom_price numeric NOT NULL,
-    created_at timestamp with time zone DEFAULT now() NOT NULL
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    sold_dealer text
 );
 
 
@@ -50980,11 +50981,11 @@ CREATE EVENT TRIGGER trg_auto_admin_bypass_policy_on_ddl ON ddl_command_end
    EXECUTE FUNCTION public.apply_admin_bypass_policy_on_ddl();
 
 
--- Completed on 2026-07-23 12:19:03 IST
+-- Completed on 2026-07-23 17:43:12 IST
 
 --
 -- PostgreSQL database dump complete
 --
 
-\unrestrict YWdIbWFszjFceOb4mVWhxs0ncIqIyuvk4S7nu6SnGEMwjp3wwbQcivxXSFepoiX
+\unrestrict A5FC9fHkpVKWbujaX81V7LDhHxg2Hm9MrE4VzR7VoK0R19MbJEdqOhqE8CBtQ2m
 

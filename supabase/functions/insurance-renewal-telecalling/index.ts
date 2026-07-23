@@ -126,6 +126,111 @@ async function fetchEligibleVehiclesInWindow(
   return { vehicles: dedupeVehiclesByChassis(vehicles) };
 }
 
+/** Statuses that mean the lead is still in a campaign queue (not terminal / not retired). */
+const LIVE_ASSIGNMENT_STATUSES = [
+  "pending",
+  "in_progress",
+  "callback_later",
+  "no_answer",
+  "assigned",
+];
+
+/**
+ * Among all live rows in active campaigns, each customer_id maps to the owning
+ * campaign_id (lowest campaign id wins — first-created campaign keeps the lead).
+ */
+async function fetchLiveCustomerOwnerCampaignMap(
+  supabase: SupabaseClient,
+): Promise<Map<number, number>> {
+  const { data: activeCampaigns, error: cErr } = await supabase
+    .from("insurance_renewal_campaigns")
+    .select("id")
+    .eq("status", "active");
+  if (cErr || !activeCampaigns?.length) return new Map();
+
+  const campaignIds = activeCampaigns.map((c) => c.id as number);
+  const owner = new Map<number, number>();
+  const PAGE = 1000;
+
+  for (let i = 0; i < campaignIds.length; i += 40) {
+    const idChunk = campaignIds.slice(i, i + 40);
+    let offset = 0;
+    while (true) {
+      const { data, error } = await supabase
+        .from("insurance_renewal_assignments")
+        .select("customer_id, campaign_id")
+        .in("campaign_id", idChunk)
+        .in("status", LIVE_ASSIGNMENT_STATUSES)
+        .range(offset, offset + PAGE - 1);
+      if (error || !data?.length) break;
+      for (const row of data) {
+        const customerId = row.customer_id as number;
+        const campaignId = row.campaign_id as number;
+        const prev = owner.get(customerId);
+        if (prev === undefined || campaignId < prev) owner.set(customerId, campaignId);
+      }
+      if (data.length < PAGE) break;
+      offset += PAGE;
+    }
+  }
+  return owner;
+}
+
+function vehiclesAvailableForNewCampaign(
+  vehicles: Record<string, unknown>[],
+  ownerMap: Map<number, number>,
+) {
+  const eligible = vehicles.filter((v) => !ownerMap.has(v.id as number));
+  return {
+    eligible,
+    excluded_cross_campaign: vehicles.length - eligible.length,
+  };
+}
+
+function vehiclesAvailableToAddToCampaign(
+  vehicles: Record<string, unknown>[],
+  campaignId: number,
+  ownerMap: Map<number, number>,
+) {
+  const eligible = vehicles.filter((v) => {
+    const owner = ownerMap.get(v.id as number);
+    return owner === undefined || owner === campaignId;
+  });
+  return {
+    eligible,
+    excluded_cross_campaign: vehicles.length - eligible.length,
+  };
+}
+
+/** Retire live rows in this campaign when another active campaign owns the customer. */
+async function retireCrossCampaignDuplicatesInCampaign(
+  supabase: SupabaseClient,
+  campaignId: number,
+  ownerMap: Map<number, number>,
+): Promise<number> {
+  const { data: liveRows, error } = await supabase
+    .from("insurance_renewal_assignments")
+    .select("id, customer_id")
+    .eq("campaign_id", campaignId)
+    .in("status", LIVE_ASSIGNMENT_STATUSES);
+  if (error || !liveRows?.length) return 0;
+
+  const retireIds = liveRows
+    .filter((r) => {
+      const owner = ownerMap.get(r.customer_id as number);
+      return owner !== undefined && owner !== campaignId;
+    })
+    .map((r) => r.id as number);
+
+  if (retireIds.length === 0) return 0;
+  await updateAssignmentsInChunks(supabase, retireIds, {
+    status: "out_of_window",
+    assigned_to: null,
+    assigned_to_name: null,
+  });
+  return retireIds.length;
+}
+
 async function updateAssignmentsInChunks(
   supabase: SupabaseClient,
   ids: number[],
@@ -430,8 +535,17 @@ async function handleGetNext(supabase: SupabaseClient, userId: string, userName:
     return json({ success: true, assignment: null });
   }
 
+  const ownerMap = await fetchLiveCustomerOwnerCampaignMap(supabase);
+  const pendingOwned = pending.filter((a: Record<string, unknown>) => {
+    const owner = ownerMap.get(a.customer_id as number);
+    return owner === undefined || owner === campaignId;
+  });
+  if (pendingOwned.length === 0) {
+    return json({ success: true, assignment: null });
+  }
+
   // Calculate priority scores and sort
-  const scored = pending.map((a: Record<string, unknown>) => {
+  const scored = pendingOwned.map((a: Record<string, unknown>) => {
     const vehicle = a.all_service_data as unknown as Record<string, unknown>;
     const insDate = estimateInsuranceDate(
       vehicle.last_insurance_expiry_date as string,
@@ -872,6 +986,18 @@ async function handleRefreshCampaign(supabase: SupabaseClient, body: Record<stri
   });
   if (vError) return errorResponse(vError);
 
+  const ownerMap = await fetchLiveCustomerOwnerCampaignMap(supabase);
+  let retiredCrossCampaign = 0;
+  try {
+    retiredCrossCampaign = await retireCrossCampaignDuplicatesInCampaign(
+      supabase,
+      campaignId,
+      ownerMap,
+    );
+  } catch (dupErr) {
+    return errorResponse((dupErr as Error).message);
+  }
+
   // Get existing assignments to avoid duplicates
   const { data: existing } = await supabase
     .from("insurance_renewal_assignments")
@@ -880,8 +1006,10 @@ async function handleRefreshCampaign(supabase: SupabaseClient, body: Record<stri
 
   const existingVehicleIds = new Set((existing || []).map((e: Record<string, unknown>) => e.customer_id));
 
-  // Find new leads to add
-  const newVehicles = uniqueVehicles.filter((v: Record<string, unknown>) => !existingVehicleIds.has(v.id));
+  // Find new leads to add (skip customers owned by another active campaign)
+  let newVehicles = uniqueVehicles.filter((v: Record<string, unknown>) => !existingVehicleIds.has(v.id));
+  const addFilter = vehiclesAvailableToAddToCampaign(newVehicles, campaignId, ownerMap);
+  newVehicles = addFilter.eligible;
 
   // Find out-of-window assignments to retire
   const { data: allAssignments } = await supabase
@@ -931,6 +1059,10 @@ async function handleRefreshCampaign(supabase: SupabaseClient, body: Record<stri
 
   const reactivateIds = (oowAssignments || [])
     .filter((a: Record<string, unknown>) => stillInWindowVehicleIds.has(a.customer_id))
+    .filter((a: Record<string, unknown>) => {
+      const owner = ownerMap.get(a.customer_id as number);
+      return owner === undefined || owner === campaignId;
+    })
     .map((a: Record<string, unknown>) => a.id as number);
 
   if (reactivateIds.length > 0) {
@@ -967,6 +1099,8 @@ async function handleRefreshCampaign(supabase: SupabaseClient, body: Record<stri
     added,
     retired_out_of_window: retired,
     reactivated_to_pending: reactivated,
+    retired_cross_campaign_duplicates: retiredCrossCampaign,
+    excluded_cross_campaign_on_add: addFilter.excluded_cross_campaign,
   }];
 
   return json({ success: true, refreshed });
@@ -989,14 +1123,16 @@ async function handlePreviewCampaign(supabase: SupabaseClient, body: Record<stri
   });
   if (error) return errorResponse(error);
 
+  const ownerMap = await fetchLiveCustomerOwnerCampaignMap(supabase);
+  const { eligible, excluded_cross_campaign } = vehiclesAvailableForNewCampaign(unique, ownerMap);
+
   return json({
     success: true,
-    preview: {
-      filtered_count: unique.length,
-      raw_count: unique.length,
-      date_from: today,
-      date_to: futureDate,
-    },
+    filtered_count: eligible.length,
+    raw_count: unique.length,
+    excluded_cross_campaign,
+    date_from: today,
+    date_to: futureDate,
   });
 }
 
@@ -1040,16 +1176,22 @@ async function handleCreateCampaign(supabase: SupabaseClient, body: Record<strin
   });
   if (vError) return errorResponse(vError);
 
-  if (unique.length === 0) {
+  const ownerMap = await fetchLiveCustomerOwnerCampaignMap(supabase);
+  const { eligible, excluded_cross_campaign } = vehiclesAvailableForNewCampaign(unique, ownerMap);
+
+  if (eligible.length === 0) {
     return json({
       success: true,
       total_leads: 0,
-      message: "No customers found with insurance expiring in the selected window.",
+      excluded_cross_campaign,
+      message: excluded_cross_campaign > 0
+        ? "No new leads: all eligible customers are already in another active campaign queue."
+        : "No customers found with insurance expiring in the selected window.",
     });
   }
 
   // Create assignments
-  const assignments = unique.map((v: Record<string, unknown>) => ({
+  const assignments = eligible.map((v: Record<string, unknown>) => ({
     campaign_id: campaign.id,
     customer_id: v.id,
     status: "pending",
@@ -1066,13 +1208,15 @@ async function handleCreateCampaign(supabase: SupabaseClient, body: Record<strin
   const stats = {
     raw_from_db: unique.length,
     after_chassis_dedup: unique.length,
+    after_cross_campaign_exclusion: eligible.length,
+    excluded_cross_campaign,
     date_from: today,
     date_to: futureDate,
   };
 
   return json({
     success: true,
-    total_leads: unique.length,
+    total_leads: eligible.length,
     stats,
   });
 }
