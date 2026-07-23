@@ -144,10 +144,10 @@ async function loadCustomerAfterRcSync(
   let last = await loadCustomerRow(serviceClient, customerId);
   for (let i = 0; i < maxAttempts; i++) {
     const fp = insuranceFieldsFingerprint(last);
-    const hasInsurance = Boolean(
-      last.last_insurance_comapny || last.last_insurance_policy_number || last.last_insurance_expiry_date,
+    const insurerOnFile = Boolean(
+      String(last.last_insurance_comapny ?? "").trim() || String(last.last_insurance_policy_number ?? "").trim(),
     );
-    if (fp !== beforeFingerprint && hasInsurance) return last;
+    if (fp !== beforeFingerprint && insurerOnFile) return last;
     if (i < maxAttempts - 1) {
       await sleep(delayMs);
       last = await loadCustomerRow(serviceClient, customerId);
@@ -214,7 +214,7 @@ export async function handleRcFetchSingleRecord(
   const vehicle = row as Record<string, unknown>;
   const beforeFp = insuranceFieldsFingerprint(vehicle);
 
-  if (!isStaleOrMissingInsurance(vehicle.last_insurance_expiry_date as string | null, cutoff)) {
+  if (shouldSkipSingleRcFetchAsFresh(vehicle, cutoff)) {
     await recordRcFetchAttempt(serviceClient, {
       campaign_id: campaignId,
       customer_id: customerId,
@@ -224,7 +224,7 @@ export async function handleRcFetchSingleRecord(
     return json({
       success: true,
       outcome: "skipped_fresh",
-      message: "Insurance expiry is already recent (<365 days). Bulk RC fetch would skip this lead too.",
+      message: "Insurance expiry is already recent (<365 days) and company/policy are on file. Bulk RC fetch would skip this lead too.",
       customer: customerPayloadFromRow(vehicle),
     });
   }
@@ -303,6 +303,15 @@ function staleInsuranceCutoffDate(days = STALE_INSURANCE_DAYS): string {
 function isStaleOrMissingInsurance(expiry: string | null | undefined, cutoff: string): boolean {
   if (!expiry) return true;
   return expiry < cutoff;
+}
+
+/** Call-card fetch: skip IDSPay only when expiry is recent and insurer details are already present. */
+function shouldSkipSingleRcFetchAsFresh(vehicle: Record<string, unknown>, cutoff: string): boolean {
+  const expiry = vehicle.last_insurance_expiry_date as string | null;
+  if (isStaleOrMissingInsurance(expiry, cutoff)) return false;
+  const company = String(vehicle.last_insurance_comapny ?? "").trim();
+  const policy = String(vehicle.last_insurance_policy_number ?? "").trim();
+  return Boolean(company && policy);
 }
 
 function sleep(ms: number): Promise<void> {

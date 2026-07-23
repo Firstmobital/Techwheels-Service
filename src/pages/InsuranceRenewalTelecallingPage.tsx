@@ -128,15 +128,25 @@ async function callEdgeRcFetchSingle(body: Record<string, unknown>): Promise<any
   const { data: session } = await supabase.auth.getSession()
   const token = session?.session?.access_token
   if (!token) throw new Error('Not authenticated')
-  const res = await fetch(EDGE_URL, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${token}`,
-      apikey: supabaseAnonKey,
-    },
-    body: JSON.stringify({ action: 'rc_fetch_single', ...body }),
-  })
+  let res: Response
+  try {
+    res = await fetch(EDGE_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+        apikey: supabaseAnonKey,
+      },
+      body: JSON.stringify({ action: 'rc_fetch_single', ...body }),
+      signal: AbortSignal.timeout(120000),
+    })
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e)
+    if (msg.includes('timeout') || msg.includes('aborted')) {
+      throw new Error('RC fetch timed out (IDSPay can take up to ~2 min). Check Network tab, then try again.')
+    }
+    throw e
+  }
   const text = await res.text()
   let data: any
   try {
@@ -428,14 +438,24 @@ function TelecallerDashboard({ activeCampaign }: { activeCampaign: Campaign | nu
     catch (err) { console.error('WA log error:', err) }
   }
 
+  const mergeCustomer = (base: Customer, patch: Partial<Customer>): Customer => ({
+    ...base,
+    ...patch,
+    last_insurance_expiry_date:
+      patch.last_insurance_expiry_date !== undefined ? patch.last_insurance_expiry_date : base.last_insurance_expiry_date,
+    last_insurance_comapny:
+      patch.last_insurance_comapny !== undefined ? patch.last_insurance_comapny : base.last_insurance_comapny,
+    last_insurance_policy_number:
+      patch.last_insurance_policy_number !== undefined ? patch.last_insurance_policy_number : base.last_insurance_policy_number,
+  })
+
   const applyAssignmentCustomer = (assignmentId: number, customer: Partial<Customer>) => {
-    const mergeCustomer = (base: Customer): Customer => ({ ...base, ...customer })
     setQueue(prev => prev.map(a => (
-      a.id === assignmentId ? { ...a, customer: mergeCustomer(a.customer) } : a
+      a.id === assignmentId ? { ...a, customer: mergeCustomer(a.customer, customer) } : a
     )))
     setCurrentAssignment(prev => (
       prev?.id === assignmentId
-        ? { ...prev, customer: mergeCustomer(prev.customer) }
+        ? { ...prev, customer: mergeCustomer(prev.customer, customer) }
         : prev
     ))
     setCustomerUiEpoch(e => e + 1)
@@ -464,7 +484,7 @@ function TelecallerDashboard({ activeCampaign }: { activeCampaign: Campaign | nu
 
   const handleRcFetchSingle = async (assignment: Assignment) => {
     setRcFetchBusy(true)
-    setRcFetchMessage(null)
+    setRcFetchMessage('Contacting IDSPay…')
     setError(null)
     const baselineKey = insuranceCustomerKey(assignment.customer)
     try {
@@ -472,18 +492,32 @@ function TelecallerDashboard({ activeCampaign }: { activeCampaign: Campaign | nu
         campaign_id: assignment.campaign_id,
         assignment_id: assignment.id,
       })
-      if (res.customer) applyAssignmentCustomer(assignment.id, res.customer)
+      if (res.customer) applyAssignmentCustomer(assignment.id, res.customer as Partial<Customer>)
       if (res.success && res.outcome === 'success') {
-        await syncCustomerToUiAfterFetch(assignment, baselineKey)
-        setRcFetchMessage(res.message || 'RC fetch completed — updating card…')
-        setTimeout(() => setRcFetchMessage(null), 6000)
+        const synced = await syncCustomerToUiAfterFetch(assignment, baselineKey)
+        setRcFetchMessage(
+          (res.message || 'RC fetch completed.') +
+            (synced ? ' Card updated.' : ' DB updated slowly — card refreshed from latest read.'),
+        )
+        setTimeout(() => setRcFetchMessage(null), 10000)
       } else if (res.outcome === 'skipped_fresh') {
-        setRcFetchMessage(res.message || 'Insurance already fresh — no API call.')
-        setTimeout(() => setRcFetchMessage(null), 5000)
+        const c = res.customer as Customer | undefined
+        const stillBlank = !String(c?.last_insurance_comapny ?? '').trim() && !String(c?.last_insurance_policy_number ?? '').trim()
+        setRcFetchMessage(null)
+        setError(
+          stillBlank
+            ? (res.message || 'Server skipped IDSPay (expiry looks recent) but insurer fields are still empty. Deploy latest edge function and retry.')
+            : (res.message || 'Insurance already on file — no API call.'),
+        )
+      } else if (res.outcome === 'skipped_no_vrn') {
+        setRcFetchMessage(null)
+        setError(res.error || 'No vehicle registration number on this customer.')
       } else {
-        setError(res.error || res.message || 'RC fetch failed')
+        setRcFetchMessage(null)
+        setError(res.error || res.message || `RC fetch failed (${res.outcome || 'unknown'})`)
       }
     } catch (err) {
+      setRcFetchMessage(null)
       const msg = (err as Error).message
       if (msg === 'Failed to fetch' || /network/i.test(msg)) {
         setError(
@@ -549,7 +583,9 @@ function TelecallerDashboard({ activeCampaign }: { activeCampaign: Campaign | nu
             onUpdateStatus={handleUpdateStatus}
             onLogWA={handleLogWA}
             rcFetchBusy={rcFetchBusy}
-            onRcFetch={() => handleRcFetchSingle(currentAssignment)}
+            rcFetchMessage={rcFetchMessage}
+            rcFetchError={error}
+            onRcFetch={() => { void handleRcFetchSingle(currentAssignment) }}
           />
         )
       )}
@@ -624,7 +660,7 @@ function TelecallerDashboard({ activeCampaign }: { activeCampaign: Campaign | nu
                     onUpdateStatus={status => handleUpdateStatus(status, asgn)}
                     onLogWA={handleLogWA}
                     rcFetchBusy={rcFetchBusy}
-                    onRcFetch={() => handleRcFetchSingle(asgn)}
+                    onRcFetch={() => { void handleRcFetchSingle(asgn) }}
                   />
                 <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 space-y-3">
                   <div className="text-xs font-semibold text-blue-700">Edit Assignment</div>
@@ -692,7 +728,7 @@ function CallCard({
   showRenewed, setShowRenewed,
   showCallback, setShowCallback,
   onUpdateStatus, onLogWA,
-  rcFetchBusy = false, onRcFetch,
+  rcFetchBusy = false, rcFetchMessage, rcFetchError, onRcFetch,
 }: {
   assignment: Assignment; busy: boolean
   notes: string; setNotes: (v: string) => void
@@ -705,14 +741,11 @@ function CallCard({
   onUpdateStatus: (s: CallStatus) => void
   onLogWA: (id: number, type: string) => void
   rcFetchBusy?: boolean
+  rcFetchMessage?: string | null
+  rcFetchError?: string | null
   onRcFetch?: () => void
 }) {
-  const [customer, setCustomer] = useState(assignment.customer)
-  useEffect(() => {
-    setCustomer(assignment.customer)
-  }, [assignment.id, insuranceCustomerKey(assignment.customer)])
-
-  const c = customer
+  const c = assignment.customer
   const phone = c.contact_phones || ''
   const dueInfo = computeInsuranceDueDate(c.last_insurance_expiry_date, c.vehicle_sale_date)
   const daysLeft = daysFromToday(dueInfo.date)
@@ -772,6 +805,15 @@ function CallCard({
           </button>
           {dueInfo.estimated && (
             <span className="text-xs text-slate-600">Recommended when due date is estimated and company/policy are blank.</span>
+          )}
+          {rcFetchBusy && rcFetchMessage && (
+            <span className="text-xs font-medium text-indigo-700">{rcFetchMessage}</span>
+          )}
+          {!rcFetchBusy && rcFetchMessage && (
+            <span className="text-xs font-medium text-green-800">{rcFetchMessage}</span>
+          )}
+          {rcFetchError && (
+            <span className="text-xs font-medium text-amber-800 max-w-xl">{rcFetchError}</span>
           )}
         </div>
       )}
