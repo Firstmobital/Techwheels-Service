@@ -88,16 +88,21 @@ type CallStatus =
 
 const EDGE_URL = `${supabaseUrl}/functions/v1/insurance-renewal-telecalling`
 
-/** Supabase access token for edge calls (refresh if expired). */
+/** Valid access token for edge calls (validates/refreshes session via Supabase Auth API). */
 async function getEdgeAccessToken(): Promise<string> {
-  let { data: { session } } = await supabase.auth.getSession()
-  if (!session?.access_token) {
-    const { data: refreshed, error } = await supabase.auth.refreshSession()
-    if (error) throw new Error('Not authenticated — please sign in again.')
-    session = refreshed.session
+  const { data: { user }, error: userErr } = await supabase.auth.getUser()
+  if (userErr || !user) {
+    throw new Error(
+      userErr?.message
+        ? `Sign in again (${userErr.message}).`
+        : 'Not authenticated — please sign out and sign in again.',
+    )
   }
+  const { data: { session } } = await supabase.auth.getSession()
   const token = session?.access_token
-  if (!token) throw new Error('Not authenticated — please sign in again.')
+  if (!token) {
+    throw new Error('Not authenticated — please sign out and sign in again.')
+  }
   return token
 }
 
@@ -135,9 +140,10 @@ async function callEdge(action: string, body: Record<string, unknown> = {}): Pro
 
   let token = await getEdgeAccessToken()
   let { res, data } = await doFetch(token)
-  if ((res.status === 401 || data.error === 'Not authenticated') && token) {
-    const { data: refreshed } = await supabase.auth.refreshSession()
-    const retryToken = refreshed.session?.access_token
+  if (res.status === 401 || data.error === 'Not authenticated') {
+    await supabase.auth.getUser()
+    const { data: { session } } = await supabase.auth.getSession()
+    const retryToken = session?.access_token
     if (retryToken && retryToken !== token) {
       ;({ res, data } = await doFetch(retryToken))
     }
@@ -181,12 +187,18 @@ async function callEdgeRcFetchSingle(body: Record<string, unknown>): Promise<any
   let token = await getEdgeAccessToken()
   let { res, data } = await doFetch(token)
   if (res.status === 401 || data.error === 'Not authenticated') {
-    const { data: refreshed } = await supabase.auth.refreshSession()
-    const retryToken = refreshed.session?.access_token
-    if (retryToken) ({ res, data } = await doFetch(retryToken))
+    await supabase.auth.getUser()
+    const { data: { session } } = await supabase.auth.getSession()
+    const retryToken = session?.access_token
+    if (retryToken && retryToken !== token) {
+      ({ res, data } = await doFetch(retryToken))
+    }
   }
   if (!res.ok && !data.customer) {
     throw new Error(String(data.error || `Edge error (HTTP ${res.status})`))
+  }
+  if (!res.ok && data.error) {
+    throw new Error(String(data.error))
   }
   return data
 }
