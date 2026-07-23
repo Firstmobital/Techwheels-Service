@@ -946,6 +946,11 @@ async function handleRefreshCampaign(supabase: SupabaseClient, body: Record<stri
     }
   }
 
+  await supabase
+    .from("insurance_renewal_campaigns")
+    .update({ date_from: today, date_to: futureDate })
+    .eq("id", campaignId);
+
   // Update campaign counts
   await updateCampaignCounts(supabase, campaignId);
 
@@ -1015,6 +1020,8 @@ async function handleCreateCampaign(supabase: SupabaseClient, body: Record<strin
       campaign_name: campaignName,
       status: "active",
       window_days: windowDays,
+      date_from: today,
+      date_to: futureDate,
       sold_dealer_filter: soldDealerFilter || null,
       last_service_dealer_filter: lastServiceDealerFilter || null,
       priority_mode: priorityMode,
