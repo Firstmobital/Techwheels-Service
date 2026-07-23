@@ -1,5 +1,6 @@
 // Background IDSPay RC fetch for insurance renewal campaigns (pg_cron + admin enqueue).
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { corsHeaders } from "../_shared/cors.ts";
 
 type SupabaseClient = ReturnType<typeof createClient>;
 
@@ -24,7 +25,7 @@ type RcJobStats = {
 function json(data: unknown, status = 200) {
   return new Response(JSON.stringify(data), {
     status,
-    headers: { "Content-Type": "application/json" },
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
   });
 }
 
