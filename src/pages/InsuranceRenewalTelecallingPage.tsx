@@ -1416,8 +1416,8 @@ function AdminDashboard({ campaigns, activeCampaign, onRefresh }: { campaigns: C
                     <button onClick={() => handleDelete(c.id, c.campaign_name)} disabled={deleting === c.id} className="rounded-lg border border-red-200 px-3 py-1.5 text-sm text-red-600 hover:bg-red-50 disabled:opacity-50">{deleting === c.id ? 'Deleting…' : '🗑️'}</button>
                   </div>
                 </div>
-                <div className="mt-3 grid grid-cols-6 gap-3">
-                  {[['Total', c.total_leads, 'bg-gray-50 text-gray-500'], ['Pending', c.pending_count, 'bg-orange-50 text-orange-600'], ['In Progress', c.in_progress_count, 'bg-blue-50 text-blue-500'], ['Callback Later', c.callback_later_count, 'bg-purple-50 text-purple-500'], ['Renewed', c.renewed_count, 'bg-green-50 text-green-600'], ['Out of Window', c.out_of_window_count, 'bg-gray-50 text-gray-400']].map(([lbl, val, cls]) => (
+                <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-7">
+                  {[['Total', c.total_leads, 'bg-gray-50 text-gray-500'], ['Pending', c.pending_count, 'bg-orange-50 text-orange-600'], ['In Progress', c.in_progress_count, 'bg-blue-50 text-blue-500'], ['Callback Later', c.callback_later_count, 'bg-purple-50 text-purple-500'], ['Renewed (Us)', c.renewed_count, 'bg-green-50 text-green-600'], ['Completed', c.completed_count, 'bg-teal-50 text-teal-700'], ['Out of Window', c.out_of_window_count, 'bg-gray-50 text-gray-400']].map(([lbl, val, cls]) => (
                     <div key={String(lbl)} className={`rounded-lg px-3 py-2 ${cls}`}>
                       <div className="text-xs">{lbl}</div>
                       <div className="text-xl font-bold text-gray-900">{val}</div>

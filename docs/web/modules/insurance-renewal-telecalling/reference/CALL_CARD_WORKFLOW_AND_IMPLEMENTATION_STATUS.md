@@ -220,7 +220,7 @@ Reference (bug location):
 |---------|----------|--------|
 | **My Queue** | Active work for telecaller | `assigned_to` = user id AND status ∈ `in_progress`, `callback_later`, `no_answer` — **excludes `assigned`** |
 | **Today's Summary** | Counts by disposition today | `my_summary` missing `not_reachable`, `wrong_number`, `already_renewed_unknown` — UI cards may show 0/undefined |
-| **Campaign counters** | Reflect live assignment mix | Updated on **create/refresh** via `updateCampaignCounts`, **not** after each `update_status` |
+| **Campaign counters** | Reflect live assignment mix | Recalculated after **create/refresh** and after **get_next / update_status / edit status** (edge `updateCampaignCounts`) |
 | **Stuck leads** | — | Rows in `assigned` with email assignee: not in Get Next (pending only) nor My Queue — requires SQL reset (see §8) |
 
 ---
@@ -233,10 +233,10 @@ Compared to `INSURANCE_RENEWAL_TELECALLING_MODULE_FLOW_AND_BUSINESS_LOGIC.md` (a
 |------|-------------------|----------------|-------|
 | **get_next** | RPC `insurance_renewal_get_next_assignment`; callbacks due today first; status `assigned`; email in `assigned_to` | JS priority on `pending` only; status `in_progress`; UUID in `assigned_to` | **Diverged** |
 | **Eligibility (create/refresh/preview)** | `insurance_renewal_leads.effective_due_date` | Edge still filters `last_insurance_expiry_date IS NOT NULL` on `all_service_data` | **Diverged** — explains large `out_of_window` vs small `pending` pools |
-| **no_answer** | 3-strike retry + drip | Early return, no DB update | **Broken** |
+| **DB writes** | Service role (telecalling pattern) | Service role after JWT validation (2026-07-23 fix) | **Working** for telecaller mutations |
+| **no_answer** | 3-strike retry + drip | Persists `.update()` before return | **Fixed** (edge deploy required) |
 | **Callback due date** | Prefer callbacks on due date in get_next | Not implemented | **Missing** |
 | **Campaign counts after call** | Derived after each update (doc §8.6) | Only create/refresh | **Stale counters** |
-| **DB writes** | Service role (telecalling pattern) | User JWT + anon client | **RLS-dependent** — telecaller writes need policies beyond SELECT (production may have admin-only write policy) |
 | **Meta drip / self-renewal / leaderboard / RC fetch** | Enhancement migration | Present in edge function | **Partial** (Meta/route flags) |
 
 ---
@@ -245,12 +245,12 @@ Compared to `INSURANCE_RENEWAL_TELECALLING_MODULE_FLOW_AND_BUSINESS_LOGIC.md` (a
 
 Priority order for a focused PR:
 
-1. **Fix `no_answer` in `handleUpdateStatus`** — persist `.update()` before return; on 3rd strike set `not_reachable`; call `updateCampaignCounts` (optional leaderboard).
+1. ~~**Fix `no_answer` in `handleUpdateStatus`**~~ — done 2026-07-23.
 2. **Align `get_next` with RPC** — call `insurance_renewal_get_next_assignment(campaign_id, user_email)` OR replicate: retry-due `pending`, then fresh `pending`, `effective_due_date` order; normalize status (`in_progress` vs `assigned`) in one convention.
 3. **Callback resurfacing** — before pending pick: `callback_later` where `callback_date <= today` and `assigned_to` = current user (or team pool — product decision).
 4. **Refresh/create/preview** — query `insurance_renewal_leads` / `effective_due_date` instead of raw `last_insurance_expiry_date` only.
 5. **`updateCampaignCounts` after `update_status`** — match service telecalling.
-6. **Service role for mutations** — validate JWT, then use service client for writes (telecalling pattern).
+6. ~~**Service role for mutations**~~ — done 2026-07-23 (JWT validate + service client).
 7. **UI notes** — two-step confirm for Elsewhere / Wrong # / Not Interested / Already Renewed (match Renewed via Us).
 8. **`my_summary`** — add missing disposition counts.
 9. **Self-renewal** — add `/insurance-renewal/self` route or change URL to existing page.

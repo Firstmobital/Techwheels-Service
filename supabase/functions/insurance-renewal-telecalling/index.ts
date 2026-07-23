@@ -207,19 +207,22 @@ Deno.serve(async (req) => {
   }
 
   // ── Authenticated endpoints ──
-  const authHeader = req.headers.get("Authorization");
-  if (!authHeader) return errorResponse("Missing Authorization header", 401);
+  // Validate JWT then use service role for DB writes (same as service telecalling).
+  // RLS on insurance_renewal_* only grants SELECT to non-admins; user-scoped clients
+  // silently skip UPDATE/INSERT and the UI still shows success from in-memory payloads.
+  const authHeader = req.headers.get("Authorization") || "";
+  const token = authHeader.replace(/^Bearer\s+/i, "").trim();
+  if (!token) return errorResponse("Missing Authorization header", 401);
 
-  const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-    global: { headers: { Authorization: authHeader } },
-  });
+  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
+  if (!serviceKey) return errorResponse("Missing SUPABASE_SERVICE_ROLE_KEY", 500);
 
-  // Get user
-  const { data: userData } = await supabase.auth.getUser();
+  const supabase = createClient(SUPABASE_URL, serviceKey);
+
+  const { data: userData, error: authErr } = await supabase.auth.getUser(token);
   const userId = userData.user?.id;
-  if (!userId) return errorResponse("Not authenticated", 401);
+  if (authErr || !userId) return errorResponse("Not authenticated", 401);
 
-  // Get user role
   const { data: userRow } = await supabase
     .from("users")
     .select("role, full_name")
@@ -366,6 +369,8 @@ async function handleGetNext(supabase: SupabaseClient, userId: string, userName:
 
   if (updateError) return errorResponse(updateError.message);
 
+  await updateCampaignCounts(supabase, campaignId);
+
   // Format assignment for frontend
   const vehicle = next.all_service_data as unknown as Record<string, unknown>;
   const insDate = estimateInsuranceDate(
@@ -376,7 +381,7 @@ async function handleGetNext(supabase: SupabaseClient, userId: string, userName:
   const assignment = {
     id: next.id,
     campaign_id: next.campaign_id,
-    status: next.status,
+    status: "in_progress",
     call_count: next.call_count || 0,
     no_answer_count: next.no_answer_count || 0,
     retry_after: next.retry_after,
@@ -456,6 +461,15 @@ async function handleUpdateStatus(supabase: SupabaseClient, userId: string, user
       await triggerWhatsAppDrip(supabase, assignmentId, campaignId, noAnswerCount);
     }
 
+    const { error: noAnswerUpdateError } = await supabase
+      .from("insurance_renewal_assignments")
+      .update(updateData)
+      .eq("id", assignmentId);
+
+    if (noAnswerUpdateError) return errorResponse(noAnswerUpdateError.message);
+
+    await updateCampaignCounts(supabase, campaignId);
+
     return json({
       success: true,
       retry_queued: noAnswerCount < 3,
@@ -493,6 +507,8 @@ async function handleUpdateStatus(supabase: SupabaseClient, userId: string, user
       await updateLeaderboard(supabase, campaignId, userId, userName, leaderboardUpdate);
     }
   }
+
+  await updateCampaignCounts(supabase, campaignId);
 
   return json({ success: true });
 }
@@ -596,12 +612,17 @@ async function handleEditAssignment(supabase: SupabaseClient, userId: string, bo
   if (body.status !== undefined) updateData.status = body.status;
   updateData.updated_at = new Date().toISOString();
 
-  const { error } = await supabase
+  const { data: updated, error } = await supabase
     .from("insurance_renewal_assignments")
     .update(updateData)
-    .eq("id", assignmentId);
+    .eq("id", assignmentId)
+    .select("campaign_id")
+    .single();
 
   if (error) return errorResponse(error.message);
+  if (body.status !== undefined && updated?.campaign_id) {
+    await updateCampaignCounts(supabase, Number(updated.campaign_id));
+  }
   return json({ success: true });
 }
 
