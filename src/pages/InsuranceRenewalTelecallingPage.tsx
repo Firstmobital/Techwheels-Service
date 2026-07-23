@@ -1121,8 +1121,12 @@ function AdminDashboard({ campaigns, activeCampaign, onRefresh }: { campaigns: C
 
     setRcEnqueueingId(campaign.id)
     try {
-      const data = await callEdge('rc_fetch_enqueue', { campaign_id: campaign.id })
-      setSuccess(data.message || 'RC fetch queued.')
+      const { data, error } = await supabase.rpc('insurance_renewal_rc_fetch_enqueue_admin', {
+        p_campaign_id: campaign.id,
+      })
+      if (error) throw new Error(error.message)
+      const payload = (data ?? {}) as { message?: string }
+      setSuccess(payload.message || 'RC fetch queued.')
       await loadRcStatus()
     } catch (err) {
       setError((err as Error).message)
