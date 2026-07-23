@@ -1498,10 +1498,35 @@ function AdminDashboard({ campaigns, activeCampaign, onRefresh }: { campaigns: C
                   <tbody className="divide-y divide-gray-100">
                     {agentStats.length === 0 ? (
                       <tr><td colSpan={11} className="px-4 py-8 text-center text-gray-400">{statsDateFrom || statsDateTo ? 'No call activity in this date range' : 'No call activity yet for this campaign'}</td></tr>
-                    ) : agentStats.map((a: any, i: number) => (
-                      <tr key={i} className={`hover:bg-gray-50 ${i === 0 ? 'bg-green-50' : ''}`}>
+                    ) : agentStats.map((a: {
+                      telecaller_id?: string
+                      telecaller_name?: string
+                      email?: string
+                      calls_made?: number
+                      calls_connected?: number
+                      renewed_via_us?: number
+                      renewed_elsewhere?: number
+                      callback_later?: number
+                      no_answer?: number
+                      not_interested?: number
+                      wrong_number?: number
+                      in_progress?: number
+                      still_assigned?: number
+                    }, i: number) => {
+                      const label = a.telecaller_name && a.telecaller_name !== 'Unknown'
+                        ? a.telecaller_name
+                        : a.email
+                          ? a.email.includes('@')
+                            ? a.email.split('@')[0]
+                            : a.email
+                          : a.telecaller_id && a.telecaller_id !== 'unassigned'
+                            ? `${a.telecaller_id.slice(0, 8)}…`
+                            : 'Unassigned'
+                      const active = a.in_progress ?? a.still_assigned ?? 0
+                      return (
+                      <tr key={a.telecaller_id || String(i)} className={`hover:bg-gray-50 ${i === 0 ? 'bg-green-50' : ''}`}>
                         <td className="px-3 py-3 text-gray-400 text-xs">{i + 1}</td>
-                        <td className="px-3 py-3 font-medium text-gray-900">{a.email.split('@')[0]}<span className="text-gray-400 text-xs"> @{a.email.split('@')[1]}</span></td>
+                        <td className="px-3 py-3 font-medium text-gray-900">{label}</td>
                         <td className="px-3 py-3 font-semibold text-gray-800">{a.calls_made || 0}</td>
                         <td className="px-3 py-3 text-blue-700 font-medium">{a.calls_connected || 0}</td>
                         <td className="px-3 py-3 font-bold text-green-700">{a.renewed_via_us || 0}</td>
@@ -1510,9 +1535,9 @@ function AdminDashboard({ campaigns, activeCampaign, onRefresh }: { campaigns: C
                         <td className="px-3 py-3 text-orange-700">{a.no_answer || 0}</td>
                         <td className="px-3 py-3 text-gray-500">{a.not_interested || 0}</td>
                         <td className="px-3 py-3 text-red-500">{a.wrong_number || 0}</td>
-                        <td className="px-3 py-3 text-gray-400">{a.still_assigned || 0}</td>
+                        <td className="px-3 py-3 text-gray-400">{active}</td>
                       </tr>
-                    ))}
+                    )})}
                   </tbody>
                 </table>
               </div>
