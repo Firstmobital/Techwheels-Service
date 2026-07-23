@@ -432,8 +432,8 @@ async function handleUpdateStatus(supabase: SupabaseClient, userId: string, user
     updated_at: new Date().toISOString(),
   };
 
-  // Handle no-answer: increment counter, auto-retry up to 3 times
-  if (status === "no_answer") {
+  // No Answer and Not Reachable share the same 3-strike retry ladder (terminal: not_reachable)
+  if (status === "no_answer" || status === "not_reachable") {
     const { data: current } = await supabase
       .from("insurance_renewal_assignments")
       .select("no_answer_count, call_count")
@@ -444,10 +444,11 @@ async function handleUpdateStatus(supabase: SupabaseClient, userId: string, user
     const callCount = (current?.call_count || 0) + 1;
 
     if (noAnswerCount >= 3) {
-      // Mark as not_reachable after 3 no-answers
+      // Mark as not_reachable after 3 no-answers (only path to not_reachable for telecallers)
       updateData.status = "not_reachable";
       updateData.no_answer_count = noAnswerCount;
       updateData.call_count = callCount;
+      updateData.retry_after = null;
     } else {
       // Re-queue for tomorrow
       updateData.no_answer_count = noAnswerCount;
@@ -605,6 +606,12 @@ async function handleMySummary(supabase: SupabaseClient, userId: string) {
 async function handleEditAssignment(supabase: SupabaseClient, userId: string, body: Record<string, unknown>) {
   const assignmentId = Number(body.assignment_id);
   if (!assignmentId) return errorResponse("Missing assignment_id");
+
+  if (body.status === "not_reachable" || body.status === "no_answer") {
+    return errorResponse(
+      "Use the call card No Answer / Not Reachable buttons — status uses the 3-attempt retry ladder"
+    );
+  }
 
   const updateData: Record<string, unknown> = {};
   if (body.call_notes !== undefined) updateData.call_notes = body.call_notes;
