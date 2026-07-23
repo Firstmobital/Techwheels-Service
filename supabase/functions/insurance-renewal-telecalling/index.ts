@@ -18,6 +18,12 @@
 
 // @ts-nocheck — Supabase dynamic query types are inferred at runtime
 import { createClient } from "npm:@supabase/supabase-js@2";
+import {
+  handleProcessRcFetchJobs,
+  handleRcFetchCancel,
+  handleRcFetchEnqueue,
+  RC_FETCH_PG_CRON_SECRET,
+} from "./rc_fetch_worker.ts";
 type SupabaseClient = ReturnType<typeof createClient>;
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
@@ -171,6 +177,23 @@ Deno.serve(async (req) => {
     }
   }
 
+  // RC fetch worker (pg_cron + enqueue kickoff) — x-cron-secret from DB migration
+  if (action === "process_rc_fetch_jobs") {
+    const headerSecret = req.headers.get("x-cron-secret") || "";
+    if (headerSecret !== RC_FETCH_PG_CRON_SECRET) {
+      return errorResponse("Invalid RC fetch cron secret", 401);
+    }
+    const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
+    if (!serviceKey) return errorResponse("Missing SUPABASE_SERVICE_ROLE_KEY", 500);
+    const svcSupabase = createClient(SUPABASE_URL, serviceKey);
+    try {
+      return await handleProcessRcFetchJobs(svcSupabase, SUPABASE_URL, serviceKey, body);
+    } catch (e) {
+      console.error("process_rc_fetch_jobs error:", e);
+      return json({ success: false, error: String(e) }, 500);
+    }
+  }
+
   // ── Public endpoints (no auth needed) ──
   if (action === "get_dealers") {
     const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
@@ -251,6 +274,22 @@ Deno.serve(async (req) => {
         return handleConquestPreview(supabase, body);
       case "conquest_create":
         return handleConquestCreate(supabase, body);
+
+      case "rc_fetch_enqueue": {
+        if (role !== "admin") return errorResponse("Admin only", 403);
+        const svcKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
+        if (!svcKey) return errorResponse("Missing SUPABASE_SERVICE_ROLE_KEY", 500);
+        const svc = createClient(SUPABASE_URL, svcKey);
+        const email = userData.user?.email || "";
+        return handleRcFetchEnqueue(svc, SUPABASE_URL, email, body);
+      }
+      case "rc_fetch_cancel": {
+        if (role !== "admin") return errorResponse("Admin only", 403);
+        const svcKey2 = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
+        if (!svcKey2) return errorResponse("Missing SUPABASE_SERVICE_ROLE_KEY", 500);
+        const svc2 = createClient(SUPABASE_URL, svcKey2);
+        return handleRcFetchCancel(svc2, body);
+      }
 
       default:
         return errorResponse(`Unknown action: ${action}`);

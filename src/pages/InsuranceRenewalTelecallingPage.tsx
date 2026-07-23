@@ -1059,9 +1059,15 @@ function AdminDashboard({ campaigns, activeCampaign, onRefresh }: { campaigns: C
     if (!st.active_job) return
     if (!confirm(`Stop background RC fetch for "${campaign.campaign_name}"?\n\nNo further IDSPay calls will be made for this job. Calls already completed cannot be undone.`)) return
     setError(null)
+    setSuccess(null)
     try {
-      const data = await callEdge('rc_fetch_cancel', { campaign_id: campaign.id })
-      setSuccess(data.message || 'RC fetch stopped.')
+      const { data, error } = await supabase.rpc('insurance_renewal_rc_fetch_cancel_admin', {
+        p_campaign_id: campaign.id,
+        p_job_id: st.active_job?.id ?? null,
+      })
+      if (error) throw new Error(error.message)
+      const payload = (data ?? {}) as { message?: string }
+      setSuccess(payload.message || 'RC fetch stopped.')
       await loadRcStatus()
     } catch (err) {
       setError((err as Error).message)
