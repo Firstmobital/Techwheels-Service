@@ -1020,7 +1020,7 @@ function AdminDashboard({ campaigns, activeCampaign, onRefresh }: { campaigns: C
     try {
       const d = await callEdge('refresh_campaign', { campaign_id: activeCampaign?.id })
       const r = (d.refreshed || [])[0]
-      if (r) setRefreshResult(`✅ Refreshed "${r.campaign_name}" — window now ${r.window}. Added ${r.added} new leads, retired ${r.retired_out_of_window} out-of-window. Pending: ${r.pending_count}, Total: ${r.total_leads}.`)
+      if (r) setRefreshResult(`✅ Refreshed "${r.campaign_name}" — window now ${r.window}. Added ${r.added} new, retired ${r.retired_out_of_window} out-of-window, re-opened ${r.reactivated_to_pending ?? 0} to pending. Pending: ${r.pending_count}, Total: ${r.total_leads}.`)
       else setRefreshResult('No active campaigns to refresh.')
       await onRefresh()
       await loadRcStatus()

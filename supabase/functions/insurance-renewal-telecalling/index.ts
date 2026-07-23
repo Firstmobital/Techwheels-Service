@@ -58,6 +58,88 @@ function estimateInsuranceDate(expiryDate: string | null, saleDate: string | nul
   return { date: r.toISOString().split("T")[0], estimated: true };
 }
 
+/** Deduplicate vehicle rows by chassis_no (first row wins). */
+function dedupeVehiclesByChassis(vehicles: Record<string, unknown>[]) {
+  const seenChassis = new Set<string>();
+  return vehicles.filter((v) => {
+    const chassis = v.chassis_no as string;
+    if (!chassis) return true;
+    if (seenChassis.has(chassis)) return false;
+    seenChassis.add(chassis);
+    return true;
+  });
+}
+
+/**
+ * Eligible leads for create/refresh/preview: window on insurance_renewal_leads.effective_due_date
+ * (stored expiry OR sale-date anniversary), then optional dealer filters on all_service_data.
+ */
+async function fetchEligibleVehiclesInWindow(
+  supabase: SupabaseClient,
+  params: {
+    today: string;
+    futureDate: string;
+    soldDealerFilter?: string[] | null;
+    lastServiceDealerFilter?: string[] | null;
+  }
+): Promise<{ vehicles: Record<string, unknown>[]; error?: string }> {
+  const PAGE = 1000;
+  const leadIds: number[] = [];
+  let offset = 0;
+  while (true) {
+    const { data, error } = await supabase
+      .from("insurance_renewal_leads")
+      .select("id")
+      .not("contact_phones", "is", null)
+      .neq("contact_phones", "")
+      .not("effective_due_date", "is", null)
+      .gte("effective_due_date", params.today)
+      .lte("effective_due_date", params.futureDate)
+      .range(offset, offset + PAGE - 1);
+    if (error) return { vehicles: [], error: error.message };
+    if (!data?.length) break;
+    for (const row of data) leadIds.push(row.id as number);
+    if (data.length < PAGE) break;
+    offset += PAGE;
+  }
+
+  if (leadIds.length === 0) return { vehicles: [] };
+
+  const vehicles: Record<string, unknown>[] = [];
+  const CHUNK = 400;
+  for (let i = 0; i < leadIds.length; i += CHUNK) {
+    const chunk = leadIds.slice(i, i + CHUNK);
+    let q = supabase.from("all_service_data").select("*").in("id", chunk);
+    if (params.soldDealerFilter && params.soldDealerFilter.length > 0) {
+      q = q.in("sold_dealer", params.soldDealerFilter);
+    }
+    if (params.lastServiceDealerFilter && params.lastServiceDealerFilter.length > 0) {
+      q = q.in("last_service_dealer", params.lastServiceDealerFilter);
+    }
+    const { data, error } = await q;
+    if (error) return { vehicles: [], error: error.message };
+    if (data) vehicles.push(...data);
+  }
+
+  return { vehicles: dedupeVehiclesByChassis(vehicles) };
+}
+
+async function updateAssignmentsInChunks(
+  supabase: SupabaseClient,
+  ids: number[],
+  update: Record<string, unknown>
+) {
+  const CHUNK = 200;
+  for (let i = 0; i < ids.length; i += CHUNK) {
+    const slice = ids.slice(i, i + CHUNK);
+    const { error } = await supabase
+      .from("insurance_renewal_assignments")
+      .update(update)
+      .in("id", slice);
+    if (error) throw error;
+  }
+}
+
 // ─── Meta WhatsApp Cloud API ───────────────────────────────────────────────
 
 async function sendMetaTemplateMessage(
@@ -776,38 +858,13 @@ async function handleRefreshCampaign(supabase: SupabaseClient, body: Record<stri
   const today = new Date().toISOString().split("T")[0];
   const futureDate = new Date(Date.now() + windowDays * 86400000).toISOString().split("T")[0];
 
-  let vehicleQuery = supabase
-    .from("all_service_data")
-    .select("*")
-    .not("contact_phones", "is", null)
-    .neq("contact_phones", "");
-
-  // Apply dealer filters
-  if (campaign.sold_dealer_filter && campaign.sold_dealer_filter.length > 0) {
-    vehicleQuery = vehicleQuery.in("sold_dealer", campaign.sold_dealer_filter);
-  }
-  if (campaign.last_service_dealer_filter && campaign.last_service_dealer_filter.length > 0) {
-    vehicleQuery = vehicleQuery.in("last_service_dealer", campaign.last_service_dealer_filter);
-  }
-
-  // Filter by insurance expiry within window
-  vehicleQuery = vehicleQuery
-    .not("last_insurance_expiry_date", "is", null)
-    .gte("last_insurance_expiry_date", today)
-    .lte("last_insurance_expiry_date", futureDate);
-
-  const { data: vehicles, error: vError } = await vehicleQuery;
-  if (vError) return errorResponse(vError.message);
-
-  // Deduplicate by chassis_no
-  const seenChassis = new Set<string>();
-  const uniqueVehicles = (vehicles || []).filter((v: Record<string, unknown>) => {
-    const chassis = v.chassis_no as string;
-    if (!chassis) return true;
-    if (seenChassis.has(chassis)) return false;
-    seenChassis.add(chassis);
-    return true;
+  const { vehicles: uniqueVehicles, error: vError } = await fetchEligibleVehiclesInWindow(supabase, {
+    today,
+    futureDate,
+    soldDealerFilter: campaign.sold_dealer_filter as string[] | null,
+    lastServiceDealerFilter: campaign.last_service_dealer_filter as string[] | null,
   });
+  if (vError) return errorResponse(vError);
 
   // Get existing assignments to avoid duplicates
   const { data: existing } = await supabase
@@ -846,15 +903,41 @@ async function handleRefreshCampaign(supabase: SupabaseClient, body: Record<stri
     if (!insertError) added = newVehicles.length;
   }
 
-  // Retire out-of-window
+  // Retire out-of-window (only pending / in_progress — never terminal dispositions)
   let retired = 0;
   if (toRetire.length > 0) {
-    const retireIds = toRetire.map((a: Record<string, unknown>) => a.id);
-    const { error: retireError } = await supabase
-      .from("insurance_renewal_assignments")
-      .update({ status: "out_of_window" })
-      .in("id", retireIds);
-    if (!retireError) retired = toRetire.length;
+    const retireIds = toRetire.map((a: Record<string, unknown>) => a.id as number);
+    try {
+      await updateAssignmentsInChunks(supabase, retireIds, { status: "out_of_window" });
+      retired = retireIds.length;
+    } catch (retireError) {
+      return errorResponse((retireError as Error).message);
+    }
+  }
+
+  // Re-open assignments that were retired but are in window again (effective_due_date)
+  let reactivated = 0;
+  const { data: oowAssignments } = await supabase
+    .from("insurance_renewal_assignments")
+    .select("id, customer_id")
+    .eq("campaign_id", campaignId)
+    .eq("status", "out_of_window");
+
+  const reactivateIds = (oowAssignments || [])
+    .filter((a: Record<string, unknown>) => stillInWindowVehicleIds.has(a.customer_id))
+    .map((a: Record<string, unknown>) => a.id as number);
+
+  if (reactivateIds.length > 0) {
+    try {
+      await updateAssignmentsInChunks(supabase, reactivateIds, {
+        status: "pending",
+        assigned_to: null,
+        assigned_to_name: null,
+      });
+      reactivated = reactivateIds.length;
+    } catch (reactErr) {
+      return errorResponse((reactErr as Error).message);
+    }
   }
 
   // Update campaign counts
@@ -872,6 +955,7 @@ async function handleRefreshCampaign(supabase: SupabaseClient, body: Record<stri
     window: `${today} → ${futureDate}`,
     added,
     retired_out_of_window: retired,
+    reactivated_to_pending: reactivated,
   }];
 
   return json({ success: true, refreshed });
@@ -886,40 +970,19 @@ async function handlePreviewCampaign(supabase: SupabaseClient, body: Record<stri
   const today = new Date().toISOString().split("T")[0];
   const futureDate = new Date(Date.now() + windowDays * 86400000).toISOString().split("T")[0];
 
-  let query = supabase
-    .from("all_service_data")
-    .select("*")
-    .not("contact_phones", "is", null)
-    .neq("contact_phones", "")
-    .not("last_insurance_expiry_date", "is", null)
-    .gte("last_insurance_expiry_date", today)
-    .lte("last_insurance_expiry_date", futureDate);
-
-  if (soldDealerFilter && soldDealerFilter.length > 0) {
-    query = query.in("sold_dealer", soldDealerFilter);
-  }
-  if (lastServiceDealerFilter && lastServiceDealerFilter.length > 0) {
-    query = query.in("last_service_dealer", lastServiceDealerFilter);
-  }
-
-  const { data: vehicles, error } = await query;
-  if (error) return errorResponse(error.message);
-
-  // Deduplicate by chassis_no
-  const seenChassis = new Set<string>();
-  const unique = (vehicles || []).filter((v: Record<string, unknown>) => {
-    const chassis = v.chassis_no as string;
-    if (!chassis) return true;
-    if (seenChassis.has(chassis)) return false;
-    seenChassis.add(chassis);
-    return true;
+  const { vehicles: unique, error } = await fetchEligibleVehiclesInWindow(supabase, {
+    today,
+    futureDate,
+    soldDealerFilter,
+    lastServiceDealerFilter,
   });
+  if (error) return errorResponse(error);
 
   return json({
     success: true,
     preview: {
       filtered_count: unique.length,
-      raw_count: vehicles?.length || 0,
+      raw_count: unique.length,
       date_from: today,
       date_to: futureDate,
     },
@@ -956,35 +1019,13 @@ async function handleCreateCampaign(supabase: SupabaseClient, body: Record<strin
     .single();
   if (campError) return errorResponse(campError.message);
 
-  // Fetch vehicles
-  let vehicleQuery = supabase
-    .from("all_service_data")
-    .select("*")
-    .not("contact_phones", "is", null)
-    .neq("contact_phones", "")
-    .not("last_insurance_expiry_date", "is", null)
-    .gte("last_insurance_expiry_date", today)
-    .lte("last_insurance_expiry_date", futureDate);
-
-  if (soldDealerFilter && soldDealerFilter.length > 0) {
-    vehicleQuery = vehicleQuery.in("sold_dealer", soldDealerFilter);
-  }
-  if (lastServiceDealerFilter && lastServiceDealerFilter.length > 0) {
-    vehicleQuery = vehicleQuery.in("last_service_dealer", lastServiceDealerFilter);
-  }
-
-  const { data: vehicles, error: vError } = await vehicleQuery;
-  if (vError) return errorResponse(vError.message);
-
-  // Deduplicate by chassis_no
-  const seenChassis = new Set<string>();
-  const unique = (vehicles || []).filter((v: Record<string, unknown>) => {
-    const chassis = v.chassis_no as string;
-    if (!chassis) return true;
-    if (seenChassis.has(chassis)) return false;
-    seenChassis.add(chassis);
-    return true;
+  const { vehicles: unique, error: vError } = await fetchEligibleVehiclesInWindow(supabase, {
+    today,
+    futureDate,
+    soldDealerFilter,
+    lastServiceDealerFilter,
   });
+  if (vError) return errorResponse(vError);
 
   if (unique.length === 0) {
     return json({
@@ -1010,7 +1051,7 @@ async function handleCreateCampaign(supabase: SupabaseClient, body: Record<strin
   await updateCampaignCounts(supabase, campaign.id);
 
   const stats = {
-    raw_from_db: vehicles?.length || 0,
+    raw_from_db: unique.length,
     after_chassis_dedup: unique.length,
     date_from: today,
     date_to: futureDate,
