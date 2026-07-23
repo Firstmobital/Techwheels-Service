@@ -88,36 +88,59 @@ type CallStatus =
 
 const EDGE_URL = `${supabaseUrl}/functions/v1/insurance-renewal-telecalling`
 
+/** Supabase access token for edge calls (refresh if expired). */
+async function getEdgeAccessToken(): Promise<string> {
+  let { data: { session } } = await supabase.auth.getSession()
+  if (!session?.access_token) {
+    const { data: refreshed, error } = await supabase.auth.refreshSession()
+    if (error) throw new Error('Not authenticated — please sign in again.')
+    session = refreshed.session
+  }
+  const token = session?.access_token
+  if (!token) throw new Error('Not authenticated — please sign in again.')
+  return token
+}
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- edge actions return heterogeneous JSON (same pattern as TelecallingPage)
 async function callEdge(action: string, body: Record<string, unknown> = {}): Promise<any> {
-  const { data: session } = await supabase.auth.getSession()
-  const token = session?.session?.access_token
-  if (!token) throw new Error('Not authenticated')
-  let res: Response
-  try {
-    res = await fetch(EDGE_URL, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${token}`,
-        apikey: supabaseAnonKey,
-      },
-      body: JSON.stringify({ action, ...body }),
-    })
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e)
-    throw new Error(
-      msg === 'Failed to fetch' || msg.includes('NetworkError')
-        ? 'Could not reach Supabase Edge (network timeout or project under load — try Refresh, pause RC fetch/cron, wait a few minutes).'
-        : msg,
-    )
+  const doFetch = async (token: string) => {
+    let res: Response
+    try {
+      res = await fetch(EDGE_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+          apikey: supabaseAnonKey,
+        },
+        body: JSON.stringify({ action, ...body }),
+      })
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e)
+      throw new Error(
+        msg === 'Failed to fetch' || msg.includes('NetworkError')
+          ? 'Could not reach Supabase Edge (network timeout or project under load — try Refresh, pause RC fetch/cron, wait a few minutes).'
+          : msg,
+      )
+    }
+    const text = await res.text()
+    let data: any
+    try {
+      data = text ? JSON.parse(text) : {}
+    } catch {
+      throw new Error(`Edge returned non-JSON (HTTP ${res.status}). Project may be overloaded.`)
+    }
+    return { res, data }
   }
-  const text = await res.text()
-  let data: any
-  try {
-    data = text ? JSON.parse(text) : {}
-  } catch {
-    throw new Error(`Edge returned non-JSON (HTTP ${res.status}). Project may be overloaded.`)
+
+  let token = await getEdgeAccessToken()
+  let { res, data } = await doFetch(token)
+  if ((res.status === 401 || data.error === 'Not authenticated') && token) {
+    const { data: refreshed } = await supabase.auth.refreshSession()
+    const retryToken = refreshed.session?.access_token
+    if (retryToken && retryToken !== token) {
+      ;({ res, data } = await doFetch(retryToken))
+    }
   }
   if (!res.ok || !data.success) throw new Error(String(data.error || `Edge error (HTTP ${res.status})`))
   return data
@@ -125,34 +148,42 @@ async function callEdge(action: string, body: Record<string, unknown> = {}): Pro
 
 /** RC fetch may return success:false with a body; never throw before caller reads customer / outcome. */
 async function callEdgeRcFetchSingle(body: Record<string, unknown>): Promise<any> {
-  const { data: session } = await supabase.auth.getSession()
-  const token = session?.session?.access_token
-  if (!token) throw new Error('Not authenticated')
-  let res: Response
-  try {
-    res = await fetch(EDGE_URL, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${token}`,
-        apikey: supabaseAnonKey,
-      },
-      body: JSON.stringify({ action: 'rc_fetch_single', ...body }),
-      signal: AbortSignal.timeout(90000),
-    })
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e)
-    if (msg.includes('timeout') || msg.includes('aborted')) {
-      throw new Error('RC fetch timed out (IDSPay can take up to ~2 min). Check Network tab, then try again.')
+  const doFetch = async (token: string) => {
+    let res: Response
+    try {
+      res = await fetch(EDGE_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+          apikey: supabaseAnonKey,
+        },
+        body: JSON.stringify({ action: 'rc_fetch_single', ...body }),
+        signal: AbortSignal.timeout(90000),
+      })
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e)
+      if (msg.includes('timeout') || msg.includes('aborted')) {
+        throw new Error('RC fetch timed out (IDSPay can take up to ~2 min). Check Network tab, then try again.')
+      }
+      throw e
     }
-    throw e
+    const text = await res.text()
+    let data: any
+    try {
+      data = text ? JSON.parse(text) : {}
+    } catch {
+      throw new Error(`Edge returned non-JSON (HTTP ${res.status}).`)
+    }
+    return { res, data }
   }
-  const text = await res.text()
-  let data: any
-  try {
-    data = text ? JSON.parse(text) : {}
-  } catch {
-    throw new Error(`Edge returned non-JSON (HTTP ${res.status}).`)
+
+  let token = await getEdgeAccessToken()
+  let { res, data } = await doFetch(token)
+  if (res.status === 401 || data.error === 'Not authenticated') {
+    const { data: refreshed } = await supabase.auth.refreshSession()
+    const retryToken = refreshed.session?.access_token
+    if (retryToken) ({ res, data } = await doFetch(retryToken))
   }
   if (!res.ok && !data.customer) {
     throw new Error(String(data.error || `Edge error (HTTP ${res.status})`))
