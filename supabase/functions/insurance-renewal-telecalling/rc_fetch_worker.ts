@@ -137,8 +137,8 @@ async function loadCustomerAfterRcSync(
   serviceClient: SupabaseClient,
   customerId: number,
   beforeFingerprint: string,
-  maxAttempts = 12,
-  delayMs = 350,
+  maxAttempts = 24,
+  delayMs = 450,
 ) {
   let last = await loadCustomerRow(serviceClient, customerId);
   for (let i = 0; i < maxAttempts; i++) {
@@ -181,6 +181,10 @@ export async function handleRcFetchSingleRecord(
   serviceRoleKey: string,
   body: Record<string, unknown>,
 ) {
+  if (body.refresh_only === true) {
+    return handleAssignmentCustomerRefresh(serviceClient, body);
+  }
+
   const campaignId = Number(body.campaign_id);
   const assignmentId = Number(body.assignment_id);
   if (!campaignId || !assignmentId) {

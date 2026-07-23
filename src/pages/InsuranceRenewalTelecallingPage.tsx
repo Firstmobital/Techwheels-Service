@@ -426,38 +426,34 @@ function TelecallerDashboard({ activeCampaign }: { activeCampaign: Campaign | nu
   }
 
   const applyAssignmentCustomer = (assignmentId: number, customer: Partial<Customer>) => {
-    const patch = (base: Customer): Customer => {
-      const next = { ...base }
-      for (const [k, v] of Object.entries(customer) as [keyof Customer, Customer[keyof Customer]][]) {
-        if (v !== null && v !== undefined && v !== '') {
-          (next as Record<string, unknown>)[k as string] = v
-        }
-      }
-      return next
-    }
+    const mergeCustomer = (base: Customer): Customer => ({ ...base, ...customer })
     setQueue(prev => prev.map(a => (
-      a.id === assignmentId ? { ...a, customer: patch(a.customer) } : a
+      a.id === assignmentId ? { ...a, customer: mergeCustomer(a.customer) } : a
     )))
     setCurrentAssignment(prev => (
       prev?.id === assignmentId
-        ? { ...prev, customer: patch(prev.customer) }
+        ? { ...prev, customer: mergeCustomer(prev.customer) }
         : prev
     ))
     setCustomerUiEpoch(e => e + 1)
   }
 
-  /** Poll DB until insurance fields change (covers trigger/sync delay after IDSPay). */
+  /** Poll DB until insurance fields change (same edge action, refresh_only — no extra IDSPay). */
   const syncCustomerToUiAfterFetch = async (assignment: Assignment, baselineKey: string) => {
-    for (let i = 0; i < 12; i++) {
-      if (i > 0) await sleepMs(400)
+    for (let i = 0; i < 16; i++) {
+      if (i > 0) await sleepMs(500)
       try {
-        const snap = await callEdge('assignment_customer', { assignment_id: assignment.id })
+        const snap = await callEdgeRcFetchSingle({
+          campaign_id: assignment.campaign_id,
+          assignment_id: assignment.id,
+          refresh_only: true,
+        })
         if (!snap.customer) continue
         applyAssignmentCustomer(assignment.id, snap.customer)
         const key = insuranceCustomerKey({ ...assignment.customer, ...snap.customer })
         if (key !== baselineKey) return true
       } catch (e) {
-        console.error('assignment_customer poll', e)
+        console.error('RC refresh_only poll', e)
       }
     }
     return false
@@ -476,8 +472,8 @@ function TelecallerDashboard({ activeCampaign }: { activeCampaign: Campaign | nu
       if (res.customer) applyAssignmentCustomer(assignment.id, res.customer)
       if (res.success && res.outcome === 'success') {
         await syncCustomerToUiAfterFetch(assignment, baselineKey)
-        setRcFetchMessage(res.message || 'RC fetch completed.')
-        setTimeout(() => setRcFetchMessage(null), 5000)
+        setRcFetchMessage(res.message || 'RC fetch completed — updating card…')
+        setTimeout(() => setRcFetchMessage(null), 6000)
       } else if (res.outcome === 'skipped_fresh') {
         setRcFetchMessage(res.message || 'Insurance already fresh — no API call.')
         setTimeout(() => setRcFetchMessage(null), 5000)
@@ -691,7 +687,12 @@ function CallCard({
   rcFetchBusy?: boolean
   onRcFetch?: () => void
 }) {
-  const c = assignment.customer
+  const [customer, setCustomer] = useState(assignment.customer)
+  useEffect(() => {
+    setCustomer(assignment.customer)
+  }, [assignment.id, insuranceCustomerKey(assignment.customer)])
+
+  const c = customer
   const phone = c.contact_phones || ''
   const dueInfo = computeInsuranceDueDate(c.last_insurance_expiry_date, c.vehicle_sale_date)
   const daysLeft = daysFromToday(dueInfo.date)
