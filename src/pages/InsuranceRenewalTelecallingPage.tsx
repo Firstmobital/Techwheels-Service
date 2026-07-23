@@ -376,6 +376,8 @@ function TelecallerDashboard({ activeCampaign }: { activeCampaign: Campaign | nu
   const [error, setError] = useState<string | null>(null)
   const [activeView, setActiveView] = useState<'call' | 'queue' | 'summary'>('call')
   const [queueSearch, setQueueSearch] = useState('')
+  /** '' = all; '__none__' = blank sold_dealer; else exact sold_dealer string */
+  const [queueSoldByFilter, setQueueSoldByFilter] = useState('')
   // Call form
   const [notes, setNotes] = useState('')
   const [callbackDate, setCallbackDate] = useState('')
@@ -407,6 +409,17 @@ function TelecallerDashboard({ activeCampaign }: { activeCampaign: Campaign | nu
   }, [])
 
   useEffect(() => { refreshQueue(); refreshSummary() }, [refreshQueue, refreshSummary])
+
+  useEffect(() => {
+    if (!queueSoldByFilter) return
+    const keys = new Set(
+      queue.map(a => {
+        const t = (a.customer.sold_dealer || '').trim()
+        return t || '__none__'
+      }),
+    )
+    if (!keys.has(queueSoldByFilter)) setQueueSoldByFilter('')
+  }, [queue, queueSoldByFilter])
 
   const resetCallForm = () => {
     setNotes(''); setCallbackDate(''); setQuotedPremium(''); setRenewalCompany('')
@@ -640,29 +653,69 @@ function TelecallerDashboard({ activeCampaign }: { activeCampaign: Campaign | nu
       {/* ── QUEUE VIEW ─────────────────────────────────────────────────────── */}
       {activeView === 'queue' && (
         <div className="space-y-2">
-          <div className="relative">
-            <input
-              type="text"
-              value={queueSearch}
-              onChange={e => setQueueSearch(e.target.value)}
-              placeholder="Search by name, phone or reg number…"
-              className="w-full rounded-lg border border-gray-200 bg-white py-2 pl-9 pr-4 text-sm text-gray-900 placeholder:text-gray-400 focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-400"
-            />
-            <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">🔍</span>
-            {queueSearch && (
-              <button onClick={() => setQueueSearch('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 text-sm">✕</button>
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+            <div className="relative flex-1">
+              <input
+                type="text"
+                value={queueSearch}
+                onChange={e => setQueueSearch(e.target.value)}
+                placeholder="Search by name, phone, reg or sold by…"
+                className="w-full rounded-lg border border-gray-200 bg-white py-2 pl-9 pr-4 text-sm text-gray-900 placeholder:text-gray-400 focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-400"
+              />
+              <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">🔍</span>
+              {queueSearch && (
+                <button onClick={() => setQueueSearch('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 text-sm">✕</button>
+              )}
+            </div>
+            {queue.length > 0 && (
+              <label className="flex shrink-0 items-center gap-2 text-sm text-gray-600">
+                <span className="whitespace-nowrap font-medium">Sold by</span>
+                <select
+                  value={queueSoldByFilter}
+                  onChange={e => setQueueSoldByFilter(e.target.value)}
+                  className="min-w-[10rem] max-w-[16rem] rounded-lg border border-gray-200 bg-white px-2.5 py-2 text-sm text-gray-900 focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-400"
+                >
+                  <option value="">All dealers</option>
+                  {[...new Set(queue.map(a => {
+                    const t = (a.customer.sold_dealer || '').trim()
+                    return t || '__none__'
+                  }))].sort((a, b) => {
+                    if (a === '__none__') return 1
+                    if (b === '__none__') return -1
+                    return a.localeCompare(b)
+                  }).map(key => (
+                    <option key={key} value={key}>
+                      {key === '__none__' ? '— (not set)' : key}
+                    </option>
+                  ))}
+                </select>
+              </label>
             )}
           </div>
           {(() => {
             const q = queueSearch.trim().toLowerCase()
-            const filtered = q ? queue.filter(a =>
-              `${a.customer.first_name} ${a.customer.last_name || ''}`.toLowerCase().includes(q) ||
-              (a.customer.contact_phones || '').toLowerCase().includes(q) ||
-              (a.customer.vehicle_registration_number || '').toLowerCase().includes(q)
-            ) : queue
+            let filtered = queue
+            if (queueSoldByFilter) {
+              filtered = filtered.filter(a => {
+                const t = (a.customer.sold_dealer || '').trim()
+                const key = t || '__none__'
+                return key === queueSoldByFilter
+              })
+            }
+            if (q) {
+              filtered = filtered.filter(a =>
+                `${a.customer.first_name} ${a.customer.last_name || ''}`.toLowerCase().includes(q) ||
+                (a.customer.contact_phones || '').toLowerCase().includes(q) ||
+                (a.customer.vehicle_registration_number || '').toLowerCase().includes(q) ||
+                (a.customer.sold_dealer || '').toLowerCase().includes(q)
+              )
+            }
+            const hasFilters = Boolean(q || queueSoldByFilter)
             if (filtered.length === 0) return (
               <div className="rounded-xl border border-gray-200 bg-white p-8 text-center text-sm text-gray-400">
-                {q ? `No results for "${queueSearch}"` : 'No active assignments. Click "Get Next Customer" to start calling.'}
+                {hasFilters
+                  ? 'No queue items match your filters.'
+                  : 'No active assignments. Click "Get Next Customer" to start calling.'}
               </div>
             )
             return filtered.map((asgn: Assignment) => (
@@ -674,6 +727,7 @@ function TelecallerDashboard({ activeCampaign }: { activeCampaign: Campaign | nu
                     <div className="text-xs text-gray-500 mt-0.5">Campaign: {asgn.campaign_name}{asgn.campaign_status === 'closed' ? ' (closed)' : ''}</div>
                   )}
                   <div className="text-sm text-gray-500 mt-0.5">📱 {asgn.customer.contact_phones} · 🚗 {asgn.customer.model} · {asgn.customer.vehicle_registration_number || '—'}</div>
+                  <div className="text-xs text-gray-500 mt-0.5">🏢 Sold by: {asgn.customer.sold_dealer?.trim() || '—'}</div>
                   {(() => {
                     const due = computeInsuranceDueDate(asgn.customer.last_insurance_expiry_date, asgn.customer.vehicle_sale_date)
                     return <div className="text-xs text-gray-400 mt-0.5">🛡️ Insurance due {formatDate(due.date)}{due.estimated ? ' (estimated)' : ''}</div>
