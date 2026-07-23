@@ -25,6 +25,8 @@ interface Customer {
 interface Assignment {
   id: number
   campaign_id: number
+  campaign_name?: string
+  campaign_status?: string
   status: string
   call_notes: string | null
   callback_date: string | null
@@ -340,10 +342,11 @@ function TelecallerDashboard({ activeCampaign }: { activeCampaign: Campaign | nu
   const [customerUiEpoch, setCustomerUiEpoch] = useState(0)
 
   const refreshQueue = useCallback(async () => {
-    if (!activeCampaign) return
-    try { const data = await callEdge('my_queue', { campaign_id: activeCampaign.id }); setQueue(data.queue || []) }
-    catch (err) { console.error('Queue fetch error:', err) }
-  }, [activeCampaign])
+    try {
+      const data = await callEdge('my_queue', { all_campaigns: true })
+      setQueue(data.queue || [])
+    } catch (err) { console.error('Queue fetch error:', err) }
+  }, [])
 
   const refreshSummary = useCallback(async () => {
     try { const data = await callEdge('my_summary', {}); setSummary(data.summary) }
@@ -370,12 +373,12 @@ function TelecallerDashboard({ activeCampaign }: { activeCampaign: Campaign | nu
 
   const handleUpdateStatus = async (status: CallStatus, fromQueue?: Assignment) => {
     const target = fromQueue ?? currentAssignment
-    if (!target || !activeCampaign) return
+    if (!target) return
     setBusy(true); setError(null)
     try {
       const result = await callEdge('update_status', {
         assignment_id: target.id,
-        campaign_id: activeCampaign.id,
+        campaign_id: target.campaign_id,
         status,
         call_notes: notes || undefined,
         callback_date: status === 'callback_later' ? callbackDate : undefined,
@@ -512,6 +515,13 @@ function TelecallerDashboard({ activeCampaign }: { activeCampaign: Campaign | nu
 
       {error && <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-700">{error}</div>}
       {rcFetchMessage && <div className="rounded-lg border border-green-200 bg-green-50 p-3 text-sm text-green-800">{rcFetchMessage}</div>}
+      {queue.some(a => a.campaign_id !== activeCampaign?.id) && (
+        <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-900">
+          You have {queue.filter(a => a.campaign_id !== activeCampaign?.id).length} open lead(s) from{' '}
+          {[...new Set(queue.filter(a => a.campaign_id !== activeCampaign?.id).map(a => a.campaign_name || `campaign #${a.campaign_id}`))].join(', ')}.
+          Open <strong>My Queue</strong> to continue those calls. <strong>Get next</strong> uses the campaign selected above ({activeCampaign?.campaign_name}).
+        </div>
+      )}
 
       {/* ── CALL VIEW ──────────────────────────────────────────────────────── */}
       {activeView === 'call' && (
@@ -577,6 +587,9 @@ function TelecallerDashboard({ activeCampaign }: { activeCampaign: Campaign | nu
               <div className="flex items-start justify-between gap-3">
                 <div className="flex-1 min-w-0">
                   <div className="font-medium text-gray-900">{asgn.customer.first_name} {asgn.customer.last_name || ''}</div>
+                  {asgn.campaign_name && (
+                    <div className="text-xs text-gray-500 mt-0.5">Campaign: {asgn.campaign_name}{asgn.campaign_status === 'closed' ? ' (closed)' : ''}</div>
+                  )}
                   <div className="text-sm text-gray-500 mt-0.5">📱 {asgn.customer.contact_phones} · 🚗 {asgn.customer.model} · {asgn.customer.vehicle_registration_number || '—'}</div>
                   {(() => {
                     const due = computeInsuranceDueDate(asgn.customer.last_insurance_expiry_date, asgn.customer.vehicle_sale_date)
@@ -1230,7 +1243,7 @@ function AdminDashboard({ campaigns, activeCampaign, onRefresh }: { campaigns: C
   }
 
   async function handleDelete(id: number, name: string) {
-    if (!confirm(`Delete campaign "${name}"? All leads and call records will be permanently removed.`)) return
+    if (!confirm(`Delete campaign "${name}"?\n\nThis permanently removes ALL leads and call history for this campaign (including in-progress and callbacks). To keep telecaller work, close the campaign instead — do not delete until My Queue is empty.`)) return
     setDeleting(id); setError(null)
     try { await callEdge('delete_campaign', { campaign_id: id }); setSuccess('Campaign deleted.'); onRefresh() }
     catch (err) { setError((err as Error).message) } finally { setDeleting(null) }

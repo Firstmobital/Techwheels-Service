@@ -428,7 +428,7 @@ Deno.serve(async (req) => {
       case "update_status":
         return handleUpdateStatus(supabase, userId, userName, body);
       case "my_queue":
-        return handleMyQueue(supabase, userId, body);
+        return handleMyQueue(supabase, userId, userData.user?.email || "", body);
       case "my_summary":
         return handleMySummary(supabase, userId);
       case "edit_assignment":
@@ -717,24 +717,37 @@ async function handleUpdateStatus(supabase: SupabaseClient, userId: string, user
 }
 
 // ─── my_queue: Get telecaller's assigned leads ─────────────────────────────
-async function handleMyQueue(supabase: SupabaseClient, userId: string, body: Record<string, unknown>) {
-  const campaignId = Number(body.campaign_id);
-  if (!campaignId) return errorResponse("Missing campaign_id");
+async function handleMyQueue(
+  supabase: SupabaseClient,
+  userId: string,
+  userEmail: string,
+  body: Record<string, unknown>,
+) {
+  const campaignId = body.campaign_id != null ? Number(body.campaign_id) : null;
+  const allCampaigns = body.all_campaigns === true || !campaignId;
 
-  const { data, error } = await supabase
+  const assigneeIds = [userId, userEmail].filter(Boolean);
+
+  let query = supabase
     .from("insurance_renewal_assignments")
     .select(`
       *,
-      all_service_data!inner(*)
+      all_service_data!inner(*),
+      insurance_renewal_campaigns!inner(campaign_name, status)
     `)
-    .eq("campaign_id", campaignId)
-    .eq("assigned_to", userId)
+    .in("assigned_to", assigneeIds)
     .in("status", ["in_progress", "callback_later", "no_answer"]);
 
+  if (!allCampaigns && campaignId) {
+    query = query.eq("campaign_id", campaignId);
+  }
+
+  const { data, error } = await query;
   if (error) return errorResponse(error.message);
 
   const queue = (data || []).map((a: Record<string, unknown>) => {
     const vehicle = a.all_service_data as unknown as Record<string, unknown>;
+    const camp = a.insurance_renewal_campaigns as Record<string, unknown> | null;
     const insDate = estimateInsuranceDate(
       vehicle.last_insurance_expiry_date as string,
       vehicle.vehicle_sale_date as string
@@ -742,6 +755,8 @@ async function handleMyQueue(supabase: SupabaseClient, userId: string, body: Rec
     return {
       id: a.id,
       campaign_id: a.campaign_id,
+      campaign_name: camp?.campaign_name as string | undefined,
+      campaign_status: camp?.status as string | undefined,
       status: a.status,
       call_count: a.call_count || 0,
       no_answer_count: a.no_answer_count || 0,
@@ -1258,6 +1273,30 @@ async function handleUpdateCampaign(supabase: SupabaseClient, body: Record<strin
 async function handleDeleteCampaign(supabase: SupabaseClient, body: Record<string, unknown>) {
   const campaignId = Number(body.campaign_id);
   if (!campaignId) return errorResponse("Missing campaign_id");
+
+  const { data: liveRows, error: liveErr } = await supabase
+    .from("insurance_renewal_assignments")
+    .select("id, status, assigned_to")
+    .eq("campaign_id", campaignId)
+    .in("status", LIVE_ASSIGNMENT_STATUSES);
+  if (liveErr) return errorResponse(liveErr.message);
+
+  const activeTelecaller = (liveRows || []).filter(
+    (r) => r.assigned_to && ["in_progress", "callback_later", "no_answer"].includes(r.status as string),
+  );
+  if (activeTelecaller.length > 0) {
+    return errorResponse(
+      `Cannot delete: ${activeTelecaller.length} lead(s) still assigned to telecallers (in progress / callback / no answer). Close the campaign and finish or reassign them first.`,
+      409,
+    );
+  }
+
+  if ((liveRows || []).length > 0 && body.force !== true) {
+    return errorResponse(
+      `Cannot delete: ${liveRows.length} lead(s) still in queue (pending or assigned). Use Close campaign, or pass force after clearing work.`,
+      409,
+    );
+  }
 
   const { error } = await supabase
     .from("insurance_renewal_campaigns")
