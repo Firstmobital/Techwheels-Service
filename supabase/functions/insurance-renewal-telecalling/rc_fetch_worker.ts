@@ -71,21 +71,157 @@ async function recordRcFetchAttempt(
   params: {
     campaign_id: number;
     customer_id: number;
-    job_id: string;
+    job_id: string | null;
     outcome: "success" | "failed" | "skipped_no_vrn" | "skipped_fresh";
     from_cache?: boolean;
     error_text?: string | null;
   },
 ) {
-  const { error } = await serviceClient.from("insurance_renewal_rc_fetch_attempts").insert({
-    campaign_id: params.campaign_id,
-    customer_id: params.customer_id,
-    job_id: params.job_id,
-    outcome: params.outcome,
-    from_cache: params.from_cache ?? false,
-    error_text: params.error_text ?? null,
-  });
+  const { error } = await serviceClient.from("insurance_renewal_rc_fetch_attempts").upsert(
+    {
+      campaign_id: params.campaign_id,
+      customer_id: params.customer_id,
+      job_id: params.job_id,
+      outcome: params.outcome,
+      from_cache: params.from_cache ?? false,
+      error_text: params.error_text ?? null,
+      attempted_at: new Date().toISOString(),
+    },
+    { onConflict: "campaign_id,customer_id" },
+  );
   if (error) throw new Error(`Failed to record RC attempt: ${error.message}`);
+}
+
+const RC_FETCH_CUSTOMER_SELECT =
+  "id, first_name, last_name, contact_phones, model, product_line, powertrain_type, chassis_no, vehicle_registration_number, vehicle_sale_date, vehicle_age_in_years, ex_showroom_price, idv, last_insurance_expiry_date, last_insurance_comapny, last_insurance_policy_number, sold_dealer, last_service_dealer";
+
+function customerPayloadFromRow(v: Record<string, unknown>) {
+  return {
+    id: v.id,
+    first_name: v.first_name,
+    last_name: v.last_name,
+    contact_phones: v.contact_phones,
+    model: v.model,
+    product_line: v.product_line,
+    powertrain_type: v.powertrain_type,
+    chassis_no: v.chassis_no,
+    vehicle_registration_number: v.vehicle_registration_number,
+    vehicle_sale_date: v.vehicle_sale_date,
+    vehicle_age_in_years: v.vehicle_age_in_years,
+    ex_showroom_price: v.ex_showroom_price,
+    idv: v.idv,
+    last_insurance_expiry_date: v.last_insurance_expiry_date,
+    last_insurance_comapny: v.last_insurance_comapny,
+    last_insurance_policy_number: v.last_insurance_policy_number,
+    sold_dealer: v.sold_dealer,
+    last_service_dealer: v.last_service_dealer,
+  };
+}
+
+/** One lead: same IDSPay path as bulk RC fetch (invoke-rc-provider → rto_idspay → all_service_data trigger). */
+export async function handleRcFetchSingleRecord(
+  serviceClient: SupabaseClient,
+  supabaseUrl: string,
+  serviceRoleKey: string,
+  body: Record<string, unknown>,
+) {
+  const campaignId = Number(body.campaign_id);
+  const assignmentId = Number(body.assignment_id);
+  if (!campaignId || !assignmentId) {
+    return json({ success: false, error: "Missing campaign_id or assignment_id" }, 400);
+  }
+
+  const { data: asgn, error: aErr } = await serviceClient
+    .from("insurance_renewal_assignments")
+    .select("id, campaign_id, customer_id")
+    .eq("id", assignmentId)
+    .single();
+  if (aErr || !asgn) return json({ success: false, error: "Assignment not found" }, 404);
+  if (Number(asgn.campaign_id) !== campaignId) {
+    return json({ success: false, error: "Campaign mismatch" }, 400);
+  }
+
+  const customerId = Number(asgn.customer_id);
+  const { data: row, error: sErr } = await serviceClient
+    .from("all_service_data")
+    .select(RC_FETCH_CUSTOMER_SELECT)
+    .eq("id", customerId)
+    .single();
+  if (sErr || !row) return json({ success: false, error: "Customer not found" }, 404);
+
+  const cutoff = staleInsuranceCutoffDate();
+  const vehicle = row as Record<string, unknown>;
+
+  if (!isStaleOrMissingInsurance(vehicle.last_insurance_expiry_date as string | null, cutoff)) {
+    await recordRcFetchAttempt(serviceClient, {
+      campaign_id: campaignId,
+      customer_id: customerId,
+      job_id: null,
+      outcome: "skipped_fresh",
+    });
+    return json({
+      success: true,
+      outcome: "skipped_fresh",
+      message: "Insurance expiry is already recent (<365 days). Bulk RC fetch would skip this lead too.",
+      customer: customerPayloadFromRow(vehicle),
+    });
+  }
+
+  const reg = normalizeRegNumber(vehicle.vehicle_registration_number as string | null);
+  if (!reg) {
+    await recordRcFetchAttempt(serviceClient, {
+      campaign_id: campaignId,
+      customer_id: customerId,
+      job_id: null,
+      outcome: "skipped_no_vrn",
+    });
+    return json({
+      success: false,
+      outcome: "skipped_no_vrn",
+      error: "No registration number on this record.",
+      customer: customerPayloadFromRow(vehicle),
+    });
+  }
+
+  const rc = await invokeRcProviderForReg(supabaseUrl, serviceRoleKey, reg);
+  if (rc.ok) {
+    await recordRcFetchAttempt(serviceClient, {
+      campaign_id: campaignId,
+      customer_id: customerId,
+      job_id: null,
+      outcome: "success",
+      from_cache: rc.fromCache ?? false,
+    });
+    const { data: refreshed } = await serviceClient
+      .from("all_service_data")
+      .select(RC_FETCH_CUSTOMER_SELECT)
+      .eq("id", customerId)
+      .single();
+    const updated = (refreshed ?? row) as Record<string, unknown>;
+    return json({
+      success: true,
+      outcome: "success",
+      from_cache: rc.fromCache ?? false,
+      message: rc.fromCache
+        ? "Insurance updated from RC cache (IDSPay)."
+        : "Insurance fetched from IDSPay and synced to this customer.",
+      customer: customerPayloadFromRow(updated),
+    });
+  }
+
+  await recordRcFetchAttempt(serviceClient, {
+    campaign_id: campaignId,
+    customer_id: customerId,
+    job_id: null,
+    outcome: "failed",
+    error_text: rc.error ?? "unknown",
+  });
+  return json({
+    success: false,
+    outcome: "failed",
+    error: rc.error ?? "RC lookup failed",
+    customer: customerPayloadFromRow(vehicle),
+  });
 }
 
 async function isRcFetchJobCancelled(serviceClient: SupabaseClient, jobId: string): Promise<boolean> {

@@ -296,6 +296,8 @@ function TelecallerDashboard({ activeCampaign }: { activeCampaign: Campaign | nu
   const [editCallbackDate, setEditCallbackDate] = useState('')
   const [editStatus, setEditStatus] = useState('')
   const [editBusy, setEditBusy] = useState(false)
+  const [rcFetchBusy, setRcFetchBusy] = useState(false)
+  const [rcFetchMessage, setRcFetchMessage] = useState<string | null>(null)
 
   const refreshQueue = useCallback(async () => {
     if (!activeCampaign) return
@@ -383,6 +385,38 @@ function TelecallerDashboard({ activeCampaign }: { activeCampaign: Campaign | nu
     catch (err) { console.error('WA log error:', err) }
   }
 
+  const mergeCustomerOntoAssignment = (assignment: Assignment, customer: Partial<Customer>) => {
+    const merged = { ...assignment, customer: { ...assignment.customer, ...customer } }
+    setCurrentAssignment(prev => (prev?.id === assignment.id ? merged : prev))
+    setQueue(prev => prev.map(a => (a.id === assignment.id ? merged : a)))
+  }
+
+  const handleRcFetchSingle = async (assignment: Assignment) => {
+    setRcFetchBusy(true)
+    setRcFetchMessage(null)
+    setError(null)
+    try {
+      const res = await callEdge('rc_fetch_single', {
+        campaign_id: assignment.campaign_id,
+        assignment_id: assignment.id,
+      })
+      if (res.customer) mergeCustomerOntoAssignment(assignment, res.customer)
+      if (res.success && res.outcome === 'success') {
+        setRcFetchMessage(res.message || 'RC fetch completed.')
+        setTimeout(() => setRcFetchMessage(null), 5000)
+      } else if (res.outcome === 'skipped_fresh') {
+        setRcFetchMessage(res.message || 'Insurance already fresh — no API call.')
+        setTimeout(() => setRcFetchMessage(null), 5000)
+      } else {
+        setError(res.error || res.message || 'RC fetch failed')
+      }
+    } catch (err) {
+      setError((err as Error).message)
+    } finally {
+      setRcFetchBusy(false)
+    }
+  }
+
   if (!activeCampaign) return (
     <div className="rounded-xl border border-gray-200 bg-white p-12 text-center">
       <div className="text-4xl mb-3">🛡️</div>
@@ -400,6 +434,7 @@ function TelecallerDashboard({ activeCampaign }: { activeCampaign: Campaign | nu
       </div>
 
       {error && <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-700">{error}</div>}
+      {rcFetchMessage && <div className="rounded-lg border border-green-200 bg-green-50 p-3 text-sm text-green-800">{rcFetchMessage}</div>}
 
       {/* ── CALL VIEW ──────────────────────────────────────────────────────── */}
       {activeView === 'call' && (
@@ -425,6 +460,8 @@ function TelecallerDashboard({ activeCampaign }: { activeCampaign: Campaign | nu
             showCallback={showCallback} setShowCallback={setShowCallback}
             onUpdateStatus={handleUpdateStatus}
             onLogWA={handleLogWA}
+            rcFetchBusy={rcFetchBusy}
+            onRcFetch={() => handleRcFetchSingle(currentAssignment)}
           />
         )
       )}
@@ -494,6 +531,8 @@ function TelecallerDashboard({ activeCampaign }: { activeCampaign: Campaign | nu
                     showCallback={showCallback} setShowCallback={setShowCallback}
                     onUpdateStatus={status => handleUpdateStatus(status, asgn)}
                     onLogWA={handleLogWA}
+                    rcFetchBusy={rcFetchBusy}
+                    onRcFetch={() => handleRcFetchSingle(asgn)}
                   />
                 <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 space-y-3">
                   <div className="text-xs font-semibold text-blue-700">Edit Assignment</div>
@@ -561,6 +600,7 @@ function CallCard({
   showRenewed, setShowRenewed,
   showCallback, setShowCallback,
   onUpdateStatus, onLogWA,
+  rcFetchBusy = false, onRcFetch,
 }: {
   assignment: Assignment; busy: boolean
   notes: string; setNotes: (v: string) => void
@@ -572,6 +612,8 @@ function CallCard({
   showCallback: boolean; setShowCallback: (v: boolean) => void
   onUpdateStatus: (s: CallStatus) => void
   onLogWA: (id: number, type: string) => void
+  rcFetchBusy?: boolean
+  onRcFetch?: () => void
 }) {
   const c = assignment.customer
   const phone = c.contact_phones || ''
@@ -619,6 +661,23 @@ function CallCard({
           📵 WA No-Pick
         </a>
       </div>
+
+      {onRcFetch && (
+        <div className="px-6 py-3 border-b border-gray-100 bg-slate-50 flex flex-wrap items-center gap-3">
+          <button
+            type="button"
+            onClick={onRcFetch}
+            disabled={busy || rcFetchBusy}
+            className="inline-flex items-center gap-2 rounded-lg border border-indigo-300 bg-indigo-50 px-4 py-2 text-sm font-semibold text-indigo-800 hover:bg-indigo-100 disabled:opacity-50"
+            title="Same IDSPay RC lookup as bulk campaign fetch — updates insurance on this customer only"
+          >
+            {rcFetchBusy ? 'Fetching from IDSPay…' : '🔄 Fetch insurance (IDSPay RC)'}
+          </button>
+          {dueInfo.estimated && (
+            <span className="text-xs text-slate-600">Recommended when due date is estimated and company/policy are blank.</span>
+          )}
+        </div>
+      )}
 
       {/* Detail grid */}
       <div className="grid grid-cols-2 gap-px bg-gray-100">

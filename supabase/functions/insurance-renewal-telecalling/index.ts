@@ -22,6 +22,7 @@ import {
   handleProcessRcFetchJobs,
   handleRcFetchCancel,
   handleRcFetchEnqueue,
+  handleRcFetchSingleRecord,
   RC_FETCH_PG_CRON_SECRET,
 } from "./rc_fetch_worker.ts";
 import { corsHeaders } from "../_shared/cors.ts";
@@ -380,6 +381,8 @@ Deno.serve(async (req) => {
         const svc2 = createClient(SUPABASE_URL, svcKey2);
         return handleRcFetchCancel(svc2, body);
       }
+      case "rc_fetch_single":
+        return handleRcFetchSingleRecord(supabase, SUPABASE_URL, serviceKey, body);
 
       default:
         return errorResponse(`Unknown action: ${action}`);
