@@ -85,12 +85,12 @@ interface DailySummary {
   quote_sent: number
   wrong_number: number
   not_reachable: number
-  already_renewed_unknown: number
+  policy_done: number
 }
 
 type CallStatus =
   | 'renewed_via_us' | 'renewed_elsewhere' | 'callback_later' | 'no_answer'
-  | 'not_reachable' | 'wrong_number' | 'not_interested' | 'already_renewed_unknown'
+  | 'not_reachable' | 'wrong_number' | 'not_interested' | 'policy_done'
   | 'quote_needed' | 'policy_requested' | 'quote_sent'
 
 const QUOTE_PIPELINE_STATUSES: CallStatus[] = ['quote_needed', 'policy_requested', 'quote_sent']
@@ -284,6 +284,7 @@ const STATUS_COLORS: Record<string, string> = {
   not_reachable: 'bg-red-100 text-red-700',
   wrong_number: 'bg-red-100 text-red-700',
   not_interested: 'bg-gray-200 text-gray-600',
+  policy_done: 'bg-teal-100 text-teal-700',
   already_renewed_unknown: 'bg-teal-100 text-teal-700',
   quote_needed: 'bg-indigo-100 text-indigo-800',
   policy_requested: 'bg-sky-100 text-sky-800',
@@ -304,7 +305,8 @@ function StatusBadge({ status }: { status: string }) {
     not_reachable: 'Not Reachable',
     wrong_number: 'Wrong Number',
     not_interested: 'Not Interested',
-    already_renewed_unknown: 'Already Renewed',
+    policy_done: 'Policy Done',
+    already_renewed_unknown: 'Policy Done',
     in_progress: 'In Progress',
   }
   const label = labels[status] || status.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
@@ -829,7 +831,7 @@ function TelecallerDashboard({ activeCampaign, onCampaignRefresh }: { activeCamp
                         <option value="no_answer">No Answer</option>
                         <option value="wrong_number">Wrong Number</option>
                         <option value="not_interested">Not Interested</option>
-                        <option value="already_renewed_unknown">Already Renewed (Unknown)</option>
+                        <option value="policy_done">Policy Done</option>
                       </select>
                     </div>
                     <div>
@@ -868,7 +870,7 @@ function TelecallerDashboard({ activeCampaign, onCampaignRefresh }: { activeCamp
           <SummaryCard label="Not Interested" value={summary.not_interested} color="gray" icon="😐" />
           <SummaryCard label="Not Reachable" value={summary.not_reachable} color="red" icon="🚫" />
           <SummaryCard label="Wrong Number" value={summary.wrong_number} color="red" icon="⚠️" />
-          <SummaryCard label="Already Renewed" value={summary.already_renewed_unknown} color="teal" icon="🔧" />
+          <SummaryCard label="Policy Done" value={summary.policy_done ?? 0} color="teal" icon="✅" />
         </div>
       )}
     </div>
@@ -1020,7 +1022,7 @@ function CallCard({
           <button onClick={() => onUpdateStatus('not_reachable')} disabled={busy} className="rounded-xl bg-rose-500 px-4 py-3 text-sm font-semibold text-white hover:bg-rose-600 disabled:opacity-50" title="Same 3-attempt retry as No Answer; 3rd attempt closes as Not Reachable">🚫 Not Reachable</button>
           <button onClick={() => { setShowNotes(true); onUpdateStatus('wrong_number') }} disabled={busy} className="rounded-xl bg-red-400 px-4 py-3 text-sm font-semibold text-white hover:bg-red-500 disabled:opacity-50">⚠️ Wrong Number</button>
           <button onClick={() => { setShowNotes(true); onUpdateStatus('not_interested') }} disabled={busy} className="rounded-xl bg-gray-400 px-4 py-3 text-sm font-semibold text-white hover:bg-gray-500 disabled:opacity-50">😐 Not Interested</button>
-          <button onClick={() => { setShowNotes(true); onUpdateStatus('already_renewed_unknown') }} disabled={busy} className="rounded-xl bg-teal-500 px-4 py-3 text-sm font-semibold text-white hover:bg-teal-600 disabled:opacity-50">🔧 Already Renewed</button>
+          <button onClick={() => { setShowNotes(true); onUpdateStatus('policy_done') }} disabled={busy} className="rounded-xl bg-teal-500 px-4 py-3 text-sm font-semibold text-white hover:bg-teal-600 disabled:opacity-50">✅ Policy Done</button>
           <button
             type="button"
             onClick={async () => {
@@ -1403,8 +1405,14 @@ function AdminDashboard({ campaigns, activeCampaign, onRefresh }: { campaigns: C
 
   async function fetchRenewed() {
     setLoadingTab(true)
-    try { const d = await callEdge('renewed_list', { campaign_id: activeCampaign?.id }); setRenewedList(d.renewed || []) }
-    catch (e) { console.error(e) } finally { setLoadingTab(false) }
+    try {
+      const d = await callEdge('renewed_list', { campaign_id: activeCampaign?.id })
+      setRenewedList(d.renewed || [])
+    } catch (e) {
+      console.error(e)
+      setError((e as Error).message)
+      setRenewedList([])
+    } finally { setLoadingTab(false) }
   }
 
   async function refreshCampaignNow() {
@@ -1890,14 +1898,14 @@ function AdminDashboard({ campaigns, activeCampaign, onRefresh }: { campaigns: C
                 <table className="w-full text-sm">
                   <thead className="bg-gray-50">
                     <tr>
-                      {['#', 'Telecaller', 'Calls Made', 'Connected', 'Renewed (Us)', 'Renewed (Elsewhere)', 'Callback', 'Quote Needed', 'Policy Req.', 'Quote Sent', 'No Answer', 'Not Interested', 'Wrong No.', 'Active'].map(h => (
+                      {['#', 'Telecaller', 'Calls Made', 'Connected', 'Renewed (Us)', 'Renewed (Elsewhere)', 'Callback', 'Quote Needed', 'Policy Req.', 'Quote Sent', 'No Answer', 'Not Interested', 'Wrong No.', 'Policy Done', 'Active'].map(h => (
                         <th key={h} className="px-3 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide whitespace-nowrap">{h}</th>
                       ))}
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">
                     {agentStats.length === 0 ? (
-                      <tr><td colSpan={14} className="px-4 py-8 text-center text-gray-400">{statsDateFrom || statsDateTo ? 'No call activity in this date range (try Clear for all time).' : 'No telecaller activity yet — counts appear after Get next / dispositions (idle pending pool is excluded).'}</td></tr>
+                      <tr><td colSpan={15} className="px-4 py-8 text-center text-gray-400">{statsDateFrom || statsDateTo ? 'No call activity in this date range (try Clear for all time).' : 'No telecaller activity yet — counts appear after Get next / dispositions (idle pending pool is excluded).'}</td></tr>
                     ) : agentStats.map((a: {
                       telecaller_id?: string
                       telecaller_name?: string
@@ -1913,6 +1921,7 @@ function AdminDashboard({ campaigns, activeCampaign, onRefresh }: { campaigns: C
                       no_answer?: number
                       not_interested?: number
                       wrong_number?: number
+                      policy_done?: number
                       in_progress?: number
                       still_assigned?: number
                     }, i: number) => {
@@ -1942,6 +1951,7 @@ function AdminDashboard({ campaigns, activeCampaign, onRefresh }: { campaigns: C
                         <td className="px-3 py-3 text-orange-700">{a.no_answer || 0}</td>
                         <td className="px-3 py-3 text-gray-500">{a.not_interested || 0}</td>
                         <td className="px-3 py-3 text-red-500">{a.wrong_number || 0}</td>
+                        <td className="px-3 py-3 text-teal-700">{a.policy_done || 0}</td>
                         <td className="px-3 py-3 text-gray-400">{active}</td>
                       </tr>
                     )})}
@@ -1973,8 +1983,16 @@ function AdminDashboard({ campaigns, activeCampaign, onRefresh }: { campaigns: C
                 <tbody className="divide-y divide-gray-100">
                   {renewedList.length === 0 ? (
                     <tr><td colSpan={8} className="px-4 py-8 text-center text-gray-400">No renewals in this campaign yet</td></tr>
-                  ) : renewedList.map((r, i) => (
-                    <tr key={i} className="hover:bg-gray-50">
+                  ) : renewedList.map((r: {
+                    id?: number
+                    customer?: { first_name?: string; last_name?: string; model?: string; vehicle_registration_number?: string; contact_phones?: string }
+                    called_at?: string
+                    quoted_premium?: number
+                    renewal_company?: string
+                    assigned_to?: string
+                    call_notes?: string
+                  }) => (
+                    <tr key={r.id ?? `${r.customer?.vehicle_registration_number}-${r.called_at}`} className="hover:bg-gray-50">
                       <td className="px-4 py-3 font-medium text-gray-900">{r.customer?.first_name} {r.customer?.last_name || ''}</td>
                       <td className="px-4 py-3 text-gray-600">{r.customer?.model} · {r.customer?.vehicle_registration_number || '—'}</td>
                       <td className="px-4 py-3 text-gray-600">{r.customer?.contact_phones}</td>

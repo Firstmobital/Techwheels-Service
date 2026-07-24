@@ -54,7 +54,7 @@ Legacy RPC path may still set **`assigned`** (email in `assigned_to`) if anythin
 | `no_answer` | (If persisted) retry state | No | Yes (edge queue filter) |
 | `renewed_via_us` | Won via Techwheels | No | No (terminal) |
 | `renewed_elsewhere` | Renewed elsewhere | No | Terminal |
-| `already_renewed_unknown` | Says renewed; channel unknown | No | Terminal |
+| `policy_done` | Lead completed — policy issued via telecaller work | No | Terminal |
 | `not_interested` | Declined | No | Terminal |
 | `wrong_number` | Bad number | No | Terminal |
 | `not_reachable` | Cannot reach | No | Terminal |
@@ -170,12 +170,12 @@ Reference (bug location):
 
 ---
 
-### 3.9 🔧 Already Renewed
+### 3.9 ✅ Policy Done
 
 | Layer | Detail |
 |-------|--------|
-| **UI** | Label "Already Renewed"; notes quirk. |
-| **Backend** | `already_renewed_unknown` — renewed but channel unknown (distinct from Elsewhere / Via Us). |
+| **UI** | Label "Policy Done" — lead completed via telecaller (policy issued). |
+| **Backend** | `policy_done` (formerly `already_renewed_unknown`). |
 | **Status** | **Working**. |
 
 ---
@@ -207,7 +207,7 @@ Reference (bug location):
 | Goal | Use |
 |------|-----|
 | **Success + premium** | ✅ Renewed via Us |
-| **Lost / closed** | 🔀 Elsewhere, 🔧 Already Renewed, 😐 Not Interested, ⚠️ Wrong Number, 🚫 Not Reachable |
+| **Lost / closed** | 🔀 Elsewhere, ✅ Policy Done, 😐 Not Interested, ⚠️ Wrong Number, 🚫 Not Reachable |
 | **Follow up** | 🔁 Callback Later (track in **My Queue**) |
 | **Retry tomorrow + drip** | 📵 No Answer — **broken**; use Callback or Not Reachable until fix |
 | **Outreach without disposition** | WA Reminder / WA No-Pick; 💬 Send WA Drip (Meta); 🔗 Self-Renewal Link |

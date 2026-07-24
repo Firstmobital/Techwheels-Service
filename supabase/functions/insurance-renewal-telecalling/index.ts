@@ -129,6 +129,13 @@ async function fetchEligibleVehiclesInWindow(
 /** Quote pipeline: active work after customer connects, before terminal disposition. */
 const QUOTE_PIPELINE_STATUSES = ["quote_needed", "policy_requested", "quote_sent"];
 
+/** Policy Done (formerly already_renewed_unknown). Legacy value kept for pre-migration rows. */
+const POLICY_DONE_STATUSES = ["policy_done", "already_renewed_unknown"];
+
+function isPolicyDoneStatus(status: string): boolean {
+  return POLICY_DONE_STATUSES.includes(status);
+}
+
 /** Statuses that mean the lead is still in a campaign queue (not terminal / not retired). */
 const LIVE_ASSIGNMENT_STATUSES = [
   "pending",
@@ -642,8 +649,9 @@ async function handleGetNext(supabase: SupabaseClient, userId: string, userName:
 async function handleUpdateStatus(supabase: SupabaseClient, userId: string, userName: string, body: Record<string, unknown>) {
   const assignmentId = Number(body.assignment_id);
   const campaignId = Number(body.campaign_id);
-  const status = body.status as string;
+  let status = body.status as string;
   if (!assignmentId || !campaignId || !status) return errorResponse("Missing required fields");
+  if (status === "already_renewed_unknown") status = "policy_done";
 
   const updateData: Record<string, unknown> = {
     status,
@@ -834,6 +842,7 @@ async function handleMySummary(supabase: SupabaseClient, userId: string) {
     quote_sent: data?.filter((d: Record<string, unknown>) => d.status === "quote_sent").length || 0,
     no_answer: data?.filter((d: Record<string, unknown>) => d.status === "no_answer" || d.status === "not_reachable").length || 0,
     not_interested: data?.filter((d: Record<string, unknown>) => d.status === "not_interested").length || 0,
+    policy_done: data?.filter((d: Record<string, unknown>) => isPolicyDoneStatus(d.status as string)).length || 0,
     premium_collected: data
       ?.filter((d: Record<string, unknown>) => d.status === "renewed_via_us")
       .reduce((sum: number, d: Record<string, unknown>) => sum + Number(d.quoted_premium || 0), 0) || 0,
@@ -856,7 +865,10 @@ async function handleEditAssignment(supabase: SupabaseClient, userId: string, bo
   const updateData: Record<string, unknown> = {};
   if (body.call_notes !== undefined) updateData.call_notes = body.call_notes;
   if (body.callback_date !== undefined) updateData.callback_date = body.callback_date || null;
-  if (body.status !== undefined) updateData.status = body.status;
+  if (body.status !== undefined) {
+    const nextStatus = body.status === "already_renewed_unknown" ? "policy_done" : body.status;
+    updateData.status = nextStatus;
+  }
   updateData.updated_at = new Date().toISOString();
 
   const { data: updated, error } = await supabase
@@ -922,6 +934,7 @@ async function handleAdminStats(supabase: SupabaseClient, role: string, body: Re
     "not_interested",
     "wrong_number",
     "not_reachable",
+    "policy_done",
     "already_renewed_unknown",
   ];
 
@@ -950,7 +963,7 @@ async function handleAdminStats(supabase: SupabaseClient, role: string, body: Re
         not_interested: 0,
         wrong_number: 0,
         not_reachable: 0,
-        already_renewed_unknown: 0,
+        policy_done: 0,
         in_progress: 0,
         quote_needed: 0,
         policy_requested: 0,
@@ -961,7 +974,7 @@ async function handleAdminStats(supabase: SupabaseClient, role: string, body: Re
     }
     const stats = statsMap.get(key)!;
     stats.calls_made = (stats.calls_made as number) + (row.call_count || 0);
-    if (["renewed_via_us", "renewed_elsewhere", "callback_later", "not_interested", "wrong_number", "not_reachable", "already_renewed_unknown", ...QUOTE_PIPELINE_STATUSES].includes(row.status)) {
+    if (["renewed_via_us", "renewed_elsewhere", "callback_later", "not_interested", "wrong_number", "not_reachable", "policy_done", "already_renewed_unknown", ...QUOTE_PIPELINE_STATUSES].includes(row.status)) {
       stats.calls_connected = (stats.calls_connected as number) + 1;
     }
     if (TERMINAL_COMPLETED.includes(row.status)) {
@@ -977,7 +990,7 @@ async function handleAdminStats(supabase: SupabaseClient, role: string, body: Re
     if (row.status === "not_interested") stats.not_interested = (stats.not_interested as number) + 1;
     if (row.status === "wrong_number") stats.wrong_number = (stats.wrong_number as number) + 1;
     if (row.status === "not_reachable") stats.not_reachable = (stats.not_reachable as number) + 1;
-    if (row.status === "already_renewed_unknown") stats.already_renewed_unknown = (stats.already_renewed_unknown as number) + 1;
+    if (isPolicyDoneStatus(row.status)) stats.policy_done = (stats.policy_done as number) + 1;
     if (row.status === "in_progress") stats.in_progress = (stats.in_progress as number) + 1;
     if (row.status === "quote_needed") stats.quote_needed = (stats.quote_needed as number) + 1;
     if (row.status === "policy_requested") stats.policy_requested = (stats.policy_requested as number) + 1;
@@ -1004,8 +1017,8 @@ async function handleRenewedList(supabase: SupabaseClient, body: Record<string, 
     .from("insurance_renewal_assignments")
     .select(`
       id, campaign_id, status, quoted_premium, renewal_company, call_notes,
-      updated_at, assigned_to_name,
-      vehicles(first_name, last_name, contact_phones, model, vehicle_registration_number, last_insurance_expiry_date)
+      updated_at, assigned_to, assigned_to_name,
+      all_service_data!inner(first_name, last_name, contact_phones, model, vehicle_registration_number, last_insurance_expiry_date)
     `)
     .eq("status", "renewed_via_us")
     .order("updated_at", { ascending: false });
@@ -1016,18 +1029,22 @@ async function handleRenewedList(supabase: SupabaseClient, body: Record<string, 
   if (error) return errorResponse(error.message);
 
   const renewed = (data || []).map((r: Record<string, unknown>) => {
-    const v = r.vehicles as Record<string, unknown>;
+    const v = r.all_service_data as Record<string, unknown>;
     return {
       id: r.id,
-      customer_name: `${v?.first_name || ""} ${v?.last_name || ""}`.trim(),
-      phone: v?.contact_phones,
-      model: v?.model,
-      reg_number: v?.vehicle_registration_number,
       quoted_premium: r.quoted_premium,
       renewal_company: r.renewal_company,
       call_notes: r.call_notes,
-      renewed_by: r.assigned_to_name,
-      renewed_at: r.updated_at,
+      called_at: r.updated_at,
+      assigned_to: r.assigned_to_name || r.assigned_to,
+      customer: {
+        first_name: v?.first_name,
+        last_name: v?.last_name,
+        contact_phones: v?.contact_phones,
+        model: v?.model,
+        vehicle_registration_number: v?.vehicle_registration_number,
+        last_insurance_expiry_date: v?.last_insurance_expiry_date,
+      },
     };
   });
 
@@ -2181,7 +2198,7 @@ async function updateCampaignCounts(supabase: SupabaseClient, campaignId: number
     quote_sent_count: assignments?.filter((a: Record<string, unknown>) => a.status === "quote_sent").length || 0,
     renewed_count: assignments?.filter((a: Record<string, unknown>) => a.status === "renewed_via_us").length || 0,
     completed_count: assignments?.filter((a: Record<string, unknown>) =>
-      ["renewed_via_us", "renewed_elsewhere", "not_interested", "wrong_number", "not_reachable", "already_renewed_unknown"].includes(a.status as string)
+      ["renewed_via_us", "renewed_elsewhere", "not_interested", "wrong_number", "not_reachable", "policy_done", "already_renewed_unknown"].includes(a.status as string)
     ).length || 0,
     out_of_window_count: assignments?.filter((a: Record<string, unknown>) => a.status === "out_of_window").length || 0,
   };

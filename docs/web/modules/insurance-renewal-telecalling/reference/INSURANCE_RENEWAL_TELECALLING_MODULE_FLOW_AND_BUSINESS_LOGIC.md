@@ -57,7 +57,7 @@ in the same change that introduced this module (2026-07-22) because:
 1. **Eligibility window differs**: rolling "N days before expiry" anchored to
    `last_insurance_expiry_date`, not a service-due date range.
 2. **Disposition set differs**: `renewed_via_us`, `renewed_elsewhere`,
-   `already_renewed_unknown`, etc. — service outcomes like `already_serviced`/
+   `policy_done`, etc. — service outcomes like `already_serviced`/
    `sold_vehicle`/`booked` don't apply.
 3. **No downstream booking bridge**: unlike service `booked` (which
    auto-creates a `service_bookings` row), `renewed_via_us` only records
@@ -166,7 +166,7 @@ correctness always comes from the server-side view, not the client mirror.
 
 `pending`, `assigned`, `renewed_via_us`, `renewed_elsewhere`, `not_interested`,
 `callback_later`, `no_answer`, `not_reachable`, `wrong_number`,
-`already_renewed_unknown`, `out_of_window`.
+`policy_done`, `out_of_window`.
 
 ### 6.5 Concurrency-safe allotment RPC
 
