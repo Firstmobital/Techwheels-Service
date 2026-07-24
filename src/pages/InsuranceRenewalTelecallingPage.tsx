@@ -96,6 +96,27 @@ type CallStatus =
 
 const QUOTE_PIPELINE_STATUSES: CallStatus[] = ['quote_needed', 'policy_requested', 'quote_sent']
 
+/** My Queue KPI card order (matches my_queue edge statuses). */
+const MY_QUEUE_KPI_STATUSES: { status: string; label: string; icon: string; color: keyof typeof SUMMARY_CARD_COLORS }[] = [
+  { status: 'in_progress', label: 'In Progress', icon: '📞', color: 'blue' },
+  { status: 'callback_later', label: 'Callback Later', icon: '🔁', color: 'purple' },
+  { status: 'quote_needed', label: 'Quote Needed', icon: '📋', color: 'blue' },
+  { status: 'policy_requested', label: 'Policy Requested', icon: '📄', color: 'blue' },
+  { status: 'quote_sent', label: 'Quote Sent', icon: '💰', color: 'blue' },
+  { status: 'no_answer', label: 'No Answer', icon: '📵', color: 'orange' },
+]
+
+const SUMMARY_CARD_COLORS = {
+  blue: 'border-blue-200 bg-blue-50 text-blue-900',
+  green: 'border-green-200 bg-green-50 text-green-900',
+  purple: 'border-purple-200 bg-purple-50 text-purple-900',
+  orange: 'border-orange-200 bg-orange-50 text-orange-900',
+  red: 'border-red-200 bg-red-50 text-red-900',
+  gray: 'border-gray-200 bg-gray-50 text-gray-900',
+  teal: 'border-teal-200 bg-teal-50 text-teal-900',
+  yellow: 'border-yellow-200 bg-yellow-50 text-yellow-900',
+} as const
+
 const EDGE_URL = `${supabaseUrl}/functions/v1/insurance-renewal-telecalling`
 
 /** Valid access token for edge calls (validates/refreshes session via Supabase Auth API). */
@@ -409,8 +430,9 @@ function TelecallerDashboard({ activeCampaign, onCampaignRefresh }: { activeCamp
   const [error, setError] = useState<string | null>(null)
   const [activeView, setActiveView] = useState<'call' | 'queue' | 'summary'>('call')
   const [queueSearch, setQueueSearch] = useState('')
-  /** '' = all; '__none__' = blank sold_dealer; else exact sold_dealer string */
   const [queueSoldByFilter, setQueueSoldByFilter] = useState('')
+  /** null = KPI overview only; 'all' or status key = show filtered list */
+  const [queueStatusFilter, setQueueStatusFilter] = useState<string | null>(null)
   // Call form
   const [notes, setNotes] = useState('')
   const [callbackDate, setCallbackDate] = useState('')
@@ -489,7 +511,24 @@ function TelecallerDashboard({ activeCampaign, onCampaignRefresh }: { activeCamp
         setError('📵 Couldn\'t connect — back to pool tomorrow (attempt ' + (result?.no_answer_count ?? '') + '/3, then marked not reachable)')
         setTimeout(() => setError(null), 4000)
       }
-      if (fromQueue) {
+      if (fromQueue && QUOTE_PIPELINE_STATUSES.includes(status)) {
+        setQueue(prev => prev.map(a => (
+          a.id === target.id
+            ? {
+                ...a,
+                status,
+                call_notes: notes || a.call_notes,
+                quoted_premium: status === 'quote_sent' && quotedPremium ? Number(quotedPremium) : a.quoted_premium,
+                renewal_company: status === 'quote_sent' && renewalCompany ? renewalCompany : a.renewal_company,
+              }
+            : a
+        )))
+        setShowQuoteSent(false)
+        setShowRenewed(false)
+        setShowCallback(false)
+        setRcFetchMessage(`Status updated to ${status.replace(/_/g, ' ')}.`)
+        setTimeout(() => setRcFetchMessage(null), 5000)
+      } else if (fromQueue) {
         setEditingId(null)
         resetCallForm()
       } else if (QUOTE_PIPELINE_STATUSES.includes(status)) {
@@ -507,6 +546,8 @@ function TelecallerDashboard({ activeCampaign, onCampaignRefresh }: { activeCamp
         setShowQuoteSent(false)
         setShowRenewed(false)
         setShowCallback(false)
+        setRcFetchMessage(`Status updated to ${status.replace(/_/g, ' ')}.`)
+        setTimeout(() => setRcFetchMessage(null), 5000)
       } else {
         setCurrentAssignment(null)
         resetCallForm()
@@ -654,7 +695,7 @@ function TelecallerDashboard({ activeCampaign, onCampaignRefresh }: { activeCamp
     <div className="space-y-4">
       <div className="flex gap-2">
         <button onClick={() => setActiveView('call')} className={`rounded-lg px-4 py-2 text-sm font-medium ${activeView === 'call' ? 'bg-gray-900 text-white' : 'bg-white border border-gray-200 text-gray-600'}`}>📞 Call</button>
-        <button onClick={() => { setActiveView('queue'); refreshQueue() }} className={`rounded-lg px-4 py-2 text-sm font-medium ${activeView === 'queue' ? 'bg-gray-900 text-white' : 'bg-white border border-gray-200 text-gray-600'}`}>📋 My Queue ({queue.length})</button>
+        <button onClick={() => { setActiveView('queue'); setQueueStatusFilter(null); refreshQueue() }} className={`rounded-lg px-4 py-2 text-sm font-medium ${activeView === 'queue' ? 'bg-gray-900 text-white' : 'bg-white border border-gray-200 text-gray-600'}`}>📋 My Queue ({queue.length})</button>
         <button onClick={() => { setActiveView('summary'); refreshSummary() }} className={`rounded-lg px-4 py-2 text-sm font-medium ${activeView === 'summary' ? 'bg-gray-900 text-white' : 'bg-white border border-gray-200 text-gray-600'}`}>📊 Today&apos;s Summary</button>
       </div>
 
@@ -704,73 +745,126 @@ function TelecallerDashboard({ activeCampaign, onCampaignRefresh }: { activeCamp
 
       {/* ── QUEUE VIEW ─────────────────────────────────────────────────────── */}
       {activeView === 'queue' && (
-        <div className="space-y-2">
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-            <div className="relative flex-1">
-              <input
-                type="text"
-                value={queueSearch}
-                onChange={e => setQueueSearch(e.target.value)}
-                placeholder="Search by name, phone, reg or sold by…"
-                className="w-full rounded-lg border border-gray-200 bg-white py-2 pl-9 pr-4 text-sm text-gray-900 placeholder:text-gray-400 focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-400"
-              />
-              <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">🔍</span>
-              {queueSearch && (
-                <button onClick={() => setQueueSearch('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 text-sm">✕</button>
-              )}
+        <div className="space-y-4">
+          {queue.length === 0 ? (
+            <div className="rounded-xl border border-gray-200 bg-white p-8 text-center text-sm text-gray-400">
+              No active assignments. Click &quot;Get Next Customer&quot; to start calling.
             </div>
-            {queue.length > 0 && (
-              <label className="flex shrink-0 items-center gap-2 text-sm text-gray-600">
-                <span className="whitespace-nowrap font-medium">Sold by</span>
-                <select
-                  value={queueSoldByFilter}
-                  onChange={e => setQueueSoldByFilter(e.target.value)}
-                  className="min-w-[10rem] max-w-[16rem] rounded-lg border border-gray-200 bg-white px-2.5 py-2 text-sm text-gray-900 focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-400"
-                >
-                  <option value="">All dealers</option>
-                  {[...new Set(queue.map(a => {
-                    const t = (a.customer.sold_dealer || '').trim()
-                    return t || '__none__'
-                  }))].sort((a, b) => {
-                    if (a === '__none__') return 1
-                    if (b === '__none__') return -1
-                    return a.localeCompare(b)
-                  }).map(key => (
-                    <option key={key} value={key}>
-                      {key === '__none__' ? '— (not set)' : key}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            )}
-          </div>
-          {(() => {
-            const q = queueSearch.trim().toLowerCase()
-            let filtered = queue
-            if (queueSoldByFilter) {
-              filtered = filtered.filter(a => {
-                const t = (a.customer.sold_dealer || '').trim()
-                const key = t || '__none__'
-                return key === queueSoldByFilter
-              })
-            }
-            if (q) {
-              filtered = filtered.filter(a =>
-                `${a.customer.first_name} ${a.customer.last_name || ''}`.toLowerCase().includes(q) ||
-                (a.customer.contact_phones || '').toLowerCase().includes(q) ||
-                (a.customer.vehicle_registration_number || '').toLowerCase().includes(q) ||
-                (a.customer.sold_dealer || '').toLowerCase().includes(q)
-              )
-            }
-            const hasFilters = Boolean(q || queueSoldByFilter)
-            if (filtered.length === 0) return (
-              <div className="rounded-xl border border-gray-200 bg-white p-8 text-center text-sm text-gray-400">
-                {hasFilters
-                  ? 'No queue items match your filters.'
-                  : 'No active assignments. Click "Get Next Customer" to start calling.'}
+          ) : (
+            <>
+              <div>
+                <h3 className="text-sm font-semibold text-gray-700 mb-2">Your open leads by status</h3>
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+                  <QueueKpiCard
+                    label="All open"
+                    value={queue.length}
+                    color="gray"
+                    icon="📋"
+                    selected={queueStatusFilter === 'all'}
+                    onClick={() => setQueueStatusFilter('all')}
+                  />
+                  {MY_QUEUE_KPI_STATUSES.map(({ status, label, icon, color }) => {
+                    const count = queue.filter(a => a.status === status).length
+                    if (count === 0) return null
+                    return (
+                      <QueueKpiCard
+                        key={status}
+                        label={label}
+                        value={count}
+                        color={color}
+                        icon={icon}
+                        selected={queueStatusFilter === status}
+                        onClick={() => setQueueStatusFilter(status)}
+                      />
+                    )
+                  })}
+                </div>
+                {!queueStatusFilter && (
+                  <p className="mt-3 text-center text-sm text-gray-500">Tap a card above to view leads in that status.</p>
+                )}
               </div>
-            )
-            return filtered.map((asgn: Assignment) => (
+
+              {queueStatusFilter && (
+                <div className="space-y-2 border-t border-gray-100 pt-4">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <h3 className="text-sm font-semibold text-gray-800">
+                      {queueStatusFilter === 'all'
+                        ? `All open leads (${queue.length})`
+                        : `${MY_QUEUE_KPI_STATUSES.find(s => s.status === queueStatusFilter)?.label ?? queueStatusFilter.replace(/_/g, ' ')} (${queue.filter(a => a.status === queueStatusFilter).length})`}
+                    </h3>
+                    <button
+                      type="button"
+                      onClick={() => { setQueueStatusFilter(null); setQueueSearch(''); setQueueSoldByFilter('') }}
+                      className="text-sm text-blue-600 hover:text-blue-800"
+                    >
+                      ← Back to status cards
+                    </button>
+                  </div>
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                    <div className="relative flex-1">
+                      <input
+                        type="text"
+                        value={queueSearch}
+                        onChange={e => setQueueSearch(e.target.value)}
+                        placeholder="Search by name, phone, reg or sold by…"
+                        className="w-full rounded-lg border border-gray-200 bg-white py-2 pl-9 pr-4 text-sm text-gray-900 placeholder:text-gray-400 focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-400"
+                      />
+                      <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">🔍</span>
+                      {queueSearch && (
+                        <button onClick={() => setQueueSearch('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 text-sm">✕</button>
+                      )}
+                    </div>
+                    <label className="flex shrink-0 items-center gap-2 text-sm text-gray-600">
+                      <span className="whitespace-nowrap font-medium">Sold by</span>
+                      <select
+                        value={queueSoldByFilter}
+                        onChange={e => setQueueSoldByFilter(e.target.value)}
+                        className="min-w-[10rem] max-w-[16rem] rounded-lg border border-gray-200 bg-white px-2.5 py-2 text-sm text-gray-900 focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-400"
+                      >
+                        <option value="">All dealers</option>
+                        {[...new Set(queue.map(a => {
+                          const t = (a.customer.sold_dealer || '').trim()
+                          return t || '__none__'
+                        }))].sort((a, b) => {
+                          if (a === '__none__') return 1
+                          if (b === '__none__') return -1
+                          return a.localeCompare(b)
+                        }).map(key => (
+                          <option key={key} value={key}>
+                            {key === '__none__' ? '— (not set)' : key}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  </div>
+                  {(() => {
+                    const q = queueSearch.trim().toLowerCase()
+                    let filtered = queue
+                    if (queueStatusFilter !== 'all') {
+                      filtered = filtered.filter(a => a.status === queueStatusFilter)
+                    }
+                    if (queueSoldByFilter) {
+                      filtered = filtered.filter(a => {
+                        const t = (a.customer.sold_dealer || '').trim()
+                        const key = t || '__none__'
+                        return key === queueSoldByFilter
+                      })
+                    }
+                    if (q) {
+                      filtered = filtered.filter(a =>
+                        `${a.customer.first_name} ${a.customer.last_name || ''}`.toLowerCase().includes(q) ||
+                        (a.customer.contact_phones || '').toLowerCase().includes(q) ||
+                        (a.customer.vehicle_registration_number || '').toLowerCase().includes(q) ||
+                        (a.customer.sold_dealer || '').toLowerCase().includes(q)
+                      )
+                    }
+                    const hasFilters = Boolean(q || queueSoldByFilter)
+                    if (filtered.length === 0) return (
+                      <div className="rounded-xl border border-gray-200 bg-white p-8 text-center text-sm text-gray-400">
+                        {hasFilters ? 'No queue items match your filters.' : 'No leads in this status.'}
+                      </div>
+                    )
+                    return filtered.map((asgn: Assignment) => (
             <div key={asgn.id} className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
               <div className="flex items-start justify-between gap-3">
                 <div className="flex-1 min-w-0">
@@ -786,6 +880,9 @@ function TelecallerDashboard({ activeCampaign, onCampaignRefresh }: { activeCamp
                   })()}
                   {asgn.status === 'callback_later' && asgn.callback_date && <div className="mt-1 text-xs text-purple-600">📅 Callback on {formatDate(asgn.callback_date)}</div>}
                   {asgn.status === 'renewed_via_us' && <div className="mt-1 text-xs text-green-600">✅ Renewed via us{asgn.quoted_premium ? ` — ${formatCurrency(asgn.quoted_premium)}` : ''}</div>}
+                  {QUOTE_PIPELINE_STATUSES.includes(asgn.status as CallStatus) && (
+                    <div className="mt-1"><StatusBadge status={asgn.status} /></div>
+                  )}
                   {asgn.call_notes && editingId !== asgn.id && <div className="mt-1 rounded bg-gray-50 px-3 py-1.5 text-xs text-gray-600">📝 {asgn.call_notes}</div>}
                 </div>
                 <div className="flex items-center gap-1.5 flex-shrink-0 flex-wrap justify-end">
@@ -826,6 +923,7 @@ function TelecallerDashboard({ activeCampaign, onCampaignRefresh }: { activeCamp
                         <option value="quote_needed">Quote Needed</option>
                         <option value="policy_requested">Policy Requested</option>
                         <option value="quote_sent">Quote Sent</option>
+                        <option value="policy_done">Policy Done</option>
                         <option value="assigned">Assigned</option>
                         <option value="renewed_via_us">Renewed via Us</option>
                         <option value="renewed_elsewhere">Renewed Elsewhere</option>
@@ -833,7 +931,6 @@ function TelecallerDashboard({ activeCampaign, onCampaignRefresh }: { activeCamp
                         <option value="no_answer">No Answer</option>
                         <option value="wrong_number">Wrong Number</option>
                         <option value="not_interested">Not Interested</option>
-                        <option value="policy_done">Policy Done</option>
                       </select>
                     </div>
                     <div>
@@ -854,7 +951,11 @@ function TelecallerDashboard({ activeCampaign, onCampaignRefresh }: { activeCamp
               )}
             </div>
           ))
-          })()}
+                  })()}
+                </div>
+              )}
+            </>
+          )}
         </div>
       )}
 
@@ -1012,7 +1113,7 @@ function CallCard({
           <div className="grid gap-2 grid-cols-1 sm:grid-cols-3">
             <button onClick={() => { setShowNotes(true); onUpdateStatus('quote_needed') }} disabled={busy} className="rounded-xl bg-indigo-500 px-4 py-3 text-sm font-semibold text-white hover:bg-indigo-600 disabled:opacity-50">📋 Quote Needed</button>
             <button onClick={() => { setShowNotes(true); onUpdateStatus('policy_requested') }} disabled={busy} className="rounded-xl bg-sky-500 px-4 py-3 text-sm font-semibold text-white hover:bg-sky-600 disabled:opacity-50">📄 Policy Requested</button>
-            <button onClick={() => { setShowQuoteSent(true); setShowNotes(true) }} disabled={busy} className="rounded-xl bg-cyan-500 px-4 py-3 text-sm font-semibold text-white hover:bg-cyan-600 disabled:opacity-50">💰 Quote Sent</button>
+            <button onClick={() => { setShowNotes(true); onUpdateStatus('quote_sent') }} disabled={busy} className="rounded-xl bg-cyan-500 px-4 py-3 text-sm font-semibold text-white hover:bg-cyan-600 disabled:opacity-50" title="Saves immediately — add premium in notes or Edit below">💰 Quote Sent</button>
           </div>
         </div>
 
@@ -1133,21 +1234,36 @@ function DetailRow({ label, value, highlight }: { label: string; value: string; 
   )
 }
 
-function SummaryCard({ label, value, color, icon }: { label: string; value: string | number; color: string; icon: string }) {
-  const colors: Record<string, string> = {
-    blue: 'border-blue-200 bg-blue-50 text-blue-900', green: 'border-green-200 bg-green-50 text-green-900',
-    purple: 'border-purple-200 bg-purple-50 text-purple-900', orange: 'border-orange-200 bg-orange-50 text-orange-900',
-    red: 'border-red-200 bg-red-50 text-red-900', gray: 'border-gray-200 bg-gray-50 text-gray-900',
-    teal: 'border-teal-200 bg-teal-50 text-teal-900', yellow: 'border-yellow-200 bg-yellow-50 text-yellow-900',
-  }
+function SummaryCard({ label, value, color, icon }: { label: string; value: string | number; color: keyof typeof SUMMARY_CARD_COLORS; icon: string }) {
   return (
-    <div className={`rounded-xl border p-4 ${colors[color] || colors.gray}`}>
+    <div className={`rounded-xl border p-4 ${SUMMARY_CARD_COLORS[color] || SUMMARY_CARD_COLORS.gray}`}>
       <div className="flex items-center justify-between">
         <span className="text-xs font-medium uppercase tracking-wide opacity-70">{label}</span>
         <span className="text-lg">{icon}</span>
       </div>
       <div className="mt-2 text-3xl font-bold">{value}</div>
     </div>
+  )
+}
+
+function QueueKpiCard({
+  label, value, color, icon, selected, onClick,
+}: {
+  label: string; value: number; color: keyof typeof SUMMARY_CARD_COLORS; icon: string
+  selected: boolean; onClick: () => void
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`rounded-xl border p-4 text-left w-full transition shadow-sm hover:shadow-md ${SUMMARY_CARD_COLORS[color] || SUMMARY_CARD_COLORS.gray} ${selected ? 'ring-2 ring-gray-900 ring-offset-1' : ''}`}
+    >
+      <div className="flex items-center justify-between">
+        <span className="text-xs font-medium uppercase tracking-wide opacity-70">{label}</span>
+        <span className="text-lg">{icon}</span>
+      </div>
+      <div className="mt-2 text-3xl font-bold">{value}</div>
+    </button>
   )
 }
 
