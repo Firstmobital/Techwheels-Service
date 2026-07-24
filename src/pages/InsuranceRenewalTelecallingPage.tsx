@@ -578,7 +578,7 @@ function TelecallerDashboard({ activeCampaign, onCampaignRefresh }: { activeCamp
   }
 
   const handleQuotePipelineSelect = (asgn: Assignment, status: CallStatus) => {
-    if (editingId !== asgn.id && activeView !== 'call') openAssignmentEdit(asgn, status)
+    if (editingId !== asgn.id) openAssignmentEdit(asgn, status)
     else setEditStatus(status)
     setQuotePipelinePending(status)
     setShowNotes(false)
@@ -613,7 +613,13 @@ function TelecallerDashboard({ activeCampaign, onCampaignRefresh }: { activeCamp
   }
 
   const handleEditCancel = (closeEdit = true) => {
-    if (closeEdit) setEditingId(null)
+    if (closeEdit) {
+      setEditingId(null)
+    } else if (currentAssignment) {
+      setEditStatus(currentAssignment.status)
+      setEditNotes(currentAssignment.call_notes || '')
+      setEditCallbackDate(currentAssignment.callback_date || '')
+    }
     setQuotePipelinePending(null)
     resetCallForm()
   }
@@ -758,6 +764,7 @@ function TelecallerDashboard({ activeCampaign, onCampaignRefresh }: { activeCamp
             </button>
           </div>
         ) : (
+          <div className="space-y-3">
           <CallCard
             key={`call-${currentAssignment.id}-${customerUiEpoch}-${insuranceCustomerKey(currentAssignment.customer)}`}
             assignment={currentAssignment}
@@ -776,16 +783,20 @@ function TelecallerDashboard({ activeCampaign, onCampaignRefresh }: { activeCamp
             rcFetchMessage={rcFetchMessage}
             rcFetchError={error}
             onRcFetch={() => { void handleRcFetchSingle(currentAssignment) }}
-            assignmentEdit={quotePipelinePending ? {
-              editStatus, setEditStatus,
-              editCallbackDate, setEditCallbackDate,
-              editNotes, setEditNotes,
-              editBusy,
-              hideStatus: true,
-              onSave: () => handleEditSave(currentAssignment.id, false),
-              onCancel: () => handleEditCancel(false),
-            } : undefined}
+            selectedQuoteStatus={quotePipelinePending ?? (QUOTE_PIPELINE_STATUSES.includes(editStatus as CallStatus) ? editStatus as CallStatus : null)}
           />
+          <AssignmentEditPanel
+            editStatus={editStatus}
+            setEditStatus={setEditStatus}
+            editCallbackDate={editCallbackDate}
+            setEditCallbackDate={setEditCallbackDate}
+            editNotes={editNotes}
+            setEditNotes={setEditNotes}
+            editBusy={editBusy}
+            onSave={() => handleEditSave(currentAssignment.id, false)}
+            onCancel={() => handleEditCancel(false)}
+          />
+          </div>
         )
       )}
 
@@ -958,15 +969,18 @@ function TelecallerDashboard({ activeCampaign, onCampaignRefresh }: { activeCamp
                     onLogWA={handleLogWA}
                     rcFetchBusy={rcFetchBusy}
                     onRcFetch={() => { void handleRcFetchSingle(asgn) }}
-                    assignmentEdit={{
-                      editStatus, setEditStatus,
-                      editCallbackDate, setEditCallbackDate,
-                      editNotes, setEditNotes,
-                      editBusy,
-                      hideStatus: quotePipelinePending !== null,
-                      onSave: () => handleEditSave(asgn.id),
-                      onCancel: () => handleEditCancel(),
-                    }}
+                    selectedQuoteStatus={quotePipelinePending ?? (QUOTE_PIPELINE_STATUSES.includes(editStatus as CallStatus) ? editStatus as CallStatus : null)}
+                  />
+                  <AssignmentEditPanel
+                    editStatus={editStatus}
+                    setEditStatus={setEditStatus}
+                    editCallbackDate={editCallbackDate}
+                    setEditCallbackDate={setEditCallbackDate}
+                    editNotes={editNotes}
+                    setEditNotes={setEditNotes}
+                    editBusy={editBusy}
+                    onSave={() => handleEditSave(asgn.id)}
+                    onCancel={() => handleEditCancel()}
                   />
                 </div>
               )}
@@ -1012,7 +1026,7 @@ function CallCard({
   showCallback, setShowCallback,
   onUpdateStatus, onQuotePipelineSelect, onLogWA,
   rcFetchBusy = false, rcFetchMessage, rcFetchError, onRcFetch,
-  assignmentEdit,
+  selectedQuoteStatus = null,
 }: {
   assignment: Assignment; busy: boolean
   notes: string; setNotes: (v: string) => void
@@ -1029,15 +1043,7 @@ function CallCard({
   rcFetchMessage?: string | null
   rcFetchError?: string | null
   onRcFetch?: () => void
-  assignmentEdit?: {
-    editStatus: string; setEditStatus: (v: string) => void
-    editCallbackDate: string; setEditCallbackDate: (v: string) => void
-    editNotes: string; setEditNotes: (v: string) => void
-    editBusy: boolean
-    hideStatus?: boolean
-    onSave: () => void
-    onCancel: () => void
-  }
+  selectedQuoteStatus?: CallStatus | null
 }) {
   const c = assignment.customer
   const phone = c.contact_phones || ''
@@ -1045,6 +1051,7 @@ function CallCard({
   const daysLeft = daysFromToday(dueInfo.date)
   const isExpired = daysLeft !== null && daysLeft < 0
   const isDueToday = daysLeft === 0
+  const quoteBtnRing = (status: CallStatus) => selectedQuoteStatus === status ? ' ring-4 ring-gray-900 ring-offset-2' : ''
 
   return (
     <div className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
@@ -1141,9 +1148,9 @@ function CallCard({
         <div>
           <div className="text-xs font-semibold uppercase tracking-wide text-indigo-700 mb-2">Quote pipeline</div>
           <div className="grid gap-2 grid-cols-1 sm:grid-cols-3">
-            <button onClick={() => onQuotePipelineSelect('quote_needed')} disabled={busy} className="rounded-xl bg-indigo-500 px-4 py-3 text-sm font-semibold text-white hover:bg-indigo-600 disabled:opacity-50">📋 Quote Needed</button>
-            <button onClick={() => onQuotePipelineSelect('policy_requested')} disabled={busy} className="rounded-xl bg-sky-500 px-4 py-3 text-sm font-semibold text-white hover:bg-sky-600 disabled:opacity-50">📄 Policy Requested</button>
-            <button onClick={() => onQuotePipelineSelect('quote_sent')} disabled={busy} className="rounded-xl bg-cyan-500 px-4 py-3 text-sm font-semibold text-white hover:bg-cyan-600 disabled:opacity-50">💰 Quote Sent</button>
+            <button onClick={() => onQuotePipelineSelect('quote_needed')} disabled={busy} className={`rounded-xl bg-indigo-500 px-4 py-3 text-sm font-semibold text-white hover:bg-indigo-600 disabled:opacity-50${quoteBtnRing('quote_needed')}`}>📋 Quote Needed</button>
+            <button onClick={() => onQuotePipelineSelect('policy_requested')} disabled={busy} className={`rounded-xl bg-sky-500 px-4 py-3 text-sm font-semibold text-white hover:bg-sky-600 disabled:opacity-50${quoteBtnRing('policy_requested')}`}>📄 Policy Requested</button>
+            <button onClick={() => onQuotePipelineSelect('quote_sent')} disabled={busy} className={`rounded-xl bg-cyan-500 px-4 py-3 text-sm font-semibold text-white hover:bg-cyan-600 disabled:opacity-50${quoteBtnRing('quote_sent')}`}>💰 Quote Sent</button>
           </div>
         </div>
 
@@ -1232,20 +1239,6 @@ function CallCard({
           </div>
         )}
 
-        {assignmentEdit && (
-          <AssignmentEditPanel
-            editStatus={assignmentEdit.editStatus}
-            setEditStatus={assignmentEdit.setEditStatus}
-            editCallbackDate={assignmentEdit.editCallbackDate}
-            setEditCallbackDate={assignmentEdit.setEditCallbackDate}
-            editNotes={assignmentEdit.editNotes}
-            setEditNotes={assignmentEdit.setEditNotes}
-            editBusy={assignmentEdit.editBusy}
-            hideStatus={assignmentEdit.hideStatus}
-            onSave={assignmentEdit.onSave}
-            onCancel={assignmentEdit.onCancel}
-          />
-        )}
       </div>
     </div>
   )
@@ -1255,39 +1248,36 @@ function AssignmentEditPanel({
   editStatus, setEditStatus,
   editCallbackDate, setEditCallbackDate,
   editNotes, setEditNotes,
-  editBusy, hideStatus, onSave, onCancel,
+  editBusy, onSave, onCancel,
 }: {
   editStatus: string; setEditStatus: (v: string) => void
   editCallbackDate: string; setEditCallbackDate: (v: string) => void
   editNotes: string; setEditNotes: (v: string) => void
   editBusy: boolean
-  hideStatus?: boolean
   onSave: () => void
   onCancel: () => void
 }) {
   return (
-    <div className={`space-y-3 ${hideStatus ? '' : 'rounded-lg border border-blue-200 bg-blue-50 p-3'}`}>
-      {!hideStatus && <div className="text-xs font-semibold text-blue-700">Edit Assignment</div>}
-      <div className={`grid gap-3 ${hideStatus ? 'sm:grid-cols-2' : 'grid-cols-2'}`}>
-        {!hideStatus && (
-          <div>
-            <label className="text-xs font-medium text-gray-600">Status</label>
-            <select value={editStatus} onChange={e => setEditStatus(e.target.value)} className="mt-1 w-full rounded-lg border border-gray-200 px-2.5 py-1.5 text-sm bg-white">
-              <option value="in_progress">In Progress</option>
-              <option value="quote_needed">Quote Needed</option>
-              <option value="policy_requested">Policy Requested</option>
-              <option value="quote_sent">Quote Sent</option>
-              <option value="policy_done">Policy Done</option>
-              <option value="assigned">Assigned</option>
-              <option value="renewed_via_us">Renewed via Us</option>
-              <option value="renewed_elsewhere">Renewed Elsewhere</option>
-              <option value="callback_later">Callback Later</option>
-              <option value="no_answer">No Answer</option>
-              <option value="wrong_number">Wrong Number</option>
-              <option value="not_interested">Not Interested</option>
-            </select>
-          </div>
-        )}
+    <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 space-y-3">
+      <div className="text-xs font-semibold text-blue-700">Edit Assignment</div>
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <label className="text-xs font-medium text-gray-600">Status</label>
+          <select value={editStatus} onChange={e => setEditStatus(e.target.value)} className="mt-1 w-full rounded-lg border border-gray-200 px-2.5 py-1.5 text-sm bg-white">
+            <option value="in_progress">In Progress</option>
+            <option value="quote_needed">Quote Needed</option>
+            <option value="policy_requested">Policy Requested</option>
+            <option value="quote_sent">Quote Sent</option>
+            <option value="policy_done">Policy Done</option>
+            <option value="assigned">Assigned</option>
+            <option value="renewed_via_us">Renewed via Us</option>
+            <option value="renewed_elsewhere">Renewed Elsewhere</option>
+            <option value="callback_later">Callback Later</option>
+            <option value="no_answer">No Answer</option>
+            <option value="wrong_number">Wrong Number</option>
+            <option value="not_interested">Not Interested</option>
+          </select>
+        </div>
         <div>
           <label className="text-xs font-medium text-gray-600">Callback Date</label>
           <input type="date" value={editCallbackDate} onChange={e => setEditCallbackDate(e.target.value)} className="mt-1 w-full rounded-lg border border-gray-200 px-2.5 py-1.5 text-sm" />
