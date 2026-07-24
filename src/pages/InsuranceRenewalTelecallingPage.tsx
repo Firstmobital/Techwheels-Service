@@ -447,6 +447,7 @@ function TelecallerDashboard({ activeCampaign, onCampaignRefresh }: { activeCamp
   const [editCallbackDate, setEditCallbackDate] = useState('')
   const [editStatus, setEditStatus] = useState('')
   const [editBusy, setEditBusy] = useState(false)
+  const [quotePipelinePending, setQuotePipelinePending] = useState<CallStatus | null>(null)
   const [rcFetchBusy, setRcFetchBusy] = useState(false)
   const [rcFetchMessage, setRcFetchMessage] = useState<string | null>(null)
   const [customerUiEpoch, setCustomerUiEpoch] = useState(0)
@@ -464,6 +465,14 @@ function TelecallerDashboard({ activeCampaign, onCampaignRefresh }: { activeCamp
   }, [])
 
   useEffect(() => { refreshQueue(); refreshSummary() }, [refreshQueue, refreshSummary])
+
+  useEffect(() => {
+    if (!currentAssignment || activeView !== 'call') return
+    setEditNotes(currentAssignment.call_notes || '')
+    setEditCallbackDate(currentAssignment.callback_date || '')
+    setEditStatus(currentAssignment.status)
+    setQuotePipelinePending(null)
+  }, [currentAssignment?.id, activeView])
 
   useEffect(() => {
     if (!queueSoldByFilter) return
@@ -554,11 +563,11 @@ function TelecallerDashboard({ activeCampaign, onCampaignRefresh }: { activeCamp
     finally { setBusy(false) }
   }
 
-  const openQueueEdit = (asgn: Assignment) => {
+  const openAssignmentEdit = (asgn: Assignment, status?: CallStatus) => {
     setEditingId(asgn.id)
     setEditNotes(asgn.call_notes || '')
     setEditCallbackDate(asgn.callback_date || '')
-    setEditStatus(asgn.status)
+    setEditStatus(status ?? asgn.status)
     setNotes(asgn.call_notes || '')
     setCallbackDate(asgn.callback_date || '')
     setQuotedPremium(asgn.quoted_premium != null ? String(asgn.quoted_premium) : '')
@@ -568,13 +577,45 @@ function TelecallerDashboard({ activeCampaign, onCampaignRefresh }: { activeCamp
     setShowCallback(false)
   }
 
-  const handleEditSave = async (assignmentId: number) => {
+  const handleQuotePipelineSelect = (asgn: Assignment, status: CallStatus) => {
+    if (editingId !== asgn.id && activeView !== 'call') openAssignmentEdit(asgn, status)
+    else setEditStatus(status)
+    setQuotePipelinePending(status)
+    setShowNotes(false)
+    setShowRenewed(false)
+    setShowCallback(false)
+  }
+
+  const handleEditSave = async (assignmentId: number, closeEdit = true) => {
     setEditBusy(true)
     try {
       await callEdge('edit_assignment', { assignment_id: assignmentId, call_notes: editNotes, callback_date: editCallbackDate || undefined, status: editStatus || undefined })
-      setEditingId(null); refreshQueue()
+      if (closeEdit) setEditingId(null)
+      setQuotePipelinePending(null)
+      setCurrentAssignment(prev => (
+        prev?.id === assignmentId
+          ? { ...prev, status: editStatus, call_notes: editNotes, callback_date: editCallbackDate || null }
+          : prev
+      ))
+      setQueue(prev => prev.map(a => (
+        a.id === assignmentId
+          ? { ...a, status: editStatus, call_notes: editNotes, callback_date: editCallbackDate || null }
+          : a
+      )))
+      setRcFetchMessage(`Status updated to ${editStatus.replace(/_/g, ' ')}.`)
+      setTimeout(() => setRcFetchMessage(null), 5000)
+      resetCallForm()
+      refreshQueue()
+      refreshSummary()
+      onCampaignRefresh?.()
     } catch (err) { setError((err as Error).message) }
     finally { setEditBusy(false) }
+  }
+
+  const handleEditCancel = (closeEdit = true) => {
+    if (closeEdit) setEditingId(null)
+    setQuotePipelinePending(null)
+    resetCallForm()
   }
 
   const handleLogWA = async (assignmentId: number, waType: string) => {
@@ -729,11 +770,21 @@ function TelecallerDashboard({ activeCampaign, onCampaignRefresh }: { activeCamp
             showRenewed={showRenewed} setShowRenewed={setShowRenewed}
             showCallback={showCallback} setShowCallback={setShowCallback}
             onUpdateStatus={handleUpdateStatus}
+            onQuotePipelineSelect={status => handleQuotePipelineSelect(currentAssignment, status)}
             onLogWA={handleLogWA}
             rcFetchBusy={rcFetchBusy}
             rcFetchMessage={rcFetchMessage}
             rcFetchError={error}
             onRcFetch={() => { void handleRcFetchSingle(currentAssignment) }}
+            assignmentEdit={quotePipelinePending ? {
+              editStatus, setEditStatus,
+              editCallbackDate, setEditCallbackDate,
+              editNotes, setEditNotes,
+              editBusy,
+              hideStatus: true,
+              onSave: () => handleEditSave(currentAssignment.id, false),
+              onCancel: () => handleEditCancel(false),
+            } : undefined}
           />
         )
       )}
@@ -882,7 +933,7 @@ function TelecallerDashboard({ activeCampaign, onCampaignRefresh }: { activeCamp
                 </div>
                 <div className="flex items-center gap-1.5 flex-shrink-0 flex-wrap justify-end">
                   <StatusBadge status={asgn.status} />
-                  <button onClick={() => openQueueEdit(asgn)} className="rounded-lg border border-gray-200 px-2.5 py-1 text-xs text-gray-500 hover:bg-gray-50">✏️ Edit</button>
+                  <button onClick={() => openAssignmentEdit(asgn)} className="rounded-lg border border-gray-200 px-2.5 py-1 text-xs text-gray-500 hover:bg-gray-50">✏️ Edit</button>
                   {asgn.status === 'no_answer' && asgn.customer.contact_phones && (
                     <a href={getWhatsAppLink(asgn.customer.contact_phones, buildNoPickMsg(asgn.customer))} target="_blank" rel="noreferrer" onClick={() => handleLogWA(asgn.id, 'not_picked')} className="rounded-lg border border-green-200 bg-green-50 px-2.5 py-1 text-xs text-green-700 hover:bg-green-100">💬 WA</a>
                   )}
@@ -903,44 +954,20 @@ function TelecallerDashboard({ activeCampaign, onCampaignRefresh }: { activeCamp
                     showRenewed={showRenewed} setShowRenewed={setShowRenewed}
                     showCallback={showCallback} setShowCallback={setShowCallback}
                     onUpdateStatus={status => handleUpdateStatus(status, asgn)}
+                    onQuotePipelineSelect={status => handleQuotePipelineSelect(asgn, status)}
                     onLogWA={handleLogWA}
                     rcFetchBusy={rcFetchBusy}
                     onRcFetch={() => { void handleRcFetchSingle(asgn) }}
+                    assignmentEdit={{
+                      editStatus, setEditStatus,
+                      editCallbackDate, setEditCallbackDate,
+                      editNotes, setEditNotes,
+                      editBusy,
+                      hideStatus: quotePipelinePending !== null,
+                      onSave: () => handleEditSave(asgn.id),
+                      onCancel: () => handleEditCancel(),
+                    }}
                   />
-                <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 space-y-3">
-                  <div className="text-xs font-semibold text-blue-700">Edit Assignment</div>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="text-xs font-medium text-gray-600">Status</label>
-                      <select value={editStatus} onChange={e => setEditStatus(e.target.value)} className="mt-1 w-full rounded-lg border border-gray-200 px-2.5 py-1.5 text-sm bg-white">
-                        <option value="in_progress">In Progress</option>
-                        <option value="quote_needed">Quote Needed</option>
-                        <option value="policy_requested">Policy Requested</option>
-                        <option value="quote_sent">Quote Sent</option>
-                        <option value="policy_done">Policy Done</option>
-                        <option value="assigned">Assigned</option>
-                        <option value="renewed_via_us">Renewed via Us</option>
-                        <option value="renewed_elsewhere">Renewed Elsewhere</option>
-                        <option value="callback_later">Callback Later</option>
-                        <option value="no_answer">No Answer</option>
-                        <option value="wrong_number">Wrong Number</option>
-                        <option value="not_interested">Not Interested</option>
-                      </select>
-                    </div>
-                    <div>
-                      <label className="text-xs font-medium text-gray-600">Callback Date</label>
-                      <input type="date" value={editCallbackDate} onChange={e => setEditCallbackDate(e.target.value)} className="mt-1 w-full rounded-lg border border-gray-200 px-2.5 py-1.5 text-sm" />
-                    </div>
-                  </div>
-                  <div>
-                    <label className="text-xs font-medium text-gray-600">Remarks / Notes</label>
-                    <textarea value={editNotes} onChange={e => setEditNotes(e.target.value)} className="mt-1 w-full rounded-lg border border-gray-200 px-2.5 py-1.5 text-sm" rows={2} placeholder="Add or update remarks…" />
-                  </div>
-                  <div className="flex gap-2">
-                    <button onClick={() => handleEditSave(asgn.id)} disabled={editBusy} className="rounded-lg bg-blue-600 px-4 py-1.5 text-sm font-medium text-white disabled:opacity-50">{editBusy ? 'Saving…' : 'Save'}</button>
-                    <button onClick={() => { setEditingId(null); resetCallForm() }} className="rounded-lg border border-gray-200 px-4 py-1.5 text-sm text-gray-600 hover:bg-gray-50">Cancel</button>
-                  </div>
-                </div>
                 </div>
               )}
             </div>
@@ -983,8 +1010,9 @@ function CallCard({
   renewalCompany, setRenewalCompany,
   showRenewed, setShowRenewed,
   showCallback, setShowCallback,
-  onUpdateStatus, onLogWA,
+  onUpdateStatus, onQuotePipelineSelect, onLogWA,
   rcFetchBusy = false, rcFetchMessage, rcFetchError, onRcFetch,
+  assignmentEdit,
 }: {
   assignment: Assignment; busy: boolean
   notes: string; setNotes: (v: string) => void
@@ -995,11 +1023,21 @@ function CallCard({
   showRenewed: boolean; setShowRenewed: (v: boolean) => void
   showCallback: boolean; setShowCallback: (v: boolean) => void
   onUpdateStatus: (s: CallStatus) => void
+  onQuotePipelineSelect: (s: CallStatus) => void
   onLogWA: (id: number, type: string) => void
   rcFetchBusy?: boolean
   rcFetchMessage?: string | null
   rcFetchError?: string | null
   onRcFetch?: () => void
+  assignmentEdit?: {
+    editStatus: string; setEditStatus: (v: string) => void
+    editCallbackDate: string; setEditCallbackDate: (v: string) => void
+    editNotes: string; setEditNotes: (v: string) => void
+    editBusy: boolean
+    hideStatus?: boolean
+    onSave: () => void
+    onCancel: () => void
+  }
 }) {
   const c = assignment.customer
   const phone = c.contact_phones || ''
@@ -1103,9 +1141,9 @@ function CallCard({
         <div>
           <div className="text-xs font-semibold uppercase tracking-wide text-indigo-700 mb-2">Quote pipeline</div>
           <div className="grid gap-2 grid-cols-1 sm:grid-cols-3">
-            <button onClick={() => { setShowNotes(true); onUpdateStatus('quote_needed') }} disabled={busy} className="rounded-xl bg-indigo-500 px-4 py-3 text-sm font-semibold text-white hover:bg-indigo-600 disabled:opacity-50">📋 Quote Needed</button>
-            <button onClick={() => { setShowNotes(true); onUpdateStatus('policy_requested') }} disabled={busy} className="rounded-xl bg-sky-500 px-4 py-3 text-sm font-semibold text-white hover:bg-sky-600 disabled:opacity-50">📄 Policy Requested</button>
-            <button onClick={() => { setShowNotes(true); onUpdateStatus('quote_sent') }} disabled={busy} className="rounded-xl bg-cyan-500 px-4 py-3 text-sm font-semibold text-white hover:bg-cyan-600 disabled:opacity-50" title="Saves immediately — add premium in notes or Edit below">💰 Quote Sent</button>
+            <button onClick={() => onQuotePipelineSelect('quote_needed')} disabled={busy} className="rounded-xl bg-indigo-500 px-4 py-3 text-sm font-semibold text-white hover:bg-indigo-600 disabled:opacity-50">📋 Quote Needed</button>
+            <button onClick={() => onQuotePipelineSelect('policy_requested')} disabled={busy} className="rounded-xl bg-sky-500 px-4 py-3 text-sm font-semibold text-white hover:bg-sky-600 disabled:opacity-50">📄 Policy Requested</button>
+            <button onClick={() => onQuotePipelineSelect('quote_sent')} disabled={busy} className="rounded-xl bg-cyan-500 px-4 py-3 text-sm font-semibold text-white hover:bg-cyan-600 disabled:opacity-50">💰 Quote Sent</button>
           </div>
         </div>
 
@@ -1193,6 +1231,75 @@ function CallCard({
             </button>
           </div>
         )}
+
+        {assignmentEdit && (
+          <AssignmentEditPanel
+            editStatus={assignmentEdit.editStatus}
+            setEditStatus={assignmentEdit.setEditStatus}
+            editCallbackDate={assignmentEdit.editCallbackDate}
+            setEditCallbackDate={assignmentEdit.setEditCallbackDate}
+            editNotes={assignmentEdit.editNotes}
+            setEditNotes={assignmentEdit.setEditNotes}
+            editBusy={assignmentEdit.editBusy}
+            hideStatus={assignmentEdit.hideStatus}
+            onSave={assignmentEdit.onSave}
+            onCancel={assignmentEdit.onCancel}
+          />
+        )}
+      </div>
+    </div>
+  )
+}
+
+function AssignmentEditPanel({
+  editStatus, setEditStatus,
+  editCallbackDate, setEditCallbackDate,
+  editNotes, setEditNotes,
+  editBusy, hideStatus, onSave, onCancel,
+}: {
+  editStatus: string; setEditStatus: (v: string) => void
+  editCallbackDate: string; setEditCallbackDate: (v: string) => void
+  editNotes: string; setEditNotes: (v: string) => void
+  editBusy: boolean
+  hideStatus?: boolean
+  onSave: () => void
+  onCancel: () => void
+}) {
+  return (
+    <div className={`space-y-3 ${hideStatus ? '' : 'rounded-lg border border-blue-200 bg-blue-50 p-3'}`}>
+      {!hideStatus && <div className="text-xs font-semibold text-blue-700">Edit Assignment</div>}
+      <div className={`grid gap-3 ${hideStatus ? 'sm:grid-cols-2' : 'grid-cols-2'}`}>
+        {!hideStatus && (
+          <div>
+            <label className="text-xs font-medium text-gray-600">Status</label>
+            <select value={editStatus} onChange={e => setEditStatus(e.target.value)} className="mt-1 w-full rounded-lg border border-gray-200 px-2.5 py-1.5 text-sm bg-white">
+              <option value="in_progress">In Progress</option>
+              <option value="quote_needed">Quote Needed</option>
+              <option value="policy_requested">Policy Requested</option>
+              <option value="quote_sent">Quote Sent</option>
+              <option value="policy_done">Policy Done</option>
+              <option value="assigned">Assigned</option>
+              <option value="renewed_via_us">Renewed via Us</option>
+              <option value="renewed_elsewhere">Renewed Elsewhere</option>
+              <option value="callback_later">Callback Later</option>
+              <option value="no_answer">No Answer</option>
+              <option value="wrong_number">Wrong Number</option>
+              <option value="not_interested">Not Interested</option>
+            </select>
+          </div>
+        )}
+        <div>
+          <label className="text-xs font-medium text-gray-600">Callback Date</label>
+          <input type="date" value={editCallbackDate} onChange={e => setEditCallbackDate(e.target.value)} className="mt-1 w-full rounded-lg border border-gray-200 px-2.5 py-1.5 text-sm" />
+        </div>
+      </div>
+      <div>
+        <label className="text-xs font-medium text-gray-600">Remarks / Notes</label>
+        <textarea value={editNotes} onChange={e => setEditNotes(e.target.value)} className="mt-1 w-full rounded-lg border border-gray-200 px-2.5 py-1.5 text-sm" rows={2} placeholder="Add or update remarks…" />
+      </div>
+      <div className="flex gap-2">
+        <button onClick={onSave} disabled={editBusy} className="rounded-lg bg-blue-600 px-4 py-1.5 text-sm font-medium text-white disabled:opacity-50">{editBusy ? 'Saving…' : 'Save'}</button>
+        <button onClick={onCancel} className="rounded-lg border border-gray-200 px-4 py-1.5 text-sm text-gray-600 hover:bg-gray-50">Cancel</button>
       </div>
     </div>
   )
