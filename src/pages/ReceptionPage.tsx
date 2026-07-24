@@ -8,11 +8,12 @@ import {
   createReceptionEntry,
   deleteReceptionEntry,
   listReceptionEntriesForGlobalSearch,
-  listReceptionEntriesByDateRange,
+  listReceptionEntriesByDateRangePage,
   listReceptionEmployees,
   type ReceptionEmployeeOption,
   type ReceptionEntryInput,
   type ReceptionEntryRow,
+  type ReceptionEntryPageCursor,
   updateReceptionEntry,
 } from '../lib/api'
 
@@ -54,7 +55,6 @@ const SERVICE_TYPE_CARD_ORDER = [
 ]
 
 const PERIOD_PRESETS: DateRangePreset[] = ['this-month', 'last-month', 'this-week', 'last-7', 'last-30']
-const DEFAULT_RECEPTION_VISIBLE_LIMIT = 100
 
 function toISTDate(d: Date): string {
   return d.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
@@ -381,6 +381,9 @@ export default function ReceptionPage() {
   const [selectedLocation, setSelectedLocation] = useState<string | 'all'>('all')
   const [selectedFuelType, setSelectedFuelType] = useState<string | 'all'>('all')
   const [selectedServiceType, setSelectedServiceType] = useState<string | 'all'>('all')
+  const [listCursor, setListCursor] = useState<ReceptionEntryPageCursor | null>(null)
+  const [hasMoreEntries, setHasMoreEntries] = useState(false)
+  const [loadingMoreEntries, setLoadingMoreEntries] = useState(false)
 
   const todayKey = useMemo(() => {
     const now = new Date()
@@ -561,7 +564,7 @@ export default function ReceptionPage() {
   const visibleEntries = useMemo(() => {
     const query = search.trim().toLowerCase()
     if (!query) {
-      return serviceTypeFilteredEntries.slice(0, DEFAULT_RECEPTION_VISIBLE_LIMIT)
+      return serviceTypeFilteredEntries
     }
 
     const searchPool = globalSearchEntries ?? []
@@ -691,7 +694,7 @@ export default function ReceptionPage() {
     )
 
     const [entriesRes, employeeRes, authRes] = await Promise.all([
-      listReceptionEntriesByDateRange(dateRange),
+      listReceptionEntriesByDateRangePage(dateRange, null),
       listReceptionEmployees(),
       supabase.auth.getSession(),
     ])
@@ -699,8 +702,13 @@ export default function ReceptionPage() {
     if (entriesRes.error) {
       setError(entriesRes.error)
       setEntries([])
+      setListCursor(null)
+      setHasMoreEntries(false)
     } else {
-      setEntries(entriesRes.data ?? [])
+      const page = entriesRes.data ?? { rows: [], nextCursor: null, hasMore: false }
+      setEntries(page.rows)
+      setListCursor(page.nextCursor)
+      setHasMoreEntries(page.hasMore)
     }
 
     if (!employeeRes.error) {
@@ -722,6 +730,33 @@ export default function ReceptionPage() {
     }
 
     setLoading(false)
+  }
+
+  async function loadMoreEntries() {
+    if (!hasMoreEntries || !listCursor || loadingMoreEntries || loading) return
+
+    setLoadingMoreEntries(true)
+    const res = await listReceptionEntriesByDateRangePage(dateRange, listCursor)
+
+    if (res.error) {
+      setError(res.error)
+      setLoadingMoreEntries(false)
+      return
+    }
+
+    const page = res.data ?? { rows: [], nextCursor: null, hasMore: false }
+    setEntries((prev) => {
+      const seen = new Set(prev.map((entry) => entry.id))
+      const merged = [...prev]
+      page.rows.forEach((entry) => {
+        if (seen.has(entry.id)) return
+        merged.push(entry)
+      })
+      return merged
+    })
+    setListCursor(page.nextCursor)
+    setHasMoreEntries(page.hasMore)
+    setLoadingMoreEntries(false)
   }
 
   useEffect(() => {
@@ -1178,7 +1213,7 @@ export default function ReceptionPage() {
               <div className="sub">
                 {search.trim()
                   ? `${globalSearchLoading ? 'Searching all records...' : 'Global search'} · ${visibleEntries.length} shown`
-                  : `Newest first · ${visibleEntries.length} shown${serviceTypeFilteredEntries.length > DEFAULT_RECEPTION_VISIBLE_LIMIT ? ` (latest ${DEFAULT_RECEPTION_VISIBLE_LIMIT})` : ''}`}
+                  : `Newest first · ${visibleEntries.length} loaded${hasMoreEntries ? ' (more available)' : ''}`}
                 {selectedListFilter === 'today' ? ' · Today filter' : ''}
                 {selectedLocation !== 'all' ? ` · ${selectedLocation}` : ''}
                 {selectedFuelType !== 'all' ? ` · ${selectedFuelType}` : ''}
@@ -1208,7 +1243,8 @@ export default function ReceptionPage() {
                     : 'No intake entries found.'}
               </div>
             ) : (
-              visibleEntries.map((entry) => (
+              <>
+              {visibleEntries.map((entry) => (
                 <div className="recep-item" key={entry.id}>
                   <div className="recep-item__main">
                     <div className="recep-item__top">
@@ -1251,7 +1287,20 @@ export default function ReceptionPage() {
                   </div>
                   <div className="recep-item__time">{formatDate(entry.created_at)}</div>
                 </div>
-              ))
+              ))}
+              {!search.trim() && (hasMoreEntries || loadingMoreEntries) && (
+                <div style={{ display: 'flex', justifyContent: 'center', padding: '1rem' }}>
+                  <button
+                    type="button"
+                    className="btn btn--secondary"
+                    disabled={loadingMoreEntries || !hasMoreEntries}
+                    onClick={() => void loadMoreEntries()}
+                  >
+                    {loadingMoreEntries ? 'Loading more…' : 'Load more entries'}
+                  </button>
+                </div>
+              )}
+              </>
             )}
           </div>
         </div>

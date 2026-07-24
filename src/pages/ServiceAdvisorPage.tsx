@@ -1,14 +1,18 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
-  listServiceAdvisorEntriesByDateRange,
-  listReceptionEntriesByDateRange,
+  listServiceAdvisorEntriesByDateRangePage,
+  listReceptionEntriesByDateRangePage,
   getDefaultReceptionLookbackDateRange,
+  fetchReceptionSummaryFieldsByDateRange,
+  fetchTechnicianAssignmentStatusesForJobCards,
   updateServiceAdvisorEntry,
   uploadServiceAdvisorEstimate,
   markServiceAdvisorInvoiceDone,
   getDealerScopeContext,
   generateComplaintLink,
+  type ReceptionEntryPageCursor,
   type ReceptionEntryRow,
+  type ReceptionSummaryFieldRow,
 } from '../lib/api'
 import DateRangeFilter, { currentMonthRange, type DateRange, type DateRangePreset } from '../components/DateRangeFilter'
 import { supabase } from '../lib/supabase'
@@ -364,6 +368,18 @@ export default function ServiceAdvisorPage() {
   const [canModifyReception, setCanModifyReception] = useState(false)
   const [canModifyServiceAdvisor, setCanModifyServiceAdvisor] = useState(false)
 
+  const [summarySlimRows, setSummarySlimRows] = useState<ReceptionSummaryFieldRow[]>([])
+  const [summaryAssignmentSets, setSummaryAssignmentSets] = useState<AssignmentStatusSets>({
+    completed: new Set(),
+    hold: new Set(),
+    inProcess: new Set(),
+    allAssigned: new Set(),
+  })
+  const [summaryLoading, setSummaryLoading] = useState(false)
+  const [listCursor, setListCursor] = useState<ReceptionEntryPageCursor | null>(null)
+  const [hasMoreRows, setHasMoreRows] = useState(false)
+  const [loadingMore, setLoadingMore] = useState(false)
+
   const [loading, setLoading] = useState(true)
   const [dateRange, setDateRange] = useState<DateRange>(currentMonthRange())
   const [disabledPeriodPresets, setDisabledPeriodPresets] = useState<DateRangePreset[]>([])
@@ -386,6 +402,32 @@ export default function ServiceAdvisorPage() {
   const searchQuery = useMemo(() => search.trim().toLowerCase(), [search])
   const visibleJobCardNumbers = useMemo(() => collectVisibleJobCardNumbers(rows), [rows])
 
+  const metricsRows = useMemo(() => {
+    if (summarySlimRows.length > 0) {
+      return summarySlimRows as unknown as ReceptionEntryRow[]
+    }
+    return rows
+  }, [summarySlimRows, rows])
+
+  const metricsAssignmentSets = useMemo((): AssignmentStatusSets => {
+    if (summarySlimRows.length > 0) {
+      return summaryAssignmentSets
+    }
+    return {
+      completed: completedJobCardNumbers,
+      hold: holdJobCardNumbers,
+      inProcess: inProcessJobCardNumbers,
+      allAssigned: allAssignedJobCardNumbers,
+    }
+  }, [
+    summarySlimRows,
+    summaryAssignmentSets,
+    completedJobCardNumbers,
+    holdJobCardNumbers,
+    inProcessJobCardNumbers,
+    allAssignedJobCardNumbers,
+  ])
+
   const matchesSearch = (row: ReceptionEntryRow): boolean => {
     if (!searchQuery) return true
 
@@ -407,9 +449,31 @@ export default function ServiceAdvisorPage() {
     return haystack.includes(searchQuery)
   }
 
+  const branchFilteredMetricsRows = useMemo(() => {
+    if (selectedBranch === 'all') return metricsRows
+    return metricsRows.filter((row) => row.branch === selectedBranch)
+  }, [metricsRows, selectedBranch])
+
+  const fuelTypeFilteredMetricsRows = useMemo(() => {
+    if (selectedFuelType === 'all') return branchFilteredMetricsRows
+    return branchFilteredMetricsRows.filter((row) => getFuelTypeLabel(row.fuel_type) === selectedFuelType)
+  }, [branchFilteredMetricsRows, selectedFuelType])
+
+  const categoryFilteredMetricsRows = useMemo(() => {
+    if (selectedCategory === 'all') return fuelTypeFilteredMetricsRows
+    return fuelTypeFilteredMetricsRows.filter((row) => getCategoryForServiceType(row.service_type) === selectedCategory)
+  }, [fuelTypeFilteredMetricsRows, selectedCategory])
+
+  const metricsDisplayedRows = useMemo(() => {
+    const advisorScoped = selectedAdvisor === 'all'
+      ? categoryFilteredMetricsRows
+      : categoryFilteredMetricsRows.filter((row) => getAdvisorFilterKey(row) === selectedAdvisor)
+    return advisorScoped.filter((row) => matchesSearch(row))
+  }, [categoryFilteredMetricsRows, selectedAdvisor, searchQuery])
+
   const branchFilteredRows = useMemo(() => {
     if (selectedBranch === 'all') return rows
-    return rows.filter(r => r.branch === selectedBranch)
+    return rows.filter((row) => row.branch === selectedBranch)
   }, [rows, selectedBranch])
 
   const fuelTypeFilteredRows = useMemo(() => {
@@ -425,7 +489,7 @@ export default function ServiceAdvisorPage() {
   }, [fuelTypeFilteredRows, selectedCategory])
 
   const locationCountRows = useMemo(() => {
-    let scoped = rows
+    let scoped = metricsRows
 
     if (selectedFuelType !== 'all') {
       scoped = scoped.filter((row) => getFuelTypeLabel(row.fuel_type) === selectedFuelType)
@@ -440,17 +504,17 @@ export default function ServiceAdvisorPage() {
     const summaryScoped = applySummaryCardFilter(
       scoped,
       selectedSummaryCard,
-      completedJobCardNumbers,
-      holdJobCardNumbers,
-      inProcessJobCardNumbers,
-      allAssignedJobCardNumbers,
+      metricsAssignmentSets.completed,
+      metricsAssignmentSets.hold,
+      metricsAssignmentSets.inProcess,
+      metricsAssignmentSets.allAssigned,
     )
     return summaryScoped.filter((row) => matchesSearch(row))
-  }, [rows, selectedFuelType, selectedCategory, selectedAdvisor, selectedSummaryCard, completedJobCardNumbers, holdJobCardNumbers, inProcessJobCardNumbers, allAssignedJobCardNumbers, searchQuery])
+  }, [metricsRows, selectedFuelType, selectedCategory, selectedAdvisor, selectedSummaryCard, metricsAssignmentSets, searchQuery])
 
 
   const categoryCountRows = useMemo(() => {
-    let scoped = rows
+    let scoped = metricsRows
 
     if (selectedBranch !== 'all') {
       scoped = scoped.filter((row) => row.branch === selectedBranch)
@@ -465,16 +529,16 @@ export default function ServiceAdvisorPage() {
     const summaryScoped = applySummaryCardFilter(
       scoped,
       selectedSummaryCard,
-      completedJobCardNumbers,
-      holdJobCardNumbers,
-      inProcessJobCardNumbers,
-      allAssignedJobCardNumbers,
+      metricsAssignmentSets.completed,
+      metricsAssignmentSets.hold,
+      metricsAssignmentSets.inProcess,
+      metricsAssignmentSets.allAssigned,
     )
     return summaryScoped.filter((row) => matchesSearch(row))
-  }, [rows, selectedBranch, selectedFuelType, selectedAdvisor, selectedSummaryCard, completedJobCardNumbers, holdJobCardNumbers, inProcessJobCardNumbers, allAssignedJobCardNumbers, searchQuery])
+  }, [metricsRows, selectedBranch, selectedFuelType, selectedAdvisor, selectedSummaryCard, metricsAssignmentSets, searchQuery])
 
   const advisorCountRows = useMemo(() => {
-    let scoped = rows
+    let scoped = metricsRows
 
     if (selectedBranch !== 'all') {
       scoped = scoped.filter((row) => row.branch === selectedBranch)
@@ -489,13 +553,13 @@ export default function ServiceAdvisorPage() {
     const summaryScoped = applySummaryCardFilter(
       scoped,
       selectedSummaryCard,
-      completedJobCardNumbers,
-      holdJobCardNumbers,
-      inProcessJobCardNumbers,
-      allAssignedJobCardNumbers,
+      metricsAssignmentSets.completed,
+      metricsAssignmentSets.hold,
+      metricsAssignmentSets.inProcess,
+      metricsAssignmentSets.allAssigned,
     )
     return summaryScoped.filter((row) => matchesSearch(row))
-  }, [rows, selectedBranch, selectedFuelType, selectedCategory, selectedSummaryCard, completedJobCardNumbers, holdJobCardNumbers, inProcessJobCardNumbers, allAssignedJobCardNumbers, searchQuery])
+  }, [metricsRows, selectedBranch, selectedFuelType, selectedCategory, selectedSummaryCard, metricsAssignmentSets, searchQuery])
 
   const advisorOptions = useMemo(() => {
     const optionMap = new Map<string, { label: string; count: number }>()
@@ -521,11 +585,11 @@ export default function ServiceAdvisorPage() {
 
   const totalAdvisorOptionCount = useMemo(() => {
     const keys = new Set<string>()
-    rows.forEach((row) => {
+    metricsRows.forEach((row) => {
       keys.add(getAdvisorFilterKey(row))
     })
     return keys.size
-  }, [rows])
+  }, [metricsRows])
 
   const displayedRows = useMemo(() => {
     const advisorScoped = selectedAdvisor === 'all'
@@ -533,21 +597,6 @@ export default function ServiceAdvisorPage() {
       : categoryFilteredRows.filter((row) => getAdvisorFilterKey(row) === selectedAdvisor)
     return advisorScoped.filter((row) => matchesSearch(row))
   }, [categoryFilteredRows, selectedAdvisor, searchQuery])
-
-  const isWorkCompleted = (row: ReceptionEntryRow): boolean => {
-    const jcNumber = String(row.jc_number ?? '').trim().toUpperCase()
-    return Boolean(jcNumber) && completedJobCardNumbers.has(jcNumber)
-  }
-
-  const isWorkHold = (row: ReceptionEntryRow): boolean => {
-    const jcNumber = String(row.jc_number ?? '').trim().toUpperCase()
-    return Boolean(jcNumber) && holdJobCardNumbers.has(jcNumber)
-  }
-
-  const isWorkInProcess = (row: ReceptionEntryRow): boolean => {
-    const jcNumber = String(row.jc_number ?? '').trim().toUpperCase()
-    return Boolean(jcNumber) && inProcessJobCardNumbers.has(jcNumber)
-  }
 
   const isTechnicianAssigned = (row: ReceptionEntryRow): boolean => {
     // "No Technician" = no assignment row (matches Floor Incharge "Unassigned")
@@ -572,19 +621,19 @@ export default function ServiceAdvisorPage() {
   }, [displayedRows, selectedSummaryCard, completedJobCardNumbers, holdJobCardNumbers, inProcessJobCardNumbers, allAssignedJobCardNumbers])
 
   const availableBranches = useMemo(() => {
-    const branches = new Set(rows.map(r => r.branch).filter(Boolean) as string[])
+    const branches = new Set(metricsRows.map((row) => row.branch).filter(Boolean) as string[])
     return Array.from(branches).sort()
-  }, [rows])
+  }, [metricsRows])
 
   const availableFuelTypes = useMemo(() => {
-    const fuelTypes = new Set(rows.map((row) => getFuelTypeLabel(row.fuel_type)).filter(Boolean) as string[])
+    const fuelTypes = new Set(metricsRows.map((row) => getFuelTypeLabel(row.fuel_type)).filter(Boolean) as string[])
     return Array.from(fuelTypes).sort()
-  }, [rows])
+  }, [metricsRows])
 
   const availableCategories = useMemo(() => {
-    const categories = new Set(rows.map((row) => getCategoryForServiceType(row.service_type)))
+    const categories = new Set(metricsRows.map((row) => getCategoryForServiceType(row.service_type)))
     return Array.from(categories)
-  }, [rows])
+  }, [metricsRows])
 
   const showLocationFilter = availableBranches.length > 0
   const showFuelTypeFilter = availableFuelTypes.length > 1
@@ -605,7 +654,10 @@ export default function ServiceAdvisorPage() {
     }
   }, [categoryCountRows])
 
-  const hasBaseRows = useMemo(() => displayedRows.length > 0, [displayedRows.length])
+  const hasBaseRows = useMemo(
+    () => metricsDisplayedRows.length > 0 || rows.length > 0,
+    [metricsDisplayedRows.length, rows.length],
+  )
   const hasRows = useMemo(() => cardFilteredRows.length > 0, [cardFilteredRows.length])
 
   useEffect(() => {
@@ -620,7 +672,7 @@ export default function ServiceAdvisorPage() {
     
     const uniqueBranches = Array.from(
       new Set(
-        rows
+        metricsRows
           .map((row) => String(row.branch ?? '').trim())
           .filter(Boolean),
       ),
@@ -629,26 +681,35 @@ export default function ServiceAdvisorPage() {
     if (uniqueBranches.length === 0) return 'Unknown'
     if (uniqueBranches.length === 1) return uniqueBranches[0]
     return 'Multiple branches'
-  }, [rows, isAdmin, selectedBranch])
+  }, [metricsRows, isAdmin, selectedBranch])
   const pendingEstimateCount = useMemo(
-    () => displayedRows.filter((r) => !isBodyshopServiceType(r.service_type) && !isNoEstimateInvoiceRequiredServiceType(r.service_type) && !r.estimate_storage_path).length,
-    [displayedRows],
+    () => metricsDisplayedRows.filter((row) => !isBodyshopServiceType(row.service_type) && !isNoEstimateInvoiceRequiredServiceType(row.service_type) && !row.estimate_storage_path).length,
+    [metricsDisplayedRows],
   )
   const pendingJobCardCount = useMemo(
-    () => displayedRows.filter((r) => isJobCardPending(r.jc_number)).length,
-    [displayedRows],
+    () => metricsDisplayedRows.filter((row) => isJobCardPending(row.jc_number)).length,
+    [metricsDisplayedRows],
   )
   const pendingServiceTypeCount = useMemo(
-    () => displayedRows.filter((r) => isServiceTypeMissing(r.service_type)).length,
-    [displayedRows],
+    () => metricsDisplayedRows.filter((row) => isServiceTypeMissing(row.service_type)).length,
+    [metricsDisplayedRows],
   )
   const pendingInvoiceCount = useMemo(
-    () => displayedRows.filter((r) => !isBodyshopServiceType(r.service_type) && !isNoEstimateInvoiceRequiredServiceType(r.service_type) && isWorkCompleted(r) && !r.invoice_done_at).length,
-    [displayedRows, completedJobCardNumbers],
+    () => metricsDisplayedRows.filter((row) => {
+      const jcNumber = String(row.jc_number ?? '').trim().toUpperCase()
+      const isCompleted = Boolean(jcNumber) && metricsAssignmentSets.completed.has(jcNumber)
+      return !isBodyshopServiceType(row.service_type) && !isNoEstimateInvoiceRequiredServiceType(row.service_type) && isCompleted && !row.invoice_done_at
+    }).length,
+    [metricsDisplayedRows, metricsAssignmentSets.completed],
   )
   const noTechnicianCount = useMemo(
-    () => displayedRows.filter((r) => isFloorApplicable(r) && !isTechnicianAssigned(r)).length,
-    [displayedRows, allAssignedJobCardNumbers],
+    () => metricsDisplayedRows.filter((row) => {
+      if (getCategoryForServiceType(row.service_type) !== 'floor') return false
+      const jcNumber = String(row.jc_number ?? '').trim().toUpperCase()
+      if (!jcNumber) return true
+      return !metricsAssignmentSets.allAssigned.has(jcNumber)
+    }).length,
+    [metricsDisplayedRows, metricsAssignmentSets.allAssigned],
   )
 
   // Debug: Log count difference analysis
@@ -663,16 +724,25 @@ export default function ServiceAdvisorPage() {
     console.log(`[DEBUG] Floor rows: ${floorRows.length}, No Technician: ${noTech.length}, Without JC: ${withoutJc.length}, No Assignment (with JC): ${noAssignment.length}`)
   }, [displayedRows, allAssignedJobCardNumbers])
   const holdCount = useMemo(
-    () => displayedRows.filter((r) => isWorkHold(r)).length,
-    [displayedRows, holdJobCardNumbers],
+    () => metricsDisplayedRows.filter((row) => {
+      const jcNumber = String(row.jc_number ?? '').trim().toUpperCase()
+      return Boolean(jcNumber) && metricsAssignmentSets.hold.has(jcNumber)
+    }).length,
+    [metricsDisplayedRows, metricsAssignmentSets.hold],
   )
   const inProcessCount = useMemo(
-    () => displayedRows.filter((r) => isWorkInProcess(r)).length,
-    [displayedRows, inProcessJobCardNumbers],
+    () => metricsDisplayedRows.filter((row) => {
+      const jcNumber = String(row.jc_number ?? '').trim().toUpperCase()
+      return Boolean(jcNumber) && metricsAssignmentSets.inProcess.has(jcNumber)
+    }).length,
+    [metricsDisplayedRows, metricsAssignmentSets.inProcess],
   )
   const completedCount = useMemo(
-    () => displayedRows.filter((r) => isWorkCompleted(r) && Boolean(r.invoice_done_at)).length,
-    [displayedRows, completedJobCardNumbers],
+    () => metricsDisplayedRows.filter((row) => {
+      const jcNumber = String(row.jc_number ?? '').trim().toUpperCase()
+      return Boolean(jcNumber) && metricsAssignmentSets.completed.has(jcNumber) && Boolean(row.invoice_done_at)
+    }).length,
+    [metricsDisplayedRows, metricsAssignmentSets.completed],
   )
   // Detect admin/super_admin and get dealer scope
   async function checkIfAdmin() {
@@ -746,11 +816,55 @@ export default function ServiceAdvisorPage() {
     return canModifyServiceAdvisor
   }
 
+  function getLoadRange(): DateRange {
+    return dateRange.from && dateRange.to ? dateRange : getDefaultReceptionLookbackDateRange()
+  }
+
+  async function loadSummaryMetrics(loadRange: DateRange) {
+    setSummaryLoading(true)
+    setSummarySlimRows([])
+    setSummaryAssignmentSets({
+      completed: new Set(),
+      hold: new Set(),
+      inProcess: new Set(),
+      allAssigned: new Set(),
+    })
+
+    const summaryRes = await fetchReceptionSummaryFieldsByDateRange(loadRange)
+    if (summaryRes.error) {
+      setSummaryLoading(false)
+      return
+    }
+
+    const slimRows = summaryRes.data ?? []
+    setSummarySlimRows(slimRows)
+
+    const jobCardNumbers = collectVisibleJobCardNumbers(slimRows as unknown as ReceptionEntryRow[])
+    const assignmentRes = await fetchTechnicianAssignmentStatusesForJobCards(jobCardNumbers)
+    if (!assignmentRes.error) {
+      setSummaryAssignmentSets(buildAssignmentStatusSets(assignmentRes.data ?? []))
+    }
+
+    setSummaryLoading(false)
+  }
+
+  async function fetchEntryPage(
+    loadRange: DateRange,
+    cursor: ReceptionEntryPageCursor | null,
+    adminScope: boolean,
+  ) {
+    const searchOptions = searchQuery ? { searchQuery } : undefined
+    return adminScope
+      ? listReceptionEntriesByDateRangePage(loadRange, cursor, searchOptions)
+      : listServiceAdvisorEntriesByDateRangePage(loadRange, cursor, searchOptions)
+  }
+
   async function loadRows() {
     setLoading(true)
     setError(null)
+    setListCursor(null)
+    setHasMoreRows(false)
 
-    // Check if user is admin
     const nextIsAdmin = await checkIfAdmin()
 
     const presetAvailability = await Promise.all(
@@ -777,13 +891,8 @@ export default function ServiceAdvisorPage() {
         .map((item) => item.preset),
     )
 
-    // Fetch appropriate data (Period "All" → bounded lookback, not full table)
-    const loadRange =
-      dateRange.from && dateRange.to ? dateRange : getDefaultReceptionLookbackDateRange()
-
-    const res = nextIsAdmin
-      ? await listReceptionEntriesByDateRange(loadRange)
-      : await listServiceAdvisorEntriesByDateRange(loadRange)
+    const loadRange = getLoadRange()
+    const res = await fetchEntryPage(loadRange, null, nextIsAdmin)
 
     if (res.error) {
       setRows([])
@@ -794,8 +903,10 @@ export default function ServiceAdvisorPage() {
       return
     }
 
-    const rawData = res.data ?? []
+    const page = res.data ?? { rows: [], nextCursor: null, hasMore: false }
+    const rawData = page.rows
     const data = rawData.filter((row) => isWithinDateRange(row.created_at, dateRange))
+
     if (nextIsAdmin) {
       setRows(data)
       setSelectedBranch('all')
@@ -804,6 +915,9 @@ export default function ServiceAdvisorPage() {
       setRows(data)
       setSelectedAdvisor('all')
     }
+
+    setListCursor(page.nextCursor)
+    setHasMoreRows(page.hasMore)
 
     const mappedDrafts: Record<number, RowDraft> = {}
     data.forEach((row) => {
@@ -817,7 +931,6 @@ export default function ServiceAdvisorPage() {
 
     setServiceTypeOptions((prev) => mergeServiceTypes(prev, data.map((row) => row.service_type ?? '')))
 
-    // Extract and set fuel type options
     const fuelTypes = Array.from(
       new Set(
         data
@@ -829,12 +942,68 @@ export default function ServiceAdvisorPage() {
     setDrafts(mappedDrafts)
     setDirtyRowIds(new Set())
     setLoading(false)
+
+    void loadSummaryMetrics(loadRange)
+  }
+
+  async function loadMoreRows() {
+    if (!hasMoreRows || !listCursor || loadingMore || loading) return
+
+    setLoadingMore(true)
+    setError(null)
+
+    const loadRange = getLoadRange()
+    const res = await fetchEntryPage(loadRange, listCursor, isAdmin)
+
+    if (res.error) {
+      setLoadingMore(false)
+      setError(res.error)
+      return
+    }
+
+    const page = res.data ?? { rows: [], nextCursor: null, hasMore: false }
+    const data = page.rows.filter((row) => isWithinDateRange(row.created_at, dateRange))
+
+    setRows((prev) => {
+      const seen = new Set(prev.map((row) => row.id))
+      const merged = [...prev]
+      data.forEach((row) => {
+        if (seen.has(row.id)) return
+        merged.push(row)
+      })
+      return merged
+    })
+
+    setDrafts((prev) => {
+      const next = { ...prev }
+      data.forEach((row) => {
+        if (next[row.id]) return
+        next[row.id] = {
+          service_type: typeof row.service_type === 'string' ? row.service_type : '',
+          jc_number: row.jc_number ?? '',
+          km_reading: row.km_reading == null ? '' : String(row.km_reading),
+          remark: row.remark ?? '',
+        }
+      })
+      return next
+    })
+
+    setServiceTypeOptions((prev) => mergeServiceTypes(prev, data.map((row) => row.service_type ?? '')))
+    setFuelTypeOptions((prev) => {
+      const merged = new Set(prev)
+      data.forEach((row) => merged.add(getFuelTypeLabel(row.fuel_type)))
+      return Array.from(merged).sort()
+    })
+
+    setListCursor(page.nextCursor)
+    setHasMoreRows(page.hasMore)
+    setLoadingMore(false)
   }
 
   useEffect(() => {
     void loadRows()
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dateRange])
+  }, [dateRange, searchQuery])
 
   useEffect(() => {
     visibleJobCardKeysRef.current = new Set(
@@ -1494,9 +1663,9 @@ export default function ServiceAdvisorPage() {
       {/* ── METRIC SUMMARY ROW ──────────────────────────────────────────────── */}
       {hasBaseRows && (
         <div className="msr">
-          <button type="button" onClick={() => setSelectedSummaryCard('all')} disabled={displayedRows.length === 0}
+          <button type="button" onClick={() => setSelectedSummaryCard('all')} disabled={metricsDisplayedRows.length === 0 && rows.length === 0}
             className={`msr__tile msr__tile--btn ${selectedSummaryCard === 'all' ? 'msr__tile--active' : ''}`}>
-            <div className="msr__n">{displayedRows.length}</div>
+            <div className="msr__n">{summaryLoading ? '…' : metricsDisplayedRows.length}</div>
             <div className="msr__l">{isAdmin ? 'Filtered' : 'Assigned'}</div>
           </button>
           <button type="button" onClick={() => setSelectedSummaryCard('sr_type_pending')} disabled={pendingServiceTypeCount === 0}
@@ -1582,12 +1751,13 @@ export default function ServiceAdvisorPage() {
               {search.trim()
                 ? 'No rows match your search.'
                 : selectedSummaryCard !== 'all'
-                ? 'No rows found for the selected summary card. Select All in summary chips to view all filtered rows.'
+                ? 'No loaded rows match the selected summary card. Try Load more entries or select All.'
                 : isAdmin
                   ? 'No rows found for the selected branch/advisor filters.'
                   : 'No rows are assigned to your advisor account.'}
             </div>
           ) : (
+            <>
             <div className="tbl-wrap scroll">
               <table className="tbl sa-tbl">
                 <thead>
@@ -1812,6 +1982,19 @@ export default function ServiceAdvisorPage() {
                 </tbody>
               </table>
             </div>
+            {(hasMoreRows || loadingMore) && (
+              <div style={{ display: 'flex', justifyContent: 'center', padding: '1rem' }}>
+                <button
+                  type="button"
+                  className="btn btn--secondary"
+                  disabled={loadingMore || !hasMoreRows}
+                  onClick={() => void loadMoreRows()}
+                >
+                  {loadingMore ? 'Loading more…' : 'Load more entries'}
+                </button>
+              </div>
+            )}
+            </>
           )}
         </div>
       </div>

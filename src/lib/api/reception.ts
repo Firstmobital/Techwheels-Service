@@ -153,6 +153,194 @@ const RECEPTION_ENTRY_SELECT_COLUMNS = [
   'updated_at',
 ].join(', ')
 
+/** Slim projection for date-range summary tiles and filter metadata (no file blobs). */
+const RECEPTION_SUMMARY_FIELD_COLUMNS = [
+  'id',
+  'jc_number',
+  'service_type',
+  'estimate_storage_path',
+  'invoice_done_at',
+  'branch',
+  'sa_employee_code',
+  'sa_display_name',
+  'sa_name',
+  'fuel_type',
+  'reg_number',
+  'model',
+  'owner_name',
+  'owner_phone',
+  'source',
+  'created_by',
+  'km_reading',
+  'created_at',
+].join(', ')
+
+export type ReceptionEntryPageCursor = {
+  createdAt: string
+  id: number
+}
+
+export type ReceptionEntryPageResult = {
+  rows: ReceptionEntryRow[]
+  nextCursor: ReceptionEntryPageCursor | null
+  hasMore: boolean
+}
+
+export type ReceptionSummaryFieldRow = Pick<
+  ReceptionEntryRow,
+  | 'id'
+  | 'jc_number'
+  | 'service_type'
+  | 'estimate_storage_path'
+  | 'invoice_done_at'
+  | 'branch'
+  | 'sa_employee_code'
+  | 'sa_display_name'
+  | 'sa_name'
+  | 'fuel_type'
+  | 'reg_number'
+  | 'model'
+  | 'owner_name'
+  | 'owner_phone'
+  | 'source'
+  | 'created_by'
+  | 'km_reading'
+  | 'created_at'
+>
+
+export type ReceptionAssignmentStatusRow = {
+  job_card_number: string | null
+  work_status: string | null
+}
+
+type ReceptionEntryPageQuery = {
+  serviceTypes?: string[]
+  createdAtFrom?: string
+  createdAtTo?: string
+  requireNonEmptyJcNumber?: boolean
+  cursor?: ReceptionEntryPageCursor | null
+  pageSize?: number
+  selectColumns?: string
+  searchQuery?: string
+}
+
+function escapePostgrestFilterValue(value: string): string {
+  return value.replace(/\\/g, '\\\\').replace(/,/g, '\\,')
+}
+
+function buildReceptionSearchOrFilter(searchQuery: string): string | null {
+  const trimmed = searchQuery.trim()
+  if (!trimmed) return null
+
+  const pattern = `%${escapePostgrestFilterValue(trimmed)}%`
+  return [
+    `reg_number.ilike.${pattern}`,
+    `model.ilike.${pattern}`,
+    `jc_number.ilike.${pattern}`,
+    `owner_name.ilike.${pattern}`,
+    `owner_phone.ilike.${pattern}`,
+    `sa_name.ilike.${pattern}`,
+    `sa_display_name.ilike.${pattern}`,
+    `source.ilike.${pattern}`,
+    `created_by.ilike.${pattern}`,
+  ].join(',')
+}
+
+function toCreatedAtBounds(range: { from: string; to: string }): { from: string; to: string } {
+  const from = String(range.from ?? '').trim()
+  const to = String(range.to ?? '').trim()
+
+  return {
+    from: from.includes('T') ? from : `${from}T00:00:00+05:30`,
+    to: to.includes('T') ? to : `${to}T23:59:59+05:30`,
+  }
+}
+
+async function fetchReceptionEntriesPage(
+  queryOptions: ReceptionEntryPageQuery,
+): Promise<{ data: ReceptionEntryPageResult | null; error: unknown | null }> {
+  const pageSize = queryOptions.pageSize ?? RECEPTION_LIST_PAGE_SIZE
+  const selectColumns = queryOptions.selectColumns ?? RECEPTION_ENTRY_SELECT_COLUMNS
+  const searchFilter = buildReceptionSearchOrFilter(queryOptions.searchQuery ?? '')
+
+  let query = supabase
+    .from('service_reception_entries')
+    .select(selectColumns)
+    .order('created_at', { ascending: false })
+    .order('id', { ascending: false })
+    .limit(pageSize)
+
+  if (queryOptions.serviceTypes && queryOptions.serviceTypes.length > 0) {
+    query = query.in('service_type', queryOptions.serviceTypes)
+  }
+
+  if (queryOptions.requireNonEmptyJcNumber) {
+    query = query.not('jc_number', 'is', null).neq('jc_number', '')
+  }
+
+  if (queryOptions.createdAtFrom) {
+    query = query.gte('created_at', queryOptions.createdAtFrom)
+  }
+
+  if (queryOptions.createdAtTo) {
+    query = query.lte('created_at', queryOptions.createdAtTo)
+  }
+
+  if (searchFilter) {
+    query = query.or(searchFilter)
+  }
+
+  if (queryOptions.cursor) {
+    const { createdAt, id } = queryOptions.cursor
+    query = query.or(`created_at.lt.${createdAt},and(created_at.eq.${createdAt},id.lt.${id})`)
+  }
+
+  const { data, error } = await query
+  if (error) {
+    return { data: null, error }
+  }
+
+  let rows = (Array.isArray(data) ? data : []) as unknown as ReceptionEntryRow[]
+  if (queryOptions.requireNonEmptyJcNumber) {
+    rows = rows.filter((row) => hasNonEmptyJcNumber(row.jc_number))
+  }
+
+  if (rows.length < pageSize) {
+    return {
+      data: {
+        rows,
+        nextCursor: null,
+        hasMore: false,
+      },
+      error: null,
+    }
+  }
+
+  const lastRow = rows[rows.length - 1]
+  const createdAt = typeof lastRow.created_at === 'string' ? lastRow.created_at : null
+  const id = Number.isFinite(lastRow.id) ? Number(lastRow.id) : null
+
+  if (!createdAt || id === null) {
+    return {
+      data: {
+        rows,
+        nextCursor: null,
+        hasMore: false,
+      },
+      error: null,
+    }
+  }
+
+  return {
+    data: {
+      rows,
+      nextCursor: { createdAt, id },
+      hasMore: true,
+    },
+    error: null,
+  }
+}
+
 function normalizePhone(value?: string | null): string | null {
   const digits = String(value ?? '').replace(/\D/g, '')
   if (!digits) return null
@@ -264,64 +452,162 @@ async function fetchReceptionEntriesWithKeyset(
   createdAtFrom?: string,
   createdAtTo?: string,
   requireNonEmptyJcNumber = false,
+  selectColumns = RECEPTION_ENTRY_SELECT_COLUMNS,
 ): Promise<{ data: ReceptionEntryRow[] | null; error: unknown | null }> {
-  let cursorCreatedAt: string | null = null
-  let cursorId: number | null = null
+  let cursor: ReceptionEntryPageCursor | null = null
   const rows: ReceptionEntryRow[] = []
 
   while (true) {
-    let query = supabase
-      .from('service_reception_entries')
-      .select(RECEPTION_ENTRY_SELECT_COLUMNS)
-      .order('created_at', { ascending: false })
-      .order('id', { ascending: false })
-      .limit(RECEPTION_LIST_PAGE_SIZE)
+    const { data, error } = await fetchReceptionEntriesPage({
+      serviceTypes,
+      createdAtFrom,
+      createdAtTo,
+      requireNonEmptyJcNumber,
+      cursor,
+      selectColumns,
+    })
 
-    if (serviceTypes && serviceTypes.length > 0) {
-      query = query.in('service_type', serviceTypes)
-    }
-
-    if (requireNonEmptyJcNumber) {
-      query = query.not('jc_number', 'is', null).neq('jc_number', '')
-    }
-
-    if (createdAtFrom) {
-      query = query.gte('created_at', createdAtFrom)
-    }
-
-    if (createdAtTo) {
-      query = query.lte('created_at', createdAtTo)
-    }
-
-    if (cursorCreatedAt && cursorId !== null) {
-      query = query.or(`created_at.lt.${cursorCreatedAt},and(created_at.eq.${cursorCreatedAt},id.lt.${cursorId})`)
-    }
-
-    const { data, error } = await query
     if (error) {
       return { data: null, error }
     }
 
-    const rawBatch = (Array.isArray(data) ? data : []) as unknown as ReceptionEntryRow[]
-    const batch = requireNonEmptyJcNumber
-      ? rawBatch.filter((row) => hasNonEmptyJcNumber(row.jc_number))
-      : rawBatch
-    rows.push(...batch)
-
-    if (rawBatch.length < RECEPTION_LIST_PAGE_SIZE) {
+    if (!data) {
       break
     }
 
-    const lastRow = rawBatch[rawBatch.length - 1]
-    cursorCreatedAt = typeof lastRow.created_at === 'string' ? lastRow.created_at : null
-    cursorId = Number.isFinite(lastRow.id) ? Number(lastRow.id) : null
+    rows.push(...data.rows)
 
-    if (!cursorCreatedAt || cursorId === null) {
+    if (!data.hasMore || !data.nextCursor) {
       break
     }
+
+    cursor = data.nextCursor
   }
 
   return { data: rows, error: null }
+}
+
+async function fetchReceptionSummaryFieldsWithKeyset(
+  createdAtFrom: string,
+  createdAtTo: string,
+): Promise<{ data: ReceptionSummaryFieldRow[] | null; error: unknown | null }> {
+  let cursor: ReceptionEntryPageCursor | null = null
+  const rows: ReceptionSummaryFieldRow[] = []
+
+  while (true) {
+    const { data, error } = await fetchReceptionEntriesPage({
+      createdAtFrom,
+      createdAtTo,
+      cursor,
+      selectColumns: RECEPTION_SUMMARY_FIELD_COLUMNS,
+    })
+
+    if (error) {
+      return { data: null, error }
+    }
+
+    if (!data) {
+      break
+    }
+
+    rows.push(...(data.rows as unknown as ReceptionSummaryFieldRow[]))
+
+    if (!data.hasMore || !data.nextCursor) {
+      break
+    }
+
+    cursor = data.nextCursor
+  }
+
+  return { data: rows, error: null }
+}
+
+export async function listReceptionEntriesByDateRangePage(
+  range: { from: string; to: string },
+  cursor: ReceptionEntryPageCursor | null = null,
+  options?: { searchQuery?: string },
+): Promise<ApiResult<ReceptionEntryPageResult>> {
+  const from = String(range.from ?? '').trim()
+  const to = String(range.to ?? '').trim()
+
+  if (!from || !to) return fail('Date range is required')
+
+  const bounds = toCreatedAtBounds({ from, to })
+  const { data, error } = await fetchReceptionEntriesPage({
+    createdAtFrom: bounds.from,
+    createdAtTo: bounds.to,
+    cursor,
+    searchQuery: options?.searchQuery,
+  })
+
+  if (error) return fail(error)
+  if (!data) return ok({ rows: [], nextCursor: null, hasMore: false })
+
+  const enriched = await enrichEntriesWithEmployeeBranch(data.rows)
+  return ok({
+    rows: enriched,
+    nextCursor: data.nextCursor,
+    hasMore: data.hasMore,
+  })
+}
+
+export async function listServiceAdvisorEntriesByDateRangePage(
+  range: { from: string; to: string },
+  cursor: ReceptionEntryPageCursor | null = null,
+  options?: { searchQuery?: string },
+): Promise<ApiResult<ReceptionEntryPageResult>> {
+  return listReceptionEntriesByDateRangePage(range, cursor, options)
+}
+
+/** Background scan for summary tiles and filter metadata — slim columns only. */
+export async function fetchReceptionSummaryFieldsByDateRange(
+  range: { from: string; to: string },
+): Promise<ApiResult<ReceptionSummaryFieldRow[]>> {
+  const from = String(range.from ?? '').trim()
+  const to = String(range.to ?? '').trim()
+
+  if (!from || !to) return fail('Date range is required')
+
+  const bounds = toCreatedAtBounds({ from, to })
+  const { data, error } = await fetchReceptionSummaryFieldsWithKeyset(bounds.from, bounds.to)
+
+  if (error) return fail(error)
+
+  const enriched = await enrichEntriesWithEmployeeBranch((data ?? []) as unknown as ReceptionEntryRow[])
+  return ok(enriched as unknown as ReceptionSummaryFieldRow[])
+}
+
+const RECEPTION_ASSIGNMENT_STATUS_BATCH_SIZE = 100
+
+export async function fetchTechnicianAssignmentStatusesForJobCards(
+  jobCardNumbers: string[],
+): Promise<ApiResult<ReceptionAssignmentStatusRow[]>> {
+  const lookupKeys = Array.from(
+    new Set(
+      jobCardNumbers
+        .map((jc) => String(jc ?? '').trim())
+        .filter(Boolean),
+    ),
+  )
+
+  if (lookupKeys.length === 0) {
+    return ok([])
+  }
+
+  const rows: ReceptionAssignmentStatusRow[] = []
+
+  for (let offset = 0; offset < lookupKeys.length; offset += RECEPTION_ASSIGNMENT_STATUS_BATCH_SIZE) {
+    const chunk = lookupKeys.slice(offset, offset + RECEPTION_ASSIGNMENT_STATUS_BATCH_SIZE)
+    const { data, error } = await supabase
+      .from('technician_assignments')
+      .select('job_card_number, work_status')
+      .in('job_card_number', chunk)
+
+    if (error) return fail(error)
+    rows.push(...((data ?? []) as ReceptionAssignmentStatusRow[]))
+  }
+
+  return ok(rows)
 }
 
 export function getDefaultReceptionLookbackDateRange(): { from: string; to: string } {

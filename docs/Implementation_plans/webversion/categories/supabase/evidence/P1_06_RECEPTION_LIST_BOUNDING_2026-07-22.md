@@ -30,3 +30,4 @@ Unbounded keyset loops loaded the full `service_reception_entries` table with ~4
 ## Status
 
 - Code: complete in repo (pending deploy + audit)
+- Post-deploy audit baseline: snapshot **14.45** (2026-07-24)
