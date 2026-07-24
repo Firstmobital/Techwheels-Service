@@ -6,6 +6,9 @@ import PartsInStockReport from './PartsInStockReport'
 import PartsHighDemandReport from './PartsHighDemandReport'
 import PartsStockDisciplineReport from './PartsStockDisciplineReport'
 import PartsGRNReport from './PartsGRNReport'
+import GRNSitapuraPVReport from './GRNSitapuraPVReport'
+import GRNAjmerPVReport from './GRNAjmerPVReport'
+import PartsDailyReport from './PartsDailyReport'
 import PartsNotInvoicedReport from './PartsNotInvoicedReport'
 import JcClosedInvoicedReport from './JcClosedInvoicedReport'
 import PartsNotShippedReport from './PartsNotShippedReport'
@@ -78,11 +81,38 @@ export const PARTS_REPORTS: ReportDefinition[] = [
   {
     id: 'parts-grn-report',
     categoryId: 'parts',
-    label: 'GRN Report',
+    label: 'GRN Report (EV + PV)',
     group: 'Daily Operations',
     description: 'Daily EV & PV Goods Receipt Note tracking — GRN received vs pending with order details.',
     cardHint: 'Best for real-time GRN position and pending receipt follow-up.',
     Component: PartsGRNReport,
+  },
+  {
+    id: 'grn-sitapura-pv',
+    categoryId: 'parts',
+    label: 'GRN – Sitapura PV (3000840)',
+    group: 'Daily Operations',
+    description: 'GRN Report for Sitapura PV dealer (3000840) — GRN received, In Transit, and pending with full order details.',
+    cardHint: 'Best for tracking Sitapura PV parts receipt and invoice status.',
+    Component: GRNSitapuraPVReport,
+  },
+  {
+    id: 'grn-ajmer-pv',
+    categoryId: 'parts',
+    label: 'GRN – Ajmer Road PV (3001440)',
+    group: 'Daily Operations',
+    description: 'GRN Report for Ajmer Road PV dealer (3001440) — independent tracking from Sitapura data.',
+    cardHint: 'Best for tracking Ajmer Road PV parts receipt and invoice status.',
+    Component: GRNAjmerPVReport,
+  },
+  {
+    id: 'parts-daily-report',
+    categoryId: 'parts',
+    label: 'Parts Daily Report',
+    group: 'Daily Operations',
+    description: 'Consolidated daily GRN data across all dealers — filter by dealer, date, supplier, invoice, part number.',
+    cardHint: 'Best for a unified view of all parts receipts across locations with export.',
+    Component: PartsDailyReport,
   },
   {
     id: 'parts-not-invoiced',
