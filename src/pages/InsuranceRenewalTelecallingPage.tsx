@@ -1996,8 +1996,8 @@ function AdminDashboard({ campaigns, activeCampaign, onRefresh }: { campaigns: C
                       <td className="px-4 py-3 font-medium text-gray-900">{r.customer?.first_name} {r.customer?.last_name || ''}</td>
                       <td className="px-4 py-3 text-gray-600">{r.customer?.model} · {r.customer?.vehicle_registration_number || '—'}</td>
                       <td className="px-4 py-3 text-gray-600">{r.customer?.contact_phones}</td>
-                      <td className="px-4 py-3 font-medium text-green-700">{formatDate(r.called_at)}</td>
-                      <td className="px-4 py-3 text-gray-600">{formatCurrency(r.quoted_premium)}</td>
+                      <td className="px-4 py-3 font-medium text-green-700">{formatDate(r.called_at ?? null)}</td>
+                      <td className="px-4 py-3 text-gray-600">{formatCurrency(r.quoted_premium ?? null)}</td>
                       <td className="px-4 py-3 text-gray-600">{r.renewal_company || '—'}</td>
                       <td className="px-4 py-3 text-gray-600">{r.assigned_to || '—'}</td>
                       <td className="px-4 py-3 text-gray-500 text-xs max-w-xs truncate">{r.call_notes || '—'}</td>
