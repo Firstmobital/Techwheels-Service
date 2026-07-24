@@ -75,7 +75,6 @@ type SortKey =
   | 'recd_qty' | 'spares_order_type' | 'challan_no' | 'challan_date'
   | 'vendor_name' | 'grn_status' | 'net_amount' | 'purchase_order_date' | 'total_invoice_amount'
   | 'sap_order_num'
-  | 'sap_order_num'
 
 
 
@@ -129,6 +128,18 @@ function parseRs(v: string | null | undefined): number {
   if (!v) return 0
   // Strip 'Rs.' prefix first, then commas — avoids double-dot issue ("Rs.10,000" → ".10000")
   return parseFloat(String(v).replace(/Rs\./gi, '').replace(/,/g, '').trim()) || 0
+}
+
+// ─── Module-level types ─────────────────────────────────────────────────────
+interface OrderSummary {
+  orderNo: string
+  vendorName: string
+  sapInvoiceNo: string
+  invoiceDate: string
+  poDate: string
+  partCount: number
+  totalInvoiceAmount: number
+  lineSum: number
 }
 
 export default function PartsGRNReport(_props: ReportViewProps) {
@@ -251,24 +262,6 @@ export default function PartsGRNReport(_props: ReportViewProps) {
   const totalReceived    = rows.filter((r) => r.grn_status === 'GRN Received').length
   const totalInTransit   = rows.filter((r) => r.grn_status === 'In Transit' || r.status === 'In Transit').length
   const totalPending     = rows.filter((r) => r.grn_status === 'GRN Pending' || (r.grn_status === null && r.status !== 'In Transit' && !r.sap_invoice_no)).length
-  // Build order-level totals for In Transit rows.
-  // Total_Invoice_Amount repeats the same value on every line of an order — 
-  // we must take it ONCE per order to avoid double-counting multi-line orders.
-  // Order-level grouping for In Transit rows.
-  // Total_Invoice_Amount in the Excel is the FULL PAYABLE invoice total per order (incl. GST + freight).
-  // It repeats the same value on every part-line of the same order — we take it ONCE per order.
-  // Fallback: sum of Line Item Invoice Total if Total_Invoice_Amount is blank.
-  interface OrderSummary {
-    orderNo: string
-    vendorName: string
-    sapInvoiceNo: string
-    invoiceDate: string
-    poDate: string
-    partCount: number
-    totalInvoiceAmount: number   // from Line Item Invoice Total column (per-part, sum per order)
-    lineSum: number              // fallback: sum of Line Item Invoice Total
-  }
-
   const inTransitOrderSummaries = useMemo((): OrderSummary[] => {
     const map = new Map<string, OrderSummary>()
     rows
