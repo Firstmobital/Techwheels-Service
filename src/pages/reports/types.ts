@@ -49,6 +49,7 @@ export type ReportId =
   | 'parts-high-demand'
   | 'parts-stock-discipline'
   | 'parts-grn-report'
+  | 'grn-sitapura-ev'
   | 'grn-sitapura-pv'
   | 'grn-ajmer-pv'
   | 'parts-daily-report'

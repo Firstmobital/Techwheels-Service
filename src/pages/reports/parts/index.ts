@@ -5,7 +5,7 @@ import BackOrderPartsReport from './BackOrderPartsReport'
 import PartsInStockReport from './PartsInStockReport'
 import PartsHighDemandReport from './PartsHighDemandReport'
 import PartsStockDisciplineReport from './PartsStockDisciplineReport'
-import PartsGRNReport from './PartsGRNReport'
+import GRNSitapuraEVReport from './GRNSitapuraEVReport'
 import GRNSitapuraPVReport from './GRNSitapuraPVReport'
 import GRNAjmerPVReport from './GRNAjmerPVReport'
 import PartsDailyReport from './PartsDailyReport'
@@ -78,20 +78,21 @@ export const PARTS_REPORTS: ReportDefinition[] = [
     cardHint: 'Best for generating a ready-to-place reorder list with shortage priorities.',
     Component: PartsStockDisciplineReport,
   },
+
   {
-    id: 'parts-grn-report',
+    id: 'grn-sitapura-ev',
     categoryId: 'parts',
-    label: 'GRN Report (EV + PV)',
-    group: 'Daily Operations',
-    description: 'Daily EV & PV Goods Receipt Note tracking — GRN received vs pending with order details.',
-    cardHint: 'Best for real-time GRN position and pending receipt follow-up.',
-    Component: PartsGRNReport,
+    label: 'GRN – Sitapura EV',
+    group: 'GRN Reports',
+    description: 'GRN Report for Sitapura EV dealer (500A840) — independent EV-only tracking.',
+    cardHint: 'Best for tracking Sitapura EV parts receipt and invoice status.',
+    Component: GRNSitapuraEVReport,
   },
   {
     id: 'grn-sitapura-pv',
     categoryId: 'parts',
-    label: 'GRN – Sitapura PV (3000840)',
-    group: 'Daily Operations',
+    label: 'GRN – Sitapura PV',
+    group: 'GRN Reports',
     description: 'GRN Report for Sitapura PV dealer (3000840) — GRN received, In Transit, and pending with full order details.',
     cardHint: 'Best for tracking Sitapura PV parts receipt and invoice status.',
     Component: GRNSitapuraPVReport,
@@ -99,8 +100,8 @@ export const PARTS_REPORTS: ReportDefinition[] = [
   {
     id: 'grn-ajmer-pv',
     categoryId: 'parts',
-    label: 'GRN – Ajmer Road PV (3001440)',
-    group: 'Daily Operations',
+    label: 'GRN – Ajmer Road PV',
+    group: 'GRN Reports',
     description: 'GRN Report for Ajmer Road PV dealer (3001440) — independent tracking from Sitapura data.',
     cardHint: 'Best for tracking Ajmer Road PV parts receipt and invoice status.',
     Component: GRNAjmerPVReport,

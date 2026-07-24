@@ -89,6 +89,9 @@ export default function ReportsPage() {
   }, [params.reportId, resolvedCategoryId])
 
   const activeReport = selectedReport ?? reportsInCategory[0] ?? null
+  const [grnFolderOpen, setGrnFolderOpen] = useState(
+    () => ['grn-sitapura-ev', 'grn-sitapura-pv', 'grn-ajmer-pv'].includes(params.reportId ?? '')
+  )
 
   const isManpowerReportSelected = activeReport?.id === 'manpower-wise-labour-revenue'
   const isServiceTypeWiseReportSelected = activeReport?.id === 'service-type-labour-revenue'
@@ -476,6 +479,51 @@ export default function ReportsPage() {
                         </button>
                       )
                     })}
+                  </div>
+                )}
+                {/* GRN Reports collapsible folder */}
+                {reportsInCategory.some(r => r.group === 'GRN Reports') && (
+                  <div className="rounded-xl border border-indigo-200 bg-indigo-50/60">
+                    {/* Folder header — click to toggle */}
+                    <button
+                      type="button"
+                      onClick={() => setGrnFolderOpen(v => !v)}
+                      className="flex w-full items-center gap-2 px-3 py-2 text-sm font-semibold text-indigo-800 hover:bg-indigo-100/60 rounded-xl transition-colors"
+                    >
+                      <svg className={`h-3.5 w-3.5 transition-transform ${grnFolderOpen ? 'rotate-90' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                      </svg>
+                      <svg className="h-4 w-4 text-indigo-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V7z" />
+                      </svg>
+                      GRN Reports
+                      <span className="ml-auto rounded-full bg-indigo-200 px-2 py-0.5 text-[10px] font-bold text-indigo-700">
+                        {reportsInCategory.filter(r => r.group === 'GRN Reports').length}
+                      </span>
+                    </button>
+                    {/* Folder contents */}
+                    {grnFolderOpen && (
+                      <div className="flex flex-wrap gap-2 border-t border-indigo-200 px-3 py-2">
+                        {reportsInCategory.filter(r => r.group === 'GRN Reports').map((report) => {
+                          const isActive = activeReport?.id === report.id
+                          const colorClass = report.id === 'grn-sitapura-ev'
+                            ? (isActive ? 'bg-emerald-600 text-white' : 'text-emerald-700 hover:bg-emerald-50')
+                            : report.id === 'grn-sitapura-pv'
+                              ? (isActive ? 'bg-blue-600 text-white' : 'text-blue-700 hover:bg-blue-50')
+                              : (isActive ? 'bg-purple-600 text-white' : 'text-purple-700 hover:bg-purple-50')
+                          return (
+                            <button key={report.id} type="button"
+                              onClick={() => navigate(`/reports/${resolvedCategoryId}/${report.id}`)}
+                              className={['rounded-lg px-3 py-2 text-sm font-medium transition-colors', colorClass].join(' ')}>
+                              {report.id === 'grn-sitapura-ev' && '🟢 '}
+                              {report.id === 'grn-sitapura-pv' && '🔵 '}
+                              {report.id === 'grn-ajmer-pv' && '🟣 '}
+                              {report.label}
+                            </button>
+                          )
+                        })}
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
