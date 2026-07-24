@@ -441,7 +441,6 @@ function TelecallerDashboard({ activeCampaign, onCampaignRefresh }: { activeCamp
   const [showNotes, setShowNotes] = useState(false)
   const [showRenewed, setShowRenewed] = useState(false)
   const [showCallback, setShowCallback] = useState(false)
-  const [showQuoteSent, setShowQuoteSent] = useState(false)
   // Queue edit
   const [editingId, setEditingId] = useState<number | null>(null)
   const [editNotes, setEditNotes] = useState('')
@@ -479,7 +478,7 @@ function TelecallerDashboard({ activeCampaign, onCampaignRefresh }: { activeCamp
 
   const resetCallForm = () => {
     setNotes(''); setCallbackDate(''); setQuotedPremium(''); setRenewalCompany('')
-    setShowNotes(false); setShowRenewed(false); setShowCallback(false); setShowQuoteSent(false)
+    setShowNotes(false); setShowRenewed(false); setShowCallback(false)
   }
 
   const handleGetNext = async () => {
@@ -523,7 +522,6 @@ function TelecallerDashboard({ activeCampaign, onCampaignRefresh }: { activeCamp
               }
             : a
         )))
-        setShowQuoteSent(false)
         setShowRenewed(false)
         setShowCallback(false)
         setRcFetchMessage(`Status updated to ${status.replace(/_/g, ' ')}.`)
@@ -543,7 +541,6 @@ function TelecallerDashboard({ activeCampaign, onCampaignRefresh }: { activeCamp
               }
             : prev
         ))
-        setShowQuoteSent(false)
         setShowRenewed(false)
         setShowCallback(false)
         setRcFetchMessage(`Status updated to ${status.replace(/_/g, ' ')}.`)
@@ -569,7 +566,6 @@ function TelecallerDashboard({ activeCampaign, onCampaignRefresh }: { activeCamp
     setShowNotes(false)
     setShowRenewed(false)
     setShowCallback(false)
-    setShowQuoteSent(false)
   }
 
   const handleEditSave = async (assignmentId: number) => {
@@ -732,7 +728,6 @@ function TelecallerDashboard({ activeCampaign, onCampaignRefresh }: { activeCamp
             renewalCompany={renewalCompany} setRenewalCompany={setRenewalCompany}
             showRenewed={showRenewed} setShowRenewed={setShowRenewed}
             showCallback={showCallback} setShowCallback={setShowCallback}
-            showQuoteSent={showQuoteSent} setShowQuoteSent={setShowQuoteSent}
             onUpdateStatus={handleUpdateStatus}
             onLogWA={handleLogWA}
             rcFetchBusy={rcFetchBusy}
@@ -907,7 +902,6 @@ function TelecallerDashboard({ activeCampaign, onCampaignRefresh }: { activeCamp
                     renewalCompany={renewalCompany} setRenewalCompany={setRenewalCompany}
                     showRenewed={showRenewed} setShowRenewed={setShowRenewed}
                     showCallback={showCallback} setShowCallback={setShowCallback}
-                    showQuoteSent={showQuoteSent} setShowQuoteSent={setShowQuoteSent}
                     onUpdateStatus={status => handleUpdateStatus(status, asgn)}
                     onLogWA={handleLogWA}
                     rcFetchBusy={rcFetchBusy}
@@ -989,7 +983,6 @@ function CallCard({
   renewalCompany, setRenewalCompany,
   showRenewed, setShowRenewed,
   showCallback, setShowCallback,
-  showQuoteSent, setShowQuoteSent,
   onUpdateStatus, onLogWA,
   rcFetchBusy = false, rcFetchMessage, rcFetchError, onRcFetch,
 }: {
@@ -1001,7 +994,6 @@ function CallCard({
   renewalCompany: string; setRenewalCompany: (v: string) => void
   showRenewed: boolean; setShowRenewed: (v: boolean) => void
   showCallback: boolean; setShowCallback: (v: boolean) => void
-  showQuoteSent: boolean; setShowQuoteSent: (v: boolean) => void
   onUpdateStatus: (s: CallStatus) => void
   onLogWA: (id: number, type: string) => void
   rcFetchBusy?: boolean
@@ -1186,25 +1178,6 @@ function CallCard({
             </div>
             <button onClick={() => onUpdateStatus('renewed_via_us')} disabled={busy} className="rounded-lg bg-green-600 px-5 py-2 text-sm font-semibold text-white hover:bg-green-700 disabled:opacity-50">
               {busy ? 'Confirming…' : '✅ Confirm Renewed via Us'}
-            </button>
-          </div>
-        )}
-
-        {showQuoteSent && (
-          <div className="rounded-xl border border-cyan-200 bg-cyan-50 p-4 space-y-3">
-            <div className="text-sm font-semibold text-cyan-900">💰 Quote sent to customer (optional premium)</div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="text-xs font-medium text-gray-600">Quoted Premium</label>
-                <input type="number" value={quotedPremium} onChange={e => setQuotedPremium(e.target.value)} placeholder="₹" className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-1.5 text-sm bg-white" />
-              </div>
-              <div>
-                <label className="text-xs font-medium text-gray-600">Renewal Company</label>
-                <input type="text" value={renewalCompany} onChange={e => setRenewalCompany(e.target.value)} placeholder="Insurer name…" className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-1.5 text-sm bg-white" />
-              </div>
-            </div>
-            <button onClick={() => onUpdateStatus('quote_sent')} disabled={busy} className="rounded-lg bg-cyan-600 px-5 py-2 text-sm font-semibold text-white hover:bg-cyan-700 disabled:opacity-50">
-              {busy ? 'Saving…' : 'Confirm Quote Sent'}
             </button>
           </div>
         )}
