@@ -1,0 +1,47 @@
+{
+  "status": "ok",
+  "endpoint": "/v1/projects/jmdndcphkmaljhwgzqxq/analytics/endpoints/logs.all?sql=select%20timestamp%2C%20event_message%20from%20postgres_logs%20order%20by%20timestamp%20desc%20limit%20100",
+  "count": 10,
+  "records": [
+    {
+      "event_message": "cron job 24 completed: 1 row",
+      "timestamp": 1784867100133000
+    },
+    {
+      "event_message": "cron job 10 completed: 1 row",
+      "timestamp": 1784867100106000
+    },
+    {
+      "event_message": "cron job 10 starting: select public.process_next_psf_import_run();",
+      "timestamp": 1784867100021000
+    },
+    {
+      "event_message": "cron job 24 starting: select public.process_all_service_history_sync_queue(50);",
+      "timestamp": 1784867100014000
+    },
+    {
+      "event_message": "logical decoding found consistent point at 79/EA04DCA8",
+      "timestamp": 1784867074688000
+    },
+    {
+      "event_message": "duration: 13651.056 ms  plan:\nQuery Text: select\n        case when not exists (\n          select 1\n          from pg_replication_slots\n          where slot_name = $1\n        )\n        then (\n          select 1 from pg_create_logical_replication_slot($1, 'wal2json', 'true')\n        )\n        else 1\n        end;\nQuery Parameters: $1 = 'supabase_realtime_replication_slot_2_117_0_f057fd0'\nResult  (cost=0.14..0.15 rows=1 width=4)\n  InitPlan 1\n    ->  Function Scan on pg_get_replication_slots l  (cost=0.00..0.13 rows=1 width=0)\n          Filter: (slot_name = 'supabase_realtime_replication_slot_2_117_0_f057fd0'::name)\n  InitPlan 2\n    ->  Function Scan on pg_create_logical_replication_slot  (cost=0.00..0.01 rows=1 width=4)",
+      "timestamp": 1784867074688000
+    },
+    {
+      "event_message": "process 200280 acquired ShareLock on transaction 1238028 after 13581.941 ms",
+      "timestamp": 1784867074642000
+    },
+    {
+      "event_message": "process 200280 still waiting for ShareLock on transaction 1238028 after 9973.605 ms",
+      "timestamp": 1784867071034000
+    },
+    {
+      "event_message": "process 200280 still waiting for ShareLock on transaction 1238028 after 1000.105 ms",
+      "timestamp": 1784867062060000
+    },
+    {
+      "event_message": "logical decoding found initial starting point at 79/EA046848",
+      "timestamp": 1784867061060000
+    }
+  ]
+}

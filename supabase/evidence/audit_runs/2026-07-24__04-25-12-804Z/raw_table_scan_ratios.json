@@ -1,0 +1,42 @@
+{
+  "status": "ok",
+  "label": "table_scan_ratios",
+  "rows": [
+    {
+      "table_name": "service_vas_jc_data",
+      "seq_scan": 23911,
+      "idx_scan": 6877,
+      "seq_scan_pct": "77.66"
+    },
+    {
+      "table_name": "ev_service_history_test",
+      "seq_scan": 43359,
+      "idx_scan": 22712,
+      "seq_scan_pct": "65.62"
+    },
+    {
+      "table_name": "pv_service_history_test",
+      "seq_scan": 44074,
+      "idx_scan": 23415,
+      "seq_scan_pct": "65.31"
+    },
+    {
+      "table_name": "technician_assignments",
+      "seq_scan": 28449,
+      "idx_scan": 44004,
+      "seq_scan_pct": "39.27"
+    },
+    {
+      "table_name": "service_reception_entries",
+      "seq_scan": 259185,
+      "idx_scan": 1684607,
+      "seq_scan_pct": "13.33"
+    },
+    {
+      "table_name": "all_service_history_sync_queue",
+      "seq_scan": 66926,
+      "idx_scan": 453723,
+      "seq_scan_pct": "12.85"
+    }
+  ]
+}
