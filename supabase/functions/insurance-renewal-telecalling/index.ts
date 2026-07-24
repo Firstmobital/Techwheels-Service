@@ -464,8 +464,9 @@ Deno.serve(async (req) => {
         return handleLogWhatsApp(supabase, userId, body);
       case "admin_stats":
         return handleAdminStats(supabase, role, body);
+      case "policy_done_list":
       case "renewed_list":
-        return handleRenewedList(supabase, body);
+        return handlePolicyDoneList(supabase, body);
       case "refresh_campaign":
         return handleRefreshCampaign(supabase, body);
       case "preview_campaign":
@@ -1009,8 +1010,8 @@ async function handleAdminStats(supabase: SupabaseClient, role: string, body: Re
   return json({ success: true, agent_stats });
 }
 
-// ─── renewed_list: List of renewed via us ─────────────────────────────────
-async function handleRenewedList(supabase: SupabaseClient, body: Record<string, unknown>) {
+// ─── policy_done_list: Leads closed as Policy Done ─────────────────────────
+async function handlePolicyDoneList(supabase: SupabaseClient, body: Record<string, unknown>) {
   const campaignId = body.campaign_id ? Number(body.campaign_id) : null;
 
   let query = supabase
@@ -1020,7 +1021,7 @@ async function handleRenewedList(supabase: SupabaseClient, body: Record<string, 
       updated_at, assigned_to, assigned_to_name,
       all_service_data!inner(first_name, last_name, contact_phones, model, vehicle_registration_number, last_insurance_expiry_date)
     `)
-    .eq("status", "renewed_via_us")
+    .in("status", POLICY_DONE_STATUSES)
     .order("updated_at", { ascending: false });
 
   if (campaignId) query = query.eq("campaign_id", campaignId);
@@ -1028,14 +1029,15 @@ async function handleRenewedList(supabase: SupabaseClient, body: Record<string, 
   const { data, error } = await query;
   if (error) return errorResponse(error.message);
 
-  const renewed = (data || []).map((r: Record<string, unknown>) => {
+  const policy_done = (data || []).map((r: Record<string, unknown>) => {
     const v = r.all_service_data as Record<string, unknown>;
     return {
       id: r.id,
+      status: r.status,
       quoted_premium: r.quoted_premium,
       renewal_company: r.renewal_company,
       call_notes: r.call_notes,
-      called_at: r.updated_at,
+      completed_at: r.updated_at,
       assigned_to: r.assigned_to_name || r.assigned_to,
       customer: {
         first_name: v?.first_name,
@@ -1048,7 +1050,7 @@ async function handleRenewedList(supabase: SupabaseClient, body: Record<string, 
     };
   });
 
-  return json({ success: true, renewed });
+  return json({ success: true, policy_done, renewed: policy_done });
 }
 
 // ─── refresh_campaign: Re-scan vehicles, add new leads ─────────────────────
@@ -2197,6 +2199,9 @@ async function updateCampaignCounts(supabase: SupabaseClient, campaignId: number
     policy_requested_count: assignments?.filter((a: Record<string, unknown>) => a.status === "policy_requested").length || 0,
     quote_sent_count: assignments?.filter((a: Record<string, unknown>) => a.status === "quote_sent").length || 0,
     renewed_count: assignments?.filter((a: Record<string, unknown>) => a.status === "renewed_via_us").length || 0,
+    policy_done_count: assignments?.filter((a: Record<string, unknown>) =>
+      isPolicyDoneStatus(a.status as string)
+    ).length || 0,
     completed_count: assignments?.filter((a: Record<string, unknown>) =>
       ["renewed_via_us", "renewed_elsewhere", "not_interested", "wrong_number", "not_reachable", "policy_done", "already_renewed_unknown"].includes(a.status as string)
     ).length || 0,

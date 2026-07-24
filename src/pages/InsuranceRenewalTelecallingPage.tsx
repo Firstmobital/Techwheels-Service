@@ -57,6 +57,7 @@ interface Campaign {
   quote_needed_count?: number
   policy_requested_count?: number
   quote_sent_count?: number
+  policy_done_count?: number
   out_of_window_count: number
   completed_count: number
   renewed_count: number
@@ -383,6 +384,7 @@ export default function InsuranceRenewalTelecallingPage() {
               {(activeCampaign.policy_requested_count ?? 0) > 0 && <span className="text-sky-600">📄 {activeCampaign.policy_requested_count} policy requested</span>}
               {(activeCampaign.quote_sent_count ?? 0) > 0 && <span className="text-cyan-600">💰 {activeCampaign.quote_sent_count} quote sent</span>}
               <span className="text-green-600">✅ {activeCampaign.renewed_count} renewed via us</span>
+              {(activeCampaign.policy_done_count ?? 0) > 0 && <span className="text-teal-600">✅ {activeCampaign.policy_done_count} policy done</span>}
               <span className="text-gray-500">📊 {activeCampaign.completed_count} completed</span>
               {activeCampaign.out_of_window_count > 0 && <span className="text-gray-400">🗓️ {activeCampaign.out_of_window_count} out of window</span>}
             </div>
@@ -1151,7 +1153,7 @@ function SummaryCard({ label, value, color, icon }: { label: string; value: stri
 
 // ── Admin Dashboard ─────────────────────────────────────────────────────────────
 function AdminDashboard({ campaigns, activeCampaign, onRefresh }: { campaigns: Campaign[]; activeCampaign: Campaign | null; onRefresh: () => void }) {
-  const [activeAdminTab, setActiveAdminTab] = useState<'campaigns' | 'performance' | 'renewed' | 'leaderboard' | 'roi' | 'expired' | 'meta'>('campaigns')
+  const [activeAdminTab, setActiveAdminTab] = useState<'campaigns' | 'performance' | 'policy_done' | 'leaderboard' | 'roi' | 'expired' | 'meta'>('campaigns')
   
   // Dealer filter state
   const [soldDealers, setSoldDealers] = useState<string[]>([])
@@ -1206,7 +1208,7 @@ function AdminDashboard({ campaigns, activeCampaign, onRefresh }: { campaigns: C
   const [refreshResult, setRefreshResult] = useState<string | null>(null)
   const [statsDateFrom, setStatsDateFrom] = useState('')
   const [statsDateTo, setStatsDateTo] = useState('')
-  const [renewedList, setRenewedList] = useState<any[]>([])
+  const [policyDoneList, setPolicyDoneList] = useState<any[]>([])
   const [loadingTab, setLoadingTab] = useState(false)
   const [rcStatusByCampaign, setRcStatusByCampaign] = useState<Record<string, any>>({})
   const [rcEnqueueingId, setRcEnqueueingId] = useState<number | null>(null)
@@ -1385,7 +1387,7 @@ function AdminDashboard({ campaigns, activeCampaign, onRefresh }: { campaigns: C
 
   useEffect(() => {
     if (activeAdminTab === 'performance') fetchAgentStats()
-    else if (activeAdminTab === 'renewed') fetchRenewed()
+    else if (activeAdminTab === 'policy_done') fetchPolicyDone()
     else if (activeAdminTab === 'leaderboard') fetchLeaderboard()
     else if (activeAdminTab === 'roi') fetchRoi()
     else if (activeAdminTab === 'expired') fetchExpired()
@@ -1403,15 +1405,15 @@ function AdminDashboard({ campaigns, activeCampaign, onRefresh }: { campaigns: C
     } finally { setLoadingTab(false) }
   }
 
-  async function fetchRenewed() {
+  async function fetchPolicyDone() {
     setLoadingTab(true)
     try {
-      const d = await callEdge('renewed_list', { campaign_id: activeCampaign?.id })
-      setRenewedList(d.renewed || [])
+      const d = await callEdge('policy_done_list', { campaign_id: activeCampaign?.id })
+      setPolicyDoneList(d.policy_done || [])
     } catch (e) {
       console.error(e)
       setError((e as Error).message)
-      setRenewedList([])
+      setPolicyDoneList([])
     } finally { setLoadingTab(false) }
   }
 
@@ -1593,7 +1595,7 @@ function AdminDashboard({ campaigns, activeCampaign, onRefresh }: { campaigns: C
       {success && <div className="rounded-lg border border-green-200 bg-green-50 p-3 text-sm text-green-700">{success}</div>}
 
       <div className="flex gap-2 flex-wrap">
-        {(['campaigns', 'performance', 'renewed', 'leaderboard', 'roi', 'expired', 'meta'] as const).map(tab => (
+        {(['campaigns', 'performance', 'policy_done', 'leaderboard', 'roi', 'expired', 'meta'] as const).map(tab => (
           <button
             key={tab}
             onClick={() => setActiveAdminTab(tab)}
@@ -1605,7 +1607,7 @@ function AdminDashboard({ campaigns, activeCampaign, onRefresh }: { campaigns: C
           >
             {tab === 'campaigns' ? '📋 Campaigns' :
              tab === 'performance' ? '📊 Performance' :
-             tab === 'renewed' ? '✅ Renewed' :
+             tab === 'policy_done' ? '✅ Policy Done' :
              tab === 'leaderboard' ? '🏆 Leaderboard' :
              tab === 'roi' ? '💰 ROI Dashboard' :
              tab === 'expired' ? '🚨 Expired' :
@@ -1858,8 +1860,8 @@ function AdminDashboard({ campaigns, activeCampaign, onRefresh }: { campaigns: C
                     <button onClick={() => handleDelete(c.id, c.campaign_name)} disabled={deleting === c.id} className="rounded-lg border border-red-200 px-3 py-1.5 text-sm text-red-600 hover:bg-red-50 disabled:opacity-50">{deleting === c.id ? 'Deleting…' : '🗑️'}</button>
                   </div>
                 </div>
-                <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-5 xl:grid-cols-10">
-                  {[['Total', c.total_leads, 'bg-gray-50 text-gray-500'], ['Pending', c.pending_count, 'bg-orange-50 text-orange-600'], ['In Progress', c.in_progress_count, 'bg-blue-50 text-blue-500'], ['Callback Later', c.callback_later_count, 'bg-purple-50 text-purple-500'], ['Quote Needed', c.quote_needed_count ?? 0, 'bg-indigo-50 text-indigo-700'], ['Policy Req.', c.policy_requested_count ?? 0, 'bg-sky-50 text-sky-700'], ['Quote Sent', c.quote_sent_count ?? 0, 'bg-cyan-50 text-cyan-700'], ['Renewed (Us)', c.renewed_count, 'bg-green-50 text-green-600'], ['Completed', c.completed_count, 'bg-teal-50 text-teal-700'], ['Out of Window', c.out_of_window_count, 'bg-gray-50 text-gray-400']].map(([lbl, val, cls]) => (
+                <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-5 xl:grid-cols-11">
+                  {[['Total', c.total_leads, 'bg-gray-50 text-gray-500'], ['Pending', c.pending_count, 'bg-orange-50 text-orange-600'], ['In Progress', c.in_progress_count, 'bg-blue-50 text-blue-500'], ['Callback Later', c.callback_later_count, 'bg-purple-50 text-purple-500'], ['Quote Needed', c.quote_needed_count ?? 0, 'bg-indigo-50 text-indigo-700'], ['Policy Req.', c.policy_requested_count ?? 0, 'bg-sky-50 text-sky-700'], ['Quote Sent', c.quote_sent_count ?? 0, 'bg-cyan-50 text-cyan-700'], ['Renewed (Us)', c.renewed_count, 'bg-green-50 text-green-600'], ['Policy Done', c.policy_done_count ?? 0, 'bg-teal-50 text-teal-700'], ['Completed', c.completed_count, 'bg-teal-50 text-teal-700'], ['Out of Window', c.out_of_window_count, 'bg-gray-50 text-gray-400']].map(([lbl, val, cls]) => (
                     <div key={String(lbl)} className={`rounded-lg px-3 py-2 ${cls}`}>
                       <div className="text-xs">{lbl}</div>
                       <div className="text-xl font-bold text-gray-900">{val}</div>
@@ -1963,40 +1965,40 @@ function AdminDashboard({ campaigns, activeCampaign, onRefresh }: { campaigns: C
         </div>
       )}
 
-      {/* ── Renewed Tab ────────────────────────────────────────────────── */}
-      {activeAdminTab === 'renewed' && (
+      {/* ── Policy Done Tab ─────────────────────────────────────────────── */}
+      {activeAdminTab === 'policy_done' && (
         <div className="rounded-xl border border-gray-200 bg-white overflow-hidden shadow-sm">
           <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
-            <h3 className="font-semibold text-gray-900">✅ Renewed via Us ({renewedList.length})</h3>
-            <button onClick={fetchRenewed} className="text-sm text-blue-600 hover:text-blue-700">↻ Refresh</button>
+            <h3 className="font-semibold text-gray-900">✅ Policy Done ({policyDoneList.length})</h3>
+            <button onClick={fetchPolicyDone} className="text-sm text-blue-600 hover:text-blue-700">↻ Refresh</button>
           </div>
           {loadingTab ? <div className="p-8 text-center text-sm text-gray-400">Loading…</div> : (
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead className="bg-gray-50">
                   <tr>
-                    {['Customer', 'Vehicle', 'Phone', 'Renewed On', 'Premium', 'Company', 'Telecaller', 'Notes'].map(h => (
+                    {['Customer', 'Vehicle', 'Phone', 'Policy Done On', 'Premium', 'Company', 'Telecaller', 'Notes'].map(h => (
                       <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide whitespace-nowrap">{h}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
-                  {renewedList.length === 0 ? (
-                    <tr><td colSpan={8} className="px-4 py-8 text-center text-gray-400">No renewals in this campaign yet</td></tr>
-                  ) : renewedList.map((r: {
+                  {policyDoneList.length === 0 ? (
+                    <tr><td colSpan={8} className="px-4 py-8 text-center text-gray-400">No policy done leads in this campaign yet</td></tr>
+                  ) : policyDoneList.map((r: {
                     id?: number
                     customer?: { first_name?: string; last_name?: string; model?: string; vehicle_registration_number?: string; contact_phones?: string }
-                    called_at?: string
+                    completed_at?: string
                     quoted_premium?: number
                     renewal_company?: string
                     assigned_to?: string
                     call_notes?: string
                   }) => (
-                    <tr key={r.id ?? `${r.customer?.vehicle_registration_number}-${r.called_at}`} className="hover:bg-gray-50">
+                    <tr key={r.id ?? `${r.customer?.vehicle_registration_number}-${r.completed_at}`} className="hover:bg-gray-50">
                       <td className="px-4 py-3 font-medium text-gray-900">{r.customer?.first_name} {r.customer?.last_name || ''}</td>
                       <td className="px-4 py-3 text-gray-600">{r.customer?.model} · {r.customer?.vehicle_registration_number || '—'}</td>
                       <td className="px-4 py-3 text-gray-600">{r.customer?.contact_phones}</td>
-                      <td className="px-4 py-3 font-medium text-green-700">{formatDate(r.called_at ?? null)}</td>
+                      <td className="px-4 py-3 font-medium text-teal-700">{formatDate(r.completed_at ?? null)}</td>
                       <td className="px-4 py-3 text-gray-600">{formatCurrency(r.quoted_premium ?? null)}</td>
                       <td className="px-4 py-3 text-gray-600">{r.renewal_company || '—'}</td>
                       <td className="px-4 py-3 text-gray-600">{r.assigned_to || '—'}</td>
