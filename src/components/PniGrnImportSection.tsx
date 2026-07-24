@@ -37,9 +37,9 @@ const PNI_SLOTS: UploadSlot[] = [
   { key: 'PNI_PV_AJMERROAD',  label: 'PV – Ajmer Road', portal: 'PV', dealer_code: '3001440',  branch_label: 'AJMER ROAD', btnColor: '#7c3aed', badge: 'PV' },
 ]
 const GRN_SLOTS: UploadSlot[] = [
-  { key: 'GRN_EV_SITAPURA',    label: 'EV – Sitapura',        portal: 'EV', dealer_code: '500A840',  branch_label: 'SITAPURA',    btnColor: '#059669', badge: 'EV' },
-  { key: 'GRN_PV_SITAPURA',    label: 'PV – Sitapura',        portal: 'PV', dealer_code: '3000840',  branch_label: 'SITAPURA',    btnColor: '#2563eb', badge: 'PV' },
-  { key: 'GRN_PV_AJMERROAD',   label: 'PV – Ajmer Road',      portal: 'PV', dealer_code: '3001440',  branch_label: 'AJMER ROAD',  btnColor: '#7c3aed', badge: 'PV' },
+  { key: 'GRN_EV_SITAPURA',    label: 'EV-Sitapura',    portal: 'EV', dealer_code: '500A840',  branch_label: 'SITAPURA',    btnColor: '#059669', badge: 'EV' },
+  { key: 'GRN_PV_SITAPURA',    label: 'PV-Sitapura',    portal: 'PV', dealer_code: '3000840',  branch_label: 'SITAPURA',    btnColor: '#2563eb', badge: 'PV' },
+  { key: 'GRN_PV_AJMERROAD',   label: 'PV-Ajmer Road',  portal: 'PV', dealer_code: '3001440',  branch_label: 'AJMER ROAD',  btnColor: '#7c3aed', badge: 'PV' },
 ]
 
 // ─── JC Closed but Invoiced slots ─────────────────────────────────────────────

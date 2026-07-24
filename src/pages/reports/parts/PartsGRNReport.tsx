@@ -5,9 +5,25 @@ import { supabase } from '../../../lib/supabase'
 import type { ReportViewProps } from '../types'
 
 const PAGE_SIZE = 50
-const PV_BRANCH = '3000840'
-const EV_BRANCH = '500A840'
-type Portal = 'EV' | 'PV'
+
+// ─── Location definitions — single source of truth ───────────────────────────
+interface Location {
+  key: string
+  label: string        // display name (no dealer code)
+  portal: string       // stored in grn_report_data.portal
+  branch: string       // stored in grn_report_data.branch (= dealer_code)
+  color: string        // tailwind color key for active tab
+  badgeBg: string      // active tab bg class
+  tileBorder: string
+  tileBg: string
+  tileText: string
+}
+const LOCATIONS: Location[] = [
+  { key: 'EV-Sitapura',   label: 'EV-Sitapura',   portal: 'EV', branch: '500A840',  color: 'emerald', badgeBg: 'bg-emerald-600', tileBorder: 'border-emerald-300', tileBg: 'bg-emerald-50',  tileText: 'text-emerald-700' },
+  { key: 'PV-Sitapura',   label: 'PV-Sitapura',   portal: 'PV', branch: '3000840',  color: 'blue',    badgeBg: 'bg-blue-600',    tileBorder: 'border-blue-300',    tileBg: 'bg-blue-50',     tileText: 'text-blue-700'    },
+  { key: 'PV-Ajmer Road', label: 'PV-Ajmer Road', portal: 'PV', branch: '3001440',  color: 'purple',  badgeBg: 'bg-purple-600',  tileBorder: 'border-purple-300',  tileBg: 'bg-purple-50',   tileText: 'text-purple-700'  },
+]
+type LocationKey = 'EV-Sitapura' | 'PV-Sitapura' | 'PV-Ajmer Road'
 
 interface GrnRow {
   id: number
@@ -116,7 +132,7 @@ function parseRs(v: string | null | undefined): number {
 }
 
 export default function PartsGRNReport(_props: ReportViewProps) {
-  const [portal, setPortal] = useState<Portal>('EV')
+  const [locationKey, setLocationKey] = useState<LocationKey>('EV-Sitapura')
   const [rows, setRows] = useState<GrnRow[]>([])
   const [history, setHistory] = useState<UploadHistoryRow[]>([])
   const [latestSession, setLatestSession] = useState<string | null>(null)
@@ -132,17 +148,14 @@ export default function PartsGRNReport(_props: ReportViewProps) {
   const [page, setPage] = useState(1)
   const [oPage, setOPage] = useState(1)
   const [showOrderSummary, setShowOrderSummary] = useState(true)
-  // Separate EV/PV invoice totals — always shown regardless of active portal tab
-  const [evInvoiceTotal, setEvInvoiceTotal] = useState<number | null>(null)
-  const [pvInvoiceTotal, setPvInvoiceTotal] = useState<number | null>(null)
+  // Invoice totals per location — always shown regardless of active tab
+  const [locationTotals, setLocationTotals] = useState<Record<string, number | null>>({})
 
-  // Load Total_Invoice_Amount totals for both portals independently
   const loadPortalTotals = useCallback(async () => {
-    const fetchTotal = async (p: Portal): Promise<number> => {
-      const branch = p === 'EV' ? EV_BRANCH : PV_BRANCH
+    const fetchTotal = async (loc: Location): Promise<number> => {
       const { data: hist } = await supabase
         .from('grn_upload_history').select('upload_session_id')
-        .eq('portal', p).eq('branch', branch)
+        .eq('portal', loc.portal).eq('branch', loc.branch)
         .order('uploaded_at', { ascending: false }).limit(1)
       const sess = (hist ?? [])[0]?.upload_session_id ?? null
       if (!sess) return 0
@@ -150,31 +163,33 @@ export default function PartsGRNReport(_props: ReportViewProps) {
       for (let from = 0; ; from += 1000) {
         const { data } = await supabase.from('grn_report_data')
           .select('line_item_invoice_total')
-          .eq('portal', p).eq('upload_session_id', sess)
+          .eq('portal', loc.portal).eq('branch', loc.branch)
+          .eq('upload_session_id', sess)
           .range(from, from + 999)
         for (const r of (data ?? [])) {
-          // Use same parseRs logic: strip 'Rs.' first, then commas
           total += parseRs(r.line_item_invoice_total)
         }
         if ((data ?? []).length < 1000) break
       }
       return total
     }
-    const [ev, pv] = await Promise.all([fetchTotal('EV'), fetchTotal('PV')])
-    setEvInvoiceTotal(ev)
-    setPvInvoiceTotal(pv)
+    const results = await Promise.all(LOCATIONS.map(loc => fetchTotal(loc)))
+    const map: Record<string, number | null> = {}
+    LOCATIONS.forEach((loc, i) => { map[loc.key] = results[i] })
+    setLocationTotals(map)
   }, [])
 
   useEffect(() => {
     void loadPortalTotals()
   }, [loadPortalTotals])
 
-  const loadData = useCallback(async (p: Portal) => {
+  const loadData = useCallback(async (lk: LocationKey) => {
     setLoading(true); setLoadingMsg('Loading latest GRN upload…'); setRows([]); setLatestSession(null)
     try {
-      const branch = p === 'EV' ? EV_BRANCH : PV_BRANCH
+      const loc = LOCATIONS.find(l => l.key === lk)!
       const { data: hist, error: he } = await supabase
-        .from('grn_upload_history').select('*').eq('portal', p).eq('branch', branch)
+        .from('grn_upload_history').select('*')
+        .eq('portal', loc.portal).eq('branch', loc.branch)
         .order('uploaded_at', { ascending: false })
       if (he) throw he
       setHistory((hist ?? []) as UploadHistoryRow[])
@@ -184,22 +199,22 @@ export default function PartsGRNReport(_props: ReportViewProps) {
       const allRows: GrnRow[] = []
       for (let from = 0; ; from += 1000) {
         const { data, error } = await supabase.from('grn_report_data').select('*')
-          .eq('portal', p).eq('upload_session_id', latestSess).range(from, from + 999)
+          .eq('portal', loc.portal).eq('branch', loc.branch)
+          .eq('upload_session_id', latestSess).range(from, from + 999)
         if (error) throw error
         allRows.push(...((data ?? []) as GrnRow[]))
         if ((data ?? []).length < 1000) break
       }
       setRows(allRows)
-      // Refresh portal totals whenever data is reloaded (catches new uploads)
       void loadPortalTotals()
     } catch (err) { console.error('GRN load error', err) }
     finally { setLoading(false); setLoadingMsg('') }
   }, [loadPortalTotals])
 
   useEffect(() => {
-    void loadData(portal)
+    void loadData(locationKey)
     setSearch(''); setDateFrom(''); setDateTo(''); setStatusFilter('all'); setPage(1)
-  }, [portal, loadData])
+  }, [locationKey, loadData])
 
 
 
@@ -324,8 +339,8 @@ export default function PartsGRNReport(_props: ReportViewProps) {
     }))
     const ws = XLSX.utils.json_to_sheet(exportRows)
     const wb = XLSX.utils.book_new()
-    XLSX.utils.book_append_sheet(wb, ws, `GRN ${portal}`)
-    XLSX.writeFile(wb, `GRN-Report-${portal}-${new Date().toISOString().slice(0, 10)}.xlsx`)
+    XLSX.utils.book_append_sheet(wb, ws, `GRN ${locationKey}`)
+    XLSX.writeFile(wb, `GRN-Report-${locationKey.replace(/\s/g, '-')}-${new Date().toISOString().slice(0, 10)}.xlsx`)
   }
 
 
@@ -336,17 +351,17 @@ export default function PartsGRNReport(_props: ReportViewProps) {
         <svg className="h-4 w-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
         <span>To upload new GRN files, go to <a href="/import" className="font-semibold underline hover:text-blue-900">Import Page → Parts Daily Reports → GRN Report</a></span>
       </div>
-      {/* Portal tabs + upload buttons */}
+      {/* Location tabs */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex rounded-xl border border-gray-200 bg-gray-50 p-1 gap-1">
-          {(['EV', 'PV'] as Portal[]).map((p) => (
-            <button key={p} onClick={() => { setPortal(p); setPage(1) }}
-              className={`rounded-lg px-6 py-2 text-sm font-semibold transition-all ${
-                portal === p
-                  ? p === 'EV' ? 'bg-emerald-600 text-white shadow' : 'bg-blue-600 text-white shadow'
+          {LOCATIONS.map((loc) => (
+            <button key={loc.key} onClick={() => { setLocationKey(loc.key as LocationKey); setPage(1) }}
+              className={`rounded-lg px-5 py-2 text-sm font-semibold transition-all ${
+                locationKey === loc.key
+                  ? `${loc.badgeBg} text-white shadow`
                   : 'text-gray-500 hover:text-gray-800'
               }`}
-            >{p} GRN</button>
+            >{loc.label}</button>
           ))}
         </div>
 
@@ -374,9 +389,9 @@ export default function PartsGRNReport(_props: ReportViewProps) {
       {/* Upload history */}
       {showHistory && (
         <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
-          <h3 className="mb-3 text-sm font-semibold text-gray-800">Upload History — {portal}</h3>
+          <h3 className="mb-3 text-sm font-semibold text-gray-800">Upload History — {locationKey}</h3>
           {history.length === 0 ? (
-            <p className="text-sm text-gray-400">No uploads yet for {portal}.</p>
+            <p className="text-sm text-gray-400">No uploads yet for {locationKey}.</p>
           ) : (
             <table className="w-full text-xs">
               <thead><tr className="border-b border-gray-100 text-gray-500">
@@ -403,30 +418,24 @@ export default function PartsGRNReport(_props: ReportViewProps) {
         </div>
       )}
 
-      {/* EV / PV Invoice Total tiles — always visible, portal-independent */}
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <div className="rounded-xl border border-emerald-300 bg-emerald-50 p-4 shadow-sm">
-          <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">EV Line Item Invoice Total</p>
-          <p className="mt-1 text-xl font-bold text-emerald-700">
-            {evInvoiceTotal === null
-              ? '—'
-              : evInvoiceTotal === 0
-                ? 'No EV data'
-                : '₹' + evInvoiceTotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-          </p>
-          <p className="text-[11px] text-emerald-600">Sum of Line Item Invoice Total — latest EV upload</p>
-        </div>
-        <div className="rounded-xl border border-indigo-300 bg-indigo-50 p-4 shadow-sm">
-          <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">PV Line Item Invoice Total</p>
-          <p className="mt-1 text-xl font-bold text-indigo-700">
-            {pvInvoiceTotal === null
-              ? '—'
-              : pvInvoiceTotal === 0
-                ? 'No PV data'
-                : '₹' + pvInvoiceTotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-          </p>
-          <p className="text-[11px] text-indigo-600">Sum of Line Item Invoice Total — latest PV upload</p>
-        </div>
+      {/* Invoice Total tiles — one per location, always visible */}
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        {LOCATIONS.map(loc => {
+          const total = locationTotals[loc.key]
+          return (
+            <div key={loc.key} className={`rounded-xl border p-4 shadow-sm ${loc.tileBorder} ${loc.tileBg}`}>
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">{loc.label} — Invoice Total</p>
+              <p className={`mt-1 text-xl font-bold ${loc.tileText}`}>
+                {total === null
+                  ? '—'
+                  : total === 0
+                    ? 'No data'
+                    : '₹' + total.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </p>
+              <p className={`text-[11px] ${loc.tileText} opacity-80`}>Line Item Invoice Total · latest upload</p>
+            </div>
+          )
+        })}
       </div>
 
       {/* KPI tiles */}
@@ -435,7 +444,7 @@ export default function PartsGRNReport(_props: ReportViewProps) {
           <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
             <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Total Rows</p>
             <p className="mt-1 text-2xl font-bold text-gray-900">{rows.length.toLocaleString('en-IN')}</p>
-            <p className="text-[11px] text-gray-400">Current {portal} upload</p>
+            <p className="text-[11px] text-gray-400">Current {locationKey} upload</p>
           </div>
           <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 shadow-sm">
             <p className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-gray-500">
@@ -522,8 +531,8 @@ export default function PartsGRNReport(_props: ReportViewProps) {
           <svg className="mb-3 h-12 w-12 text-gray-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
           </svg>
-          <p className="text-sm font-semibold text-gray-500">No GRN data for {portal}</p>
-          <p className="mt-1 text-xs text-gray-400">Upload an {portal} GRN report using the button above</p>
+          <p className="text-sm font-semibold text-gray-500">No GRN data for {locationKey}</p>
+          <p className="mt-1 text-xs text-gray-400">Upload a {locationKey} GRN file from the Import page</p>
         </div>
       ) : (
         <>
