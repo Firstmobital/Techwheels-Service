@@ -126,6 +126,9 @@ async function fetchEligibleVehiclesInWindow(
   return { vehicles: dedupeVehiclesByChassis(vehicles) };
 }
 
+/** Quote pipeline: active work after customer connects, before terminal disposition. */
+const QUOTE_PIPELINE_STATUSES = ["quote_needed", "policy_requested", "quote_sent"];
+
 /** Statuses that mean the lead is still in a campaign queue (not terminal / not retired). */
 const LIVE_ASSIGNMENT_STATUSES = [
   "pending",
@@ -133,6 +136,23 @@ const LIVE_ASSIGNMENT_STATUSES = [
   "callback_later",
   "no_answer",
   "assigned",
+  ...QUOTE_PIPELINE_STATUSES,
+];
+
+/** Assigned open work visible in telecaller My Queue. */
+const MY_QUEUE_STATUSES = [
+  "in_progress",
+  "callback_later",
+  "no_answer",
+  ...QUOTE_PIPELINE_STATUSES,
+];
+
+/** Block campaign delete when telecallers still hold active leads. */
+const ACTIVE_TELECALLER_STATUSES = [
+  "in_progress",
+  "callback_later",
+  "no_answer",
+  ...QUOTE_PIPELINE_STATUSES,
 ];
 
 /**
@@ -736,7 +756,7 @@ async function handleMyQueue(
       insurance_renewal_campaigns!inner(campaign_name, status)
     `)
     .in("assigned_to", assigneeIds)
-    .in("status", ["in_progress", "callback_later", "no_answer"]);
+    .in("status", MY_QUEUE_STATUSES);
 
   if (!allCampaigns && campaignId) {
     query = query.eq("campaign_id", campaignId);
@@ -809,6 +829,9 @@ async function handleMySummary(supabase: SupabaseClient, userId: string) {
     renewed_via_us: data?.filter((d: Record<string, unknown>) => d.status === "renewed_via_us").length || 0,
     renewed_elsewhere: data?.filter((d: Record<string, unknown>) => d.status === "renewed_elsewhere").length || 0,
     callback_later: data?.filter((d: Record<string, unknown>) => d.status === "callback_later").length || 0,
+    quote_needed: data?.filter((d: Record<string, unknown>) => d.status === "quote_needed").length || 0,
+    policy_requested: data?.filter((d: Record<string, unknown>) => d.status === "policy_requested").length || 0,
+    quote_sent: data?.filter((d: Record<string, unknown>) => d.status === "quote_sent").length || 0,
     no_answer: data?.filter((d: Record<string, unknown>) => d.status === "no_answer" || d.status === "not_reachable").length || 0,
     not_interested: data?.filter((d: Record<string, unknown>) => d.status === "not_interested").length || 0,
     premium_collected: data
@@ -929,13 +952,16 @@ async function handleAdminStats(supabase: SupabaseClient, role: string, body: Re
         not_reachable: 0,
         already_renewed_unknown: 0,
         in_progress: 0,
+        quote_needed: 0,
+        policy_requested: 0,
+        quote_sent: 0,
         completed_total: 0,
         premium_collected: 0,
       });
     }
     const stats = statsMap.get(key)!;
     stats.calls_made = (stats.calls_made as number) + (row.call_count || 0);
-    if (["renewed_via_us", "renewed_elsewhere", "callback_later", "not_interested", "wrong_number", "not_reachable", "already_renewed_unknown"].includes(row.status)) {
+    if (["renewed_via_us", "renewed_elsewhere", "callback_later", "not_interested", "wrong_number", "not_reachable", "already_renewed_unknown", ...QUOTE_PIPELINE_STATUSES].includes(row.status)) {
       stats.calls_connected = (stats.calls_connected as number) + 1;
     }
     if (TERMINAL_COMPLETED.includes(row.status)) {
@@ -953,10 +979,14 @@ async function handleAdminStats(supabase: SupabaseClient, role: string, body: Re
     if (row.status === "not_reachable") stats.not_reachable = (stats.not_reachable as number) + 1;
     if (row.status === "already_renewed_unknown") stats.already_renewed_unknown = (stats.already_renewed_unknown as number) + 1;
     if (row.status === "in_progress") stats.in_progress = (stats.in_progress as number) + 1;
+    if (row.status === "quote_needed") stats.quote_needed = (stats.quote_needed as number) + 1;
+    if (row.status === "policy_requested") stats.policy_requested = (stats.policy_requested as number) + 1;
+    if (row.status === "quote_sent") stats.quote_sent = (stats.quote_sent as number) + 1;
   }
 
   const agent_stats = Array.from(statsMap.values()).filter((s) => {
-    const activity = (s.calls_made as number) + (s.in_progress as number) + (s.completed_total as number) +
+    const quotePipeline = (s.quote_needed as number) + (s.policy_requested as number) + (s.quote_sent as number);
+    const activity = (s.calls_made as number) + (s.in_progress as number) + quotePipeline + (s.completed_total as number) +
       (s.callback_later as number) + (s.no_answer as number);
     return activity > 0 || s.telecaller_id;
   });
@@ -1314,7 +1344,7 @@ async function handleDeleteCampaign(supabase: SupabaseClient, body: Record<strin
   if (liveErr) return errorResponse(liveErr.message);
 
   const activeTelecaller = (liveRows || []).filter(
-    (r) => r.assigned_to && ["in_progress", "callback_later", "no_answer"].includes(r.status as string),
+    (r) => r.assigned_to && ACTIVE_TELECALLER_STATUSES.includes(r.status as string),
   );
   if (activeTelecaller.length > 0) {
     return errorResponse(
@@ -2146,6 +2176,9 @@ async function updateCampaignCounts(supabase: SupabaseClient, campaignId: number
     pending_count: assignments?.filter((a: Record<string, unknown>) => a.status === "pending").length || 0,
     in_progress_count: assignments?.filter((a: Record<string, unknown>) => a.status === "in_progress").length || 0,
     callback_later_count: assignments?.filter((a: Record<string, unknown>) => a.status === "callback_later").length || 0,
+    quote_needed_count: assignments?.filter((a: Record<string, unknown>) => a.status === "quote_needed").length || 0,
+    policy_requested_count: assignments?.filter((a: Record<string, unknown>) => a.status === "policy_requested").length || 0,
+    quote_sent_count: assignments?.filter((a: Record<string, unknown>) => a.status === "quote_sent").length || 0,
     renewed_count: assignments?.filter((a: Record<string, unknown>) => a.status === "renewed_via_us").length || 0,
     completed_count: assignments?.filter((a: Record<string, unknown>) =>
       ["renewed_via_us", "renewed_elsewhere", "not_interested", "wrong_number", "not_reachable", "already_renewed_unknown"].includes(a.status as string)

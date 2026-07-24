@@ -54,6 +54,9 @@ interface Campaign {
   pending_count: number
   in_progress_count: number
   callback_later_count: number
+  quote_needed_count?: number
+  policy_requested_count?: number
+  quote_sent_count?: number
   out_of_window_count: number
   completed_count: number
   renewed_count: number
@@ -77,6 +80,9 @@ interface DailySummary {
   no_answer: number
   not_interested: number
   callback_later: number
+  quote_needed: number
+  policy_requested: number
+  quote_sent: number
   wrong_number: number
   not_reachable: number
   already_renewed_unknown: number
@@ -85,6 +91,9 @@ interface DailySummary {
 type CallStatus =
   | 'renewed_via_us' | 'renewed_elsewhere' | 'callback_later' | 'no_answer'
   | 'not_reachable' | 'wrong_number' | 'not_interested' | 'already_renewed_unknown'
+  | 'quote_needed' | 'policy_requested' | 'quote_sent'
+
+const QUOTE_PIPELINE_STATUSES: CallStatus[] = ['quote_needed', 'policy_requested', 'quote_sent']
 
 const EDGE_URL = `${supabaseUrl}/functions/v1/insurance-renewal-telecalling`
 
@@ -276,12 +285,29 @@ const STATUS_COLORS: Record<string, string> = {
   wrong_number: 'bg-red-100 text-red-700',
   not_interested: 'bg-gray-200 text-gray-600',
   already_renewed_unknown: 'bg-teal-100 text-teal-700',
+  quote_needed: 'bg-indigo-100 text-indigo-800',
+  policy_requested: 'bg-sky-100 text-sky-800',
+  quote_sent: 'bg-cyan-100 text-cyan-800',
   active: 'bg-green-100 text-green-700',
   closed: 'bg-gray-200 text-gray-600',
 }
 
 function StatusBadge({ status }: { status: string }) {
-  const label = status.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
+  const labels: Record<string, string> = {
+    quote_needed: 'Quote Needed',
+    policy_requested: 'Policy Requested',
+    quote_sent: 'Quote Sent',
+    renewed_via_us: 'Renewed via Us',
+    renewed_elsewhere: 'Renewed Elsewhere',
+    callback_later: 'Callback Later',
+    no_answer: 'No Answer',
+    not_reachable: 'Not Reachable',
+    wrong_number: 'Wrong Number',
+    not_interested: 'Not Interested',
+    already_renewed_unknown: 'Already Renewed',
+    in_progress: 'In Progress',
+  }
+  const label = labels[status] || status.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
   return <span className={`inline-block rounded-full px-2.5 py-0.5 text-xs font-medium ${STATUS_COLORS[status] || 'bg-gray-100 text-gray-600'}`}>{label}</span>
 }
 
@@ -351,6 +377,9 @@ export default function InsuranceRenewalTelecallingPage() {
               <span className="text-orange-600">⏳ {activeCampaign.pending_count} pending</span>
               {activeCampaign.in_progress_count > 0 && <span className="text-blue-500">📞 {activeCampaign.in_progress_count} in progress</span>}
               {activeCampaign.callback_later_count > 0 && <span className="text-purple-500">🔁 {activeCampaign.callback_later_count} callback later</span>}
+              {(activeCampaign.quote_needed_count ?? 0) > 0 && <span className="text-indigo-600">📋 {activeCampaign.quote_needed_count} quote needed</span>}
+              {(activeCampaign.policy_requested_count ?? 0) > 0 && <span className="text-sky-600">📄 {activeCampaign.policy_requested_count} policy requested</span>}
+              {(activeCampaign.quote_sent_count ?? 0) > 0 && <span className="text-cyan-600">💰 {activeCampaign.quote_sent_count} quote sent</span>}
               <span className="text-green-600">✅ {activeCampaign.renewed_count} renewed via us</span>
               <span className="text-gray-500">📊 {activeCampaign.completed_count} completed</span>
               {activeCampaign.out_of_window_count > 0 && <span className="text-gray-400">🗓️ {activeCampaign.out_of_window_count} out of window</span>}
@@ -361,14 +390,14 @@ export default function InsuranceRenewalTelecallingPage() {
 
       {activeTab === 'admin' && role === 'admin'
         ? <AdminDashboard campaigns={campaigns} activeCampaign={activeCampaign} onRefresh={refreshCampaigns} />
-        : <TelecallerDashboard activeCampaign={activeCampaign} />
+        : <TelecallerDashboard activeCampaign={activeCampaign} onCampaignRefresh={refreshCampaigns} />
       }
     </div>
   )
 }
 
 // ── Telecaller Dashboard ────────────────────────────────────────────────────────
-function TelecallerDashboard({ activeCampaign }: { activeCampaign: Campaign | null }) {
+function TelecallerDashboard({ activeCampaign, onCampaignRefresh }: { activeCampaign: Campaign | null; onCampaignRefresh?: () => void }) {
   const [currentAssignment, setCurrentAssignment] = useState<Assignment | null>(null)
   const [queue, setQueue] = useState<Assignment[]>([])
   const [summary, setSummary] = useState<DailySummary | null>(null)
@@ -386,6 +415,7 @@ function TelecallerDashboard({ activeCampaign }: { activeCampaign: Campaign | nu
   const [showNotes, setShowNotes] = useState(false)
   const [showRenewed, setShowRenewed] = useState(false)
   const [showCallback, setShowCallback] = useState(false)
+  const [showQuoteSent, setShowQuoteSent] = useState(false)
   // Queue edit
   const [editingId, setEditingId] = useState<number | null>(null)
   const [editNotes, setEditNotes] = useState('')
@@ -423,7 +453,7 @@ function TelecallerDashboard({ activeCampaign }: { activeCampaign: Campaign | nu
 
   const resetCallForm = () => {
     setNotes(''); setCallbackDate(''); setQuotedPremium(''); setRenewalCompany('')
-    setShowNotes(false); setShowRenewed(false); setShowCallback(false)
+    setShowNotes(false); setShowRenewed(false); setShowCallback(false); setShowQuoteSent(false)
   }
 
   const handleGetNext = async () => {
@@ -448,8 +478,8 @@ function TelecallerDashboard({ activeCampaign }: { activeCampaign: Campaign | nu
         status,
         call_notes: notes || undefined,
         callback_date: status === 'callback_later' ? callbackDate : undefined,
-        quoted_premium: status === 'renewed_via_us' && quotedPremium ? Number(quotedPremium) : undefined,
-        renewal_company: status === 'renewed_via_us' && renewalCompany ? renewalCompany : undefined,
+        quoted_premium: (status === 'renewed_via_us' || status === 'quote_sent') && quotedPremium ? Number(quotedPremium) : undefined,
+        renewal_company: (status === 'renewed_via_us' || status === 'quote_sent') && renewalCompany ? renewalCompany : undefined,
       })
       if (result?.retry_queued) {
         setError('📵 Couldn\'t connect — back to pool tomorrow (attempt ' + (result?.no_answer_count ?? '') + '/3, then marked not reachable)')
@@ -457,11 +487,27 @@ function TelecallerDashboard({ activeCampaign }: { activeCampaign: Campaign | nu
       }
       if (fromQueue) {
         setEditingId(null)
+        resetCallForm()
+      } else if (QUOTE_PIPELINE_STATUSES.includes(status)) {
+        setCurrentAssignment(prev => (
+          prev && prev.id === target.id
+            ? {
+                ...prev,
+                status,
+                call_notes: notes || prev.call_notes,
+                quoted_premium: status === 'quote_sent' && quotedPremium ? Number(quotedPremium) : prev.quoted_premium,
+                renewal_company: status === 'quote_sent' && renewalCompany ? renewalCompany : prev.renewal_company,
+              }
+            : prev
+        ))
+        setShowQuoteSent(false)
+        setShowRenewed(false)
+        setShowCallback(false)
       } else {
         setCurrentAssignment(null)
+        resetCallForm()
       }
-      resetCallForm()
-      refreshQueue(); refreshSummary()
+      refreshQueue(); refreshSummary(); onCampaignRefresh?.()
     } catch (err) { setError((err as Error).message) }
     finally { setBusy(false) }
   }
@@ -478,6 +524,7 @@ function TelecallerDashboard({ activeCampaign }: { activeCampaign: Campaign | nu
     setShowNotes(false)
     setShowRenewed(false)
     setShowCallback(false)
+    setShowQuoteSent(false)
   }
 
   const handleEditSave = async (assignmentId: number) => {
@@ -640,6 +687,7 @@ function TelecallerDashboard({ activeCampaign }: { activeCampaign: Campaign | nu
             renewalCompany={renewalCompany} setRenewalCompany={setRenewalCompany}
             showRenewed={showRenewed} setShowRenewed={setShowRenewed}
             showCallback={showCallback} setShowCallback={setShowCallback}
+            showQuoteSent={showQuoteSent} setShowQuoteSent={setShowQuoteSent}
             onUpdateStatus={handleUpdateStatus}
             onLogWA={handleLogWA}
             rcFetchBusy={rcFetchBusy}
@@ -758,6 +806,7 @@ function TelecallerDashboard({ activeCampaign }: { activeCampaign: Campaign | nu
                     renewalCompany={renewalCompany} setRenewalCompany={setRenewalCompany}
                     showRenewed={showRenewed} setShowRenewed={setShowRenewed}
                     showCallback={showCallback} setShowCallback={setShowCallback}
+                    showQuoteSent={showQuoteSent} setShowQuoteSent={setShowQuoteSent}
                     onUpdateStatus={status => handleUpdateStatus(status, asgn)}
                     onLogWA={handleLogWA}
                     rcFetchBusy={rcFetchBusy}
@@ -769,6 +818,10 @@ function TelecallerDashboard({ activeCampaign }: { activeCampaign: Campaign | nu
                     <div>
                       <label className="text-xs font-medium text-gray-600">Status</label>
                       <select value={editStatus} onChange={e => setEditStatus(e.target.value)} className="mt-1 w-full rounded-lg border border-gray-200 px-2.5 py-1.5 text-sm bg-white">
+                        <option value="in_progress">In Progress</option>
+                        <option value="quote_needed">Quote Needed</option>
+                        <option value="policy_requested">Policy Requested</option>
+                        <option value="quote_sent">Quote Sent</option>
                         <option value="assigned">Assigned</option>
                         <option value="renewed_via_us">Renewed via Us</option>
                         <option value="renewed_elsewhere">Renewed Elsewhere</option>
@@ -809,6 +862,9 @@ function TelecallerDashboard({ activeCampaign }: { activeCampaign: Campaign | nu
           <SummaryCard label="Renewed Elsewhere" value={summary.renewed_elsewhere} color="yellow" icon="🔀" />
           <SummaryCard label="No Answer" value={summary.no_answer} color="orange" icon="📵" />
           <SummaryCard label="Callback" value={summary.callback_later} color="purple" icon="🔁" />
+          <SummaryCard label="Quote Needed" value={summary.quote_needed ?? 0} color="blue" icon="📋" />
+          <SummaryCard label="Policy Requested" value={summary.policy_requested ?? 0} color="blue" icon="📄" />
+          <SummaryCard label="Quote Sent" value={summary.quote_sent ?? 0} color="blue" icon="💰" />
           <SummaryCard label="Not Interested" value={summary.not_interested} color="gray" icon="😐" />
           <SummaryCard label="Not Reachable" value={summary.not_reachable} color="red" icon="🚫" />
           <SummaryCard label="Wrong Number" value={summary.wrong_number} color="red" icon="⚠️" />
@@ -828,6 +884,7 @@ function CallCard({
   renewalCompany, setRenewalCompany,
   showRenewed, setShowRenewed,
   showCallback, setShowCallback,
+  showQuoteSent, setShowQuoteSent,
   onUpdateStatus, onLogWA,
   rcFetchBusy = false, rcFetchMessage, rcFetchError, onRcFetch,
 }: {
@@ -839,6 +896,7 @@ function CallCard({
   renewalCompany: string; setRenewalCompany: (v: string) => void
   showRenewed: boolean; setShowRenewed: (v: boolean) => void
   showCallback: boolean; setShowCallback: (v: boolean) => void
+  showQuoteSent: boolean; setShowQuoteSent: (v: boolean) => void
   onUpdateStatus: (s: CallStatus) => void
   onLogWA: (id: number, type: string) => void
   rcFetchBusy?: boolean
@@ -876,6 +934,9 @@ function CallCard({
             {isDueToday && <div className="rounded-full bg-orange-900/30 px-2 py-0.5 text-xs font-semibold">⚡ Expires Today</div>}
             {!isExpired && !isDueToday && daysLeft !== null && <div className="rounded-full bg-white/20 px-2 py-0.5 text-xs">Expires in {daysLeft}d</div>}
             {dueInfo.estimated && <div className="rounded-full bg-white/20 px-2 py-0.5 text-xs">📅 Estimated from sale date</div>}
+            {assignment.status !== 'in_progress' && (
+              <div className="mt-1"><StatusBadge status={assignment.status} /></div>
+            )}
           </div>
         </div>
       </div>
@@ -942,6 +1003,15 @@ function CallCard({
 
       {/* Action buttons */}
       <div className="px-6 py-4 space-y-4">
+        <div>
+          <div className="text-xs font-semibold uppercase tracking-wide text-indigo-700 mb-2">Quote pipeline</div>
+          <div className="grid gap-2 grid-cols-1 sm:grid-cols-3">
+            <button onClick={() => { setShowNotes(true); onUpdateStatus('quote_needed') }} disabled={busy} className="rounded-xl bg-indigo-500 px-4 py-3 text-sm font-semibold text-white hover:bg-indigo-600 disabled:opacity-50">📋 Quote Needed</button>
+            <button onClick={() => { setShowNotes(true); onUpdateStatus('policy_requested') }} disabled={busy} className="rounded-xl bg-sky-500 px-4 py-3 text-sm font-semibold text-white hover:bg-sky-600 disabled:opacity-50">📄 Policy Requested</button>
+            <button onClick={() => { setShowQuoteSent(true); setShowNotes(true) }} disabled={busy} className="rounded-xl bg-cyan-500 px-4 py-3 text-sm font-semibold text-white hover:bg-cyan-600 disabled:opacity-50">💰 Quote Sent</button>
+          </div>
+        </div>
+
         <div className="grid gap-2 grid-cols-2 sm:grid-cols-4">
           <button onClick={() => { setShowRenewed(true); setShowNotes(true) }} disabled={busy} className="rounded-xl bg-green-500 px-4 py-3 text-sm font-semibold text-white hover:bg-green-600 disabled:opacity-50">✅ Renewed via Us</button>
           <button onClick={() => { setShowNotes(true); onUpdateStatus('renewed_elsewhere') }} disabled={busy} className="rounded-xl bg-yellow-500 px-4 py-3 text-sm font-semibold text-white hover:bg-yellow-600 disabled:opacity-50">🔀 Renewed Elsewhere</button>
@@ -1011,6 +1081,25 @@ function CallCard({
             </div>
             <button onClick={() => onUpdateStatus('renewed_via_us')} disabled={busy} className="rounded-lg bg-green-600 px-5 py-2 text-sm font-semibold text-white hover:bg-green-700 disabled:opacity-50">
               {busy ? 'Confirming…' : '✅ Confirm Renewed via Us'}
+            </button>
+          </div>
+        )}
+
+        {showQuoteSent && (
+          <div className="rounded-xl border border-cyan-200 bg-cyan-50 p-4 space-y-3">
+            <div className="text-sm font-semibold text-cyan-900">💰 Quote sent to customer (optional premium)</div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-xs font-medium text-gray-600">Quoted Premium</label>
+                <input type="number" value={quotedPremium} onChange={e => setQuotedPremium(e.target.value)} placeholder="₹" className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-1.5 text-sm bg-white" />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-gray-600">Renewal Company</label>
+                <input type="text" value={renewalCompany} onChange={e => setRenewalCompany(e.target.value)} placeholder="Insurer name…" className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-1.5 text-sm bg-white" />
+              </div>
+            </div>
+            <button onClick={() => onUpdateStatus('quote_sent')} disabled={busy} className="rounded-lg bg-cyan-600 px-5 py-2 text-sm font-semibold text-white hover:bg-cyan-700 disabled:opacity-50">
+              {busy ? 'Saving…' : 'Confirm Quote Sent'}
             </button>
           </div>
         )}
@@ -1761,8 +1850,8 @@ function AdminDashboard({ campaigns, activeCampaign, onRefresh }: { campaigns: C
                     <button onClick={() => handleDelete(c.id, c.campaign_name)} disabled={deleting === c.id} className="rounded-lg border border-red-200 px-3 py-1.5 text-sm text-red-600 hover:bg-red-50 disabled:opacity-50">{deleting === c.id ? 'Deleting…' : '🗑️'}</button>
                   </div>
                 </div>
-                <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-7">
-                  {[['Total', c.total_leads, 'bg-gray-50 text-gray-500'], ['Pending', c.pending_count, 'bg-orange-50 text-orange-600'], ['In Progress', c.in_progress_count, 'bg-blue-50 text-blue-500'], ['Callback Later', c.callback_later_count, 'bg-purple-50 text-purple-500'], ['Renewed (Us)', c.renewed_count, 'bg-green-50 text-green-600'], ['Completed', c.completed_count, 'bg-teal-50 text-teal-700'], ['Out of Window', c.out_of_window_count, 'bg-gray-50 text-gray-400']].map(([lbl, val, cls]) => (
+                <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-5 xl:grid-cols-10">
+                  {[['Total', c.total_leads, 'bg-gray-50 text-gray-500'], ['Pending', c.pending_count, 'bg-orange-50 text-orange-600'], ['In Progress', c.in_progress_count, 'bg-blue-50 text-blue-500'], ['Callback Later', c.callback_later_count, 'bg-purple-50 text-purple-500'], ['Quote Needed', c.quote_needed_count ?? 0, 'bg-indigo-50 text-indigo-700'], ['Policy Req.', c.policy_requested_count ?? 0, 'bg-sky-50 text-sky-700'], ['Quote Sent', c.quote_sent_count ?? 0, 'bg-cyan-50 text-cyan-700'], ['Renewed (Us)', c.renewed_count, 'bg-green-50 text-green-600'], ['Completed', c.completed_count, 'bg-teal-50 text-teal-700'], ['Out of Window', c.out_of_window_count, 'bg-gray-50 text-gray-400']].map(([lbl, val, cls]) => (
                     <div key={String(lbl)} className={`rounded-lg px-3 py-2 ${cls}`}>
                       <div className="text-xs">{lbl}</div>
                       <div className="text-xl font-bold text-gray-900">{val}</div>
@@ -1801,14 +1890,14 @@ function AdminDashboard({ campaigns, activeCampaign, onRefresh }: { campaigns: C
                 <table className="w-full text-sm">
                   <thead className="bg-gray-50">
                     <tr>
-                      {['#', 'Telecaller', 'Calls Made', 'Connected', 'Renewed (Us)', 'Renewed (Elsewhere)', 'Callback', 'No Answer', 'Not Interested', 'Wrong No.', 'In Progress'].map(h => (
+                      {['#', 'Telecaller', 'Calls Made', 'Connected', 'Renewed (Us)', 'Renewed (Elsewhere)', 'Callback', 'Quote Needed', 'Policy Req.', 'Quote Sent', 'No Answer', 'Not Interested', 'Wrong No.', 'Active'].map(h => (
                         <th key={h} className="px-3 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide whitespace-nowrap">{h}</th>
                       ))}
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">
                     {agentStats.length === 0 ? (
-                      <tr><td colSpan={11} className="px-4 py-8 text-center text-gray-400">{statsDateFrom || statsDateTo ? 'No call activity in this date range (try Clear for all time).' : 'No telecaller activity yet — counts appear after Get next / dispositions (idle pending pool is excluded).'}</td></tr>
+                      <tr><td colSpan={14} className="px-4 py-8 text-center text-gray-400">{statsDateFrom || statsDateTo ? 'No call activity in this date range (try Clear for all time).' : 'No telecaller activity yet — counts appear after Get next / dispositions (idle pending pool is excluded).'}</td></tr>
                     ) : agentStats.map((a: {
                       telecaller_id?: string
                       telecaller_name?: string
@@ -1818,6 +1907,9 @@ function AdminDashboard({ campaigns, activeCampaign, onRefresh }: { campaigns: C
                       renewed_via_us?: number
                       renewed_elsewhere?: number
                       callback_later?: number
+                      quote_needed?: number
+                      policy_requested?: number
+                      quote_sent?: number
                       no_answer?: number
                       not_interested?: number
                       wrong_number?: number
@@ -1833,7 +1925,8 @@ function AdminDashboard({ campaigns, activeCampaign, onRefresh }: { campaigns: C
                           : a.telecaller_id && a.telecaller_id !== 'unassigned'
                             ? `${a.telecaller_id.slice(0, 8)}…`
                             : 'Unassigned'
-                      const active = a.in_progress ?? a.still_assigned ?? 0
+                      const active = (a.in_progress ?? a.still_assigned ?? 0)
+                        + (a.quote_needed ?? 0) + (a.policy_requested ?? 0) + (a.quote_sent ?? 0)
                       return (
                       <tr key={a.telecaller_id || String(i)} className={`hover:bg-gray-50 ${i === 0 ? 'bg-green-50' : ''}`}>
                         <td className="px-3 py-3 text-gray-400 text-xs">{i + 1}</td>
@@ -1843,6 +1936,9 @@ function AdminDashboard({ campaigns, activeCampaign, onRefresh }: { campaigns: C
                         <td className="px-3 py-3 font-bold text-green-700">{a.renewed_via_us || 0}</td>
                         <td className="px-3 py-3 text-yellow-700">{a.renewed_elsewhere || 0}</td>
                         <td className="px-3 py-3 text-purple-700">{a.callback_later || 0}</td>
+                        <td className="px-3 py-3 text-indigo-700">{a.quote_needed || 0}</td>
+                        <td className="px-3 py-3 text-sky-700">{a.policy_requested || 0}</td>
+                        <td className="px-3 py-3 text-cyan-700">{a.quote_sent || 0}</td>
                         <td className="px-3 py-3 text-orange-700">{a.no_answer || 0}</td>
                         <td className="px-3 py-3 text-gray-500">{a.not_interested || 0}</td>
                         <td className="px-3 py-3 text-red-500">{a.wrong_number || 0}</td>
