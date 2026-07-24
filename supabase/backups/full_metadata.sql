@@ -2,12 +2,12 @@
 -- PostgreSQL database dump
 --
 
-\restrict A5FC9fHkpVKWbujaX81V7LDhHxg2Hm9MrE4VzR7VoK0R19MbJEdqOhqE8CBtQ2m
+\restrict wdk4aXmmoOjYeCER7MowM4LlgXsJJjxhPnncyWREhycF3BWFMX4KceVzhonhJeJ
 
 -- Dumped from database version 17.6
 -- Dumped by pg_dump version 17.7 (Homebrew)
 
--- Started on 2026-07-23 17:42:23 IST
+-- Started on 2026-07-24 09:54:14 IST
 
 SET statement_timeout = 0;
 SET lock_timeout = 0;
@@ -380,7 +380,7 @@ CREATE TYPE public.photo_type AS ENUM (
 
 
 --
--- TOC entry 3215 (class 1247 OID 17406)
+-- TOC entry 3212 (class 1247 OID 17406)
 -- Name: action; Type: TYPE; Schema: realtime; Owner: -
 --
 
@@ -394,7 +394,7 @@ CREATE TYPE realtime.action AS ENUM (
 
 
 --
--- TOC entry 3218 (class 1247 OID 17367)
+-- TOC entry 3215 (class 1247 OID 17367)
 -- Name: equality_op; Type: TYPE; Schema: realtime; Owner: -
 --
 
@@ -416,7 +416,7 @@ CREATE TYPE realtime.equality_op AS ENUM (
 
 
 --
--- TOC entry 3221 (class 1247 OID 17381)
+-- TOC entry 3218 (class 1247 OID 17381)
 -- Name: user_defined_filter; Type: TYPE; Schema: realtime; Owner: -
 --
 
@@ -429,7 +429,7 @@ CREATE TYPE realtime.user_defined_filter AS (
 
 
 --
--- TOC entry 3224 (class 1247 OID 17448)
+-- TOC entry 3221 (class 1247 OID 17448)
 -- Name: wal_column; Type: TYPE; Schema: realtime; Owner: -
 --
 
@@ -444,7 +444,7 @@ CREATE TYPE realtime.wal_column AS (
 
 
 --
--- TOC entry 3227 (class 1247 OID 17419)
+-- TOC entry 3224 (class 1247 OID 17419)
 -- Name: wal_rls; Type: TYPE; Schema: realtime; Owner: -
 --
 
@@ -4264,8 +4264,7 @@ CREATE TABLE public.all_service_data (
     updated_by_sale_at timestamp with time zone,
     updated_by_rtoids boolean,
     updated_by_rtoids_at timestamp with time zone,
-    veh_sold_dealer text,
-    CONSTRAINT all_service_data_sold_dealer_chk CHECK (((sold_dealer IS NULL) OR (sold_dealer = ANY (ARRAY['Techwheels'::text, 'Others'::text]))))
+    CONSTRAINT all_service_data_sold_dealer_chk CHECK (((sold_dealer IS NULL) OR (btrim(sold_dealer) <> ''::text)))
 );
 
 
@@ -15571,7 +15570,7 @@ COMMENT ON COLUMN public.income_role_scope.employee_role IS 'Allowed Employee Ma
 
 
 --
--- TOC entry 620 (class 1259 OID 37352)
+-- TOC entry 619 (class 1259 OID 37352)
 -- Name: insurance_renewal_assignments; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -15599,7 +15598,7 @@ CREATE TABLE public.insurance_renewal_assignments (
 
 
 --
--- TOC entry 619 (class 1259 OID 37351)
+-- TOC entry 618 (class 1259 OID 37351)
 -- Name: insurance_renewal_assignments_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
@@ -15614,7 +15613,7 @@ ALTER TABLE public.insurance_renewal_assignments ALTER COLUMN id ADD GENERATED A
 
 
 --
--- TOC entry 618 (class 1259 OID 37333)
+-- TOC entry 617 (class 1259 OID 37333)
 -- Name: insurance_renewal_campaigns; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -15649,7 +15648,7 @@ CREATE TABLE public.insurance_renewal_campaigns (
 
 
 --
--- TOC entry 617 (class 1259 OID 37332)
+-- TOC entry 616 (class 1259 OID 37332)
 -- Name: insurance_renewal_campaigns_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
@@ -15664,7 +15663,7 @@ ALTER TABLE public.insurance_renewal_campaigns ALTER COLUMN id ADD GENERATED ALW
 
 
 --
--- TOC entry 630 (class 1259 OID 37959)
+-- TOC entry 629 (class 1259 OID 37959)
 -- Name: insurance_renewal_leaderboard; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -15689,7 +15688,7 @@ CREATE TABLE public.insurance_renewal_leaderboard (
 
 
 --
--- TOC entry 629 (class 1259 OID 37958)
+-- TOC entry 628 (class 1259 OID 37958)
 -- Name: insurance_renewal_leaderboard_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
@@ -15704,7 +15703,7 @@ ALTER TABLE public.insurance_renewal_leaderboard ALTER COLUMN id ADD GENERATED A
 
 
 --
--- TOC entry 621 (class 1259 OID 37457)
+-- TOC entry 620 (class 1259 OID 37457)
 -- Name: insurance_renewal_leads; Type: VIEW; Schema: public; Owner: -
 --
 
@@ -15720,7 +15719,7 @@ CREATE VIEW public.insurance_renewal_leads AS
 
 
 --
--- TOC entry 628 (class 1259 OID 37939)
+-- TOC entry 627 (class 1259 OID 37939)
 -- Name: insurance_renewal_meta_logs; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -15741,7 +15740,7 @@ CREATE TABLE public.insurance_renewal_meta_logs (
 
 
 --
--- TOC entry 627 (class 1259 OID 37938)
+-- TOC entry 626 (class 1259 OID 37938)
 -- Name: insurance_renewal_meta_logs_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
@@ -15756,7 +15755,7 @@ ALTER TABLE public.insurance_renewal_meta_logs ALTER COLUMN id ADD GENERATED ALW
 
 
 --
--- TOC entry 626 (class 1259 OID 37711)
+-- TOC entry 625 (class 1259 OID 37711)
 -- Name: insurance_renewal_rc_fetch_attempts; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -15774,7 +15773,7 @@ CREATE TABLE public.insurance_renewal_rc_fetch_attempts (
 
 --
 -- TOC entry 9985 (class 0 OID 0)
--- Dependencies: 626
+-- Dependencies: 625
 -- Name: TABLE insurance_renewal_rc_fetch_attempts; Type: COMMENT; Schema: public; Owner: -
 --
 
@@ -15782,7 +15781,7 @@ COMMENT ON TABLE public.insurance_renewal_rc_fetch_attempts IS 'One row per camp
 
 
 --
--- TOC entry 625 (class 1259 OID 37690)
+-- TOC entry 624 (class 1259 OID 37690)
 -- Name: insurance_renewal_rc_fetch_jobs; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -15804,7 +15803,7 @@ CREATE TABLE public.insurance_renewal_rc_fetch_jobs (
 
 --
 -- TOC entry 9987 (class 0 OID 0)
--- Dependencies: 625
+-- Dependencies: 624
 -- Name: TABLE insurance_renewal_rc_fetch_jobs; Type: COMMENT; Schema: public; Owner: -
 --
 
@@ -15812,7 +15811,7 @@ COMMENT ON TABLE public.insurance_renewal_rc_fetch_jobs IS 'Queued background RC
 
 
 --
--- TOC entry 632 (class 1259 OID 37987)
+-- TOC entry 631 (class 1259 OID 37987)
 -- Name: insurance_renewal_self_renewal_links; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -15835,7 +15834,7 @@ CREATE TABLE public.insurance_renewal_self_renewal_links (
 
 
 --
--- TOC entry 631 (class 1259 OID 37986)
+-- TOC entry 630 (class 1259 OID 37986)
 -- Name: insurance_renewal_self_renewal_links_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
@@ -17396,7 +17395,7 @@ CREATE TABLE public.rto_cache (
 
 
 --
--- TOC entry 624 (class 1259 OID 37606)
+-- TOC entry 623 (class 1259 OID 37606)
 -- Name: rto_idspay; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -17481,7 +17480,7 @@ CREATE TABLE public.rto_idspay (
 
 --
 -- TOC entry 10076 (class 0 OID 0)
--- Dependencies: 624
+-- Dependencies: 623
 -- Name: TABLE rto_idspay; Type: COMMENT; Schema: public; Owner: -
 --
 
@@ -18576,7 +18575,7 @@ ALTER SEQUENCE public.temp_data_id_seq OWNED BY public.temp_data.id;
 
 
 --
--- TOC entry 623 (class 1259 OID 37520)
+-- TOC entry 622 (class 1259 OID 37520)
 -- Name: temp_ex_showroom_update; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -18589,7 +18588,7 @@ CREATE TABLE public.temp_ex_showroom_update (
 
 
 --
--- TOC entry 622 (class 1259 OID 37519)
+-- TOC entry 621 (class 1259 OID 37519)
 -- Name: temp_ex_showroom_update_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
@@ -18603,7 +18602,7 @@ CREATE SEQUENCE public.temp_ex_showroom_update_id_seq
 
 --
 -- TOC entry 10144 (class 0 OID 0)
--- Dependencies: 622
+-- Dependencies: 621
 -- Name: temp_ex_showroom_update_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
 --
 
@@ -20004,26 +20003,7 @@ PARTITION BY RANGE (inserted_at);
 
 
 --
--- TOC entry 611 (class 1259 OID 36233)
--- Name: messages_2026_07_20; Type: TABLE; Schema: realtime; Owner: -
---
-
-CREATE TABLE realtime.messages_2026_07_20 (
-    topic text NOT NULL,
-    extension text NOT NULL,
-    payload jsonb,
-    event text,
-    private boolean DEFAULT false,
-    updated_at timestamp without time zone DEFAULT now() NOT NULL,
-    inserted_at timestamp without time zone DEFAULT now() NOT NULL,
-    id uuid DEFAULT gen_random_uuid() NOT NULL,
-    binary_payload bytea,
-    CONSTRAINT messages_payload_exclusive CHECK (((payload IS NULL) OR (binary_payload IS NULL)))
-);
-
-
---
--- TOC entry 612 (class 1259 OID 36397)
+-- TOC entry 611 (class 1259 OID 36397)
 -- Name: messages_2026_07_21; Type: TABLE; Schema: realtime; Owner: -
 --
 
@@ -20042,7 +20022,7 @@ CREATE TABLE realtime.messages_2026_07_21 (
 
 
 --
--- TOC entry 613 (class 1259 OID 36600)
+-- TOC entry 612 (class 1259 OID 36600)
 -- Name: messages_2026_07_22; Type: TABLE; Schema: realtime; Owner: -
 --
 
@@ -20061,7 +20041,7 @@ CREATE TABLE realtime.messages_2026_07_22 (
 
 
 --
--- TOC entry 614 (class 1259 OID 36709)
+-- TOC entry 613 (class 1259 OID 36709)
 -- Name: messages_2026_07_23; Type: TABLE; Schema: realtime; Owner: -
 --
 
@@ -20080,7 +20060,7 @@ CREATE TABLE realtime.messages_2026_07_23 (
 
 
 --
--- TOC entry 615 (class 1259 OID 36892)
+-- TOC entry 614 (class 1259 OID 36892)
 -- Name: messages_2026_07_24; Type: TABLE; Schema: realtime; Owner: -
 --
 
@@ -20099,7 +20079,7 @@ CREATE TABLE realtime.messages_2026_07_24 (
 
 
 --
--- TOC entry 616 (class 1259 OID 37150)
+-- TOC entry 615 (class 1259 OID 37150)
 -- Name: messages_2026_07_25; Type: TABLE; Schema: realtime; Owner: -
 --
 
@@ -20118,11 +20098,30 @@ CREATE TABLE realtime.messages_2026_07_25 (
 
 
 --
--- TOC entry 633 (class 1259 OID 38077)
+-- TOC entry 632 (class 1259 OID 38077)
 -- Name: messages_2026_07_26; Type: TABLE; Schema: realtime; Owner: -
 --
 
 CREATE TABLE realtime.messages_2026_07_26 (
+    topic text NOT NULL,
+    extension text NOT NULL,
+    payload jsonb,
+    event text,
+    private boolean DEFAULT false,
+    updated_at timestamp without time zone DEFAULT now() NOT NULL,
+    inserted_at timestamp without time zone DEFAULT now() NOT NULL,
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    binary_payload bytea,
+    CONSTRAINT messages_payload_exclusive CHECK (((payload IS NULL) OR (binary_payload IS NULL)))
+);
+
+
+--
+-- TOC entry 633 (class 1259 OID 40735)
+-- Name: messages_2026_07_27; Type: TABLE; Schema: realtime; Owner: -
+--
+
+CREATE TABLE realtime.messages_2026_07_27 (
     topic text NOT NULL,
     extension text NOT NULL,
     payload jsonb,
@@ -20355,14 +20354,6 @@ CREATE TABLE supabase_migrations.schema_migrations (
 
 --
 -- TOC entry 5702 (class 0 OID 0)
--- Name: messages_2026_07_20; Type: TABLE ATTACH; Schema: realtime; Owner: -
---
-
-ALTER TABLE ONLY realtime.messages ATTACH PARTITION realtime.messages_2026_07_20 FOR VALUES FROM ('2026-07-20 00:00:00') TO ('2026-07-21 00:00:00');
-
-
---
--- TOC entry 5703 (class 0 OID 0)
 -- Name: messages_2026_07_21; Type: TABLE ATTACH; Schema: realtime; Owner: -
 --
 
@@ -20370,7 +20361,7 @@ ALTER TABLE ONLY realtime.messages ATTACH PARTITION realtime.messages_2026_07_21
 
 
 --
--- TOC entry 5704 (class 0 OID 0)
+-- TOC entry 5703 (class 0 OID 0)
 -- Name: messages_2026_07_22; Type: TABLE ATTACH; Schema: realtime; Owner: -
 --
 
@@ -20378,7 +20369,7 @@ ALTER TABLE ONLY realtime.messages ATTACH PARTITION realtime.messages_2026_07_22
 
 
 --
--- TOC entry 5705 (class 0 OID 0)
+-- TOC entry 5704 (class 0 OID 0)
 -- Name: messages_2026_07_23; Type: TABLE ATTACH; Schema: realtime; Owner: -
 --
 
@@ -20386,7 +20377,7 @@ ALTER TABLE ONLY realtime.messages ATTACH PARTITION realtime.messages_2026_07_23
 
 
 --
--- TOC entry 5706 (class 0 OID 0)
+-- TOC entry 5705 (class 0 OID 0)
 -- Name: messages_2026_07_24; Type: TABLE ATTACH; Schema: realtime; Owner: -
 --
 
@@ -20394,7 +20385,7 @@ ALTER TABLE ONLY realtime.messages ATTACH PARTITION realtime.messages_2026_07_24
 
 
 --
--- TOC entry 5707 (class 0 OID 0)
+-- TOC entry 5706 (class 0 OID 0)
 -- Name: messages_2026_07_25; Type: TABLE ATTACH; Schema: realtime; Owner: -
 --
 
@@ -20402,11 +20393,19 @@ ALTER TABLE ONLY realtime.messages ATTACH PARTITION realtime.messages_2026_07_25
 
 
 --
--- TOC entry 5708 (class 0 OID 0)
+-- TOC entry 5707 (class 0 OID 0)
 -- Name: messages_2026_07_26; Type: TABLE ATTACH; Schema: realtime; Owner: -
 --
 
 ALTER TABLE ONLY realtime.messages ATTACH PARTITION realtime.messages_2026_07_26 FOR VALUES FROM ('2026-07-26 00:00:00') TO ('2026-07-27 00:00:00');
+
+
+--
+-- TOC entry 5708 (class 0 OID 0)
+-- Name: messages_2026_07_27; Type: TABLE ATTACH; Schema: realtime; Owner: -
+--
+
+ALTER TABLE ONLY realtime.messages ATTACH PARTITION realtime.messages_2026_07_27 FOR VALUES FROM ('2026-07-27 00:00:00') TO ('2026-07-28 00:00:00');
 
 
 --
@@ -20634,7 +20633,7 @@ ALTER TABLE ONLY public.temp_data ALTER COLUMN id SET DEFAULT nextval('public.te
 
 
 --
--- TOC entry 6351 (class 2604 OID 37523)
+-- TOC entry 6347 (class 2604 OID 37523)
 -- Name: temp_ex_showroom_update id; Type: DEFAULT; Schema: public; Owner: -
 --
 
@@ -21566,7 +21565,7 @@ ALTER TABLE ONLY public.income_role_scope
 
 
 --
--- TOC entry 7380 (class 2606 OID 37366)
+-- TOC entry 7377 (class 2606 OID 37366)
 -- Name: insurance_renewal_assignments insurance_renewal_assignments_campaign_id_customer_id_key; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -21575,7 +21574,7 @@ ALTER TABLE ONLY public.insurance_renewal_assignments
 
 
 --
--- TOC entry 7382 (class 2606 OID 37364)
+-- TOC entry 7379 (class 2606 OID 37364)
 -- Name: insurance_renewal_assignments insurance_renewal_assignments_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -21584,7 +21583,7 @@ ALTER TABLE ONLY public.insurance_renewal_assignments
 
 
 --
--- TOC entry 7376 (class 2606 OID 37350)
+-- TOC entry 7373 (class 2606 OID 37350)
 -- Name: insurance_renewal_campaigns insurance_renewal_campaigns_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -21593,7 +21592,7 @@ ALTER TABLE ONLY public.insurance_renewal_campaigns
 
 
 --
--- TOC entry 7407 (class 2606 OID 37978)
+-- TOC entry 7404 (class 2606 OID 37978)
 -- Name: insurance_renewal_leaderboard insurance_renewal_leaderboard_campaign_id_telecaller_id_sna_key; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -21602,7 +21601,7 @@ ALTER TABLE ONLY public.insurance_renewal_leaderboard
 
 
 --
--- TOC entry 7409 (class 2606 OID 37976)
+-- TOC entry 7406 (class 2606 OID 37976)
 -- Name: insurance_renewal_leaderboard insurance_renewal_leaderboard_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -21611,7 +21610,7 @@ ALTER TABLE ONLY public.insurance_renewal_leaderboard
 
 
 --
--- TOC entry 7403 (class 2606 OID 37950)
+-- TOC entry 7400 (class 2606 OID 37950)
 -- Name: insurance_renewal_meta_logs insurance_renewal_meta_logs_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -21620,7 +21619,7 @@ ALTER TABLE ONLY public.insurance_renewal_meta_logs
 
 
 --
--- TOC entry 7399 (class 2606 OID 37720)
+-- TOC entry 7396 (class 2606 OID 37720)
 -- Name: insurance_renewal_rc_fetch_attempts insurance_renewal_rc_fetch_attempts_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -21629,7 +21628,7 @@ ALTER TABLE ONLY public.insurance_renewal_rc_fetch_attempts
 
 
 --
--- TOC entry 7396 (class 2606 OID 37703)
+-- TOC entry 7393 (class 2606 OID 37703)
 -- Name: insurance_renewal_rc_fetch_jobs insurance_renewal_rc_fetch_jobs_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -21638,7 +21637,7 @@ ALTER TABLE ONLY public.insurance_renewal_rc_fetch_jobs
 
 
 --
--- TOC entry 7412 (class 2606 OID 37995)
+-- TOC entry 7409 (class 2606 OID 37995)
 -- Name: insurance_renewal_self_renewal_links insurance_renewal_self_renewal_links_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -21647,7 +21646,7 @@ ALTER TABLE ONLY public.insurance_renewal_self_renewal_links
 
 
 --
--- TOC entry 7414 (class 2606 OID 37997)
+-- TOC entry 7411 (class 2606 OID 37997)
 -- Name: insurance_renewal_self_renewal_links insurance_renewal_self_renewal_links_token_key; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -21926,7 +21925,7 @@ ALTER TABLE ONLY public.rto_cache
 
 
 --
--- TOC entry 7392 (class 2606 OID 37624)
+-- TOC entry 7389 (class 2606 OID 37624)
 -- Name: rto_idspay rto_idspay_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -22142,7 +22141,7 @@ ALTER TABLE ONLY public.temp_data
 
 
 --
--- TOC entry 7385 (class 2606 OID 37530)
+-- TOC entry 7382 (class 2606 OID 37530)
 -- Name: temp_ex_showroom_update temp_ex_showroom_update_chassis_unique; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -22151,7 +22150,7 @@ ALTER TABLE ONLY public.temp_ex_showroom_update
 
 
 --
--- TOC entry 7387 (class 2606 OID 37528)
+-- TOC entry 7384 (class 2606 OID 37528)
 -- Name: temp_ex_showroom_update temp_ex_showroom_update_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -22547,16 +22546,7 @@ ALTER TABLE ONLY realtime.messages
 
 
 --
--- TOC entry 7359 (class 2606 OID 36242)
--- Name: messages_2026_07_20 messages_2026_07_20_pkey; Type: CONSTRAINT; Schema: realtime; Owner: -
---
-
-ALTER TABLE ONLY realtime.messages_2026_07_20
-    ADD CONSTRAINT messages_2026_07_20_pkey PRIMARY KEY (id, inserted_at);
-
-
---
--- TOC entry 7362 (class 2606 OID 36406)
+-- TOC entry 7359 (class 2606 OID 36406)
 -- Name: messages_2026_07_21 messages_2026_07_21_pkey; Type: CONSTRAINT; Schema: realtime; Owner: -
 --
 
@@ -22565,7 +22555,7 @@ ALTER TABLE ONLY realtime.messages_2026_07_21
 
 
 --
--- TOC entry 7365 (class 2606 OID 36609)
+-- TOC entry 7362 (class 2606 OID 36609)
 -- Name: messages_2026_07_22 messages_2026_07_22_pkey; Type: CONSTRAINT; Schema: realtime; Owner: -
 --
 
@@ -22574,7 +22564,7 @@ ALTER TABLE ONLY realtime.messages_2026_07_22
 
 
 --
--- TOC entry 7368 (class 2606 OID 36718)
+-- TOC entry 7365 (class 2606 OID 36718)
 -- Name: messages_2026_07_23 messages_2026_07_23_pkey; Type: CONSTRAINT; Schema: realtime; Owner: -
 --
 
@@ -22583,7 +22573,7 @@ ALTER TABLE ONLY realtime.messages_2026_07_23
 
 
 --
--- TOC entry 7371 (class 2606 OID 36901)
+-- TOC entry 7368 (class 2606 OID 36901)
 -- Name: messages_2026_07_24 messages_2026_07_24_pkey; Type: CONSTRAINT; Schema: realtime; Owner: -
 --
 
@@ -22592,7 +22582,7 @@ ALTER TABLE ONLY realtime.messages_2026_07_24
 
 
 --
--- TOC entry 7374 (class 2606 OID 37159)
+-- TOC entry 7371 (class 2606 OID 37159)
 -- Name: messages_2026_07_25 messages_2026_07_25_pkey; Type: CONSTRAINT; Schema: realtime; Owner: -
 --
 
@@ -22601,12 +22591,21 @@ ALTER TABLE ONLY realtime.messages_2026_07_25
 
 
 --
--- TOC entry 7417 (class 2606 OID 38086)
+-- TOC entry 7414 (class 2606 OID 38086)
 -- Name: messages_2026_07_26 messages_2026_07_26_pkey; Type: CONSTRAINT; Schema: realtime; Owner: -
 --
 
 ALTER TABLE ONLY realtime.messages_2026_07_26
     ADD CONSTRAINT messages_2026_07_26_pkey PRIMARY KEY (id, inserted_at);
+
+
+--
+-- TOC entry 7417 (class 2606 OID 40744)
+-- Name: messages_2026_07_27 messages_2026_07_27_pkey; Type: CONSTRAINT; Schema: realtime; Owner: -
+--
+
+ALTER TABLE ONLY realtime.messages_2026_07_27
+    ADD CONSTRAINT messages_2026_07_27_pkey PRIMARY KEY (id, inserted_at);
 
 
 --
@@ -23908,7 +23907,7 @@ COMMENT ON INDEX public.idx_ev_service_history_test_chassis_norm IS 'Supports re
 
 
 --
--- TOC entry 7377 (class 1259 OID 37378)
+-- TOC entry 7374 (class 1259 OID 37378)
 -- Name: idx_insurance_renewal_assignments_assigned_to; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -23916,7 +23915,7 @@ CREATE INDEX idx_insurance_renewal_assignments_assigned_to ON public.insurance_r
 
 
 --
--- TOC entry 7378 (class 1259 OID 37377)
+-- TOC entry 7375 (class 1259 OID 37377)
 -- Name: idx_insurance_renewal_assignments_campaign_status; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -23924,7 +23923,7 @@ CREATE INDEX idx_insurance_renewal_assignments_campaign_status ON public.insuran
 
 
 --
--- TOC entry 7397 (class 1259 OID 37736)
+-- TOC entry 7394 (class 1259 OID 37736)
 -- Name: idx_insurance_renewal_rc_fetch_attempts_job; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -23932,7 +23931,7 @@ CREATE INDEX idx_insurance_renewal_rc_fetch_attempts_job ON public.insurance_ren
 
 
 --
--- TOC entry 7393 (class 1259 OID 37709)
+-- TOC entry 7390 (class 1259 OID 37709)
 -- Name: idx_insurance_renewal_rc_fetch_jobs_campaign_status; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -23940,7 +23939,7 @@ CREATE INDEX idx_insurance_renewal_rc_fetch_jobs_campaign_status ON public.insur
 
 
 --
--- TOC entry 7394 (class 1259 OID 37710)
+-- TOC entry 7391 (class 1259 OID 37710)
 -- Name: idx_insurance_renewal_rc_fetch_jobs_status_created; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -23948,7 +23947,7 @@ CREATE INDEX idx_insurance_renewal_rc_fetch_jobs_status_created ON public.insura
 
 
 --
--- TOC entry 7404 (class 1259 OID 37985)
+-- TOC entry 7401 (class 1259 OID 37985)
 -- Name: idx_ir_leaderboard_campaign; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -23956,7 +23955,7 @@ CREATE INDEX idx_ir_leaderboard_campaign ON public.insurance_renewal_leaderboard
 
 
 --
--- TOC entry 7405 (class 1259 OID 37984)
+-- TOC entry 7402 (class 1259 OID 37984)
 -- Name: idx_ir_leaderboard_date; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -23964,7 +23963,7 @@ CREATE INDEX idx_ir_leaderboard_date ON public.insurance_renewal_leaderboard USI
 
 
 --
--- TOC entry 7400 (class 1259 OID 37957)
+-- TOC entry 7397 (class 1259 OID 37957)
 -- Name: idx_ir_meta_logs_assignment; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -23972,7 +23971,7 @@ CREATE INDEX idx_ir_meta_logs_assignment ON public.insurance_renewal_meta_logs U
 
 
 --
--- TOC entry 7401 (class 1259 OID 37956)
+-- TOC entry 7398 (class 1259 OID 37956)
 -- Name: idx_ir_meta_logs_campaign; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -23980,7 +23979,7 @@ CREATE INDEX idx_ir_meta_logs_campaign ON public.insurance_renewal_meta_logs USI
 
 
 --
--- TOC entry 7410 (class 1259 OID 38003)
+-- TOC entry 7407 (class 1259 OID 38003)
 -- Name: idx_ir_self_renewal_token; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -24621,7 +24620,7 @@ CREATE INDEX idx_rto_cache_source ON public.rto_cache USING btree (source, cache
 
 
 --
--- TOC entry 7388 (class 1259 OID 37627)
+-- TOC entry 7385 (class 1259 OID 37627)
 -- Name: idx_rto_idspay_cached_at; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -24629,7 +24628,7 @@ CREATE INDEX idx_rto_idspay_cached_at ON public.rto_idspay USING btree (cached_a
 
 
 --
--- TOC entry 7389 (class 1259 OID 37626)
+-- TOC entry 7386 (class 1259 OID 37626)
 -- Name: idx_rto_idspay_expires_at; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -24637,7 +24636,7 @@ CREATE INDEX idx_rto_idspay_expires_at ON public.rto_idspay USING btree (expires
 
 
 --
--- TOC entry 7390 (class 1259 OID 37625)
+-- TOC entry 7387 (class 1259 OID 37625)
 -- Name: idx_rto_idspay_reg_no; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -24997,7 +24996,7 @@ CREATE INDEX idx_telecall_assignments_campaign_status ON public.telecall_assignm
 
 
 --
--- TOC entry 7383 (class 1259 OID 37548)
+-- TOC entry 7380 (class 1259 OID 37548)
 -- Name: idx_temp_ex_showroom_update_chassis_norm; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -25648,15 +25647,7 @@ CREATE INDEX messages_inserted_at_topic_index ON ONLY realtime.messages USING bt
 
 
 --
--- TOC entry 7357 (class 1259 OID 36243)
--- Name: messages_2026_07_20_inserted_at_topic_idx; Type: INDEX; Schema: realtime; Owner: -
---
-
-CREATE INDEX messages_2026_07_20_inserted_at_topic_idx ON realtime.messages_2026_07_20 USING btree (inserted_at DESC, topic) WHERE ((extension = 'broadcast'::text) AND (private IS TRUE));
-
-
---
--- TOC entry 7360 (class 1259 OID 36407)
+-- TOC entry 7357 (class 1259 OID 36407)
 -- Name: messages_2026_07_21_inserted_at_topic_idx; Type: INDEX; Schema: realtime; Owner: -
 --
 
@@ -25664,7 +25655,7 @@ CREATE INDEX messages_2026_07_21_inserted_at_topic_idx ON realtime.messages_2026
 
 
 --
--- TOC entry 7363 (class 1259 OID 36610)
+-- TOC entry 7360 (class 1259 OID 36610)
 -- Name: messages_2026_07_22_inserted_at_topic_idx; Type: INDEX; Schema: realtime; Owner: -
 --
 
@@ -25672,7 +25663,7 @@ CREATE INDEX messages_2026_07_22_inserted_at_topic_idx ON realtime.messages_2026
 
 
 --
--- TOC entry 7366 (class 1259 OID 36719)
+-- TOC entry 7363 (class 1259 OID 36719)
 -- Name: messages_2026_07_23_inserted_at_topic_idx; Type: INDEX; Schema: realtime; Owner: -
 --
 
@@ -25680,7 +25671,7 @@ CREATE INDEX messages_2026_07_23_inserted_at_topic_idx ON realtime.messages_2026
 
 
 --
--- TOC entry 7369 (class 1259 OID 36902)
+-- TOC entry 7366 (class 1259 OID 36902)
 -- Name: messages_2026_07_24_inserted_at_topic_idx; Type: INDEX; Schema: realtime; Owner: -
 --
 
@@ -25688,7 +25679,7 @@ CREATE INDEX messages_2026_07_24_inserted_at_topic_idx ON realtime.messages_2026
 
 
 --
--- TOC entry 7372 (class 1259 OID 37160)
+-- TOC entry 7369 (class 1259 OID 37160)
 -- Name: messages_2026_07_25_inserted_at_topic_idx; Type: INDEX; Schema: realtime; Owner: -
 --
 
@@ -25696,11 +25687,19 @@ CREATE INDEX messages_2026_07_25_inserted_at_topic_idx ON realtime.messages_2026
 
 
 --
--- TOC entry 7415 (class 1259 OID 38087)
+-- TOC entry 7412 (class 1259 OID 38087)
 -- Name: messages_2026_07_26_inserted_at_topic_idx; Type: INDEX; Schema: realtime; Owner: -
 --
 
 CREATE INDEX messages_2026_07_26_inserted_at_topic_idx ON realtime.messages_2026_07_26 USING btree (inserted_at DESC, topic) WHERE ((extension = 'broadcast'::text) AND (private IS TRUE));
+
+
+--
+-- TOC entry 7415 (class 1259 OID 40745)
+-- Name: messages_2026_07_27_inserted_at_topic_idx; Type: INDEX; Schema: realtime; Owner: -
+--
+
+CREATE INDEX messages_2026_07_27_inserted_at_topic_idx ON realtime.messages_2026_07_27 USING btree (inserted_at DESC, topic) WHERE ((extension = 'broadcast'::text) AND (private IS TRUE));
 
 
 --
@@ -25777,22 +25776,6 @@ CREATE UNIQUE INDEX vector_indexes_name_bucket_id_idx ON storage.vector_indexes 
 
 --
 -- TOC entry 7418 (class 0 OID 0)
--- Name: messages_2026_07_20_inserted_at_topic_idx; Type: INDEX ATTACH; Schema: realtime; Owner: -
---
-
-ALTER INDEX realtime.messages_inserted_at_topic_index ATTACH PARTITION realtime.messages_2026_07_20_inserted_at_topic_idx;
-
-
---
--- TOC entry 7419 (class 0 OID 0)
--- Name: messages_2026_07_20_pkey; Type: INDEX ATTACH; Schema: realtime; Owner: -
---
-
-ALTER INDEX realtime.messages_pkey ATTACH PARTITION realtime.messages_2026_07_20_pkey;
-
-
---
--- TOC entry 7420 (class 0 OID 0)
 -- Name: messages_2026_07_21_inserted_at_topic_idx; Type: INDEX ATTACH; Schema: realtime; Owner: -
 --
 
@@ -25800,7 +25783,7 @@ ALTER INDEX realtime.messages_inserted_at_topic_index ATTACH PARTITION realtime.
 
 
 --
--- TOC entry 7421 (class 0 OID 0)
+-- TOC entry 7419 (class 0 OID 0)
 -- Name: messages_2026_07_21_pkey; Type: INDEX ATTACH; Schema: realtime; Owner: -
 --
 
@@ -25808,7 +25791,7 @@ ALTER INDEX realtime.messages_pkey ATTACH PARTITION realtime.messages_2026_07_21
 
 
 --
--- TOC entry 7422 (class 0 OID 0)
+-- TOC entry 7420 (class 0 OID 0)
 -- Name: messages_2026_07_22_inserted_at_topic_idx; Type: INDEX ATTACH; Schema: realtime; Owner: -
 --
 
@@ -25816,7 +25799,7 @@ ALTER INDEX realtime.messages_inserted_at_topic_index ATTACH PARTITION realtime.
 
 
 --
--- TOC entry 7423 (class 0 OID 0)
+-- TOC entry 7421 (class 0 OID 0)
 -- Name: messages_2026_07_22_pkey; Type: INDEX ATTACH; Schema: realtime; Owner: -
 --
 
@@ -25824,7 +25807,7 @@ ALTER INDEX realtime.messages_pkey ATTACH PARTITION realtime.messages_2026_07_22
 
 
 --
--- TOC entry 7424 (class 0 OID 0)
+-- TOC entry 7422 (class 0 OID 0)
 -- Name: messages_2026_07_23_inserted_at_topic_idx; Type: INDEX ATTACH; Schema: realtime; Owner: -
 --
 
@@ -25832,7 +25815,7 @@ ALTER INDEX realtime.messages_inserted_at_topic_index ATTACH PARTITION realtime.
 
 
 --
--- TOC entry 7425 (class 0 OID 0)
+-- TOC entry 7423 (class 0 OID 0)
 -- Name: messages_2026_07_23_pkey; Type: INDEX ATTACH; Schema: realtime; Owner: -
 --
 
@@ -25840,7 +25823,7 @@ ALTER INDEX realtime.messages_pkey ATTACH PARTITION realtime.messages_2026_07_23
 
 
 --
--- TOC entry 7426 (class 0 OID 0)
+-- TOC entry 7424 (class 0 OID 0)
 -- Name: messages_2026_07_24_inserted_at_topic_idx; Type: INDEX ATTACH; Schema: realtime; Owner: -
 --
 
@@ -25848,7 +25831,7 @@ ALTER INDEX realtime.messages_inserted_at_topic_index ATTACH PARTITION realtime.
 
 
 --
--- TOC entry 7427 (class 0 OID 0)
+-- TOC entry 7425 (class 0 OID 0)
 -- Name: messages_2026_07_24_pkey; Type: INDEX ATTACH; Schema: realtime; Owner: -
 --
 
@@ -25856,7 +25839,7 @@ ALTER INDEX realtime.messages_pkey ATTACH PARTITION realtime.messages_2026_07_24
 
 
 --
--- TOC entry 7428 (class 0 OID 0)
+-- TOC entry 7426 (class 0 OID 0)
 -- Name: messages_2026_07_25_inserted_at_topic_idx; Type: INDEX ATTACH; Schema: realtime; Owner: -
 --
 
@@ -25864,7 +25847,7 @@ ALTER INDEX realtime.messages_inserted_at_topic_index ATTACH PARTITION realtime.
 
 
 --
--- TOC entry 7429 (class 0 OID 0)
+-- TOC entry 7427 (class 0 OID 0)
 -- Name: messages_2026_07_25_pkey; Type: INDEX ATTACH; Schema: realtime; Owner: -
 --
 
@@ -25872,7 +25855,7 @@ ALTER INDEX realtime.messages_pkey ATTACH PARTITION realtime.messages_2026_07_25
 
 
 --
--- TOC entry 7430 (class 0 OID 0)
+-- TOC entry 7428 (class 0 OID 0)
 -- Name: messages_2026_07_26_inserted_at_topic_idx; Type: INDEX ATTACH; Schema: realtime; Owner: -
 --
 
@@ -25880,11 +25863,27 @@ ALTER INDEX realtime.messages_inserted_at_topic_index ATTACH PARTITION realtime.
 
 
 --
--- TOC entry 7431 (class 0 OID 0)
+-- TOC entry 7429 (class 0 OID 0)
 -- Name: messages_2026_07_26_pkey; Type: INDEX ATTACH; Schema: realtime; Owner: -
 --
 
 ALTER INDEX realtime.messages_pkey ATTACH PARTITION realtime.messages_2026_07_26_pkey;
+
+
+--
+-- TOC entry 7430 (class 0 OID 0)
+-- Name: messages_2026_07_27_inserted_at_topic_idx; Type: INDEX ATTACH; Schema: realtime; Owner: -
+--
+
+ALTER INDEX realtime.messages_inserted_at_topic_index ATTACH PARTITION realtime.messages_2026_07_27_inserted_at_topic_idx;
+
+
+--
+-- TOC entry 7431 (class 0 OID 0)
+-- Name: messages_2026_07_27_pkey; Type: INDEX ATTACH; Schema: realtime; Owner: -
+--
+
+ALTER INDEX realtime.messages_pkey ATTACH PARTITION realtime.messages_2026_07_27_pkey;
 
 
 --
@@ -27723,7 +27722,7 @@ ALTER TABLE auth.sso_providers ENABLE ROW LEVEL SECURITY;
 ALTER TABLE auth.users ENABLE ROW LEVEL SECURITY;
 
 --
--- TOC entry 8187 (class 3256 OID 22016)
+-- TOC entry 8186 (class 3256 OID 22016)
 -- Name: email_logs Users can view email logs for their dealer's job cards; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -27734,7 +27733,7 @@ CREATE POLICY "Users can view email logs for their dealer's job cards" ON public
 
 
 --
--- TOC entry 8249 (class 3256 OID 35226)
+-- TOC entry 8248 (class 3256 OID 35226)
 -- Name: parts_not_invoiced_data admin_all; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -27742,7 +27741,7 @@ CREATE POLICY admin_all ON public.parts_not_invoiced_data TO authenticated USING
 
 
 --
--- TOC entry 8267 (class 3256 OID 35231)
+-- TOC entry 8266 (class 3256 OID 35231)
 -- Name: parts_not_invoiced_uploads admin_all; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -27750,7 +27749,7 @@ CREATE POLICY admin_all ON public.parts_not_invoiced_uploads TO authenticated US
 
 
 --
--- TOC entry 8252 (class 3256 OID 35361)
+-- TOC entry 8251 (class 3256 OID 35361)
 -- Name: jc_closed_invoiced_data admin_all_jci_data; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -27758,7 +27757,7 @@ CREATE POLICY admin_all_jci_data ON public.jc_closed_invoiced_data USING (public
 
 
 --
--- TOC entry 8253 (class 3256 OID 35362)
+-- TOC entry 8252 (class 3256 OID 35362)
 -- Name: jc_closed_invoiced_uploads admin_all_jci_uploads; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -27854,7 +27853,7 @@ CREATE POLICY admin_unrestricted_all_ops_v1 ON public.autodoc_rate_rows TO authe
 
 
 --
--- TOC entry 8204 (class 3256 OID 35189)
+-- TOC entry 8203 (class 3256 OID 35189)
 -- Name: bodyshop_assignments admin_unrestricted_all_ops_v1; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -27862,7 +27861,7 @@ CREATE POLICY admin_unrestricted_all_ops_v1 ON public.bodyshop_assignments TO au
 
 
 --
--- TOC entry 8194 (class 3256 OID 34251)
+-- TOC entry 8193 (class 3256 OID 34251)
 -- Name: bodyshop_floor_support_assignments admin_unrestricted_all_ops_v1; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -27886,7 +27885,7 @@ CREATE POLICY admin_unrestricted_all_ops_v1 ON public.bodyshop_repair_card_docum
 
 
 --
--- TOC entry 8285 (class 3256 OID 35156)
+-- TOC entry 8284 (class 3256 OID 35156)
 -- Name: bodyshop_repair_cards admin_unrestricted_all_ops_v1; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -27918,7 +27917,7 @@ CREATE POLICY admin_unrestricted_all_ops_v1 ON public.closed_but_not_invoiced TO
 
 
 --
--- TOC entry 8276 (class 3256 OID 33833)
+-- TOC entry 8275 (class 3256 OID 33833)
 -- Name: complaint_access_links admin_unrestricted_all_ops_v1; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -27950,7 +27949,7 @@ CREATE POLICY admin_unrestricted_all_ops_v1 ON public.complaint_messages TO auth
 
 
 --
--- TOC entry 8193 (class 3256 OID 26100)
+-- TOC entry 8192 (class 3256 OID 26100)
 -- Name: complaint_notifications admin_unrestricted_all_ops_v1; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -27966,7 +27965,7 @@ CREATE POLICY admin_unrestricted_all_ops_v1 ON public.complaint_sla_policies TO 
 
 
 --
--- TOC entry 8278 (class 3256 OID 33840)
+-- TOC entry 8277 (class 3256 OID 33840)
 -- Name: complaint_tickets admin_unrestricted_all_ops_v1; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -27974,7 +27973,7 @@ CREATE POLICY admin_unrestricted_all_ops_v1 ON public.complaint_tickets TO authe
 
 
 --
--- TOC entry 8202 (class 3256 OID 32395)
+-- TOC entry 8201 (class 3256 OID 32395)
 -- Name: cre_incentive_settings admin_unrestricted_all_ops_v1; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -27982,7 +27981,7 @@ CREATE POLICY admin_unrestricted_all_ops_v1 ON public.cre_incentive_settings TO 
 
 
 --
--- TOC entry 8190 (class 3256 OID 28881)
+-- TOC entry 8189 (class 3256 OID 28881)
 -- Name: dealer_settings admin_unrestricted_all_ops_v1; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -28022,7 +28021,7 @@ CREATE POLICY admin_unrestricted_all_ops_v1 ON public.estimate_rows TO authentic
 
 
 --
--- TOC entry 8270 (class 3256 OID 35246)
+-- TOC entry 8269 (class 3256 OID 35246)
 -- Name: grn_report_data admin_unrestricted_all_ops_v1; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -28030,7 +28029,7 @@ CREATE POLICY admin_unrestricted_all_ops_v1 ON public.grn_report_data TO authent
 
 
 --
--- TOC entry 8245 (class 3256 OID 35192)
+-- TOC entry 8244 (class 3256 OID 35192)
 -- Name: grn_upload_history admin_unrestricted_all_ops_v1; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -28038,7 +28037,7 @@ CREATE POLICY admin_unrestricted_all_ops_v1 ON public.grn_upload_history TO auth
 
 
 --
--- TOC entry 8244 (class 3256 OID 33094)
+-- TOC entry 8243 (class 3256 OID 33094)
 -- Name: import_employee_mapping_issues admin_unrestricted_all_ops_v1; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -28054,7 +28053,7 @@ CREATE POLICY admin_unrestricted_all_ops_v1 ON public.import_metadata TO authent
 
 
 --
--- TOC entry 8209 (class 3256 OID 26265)
+-- TOC entry 8208 (class 3256 OID 26265)
 -- Name: income_role_scope admin_unrestricted_all_ops_v1; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -28062,7 +28061,7 @@ CREATE POLICY admin_unrestricted_all_ops_v1 ON public.income_role_scope TO authe
 
 
 --
--- TOC entry 8188 (class 3256 OID 38052)
+-- TOC entry 8187 (class 3256 OID 38052)
 -- Name: insurance_renewal_assignments admin_unrestricted_all_ops_v1; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -28070,7 +28069,7 @@ CREATE POLICY admin_unrestricted_all_ops_v1 ON public.insurance_renewal_assignme
 
 
 --
--- TOC entry 8172 (class 3256 OID 38050)
+-- TOC entry 8288 (class 3256 OID 39529)
 -- Name: insurance_renewal_campaigns admin_unrestricted_all_ops_v1; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -28078,7 +28077,7 @@ CREATE POLICY admin_unrestricted_all_ops_v1 ON public.insurance_renewal_campaign
 
 
 --
--- TOC entry 8273 (class 3256 OID 38403)
+-- TOC entry 8272 (class 3256 OID 38403)
 -- Name: insurance_renewal_leaderboard admin_unrestricted_all_ops_v1; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -28086,7 +28085,7 @@ CREATE POLICY admin_unrestricted_all_ops_v1 ON public.insurance_renewal_leaderbo
 
 
 --
--- TOC entry 8274 (class 3256 OID 38404)
+-- TOC entry 8273 (class 3256 OID 38404)
 -- Name: insurance_renewal_meta_logs admin_unrestricted_all_ops_v1; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -28094,7 +28093,7 @@ CREATE POLICY admin_unrestricted_all_ops_v1 ON public.insurance_renewal_meta_log
 
 
 --
--- TOC entry 8279 (class 3256 OID 38407)
+-- TOC entry 8278 (class 3256 OID 38407)
 -- Name: insurance_renewal_rc_fetch_attempts admin_unrestricted_all_ops_v1; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -28102,7 +28101,7 @@ CREATE POLICY admin_unrestricted_all_ops_v1 ON public.insurance_renewal_rc_fetch
 
 
 --
--- TOC entry 8277 (class 3256 OID 38406)
+-- TOC entry 8276 (class 3256 OID 38406)
 -- Name: insurance_renewal_rc_fetch_jobs admin_unrestricted_all_ops_v1; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -28110,7 +28109,7 @@ CREATE POLICY admin_unrestricted_all_ops_v1 ON public.insurance_renewal_rc_fetch
 
 
 --
--- TOC entry 8275 (class 3256 OID 38405)
+-- TOC entry 8274 (class 3256 OID 38405)
 -- Name: insurance_renewal_self_renewal_links admin_unrestricted_all_ops_v1; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -28118,7 +28117,7 @@ CREATE POLICY admin_unrestricted_all_ops_v1 ON public.insurance_renewal_self_ren
 
 
 --
--- TOC entry 8250 (class 3256 OID 35359)
+-- TOC entry 8249 (class 3256 OID 35359)
 -- Name: jc_closed_invoiced_data admin_unrestricted_all_ops_v1; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -28126,7 +28125,7 @@ CREATE POLICY admin_unrestricted_all_ops_v1 ON public.jc_closed_invoiced_data TO
 
 
 --
--- TOC entry 8251 (class 3256 OID 35360)
+-- TOC entry 8250 (class 3256 OID 35360)
 -- Name: jc_closed_invoiced_uploads admin_unrestricted_all_ops_v1; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -28150,7 +28149,7 @@ CREATE POLICY admin_unrestricted_all_ops_v1 ON public.job_card_closed_data_dupli
 
 
 --
--- TOC entry 8280 (class 3256 OID 33843)
+-- TOC entry 8279 (class 3256 OID 33843)
 -- Name: job_card_support_assignments admin_unrestricted_all_ops_v1; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -28222,7 +28221,7 @@ CREATE POLICY admin_unrestricted_all_ops_v1 ON public.part_master TO authenticat
 
 
 --
--- TOC entry 8247 (class 3256 OID 35224)
+-- TOC entry 8246 (class 3256 OID 35224)
 -- Name: parts_not_invoiced_data admin_unrestricted_all_ops_v1; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -28230,7 +28229,7 @@ CREATE POLICY admin_unrestricted_all_ops_v1 ON public.parts_not_invoiced_data TO
 
 
 --
--- TOC entry 8248 (class 3256 OID 35225)
+-- TOC entry 8247 (class 3256 OID 35225)
 -- Name: parts_not_invoiced_uploads admin_unrestricted_all_ops_v1; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -28238,7 +28237,7 @@ CREATE POLICY admin_unrestricted_all_ops_v1 ON public.parts_not_invoiced_uploads
 
 
 --
--- TOC entry 8260 (class 3256 OID 37325)
+-- TOC entry 8259 (class 3256 OID 37325)
 -- Name: parts_requests admin_unrestricted_all_ops_v1; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -28254,7 +28253,7 @@ CREATE POLICY admin_unrestricted_all_ops_v1 ON public.pending_drive_uploads TO a
 
 
 --
--- TOC entry 8240 (class 3256 OID 32618)
+-- TOC entry 8239 (class 3256 OID 32618)
 -- Name: post_service_feedback_messages admin_unrestricted_all_ops_v1; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -28262,7 +28261,7 @@ CREATE POLICY admin_unrestricted_all_ops_v1 ON public.post_service_feedback_mess
 
 
 --
--- TOC entry 8241 (class 3256 OID 32619)
+-- TOC entry 8240 (class 3256 OID 32619)
 -- Name: post_service_feedback_remarks admin_unrestricted_all_ops_v1; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -28270,7 +28269,7 @@ CREATE POLICY admin_unrestricted_all_ops_v1 ON public.post_service_feedback_rema
 
 
 --
--- TOC entry 8259 (class 3256 OID 37048)
+-- TOC entry 8258 (class 3256 OID 37048)
 -- Name: psf_revenue_dms admin_unrestricted_all_ops_v1; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -28302,7 +28301,7 @@ CREATE POLICY admin_unrestricted_all_ops_v1 ON public.sa_earnings_settings TO au
 
 
 --
--- TOC entry 8222 (class 3256 OID 23927)
+-- TOC entry 8221 (class 3256 OID 23927)
 -- Name: service_booking_followups admin_unrestricted_all_ops_v1; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -28310,7 +28309,7 @@ CREATE POLICY admin_unrestricted_all_ops_v1 ON public.service_booking_followups 
 
 
 --
--- TOC entry 8200 (class 3256 OID 31856)
+-- TOC entry 8199 (class 3256 OID 31856)
 -- Name: service_bookings admin_unrestricted_all_ops_v1; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -28406,7 +28405,7 @@ CREATE POLICY admin_unrestricted_all_ops_v1 ON public.settings_model_options TO 
 
 
 --
--- TOC entry 8232 (class 3256 OID 24158)
+-- TOC entry 8231 (class 3256 OID 24158)
 -- Name: technician_assignments admin_unrestricted_all_ops_v1; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -28414,7 +28413,7 @@ CREATE POLICY admin_unrestricted_all_ops_v1 ON public.technician_assignments TO 
 
 
 --
--- TOC entry 8262 (class 3256 OID 35132)
+-- TOC entry 8261 (class 3256 OID 35132)
 -- Name: telecall_assignments admin_unrestricted_all_ops_v1; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -28422,7 +28421,7 @@ CREATE POLICY admin_unrestricted_all_ops_v1 ON public.telecall_assignments TO au
 
 
 --
--- TOC entry 8271 (class 3256 OID 36322)
+-- TOC entry 8270 (class 3256 OID 36322)
 -- Name: telecall_campaigns admin_unrestricted_all_ops_v1; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -28446,7 +28445,7 @@ CREATE POLICY admin_unrestricted_all_ops_v1 ON public.user_module_permissions TO
 
 
 --
--- TOC entry 8201 (class 3256 OID 31859)
+-- TOC entry 8200 (class 3256 OID 31859)
 -- Name: users admin_unrestricted_all_ops_v1; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -28470,7 +28469,7 @@ CREATE POLICY admin_unrestricted_all_ops_v1 ON public.wa_agent_config TO authent
 
 
 --
--- TOC entry 8231 (class 3256 OID 24079)
+-- TOC entry 8230 (class 3256 OID 24079)
 -- Name: wa_campaign_contacts admin_unrestricted_all_ops_v1; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -28478,7 +28477,7 @@ CREATE POLICY admin_unrestricted_all_ops_v1 ON public.wa_campaign_contacts TO au
 
 
 --
--- TOC entry 8238 (class 3256 OID 24560)
+-- TOC entry 8237 (class 3256 OID 24560)
 -- Name: wa_campaigns admin_unrestricted_all_ops_v1; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -28486,7 +28485,7 @@ CREATE POLICY admin_unrestricted_all_ops_v1 ON public.wa_campaigns TO authentica
 
 
 --
--- TOC entry 8195 (class 3256 OID 26908)
+-- TOC entry 8194 (class 3256 OID 26908)
 -- Name: wa_conversations admin_unrestricted_all_ops_v1; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -28510,7 +28509,7 @@ CREATE POLICY admin_unrestricted_all_ops_v1 ON public.wa_followup_steps TO authe
 
 
 --
--- TOC entry 8225 (class 3256 OID 24063)
+-- TOC entry 8224 (class 3256 OID 24063)
 -- Name: wa_messages admin_unrestricted_all_ops_v1; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -28518,7 +28517,7 @@ CREATE POLICY admin_unrestricted_all_ops_v1 ON public.wa_messages TO authenticat
 
 
 --
--- TOC entry 8233 (class 3256 OID 24185)
+-- TOC entry 8232 (class 3256 OID 24185)
 -- Name: wa_templates admin_unrestricted_all_ops_v1; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -28598,7 +28597,7 @@ CREATE POLICY admin_unrestricted_all_ops_v1 ON public.warranty_wc_data TO authen
 
 
 --
--- TOC entry 8272 (class 3256 OID 33659)
+-- TOC entry 8271 (class 3256 OID 33659)
 -- Name: parts_requests advisor_view_own; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -28606,7 +28605,7 @@ CREATE POLICY advisor_view_own ON public.parts_requests FOR SELECT USING ((advis
 
 
 --
--- TOC entry 8237 (class 3256 OID 26555)
+-- TOC entry 8236 (class 3256 OID 26555)
 -- Name: settings_model_options all_authenticated_read_active_models; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -28614,7 +28613,7 @@ CREATE POLICY all_authenticated_read_active_models ON public.settings_model_opti
 
 
 --
--- TOC entry 8261 (class 3256 OID 32397)
+-- TOC entry 8260 (class 3256 OID 32397)
 -- Name: cre_incentive_settings allow_admin_write_cre_incentive_settings; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -28624,7 +28623,7 @@ CREATE POLICY allow_admin_write_cre_incentive_settings ON public.cre_incentive_s
 
 
 --
--- TOC entry 8208 (class 3256 OID 23579)
+-- TOC entry 8207 (class 3256 OID 23579)
 -- Name: sa_earnings_settings allow_admin_write_sa_settings; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -28650,7 +28649,7 @@ CREATE POLICY allow_all_authenticated ON public.wa_followup_steps USING (true);
 
 
 --
--- TOC entry 8203 (class 3256 OID 32396)
+-- TOC entry 8202 (class 3256 OID 32396)
 -- Name: cre_incentive_settings allow_read_cre_incentive_settings; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -28922,7 +28921,7 @@ CREATE POLICY bodyshop_intake_vehicle_photos_update_rbac_v3 ON public.bodyshop_i
 ALTER TABLE public.bodyshop_repair_card_documents ENABLE ROW LEVEL SECURITY;
 
 --
--- TOC entry 8191 (class 3256 OID 23339)
+-- TOC entry 8190 (class 3256 OID 23339)
 -- Name: bodyshop_repair_card_documents bodyshop_repair_card_documents_delete_rbac_v2; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -28990,7 +28989,7 @@ CREATE POLICY bodyshop_repair_cards_select_rbac_v2 ON public.bodyshop_repair_car
 
 
 --
--- TOC entry 8286 (class 3256 OID 36208)
+-- TOC entry 8285 (class 3256 OID 36208)
 -- Name: bodyshop_repair_cards bodyshop_repair_cards_update_rbac_v2; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -29090,7 +29089,7 @@ ALTER TABLE public.complaint_messages ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.complaint_notifications ENABLE ROW LEVEL SECURITY;
 
 --
--- TOC entry 8189 (class 3256 OID 26089)
+-- TOC entry 8188 (class 3256 OID 26089)
 -- Name: complaint_notifications complaint_notifications_select; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -29138,7 +29137,7 @@ ALTER TABLE public.cre_incentive_settings ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.dealer_settings ENABLE ROW LEVEL SECURITY;
 
 --
--- TOC entry 8215 (class 3256 OID 29013)
+-- TOC entry 8214 (class 3256 OID 29013)
 -- Name: dealer_settings dealer_settings_anon_read; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -29146,7 +29145,7 @@ CREATE POLICY dealer_settings_anon_read ON public.dealer_settings FOR SELECT TO 
 
 
 --
--- TOC entry 8197 (class 3256 OID 28882)
+-- TOC entry 8196 (class 3256 OID 28882)
 -- Name: dealer_settings dealer_settings_read; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -29154,7 +29153,7 @@ CREATE POLICY dealer_settings_read ON public.dealer_settings FOR SELECT TO authe
 
 
 --
--- TOC entry 8199 (class 3256 OID 28884)
+-- TOC entry 8198 (class 3256 OID 28884)
 -- Name: dealer_settings dealer_settings_update; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -29162,7 +29161,7 @@ CREATE POLICY dealer_settings_update ON public.dealer_settings FOR UPDATE TO aut
 
 
 --
--- TOC entry 8198 (class 3256 OID 28883)
+-- TOC entry 8197 (class 3256 OID 28883)
 -- Name: dealer_settings dealer_settings_write; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -29170,7 +29169,7 @@ CREATE POLICY dealer_settings_write ON public.dealer_settings FOR INSERT TO auth
 
 
 --
--- TOC entry 8266 (class 3256 OID 35230)
+-- TOC entry 8265 (class 3256 OID 35230)
 -- Name: parts_not_invoiced_data del_rbac; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -29186,7 +29185,7 @@ CREATE POLICY del_rbac ON public.parts_not_invoiced_data FOR DELETE TO authentic
 ALTER TABLE public.documents ENABLE ROW LEVEL SECURITY;
 
 --
--- TOC entry 8177 (class 3256 OID 21994)
+-- TOC entry 8176 (class 3256 OID 21994)
 -- Name: documents documents: own dealership insert; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -29197,7 +29196,7 @@ CREATE POLICY "documents: own dealership insert" ON public.documents FOR INSERT 
 
 
 --
--- TOC entry 8176 (class 3256 OID 21992)
+-- TOC entry 8175 (class 3256 OID 21992)
 -- Name: documents documents: own dealership select; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -29264,7 +29263,7 @@ CREATE POLICY employee_master_update_admin ON public.employee_master FOR UPDATE 
 ALTER TABLE public.estimate_rows ENABLE ROW LEVEL SECURITY;
 
 --
--- TOC entry 8179 (class 3256 OID 21998)
+-- TOC entry 8178 (class 3256 OID 21998)
 -- Name: estimate_rows estimate_rows: own dealership insert; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -29275,7 +29274,7 @@ CREATE POLICY "estimate_rows: own dealership insert" ON public.estimate_rows FOR
 
 
 --
--- TOC entry 8178 (class 3256 OID 21996)
+-- TOC entry 8177 (class 3256 OID 21996)
 -- Name: estimate_rows estimate_rows: own dealership select; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -29286,7 +29285,7 @@ CREATE POLICY "estimate_rows: own dealership select" ON public.estimate_rows FOR
 
 
 --
--- TOC entry 8180 (class 3256 OID 22000)
+-- TOC entry 8179 (class 3256 OID 22000)
 -- Name: estimate_rows estimate_rows: own dealership update; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -29396,7 +29395,7 @@ CREATE POLICY import_metadata_write_admin_v1 ON public.import_metadata TO authen
 ALTER TABLE public.income_role_scope ENABLE ROW LEVEL SECURITY;
 
 --
--- TOC entry 8213 (class 3256 OID 26269)
+-- TOC entry 8212 (class 3256 OID 26269)
 -- Name: income_role_scope income_role_scope_admin_delete; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -29404,7 +29403,7 @@ CREATE POLICY income_role_scope_admin_delete ON public.income_role_scope FOR DEL
 
 
 --
--- TOC entry 8211 (class 3256 OID 26267)
+-- TOC entry 8210 (class 3256 OID 26267)
 -- Name: income_role_scope income_role_scope_admin_insert; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -29412,7 +29411,7 @@ CREATE POLICY income_role_scope_admin_insert ON public.income_role_scope FOR INS
 
 
 --
--- TOC entry 8212 (class 3256 OID 26268)
+-- TOC entry 8211 (class 3256 OID 26268)
 -- Name: income_role_scope income_role_scope_admin_update; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -29420,7 +29419,7 @@ CREATE POLICY income_role_scope_admin_update ON public.income_role_scope FOR UPD
 
 
 --
--- TOC entry 8210 (class 3256 OID 26266)
+-- TOC entry 8209 (class 3256 OID 26266)
 -- Name: income_role_scope income_role_scope_select_all; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -29428,7 +29427,7 @@ CREATE POLICY income_role_scope_select_all ON public.income_role_scope FOR SELEC
 
 
 --
--- TOC entry 8264 (class 3256 OID 35228)
+-- TOC entry 8263 (class 3256 OID 35228)
 -- Name: parts_not_invoiced_data ins_rbac; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -29436,7 +29435,7 @@ CREATE POLICY ins_rbac ON public.parts_not_invoiced_data FOR INSERT TO authentic
 
 
 --
--- TOC entry 8269 (class 3256 OID 35233)
+-- TOC entry 8268 (class 3256 OID 35233)
 -- Name: parts_not_invoiced_uploads ins_rbac; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -29445,14 +29444,14 @@ CREATE POLICY ins_rbac ON public.parts_not_invoiced_uploads FOR INSERT TO authen
 
 --
 -- TOC entry 7906 (class 0 OID 37352)
--- Dependencies: 620
+-- Dependencies: 619
 -- Name: insurance_renewal_assignments; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
 ALTER TABLE public.insurance_renewal_assignments ENABLE ROW LEVEL SECURITY;
 
 --
--- TOC entry 8246 (class 3256 OID 38402)
+-- TOC entry 8245 (class 3256 OID 38402)
 -- Name: insurance_renewal_assignments insurance_renewal_assignments_insert_v1; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -29460,7 +29459,7 @@ CREATE POLICY insurance_renewal_assignments_insert_v1 ON public.insurance_renewa
 
 
 --
--- TOC entry 8216 (class 3256 OID 38400)
+-- TOC entry 8215 (class 3256 OID 38400)
 -- Name: insurance_renewal_assignments insurance_renewal_assignments_select_v1; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -29468,7 +29467,7 @@ CREATE POLICY insurance_renewal_assignments_select_v1 ON public.insurance_renewa
 
 
 --
--- TOC entry 8236 (class 3256 OID 38401)
+-- TOC entry 8235 (class 3256 OID 38401)
 -- Name: insurance_renewal_assignments insurance_renewal_assignments_update_v1; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -29477,14 +29476,14 @@ CREATE POLICY insurance_renewal_assignments_update_v1 ON public.insurance_renewa
 
 --
 -- TOC entry 7905 (class 0 OID 37333)
--- Dependencies: 618
+-- Dependencies: 617
 -- Name: insurance_renewal_campaigns; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
 ALTER TABLE public.insurance_renewal_campaigns ENABLE ROW LEVEL SECURITY;
 
 --
--- TOC entry 8192 (class 3256 OID 38398)
+-- TOC entry 8191 (class 3256 OID 38398)
 -- Name: insurance_renewal_campaigns insurance_renewal_campaigns_select_v1; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -29492,7 +29491,7 @@ CREATE POLICY insurance_renewal_campaigns_select_v1 ON public.insurance_renewal_
 
 
 --
--- TOC entry 8196 (class 3256 OID 38399)
+-- TOC entry 8195 (class 3256 OID 38399)
 -- Name: insurance_renewal_campaigns insurance_renewal_campaigns_write_v1; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -29501,14 +29500,14 @@ CREATE POLICY insurance_renewal_campaigns_write_v1 ON public.insurance_renewal_c
 
 --
 -- TOC entry 7911 (class 0 OID 37959)
--- Dependencies: 630
+-- Dependencies: 629
 -- Name: insurance_renewal_leaderboard; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
 ALTER TABLE public.insurance_renewal_leaderboard ENABLE ROW LEVEL SECURITY;
 
 --
--- TOC entry 8281 (class 3256 OID 38408)
+-- TOC entry 8280 (class 3256 OID 38408)
 -- Name: insurance_renewal_leaderboard insurance_renewal_leaderboard_rw_v1; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -29517,14 +29516,14 @@ CREATE POLICY insurance_renewal_leaderboard_rw_v1 ON public.insurance_renewal_le
 
 --
 -- TOC entry 7910 (class 0 OID 37939)
--- Dependencies: 628
+-- Dependencies: 627
 -- Name: insurance_renewal_meta_logs; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
 ALTER TABLE public.insurance_renewal_meta_logs ENABLE ROW LEVEL SECURITY;
 
 --
--- TOC entry 8282 (class 3256 OID 38409)
+-- TOC entry 8281 (class 3256 OID 38409)
 -- Name: insurance_renewal_meta_logs insurance_renewal_meta_logs_rw_v1; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -29532,7 +29531,7 @@ CREATE POLICY insurance_renewal_meta_logs_rw_v1 ON public.insurance_renewal_meta
 
 
 --
--- TOC entry 8284 (class 3256 OID 38411)
+-- TOC entry 8283 (class 3256 OID 38411)
 -- Name: insurance_renewal_rc_fetch_jobs insurance_renewal_rc_fetch_admin_v1; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -29541,14 +29540,14 @@ CREATE POLICY insurance_renewal_rc_fetch_admin_v1 ON public.insurance_renewal_rc
 
 --
 -- TOC entry 7909 (class 0 OID 37711)
--- Dependencies: 626
+-- Dependencies: 625
 -- Name: insurance_renewal_rc_fetch_attempts; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
 ALTER TABLE public.insurance_renewal_rc_fetch_attempts ENABLE ROW LEVEL SECURITY;
 
 --
--- TOC entry 8287 (class 3256 OID 38412)
+-- TOC entry 8286 (class 3256 OID 38412)
 -- Name: insurance_renewal_rc_fetch_attempts insurance_renewal_rc_fetch_attempts_admin_v1; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -29557,7 +29556,7 @@ CREATE POLICY insurance_renewal_rc_fetch_attempts_admin_v1 ON public.insurance_r
 
 --
 -- TOC entry 7908 (class 0 OID 37690)
--- Dependencies: 625
+-- Dependencies: 624
 -- Name: insurance_renewal_rc_fetch_jobs; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
@@ -29565,14 +29564,14 @@ ALTER TABLE public.insurance_renewal_rc_fetch_jobs ENABLE ROW LEVEL SECURITY;
 
 --
 -- TOC entry 7912 (class 0 OID 37987)
--- Dependencies: 632
+-- Dependencies: 631
 -- Name: insurance_renewal_self_renewal_links; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
 ALTER TABLE public.insurance_renewal_self_renewal_links ENABLE ROW LEVEL SECURITY;
 
 --
--- TOC entry 8283 (class 3256 OID 38410)
+-- TOC entry 8282 (class 3256 OID 38410)
 -- Name: insurance_renewal_self_renewal_links insurance_renewal_self_renewal_links_rw_v1; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -29692,7 +29691,7 @@ CREATE POLICY job_card_support_assignments_update_rbac ON public.job_card_suppor
 ALTER TABLE public.job_cards ENABLE ROW LEVEL SECURITY;
 
 --
--- TOC entry 8174 (class 3256 OID 21989)
+-- TOC entry 8173 (class 3256 OID 21989)
 -- Name: job_cards job_cards: own dealership insert; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -29702,7 +29701,7 @@ CREATE POLICY "job_cards: own dealership insert" ON public.job_cards FOR INSERT 
 
 
 --
--- TOC entry 8173 (class 3256 OID 21988)
+-- TOC entry 8172 (class 3256 OID 21988)
 -- Name: job_cards job_cards: own dealership select; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -29712,7 +29711,7 @@ CREATE POLICY "job_cards: own dealership select" ON public.job_cards FOR SELECT 
 
 
 --
--- TOC entry 8175 (class 3256 OID 21990)
+-- TOC entry 8174 (class 3256 OID 21990)
 -- Name: job_cards job_cards: own dealership update; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -30372,7 +30371,7 @@ CREATE POLICY p0_auth_update ON public.warranty_wc_data FOR UPDATE TO authentica
 ALTER TABLE public.panel_photos ENABLE ROW LEVEL SECURITY;
 
 --
--- TOC entry 8182 (class 3256 OID 22005)
+-- TOC entry 8181 (class 3256 OID 22005)
 -- Name: panel_photos panel_photos: own dealership insert; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -30383,7 +30382,7 @@ CREATE POLICY "panel_photos: own dealership insert" ON public.panel_photos FOR I
 
 
 --
--- TOC entry 8181 (class 3256 OID 22003)
+-- TOC entry 8180 (class 3256 OID 22003)
 -- Name: panel_photos panel_photos: own dealership select; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -30402,7 +30401,7 @@ CREATE POLICY "panel_photos: own dealership select" ON public.panel_photos FOR S
 ALTER TABLE public.panels ENABLE ROW LEVEL SECURITY;
 
 --
--- TOC entry 8186 (class 3256 OID 22014)
+-- TOC entry 8185 (class 3256 OID 22014)
 -- Name: panels panels: own dealership delete; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -30413,7 +30412,7 @@ CREATE POLICY "panels: own dealership delete" ON public.panels FOR DELETE TO aut
 
 
 --
--- TOC entry 8184 (class 3256 OID 22009)
+-- TOC entry 8183 (class 3256 OID 22009)
 -- Name: panels panels: own dealership insert; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -30424,7 +30423,7 @@ CREATE POLICY "panels: own dealership insert" ON public.panels FOR INSERT TO aut
 
 
 --
--- TOC entry 8183 (class 3256 OID 22007)
+-- TOC entry 8182 (class 3256 OID 22007)
 -- Name: panels panels: own dealership select; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -30435,7 +30434,7 @@ CREATE POLICY "panels: own dealership select" ON public.panels FOR SELECT TO aut
 
 
 --
--- TOC entry 8185 (class 3256 OID 22011)
+-- TOC entry 8184 (class 3256 OID 22011)
 -- Name: panels panels: own dealership update; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -30553,7 +30552,7 @@ ALTER TABLE public.post_service_feedback_remarks ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.psf_revenue_dms ENABLE ROW LEVEL SECURITY;
 
 --
--- TOC entry 8221 (class 3256 OID 33091)
+-- TOC entry 8220 (class 3256 OID 33091)
 -- Name: psf_revenue_dms psf_revenue_dms_delete_authenticated; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -30561,7 +30560,7 @@ CREATE POLICY psf_revenue_dms_delete_authenticated ON public.psf_revenue_dms FOR
 
 
 --
--- TOC entry 8219 (class 3256 OID 33089)
+-- TOC entry 8218 (class 3256 OID 33089)
 -- Name: psf_revenue_dms psf_revenue_dms_insert_authenticated; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -30569,7 +30568,7 @@ CREATE POLICY psf_revenue_dms_insert_authenticated ON public.psf_revenue_dms FOR
 
 
 --
--- TOC entry 8218 (class 3256 OID 33088)
+-- TOC entry 8217 (class 3256 OID 33088)
 -- Name: psf_revenue_dms psf_revenue_dms_select_authenticated; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -30577,7 +30576,7 @@ CREATE POLICY psf_revenue_dms_select_authenticated ON public.psf_revenue_dms FOR
 
 
 --
--- TOC entry 8220 (class 3256 OID 33090)
+-- TOC entry 8219 (class 3256 OID 33090)
 -- Name: psf_revenue_dms psf_revenue_dms_update_authenticated; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -30585,7 +30584,7 @@ CREATE POLICY psf_revenue_dms_update_authenticated ON public.psf_revenue_dms FOR
 
 
 --
--- TOC entry 8258 (class 3256 OID 35367)
+-- TOC entry 8257 (class 3256 OID 35367)
 -- Name: jc_closed_invoiced_data rbac_delete_jci_data; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -30593,7 +30592,7 @@ CREATE POLICY rbac_delete_jci_data ON public.jc_closed_invoiced_data FOR DELETE 
 
 
 --
--- TOC entry 8256 (class 3256 OID 35365)
+-- TOC entry 8255 (class 3256 OID 35365)
 -- Name: jc_closed_invoiced_data rbac_insert_jci_data; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -30601,7 +30600,7 @@ CREATE POLICY rbac_insert_jci_data ON public.jc_closed_invoiced_data FOR INSERT 
 
 
 --
--- TOC entry 8257 (class 3256 OID 35366)
+-- TOC entry 8256 (class 3256 OID 35366)
 -- Name: jc_closed_invoiced_uploads rbac_insert_jci_uploads; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -30609,7 +30608,7 @@ CREATE POLICY rbac_insert_jci_uploads ON public.jc_closed_invoiced_uploads FOR I
 
 
 --
--- TOC entry 8254 (class 3256 OID 35363)
+-- TOC entry 8253 (class 3256 OID 35363)
 -- Name: jc_closed_invoiced_data rbac_view_jci_data; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -30617,7 +30616,7 @@ CREATE POLICY rbac_view_jci_data ON public.jc_closed_invoiced_data FOR SELECT US
 
 
 --
--- TOC entry 8255 (class 3256 OID 35364)
+-- TOC entry 8254 (class 3256 OID 35364)
 -- Name: jc_closed_invoiced_uploads rbac_view_jci_uploads; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -30658,7 +30657,7 @@ CREATE POLICY rto_cache_update ON public.rto_cache FOR UPDATE TO authenticated U
 
 --
 -- TOC entry 7907 (class 0 OID 37606)
--- Dependencies: 624
+-- Dependencies: 623
 -- Name: rto_idspay; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
@@ -30697,7 +30696,7 @@ CREATE POLICY rto_idspay_update ON public.rto_idspay FOR UPDATE TO authenticated
 ALTER TABLE public.sa_earnings_settings ENABLE ROW LEVEL SECURITY;
 
 --
--- TOC entry 8263 (class 3256 OID 35227)
+-- TOC entry 8262 (class 3256 OID 35227)
 -- Name: parts_not_invoiced_data sel_rbac; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -30705,7 +30704,7 @@ CREATE POLICY sel_rbac ON public.parts_not_invoiced_data FOR SELECT TO authentic
 
 
 --
--- TOC entry 8268 (class 3256 OID 35232)
+-- TOC entry 8267 (class 3256 OID 35232)
 -- Name: parts_not_invoiced_uploads sel_rbac; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -30721,7 +30720,7 @@ CREATE POLICY sel_rbac ON public.parts_not_invoiced_uploads FOR SELECT TO authen
 ALTER TABLE public.service_booking_followups ENABLE ROW LEVEL SECURITY;
 
 --
--- TOC entry 8224 (class 3256 OID 23929)
+-- TOC entry 8223 (class 3256 OID 23929)
 -- Name: service_booking_followups service_booking_followups_all_auth; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -30737,7 +30736,7 @@ CREATE POLICY service_booking_followups_all_auth ON public.service_booking_follo
 ALTER TABLE public.service_bookings ENABLE ROW LEVEL SECURITY;
 
 --
--- TOC entry 8223 (class 3256 OID 23928)
+-- TOC entry 8222 (class 3256 OID 23928)
 -- Name: service_bookings service_bookings_all_auth; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -31062,7 +31061,7 @@ ALTER TABLE public.service_vas_jc_data ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.settings_bodyshop_surveyors ENABLE ROW LEVEL SECURITY;
 
 --
--- TOC entry 8207 (class 3256 OID 23534)
+-- TOC entry 8206 (class 3256 OID 23534)
 -- Name: settings_bodyshop_surveyors settings_bodyshop_surveyors_delete_v1; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -31070,7 +31069,7 @@ CREATE POLICY settings_bodyshop_surveyors_delete_v1 ON public.settings_bodyshop_
 
 
 --
--- TOC entry 8205 (class 3256 OID 23532)
+-- TOC entry 8204 (class 3256 OID 23532)
 -- Name: settings_bodyshop_surveyors settings_bodyshop_surveyors_insert_v1; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -31086,7 +31085,7 @@ CREATE POLICY settings_bodyshop_surveyors_select_v10 ON public.settings_bodyshop
 
 
 --
--- TOC entry 8206 (class 3256 OID 23533)
+-- TOC entry 8205 (class 3256 OID 23533)
 -- Name: settings_bodyshop_surveyors settings_bodyshop_surveyors_update_v1; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -31166,7 +31165,7 @@ CREATE POLICY technician_assignments_select_rbac ON public.technician_assignment
 
 
 --
--- TOC entry 8288 (class 3256 OID 36978)
+-- TOC entry 8287 (class 3256 OID 36978)
 -- Name: technician_assignments technician_assignments_select_sa_own_jobs; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -31210,7 +31209,7 @@ CREATE POLICY telecall_assignments_insert ON public.telecall_assignments FOR INS
 
 
 --
--- TOC entry 8239 (class 3256 OID 28000)
+-- TOC entry 8238 (class 3256 OID 28000)
 -- Name: telecall_assignments telecall_assignments_read; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -31234,7 +31233,7 @@ CREATE POLICY telecall_assignments_update ON public.telecall_assignments FOR UPD
 ALTER TABLE public.telecall_campaigns ENABLE ROW LEVEL SECURITY;
 
 --
--- TOC entry 8214 (class 3256 OID 27998)
+-- TOC entry 8213 (class 3256 OID 27998)
 -- Name: telecall_campaigns telecall_campaigns_read; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -31242,7 +31241,7 @@ CREATE POLICY telecall_campaigns_read ON public.telecall_campaigns FOR SELECT US
 
 
 --
--- TOC entry 8217 (class 3256 OID 27999)
+-- TOC entry 8216 (class 3256 OID 27999)
 -- Name: telecall_campaigns telecall_campaigns_write; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -31250,7 +31249,7 @@ CREATE POLICY telecall_campaigns_write ON public.telecall_campaigns USING (true)
 
 
 --
--- TOC entry 8265 (class 3256 OID 35229)
+-- TOC entry 8264 (class 3256 OID 35229)
 -- Name: parts_not_invoiced_data upd_rbac; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -31450,7 +31449,7 @@ CREATE POLICY "vehicles: own dealership update" ON public.vehicles FOR UPDATE TO
 
 
 --
--- TOC entry 8242 (class 3256 OID 32620)
+-- TOC entry 8241 (class 3256 OID 32620)
 -- Name: post_service_feedback_messages view_post_service_feedback; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -31458,7 +31457,7 @@ CREATE POLICY view_post_service_feedback ON public.post_service_feedback_message
 
 
 --
--- TOC entry 8243 (class 3256 OID 32621)
+-- TOC entry 8242 (class 3256 OID 32621)
 -- Name: post_service_feedback_remarks view_post_service_feedback_remarks; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -31490,7 +31489,7 @@ ALTER TABLE public.wa_campaign_contacts ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.wa_campaigns ENABLE ROW LEVEL SECURITY;
 
 --
--- TOC entry 8227 (class 3256 OID 24066)
+-- TOC entry 8226 (class 3256 OID 24066)
 -- Name: wa_campaigns wa_campaigns_auth; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -31498,7 +31497,7 @@ CREATE POLICY wa_campaigns_auth ON public.wa_campaigns TO authenticated USING (t
 
 
 --
--- TOC entry 8230 (class 3256 OID 24069)
+-- TOC entry 8229 (class 3256 OID 24069)
 -- Name: wa_campaign_contacts wa_cc_auth; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -31506,7 +31505,7 @@ CREATE POLICY wa_cc_auth ON public.wa_campaign_contacts TO authenticated USING (
 
 
 --
--- TOC entry 8226 (class 3256 OID 24065)
+-- TOC entry 8225 (class 3256 OID 24065)
 -- Name: wa_agent_config wa_config_auth; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -31514,7 +31513,7 @@ CREATE POLICY wa_config_auth ON public.wa_agent_config TO authenticated USING (t
 
 
 --
--- TOC entry 8228 (class 3256 OID 24067)
+-- TOC entry 8227 (class 3256 OID 24067)
 -- Name: wa_conversations wa_conv_auth; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -31554,7 +31553,7 @@ ALTER TABLE public.wa_followup_steps ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.wa_messages ENABLE ROW LEVEL SECURITY;
 
 --
--- TOC entry 8229 (class 3256 OID 24068)
+-- TOC entry 8228 (class 3256 OID 24068)
 -- Name: wa_messages wa_msg_auth; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -31570,7 +31569,7 @@ CREATE POLICY wa_msg_auth ON public.wa_messages TO authenticated USING (true) WI
 ALTER TABLE public.wa_templates ENABLE ROW LEVEL SECURITY;
 
 --
--- TOC entry 8234 (class 3256 OID 24186)
+-- TOC entry 8233 (class 3256 OID 24186)
 -- Name: wa_templates wa_templates_read; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -31578,7 +31577,7 @@ CREATE POLICY wa_templates_read ON public.wa_templates FOR SELECT TO authenticat
 
 
 --
--- TOC entry 8235 (class 3256 OID 24187)
+-- TOC entry 8234 (class 3256 OID 24187)
 -- Name: wa_templates wa_templates_write; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -48888,7 +48887,7 @@ GRANT ALL ON TABLE public.income_role_scope TO service_role;
 
 --
 -- TOC entry 9976 (class 0 OID 0)
--- Dependencies: 620
+-- Dependencies: 619
 -- Name: TABLE insurance_renewal_assignments; Type: ACL; Schema: public; Owner: -
 --
 
@@ -48899,7 +48898,7 @@ GRANT ALL ON TABLE public.insurance_renewal_assignments TO service_role;
 
 --
 -- TOC entry 9977 (class 0 OID 0)
--- Dependencies: 619
+-- Dependencies: 618
 -- Name: SEQUENCE insurance_renewal_assignments_id_seq; Type: ACL; Schema: public; Owner: -
 --
 
@@ -48910,7 +48909,7 @@ GRANT ALL ON SEQUENCE public.insurance_renewal_assignments_id_seq TO service_rol
 
 --
 -- TOC entry 9978 (class 0 OID 0)
--- Dependencies: 618
+-- Dependencies: 617
 -- Name: TABLE insurance_renewal_campaigns; Type: ACL; Schema: public; Owner: -
 --
 
@@ -48921,7 +48920,7 @@ GRANT ALL ON TABLE public.insurance_renewal_campaigns TO service_role;
 
 --
 -- TOC entry 9979 (class 0 OID 0)
--- Dependencies: 617
+-- Dependencies: 616
 -- Name: SEQUENCE insurance_renewal_campaigns_id_seq; Type: ACL; Schema: public; Owner: -
 --
 
@@ -48932,7 +48931,7 @@ GRANT ALL ON SEQUENCE public.insurance_renewal_campaigns_id_seq TO service_role;
 
 --
 -- TOC entry 9980 (class 0 OID 0)
--- Dependencies: 630
+-- Dependencies: 629
 -- Name: TABLE insurance_renewal_leaderboard; Type: ACL; Schema: public; Owner: -
 --
 
@@ -48943,7 +48942,7 @@ GRANT ALL ON TABLE public.insurance_renewal_leaderboard TO service_role;
 
 --
 -- TOC entry 9981 (class 0 OID 0)
--- Dependencies: 629
+-- Dependencies: 628
 -- Name: SEQUENCE insurance_renewal_leaderboard_id_seq; Type: ACL; Schema: public; Owner: -
 --
 
@@ -48954,7 +48953,7 @@ GRANT ALL ON SEQUENCE public.insurance_renewal_leaderboard_id_seq TO service_rol
 
 --
 -- TOC entry 9982 (class 0 OID 0)
--- Dependencies: 621
+-- Dependencies: 620
 -- Name: TABLE insurance_renewal_leads; Type: ACL; Schema: public; Owner: -
 --
 
@@ -48965,7 +48964,7 @@ GRANT ALL ON TABLE public.insurance_renewal_leads TO service_role;
 
 --
 -- TOC entry 9983 (class 0 OID 0)
--- Dependencies: 628
+-- Dependencies: 627
 -- Name: TABLE insurance_renewal_meta_logs; Type: ACL; Schema: public; Owner: -
 --
 
@@ -48976,7 +48975,7 @@ GRANT ALL ON TABLE public.insurance_renewal_meta_logs TO service_role;
 
 --
 -- TOC entry 9984 (class 0 OID 0)
--- Dependencies: 627
+-- Dependencies: 626
 -- Name: SEQUENCE insurance_renewal_meta_logs_id_seq; Type: ACL; Schema: public; Owner: -
 --
 
@@ -48987,7 +48986,7 @@ GRANT ALL ON SEQUENCE public.insurance_renewal_meta_logs_id_seq TO service_role;
 
 --
 -- TOC entry 9986 (class 0 OID 0)
--- Dependencies: 626
+-- Dependencies: 625
 -- Name: TABLE insurance_renewal_rc_fetch_attempts; Type: ACL; Schema: public; Owner: -
 --
 
@@ -48998,7 +48997,7 @@ GRANT ALL ON TABLE public.insurance_renewal_rc_fetch_attempts TO service_role;
 
 --
 -- TOC entry 9988 (class 0 OID 0)
--- Dependencies: 625
+-- Dependencies: 624
 -- Name: TABLE insurance_renewal_rc_fetch_jobs; Type: ACL; Schema: public; Owner: -
 --
 
@@ -49009,7 +49008,7 @@ GRANT ALL ON TABLE public.insurance_renewal_rc_fetch_jobs TO service_role;
 
 --
 -- TOC entry 9989 (class 0 OID 0)
--- Dependencies: 632
+-- Dependencies: 631
 -- Name: TABLE insurance_renewal_self_renewal_links; Type: ACL; Schema: public; Owner: -
 --
 
@@ -49020,7 +49019,7 @@ GRANT ALL ON TABLE public.insurance_renewal_self_renewal_links TO service_role;
 
 --
 -- TOC entry 9990 (class 0 OID 0)
--- Dependencies: 631
+-- Dependencies: 630
 -- Name: SEQUENCE insurance_renewal_self_renewal_links_id_seq; Type: ACL; Schema: public; Owner: -
 --
 
@@ -49521,7 +49520,7 @@ GRANT ALL ON TABLE public.rto_cache TO service_role;
 
 --
 -- TOC entry 10077 (class 0 OID 0)
--- Dependencies: 624
+-- Dependencies: 623
 -- Name: TABLE rto_idspay; Type: ACL; Schema: public; Owner: -
 --
 
@@ -49917,7 +49916,7 @@ GRANT ALL ON SEQUENCE public.temp_data_id_seq TO service_role;
 
 --
 -- TOC entry 10143 (class 0 OID 0)
--- Dependencies: 623
+-- Dependencies: 622
 -- Name: TABLE temp_ex_showroom_update; Type: ACL; Schema: public; Owner: -
 --
 
@@ -49928,7 +49927,7 @@ GRANT ALL ON TABLE public.temp_ex_showroom_update TO service_role;
 
 --
 -- TOC entry 10145 (class 0 OID 0)
--- Dependencies: 622
+-- Dependencies: 621
 -- Name: SEQUENCE temp_ex_showroom_update_id_seq; Type: ACL; Schema: public; Owner: -
 --
 
@@ -50450,16 +50449,6 @@ GRANT SELECT,INSERT,UPDATE ON TABLE realtime.messages TO service_role;
 --
 -- TOC entry 10232 (class 0 OID 0)
 -- Dependencies: 611
--- Name: TABLE messages_2026_07_20; Type: ACL; Schema: realtime; Owner: -
---
-
-GRANT ALL ON TABLE realtime.messages_2026_07_20 TO postgres;
-GRANT ALL ON TABLE realtime.messages_2026_07_20 TO dashboard_user;
-
-
---
--- TOC entry 10233 (class 0 OID 0)
--- Dependencies: 612
 -- Name: TABLE messages_2026_07_21; Type: ACL; Schema: realtime; Owner: -
 --
 
@@ -50468,8 +50457,8 @@ GRANT ALL ON TABLE realtime.messages_2026_07_21 TO dashboard_user;
 
 
 --
--- TOC entry 10234 (class 0 OID 0)
--- Dependencies: 613
+-- TOC entry 10233 (class 0 OID 0)
+-- Dependencies: 612
 -- Name: TABLE messages_2026_07_22; Type: ACL; Schema: realtime; Owner: -
 --
 
@@ -50478,8 +50467,8 @@ GRANT ALL ON TABLE realtime.messages_2026_07_22 TO dashboard_user;
 
 
 --
--- TOC entry 10235 (class 0 OID 0)
--- Dependencies: 614
+-- TOC entry 10234 (class 0 OID 0)
+-- Dependencies: 613
 -- Name: TABLE messages_2026_07_23; Type: ACL; Schema: realtime; Owner: -
 --
 
@@ -50488,8 +50477,8 @@ GRANT ALL ON TABLE realtime.messages_2026_07_23 TO dashboard_user;
 
 
 --
--- TOC entry 10236 (class 0 OID 0)
--- Dependencies: 615
+-- TOC entry 10235 (class 0 OID 0)
+-- Dependencies: 614
 -- Name: TABLE messages_2026_07_24; Type: ACL; Schema: realtime; Owner: -
 --
 
@@ -50498,8 +50487,8 @@ GRANT ALL ON TABLE realtime.messages_2026_07_24 TO dashboard_user;
 
 
 --
--- TOC entry 10237 (class 0 OID 0)
--- Dependencies: 616
+-- TOC entry 10236 (class 0 OID 0)
+-- Dependencies: 615
 -- Name: TABLE messages_2026_07_25; Type: ACL; Schema: realtime; Owner: -
 --
 
@@ -50508,13 +50497,23 @@ GRANT ALL ON TABLE realtime.messages_2026_07_25 TO dashboard_user;
 
 
 --
--- TOC entry 10238 (class 0 OID 0)
--- Dependencies: 633
+-- TOC entry 10237 (class 0 OID 0)
+-- Dependencies: 632
 -- Name: TABLE messages_2026_07_26; Type: ACL; Schema: realtime; Owner: -
 --
 
 GRANT ALL ON TABLE realtime.messages_2026_07_26 TO postgres;
 GRANT ALL ON TABLE realtime.messages_2026_07_26 TO dashboard_user;
+
+
+--
+-- TOC entry 10238 (class 0 OID 0)
+-- Dependencies: 633
+-- Name: TABLE messages_2026_07_27; Type: ACL; Schema: realtime; Owner: -
+--
+
+GRANT ALL ON TABLE realtime.messages_2026_07_27 TO postgres;
+GRANT ALL ON TABLE realtime.messages_2026_07_27 TO dashboard_user;
 
 
 --
@@ -50981,11 +50980,11 @@ CREATE EVENT TRIGGER trg_auto_admin_bypass_policy_on_ddl ON ddl_command_end
    EXECUTE FUNCTION public.apply_admin_bypass_policy_on_ddl();
 
 
--- Completed on 2026-07-23 17:43:12 IST
+-- Completed on 2026-07-24 09:55:02 IST
 
 --
 -- PostgreSQL database dump complete
 --
 
-\unrestrict A5FC9fHkpVKWbujaX81V7LDhHxg2Hm9MrE4VzR7VoK0R19MbJEdqOhqE8CBtQ2m
+\unrestrict wdk4aXmmoOjYeCER7MowM4LlgXsJJjxhPnncyWREhycF3BWFMX4KceVzhonhJeJ
 
