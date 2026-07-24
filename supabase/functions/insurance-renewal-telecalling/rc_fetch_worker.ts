@@ -351,6 +351,7 @@ function insuranceFieldsFromInvokePayload(payload: Record<string, unknown>) {
     upto: pick("vehicle_insurance_upto"),
     policy: pick("vehicle_insurance_policy_number"),
     chassis: pick("chassis"),
+    ownerName: pick("owner_name"),
   };
 }
 
@@ -363,7 +364,7 @@ async function syncAllServiceDataInsuranceFromRc(
   serviceClient: SupabaseClient,
   vehicle: Record<string, unknown>,
   regNo: string,
-  ins: { company?: string; upto?: string; policy?: string; chassis?: string },
+  ins: { company?: string; upto?: string; policy?: string; chassis?: string; ownerName?: string },
 ) {
   const { error } = await serviceClient.rpc("refresh_all_service_data_from_rto_idspay", {
     p_chassis_key: ins.chassis ?? (vehicle.chassis_no as string | null) ?? null,
@@ -371,6 +372,7 @@ async function syncAllServiceDataInsuranceFromRc(
     p_insurance_company: ins.company ?? null,
     p_insurance_upto: ins.upto ?? null,
     p_insurance_policy_number: ins.policy ?? null,
+    p_owner_name: ins.ownerName ?? null,
   });
   if (error) console.warn("refresh_all_service_data_from_rto_idspay:", error.message);
 }
@@ -383,7 +385,7 @@ async function invokeRcProviderForReg(
   ok: boolean;
   fromCache?: boolean;
   error?: string;
-  insurance?: { company?: string; upto?: string; policy?: string; chassis?: string };
+  insurance?: { company?: string; upto?: string; policy?: string; chassis?: string; ownerName?: string };
 }> {
   try {
     const res = await fetch(`${supabaseUrl}/functions/v1/invoke-rc-provider`, {
