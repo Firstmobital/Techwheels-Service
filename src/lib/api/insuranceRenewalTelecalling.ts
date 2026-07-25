@@ -55,9 +55,10 @@ export async function uploadInsuranceRenewalQuote(
     }),
   })
 
-  const drivePayload = await driveRes.json().catch(() => ({} as { error?: string; drive_url?: string }))
-  if (!driveRes.ok || drivePayload?.error) {
-    return fail(drivePayload?.error || `Universal drive upload failed (${driveRes.status})`)
+  const drivePayload = await driveRes.json().catch(() => ({} as { ok?: boolean; error?: string; db_update_error?: string }))
+  if (!driveRes.ok || drivePayload?.ok === false || drivePayload?.error) {
+    const detail = drivePayload?.db_update_error ? ` (${drivePayload.db_update_error})` : ''
+    return fail(`${drivePayload?.error || `Universal drive upload failed (${driveRes.status})`}${detail}`)
   }
 
   const { data, error } = await supabase

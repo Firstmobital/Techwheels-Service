@@ -672,22 +672,23 @@ Deno.serve(async (req) => {
         })
       }
 
-      const { data: assignmentRows, error: assignmentErr } = await supabase
+      const { data: assignmentRow, error: assignmentErr } = await supabase
         .from('insurance_renewal_assignments')
-        .select(`
-          id,
-          created_at,
-          quote_drive_file_id,
-          all_service_data!inner(vehicle_registration_number)
-        `)
+        .select('id, assigned_at, updated_at, customer_id, quote_drive_file_id')
         .eq('id', assignmentIdNum)
-        .limit(1)
+        .maybeSingle()
 
       if (assignmentErr) {
-        return json(500, { ok: false, error: assignmentErr.message, error_code: 'DB_ERROR' })
+        const missingQuoteCols = /quote_drive_file_id|quote_drive_url|schema cache/i.test(assignmentErr.message)
+        return json(500, {
+          ok: false,
+          error: missingQuoteCols
+            ? 'Quote upload columns missing on database. Run migration 20260725104500_insurance_renewal_quote_upload.sql in Supabase SQL Editor.'
+            : assignmentErr.message,
+          error_code: 'DB_ERROR',
+        })
       }
 
-      const assignmentRow = assignmentRows?.[0] as Record<string, unknown> | undefined
       if (!assignmentRow?.id) {
         return json(404, {
           ok: false,
@@ -696,8 +697,17 @@ Deno.serve(async (req) => {
         })
       }
 
-      const vehicle = assignmentRow.all_service_data as Record<string, unknown> | null
-      registrationNo = String(vehicle?.vehicle_registration_number ?? '').trim()
+      const { data: customerRow, error: customerErr } = await supabase
+        .from('all_service_data')
+        .select('vehicle_registration_number')
+        .eq('id', assignmentRow.customer_id)
+        .maybeSingle()
+
+      if (customerErr) {
+        return json(500, { ok: false, error: customerErr.message, error_code: 'DB_ERROR' })
+      }
+
+      registrationNo = String(customerRow?.vehicle_registration_number ?? '').trim()
       if (!registrationNo) {
         return json(400, {
           ok: false,
@@ -707,7 +717,7 @@ Deno.serve(async (req) => {
       }
 
       rowId = String(assignmentRow.id)
-      rowCreatedAt = assignmentRow.created_at as string | null
+      rowCreatedAt = assignmentRow.assigned_at ?? assignmentRow.updated_at
       existingDriveFileId = String(assignmentRow.quote_drive_file_id ?? '').trim()
       effectiveFileType = body.fileType || 'insurance_quote'
     } else {
@@ -900,6 +910,7 @@ Deno.serve(async (req) => {
       .eq('id', rowId)
 
     if (updateErr) {
+      const missingQuoteCols = /quote_drive_url|quote_drive_file_id|schema cache/i.test(updateErr.message)
       await logPendingUpload(supabase, {
         resource_type: body.resourceType,
         resource_id: rowId,
@@ -916,7 +927,9 @@ Deno.serve(async (req) => {
 
       return json(500, {
         ok: false,
-        error: `Drive upload succeeded but ${targetTable} table update failed`,
+        error: missingQuoteCols
+          ? 'Quote uploaded to Drive but database columns are missing. Run migration 20260725104500_insurance_renewal_quote_upload.sql in Supabase SQL Editor.'
+          : `Drive upload succeeded but ${targetTable} table update failed`,
         error_code: 'DB_ERROR',
         db_update_error: updateErr.message,
       })
