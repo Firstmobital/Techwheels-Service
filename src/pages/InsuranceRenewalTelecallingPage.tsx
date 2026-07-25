@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { supabase, supabaseAnonKey, supabaseUrl } from '../lib/supabase'
+import { uploadInsuranceRenewalQuote } from '../lib/api/insuranceRenewalTelecalling'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 interface Customer {
@@ -39,6 +40,9 @@ interface Assignment {
   assigned_at: string | null
   quoted_premium: number | null
   renewal_company: string | null
+  quote_drive_url?: string | null
+  quote_file_name?: string | null
+  quote_uploaded_at?: string | null
   customer: Customer
   priority_score?: number
 }
@@ -448,6 +452,9 @@ function TelecallerDashboard({ activeCampaign, onCampaignRefresh }: { activeCamp
   const [editStatus, setEditStatus] = useState('')
   const [editBusy, setEditBusy] = useState(false)
   const [quotePipelinePending, setQuotePipelinePending] = useState<CallStatus | null>(null)
+  const [editQuoteDriveUrl, setEditQuoteDriveUrl] = useState('')
+  const [editQuoteFileName, setEditQuoteFileName] = useState('')
+  const [quoteUploadBusy, setQuoteUploadBusy] = useState(false)
   const [rcFetchBusy, setRcFetchBusy] = useState(false)
   const [rcFetchMessage, setRcFetchMessage] = useState<string | null>(null)
   const [customerUiEpoch, setCustomerUiEpoch] = useState(0)
@@ -471,8 +478,46 @@ function TelecallerDashboard({ activeCampaign, onCampaignRefresh }: { activeCamp
     setEditNotes(currentAssignment.call_notes || '')
     setEditCallbackDate(currentAssignment.callback_date || '')
     setEditStatus(currentAssignment.status)
+    setEditQuoteDriveUrl(currentAssignment.quote_drive_url || '')
+    setEditQuoteFileName(currentAssignment.quote_file_name || '')
     setQuotePipelinePending(null)
   }, [currentAssignment?.id, activeView])
+
+  const syncQuoteEditFields = (asgn: Assignment) => {
+    setEditQuoteDriveUrl(asgn.quote_drive_url || '')
+    setEditQuoteFileName(asgn.quote_file_name || '')
+  }
+
+  const applyQuoteUploadToAssignment = (assignmentId: number, quote: { quote_drive_url: string | null; quote_file_name: string | null; quote_uploaded_at: string | null }) => {
+    setEditQuoteDriveUrl(quote.quote_drive_url || '')
+    setEditQuoteFileName(quote.quote_file_name || '')
+    setCurrentAssignment(prev => (
+      prev?.id === assignmentId
+        ? { ...prev, quote_drive_url: quote.quote_drive_url, quote_file_name: quote.quote_file_name, quote_uploaded_at: quote.quote_uploaded_at }
+        : prev
+    ))
+    setQueue(prev => prev.map(a => (
+      a.id === assignmentId
+        ? { ...a, quote_drive_url: quote.quote_drive_url, quote_file_name: quote.quote_file_name, quote_uploaded_at: quote.quote_uploaded_at }
+        : a
+    )))
+  }
+
+  const handleQuoteUpload = async (assignmentId: number, registrationNumber: string | null | undefined, file: File) => {
+    setQuoteUploadBusy(true)
+    setError(null)
+    try {
+      const res = await uploadInsuranceRenewalQuote(assignmentId, file, registrationNumber)
+      if (res.error || !res.data) throw new Error(res.error || 'Quote upload failed')
+      applyQuoteUploadToAssignment(assignmentId, res.data)
+      setRcFetchMessage('Quote uploaded.')
+      setTimeout(() => setRcFetchMessage(null), 5000)
+    } catch (err) {
+      setError((err as Error).message)
+    } finally {
+      setQuoteUploadBusy(false)
+    }
+  }
 
   useEffect(() => {
     if (!queueSoldByFilter) return
@@ -568,6 +613,7 @@ function TelecallerDashboard({ activeCampaign, onCampaignRefresh }: { activeCamp
     setEditNotes(asgn.call_notes || '')
     setEditCallbackDate(asgn.callback_date || '')
     setEditStatus(status ?? asgn.status)
+    syncQuoteEditFields(asgn)
     setNotes(asgn.call_notes || '')
     setCallbackDate(asgn.callback_date || '')
     setQuotedPremium(asgn.quoted_premium != null ? String(asgn.quoted_premium) : '')
@@ -587,6 +633,10 @@ function TelecallerDashboard({ activeCampaign, onCampaignRefresh }: { activeCamp
   }
 
   const handleEditSave = async (assignmentId: number, closeEdit = true) => {
+    if (editStatus === 'quote_sent' && !editQuoteDriveUrl.trim()) {
+      setError('Please upload the quote before saving Quote Sent.')
+      return
+    }
     setEditBusy(true)
     try {
       await callEdge('edit_assignment', { assignment_id: assignmentId, call_notes: editNotes, callback_date: editCallbackDate || undefined, status: editStatus || undefined })
@@ -594,12 +644,26 @@ function TelecallerDashboard({ activeCampaign, onCampaignRefresh }: { activeCamp
       setQuotePipelinePending(null)
       setCurrentAssignment(prev => (
         prev?.id === assignmentId
-          ? { ...prev, status: editStatus, call_notes: editNotes, callback_date: editCallbackDate || null }
+          ? {
+              ...prev,
+              status: editStatus,
+              call_notes: editNotes,
+              callback_date: editCallbackDate || null,
+              quote_drive_url: editQuoteDriveUrl || null,
+              quote_file_name: editQuoteFileName || null,
+            }
           : prev
       ))
       setQueue(prev => prev.map(a => (
         a.id === assignmentId
-          ? { ...a, status: editStatus, call_notes: editNotes, callback_date: editCallbackDate || null }
+          ? {
+              ...a,
+              status: editStatus,
+              call_notes: editNotes,
+              callback_date: editCallbackDate || null,
+              quote_drive_url: editQuoteDriveUrl || null,
+              quote_file_name: editQuoteFileName || null,
+            }
           : a
       )))
       setRcFetchMessage(`Status updated to ${editStatus.replace(/_/g, ' ')}.`)
@@ -619,6 +683,7 @@ function TelecallerDashboard({ activeCampaign, onCampaignRefresh }: { activeCamp
       setEditStatus(currentAssignment.status)
       setEditNotes(currentAssignment.call_notes || '')
       setEditCallbackDate(currentAssignment.callback_date || '')
+      syncQuoteEditFields(currentAssignment)
     }
     setQuotePipelinePending(null)
     resetCallForm()
@@ -793,6 +858,12 @@ function TelecallerDashboard({ activeCampaign, onCampaignRefresh }: { activeCamp
             editNotes={editNotes}
             setEditNotes={setEditNotes}
             editBusy={editBusy}
+            assignmentId={currentAssignment.id}
+            registrationNumber={currentAssignment.customer.vehicle_registration_number}
+            quoteDriveUrl={editQuoteDriveUrl}
+            quoteFileName={editQuoteFileName}
+            quoteUploadBusy={quoteUploadBusy}
+            onQuoteUpload={file => handleQuoteUpload(currentAssignment.id, currentAssignment.customer.vehicle_registration_number, file)}
             onSave={() => handleEditSave(currentAssignment.id, false)}
             onCancel={() => handleEditCancel(false)}
           />
@@ -979,6 +1050,12 @@ function TelecallerDashboard({ activeCampaign, onCampaignRefresh }: { activeCamp
                     editNotes={editNotes}
                     setEditNotes={setEditNotes}
                     editBusy={editBusy}
+                    assignmentId={asgn.id}
+                    registrationNumber={asgn.customer.vehicle_registration_number}
+                    quoteDriveUrl={editQuoteDriveUrl}
+                    quoteFileName={editQuoteFileName}
+                    quoteUploadBusy={quoteUploadBusy}
+                    onQuoteUpload={file => handleQuoteUpload(asgn.id, asgn.customer.vehicle_registration_number, file)}
                     onSave={() => handleEditSave(asgn.id)}
                     onCancel={() => handleEditCancel()}
                   />
@@ -1248,19 +1325,29 @@ function AssignmentEditPanel({
   editStatus, setEditStatus,
   editCallbackDate, setEditCallbackDate,
   editNotes, setEditNotes,
-  editBusy, onSave, onCancel,
+  editBusy, quoteDriveUrl, quoteFileName, quoteUploadBusy, onQuoteUpload,
+  onSave, onCancel,
 }: {
   editStatus: string; setEditStatus: (v: string) => void
   editCallbackDate: string; setEditCallbackDate: (v: string) => void
   editNotes: string; setEditNotes: (v: string) => void
   editBusy: boolean
+  assignmentId: number
+  registrationNumber?: string | null
+  quoteDriveUrl: string
+  quoteFileName: string
+  quoteUploadBusy: boolean
+  onQuoteUpload: (file: File) => Promise<void>
   onSave: () => void
   onCancel: () => void
 }) {
+  const quoteFileInputRef = useRef<HTMLInputElement | null>(null)
+  const showQuoteUpload = editStatus === 'quote_sent'
+
   return (
     <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 space-y-3">
       <div className="text-xs font-semibold text-blue-700">Edit Assignment</div>
-      <div className="grid grid-cols-2 gap-3">
+      <div className={`grid gap-3 ${showQuoteUpload ? 'grid-cols-1 sm:grid-cols-3' : 'grid-cols-2'}`}>
         <div>
           <label className="text-xs font-medium text-gray-600">Status</label>
           <select value={editStatus} onChange={e => setEditStatus(e.target.value)} className="mt-1 w-full rounded-lg border border-gray-200 px-2.5 py-1.5 text-sm bg-white">
@@ -1282,6 +1369,58 @@ function AssignmentEditPanel({
           <label className="text-xs font-medium text-gray-600">Callback Date</label>
           <input type="date" value={editCallbackDate} onChange={e => setEditCallbackDate(e.target.value)} className="mt-1 w-full rounded-lg border border-gray-200 px-2.5 py-1.5 text-sm" />
         </div>
+        {showQuoteUpload && (
+          <div>
+            <label className="text-xs font-medium text-gray-600">Upload Quote</label>
+            <div className="mt-1 rounded-lg border border-gray-200 bg-white px-2.5 py-2 text-sm">
+              {quoteDriveUrl ? (
+                <div className="space-y-2">
+                  <div className="truncate text-xs text-gray-600" title={quoteFileName || 'Quote uploaded'}>
+                    {quoteFileName || 'Quote uploaded'}
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <a
+                      href={quoteDriveUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="rounded-md border border-gray-200 px-2.5 py-1 text-xs font-medium text-blue-700 hover:bg-blue-50"
+                    >
+                      View
+                    </a>
+                    <button
+                      type="button"
+                      onClick={() => quoteFileInputRef.current?.click()}
+                      disabled={quoteUploadBusy || editBusy}
+                      className="rounded-md border border-gray-200 px-2.5 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                    >
+                      {quoteUploadBusy ? 'Uploading…' : 'Replace'}
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => quoteFileInputRef.current?.click()}
+                  disabled={quoteUploadBusy || editBusy}
+                  className="w-full rounded-md bg-cyan-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-cyan-700 disabled:opacity-50"
+                >
+                  {quoteUploadBusy ? 'Uploading…' : 'Upload quote'}
+                </button>
+              )}
+              <input
+                ref={quoteFileInputRef}
+                type="file"
+                className="hidden"
+                accept=".pdf,.png,.jpg,.jpeg,.webp,.doc,.docx,.xls,.xlsx,application/pdf,image/*"
+                onChange={e => {
+                  const file = e.target.files?.[0]
+                  e.target.value = ''
+                  if (file) void onQuoteUpload(file)
+                }}
+              />
+            </div>
+          </div>
+        )}
       </div>
       <div>
         <label className="text-xs font-medium text-gray-600">Remarks / Notes</label>

@@ -2,8 +2,8 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { SignJWT, importPKCS8 } from 'https://esm.sh/jose@5.9.6'
 
 type UploadBody = {
-  resource_type?: 'document' | 'panel_photo' | 'reception_estimate' | 'reception_invoice' | 'bodyshop_intake_photo' | 'bodyshop_document'
-  resourceType?: 'document' | 'panel_photo' | 'reception_estimate' | 'reception_invoice' | 'bodyshop_intake_photo' | 'bodyshop_document'
+  resource_type?: 'document' | 'panel_photo' | 'reception_estimate' | 'reception_invoice' | 'bodyshop_intake_photo' | 'bodyshop_document' | 'insurance_renewal_quote'
+  resourceType?: 'document' | 'panel_photo' | 'reception_estimate' | 'reception_invoice' | 'bodyshop_intake_photo' | 'bodyshop_document' | 'insurance_renewal_quote'
   bucket_id?: string
   bucketId?: string
   object_name?: string
@@ -14,6 +14,8 @@ type UploadBody = {
   receptionEntryId?: number | string
   resource_id?: number | string
   resourceId?: number | string
+  assignment_id?: number | string
+  assignmentId?: number | string
   doc_type?: string
   docType?: string
   file_type?: string
@@ -82,15 +84,18 @@ function normalizeBody(body: UploadBody) {
           ? 'bodyshop_intake_photo'
           : rawResourceType === 'bodyshop_document'
             ? 'bodyshop_document'
+            : rawResourceType === 'insurance_renewal_quote'
+              ? 'insurance_renewal_quote'
       : 'document'
   const bucketId = String(body.bucket_id ?? body.bucketId ?? 'autodoc').trim()
   const objectName = String(body.object_name ?? body.objectName ?? '').trim().replace(/^\/+/, '')
   const jobCardId = String(body.job_card_id ?? body.jobCardId ?? '').trim()
   const receptionEntryId = String(body.reception_entry_id ?? body.receptionEntryId ?? '').trim()
   const resourceId = String(body.resource_id ?? body.resourceId ?? '').trim()
+  const assignmentId = String(body.assignment_id ?? body.assignmentId ?? '').trim()
   const fileType = String(body.file_type ?? body.fileType ?? body.doc_type ?? body.docType ?? '').trim()
   const fileSizeMb = Number(body.file_size_mb ?? body.fileSizeMb ?? 0)
-  return { resourceType, bucketId, objectName, jobCardId, receptionEntryId, resourceId, fileType, fileSizeMb }
+  return { resourceType, bucketId, objectName, jobCardId, receptionEntryId, resourceId, assignmentId, fileType, fileSizeMb }
 }
 
 function toYmd(input: string | null | undefined): string {
@@ -392,12 +397,16 @@ Deno.serve(async (req) => {
     const isReceptionUpload = body.resourceType === 'reception_estimate' || body.resourceType === 'reception_invoice'
     const isBodyshopIntakeUpload = body.resourceType === 'bodyshop_intake_photo'
     const isBodyshopDocumentUpload = body.resourceType === 'bodyshop_document'
+    const isInsuranceRenewalQuoteUpload = body.resourceType === 'insurance_renewal_quote'
 
-    if (!isReceptionUpload && !isBodyshopIntakeUpload && !isBodyshopDocumentUpload && !body.jobCardId) {
+    if (!isReceptionUpload && !isBodyshopIntakeUpload && !isBodyshopDocumentUpload && !isInsuranceRenewalQuoteUpload && !body.jobCardId) {
       return json(400, { ok: false, error: 'job_card_id is required', error_code: 'VALIDATION_ERROR' })
     }
     if (isReceptionUpload && !body.receptionEntryId) {
       return json(400, { ok: false, error: 'reception_entry_id is required', error_code: 'VALIDATION_ERROR' })
+    }
+    if (isInsuranceRenewalQuoteUpload && !body.assignmentId) {
+      return json(400, { ok: false, error: 'assignment_id is required', error_code: 'VALIDATION_ERROR' })
     }
     if (isBodyshopIntakeUpload && !body.resourceId) {
       return json(400, { ok: false, error: 'resource_id is required', error_code: 'VALIDATION_ERROR' })
@@ -408,7 +417,7 @@ Deno.serve(async (req) => {
     if (!body.objectName) {
       return json(400, { ok: false, error: 'object_name is required', error_code: 'VALIDATION_ERROR' })
     }
-    if (!isReceptionUpload && !body.fileType) {
+    if (!isReceptionUpload && !isInsuranceRenewalQuoteUpload && !body.fileType) {
       return json(400, {
         ok: false,
         error: 'file_type is required',
@@ -652,7 +661,55 @@ Deno.serve(async (req) => {
       rowId = String(docRow.id)
       rowCreatedAt = docRow.created_at
       existingDriveFileId = String(docRow.drive_file_id ?? '').trim()
-      effectiveFileType = String(docRow.doc_key ?? body.fileType || 'bodyshop_document')
+      effectiveFileType = String(docRow.doc_key ?? (body.fileType || 'bodyshop_document'))
+    } else if (body.resourceType === 'insurance_renewal_quote') {
+      const assignmentIdNum = Number(body.assignmentId)
+      if (!Number.isFinite(assignmentIdNum)) {
+        return json(400, {
+          ok: false,
+          error: 'Invalid assignment_id',
+          error_code: 'VALIDATION_ERROR',
+        })
+      }
+
+      const { data: assignmentRows, error: assignmentErr } = await supabase
+        .from('insurance_renewal_assignments')
+        .select(`
+          id,
+          created_at,
+          quote_drive_file_id,
+          all_service_data!inner(vehicle_registration_number)
+        `)
+        .eq('id', assignmentIdNum)
+        .limit(1)
+
+      if (assignmentErr) {
+        return json(500, { ok: false, error: assignmentErr.message, error_code: 'DB_ERROR' })
+      }
+
+      const assignmentRow = assignmentRows?.[0] as Record<string, unknown> | undefined
+      if (!assignmentRow?.id) {
+        return json(404, {
+          ok: false,
+          error: 'Insurance renewal assignment not found for upload payload',
+          error_code: 'ASSIGNMENT_NOT_FOUND',
+        })
+      }
+
+      const vehicle = assignmentRow.all_service_data as Record<string, unknown> | null
+      registrationNo = String(vehicle?.vehicle_registration_number ?? '').trim()
+      if (!registrationNo) {
+        return json(400, {
+          ok: false,
+          error: 'Registration number not found for insurance renewal assignment',
+          error_code: 'REGISTRATION_NOT_FOUND',
+        })
+      }
+
+      rowId = String(assignmentRow.id)
+      rowCreatedAt = assignmentRow.created_at as string | null
+      existingDriveFileId = String(assignmentRow.quote_drive_file_id ?? '').trim()
+      effectiveFileType = body.fileType || 'insurance_quote'
     } else {
       const receptionId = Number(body.receptionEntryId)
       if (!Number.isFinite(receptionId)) {
@@ -726,6 +783,8 @@ Deno.serve(async (req) => {
           ? `${normalizedReg}_SA_BODYSHOP_DOC_${normalizedFileType}_${datePart}_${rowId}.${ext}`
         : body.resourceType === 'reception_invoice'
           ? `${normalizedReg}_SA_INVOICE_${datePart}_${rowId}.${ext}`
+          : body.resourceType === 'insurance_renewal_quote'
+            ? `${normalizedReg}_INS_QUOTE_${datePart}_${rowId}.${ext}`
           : `${normalizedReg}_SA_ESTIMATE_${datePart}_${rowId}.${ext}`
 
     const privateKeyPem = serviceAccountPrivateKeyBase64
@@ -811,6 +870,15 @@ Deno.serve(async (req) => {
               drive_url: driveUrl,
               drive_file_id: fileId,
             }
+        : body.resourceType === 'insurance_renewal_quote'
+          ? {
+              quote_drive_url: driveUrl,
+              quote_drive_file_id: fileId,
+              quote_storage_path: body.objectName,
+              quote_file_name: body.objectName.split('/').at(-1) ?? null,
+              quote_content_type: mimeType,
+              quote_uploaded_at: new Date().toISOString(),
+            }
         : {
             drive_url: driveUrl,
             drive_file_id: fileId,
@@ -823,6 +891,8 @@ Deno.serve(async (req) => {
           ? 'bodyshop_intake_vehicle_photos'
         : body.resourceType === 'bodyshop_document'
           ? 'bodyshop_repair_card_documents'
+        : body.resourceType === 'insurance_renewal_quote'
+          ? 'insurance_renewal_assignments'
         : 'service_reception_entries'
     const { error: updateErr } = await supabase
       .from(targetTable)

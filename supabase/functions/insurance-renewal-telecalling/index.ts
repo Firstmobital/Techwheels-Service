@@ -619,6 +619,9 @@ async function handleGetNext(supabase: SupabaseClient, userId: string, userName:
     callback_date: next.callback_date,
     quoted_premium: next.quoted_premium,
     renewal_company: next.renewal_company,
+    quote_drive_url: next.quote_drive_url,
+    quote_file_name: next.quote_file_name,
+    quote_uploaded_at: next.quote_uploaded_at,
     whatsapp_sent: next.whatsapp_sent,
     whatsapp_status: next.whatsapp_status,
     customer: {
@@ -794,6 +797,9 @@ async function handleMyQueue(
       callback_date: a.callback_date,
       quoted_premium: a.quoted_premium,
       renewal_company: a.renewal_company,
+      quote_drive_url: a.quote_drive_url,
+      quote_file_name: a.quote_file_name,
+      quote_uploaded_at: a.quote_uploaded_at,
       whatsapp_sent: a.whatsapp_sent,
       whatsapp_status: a.whatsapp_status,
       customer: {
@@ -861,6 +867,19 @@ async function handleEditAssignment(supabase: SupabaseClient, userId: string, bo
     return errorResponse(
       "Use the call card No Answer / Not Reachable buttons — status uses the 3-attempt retry ladder"
     );
+  }
+
+  const nextStatusRaw = body.status === "already_renewed_unknown" ? "policy_done" : body.status;
+  if (body.status !== undefined && nextStatusRaw === "quote_sent") {
+    const { data: quoteRow, error: quoteErr } = await supabase
+      .from("insurance_renewal_assignments")
+      .select("quote_drive_url")
+      .eq("id", assignmentId)
+      .maybeSingle();
+    if (quoteErr) return errorResponse(quoteErr.message);
+    if (!String(quoteRow?.quote_drive_url ?? "").trim()) {
+      return errorResponse("Upload the quote document before saving Quote Sent status");
+    }
   }
 
   const updateData: Record<string, unknown> = {};
