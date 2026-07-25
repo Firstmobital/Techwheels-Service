@@ -278,6 +278,23 @@ function computeInsuranceDueDate(lastExpiry: string | null, saleDate: string | n
   return { date: candidate.toISOString().split('T')[0], estimated: true }
 }
 
+function assignmentDueDate(asgn: Assignment): string | null {
+  return computeInsuranceDueDate(asgn.customer.last_insurance_expiry_date, asgn.customer.vehicle_sale_date).date
+}
+
+function matchesExpiryDateRange(dueDate: string | null, from: string, to: string): boolean {
+  if (!from && !to) return true
+  if (!dueDate) return false
+  if (from && dueDate < from) return false
+  if (to && dueDate > to) return false
+  return true
+}
+
+function filterQueueByExpiryRange(items: Assignment[], from: string, to: string): Assignment[] {
+  if (!from && !to) return items
+  return items.filter(a => matchesExpiryDateRange(assignmentDueDate(a), from, to))
+}
+
 function formatCurrency(v: number | null): string {
   if (v === null || v === undefined) return '—'
   return `₹${v.toLocaleString('en-IN')}`
@@ -435,6 +452,8 @@ function TelecallerDashboard({ activeCampaign, onCampaignRefresh }: { activeCamp
   const [activeView, setActiveView] = useState<'call' | 'queue' | 'summary'>('call')
   const [queueSearch, setQueueSearch] = useState('')
   const [queueSoldByFilter, setQueueSoldByFilter] = useState('')
+  const [queueExpiryFrom, setQueueExpiryFrom] = useState('')
+  const [queueExpiryTo, setQueueExpiryTo] = useState('')
   /** null = KPI overview only; 'all' or status key = show filtered list */
   const [queueStatusFilter, setQueueStatusFilter] = useState<string | null>(null)
   // Call form
@@ -522,13 +541,16 @@ function TelecallerDashboard({ activeCampaign, onCampaignRefresh }: { activeCamp
   useEffect(() => {
     if (!queueSoldByFilter) return
     const keys = new Set(
-      queue.map(a => {
+      filterQueueByExpiryRange(queue, queueExpiryFrom, queueExpiryTo).map(a => {
         const t = (a.customer.sold_dealer || '').trim()
         return t || '__none__'
       }),
     )
     if (!keys.has(queueSoldByFilter)) setQueueSoldByFilter('')
-  }, [queue, queueSoldByFilter])
+  }, [queue, queueSoldByFilter, queueExpiryFrom, queueExpiryTo])
+
+  const queueByExpiry = filterQueueByExpiryRange(queue, queueExpiryFrom, queueExpiryTo)
+  const queueExpiryFilterActive = Boolean(queueExpiryFrom || queueExpiryTo)
 
   const resetCallForm = () => {
     setNotes(''); setCallbackDate(''); setQuotedPremium(''); setRenewalCompany('')
@@ -803,7 +825,9 @@ function TelecallerDashboard({ activeCampaign, onCampaignRefresh }: { activeCamp
     <div className="space-y-4">
       <div className="flex gap-2">
         <button onClick={() => setActiveView('call')} className={`rounded-lg px-4 py-2 text-sm font-medium ${activeView === 'call' ? 'bg-gray-900 text-white' : 'bg-white border border-gray-200 text-gray-600'}`}>📞 Call</button>
-        <button onClick={() => { setActiveView('queue'); setQueueStatusFilter(null); refreshQueue() }} className={`rounded-lg px-4 py-2 text-sm font-medium ${activeView === 'queue' ? 'bg-gray-900 text-white' : 'bg-white border border-gray-200 text-gray-600'}`}>📋 My Queue ({queue.length})</button>
+        <button onClick={() => { setActiveView('queue'); setQueueStatusFilter(null); refreshQueue() }} className={`rounded-lg px-4 py-2 text-sm font-medium ${activeView === 'queue' ? 'bg-gray-900 text-white' : 'bg-white border border-gray-200 text-gray-600'}`}>
+          📋 My Queue ({queueExpiryFilterActive ? `${queueByExpiry.length}/${queue.length}` : queue.length})
+        </button>
         <button onClick={() => { setActiveView('summary'); refreshSummary() }} className={`rounded-lg px-4 py-2 text-sm font-medium ${activeView === 'summary' ? 'bg-gray-900 text-white' : 'bg-white border border-gray-200 text-gray-600'}`}>📊 Today&apos;s Summary</button>
       </div>
 
@@ -880,19 +904,70 @@ function TelecallerDashboard({ activeCampaign, onCampaignRefresh }: { activeCamp
             </div>
           ) : (
             <>
+              <div className="rounded-lg border border-gray-200 bg-white p-3">
+                <div className="flex flex-wrap items-end gap-3">
+                  <div className="text-sm font-semibold text-gray-800 shrink-0">Insurance expiring</div>
+                  <label className="flex flex-col gap-0.5">
+                    <span className="text-xs font-medium text-gray-500">From</span>
+                    <input
+                      type="date"
+                      value={queueExpiryFrom}
+                      max={queueExpiryTo || undefined}
+                      onChange={e => setQueueExpiryFrom(e.target.value)}
+                      className="rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-sm text-gray-900 focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-400"
+                    />
+                  </label>
+                  <label className="flex flex-col gap-0.5">
+                    <span className="text-xs font-medium text-gray-500">To</span>
+                    <input
+                      type="date"
+                      value={queueExpiryTo}
+                      min={queueExpiryFrom || undefined}
+                      onChange={e => setQueueExpiryTo(e.target.value)}
+                      className="rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-sm text-gray-900 focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-400"
+                    />
+                  </label>
+                  {queueExpiryFilterActive && (
+                    <button
+                      type="button"
+                      onClick={() => { setQueueExpiryFrom(''); setQueueExpiryTo('') }}
+                      className="rounded-lg border border-gray-200 px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-50"
+                    >
+                      Clear dates
+                    </button>
+                  )}
+                </div>
+                {queueExpiryFilterActive && (
+                  <p className="mt-2 text-xs text-gray-500">
+                    Showing {queueByExpiry.length} of {queue.length} open lead(s)
+                    {queueExpiryFrom && queueExpiryTo
+                      ? ` expiring ${formatDate(queueExpiryFrom)} – ${formatDate(queueExpiryTo)}`
+                      : queueExpiryFrom
+                        ? ` expiring on or after ${formatDate(queueExpiryFrom)}`
+                        : ` expiring on or before ${formatDate(queueExpiryTo)}`}
+                  </p>
+                )}
+              </div>
+
+              {queueByExpiry.length === 0 ? (
+                <div className="rounded-xl border border-gray-200 bg-white p-8 text-center text-sm text-gray-400">
+                  No queue items match the selected expiry date range.
+                </div>
+              ) : (
+              <>
               <div>
                 <h3 className="text-sm font-semibold text-gray-700 mb-2">Your open leads by status</h3>
                 <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
                   <QueueKpiCard
                     label="All open"
-                    value={queue.length}
+                    value={queueByExpiry.length}
                     color="gray"
                     icon="📋"
                     selected={queueStatusFilter === 'all'}
                     onClick={() => setQueueStatusFilter('all')}
                   />
                   {MY_QUEUE_KPI_STATUSES.map(({ status, label, icon, color }) => {
-                    const count = queue.filter(a => a.status === status).length
+                    const count = queueByExpiry.filter(a => a.status === status).length
                     if (count === 0) return null
                     return (
                       <QueueKpiCard
@@ -917,8 +992,8 @@ function TelecallerDashboard({ activeCampaign, onCampaignRefresh }: { activeCamp
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <h3 className="text-sm font-semibold text-gray-800">
                       {queueStatusFilter === 'all'
-                        ? `All open leads (${queue.length})`
-                        : `${MY_QUEUE_KPI_STATUSES.find(s => s.status === queueStatusFilter)?.label ?? queueStatusFilter.replace(/_/g, ' ')} (${queue.filter(a => a.status === queueStatusFilter).length})`}
+                        ? `All open leads (${queueByExpiry.length})`
+                        : `${MY_QUEUE_KPI_STATUSES.find(s => s.status === queueStatusFilter)?.label ?? queueStatusFilter.replace(/_/g, ' ')} (${queueByExpiry.filter(a => a.status === queueStatusFilter).length})`}
                     </h3>
                     <button
                       type="button"
@@ -950,7 +1025,7 @@ function TelecallerDashboard({ activeCampaign, onCampaignRefresh }: { activeCamp
                         className="min-w-[10rem] max-w-[16rem] rounded-lg border border-gray-200 bg-white px-2.5 py-2 text-sm text-gray-900 focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-400"
                       >
                         <option value="">All dealers</option>
-                        {[...new Set(queue.map(a => {
+                        {[...new Set(queueByExpiry.map(a => {
                           const t = (a.customer.sold_dealer || '').trim()
                           return t || '__none__'
                         }))].sort((a, b) => {
@@ -967,7 +1042,7 @@ function TelecallerDashboard({ activeCampaign, onCampaignRefresh }: { activeCamp
                   </div>
                   {(() => {
                     const q = queueSearch.trim().toLowerCase()
-                    let filtered = queue
+                    let filtered = queueByExpiry
                     if (queueStatusFilter !== 'all') {
                       filtered = filtered.filter(a => a.status === queueStatusFilter)
                     }
@@ -1065,6 +1140,8 @@ function TelecallerDashboard({ activeCampaign, onCampaignRefresh }: { activeCamp
           ))
                   })()}
                 </div>
+              )}
+              </>
               )}
             </>
           )}
