@@ -657,6 +657,18 @@ async function handleUpdateStatus(supabase: SupabaseClient, userId: string, user
   if (!assignmentId || !campaignId || !status) return errorResponse("Missing required fields");
   if (status === "already_renewed_unknown") status = "policy_done";
 
+  if (status === "quote_sent") {
+    const { data: quoteRow, error: quoteErr } = await supabase
+      .from("insurance_renewal_assignments")
+      .select("quote_drive_url")
+      .eq("id", assignmentId)
+      .maybeSingle();
+    if (quoteErr) return errorResponse(quoteErr.message);
+    if (!String(quoteRow?.quote_drive_url ?? "").trim()) {
+      return errorResponse("Upload the quote document before saving Quote Sent status");
+    }
+  }
+
   const updateData: Record<string, unknown> = {
     status,
     call_notes: body.call_notes || null,

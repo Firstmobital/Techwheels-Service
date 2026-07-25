@@ -1343,6 +1343,8 @@ function AssignmentEditPanel({
 }) {
   const quoteFileInputRef = useRef<HTMLInputElement | null>(null)
   const showQuoteUpload = editStatus === 'quote_sent'
+  const quoteUploadRequired = showQuoteUpload && !quoteDriveUrl.trim()
+  const saveBlocked = editBusy || quoteUploadBusy || quoteUploadRequired
 
   return (
     <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 space-y-3">
@@ -1371,8 +1373,10 @@ function AssignmentEditPanel({
         </div>
         {showQuoteUpload && (
           <div>
-            <label className="text-xs font-medium text-gray-600">Upload Quote</label>
-            <div className="mt-1 rounded-lg border border-gray-200 bg-white px-2.5 py-2 text-sm">
+            <label className="text-xs font-medium text-gray-600">
+              Upload Quote <span className="text-red-600">*</span>
+            </label>
+            <div className={`mt-1 rounded-lg border bg-white px-2.5 py-2 text-sm ${quoteUploadRequired ? 'border-red-300 ring-1 ring-red-200' : 'border-gray-200'}`}>
               {quoteDriveUrl ? (
                 <div className="space-y-2">
                   <div className="truncate text-xs text-gray-600" title={quoteFileName || 'Quote uploaded'}>
@@ -1419,6 +1423,9 @@ function AssignmentEditPanel({
                 }}
               />
             </div>
+            {quoteUploadRequired && (
+              <p className="mt-1 text-xs text-red-600">Upload the shared quote before saving Quote Sent.</p>
+            )}
           </div>
         )}
       </div>
@@ -1426,8 +1433,15 @@ function AssignmentEditPanel({
         <label className="text-xs font-medium text-gray-600">Remarks / Notes</label>
         <textarea value={editNotes} onChange={e => setEditNotes(e.target.value)} className="mt-1 w-full rounded-lg border border-gray-200 px-2.5 py-1.5 text-sm" rows={2} placeholder="Add or update remarks…" />
       </div>
-      <div className="flex gap-2">
-        <button onClick={onSave} disabled={editBusy} className="rounded-lg bg-blue-600 px-4 py-1.5 text-sm font-medium text-white disabled:opacity-50">{editBusy ? 'Saving…' : 'Save'}</button>
+      <div className="flex flex-wrap items-center gap-2">
+        <button
+          onClick={onSave}
+          disabled={saveBlocked}
+          title={quoteUploadRequired ? 'Upload the quote before saving Quote Sent' : undefined}
+          className="rounded-lg bg-blue-600 px-4 py-1.5 text-sm font-medium text-white disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          {editBusy ? 'Saving…' : 'Save'}
+        </button>
         <button onClick={onCancel} className="rounded-lg border border-gray-200 px-4 py-1.5 text-sm text-gray-600 hover:bg-gray-50">Cancel</button>
       </div>
     </div>
