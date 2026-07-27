@@ -90,12 +90,148 @@ type YesterdayRow = {
 
 const QUERY_PAGE_SIZE = 1000
 const IN_FILTER_BATCH_SIZE = 200
+const MAX_ASSIGNMENT_PAGES = 50
+const ASSIGNED_AT_LOOKBACK_DAYS = 90
+const ASSIGNED_AT_FORWARD_BUFFER_DAYS = 7
 const DEFAULT_PV_SHARE_PERCENT = 20
 const DEFAULT_EV_SHARE_PERCENT = 25
 const UNKNOWN_FUEL_TYPE = 'Unknown'
 const UNKNOWN_LOCATION = 'Unknown location'
 const TECHNICIAN_INCOME_ASSIGNMENTS_SOURCE = 'vw_technician_income_assignments'
 const NOT_REQUIRED_TECHNICIAN_CODE = '__NOT_REQUIRED__'
+
+type TechnicianLoadScope = {
+  broadAccess: boolean
+  technicianCodes: string[]
+}
+
+function shiftCalendarDate(dateStr: string, days: number): string {
+  const [y, m, d] = dateStr.split('-').map(Number)
+  const date = new Date(Date.UTC(y, m - 1, d))
+  date.setUTCDate(date.getUTCDate() + days)
+  return date.toISOString().slice(0, 10)
+}
+
+function buildAssignedAtWindow(dateRange: DateRange): { from: string; to: string } {
+  return {
+    from: `${shiftCalendarDate(dateRange.from, -ASSIGNED_AT_LOOKBACK_DAYS)}T00:00:00+05:30`,
+    to: `${shiftCalendarDate(dateRange.to, ASSIGNED_AT_FORWARD_BUFFER_DAYS)}T23:59:59+05:30`,
+  }
+}
+
+function isPlatformAdminRole(role: string): boolean {
+  const normalized = role.trim().toLowerCase()
+  return normalized === 'admin' || normalized === 'super_admin' || normalized === 'super admin'
+}
+
+async function resolveTechnicianLoadScope(
+  userId: string,
+  role: string,
+  technicianCodeSet: Set<string>,
+): Promise<TechnicianLoadScope> {
+  if (isPlatformAdminRole(role)) {
+    return { broadAccess: true, technicianCodes: [] }
+  }
+
+  const permRes = await supabase.rpc('get_all_my_permissions')
+  if (permRes.error) {
+    throw new Error(`Failed to load permissions: ${permRes.error.message}`)
+  }
+
+  const moduleNames = new Set(
+    ((permRes.data ?? []) as { module_name?: string | null }[])
+      .map((row) => String(row.module_name ?? '').trim())
+      .filter(Boolean),
+  )
+
+  if (moduleNames.has('floor_incharge') || moduleNames.has('sa_tracker')) {
+    return { broadAccess: true, technicianCodes: [] }
+  }
+
+  const linksRes = await supabase
+    .from('user_employee_links')
+    .select('employee_code')
+    .eq('user_id', userId)
+    .eq('is_active', true)
+
+  if (linksRes.error) {
+    throw new Error(`Failed to load employee links: ${linksRes.error.message}`)
+  }
+
+  const technicianCodes = Array.from(new Set(
+    (linksRes.data ?? [])
+      .map((row) => String((row as { employee_code?: string | null }).employee_code ?? '').trim())
+      .filter((code) => {
+        const normalized = normalizeJobCardNumber(code)
+        return Boolean(normalized && technicianCodeSet.has(normalized))
+      }),
+  ))
+
+  return { broadAccess: false, technicianCodes }
+}
+
+async function fetchIncomeAssignments(options: {
+  scope: TechnicianLoadScope
+  assignedFrom?: string
+  assignedTo?: string
+}): Promise<TechnicianAssignmentRow[]> {
+  const { scope, assignedFrom, assignedTo } = options
+
+  if (!scope.broadAccess && scope.technicianCodes.length === 0) {
+    return []
+  }
+
+  const assignmentRowsRaw: TechnicianAssignmentRow[] = []
+  let cursorAssignedAt: string | null = null
+  let cursorId: number | null = null
+  let pageCount = 0
+
+  while (pageCount < MAX_ASSIGNMENT_PAGES) {
+    pageCount += 1
+
+    let assignQuery = supabase
+      .from(TECHNICIAN_INCOME_ASSIGNMENTS_SOURCE)
+      .select('*')
+      .order('assigned_at', { ascending: false })
+      .order('id', { ascending: false })
+      .limit(QUERY_PAGE_SIZE)
+
+    if (assignedFrom) {
+      assignQuery = assignQuery.gte('assigned_at', assignedFrom)
+    }
+    if (assignedTo) {
+      assignQuery = assignQuery.lte('assigned_at', assignedTo)
+    }
+
+    if (!scope.broadAccess) {
+      assignQuery = assignQuery.in('technician_code', scope.technicianCodes)
+    }
+
+    if (cursorAssignedAt && Number.isFinite(cursorId)) {
+      const safeAssignedAt = cursorAssignedAt.replace(/'/g, "''")
+      assignQuery = assignQuery.or(`assigned_at.lt.${safeAssignedAt},and(assigned_at.eq.${safeAssignedAt},id.lt.${cursorId})`)
+    }
+
+    const assignRes = await assignQuery
+    if (assignRes.error) {
+      throw new Error(assignRes.error.message)
+    }
+
+    const batch = (assignRes.data ?? []) as TechnicianAssignmentRow[]
+    assignmentRowsRaw.push(...batch)
+
+    if (batch.length < QUERY_PAGE_SIZE) {
+      break
+    }
+
+    const last = batch[batch.length - 1]
+    cursorAssignedAt = last?.assigned_at ?? null
+    cursorId = typeof last?.id === 'number' ? last.id : null
+    if (!cursorAssignedAt || cursorId === null) break
+  }
+
+  return assignmentRowsRaw
+}
 
 function formatDateTime(value: string | null | undefined): string {
   if (!value) return '—'
@@ -532,7 +668,11 @@ function calculateTechnicianIncome(
 }
 
 // ── Yesterday Report Generator ────────────────────────────────────────────────
-async function fetchYesterdayReportData(pvPct: number, evPct: number): Promise<{ rows: YesterdayRow[]; date: string }> {
+async function fetchYesterdayReportData(
+  pvPct: number,
+  evPct: number,
+  scope: TechnicianLoadScope,
+): Promise<{ rows: YesterdayRow[]; date: string }> {
   // Yesterday in IST
   const now = new Date()
   const istOffset = 5.5 * 60 * 60 * 1000
@@ -544,18 +684,9 @@ async function fetchYesterdayReportData(pvPct: number, evPct: number): Promise<{
   const toTs = dateStr + 'T23:59:59+05:30'
   const technicianCodeSet = await fetchTechnicianCodeSet()
 
-  // Fetch assignments for yesterday
-  const assignRes = await supabase
-    .from(TECHNICIAN_INCOME_ASSIGNMENTS_SOURCE)
-    .select('*')
-    .gte('assigned_at', fromTs)
-    .lte('assigned_at', toTs)
-    .order('assigned_at', { ascending: true })
-
-  if (assignRes.error) throw new Error(assignRes.error.message)
   const assignmentRows = dedupeLatestAssignments(
-    ((assignRes.data ?? []) as TechnicianAssignmentRow[])
-      .filter((row) => technicianCodeSet.has(normalizeJobCardNumber(row.technician_code))),
+    ((await fetchIncomeAssignments({ scope, assignedFrom: fromTs, assignedTo: toTs }))
+      .filter((row) => technicianCodeSet.has(normalizeJobCardNumber(row.technician_code)))),
   )
 
   const completedJcs = Array.from(new Set(
@@ -755,47 +886,14 @@ export default function TechnicianPage() {
       // ───────────────────────────────────────────────────────────────────────
 
       const technicianCodeSet = await fetchTechnicianCodeSet()
+      const loadScope = await resolveTechnicianLoadScope(userId, role, technicianCodeSet)
+      const assignedAtWindow = buildAssignedAtWindow(dateRange)
 
-      // Fetch all technician assignments for the date range
-      const assignmentRowsRaw: TechnicianAssignmentRow[] = []
-      let cursorAssignedAt: string | null = null
-      let cursorId: number | null = null
-
-      while (true) {
-        // Fetch technician assignments (no join - will map invoice_date separately)
-        let assignQuery = supabase
-          .from(TECHNICIAN_INCOME_ASSIGNMENTS_SOURCE)
-          .select('*')
-          .order('assigned_at', { ascending: false })
-          .order('id', { ascending: false })
-          .limit(QUERY_PAGE_SIZE)
-
-        if (cursorAssignedAt && Number.isFinite(cursorId)) {
-          const safeAssignedAt = cursorAssignedAt.replace(/'/g, "''")
-          assignQuery = assignQuery.or(`assigned_at.lt.${safeAssignedAt},and(assigned_at.eq.${safeAssignedAt},id.lt.${cursorId})`)
-        }
-
-        const assignRes = await assignQuery
-
-        if (assignRes.error) {
-          setError(assignRes.error.message)
-          setAssignments([])
-          setLoading(false)
-          return
-        }
-
-        const batch = (assignRes.data ?? []) as TechnicianAssignmentRow[]
-        assignmentRowsRaw.push(...batch)
-
-        if (batch.length < QUERY_PAGE_SIZE) {
-          break
-        }
-
-        const last = batch[batch.length - 1]
-        cursorAssignedAt = last?.assigned_at ?? null
-        cursorId = typeof last?.id === 'number' ? last.id : null
-        if (!cursorAssignedAt || cursorId === null) break
-      }
+      const assignmentRowsRaw = await fetchIncomeAssignments({
+        scope: loadScope,
+        assignedFrom: assignedAtWindow.from,
+        assignedTo: assignedAtWindow.to,
+      })
 
       // Build map of invoice_date by job_card_number
       const jcNumbers = Array.from(new Set(
@@ -1047,7 +1145,22 @@ export default function TechnicianPage() {
   async function handleGenerateYesterdayReport() {
     setGeneratingReport(true)
     try {
-      const { rows, date } = await fetchYesterdayReportData(pvSharePercent, evSharePercent)
+      const authRes = await supabase.auth.getUser()
+      const userId = authRes.data.user?.id
+      if (!userId) {
+        throw new Error('Not signed in')
+      }
+
+      const profileRes = await supabase
+        .from('users')
+        .select('role')
+        .eq('id', userId)
+        .maybeSingle()
+
+      const role = String((profileRes.data as { role?: string | null } | null)?.role ?? '')
+      const technicianCodeSet = await fetchTechnicianCodeSet()
+      const scope = await resolveTechnicianLoadScope(userId, role, technicianCodeSet)
+      const { rows, date } = await fetchYesterdayReportData(pvSharePercent, evSharePercent, scope)
       const waText = buildWAText(rows, date, pvSharePercent, evSharePercent)
       setYesterdayReport({ rows, date, waText })
     } catch (e: any) {
