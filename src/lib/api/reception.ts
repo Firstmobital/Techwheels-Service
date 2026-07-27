@@ -164,7 +164,7 @@ const RECEPTION_SUMMARY_FIELD_COLUMNS = [
   'sa_employee_code',
   'sa_display_name',
   'sa_name',
-  'fuel_type',
+  'portal',
   'reg_number',
   'model',
   'owner_name',
@@ -390,56 +390,56 @@ function sanitizeFileNamePart(value: string): string {
 }
 
 async function enrichEntriesWithEmployeeBranch(entries: ReceptionEntryRow[]): Promise<ReceptionEntryRow[]> {
-  // Find entries missing derived metadata from employee master.
-  const entriesNeedingEnrichment = entries.filter(
-    (entry) => (!entry.branch || !entry.fuel_type) && entry.sa_employee_code,
+  const entriesNeedingEmployeeLookup = entries.filter(
+    (entry) => (!entry.branch || !(entry.fuel_type || entry.portal)) && entry.sa_employee_code,
   )
-  
-  if (entriesNeedingEnrichment.length === 0) {
-    return entries
+
+  let employeeMetaMap = new Map<string, { location: string; fuelType: string }>()
+
+  if (entriesNeedingEmployeeLookup.length > 0) {
+    const employeeCodes = Array.from(
+      new Set(entriesNeedingEmployeeLookup.map((e) => e.sa_employee_code).filter(Boolean) as string[]),
+    )
+
+    const { data: employees, error } = await supabase
+      .from('employee_master')
+      .select('employee_code, location, fuel_type')
+      .in('employee_code', employeeCodes)
+
+    if (!error && employees) {
+      employeeMetaMap = new Map(
+        employees.map((emp: { employee_code?: string; location?: string | null; fuel_type?: string | null }) => [
+          String(emp.employee_code ?? '').trim().toUpperCase(),
+          {
+            location: String(emp.location ?? '').trim(),
+            fuelType: String(emp.fuel_type ?? '').trim(),
+          },
+        ]),
+      )
+    }
   }
 
-  // Batch fetch employee metadata for all employee codes.
-  const employeeCodes = Array.from(
-    new Set(entriesNeedingEnrichment.map(e => e.sa_employee_code).filter(Boolean) as string[]),
-  )
-
-  const { data: employees, error } = await supabase
-    .from('employee_master')
-    .select('employee_code, location, fuel_type')
-    .in('employee_code', employeeCodes)
-
-  if (error || !employees) {
-    return entries
-  }
-
-  // Build metadata map keyed by employee_code.
-  const employeeMetaMap = new Map(
-    employees.map((emp: { employee_code?: string; location?: string | null; fuel_type?: string | null }) => [
-      String(emp.employee_code ?? '').trim().toUpperCase(),
-      {
-        location: String(emp.location ?? '').trim(),
-        fuelType: String(emp.fuel_type ?? '').trim(),
-      },
-    ]),
-  )
-
-  // Enrich entries
   return entries.map((entry) => {
-    if (!entry.sa_employee_code) return entry
+    let branch = entry.branch
+    let fuelType = entry.fuel_type
 
-    const meta = employeeMetaMap.get(entry.sa_employee_code.trim().toUpperCase())
-    if (!meta) return entry
+    if (entry.sa_employee_code) {
+      const meta = employeeMetaMap.get(entry.sa_employee_code.trim().toUpperCase())
+      if (meta) {
+        branch = meta.location || branch || null
+        fuelType = meta.fuelType || fuelType || entry.portal || null
+      }
+    }
 
-    // Employee Master mapping is the winning source when present.
-    const nextBranch = meta.location || entry.branch || null
-    const nextFuelType = meta.fuelType || entry.fuel_type || null
+    if (!fuelType && entry.portal) {
+      fuelType = entry.portal
+    }
 
-    if (nextBranch !== entry.branch || nextFuelType !== entry.fuel_type) {
+    if (branch !== entry.branch || fuelType !== entry.fuel_type) {
       return {
         ...entry,
-        branch: nextBranch,
-        fuel_type: nextFuelType,
+        branch,
+        fuel_type: fuelType,
       }
     }
 
