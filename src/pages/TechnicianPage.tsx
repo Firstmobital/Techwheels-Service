@@ -103,6 +103,65 @@ const NOT_REQUIRED_TECHNICIAN_CODE = '__NOT_REQUIRED__'
 type TechnicianLoadScope = {
   broadAccess: boolean
   technicianCodes: string[]
+  jobCardNumbers: string[] | null
+}
+
+async function fetchSaOwnedJobCardNumbers(saEmployeeCode: string): Promise<string[]> {
+  const normalizedSaCode = String(saEmployeeCode ?? '').trim()
+  if (!normalizedSaCode) return []
+
+  const res = await supabase
+    .from('service_reception_entries')
+    .select('jc_number')
+    .eq('sa_employee_code', normalizedSaCode)
+    .not('jc_number', 'is', null)
+
+  if (res.error) {
+    throw new Error(`Failed to load SA job cards: ${res.error.message}`)
+  }
+
+  return Array.from(new Set(
+    (res.data ?? [])
+      .map((row) => String((row as { jc_number?: string | null }).jc_number ?? '').trim())
+      .filter(Boolean),
+  ))
+}
+
+async function fetchIncomeAssignmentsByJobCards(options: {
+  jobCardNumbers: string[]
+  assignedFrom?: string
+  assignedTo?: string
+}): Promise<TechnicianAssignmentRow[]> {
+  const { jobCardNumbers, assignedFrom, assignedTo } = options
+  const rows: TechnicianAssignmentRow[] = []
+
+  for (let i = 0; i < jobCardNumbers.length; i += IN_FILTER_BATCH_SIZE) {
+    const jcBatch = jobCardNumbers.slice(i, i + IN_FILTER_BATCH_SIZE)
+    if (jcBatch.length === 0) continue
+
+    let assignQuery = supabase
+      .from(TECHNICIAN_INCOME_ASSIGNMENTS_SOURCE)
+      .select('*')
+      .in('job_card_number', jcBatch)
+      .order('assigned_at', { ascending: false })
+      .order('id', { ascending: false })
+
+    if (assignedFrom) {
+      assignQuery = assignQuery.gte('assigned_at', assignedFrom)
+    }
+    if (assignedTo) {
+      assignQuery = assignQuery.lte('assigned_at', assignedTo)
+    }
+
+    const assignRes = await assignQuery
+    if (assignRes.error) {
+      throw new Error(assignRes.error.message)
+    }
+
+    rows.push(...((assignRes.data ?? []) as TechnicianAssignmentRow[]))
+  }
+
+  return rows
 }
 
 function shiftCalendarDate(dateStr: string, days: number): string {
@@ -130,7 +189,7 @@ async function resolveTechnicianLoadScope(
   technicianCodeSet: Set<string>,
 ): Promise<TechnicianLoadScope> {
   if (isPlatformAdminRole(role)) {
-    return { broadAccess: true, technicianCodes: [] }
+    return { broadAccess: true, technicianCodes: [], jobCardNumbers: null }
   }
 
   const permRes = await supabase.rpc('get_all_my_permissions')
@@ -145,14 +204,15 @@ async function resolveTechnicianLoadScope(
   )
 
   if (moduleNames.has('floor_incharge') || moduleNames.has('sa_tracker')) {
-    return { broadAccess: true, technicianCodes: [] }
+    return { broadAccess: true, technicianCodes: [], jobCardNumbers: null }
   }
 
   const linksRes = await supabase
     .from('user_employee_links')
-    .select('employee_code')
+    .select('employee_code, is_primary')
     .eq('user_id', userId)
     .eq('is_active', true)
+    .order('is_primary', { ascending: false })
 
   if (linksRes.error) {
     throw new Error(`Failed to load employee links: ${linksRes.error.message}`)
@@ -167,7 +227,22 @@ async function resolveTechnicianLoadScope(
       }),
   ))
 
-  return { broadAccess: false, technicianCodes }
+  if (technicianCodes.length > 0) {
+    return { broadAccess: false, technicianCodes, jobCardNumbers: null }
+  }
+
+  if (moduleNames.has('service_advisor')) {
+    const saEmployeeCode = String(
+      (linksRes.data ?? []).find((row) => (row as { is_primary?: boolean | null }).is_primary)?.employee_code
+      ?? (linksRes.data ?? [])[0]?.employee_code
+      ?? '',
+    ).trim()
+
+    const jobCardNumbers = await fetchSaOwnedJobCardNumbers(saEmployeeCode)
+    return { broadAccess: false, technicianCodes: [], jobCardNumbers }
+  }
+
+  return { broadAccess: false, technicianCodes: [], jobCardNumbers: [] }
 }
 
 async function fetchIncomeAssignments(options: {
@@ -176,6 +251,17 @@ async function fetchIncomeAssignments(options: {
   assignedTo?: string
 }): Promise<TechnicianAssignmentRow[]> {
   const { scope, assignedFrom, assignedTo } = options
+
+  if (scope.jobCardNumbers !== null) {
+    if (scope.jobCardNumbers.length === 0) {
+      return []
+    }
+    return fetchIncomeAssignmentsByJobCards({
+      jobCardNumbers: scope.jobCardNumbers,
+      assignedFrom,
+      assignedTo,
+    })
+  }
 
   if (!scope.broadAccess && scope.technicianCodes.length === 0) {
     return []
