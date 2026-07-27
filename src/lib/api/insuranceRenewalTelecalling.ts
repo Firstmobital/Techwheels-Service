@@ -1,5 +1,6 @@
 import { supabase } from '../supabase'
 import { AUTODOC_BUCKET } from '../autodocStorage'
+import { getDealerContext } from './auth'
 import { fail, ok, type ApiResult } from './types'
 
 export type InsuranceRenewalQuoteUpload = {
@@ -25,13 +26,27 @@ export async function uploadInsuranceRenewalQuote(
   const extension = file.name.includes('.') ? file.name.split('.').pop() : 'bin'
   const safeName = sanitizeFileNamePart(file.name || `quote.${extension}`)
   const regPart = sanitizeFileNamePart(registrationNumber?.trim() || 'unknown-reg')
-  const storagePath = `insurance-renewal-quotes/${regPart}/${assignmentId}/${Date.now()}_${safeName}`
+  const dealerCtx = await getDealerContext()
+  if (dealerCtx.error || !dealerCtx.data?.dealerCode?.trim()) {
+    return fail(dealerCtx.error || 'Your account has no dealer code — quote upload requires dealer access. Ask admin to link your employee profile.')
+  }
+  const dealerCode = sanitizeFileNamePart(dealerCtx.data.dealerCode.trim())
+  // autodoc bucket RLS requires first path segment = my_dealer_code() (same as reception/documents).
+  const storagePath = `${dealerCode}/insurance-renewal-quotes/${regPart}/${assignmentId}/${Date.now()}_${safeName}`
 
   const uploadRes = await supabase.storage
     .from(AUTODOC_BUCKET)
     .upload(storagePath, file, { upsert: true, contentType: file.type || 'application/octet-stream' })
 
-  if (uploadRes.error) return fail(uploadRes.error.message)
+  if (uploadRes.error) {
+    const msg = uploadRes.error.message
+    if (/row-level security|violates.*policy|Unauthorized/i.test(msg)) {
+      return fail(
+        'Storage upload blocked by dealer permissions. Ensure your account has a dealer code assigned, then hard-refresh and retry. If it persists, contact admin.',
+      )
+    }
+    return fail(msg)
+  }
 
   const supabaseUrl = (import.meta.env.VITE_SUPABASE_URL as string | undefined)?.replace(/\/$/, '')
   const sessionRes = await supabase.auth.getSession()
@@ -50,15 +65,17 @@ export async function uploadInsuranceRenewalQuote(
       bucket_id: AUTODOC_BUCKET,
       object_name: storagePath,
       assignment_id: assignmentId,
+      registration_no: registrationNumber?.trim() || undefined,
       file_type: 'insurance_quote',
       file_size_mb: Number((file.size / (1024 * 1024)).toFixed(3)),
     }),
   })
 
-  const drivePayload = await driveRes.json().catch(() => ({} as { ok?: boolean; error?: string; db_update_error?: string }))
+  const drivePayload = await driveRes.json().catch(() => ({} as { ok?: boolean; error?: string; error_code?: string; db_update_error?: string }))
   if (!driveRes.ok || drivePayload?.ok === false || drivePayload?.error) {
     const detail = drivePayload?.db_update_error ? ` (${drivePayload.db_update_error})` : ''
-    return fail(`${drivePayload?.error || `Universal drive upload failed (${driveRes.status})`}${detail}`)
+    const code = drivePayload?.error_code ? ` [${drivePayload.error_code}]` : ''
+    return fail(`${drivePayload?.error || `Universal drive upload failed (${driveRes.status})`}${code}${detail}`)
   }
 
   const { data, error } = await supabase

@@ -22,6 +22,8 @@ type UploadBody = {
   fileType?: string
   file_size_mb?: number
   fileSizeMb?: number
+  registration_no?: string
+  registrationNo?: string
 }
 
 type DriveUploadResult = {
@@ -95,7 +97,8 @@ function normalizeBody(body: UploadBody) {
   const assignmentId = String(body.assignment_id ?? body.assignmentId ?? '').trim()
   const fileType = String(body.file_type ?? body.fileType ?? body.doc_type ?? body.docType ?? '').trim()
   const fileSizeMb = Number(body.file_size_mb ?? body.fileSizeMb ?? 0)
-  return { resourceType, bucketId, objectName, jobCardId, receptionEntryId, resourceId, assignmentId, fileType, fileSizeMb }
+  const registrationNoHint = String(body.registration_no ?? body.registrationNo ?? '').trim()
+  return { resourceType, bucketId, objectName, jobCardId, receptionEntryId, resourceId, assignmentId, fileType, fileSizeMb, registrationNoHint }
 }
 
 function toYmd(input: string | null | undefined): string {
@@ -699,7 +702,7 @@ Deno.serve(async (req) => {
 
       const { data: customerRow, error: customerErr } = await supabase
         .from('all_service_data')
-        .select('vehicle_registration_number')
+        .select('vehicle_registration_number, chassis_no')
         .eq('id', assignmentRow.customer_id)
         .maybeSingle()
 
@@ -709,11 +712,13 @@ Deno.serve(async (req) => {
 
       registrationNo = String(customerRow?.vehicle_registration_number ?? '').trim()
       if (!registrationNo) {
-        return json(400, {
-          ok: false,
-          error: 'Registration number not found for insurance renewal assignment',
-          error_code: 'REGISTRATION_NOT_FOUND',
-        })
+        registrationNo = body.registrationNoHint
+      }
+      if (!registrationNo) {
+        registrationNo = String(customerRow?.chassis_no ?? '').trim()
+      }
+      if (!registrationNo) {
+        registrationNo = `assignment-${assignmentIdNum}`
       }
 
       rowId = String(assignmentRow.id)
