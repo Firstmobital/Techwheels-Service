@@ -1,5 +1,6 @@
 import { supabase } from '../supabase'
 import { AUTODOC_BUCKET } from '../autodocStorage'
+import { isServiceAdvisorRole } from '../businessRoles'
 import { getDealerContext } from './auth'
 import { fail, ok, type ApiResult } from './types'
 
@@ -949,10 +950,8 @@ export async function listReceptionEmployees(): Promise<ApiResult<ReceptionEmplo
 
   if (error) return fail(error)
 
-  const allowedRoles = new Set(['sa', 'service advisor', 'service_advisor'])
-
   const options = (data ?? [])
-    .filter((row) => allowedRoles.has(String((row as { role?: string | null }).role ?? '').trim().toLowerCase()))
+    .filter((row) => isServiceAdvisorRole((row as { role?: string | null }).role))
     .map((row) => ({
       employee_code: String(row.employee_code ?? '').trim(),
       employee_name: String(row.employee_name ?? '').trim(),

@@ -4,6 +4,13 @@ import { supabase } from '../lib/supabase'
 import { getDealerContext, getDealerScopeContext } from '../lib/api'
 import { AUTODOC_BUCKET } from '../lib/autodocStorage'
 import { isBodyshopDepartment } from '../lib/department'
+import {
+  isBodyshopFloorInchargeRole,
+  isBodyshopSaRole,
+  isBodyshopSsaRole,
+  isBodyshopSurveyRole,
+  normalizeAccessToken,
+} from '../lib/businessRoles'
 import DateRangeFilter, { currentMonthRange, type DateRange } from '../components/DateRangeFilter'
 import { fetchVehicleFromRcLookup } from '../lib/api/rcLookup'
 import {
@@ -130,30 +137,6 @@ type RtoInsuranceCacheRow = {
 }
 
 const INSURANCE_TYPE_OPTIONS = ['TMI', 'Non-TMI'] as const
-
-function normalizeAccessToken(value: string | null | undefined): string {
-  return String(value ?? '').trim().toUpperCase().replace(/[_\s]+/g, ' ')
-}
-
-function isBodyshopSaRole(value: string | null | undefined): boolean {
-  const normalized = normalizeAccessToken(value)
-  return normalized === 'SA' || normalized === 'SERVICE ADVISOR'
-}
-
-function isBodyshopSsaRole(value: string | null | undefined): boolean {
-  const normalized = normalizeAccessToken(value)
-  return normalized === 'EDP' || normalized === 'SSA' || normalized === 'SENIOR SERVICE ADVISOR'
-}
-
-function isBodyshopSurveyRole(value: string | null | undefined): boolean {
-  const normalized = normalizeAccessToken(value)
-  return normalized === 'SURVEY' || normalized === 'SURVEYOR'
-}
-
-function isBodyshopFloorInchargeRole(value: string | null | undefined): boolean {
-  const normalized = normalizeAccessToken(value)
-  return normalized === 'FLOOR INCHARGE'
-}
 
 function getIntakeMilestones(card: RepairCard, intakePhotoCount: number, hasKmReading: boolean) {
   const stage1Done = isValidCustomerType(card.customer_type) && hasKmReading

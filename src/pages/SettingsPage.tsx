@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { getDealerSettings, saveDealerSetting } from '../lib/api/dealerSettings'
 import * as XLSX from 'xlsx'
 import { normalizeDepartmentDisplay } from '../lib/department'
+import { validateAndCanonicalizeRoles } from '../lib/businessRoles'
 import { supabase } from '../lib/supabase'
 import Icon from '../components/Icon'
 import {
@@ -1291,15 +1292,23 @@ export default function SettingsPage() {
 
     try {
       const parsedRows = await parseEmployeeWorkbook(file)
+      const canonicalRows = parsedRows.map((row) => {
+        if (!row.role) return row
+        const validated = validateAndCanonicalizeRoles(row.role)
+        if (!validated.ok) {
+          throw new Error(`${row.employee_code}: ${validated.errors.join(' ')}`)
+        }
+        return { ...row, role: validated.canonical }
+      })
       const { error: upsertError } = await supabase
         .from('employee_master')
-        .upsert(parsedRows, { onConflict: 'employee_code' })
+        .upsert(canonicalRows, { onConflict: 'employee_code' })
 
       if (upsertError) {
         throw new Error(upsertError.message)
       }
 
-      setMessage(`Uploaded ${parsedRows.length.toLocaleString()} employee rows.`)
+      setMessage(`Uploaded ${canonicalRows.length.toLocaleString()} employee rows.`)
       await fetchEmployees()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to upload employee file.')
@@ -1337,6 +1346,16 @@ export default function SettingsPage() {
       setError('Employee code and employee name are required.')
       setSavingCode(null)
       return false
+    }
+
+    if (employee.role?.trim()) {
+      const validated = validateAndCanonicalizeRoles(employee.role)
+      if (!validated.ok) {
+        setError(validated.errors.join(' '))
+        setSavingCode(null)
+        return false
+      }
+      updatePayload.role = validated.canonical
     }
 
     const { error: saveError } = await supabase
@@ -1382,6 +1401,15 @@ export default function SettingsPage() {
     if (!payload.employee_code || !payload.employee_name) {
       setError('SA CODE and SA NAME are required to add an employee.')
       return
+    }
+
+    if (payload.role) {
+      const validated = validateAndCanonicalizeRoles(payload.role)
+      if (!validated.ok) {
+        setError(validated.errors.join(' '))
+        return
+      }
+      payload.role = validated.canonical
     }
 
     const { error: addError } = await supabase
@@ -2078,7 +2106,7 @@ export default function SettingsPage() {
 
           <div className="space-y-4 px-5 py-4">
             <div className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-800">
-              Governance: This Role column is the Business Role source of truth (for example SA, CRM, TECHNICIAN, FLOOR INCHARGE, SM, GM). Platform Role is managed in Admin → Users.
+              Governance: Business Role supports comma-separated values (example: PAINTER, RUBBING). Platform Role is managed in Admin → Users.
             </div>
             <div className="flex flex-col gap-3 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 sm:flex-row sm:items-center sm:justify-between">
               <div className="relative w-full sm:max-w-sm">

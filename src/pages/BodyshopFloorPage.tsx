@@ -5,6 +5,7 @@ import Icon from '../components/Icon'
 import { AUTODOC_BUCKET } from '../lib/autodocStorage'
 import { isBodyshopDepartment } from '../lib/department'
 import { getDealerContext } from '../lib/api'
+import { parseBodyshopFloorRoles } from '../lib/businessRoles'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -713,21 +714,6 @@ function emptyAdditionalApprovalDraftPart(): AdditionalApprovalDraftPart {
   }
 }
 
-function normRole(r: string | null): BSRole | null {
-  const v = String(r ?? '').trim().toUpperCase()
-  if (v === 'DENTOR')          return 'DENTOR'
-  if (v === 'PAINTER')         return 'PAINTER'
-  if (v === 'TECHNICIAN')      return 'TECHNICIAN'
-  if (v === 'FLOOR INCHARGE')  return 'FLOOR_INCHARGE'
-  if (v === 'DENTOR HELPER')   return 'DENTOR_HELPER'
-  if (v === 'PAINTER HELPER')  return 'PAINTER_HELPER'
-  if (v === 'RUBBING')         return 'RUBBING'
-  if (v === 'EDP')             return 'EDP'
-  if (v === 'PARTS INCHARGE') return 'PARTS_INCHARGE'
-  if (v === 'PARTS_INCHARGE') return 'PARTS_INCHARGE'
-  return null
-}
-
 function jcKey(car: AccidentCar): string {
   const jc = (car.jc_number ?? '').trim().toUpperCase()
   if (jc) return jc
@@ -1064,10 +1050,12 @@ export default function BodyshopFloorPage() {
   const empByRole = useMemo<Record<BSRole, Employee[]>>(() => {
     const m: Record<BSRole, Employee[]> = { DENTOR: [], PAINTER: [], TECHNICIAN: [], FLOOR_INCHARGE: [], DENTOR_HELPER: [], PAINTER_HELPER: [], RUBBING: [], EDP: [], PARTS_INCHARGE: [] }
     employees.forEach((e) => {
-      const r = normRole(e.role)
-      if (!r) return
-      if (!isEmployeeEligibleForRole(r, e.department)) return
-      m[r].push(e)
+      const roles = parseBodyshopFloorRoles(e.role)
+      if (roles.length === 0) return
+      for (const r of roles) {
+        if (!isEmployeeEligibleForRole(r, e.department)) continue
+        m[r].push(e)
+      }
     })
     ALL_ROLES.forEach((r) => m[r].sort((a, b) => a.employee_name.localeCompare(b.employee_name)))
     return m
@@ -1076,10 +1064,12 @@ export default function BodyshopFloorPage() {
   const empBySupportRole = useMemo<Record<SupportRole, Employee[]>>(() => {
     const m: Record<SupportRole, Employee[]> = { DENTOR: [], PAINTER: [], TECHNICIAN: [], FLOOR_INCHARGE: [], DENTOR_HELPER: [], PAINTER_HELPER: [], RUBBING: [], EDP: [], PARTS_INCHARGE: [] }
     employees.forEach((e) => {
-      const r = normRole(e.role)
-      if (!r) return
-      if (!isEmployeeEligibleForRole(r, e.department)) return
-      m[r].push(e)
+      const roles = parseBodyshopFloorRoles(e.role)
+      if (roles.length === 0) return
+      for (const r of roles) {
+        if (!isEmployeeEligibleForRole(r, e.department)) continue
+        m[r].push(e)
+      }
     })
     ALL_ROLES.forEach((r) => m[r].sort((a, b) => a.employee_name.localeCompare(b.employee_name)))
     return m

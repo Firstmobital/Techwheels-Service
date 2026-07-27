@@ -4,10 +4,10 @@
 **Created:** 2026-07-18  
 **Priority:** HIGH  
 **Owner:** RBAC Team + Platform Team  
-**Status:** Active (Audit complete; implementation not started)  
+**Status:** Active (Implementation in progress — app code done; DB migration pending apply)  
 **Scope:** Settings → Employee Master comma-separated Business Roles; shared TS + SQL helpers; Settings validation; web + mobile + Supabase RLS parity  
 **Parent governance:** Extends (does not replace) `RBAC-001_MASTER_PLAN_ACTIVE.md` Business Role vs Platform Role split  
-**Last Updated:** 2026-07-18
+**Last Updated:** 2026-07-27
 
 ---
 
@@ -48,13 +48,12 @@ Session resume protocol:
 
 ---
 
-## Authoritative Inputs Used (Audit 2026-07-18)
+## Authoritative Inputs Used (Audit 2026-07-18; dump refresh 2026-07-27)
 
 | Source | Path | Used for |
 |---|---|---|
-| Schema / functions / RLS | `supabase/backups/full_metadata.sql` | All SQL inventory |
-| Row data | `supabase/backups/full_dump.sql` | **Empty** `employee_master` TABLE DATA in workspace |
-| Row data (expected) | `local_folder/backups/full_database.sql` or `chunks/full_database.sql.part_*` | **Not present in workspace** — live role distribution not verified |
+| Schema / functions / RLS | `supabase/backups/full_metadata.sql` | All SQL inventory; **production truth as of 2026-07-27 dump** |
+| Row data | `supabase/backups/full_dump.sql` | Employee row samples (if present) |
 | Web app | `src/**` | Frontend inventory |
 | Mobile app | `mobile/src/**` | Mobile parity inventory |
 | Edge functions | `supabase/functions/**` | No `employee_master.role` reads found |
@@ -66,6 +65,69 @@ Detailed audit evidence:
 
 Regression matrix (QA):  
 `docs/Implementation_plans/webversion/categories/rbac/evidence/RBAC-003_BUSINESS_ROLES_CSV_TEST_MATRIX.md`
+
+---
+
+## Production DB Audit (from `full_metadata.sql` refresh 2026-07-27)
+
+Dump-backed checks (not guessed):
+
+| Check | Result in live dump |
+|---|---|
+| `employee_business_roles()` exists | **NO** — RBAC-003 SQL not applied |
+| `employee_has_business_role()` exists | **NO** |
+| `normalize_business_role_token()` exists | **NO** |
+| `user_has_crm_dealer_scope` body | `lower(btrim(em.role)) = 'crm'` — **exact match (pre-RBAC-003)** |
+| `user_has_technician_code` body | `lower(btrim(em.role)) = 'technician'` — **exact match** |
+| Floor incharge scope functions | `lower(btrim(fi.role)) IN ('floor incharge','floor_incharge')` — **exact match** |
+| `can_access_bodyshop_surveyor_settings` / `can_view_bodyshop_surveyor_catalog` | `UPPER(s.role) IN ('SA','EDP','SURVEY')` — **exact match on full CSV string** |
+| `is_income_assignment_eligible` | `upper(rs.employee_role) = upper(em.role)` — **exact match** |
+| `generate_complaint_link` SM/GM gate | `lower(em.role) = ANY (ARRAY['sm','gm'])` — **exact match** |
+| `bodyshop_repair_card_documents_*_rbac_v4` (×3) | `upper(s.role) = ANY (ARRAY['SA','EDP','SURVEY'])` — **exact match** |
+| `service_reception_*` inline SM/GM EXISTS (×4 blocks) | `lower(em.role) = ANY (ARRAY['sm','gm'])` — **exact match; not in current migration file** |
+| `20260727123000` technician RLS fix | **Already applied** — `technician_assignments_select_rbac` includes `sa_tracker`; SA branch skips when floor_incharge/sa_tracker present |
+| `20260727120000` index | **Already applied** — `idx_technician_assignments_code_assigned_at` present |
+
+**Test case `3000840_427` / `PAINTER,RUBBING`:** Bodyshop Floor dropdown buckets are **frontend-only** (`BodyshopFloorPage.tsx` / mobile `bodyshop-floor.tsx`). SQL migration is **not** required for that specific UI test, but **is** required for CRM/SA/technician/floor-incharge RLS parity when roles are comma-separated.
+
+---
+
+## Migration Runbook (confirmed from dump 2026-07-27)
+
+| Migration file | Apply now? | Reason |
+|---|---|---|
+| `supabase/migrations/20260727120000_technician_assignments_code_assigned_at_index.sql` | **No — already live** | Index `idx_technician_assignments_code_assigned_at` in dump |
+| `supabase/migrations/20260727123000_fix_technician_assignments_sa_rls_priority.sql` | **No — already live** | Policy bodies match dump |
+| **`supabase/migrations/20260727140000_business_roles_csv_helpers.sql`** | **YES — run this** | RBAC-003 helpers + 11 function rewrites + 3 bodyshop document policies + `generate_complaint_link` |
+
+**How to apply:**
+
+```bash
+# From repo root, linked to production project:
+supabase db push
+
+# Or paste the full contents of 20260727140000_business_roles_csv_helpers.sql
+# into Supabase Dashboard → SQL Editor → Run
+```
+
+**Post-apply verification (sql_checks — create/run after apply):**
+
+```sql
+SELECT public.employee_business_roles('PAINTER,RUBBING');          -- expect {PAINTER,RUBBING}
+SELECT public.employee_has_business_role('SA, CRM', 'CRM');          -- true
+SELECT public.employee_has_business_role('PAINTER,RUBBING', 'PAINTER'); -- true
+SELECT to_regprocedure('public.employee_business_roles(text)');      -- non-null
+```
+
+**Known gap after `20260727140000` (follow-up migration BR-009):**
+
+- `service_reception_select_crm_dealer_scope` and `service_reception_update_sa` still have **inline** `lower(em.role) = ANY (ARRAY['sm','gm'])` in dump — **not rewritten** in `20260727140000`. Multi-role `SA, SM` users may still fail SM/GM reception RLS until BR-009 ships (extract `user_has_sm_gm_scope_for_sa_code()` or inline `employee_has_any_business_role` in those policies).
+
+**Deferred (not blocking PAINTER,RUBBING test):**
+
+- `list_employees_with_business_role` RPC (BR-011) — web/mobile use client-side `hasBusinessRole` filter instead
+- `role_codes text[]` + GIN trigger (BR-012)
+- `scripts/03_backfill_seed_user_employee_links.sql` update (BR-017)
 
 ---
 
@@ -136,9 +198,9 @@ Option B adds multi-role **within one employee_code** without requiring duplicat
 
 ### 3.2 Shared SQL contract
 
-**Migration:** `supabase/migrations/20260718100000_business_roles_csv_helpers.sql`  
-**Checks:** `supabase/sql_checks/20260718100000_business_roles_csv_helpers_checks.sql`  
-**Ledger:** `DBL-00XX` in `docs/shared/reference/DB_CHANGE_LEDGER.md`
+**Migration:** `supabase/migrations/20260727140000_business_roles_csv_helpers.sql`  
+**Checks:** `supabase/sql_checks/20260727140000_business_roles_csv_helpers_checks.sql` *(pending)*  
+**Ledger:** `DBL-00XX` in `docs/shared/reference/DB_CHANGE_LEDGER.md` *(pending)*
 
 | Object | Purpose |
 |---|---|
@@ -254,33 +316,34 @@ Legend: `DONE` | `IN PROGRESS` | `PENDING` | `BLOCKED`
 
 | ID | Phase | Task | Status | Owner | Updated | Evidence |
 |---|---|---|---|---|---|---|
-| BR-001 | 0 | DB ledger row DBL-00XX PROPOSED | PENDING | Platform | 2026-07-18 | `DB_CHANGE_LEDGER.md` |
+| BR-001 | 0 | DB ledger row DBL-00XX PROPOSED | PENDING | Platform | 2026-07-27 | `DB_CHANGE_LEDGER.md` |
 | BR-002 | 0 | Alias catalog sign-off with business | PENDING | RBAC + Product | 2026-07-18 | This plan §3.3 |
-| BR-003 | 1 | Create `src/lib/businessRoles.ts` | PENDING | Web | 2026-07-18 | — |
-| BR-004 | 1 | Create `mobile/src/lib/businessRoles.ts` | PENDING | Mobile | 2026-07-18 | — |
+| BR-003 | 1 | Create `src/lib/businessRoles.ts` | DONE | Web | 2026-07-27 | `src/lib/businessRoles.ts` |
+| BR-004 | 1 | Create `mobile/src/lib/businessRoles.ts` | DONE | Mobile | 2026-07-27 | `mobile/src/lib/businessRoles.ts` |
 | BR-005 | 1 | Create `src/lib/businessRoles.test.ts` | PENDING | Web | 2026-07-18 | — |
-| BR-006 | 1 | SQL helpers migration (helpers only) | PENDING | Platform | 2026-07-18 | `20260718100000_*.sql` |
-| BR-007 | 1 | SQL checks file | PENDING | Platform | 2026-07-18 | `sql_checks/20260718100000_*` |
-| BR-008 | 2 | Rewrite F2–F12 SQL functions | PENDING | Platform | 2026-07-18 | Migration part 2 |
-| BR-009 | 2 | Rewrite inline SM/GM RLS on service_reception | PENDING | Platform | 2026-07-18 | Migration part 2 |
-| BR-010 | 2 | Rewrite bodyshop document RLS inline s.role | PENDING | Platform | 2026-07-18 | Migration part 2 |
-| BR-011 | 2 | Add `list_employees_with_business_role` RPC | PENDING | Platform | 2026-07-18 | Migration |
+| BR-006 | 1 | SQL helpers migration (helpers + consumers) | IN PROGRESS | Platform | 2026-07-27 | `20260727140000_business_roles_csv_helpers.sql` — **file ready; not applied in dump** |
+| BR-007 | 1 | SQL checks file | PENDING | Platform | 2026-07-27 | Post-apply verification queries in Migration Runbook |
+| BR-008 | 2 | Rewrite F2–F12 SQL functions | DONE (in migration file) | Platform | 2026-07-27 | Included in `20260727140000`; dump still shows pre-rewrite bodies |
+| BR-009 | 2 | Rewrite inline SM/GM RLS on service_reception | PENDING | Platform | 2026-07-27 | **Gap:** not in `20260727140000`; dump lines ~31079–31180 |
+| BR-010 | 2 | Rewrite bodyshop document RLS inline s.role | DONE (in migration file) | Platform | 2026-07-27 | Included in `20260727140000`; dump still shows pre-rewrite policies |
+| BR-011 | 2 | Add `list_employees_with_business_role` RPC | DEFERRED | Platform | 2026-07-27 | Client-side `hasBusinessRole` used for CRE/DRIVER |
 | BR-012 | 2 | Optional `role_codes[]` + GIN trigger | PENDING | Platform | 2026-07-18 | Migration optional |
-| BR-013 | 3 | Settings validation + UI (import/export/add/save) | PENDING | Web | 2026-07-18 | `SettingsPage.tsx` |
-| BR-014 | 3 | Admin Effective Access Summary parse | PENDING | Web | 2026-07-18 | `AdminPage.tsx` |
-| BR-015 | 4 | Web consumer migration (8 files) | PENDING | Web | 2026-07-18 | See §4.3 |
-| BR-016 | 5 | Mobile parity (4 files) | PENDING | Mobile | 2026-07-18 | See §4.4 |
+| BR-013 | 3 | Settings validation + UI (import/export/add/save) | DONE | Web | 2026-07-27 | `SettingsPage.tsx` |
+| BR-014 | 3 | Admin Effective Access Summary parse | DONE | Web | 2026-07-27 | `AdminPage.tsx` |
+| BR-015 | 4 | Web consumer migration (8 files) | DONE | Web | 2026-07-27 | See §4.3 |
+| BR-016 | 5 | Mobile parity (4 files) | DONE | Mobile | 2026-07-27 | reception, floor-incharge, bodyshop-floor |
 | BR-017 | 6 | Update backfill script | PENDING | Platform | 2026-07-18 | `scripts/03_*.sql` |
 | BR-018 | 6 | RBAC-001 execution update cross-ref | PENDING | RBAC | 2026-07-18 | `RBAC-001_*.md` |
 | BR-019 | 6 | CI grep guard for direct em.role checks | PENDING | Platform | 2026-07-18 | — |
-| BR-020 | QA | Execute test matrix on staging | PENDING | QA + RBAC | 2026-07-18 | Test matrix evidence |
-| BR-021 | QA | Refresh `db:backup:metadata` post-apply | PENDING | Platform | 2026-07-18 | `full_metadata.sql` |
+| BR-020 | QA | Execute test matrix on staging | PENDING | QA + RBAC | 2026-07-27 | Test `3000840_427` PAINTER,RUBBING on Bodyshop Floor post-deploy |
+| BR-021 | QA | Refresh `db:backup:metadata` post-apply | PENDING | Platform | 2026-07-27 | Re-dump after `20260727140000` apply; expect `employee_business_roles` in metadata |
 
 ### Done vs Pending Snapshot
 
-- Done: 0  
-- In Progress: 0  
-- Pending: 21  
+- Done: 8  
+- In Progress: 1 (BR-006 apply to Supabase)  
+- Pending: 10  
+- Deferred: 1 (BR-011)  
 - Blocked: 0  
 
 ---
@@ -356,6 +419,8 @@ Legend: `DONE` | `IN PROGRESS` | `PENDING` | `BLOCKED`
 |---|---|---|---|
 | 2026-07-18 | Plan created from full project + DB audit | User request for structured implementation plan | Cursor Agent |
 | 2026-07-18 | Evidence + test matrix files added under rbac/evidence | Per docs structure | Cursor Agent |
+| 2026-07-27 | App implementation (TS + web/mobile consumers) | Option B code path for CSV roles incl. PAINTER,RUBBING multi-bucket | Cursor Agent |
+| 2026-07-27 | Production dump audit + Migration Runbook | Fresh `full_metadata.sql`; confirmed `20260727140000` pending apply; `20260727123000`/`20260727120000` already live | Cursor Agent |
 
 ---
 

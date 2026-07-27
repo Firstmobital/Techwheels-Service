@@ -13,6 +13,10 @@ import {
 import { useFocusEffect } from '@react-navigation/native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { supabase } from '../../lib/supabase'
+import {
+  isTechnicianBusinessRole,
+  parseEmployeeSupportRoles,
+} from '../../lib/businessRoles'
 
 const SCREEN_W = Dimensions.get('window').width
 
@@ -147,9 +151,6 @@ function getPortalLabel(v: string | null | undefined): string {
   const n = String(v ?? '').trim().toUpperCase()
   return (n === 'EV' || n === 'PV') ? n : UNKNOWN_PORTAL
 }
-function isTechnicianRole(v: string | null | undefined): boolean {
-  return String(v ?? '').trim().toUpperCase().replace(/[^A-Z]/g, '') === 'TECHNICIAN'
-}
 function isServiceDepartment(v: string | null | undefined): boolean {
   return normalizeDepartmentValue(v).replace(/[^A-Z]/g, '') === 'SERVICE'
 }
@@ -170,7 +171,7 @@ function normalizeFuelTypeForMatch(v: string | null | undefined): 'PV' | 'EV' | 
 }
 function isEmployeeEligibleForJobCard(employee: Employee, jobCard: JobCard): boolean {
   if (!isServiceDepartment(employee.department)) return false
-  if (!isTechnicianRole(employee.role)) return false
+  if (!isTechnicianBusinessRole(employee.role)) return false
   const jcLoc  = normalizeLocationForMatch(jobCard.location ?? jobCard.branch)
   const empLoc = normalizeLocationForMatch(employee.location)
   if (jcLoc && empLoc !== jcLoc) return false
@@ -385,7 +386,7 @@ export default function FloorInchargeScreen() {
       const empList = (empRes.data ?? []) as Employee[]
       setJobCards(receptionRows)
       setAllEmployees(empList)
-      setEmployees(empList.filter(e => isServiceDepartment(e.department) && isTechnicianRole(e.role)))
+      setEmployees(empList.filter(e => isServiceDepartment(e.department) && isTechnicianBusinessRole(e.role)))
 
       // Technician assignments
       const assignmentRows: TechnicianAssignment[] = []
@@ -565,7 +566,11 @@ export default function FloorInchargeScreen() {
 
   const supportEmployeesByRole = useMemo<Record<SupportRole, Employee[]>>(() => {
     const g: Record<SupportRole, Employee[]> = { DET: [], ELECTRICIAN: [], DENTOR: [], TECHNICIAN: [] }
-    allEmployees.forEach(e => { const r = normalizeSupportRole(e.role); if (r) g[r].push(e) })
+    allEmployees.forEach(e => {
+      for (const r of parseEmployeeSupportRoles(e.role)) {
+        if (r in g) g[r as keyof typeof g].push(e)
+      }
+    })
     return {
       DET:         g.DET.sort((a, b) => a.employee_name.localeCompare(b.employee_name)),
       ELECTRICIAN: g.ELECTRICIAN.sort((a, b) => a.employee_name.localeCompare(b.employee_name)),

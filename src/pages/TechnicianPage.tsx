@@ -9,6 +9,7 @@ import {
   type ReceptionEntryRow,
 } from '../lib/api'
 import { sendTechnicianDailyEarningsTestEmail } from '../lib/api/email'
+import { isTechnicianBusinessRole } from '../lib/businessRoles'
 import * as XLSX from 'xlsx'
 
 type TechnicianAssignmentRow = {
@@ -450,11 +451,6 @@ function normalizeJobCardNumber(value: string | null | undefined): string {
 
 function normalizeSupportRole(value: string | null | undefined): string {
   return String(value ?? '').trim().toUpperCase()
-}
-
-function isTechnicianBusinessRole(value: string | null | undefined): boolean {
-  const normalized = String(value ?? '').trim().toLowerCase()
-  return normalized === 'technician' || normalized.includes('technician')
 }
 
 async function fetchTechnicianCodeSet(): Promise<Set<string>> {

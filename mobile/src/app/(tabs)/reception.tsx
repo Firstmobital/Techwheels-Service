@@ -12,6 +12,7 @@ import {
 import { useFocusEffect } from '@react-navigation/native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { supabase } from '../../lib/supabase'
+import { isServiceAdvisorRole } from '../../lib/businessRoles'
 import { useAuth } from '../../context/AuthContext'
 
 // ─── Constants (exact match with web ReceptionPage) ─────────────────────────────
@@ -312,14 +313,13 @@ export default function ReceptionScreen() {
     const enriched = await enrichEntries(entriesRaw)
     setEntries(enriched)
 
-    // Exact web: only SA and SSA roles
-    const allowedRoles = new Set(['sa', 'service advisor', 'service_advisor'])
+    // Exact web: only SA roles (supports comma-separated Business Roles)
     const empData = (empRes.data ?? []) as Employee[]
     // Deduplicate by employee_code (take first occurrence) — matches web listReceptionEmployees
     const seenCodes = new Set<string>()
     setEmployees(empData
       .filter(e =>
-        allowedRoles.has(String(e.role ?? '').trim().toLowerCase()) &&
+        isServiceAdvisorRole(e.role) &&
         String(e.employee_code ?? '').trim().length > 0
       )
       .filter(e => {

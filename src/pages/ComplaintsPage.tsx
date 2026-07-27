@@ -13,6 +13,7 @@ import {
 import { LoadingSpinner, ErrorAlert, SuccessAlert } from '../components/complaints/UI'
 import type { ComplaintMessage, ComplaintPriority, ComplaintStatus, ComplaintTicket } from '../components/complaints/types'
 import './ComplaintsPage.css'
+import { isManagerBusinessRole, isServiceAdvisorRole } from '../lib/businessRoles'
 
 type TabKey = 'inbox' | 'board' | 'sla'
 type ViewRole = 'manager' | 'advisor' | 'viewer'
@@ -177,20 +178,18 @@ export const ComplaintsPage: React.FC = () => {
           .map((row) => String(row.employee_code ?? '').trim())
           .filter(Boolean)
 
-        let businessRoles: string[] = []
+        let employeeRows: Array<{ role?: string | null }> = []
         if (employeeCodes.length > 0) {
-          const { data: employeeRows } = await supabase
+          const { data } = await supabase
             .from('employee_master')
             .select('role')
             .in('employee_code', employeeCodes)
 
-          businessRoles = ((employeeRows ?? []) as Array<{ role?: string | null }>)
-            .map((row) => String(row.role ?? '').trim().toUpperCase())
-            .filter(Boolean)
+          employeeRows = (data ?? []) as Array<{ role?: string | null }>
         }
 
-        const hasManagerBusinessRole = businessRoles.some((value) => value === 'CRM' || value === 'GM' || value === 'SM')
-        const hasAdvisorBusinessRole = businessRoles.some((value) => value === 'SA' || value === 'SERVICE ADVISOR' || value === 'SERVICE_ADVISOR')
+        const hasManagerBusinessRole = employeeRows.some((row) => isManagerBusinessRole(row.role))
+        const hasAdvisorBusinessRole = employeeRows.some((row) => isServiceAdvisorRole(row.role))
 
         const canView = isAdminLike || hasComplaintsViewPermission
         const editable = isAdminLike || hasComplaintsModify

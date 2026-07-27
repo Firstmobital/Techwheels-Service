@@ -10,6 +10,7 @@ import {
   listEmployees,
   type UserEmployeeLinkRow,
 } from '../lib/api/userEmployeeLinks'
+import { collectBusinessRolesFromMappings } from '../lib/businessRoles'
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 type UserRole = 'admin' | 'manager' | 'staff' | 'viewer'
@@ -840,12 +841,8 @@ export default function AdminPage({ onViewAsUser }: { onViewAsUser?: (id: string
   const selectedPermissionMappings = selectedUserId
     ? mappings.filter((mapping) => mapping.user_id === selectedUserId && mapping.is_active)
     : []
-  const selectedBusinessRoles = Array.from(
-    new Set(
-      selectedPermissionMappings
-        .map((mapping) => String(employeeRoleLookup.get(mapping.employee_code) ?? '').trim().toUpperCase())
-        .filter(Boolean),
-    ),
+  const selectedBusinessRoles = collectBusinessRolesFromMappings(
+    selectedPermissionMappings.map((mapping) => employeeRoleLookup.get(mapping.employee_code)),
   )
   const selectedDealerCodes = Array.from(
     new Set(selectedPermissionMappings.map((mapping) => String(mapping.dealer_code ?? '').trim().toUpperCase()).filter(Boolean)),

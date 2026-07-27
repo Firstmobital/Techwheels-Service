@@ -2,6 +2,10 @@ import { useEffect, useState, useMemo } from 'react'
 import DateRangeFilter, { currentMonthRange, type DateRange } from '../components/DateRangeFilter'
 import { supabase } from '../lib/supabase'
 import { listFloorInchargeEntries, type ReceptionEntryRow } from '../lib/api'
+import {
+  isTechnicianBusinessRole,
+  parseEmployeeSupportRoles,
+} from '../lib/businessRoles'
 import Icon from '../components/Icon'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -201,14 +205,6 @@ function normalizeFuelTypeForMatch(value: string | null | undefined): 'PV' | 'EV
   return null
 }
 
-function isTechnicianRole(value: string | null | undefined): boolean {
-  const normalizedRole = String(value ?? '')
-    .trim()
-    .toUpperCase()
-    .replace(/[^A-Z]/g, '')
-  return normalizedRole === 'TECHNICIAN'
-}
-
 function isServiceDepartment(value: string | null | undefined): boolean {
   const normalizedDepartment = normalizeDepartmentValue(value).replace(/[^A-Z]/g, '')
   return normalizedDepartment === 'SERVICE'
@@ -216,7 +212,7 @@ function isServiceDepartment(value: string | null | undefined): boolean {
 
 function isEmployeeEligibleForJobCard(employee: Employee, jobCard: JobCard): boolean {
   if (!isServiceDepartment(employee.department)) return false
-  if (!isTechnicianRole(employee.role)) return false
+  if (!isTechnicianBusinessRole(employee.role)) return false
 
   const jobCardLocation = normalizeLocationForMatch(jobCard.location ?? jobCard.branch)
   const employeeLocation = normalizeLocationForMatch(employee.location)
@@ -558,7 +554,7 @@ export default function FloorInchargePage() {
       }))
 
       const technicianEmployees = (empRes.data ?? []).filter((employee) =>
-        isServiceDepartment(employee.department) && isTechnicianRole(employee.role),
+        isServiceDepartment(employee.department) && isTechnicianBusinessRole(employee.role),
       )
 
       setJobCards(receptionRows)
@@ -796,9 +792,10 @@ export default function FloorInchargePage() {
     }
 
     allEmployees.forEach((employee) => {
-      const normalizedRole = normalizeSupportRole(employee.role)
-      if (!normalizedRole) return
-      grouped[normalizedRole].push(employee)
+      const supportRoles = parseEmployeeSupportRoles(employee.role)
+      for (const normalizedRole of supportRoles) {
+        grouped[normalizedRole].push(employee)
+      }
     })
 
     return {

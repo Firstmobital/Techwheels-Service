@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabase'
 import { Icon } from '../components/Icon'
 import DateRangeFilter from '../components/DateRangeFilter'
 import { exportToCSV, generateExportFilename } from '../lib/exportUtils'
+import { hasBusinessRole } from '../lib/businessRoles'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 const BOOKING_SOURCES = ['Telecalling', 'WhatsApp', 'Walk-in', 'Self', 'Driver Pickup', 'Referral'] as const
@@ -152,10 +153,16 @@ export default function ServiceBookingPage() {
   async function loadBranchesAndSAs() {
     const branchRes = await supabase.from('service_branches').select('name').order('name')
     if (branchRes.data) setBranches((branchRes.data as { name: string }[]).map(b => b.name))
-    const creRes = await supabase.from('employee_master').select('id, employee_name').eq('role', 'CRE').order('employee_name')
-    if (creRes.data) setCreUsers((creRes.data as { id: string; employee_name: string }[]).filter(u => u.employee_name))
-    const driverRes = await supabase.from('employee_master').select('id, employee_name').eq('role', 'DRIVER').order('employee_name')
-    if (driverRes.data) setDrivers((driverRes.data as { id: string; employee_name: string }[]).filter(u => u.employee_name))
+    const creRes = await supabase.from('employee_master').select('id, employee_name, role').order('employee_name')
+    if (creRes.data) {
+      setCreUsers((creRes.data as { id: string; employee_name: string; role: string | null }[])
+        .filter((u) => u.employee_name && hasBusinessRole(u.role, 'CRE')))
+    }
+    const driverRes = await supabase.from('employee_master').select('id, employee_name, role').order('employee_name')
+    if (driverRes.data) {
+      setDrivers((driverRes.data as { id: string; employee_name: string; role: string | null }[])
+        .filter((u) => u.employee_name && hasBusinessRole(u.role, 'DRIVER')))
+    }
   }
 
   // Fetch reg_number + created_at from Reception so we can flag which booked vehicles have

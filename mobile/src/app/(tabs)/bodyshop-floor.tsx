@@ -13,6 +13,7 @@ import {
 import { useFocusEffect } from '@react-navigation/native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { supabase } from '../../lib/supabase'
+import { parseBodyshopFloorRoles } from '../../lib/businessRoles'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -252,20 +253,6 @@ const VIEW_TABS: { key: AssignmentView; label: string }[] = [
 
 function jcKey(raw: string | null | undefined): string {
   return String(raw ?? '').trim().toUpperCase()
-}
-
-function normRole(r: string | null): BSRole | null {
-  const v = String(r ?? '').trim().toUpperCase()
-  if (v === 'DENTOR')                                   return 'DENTOR'
-  if (v === 'PAINTER')                                  return 'PAINTER'
-  if (v === 'TECHNICIAN')                               return 'TECHNICIAN'
-  if (v === 'FLOOR INCHARGE' || v === 'FLOOR_INCHARGE') return 'FLOOR_INCHARGE'
-  if (v === 'DENTOR HELPER'  || v === 'DENTOR_HELPER')  return 'DENTOR_HELPER'
-  if (v === 'PAINTER HELPER' || v === 'PAINTER_HELPER') return 'PAINTER_HELPER'
-  if (v === 'RUBBING')                                  return 'RUBBING'
-  if (v === 'EDP')                                      return 'EDP'
-  if (v === 'PARTS INCHARGE' || v === 'PARTS_INCHARGE') return 'PARTS_INCHARGE'
-  return null
 }
 
 function isBodyshopDepartment(dept: string | null): boolean {
@@ -607,9 +594,12 @@ export default function BodyshopFloorScreen() {
   const empByRole = useMemo<Record<BSRole, Employee[]>>(() => {
     const m: Record<BSRole, Employee[]> = { FLOOR_INCHARGE: [], DENTOR: [], DENTOR_HELPER: [], PAINTER: [], PAINTER_HELPER: [], TECHNICIAN: [], RUBBING: [], EDP: [], PARTS_INCHARGE: [] }
     employees.forEach(e => {
-      const r = normRole(e.role)
-      if (!r || !isBodyshopDepartment(e.department)) return
-      m[r].push(e)
+      const roles = parseBodyshopFloorRoles(e.role)
+      if (roles.length === 0) return
+      for (const r of roles) {
+        if (!isBodyshopDepartment(e.department)) continue
+        m[r].push(e)
+      }
     })
     ALL_ROLES.forEach(r => m[r].sort((a, b) => a.employee_name.localeCompare(b.employee_name)))
     return m
