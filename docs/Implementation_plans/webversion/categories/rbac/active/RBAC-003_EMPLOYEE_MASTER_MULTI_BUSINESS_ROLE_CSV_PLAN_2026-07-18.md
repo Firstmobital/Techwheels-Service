@@ -70,25 +70,27 @@ Regression matrix (QA):
 
 ## Production DB Audit (from `full_metadata.sql` refresh 2026-07-27)
 
-Dump-backed checks (not guessed):
+**Post-apply verdict:** `20260727140000_business_roles_csv_helpers.sql` is **fully live** in production metadata. One known gap remains (BR-009).
 
-| Check | Result in live dump |
+| Check | Result in post-apply dump |
 |---|---|
-| `employee_business_roles()` exists | **NO** — RBAC-003 SQL not applied |
-| `employee_has_business_role()` exists | **NO** |
-| `normalize_business_role_token()` exists | **NO** |
-| `user_has_crm_dealer_scope` body | `lower(btrim(em.role)) = 'crm'` — **exact match (pre-RBAC-003)** |
-| `user_has_technician_code` body | `lower(btrim(em.role)) = 'technician'` — **exact match** |
-| Floor incharge scope functions | `lower(btrim(fi.role)) IN ('floor incharge','floor_incharge')` — **exact match** |
-| `can_access_bodyshop_surveyor_settings` / `can_view_bodyshop_surveyor_catalog` | `UPPER(s.role) IN ('SA','EDP','SURVEY')` — **exact match on full CSV string** |
-| `is_income_assignment_eligible` | `upper(rs.employee_role) = upper(em.role)` — **exact match** |
-| `generate_complaint_link` SM/GM gate | `lower(em.role) = ANY (ARRAY['sm','gm'])` — **exact match** |
-| `bodyshop_repair_card_documents_*_rbac_v4` (×3) | `upper(s.role) = ANY (ARRAY['SA','EDP','SURVEY'])` — **exact match** |
-| `service_reception_*` inline SM/GM EXISTS (×4 blocks) | `lower(em.role) = ANY (ARRAY['sm','gm'])` — **exact match; not in current migration file** |
-| `20260727123000` technician RLS fix | **Already applied** — `technician_assignments_select_rbac` includes `sa_tracker`; SA branch skips when floor_incharge/sa_tracker present |
-| `20260727120000` index | **Already applied** — `idx_technician_assignments_code_assigned_at` present |
+| `normalize_business_role_token()` | **YES** — RBAC-003 comment + grants |
+| `employee_business_roles()` | **YES** — comma-split parse |
+| `employee_has_business_role()` | **YES** |
+| `employee_has_any_business_role()` | **YES** |
+| `user_has_crm_dealer_scope` | **Migrated** → `employee_has_business_role(em.role, 'CRM')` |
+| `user_is_crm_for_sa_code` / `user_is_crm_for_dealer_sa` | **Migrated** |
+| `user_has_technician_code` | **Migrated** → `employee_has_business_role(..., 'TECHNICIAN')` |
+| Floor incharge scope (×3) | **Migrated** → `employee_has_business_role(fi.role, 'FLOOR_INCHARGE')` |
+| `can_access_bodyshop_surveyor_settings` / `can_view_bodyshop_surveyor_catalog` | **Migrated** → `employee_has_any_business_role(s.role, ARRAY['SA','EDP','SURVEY'])` |
+| `is_income_assignment_eligible` | **Migrated** — per-token match via helpers |
+| `generate_complaint_link` SM/GM gate | **Migrated** → `employee_has_any_business_role(em.role, ARRAY['SM','GM'])` |
+| `bodyshop_repair_card_documents_*_rbac_v4` (×3) | **Migrated** |
+| `get_my_bodyshop_employee_scope()` | **Unchanged (by design)** — returns raw CSV `em.role` |
+| `service_reception_*` inline SM/GM EXISTS | **NOT migrated** — still `lower(em.role) = ANY (ARRAY['sm','gm'])` at dump ~31164–31265 |
+| Legacy exact match (`= 'crm'`, `= 'technician'`, `upper(s.role) = ANY(...)`) | **Removed** from all objects in migration scope |
 
-**Test case `3000840_427` / `PAINTER,RUBBING`:** Bodyshop Floor dropdown buckets are **frontend-only** (`BodyshopFloorPage.tsx` / mobile `bodyshop-floor.tsx`). SQL migration is **not** required for that specific UI test, but **is** required for CRM/SA/technician/floor-incharge RLS parity when roles are comma-separated.
+**Test case `3000840_427` / `PAINTER,RUBBING`:** Bodyshop Floor dropdowns = **frontend** (`parseBodyshopFloorRoles`). DB migration does not gate PAINTER/RUBBING assignment buckets.
 
 ---
 
@@ -98,7 +100,7 @@ Dump-backed checks (not guessed):
 |---|---|---|
 | `supabase/migrations/20260727120000_technician_assignments_code_assigned_at_index.sql` | **No — already live** | Index `idx_technician_assignments_code_assigned_at` in dump |
 | `supabase/migrations/20260727123000_fix_technician_assignments_sa_rls_priority.sql` | **No — already live** | Policy bodies match dump |
-| **`supabase/migrations/20260727140000_business_roles_csv_helpers.sql`** | **YES — run this** | RBAC-003 helpers + 11 function rewrites + 3 bodyshop document policies + `generate_complaint_link` |
+| **`supabase/migrations/20260727140000_business_roles_csv_helpers.sql`** | **Applied ✓** | Confirmed in post-apply dump (2026-07-27 re-export) |
 
 **How to apply:**
 
@@ -321,11 +323,11 @@ Legend: `DONE` | `IN PROGRESS` | `PENDING` | `BLOCKED`
 | BR-003 | 1 | Create `src/lib/businessRoles.ts` | DONE | Web | 2026-07-27 | `src/lib/businessRoles.ts` |
 | BR-004 | 1 | Create `mobile/src/lib/businessRoles.ts` | DONE | Mobile | 2026-07-27 | `mobile/src/lib/businessRoles.ts` |
 | BR-005 | 1 | Create `src/lib/businessRoles.test.ts` | PENDING | Web | 2026-07-18 | — |
-| BR-006 | 1 | SQL helpers migration (helpers + consumers) | IN PROGRESS | Platform | 2026-07-27 | `20260727140000_business_roles_csv_helpers.sql` — **file ready; not applied in dump** |
-| BR-007 | 1 | SQL checks file | PENDING | Platform | 2026-07-27 | Post-apply verification queries in Migration Runbook |
-| BR-008 | 2 | Rewrite F2–F12 SQL functions | DONE (in migration file) | Platform | 2026-07-27 | Included in `20260727140000`; dump still shows pre-rewrite bodies |
-| BR-009 | 2 | Rewrite inline SM/GM RLS on service_reception | PENDING | Platform | 2026-07-27 | **Gap:** not in `20260727140000`; dump lines ~31079–31180 |
-| BR-010 | 2 | Rewrite bodyshop document RLS inline s.role | DONE (in migration file) | Platform | 2026-07-27 | Included in `20260727140000`; dump still shows pre-rewrite policies |
+| BR-006 | 1 | SQL helpers migration (helpers + consumers) | DONE | Platform | 2026-07-27 | Applied by user; verify with `sql_checks/20260727140000_*` |
+| BR-007 | 1 | SQL checks file | DONE | Platform | 2026-07-27 | `sql_checks/20260727140000_business_roles_csv_helpers_checks.sql` |
+| BR-008 | 2 | Rewrite F2–F12 SQL functions | DONE | Platform | 2026-07-27 | Confirmed in post-apply `full_metadata.sql` |
+| BR-009 | 2 | Rewrite inline SM/GM RLS on service_reception | PENDING | Platform | 2026-07-27 | **Only remaining DB gap** — 6 inline blocks in dump ~31164–31265 |
+| BR-010 | 2 | Rewrite bodyshop document RLS inline s.role | DONE | Platform | 2026-07-27 | Confirmed in post-apply dump |
 | BR-011 | 2 | Add `list_employees_with_business_role` RPC | DEFERRED | Platform | 2026-07-27 | Client-side `hasBusinessRole` used for CRE/DRIVER |
 | BR-012 | 2 | Optional `role_codes[]` + GIN trigger | PENDING | Platform | 2026-07-18 | Migration optional |
 | BR-013 | 3 | Settings validation + UI (import/export/add/save) | DONE | Web | 2026-07-27 | `SettingsPage.tsx` |
@@ -336,13 +338,13 @@ Legend: `DONE` | `IN PROGRESS` | `PENDING` | `BLOCKED`
 | BR-018 | 6 | RBAC-001 execution update cross-ref | PENDING | RBAC | 2026-07-18 | `RBAC-001_*.md` |
 | BR-019 | 6 | CI grep guard for direct em.role checks | PENDING | Platform | 2026-07-18 | — |
 | BR-020 | QA | Execute test matrix on staging | PENDING | QA + RBAC | 2026-07-27 | Test `3000840_427` PAINTER,RUBBING on Bodyshop Floor post-deploy |
-| BR-021 | QA | Refresh `db:backup:metadata` post-apply | PENDING | Platform | 2026-07-27 | Re-dump after `20260727140000` apply; expect `employee_business_roles` in metadata |
+| BR-021 | QA | Refresh `db:backup:metadata` post-apply | DONE | Platform | 2026-07-27 | Post-apply `full_metadata.sql` audited |
 
 ### Done vs Pending Snapshot
 
-- Done: 8  
-- In Progress: 1 (BR-006 apply to Supabase)  
-- Pending: 10  
+- Done: 11  
+- In Progress: 0  
+- Pending: 7  
 - Deferred: 1 (BR-011)  
 - Blocked: 0  
 
@@ -420,7 +422,7 @@ Legend: `DONE` | `IN PROGRESS` | `PENDING` | `BLOCKED`
 | 2026-07-18 | Plan created from full project + DB audit | User request for structured implementation plan | Cursor Agent |
 | 2026-07-18 | Evidence + test matrix files added under rbac/evidence | Per docs structure | Cursor Agent |
 | 2026-07-27 | App implementation (TS + web/mobile consumers) | Option B code path for CSV roles incl. PAINTER,RUBBING multi-bucket | Cursor Agent |
-| 2026-07-27 | Production dump audit + Migration Runbook | Fresh `full_metadata.sql`; confirmed `20260727140000` pending apply; `20260727123000`/`20260727120000` already live | Cursor Agent |
+| 2026-07-27 | Post-apply dump audit | Fresh `full_metadata.sql` confirms `20260727140000` applied; BR-009 SM/GM reception RLS still pending | Cursor Agent |
 
 ---
 
