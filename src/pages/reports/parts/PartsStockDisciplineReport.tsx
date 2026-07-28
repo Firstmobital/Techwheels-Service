@@ -30,9 +30,10 @@ interface ConsumptionRow {
   part_description: string | null
   portal: string
   fiscal_year: number
-  fiscal_month: number
+  fiscal_month: number | null      // nullable — may be absent in some DMS exports
   month_name: string | null
   total_consumption: number
+  transaction_date: string | null  // fallback for FM derivation
 }
 interface StockRow {
   part_number: string
@@ -129,15 +130,21 @@ async function resolveActiveWindow(
   const elapsedDays = Math.max(1, Math.floor((today.getTime() - fyStartDate.getTime()) / 86400000) + 1)
 
   // Check which target months have data in DB
+  // Query by BOTH fiscal_month number AND month_name to handle uploads
+  // where fiscal_month column was absent/null in the source Excel file.
   let q = (supabase.from('service_parts_consumption_data') as any)
-    .select('fiscal_year,fiscal_month')
+    .select('fiscal_year,fiscal_month,month_name,transaction_date')
     .eq('portal', portal)
-    .in('fiscal_month', targetFMs)
-    .limit(500)
+    .limit(1000)
   if (branch !== 'ALL') q = q.eq('branch', branch)
   const { data: targetData } = await q
 
-  const foundFMs = new Set((targetData ?? []).map((r: any) => Number(r.fiscal_month)))
+  // Resolve FM for each row using the multi-fallback helper
+  const foundFMs = new Set<number>()
+  for (const r of (targetData ?? [])) {
+    const fm = resolveFmFromRow(r as { fiscal_month: number; month_name: string | null; transaction_date: string | null })
+    if (fm != null) foundFMs.add(fm)
+  }
   const availableTargetFMs = targetFMs.filter((m) => foundFMs.has(m))
 
   if (availableTargetFMs.length > 0) {
@@ -161,8 +168,11 @@ async function resolveActiveWindow(
   const seen = new Set<string>()
   const pairs: { fy: number; fm: number }[] = []
   for (const row of latestData) {
-    const key = `${row.fiscal_year}-${row.fiscal_month}`
-    if (!seen.has(key)) { seen.add(key); pairs.push({ fy: Number(row.fiscal_year), fm: Number(row.fiscal_month) }) }
+    const fm = resolveFmFromRow(row as { fiscal_month: number; month_name: string | null; transaction_date: string | null })
+    if (fm == null) continue
+    const fy = Number(row.fiscal_year) || fyStart
+    const key = `${fy}-${fm}`
+    if (!seen.has(key)) { seen.add(key); pairs.push({ fy, fm }) }
     if (pairs.length >= WINDOW_SIZE) break
   }
   const fiscal_year    = pairs[0]?.fy ?? fyStart
@@ -216,6 +226,50 @@ function fmLabel(fm: number): string {
   return names[fm] ?? `FM${fm}`
 }
 
+// Convert month_name (from DB) → fiscal month number (Apr=1 … Mar=12)
+// Handles full names ("April"), abbreviated ("Apr"), TML DMS format variations
+const MONTH_NAME_TO_FM: Record<string, number> = {
+  apr: 1, april: 1,
+  may: 2,
+  jun: 3, june: 3,
+  jul: 4, july: 4,
+  aug: 5, august: 5,
+  sep: 6, sept: 6, september: 6,
+  oct: 7, october: 7,
+  nov: 8, november: 8,
+  dec: 9, december: 9,
+  jan: 10, january: 10,
+  feb: 11, february: 11,
+  mar: 12, march: 12,
+}
+
+// Derive FM from month_name string (case-insensitive)
+function monthNameToFm(name: string | null | undefined): number | null {
+  if (!name) return null
+  return MONTH_NAME_TO_FM[name.trim().toLowerCase()] ?? null
+}
+
+// Derive FM from calendar month (1-12 → fiscal month, April=1)
+function calMonthToFm(calMonth: number): number {
+  return ((calMonth - 4 + 12) % 12) + 1
+}
+
+// Resolve the best available FM from a consumption row
+function resolveFmFromRow(row: { fiscal_month: number; month_name: string | null; transaction_date: string | null }): number | null {
+  // Priority: fiscal_month (explicit) → month_name → transaction_date
+  if (row.fiscal_month != null && row.fiscal_month >= 1 && row.fiscal_month <= 12) return row.fiscal_month
+  const fromName = monthNameToFm(row.month_name)
+  if (fromName != null) return fromName
+  if (row.transaction_date) {
+    try {
+      const d = new Date(row.transaction_date)
+      if (!isNaN(d.getTime())) return calMonthToFm(d.getMonth() + 1)
+    } catch { /* ignore */ }
+  }
+  return null
+}
+
+
 // ─────────────────────────────────────────────────────────────────────────────
 // COMPONENT
 // ─────────────────────────────────────────────────────────────────────────────
@@ -254,11 +308,20 @@ export default function PartsStockDisciplineReport(_props: ReportViewProps) {
       }
       if (rawBranch !== 'ALL') baseFilters.branch = rawBranch
 
-      // ── 1. Consumption ─────────────────────────────────────────────────────
+      // ── 1. Consumption — fetch ALL rows for this portal+branch+FY (no FM filter)
+      // then resolve FM in JS using the multi-fallback helper (fiscal_month →
+      // month_name → transaction_date). This handles uploads where the Excel
+      // source file did not include a 'Fiscal Month' column (common in TML DMS
+      // exports where only Month Name is present).
+      const consumptionFilters: Record<string, string | string[] | number[]> = {
+        portal: portalFilter,
+        fiscal_year: [window_.fiscal_year],
+      }
+      if (rawBranch !== 'ALL') consumptionFilters.branch = rawBranch
       const consumptionRows = await fetchAll<ConsumptionRow>(
         'service_parts_consumption_data',
-        'part_number,part_description,portal,fiscal_year,fiscal_month,month_name,total_consumption',
-        baseFilters,
+        'part_number,part_description,portal,fiscal_year,fiscal_month,month_name,total_consumption,transaction_date',
+        consumptionFilters,
       )
 
       // ── 2. Stock snapshot ─────────────────────────────────────────────────
@@ -288,10 +351,14 @@ export default function PartsStockDisciplineReport(_props: ReportViewProps) {
       const consumpMap = new Map<string, ConsumptionEntry>()
       for (const row of consumptionRows) {
         if (isAccessoryPart(row.part_number)) continue
+        // Resolve FM using the multi-fallback helper (fiscal_month → month_name → date)
+        const fm = resolveFmFromRow(row as unknown as { fiscal_month: number; month_name: string | null; transaction_date: string | null })
+        if (fm == null) continue
+        // Only include rows that fall within the active consumption window
+        if (!window_.fiscal_months.includes(fm)) continue
         const key = `${row.part_number}|${row.portal}`
         if (!consumpMap.has(key)) consumpMap.set(key, { desc: row.part_description ?? row.part_number, months: {} })
         const entry = consumpMap.get(key)!
-        const fm = Number(row.fiscal_month)
         entry.months[fm] = (entry.months[fm] ?? 0) + Number(row.total_consumption)
         if (row.part_description) entry.desc = row.part_description
       }
