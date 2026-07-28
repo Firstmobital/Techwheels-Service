@@ -110,6 +110,8 @@ Deno.serve(async (req) => {
     let duplicatesSkipped = 0
     for (const r of rawRows) {
       const d = r.source_row_data || {}
+      // Exclude posting_date and invc_date from the dedup key — same claim re-exported
+      // after posting (with a real date) should replace the unposted version, not stack.
       const key = [
         str(d.sap_claim), str(d.job_code), str(d.dealer_invc_no), str(d.posting_document_number),
         str(d.job_card_number_number), str(d.part_number),
@@ -118,9 +120,21 @@ Deno.serve(async (req) => {
       const existing = seen.get(key)
       if (existing) {
         duplicatesSkipped++
+        const existingPosting = str((existing.source_row_data || {}).posting_date_yyyy_mm_dd)
+        const currentPosting  = str(d.posting_date_yyyy_mm_dd)
+        const existingHasDate = existingPosting !== '' && existingPosting !== '0000-00-00'
+        const currentHasDate  = currentPosting  !== '' && currentPosting  !== '0000-00-00'
+        // Prefer the row with a real posting date over '0000-00-00' / blank
+        if (currentHasDate && !existingHasDate) {
+          seen.set(key, r)
+          continue
+        }
+        // Otherwise prefer longer description (more detail)
         const existingDesc = str((existing.source_row_data || {}).description)
         const currentDesc = str(d.description)
-        if (currentDesc.length > existingDesc.length) seen.set(key, r)
+        if (currentDesc.length > existingDesc.length && (currentHasDate || !existingHasDate)) {
+          seen.set(key, r)
+        }
         continue
       }
       seen.set(key, r)

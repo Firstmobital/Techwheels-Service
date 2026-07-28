@@ -754,7 +754,15 @@ function normalizeWarrantyRow(row: Record<string, unknown>): Record<string, stri
 }
 
 function hashWarrantyRow(payload: Record<string, string>): string {
+  // EXCLUDE posting_date_yyyy_mm_dd and invc_date_yyyy_mm_dd from the hash.
+  // Claim-Settlement-Report files are often exported BEFORE posting (date='0000-00-00')
+  // and then re-exported AFTER posting (date='2026-06-12'). If posting_date were in the
+  // hash, both versions would produce different hashes and both would be stored,
+  // causing double-counting. By excluding date fields, a re-upload with the real posting
+  // date will match the existing row and UPDATE it via the ON CONFLICT upsert path.
+  const DATE_FIELDS = new Set(['posting_date_yyyy_mm_dd', 'invc_date_yyyy_mm_dd'])
   const canonical = Object.entries(payload)
+    .filter(([k]) => !DATE_FIELDS.has(k))
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([k, v]) => `${k}=${v}`)
     .join('|')
