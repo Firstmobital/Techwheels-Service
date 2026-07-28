@@ -1,0 +1,407 @@
+{
+  "status": "ok",
+  "endpoint": "/v1/projects/jmdndcphkmaljhwgzqxq/analytics/endpoints/logs?sql=select+timestamp%2C+event_message+from+logs+where+source+%3D+%27postgres_logs%27+order+by+timestamp+desc+limit+100&iso_timestamp_start=2026-07-27T05%3A28%3A39.502Z&iso_timestamp_end=2026-07-28T05%3A28%3A39.502Z",
+  "count": 100,
+  "records": [
+    {
+      "event_message": "cron job 24 completed: 1 row",
+      "timestamp": "2026-07-28T05:28:00.236000"
+    },
+    {
+      "event_message": "cron job 10 completed: 1 row",
+      "timestamp": "2026-07-28T05:28:00.204000"
+    },
+    {
+      "event_message": "cron job 25 completed: 1 row",
+      "timestamp": "2026-07-28T05:28:00.108000"
+    },
+    {
+      "event_message": "cron job 10 starting: select public.process_next_psf_import_run();",
+      "timestamp": "2026-07-28T05:28:00.029000"
+    },
+    {
+      "event_message": "cron job 25 starting: SELECT public.invoke_insurance_renewal_rc_fetch_worker();",
+      "timestamp": "2026-07-28T05:28:00.024000"
+    },
+    {
+      "event_message": "cron job 24 starting: select public.process_all_service_history_sync_queue(50);",
+      "timestamp": "2026-07-28T05:28:00.010000"
+    },
+    {
+      "event_message": "column service_parts_stock_snapshot_data.on_hand_qty does not exist",
+      "timestamp": "2026-07-28T05:27:21.337000"
+    },
+    {
+      "event_message": "checkpoint starting: time",
+      "timestamp": "2026-07-28T05:27:00.840000"
+    },
+    {
+      "event_message": "cron job 24 completed: 1 row",
+      "timestamp": "2026-07-28T05:27:00.184000"
+    },
+    {
+      "event_message": "cron job 10 completed: 1 row",
+      "timestamp": "2026-07-28T05:27:00.099000"
+    },
+    {
+      "event_message": "cron job 10 starting: select public.process_next_psf_import_run();",
+      "timestamp": "2026-07-28T05:27:00.008000"
+    },
+    {
+      "event_message": "cron job 24 starting: select public.process_all_service_history_sync_queue(50);",
+      "timestamp": "2026-07-28T05:27:00.003000"
+    },
+    {
+      "event_message": "cron job 24 completed: 1 row",
+      "timestamp": "2026-07-28T05:26:00.257000"
+    },
+    {
+      "event_message": "cron job 10 completed: 1 row",
+      "timestamp": "2026-07-28T05:26:00.182000"
+    },
+    {
+      "event_message": "cron job 25 completed: 1 row",
+      "timestamp": "2026-07-28T05:26:00.150000"
+    },
+    {
+      "event_message": "cron job 10 starting: select public.process_next_psf_import_run();",
+      "timestamp": "2026-07-28T05:26:00.028000"
+    },
+    {
+      "event_message": "cron job 25 starting: SELECT public.invoke_insurance_renewal_rc_fetch_worker();",
+      "timestamp": "2026-07-28T05:26:00.026000"
+    },
+    {
+      "event_message": "cron job 24 starting: select public.process_all_service_history_sync_queue(50);",
+      "timestamp": "2026-07-28T05:26:00.008000"
+    },
+    {
+      "event_message": "statement: -- v3: refresh_job_card_closed_dms_revenue_batch still timed out because every\n-- job_card_closed_data UPDATE fires trg_refresh_all_service_data_from_job_card_closed_data\n-- (refresh_all_service_data_from_job_card_closed_data per row). DMS mirror columns\n-- do not belong in that sync path.\n\nCREATE OR REPLACE FUNCTION public.refresh_job_card_closed_dms_revenue_batch(p_keys jsonb)\nRETURNS integer\nLANGUAGE plpgsql\nSECURITY DEFINER\nSET search_path TO 'public'\nAS $$\nDECLARE\n  v_updated integer := 0;\nBEGIN\n  PERFORM set_config('statement_timeout', '120s', true);\n\n  IF p_keys IS NULL OR jsonb_typeof(p_keys) <> 'array' OR jsonb_array_length(p_keys) = 0 THEN\n    RETURN 0;\n  END IF;\n\n  ALTER TABLE public.job_card_closed_data\n    DISABLE TRIGGER trg_refresh_all_service_data_from_job_card_closed_data;\n\n  WITH keys AS (\n    SELECT DISTINCT\n      upper(btrim(r.job_card_number)) AS job_card_number,\n      nullif(btrim(r.location), '') AS location,\n      nullif(btrim(r.portal), '') AS portal\n    FROM jsonb_to_recordset(p_keys) AS r(\n      job_card_number text,\n      location text,\n      portal text\n    )\n    WHERE coalesce(btrim(r.job_card_number), '') <> ''\n      AND nullif(btrim(r.location), '') IS NOT NULL\n      AND nullif(btrim(r.portal), '') IS NOT NULL\n  ),\n  latest_dms AS (\n    SELECT DISTINCT ON (\n      upper(btrim(d.job_card_number)),\n      d.location,\n      d.portal\n    )\n      upper(btrim(d.job_card_number)) AS job_card_number,\n      d.location,\n      d.portal,\n      d.final_labour_amount,\n      d.total_invoice_amount\n    FROM public.psf_revenue_dms d\n    INNER JOIN keys k\n      ON upper(btrim(d.job_card_number)) = k.job_card_number\n     AND d.location = k.location\n     AND d.portal = k.portal\n    ORDER BY\n      upper(btrim(d.job_card_number)),\n      d.location,\n      d.portal,\n      d.invoice_date DESC NULLS LAST,\n      d.id DESC\n  )\n  UPDATE public.job_card_closed_data jc\n     SET dms_final_labour_amount = ld.final_labour_amount,\n         dms_total_invoice_amount = ld.total_invoice_amount\n    FROM latest_dms ld\n   WHERE upper(btrim(jc.job_card_number)) = ld.job_card_number\n     AND jc.location = ld.location\n     AND jc.portal = ld.portal\n     AND (\n       jc.dms_final_labour_amount IS DISTINCT FROM ld.final_labour_amount\n       OR jc.dms_total_invoice_amount IS DISTINCT FROM ld.total_invoice_amount\n     );\n\n  GET DIAGNOSTICS v_updated = ROW_COUNT;\n\n  ALTER TABLE public.job_card_closed_data\n    ENABLE TRIGGER trg_refresh_all_service_data_from_job_card_closed_data;\n\n  RETURN v_updated;\nEXCEPTION\n  WHEN OTHERS THEN\n    ALTER TABLE public.job_card_closed_data\n      ENABLE TRIGGER trg_refresh_all_service_data_from_job_card_closed_data;\n    RAISE;\nEND;\n$$;\n\nCOMMENT ON FUNCTION public.refresh_job_card_closed_dms_revenue_batch(jsonb) IS\n  'Bulk mirror latest psf_revenue_dms into job_card_closed_data.dms_* columns. Skips all_service_data row trigger during update.';\n\n\n-- source: dashboard\n-- user: session:82dd2089-a0f5-48ef-8a45-06798c35a4ae\n-- date: 2026-07-28T05:25:17.717Z",
+      "timestamp": "2026-07-28T05:25:18.202000"
+    },
+    {
+      "event_message": "cron job 24 completed: 1 row",
+      "timestamp": "2026-07-28T05:25:00.139000"
+    },
+    {
+      "event_message": "cron job 10 completed: 1 row",
+      "timestamp": "2026-07-28T05:25:00.092000"
+    },
+    {
+      "event_message": "cron job 10 starting: select public.process_next_psf_import_run();",
+      "timestamp": "2026-07-28T05:25:00.013000"
+    },
+    {
+      "event_message": "cron job 24 starting: select public.process_all_service_history_sync_queue(50);",
+      "timestamp": "2026-07-28T05:25:00.009000"
+    },
+    {
+      "event_message": "statement: -- Hotfix: Batch F summary RPC 500s (statement timeout under SECURITY INVOKER + RLS).\n-- Root cause: INVOKER re-evaluated expensive reception/technician_assignments RLS per row,\n-- amplified by 4 parallel RPC calls on SA page load.\n--\n-- Fix:\n-- 1) SECURITY DEFINER with explicit read gate (mirrors service_reception_entries SELECT policies).\n-- 2) Join technician_assignments from scoped base rows only (no full-table IN scan under RLS).\n-- 3) Return filter-option metadata in one payload (category/advisor/location slices).\n--\n-- Apply: node scripts/apply-sql-files.mjs supabase/migrations/20260728120000_fix_sa_summary_rpc_security_definer.sql\n\nCREATE OR REPLACE FUNCTION public.user_is_sm_gm_for_dealer_sa(p_sa_employee_code text)\nRETURNS boolean\nLANGUAGE sql\nSTABLE\nSECURITY DEFINER\nSET search_path TO 'public'\nAS $$\n  WITH sa_parts AS (\n    SELECT\n      upper(btrim(split_part(coalesce(p_sa_employee_code, ''), '_', 1))) AS part1,\n      upper(btrim(split_part(coalesce(p_sa_employee_code, ''), '_', 2))) AS part2\n  ),\n  jwt_codes AS (\n    SELECT upper(btrim(code)) AS code\n    FROM unnest(public.my_effective_dealer_codes()) AS code\n    WHERE btrim(coalesce(code, '')) <> ''\n  )\n  SELECT\n    public.has_module_view('service_advisor'::text)\n    AND btrim(coalesce(p_sa_employee_code, '')) <> ''\n    AND EXISTS (\n      SELECT 1\n      FROM public.user_employee_links uel\n      JOIN public.employee_master em ON em.employee_code = uel.employee_code\n      WHERE uel.user_id = auth.uid()\n        AND uel.is_active = true\n        AND lower(btrim(coalesce(em.role, ''))) = ANY (ARRAY['sm'::text, 'gm'::text])\n    )\n    AND (\n      (\n        (SELECT count(*)::int FROM jwt_codes) > 0\n        AND EXISTS (\n          SELECT 1\n          FROM jwt_codes dc\n          CROSS JOIN sa_parts sp\n          WHERE dc.code IN (sp.part1, sp.part2)\n            AND dc.code <> ''\n        )\n      )\n      OR (\n        (SELECT count(*)::int FROM jwt_codes) = 0\n        AND EXISTS (\n          SELECT 1\n          FROM public.user_employee_links uel\n          JOIN public.employee_master em ON em.employee_code = uel.employee_code\n          CROSS JOIN sa_parts sp\n          WHERE uel.user_id = auth.uid()\n            AND uel.is_active = true\n            AND lower(btrim(coalesce(em.role, ''))) = ANY (ARRAY['sm'::text, 'gm'::text])\n            AND upper(btrim(coalesce(uel.dealer_code, ''))) IN (sp.part1, sp.part2)\n            AND upper(btrim(coalesce(uel.dealer_code, ''))) <> ''\n        )\n      )\n    );\n$$;\n\nCOMMENT ON FUNCTION public.user_is_sm_gm_for_dealer_sa(text) IS\n  'SM/GM dealer-scoped SA read helper extracted from service_reception_select_crm_dealer_scope. SECURITY DEFINER.';\n\nGRANT EXECUTE ON FUNCTION public.user_is_sm_gm_for_dealer_sa(text) TO authenticated;\nGRANT EXECUTE ON FUNCTION public.user_is_sm_gm_for_dealer_sa(text) TO service_role;\n\nCREATE OR REPLACE FUNCTION public.user_can_read_service_reception_entry(\n  p_dealer_code text,\n  p_sa_employee_code text,\n  p_service_type text,\n  p_reception_entry_id bigint\n)\nRETURNS boolean\nLANGUAGE sql\nSTABLE\nSECURITY DEFINER\nSET search_path TO 'public'\nAS $$\n  SELECT\n    public.is_admin()\n    OR (public.has_module_view('reception'::text) AND public.dealer_code_in_scope(p_dealer_code))\n    OR (public.has_module_view('service_advisor'::text) AND public.user_has_employee_code(p_sa_employee_code))\n    OR (public.has_module_modify('service_advisor'::text) AND p_sa_employee_code IS NOT NULL AND public.user_has_employee_code(p_sa_employee_code))\n    OR (\n      public.has_module_view('service_advisor'::text)\n      AND p_sa_employee_code IS NOT NULL\n      AND (\n        public.user_is_crm_for_dealer_sa(p_sa_employee_code)\n        OR public.user_is_sm_gm_for_dealer_sa(p_sa_employee_code)\n      )\n    )\n    OR (\n      public.has_module_view('floor_incharge'::text)\n      AND p_sa_employee_code IS NOT NULL\n      AND public.user_has_service_floor_incharge_scope_for_sa_code(p_sa_employee_code)\n    )\n    OR (\n      coalesce(p_service_type, ''::text) = 'Accident'::text\n      AND p_sa_employee_code IS NOT NULL\n      AND (public.has_module_view('bodyshop_floor'::text) OR public.has_module_modify('bodyshop_floor'::text))\n      AND public.user_has_bodyshop_floor_incharge_scope_for_sa_code(p_sa_employee_code)\n    );\n$$;\n\nCOMMENT ON FUNCTION public.user_can_read_service_reception_entry(text, text, text, bigint) IS\n  'Consolidated service_reception_entries SELECT gate for summary RPC. SECURITY DEFINER — keep in sync with reception SELECT policies.';\n\nGRANT EXECUTE ON FUNCTION public.user_can_read_service_reception_entry(text, text, text, bigint) TO authenticated;\nGRANT EXECUTE ON FUNCTION public.user_can_read_service_reception_entry(text, text, text, bigint) TO service_role;\n\nCREATE OR REPLACE FUNCTION public.get_service_advisor_summary_counts(\n  p_created_from timestamptz,\n  p_created_to timestamptz,\n  p_branch text DEFAULT NULL,\n  p_fuel_type text DEFAULT NULL,\n  p_category text DEFAULT NULL,\n  p_advisor_key text DEFAULT NULL,\n  p_search text DEFAULT NULL\n)\nRETURNS jsonb\nLANGUAGE plpgsql\nSTABLE\nSECURITY DEFINER\nSET search_path TO 'public'\nAS $$\nDECLARE\n  v_result jsonb;\nBEGIN\n  IF NOT (\n    public.is_admin()\n    OR public.has_module_view('service_advisor'::text)\n    OR public.has_module_view('reception'::text)\n    OR public.has_module_view('floor_incharge'::text)\n    OR public.has_module_view('bodyshop_floor'::text)\n  ) THEN\n    RAISE EXCEPTION 'permission denied' USING ERRCODE = '42501';\n  END IF;\n\n  WITH scope AS (\n    SELECT\n      r.id,\n      r.jc_number,\n      r.service_type,\n      r.estimate_storage_path,\n      r.invoice_done_at,\n      r.branch,\n      r.portal,\n      r.sa_employee_code,\n      r.sa_display_name,\n      r.sa_name,\n      r.reg_number,\n      r.model,\n      r.owner_name,\n      r.owner_phone,\n      r.source,\n      r.created_by,\n      lower(trim(regexp_replace(coalesce(r.service_type, ''), '\\s+', ' ', 'g'))) AS st_norm,\n      coalesce(\n        nullif(btrim(em.fuel_type), ''),\n        nullif(btrim(r.portal), ''),\n        'Unknown'\n      ) AS fuel_label\n    FROM public.service_reception_entries r\n    LEFT JOIN public.employee_master em\n      ON upper(btrim(em.employee_code)) = upper(btrim(r.sa_employee_code))\n    WHERE r.created_at >= p_created_from\n      AND r.created_at <= p_created_to\n      AND public.user_can_read_service_reception_entry(\n        r.dealer_code,\n        r.sa_employee_code,\n        r.service_type,\n        r.id\n      )\n  ),\n  apply_common_filters AS (\n    SELECT\n      s.*,\n      p_branch AS branch_filter,\n      p_fuel_type AS fuel_filter,\n      p_category AS category_filter,\n      p_advisor_key AS advisor_filter,\n      p_search AS search_filter\n    FROM scope s\n  ),\n  filter_rows AS (\n    SELECT s.*\n    FROM apply_common_filters s\n    WHERE (s.branch_filter IS NULL OR btrim(s.branch_filter) = '' OR s.branch = s.branch_filter)\n      AND (\n        s.fuel_filter IS NULL\n        OR btrim(s.fuel_filter) = ''\n        OR s.fuel_label = s.fuel_filter\n      )\n      AND (\n        s.category_filter IS NULL\n        OR btrim(s.category_filter) = ''\n        OR (\n          s.category_filter = 'floor'\n          AND s.st_norm = ANY (\n            ARRAY[\n              'running repairs', 'first free service', 'second free service', 'third free service',\n              'paid service', 'updation', 'e breakdown', 'campaign'\n            ]\n          )\n        )\n        OR (s.category_filter = 'bodyshop' AND s.st_norm = 'accident')\n        OR (\n          s.category_filter = 'others'\n          AND btrim(coalesce(s.service_type, '')) <> ''\n          AND s.st_norm NOT IN ('accident', 'rusting')\n          AND s.st_norm <> ALL (\n            ARRAY[\n              'running repairs', 'first free service', 'second free service', 'third free service',\n              'paid service', 'updation', 'e breakdown', 'campaign'\n            ]\n          )\n        )\n        OR (s.category_filter = 'null' AND btrim(coalesce(s.service_type, '')) = '')\n      )\n      AND (\n        s.advisor_filter IS NULL\n        OR btrim(s.advisor_filter) = ''\n        OR (\n          s.advisor_filter LIKE 'code:%'\n          AND upper(btrim(s.sa_employee_code)) = upper(btrim(substring(s.advisor_filter from 6)))\n        )\n        OR (\n          s.advisor_filter LIKE 'name:%'\n          AND lower(btrim(coalesce(s.sa_display_name, s.sa_name, ''))) = lower(btrim(substring(s.advisor_filter from 6)))\n        )\n      )\n      AND (\n        s.search_filter IS NULL\n        OR btrim(s.search_filter) = ''\n        OR (\n          coalesce(s.reg_number, '') ILIKE '%' || s.search_filter || '%'\n          OR coalesce(s.model, '') ILIKE '%' || s.search_filter || '%'\n          OR coalesce(s.jc_number, '') ILIKE '%' || s.search_filter || '%'\n          OR coalesce(s.owner_name, '') ILIKE '%' || s.search_filter || '%'\n          OR coalesce(s.owner_phone, '') ILIKE '%' || s.search_filter || '%'\n          OR coalesce(s.sa_name, '') ILIKE '%' || s.search_filter || '%'\n          OR coalesce(s.sa_display_name, '') ILIKE '%' || s.search_filter || '%'\n          OR coalesce(s.source, '') ILIKE '%' || s.search_filter || '%'\n          OR coalesce(s.created_by, '') ILIKE '%' || s.search_filter || '%'\n        )\n      )\n  ),\n  base AS (\n    SELECT * FROM filter_rows\n  ),\n  base_for_category AS (\n    SELECT s.*\n    FROM apply_common_filters s\n    WHERE (s.branch_filter IS NULL OR btrim(s.branch_filter) = '' OR s.branch = s.branch_filter)\n      AND (s.fuel_filter IS NULL OR btrim(s.fuel_filter) = '' OR s.fuel_label = s.fuel_filter)\n      AND (\n        s.advisor_filter IS NULL\n        OR btrim(s.advisor_filter) = ''\n        OR (\n          s.advisor_filter LIKE 'code:%'\n          AND upper(btrim(s.sa_employee_code)) = upper(btrim(substring(s.advisor_filter from 6)))\n        )\n        OR (\n          s.advisor_filter LIKE 'name:%'\n          AND lower(btrim(coalesce(s.sa_display_name, s.sa_name, ''))) = lower(btrim(substring(s.advisor_filter from 6)))\n        )\n      )\n      AND (\n        s.search_filter IS NULL\n        OR btrim(s.search_filter) = ''\n        OR (\n          coalesce(s.reg_number, '') ILIKE '%' || s.search_filter || '%'\n          OR coalesce(s.model, '') ILIKE '%' || s.search_filter || '%'\n          OR coalesce(s.jc_number, '') ILIKE '%' || s.search_filter || '%'\n          OR coalesce(s.owner_name, '') ILIKE '%' || s.search_filter || '%'\n          OR coalesce(s.owner_phone, '') ILIKE '%' || s.search_filter || '%'\n          OR coalesce(s.sa_name, '') ILIKE '%' || s.search_filter || '%'\n          OR coalesce(s.sa_display_name, '') ILIKE '%' || s.search_filter || '%'\n          OR coalesce(s.source, '') ILIKE '%' || s.search_filter || '%'\n          OR coalesce(s.created_by, '') ILIKE '%' || s.search_filter || '%'\n        )\n      )\n  ),\n  base_for_advisor AS (\n    SELECT s.*\n    FROM apply_common_filters s\n    WHERE (s.branch_filter IS NULL OR btrim(s.branch_filter) = '' OR s.branch = s.branch_filter)\n      AND (s.fuel_filter IS NULL OR btrim(s.fuel_filter) = '' OR s.fuel_label = s.fuel_filter)\n      AND (\n        s.category_filter IS NULL\n        OR btrim(s.category_filter) = ''\n        OR (\n          s.category_filter = 'floor'\n          AND s.st_norm = ANY (\n            ARRAY[\n              'running repairs', 'first free service', 'second free service', 'third free service',\n              'paid service', 'updation', 'e breakdown', 'campaign'\n            ]\n          )\n        )\n        OR (s.category_filter = 'bodyshop' AND s.st_norm = 'accident')\n        OR (\n          s.category_filter = 'others'\n          AND btrim(coalesce(s.service_type, '')) <> ''\n          AND s.st_norm NOT IN ('accident', 'rusting')\n          AND s.st_norm <> ALL (\n            ARRAY[\n              'running repairs', 'first free service', 'second free service', 'third free service',\n              'paid service', 'updation', 'e breakdown', 'campaign'\n            ]\n          )\n        )\n        OR (s.category_filter = 'null' AND btrim(coalesce(s.service_type, '')) = '')\n      )\n      AND (\n        s.search_filter IS NULL\n        OR btrim(s.search_filter) = ''\n        OR (\n          coalesce(s.reg_number, '') ILIKE '%' || s.search_filter || '%'\n          OR coalesce(s.model, '') ILIKE '%' || s.search_filter || '%'\n          OR coalesce(s.jc_number, '') ILIKE '%' || s.search_filter || '%'\n          OR coalesce(s.owner_name, '') ILIKE '%' || s.search_filter || '%'\n          OR coalesce(s.owner_phone, '') ILIKE '%' || s.search_filter || '%'\n          OR coalesce(s.sa_name, '') ILIKE '%' || s.search_filter || '%'\n          OR coalesce(s.sa_display_name, '') ILIKE '%' || s.search_filter || '%'\n          OR coalesce(s.source, '') ILIKE '%' || s.search_filter || '%'\n          OR coalesce(s.created_by, '') ILIKE '%' || s.search_filter || '%'\n        )\n      )\n  ),\n  base_for_location AS (\n    SELECT s.*\n    FROM apply_common_filters s\n    WHERE (s.fuel_filter IS NULL OR btrim(s.fuel_filter) = '' OR s.fuel_label = s.fuel_filter)\n      AND (\n        s.category_filter IS NULL\n        OR btrim(s.category_filter) = ''\n        OR (\n          s.category_filter = 'floor'\n          AND s.st_norm = ANY (\n            ARRAY[\n              'running repairs', 'first free service', 'second free service', 'third free service',\n              'paid service', 'updation', 'e breakdown', 'campaign'\n            ]\n          )\n        )\n        OR (s.category_filter = 'bodyshop' AND s.st_norm = 'accident')\n        OR (\n          s.category_filter = 'others'\n          AND btrim(coalesce(s.service_type, '')) <> ''\n          AND s.st_norm NOT IN ('accident', 'rusting')\n          AND s.st_norm <> ALL (\n            ARRAY[\n              'running repairs', 'first free service', 'second free service', 'third free service',\n              'paid service', 'updation', 'e breakdown', 'campaign'\n            ]\n          )\n        )\n        OR (s.category_filter = 'null' AND btrim(coalesce(s.service_type, '')) = '')\n      )\n      AND (\n        s.advisor_filter IS NULL\n        OR btrim(s.advisor_filter) = ''\n        OR (\n          s.advisor_filter LIKE 'code:%'\n          AND upper(btrim(s.sa_employee_code)) = upper(btrim(substring(s.advisor_filter from 6)))\n        )\n        OR (\n          s.advisor_filter LIKE 'name:%'\n          AND lower(btrim(coalesce(s.sa_display_name, s.sa_name, ''))) = lower(btrim(substring(s.advisor_filter from 6)))\n        )\n      )\n      AND (\n        s.search_filter IS NULL\n        OR btrim(s.search_filter) = ''\n        OR (\n          coalesce(s.reg_number, '') ILIKE '%' || s.search_filter || '%'\n          OR coalesce(s.model, '') ILIKE '%' || s.search_filter || '%'\n          OR coalesce(s.jc_number, '') ILIKE '%' || s.search_filter || '%'\n          OR coalesce(s.owner_name, '') ILIKE '%' || s.search_filter || '%'\n          OR coalesce(s.owner_phone, '') ILIKE '%' || s.search_filter || '%'\n          OR coalesce(s.sa_name, '') ILIKE '%' || s.search_filter || '%'\n          OR coalesce(s.sa_display_name, '') ILIKE '%' || s.search_filter || '%'\n          OR coalesce(s.source, '') ILIKE '%' || s.search_filter || '%'\n          OR coalesce(s.created_by, '') ILIKE '%' || s.search_filter || '%'\n        )\n      )\n  ),\n  assign AS (\n    SELECT\n      upper(btrim(b.jc_number)) AS jc,\n      bool_or(lower(btrim(coalesce(t.work_status, ''))) = 'completed') AS is_completed,\n      bool_or(lower(btrim(coalesce(t.work_status, ''))) = 'hold') AS is_hold,\n      bool_or(lower(btrim(coalesce(t.work_status, ''))) = 'work_inprocess') AS is_in_process,\n      true AS has_assignment\n    FROM base b\n    INNER JOIN public.technician_assignments t\n      ON upper(btrim(coalesce(b.jc_number, ''))) = upper(btrim(t.job_card_number))\n    WHERE btrim(coalesce(b.jc_number, '')) <> ''\n    GROUP BY 1\n  ),\n  enriched AS (\n    SELECT\n      b.*,\n      coalesce(a.is_completed, false) AS work_completed,\n      coalesce(a.is_hold, false) AS work_hold,\n      coalesce(a.is_in_process, false) AS work_in_process,\n      coalesce(a.has_assignment, false) AS has_assignment,\n      (b.st_norm = ANY (\n        ARRAY[\n          'running repairs', 'first free service', 'second free service', 'third free service',\n          'paid service', 'updation', 'e breakdown', 'campaign'\n        ]\n      )) AS is_floor,\n      (b.st_norm = 'accident') AS is_bodyshop,\n      (b.st_norm = 'rusting') AS is_rusting\n    FROM base b\n    LEFT JOIN assign a ON upper(btrim(coalesce(b.jc_number, ''))) = a.jc\n  )\n  SELECT jsonb_build_object(\n    'total', (SELECT count(*)::int FROM enriched),\n    'job_card_pending', (SELECT count(*)::int FROM enriched WHERE btrim(coalesce(jc_number, '')) = ''),\n    'sr_type_pending', (SELECT count(*)::int FROM enriched WHERE btrim(coalesce(service_type, '')) = ''),\n    'estimate_pending', (\n      SELECT count(*)::int FROM enriched\n      WHERE NOT is_bodyshop AND NOT is_rusting AND estimate_storage_path IS NULL\n    ),\n    'invoice_pending', (\n      SELECT count(*)::int FROM enriched\n      WHERE NOT is_bodyshop AND NOT is_rusting AND work_completed AND invoice_done_at IS NULL\n    ),\n    'no_technician', (\n      SELECT count(*)::int FROM enriched\n      WHERE is_floor AND (btrim(coalesce(jc_number, '')) = '' OR NOT has_assignment)\n    ),\n    'hold', (SELECT count(*)::int FROM enriched WHERE work_hold),\n    'in_process', (SELECT count(*)::int FROM enriched WHERE work_in_process),\n    'completed', (\n      SELECT count(*)::int FROM enriched\n      WHERE work_completed AND invoice_done_at IS NOT NULL\n    ),\n    'category_counts', (\n      SELECT jsonb_build_object(\n        'all', count(*)::int,\n        'floor', count(*) FILTER (WHERE st_norm = ANY (\n          ARRAY[\n            'running repairs', 'first free service', 'second free service', 'third free service',\n            'paid service', 'updation', 'e breakdown', 'campaign'\n          ]\n        ))::int,\n        'bodyshop', count(*) FILTER (WHERE st_norm = 'accident')::int,\n        'others', count(*) FILTER (\n          WHERE st_norm NOT IN ('accident', 'rusting')\n            AND st_norm <> ALL (\n              ARRAY[\n                'running repairs', 'first free service', 'second free service', 'third free service',\n                'paid service', 'updation', 'e breakdown', 'campaign'\n              ]\n            )\n            AND btrim(coalesce(service_type, '')) <> ''\n        )::int,\n        'null', count(*) FILTER (WHERE btrim(coalesce(service_type, '')) = '')::int\n      )\n      FROM base_for_category\n    ),\n    'branches', (\n      SELECT coalesce(jsonb_agg(branch ORDER BY branch), '[]'::jsonb)\n      FROM (\n        SELECT DISTINCT branch\n        FROM base_for_location\n        WHERE branch IS NOT NULL AND btrim(branch) <> ''\n      ) s\n    ),\n    'location_total', (SELECT count(*)::int FROM base_for_location),\n    'fuel_types', (\n      SELECT coalesce(jsonb_agg(fuel ORDER BY fuel), '[]'::jsonb)\n      FROM (SELECT DISTINCT fuel_label AS fuel FROM base_for_location) s\n    ),\n    'advisors', (\n      SELECT coalesce(\n        jsonb_agg(\n          jsonb_build_object('key', advisor_key, 'label', advisor_label, 'count', cnt)\n          ORDER BY advisor_label\n        ),\n        '[]'::jsonb\n      )\n      FROM (\n        SELECT\n          CASE\n            WHEN btrim(coalesce(sa_employee_code, '')) <> '' THEN 'code:' || upper(btrim(sa_employee_code))\n            WHEN btrim(coalesce(sa_display_name, sa_name, '')) <> ''\n              THEN 'name:' || lower(btrim(coalesce(sa_display_name, sa_name, '')))\n            ELSE 'unknown'\n          END AS advisor_key,\n          CASE\n            WHEN btrim(coalesce(sa_display_name, sa_name, '')) <> ''\n              AND btrim(coalesce(sa_employee_code, '')) <> ''\n              THEN btrim(coalesce(sa_display_name, sa_name, '')) || ' (' || upper(btrim(sa_employee_code)) || ')'\n            WHEN btrim(coalesce(sa_display_name, sa_name, '')) <> ''\n              THEN btrim(coalesce(sa_display_name, sa_name, ''))\n            WHEN btrim(coalesce(sa_employee_code, '')) <> ''\n              THEN upper(btrim(sa_employee_code))\n            ELSE 'Unknown advisor'\n          END AS advisor_label,\n          count(*)::int AS cnt\n        FROM base_for_advisor\n        GROUP BY 1, 2\n      ) advisor_rows\n    )\n  )\n  INTO v_result;\n\n  RETURN v_result;\nEND;\n$$;\n\nCOMMENT ON FUNCTION public.get_service_advisor_summary_counts(\n  timestamptz, timestamptz, text, text, text, text, text\n) IS 'P1-06 Batch F: SA summary counts. SECURITY DEFINER with explicit read gate; single call returns tile + filter-option metadata.';\n\nGRANT EXECUTE ON FUNCTION public.get_service_advisor_summary_counts(\n  timestamptz, timestamptz, text, text, text, text, text\n) TO authenticated;\n\nGRANT EXECUTE ON FUNCTION public.get_service_advisor_summary_counts(\n  timestamptz, timestamptz, text, text, text, text, text\n) TO service_role;\n\n\n-- source: POST /v1/projects/:ref/database/query\n-- user: pat:5001876\n-- date: 2026-07-28T05:24:06.142Z",
+      "timestamp": "2026-07-28T05:24:06.678000"
+    },
+    {
+      "event_message": "cron job 24 completed: 1 row",
+      "timestamp": "2026-07-28T05:24:00.203000"
+    },
+    {
+      "event_message": "cron job 10 completed: 1 row",
+      "timestamp": "2026-07-28T05:24:00.175000"
+    },
+    {
+      "event_message": "cron job 25 completed: 1 row",
+      "timestamp": "2026-07-28T05:24:00.166000"
+    },
+    {
+      "event_message": "cron job 10 starting: select public.process_next_psf_import_run();",
+      "timestamp": "2026-07-28T05:24:00.008000"
+    },
+    {
+      "event_message": "cron job 25 starting: SELECT public.invoke_insurance_renewal_rc_fetch_worker();",
+      "timestamp": "2026-07-28T05:24:00.006000"
+    },
+    {
+      "event_message": "cron job 24 starting: select public.process_all_service_history_sync_queue(50);",
+      "timestamp": "2026-07-28T05:24:00.004000"
+    },
+    {
+      "event_message": "canceling statement due to statement timeout",
+      "timestamp": "2026-07-28T05:23:05.044000"
+    },
+    {
+      "event_message": "checkpoint complete: wrote 603 buffers (1.8%); 0 WAL file(s) added, 0 removed, 3 recycled; write=60.167 s, sync=0.004 s, total=60.182 s; sync files=169, longest=0.002 s, average=0.001 s; distance=32883 kB, estimate=47700 kB; lsn=85/4E1F3358, redo lsn=85/4D03BD10",
+      "timestamp": "2026-07-28T05:23:00.546000"
+    },
+    {
+      "event_message": "cron job 24 completed: 1 row",
+      "timestamp": "2026-07-28T05:23:00.147000"
+    },
+    {
+      "event_message": "cron job 10 completed: 1 row",
+      "timestamp": "2026-07-28T05:23:00.109000"
+    },
+    {
+      "event_message": "cron job 10 starting: select public.process_next_psf_import_run();",
+      "timestamp": "2026-07-28T05:23:00.035000"
+    },
+    {
+      "event_message": "cron job 24 starting: select public.process_all_service_history_sync_queue(50);",
+      "timestamp": "2026-07-28T05:23:00.022000"
+    },
+    {
+      "event_message": "checkpoint starting: time",
+      "timestamp": "2026-07-28T05:22:00.364000"
+    },
+    {
+      "event_message": "cron job 24 completed: 1 row",
+      "timestamp": "2026-07-28T05:22:00.315000"
+    },
+    {
+      "event_message": "cron job 10 completed: 1 row",
+      "timestamp": "2026-07-28T05:22:00.281000"
+    },
+    {
+      "event_message": "cron job 25 completed: 1 row",
+      "timestamp": "2026-07-28T05:22:00.267000"
+    },
+    {
+      "event_message": "cron job 10 starting: select public.process_next_psf_import_run();",
+      "timestamp": "2026-07-28T05:22:00.055000"
+    },
+    {
+      "event_message": "cron job 25 starting: SELECT public.invoke_insurance_renewal_rc_fetch_worker();",
+      "timestamp": "2026-07-28T05:22:00.040000"
+    },
+    {
+      "event_message": "cron job 24 starting: select public.process_all_service_history_sync_queue(50);",
+      "timestamp": "2026-07-28T05:22:00.020000"
+    },
+    {
+      "event_message": "statement: -- v2: DMS import still timed out after bulk-refresh v1.\n-- Root causes:\n--   1) production UI still sends 500-row RPC payloads per call\n--   2) refresh_job_card_closed_dms_revenue_batch used LATERAL per JCC row (still slow)\n-- Fix:\n--   A) import RPC = upsert only (no JCC mirror during import)\n--   B) refresh RPC = single DISTINCT ON scan over psf_revenue_dms\n--   C) raise statement_timeout locally inside SECURITY DEFINER import RPC\n\nCREATE OR REPLACE FUNCTION public.refresh_job_card_closed_dms_revenue_batch(p_keys jsonb)\nRETURNS integer\nLANGUAGE plpgsql\nSECURITY DEFINER\nSET search_path TO 'public'\nAS $$\nDECLARE\n  v_updated integer := 0;\nBEGIN\n  IF p_keys IS NULL OR jsonb_typeof(p_keys) <> 'array' OR jsonb_array_length(p_keys) = 0 THEN\n    RETURN 0;\n  END IF;\n\n  WITH keys AS (\n    SELECT DISTINCT\n      upper(btrim(r.job_card_number)) AS job_card_number,\n      nullif(btrim(r.location), '') AS location,\n      nullif(btrim(r.portal), '') AS portal\n    FROM jsonb_to_recordset(p_keys) AS r(\n      job_card_number text,\n      location text,\n      portal text\n    )\n    WHERE coalesce(btrim(r.job_card_number), '') <> ''\n      AND nullif(btrim(r.location), '') IS NOT NULL\n      AND nullif(btrim(r.portal), '') IS NOT NULL\n  ),\n  latest_dms AS (\n    SELECT DISTINCT ON (\n      upper(btrim(d.job_card_number)),\n      d.location,\n      d.portal\n    )\n      upper(btrim(d.job_card_number)) AS job_card_number,\n      d.location,\n      d.portal,\n      d.final_labour_amount,\n      d.total_invoice_amount\n    FROM public.psf_revenue_dms d\n    INNER JOIN keys k\n      ON upper(btrim(d.job_card_number)) = k.job_card_number\n     AND d.location = k.location\n     AND d.portal = k.portal\n    ORDER BY\n      upper(btrim(d.job_card_number)),\n      d.location,\n      d.portal,\n      d.invoice_date DESC NULLS LAST,\n      d.id DESC\n  )\n  UPDATE public.job_card_closed_data jc\n     SET dms_final_labour_amount = ld.final_labour_amount,\n         dms_total_invoice_amount = ld.total_invoice_amount\n    FROM latest_dms ld\n   WHERE upper(btrim(jc.job_card_number)) = ld.job_card_number\n     AND jc.location = ld.location\n     AND jc.portal = ld.portal\n     AND (\n       jc.dms_final_labour_amount IS DISTINCT FROM ld.final_labour_amount\n       OR jc.dms_total_invoice_amount IS DISTINCT FROM ld.total_invoice_amount\n     );\n\n  GET DIAGNOSTICS v_updated = ROW_COUNT;\n  RETURN v_updated;\nEND;\n$$;\n\nCOMMENT ON FUNCTION public.refresh_job_card_closed_dms_revenue_batch(jsonb) IS\n  'Bulk mirror latest psf_revenue_dms amounts into job_card_closed_data for supplied keys. Uses DISTINCT ON (no per-row lateral).';\n\nGRANT EXECUTE ON FUNCTION public.refresh_job_card_closed_dms_revenue_batch(jsonb) TO authenticated;\nGRANT EXECUTE ON FUNCTION public.refresh_job_card_closed_dms_revenue_batch(jsonb) TO service_role;\n\nCREATE OR REPLACE FUNCTION public.run_psf_revenue_dms_import_batch(\n  p_rows jsonb,\n  p_sync_job_cards boolean DEFAULT false\n)\nRETURNS TABLE(processed_rows integer, inserted_rows integer, updated_rows integer)\nLANGUAGE plpgsql\nSECURITY DEFINER\nSET search_path TO 'public'\nAS $$\nDECLARE\n  v_processed integer := 0;\n  v_inserted integer := 0;\n  v_updated integer := 0;\nBEGIN\n  PERFORM set_config('statement_timeout', '120s', true);\n\n  IF p_rows IS NULL OR jsonb_typeof(p_rows) <> 'array' OR jsonb_array_length(p_rows) = 0 THEN\n    RETURN QUERY SELECT 0, 0, 0;\n    RETURN;\n  END IF;\n\n  ALTER TABLE public.psf_revenue_dms DISABLE TRIGGER trg_refresh_job_card_closed_dms_revenue;\n\n  WITH src AS (\n    SELECT\n      coalesce(nullif(btrim(r.branch), ''), nullif(btrim(r.location), '')) AS branch,\n      nullif(btrim(r.location), '') AS location,\n      nullif(btrim(r.portal), '') AS portal,\n      nullif(btrim(r.invoice_number), '') AS invoice_number,\n      r.invoice_date,\n      nullif(btrim(r.account), '') AS account,\n      nullif(btrim(r.first_name), '') AS first_name,\n      nullif(btrim(r.last_name), '') AS last_name,\n      nullif(btrim(r.invoice_type), '') AS invoice_type,\n      nullif(btrim(r.invoice_format), '') AS invoice_format,\n      nullif(btrim(r.invoice_status), '') AS invoice_status,\n      r.final_labour_amount,\n      r.final_spares_amount,\n      r.total_invoice_amount,\n      upper(nullif(btrim(r.job_card_number), '')) AS job_card_number,\n      nullif(btrim(r.sr_number), '') AS sr_number,\n      upper(nullif(btrim(r.chassis_number), '')) AS chassis_number,\n      nullif(btrim(r.vehicle_registration_number), '') AS vehicle_registration_number,\n      nullif(btrim(r.irn), '') AS irn,\n      r.irn_date,\n      nullif(btrim(r.irn_status), '') AS irn_status,\n      r.irn_cancellation_date,\n      r.tcs_percent,\n      r.tcs_assessable_amount,\n      r.final_tcs_amount,\n      nullif(btrim(r.cancellation_reason), '') AS cancellation_reason,\n      nullif(btrim(r.arn), '') AS arn,\n      nullif(btrim(r.crn), '') AS crn,\n      nullif(btrim(r.contact_home_phone), '') AS contact_home_phone,\n      nullif(btrim(r.account_phone_number), '') AS account_phone_number,\n      nullif(btrim(r.contact_cell_phone), '') AS contact_cell_phone,\n      nullif(btrim(r.contact_work_phone), '') AS contact_work_phone,\n      nullif(btrim(r.jc_supervisor), '') AS jc_supervisor,\n      r.delivery_date,\n      nullif(btrim(r.reason_for_delay), '') AS reason_for_delay,\n      nullif(btrim(r.sr_type), '') AS sr_type,\n      r.kms_run,\n      nullif(btrim(r.sr_assigned_to), '') AS sr_assigned_to,\n      nullif(btrim(r.employee_code), '') AS employee_code,\n      r.discounts_labour,\n      r.other_charges_labour,\n      r.service_tax,\n      r.swachh_bharat_cess_amount,\n      r.krishi_kalyan_cess_amount,\n      r.wct,\n      r.education_cess,\n      r.discounts_parts,\n      r.other_charges_parts,\n      r.tax_parts,\n      nullif(btrim(r.mode_of_payment), '') AS mode_of_payment,\n      r.invoice_cancellation_date,\n      nullif(btrim(r.prolife_flag), '') AS prolife_flag\n    FROM jsonb_to_recordset(p_rows) AS r(\n      branch text,\n      location text,\n      portal text,\n      invoice_number text,\n      invoice_date date,\n      account text,\n      first_name text,\n      last_name text,\n      invoice_type text,\n      invoice_format text,\n      invoice_status text,\n      final_labour_amount numeric,\n      final_spares_amount numeric,\n      total_invoice_amount numeric,\n      job_card_number text,\n      sr_number text,\n      chassis_number text,\n      vehicle_registration_number text,\n      irn text,\n      irn_date date,\n      irn_status text,\n      irn_cancellation_date date,\n      tcs_percent numeric,\n      tcs_assessable_amount numeric,\n      final_tcs_amount numeric,\n      cancellation_reason text,\n      arn text,\n      crn text,\n      contact_home_phone text,\n      account_phone_number text,\n      contact_cell_phone text,\n      contact_work_phone text,\n      jc_supervisor text,\n      delivery_date date,\n      reason_for_delay text,\n      sr_type text,\n      kms_run numeric,\n      sr_assigned_to text,\n      employee_code text,\n      discounts_labour numeric,\n      other_charges_labour numeric,\n      service_tax numeric,\n      swachh_bharat_cess_amount numeric,\n      krishi_kalyan_cess_amount numeric,\n      wct numeric,\n      education_cess numeric,\n      discounts_parts numeric,\n      other_charges_parts numeric,\n      tax_parts numeric,\n      mode_of_payment text,\n      invoice_cancellation_date date,\n      prolife_flag text\n    )\n  ),\n  eligible AS (\n    SELECT *\n    FROM src\n    WHERE location IS NOT NULL\n      AND portal IS NOT NULL\n      AND job_card_number IS NOT NULL\n      AND invoice_date IS NOT NULL\n      AND branch IS NOT NULL\n  ),\n  upserted AS (\n    INSERT INTO public.psf_revenue_dms AS t (\n      branch,\n      location,\n      portal,\n      invoice_number,\n      invoice_date,\n      account,\n      first_name,\n      last_name,\n      invoice_type,\n      invoice_format,\n      invoice_status,\n      final_labour_amount,\n      final_spares_amount,\n      total_invoice_amount,\n      job_card_number,\n      sr_number,\n      chassis_number,\n      vehicle_registration_number,\n      irn,\n      irn_date,\n      irn_status,\n      irn_cancellation_date,\n      tcs_percent,\n      tcs_assessable_amount,\n      final_tcs_amount,\n      cancellation_reason,\n      arn,\n      crn,\n      contact_home_phone,\n      account_phone_number,\n      contact_cell_phone,\n      contact_work_phone,\n      jc_supervisor,\n      delivery_date,\n      reason_for_delay,\n      sr_type,\n      kms_run,\n      sr_assigned_to,\n      employee_code,\n      discounts_labour,\n      other_charges_labour,\n      service_tax,\n      swachh_bharat_cess_amount,\n      krishi_kalyan_cess_amount,\n      wct,\n      education_cess,\n      discounts_parts,\n      other_charges_parts,\n      tax_parts,\n      mode_of_payment,\n      invoice_cancellation_date,\n      prolife_flag\n    )\n    SELECT\n      branch,\n      location,\n      portal,\n      invoice_number,\n      invoice_date,\n      account,\n      first_name,\n      last_name,\n      invoice_type,\n      invoice_format,\n      invoice_status,\n      final_labour_amount,\n      final_spares_amount,\n      total_invoice_amount,\n      job_card_number,\n      sr_number,\n      chassis_number,\n      vehicle_registration_number,\n      irn,\n      irn_date,\n      irn_status,\n      irn_cancellation_date,\n      tcs_percent,\n      tcs_assessable_amount,\n      final_tcs_amount,\n      cancellation_reason,\n      arn,\n      crn,\n      contact_home_phone,\n      account_phone_number,\n      contact_cell_phone,\n      contact_work_phone,\n      jc_supervisor,\n      delivery_date,\n      reason_for_delay,\n      sr_type,\n      kms_run,\n      sr_assigned_to,\n      employee_code,\n      discounts_labour,\n      other_charges_labour,\n      service_tax,\n      swachh_bharat_cess_amount,\n      krishi_kalyan_cess_amount,\n      wct,\n      education_cess,\n      discounts_parts,\n      other_charges_parts,\n      tax_parts,\n      mode_of_payment,\n      invoice_cancellation_date,\n      prolife_flag\n    FROM eligible\n    ON CONFLICT ON CONSTRAINT uq_psf_revenue_dms_location_portal_job_card_invoice_date\n    DO UPDATE SET\n      branch = EXCLUDED.branch,\n      invoice_number = EXCLUDED.invoice_number,\n      account = EXCLUDED.account,\n      first_name = EXCLUDED.first_name,\n      last_name = EXCLUDED.last_name,\n      invoice_type = EXCLUDED.invoice_type,\n      invoice_format = EXCLUDED.invoice_format,\n      invoice_status = EXCLUDED.invoice_status,\n      final_labour_amount = EXCLUDED.final_labour_amount,\n      final_spares_amount = EXCLUDED.final_spares_amount,\n      total_invoice_amount = EXCLUDED.total_invoice_amount,\n      sr_number = EXCLUDED.sr_number,\n      chassis_number = EXCLUDED.chassis_number,\n      vehicle_registration_number = EXCLUDED.vehicle_registration_number,\n      irn = EXCLUDED.irn,\n      irn_date = EXCLUDED.irn_date,\n      irn_status = EXCLUDED.irn_status,\n      irn_cancellation_date = EXCLUDED.irn_cancellation_date,\n      tcs_percent = EXCLUDED.tcs_percent,\n      tcs_assessable_amount = EXCLUDED.tcs_assessable_amount,\n      final_tcs_amount = EXCLUDED.final_tcs_amount,\n      cancellation_reason = EXCLUDED.cancellation_reason,\n      arn = EXCLUDED.arn,\n      crn = EXCLUDED.crn,\n      contact_home_phone = EXCLUDED.contact_home_phone,\n      account_phone_number = EXCLUDED.account_phone_number,\n      contact_cell_phone = EXCLUDED.contact_cell_phone,\n      contact_work_phone = EXCLUDED.contact_work_phone,\n      jc_supervisor = EXCLUDED.jc_supervisor,\n      delivery_date = EXCLUDED.delivery_date,\n      reason_for_delay = EXCLUDED.reason_for_delay,\n      sr_type = EXCLUDED.sr_type,\n      kms_run = EXCLUDED.kms_run,\n      sr_assigned_to = EXCLUDED.sr_assigned_to,\n      employee_code = EXCLUDED.employee_code,\n      discounts_labour = EXCLUDED.discounts_labour,\n      other_charges_labour = EXCLUDED.other_charges_labour,\n      service_tax = EXCLUDED.service_tax,\n      swachh_bharat_cess_amount = EXCLUDED.swachh_bharat_cess_amount,\n      krishi_kalyan_cess_amount = EXCLUDED.krishi_kalyan_cess_amount,\n      wct = EXCLUDED.wct,\n      education_cess = EXCLUDED.education_cess,\n      discounts_parts = EXCLUDED.discounts_parts,\n      other_charges_parts = EXCLUDED.other_charges_parts,\n      tax_parts = EXCLUDED.tax_parts,\n      mode_of_payment = EXCLUDED.mode_of_payment,\n      invoice_cancellation_date = EXCLUDED.invoice_cancellation_date,\n      prolife_flag = EXCLUDED.prolife_flag,\n      updated_at = now()\n    RETURNING (xmax = 0) AS inserted_flag, job_card_number, location, portal\n  )\n  SELECT\n    count(*)::integer,\n    count(*) FILTER (WHERE inserted_flag)::integer,\n    count(*) FILTER (WHERE NOT inserted_flag)::integer\n  INTO v_processed, v_inserted, v_updated\n  FROM upserted;\n\n  ALTER TABLE public.psf_revenue_dms ENABLE TRIGGER trg_refresh_job_card_closed_dms_revenue;\n\n  IF p_sync_job_cards THEN\n    PERFORM public.refresh_job_card_closed_dms_revenue_batch(p_rows);\n  END IF;\n\n  RETURN QUERY SELECT v_processed, v_inserted, v_updated;\nEXCEPTION\n  WHEN OTHERS THEN\n    ALTER TABLE public.psf_revenue_dms ENABLE TRIGGER trg_refresh_job_card_closed_dms_revenue;\n    RAISE;\nEND;\n$$;\n\nCOMMENT ON FUNCTION public.run_psf_revenue_dms_import_batch(jsonb, boolean) IS\n  'Bulk upsert psf_revenue_dms from JSON array. JCC mirror is optional (p_sync_job_cards, default false).';\n\n-- Keep single-arg overload for existing PostgREST callers.\nCREATE OR REPLACE FUNCTION public.run_psf_revenue_dms_import_batch(p_rows jsonb)\nRETURNS TABLE(processed_rows integer, inserted_rows integer, updated_rows integer)\nLANGUAGE sql\nSECURITY DEFINER\nSET search_path TO 'public'\nAS $$\n  SELECT * FROM public.run_psf_revenue_dms_import_batch(p_rows, false);\n$$;\n\nGRANT EXECUTE ON FUNCTION public.run_psf_revenue_dms_import_batch(jsonb) TO authenticated;\nGRANT EXECUTE ON FUNCTION public.run_psf_revenue_dms_import_batch(jsonb) TO service_role;\nGRANT EXECUTE ON FUNCTION public.run_psf_revenue_dms_import_batch(jsonb, boolean) TO authenticated;\nGRANT EXECUTE ON FUNCTION public.run_psf_revenue_dms_import_batch(jsonb, boolean) TO service_role;\n\n\n-- source: dashboard\n-- user: session:82dd2089-a0f5-48ef-8a45-06798c35a4ae\n-- date: 2026-07-28T05:21:34.288Z",
+      "timestamp": "2026-07-28T05:21:34.780000"
+    },
+    {
+      "event_message": "cron job 24 completed: 1 row",
+      "timestamp": "2026-07-28T05:21:00.149000"
+    },
+    {
+      "event_message": "cron job 10 completed: 1 row",
+      "timestamp": "2026-07-28T05:21:00.119000"
+    },
+    {
+      "event_message": "cron job 10 starting: select public.process_next_psf_import_run();",
+      "timestamp": "2026-07-28T05:21:00.019000"
+    },
+    {
+      "event_message": "cron job 24 starting: select public.process_all_service_history_sync_queue(50);",
+      "timestamp": "2026-07-28T05:21:00.007000"
+    },
+    {
+      "event_message": "canceling statement due to statement timeout",
+      "timestamp": "2026-07-28T05:20:08.100000"
+    },
+    {
+      "event_message": "canceling statement due to statement timeout",
+      "timestamp": "2026-07-28T05:20:07.226000"
+    },
+    {
+      "event_message": "canceling statement due to statement timeout",
+      "timestamp": "2026-07-28T05:20:07.225000"
+    },
+    {
+      "event_message": "canceling statement due to statement timeout",
+      "timestamp": "2026-07-28T05:20:07.223000"
+    },
+    {
+      "event_message": "canceling statement due to statement timeout",
+      "timestamp": "2026-07-28T05:20:07.202000"
+    },
+    {
+      "event_message": "cron job 24 completed: 1 row",
+      "timestamp": "2026-07-28T05:20:00.122000"
+    },
+    {
+      "event_message": "cron job 10 completed: 1 row",
+      "timestamp": "2026-07-28T05:20:00.093000"
+    },
+    {
+      "event_message": "cron job 25 completed: 1 row",
+      "timestamp": "2026-07-28T05:20:00.082000"
+    },
+    {
+      "event_message": "cron job 10 starting: select public.process_next_psf_import_run();",
+      "timestamp": "2026-07-28T05:20:00.010000"
+    },
+    {
+      "event_message": "cron job 25 starting: SELECT public.invoke_insurance_renewal_rc_fetch_worker();",
+      "timestamp": "2026-07-28T05:20:00.006000"
+    },
+    {
+      "event_message": "cron job 24 starting: select public.process_all_service_history_sync_queue(50);",
+      "timestamp": "2026-07-28T05:20:00.001000"
+    },
+    {
+      "event_message": "cron job 24 completed: 1 row",
+      "timestamp": "2026-07-28T05:19:00.200000"
+    },
+    {
+      "event_message": "cron job 10 completed: 1 row",
+      "timestamp": "2026-07-28T05:19:00.175000"
+    },
+    {
+      "event_message": "cron job 10 starting: select public.process_next_psf_import_run();",
+      "timestamp": "2026-07-28T05:19:00.029000"
+    },
+    {
+      "event_message": "cron job 24 starting: select public.process_all_service_history_sync_queue(50);",
+      "timestamp": "2026-07-28T05:19:00.023000"
+    },
+    {
+      "event_message": "canceling statement due to statement timeout",
+      "timestamp": "2026-07-28T05:18:48.214000"
+    },
+    {
+      "event_message": "cron job 24 completed: 1 row",
+      "timestamp": "2026-07-28T05:18:00.204000"
+    },
+    {
+      "event_message": "cron job 10 completed: 1 row",
+      "timestamp": "2026-07-28T05:18:00.130000"
+    },
+    {
+      "event_message": "cron job 25 completed: 1 row",
+      "timestamp": "2026-07-28T05:18:00.095000"
+    },
+    {
+      "event_message": "cron job 10 starting: select public.process_next_psf_import_run();",
+      "timestamp": "2026-07-28T05:18:00.021000"
+    },
+    {
+      "event_message": "cron job 25 starting: SELECT public.invoke_insurance_renewal_rc_fetch_worker();",
+      "timestamp": "2026-07-28T05:18:00.017000"
+    },
+    {
+      "event_message": "cron job 24 starting: select public.process_all_service_history_sync_queue(50);",
+      "timestamp": "2026-07-28T05:18:00.010000"
+    },
+    {
+      "event_message": "canceling statement due to statement timeout",
+      "timestamp": "2026-07-28T05:17:44.156000"
+    },
+    {
+      "event_message": "canceling statement due to statement timeout",
+      "timestamp": "2026-07-28T05:17:40.967000"
+    },
+    {
+      "event_message": "canceling statement due to statement timeout",
+      "timestamp": "2026-07-28T05:17:40.486000"
+    },
+    {
+      "event_message": "canceling statement due to statement timeout",
+      "timestamp": "2026-07-28T05:17:40.481000"
+    },
+    {
+      "event_message": "canceling statement due to statement timeout",
+      "timestamp": "2026-07-28T05:17:40.475000"
+    },
+    {
+      "event_message": "canceling statement due to statement timeout",
+      "timestamp": "2026-07-28T05:17:40.475000"
+    },
+    {
+      "event_message": "checkpoint starting: time",
+      "timestamp": "2026-07-28T05:17:00.430000"
+    },
+    {
+      "event_message": "cron job 24 completed: 1 row",
+      "timestamp": "2026-07-28T05:17:00.158000"
+    },
+    {
+      "event_message": "cron job 10 completed: 1 row",
+      "timestamp": "2026-07-28T05:17:00.100000"
+    },
+    {
+      "event_message": "cron job 10 starting: select public.process_next_psf_import_run();",
+      "timestamp": "2026-07-28T05:17:00.018000"
+    },
+    {
+      "event_message": "cron job 24 starting: select public.process_all_service_history_sync_queue(50);",
+      "timestamp": "2026-07-28T05:17:00.016000"
+    },
+    {
+      "event_message": "cron job 25 completed: 1 row",
+      "timestamp": "2026-07-28T05:16:00.197000"
+    },
+    {
+      "event_message": "cron job 10 completed: 1 row",
+      "timestamp": "2026-07-28T05:16:00.177000"
+    },
+    {
+      "event_message": "cron job 24 completed: 1 row",
+      "timestamp": "2026-07-28T05:16:00.170000"
+    },
+    {
+      "event_message": "cron job 10 starting: select public.process_next_psf_import_run();",
+      "timestamp": "2026-07-28T05:16:00.033000"
+    },
+    {
+      "event_message": "cron job 25 starting: SELECT public.invoke_insurance_renewal_rc_fetch_worker();",
+      "timestamp": "2026-07-28T05:16:00.014000"
+    },
+    {
+      "event_message": "cron job 24 starting: select public.process_all_service_history_sync_queue(50);",
+      "timestamp": "2026-07-28T05:16:00.001000"
+    },
+    {
+      "event_message": "cron job 24 completed: 1 row",
+      "timestamp": "2026-07-28T05:15:00.095000"
+    },
+    {
+      "event_message": "cron job 10 completed: 1 row",
+      "timestamp": "2026-07-28T05:15:00.075000"
+    },
+    {
+      "event_message": "cron job 10 starting: select public.process_next_psf_import_run();",
+      "timestamp": "2026-07-28T05:15:00.006000"
+    },
+    {
+      "event_message": "cron job 24 starting: select public.process_all_service_history_sync_queue(50);",
+      "timestamp": "2026-07-28T05:15:00.004000"
+    },
+    {
+      "event_message": "statement: -- P1-06 Batch F: single-query Service Advisor summary tiles (replaces client slim-scan loop).\n-- Apply: node scripts/apply-sql-files.mjs supabase/migrations/20260728103000_p1_06_batch_f_service_advisor_summary_rpc.sql\n\nCREATE OR REPLACE FUNCTION public.get_service_advisor_summary_counts(\n  p_created_from timestamptz,\n  p_created_to timestamptz,\n  p_branch text DEFAULT NULL,\n  p_fuel_type text DEFAULT NULL,\n  p_category text DEFAULT NULL,\n  p_advisor_key text DEFAULT NULL,\n  p_search text DEFAULT NULL\n)\nRETURNS jsonb\nLANGUAGE sql\nSTABLE\nSECURITY INVOKER\nSET search_path = public\nAS $$\n  WITH base AS (\n    SELECT\n      r.id,\n      r.jc_number,\n      r.service_type,\n      r.estimate_storage_path,\n      r.invoice_done_at,\n      r.branch,\n      r.portal,\n      r.sa_employee_code,\n      r.sa_display_name,\n      r.sa_name,\n      r.reg_number,\n      r.model,\n      r.owner_name,\n      r.owner_phone,\n      r.source,\n      r.created_by,\n      lower(trim(regexp_replace(coalesce(r.service_type, ''), '\\s+', ' ', 'g'))) AS st_norm,\n      coalesce(\n        nullif(btrim(em.fuel_type), ''),\n        nullif(btrim(r.portal), ''),\n        'Unknown'\n      ) AS fuel_label\n    FROM public.service_reception_entries r\n    LEFT JOIN public.employee_master em\n      ON upper(btrim(em.employee_code)) = upper(btrim(r.sa_employee_code))\n    WHERE r.created_at >= p_created_from\n      AND r.created_at <= p_created_to\n      AND (p_branch IS NULL OR btrim(p_branch) = '' OR r.branch = p_branch)\n      AND (\n        p_fuel_type IS NULL\n        OR btrim(p_fuel_type) = ''\n        OR coalesce(\n          nullif(btrim(em.fuel_type), ''),\n          nullif(btrim(r.portal), ''),\n          'Unknown'\n        ) = p_fuel_type\n      )\n      AND (\n        p_category IS NULL\n        OR btrim(p_category) = ''\n        OR (\n          p_category = 'floor'\n          AND lower(trim(regexp_replace(coalesce(r.service_type, ''), '\\s+', ' ', 'g'))) = ANY (\n            ARRAY[\n              'running repairs', 'first free service', 'second free service', 'third free service',\n              'paid service', 'updation', 'e breakdown', 'campaign'\n            ]\n          )\n        )\n        OR (p_category = 'bodyshop' AND lower(trim(coalesce(r.service_type, ''))) = 'accident')\n        OR (\n          p_category = 'others'\n          AND btrim(coalesce(r.service_type, '')) <> ''\n          AND lower(trim(r.service_type)) NOT IN ('accident', 'rusting')\n          AND lower(trim(regexp_replace(coalesce(r.service_type, ''), '\\s+', ' ', 'g'))) <> ALL (\n            ARRAY[\n              'running repairs', 'first free service', 'second free service', 'third free service',\n              'paid service', 'updation', 'e breakdown', 'campaign'\n            ]\n          )\n        )\n        OR (p_category = 'null' AND btrim(coalesce(r.service_type, '')) = '')\n      )\n      AND (\n        p_advisor_key IS NULL\n        OR btrim(p_advisor_key) = ''\n        OR (\n          p_advisor_key LIKE 'code:%'\n          AND upper(btrim(r.sa_employee_code)) = upper(btrim(substring(p_advisor_key from 6)))\n        )\n        OR (\n          p_advisor_key LIKE 'name:%'\n          AND lower(btrim(coalesce(r.sa_display_name, r.sa_name, ''))) = lower(btrim(substring(p_advisor_key from 6)))\n        )\n      )\n      AND (\n        p_search IS NULL\n        OR btrim(p_search) = ''\n        OR (\n          coalesce(r.reg_number, '') ILIKE '%' || p_search || '%'\n          OR coalesce(r.model, '') ILIKE '%' || p_search || '%'\n          OR coalesce(r.jc_number, '') ILIKE '%' || p_search || '%'\n          OR coalesce(r.owner_name, '') ILIKE '%' || p_search || '%'\n          OR coalesce(r.owner_phone, '') ILIKE '%' || p_search || '%'\n          OR coalesce(r.sa_name, '') ILIKE '%' || p_search || '%'\n          OR coalesce(r.sa_display_name, '') ILIKE '%' || p_search || '%'\n          OR coalesce(r.source, '') ILIKE '%' || p_search || '%'\n          OR coalesce(r.created_by, '') ILIKE '%' || p_search || '%'\n        )\n      )\n  ),\n  jc_keys AS (\n    SELECT DISTINCT upper(btrim(jc_number)) AS jc\n    FROM base\n    WHERE btrim(coalesce(jc_number, '')) <> ''\n  ),\n  assign AS (\n    SELECT\n      upper(btrim(t.job_card_number)) AS jc,\n      bool_or(lower(btrim(coalesce(t.work_status, ''))) = 'completed') AS is_completed,\n      bool_or(lower(btrim(coalesce(t.work_status, ''))) = 'hold') AS is_hold,\n      bool_or(lower(btrim(coalesce(t.work_status, ''))) = 'work_inprocess') AS is_in_process,\n      true AS has_assignment\n    FROM public.technician_assignments t\n    WHERE upper(btrim(t.job_card_number)) IN (SELECT jc FROM jc_keys)\n    GROUP BY 1\n  ),\n  enriched AS (\n    SELECT\n      b.*,\n      coalesce(a.is_completed, false) AS work_completed,\n      coalesce(a.is_hold, false) AS work_hold,\n      coalesce(a.is_in_process, false) AS work_in_process,\n      coalesce(a.has_assignment, false) AS has_assignment,\n      (b.st_norm = ANY (\n        ARRAY[\n          'running repairs', 'first free service', 'second free service', 'third free service',\n          'paid service', 'updation', 'e breakdown', 'campaign'\n        ]\n      )) AS is_floor,\n      (b.st_norm = 'accident') AS is_bodyshop,\n      (b.st_norm = 'rusting') AS is_rusting\n    FROM base b\n    LEFT JOIN assign a ON upper(btrim(coalesce(b.jc_number, ''))) = a.jc\n  )\n  SELECT jsonb_build_object(\n    'total', (SELECT count(*)::int FROM enriched),\n    'job_card_pending', (SELECT count(*)::int FROM enriched WHERE btrim(coalesce(jc_number, '')) = ''),\n    'sr_type_pending', (SELECT count(*)::int FROM enriched WHERE btrim(coalesce(service_type, '')) = ''),\n    'estimate_pending', (\n      SELECT count(*)::int FROM enriched\n      WHERE NOT is_bodyshop AND NOT is_rusting AND estimate_storage_path IS NULL\n    ),\n    'invoice_pending', (\n      SELECT count(*)::int FROM enriched\n      WHERE NOT is_bodyshop AND NOT is_rusting AND work_completed AND invoice_done_at IS NULL\n    ),\n    'no_technician', (\n      SELECT count(*)::int FROM enriched\n      WHERE is_floor AND (btrim(coalesce(jc_number, '')) = '' OR NOT has_assignment)\n    ),\n    'hold', (SELECT count(*)::int FROM enriched WHERE work_hold),\n    'in_process', (SELECT count(*)::int FROM enriched WHERE work_in_process),\n    'completed', (\n      SELECT count(*)::int FROM enriched\n      WHERE work_completed AND invoice_done_at IS NOT NULL\n    ),\n    'category_counts', (\n      SELECT jsonb_build_object(\n        'all', count(*)::int,\n        'floor', count(*) FILTER (WHERE is_floor)::int,\n        'bodyshop', count(*) FILTER (WHERE is_bodyshop)::int,\n        'others', count(*) FILTER (\n          WHERE NOT is_floor AND NOT is_bodyshop AND btrim(coalesce(service_type, '')) <> '' AND NOT is_rusting\n        )::int,\n        'null', count(*) FILTER (WHERE btrim(coalesce(service_type, '')) = '')::int\n      )\n      FROM (\n        SELECT\n          b.*,\n          (b.st_norm = ANY (\n            ARRAY[\n              'running repairs', 'first free service', 'second free service', 'third free service',\n              'paid service', 'updation', 'e breakdown', 'campaign'\n            ]\n          )) AS is_floor,\n          (b.st_norm = 'accident') AS is_bodyshop,\n          (b.st_norm = 'rusting') AS is_rusting\n        FROM base b\n      ) cat_base\n    ),\n    'branches', (\n      SELECT coalesce(jsonb_agg(branch ORDER BY branch), '[]'::jsonb)\n      FROM (SELECT DISTINCT branch FROM base WHERE branch IS NOT NULL AND btrim(branch) <> '') s\n    ),\n    'fuel_types', (\n      SELECT coalesce(jsonb_agg(fuel ORDER BY fuel), '[]'::jsonb)\n      FROM (\n        SELECT DISTINCT fuel_label AS fuel\n        FROM base\n      ) s\n    ),\n    'advisors', (\n      SELECT coalesce(\n        jsonb_agg(\n          jsonb_build_object('key', advisor_key, 'label', advisor_label, 'count', cnt)\n          ORDER BY advisor_label\n        ),\n        '[]'::jsonb\n      )\n      FROM (\n        SELECT\n          CASE\n            WHEN btrim(coalesce(sa_employee_code, '')) <> '' THEN 'code:' || upper(btrim(sa_employee_code))\n            WHEN btrim(coalesce(sa_display_name, sa_name, '')) <> ''\n              THEN 'name:' || lower(btrim(coalesce(sa_display_name, sa_name, '')))\n            ELSE 'unknown'\n          END AS advisor_key,\n          CASE\n            WHEN btrim(coalesce(sa_display_name, sa_name, '')) <> ''\n              AND btrim(coalesce(sa_employee_code, '')) <> ''\n              THEN btrim(coalesce(sa_display_name, sa_name, '')) || ' (' || upper(btrim(sa_employee_code)) || ')'\n            WHEN btrim(coalesce(sa_display_name, sa_name, '')) <> ''\n              THEN btrim(coalesce(sa_display_name, sa_name, ''))\n            WHEN btrim(coalesce(sa_employee_code, '')) <> ''\n              THEN upper(btrim(sa_employee_code))\n            ELSE 'Unknown advisor'\n          END AS advisor_label,\n          count(*)::int AS cnt\n        FROM base\n        GROUP BY 1, 2\n      ) advisor_rows\n    )\n  );\n$$;\n\nCOMMENT ON FUNCTION public.get_service_advisor_summary_counts(\n  timestamptz, timestamptz, text, text, text, text, text\n) IS 'P1-06 Batch F: Service Advisor summary tile counts for a created_at window with optional filters. SECURITY INVOKER — RLS applies.';\n\nGRANT EXECUTE ON FUNCTION public.get_service_advisor_summary_counts(\n  timestamptz, timestamptz, text, text, text, text, text\n) TO authenticated;\n\nGRANT EXECUTE ON FUNCTION public.get_service_advisor_summary_counts(\n  timestamptz, timestamptz, text, text, text, text, text\n) TO service_role;\n\n\n-- source: dashboard\n-- user: session:82dd2089-a0f5-48ef-8a45-06798c35a4ae\n-- date: 2026-07-28T05:14:24.013Z",
+      "timestamp": "2026-07-28T05:14:24.480000"
+    },
+    {
+      "event_message": "cron job 10 completed: 1 row",
+      "timestamp": "2026-07-28T05:14:00.228000"
+    },
+    {
+      "event_message": "cron job 24 completed: 1 row",
+      "timestamp": "2026-07-28T05:14:00.204000"
+    },
+    {
+      "event_message": "cron job 25 completed: 1 row",
+      "timestamp": "2026-07-28T05:14:00.167000"
+    },
+    {
+      "event_message": "cron job 10 starting: select public.process_next_psf_import_run();",
+      "timestamp": "2026-07-28T05:14:00.054000"
+    },
+    {
+      "event_message": "cron job 25 starting: SELECT public.invoke_insurance_renewal_rc_fetch_worker();",
+      "timestamp": "2026-07-28T05:14:00.051000"
+    },
+    {
+      "event_message": "cron job 24 starting: select public.process_all_service_history_sync_queue(50);",
+      "timestamp": "2026-07-28T05:14:00.015000"
+    },
+    {
+      "event_message": "statement: -- Fix postgres error: function gen_random_bytes(integer) does not exist\n-- Apply: node scripts/apply-sql-files.mjs supabase/migrations/20260728104000_enable_pgcrypto_extension.sql\n\nCREATE EXTENSION IF NOT EXISTS pgcrypto WITH SCHEMA extensions;\n\n\n-- source: POST /v1/projects/:ref/database/query\n-- user: pat:5001876\n-- date: 2026-07-28T05:13:29.188Z",
+      "timestamp": "2026-07-28T05:13:29.663000"
+    },
+    {
+      "event_message": "column r.fuel_type does not exist",
+      "timestamp": "2026-07-28T05:13:28.744000"
+    }
+  ]
+}
