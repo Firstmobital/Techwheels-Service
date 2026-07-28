@@ -248,7 +248,8 @@ const PSF_SERVER_STAGING_RPC_CHUNK_SIZE = 1000
 const PSF_ASYNC_ENQUEUE_ENABLED = true
 const PSF_ASYNC_ENQUEUE_CHUNK_SIZE = 250
 const PSF_DMS_SERVER_IMPORT_RPC_ENABLED = true
-const PSF_DMS_SERVER_IMPORT_CHUNK_SIZE = 150
+const PSF_DMS_SERVER_IMPORT_CHUNK_SIZE = 75
+const PSF_DMS_JCC_SYNC_CHUNK_SIZE = 200
 const PARTS_REPLACE_ALL_ON_IMPORT = true
 
 const DEALER_CODE_LOCATION_PORTAL_RULES = [
@@ -1807,6 +1808,39 @@ export default function ImportPage() {
           return Array.from(dedupedByCanonicalKey.values())
         }
 
+        const syncPsfRevenueDmsToJobCards = async (rows: Record<string, unknown>[]): Promise<void> => {
+          if (rows.length === 0) return
+
+          const syncKeys = rows.map((row) => ({
+            job_card_number: row.job_card_number,
+            location: row.location,
+            portal: row.portal,
+          }))
+
+          let chunkStart = 0
+          while (chunkStart < syncKeys.length) {
+            const chunkEnd = Math.min(chunkStart + PSF_DMS_JCC_SYNC_CHUNK_SIZE, syncKeys.length)
+            const chunkKeys = syncKeys.slice(chunkStart, chunkEnd)
+
+            const { error } = await supabase.rpc('refresh_job_card_closed_dms_revenue_batch', {
+              p_keys: chunkKeys,
+            })
+
+            if (error) {
+              const lower = (error.message ?? '').toLowerCase()
+              const rpcUnavailable =
+                lower.includes('could not find the function') ||
+                (lower.includes('function') && lower.includes('refresh_job_card_closed_dms_revenue_batch'))
+
+              if (rpcUnavailable) return
+
+              throw new Error(error.message ?? 'PSF Revenue DMS job-card sync failed')
+            }
+
+            chunkStart = chunkEnd
+          }
+        }
+
         const importPsfRevenueDmsRowsViaServerBatch = async (
           rows: Record<string, unknown>[],
         ): Promise<number> => {
@@ -1822,6 +1856,7 @@ export default function ImportPage() {
 
             const { data, error } = await supabase.rpc('run_psf_revenue_dms_import_batch', {
               p_rows: chunkRows,
+              p_sync_job_cards: false,
             })
 
             if (error) {
@@ -1834,6 +1869,28 @@ export default function ImportPage() {
                 return upsertPsfRevenueDmsRowsByBusinessKey(dedupedRows)
               }
 
+              // Backward compat: older RPC signature has no p_sync_job_cards arg.
+              const unknownSyncParam =
+                lower.includes('p_sync_job_cards') ||
+                lower.includes('does not exist') ||
+                lower.includes('unknown parameter')
+
+              if (unknownSyncParam) {
+                const legacy = await supabase.rpc('run_psf_revenue_dms_import_batch', {
+                  p_rows: chunkRows,
+                })
+                if (legacy.error) {
+                  throw new Error(legacy.error.message ?? 'PSF Revenue DMS server batch import failed')
+                }
+                const legacyResultRows = (legacy.data as Array<Record<string, unknown>> | null) ?? []
+                const legacyResult = legacyResultRows[0]
+                const legacyProcessed = Number(legacyResult?.processed_rows ?? chunkRows.length)
+                processed += Number.isFinite(legacyProcessed) ? legacyProcessed : chunkRows.length
+                incrementProcessedRows(chunkRows.length)
+                chunkStart = chunkEnd
+                continue
+              }
+
               throw new Error(error.message ?? 'PSF Revenue DMS server batch import failed')
             }
 
@@ -1844,6 +1901,8 @@ export default function ImportPage() {
             incrementProcessedRows(chunkRows.length)
             chunkStart = chunkEnd
           }
+
+          await syncPsfRevenueDmsToJobCards(dedupedRows)
 
           return processed
         }
