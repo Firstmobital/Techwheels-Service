@@ -534,6 +534,7 @@ export type ServiceAdvisorSummaryCounts = {
   branches: string[]
   fuel_types: string[]
   advisors: Array<{ key: string; label: string; count: number }>
+  location_total?: number
 }
 
 export type ServiceAdvisorSummaryFilter = {
@@ -581,6 +582,7 @@ function parseServiceAdvisorSummaryCounts(raw: unknown): ServiceAdvisorSummaryCo
         }
       })
       : [],
+    location_total: Number(row.location_total ?? 0),
   }
 }
 

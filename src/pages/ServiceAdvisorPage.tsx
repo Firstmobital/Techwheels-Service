@@ -585,29 +585,21 @@ export default function ServiceAdvisorPage() {
       searchQuery,
     }
 
-    const [tilesRes, categoryRes, advisorRes, locationRes] = await Promise.all([
-      fetchServiceAdvisorSummaryCounts(loadRange, filters),
-      fetchServiceAdvisorSummaryCounts(loadRange, { ...filters, category: null }),
-      fetchServiceAdvisorSummaryCounts(loadRange, { ...filters, advisorKey: null }),
-      fetchServiceAdvisorSummaryCounts(loadRange, { ...filters, branch: null }),
-    ])
-
-    if (tilesRes.data) setSummaryCounts(tilesRes.data)
-    if (categoryRes.data) setCategoryOptionCounts(categoryRes.data.category_counts)
-    if (advisorRes.data) {
+    const summaryRes = await fetchServiceAdvisorSummaryCounts(loadRange, filters)
+    if (summaryRes.data) {
+      setSummaryCounts(summaryRes.data)
+      setCategoryOptionCounts(summaryRes.data.category_counts)
       setAdvisorOptions(
-        advisorRes.data.advisors.map((advisor) => ({
+        summaryRes.data.advisors.map((advisor) => ({
           value: advisor.key,
           label: advisor.label,
           count: advisor.count,
         })),
       )
-    }
-    if (locationRes.data) {
-      setAvailableBranches(locationRes.data.branches)
-      setLocationOptionTotal(locationRes.data.total)
-      if (locationRes.data.fuel_types.length > 0) {
-        setFuelTypeOptions(locationRes.data.fuel_types)
+      setAvailableBranches(summaryRes.data.branches)
+      setLocationOptionTotal(summaryRes.data.location_total ?? summaryRes.data.total)
+      if (summaryRes.data.fuel_types.length > 0) {
+        setFuelTypeOptions(summaryRes.data.fuel_types)
       }
     }
 
@@ -770,10 +762,11 @@ export default function ServiceAdvisorPage() {
   }, [dateRange, searchQuery])
 
   useEffect(() => {
+    if (loading) return
     const loadRange = getLoadRange()
     void loadSummaryMetrics(loadRange)
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dateRange, searchQuery, selectedBranch, selectedFuelType, selectedCategory, selectedAdvisor])
+  }, [loading, dateRange, searchQuery, selectedBranch, selectedFuelType, selectedCategory, selectedAdvisor])
 
   useEffect(() => {
     visibleJobCardKeysRef.current = new Set(
