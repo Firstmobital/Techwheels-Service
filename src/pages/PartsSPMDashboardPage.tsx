@@ -340,7 +340,7 @@ export default function PartsSPMDashboardPage() {
 
   const handleExport = () => {
     const header = [
-      'Entry Date', 'Job Card', 'Advisor', 'Reg No.', 'Customer', 'Vehicle Model', 'Portal',
+      'Entry Date', 'Job Card', 'Advisor', 'Reg No.', 'Customer', 'Customer Mobile No', 'Vehicle Model', 'Portal',
       'Parts Required', 'Parts No.', 'Order No.', 'Order Date', 'Order Status',
       'Stock', 'Parts Status', 'Advisor Remarks', 'Customer Update', 'SPM Remarks',
       'Received At', 'Received By', 'Done At', 'Done By',
@@ -349,7 +349,7 @@ export default function PartsSPMDashboardPage() {
       const { orderDate, orderNo, orderStatus, stock } = lookupOrderForPartNo(r.parts_number ?? '')
       return [
         r.entry_date, r.job_card_number ?? '', r.advisor_name, r.registration_number,
-        r.customer_name ?? '', r.vehicle_model ?? '', evpvOf(r),
+        r.customer_name ?? '', r.customer_mobile ?? '', r.vehicle_model ?? '', evpvOf(r),
         r.parts_required, r.parts_number ?? '', orderNo, r.parts_order_date ?? orderDate,
         orderStatus, stock ?? r.parts_qty ?? '', r.parts_status,
         r.advisor_remarks ?? '', r.customer_update ?? '', r.spm_remarks ?? '',
@@ -466,6 +466,7 @@ export default function PartsSPMDashboardPage() {
                   <SortHeader label="Advisor" sortField="advisor_name" />
                   <SortHeader label="Reg. No." sortField="registration_number" />
                   <th className="px-4 py-3">Customer</th>
+                  <th className="px-4 py-3">Customer Mobile No</th>
                   <th className="px-4 py-3">Vehicle Model</th>
                   <th className="px-4 py-3">Portal</th>
                   <th className="px-4 py-3">Parts Required</th>
@@ -502,6 +503,7 @@ export default function PartsSPMDashboardPage() {
                       <td className="whitespace-nowrap px-4 py-2.5 text-gray-700">{row.advisor_name}</td>
                       <td className="whitespace-nowrap px-4 py-2.5 font-semibold text-gray-900">{row.registration_number}</td>
                       <td className="whitespace-nowrap px-4 py-2.5 text-gray-700">{row.customer_name || '—'}</td>
+                      <td className="whitespace-nowrap px-4 py-2.5 text-xs text-gray-600">{row.customer_mobile || '—'}</td>
                       {/* Vehicle Model */}
                       <td className="whitespace-nowrap px-4 py-2.5 text-gray-600">{row.vehicle_model || '—'}</td>
                       {/* Portal (EV/PV) */}
