@@ -249,7 +249,7 @@ const PSF_ASYNC_ENQUEUE_ENABLED = true
 const PSF_ASYNC_ENQUEUE_CHUNK_SIZE = 250
 const PSF_DMS_SERVER_IMPORT_RPC_ENABLED = true
 const PSF_DMS_SERVER_IMPORT_CHUNK_SIZE = 75
-const PSF_DMS_JCC_SYNC_CHUNK_SIZE = 200
+const PSF_DMS_JCC_SYNC_CHUNK_SIZE = 50
 const PARTS_REPLACE_ALL_ON_IMPORT = true
 
 const DEALER_CODE_LOCATION_PORTAL_RULES = [
@@ -1808,8 +1808,10 @@ export default function ImportPage() {
           return Array.from(dedupedByCanonicalKey.values())
         }
 
-        const syncPsfRevenueDmsToJobCards = async (rows: Record<string, unknown>[]): Promise<void> => {
-          if (rows.length === 0) return
+        const syncPsfRevenueDmsToJobCards = async (
+          rows: Record<string, unknown>[],
+        ): Promise<string | null> => {
+          if (rows.length === 0) return null
 
           const syncKeys = rows.map((row) => ({
             job_card_number: row.job_card_number,
@@ -1832,13 +1834,15 @@ export default function ImportPage() {
                 lower.includes('could not find the function') ||
                 (lower.includes('function') && lower.includes('refresh_job_card_closed_dms_revenue_batch'))
 
-              if (rpcUnavailable) return
+              if (rpcUnavailable) return null
 
-              throw new Error(error.message ?? 'PSF Revenue DMS job-card sync failed')
+              return error.message ?? 'PSF Revenue DMS job-card sync failed'
             }
 
             chunkStart = chunkEnd
           }
+
+          return null
         }
 
         const importPsfRevenueDmsRowsViaServerBatch = async (
@@ -1902,7 +1906,10 @@ export default function ImportPage() {
             chunkStart = chunkEnd
           }
 
-          await syncPsfRevenueDmsToJobCards(dedupedRows)
+          const syncWarning = await syncPsfRevenueDmsToJobCards(dedupedRows)
+          if (syncWarning) {
+            console.warn(`PSF Revenue DMS imported but job-card sync incomplete: ${syncWarning}`)
+          }
 
           return processed
         }
