@@ -129,17 +129,25 @@ async function resolveActiveWindow(
   // Calendar days = Apr 1 → today (for daily-average denominator)
   const elapsedDays = Math.max(1, Math.floor((today.getTime() - fyStartDate.getTime()) / 86400000) + 1)
 
-  // Check which target months have data in DB
-  // Query by BOTH fiscal_month number AND month_name to handle uploads
-  // where fiscal_month column was absent/null in the source Excel file.
+  // Check which target months have data in DB.
+  // IMPORTANT: Use a DISTINCT query — NOT a row-count-limited one.
+  // PV Sitapura has >1200 rows for April alone; a LIMIT 1000 query returns
+  // only April rows and never sees May/June → fiscal_months becomes [1] only
+  // → column labels show "M2"/"M3" instead of "May"/"Jun".
+  //
+  // Selecting only the distinct (fiscal_month, month_name) combinations
+  // returns at most 12 rows for a full fiscal year regardless of data volume.
   let q = (supabase.from('service_parts_consumption_data') as any)
     .select('fiscal_year,fiscal_month,month_name,transaction_date')
     .eq('portal', portal)
-    .limit(1000)
+    .eq('fiscal_year', fyStart)
   if (branch !== 'ALL') q = q.eq('branch', branch)
+  // No LIMIT — we need ALL distinct months. The result is grouped client-side.
+  // Use order so we process months in ascending order (Apr→Mar).
+  q = q.order('fiscal_month', { ascending: true })
   const { data: targetData } = await q
 
-  // Resolve FM for each row using the multi-fallback helper
+  // Resolve FM for each row using the multi-fallback helper and deduplicate
   const foundFMs = new Set<number>()
   for (const r of (targetData ?? [])) {
     const fm = resolveFmFromRow(r as { fiscal_month: number; month_name: string | null; transaction_date: string | null })
@@ -151,13 +159,13 @@ async function resolveActiveWindow(
     return { fiscal_year: fyStart, fiscal_months: availableTargetFMs, calendar_days: elapsedDays, windowBasis: 'calendar' }
   }
 
-  // Fallback — use whatever months are available in DB
+  // Fallback — use whatever months are available in DB for current FY
+  // No LIMIT here either — we need to see all distinct months available.
   let qLatest = (supabase.from('service_parts_consumption_data') as any)
-    .select('fiscal_year,fiscal_month')
+    .select('fiscal_year,fiscal_month,month_name,transaction_date')
     .eq('portal', portal)
-    .order('fiscal_year', { ascending: false })
-    .order('fiscal_month', { ascending: false })
-    .limit(500)
+    .eq('fiscal_year', fyStart)
+    .order('fiscal_month', { ascending: true })
   if (branch !== 'ALL') qLatest = qLatest.eq('branch', branch)
   const { data: latestData } = await qLatest
 
@@ -165,18 +173,13 @@ async function resolveActiveWindow(
     return { fiscal_year: fyStart, fiscal_months: targetFMs.length ? targetFMs : [1, 2, 3], calendar_days: elapsedDays, windowBasis: 'fallback' }
   }
 
-  const seen = new Set<string>()
-  const pairs: { fy: number; fm: number }[] = []
+  const seen = new Set<number>()
   for (const row of latestData) {
     const fm = resolveFmFromRow(row as { fiscal_month: number; month_name: string | null; transaction_date: string | null })
-    if (fm == null) continue
-    const fy = Number(row.fiscal_year) || fyStart
-    const key = `${fy}-${fm}`
-    if (!seen.has(key)) { seen.add(key); pairs.push({ fy, fm }) }
-    if (pairs.length >= WINDOW_SIZE) break
+    if (fm != null) seen.add(fm)
   }
-  const fiscal_year    = pairs[0]?.fy ?? fyStart
-  const fiscal_months  = pairs.map((p) => p.fm).sort((a, b) => a - b)
+  const fiscal_year   = fyStart
+  const fiscal_months = Array.from(seen).sort((a, b) => a - b).slice(0, WINDOW_SIZE)
   return { fiscal_year, fiscal_months, calendar_days: elapsedDays, windowBasis: 'fallback' }
 }
 
