@@ -171,15 +171,15 @@ export default function PartsSPMDashboardPage() {
     try {
       const { data } = await supabase
         .from('service_parts_stock_snapshot_data')
-        .select('part_number,on_hand_qty')
+        .select('part_number,on_hand_quantity')
         .not('part_number', 'is', null)
       if (!data) return
       const map = new Map<string, number>()
-      for (const r of data as { part_number: string; on_hand_qty: number | null }[]) {
+      for (const r of data as { part_number: string; on_hand_quantity: number | null }[]) {
         const pn = norm(r.part_number)
         if (!pn) continue
         const existing = map.get(pn) ?? 0
-        map.set(pn, existing + (r.on_hand_qty ?? 0))
+        map.set(pn, existing + (Number(r.on_hand_quantity) || 0))
       }
       setStockLookup(map)
     } catch { /* silent */ }

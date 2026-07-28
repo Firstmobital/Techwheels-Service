@@ -6,7 +6,7 @@
  * What it does:
  * 1. Validates a manual post-deploy confirmation gate (prevents cold-data runs).
  * 2. Fires parallel SQL queries against pg_stat_statements and pg_stat_* views.
- * 3. Collects Supabase platform logs (auth, edge, realtime, storage, postgres).
+ * 3. Collects Supabase platform logs via ClickHouse `/analytics/endpoints/logs` (24h window).
  * 4. Collects ranked postgres_logs / edge_logs error frequency (analytics SQL).
  * 5. Compares results against the previous run stored in supabase/evidence/audit_runs/.
  * 6. Evaluates a regression guard with configurable thresholds.
@@ -178,16 +178,29 @@ async function runSql(projectRef, token, sql, label) {
   }
 }
 
-async function collectPlatformLogs(projectRef, token, sourceTable, limit = 100) {
-  const sql = `select timestamp, event_message from ${sourceTable} order by timestamp desc limit ${Number(limit)}`
-  const endpoint = `/v1/projects/${projectRef}/analytics/endpoints/logs.all?sql=${encodeURIComponent(sql)}`
+function getLogsTimeRangeIso() {
+  const end = new Date()
+  const start = new Date(end.getTime() - 24 * 60 * 60 * 1000)
+  return {
+    iso_timestamp_start: start.toISOString(),
+    iso_timestamp_end: end.toISOString(),
+  }
+}
+
+async function queryAnalyticsLogs(projectRef, token, sql) {
+  const { iso_timestamp_start, iso_timestamp_end } = getLogsTimeRangeIso()
+  const params = new URLSearchParams({
+    sql,
+    iso_timestamp_start,
+    iso_timestamp_end,
+  })
+  const endpoint = `/v1/projects/${projectRef}/analytics/endpoints/logs?${params.toString()}`
   const response = await callManagementApi({ method: 'GET', pathName: endpoint, token })
 
   if (!response.ok) {
     return {
-      status: 'unavailable',
+      ok: false,
       endpoint,
-      count: 0,
       records: [],
       error: response.data,
     }
@@ -195,74 +208,84 @@ async function collectPlatformLogs(projectRef, token, sourceTable, limit = 100) 
 
   const records = Array.isArray(response.data?.result) ? response.data.result : []
   return {
-    status: 'ok',
+    ok: true,
     endpoint,
-    count: records.length,
     records,
   }
 }
 
+async function collectPlatformLogs(projectRef, token, sourceName, limit = 100) {
+  const sql = `select timestamp, event_message from logs where source = '${sourceName}' order by timestamp desc limit ${Number(limit)}`
+  const result = await queryAnalyticsLogs(projectRef, token, sql)
+
+  if (!result.ok) {
+    return {
+      status: 'unavailable',
+      endpoint: result.endpoint,
+      count: 0,
+      records: [],
+      error: result.error,
+    }
+  }
+
+  return {
+    status: 'ok',
+    endpoint: result.endpoint,
+    count: result.records.length,
+    records: result.records,
+  }
+}
+
 async function collectTopPostgresErrors(projectRef, token) {
-  // postgres_logs has no top-level `level`; severity lives in metadata.parsed (Supabase Logs SQL).
   const sql = `
     select
       event_message,
-      count(*) as occurrences
-    from postgres_logs
-    cross join unnest(postgres_logs.metadata) as metadata
-    cross join unnest(metadata.parsed) as parsed
-    where cast(postgres_logs.timestamp as datetime) > datetime_sub(current_datetime(), interval 24 hour)
-      and regexp_contains(parsed.error_severity, '(?i)ERROR|FATAL|PANIC|WARNING')
+      count() as occurrences
+    from logs
+    where source = 'postgres_logs'
+      and match(severity_text, '(?i)ERROR|FATAL|PANIC|WARNING')
     group by event_message
     order by occurrences desc
     limit 15
   `.trim()
-  const endpoint = `/v1/projects/${projectRef}/analytics/endpoints/logs.all?sql=${encodeURIComponent(sql)}`
-  const response = await callManagementApi({ method: 'GET', pathName: endpoint, token })
-  if (!response.ok) {
-    return { status: 'unavailable', records: [], error: response.data, sql }
+  const result = await queryAnalyticsLogs(projectRef, token, sql)
+  if (!result.ok) {
+    return { status: 'unavailable', records: [], error: result.error, sql }
   }
-  const records = Array.isArray(response.data?.result) ? response.data.result : []
-  return { status: 'ok', records, sql }
+  return { status: 'ok', records: result.records, sql }
 }
 
 async function collectEdgeFunctionErrors(projectRef, token) {
-  // edge_logs: HTTP failures via metadata.response.status_code; function_logs: runtime level.
   const sql = `
     select event_message, sum(occurrences) as occurrences
     from (
       select
         event_message,
-        count(*) as occurrences
-      from edge_logs
-      cross join unnest(edge_logs.metadata) as metadata
-      cross join unnest(metadata.response) as response
-      where cast(edge_logs.timestamp as datetime) > datetime_sub(current_datetime(), interval 24 hour)
-        and response.status_code >= 500
+        count() as occurrences
+      from logs
+      where source = 'edge_logs'
+        and toInt32OrZero(log_attributes['response.status_code']) >= 500
       group by event_message
 
       union all
 
       select
         event_message,
-        count(*) as occurrences
-      from function_logs
-      cross join unnest(function_logs.metadata) as metadata
-      where cast(function_logs.timestamp as datetime) > datetime_sub(current_datetime(), interval 24 hour)
-        and regexp_contains(coalesce(metadata.level, ''), '(?i)error|warning')
+        count() as occurrences
+      from logs
+      where source = 'function_logs'
+        and match(coalesce(severity_text, log_attributes['metadata.level'], ''), '(?i)error|warning')
       group by event_message
     )
     group by event_message
     order by occurrences desc
     limit 10
   `.trim()
-  const endpoint = `/v1/projects/${projectRef}/analytics/endpoints/logs.all?sql=${encodeURIComponent(sql)}`
-  const response = await callManagementApi({ method: 'GET', pathName: endpoint, token })
-  if (!response.ok) {
-    return { status: 'unavailable', records: [], error: response.data, sql }
+  const result = await queryAnalyticsLogs(projectRef, token, sql)
+  if (!result.ok) {
+    return { status: 'unavailable', records: [], error: result.error, sql }
   }
-  const records = Array.isArray(response.data?.result) ? response.data.result : []
-  return { status: 'ok', records, sql }
+  return { status: 'ok', records: result.records, sql }
 }
 
 function summarizeTopQuery(topRows) {

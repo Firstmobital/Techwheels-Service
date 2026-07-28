@@ -7,8 +7,8 @@ import {
   bulkCreateReceptionEntries,
   createReceptionEntry,
   deleteReceptionEntry,
-  listReceptionEntriesForGlobalSearch,
   listReceptionEntriesByDateRangePage,
+  searchReceptionEntriesForGlobalSearchPage,
   listReceptionEmployees,
   type ReceptionEmployeeOption,
   type ReceptionEntryInput,
@@ -375,8 +375,11 @@ export default function ReceptionPage() {
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
   const [search, setSearch] = useState('')
-  const [globalSearchEntries, setGlobalSearchEntries] = useState<ReceptionEntryRow[] | null>(null)
+  const [globalSearchEntries, setGlobalSearchEntries] = useState<ReceptionEntryRow[]>([])
+  const [globalSearchCursor, setGlobalSearchCursor] = useState<ReceptionEntryPageCursor | null>(null)
+  const [globalSearchHasMore, setGlobalSearchHasMore] = useState(false)
   const [globalSearchLoading, setGlobalSearchLoading] = useState(false)
+  const [globalSearchLoadingMore, setGlobalSearchLoadingMore] = useState(false)
   const [selectedListFilter, setSelectedListFilter] = useState<ReceptionListFilter>('default')
   const [selectedLocation, setSelectedLocation] = useState<string | 'all'>('all')
   const [selectedFuelType, setSelectedFuelType] = useState<string | 'all'>('all')
@@ -537,7 +540,7 @@ export default function ReceptionPage() {
   }, [employeeOptions, form.model, form.service_type, selectedLocation])
 
   const entryLookupById = useMemo(() => {
-    const merged = [...entries, ...(globalSearchEntries ?? [])]
+    const merged = [...entries, ...globalSearchEntries]
     return new Map(merged.map((entry) => [entry.id, entry]))
   }, [entries, globalSearchEntries])
 
@@ -562,48 +565,45 @@ export default function ReceptionPage() {
   }, [selectedServiceType, serviceTypeBaseEntries])
 
   const visibleEntries = useMemo(() => {
-    const query = search.trim().toLowerCase()
+    const query = search.trim()
     if (!query) {
       return serviceTypeFilteredEntries
     }
 
-    const searchPool = globalSearchEntries ?? []
-    return searchPool.filter((entry) => {
-      const joined = [
-        entry.reg_number,
-        entry.model ?? '',
-        entry.jc_number ?? '',
-        entry.sa_name,
-        entry.sa_display_name ?? '',
-        entry.owner_name ?? '',
-        entry.owner_phone ?? '',
-        entry.source,
-        entry.created_by,
-        entry.branch ?? '',
-      ]
-        .join(' ')
-        .toLowerCase()
-
-      return joined.includes(query)
-    })
+    return globalSearchEntries
   }, [globalSearchEntries, search, serviceTypeFilteredEntries])
+
+  async function loadGlobalSearchPage(query: string, cursor: ReceptionEntryPageCursor | null) {
+    const res = await searchReceptionEntriesForGlobalSearchPage(query, cursor)
+    if (res.error) {
+      setError(res.error)
+      return null
+    }
+    return res.data ?? { rows: [], nextCursor: null, hasMore: false }
+  }
 
   useEffect(() => {
     const query = search.trim()
-    if (!query) return
-    if (globalSearchEntries !== null) return
+    if (!query) {
+      setGlobalSearchEntries([])
+      setGlobalSearchCursor(null)
+      setGlobalSearchHasMore(false)
+      setGlobalSearchLoading(false)
+      setGlobalSearchLoadingMore(false)
+      return
+    }
 
     let cancelled = false
     setGlobalSearchLoading(true)
+    setGlobalSearchEntries([])
+    setGlobalSearchCursor(null)
+    setGlobalSearchHasMore(false)
 
-    void listReceptionEntriesForGlobalSearch().then((res) => {
-      if (cancelled) return
-      if (res.error) {
-        setError(res.error)
-        setGlobalSearchEntries([])
-        return
-      }
-      setGlobalSearchEntries(res.data ?? [])
+    void loadGlobalSearchPage(query, null).then((page) => {
+      if (cancelled || !page) return
+      setGlobalSearchEntries(page.rows)
+      setGlobalSearchCursor(page.nextCursor)
+      setGlobalSearchHasMore(page.hasMore)
     }).finally(() => {
       if (!cancelled) setGlobalSearchLoading(false)
     })
@@ -611,7 +611,32 @@ export default function ReceptionPage() {
     return () => {
       cancelled = true
     }
-  }, [globalSearchEntries, search])
+  }, [search])
+
+  async function loadMoreGlobalSearch() {
+    const query = search.trim()
+    if (!query || !globalSearchHasMore || !globalSearchCursor || globalSearchLoadingMore || globalSearchLoading) return
+
+    setGlobalSearchLoadingMore(true)
+    const page = await loadGlobalSearchPage(query, globalSearchCursor)
+    if (!page) {
+      setGlobalSearchLoadingMore(false)
+      return
+    }
+
+    setGlobalSearchEntries((prev) => {
+      const seen = new Set(prev.map((entry) => entry.id))
+      const merged = [...prev]
+      page.rows.forEach((entry) => {
+        if (seen.has(entry.id)) return
+        merged.push(entry)
+      })
+      return merged
+    })
+    setGlobalSearchCursor(page.nextCursor)
+    setGlobalSearchHasMore(page.hasMore)
+    setGlobalSearchLoadingMore(false)
+  }
 
   useEffect(() => {
     if (selectedServiceType === 'all') return
@@ -667,7 +692,7 @@ export default function ReceptionPage() {
   async function loadData() {
     setLoading(true)
     setError(null)
-    setGlobalSearchEntries(null)
+    setGlobalSearchEntries([])
 
     const presetAvailability = await Promise.all(
       PERIOD_PRESETS.map(async (preset) => {
@@ -1212,7 +1237,7 @@ export default function ReceptionPage() {
               <h3>Reception entries</h3>
               <div className="sub">
                 {search.trim()
-                  ? `${globalSearchLoading ? 'Searching all records...' : 'Global search'} · ${visibleEntries.length} shown`
+                  ? `${globalSearchLoading ? 'Searching all records...' : 'Global search'} · ${visibleEntries.length} shown${globalSearchHasMore ? ' (more available)' : ''}`
                   : `Newest first · ${visibleEntries.length} loaded${hasMoreEntries ? ' (more available)' : ''}`}
                 {selectedListFilter === 'today' ? ' · Today filter' : ''}
                 {selectedLocation !== 'all' ? ` · ${selectedLocation}` : ''}
@@ -1288,6 +1313,18 @@ export default function ReceptionPage() {
                   <div className="recep-item__time">{formatDate(entry.created_at)}</div>
                 </div>
               ))}
+              {search.trim() && (globalSearchHasMore || globalSearchLoadingMore) && (
+                <div style={{ display: 'flex', justifyContent: 'center', padding: '1rem' }}>
+                  <button
+                    type="button"
+                    className="btn btn--secondary"
+                    disabled={globalSearchLoadingMore || !globalSearchHasMore}
+                    onClick={() => void loadMoreGlobalSearch()}
+                  >
+                    {globalSearchLoadingMore ? 'Loading more…' : 'Load more search results'}
+                  </button>
+                </div>
+              )}
               {!search.trim() && (hasMoreEntries || loadingMoreEntries) && (
                 <div style={{ display: 'flex', justifyContent: 'center', padding: '1rem' }}>
                   <button

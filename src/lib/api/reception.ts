@@ -154,28 +154,6 @@ const RECEPTION_ENTRY_SELECT_COLUMNS = [
   'updated_at',
 ].join(', ')
 
-/** Slim projection for date-range summary tiles and filter metadata (no file blobs). */
-const RECEPTION_SUMMARY_FIELD_COLUMNS = [
-  'id',
-  'jc_number',
-  'service_type',
-  'estimate_storage_path',
-  'invoice_done_at',
-  'branch',
-  'sa_employee_code',
-  'sa_display_name',
-  'sa_name',
-  'portal',
-  'reg_number',
-  'model',
-  'owner_name',
-  'owner_phone',
-  'source',
-  'created_by',
-  'km_reading',
-  'created_at',
-].join(', ')
-
 export type ReceptionEntryPageCursor = {
   createdAt: string
   id: number
@@ -186,28 +164,6 @@ export type ReceptionEntryPageResult = {
   nextCursor: ReceptionEntryPageCursor | null
   hasMore: boolean
 }
-
-export type ReceptionSummaryFieldRow = Pick<
-  ReceptionEntryRow,
-  | 'id'
-  | 'jc_number'
-  | 'service_type'
-  | 'estimate_storage_path'
-  | 'invoice_done_at'
-  | 'branch'
-  | 'sa_employee_code'
-  | 'sa_display_name'
-  | 'sa_name'
-  | 'fuel_type'
-  | 'reg_number'
-  | 'model'
-  | 'owner_name'
-  | 'owner_phone'
-  | 'source'
-  | 'created_by'
-  | 'km_reading'
-  | 'created_at'
->
 
 export type ReceptionAssignmentStatusRow = {
   job_card_number: string | null
@@ -488,41 +444,6 @@ async function fetchReceptionEntriesWithKeyset(
   return { data: rows, error: null }
 }
 
-async function fetchReceptionSummaryFieldsWithKeyset(
-  createdAtFrom: string,
-  createdAtTo: string,
-): Promise<{ data: ReceptionSummaryFieldRow[] | null; error: unknown | null }> {
-  let cursor: ReceptionEntryPageCursor | null = null
-  const rows: ReceptionSummaryFieldRow[] = []
-
-  while (true) {
-    const { data, error } = await fetchReceptionEntriesPage({
-      createdAtFrom,
-      createdAtTo,
-      cursor,
-      selectColumns: RECEPTION_SUMMARY_FIELD_COLUMNS,
-    })
-
-    if (error) {
-      return { data: null, error }
-    }
-
-    if (!data) {
-      break
-    }
-
-    rows.push(...(data.rows as unknown as ReceptionSummaryFieldRow[]))
-
-    if (!data.hasMore || !data.nextCursor) {
-      break
-    }
-
-    cursor = data.nextCursor
-  }
-
-  return { data: rows, error: null }
-}
-
 export async function listReceptionEntriesByDateRangePage(
   range: { from: string; to: string },
   cursor: ReceptionEntryPageCursor | null = null,
@@ -560,24 +481,6 @@ export async function listServiceAdvisorEntriesByDateRangePage(
   return listReceptionEntriesByDateRangePage(range, cursor, options)
 }
 
-/** Background scan for summary tiles and filter metadata — slim columns only. */
-export async function fetchReceptionSummaryFieldsByDateRange(
-  range: { from: string; to: string },
-): Promise<ApiResult<ReceptionSummaryFieldRow[]>> {
-  const from = String(range.from ?? '').trim()
-  const to = String(range.to ?? '').trim()
-
-  if (!from || !to) return fail('Date range is required')
-
-  const bounds = toCreatedAtBounds({ from, to })
-  const { data, error } = await fetchReceptionSummaryFieldsWithKeyset(bounds.from, bounds.to)
-
-  if (error) return fail(error)
-
-  const enriched = await enrichEntriesWithEmployeeBranch((data ?? []) as unknown as ReceptionEntryRow[])
-  return ok(enriched as unknown as ReceptionSummaryFieldRow[])
-}
-
 const RECEPTION_ASSIGNMENT_STATUS_BATCH_SIZE = 100
 
 export async function fetchTechnicianAssignmentStatusesForJobCards(
@@ -611,6 +514,109 @@ export async function fetchTechnicianAssignmentStatusesForJobCards(
   return ok(rows)
 }
 
+export type ServiceAdvisorSummaryCounts = {
+  total: number
+  job_card_pending: number
+  sr_type_pending: number
+  estimate_pending: number
+  invoice_pending: number
+  no_technician: number
+  hold: number
+  in_process: number
+  completed: number
+  category_counts: {
+    all: number
+    floor: number
+    bodyshop: number
+    others: number
+    null: number
+  }
+  branches: string[]
+  fuel_types: string[]
+  advisors: Array<{ key: string; label: string; count: number }>
+}
+
+export type ServiceAdvisorSummaryFilter = {
+  branch?: string | null
+  fuelType?: string | null
+  category?: string | null
+  advisorKey?: string | null
+  searchQuery?: string | null
+}
+
+function parseServiceAdvisorSummaryCounts(raw: unknown): ServiceAdvisorSummaryCounts | null {
+  if (!raw || typeof raw !== 'object') return null
+  const row = raw as Record<string, unknown>
+  const categoryRaw = row.category_counts
+  const category = categoryRaw && typeof categoryRaw === 'object'
+    ? categoryRaw as Record<string, unknown>
+    : {}
+
+  return {
+    total: Number(row.total ?? 0),
+    job_card_pending: Number(row.job_card_pending ?? 0),
+    sr_type_pending: Number(row.sr_type_pending ?? 0),
+    estimate_pending: Number(row.estimate_pending ?? 0),
+    invoice_pending: Number(row.invoice_pending ?? 0),
+    no_technician: Number(row.no_technician ?? 0),
+    hold: Number(row.hold ?? 0),
+    in_process: Number(row.in_process ?? 0),
+    completed: Number(row.completed ?? 0),
+    category_counts: {
+      all: Number(category.all ?? 0),
+      floor: Number(category.floor ?? 0),
+      bodyshop: Number(category.bodyshop ?? 0),
+      others: Number(category.others ?? 0),
+      null: Number(category.null ?? 0),
+    },
+    branches: Array.isArray(row.branches) ? row.branches.map((v) => String(v)) : [],
+    fuel_types: Array.isArray(row.fuel_types) ? row.fuel_types.map((v) => String(v)) : [],
+    advisors: Array.isArray(row.advisors)
+      ? row.advisors.map((entry) => {
+        const adv = entry as Record<string, unknown>
+        return {
+          key: String(adv.key ?? ''),
+          label: String(adv.label ?? ''),
+          count: Number(adv.count ?? 0),
+        }
+      })
+      : [],
+  }
+}
+
+/** Batch F: one RPC replaces paginated slim summary scan. Requires migration 20260728103000. */
+export async function fetchServiceAdvisorSummaryCounts(
+  range: { from: string; to: string },
+  filters?: ServiceAdvisorSummaryFilter,
+): Promise<ApiResult<ServiceAdvisorSummaryCounts>> {
+  const from = String(range.from ?? '').trim()
+  const to = String(range.to ?? '').trim()
+  if (!from || !to) return fail('Date range is required')
+
+  const bounds = toCreatedAtBounds({ from, to })
+  const branch = filters?.branch && filters.branch !== 'all' ? filters.branch : null
+  const fuelType = filters?.fuelType && filters.fuelType !== 'all' ? filters.fuelType : null
+  const category = filters?.category && filters.category !== 'all' ? filters.category : null
+  const advisorKey = filters?.advisorKey && filters.advisorKey !== 'all' ? filters.advisorKey : null
+  const search = filters?.searchQuery?.trim() || null
+
+  const { data, error } = await supabase.rpc('get_service_advisor_summary_counts', {
+    p_created_from: bounds.from,
+    p_created_to: bounds.to,
+    p_branch: branch,
+    p_fuel_type: fuelType,
+    p_category: category,
+    p_advisor_key: advisorKey,
+    p_search: search,
+  })
+
+  if (error) return fail(error)
+
+  const parsed = parseServiceAdvisorSummaryCounts(data)
+  if (!parsed) return fail('Invalid summary counts response')
+  return ok(parsed)
+}
+
 export function getDefaultReceptionLookbackDateRange(): { from: string; to: string } {
   const range = getISOLookbackRange(RECEPTION_DEFAULT_LOOKBACK_DAYS)
   return {
@@ -630,7 +636,23 @@ export async function listReceptionEntries(): Promise<ApiResult<ReceptionEntryRo
   return ok(enriched)
 }
 
-/** Bounded pool for Reception page global search (avoids unbounded table scan). */
+/** Server-side search within the global-search lookback window (paginated). */
+export async function searchReceptionEntriesForGlobalSearchPage(
+  searchQuery: string,
+  cursor: ReceptionEntryPageCursor | null = null,
+): Promise<ApiResult<ReceptionEntryPageResult>> {
+  const trimmed = searchQuery.trim()
+  if (!trimmed) return ok({ rows: [], nextCursor: null, hasMore: false })
+
+  const range = getISOLookbackRange(RECEPTION_GLOBAL_SEARCH_LOOKBACK_DAYS)
+  return listReceptionEntriesByDateRangePage(
+    { from: range.from.slice(0, 10), to: range.to.slice(0, 10) },
+    cursor,
+    { searchQuery: trimmed },
+  )
+}
+
+/** @deprecated Prefer searchReceptionEntriesForGlobalSearchPage — fetch-all retained for legacy callers. */
 export async function listReceptionEntriesForGlobalSearch(): Promise<ApiResult<ReceptionEntryRow[]>> {
   const range = getISOLookbackRange(RECEPTION_GLOBAL_SEARCH_LOOKBACK_DAYS)
   const { data, error } = await fetchReceptionEntriesWithKeyset(undefined, range.from, range.to)
