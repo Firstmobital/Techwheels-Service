@@ -146,8 +146,8 @@ Retention rule:
 | 2026-06-26 (manual dashboard checkpoint, 10:54 IST) | 65% | 15% | 34% | 24/60 | - | - | - | - | Observability Overview + Query Performance screenshot evidence: slow queries reported as 932/933 (panel variance), Disk IO 45%, API Gateway errors 14%, Database errors 5.3%, PostgREST requests 2,892 |
 | 2026-07-06 (automated audit cycle, post-deploy Batch B) | - | - | - | 26/60 | - | - | - | - | Snapshot 14.35 (08:13 UTC); top query 3220864789079889211 calls=22 total_ms=31092.85 mean_ms=1413.31; slow_queries=18 (was 1117); cache_hit=100%; comparison=improved; delta_total_ms_sum=-198283995.58; guard=ok |
 | 2026-07-07 (automated audit 14.36 + metadata backup) | 71% | 8% | 36% | 24/60 | - | - | - | - | Snapshot 14.36 (06:14 UTC); top query 6462467893367818088 calls=214; slow_queries=200; comparison=regressed; delta_total_ms_sum=3425053.57; guard=blocked_requires_checklist; egress=125%; db_size=88%; metadata dump sha256=aa70820a (06:18 UTC) |
-| 2026-07-22 (automated audit cycle) | - | - | - | - | - | - | - | - | Top query -2876120296317350531 calls=520961 total_ms=5750354.02 mean_ms=11.04; comparison=regressed; delta_total_ms_sum=1328716.34 |
 | 2026-07-24 (automated audit cycle) | - | - | - | - | - | - | - | - | Top query -2876120296317350531 calls=653128 total_ms=6737768.55 mean_ms=10.32; comparison=regressed; delta_total_ms_sum=5541869.49 |
+| 2026-07-28 (automated audit cycle) | - | - | - | - | - | - | - | - | Top query -2876120296317350531 calls=926721 total_ms=8687352.24 mean_ms=9.37; comparison=regressed; delta_total_ms_sum=15603411.62 |
 
 ## 6) Change Log (What Was Updated in This Plan)
 
@@ -164,9 +164,9 @@ Retention rule:
 | 2026-07-07 | Copilot | Batch C Phase 1 implemented in `src/pages/ServiceAdvisorPage.tsx`: C-01 bounded assignment status query (visible job cards, batched `.in()`, narrowed columns); C-02 incremental Realtime updates with ref-guarded single subscription and teardown cleanup. `npm run build` pass. Post-deploy audit pending (no production snapshot yet). |
 | 2026-07-21 | Copilot | Audit cycle script parity with TECHWHEELS-WEB: ranked postgres/edge log digests, ILIKE tracked queries (incl. service-history sync), expanded scan watchlist, sync-queue/timeout comparison actions; plan Section 10A added. |
 | 2026-07-21 | Copilot | Ranked log SQL fixed for Supabase Logs API: postgres `unnest(metadata.parsed.error_severity)`, edge 5xx + function_logs level, 24h window (fills timeout/missing-relation frequency in audit artifacts). |
-| 2026-07-22 | Copilot | Automated Supabase audit cycle appended run summary (2026-07-22 17:14:29 IST) and refreshed plan evidence block from generated audit artifacts. |
 | 2026-07-24 | Copilot | Automated Supabase audit cycle appended run summary (2026-07-24 09:55:12 IST) and refreshed plan evidence block from generated audit artifacts. |
 | 2026-07-24 | Copilot | P1-06 Batch E implemented: paginated SA/Reception list APIs, background slim summary scan for SA tiles, Load more UX. Evidence: [P1_06_RECEPTION_PAGINATED_LIST_BATCH_E_2026-07-24.md](../evidence/P1_06_RECEPTION_PAGINATED_LIST_BATCH_E_2026-07-24.md). Deploy + audit pending. |
+| 2026-07-28 | Copilot | Automated Supabase audit cycle appended run summary (2026-07-28 10:29:02 IST) and refreshed plan evidence block from generated audit artifacts. |
 
 ## 7) Update Protocol For Future Chats
 
@@ -292,41 +292,6 @@ Retention policy:
 - Keep comparison status and compact top-10 table in each retained snapshot.
 - Archive detailed historical logs under `supabase/evidence/audit_runs/`.
 
-### 14.44 Capture Snapshot: 2026-07-22 (Automated Audit Cycle)
-
-What was captured:
-- Timestamp (IST): 2026-07-22 17:14:29 IST
-- Capture mode: automated_supabase_audit_cycle
-- Top queryid: -2876120296317350531 (calls=520961, total_ms=5750354.02, mean_ms=11.04)
-- Platform logs capture status: auth=ok, edge_functions=ok, realtime=ok, storage=ok, database_health=ok
-- Comparison vs previous run (2026-07-22__09-13-27-494Z): status=regressed, delta_total_ms_sum=1328716.34, delta_calls_sum=16196
-- Top regressions by delta_total_ms: 3833171277786028740 (405610.55); -2876120296317350531 (302878.68); -2647655532108368607 (206536.5)
-- Top postgres log messages: unavailable (analytics query empty or failed).
-
-Compact Top 10 (run-local):
-| rank | queryid | calls | total_ms | mean_ms |
-|---:|---|---:|---:|---:|
-| 1 | -2876120296317350531 | 520961 | 5750354.02 | 11.04 |
-| 2 | 852176900607336119 | 2603 | 4240996.88 | 1629.27 |
-| 3 | 7336725908253715888 | 2583 | 2279905.15 | 882.66 |
-| 4 | 8843009277484467611 | 298 | 1202470.16 | 4035.13 |
-| 5 | -397576279058981298 | 408 | 1184667.40 | 2903.60 |
-| 6 | -1851842182524549347 | 12500 | 1145742.07 | 91.66 |
-| 7 | -6279881906384027513 | 882 | 1116899.51 | 1266.33 |
-| 8 | 3787216458397661678 | 3073 | 1018516.84 | 331.44 |
-| 9 | 8976932172498995662 | 5727 | 915045.41 | 159.78 |
-| 10 | -8535248155740750540 | 148 | 827420.34 | 5590.68 |
-
-Interpretation:
-- This snapshot is append-only and intended to keep log evidence current for the hardening cycle.
-- Prioritize fixes by highest delta_total_ms and call movement from run-to-run comparison.
-
-Self-heal plan:
-- Realtime WAL polling increased; reduce duplicate subscriptions and channel fan-out.
-
-Next action:
-- Re-run the cycle after the next production traffic window and validate that comparison status moves toward improved.
-
 ### 14.45 Capture Snapshot: 2026-07-24 (Automated Audit Cycle)
 
 What was captured:
@@ -358,6 +323,42 @@ Interpretation:
 
 Self-heal plan:
 - Realtime WAL polling increased; reduce duplicate subscriptions and channel fan-out.
+
+Next action:
+- Re-run the cycle after the next production traffic window and validate that comparison status moves toward improved.
+
+### 14.46 Capture Snapshot: 2026-07-28 (Automated Audit Cycle)
+
+What was captured:
+- Timestamp (IST): 2026-07-28 10:29:02 IST
+- Capture mode: automated_supabase_audit_cycle
+- Top queryid: -2876120296317350531 (calls=926721, total_ms=8687352.24, mean_ms=9.37)
+- Platform logs capture status: auth=ok, edge_functions=ok, realtime=ok, storage=ok, database_health=ok
+- Comparison vs previous run (2026-07-24__04-25-12-804Z): status=regressed, delta_total_ms_sum=15603411.62, delta_calls_sum=358073
+- Top regressions by delta_total_ms: 3787216458397661678 (2683280.4); 852176900607336119 (2645500.6); -2876120296317350531 (1949583.69)
+- Top postgres log messages (by frequency): column service_parts_stock_snapshot_data.on_hand_qty does not exist (1)
+
+Compact Top 10 (run-local):
+| rank | queryid | calls | total_ms | mean_ms |
+|---:|---|---:|---:|---:|
+| 1 | -2876120296317350531 | 926721 | 8687352.24 | 9.37 |
+| 2 | 852176900607336119 | 4408 | 7588189.26 | 1721.46 |
+| 3 | 3787216458397661678 | 7681 | 4642166.45 | 604.37 |
+| 4 | -397576279058981298 | 737 | 2355457.05 | 3196.01 |
+| 5 | 7336725908253715888 | 2583 | 2279905.15 | 882.66 |
+| 6 | 8843009277484467611 | 546 | 2253321.77 | 4126.96 |
+| 7 | 8976932172498995662 | 9168 | 2201031.55 | 240.08 |
+| 8 | -1851842182524549347 | 20556 | 1674447.97 | 81.46 |
+| 9 | -6279881906384027513 | 1350 | 1485756.97 | 1100.56 |
+| 10 | -6327570512180762919 | 7646 | 1397212.46 | 182.74 |
+
+Interpretation:
+- This snapshot is append-only and intended to keep log evidence current for the hardening cycle.
+- Prioritize fixes by highest delta_total_ms and call movement from run-to-run comparison.
+
+Self-heal plan:
+- Realtime WAL polling increased; reduce duplicate subscriptions and channel fan-out.
+- Postgres missing-relation errors in logs; verify function/table identifiers match live schema (quoted vs lowercase names).
 
 Next action:
 - Re-run the cycle after the next production traffic window and validate that comparison status moves toward improved.

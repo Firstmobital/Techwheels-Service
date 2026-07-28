@@ -1,0 +1,31 @@
+{
+  "status": "ok",
+  "endpoint": "/v1/projects/jmdndcphkmaljhwgzqxq/analytics/endpoints/logs.all?sql=select%20timestamp%2C%20event_message%20from%20auth_logs%20order%20by%20timestamp%20desc%20limit%20100",
+  "count": 6,
+  "records": [
+    {
+      "event_message": "{\"component\":\"api\",\"duration\":2976571,\"level\":\"info\",\"method\":\"GET\",\"msg\":\"request completed\",\"path\":\"/user\",\"referer\":\"https://techwheels-service.vercel.app\",\"remote_addr\":\"15.206.188.151\",\"request_id\":\"019fa716-8ca8-7ced-9847-367f95ad4290\",\"status\":200,\"time\":\"2026-07-28T04:58:20Z\"}",
+      "timestamp": 1785214700000000
+    },
+    {
+      "event_message": "{\"component\":\"api\",\"duration\":3125115,\"level\":\"info\",\"method\":\"GET\",\"msg\":\"request completed\",\"path\":\"/user\",\"referer\":\"https://techwheels-service.vercel.app\",\"remote_addr\":\"43.205.140.135\",\"request_id\":\"019fa716-81c1-71c3-92fd-04cad76f8cb4\",\"status\":200,\"time\":\"2026-07-28T04:58:17Z\"}",
+      "timestamp": 1785214697000000
+    },
+    {
+      "event_message": "{\"auth_event\":{\"action\":\"token_revoked\",\"actor_id\":\"f5679d7d-5d87-4424-863e-a670e312bf53\",\"actor_name\":\"Lokesh Singh\",\"actor_username\":\"lokeshsinghrathore705@gmail.com\",\"actor_via_sso\":false,\"log_type\":\"token\"},\"component\":\"api\",\"duration\":19485526,\"grant_type\":\"refresh_token\",\"level\":\"info\",\"method\":\"POST\",\"msg\":\"request completed\",\"path\":\"/token\",\"referer\":\"https://techwheels-service.vercel.app/\",\"remote_addr\":\"49.43.178.30\",\"request_id\":\"019fa716-7a38-7e8b-a0fb-291518451983\",\"status\":200,\"time\":\"2026-07-28T04:58:16Z\"}",
+      "timestamp": 1785214696000000
+    },
+    {
+      "event_message": "{\"action\":\"login\",\"instance_id\":\"00000000-0000-0000-0000-000000000000\",\"level\":\"info\",\"login_method\":\"token\",\"metering\":true,\"msg\":\"Login\",\"time\":\"2026-07-28T04:58:16Z\",\"user_id\":\"f5679d7d-5d87-4424-863e-a670e312bf53\"}",
+      "timestamp": 1785214696000000
+    },
+    {
+      "event_message": "{\"component\":\"api\",\"duration\":2330029,\"level\":\"info\",\"method\":\"GET\",\"msg\":\"request completed\",\"path\":\"/user\",\"referer\":\"https://techwheels-service.vercel.app\",\"remote_addr\":\"13.235.215.99\",\"request_id\":\"019fa716-7761-72e8-84e2-1c33347f5df4\",\"status\":200,\"time\":\"2026-07-28T04:58:15Z\"}",
+      "timestamp": 1785214695000000
+    },
+    {
+      "event_message": "{\"component\":\"api\",\"duration\":19891159,\"level\":\"info\",\"method\":\"GET\",\"msg\":\"request completed\",\"path\":\"/user\",\"referer\":\"https://techwheels-service.vercel.app\",\"remote_addr\":\"3.111.46.141\",\"request_id\":\"019fa716-777d-7577-9765-152b8cb44147\",\"status\":200,\"time\":\"2026-07-28T04:58:15Z\"}",
+      "timestamp": 1785214695000000
+    }
+  ]
+}
