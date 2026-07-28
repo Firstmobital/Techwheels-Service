@@ -254,18 +254,38 @@ function calMonthToFm(calMonth: number): number {
   return ((calMonth - 4 + 12) % 12) + 1
 }
 
-// Resolve the best available FM from a consumption row
+// Resolve the best available FM from a consumption row.
+//
+// TML DMS exports store month info in ONE of three ways (inconsistently):
+//   A) month_name = "April"/"May"/"June" (most reliable — always fiscal-correct)
+//   B) fiscal_month = calendar month number e.g. 5 for May (NOT FM2!)
+//   C) transaction_date only
+//
+// Priority: month_name → transaction_date → fiscal_month (calendar→FM conversion)
+// month_name is FIRST because it is always the fiscal-correct name from the DMS.
+// fiscal_month is LAST because it is ambiguously either FM-style (1,2,3) or
+// calendar-style (4,5,6) depending on which DMS version exported the file.
 function resolveFmFromRow(row: { fiscal_month: number; month_name: string | null; transaction_date: string | null }): number | null {
-  // Priority: fiscal_month (explicit) → month_name → transaction_date
-  if (row.fiscal_month != null && row.fiscal_month >= 1 && row.fiscal_month <= 12) return row.fiscal_month
+  // 1. month_name — always authoritative when present
   const fromName = monthNameToFm(row.month_name)
   if (fromName != null) return fromName
+
+  // 2. transaction_date — derive calendar month → convert to FM
   if (row.transaction_date) {
     try {
       const d = new Date(row.transaction_date)
       if (!isNaN(d.getTime())) return calMonthToFm(d.getMonth() + 1)
     } catch { /* ignore */ }
   }
+
+  // 3. fiscal_month — treat as calendar month and convert (handles DMS exports
+  //    that store calendar month 4=Apr, 5=May, 6=Jun in this column)
+  if (row.fiscal_month != null && row.fiscal_month >= 1 && row.fiscal_month <= 12) {
+    // Values 1-3 are ambiguous (could be FM Jan/Feb/Mar=10,11,12 or FM Apr/May/Jun=1,2,3)
+    // but if month_name and transaction_date are both absent, use as-is (best effort)
+    return calMonthToFm(row.fiscal_month)
+  }
+
   return null
 }
 
