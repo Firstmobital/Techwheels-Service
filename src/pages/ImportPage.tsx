@@ -774,6 +774,17 @@ function resolveLocationAndPortalFromSlotBranch(branch: string): LocationPortal 
   return { location, portal }
 }
 
+// Derives the correct portal for a warranty row based on its prowac_no prefix.
+// EW/ER/EE = Extended Warranty (EV vehicles only) → EV portal.
+// All other codes (CW/CR/CS, MW/MR/ME, SW/SR/SE, CE, 00) → PV portal.
+// This prevents EV-slot uploads from incorrectly tagging PV-type claims as EV.
+function deriveWarrantyPortalFromProwac(prowacNo: string | undefined): Portal {
+  if (!prowacNo) return 'PV'
+  const prefix = prowacNo.trim().toUpperCase().slice(0, 2)
+  return (prefix === 'EW' || prefix === 'ER' || prefix === 'EE') ? 'EV' : 'PV'
+}
+
+
 function resolveStandardBranchFromSlot(branch: string): 'Ajmer Road' | 'Sitapura' {
   return resolveLocationAndPortalFromSlotBranch(branch).location
 }
@@ -2966,13 +2977,16 @@ export default function ImportPage() {
               ],
             )
           } else if (isWarrantyTable) {
-            const { location, portal } = resolveLocationAndPortalFromSlotBranch(branch)
+            const { location } = resolveLocationAndPortalFromSlotBranch(branch)
             const insertRows = rawRows.map((rawRow, rowIdx) => {
               const sourceRowData = normalizeWarrantyRow(rawRow)
+              // Derive portal from prowac_no prefix so that EV-slot uploads don't
+              // incorrectly tag CW/CR/MW/MR-prefixed PV claims as EV portal.
+              const rowPortal = deriveWarrantyPortalFromProwac(sourceRowData.prowac_no)
               return {
                 branch: standardBranch,
                 location,
-                portal,
+                portal: rowPortal,
                 source_row_number: rowIdx + 2,
                 source_file_name: slot.file!.name,
                 source_row_hash: hashWarrantyRow(sourceRowData),

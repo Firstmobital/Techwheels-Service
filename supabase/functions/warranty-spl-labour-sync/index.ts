@@ -57,6 +57,16 @@ function toDateOrNull(v: unknown): string | null {
   return s
 }
 
+// Corrects portal based on prowac_no prefix:
+// EW/ER/EE → EV (Extended Warranty for electric vehicles only).
+// All other prefixes → PV. Overrides any portal stored in the raw row
+// so that files accidentally uploaded under the wrong slot are self-correcting.
+function derivePortalFromProwac(prowacNo: string | null | undefined): 'EV' | 'PV' {
+  if (!prowacNo) return 'PV'
+  const prefix = prowacNo.trim().toUpperCase().slice(0, 2)
+  return (prefix === 'EW' || prefix === 'ER' || prefix === 'EE') ? 'EV' : 'PV'
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
@@ -127,7 +137,7 @@ Deno.serve(async (req) => {
       const common: Record<string, unknown> = {
         source_claim_id: r.id,
         dealer_code: str(d.dealer_code) || null,
-        portal: r.portal,
+        portal: derivePortalFromProwac(str(d.prowac_no)) as 'EV' | 'PV',
         job_card_number: str(d.job_card_number_number) || null,
         prowac_no: str(d.prowac_no) || null,
         sap_claim: str(d.sap_claim) || null,
