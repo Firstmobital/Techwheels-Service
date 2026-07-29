@@ -612,7 +612,21 @@ async function handleGetNext(
 
   if (callbackErr) return errorResponse(callbackErr.message);
   if (callbackDue) {
-    return json({ success: true, assignment: formatInsuranceAssignment(callbackDue) });
+    // Resurface as in_progress so the same callback is not returned on every Get Next click
+    const { error: callbackPromoteErr } = await supabase
+      .from("insurance_renewal_assignments")
+      .update({
+        status: "in_progress",
+        assigned_to: userId,
+        assigned_to_name: userName,
+        assigned_at: new Date().toISOString(),
+      })
+      .eq("id", callbackDue.id);
+    if (callbackPromoteErr) return errorResponse(callbackPromoteErr.message);
+    return json({
+      success: true,
+      assignment: formatInsuranceAssignment({ ...callbackDue, status: "in_progress" }),
+    });
   }
 
   // 2) Reclaim stale legacy RPC claims (assigned > 24h, never opened on call card)
