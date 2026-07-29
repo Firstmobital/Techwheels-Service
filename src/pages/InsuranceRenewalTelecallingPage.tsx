@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { supabase, supabaseAnonKey, supabaseUrl } from '../lib/supabase'
 import { uploadInsuranceRenewalQuote } from '../lib/api/insuranceRenewalTelecalling'
 
@@ -290,6 +290,27 @@ function matchesExpiryDateRange(dueDate: string | null, from: string, to: string
   return true
 }
 
+function todayIsoDate(): string {
+  return new Date().toISOString().split('T')[0]
+}
+
+/** Callback scheduled today or overdue (assigned work still open in My Queue). */
+function filterCallbackDue(items: Assignment[], asOf: string): Assignment[] {
+  return items.filter(a => a.callback_date != null && a.callback_date <= asOf)
+}
+
+function sortByCallbackThenExpiry(items: Assignment[]): Assignment[] {
+  return [...items].sort((a, b) => {
+    const ca = a.callback_date ?? '9999-12-31'
+    const cb = b.callback_date ?? '9999-12-31'
+    if (ca !== cb) return ca.localeCompare(cb)
+    const da = assignmentDueDate(a) ?? '9999-12-31'
+    const db = assignmentDueDate(b) ?? '9999-12-31'
+    if (da !== db) return da.localeCompare(db)
+    return a.id - b.id
+  })
+}
+
 function filterQueueByExpiryRange(items: Assignment[], from: string, to: string): Assignment[] {
   if (!from && !to) return items
   return items.filter(a => matchesExpiryDateRange(assignmentDueDate(a), from, to))
@@ -449,7 +470,7 @@ function TelecallerDashboard({ activeCampaign, onCampaignRefresh }: { activeCamp
   const [summary, setSummary] = useState<DailySummary | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [activeView, setActiveView] = useState<'call' | 'queue' | 'summary'>('call')
+  const [activeView, setActiveView] = useState<'call' | 'queue' | 'today_pending' | 'summary'>('call')
   const [queueSearch, setQueueSearch] = useState('')
   const [queueSoldByFilter, setQueueSoldByFilter] = useState('')
   const [queueExpiryFrom, setQueueExpiryFrom] = useState('')
@@ -538,19 +559,29 @@ function TelecallerDashboard({ activeCampaign, onCampaignRefresh }: { activeCamp
     }
   }
 
+  const todayStr = todayIsoDate()
+  const todayPendingItems = useMemo(
+    () => sortByCallbackThenExpiry(filterCallbackDue(queue, todayStr)),
+    [queue, todayStr],
+  )
+
+  const isListView = activeView === 'queue' || activeView === 'today_pending'
+  const listSource = activeView === 'today_pending' ? todayPendingItems : queue
+  const listByExpiry = filterQueueByExpiryRange(listSource, queueExpiryFrom, queueExpiryTo)
+  const queueByExpiry = filterQueueByExpiryRange(queue, queueExpiryFrom, queueExpiryTo)
+  const todayPendingByExpiry = filterQueueByExpiryRange(todayPendingItems, queueExpiryFrom, queueExpiryTo)
+  const queueExpiryFilterActive = Boolean(queueExpiryFrom || queueExpiryTo)
+
   useEffect(() => {
-    if (!queueSoldByFilter) return
+    if (!queueSoldByFilter || !isListView) return
     const keys = new Set(
-      filterQueueByExpiryRange(queue, queueExpiryFrom, queueExpiryTo).map(a => {
+      listByExpiry.map(a => {
         const t = (a.customer.sold_dealer || '').trim()
         return t || '__none__'
       }),
     )
     if (!keys.has(queueSoldByFilter)) setQueueSoldByFilter('')
-  }, [queue, queueSoldByFilter, queueExpiryFrom, queueExpiryTo])
-
-  const queueByExpiry = filterQueueByExpiryRange(queue, queueExpiryFrom, queueExpiryTo)
-  const queueExpiryFilterActive = Boolean(queueExpiryFrom || queueExpiryTo)
+  }, [listByExpiry, queueSoldByFilter, isListView])
 
   const resetCallForm = () => {
     setNotes(''); setCallbackDate(''); setQuotedPremium(''); setRenewalCompany('')
@@ -829,6 +860,12 @@ function TelecallerDashboard({ activeCampaign, onCampaignRefresh }: { activeCamp
           📋 My Queue ({queueExpiryFilterActive ? `${queueByExpiry.length}/${queue.length}` : queue.length})
         </button>
         <button onClick={() => { setActiveView('summary'); refreshSummary() }} className={`rounded-lg px-4 py-2 text-sm font-medium ${activeView === 'summary' ? 'bg-gray-900 text-white' : 'bg-white border border-gray-200 text-gray-600'}`}>📊 Today&apos;s Summary</button>
+        <button
+          onClick={() => { setActiveView('today_pending'); setQueueStatusFilter(null); refreshQueue() }}
+          className={`rounded-lg px-4 py-2 text-sm font-medium ${activeView === 'today_pending' ? 'bg-gray-900 text-white' : 'bg-white border border-gray-200 text-gray-600'}`}
+        >
+          📊 Today&apos;s Pending ({queueExpiryFilterActive && activeView === 'today_pending' ? `${todayPendingByExpiry.length}/${todayPendingItems.length}` : todayPendingItems.length})
+        </button>
       </div>
 
       {error && <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-700">{error}</div>}
@@ -895,15 +932,22 @@ function TelecallerDashboard({ activeCampaign, onCampaignRefresh }: { activeCamp
         )
       )}
 
-      {/* ── QUEUE VIEW ─────────────────────────────────────────────────────── */}
-      {activeView === 'queue' && (
+      {/* ── MY QUEUE / TODAY'S PENDING ──────────────────────────────────────── */}
+      {isListView && (
         <div className="space-y-4">
-          {queue.length === 0 ? (
+          {listSource.length === 0 ? (
             <div className="rounded-xl border border-gray-200 bg-white p-8 text-center text-sm text-gray-400">
-              No active assignments. Click &quot;Get Next Customer&quot; to start calling.
+              {activeView === 'today_pending'
+                ? 'No callbacks due today or overdue. Scheduled callbacks with a future date stay in My Queue until due.'
+                : 'No active assignments. Click "Get Next Customer" to start calling.'}
             </div>
           ) : (
             <>
+              {activeView === 'today_pending' && (
+                <p className="text-sm text-gray-600">
+                  Callback date today or earlier — ordered by callback date, then insurance expiry.
+                </p>
+              )}
               <div className="rounded-lg border border-gray-200 bg-white p-3">
                 <div className="flex flex-wrap items-end gap-3">
                   <div className="text-sm font-semibold text-gray-800 shrink-0">Insurance expiring</div>
@@ -939,7 +983,8 @@ function TelecallerDashboard({ activeCampaign, onCampaignRefresh }: { activeCamp
                 </div>
                 {queueExpiryFilterActive && (
                   <p className="mt-2 text-xs text-gray-500">
-                    Showing {queueByExpiry.length} of {queue.length} open lead(s)
+                    Showing {listByExpiry.length} of {listSource.length}{' '}
+                    {activeView === 'today_pending' ? 'due callback(s)' : 'open lead(s)'}
                     {queueExpiryFrom && queueExpiryTo
                       ? ` expiring ${formatDate(queueExpiryFrom)} – ${formatDate(queueExpiryTo)}`
                       : queueExpiryFrom
@@ -949,25 +994,27 @@ function TelecallerDashboard({ activeCampaign, onCampaignRefresh }: { activeCamp
                 )}
               </div>
 
-              {queueByExpiry.length === 0 ? (
+              {listByExpiry.length === 0 ? (
                 <div className="rounded-xl border border-gray-200 bg-white p-8 text-center text-sm text-gray-400">
-                  No queue items match the selected expiry date range.
+                  No {activeView === 'today_pending' ? 'due callbacks' : 'queue items'} match the selected expiry date range.
                 </div>
               ) : (
               <>
               <div>
-                <h3 className="text-sm font-semibold text-gray-700 mb-2">Your open leads by status</h3>
+                <h3 className="text-sm font-semibold text-gray-700 mb-2">
+                  {activeView === 'today_pending' ? 'Due callbacks by status' : 'Your open leads by status'}
+                </h3>
                 <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
                   <QueueKpiCard
-                    label="All open"
-                    value={queueByExpiry.length}
+                    label={activeView === 'today_pending' ? 'All due' : 'All open'}
+                    value={listByExpiry.length}
                     color="gray"
                     icon="📋"
                     selected={queueStatusFilter === 'all'}
                     onClick={() => setQueueStatusFilter('all')}
                   />
                   {MY_QUEUE_KPI_STATUSES.map(({ status, label, icon, color }) => {
-                    const count = queueByExpiry.filter(a => a.status === status).length
+                    const count = listByExpiry.filter(a => a.status === status).length
                     if (count === 0) return null
                     return (
                       <QueueKpiCard
@@ -992,8 +1039,8 @@ function TelecallerDashboard({ activeCampaign, onCampaignRefresh }: { activeCamp
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <h3 className="text-sm font-semibold text-gray-800">
                       {queueStatusFilter === 'all'
-                        ? `All open leads (${queueByExpiry.length})`
-                        : `${MY_QUEUE_KPI_STATUSES.find(s => s.status === queueStatusFilter)?.label ?? queueStatusFilter.replace(/_/g, ' ')} (${queueByExpiry.filter(a => a.status === queueStatusFilter).length})`}
+                        ? `${activeView === 'today_pending' ? 'All due callbacks' : 'All open leads'} (${listByExpiry.length})`
+                        : `${MY_QUEUE_KPI_STATUSES.find(s => s.status === queueStatusFilter)?.label ?? queueStatusFilter.replace(/_/g, ' ')} (${listByExpiry.filter(a => a.status === queueStatusFilter).length})`}
                     </h3>
                     <button
                       type="button"
@@ -1025,7 +1072,7 @@ function TelecallerDashboard({ activeCampaign, onCampaignRefresh }: { activeCamp
                         className="min-w-[10rem] max-w-[16rem] rounded-lg border border-gray-200 bg-white px-2.5 py-2 text-sm text-gray-900 focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-400"
                       >
                         <option value="">All dealers</option>
-                        {[...new Set(queueByExpiry.map(a => {
+                        {[...new Set(listByExpiry.map(a => {
                           const t = (a.customer.sold_dealer || '').trim()
                           return t || '__none__'
                         }))].sort((a, b) => {
@@ -1042,7 +1089,7 @@ function TelecallerDashboard({ activeCampaign, onCampaignRefresh }: { activeCamp
                   </div>
                   {(() => {
                     const q = queueSearch.trim().toLowerCase()
-                    let filtered = queueByExpiry
+                    let filtered = listByExpiry
                     if (queueStatusFilter !== 'all') {
                       filtered = filtered.filter(a => a.status === queueStatusFilter)
                     }
@@ -1064,10 +1111,10 @@ function TelecallerDashboard({ activeCampaign, onCampaignRefresh }: { activeCamp
                     const hasFilters = Boolean(q || queueSoldByFilter)
                     if (filtered.length === 0) return (
                       <div className="rounded-xl border border-gray-200 bg-white p-8 text-center text-sm text-gray-400">
-                        {hasFilters ? 'No queue items match your filters.' : 'No leads in this status.'}
+                        {hasFilters ? 'No items match your filters.' : 'No leads in this status.'}
                       </div>
                     )
-                    return filtered.map((asgn: Assignment) => (
+                    return (activeView === 'today_pending' ? sortByCallbackThenExpiry(filtered) : filtered).map((asgn: Assignment) => (
             <div key={asgn.id} className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
               <div className="flex items-start justify-between gap-3">
                 <div className="flex-1 min-w-0">
@@ -1081,7 +1128,12 @@ function TelecallerDashboard({ activeCampaign, onCampaignRefresh }: { activeCamp
                     const due = computeInsuranceDueDate(asgn.customer.last_insurance_expiry_date, asgn.customer.vehicle_sale_date)
                     return <div className="text-xs text-gray-400 mt-0.5">🛡️ Insurance due {formatDate(due.date)}{due.estimated ? ' (estimated)' : ''}</div>
                   })()}
-                  {asgn.status === 'callback_later' && asgn.callback_date && <div className="mt-1 text-xs text-purple-600">📅 Callback on {formatDate(asgn.callback_date)}</div>}
+                  {asgn.callback_date && (
+                    <div className={`mt-1 text-xs ${asgn.callback_date <= todayStr ? 'text-amber-700 font-medium' : 'text-purple-600'}`}>
+                      📅 Callback {asgn.callback_date <= todayStr ? 'due' : 'on'} {formatDate(asgn.callback_date)}
+                      {asgn.callback_date < todayStr ? ' (overdue)' : ''}
+                    </div>
+                  )}
                   {asgn.status === 'renewed_via_us' && <div className="mt-1 text-xs text-green-600">✅ Renewed via us{asgn.quoted_premium ? ` — ${formatCurrency(asgn.quoted_premium)}` : ''}</div>}
                   {QUOTE_PIPELINE_STATUSES.includes(asgn.status as CallStatus) && (
                     <div className="mt-1"><StatusBadge status={asgn.status} /></div>
