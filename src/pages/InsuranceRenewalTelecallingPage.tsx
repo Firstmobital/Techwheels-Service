@@ -1681,6 +1681,8 @@ function AdminDashboard({ campaigns, activeCampaign, onRefresh }: { campaigns: C
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
   const [agentStats, setAgentStats] = useState<any[]>([])
+  const [todaysPendingTotal, setTodaysPendingTotal] = useState(0)
+  const [todaysPendingAsOf, setTodaysPendingAsOf] = useState<string | null>(null)
   const [refreshingCampaign, setRefreshingCampaign] = useState(false)
   const [refreshResult, setRefreshResult] = useState<string | null>(null)
   const [statsDateFrom, setStatsDateFrom] = useState('')
@@ -1875,10 +1877,14 @@ function AdminDashboard({ campaigns, activeCampaign, onRefresh }: { campaigns: C
     try {
       const d = await callEdge('admin_stats', { campaign_id: activeCampaign?.id, date_from: statsDateFrom || undefined, date_to: statsDateTo || undefined })
       setAgentStats(d.agent_stats || [])
+      setTodaysPendingTotal(Number(d.todays_pending_total ?? 0))
+      setTodaysPendingAsOf(d.todays_pending_as_of ?? null)
     } catch (e) {
       console.error(e)
       setError((e as Error).message)
       setAgentStats([])
+      setTodaysPendingTotal(0)
+      setTodaysPendingAsOf(null)
     } finally { setLoadingTab(false) }
   }
 
@@ -2368,8 +2374,15 @@ function AdminDashboard({ campaigns, activeCampaign, onRefresh }: { campaigns: C
           </div>
 
           <div className="rounded-xl border border-gray-200 bg-white overflow-hidden shadow-sm">
-            <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
-              <h3 className="font-semibold text-gray-900">📊 Telecaller Performance</h3>
+            <div className="px-5 py-4 border-b border-gray-100 flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <h3 className="font-semibold text-gray-900">📊 Telecaller Performance</h3>
+                {todaysPendingAsOf && (
+                  <p className="text-xs text-amber-800 mt-0.5">
+                    Today&apos;s Pending (callback due): <strong>{todaysPendingTotal}</strong> across team as of {formatDate(todaysPendingAsOf)} — live snapshot, not filtered by date range above.
+                  </p>
+                )}
+              </div>
               <button onClick={fetchAgentStats} className="text-sm text-blue-600 hover:text-blue-700">↻ Refresh</button>
             </div>
             {loadingTab ? <div className="p-8 text-center text-sm text-gray-400">Loading…</div> : (
@@ -2377,14 +2390,14 @@ function AdminDashboard({ campaigns, activeCampaign, onRefresh }: { campaigns: C
                 <table className="w-full text-sm">
                   <thead className="bg-gray-50">
                     <tr>
-                      {['#', 'Telecaller', 'Calls Made', 'Connected', 'Renewed (Us)', 'Renewed (Elsewhere)', 'Callback', 'Quote Needed', 'Policy Req.', 'Quote Sent', 'No Answer', 'Not Interested', 'Wrong No.', 'Policy Done', 'Active'].map(h => (
-                        <th key={h} className="px-3 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide whitespace-nowrap">{h}</th>
+                      {['#', 'Telecaller', 'Calls Made', 'Connected', 'Renewed (Us)', 'Renewed (Elsewhere)', 'Callback', "Today's Pending", 'Quote Needed', 'Policy Req.', 'Quote Sent', 'No Answer', 'Not Interested', 'Wrong No.', 'Policy Done', 'Active'].map(h => (
+                        <th key={h} className={`px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide whitespace-nowrap ${h === "Today's Pending" ? 'text-amber-700' : 'text-gray-500'}`}>{h}</th>
                       ))}
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">
                     {agentStats.length === 0 ? (
-                      <tr><td colSpan={15} className="px-4 py-8 text-center text-gray-400">{statsDateFrom || statsDateTo ? 'No call activity in this date range (try Clear for all time).' : 'No telecaller activity yet — counts appear after Get next / dispositions (idle pending pool is excluded).'}</td></tr>
+                      <tr><td colSpan={16} className="px-4 py-8 text-center text-gray-400">{statsDateFrom || statsDateTo ? 'No call activity in this date range (try Clear for all time).' : 'No telecaller activity yet — counts appear after Get next / dispositions (idle pending pool is excluded).'}</td></tr>
                     ) : agentStats.map((a: {
                       telecaller_id?: string
                       telecaller_name?: string
@@ -2394,6 +2407,7 @@ function AdminDashboard({ campaigns, activeCampaign, onRefresh }: { campaigns: C
                       renewed_via_us?: number
                       renewed_elsewhere?: number
                       callback_later?: number
+                      todays_pending?: number
                       quote_needed?: number
                       policy_requested?: number
                       quote_sent?: number
@@ -2424,6 +2438,7 @@ function AdminDashboard({ campaigns, activeCampaign, onRefresh }: { campaigns: C
                         <td className="px-3 py-3 font-bold text-green-700">{a.renewed_via_us || 0}</td>
                         <td className="px-3 py-3 text-yellow-700">{a.renewed_elsewhere || 0}</td>
                         <td className="px-3 py-3 text-purple-700">{a.callback_later || 0}</td>
+                        <td className={`px-3 py-3 font-semibold ${(a.todays_pending ?? 0) > 0 ? 'text-amber-700' : 'text-gray-400'}`}>{a.todays_pending ?? 0}</td>
                         <td className="px-3 py-3 text-indigo-700">{a.quote_needed || 0}</td>
                         <td className="px-3 py-3 text-sky-700">{a.policy_requested || 0}</td>
                         <td className="px-3 py-3 text-cyan-700">{a.quote_sent || 0}</td>

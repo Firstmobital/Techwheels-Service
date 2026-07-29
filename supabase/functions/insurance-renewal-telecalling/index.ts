@@ -1068,6 +1068,7 @@ async function handleAdminStats(supabase: SupabaseClient, role: string, body: Re
         quote_sent: 0,
         completed_total: 0,
         premium_collected: 0,
+        todays_pending: 0,
       });
     }
     const stats = statsMap.get(key)!;
@@ -1102,9 +1103,71 @@ async function handleAdminStats(supabase: SupabaseClient, role: string, body: Re
     return activity > 0 || s.telecaller_id;
   });
 
-  agent_stats.sort((a, b) => (b.calls_made as number) - (a.calls_made as number));
+  // Today's Pending: assigned open work with callback_date <= today (IST snapshot, not date-range filtered)
+  const todayIst = new Date(Date.now() + 5.5 * 3600000).toISOString().split("T")[0];
+  let pendingQuery = supabase
+    .from("insurance_renewal_assignments")
+    .select("assigned_to, assigned_to_name, callback_date, status")
+    .not("assigned_to", "is", null)
+    .not("callback_date", "is", null)
+    .lte("callback_date", todayIst)
+    .in("status", MY_QUEUE_STATUSES);
 
-  return json({ success: true, agent_stats });
+  if (campaignId) pendingQuery = pendingQuery.eq("campaign_id", campaignId);
+
+  const { data: pendingRows, error: pendingErr } = await pendingQuery;
+  if (pendingErr) return errorResponse(pendingErr.message);
+
+  const pendingByAgent = new Map<string, { count: number; name: string | null }>();
+  for (const row of pendingRows || []) {
+    const key = row.assigned_to as string;
+    const prev = pendingByAgent.get(key);
+    pendingByAgent.set(key, {
+      count: (prev?.count ?? 0) + 1,
+      name: (row.assigned_to_name as string | null) ?? prev?.name ?? null,
+    });
+  }
+
+  for (const stats of agent_stats) {
+    const id = stats.telecaller_id as string | null;
+    stats.todays_pending = id ? (pendingByAgent.get(id)?.count ?? 0) : 0;
+  }
+
+  for (const [telecallerId, { count, name }] of pendingByAgent) {
+    if (!agent_stats.some((s) => s.telecaller_id === telecallerId)) {
+      agent_stats.push({
+        telecaller_id: telecallerId,
+        telecaller_name: name || "Unknown",
+        calls_made: 0,
+        calls_connected: 0,
+        renewed_via_us: 0,
+        renewed_elsewhere: 0,
+        callback_later: 0,
+        no_answer: 0,
+        not_interested: 0,
+        wrong_number: 0,
+        not_reachable: 0,
+        policy_done: 0,
+        in_progress: 0,
+        quote_needed: 0,
+        policy_requested: 0,
+        quote_sent: 0,
+        completed_total: 0,
+        premium_collected: 0,
+        todays_pending: count,
+      });
+    }
+  }
+
+  agent_stats.sort((a, b) => {
+    const pendingDiff = (b.todays_pending as number ?? 0) - (a.todays_pending as number ?? 0);
+    if (pendingDiff !== 0) return pendingDiff;
+    return (b.calls_made as number) - (a.calls_made as number);
+  });
+
+  const todays_pending_total = pendingRows?.length ?? 0;
+
+  return json({ success: true, agent_stats, todays_pending_total, todays_pending_as_of: todayIst });
 }
 
 // ─── policy_done_list: Leads closed as Policy Done ─────────────────────────
