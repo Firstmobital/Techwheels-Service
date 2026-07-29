@@ -214,7 +214,7 @@ export async function handleRcFetchSingleRecord(
   const vehicle = row as Record<string, unknown>;
   const beforeFp = insuranceFieldsFingerprint(vehicle);
 
-  if (shouldSkipSingleRcFetchAsFresh(vehicle, cutoff)) {
+  if (shouldSkipSingleRcFetchAsFresh(vehicle, cutoff, body.force_refresh === true)) {
     await recordRcFetchAttempt(serviceClient, {
       campaign_id: campaignId,
       customer_id: customerId,
@@ -224,7 +224,7 @@ export async function handleRcFetchSingleRecord(
     return json({
       success: true,
       outcome: "skipped_fresh",
-      message: "Insurance expiry is already recent (<365 days) and company/policy are on file. Bulk RC fetch would skip this lead too.",
+      message: "Insurance expiry is already recent (<365 days), not past-due, and company/policy are on file. Bulk RC fetch would skip this lead too.",
       customer: customerPayloadFromRow(vehicle),
     });
   }
@@ -271,17 +271,34 @@ export async function handleRcFetchSingleRecord(
     }
     const stillBlank = !String(updated.last_insurance_comapny ?? "").trim() &&
       !String(updated.last_insurance_policy_number ?? "").trim();
+
+    const windowResult = await applyCampaignWindowAfterInsuranceSync(
+      serviceClient,
+      campaignId,
+      assignmentId,
+      customerId,
+    );
+
+    let message = stillBlank
+      ? "IDSPay returned but insurer fields are empty on this RC record — company/policy not in provider response."
+      : rc.fromCache
+      ? "Insurance updated from RC cache (IDSPay)."
+      : "Insurance fetched from IDSPay and synced to this customer.";
+
+    if (windowResult.retired_to_out_of_window) {
+      message += ` Effective due date ${windowResult.effective_due_date ?? "unknown"} is outside the campaign window — assignment marked out of window.`;
+    } else if (!windowResult.in_window && windowResult.effective_due_date) {
+      message += ` Note: effective due ${windowResult.effective_due_date} is outside the campaign window (terminal status — not auto-retired).`;
+    }
+
     return json({
       success: true,
       outcome: "success",
       from_cache: rc.fromCache ?? false,
-      message: stillBlank
-        ? "IDSPay returned but insurer fields are empty on this RC record — company/policy not in provider response."
-        : rc.fromCache
-        ? "Insurance updated from RC cache (IDSPay)."
-        : "Insurance fetched from IDSPay and synced to this customer.",
+      message,
       customer: customerPayloadFromRow(updated),
       idspay_insurance: ins ?? null,
+      window: windowResult,
     });
   }
 
@@ -314,6 +331,10 @@ function normalizeRegNumber(value: string | null | undefined): string {
   return value.trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
 }
 
+function todayIstDate(): string {
+  return new Date(Date.now() + 5.5 * 3600000).toISOString().split("T")[0];
+}
+
 function staleInsuranceCutoffDate(days = STALE_INSURANCE_DAYS): string {
   const d = new Date(Date.now() + 5.5 * 3600000 - days * 86400000);
   return d.toISOString().split("T")[0];
@@ -324,9 +345,21 @@ function isStaleOrMissingInsurance(expiry: string | null | undefined, cutoff: st
   return expiry < cutoff;
 }
 
-/** Call-card fetch: skip IDSPay only when expiry is recent and insurer details are already present. */
-function shouldSkipSingleRcFetchAsFresh(vehicle: Record<string, unknown>, cutoff: string): boolean {
+/** Insurance calendar-expired (before today IST) — telecaller may refetch RC to pick up renewal. */
+function isInsuranceExpiredOnRecord(expiry: string | null | undefined): boolean {
+  if (!expiry) return false;
+  return expiry < todayIstDate();
+}
+
+/** Call-card fetch: skip IDSPay only when expiry is recent, not past-due, and insurer details are present. */
+function shouldSkipSingleRcFetchAsFresh(
+  vehicle: Record<string, unknown>,
+  cutoff: string,
+  forceRefresh = false,
+): boolean {
+  if (forceRefresh) return false;
   const expiry = vehicle.last_insurance_expiry_date as string | null;
+  if (isInsuranceExpiredOnRecord(expiry)) return false;
   if (isStaleOrMissingInsurance(expiry, cutoff)) return false;
   const company = String(vehicle.last_insurance_comapny ?? "").trim();
   const policy = String(vehicle.last_insurance_policy_number ?? "").trim();
@@ -375,6 +408,73 @@ async function syncAllServiceDataInsuranceFromRc(
     p_owner_name: ins.ownerName ?? null,
   });
   if (error) console.warn("refresh_all_service_data_from_rto_idspay:", error.message);
+}
+
+const LIVE_STATUSES_FOR_WINDOW_RETIRE = [
+  "pending",
+  "in_progress",
+  "assigned",
+  "callback_later",
+  "no_answer",
+  "quote_needed",
+  "policy_requested",
+  "quote_sent",
+];
+
+/** After RC sync: if effective_due_date falls outside campaign rolling window, retire assignment. */
+async function applyCampaignWindowAfterInsuranceSync(
+  serviceClient: SupabaseClient,
+  campaignId: number,
+  assignmentId: number,
+  customerId: number,
+): Promise<{ in_window: boolean; effective_due_date: string | null; retired_to_out_of_window: boolean }> {
+  const { data: campaign } = await serviceClient
+    .from("insurance_renewal_campaigns")
+    .select("window_days")
+    .eq("id", campaignId)
+    .single();
+  const windowDays = Number(campaign?.window_days) || 30;
+  const today = todayIstDate();
+  const futureDate = new Date(Date.now() + 5.5 * 3600000 + windowDays * 86400000)
+    .toISOString()
+    .split("T")[0];
+
+  const { data: lead } = await serviceClient
+    .from("insurance_renewal_leads")
+    .select("effective_due_date")
+    .eq("id", customerId)
+    .maybeSingle();
+
+  const effectiveDue = (lead?.effective_due_date as string | null) ?? null;
+  const inWindow = Boolean(
+    effectiveDue && effectiveDue >= today && effectiveDue <= futureDate,
+  );
+
+  if (inWindow) {
+    return { in_window: true, effective_due_date: effectiveDue, retired_to_out_of_window: false };
+  }
+
+  const { data: asgn } = await serviceClient
+    .from("insurance_renewal_assignments")
+    .select("status")
+    .eq("id", assignmentId)
+    .maybeSingle();
+
+  if (!asgn || !LIVE_STATUSES_FOR_WINDOW_RETIRE.includes(asgn.status as string)) {
+    return { in_window: false, effective_due_date: effectiveDue, retired_to_out_of_window: false };
+  }
+
+  await serviceClient
+    .from("insurance_renewal_assignments")
+    .update({
+      status: "out_of_window",
+      assigned_to: null,
+      assigned_to_name: null,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", assignmentId);
+
+  return { in_window: false, effective_due_date: effectiveDue, retired_to_out_of_window: true };
 }
 
 async function invokeRcProviderForReg(

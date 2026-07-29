@@ -805,6 +805,12 @@ function TelecallerDashboard({ activeCampaign, onCampaignRefresh }: { activeCamp
       if (res.customer) applyAssignmentCustomer(assignment.id, res.customer as Partial<Customer>)
       if (res.success && res.outcome === 'success') {
         setRcFetchMessage(res.message || 'RC fetch completed.')
+        if (res.window?.retired_to_out_of_window) {
+          setCurrentAssignment(null)
+          resetCallForm()
+          refreshQueue()
+          onCampaignRefresh?.()
+        }
       } else if (res.outcome === 'skipped_fresh') {
         const c = res.customer as Customer | undefined
         const stillBlank = !String(c?.last_insurance_comapny ?? '').trim() && !String(c?.last_insurance_policy_number ?? '').trim()
@@ -1315,6 +1321,9 @@ function CallCard({
           </button>
           {dueInfo.estimated && (
             <span className="text-xs text-slate-600">Recommended when due date is estimated and company/policy are blank.</span>
+          )}
+          {!dueInfo.estimated && isExpired && (
+            <span className="text-xs text-amber-800">Policy past expiry — fetch RC to verify if renewed; may update expiry or mark lead out of window.</span>
           )}
           {rcFetchBusy && rcFetchMessage && (
             <span className="text-xs font-medium text-indigo-700">{rcFetchMessage}</span>
