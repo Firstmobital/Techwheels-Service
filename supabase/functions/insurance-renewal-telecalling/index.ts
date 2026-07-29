@@ -364,6 +364,54 @@ function calculatePriorityScore(
   }
 }
 
+function formatInsuranceAssignment(
+  a: Record<string, unknown>,
+  priorityMode = "urgency",
+) {
+  const vehicle = a.all_service_data as unknown as Record<string, unknown>;
+  const insDate = estimateInsuranceDate(
+    vehicle.last_insurance_expiry_date as string,
+    vehicle.vehicle_sale_date as string,
+  );
+  return {
+    id: a.id,
+    campaign_id: a.campaign_id,
+    status: a.status,
+    call_count: a.call_count || 0,
+    no_answer_count: a.no_answer_count || 0,
+    retry_after: a.retry_after,
+    call_notes: a.call_notes,
+    callback_date: a.callback_date,
+    quoted_premium: a.quoted_premium,
+    renewal_company: a.renewal_company,
+    quote_drive_url: a.quote_drive_url,
+    quote_file_name: a.quote_file_name,
+    quote_uploaded_at: a.quote_uploaded_at,
+    whatsapp_sent: a.whatsapp_sent,
+    whatsapp_status: a.whatsapp_status,
+    customer: {
+      first_name: vehicle.first_name,
+      last_name: vehicle.last_name,
+      contact_phones: vehicle.contact_phones,
+      model: vehicle.model,
+      powertrain_type: vehicle.powertrain_type,
+      product_line: vehicle.product_line,
+      chassis_no: vehicle.chassis_no,
+      vehicle_registration_number: vehicle.vehicle_registration_number,
+      last_insurance_expiry_date: vehicle.last_insurance_expiry_date,
+      vehicle_sale_date: vehicle.vehicle_sale_date,
+      last_insurance_comapny: vehicle.last_insurance_comapny,
+      last_insurance_policy_number: vehicle.last_insurance_policy_number,
+      idv: vehicle.idv,
+      ex_showroom_price: vehicle.ex_showroom_price,
+      vehicle_age_in_years: vehicle.vehicle_age_in_years,
+      sold_dealer: vehicle.sold_dealer,
+      last_service_dealer: vehicle.last_service_dealer,
+    },
+    priority_score: calculatePriorityScore(vehicle, insDate.date, priorityMode),
+  };
+}
+
 // ─── Main Handler ──────────────────────────────────────────────────────────
 
 Deno.serve(async (req) => {
@@ -451,7 +499,7 @@ Deno.serve(async (req) => {
     switch (action) {
       // ── EXISTING ACTIONS (enhanced) ──
       case "get_next":
-        return handleGetNext(supabase, userId, userName, body);
+        return handleGetNext(supabase, userId, userData.user?.email || "", userName, body);
       case "update_status":
         return handleUpdateStatus(supabase, userId, userName, body);
       case "my_queue":
@@ -534,59 +582,98 @@ Deno.serve(async (req) => {
 // ============================================================================
 
 // ─── get_next: Assign next pending lead to telecaller ──────────────────────
-async function handleGetNext(supabase: SupabaseClient, userId: string, userName: string, body: Record<string, unknown>) {
+// Uses DB RPC insurance_renewal_get_next_assignment for global ordering:
+// retry_after due first, then soonest insurance_renewal_leads.effective_due_date
+// (last_insurance_expiry_date, else sale-date anniversary), FOR UPDATE SKIP LOCKED.
+async function handleGetNext(
+  supabase: SupabaseClient,
+  userId: string,
+  userEmail: string,
+  userName: string,
+  body: Record<string, unknown>,
+) {
   const campaignId = Number(body.campaign_id);
   if (!campaignId) return errorResponse("Missing campaign_id");
 
-  // Get campaign to check priority mode
-  const { data: campaign } = await supabase
-    .from("insurance_renewal_campaigns")
-    .select("priority_mode")
-    .eq("id", campaignId)
-    .single();
+  const todayStr = new Date().toISOString().split("T")[0];
+  const assigneeIds = [userId, userEmail].filter(Boolean);
 
-  const priorityMode = campaign?.priority_mode || "urgency";
-
-  // Find pending assignments, ordered by priority
-  const { data: pending, error } = await supabase
+  // 1) Own callback_later rows due today (before pulling from pending pool)
+  const { data: callbackDue, error: callbackErr } = await supabase
     .from("insurance_renewal_assignments")
-    .select(`
-      *,
-      all_service_data!inner(*)
-    `)
+    .select(`*, all_service_data!inner(*)`)
     .eq("campaign_id", campaignId)
-    .eq("status", "pending")
-    .limit(50);
+    .in("assigned_to", assigneeIds)
+    .eq("status", "callback_later")
+    .lte("callback_date", todayStr)
+    .order("callback_date", { ascending: true })
+    .limit(1)
+    .maybeSingle();
 
-  if (error) return errorResponse(error.message);
-  if (!pending || pending.length === 0) {
-    return json({ success: true, assignment: null });
+  if (callbackErr) return errorResponse(callbackErr.message);
+  if (callbackDue) {
+    return json({ success: true, assignment: formatInsuranceAssignment(callbackDue) });
+  }
+
+  // 2) Reclaim stale legacy RPC claims (assigned > 24h, never opened on call card)
+  const staleCutoff = new Date(Date.now() - 24 * 3600000).toISOString();
+  const { data: staleRows } = await supabase
+    .from("insurance_renewal_assignments")
+    .select("id")
+    .eq("campaign_id", campaignId)
+    .eq("status", "assigned")
+    .lt("assigned_at", staleCutoff);
+  if (staleRows?.length) {
+    await supabase
+      .from("insurance_renewal_assignments")
+      .update({
+        status: "pending",
+        assigned_to: null,
+        assigned_to_name: null,
+        assigned_at: null,
+      })
+      .in("id", staleRows.map((r: { id: number }) => r.id));
   }
 
   const ownerMap = await fetchLiveCustomerOwnerCampaignMap(supabase);
-  const pendingOwned = pending.filter((a: Record<string, unknown>) => {
-    const owner = ownerMap.get(a.customer_id as number);
-    return owner === undefined || owner === campaignId;
-  });
-  if (pendingOwned.length === 0) {
+  let pickedId: number | null = null;
+
+  // 3) Atomic DB pick; skip cross-campaign duplicates until a valid row is found
+  for (let attempt = 0; attempt < 10; attempt++) {
+    const { data: rpcRows, error: rpcErr } = await supabase.rpc(
+      "insurance_renewal_get_next_assignment",
+      {
+        p_campaign_id: campaignId,
+        p_user_email: userEmail || userId,
+      },
+    );
+    if (rpcErr) return errorResponse(rpcErr.message);
+
+    const pick = rpcRows?.[0] as { asgn_id?: number; cust_id?: number } | undefined;
+    if (!pick?.asgn_id) break;
+
+    const owner = ownerMap.get(pick.cust_id as number);
+    if (owner !== undefined && owner !== campaignId) {
+      await supabase
+        .from("insurance_renewal_assignments")
+        .update({
+          status: "out_of_window",
+          assigned_to: null,
+          assigned_to_name: null,
+        })
+        .eq("id", pick.asgn_id);
+      continue;
+    }
+
+    pickedId = pick.asgn_id;
+    break;
+  }
+
+  if (!pickedId) {
     return json({ success: true, assignment: null });
   }
 
-  // Calculate priority scores and sort
-  const scored = pendingOwned.map((a: Record<string, unknown>) => {
-    const vehicle = a.all_service_data as unknown as Record<string, unknown>;
-    const insDate = estimateInsuranceDate(
-      vehicle.last_insurance_expiry_date as string,
-      vehicle.vehicle_sale_date as string
-    );
-    return {
-      ...a,
-      _priorityScore: calculatePriorityScore(vehicle, insDate.date, priorityMode),
-    };
-  });
-  scored.sort((a, b) => (b._priorityScore as number) - (a._priorityScore as number));
-
-  const next = scored[0];
+  // RPC sets status=assigned; web UI expects in_progress + auth user UUID
   const { error: updateError } = await supabase
     .from("insurance_renewal_assignments")
     .update({
@@ -595,58 +682,23 @@ async function handleGetNext(supabase: SupabaseClient, userId: string, userName:
       assigned_to_name: userName,
       assigned_at: new Date().toISOString(),
     })
-    .eq("id", next.id);
+    .eq("id", pickedId);
 
   if (updateError) return errorResponse(updateError.message);
 
   await updateCampaignCounts(supabase, campaignId);
 
-  // Format assignment for frontend
-  const vehicle = next.all_service_data as unknown as Record<string, unknown>;
-  const insDate = estimateInsuranceDate(
-    vehicle.last_insurance_expiry_date as string,
-    vehicle.vehicle_sale_date as string
-  );
+  const { data: full, error: fetchErr } = await supabase
+    .from("insurance_renewal_assignments")
+    .select(`*, all_service_data!inner(*)`)
+    .eq("id", pickedId)
+    .single();
 
-  const assignment = {
-    id: next.id,
-    campaign_id: next.campaign_id,
-    status: "in_progress",
-    call_count: next.call_count || 0,
-    no_answer_count: next.no_answer_count || 0,
-    retry_after: next.retry_after,
-    call_notes: next.call_notes,
-    callback_date: next.callback_date,
-    quoted_premium: next.quoted_premium,
-    renewal_company: next.renewal_company,
-    quote_drive_url: next.quote_drive_url,
-    quote_file_name: next.quote_file_name,
-    quote_uploaded_at: next.quote_uploaded_at,
-    whatsapp_sent: next.whatsapp_sent,
-    whatsapp_status: next.whatsapp_status,
-    customer: {
-      first_name: vehicle.first_name,
-      last_name: vehicle.last_name,
-      contact_phones: vehicle.contact_phones,
-      model: vehicle.model,
-      powertrain_type: vehicle.powertrain_type,
-      product_line: vehicle.product_line,
-      chassis_no: vehicle.chassis_no,
-      vehicle_registration_number: vehicle.vehicle_registration_number,
-      last_insurance_expiry_date: vehicle.last_insurance_expiry_date,
-      vehicle_sale_date: vehicle.vehicle_sale_date,
-      last_insurance_comapny: vehicle.last_insurance_comapny,
-      last_insurance_policy_number: vehicle.last_insurance_policy_number,
-      idv: vehicle.idv,
-      ex_showroom_price: vehicle.ex_showroom_price,
-      vehicle_age_in_years: vehicle.vehicle_age_in_years,
-      sold_dealer: vehicle.sold_dealer,
-      last_service_dealer: vehicle.last_service_dealer,
-    },
-    priority_score: next._priorityScore,
-  };
+  if (fetchErr || !full) {
+    return errorResponse(fetchErr?.message || "Assignment not found");
+  }
 
-  return json({ success: true, assignment });
+  return json({ success: true, assignment: formatInsuranceAssignment(full) });
 }
 
 // ─── update_status: Update call outcome + trigger drip ─────────────────────
