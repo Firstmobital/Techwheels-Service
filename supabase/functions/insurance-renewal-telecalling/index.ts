@@ -1103,20 +1103,23 @@ async function handleAdminStats(supabase: SupabaseClient, role: string, body: Re
     return activity > 0 || s.telecaller_id;
   });
 
-  // Today's Pending: assigned open work with callback_date <= today (IST snapshot, not date-range filtered)
+  // Today's Pending: callback due/overdue OR in_progress without callback date (IST snapshot)
   const todayIst = new Date(Date.now() + 5.5 * 3600000).toISOString().split("T")[0];
   let pendingQuery = supabase
     .from("insurance_renewal_assignments")
-    .select("assigned_to, assigned_to_name, callback_date, status")
+    .select("id, assigned_to, assigned_to_name, callback_date, status")
     .not("assigned_to", "is", null)
-    .not("callback_date", "is", null)
-    .lte("callback_date", todayIst)
     .in("status", MY_QUEUE_STATUSES);
 
   if (campaignId) pendingQuery = pendingQuery.eq("campaign_id", campaignId);
 
-  const { data: pendingRows, error: pendingErr } = await pendingQuery;
+  const { data: queueRows, error: pendingErr } = await pendingQuery;
   if (pendingErr) return errorResponse(pendingErr.message);
+
+  const pendingRows = (queueRows || []).filter((row) => {
+    if (row.status === "in_progress" && !row.callback_date) return true;
+    return row.callback_date != null && row.callback_date <= todayIst;
+  });
 
   const pendingByAgent = new Map<string, { count: number; name: string | null }>();
   for (const row of pendingRows || []) {

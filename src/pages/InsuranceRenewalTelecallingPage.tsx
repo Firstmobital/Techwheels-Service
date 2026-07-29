@@ -294,16 +294,24 @@ function todayIsoDate(): string {
   return new Date().toISOString().split('T')[0]
 }
 
-/** Callback scheduled today or overdue (assigned work still open in My Queue). */
-function filterCallbackDue(items: Assignment[], asOf: string): Assignment[] {
-  return items.filter(a => a.callback_date != null && a.callback_date <= asOf)
+/** Today's Pending: callback due/overdue OR in_progress with no callback date scheduled. */
+function isTodaysPendingItem(a: Assignment, asOf: string): boolean {
+  if (a.status === 'in_progress' && !a.callback_date) return true
+  return a.callback_date != null && a.callback_date <= asOf
+}
+
+function filterTodaysPending(items: Assignment[], asOf: string): Assignment[] {
+  return items.filter(a => isTodaysPendingItem(a, asOf))
 }
 
 function sortByCallbackThenExpiry(items: Assignment[]): Assignment[] {
   return [...items].sort((a, b) => {
-    const ca = a.callback_date ?? '9999-12-31'
-    const cb = b.callback_date ?? '9999-12-31'
-    if (ca !== cb) return ca.localeCompare(cb)
+    const aNoCallback = !a.callback_date
+    const bNoCallback = !b.callback_date
+    if (aNoCallback !== bNoCallback) return aNoCallback ? 1 : -1
+    if (!aNoCallback && !bNoCallback && a.callback_date !== b.callback_date) {
+      return a.callback_date!.localeCompare(b.callback_date!)
+    }
     const da = assignmentDueDate(a) ?? '9999-12-31'
     const db = assignmentDueDate(b) ?? '9999-12-31'
     if (da !== db) return da.localeCompare(db)
@@ -561,7 +569,7 @@ function TelecallerDashboard({ activeCampaign, onCampaignRefresh }: { activeCamp
 
   const todayStr = todayIsoDate()
   const todayPendingItems = useMemo(
-    () => sortByCallbackThenExpiry(filterCallbackDue(queue, todayStr)),
+    () => sortByCallbackThenExpiry(filterTodaysPending(queue, todayStr)),
     [queue, todayStr],
   )
 
@@ -944,14 +952,14 @@ function TelecallerDashboard({ activeCampaign, onCampaignRefresh }: { activeCamp
           {listSource.length === 0 ? (
             <div className="rounded-xl border border-gray-200 bg-white p-8 text-center text-sm text-gray-400">
               {activeView === 'today_pending'
-                ? 'No callbacks due today or overdue. Scheduled callbacks with a future date stay in My Queue until due.'
+                ? 'Nothing due today — no overdue callbacks and no in-progress leads without a callback date.'
                 : 'No active assignments. Click "Get Next Customer" to start calling.'}
             </div>
           ) : (
             <>
               {activeView === 'today_pending' && (
                 <p className="text-sm text-gray-600">
-                  Callback date today or earlier — ordered by callback date, then insurance expiry.
+                  Callback due today or earlier, plus in-progress leads with no callback date — ordered by callback date, then insurance expiry.
                 </p>
               )}
               <div className="rounded-lg border border-gray-200 bg-white p-3">
@@ -1008,7 +1016,7 @@ function TelecallerDashboard({ activeCampaign, onCampaignRefresh }: { activeCamp
               <>
               <div>
                 <h3 className="text-sm font-semibold text-gray-700 mb-2">
-                  {activeView === 'today_pending' ? 'Due callbacks by status' : 'Your open leads by status'}
+                  {activeView === 'today_pending' ? 'Today\'s pending by status' : 'Your open leads by status'}
                 </h3>
                 <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
                   <QueueKpiCard
@@ -2379,7 +2387,7 @@ function AdminDashboard({ campaigns, activeCampaign, onRefresh }: { campaigns: C
                 <h3 className="font-semibold text-gray-900">📊 Telecaller Performance</h3>
                 {todaysPendingAsOf && (
                   <p className="text-xs text-amber-800 mt-0.5">
-                    Today&apos;s Pending (callback due): <strong>{todaysPendingTotal}</strong> across team as of {formatDate(todaysPendingAsOf)} — live snapshot, not filtered by date range above.
+                    Today's Pending (callback due + in progress w/o callback): <strong>{todaysPendingTotal}</strong> across team as of {formatDate(todaysPendingAsOf)} — live snapshot, not filtered by date range above.
                   </p>
                 )}
               </div>
