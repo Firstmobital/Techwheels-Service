@@ -55,6 +55,7 @@ type Draft = {
   entry_date: string
   parts_number: string
   customer_mobile: string
+  customer_update: string
 }
 
 type QuickFilter = 'all' | 'Pending' | 'Ordered' | 'Received' | 'Ready' | 'mine'
@@ -99,6 +100,7 @@ const EMPTY_DRAFT: Draft = {
   entry_date: todayIST(),
   parts_number: '',
   customer_mobile: '',
+  customer_update: '',
 }
 
 function StatusBadge({ status, qty = null }: { status: PartsRequestRow['parts_status']; qty?: number | null }) {
@@ -543,6 +545,7 @@ export default function PartsRequirementSection({ isAdmin = false }: Props) {
       entry_date: row.entry_date,
       parts_number: row.parts_number ?? '',
       customer_mobile: row.customer_mobile ?? '',
+      customer_update: row.customer_update ?? '',
     })
     setShowForm(true)
   }
@@ -609,8 +612,11 @@ export default function PartsRequirementSection({ isAdmin = false }: Props) {
       partsNumber: draft.parts_number.trim() || null,
       customerMobile: draft.customer_mobile.trim() || null,
     })
+    if (res.error) { setSaving(false); setError(res.error); return }
+    // Save customer_update separately via dedicated RPC
+    const cuRes = await updatePartsRequestCustomerUpdate(editingId!, (draft.customer_update ?? '').trim() || null)
+    if (cuRes.error) { setSaving(false); setError(cuRes.error); return }
     setSaving(false)
-    if (res.error) { setError(res.error); return }
     setToast('Request updated')
     setShowForm(false)
     setEditingId(null)
@@ -1050,6 +1056,12 @@ export default function PartsRequirementSection({ isAdmin = false }: Props) {
                 onChange={(e) => setDraft((d) => ({ ...d, advisor_remarks: e.target.value }))}
                 rows={2} placeholder="Notes for SPM" className={`${inputCls} font-sans`} />
             </label>
+            <label className={`${labelCls} sm:col-span-2 lg:col-span-3`}>
+              Customer Update
+              <textarea value={draft.customer_update}
+                onChange={(e) => setDraft((d) => ({ ...d, customer_update: e.target.value }))}
+                rows={2} placeholder="Latest update shared with customer..." className={`${inputCls} font-sans`} />
+            </label>
           </div>
           <div className="mt-4 flex gap-2">
             <button type="button" onClick={() => void handleEditSubmit()} disabled={saving}
@@ -1185,12 +1197,32 @@ export default function PartsRequirementSection({ isAdmin = false }: Props) {
                       {/* Col 15: Status */}
                       <td className="px-4 py-2.5"><StatusBadge status={row.parts_status} qty={row.parts_qty} /></td>
                       {/* Col 16: Adv. Remarks */}
-                      <td className="px-4 py-2.5 text-xs text-gray-600 max-w-[140px]">
-                        <p className="line-clamp-2">{row.advisor_remarks || '\u2014'}</p>
+                      <td className="px-4 py-2.5 text-xs text-gray-600 max-w-[160px]">
+                        {row.parts_status !== 'Done' ? (
+                          <textarea
+                            defaultValue={row.advisor_remarks ?? ''}
+                            onBlur={(e) => void handleRemarksBlur(row, e.target.value)}
+                            rows={2}
+                            className="w-full rounded-md border border-gray-200 px-2 py-1 text-xs font-sans focus:border-blue-400 focus:outline-none resize-y"
+                            placeholder="Add remarks..."
+                          />
+                        ) : (
+                          <p className="line-clamp-2">{row.advisor_remarks || '\u2014'}</p>
+                        )}
                       </td>
                       {/* Col 17: Cust. Update */}
-                      <td className="px-4 py-2.5 text-xs text-gray-600 max-w-[140px]">
-                        <p className="line-clamp-2">{row.customer_update || '\u2014'}</p>
+                      <td className="px-4 py-2.5 text-xs text-gray-600 max-w-[160px]">
+                        {row.parts_status !== 'Done' ? (
+                          <textarea
+                            defaultValue={row.customer_update ?? ''}
+                            onBlur={(e) => void handleCustomerUpdateBlur(row, e.target.value)}
+                            rows={2}
+                            className="w-full rounded-md border border-gray-200 px-2 py-1 text-xs font-sans focus:border-blue-400 focus:outline-none resize-y"
+                            placeholder="Latest update shared with customer..."
+                          />
+                        ) : (
+                          <p className="line-clamp-2">{row.customer_update || '\u2014'}</p>
+                        )}
                       </td>
                       {/* Col 18: SPM Remarks */}
                       <td className="px-4 py-2.5 text-xs text-gray-500 max-w-[140px]">
