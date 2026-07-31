@@ -433,7 +433,7 @@ export default function PartsRequirementSection({ isAdmin = false }: Props) {
     const q = search.trim().toLowerCase()
     if (q) {
       list = list.filter((r) =>
-        [r.job_card_number, r.registration_number, r.customer_name, r.parts_number, r.parts_required, r.advisor_name]
+        [r.job_card_number, r.registration_number, r.parts_number, r.parts_required, r.advisor_name]
           .some((v) => (v ?? '').toLowerCase().includes(q))
       )
     }
@@ -820,7 +820,7 @@ export default function PartsRequirementSection({ isAdmin = false }: Props) {
           type="text"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search Job Card, Reg No., Customer, Part No./Name..."
+          placeholder="Search Job Card, Reg No., Part No./Name..."
           className="w-full rounded-lg border border-gray-300 px-3 py-1.5 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 sm:w-72"
         />
       </div>
@@ -1124,10 +1124,9 @@ export default function PartsRequirementSection({ isAdmin = false }: Props) {
                 <th className="whitespace-nowrap px-4 py-3 text-left">Job Card</th>
                 {isAdmin && <th className="whitespace-nowrap px-4 py-3 text-left">Advisor</th>}
                 <th className="whitespace-nowrap px-4 py-3 text-left">Reg No.</th>
-                <th className="whitespace-nowrap px-4 py-3 text-left">Customer Name</th>
                 {isAdmin && <th className="whitespace-nowrap px-4 py-3 text-left">Customer Mobile No</th>}
                 <th className="whitespace-nowrap px-4 py-3 text-left">Vehicle Model</th>
-                <th className="whitespace-nowrap px-4 py-3 text-left">Portal</th>
+                {isAdmin && <th className="whitespace-nowrap px-4 py-3 text-left">Portal</th>}
                 <th className="whitespace-nowrap px-4 py-3 text-left">Parts Required</th>
                 <th className="whitespace-nowrap px-4 py-3 text-left">Parts No.</th>
                 <th className="whitespace-nowrap px-4 py-3 text-left">Order No.</th>
@@ -1156,28 +1155,26 @@ export default function PartsRequirementSection({ isAdmin = false }: Props) {
                     >
                       {/* Col 1: Entry Date */}
                       <td className="whitespace-nowrap px-4 py-2.5 text-xs text-gray-700">{fmtDateDMY(row.entry_date)}</td>
-                      {/* Col 2: Job Card */}
-                      <td className="whitespace-nowrap px-4 py-2.5 text-xs text-gray-600">{row.job_card_number || '\u2014'}</td>
+                      {/* Col 2: Job Card — display last 6 digits only */}
+                      <td className="whitespace-nowrap px-4 py-2.5 text-xs text-gray-600">{row.job_card_number ? row.job_card_number.slice(-6) : '\u2014'}</td>
                       {/* Col 3: Advisor (admin only) */}
                       {isAdmin && <td className="whitespace-nowrap px-4 py-2.5 text-xs text-gray-700">{row.advisor_name}</td>}
                       {/* Col 4: Reg No. */}
                       <td className="whitespace-nowrap px-4 py-2.5 text-sm font-semibold text-gray-900">{row.registration_number}</td>
-                      {/* Col 5: Customer Name */}
-                      <td className="whitespace-nowrap px-4 py-2.5 text-xs text-gray-700">{row.customer_name || '\u2014'}</td>
                       {/* Col 6: Customer Mobile (admin only) */}
                       {isAdmin && <td className="whitespace-nowrap px-4 py-2.5 text-xs text-gray-600">{row.customer_mobile || '\u2014'}</td>}
                       {/* Col 7: Vehicle Model (from Reception) */}
                       <td className="whitespace-nowrap px-4 py-2.5 text-xs text-gray-600">{row.vehicle_model || '\u2014'}</td>
-                      {/* Col 8: Portal (EV/PV badge) */}
-                      <td className="px-4 py-2.5">
+                      {/* Col 8: Portal (EV/PV badge) — admin only */}
+                      {isAdmin && <td className="px-4 py-2.5">
                         <span className={`inline-block rounded px-1.5 py-0.5 text-[10px] font-bold
                           ${evpvOf(row) === 'EV' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'}`}>
                           {evpvOf(row)}
                         </span>
-                      </td>
-                      {/* Col 9: Parts Required */}
-                      <td className="px-4 py-2.5 text-xs font-medium text-gray-900 max-w-[160px]">
-                        <p className="truncate">{row.parts_required}</p>
+                      </td>}
+                      {/* Col 9: Parts Required — full name, no truncation */}
+                      <td className="px-4 py-2.5 text-xs font-medium text-gray-900 max-w-[220px]">
+                        <p className="whitespace-normal break-words">{row.parts_required}</p>
                       </td>
                       {/* Col 10: Parts No. */}
                       <td className="px-4 py-2.5 text-xs text-gray-500 font-mono">{row.parts_number || '\u2014'}</td>
@@ -1288,12 +1285,9 @@ export default function PartsRequirementSection({ isAdmin = false }: Props) {
                       <div className="grid grid-cols-2 gap-2">
                         <div>
                           <p className="font-bold text-gray-500">Job Card</p>
-                          <p className="text-gray-800">{row.job_card_number || '\u2014'}</p>
+                          <p className="text-gray-800">{row.job_card_number ? row.job_card_number.slice(-6) : '\u2014'}</p>
                         </div>
-                        <div>
-                          <p className="font-bold text-gray-500">Customer</p>
-                          <p className="text-gray-800">{row.customer_name || '\u2014'}</p>
-                        </div>
+
                         <div>
                           <p className="font-bold text-gray-500">Order No.</p>
                           <p className="text-gray-800">{orderNoOf(row) || '\u2014'}</p>
