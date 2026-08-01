@@ -14,7 +14,7 @@ import {
   type ReceptionEntryRow,
   type ServiceAdvisorSummaryCounts,
 } from '../lib/api'
-import DateRangeFilter, { currentMonthRange, type DateRange, type DateRangePreset } from '../components/DateRangeFilter'
+import DateRangeFilter, { currentMonthRange, type DateRange } from '../components/DateRangeFilter'
 import { supabase } from '../lib/supabase'
 import Icon from '../components/Icon'
 import { buildSaFloorCompletedWaTemplate } from '../lib/waTemplates'
@@ -72,7 +72,6 @@ const SOURCE_TONE_MAP: Record<string, string> = {
 
 const UNKNOWN_FUEL_TYPE = 'Unknown'
 const ASSIGNMENT_JOB_CARD_BATCH_SIZE = 100
-const PERIOD_PRESETS: DateRangePreset[] = ['this-month', 'last-month', 'this-week', 'last-7', 'last-30']
 
 type AssignmentStatusRow = {
   job_card_number: string | null
@@ -126,47 +125,6 @@ function buildAssignmentStatusSets(rows: AssignmentStatusRow[]): AssignmentStatu
   }
 
   return { completed, hold, inProcess, allAssigned }
-}
-function toISTDate(d: Date): string {
-  return d.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
-}
-
-function getRangeFromPreset(preset: DateRangePreset): DateRange {
-  const now = new Date()
-  const today = toISTDate(now)
-
-  if (preset === 'this-month') {
-    return currentMonthRange()
-  }
-
-  if (preset === 'last-month') {
-    const d = new Date(now.getFullYear(), now.getMonth() - 1, 1)
-    const y = d.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }).slice(0, 4)
-    const m = d.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }).slice(5, 7)
-    const lastDay = new Date(Number(y), Number(m), 0).getDate()
-    return { from: `${y}-${m}-01`, to: `${y}-${m}-${String(lastDay).padStart(2, '0')}` }
-  }
-
-  if (preset === 'this-week') {
-    const day = now.getDay()
-    const mon = new Date(now)
-    mon.setDate(now.getDate() - ((day + 6) % 7))
-    return { from: toISTDate(mon), to: today }
-  }
-
-  if (preset === 'last-7') {
-    const d = new Date(now)
-    d.setDate(now.getDate() - 6)
-    return { from: toISTDate(d), to: today }
-  }
-
-  if (preset === 'last-30') {
-    const d = new Date(now)
-    d.setDate(now.getDate() - 29)
-    return { from: toISTDate(d), to: today }
-  }
-
-  return currentMonthRange()
 }
 
 function formatDate(value: string): string {
@@ -480,7 +438,6 @@ export default function ServiceAdvisorPage() {
 
   const [loading, setLoading] = useState(true)
   const [dateRange, setDateRange] = useState<DateRange>(currentMonthRange())
-  const [disabledPeriodPresets, setDisabledPeriodPresets] = useState<DateRangePreset[]>([])
   const [error, setError] = useState<string | null>(null)
   const [toastMsg, setToastMsg] = useState<string | null>(null)
   const [savingId, setSavingId] = useState<number | null>(null)
@@ -788,30 +745,6 @@ export default function ServiceAdvisorPage() {
     setHasMoreRows(false)
 
     const nextIsAdmin = await checkIfAdmin()
-
-    const presetAvailability = await Promise.all(
-      PERIOD_PRESETS.map(async (preset) => {
-        const presetRange = getRangeFromPreset(preset)
-        const { data: probeRows, error: probeError } = await supabase
-          .from('service_reception_entries')
-          .select('id')
-          .gte('created_at', `${presetRange.from}T00:00:00+05:30`)
-          .lte('created_at', `${presetRange.to}T23:59:59+05:30`)
-          .limit(1)
-
-        if (probeError) {
-          return { preset, hasData: true }
-        }
-
-        return { preset, hasData: Array.isArray(probeRows) && probeRows.length > 0 }
-      }),
-    )
-
-    setDisabledPeriodPresets(
-      presetAvailability
-        .filter((item) => !item.hasData)
-        .map((item) => item.preset),
-    )
 
     const loadRange = getLoadRange()
     const res = await fetchEntryPage(loadRange, null, nextIsAdmin)
@@ -1522,7 +1455,6 @@ export default function ServiceAdvisorPage() {
           range={dateRange}
           onChange={setDateRange}
           label="Period:"
-          disabledPresets={disabledPeriodPresets}
           includeAll
           allLookbackDays={RECEPTION_DEFAULT_LOOKBACK_DAYS}
         />
