@@ -336,6 +336,115 @@ function parseKmInput(value: string): number | null {
   return parsed
 }
 
+function getAdvisorFilterLabel(row: ReceptionEntryRow): string {
+  const displayName = String(row.sa_display_name ?? row.sa_name ?? '').trim()
+  const code = String(row.sa_employee_code ?? '').trim().toUpperCase()
+
+  if (displayName && code) return `${displayName} (${code})`
+  if (displayName) return displayName
+  if (code) return code
+  return 'Unknown advisor'
+}
+
+function computeClientSummaryCounts(
+  metricRows: ReceptionEntryRow[],
+  assignmentSets: AssignmentStatusSets,
+): ServiceAdvisorSummaryCounts {
+  let floor = 0
+  let bodyshop = 0
+  let others = 0
+  let nullCategory = 0
+  let jobCardPending = 0
+  let srTypePending = 0
+  let estimatePending = 0
+  let invoicePending = 0
+  let noTechnician = 0
+  let hold = 0
+  let inProcess = 0
+  let completed = 0
+
+  for (const row of metricRows) {
+    const category = getCategoryForServiceType(row.service_type)
+    if (category === 'floor') floor += 1
+    else if (category === 'bodyshop') bodyshop += 1
+    else if (category === 'others') others += 1
+    else nullCategory += 1
+
+    if (isJobCardPending(row.jc_number)) jobCardPending += 1
+    if (isServiceTypeMissing(row.service_type)) srTypePending += 1
+
+    if (
+      !isBodyshopServiceType(row.service_type)
+      && !isNoEstimateInvoiceRequiredServiceType(row.service_type)
+      && !row.estimate_storage_path
+    ) {
+      estimatePending += 1
+    }
+
+    const jcNumber = String(row.jc_number ?? '').trim().toUpperCase()
+    const isCompleted = Boolean(jcNumber) && assignmentSets.completed.has(jcNumber)
+    const isHold = Boolean(jcNumber) && assignmentSets.hold.has(jcNumber)
+    const isInProc = Boolean(jcNumber) && assignmentSets.inProcess.has(jcNumber)
+
+    if (
+      !isBodyshopServiceType(row.service_type)
+      && !isNoEstimateInvoiceRequiredServiceType(row.service_type)
+      && isCompleted
+      && !row.invoice_done_at
+    ) {
+      invoicePending += 1
+    }
+
+    if (category === 'floor') {
+      if (!jcNumber || !assignmentSets.allAssigned.has(jcNumber)) noTechnician += 1
+    }
+
+    if (isHold) hold += 1
+    if (isInProc) inProcess += 1
+    if (isCompleted && row.invoice_done_at) completed += 1
+  }
+
+  const branchSet = new Set<string>()
+  const fuelSet = new Set<string>()
+  const advisorMap = new Map<string, { label: string; count: number }>()
+
+  for (const row of metricRows) {
+    const branch = String(row.branch ?? '').trim()
+    if (branch) branchSet.add(branch)
+    fuelSet.add(getFuelTypeLabel(row.fuel_type))
+
+    const key = getAdvisorFilterKey(row)
+    const existing = advisorMap.get(key)
+    if (existing) existing.count += 1
+    else advisorMap.set(key, { label: getAdvisorFilterLabel(row), count: 1 })
+  }
+
+  return {
+    total: metricRows.length,
+    job_card_pending: jobCardPending,
+    sr_type_pending: srTypePending,
+    estimate_pending: estimatePending,
+    invoice_pending: invoicePending,
+    no_technician: noTechnician,
+    hold,
+    in_process: inProcess,
+    completed,
+    category_counts: {
+      all: metricRows.length,
+      floor,
+      bodyshop,
+      others,
+      null: nullCategory,
+    },
+    branches: Array.from(branchSet).sort(),
+    fuel_types: Array.from(fuelSet).sort(),
+    advisors: Array.from(advisorMap.entries())
+      .map(([key, meta]) => ({ key, label: meta.label, count: meta.count }))
+      .sort((a, b) => a.label.localeCompare(b.label)),
+    location_total: metricRows.length,
+  }
+}
+
 export default function ServiceAdvisorPage() {
   const fileInputRefs = useRef<Record<number, HTMLInputElement | null>>({})
   const assignmentRealtimeChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null)
@@ -358,6 +467,7 @@ export default function ServiceAdvisorPage() {
   const [canModifyServiceAdvisor, setCanModifyServiceAdvisor] = useState(false)
 
   const [summaryCounts, setSummaryCounts] = useState<ServiceAdvisorSummaryCounts | null>(null)
+  const [summaryUseFallback, setSummaryUseFallback] = useState(false)
   const [categoryOptionCounts, setCategoryOptionCounts] = useState<ServiceAdvisorSummaryCounts['category_counts'] | null>(null)
   const [advisorOptions, setAdvisorOptions] = useState<Array<{ value: string; label: string; count: number }>>([])
   const [locationOptionTotal, setLocationOptionTotal] = useState(0)
@@ -434,9 +544,25 @@ export default function ServiceAdvisorPage() {
     return advisorScoped.filter((row) => matchesSearch(row))
   }, [categoryFilteredRows, selectedAdvisor, searchQuery])
 
-  const totalAdvisorOptionCount = advisorOptions.length
+  const clientSummaryCounts = useMemo(
+    () => computeClientSummaryCounts(displayedRows, {
+      completed: completedJobCardNumbers,
+      hold: holdJobCardNumbers,
+      inProcess: inProcessJobCardNumbers,
+      allAssigned: allAssignedJobCardNumbers,
+    }),
+    [
+      displayedRows,
+      completedJobCardNumbers,
+      holdJobCardNumbers,
+      inProcessJobCardNumbers,
+      allAssignedJobCardNumbers,
+    ],
+  )
 
-  const categoryCounts = categoryOptionCounts ?? summaryCounts?.category_counts ?? {
+  const activeSummaryCounts = summaryCounts ?? (summaryUseFallback ? clientSummaryCounts : null)
+
+  const categoryCounts = categoryOptionCounts ?? activeSummaryCounts?.category_counts ?? {
     all: 0,
     floor: 0,
     bodyshop: 0,
@@ -444,7 +570,25 @@ export default function ServiceAdvisorPage() {
     null: 0,
   }
 
-  const showLocationFilter = availableBranches.length > 0
+  const effectiveAdvisorOptions = useMemo(() => {
+    if (summaryCounts || !summaryUseFallback) return advisorOptions
+    return clientSummaryCounts.advisors.map((advisor) => ({
+      value: advisor.key,
+      label: advisor.label,
+      count: advisor.count,
+    }))
+  }, [summaryCounts, summaryUseFallback, advisorOptions, clientSummaryCounts.advisors])
+
+  const effectiveAvailableBranches = useMemo(() => {
+    if (summaryCounts || !summaryUseFallback) return availableBranches
+    return clientSummaryCounts.branches
+  }, [summaryCounts, summaryUseFallback, availableBranches, clientSummaryCounts.branches])
+
+  const effectiveLocationOptionTotal = summaryCounts || !summaryUseFallback
+    ? locationOptionTotal
+    : clientSummaryCounts.location_total ?? clientSummaryCounts.total
+
+  const showLocationFilter = effectiveAvailableBranches.length > 0
   const showFuelTypeFilter = fuelTypeOptions.length > 1
   const showCategoryFilter = [
     categoryCounts.floor,
@@ -452,7 +596,7 @@ export default function ServiceAdvisorPage() {
     categoryCounts.others,
     categoryCounts.null,
   ].filter((count) => count > 0).length > 1
-  const showAdvisorFilter = totalAdvisorOptionCount > 1
+  const showAdvisorFilter = effectiveAdvisorOptions.length > 1
 
   const cardFilteredRows = useMemo(() => {
     return applySummaryCardFilter(
@@ -466,38 +610,38 @@ export default function ServiceAdvisorPage() {
   }, [displayedRows, selectedSummaryCard, completedJobCardNumbers, holdJobCardNumbers, inProcessJobCardNumbers, allAssignedJobCardNumbers])
 
   const hasBaseRows = useMemo(
-    () => (summaryCounts?.total ?? 0) > 0 || rows.length > 0,
-    [summaryCounts?.total, rows.length],
+    () => (activeSummaryCounts?.total ?? 0) > 0 || rows.length > 0,
+    [activeSummaryCounts?.total, rows.length],
   )
   const hasRows = useMemo(() => cardFilteredRows.length > 0, [cardFilteredRows.length])
 
   useEffect(() => {
     if (selectedAdvisor === 'all') return
-    if (advisorOptions.some((option) => option.value === selectedAdvisor)) return
+    if (effectiveAdvisorOptions.some((option) => option.value === selectedAdvisor)) return
     setSelectedAdvisor('all')
-  }, [advisorOptions, selectedAdvisor])
+  }, [effectiveAdvisorOptions, selectedAdvisor])
 
   const advisorBranch = useMemo(() => {
     if (isAdmin && selectedBranch !== 'all') return selectedBranch
     if (isAdmin) return 'All branches'
 
-    const uniqueBranches = availableBranches
+    const uniqueBranches = effectiveAvailableBranches
 
     if (uniqueBranches.length === 0) return 'Unknown'
     if (uniqueBranches.length === 1) return uniqueBranches[0]
     return 'Multiple branches'
-  }, [availableBranches, isAdmin, selectedBranch])
+  }, [effectiveAvailableBranches, isAdmin, selectedBranch])
 
-  const filteredTotalCount = summaryCounts?.total ?? 0
-  const pendingEstimateCount = summaryCounts?.estimate_pending ?? 0
-  const pendingJobCardCount = summaryCounts?.job_card_pending ?? 0
-  const pendingServiceTypeCount = summaryCounts?.sr_type_pending ?? 0
-  const pendingInvoiceCount = summaryCounts?.invoice_pending ?? 0
-  const noTechnicianCount = summaryCounts?.no_technician ?? 0
-  const holdCount = summaryCounts?.hold ?? 0
-  const inProcessCount = summaryCounts?.in_process ?? 0
-  const completedCount = summaryCounts?.completed ?? 0
-  const advisorOptionTotal = advisorOptions.reduce((sum, option) => sum + option.count, 0)
+  const filteredTotalCount = activeSummaryCounts?.total ?? 0
+  const pendingEstimateCount = activeSummaryCounts?.estimate_pending ?? 0
+  const pendingJobCardCount = activeSummaryCounts?.job_card_pending ?? 0
+  const pendingServiceTypeCount = activeSummaryCounts?.sr_type_pending ?? 0
+  const pendingInvoiceCount = activeSummaryCounts?.invoice_pending ?? 0
+  const noTechnicianCount = activeSummaryCounts?.no_technician ?? 0
+  const holdCount = activeSummaryCounts?.hold ?? 0
+  const inProcessCount = activeSummaryCounts?.in_process ?? 0
+  const completedCount = activeSummaryCounts?.completed ?? 0
+  const advisorOptionTotal = effectiveAdvisorOptions.reduce((sum, option) => sum + option.count, 0)
   // Detect admin/super_admin and get dealer scope
   async function checkIfAdmin() {
     try {
@@ -588,6 +732,7 @@ export default function ServiceAdvisorPage() {
     const summaryRes = await fetchServiceAdvisorSummaryCounts(loadRange, filters)
     if (summaryRes.data) {
       setSummaryCounts(summaryRes.data)
+      setSummaryUseFallback(false)
       setCategoryOptionCounts(summaryRes.data.category_counts)
       setAdvisorOptions(
         summaryRes.data.advisors.map((advisor) => ({
@@ -600,6 +745,12 @@ export default function ServiceAdvisorPage() {
       setLocationOptionTotal(summaryRes.data.location_total ?? summaryRes.data.total)
       if (summaryRes.data.fuel_types.length > 0) {
         setFuelTypeOptions(summaryRes.data.fuel_types)
+      }
+    } else {
+      setSummaryCounts(null)
+      setSummaryUseFallback(rows.length > 0)
+      if (summaryRes.error) {
+        setError((prev) => prev ?? `Summary counts unavailable (${summaryRes.error}). Showing counts from loaded rows.`)
       }
     }
 
@@ -1368,8 +1519,8 @@ export default function ServiceAdvisorPage() {
           <>
             <span className="cft__label">Loc:</span>
             <select className="cft__sel" value={selectedBranch} onChange={e => setSelectedBranch(e.target.value)}>
-              <option value="all">All ({locationOptionTotal})</option>
-              {availableBranches.map(branch => (
+              <option value="all">All ({effectiveLocationOptionTotal})</option>
+              {effectiveAvailableBranches.map(branch => (
                 <option key={branch} value={branch}>{branch}</option>
               ))}
             </select>
@@ -1407,7 +1558,7 @@ export default function ServiceAdvisorPage() {
             <span className="cft__label">Advisor:</span>
             <select className="cft__sel" value={selectedAdvisor} onChange={e => setSelectedAdvisor(e.target.value)}>
               <option value="all">All ({advisorOptionTotal})</option>
-              {advisorOptions.map(a => (
+              {effectiveAdvisorOptions.map(a => (
                 <option key={a.value} value={a.value}>{a.label} ({a.count})</option>
               ))}
             </select>
