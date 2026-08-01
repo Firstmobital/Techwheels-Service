@@ -387,6 +387,7 @@ export default function ReceptionPage() {
   const [listCursor, setListCursor] = useState<ReceptionEntryPageCursor | null>(null)
   const [hasMoreEntries, setHasMoreEntries] = useState(false)
   const [loadingMoreEntries, setLoadingMoreEntries] = useState(false)
+  const [exporting, setExporting] = useState(false)
 
   const todayKey = useMemo(() => {
     const now = new Date()
@@ -784,6 +785,137 @@ export default function ReceptionPage() {
     setLoadingMoreEntries(false)
   }
 
+  async function handleExportExcel() {
+    setExporting(true)
+    try {
+      // Fetch ALL records matching the date range (bypassing pagination)
+      let allRows: ReceptionEntryRow[] = []
+      let cursor: ReceptionEntryPageCursor | null = null
+      let hasMore = true
+      while (hasMore) {
+        const res = await listReceptionEntriesByDateRangePage(dateRange, cursor)
+        if (res.error) {
+          setError(res.error)
+          setExporting(false)
+          return
+        }
+        const page = res.data ?? { rows: [], nextCursor: null, hasMore: false }
+        allRows = allRows.concat(page.rows)
+        cursor = page.nextCursor
+        hasMore = page.hasMore
+      }
+
+      // Apply same client-side filters as the UI
+      let filtered = allRows
+
+      // Location filter
+      if (selectedListFilter === 'today') {
+        filtered = filtered.filter((entry) => {
+          const created = new Date(entry.created_at)
+          if (Number.isNaN(created.getTime())) return false
+          const createdKey = new Intl.DateTimeFormat('en-CA', {
+            timeZone: 'Asia/Kolkata',
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+          }).format(created)
+          return createdKey === todayKey
+        })
+      }
+
+      if (selectedLocation !== 'all') {
+        filtered = filtered.filter((entry) => getLocationLabel(entry.branch) === selectedLocation)
+      }
+
+      // Portal / fuel type filter
+      if (selectedFuelType !== 'all') {
+        filtered = filtered.filter((entry) => getEntryFuelTypeLabel(entry) === selectedFuelType)
+      }
+
+      // Service type filter
+      if (selectedServiceType !== 'all') {
+        filtered = filtered.filter((entry) => getServiceTypeLabel(entry.service_type) === selectedServiceType)
+      }
+
+      // Build Excel sheet
+      const header = [
+        'Reg Number',
+        'Job Card No.',
+        'Model',
+        'Service Type',
+        'Service Advisor',
+        'Customer Name',
+        'Customer Phone',
+        'Source',
+        'KM Reading',
+        'Branch / Location',
+        'Portal',
+        'Remark',
+        'Created By',
+        'Created At',
+        'Updated At',
+      ]
+
+      const dataRows = filtered.map((entry) => [
+        entry.reg_number || '',
+        entry.jc_number || '',
+        entry.model || '',
+        getServiceTypeLabel(entry.service_type),
+        entry.sa_name || '',
+        entry.owner_name || '',
+        entry.owner_phone || '',
+        entry.source || '',
+        entry.km_reading ?? '',
+        getLocationLabel(entry.branch),
+        getEntryFuelTypeLabel(entry),
+        entry.remark || '',
+        entry.created_by || '',
+        formatDate(entry.created_at),
+        formatDate(entry.updated_at),
+      ])
+
+      const wb = XLSX.utils.book_new()
+      const ws = XLSX.utils.aoa_to_sheet([header, ...dataRows])
+
+      // Set column widths
+      ws['!cols'] = [
+        { wch: 14 }, // Reg Number
+        { wch: 16 }, // JC Number
+        { wch: 16 }, // Model
+        { wch: 16 }, // Service Type
+        { wch: 20 }, // SA
+        { wch: 20 }, // Customer Name
+        { wch: 14 }, // Phone
+        { wch: 12 }, // Source
+        { wch: 10 }, // KM
+        { wch: 16 }, // Branch
+        { wch: 8 },  // Portal
+        { wch: 24 }, // Remark
+        { wch: 16 }, // Created By
+        { wch: 20 }, // Created At
+        { wch: 20 }, // Updated At
+      ]
+
+      XLSX.utils.book_append_sheet(wb, ws, 'Reception')
+
+      const dateStr = dateRange.from === dateRange.to
+        ? dateRange.from
+        : `${dateRange.from}_to_${dateRange.to}`
+      const filterStr = [
+        selectedLocation !== 'all' ? selectedLocation : null,
+        selectedFuelType !== 'all' ? selectedFuelType : null,
+        selectedServiceType !== 'all' ? selectedServiceType : null,
+      ].filter(Boolean).join('_')
+      const suffix = filterStr ? `_${filterStr}` : ''
+
+      XLSX.writeFile(wb, `Reception_${dateStr}${suffix}.xlsx`)
+    } catch (err) {
+      setError(`Export failed: ${err instanceof Error ? err.message : String(err)}`)
+    } finally {
+      setExporting(false)
+    }
+  }
+
   useEffect(() => {
     void loadData()
     void loadModelOptions()
@@ -1034,6 +1166,10 @@ export default function ReceptionPage() {
 
         <div className="cft__spacer" />
 
+        <button type="button" className="btn btn--soft cft__action" onClick={() => void handleExportExcel()} disabled={exporting || loading || visibleEntries.length === 0}
+          title="Export all filtered records to Excel">
+          {exporting ? '⏳ Exporting…' : '📊 Download Excel'}
+        </button>
         {canImport && (
           <button type="button" className="btn btn--soft cft__action" onClick={() => fileInputRef.current?.click()} disabled={uploading}>
             {uploading ? '⏳ Importing…' : '📥 Import XLSX'}
