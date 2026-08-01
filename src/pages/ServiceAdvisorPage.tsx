@@ -716,11 +716,12 @@ export default function ServiceAdvisorPage() {
       }
     } else {
       setSummaryCounts(summaryRes.data ?? null)
-      setSummaryFromClient(loadedRowCount > 0)
-      if (summaryRes.error) {
-        setError((prev) => prev ?? `Summary counts unavailable (${summaryRes.error}). Showing counts from loaded rows.`)
-      } else if (loadedRowCount > 0) {
-        setError((prev) => prev ?? 'Summary counts unavailable from server. Showing counts from loaded rows.')
+      const useClientFallback = loadedRowCount > 0
+      setSummaryFromClient(useClientFallback)
+      if (summaryRes.error && !useClientFallback) {
+        setError((prev) => prev ?? `Summary counts unavailable (${summaryRes.error}).`)
+      } else if (!summaryRes.error && !useClientFallback && loadedRowCount === 0) {
+        setError((prev) => prev ?? 'Summary counts unavailable from server.')
       }
     }
 
