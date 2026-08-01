@@ -4,7 +4,8 @@
 -- user_can_read_service_reception_entry() per row under SECURITY DEFINER.
 --
 -- Fix:
--- 1) Advisor fast path: INNER JOIN my_active_employee_codes() (index-friendly).
+-- 1) Advisor fast path: employee-code IN my_active_employee_codes() (index-friendly).
+-- 2) No temp tables (STABLE functions cannot run DDL).
 -- 2) Add has_module_modify('service_advisor') to the outer permission gate.
 -- 3) Join technician_assignments only for JC numbers present in the filtered base.
 --
@@ -53,10 +54,7 @@ AS $$
         OR public.has_module_modify('service_advisor'::text)
       )
       AND p_sa_employee_code IS NOT NULL
-      AND upper(btrim(p_sa_employee_code)) IN (
-        SELECT upper(btrim(code))
-        FROM public.my_active_employee_codes() AS code
-      )
+      AND p_sa_employee_code IN (SELECT code FROM public.my_active_employee_codes() AS code)
     )
     OR (
       public.has_module_view('service_advisor'::text)
@@ -140,45 +138,7 @@ BEGIN
         AND lower(btrim(coalesce(em.role, ''))) = ANY (ARRAY['crm'::text, 'sm'::text, 'gm'::text])
     );
 
-  DROP TABLE IF EXISTS pg_temp.sa_summary_scope;
-
-  IF v_sa_only THEN
-    CREATE TEMP TABLE pg_temp.sa_summary_scope ON COMMIT DROP AS
-    SELECT
-      r.id,
-      r.jc_number,
-      r.service_type,
-      r.estimate_storage_path,
-      r.invoice_done_at,
-      r.branch,
-      r.portal,
-      r.sa_employee_code,
-      r.sa_display_name,
-      r.sa_name,
-      r.reg_number,
-      r.model,
-      r.owner_name,
-      r.owner_phone,
-      r.source,
-      r.created_by,
-      lower(trim(regexp_replace(coalesce(r.service_type, ''), '\s+', ' ', 'g'))) AS st_norm,
-      coalesce(
-        nullif(btrim(em.fuel_type), ''),
-        nullif(btrim(r.portal), ''),
-        'Unknown'
-      ) AS fuel_label
-    FROM public.service_reception_entries r
-    LEFT JOIN public.employee_master em
-      ON upper(btrim(em.employee_code)) = upper(btrim(r.sa_employee_code))
-    INNER JOIN (
-      SELECT upper(btrim(code)) AS employee_code
-      FROM public.my_active_employee_codes() AS code
-    ) my_codes
-      ON upper(btrim(r.sa_employee_code)) = my_codes.employee_code
-    WHERE r.created_at >= p_created_from
-      AND r.created_at <= p_created_to;
-  ELSE
-    CREATE TEMP TABLE pg_temp.sa_summary_scope ON COMMIT DROP AS
+  WITH scoped AS (
     SELECT
       r.id,
       r.jc_number,
@@ -207,16 +167,22 @@ BEGIN
       ON upper(btrim(em.employee_code)) = upper(btrim(r.sa_employee_code))
     WHERE r.created_at >= p_created_from
       AND r.created_at <= p_created_to
-      AND public.service_reception_entry_in_summary_scope(
-        r.dealer_code,
-        r.sa_employee_code,
-        r.service_type
-      );
-  END IF;
-
-  CREATE INDEX sa_summary_scope_st_norm_idx ON pg_temp.sa_summary_scope (st_norm);
-
-  WITH apply_common_filters AS (
+      AND (
+        (
+          v_sa_only
+          AND r.sa_employee_code IN (SELECT code FROM public.my_active_employee_codes() AS code)
+        )
+        OR (
+          NOT v_sa_only
+          AND public.service_reception_entry_in_summary_scope(
+            r.dealer_code,
+            r.sa_employee_code,
+            r.service_type
+          )
+        )
+      )
+  ),
+  apply_common_filters AS (
     SELECT
       s.*,
       p_branch AS branch_filter,
@@ -224,7 +190,7 @@ BEGIN
       p_category AS category_filter,
       p_advisor_key AS advisor_filter,
       p_search AS search_filter
-    FROM pg_temp.sa_summary_scope s
+    FROM scoped s
   ),
   matches_search AS (
     SELECT s.*
@@ -438,7 +404,7 @@ $$;
 
 COMMENT ON FUNCTION public.get_service_advisor_summary_counts(
   timestamptz, timestamptz, text, text, text, text, text
-) IS 'P1-06 Batch F: SA summary counts. Advisor fast path via employee-code join; JC-limited assignment join.';
+) IS 'P1-06 Batch F: SA summary counts. Advisor fast path via employee-code IN; no temp tables; JC-limited assignment join.';
 
 GRANT EXECUTE ON FUNCTION public.get_service_advisor_summary_counts(
   timestamptz, timestamptz, text, text, text, text, text

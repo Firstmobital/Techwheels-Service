@@ -467,7 +467,7 @@ export default function ServiceAdvisorPage() {
   const [canModifyServiceAdvisor, setCanModifyServiceAdvisor] = useState(false)
 
   const [summaryCounts, setSummaryCounts] = useState<ServiceAdvisorSummaryCounts | null>(null)
-  const [summaryUseFallback, setSummaryUseFallback] = useState(false)
+  const [summaryFromClient, setSummaryFromClient] = useState(false)
   const [categoryOptionCounts, setCategoryOptionCounts] = useState<ServiceAdvisorSummaryCounts['category_counts'] | null>(null)
   const [advisorOptions, setAdvisorOptions] = useState<Array<{ value: string; label: string; count: number }>>([])
   const [locationOptionTotal, setLocationOptionTotal] = useState(0)
@@ -560,9 +560,17 @@ export default function ServiceAdvisorPage() {
     ],
   )
 
-  const activeSummaryCounts = summaryCounts ?? (summaryUseFallback ? clientSummaryCounts : null)
+  const preferClientSummary = rows.length > 0 && (
+    summaryFromClient
+    || !summaryCounts
+    || (summaryCounts.total ?? 0) === 0
+  )
 
-  const categoryCounts = categoryOptionCounts ?? activeSummaryCounts?.category_counts ?? {
+  const activeSummaryCounts = preferClientSummary ? clientSummaryCounts : summaryCounts
+
+  const categoryCounts = (preferClientSummary
+    ? activeSummaryCounts?.category_counts
+    : (categoryOptionCounts ?? activeSummaryCounts?.category_counts)) ?? {
     all: 0,
     floor: 0,
     bodyshop: 0,
@@ -571,20 +579,20 @@ export default function ServiceAdvisorPage() {
   }
 
   const effectiveAdvisorOptions = useMemo(() => {
-    if (summaryCounts || !summaryUseFallback) return advisorOptions
+    if (!preferClientSummary) return advisorOptions
     return clientSummaryCounts.advisors.map((advisor) => ({
       value: advisor.key,
       label: advisor.label,
       count: advisor.count,
     }))
-  }, [summaryCounts, summaryUseFallback, advisorOptions, clientSummaryCounts.advisors])
+  }, [preferClientSummary, advisorOptions, clientSummaryCounts.advisors])
 
   const effectiveAvailableBranches = useMemo(() => {
-    if (summaryCounts || !summaryUseFallback) return availableBranches
+    if (!preferClientSummary) return availableBranches
     return clientSummaryCounts.branches
-  }, [summaryCounts, summaryUseFallback, availableBranches, clientSummaryCounts.branches])
+  }, [preferClientSummary, availableBranches, clientSummaryCounts.branches])
 
-  const effectiveLocationOptionTotal = summaryCounts || !summaryUseFallback
+  const effectiveLocationOptionTotal = !preferClientSummary
     ? locationOptionTotal
     : clientSummaryCounts.location_total ?? clientSummaryCounts.total
 
@@ -730,9 +738,11 @@ export default function ServiceAdvisorPage() {
     }
 
     const summaryRes = await fetchServiceAdvisorSummaryCounts(loadRange, filters)
-    if (summaryRes.data) {
+    const loadedRowCount = rows.length
+
+    if (summaryRes.data && (summaryRes.data.total ?? 0) > 0) {
       setSummaryCounts(summaryRes.data)
-      setSummaryUseFallback(false)
+      setSummaryFromClient(false)
       setCategoryOptionCounts(summaryRes.data.category_counts)
       setAdvisorOptions(
         summaryRes.data.advisors.map((advisor) => ({
@@ -747,10 +757,12 @@ export default function ServiceAdvisorPage() {
         setFuelTypeOptions(summaryRes.data.fuel_types)
       }
     } else {
-      setSummaryCounts(null)
-      setSummaryUseFallback(rows.length > 0)
+      setSummaryCounts(summaryRes.data ?? null)
+      setSummaryFromClient(loadedRowCount > 0)
       if (summaryRes.error) {
         setError((prev) => prev ?? `Summary counts unavailable (${summaryRes.error}). Showing counts from loaded rows.`)
+      } else if (loadedRowCount > 0) {
+        setError((prev) => prev ?? 'Summary counts unavailable from server. Showing counts from loaded rows.')
       }
     }
 
@@ -917,7 +929,7 @@ export default function ServiceAdvisorPage() {
     const loadRange = getLoadRange()
     void loadSummaryMetrics(loadRange)
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [loading, dateRange, searchQuery, selectedBranch, selectedFuelType, selectedCategory, selectedAdvisor])
+  }, [loading, rows.length, dateRange, searchQuery, selectedBranch, selectedFuelType, selectedCategory, selectedAdvisor])
 
   useEffect(() => {
     visibleJobCardKeysRef.current = new Set(
