@@ -3,6 +3,7 @@ import {
   listServiceAdvisorEntriesByDateRangePage,
   listReceptionEntriesByDateRangePage,
   getDefaultReceptionLookbackDateRange,
+  RECEPTION_DEFAULT_LOOKBACK_DAYS,
   fetchServiceAdvisorSummaryCounts,
   updateServiceAdvisorEntry,
   uploadServiceAdvisorEstimate,
@@ -1523,7 +1524,7 @@ export default function ServiceAdvisorPage() {
           label="Period:"
           disabledPresets={disabledPeriodPresets}
           includeAll
-          defaultPreset="all"
+          allLookbackDays={RECEPTION_DEFAULT_LOOKBACK_DAYS}
         />
         <div className="cft__sep" />
 

@@ -168,12 +168,14 @@ BEGIN
     WHERE r.created_at >= p_created_from
       AND r.created_at <= p_created_to
       AND (
-        (
+        v_is_admin
+        OR (
           v_sa_only
           AND r.sa_employee_code IN (SELECT code FROM public.my_active_employee_codes() AS code)
         )
         OR (
           NOT v_sa_only
+          AND NOT v_is_admin
           AND public.service_reception_entry_in_summary_scope(
             r.dealer_code,
             r.sa_employee_code,

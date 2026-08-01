@@ -87,7 +87,7 @@ const FLOOR_INCHARGE_ALLOWED_SERVICE_TYPES = [
 const RECEPTION_LIST_PAGE_SIZE = 200
 
 // "All" period and legacy list helpers use this cap — not a full-table scan.
-const RECEPTION_DEFAULT_LOOKBACK_DAYS = 90
+export const RECEPTION_DEFAULT_LOOKBACK_DAYS = 90
 const RECEPTION_GLOBAL_SEARCH_LOOKBACK_DAYS = 90
 
 // Default lookback for floor/technician pages — vehicles don't stay in service longer than this.

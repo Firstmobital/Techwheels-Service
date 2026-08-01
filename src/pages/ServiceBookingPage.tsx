@@ -431,7 +431,7 @@ export default function ServiceBookingPage() {
           </select>
         )}
 
-        <DateRangeFilter range={appointmentDateRange} onChange={setAppointmentDateRange} label="Appointment:" includeAll defaultPreset="all" />
+        <DateRangeFilter range={appointmentDateRange} onChange={setAppointmentDateRange} label="Appointment:" includeAll />
 
         <div style={{ fontSize: '0.75rem', color: '#64748b', marginLeft: 'auto' }}>
           {filtered.length} record{filtered.length !== 1 ? 's' : ''}

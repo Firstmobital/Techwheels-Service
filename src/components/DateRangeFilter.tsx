@@ -1,7 +1,7 @@
 // src/components/DateRangeFilter.tsx
 // Shared date-range bar used across all CRM modules
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 
 export type DateRange = { from: string; to: string }
 
@@ -52,23 +52,46 @@ function getRange(preset: DateRangePreset, custom: DateRange): DateRange {
   return custom // 'custom'
 }
 
+export function inferPresetFromRange(range: DateRange): DateRangePreset | 'all' {
+  if (!range.from && !range.to) return 'all'
+
+  const presets: DateRangePreset[] = ['this-month', 'last-month', 'this-week', 'last-7', 'last-30']
+  for (const preset of presets) {
+    const candidate = getRange(preset, range)
+    if (candidate.from === range.from && candidate.to === range.to) return preset
+  }
+
+  return 'custom'
+}
+
 interface Props {
   range: DateRange
   onChange: (r: DateRange) => void
   label?: string
   disabledPresets?: DateRangePreset[]
   includeAll?: boolean
-  defaultPreset?: DateRangePreset | 'all'
+  /** When Period = All, API uses this many days — shown in the dropdown label. */
+  allLookbackDays?: number
 }
 
-export default function DateRangeFilter({ range, onChange, label, disabledPresets, includeAll = false, defaultPreset }: Props) {
-  const initialPreset: DateRangePreset | 'all' =
-    defaultPreset
-      ?? (includeAll && !range.from && !range.to ? 'all' : 'this-month')
-
-  const [preset, setPreset] = useState<DateRangePreset | 'all'>(initialPreset)
+export default function DateRangeFilter({
+  range,
+  onChange,
+  label,
+  disabledPresets,
+  includeAll = false,
+  allLookbackDays = 90,
+}: Props) {
+  const [preset, setPreset] = useState<DateRangePreset | 'all'>(() => inferPresetFromRange(range))
   const [custom, setCustom] = useState<DateRange>(range)
   const disabledSet = new Set(disabledPresets ?? [])
+
+  useEffect(() => {
+    setPreset(inferPresetFromRange(range))
+    if (inferPresetFromRange(range) === 'custom') {
+      setCustom(range)
+    }
+  }, [range.from, range.to])
 
   function apply(p: DateRangePreset, c?: DateRange) {
     const resolved = c ?? custom
@@ -87,7 +110,7 @@ export default function DateRangeFilter({ range, onChange, label, disabledPreset
   }
 
   const OPTIONS: Array<{ key: DateRangePreset | 'all'; label: string }> = [
-    ...(includeAll ? [{ key: 'all' as const, label: 'All' }] : []),
+    ...(includeAll ? [{ key: 'all' as const, label: `All (${allLookbackDays}d)` }] : []),
     { key: 'this-month', label: 'This Month'  },
     { key: 'last-month', label: 'Last Month'  },
     { key: 'this-week',  label: 'This Week'   },
