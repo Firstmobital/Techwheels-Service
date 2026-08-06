@@ -44,6 +44,9 @@ export interface ReceptionEntryRow {
   prior_reception_entry_id: number | null
   suggested_technician_code: string | null
   suggested_technician_name: string | null
+  has_updation_available: boolean
+  updation_code: string | null
+  updation_name: string | null
   created_by: string
   created_at: string
   updated_at: string
@@ -86,6 +89,13 @@ export type ReceptionRevisitContext = {
     code: string
     name: string | null
   } | null
+}
+
+export type ReceptionUpdationContext = {
+  has_updation_available: boolean
+  updation_code?: string | null
+  updation_name?: string | null
+  portal?: string | null
 }
 
 export interface ServiceAdvisorEntryUpdateInput {
@@ -185,6 +195,9 @@ const RECEPTION_ENTRY_SELECT_COLUMNS = [
   'prior_reception_entry_id',
   'suggested_technician_code',
   'suggested_technician_name',
+  'has_updation_available',
+  'updation_code',
+  'updation_name',
   'created_by',
   'created_at',
   'updated_at',
@@ -950,6 +963,48 @@ export async function getReceptionRevisitContext(
 
   if (error) return fail(error)
   return ok(parseReceptionRevisitContext(data))
+}
+
+function parseReceptionUpdationContext(raw: unknown): ReceptionUpdationContext {
+  if (!raw || typeof raw !== 'object') {
+    return { has_updation_available: false }
+  }
+
+  const payload = raw as {
+    has_updation_available?: boolean
+    updation_code?: string | null
+    updation_name?: string | null
+    portal?: string | null
+  }
+
+  if (!payload.has_updation_available) {
+    return { has_updation_available: false }
+  }
+
+  return {
+    has_updation_available: true,
+    updation_code: payload.updation_code ?? null,
+    updation_name: payload.updation_name ?? null,
+    portal: payload.portal ?? null,
+  }
+}
+
+export async function getReceptionUpdationContext(
+  regNumber: string,
+  portal?: string | null,
+): Promise<ApiResult<ReceptionUpdationContext>> {
+  const normalizedReg = regNumber.trim().toUpperCase()
+  if (!normalizedReg) {
+    return ok({ has_updation_available: false })
+  }
+
+  const { data, error } = await supabase.rpc('get_reception_updation_context', {
+    p_reg_number: normalizedReg,
+    p_portal: portal?.trim() || null,
+  })
+
+  if (error) return fail(error)
+  return ok(parseReceptionUpdationContext(data))
 }
 
 export async function updateReceptionEntry(id: number, input: ReceptionEntryInput): Promise<ApiResult<ReceptionEntryRow>> {

@@ -82,6 +82,7 @@ interface JobCard {
   fuel_type: string | null
   assignment_key: string
   is_revisit: boolean
+  has_updation_available: boolean
   suggested_technician_code: string | null
   suggested_technician_name: string | null
 }
@@ -271,6 +272,7 @@ const ENTRY_SELECT = [
   'jc_number', 'owner_name', 'owner_phone', 'branch', 'location', 'portal',
   'branch_label', 'km_reading', 'source', 'created_at',
   'is_revisit', 'prior_reception_entry_id', 'suggested_technician_code', 'suggested_technician_name',
+  'has_updation_available', 'updation_code', 'updation_name',
 ].join(', ')
 
 async function fetchFloorInchargeEntries(): Promise<JobCard[]> {
@@ -317,6 +319,7 @@ async function fetchFloorInchargeEntries(): Promise<JobCard[]> {
         sa_employee_code: row.sa_employee_code, fuel_type: null,
         assignment_key: jcRaw.toUpperCase(),
         is_revisit: row.is_revisit === true,
+        has_updation_available: row.has_updation_available === true,
         suggested_technician_code: row.suggested_technician_code ?? null,
         suggested_technician_name: row.suggested_technician_name ?? null,
       })
@@ -812,6 +815,11 @@ export default function FloorInchargeScreen() {
               {jc.is_revisit && (
                 <View style={S.revisitBadge}>
                   <Text style={S.revisitBadgeText}>Revisit</Text>
+                </View>
+              )}
+              {jc.has_updation_available && (
+                <View style={S.updationBadge}>
+                  <Text style={S.updationBadgeText}>Updation Available</Text>
                 </View>
               )}
               <View style={[S.portalBadge, { backgroundColor: portalEV ? '#f0fdf4' : '#eff6ff', borderColor: portalEV ? '#16a34a66' : '#2563eb66' }]}>
@@ -1517,6 +1525,8 @@ const S = {
   portalBadge:       { borderRadius: 5, paddingHorizontal: 6, paddingVertical: 2, borderWidth: 1, flexShrink: 0 },
   revisitBadge:      { borderRadius: 5, paddingHorizontal: 6, paddingVertical: 2, backgroundColor: '#fef3c7', flexShrink: 0 },
   revisitBadgeText:  { fontSize: 10, fontWeight: '700' as const, color: '#b45309' },
+  updationBadge:     { borderRadius: 5, paddingHorizontal: 6, paddingVertical: 2, backgroundColor: '#ede9fe', flexShrink: 0 },
+  updationBadgeText: { fontSize: 10, fontWeight: '700' as const, color: '#6d28d9' },
   portalBadgeText:   { fontSize: 10, fontWeight: '800' as const, letterSpacing: 0.4 },
   statusPill:        { borderRadius: 6, paddingHorizontal: 7, paddingVertical: 3, borderWidth: 1, flexShrink: 0 },
   statusPillText:    { fontSize: 10, fontWeight: '700' as const },

@@ -4,6 +4,7 @@ import DateRangeFilter, { currentMonthRange, type DateRange } from '../component
 import { supabase } from '../lib/supabase'
 import { listFloorInchargeEntries, type ReceptionEntryRow } from '../lib/api'
 import RevisitBadge from '../components/RevisitBadge'
+import UpdationAvailableBadge from '../components/UpdationAvailableBadge'
 import {
   isTechnicianBusinessRole,
   parseEmployeeSupportRoles,
@@ -33,6 +34,7 @@ interface JobCard {
   fuel_type: string | null
   assignment_key: string
   is_revisit: boolean
+  has_updation_available: boolean
   suggested_technician_code: string | null
   suggested_technician_name: string | null
 }
@@ -265,6 +267,7 @@ function mapReceptionRowToJobCard(row: ReceptionEntryRow): JobCard {
     fuel_type: row.fuel_type ?? null,
     assignment_key: assignmentKey,
     is_revisit: row.is_revisit === true,
+    has_updation_available: row.has_updation_available === true,
     suggested_technician_code: row.suggested_technician_code ?? null,
     suggested_technician_name: row.suggested_technician_name ?? null,
   }
@@ -1444,6 +1447,7 @@ export default function FloorInchargePage() {
                           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                             <span>{jc.reg_number || '—'}</span>
                             {jc.is_revisit && <RevisitBadge />}
+                            {jc.has_updation_available && <UpdationAvailableBadge />}
                           </div>
                         </td>
                         <td className="mono">{jc.km_reading ?? '—'}</td>

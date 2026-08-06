@@ -8,6 +8,7 @@ import {
   createReceptionEntry,
   deleteReceptionEntry,
   getReceptionRevisitContext,
+  getReceptionUpdationContext,
   isFloorInchargeServiceType,
   listReceptionEntriesByDateRangePage,
   searchReceptionEntriesForGlobalSearchPage,
@@ -17,9 +18,11 @@ import {
   type ReceptionEntryRow,
   type ReceptionEntryPageCursor,
   type ReceptionRevisitContext,
+  type ReceptionUpdationContext,
   updateReceptionEntry,
 } from '../lib/api'
 import RevisitBadge from '../components/RevisitBadge'
+import UpdationAvailableBadge from '../components/UpdationAvailableBadge'
 
 const SOURCE_OPTIONS = ['Self', 'Driver Pickup', 'Walk-in', 'RSA']
 
@@ -394,7 +397,10 @@ export default function ReceptionPage() {
   const [exporting, setExporting] = useState(false)
   const [revisitContext, setRevisitContext] = useState<ReceptionRevisitContext | null>(null)
   const [revisitChecking, setRevisitChecking] = useState(false)
+  const [updationContext, setUpdationContext] = useState<ReceptionUpdationContext | null>(null)
+  const [updationChecking, setUpdationChecking] = useState(false)
   const revisitDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const updationDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const todayKey = useMemo(() => {
     const now = new Date()
@@ -935,9 +941,15 @@ export default function ReceptionPage() {
     setEditingId(null)
     setRevisitContext(null)
     setRevisitChecking(false)
+    setUpdationContext(null)
+    setUpdationChecking(false)
     if (revisitDebounceRef.current) {
       clearTimeout(revisitDebounceRef.current)
       revisitDebounceRef.current = null
+    }
+    if (updationDebounceRef.current) {
+      clearTimeout(updationDebounceRef.current)
+      updationDebounceRef.current = null
     }
   }
 
@@ -992,6 +1004,35 @@ export default function ReceptionPage() {
     }, 400)
   }
 
+  async function checkUpdationForReg(regNumber: string) {
+    const normalized = regNumber.trim().toUpperCase()
+    if (!normalized) {
+      setUpdationContext(null)
+      return
+    }
+
+    setUpdationChecking(true)
+    const result = await getReceptionUpdationContext(normalized)
+    setUpdationChecking(false)
+
+    if (result.error || !result.data) {
+      setUpdationContext(null)
+      return
+    }
+
+    setUpdationContext(result.data)
+  }
+
+  function scheduleUpdationCheck(regNumber: string) {
+    if (updationDebounceRef.current) {
+      clearTimeout(updationDebounceRef.current)
+    }
+
+    updationDebounceRef.current = setTimeout(() => {
+      void checkUpdationForReg(regNumber)
+    }, 400)
+  }
+
   function handleRegNumberChange(value: string) {
     const nextReg = value.toUpperCase()
     setForm((prev) => ({
@@ -999,6 +1040,7 @@ export default function ReceptionPage() {
       reg_number: nextReg,
     }))
     scheduleRevisitCheck(nextReg, form.service_type, editingId)
+    scheduleUpdationCheck(nextReg)
   }
 
   function handleServiceTypeChange(value: string) {
@@ -1131,6 +1173,7 @@ export default function ReceptionPage() {
     setNotice(null)
     setError(null)
     void checkRevisitForReg(entry.reg_number, entry.service_type ?? '', entry.id)
+    void checkUpdationForReg(entry.reg_number)
   }
 
   async function handleDelete(id: number) {
@@ -1296,15 +1339,27 @@ export default function ReceptionPage() {
                 <input
                   value={form.reg_number}
                   onChange={(event) => handleRegNumberChange(event.target.value)}
-                  onBlur={() => void checkRevisitForReg(form.reg_number, form.service_type, editingId)}
+                  onBlur={() => {
+                    void checkRevisitForReg(form.reg_number, form.service_type, editingId)
+                    void checkUpdationForReg(form.reg_number)
+                  }}
                   autoCapitalize="characters"
                   placeholder="RJ14AB1234"
                   className="inp inp--uc"
                 />
-                {revisitChecking && (
+                {(revisitChecking || updationChecking) && (
                   <span style={{ fontSize: 12, color: '#64748b', marginTop: 4, display: 'block' }}>
-                    Checking revisit history...
+                    Checking vehicle history...
                   </span>
+                )}
+                {updationContext?.has_updation_available && (
+                  <div style={{ fontSize: 12, color: '#6d28d9', marginTop: 6, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                    <UpdationAvailableBadge />
+                    <span>
+                      {updationContext.updation_name || 'Pending updation campaign'}
+                      {updationContext.updation_code ? ` · ${updationContext.updation_code}` : ''}
+                    </span>
+                  </div>
                 )}
                 {revisitContext?.is_revisit && revisitContext.prior_entry && (
                   <div style={{ fontSize: 12, color: '#b45309', marginTop: 6, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
@@ -1505,6 +1560,7 @@ export default function ReceptionPage() {
                     <div className="recep-item__top">
                       <span className="mono recep-item__reg">{entry.reg_number}</span>
                       {entry.is_revisit && <RevisitBadge />}
+                      {entry.has_updation_available && <UpdationAvailableBadge />}
                       <span className={[`pill`, sourceTone(entry.source)].join(' ').trim()}>{entry.source}</span>
                     </div>
                     {entry.jc_number && (

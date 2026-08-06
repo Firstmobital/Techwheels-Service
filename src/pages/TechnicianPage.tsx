@@ -9,6 +9,7 @@ import {
   type ReceptionEntryRow,
 } from '../lib/api'
 import RevisitBadge from '../components/RevisitBadge'
+import UpdationAvailableBadge from '../components/UpdationAvailableBadge'
 import { sendTechnicianDailyEarningsTestEmail } from '../lib/api/email'
 import { isTechnicianBusinessRole } from '../lib/businessRoles'
 import * as XLSX from 'xlsx'
@@ -29,6 +30,7 @@ type TechnicianAssignmentRow = {
   updated_at?: string | null
   reg_number?: string | null
   is_revisit?: boolean
+  has_updation_available?: boolean
   location?: string | null
   fuel_type?: string | null
   gross_labour_amount?: number
@@ -1088,6 +1090,7 @@ export default function TechnicianPage() {
       // Reuse Floor Incharge API enrichment path to keep location/fuel logic consistent.
       let regNumberMap = new Map<string, string>()
       let isRevisitMap = new Map<string, boolean>()
+      let isUpdationMap = new Map<string, boolean>()
       let locationMap = new Map<string, string>()
       let fuelTypeMap = new Map<string, string>()
       let revenueMap = new Map<string, RevenueRow>()
@@ -1108,6 +1111,10 @@ export default function TechnicianPage() {
 
             if ((row as ReceptionEntryRow).is_revisit === true) {
               isRevisitMap.set(key, true)
+            }
+
+            if ((row as ReceptionEntryRow).has_updation_available === true) {
+              isUpdationMap.set(key, true)
             }
 
             const location = String((row as ReceptionEntryRow)['branch'] ?? '').trim()
@@ -1141,6 +1148,10 @@ export default function TechnicianPage() {
 
               if ((row as ReceptionEntryRow).is_revisit === true) {
                 isRevisitMap.set(key, true)
+              }
+
+              if ((row as ReceptionEntryRow).has_updation_available === true) {
+                isUpdationMap.set(key, true)
               }
 
               const location = String((row as ReceptionEntryRow)['branch'] ?? '').trim()
@@ -1217,6 +1228,7 @@ export default function TechnicianPage() {
           ...row,
           reg_number: regNumberMap.get(jc) ?? null,
           is_revisit: isRevisitMap.get(jc) === true,
+          has_updation_available: isUpdationMap.get(jc) === true,
           location: locationMap.get(jc) ?? inferredBranch,
           fuel_type: fuelTypeMap.get(jc) ?? null,
           gross_labour_amount: grossByJc.get(jc) ?? 0,
@@ -2432,6 +2444,7 @@ export default function TechnicianPage() {
                           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                             <span>{row.reg_number ?? '—'}</span>
                             {row.is_revisit && <RevisitBadge />}
+                            {row.has_updation_available && <UpdationAvailableBadge />}
                           </div>
                         </td>
                         <td className="type-cell">{row.bay_no ?? '—'}</td>

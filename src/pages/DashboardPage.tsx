@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Icon } from '../components/Icon'
 import RevisitBadge from '../components/RevisitBadge'
+import UpdationAvailableBadge from '../components/UpdationAvailableBadge'
 import { supabase } from '../lib/supabase'
 
 type VisibleModule = {
@@ -24,6 +25,7 @@ type ReceptionRow = {
   sa_name: string | null
   service_type: string | null
   is_revisit?: boolean | null
+  has_updation_available?: boolean | null
 }
 
 type ModuleMetaRow = {
@@ -220,7 +222,7 @@ export default function DashboardPage({
         supabase.from('modules').select('name, label, description, route, is_active'),
         supabase
           .from('service_reception_entries')
-          .select('id, created_at, source, reg_number, model, sa_name, service_type, is_revisit')
+          .select('id, created_at, source, reg_number, model, sa_name, service_type, is_revisit, has_updation_available')
           .order('created_at', { ascending: false })
           .limit(8),
         supabase.auth.getSession(),
@@ -780,6 +782,7 @@ export default function DashboardPage({
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                           <span>{row.reg_number}</span>
                           {row.is_revisit && <RevisitBadge />}
+                          {row.has_updation_available && <UpdationAvailableBadge />}
                         </div>
                       </td>
                       <td>{row.model || '—'}</td>

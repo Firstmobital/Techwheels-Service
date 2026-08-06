@@ -15,6 +15,7 @@ import { supabase } from '../../lib/supabase'
 import { isServiceAdvisorRole } from '../../lib/businessRoles'
 import { useAuth } from '../../context/AuthContext'
 import { getReceptionRevisitContext, type ReceptionRevisitContext } from '../../lib/api/receptionRevisit'
+import { getReceptionUpdationContext, type ReceptionUpdationContext } from '../../lib/api/receptionUpdation'
 
 // ─── Constants (exact match with web ReceptionPage) ─────────────────────────────
 const SOURCE_OPTIONS = ['Self', 'Driver Pickup', 'Walk-in', 'RSA']
@@ -64,6 +65,7 @@ const ENTRY_SELECT = [
   'owner_name', 'owner_phone', 'branch', 'location', 'portal',
   'branch_label', 'km_reading', 'source', 'remark',
   'is_revisit', 'prior_reception_entry_id', 'suggested_technician_code', 'suggested_technician_name',
+  'has_updation_available', 'updation_code', 'updation_name',
   'created_by', 'created_at', 'updated_at',
 ].join(', ')
 
@@ -88,6 +90,9 @@ interface ReceptionEntry {
   source: string
   remark: string | null
   is_revisit?: boolean
+  has_updation_available?: boolean
+  updation_code?: string | null
+  updation_name?: string | null
   prior_reception_entry_id?: number | null
   suggested_technician_code?: string | null
   suggested_technician_name?: string | null
@@ -322,7 +327,10 @@ export default function ReceptionScreen() {
   const [pickerSearch, setPickerSearch] = useState('')
   const [revisitContext, setRevisitContext] = useState<ReceptionRevisitContext | null>(null)
   const [revisitChecking, setRevisitChecking] = useState(false)
+  const [updationContext, setUpdationContext] = useState<ReceptionUpdationContext | null>(null)
+  const [updationChecking, setUpdationChecking] = useState(false)
   const revisitDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const updationDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // ── Load data ──────────────────────────────────────────────────────────────
   const loadAll = useCallback(async (isRefresh = false) => {
@@ -499,9 +507,35 @@ export default function ReceptionScreen() {
     }, 400)
   }
 
+  async function checkUpdationForReg(regNumber: string) {
+    const normalized = regNumber.trim().toUpperCase()
+    if (!normalized) {
+      setUpdationContext(null)
+      return
+    }
+
+    setUpdationChecking(true)
+    const result = await getReceptionUpdationContext(normalized)
+    setUpdationChecking(false)
+
+    if (result.error || !result.data) {
+      setUpdationContext(null)
+      return
+    }
+
+    setUpdationContext(result.data)
+  }
+
+  function scheduleUpdationCheck(regNumber: string) {
+    if (updationDebounceRef.current) clearTimeout(updationDebounceRef.current)
+    updationDebounceRef.current = setTimeout(() => {
+      void checkUpdationForReg(regNumber)
+    }, 400)
+  }
+
   // ── Form actions ──────────────────────────────────────────────────────────
   function openAdd() {
-    setForm(EMPTY_FORM); setEditingId(null); setFormError(null); setRevisitContext(null); setShowModal(true)
+    setForm(EMPTY_FORM); setEditingId(null); setFormError(null); setRevisitContext(null); setUpdationContext(null); setShowModal(true)
   }
 
   function openEdit(entry: ReceptionEntry) {
@@ -524,6 +558,7 @@ export default function ReceptionScreen() {
     })
     setEditingId(entry.id); setFormError(null); setShowModal(true)
     void checkRevisitForReg(entry.reg_number ?? '', entry.service_type ?? '', entry.id)
+    void checkUpdationForReg(entry.reg_number ?? '')
   }
 
   // ── Save — exact web validation + payload + bodyshop card logic ───────────
@@ -732,6 +767,11 @@ export default function ReceptionScreen() {
                 <Text style={s.revisitChipText}>Revisit</Text>
               </View>
             )}
+            {entry.has_updation_available && (
+              <View style={s.updationChip}>
+                <Text style={s.updationChipText}>Updation Available</Text>
+              </View>
+            )}
             <View style={[s.stChip, { backgroundColor: col.bg }]}>
               <Text style={[s.stChipText, { color: col.text }]}>{abbr}</Text>
             </View>
@@ -887,11 +927,23 @@ export default function ReceptionScreen() {
                     const nextReg = t.toUpperCase()
                     setForm(p => ({ ...p, reg_number: nextReg }))
                     scheduleRevisitCheck(nextReg, form.service_type, editingId)
+                    scheduleUpdationCheck(nextReg)
                   }}
-                  onBlur={() => void checkRevisitForReg(form.reg_number, form.service_type, editingId)}
+                  onBlur={() => {
+                    void checkRevisitForReg(form.reg_number, form.service_type, editingId)
+                    void checkUpdationForReg(form.reg_number)
+                  }}
                 />
-                {revisitChecking && (
-                  <Text style={{ fontSize: 12, color: '#64748b', marginTop: 4 }}>Checking revisit history...</Text>
+                {(revisitChecking || updationChecking) && (
+                  <Text style={{ fontSize: 12, color: '#64748b', marginTop: 4 }}>Checking vehicle history...</Text>
+                )}
+                {updationContext?.has_updation_available && (
+                  <View style={s.updationNotice}>
+                    <Text style={s.updationNoticeText}>
+                      Updation Available — {updationContext.updation_name || 'Pending campaign'}
+                      {updationContext.updation_code ? ` · ${updationContext.updation_code}` : ''}
+                    </Text>
+                  </View>
                 )}
                 {revisitContext?.is_revisit && revisitContext.prior_entry && (
                   <View style={s.revisitNotice}>
@@ -1040,8 +1092,12 @@ const styles = {
   stChipText:         { fontSize: 11, fontWeight: '700' as const },
   revisitChip:        { borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3, backgroundColor: '#fef3c7' },
   revisitChipText:      { fontSize: 11, fontWeight: '700' as const, color: '#b45309' },
+  updationChip:       { borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3, backgroundColor: '#ede9fe' },
+  updationChipText:   { fontSize: 11, fontWeight: '700' as const, color: '#6d28d9' },
   revisitNotice:      { backgroundColor: '#fffbeb', borderRadius: 8, padding: 10, marginTop: 6, borderWidth: 1, borderColor: '#fde68a' },
   revisitNoticeText:  { color: '#b45309', fontSize: 12, fontWeight: '600' as const },
+  updationNotice:     { backgroundColor: '#f5f3ff', borderRadius: 8, padding: 10, marginTop: 6, borderWidth: 1, borderColor: '#ddd6fe' },
+  updationNoticeText: { color: '#6d28d9', fontSize: 12, fontWeight: '600' as const },
   cardRow:            { flexDirection: 'row' as const, flexWrap: 'wrap' as const, marginBottom: 4 },
   cardLabel:          { fontSize: 11, color: '#94a3b8', marginRight: 4, minWidth: 36 },
   cardValue:          { fontSize: 12, color: '#334155', fontWeight: '500' as const, marginRight: 4 },
