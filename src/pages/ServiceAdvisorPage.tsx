@@ -12,6 +12,7 @@ import {
   getDealerScopeContext,
   generateComplaintLink,
   type ReceptionEntryPageCursor,
+  type ReceptionEntryPageResult,
   type ReceptionEntryRow,
   type ServiceAdvisorSummaryCounts,
 } from '../lib/api'
@@ -1041,24 +1042,21 @@ export default function ServiceAdvisorPage() {
     try {
       const adminScope = isAdmin || await checkIfAdmin()
       const loadRange = getLoadRange()
-      const searchOptions = searchQuery ? { searchQuery } : undefined
 
       let allRows: ReceptionEntryRow[] = []
       let cursor: ReceptionEntryPageCursor | null = null
       let hasMore = true
 
       while (hasMore) {
-        const res = adminScope
-          ? await listReceptionEntriesByDateRangePage(loadRange, cursor, searchOptions)
-          : await listServiceAdvisorEntriesByDateRangePage(loadRange, cursor, searchOptions)
+        const res = await fetchEntryPage(loadRange, cursor, adminScope)
 
         if (res.error) {
           setError(res.error)
           return
         }
 
-        const page = res.data ?? { rows: [], nextCursor: null, hasMore: false }
-        allRows = allRows.concat(page.rows.filter((row) => isWithinDateRange(row.created_at, dateRange)))
+        const page: ReceptionEntryPageResult = res.data ?? { rows: [], nextCursor: null, hasMore: false }
+        allRows = allRows.concat(page.rows.filter((row: ReceptionEntryRow) => isWithinDateRange(row.created_at, dateRange)))
         cursor = page.nextCursor
         hasMore = page.hasMore
       }
