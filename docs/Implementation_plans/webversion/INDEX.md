@@ -57,6 +57,7 @@ Use this file as daily command center:
 | RBAC-002 | rbac | Pending Execution | RBAC Team + Bodyshop Team + Platform Team | `docs/Implementation_plans/webversion/categories/rbac/active/RBAC-002_BODYSHOP_STANDALONE_RECEPTION_RBAC_PLAN_2026-06-20.md` |
 | RBAC-003 | rbac | Active (Audit complete) | RBAC Team + Platform Team | `docs/Implementation_plans/webversion/categories/rbac/active/RBAC-003_EMPLOYEE_MASTER_MULTI_BUSINESS_ROLE_CSV_PLAN_2026-07-18.md` |
 | RECEPTION-001 | reception | Active | Reception Team | `docs/Implementation_plans/webversion/categories/reception/active/RECEPTION-001_RECEPTION_MODULE_PLAN.md` |
+| VEHICLE-PICKUP-001 | reception | Active (audit complete) | Reception Team + Operations Team + Platform Team | `docs/Implementation_plans/webversion/categories/reception/active/VEHICLE-PICKUP-001_VEHICLE_PICKUP_MODULE_PLAN.md` |
 | WEBREDESIGN-MASTER | redesign | In Progress | Web UX Team | `docs/Implementation_plans/webversion/categories/redesign/active/Webredesign_IMPLEMENTATION_PLAN_MASTER_TRACKER.md` |
 | SUPABASE-001 | supabase | Active | Platform Team | `docs/Implementation_plans/webversion/categories/supabase/active/SUPABASE-001_PRODUCTION_HARDENING_MASTER_PLAN.md` |
 | SUPABASE-002 | supabase | Active | Platform Team | `docs/Implementation_plans/webversion/categories/supabase/active/SUPABASE-002_ALL_SERVICE_DATA_DYNAMIC_TABLE_REALTIME_SYNC_PLAN_2026-06-20.md` |
