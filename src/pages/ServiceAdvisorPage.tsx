@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import * as XLSX from 'xlsx'
 import {
   listServiceAdvisorEntriesByDateRangePage,
   listReceptionEntriesByDateRangePage,
@@ -435,6 +436,7 @@ export default function ServiceAdvisorPage() {
   const [listCursor, setListCursor] = useState<ReceptionEntryPageCursor | null>(null)
   const [hasMoreRows, setHasMoreRows] = useState(false)
   const [loadingMore, setLoadingMore] = useState(false)
+  const [exporting, setExporting] = useState(false)
 
   const [loading, setLoading] = useState(true)
   const [dateRange, setDateRange] = useState<DateRange>(currentMonthRange())
@@ -1006,6 +1008,207 @@ export default function ServiceAdvisorPage() {
     setListCursor(page.nextCursor)
     setHasMoreRows(page.hasMore)
     setLoadingMore(false)
+  }
+
+  async function fetchAssignmentStatusSetsForExport(jobCardNumbers: string[]): Promise<AssignmentStatusSets> {
+    if (jobCardNumbers.length === 0) {
+      return { completed: new Set(), hold: new Set(), inProcess: new Set(), allAssigned: new Set() }
+    }
+
+    const assignmentRows: AssignmentStatusRow[] = []
+
+    for (let offset = 0; offset < jobCardNumbers.length; offset += ASSIGNMENT_JOB_CARD_BATCH_SIZE) {
+      const chunk = jobCardNumbers.slice(offset, offset + ASSIGNMENT_JOB_CARD_BATCH_SIZE)
+      const res = await supabase
+        .from('technician_assignments')
+        .select('job_card_number, work_status')
+        .in('job_card_number', chunk)
+
+      if (res.error) {
+        throw res.error
+      }
+
+      assignmentRows.push(...((res.data ?? []) as AssignmentStatusRow[]))
+    }
+
+    return buildAssignmentStatusSets(assignmentRows)
+  }
+
+  async function handleExportExcel() {
+    setExporting(true)
+    setError(null)
+
+    try {
+      const adminScope = isAdmin || await checkIfAdmin()
+      const loadRange = getLoadRange()
+      const searchOptions = searchQuery ? { searchQuery } : undefined
+
+      let allRows: ReceptionEntryRow[] = []
+      let cursor: ReceptionEntryPageCursor | null = null
+      let hasMore = true
+
+      while (hasMore) {
+        const res = adminScope
+          ? await listReceptionEntriesByDateRangePage(loadRange, cursor, searchOptions)
+          : await listServiceAdvisorEntriesByDateRangePage(loadRange, cursor, searchOptions)
+
+        if (res.error) {
+          setError(res.error)
+          return
+        }
+
+        const page = res.data ?? { rows: [], nextCursor: null, hasMore: false }
+        allRows = allRows.concat(page.rows.filter((row) => isWithinDateRange(row.created_at, dateRange)))
+        cursor = page.nextCursor
+        hasMore = page.hasMore
+      }
+
+      let filtered = allRows
+
+      if (selectedBranch !== 'all') {
+        filtered = filtered.filter((row) => row.branch === selectedBranch)
+      }
+
+      if (selectedFuelType !== 'all') {
+        filtered = filtered.filter((row) => getFuelTypeLabel(row.fuel_type) === selectedFuelType)
+      }
+
+      if (selectedCategory !== 'all') {
+        filtered = filtered.filter((row) => getCategoryForServiceType(row.service_type) === selectedCategory)
+      }
+
+      if (selectedAdvisor !== 'all') {
+        filtered = filtered.filter((row) => getAdvisorFilterKey(row) === selectedAdvisor)
+      }
+
+      filtered = filtered.filter((row) => matchesSearch(row))
+
+      const assignmentDependentCards = new Set<SummaryCardFilter>([
+        'no_technician',
+        'floor_hold',
+        'in_process',
+        'completed',
+        'invoice_pending',
+      ])
+
+      let exportAssignmentSets = assignmentSets
+      if (assignmentDependentCards.has(selectedSummaryCard)) {
+        exportAssignmentSets = await fetchAssignmentStatusSetsForExport(collectVisibleJobCardNumbers(filtered))
+      }
+
+      const exportRows = applySummaryCardFilter(
+        filtered,
+        selectedSummaryCard,
+        exportAssignmentSets.completed,
+        exportAssignmentSets.hold,
+        exportAssignmentSets.inProcess,
+        exportAssignmentSets.allAssigned,
+      )
+
+      const header = [
+        'Created',
+        'Source',
+        'Reg No',
+        'KM Reading',
+        'Model',
+        'Service Type',
+        'JC Number',
+        'Owner Name',
+        'Owner Phone',
+        'Remark',
+        'Branch',
+        'Portal',
+        'Advisor',
+        'Estimate',
+        'Invoice',
+      ]
+
+      const dataRows = exportRows.map((row) => {
+        const draft = drafts[row.id]
+        const serviceType = String(draft?.service_type || row.service_type || '')
+        const jcNumber = String(draft?.jc_number ?? row.jc_number ?? '')
+        const kmReading = draft?.km_reading ?? (row.km_reading == null ? '' : String(row.km_reading))
+        const remark = String(draft?.remark ?? row.remark ?? '')
+        const isBodyshopRow = isBodyshopServiceType(serviceType)
+        const isNoActionRequiredRow = isNoEstimateInvoiceRequiredServiceType(serviceType)
+
+        let estimateStatus = 'Pending'
+        if (isBodyshopRow) {
+          estimateStatus = 'Managed in Bodyshop Repair'
+        } else if (isNoActionRequiredRow) {
+          estimateStatus = 'Not required'
+        } else if (row.estimate_storage_path) {
+          estimateStatus = row.estimate_file_name || 'Uploaded'
+        }
+
+        let invoiceStatus = 'Pending'
+        if (isBodyshopRow) {
+          invoiceStatus = 'Managed in Bodyshop Repair'
+        } else if (isNoActionRequiredRow) {
+          invoiceStatus = 'Not required'
+        } else if (row.invoice_done_at) {
+          invoiceStatus = 'Done'
+        }
+
+        return [
+          formatDate(row.created_at),
+          row.source || '',
+          row.reg_number || '',
+          kmReading,
+          row.model || '',
+          serviceType,
+          jcNumber,
+          row.owner_name || '',
+          row.owner_phone || '',
+          remark,
+          row.branch || '',
+          getFuelTypeLabel(row.fuel_type),
+          row.sa_display_name || row.sa_name || '',
+          estimateStatus,
+          invoiceStatus,
+        ]
+      })
+
+      const wb = XLSX.utils.book_new()
+      const ws = XLSX.utils.aoa_to_sheet([header, ...dataRows])
+      ws['!cols'] = [
+        { wch: 20 },
+        { wch: 14 },
+        { wch: 14 },
+        { wch: 12 },
+        { wch: 16 },
+        { wch: 18 },
+        { wch: 16 },
+        { wch: 20 },
+        { wch: 14 },
+        { wch: 24 },
+        { wch: 16 },
+        { wch: 10 },
+        { wch: 20 },
+        { wch: 24 },
+        { wch: 14 },
+      ]
+      XLSX.utils.book_append_sheet(wb, ws, 'Service Advisor')
+
+      const dateStr = dateRange.from && dateRange.to
+        ? (dateRange.from === dateRange.to ? dateRange.from : `${dateRange.from}_to_${dateRange.to}`)
+        : 'all'
+      const filterParts = [
+        selectedBranch !== 'all' ? selectedBranch : null,
+        selectedFuelType !== 'all' ? selectedFuelType : null,
+        selectedCategory !== 'all' ? selectedCategory : null,
+        selectedAdvisor !== 'all' ? effectiveAdvisorOptions.find((option) => option.value === selectedAdvisor)?.label ?? selectedAdvisor : null,
+        selectedSummaryCard !== 'all' ? selectedSummaryCard : null,
+        searchQuery ? `search_${searchQuery.slice(0, 20)}` : null,
+      ].filter(Boolean)
+      const suffix = filterParts.length > 0 ? `_${filterParts.join('_')}` : ''
+
+      XLSX.writeFile(wb, `ServiceAdvisor_${dateStr}${suffix}.xlsx`)
+    } catch (err) {
+      setError(`Export failed: ${err instanceof Error ? err.message : String(err)}`)
+    } finally {
+      setExporting(false)
+    }
   }
 
   useEffect(() => {
@@ -1743,6 +1946,15 @@ export default function ServiceAdvisorPage() {
             </div>
           </div>
           <div className="card__head-flex">
+            <button
+              type="button"
+              className="btn btn--soft"
+              onClick={() => void handleExportExcel()}
+              disabled={exporting || loading || (filteredTotalCount === 0 && rows.length === 0)}
+              title="Export filtered records to Excel"
+            >
+              {exporting ? 'Exporting…' : 'Export Excel'}
+            </button>
             <span className="inp-wrap inp-wrap-lg">
               <span className="icon-l">
                 <Icon name="search" size={16} />
