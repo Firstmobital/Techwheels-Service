@@ -1,7 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import * as XLSX from 'xlsx'
+import type { WorkBook } from 'xlsx'
 import { Icon } from './Icon'
 import { supabase } from '../lib/supabase'
+import {
+  getSpreadsheetSheetRows,
+  parseSpreadsheetUploadFile,
+} from '../lib/parseSpreadsheetUploadFile'
 import {
   buildVehicleUpdationRows,
   formatVehicleUpdationParseErrors,
@@ -39,7 +43,7 @@ type SlotMsg = { type: 'progress' | 'success' | 'error'; text: string }
 
 interface PendingWorkbook {
   file: File
-  workbook: XLSX.WorkBook
+  workbook: WorkBook
   sheetNames: string[]
   selectedSheet: string
 }
@@ -56,26 +60,13 @@ const CLAIMED_SLOTS: UploadSlot[] = [
 
 const ALL_SLOTS = [...PENDING_SLOTS, ...CLAIMED_SLOTS]
 
-async function readWorkbook(file: File): Promise<XLSX.WorkBook> {
-  const ab = await file.arrayBuffer()
-  return XLSX.read(ab, { type: 'array', cellDates: true })
+async function readUploadWorkbook(file: File): Promise<{ workbook: WorkBook; sheetNames: string[] }> {
+  const parsed = await parseSpreadsheetUploadFile(file)
+  return parsed
 }
 
-function getSheetRowCount(workbook: XLSX.WorkBook, sheetName: string): number {
-  const ws = workbook.Sheets[sheetName]
-  if (!ws) return 0
-  const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(ws, { defval: '' })
-  return rows.length
-}
-
-function getWorkbookSheetNames(workbook: XLSX.WorkBook): string[] {
-  return workbook.SheetNames.filter((name) => getSheetRowCount(workbook, name) > 0)
-}
-
-function getSheetRows(workbook: XLSX.WorkBook, sheetName: string): Record<string, unknown>[] {
-  const ws = workbook.Sheets[sheetName]
-  if (!ws) return []
-  return XLSX.utils.sheet_to_json<Record<string, unknown>>(ws, { defval: '' })
+function getSheetRows(workbook: WorkBook, sheetName: string): Record<string, unknown>[] {
+  return getSpreadsheetSheetRows(workbook, sheetName)
 }
 
 interface MiniCardProps {
@@ -281,7 +272,7 @@ export function VehicleUpdationImportSection() {
   const uploadPendingSheet = useCallback(async (
     slot: UploadSlot,
     file: File,
-    workbook: XLSX.WorkBook,
+    workbook: WorkBook,
     sheetName: string,
   ) => {
     setUploading((prev) => ({ ...prev, [slot.key]: true }))
@@ -361,7 +352,7 @@ export function VehicleUpdationImportSection() {
   const uploadClaimedSheet = useCallback(async (
     slot: UploadSlot,
     file: File,
-    workbook: XLSX.WorkBook,
+    workbook: WorkBook,
     sheetName: string,
   ) => {
     setUploading((prev) => ({ ...prev, [slot.key]: true }))
@@ -453,7 +444,7 @@ export function VehicleUpdationImportSection() {
   const uploadSheet = useCallback(async (
     slot: UploadSlot,
     file: File,
-    workbook: XLSX.WorkBook,
+    workbook: WorkBook,
     sheetName: string,
   ) => {
     if (slot.uploadKind === 'claimed') {
@@ -465,8 +456,7 @@ export function VehicleUpdationImportSection() {
 
   const handleFile = useCallback(async (file: File, slot: UploadSlot) => {
     try {
-      const workbook = await readWorkbook(file)
-      const sheetNames = getWorkbookSheetNames(workbook)
+      const { workbook, sheetNames } = await readUploadWorkbook(file)
       if (sheetNames.length === 0) {
         throw new Error('No data sheets found in file.')
       }
