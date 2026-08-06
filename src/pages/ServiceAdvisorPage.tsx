@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   listServiceAdvisorEntriesByDateRangePage,
   listReceptionEntriesByDateRangePage,
@@ -502,6 +502,114 @@ export default function ServiceAdvisorPage() {
     return advisorScoped.filter((row) => matchesSearch(row))
   }, [categoryFilteredRows, selectedAdvisor, searchQuery])
 
+  const searchFilteredRows = useMemo(
+    () => rows.filter((row) => matchesSearch(row)),
+    [rows, searchQuery],
+  )
+
+  const kpiCardActive = selectedSummaryCard !== 'all'
+
+  const withKpiCard = useCallback(
+    (inputRows: ReceptionEntryRow[]) => {
+      if (!kpiCardActive) return inputRows
+      return applySummaryCardFilter(
+        inputRows,
+        selectedSummaryCard,
+        completedJobCardNumbers,
+        holdJobCardNumbers,
+        inProcessJobCardNumbers,
+        allAssignedJobCardNumbers,
+      )
+    },
+    [
+      kpiCardActive,
+      selectedSummaryCard,
+      completedJobCardNumbers,
+      holdJobCardNumbers,
+      inProcessJobCardNumbers,
+      allAssignedJobCardNumbers,
+    ],
+  )
+
+  const locCountRows = useMemo(() => {
+    if (!kpiCardActive) return []
+    return withKpiCard(
+      searchFilteredRows.filter((row) => {
+        if (selectedFuelType !== 'all' && getFuelTypeLabel(row.fuel_type) !== selectedFuelType) return false
+        if (selectedCategory !== 'all' && getCategoryForServiceType(row.service_type) !== selectedCategory) return false
+        if (selectedAdvisor !== 'all' && getAdvisorFilterKey(row) !== selectedAdvisor) return false
+        return true
+      }),
+    )
+  }, [kpiCardActive, searchFilteredRows, selectedFuelType, selectedCategory, selectedAdvisor, withKpiCard])
+
+  const portalCountRows = useMemo(() => {
+    if (!kpiCardActive) return []
+    return withKpiCard(
+      searchFilteredRows.filter((row) => {
+        if (selectedBranch !== 'all' && row.branch !== selectedBranch) return false
+        if (selectedCategory !== 'all' && getCategoryForServiceType(row.service_type) !== selectedCategory) return false
+        if (selectedAdvisor !== 'all' && getAdvisorFilterKey(row) !== selectedAdvisor) return false
+        return true
+      }),
+    )
+  }, [kpiCardActive, searchFilteredRows, selectedBranch, selectedCategory, selectedAdvisor, withKpiCard])
+
+  const categoryCountRows = useMemo(() => {
+    if (!kpiCardActive) return []
+    return withKpiCard(
+      searchFilteredRows.filter((row) => {
+        if (selectedBranch !== 'all' && row.branch !== selectedBranch) return false
+        if (selectedFuelType !== 'all' && getFuelTypeLabel(row.fuel_type) !== selectedFuelType) return false
+        if (selectedAdvisor !== 'all' && getAdvisorFilterKey(row) !== selectedAdvisor) return false
+        return true
+      }),
+    )
+  }, [kpiCardActive, searchFilteredRows, selectedBranch, selectedFuelType, selectedAdvisor, withKpiCard])
+
+  const advisorCountRows = useMemo(() => {
+    if (!kpiCardActive) return []
+    return withKpiCard(
+      searchFilteredRows.filter((row) => {
+        if (selectedBranch !== 'all' && row.branch !== selectedBranch) return false
+        if (selectedFuelType !== 'all' && getFuelTypeLabel(row.fuel_type) !== selectedFuelType) return false
+        if (selectedCategory !== 'all' && getCategoryForServiceType(row.service_type) !== selectedCategory) return false
+        return true
+      }),
+    )
+  }, [kpiCardActive, searchFilteredRows, selectedBranch, selectedFuelType, selectedCategory, withKpiCard])
+
+  const assignmentSets = useMemo(
+    () => ({
+      completed: completedJobCardNumbers,
+      hold: holdJobCardNumbers,
+      inProcess: inProcessJobCardNumbers,
+      allAssigned: allAssignedJobCardNumbers,
+    }),
+    [completedJobCardNumbers, holdJobCardNumbers, inProcessJobCardNumbers, allAssignedJobCardNumbers],
+  )
+
+  const kpiSyncedAdvisorCounts = useMemo(
+    () => (kpiCardActive ? computeClientSummaryCounts(advisorCountRows, assignmentSets) : null),
+    [kpiCardActive, advisorCountRows, assignmentSets],
+  )
+
+  const kpiSyncedCategoryCounts = useMemo(
+    () => (kpiCardActive ? computeClientSummaryCounts(categoryCountRows, assignmentSets) : null),
+    [kpiCardActive, categoryCountRows, assignmentSets],
+  )
+
+  const kpiSyncedLocationCounts = useMemo(
+    () => (kpiCardActive ? computeClientSummaryCounts(locCountRows, assignmentSets) : null),
+    [kpiCardActive, locCountRows, assignmentSets],
+  )
+
+  const kpiSyncedPortalFuelTypes = useMemo(() => {
+    if (!kpiCardActive) return null
+    const fuelTypes = new Set(portalCountRows.map((row) => getFuelTypeLabel(row.fuel_type)))
+    return Array.from(fuelTypes).sort()
+  }, [kpiCardActive, portalCountRows])
+
   const clientSummaryCounts = useMemo(
     () => computeClientSummaryCounts(displayedRows, {
       completed: completedJobCardNumbers,
@@ -526,9 +634,11 @@ export default function ServiceAdvisorPage() {
 
   const activeSummaryCounts = preferClientSummary ? clientSummaryCounts : summaryCounts
 
-  const categoryCounts = (preferClientSummary
-    ? activeSummaryCounts?.category_counts
-    : (categoryOptionCounts ?? activeSummaryCounts?.category_counts)) ?? {
+  const categoryCounts = (kpiCardActive && kpiSyncedCategoryCounts
+    ? kpiSyncedCategoryCounts.category_counts
+    : preferClientSummary
+      ? activeSummaryCounts?.category_counts
+      : (categoryOptionCounts ?? activeSummaryCounts?.category_counts)) ?? {
     all: 0,
     floor: 0,
     bodyshop: 0,
@@ -537,25 +647,39 @@ export default function ServiceAdvisorPage() {
   }
 
   const effectiveAdvisorOptions = useMemo(() => {
+    if (kpiCardActive && kpiSyncedAdvisorCounts) {
+      return kpiSyncedAdvisorCounts.advisors.map((advisor) => ({
+        value: advisor.key,
+        label: advisor.label,
+        count: advisor.count,
+      }))
+    }
     if (!preferClientSummary) return advisorOptions
     return clientSummaryCounts.advisors.map((advisor) => ({
       value: advisor.key,
       label: advisor.label,
       count: advisor.count,
     }))
-  }, [preferClientSummary, advisorOptions, clientSummaryCounts.advisors])
+  }, [kpiCardActive, kpiSyncedAdvisorCounts, preferClientSummary, advisorOptions, clientSummaryCounts.advisors])
 
   const effectiveAvailableBranches = useMemo(() => {
+    if (kpiCardActive && kpiSyncedLocationCounts) return kpiSyncedLocationCounts.branches
     if (!preferClientSummary) return availableBranches
     return clientSummaryCounts.branches
-  }, [preferClientSummary, availableBranches, clientSummaryCounts.branches])
+  }, [kpiCardActive, kpiSyncedLocationCounts, preferClientSummary, availableBranches, clientSummaryCounts.branches])
 
-  const effectiveLocationOptionTotal = !preferClientSummary
-    ? locationOptionTotal
-    : clientSummaryCounts.location_total ?? clientSummaryCounts.total
+  const effectiveLocationOptionTotal = kpiCardActive && kpiSyncedLocationCounts
+    ? (kpiSyncedLocationCounts.location_total ?? kpiSyncedLocationCounts.total)
+    : !preferClientSummary
+      ? locationOptionTotal
+      : clientSummaryCounts.location_total ?? clientSummaryCounts.total
+
+  const effectiveFuelTypeOptions = kpiCardActive && kpiSyncedPortalFuelTypes
+    ? kpiSyncedPortalFuelTypes
+    : fuelTypeOptions
 
   const showLocationFilter = effectiveAvailableBranches.length > 0
-  const showFuelTypeFilter = fuelTypeOptions.length > 1
+  const showFuelTypeFilter = effectiveFuelTypeOptions.length > 1
   const showCategoryFilter = [
     categoryCounts.floor,
     categoryCounts.bodyshop,
@@ -608,6 +732,36 @@ export default function ServiceAdvisorPage() {
   const inProcessCount = activeSummaryCounts?.in_process ?? 0
   const completedCount = activeSummaryCounts?.completed ?? 0
   const advisorOptionTotal = effectiveAdvisorOptions.reduce((sum, option) => sum + option.count, 0)
+
+  useEffect(() => {
+    if (selectedSummaryCard === 'all') return
+
+    const countByCard: Record<Exclude<SummaryCardFilter, 'all'>, number> = {
+      job_card_pending: pendingJobCardCount,
+      sr_type_pending: pendingServiceTypeCount,
+      estimate_pending: pendingEstimateCount,
+      invoice_pending: pendingInvoiceCount,
+      no_technician: noTechnicianCount,
+      floor_hold: holdCount,
+      in_process: inProcessCount,
+      completed: completedCount,
+    }
+
+    if (countByCard[selectedSummaryCard] === 0) {
+      setSelectedSummaryCard('all')
+    }
+  }, [
+    selectedSummaryCard,
+    pendingJobCardCount,
+    pendingServiceTypeCount,
+    pendingEstimateCount,
+    pendingInvoiceCount,
+    noTechnicianCount,
+    holdCount,
+    inProcessCount,
+    completedCount,
+  ])
+
   // Detect admin/super_admin and get dealer scope
   async function checkIfAdmin() {
     try {
@@ -1448,7 +1602,7 @@ export default function ServiceAdvisorPage() {
         <div className="cft__brand">
           <span className="cft__icon">🔧</span>
           <span className="cft__title">Service Advisor</span>
-          <span className="cft__count">{displayedRows.length} JCs</span>
+          <span className="cft__count">{cardFilteredRows.length} JCs</span>
         </div>
         <div className="cft__sep" />
 
@@ -1474,12 +1628,12 @@ export default function ServiceAdvisorPage() {
           </>
         )}
 
-        {showFuelTypeFilter && fuelTypeOptions.length > 0 && (
+        {showFuelTypeFilter && effectiveFuelTypeOptions.length > 0 && (
           <>
             <span className="cft__label">Portal:</span>
             <select className="cft__sel" value={selectedFuelType} onChange={e => setSelectedFuelType(e.target.value)}>
               <option value="all">All</option>
-              {fuelTypeOptions.map(ft => (
+              {effectiveFuelTypeOptions.map(ft => (
                 <option key={ft} value={ft}>{ft}</option>
               ))}
             </select>
