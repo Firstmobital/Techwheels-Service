@@ -468,20 +468,25 @@ export default function PartsRequirementSection({ isAdmin = false }: Props) {
 
   const ActionButton = ({ row }: { row: PartsRequestRow }) => {
     const busy = actionBusyId === row.id
-    if (row.parts_status === 'Pending' && !showMarkReceived(row)) {
+    const TERMINAL_STATUSES = ['Received', 'Ready', 'Done', 'Delivered to Workshop', 'Cancelled']
+    // Strictly enforce only 2 rules for Mark Received, regardless of parts_status
+    // (Pending, Ordered, In Transit, Back Order, Partially Received all follow the same gate):
+    //   1. Stock = Available or Low Stock
+    //   2. Advisor Remark = "Received from co-dealer" (even if stock is Pending Update)
+    if (!TERMINAL_STATUSES.includes(row.parts_status)) {
+      if (showMarkReceived(row)) {
+        return (
+          <button
+            type="button"
+            disabled={busy}
+            onClick={(e) => { e.stopPropagation(); setConfirmAction({ row, kind: 'received' }) }}
+            className="rounded-md bg-green-600 px-2.5 py-1 text-xs font-semibold text-white hover:bg-green-700 disabled:opacity-50"
+          >
+            Mark Received
+          </button>
+        )
+      }
       return <span className="text-xs text-gray-400">Waiting for Parts Stock Update</span>
-    }
-    if (['Ordered', 'In Transit', 'Back Order', 'Partially Received'].includes(row.parts_status) || showMarkReceived(row)) {
-      return (
-        <button
-          type="button"
-          disabled={busy}
-          onClick={(e) => { e.stopPropagation(); setConfirmAction({ row, kind: 'received' }) }}
-          className="rounded-md bg-green-600 px-2.5 py-1 text-xs font-semibold text-white hover:bg-green-700 disabled:opacity-50"
-        >
-          Mark Received
-        </button>
-      )
     }
     if (row.parts_status === 'Received') {
       return (
