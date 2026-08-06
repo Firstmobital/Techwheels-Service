@@ -1,4 +1,5 @@
 import { useEffect, useState, useMemo } from 'react'
+import * as XLSX from 'xlsx'
 import DateRangeFilter, { currentMonthRange, type DateRange } from '../components/DateRangeFilter'
 import { supabase } from '../lib/supabase'
 import { listFloorInchargeEntries, type ReceptionEntryRow } from '../lib/api'
@@ -492,6 +493,7 @@ export default function FloorInchargePage() {
   const [assignmentView, setAssignmentView] = useState<AssignmentView>('all')
   const [dataError, setDataError] = useState<string | null>(null)
   const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null)
+  const [exporting, setExporting] = useState(false)
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
@@ -1154,6 +1156,78 @@ export default function FloorInchargePage() {
     return applyAssignmentViewFilter(toolbarScopedRows, assignmentView, assignments)
   }, [toolbarScopedRows, assignmentView, assignments])
 
+  function handleExportFloorIncharge() {
+    setExporting(true)
+    try {
+      const header = [
+        'Created',
+        'Reg No',
+        'KM Reading',
+        'Model',
+        'Service Type',
+        'SA Name',
+        'JC Number',
+        'Location',
+        'Technician',
+        'IN TS',
+        'OUT TS',
+        'Time Diff',
+        'Bay',
+        'Status',
+        'Remark',
+      ]
+
+      const dataRows = filtered.map((jc) => {
+        const assignment = assignments[jc.assignment_key]
+        return [
+          formatDate(jc.created_at),
+          jc.reg_number || '',
+          jc.km_reading ?? '',
+          jc.model || '',
+          jc.service_type || '',
+          jc.sa_name || '',
+          jc.jc_number || '',
+          jc.location || jc.branch || '',
+          getTechnicianFilterLabel(assignment),
+          formatTimestamp(assignment?.assigned_at) || '',
+          formatTimestamp(assignment?.out_ts) || '',
+          calculateTimeDiffFromTimestamps(assignment?.assigned_at, assignment?.out_ts) || formatTimeDiff(assignment?.time_diff) || '',
+          assignment?.bay_no || '',
+          assignment?.work_status || '',
+          assignment?.remark || '',
+        ]
+      })
+
+      const wb = XLSX.utils.book_new()
+      const ws = XLSX.utils.aoa_to_sheet([header, ...dataRows])
+      ws['!cols'] = [
+        { wch: 20 },
+        { wch: 14 },
+        { wch: 10 },
+        { wch: 16 },
+        { wch: 18 },
+        { wch: 20 },
+        { wch: 16 },
+        { wch: 16 },
+        { wch: 22 },
+        { wch: 20 },
+        { wch: 20 },
+        { wch: 12 },
+        { wch: 8 },
+        { wch: 16 },
+        { wch: 24 },
+      ]
+      XLSX.utils.book_append_sheet(wb, ws, 'Floor Incharge')
+
+      const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
+      XLSX.writeFile(wb, `Floor_Incharge_Report_${today}.xlsx`)
+    } catch (err) {
+      setToast({ msg: `Export failed: ${err instanceof Error ? err.message : String(err)}`, type: 'error' })
+    } finally {
+      setExporting(false)
+    }
+  }
+
   useEffect(() => {
     if (assignmentView === 'all') return
 
@@ -1223,6 +1297,17 @@ export default function FloorInchargePage() {
             return <option key={opt.value} value={opt.value}>{opt.label} ({cnt})</option>
           })}
         </select>
+
+        <div className="cft__spacer" />
+        <button
+          type="button"
+          className="btn btn--soft cft__action"
+          onClick={() => handleExportFloorIncharge()}
+          disabled={exporting || loading || filtered.length === 0}
+          title="Export filtered records to Excel"
+        >
+          {exporting ? '⏳ Exporting…' : '📊 Download Excel'}
+        </button>
       </div>
 
       {/* ── METRIC SUMMARY ROW (status tabs) ─────────────────────────────── */}
