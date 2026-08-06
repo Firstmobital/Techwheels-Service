@@ -9,11 +9,20 @@ import {
   validatePortalFuelTypes,
   type VehicleUpdationPortal,
 } from '../lib/vehicleUpdationColumnMapper'
+import {
+  buildVehicleUpdationClaimedRows,
+  formatVehicleUpdationClaimedParseErrors,
+  mapVehicleUpdationClaimedHeaders,
+  validateClaimedPortalProductLines,
+} from '../lib/vehicleUpdationClaimedColumnMapper'
+
+type UploadKind = 'pending' | 'claimed'
 
 interface UploadSlot {
   key: string
   label: string
   portal: VehicleUpdationPortal
+  uploadKind: UploadKind
   btnColor: string
   badge: string
 }
@@ -35,10 +44,17 @@ interface PendingWorkbook {
   selectedSheet: string
 }
 
-const VU_SLOTS: UploadSlot[] = [
-  { key: 'VU_EV', label: 'Portal EV', portal: 'EV', btnColor: '#059669', badge: 'EV' },
-  { key: 'VU_PV', label: 'Portal PV', portal: 'PV', btnColor: '#2563eb', badge: 'PV' },
+const PENDING_SLOTS: UploadSlot[] = [
+  { key: 'VU_EV', label: 'Portal EV', portal: 'EV', uploadKind: 'pending', btnColor: '#059669', badge: 'EV' },
+  { key: 'VU_PV', label: 'Portal PV', portal: 'PV', uploadKind: 'pending', btnColor: '#2563eb', badge: 'PV' },
 ]
+
+const CLAIMED_SLOTS: UploadSlot[] = [
+  { key: 'VUC_EV', label: 'Portal EV', portal: 'EV', uploadKind: 'claimed', btnColor: '#0f766e', badge: 'EV' },
+  { key: 'VUC_PV', label: 'Portal PV', portal: 'PV', uploadKind: 'claimed', btnColor: '#1d4ed8', badge: 'PV' },
+]
+
+const ALL_SLOTS = [...PENDING_SLOTS, ...CLAIMED_SLOTS]
 
 async function readWorkbook(file: File): Promise<XLSX.WorkBook> {
   const ab = await file.arrayBuffer()
@@ -68,6 +84,7 @@ interface MiniCardProps {
   msg: SlotMsg | null
   uploading: boolean
   pending: PendingWorkbook | null
+  uploadLabel: string
   onFile: (file: File) => void
   onSheetChange: (sheetName: string) => void
   onConfirmPending: () => void
@@ -80,6 +97,7 @@ function MiniUploadCard({
   msg,
   uploading,
   pending,
+  uploadLabel,
   onFile,
   onSheetChange,
   onConfirmPending,
@@ -197,7 +215,7 @@ function MiniUploadCard({
         <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
         </svg>
-        {uploading ? 'Uploading…' : `Upload ${slot.label}`}
+        {uploading ? 'Uploading…' : uploadLabel}
       </label>
 
       {dragging && (
@@ -231,7 +249,7 @@ export function VehicleUpdationImportSection() {
   const loadLastUploads = useCallback(async () => {
     const { data, error } = await supabase
       .from('vehicle_updation_uploads')
-      .select('portal,file_name,sheet_name,uploaded_at,row_count,skipped_blank_rows')
+      .select('portal,upload_kind,file_name,sheet_name,uploaded_at,row_count,skipped_blank_rows')
       .order('uploaded_at', { ascending: false })
 
     if (error) {
@@ -240,8 +258,11 @@ export function VehicleUpdationImportSection() {
     }
 
     const map: Record<string, LastUpload | null> = {}
-    for (const slot of VU_SLOTS) {
-      const found = (data ?? []).find((row) => row.portal === slot.portal)
+    for (const slot of ALL_SLOTS) {
+      const found = (data ?? []).find((row) => {
+        const kind = String((row as { upload_kind?: string | null }).upload_kind ?? 'pending')
+        return row.portal === slot.portal && kind === slot.uploadKind
+      })
       map[slot.key] = found
         ? {
           file_name: found.file_name,
@@ -257,7 +278,7 @@ export function VehicleUpdationImportSection() {
 
   useEffect(() => { void loadLastUploads() }, [loadLastUploads])
 
-  const uploadSheet = useCallback(async (
+  const uploadPendingSheet = useCallback(async (
     slot: UploadSlot,
     file: File,
     workbook: XLSX.WorkBook,
@@ -301,7 +322,7 @@ export function VehicleUpdationImportSection() {
         ...prev,
         [slot.key]: {
           type: 'progress',
-          text: `Replacing ${slot.portal} data (${built.rows.length.toLocaleString('en-IN')} rows)…`,
+          text: `Replacing ${slot.portal} pending data (${built.rows.length.toLocaleString('en-IN')} rows)…`,
         },
       }))
 
@@ -323,7 +344,7 @@ export function VehicleUpdationImportSection() {
         ...prev,
         [slot.key]: {
           type: 'success',
-          text: `✅ ${insertedCount.toLocaleString('en-IN')} rows imported for ${slot.portal} (cleared ${deletedCount.toLocaleString('en-IN')} old rows${built.skippedBlankRows > 0 ? ` · ${built.skippedBlankRows} blank chassis skipped` : ''})`,
+          text: `✅ ${insertedCount.toLocaleString('en-IN')} pending rows imported for ${slot.portal} (cleared ${deletedCount.toLocaleString('en-IN')} old rows${built.skippedBlankRows > 0 ? ` · ${built.skippedBlankRows} blank chassis skipped` : ''})`,
         },
       }))
       setTimeout(() => setMsgs((prev) => ({ ...prev, [slot.key]: null })), 8000)
@@ -336,6 +357,111 @@ export function VehicleUpdationImportSection() {
       setPendingBySlot((prev) => ({ ...prev, [slot.key]: null }))
     }
   }, [loadLastUploads])
+
+  const uploadClaimedSheet = useCallback(async (
+    slot: UploadSlot,
+    file: File,
+    workbook: XLSX.WorkBook,
+    sheetName: string,
+  ) => {
+    setUploading((prev) => ({ ...prev, [slot.key]: true }))
+    setMsgs((prev) => ({ ...prev, [slot.key]: { type: 'progress', text: `Parsing ${file.name}…` } }))
+
+    try {
+      if (!file.name.match(/\.(xlsx|xls|csv|txt)$/i)) {
+        throw new Error('Please upload an Excel or CSV file.')
+      }
+
+      const rawRows = getSheetRows(workbook, sheetName)
+      if (rawRows.length === 0) {
+        throw new Error(`Sheet "${sheetName}" has no data rows.`)
+      }
+
+      const headers = Object.keys(rawRows[0] ?? {})
+      const headerResult = mapVehicleUpdationClaimedHeaders(headers)
+      if ('errors' in headerResult) {
+        throw new Error(formatVehicleUpdationClaimedParseErrors(headerResult.errors))
+      }
+
+      const built = buildVehicleUpdationClaimedRows(rawRows, {
+        fileName: file.name,
+        headers,
+        mapping: headerResult.mapping,
+      })
+      if (built.errors.length > 0) {
+        throw new Error(formatVehicleUpdationClaimedParseErrors(built.errors))
+      }
+
+      const portalError = validateClaimedPortalProductLines(
+        slot.portal,
+        built.rows,
+        headerResult.mapping,
+        rawRows,
+      )
+      if (portalError) throw new Error(portalError)
+
+      const uploadSessionId = crypto.randomUUID()
+      const { data: { user } } = await supabase.auth.getUser()
+
+      setMsgs((prev) => ({
+        ...prev,
+        [slot.key]: {
+          type: 'progress',
+          text: `Applying ${built.rows.length.toLocaleString('en-IN')} claimed chassis for ${slot.portal}…`,
+        },
+      }))
+
+      const { data, error } = await supabase.rpc('apply_vehicle_updation_claimed_portal', {
+        p_portal: slot.portal,
+        p_upload_session_id: uploadSessionId,
+        p_file_name: file.name,
+        p_sheet_name: sheetName,
+        p_uploaded_by_email: user?.email ?? null,
+        p_skipped_blank_rows: built.skippedBlankRows + built.skippedNonUpdationRows,
+        p_rows: built.rows,
+      })
+      if (error) throw new Error(error.message)
+
+      const submittedCount = Number((data as { submitted_count?: number })?.submitted_count ?? built.rows.length)
+      const removedCount = Number((data as { removed_count?: number })?.removed_count ?? 0)
+      const notFoundCount = Number((data as { not_found_count?: number })?.not_found_count ?? 0)
+
+      const skippedParts = [
+        built.skippedBlankRows > 0 ? `${built.skippedBlankRows} blank chassis skipped` : '',
+        built.skippedNonUpdationRows > 0 ? `${built.skippedNonUpdationRows} non-updation rows skipped` : '',
+        notFoundCount > 0 ? `${notFoundCount} chassis not in pending list` : '',
+      ].filter(Boolean)
+
+      setMsgs((prev) => ({
+        ...prev,
+        [slot.key]: {
+          type: 'success',
+          text: `✅ Removed ${removedCount.toLocaleString('en-IN')} pending row(s) for ${submittedCount.toLocaleString('en-IN')} claimed chassis (${slot.portal})${skippedParts.length > 0 ? ` · ${skippedParts.join(' · ')}` : ''}`,
+        },
+      }))
+      setTimeout(() => setMsgs((prev) => ({ ...prev, [slot.key]: null })), 8000)
+      await loadLastUploads()
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      setMsgs((prev) => ({ ...prev, [slot.key]: { type: 'error', text: `❌ ${message}` } }))
+    } finally {
+      setUploading((prev) => ({ ...prev, [slot.key]: false }))
+      setPendingBySlot((prev) => ({ ...prev, [slot.key]: null }))
+    }
+  }, [loadLastUploads])
+
+  const uploadSheet = useCallback(async (
+    slot: UploadSlot,
+    file: File,
+    workbook: XLSX.WorkBook,
+    sheetName: string,
+  ) => {
+    if (slot.uploadKind === 'claimed') {
+      await uploadClaimedSheet(slot, file, workbook, sheetName)
+      return
+    }
+    await uploadPendingSheet(slot, file, workbook, sheetName)
+  }, [uploadClaimedSheet, uploadPendingSheet])
 
   const handleFile = useCallback(async (file: File, slot: UploadSlot) => {
     try {
@@ -371,6 +497,43 @@ export function VehicleUpdationImportSection() {
 
   const anyUploading = Object.values(uploading).some(Boolean)
 
+  const renderSlotGrid = (slots: UploadSlot[], uploadLabel: (slot: UploadSlot) => string) => (
+    <div className="grid gap-3 sm:grid-cols-2">
+      {slots.map((slot) => (
+        <MiniUploadCard
+          key={slot.key}
+          slot={slot}
+          lastUpload={lastUploads[slot.key] ?? null}
+          msg={msgs[slot.key] ?? null}
+          uploading={!!uploading[slot.key]}
+          pending={pendingBySlot[slot.key] ?? null}
+          uploadLabel={uploadLabel(slot)}
+          onFile={(file) => void handleFile(file, slot)}
+          onSheetChange={(sheetName) => {
+            setPendingBySlot((prev) => {
+              const pending = prev[slot.key]
+              if (!pending) return prev
+              return {
+                ...prev,
+                [slot.key]: { ...pending, selectedSheet: sheetName },
+              }
+            })
+          }}
+          onConfirmPending={() => {
+            const pending = pendingBySlot[slot.key]
+            if (pending) {
+              void uploadSheet(slot, pending.file, pending.workbook, pending.selectedSheet)
+            }
+          }}
+          onCancelPending={() => {
+            setPendingBySlot((prev) => ({ ...prev, [slot.key]: null }))
+            setMsgs((prev) => ({ ...prev, [slot.key]: null }))
+          }}
+        />
+      ))}
+    </div>
+  )
+
   return (
     <section className="imp-group">
       <button
@@ -383,10 +546,10 @@ export function VehicleUpdationImportSection() {
         <span style={{ flex: 1, textAlign: 'left', minWidth: 0 }}>
           <span className="imp-group__title">
             Vehicle Updation
-            <span className="imp-group__count">{VU_SLOTS.length}</span>
+            <span className="imp-group__count">{ALL_SLOTS.length}</span>
           </span>
           <span className="imp-group__desc">
-            Pending Tata Motors updation campaign lists — one file per portal. Re-upload replaces all rows for that portal only.
+            Pending campaign lists and claimed removals — separate EV / PV uploads for each workflow.
           </span>
         </span>
         {anyUploading && (
@@ -401,43 +564,33 @@ export function VehicleUpdationImportSection() {
       </button>
 
       {expanded && (
-        <div className="imp-group__body">
-          <div className="note note--info mb-gap text-sm">
-            Uploading <b>Portal EV</b> clears only EV rows. <b>Portal PV</b> data is untouched (and vice versa).
+        <div className="imp-group__body space-y-5">
+          <div>
+            <div className="mb-2 flex items-center gap-2">
+              <span className="rounded-full bg-emerald-100 px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wide text-emerald-800">
+                Pending Updation
+              </span>
+              <span className="text-sm font-semibold text-gray-800">Upload full pending campaign sheet</span>
+            </div>
+            <div className="note note--info mb-3 text-sm">
+              Re-uploading <b>Portal EV</b> or <b>Portal PV</b> replaces all pending rows for that portal only.
+              These vehicles show the <b>Updation Available</b> tag at reception.
+            </div>
+            {renderSlotGrid(PENDING_SLOTS, (slot) => `Upload Pending ${slot.label}`)}
           </div>
 
-          <div className="grid gap-3 sm:grid-cols-2">
-            {VU_SLOTS.map((slot) => (
-              <MiniUploadCard
-                key={slot.key}
-                slot={slot}
-                lastUpload={lastUploads[slot.key] ?? null}
-                msg={msgs[slot.key] ?? null}
-                uploading={!!uploading[slot.key]}
-                pending={pendingBySlot[slot.key] ?? null}
-                onFile={(file) => void handleFile(file, slot)}
-                onSheetChange={(sheetName) => {
-                  setPendingBySlot((prev) => {
-                    const pending = prev[slot.key]
-                    if (!pending) return prev
-                    return {
-                      ...prev,
-                      [slot.key]: { ...pending, selectedSheet: sheetName },
-                    }
-                  })
-                }}
-                onConfirmPending={() => {
-                  const pending = pendingBySlot[slot.key]
-                  if (pending) {
-                    void uploadSheet(slot, pending.file, pending.workbook, pending.selectedSheet)
-                  }
-                }}
-                onCancelPending={() => {
-                  setPendingBySlot((prev) => ({ ...prev, [slot.key]: null }))
-                  setMsgs((prev) => ({ ...prev, [slot.key]: null }))
-                }}
-              />
-            ))}
+          <div className="border-t border-gray-200 pt-5">
+            <div className="mb-2 flex items-center gap-2">
+              <span className="rounded-full bg-violet-100 px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wide text-violet-800">
+                Updation Claimed
+              </span>
+              <span className="text-sm font-semibold text-gray-800">Remove completed / claimed vehicles</span>
+            </div>
+            <div className="note note--info mb-3 text-sm">
+              Upload the Tata Motors <b>claimed updation</b> export (Chassis No column).
+              Matching chassis are removed from the pending list and the <b>Updation Available</b> tag clears automatically.
+            </div>
+            {renderSlotGrid(CLAIMED_SLOTS, (slot) => `Upload Claimed ${slot.label}`)}
           </div>
         </div>
       )}

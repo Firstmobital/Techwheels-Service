@@ -450,6 +450,7 @@ const FALLBACK_COLUMNS: Record<string, string[]> = {
   ],
   vehicle_updation_uploads: [
     'portal',
+    'upload_kind',
     'upload_session_id',
     'uploaded_at',
     'uploaded_by_email',
