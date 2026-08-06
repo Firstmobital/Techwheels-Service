@@ -359,6 +359,7 @@ table.tbl { width: 100%; border-collapse: collapse; font-size: 13.5px; }
 .pill.b { background: var(--accent-soft); color: var(--accent); }
 .pill.g { background: var(--success-bg); color: var(--success); }
 .pill.w { background: var(--warn-bg); color: var(--warn); }
+.pill.r { background: #fef3c7; color: #b45309; }
 .pill::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; opacity: .8; }
 
 /* Feed / activity list */

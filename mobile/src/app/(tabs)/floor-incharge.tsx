@@ -4,7 +4,7 @@
  * Business logic: 100% identical to web (same DB tables, queries, rules).
  * UI: Mobile-native React Native cards. No guessing. Every field/filter/function mirrors the web.
  */
-import { useEffect, useState, useMemo, useCallback } from 'react'
+import { useEffect, useState, useMemo, useCallback, useRef } from 'react'
 import {
   ActivityIndicator, FlatList, Modal, Platform,
   RefreshControl, ScrollView, Text, TextInput,
@@ -81,6 +81,9 @@ interface JobCard {
   sa_employee_code: string | null
   fuel_type: string | null
   assignment_key: string
+  is_revisit: boolean
+  suggested_technician_code: string | null
+  suggested_technician_name: string | null
 }
 
 interface Employee {
@@ -267,6 +270,7 @@ const ENTRY_SELECT = [
   'id', 'reg_number', 'model', 'service_type', 'sa_name', 'sa_employee_code',
   'jc_number', 'owner_name', 'owner_phone', 'branch', 'location', 'portal',
   'branch_label', 'km_reading', 'source', 'created_at',
+  'is_revisit', 'prior_reception_entry_id', 'suggested_technician_code', 'suggested_technician_name',
 ].join(', ')
 
 async function fetchFloorInchargeEntries(): Promise<JobCard[]> {
@@ -296,6 +300,9 @@ async function fetchFloorInchargeEntries(): Promise<JobCard[]> {
       owner_name: string | null; owner_phone: string | null; branch: string | null;
       location: string | null; portal: string | null; branch_label: string | null;
       sa_employee_code: string | null;
+      is_revisit?: boolean | null;
+      suggested_technician_code?: string | null;
+      suggested_technician_name?: string | null;
     }>
     batch.forEach(row => {
       const jcRaw = String(row.jc_number ?? '').trim()
@@ -309,6 +316,9 @@ async function fetchFloorInchargeEntries(): Promise<JobCard[]> {
         portal: row.portal, branch_label: row.branch_label ?? row.branch,
         sa_employee_code: row.sa_employee_code, fuel_type: null,
         assignment_key: jcRaw.toUpperCase(),
+        is_revisit: row.is_revisit === true,
+        suggested_technician_code: row.suggested_technician_code ?? null,
+        suggested_technician_name: row.suggested_technician_name ?? null,
       })
     })
     if (batch.length < QUERY_PAGE_SIZE) break
@@ -355,6 +365,7 @@ export default function FloorInchargeScreen() {
   const [supportModalCard, setSupportModalCard] = useState<JobCard | null>(null)
   const [supportModalRole, setSupportModalRole] = useState<SupportRole | ''>('')
   const [supportModalCode, setSupportModalCode] = useState('')
+  const autoAssignedRevisitRef = useRef<Set<string>>(new Set())
 
   // ── Load ─────────────────────────────────────────────────────────────────
   const fetchAll = useCallback(async (isRefresh = false) => {
@@ -563,6 +574,29 @@ export default function FloorInchargeScreen() {
     })
     return map
   }, [employees, jobCards])
+
+  useEffect(() => {
+    if (loading || jobCards.length === 0) return
+
+    for (const jc of jobCards) {
+      if (!jc.is_revisit || !jc.suggested_technician_code || !jc.jc_number?.trim()) continue
+
+      const key = jc.assignment_key
+      if (assignments[key]) continue
+      if (autoAssignedRevisitRef.current.has(key)) continue
+
+      const scoped = techniciansByJobCard[key] ?? []
+      const suggestedCode = normalizeEmployeeCode(jc.suggested_technician_code)
+      const eligible = scoped.some(
+        (employee) => normalizeEmployeeCode(employee.employee_code) === suggestedCode,
+      )
+      if (!eligible) continue
+
+      autoAssignedRevisitRef.current.add(key)
+      void assignTechnician(key, jc.suggested_technician_code)
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading, jobCards, assignments, techniciansByJobCard])
 
   const supportEmployeesByRole = useMemo<Record<SupportRole, Employee[]>>(() => {
     const g: Record<SupportRole, Employee[]> = { DET: [], ELECTRICIAN: [], DENTOR: [], TECHNICIAN: [] }
@@ -775,6 +809,11 @@ export default function FloorInchargeScreen() {
             {/* Line 1: reg + portal badge */}
             <View style={S.cardLine1}>
               <Text style={S.regText} numberOfLines={1}>{jc.reg_number || '—'}</Text>
+              {jc.is_revisit && (
+                <View style={S.revisitBadge}>
+                  <Text style={S.revisitBadgeText}>Revisit</Text>
+                </View>
+              )}
               <View style={[S.portalBadge, { backgroundColor: portalEV ? '#f0fdf4' : '#eff6ff', borderColor: portalEV ? '#16a34a66' : '#2563eb66' }]}>
                 <Text style={[S.portalBadgeText, { color: portalEV ? '#16a34a' : '#2563eb' }]}>{portal}</Text>
               </View>
@@ -1476,6 +1515,8 @@ const S = {
   jcNumberLabel:     { fontSize: 11, color: '#6b7280', fontWeight: '500' as const },
   jcNumberValue:     { fontSize: 12, color: '#1d4ed8', fontWeight: '700' as const, flexShrink: 1 },
   portalBadge:       { borderRadius: 5, paddingHorizontal: 6, paddingVertical: 2, borderWidth: 1, flexShrink: 0 },
+  revisitBadge:      { borderRadius: 5, paddingHorizontal: 6, paddingVertical: 2, backgroundColor: '#fef3c7', flexShrink: 0 },
+  revisitBadgeText:  { fontSize: 10, fontWeight: '700' as const, color: '#b45309' },
   portalBadgeText:   { fontSize: 10, fontWeight: '800' as const, letterSpacing: 0.4 },
   statusPill:        { borderRadius: 6, paddingHorizontal: 7, paddingVertical: 3, borderWidth: 1, flexShrink: 0 },
   statusPillText:    { fontSize: 10, fontWeight: '700' as const },

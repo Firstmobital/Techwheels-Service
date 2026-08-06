@@ -19,6 +19,7 @@ import {
 import DateRangeFilter, { currentMonthRange, type DateRange } from '../components/DateRangeFilter'
 import { supabase } from '../lib/supabase'
 import Icon from '../components/Icon'
+import RevisitBadge from '../components/RevisitBadge'
 import { buildSaFloorCompletedWaTemplate } from '../lib/waTemplates'
 import PartsRequirementSection from '../components/PartsRequirementSection'
 
@@ -2024,8 +2025,9 @@ export default function ServiceAdvisorPage() {
                           </span>
                         </td>
                         <td className="mono strong">
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
                             {row.reg_number}
+                            {row.is_revisit && <RevisitBadge />}
                           </div>
                         </td>
                         <td>

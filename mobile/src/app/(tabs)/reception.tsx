@@ -4,7 +4,7 @@
  * UI is mobile-specific (React Native). All data columns, filtering, validation,
  * SA logic, and bodyshop card creation match the web version exactly.
  */
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   ActivityIndicator, Alert, FlatList, KeyboardAvoidingView, Modal, Platform,
   RefreshControl, ScrollView, Text, TextInput, TouchableOpacity, View,
@@ -14,6 +14,7 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 import { supabase } from '../../lib/supabase'
 import { isServiceAdvisorRole } from '../../lib/businessRoles'
 import { useAuth } from '../../context/AuthContext'
+import { getReceptionRevisitContext, type ReceptionRevisitContext } from '../../lib/api/receptionRevisit'
 
 // ─── Constants (exact match with web ReceptionPage) ─────────────────────────────
 const SOURCE_OPTIONS = ['Self', 'Driver Pickup', 'Walk-in', 'RSA']
@@ -46,6 +47,7 @@ const ENTRY_SELECT = [
   'sa_name', 'sa_employee_code', 'sa_display_name', 'jc_number',
   'owner_name', 'owner_phone', 'branch', 'location', 'portal',
   'branch_label', 'km_reading', 'source', 'remark',
+  'is_revisit', 'prior_reception_entry_id', 'suggested_technician_code', 'suggested_technician_name',
   'created_by', 'created_at', 'updated_at',
 ].join(', ')
 
@@ -69,6 +71,10 @@ interface ReceptionEntry {
   km_reading: number | null
   source: string
   remark: string | null
+  is_revisit?: boolean
+  prior_reception_entry_id?: number | null
+  suggested_technician_code?: string | null
+  suggested_technician_name?: string | null
   created_by: string
   created_at: string
   updated_at: string | null
@@ -298,6 +304,9 @@ export default function ReceptionScreen() {
 
   const [showPicker, setShowPicker] = useState<'model' | 'service_type' | 'source' | 'sa' | null>(null)
   const [pickerSearch, setPickerSearch] = useState('')
+  const [revisitContext, setRevisitContext] = useState<ReceptionRevisitContext | null>(null)
+  const [revisitChecking, setRevisitChecking] = useState(false)
+  const revisitDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // ── Load data ──────────────────────────────────────────────────────────────
   const loadAll = useCallback(async (isRefresh = false) => {
@@ -424,14 +433,51 @@ export default function ReceptionScreen() {
   // Clear SA when it's no longer valid after service_type / fuel_type / model change
   useEffect(() => {
     if (!form.sa_employee_code) return
+    if (revisitContext?.is_revisit) return
     const code = form.sa_employee_code.trim().toUpperCase()
     const valid = filteredSAs.some(e => e.employee_code.trim().toUpperCase() === code)
     if (!valid) setForm(p => ({ ...p, sa_employee_code: '' }))
-  }, [form.sa_employee_code, filteredSAs])
+  }, [form.sa_employee_code, filteredSAs, revisitContext?.is_revisit])
+
+  async function checkRevisitForReg(regNumber: string, excludeEntryId?: number | null) {
+    const normalized = regNumber.trim().toUpperCase()
+    if (!normalized) {
+      setRevisitContext(null)
+      return
+    }
+
+    setRevisitChecking(true)
+    const result = await getReceptionRevisitContext(normalized, excludeEntryId ?? null)
+    setRevisitChecking(false)
+
+    if (result.error || !result.data) {
+      setRevisitContext(null)
+      return
+    }
+
+    setRevisitContext(result.data)
+
+    if (result.data.is_revisit && result.data.prior_entry?.sa_employee_code) {
+      const priorCode = result.data.prior_entry.sa_employee_code.trim().toUpperCase()
+      const existsInMaster = employees.some(
+        (employee) => String(employee.employee_code ?? '').trim().toUpperCase() === priorCode,
+      )
+      if (existsInMaster) {
+        setForm((prev) => ({ ...prev, sa_employee_code: priorCode }))
+      }
+    }
+  }
+
+  function scheduleRevisitCheck(regNumber: string, excludeEntryId?: number | null) {
+    if (revisitDebounceRef.current) clearTimeout(revisitDebounceRef.current)
+    revisitDebounceRef.current = setTimeout(() => {
+      void checkRevisitForReg(regNumber, excludeEntryId)
+    }, 400)
+  }
 
   // ── Form actions ──────────────────────────────────────────────────────────
   function openAdd() {
-    setForm(EMPTY_FORM); setEditingId(null); setFormError(null); setShowModal(true)
+    setForm(EMPTY_FORM); setEditingId(null); setFormError(null); setRevisitContext(null); setShowModal(true)
   }
 
   function openEdit(entry: ReceptionEntry) {
@@ -453,6 +499,7 @@ export default function ReceptionScreen() {
       source:           entry.source ?? '',
     })
     setEditingId(entry.id); setFormError(null); setShowModal(true)
+    void checkRevisitForReg(entry.reg_number ?? '', entry.id)
   }
 
   // ── Save — exact web validation + payload + bodyshop card logic ───────────
@@ -652,8 +699,15 @@ export default function ReceptionScreen() {
         {/* Row 1: Reg No + Service Type chip */}
         <View style={s.cardHeader}>
           <Text style={s.regNo}>{entry.reg_number}</Text>
-          <View style={[s.stChip, { backgroundColor: col.bg }]}>
-            <Text style={[s.stChipText, { color: col.text }]}>{abbr}</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+            {entry.is_revisit && (
+              <View style={s.revisitChip}>
+                <Text style={s.revisitChipText}>Revisit</Text>
+              </View>
+            )}
+            <View style={[s.stChip, { backgroundColor: col.bg }]}>
+              <Text style={[s.stChipText, { color: col.text }]}>{abbr}</Text>
+            </View>
           </View>
         </View>
         {/* Row 2: Model + Fuel */}
@@ -802,8 +856,25 @@ export default function ReceptionScreen() {
                   value={form.reg_number}
                   maxLength={10}
                   autoCapitalize="characters"
-                  onChangeText={t => setForm(p => ({ ...p, reg_number: t.toUpperCase() }))}
+                  onChangeText={(t) => {
+                    const nextReg = t.toUpperCase()
+                    setForm(p => ({ ...p, reg_number: nextReg }))
+                    scheduleRevisitCheck(nextReg, editingId)
+                  }}
+                  onBlur={() => void checkRevisitForReg(form.reg_number, editingId)}
                 />
+                {revisitChecking && (
+                  <Text style={{ fontSize: 12, color: '#64748b', marginTop: 4 }}>Checking revisit history...</Text>
+                )}
+                {revisitContext?.is_revisit && revisitContext.prior_entry && (
+                  <View style={s.revisitNotice}>
+                    <Text style={s.revisitNoticeText}>
+                      Revisit — last visit {new Date(revisitContext.prior_entry.created_at).toLocaleDateString('en-IN')}
+                      {' · '}{revisitContext.prior_entry.service_type || 'Service'}
+                      {revisitContext.prior_entry.jc_number ? ` · JC# ${revisitContext.prior_entry.jc_number}` : ''}
+                    </Text>
+                  </View>
+                )}
               </FormField>
 
               <FormField label="Service Type">
@@ -940,6 +1011,10 @@ const styles = {
   regNo:              { fontSize: 16, fontWeight: '800' as const, color: '#1e293b', letterSpacing: 0.5 },
   stChip:             { borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3 },
   stChipText:         { fontSize: 11, fontWeight: '700' as const },
+  revisitChip:        { borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3, backgroundColor: '#fef3c7' },
+  revisitChipText:      { fontSize: 11, fontWeight: '700' as const, color: '#b45309' },
+  revisitNotice:      { backgroundColor: '#fffbeb', borderRadius: 8, padding: 10, marginTop: 6, borderWidth: 1, borderColor: '#fde68a' },
+  revisitNoticeText:  { color: '#b45309', fontSize: 12, fontWeight: '600' as const },
   cardRow:            { flexDirection: 'row' as const, flexWrap: 'wrap' as const, marginBottom: 4 },
   cardLabel:          { fontSize: 11, color: '#94a3b8', marginRight: 4, minWidth: 36 },
   cardValue:          { fontSize: 12, color: '#334155', fontWeight: '500' as const, marginRight: 4 },

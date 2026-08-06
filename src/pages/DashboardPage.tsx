@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Icon } from '../components/Icon'
+import RevisitBadge from '../components/RevisitBadge'
 import { supabase } from '../lib/supabase'
 
 type VisibleModule = {
@@ -22,6 +23,7 @@ type ReceptionRow = {
   model: string | null
   sa_name: string | null
   service_type: string | null
+  is_revisit?: boolean | null
 }
 
 type ModuleMetaRow = {
@@ -218,7 +220,7 @@ export default function DashboardPage({
         supabase.from('modules').select('name, label, description, route, is_active'),
         supabase
           .from('service_reception_entries')
-          .select('id, created_at, source, reg_number, model, sa_name, service_type')
+          .select('id, created_at, source, reg_number, model, sa_name, service_type, is_revisit')
           .order('created_at', { ascending: false })
           .limit(8),
         supabase.auth.getSession(),
@@ -774,7 +776,12 @@ export default function DashboardPage({
                     <tr key={row.id}>
                       <td>{formatDateTime(row.created_at)}</td>
                       <td><span className="pill b">{row.source || '—'}</span></td>
-                      <td className="mono strong">{row.reg_number}</td>
+                      <td className="mono strong">
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                          <span>{row.reg_number}</span>
+                          {row.is_revisit && <RevisitBadge />}
+                        </div>
+                      </td>
                       <td>{row.model || '—'}</td>
                       <td className="strong">{row.sa_name || '—'}</td>
                       <td className="text-muted">{row.service_type || '—'}</td>

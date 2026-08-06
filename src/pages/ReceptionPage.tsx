@@ -7,6 +7,7 @@ import {
   bulkCreateReceptionEntries,
   createReceptionEntry,
   deleteReceptionEntry,
+  getReceptionRevisitContext,
   listReceptionEntriesByDateRangePage,
   searchReceptionEntriesForGlobalSearchPage,
   listReceptionEmployees,
@@ -14,8 +15,10 @@ import {
   type ReceptionEntryInput,
   type ReceptionEntryRow,
   type ReceptionEntryPageCursor,
+  type ReceptionRevisitContext,
   updateReceptionEntry,
 } from '../lib/api'
+import RevisitBadge from '../components/RevisitBadge'
 
 const SOURCE_OPTIONS = ['Self', 'Driver Pickup', 'Walk-in', 'RSA']
 
@@ -388,6 +391,9 @@ export default function ReceptionPage() {
   const [hasMoreEntries, setHasMoreEntries] = useState(false)
   const [loadingMoreEntries, setLoadingMoreEntries] = useState(false)
   const [exporting, setExporting] = useState(false)
+  const [revisitContext, setRevisitContext] = useState<ReceptionRevisitContext | null>(null)
+  const [revisitChecking, setRevisitChecking] = useState(false)
+  const revisitDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const todayKey = useMemo(() => {
     const now = new Date()
@@ -557,8 +563,9 @@ export default function ReceptionPage() {
     if (editingId !== null) return
     if (!form.sa_employee_code) return
     if (hasSelectedSaInOptions) return
+    if (revisitContext?.is_revisit) return
     setForm((prev) => ({ ...prev, sa_employee_code: '' }))
-  }, [editingId, form.sa_employee_code, hasSelectedSaInOptions])
+  }, [editingId, form.sa_employee_code, hasSelectedSaInOptions, revisitContext?.is_revisit])
 
   const serviceTypeFilteredEntries = useMemo(() => {
     if (selectedServiceType === 'all') return serviceTypeBaseEntries
@@ -925,6 +932,64 @@ export default function ReceptionPage() {
   function resetForm() {
     setForm(EMPTY_FORM)
     setEditingId(null)
+    setRevisitContext(null)
+    setRevisitChecking(false)
+    if (revisitDebounceRef.current) {
+      clearTimeout(revisitDebounceRef.current)
+      revisitDebounceRef.current = null
+    }
+  }
+
+  async function checkRevisitForReg(regNumber: string, excludeEntryId?: number | null) {
+    const normalized = regNumber.trim().toUpperCase()
+    if (!normalized) {
+      setRevisitContext(null)
+      return
+    }
+
+    setRevisitChecking(true)
+    const result = await getReceptionRevisitContext(normalized, excludeEntryId ?? null)
+    setRevisitChecking(false)
+
+    if (result.error || !result.data) {
+      setRevisitContext(null)
+      return
+    }
+
+    setRevisitContext(result.data)
+
+    if (result.data.is_revisit && result.data.prior_entry?.sa_employee_code) {
+      const priorCode = result.data.prior_entry.sa_employee_code.trim().toUpperCase()
+      const existsInMaster = employeeOptions.some(
+        (employee) => String(employee.employee_code ?? '').trim().toUpperCase() === priorCode,
+      )
+
+      if (existsInMaster) {
+        setForm((prev) => ({
+          ...prev,
+          sa_employee_code: priorCode,
+        }))
+      }
+    }
+  }
+
+  function scheduleRevisitCheck(regNumber: string, excludeEntryId?: number | null) {
+    if (revisitDebounceRef.current) {
+      clearTimeout(revisitDebounceRef.current)
+    }
+
+    revisitDebounceRef.current = setTimeout(() => {
+      void checkRevisitForReg(regNumber, excludeEntryId)
+    }, 400)
+  }
+
+  function handleRegNumberChange(value: string) {
+    const nextReg = value.toUpperCase()
+    setForm((prev) => ({
+      ...prev,
+      reg_number: nextReg,
+    }))
+    scheduleRevisitCheck(nextReg, editingId)
   }
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
@@ -1051,6 +1116,7 @@ export default function ReceptionPage() {
     })
     setNotice(null)
     setError(null)
+    void checkRevisitForReg(entry.reg_number, entry.id)
   }
 
   async function handleDelete(id: number) {
@@ -1215,16 +1281,28 @@ export default function ReceptionPage() {
                 <span className="label">Registration No <span className="req">*</span></span>
                 <input
                   value={form.reg_number}
-                  onChange={(event) =>
-                    setForm((prev) => ({
-                      ...prev,
-                      reg_number: event.target.value.toUpperCase(),
-                    }))
-                  }
+                  onChange={(event) => handleRegNumberChange(event.target.value)}
+                  onBlur={() => void checkRevisitForReg(form.reg_number, editingId)}
                   autoCapitalize="characters"
                   placeholder="RJ14AB1234"
                   className="inp inp--uc"
                 />
+                {revisitChecking && (
+                  <span style={{ fontSize: 12, color: '#64748b', marginTop: 4, display: 'block' }}>
+                    Checking revisit history...
+                  </span>
+                )}
+                {revisitContext?.is_revisit && revisitContext.prior_entry && (
+                  <div style={{ fontSize: 12, color: '#b45309', marginTop: 6, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                    <RevisitBadge />
+                    <span>
+                      Last visit {formatDate(revisitContext.prior_entry.created_at)}
+                      {' · '}
+                      {revisitContext.prior_entry.service_type || 'Service'}
+                      {revisitContext.prior_entry.jc_number ? ` · JC# ${revisitContext.prior_entry.jc_number}` : ''}
+                    </span>
+                  </div>
+                )}
               </label>
 
               <label className="field">
@@ -1303,9 +1381,11 @@ export default function ReceptionPage() {
                 className="sel"
               >
                 <option value="">- Select SA -</option>
-                {editingId !== null && form.sa_employee_code && !hasSelectedSaInOptions && (
+                {form.sa_employee_code && !hasSelectedSaInOptions && (
                   <option value={form.sa_employee_code}>
-                    {entryLookupById.get(editingId)?.sa_name || 'Current SA'} ({form.sa_employee_code})
+                    {(editingId !== null
+                      ? entryLookupById.get(editingId)?.sa_name
+                      : revisitContext?.prior_entry?.sa_name) || 'Selected SA'} ({form.sa_employee_code})
                   </option>
                 )}
                 {sortedEmployeeOptions.map((employee) => (
@@ -1410,6 +1490,7 @@ export default function ReceptionPage() {
                   <div className="recep-item__main">
                     <div className="recep-item__top">
                       <span className="mono recep-item__reg">{entry.reg_number}</span>
+                      {entry.is_revisit && <RevisitBadge />}
                       <span className={[`pill`, sourceTone(entry.source)].join(' ').trim()}>{entry.source}</span>
                     </div>
                     {entry.jc_number && (

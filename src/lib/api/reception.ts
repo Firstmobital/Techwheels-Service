@@ -40,6 +40,10 @@ export interface ReceptionEntryRow {
   invoice_drive_file_id: string | null
   invoice_done_at: string | null
   invoice_done_by: string | null
+  is_revisit: boolean
+  prior_reception_entry_id: number | null
+  suggested_technician_code: string | null
+  suggested_technician_name: string | null
   created_by: string
   created_at: string
   updated_at: string
@@ -66,6 +70,24 @@ export interface ReceptionEmployeeOption {
   location: string | null
 }
 
+export type ReceptionRevisitPriorEntry = {
+  id: number
+  sa_employee_code: string | null
+  sa_name: string | null
+  jc_number: string | null
+  service_type: string | null
+  created_at: string
+}
+
+export type ReceptionRevisitContext = {
+  is_revisit: boolean
+  prior_entry?: ReceptionRevisitPriorEntry
+  suggested_technician?: {
+    code: string
+    name: string | null
+  } | null
+}
+
 export interface ServiceAdvisorEntryUpdateInput {
   service_type: string
   jc_number?: string | null
@@ -82,7 +104,11 @@ const FLOOR_INCHARGE_ALLOWED_SERVICE_TYPES = [
   'Updation',
   'E Breakdown',
   'Campaign',
-]
+] as const
+
+export const FLOOR_INCHARGE_SERVICE_TYPES: string[] = [...FLOOR_INCHARGE_ALLOWED_SERVICE_TYPES]
+
+export { FLOOR_INCHARGE_ALLOWED_SERVICE_TYPES }
 
 const RECEPTION_LIST_PAGE_SIZE = 200
 
@@ -149,6 +175,10 @@ const RECEPTION_ENTRY_SELECT_COLUMNS = [
   'invoice_drive_file_id',
   'invoice_done_at',
   'invoice_done_by',
+  'is_revisit',
+  'prior_reception_entry_id',
+  'suggested_technician_code',
+  'suggested_technician_name',
   'created_by',
   'created_at',
   'updated_at',
@@ -775,7 +805,7 @@ export async function listFloorInchargeEntries(
   // Default to last FLOOR_INCHARGE_LOOKBACK_DAYS days — vehicles don't stay in service longer.
   const effectiveRange = normalizeCreatedAtRange(range ?? getISOLookbackRange(FLOOR_INCHARGE_LOOKBACK_DAYS))
   const { data, error } = await fetchReceptionEntriesWithKeyset(
-    FLOOR_INCHARGE_ALLOWED_SERVICE_TYPES,
+    FLOOR_INCHARGE_SERVICE_TYPES,
     effectiveRange.from,
     effectiveRange.to,
     true,
@@ -851,6 +881,65 @@ export async function createReceptionEntry(input: ReceptionEntryInput): Promise<
   
   const enriched = await enrichEntriesWithEmployeeBranch(data ? [data as ReceptionEntryRow] : [])
   return ok(enriched[0] ?? (data as ReceptionEntryRow))
+}
+
+function parseReceptionRevisitContext(raw: unknown): ReceptionRevisitContext {
+  if (!raw || typeof raw !== 'object') {
+    return { is_revisit: false }
+  }
+
+  const payload = raw as {
+    is_revisit?: boolean
+    prior_entry?: Record<string, unknown>
+    suggested_technician?: Record<string, unknown> | null
+  }
+
+  if (!payload.is_revisit) {
+    return { is_revisit: false }
+  }
+
+  const priorRaw = payload.prior_entry
+  const priorEntry = priorRaw && typeof priorRaw === 'object'
+    ? {
+        id: Number(priorRaw.id),
+        sa_employee_code: priorRaw.sa_employee_code != null ? String(priorRaw.sa_employee_code) : null,
+        sa_name: priorRaw.sa_name != null ? String(priorRaw.sa_name) : null,
+        jc_number: priorRaw.jc_number != null ? String(priorRaw.jc_number) : null,
+        service_type: priorRaw.service_type != null ? String(priorRaw.service_type) : null,
+        created_at: priorRaw.created_at != null ? String(priorRaw.created_at) : '',
+      }
+    : undefined
+
+  const techRaw = payload.suggested_technician
+  const suggestedTechnician =
+    techRaw && typeof techRaw === 'object' && techRaw.code
+      ? {
+          code: String(techRaw.code),
+          name: techRaw.name != null ? String(techRaw.name) : null,
+        }
+      : null
+
+  return {
+    is_revisit: true,
+    prior_entry: priorEntry && Number.isFinite(priorEntry.id) ? priorEntry : undefined,
+    suggested_technician: suggestedTechnician,
+  }
+}
+
+export async function getReceptionRevisitContext(
+  regNumber: string,
+  excludeEntryId?: number | null,
+): Promise<ApiResult<ReceptionRevisitContext>> {
+  const normalizedReg = regNumber.trim().toUpperCase()
+  if (!normalizedReg) return ok({ is_revisit: false })
+
+  const { data, error } = await supabase.rpc('get_reception_revisit_context', {
+    p_reg_number: normalizedReg,
+    p_exclude_entry_id: excludeEntryId ?? null,
+  })
+
+  if (error) return fail(error)
+  return ok(parseReceptionRevisitContext(data))
 }
 
 export async function updateReceptionEntry(id: number, input: ReceptionEntryInput): Promise<ApiResult<ReceptionEntryRow>> {

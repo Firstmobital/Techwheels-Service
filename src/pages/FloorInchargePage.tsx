@@ -1,8 +1,9 @@
-import { useEffect, useState, useMemo } from 'react'
+import { useEffect, useState, useMemo, useRef } from 'react'
 import * as XLSX from 'xlsx'
 import DateRangeFilter, { currentMonthRange, type DateRange } from '../components/DateRangeFilter'
 import { supabase } from '../lib/supabase'
 import { listFloorInchargeEntries, type ReceptionEntryRow } from '../lib/api'
+import RevisitBadge from '../components/RevisitBadge'
 import {
   isTechnicianBusinessRole,
   parseEmployeeSupportRoles,
@@ -31,6 +32,9 @@ interface JobCard {
   sa_employee_code: string | null
   fuel_type: string | null
   assignment_key: string
+  is_revisit: boolean
+  suggested_technician_code: string | null
+  suggested_technician_name: string | null
 }
 
 type StageDraft = {
@@ -260,6 +264,9 @@ function mapReceptionRowToJobCard(row: ReceptionEntryRow): JobCard {
     sa_employee_code: row.sa_employee_code ?? null,
     fuel_type: row.fuel_type ?? null,
     assignment_key: assignmentKey,
+    is_revisit: row.is_revisit === true,
+    suggested_technician_code: row.suggested_technician_code ?? null,
+    suggested_technician_name: row.suggested_technician_name ?? null,
   }
 }
 
@@ -494,6 +501,7 @@ export default function FloorInchargePage() {
   const [dataError, setDataError] = useState<string | null>(null)
   const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null)
   const [exporting, setExporting] = useState(false)
+  const autoAssignedRevisitRef = useRef<Set<string>>(new Set())
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
@@ -688,6 +696,29 @@ export default function FloorInchargePage() {
 
     return map
   }, [employees, jobCards])
+
+  useEffect(() => {
+    if (loading || jobCards.length === 0) return
+
+    for (const jc of jobCards) {
+      if (!jc.is_revisit || !jc.suggested_technician_code || !jc.jc_number?.trim()) continue
+
+      const key = jc.assignment_key
+      if (assignments[key]) continue
+      if (autoAssignedRevisitRef.current.has(key)) continue
+
+      const scoped = techniciansByJobCard[key] ?? []
+      const suggestedCode = normalizeEmployeeCode(jc.suggested_technician_code)
+      const eligible = scoped.some(
+        (employee) => normalizeEmployeeCode(employee.employee_code) === suggestedCode,
+      )
+      if (!eligible) continue
+
+      autoAssignedRevisitRef.current.add(key)
+      void assignTechnician(key, jc.suggested_technician_code)
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading, jobCards, assignments, techniciansByJobCard])
 
   async function assignTechnician(jobCardNumber: string, employeeCode: string) {
     const normalizedJobCardNumber = normalizeJobCardNumber(jobCardNumber)
@@ -1410,7 +1441,10 @@ export default function FloorInchargePage() {
                           {formatDate(jc.created_at)}
                         </td>
                         <td className="mono strong cell-accent">
-                          {jc.reg_number || '—'}
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                            <span>{jc.reg_number || '—'}</span>
+                            {jc.is_revisit && <RevisitBadge />}
+                          </div>
                         </td>
                         <td className="mono">{jc.km_reading ?? '—'}</td>
                         <td>{jc.model || '—'}</td>

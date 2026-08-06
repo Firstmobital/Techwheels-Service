@@ -8,6 +8,7 @@ import {
   listReceptionEntriesWithDefaultLookback,
   type ReceptionEntryRow,
 } from '../lib/api'
+import RevisitBadge from '../components/RevisitBadge'
 import { sendTechnicianDailyEarningsTestEmail } from '../lib/api/email'
 import { isTechnicianBusinessRole } from '../lib/businessRoles'
 import * as XLSX from 'xlsx'
@@ -27,6 +28,7 @@ type TechnicianAssignmentRow = {
   created_at?: string | null
   updated_at?: string | null
   reg_number?: string | null
+  is_revisit?: boolean
   location?: string | null
   fuel_type?: string | null
   gross_labour_amount?: number
@@ -1085,6 +1087,7 @@ export default function TechnicianPage() {
 
       // Reuse Floor Incharge API enrichment path to keep location/fuel logic consistent.
       let regNumberMap = new Map<string, string>()
+      let isRevisitMap = new Map<string, boolean>()
       let locationMap = new Map<string, string>()
       let fuelTypeMap = new Map<string, string>()
       let revenueMap = new Map<string, RevenueRow>()
@@ -1101,6 +1104,10 @@ export default function TechnicianPage() {
             const regNum = String((row as ReceptionEntryRow).reg_number ?? '').trim()
             if (regNum && !regNumberMap.has(key)) {
               regNumberMap.set(key, regNum)
+            }
+
+            if ((row as ReceptionEntryRow).is_revisit === true) {
+              isRevisitMap.set(key, true)
             }
 
             const location = String((row as ReceptionEntryRow)['branch'] ?? '').trim()
@@ -1130,6 +1137,10 @@ export default function TechnicianPage() {
               const regNum = String((row as ReceptionEntryRow).reg_number ?? '').trim()
               if (regNum && !regNumberMap.has(key)) {
                 regNumberMap.set(key, regNum)
+              }
+
+              if ((row as ReceptionEntryRow).is_revisit === true) {
+                isRevisitMap.set(key, true)
               }
 
               const location = String((row as ReceptionEntryRow)['branch'] ?? '').trim()
@@ -1205,6 +1216,7 @@ export default function TechnicianPage() {
         return {
           ...row,
           reg_number: regNumberMap.get(jc) ?? null,
+          is_revisit: isRevisitMap.get(jc) === true,
           location: locationMap.get(jc) ?? inferredBranch,
           fuel_type: fuelTypeMap.get(jc) ?? null,
           gross_labour_amount: grossByJc.get(jc) ?? 0,
@@ -2416,7 +2428,12 @@ export default function TechnicianPage() {
                     {finalRows.map((row) => (
                       <tr key={row.id}>
                         <td className="mono ts-cell">{row.job_card_number}</td>
-                        <td className="mono ts-cell">{row.reg_number ?? '—'}</td>
+                        <td className="mono ts-cell">
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                            <span>{row.reg_number ?? '—'}</span>
+                            {row.is_revisit && <RevisitBadge />}
+                          </div>
+                        </td>
                         <td className="type-cell">{row.bay_no ?? '—'}</td>
                         <td className="ctr">
                           <span className={`pill ${statusPill(row.work_status)}`}>
