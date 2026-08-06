@@ -115,27 +115,45 @@ function StatusBadge({ status, qty = null }: { status: PartsRequestRow['parts_st
 
 const LOW_STOCK_THRESHOLD = 5
 
-function QtyBadge({ qty }: { qty: number | null }) {
-  if (qty == null) {
-    return <span className="text-xs font-medium text-gray-400">Not Available</span>
-  }
-  if (qty <= 0) {
+// ── Stock status enum for the 3-badge system ──────────────────────────────
+type StockStatus = 'available' | 'low' | 'pending'
+
+function getStockStatus(qty: number | null): StockStatus {
+  if (qty == null || qty <= 0) return 'pending'
+  if (qty < LOW_STOCK_THRESHOLD) return 'low'
+  return 'available'
+}
+
+// ── Advisor remark options (dropdown only, no free text) ──────────────────
+const ADVISOR_REMARK_OPTIONS = [
+  'Order Through VOR',
+  'Urgent Order',
+  'Received from co-dealer',
+  'VEHICLE HOLD at WORKSHOP',
+] as const
+
+function StockStatusBadge({ qty }: { qty: number | null }) {
+  const status = getStockStatus(qty)
+  if (status === 'available') {
     return (
-      <span className="inline-flex items-center gap-1.5 rounded-full bg-red-50 px-2 py-0.5 text-xs font-semibold text-red-600">
-        0 <span className="text-red-500">&middot; Out of Stock</span>
+      <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-emerald-700">
+        <span className="inline-block h-2 w-2 rounded-full bg-emerald-500" />
+        Available
       </span>
     )
   }
-  if (qty < LOW_STOCK_THRESHOLD) {
+  if (status === 'low') {
     return (
       <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-50 px-2 py-0.5 text-xs font-semibold text-amber-700">
-        {qty} <span className="text-amber-600">&middot; Low Stock</span>
+        <span className="inline-block h-2 w-2 rounded-full bg-amber-500" />
+        Low Stock
       </span>
     )
   }
   return (
-    <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-emerald-700">
-      {qty} <span className="text-emerald-600">&middot; Available</span>
+    <span className="inline-flex items-center gap-1.5 rounded-full bg-gray-100 px-2 py-0.5 text-xs font-semibold text-gray-500">
+      <span className="inline-block h-2 w-2 rounded-full bg-gray-400" />
+      Pending Update
     </span>
   )
 }
@@ -394,8 +412,8 @@ export default function PartsRequirementSection({ isAdmin = false }: Props) {
   }, [rows])
 
   function stockStatusLabel(qty: number | null): string {
-    if (qty == null) return 'unknown'
-    if (qty <= 0) return 'out'
+    if (qty == null) return 'pending'
+    if (qty <= 0) return 'pending'
     if (qty < LOW_STOCK_THRESHOLD) return 'low'
     return 'available'
   }
@@ -440,23 +458,18 @@ export default function PartsRequirementSection({ isAdmin = false }: Props) {
     return list
   }, [visibleRows, quickFilter, search, isAdmin, advisorFilter, vehicleNoFilter, stockStatusFilter, orderStatusFilter, orderStatuses])
 
-  const hasPartsReceivedRemark = (row: PartsRequestRow): boolean => {
-    const r = (row.advisor_remarks ?? '').toLowerCase()
-    return r.includes('part') && r.includes('received')
-  }
-
-  const isAvailableBadge = (row: PartsRequestRow): boolean =>
-    row.parts_status === 'Pending' && (row.parts_qty ?? 0) > 0
-
   const showMarkReceived = (row: PartsRequestRow): boolean => {
     if (['Received', 'Ready', 'Done', 'Delivered to Workshop', 'Cancelled'].includes(row.parts_status)) return false
-    return isAvailableBadge(row) || hasPartsReceivedRemark(row)
+    const stock = getStockStatus(row.parts_qty)
+    const isCoDealer = (row.advisor_remarks ?? '').trim() === 'Received from co-dealer'
+    // Show Mark Received if stock is Available or Low Stock, or if co-dealer remark
+    return stock === 'available' || stock === 'low' || isCoDealer
   }
 
   const ActionButton = ({ row }: { row: PartsRequestRow }) => {
     const busy = actionBusyId === row.id
     if (row.parts_status === 'Pending' && !showMarkReceived(row)) {
-      return <span className="text-xs text-gray-400">Awaiting SPM order</span>
+      return <span className="text-xs text-gray-400">Waiting for Parts Stock Update</span>
     }
     if (['Ordered', 'In Transit', 'Back Order', 'Partially Received'].includes(row.parts_status) || showMarkReceived(row)) {
       return (
@@ -785,9 +798,9 @@ export default function PartsRequirementSection({ isAdmin = false }: Props) {
               <select value={stockStatusFilter} onChange={(e) => setStockStatusFilter(e.target.value)}
                 className="mt-1 block w-full rounded-lg border border-gray-300 bg-white px-2 py-1.5 text-sm shadow-sm focus:border-blue-500 focus:outline-none">
                 <option value="all">All</option>
-                <option value="available">In Stock</option>
+                <option value="available">Available</option>
                 <option value="low">Low Stock</option>
-                <option value="out">Out of Stock</option>
+                <option value="pending">Pending Update</option>
                 <option value="unknown">Not Available</option>
               </select>
             </label>
@@ -982,10 +995,14 @@ export default function PartsRequirementSection({ isAdmin = false }: Props) {
                 </div>
                 <div className={isDesktop ? 'col-span-3' : ''}>
                   {!isDesktop && <p className="mb-1 text-[10px] font-bold uppercase text-gray-400">Remarks</p>}
-                  <input type="text" value={line.advisor_remarks}
+                  <select value={line.advisor_remarks}
                     onChange={(e) => updateLine(i, 'advisor_remarks', e.target.value)}
-                    placeholder="Optional"
-                    className="block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500" />
+                    className="block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 bg-white">
+                    <option value="">— Select —</option>
+                    {ADVISOR_REMARK_OPTIONS.map((opt) => (
+                      <option key={opt} value={opt}>{opt}</option>
+                    ))}
+                  </select>
                 </div>
                 <div className={isDesktop ? 'col-span-1 flex justify-center' : 'flex justify-end'}>
                   <button type="button" onClick={() => removeLine(i)} disabled={partLines.length === 1}
@@ -1052,9 +1069,14 @@ export default function PartsRequirementSection({ isAdmin = false }: Props) {
             </label>
             <label className={`${labelCls} sm:col-span-2 lg:col-span-3`}>
               Advisor Remarks
-              <textarea value={draft.advisor_remarks}
+              <select value={draft.advisor_remarks ?? ''}
                 onChange={(e) => setDraft((d) => ({ ...d, advisor_remarks: e.target.value }))}
-                rows={2} placeholder="Notes for SPM" className={`${inputCls} font-sans`} />
+                className={`${inputCls} font-sans bg-white`}>
+                <option value="">— Select —</option>
+                {ADVISOR_REMARK_OPTIONS.map((opt) => (
+                  <option key={opt} value={opt}>{opt}</option>
+                ))}
+              </select>
             </label>
             <label className={`${labelCls} sm:col-span-2 lg:col-span-3`}>
               Customer Update
@@ -1190,19 +1212,22 @@ export default function PartsRequirementSection({ isAdmin = false }: Props) {
                       {/* Col 13: Order Status */}
                       <td className="px-4 py-2.5"><OrderStatusBadge label={orderStatus} /></td>
                       {/* Col 14: Stock */}
-                      <td className="px-4 py-2.5"><QtyBadge qty={row.parts_qty} /></td>
+                      <td className="px-4 py-2.5"><StockStatusBadge qty={row.parts_qty} /></td>
                       {/* Col 15: Status */}
                       <td className="px-4 py-2.5"><StatusBadge status={row.parts_status} qty={row.parts_qty} /></td>
-                      {/* Col 16: Adv. Remarks */}
+                      {/* Col 16: Adv. Remarks — dropdown only */}
                       <td className="px-4 py-2.5 text-xs text-gray-600 max-w-[160px]">
                         {row.parts_status !== 'Done' ? (
-                          <textarea
+                          <select
                             defaultValue={row.advisor_remarks ?? ''}
                             onBlur={(e) => void handleRemarksBlur(row, e.target.value)}
-                            rows={2}
-                            className="w-full rounded-md border border-gray-200 px-2 py-1 text-xs font-sans focus:border-blue-400 focus:outline-none resize-y"
-                            placeholder="Add remarks..."
-                          />
+                            className="w-full rounded-md border border-gray-200 px-1.5 py-1 text-xs font-sans focus:border-blue-400 focus:outline-none bg-white"
+                          >
+                            <option value="">— Select —</option>
+                            {ADVISOR_REMARK_OPTIONS.map((opt) => (
+                              <option key={opt} value={opt}>{opt}</option>
+                            ))}
+                          </select>
                         ) : (
                           <p className="line-clamp-2">{row.advisor_remarks || '\u2014'}</p>
                         )}
@@ -1270,7 +1295,7 @@ export default function PartsRequirementSection({ isAdmin = false }: Props) {
                     </div>
                   </div>
                   <div className="mt-2 flex flex-wrap gap-2">
-                    <QtyBadge qty={row.parts_qty} />
+                    <StockStatusBadge qty={row.parts_qty} />
                     <OrderStatusBadge label={orderStatus} />
                   </div>
                   {!isAdmin && (
