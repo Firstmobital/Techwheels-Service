@@ -5,8 +5,8 @@
 - Category: import
 - Owner: Import Team + Platform Team
 - Created: 2026-08-06
-- Status: IP (In Progress) — Phases 1–4 implemented; migration apply + manual QA pending
-- Last Updated: 2026-08-06 (implementation started; WhatsApp excluded)
+- Status: IP (In Progress) — DB applied + Vercel live; upload QA pending
+- Last Updated: 2026-08-06 (migration applied in SQL editor; Vercel deployment confirmed)
 - Authoritative DB baseline: `supabase/backups/full_metadata.sql`
 - Related plans: `IMPORT-001` only (`OPS-UPDATION-001` is a separate system — **no integration**)
 
@@ -234,22 +234,22 @@ CREATE POLICY ins_rbac ON vehicle_updation_uploads
 
 | Phase | Description | Status | Completed |
 |-------|-------------|--------|-----------|
-| 1 | Database and Security | **IP** | Migration + sql_checks written — **apply to Supabase pending** |
+| 1 | Database and Security | **DN** | 2026-08-06 — applied in Supabase SQL editor |
 | 2 | Column mapper | **DN** | 2026-08-06 — `src/lib/vehicleUpdationColumnMapper.ts` |
-| 3 | Frontend Import section | **DN** | 2026-08-06 — `VehicleUpdationImportSection.tsx` + `ImportPage.tsx` |
+| 3 | Frontend Import section | **DN** | 2026-08-06 — deployed Vercel `/import` |
 | 4 | Types and registry | **DN** | 2026-08-06 — `getTableColumns.ts` |
-| 5 | Validation | **NS** | Blocked on migration apply + sample file upload QA |
+| 5 | Validation | **IP** | Live upload QA with EV/PV sample files |
 
 ---
 
 ## Implementation Plan
 
-### Phase 1 — Database and Security — IP
+### Phase 1 — Database and Security — DN
 **Deliverables:**
 - [x] Migration `20260806170000_vehicle_updation_import.sql` (tables, indexes, trigger, RLS, RPC, grants)
 - [x] SQL checks file `supabase/sql_checks/20260806170000_vehicle_updation_import_checks.sql`
-- [ ] Apply to Supabase + verify checks
-- [ ] Register in `docs/shared/reference/DB_CHANGE_LEDGER.md`
+- [x] Apply to Supabase + verify checks (2026-08-06, SQL editor)
+- [x] Register in `docs/shared/reference/DB_CHANGE_LEDGER.md` (DBL-0022)
 
 **Acceptance:**
 - Both tables exist with constraints/indexes
@@ -272,19 +272,16 @@ CREATE POLICY ins_rbac ON vehicle_updation_uploads
 - `src/components/VehicleUpdationImportSection.tsx` *(new — mirror `PniGrnImportSection`)*
 - `src/pages/ImportPage.tsx` *(wire accordion)*
 
-**UX spec:**
-- [x] Accordion title: **Vehicle Updation** (count badge: `2`)
-- [x] Description + portal-scoped replace warning banner
-- [x] Two slots: `VU_EV` (Portal EV), `VU_PV` (Portal PV)
-- [x] Per slot: file picker, last upload chip, multi-sheet picker
-- [x] Upload flow: parse → validate portal/type → call RPC → show success/error
-- [x] Insert after `<PniGrnImportSection />`, before Warranty accordion
+- [x] Accordion + two portal slots live on Vercel `/import`
 
 ### Phase 4 — Types and registry — DN
 - [x] Add table entries to `src/lib/getTableColumns.ts`
 - [ ] Optional: include row count in Import page summary chip (query `vehicle_updation_data` count)
 
-### Phase 5 — Validation — NS
+### Phase 5 — Validation — IP
+
+**Deployment note:** Migration applied 2026-08-06 (Supabase SQL editor). Frontend live on Vercel.
+
 **Manual test checklist:**
 - [ ] Upload EV sample → ~7,028 rows in DB with `portal='EV'`; PV table empty or unchanged
 - [ ] Upload PV sample → EV rows unchanged; PV has ~7,028 rows
@@ -368,8 +365,7 @@ CREATE POLICY ins_rbac ON vehicle_updation_uploads
 ---
 
 ## Next Actions
-1. **Apply migration** `20260806170000_vehicle_updation_import.sql` in Supabase SQL editor (or CLI)
-2. Run `supabase/sql_checks/20260806170000_vehicle_updation_import_checks.sql`
-3. Manual QA on `/import` with EV + PV sample files
-4. Register in `DB_CHANGE_LEDGER.md` after apply
-5. Move plan to **RV** after QA sign-off
+1. Run live upload QA on https://techwheels-service.vercel.app/import (EV + PV sample files)
+2. Confirm sql_checks output in Supabase (2 tables, RPC, RLS)
+3. Optional: `npm run db:backup:metadata` to refresh `full_metadata.sql`
+4. Mark Phase 5 checklist complete → plan **RV**, then **DN** after sign-off

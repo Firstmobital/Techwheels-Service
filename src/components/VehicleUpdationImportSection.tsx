@@ -282,7 +282,7 @@ export function VehicleUpdationImportSection() {
         throw new Error(formatVehicleUpdationParseErrors(headerResult.errors))
       }
 
-      const built = buildVehicleUpdationRows(rawRows, slot.portal, {
+      const built = buildVehicleUpdationRows(rawRows, {
         fileName: file.name,
         headers,
         mapping: headerResult.mapping,

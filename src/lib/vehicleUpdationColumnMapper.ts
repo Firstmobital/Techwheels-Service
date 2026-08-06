@@ -239,7 +239,6 @@ export function validatePortalFuelTypes(
 
 export function buildVehicleUpdationRows(
   rawRows: Record<string, unknown>[],
-  portal: VehicleUpdationPortal,
   options: {
     fileName: string
     headers: string[]
