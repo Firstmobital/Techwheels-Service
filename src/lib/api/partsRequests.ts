@@ -34,6 +34,7 @@ export interface PartsRequestRow {
   parts_qty: number | null
   parts_number: string | null
   parts_order_date: string | null
+  parts_order_number: string | null
   parts_status: PartsStatus
   spm_remarks: string | null
   vehicle_type: string | null
@@ -186,6 +187,8 @@ export async function spmUpdatePartsRequest(input: {
   spmRemarks?: string | null
   /** Manual override only — omit/undefined to leave the auto-computed Parts Qty untouched. */
   partsQty?: number | null
+  /** SPM-entered manual order number override. */
+  orderNo?: string | null
 }): Promise<ApiResult<void>> {
   const { error } = await supabase.rpc('parts_request_spm_update', {
     p_id: input.id,
@@ -194,6 +197,7 @@ export async function spmUpdatePartsRequest(input: {
     p_parts_status: input.partsStatus,
     p_spm_remarks: input.spmRemarks ?? null,
     p_parts_qty: input.partsQty ?? null,
+    p_parts_order_number: input.orderNo ?? null,
   })
 
   if (error) return fail(error)

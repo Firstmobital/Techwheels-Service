@@ -281,13 +281,15 @@ export default function PartsSPMDashboardPage() {
   const openEdit = useCallback((row: PartsRequestRow) => {
     setEditingId(row.id)
     const { orderDate, orderNo, orderStatus, stock } = lookupOrderForPartNo(row.parts_number ?? '')
+    // Use saved manual order number if present, else fall back to auto-lookup
+    const savedOrderNo = (row as any).parts_order_number ?? ''
     setEditDraft({
       parts_number: row.parts_number ?? '',
       parts_order_date: row.parts_order_date ?? orderDate,
       parts_status: row.parts_status,
       spm_remarks: row.spm_remarks ?? '',
       parts_qty: stock != null ? String(stock) : (row.parts_qty != null ? String(row.parts_qty) : ''),
-      order_no: orderNo,
+      order_no: savedOrderNo || orderNo,
       order_status_display: orderStatus,
       vehicle_model: row.vehicle_model ?? '',
     })
@@ -326,6 +328,7 @@ export default function PartsSPMDashboardPage() {
       partsStatus: editDraft.parts_status,
       spmRemarks: editDraft.spm_remarks.trim() || null,
       partsQty: qtyTrimmed === '' ? undefined : Number(qtyTrimmed),
+      orderNo: editDraft.order_no.trim() || null,
     })
     setSaving(false)
     if (res.error) { setToast({ kind: 'error', text: `Save failed: ${res.error}` }); return }
@@ -488,7 +491,7 @@ export default function PartsSPMDashboardPage() {
                 {pageRows.map((row) => {
                   const isEditing = editingId === row.id
                   const { orderDate, orderNo, orderStatus, stock } = lookupOrderForPartNo(row.parts_number ?? '')
-                  const displayOrderNo = orderNo || (row as any).sap_order_number || ''
+                  const displayOrderNo = (row as any).parts_order_number || orderNo || (row as any).sap_order_number || ''
                   const displayOrderDate = row.parts_order_date ?? orderDate
                   const displayOrderStatus = orderStatus
                   const displayStock = stock ?? row.parts_qty
