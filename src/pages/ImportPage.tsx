@@ -61,6 +61,7 @@ import {
 } from '../lib/partsStockColumnMapper'
 import { PORTAL_BRANCHES } from '../lib/branches'
 import { PniGrnImportSection } from '../components/PniGrnImportSection'
+import { VehicleUpdationImportSection } from '../components/VehicleUpdationImportSection'
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
@@ -3326,6 +3327,8 @@ export default function ImportPage() {
 
         {/* ── Parts Daily Reports (PNI + GRN) ─────────────────────────────── */}
         <PniGrnImportSection />
+
+        <VehicleUpdationImportSection />
 
         {warrantyReportCards.length > 0 && (
           <section className="imp-group">
