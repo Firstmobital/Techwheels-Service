@@ -5,7 +5,7 @@
 // 
 // ENHANCEMENTS:
 // 1. Dealer filter (sold_dealer, last_service_dealer) in campaign creation
-// 2. Auto 30-day daily refresh (cron_daily_refresh action)
+// 2. Auto campaign refresh every 2h (cron_auto_refresh) + daily drip/leaderboard (cron_daily_refresh)
 // 3. Multi-attempt WhatsApp drip (3 steps) via Meta Cloud API
 // 4. Priority scoring (urgency, idv_value, loyalty, mixed)
 // 5. Telecaller gamification leaderboard
@@ -433,12 +433,15 @@ Deno.serve(async (req) => {
   const action = body.action as string;
   if (!action) return errorResponse("Missing 'action' parameter");
 
-  // ── Cron endpoint (no auth needed, uses secret) ──
-  if (action === "cron_daily_refresh") {
+  // ── Cron endpoints (no auth needed, uses secret) ──
+  if (action === "cron_auto_refresh" || action === "cron_daily_refresh") {
     if (body.cron_secret !== CRON_SECRET) {
       return errorResponse("Invalid cron secret", 401);
     }
     try {
+      if (action === "cron_auto_refresh") {
+        return await handleCronAutoRefresh();
+      }
       return await handleCronDailyRefresh();
     } catch (e) {
       console.error("Cron error:", e);
@@ -2022,11 +2025,15 @@ async function handleConquestCreate(supabase: SupabaseClient, body: Record<strin
   });
 }
 
-// ─── cron_daily_refresh: Auto-refresh all active campaigns ─────────────────
-async function handleCronDailyRefresh() {
-  const serviceKey = Deno.env.get("CRON_SERVICE_KEY") || Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || Deno.env.get("SERVICE_ROLE_KEY") || "";  const supabase = createClient(SUPABASE_URL, serviceKey);
+function cronServiceClient() {
+  const serviceKey = Deno.env.get("CRON_SERVICE_KEY") || Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || Deno.env.get("SERVICE_ROLE_KEY") || "";
+  return createClient(SUPABASE_URL, serviceKey);
+}
 
-  // Get all active campaigns with auto_refresh_enabled
+// ─── cron_auto_refresh: Refresh active campaigns every 2h; queue RC fetch if pending ──
+async function handleCronAutoRefresh() {
+  const supabase = cronServiceClient();
+
   const { data: campaigns, error } = await supabase
     .from("insurance_renewal_campaigns")
     .select("*")
@@ -2034,7 +2041,7 @@ async function handleCronDailyRefresh() {
     .eq("auto_refresh_enabled", true);
 
   if (error) {
-    console.error("Cron refresh error:", error);
+    console.error("Cron auto-refresh error:", error);
     return json({ success: false, error: error.message });
   }
 
@@ -2049,11 +2056,27 @@ async function handleCronDailyRefresh() {
         campaign_id: campaign.id,
       });
       const resp = await refreshResult.json();
+
+      let rcFetch: Record<string, unknown> | null = null;
+      try {
+        const rcResult = await handleRcFetchEnqueue(
+          supabase,
+          SUPABASE_URL,
+          "cron@auto-refresh",
+          { campaign_id: campaign.id },
+        );
+        rcFetch = await rcResult.json();
+      } catch (rcErr) {
+        console.error(`RC fetch enqueue failed for campaign ${campaign.id}:`, rcErr);
+        rcFetch = { error: String(rcErr) };
+      }
+
       results.push({
         campaign_id: campaign.id,
         campaign_name: campaign.campaign_name,
         added: resp.refreshed?.[0]?.added || 0,
         retired: resp.refreshed?.[0]?.retired_out_of_window || 0,
+        rc_fetch: rcFetch,
       });
     } catch (e) {
       console.error(`Refresh failed for campaign ${campaign.id}:`, e);
@@ -2064,13 +2087,17 @@ async function handleCronDailyRefresh() {
     }
   }
 
-  // Also send drip messages for no-answer leads that are due for retry
-  try { await sendPendingDripMessages(supabase); } catch (e) { console.error("Drip error:", e); }
+  return json({ success: true, refreshed: campaigns.length, results });
+}
 
-  // Snapshot leaderboard for today
+// ─── cron_daily_refresh: WhatsApp drip + leaderboard snapshot (once daily) ──
+async function handleCronDailyRefresh() {
+  const supabase = cronServiceClient();
+
+  try { await sendPendingDripMessages(supabase); } catch (e) { console.error("Drip error:", e); }
   try { await snapshotLeaderboard(supabase); } catch (e) { console.error("Leaderboard error:", e); }
 
-  return json({ success: true, refreshed: campaigns.length, results });
+  return json({ success: true, message: "Daily drip and leaderboard tasks completed." });
 }
 
 // ─── Send pending drip messages (called by cron) ──────────────────────────

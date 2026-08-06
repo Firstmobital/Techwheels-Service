@@ -2155,7 +2155,7 @@ function AdminDashboard({ campaigns, activeCampaign, onRefresh }: { campaigns: C
             </div>
           )}
           <p className="text-xs text-gray-500">
-            RC fetch runs in the background (cron every ~2 min). Only campaign leads with null or 365+ day old insurance that have not been fetched before are processed.
+            Active campaigns auto-refresh every 2 hours (same as “↻ Refresh Now”). If “new to fetch” is greater than 0 after refresh, RC fetch is queued automatically. Manual buttons still work anytime. RC fetch worker runs every ~2 min. Only leads with null or 365+ day old insurance not yet fetched are processed.
           </p>
 
           {showCreate && (
