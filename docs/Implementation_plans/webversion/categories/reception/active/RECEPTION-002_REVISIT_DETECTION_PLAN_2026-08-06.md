@@ -54,7 +54,7 @@ When a vehicle revisits Reception within 30 days of a prior floor-incharge servi
 | Prior window | Rolling 30 calendar days from `now()` |
 | Prior service types | RR, FFS, SFS, TFS, PS, Updation, E Breakdown, Campaign |
 | Prior quality gate | Prior row must have non-empty `jc_number` |
-| New entry service type | Does not affect detection |
+| **Current visit service type** | **Must** be one of the 8 floor-incharge types; empty/Accident/Rusting/PDI = not a revisit |
 | SA default | Prior `sa_employee_code` (editable at reception) |
 | Technician default | Prior `technician_assignments.technician_code` via prior JC (auto-assign on FI when eligible) |
 | Support roles | Out of scope for v1 |

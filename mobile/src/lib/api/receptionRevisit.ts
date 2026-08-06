@@ -64,14 +64,30 @@ function parseReceptionRevisitContext(raw: unknown): ReceptionRevisitContext {
 
 export async function getReceptionRevisitContext(
   regNumber: string,
+  serviceType: string | null | undefined,
   excludeEntryId?: number | null,
 ): Promise<ApiResult<ReceptionRevisitContext>> {
   const normalizedReg = regNumber.trim().toUpperCase()
-  if (!normalizedReg) return ok({ is_revisit: false })
+  const normalizedServiceType = String(serviceType ?? '').trim()
+  const floorTypes = [
+    'Running Repairs',
+    'First Free Service',
+    'Second Free Service',
+    'Third Free Service',
+    'Paid Service',
+    'Updation',
+    'E Breakdown',
+    'Campaign',
+  ]
+
+  if (!normalizedReg || !floorTypes.includes(normalizedServiceType)) {
+    return ok({ is_revisit: false })
+  }
 
   const { data, error } = await supabase.rpc('get_reception_revisit_context', {
     p_reg_number: normalizedReg,
     p_exclude_entry_id: excludeEntryId ?? null,
+    p_service_type: normalizedServiceType,
   })
 
   if (error) return fail(error)

@@ -8,6 +8,7 @@ import {
   createReceptionEntry,
   deleteReceptionEntry,
   getReceptionRevisitContext,
+  isFloorInchargeServiceType,
   listReceptionEntriesByDateRangePage,
   searchReceptionEntriesForGlobalSearchPage,
   listReceptionEmployees,
@@ -940,15 +941,19 @@ export default function ReceptionPage() {
     }
   }
 
-  async function checkRevisitForReg(regNumber: string, excludeEntryId?: number | null) {
+  async function checkRevisitForReg(
+    regNumber: string,
+    serviceType: string,
+    excludeEntryId?: number | null,
+  ) {
     const normalized = regNumber.trim().toUpperCase()
-    if (!normalized) {
+    if (!normalized || !isFloorInchargeServiceType(serviceType)) {
       setRevisitContext(null)
       return
     }
 
     setRevisitChecking(true)
-    const result = await getReceptionRevisitContext(normalized, excludeEntryId ?? null)
+    const result = await getReceptionRevisitContext(normalized, serviceType, excludeEntryId ?? null)
     setRevisitChecking(false)
 
     if (result.error || !result.data) {
@@ -973,13 +978,17 @@ export default function ReceptionPage() {
     }
   }
 
-  function scheduleRevisitCheck(regNumber: string, excludeEntryId?: number | null) {
+  function scheduleRevisitCheck(
+    regNumber: string,
+    serviceType: string,
+    excludeEntryId?: number | null,
+  ) {
     if (revisitDebounceRef.current) {
       clearTimeout(revisitDebounceRef.current)
     }
 
     revisitDebounceRef.current = setTimeout(() => {
-      void checkRevisitForReg(regNumber, excludeEntryId)
+      void checkRevisitForReg(regNumber, serviceType, excludeEntryId)
     }, 400)
   }
 
@@ -989,7 +998,12 @@ export default function ReceptionPage() {
       ...prev,
       reg_number: nextReg,
     }))
-    scheduleRevisitCheck(nextReg, editingId)
+    scheduleRevisitCheck(nextReg, form.service_type, editingId)
+  }
+
+  function handleServiceTypeChange(value: string) {
+    setForm((prev) => ({ ...prev, service_type: value }))
+    scheduleRevisitCheck(form.reg_number, value, editingId)
   }
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
@@ -1116,7 +1130,7 @@ export default function ReceptionPage() {
     })
     setNotice(null)
     setError(null)
-    void checkRevisitForReg(entry.reg_number, entry.id)
+    void checkRevisitForReg(entry.reg_number, entry.service_type ?? '', entry.id)
   }
 
   async function handleDelete(id: number) {
@@ -1282,7 +1296,7 @@ export default function ReceptionPage() {
                 <input
                   value={form.reg_number}
                   onChange={(event) => handleRegNumberChange(event.target.value)}
-                  onBlur={() => void checkRevisitForReg(form.reg_number, editingId)}
+                  onBlur={() => void checkRevisitForReg(form.reg_number, form.service_type, editingId)}
                   autoCapitalize="characters"
                   placeholder="RJ14AB1234"
                   className="inp inp--uc"
@@ -1357,7 +1371,7 @@ export default function ReceptionPage() {
               <span className="label">Service Type</span>
               <select
                 value={form.service_type}
-                onChange={(event) => setForm((prev) => ({ ...prev, service_type: event.target.value }))}
+                onChange={(event) => handleServiceTypeChange(event.target.value)}
                 className="sel"
                 style={{ borderColor: form.service_type === 'Accident' ? '#ef4444' : undefined }}
               >

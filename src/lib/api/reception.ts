@@ -110,6 +110,12 @@ export const FLOOR_INCHARGE_SERVICE_TYPES: string[] = [...FLOOR_INCHARGE_ALLOWED
 
 export { FLOOR_INCHARGE_ALLOWED_SERVICE_TYPES }
 
+export function isFloorInchargeServiceType(serviceType: string | null | undefined): boolean {
+  const normalized = String(serviceType ?? '').trim()
+  if (!normalized) return false
+  return (FLOOR_INCHARGE_ALLOWED_SERVICE_TYPES as readonly string[]).includes(normalized)
+}
+
 const RECEPTION_LIST_PAGE_SIZE = 200
 
 // "All" period and legacy list helpers use this cap — not a full-table scan.
@@ -928,14 +934,18 @@ function parseReceptionRevisitContext(raw: unknown): ReceptionRevisitContext {
 
 export async function getReceptionRevisitContext(
   regNumber: string,
+  serviceType: string | null | undefined,
   excludeEntryId?: number | null,
 ): Promise<ApiResult<ReceptionRevisitContext>> {
   const normalizedReg = regNumber.trim().toUpperCase()
-  if (!normalizedReg) return ok({ is_revisit: false })
+  if (!normalizedReg || !isFloorInchargeServiceType(serviceType)) {
+    return ok({ is_revisit: false })
+  }
 
   const { data, error } = await supabase.rpc('get_reception_revisit_context', {
     p_reg_number: normalizedReg,
     p_exclude_entry_id: excludeEntryId ?? null,
+    p_service_type: String(serviceType ?? '').trim(),
   })
 
   if (error) return fail(error)

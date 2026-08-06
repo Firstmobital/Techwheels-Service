@@ -25,6 +25,22 @@ const RECEPTION_SERVICE_TYPE_OPTIONS = [
   'PDI', 'Campaign', 'E Breakdown', 'Updation',
 ]
 
+const FLOOR_INCHARGE_SERVICE_TYPES = new Set([
+  'Running Repairs',
+  'First Free Service',
+  'Second Free Service',
+  'Third Free Service',
+  'Paid Service',
+  'Updation',
+  'E Breakdown',
+  'Campaign',
+])
+
+function isFloorInchargeServiceType(serviceType: string | null | undefined): boolean {
+  const normalized = String(serviceType ?? '').trim()
+  return normalized.length > 0 && FLOOR_INCHARGE_SERVICE_TYPES.has(normalized)
+}
+
 const SERVICE_TYPE_ABB: Record<string, string> = {
   'running repairs': 'RR', 'first free service': 'FFS', 'second free service': 'SFS',
   'third free service': 'TFS', 'paid service': 'PS', 'accident': 'ACC',
@@ -439,15 +455,19 @@ export default function ReceptionScreen() {
     if (!valid) setForm(p => ({ ...p, sa_employee_code: '' }))
   }, [form.sa_employee_code, filteredSAs, revisitContext?.is_revisit])
 
-  async function checkRevisitForReg(regNumber: string, excludeEntryId?: number | null) {
+  async function checkRevisitForReg(
+    regNumber: string,
+    serviceType: string,
+    excludeEntryId?: number | null,
+  ) {
     const normalized = regNumber.trim().toUpperCase()
-    if (!normalized) {
+    if (!normalized || !isFloorInchargeServiceType(serviceType)) {
       setRevisitContext(null)
       return
     }
 
     setRevisitChecking(true)
-    const result = await getReceptionRevisitContext(normalized, excludeEntryId ?? null)
+    const result = await getReceptionRevisitContext(normalized, serviceType, excludeEntryId ?? null)
     setRevisitChecking(false)
 
     if (result.error || !result.data) {
@@ -468,10 +488,14 @@ export default function ReceptionScreen() {
     }
   }
 
-  function scheduleRevisitCheck(regNumber: string, excludeEntryId?: number | null) {
+  function scheduleRevisitCheck(
+    regNumber: string,
+    serviceType: string,
+    excludeEntryId?: number | null,
+  ) {
     if (revisitDebounceRef.current) clearTimeout(revisitDebounceRef.current)
     revisitDebounceRef.current = setTimeout(() => {
-      void checkRevisitForReg(regNumber, excludeEntryId)
+      void checkRevisitForReg(regNumber, serviceType, excludeEntryId)
     }, 400)
   }
 
@@ -499,7 +523,7 @@ export default function ReceptionScreen() {
       source:           entry.source ?? '',
     })
     setEditingId(entry.id); setFormError(null); setShowModal(true)
-    void checkRevisitForReg(entry.reg_number ?? '', entry.id)
+    void checkRevisitForReg(entry.reg_number ?? '', entry.service_type ?? '', entry.id)
   }
 
   // ── Save — exact web validation + payload + bodyshop card logic ───────────
@@ -673,7 +697,10 @@ export default function ReceptionScreen() {
 
   function onPickerSelect(item: string) {
     if (showPicker === 'model') setForm(p => ({ ...p, model: item }))
-    else if (showPicker === 'service_type') setForm(p => ({ ...p, service_type: item }))
+    else if (showPicker === 'service_type') {
+      setForm(p => ({ ...p, service_type: item }))
+      scheduleRevisitCheck(form.reg_number, item, editingId)
+    }
     else if (showPicker === 'source') setForm(p => ({ ...p, source: item }))
     else if (showPicker === 'sa') setForm(p => ({ ...p, sa_employee_code: item }))
     setShowPicker(null); setPickerSearch('')
@@ -859,9 +886,9 @@ export default function ReceptionScreen() {
                   onChangeText={(t) => {
                     const nextReg = t.toUpperCase()
                     setForm(p => ({ ...p, reg_number: nextReg }))
-                    scheduleRevisitCheck(nextReg, editingId)
+                    scheduleRevisitCheck(nextReg, form.service_type, editingId)
                   }}
-                  onBlur={() => void checkRevisitForReg(form.reg_number, editingId)}
+                  onBlur={() => void checkRevisitForReg(form.reg_number, form.service_type, editingId)}
                 />
                 {revisitChecking && (
                   <Text style={{ fontSize: 12, color: '#64748b', marginTop: 4 }}>Checking revisit history...</Text>
