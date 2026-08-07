@@ -11,6 +11,7 @@ Apply **all three migrations in order** (one coordinated fix, shipped in slices 
 | 1 | `20260807120000_fix_sa_save_reception_entry_timeout.sql` | `service_advisor_save_reception_entry`, sync trigger SECURITY DEFINER |
 | 2 | `20260807130000_fix_reception_page_timeout.sql` | `list_reception_entries_page`, `create_reception_entry`, `update_reception_entry` |
 | 3 | `20260807140000_service_reception_rls_bypass_complete.sql` | `get_reception_entry_by_id`, `get_reception_entry_latest_by_reg`, `list_reception_entries_by_jc_numbers`, `service_advisor_mark_invoice_done`, `bulk_create_reception_entries`, `search_reception_reg_numbers`; create/update +portal |
+| 4 | `20260807141000_drop_reception_entry_rpc_duplicate_overloads.sql` | Drop pre-portal `create_reception_entry` / `update_reception_entry` overloads (07140000 leaves duplicates without this) |
 
 - Checks: `supabase/sql_checks/20260807140000_service_reception_rls_bypass_complete_checks.sql`
 - Frontend (web): `src/lib/api/reception.ts`, `src/pages/ReceptionPage.tsx`, `src/components/PartsRequirementSection.tsx`

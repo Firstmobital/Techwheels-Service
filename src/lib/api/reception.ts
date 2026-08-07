@@ -854,6 +854,7 @@ export async function createReceptionEntry(input: ReceptionEntryInput): Promise<
     p_km_reading: payload.km_reading,
     p_jc_number: payload.jc_number,
     p_branch: payload.branch,
+    p_portal: null,
   })
 
   if (error) return fail(error)
@@ -1001,6 +1002,7 @@ export async function updateReceptionEntry(id: number, input: ReceptionEntryInpu
     p_km_reading: payload.km_reading,
     p_jc_number: payload.jc_number,
     p_branch: payload.branch,
+    p_portal: null,
   })
 
   if (error) return fail(error)

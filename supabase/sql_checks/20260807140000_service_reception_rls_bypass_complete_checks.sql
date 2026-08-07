@@ -13,8 +13,8 @@ WHERE n.nspname = 'public'
   )
 ORDER BY p.proname;
 
--- Full P1-13 RPC family (all migrations)
-SELECT p.proname
+-- Full P1-13 RPC family (all migrations) — expect exactly one row per name
+SELECT p.proname, count(*) AS overload_count
 FROM pg_proc p
 JOIN pg_namespace n ON n.oid = p.pronamespace
 WHERE n.nspname = 'public'
@@ -27,6 +27,8 @@ WHERE n.nspname = 'public'
     'get_reception_entry_latest_by_reg',
     'list_reception_entries_by_jc_numbers',
     'service_advisor_mark_invoice_done',
-    'bulk_create_reception_entries'
+    'bulk_create_reception_entries',
+    'search_reception_reg_numbers'
   )
+GROUP BY p.proname
 ORDER BY p.proname;
