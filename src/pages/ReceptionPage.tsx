@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import * as XLSX from 'xlsx'
-import DateRangeFilter, { currentMonthRange, type DateRange, type DateRangePreset } from '../components/DateRangeFilter'
+import DateRangeFilter, { currentMonthRange, type DateRange } from '../components/DateRangeFilter'
 import { supabase } from '../lib/supabase'
 import { getModelNames } from '../lib/api/settings'
 import {
@@ -60,50 +60,6 @@ const SERVICE_TYPE_CARD_ORDER = [
   'rusting',
   'null',
 ]
-
-const PERIOD_PRESETS: DateRangePreset[] = ['this-month', 'last-month', 'this-week', 'last-7', 'last-30']
-
-function toISTDate(d: Date): string {
-  return d.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
-}
-
-function getRangeFromPreset(preset: DateRangePreset): DateRange {
-  const now = new Date()
-  const today = toISTDate(now)
-
-  if (preset === 'this-month') {
-    return currentMonthRange()
-  }
-
-  if (preset === 'last-month') {
-    const d = new Date(now.getFullYear(), now.getMonth() - 1, 1)
-    const y = d.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }).slice(0, 4)
-    const m = d.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }).slice(5, 7)
-    const lastDay = new Date(Number(y), Number(m), 0).getDate()
-    return { from: `${y}-${m}-01`, to: `${y}-${m}-${String(lastDay).padStart(2, '0')}` }
-  }
-
-  if (preset === 'this-week') {
-    const day = now.getDay()
-    const mon = new Date(now)
-    mon.setDate(now.getDate() - ((day + 6) % 7))
-    return { from: toISTDate(mon), to: today }
-  }
-
-  if (preset === 'last-7') {
-    const d = new Date(now)
-    d.setDate(now.getDate() - 6)
-    return { from: toISTDate(d), to: today }
-  }
-
-  if (preset === 'last-30') {
-    const d = new Date(now)
-    d.setDate(now.getDate() - 29)
-    return { from: toISTDate(d), to: today }
-  }
-
-  return currentMonthRange()
-}
 
 const DEFAULT_MODEL_OPTIONS = [
   'Nexon',
@@ -374,7 +330,6 @@ export default function ReceptionPage() {
 
   const [loading, setLoading] = useState(true)
   const [dateRange, setDateRange] = useState<DateRange>(currentMonthRange())
-  const [disabledPeriodPresets, setDisabledPeriodPresets] = useState<DateRangePreset[]>([])
   const [saving, setSaving] = useState(false)
   const [uploading, setUploading] = useState(false)
   const [deletingId, setDeletingId] = useState<number | null>(null)
@@ -708,30 +663,8 @@ export default function ReceptionPage() {
     setLoading(true)
     setError(null)
     setGlobalSearchEntries([])
-
-    const presetAvailability = await Promise.all(
-      PERIOD_PRESETS.map(async (preset) => {
-        const presetRange = getRangeFromPreset(preset)
-        const { data: probeRows, error: probeError } = await supabase
-          .from('service_reception_entries')
-          .select('id')
-          .gte('created_at', `${presetRange.from}T00:00:00+05:30`)
-          .lte('created_at', `${presetRange.to}T23:59:59+05:30`)
-          .limit(1)
-
-        if (probeError) {
-          return { preset, hasData: true }
-        }
-
-        return { preset, hasData: Array.isArray(probeRows) && probeRows.length > 0 }
-      }),
-    )
-
-    setDisabledPeriodPresets(
-      presetAvailability
-        .filter((item) => !item.hasData)
-        .map((item) => item.preset),
-    )
+    // Period preset probes removed: each fired a separate RLS scan on
+    // service_reception_entries and contributed to 57014 on page load.
 
     const [entriesRes, employeeRes, authRes] = await Promise.all([
       listReceptionEntriesByDateRangePage(dateRange, null),
@@ -1260,7 +1193,7 @@ export default function ReceptionPage() {
         </div>
         <div className="cft__sep" />
 
-        <DateRangeFilter range={dateRange} onChange={setDateRange} label="Period:" disabledPresets={disabledPeriodPresets} />
+        <DateRangeFilter range={dateRange} onChange={setDateRange} label="Period:" />
         <div className="cft__sep" />
 
         <span className="cft__label">Loc:</span>

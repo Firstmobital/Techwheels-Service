@@ -230,28 +230,6 @@ type ReceptionEntryPageQuery = {
   searchQuery?: string
 }
 
-function escapePostgrestFilterValue(value: string): string {
-  return value.replace(/\\/g, '\\\\').replace(/,/g, '\\,')
-}
-
-function buildReceptionSearchOrFilter(searchQuery: string): string | null {
-  const trimmed = searchQuery.trim()
-  if (!trimmed) return null
-
-  const pattern = `%${escapePostgrestFilterValue(trimmed)}%`
-  return [
-    `reg_number.ilike.${pattern}`,
-    `model.ilike.${pattern}`,
-    `jc_number.ilike.${pattern}`,
-    `owner_name.ilike.${pattern}`,
-    `owner_phone.ilike.${pattern}`,
-    `sa_name.ilike.${pattern}`,
-    `sa_display_name.ilike.${pattern}`,
-    `source.ilike.${pattern}`,
-    `created_by.ilike.${pattern}`,
-  ].join(',')
-}
-
 function toCreatedAtBounds(range: { from: string; to: string }): { from: string; to: string } {
   const from = String(range.from ?? '').trim()
   const to = String(range.to ?? '').trim()
@@ -266,47 +244,27 @@ async function fetchReceptionEntriesPage(
   queryOptions: ReceptionEntryPageQuery,
 ): Promise<{ data: ReceptionEntryPageResult | null; error: unknown | null }> {
   const pageSize = queryOptions.pageSize ?? RECEPTION_LIST_PAGE_SIZE
-  const selectColumns = queryOptions.selectColumns ?? RECEPTION_ENTRY_SELECT_COLUMNS
-  const searchFilter = buildReceptionSearchOrFilter(queryOptions.searchQuery ?? '')
+  const searchQuery = (queryOptions.searchQuery ?? '').trim() || null
 
-  let query = supabase
-    .from('service_reception_entries')
-    .select(selectColumns)
-    .order('created_at', { ascending: false })
-    .order('id', { ascending: false })
-    .limit(pageSize)
+  const { data, error } = await supabase.rpc('list_reception_entries_page', {
+    p_created_at_from: queryOptions.createdAtFrom ?? null,
+    p_created_at_to: queryOptions.createdAtTo ?? null,
+    p_page_size: pageSize,
+    p_cursor_created_at: queryOptions.cursor?.createdAt ?? null,
+    p_cursor_id: queryOptions.cursor?.id ?? null,
+    p_service_types:
+      queryOptions.serviceTypes && queryOptions.serviceTypes.length > 0
+        ? queryOptions.serviceTypes
+        : null,
+    p_search_query: searchQuery,
+    p_require_non_empty_jc: queryOptions.requireNonEmptyJcNumber ?? false,
+  })
 
-  if (queryOptions.serviceTypes && queryOptions.serviceTypes.length > 0) {
-    query = query.in('service_type', queryOptions.serviceTypes)
-  }
-
-  if (queryOptions.requireNonEmptyJcNumber) {
-    query = query.not('jc_number', 'is', null).neq('jc_number', '')
-  }
-
-  if (queryOptions.createdAtFrom) {
-    query = query.gte('created_at', queryOptions.createdAtFrom)
-  }
-
-  if (queryOptions.createdAtTo) {
-    query = query.lte('created_at', queryOptions.createdAtTo)
-  }
-
-  if (searchFilter) {
-    query = query.or(searchFilter)
-  }
-
-  if (queryOptions.cursor) {
-    const { createdAt, id } = queryOptions.cursor
-    query = query.or(`created_at.lt.${createdAt},and(created_at.eq.${createdAt},id.lt.${id})`)
-  }
-
-  const { data, error } = await query
   if (error) {
     return { data: null, error }
   }
 
-  let rows = (Array.isArray(data) ? data : []) as unknown as ReceptionEntryRow[]
+  let rows = (Array.isArray(data) ? data : data ? [data] : []) as ReceptionEntryRow[]
   if (queryOptions.requireNonEmptyJcNumber) {
     rows = rows.filter((row) => hasNonEmptyJcNumber(row.jc_number))
   }
@@ -886,20 +844,26 @@ export async function createReceptionEntry(input: ReceptionEntryInput): Promise<
     return fail(employeeNameRes.error ?? `Employee code '${payload.sa_employee_code}' not found`)
   }
 
-  const { data, error } = await supabase
-    .from('service_reception_entries')
-    .insert({
-      ...payload,
-      sa_name: employeeNameRes.data,
-      sa_display_name: employeeNameRes.data,
-    })
-    .select('*')
-    .single()
+  const { data, error } = await supabase.rpc('create_reception_entry', {
+    p_reg_number: payload.reg_number,
+    p_model: payload.model,
+    p_service_type: payload.service_type,
+    p_sa_employee_code: payload.sa_employee_code,
+    p_owner_name: payload.owner_name,
+    p_owner_phone: payload.owner_phone,
+    p_source: payload.source,
+    p_km_reading: payload.km_reading,
+    p_jc_number: payload.jc_number,
+    p_branch: payload.branch,
+  })
 
   if (error) return fail(error)
-  
-  const enriched = await enrichEntriesWithEmployeeBranch(data ? [data as ReceptionEntryRow] : [])
-  return ok(enriched[0] ?? (data as ReceptionEntryRow))
+
+  const row = (Array.isArray(data) ? data[0] : data) as ReceptionEntryRow | undefined
+  if (!row) return fail('Create failed: no row returned')
+
+  const enriched = await enrichEntriesWithEmployeeBranch([row])
+  return ok(enriched[0] ?? row)
 }
 
 function parseReceptionRevisitContext(raw: unknown): ReceptionRevisitContext {
@@ -1026,21 +990,27 @@ export async function updateReceptionEntry(id: number, input: ReceptionEntryInpu
     return fail(employeeNameRes.error ?? `Employee code '${payload.sa_employee_code}' not found`)
   }
 
-  const { data, error } = await supabase
-    .from('service_reception_entries')
-    .update({
-      ...payload,
-      sa_name: employeeNameRes.data,
-      sa_display_name: employeeNameRes.data,
-    })
-    .eq('id', id)
-    .select('*')
-    .single()
+  const { data, error } = await supabase.rpc('update_reception_entry', {
+    p_reception_entry_id: id,
+    p_reg_number: payload.reg_number,
+    p_model: payload.model,
+    p_service_type: payload.service_type,
+    p_sa_employee_code: payload.sa_employee_code,
+    p_owner_name: payload.owner_name,
+    p_owner_phone: payload.owner_phone,
+    p_source: payload.source,
+    p_km_reading: payload.km_reading,
+    p_jc_number: payload.jc_number,
+    p_branch: payload.branch,
+  })
 
   if (error) return fail(error)
-  
-  const enriched = await enrichEntriesWithEmployeeBranch(data ? [data as ReceptionEntryRow] : [])
-  return ok(enriched[0] ?? (data as ReceptionEntryRow))
+
+  const row = (Array.isArray(data) ? data[0] : data) as ReceptionEntryRow | undefined
+  if (!row) return fail('Update failed: no row returned')
+
+  const enriched = await enrichEntriesWithEmployeeBranch([row])
+  return ok(enriched[0] ?? row)
 }
 
 export async function deleteReceptionEntry(id: number): Promise<ApiResult<null>> {
