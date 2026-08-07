@@ -2,32 +2,21 @@
 
 ## 2026-08-07
 
-### P1-13 — Service Advisor save statement timeout (57014)
+### P1-13 — service_reception_entries RLS bypass (complete family)
 
-- Migration: `20260807120000_fix_sa_save_reception_entry_timeout.sql`
-- Check: `supabase/sql_checks/20260807120000_fix_sa_save_reception_entry_timeout_checks.sql`
-- Frontend: `src/lib/api/reception.ts` — `updateServiceAdvisorEntry()` calls `service_advisor_save_reception_entry` RPC
-- Status: **Migration applied and verified** (2026-08-07); frontend deploy pending
-- Post-apply checks (all pass):
-  - `service_advisor_save_reception_entry` — SECURITY DEFINER ✓
-  - `sync_reception_jc_to_legacy_technician_assignments` — SECURITY DEFINER ✓
-  - `trg_sync_reception_jc_to_technician_assignments` — wired on `jc_number` ✓
-  - `authenticated` EXECUTE grant ✓
-- Notes:
-  - Root cause: direct PostgREST UPDATE on `service_reception_entries` + `sync_reception_jc_to_legacy_technician_assignments` running under SA RLS on `technician_assignments`
-  - Fix mirrors `bodyshop_save_reception_jc_km` pattern (SECURITY DEFINER RPC + trigger hardening)
-  - Correlated with audit snapshot 14.48: 170× `57014`, queryid `2624296883471019521`, PATCH 500 on SA save
+Apply **all three migrations in order** (one coordinated fix, shipped in slices because 07120000 was already applied first):
 
-### P1-13 — Reception page statement timeout (57014)
+| Order | Migration | RPCs / changes |
+|------|-----------|----------------|
+| 1 | `20260807120000_fix_sa_save_reception_entry_timeout.sql` | `service_advisor_save_reception_entry`, sync trigger SECURITY DEFINER |
+| 2 | `20260807130000_fix_reception_page_timeout.sql` | `list_reception_entries_page`, `create_reception_entry`, `update_reception_entry` |
+| 3 | `20260807140000_service_reception_rls_bypass_complete.sql` | `get_reception_entry_by_id`, `get_reception_entry_latest_by_reg`, `list_reception_entries_by_jc_numbers`, `service_advisor_mark_invoice_done`, `bulk_create_reception_entries`, `search_reception_reg_numbers`; create/update +portal |
 
-- Migration: `20260807130000_fix_reception_page_timeout.sql`
-- Check: `supabase/sql_checks/20260807130000_fix_reception_page_timeout_checks.sql`
-- Frontend: `src/lib/api/reception.ts` (list/create/update RPCs), `src/pages/ReceptionPage.tsx` (removed period preset probes)
-- Status: **Code complete — deploy pending**
-- Notes:
-  - Separate from SA save fix; Reception uses SELECT list + INSERT/UPDATE, all hitting expensive RLS
-  - Audit queryid `852176900607336119` mean 1552ms on reception list SELECT
-  - Page load previously fired 5 extra RLS probes before main list query
+- Checks: `supabase/sql_checks/20260807140000_service_reception_rls_bypass_complete_checks.sql`
+- Frontend (web): `src/lib/api/reception.ts`, `src/pages/ReceptionPage.tsx`, `src/components/PartsRequirementSection.tsx`
+- Frontend (mobile): `mobile/src/app/(tabs)/reception.tsx`
+- Status: **Code complete — deploy all 3 migrations + frontend**
+- Notes: Root cause is systemic — every direct PostgREST path on `service_reception_entries` hits expensive RLS. Not a user/account issue. Remaining direct callers (BodyshopRepairPage, DashboardPage, edge function) are lower-traffic or already use dedicated RPCs where hot.
 
 ## 2026-07-21
 

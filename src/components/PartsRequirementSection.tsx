@@ -255,15 +255,12 @@ export default function PartsRequirementSection({ isAdmin = false }: Props) {
     }
     setRegFetchStatus('loading')
     try {
-      const { data, error: err } = await supabase
-        .from('service_reception_entries')
-        .select('reg_number, jc_number, owner_name, owner_phone, model')
-        .ilike('reg_number', regNo.trim())
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .single()
+      const { data, error: err } = await supabase.rpc('get_reception_entry_latest_by_reg', {
+        p_reg_number: regNo.trim(),
+      })
 
-      if (err || !data) {
+      const row = Array.isArray(data) ? data[0] : data
+      if (err || !row) {
         setRegFetchStatus('notfound')
         return
       }
@@ -271,20 +268,20 @@ export default function PartsRequirementSection({ isAdmin = false }: Props) {
       setDraftHeader((prev) => {
         const filled = new Set<string>()
         const next = { ...prev }
-        if (!prev.job_card_number && data.jc_number) {
-          next.job_card_number = data.jc_number
+        if (!prev.job_card_number && row.jc_number) {
+          next.job_card_number = row.jc_number
           filled.add('job_card_number')
         }
-        if (!prev.customer_name && data.owner_name) {
-          next.customer_name = data.owner_name
+        if (!prev.customer_name && row.owner_name) {
+          next.customer_name = row.owner_name
           filled.add('customer_name')
         }
-        if (!prev.customer_mobile && data.owner_phone) {
-          next.customer_mobile = data.owner_phone
+        if (!prev.customer_mobile && row.owner_phone) {
+          next.customer_mobile = row.owner_phone
           filled.add('customer_mobile')
         }
-        if (!prev.vehicle_model && data.model) {
-          next.vehicle_model = data.model
+        if (!prev.vehicle_model && row.model) {
+          next.vehicle_model = row.model
           filled.add('vehicle_model')
         }
         setAutoFilledFields(filled)
@@ -300,14 +297,14 @@ export default function PartsRequirementSection({ isAdmin = false }: Props) {
   const fetchRegSuggestions = useCallback(async (partial: string) => {
     if (!partial || partial.length < 3) { setRegSuggestions([]); return }
     try {
-      const { data } = await supabase
-        .from('service_reception_entries')
-        .select('reg_number')
-        .ilike('reg_number', `${partial}%`)
-        .order('created_at', { ascending: false })
-        .limit(8)
+      const { data } = await supabase.rpc('search_reception_reg_numbers', {
+        p_prefix: partial.trim(),
+        p_limit: 8,
+      })
       if (data) {
-        const unique = [...new Set(data.map((r) => r.reg_number as string))]
+        const unique = (Array.isArray(data) ? data : [data]).map(
+          (r: { reg_number?: string }) => String(r.reg_number ?? ''),
+        ).filter(Boolean)
         setRegSuggestions(unique)
       }
     } catch { setRegSuggestions([]) }

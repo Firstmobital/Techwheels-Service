@@ -239,23 +239,22 @@ async function fetchAllEntries(): Promise<ReceptionEntry[]> {
   let cursorCreatedAt: string | null = null
   let cursorId: number | null = null
   const lookbackFrom = getMobileLookbackFrom()
+  const lookbackTo = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()
 
   while (true) {
-    let q = supabase
-      .from('service_reception_entries')
-      .select(ENTRY_SELECT)
-      .gte('created_at', lookbackFrom)
-      .order('created_at', { ascending: false })
-      .order('id', { ascending: false })
-      .limit(PAGE)
+    const { data, error } = await supabase.rpc('list_reception_entries_page', {
+      p_created_at_from: lookbackFrom,
+      p_created_at_to: lookbackTo,
+      p_page_size: PAGE,
+      p_cursor_created_at: cursorCreatedAt,
+      p_cursor_id: cursorId,
+      p_service_types: null,
+      p_search_query: null,
+      p_require_non_empty_jc: false,
+    })
 
-    if (cursorCreatedAt && cursorId !== null) {
-      q = q.or(`created_at.lt.${cursorCreatedAt},and(created_at.eq.${cursorCreatedAt},id.lt.${cursorId})`)
-    }
-
-    const { data, error } = await q
     if (error) { console.warn('fetchAllEntries error:', error.message); break }
-    const batch = (data ?? []) as ReceptionEntry[]
+    const batch = (Array.isArray(data) ? data : data ? [data] : []) as ReceptionEntry[]
     rows.push(...batch)
     if (batch.length < PAGE) break
     const last = batch[batch.length - 1]
@@ -608,21 +607,35 @@ export default function ReceptionScreen() {
     let resultError: string | null = null
 
     if (editingId === null) {
-      const { data, error } = await supabase
-        .from('service_reception_entries')
-        .insert({ ...payload, sa_name: saName, sa_display_name: saName })
-        .select(ENTRY_SELECT)
-        .single()
-      resultData = data as ReceptionEntry | null
+      const { data, error } = await supabase.rpc('create_reception_entry', {
+        p_reg_number: payload.reg_number,
+        p_model: payload.model,
+        p_service_type: payload.service_type,
+        p_sa_employee_code: payload.sa_employee_code,
+        p_owner_name: payload.owner_name,
+        p_owner_phone: payload.owner_phone,
+        p_source: payload.source,
+        p_km_reading: payload.km_reading,
+        p_branch: payload.branch,
+        p_portal: payload.portal,
+      })
+      resultData = (Array.isArray(data) ? data[0] : data) as ReceptionEntry | null
       resultError = error?.message ?? null
     } else {
-      const { data, error } = await supabase
-        .from('service_reception_entries')
-        .update({ ...payload, sa_name: saName, sa_display_name: saName })
-        .eq('id', editingId)
-        .select(ENTRY_SELECT)
-        .single()
-      resultData = data as ReceptionEntry | null
+      const { data, error } = await supabase.rpc('update_reception_entry', {
+        p_reception_entry_id: editingId,
+        p_reg_number: payload.reg_number,
+        p_model: payload.model,
+        p_service_type: payload.service_type,
+        p_sa_employee_code: payload.sa_employee_code,
+        p_owner_name: payload.owner_name,
+        p_owner_phone: payload.owner_phone,
+        p_source: payload.source,
+        p_km_reading: payload.km_reading,
+        p_branch: payload.branch,
+        p_portal: payload.portal,
+      })
+      resultData = (Array.isArray(data) ? data[0] : data) as ReceptionEntry | null
       resultError = error?.message ?? null
     }
 

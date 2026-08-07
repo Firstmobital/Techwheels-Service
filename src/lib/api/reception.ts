@@ -717,14 +717,13 @@ export async function listReceptionEntriesByJobCardNumbers(
 
   for (let i = 0; i < lookupKeys.length; i += RECEPTION_JC_LOOKUP_BATCH_SIZE) {
     const batch = lookupKeys.slice(i, i + RECEPTION_JC_LOOKUP_BATCH_SIZE)
-    const { data, error } = await supabase
-      .from('service_reception_entries')
-      .select(RECEPTION_ENTRY_SELECT_COLUMNS)
-      .in('jc_number', batch)
+    const { data, error } = await supabase.rpc('list_reception_entries_by_jc_numbers', {
+      p_jc_numbers: batch,
+    })
 
     if (error) return fail(error)
 
-    const batchRows = (Array.isArray(data) ? data : []) as unknown as ReceptionEntryRow[]
+    const batchRows = (Array.isArray(data) ? data : data ? [data] : []) as ReceptionEntryRow[]
     batchRows.forEach((row) => {
       const key = normalizeReceptionJcKey(row.jc_number)
       if (!key) return
@@ -1081,13 +1080,12 @@ export async function bulkCreateReceptionEntries(rows: ReceptionEntryInput[]): P
     return fail('No valid employee codes found in import file')
   }
 
-  const { data, error } = await supabase
-    .from('service_reception_entries')
-    .insert(enrichedPayload)
-    .select('id')
+  const { data, error } = await supabase.rpc('bulk_create_reception_entries', {
+    p_rows: enrichedPayload,
+  })
 
   if (error) return fail(error)
-  return ok((data ?? []).length)
+  return ok(Number(data ?? 0))
 }
 
 export async function listReceptionEmployees(): Promise<ApiResult<ReceptionEmployeeOption[]>> {
@@ -1117,6 +1115,20 @@ export const listReceptionSaNames = async (): Promise<ApiResult<string[]>> => {
   const result = await listReceptionEmployees()
   if (result.error || !result.data) return fail(result.error ?? 'Failed to list reception employees')
   return ok(result.data.map((row) => row.employee_name))
+}
+
+export async function getReceptionEntryById(id: number): Promise<ApiResult<ReceptionEntryRow>> {
+  const { data, error } = await supabase.rpc('get_reception_entry_by_id', {
+    p_reception_entry_id: id,
+  })
+
+  if (error) return fail(error)
+
+  const row = (Array.isArray(data) ? data[0] : data) as ReceptionEntryRow | undefined
+  if (!row) return fail('Reception entry not found')
+
+  const enriched = await enrichEntriesWithEmployeeBranch([row])
+  return ok(enriched[0] ?? row)
 }
 
 export async function updateServiceAdvisorEntry(
@@ -1194,16 +1206,9 @@ export async function uploadServiceAdvisorEstimate(
     return fail(drivePayload?.error || `Universal drive upload failed (${driveRes.status})`)
   }
 
-  const { data, error } = await supabase
-    .from('service_reception_entries')
-    .select('*')
-    .eq('id', id)
-    .single()
-
-  if (error) return fail(error)
-  
-  const enriched = await enrichEntriesWithEmployeeBranch(data ? [data as ReceptionEntryRow] : [])
-  return ok(enriched[0] ?? (data as ReceptionEntryRow))
+  const refetch = await getReceptionEntryById(id)
+  if (refetch.error || !refetch.data) return fail(refetch.error ?? 'Failed to reload entry after estimate upload')
+  return ok(refetch.data)
 }
 
 export async function uploadServiceAdvisorInvoice(
@@ -1249,44 +1254,28 @@ export async function uploadServiceAdvisorInvoice(
     return fail(drivePayload?.error || `Universal drive upload failed (${driveRes.status})`)
   }
 
-  const { data, error } = await supabase
-    .from('service_reception_entries')
-    .select('*')
-    .eq('id', id)
-    .single()
-
-  if (error) return fail(error)
-  
-  const enriched = await enrichEntriesWithEmployeeBranch(data ? [data as ReceptionEntryRow] : [])
-  return ok(enriched[0] ?? (data as ReceptionEntryRow))
+  const refetch = await getReceptionEntryById(id)
+  if (refetch.error || !refetch.data) return fail(refetch.error ?? 'Failed to reload entry after invoice upload')
+  return ok(refetch.data)
 }
 
 export async function markServiceAdvisorInvoiceDone(
   id: number,
 ): Promise<ApiResult<ReceptionEntryRow>> {
   try {
-    const sessionRes = await supabase.auth.getSession()
-    const userEmail = sessionRes.data.session?.user?.email
-
-    if (!userEmail) return fail('No active session')
-
-    const { data, error } = await supabase
-      .from('service_reception_entries')
-      .update({
-        invoice_done_at: new Date().toISOString(),
-        invoice_done_by: userEmail,
-      })
-      .eq('id', id)
-      .select('*')
+    const { data, error } = await supabase.rpc('service_advisor_mark_invoice_done', {
+      p_reception_entry_id: id,
+    })
 
     if (error) return fail(error)
-    if (!data || data.length === 0) {
+
+    const row = (Array.isArray(data) ? data[0] : data) as ReceptionEntryRow | undefined
+    if (!row) {
       return fail('Unable to mark invoice as done. Please refresh and retry.')
     }
 
-    const updatedRow = data[0] as ReceptionEntryRow
-    const enriched = await enrichEntriesWithEmployeeBranch([updatedRow])
-    return ok(enriched[0] ?? updatedRow)
+    const enriched = await enrichEntriesWithEmployeeBranch([row])
+    return ok(enriched[0] ?? row)
   } catch (error) {
     return fail(error)
   }
