@@ -1,0 +1,407 @@
+{
+  "status": "ok",
+  "endpoint": "/v1/projects/jmdndcphkmaljhwgzqxq/analytics/endpoints/logs?sql=select+timestamp%2C+event_message+from+logs+where+source+%3D+%27edge_logs%27+order+by+timestamp+desc+limit+100&iso_timestamp_start=2026-08-06T06%3A57%3A56.089Z&iso_timestamp_end=2026-08-07T06%3A57%3A56.089Z",
+  "count": 100,
+  "records": [
+    {
+      "event_message": "POST | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/rpc/get_reception_updation_context | Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36",
+      "timestamp": "2026-08-07T06:57:41.392000"
+    },
+    {
+      "event_message": "POST | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/rpc/get_unread_complaint_notification_count | Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36",
+      "timestamp": "2026-08-07T06:57:38.741000"
+    },
+    {
+      "event_message": "POST | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/rpc/get_reception_updation_context | Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36",
+      "timestamp": "2026-08-07T06:57:37.736000"
+    },
+    {
+      "event_message": "POST | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/rpc/get_reception_updation_context | Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36",
+      "timestamp": "2026-08-07T06:57:37.312000"
+    },
+    {
+      "event_message": "POST | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/rpc/get_unread_complaint_notification_count | Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36",
+      "timestamp": "2026-08-07T06:57:35.255000"
+    },
+    {
+      "event_message": "POST | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/rpc/get_unread_complaint_notification_count | Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36",
+      "timestamp": "2026-08-07T06:57:32.427000"
+    },
+    {
+      "event_message": "GET | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/users?select=role&id=eq.2e8835b8-a9f7-4c81-9f9e-e75eeb8699dd | Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36",
+      "timestamp": "2026-08-07T06:57:30.376000"
+    },
+    {
+      "event_message": "GET | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/employee_master?select=employee_code%2Cemployee_name%2Crole%2Cdepartment%2Cfuel_type%2Clocation&order=employee_name.asc | Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36",
+      "timestamp": "2026-08-07T06:57:29.515000"
+    },
+    {
+      "event_message": "GET | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/service_reception_entries?select=id%2Cdealer_code%2Creg_number%2Cmodel%2Cservice_type%2Csa_name%2Csa_employee_code%2Csa_display_name%2Cjc_number%2Cowner_name%2Cowner_phone%2Cbranch%2Clocation%2Cportal%2Cbranch_label%2Ckm_reading%2Csource%2Cremark%2Cestimate_storage_path%2Cestimate_file_name%2Cestimate_content_type%2Cestimate_uploaded_at%2Cestimate_uploaded_by%2Cestimate_drive_url%2Cestimate_drive_file_id%2Cinvoice_storage_path%2Cinvoice_file_name%2Cinvoice_content_type%2Cinvoice_uploaded_at%2Cinvoice_uploaded_by%2Cinvoice_drive_url%2Cinvoice_drive_file_id%2Cinvoice_done_at%2Cinvoice_done_by%2Cis_revisit%2Cprior_reception_entry_id%2Csuggested_technician_code%2Csuggested_technician_name%2Chas_updation_available%2Cupdation_code%2Cupdation_name%2Ccreated_by%2Ccreated_at%2Cupdated_at&order=created_at.desc%2Cid.desc&limit=200&created_at=gte.2026-08-01T00%3A00%3A00%2B05%3A30&created_at=lte.2026-08-31T23%3A59%3A59%2B05%3A30 | Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36",
+      "timestamp": "2026-08-07T06:57:29.465000"
+    },
+    {
+      "event_message": "POST | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/rpc/get_unread_complaint_notification_count | Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+      "timestamp": "2026-08-07T06:57:27.951000"
+    },
+    {
+      "event_message": "GET | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/user_employee_links?select=dealer_code%2Cis_primary%2Cupdated_at&user_id=eq.2e8835b8-a9f7-4c81-9f9e-e75eeb8699dd&is_active=eq.true&order=is_primary.desc%2Cupdated_at.desc | Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36",
+      "timestamp": "2026-08-07T06:57:27.623000"
+    },
+    {
+      "event_message": "OPTIONS | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/user_employee_links?select=dealer_code%2Cis_primary%2Cupdated_at&user_id=eq.2e8835b8-a9f7-4c81-9f9e-e75eeb8699dd&is_active=eq.true&order=is_primary.desc%2Cupdated_at.desc | Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36",
+      "timestamp": "2026-08-07T06:57:27.605000"
+    },
+    {
+      "event_message": "POST | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/rpc/get_unread_complaint_notification_count | Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36",
+      "timestamp": "2026-08-07T06:57:27.583000"
+    },
+    {
+      "event_message": "GET | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/users?select=role%2Cis_active&id=eq.2e8835b8-a9f7-4c81-9f9e-e75eeb8699dd | Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36",
+      "timestamp": "2026-08-07T06:57:27.314000"
+    },
+    {
+      "event_message": "GET | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/users?select=role&id=eq.2e8835b8-a9f7-4c81-9f9e-e75eeb8699dd | Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36",
+      "timestamp": "2026-08-07T06:57:27.296000"
+    },
+    {
+      "event_message": "OPTIONS | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/users?select=role%2Cis_active&id=eq.2e8835b8-a9f7-4c81-9f9e-e75eeb8699dd | Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36",
+      "timestamp": "2026-08-07T06:57:27.295000"
+    },
+    {
+      "event_message": "POST | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/rpc/get_all_my_permissions | Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36",
+      "timestamp": "2026-08-07T06:57:27.294000"
+    },
+    {
+      "event_message": "POST | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/rpc/get_unread_complaint_notification_count | Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36",
+      "timestamp": "2026-08-07T06:57:27.281000"
+    },
+    {
+      "event_message": "OPTIONS | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/users?select=role&id=eq.2e8835b8-a9f7-4c81-9f9e-e75eeb8699dd | Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36",
+      "timestamp": "2026-08-07T06:57:27.279000"
+    },
+    {
+      "event_message": "POST | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/rpc/get_unread_complaint_notification_count | Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36",
+      "timestamp": "2026-08-07T06:57:27.092000"
+    },
+    {
+      "event_message": "POST | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/auth/v1/token?grant_type=password | Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36",
+      "timestamp": "2026-08-07T06:57:26.868000"
+    },
+    {
+      "event_message": "POST | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/rpc/get_unread_complaint_notification_count | Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36",
+      "timestamp": "2026-08-07T06:57:24.271000"
+    },
+    {
+      "event_message": "GET | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/insurance_renewal_assignments?select=status%2Cquoted_premium&assigned_to=eq.768cba2d-8a70-4424-9678-6f98e471b9fa&updated_at=gte.2026-08-07T00%3A00%3A00Z | Deno/2.1.4 (variant; SupabaseEdgeRuntime/1.74.2)",
+      "timestamp": "2026-08-07T06:57:23.606000"
+    },
+    {
+      "event_message": "GET | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/insurance_renewal_assignments?select=*%2Call_service_data%21inner%28*%29%2Cinsurance_renewal_campaigns%21inner%28campaign_name%2Cstatus%29&assigned_to=in.%28768cba2d-8a70-4424-9678-6f98e471b9fa%2Csarichoudhary14%40gmail.com%29&status=in.%28in_progress%2Ccallback_later%2Cno_answer%2Cquote_needed%2Cpolicy_requested%2Cquote_sent%29 | Deno/2.1.4 (variant; SupabaseEdgeRuntime/1.74.2)",
+      "timestamp": "2026-08-07T06:57:23.602000"
+    },
+    {
+      "event_message": "GET | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/users?select=role%2Cfull_name&id=eq.768cba2d-8a70-4424-9678-6f98e471b9fa | Deno/2.1.4 (variant; SupabaseEdgeRuntime/1.74.2)",
+      "timestamp": "2026-08-07T06:57:23.580000"
+    },
+    {
+      "event_message": "GET | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/users?select=role%2Cfull_name&id=eq.768cba2d-8a70-4424-9678-6f98e471b9fa | Deno/2.1.4 (variant; SupabaseEdgeRuntime/1.74.2)",
+      "timestamp": "2026-08-07T06:57:23.574000"
+    },
+    {
+      "event_message": "GET | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/auth/v1/user | Deno/2.1.4 (variant; SupabaseEdgeRuntime/1.74.2)",
+      "timestamp": "2026-08-07T06:57:23.397000"
+    },
+    {
+      "event_message": "GET | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/auth/v1/user | Deno/2.1.4 (variant; SupabaseEdgeRuntime/1.74.2)",
+      "timestamp": "2026-08-07T06:57:23.396000"
+    },
+    {
+      "event_message": "GET | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/insurance_renewal_campaigns?select=*&order=created_at.desc | Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36",
+      "timestamp": "2026-08-07T06:57:23.226000"
+    },
+    {
+      "event_message": "GET | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/auth/v1/user | Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36",
+      "timestamp": "2026-08-07T06:57:23.130000"
+    },
+    {
+      "event_message": "GET | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/auth/v1/user | Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36",
+      "timestamp": "2026-08-07T06:57:23.087000"
+    },
+    {
+      "event_message": "PATCH | 204 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/insurance_renewal_campaigns?id=eq.1 | Deno/2.1.4 (variant; SupabaseEdgeRuntime/1.74.2)",
+      "timestamp": "2026-08-07T06:57:22.991000"
+    },
+    {
+      "event_message": "GET | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/insurance_renewal_assignments?select=status&campaign_id=eq.1 | Deno/2.1.4 (variant; SupabaseEdgeRuntime/1.74.2)",
+      "timestamp": "2026-08-07T06:57:22.961000"
+    },
+    {
+      "event_message": "PATCH | 204 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/insurance_renewal_leaderboard?id=eq.53 | Deno/2.1.4 (variant; SupabaseEdgeRuntime/1.74.2)",
+      "timestamp": "2026-08-07T06:57:22.944000"
+    },
+    {
+      "event_message": "GET | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/insurance_renewal_leaderboard?select=*&campaign_id=eq.1&telecaller_id=eq.768cba2d-8a70-4424-9678-6f98e471b9fa&snapshot_date=eq.2026-08-07 | Deno/2.1.4 (variant; SupabaseEdgeRuntime/1.74.2)",
+      "timestamp": "2026-08-07T06:57:22.923000"
+    },
+    {
+      "event_message": "PATCH | 204 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/insurance_renewal_assignments?id=eq.4100 | Deno/2.1.4 (variant; SupabaseEdgeRuntime/1.74.2)",
+      "timestamp": "2026-08-07T06:57:22.905000"
+    },
+    {
+      "event_message": "GET | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/insurance_renewal_assignments?select=call_count&id=eq.4100 | Deno/2.1.4 (variant; SupabaseEdgeRuntime/1.74.2)",
+      "timestamp": "2026-08-07T06:57:22.888000"
+    },
+    {
+      "event_message": "GET | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/users?select=role%2Cfull_name&id=eq.768cba2d-8a70-4424-9678-6f98e471b9fa | Deno/2.1.4 (variant; SupabaseEdgeRuntime/1.74.2)",
+      "timestamp": "2026-08-07T06:57:22.868000"
+    },
+    {
+      "event_message": "GET | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/auth/v1/user | Deno/2.1.4 (variant; SupabaseEdgeRuntime/1.74.2)",
+      "timestamp": "2026-08-07T06:57:22.601000"
+    },
+    {
+      "event_message": "POST | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/rpc/get_unread_complaint_notification_count | Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
+      "timestamp": "2026-08-07T06:57:22.384000"
+    },
+    {
+      "event_message": "POST | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/rpc/get_reception_updation_context | Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/109.0.0.0 Safari/537.36",
+      "timestamp": "2026-08-07T06:57:21.499000"
+    },
+    {
+      "event_message": "POST | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/rpc/get_unread_complaint_notification_count | Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36",
+      "timestamp": "2026-08-07T06:57:20.457000"
+    },
+    {
+      "event_message": "POST | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/rpc/get_reception_updation_context | Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/109.0.0.0 Safari/537.36",
+      "timestamp": "2026-08-07T06:57:19.995000"
+    },
+    {
+      "event_message": "GET | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/all_service_data?select=id%2Cchassis_no%2Csold_dealer%2Cpowertrain_type&sold_dealer=is.null&chassis_no=not.is.null&powertrain_type=neq.EV&order=id.asc&limit=1 | null",
+      "timestamp": "2026-08-07T06:57:19.378000"
+    },
+    {
+      "event_message": "PATCH | 204 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/all_service_data?id=eq.47557 | null",
+      "timestamp": "2026-08-07T06:57:19.315000"
+    },
+    {
+      "event_message": "POST | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/rpc/get_reception_updation_context | Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/109.0.0.0 Safari/537.36",
+      "timestamp": "2026-08-07T06:57:18.892000"
+    },
+    {
+      "event_message": "POST | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/rpc/get_reception_updation_context | Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/109.0.0.0 Safari/537.36",
+      "timestamp": "2026-08-07T06:57:17.011000"
+    },
+    {
+      "event_message": "POST | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/rpc/get_reception_updation_context | Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/109.0.0.0 Safari/537.36",
+      "timestamp": "2026-08-07T06:57:16.182000"
+    },
+    {
+      "event_message": "POST | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/rpc/get_unread_complaint_notification_count | Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+      "timestamp": "2026-08-07T06:57:15.416000"
+    },
+    {
+      "event_message": "POST | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/rpc/get_unread_complaint_notification_count | Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36",
+      "timestamp": "2026-08-07T06:57:14.626000"
+    },
+    {
+      "event_message": "POST | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/rpc/get_unread_complaint_notification_count | Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36",
+      "timestamp": "2026-08-07T06:57:12.189000"
+    },
+    {
+      "event_message": "POST | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/rpc/get_unread_complaint_notification_count | Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+      "timestamp": "2026-08-07T06:57:12.069000"
+    },
+    {
+      "event_message": "POST | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/rpc/get_unread_complaint_notification_count | Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36 Edg/151.0.0.0",
+      "timestamp": "2026-08-07T06:57:10.841000"
+    },
+    {
+      "event_message": "POST | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/rpc/get_unread_complaint_notification_count | Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36",
+      "timestamp": "2026-08-07T06:57:09.087000"
+    },
+    {
+      "event_message": "GET | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/users?select=role&id=eq.2e8835b8-a9f7-4c81-9f9e-e75eeb8699dd | Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/109.0.0.0 Safari/537.36",
+      "timestamp": "2026-08-07T06:57:07.263000"
+    },
+    {
+      "event_message": "GET | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/employee_master?select=employee_code%2Cemployee_name%2Crole%2Cdepartment%2Cfuel_type%2Clocation&order=employee_name.asc | Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/109.0.0.0 Safari/537.36",
+      "timestamp": "2026-08-07T06:57:06.309000"
+    },
+    {
+      "event_message": "GET | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/service_reception_entries?select=id%2Cdealer_code%2Creg_number%2Cmodel%2Cservice_type%2Csa_name%2Csa_employee_code%2Csa_display_name%2Cjc_number%2Cowner_name%2Cowner_phone%2Cbranch%2Clocation%2Cportal%2Cbranch_label%2Ckm_reading%2Csource%2Cremark%2Cestimate_storage_path%2Cestimate_file_name%2Cestimate_content_type%2Cestimate_uploaded_at%2Cestimate_uploaded_by%2Cestimate_drive_url%2Cestimate_drive_file_id%2Cinvoice_storage_path%2Cinvoice_file_name%2Cinvoice_content_type%2Cinvoice_uploaded_at%2Cinvoice_uploaded_by%2Cinvoice_drive_url%2Cinvoice_drive_file_id%2Cinvoice_done_at%2Cinvoice_done_by%2Cis_revisit%2Cprior_reception_entry_id%2Csuggested_technician_code%2Csuggested_technician_name%2Chas_updation_available%2Cupdation_code%2Cupdation_name%2Ccreated_by%2Ccreated_at%2Cupdated_at&order=created_at.desc%2Cid.desc&limit=200&created_at=gte.2026-08-01T00%3A00%3A00%2B05%3A30&created_at=lte.2026-08-31T23%3A59%3A59%2B05%3A30 | Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/109.0.0.0 Safari/537.36",
+      "timestamp": "2026-08-07T06:57:06.303000"
+    },
+    {
+      "event_message": "POST | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/rpc/get_unread_complaint_notification_count | Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36",
+      "timestamp": "2026-08-07T06:57:06.092000"
+    },
+    {
+      "event_message": "GET | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/service_reception_entries?select=id&created_at=gte.2026-08-03T00%3A00%3A00%2B05%3A30&created_at=lte.2026-08-07T23%3A59%3A59%2B05%3A30&limit=1 | Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/109.0.0.0 Safari/537.36",
+      "timestamp": "2026-08-07T06:57:05.984000"
+    },
+    {
+      "event_message": "GET | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/service_reception_entries?select=id&created_at=gte.2026-08-01T00%3A00%3A00%2B05%3A30&created_at=lte.2026-08-07T23%3A59%3A59%2B05%3A30&limit=1 | Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/109.0.0.0 Safari/537.36",
+      "timestamp": "2026-08-07T06:57:05.982000"
+    },
+    {
+      "event_message": "GET | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/service_reception_entries?select=id&created_at=gte.2026-07-09T00%3A00%3A00%2B05%3A30&created_at=lte.2026-08-07T23%3A59%3A59%2B05%3A30&limit=1 | Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/109.0.0.0 Safari/537.36",
+      "timestamp": "2026-08-07T06:57:05.981000"
+    },
+    {
+      "event_message": "GET | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/service_reception_entries?select=id&created_at=gte.2026-07-01T00%3A00%3A00%2B05%3A30&created_at=lte.2026-07-31T23%3A59%3A59%2B05%3A30&limit=1 | Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/109.0.0.0 Safari/537.36",
+      "timestamp": "2026-08-07T06:57:05.979000"
+    },
+    {
+      "event_message": "GET | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/service_reception_entries?select=id&created_at=gte.2026-08-01T00%3A00%3A00%2B05%3A30&created_at=lte.2026-08-31T23%3A59%3A59%2B05%3A30&limit=1 | Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/109.0.0.0 Safari/537.36",
+      "timestamp": "2026-08-07T06:57:05.972000"
+    },
+    {
+      "event_message": "POST | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/rpc/get_unread_complaint_notification_count | Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36",
+      "timestamp": "2026-08-07T06:57:02.429000"
+    },
+    {
+      "event_message": "POST | 201 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/service_reception_entries?select=* | Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/109.0.0.0 Safari/537.36",
+      "timestamp": "2026-08-07T06:57:00.213000"
+    },
+    {
+      "event_message": "GET | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/employee_master?select=employee_name&employee_code=eq.PS2_3000840 | Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/109.0.0.0 Safari/537.36",
+      "timestamp": "2026-08-07T06:56:59.918000"
+    },
+    {
+      "event_message": "OPTIONS | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/employee_master?select=employee_name&employee_code=eq.PS2_3000840 | Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/109.0.0.0 Safari/537.36",
+      "timestamp": "2026-08-07T06:56:59.901000"
+    },
+    {
+      "event_message": "POST | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/rpc/get_unread_complaint_notification_count | Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/109.0.0.0 Safari/537.36",
+      "timestamp": "2026-08-07T06:56:59.783000"
+    },
+    {
+      "event_message": "POST | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/rpc/get_unread_complaint_notification_count | Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+      "timestamp": "2026-08-07T06:56:57.757000"
+    },
+    {
+      "event_message": "POST | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/rpc/get_unread_complaint_notification_count | Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36",
+      "timestamp": "2026-08-07T06:56:57.088000"
+    },
+    {
+      "event_message": "GET | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/all_service_data_dynamic?select=chassis_no%2Cfuel_tp%2Cpriority_bucket%2Cpriority_score%2Cupdated_by_robot&fuel_tp=eq.PV&updated_by_robot=is.null&order=id.asc&limit=1 | null",
+      "timestamp": "2026-08-07T06:56:54.567000"
+    },
+    {
+      "event_message": "PATCH | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/all_service_data?chassis_no=eq.MAT632281PPNK2979 | null",
+      "timestamp": "2026-08-07T06:56:54.475000"
+    },
+    {
+      "event_message": "POST | 201 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/pv_service_history_test | null",
+      "timestamp": "2026-08-07T06:56:54.408000"
+    },
+    {
+      "event_message": "POST | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/rpc/get_unread_complaint_notification_count | Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36",
+      "timestamp": "2026-08-07T06:56:54.263000"
+    },
+    {
+      "event_message": "POST | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/rpc/get_unread_complaint_notification_count | Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
+      "timestamp": "2026-08-07T06:56:52.374000"
+    },
+    {
+      "event_message": "POST | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/rpc/get_unread_complaint_notification_count | Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36",
+      "timestamp": "2026-08-07T06:56:51.635000"
+    },
+    {
+      "event_message": "GET | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/telecall_assignments?select=id%2Ccampaign_id%2Cstatus%2Ccall_notes%2Cbooking_date%2Ccallback_date%2Ccalled_at%2Ccall_count%2Cno_answer_count%2Cwhatsapp_sent%2Cwhatsapp_status%2Cassigned_at%2Ccustomer%3Acustomer_id%28id%2Cchassis_no%2Cvehicle_registration_number%2Cfirst_name%2Clast_name%2Ccontact_phones%2Cmodel%2Cpowertrain_type%2Cproduct_line%2Cassumed_next_service_date%2Cassumed_next_service_type%2Cscheduled_next_service_date%2Cscheduled_next_service_type%2Clast_service_date%2Clast_service_type%2Clast_service_km%2Clast_service_dealer%2Csold_dealer%2Cextended_warranty_end_date%2Cextended_warranty_product%2Cextended_warranty_end_kms%2Cextended_warranty_policy_no%2Cextended_warranty_order_status%2Clast_insurance_expiry_date%2Clast_insurance_comapny%2Clast_insurance_policy_number%29&id=eq.23649 | Deno/2.1.4 (variant; SupabaseEdgeRuntime/1.74.2)",
+      "timestamp": "2026-08-07T06:56:51.474000"
+    },
+    {
+      "event_message": "PATCH | 204 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/telecall_assignments?id=eq.23649 | Deno/2.1.4 (variant; SupabaseEdgeRuntime/1.74.2)",
+      "timestamp": "2026-08-07T06:56:51.455000"
+    },
+    {
+      "event_message": "GET | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/telecall_assignments?select=id&campaign_id=eq.12&status=eq.pending&retry_after=is.null&order=priority_score.desc%2Cid.asc&limit=1 | Deno/2.1.4 (variant; SupabaseEdgeRuntime/1.74.2)",
+      "timestamp": "2026-08-07T06:56:51.432000"
+    },
+    {
+      "event_message": "GET | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/telecall_assignments?select=id&campaign_id=eq.12&status=eq.pending&retry_after=not.is.null&retry_after=lte.2026-08-07&order=retry_after.asc%2Cpriority_score.desc&limit=1 | Deno/2.1.4 (variant; SupabaseEdgeRuntime/1.74.2)",
+      "timestamp": "2026-08-07T06:56:51.415000"
+    },
+    {
+      "event_message": "GET | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/telecall_assignments?select=id%2Ccampaign_id%2Cstatus%2Ccall_notes%2Cbooking_date%2Ccallback_date%2Ccalled_at%2Ccall_count%2Cno_answer_count%2Cwhatsapp_sent%2Cwhatsapp_status%2Cassigned_at%2Ccustomer%3Acustomer_id%28id%2Cchassis_no%2Cvehicle_registration_number%2Cfirst_name%2Clast_name%2Ccontact_phones%2Cmodel%2Cpowertrain_type%2Cproduct_line%2Cassumed_next_service_date%2Cassumed_next_service_type%2Cscheduled_next_service_date%2Cscheduled_next_service_type%2Clast_service_date%2Clast_service_type%2Clast_service_km%2Clast_service_dealer%2Csold_dealer%2Cextended_warranty_end_date%2Cextended_warranty_product%2Cextended_warranty_end_kms%2Cextended_warranty_policy_no%2Cextended_warranty_order_status%2Clast_insurance_expiry_date%2Clast_insurance_comapny%2Clast_insurance_policy_number%29&campaign_id=eq.12&assigned_to=eq.mnirama644%40gmail.com&status=eq.callback_later&callback_date=lte.2026-08-07&order=callback_date.asc&limit=1 | Deno/2.1.4 (variant; SupabaseEdgeRuntime/1.74.2)",
+      "timestamp": "2026-08-07T06:56:51.383000"
+    },
+    {
+      "event_message": "GET | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/telecall_assignments?select=id&campaign_id=eq.12&status=eq.assigned&assigned_at=lt.2026-08-06T06%3A56%3A51.367Z | Deno/2.1.4 (variant; SupabaseEdgeRuntime/1.74.2)",
+      "timestamp": "2026-08-07T06:56:51.364000"
+    },
+    {
+      "event_message": "GET | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/users?select=email%2Crole%2Cfull_name&id=eq.2a9461b0-0a12-4346-bfad-60ea5340956e | Deno/2.1.4 (variant; SupabaseEdgeRuntime/1.74.2)",
+      "timestamp": "2026-08-07T06:56:51.346000"
+    },
+    {
+      "event_message": "GET | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/auth/v1/user | Deno/2.1.4 (variant; SupabaseEdgeRuntime/1.74.2)",
+      "timestamp": "2026-08-07T06:56:51.322000"
+    },
+    {
+      "event_message": "GET | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/telecall_assignments?select=status&assigned_to=eq.mnirama644%40gmail.com&called_at=gte.2026-08-07T00%3A00%3A00%2B00%3A00 | Deno/2.1.4 (variant; SupabaseEdgeRuntime/1.74.2)",
+      "timestamp": "2026-08-07T06:56:50.504000"
+    },
+    {
+      "event_message": "GET | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/users?select=email%2Crole%2Cfull_name&id=eq.2a9461b0-0a12-4346-bfad-60ea5340956e | Deno/2.1.4 (variant; SupabaseEdgeRuntime/1.74.2)",
+      "timestamp": "2026-08-07T06:56:50.479000"
+    },
+    {
+      "event_message": "GET | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/telecall_assignments?select=id%2Ccampaign_id%2Cstatus%2Ccall_notes%2Cbooking_date%2Ccallback_date%2Ccalled_at%2Ccall_count%2Cno_answer_count%2Cwhatsapp_sent%2Cwhatsapp_status%2Cassigned_at%2Ccustomer%3Acustomer_id%28id%2Cchassis_no%2Cvehicle_registration_number%2Cfirst_name%2Clast_name%2Ccontact_phones%2Cmodel%2Cpowertrain_type%2Cproduct_line%2Cassumed_next_service_date%2Cassumed_next_service_type%2Clast_service_date%2Clast_service_type%2Clast_service_km%2Clast_service_dealer%2Csold_dealer%2Cextended_warranty_end_date%2Cextended_warranty_product%2Cextended_warranty_order_status%2Clast_insurance_expiry_date%2Clast_insurance_comapny%29&assigned_to=eq.mnirama644%40gmail.com&status=in.%28assigned%2Ccalling%2Ccallback_later%2Cbooked%29&campaign_id=eq.12&order=assigned_at.desc | Deno/2.1.4 (variant; SupabaseEdgeRuntime/1.74.2)",
+      "timestamp": "2026-08-07T06:56:50.478000"
+    },
+    {
+      "event_message": "POST | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/rpc/get_unread_complaint_notification_count | Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36",
+      "timestamp": "2026-08-07T06:56:50.462000"
+    },
+    {
+      "event_message": "GET | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/users?select=email%2Crole%2Cfull_name&id=eq.2a9461b0-0a12-4346-bfad-60ea5340956e | Deno/2.1.4 (variant; SupabaseEdgeRuntime/1.74.2)",
+      "timestamp": "2026-08-07T06:56:50.459000"
+    },
+    {
+      "event_message": "GET | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/auth/v1/user | Deno/2.1.4 (variant; SupabaseEdgeRuntime/1.74.2)",
+      "timestamp": "2026-08-07T06:56:50.434000"
+    },
+    {
+      "event_message": "GET | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/auth/v1/user | Deno/2.1.4 (variant; SupabaseEdgeRuntime/1.74.2)",
+      "timestamp": "2026-08-07T06:56:50.433000"
+    },
+    {
+      "event_message": "PATCH | 204 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/telecall_campaigns?id=eq.12 | Deno/2.1.4 (variant; SupabaseEdgeRuntime/1.74.2)",
+      "timestamp": "2026-08-07T06:56:50.200000"
+    },
+    {
+      "event_message": "GET | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/telecall_assignments?select=status&campaign_id=eq.12 | Deno/2.1.4 (variant; SupabaseEdgeRuntime/1.74.2)",
+      "timestamp": "2026-08-07T06:56:50.158000"
+    },
+    {
+      "event_message": "PATCH | 204 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/telecall_assignments?id=eq.23642 | Deno/2.1.4 (variant; SupabaseEdgeRuntime/1.74.2)",
+      "timestamp": "2026-08-07T06:56:50.122000"
+    },
+    {
+      "event_message": "GET | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/telecall_assignments?select=call_count&id=eq.23642 | Deno/2.1.4 (variant; SupabaseEdgeRuntime/1.74.2)",
+      "timestamp": "2026-08-07T06:56:50.094000"
+    },
+    {
+      "event_message": "GET | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/users?select=email%2Crole%2Cfull_name&id=eq.2a9461b0-0a12-4346-bfad-60ea5340956e | Deno/2.1.4 (variant; SupabaseEdgeRuntime/1.74.2)",
+      "timestamp": "2026-08-07T06:56:50.068000"
+    },
+    {
+      "event_message": "GET | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/auth/v1/user | Deno/2.1.4 (variant; SupabaseEdgeRuntime/1.74.2)",
+      "timestamp": "2026-08-07T06:56:50.023000"
+    },
+    {
+      "event_message": "POST | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/rpc/get_unread_complaint_notification_count | Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36",
+      "timestamp": "2026-08-07T06:56:49.213000"
+    },
+    {
+      "event_message": "POST | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/rpc/get_unread_complaint_notification_count | Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36",
+      "timestamp": "2026-08-07T06:56:49.121000"
+    },
+    {
+      "event_message": "POST | 200 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/rpc/get_unread_complaint_notification_count | Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+      "timestamp": "2026-08-07T06:56:45.607000"
+    }
+  ]
+}

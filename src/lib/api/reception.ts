@@ -1162,17 +1162,23 @@ export async function updateServiceAdvisorEntry(
 
   if (!payload.service_type) return fail('Service Type is required')
 
-  const { data, error } = await supabase
-    .from('service_reception_entries')
-    .update(payload)
-    .eq('id', id)
-    .select('*')
-    .single()
+  // SECURITY DEFINER RPC bypasses expensive authenticated-role RLS on
+  // service_reception_entries (57014 statement_timeout on direct UPDATE).
+  const { data, error } = await supabase.rpc('service_advisor_save_reception_entry', {
+    p_reception_entry_id: id,
+    p_service_type: payload.service_type,
+    p_jc_number: payload.jc_number,
+    p_km_reading: payload.km_reading,
+    p_remark: payload.remark,
+  })
 
   if (error) return fail(error)
-  
-  const enriched = await enrichEntriesWithEmployeeBranch(data ? [data as ReceptionEntryRow] : [])
-  return ok(enriched[0] ?? (data as ReceptionEntryRow))
+
+  const row = (Array.isArray(data) ? data[0] : data) as ReceptionEntryRow | undefined
+  if (!row) return fail('Save skipped: no matching reception row updated')
+
+  const enriched = await enrichEntriesWithEmployeeBranch([row])
+  return ok(enriched[0] ?? row)
 }
 
 export async function uploadServiceAdvisorEstimate(

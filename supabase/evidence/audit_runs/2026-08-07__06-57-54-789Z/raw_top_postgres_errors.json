@@ -1,0 +1,66 @@
+{
+  "status": "ok",
+  "records": [
+    {
+      "event_message": "canceling statement due to statement timeout",
+      "occurrences": 170
+    },
+    {
+      "event_message": "function gen_random_bytes(integer) does not exist",
+      "occurrences": 105
+    },
+    {
+      "event_message": "there is no unique or exclusion constraint matching the ON CONFLICT specification",
+      "occurrences": 37
+    },
+    {
+      "event_message": "duplicate key value violates unique constraint \"uq_service_reception_entries_jc_number_norm\"",
+      "occurrences": 9
+    },
+    {
+      "event_message": "permission denied for table service_reception_entries",
+      "occurrences": 9
+    },
+    {
+      "event_message": "permission denied for table technician_assignments",
+      "occurrences": 5
+    },
+    {
+      "event_message": "invalid input syntax for type uuid: \"3023\"",
+      "occurrences": 4
+    },
+    {
+      "event_message": "invalid input syntax for type uuid: \"3054\"",
+      "occurrences": 4
+    },
+    {
+      "event_message": "invalid input syntax for type uuid: \"system:internal-dispatch\"",
+      "occurrences": 4
+    },
+    {
+      "event_message": "column users.dealer_code does not exist",
+      "occurrences": 4
+    },
+    {
+      "event_message": "invalid input syntax for type uuid: \"3066\"",
+      "occurrences": 3
+    },
+    {
+      "event_message": "invalid input syntax for type uuid: \"3056\"",
+      "occurrences": 2
+    },
+    {
+      "event_message": "invalid input syntax for type uuid: \"3041\"",
+      "occurrences": 2
+    },
+    {
+      "event_message": "invalid input syntax for type uuid: \"3064\"",
+      "occurrences": 2
+    },
+    {
+      "event_message": "invalid input syntax for type uuid: \"3032\"",
+      "occurrences": 2
+    }
+  ],
+  "sql": "select\n      event_message,\n      count() as occurrences\n    from logs\n    where source = 'postgres_logs'\n      and match(severity_text, '(?i)ERROR|FATAL|PANIC|WARNING')\n    group by event_message\n    order by occurrences desc\n    limit 15"
+}

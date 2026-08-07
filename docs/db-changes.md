@@ -1,5 +1,18 @@
 # DB Changes Ledger
 
+## 2026-08-07
+
+### P1-13 — Service Advisor save statement timeout (57014)
+
+- Migration: `20260807120000_fix_sa_save_reception_entry_timeout.sql`
+- Check: `supabase/sql_checks/20260807120000_fix_sa_save_reception_entry_timeout_checks.sql`
+- Frontend: `src/lib/api/reception.ts` — `updateServiceAdvisorEntry()` calls `service_advisor_save_reception_entry` RPC
+- Status: **Code complete — deploy pending**
+- Notes:
+  - Root cause: direct PostgREST UPDATE on `service_reception_entries` + `sync_reception_jc_to_legacy_technician_assignments` running under SA RLS on `technician_assignments`
+  - Fix mirrors `bodyshop_save_reception_jc_km` pattern (SECURITY DEFINER RPC + trigger hardening)
+  - Correlated with audit snapshot 14.48: 170× `57014`, queryid `2624296883471019521`, PATCH 500 on SA save
+
 ## 2026-07-21
 
 ### Prefix 20260721133000 (table name fix)
