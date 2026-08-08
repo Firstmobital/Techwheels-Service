@@ -234,6 +234,11 @@ export default function PartsRequirementSection({ isAdmin = false }: Props) {
   const [confirmAction, setConfirmAction] = useState<ConfirmAction>(null)
   const [actionBusyId, setActionBusyId] = useState<number | null>(null)
 
+  // ── Admin-only inline edit for "Parts Required" ──────────────────────────
+  const [editingPartsRequiredId, setEditingPartsRequiredId] = useState<number | null>(null)
+  const [editingPartsRequiredValue, setEditingPartsRequiredValue] = useState('')
+  const [editingPartsRequiredSaving, setEditingPartsRequiredSaving] = useState(false)
+
   const [advisorFilter, setAdvisorFilter] = useState('all')
   const [vehicleNoFilter, setVehicleNoFilter] = useState('')
   const [stockStatusFilter, setStockStatusFilter] = useState('all')
@@ -649,6 +654,35 @@ export default function PartsRequirementSection({ isAdmin = false }: Props) {
     })
     if (res.error) setError(res.error)
     else void load()
+  }
+
+  const handlePartsRequiredEdit = async (row: PartsRequestRow, newValue: string) => {
+    const trimmed = newValue.trim()
+    if (trimmed === row.parts_required) {
+      setEditingPartsRequiredId(null)
+      return
+    }
+    if (!trimmed) {
+      setError('Parts Required cannot be empty')
+      return
+    }
+    setEditingPartsRequiredSaving(true)
+    const res = await updateMyPartsRequestFields({
+      id: row.id, registrationNumber: row.registration_number, partsRequired: trimmed,
+      partsDescription: row.parts_description, advisorRemarks: row.advisor_remarks,
+      entryDate: row.entry_date, partsNumber: row.parts_number, customerMobile: row.customer_mobile,
+    })
+    setEditingPartsRequiredSaving(false)
+    if (res.error) setError(res.error)
+    else {
+      setEditingPartsRequiredId(null)
+      void load()
+    }
+  }
+
+  const startPartsRequiredEdit = (row: PartsRequestRow) => {
+    setEditingPartsRequiredId(row.id)
+    setEditingPartsRequiredValue(row.parts_required)
   }
 
   const handleCustomerUpdateBlur = async (row: PartsRequestRow, value: string) => {
@@ -1196,9 +1230,55 @@ export default function PartsRequirementSection({ isAdmin = false }: Props) {
                           {evpvOf(row)}
                         </span>
                       </td>}
-                      {/* Col 9: Parts Required — full name, no truncation */}
+                      {/* Col 9: Parts Required — full name, no truncation; admin can inline-edit */}
                       <td className="px-4 py-2.5 text-xs font-medium text-gray-900 max-w-[220px]">
-                        <p className="whitespace-normal break-words">{row.parts_required}</p>
+                        {isAdmin && editingPartsRequiredId === row.id ? (
+                          <div className="flex flex-col gap-1">
+                            <input
+                              type="text"
+                              autoFocus
+                              value={editingPartsRequiredValue}
+                              onChange={(e) => setEditingPartsRequiredValue(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') void handlePartsRequiredEdit(row, editingPartsRequiredValue)
+                                if (e.key === 'Escape') setEditingPartsRequiredId(null)
+                              }}
+                              className="w-full rounded border border-blue-400 px-1.5 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400"
+                            />
+                            <div className="flex gap-1">
+                              <button
+                                type="button"
+                                disabled={editingPartsRequiredSaving}
+                                onClick={() => void handlePartsRequiredEdit(row, editingPartsRequiredValue)}
+                                className="rounded bg-blue-600 px-2 py-0.5 text-[10px] font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
+                              >
+                                {editingPartsRequiredSaving ? 'Saving...' : 'Save'}
+                              </button>
+                              <button
+                                type="button"
+                                disabled={editingPartsRequiredSaving}
+                                onClick={() => setEditingPartsRequiredId(null)}
+                                className="rounded bg-gray-200 px-2 py-0.5 text-[10px] font-semibold text-gray-600 hover:bg-gray-300 disabled:opacity-50"
+                              >
+                                Cancel
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="flex items-start gap-1">
+                            <p className="whitespace-normal break-words flex-1">{row.parts_required}</p>
+                            {isAdmin && row.parts_status !== 'Done' && (
+                              <button
+                                type="button"
+                                onClick={(e) => { e.stopPropagation(); startPartsRequiredEdit(row) }}
+                                className="shrink-0 rounded p-0.5 text-gray-400 hover:bg-blue-50 hover:text-blue-600"
+                                title="Edit Parts Required"
+                              >
+                                <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4Z"/></svg>
+                              </button>
+                            )}
+                          </div>
+                        )}
                       </td>
                       {/* Col 10: Parts No. */}
                       <td className="px-4 py-2.5 text-xs text-gray-500 font-mono">{row.parts_number || '\u2014'}</td>
@@ -1287,7 +1367,47 @@ export default function PartsRequirementSection({ isAdmin = false }: Props) {
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-sm font-bold text-gray-900">{row.registration_number}</p>
-                      <p className="mt-0.5 text-xs text-gray-500">{row.parts_required}</p>
+                      <p className="mt-0.5 text-xs text-gray-500">
+                        {isAdmin && editingPartsRequiredId === row.id ? (
+                          <span className="flex flex-col gap-1" onClick={(e) => e.stopPropagation()}>
+                            <input
+                              type="text"
+                              autoFocus
+                              value={editingPartsRequiredValue}
+                              onChange={(e) => setEditingPartsRequiredValue(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') void handlePartsRequiredEdit(row, editingPartsRequiredValue)
+                                if (e.key === 'Escape') setEditingPartsRequiredId(null)
+                              }}
+                              className="w-full rounded border border-blue-400 px-1.5 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400"
+                            />
+                            <span className="flex gap-1">
+                              <button type="button" disabled={editingPartsRequiredSaving}
+                                onClick={() => void handlePartsRequiredEdit(row, editingPartsRequiredValue)}
+                                className="rounded bg-blue-600 px-2 py-0.5 text-[10px] font-semibold text-white hover:bg-blue-700 disabled:opacity-50">
+                                {editingPartsRequiredSaving ? 'Saving...' : 'Save'}
+                              </button>
+                              <button type="button" disabled={editingPartsRequiredSaving}
+                                onClick={() => setEditingPartsRequiredId(null)}
+                                className="rounded bg-gray-200 px-2 py-0.5 text-[10px] font-semibold text-gray-600 hover:bg-gray-300 disabled:opacity-50">
+                                Cancel
+                              </button>
+                            </span>
+                          </span>
+                        ) : (
+                          <span className="flex items-start gap-1">
+                            <span className="flex-1">{row.parts_required}</span>
+                            {isAdmin && row.parts_status !== 'Done' && (
+                              <button type="button"
+                                onClick={(e) => { e.stopPropagation(); startPartsRequiredEdit(row) }}
+                                className="shrink-0 rounded p-0.5 text-gray-400 hover:bg-blue-50 hover:text-blue-600"
+                                title="Edit Parts Required">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4Z"/></svg>
+                              </button>
+                            )}
+                          </span>
+                        )}
+                      </p>
                       {row.parts_number && <p className="text-[11px] text-gray-400">{row.parts_number}</p>}
                       {isAdmin && <p className="mt-1 text-[11px] font-medium text-blue-600">{row.advisor_name}</p>}
                     </div>
