@@ -1243,14 +1243,14 @@ export default function PartsRequirementSection({ isAdmin = false }: Props) {
                 <th className="whitespace-nowrap px-4 py-3 text-left">Entry Date</th>
                 <th className="whitespace-nowrap px-4 py-3 text-left">Job Card</th>
                 {isAdmin && <th className="whitespace-nowrap px-4 py-3 text-left">Advisor</th>}
-                <th className="whitespace-nowrap px-4 py-3 text-left">Reg No.</th>
+                <th className="whitespace-nowrap px-4 py-3 text-left">{isAdmin ? 'Reg No.' : 'Reg No./Model'}</th>
                 {isAdmin && <th className="whitespace-nowrap px-4 py-3 text-left">Customer Mobile No</th>}
-                <th className="whitespace-nowrap px-4 py-3 text-left">Vehicle Model</th>
+                {isAdmin && <th className="whitespace-nowrap px-4 py-3 text-left">Vehicle Model</th>}
                 {isAdmin && <th className="whitespace-nowrap px-4 py-3 text-left">Portal</th>}
                 <th className="whitespace-nowrap px-4 py-3 text-left">Parts Required</th>
-                <th className="whitespace-nowrap px-4 py-3 text-left">Parts No.</th>
-                <th className="whitespace-nowrap px-4 py-3 text-left">Order No.</th>
-                <th className="whitespace-nowrap px-4 py-3 text-left">Order Date</th>
+                {isAdmin && <th className="whitespace-nowrap px-4 py-3 text-left">Parts No.</th>}
+                {isAdmin && <th className="whitespace-nowrap px-4 py-3 text-left">Order No.</th>}
+                {isAdmin && <th className="whitespace-nowrap px-4 py-3 text-left">Order Date</th>}
                 <th className="whitespace-nowrap px-4 py-3 text-left">Order Status</th>
                 <th className="whitespace-nowrap px-4 py-3 text-left">Stock</th>
                 <th className="whitespace-nowrap px-4 py-3 text-left">Status</th>
@@ -1493,7 +1493,8 @@ export default function PartsRequirementSection({ isAdmin = false }: Props) {
                           </span>
                         )}
                       </p>
-                      {row.parts_number && <p className="text-[11px] text-gray-400">{row.parts_number}</p>}
+                      {row.vehicle_model && <p className="text-[11px] text-gray-400">{row.vehicle_model}</p>}
+                      {row.parts_number && <p className="text-[11px] text-gray-400 font-mono">{row.parts_number}</p>}
                       {isAdmin && <p className="mt-1 text-[11px] font-medium text-blue-600">{row.advisor_name}</p>}
                     </div>
                     <div className="flex shrink-0 flex-col items-end gap-1.5">
