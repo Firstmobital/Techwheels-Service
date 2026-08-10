@@ -62,6 +62,16 @@ function norm(v: string | null | undefined): string {
   return (v ?? '').trim().toUpperCase().replace(/\s+/g, '')
 }
 
+// ── Status 1 helper: Back Order + Jaipur Co-Dealer availability ──────────────
+function getStatus1(vorBackOrderParts: Set<string>, jaipurDealerCount: Record<string, number>, partNo: string | null | undefined): { isBackOrder: boolean; jaipurDealers: number } {
+  const np = norm(partNo)
+  if (!np) return { isBackOrder: false, jaipurDealers: 0 }
+  return {
+    isBackOrder: vorBackOrderParts.has(np),
+    jaipurDealers: jaipurDealerCount[np] ?? 0,
+  }
+}
+
 interface OrderLookupRow {
   part_number: string | null
   order_date: string | null
@@ -129,6 +139,59 @@ export default function PartsSPMDashboardPage() {
 
   // ── Part No → Stock (qty) lookup ─────────────────────────────────────────
   const [stockLookup, setStockLookup] = useState<Map<string, number>>(new Map())
+
+  // ── Back Order + Jaipur Co-Dealer stock (Status 1 column) ──────────────────
+  const [vorBackOrderParts, setVorBackOrderParts] = useState<Set<string>>(new Set())
+  const [jaipurDealerCount, setJaipurDealerCount] = useState<Record<string, number>>({})
+
+  // ── Load VOR Back Order parts + Jaipur Co-Dealer stock for Status 1 column ──
+  const loadBackOrderData = useCallback(async () => {
+    try {
+      // Fetch all VOR BO REPORT part numbers (Sheet 1 — Back Order parts)
+      let vorParts = new Set<string>()
+      let vorOffset = 0
+      while (true) {
+        const { data: vorData } = await supabase
+          .from('back_order_vor_data')
+          .select('part_number')
+          .range(vorOffset, vorOffset + 999)
+        if (!vorData || vorData.length === 0) break
+        for (const r of vorData) {
+          if (r.part_number) vorParts.add(norm(r.part_number))
+        }
+        if (vorData.length < 1000) break
+        vorOffset += 1000
+      }
+      setVorBackOrderParts(vorParts)
+
+      // Fetch AVL WITH CP STOCK — filter CITY = Jaipur, count unique dealers per part
+      const dealerMap: Record<string, number> = {}
+      let cpOffset = 0
+      while (true) {
+        const { data: cpData } = await supabase
+          .from('back_order_cp_stock_data')
+          .select('part_number, co_dealer_name, city')
+          .ilike('city', 'Jaipur')
+          .range(cpOffset, cpOffset + 999)
+        if (!cpData || cpData.length === 0) break
+        const partDealers: Record<string, Set<string>> = {}
+        for (const r of cpData) {
+          if (!r.part_number) continue
+          const np = norm(r.part_number)
+          if (!partDealers[np]) partDealers[np] = new Set()
+          if (r.co_dealer_name) partDealers[np].add(r.co_dealer_name)
+        }
+        for (const [part, dealers] of Object.entries(partDealers)) {
+          dealerMap[part] = (dealerMap[part] ?? 0) + dealers.size
+        }
+        if (cpData.length < 1000) break
+        cpOffset += 1000
+      }
+      setJaipurDealerCount(dealerMap)
+    } catch (err) {
+      console.error('[SPM] Back order data load error:', err)
+    }
+  }, [])
 
   // ── Parts-number auto-fetch state for inline edit ─────────────────────────
   const [partNoFetchStatus, setPartNoFetchStatus] = useState<'idle' | 'loading' | 'found' | 'notfound'>('idle')
@@ -198,7 +261,8 @@ export default function PartsSPMDashboardPage() {
     void load()
     void loadOrderLookup()
     void loadStockLookup()
-  }, [load, loadOrderLookup, loadStockLookup])
+    void loadBackOrderData()
+  }, [load, loadOrderLookup, loadStockLookup, loadBackOrderData])
 
   // ── Realtime refresh ───────────────────────────────────────────────────────
   useEffect(() => {
@@ -345,7 +409,7 @@ export default function PartsSPMDashboardPage() {
     const header = [
       'Entry Date', 'Job Card', 'Advisor', 'Reg No.', 'Customer', 'Customer Mobile No', 'Vehicle Model', 'Portal',
       'Parts Required', 'Parts No.', 'Order No.', 'Order Date', 'Order Status',
-      'Stock', 'Parts Status', 'Advisor Remarks', 'Customer Update', 'SPM Remarks',
+      'Stock', 'Parts Status', 'Status 1', 'Advisor Remarks', 'Customer Update', 'SPM Remarks',
       'Received At', 'Received By', 'Done At', 'Done By',
     ]
     const dataRows = sorted.map((r) => {
@@ -354,7 +418,7 @@ export default function PartsSPMDashboardPage() {
         r.entry_date, r.job_card_number ?? '', r.advisor_name, r.registration_number,
         r.customer_name ?? '', r.customer_mobile ?? '', r.vehicle_model ?? '', evpvOf(r),
         r.parts_required, r.parts_number ?? '', orderNo, r.parts_order_date ?? orderDate,
-        orderStatus, stock ?? r.parts_qty ?? '', r.parts_status,
+        orderStatus, stock ?? r.parts_qty ?? '', r.parts_status, getStatus1(vorBackOrderParts, jaipurDealerCount, r.parts_number).isBackOrder ? `Back Order; Jaipur: ${getStatus1(vorBackOrderParts, jaipurDealerCount, r.parts_number).jaipurDealers} dealer(s)` : '',
         r.advisor_remarks ?? '', r.customer_update ?? '', r.spm_remarks ?? '',
         r.received_at ?? '', r.received_by_name ?? '', r.done_at ?? '', r.done_by_name ?? '',
       ]
@@ -400,7 +464,7 @@ export default function PartsSPMDashboardPage() {
           )}
         </div>
         <div className="flex items-center gap-2">
-          <button type="button" onClick={() => { void load(); void loadOrderLookup(); void loadStockLookup() }}
+          <button type="button" onClick={() => { void load(); void loadOrderLookup(); void loadStockLookup(); void loadBackOrderData() }}
             className="inline-flex items-center gap-1.5 rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50">
             <Icon name="refresh-cw" size={14} />Refresh
           </button>
@@ -479,6 +543,7 @@ export default function PartsSPMDashboardPage() {
                   <th className="px-4 py-3">Order Status</th>
                   <th className="px-4 py-3">Stock</th>
                   <SortHeader label="Status" sortField="parts_status" />
+                  <th className="px-4 py-3">Status 1</th>
                   <th className="px-4 py-3">Adv. Remarks</th>
                   <th className="px-4 py-3">Cust. Update</th>
                   <th className="px-4 py-3">SPM Remarks</th>
@@ -574,6 +639,28 @@ export default function PartsSPMDashboardPage() {
                               {PARTS_STATUS_VALUES.map((s) => <option key={s} value={s}>{s}</option>)}
                             </select>
                           </td>
+                          {/* Status 1 — Back Order + Jaipur Co-Dealer (read-only in edit mode) */}
+                          <td className="px-4 py-2.5 text-xs">
+                            {(() => {
+                              const s1 = getStatus1(vorBackOrderParts, jaipurDealerCount, row.parts_number)
+                              if (!s1.isBackOrder) return <span className="text-gray-300">—</span>
+                              return (
+                                <div className="space-y-0.5">
+                                  <span className="inline-block rounded bg-red-100 px-1.5 py-0.5 text-[10px] font-semibold text-red-700">Back Order</span>
+                                  <br />
+                                  {s1.jaipurDealers > 0 ? (
+                                    <span className="inline-block rounded bg-green-100 px-1.5 py-0.5 text-[10px] font-semibold text-green-700">
+                                      AVL: Jaipur – {s1.jaipurDealers} Dealer{s1.jaipurDealers !== 1 ? 's' : ''}
+                                    </span>
+                                  ) : (
+                                    <span className="inline-block rounded bg-gray-100 px-1.5 py-0.5 text-[10px] font-semibold text-gray-500">
+                                      AVL: Jaipur – Not Available
+                                    </span>
+                                  )}
+                                </div>
+                              )
+                            })()}
+                          </td>
                           <td className="max-w-[140px] truncate px-4 py-2.5 text-gray-500">{row.advisor_remarks || '—'}</td>
                           <td className="max-w-[140px] truncate px-4 py-2.5 text-gray-500">{row.customer_update || '—'}</td>
                           {/* SPM Remarks — editable */}
@@ -618,6 +705,28 @@ export default function PartsSPMDashboardPage() {
                           <td className="px-4 py-2.5 text-xs text-gray-600">{displayOrderStatus}</td>
                           <td className="px-4 py-2.5"><QtyBadge qty={displayStock} /></td>
                           <td className="px-4 py-2.5"><StatusBadge status={row.parts_status} qty={row.parts_qty} /></td>
+                          {/* Status 1 — Back Order + Jaipur Co-Dealer availability */}
+                          <td className="px-4 py-2.5 text-xs">
+                            {(() => {
+                              const s1 = getStatus1(vorBackOrderParts, jaipurDealerCount, row.parts_number)
+                              if (!s1.isBackOrder) return <span className="text-gray-300">—</span>
+                              return (
+                                <div className="space-y-0.5">
+                                  <span className="inline-block rounded bg-red-100 px-1.5 py-0.5 text-[10px] font-semibold text-red-700">Back Order</span>
+                                  <br />
+                                  {s1.jaipurDealers > 0 ? (
+                                    <span className="inline-block rounded bg-green-100 px-1.5 py-0.5 text-[10px] font-semibold text-green-700">
+                                      AVL: Jaipur – {s1.jaipurDealers} Dealer{s1.jaipurDealers !== 1 ? 's' : ''}
+                                    </span>
+                                  ) : (
+                                    <span className="inline-block rounded bg-gray-100 px-1.5 py-0.5 text-[10px] font-semibold text-gray-500">
+                                      AVL: Jaipur – Not Available
+                                    </span>
+                                  )}
+                                </div>
+                              )
+                            })()}
+                          </td>
                           <td className="max-w-[140px] truncate px-4 py-2.5 text-gray-500">{row.advisor_remarks || '—'}</td>
                           <td className="max-w-[140px] truncate px-4 py-2.5 text-gray-500">{row.customer_update || '—'}</td>
                           <td className={`max-w-[160px] truncate px-4 py-2.5 ${row.spm_remarks ? 'text-gray-700' : 'text-gray-400'}`}>{row.spm_remarks || '—'}</td>
