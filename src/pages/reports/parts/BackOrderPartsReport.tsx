@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import AvlCpStockReport from './AvlCpStockReport'
 import type { ReportViewProps } from '../types'
 import { supabase } from '../../../lib/supabase'
 import { REPORT_BRANCH_OPTIONS } from '../../../lib/branches'
@@ -75,7 +76,7 @@ function getDateParts(rawDate: string | null): { year?: number; monthName?: stri
   return {}
 }
 
-export default function BackOrderPartsReport({ branch }: ReportViewProps) {
+function BackOrderPartsStatusTab({ branch }: ReportViewProps) {
   const [filters, setFilters] = useState<FilterState>({ branch, fuelType: 'ALL' })
   const [rows, setRows] = useState<BackOrderData[]>([])
   const [, setLoading] = useState(false)
@@ -452,3 +453,49 @@ export default function BackOrderPartsReport({ branch }: ReportViewProps) {
     </div>
   )
 }
+
+// ─── Tab Wrapper ─────────────────────────────────────────────────────────────
+// Renders two tabs: Back Order Parts Status | AVL WITH CP STOCK
+export function BackOrderPartsReportWrapper({ branch, dateFilter }: ReportViewProps) {
+  const [activeTab, setActiveTab] = useState<'back-order' | 'avl-cp-stock'>('back-order')
+
+  return (
+    <div className="space-y-4">
+      {/* Tab bar */}
+      <div className="flex gap-1 border-b border-gray-200">
+        <button
+          type="button"
+          onClick={() => setActiveTab('back-order')}
+          className={`px-5 py-2.5 text-sm font-semibold border-b-2 transition-colors ${
+            activeTab === 'back-order'
+              ? 'border-blue-600 text-blue-600'
+              : 'border-transparent text-gray-500 hover:text-gray-700'
+          }`}
+        >
+          Back Order Parts Status
+        </button>
+        <button
+          type="button"
+          onClick={() => setActiveTab('avl-cp-stock')}
+          className={`px-5 py-2.5 text-sm font-semibold border-b-2 transition-colors ${
+            activeTab === 'avl-cp-stock'
+              ? 'border-blue-600 text-blue-600'
+              : 'border-transparent text-gray-500 hover:text-gray-700'
+          }`}
+        >
+          AVL WITH CP STOCK
+        </button>
+      </div>
+
+      {/* Tab content */}
+      {activeTab === 'back-order' ? (
+        <BackOrderPartsStatusTab branch={branch} dateFilter={dateFilter} />
+      ) : (
+        <AvlCpStockReport />
+      )}
+    </div>
+  )
+}
+
+// Re-export wrapper as default
+export default BackOrderPartsReportWrapper
