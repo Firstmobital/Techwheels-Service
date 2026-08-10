@@ -12,6 +12,7 @@ import PartsDailyReport from './PartsDailyReport'
 import PartsNotInvoicedReport from './PartsNotInvoicedReport'
 import JcClosedInvoicedReport from './JcClosedInvoicedReport'
 import PartsNotShippedReport from './PartsNotShippedReport'
+import BackOrderDataReport from './BackOrderDataReport'
 
 import type { ReportCategoryDefinition, ReportDefinition } from '../types'
 
@@ -141,5 +142,14 @@ export const PARTS_REPORTS: ReportDefinition[] = [
     description: 'Full order-to-delivery pipeline visibility — track every part from confirmation through challan, invoice, docket, ETA, to final receipt.',
     cardHint: 'Best for tracking pending shipments and identifying pipeline bottlenecks.',
     Component: PartsNotShippedReport,
+  },
+  {
+    id: 'back-order-data',
+    categoryId: 'parts',
+    label: 'Back Order Data',
+    group: 'Back Order',
+    description: 'Upload VOR BO Report & Co-Dealer stock, then search any Part Number to check Tata Motors and Co-Dealer availability.',
+    cardHint: 'Best for finding which Co-Dealer has a required part in stock.',
+    Component: BackOrderDataReport,
   },
 ]

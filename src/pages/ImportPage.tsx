@@ -61,6 +61,7 @@ import {
 } from '../lib/partsStockColumnMapper'
 import { PORTAL_BRANCHES } from '../lib/branches'
 import { PniGrnImportSection } from '../components/PniGrnImportSection'
+import { BackOrderImportSection } from '../components/BackOrderImportSection'
 import { VehicleUpdationImportSection } from '../components/VehicleUpdationImportSection'
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
@@ -3327,6 +3328,9 @@ export default function ImportPage() {
 
         {/* ── Parts Daily Reports (PNI + GRN) ─────────────────────────────── */}
         <PniGrnImportSection />
+
+        {/* ── Back Order Data (VOR BO + Co-Dealer Stock) ─────────────────── */}
+        <BackOrderImportSection />
 
         <VehicleUpdationImportSection />
 
