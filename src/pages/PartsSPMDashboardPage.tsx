@@ -526,30 +526,36 @@ export default function PartsSPMDashboardPage() {
         ) : (
           <div className="max-h-[70vh] overflow-auto">
             <table className="w-full border-collapse text-sm">
-              <thead className="sticky top-0 z-10 bg-gray-50 text-left text-xs font-semibold uppercase tracking-wide text-gray-500 shadow-sm">
+              <thead className="sticky top-0 z-10 bg-gradient-to-r from-slate-100 via-blue-50 to-indigo-50 text-left text-xs font-semibold uppercase tracking-wide text-gray-600 shadow-sm">
                 <tr>
                   <SortHeader label="Entry Date" sortField="entry_date" />
-                  <th className="px-4 py-3">Job Card</th>
+                  <th className="px-3 py-3">Job Card</th>
                   <SortHeader label="Advisor" sortField="advisor_name" />
                   <SortHeader label="Reg. No." sortField="registration_number" />
-                  <th className="px-4 py-3">Customer</th>
-                  <th className="px-4 py-3">Customer Mobile No</th>
-                  <th className="px-4 py-3">Vehicle Model</th>
-                  <th className="px-4 py-3">Portal</th>
-                  <th className="px-4 py-3">Parts Required</th>
-                  <th className="px-4 py-3">Parts No.</th>
-                  <th className="px-4 py-3">Order No.</th>
-                  <SortHeader label="Order Date" sortField="parts_order_date" />
-                  <th className="px-4 py-3">Order Status</th>
-                  <th className="px-4 py-3">Stock</th>
+                  <th className="px-3 py-3">Customer</th>
+                  <th className="px-3 py-3">Customer Mobile No</th>
+                  <th className="px-3 py-3">
+                    <div className="leading-tight">
+                      <span>Parts Required</span>
+                      <span className="block text-[10px] font-medium text-gray-400 normal-case">Parts No.</span>
+                    </div>
+                  </th>
+                  <th className="px-3 py-3">
+                    <div className="leading-tight">
+                      <span>Order No.</span>
+                      <span className="block text-[10px] font-medium text-gray-400 normal-case">Order Date</span>
+                    </div>
+                  </th>
+                  <th className="px-3 py-3">Order Status</th>
+                  <th className="px-3 py-3">Stock</th>
                   <SortHeader label="Status" sortField="parts_status" />
-                  <th className="px-4 py-3">Status 1</th>
-                  <th className="px-4 py-3">Adv. Remarks</th>
-                  <th className="px-4 py-3">Cust. Update</th>
-                  <th className="px-4 py-3">SPM Remarks</th>
-                  <th className="px-4 py-3">Received</th>
-                  <th className="px-4 py-3">Done</th>
-                  <th className="px-4 py-3" />
+                  <th className="px-3 py-3">Status 1</th>
+                  <th className="px-3 py-3">Adv. Remarks</th>
+                  <th className="px-3 py-3">Cust. Update</th>
+                  <th className="px-3 py-3">SPM Remarks</th>
+                  <th className="px-3 py-3">Received</th>
+                  <th className="px-3 py-3">Done</th>
+                  <th className="px-3 py-3" />
                 </tr>
               </thead>
               <tbody>
@@ -569,52 +575,47 @@ export default function PartsSPMDashboardPage() {
                       <td className="whitespace-nowrap px-4 py-2.5 text-gray-700">{row.entry_date}</td>
                       <td className="whitespace-nowrap px-4 py-2.5 text-gray-600">{row.job_card_number || '—'}</td>
                       <td className="whitespace-nowrap px-4 py-2.5 text-gray-700">{row.advisor_name}</td>
-                      <td className="whitespace-nowrap px-4 py-2.5 font-semibold text-gray-900">{row.registration_number}</td>
-                      <td className="whitespace-nowrap px-4 py-2.5 text-gray-700">{row.customer_name || '—'}</td>
-                      <td className="whitespace-nowrap px-4 py-2.5 text-xs text-gray-600">{row.customer_mobile || '—'}</td>
-                      {/* Vehicle Model */}
-                      <td className="whitespace-nowrap px-4 py-2.5 text-gray-600">{row.vehicle_model || '—'}</td>
-                      {/* Portal (EV/PV) */}
-                      <td className="px-4 py-2.5">
-                        <span className={`inline-block rounded px-1.5 py-0.5 text-[10px] font-bold
-                          ${evpvOf(row) === 'EV' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'}`}>
-                          {evpvOf(row)}
-                        </span>
+                      <td className="whitespace-nowrap px-3 py-2.5">
+                        <div className="leading-tight">
+                          <p className="font-semibold text-gray-900">{row.registration_number}</p>
+                          <p className="text-[11px] text-gray-500">{row.vehicle_model || '—'}</p>
+                        </div>
                       </td>
-                      <td className="px-4 py-2.5 text-gray-700">{row.parts_required}</td>
-
-                      {isEditing ? (
-                        <>
-                          {/* Parts No. — editable + auto-fetch trigger */}
-                          <td className="px-4 py-2.5">
-                            <div className="relative">
+                      <td className="whitespace-nowrap px-3 py-2.5 text-gray-700">{row.customer_name || '—'}</td>
+                      <td className="whitespace-nowrap px-3 py-2.5 text-xs text-gray-600">{row.customer_mobile || '—'}</td>
+                      <td className="px-3 py-2.5">
+                        <div className="leading-tight">
+                          <p className="text-gray-700">{row.parts_required}</p>
+                          {isEditing ? (
+                            <div className="relative mt-0.5">
                               <input type="text"
                                 value={editDraft?.parts_number ?? ''}
                                 onChange={(e) => handlePartNoChange(e.target.value)}
-                                className={`w-32 rounded-md border px-2 py-1 text-sm
+                                className={`w-32 rounded-md border px-2 py-1 text-xs font-mono
                                   ${partNoFetchStatus === 'found' ? 'border-green-400 bg-green-50' : 'border-gray-300'}`}
                                 placeholder="Parts No." />
                               {partNoFetchStatus === 'found' && (
                                 <span className="absolute -right-1 -top-2 text-[9px] font-bold text-green-600">✓</span>
                               )}
                             </div>
-                          </td>
-                          {/* Order No. — SPM-editable */}
-                          <td className="px-4 py-2.5">
+                          ) : (
+                            <p className="mt-0.5 font-mono text-[11px] text-gray-500">{row.parts_number || '—'}</p>
+                          )}
+                        </div>
+                      </td>
+
+                      {isEditing ? (
+                        <>
+                          {/* Order No. + Order Date merged — SPM-editable Order No, auto Order Date */}
+                          <td className="px-3 py-2.5">
                             <div className="flex flex-col gap-0.5">
                               <input type="text"
                                 value={editDraft?.order_no ?? ''}
                                 onChange={(e) => setEditDraft((d) => d ? { ...d, order_no: e.target.value } : d)}
                                 className="w-28 rounded-md border border-blue-300 bg-blue-50 px-2 py-1 text-sm"
                                 placeholder="Order No." />
+                              <span className="text-[10px] text-gray-500">{editDraft?.parts_order_date || '—'}</span>
                               <span className="text-[9px] text-blue-500">SPM editable</span>
-                            </div>
-                          </td>
-                          {/* Order Date — auto-filled, read-only */}
-                          <td className="px-4 py-2.5">
-                            <div className="flex flex-col gap-0.5">
-                              <span className="text-sm text-gray-700">{editDraft?.parts_order_date || '—'}</span>
-                              <span className="text-[9px] text-gray-400">Auto from Parts Order</span>
                             </div>
                           </td>
                           {/* Order Status — auto-filled, read-only */}
@@ -694,14 +695,16 @@ export default function PartsSPMDashboardPage() {
                       ) : (
                         <>
                           <td className={`px-4 py-2.5 font-mono text-xs ${row.parts_number ? 'text-gray-700' : 'text-gray-400'}`}>{row.parts_number || '—'}</td>
-                          {/* Order No. with VOR badge */}
-                          <td className="px-4 py-2.5 text-xs text-gray-700">
-                            <div className="flex items-center gap-1">
-                              {isVOR && <span className="rounded bg-yellow-200 px-1 py-0.5 text-[9px] font-bold text-yellow-800">VOR</span>}
-                              {displayOrderNo || '—'}
+                          {/* Order No. + Order Date merged */}
+                          <td className="whitespace-nowrap px-3 py-2.5 text-xs">
+                            <div className="leading-tight">
+                              <div className="flex items-center gap-1">
+                                {isVOR && <span className="rounded bg-yellow-200 px-1 py-0.5 text-[9px] font-bold text-yellow-800">VOR</span>}
+                                <span className="text-gray-700">{displayOrderNo || '—'}</span>
+                              </div>
+                              <p className="mt-0.5 text-[11px] text-gray-500">{displayOrderDate || '—'}</p>
                             </div>
                           </td>
-                          <td className={`px-4 py-2.5 text-xs ${displayOrderDate ? 'text-gray-700' : 'text-gray-400'}`}>{displayOrderDate || '—'}</td>
                           <td className="px-4 py-2.5 text-xs text-gray-600">{displayOrderStatus}</td>
                           <td className="px-4 py-2.5"><QtyBadge qty={displayStock} /></td>
                           <td className="px-4 py-2.5"><StatusBadge status={row.parts_status} qty={row.parts_qty} /></td>

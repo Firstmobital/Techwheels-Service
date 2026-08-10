@@ -585,18 +585,6 @@ export default function PartsRequirementSection({ isAdmin = false }: Props) {
   // ── EV/PV category — vehicle_type is the primary source.
   // Special exception: SINGH, PANKAJ (employee_code PS2_3000840) is EV even though
   // his suffix code contains 3000840 (normal PV prefix).
-  const evpvOf = (row: PartsRequestRow): string => {
-    const name = (row.advisor_name ?? '').toUpperCase()
-    const code = (row.advisor_employee_code ?? '').toUpperCase()
-    // Pankaj Singh exception — EV regardless of code
-    if (name.includes('PANKAJ') && (name.includes('SINGH') || code.includes('PS2_'))) return 'EV'
-    if (row.vehicle_type === 'EV') return 'EV'
-    if (row.vehicle_type === 'PV') return 'PV'
-    // Fallback: infer from employee code prefix
-    if (code.startsWith('500A') || code.includes('_500A')) return 'EV'
-    return 'PV'
-  }
-
   // ── Order number lookup (must be declared before isVOR uses it) ──────────
   const orderNoOf = (row: PartsRequestRow): string =>
     orderNumbers[normPartNumber(row.parts_number)] || ''
@@ -1261,108 +1249,131 @@ export default function PartsRequirementSection({ isAdmin = false }: Props) {
       ) : isDesktop && isAdmin ? (
         <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white shadow-sm">
           <table className="min-w-full text-sm">
-            <thead className="sticky top-0 z-10 bg-gray-50 text-xs font-semibold uppercase tracking-wide text-gray-500">
+            <thead className="sticky top-0 z-10 bg-gradient-to-r from-slate-100 via-blue-50 to-indigo-50 text-xs font-semibold uppercase tracking-wide text-gray-600 shadow-sm">
               <tr>
-                <th className="whitespace-nowrap px-4 py-3 text-left">Entry Date</th>
-                <th className="whitespace-nowrap px-4 py-3 text-left">Job Card</th>
-                <th className="whitespace-nowrap px-4 py-3 text-left">Advisor</th>
-                <th className="whitespace-nowrap px-4 py-3 text-left">Reg No.</th>
-                <th className="whitespace-nowrap px-4 py-3 text-left">Customer Mobile No</th>
-                <th className="whitespace-nowrap px-4 py-3 text-left">Vehicle Model</th>
-                <th className="whitespace-nowrap px-4 py-3 text-left">Portal</th>
-                <th className="whitespace-nowrap px-4 py-3 text-left">Parts Required</th>
-                <th className="whitespace-nowrap px-4 py-3 text-left">Parts No.</th>
-                <th className="whitespace-nowrap px-4 py-3 text-left">Order No.</th>
-                <th className="whitespace-nowrap px-4 py-3 text-left">Order Date</th>
-                <th className="whitespace-nowrap px-4 py-3 text-left">Order Status</th>
-                <th className="whitespace-nowrap px-4 py-3 text-left">Stock</th>
-                <th className="whitespace-nowrap px-4 py-3 text-left">Status</th>
-                <th className="whitespace-nowrap px-4 py-3 text-left">Status 1</th>
-                <th className="whitespace-nowrap px-4 py-3 text-left">Adv. Remarks</th>
-                <th className="whitespace-nowrap px-4 py-3 text-left">Cust. Update</th>
-                <th className="whitespace-nowrap px-4 py-3 text-left">SPM Remarks</th>
-                <th className="whitespace-nowrap px-4 py-3 text-left">Received</th>
-                <th className="whitespace-nowrap px-4 py-3 text-left">Done</th>
-                <th className="whitespace-nowrap px-4 py-3 text-left">Action</th>
+                <th className="whitespace-nowrap px-3 py-3 text-left">Entry Date</th>
+                <th className="whitespace-nowrap px-3 py-3 text-left">Job Card</th>
+                <th className="whitespace-nowrap px-3 py-3 text-left">Advisor</th>
+                <th className="whitespace-nowrap px-3 py-3 text-left">
+                  <div className="leading-tight">
+                    <span>Reg No.</span>
+                    <span className="block text-[10px] font-medium text-gray-400 normal-case">Model</span>
+                  </div>
+                </th>
+                <th className="whitespace-nowrap px-3 py-3 text-left">Customer</th>
+                <th className="whitespace-nowrap px-3 py-3 text-left">Customer Mobile No</th>
+                <th className="whitespace-nowrap px-3 py-3 text-left">
+                  <div className="leading-tight">
+                    <span>Parts Required</span>
+                    <span className="block text-[10px] font-medium text-gray-400 normal-case">Parts No.</span>
+                  </div>
+                </th>
+                <th className="whitespace-nowrap px-3 py-3 text-left">
+                  <div className="leading-tight">
+                    <span>Order No.</span>
+                    <span className="block text-[10px] font-medium text-gray-400 normal-case">Order Date</span>
+                  </div>
+                </th>
+                <th className="whitespace-nowrap px-3 py-3 text-left">Order Status</th>
+                <th className="whitespace-nowrap px-3 py-3 text-left">Stock</th>
+                <th className="whitespace-nowrap px-3 py-3 text-left">Status</th>
+                <th className="whitespace-nowrap px-3 py-3 text-left">Status 1</th>
+                <th className="whitespace-nowrap px-3 py-3 text-left">Adv. Remarks</th>
+                <th className="whitespace-nowrap px-3 py-3 text-left">Cust. Update</th>
+                <th className="whitespace-nowrap px-3 py-3 text-left">SPM Remarks</th>
+                <th className="whitespace-nowrap px-3 py-3 text-left">Received</th>
+                <th className="whitespace-nowrap px-3 py-3 text-left">Done</th>
+                <th className="whitespace-nowrap px-3 py-3 text-left">Action</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
               {filteredRows.map((row) => {
                 const orderStatus = orderStatusOf(row)
+                const isReceived = row.parts_status === 'Received'
                 return (
                   <>
                     <tr
                       key={row.id}
                       className={`transition hover:bg-gray-50
-                        ${isVOR(row) ? 'bg-yellow-50 border-l-4 border-yellow-400' : ''}
-                        ${!row.advisor_seen && !isAdmin && !isVOR(row) ? 'bg-blue-50/40' : ''}`}
+                        ${isReceived ? 'bg-emerald-50 border-l-4 border-emerald-500' : ''}
+                        ${isVOR(row) && !isReceived ? 'bg-yellow-50 border-l-4 border-yellow-400' : ''}
+                        ${!row.advisor_seen && !isAdmin && !isVOR(row) && !isReceived ? 'bg-blue-50/40' : ''}`}
                     >
-                      <td className="whitespace-nowrap px-4 py-2.5 text-xs text-gray-700">{fmtDateDMY(row.entry_date)}</td>
-                      <td className="whitespace-nowrap px-4 py-2.5 text-xs text-gray-600">{row.job_card_number ? row.job_card_number.slice(-6) : '—'}</td>
-                      <td className="whitespace-nowrap px-4 py-2.5 text-xs text-gray-700">{row.advisor_name}</td>
-                      <td className="whitespace-nowrap px-4 py-2.5 text-sm font-semibold text-gray-900">{row.registration_number}</td>
-                      <td className="whitespace-nowrap px-4 py-2.5 text-xs text-gray-600">{row.customer_mobile || '—'}</td>
-                      <td className="whitespace-nowrap px-4 py-2.5 text-xs text-gray-600">{row.vehicle_model || '—'}</td>
-                      <td className="px-4 py-2.5">
-                        <span className={`inline-block rounded px-1.5 py-0.5 text-[10px] font-bold
-                          ${evpvOf(row) === 'EV' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'}`}>
-                          {evpvOf(row)}
-                        </span>
-                      </td>
-                      <td className="px-4 py-2.5 text-xs font-medium text-gray-900 max-w-[220px]">
-                        {editingPartsRequiredId === row.id ? (
-                          <div className="flex flex-col gap-1">
-                            <input type="text" autoFocus value={editingPartsRequiredValue}
-                              onChange={(e) => setEditingPartsRequiredValue(e.target.value)}
-                              onKeyDown={(e) => { if (e.key === 'Enter') void handlePartsRequiredEdit(row, editingPartsRequiredValue); if (e.key === 'Escape') setEditingPartsRequiredId(null) }}
-                              className="w-full rounded border border-blue-400 px-1.5 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400" />
-                            <div className="flex gap-1">
-                              <button type="button" disabled={editingPartsRequiredSaving} onClick={() => void handlePartsRequiredEdit(row, editingPartsRequiredValue)}
-                                className="rounded bg-blue-600 px-2 py-0.5 text-[10px] font-semibold text-white hover:bg-blue-700 disabled:opacity-50">{editingPartsRequiredSaving ? 'Saving...' : 'Save'}</button>
-                              <button type="button" disabled={editingPartsRequiredSaving} onClick={() => setEditingPartsRequiredId(null)}
-                                className="rounded bg-gray-200 px-2 py-0.5 text-[10px] font-semibold text-gray-600 hover:bg-gray-300 disabled:opacity-50">Cancel</button>
-                            </div>
-                          </div>
-                        ) : (
-                          <div className="flex items-start gap-1">
-                            <p className="whitespace-normal break-words flex-1">{row.parts_required}</p>
-                            {row.parts_status !== 'Done' && (
-                              <button type="button" onClick={(e) => { e.stopPropagation(); startPartsRequiredEdit(row) }}
-                                className="shrink-0 rounded p-0.5 text-gray-400 hover:bg-blue-50 hover:text-blue-600" title="Edit Parts Required">
-                                <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4Z"/></svg>
-                              </button>
-                            )}
-                          </div>
-                        )}
-                      </td>
-                      <td className="px-4 py-2.5 text-xs text-gray-500 font-mono">{row.parts_number || '—'}</td>
-                      <td className="whitespace-nowrap px-4 py-2.5 text-xs">
-                        <div className="flex items-center gap-1">
-                          {isVOR(row) && <span className="rounded bg-yellow-200 px-1 py-0.5 text-[9px] font-bold text-yellow-800">VOR</span>}
-                          <span className="text-gray-700">{orderNoOf(row) || '—'}</span>
+                      <td className="whitespace-nowrap px-3 py-2.5 text-xs text-gray-700">{fmtDateDMY(row.entry_date)}</td>
+                      <td className="whitespace-nowrap px-3 py-2.5 text-xs text-gray-600">{row.job_card_number ? row.job_card_number.slice(-6) : '—'}</td>
+                      <td className="whitespace-nowrap px-3 py-2.5 text-xs text-gray-700">{row.advisor_name}</td>
+                      {/* Reg No. + Model merged */}
+                      <td className="whitespace-nowrap px-3 py-2.5">
+                        <div className="leading-tight">
+                          <p className="text-sm font-semibold text-gray-900">{row.registration_number}</p>
+                          <p className="text-[11px] text-gray-500">{row.vehicle_model || '—'}</p>
                         </div>
                       </td>
-                      <td className="whitespace-nowrap px-4 py-2.5 text-xs text-gray-600">{fmtDateDMY(row.parts_order_date)}</td>
-                      <td className="px-4 py-2.5"><OrderStatusBadge label={orderStatus} /></td>
-                      <td className="px-4 py-2.5"><StockStatusBadge qty={row.parts_qty} /></td>
-                      <td className="px-4 py-2.5"><StatusBadge status={row.parts_status} qty={row.parts_qty} /></td>
-                      <td className="px-4 py-2.5 text-xs">
+                      {/* Customer */}
+                      <td className="whitespace-nowrap px-3 py-2.5 text-xs text-gray-700">{row.customer_name || '—'}</td>
+                      <td className="whitespace-nowrap px-3 py-2.5 text-xs text-gray-600">{row.customer_mobile || '—'}</td>
+                      {/* Parts Required + Parts No. merged */}
+                      <td className="px-3 py-2.5 text-xs font-medium text-gray-900 max-w-[220px]">
+                        <div className="leading-tight">
+                          {editingPartsRequiredId === row.id ? (
+                            <div className="flex flex-col gap-1">
+                              <input type="text" autoFocus value={editingPartsRequiredValue}
+                                onChange={(e) => setEditingPartsRequiredValue(e.target.value)}
+                                onKeyDown={(e) => { if (e.key === 'Enter') void handlePartsRequiredEdit(row, editingPartsRequiredValue); if (e.key === 'Escape') setEditingPartsRequiredId(null) }}
+                                className="w-full rounded border border-blue-400 px-1.5 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400" />
+                              <div className="flex gap-1">
+                                <button type="button" disabled={editingPartsRequiredSaving} onClick={() => void handlePartsRequiredEdit(row, editingPartsRequiredValue)}
+                                  className="rounded bg-blue-600 px-2 py-0.5 text-[10px] font-semibold text-white hover:bg-blue-700 disabled:opacity-50">{editingPartsRequiredSaving ? 'Saving...' : 'Save'}</button>
+                                <button type="button" disabled={editingPartsRequiredSaving} onClick={() => setEditingPartsRequiredId(null)}
+                                  className="rounded bg-gray-200 px-2 py-0.5 text-[10px] font-semibold text-gray-600 hover:bg-gray-300 disabled:opacity-50">Cancel</button>
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="flex items-start gap-1">
+                              <div className="flex-1">
+                                <p className="whitespace-normal break-words">{row.parts_required}</p>
+                                <p className="mt-0.5 font-mono text-[11px] text-gray-500">{row.parts_number || '—'}</p>
+                              </div>
+                              {row.parts_status !== 'Done' && (
+                                <button type="button" onClick={(e) => { e.stopPropagation(); startPartsRequiredEdit(row) }}
+                                  className="shrink-0 rounded p-0.5 text-gray-400 hover:bg-blue-50 hover:text-blue-600" title="Edit Parts Required">
+                                  <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4Z"/></svg>
+                                </button>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      </td>
+                      {/* Order No. + Order Date merged */}
+                      <td className="whitespace-nowrap px-3 py-2.5 text-xs">
+                        <div className="leading-tight">
+                          <div className="flex items-center gap-1">
+                            {isVOR(row) && <span className="rounded bg-yellow-200 px-1 py-0.5 text-[9px] font-bold text-yellow-800">VOR</span>}
+                            <span className="text-gray-700">{orderNoOf(row) || '—'}</span>
+                          </div>
+                          <p className="mt-0.5 text-[11px] text-gray-500">{fmtDateDMY(row.parts_order_date)}</p>
+                        </div>
+                      </td>
+                      <td className="px-3 py-2.5"><OrderStatusBadge label={orderStatus} /></td>
+                      <td className="px-3 py-2.5"><StockStatusBadge qty={row.parts_qty} /></td>
+                      <td className="px-3 py-2.5"><StatusBadge status={row.parts_status} qty={row.parts_qty} /></td>
+                      <td className="px-3 py-2.5 text-xs">
                         {(() => { const s1 = getStatus1(row.parts_number); if (!s1.isBackOrder) return <span className="text-gray-300">&mdash;</span>; return (
                           <div className="space-y-0.5">
                             <span className="inline-block rounded bg-red-100 px-1.5 py-0.5 text-[10px] font-semibold text-red-700">Back Order</span><br />
                             {s1.jaipurDealers > 0 ? <span className="inline-block rounded bg-green-100 px-1.5 py-0.5 text-[10px] font-semibold text-green-700">AVL: Jaipur – {s1.jaipurDealers} Dealer{s1.jaipurDealers !== 1 ? 's' : ''}</span> : <span className="inline-block rounded bg-gray-100 px-1.5 py-0.5 text-[10px] font-semibold text-gray-500">AVL: Jaipur – Not Available</span>}
                           </div>); })()}
                       </td>
-                      <td className="px-4 py-2.5 text-xs text-gray-600 max-w-[160px]">
+                      <td className="px-3 py-2.5 text-xs text-gray-600 max-w-[160px]">
                         {row.parts_status !== 'Done' ? (<select defaultValue={row.advisor_remarks ?? ''} onBlur={(e) => void handleRemarksBlur(row, e.target.value)} className="w-full rounded-md border border-gray-200 px-1.5 py-1 text-xs font-sans focus:border-blue-400 focus:outline-none bg-white"><option value="">— Select —</option>{ADVISOR_REMARK_OPTIONS.map((opt) => (<option key={opt} value={opt}>{opt}</option>))}</select>) : (<p className="line-clamp-2">{row.advisor_remarks || '—'}</p>)}
                       </td>
-                      <td className="px-4 py-2.5 text-xs text-gray-600 max-w-[160px]">
+                      <td className="px-3 py-2.5 text-xs text-gray-600 max-w-[160px]">
                         {row.parts_status !== 'Done' ? (<textarea defaultValue={row.customer_update ?? ''} onBlur={(e) => void handleCustomerUpdateBlur(row, e.target.value)} rows={2} className="w-full rounded-md border border-gray-200 px-2 py-1 text-xs font-sans focus:border-blue-400 focus:outline-none resize-y" placeholder="Latest update shared with customer..." />) : (<p className="line-clamp-2">{row.customer_update || '—'}</p>)}
                       </td>
-                      <td className="px-4 py-2.5 text-xs text-gray-500 max-w-[140px]"><p className="line-clamp-2">{row.spm_remarks || '—'}</p></td>
-                      <td className="whitespace-nowrap px-4 py-2.5 text-xs text-gray-500">{row.received_at ? new Date(row.received_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', dateStyle: 'short', timeStyle: 'short' }) : '—'}{row.received_by_name && <div className="text-gray-400">{row.received_by_name}</div>}</td>
-                      <td className="whitespace-nowrap px-4 py-2.5 text-xs text-gray-500">{row.done_at ? new Date(row.done_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', dateStyle: 'short', timeStyle: 'short' }) : '—'}{row.done_by_name && <div className="text-gray-400">{row.done_by_name}</div>}</td>
-                      <td className="px-4 py-2.5"><ActionButton row={row} /></td>
+                      <td className="px-3 py-2.5 text-xs text-gray-500 max-w-[140px]"><p className="line-clamp-2">{row.spm_remarks || '—'}</p></td>
+                      <td className="whitespace-nowrap px-3 py-2.5 text-xs text-gray-500">{row.received_at ? new Date(row.received_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', dateStyle: 'short', timeStyle: 'short' }) : '—'}{row.received_by_name && <div className="text-gray-400">{row.received_by_name}</div>}</td>
+                      <td className="whitespace-nowrap px-3 py-2.5 text-xs text-gray-500">{row.done_at ? new Date(row.done_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', dateStyle: 'short', timeStyle: 'short' }) : '—'}{row.done_by_name && <div className="text-gray-400">{row.done_by_name}</div>}</td>
+                      <td className="px-3 py-2.5"><ActionButton row={row} /></td>
                     </tr>
                   </>
                 )
