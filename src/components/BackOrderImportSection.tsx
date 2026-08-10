@@ -1,8 +1,8 @@
 // BackOrderImportSection — self-contained upload section for
 //   1. VOR BO REPORT (Sheet 1) — parts NOT available with Tata Motors
 //   2. AVL WITH CP STOCK (Sheet 2) — parts available with Co-Dealers
-// Inserted into ImportPage. Uses same CSS conventions (imp-group) as rest of page.
-// Optimized for large files: batch size 50 + progress feedback + raw column storage.
+// Supports .xlsx, .xls, AND .csv files.
+// Column mapping matches actual column names from the AVL WITH CP STOCK export.
 
 import { useCallback, useRef, useState } from 'react'
 import * as XLSX from 'xlsx'
@@ -27,7 +27,7 @@ const EMPTY_SLOT: SlotState = {
   sheetName: null, availableSheets: [], fileSizeMB: null, uploadedSoFar: null
 }
 
-// ─── Column mapping helpers (flexible — tries multiple common column names) ───
+// ─── Column mapping helpers ───────────────────────────────────────────────────
 function gs(raw: Record<string, unknown>, ...keys: string[]): string {
   for (const k of keys) {
     for (const col of Object.keys(raw)) {
@@ -47,7 +47,7 @@ function gn(raw: Record<string, unknown>, ...keys: string[]): number | null {
   return isNaN(n) ? null : n
 }
 
-// ─── Smart sheet selection ───────────────────────────────────────────────────
+// ─── Smart sheet selection for XLSX ───────────────────────────────────────────
 function pickSheet(wb: XLSX.WorkBook, key: SlotKey): string {
   const names = wb.SheetNames.map(n => n.toLowerCase().trim())
   const actualNames = wb.SheetNames
@@ -60,8 +60,6 @@ function pickSheet(wb: XLSX.WorkBook, key: SlotKey): string {
     }
     return actualNames[0]
   }
-
-  // avl_cp_stock
   for (let i = 0; i < names.length; i++) {
     if (names[i].includes('avl') || names[i].includes('cp') || names[i].includes('stock') || names[i].includes('sheet2') || names[i] === 'sheet 2') {
       return actualNames[i]
@@ -71,26 +69,60 @@ function pickSheet(wb: XLSX.WorkBook, key: SlotKey): string {
   return actualNames[0]
 }
 
+// ─── Read rows from file (xlsx or csv) ────────────────────────────────────────
+async function readRows(file: File, key: SlotKey): Promise<{ rows: Record<string, unknown>[]; sheetName: string }> {
+  const buf = await file.arrayBuffer()
+  const fileName = file.name.toLowerCase()
+
+  if (fileName.endsWith('.csv')) {
+    // CSV: XLSX can parse CSV too
+    const wb = XLSX.read(buf, { type: 'array', raw: false })
+    const sheetName = wb.SheetNames[0]
+    const ws = wb.Sheets[sheetName]
+    const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(ws, { defval: '' })
+    return { rows, sheetName }
+  }
+
+  // XLSX/XLS
+  const wb = XLSX.read(buf, { type: 'array' })
+  const sheetName = pickSheet(wb, key)
+  const ws = wb.Sheets[sheetName]
+  const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(ws, { defval: '' })
+  return { rows, sheetName }
+}
+
 // ─── VOR BO REPORT row mapper ─────────────────────────────────────────────────
 function mapVorRow(raw: Record<string, unknown>, sessionId: string) {
   return {
     upload_session_id: sessionId,
-    part_number: gs(raw, 'Part No', 'Part Number', 'Part No.', 'Part #', 'Material', 'Material No', 'Material Number', 'Material No.'),
-    part_description: gs(raw, 'Part Description', 'Description', 'Material Description', 'Part Desc', 'Material Description (Material)', 'Material Desc'),
+    part_number: gs(raw, 'Part No', 'Part Number', 'Part No.', 'Part #', 'Material', 'Material No', 'Material Number', 'Material No.', 'Part'),
+    part_description: gs(raw, 'Part Description', 'Description', 'Material Description', 'Part Desc', 'Material Description (Material)', 'Material Desc', 'PARTNAME', 'Part Name'),
     bo_quantity: gn(raw, 'BO Qty', 'BO Quantity', 'Back Order Qty', 'Back Order Quantity', 'Quantity', 'Qty', 'Required Qty', 'Required Quantity', 'Order Qty', 'Pending Qty'),
     source_row_data: raw as unknown,
   }
 }
 
-// ─── AVL WITH CP STOCK row mapper ─────────────────────────────────────────────
+// ─── AVL WITH CP STOCK row mapper — matches actual CSV columns ─────────────────
 function mapCpRow(raw: Record<string, unknown>, sessionId: string) {
   return {
     upload_session_id: sessionId,
-    part_number: gs(raw, 'Part No', 'Part Number', 'Part No.', 'Part #', 'Material', 'Material No', 'Material Number', 'Material No.', 'Part Code'),
-    part_description: gs(raw, 'Part Description', 'Description', 'Material Description', 'Part Desc', 'Material Desc', 'Material Description (Material)'),
-    co_dealer_name: gs(raw, 'Co-Dealer Name', 'Dealer Name', 'Co Dealer Name', 'Vendor Name', 'Supplier Name', 'CP Name', 'Co-Dealer', 'Dealer', 'Dealer Name (Co-Dealer)', 'Co Dealer', 'CoDealer'),
-    dealer_code: gs(raw, 'Dealer Code', 'Co-Dealer Code', 'CP Code', 'Vendor Code', 'Supplier Code', 'Code', 'Dealer Code (Co-Dealer)', 'Dealer No', 'Dealer No.'),
-    available_qty: gn(raw, 'Available Qty', 'Available Quantity', 'Stock Qty', 'Stock Quantity', 'Qty', 'Quantity', 'CP Qty', 'CP Stock', 'Available Stock', 'Stock'),
+    // Actual column names from AVLWITHCPSTOCK.csv:
+    part_number: gs(raw, 'Part', 'Part No', 'Part Number', 'Part No.', 'Part #', 'Material', 'Material No', 'Material Number'),
+    part_description: gs(raw, 'PARTNAME', 'Part Name', 'Part Description', 'Description', 'Material Description', 'Part Desc'),
+    co_dealer_name: gs(raw, 'CP_NAME', 'Co-Dealer Name', 'Dealer Name', 'Co Dealer Name', 'Vendor Name', 'Supplier Name', 'CP Name', 'Co-Dealer', 'Dealer'),
+    dealer_code: gs(raw, 'SP', 'Dealer Code', 'Co-Dealer Code', 'CP Code', 'Vendor Code', 'Supplier Code', 'Code', 'Dealer No', 'Dealer No.'),
+    available_qty: gn(raw, 'STOCK', 'Stock', 'Available Qty', 'Available Quantity', 'Stock Qty', 'Stock Quantity', 'Qty', 'Quantity', 'CP Qty', 'CP Stock', 'Available Stock'),
+    on_order: gn(raw, 'ONORDER', 'On Order', 'OnOrder', 'On-Order'),
+    price: gn(raw, 'PRICE', 'Price', 'Part Price'),
+    region_name: gs(raw, 'REGIONNAME', 'Region Name', 'Region', 'REGION'),
+    state: gs(raw, 'STATE', 'State'),
+    city: gs(raw, 'CITY', 'City'),
+    cp_type: gs(raw, 'CP_TYPE', 'CP Type', 'Cp Type'),
+    cp_type1: gs(raw, 'CP_TYPE1', 'CP Type1', 'Cp Type1'),
+    division: gs(raw, 'DIVISION', 'Division'),
+    cell_phone: gs(raw, 'CELL', 'Cell', 'Phone', 'Mobile', 'Contact No', 'Contact Number'),
+    contact_name: gs(raw, 'CONTACT_NAME', 'Contact Name', 'Contact Person'),
+    email: gs(raw, 'E_MAIL', 'Email', 'E-Mail', 'E Mail'),
     source_row_data: raw as unknown,
   }
 }
@@ -111,12 +143,15 @@ export function BackOrderImportSection() {
     if (!file) return
     const fileSizeMB = (file.size / (1024 * 1024)).toFixed(2)
     try {
-      const buf = await file.arrayBuffer()
-      const wb = XLSX.read(buf, { type: 'array' })
-      const sheetName = pickSheet(wb, key)
+      const { rows, sheetName } = await readRows(file, key)
+      void rows
       setSlots(prev => ({
         ...prev,
-        [key]: { file, rowCount: null, status: 'idle', message: null, sheetName, availableSheets: wb.SheetNames, fileSizeMB, uploadedSoFar: null }
+        [key]: {
+          file, rowCount: null, status: 'idle', message: null,
+          sheetName, availableSheets: file.name.toLowerCase().endsWith('.csv') ? [sheetName] : [],
+          fileSizeMB, uploadedSoFar: null
+        }
       }))
     } catch {
       setSlots(prev => ({
@@ -129,16 +164,11 @@ export function BackOrderImportSection() {
   const handleUpload = useCallback(async (key: SlotKey) => {
     const slot = slots[key]
     if (!slot.file) return
-    setSlots(prev => ({ ...prev, [key]: { ...prev[key], status: 'uploading', message: 'Reading Excel…', uploadedSoFar: 0 } }))
+    setSlots(prev => ({ ...prev, [key]: { ...prev[key], status: 'uploading', message: 'Reading file…', uploadedSoFar: 0 } }))
 
     try {
-      const buf = await slot.file.arrayBuffer()
-      const wb = XLSX.read(buf, { type: 'array' })
-
-      const sheetName = pickSheet(wb, key)
-      const ws = wb.Sheets[sheetName]
-      const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(ws, { defval: '' })
-      if (rows.length === 0) throw new Error('No data rows found in sheet: ' + sheetName)
+      const { rows, sheetName } = await readRows(slot.file, key)
+      if (rows.length === 0) throw new Error('No data rows found in: ' + sheetName)
 
       const sessionId = 'bo_' + key + '_' + Date.now()
       const tableName = key === 'vor_bo_report' ? 'back_order_vor_data' : 'back_order_cp_stock_data'
@@ -148,8 +178,7 @@ export function BackOrderImportSection() {
       const { error: delErr } = await supabase.from(tableName).delete().neq('id', -1)
       if (delErr) throw new Error('Failed to clear existing data: ' + delErr.message)
 
-      // Insert new rows in small batches (50) to stay under Supabase API 1MB payload limit
-      // Each row has source_row_data JSONB which can be large, so keep batches small
+      // Insert in small batches (50) to stay under Supabase API 1MB limit
       const BATCH = 50
       let inserted = 0
       for (let i = 0; i < rows.length; i += BATCH) {
@@ -157,15 +186,19 @@ export function BackOrderImportSection() {
         const { error: insErr } = await supabase.from(tableName).insert(batch)
         if (insErr) throw new Error('Insert failed at row ' + i + ': ' + insErr.message)
         inserted += batch.length
-        // Update progress
-        setSlots(prev => ({ ...prev, [key]: { ...prev[key], message: 'Uploading… ' + inserted + ' / ' + rows.length + ' rows', uploadedSoFar: inserted } }))
+        setSlots(prev => ({
+          ...prev,
+          [key]: { ...prev[key], message: 'Uploading… ' + inserted.toLocaleString('en-IN') + ' / ' + rows.length.toLocaleString('en-IN') + ' rows', uploadedSoFar: inserted }
+        }))
       }
 
       setSlots(prev => ({
         ...prev,
-        [key]: { ...prev[key], file: slot.file, rowCount: rows.length, status: 'success',
-          message: rows.length + ' rows uploaded from sheet: ' + sheetName,
-          sheetName, availableSheets: prev[key].availableSheets, fileSizeMB: prev[key].fileSizeMB, uploadedSoFar: rows.length }
+        [key]: {
+          ...prev[key], file: slot.file, rowCount: rows.length, status: 'success',
+          message: rows.length + ' rows uploaded from: ' + sheetName,
+          sheetName, fileSizeMB: prev[key].fileSizeMB, uploadedSoFar: rows.length
+        }
       }))
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err)
@@ -181,17 +214,12 @@ export function BackOrderImportSection() {
 
   const SLOT_CONFIG: { key: SlotKey; title: string; desc: string; badge: string; color: string }[] = [
     { key: 'vor_bo_report', title: 'VOR BO REPORT', desc: 'Parts NOT available with Tata Motors (Back Order data). Upload Sheet 1.', badge: 'Sheet 1', color: '#dc2626' },
-    { key: 'avl_cp_stock', title: 'AVL WITH CP STOCK', desc: 'Parts available with Co-Dealers (not with Tata Motors). Upload Sheet 2.', badge: 'Sheet 2', color: '#2563eb' },
+    { key: 'avl_cp_stock', title: 'AVL WITH CP STOCK', desc: 'Parts available with Co-Dealers. Upload CSV or Excel (Sheet 2).', badge: 'Sheet 2', color: '#2563eb' },
   ]
 
   return (
     <section className="imp-group">
-      <button
-        type="button"
-        onClick={() => setExpanded(e => !e)}
-        className="imp-group__hd"
-        aria-expanded={expanded}
-      >
+      <button type="button" onClick={() => setExpanded(e => !e)} className="imp-group__hd" aria-expanded={expanded}>
         <span className="imp-group__ic"><Icon name="grid" size={18} /></span>
         <span style={{ flex: 1, textAlign: 'left', minWidth: 0 }}>
           <span className="imp-group__title">Back Order Data <span className="imp-group__count">2</span></span>
@@ -214,13 +242,7 @@ export function BackOrderImportSection() {
 
                 {slot.fileSizeMB && (
                   <p style={{ fontSize: '11px', color: '#9ca3af', marginBottom: '4px' }}>
-                    File size: {slot.fileSizeMB} MB
-                  </p>
-                )}
-                {slot.availableSheets.length > 0 && (
-                  <p style={{ fontSize: '11px', color: '#9ca3af', marginBottom: '8px' }}>
-                    Sheets in file: {slot.availableSheets.join(', ')}
-                    {slot.sheetName && <span style={{ color: '#2563eb', fontWeight: 600 }}> → Using: {slot.sheetName}</span>}
+                    File size: {slot.fileSizeMB} MB{slot.sheetName ? ' • Sheet: ' + slot.sheetName : ''}
                   </p>
                 )}
 
@@ -228,72 +250,38 @@ export function BackOrderImportSection() {
                   <input
                     ref={el => { fileRefs.current[cfg.key] = el }}
                     type="file"
-                    accept=".xlsx,.xls"
+                    accept=".xlsx,.xls,.csv"
                     onChange={(e) => void handleFile(cfg.key, e.target.files?.[0] ?? null)}
                     style={{ display: 'none' }}
                   />
-                  <button
-                    type="button"
-                    onClick={() => fileRefs.current[cfg.key]?.click()}
-                    className="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-xs font-semibold text-gray-700 hover:bg-gray-50"
-                  >
-                    Choose Excel File
+                  <button type="button" onClick={() => fileRefs.current[cfg.key]?.click()}
+                    className="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-xs font-semibold text-gray-700 hover:bg-gray-50">
+                    Choose File
                   </button>
-
                   {slot.file && (
                     <span className="text-xs text-gray-600" style={{ maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                       {slot.file.name}
                     </span>
                   )}
-
                   {slot.file && slot.status !== 'uploading' && (
-                    <button
-                      type="button"
-                      onClick={() => void handleUpload(cfg.key)}
-                      className="rounded-md bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-700"
-                    >
+                    <button type="button" onClick={() => void handleUpload(cfg.key)}
+                      className="rounded-md bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-700">
                       Upload
                     </button>
                   )}
-
-                  {slot.status === 'uploading' && (
-                    <span className="text-xs text-blue-600">{slot.message}</span>
-                  )}
-
-                  {slot.status === 'success' && (
-                    <span className="text-xs font-medium text-green-600">{slot.message}</span>
-                  )}
-
-                  {slot.status === 'error' && (
-                    <span className="text-xs font-medium text-red-600" style={{ maxWidth: '300px' }}>{slot.message}</span>
-                  )}
-
+                  {slot.status === 'uploading' && <span className="text-xs text-blue-600">{slot.message}</span>}
+                  {slot.status === 'success' && <span className="text-xs font-medium text-green-600">{slot.message}</span>}
+                  {slot.status === 'error' && <span className="text-xs font-medium text-red-600" style={{ maxWidth: '300px' }}>{slot.message}</span>}
                   {slot.file && slot.status !== 'uploading' && (
-                    <button
-                      type="button"
-                      onClick={() => handleReset(cfg.key)}
-                      className="rounded-md bg-gray-200 px-2 py-1.5 text-xs font-semibold text-gray-600 hover:bg-gray-300"
-                    >
+                    <button type="button" onClick={() => handleReset(cfg.key)}
+                      className="rounded-md bg-gray-200 px-2 py-1.5 text-xs font-semibold text-gray-600 hover:bg-gray-300">
                       Clear
                     </button>
                   )}
                 </div>
 
-                {/* Progress bar during upload */}
-                {slot.status === 'uploading' && slot.uploadedSoFar != null && slot.rowCount == null && (
-                  <div style={{ marginTop: '8px', width: '100%', height: '6px', background: '#e5e7eb', borderRadius: '3px', overflow: 'hidden' }}>
-                    <div style={{
-                      width: '50%',
-                      height: '100%',
-                      background: '#2563eb',
-                      borderRadius: '3px',
-                      transition: 'width 0.3s'
-                    }} />
-                  </div>
-                )}
-
                 {slot.rowCount != null && slot.status === 'success' && (
-                  <p className="mt-2 text-[11px] text-gray-400">{slot.rowCount} rows stored. Previous data replaced.</p>
+                  <p className="mt-2 text-[11px] text-gray-400">{slot.rowCount.toLocaleString('en-IN')} rows stored. Previous data replaced.</p>
                 )}
               </div>
             )
