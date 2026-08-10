@@ -229,6 +229,9 @@ export default function PartsRequirementSection({ isAdmin = false }: Props) {
   const [descriptions, setDescriptions] = useState<Record<string, string>>({})
   const [orderNumbers, setOrderNumbers] = useState<Record<string, string>>({})
   const [orderStatuses, setOrderStatuses] = useState<Record<string, string>>({})
+  // ── Back Order + Jaipur Co-Dealer stock data (Status 1 column) ──────────────
+  const [vorBackOrderParts, setVorBackOrderParts] = useState<Set<string>>(new Set())
+  const [jaipurDealerCount, setJaipurDealerCount] = useState<Record<string, number>>({})
   const [quickFilter, setQuickFilter] = useState<QuickFilter>('all')
   const [search, setSearch] = useState('')
   const [confirmAction, setConfirmAction] = useState<ConfirmAction>(null)
@@ -356,6 +359,64 @@ export default function PartsRequirementSection({ isAdmin = false }: Props) {
     }
   }, [])
 
+  // ── Load VOR Back Order parts + Jaipur Co-Dealer stock for Status 1 column ──
+  const loadBackOrderData = useCallback(async () => {
+    try {
+      // Fetch all VOR BO REPORT part numbers (Sheet 1 — Back Order parts)
+      let vorParts = new Set<string>()
+      let vorOffset = 0
+      while (true) {
+        const { data: vorData } = await supabase
+          .from('back_order_vor_data')
+          .select('part_number')
+          .range(vorOffset, vorOffset + 999)
+        if (!vorData || vorData.length === 0) break
+        for (const r of vorData) {
+          if (r.part_number) vorParts.add(r.part_number.trim().toUpperCase().replace(/\s+/g, ''))
+        }
+        if (vorData.length < 1000) break
+        vorOffset += 1000
+      }
+      setVorBackOrderParts(vorParts)
+
+      // Fetch AVL WITH CP STOCK data — filter CITY = Jaipur, count unique dealers per part
+      const dealerMap: Record<string, number> = {}
+      let cpOffset = 0
+      while (true) {
+        const { data: cpData } = await supabase
+          .from('back_order_cp_stock_data')
+          .select('part_number, co_dealer_name, city')
+          .ilike('city', 'Jaipur')
+          .range(cpOffset, cpOffset + 999)
+        if (!cpData || cpData.length === 0) break
+        const partDealers: Record<string, Set<string>> = {}
+        for (const r of cpData) {
+          if (!r.part_number) continue
+          const norm = r.part_number.trim().toUpperCase().replace(/\s+/g, '')
+          if (!partDealers[norm]) partDealers[norm] = new Set()
+          if (r.co_dealer_name) partDealers[norm].add(r.co_dealer_name)
+        }
+        for (const [part, dealers] of Object.entries(partDealers)) {
+          dealerMap[part] = (dealerMap[part] ?? 0) + dealers.size
+        }
+        if (cpData.length < 1000) break
+        cpOffset += 1000
+      }
+      setJaipurDealerCount(dealerMap)
+    } catch (err) {
+      console.error('[PartsReq] Back order data load error:', err)
+    }
+  }, [])
+
+  // ── Compute Status 1 for a row ──────────────────────────────────────────────
+  function getStatus1(partNo: string | null | undefined): { isBackOrder: boolean; jaipurDealers: number } {
+    const norm = normPartNumber(partNo ?? "")
+    if (!norm) return { isBackOrder: false, jaipurDealers: 0 }
+    const isBackOrder = vorBackOrderParts.has(norm)
+    const jaipurDealers = jaipurDealerCount[norm] ?? 0
+    return { isBackOrder, jaipurDealers }
+  }
+
   const load = useCallback(async () => {
     setLoading(true)
     const res = isAdmin ? await listAllPartsRequests() : await listMyPartsRequests()
@@ -371,7 +432,8 @@ export default function PartsRequirementSection({ isAdmin = false }: Props) {
   useEffect(() => {
     void load()
     void loadDescriptions()
-  }, [load, loadDescriptions])
+    void loadBackOrderData()
+  }, [load, loadDescriptions, loadBackOrderData])
 
   useEffect(() => {
     const channel = supabase
@@ -1192,6 +1254,7 @@ export default function PartsRequirementSection({ isAdmin = false }: Props) {
                 <th className="whitespace-nowrap px-4 py-3 text-left">Order Status</th>
                 <th className="whitespace-nowrap px-4 py-3 text-left">Stock</th>
                 <th className="whitespace-nowrap px-4 py-3 text-left">Status</th>
+                <th className="whitespace-nowrap px-4 py-3 text-left">Status 1</th>
                 <th className="whitespace-nowrap px-4 py-3 text-left">Adv. Remarks</th>
                 <th className="whitespace-nowrap px-4 py-3 text-left">Cust. Update</th>
                 <th className="whitespace-nowrap px-4 py-3 text-left">SPM Remarks</th>
@@ -1297,6 +1360,28 @@ export default function PartsRequirementSection({ isAdmin = false }: Props) {
                       <td className="px-4 py-2.5"><StockStatusBadge qty={row.parts_qty} /></td>
                       {/* Col 15: Status */}
                       <td className="px-4 py-2.5"><StatusBadge status={row.parts_status} qty={row.parts_qty} /></td>
+                      {/* Col 15b: Status 1 — Back Order + Jaipur Co-Dealer availability */}
+                      <td className="px-4 py-2.5 text-xs">
+                        {(() => {
+                          const s1 = getStatus1(row.parts_number)
+                          if (!s1.isBackOrder) return <span className="text-gray-300">—</span>
+                          return (
+                            <div className="space-y-0.5">
+                              <span className="inline-block rounded bg-red-100 px-1.5 py-0.5 text-[10px] font-semibold text-red-700">Back Order</span>
+                              <br />
+                              {s1.jaipurDealers > 0 ? (
+                                <span className="inline-block rounded bg-green-100 px-1.5 py-0.5 text-[10px] font-semibold text-green-700">
+                                  AVL: Jaipur – {s1.jaipurDealers} Dealer{s1.jaipurDealers !== 1 ? 's' : ''}
+                                </span>
+                              ) : (
+                                <span className="inline-block rounded bg-gray-100 px-1.5 py-0.5 text-[10px] font-semibold text-gray-500">
+                                  AVL: Jaipur – Not Available
+                                </span>
+                              )}
+                            </div>
+                          )
+                        })()}
+                      </td>
                       {/* Col 16: Adv. Remarks — dropdown only */}
                       <td className="px-4 py-2.5 text-xs text-gray-600 max-w-[160px]">
                         {row.parts_status !== 'Done' ? (
@@ -1420,6 +1505,24 @@ export default function PartsRequirementSection({ isAdmin = false }: Props) {
                     <StockStatusBadge qty={row.parts_qty} />
                     <OrderStatusBadge label={orderStatus} />
                   </div>
+                  {(() => {
+                    const s1 = getStatus1(row.parts_number)
+                    if (!s1.isBackOrder) return null
+                    return (
+                      <div className="mt-2 flex flex-wrap gap-1.5">
+                        <span className="inline-block rounded bg-red-100 px-1.5 py-0.5 text-[10px] font-semibold text-red-700">Back Order</span>
+                        {s1.jaipurDealers > 0 ? (
+                          <span className="inline-block rounded bg-green-100 px-1.5 py-0.5 text-[10px] font-semibold text-green-700">
+                            AVL: Jaipur – {s1.jaipurDealers} Dealer{s1.jaipurDealers !== 1 ? 's' : ''}
+                          </span>
+                        ) : (
+                          <span className="inline-block rounded bg-gray-100 px-1.5 py-0.5 text-[10px] font-semibold text-gray-500">
+                            AVL: Jaipur – Not Available
+                          </span>
+                        )}
+                      </div>
+                    )
+                  })()}
                   {!isAdmin && (
                     <div className="mt-2" onClick={(e) => e.stopPropagation()}>
                       <ActionButton row={row} />
