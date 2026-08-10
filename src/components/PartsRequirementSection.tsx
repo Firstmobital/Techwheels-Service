@@ -1258,22 +1258,22 @@ export default function PartsRequirementSection({ isAdmin = false }: Props) {
         <div className="rounded-xl border border-dashed border-gray-200 bg-gray-50 py-12 text-center text-sm text-gray-400">
           No parts requests found.
         </div>
-      ) : isDesktop ? (
+      ) : isDesktop && isAdmin ? (
         <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white shadow-sm">
           <table className="min-w-full text-sm">
             <thead className="sticky top-0 z-10 bg-gray-50 text-xs font-semibold uppercase tracking-wide text-gray-500">
               <tr>
                 <th className="whitespace-nowrap px-4 py-3 text-left">Entry Date</th>
                 <th className="whitespace-nowrap px-4 py-3 text-left">Job Card</th>
-                {isAdmin && <th className="whitespace-nowrap px-4 py-3 text-left">Advisor</th>}
-                <th className="whitespace-nowrap px-4 py-3 text-left">{isAdmin ? 'Reg No.' : 'Reg No./Model'}</th>
-                {isAdmin && <th className="whitespace-nowrap px-4 py-3 text-left">Customer Mobile No</th>}
-                {isAdmin && <th className="whitespace-nowrap px-4 py-3 text-left">Vehicle Model</th>}
-                {isAdmin && <th className="whitespace-nowrap px-4 py-3 text-left">Portal</th>}
+                <th className="whitespace-nowrap px-4 py-3 text-left">Advisor</th>
+                <th className="whitespace-nowrap px-4 py-3 text-left">Reg No.</th>
+                <th className="whitespace-nowrap px-4 py-3 text-left">Customer Mobile No</th>
+                <th className="whitespace-nowrap px-4 py-3 text-left">Vehicle Model</th>
+                <th className="whitespace-nowrap px-4 py-3 text-left">Portal</th>
                 <th className="whitespace-nowrap px-4 py-3 text-left">Parts Required</th>
-                {isAdmin && <th className="whitespace-nowrap px-4 py-3 text-left">Parts No.</th>}
-                {isAdmin && <th className="whitespace-nowrap px-4 py-3 text-left">Order No.</th>}
-                {isAdmin && <th className="whitespace-nowrap px-4 py-3 text-left">Order Date</th>}
+                <th className="whitespace-nowrap px-4 py-3 text-left">Parts No.</th>
+                <th className="whitespace-nowrap px-4 py-3 text-left">Order No.</th>
+                <th className="whitespace-nowrap px-4 py-3 text-left">Order Date</th>
                 <th className="whitespace-nowrap px-4 py-3 text-left">Order Status</th>
                 <th className="whitespace-nowrap px-4 py-3 text-left">Stock</th>
                 <th className="whitespace-nowrap px-4 py-3 text-left">Status</th>
@@ -1297,195 +1297,71 @@ export default function PartsRequirementSection({ isAdmin = false }: Props) {
                         ${isVOR(row) ? 'bg-yellow-50 border-l-4 border-yellow-400' : ''}
                         ${!row.advisor_seen && !isAdmin && !isVOR(row) ? 'bg-blue-50/40' : ''}`}
                     >
-                      {/* Col 1: Entry Date */}
                       <td className="whitespace-nowrap px-4 py-2.5 text-xs text-gray-700">{fmtDateDMY(row.entry_date)}</td>
-                      {/* Col 2: Job Card — display last 6 digits only */}
-                      <td className="whitespace-nowrap px-4 py-2.5 text-xs text-gray-600">{row.job_card_number ? row.job_card_number.slice(-6) : '\u2014'}</td>
-                      {/* Col 3: Advisor (admin only) */}
-                      {isAdmin && <td className="whitespace-nowrap px-4 py-2.5 text-xs text-gray-700">{row.advisor_name}</td>}
-                      {/* Col 4: Reg No. (non-admin: combined with Vehicle Model as 'Reg No./Model') */}
-                      <td className="whitespace-nowrap px-4 py-2.5 text-sm font-semibold text-gray-900">
-                        {row.registration_number}
-                        {!isAdmin && row.vehicle_model && (
-                          <p className="mt-0.5 text-xs font-normal text-gray-500">{row.vehicle_model}</p>
-                        )}
-                      </td>
-                      {/* Col 6: Customer Mobile (admin only) */}
-                      {isAdmin && <td className="whitespace-nowrap px-4 py-2.5 text-xs text-gray-600">{row.customer_mobile || '—'}</td>}
-                      {/* Col 7: Vehicle Model — admin only (non-admin sees it under Reg No.) */}
-                      {isAdmin && <td className="whitespace-nowrap px-4 py-2.5 text-xs text-gray-600">{row.vehicle_model || '—'}</td>}
-                      {/* Col 8: Portal (EV/PV badge) — admin only */}
-                      {isAdmin && <td className="px-4 py-2.5">
+                      <td className="whitespace-nowrap px-4 py-2.5 text-xs text-gray-600">{row.job_card_number ? row.job_card_number.slice(-6) : '—'}</td>
+                      <td className="whitespace-nowrap px-4 py-2.5 text-xs text-gray-700">{row.advisor_name}</td>
+                      <td className="whitespace-nowrap px-4 py-2.5 text-sm font-semibold text-gray-900">{row.registration_number}</td>
+                      <td className="whitespace-nowrap px-4 py-2.5 text-xs text-gray-600">{row.customer_mobile || '—'}</td>
+                      <td className="whitespace-nowrap px-4 py-2.5 text-xs text-gray-600">{row.vehicle_model || '—'}</td>
+                      <td className="px-4 py-2.5">
                         <span className={`inline-block rounded px-1.5 py-0.5 text-[10px] font-bold
                           ${evpvOf(row) === 'EV' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'}`}>
                           {evpvOf(row)}
                         </span>
-                      </td>}
-                      {/* Col 9: Parts Required — full name, no truncation; admin can inline-edit */}
+                      </td>
                       <td className="px-4 py-2.5 text-xs font-medium text-gray-900 max-w-[220px]">
-                        {isAdmin && editingPartsRequiredId === row.id ? (
+                        {editingPartsRequiredId === row.id ? (
                           <div className="flex flex-col gap-1">
-                            <input
-                              type="text"
-                              autoFocus
-                              value={editingPartsRequiredValue}
+                            <input type="text" autoFocus value={editingPartsRequiredValue}
                               onChange={(e) => setEditingPartsRequiredValue(e.target.value)}
-                              onKeyDown={(e) => {
-                                if (e.key === 'Enter') void handlePartsRequiredEdit(row, editingPartsRequiredValue)
-                                if (e.key === 'Escape') setEditingPartsRequiredId(null)
-                              }}
-                              className="w-full rounded border border-blue-400 px-1.5 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400"
-                            />
+                              onKeyDown={(e) => { if (e.key === 'Enter') void handlePartsRequiredEdit(row, editingPartsRequiredValue); if (e.key === 'Escape') setEditingPartsRequiredId(null) }}
+                              className="w-full rounded border border-blue-400 px-1.5 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400" />
                             <div className="flex gap-1">
-                              <button
-                                type="button"
-                                disabled={editingPartsRequiredSaving}
-                                onClick={() => void handlePartsRequiredEdit(row, editingPartsRequiredValue)}
-                                className="rounded bg-blue-600 px-2 py-0.5 text-[10px] font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
-                              >
-                                {editingPartsRequiredSaving ? 'Saving...' : 'Save'}
-                              </button>
-                              <button
-                                type="button"
-                                disabled={editingPartsRequiredSaving}
-                                onClick={() => setEditingPartsRequiredId(null)}
-                                className="rounded bg-gray-200 px-2 py-0.5 text-[10px] font-semibold text-gray-600 hover:bg-gray-300 disabled:opacity-50"
-                              >
-                                Cancel
-                              </button>
+                              <button type="button" disabled={editingPartsRequiredSaving} onClick={() => void handlePartsRequiredEdit(row, editingPartsRequiredValue)}
+                                className="rounded bg-blue-600 px-2 py-0.5 text-[10px] font-semibold text-white hover:bg-blue-700 disabled:opacity-50">{editingPartsRequiredSaving ? 'Saving...' : 'Save'}</button>
+                              <button type="button" disabled={editingPartsRequiredSaving} onClick={() => setEditingPartsRequiredId(null)}
+                                className="rounded bg-gray-200 px-2 py-0.5 text-[10px] font-semibold text-gray-600 hover:bg-gray-300 disabled:opacity-50">Cancel</button>
                             </div>
                           </div>
                         ) : (
                           <div className="flex items-start gap-1">
                             <p className="whitespace-normal break-words flex-1">{row.parts_required}</p>
-                            {isAdmin && row.parts_status !== 'Done' && (
-                              <button
-                                type="button"
-                                onClick={(e) => { e.stopPropagation(); startPartsRequiredEdit(row) }}
-                                className="shrink-0 rounded p-0.5 text-gray-400 hover:bg-blue-50 hover:text-blue-600"
-                                title="Edit Parts Required"
-                              >
+                            {row.parts_status !== 'Done' && (
+                              <button type="button" onClick={(e) => { e.stopPropagation(); startPartsRequiredEdit(row) }}
+                                className="shrink-0 rounded p-0.5 text-gray-400 hover:bg-blue-50 hover:text-blue-600" title="Edit Parts Required">
                                 <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4Z"/></svg>
                               </button>
                             )}
                           </div>
                         )}
-                        {/* Non-admin: show Parts No. (editable), Order No., Order Date nested below */}
-                        {!isAdmin && (
-                          <div className="mt-2 space-y-1 border-t border-gray-100 pt-2">
-                            <div className="flex items-center gap-1.5">
-                              <span className="text-[10px] font-bold uppercase text-gray-400 w-16 shrink-0">Parts No.</span>
-                              <input
-                                type="text"
-                                defaultValue={row.parts_number ?? ''}
-                                onBlur={(e) => void handleInlinePartNoBlur(row, e.target.value)}
-                                placeholder="Enter Part No."
-                                className="flex-1 rounded border border-gray-200 px-1.5 py-0.5 text-xs font-mono text-gray-700 focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-400 bg-gray-50/50"
-                              />
-                            </div>
-                            <div className="flex items-center gap-1.5">
-                              <span className="text-[10px] font-bold uppercase text-gray-400 w-16 shrink-0">Order No.</span>
-                              <span className="text-xs text-gray-600">
-                                {isVOR(row) && <span className="mr-1 rounded bg-yellow-200 px-1 py-0.5 text-[9px] font-bold text-yellow-800">VOR</span>}
-                                {orderNoOf(row) || '—'}
-                              </span>
-                            </div>
-                            <div className="flex items-center gap-1.5">
-                              <span className="text-[10px] font-bold uppercase text-gray-400 w-16 shrink-0">Order Date</span>
-                              <span className="text-xs text-gray-600">{fmtDateDMY(row.parts_order_date)}</span>
-                            </div>
-                          </div>
-                        )}
                       </td>
-                      {/* Col 10: Parts No. — admin only (non-admin sees it under Parts Required) */}
-                      {isAdmin && <td className="px-4 py-2.5 text-xs text-gray-500 font-mono">{row.parts_number || '—'}</td>}
-                      {/* Col 11: Order No. — admin only (non-admin sees it under Parts Required) */}
-                      {isAdmin && <td className="whitespace-nowrap px-4 py-2.5 text-xs">
+                      <td className="px-4 py-2.5 text-xs text-gray-500 font-mono">{row.parts_number || '—'}</td>
+                      <td className="whitespace-nowrap px-4 py-2.5 text-xs">
                         <div className="flex items-center gap-1">
                           {isVOR(row) && <span className="rounded bg-yellow-200 px-1 py-0.5 text-[9px] font-bold text-yellow-800">VOR</span>}
                           <span className="text-gray-700">{orderNoOf(row) || '—'}</span>
                         </div>
-                      </td>}
-                      {/* Col 12: Order Date — admin only (non-admin sees it under Parts Required) */}
-                      {isAdmin && <td className="whitespace-nowrap px-4 py-2.5 text-xs text-gray-600">{fmtDateDMY(row.parts_order_date)}</td>}
-                      {/* Col 13: Order Status */}
+                      </td>
+                      <td className="whitespace-nowrap px-4 py-2.5 text-xs text-gray-600">{fmtDateDMY(row.parts_order_date)}</td>
                       <td className="px-4 py-2.5"><OrderStatusBadge label={orderStatus} /></td>
-                      {/* Col 14: Stock */}
                       <td className="px-4 py-2.5"><StockStatusBadge qty={row.parts_qty} /></td>
-                      {/* Col 15: Status */}
                       <td className="px-4 py-2.5"><StatusBadge status={row.parts_status} qty={row.parts_qty} /></td>
-                      {/* Col 15b: Status 1 — Back Order + Jaipur Co-Dealer availability */}
                       <td className="px-4 py-2.5 text-xs">
-                        {(() => {
-                          const s1 = getStatus1(row.parts_number)
-                          if (!s1.isBackOrder) return <span className="text-gray-300">—</span>
-                          return (
-                            <div className="space-y-0.5">
-                              <span className="inline-block rounded bg-red-100 px-1.5 py-0.5 text-[10px] font-semibold text-red-700">Back Order</span>
-                              <br />
-                              {s1.jaipurDealers > 0 ? (
-                                <span className="inline-block rounded bg-green-100 px-1.5 py-0.5 text-[10px] font-semibold text-green-700">
-                                  AVL: Jaipur – {s1.jaipurDealers} Dealer{s1.jaipurDealers !== 1 ? 's' : ''}
-                                </span>
-                              ) : (
-                                <span className="inline-block rounded bg-gray-100 px-1.5 py-0.5 text-[10px] font-semibold text-gray-500">
-                                  AVL: Jaipur – Not Available
-                                </span>
-                              )}
-                            </div>
-                          )
-                        })()}
+                        {(() => { const s1 = getStatus1(row.parts_number); if (!s1.isBackOrder) return <span className="text-gray-300">&mdash;</span>; return (
+                          <div className="space-y-0.5">
+                            <span className="inline-block rounded bg-red-100 px-1.5 py-0.5 text-[10px] font-semibold text-red-700">Back Order</span><br />
+                            {s1.jaipurDealers > 0 ? <span className="inline-block rounded bg-green-100 px-1.5 py-0.5 text-[10px] font-semibold text-green-700">AVL: Jaipur – {s1.jaipurDealers} Dealer{s1.jaipurDealers !== 1 ? 's' : ''}</span> : <span className="inline-block rounded bg-gray-100 px-1.5 py-0.5 text-[10px] font-semibold text-gray-500">AVL: Jaipur – Not Available</span>}
+                          </div>); })()}
                       </td>
-                      {/* Col 16: Adv. Remarks — dropdown only */}
                       <td className="px-4 py-2.5 text-xs text-gray-600 max-w-[160px]">
-                        {row.parts_status !== 'Done' ? (
-                          <select
-                            defaultValue={row.advisor_remarks ?? ''}
-                            onBlur={(e) => void handleRemarksBlur(row, e.target.value)}
-                            className="w-full rounded-md border border-gray-200 px-1.5 py-1 text-xs font-sans focus:border-blue-400 focus:outline-none bg-white"
-                          >
-                            <option value="">— Select —</option>
-                            {ADVISOR_REMARK_OPTIONS.map((opt) => (
-                              <option key={opt} value={opt}>{opt}</option>
-                            ))}
-                          </select>
-                        ) : (
-                          <p className="line-clamp-2">{row.advisor_remarks || '\u2014'}</p>
-                        )}
+                        {row.parts_status !== 'Done' ? (<select defaultValue={row.advisor_remarks ?? ''} onBlur={(e) => void handleRemarksBlur(row, e.target.value)} className="w-full rounded-md border border-gray-200 px-1.5 py-1 text-xs font-sans focus:border-blue-400 focus:outline-none bg-white"><option value="">— Select —</option>{ADVISOR_REMARK_OPTIONS.map((opt) => (<option key={opt} value={opt}>{opt}</option>))}</select>) : (<p className="line-clamp-2">{row.advisor_remarks || '—'}</p>)}
                       </td>
-                      {/* Col 17: Cust. Update */}
                       <td className="px-4 py-2.5 text-xs text-gray-600 max-w-[160px]">
-                        {row.parts_status !== 'Done' ? (
-                          <textarea
-                            defaultValue={row.customer_update ?? ''}
-                            onBlur={(e) => void handleCustomerUpdateBlur(row, e.target.value)}
-                            rows={2}
-                            className="w-full rounded-md border border-gray-200 px-2 py-1 text-xs font-sans focus:border-blue-400 focus:outline-none resize-y"
-                            placeholder="Latest update shared with customer..."
-                          />
-                        ) : (
-                          <p className="line-clamp-2">{row.customer_update || '\u2014'}</p>
-                        )}
+                        {row.parts_status !== 'Done' ? (<textarea defaultValue={row.customer_update ?? ''} onBlur={(e) => void handleCustomerUpdateBlur(row, e.target.value)} rows={2} className="w-full rounded-md border border-gray-200 px-2 py-1 text-xs font-sans focus:border-blue-400 focus:outline-none resize-y" placeholder="Latest update shared with customer..." />) : (<p className="line-clamp-2">{row.customer_update || '—'}</p>)}
                       </td>
-                      {/* Col 18: SPM Remarks */}
-                      <td className="px-4 py-2.5 text-xs text-gray-500 max-w-[140px]">
-                        <p className="line-clamp-2">{row.spm_remarks || '\u2014'}</p>
-                      </td>
-                      {/* Col 19: Received (timestamp + who) */}
-                      <td className="whitespace-nowrap px-4 py-2.5 text-xs text-gray-500">
-                        {row.received_at
-                          ? new Date(row.received_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', dateStyle: 'short', timeStyle: 'short' })
-                          : '\u2014'}
-                        {row.received_by_name && <div className="text-gray-400">{row.received_by_name}</div>}
-                      </td>
-                      {/* Col 20: Done (timestamp + who) */}
-                      <td className="whitespace-nowrap px-4 py-2.5 text-xs text-gray-500">
-                        {row.done_at
-                          ? new Date(row.done_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', dateStyle: 'short', timeStyle: 'short' })
-                          : '\u2014'}
-                        {row.done_by_name && <div className="text-gray-400">{row.done_by_name}</div>}
-                      </td>
-                      {/* Col 21: Action */}
+                      <td className="px-4 py-2.5 text-xs text-gray-500 max-w-[140px]"><p className="line-clamp-2">{row.spm_remarks || '—'}</p></td>
+                      <td className="whitespace-nowrap px-4 py-2.5 text-xs text-gray-500">{row.received_at ? new Date(row.received_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', dateStyle: 'short', timeStyle: 'short' }) : '—'}{row.received_by_name && <div className="text-gray-400">{row.received_by_name}</div>}</td>
+                      <td className="whitespace-nowrap px-4 py-2.5 text-xs text-gray-500">{row.done_at ? new Date(row.done_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', dateStyle: 'short', timeStyle: 'short' }) : '—'}{row.done_by_name && <div className="text-gray-400">{row.done_by_name}</div>}</td>
                       <td className="px-4 py-2.5"><ActionButton row={row} /></td>
                     </tr>
                   </>
@@ -1494,90 +1370,218 @@ export default function PartsRequirementSection({ isAdmin = false }: Props) {
             </tbody>
           </table>
         </div>
+      ) : isDesktop ? (
+        <div className="space-y-4">
+          {filteredRows.map((row) => {
+            const desc = descOf(row)
+            const orderStatus = orderStatusOf(row)
+            const s1 = getStatus1(row.parts_number)
+            const vor = isVOR(row)
+
+            // Status-based accent colors for left border
+            const accentMap: Record<string, string> = {
+              'Pending': 'border-l-amber-400',
+              'Ordered': 'border-l-blue-500',
+              'Back Order': 'border-l-orange-500',
+              'In Transit': 'border-l-purple-500',
+              'Received': 'border-l-green-500',
+              'Partially Received': 'border-l-teal-500',
+              'Cancelled': 'border-l-gray-400',
+              'Delivered to Workshop': 'border-l-emerald-600',
+              'Ready': 'border-l-violet-500',
+              'Done': 'border-l-slate-400',
+            }
+            const accent = accentMap[row.parts_status] || 'border-l-gray-300'
+            const headerBgMap: Record<string, string> = {
+              'Pending': 'from-amber-50 to-white',
+              'Ordered': 'from-blue-50 to-white',
+              'Back Order': 'from-orange-50 to-white',
+              'In Transit': 'from-purple-50 to-white',
+              'Received': 'from-green-50 to-white',
+              'Partially Received': 'from-teal-50 to-white',
+              'Cancelled': 'from-gray-50 to-white',
+              'Delivered to Workshop': 'from-emerald-50 to-white',
+              'Ready': 'from-violet-50 to-white',
+              'Done': 'from-slate-50 to-white',
+            }
+            const headerBg = headerBgMap[row.parts_status] || 'from-gray-50 to-white'
+            return (
+              <div key={row.id} className={`rounded-xl border border-gray-200 border-l-4 ${accent} bg-white shadow-sm overflow-hidden ${vor ? 'ring-2 ring-yellow-300' : ''} ${!row.advisor_seen ? 'ring-2 ring-blue-200' : ''}`}>
+                {/* ── Card Header: Reg No + Model + Date + Status ── */}
+                <div className={`bg-gradient-to-r ${headerBg} px-5 py-3 border-b border-gray-100`}>
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-3">
+                      <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-white shadow-sm border border-gray-200">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" className="text-gray-600"><path d="M5 17H3v-6l2-5h12l2 5v6h-2"/><circle cx="7.5" cy="17" r="2"/><circle cx="16.5" cy="17" r="2"/></svg>
+                      </div>
+                      <div>
+                        <p className="text-base font-bold text-gray-900 leading-tight">{row.registration_number}</p>
+                        <p className="text-xs text-gray-500 mt-0.5">
+                          {row.vehicle_model || '—'} &middot; JC: {row.job_card_number ? row.job_card_number.slice(-6) : '—'} &middot; {fmtDateDMY(row.entry_date)}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {vor && <span className="inline-flex items-center rounded-full bg-yellow-200 px-2.5 py-1 text-[11px] font-bold text-yellow-900 shadow-sm">VOR</span>}
+                      <StatusBadge status={row.parts_status} qty={row.parts_qty} />
+                    </div>
+                  </div>
+                </div>
+
+                {/* ── Card Body: Parts + Status badges + Details ── */}
+                <div className="px-5 py-4">
+                  {/* Parts Required Section — colorful sub-blocks */}
+                  <div className="mb-4 rounded-lg bg-gradient-to-br from-gray-50 to-blue-50/30 p-4 border border-gray-100">
+                    <div className="flex items-start gap-2 mb-3">
+                      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" className="text-blue-600 mt-0.5 shrink-0"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                      <div className="flex-1">
+                        <p className="text-[10px] font-bold uppercase tracking-wide text-blue-600 mb-1">Parts Required</p>
+                        <p className="text-sm font-semibold text-gray-900">{row.parts_required}</p>
+                        {desc && desc !== 'Description Not Available' && <p className="mt-1 text-xs text-gray-500">{desc}</p>}
+                      </div>
+                    </div>
+                    {/* Nested fields in colorful sub-cards */}
+                    <div className="grid grid-cols-3 gap-3">
+                      <div className="rounded-lg bg-white border border-blue-100 px-3 py-2 shadow-xs">
+                        <p className="text-[9px] font-bold uppercase tracking-wide text-blue-500 mb-0.5">Parts No.</p>
+                        <input type="text" defaultValue={row.parts_number ?? ''} onBlur={(e) => void handleInlinePartNoBlur(row, e.target.value)} placeholder="Enter Part No." className="w-full rounded border border-gray-200 px-2 py-1 text-xs font-mono text-gray-700 focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-400 bg-gray-50/50" />
+                      </div>
+                      <div className="rounded-lg bg-white border border-amber-100 px-3 py-2 shadow-xs">
+                        <p className="text-[9px] font-bold uppercase tracking-wide text-amber-600 mb-0.5">Order No.</p>
+                        <p className="text-xs font-semibold text-gray-700 flex items-center gap-1">
+                          {vor && <span className="rounded bg-yellow-200 px-1 py-0.5 text-[9px] font-bold text-yellow-800">VOR</span>}
+                          {orderNoOf(row) || '—'}
+                        </p>
+                      </div>
+                      <div className="rounded-lg bg-white border border-emerald-100 px-3 py-2 shadow-xs">
+                        <p className="text-[9px] font-bold uppercase tracking-wide text-emerald-600 mb-0.5">Order Date</p>
+                        <p className="text-xs font-semibold text-gray-700">{fmtDateDMY(row.parts_order_date)}</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Status Badges Row */}
+                  <div className="mb-4 flex flex-wrap items-center gap-2">
+                    <span className="text-[10px] font-bold uppercase text-gray-400 mr-1">Status:</span>
+                    <StockStatusBadge qty={row.parts_qty} />
+                    <OrderStatusBadge label={orderStatus} />
+                    {s1.isBackOrder && (
+                      <>
+                        <span className="inline-flex items-center gap-1 rounded-full bg-red-100 px-2 py-0.5 text-[11px] font-semibold text-red-700"><span className="inline-block h-2 w-2 rounded-full bg-red-500" />Back Order</span>
+                        {s1.jaipurDealers > 0 ? (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-green-100 px-2 py-0.5 text-[11px] font-semibold text-green-700"><span className="inline-block h-2 w-2 rounded-full bg-green-500" />AVL: Jaipur – {s1.jaipurDealers} Dealer{s1.jaipurDealers !== 1 ? 's' : ''}</span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-gray-100 px-2 py-0.5 text-[11px] font-semibold text-gray-500"><span className="inline-block h-2 w-2 rounded-full bg-gray-400" />AVL: Jaipur – Not Available</span>
+                        )}
+                      </>
+                    )}
+                  </div>
+
+                  {/* Progress Timeline */}
+                  <div className="mb-4 flex items-center gap-2">
+                    <span className="text-[10px] font-bold uppercase text-gray-400">Progress:</span>
+                    <MiniTimeline status={row.parts_status} />
+                  </div>
+
+                  {/* Action + Editable Fields in two columns */}
+                  <div className="grid grid-cols-2 gap-4">
+                    {/* Left: Adv Remarks + Cust Update */}
+                    <div className="space-y-3">
+                      <div>
+                        <p className="text-[10px] font-bold uppercase tracking-wide text-gray-500 mb-1">Adv. Remarks</p>
+                        {row.parts_status !== 'Done' ? (
+                          <select defaultValue={row.advisor_remarks ?? ''} onBlur={(e) => void handleRemarksBlur(row, e.target.value)} className="w-full rounded-md border border-gray-200 px-2 py-1.5 text-xs font-sans focus:border-blue-400 focus:outline-none bg-white"><option value="">— Select —</option>{ADVISOR_REMARK_OPTIONS.map((opt) => (<option key={opt} value={opt}>{opt}</option>))}</select>
+                        ) : (<p className="text-xs text-gray-600 px-2 py-1.5">{row.advisor_remarks || '—'}</p>)}
+                      </div>
+                      <div>
+                        <p className="text-[10px] font-bold uppercase tracking-wide text-gray-500 mb-1">Cust. Update</p>
+                        {row.parts_status !== 'Done' ? (
+                          <textarea defaultValue={row.customer_update ?? ''} onBlur={(e) => void handleCustomerUpdateBlur(row, e.target.value)} rows={2} className="w-full rounded-md border border-gray-200 px-2 py-1.5 text-xs font-sans focus:border-blue-400 focus:outline-none resize-y" placeholder="Latest update shared with customer..." />
+                        ) : (<p className="text-xs text-gray-600 px-2 py-1.5">{row.customer_update || '—'}</p>)}
+                      </div>
+                    </div>
+                    {/* Right: SPM Remarks + Timestamps + Action */}
+                    <div className="space-y-3">
+                      <div>
+                        <p className="text-[10px] font-bold uppercase tracking-wide text-gray-500 mb-1">SPM Remarks</p>
+                        <p className="text-xs text-gray-600 px-2 py-1.5 rounded-md bg-gray-50 border border-gray-100">{row.spm_remarks || '—'}</p>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <p className="text-[10px] font-bold uppercase tracking-wide text-gray-400 mb-0.5">Received</p>
+                          <p className="text-[11px] text-gray-600">{row.received_at ? new Date(row.received_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', dateStyle: 'short', timeStyle: 'short' }) : '—'}{row.received_by_name && <span className="block text-gray-400">{row.received_by_name}</span>}</p>
+                        </div>
+                        <div>
+                          <p className="text-[10px] font-bold uppercase tracking-wide text-gray-400 mb-0.5">Done</p>
+                          <p className="text-[11px] text-gray-600">{row.done_at ? new Date(row.done_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', dateStyle: 'short', timeStyle: 'short' }) : '—'}{row.done_by_name && <span className="block text-gray-400">{row.done_by_name}</span>}</p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Action Button Row */}
+                  <div className="mt-4 flex items-center justify-between border-t border-gray-100 pt-3">
+                    <button type="button" onClick={() => openEditForm(row)} className="inline-flex items-center gap-1.5 rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs font-semibold text-gray-600 hover:bg-gray-50 transition">
+                      <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4Z"/></svg>
+                      Edit Details
+                    </button>
+                    <ActionButton row={row} />
+                  </div>
+                </div>
+              </div>
+            )
+          })}
+        </div>
       ) : (
         <div className="space-y-3">
           {filteredRows.map((row) => {
             const desc = descOf(row)
             const orderStatus = orderStatusOf(row)
             const isExpanded = expandedId === row.id
+            const s1 = getStatus1(row.parts_number)
+            const vor = isVOR(row)
+            const accentMap: Record<string, string> = {
+              'Pending': 'border-l-amber-400', 'Ordered': 'border-l-blue-500', 'Back Order': 'border-l-orange-500',
+              'In Transit': 'border-l-purple-500', 'Received': 'border-l-green-500', 'Partially Received': 'border-l-teal-500',
+              'Cancelled': 'border-l-gray-400', 'Delivered to Workshop': 'border-l-emerald-600', 'Ready': 'border-l-violet-500', 'Done': 'border-l-slate-400',
+            }
+            const accent = accentMap[row.parts_status] || 'border-l-gray-300'
+            const headerBgMap: Record<string, string> = {
+              'Pending': 'from-amber-50 to-white', 'Ordered': 'from-blue-50 to-white', 'Back Order': 'from-orange-50 to-white',
+              'In Transit': 'from-purple-50 to-white', 'Received': 'from-green-50 to-white', 'Partially Received': 'from-teal-50 to-white',
+              'Cancelled': 'from-gray-50 to-white', 'Delivered to Workshop': 'from-emerald-50 to-white', 'Ready': 'from-violet-50 to-white', 'Done': 'from-slate-50 to-white',
+            }
+            const headerBg = headerBgMap[row.parts_status] || 'from-gray-50 to-white'
             return (
-              <div key={row.id} className={`rounded-xl border bg-white shadow-sm ${!row.advisor_seen && !isAdmin ? 'border-blue-200' : 'border-gray-200'}`}>
-                <div className="cursor-pointer p-4" onClick={() => void handleExpand(row)}>
+              <div key={row.id} className={`rounded-xl border border-gray-200 border-l-4 ${accent} bg-white shadow-sm overflow-hidden ${vor ? 'ring-2 ring-yellow-300' : ''} ${!row.advisor_seen && !isAdmin ? 'ring-2 ring-blue-200' : ''}`}>
+                <div className={`cursor-pointer bg-gradient-to-r ${headerBg} px-4 py-3 border-b border-gray-100`} onClick={() => void handleExpand(row)}>
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-sm font-bold text-gray-900">{row.registration_number}</p>
-                      <p className="mt-0.5 text-xs text-gray-500">
-                        {isAdmin && editingPartsRequiredId === row.id ? (
-                          <span className="flex flex-col gap-1" onClick={(e) => e.stopPropagation()}>
-                            <input
-                              type="text"
-                              autoFocus
-                              value={editingPartsRequiredValue}
-                              onChange={(e) => setEditingPartsRequiredValue(e.target.value)}
-                              onKeyDown={(e) => {
-                                if (e.key === 'Enter') void handlePartsRequiredEdit(row, editingPartsRequiredValue)
-                                if (e.key === 'Escape') setEditingPartsRequiredId(null)
-                              }}
-                              className="w-full rounded border border-blue-400 px-1.5 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400"
-                            />
-                            <span className="flex gap-1">
-                              <button type="button" disabled={editingPartsRequiredSaving}
-                                onClick={() => void handlePartsRequiredEdit(row, editingPartsRequiredValue)}
-                                className="rounded bg-blue-600 px-2 py-0.5 text-[10px] font-semibold text-white hover:bg-blue-700 disabled:opacity-50">
-                                {editingPartsRequiredSaving ? 'Saving...' : 'Save'}
-                              </button>
-                              <button type="button" disabled={editingPartsRequiredSaving}
-                                onClick={() => setEditingPartsRequiredId(null)}
-                                className="rounded bg-gray-200 px-2 py-0.5 text-[10px] font-semibold text-gray-600 hover:bg-gray-300 disabled:opacity-50">
-                                Cancel
-                              </button>
-                            </span>
-                          </span>
-                        ) : (
-                          <span className="flex items-start gap-1">
-                            <span className="flex-1">{row.parts_required}</span>
-                            {isAdmin && row.parts_status !== 'Done' && (
-                              <button type="button"
-                                onClick={(e) => { e.stopPropagation(); startPartsRequiredEdit(row) }}
-                                className="shrink-0 rounded p-0.5 text-gray-400 hover:bg-blue-50 hover:text-blue-600"
-                                title="Edit Parts Required">
-                                <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4Z"/></svg>
-                              </button>
-                            )}
-                          </span>
-                        )}
-                      </p>
-                      {row.vehicle_model && <p className="text-[11px] text-gray-400">{row.vehicle_model}</p>}
-                      {row.parts_number && <p className="text-[11px] text-gray-400 font-mono">{row.parts_number}</p>}
-                      {isAdmin && <p className="mt-1 text-[11px] font-medium text-blue-600">{row.advisor_name}</p>}
+                      <p className="mt-0.5 text-xs text-gray-500">{row.vehicle_model || '—'} &middot; {fmtDateDMY(row.entry_date)}</p>
                     </div>
                     <div className="flex shrink-0 flex-col items-end gap-1.5">
+                      {vor && <span className="inline-flex items-center rounded-full bg-yellow-200 px-2 py-0.5 text-[10px] font-bold text-yellow-900">VOR</span>}
                       <StatusBadge status={row.parts_status} qty={row.parts_qty} />
-                      <span className="text-[11px] text-gray-400">{fmtDateDMY(row.entry_date)}</span>
                     </div>
                   </div>
-                  <div className="mt-2 flex flex-wrap gap-2">
+                  <div className="mt-2">
+                    <p className="text-xs font-semibold text-gray-800">{row.parts_required}</p>
+                  </div>
+                  <div className="mt-2 flex flex-wrap gap-1.5">
                     <StockStatusBadge qty={row.parts_qty} />
                     <OrderStatusBadge label={orderStatus} />
                   </div>
-                  {(() => {
-                    const s1 = getStatus1(row.parts_number)
-                    if (!s1.isBackOrder) return null
-                    return (
-                      <div className="mt-2 flex flex-wrap gap-1.5">
-                        <span className="inline-block rounded bg-red-100 px-1.5 py-0.5 text-[10px] font-semibold text-red-700">Back Order</span>
-                        {s1.jaipurDealers > 0 ? (
-                          <span className="inline-block rounded bg-green-100 px-1.5 py-0.5 text-[10px] font-semibold text-green-700">
-                            AVL: Jaipur – {s1.jaipurDealers} Dealer{s1.jaipurDealers !== 1 ? 's' : ''}
-                          </span>
-                        ) : (
-                          <span className="inline-block rounded bg-gray-100 px-1.5 py-0.5 text-[10px] font-semibold text-gray-500">
-                            AVL: Jaipur – Not Available
-                          </span>
-                        )}
-                      </div>
-                    )
-                  })()}
+                  {s1.isBackOrder && (
+                    <div className="mt-1.5 flex flex-wrap gap-1.5">
+                      <span className="inline-block rounded bg-red-100 px-1.5 py-0.5 text-[10px] font-semibold text-red-700">Back Order</span>
+                      {s1.jaipurDealers > 0 ? (
+                        <span className="inline-block rounded bg-green-100 px-1.5 py-0.5 text-[10px] font-semibold text-green-700">AVL: Jaipur – {s1.jaipurDealers} Dealer{s1.jaipurDealers !== 1 ? 's' : ''}</span>
+                      ) : (
+                        <span className="inline-block rounded bg-gray-100 px-1.5 py-0.5 text-[10px] font-semibold text-gray-500">AVL: Jaipur – Not Available</span>
+                      )}
+                    </div>
+                  )}
                   {!isAdmin && (
                     <div className="mt-2" onClick={(e) => e.stopPropagation()}>
                       <ActionButton row={row} />
@@ -1586,24 +1590,30 @@ export default function PartsRequirementSection({ isAdmin = false }: Props) {
                 </div>
                 {isExpanded && (
                   <div className="border-t border-gray-100 px-4 pb-4 pt-3">
-                    <div className="space-y-2 text-xs">
+                    <div className="space-y-3 text-xs">
+                      {/* Colorful nested fields */}
+                      <div className="grid grid-cols-3 gap-2">
+                        <div className="rounded-lg bg-blue-50 border border-blue-100 px-2.5 py-1.5">
+                          <p className="text-[9px] font-bold uppercase text-blue-500">Parts No.</p>
+                          <p className="font-mono text-gray-700">{row.parts_number || '—'}</p>
+                        </div>
+                        <div className="rounded-lg bg-amber-50 border border-amber-100 px-2.5 py-1.5">
+                          <p className="text-[9px] font-bold uppercase text-amber-600">Order No.</p>
+                          <p className="text-gray-700">{orderNoOf(row) || '—'}</p>
+                        </div>
+                        <div className="rounded-lg bg-emerald-50 border border-emerald-100 px-2.5 py-1.5">
+                          <p className="text-[9px] font-bold uppercase text-emerald-600">Order Date</p>
+                          <p className="text-gray-700">{fmtDateDMY(row.parts_order_date)}</p>
+                        </div>
+                      </div>
                       <div className="grid grid-cols-2 gap-2">
                         <div>
                           <p className="font-bold text-gray-500">Job Card</p>
-                          <p className="text-gray-800">{row.job_card_number ? row.job_card_number.slice(-6) : '\u2014'}</p>
-                        </div>
-
-                        <div>
-                          <p className="font-bold text-gray-500">Order No.</p>
-                          <p className="text-gray-800">{orderNoOf(row) || '\u2014'}</p>
-                        </div>
-                        <div>
-                          <p className="font-bold text-gray-500">Order Date</p>
-                          <p className="text-gray-800">{fmtDateDMY(row.parts_order_date)}</p>
+                          <p className="text-gray-800">{row.job_card_number ? row.job_card_number.slice(-6) : '—'}</p>
                         </div>
                         <div>
                           <p className="font-bold text-gray-500">Mobile</p>
-                          <p className="text-gray-800">{row.customer_mobile || '\u2014'}</p>
+                          <p className="text-gray-800">{row.customer_mobile || '—'}</p>
                         </div>
                       </div>
                       <div>
@@ -1623,32 +1633,17 @@ export default function PartsRequirementSection({ isAdmin = false }: Props) {
                       <div>
                         <p className="mb-0.5 font-bold text-gray-500">Advisor Remarks</p>
                         {row.parts_status !== 'Done' ? (
-                          <textarea defaultValue={row.advisor_remarks ?? ''}
-                            onBlur={(e) => void handleRemarksBlur(row, e.target.value)}
-                            rows={2}
-                            className="w-full rounded-md border border-gray-300 px-2 py-1 text-xs font-sans focus:border-blue-400 focus:outline-none"
-                            placeholder="Add remarks..." />
-                        ) : (
-                          <p className="text-gray-700">{row.advisor_remarks || '\u2014'}</p>
-                        )}
+                          <textarea defaultValue={row.advisor_remarks ?? ''} onBlur={(e) => void handleRemarksBlur(row, e.target.value)} rows={2} className="w-full rounded-md border border-gray-300 px-2 py-1 text-xs font-sans focus:border-blue-400 focus:outline-none" placeholder="Add remarks..." />
+                        ) : (<p className="text-gray-700">{row.advisor_remarks || '—'}</p>)}
                       </div>
                       <div>
                         <p className="mb-0.5 font-bold text-gray-500">Customer Update</p>
                         {row.parts_status !== 'Done' ? (
-                          <textarea defaultValue={row.customer_update ?? ''}
-                            onBlur={(e) => void handleCustomerUpdateBlur(row, e.target.value)}
-                            rows={2}
-                            className="w-full rounded-md border border-gray-300 px-2 py-1 text-xs font-sans focus:border-blue-400 focus:outline-none"
-                            placeholder="Latest update shared with customer..." />
-                        ) : (
-                          <p className="text-gray-700">{row.customer_update || '\u2014'}</p>
-                        )}
+                          <textarea defaultValue={row.customer_update ?? ''} onBlur={(e) => void handleCustomerUpdateBlur(row, e.target.value)} rows={2} className="w-full rounded-md border border-gray-300 px-2 py-1 text-xs font-sans focus:border-blue-400 focus:outline-none" placeholder="Latest update shared with customer..." />
+                        ) : (<p className="text-gray-700">{row.customer_update || '—'}</p>)}
                       </div>
                       {!isAdmin && (
-                        <button type="button" onClick={() => openEditForm(row)}
-                          className="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-xs font-semibold text-gray-700 hover:bg-gray-50">
-                          Edit
-                        </button>
+                        <button type="button" onClick={() => openEditForm(row)} className="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-xs font-semibold text-gray-700 hover:bg-gray-50">Edit</button>
                       )}
                     </div>
                   </div>
