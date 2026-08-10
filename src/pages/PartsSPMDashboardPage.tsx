@@ -532,8 +532,12 @@ export default function PartsSPMDashboardPage() {
                   <th className="px-3 py-3">Job Card</th>
                   <SortHeader label="Advisor" sortField="advisor_name" />
                   <SortHeader label="Reg. No." sortField="registration_number" />
-                  <th className="px-3 py-3">Customer</th>
-                  <th className="px-3 py-3">Customer Mobile No</th>
+                  <th className="px-3 py-3">
+                    <div className="leading-tight">
+                      <span>Customer</span>
+                      <span className="block text-[10px] font-medium text-gray-400 normal-case">Mobile No</span>
+                    </div>
+                  </th>
                   <th className="px-3 py-3">
                     <div className="leading-tight">
                       <span>Parts Required</span>
@@ -581,8 +585,12 @@ export default function PartsSPMDashboardPage() {
                           <p className="text-[11px] text-gray-500">{row.vehicle_model || '—'}</p>
                         </div>
                       </td>
-                      <td className="whitespace-nowrap px-3 py-2.5 text-gray-700">{row.customer_name || '—'}</td>
-                      <td className="whitespace-nowrap px-3 py-2.5 text-xs text-gray-600">{row.customer_mobile || '—'}</td>
+                      <td className="whitespace-nowrap px-3 py-2.5">
+                        <div className="leading-tight">
+                          <p className="text-gray-700">{row.customer_name || '—'}</p>
+                          <p className="text-[11px] text-gray-500">{row.customer_mobile ? row.customer_mobile.replace(/\D/g, '').slice(0, 10) : '—'}</p>
+                        </div>
+                      </td>
                       <td className="px-3 py-2.5">
                         <div className="leading-tight">
                           <p className="text-gray-700">{row.parts_required}</p>

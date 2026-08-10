@@ -1260,8 +1260,12 @@ export default function PartsRequirementSection({ isAdmin = false }: Props) {
                     <span className="block text-[10px] font-medium text-gray-400 normal-case">Model</span>
                   </div>
                 </th>
-                <th className="whitespace-nowrap px-3 py-3 text-left">Customer</th>
-                <th className="whitespace-nowrap px-3 py-3 text-left">Customer Mobile No</th>
+                <th className="whitespace-nowrap px-3 py-3 text-left">
+                  <div className="leading-tight">
+                    <span>Customer</span>
+                    <span className="block text-[10px] font-medium text-gray-400 normal-case">Mobile No</span>
+                  </div>
+                </th>
                 <th className="whitespace-nowrap px-3 py-3 text-left">
                   <div className="leading-tight">
                     <span>Parts Required</span>
@@ -1309,9 +1313,13 @@ export default function PartsRequirementSection({ isAdmin = false }: Props) {
                           <p className="text-[11px] text-gray-500">{row.vehicle_model || '—'}</p>
                         </div>
                       </td>
-                      {/* Customer */}
-                      <td className="whitespace-nowrap px-3 py-2.5 text-xs text-gray-700">{row.customer_name || '—'}</td>
-                      <td className="whitespace-nowrap px-3 py-2.5 text-xs text-gray-600">{row.customer_mobile || '—'}</td>
+                      {/* Customer + Mobile merged */}
+                      <td className="whitespace-nowrap px-3 py-2.5">
+                        <div className="leading-tight">
+                          <p className="text-xs text-gray-700">{row.customer_name || '—'}</p>
+                          <p className="text-[11px] text-gray-500">{row.customer_mobile ? row.customer_mobile.replace(/\D/g, '').slice(0, 10) : '—'}</p>
+                        </div>
+                      </td>
                       {/* Parts Required + Parts No. merged */}
                       <td className="px-3 py-2.5 text-xs font-medium text-gray-900 max-w-[220px]">
                         <div className="leading-tight">
