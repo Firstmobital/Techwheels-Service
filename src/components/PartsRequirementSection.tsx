@@ -746,6 +746,29 @@ export default function PartsRequirementSection({ isAdmin = false }: Props) {
     setEditingPartsRequiredId(row.id)
     setEditingPartsRequiredValue(row.parts_required)
   }
+  // ── Inline Parts No. edit (non-admin, nested under Parts Required) ──────────
+  const handleInlinePartNoBlur = async (row: PartsRequestRow, value: string) => {
+    const trimmed = value.trim().toUpperCase()
+    if (trimmed === (row.parts_number ?? '').toUpperCase()) return
+    const res = await updateMyPartsRequestFields({
+      id: row.id,
+      registrationNumber: row.registration_number,
+      partsRequired: row.parts_required,
+      partsDescription: row.parts_description,
+      advisorRemarks: row.advisor_remarks,
+      entryDate: row.entry_date,
+      partsNumber: trimmed || null,
+      customerMobile: row.customer_mobile,
+    })
+    if (res.error) {
+      setError(res.error)
+    } else {
+      setToast('Part No. updated')
+      void load()
+      void loadDescriptions()
+    }
+  }
+
 
   const handleCustomerUpdateBlur = async (row: PartsRequestRow, value: string) => {
     const trimmed = value.trim()
@@ -1280,12 +1303,17 @@ export default function PartsRequirementSection({ isAdmin = false }: Props) {
                       <td className="whitespace-nowrap px-4 py-2.5 text-xs text-gray-600">{row.job_card_number ? row.job_card_number.slice(-6) : '\u2014'}</td>
                       {/* Col 3: Advisor (admin only) */}
                       {isAdmin && <td className="whitespace-nowrap px-4 py-2.5 text-xs text-gray-700">{row.advisor_name}</td>}
-                      {/* Col 4: Reg No. */}
-                      <td className="whitespace-nowrap px-4 py-2.5 text-sm font-semibold text-gray-900">{row.registration_number}</td>
+                      {/* Col 4: Reg No. (non-admin: combined with Vehicle Model as 'Reg No./Model') */}
+                      <td className="whitespace-nowrap px-4 py-2.5 text-sm font-semibold text-gray-900">
+                        {row.registration_number}
+                        {!isAdmin && row.vehicle_model && (
+                          <p className="mt-0.5 text-xs font-normal text-gray-500">{row.vehicle_model}</p>
+                        )}
+                      </td>
                       {/* Col 6: Customer Mobile (admin only) */}
-                      {isAdmin && <td className="whitespace-nowrap px-4 py-2.5 text-xs text-gray-600">{row.customer_mobile || '\u2014'}</td>}
-                      {/* Col 7: Vehicle Model (from Reception) */}
-                      <td className="whitespace-nowrap px-4 py-2.5 text-xs text-gray-600">{row.vehicle_model || '\u2014'}</td>
+                      {isAdmin && <td className="whitespace-nowrap px-4 py-2.5 text-xs text-gray-600">{row.customer_mobile || '—'}</td>}
+                      {/* Col 7: Vehicle Model — admin only (non-admin sees it under Reg No.) */}
+                      {isAdmin && <td className="whitespace-nowrap px-4 py-2.5 text-xs text-gray-600">{row.vehicle_model || '—'}</td>}
                       {/* Col 8: Portal (EV/PV badge) — admin only */}
                       {isAdmin && <td className="px-4 py-2.5">
                         <span className={`inline-block rounded px-1.5 py-0.5 text-[10px] font-bold
@@ -1342,18 +1370,44 @@ export default function PartsRequirementSection({ isAdmin = false }: Props) {
                             )}
                           </div>
                         )}
+                        {/* Non-admin: show Parts No. (editable), Order No., Order Date nested below */}
+                        {!isAdmin && (
+                          <div className="mt-2 space-y-1 border-t border-gray-100 pt-2">
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-[10px] font-bold uppercase text-gray-400 w-16 shrink-0">Parts No.</span>
+                              <input
+                                type="text"
+                                defaultValue={row.parts_number ?? ''}
+                                onBlur={(e) => void handleInlinePartNoBlur(row, e.target.value)}
+                                placeholder="Enter Part No."
+                                className="flex-1 rounded border border-gray-200 px-1.5 py-0.5 text-xs font-mono text-gray-700 focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-400 bg-gray-50/50"
+                              />
+                            </div>
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-[10px] font-bold uppercase text-gray-400 w-16 shrink-0">Order No.</span>
+                              <span className="text-xs text-gray-600">
+                                {isVOR(row) && <span className="mr-1 rounded bg-yellow-200 px-1 py-0.5 text-[9px] font-bold text-yellow-800">VOR</span>}
+                                {orderNoOf(row) || '—'}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-[10px] font-bold uppercase text-gray-400 w-16 shrink-0">Order Date</span>
+                              <span className="text-xs text-gray-600">{fmtDateDMY(row.parts_order_date)}</span>
+                            </div>
+                          </div>
+                        )}
                       </td>
-                      {/* Col 10: Parts No. */}
-                      <td className="px-4 py-2.5 text-xs text-gray-500 font-mono">{row.parts_number || '\u2014'}</td>
-                      {/* Col 11: Order No. */}
-                      <td className="whitespace-nowrap px-4 py-2.5 text-xs">
+                      {/* Col 10: Parts No. — admin only (non-admin sees it under Parts Required) */}
+                      {isAdmin && <td className="px-4 py-2.5 text-xs text-gray-500 font-mono">{row.parts_number || '—'}</td>}
+                      {/* Col 11: Order No. — admin only (non-admin sees it under Parts Required) */}
+                      {isAdmin && <td className="whitespace-nowrap px-4 py-2.5 text-xs">
                         <div className="flex items-center gap-1">
                           {isVOR(row) && <span className="rounded bg-yellow-200 px-1 py-0.5 text-[9px] font-bold text-yellow-800">VOR</span>}
-                          <span className="text-gray-700">{orderNoOf(row) || '\u2014'}</span>
+                          <span className="text-gray-700">{orderNoOf(row) || '—'}</span>
                         </div>
-                      </td>
-                      {/* Col 12: Order Date (from Parts Order sheet) */}
-                      <td className="whitespace-nowrap px-4 py-2.5 text-xs text-gray-600">{fmtDateDMY(row.parts_order_date)}</td>
+                      </td>}
+                      {/* Col 12: Order Date — admin only (non-admin sees it under Parts Required) */}
+                      {isAdmin && <td className="whitespace-nowrap px-4 py-2.5 text-xs text-gray-600">{fmtDateDMY(row.parts_order_date)}</td>}
                       {/* Col 13: Order Status */}
                       <td className="px-4 py-2.5"><OrderStatusBadge label={orderStatus} /></td>
                       {/* Col 14: Stock */}
