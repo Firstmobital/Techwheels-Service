@@ -2,6 +2,7 @@
 //   1. VOR BO REPORT (Sheet 1) — parts NOT available with Tata Motors
 //   2. AVL WITH CP STOCK (Sheet 2) — parts available with Co-Dealers
 // Inserted into ImportPage. Uses same CSS conventions (imp-group) as rest of page.
+// Optimized for large files: batch size 50 + progress feedback + raw column storage.
 
 import { useCallback, useRef, useState } from 'react'
 import * as XLSX from 'xlsx'
@@ -17,9 +18,14 @@ interface SlotState {
   message: string | null
   sheetName: string | null
   availableSheets: string[]
+  fileSizeMB: string | null
+  uploadedSoFar: number | null
 }
 
-const EMPTY_SLOT: SlotState = { file: null, rowCount: null, status: 'idle', message: null, sheetName: null, availableSheets: [] }
+const EMPTY_SLOT: SlotState = {
+  file: null, rowCount: null, status: 'idle', message: null,
+  sheetName: null, availableSheets: [], fileSizeMB: null, uploadedSoFar: null
+}
 
 // ─── Column mapping helpers (flexible — tries multiple common column names) ───
 function gs(raw: Record<string, unknown>, ...keys: string[]): string {
@@ -42,32 +48,26 @@ function gn(raw: Record<string, unknown>, ...keys: string[]): number | null {
 }
 
 // ─── Smart sheet selection ───────────────────────────────────────────────────
-// For VOR BO: prefer sheet named with "VOR" or "BO", else first sheet
-// For CP Stock: prefer sheet named with "AVL" or "CP" or "STOCK", else second sheet, else first
 function pickSheet(wb: XLSX.WorkBook, key: SlotKey): string {
   const names = wb.SheetNames.map(n => n.toLowerCase().trim())
   const actualNames = wb.SheetNames
 
   if (key === 'vor_bo_report') {
-    // Look for sheet with "vor" or "bo" in name
     for (let i = 0; i < names.length; i++) {
       if (names[i].includes('vor') || names[i].includes('bo report') || names[i].includes('sheet1') || names[i] === 'sheet 1') {
         return actualNames[i]
       }
     }
-    return actualNames[0] // fallback: first sheet
+    return actualNames[0]
   }
 
   // avl_cp_stock
-  // Look for sheet with "avl" or "cp" or "stock" in name
   for (let i = 0; i < names.length; i++) {
     if (names[i].includes('avl') || names[i].includes('cp') || names[i].includes('stock') || names[i].includes('sheet2') || names[i] === 'sheet 2') {
       return actualNames[i]
     }
   }
-  // If there are 2+ sheets, use the second one
   if (actualNames.length >= 2) return actualNames[1]
-  // Fallback: first sheet
   return actualNames[0]
 }
 
@@ -109,19 +109,19 @@ export function BackOrderImportSection() {
 
   const handleFile = useCallback(async (key: SlotKey, file: File | null) => {
     if (!file) return
-    // Read sheet names for display
+    const fileSizeMB = (file.size / (1024 * 1024)).toFixed(2)
     try {
       const buf = await file.arrayBuffer()
       const wb = XLSX.read(buf, { type: 'array' })
       const sheetName = pickSheet(wb, key)
       setSlots(prev => ({
         ...prev,
-        [key]: { file, rowCount: null, status: 'idle', message: null, sheetName, availableSheets: wb.SheetNames }
+        [key]: { file, rowCount: null, status: 'idle', message: null, sheetName, availableSheets: wb.SheetNames, fileSizeMB, uploadedSoFar: null }
       }))
     } catch {
       setSlots(prev => ({
         ...prev,
-        [key]: { file, rowCount: null, status: 'idle', message: null, sheetName: null, availableSheets: [] }
+        [key]: { file, rowCount: null, status: 'idle', message: null, sheetName: null, availableSheets: [], fileSizeMB, uploadedSoFar: null }
       }))
     }
   }, [])
@@ -129,13 +129,12 @@ export function BackOrderImportSection() {
   const handleUpload = useCallback(async (key: SlotKey) => {
     const slot = slots[key]
     if (!slot.file) return
-    setSlots(prev => ({ ...prev, [key]: { ...prev[key], status: 'uploading', message: 'Reading Excel…' } }))
+    setSlots(prev => ({ ...prev, [key]: { ...prev[key], status: 'uploading', message: 'Reading Excel…', uploadedSoFar: 0 } }))
 
     try {
       const buf = await slot.file.arrayBuffer()
       const wb = XLSX.read(buf, { type: 'array' })
 
-      // Smart sheet selection
       const sheetName = pickSheet(wb, key)
       const ws = wb.Sheets[sheetName]
       const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(ws, { defval: '' })
@@ -149,17 +148,24 @@ export function BackOrderImportSection() {
       const { error: delErr } = await supabase.from(tableName).delete().neq('id', -1)
       if (delErr) throw new Error('Failed to clear existing data: ' + delErr.message)
 
-      // Insert new rows in batches
-      const BATCH = 500
+      // Insert new rows in small batches (50) to stay under Supabase API 1MB payload limit
+      // Each row has source_row_data JSONB which can be large, so keep batches small
+      const BATCH = 50
+      let inserted = 0
       for (let i = 0; i < rows.length; i += BATCH) {
         const batch = rows.slice(i, i + BATCH).map((r) => mapper(r, sessionId))
         const { error: insErr } = await supabase.from(tableName).insert(batch)
         if (insErr) throw new Error('Insert failed at row ' + i + ': ' + insErr.message)
+        inserted += batch.length
+        // Update progress
+        setSlots(prev => ({ ...prev, [key]: { ...prev[key], message: 'Uploading… ' + inserted + ' / ' + rows.length + ' rows', uploadedSoFar: inserted } }))
       }
 
       setSlots(prev => ({
         ...prev,
-        [key]: { ...prev[key], file: slot.file, rowCount: rows.length, status: 'success', message: rows.length + ' rows uploaded from sheet: ' + sheetName, sheetName, availableSheets: prev[key].availableSheets }
+        [key]: { ...prev[key], file: slot.file, rowCount: rows.length, status: 'success',
+          message: rows.length + ' rows uploaded from sheet: ' + sheetName,
+          sheetName, availableSheets: prev[key].availableSheets, fileSizeMB: prev[key].fileSizeMB, uploadedSoFar: rows.length }
       }))
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err)
@@ -206,6 +212,11 @@ export function BackOrderImportSection() {
                 </div>
                 <p style={{ fontSize: '12px', color: '#6b7280', marginBottom: '12px' }}>{cfg.desc}</p>
 
+                {slot.fileSizeMB && (
+                  <p style={{ fontSize: '11px', color: '#9ca3af', marginBottom: '4px' }}>
+                    File size: {slot.fileSizeMB} MB
+                  </p>
+                )}
                 {slot.availableSheets.length > 0 && (
                   <p style={{ fontSize: '11px', color: '#9ca3af', marginBottom: '8px' }}>
                     Sheets in file: {slot.availableSheets.join(', ')}
@@ -246,7 +257,7 @@ export function BackOrderImportSection() {
                   )}
 
                   {slot.status === 'uploading' && (
-                    <span className="text-xs text-blue-600">Uploading…</span>
+                    <span className="text-xs text-blue-600">{slot.message}</span>
                   )}
 
                   {slot.status === 'success' && (
@@ -267,6 +278,19 @@ export function BackOrderImportSection() {
                     </button>
                   )}
                 </div>
+
+                {/* Progress bar during upload */}
+                {slot.status === 'uploading' && slot.uploadedSoFar != null && slot.rowCount == null && (
+                  <div style={{ marginTop: '8px', width: '100%', height: '6px', background: '#e5e7eb', borderRadius: '3px', overflow: 'hidden' }}>
+                    <div style={{
+                      width: '50%',
+                      height: '100%',
+                      background: '#2563eb',
+                      borderRadius: '3px',
+                      transition: 'width 0.3s'
+                    }} />
+                  </div>
+                )}
 
                 {slot.rowCount != null && slot.status === 'success' && (
                   <p className="mt-2 text-[11px] text-gray-400">{slot.rowCount} rows stored. Previous data replaced.</p>
