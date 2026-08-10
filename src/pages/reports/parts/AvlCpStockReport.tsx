@@ -1,8 +1,8 @@
 // AvlCpStockReport — AVL WITH CP STOCK (Co-Dealer Stock Report)
-// Separate report for Co-Dealer stock data. Shows all locations where a part is available.
+// Separate report for Co-Dealer stock data with filters on ALL columns.
 // Data is imported via /import page → Back Order Data → AVL WITH CP STOCK slot.
 
-import { useCallback, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { supabase } from '../../../lib/supabase'
 
 interface CpRow {
@@ -22,72 +22,41 @@ interface CpRow {
   contact_name: string | null
 }
 
+const PAGE_SIZE = 25
+
 export default function AvlCpStockReport() {
-  const [search, setSearch] = useState('')
+  const [allData, setAllData] = useState<CpRow[]>([])
   const [loading, setLoading] = useState(false)
-  const [results, setResults] = useState<CpRow[]>([])
-  const [hasSearched, setHasSearched] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [loaded, setLoaded] = useState(false)
+  const [currentPage, setCurrentPage] = useState(1)
 
-  // Browse mode
-  const [browseData, setBrowseData] = useState<CpRow[]>([])
-  const [browseLoading, setBrowseLoading] = useState(false)
-  const [browseLoaded, setBrowseLoaded] = useState(false)
-  const [browseError, setBrowseError] = useState<string | null>(null)
+  // ── Filters (one per field) ────────────────────────────────────────────────
+  const [fPartNo, setFPartNo] = useState('')
+  const [fPartName, setFPartName] = useState('')
+  const [fDealer, setFDealer] = useState('')
+  const [fDealerCode, setFDealerCode] = useState('')
+  const [fRegion, setFRegion] = useState('')
+  const [fCity, setFCity] = useState('')
+  const [fState, setFState] = useState('')
+  const [fQtyMin, setFQtyMin] = useState('')
+  const [fQtyMax, setFQtyMax] = useState('')
+  const [fContact, setFContact] = useState('')
+  const [fPhone, setFPhone] = useState('')
 
-  // Filters
-  const [filterRegion, setFilterRegion] = useState('')
-  const [filterState, setFilterState] = useState('')
-  const [filterCity, setFilterCity] = useState('')
-  const [filterDealer, setFilterDealer] = useState('')
+  // ── Dropdown option lists ──────────────────────────────────────────────────
+  const [regionOptions, setRegionOptions] = useState<string[]>([])
+  const [stateOptions, setStateOptions] = useState<string[]>([])
+  const [cityOptions, setCityOptions] = useState<string[]>([])
+  const [dealerOptions, setDealerOptions] = useState<string[]>([])
+  const [dealerCodeOptions, setDealerCodeOptions] = useState<string[]>([])
 
-  // Unique filter values
-  const [regions, setRegions] = useState<string[]>([])
-  const [states, setStates] = useState<string[]>([])
-  const [cities, setCities] = useState<string[]>([])
-  const [dealers, setDealers] = useState<string[]>([])
-
-  const totalSearchQty = results.reduce((sum, r) => sum + (r.available_qty ?? 0), 0)
-
-  // ── Search ──────────────────────────────────────────────────────────────────
-  const doSearch = useCallback(async () => {
-    const trimmed = search.trim()
-    if (!trimmed) return
+  // ── Load all data ──────────────────────────────────────────────────────────
+  const loadData = useCallback(async () => {
     setLoading(true)
-    setHasSearched(true)
     setError(null)
-
     try {
-      const { data, error: qErr } = await supabase
-        .from('back_order_cp_stock_data')
-        .select('id, part_number, part_description, co_dealer_name, dealer_code, available_qty, on_order, region_name, state, city, cp_type, division, cell_phone, contact_name')
-        .or(`part_number.ilike.%${trimmed.toUpperCase()}%,part_description.ilike.%${trimmed}%`)
-        .order('available_qty', { ascending: false })
-        .limit(500)
-
-      if (qErr) throw new Error(qErr.message)
-      setResults(data ?? [])
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Search failed')
-      setResults([])
-    } finally {
-      setLoading(false)
-    }
-  }, [search])
-
-  const handleClear = () => {
-    setSearch('')
-    setResults([])
-    setHasSearched(false)
-    setError(null)
-  }
-
-  // ── Load all data for browse ────────────────────────────────────────────────
-  const loadAllData = useCallback(async () => {
-    setBrowseLoading(true)
-    setBrowseError(null)
-    try {
-      let allData: CpRow[] = []
+      let all: CpRow[] = []
       let offset = 0
       const PAGE = 1000
       while (true) {
@@ -98,257 +67,323 @@ export default function AvlCpStockReport() {
           .range(offset, offset + PAGE - 1)
         if (qErr) throw new Error(qErr.message)
         if (!data || data.length === 0) break
-        allData = allData.concat(data as CpRow[])
+        all = all.concat(data as CpRow[])
         if (data.length < PAGE) break
         offset += PAGE
       }
-      setBrowseData(allData)
-      setBrowseLoaded(true)
 
-      // Extract unique filter values
+      setAllData(all)
+      setLoaded(true)
+
+      // Build dropdown option lists
       const rSet = new Set<string>()
       const sSet = new Set<string>()
       const cSet = new Set<string>()
       const dSet = new Set<string>()
-      for (const r of allData) {
+      const dcSet = new Set<string>()
+      for (const r of all) {
         if (r.region_name) rSet.add(r.region_name)
         if (r.state) sSet.add(r.state)
         if (r.city) cSet.add(r.city)
         if (r.co_dealer_name) dSet.add(r.co_dealer_name)
+        if (r.dealer_code) dcSet.add(r.dealer_code)
       }
-      setRegions(Array.from(rSet).sort())
-      setStates(Array.from(sSet).sort())
-      setCities(Array.from(cSet).sort())
-      setDealers(Array.from(dSet).sort())
+      setRegionOptions(Array.from(rSet).sort())
+      setStateOptions(Array.from(sSet).sort())
+      setCityOptions(Array.from(cSet).sort())
+      setDealerOptions(Array.from(dSet).sort())
+      setDealerCodeOptions(Array.from(dcSet).sort())
     } catch (err) {
-      setBrowseError(err instanceof Error ? err.message : 'Failed to load data')
+      setError(err instanceof Error ? err.message : 'Failed to load data')
     } finally {
-      setBrowseLoading(false)
+      setLoading(false)
     }
   }, [])
 
-  const filteredBrowse = browseData.filter(r => {
-    if (filterRegion && r.region_name !== filterRegion) return false
-    if (filterState && r.state !== filterState) return false
-    if (filterCity && r.city !== filterCity) return false
-    if (filterDealer && r.co_dealer_name !== filterDealer) return false
-    return true
-  })
+  useEffect(() => { void loadData() }, [loadData])
 
-  const totalFilteredQty = filteredBrowse.reduce((sum, r) => sum + (r.available_qty ?? 0), 0)
+  // ── Apply ALL filters ───────────────────────────────────────────────────────
+  const filteredData = useMemo(() => {
+    return allData.filter(r => {
+      // Part Number — text contains (case-insensitive)
+      if (fPartNo.trim()) {
+        if (!(r.part_number ?? '').toLowerCase().includes(fPartNo.trim().toLowerCase())) return false
+      }
+      // Part Name — text contains
+      if (fPartName.trim()) {
+        if (!(r.part_description ?? '').toLowerCase().includes(fPartName.trim().toLowerCase())) return false
+      }
+      // Co-Dealer — dropdown exact match
+      if (fDealer && r.co_dealer_name !== fDealer) return false
+      // Dealer Code — dropdown exact match
+      if (fDealerCode && r.dealer_code !== fDealerCode) return false
+      // Region — dropdown exact match
+      if (fRegion && r.region_name !== fRegion) return false
+      // City — dropdown exact match
+      if (fCity && r.city !== fCity) return false
+      // State — dropdown exact match
+      if (fState && r.state !== fState) return false
+      // Available Qty — min/max range
+      if (fQtyMin.trim()) {
+        const min = parseFloat(fQtyMin)
+        if (!isNaN(min) && (r.available_qty ?? 0) < min) return false
+      }
+      if (fQtyMax.trim()) {
+        const max = parseFloat(fQtyMax)
+        if (!isNaN(max) && (r.available_qty ?? 0) > max) return false
+      }
+      // Contact — text contains
+      if (fContact.trim()) {
+        if (!(r.contact_name ?? '').toLowerCase().includes(fContact.trim().toLowerCase())) return false
+      }
+      // Phone — text contains
+      if (fPhone.trim()) {
+        if (!(r.cell_phone ?? '').toLowerCase().includes(fPhone.trim().toLowerCase())) return false
+      }
+      return true
+    })
+  }, [allData, fPartNo, fPartName, fDealer, fDealerCode, fRegion, fCity, fState, fQtyMin, fQtyMax, fContact, fPhone])
+
+  // ── Stats ──────────────────────────────────────────────────────────────────
+  const totalQty = filteredData.reduce((sum, r) => sum + (r.available_qty ?? 0), 0)
+  const uniqueDealers = new Set(filteredData.map(r => r.co_dealer_name)).size
+  const uniqueParts = new Set(filteredData.map(r => r.part_number)).size
+
+  // ── Pagination ──────────────────────────────────────────────────────────────
+  const totalPages = Math.max(1, Math.ceil(filteredData.length / PAGE_SIZE))
+  const paginatedData = useMemo(() => {
+    const start = (currentPage - 1) * PAGE_SIZE
+    return filteredData.slice(start, start + PAGE_SIZE)
+  }, [filteredData, currentPage])
+
+  // Reset to page 1 when filters change
+  useEffect(() => { setCurrentPage(1) }, [fPartNo, fPartName, fDealer, fDealerCode, fRegion, fCity, fState, fQtyMin, fQtyMax, fContact, fPhone])
+
+  // ── Clear all filters ───────────────────────────────────────────────────────
+  const clearAllFilters = () => {
+    setFPartNo(''); setFPartName(''); setFDealer(''); setFDealerCode('')
+    setFRegion(''); setFCity(''); setFState('')
+    setFQtyMin(''); setFQtyMax('')
+    setFContact(''); setFPhone('')
+  }
+
+  const hasActiveFilters = fPartNo || fPartName || fDealer || fDealerCode || fRegion || fCity || fState || fQtyMin || fQtyMax || fContact || fPhone
+
+  // ── Filter input component ──────────────────────────────────────────────────
+  const FilterLabel = ({ children }: { children: React.ReactNode }) => (
+    <label className="block text-xs font-semibold text-gray-500 mb-1">{children}</label>
+  )
 
   return (
     <div className="space-y-5">
-      {/* ── Header ──────────────────────────────────────────────────────────── */}
+      {/* ── Header ────────────────────────────────────────────────────────────── */}
       <div className="flex items-start justify-between">
         <div>
           <h2 className="text-2xl font-bold text-gray-800">AVL WITH CP STOCK</h2>
           <p className="mt-1 text-sm text-gray-500">
-            Search any Part Number or Part Name to find all Co-Dealer locations where it's available.
+            Co-Dealer stock availability. Use filters below to narrow down by any field.
           </p>
         </div>
-        {browseLoaded && (
-          <span className="text-xs text-gray-400 mt-2">{browseData.length.toLocaleString('en-IN')} total records</span>
-        )}
-      </div>
-
-      {/* ── Search ─────────────────────────────────────────────────────────────── */}
-      <div className="flex flex-wrap items-center gap-2">
-        <div className="relative">
-          <input
-            type="text"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            onKeyDown={(e) => { if (e.key === 'Enter') void doSearch() }}
-            placeholder="Search Part No. or Part Name…"
-            className="rounded-lg border border-gray-300 bg-white px-3 py-2 pl-10 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-            style={{ width: '260px' }}
-          />
-          <svg className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-          </svg>
-        </div>
-        <button type="button" onClick={() => void doSearch()} disabled={loading || !search.trim()}
-          className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50">
-          {loading ? 'Searching…' : 'Search'}
-        </button>
-        <button type="button" onClick={handleClear} disabled={loading}
-          className="rounded-lg bg-gray-200 px-4 py-2 text-sm font-semibold text-gray-600 hover:bg-gray-300 disabled:opacity-50">
-          Clear
-        </button>
-        {!browseLoaded && (
-          <button type="button" onClick={() => void loadAllData()} disabled={browseLoading}
-            className="rounded-lg bg-gray-100 px-3 py-2 text-sm font-semibold text-gray-600 hover:bg-gray-200">
-            {browseLoading ? 'Loading all…' : 'Browse All Data'}
-          </button>
+        {loaded && (
+          <span className="text-xs text-gray-400 mt-2">{allData.length.toLocaleString('en-IN')} total records</span>
         )}
       </div>
 
       {error && <div className="p-4 bg-red-50 text-red-700 rounded border border-red-200 text-sm">{error}</div>}
-      {browseError && <div className="p-4 bg-red-50 text-red-700 rounded border border-red-200 text-sm">{browseError}</div>}
 
-      {/* ── SEARCH RESULTS ─────────────────────────────────────────────────────── */}
-      {hasSearched && !loading && (
-        <div className="space-y-4">
-          {/* Summary */}
-          <div className="flex flex-wrap gap-3">
-            <div className="p-3 bg-blue-50 rounded-lg border border-blue-200">
-              <p className="text-xs text-blue-600">Matching Records</p>
-              <p className="text-xl font-bold text-blue-800">{results.length.toLocaleString('en-IN')}</p>
-            </div>
-            <div className="p-3 bg-green-50 rounded-lg border border-green-200">
-              <p className="text-xs text-green-600">Total Available Qty</p>
-              <p className="text-xl font-bold text-green-800">{totalSearchQty.toLocaleString('en-IN')}</p>
-            </div>
-            <div className="p-3 bg-gray-50 rounded-lg border border-gray-200">
-              <p className="text-xs text-gray-500">Unique Co-Dealers</p>
-              <p className="text-xl font-bold text-gray-700">{new Set(results.map(r => r.co_dealer_name)).size}</p>
-            </div>
-          </div>
-
-          {/* Results table */}
-          {results.length > 0 ? (
-            <div className="overflow-x-auto bg-white rounded-lg shadow-sm border border-gray-200">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="bg-gray-100">
-                    <th className="px-4 py-2 text-left font-semibold text-gray-700 border">Part Number</th>
-                    <th className="px-4 py-2 text-left font-semibold text-gray-700 border">Part Name</th>
-                    <th className="px-4 py-2 text-left font-semibold text-gray-700 border">Co-Dealer (CP Location)</th>
-                    <th className="px-4 py-2 text-left font-semibold text-gray-700 border">Dealer Code</th>
-                    <th className="px-4 py-2 text-left font-semibold text-gray-700 border">Region</th>
-                    <th className="px-4 py-2 text-left font-semibold text-gray-700 border">City</th>
-                    <th className="px-4 py-2 text-left font-semibold text-gray-700 border">State</th>
-                    <th className="px-4 py-2 text-right font-semibold text-gray-700 border">Available Qty</th>
-                    <th className="px-4 py-2 text-left font-semibold text-gray-700 border">Contact</th>
-                    <th className="px-4 py-2 text-left font-semibold text-gray-700 border">Phone</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {results.map((row, idx) => (
-                    <tr key={row.id} className={idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
-                      <td className="px-4 py-2 border text-gray-800 font-medium font-mono">{row.part_number || '—'}</td>
-                      <td className="px-4 py-2 border text-gray-700 text-xs" style={{ maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{row.part_description || '—'}</td>
-                      <td className="px-4 py-2 border text-gray-700 font-medium">{row.co_dealer_name || '—'}</td>
-                      <td className="px-4 py-2 border text-gray-500 font-mono">{row.dealer_code || '—'}</td>
-                      <td className="px-4 py-2 border text-gray-600 text-xs">{row.region_name || '—'}</td>
-                      <td className="px-4 py-2 border text-gray-600 text-xs">{row.city || '—'}</td>
-                      <td className="px-4 py-2 border text-gray-500 text-xs" style={{ maxWidth: '120px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{row.state || '—'}</td>
-                      <td className="px-4 py-2 border text-right font-bold text-green-700">{row.available_qty ?? '—'}</td>
-                      <td className="px-4 py-2 border text-gray-600 text-xs">{row.contact_name || '—'}</td>
-                      <td className="px-4 py-2 border text-gray-500 text-xs font-mono">{row.cell_phone || '—'}</td>
-                    </tr>
-                  ))}
-                </tbody>
-                <tfoot>
-                  <tr className="bg-gray-100 border-t-2">
-                    <td colSpan={7} className="px-4 py-2 text-right font-semibold text-gray-600 border">Total Available Qty:</td>
-                    <td className="px-4 py-2 text-right font-bold text-green-700 border">{totalSearchQty.toLocaleString('en-IN')}</td>
-                    <td colSpan={2} className="border"></td>
-                  </tr>
-                </tfoot>
-              </table>
-            </div>
-          ) : (
-            <div className="p-8 text-center text-gray-400 bg-gray-50 rounded-lg border border-gray-200">
-              No records found for "<span className="font-medium text-gray-600">{search}</span>"
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* ── BROWSE ALL + FILTERS ─────────────────────────────────────────────────── */}
-      {browseLoaded && (
-        <div className="space-y-4">
-          {/* Filters */}
-          <div className="flex flex-wrap items-end gap-3 p-4 bg-white rounded-lg shadow-sm border border-gray-200">
-            <div>
-              <label className="block text-xs font-semibold text-gray-500 mb-1">Region</label>
-              <select value={filterRegion} onChange={(e) => setFilterRegion(e.target.value)}
-                className="w-40 rounded-lg border border-gray-300 px-3 py-1.5 text-xs">
-                <option value="">All Regions</option>
-                {regions.map(r => <option key={r} value={r}>{r}</option>)}
-              </select>
-            </div>
-            <div>
-              <label className="block text-xs font-semibold text-gray-500 mb-1">State</label>
-              <select value={filterState} onChange={(e) => setFilterState(e.target.value)}
-                className="w-48 rounded-lg border border-gray-300 px-3 py-1.5 text-xs">
-                <option value="">All States</option>
-                {states.map(s => <option key={s} value={s}>{s}</option>)}
-              </select>
-            </div>
-            <div>
-              <label className="block text-xs font-semibold text-gray-500 mb-1">City</label>
-              <select value={filterCity} onChange={(e) => setFilterCity(e.target.value)}
-                className="w-40 rounded-lg border border-gray-300 px-3 py-1.5 text-xs">
-                <option value="">All Cities</option>
-                {cities.map(c => <option key={c} value={c}>{c}</option>)}
-              </select>
-            </div>
-            <div>
-              <label className="block text-xs font-semibold text-gray-500 mb-1">Co-Dealer</label>
-              <select value={filterDealer} onChange={(e) => setFilterDealer(e.target.value)}
-                className="w-56 rounded-lg border border-gray-300 px-3 py-1.5 text-xs">
-                <option value="">All Dealers</option>
-                {dealers.map(d => <option key={d} value={d}>{d}</option>)}
-              </select>
-            </div>
-            <button type="button" onClick={() => { setFilterRegion(''); setFilterState(''); setFilterCity(''); setFilterDealer('') }}
-              className="rounded-lg bg-gray-200 px-3 py-1.5 text-xs font-semibold text-gray-600 hover:bg-gray-300">
-              Clear Filters
+      {/* ── Filters Bar ─────────────────────────────────────────────────────────── */}
+      <div className="p-4 bg-white rounded-lg shadow-sm border border-gray-200 space-y-3">
+        <div className="flex items-center justify-between">
+          <h3 className="text-sm font-bold text-gray-700">Filters</h3>
+          {hasActiveFilters ? (
+            <button type="button" onClick={clearAllFilters}
+              className="rounded-md bg-gray-200 px-3 py-1 text-xs font-semibold text-gray-600 hover:bg-gray-300">
+              Clear All Filters
             </button>
-            <span className="text-xs text-gray-400 ml-auto">
-              Showing <b className="text-gray-600">{filteredBrowse.length.toLocaleString('en-IN')}</b> of {browseData.length.toLocaleString('en-IN')} • Total Stock: <b className="text-green-700">{totalFilteredQty.toLocaleString('en-IN')}</b>
-            </span>
+          ) : null}
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+          {/* Part Number */}
+          <div>
+            <FilterLabel>Part Number</FilterLabel>
+            <input type="text" value={fPartNo} onChange={(e) => setFPartNo(e.target.value)}
+              placeholder="Search part no…"
+              className="w-full rounded-lg border border-gray-300 px-3 py-1.5 text-xs focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-400" />
           </div>
 
-          {/* Data table */}
-          <div className="overflow-x-auto bg-white rounded-lg shadow-sm border border-gray-200" style={{ maxHeight: '600px' }}>
-            <table className="w-full text-sm">
-              <thead className="sticky top-0 z-10">
-                <tr className="bg-gray-100">
-                  <th className="px-4 py-2 text-left font-semibold text-gray-700 border">Part Number</th>
-                  <th className="px-4 py-2 text-left font-semibold text-gray-700 border">Part Name</th>
-                  <th className="px-4 py-2 text-left font-semibold text-gray-700 border">Co-Dealer</th>
-                  <th className="px-4 py-2 text-left font-semibold text-gray-700 border">Code</th>
-                  <th className="px-4 py-2 text-left font-semibold text-gray-700 border">Region</th>
-                  <th className="px-4 py-2 text-left font-semibold text-gray-700 border">City</th>
-                  <th className="px-4 py-2 text-left font-semibold text-gray-700 border">State</th>
-                  <th className="px-4 py-2 text-right font-semibold text-gray-700 border">Stock</th>
-                  <th className="px-4 py-2 text-left font-semibold text-gray-700 border">Type</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredBrowse.slice(0, 500).map((row, idx) => (
-                  <tr key={row.id} className={idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
-                    <td className="px-4 py-2 border text-gray-800 font-medium font-mono">{row.part_number || '—'}</td>
-                    <td className="px-4 py-2 border text-gray-700 text-xs" style={{ maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{row.part_description || '—'}</td>
-                    <td className="px-4 py-2 border text-gray-700 font-medium">{row.co_dealer_name || '—'}</td>
-                    <td className="px-4 py-2 border text-gray-500 font-mono">{row.dealer_code || '—'}</td>
-                    <td className="px-4 py-2 border text-gray-600 text-xs">{row.region_name || '—'}</td>
-                    <td className="px-4 py-2 border text-gray-600 text-xs">{row.city || '—'}</td>
-                    <td className="px-4 py-2 border text-gray-500 text-xs" style={{ maxWidth: '120px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{row.state || '—'}</td>
-                    <td className="px-4 py-2 border text-right font-bold text-green-700">{row.available_qty ?? '—'}</td>
-                    <td className="px-4 py-2 border text-gray-500 text-xs">{row.cp_type || '—'}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          {/* Part Name */}
+          <div>
+            <FilterLabel>Part Name</FilterLabel>
+            <input type="text" value={fPartName} onChange={(e) => setFPartName(e.target.value)}
+              placeholder="Search part name…"
+              className="w-full rounded-lg border border-gray-300 px-3 py-1.5 text-xs focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-400" />
           </div>
-          {filteredBrowse.length > 500 && (
-            <p className="text-center text-xs text-gray-400">
-              Showing first 500 of {filteredBrowse.length.toLocaleString('en-IN')} filtered records. Use filters to narrow down.
-            </p>
-          )}
+
+          {/* Co-Dealer */}
+          <div>
+            <FilterLabel>Co-Dealer (CP Location)</FilterLabel>
+            <select value={fDealer} onChange={(e) => setFDealer(e.target.value)}
+              className="w-full rounded-lg border border-gray-300 px-3 py-1.5 text-xs">
+              <option value="">All Dealers</option>
+              {dealerOptions.map(d => <option key={d} value={d}>{d}</option>)}
+            </select>
+          </div>
+
+          {/* Dealer Code */}
+          <div>
+            <FilterLabel>Dealer Code</FilterLabel>
+            <select value={fDealerCode} onChange={(e) => setFDealerCode(e.target.value)}
+              className="w-full rounded-lg border border-gray-300 px-3 py-1.5 text-xs">
+              <option value="">All Codes</option>
+              {dealerCodeOptions.map(d => <option key={d} value={d}>{d}</option>)}
+            </select>
+          </div>
+
+          {/* Region */}
+          <div>
+            <FilterLabel>Region</FilterLabel>
+            <select value={fRegion} onChange={(e) => setFRegion(e.target.value)}
+              className="w-full rounded-lg border border-gray-300 px-3 py-1.5 text-xs">
+              <option value="">All Regions</option>
+              {regionOptions.map(r => <option key={r} value={r}>{r}</option>)}
+            </select>
+          </div>
+
+          {/* City */}
+          <div>
+            <FilterLabel>City</FilterLabel>
+            <select value={fCity} onChange={(e) => setFCity(e.target.value)}
+              className="w-full rounded-lg border border-gray-300 px-3 py-1.5 text-xs">
+              <option value="">All Cities</option>
+              {cityOptions.map(c => <option key={c} value={c}>{c}</option>)}
+            </select>
+          </div>
+
+          {/* State */}
+          <div>
+            <FilterLabel>State</FilterLabel>
+            <select value={fState} onChange={(e) => setFState(e.target.value)}
+              className="w-full rounded-lg border border-gray-300 px-3 py-1.5 text-xs">
+              <option value="">All States</option>
+              {stateOptions.map(s => <option key={s} value={s}>{s}</option>)}
+            </select>
+          </div>
+
+          {/* Available Qty — min/max */}
+          <div>
+            <FilterLabel>Available Qty (Min – Max)</FilterLabel>
+            <div className="flex gap-1">
+              <input type="number" value={fQtyMin} onChange={(e) => setFQtyMin(e.target.value)}
+                placeholder="Min" className="w-1/2 rounded-lg border border-gray-300 px-2 py-1.5 text-xs" />
+              <input type="number" value={fQtyMax} onChange={(e) => setFQtyMax(e.target.value)}
+                placeholder="Max" className="w-1/2 rounded-lg border border-gray-300 px-2 py-1.5 text-xs" />
+            </div>
+          </div>
+
+          {/* Contact */}
+          <div>
+            <FilterLabel>Contact</FilterLabel>
+            <input type="text" value={fContact} onChange={(e) => setFContact(e.target.value)}
+              placeholder="Search contact…"
+              className="w-full rounded-lg border border-gray-300 px-3 py-1.5 text-xs focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-400" />
+          </div>
+
+          {/* Phone */}
+          <div>
+            <FilterLabel>Phone</FilterLabel>
+            <input type="text" value={fPhone} onChange={(e) => setFPhone(e.target.value)}
+              placeholder="Search phone…"
+              className="w-full rounded-lg border border-gray-300 px-3 py-1.5 text-xs focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-400" />
+          </div>
+        </div>
+
+        {/* Result count */}
+        <div className="flex flex-wrap gap-4 pt-2 border-t border-gray-100">
+          <span className="text-xs text-gray-500">
+            Showing <b className="text-gray-700">{filteredData.length.toLocaleString('en-IN')}</b> of {allData.length.toLocaleString('en-IN')} records
+          </span>
+          <span className="text-xs text-gray-500">
+            Total Available Qty: <b className="text-green-700">{totalQty.toLocaleString('en-IN')}</b>
+          </span>
+          <span className="text-xs text-gray-500">
+            Unique Parts: <b className="text-gray-700">{uniqueParts.toLocaleString('en-IN')}</b>
+          </span>
+          <span className="text-xs text-gray-500">
+            Unique Co-Dealers: <b className="text-gray-700">{uniqueDealers.toLocaleString('en-IN')}</b>
+          </span>
+        </div>
+      </div>
+
+      {/* ── Loading state ──────────────────────────────────────────────────────── */}
+      {loading && (
+        <div className="p-8 text-center text-gray-400 bg-gray-50 rounded-lg border border-gray-200">
+          Loading all data… {allData.length > 0 && `(${allData.length.toLocaleString('en-IN')} rows so far)`}
         </div>
       )}
 
       {/* ── Empty state ─────────────────────────────────────────────────────────── */}
-      {!hasSearched && !browseLoaded && (
-        <div className="p-8 text-center bg-gray-50 rounded-lg border border-gray-200">
-          <p className="text-gray-500 mb-2">Search for a Part Number or Part Name above, or click "Browse All Data" to view all records.</p>
-          <p className="text-xs text-gray-400">Import data from the Import page → Back Order Data → AVL WITH CP STOCK</p>
+      {!loading && loaded && filteredData.length === 0 && (
+        <div className="p-8 text-center text-gray-400 bg-gray-50 rounded-lg border border-gray-200">
+          {hasActiveFilters
+            ? 'No records match the current filters.'
+            : 'No data available. Import data from the Import page → Back Order Data → AVL WITH CP STOCK.'}
+        </div>
+      )}
+
+      {/* ── Data Table ──────────────────────────────────────────────────────────── */}
+      {!loading && filteredData.length > 0 && (
+        <div className="overflow-x-auto bg-white rounded-lg shadow-sm border border-gray-200">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="bg-gray-100">
+                <th className="px-4 py-2 text-left font-semibold text-gray-700 border">Part Number</th>
+                <th className="px-4 py-2 text-left font-semibold text-gray-700 border">Part Name</th>
+                <th className="px-4 py-2 text-left font-semibold text-gray-700 border">Co-Dealer (CP Location)</th>
+                <th className="px-4 py-2 text-left font-semibold text-gray-700 border">Dealer Code</th>
+                <th className="px-4 py-2 text-left font-semibold text-gray-700 border">Region</th>
+                <th className="px-4 py-2 text-left font-semibold text-gray-700 border">City</th>
+                <th className="px-4 py-2 text-left font-semibold text-gray-700 border">State</th>
+                <th className="px-4 py-2 text-right font-semibold text-gray-700 border">Available Qty</th>
+                <th className="px-4 py-2 text-left font-semibold text-gray-700 border">Contact</th>
+                <th className="px-4 py-2 text-left font-semibold text-gray-700 border">Phone</th>
+              </tr>
+            </thead>
+            <tbody>
+              {paginatedData.map((row, idx) => (
+                <tr key={row.id} className={idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
+                  <td className="px-4 py-2 border text-gray-800 font-medium font-mono">{row.part_number || '—'}</td>
+                  <td className="px-4 py-2 border text-gray-700 text-xs" style={{ maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{row.part_description || '—'}</td>
+                  <td className="px-4 py-2 border text-gray-700 font-medium">{row.co_dealer_name || '—'}</td>
+                  <td className="px-4 py-2 border text-gray-500 font-mono">{row.dealer_code || '—'}</td>
+                  <td className="px-4 py-2 border text-gray-600 text-xs">{row.region_name || '—'}</td>
+                  <td className="px-4 py-2 border text-gray-600 text-xs">{row.city || '—'}</td>
+                  <td className="px-4 py-2 border text-gray-500 text-xs" style={{ maxWidth: '120px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{row.state || '—'}</td>
+                  <td className="px-4 py-2 border text-right font-bold text-green-700">{row.available_qty ?? '—'}</td>
+                  <td className="px-4 py-2 border text-gray-600 text-xs">{row.contact_name || '—'}</td>
+                  <td className="px-4 py-2 border text-gray-500 text-xs font-mono">{row.cell_phone || '—'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+
+          {/* Pagination */}
+          <div className="flex items-center justify-between px-4 py-3 border-t border-gray-100 text-sm">
+            <span className="text-gray-600">
+              Showing {(currentPage - 1) * PAGE_SIZE + 1}–{Math.min(currentPage * PAGE_SIZE, filteredData.length)} of {filteredData.length.toLocaleString('en-IN')}
+            </span>
+            <div className="flex items-center gap-2">
+              <button onClick={() => setCurrentPage(1)} disabled={currentPage === 1}
+                className="rounded border border-gray-300 px-2 py-1 text-xs text-gray-700 disabled:opacity-50">First</button>
+              <button onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1}
+                className="rounded border border-gray-300 px-3 py-1 text-xs text-gray-700 disabled:opacity-50">Prev</button>
+              <span className="text-xs text-gray-600">Page {currentPage} / {totalPages}</span>
+              <button onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages}
+                className="rounded border border-gray-300 px-3 py-1 text-xs text-gray-700 disabled:opacity-50">Next</button>
+              <button onClick={() => setCurrentPage(totalPages)} disabled={currentPage === totalPages}
+                className="rounded border border-gray-300 px-2 py-1 text-xs text-gray-700 disabled:opacity-50">Last</button>
+            </div>
+          </div>
         </div>
       )}
     </div>
