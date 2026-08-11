@@ -44,29 +44,6 @@ async function resolveGlobalDealerCodesForAdmin(userId: string): Promise<string[
   )
 }
 
-async function resolveDealerFromMappings(userId: string): Promise<DealerContext | null> {
-  const mappingRes = await supabase
-    .from('user_employee_links')
-    .select('dealer_code, is_primary, updated_at')
-    .eq('user_id', userId)
-    .eq('is_active', true)
-    .order('is_primary', { ascending: false })
-    .order('updated_at', { ascending: false })
-    .limit(1)
-
-  if (mappingRes.error) {
-    return null
-  }
-
-  const mappingRow = (mappingRes.data ?? [])[0] as { dealer_code?: string | null } | undefined
-  const mappedDealerCode = String(mappingRow?.dealer_code ?? '').trim().toUpperCase()
-  if (!mappedDealerCode) {
-    return null
-  }
-
-  return { dealerCode: mappedDealerCode, dealerName: null }
-}
-
 async function resolveDealerScopeFromMappings(userId: string): Promise<DealerScopeContext | null> {
   const mappingRes = await supabase
     .from('user_employee_links')
@@ -161,42 +138,35 @@ export async function getDealerScopeContext(): Promise<ApiResult<DealerScopeCont
     }
   }
 
+  // Non-admin: UNION mapping dealers + JWT primary/additional codes (matches SQL my_effective_dealer_codes).
   if (userId) {
     const fromMappingsScope = await resolveDealerScopeFromMappings(userId)
-    if (fromMappingsScope) {
-      return ok(fromMappingsScope)
+    const mergedDealerCodes = Array.from(
+      new Set([
+        ...(fromMappingsScope?.dealerCodes ?? []),
+        ...dealerCodesFromMeta,
+        dealerCode,
+      ].filter(Boolean)),
+    )
+
+    if (mergedDealerCodes.length > 0) {
+      const primary =
+        dealerCode
+        || fromMappingsScope?.dealerCode
+        || mergedDealerCodes[0]
+
+      return ok({
+        dealerCode: primary,
+        dealerCodes: mergedDealerCodes,
+        dealerName: dealerName || fromMappingsScope?.dealerName || null,
+        source: fromMappingsScope
+          ? ((dealerCode || dealerCodesFromMeta.length > 0) ? 'metadata' : 'mapping')
+          : 'metadata',
+      })
     }
-  }
-
-  if (dealerCode) {
-    return ok({
-      dealerCode,
-      dealerCodes: Array.from(new Set([dealerCode, ...dealerCodesFromMeta])),
-      dealerName: dealerName || null,
-      source: 'metadata',
-    })
-  }
-
-  if (dealerCodesFromMeta.length > 0) {
-    return ok({
-      dealerCode: dealerCodesFromMeta[0],
-      dealerCodes: Array.from(new Set(dealerCodesFromMeta)),
-      dealerName: dealerName || null,
-      source: 'metadata',
-    })
   }
 
   if (userId) {
-    const fromMappings = await resolveDealerFromMappings(userId)
-    if (fromMappings?.dealerCode) {
-      return ok({
-        dealerCode: fromMappings.dealerCode,
-        dealerCodes: [fromMappings.dealerCode],
-        dealerName: fromMappings.dealerName,
-        source: 'mapping',
-      })
-    }
-
     const fromUsersTable = await resolveDealerFromUsersTable(userId)
     if (fromUsersTable?.dealerCode) {
       return ok({

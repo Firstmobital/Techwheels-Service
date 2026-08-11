@@ -664,7 +664,7 @@ export default function AdminPage({ onViewAsUser }: { onViewAsUser?: (id: string
     showToastMsg(
       error && isMissingDealerColumnError(error)
         ? 'Dealer saved in auth metadata (database). This schema does not use public.users dealer columns; Dealer display comes from auth metadata + active mappings.'
-        : 'Dealer metadata saved. For CRM/SM/GM, Additional Dealer Codes control SA visibility; if left blank, scope falls back to mapped dealer codes. User must re-login for JWT updates.'
+        : 'Dealer metadata saved. For CRM/SM/GM/Reception, Additional Dealer Codes are unioned with mapped dealer codes for visibility. User must re-login for JWT updates.'
     )
   }
 
@@ -1482,7 +1482,7 @@ export default function AdminPage({ onViewAsUser }: { onViewAsUser?: (id: string
             </Field>
           </div>
           <p className="mt-3 text-xs text-gray-600">
-            This sets fallback metadata only. For CRM/SM/GM SA visibility: Additional Dealer Codes take precedence; if blank, scope falls back to mapped dealer codes from Admin → Mappings. User must sign out and sign back in for JWT updates.
+            This sets auth metadata used with mapped dealer codes. For CRM/SM/GM/Reception visibility: Additional Dealer Codes are unioned with mapped dealer codes from Admin → Mappings. User must sign out and sign back in for JWT updates.
           </p>
           <div className="mt-5 flex justify-end gap-3">
             <button onClick={() => setDealerEditUser(null)} className={BTN_SECONDARY}>Cancel</button>

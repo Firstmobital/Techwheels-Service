@@ -27,6 +27,7 @@ Deno.serve(async (req) => {
       })
     }
 
+    const normalizedPrimary = String(dealerCode ?? '').trim().toUpperCase()
     const normalizedCodes = Array.isArray(dealerCodes)
       ? Array.from(
           new Set(
@@ -37,8 +38,10 @@ Deno.serve(async (req) => {
         )
       : []
 
-    const normalizedPrimary = String(dealerCode ?? '').trim().toUpperCase()
-    const finalCodes = normalizedCodes
+    // Always include primary dealer_code in dealer_codes so Reception/SA scope sees both EV+PV.
+    const finalCodes = Array.from(
+      new Set([normalizedPrimary, ...normalizedCodes].filter(Boolean)),
+    )
 
     // Call Supabase Auth API to update metadata
     const res = await fetch(`${SUPABASE_URL}/auth/v1/admin/users/${userId}`, {
