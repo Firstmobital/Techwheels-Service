@@ -32,6 +32,7 @@ This document defines the authoritative mapping between database modules and fro
 | 7 | `reports` | `/reports` | `/reports` | ReportsPage + sub-routes | Active | Analytics and cross-module dashboards |
 | 8 | `admin` | `/admin` | `/admin` | AdminPage | Active | User and permission management |
 | 10 | `reception` | `/reception` | `/reception` | ReceptionPage | Active | Front desk vehicle intake and SA assignment |
+| — | `help_tickets` | `/help-tickets` | `/help-tickets` | HelpTicketsAdminPage | Active | Support inbox (org-wide). Employee self-service at `/help/tickets*` is auth-only (no module grant). |
 
 **Legend:**
 - **Module Name**: Authoritative name from `public.modules.name`
@@ -58,9 +59,11 @@ const ROUTE_MODULE_MAP: Record<AppRoute, ModuleName[]> = {
 }
 ```
 
-### Secondary Routes (no guard)
+### Secondary Routes (no module guard)
 
 - `/` (root) → Always accessible
+- `/home` → Always accessible when authenticated
+- `/help/tickets`, `/help/tickets/new`, `/help/tickets/:id` → Authenticated employee Get Help (RPC enforces `my_employee_code()`)
 - `/reset-password` → Always accessible (auth flow)
 - `/auth/callback` → Always accessible (auth flow)
 - `*` (catch-all) → Denied by default if not in ROUTE_MODULE_MAP

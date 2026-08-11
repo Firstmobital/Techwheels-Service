@@ -1,10 +1,10 @@
 # HELP-001 — Phase Tracking
 
 **Implementation Plan:** HELP-001  
-**Last Updated:** 2026-08-11 (dealer-agnostic visibility locked)  
+**Last Updated:** 2026-08-11 (Phase 1 applied; Phase 2 starting)  
 **Total Phases:** 5  
-**Current Progress:** 0/5 (0%)  
-**Status:** Not Started  
+**Current Progress:** 1/5 (20%)  
+**Status:** Phase 2 in progress  
 
 ---
 
@@ -12,8 +12,8 @@
 
 | Phase | Name | Duration | Status | Completion % |
 |-------|------|----------|--------|--------------|
-| 1 | Database schema, RLS, RPCs, module | ~1 week | ⏳ Not Started | 0% |
-| 2 | Web employee + support UI + Drive | ~1–1.5 weeks | ⏳ Blocked by Phase 1 | 0% |
+| 1 | Database schema, RLS, RPCs, module | ~1 week | ✅ Applied + full_metadata refreshed | 100% |
+| 2 | Web employee + support UI + Drive | ~1–1.5 weeks | 🟡 Web surfaces landed — grant support perms + deploy edge | 80% |
 | 3 | In-app notifications + deep links | ~3–4 days | ⏳ Blocked by Phase 2 | 0% |
 | 4 | Mobile employee Help Lite | ~1 week | ⏳ Blocked by Phase 1 (RPC) / Phase 2 preferred | 0% |
 | 5 | SLA cron + hardening + evidence | ~3–5 days | ⏳ Blocked by Phase 3 | 0% |
@@ -31,13 +31,14 @@ Mobile detail: [MOBILE-HELP-001](../../../../mobileversion/categories/help-ticke
 **Goal:** Greenfield `help_ticket_*` backend ready for web and mobile clients.
 
 ### Deliverables
-- [ ] Pre-migration grep against `supabase/backups/full_metadata.sql` (no `help_ticket_*` collisions)
-- [ ] Tables: categories, tickets, messages, attachments, audit_log, notifications
-- [ ] Category seed (Service keys)
-- [ ] Helpers + employee/support/notification RPCs
-- [ ] RLS enabled; RPC-only mutation posture
-- [ ] `modules` row `help_tickets` → `/help-tickets`
-- [ ] Refresh `full_metadata.sql` after apply
+- [x] Pre-migration grep against `supabase/backups/full_metadata.sql` (no `help_ticket_*` collisions)
+- [x] Tables: categories, tickets, messages, attachments, audit_log, notifications (`20260811120000_help_tickets_schema.sql`)
+- [x] Category seed (Service keys)
+- [x] Helpers + employee/support/notification RPCs (`20260811120100_help_tickets_rpcs.sql`)
+- [x] RLS enabled; RPC-only mutation posture (REVOKE direct table access)
+- [x] `modules` row `help_tickets` → `/help-tickets`
+- [x] Apply migrations to target DB
+- [x] Refresh `full_metadata.sql` after apply
 
 ### Success Criteria
 - [ ] Linked employee can `help_ticket_create` + `help_ticket_list_mine`
@@ -45,11 +46,11 @@ Mobile detail: [MOBILE-HELP-001](../../../../mobileversion/categories/help-ticke
 - [ ] Employee cannot execute support-only RPCs
 - [ ] Support view/modify gates enforced
 - [ ] Support with modify on dealer B can work tickets raised from dealer A (org-wide)
-- [ ] No `my_dealer_code()` / dealer equality in `help_ticket_can_see` or `list_admin`
+- [x] No `my_dealer_code()` / dealer equality in `help_ticket_can_see` or `list_admin` (static review)
 - [ ] Internal notes never returned to raiser in `help_ticket_get_detail`
 
 ### Evidence
-- Place under `../evidence/` (e.g. `HELP-001_PHASE1_RPC_MATRIX.md`)
+- [`../evidence/HELP-001_PHASE1_MIGRATIONS.md`](../evidence/HELP-001_PHASE1_MIGRATIONS.md)
 
 ### Dependencies
 - Existing helpers: `my_employee_code()`, `is_admin()`, `has_module_*` (`my_dealer_code` must not gate help tickets)
@@ -61,13 +62,14 @@ Mobile detail: [MOBILE-HELP-001](../../../../mobileversion/categories/help-ticke
 **Goal:** Full web product surface; attachments via Universal Drive.
 
 ### Deliverables
-- [ ] `ModuleName` / `ROUTE_MODULE_MAP` / `NAV_ITEMS` / routes in `src/App.tsx`
-- [ ] Update `MODULE_ROUTE_CONTRACT.md`
-- [ ] `GetHelpFab` + `/help/tickets*` pages
-- [ ] `HelpTicketsAdminPage` + `?ticketId=` deep link
-- [ ] `src/lib/api/helpTickets.ts` + `src/lib/helpTicketUpload.ts`
-- [ ] `universal-drive-upload` allow-list: `help_ticket_attachment`
-- [ ] Grant support users `can_view`/`can_modify` via Admin or seed
+- [x] `ModuleName` / `ROUTE_MODULE_MAP` / `NAV_ITEMS` / routes in `src/App.tsx`
+- [x] Update `MODULE_ROUTE_CONTRACT.md`
+- [x] `GetHelpFab` + `/help/tickets*` pages
+- [x] `HelpTicketsAdminPage` + `?ticketId=` deep link
+- [x] `src/lib/api/helpTickets.ts` + `src/lib/helpTicketUpload.ts`
+- [x] `universal-drive-upload` allow-list: `help_ticket_attachment`
+- [ ] Grant support users `can_view`/`can_modify` via Admin UI
+- [ ] Deploy updated `universal-drive-upload` edge function
 
 ### Success Criteria
 - [ ] Raise ticket under 60s (happy path)

@@ -1,0 +1,65 @@
+.ht-page { max-width: 1100px; margin: 0 auto; padding: 1rem 1.25rem 2.5rem; }
+.ht-header { display: flex; align-items: flex-end; justify-content: space-between; gap: 1rem; margin-bottom: 1.25rem; flex-wrap: wrap; }
+.ht-header h1 { margin: 0; font-size: 1.45rem; font-weight: 700; color: #0f172a; }
+.ht-sub { margin: 0.25rem 0 0; color: #64748b; font-size: 0.9rem; }
+.ht-btn {
+  border: 1px solid #cbd5e1; background: #fff; color: #0f172a;
+  border-radius: 0.5rem; padding: 0.5rem 0.85rem; font-size: 0.875rem; font-weight: 600;
+  cursor: pointer;
+}
+.ht-btn:hover { background: #f8fafc; }
+.ht-btn.primary { background: #0f766e; border-color: #0f766e; color: #fff; }
+.ht-btn.primary:hover { background: #0d9488; }
+.ht-btn.danger { background: #fff; border-color: #fecaca; color: #b91c1c; }
+.ht-btn:disabled { opacity: 0.55; cursor: not-allowed; }
+.ht-card {
+  background: #fff; border: 1px solid #e2e8f0; border-radius: 0.75rem;
+  padding: 1rem; margin-bottom: 0.75rem;
+}
+.ht-card:hover { border-color: #94a3b8; }
+.ht-row { display: flex; justify-content: space-between; gap: 1rem; align-items: flex-start; }
+.ht-meta { color: #64748b; font-size: 0.8rem; display: flex; flex-wrap: wrap; gap: 0.5rem 0.85rem; margin-top: 0.4rem; }
+.ht-pill {
+  display: inline-flex; align-items: center; border-radius: 999px;
+  padding: 0.15rem 0.55rem; font-size: 0.72rem; font-weight: 700; text-transform: uppercase;
+  background: #e2e8f0; color: #334155;
+}
+.ht-pill.new, .ht-pill.open { background: #dbeafe; color: #1d4ed8; }
+.ht-pill.in_progress, .ht-pill.reopened { background: #ffedd5; color: #c2410c; }
+.ht-pill.resolved { background: #dcfce7; color: #15803d; }
+.ht-pill.closed { background: #f1f5f9; color: #475569; }
+.ht-pill.on_hold, .ht-pill.waiting_raiser { background: #fef3c7; color: #a16207; }
+.ht-pill.escalated { background: #fee2e2; color: #b91c1c; }
+.ht-form { display: grid; gap: 0.85rem; max-width: 720px; }
+.ht-form label { display: grid; gap: 0.35rem; font-size: 0.85rem; font-weight: 600; color: #334155; }
+.ht-form input, .ht-form select, .ht-form textarea {
+  border: 1px solid #cbd5e1; border-radius: 0.5rem; padding: 0.55rem 0.7rem;
+  font: inherit; color: #0f172a; background: #fff;
+}
+.ht-form textarea { min-height: 140px; resize: vertical; }
+.ht-error { background: #fef2f2; border: 1px solid #fecaca; color: #991b1b; padding: 0.65rem 0.8rem; border-radius: 0.5rem; margin-bottom: 0.85rem; font-size: 0.875rem; }
+.ht-success { background: #ecfdf5; border: 1px solid #a7f3d0; color: #065f46; padding: 0.65rem 0.8rem; border-radius: 0.5rem; margin-bottom: 0.85rem; font-size: 0.875rem; }
+.ht-empty { color: #64748b; padding: 2rem 0; text-align: center; }
+.ht-chat { display: grid; gap: 0.65rem; margin-top: 1rem; }
+.ht-msg {
+  border: 1px solid #e2e8f0; border-radius: 0.65rem; padding: 0.7rem 0.85rem; background: #f8fafc;
+}
+.ht-msg.internal { background: #fff7ed; border-color: #fed7aa; }
+.ht-msg-head { display: flex; justify-content: space-between; gap: 0.5rem; font-size: 0.78rem; color: #64748b; margin-bottom: 0.35rem; }
+.ht-composer { display: grid; gap: 0.5rem; margin-top: 1rem; }
+.ht-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.75rem; }
+.ht-split { display: grid; grid-template-columns: 1.1fr 1fr; gap: 1rem; }
+@media (max-width: 900px) { .ht-split { grid-template-columns: 1fr; } }
+.ht-filters { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 1rem; }
+.ht-filters select, .ht-filters input {
+  border: 1px solid #cbd5e1; border-radius: 0.5rem; padding: 0.4rem 0.6rem; font: inherit; font-size: 0.85rem;
+}
+.ht-fab {
+  position: fixed; right: 1.25rem; bottom: 1.25rem; z-index: 40;
+  border: none; border-radius: 999px; padding: 0.85rem 1.15rem;
+  background: #0f766e; color: #fff; font-weight: 700; font-size: 0.9rem;
+  box-shadow: 0 10px 24px rgba(15, 118, 110, 0.35); cursor: pointer;
+}
+.ht-fab:hover { background: #0d9488; }
+.ht-attach-list { display: grid; gap: 0.35rem; margin-top: 0.75rem; font-size: 0.85rem; }
+.ht-attach-list a { color: #0f766e; font-weight: 600; }

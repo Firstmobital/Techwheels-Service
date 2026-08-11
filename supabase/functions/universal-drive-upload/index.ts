@@ -2,8 +2,8 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { SignJWT, importPKCS8 } from 'https://esm.sh/jose@5.9.6'
 
 type UploadBody = {
-  resource_type?: 'document' | 'panel_photo' | 'reception_estimate' | 'reception_invoice' | 'bodyshop_intake_photo' | 'bodyshop_document' | 'insurance_renewal_quote'
-  resourceType?: 'document' | 'panel_photo' | 'reception_estimate' | 'reception_invoice' | 'bodyshop_intake_photo' | 'bodyshop_document' | 'insurance_renewal_quote'
+  resource_type?: 'document' | 'panel_photo' | 'reception_estimate' | 'reception_invoice' | 'bodyshop_intake_photo' | 'bodyshop_document' | 'insurance_renewal_quote' | 'help_ticket_attachment'
+  resourceType?: 'document' | 'panel_photo' | 'reception_estimate' | 'reception_invoice' | 'bodyshop_intake_photo' | 'bodyshop_document' | 'insurance_renewal_quote' | 'help_ticket_attachment'
   bucket_id?: string
   bucketId?: string
   object_name?: string
@@ -88,6 +88,8 @@ function normalizeBody(body: UploadBody) {
             ? 'bodyshop_document'
             : rawResourceType === 'insurance_renewal_quote'
               ? 'insurance_renewal_quote'
+              : rawResourceType === 'help_ticket_attachment'
+                ? 'help_ticket_attachment'
       : 'document'
   const bucketId = String(body.bucket_id ?? body.bucketId ?? 'autodoc').trim()
   const objectName = String(body.object_name ?? body.objectName ?? '').trim().replace(/^\/+/, '')
@@ -401,8 +403,9 @@ Deno.serve(async (req) => {
     const isBodyshopIntakeUpload = body.resourceType === 'bodyshop_intake_photo'
     const isBodyshopDocumentUpload = body.resourceType === 'bodyshop_document'
     const isInsuranceRenewalQuoteUpload = body.resourceType === 'insurance_renewal_quote'
+    const isHelpTicketAttachmentUpload = body.resourceType === 'help_ticket_attachment'
 
-    if (!isReceptionUpload && !isBodyshopIntakeUpload && !isBodyshopDocumentUpload && !isInsuranceRenewalQuoteUpload && !body.jobCardId) {
+    if (!isReceptionUpload && !isBodyshopIntakeUpload && !isBodyshopDocumentUpload && !isInsuranceRenewalQuoteUpload && !isHelpTicketAttachmentUpload && !body.jobCardId) {
       return json(400, { ok: false, error: 'job_card_id is required', error_code: 'VALIDATION_ERROR' })
     }
     if (isReceptionUpload && !body.receptionEntryId) {
@@ -417,10 +420,13 @@ Deno.serve(async (req) => {
     if (isBodyshopDocumentUpload && !body.resourceId) {
       return json(400, { ok: false, error: 'resource_id is required', error_code: 'VALIDATION_ERROR' })
     }
+    if (isHelpTicketAttachmentUpload && !body.resourceId) {
+      return json(400, { ok: false, error: 'resource_id is required (help_ticket_attachments.id)', error_code: 'VALIDATION_ERROR' })
+    }
     if (!body.objectName) {
       return json(400, { ok: false, error: 'object_name is required', error_code: 'VALIDATION_ERROR' })
     }
-    if (!isReceptionUpload && !isInsuranceRenewalQuoteUpload && !body.fileType) {
+    if (!isReceptionUpload && !isInsuranceRenewalQuoteUpload && !isHelpTicketAttachmentUpload && !body.fileType) {
       return json(400, {
         ok: false,
         error: 'file_type is required',
@@ -665,6 +671,39 @@ Deno.serve(async (req) => {
       rowCreatedAt = docRow.created_at
       existingDriveFileId = String(docRow.drive_file_id ?? '').trim()
       effectiveFileType = String(docRow.doc_key ?? (body.fileType || 'bodyshop_document'))
+    } else if (body.resourceType === 'help_ticket_attachment') {
+      const attachmentId = String(body.resourceId ?? '').trim()
+      if (!attachmentId) {
+        return json(400, {
+          ok: false,
+          error: 'Invalid resource_id for help_ticket_attachment',
+          error_code: 'VALIDATION_ERROR',
+        })
+      }
+
+      const { data: attachmentRow, error: attachmentErr } = await supabase
+        .from('help_ticket_attachments')
+        .select('id, uploaded_at, drive_file_id, ticket_id, original_filename')
+        .eq('id', attachmentId)
+        .maybeSingle()
+
+      if (attachmentErr) {
+        return json(500, { ok: false, error: attachmentErr.message, error_code: 'DB_ERROR' })
+      }
+      if (!attachmentRow?.id) {
+        return json(404, {
+          ok: false,
+          error: 'Help ticket attachment row not found for upload payload',
+          error_code: 'HELP_TICKET_ATTACHMENT_NOT_FOUND',
+        })
+      }
+
+      // No vehicle registration — park under a stable Help Tickets Drive folder.
+      registrationNo = 'HELP_TICKETS'
+      rowId = String(attachmentRow.id)
+      rowCreatedAt = attachmentRow.uploaded_at
+      existingDriveFileId = String(attachmentRow.drive_file_id ?? '').trim()
+      effectiveFileType = body.fileType || 'attachment'
     } else if (body.resourceType === 'insurance_renewal_quote') {
       const assignmentIdNum = Number(body.assignmentId)
       if (!Number.isFinite(assignmentIdNum)) {
@@ -800,6 +839,8 @@ Deno.serve(async (req) => {
           ? `${normalizedReg}_SA_INVOICE_${datePart}_${rowId}.${ext}`
           : body.resourceType === 'insurance_renewal_quote'
             ? `${normalizedReg}_INS_QUOTE_${datePart}_${rowId}.${ext}`
+          : body.resourceType === 'help_ticket_attachment'
+            ? `HELP_${datePart}_${rowId.slice(0, 8)}.${ext}`
           : `${normalizedReg}_SA_ESTIMATE_${datePart}_${rowId}.${ext}`
 
     const privateKeyPem = serviceAccountPrivateKeyBase64
@@ -894,6 +935,14 @@ Deno.serve(async (req) => {
               quote_content_type: mimeType,
               quote_uploaded_at: new Date().toISOString(),
             }
+        : body.resourceType === 'help_ticket_attachment'
+          ? {
+              drive_url: driveUrl,
+              drive_file_id: fileId,
+              status: 'uploaded',
+              error_message: null,
+              storage_staging_path: null,
+            }
         : {
             drive_url: driveUrl,
             drive_file_id: fileId,
@@ -908,6 +957,8 @@ Deno.serve(async (req) => {
           ? 'bodyshop_repair_card_documents'
         : body.resourceType === 'insurance_renewal_quote'
           ? 'insurance_renewal_assignments'
+        : body.resourceType === 'help_ticket_attachment'
+          ? 'help_ticket_attachments'
         : 'service_reception_entries'
     const { error: updateErr } = await supabase
       .from(targetTable)

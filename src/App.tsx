@@ -41,6 +41,12 @@ import WhatsAppAutomationsPage from './pages/WhatsAppAutomationsPage'
 import PostServiceFeedbackCREPage from './pages/PostServiceFeedbackCREPage'
 import PartsSPMDashboardPage from './pages/PartsSPMDashboardPage'
 import VerifyScreenPreview from './pages/VerifyScreenPreview'
+import HelpTicketsAdminPage from './pages/HelpTicketsAdminPage'
+import MyHelpTicketsPage from './pages/help/MyHelpTicketsPage'
+import RaiseHelpTicketPage from './pages/help/RaiseHelpTicketPage'
+import HelpTicketDetailPage from './pages/help/HelpTicketDetailPage'
+import GetHelpFab from './components/help/GetHelpFab'
+import './pages/help/helpTickets.css'
 import { hasSupabaseEnv, supabase } from './lib/supabase'
 import { getDealerScopeContext } from './lib/api/auth'
 import { DirtyProvider, useDirty } from './context/DirtyContext'
@@ -64,6 +70,7 @@ const NAV_ITEMS = [
   { to: '/admin', label: 'Admin', icon: 'admin' },
 
   { to: '/complaints', label: 'Complaints', icon: 'complaints' },
+  { to: '/help-tickets', label: 'Help Tickets', icon: 'message-circle' },
   { to: '/bodyshop-repair', label: 'Repair Tracker', icon: 'floor' },
   { to: '/ew-reminder', label: 'EW Reminder', icon: 'shield' },
   { to: '/service-booking', label: 'Service Booking', icon: 'calendar' },
@@ -95,6 +102,7 @@ type ModuleName =
   | 'bodyshop_floor'
   | 'technician'
   | 'complaints'
+  | 'help_tickets'
   | 'bodyshop_repair'
   | 'ew_reminder'
   | 'service_booking'
@@ -106,7 +114,7 @@ type ModuleName =
   | 'post_service_feedback_cre'
   | 'parts_spm'
 
-type AppRoute = '/import' | '/reports' | '/settings' | '/admin' | '/autodoc' | '/reception' | '/service-advisor' | '/floor-incharge' | '/sa-tracker' | '/bodyshop-tracker' | '/bodyshop-floor' | '/technician' | '/complaints' | '/bodyshop-repair' | '/ew-reminder' | '/service-booking' | '/wa-agent' | '/telecalling' | '/insurance-renewal-telecalling' | '/auto-service-reminder' | '/cre-incentive' | '/post-service-feedback' | '/parts-spm'
+type AppRoute = '/import' | '/reports' | '/settings' | '/admin' | '/autodoc' | '/reception' | '/service-advisor' | '/floor-incharge' | '/sa-tracker' | '/bodyshop-tracker' | '/bodyshop-floor' | '/technician' | '/complaints' | '/help-tickets' | '/bodyshop-repair' | '/ew-reminder' | '/service-booking' | '/wa-agent' | '/telecalling' | '/insurance-renewal-telecalling' | '/auto-service-reminder' | '/cre-incentive' | '/post-service-feedback' | '/parts-spm'
 
 interface PermissionRow {
   module_name: string
@@ -126,6 +134,7 @@ const ROUTE_MODULE_MAP: Record<AppRoute, ModuleName[]> = {
   '/bodyshop-floor': ['bodyshop_floor'],
   '/technician': ['technician'],
   '/complaints': ['complaints'],
+  '/help-tickets': ['help_tickets'],
   '/bodyshop-repair': ['bodyshop_repair'],
   '/ew-reminder': ['ew_reminder'],
   '/service-booking': ['service_booking'],
@@ -778,6 +787,9 @@ function canAccessPath(pathname: string, allowedModules: Set<string>) {
   if (pathname.startsWith('/bodyshop-floor')) return hasAnyModuleAccess(allowedModules, ROUTE_MODULE_MAP['/bodyshop-floor'])
   if (pathname.startsWith('/technician')) return hasAnyModuleAccess(allowedModules, ROUTE_MODULE_MAP['/technician'])
   if (pathname.startsWith('/complaints')) return hasAnyModuleAccess(allowedModules, ROUTE_MODULE_MAP['/complaints'])
+  if (pathname.startsWith('/help-tickets')) return hasAnyModuleAccess(allowedModules, ROUTE_MODULE_MAP['/help-tickets'])
+  // Employee Get Help self-service — auth only; RPCs enforce employee link
+  if (pathname.startsWith('/help')) return true
   if (pathname.startsWith('/bodyshop-repair')) return hasAnyModuleAccess(allowedModules, ROUTE_MODULE_MAP['/bodyshop-repair'])
   if (pathname.startsWith('/ew-reminder')) return hasAnyModuleAccess(allowedModules, ROUTE_MODULE_MAP['/ew-reminder'])
   if (pathname.startsWith('/service-booking')) return hasAnyModuleAccess(allowedModules, ROUTE_MODULE_MAP['/service-booking'])
@@ -1169,6 +1181,8 @@ VITE_SUPABASE_ANON_KEY=your-anon-key`}
           onStopImpersonating={stopImpersonating}
         />
 
+        {userId ? <GetHelpFab /> : null}
+
         <main className="main">
           <div className="page">
             {!defaultRoute ? (
@@ -1317,6 +1331,17 @@ VITE_SUPABASE_ANON_KEY=your-anon-key`}
                     </RequireAccess>
                   )}
                 />
+                <Route
+                  path="/help-tickets"
+                  element={(
+                    <RequireAccess allowedModules={allowedModules} modules={ROUTE_MODULE_MAP['/help-tickets']}>
+                      <HelpTicketsAdminPage />
+                    </RequireAccess>
+                  )}
+                />
+                <Route path="/help/tickets" element={<MyHelpTicketsPage />} />
+                <Route path="/help/tickets/new" element={<RaiseHelpTicketPage />} />
+                <Route path="/help/tickets/:id" element={<HelpTicketDetailPage />} />
                 <Route
                   path="/bodyshop-repair"
                   element={(

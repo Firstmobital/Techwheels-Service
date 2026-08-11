@@ -3,7 +3,7 @@
 **Project:** Employee Help Tickets (Get Help)  
 **Plan:** [HELP-001_COMPREHENSIVE_PLAN.md](HELP-001_COMPREHENSIVE_PLAN.md)  
 **Created:** 2026-08-11  
-**Status:** 🔴 Not Started  
+**Status:** 🟡 Phase 2 web surfaces landed — deploy edge + grant support perms  
 
 Legend: `[ ]` pending · `[x]` done · `N/A` skipped with note
 
@@ -11,58 +11,58 @@ Legend: `[ ]` pending · `[x]` done · `N/A` skipped with note
 
 ## PHASE 0: PRE-FLIGHT AUDIT
 
-- [ ] **0.1** Grep DB truth for collisions  
+- [x] **0.1** Grep DB truth for collisions  
   `rg -n "help_ticket|admin\\.help-tickets" supabase/backups/full_metadata.sql`  
   Expected: no `help_ticket_*` tables/functions (complaints-only ticket hits OK)
 
-- [ ] **0.2** Confirm helpers exist: `my_employee_code`, `is_admin`, `has_module_view`, `has_module_modify`, `has_module_delete`, `get_all_my_permissions` (`my_dealer_code` exists but must **not** be used for help-ticket ACL)
+- [x] **0.2** Confirm helpers exist: `my_employee_code`, `is_admin`, `has_module_view`, `has_module_modify`, `has_module_delete`, `get_all_my_permissions` (`my_dealer_code` exists but must **not** be used for help-ticket ACL)
 
-- [ ] **0.3** Confirm identity tables: `employee_master.employee_code`, `user_employee_links`, `users.id`
+- [x] **0.3** Confirm identity tables: `employee_master.employee_code`, `user_employee_links`, `users.id`
 
-- [ ] **0.4** Confirm `complaint_*` remains customer-only — do not alter for this feature; do **not** copy complaints dealer-scoped RLS onto help tickets
+- [x] **0.4** Confirm `complaint_*` remains customer-only — do not alter for this feature; do **not** copy complaints dealer-scoped RLS onto help tickets
 
-- [ ] **0.4b** Lock design: help tickets are **dealer-agnostic** — `has_module_modify('help_tickets')` works any ticket org-wide
+- [x] **0.4b** Lock design: help tickets are **dealer-agnostic** — `has_module_modify('help_tickets')` works any ticket org-wide
 
-- [ ] **0.5** Confirm Drive edge allow-list location in `supabase/functions/universal-drive-upload/index.ts`
+- [x] **0.5** Confirm Drive edge allow-list location in `supabase/functions/universal-drive-upload/index.ts` (Phase 2 change)
 
-- [ ] **0.6** Confirm App RBAC pattern in `src/App.tsx` (`ModuleName`, `ROUTE_MODULE_MAP`, `RequireAccess`)
+- [x] **0.6** Confirm App RBAC pattern in `src/App.tsx` (`ModuleName`, `ROUTE_MODULE_MAP`, `RequireAccess`) (Phase 2 wiring)
 
 ---
 
 ## PHASE 1: DATABASE
 
 ### Schema
-- [ ] **1.1** Create migration `*_help_tickets_schema.sql`
-  - [ ] `help_ticket_categories` + seed
-  - [ ] `help_tickets` (optional `raiser_dealer_code` snapshot only — not `dealer_code` ACL column)
-  - [ ] `help_ticket_messages`
-  - [ ] `help_ticket_attachments`
-  - [ ] `help_ticket_audit_log`
-  - [ ] `help_ticket_notifications` (**no** dealer_code column)
-  - [ ] Indexes per HELP-001 §7
-  - [ ] Prefer `help_ticket_number_seq` for ticket numbers
+- [x] **1.1** Create migration `20260811120000_help_tickets_schema.sql`
+  - [x] `help_ticket_categories` + seed
+  - [x] `help_tickets` (optional `raiser_dealer_code` snapshot only — not `dealer_code` ACL column)
+  - [x] `help_ticket_messages`
+  - [x] `help_ticket_attachments`
+  - [x] `help_ticket_audit_log`
+  - [x] `help_ticket_notifications` (**no** dealer_code column)
+  - [x] Indexes per HELP-001 §7
+  - [x] Prefer `help_ticket_number_seq` for ticket numbers
 
 ### Module
-- [ ] **1.2** `INSERT INTO public.modules (... name='help_tickets', route='/help-tickets' ...) ON CONFLICT (name) DO NOTHING`
+- [x] **1.2** `INSERT INTO public.modules (... name='help_tickets', route='/help-tickets' ...) ON CONFLICT (name) DO NOTHING`
 
 ### RPCs & helpers
-- [ ] **1.3** Helpers: `help_ticket_require_employee`, `help_ticket_require_support_view/modify`, `help_ticket_can_see` (**no dealer predicate**), `help_ticket_next_number`, `help_ticket_next_sequence_number`, `help_ticket_calculate_sla_targets`, `help_ticket_emit_notification`
-- [ ] **1.4** Employee RPCs (create, list_mine, get_detail, send_message, verify, categories, attachment create/fail)
-- [ ] **1.5** Support RPCs (list_admin, assign, status, priority, hold, escalate, mark_duplicate, audit, list_assignees, list_assigned_to_me)
-- [ ] **1.6** Notification RPCs (list, unread count, mark read / mark all)
-- [ ] **1.7** GRANT EXECUTE to `authenticated` (and service_role as needed); revoke direct DML from authenticated if using RPC-only posture
+- [x] **1.3** Helpers: `help_ticket_require_employee`, `help_ticket_require_support_view/modify`, `help_ticket_can_see` (**no dealer predicate**), `help_ticket_next_number`, `help_ticket_next_sequence_number`, `help_ticket_calculate_sla_targets`, `help_ticket_emit_notification`
+- [x] **1.4** Employee RPCs (create, list_mine, get_detail, send_message, verify, categories, attachment create/fail)
+- [x] **1.5** Support RPCs (list_admin, assign, status, priority, hold, escalate, mark_duplicate, audit, list_assignees, list_assigned_to_me)
+- [x] **1.6** Notification RPCs (list, unread count, mark read / mark all)
+- [x] **1.7** GRANT EXECUTE to `authenticated` (and service_role as needed); revoke direct DML from authenticated if using RPC-only posture
 
 ### RLS
-- [ ] **1.8** `ENABLE ROW LEVEL SECURITY` on all `help_ticket_*` tables
-- [ ] **1.9** Policies match chosen posture (RPC-only preferred)
+- [x] **1.8** `ENABLE ROW LEVEL SECURITY` on all `help_ticket_*` tables
+- [x] **1.9** Policies match chosen posture (RPC-only preferred)
 
 ### Verify
-- [ ] **1.10** Apply migrations cleanly
+- [x] **1.10** Apply migrations cleanly
 - [ ] **1.11** Manual SQL smoke: create → list_mine → support list → internal note hidden from raiser
 - [ ] **1.11b** Cross-dealer smoke: raiser linked to dealer A; support user linked to dealer B with `can_modify` on `help_tickets` can `list_admin` + `assign` + `update_status` that ticket
-- [ ] **1.11c** Grep migration SQL: no `my_dealer_code()` / `raiser_dealer_code =` in `help_ticket_can_see` / `list_admin` / RLS USING clauses
-- [ ] **1.12** Refresh `supabase/backups/full_metadata.sql`
-- [ ] **1.13** Evidence note in `../evidence/`
+- [x] **1.11c** Grep migration SQL: no `my_dealer_code()` in ACL paths; `list_admin` optional `raiser_dealer_code` is display filter only
+- [x] **1.12** Refresh `supabase/backups/full_metadata.sql`
+- [x] **1.13** Evidence note in `../evidence/HELP-001_PHASE1_MIGRATIONS.md`
 
 ---
 
