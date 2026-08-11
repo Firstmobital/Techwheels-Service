@@ -363,7 +363,7 @@ function getTechnicianFilterLabel(assignment: TechnicianAssignment | undefined):
   return 'Unassigned'
 }
 
-type AssignmentView = 'all' | 'assigned' | 'unassigned' | 'hold' | 'work_inprocess' | 'completed'
+type AssignmentView = 'all' | 'assigned' | 'unassigned' | 'hold' | 'work_inprocess' | 'completed' | 'old_hold_wip'
 
 const QUERY_PAGE_SIZE = 1000
 const JOB_CARD_BATCH_SIZE = 100
@@ -377,6 +377,33 @@ function isWithinDateRange(createdAt: string | null | undefined, range: DateRang
 
   const dateKey = date.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
   return dateKey >= range.from && dateKey <= range.to
+}
+
+function getTodayISTKey(): string {
+  return new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
+}
+
+function isEntryOlderThanToday(createdAt: string | null | undefined): boolean {
+  const dateKey = new Date(String(createdAt ?? '')).toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
+  return dateKey < getTodayISTKey()
+}
+
+// 90-day lookback range for old Hold/WIP entries (from 90 days ago to day before dateRange.from)
+function getOldHoldWipLookbackRange(dateRange: DateRange): DateRange | null {
+  if (!dateRange.from) return null
+  const todayKey = getTodayISTKey()
+
+  const start = new Date(dateRange.from)
+  start.setDate(start.getDate() - 90)
+  const fromKey = start.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
+
+  const end = new Date(dateRange.from)
+  end.setDate(end.getDate() - 1)
+  const toKey = end.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
+
+  if (toKey >= todayKey) return null
+
+  return { from: fromKey, to: toKey }
 }
 
 function getErrorMessage(err: unknown, fallback: string): string {
@@ -477,6 +504,16 @@ function applyAssignmentViewFilter(
     })
   }
 
+  if (assignmentView === 'old_hold_wip') {
+    return rows.filter((jc) => {
+      if (!isEntryOlderThanToday(jc.created_at)) return false
+      const assignment = assignments[jc.assignment_key]
+      if (!assignment) return false
+      const status = normalizeStatusValue(assignment?.work_status)
+      return status === 'hold' || status === 'work_inprocess'
+    })
+  }
+
   return rows
 }
 
@@ -504,6 +541,9 @@ export default function FloorInchargePage() {
   const [dataError, setDataError] = useState<string | null>(null)
   const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null)
   const [exporting, setExporting] = useState(false)
+  const [oldHoldWipJobCards, setOldHoldWipJobCards] = useState<JobCard[]>([])
+  const [oldHoldWipLoading, setOldHoldWipLoading] = useState(false)
+  const [oldHoldWipAssignments, setOldHoldWipAssignments] = useState<Record<string, TechnicianAssignment>>({})
   const autoAssignedRevisitRef = useRef<Set<string>>(new Set())
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -685,6 +725,82 @@ export default function FloorInchargePage() {
       console.error(err)
     } finally {
       setLoading(false)
+    }
+
+    // Fetch 90-day old Hold/WIP data
+    void loadOldHoldWipData()
+  }
+
+  // Fetch entries from the last 90 days (outside current date range) that have Hold or WIP status.
+  // These are merged into the 'Old Hold/WIP' tile only — no other view is affected.
+  async function loadOldHoldWipData() {
+    const lookbackRange = getOldHoldWipLookbackRange(dateRange)
+    if (!lookbackRange) {
+      setOldHoldWipJobCards([])
+      setOldHoldWipAssignments({})
+      return
+    }
+
+    setOldHoldWipLoading(true)
+    try {
+      const res = await listFloorInchargeEntries(lookbackRange)
+      if (res.error || !res.data) {
+        setOldHoldWipJobCards([])
+        setOldHoldWipAssignments({})
+        return
+      }
+
+      const baseRows = res.data
+        .filter((row) => Boolean(row.jc_number?.trim()))
+        .filter((row) => isWithinDateRange(row.created_at, lookbackRange))
+        .map(mapReceptionRowToJobCard)
+
+      // Fetch assignment statuses for these old job cards
+      const jobCardNumbers = Array.from(new Set(
+        baseRows
+          .map((row) => normalizeJobCardNumber(row.jc_number))
+          .filter(Boolean),
+      ))
+
+      const oldAssignments: Record<string, TechnicianAssignment> = {}
+      for (let offset = 0; offset < jobCardNumbers.length; offset += JOB_CARD_BATCH_SIZE) {
+        const batch = jobCardNumbers.slice(offset, offset + JOB_CARD_BATCH_SIZE)
+        if (batch.length === 0) continue
+
+        const assignRes = await supabase
+          .from('technician_assignments')
+          .select('*')
+          .in('job_card_number', batch)
+          .order('id', { ascending: false })
+
+        if (assignRes.error) break
+
+        const assignRows = (assignRes.data ?? []) as TechnicianAssignment[]
+        assignRows.forEach((assignment) => {
+          const jcKey = normalizeJobCardNumber(assignment.job_card_number)
+          if (!jcKey) return
+          if (!oldAssignments[jcKey]) {
+            oldAssignments[jcKey] = assignment
+          }
+        })
+      }
+
+      // Filter to only Hold and WIP
+      const holdWipRows = baseRows.filter((jc) => {
+        const assignment = oldAssignments[jc.assignment_key]
+        if (!assignment) return false
+        const status = normalizeStatusValue(assignment?.work_status)
+        return status === 'hold' || status === 'work_inprocess'
+      })
+
+      setOldHoldWipJobCards(holdWipRows)
+      setOldHoldWipAssignments(oldAssignments)
+    } catch (err) {
+      console.error('Failed to load old Hold/WIP data:', err)
+      setOldHoldWipJobCards([])
+      setOldHoldWipAssignments({})
+    } finally {
+      setOldHoldWipLoading(false)
     }
   }
 
@@ -1186,9 +1302,32 @@ export default function FloorInchargePage() {
     return Boolean(assignment) && normalizeStatusValue(assignment?.work_status) === 'completed'
   }).length
 
+  // Old Hold/WIP count from 90-day lookback (entries NOT in current date range)
+  const currentRowIds = useMemo(() => new Set(jobCards.map((jc) => jc.id)), [jobCards])
+  const oldHoldWipCount = useMemo(() => {
+    return oldHoldWipJobCards.filter((jc) => !currentRowIds.has(jc.id)).length
+  }, [oldHoldWipJobCards, currentRowIds])
+
+  // When 'old_hold_wip' is selected, merge old Hold/WIP rows with current rows
   const filtered = useMemo(() => {
+    if (assignmentView === 'old_hold_wip') {
+      const seenIds = new Set(toolbarScopedRows.map((jc) => jc.id))
+      const merged = [
+        ...applyAssignmentViewFilter(toolbarScopedRows, 'old_hold_wip', assignments),
+        ...oldHoldWipJobCards.filter((jc) => {
+          if (seenIds.has(jc.id)) return false
+          // Apply current filters (branch, portal, technician, search)
+          if (!matchesLocationFilter(jc, branchFilter)) return false
+          if (!matchesPortalFilter(jc, fuelTypeFilter)) return false
+          if (!matchesTechnicianFilter(jc, technicianFilter, oldHoldWipAssignments)) return false
+          if (!jobCardMatchesSearch(jc, search, oldHoldWipAssignments, {})) return false
+          return true
+        }),
+      ]
+      return merged
+    }
     return applyAssignmentViewFilter(toolbarScopedRows, assignmentView, assignments)
-  }, [toolbarScopedRows, assignmentView, assignments])
+  }, [toolbarScopedRows, assignmentView, assignments, oldHoldWipJobCards, oldHoldWipAssignments, branchFilter, fuelTypeFilter, technicianFilter, search])
 
   function handleExportFloorIncharge() {
     setExporting(true)
@@ -1271,6 +1410,7 @@ export default function FloorInchargePage() {
       hold: holdCount,
       work_inprocess: inProcessCount,
       completed: completedCount,
+      old_hold_wip: oldHoldWipCount,
     }
 
     if (countByView[assignmentView] === 0) {
@@ -1283,6 +1423,7 @@ export default function FloorInchargePage() {
     holdCount,
     inProcessCount,
     completedCount,
+    oldHoldWipCount,
   ])
 
   return (
@@ -1353,11 +1494,12 @@ export default function FloorInchargePage() {
           { key: 'hold',           label: 'Hold',       count: holdCount,              accent: '#f59e0b' },
           { key: 'work_inprocess', label: 'In-Process', count: inProcessCount,         accent: '#0ea5e9' },
           { key: 'completed',      label: 'Completed',  count: completedCount,         accent: '#16a34a' },
+          { key: 'old_hold_wip',   label: 'Old Hold/WIP', count: oldHoldWipCount,  accent: '#ea580c' },
         ] as { key: typeof assignmentView; label: string; count: number; accent: string }[]).map(({ key, label, count, accent }) => (
-          <button key={key} type="button" onClick={() => setAssignmentView(key)} disabled={count === 0}
+          <button key={key} type="button" onClick={() => setAssignmentView(key)} disabled={count === 0 && key !== 'old_hold_wip'}
             className={`msr__tile msr__tile--btn ${assignmentView === key ? 'msr__tile--active' : ''}`}
             style={assignmentView === key ? { borderTopColor: accent } : {}}>
-            <div className="msr__n" style={{ color: accent }}>{count}</div>
+            <div className="msr__n" style={{ color: accent }}>{key === 'old_hold_wip' && oldHoldWipLoading ? '…' : count}</div>
             <div className="msr__l">{label}</div>
           </button>
         ))}
@@ -1368,7 +1510,7 @@ export default function FloorInchargePage() {
         <div className="card__head">
           <div>
             <h3>
-              Job cards <span className="count-badge">({filtered.length})</span>
+              Job cards <span className="count-badge">({filtered.length})</span>{assignmentView === 'old_hold_wip' && oldHoldWipLoading ? ' · Loading 90-day data…' : ''}
             </h3>
           </div>
           <div className="card__head-flex">
