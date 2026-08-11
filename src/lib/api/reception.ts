@@ -1316,7 +1316,7 @@ export async function lookupVehicleByRegNumber(
   // 1) Check service_reception_entries for the most recent entry
   const { data: receptionData, error: receptionErr } = await supabase
     .from('service_reception_entries')
-    .select('reg_number, model, owner_name, owner_phone, sa_employee_code, portal, fuel_type, created_at')
+    .select('reg_number, model, owner_name, owner_phone, sa_employee_code, portal, created_at')
     .ilike('reg_number', normalized)
     .order('created_at', { ascending: false })
     .limit(1)
