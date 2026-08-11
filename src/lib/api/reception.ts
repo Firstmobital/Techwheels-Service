@@ -1417,10 +1417,11 @@ export async function lookupVehicleByRegNumber(
 
   if (vehicleExactErr) return fail(vehicleExactErr)
 
-  let vehicleRow: { reg_number: string; model: string | null; owner_name: string | null; owner_phone: string | null } | null = null
+  type VehicleRow = { reg_number: string; model: string | null; owner_name: string | null; owner_phone: string | null }
+  let vehicleRow: VehicleRow | null = null
 
   if (vehicleExact && vehicleExact.length > 0) {
-    vehicleRow = vehicleExact[0] as typeof vehicleRow
+    vehicleRow = vehicleExact[0] as VehicleRow
   } else {
     const { data: vehicleContains, error: vehicleContainsErr } = await supabase
       .from('vehicles')
@@ -1429,7 +1430,7 @@ export async function lookupVehicleByRegNumber(
       .limit(5)
 
     if (!vehicleContainsErr && vehicleContains) {
-      const matched = (vehicleContains as Array<{ reg_number: string; model: string | null; owner_name: string | null; owner_phone: string | null }>).filter(
+      const matched = (vehicleContains as Array<VehicleRow>).filter(
         (row) => row.reg_number.replace(/\s+/g, '').toUpperCase() === normalized
       )
       if (matched.length > 0) vehicleRow = matched[0]
@@ -1454,7 +1455,8 @@ export async function lookupVehicleByRegNumber(
   }
 
   // 3) Check all_service_data table — try exact then contains, handle space variations
-  let asdRow: { vehicle_registration_number: string | null; registration_no: string | null; cust_first_name: string | null; cust_last_name: string | null; cust_mobile_no: string | null; model: string | null; product_line: string | null; ppl: string | null; pl: string | null } | null = null
+  type AsdRow = { vehicle_registration_number: string | null; registration_no: string | null; cust_first_name: string | null; cust_last_name: string | null; cust_mobile_no: string | null; model: string | null; product_line: string | null; ppl: string | null; pl: string | null }
+  let asdRow: AsdRow | null = null
 
   // Try exact match on vehicle_registration_number
   const { data: asdExact, error: asdExactErr } = await supabase
@@ -1464,7 +1466,7 @@ export async function lookupVehicleByRegNumber(
     .limit(1)
 
   if (!asdExactErr && asdExact && asdExact.length > 0) {
-    asdRow = asdExact[0] as typeof asdRow
+    asdRow = asdExact[0] as AsdRow
   }
 
   // If not found, try exact match on registration_no
@@ -1476,7 +1478,7 @@ export async function lookupVehicleByRegNumber(
       .limit(1)
 
     if (!asdRegNoErr && asdRegNo && asdRegNo.length > 0) {
-      asdRow = asdRegNo[0] as typeof asdRow
+      asdRow = asdRegNo[0] as AsdRow
     }
   }
 
@@ -1489,7 +1491,7 @@ export async function lookupVehicleByRegNumber(
       .limit(10)
 
     if (!asdContainsErr && asdContains) {
-      const matched = (asdContains as Array<typeof asdRow>).find(
+      const matched = (asdContains as Array<AsdRow>).find(
         (row) =>
           (row.vehicle_registration_number ?? '').replace(/\s+/g, '').toUpperCase() === normalized ||
           (row.registration_no ?? '').replace(/\s+/g, '').toUpperCase() === normalized,
