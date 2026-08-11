@@ -46,10 +46,10 @@ Use this file as daily command center:
 | CMP-CHECKLIST | complaints | Active | Complaints Team | `docs/Implementation_plans/webversion/categories/complaints/active/CHECKLIST.md` |
 | CMP-PHASES | complaints | Active | Complaints Team | `docs/Implementation_plans/webversion/categories/complaints/active/PHASES.md` |
 | DRIVE-001 | drive | Active | Platform Team | `docs/Implementation_plans/webversion/categories/drive/active/DRIVE-001_UNIVERSAL_DRIVE_UPLOAD_AND_STORAGE_OFFLOAD.md` |
-| HELP-00 | help-tickets | Planned | Platform Team + Web + Mobile | `docs/Implementation_plans/webversion/categories/help-tickets/active/00_INDEX.md` |
-| HELP-001 | help-tickets | Planned | Platform Team + Web + Mobile | `docs/Implementation_plans/webversion/categories/help-tickets/active/HELP-001_COMPREHENSIVE_PLAN.md` |
-| HELP-CHECKLIST | help-tickets | Planned | Platform Team + Web + Mobile | `docs/Implementation_plans/webversion/categories/help-tickets/active/CHECKLIST.md` |
-| HELP-PHASES | help-tickets | Planned | Platform Team + Web + Mobile | `docs/Implementation_plans/webversion/categories/help-tickets/active/PHASES.md` |
+| HELP-00 | help-tickets | Done | Platform Team + Web + Mobile | `docs/Implementation_plans/webversion/categories/help-tickets/active/00_INDEX.md` |
+| HELP-001 | help-tickets | Done | Platform Team + Web + Mobile | `docs/Implementation_plans/webversion/categories/help-tickets/active/HELP-001_COMPREHENSIVE_PLAN.md` |
+| HELP-CHECKLIST | help-tickets | Done | Platform Team + Web + Mobile | `docs/Implementation_plans/webversion/categories/help-tickets/active/CHECKLIST.md` |
+| HELP-PHASES | help-tickets | Done | Platform Team + Web + Mobile | `docs/Implementation_plans/webversion/categories/help-tickets/active/PHASES.md` |
 | IMPORT-001 | import | Active | Import Team | `docs/Implementation_plans/webversion/categories/import/active/IMPORT_UPLOAD_GOVERNING_PLAN_2026-06-06.md` |
 | IMPORT-002 | import | Proposed (PSF-only, web /import) | Import Team + Platform Team + Ops | `docs/Implementation_plans/webversion/categories/import/active/IMPORT-002_PSF_INCREMENTAL_UPSERT_GOVERNANCE_PLAN_2026-06-26.md` |
 | TECH-EARNINGS-001 | operations | Active | Operations Team | `docs/Implementation_plans/webversion/categories/operations/active/TECH-EARNINGS-001_TECHNICIAN_DAILY_EARNINGS_EMAIL_AUTOMATION_PLAN_2026-06-09.md` |

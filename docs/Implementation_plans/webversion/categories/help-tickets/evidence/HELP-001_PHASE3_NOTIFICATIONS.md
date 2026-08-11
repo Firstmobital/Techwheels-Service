@@ -1,7 +1,7 @@
 # HELP-001 Phase 3 — In-app notifications
 
 **Date:** 2026-08-11  
-**Status:** Code complete — awaiting Vercel deploy + smoke
+**Status:** ✅ Deployed (Vercel)
 
 ## Implementation
 

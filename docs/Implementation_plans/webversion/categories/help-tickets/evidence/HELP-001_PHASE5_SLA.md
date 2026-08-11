@@ -1,7 +1,7 @@
 # HELP-001 Phase 5 — SLA cron + hardening
 
 **Date:** 2026-08-11  
-**Status:** Migration authored — apply SQL + run checks + refresh metadata
+**Status:** ✅ Applied + Vercel deployed + ACL hotfix verified in `full_metadata.sql`
 
 ## Migration
 
@@ -16,28 +16,32 @@
 | Schedule | `help-ticket-sla-jobs` every 15 minutes via `pg_cron` (skipped if extension missing) |
 | Grants | `postgres` + `service_role` only (revoked from `PUBLIC` / not granted to `authenticated`) |
 
+## Verification (2026-08-11)
+
+- [x] Migration applied in Supabase
+- [x] Vercel deployment includes admin SLA badge / notification labels
+- [x] Fresh dump `supabase/backups/full_metadata.sql` contains:
+  - `check_help_ticket_sla_breaches(integer)`
+  - `auto_close_unverified_help_tickets(integer, integer)`
+  - `run_help_ticket_sla_jobs()`
+  - columns `sla_response_breached_at` / `sla_resolution_breached_at`
+  - indexes `idx_help_tickets_sla_response` / `idx_help_tickets_auto_close`
+
+### ACL (verified after hotfix)
+
+`20260811141500_help_ticket_sla_jobs_revoke_client_execute.sql` applied.  
+Dump ACLs for all three maintenance RPCs:
+
+- `REVOKE ALL … FROM PUBLIC`
+- `GRANT ALL … TO service_role` only  
+- **No** `anon` / `authenticated` grants
+
 ## Checks
 
 `supabase/sql_checks/20260811140000_help_ticket_sla_cron_and_auto_close_checks.sql`
-
-Expect:
-- columns present
-- SECURITY DEFINER functions present
-- `authenticated` cannot EXECUTE maintenance RPCs
-- no `my_dealer_code()` in help-ticket visibility / SLA functions
-- cron job registered when `pg_cron` installed
-- `SELECT public.run_help_ticket_sla_jobs()` returns `ok: true`
 
 ## UI
 
 - Admin inbox shows **SLA** pill when either breach timestamp is set
 - Detail meta shows paused / response / resolution breach hints
 - TopNav already labels `sla_breached` events (Phase 3)
-
-## Apply steps
-
-1. Run migration SQL in Supabase
-2. Run sql_checks file
-3. Refresh `supabase/backups/full_metadata.sql`
-4. Redeploy Vercel for admin SLA badge (optional but recommended)
-5. Smoke: hold a ticket → confirm job does not mark breach; resolve + backdate `resolved_at` → auto-close

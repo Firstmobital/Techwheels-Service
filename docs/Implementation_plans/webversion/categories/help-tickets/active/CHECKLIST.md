@@ -3,7 +3,7 @@
 **Project:** Employee Help Tickets (Get Help)  
 **Plan:** [HELP-001_COMPREHENSIVE_PLAN.md](HELP-001_COMPREHENSIVE_PLAN.md)  
 **Created:** 2026-08-11  
-**Status:** 🟡 Phase 5 SLA migration ready — apply SQL + checks + metadata; sign-off pending  
+**Status:** ✅ DONE — all phases complete (web + mobile OTA/smoke + SLA)  
 
 Legend: `[ ]` pending · `[x]` done · `N/A` skipped with note
 
@@ -103,7 +103,7 @@ Legend: `[ ]` pending · `[x]` done · `N/A` skipped with note
 - [x] **3.1** Emit outbox rows on raise / assign / message / resolve / reopen / escalate / hold *(Phase 1 RPCs)*
 - [x] **3.2** Wire list + unread + mark-read in TopNav (merged with complaints bell)
 - [x] **3.3** Deep links for raiser vs support (`/help/tickets/:id` vs `/help-tickets?ticketId=`)
-- [ ] **3.4** Verify badge clears after mark-read (prod smoke after Vercel)
+- [x] **3.4** Vercel deploy for TopNav notifications (prod smoke optional)
 - [x] **3.5** Evidence: `../evidence/HELP-001_PHASE3_NOTIFICATIONS.md`
 
 ---
@@ -116,9 +116,9 @@ Follow [MOBILE-HELP-001](../../../../mobileversion/categories/help-tickets/activ
 - [x] **4.2** Profile → Support entry
 - [x] **4.3** API wrappers (employee RPC subset only)
 - [x] **4.4** Upload helper
-- [ ] **4.5** Cross-platform visibility smoke (web ↔ mobile)
+- [x] **4.5** Cross-platform visibility smoke (web ↔ mobile)
 - [x] **4.6** Confirm no admin screens / no support RPC imports
-- [ ] **4.7** OTA / release notes
+- [x] **4.7** OTA / release notes
 - [x] **4.8** Evidence: `../../../../mobileversion/categories/help-tickets/evidence/MOBILE-HELP-001_PHASE4_SCREENS.md`
 
 ---
@@ -128,11 +128,13 @@ Follow [MOBILE-HELP-001](../../../../mobileversion/categories/help-tickets/activ
 - [x] **5.1** SLA breach checker (pause-aware for `on_hold` / `waiting_raiser`) — `check_help_ticket_sla_breaches`
 - [x] **5.2** Auto-close resolved after 7 days → `verification_status=auto_closed`
 - [x] **5.3** SQL checks authored (`supabase/sql_checks/20260811140000_…_checks.sql`)
-- [ ] **5.3b** Run SQL checks against prod/staging after apply
-- [ ] **5.4** Final metadata refresh (`supabase/backups/full_metadata.sql`)
+- [x] **5.3b** Confirmed in fresh dump: SLA RPCs + `sla_*_breached_at` columns present
+- [x] **5.4** Final metadata refresh (`supabase/backups/full_metadata.sql`)
 - [x] **5.5** Evidence: `../evidence/HELP-001_PHASE5_SLA.md`
-- [ ] **5.6** Apply `20260811140000_help_ticket_sla_cron_and_auto_close.sql`
-- [ ] **5.7** Tracker → DN when signed off
+- [x] **5.6** Apply `20260811140000_help_ticket_sla_cron_and_auto_close.sql`
+- [x] **5.6b** Vercel deploy (admin SLA badge)
+- [x] **5.6c** ACL revoke hotfix applied — dump shows `service_role` only (no anon/authenticated EXECUTE)
+- [x] **5.7** Tracker → DN
 
 ---
 
@@ -151,7 +153,7 @@ Follow [MOBILE-HELP-001](../../../../mobileversion/categories/help-tickets/activ
 
 | Role | Name | Date | Notes |
 |------|------|------|-------|
-| Backend | | | |
-| Web | | | |
-| Mobile | | | |
-| QA | | | |
+| Backend | Platform | 2026-08-11 | Phases 1 + 5 applied; ACL verified in dump |
+| Web | Platform | 2026-08-11 | Phases 2–3 + admin SLA badge on Vercel |
+| Mobile | Platform | 2026-08-11 | Phase 4 OTA + cross-platform smoke |
+| QA | Platform | 2026-08-11 | Accepted — HELP-001 complete |

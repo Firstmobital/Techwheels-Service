@@ -1,7 +1,7 @@
 # MOBILE-HELP-001 Phase 4 — Employee Help Lite screens
 
 **Date:** 2026-08-11  
-**Status:** Code complete — awaiting OTA + cross-platform smoke
+**Status:** ✅ Done — OTA shipped + cross-platform smoke passed
 
 ## Files
 
@@ -37,9 +37,9 @@
 
 ## Smoke checklist
 
-1. Profile → Raise a ticket → submit → detail opens
-2. Profile → My tickets → filter chips + open detail
-3. Reply from mobile appears on web employee/support detail
-4. Resolve on web → Verify / Not fixed on mobile
-5. Attachment → Drive URL on ticket after upload
-6. Unlinked employee sees clear employee-link error (no crash)
+1. [x] Profile → Raise a ticket → submit → detail opens
+2. [x] Profile → My tickets → filter chips + open detail
+3. [x] Reply from mobile appears on web employee/support detail
+4. [x] Resolve on web → Verify / Not fixed on mobile
+5. [x] Attachment → Drive URL on ticket after upload
+6. [x] Unlinked employee sees clear employee-link error (no crash)

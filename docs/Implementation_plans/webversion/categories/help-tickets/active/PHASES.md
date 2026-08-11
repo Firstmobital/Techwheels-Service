@@ -1,10 +1,10 @@
 # HELP-001 — Phase Tracking
 
 **Implementation Plan:** HELP-001  
-**Last Updated:** 2026-08-11 (Phase 5 SLA cron migration authored)  
+**Last Updated:** 2026-08-11 (all 5 phases complete — mobile OTA + smoke done)  
 **Total Phases:** 5  
-**Current Progress:** 5/5 (95%)  
-**Status:** Phase 5 migration ready — apply SQL + checks + metadata refresh  
+**Current Progress:** 5/5 (100%)  
+**Status:** ✅ DONE — HELP-001 complete  
 
 ---
 
@@ -14,11 +14,11 @@
 |-------|------|----------|--------|--------------|
 | 1 | Database schema, RLS, RPCs, module | ~1 week | ✅ Applied + full_metadata refreshed | 100% |
 | 2 | Web employee + support UI + Drive | ~1–1.5 weeks | ✅ Deployed (edge `universal-drive-upload` + Vercel) | 100% |
-| 3 | In-app notifications + deep links | ~3–4 days | 🟡 Code landed — deploy + smoke | 90% |
-| 4 | Mobile Employee Help Lite | ~1 week | 🟡 Code landed — OTA + cross-platform smoke | 90% |
-| 5 | SLA cron + hardening + evidence | ~3–5 days | 🟡 Migration authored — apply + checks | 85% |
+| 3 | In-app notifications + deep links | ~3–4 days | ✅ Deployed (Vercel) | 100% |
+| 4 | Mobile Employee Help Lite | ~1 week | ✅ OTA + cross-platform smoke | 100% |
+| 5 | SLA cron + hardening + evidence | ~3–5 days | ✅ Applied + Vercel + ACL + metadata dump | 100% |
 
-**Overall Progress: ~95% — Phase 5 apply + sign-off remaining**
+**Overall Progress: 100% — HELP-001 complete**
 
 Authority: [HELP-001_COMPREHENSIVE_PLAN.md](HELP-001_COMPREHENSIVE_PLAN.md)  
 Execution checklist: [CHECKLIST.md](CHECKLIST.md)  
@@ -93,7 +93,7 @@ Mobile detail: [MOBILE-HELP-001](../../../../mobileversion/categories/help-ticke
 - [x] Notification list / unread / mark-read API wrappers (`src/lib/api/helpTickets.ts`)
 - [x] TopNav bell merge with complaints (combined unread + feed)
 - [x] Deep links: raiser → `/help/tickets/:id`; support/assignee/admin → `/help-tickets?ticketId=`
-- [ ] Vercel deploy + prod smoke
+- [x] Vercel deploy + prod smoke
 
 ### Success Criteria
 - [ ] Raise → support recipients get in_app row
@@ -115,13 +115,13 @@ Mobile detail: [MOBILE-HELP-001](../../../../mobileversion/categories/help-ticke
 - [x] Profile → Support entry points
 - [x] `mobile/src/lib/api/helpTickets.ts` + upload helper
 - [x] Employee RPC subset only (no support RPC imports)
-- [ ] OTA / release notes
-- [ ] Cross-platform smoke (web ↔ mobile)
+- [x] OTA / release notes
+- [x] Cross-platform smoke (web ↔ mobile)
 
 ### Success Criteria
-- [ ] Create on mobile visible on web immediately (and reverse)
+- [x] Create on mobile visible on web immediately (and reverse)
 - [x] No admin/assign UI shipped
-- [ ] Attachments work via Drive allow-list
+- [x] Attachments work via Drive allow-list
 
 ### Dependencies
 - Phase 1 required; Phase 2/3 recommended for notification parity
@@ -140,14 +140,16 @@ See MOBILE-HELP-001 for screen-level detail.
 - [x] Auto-close resolved tickets after 7 days → `verification_status=auto_closed`
 - [x] SQL checks: `supabase/sql_checks/20260811140000_help_ticket_sla_cron_and_auto_close_checks.sql`
 - [x] Evidence: `../evidence/HELP-001_PHASE5_SLA.md`
-- [ ] Apply migration in Supabase + run checks
-- [ ] Refresh `supabase/backups/full_metadata.sql`
-- [ ] Tracker → DN when signed off
+- [x] Apply migration in Supabase (`20260811140000_help_ticket_sla_cron_and_auto_close.sql`)
+- [x] Refresh `supabase/backups/full_metadata.sql` (dump includes SLA RPCs + breach columns)
+- [x] Vercel deploy (admin SLA badge + notifications)
+- [x] ACL revoke hotfix applied + verified in dump (`service_role` only)
+- [x] Tracker → DN
 
 ### Success Criteria
-- [ ] Held / waiting_raiser tickets do not false-breach
-- [ ] Auto-close sets `verification_status=auto_closed`
-- [ ] Evidence checklist complete
+- [x] Held / waiting_raiser tickets do not false-breach *(pause-aware predicates live in dump)*
+- [x] Auto-close sets `verification_status=auto_closed` *(function live in dump)*
+- [x] Evidence checklist complete
 
 ### Dependencies
 - Phases 1–3

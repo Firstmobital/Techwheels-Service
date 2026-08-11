@@ -2,8 +2,8 @@
 
 **Plan ID:** MOBILE-HELP-001  
 **Created:** 2026-08-11  
-**Last Updated:** 2026-08-11 (Phase 4 screens + API landed)  
-**Status:** In progress — code complete; OTA + cross-platform smoke pending  
+**Last Updated:** 2026-08-11 (OTA + cross-platform smoke complete)  
+**Status:** ✅ Done
 **Owner:** Mobile Team + Platform  
 **Category:** help-tickets  
 **Shared backend authority:** [HELP-001_COMPREHENSIVE_PLAN.md](../../../../webversion/categories/help-tickets/active/HELP-001_COMPREHENSIVE_PLAN.md)  
@@ -207,8 +207,8 @@ Evidence: `docs/Implementation_plans/mobileversion/categories/help-tickets/evide
 - [x] Profile Support entry
 - [x] `helpTickets.ts` employee wrappers only
 - [x] `helpTicketUpload.ts`
-- [ ] Cross-platform smoke with web
-- [ ] OTA / store notes
+- [x] Cross-platform smoke with web
+- [x] OTA / store notes
 - [x] Evidence file: `../evidence/MOBILE-HELP-001_PHASE4_SCREENS.md`
 
 ---
