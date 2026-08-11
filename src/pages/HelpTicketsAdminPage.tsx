@@ -212,7 +212,11 @@ export default function HelpTicketsAdminPage() {
                 <>
                   <div className="ht-actions">
                     <select value={assignCode} onChange={(e) => setAssignCode(e.target.value)}>
-                      <option value="">Assign to…</option>
+                      <option value="">
+                        {assignees.length === 0
+                          ? 'No users with Help Tickets edit rights'
+                          : 'Assign to…'}
+                      </option>
                       {assignees.map((a) => (
                         <option key={a.employee_code} value={a.employee_code}>{a.employee_name}</option>
                       ))}
@@ -261,7 +265,11 @@ export default function HelpTicketsAdminPage() {
                       <option value="urgent">urgent</option>
                     </select>
                     <select value={escalateCode} onChange={(e) => setEscalateCode(e.target.value)}>
-                      <option value="">Escalate to…</option>
+                      <option value="">
+                        {assignees.length === 0
+                          ? 'No users with Help Tickets edit rights'
+                          : 'Escalate to…'}
+                      </option>
                       {assignees.map((a) => (
                         <option key={a.employee_code} value={a.employee_code}>{a.employee_name}</option>
                       ))}
