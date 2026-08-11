@@ -89,6 +89,7 @@ type FormState = {
   reg_number: string
   km_reading: string
   model: string
+  fuel_type: string
   sa_employee_code: string
   owner_name: string
   owner_phone: string
@@ -100,6 +101,7 @@ const EMPTY_FORM: FormState = {
   reg_number: '',
   km_reading: '',
   model: '',
+  fuel_type: '',
   sa_employee_code: '',
   owner_name: '',
   owner_phone: '',
@@ -122,6 +124,7 @@ const HEADER_ALIASES: Record<keyof FormState, string[]> = {
   owner_phone: ['owner_phone', 'owner phone'],
   source: ['source'],
   service_type: ['service_type', 'service type'],
+  fuel_type: ['fuel_type', 'fuel type', 'portal'],
 }
 
 const IMPORT_SERVICE_TYPE_ALIASES = ['service_type', 'service type']
@@ -478,8 +481,10 @@ export default function ReceptionPage() {
     // Keep this rule in sync with Settings > Employee Master to avoid behavior drift.
     const requiredDepartment = getRequiredDepartmentForServiceType(form.service_type)
     const useFuelFilter = shouldApplyFuelFilter(form.service_type)
-    // Primary: use vehicleInfo.vehicle_type from lookup. Fallback: infer from model name.
-    const requiredFuelType = vehicleInfo?.vehicle_type ?? inferRequiredFuelTypeFromModel(form.model)
+    // Primary: use form.fuel_type (set by vehicle lookup or manual selection)
+    // Secondary: vehicleInfo.vehicle_type from lookup
+    // Tertiary: infer from model name
+    const requiredFuelType = form.fuel_type || vehicleInfo?.vehicle_type || inferRequiredFuelTypeFromModel(form.model)
 
     const values = employeeOptions.filter((employee) => {
       const employeeDepartment = normalizeDepartment(employee.department)
@@ -497,7 +502,7 @@ export default function ReceptionPage() {
 
     values.sort((a, b) => a.employee_name.localeCompare(b.employee_name))
     return values
-  }, [employeeOptions, form.model, form.service_type, vehicleInfo])
+  }, [employeeOptions, form.model, form.fuel_type, form.service_type, vehicleInfo])
 
   const entryLookupById = useMemo(() => {
     const merged = [...entries, ...globalSearchEntries]
@@ -998,6 +1003,8 @@ export default function ReceptionPage() {
           model: info.model ?? prev.model,
           owner_name: info.owner_name ?? prev.owner_name,
           owner_phone: info.owner_phone ?? prev.owner_phone,
+          // Auto-fill fuel type from vehicle lookup
+          ...(info.vehicle_type ? { fuel_type: info.vehicle_type } : {}),
           // If vehicle had a previous SA, auto-assign same one
           ...(info.sa_employee_code ? { sa_employee_code: info.sa_employee_code } : {}),
         }))
@@ -1033,8 +1040,8 @@ export default function ReceptionPage() {
     setNotice(null)
     setError(null)
 
-    if (!form.reg_number.trim() || !form.model.trim() || !form.sa_employee_code.trim() || !form.owner_name.trim() || !form.owner_phone.trim() || !form.source.trim()) {
-      setError('Please fill all required fields: Registration No, Model, SA Name, Owner Name, Owner Phone, Source')
+    if (!form.reg_number.trim() || !form.model.trim() || !form.fuel_type.trim() || !form.sa_employee_code.trim() || !form.owner_name.trim() || !form.owner_phone.trim() || !form.source.trim()) {
+      setError('Please fill all required fields: Registration No, Model, Fuel Type (EV/PV), SA Name, Owner Name, Owner Phone, Source')
       return
     }
 
@@ -1054,6 +1061,7 @@ export default function ReceptionPage() {
       owner_name: form.owner_name,
       owner_phone: form.owner_phone,
       source: form.source,
+      portal: form.fuel_type || null,
     }
 
     const result =
@@ -1144,6 +1152,7 @@ export default function ReceptionPage() {
       reg_number: entry.reg_number,
       km_reading: entry.km_reading == null ? '' : String(entry.km_reading),
       model: entry.model ?? '',
+      fuel_type: entry.fuel_type ?? entry.portal ?? '',
       sa_employee_code: resolvedEmployeeCode,
       owner_name: entry.owner_name ?? '',
       owner_phone: entry.owner_phone ?? '',
@@ -1479,9 +1488,9 @@ export default function ReceptionPage() {
                   }}>
                     {vehicleInfo.sa_employee_code
                       ? `Code: ${vehicleInfo.sa_employee_code}`
-                      : vehicleInfo.vehicle_type
-                      ? `${vehicleInfo.vehicle_type} advisor will be suggested below ↓`
-                      : 'Select advisor manually'}
+                      : (vehicleInfo.vehicle_type || form.fuel_type)
+                      ? `${vehicleInfo.vehicle_type || form.fuel_type} advisor will be suggested below ↓`
+                      : 'Select Fuel Type first'}
                   </span>
                 </div>
               </div>
@@ -1518,8 +1527,36 @@ export default function ReceptionPage() {
               </label>
             </div>
 
-            <label className="field">
-              <span className="label">SA Name <span className="req">*</span></span>
+            <div className="form-grid-2">
+              <label className="field">
+                <span className="label">Fuel Type <span className="req">*</span></span>
+                <select
+                  value={form.fuel_type}
+                  onChange={(event) => {
+                    const fuel = event.target.value
+                    setForm((prev) => ({ ...prev, fuel_type: fuel, sa_employee_code: '' }))
+                  }}
+                  className="sel"
+                  style={form.fuel_type === '' && !vehicleInfo?.vehicle_type ? { borderColor: 'var(--warn)', borderWidth: 2 } : {}}
+                >
+                  <option value="">- Select EV / PV -</option>
+                  <option value="EV">⚡ EV</option>
+                  <option value="PV">🚗 PV</option>
+                </select>
+                {form.fuel_type === '' && !vehicleInfo?.vehicle_type && (
+                  <span style={{ fontSize: 12, color: 'var(--warn)', marginTop: 4, display: 'block', fontWeight: 600 }}>
+                    ⚠ Fuel Type is required to select advisor
+                  </span>
+                )}
+                {vehicleInfo?.vehicle_type && (
+                  <span style={{ fontSize: 11, color: 'var(--muted)', marginTop: 2, display: 'block' }}>
+                    Auto-detected from vehicle lookup
+                  </span>
+                )}
+              </label>
+
+              <label className="field">
+                <span className="label">SA Name <span className="req">*</span></span>
               <select
                 value={form.sa_employee_code}
                 onChange={(event) => setForm((prev) => ({ ...prev, sa_employee_code: event.target.value }))}
@@ -1540,9 +1577,10 @@ export default function ReceptionPage() {
                 ))}
               </select>
               <span style={{ fontSize: 12, color: '#64748b', marginTop: 4, display: 'block' }}>
-                Showing {sortedEmployeeOptions.length} SA(s) for {(vehicleInfo?.vehicle_type ?? inferRequiredFuelTypeFromModel(form.model)) === 'EV' ? '⚡ EV' : '🚗 PV'} {getRequiredDepartmentForServiceType(form.service_type)}
+                Showing {sortedEmployeeOptions.length} SA(s) for {(form.fuel_type || vehicleInfo?.vehicle_type || inferRequiredFuelTypeFromModel(form.model)) === 'EV' ? '⚡ EV' : '🚗 PV'} {getRequiredDepartmentForServiceType(form.service_type)}
               </span>
             </label>
+            </div>
 
             <div className="form-grid-2">
               <label className="field field--no-gap">

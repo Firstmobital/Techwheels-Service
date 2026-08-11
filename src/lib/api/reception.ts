@@ -63,6 +63,7 @@ export interface ReceptionEntryInput {
   km_reading?: number | null
   source: string
   branch?: string | null
+  portal?: string | null
 }
 
 export interface ReceptionEmployeeOption {
@@ -335,6 +336,7 @@ function normalizePayload(input: ReceptionEntryInput) {
     km_reading: normalizeKmReading(input.km_reading),
     source: input.source.trim(),
     branch: input.branch?.trim() || null,
+    portal: input.portal?.trim() || null,
   }
 }
 
@@ -854,7 +856,7 @@ export async function createReceptionEntry(input: ReceptionEntryInput): Promise<
     p_km_reading: payload.km_reading,
     p_jc_number: payload.jc_number,
     p_branch: payload.branch,
-    p_portal: null,
+    p_portal: payload.portal,
   })
 
   if (error) return fail(error)
@@ -1002,7 +1004,7 @@ export async function updateReceptionEntry(id: number, input: ReceptionEntryInpu
     p_km_reading: payload.km_reading,
     p_jc_number: payload.jc_number,
     p_branch: payload.branch,
-    p_portal: null,
+    p_portal: payload.portal,
   })
 
   if (error) return fail(error)
