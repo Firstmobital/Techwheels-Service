@@ -16,6 +16,7 @@ import { isServiceAdvisorRole } from '../../lib/businessRoles'
 import { useAuth } from '../../context/AuthContext'
 import { getReceptionRevisitContext, type ReceptionRevisitContext } from '../../lib/api/receptionRevisit'
 import { getReceptionUpdationContext, type ReceptionUpdationContext } from '../../lib/api/receptionUpdation'
+import { lookupVehicleByRegNumber, type VehicleLookupResult } from '../../lib/api/vehicleLookup'
 
 // ─── Constants (exact match with web ReceptionPage) ─────────────────────────────
 const SOURCE_OPTIONS = ['Self', 'Driver Pickup', 'Walk-in', 'RSA']
@@ -326,6 +327,10 @@ export default function ReceptionScreen() {
   const [showPicker, setShowPicker] = useState<'model' | 'service_type' | 'source' | 'sa' | null>(null)
   const [pickerSearch, setPickerSearch] = useState('')
   const [revisitContext, setRevisitContext] = useState<ReceptionRevisitContext | null>(null)
+  const [vehicleInfo, setVehicleInfo] = useState<VehicleLookupResult | null>(null)
+  const [vehicleLooking, setVehicleLooking] = useState(false)
+  const [vehicleError, setVehicleError] = useState<string | null>(null)
+  const vehicleDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [revisitChecking, setRevisitChecking] = useState(false)
   const [updationContext, setUpdationContext] = useState<ReceptionUpdationContext | null>(null)
   const [updationChecking, setUpdationChecking] = useState(false)
@@ -536,9 +541,43 @@ export default function ReceptionScreen() {
     }, 400)
   }
 
+  function scheduleVehicleLookup(regNumber: string) {
+    if (vehicleDebounceRef.current) clearTimeout(vehicleDebounceRef.current)
+    setVehicleInfo(null)
+    setVehicleError(null)
+    const normalized = regNumber.trim().toUpperCase()
+    if (!normalized || normalized.length < 4) {
+      setVehicleLooking(false)
+      return
+    }
+    setVehicleLooking(true)
+    vehicleDebounceRef.current = setTimeout(async () => {
+      const result = await lookupVehicleByRegNumber(normalized)
+      setVehicleLooking(false)
+      if (result.error || !result.data) {
+        setVehicleError('Failed to lookup vehicle.')
+        return
+      }
+      const info = result.data
+      setVehicleInfo(info)
+      if (info.found) {
+        setForm((prev) => ({
+          ...prev,
+          model: info.model ?? prev.model,
+          owner_name: info.owner_name ?? prev.owner_name,
+          owner_phone: info.owner_phone ?? prev.owner_phone,
+          ...(info.vehicle_type ? { fuel_type: info.vehicle_type } : {}),
+          ...(info.sa_employee_code ? { sa_employee_code: info.sa_employee_code } : {}),
+        }))
+      } else {
+        setVehicleError('Vehicle details not found. Please enter manually.')
+      }
+    }, 700)
+  }
+
   // ── Form actions ──────────────────────────────────────────────────────────
   function openAdd() {
-    setForm(EMPTY_FORM); setEditingId(null); setFormError(null); setRevisitContext(null); setUpdationContext(null); setShowModal(true)
+    setForm(EMPTY_FORM); setEditingId(null); setFormError(null); setRevisitContext(null); setUpdationContext(null); setVehicleInfo(null); setVehicleError(null); setVehicleLooking(false); setShowModal(true)
   }
 
   function openEdit(entry: ReceptionEntry) {
@@ -945,6 +984,7 @@ export default function ReceptionScreen() {
                     setForm(p => ({ ...p, reg_number: nextReg }))
                     scheduleRevisitCheck(nextReg, form.service_type, editingId)
                     scheduleUpdationCheck(nextReg)
+                    scheduleVehicleLookup(nextReg)
                   }}
                   onBlur={() => {
                     void checkRevisitForReg(form.reg_number, form.service_type, editingId)
@@ -969,6 +1009,24 @@ export default function ReceptionScreen() {
                       {' · '}{revisitContext.prior_entry.service_type || 'Service'}
                       {revisitContext.prior_entry.jc_number ? ` · JC# ${revisitContext.prior_entry.jc_number}` : ''}
                     </Text>
+                  </View>
+                )}
+                {vehicleLooking && (
+                  <Text style={{ fontSize: 12, color: '#64748b', marginTop: 4 }}>Looking up vehicle...</Text>
+                )}
+                {vehicleError && (
+                  <View style={{ marginTop: 4, padding: 8, borderRadius: 8, backgroundColor: '#fef2f2', borderWidth: 1, borderColor: '#fecaca' }}>
+                    <Text style={{ fontSize: 12, color: '#dc2626' }}>⚠️  {vehicleError}</Text>
+                  </View>
+                )}
+                {vehicleInfo && vehicleInfo.found && (
+                  <View style={{ marginTop: 4, padding: 8, borderRadius: 8, backgroundColor: '#f0fdf4', borderWidth: 1, borderColor: '#bbf7d0' }}>
+                    <Text style={{ fontSize: 12, color: '#16a34a', fontWeight: '600' }}>
+                      ✓ Vehicle found — {vehicleInfo.source === 'reception' ? 'Previous visit' : vehicleInfo.source === 'vehicles' ? 'Vehicle master' : 'Service data'}
+                    </Text>
+                    {vehicleInfo.model && <Text style={{ fontSize: 11, color: '#15803d', marginTop: 2 }}>Model: {vehicleInfo.model}</Text>}
+                    {vehicleInfo.owner_name && <Text style={{ fontSize: 11, color: '#15803d', marginTop: 2 }}>Owner: {vehicleInfo.owner_name}</Text>}
+                    {vehicleInfo.vehicle_type && <Text style={{ fontSize: 11, color: '#15803d', marginTop: 2 }}>Fuel: {vehicleInfo.vehicle_type}</Text>}
                   </View>
                 )}
               </FormField>

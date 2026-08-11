@@ -1309,6 +1309,23 @@ export function inferVehicleTypeFromModel(model: string | null | undefined): 'EV
   return normalized.includes('EV') ? 'EV' : 'PV'
 }
 
+function inferVehicleTypeFromAllServiceData(
+  model: string | null | undefined,
+  productLine: string | null | undefined,
+  ppl: string | null | undefined,
+  pl: string | null | undefined,
+): 'EV' | 'PV' | null {
+  // Check product_line first (most reliable)
+  for (const val of [productLine, ppl, pl]) {
+    if (!val) continue
+    const normalized = String(val).trim().toUpperCase()
+    if (normalized.includes('EV') || normalized.includes('ELECTRIC')) return 'EV'
+    if (normalized.includes('PV') || normalized.includes('CNG') || normalized.includes('DIESEL') || normalized.includes('PETROL')) return 'PV'
+  }
+  // Fallback: infer from model name
+  return inferVehicleTypeFromModel(model)
+}
+
 export async function lookupVehicleByRegNumber(
   regNumber: string,
 ): Promise<ApiResult<VehicleLookupResult>> {
@@ -1383,7 +1400,86 @@ export async function lookupVehicleByRegNumber(
     })
   }
 
-  // 3) Not found anywhere
+  // 3) Check all_service_data table (primary vehicle/customer data source)
+  const { data: serviceData, error: serviceErr } = await supabase
+    .from('all_service_data')
+    .select('vehicle_registration_number, registration_no, cust_first_name, cust_last_name, cust_mobile_no, model, product_line, ppl, pl')
+    .or(`vehicle_registration_number.ilike.${normalized},registration_no.ilike.${normalized}`)
+    .limit(1)
+
+  if (serviceErr) {
+    // Try with just vehicle_registration_number if registration_no column doesn't exist
+    const { data: serviceData2, error: serviceErr2 } = await supabase
+      .from('all_service_data')
+      .select('vehicle_registration_number, cust_first_name, cust_last_name, cust_mobile_no, model, product_line, ppl, pl')
+      .ilike('vehicle_registration_number', normalized)
+      .limit(1)
+
+    if (!serviceErr2 && serviceData2 && serviceData2.length > 0) {
+      const serviceRow = serviceData2[0] as {
+        vehicle_registration_number: string | null
+        cust_first_name: string | null
+        cust_last_name: string | null
+        cust_mobile_no: string | null
+        model: string | null
+        product_line: string | null
+        ppl: string | null
+        pl: string | null
+      }
+      const model = serviceRow.model ? String(serviceRow.model).trim() : null
+      const firstName = serviceRow.cust_first_name ? String(serviceRow.cust_first_name).trim() : null
+      const lastName = serviceRow.cust_last_name ? String(serviceRow.cust_last_name).trim() : null
+      const ownerName = [firstName, lastName].filter(Boolean).join(' ') || null
+      const ownerPhone = serviceRow.cust_mobile_no ? String(serviceRow.cust_mobile_no).trim() : null
+      const vehicleType = inferVehicleTypeFromAllServiceData(model, serviceRow.product_line, serviceRow.ppl, serviceRow.pl)
+
+      return ok({
+        found: true,
+        source: 'vehicles',
+        reg_number: normalized,
+        model,
+        owner_name: ownerName,
+        owner_phone: ownerPhone,
+        vehicle_type: vehicleType,
+        sa_employee_code: null,
+        sa_name: null,
+        is_first_visit: true,
+      })
+    }
+  } else if (serviceData && serviceData.length > 0) {
+    const serviceRow = serviceData[0] as {
+      vehicle_registration_number: string | null
+      registration_no: string | null
+      cust_first_name: string | null
+      cust_last_name: string | null
+      cust_mobile_no: string | null
+      model: string | null
+      product_line: string | null
+      ppl: string | null
+      pl: string | null
+    }
+    const model = serviceRow.model ? String(serviceRow.model).trim() : null
+    const firstName = serviceRow.cust_first_name ? String(serviceRow.cust_first_name).trim() : null
+    const lastName = serviceRow.cust_last_name ? String(serviceRow.cust_last_name).trim() : null
+    const ownerName = [firstName, lastName].filter(Boolean).join(' ') || null
+    const ownerPhone = serviceRow.cust_mobile_no ? String(serviceRow.cust_mobile_no).trim() : null
+    const vehicleType = inferVehicleTypeFromAllServiceData(model, serviceRow.product_line, serviceRow.ppl, serviceRow.pl)
+
+    return ok({
+      found: true,
+      source: 'vehicles',
+      reg_number: normalized,
+      model,
+      owner_name: ownerName,
+      owner_phone: ownerPhone,
+      vehicle_type: vehicleType,
+      sa_employee_code: null,
+      sa_name: null,
+      is_first_visit: true,
+    })
+  }
+
+  // 4) Not found anywhere
   return ok({
     found: false,
     source: 'none',

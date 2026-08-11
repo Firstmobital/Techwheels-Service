@@ -11,6 +11,8 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 import { useAuth } from '../../context/AuthContext'
 import { useRouter } from 'expo-router'
 import { getDealerSettings, saveDealerSetting } from '../../lib/api/dealerSettings'
+import * as Application from 'expo-application'
+import * as Updates from 'expo-updates'
 
 // ─── Colours ─────────────────────────────────────────────────────────────────
 const C = {
@@ -301,7 +303,8 @@ export default function SettingsScreen() {
           <View style={{ backgroundColor: C.card, marginHorizontal: 16, borderRadius: 12, borderWidth: 1, borderColor: C.border, overflow: 'hidden' }}>
             <SettingRow label="Dealer Name" value="FIRST MOBITEL PVT. LTD." />
             <SettingRow label="Dealer Code" value="3000840" />
-            <SettingRow label="App Version" value="1.0.0 (Build 1)" last />
+            <SettingRow label="App Version" value={`${Application.nativeApplicationVersion ?? '1.0.0'} (${Application.nativeBuildVersion ?? '1'})`} last />
+            <SettingRow label="Update Channel" value={Updates.channel ?? 'production'} />
           </View>
 
           {/* ── 4. App Preferences ── */}
