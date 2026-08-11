@@ -1,6 +1,6 @@
 # Web Version Implementation Tracker
 
-Last Updated: 2026-08-06
+Last Updated: 2026-08-11
 Scope: All webversion plans under active execution or review
 
 Legend:
@@ -21,6 +21,7 @@ Legend:
 | BODYSHOP-EARNINGS-001 | bodyshop | Bodyshop tracker solo bonus + support split earnings | IP | Bodyshop Team + Platform Team | docs/Implementation_plans/webversion/categories/bodyshop/active/BODYSHOP-EARNINGS-001_BODYSHOP_TRACKER_SOLO_BONUS_SUPPORT_SPLIT_PLAN_2026-07-17.md | 2026-07-17 |
 | CMP-01 | complaints | Complaints comprehensive plan | IP | Complaints Team | docs/Implementation_plans/webversion/categories/complaints/active/01_COMPREHENSIVE_PLAN.md | 2026-06-18 |
 | DRIVE-001 | drive | Universal drive upload and storage offload | IP | Platform Team | docs/Implementation_plans/webversion/categories/drive/active/DRIVE-001_UNIVERSAL_DRIVE_UPLOAD_AND_STORAGE_OFFLOAD.md | 2026-06-18 |
+| HELP-001 | help-tickets | Employee Help Tickets (Get Help) — web + shared backend | NS | Platform Team + Web + Mobile | docs/Implementation_plans/webversion/categories/help-tickets/active/HELP-001_COMPREHENSIVE_PLAN.md | 2026-08-11 |
 | IMPORT-001 | import | Import upload governing plan | IP | Import Team | docs/Implementation_plans/webversion/categories/import/active/IMPORT_UPLOAD_GOVERNING_PLAN_2026-06-06.md | 2026-06-18 |
 | IMPORT-002 | import | PSF incremental upsert governance plan (web /import only) | NS | Import Team + Platform Team + Ops | docs/Implementation_plans/webversion/categories/import/active/IMPORT-002_PSF_INCREMENTAL_UPSERT_GOVERNANCE_PLAN_2026-06-26.md | 2026-06-26 |
 | IMPORT-003 | import | Vehicle Updation import (portal EV/PV replace-all) | IP | Import Team + Platform Team | docs/Implementation_plans/webversion/categories/import/active/IMPORT-003_VEHICLE_UPDATION_IMPORT_PLAN_2026-08-06.md | 2026-08-06 |

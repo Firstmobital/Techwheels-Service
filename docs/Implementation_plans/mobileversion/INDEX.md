@@ -1,6 +1,6 @@
 # Mobile Version Plans Index
 
-Last Updated: 2026-06-18
+Last Updated: 2026-08-11
 Scope: Mobile app implementation plans only
 Authority: This index is the routing source for mobileversion plans
 
@@ -15,6 +15,7 @@ Mobile categories currently in use:
 - `auth`
 - `autodoc`
 - `core-shell`
+- `help-tickets`
 - `import`
 - `operations`
 - `program`
@@ -39,6 +40,7 @@ Use this file as daily command center:
 | MOBILE-005 | autodoc | In Progress | Product + Mobile | `docs/Implementation_plans/mobileversion/categories/autodoc/active/MOBILE-005_AUTODOC_GPS_STAMP_PARITY_PLAN.md` |
 | MOBILE-006 | autodoc | Pending | Product + Mobile | `docs/Implementation_plans/mobileversion/categories/autodoc/active/MOBILE-006_GOOGLE_SATELLITE_HYBRID_STAMP_PLAN.md` |
 | MOBILE-007 | core-shell | In Progress | Mobile Team | `docs/Implementation_plans/mobileversion/categories/core-shell/active/MOBILE-007_PLATFORM_HOME_SUPERAPP_TRACKER.md` |
+| MOBILE-HELP-001 | help-tickets | Planned | Mobile Team + Platform | `docs/Implementation_plans/mobileversion/categories/help-tickets/active/MOBILE-HELP-001_EMPLOYEE_HELP_LITE_PLAN.md` |
 | MOBILE-008 | operations | Pending | Mobile Team | `docs/Implementation_plans/mobileversion/categories/operations/active/MOBILE-008_BACKGROUND_PROCESSING_STATE_UX_PLAN.md` |
 | MOBILE-009 | redesign | Active | Mobile Team | `docs/Implementation_plans/mobileversion/categories/redesign/active/MOBILE-009_MOBILE_APP_REDESIGN_PARITY_TRACKER.md` |
 | MOBILE-010 | program | Active | Mobile Team | `docs/Implementation_plans/mobileversion/categories/program/active/MOBILE-010_MOBILE_PROGRAM_MASTER_TRACKER.md` |
