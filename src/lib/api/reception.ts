@@ -1538,15 +1538,30 @@ export async function lookupVehicleByRegNumber(
 }
 
 /**
- * Suggests an advisor for a new vehicle based on EV/PV type.
- * Uses round-robin: picks the advisor with the fewest entries today.
+ * Suggests an advisor for a new vehicle using TRUE round-robin allocation.
+ *
+ * Algorithm:
+ * 1. Filter to SERVICE advisors matching the vehicle's EV/PV type
+ * 2. Sort alphabetically by name for stable, deterministic ordering
+ * 3. Count today's NEW allocations per advisor (REVISITS EXCLUDED)
+ * 4. Find the minimum allocation count among candidates
+ * 5. Among advisors with the minimum count, pick the one whose last
+ *    allocation was EARLIEST (or never allocated)
+ *
+ * This ensures:
+ *   - Every advisor gets 1 vehicle before any gets a 2nd
+ *   - The sequence repeats in the same order: A1→A2→A3→A4→A5→A1→A2→...
+ *   - Revisit vehicles do NOT disturb the round-robin sequence
+ *   - Manual overrides are handled gracefully (the skipped advisor
+ *     will be picked next since they still have the minimum count)
+ *   - State persists across page refreshes (reads from DB entries)
  */
 export async function suggestAdvisorForVehicle(
   vehicleType: 'EV' | 'PV',
   employeeOptions: ReceptionEmployeeOption[],
   existingEntries: ReceptionEntryRow[],
 ): Promise<ReceptionEmployeeOption | null> {
-  // Filter active advisors for this vehicle type + SERVICE department
+  // 1. Filter to SERVICE advisors matching the vehicle's fuel type
   const candidates = employeeOptions.filter((emp) => {
     const dept = String(emp.department ?? '').trim().toUpperCase()
     const fuel = String(emp.fuel_type ?? '').trim().toUpperCase()
@@ -1555,24 +1570,63 @@ export async function suggestAdvisorForVehicle(
 
   if (candidates.length === 0) return null
 
-  // Count today's entries per advisor
+  // 2. Sort alphabetically for stable round-robin ordering
+  const sortedCandidates = [...candidates].sort((a, b) =>
+    a.employee_name.localeCompare(b.employee_name),
+  )
+
+  // 3. Get today's NEW (non-revisit) allocations only
+  //    Revisits retain their previous advisor but do NOT affect the sequence
   const todayStr = new Date().toISOString().slice(0, 10)
-  const counts = new Map<string, number>()
-  for (const entry of existingEntries) {
-    if (!entry.sa_employee_code) continue
-    const entryDate = String(entry.created_at ?? '').slice(0, 10)
-    if (entryDate !== todayStr) continue
-    const code = entry.sa_employee_code.trim().toUpperCase()
-    counts.set(code, (counts.get(code) ?? 0) + 1)
+  const todayNewEntries = existingEntries
+    .filter((entry) => {
+      const entryDate = String(entry.created_at ?? '').slice(0, 10)
+      if (entryDate !== todayStr) return false
+      if (entry.is_revisit) return false // ★ KEY: exclude revisits from round-robin
+      if (!entry.sa_employee_code) return false
+      return true
+    })
+    .sort((a, b) => String(a.created_at).localeCompare(String(b.created_at)))
+
+  // 4. Count allocations per candidate + track last allocation time
+  const candidateCodes = new Set(
+    sortedCandidates.map((c) => c.employee_code.trim().toUpperCase()),
+  )
+  const allocCounts = new Map<string, number>()
+  const lastAllocAt = new Map<string, string>()
+
+  for (const entry of todayNewEntries) {
+    const code = entry.sa_employee_code!.trim().toUpperCase()
+    if (!candidateCodes.has(code)) continue // skip non-candidate allocations
+    allocCounts.set(code, (allocCounts.get(code) ?? 0) + 1)
+    lastAllocAt.set(code, String(entry.created_at))
   }
 
-  // Sort by fewest entries, then alphabetically
-  candidates.sort((a, b) => {
-    const countA = counts.get(a.employee_code.toUpperCase()) ?? 0
-    const countB = counts.get(b.employee_code.toUpperCase()) ?? 0
-    if (countA !== countB) return countA - countB
-    return a.employee_name.localeCompare(b.employee_name)
+  // 5. Find minimum allocation count among candidates
+  let minCount = Infinity
+  for (const c of sortedCandidates) {
+    const count = allocCounts.get(c.employee_code.trim().toUpperCase()) ?? 0
+    if (count < minCount) minCount = count
+  }
+
+  // 6. Among advisors with minimum count, pick the one allocated LEAST RECENTLY
+  const tied = sortedCandidates.filter(
+    (c) => (allocCounts.get(c.employee_code.trim().toUpperCase()) ?? 0) === minCount,
+  )
+
+  if (minCount === 0) {
+    // First round — no one has been allocated yet → pick alphabetically first
+    return tied[0] ?? null
+  }
+
+  // Among tied advisors, sort by last allocation time (earliest first)
+  // Advisors never allocated (shouldn't happen here since minCount > 0)
+  // sort to the front with empty string comparison
+  tied.sort((a, b) => {
+    const lastA = lastAllocAt.get(a.employee_code.trim().toUpperCase()) ?? ''
+    const lastB = lastAllocAt.get(b.employee_code.trim().toUpperCase()) ?? ''
+    return lastA.localeCompare(lastB)
   })
 
-  return candidates[0] ?? null
+  return tied[0] ?? null
 }

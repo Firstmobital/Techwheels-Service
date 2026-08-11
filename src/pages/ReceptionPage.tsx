@@ -343,6 +343,8 @@ export default function ReceptionPage() {
   const [loadingMoreEntries, setLoadingMoreEntries] = useState(false)
   const [exporting, setExporting] = useState(false)
   const [revisitContext, setRevisitContext] = useState<ReceptionRevisitContext | null>(null)
+  // Ref for accessing latest revisit state inside async callbacks (avoids stale closure)
+  const revisitContextRef = useRef<ReceptionRevisitContext | null>(null)
   const [revisitChecking, setRevisitChecking] = useState(false)
   const [updationContext, setUpdationContext] = useState<ReceptionUpdationContext | null>(null)
   const [updationChecking, setUpdationChecking] = useState(false)
@@ -906,6 +908,7 @@ export default function ReceptionPage() {
     }
 
     setRevisitContext(result.data)
+    revisitContextRef.current = result.data
 
     if (result.data.is_revisit && result.data.prior_entry?.sa_employee_code) {
       const priorCode = result.data.prior_entry.sa_employee_code.trim().toUpperCase()
@@ -1014,17 +1017,24 @@ export default function ReceptionPage() {
       }
 
       // If new vehicle (no previous SA), suggest advisor based on EV/PV
+      // Skip suggestion if revisit already assigned an advisor (race condition fix)
       if (info.found && !info.sa_employee_code && info.vehicle_type) {
-        const suggested = await suggestAdvisorForVehicle(
-          info.vehicle_type,
-          employeeOptions,
-          entries,
-        )
-        if (suggested) {
-          setForm((prev) => ({
-            ...prev,
-            sa_employee_code: suggested.employee_code,
-          }))
+        // Check if revisit context has already set an SA
+        const currentRevisit = revisitContextRef.current
+        if (currentRevisit?.is_revisit && currentRevisit.prior_entry?.sa_employee_code) {
+          // Revisit already handled — don't override with round-robin suggestion
+        } else {
+          const suggested = await suggestAdvisorForVehicle(
+            info.vehicle_type,
+            employeeOptions,
+            entries,
+          )
+          if (suggested) {
+            setForm((prev) => ({
+              ...prev,
+              sa_employee_code: suggested.employee_code,
+            }))
+          }
         }
       }
 
