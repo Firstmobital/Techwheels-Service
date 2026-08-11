@@ -1282,3 +1282,156 @@ export async function markServiceAdvisorInvoiceDone(
     return fail(error)
   }
 }
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   Vehicle Lookup by Reg Number
+   Fetches the most recent reception entry + vehicles table for auto-fill
+   ════════════════════════════════════════════════════════════════════════════ */
+
+export type VehicleLookupResult = {
+  found: boolean
+  source: 'reception' | 'vehicles' | 'none'
+  reg_number: string
+  model: string | null
+  owner_name: string | null
+  owner_phone: string | null
+  vehicle_type: 'EV' | 'PV' | null
+  sa_employee_code: string | null
+  sa_name: string | null
+  is_first_visit: boolean
+}
+
+export function inferVehicleTypeFromModel(model: string | null | undefined): 'EV' | 'PV' | null {
+  const normalized = String(model ?? '').trim().toUpperCase()
+  if (!normalized) return null
+  return normalized.includes('EV') ? 'EV' : 'PV'
+}
+
+export async function lookupVehicleByRegNumber(
+  regNumber: string,
+): Promise<ApiResult<VehicleLookupResult>> {
+  const normalized = regNumber.trim().toUpperCase()
+  if (!normalized) return fail('Registration number is required')
+
+  // 1) Check service_reception_entries for the most recent entry
+  const { data: receptionData, error: receptionErr } = await supabase
+    .from('service_reception_entries')
+    .select('reg_number, model, owner_name, owner_phone, sa_employee_code, portal, fuel_type, created_at')
+    .ilike('reg_number', normalized)
+    .order('created_at', { ascending: false })
+    .limit(1)
+
+  if (receptionErr) return fail(receptionErr)
+
+  const receptionRow = (receptionData ?? [])[0]
+  if (receptionRow) {
+    // Get SA name from employee_master
+    let saName: string | null = null
+    if (receptionRow.sa_employee_code) {
+      const { data: empData } = await supabase
+        .from('employee_master')
+        .select('employee_name')
+        .eq('employee_code', receptionRow.sa_employee_code)
+        .maybeSingle()
+      saName = empData?.employee_name ?? null
+    }
+
+    const model = receptionRow.model ? String(receptionRow.model).trim() : null
+    const vehicleType = inferVehicleTypeFromModel(model)
+
+    return ok({
+      found: true,
+      source: 'reception',
+      reg_number: normalized,
+      model,
+      owner_name: receptionRow.owner_name ? String(receptionRow.owner_name).trim() : null,
+      owner_phone: receptionRow.owner_phone ? String(receptionRow.owner_phone).trim() : null,
+      vehicle_type: vehicleType,
+      sa_employee_code: receptionRow.sa_employee_code ? String(receptionRow.sa_employee_code).trim() : null,
+      sa_name: saName,
+      is_first_visit: false,
+    })
+  }
+
+  // 2) Fall back to vehicles table
+  const { data: vehicleData, error: vehicleErr } = await supabase
+    .from('vehicles')
+    .select('reg_number, model, owner_name, owner_phone')
+    .ilike('reg_number', normalized)
+    .limit(1)
+
+  if (vehicleErr) return fail(vehicleErr)
+
+  const vehicleRow = (vehicleData ?? [])[0]
+  if (vehicleRow) {
+    const model = vehicleRow.model ? String(vehicleRow.model).trim() : null
+    const vehicleType = inferVehicleTypeFromModel(model)
+
+    return ok({
+      found: true,
+      source: 'vehicles',
+      reg_number: normalized,
+      model,
+      owner_name: vehicleRow.owner_name ? String(vehicleRow.owner_name).trim() : null,
+      owner_phone: vehicleRow.owner_phone ? String(vehicleRow.owner_phone).trim() : null,
+      vehicle_type: vehicleType,
+      sa_employee_code: null,
+      sa_name: null,
+      is_first_visit: true,
+    })
+  }
+
+  // 3) Not found anywhere
+  return ok({
+    found: false,
+    source: 'none',
+    reg_number: normalized,
+    model: null,
+    owner_name: null,
+    owner_phone: null,
+    vehicle_type: null,
+    sa_employee_code: null,
+    sa_name: null,
+    is_first_visit: true,
+  })
+}
+
+/**
+ * Suggests an advisor for a new vehicle based on EV/PV type.
+ * Uses round-robin: picks the advisor with the fewest entries today.
+ */
+export async function suggestAdvisorForVehicle(
+  vehicleType: 'EV' | 'PV',
+  employeeOptions: ReceptionEmployeeOption[],
+  existingEntries: ReceptionEntryRow[],
+): Promise<ReceptionEmployeeOption | null> {
+  // Filter active advisors for this vehicle type + SERVICE department
+  const candidates = employeeOptions.filter((emp) => {
+    const dept = String(emp.department ?? '').trim().toUpperCase()
+    const fuel = String(emp.fuel_type ?? '').trim().toUpperCase()
+    return dept === 'SERVICE' && fuel === vehicleType
+  })
+
+  if (candidates.length === 0) return null
+
+  // Count today's entries per advisor
+  const todayStr = new Date().toISOString().slice(0, 10)
+  const counts = new Map<string, number>()
+  for (const entry of existingEntries) {
+    if (!entry.sa_employee_code) continue
+    const entryDate = String(entry.created_at ?? '').slice(0, 10)
+    if (entryDate !== todayStr) continue
+    const code = entry.sa_employee_code.trim().toUpperCase()
+    counts.set(code, (counts.get(code) ?? 0) + 1)
+  }
+
+  // Sort by fewest entries, then alphabetically
+  candidates.sort((a, b) => {
+    const countA = counts.get(a.employee_code.toUpperCase()) ?? 0
+    const countB = counts.get(b.employee_code.toUpperCase()) ?? 0
+    if (countA !== countB) return countA - countB
+    return a.employee_name.localeCompare(b.employee_name)
+  })
+
+  return candidates[0] ?? null
+}

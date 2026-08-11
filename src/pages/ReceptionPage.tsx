@@ -13,12 +13,15 @@ import {
   listReceptionEntriesByDateRangePage,
   searchReceptionEntriesForGlobalSearchPage,
   listReceptionEmployees,
+  lookupVehicleByRegNumber,
+  suggestAdvisorForVehicle,
   type ReceptionEmployeeOption,
   type ReceptionEntryInput,
   type ReceptionEntryRow,
   type ReceptionEntryPageCursor,
   type ReceptionRevisitContext,
   type ReceptionUpdationContext,
+  type VehicleLookupResult,
   updateReceptionEntry,
 } from '../lib/api'
 import RevisitBadge from '../components/RevisitBadge'
@@ -92,20 +95,6 @@ type FormState = {
   source: string
   service_type: string
 }
-
-const RECEPTION_SERVICE_TYPE_OPTIONS = [
-  'Running Repairs',
-  'First Free Service',
-  'Second Free Service',
-  'Third Free Service',
-  'Paid Service',
-  'Accident',
-  'Rusting',
-  'PDI',
-  'Campaign',
-  'E Breakdown',
-  'Updation',
-]
 
 const EMPTY_FORM: FormState = {
   reg_number: '',
@@ -356,6 +345,12 @@ export default function ReceptionPage() {
   const [updationChecking, setUpdationChecking] = useState(false)
   const revisitDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const updationDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  // Vehicle lookup state
+  const [vehicleInfo, setVehicleInfo] = useState<VehicleLookupResult | null>(null)
+  const [vehicleLooking, setVehicleLooking] = useState(false)
+  const [vehicleError, setVehicleError] = useState<string | null>(null)
+  const vehicleDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const todayKey = useMemo(() => {
     const now = new Date()
@@ -876,6 +871,9 @@ export default function ReceptionPage() {
     setRevisitChecking(false)
     setUpdationContext(null)
     setUpdationChecking(false)
+    setVehicleInfo(null)
+    setVehicleLooking(false)
+    setVehicleError(null)
     if (revisitDebounceRef.current) {
       clearTimeout(revisitDebounceRef.current)
       revisitDebounceRef.current = null
@@ -883,6 +881,10 @@ export default function ReceptionPage() {
     if (updationDebounceRef.current) {
       clearTimeout(updationDebounceRef.current)
       updationDebounceRef.current = null
+    }
+    if (vehicleDebounceRef.current) {
+      clearTimeout(vehicleDebounceRef.current)
+      vehicleDebounceRef.current = null
     }
   }
 
@@ -974,11 +976,64 @@ export default function ReceptionPage() {
     }))
     scheduleRevisitCheck(nextReg, form.service_type, editingId)
     scheduleUpdationCheck(nextReg)
+    scheduleVehicleLookup(nextReg)
   }
 
-  function handleServiceTypeChange(value: string) {
-    setForm((prev) => ({ ...prev, service_type: value }))
-    scheduleRevisitCheck(form.reg_number, value, editingId)
+  function scheduleVehicleLookup(regNumber: string) {
+    if (vehicleDebounceRef.current) clearTimeout(vehicleDebounceRef.current)
+    setVehicleInfo(null)
+    setVehicleError(null)
+    const normalized = regNumber.trim().toUpperCase()
+    if (!normalized || normalized.length < 4) {
+      setVehicleLooking(false)
+      return
+    }
+    setVehicleLooking(true)
+    vehicleDebounceRef.current = setTimeout(async () => {
+      const result = await lookupVehicleByRegNumber(normalized)
+      setVehicleLooking(false)
+      if (result.error || !result.data) {
+        setVehicleError('Failed to lookup vehicle. Please try again.')
+        return
+      }
+      const info = result.data
+      setVehicleInfo(info)
+
+      // Auto-fill fields from lookup
+      if (info.found) {
+        setForm((prev) => ({
+          ...prev,
+          model: info.model ?? prev.model,
+          owner_name: info.owner_name ?? prev.owner_name,
+          owner_phone: info.owner_phone ?? prev.owner_phone,
+          // If vehicle had a previous SA, auto-assign same one
+          ...(info.sa_employee_code ? { sa_employee_code: info.sa_employee_code } : {}),
+        }))
+      } else {
+        // Vehicle not found — show clear error
+        setVehicleError('Vehicle details not found. Please enter/check Reg. No.')
+      }
+
+      // If new vehicle (no previous SA), suggest advisor based on EV/PV
+      if (info.found && !info.sa_employee_code && info.vehicle_type) {
+        const suggested = await suggestAdvisorForVehicle(
+          info.vehicle_type,
+          employeeOptions,
+          entries,
+        )
+        if (suggested) {
+          setForm((prev) => ({
+            ...prev,
+            sa_employee_code: suggested.employee_code,
+          }))
+        }
+      }
+
+      // If EV/PV not identified, show warning
+      if (info.found && !info.vehicle_type) {
+        setVehicleError('Could not determine EV/PV category. Please verify model and select advisor manually.')
+      }
+    }, 500)
   }
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
@@ -1000,7 +1055,7 @@ export default function ReceptionPage() {
 
     const payload: ReceptionEntryInput = {
       reg_number: form.reg_number,
-      km_reading: form.km_reading.trim() ? Number.parseInt(form.km_reading, 10) : null,
+      km_reading: null,
       model: form.model,
       service_type: form.service_type || null,
       sa_employee_code: form.sa_employee_code,
@@ -1105,8 +1160,11 @@ export default function ReceptionPage() {
     })
     setNotice(null)
     setError(null)
+    setVehicleInfo(null)
+    setVehicleError(null)
     void checkRevisitForReg(entry.reg_number, entry.service_type ?? '', entry.id)
     void checkUpdationForReg(entry.reg_number)
+    scheduleVehicleLookup(entry.reg_number)
   }
 
   async function handleDelete(id: number) {
@@ -1307,22 +1365,143 @@ export default function ReceptionPage() {
                 )}
               </label>
 
-              <label className="field">
-                <span className="label">KM Reading</span>
-                <input
-                  value={form.km_reading}
-                  onChange={(event) =>
-                    setForm((prev) => ({
-                      ...prev,
-                      km_reading: event.target.value.replace(/[^0-9]/g, ''),
-                    }))
-                  }
-                  inputMode="numeric"
-                  placeholder="e.g. 24560"
-                  className="inp"
-                />
-              </label>
             </div>
+
+            {/* ── VEHICLE INFORMATION CARD ── */}
+            {vehicleLooking && (
+              <div style={{
+                display: 'flex', alignItems: 'center', gap: 10,
+                padding: '12px 16px', marginBottom: 14,
+                borderRadius: 'var(--r-sm)', border: '1px solid var(--border)',
+                background: 'var(--accent-soft)', fontSize: 13, color: 'var(--accent)',
+              }}>
+                <span style={{ animation: 'spin 0.8s linear infinite', display: 'inline-block' }}>⟳</span>
+                Looking up vehicle details...
+              </div>
+            )}
+
+            {vehicleError && (
+              <div style={{
+                display: 'flex', alignItems: 'center', gap: 8,
+                padding: '12px 16px', marginBottom: 14,
+                borderRadius: 'var(--r-sm)', border: '1px solid #fcd34d',
+                background: '#fffbeb', fontSize: 13, color: '#b45309', fontWeight: 600,
+              }}>
+                <span>⚠️</span>
+                {vehicleError}
+              </div>
+            )}
+
+            {vehicleInfo && vehicleInfo.found && (
+              <div style={{
+                marginBottom: 14,
+                borderRadius: 'var(--r)', border: '1px solid var(--border)',
+                overflow: 'hidden',
+                boxShadow: 'var(--sh-1)',
+              }}>
+                {/* Card header with EV/PV badge */}
+                <div style={{
+                  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                  padding: '12px 16px',
+                  background: vehicleInfo.vehicle_type === 'EV'
+                    ? 'linear-gradient(135deg, #ecfdf5, #d1fae5)'
+                    : vehicleInfo.vehicle_type === 'PV'
+                    ? 'linear-gradient(135deg, #eff6ff, #dbeafe)'
+                    : 'linear-gradient(135deg, #f9fafb, #f3f4f6)',
+                  borderBottom: '1px solid var(--border)',
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <span style={{ fontSize: 15, fontWeight: 700, color: 'var(--ink)', letterSpacing: '0.01em' }}>
+                      Vehicle Information
+                    </span>
+                    {vehicleInfo.vehicle_type && (
+                      <span style={{
+                        display: 'inline-flex', alignItems: 'center', gap: 4,
+                        padding: '3px 10px', borderRadius: '999px',
+                        fontSize: 11, fontWeight: 700, letterSpacing: '0.03em',
+                        background: vehicleInfo.vehicle_type === 'EV' ? '#059669' : '#2563eb',
+                        color: '#fff',
+                      }}>
+                        {vehicleInfo.vehicle_type === 'EV' ? '⚡ EV' : '🚗 PV'}
+                      </span>
+                    )}
+                    {vehicleInfo.is_first_visit && (
+                      <span style={{
+                        display: 'inline-flex', alignItems: 'center',
+                        padding: '3px 10px', borderRadius: '999px',
+                        fontSize: 11, fontWeight: 600,
+                        background: '#f3e8ff', color: '#7c3aed',
+                      }}>
+                        First Visit
+                      </span>
+                    )}
+                  </div>
+                  <span style={{ fontSize: 11, color: 'var(--muted)', fontWeight: 500 }}>
+                    Source: {vehicleInfo.source === 'reception' ? 'Previous Entry' : 'Vehicle Database'}
+                  </span>
+                </div>
+                {/* Card body — vehicle details grid */}
+                <div style={{
+                  display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px 18px',
+                  padding: '16px', background: 'var(--surface)',
+                }}>
+                  {/* Reg No */}
+                  <div>
+                    <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--muted)', marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Reg. No.</div>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--ink)' }}>{vehicleInfo.reg_number}</div>
+                  </div>
+                  {/* Vehicle Model */}
+                  <div>
+                    <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--muted)', marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Vehicle Model</div>
+                    <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--ink-2)' }}>{vehicleInfo.model ?? '—'}</div>
+                  </div>
+                  {/* Owner Name */}
+                  <div>
+                    <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--muted)', marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Owner Name</div>
+                    <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--ink-2)' }}>{vehicleInfo.owner_name ?? '—'}</div>
+                  </div>
+                  {/* Mobile No */}
+                  <div>
+                    <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--muted)', marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Mobile No.</div>
+                    <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--ink-2)' }}>{vehicleInfo.owner_phone ?? '—'}</div>
+                  </div>
+                </div>
+                {/* Advisor section — visually prominent */}
+                <div style={{
+                  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                  padding: '14px 16px',
+                  borderTop: '1px solid var(--border)',
+                  background: vehicleInfo.sa_employee_code ? '#f0fdf4' : '#fffbeb',
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <span style={{
+                      width: 36, height: 36, borderRadius: '50%',
+                      display: 'grid', placeItems: 'center',
+                      background: vehicleInfo.sa_employee_code ? '#059669' : '#f59e0b',
+                      color: '#fff', fontSize: 16, fontWeight: 700,
+                    }}>
+                      {vehicleInfo.sa_employee_code ? '✓' : '!'}
+                    </span>
+                    <div>
+                      <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Assigned Service Advisor</div>
+                      <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--ink)' }}>
+                        {vehicleInfo.sa_name ?? (vehicleInfo.sa_employee_code ? vehicleInfo.sa_employee_code : 'Advisor Not Assigned')}
+                      </div>
+                    </div>
+                  </div>
+                  <span style={{
+                    fontSize: 12, fontWeight: 600,
+                    color: vehicleInfo.sa_employee_code ? '#059669' : '#b45309',
+                  }}>
+                    {vehicleInfo.sa_employee_code
+                      ? `Code: ${vehicleInfo.sa_employee_code}`
+                      : vehicleInfo.vehicle_type
+                      ? `${vehicleInfo.vehicle_type} advisor will be suggested below ↓`
+                      : 'Select advisor manually'}
+                  </span>
+                </div>
+              </div>
+            )}
 
             <div className="form-grid-2">
               <label className="field">
@@ -1356,26 +1535,6 @@ export default function ReceptionPage() {
             </div>
 
             <label className="field">
-              <span className="label">Service Type</span>
-              <select
-                value={form.service_type}
-                onChange={(event) => handleServiceTypeChange(event.target.value)}
-                className="sel"
-                style={{ borderColor: form.service_type === 'Accident' ? '#ef4444' : undefined }}
-              >
-                <option value="">- Select Service Type -</option>
-                {RECEPTION_SERVICE_TYPE_OPTIONS.map((opt) => (
-                  <option key={opt} value={opt}>{opt}</option>
-                ))}
-              </select>
-              {form.service_type === 'Accident' && (
-                <span style={{ fontSize: 12, color: '#ef4444', marginTop: 4, display: 'block', fontWeight: 600 }}>
-                  ⚠️ Accident — will appear in Bodyshop Repair Tracker
-                </span>
-              )}
-            </label>
-
-            <label className="field">
               <span className="label">SA Name <span className="req">*</span></span>
               <select
                 value={form.sa_employee_code}
@@ -1397,7 +1556,7 @@ export default function ReceptionPage() {
                 ))}
               </select>
               <span style={{ fontSize: 12, color: '#64748b', marginTop: 4, display: 'block' }}>
-                Showing {sortedEmployeeOptions.length} SA(s): {getRequiredDepartmentForServiceType(form.service_type)}{shouldApplyFuelFilter(form.service_type) ? ` + ${inferRequiredFuelTypeFromModel(form.model)}` : ' (all fuel types)'}
+                Showing {sortedEmployeeOptions.length} SA(s) for {inferRequiredFuelTypeFromModel(form.model) === 'EV' ? '⚡ EV' : '🚗 PV'} {getRequiredDepartmentForServiceType(form.service_type)}
               </span>
             </label>
 

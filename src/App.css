@@ -5816,3 +5816,9 @@ code.k--b { background: var(--accent-soft); color: var(--accent); }
   overflow: hidden;
   text-overflow: ellipsis;
 }
+
+/* Vehicle lookup loading spinner */
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
