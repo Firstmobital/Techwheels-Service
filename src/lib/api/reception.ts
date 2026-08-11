@@ -525,6 +525,9 @@ export async function fetchTechnicianAssignmentStatusesForJobCards(
 
 export type ServiceAdvisorSummaryCounts = {
   total: number
+  today: number
+  today_pending: number
+  old_pending: number
   job_card_pending: number
   sr_type_pending: number
   estimate_pending: number
@@ -557,6 +560,9 @@ export type ServiceAdvisorSummaryFilter = {
 function parseServiceAdvisorSummaryCounts(raw: unknown): ServiceAdvisorSummaryCounts | null {
   if (!raw || typeof raw !== 'object') return null
   const row = raw as Record<string, unknown>
+  const today: number = Number(row.today ?? 0)
+  const today_pending: number = Number(row.today_pending ?? 0)
+  const old_pending: number = Number(row.old_pending ?? 0)
   const categoryRaw = row.category_counts
   const category = categoryRaw && typeof categoryRaw === 'object'
     ? categoryRaw as Record<string, unknown>
@@ -564,6 +570,9 @@ function parseServiceAdvisorSummaryCounts(raw: unknown): ServiceAdvisorSummaryCo
 
   return {
     total: Number(row.total ?? 0),
+    today,
+    today_pending,
+    old_pending,
     job_card_pending: Number(row.job_card_pending ?? 0),
     sr_type_pending: Number(row.sr_type_pending ?? 0),
     estimate_pending: Number(row.estimate_pending ?? 0),

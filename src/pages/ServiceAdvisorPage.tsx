@@ -57,7 +57,7 @@ const FLOOR_INCHARGE_ALLOWED_SERVICE_TYPES = new Set([
 ])
 
 type CategoryFilter = 'all' | 'floor' | 'bodyshop' | 'others' | 'null'
-type SummaryCardFilter = 'all' | 'job_card_pending' | 'sr_type_pending' | 'estimate_pending' | 'invoice_pending' | 'no_technician' | 'floor_hold' | 'in_process' | 'completed'
+type SummaryCardFilter = 'all' | 'today' | 'today_pending' | 'old_pending' | 'job_card_pending' | 'sr_type_pending' | 'estimate_pending' | 'invoice_pending' | 'no_technician' | 'floor_hold' | 'in_process' | 'completed'
 
 const EMPTY_DRAFT: RowDraft = {
   service_type: '',
@@ -188,6 +188,29 @@ function applySummaryCardFilter(
   }
 
   if (selectedSummaryCard === 'all') return rows
+
+  // ── Today's Data filters ──────────────────────────────────────────────
+  if (selectedSummaryCard === 'today') {
+    return rows.filter((row) => isEntryToday(row.created_at))
+  }
+  if (selectedSummaryCard === 'today_pending') {
+    return rows.filter((row) => {
+      if (!isEntryToday(row.created_at)) return false
+      const jcNum = String(row.jc_number ?? '').trim().toUpperCase()
+      if (jcNum && completedJobCardNumbers.has(jcNum)) return false
+      return true
+    })
+  }
+  if (selectedSummaryCard === 'old_pending') {
+    // Old entries (before today) still not completed — Hold, WIP, or any non-completed
+    return rows.filter((row) => {
+      if (!isEntryOlderThanToday(row.created_at)) return false
+      const jcNum = String(row.jc_number ?? '').trim().toUpperCase()
+      if (jcNum && completedJobCardNumbers.has(jcNum)) return false
+      return true
+    })
+  }
+
   if (selectedSummaryCard === 'job_card_pending') {
     return rows.filter((row) => isJobCardPending(row.jc_number))
   }
@@ -282,6 +305,41 @@ function isWithinDateRange(createdAt: string | null | undefined, range: DateRang
   return dateKey >= range.from && dateKey <= range.to
 }
 
+// ── Today's Data & Old Pending helpers ──────────────────────────────────
+function getTodayISTDate(): string {
+  return new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
+}
+
+function isEntryToday(createdAt: string | null | undefined): boolean {
+  const dateKey = new Date(String(createdAt ?? '')).toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
+  return dateKey === getTodayISTDate()
+}
+
+function isEntryOlderThanToday(createdAt: string | null | undefined): boolean {
+  const dateKey = new Date(String(createdAt ?? '')).toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
+  return dateKey < getTodayISTDate()
+}
+
+// Row urgency classification for color-coded indicators
+type RowUrgency = 'today' | 'old_hold' | 'old_wip' | 'old_other' | 'today_done' | 'normal'
+
+function classifyRowUrgency(
+  row: ReceptionEntryRow,
+  isCompleted: boolean,
+  isHold: boolean,
+  isInProcess: boolean,
+): RowUrgency {
+  const today = isEntryToday(row.created_at)
+  if (today) {
+    return isCompleted ? 'today_done' : 'today'
+  }
+  // Old entry (from earlier in the month)
+  if (isCompleted) return 'normal' // completed old entries don't need attention
+  if (isHold) return 'old_hold'
+  if (isInProcess) return 'old_wip'
+  return 'old_other'
+}
+
 function isBodyshopServiceType(serviceType: string | null | undefined): boolean {
   return getCategoryForServiceType(serviceType) === 'bodyshop'
 }
@@ -325,6 +383,9 @@ function computeClientSummaryCounts(
   let hold = 0
   let inProcess = 0
   let completed = 0
+  let todayCount = 0
+  let todayPendingCount = 0
+  let oldPendingCount = 0
 
   for (const row of metricRows) {
     const category = getCategoryForServiceType(row.service_type)
@@ -346,6 +407,14 @@ function computeClientSummaryCounts(
 
     const jcNumber = String(row.jc_number ?? '').trim().toUpperCase()
     const isCompleted = Boolean(jcNumber) && assignmentSets.completed.has(jcNumber)
+
+    // Today's Data counts
+    if (isEntryToday(row.created_at)) {
+      todayCount += 1
+      if (!isCompleted) todayPendingCount += 1
+    } else if (!isCompleted) {
+      oldPendingCount += 1
+    }
     const isHold = Boolean(jcNumber) && assignmentSets.hold.has(jcNumber)
     const isInProc = Boolean(jcNumber) && assignmentSets.inProcess.has(jcNumber)
 
@@ -392,6 +461,9 @@ function computeClientSummaryCounts(
     hold,
     in_process: inProcess,
     completed,
+    today: todayCount,
+    today_pending: todayPendingCount,
+    old_pending: oldPendingCount,
     category_counts: {
       all: metricRows.length,
       floor,
@@ -729,6 +801,9 @@ export default function ServiceAdvisorPage() {
 
   const filteredTotalCount = activeSummaryCounts?.total ?? 0
   const pendingEstimateCount = activeSummaryCounts?.estimate_pending ?? 0
+  const todayCount = activeSummaryCounts?.today ?? 0
+  const todayPendingCount = activeSummaryCounts?.today_pending ?? 0
+  const oldPendingCount = activeSummaryCounts?.old_pending ?? 0
   const pendingJobCardCount = activeSummaryCounts?.job_card_pending ?? 0
   const pendingServiceTypeCount = activeSummaryCounts?.sr_type_pending ?? 0
   const pendingInvoiceCount = activeSummaryCounts?.invoice_pending ?? 0
@@ -750,6 +825,9 @@ export default function ServiceAdvisorPage() {
       floor_hold: holdCount,
       in_process: inProcessCount,
       completed: completedCount,
+      today: todayCount,
+      today_pending: todayPendingCount,
+      old_pending: oldPendingCount,
     }
 
     if (countByCard[selectedSummaryCard] === 0) {
@@ -1880,6 +1958,23 @@ export default function ServiceAdvisorPage() {
       {/* ── METRIC SUMMARY ROW ──────────────────────────────────────────────── */}
       {hasBaseRows && (
         <div className="msr">
+          {/* ── TODAY'S DATA TILES ─────────────────────────────────────────── */}
+          <button type="button" onClick={() => setSelectedSummaryCard('today')} disabled={todayCount === 0}
+            className={`msr__tile msr__tile--btn msr__tile--today ${selectedSummaryCard === 'today' ? 'msr__tile--active' : ''}`}>
+            <div className="msr__n">{summaryLoading ? '…' : todayCount}</div>
+            <div className="msr__l">🟢 Today</div>
+          </button>
+          <button type="button" onClick={() => setSelectedSummaryCard('today_pending')} disabled={todayPendingCount === 0}
+            className={`msr__tile msr__tile--btn msr__tile--today-pending ${selectedSummaryCard === 'today_pending' ? 'msr__tile--active' : ''}`}>
+            <div className="msr__n">{summaryLoading ? '…' : todayPendingCount}</div>
+            <div className="msr__l">🟡 Today Pending</div>
+          </button>
+          <button type="button" onClick={() => setSelectedSummaryCard('old_pending')} disabled={oldPendingCount === 0}
+            className={`msr__tile msr__tile--btn msr__tile--old-pending ${selectedSummaryCard === 'old_pending' ? 'msr__tile--active' : ''}`}>
+            <div className="msr__n">{summaryLoading ? '…' : oldPendingCount}</div>
+            <div className="msr__l">🟠 Old Pending</div>
+          </button>
+          {/* ── EXISTING TILES ─────────────────────────────────────────────── */}
           <button type="button" onClick={() => setSelectedSummaryCard('all')} disabled={filteredTotalCount === 0 && rows.length === 0}
             className={`msr__tile msr__tile--btn ${selectedSummaryCard === 'all' ? 'msr__tile--active' : ''}`}>
             <div className="msr__n">{summaryLoading ? '…' : filteredTotalCount}</div>
@@ -1931,6 +2026,19 @@ export default function ServiceAdvisorPage() {
               <div className="msr__l">Branch</div>
             </div>
           )}
+        </div>
+      )}
+
+      {/* ── URGENCY LEGEND ─────────────────────────────────────────────────── */}
+      {hasBaseRows && (
+        <div className="urgency-legend">
+          <span className="urgency-legend__item"><span className="urgency-legend__dot urgency-legend__dot--today"></span>🟢 Today's vehicles</span>
+          <span className="urgency-legend__item"><span className="urgency-legend__dot urgency-legend__dot--hold"></span>🟠 Old Hold vehicles</span>
+          <span className="urgency-legend__item"><span className="urgency-legend__dot urgency-legend__dot--wip"></span>🔵 Old WIP vehicles</span>
+          <span className="urgency-legend__item"><span className="urgency-legend__dot urgency-legend__dot--other"></span>🔴 Old vehicles needing attention</span>
+          <span style={{ marginLeft: 'auto', fontSize: '0.7rem', color: '#94a3b8' }}>
+            Today: {getTodayISTDate()}
+          </span>
         </div>
       )}
 
@@ -2016,10 +2124,20 @@ export default function ServiceAdvisorPage() {
                     const toneColor = getSourceToneColor(row.source)
                     const isCompleted = completedJobCardNumbers.has((row.jc_number ?? '').toUpperCase())
                     const canMarkDone = canUpdateRow(row) && isCompleted
+                    const isHoldRow = holdJobCardNumbers.has((row.jc_number ?? '').toUpperCase())
+                    const isInProcessRow = inProcessJobCardNumbers.has((row.jc_number ?? '').toUpperCase())
+                    const rowUrgency = classifyRowUrgency(row, isCompleted, isHoldRow, isInProcessRow)
+                    const urgencyClass = `row--${rowUrgency}`
+                    const isToday = isEntryToday(row.created_at)
+                    const isOld = isEntryOlderThanToday(row.created_at)
 
                     return (
-                      <tr key={row.id} className={isCompleted ? 'row--completed' : ''}>
-                        <td className="td-muted-nowrap">{formatDate(row.created_at)}</td>
+                      <tr key={row.id} className={`${isCompleted ? 'row--completed' : ''} ${urgencyClass}`}>
+                        <td className="td-muted-nowrap">
+                          {formatDate(row.created_at)}
+                          {isToday && <span className="today-dot" title="Today's entry">🟢</span>}
+                          {isOld && !isCompleted && <span className="old-dot" title="Old pending entry">🟠</span>}
+                        </td>
                         <td>
                           <span className={`pill ${toneColor}`.trim()}>
                             {row.source}

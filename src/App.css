@@ -5799,6 +5799,44 @@ code.k--b { background: var(--accent-soft); color: var(--accent); }
 .msr__tile--hold.msr__tile--active .msr__n { color: #92400e; }
 .msr__tile--ok.msr__tile--active    { background: #f0fdf4 !important; border-top-color: #16a34a !important; }
 .msr__tile--ok.msr__tile--active .msr__n { color: #15803d; }
+
+/* Today's Data tiles */
+.msr__tile--today { border-top-color: #22c55e !important; }
+.msr__tile--today.msr__tile--active { background: #f0fdf4 !important; border-top-color: #16a34a !important; }
+.msr__tile--today.msr__tile--active .msr__n { color: #15803d; }
+
+.msr__tile--today-pending { border-top-color: #eab308 !important; }
+.msr__tile--today-pending.msr__tile--active { background: #fefce8 !important; border-top-color: #ca8a04 !important; }
+.msr__tile--today-pending.msr__tile--active .msr__n { color: #a16207; }
+
+.msr__tile--old-pending { border-top-color: #f97316 !important; }
+.msr__tile--old-pending.msr__tile--active { background: #fff7ed !important; border-top-color: #ea580c !important; }
+.msr__tile--old-pending.msr__tile--active .msr__n { color: #c2410c; }
+
+/* Color-coded row urgency indicators */
+.row--today { border-left: 3px solid #22c55e !important; }
+.row--today_done { border-left: 3px solid #86efac !important; opacity: 0.7; }
+.row--old_hold { border-left: 3px solid #f97316 !important; background: #fff7ed !important; }
+.row--old_wip { border-left: 3px solid #3b82f6 !important; background: #eff6ff !important; }
+.row--old_other { border-left: 3px solid #ef4444 !important; background: #fef2f2 !important; }
+.row--normal { }
+.row--completed { opacity: 0.6; }
+
+.today-dot, .old-dot { font-size: 0.7rem; margin-left: 4px; }
+
+/* Legend for urgency indicators */
+.urgency-legend {
+  display: flex; gap: 12px; align-items: center; flex-wrap: wrap;
+  padding: 8px 12px; margin-bottom: 8px;
+  font-size: 0.72rem; color: #64748b;
+  background: #f8fafc; border-radius: 8px; border: 1px solid #e2e8f0;
+}
+.urgency-legend__item { display: flex; align-items: center; gap: 4px; }
+.urgency-legend__dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+.urgency-legend__dot--today { background: #22c55e; }
+.urgency-legend__dot--hold { background: #f97316; }
+.urgency-legend__dot--wip { background: #3b82f6; }
+.urgency-legend__dot--other { background: #ef4444; }
 .msr__tile--info { cursor: default; }
 
 .msr__n {
