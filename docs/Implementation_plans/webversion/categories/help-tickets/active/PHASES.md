@@ -1,10 +1,10 @@
 # HELP-001 — Phase Tracking
 
 **Implementation Plan:** HELP-001  
-**Last Updated:** 2026-08-11 (Phase 3 TopNav notifications wired — deploy web)  
+**Last Updated:** 2026-08-11 (Phase 4 mobile Help Lite code landed)  
 **Total Phases:** 5  
-**Current Progress:** 3/5 (60%)  
-**Status:** Phase 3 code complete — Vercel deploy + smoke  
+**Current Progress:** 4/5 (80%)  
+**Status:** Phase 4 code complete — OTA/smoke; Phase 5 SLA next  
 
 ---
 
@@ -15,10 +15,10 @@
 | 1 | Database schema, RLS, RPCs, module | ~1 week | ✅ Applied + full_metadata refreshed | 100% |
 | 2 | Web employee + support UI + Drive | ~1–1.5 weeks | ✅ Deployed (edge `universal-drive-upload` + Vercel) | 100% |
 | 3 | In-app notifications + deep links | ~3–4 days | 🟡 Code landed — deploy + smoke | 90% |
-| 4 | Mobile employee Help Lite | ~1 week | ⏳ Blocked by Phase 1 (RPC) / Phase 2 preferred | 0% |
-| 5 | SLA cron + hardening + evidence | ~3–5 days | ⏳ Blocked by Phase 3 | 0% |
+| 4 | Mobile Employee Help Lite | ~1 week | 🟡 Code landed — OTA + cross-platform smoke | 90% |
+| 5 | SLA cron + hardening + evidence | ~3–5 days | ⏳ After Phase 4 smoke | 0% |
 
-**Overall Progress: 0% — Docs complete; ready to begin Phase 1 implementation**
+**Overall Progress: ~80% — Phase 4 mobile Help Lite code landed**
 
 Authority: [HELP-001_COMPREHENSIVE_PLAN.md](HELP-001_COMPREHENSIVE_PLAN.md)  
 Execution checklist: [CHECKLIST.md](CHECKLIST.md)  
@@ -111,15 +111,16 @@ Mobile detail: [MOBILE-HELP-001](../../../../mobileversion/categories/help-ticke
 **Goal:** Employee parity for create/list/detail/reply/verify; no mobile admin.
 
 ### Deliverables
-- [ ] Expo routes under `mobile/src/app/help-tickets/`
-- [ ] Profile → Support entry points
-- [ ] `mobile/src/lib/api/helpTickets.ts` + upload helper
-- [ ] Employee RPC subset only (lint/review ban on support RPCs)
+- [x] Expo routes under `mobile/src/app/help-tickets/`
+- [x] Profile → Support entry points
+- [x] `mobile/src/lib/api/helpTickets.ts` + upload helper
+- [x] Employee RPC subset only (no support RPC imports)
 - [ ] OTA / release notes
+- [ ] Cross-platform smoke (web ↔ mobile)
 
 ### Success Criteria
 - [ ] Create on mobile visible on web immediately (and reverse)
-- [ ] No admin/assign UI shipped
+- [x] No admin/assign UI shipped
 - [ ] Attachments work via Drive allow-list
 
 ### Dependencies

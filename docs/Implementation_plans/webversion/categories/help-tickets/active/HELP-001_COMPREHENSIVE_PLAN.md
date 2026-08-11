@@ -2,8 +2,8 @@
 
 **Plan ID:** HELP-001  
 **Date Created:** 2026-08-11  
-**Last Updated:** 2026-08-11 (Phase 3 TopNav notifications wired)  
-**Status:** In progress — Phase 3 awaiting Vercel deploy + smoke; Phase 4 mobile next  
+**Last Updated:** 2026-08-11 (Phase 4 mobile Help Lite code landed)  
+**Status:** In progress — Phase 4 OTA + cross-platform smoke; Phase 5 SLA next  
 **Owner:** Platform + Web + Mobile  
 **Platform:** web (employee + support) • mobile (employee Help Lite) • shared Supabase  
 **Category:** help-tickets  

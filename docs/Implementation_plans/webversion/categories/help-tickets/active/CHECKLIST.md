@@ -3,7 +3,7 @@
 **Project:** Employee Help Tickets (Get Help)  
 **Plan:** [HELP-001_COMPREHENSIVE_PLAN.md](HELP-001_COMPREHENSIVE_PLAN.md)  
 **Created:** 2026-08-11  
-**Status:** 🟡 Phase 3 notifications wired — deploy Vercel + smoke; Phase 4 mobile next  
+**Status:** 🟡 Phase 4 mobile Help Lite code landed — OTA + cross-platform smoke; Phase 5 SLA next  
 
 Legend: `[ ]` pending · `[x]` done · `N/A` skipped with note
 
@@ -112,13 +112,14 @@ Legend: `[ ]` pending · `[x]` done · `N/A` skipped with note
 
 Follow [MOBILE-HELP-001](../../../../mobileversion/categories/help-tickets/active/MOBILE-HELP-001_EMPLOYEE_HELP_LITE_PLAN.md).
 
-- [ ] **4.1** Routes: list / new / `[ticketId]`
-- [ ] **4.2** Profile → Support entry
-- [ ] **4.3** API wrappers (employee RPC subset only)
-- [ ] **4.4** Upload helper
+- [x] **4.1** Routes: list / new / `[ticketId]`
+- [x] **4.2** Profile → Support entry
+- [x] **4.3** API wrappers (employee RPC subset only)
+- [x] **4.4** Upload helper
 - [ ] **4.5** Cross-platform visibility smoke (web ↔ mobile)
-- [ ] **4.6** Confirm no admin screens / no support RPC imports
+- [x] **4.6** Confirm no admin screens / no support RPC imports
 - [ ] **4.7** OTA / release notes
+- [x] **4.8** Evidence: `../../../../mobileversion/categories/help-tickets/evidence/MOBILE-HELP-001_PHASE4_SCREENS.md`
 
 ---
 

@@ -63,6 +63,47 @@ export default function ProfileScreen() {
           <Text className="text-slate-400">→</Text>
         </TouchableOpacity>
 
+        <Text className="text-slate-500 text-xs font-semibold uppercase tracking-wide mt-5 mb-2">
+          Support
+        </Text>
+
+        {!user ? (
+          <View className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3">
+            <Text className="text-amber-900 font-semibold">Sign in required</Text>
+            <Text className="text-amber-800 text-xs mt-0.5">
+              Sign in with a linked employee account to raise help tickets.
+            </Text>
+          </View>
+        ) : (
+          <>
+            <TouchableOpacity
+              className="bg-white border border-slate-200 rounded-xl px-4 py-3 flex-row items-center justify-between"
+              onPress={() => router.push('/help-tickets/new')}
+            >
+              <View>
+                <Text className="text-slate-900 font-semibold">Raise a ticket</Text>
+                <Text className="text-slate-500 text-xs mt-0.5">
+                  Get help from support for app or process issues
+                </Text>
+              </View>
+              <Text className="text-slate-400">→</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              className="bg-white border border-slate-200 rounded-xl px-4 py-3 mt-2 flex-row items-center justify-between"
+              onPress={() => router.push('/help-tickets')}
+            >
+              <View>
+                <Text className="text-slate-900 font-semibold">My tickets</Text>
+                <Text className="text-slate-500 text-xs mt-0.5">
+                  Track replies and verify resolutions
+                </Text>
+              </View>
+              <Text className="text-slate-400">→</Text>
+            </TouchableOpacity>
+          </>
+        )}
+
         <TouchableOpacity
           className="bg-red-50 border border-red-200 rounded-xl px-4 py-3 mt-4"
           onPress={handleLogout}

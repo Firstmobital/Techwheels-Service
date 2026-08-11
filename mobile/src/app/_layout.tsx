@@ -88,6 +88,12 @@ export default function RootLayout() {
               headerShown: false,
             }}
           />
+          <Stack.Screen
+            name="help-tickets"
+            options={{
+              headerShown: false,
+            }}
+          />
         </Stack>
         <MandatoryUpdateModal
           visible={modalVisible}
