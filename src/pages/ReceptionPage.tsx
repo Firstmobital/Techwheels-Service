@@ -485,6 +485,10 @@ export default function ReceptionPage() {
       const employeeDepartment = normalizeDepartment(employee.department)
       if (employeeDepartment !== requiredDepartment) return false
 
+      // Only show Sitapura location SAs
+      const empLocation = String(employee.location ?? '').trim().toLowerCase()
+      if (empLocation !== 'sitapura') return false
+
       if (!useFuelFilter) return true
 
       const employeeFuelType = normalizeFuelBucket(employee.fuel_type)

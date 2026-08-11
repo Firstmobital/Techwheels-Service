@@ -108,6 +108,7 @@ interface Employee {
   department: string | null
   fuel_type: string | null
   role: string | null
+  location: string | null
 }
 
 type FormState = {
@@ -338,7 +339,7 @@ export default function ReceptionScreen() {
       fetchAllEntries(),
       supabase
         .from('employee_master')
-        .select('employee_code,employee_name,department,fuel_type,role')
+        .select('employee_code,employee_name,department,fuel_type,role,location')
         .order('employee_name'),
       supabase.from('settings_model_options').select('model_name').eq('is_active', true).order('sort_order', { ascending: true }).order('model_name', { ascending: true }),
     ])
@@ -445,6 +446,9 @@ export default function ReceptionScreen() {
         const dept = normalizeDept(e.department)
         // Department filter (service type driven)
         if (hasServiceType && dept !== reqDept) return false
+        // Only show Sitapura location SAs
+        const empLoc = String(e.location ?? '').trim().toLowerCase()
+        if (empLoc !== 'sitapura') return false
         // Accident: skip fuel filter
         if (!useFuel) return true
         // Strict: EV fuel → EV SAs only, PV fuel → PV SAs only
