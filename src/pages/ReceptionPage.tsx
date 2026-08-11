@@ -332,7 +332,7 @@ export default function ReceptionPage() {
   const [globalSearchLoading, setGlobalSearchLoading] = useState(false)
   const [globalSearchLoadingMore, setGlobalSearchLoadingMore] = useState(false)
   const [selectedListFilter, setSelectedListFilter] = useState<ReceptionListFilter>('default')
-  const [selectedLocation, setSelectedLocation] = useState<string | 'all'>('all')
+  const [selectedLocation] = useState<string | 'all'>('all')
   const [selectedFuelType, setSelectedFuelType] = useState<string | 'all'>('all')
   const [selectedServiceType, setSelectedServiceType] = useState<string | 'all'>('all')
   const [listCursor, setListCursor] = useState<ReceptionEntryPageCursor | null>(null)
@@ -471,27 +471,19 @@ export default function ReceptionPage() {
 
   const sortedEmployeeOptions = useMemo(() => {
     // Business rule (source of truth):
-    // 1) Service Type -> Department mapping:
-    //    Accident => BODY SHOP, PDI => PDI, Rusting => RUSTING, all others => SERVICE.
-    // 2) Model -> Fuel Type mapping:
-    //    model contains "EV" => EV, otherwise => PV.
-    // 3) Accident is exempt from fuel filtering: show all BODY SHOP advisors.
-    // 4) For non-Accident, SA dropdown shows employee_master rows matching BOTH department and fuel_type.
-    // 5) For Rusting, SA dropdown also matches selected location when a location filter is active.
+    // 1) Department: SERVICE (default for all reception entries).
+    // 2) Fuel Type: Determined from vehicleInfo.vehicle_type (primary) or model name (fallback).
+    //    EV vehicles => only EV advisors, PV vehicles => only PV advisors.
+    // 3) SA dropdown shows employee_master rows matching BOTH department and fuel_type.
     // Keep this rule in sync with Settings > Employee Master to avoid behavior drift.
     const requiredDepartment = getRequiredDepartmentForServiceType(form.service_type)
     const useFuelFilter = shouldApplyFuelFilter(form.service_type)
-    const requiredFuelType = inferRequiredFuelTypeFromModel(form.model)
-    const isRusting = normalizeServiceType(form.service_type).toLowerCase() === 'rusting'
+    // Primary: use vehicleInfo.vehicle_type from lookup. Fallback: infer from model name.
+    const requiredFuelType = vehicleInfo?.vehicle_type ?? inferRequiredFuelTypeFromModel(form.model)
 
     const values = employeeOptions.filter((employee) => {
       const employeeDepartment = normalizeDepartment(employee.department)
       if (employeeDepartment !== requiredDepartment) return false
-
-      if (isRusting && selectedLocation !== 'all') {
-        const employeeLocation = getLocationLabel(employee.location)
-        if (employeeLocation !== selectedLocation) return false
-      }
 
       if (!useFuelFilter) return true
 
@@ -501,7 +493,7 @@ export default function ReceptionPage() {
 
     values.sort((a, b) => a.employee_name.localeCompare(b.employee_name))
     return values
-  }, [employeeOptions, form.model, form.service_type, selectedLocation])
+  }, [employeeOptions, form.model, form.service_type, vehicleInfo])
 
   const entryLookupById = useMemo(() => {
     const merged = [...entries, ...globalSearchEntries]
@@ -610,9 +602,7 @@ export default function ReceptionPage() {
   }, [selectedServiceType, serviceTypeOptions])
 
   useEffect(() => {
-    if (selectedLocation === 'all') return
-    if (locationOptions.includes(selectedLocation)) return
-    setSelectedLocation('all')
+    // Location filter removed — no reset needed
   }, [selectedLocation, locationOptions])
 
   async function loadModelOptions() {
@@ -765,9 +755,7 @@ export default function ReceptionPage() {
         })
       }
 
-      if (selectedLocation !== 'all') {
-        filtered = filtered.filter((entry) => getLocationLabel(entry.branch) === selectedLocation)
-      }
+      // Location filter removed per requirement — show all locations
 
       // Portal / fuel type filter
       if (selectedFuelType !== 'all') {
@@ -844,7 +832,7 @@ export default function ReceptionPage() {
         ? dateRange.from
         : `${dateRange.from}_to_${dateRange.to}`
       const filterStr = [
-        selectedLocation !== 'all' ? selectedLocation : null,
+        null, // Location filter removed
         selectedFuelType !== 'all' ? selectedFuelType : null,
         selectedServiceType !== 'all' ? selectedServiceType : null,
       ].filter(Boolean).join('_')
@@ -1254,14 +1242,6 @@ export default function ReceptionPage() {
         <DateRangeFilter range={dateRange} onChange={setDateRange} label="Period:" />
         <div className="cft__sep" />
 
-        <span className="cft__label">Loc:</span>
-        <select className="cft__sel" value={selectedLocation} onChange={e => setSelectedLocation(e.target.value)}>
-          <option value="all">All ({locationFilterBaseEntries.length})</option>
-          {locationOptions.map(loc => (
-            <option key={loc} value={loc}>{loc} ({locationFilterBaseEntries.filter(e => getLocationLabel(e.branch) === loc).length})</option>
-          ))}
-        </select>
-
         <span className="cft__label">Portal:</span>
         <select className="cft__sel" value={selectedFuelType} onChange={e => setSelectedFuelType(e.target.value)}>
           <option value="all">All ({fuelFilterBaseEntries.length})</option>
@@ -1556,7 +1536,7 @@ export default function ReceptionPage() {
                 ))}
               </select>
               <span style={{ fontSize: 12, color: '#64748b', marginTop: 4, display: 'block' }}>
-                Showing {sortedEmployeeOptions.length} SA(s) for {inferRequiredFuelTypeFromModel(form.model) === 'EV' ? '⚡ EV' : '🚗 PV'} {getRequiredDepartmentForServiceType(form.service_type)}
+                Showing {sortedEmployeeOptions.length} SA(s) for {(vehicleInfo?.vehicle_type ?? inferRequiredFuelTypeFromModel(form.model)) === 'EV' ? '⚡ EV' : '🚗 PV'} {getRequiredDepartmentForServiceType(form.service_type)}
               </span>
             </label>
 
@@ -1617,7 +1597,7 @@ export default function ReceptionPage() {
                   ? `${globalSearchLoading ? 'Searching all records...' : 'Global search'} · ${visibleEntries.length} shown${globalSearchHasMore ? ' (more available)' : ''}`
                   : `Newest first · ${visibleEntries.length} loaded${hasMoreEntries ? ' (more available)' : ''}`}
                 {selectedListFilter === 'today' ? ' · Today filter' : ''}
-                {selectedLocation !== 'all' ? ` · ${selectedLocation}` : ''}
+                
                 {selectedFuelType !== 'all' ? ` · ${selectedFuelType}` : ''}
                 {selectedServiceType !== 'all' ? ` · ${selectedServiceType}` : ''}
               </div>
