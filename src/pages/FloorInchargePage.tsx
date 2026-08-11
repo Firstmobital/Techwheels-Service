@@ -379,19 +379,10 @@ function isWithinDateRange(createdAt: string | null | undefined, range: DateRang
   return dateKey >= range.from && dateKey <= range.to
 }
 
-function getTodayISTKey(): string {
-  return new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
-}
-
-function isEntryOlderThanToday(createdAt: string | null | undefined): boolean {
-  const dateKey = new Date(String(createdAt ?? '')).toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
-  return dateKey < getTodayISTKey()
-}
-
 // 90-day lookback range for old Hold/WIP entries (from 90 days ago to day before dateRange.from)
 function getOldHoldWipLookbackRange(dateRange: DateRange): DateRange | null {
   if (!dateRange.from) return null
-  const todayKey = getTodayISTKey()
+  const todayKey = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
 
   const start = new Date(dateRange.from)
   start.setDate(start.getDate() - 90)
@@ -501,16 +492,6 @@ function applyAssignmentViewFilter(
     return rows.filter((jc) => {
       const assignment = assignments[jc.assignment_key]
       return Boolean(assignment) && normalizeStatusValue(assignment?.work_status) === 'completed'
-    })
-  }
-
-  if (assignmentView === 'old_hold_wip') {
-    return rows.filter((jc) => {
-      if (!isEntryOlderThanToday(jc.created_at)) return false
-      const assignment = assignments[jc.assignment_key]
-      if (!assignment) return false
-      const status = normalizeStatusValue(assignment?.work_status)
-      return status === 'hold' || status === 'work_inprocess'
     })
   }
 
@@ -1302,29 +1283,20 @@ export default function FloorInchargePage() {
     return Boolean(assignment) && normalizeStatusValue(assignment?.work_status) === 'completed'
   }).length
 
-  // Old Hold/WIP count from 90-day lookback (entries NOT in current date range)
-  const currentRowIds = useMemo(() => new Set(jobCards.map((jc) => jc.id)), [jobCards])
-  const oldHoldWipCount = useMemo(() => {
-    return oldHoldWipJobCards.filter((jc) => !currentRowIds.has(jc.id)).length
-  }, [oldHoldWipJobCards, currentRowIds])
+  // Old Hold/WIP count = exactly what the tile shows when clicked
+  const oldHoldWipCount = oldHoldWipJobCards.length
 
-  // When 'old_hold_wip' is selected, merge old Hold/WIP rows with current rows
+  // When 'old_hold_wip' is selected, show ONLY the 90-day old Hold/WIP entries
+  // (no current-month rows mixed in — the count must match the displayed list)
   const filtered = useMemo(() => {
     if (assignmentView === 'old_hold_wip') {
-      const seenIds = new Set(toolbarScopedRows.map((jc) => jc.id))
-      const merged = [
-        ...applyAssignmentViewFilter(toolbarScopedRows, 'old_hold_wip', assignments),
-        ...oldHoldWipJobCards.filter((jc) => {
-          if (seenIds.has(jc.id)) return false
-          // Apply current filters (branch, portal, technician, search)
-          if (!matchesLocationFilter(jc, branchFilter)) return false
-          if (!matchesPortalFilter(jc, fuelTypeFilter)) return false
-          if (!matchesTechnicianFilter(jc, technicianFilter, oldHoldWipAssignments)) return false
-          if (!jobCardMatchesSearch(jc, search, oldHoldWipAssignments, {})) return false
-          return true
-        }),
-      ]
-      return merged
+      return oldHoldWipJobCards.filter((jc) => {
+        if (!matchesLocationFilter(jc, branchFilter)) return false
+        if (!matchesPortalFilter(jc, fuelTypeFilter)) return false
+        if (!matchesTechnicianFilter(jc, technicianFilter, oldHoldWipAssignments)) return false
+        if (!jobCardMatchesSearch(jc, search, oldHoldWipAssignments, {})) return false
+        return true
+      })
     }
     return applyAssignmentViewFilter(toolbarScopedRows, assignmentView, assignments)
   }, [toolbarScopedRows, assignmentView, assignments, oldHoldWipJobCards, oldHoldWipAssignments, branchFilter, fuelTypeFilter, technicianFilter, search])
