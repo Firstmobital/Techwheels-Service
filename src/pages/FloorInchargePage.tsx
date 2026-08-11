@@ -379,22 +379,18 @@ function isWithinDateRange(createdAt: string | null | undefined, range: DateRang
   return dateKey >= range.from && dateKey <= range.to
 }
 
-// 90-day lookback range for old Hold/WIP entries (from 90 days ago to day before dateRange.from)
-function getOldHoldWipLookbackRange(dateRange: DateRange): DateRange | null {
-  if (!dateRange.from) return null
-  const todayKey = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
-
-  const start = new Date(dateRange.from)
+// Last 90 days range (from 90 days ago to yesterday — today excluded)
+function getOldHoldWipLookbackRange(_dateRange: DateRange): DateRange | null {
+  const today = new Date()
+  const start = new Date(today)
   start.setDate(start.getDate() - 90)
-  const fromKey = start.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
-
-  const end = new Date(dateRange.from)
+  const end = new Date(today)
   end.setDate(end.getDate() - 1)
-  const toKey = end.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
 
-  if (toKey >= todayKey) return null
-
-  return { from: fromKey, to: toKey }
+  return {
+    from: start.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }),
+    to: end.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }),
+  }
 }
 
 function getErrorMessage(err: unknown, fallback: string): string {
@@ -708,11 +704,11 @@ export default function FloorInchargePage() {
       setLoading(false)
     }
 
-    // Fetch 90-day old Hold/WIP data
+    // Fetch last 90 days Hold/WIP data (today excluded)
     void loadOldHoldWipData()
   }
 
-  // Fetch entries from the last 90 days (outside current date range) that have Hold or WIP status.
+  // Fetch entries from the last 90 days (excluding today) that have Hold or WIP status.
   // These are merged into the 'Old Hold/WIP' tile only — no other view is affected.
   async function loadOldHoldWipData() {
     const lookbackRange = getOldHoldWipLookbackRange(dateRange)
@@ -1466,7 +1462,7 @@ export default function FloorInchargePage() {
           { key: 'hold',           label: 'Hold',       count: holdCount,              accent: '#f59e0b' },
           { key: 'work_inprocess', label: 'In-Process', count: inProcessCount,         accent: '#0ea5e9' },
           { key: 'completed',      label: 'Completed',  count: completedCount,         accent: '#16a34a' },
-          { key: 'old_hold_wip',   label: 'Old Hold/WIP', count: oldHoldWipCount,  accent: '#ea580c' },
+          { key: 'old_hold_wip',   label: 'Last 90 Days', count: oldHoldWipCount,  accent: '#ea580c' },
         ] as { key: typeof assignmentView; label: string; count: number; accent: string }[]).map(({ key, label, count, accent }) => (
           <button key={key} type="button" onClick={() => setAssignmentView(key)} disabled={count === 0 && key !== 'old_hold_wip'}
             className={`msr__tile msr__tile--btn ${assignmentView === key ? 'msr__tile--active' : ''}`}
@@ -1482,7 +1478,7 @@ export default function FloorInchargePage() {
         <div className="card__head">
           <div>
             <h3>
-              Job cards <span className="count-badge">({filtered.length})</span>{assignmentView === 'old_hold_wip' && oldHoldWipLoading ? ' · Loading 90-day data…' : ''}
+              Job cards <span className="count-badge">({filtered.length})</span>{assignmentView === 'old_hold_wip' && oldHoldWipLoading ? ' · Loading last 90 days…' : ''}
             </h3>
           </div>
           <div className="card__head-flex">
