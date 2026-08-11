@@ -57,7 +57,7 @@ const FLOOR_INCHARGE_ALLOWED_SERVICE_TYPES = new Set([
 ])
 
 type CategoryFilter = 'all' | 'floor' | 'bodyshop' | 'others' | 'null'
-type SummaryCardFilter = 'all' | 'today' | 'today_pending' | 'old_pending' | 'job_card_pending' | 'sr_type_pending' | 'estimate_pending' | 'invoice_pending' | 'no_technician' | 'floor_hold' | 'in_process' | 'completed'
+type SummaryCardFilter = 'all' | 'today' | 'today_pending' | 'old_hold_wip' | 'job_card_pending' | 'sr_type_pending' | 'estimate_pending' | 'invoice_pending' | 'no_technician' | 'floor_hold' | 'in_process' | 'completed'
 
 const EMPTY_DRAFT: RowDraft = {
   service_type: '',
@@ -189,13 +189,15 @@ function applySummaryCardFilter(
       return true
     })
   }
-  if (selectedSummaryCard === 'old_pending') {
-    // Old entries (before today) still not completed — Hold, WIP, or any non-completed
+  if (selectedSummaryCard === 'old_hold_wip') {
+    // Last 90 days: only Hold and WIP entries (not all non-completed)
     return rows.filter((row) => {
       if (!isEntryOlderThanToday(row.created_at)) return false
       const jcNum = String(row.jc_number ?? '').trim().toUpperCase()
-      if (jcNum && completedJobCardNumbers.has(jcNum)) return false
-      return true
+      if (!jcNum) return false
+      if (holdJobCardNumbers.has(jcNum)) return true
+      if (inProcessJobCardNumbers.has(jcNum)) return true
+      return false
     })
   }
 
@@ -293,7 +295,7 @@ function isWithinDateRange(createdAt: string | null | undefined, range: DateRang
   return dateKey >= range.from && dateKey <= range.to
 }
 
-// ── Today's Data & Old Pending helpers ──────────────────────────────────
+// ── Today's Data // ── Today's Data & Old Pending helpers ────────────────────────────────── Last 90 Days Hold/WIP helpers ──────────────────────────
 function getTodayISTDate(): string {
   return new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
 }
@@ -308,28 +310,18 @@ function isEntryOlderThanToday(createdAt: string | null | undefined): boolean {
   return dateKey < getTodayISTDate()
 }
 
-// 90-day lookback range for old pending entries (from 90 days ago to day before dateRange.from)
-function getOldPendingLookbackRange(dateRange: DateRange): DateRange | null {
-  if (!dateRange.from) return null
-  const todayKey = getTodayISTDate()
-  // If dateRange starts at or after today, we look back 90 days from yesterday
-  // If dateRange starts before today, we look from 90 days before dateRange.from to day before dateRange.from
-  const rangeStart = dateRange.from
-  
-  // Compute 90 days before rangeStart
-  const start = new Date(rangeStart)
+// Last 90 days range (from 90 days ago to yesterday — today excluded)
+function getOldHoldWipLookbackRange(_dateRange: DateRange): DateRange | null {
+  const today = new Date()
+  const start = new Date(today)
   start.setDate(start.getDate() - 90)
-  const fromKey = start.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
-  
-  // End at day before rangeStart
-  const end = new Date(rangeStart)
+  const end = new Date(today)
   end.setDate(end.getDate() - 1)
-  const toKey = end.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
-  
-  // If the lookback end is today or in the future, no old pending to fetch
-  if (toKey >= todayKey) return null
-  
-  return { from: fromKey, to: toKey }
+
+  return {
+    from: start.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }),
+    to: end.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }),
+  }
 }
 
 // Row urgency classification for color-coded indicators
@@ -397,7 +389,7 @@ function computeClientSummaryCounts(
   let completed = 0
   let todayCount = 0
   let todayPendingCount = 0
-  let oldPendingCount = 0
+  let oldHoldWipCount = 0
 
   for (const row of metricRows) {
     const category = getCategoryForServiceType(row.service_type)
@@ -425,7 +417,7 @@ function computeClientSummaryCounts(
       todayCount += 1
       if (!isCompleted) todayPendingCount += 1
     } else if (!isCompleted) {
-      oldPendingCount += 1
+      oldHoldWipCount += 1
     }
     const isHold = Boolean(jcNumber) && assignmentSets.hold.has(jcNumber)
     const isInProc = Boolean(jcNumber) && assignmentSets.inProcess.has(jcNumber)
@@ -475,7 +467,7 @@ function computeClientSummaryCounts(
     completed,
     today: todayCount,
     today_pending: todayPendingCount,
-    old_pending: oldPendingCount,
+    old_pending: oldHoldWipCount,
     category_counts: {
       all: metricRows.length,
       floor,
@@ -538,8 +530,8 @@ export default function ServiceAdvisorPage() {
   const [holdJobCardNumbers, setHoldJobCardNumbers] = useState<Set<string>>(new Set())
   const [inProcessJobCardNumbers, setInProcessJobCardNumbers] = useState<Set<string>>(new Set())
   const [allAssignedJobCardNumbers, setAllAssignedJobCardNumbers] = useState<Set<string>>(new Set())
-  const [oldPendingRows, setOldPendingRows] = useState<ReceptionEntryRow[]>([])
-  const [oldPendingLoading, setOldPendingLoading] = useState(false)
+  const [oldHoldWipRows, setOldPendingRows] = useState<ReceptionEntryRow[]>([])
+  const [oldHoldWipLoading, setOldPendingLoading] = useState(false)
 
   // Complaint link modal state
   const [complaintLinkModal, setComplaintLinkModal] = useState<{ open: boolean; url: string | null; regNumber: string | null }>({ open: false, url: null, regNumber: null })
@@ -550,11 +542,11 @@ export default function ServiceAdvisorPage() {
   const allVisibleRows = useMemo(() => {
     const seenIds = new Set(rows.map((row) => row.id))
     const merged = [...rows]
-    oldPendingRows.forEach((row) => {
+    oldHoldWipRows.forEach((row) => {
       if (!seenIds.has(row.id)) merged.push(row)
     })
     return merged
-  }, [rows, oldPendingRows])
+  }, [rows, oldHoldWipRows])
 
   const visibleJobCardNumbers = useMemo(() => collectVisibleJobCardNumbers(allVisibleRows), [allVisibleRows])
 
@@ -790,8 +782,8 @@ export default function ServiceAdvisorPage() {
   const showAdvisorFilter = effectiveAdvisorOptions.length > 1
 
   // Apply branch/fuel/category/advisor/search filters to old pending rows too
-  const oldPendingFiltered = useMemo(() => {
-    let result = oldPendingRows
+  const oldHoldWipFiltered = useMemo(() => {
+    let result = oldHoldWipRows
     if (selectedBranch !== 'all') {
       result = result.filter((row) => row.branch === selectedBranch)
     }
@@ -808,16 +800,16 @@ export default function ServiceAdvisorPage() {
       result = result.filter((row) => matchesSearch(row))
     }
     return result
-  }, [oldPendingRows, selectedBranch, selectedFuelType, selectedCategory, selectedAdvisor, searchQuery])
+  }, [oldHoldWipRows, selectedBranch, selectedFuelType, selectedCategory, selectedAdvisor, searchQuery])
 
   const cardFilteredRows = useMemo(() => {
-    // When 'old_pending' is selected, merge displayed rows with 90-day old pending rows
-    if (selectedSummaryCard === 'old_pending') {
+    // When 'old_hold_wip' is selected, merge displayed rows with 90-day old Hold/WIP rows
+    if (selectedSummaryCard === 'old_hold_wip') {
       // Deduplicate by id (in case old pending rows overlap with current date range rows)
       const seenIds = new Set(displayedRows.map((row) => row.id))
       const merged = [
         ...displayedRows.filter((row) => isEntryOlderThanToday(row.created_at)),
-        ...oldPendingFiltered.filter((row) => !seenIds.has(row.id)),
+        ...oldHoldWipFiltered.filter((row) => !seenIds.has(row.id)),
       ]
       return applySummaryCardFilter(
         merged,
@@ -836,7 +828,7 @@ export default function ServiceAdvisorPage() {
       inProcessJobCardNumbers,
       allAssignedJobCardNumbers,
     )
-  }, [displayedRows, oldPendingFiltered, selectedSummaryCard, completedJobCardNumbers, holdJobCardNumbers, inProcessJobCardNumbers, allAssignedJobCardNumbers])
+  }, [displayedRows, oldHoldWipFiltered, selectedSummaryCard, completedJobCardNumbers, holdJobCardNumbers, inProcessJobCardNumbers, allAssignedJobCardNumbers])
 
   const hasBaseRows = useMemo(
     () => (activeSummaryCounts?.total ?? 0) > 0 || rows.length > 0,
@@ -863,21 +855,37 @@ export default function ServiceAdvisorPage() {
 
   const filteredTotalCount = activeSummaryCounts?.total ?? 0
   const pendingEstimateCount = activeSummaryCounts?.estimate_pending ?? 0
-  const todayCount = activeSummaryCounts?.today ?? 0
-  const todayPendingCount = activeSummaryCounts?.today_pending ?? 0
-  const oldPendingCount = useMemo(() => {
-    // Count non-completed entries older than today from BOTH current rows and 90-day old pending rows
-    const baseCount = activeSummaryCounts?.old_pending ?? 0
-    // Add old pending rows that are outside the current date range
-    const currentRowIds = new Set(rows.map((row) => row.id))
-    const extraOldPending = oldPendingRows.filter((row) => {
-      if (currentRowIds.has(row.id)) return false
+  // Always use client-side computation for Today/Today Pending — ensures accuracy
+  // regardless of server RPC behavior or date range selection
+  const todayCount = useMemo(() => {
+    return displayedRows.filter((row) => isEntryToday(row.created_at)).length
+  }, [displayedRows])
+
+  const todayPendingCount = useMemo(() => {
+    return displayedRows.filter((row) => {
+      if (!isEntryToday(row.created_at)) return false
       const jcNum = String(row.jc_number ?? '').trim().toUpperCase()
       if (jcNum && completedJobCardNumbers.has(jcNum)) return false
-      return isEntryOlderThanToday(row.created_at)
+      return true
     }).length
-    return baseCount + extraOldPending
-  }, [activeSummaryCounts, oldPendingRows, rows, completedJobCardNumbers])
+  }, [displayedRows, completedJobCardNumbers])
+  const oldHoldWipCount = useMemo(() => {
+    // Count Hold + WIP entries from the last 90 days (excluding today)
+    // From the fetched 90-day rows that are outside the current date range
+    const currentRowIds = new Set(rows.map((row) => row.id))
+    // Also count Hold/WIP from current rows that are older than today
+    const currentOldHoldWip = rows.filter((row) => {
+      if (!isEntryOlderThanToday(row.created_at)) return false
+      const jcNum = String(row.jc_number ?? '').trim().toUpperCase()
+      if (!jcNum) return false
+      return holdJobCardNumbers.has(jcNum) || inProcessJobCardNumbers.has(jcNum)
+    }).length
+    const extraOldHoldWip = oldHoldWipRows.filter((row) => {
+      if (currentRowIds.has(row.id)) return false
+      return true
+    }).length
+    return currentOldHoldWip + extraOldHoldWip
+  }, [oldHoldWipRows, rows, holdJobCardNumbers, inProcessJobCardNumbers])
   const pendingJobCardCount = activeSummaryCounts?.job_card_pending ?? 0
   const pendingServiceTypeCount = activeSummaryCounts?.sr_type_pending ?? 0
   const pendingInvoiceCount = activeSummaryCounts?.invoice_pending ?? 0
@@ -901,7 +909,7 @@ export default function ServiceAdvisorPage() {
       completed: completedCount,
       today: todayCount,
       today_pending: todayPendingCount,
-      old_pending: oldPendingCount,
+      old_hold_wip: oldHoldWipCount,
     }
 
     if (countByCard[selectedSummaryCard] === 0) {
@@ -1110,14 +1118,14 @@ export default function ServiceAdvisorPage() {
     setDirtyRowIds(new Set())
     setLoading(false)
 
-    // Fetch 90-day old pending entries
-    void loadOldPendingRows(nextIsAdmin)
+    // Fetch last 90 days Hold/WIP entries (today excluded)
+    void loadOldHoldWipRows(nextIsAdmin)
   }
 
-  // Fetch entries from the last 90 days that are outside the current date range.
-  // These are merged into the "Old Pending" view only — no other view is affected.
-  async function loadOldPendingRows(adminScope: boolean) {
-    const lookbackRange = getOldPendingLookbackRange(getLoadRange())
+  // Fetch entries from the last 90 days (excluding today) that have Hold or WIP status.
+  // These are merged into the 'Last 90 Days' view only — no other view is affected.
+  async function loadOldHoldWipRows(adminScope: boolean) {
+    const lookbackRange = getOldHoldWipLookbackRange(getLoadRange())
     if (!lookbackRange) {
       setOldPendingRows([])
       return
@@ -1143,7 +1151,7 @@ export default function ServiceAdvisorPage() {
       const filtered = allRows.filter((row) => isWithinDateRange(row.created_at, lookbackRange))
       setOldPendingRows(filtered)
     } catch (err) {
-      console.error('Failed to load old pending rows:', err)
+      console.error('Failed to load old Hold/WIP rows:', err)
       setOldPendingRows([])
     } finally {
       setOldPendingLoading(false)
@@ -2082,10 +2090,10 @@ export default function ServiceAdvisorPage() {
             <div className="msr__n">{summaryLoading ? '…' : todayPendingCount}</div>
             <div className="msr__l">🟡 Today Pending</div>
           </button>
-          <button type="button" onClick={() => setSelectedSummaryCard('old_pending')} disabled={oldPendingCount === 0 && !oldPendingLoading}
-            className={`msr__tile msr__tile--btn msr__tile--old-pending ${selectedSummaryCard === 'old_pending' ? 'msr__tile--active' : ''}`}>
-            <div className="msr__n">{oldPendingLoading ? '…' : oldPendingCount}</div>
-            <div className="msr__l">🟠 Old Pending</div>
+          <button type="button" onClick={() => setSelectedSummaryCard('old_hold_wip')} disabled={oldHoldWipCount === 0 && !oldHoldWipLoading}
+            className={`msr__tile msr__tile--btn msr__tile--old-pending ${selectedSummaryCard === 'old_hold_wip' ? 'msr__tile--active' : ''}`}>
+            <div className="msr__n">{oldHoldWipLoading ? '…' : oldHoldWipCount}</div>
+            <div className="msr__l">🟠 Last 90 Days</div>
           </button>
           {/* ── EXISTING TILES ─────────────────────────────────────────────── */}
           <button type="button" onClick={() => setSelectedSummaryCard('all')} disabled={filteredTotalCount === 0 && rows.length === 0}

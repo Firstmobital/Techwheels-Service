@@ -1338,20 +1338,47 @@ function inferVehicleTypeFromAllServiceData(
 export async function lookupVehicleByRegNumber(
   regNumber: string,
 ): Promise<ApiResult<VehicleLookupResult>> {
-  const normalized = regNumber.trim().toUpperCase()
+  // Remove ALL spaces — DB may store 'RJ14AB1234' or 'RJ14 AB 1234'
+  const normalized = regNumber.replace(/\s+/g, '').toUpperCase()
   if (!normalized) return fail('Registration number is required')
 
   // 1) Check service_reception_entries for the most recent entry
-  const { data: receptionData, error: receptionErr } = await supabase
+  // Try exact match first, then fall back to contains search (handles space variations)
+  let receptionData: Array<{ reg_number: string; model: string | null; owner_name: string | null; owner_phone: string | null; sa_employee_code: string | null; portal: string | null; created_at: string }> = []
+  let receptionErr: unknown = null
+
+  const { data: receptionExact, error: receptionExactErr } = await supabase
     .from('service_reception_entries')
     .select('reg_number, model, owner_name, owner_phone, sa_employee_code, portal, created_at')
     .ilike('reg_number', normalized)
     .order('created_at', { ascending: false })
     .limit(1)
 
-  if (receptionErr) return fail(receptionErr)
+  if (receptionExactErr) {
+    receptionErr = receptionExactErr
+  } else if (receptionExact && receptionExact.length > 0) {
+    receptionData = receptionExact as typeof receptionData
+  } else {
+    // Fallback: contains search — match if DB value without spaces equals our query
+    const { data: receptionContains, error: receptionContainsErr } = await supabase
+      .from('service_reception_entries')
+      .select('reg_number, model, owner_name, owner_phone, sa_employee_code, portal, created_at')
+      .ilike('reg_number', `%${normalized}%`)
+      .order('created_at', { ascending: false })
+      .limit(5)
 
-  const receptionRow = (receptionData ?? [])[0]
+    if (!receptionContainsErr && receptionContains) {
+      // Filter to rows where reg_number without spaces matches our normalized query
+      const matched = (receptionContains as Array<{ reg_number: string; model: string | null; owner_name: string | null; owner_phone: string | null; sa_employee_code: string | null; portal: string | null; created_at: string }>).filter(
+        (row) => row.reg_number.replace(/\s+/g, '').toUpperCase() === normalized
+      )
+      if (matched.length > 0) receptionData = matched
+    }
+  }
+
+  if (receptionErr) return fail(receptionErr as { message: string })
+
+  const receptionRow = receptionData[0]
   if (receptionRow) {
     // Get SA name from employee_master
     let saName: string | null = null
@@ -1381,16 +1408,33 @@ export async function lookupVehicleByRegNumber(
     })
   }
 
-  // 2) Fall back to vehicles table
-  const { data: vehicleData, error: vehicleErr } = await supabase
+  // 2) Fall back to vehicles table — try exact then contains
+  const { data: vehicleExact, error: vehicleExactErr } = await supabase
     .from('vehicles')
     .select('reg_number, model, owner_name, owner_phone')
     .ilike('reg_number', normalized)
     .limit(1)
 
-  if (vehicleErr) return fail(vehicleErr)
+  if (vehicleExactErr) return fail(vehicleExactErr)
 
-  const vehicleRow = (vehicleData ?? [])[0]
+  let vehicleRow: { reg_number: string; model: string | null; owner_name: string | null; owner_phone: string | null } | null = null
+
+  if (vehicleExact && vehicleExact.length > 0) {
+    vehicleRow = vehicleExact[0] as typeof vehicleRow
+  } else {
+    const { data: vehicleContains, error: vehicleContainsErr } = await supabase
+      .from('vehicles')
+      .select('reg_number, model, owner_name, owner_phone')
+      .ilike('reg_number', `%${normalized}%`)
+      .limit(5)
+
+    if (!vehicleContainsErr && vehicleContains) {
+      const matched = (vehicleContains as Array<{ reg_number: string; model: string | null; owner_name: string | null; owner_phone: string | null }>).filter(
+        (row) => row.reg_number.replace(/\s+/g, '').toUpperCase() === normalized
+      )
+      if (matched.length > 0) vehicleRow = matched[0]
+    }
+  }
   if (vehicleRow) {
     const model = vehicleRow.model ? String(vehicleRow.model).trim() : null
     const vehicleType = inferVehicleTypeFromModel(model)
@@ -1409,70 +1453,58 @@ export async function lookupVehicleByRegNumber(
     })
   }
 
-  // 3) Check all_service_data table (primary vehicle/customer data source)
-  const { data: serviceData, error: serviceErr } = await supabase
+  // 3) Check all_service_data table — try exact then contains, handle space variations
+  let asdRow: { vehicle_registration_number: string | null; registration_no: string | null; cust_first_name: string | null; cust_last_name: string | null; cust_mobile_no: string | null; model: string | null; product_line: string | null; ppl: string | null; pl: string | null } | null = null
+
+  // Try exact match on vehicle_registration_number
+  const { data: asdExact, error: asdExactErr } = await supabase
     .from('all_service_data')
     .select('vehicle_registration_number, registration_no, cust_first_name, cust_last_name, cust_mobile_no, model, product_line, ppl, pl')
-    .or(`vehicle_registration_number.ilike.${normalized},registration_no.ilike.${normalized}`)
+    .ilike('vehicle_registration_number', normalized)
     .limit(1)
 
-  if (serviceErr) {
-    // Try with just vehicle_registration_number if registration_no column doesn't exist
-    const { data: serviceData2, error: serviceErr2 } = await supabase
+  if (!asdExactErr && asdExact && asdExact.length > 0) {
+    asdRow = asdExact[0] as typeof asdRow
+  }
+
+  // If not found, try exact match on registration_no
+  if (!asdRow) {
+    const { data: asdRegNo, error: asdRegNoErr } = await supabase
       .from('all_service_data')
-      .select('vehicle_registration_number, cust_first_name, cust_last_name, cust_mobile_no, model, product_line, ppl, pl')
-      .ilike('vehicle_registration_number', normalized)
+      .select('vehicle_registration_number, registration_no, cust_first_name, cust_last_name, cust_mobile_no, model, product_line, ppl, pl')
+      .ilike('registration_no', normalized)
       .limit(1)
 
-    if (!serviceErr2 && serviceData2 && serviceData2.length > 0) {
-      const serviceRow = serviceData2[0] as {
-        vehicle_registration_number: string | null
-        cust_first_name: string | null
-        cust_last_name: string | null
-        cust_mobile_no: string | null
-        model: string | null
-        product_line: string | null
-        ppl: string | null
-        pl: string | null
-      }
-      const model = serviceRow.model ? String(serviceRow.model).trim() : null
-      const firstName = serviceRow.cust_first_name ? String(serviceRow.cust_first_name).trim() : null
-      const lastName = serviceRow.cust_last_name ? String(serviceRow.cust_last_name).trim() : null
-      const ownerName = [firstName, lastName].filter(Boolean).join(' ') || null
-      const ownerPhone = serviceRow.cust_mobile_no ? String(serviceRow.cust_mobile_no).trim() : null
-      const vehicleType = inferVehicleTypeFromAllServiceData(model, serviceRow.product_line, serviceRow.ppl, serviceRow.pl)
+    if (!asdRegNoErr && asdRegNo && asdRegNo.length > 0) {
+      asdRow = asdRegNo[0] as typeof asdRow
+    }
+  }
 
-      return ok({
-        found: true,
-        source: 'vehicles',
-        reg_number: normalized,
-        model,
-        owner_name: ownerName,
-        owner_phone: ownerPhone,
-        vehicle_type: vehicleType,
-        sa_employee_code: null,
-        sa_name: null,
-        is_first_visit: true,
-      })
+  // If still not found, try contains search and filter by space-normalized match
+  if (!asdRow) {
+    const { data: asdContains, error: asdContainsErr } = await supabase
+      .from('all_service_data')
+      .select('vehicle_registration_number, registration_no, cust_first_name, cust_last_name, cust_mobile_no, model, product_line, ppl, pl')
+      .or(`vehicle_registration_number.ilike.%${normalized}%,registration_no.ilike.%${normalized}%`)
+      .limit(10)
+
+    if (!asdContainsErr && asdContains) {
+      const matched = (asdContains as Array<typeof asdRow>).find(
+        (row) =>
+          (row.vehicle_registration_number ?? '').replace(/\s+/g, '').toUpperCase() === normalized ||
+          (row.registration_no ?? '').replace(/\s+/g, '').toUpperCase() === normalized,
+      )
+      if (matched) asdRow = matched
     }
-  } else if (serviceData && serviceData.length > 0) {
-    const serviceRow = serviceData[0] as {
-      vehicle_registration_number: string | null
-      registration_no: string | null
-      cust_first_name: string | null
-      cust_last_name: string | null
-      cust_mobile_no: string | null
-      model: string | null
-      product_line: string | null
-      ppl: string | null
-      pl: string | null
-    }
-    const model = serviceRow.model ? String(serviceRow.model).trim() : null
-    const firstName = serviceRow.cust_first_name ? String(serviceRow.cust_first_name).trim() : null
-    const lastName = serviceRow.cust_last_name ? String(serviceRow.cust_last_name).trim() : null
+  }
+
+  if (asdRow) {
+    const model = asdRow.model ? String(asdRow.model).trim() : null
+    const firstName = asdRow.cust_first_name ? String(asdRow.cust_first_name).trim() : null
+    const lastName = asdRow.cust_last_name ? String(asdRow.cust_last_name).trim() : null
     const ownerName = [firstName, lastName].filter(Boolean).join(' ') || null
-    const ownerPhone = serviceRow.cust_mobile_no ? String(serviceRow.cust_mobile_no).trim() : null
-    const vehicleType = inferVehicleTypeFromAllServiceData(model, serviceRow.product_line, serviceRow.ppl, serviceRow.pl)
+    const ownerPhone = asdRow.cust_mobile_no ? String(asdRow.cust_mobile_no).trim() : null
+    const vehicleType = inferVehicleTypeFromAllServiceData(model, asdRow.product_line, asdRow.ppl, asdRow.pl)
 
     return ok({
       found: true,
