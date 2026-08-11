@@ -3,7 +3,7 @@
 **Project:** Employee Help Tickets (Get Help)  
 **Plan:** [HELP-001_COMPREHENSIVE_PLAN.md](HELP-001_COMPREHENSIVE_PLAN.md)  
 **Created:** 2026-08-11  
-**Status:** 🟡 Phase 2 web surfaces landed — deploy edge + grant support perms  
+**Status:** ✅ Phase 2 deployed (edge + Vercel) — Phase 3 next; grant support perms if pending  
 
 Legend: `[ ]` pending · `[x]` done · `N/A` skipped with note
 
@@ -69,25 +69,26 @@ Legend: `[ ]` pending · `[x]` done · `N/A` skipped with note
 ## PHASE 2: WEB UI + DRIVE
 
 ### Contract / RBAC shell
-- [ ] **2.1** Add `'help_tickets'` to `ModuleName` in `src/App.tsx`
-- [ ] **2.2** Add `'/help-tickets'` to `AppRoute` + `ROUTE_MODULE_MAP`
-- [ ] **2.3** `canAccessPath` + `RequireAccess` for `/help-tickets`
-- [ ] **2.4** `NAV_ITEMS` entry for support
-- [ ] **2.5** Auth-only routes for `/help/tickets`, `/help/tickets/new`, `/help/tickets/:id`
-- [ ] **2.6** Update `docs/shared/reference/MODULE_ROUTE_CONTRACT.md`
-- [ ] **2.7** Grant support users module permissions (Admin UI or seed)
+- [x] **2.1** Add `'help_tickets'` to `ModuleName` in `src/App.tsx`
+- [x] **2.2** Add `'/help-tickets'` to `AppRoute` + `ROUTE_MODULE_MAP`
+- [x] **2.3** `canAccessPath` + `RequireAccess` for `/help-tickets`
+- [x] **2.4** `NAV_ITEMS` entry for support
+- [x] **2.5** Auth-only routes for `/help/tickets`, `/help/tickets/new`, `/help/tickets/:id`
+- [x] **2.6** Update `docs/shared/reference/MODULE_ROUTE_CONTRACT.md`
+- [ ] **2.7** Grant support users module permissions (Admin UI or seed) — ops if not done
 
 ### API / upload
-- [ ] **2.8** `src/lib/api/helpTickets.ts`
-- [ ] **2.9** `src/lib/helpTicketUpload.ts`
-- [ ] **2.10** Edge: add `help_ticket_attachment` to `resource_type` union + validation
-- [ ] **2.11** Deploy edge function
+- [x] **2.8** `src/lib/api/helpTickets.ts`
+- [x] **2.9** `src/lib/helpTicketUpload.ts`
+- [x] **2.10** Edge: add `help_ticket_attachment` to `resource_type` union + validation
+- [x] **2.11** Deploy edge function (`universal-drive-upload`)
 
 ### Pages
-- [ ] **2.12** `GetHelpFab` (linked employees only)
-- [ ] **2.13** My tickets / Raise / Detail pages
-- [ ] **2.14** `HelpTicketsAdminPage` with filters, assign, status, hold, escalate, internal notes, audit
-- [ ] **2.15** Deep link `?ticketId=`
+- [x] **2.12** `GetHelpFab` (linked employees only)
+- [x] **2.13** My tickets / Raise / Detail pages
+- [x] **2.14** `HelpTicketsAdminPage` with filters, assign, status, hold, escalate, internal notes, audit
+- [x] **2.15** Deep link `?ticketId=`
+- [x] **2.20** Vercel web deploy
 
 ### Verify
 - [ ] **2.16** Employee raise < 60s
@@ -99,9 +100,9 @@ Legend: `[ ]` pending · `[x]` done · `N/A` skipped with note
 
 ## PHASE 3: NOTIFICATIONS
 
-- [ ] **3.1** Emit outbox rows on raise / assign / message / resolve / reopen / escalate / hold
+- [ ] **3.1** Emit outbox rows on raise / assign / message / resolve / reopen / escalate / hold *(RPCs already emit — verify + wire UI)*
 - [ ] **3.2** Wire list + unread + mark-read in TopNav (or extracted bell)
-- [ ] **3.3** Deep links for raiser vs support
+- [ ] **3.3** Deep links for raiser vs support (`/help/tickets/:id` vs `/help-tickets?ticketId=`)
 - [ ] **3.4** Verify badge clears after mark-read
 - [ ] **3.5** Evidence: notification event matrix
 

@@ -2,8 +2,8 @@
 
 **Plan ID:** HELP-001  
 **Date Created:** 2026-08-11  
-**Last Updated:** 2026-08-11 (dealer-agnostic visibility locked)  
-**Status:** Planned (documentation only)  
+**Last Updated:** 2026-08-11 (Phase 1–2 deployed: DB + edge + Vercel; Phase 3 next)  
+**Status:** In progress — Phase 2 complete, Phase 3 pending  
 **Owner:** Platform + Web + Mobile  
 **Platform:** web (employee + support) • mobile (employee Help Lite) • shared Supabase  
 **Category:** help-tickets  

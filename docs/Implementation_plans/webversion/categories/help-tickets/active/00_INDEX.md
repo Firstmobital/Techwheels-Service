@@ -1,7 +1,7 @@
 # Help Tickets — Documentation Index
 
 **Plan ID:** HELP-001  
-**Status:** 📋 PLANNED (docs only; implementation not started)  
+**Status:** 🟡 IN PROGRESS — Phase 1–2 deployed (DB + edge + Vercel); Phase 3 next  
 **Created:** 2026-08-11  
 **Platform:** web (employee + support) • mobile (employee Help Lite) • shared Supabase backend  
 **Repository:** Firstmobital/Techwheels-Service  

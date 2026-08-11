@@ -25,8 +25,16 @@ export default function RaiseHelpTicketPage() {
       .then((rows) => {
         setCategories(rows)
         if (rows[0]) setCategoryKey(rows[0].key)
+        if (!rows.length) {
+          setError('No help ticket categories found. Ask an admin to run the categories seed migration.')
+        }
       })
-      .catch((err) => setError(err instanceof Error ? err.message : 'Failed to load categories'))
+      .catch((err) => {
+        const msg = err instanceof Error ? err.message : 'Failed to load categories'
+        setError(msg.includes('Employee link')
+          ? `${msg}. Link an employee profile in Admin, or use an admin account after the latest hotfix migration.`
+          : msg)
+      })
   }, [])
 
   async function onSubmit(e: React.FormEvent) {

@@ -16,7 +16,12 @@ export default function MyHelpTicketsPage() {
         const rows = await listMyHelpTickets({ limit: 50 })
         if (mounted) setTickets(rows)
       } catch (err) {
-        if (mounted) setError(err instanceof Error ? err.message : 'Failed to load tickets')
+        if (mounted) {
+          const msg = err instanceof Error ? err.message : 'Failed to load tickets'
+          setError(msg.includes('Employee link')
+            ? `${msg}. Link an employee profile in Admin, or apply the admin-identity hotfix migration.`
+            : msg)
+        }
       } finally {
         if (mounted) setLoading(false)
       }

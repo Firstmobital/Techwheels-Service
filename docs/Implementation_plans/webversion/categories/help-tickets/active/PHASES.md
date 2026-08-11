@@ -1,10 +1,10 @@
 # HELP-001 — Phase Tracking
 
 **Implementation Plan:** HELP-001  
-**Last Updated:** 2026-08-11 (Phase 1 applied; Phase 2 starting)  
+**Last Updated:** 2026-08-11 (hotfix: categories seed + admin identity for Get Help)  
 **Total Phases:** 5  
-**Current Progress:** 1/5 (20%)  
-**Status:** Phase 2 in progress  
+**Current Progress:** 2/5 (40%)  
+**Status:** Phase 2 hotfix pending apply; Phase 3 next after smoke  
 
 ---
 
@@ -13,8 +13,8 @@
 | Phase | Name | Duration | Status | Completion % |
 |-------|------|----------|--------|--------------|
 | 1 | Database schema, RLS, RPCs, module | ~1 week | ✅ Applied + full_metadata refreshed | 100% |
-| 2 | Web employee + support UI + Drive | ~1–1.5 weeks | 🟡 Web surfaces landed — grant support perms + deploy edge | 80% |
-| 3 | In-app notifications + deep links | ~3–4 days | ⏳ Blocked by Phase 2 | 0% |
+| 2 | Web employee + support UI + Drive | ~1–1.5 weeks | ✅ Deployed (edge `universal-drive-upload` + Vercel) | 100% |
+| 3 | In-app notifications + deep links | ~3–4 days | ⏳ Ready to start | 0% |
 | 4 | Mobile employee Help Lite | ~1 week | ⏳ Blocked by Phase 1 (RPC) / Phase 2 preferred | 0% |
 | 5 | SLA cron + hardening + evidence | ~3–5 days | ⏳ Blocked by Phase 3 | 0% |
 
@@ -68,14 +68,16 @@ Mobile detail: [MOBILE-HELP-001](../../../../mobileversion/categories/help-ticke
 - [x] `HelpTicketsAdminPage` + `?ticketId=` deep link
 - [x] `src/lib/api/helpTickets.ts` + `src/lib/helpTicketUpload.ts`
 - [x] `universal-drive-upload` allow-list: `help_ticket_attachment`
-- [ ] Grant support users `can_view`/`can_modify` via Admin UI
-- [ ] Deploy updated `universal-drive-upload` edge function
+- [x] Deploy updated `universal-drive-upload` edge function
+- [x] Vercel web deploy
+- [ ] Grant support users `can_view`/`can_modify` via Admin UI (ops — if not already done)
 
 ### Success Criteria
-- [ ] Raise ticket under 60s (happy path)
-- [ ] Support inbox lists all tickets; employee list shows only mine
-- [ ] Attachment ends with non-null `drive_url` and `status=uploaded`
-- [ ] Non-support non-admin denied at `/help-tickets`
+- [x] Web employee + support surfaces live (deployed)
+- [ ] Raise ticket under 60s (happy path) — verify in prod
+- [ ] Support inbox lists all tickets; employee list shows only mine — verify in prod
+- [ ] Attachment ends with non-null `drive_url` and `status=uploaded` — verify in prod
+- [ ] Non-support non-admin denied at `/help-tickets` — verify in prod
 
 ### Dependencies
 - Phase 1 RPCs deployed
