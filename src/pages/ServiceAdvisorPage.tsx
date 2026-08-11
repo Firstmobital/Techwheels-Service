@@ -66,14 +66,6 @@ const EMPTY_DRAFT: RowDraft = {
   remark: '',
 }
 
-const SOURCE_TONE_MAP: Record<string, string> = {
-  'Driver Pickup': 'b',
-  'Walk-in': 'g',
-  'Self': 'w',
-  'RSA': 'b',
-  'PSF Backfill': '',
-}
-
 const UNKNOWN_FUEL_TYPE = 'Unknown'
 const ASSIGNMENT_JOB_CARD_BATCH_SIZE = 100
 
@@ -135,10 +127,6 @@ function formatDate(value: string): string {
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return value
   return date.toLocaleString('en-IN', { dateStyle: 'short', timeStyle: 'short' })
-}
-
-function getSourceToneColor(source: string): string {
-  return SOURCE_TONE_MAP[source] || ''
 }
 
 function normalizeServiceType(value: string): string {
@@ -318,6 +306,30 @@ function isEntryToday(createdAt: string | null | undefined): boolean {
 function isEntryOlderThanToday(createdAt: string | null | undefined): boolean {
   const dateKey = new Date(String(createdAt ?? '')).toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
   return dateKey < getTodayISTDate()
+}
+
+// 90-day lookback range for old pending entries (from 90 days ago to day before dateRange.from)
+function getOldPendingLookbackRange(dateRange: DateRange): DateRange | null {
+  if (!dateRange.from) return null
+  const todayKey = getTodayISTDate()
+  // If dateRange starts at or after today, we look back 90 days from yesterday
+  // If dateRange starts before today, we look from 90 days before dateRange.from to day before dateRange.from
+  const rangeStart = dateRange.from
+  
+  // Compute 90 days before rangeStart
+  const start = new Date(rangeStart)
+  start.setDate(start.getDate() - 90)
+  const fromKey = start.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
+  
+  // End at day before rangeStart
+  const end = new Date(rangeStart)
+  end.setDate(end.getDate() - 1)
+  const toKey = end.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
+  
+  // If the lookback end is today or in the future, no old pending to fetch
+  if (toKey >= todayKey) return null
+  
+  return { from: fromKey, to: toKey }
 }
 
 // Row urgency classification for color-coded indicators
@@ -526,13 +538,25 @@ export default function ServiceAdvisorPage() {
   const [holdJobCardNumbers, setHoldJobCardNumbers] = useState<Set<string>>(new Set())
   const [inProcessJobCardNumbers, setInProcessJobCardNumbers] = useState<Set<string>>(new Set())
   const [allAssignedJobCardNumbers, setAllAssignedJobCardNumbers] = useState<Set<string>>(new Set())
+  const [oldPendingRows, setOldPendingRows] = useState<ReceptionEntryRow[]>([])
+  const [oldPendingLoading, setOldPendingLoading] = useState(false)
 
   // Complaint link modal state
   const [complaintLinkModal, setComplaintLinkModal] = useState<{ open: boolean; url: string | null; regNumber: string | null }>({ open: false, url: null, regNumber: null })
   const [generatingComplaintLink, setGeneratingComplaintLink] = useState<number | null>(null)
 
   const searchQuery = useMemo(() => search.trim().toLowerCase(), [search])
-  const visibleJobCardNumbers = useMemo(() => collectVisibleJobCardNumbers(rows), [rows])
+  // Include old pending job card numbers so their assignment statuses are fetched too
+  const allVisibleRows = useMemo(() => {
+    const seenIds = new Set(rows.map((row) => row.id))
+    const merged = [...rows]
+    oldPendingRows.forEach((row) => {
+      if (!seenIds.has(row.id)) merged.push(row)
+    })
+    return merged
+  }, [rows, oldPendingRows])
+
+  const visibleJobCardNumbers = useMemo(() => collectVisibleJobCardNumbers(allVisibleRows), [allVisibleRows])
 
   const matchesSearch = (row: ReceptionEntryRow): boolean => {
     if (!searchQuery) return true
@@ -765,7 +789,45 @@ export default function ServiceAdvisorPage() {
   ].filter((count) => count > 0).length > 1
   const showAdvisorFilter = effectiveAdvisorOptions.length > 1
 
+  // Apply branch/fuel/category/advisor/search filters to old pending rows too
+  const oldPendingFiltered = useMemo(() => {
+    let result = oldPendingRows
+    if (selectedBranch !== 'all') {
+      result = result.filter((row) => row.branch === selectedBranch)
+    }
+    if (selectedFuelType !== 'all') {
+      result = result.filter((row) => getFuelTypeLabel(row.fuel_type) === selectedFuelType)
+    }
+    if (selectedCategory !== 'all') {
+      result = result.filter((row) => getCategoryForServiceType(row.service_type) === selectedCategory)
+    }
+    if (selectedAdvisor !== 'all') {
+      result = result.filter((row) => getAdvisorFilterKey(row) === selectedAdvisor)
+    }
+    if (searchQuery) {
+      result = result.filter((row) => matchesSearch(row))
+    }
+    return result
+  }, [oldPendingRows, selectedBranch, selectedFuelType, selectedCategory, selectedAdvisor, searchQuery])
+
   const cardFilteredRows = useMemo(() => {
+    // When 'old_pending' is selected, merge displayed rows with 90-day old pending rows
+    if (selectedSummaryCard === 'old_pending') {
+      // Deduplicate by id (in case old pending rows overlap with current date range rows)
+      const seenIds = new Set(displayedRows.map((row) => row.id))
+      const merged = [
+        ...displayedRows.filter((row) => isEntryOlderThanToday(row.created_at)),
+        ...oldPendingFiltered.filter((row) => !seenIds.has(row.id)),
+      ]
+      return applySummaryCardFilter(
+        merged,
+        selectedSummaryCard,
+        completedJobCardNumbers,
+        holdJobCardNumbers,
+        inProcessJobCardNumbers,
+        allAssignedJobCardNumbers,
+      )
+    }
     return applySummaryCardFilter(
       displayedRows,
       selectedSummaryCard,
@@ -774,7 +836,7 @@ export default function ServiceAdvisorPage() {
       inProcessJobCardNumbers,
       allAssignedJobCardNumbers,
     )
-  }, [displayedRows, selectedSummaryCard, completedJobCardNumbers, holdJobCardNumbers, inProcessJobCardNumbers, allAssignedJobCardNumbers])
+  }, [displayedRows, oldPendingFiltered, selectedSummaryCard, completedJobCardNumbers, holdJobCardNumbers, inProcessJobCardNumbers, allAssignedJobCardNumbers])
 
   const hasBaseRows = useMemo(
     () => (activeSummaryCounts?.total ?? 0) > 0 || rows.length > 0,
@@ -803,7 +865,19 @@ export default function ServiceAdvisorPage() {
   const pendingEstimateCount = activeSummaryCounts?.estimate_pending ?? 0
   const todayCount = activeSummaryCounts?.today ?? 0
   const todayPendingCount = activeSummaryCounts?.today_pending ?? 0
-  const oldPendingCount = activeSummaryCounts?.old_pending ?? 0
+  const oldPendingCount = useMemo(() => {
+    // Count non-completed entries older than today from BOTH current rows and 90-day old pending rows
+    const baseCount = activeSummaryCounts?.old_pending ?? 0
+    // Add old pending rows that are outside the current date range
+    const currentRowIds = new Set(rows.map((row) => row.id))
+    const extraOldPending = oldPendingRows.filter((row) => {
+      if (currentRowIds.has(row.id)) return false
+      const jcNum = String(row.jc_number ?? '').trim().toUpperCase()
+      if (jcNum && completedJobCardNumbers.has(jcNum)) return false
+      return isEntryOlderThanToday(row.created_at)
+    }).length
+    return baseCount + extraOldPending
+  }, [activeSummaryCounts, oldPendingRows, rows, completedJobCardNumbers])
   const pendingJobCardCount = activeSummaryCounts?.job_card_pending ?? 0
   const pendingServiceTypeCount = activeSummaryCounts?.sr_type_pending ?? 0
   const pendingInvoiceCount = activeSummaryCounts?.invoice_pending ?? 0
@@ -1035,6 +1109,45 @@ export default function ServiceAdvisorPage() {
     setDrafts(mappedDrafts)
     setDirtyRowIds(new Set())
     setLoading(false)
+
+    // Fetch 90-day old pending entries
+    void loadOldPendingRows(nextIsAdmin)
+  }
+
+  // Fetch entries from the last 90 days that are outside the current date range.
+  // These are merged into the "Old Pending" view only — no other view is affected.
+  async function loadOldPendingRows(adminScope: boolean) {
+    const lookbackRange = getOldPendingLookbackRange(getLoadRange())
+    if (!lookbackRange) {
+      setOldPendingRows([])
+      return
+    }
+
+    setOldPendingLoading(true)
+    try {
+      let allRows: ReceptionEntryRow[] = []
+      let cursor: ReceptionEntryPageCursor | null = null
+      let hasMore = true
+
+      while (hasMore) {
+        const res = await fetchEntryPage(lookbackRange, cursor, adminScope)
+        if (res.error) break
+
+        const page: ReceptionEntryPageResult = res.data ?? { rows: [], nextCursor: null, hasMore: false }
+        allRows = allRows.concat(page.rows)
+        cursor = page.nextCursor
+        hasMore = page.hasMore
+      }
+
+      // Filter to only entries within the lookback range
+      const filtered = allRows.filter((row) => isWithinDateRange(row.created_at, lookbackRange))
+      setOldPendingRows(filtered)
+    } catch (err) {
+      console.error('Failed to load old pending rows:', err)
+      setOldPendingRows([])
+    } finally {
+      setOldPendingLoading(false)
+    }
   }
 
   async function loadMoreRows() {
@@ -1969,9 +2082,9 @@ export default function ServiceAdvisorPage() {
             <div className="msr__n">{summaryLoading ? '…' : todayPendingCount}</div>
             <div className="msr__l">🟡 Today Pending</div>
           </button>
-          <button type="button" onClick={() => setSelectedSummaryCard('old_pending')} disabled={oldPendingCount === 0}
+          <button type="button" onClick={() => setSelectedSummaryCard('old_pending')} disabled={oldPendingCount === 0 && !oldPendingLoading}
             className={`msr__tile msr__tile--btn msr__tile--old-pending ${selectedSummaryCard === 'old_pending' ? 'msr__tile--active' : ''}`}>
-            <div className="msr__n">{summaryLoading ? '…' : oldPendingCount}</div>
+            <div className="msr__n">{oldPendingLoading ? '…' : oldPendingCount}</div>
             <div className="msr__l">🟠 Old Pending</div>
           </button>
           {/* ── EXISTING TILES ─────────────────────────────────────────────── */}
@@ -2097,7 +2210,6 @@ export default function ServiceAdvisorPage() {
                 <thead>
                   <tr>
                     <th>Created</th>
-                    <th>Source</th>
                     <th>Reg No</th>
                     <th>KM Reading</th>
                     <th>Model</th>
@@ -2121,7 +2233,6 @@ export default function ServiceAdvisorPage() {
                     const isDirty = dirtyRowIds.has(row.id)
                     const hasJcNumber = Boolean(String(draft.jc_number ?? '').trim())
                     const isBodyshopPending = isBodyshopRow && !hasJcNumber
-                    const toneColor = getSourceToneColor(row.source)
                     const isCompleted = completedJobCardNumbers.has((row.jc_number ?? '').toUpperCase())
                     const canMarkDone = canUpdateRow(row) && isCompleted
                     const isHoldRow = holdJobCardNumbers.has((row.jc_number ?? '').toUpperCase())
@@ -2137,11 +2248,6 @@ export default function ServiceAdvisorPage() {
                           {formatDate(row.created_at)}
                           {isToday && <span className="today-dot" title="Today's entry">🟢</span>}
                           {isOld && !isCompleted && <span className="old-dot" title="Old pending entry">🟠</span>}
-                        </td>
-                        <td>
-                          <span className={`pill ${toneColor}`.trim()}>
-                            {row.source}
-                          </span>
                         </td>
                         <td className="mono strong">
                           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
