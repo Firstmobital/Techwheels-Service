@@ -30,14 +30,21 @@ function inferVehicleTypeFromModel(model: string | null | undefined): 'EV' | 'PV
 function inferVehicleTypeFromServiceData(
   model: string | null | undefined,
   productLine: string | null | undefined,
-  ppl: string | null | undefined,
-  pl: string | null | undefined,
+  powertrainType: string | null | undefined,
 ): 'EV' | 'PV' | null {
-  for (const val of [productLine, ppl, pl]) {
+  for (const val of [powertrainType, productLine]) {
     if (!val) continue
     const normalized = String(val).trim().toUpperCase()
     if (normalized.includes('EV') || normalized.includes('ELECTRIC')) return 'EV'
-    if (normalized.includes('PV') || normalized.includes('CNG') || normalized.includes('DIESEL') || normalized.includes('PETROL')) return 'PV'
+    if (
+      normalized.includes('PV') ||
+      normalized.includes('CNG') ||
+      normalized.includes('DIESEL') ||
+      normalized.includes('PETROL') ||
+      normalized.includes('ICE')
+    ) {
+      return 'PV'
+    }
   }
   return inferVehicleTypeFromModel(model)
 }
@@ -45,7 +52,7 @@ function inferVehicleTypeFromServiceData(
 export async function lookupVehicleByRegNumber(
   regNumber: string,
 ): Promise<ApiResult<VehicleLookupResult>> {
-  const normalized = regNumber.trim().toUpperCase()
+  const normalized = normalizeRegNumber(regNumber) || regNumber.replace(/\s+/g, '').toUpperCase()
   if (!normalized) return fail('Registration number is required')
 
   const notFound: VehicleLookupResult = {
@@ -117,61 +124,61 @@ export async function lookupVehicleByRegNumber(
 
   // 3) Check all_service_data (primary vehicle/customer data)
   try {
+    const asdSelect =
+      'vehicle_registration_number, first_name, last_name, contact_phones, model, product_line, powertrain_type'
+
+    type AsdRow = {
+      vehicle_registration_number: string | null
+      first_name: string | null
+      last_name: string | null
+      contact_phones: string | null
+      model: string | null
+      product_line: string | null
+      powertrain_type: string | null
+    }
+
+    const mapAsdRow = (row: AsdRow): VehicleLookupResult => {
+      const model = row.model ? String(row.model).trim() : null
+      const firstName = row.first_name ? String(row.first_name).trim() : null
+      const lastName = row.last_name ? String(row.last_name).trim() : null
+      const ownerName = [firstName, lastName].filter(Boolean).join(' ') || null
+      return {
+        found: true,
+        source: 'all_service_data',
+        reg_number: normalized,
+        model,
+        owner_name: ownerName,
+        owner_phone: row.contact_phones ? String(row.contact_phones).trim() : null,
+        vehicle_type: inferVehicleTypeFromServiceData(model, row.product_line, row.powertrain_type),
+        sa_employee_code: null,
+        sa_name: null,
+        is_first_visit: true,
+      }
+    }
+
     const { data: serviceData, error: serviceErr } = await supabase
       .from('all_service_data')
-      .select('vehicle_registration_number, registration_no, cust_first_name, cust_last_name, cust_mobile_no, model, product_line, ppl, pl')
-      .or(`vehicle_registration_number.ilike.${normalized},registration_no.ilike.${normalized}`)
+      .select(asdSelect)
+      .ilike('vehicle_registration_number', normalized)
       .limit(1)
 
     if (!serviceErr && serviceData && serviceData.length > 0) {
-      const row = serviceData[0] as {
-        vehicle_registration_number: string | null; registration_no: string | null;
-        cust_first_name: string | null; cust_last_name: string | null;
-        cust_mobile_no: string | null; model: string | null;
-        product_line: string | null; ppl: string | null; pl: string | null;
-      }
-      const model = row.model ? String(row.model).trim() : null
-      const firstName = row.cust_first_name ? String(row.cust_first_name).trim() : null
-      const lastName = row.cust_last_name ? String(row.cust_last_name).trim() : null
-      const ownerName = [firstName, lastName].filter(Boolean).join(' ') || null
-      return ok({
-        found: true, source: 'all_service_data', reg_number: normalized,
-        model,
-        owner_name: ownerName,
-        owner_phone: row.cust_mobile_no ? String(row.cust_mobile_no).trim() : null,
-        vehicle_type: inferVehicleTypeFromServiceData(model, row.product_line, row.ppl, row.pl),
-        sa_employee_code: null, sa_name: null, is_first_visit: true,
-      })
+      return ok(mapAsdRow(serviceData[0] as AsdRow))
     }
 
-    // Fallback: try just vehicle_registration_number if or() failed
-    if (serviceErr) {
-      const { data: fallbackData } = await supabase
-        .from('all_service_data')
-        .select('vehicle_registration_number, cust_first_name, cust_last_name, cust_mobile_no, model, product_line, ppl, pl')
-        .ilike('vehicle_registration_number', normalized)
-        .limit(1)
+    // Fallback: contains search + space-normalized equality
+    const { data: containsData } = await supabase
+      .from('all_service_data')
+      .select(asdSelect)
+      .ilike('vehicle_registration_number', `%${normalized}%`)
+      .limit(10)
 
-      if (fallbackData && fallbackData.length > 0) {
-        const row = fallbackData[0] as {
-          vehicle_registration_number: string | null;
-          cust_first_name: string | null; cust_last_name: string | null;
-          cust_mobile_no: string | null; model: string | null;
-          product_line: string | null; ppl: string | null; pl: string | null;
-        }
-        const model = row.model ? String(row.model).trim() : null
-        const firstName = row.cust_first_name ? String(row.cust_first_name).trim() : null
-        const lastName = row.cust_last_name ? String(row.cust_last_name).trim() : null
-        const ownerName = [firstName, lastName].filter(Boolean).join(' ') || null
-        return ok({
-          found: true, source: 'all_service_data', reg_number: normalized,
-          model,
-          owner_name: ownerName,
-          owner_phone: row.cust_mobile_no ? String(row.cust_mobile_no).trim() : null,
-          vehicle_type: inferVehicleTypeFromServiceData(model, row.product_line, row.ppl, row.pl),
-          sa_employee_code: null, sa_name: null, is_first_visit: true,
-        })
-      }
+    if (containsData && containsData.length > 0) {
+      const matched = (containsData as AsdRow[]).find(
+        (row) =>
+          (row.vehicle_registration_number ?? '').replace(/\s+/g, '').toUpperCase() === normalized,
+      )
+      if (matched) return ok(mapAsdRow(matched))
     }
   } catch (e) { /* continue to not found */ }
 

@@ -1321,17 +1321,23 @@ export function inferVehicleTypeFromModel(model: string | null | undefined): 'EV
 function inferVehicleTypeFromAllServiceData(
   model: string | null | undefined,
   productLine: string | null | undefined,
-  ppl: string | null | undefined,
-  pl: string | null | undefined,
+  powertrainType: string | null | undefined,
 ): 'EV' | 'PV' | null {
-  // Check product_line first (most reliable)
-  for (const val of [productLine, ppl, pl]) {
+  // Prefer powertrain_type, then product_line, then model name
+  for (const val of [powertrainType, productLine]) {
     if (!val) continue
     const normalized = String(val).trim().toUpperCase()
     if (normalized.includes('EV') || normalized.includes('ELECTRIC')) return 'EV'
-    if (normalized.includes('PV') || normalized.includes('CNG') || normalized.includes('DIESEL') || normalized.includes('PETROL')) return 'PV'
+    if (
+      normalized.includes('PV') ||
+      normalized.includes('CNG') ||
+      normalized.includes('DIESEL') ||
+      normalized.includes('PETROL') ||
+      normalized.includes('ICE')
+    ) {
+      return 'PV'
+    }
   }
-  // Fallback: infer from model name
   return inferVehicleTypeFromModel(model)
 }
 
@@ -1455,13 +1461,23 @@ export async function lookupVehicleByRegNumber(
   }
 
   // 3) Check all_service_data table — try exact then contains, handle space variations
-  type AsdRow = { vehicle_registration_number: string | null; registration_no: string | null; cust_first_name: string | null; cust_last_name: string | null; cust_mobile_no: string | null; model: string | null; product_line: string | null; ppl: string | null; pl: string | null }
+  type AsdRow = {
+    vehicle_registration_number: string | null
+    first_name: string | null
+    last_name: string | null
+    contact_phones: string | null
+    model: string | null
+    product_line: string | null
+    powertrain_type: string | null
+  }
+  const asdSelect =
+    'vehicle_registration_number, first_name, last_name, contact_phones, model, product_line, powertrain_type'
   let asdRow: AsdRow | null = null
 
   // Try exact match on vehicle_registration_number
   const { data: asdExact, error: asdExactErr } = await supabase
     .from('all_service_data')
-    .select('vehicle_registration_number, registration_no, cust_first_name, cust_last_name, cust_mobile_no, model, product_line, ppl, pl')
+    .select(asdSelect)
     .ilike('vehicle_registration_number', normalized)
     .limit(1)
 
@@ -1469,32 +1485,18 @@ export async function lookupVehicleByRegNumber(
     asdRow = asdExact[0] as AsdRow
   }
 
-  // If not found, try exact match on registration_no
-  if (!asdRow) {
-    const { data: asdRegNo, error: asdRegNoErr } = await supabase
-      .from('all_service_data')
-      .select('vehicle_registration_number, registration_no, cust_first_name, cust_last_name, cust_mobile_no, model, product_line, ppl, pl')
-      .ilike('registration_no', normalized)
-      .limit(1)
-
-    if (!asdRegNoErr && asdRegNo && asdRegNo.length > 0) {
-      asdRow = asdRegNo[0] as AsdRow
-    }
-  }
-
   // If still not found, try contains search and filter by space-normalized match
   if (!asdRow) {
     const { data: asdContains, error: asdContainsErr } = await supabase
       .from('all_service_data')
-      .select('vehicle_registration_number, registration_no, cust_first_name, cust_last_name, cust_mobile_no, model, product_line, ppl, pl')
-      .or(`vehicle_registration_number.ilike.%${normalized}%,registration_no.ilike.%${normalized}%`)
+      .select(asdSelect)
+      .ilike('vehicle_registration_number', `%${normalized}%`)
       .limit(10)
 
     if (!asdContainsErr && asdContains) {
       const matched = (asdContains as Array<AsdRow>).find(
         (row) =>
-          (row.vehicle_registration_number ?? '').replace(/\s+/g, '').toUpperCase() === normalized ||
-          (row.registration_no ?? '').replace(/\s+/g, '').toUpperCase() === normalized,
+          (row.vehicle_registration_number ?? '').replace(/\s+/g, '').toUpperCase() === normalized,
       )
       if (matched) asdRow = matched
     }
@@ -1502,11 +1504,15 @@ export async function lookupVehicleByRegNumber(
 
   if (asdRow) {
     const model = asdRow.model ? String(asdRow.model).trim() : null
-    const firstName = asdRow.cust_first_name ? String(asdRow.cust_first_name).trim() : null
-    const lastName = asdRow.cust_last_name ? String(asdRow.cust_last_name).trim() : null
+    const firstName = asdRow.first_name ? String(asdRow.first_name).trim() : null
+    const lastName = asdRow.last_name ? String(asdRow.last_name).trim() : null
     const ownerName = [firstName, lastName].filter(Boolean).join(' ') || null
-    const ownerPhone = asdRow.cust_mobile_no ? String(asdRow.cust_mobile_no).trim() : null
-    const vehicleType = inferVehicleTypeFromAllServiceData(model, asdRow.product_line, asdRow.ppl, asdRow.pl)
+    const ownerPhone = asdRow.contact_phones ? String(asdRow.contact_phones).trim() : null
+    const vehicleType = inferVehicleTypeFromAllServiceData(
+      model,
+      asdRow.product_line,
+      asdRow.powertrain_type,
+    )
 
     return ok({
       found: true,
