@@ -3,7 +3,7 @@
 **Project:** Employee Help Tickets (Get Help)  
 **Plan:** [HELP-001_COMPREHENSIVE_PLAN.md](HELP-001_COMPREHENSIVE_PLAN.md)  
 **Created:** 2026-08-11  
-**Status:** ✅ Phase 2 deployed (edge + Vercel) — Phase 3 next; grant support perms if pending  
+**Status:** 🟡 Phase 3 notifications wired — deploy Vercel + smoke; Phase 4 mobile next  
 
 Legend: `[ ]` pending · `[x]` done · `N/A` skipped with note
 
@@ -100,11 +100,11 @@ Legend: `[ ]` pending · `[x]` done · `N/A` skipped with note
 
 ## PHASE 3: NOTIFICATIONS
 
-- [ ] **3.1** Emit outbox rows on raise / assign / message / resolve / reopen / escalate / hold *(RPCs already emit — verify + wire UI)*
-- [ ] **3.2** Wire list + unread + mark-read in TopNav (or extracted bell)
-- [ ] **3.3** Deep links for raiser vs support (`/help/tickets/:id` vs `/help-tickets?ticketId=`)
-- [ ] **3.4** Verify badge clears after mark-read
-- [ ] **3.5** Evidence: notification event matrix
+- [x] **3.1** Emit outbox rows on raise / assign / message / resolve / reopen / escalate / hold *(Phase 1 RPCs)*
+- [x] **3.2** Wire list + unread + mark-read in TopNav (merged with complaints bell)
+- [x] **3.3** Deep links for raiser vs support (`/help/tickets/:id` vs `/help-tickets?ticketId=`)
+- [ ] **3.4** Verify badge clears after mark-read (prod smoke after Vercel)
+- [x] **3.5** Evidence: `../evidence/HELP-001_PHASE3_NOTIFICATIONS.md`
 
 ---
 

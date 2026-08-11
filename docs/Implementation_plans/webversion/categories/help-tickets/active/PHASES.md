@@ -1,10 +1,10 @@
 # HELP-001 — Phase Tracking
 
 **Implementation Plan:** HELP-001  
-**Last Updated:** 2026-08-11 (hotfix: categories seed + admin identity for Get Help)  
+**Last Updated:** 2026-08-11 (Phase 3 TopNav notifications wired — deploy web)  
 **Total Phases:** 5  
-**Current Progress:** 2/5 (40%)  
-**Status:** Phase 2 hotfix pending apply; Phase 3 next after smoke  
+**Current Progress:** 3/5 (60%)  
+**Status:** Phase 3 code complete — Vercel deploy + smoke  
 
 ---
 
@@ -14,7 +14,7 @@
 |-------|------|----------|--------|--------------|
 | 1 | Database schema, RLS, RPCs, module | ~1 week | ✅ Applied + full_metadata refreshed | 100% |
 | 2 | Web employee + support UI + Drive | ~1–1.5 weeks | ✅ Deployed (edge `universal-drive-upload` + Vercel) | 100% |
-| 3 | In-app notifications + deep links | ~3–4 days | ⏳ Ready to start | 0% |
+| 3 | In-app notifications + deep links | ~3–4 days | 🟡 Code landed — deploy + smoke | 90% |
 | 4 | Mobile employee Help Lite | ~1 week | ⏳ Blocked by Phase 1 (RPC) / Phase 2 preferred | 0% |
 | 5 | SLA cron + hardening + evidence | ~3–5 days | ⏳ Blocked by Phase 3 | 0% |
 
@@ -89,10 +89,11 @@ Mobile detail: [MOBILE-HELP-001](../../../../mobileversion/categories/help-ticke
 **Goal:** Ticket lifecycle events visible in TopNav; correct deep links.
 
 ### Deliverables
-- [ ] Emit notifications from RPCs/triggers (best-effort outbox)
-- [ ] Notification list / unread / mark-read RPCs wired in UI
-- [ ] TopNav bell integration (sibling or merge with complaints bell)
-- [ ] Deep links: raiser → `/help/tickets/:id`; support → `/help-tickets?ticketId=`
+- [x] Emit notifications from RPCs/triggers (best-effort outbox) — Phase 1 RPCs
+- [x] Notification list / unread / mark-read API wrappers (`src/lib/api/helpTickets.ts`)
+- [x] TopNav bell merge with complaints (combined unread + feed)
+- [x] Deep links: raiser → `/help/tickets/:id`; support/assignee/admin → `/help-tickets?ticketId=`
+- [ ] Vercel deploy + prod smoke
 
 ### Success Criteria
 - [ ] Raise → support recipients get in_app row

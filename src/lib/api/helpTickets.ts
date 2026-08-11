@@ -335,3 +335,61 @@ export async function listHelpTicketAssignees(search?: string) {
     role: string | null
   }>
 }
+
+// ── In-app notifications ─────────────────────────────────────────────────
+
+export interface InAppHelpTicketNotification {
+  id: number
+  ticket_id: string
+  event_type: string
+  recipient_type: string
+  channel: string
+  status: string
+  payload: Record<string, unknown> | null
+  created_at: string
+  seen_at: string | null
+  read_at: string | null
+  dismissed_at: string | null
+}
+
+export async function listMyHelpTicketNotifications(
+  limit: number = 10,
+  offset: number = 0,
+  includeDismissed: boolean = false,
+) {
+  const { data, error } = await supabase.rpc('list_my_help_ticket_notifications', {
+    p_limit: limit,
+    p_offset: offset,
+    p_include_dismissed: includeDismissed,
+  })
+  if (error) throw error
+  return (data || []) as InAppHelpTicketNotification[]
+}
+
+export async function getUnreadHelpTicketNotificationCount() {
+  const { data, error } = await supabase.rpc('get_unread_help_ticket_notification_count')
+  if (error) throw error
+  return Number(data || 0)
+}
+
+export async function markHelpTicketNotificationRead(notificationId: number) {
+  const { data, error } = await supabase.rpc('mark_help_ticket_notification_read', {
+    p_id: notificationId,
+  })
+  if (error) throw error
+  return data
+}
+
+export async function markAllHelpTicketNotificationsRead() {
+  const { data, error } = await supabase.rpc('mark_all_help_ticket_notifications_read')
+  if (error) throw error
+  return data
+}
+
+/** Deep link for a help-ticket in-app notification. */
+export function helpTicketNotificationPath(row: Pick<InAppHelpTicketNotification, 'ticket_id' | 'recipient_type'>): string {
+  const ticketId = String(row.ticket_id || '').trim()
+  if (!ticketId) return '/help/tickets'
+  if (row.recipient_type === 'raiser') return `/help/tickets/${ticketId}`
+  return `/help-tickets?ticketId=${encodeURIComponent(ticketId)}`
+}

@@ -32,6 +32,14 @@ import {
   markComplaintNotificationRead,
   type InAppComplaintNotification,
 } from './lib/api/complaints'
+import {
+  getUnreadHelpTicketNotificationCount,
+  helpTicketNotificationPath,
+  listMyHelpTicketNotifications,
+  markAllHelpTicketNotificationsRead,
+  markHelpTicketNotificationRead,
+  type InAppHelpTicketNotification,
+} from './lib/api/helpTickets'
 import EWReminderPage from './pages/EWReminderPage'
 import ServiceBookingPage from './pages/ServiceBookingPage'
 import WAAgentPage from './pages/WAAgentPage'
@@ -180,6 +188,20 @@ function isNavItemActive(pathname: string, route: AppRoute) {
   return pathname === route || pathname.startsWith(`${route}/`)
 }
 
+type UnifiedNavNotification = {
+  key: string
+  source: 'complaint' | 'help_ticket'
+  id: number
+  event_type: string
+  created_at: string
+  read_at: string | null
+  seen_at: string | null
+  payload: Record<string, unknown> | null
+  complaint_id?: number
+  ticket_id?: string
+  recipient_type?: string
+}
+
 function TopNav({
   visibleItems,
   pathname,
@@ -205,7 +227,7 @@ function TopNav({
 }) {
   const [open, setOpen] = useState<string | null>(null)
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false)
-  const [notificationRows, setNotificationRows] = useState<InAppComplaintNotification[]>([])
+  const [notificationRows, setNotificationRows] = useState<UnifiedNavNotification[]>([])
   const [notificationLoading, setNotificationLoading] = useState(false)
   const [notificationUnread, setNotificationUnread] = useState(0)
   const [windowWidth, setWindowWidth] = useState<number>(
@@ -231,8 +253,11 @@ function TopNav({
       return
     }
     try {
-      const count = await getUnreadComplaintNotificationCount()
-      setNotificationUnread(count)
+      const [complaintCount, helpCount] = await Promise.all([
+        getUnreadComplaintNotificationCount().catch(() => 0),
+        getUnreadHelpTicketNotificationCount().catch(() => 0),
+      ])
+      setNotificationUnread(Number(complaintCount || 0) + Number(helpCount || 0))
     } catch {
       // Keep header resilient even if notifications endpoint is unavailable.
       setNotificationUnread(0)
@@ -246,8 +271,40 @@ function TopNav({
     }
     setNotificationLoading(true)
     try {
-      const rows = await listMyComplaintNotifications(8, 0, false)
-      setNotificationRows(rows)
+      const [complaintRows, helpRows] = await Promise.all([
+        listMyComplaintNotifications(8, 0, false).catch(() => [] as InAppComplaintNotification[]),
+        listMyHelpTicketNotifications(8, 0, false).catch(() => [] as InAppHelpTicketNotification[]),
+      ])
+
+      const unified: UnifiedNavNotification[] = [
+        ...complaintRows.map((row) => ({
+          key: `complaint-${row.id}`,
+          source: 'complaint' as const,
+          id: Number(row.id),
+          event_type: row.event_type,
+          created_at: row.created_at,
+          read_at: row.read_at,
+          seen_at: row.seen_at,
+          payload: row.payload,
+          complaint_id: Number(row.complaint_id),
+        })),
+        ...helpRows.map((row) => ({
+          key: `help-${row.id}`,
+          source: 'help_ticket' as const,
+          id: Number(row.id),
+          event_type: row.event_type,
+          created_at: row.created_at,
+          read_at: row.read_at,
+          seen_at: row.seen_at,
+          payload: row.payload,
+          ticket_id: row.ticket_id,
+          recipient_type: row.recipient_type,
+        })),
+      ]
+        .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+        .slice(0, 12)
+
+      setNotificationRows(unified)
     } catch {
       setNotificationRows([])
     } finally {
@@ -271,7 +328,22 @@ function TopNav({
     void refreshNotificationCount()
   }, [open, user?.id])
 
-  const notificationEventLabel = (eventType: string): string => {
+  const notificationEventLabel = (source: UnifiedNavNotification['source'], eventType: string): string => {
+    if (source === 'help_ticket') {
+      const map: Record<string, string> = {
+        raised: 'Help ticket raised',
+        assigned: 'Help ticket assigned',
+        status_changed: 'Help ticket updated',
+        message_added: 'Help ticket reply',
+        resolved: 'Help ticket resolved',
+        reopened: 'Help ticket reopened',
+        closed: 'Help ticket closed',
+        escalated: 'Help ticket escalated',
+        held: 'Help ticket on hold',
+        sla_breached: 'Help ticket SLA breached',
+      }
+      return map[eventType] || `Help: ${eventType.replaceAll('_', ' ')}`
+    }
     const map: Record<string, string> = {
       raised: 'Complaint raised',
       acknowledged: 'Complaint acknowledged',
@@ -285,28 +357,43 @@ function TopNav({
     return map[eventType] || eventType.replaceAll('_', ' ')
   }
 
-  const openNotification = async (row: InAppComplaintNotification) => {
+  const openNotification = async (row: UnifiedNavNotification) => {
     try {
       if (!row.read_at) {
-        await markComplaintNotificationRead(Number(row.id))
+        if (row.source === 'help_ticket') {
+          await markHelpTicketNotificationRead(row.id)
+        } else {
+          await markComplaintNotificationRead(row.id)
+        }
       }
     } catch {
       // Navigation should still proceed even if mark-read fails.
     }
 
     setNotificationRows((prev) => prev.map((item) => (
-      item.id === row.id
+      item.key === row.key
         ? { ...item, read_at: item.read_at || new Date().toISOString(), seen_at: item.seen_at || new Date().toISOString() }
         : item
     )))
     setNotificationUnread((prev) => Math.max(0, prev - (row.read_at ? 0 : 1)))
-    onNavigate('/complaints')
+
+    if (row.source === 'help_ticket') {
+      onNavigate(helpTicketNotificationPath({
+        ticket_id: row.ticket_id || '',
+        recipient_type: row.recipient_type || 'raiser',
+      }))
+    } else {
+      onNavigate('/complaints')
+    }
     setOpen(null)
   }
 
   const markAllNotificationsRead = async () => {
     try {
-      await markAllComplaintNotificationsRead()
+      await Promise.all([
+        markAllComplaintNotificationsRead().catch(() => null),
+        markAllHelpTicketNotificationsRead().catch(() => null),
+      ])
       setNotificationRows((prev) => prev.map((item) => ({
         ...item,
         read_at: item.read_at || new Date().toISOString(),
@@ -522,20 +609,21 @@ function TopNav({
               )}
 
               {!notificationLoading && notificationRows.map((row) => {
-                const payloadTicket = String((row.payload as Record<string, unknown> | null)?.ticket_number ?? '').trim()
+                const payloadTicket = String(row.payload?.ticket_number ?? '').trim()
                 const when = new Date(row.created_at).toLocaleString()
+                const fallbackSub = row.source === 'help_ticket' ? 'Help ticket update' : 'Complaint update'
 
                 return (
                   <button
-                    key={row.id}
+                    key={row.key}
                     type="button"
                     className={[`menu__item`, `menu__notif-item`, !row.read_at ? 'is-active' : ''].join(' ').trim()}
                     onClick={() => void openNotification(row)}
                   >
                     <span className="ic"><Icon name="bell" size={15} strokeWidth={1.9} /></span>
                     <span className="menu__notif-main">
-                      <span className="menu__notif-title">{notificationEventLabel(row.event_type)}</span>
-                      <span className="menu__notif-sub">{payloadTicket || 'Complaint update'}</span>
+                      <span className="menu__notif-title">{notificationEventLabel(row.source, row.event_type)}</span>
+                      <span className="menu__notif-sub">{payloadTicket || fallbackSub}</span>
                       <span className="menu__notif-time">{when}</span>
                     </span>
                   </button>
