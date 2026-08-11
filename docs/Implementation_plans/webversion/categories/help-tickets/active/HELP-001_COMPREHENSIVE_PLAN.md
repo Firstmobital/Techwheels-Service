@@ -2,8 +2,8 @@
 
 **Plan ID:** HELP-001  
 **Date Created:** 2026-08-11  
-**Last Updated:** 2026-08-11 (Phase 4 mobile Help Lite code landed)  
-**Status:** In progress — Phase 4 OTA + cross-platform smoke; Phase 5 SLA next  
+**Last Updated:** 2026-08-11 (Phase 5 SLA cron + auto-close migration authored)  
+**Status:** In progress — apply Phase 5 SQL + checks + metadata; sign-off pending  
 **Owner:** Platform + Web + Mobile  
 **Platform:** web (employee + support) • mobile (employee Help Lite) • shared Supabase  
 **Category:** help-tickets  

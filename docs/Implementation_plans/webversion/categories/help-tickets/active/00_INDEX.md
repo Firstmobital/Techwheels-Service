@@ -1,7 +1,7 @@
 # Help Tickets — Documentation Index
 
 **Plan ID:** HELP-001  
-**Status:** 🟡 IN PROGRESS — Phase 1–4 code done; OTA/smoke Phase 4; Phase 5 SLA next  
+**Status:** 🟡 IN PROGRESS — Phase 5 SLA migration ready to apply; sign-off pending  
 **Created:** 2026-08-11  
 **Platform:** web (employee + support) • mobile (employee Help Lite) • shared Supabase backend  
 **Repository:** Firstmobital/Techwheels-Service  

@@ -184,7 +184,12 @@ export default function HelpTicketsAdminPage() {
                     {t.assigned_to_name && <span>{t.assigned_to_name}</span>}
                   </div>
                 </div>
-                <span className={`ht-pill ${t.status}`}>{t.status.replaceAll('_', ' ')}</span>
+                <div className="ht-actions" style={{ gap: '0.35rem' }}>
+                  {(t.sla_response_breached_at || t.sla_resolution_breached_at) && (
+                    <span className="ht-pill escalated">SLA</span>
+                  )}
+                  <span className={`ht-pill ${t.status}`}>{t.status.replaceAll('_', ' ')}</span>
+                </div>
               </div>
             </button>
           ))}
@@ -202,6 +207,9 @@ export default function HelpTicketsAdminPage() {
                     <span>{detail.ticket.raised_by_name}</span>
                     <span>{detail.ticket.category_key}</span>
                     {detail.ticket.raiser_dealer_code && <span>Dealer snapshot: {detail.ticket.raiser_dealer_code}</span>}
+                    {detail.ticket.sla_paused && <span>SLA paused</span>}
+                    {detail.ticket.sla_response_breached_at && <span>Response SLA breached</span>}
+                    {detail.ticket.sla_resolution_breached_at && <span>Resolution SLA breached</span>}
                   </div>
                 </div>
                 <span className={`ht-pill ${detail.ticket.status}`}>{detail.ticket.status.replaceAll('_', ' ')}</span>

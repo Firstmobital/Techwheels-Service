@@ -47,6 +47,8 @@ export interface HelpTicket {
   sla_response_at: string | null
   sla_resolution_at: string | null
   sla_paused: boolean
+  sla_response_breached_at?: string | null
+  sla_resolution_breached_at?: string | null
   first_response_at: string | null
   resolved_at: string | null
   verification_status: string

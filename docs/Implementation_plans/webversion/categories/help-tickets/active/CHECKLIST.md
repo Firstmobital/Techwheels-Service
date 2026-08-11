@@ -3,7 +3,7 @@
 **Project:** Employee Help Tickets (Get Help)  
 **Plan:** [HELP-001_COMPREHENSIVE_PLAN.md](HELP-001_COMPREHENSIVE_PLAN.md)  
 **Created:** 2026-08-11  
-**Status:** 🟡 Phase 4 mobile Help Lite code landed — OTA + cross-platform smoke; Phase 5 SLA next  
+**Status:** 🟡 Phase 5 SLA migration ready — apply SQL + checks + metadata; sign-off pending  
 
 Legend: `[ ]` pending · `[x]` done · `N/A` skipped with note
 
@@ -125,22 +125,25 @@ Follow [MOBILE-HELP-001](../../../../mobileversion/categories/help-tickets/activ
 
 ## PHASE 5: SLA + HARDENING
 
-- [ ] **5.1** SLA breach checker (pause-aware for `on_hold` / `waiting_raiser`)
-- [ ] **5.2** Auto-close resolved after 7 days → `verification_status=auto_closed`
-- [ ] **5.3** SQL/pgTAP or scripted gate tests
-- [ ] **5.4** Final metadata refresh
-- [ ] **5.5** Evidence pack complete; tracker → DN when signed off
+- [x] **5.1** SLA breach checker (pause-aware for `on_hold` / `waiting_raiser`) — `check_help_ticket_sla_breaches`
+- [x] **5.2** Auto-close resolved after 7 days → `verification_status=auto_closed`
+- [x] **5.3** SQL checks authored (`supabase/sql_checks/20260811140000_…_checks.sql`)
+- [ ] **5.3b** Run SQL checks against prod/staging after apply
+- [ ] **5.4** Final metadata refresh (`supabase/backups/full_metadata.sql`)
+- [x] **5.5** Evidence: `../evidence/HELP-001_PHASE5_SLA.md`
+- [ ] **5.6** Apply `20260811140000_help_ticket_sla_cron_and_auto_close.sql`
+- [ ] **5.7** Tracker → DN when signed off
 
 ---
 
 ## GUARDRAILS (do not skip)
 
-- [ ] **G.1** No WEB `admin_menu_modules` / `admin.help-tickets` / `useRightGate` / `role_permission_rights`
-- [ ] **G.2** No reuse of `complaint_*` tables for employee help
-- [ ] **G.3** No permanent Storage URLs as attachment truth
-- [ ] **G.4** Mobile never calls support-only RPCs
-- [ ] **G.5** Additive migrations only; seeds use `ON CONFLICT DO NOTHING`
-- [ ] **G.6** Dealer-agnostic: no `dealer_code` / `my_dealer_code()` security filters on help-ticket visibility or modify rights
+- [x] **G.1** No WEB `admin_menu_modules` / `admin.help-tickets` / `useRightGate` / `role_permission_rights`
+- [x] **G.2** No reuse of `complaint_*` tables for employee help
+- [x] **G.3** No permanent Storage URLs as attachment truth
+- [x] **G.4** Mobile never calls support-only RPCs
+- [x] **G.5** Additive migrations only; seeds use `ON CONFLICT DO NOTHING`
+- [x] **G.6** Dealer-agnostic: no `dealer_code` / `my_dealer_code()` security filters on help-ticket visibility or modify rights (SQL check asserts)
 
 ---
 

@@ -1,10 +1,10 @@
 # HELP-001 — Phase Tracking
 
 **Implementation Plan:** HELP-001  
-**Last Updated:** 2026-08-11 (Phase 4 mobile Help Lite code landed)  
+**Last Updated:** 2026-08-11 (Phase 5 SLA cron migration authored)  
 **Total Phases:** 5  
-**Current Progress:** 4/5 (80%)  
-**Status:** Phase 4 code complete — OTA/smoke; Phase 5 SLA next  
+**Current Progress:** 5/5 (95%)  
+**Status:** Phase 5 migration ready — apply SQL + checks + metadata refresh  
 
 ---
 
@@ -16,9 +16,9 @@
 | 2 | Web employee + support UI + Drive | ~1–1.5 weeks | ✅ Deployed (edge `universal-drive-upload` + Vercel) | 100% |
 | 3 | In-app notifications + deep links | ~3–4 days | 🟡 Code landed — deploy + smoke | 90% |
 | 4 | Mobile Employee Help Lite | ~1 week | 🟡 Code landed — OTA + cross-platform smoke | 90% |
-| 5 | SLA cron + hardening + evidence | ~3–5 days | ⏳ After Phase 4 smoke | 0% |
+| 5 | SLA cron + hardening + evidence | ~3–5 days | 🟡 Migration authored — apply + checks | 85% |
 
-**Overall Progress: ~80% — Phase 4 mobile Help Lite code landed**
+**Overall Progress: ~95% — Phase 5 apply + sign-off remaining**
 
 Authority: [HELP-001_COMPREHENSIVE_PLAN.md](HELP-001_COMPREHENSIVE_PLAN.md)  
 Execution checklist: [CHECKLIST.md](CHECKLIST.md)  
@@ -135,11 +135,14 @@ See MOBILE-HELP-001 for screen-level detail.
 **Goal:** Support-facing SLA breach detection and production hardening.
 
 ### Deliverables
-- [ ] `check_help_ticket_sla_breaches` (or pg_cron / scheduled edge) — pause-aware
-- [ ] Breach → notification + optional status/escalation flag
-- [ ] Auto-close resolved tickets after 7 days without verification
-- [ ] pgTAP / SQL checks for gates + visibility
-- [ ] Evidence pack + tracker status → DN when signed off
+- [x] `check_help_ticket_sla_breaches` + `run_help_ticket_sla_jobs` (pg_cron */15) — pause-aware
+- [x] Breach → audit + `sla_breached` notification + `tags` / breach timestamps
+- [x] Auto-close resolved tickets after 7 days → `verification_status=auto_closed`
+- [x] SQL checks: `supabase/sql_checks/20260811140000_help_ticket_sla_cron_and_auto_close_checks.sql`
+- [x] Evidence: `../evidence/HELP-001_PHASE5_SLA.md`
+- [ ] Apply migration in Supabase + run checks
+- [ ] Refresh `supabase/backups/full_metadata.sql`
+- [ ] Tracker → DN when signed off
 
 ### Success Criteria
 - [ ] Held / waiting_raiser tickets do not false-breach
