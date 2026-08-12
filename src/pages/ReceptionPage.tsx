@@ -128,6 +128,20 @@ const HEADER_ALIASES: Record<keyof FormState, string[]> = {
 }
 
 const IMPORT_SERVICE_TYPE_ALIASES = ['service_type', 'service type']
+
+const RECEPTION_SERVICE_TYPE_OPTIONS = [
+  'Running Repairs',
+  'First Free Service',
+  'Second Free Service',
+  'Third Free Service',
+  'Paid Service',
+  'Accident',
+  'Rusting',
+  'PDI',
+  'Campaign',
+  'E Breakdown',
+  'Updation',
+]
 const IMPORT_JC_NUMBER_ALIASES = ['jc_number', 'job card number', 'job card numbe', 'job card no']
 
 function parseImportFile(file: File): Promise<{ rows: ReceptionEntryInput[]; skipped: number }> {
@@ -1045,6 +1059,11 @@ export default function ReceptionPage() {
     }, 500)
   }
 
+  function handleServiceTypeChange(value: string) {
+    setForm((prev) => ({ ...prev, service_type: value }))
+    scheduleRevisitCheck(form.reg_number, value, editingId)
+  }
+
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
     setNotice(null)
@@ -1536,6 +1555,26 @@ export default function ReceptionPage() {
                 </select>
               </label>
             </div>
+
+            <label className="field">
+              <span className="label">Service Type</span>
+              <select
+                value={form.service_type}
+                onChange={(event) => handleServiceTypeChange(event.target.value)}
+                className="sel"
+                style={{ borderColor: form.service_type === 'Accident' ? '#ef4444' : undefined }}
+              >
+                <option value="">- Select Service Type -</option>
+                {RECEPTION_SERVICE_TYPE_OPTIONS.map((opt) => (
+                  <option key={opt} value={opt}>{opt}</option>
+                ))}
+              </select>
+              {form.service_type === 'Accident' && (
+                <span style={{ fontSize: 12, color: '#ef4444', marginTop: 4, display: 'block', fontWeight: 600 }}>
+                  ⚠️ Accident — will appear in Bodyshop Repair Tracker
+                </span>
+              )}
+            </label>
 
             <div className="form-grid-2">
               <label className="field">
