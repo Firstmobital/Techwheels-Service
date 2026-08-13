@@ -1,6 +1,5 @@
 import { supabase } from './supabase'
 import { AUTODOC_BUCKET } from './autodocStorage'
-import { getDealerScopeContext } from './api/auth'
 import {
   createHelpTicketAttachmentRow,
   markHelpTicketAttachmentFailed,
@@ -10,6 +9,22 @@ const MAX_BYTES = 25 * 1024 * 1024
 
 function safeFilename(name: string): string {
   return name.replace(/[^a-zA-Z0-9._-]+/g, '_').slice(0, 120) || 'file'
+}
+
+/**
+ * autodoc storage RLS: split_part(name, '/', 1) = public.my_dealer_code()
+ * Must match case exactly — never lowercase / never invent "shared".
+ */
+async function resolveStorageDealerPrefix(): Promise<string> {
+  const { data, error } = await supabase.rpc('my_dealer_code')
+  if (error) throw new Error(error.message)
+  const dealerCode = String(data ?? '').trim()
+  if (!dealerCode) {
+    throw new Error(
+      'Dealer code required for attachment upload. Ensure your account has a dealer code, then retry.',
+    )
+  }
+  return dealerCode
 }
 
 export async function uploadHelpTicketAttachment(input: {
@@ -22,8 +37,7 @@ export async function uploadHelpTicketAttachment(input: {
   if (!file || file.size <= 0) throw new Error('File is required')
   if (file.size > MAX_BYTES) throw new Error('File exceeds 25 MB limit')
 
-  const dealerScope = await getDealerScopeContext()
-  const dealerCode = (dealerScope.data?.dealerCode || 'shared').toLowerCase()
+  const dealerCode = await resolveStorageDealerPrefix()
 
   const created = await createHelpTicketAttachmentRow({
     ticketId,

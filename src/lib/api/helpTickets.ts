@@ -83,6 +83,7 @@ export interface HelpTicketAttachment {
   drive_url: string | null
   drive_file_id: string | null
   status: string
+  error_message?: string | null
   uploaded_by_name: string
   uploaded_at: string
 }

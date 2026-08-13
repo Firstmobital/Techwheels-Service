@@ -114,13 +114,15 @@ export async function uploadHelpTicketAttachmentFromUri(input: {
     throw new Error('Only images, PDF, or Office files are allowed')
   }
 
-  const sessionRes = await supabase.auth.getSession()
-  const user = sessionRes.data.session?.user
-  const dealerCode = String(
-    user?.user_metadata?.dealer_code
-    ?? user?.app_metadata?.dealer_code
-    ?? 'shared',
-  ).trim().toLowerCase() || 'shared'
+  // autodoc RLS: first path segment must equal public.my_dealer_code() exactly (case-sensitive).
+  const { data: dealerCodeRaw, error: dealerErr } = await supabase.rpc('my_dealer_code')
+  if (dealerErr) throw new Error(dealerErr.message)
+  const dealerCode = String(dealerCodeRaw ?? '').trim()
+  if (!dealerCode) {
+    throw new Error(
+      'Dealer code required for attachment upload. Ensure your account has a dealer code, then retry.',
+    )
+  }
 
   const created = await createHelpTicketAttachmentRow({
     ticketId,
@@ -133,6 +135,8 @@ export async function uploadHelpTicketAttachmentFromUri(input: {
 
   const storagePath =
     `${dealerCode}/help-ticket-attachments/${ticketId}/${attachmentId}/${Date.now()}_${safeFilename(filename)}`
+
+  const sessionRes = await supabase.auth.getSession()
 
   try {
     const uploadUri = await resolveUploadUri(file.uri, filename)

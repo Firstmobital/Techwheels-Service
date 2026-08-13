@@ -216,6 +216,23 @@ export default function HelpTicketsAdminPage() {
               </div>
               <p style={{ whiteSpace: 'pre-wrap', marginTop: '0.75rem' }}>{detail.ticket.description}</p>
 
+              {detail.attachments?.length > 0 && (
+                <div className="ht-attach-list" style={{ marginTop: '0.75rem' }}>
+                  {detail.attachments.map((a) => (
+                    <div key={a.id}>
+                      {a.drive_url ? (
+                        <a href={a.drive_url} target="_blank" rel="noreferrer">{a.original_filename}</a>
+                      ) : (
+                        <span>
+                          {a.original_filename} ({a.status})
+                          {a.error_message ? ` — ${a.error_message}` : ''}
+                        </span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+
               {detail.viewer.can_modify && (
                 <>
                   <div className="ht-actions">

@@ -125,7 +125,10 @@ export default function HelpTicketDetailPage() {
                 {a.drive_url ? (
                   <a href={a.drive_url} target="_blank" rel="noreferrer">{a.original_filename}</a>
                 ) : (
-                  <span>{a.original_filename} ({a.status})</span>
+                  <span>
+                    {a.original_filename} ({a.status})
+                    {a.error_message ? ` — ${a.error_message}` : ''}
+                  </span>
                 )}
               </div>
             ))}
