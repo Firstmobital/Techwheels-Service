@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Icon } from '../components/Icon'
 import RevisitBadge from '../components/RevisitBadge'
 import UpdationAvailableBadge from '../components/UpdationAvailableBadge'
+import { fetchRecentReceptionEntries, fetchReceptionDashboardStatusRows } from '../lib/api/reception'
 import { supabase } from '../lib/supabase'
 
 type VisibleModule = {
@@ -38,7 +39,6 @@ type ModuleMetaRow = {
 
 const UNKNOWN_FUEL_TYPE = 'Unknown'
 const QUERY_PAGE_SIZE = 1000
-const DASHBOARD_RECEPTION_PAGE_SIZE = 500
 const DASHBOARD_LOOKBACK_DAYS = 30
 const FLOOR_INCHARGE_ALLOWED_SERVICE_TYPES = [
   'Running Repairs',
@@ -124,50 +124,9 @@ async function fetchDashboardStatusRows(options: {
   serviceTypes?: string[]
   requireNonEmptyJcNumber?: boolean
 }): Promise<{ data: DashboardStatusRow[] | null; error: unknown | null }> {
-  const rows: DashboardStatusRow[] = []
-  let cursorCreatedAt: string | null = null
-  let cursorId: number | null = null
-
-  while (true) {
-    let query = supabase
-      .from('service_reception_entries')
-      .select('id, created_at, service_type, jc_number, estimate_storage_path, invoice_done_at, branch, portal')
-      .gte('created_at', options.createdAtFrom)
-      .lte('created_at', options.createdAtTo)
-      .order('created_at', { ascending: false })
-      .order('id', { ascending: false })
-      .limit(DASHBOARD_RECEPTION_PAGE_SIZE)
-
-    if (options.serviceTypes && options.serviceTypes.length > 0) {
-      query = query.in('service_type', options.serviceTypes)
-    }
-
-    if (options.requireNonEmptyJcNumber) {
-      query = query.not('jc_number', 'is', null).neq('jc_number', '')
-    }
-
-    if (cursorCreatedAt && cursorId !== null) {
-      query = query.or(`created_at.lt.${cursorCreatedAt},and(created_at.eq.${cursorCreatedAt},id.lt.${cursorId})`)
-    }
-
-    const { data, error } = await query
-    if (error) return { data: null, error }
-
-    const batch = (data ?? []) as DashboardStatusRow[]
-    rows.push(...batch)
-
-    if (batch.length < DASHBOARD_RECEPTION_PAGE_SIZE) break
-
-    const last = batch[batch.length - 1]
-    const nextCreatedAt = typeof last?.created_at === 'string' ? last.created_at : null
-    const nextId = Number(last?.id)
-    if (!nextCreatedAt || !Number.isFinite(nextId) || nextId <= 0) break
-
-    cursorCreatedAt = nextCreatedAt
-    cursorId = nextId
-  }
-
-  return { data: rows, error: null }
+  const result = await fetchReceptionDashboardStatusRows(options)
+  if (result.error) return { data: null, error: result.error }
+  return { data: result.data ?? [], error: null }
 }
 
 async function fetchCount(tableName: string) {
@@ -209,22 +168,16 @@ export default function DashboardPage({
       setStatusLoading(true)
 
       const [
-        receptionCount,
         employeesCount,
         usersCount,
         modulesResult,
         receptionResult,
         authResult,
       ] = await Promise.all([
-        fetchCount('service_reception_entries'),
         fetchCount('employee_master'),
         fetchCount('users'),
         supabase.from('modules').select('name, label, description, route, is_active'),
-        supabase
-          .from('service_reception_entries')
-          .select('id, created_at, source, reg_number, model, sa_name, service_type, is_revisit, has_updation_available')
-          .order('created_at', { ascending: false })
-          .limit(8),
+        fetchRecentReceptionEntries(8),
         supabase.auth.getSession(),
       ])
 
@@ -327,15 +280,15 @@ export default function DashboardPage({
       if (!mounted) return
 
       setKpis([
-        { icon: 'reception', label: 'Reception Entries', value: toDisplayCount(receptionCount) },
+        { icon: 'reception', label: 'Reception Entries', value: toDisplayCount(nextStatusRows.length) },
         { icon: 'user', label: 'Employees', value: toDisplayCount(employeesCount) },
         { icon: 'admin', label: 'Platform Users', value: toDisplayCount(usersCount) },
         { icon: 'grid', label: 'Active Modules', value: toDisplayCount(activeModulesCount) },
       ])
 
-      const receptionData = (receptionResult.data ?? []) as ReceptionRow[]
-      setReceptionTotal(receptionCount)
-      setReceptionRows(receptionData)
+      const receptionData = receptionResult.error ? [] : (receptionResult.data ?? [])
+      setReceptionTotal(null)
+      setReceptionRows(receptionData as ReceptionRow[])
 
       const fullName = String(authResult.data.session?.user?.user_metadata?.full_name ?? '').trim()
       if (userId) {
@@ -754,7 +707,7 @@ export default function DashboardPage({
           <div className="card__head">
             <div>
               <h3>Recent reception entries</h3>
-              <div className="sub">Latest front-desk intake · {toDisplayCount(receptionTotal)} total</div>
+              <div className="sub">Latest front-desk intake{receptionTotal != null ? ` · ${toDisplayCount(receptionTotal)} total` : ''}</div>
             </div>
             <button type="button" className="btn btn--soft btn--sm" onClick={() => onNavigate('/reception')}>
               Open Reception <Icon name="arrowr" size={15} />

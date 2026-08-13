@@ -471,11 +471,9 @@ export default function BodyshopFloorScreen() {
       const entryIds = rawCards.map(c => c.reception_entry_id).filter((v): v is number => v != null)
       let modelMap: Record<number, string | null> = {}
       if (entryIds.length > 0) {
-        const { data: entryData } = await supabase
-          .from('service_reception_entries')
-          .select('id, model')
-          .in('id', entryIds)
-          .limit(500)
+        const { data: entryData } = await supabase.rpc('get_reception_entries_by_ids', {
+          p_ids: entryIds,
+        })
         ;(entryData ?? []).forEach((r: { id: number; model: string | null }) => {
           modelMap[r.id] = r.model
         })

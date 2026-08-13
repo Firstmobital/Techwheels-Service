@@ -33,41 +33,37 @@ export async function fetchReceptionPrefillByReg(
   const candidates = Array.from(new Set([normalized, regNumber.trim().toUpperCase()]))
 
   for (const regKey of candidates) {
-    const { data, error } = await supabase
-      .from('service_reception_entries')
-      .select(
-        'owner_name, owner_phone, model, km_reading, jc_number, sa_name, service_type, branch',
-      )
-      .eq('reg_number', regKey)
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle()
+    const { data, error } = await supabase.rpc('get_reception_entry_latest_by_reg', {
+      p_reg_number: regKey,
+    })
 
     if (error) {
-      // Suppress 406/not found - treat as not found
-      if (
-        typeof error === 'object' &&
-        (String((error as { code?: string }).code ?? '') === 'PGRST116' ||
-          (error as { message?: string }).message?.includes('0 rows'))
-      ) {
-        continue
-      }
       return fail(error)
     }
 
-    if (data) {
+    const row = (Array.isArray(data) ? data[0] : data) as
+      | {
+          owner_name?: string | null
+          owner_phone?: string | null
+          model?: string | null
+          km_reading?: number | null
+          jc_number?: string | null
+          sa_name?: string | null
+          service_type?: string | null
+          branch?: string | null
+        }
+      | undefined
+
+    if (row) {
       return ok({
-        ownerName: (data as { owner_name?: string | null }).owner_name ?? null,
-        ownerPhone: (data as { owner_phone?: string | null }).owner_phone ?? null,
-        model: (data as { model?: string | null }).model ?? null,
-        kmReading:
-          (data as { km_reading?: number | null }).km_reading != null
-            ? Number((data as { km_reading?: number | null }).km_reading)
-            : null,
-        jcNumber: (data as { jc_number?: string | null }).jc_number ?? null,
-        saName: (data as { sa_name?: string | null }).sa_name ?? null,
-        serviceType: (data as { service_type?: string | null }).service_type ?? null,
-        branch: (data as { branch?: string | null }).branch ?? null,
+        ownerName: row.owner_name ?? null,
+        ownerPhone: row.owner_phone ?? null,
+        model: row.model ?? null,
+        kmReading: row.km_reading != null ? Number(row.km_reading) : null,
+        jcNumber: row.jc_number ?? null,
+        saName: row.sa_name ?? null,
+        serviceType: row.service_type ?? null,
+        branch: row.branch ?? null,
       })
     }
   }

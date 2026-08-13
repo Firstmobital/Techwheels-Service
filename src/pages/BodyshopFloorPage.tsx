@@ -4,7 +4,7 @@ import { supabase } from '../lib/supabase'
 import Icon from '../components/Icon'
 import { AUTODOC_BUCKET } from '../lib/autodocStorage'
 import { isBodyshopDepartment } from '../lib/department'
-import { getDealerContext } from '../lib/api'
+import { getDealerContext, listAccidentReceptionEntriesByDateRange } from '../lib/api'
 import { parseBodyshopFloorRoles } from '../lib/businessRoles'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -26,37 +26,28 @@ interface AccidentCar {
 }
 
 async function fetchAccidentCarsByDateRange(range: DateRange): Promise<{ data: AccidentCar[] | null; error: unknown | null }> {
-  const PAGE_SIZE = 500
-  const rows: AccidentCar[] = []
-  let cursorId: number | null = null
+  const result = await listAccidentReceptionEntriesByDateRange({
+    from: range.from ?? '',
+    to: range.to ?? '',
+  })
 
-  while (true) {
-    let query = supabase
-      .from('service_reception_entries')
-      .select('id, jc_number, sa_employee_code, dealer_code, reg_number, model, owner_name, owner_phone, sa_name, sa_display_name, branch, created_at')
-      .eq('service_type', 'Accident')
-      .order('id', { ascending: false })
-      .limit(PAGE_SIZE)
+  if (result.error) return { data: null, error: result.error }
 
-    if (range.from) query = query.gte('created_at', range.from + 'T00:00:00+05:30')
-    if (range.to)   query = query.lte('created_at', range.to + 'T23:59:59+05:30')
-
-    if (cursorId !== null) {
-      query = query.lt('id', cursorId)
-    }
-
-    const { data, error } = await query
-    if (error) return { data: null, error }
-
-    const batch = (data ?? []) as AccidentCar[]
-    rows.push(...batch)
-
-    if (batch.length < PAGE_SIZE) break
-
-    const lastId = Number(batch[batch.length - 1]?.id)
-    if (!Number.isFinite(lastId) || lastId <= 0) break
-    cursorId = lastId
-  }
+  const rows = (result.data ?? []).map((row) => ({
+    id: row.id,
+    jc_number: row.jc_number,
+    sa_employee_code: row.sa_employee_code,
+    dealer_code: row.dealer_code,
+    reg_number: row.reg_number,
+    model: row.model,
+    owner_name: row.owner_name,
+    owner_phone: row.owner_phone,
+    sa_name: row.sa_name,
+    sa_display_name: row.sa_display_name,
+    branch: row.branch,
+    created_at: row.created_at,
+    bodyshop_floor: null,
+  })) as AccidentCar[]
 
   return { data: rows, error: null }
 }

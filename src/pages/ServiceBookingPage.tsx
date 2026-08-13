@@ -4,6 +4,7 @@ import { Icon } from '../components/Icon'
 import DateRangeFilter from '../components/DateRangeFilter'
 import { exportToCSV, generateExportFilename } from '../lib/exportUtils'
 import { hasBusinessRole } from '../lib/businessRoles'
+import { listReceptionRegCreatedSince } from '../lib/api'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 const BOOKING_SOURCES = ['Telecalling', 'WhatsApp', 'Walk-in', 'Self', 'Driver Pickup', 'Referral'] as const
@@ -170,11 +171,8 @@ export default function ServiceBookingPage() {
   async function loadReceptionEntries() {
     const from = new Date()
     from.setDate(from.getDate() - 90)
-    const { data } = await supabase
-      .from('service_reception_entries')
-      .select('reg_number, created_at')
-      .gte('created_at', from.toISOString())
-    if (data) setReceptionEntries(data as { reg_number: string; created_at: string }[])
+    const result = await listReceptionRegCreatedSince(from.toISOString())
+    if (result.data) setReceptionEntries(result.data)
   }
 
   async function loadBookings() {

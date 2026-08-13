@@ -1,5 +1,17 @@
 # DB Changes Ledger
 
+## 2026-08-13
+
+### P1-13 — optimize `list_reception_entries_page` + remaining caller RPCs
+
+| Order | Migration | RPCs / changes |
+|------|-----------|----------------|
+| 1 | `20260813120000_optimize_list_reception_entries_page.sql` | Rewrite `list_reception_entries_page` with dealer/SA fast paths (scope_mode); cap page_size at 100; add `list_reception_jc_numbers_by_sa`, `list_reception_reg_created_since`, `get_reception_entries_by_ids` |
+
+- Checks: `supabase/sql_checks/20260813120000_optimize_list_reception_entries_page_checks.sql`
+- Frontend: migrate remaining direct `service_reception_entries` callers (Dashboard, Technician, Bodyshop, ServiceBooking, mobile prefill/floor)
+- Status: **Pending apply + deploy**
+
 ## 2026-08-07
 
 ### P1-13 — service_reception_entries RLS bypass (complete family)

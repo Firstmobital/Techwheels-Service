@@ -275,27 +275,38 @@ const ENTRY_SELECT = [
   'has_updation_available', 'updation_code', 'updation_name',
 ].join(', ')
 
+const FLOOR_INCHARGE_LOOKBACK_DAYS = 60
+
+function getFloorLookbackRange(): { from: string; to: string } {
+  const now = new Date()
+  const from = new Date(now)
+  from.setDate(from.getDate() - FLOOR_INCHARGE_LOOKBACK_DAYS)
+  return {
+    from: from.toISOString(),
+    to: new Date(now.getTime() + 24 * 60 * 60 * 1000).toISOString(),
+  }
+}
+
 async function fetchFloorInchargeEntries(): Promise<JobCard[]> {
   const rows: JobCard[] = []
-  let cursor: string | null = null
+  let cursorCreatedAt: string | null = null
   let cursorId: number | null = null
+  const lookback = getFloorLookbackRange()
 
   while (true) {
-    let q = supabase
-      .from('service_reception_entries')
-      .select(ENTRY_SELECT)
-      .in('service_type', FLOOR_INCHARGE_ALLOWED_SERVICE_TYPES)
-      .not('jc_number', 'is', null)
-      .order('created_at', { ascending: false })
-      .order('id', { ascending: false })
-      .limit(QUERY_PAGE_SIZE)
+    const { data, error } = await supabase.rpc('list_reception_entries_page', {
+      p_created_at_from: lookback.from,
+      p_created_at_to: lookback.to,
+      p_page_size: 100,
+      p_cursor_created_at: cursorCreatedAt,
+      p_cursor_id: cursorId,
+      p_service_types: FLOOR_INCHARGE_ALLOWED_SERVICE_TYPES,
+      p_search_query: null,
+      p_require_non_empty_jc: true,
+    })
 
-    if (cursor && cursorId !== null) {
-      q = q.or(`created_at.lt.${cursor},and(created_at.eq.${cursor},id.lt.${cursorId})`)
-    }
-    const { data, error } = await q
     if (error) { console.warn('fetchFloorInchargeEntries:', error.message); break }
-    const batch = (data ?? []) as Array<{
+    const batch = (Array.isArray(data) ? data : data ? [data] : []) as Array<{
       id: number; created_at: string | null; source: string | null;
       reg_number: string | null; km_reading: number | null; model: string | null;
       service_type: string | null; sa_name: string | null; jc_number: string | null;
@@ -305,6 +316,9 @@ async function fetchFloorInchargeEntries(): Promise<JobCard[]> {
       is_revisit?: boolean | null;
       suggested_technician_code?: string | null;
       suggested_technician_name?: string | null;
+      has_updation_available?: boolean | null;
+      updation_code?: string | null;
+      updation_name?: string | null;
     }>
     batch.forEach(row => {
       const jcRaw = String(row.jc_number ?? '').trim()
@@ -324,10 +338,11 @@ async function fetchFloorInchargeEntries(): Promise<JobCard[]> {
         suggested_technician_name: row.suggested_technician_name ?? null,
       })
     })
-    if (batch.length < QUERY_PAGE_SIZE) break
+    if (batch.length < 100) break
     const last = batch[batch.length - 1]
-    cursor = last.created_at; cursorId = last.id
-    if (!cursor || cursorId === null) break
+    cursorCreatedAt = last.created_at ?? null
+    cursorId = last.id ?? null
+    if (!cursorCreatedAt || cursorId === null) break
   }
   return rows
 }

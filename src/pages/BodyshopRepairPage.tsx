@@ -2,6 +2,11 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { supabase } from '../lib/supabase'
 import { getDealerContext, getDealerScopeContext } from '../lib/api'
+import {
+  getReceptionEntryById,
+  getReceptionEntriesByIds,
+  listAccidentReceptionEntriesByDateRange,
+} from '../lib/api/reception'
 import { AUTODOC_BUCKET } from '../lib/autodocStorage'
 import { isBodyshopDepartment } from '../lib/department'
 import {
@@ -1221,24 +1226,22 @@ export default function BodyshopRepairPage() {
 
     ;(async () => {
       setLoadingSelectedReception(true)
-      const { data, error } = await supabase
-        .from('service_reception_entries')
-        .select('id, jc_number, reg_number, model, km_reading, owner_name, owner_phone, branch, created_at')
-        .eq('id', receptionEntryId)
-        .maybeSingle()
+      const result = await getReceptionEntryById(receptionEntryId)
 
       if (cancelled) return
 
-      if (error || !data) {
+      if (result.error || !result.data) {
         console.warn('[BodyshopSA:KM] reception-load failed', {
           receptionEntryId,
-          errorMessage: error?.message ?? null,
-          hasData: Boolean(data),
+          errorMessage: result.error ?? null,
+          hasData: Boolean(result.data),
         })
         setSelectedReception(null)
         setLoadingSelectedReception(false)
         return
       }
+
+      const data = result.data
 
       console.debug('[BodyshopSA:KM] reception-load success', {
         receptionEntryId,
@@ -1571,64 +1574,47 @@ export default function BodyshopRepairPage() {
     toDate: string
     saCodes?: string[] | null
     saNames?: string[] | null
-    branches?: string[]
+    branches?: string[] | null
     applySaScope: boolean
   }): Promise<{ data: AccidentReceptionRow[] | null; error: unknown | null }> {
-    const PAGE_SIZE = 500
-    const rows: AccidentReceptionRow[] = []
-    let cursorId: number | null = null
+    const result = await listAccidentReceptionEntriesByDateRange({
+      from: options.fromDate,
+      to: options.toDate,
+    })
 
-    while (true) {
-      let query = supabase
-        .from('service_reception_entries')
-        .select('id, jc_number, reg_number, owner_name, owner_phone, sa_employee_code, sa_name, sa_display_name, branch, created_at')
-        .eq('service_type', 'Accident')
-        .order('id', { ascending: false })
-        .limit(PAGE_SIZE)
+    if (result.error) return { data: null, error: result.error }
 
-      if (options.fromDate) query = query.gte('created_at', options.fromDate + 'T00:00:00+05:30')
-      if (options.toDate)   query = query.lte('created_at', options.toDate + 'T23:59:59+05:30')
+    let rows = (result.data ?? []).map((row) => ({
+      id: row.id,
+      jc_number: row.jc_number,
+      reg_number: row.reg_number,
+      owner_name: row.owner_name,
+      owner_phone: row.owner_phone,
+      sa_employee_code: row.sa_employee_code,
+      sa_name: row.sa_name,
+      sa_display_name: row.sa_display_name,
+      branch: row.branch,
+      created_at: row.created_at,
+    })) as AccidentReceptionRow[]
 
-      if (options.applySaScope) {
-        const scopedSaCodes = options.saCodes ?? []
-        const scopedSaNames = options.saNames ?? []
+    if (options.applySaScope) {
+      const scopedSaCodes = new Set((options.saCodes ?? []).map((v) => String(v ?? '').trim().toUpperCase()).filter(Boolean))
+      const scopedSaNames = new Set((options.saNames ?? []).map((v) => String(v ?? '').trim().toLowerCase()).filter(Boolean))
 
-        if (scopedSaCodes.length > 0 && scopedSaNames.length > 0) {
-          const codeCsv = scopedSaCodes.map((v) => `"${v.replace(/"/g, '')}"`).join(',')
-          const nameCsv = scopedSaNames.map((v) => `"${v.replace(/"/g, '')}"`).join(',')
-          query = query.or(`sa_employee_code.in.(${codeCsv}),sa_name.in.(${nameCsv}),sa_display_name.in.(${nameCsv})`)
-        } else if (scopedSaCodes.length > 0) {
-          query = query.in('sa_employee_code', scopedSaCodes)
-        } else if (scopedSaNames.length > 0) {
-          query = query.in('sa_name', scopedSaNames)
-        }
+      if (scopedSaCodes.size > 0 || scopedSaNames.size > 0) {
+        rows = rows.filter((row) => {
+          const code = String(row.sa_employee_code ?? '').trim().toUpperCase()
+          const name = String(row.sa_name ?? '').trim().toLowerCase()
+          const displayName = String(row.sa_display_name ?? '').trim().toLowerCase()
+          return (scopedSaCodes.size > 0 && scopedSaCodes.has(code))
+            || (scopedSaNames.size > 0 && (scopedSaNames.has(name) || scopedSaNames.has(displayName)))
+        })
       }
+    }
 
-      if ((options.branches ?? []).length > 0) {
-        query = query.in('branch', options.branches ?? [])
-      }
-
-      if (cursorId !== null) {
-        query = query.lt('id', cursorId)
-      }
-
-      const { data, error } = await query
-      if (error) {
-        return { data: null, error }
-      }
-
-      const batch = (data ?? []) as AccidentReceptionRow[]
-      rows.push(...batch)
-
-      if (batch.length < PAGE_SIZE) {
-        break
-      }
-
-      const lastId = Number(batch[batch.length - 1]?.id)
-      if (!Number.isFinite(lastId) || lastId <= 0) {
-        break
-      }
-      cursorId = lastId
+    if ((options.branches ?? []).length > 0) {
+      const branchSet = new Set((options.branches ?? []).map((v) => String(v ?? '').trim()).filter(Boolean))
+      rows = rows.filter((row) => branchSet.has(String(row.branch ?? '').trim()))
     }
 
     return { data: rows, error: null }
@@ -1950,10 +1936,7 @@ export default function BodyshopRepairPage() {
             .from('bodyshop_intake_vehicle_photos')
             .select('reception_entry_id')
             .in('reception_entry_id', photoReceptionIds),
-          supabase
-            .from('service_reception_entries')
-            .select('id, km_reading')
-            .in('id', photoReceptionIds),
+          getReceptionEntriesByIds(photoReceptionIds),
         ])
 
         const photoRows = photoRes.data
@@ -1963,8 +1946,8 @@ export default function BodyshopRepairPage() {
           nextPhotoCounts[receptionId] = (nextPhotoCounts[receptionId] ?? 0) + 1
         })
 
-        const kmRows = kmRes.data
-        ;((kmRows ?? []) as Array<{ id: number | null; km_reading: number | null }>).forEach((row) => {
+        const kmRows = kmRes.error ? [] : (kmRes.data ?? [])
+        ;(kmRows as Array<{ id: number | null; km_reading: number | null }>).forEach((row) => {
           const receptionId = Number(row.id)
           if (!Number.isFinite(receptionId)) return
           nextKmPresence[receptionId] = row.km_reading != null
@@ -2607,17 +2590,13 @@ export default function BodyshopRepairPage() {
       let metadataDealerCode = effectiveDealerCode
       let receptionDealerLookupError: string | null = null
       if (Number.isFinite(receptionEntryId)) {
-        const receptionDealerRes = await supabase
-          .from('service_reception_entries')
-          .select('dealer_code')
-          .eq('id', receptionEntryId)
-          .maybeSingle()
+        const receptionDealerRes = await getReceptionEntryById(receptionEntryId)
 
-        const receptionDealerCode = String((receptionDealerRes.data as { dealer_code?: string | null } | null)?.dealer_code ?? '').trim().toUpperCase()
+        const receptionDealerCode = String(receptionDealerRes.data?.dealer_code ?? '').trim().toUpperCase()
         if (receptionDealerCode) {
           metadataDealerCode = receptionDealerCode
         }
-        receptionDealerLookupError = receptionDealerRes.error?.message ?? null
+        receptionDealerLookupError = receptionDealerRes.error ?? null
       }
 
       const [canModifyServiceAdvisorRes, canModifyReceptionRes, canModifyBodyshopRepairRes] = await Promise.all([
@@ -3281,12 +3260,10 @@ export default function BodyshopRepairPage() {
 
     setSavingReceiving(true)
     try {
-      const { data: updatedReceptionRow, error } = await supabase
-        .from('service_reception_entries')
-        .update({ km_reading: parsedKm })
-        .eq('id', selectedReception.id)
-        .select('id, km_reading')
-        .maybeSingle()
+      const { data: rpcRows, error } = await supabase.rpc('bodyshop_save_reception_jc_km', {
+        p_reception_entry_id: selectedReception.id,
+        p_km_reading: parsedKm,
+      })
 
       if (error) {
         console.error('[BodyshopSA:KM] blur-save db update failed', {
@@ -3302,6 +3279,7 @@ export default function BodyshopRepairPage() {
         return
       }
 
+      const updatedReceptionRow = Array.isArray(rpcRows) ? rpcRows[0] : null
       if (!updatedReceptionRow) {
         const message = 'KM save skipped: no matching reception row updated (scope/RLS).'
         console.error('[BodyshopSA:KM] blur-save no rows updated', {

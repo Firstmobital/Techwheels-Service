@@ -236,7 +236,7 @@ function getMobileLookbackFrom(): string {
 }
 
 async function fetchAllEntries(): Promise<ReceptionEntry[]> {
-  const PAGE = 500
+  const PAGE = 100
   const rows: ReceptionEntry[] = []
   let cursorCreatedAt: string | null = null
   let cursorId: number | null = null
@@ -744,7 +744,7 @@ export default function ReceptionScreen() {
     Alert.alert('Delete Entry', 'Are you sure?', [
       { text: 'Cancel', style: 'cancel' },
       { text: 'Delete', style: 'destructive', onPress: async () => {
-        const { error } = await supabase.from('service_reception_entries').delete().eq('id', id)
+        const { error } = await supabase.rpc('delete_reception_entry_cascade', { p_id: id })
         if (error) { Alert.alert('Error', error.message); return }
         await loadAll()
       }},

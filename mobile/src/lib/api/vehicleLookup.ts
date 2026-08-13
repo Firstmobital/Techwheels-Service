@@ -61,39 +61,39 @@ export async function lookupVehicleByRegNumber(
     vehicle_type: null, sa_employee_code: null, sa_name: null, is_first_visit: true,
   }
 
-  // 1) Check service_reception_entries for most recent entry
+  // 1) Check service_reception_entries for most recent entry (RPC bypasses RLS)
   try {
-    const { data: receptionData, error: receptionErr } = await supabase
-      .from('service_reception_entries')
-      .select('reg_number, model, owner_name, owner_phone, sa_employee_code, portal, created_at')
-      .ilike('reg_number', normalized)
-      .order('created_at', { ascending: false })
-      .limit(1)
+    const { data: receptionData, error: receptionErr } = await supabase.rpc(
+      'get_reception_entry_latest_by_reg',
+      { p_reg_number: normalized },
+    )
 
-    if (!receptionErr && receptionData && receptionData.length > 0) {
-      const row = receptionData[0] as {
+    if (!receptionErr && receptionData) {
+      const row = (Array.isArray(receptionData) ? receptionData[0] : receptionData) as {
         reg_number: string; model: string | null; owner_name: string | null;
         owner_phone: string | null; sa_employee_code: string | null; portal: string | null;
+      } | undefined
+      if (row) {
+        let saName: string | null = null
+        if (row.sa_employee_code) {
+          const { data: empData } = await supabase
+            .from('employee_master')
+            .select('employee_name')
+            .eq('employee_code', row.sa_employee_code)
+            .maybeSingle()
+          saName = (empData as { employee_name?: string } | null)?.employee_name ?? null
+        }
+        const model = row.model ? String(row.model).trim() : null
+        return ok({
+          found: true, source: 'reception', reg_number: normalized,
+          model,
+          owner_name: row.owner_name ? String(row.owner_name).trim() : null,
+          owner_phone: row.owner_phone ? String(row.owner_phone).trim() : null,
+          vehicle_type: inferVehicleTypeFromModel(model),
+          sa_employee_code: row.sa_employee_code ? String(row.sa_employee_code).trim() : null,
+          sa_name: saName, is_first_visit: false,
+        })
       }
-      let saName: string | null = null
-      if (row.sa_employee_code) {
-        const { data: empData } = await supabase
-          .from('employee_master')
-          .select('employee_name')
-          .eq('employee_code', row.sa_employee_code)
-          .maybeSingle()
-        saName = (empData as { employee_name?: string } | null)?.employee_name ?? null
-      }
-      const model = row.model ? String(row.model).trim() : null
-      return ok({
-        found: true, source: 'reception', reg_number: normalized,
-        model,
-        owner_name: row.owner_name ? String(row.owner_name).trim() : null,
-        owner_phone: row.owner_phone ? String(row.owner_phone).trim() : null,
-        vehicle_type: inferVehicleTypeFromModel(model),
-        sa_employee_code: row.sa_employee_code ? String(row.sa_employee_code).trim() : null,
-        sa_name: saName, is_first_visit: false,
-      })
     }
   } catch (e) { /* continue to next source */ }
 

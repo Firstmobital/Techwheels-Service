@@ -6,6 +6,7 @@ import {
   listFloorInchargeEntries,
   listReceptionEntriesByJobCardNumbers,
   listReceptionEntriesWithDefaultLookback,
+  listReceptionJcNumbersBySa,
   type ReceptionEntryRow,
 } from '../lib/api'
 import RevisitBadge from '../components/RevisitBadge'
@@ -115,21 +116,12 @@ async function fetchSaOwnedJobCardNumbers(saEmployeeCode: string): Promise<strin
   const normalizedSaCode = String(saEmployeeCode ?? '').trim()
   if (!normalizedSaCode) return []
 
-  const res = await supabase
-    .from('service_reception_entries')
-    .select('jc_number')
-    .eq('sa_employee_code', normalizedSaCode)
-    .not('jc_number', 'is', null)
-
-  if (res.error) {
-    throw new Error(`Failed to load SA job cards: ${res.error.message}`)
+  const result = await listReceptionJcNumbersBySa(normalizedSaCode)
+  if (result.error) {
+    throw new Error(`Failed to load SA job cards: ${result.error ?? 'Unknown error'}`)
   }
 
-  return Array.from(new Set(
-    (res.data ?? [])
-      .map((row) => String((row as { jc_number?: string | null }).jc_number ?? '').trim())
-      .filter(Boolean),
-  ))
+  return result.data ?? []
 }
 
 async function fetchIncomeAssignmentsByJobCards(options: {

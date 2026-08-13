@@ -1,6 +1,9 @@
 // src/lib/api/bodyshopRepair.ts
 
 import { supabase } from '../supabase'
+import {
+  listReceptionEntriesByJobCardNumbers,
+} from './reception'
 
 export type CustomerType = 'individual' | 'firm' | 'foc' | 'cash'
 export type OverallStatus = 'active' | 'delivered' | 'cancelled'
@@ -210,22 +213,19 @@ export async function createRepairCard(input: Partial<RepairCard> & { job_card_n
     : null
 
   if (!resolvedReceptionEntryId) {
-    let receptionLookup = supabase
-      .from('service_reception_entries')
-      .select('id')
-      .eq('service_type', 'Accident')
-      .order('created_at', { ascending: false })
-      .limit(1)
-
     if (jcNo) {
-      receptionLookup = receptionLookup.eq('jc_number', jcNo)
+      const jcResult = await listReceptionEntriesByJobCardNumbers([jcNo])
+      if (jcResult.error) throw jcResult.error
+      const match = (jcResult.data ?? []).find((row) => String(row.service_type ?? '').trim() === 'Accident')
+      resolvedReceptionEntryId = match?.id ?? null
     } else if (regNo) {
-      receptionLookup = receptionLookup.eq('reg_number', regNo)
+      const regResult = await supabase.rpc('get_reception_entry_latest_by_reg', { p_reg_number: regNo })
+      if (regResult.error) throw regResult.error
+      const row = (Array.isArray(regResult.data) ? regResult.data[0] : regResult.data) as { id?: number; service_type?: string | null } | undefined
+      if (row && String(row.service_type ?? '').trim() === 'Accident') {
+        resolvedReceptionEntryId = Number(row.id)
+      }
     }
-
-    const receptionRes = await receptionLookup
-    if (receptionRes.error) throw receptionRes.error
-    resolvedReceptionEntryId = ((receptionRes.data ?? []) as Array<{ id: number }>)[0]?.id ?? null
   }
 
   if (!resolvedReceptionEntryId) {

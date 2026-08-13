@@ -127,7 +127,7 @@ export function isFloorInchargeServiceType(serviceType: string | null | undefine
   return (FLOOR_INCHARGE_ALLOWED_SERVICE_TYPES as readonly string[]).includes(normalized)
 }
 
-const RECEPTION_LIST_PAGE_SIZE = 200
+const RECEPTION_LIST_PAGE_SIZE = 100
 
 // "All" period and legacy list helpers use this cap — not a full-table scan.
 export const RECEPTION_DEFAULT_LOOKBACK_DAYS = 90
@@ -817,6 +817,146 @@ export async function listFloorInchargeEntries(
   return ok(enriched)
 }
 
+export async function listAccidentReceptionEntriesByDateRange(
+  range: { from: string; to: string },
+): Promise<ApiResult<ReceptionEntryRow[]>> {
+  const effectiveRange = normalizeCreatedAtRange(range)
+  const { data, error } = await fetchReceptionEntriesWithKeyset(
+    ['Accident'],
+    effectiveRange.from,
+    effectiveRange.to,
+  )
+
+  if (error) return fail(error)
+
+  const entries = (data ?? []) as ReceptionEntryRow[]
+  const enriched = await enrichEntriesWithEmployeeBranch(entries)
+  return ok(enriched)
+}
+
+export async function listReceptionJcNumbersBySa(saEmployeeCode: string): Promise<ApiResult<string[]>> {
+  const normalized = String(saEmployeeCode ?? '').trim()
+  if (!normalized) return ok([])
+
+  const { data, error } = await supabase.rpc('list_reception_jc_numbers_by_sa', {
+    p_sa_employee_code: normalized,
+  })
+
+  if (error) return fail(error)
+  return ok((data ?? []).map((value: unknown) => String(value ?? '').trim()).filter(Boolean))
+}
+
+export async function listReceptionRegCreatedSince(
+  sinceIso: string,
+): Promise<ApiResult<Array<{ reg_number: string; created_at: string }>>> {
+  const since = String(sinceIso ?? '').trim()
+  if (!since) return fail('since timestamp is required')
+
+  const { data, error } = await supabase.rpc('list_reception_reg_created_since', {
+    p_since: since,
+  })
+
+  if (error) return fail(error)
+
+  const rows = (Array.isArray(data) ? data : data ? [data] : []) as Array<{
+    reg_number?: string | null
+    created_at?: string | null
+  }>
+
+  return ok(
+    rows
+      .map((row) => ({
+        reg_number: String(row.reg_number ?? '').trim(),
+        created_at: String(row.created_at ?? '').trim(),
+      }))
+      .filter((row) => row.reg_number && row.created_at),
+  )
+}
+
+export type ReceptionEntryLite = {
+  id: number
+  model: string | null
+  km_reading: number | null
+  dealer_code: string | null
+  jc_number: string | null
+  reg_number: string | null
+  owner_name: string | null
+  owner_phone: string | null
+  branch: string | null
+  created_at: string | null
+}
+
+export async function getReceptionEntriesByIds(ids: number[]): Promise<ApiResult<ReceptionEntryLite[]>> {
+  const uniqueIds = Array.from(new Set(ids.filter((id) => Number.isFinite(id) && id > 0)))
+  if (uniqueIds.length === 0) return ok([])
+
+  const { data, error } = await supabase.rpc('get_reception_entries_by_ids', {
+    p_ids: uniqueIds,
+  })
+
+  if (error) return fail(error)
+
+  const rows = (Array.isArray(data) ? data : data ? [data] : []) as ReceptionEntryLite[]
+  return ok(rows)
+}
+
+export async function fetchRecentReceptionEntries(limit = 8): Promise<ApiResult<ReceptionEntryRow[]>> {
+  const range = getISOLookbackRange(RECEPTION_DEFAULT_LOOKBACK_DAYS)
+  const bounds = toCreatedAtBounds({ from: range.from.slice(0, 10), to: range.to.slice(0, 10) })
+  const { data, error } = await fetchReceptionEntriesPage({
+    createdAtFrom: bounds.from,
+    createdAtTo: bounds.to,
+    pageSize: limit,
+    cursor: null,
+  })
+
+  if (error) return fail(error)
+  if (!data) return ok([])
+
+  const enriched = await enrichEntriesWithEmployeeBranch(data.rows)
+  return ok(enriched)
+}
+
+export type ReceptionDashboardStatusRow = {
+  id: number
+  created_at: string
+  service_type: string | null
+  jc_number: string | null
+  estimate_storage_path: string | null
+  invoice_done_at: string | null
+  branch: string | null
+  portal: string | null
+}
+
+export async function fetchReceptionDashboardStatusRows(options: {
+  createdAtFrom: string
+  createdAtTo: string
+  serviceTypes?: string[]
+  requireNonEmptyJcNumber?: boolean
+}): Promise<ApiResult<ReceptionDashboardStatusRow[]>> {
+  const { data, error } = await fetchReceptionEntriesWithKeyset(
+    options.serviceTypes,
+    options.createdAtFrom,
+    options.createdAtTo,
+    options.requireNonEmptyJcNumber ?? false,
+  )
+
+  if (error) return fail(error)
+
+  const rows = (data ?? []).map((row) => ({
+    id: row.id,
+    created_at: row.created_at,
+    service_type: row.service_type ?? null,
+    jc_number: row.jc_number ?? null,
+    estimate_storage_path: row.estimate_storage_path ?? null,
+    invoice_done_at: row.invoice_done_at ?? null,
+    branch: row.branch ?? null,
+    portal: row.portal ?? null,
+  }))
+
+  return ok(rows)
+}
+
 export async function listReceptionEntriesByDateRange(range: { from: string; to: string }): Promise<ApiResult<ReceptionEntryRow[]>> {
   const from = String(range.from ?? '').trim()
   const to = String(range.to ?? '').trim()
@@ -1348,43 +1488,26 @@ export async function lookupVehicleByRegNumber(
   const normalized = regNumber.replace(/\s+/g, '').toUpperCase()
   if (!normalized) return fail('Registration number is required')
 
-  // 1) Check service_reception_entries for the most recent entry
-  // Try exact match first, then fall back to contains search (handles space variations)
-  let receptionData: Array<{ reg_number: string; model: string | null; owner_name: string | null; owner_phone: string | null; sa_employee_code: string | null; portal: string | null; created_at: string }> = []
-  let receptionErr: unknown = null
+  // 1) Check service_reception_entries for the most recent entry (RPC bypasses RLS)
+  const { data: receptionRpcData, error: receptionRpcErr } = await supabase.rpc(
+    'get_reception_entry_latest_by_reg',
+    { p_reg_number: normalized },
+  )
 
-  const { data: receptionExact, error: receptionExactErr } = await supabase
-    .from('service_reception_entries')
-    .select('reg_number, model, owner_name, owner_phone, sa_employee_code, portal, created_at')
-    .ilike('reg_number', normalized)
-    .order('created_at', { ascending: false })
-    .limit(1)
+  if (receptionRpcErr) return fail(receptionRpcErr as { message: string })
 
-  if (receptionExactErr) {
-    receptionErr = receptionExactErr
-  } else if (receptionExact && receptionExact.length > 0) {
-    receptionData = receptionExact as typeof receptionData
-  } else {
-    // Fallback: contains search — match if DB value without spaces equals our query
-    const { data: receptionContains, error: receptionContainsErr } = await supabase
-      .from('service_reception_entries')
-      .select('reg_number, model, owner_name, owner_phone, sa_employee_code, portal, created_at')
-      .ilike('reg_number', `%${normalized}%`)
-      .order('created_at', { ascending: false })
-      .limit(5)
+  const receptionRow = (Array.isArray(receptionRpcData) ? receptionRpcData[0] : receptionRpcData) as
+    | {
+        reg_number: string
+        model: string | null
+        owner_name: string | null
+        owner_phone: string | null
+        sa_employee_code: string | null
+        portal: string | null
+        created_at: string
+      }
+    | undefined
 
-    if (!receptionContainsErr && receptionContains) {
-      // Filter to rows where reg_number without spaces matches our normalized query
-      const matched = (receptionContains as Array<{ reg_number: string; model: string | null; owner_name: string | null; owner_phone: string | null; sa_employee_code: string | null; portal: string | null; created_at: string }>).filter(
-        (row) => row.reg_number.replace(/\s+/g, '').toUpperCase() === normalized
-      )
-      if (matched.length > 0) receptionData = matched
-    }
-  }
-
-  if (receptionErr) return fail(receptionErr as { message: string })
-
-  const receptionRow = receptionData[0]
   if (receptionRow) {
     // Get SA name from employee_master
     let saName: string | null = null
