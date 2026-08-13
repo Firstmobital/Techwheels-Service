@@ -1,0 +1,226 @@
+{
+  "status": "ok",
+  "label": "table_io_hotspots",
+  "rows": [
+    {
+      "table_name": "service_parts_stock_snapshot_data",
+      "heap_blks_read": 16294,
+      "heap_blks_hit": 135814538,
+      "idx_blks_read": 384392,
+      "idx_blks_hit": 18784325,
+      "toast_blks_read": 0,
+      "toast_blks_hit": 0,
+      "heap_cache_hit_rate_pct": "99.99",
+      "total_read_blocks": 400686
+    },
+    {
+      "table_name": "service_parts_consumption_data",
+      "heap_blks_read": 14028,
+      "heap_blks_hit": 51133057,
+      "idx_blks_read": 220409,
+      "idx_blks_hit": 14221173,
+      "toast_blks_read": 0,
+      "toast_blks_hit": 0,
+      "heap_cache_hit_rate_pct": "99.97",
+      "total_read_blocks": 234437
+    },
+    {
+      "table_name": "service_invoice_order_data",
+      "heap_blks_read": 167158,
+      "heap_blks_hit": 5667762,
+      "idx_blks_read": 45271,
+      "idx_blks_hit": 6973110,
+      "toast_blks_read": 0,
+      "toast_blks_hit": 0,
+      "heap_cache_hit_rate_pct": "97.14",
+      "total_read_blocks": 212429
+    },
+    {
+      "table_name": "pv_service_history_test",
+      "heap_blks_read": 63536,
+      "heap_blks_hit": 96484836,
+      "idx_blks_read": 31510,
+      "idx_blks_hit": 1958404,
+      "toast_blks_read": 0,
+      "toast_blks_hit": 0,
+      "heap_cache_hit_rate_pct": "99.93",
+      "total_read_blocks": 95046
+    },
+    {
+      "table_name": "all_service_data",
+      "heap_blks_read": 10588,
+      "heap_blks_hit": 627652256,
+      "idx_blks_read": 72479,
+      "idx_blks_hit": 39095291,
+      "toast_blks_read": 66,
+      "toast_blks_hit": 48,
+      "heap_cache_hit_rate_pct": "100.00",
+      "total_read_blocks": 83133
+    },
+    {
+      "table_name": "ev_service_history_test",
+      "heap_blks_read": 27631,
+      "heap_blks_hit": 38130341,
+      "idx_blks_read": 8174,
+      "idx_blks_hit": 785276,
+      "toast_blks_read": 0,
+      "toast_blks_hit": 0,
+      "heap_cache_hit_rate_pct": "99.93",
+      "total_read_blocks": 35805
+    },
+    {
+      "table_name": "service_parts_order_data",
+      "heap_blks_read": 776,
+      "heap_blks_hit": 618716,
+      "idx_blks_read": 34370,
+      "idx_blks_hit": 1924884,
+      "toast_blks_read": 0,
+      "toast_blks_hit": 0,
+      "heap_cache_hit_rate_pct": "99.87",
+      "total_read_blocks": 35146
+    },
+    {
+      "table_name": "all_service_data_dynamic",
+      "heap_blks_read": 14374,
+      "heap_blks_hit": 437689260,
+      "idx_blks_read": 19628,
+      "idx_blks_hit": 19709758,
+      "toast_blks_read": 0,
+      "toast_blks_hit": 0,
+      "heap_cache_hit_rate_pct": "100.00",
+      "total_read_blocks": 34002
+    },
+    {
+      "table_name": "warranty_wc_data",
+      "heap_blks_read": 32282,
+      "heap_blks_hit": 1823286,
+      "idx_blks_read": 1314,
+      "idx_blks_hit": 258779,
+      "toast_blks_read": 0,
+      "toast_blks_hit": 0,
+      "heap_cache_hit_rate_pct": "98.26",
+      "total_read_blocks": 33596
+    },
+    {
+      "table_name": "warranty_updation_claim_data",
+      "heap_blks_read": 28543,
+      "heap_blks_hit": 1405892,
+      "idx_blks_read": 1085,
+      "idx_blks_hit": 330873,
+      "toast_blks_read": 0,
+      "toast_blks_hit": 0,
+      "heap_cache_hit_rate_pct": "98.01",
+      "total_read_blocks": 29628
+    },
+    {
+      "table_name": "warranty_fsb_data",
+      "heap_blks_read": 24151,
+      "heap_blks_hit": 2012803,
+      "idx_blks_read": 1641,
+      "idx_blks_hit": 509022,
+      "toast_blks_read": 0,
+      "toast_blks_hit": 0,
+      "heap_cache_hit_rate_pct": "98.81",
+      "total_read_blocks": 25792
+    },
+    {
+      "table_name": "job_run_details",
+      "heap_blks_read": 25248,
+      "heap_blks_hit": 1094441,
+      "idx_blks_read": 364,
+      "idx_blks_hit": 811427,
+      "toast_blks_read": 0,
+      "toast_blks_hit": 0,
+      "heap_cache_hit_rate_pct": "97.75",
+      "total_read_blocks": 25612
+    },
+    {
+      "table_name": "warranty_claim_settlement_report_data",
+      "heap_blks_read": 22946,
+      "heap_blks_hit": 2729802,
+      "idx_blks_read": 1783,
+      "idx_blks_hit": 412611,
+      "toast_blks_read": 0,
+      "toast_blks_hit": 0,
+      "heap_cache_hit_rate_pct": "99.17",
+      "total_read_blocks": 24729
+    },
+    {
+      "table_name": "job_card_closed_data",
+      "heap_blks_read": 6821,
+      "heap_blks_hit": 259108692,
+      "idx_blks_read": 12837,
+      "idx_blks_hit": 37669396,
+      "toast_blks_read": 0,
+      "toast_blks_hit": 0,
+      "heap_cache_hit_rate_pct": "100.00",
+      "total_read_blocks": 19658
+    },
+    {
+      "table_name": "auto_service_reminders",
+      "heap_blks_read": 11791,
+      "heap_blks_hit": 918275,
+      "idx_blks_read": 7530,
+      "idx_blks_hit": 1658841,
+      "toast_blks_read": 0,
+      "toast_blks_hit": 0,
+      "heap_cache_hit_rate_pct": "98.73",
+      "total_read_blocks": 19321
+    },
+    {
+      "table_name": "service_vas_jc_data",
+      "heap_blks_read": 3442,
+      "heap_blks_hit": 13807733,
+      "idx_blks_read": 13337,
+      "idx_blks_hit": 2913319,
+      "toast_blks_read": 0,
+      "toast_blks_hit": 0,
+      "heap_cache_hit_rate_pct": "99.98",
+      "total_read_blocks": 16779
+    },
+    {
+      "table_name": "jc_closed_invoiced_data",
+      "heap_blks_read": 7089,
+      "heap_blks_hit": 604032,
+      "idx_blks_read": 5310,
+      "idx_blks_hit": 1940712,
+      "toast_blks_read": 0,
+      "toast_blks_hit": 0,
+      "heap_cache_hit_rate_pct": "98.84",
+      "total_read_blocks": 12399
+    },
+    {
+      "table_name": "parts_not_invoiced_data",
+      "heap_blks_read": 3131,
+      "heap_blks_hit": 611094,
+      "idx_blks_read": 8342,
+      "idx_blks_hit": 2064192,
+      "toast_blks_read": 0,
+      "toast_blks_hit": 0,
+      "heap_cache_hit_rate_pct": "99.49",
+      "total_read_blocks": 11473
+    },
+    {
+      "table_name": "objects",
+      "heap_blks_read": 5068,
+      "heap_blks_hit": 91607,
+      "idx_blks_read": 3549,
+      "idx_blks_hit": 198156,
+      "toast_blks_read": 0,
+      "toast_blks_hit": 0,
+      "heap_cache_hit_rate_pct": "94.76",
+      "total_read_blocks": 8617
+    },
+    {
+      "table_name": "psf_revenue_dms",
+      "heap_blks_read": 6214,
+      "heap_blks_hit": 1208159,
+      "idx_blks_read": 2079,
+      "idx_blks_hit": 695468,
+      "toast_blks_read": 0,
+      "toast_blks_hit": 0,
+      "heap_cache_hit_rate_pct": "99.49",
+      "total_read_blocks": 8293
+    }
+  ]
+}

@@ -1,0 +1,66 @@
+{
+  "status": "ok",
+  "records": [
+    {
+      "event_message": "canceling statement due to statement timeout",
+      "occurrences": 609
+    },
+    {
+      "event_message": "function gen_random_bytes(integer) does not exist",
+      "occurrences": 57
+    },
+    {
+      "event_message": "there is no unique or exclusion constraint matching the ON CONFLICT specification",
+      "occurrences": 21
+    },
+    {
+      "event_message": "column all_service_data.registration_no does not exist",
+      "occurrences": 8
+    },
+    {
+      "event_message": "column all_service_data.cust_first_name does not exist",
+      "occurrences": 8
+    },
+    {
+      "event_message": "permission denied for table users",
+      "occurrences": 5
+    },
+    {
+      "event_message": "invalid input syntax for type uuid: \"3299\"",
+      "occurrences": 5
+    },
+    {
+      "event_message": "invalid input syntax for type uuid: \"3287\"",
+      "occurrences": 3
+    },
+    {
+      "event_message": "invalid input syntax for type uuid: \"3302\"",
+      "occurrences": 3
+    },
+    {
+      "event_message": "invalid input syntax for type uuid: \"3325\"",
+      "occurrences": 3
+    },
+    {
+      "event_message": "permission denied for table technician_assignments",
+      "occurrences": 3
+    },
+    {
+      "event_message": "invalid input syntax for type uuid: \"3307\"",
+      "occurrences": 2
+    },
+    {
+      "event_message": "invalid input syntax for type uuid: \"3328\"",
+      "occurrences": 2
+    },
+    {
+      "event_message": "invalid input syntax for type uuid: \"system:internal-dispatch\"",
+      "occurrences": 2
+    },
+    {
+      "event_message": "invalid input syntax for type uuid: \"3319\"",
+      "occurrences": 2
+    }
+  ],
+  "sql": "select\n      event_message,\n      count() as occurrences\n    from logs\n    where source = 'postgres_logs'\n      and match(severity_text, '(?i)ERROR|FATAL|PANIC|WARNING')\n    group by event_message\n    order by occurrences desc\n    limit 15"
+}

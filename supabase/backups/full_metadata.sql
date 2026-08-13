@@ -2,12 +2,12 @@
 -- PostgreSQL database dump
 --
 
-\restrict 7nFDXeTx4R0ICBfQHUnmv1VOH7LUlYkoYmCccTr0SXo8Mc6kvpEPtBJPZ3S9Rtz
+\restrict icldgtbRPt55gEiKwT6q8iUUzBqtI1FqGrSbobkIfrkodJY2mPoc955lgtBP4Rb
 
 -- Dumped from database version 17.6
 -- Dumped by pg_dump version 17.7 (Homebrew)
 
--- Started on 2026-08-13 10:04:47 IST
+-- Started on 2026-08-13 10:06:03 IST
 
 SET statement_timeout = 0;
 SET lock_timeout = 0;
@@ -57439,11 +57439,11 @@ CREATE EVENT TRIGGER trg_auto_admin_bypass_policy_on_ddl ON ddl_command_end
    EXECUTE FUNCTION public.apply_admin_bypass_policy_on_ddl();
 
 
--- Completed on 2026-08-13 10:05:42 IST
+-- Completed on 2026-08-13 10:06:54 IST
 
 --
 -- PostgreSQL database dump complete
 --
 
-\unrestrict 7nFDXeTx4R0ICBfQHUnmv1VOH7LUlYkoYmCccTr0SXo8Mc6kvpEPtBJPZ3S9Rtz
+\unrestrict icldgtbRPt55gEiKwT6q8iUUzBqtI1FqGrSbobkIfrkodJY2mPoc955lgtBP4Rb
 

@@ -1,0 +1,175 @@
+{
+  "status": "ok",
+  "endpoint": "/v1/projects/jmdndcphkmaljhwgzqxq/analytics/endpoints/logs?sql=select+timestamp%2C+event_message+from+logs+where+source+%3D+%27realtime_logs%27+order+by+timestamp+desc+limit+100&iso_timestamp_start=2026-08-12T04%3A37%3A08.310Z&iso_timestamp_end=2026-08-13T04%3A37%3A08.310Z",
+  "count": 42,
+  "records": [
+    {
+      "event_message": "Stop tenant jmdndcphkmaljhwgzqxq because of no connected users",
+      "timestamp": "2026-08-13T04:06:37.193000"
+    },
+    {
+      "event_message": "#PID<0.56308138.0> Starting stream replication for slot supabase_realtime_messages_replication_slot_2_125_1_38e1bef using publication supabase_realtime_messages_publication and protocol version 2",
+      "timestamp": "2026-08-13T03:55:37.379000"
+    },
+    {
+      "event_message": "Create replication slot supabase_realtime_messages_replication_slot_2_125_1_38e1bef using plugin pgoutput",
+      "timestamp": "2026-08-13T03:55:37.367000"
+    },
+    {
+      "event_message": "Publication supabase_realtime_messages_publication exists, validating contents",
+      "timestamp": "2026-08-13T03:55:37.363000"
+    },
+    {
+      "event_message": "Check publication supabase_realtime_messages_publication for table realtime.messages exists",
+      "timestamp": "2026-08-13T03:55:37.362000"
+    },
+    {
+      "event_message": "Checking if replication slot supabase_realtime_messages_replication_slot_2_125_1_38e1bef exists",
+      "timestamp": "2026-08-13T03:55:37.359000"
+    },
+    {
+      "event_message": "Initializing connection with the status: %Realtime.Tenants.ReplicationConnection{\n  tenant_id: \"jmdndcphkmaljhwgzqxq\",\n  opts: [],\n  step: :disconnected,\n  publication_name: \"supabase_realtime_messages_publication\",\n  replication_slot_name: \"supabase_realtime_messages_replication_slot_2_125_1_38e1bef\",\n  output_plugin: \"pgoutput\",\n  proto_version: 2,\n  relations: %{},\n  buffer: [],\n  monitored_pid: #PID<0.40926307.0>,\n  latency_committed_at: nil,\n  query_timeout: 240000\n}",
+      "timestamp": "2026-08-13T03:55:37.299000"
+    },
+    {
+      "event_message": "Creating partitions for realtime.messages",
+      "timestamp": "2026-08-13T03:55:37.093000"
+    },
+    {
+      "event_message": "Realtime.Tenants.Connect.CheckConnection executed in 103 ms",
+      "timestamp": "2026-08-13T03:55:37.093000"
+    },
+    {
+      "event_message": "Realtime.Tenants.Connect.RegisterProcess executed in 0 ms",
+      "timestamp": "2026-08-13T03:55:37.093000"
+    },
+    {
+      "event_message": "Tenant jmdndcphkmaljhwgzqxq is initializing: :\"realtime@2406:da1a:f3c:4500:a28e:78ae:38c:9927\"",
+      "timestamp": "2026-08-13T03:55:37.093000"
+    },
+    {
+      "event_message": "Realtime.Tenants.Connect.ReconcileMigrations executed in 0 ms",
+      "timestamp": "2026-08-13T03:55:37.093000"
+    },
+    {
+      "event_message": "Realtime.Tenants.Connect.GetTenant executed in 122 ms",
+      "timestamp": "2026-08-13T03:55:36.989000"
+    },
+    {
+      "event_message": "Disconnecting broadcast changes handler in the step : :streaming",
+      "timestamp": "2026-08-12T17:12:14.314000"
+    },
+    {
+      "event_message": "Tenant jmdndcphkmaljhwgzqxq has been terminated: :shutdown",
+      "timestamp": "2026-08-12T17:12:14.314000"
+    },
+    {
+      "event_message": "Tenant has no connected users, database connection will be terminated",
+      "timestamp": "2026-08-12T17:12:14.313000"
+    },
+    {
+      "event_message": "Stop tenant jmdndcphkmaljhwgzqxq because of no connected users",
+      "timestamp": "2026-08-12T16:33:51.562000"
+    },
+    {
+      "event_message": "Janitor finished",
+      "timestamp": "2026-08-12T16:19:15.927000"
+    },
+    {
+      "event_message": "Creating partitions for realtime.messages",
+      "timestamp": "2026-08-12T16:19:15.876000"
+    },
+    {
+      "event_message": "Janitor starting realtime.messages cleanup",
+      "timestamp": "2026-08-12T16:19:13.008000"
+    },
+    {
+      "event_message": "Stop tenant jmdndcphkmaljhwgzqxq because of no connected users",
+      "timestamp": "2026-08-12T15:34:50.728000"
+    },
+    {
+      "event_message": "Stop tenant jmdndcphkmaljhwgzqxq because of no connected users",
+      "timestamp": "2026-08-12T14:29:35.960000"
+    },
+    {
+      "event_message": "Stop tenant jmdndcphkmaljhwgzqxq because of no connected users",
+      "timestamp": "2026-08-12T14:18:28.675000"
+    },
+    {
+      "event_message": "Stop tenant jmdndcphkmaljhwgzqxq because of no connected users",
+      "timestamp": "2026-08-12T13:53:57.557000"
+    },
+    {
+      "event_message": "Stop tenant jmdndcphkmaljhwgzqxq because of no connected users",
+      "timestamp": "2026-08-12T13:33:48.931000"
+    },
+    {
+      "event_message": "Stop tenant jmdndcphkmaljhwgzqxq because of no connected users",
+      "timestamp": "2026-08-12T13:17:46.825000"
+    },
+    {
+      "event_message": "Janitor finished",
+      "timestamp": "2026-08-12T13:05:23.455000"
+    },
+    {
+      "event_message": "Creating partitions for realtime.messages",
+      "timestamp": "2026-08-12T13:05:23.397000"
+    },
+    {
+      "event_message": "Janitor starting realtime.messages cleanup",
+      "timestamp": "2026-08-12T13:05:23.323000"
+    },
+    {
+      "event_message": "Stop tenant jmdndcphkmaljhwgzqxq because of no connected users",
+      "timestamp": "2026-08-12T10:46:46.362000"
+    },
+    {
+      "event_message": "Stop tenant jmdndcphkmaljhwgzqxq because of no connected users",
+      "timestamp": "2026-08-12T10:35:25.484000"
+    },
+    {
+      "event_message": "Sent 200 in 3ms",
+      "timestamp": "2026-08-12T10:30:56.903000"
+    },
+    {
+      "event_message": "Sent 200 in 2ms",
+      "timestamp": "2026-08-12T10:29:21.671000"
+    },
+    {
+      "event_message": "Sent 200 in 1ms",
+      "timestamp": "2026-08-12T10:29:20.932000"
+    },
+    {
+      "event_message": "Stop tenant jmdndcphkmaljhwgzqxq because of no connected users",
+      "timestamp": "2026-08-12T09:34:11.458000"
+    },
+    {
+      "event_message": "Janitor finished",
+      "timestamp": "2026-08-12T09:29:22.914000"
+    },
+    {
+      "event_message": "Creating partitions for realtime.messages",
+      "timestamp": "2026-08-12T09:29:22.861000"
+    },
+    {
+      "event_message": "Janitor starting realtime.messages cleanup",
+      "timestamp": "2026-08-12T09:29:16.919000"
+    },
+    {
+      "event_message": "Janitor finished",
+      "timestamp": "2026-08-12T06:28:23.151000"
+    },
+    {
+      "event_message": "Creating partitions for realtime.messages",
+      "timestamp": "2026-08-12T06:28:23.104000"
+    },
+    {
+      "event_message": "Janitor starting realtime.messages cleanup",
+      "timestamp": "2026-08-12T06:28:23.032000"
+    },
+    {
+      "event_message": "Sent 200 in 1ms",
+      "timestamp": "2026-08-12T05:51:52.048000"
+    }
+  ]
+}
