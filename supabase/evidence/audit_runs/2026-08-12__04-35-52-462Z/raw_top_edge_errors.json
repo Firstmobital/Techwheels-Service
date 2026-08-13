@@ -1,0 +1,46 @@
+{
+  "status": "ok",
+  "records": [
+    {
+      "event_message": "POST | 500 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/rpc/list_reception_entries_page | Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+      "occurrences": 130
+    },
+    {
+      "event_message": "POST | 500 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/rpc/list_reception_entries_page | Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36 Edg/151.0.0.0",
+      "occurrences": 52
+    },
+    {
+      "event_message": "GET | 500 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/service_reception_entries?select=reg_number%2Cmodel%2Cowner_name%2Cowner_phone%2Csa_employee_code%2Cportal%2Ccreated_at&reg_number=ilike.RJ60&order=created_at.desc&limit=1 | Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/109.0.0.0 Safari/537.36",
+      "occurrences": 34
+    },
+    {
+      "event_message": "HEAD | 500 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/service_reception_entries?select=* | Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+      "occurrences": 14
+    },
+    {
+      "event_message": "GET | 500 | https://jmdndcphkmaljhwgzqxq.supabase.co/auth/v1/admin/users?page=2&per_page=100 | Deno/2.1.4 (variant; SupabaseEdgeRuntime/1.74.2)",
+      "occurrences": 13
+    },
+    {
+      "event_message": "GET | 500 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/service_reception_entries?select=reg_number%2Cmodel%2Cowner_name%2Cowner_phone%2Csa_employee_code%2Cportal%2Ccreated_at&reg_number=ilike.RJ45&order=created_at.desc&limit=1 | Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/109.0.0.0 Safari/537.36",
+      "occurrences": 12
+    },
+    {
+      "event_message": "GET | 500 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/service_reception_entries?select=reg_number%2Cmodel%2Cowner_name%2Cowner_phone%2Csa_employee_code%2Cportal%2Ccreated_at&reg_number=ilike.RJ60C&order=created_at.desc&limit=1 | Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/109.0.0.0 Safari/537.36",
+      "occurrences": 12
+    },
+    {
+      "event_message": "HEAD | 500 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/service_reception_entries?select=* | Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36 Edg/151.0.0.0",
+      "occurrences": 9
+    },
+    {
+      "event_message": "GET | 500 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/service_reception_entries?select=reg_number%2Cmodel%2Cowner_name%2Cowner_phone%2Csa_employee_code%2Cportal%2Ccreated_at&reg_number=ilike.RJ60CJ&order=created_at.desc&limit=1 | Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/109.0.0.0 Safari/537.36",
+      "occurrences": 7
+    },
+    {
+      "event_message": "GET | 500 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/service_reception_entries?select=reg_number%2Cmodel%2Cowner_name%2Cowner_phone%2Csa_employee_code%2Cportal%2Ccreated_at&reg_number=ilike.RJ60CG&order=created_at.desc&limit=1 | Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/109.0.0.0 Safari/537.36",
+      "occurrences": 7
+    }
+  ],
+  "sql": "select event_message, sum(occurrences) as occurrences\n    from (\n      select\n        event_message,\n        count() as occurrences\n      from logs\n      where source = 'edge_logs'\n        and toInt32OrZero(log_attributes['response.status_code']) >= 500\n      group by event_message\n\n      union all\n\n      select\n        event_message,\n        count() as occurrences\n      from logs\n      where source = 'function_logs'\n        and match(coalesce(severity_text, log_attributes['metadata.level'], ''), '(?i)error|warning')\n      group by event_message\n    )\n    group by event_message\n    order by occurrences desc\n    limit 10"
+}

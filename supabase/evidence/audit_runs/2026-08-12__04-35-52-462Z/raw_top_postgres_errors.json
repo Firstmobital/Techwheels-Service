@@ -1,0 +1,66 @@
+{
+  "status": "ok",
+  "records": [
+    {
+      "event_message": "canceling statement due to statement timeout",
+      "occurrences": 652
+    },
+    {
+      "event_message": "column all_service_data.registration_no does not exist",
+      "occurrences": 71
+    },
+    {
+      "event_message": "function gen_random_bytes(integer) does not exist",
+      "occurrences": 66
+    },
+    {
+      "event_message": "column all_service_data.cust_first_name does not exist",
+      "occurrences": 44
+    },
+    {
+      "event_message": "there is no unique or exclusion constraint matching the ON CONFLICT specification",
+      "occurrences": 27
+    },
+    {
+      "event_message": "column users.dealer_code does not exist",
+      "occurrences": 15
+    },
+    {
+      "event_message": "syntax error at or near \"'EMPTY'\"",
+      "occurrences": 11
+    },
+    {
+      "event_message": "Employee link required",
+      "occurrences": 8
+    },
+    {
+      "event_message": "invalid input syntax for type uuid: \"3267\"",
+      "occurrences": 3
+    },
+    {
+      "event_message": "invalid input syntax for type uuid: \"3263\"",
+      "occurrences": 3
+    },
+    {
+      "event_message": "permission denied for table technician_assignments",
+      "occurrences": 3
+    },
+    {
+      "event_message": "invalid input syntax for type uuid: \"3270\"",
+      "occurrences": 2
+    },
+    {
+      "event_message": "permission denied: caller is not the SA on this reception entry",
+      "occurrences": 2
+    },
+    {
+      "event_message": "invalid input syntax for type uuid: \"3265\"",
+      "occurrences": 1
+    },
+    {
+      "event_message": "invalid input syntax for type uuid: \"3259\"",
+      "occurrences": 1
+    }
+  ],
+  "sql": "select\n      event_message,\n      count() as occurrences\n    from logs\n    where source = 'postgres_logs'\n      and match(severity_text, '(?i)ERROR|FATAL|PANIC|WARNING')\n    group by event_message\n    order by occurrences desc\n    limit 15"
+}
