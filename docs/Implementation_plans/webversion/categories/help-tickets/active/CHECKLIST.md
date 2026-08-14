@@ -3,7 +3,7 @@
 **Project:** Employee Help Tickets (Get Help)  
 **Plan:** [HELP-001_COMPREHENSIVE_PLAN.md](HELP-001_COMPREHENSIVE_PLAN.md)  
 **Created:** 2026-08-11  
-**Status:** ✅ DONE — all phases complete (web + mobile OTA/smoke + SLA)  
+**Status:** ✅ DONE — all phases complete; 2026-08-13 assignees/upload hotfix applied + Vercel (refresh full_metadata dump pending)  
 
 Legend: `[ ]` pending · `[x]` done · `N/A` skipped with note
 
