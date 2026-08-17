@@ -150,8 +150,7 @@ export const ComplaintsPage: React.FC = () => {
             .from('user_employee_links')
             .select('employee_code')
             .eq('user_id', userId)
-            .eq('is_active', true)
-            .is('deleted_at', null),
+            .eq('is_active', true),
         ])
 
         const role = String((profile as { role?: string | null } | null)?.role ?? '').trim().toLowerCase()

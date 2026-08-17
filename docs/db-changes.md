@@ -10,6 +10,16 @@
 
 - Checks: `supabase/sql_checks/20260817120000_fix_list_reception_sa_scope_priority_checks.sql`
 - Frontend: empty-date guard in `normalizeCreatedAtRange` (fixes `T00:00:00+05:30` / 22007)
+- Status: **Applied + Vercel deployed** (2026-08-17)
+
+### Complaints — fix 42703 / 42883 from prod logs
+
+| Order | Migration | Change |
+|------|-----------|--------|
+| 1 | `20260817130000_fix_generate_complaint_link_pgcrypto.sql` | `generate_complaint_link`: qualify `extensions.gen_random_bytes()` (42883) |
+
+- Frontend: remove invalid `user_employee_links.deleted_at` filter in `ComplaintsPage.tsx` (42703)
+- Checks: `supabase/sql_checks/20260817130000_fix_generate_complaint_link_pgcrypto_checks.sql`
 - Status: **Pending apply + Vercel deploy**
 
 ## 2026-08-13
