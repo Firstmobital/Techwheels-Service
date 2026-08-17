@@ -2,6 +2,16 @@
 
 ## 2026-08-17
 
+### P1-13 — reception list role fast paths (CRM/floor/admin 57014)
+
+| Order | Migration | Change |
+|------|-----------|--------|
+| 1 | `20260817170000_fix_reception_list_role_fast_paths.sql` | CRM/SM/GM with reception module use dealer-only path (matches RLS). Dedicated early paths for admin, reception-dealer, floor incharge (precomputed SA JOIN). Residual broad path: dealer pre-filter + `summary_scope` only for bodyshop / SA-only CRM. |
+
+- Checks: `supabase/sql_checks/20260817170000_fix_reception_list_role_fast_paths_checks.sql`
+- Root cause: `reception_dealer_only` excluded CRM roles (copied from SA-summary logic), forcing per-row `user_is_crm_for_dealer_sa` / `user_has_service_floor_incharge_scope_for_sa_code` on prod logs 2026-08-17 06:30–06:56 UTC
+- Status: **Pending apply**
+
 ### SUPABASE-002 Phase 8.6 — 10-day `contact_details` retention
 
 | Order | Migration | Change |
