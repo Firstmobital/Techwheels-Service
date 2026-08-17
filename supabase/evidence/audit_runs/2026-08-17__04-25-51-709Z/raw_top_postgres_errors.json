@@ -1,0 +1,66 @@
+{
+  "status": "ok",
+  "records": [
+    {
+      "event_message": "canceling statement due to statement timeout",
+      "occurrences": 287
+    },
+    {
+      "event_message": "permission denied: caller is not the SA on this reception entry",
+      "occurrences": 51
+    },
+    {
+      "event_message": "there is no unique or exclusion constraint matching the ON CONFLICT specification",
+      "occurrences": 34
+    },
+    {
+      "event_message": "invalid input syntax for type timestamp with time zone: \"T00:00:00+05:30\"",
+      "occurrences": 28
+    },
+    {
+      "event_message": "duplicate key value violates unique constraint \"uq_service_reception_entries_jc_number_norm\"",
+      "occurrences": 24
+    },
+    {
+      "event_message": "function gen_random_bytes(integer) does not exist",
+      "occurrences": 22
+    },
+    {
+      "event_message": "permission denied for table technician_assignments",
+      "occurrences": 7
+    },
+    {
+      "event_message": "column users.dealer_code does not exist",
+      "occurrences": 2
+    },
+    {
+      "event_message": "invalid input syntax for type uuid: \"2507\"",
+      "occurrences": 1
+    },
+    {
+      "event_message": "invalid input syntax for type uuid: \"2510\"",
+      "occurrences": 1
+    },
+    {
+      "event_message": "invalid input syntax for type uuid: \"2511\"",
+      "occurrences": 1
+    },
+    {
+      "event_message": "new row for relation \"service_reception_entries\" violates check constraint \"chk_service_reception_entries_jc_number_min_len\"",
+      "occurrences": 1
+    },
+    {
+      "event_message": "duplicate key value violates unique constraint \"uq_bodyshop_assignments_active_job_card\"",
+      "occurrences": 1
+    },
+    {
+      "event_message": "invalid input syntax for type uuid: \"2508\"",
+      "occurrences": 1
+    },
+    {
+      "event_message": "invalid input syntax for type uuid: \"2509\"",
+      "occurrences": 1
+    }
+  ],
+  "sql": "select\n      event_message,\n      count() as occurrences\n    from logs\n    where source = 'postgres_logs'\n      and match(severity_text, '(?i)ERROR|FATAL|PANIC|WARNING')\n    group by event_message\n    order by occurrences desc\n    limit 15"
+}

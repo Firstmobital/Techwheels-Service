@@ -1,0 +1,407 @@
+{
+  "status": "ok",
+  "endpoint": "/v1/projects/jmdndcphkmaljhwgzqxq/analytics/endpoints/logs?sql=select+timestamp%2C+event_message+from+logs+where+source+%3D+%27realtime_logs%27+order+by+timestamp+desc+limit+100&iso_timestamp_start=2026-08-16T04%3A25%3A52.980Z&iso_timestamp_end=2026-08-17T04%3A25%3A52.980Z",
+  "count": 100,
+  "records": [
+    {
+      "event_message": "#PID<0.35995459.0> Starting stream replication for slot supabase_realtime_messages_replication_slot_2_128_0_38e1bef using publication supabase_realtime_messages_publication and protocol version 2",
+      "timestamp": "2026-08-17T03:55:56.833000"
+    },
+    {
+      "event_message": "Create replication slot supabase_realtime_messages_replication_slot_2_128_0_38e1bef using plugin pgoutput",
+      "timestamp": "2026-08-17T03:55:56.815000"
+    },
+    {
+      "event_message": "Publication supabase_realtime_messages_publication exists, validating contents",
+      "timestamp": "2026-08-17T03:55:56.811000"
+    },
+    {
+      "event_message": "Check publication supabase_realtime_messages_publication for table realtime.messages exists",
+      "timestamp": "2026-08-17T03:55:56.809000"
+    },
+    {
+      "event_message": "Checking if replication slot supabase_realtime_messages_replication_slot_2_128_0_38e1bef exists",
+      "timestamp": "2026-08-17T03:55:56.806000"
+    },
+    {
+      "event_message": "Initializing connection with the status: %Realtime.Tenants.ReplicationConnection{\n  tenant_id: \"jmdndcphkmaljhwgzqxq\",\n  opts: [],\n  step: :disconnected,\n  publication_name: \"supabase_realtime_messages_publication\",\n  replication_slot_name: \"supabase_realtime_messages_replication_slot_2_128_0_38e1bef\",\n  output_plugin: \"pgoutput\",\n  proto_version: 2,\n  relations: %{},\n  buffer: [],\n  monitored_pid: #PID<0.38291183.0>,\n  latency_committed_at: nil,\n  query_timeout: 240000\n}",
+      "timestamp": "2026-08-17T03:55:56.744000"
+    },
+    {
+      "event_message": "Creating partitions for realtime.messages",
+      "timestamp": "2026-08-17T03:55:56.626000"
+    },
+    {
+      "event_message": "Realtime.Tenants.Connect.RegisterProcess executed in 0 ms",
+      "timestamp": "2026-08-17T03:55:56.626000"
+    },
+    {
+      "event_message": "Tenant jmdndcphkmaljhwgzqxq is initializing: :\"realtime@2406:da1a:f3c:4501:e666:2c0b:f01e:6351\"",
+      "timestamp": "2026-08-17T03:55:56.626000"
+    },
+    {
+      "event_message": "Realtime.Tenants.Connect.CheckConnection executed in 86 ms",
+      "timestamp": "2026-08-17T03:55:56.625000"
+    },
+    {
+      "event_message": "Realtime.Tenants.Connect.ReconcileMigrations executed in 0 ms",
+      "timestamp": "2026-08-17T03:55:56.625000"
+    },
+    {
+      "event_message": "Realtime.Tenants.Connect.GetTenant executed in 119 ms",
+      "timestamp": "2026-08-17T03:55:56.539000"
+    },
+    {
+      "event_message": "Tenant has no connected users, database connection will be terminated",
+      "timestamp": "2026-08-17T02:33:15.143000"
+    },
+    {
+      "event_message": "Tenant jmdndcphkmaljhwgzqxq has been terminated: :shutdown",
+      "timestamp": "2026-08-17T02:33:15.143000"
+    },
+    {
+      "event_message": "Disconnecting broadcast changes handler in the step : :streaming",
+      "timestamp": "2026-08-17T02:33:15.143000"
+    },
+    {
+      "event_message": "Stop tenant jmdndcphkmaljhwgzqxq because of no connected users",
+      "timestamp": "2026-08-17T02:32:15.142000"
+    },
+    {
+      "event_message": "#PID<0.22358831.0> Starting stream replication for slot supabase_realtime_messages_replication_slot_2_128_0_38e1bef using publication supabase_realtime_messages_publication and protocol version 2",
+      "timestamp": "2026-08-17T02:21:15.126000"
+    },
+    {
+      "event_message": "Create replication slot supabase_realtime_messages_replication_slot_2_128_0_38e1bef using plugin pgoutput",
+      "timestamp": "2026-08-17T02:21:15.117000"
+    },
+    {
+      "event_message": "Publication supabase_realtime_messages_publication exists, validating contents",
+      "timestamp": "2026-08-17T02:21:15.113000"
+    },
+    {
+      "event_message": "Check publication supabase_realtime_messages_publication for table realtime.messages exists",
+      "timestamp": "2026-08-17T02:21:15.112000"
+    },
+    {
+      "event_message": "Checking if replication slot supabase_realtime_messages_replication_slot_2_128_0_38e1bef exists",
+      "timestamp": "2026-08-17T02:21:15.110000"
+    },
+    {
+      "event_message": "Initializing connection with the status: %Realtime.Tenants.ReplicationConnection{\n  tenant_id: \"jmdndcphkmaljhwgzqxq\",\n  opts: [],\n  step: :disconnected,\n  publication_name: \"supabase_realtime_messages_publication\",\n  replication_slot_name: \"supabase_realtime_messages_replication_slot_2_128_0_38e1bef\",\n  output_plugin: \"pgoutput\",\n  proto_version: 2,\n  relations: %{},\n  buffer: [],\n  monitored_pid: #PID<0.20337662.0>,\n  latency_committed_at: nil,\n  query_timeout: 240000\n}",
+      "timestamp": "2026-08-17T02:21:15.052000"
+    },
+    {
+      "event_message": "Realtime.Tenants.Connect.ReconcileMigrations executed in 0 ms",
+      "timestamp": "2026-08-17T02:21:14.936000"
+    },
+    {
+      "event_message": "Creating partitions for realtime.messages",
+      "timestamp": "2026-08-17T02:21:14.936000"
+    },
+    {
+      "event_message": "Realtime.Tenants.Connect.CheckConnection executed in 85 ms",
+      "timestamp": "2026-08-17T02:21:14.936000"
+    },
+    {
+      "event_message": "Realtime.Tenants.Connect.RegisterProcess executed in 0 ms",
+      "timestamp": "2026-08-17T02:21:14.936000"
+    },
+    {
+      "event_message": "Tenant jmdndcphkmaljhwgzqxq is initializing: :\"realtime@2406:da1a:f3c:4502:a608:ac0c:f85b:602d\"",
+      "timestamp": "2026-08-17T02:21:14.936000"
+    },
+    {
+      "event_message": "Realtime.Tenants.Connect.GetTenant executed in 121 ms",
+      "timestamp": "2026-08-17T02:21:14.851000"
+    },
+    {
+      "event_message": "Janitor finished",
+      "timestamp": "2026-08-17T02:19:30.265000"
+    },
+    {
+      "event_message": "Creating partitions for realtime.messages",
+      "timestamp": "2026-08-17T02:19:30.215000"
+    },
+    {
+      "event_message": "Janitor starting realtime.messages cleanup",
+      "timestamp": "2026-08-17T02:19:26.493000"
+    },
+    {
+      "event_message": "Tenant jmdndcphkmaljhwgzqxq has been terminated: :shutdown",
+      "timestamp": "2026-08-17T02:12:24.525000"
+    },
+    {
+      "event_message": "Disconnecting broadcast changes handler in the step : :streaming",
+      "timestamp": "2026-08-17T02:12:24.525000"
+    },
+    {
+      "event_message": "Tenant has no connected users, database connection will be terminated",
+      "timestamp": "2026-08-17T02:12:24.525000"
+    },
+    {
+      "event_message": "Stop tenant jmdndcphkmaljhwgzqxq because of no connected users",
+      "timestamp": "2026-08-17T02:11:24.479000"
+    },
+    {
+      "event_message": "#PID<0.23657538.0> Starting stream replication for slot supabase_realtime_messages_replication_slot_2_128_0_38e1bef using publication supabase_realtime_messages_publication and protocol version 2",
+      "timestamp": "2026-08-17T01:58:24.605000"
+    },
+    {
+      "event_message": "Create replication slot supabase_realtime_messages_replication_slot_2_128_0_38e1bef using plugin pgoutput",
+      "timestamp": "2026-08-17T01:58:24.583000"
+    },
+    {
+      "event_message": "Publication supabase_realtime_messages_publication exists, validating contents",
+      "timestamp": "2026-08-17T01:58:24.576000"
+    },
+    {
+      "event_message": "Check publication supabase_realtime_messages_publication for table realtime.messages exists",
+      "timestamp": "2026-08-17T01:58:24.575000"
+    },
+    {
+      "event_message": "Checking if replication slot supabase_realtime_messages_replication_slot_2_128_0_38e1bef exists",
+      "timestamp": "2026-08-17T01:58:24.572000"
+    },
+    {
+      "event_message": "Initializing connection with the status: %Realtime.Tenants.ReplicationConnection{\n  tenant_id: \"jmdndcphkmaljhwgzqxq\",\n  opts: [],\n  step: :disconnected,\n  publication_name: \"supabase_realtime_messages_publication\",\n  replication_slot_name: \"supabase_realtime_messages_replication_slot_2_128_0_38e1bef\",\n  output_plugin: \"pgoutput\",\n  proto_version: 2,\n  relations: %{},\n  buffer: [],\n  monitored_pid: #PID<0.23680193.0>,\n  latency_committed_at: nil,\n  query_timeout: 240000\n}",
+      "timestamp": "2026-08-17T01:58:24.511000"
+    },
+    {
+      "event_message": "Realtime.Tenants.Connect.CheckConnection executed in 105 ms",
+      "timestamp": "2026-08-17T01:58:24.266000"
+    },
+    {
+      "event_message": "Tenant jmdndcphkmaljhwgzqxq is initializing: :\"realtime@2406:da1a:f3c:4501:e666:2c0b:f01e:6351\"",
+      "timestamp": "2026-08-17T01:58:24.266000"
+    },
+    {
+      "event_message": "Realtime.Tenants.Connect.RegisterProcess executed in 0 ms",
+      "timestamp": "2026-08-17T01:58:24.266000"
+    },
+    {
+      "event_message": "Realtime.Tenants.Connect.ReconcileMigrations executed in 0 ms",
+      "timestamp": "2026-08-17T01:58:24.266000"
+    },
+    {
+      "event_message": "Creating partitions for realtime.messages",
+      "timestamp": "2026-08-17T01:58:24.266000"
+    },
+    {
+      "event_message": "Realtime.Tenants.Connect.GetTenant executed in 0 ms",
+      "timestamp": "2026-08-17T01:58:24.161000"
+    },
+    {
+      "event_message": "Stop tenant jmdndcphkmaljhwgzqxq because of no connected users",
+      "timestamp": "2026-08-16T22:03:03.136000"
+    },
+    {
+      "event_message": "Stop tenant jmdndcphkmaljhwgzqxq because of no connected users",
+      "timestamp": "2026-08-16T21:04:02.042000"
+    },
+    {
+      "event_message": "Janitor finished",
+      "timestamp": "2026-08-16T20:47:31.003000"
+    },
+    {
+      "event_message": "Creating partitions for realtime.messages",
+      "timestamp": "2026-08-16T20:47:30.967000"
+    },
+    {
+      "event_message": "Janitor starting realtime.messages cleanup",
+      "timestamp": "2026-08-16T20:47:30.905000"
+    },
+    {
+      "event_message": "Stop tenant jmdndcphkmaljhwgzqxq because of no connected users",
+      "timestamp": "2026-08-16T20:05:03.573000"
+    },
+    {
+      "event_message": "Stop tenant jmdndcphkmaljhwgzqxq because of no connected users",
+      "timestamp": "2026-08-16T19:06:02.049000"
+    },
+    {
+      "event_message": "Stop tenant jmdndcphkmaljhwgzqxq because of no connected users",
+      "timestamp": "2026-08-16T18:07:03.519000"
+    },
+    {
+      "event_message": "Stop tenant jmdndcphkmaljhwgzqxq because of no connected users",
+      "timestamp": "2026-08-16T17:08:02.004000"
+    },
+    {
+      "event_message": "Janitor finished",
+      "timestamp": "2026-08-16T16:51:28.094000"
+    },
+    {
+      "event_message": "Creating partitions for realtime.messages",
+      "timestamp": "2026-08-16T16:51:28.052000"
+    },
+    {
+      "event_message": "Janitor starting realtime.messages cleanup",
+      "timestamp": "2026-08-16T16:51:27.983000"
+    },
+    {
+      "event_message": "Stop tenant jmdndcphkmaljhwgzqxq because of no connected users",
+      "timestamp": "2026-08-16T16:09:01.811000"
+    },
+    {
+      "event_message": "Stop tenant jmdndcphkmaljhwgzqxq because of no connected users",
+      "timestamp": "2026-08-16T15:10:02.981000"
+    },
+    {
+      "event_message": "Stop tenant jmdndcphkmaljhwgzqxq because of no connected users",
+      "timestamp": "2026-08-16T14:34:43.621000"
+    },
+    {
+      "event_message": "Stop tenant jmdndcphkmaljhwgzqxq because of no connected users",
+      "timestamp": "2026-08-16T14:23:10.061000"
+    },
+    {
+      "event_message": "Stop tenant jmdndcphkmaljhwgzqxq because of no connected users",
+      "timestamp": "2026-08-16T14:11:02.635000"
+    },
+    {
+      "event_message": "Janitor finished",
+      "timestamp": "2026-08-16T13:09:42.449000"
+    },
+    {
+      "event_message": "Creating partitions for realtime.messages",
+      "timestamp": "2026-08-16T13:09:42.407000"
+    },
+    {
+      "event_message": "Janitor starting realtime.messages cleanup",
+      "timestamp": "2026-08-16T13:09:42.334000"
+    },
+    {
+      "event_message": "Stop tenant jmdndcphkmaljhwgzqxq because of no connected users",
+      "timestamp": "2026-08-16T13:09:22.506000"
+    },
+    {
+      "event_message": "Stop tenant jmdndcphkmaljhwgzqxq because of no connected users",
+      "timestamp": "2026-08-16T12:54:15.815000"
+    },
+    {
+      "event_message": "Stop tenant jmdndcphkmaljhwgzqxq because of no connected users",
+      "timestamp": "2026-08-16T12:43:08.912000"
+    },
+    {
+      "event_message": "Stop tenant jmdndcphkmaljhwgzqxq because of no connected users",
+      "timestamp": "2026-08-16T12:23:40.225000"
+    },
+    {
+      "event_message": "Stop tenant jmdndcphkmaljhwgzqxq because of no connected users",
+      "timestamp": "2026-08-16T12:02:38.405000"
+    },
+    {
+      "event_message": "Stop tenant jmdndcphkmaljhwgzqxq because of no connected users",
+      "timestamp": "2026-08-16T11:19:15.827000"
+    },
+    {
+      "event_message": "Stop tenant jmdndcphkmaljhwgzqxq because of no connected users",
+      "timestamp": "2026-08-16T11:07:54.613000"
+    },
+    {
+      "event_message": "#PID<0.265984741.3> Starting stream replication for slot supabase_realtime_messages_replication_slot_2_125_1_38e1bef using publication supabase_realtime_messages_publication and protocol version 2",
+      "timestamp": "2026-08-16T10:56:54.725000"
+    },
+    {
+      "event_message": "Create replication slot supabase_realtime_messages_replication_slot_2_125_1_38e1bef using plugin pgoutput",
+      "timestamp": "2026-08-16T10:56:54.711000"
+    },
+    {
+      "event_message": "Publication supabase_realtime_messages_publication exists, validating contents",
+      "timestamp": "2026-08-16T10:56:54.702000"
+    },
+    {
+      "event_message": "Check publication supabase_realtime_messages_publication for table realtime.messages exists",
+      "timestamp": "2026-08-16T10:56:54.701000"
+    },
+    {
+      "event_message": "Checking if replication slot supabase_realtime_messages_replication_slot_2_125_1_38e1bef exists",
+      "timestamp": "2026-08-16T10:56:54.698000"
+    },
+    {
+      "event_message": "Initializing connection with the status: %Realtime.Tenants.ReplicationConnection{\n  tenant_id: \"jmdndcphkmaljhwgzqxq\",\n  opts: [],\n  step: :disconnected,\n  publication_name: \"supabase_realtime_messages_publication\",\n  replication_slot_name: \"supabase_realtime_messages_replication_slot_2_125_1_38e1bef\",\n  output_plugin: \"pgoutput\",\n  proto_version: 2,\n  relations: %{},\n  buffer: [],\n  monitored_pid: #PID<0.237983213.3>,\n  latency_committed_at: nil,\n  query_timeout: 240000\n}",
+      "timestamp": "2026-08-16T10:56:54.641000"
+    },
+    {
+      "event_message": "Tenant jmdndcphkmaljhwgzqxq is initializing: :\"realtime@2406:da1a:f3c:4500:a28e:78ae:38c:9927\"",
+      "timestamp": "2026-08-16T10:56:54.519000"
+    },
+    {
+      "event_message": "Realtime.Tenants.Connect.ReconcileMigrations executed in 0 ms",
+      "timestamp": "2026-08-16T10:56:54.519000"
+    },
+    {
+      "event_message": "Creating partitions for realtime.messages",
+      "timestamp": "2026-08-16T10:56:54.519000"
+    },
+    {
+      "event_message": "Realtime.Tenants.Connect.RegisterProcess executed in 0 ms",
+      "timestamp": "2026-08-16T10:56:54.519000"
+    },
+    {
+      "event_message": "Realtime.Tenants.Connect.CheckConnection executed in 114 ms",
+      "timestamp": "2026-08-16T10:56:54.518000"
+    },
+    {
+      "event_message": "Realtime.Tenants.Connect.GetTenant executed in 124 ms",
+      "timestamp": "2026-08-16T10:56:54.404000"
+    },
+    {
+      "event_message": "Tenant jmdndcphkmaljhwgzqxq has been terminated: :shutdown",
+      "timestamp": "2026-08-16T10:39:13.436000"
+    },
+    {
+      "event_message": "Tenant has no connected users, database connection will be terminated",
+      "timestamp": "2026-08-16T10:39:13.436000"
+    },
+    {
+      "event_message": "Disconnecting broadcast changes handler in the step : :streaming",
+      "timestamp": "2026-08-16T10:39:13.436000"
+    },
+    {
+      "event_message": "Stop tenant jmdndcphkmaljhwgzqxq because of no connected users",
+      "timestamp": "2026-08-16T10:24:34.204000"
+    },
+    {
+      "event_message": "Stop tenant jmdndcphkmaljhwgzqxq because of no connected users",
+      "timestamp": "2026-08-16T10:11:24.067000"
+    },
+    {
+      "event_message": "Stop tenant jmdndcphkmaljhwgzqxq because of no connected users",
+      "timestamp": "2026-08-16T09:59:22.711000"
+    },
+    {
+      "event_message": "Stop tenant jmdndcphkmaljhwgzqxq because of no connected users",
+      "timestamp": "2026-08-16T09:46:40.058000"
+    },
+    {
+      "event_message": "Stop tenant jmdndcphkmaljhwgzqxq because of no connected users",
+      "timestamp": "2026-08-16T09:34:51.192000"
+    },
+    {
+      "event_message": "Stop tenant jmdndcphkmaljhwgzqxq because of no connected users",
+      "timestamp": "2026-08-16T09:21:54.985000"
+    },
+    {
+      "event_message": "Stop tenant jmdndcphkmaljhwgzqxq because of no connected users",
+      "timestamp": "2026-08-16T09:09:53.221000"
+    },
+    {
+      "event_message": "Stop tenant jmdndcphkmaljhwgzqxq because of no connected users",
+      "timestamp": "2026-08-16T08:58:18.933000"
+    },
+    {
+      "event_message": "Stop tenant jmdndcphkmaljhwgzqxq because of no connected users",
+      "timestamp": "2026-08-16T08:47:12.977000"
+    },
+    {
+      "event_message": "Janitor finished",
+      "timestamp": "2026-08-16T08:20:02.932000"
+    },
+    {
+      "event_message": "Creating partitions for realtime.messages",
+      "timestamp": "2026-08-16T08:20:02.883000"
+    }
+  ]
+}

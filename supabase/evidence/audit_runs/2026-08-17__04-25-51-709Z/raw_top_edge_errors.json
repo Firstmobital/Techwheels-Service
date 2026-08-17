@@ -1,0 +1,46 @@
+{
+  "status": "ok",
+  "records": [
+    {
+      "event_message": "POST | 500 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/rpc/list_reception_entries_page | Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+      "occurrences": 240
+    },
+    {
+      "event_message": "POST | 500 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/rpc/list_reception_entries_page | Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Mobile Safari/537.36",
+      "occurrences": 12
+    },
+    {
+      "event_message": "ReferenceError: history is not defined\n    at Object.handler (file:///var/tmp/sb-compile-edge-runtime/source/index.ts:1155:53)\n    at eventLoopTick (ext:core/01_core.js:175:7)\n    at async mapped (ext:runtime/http.js:246:20)\n",
+      "occurrences": 9
+    },
+    {
+      "event_message": "POST | 500 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/rpc/list_reception_reg_created_since | Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+      "occurrences": 8
+    },
+    {
+      "event_message": "POST | 500 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/rpc/list_reception_entries_page | Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36 Edg/151.0.0.0",
+      "occurrences": 6
+    },
+    {
+      "event_message": "HEAD | 500 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/post_service_feedback_messages?select=id&sent_at=not.is.null | Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+      "occurrences": 2
+    },
+    {
+      "event_message": "GET | 500 | https://jmdndcphkmaljhwgzqxq.supabase.co/auth/v1/admin/users?page=2&per_page=100 | Deno/2.1.4 (variant; SupabaseEdgeRuntime/1.74.3)",
+      "occurrences": 2
+    },
+    {
+      "event_message": "GET | 500 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/vw_technician_income_assignments?select=*&order=assigned_at.desc%2Cid.desc&limit=1000&assigned_at=gte.2026-05-03T00%3A00%3A00%2B05%3A30&assigned_at=lte.2026-09-07T23%3A59%3A59%2B05%3A30&or=%28assigned_at.lt.2026-07-25T12%3A51%3A34.419%2B05%3A30%2Cand%28assigned_at.eq.2026-07-25T12%3A51%3A34.419%2B05%3A30%2Cid.lt.3039%29%29 | Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+      "occurrences": 1
+    },
+    {
+      "event_message": "POST | 500 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/rpc/list_reception_entries_by_jc_numbers | Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+      "occurrences": 1
+    },
+    {
+      "event_message": "[universal-drive-upload] pending log write failed: invalid input syntax for type uuid: \"2509\"\n",
+      "occurrences": 1
+    }
+  ],
+  "sql": "select event_message, sum(occurrences) as occurrences\n    from (\n      select\n        event_message,\n        count() as occurrences\n      from logs\n      where source = 'edge_logs'\n        and toInt32OrZero(log_attributes['response.status_code']) >= 500\n      group by event_message\n\n      union all\n\n      select\n        event_message,\n        count() as occurrences\n      from logs\n      where source = 'function_logs'\n        and match(coalesce(severity_text, log_attributes['metadata.level'], ''), '(?i)error|warning')\n      group by event_message\n    )\n    group by event_message\n    order by occurrences desc\n    limit 10"
+}

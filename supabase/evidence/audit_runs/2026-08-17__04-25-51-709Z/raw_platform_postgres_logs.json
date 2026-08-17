@@ -1,0 +1,407 @@
+{
+  "status": "ok",
+  "endpoint": "/v1/projects/jmdndcphkmaljhwgzqxq/analytics/endpoints/logs?sql=select+timestamp%2C+event_message+from+logs+where+source+%3D+%27postgres_logs%27+order+by+timestamp+desc+limit+100&iso_timestamp_start=2026-08-16T04%3A25%3A52.982Z&iso_timestamp_end=2026-08-17T04%3A25%3A52.982Z",
+  "count": 100,
+  "records": [
+    {
+      "event_message": "cron job 24 completed: 1 row",
+      "timestamp": "2026-08-17T04:25:00.150000"
+    },
+    {
+      "event_message": "cron job 10 completed: 1 row",
+      "timestamp": "2026-08-17T04:25:00.112000"
+    },
+    {
+      "event_message": "cron job 10 starting: select public.process_next_psf_import_run();",
+      "timestamp": "2026-08-17T04:25:00.026000"
+    },
+    {
+      "event_message": "cron job 24 starting: select public.process_all_service_history_sync_queue(50);",
+      "timestamp": "2026-08-17T04:25:00.016000"
+    },
+    {
+      "event_message": "cron job 10 completed: 1 row",
+      "timestamp": "2026-08-17T04:24:00.172000"
+    },
+    {
+      "event_message": "cron job 25 completed: 1 row",
+      "timestamp": "2026-08-17T04:24:00.159000"
+    },
+    {
+      "event_message": "cron job 24 completed: 1 row",
+      "timestamp": "2026-08-17T04:24:00.145000"
+    },
+    {
+      "event_message": "cron job 10 starting: select public.process_next_psf_import_run();",
+      "timestamp": "2026-08-17T04:24:00.046000"
+    },
+    {
+      "event_message": "cron job 25 starting: SELECT public.invoke_insurance_renewal_rc_fetch_worker();",
+      "timestamp": "2026-08-17T04:24:00.039000"
+    },
+    {
+      "event_message": "cron job 24 starting: select public.process_all_service_history_sync_queue(50);",
+      "timestamp": "2026-08-17T04:24:00.007000"
+    },
+    {
+      "event_message": "cron job 24 completed: 1 row",
+      "timestamp": "2026-08-17T04:23:00.114000"
+    },
+    {
+      "event_message": "cron job 10 completed: 1 row",
+      "timestamp": "2026-08-17T04:23:00.091000"
+    },
+    {
+      "event_message": "cron job 10 starting: select public.process_next_psf_import_run();",
+      "timestamp": "2026-08-17T04:23:00.026000"
+    },
+    {
+      "event_message": "cron job 24 starting: select public.process_all_service_history_sync_queue(50);",
+      "timestamp": "2026-08-17T04:23:00.015000"
+    },
+    {
+      "event_message": "checkpoint complete: wrote 74 buffers (0.2%); 0 WAL file(s) added, 0 removed, 3 recycled; write=7.333 s, sync=0.004 s, total=7.371 s; sync files=53, longest=0.003 s, average=0.001 s; distance=32820 kB, estimate=47466 kB; lsn=BD/94013798, redo lsn=BD/9400E2B0",
+      "timestamp": "2026-08-17T04:22:09.339000"
+    },
+    {
+      "event_message": "checkpoint starting: time",
+      "timestamp": "2026-08-17T04:22:01.969000"
+    },
+    {
+      "event_message": "cron job 25 completed: 1 row",
+      "timestamp": "2026-08-17T04:22:00.146000"
+    },
+    {
+      "event_message": "cron job 24 completed: 1 row",
+      "timestamp": "2026-08-17T04:22:00.144000"
+    },
+    {
+      "event_message": "cron job 10 completed: 1 row",
+      "timestamp": "2026-08-17T04:22:00.142000"
+    },
+    {
+      "event_message": "cron job 10 starting: select public.process_next_psf_import_run();",
+      "timestamp": "2026-08-17T04:22:00.031000"
+    },
+    {
+      "event_message": "cron job 25 starting: SELECT public.invoke_insurance_renewal_rc_fetch_worker();",
+      "timestamp": "2026-08-17T04:22:00.027000"
+    },
+    {
+      "event_message": "cron job 24 starting: select public.process_all_service_history_sync_queue(50);",
+      "timestamp": "2026-08-17T04:22:00.002000"
+    },
+    {
+      "event_message": "canceling statement due to statement timeout",
+      "timestamp": "2026-08-17T04:21:05.373000"
+    },
+    {
+      "event_message": "cron job 24 completed: 1 row",
+      "timestamp": "2026-08-17T04:21:00.106000"
+    },
+    {
+      "event_message": "cron job 10 completed: 1 row",
+      "timestamp": "2026-08-17T04:21:00.095000"
+    },
+    {
+      "event_message": "cron job 10 starting: select public.process_next_psf_import_run();",
+      "timestamp": "2026-08-17T04:21:00.016000"
+    },
+    {
+      "event_message": "cron job 24 starting: select public.process_all_service_history_sync_queue(50);",
+      "timestamp": "2026-08-17T04:21:00.009000"
+    },
+    {
+      "event_message": "statement: SET statement_timeout='58s'; SET idle_session_timeout='58s';\n\nCREATE OR REPLACE FUNCTION pg_temp.count_estimate(\n    query text\n) RETURNS integer LANGUAGE plpgsql AS $$\nDECLARE\n    plan jsonb;\nBEGIN\n    EXECUTE 'EXPLAIN (FORMAT JSON)' || query INTO plan;\n    RETURN plan->0->'Plan'->'Plan Rows';\nEND;\n$$;\n\n\nwith approximation as (\n    select reltuples as estimate\n    from pg_class\n    where oid = 45711\n)\nselect \n  case \n    when estimate > 50000 then estimate\n    else (select count(*) from public.all_chassis_no)\n  end as count,\n  estimate > 50000 as is_estimate\nfrom approximation;\n\n\n-- source: dashboard\n-- user: session:82dd2089-a0f5-48ef-8a45-06798c35a4ae\n-- date: 2026-08-17T04:20:12.726Z",
+      "timestamp": "2026-08-17T04:20:13.189000"
+    },
+    {
+      "event_message": "cron job 24 completed: 1 row",
+      "timestamp": "2026-08-17T04:20:00.211000"
+    },
+    {
+      "event_message": "cron job 10 completed: 1 row",
+      "timestamp": "2026-08-17T04:20:00.142000"
+    },
+    {
+      "event_message": "cron job 25 completed: 1 row",
+      "timestamp": "2026-08-17T04:20:00.140000"
+    },
+    {
+      "event_message": "cron job 10 starting: select public.process_next_psf_import_run();",
+      "timestamp": "2026-08-17T04:20:00.035000"
+    },
+    {
+      "event_message": "cron job 25 starting: SELECT public.invoke_insurance_renewal_rc_fetch_worker();",
+      "timestamp": "2026-08-17T04:20:00.025000"
+    },
+    {
+      "event_message": "cron job 24 starting: select public.process_all_service_history_sync_queue(50);",
+      "timestamp": "2026-08-17T04:20:00.008000"
+    },
+    {
+      "event_message": "cron job 10 completed: 1 row",
+      "timestamp": "2026-08-17T04:19:00.085000"
+    },
+    {
+      "event_message": "cron job 24 completed: 1 row",
+      "timestamp": "2026-08-17T04:19:00.054000"
+    },
+    {
+      "event_message": "cron job 10 starting: select public.process_next_psf_import_run();",
+      "timestamp": "2026-08-17T04:19:00.011000"
+    },
+    {
+      "event_message": "cron job 24 starting: select public.process_all_service_history_sync_queue(50);",
+      "timestamp": "2026-08-17T04:19:00.004000"
+    },
+    {
+      "event_message": "cron job 25 completed: 1 row",
+      "timestamp": "2026-08-17T04:18:00.187000"
+    },
+    {
+      "event_message": "cron job 10 completed: 1 row",
+      "timestamp": "2026-08-17T04:18:00.151000"
+    },
+    {
+      "event_message": "cron job 24 completed: 1 row",
+      "timestamp": "2026-08-17T04:18:00.149000"
+    },
+    {
+      "event_message": "cron job 10 starting: select public.process_next_psf_import_run();",
+      "timestamp": "2026-08-17T04:18:00.024000"
+    },
+    {
+      "event_message": "cron job 25 starting: SELECT public.invoke_insurance_renewal_rc_fetch_worker();",
+      "timestamp": "2026-08-17T04:18:00.016000"
+    },
+    {
+      "event_message": "cron job 24 starting: select public.process_all_service_history_sync_queue(50);",
+      "timestamp": "2026-08-17T04:18:00.006000"
+    },
+    {
+      "event_message": "invalid input syntax for type timestamp with time zone: \"T00:00:00+05:30\"",
+      "timestamp": "2026-08-17T04:17:43.641000"
+    },
+    {
+      "event_message": "invalid input syntax for type timestamp with time zone: \"T00:00:00+05:30\"",
+      "timestamp": "2026-08-17T04:17:41.287000"
+    },
+    {
+      "event_message": "invalid input syntax for type timestamp with time zone: \"T00:00:00+05:30\"",
+      "timestamp": "2026-08-17T04:17:38.989000"
+    },
+    {
+      "event_message": "invalid input syntax for type timestamp with time zone: \"T00:00:00+05:30\"",
+      "timestamp": "2026-08-17T04:17:36.216000"
+    },
+    {
+      "event_message": "invalid input syntax for type timestamp with time zone: \"T00:00:00+05:30\"",
+      "timestamp": "2026-08-17T04:17:33.649000"
+    },
+    {
+      "event_message": "invalid input syntax for type timestamp with time zone: \"T00:00:00+05:30\"",
+      "timestamp": "2026-08-17T04:17:31.304000"
+    },
+    {
+      "event_message": "invalid input syntax for type timestamp with time zone: \"T00:00:00+05:30\"",
+      "timestamp": "2026-08-17T04:17:28.902000"
+    },
+    {
+      "event_message": "invalid input syntax for type timestamp with time zone: \"T00:00:00+05:30\"",
+      "timestamp": "2026-08-17T04:17:24.835000"
+    },
+    {
+      "event_message": "invalid input syntax for type timestamp with time zone: \"T00:00:00+05:30\"",
+      "timestamp": "2026-08-17T04:17:13.263000"
+    },
+    {
+      "event_message": "checkpoint complete: wrote 85 buffers (0.3%); 0 WAL file(s) added, 0 removed, 2 recycled; write=8.436 s, sync=0.002 s, total=8.452 s; sync files=63, longest=0.002 s, average=0.001 s; distance=49094 kB, estimate=49094 kB; lsn=BD/9200AD08, redo lsn=BD/920011E8",
+      "timestamp": "2026-08-17T04:17:09.643000"
+    },
+    {
+      "event_message": "checkpoint starting: time",
+      "timestamp": "2026-08-17T04:17:01.191000"
+    },
+    {
+      "event_message": "cron job 24 completed: 1 row",
+      "timestamp": "2026-08-17T04:17:00.124000"
+    },
+    {
+      "event_message": "cron job 10 completed: 1 row",
+      "timestamp": "2026-08-17T04:17:00.101000"
+    },
+    {
+      "event_message": "cron job 10 starting: select public.process_next_psf_import_run();",
+      "timestamp": "2026-08-17T04:17:00.020000"
+    },
+    {
+      "event_message": "cron job 24 starting: select public.process_all_service_history_sync_queue(50);",
+      "timestamp": "2026-08-17T04:17:00.002000"
+    },
+    {
+      "event_message": "cron job 10 completed: 1 row",
+      "timestamp": "2026-08-17T04:16:00.131000"
+    },
+    {
+      "event_message": "cron job 25 completed: 1 row",
+      "timestamp": "2026-08-17T04:16:00.108000"
+    },
+    {
+      "event_message": "cron job 24 completed: 1 row",
+      "timestamp": "2026-08-17T04:16:00.093000"
+    },
+    {
+      "event_message": "cron job 10 starting: select public.process_next_psf_import_run();",
+      "timestamp": "2026-08-17T04:16:00.013000"
+    },
+    {
+      "event_message": "cron job 25 starting: SELECT public.invoke_insurance_renewal_rc_fetch_worker();",
+      "timestamp": "2026-08-17T04:16:00.005000"
+    },
+    {
+      "event_message": "cron job 24 starting: select public.process_all_service_history_sync_queue(50);",
+      "timestamp": "2026-08-17T04:16:00.003000"
+    },
+    {
+      "event_message": "cron job 30 completed: 1 row",
+      "timestamp": "2026-08-17T04:15:00.172000"
+    },
+    {
+      "event_message": "cron job 10 completed: 1 row",
+      "timestamp": "2026-08-17T04:15:00.155000"
+    },
+    {
+      "event_message": "cron job 24 completed: 1 row",
+      "timestamp": "2026-08-17T04:15:00.142000"
+    },
+    {
+      "event_message": "cron job 30 starting: SELECT public.run_help_ticket_sla_jobs();",
+      "timestamp": "2026-08-17T04:15:00.011000"
+    },
+    {
+      "event_message": "cron job 10 starting: select public.process_next_psf_import_run();",
+      "timestamp": "2026-08-17T04:15:00.008000"
+    },
+    {
+      "event_message": "cron job 24 starting: select public.process_all_service_history_sync_queue(50);",
+      "timestamp": "2026-08-17T04:15:00.004000"
+    },
+    {
+      "event_message": "cron job 25 completed: 1 row",
+      "timestamp": "2026-08-17T04:14:00.249000"
+    },
+    {
+      "event_message": "cron job 10 completed: 1 row",
+      "timestamp": "2026-08-17T04:14:00.247000"
+    },
+    {
+      "event_message": "cron job 24 completed: 1 row",
+      "timestamp": "2026-08-17T04:14:00.231000"
+    },
+    {
+      "event_message": "cron job 10 starting: select public.process_next_psf_import_run();",
+      "timestamp": "2026-08-17T04:14:00.032000"
+    },
+    {
+      "event_message": "cron job 25 starting: SELECT public.invoke_insurance_renewal_rc_fetch_worker();",
+      "timestamp": "2026-08-17T04:14:00.023000"
+    },
+    {
+      "event_message": "cron job 24 starting: select public.process_all_service_history_sync_queue(50);",
+      "timestamp": "2026-08-17T04:14:00.018000"
+    },
+    {
+      "event_message": "cron job 10 completed: 1 row",
+      "timestamp": "2026-08-17T04:13:00.098000"
+    },
+    {
+      "event_message": "cron job 24 completed: 1 row",
+      "timestamp": "2026-08-17T04:13:00.083000"
+    },
+    {
+      "event_message": "cron job 10 starting: select public.process_next_psf_import_run();",
+      "timestamp": "2026-08-17T04:13:00.031000"
+    },
+    {
+      "event_message": "cron job 24 starting: select public.process_all_service_history_sync_queue(50);",
+      "timestamp": "2026-08-17T04:13:00.019000"
+    },
+    {
+      "event_message": "checkpoint complete: wrote 220 buffers (0.7%); 0 WAL file(s) added, 0 removed, 3 recycled; write=21.982 s, sync=0.004 s, total=22.019 s; sync files=83, longest=0.003 s, average=0.001 s; distance=32571 kB, estimate=47669 kB; lsn=BD/8F0178F8, redo lsn=BD/8F00F9C8",
+      "timestamp": "2026-08-17T04:12:23.905000"
+    },
+    {
+      "event_message": "checkpoint starting: time",
+      "timestamp": "2026-08-17T04:12:01.886000"
+    },
+    {
+      "event_message": "cron job 25 completed: 1 row",
+      "timestamp": "2026-08-17T04:12:00.180000"
+    },
+    {
+      "event_message": "cron job 24 completed: 1 row",
+      "timestamp": "2026-08-17T04:12:00.147000"
+    },
+    {
+      "event_message": "cron job 10 completed: 1 row",
+      "timestamp": "2026-08-17T04:12:00.140000"
+    },
+    {
+      "event_message": "cron job 10 starting: select public.process_next_psf_import_run();",
+      "timestamp": "2026-08-17T04:12:00.026000"
+    },
+    {
+      "event_message": "cron job 25 starting: SELECT public.invoke_insurance_renewal_rc_fetch_worker();",
+      "timestamp": "2026-08-17T04:12:00.023000"
+    },
+    {
+      "event_message": "cron job 24 starting: select public.process_all_service_history_sync_queue(50);",
+      "timestamp": "2026-08-17T04:12:00.007000"
+    },
+    {
+      "event_message": "cron job 24 completed: 1 row",
+      "timestamp": "2026-08-17T04:11:00.077000"
+    },
+    {
+      "event_message": "cron job 10 completed: 1 row",
+      "timestamp": "2026-08-17T04:11:00.067000"
+    },
+    {
+      "event_message": "cron job 10 starting: select public.process_next_psf_import_run();",
+      "timestamp": "2026-08-17T04:11:00.014000"
+    },
+    {
+      "event_message": "cron job 24 starting: select public.process_all_service_history_sync_queue(50);",
+      "timestamp": "2026-08-17T04:11:00.002000"
+    },
+    {
+      "event_message": "cron job 10 completed: 1 row",
+      "timestamp": "2026-08-17T04:10:00.147000"
+    },
+    {
+      "event_message": "cron job 24 completed: 1 row",
+      "timestamp": "2026-08-17T04:10:00.128000"
+    },
+    {
+      "event_message": "cron job 25 completed: 1 row",
+      "timestamp": "2026-08-17T04:10:00.083000"
+    },
+    {
+      "event_message": "cron job 10 starting: select public.process_next_psf_import_run();",
+      "timestamp": "2026-08-17T04:10:00.021000"
+    },
+    {
+      "event_message": "cron job 25 starting: SELECT public.invoke_insurance_renewal_rc_fetch_worker();",
+      "timestamp": "2026-08-17T04:10:00.012000"
+    },
+    {
+      "event_message": "cron job 24 starting: select public.process_all_service_history_sync_queue(50);",
+      "timestamp": "2026-08-17T04:10:00.003000"
+    },
+    {
+      "event_message": "canceling statement due to statement timeout",
+      "timestamp": "2026-08-17T04:09:44.731000"
+    }
+  ]
+}

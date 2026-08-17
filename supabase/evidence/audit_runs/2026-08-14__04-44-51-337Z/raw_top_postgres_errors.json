@@ -1,0 +1,66 @@
+{
+  "status": "ok",
+  "records": [
+    {
+      "event_message": "canceling statement due to statement timeout",
+      "occurrences": 343
+    },
+    {
+      "event_message": "invalid input syntax for type timestamp with time zone: \"T00:00:00+05:30\"",
+      "occurrences": 56
+    },
+    {
+      "event_message": "function gen_random_bytes(integer) does not exist",
+      "occurrences": 52
+    },
+    {
+      "event_message": "there is no unique or exclusion constraint matching the ON CONFLICT specification",
+      "occurrences": 9
+    },
+    {
+      "event_message": "duplicate key value violates unique constraint \"uq_service_reception_entries_jc_number_norm\"",
+      "occurrences": 5
+    },
+    {
+      "event_message": "canceling statement due to user request",
+      "occurrences": 3
+    },
+    {
+      "event_message": "permission denied for table technician_assignments",
+      "occurrences": 3
+    },
+    {
+      "event_message": "column user_employee_links.deleted_at does not exist",
+      "occurrences": 3
+    },
+    {
+      "event_message": "column service_reception_entries.fuel_type does not exist",
+      "occurrences": 2
+    },
+    {
+      "event_message": "invalid input syntax for type uuid: \"3402\"",
+      "occurrences": 2
+    },
+    {
+      "event_message": "invalid input syntax for type uuid: \"3422\"",
+      "occurrences": 2
+    },
+    {
+      "event_message": "invalid input syntax for type uuid: \"3405\"",
+      "occurrences": 2
+    },
+    {
+      "event_message": "column users.dealer_code does not exist",
+      "occurrences": 2
+    },
+    {
+      "event_message": "invalid input syntax for type uuid: \"3335\"",
+      "occurrences": 1
+    },
+    {
+      "event_message": "invalid input syntax for type uuid: \"3418\"",
+      "occurrences": 1
+    }
+  ],
+  "sql": "select\n      event_message,\n      count() as occurrences\n    from logs\n    where source = 'postgres_logs'\n      and match(severity_text, '(?i)ERROR|FATAL|PANIC|WARNING')\n    group by event_message\n    order by occurrences desc\n    limit 15"
+}
