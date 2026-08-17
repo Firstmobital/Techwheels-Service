@@ -151,16 +151,45 @@ function normalizeCreatedAtRange(range: { from: string; to: string }): { from: s
   let from = String(range.from ?? '').trim()
   let to = String(range.to ?? '').trim()
 
-  if (!from || !to) {
+  // Reject time-only fragments (e.g. "T00:00:00+05:30" from empty date + suffix).
+  if (from.startsWith('T')) from = ''
+  if (to.startsWith('T')) to = ''
+
+  const fromIsDateOnly = /^\d{4}-\d{2}-\d{2}$/.test(from)
+  const toIsDateOnly = /^\d{4}-\d{2}-\d{2}$/.test(to)
+  const fromIsFull = from.includes('T') && !from.startsWith('T')
+  const toIsFull = to.includes('T') && !to.startsWith('T')
+
+  if (!from || !to || (!fromIsDateOnly && !fromIsFull) || (!toIsDateOnly && !toIsFull)) {
     const fallback = getISOLookbackRange(RECEPTION_DEFAULT_LOOKBACK_DAYS)
-    if (!from) from = fallback.from.slice(0, 10)
-    if (!to) to = fallback.to.slice(0, 10)
+    if (!from || (!fromIsDateOnly && !fromIsFull)) from = fallback.from.slice(0, 10)
+    if (!to || (!toIsDateOnly && !toIsFull)) to = fallback.to.slice(0, 10)
   }
 
   return {
     from: from.includes('T') ? from : `${from}T00:00:00+05:30`,
     to: to.includes('T') ? to : `${to}T23:59:59+05:30`,
   }
+}
+
+/** Period "All" / empty custom dates → default lookback before RPC bounds. */
+export function resolveReceptionLoadRange(range: { from: string; to: string }): { from: string; to: string } {
+  const from = String(range.from ?? '').trim()
+  const to = String(range.to ?? '').trim()
+  if (!from || !to || from.startsWith('T') || to.startsWith('T')) {
+    return getDefaultReceptionLookbackDateRange()
+  }
+  return { from, to }
+}
+
+function resolveRpcCreatedAtBounds(
+  createdAtFrom?: string | null,
+  createdAtTo?: string | null,
+): { from: string; to: string } {
+  return normalizeCreatedAtRange({
+    from: String(createdAtFrom ?? '').trim(),
+    to: String(createdAtTo ?? '').trim(),
+  })
 }
 
 const RECEPTION_ENTRY_SELECT_COLUMNS = [
@@ -246,10 +275,11 @@ async function fetchReceptionEntriesPage(
 ): Promise<{ data: ReceptionEntryPageResult | null; error: unknown | null }> {
   const pageSize = queryOptions.pageSize ?? RECEPTION_LIST_PAGE_SIZE
   const searchQuery = (queryOptions.searchQuery ?? '').trim() || null
+  const bounds = resolveRpcCreatedAtBounds(queryOptions.createdAtFrom, queryOptions.createdAtTo)
 
   const { data, error } = await supabase.rpc('list_reception_entries_page', {
-    p_created_at_from: queryOptions.createdAtFrom ?? null,
-    p_created_at_to: queryOptions.createdAtTo ?? null,
+    p_created_at_from: bounds.from,
+    p_created_at_to: bounds.to,
     p_page_size: pageSize,
     p_cursor_created_at: queryOptions.cursor?.createdAt ?? null,
     p_cursor_id: queryOptions.cursor?.id ?? null,
@@ -458,12 +488,8 @@ export async function listReceptionEntriesByDateRangePage(
   cursor: ReceptionEntryPageCursor | null = null,
   options?: { searchQuery?: string },
 ): Promise<ApiResult<ReceptionEntryPageResult>> {
-  const from = String(range.from ?? '').trim()
-  const to = String(range.to ?? '').trim()
-
-  if (!from || !to) return fail('Date range is required')
-
-  const bounds = toCreatedAtBounds({ from, to })
+  const effectiveRange = resolveReceptionLoadRange(range)
+  const bounds = toCreatedAtBounds(effectiveRange)
   const { data, error } = await fetchReceptionEntriesPage({
     createdAtFrom: bounds.from,
     createdAtTo: bounds.to,
@@ -609,11 +635,8 @@ export async function fetchServiceAdvisorSummaryCounts(
   range: { from: string; to: string },
   filters?: ServiceAdvisorSummaryFilter,
 ): Promise<ApiResult<ServiceAdvisorSummaryCounts>> {
-  const from = String(range.from ?? '').trim()
-  const to = String(range.to ?? '').trim()
-  if (!from || !to) return fail('Date range is required')
-
-  const bounds = toCreatedAtBounds({ from, to })
+  const effectiveRange = resolveReceptionLoadRange(range)
+  const bounds = toCreatedAtBounds(effectiveRange)
   const branch = filters?.branch && filters.branch !== 'all' ? filters.branch : null
   const fuelType = filters?.fuelType && filters.fuelType !== 'all' ? filters.fuelType : null
   const category = filters?.category && filters.category !== 'all' ? filters.category : null
@@ -769,15 +792,9 @@ export async function listServiceAdvisorEntries(): Promise<ApiResult<ReceptionEn
 }
 
 export async function listServiceAdvisorEntriesByDateRange(range: { from: string; to: string }): Promise<ApiResult<ReceptionEntryRow[]>> {
-  const from = String(range.from ?? '').trim()
-  const to = String(range.to ?? '').trim()
+  const bounds = toCreatedAtBounds(resolveReceptionLoadRange(range))
 
-  if (!from || !to) return fail('Date range is required')
-
-  const createdAtFrom = `${from}T00:00:00+05:30`
-  const createdAtTo = `${to}T23:59:59+05:30`
-
-  const { data, error } = await fetchReceptionEntriesWithKeyset(undefined, createdAtFrom, createdAtTo)
+  const { data, error } = await fetchReceptionEntriesWithKeyset(undefined, bounds.from, bounds.to)
 
   if (error) return fail(error)
 
@@ -789,8 +806,9 @@ export async function listServiceAdvisorEntriesByDateRange(range: { from: string
 export async function listFloorInchargeEntries(
   range?: { from: string; to: string },
 ): Promise<ApiResult<ReceptionEntryRow[]>> {
-  // Default to last FLOOR_INCHARGE_LOOKBACK_DAYS days — vehicles don't stay in service longer.
-  const effectiveRange = normalizeCreatedAtRange(range ?? getISOLookbackRange(FLOOR_INCHARGE_LOOKBACK_DAYS))
+  const effectiveRange = normalizeCreatedAtRange(
+    range ? resolveReceptionLoadRange(range) : getISOLookbackRange(FLOOR_INCHARGE_LOOKBACK_DAYS),
+  )
   const { data, error } = await fetchReceptionEntriesWithKeyset(
     FLOOR_INCHARGE_SERVICE_TYPES,
     effectiveRange.from,
@@ -820,7 +838,7 @@ export async function listFloorInchargeEntries(
 export async function listAccidentReceptionEntriesByDateRange(
   range: { from: string; to: string },
 ): Promise<ApiResult<ReceptionEntryRow[]>> {
-  const effectiveRange = normalizeCreatedAtRange(range)
+  const effectiveRange = normalizeCreatedAtRange(resolveReceptionLoadRange(range))
   const { data, error } = await fetchReceptionEntriesWithKeyset(
     ['Accident'],
     effectiveRange.from,
@@ -958,15 +976,9 @@ export async function fetchReceptionDashboardStatusRows(options: {
 }
 
 export async function listReceptionEntriesByDateRange(range: { from: string; to: string }): Promise<ApiResult<ReceptionEntryRow[]>> {
-  const from = String(range.from ?? '').trim()
-  const to = String(range.to ?? '').trim()
+  const bounds = toCreatedAtBounds(resolveReceptionLoadRange(range))
 
-  if (!from || !to) return fail('Date range is required')
-
-  const createdAtFrom = `${from}T00:00:00+05:30`
-  const createdAtTo = `${to}T23:59:59+05:30`
-
-  const { data, error } = await fetchReceptionEntriesWithKeyset(undefined, createdAtFrom, createdAtTo)
+  const { data, error } = await fetchReceptionEntriesWithKeyset(undefined, bounds.from, bounds.to)
 
   if (error) return fail(error)
 
