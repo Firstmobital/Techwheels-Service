@@ -2,6 +2,28 @@
 
 ## 2026-08-17
 
+### SUPABASE-002 Phase 8.6 — 10-day `contact_details` retention
+
+| Order | Migration | Change |
+|------|-----------|--------|
+| 1 | `20260817161000_contact_details_10day_retention_purge.sql` | Keep only last 10 days of `contact_details` (`created_at`). Batched purge RPC + daily pg_cron `02:15 IST`. Fills remaining Customer phones before delete. |
+
+- Checks: `supabase/sql_checks/20260817161000_contact_details_10day_retention_purge_checks.sql`
+- Plan: SUPABASE-002 Phase 8.6
+- Status: **Pending apply**
+- Authority: `supabase/backups/full_metadata.sql` (`public.contact_details.created_at`)
+
+### SUPABASE-002 Phase 8 — fill-null `contact_phones` from `contact_details`
+
+| Order | Migration | Change |
+|------|-----------|--------|
+| 1 | `20260817160000_all_service_data_fill_contact_phones_from_contact_details.sql` | Fill `all_service_data.contact_phones` from Customer `contact_details.cell_phone_no` on matching chassis when target is NULL/blank. No overwrite. Triggers + chunked reconcile. |
+
+- Checks: `supabase/sql_checks/20260817160000_all_service_data_fill_contact_phones_from_contact_details_checks.sql`
+- Plan: `docs/Implementation_plans/webversion/categories/supabase/active/SUPABASE-002_ALL_SERVICE_DATA_DYNAMIC_TABLE_REALTIME_SYNC_PLAN_2026-06-20.md` Phase 8
+- Status: **Applied + verified** (2026-08-17). `remaining_fillable_rows=0`, reconcile=`0`, both triggers present. New Customer inserts fill blank phones automatically.
+- Authority: `supabase/backups/full_metadata.sql` (`public.contact_details`, `public.all_service_data.contact_phones`)
+
 ### P1-13 — shared-role gate for reception list (Veika + floor)
 
 | Order | Migration | Change |

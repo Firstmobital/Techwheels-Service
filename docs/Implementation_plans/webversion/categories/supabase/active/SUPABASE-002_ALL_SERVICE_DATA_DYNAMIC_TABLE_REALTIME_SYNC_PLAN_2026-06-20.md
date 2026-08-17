@@ -74,6 +74,12 @@ All date/time columns in `public.all_service_data` must follow Supabase/PostgreS
 10. Add closed-job audit columns in `public.all_service_data`:
   - `updated_by_closed_job` (boolean)
   - `updated_by_closed_job_at` (timestamp with time zone)
+11. Add a chassis-keyed fill-null flow from `public.contact_details` to `public.all_service_data.contact_phones` (Phase 8):
+  - Source gate: `contact_status` is Customer
+  - Target gate: write only when `contact_phones` is `NULL` or blank
+  - Do not overwrite an existing non-blank target phone
+  - Realtime: new Customer `contact_details` rows fill blank target phones via trigger
+  - Retention: `contact_details` keeps only the last 10 days (`created_at`); daily purge
 
 ---
 
@@ -490,6 +496,28 @@ Execution principles:
   - Add new source->target mappings one by one with explicit freshness and overwrite rules.
   - For each added mapping, include matching SQL checks and evidence update in this plan.
 
+### Phase 8: `contact_details` -> `all_service_data.contact_phones` Fill-Null Sync
+
+Scope (locked 2026-08-17):
+
+- Source table: `public.contact_details` (schema authority: `supabase/backups/full_metadata.sql`)
+- Target table: `public.all_service_data`
+- Target column: `contact_phones` only
+- Match key: normalized chassis (`upper(btrim(contact_details.chassis_no))` = `upper(btrim(all_service_data.chassis_no))`)
+- Source gate: `lower(btrim(coalesce(contact_status, ''))) = 'customer'`
+- Source phone column: `cell_phone_no` (must be non-null and non-blank after trim)
+- Target write gate: update only when `nullif(btrim(contact_phones), '') IS NULL`
+- Mode: update-only. Do not insert new `all_service_data` rows. Do not clear or overwrite an existing non-blank `contact_phones` value.
+- Out of scope: `contact_details.first_name`, `contact_details.last_name`, quoted `"Status"` column, `all_service_data_dynamic` (that table has no `contact_phones` column after prune).
+
+- [x] **Task 8.1:** Lock source/target contracts from metadata truth (`contact_details` columns, `all_service_data.contact_phones`, chassis indexes).
+- [x] **Task 8.2:** Add normalized Customer-phone lookup index on `contact_details`.
+- [x] **Task 8.3:** Implement lookup + refresh + fill-null triggers + chunked reconcile helper.
+- [x] **Task 8.4:** One-time set-based backfill of blank/null target phones from Customer source winners.
+- [x] **Task 8.5:** Add read-only SQL checks for objects, no-overwrite safety, and smoke no-match refresh.
+- [x] **Task 8.6:** Keep only last 10 days of `contact_details` (`created_at`); daily IST purge via pg_cron.
+- [x] **Task 8.7:** Confirm realtime Customer-insert fill remains active after retention rollout.
+
 Execution update (2026-06-25):
 
 - Executed and verified migrations/checks promoted:
@@ -520,6 +548,73 @@ Scheduler runbook (daily IST +1h):
   - edge function `booking-source-sync` with body `{ "dry_run": false, "batch_size": 200 }`.
 - Auth mode for scheduler invocation:
   - `booking-source-sync` is configured with `verify_jwt = false` in `supabase/config.toml` so cron can call without vault bearer-token dependency.
+
+### `contact_details` -> `all_service_data.contact_phones` Fill-Null Contract (Phase 8, locked 2026-08-17)
+
+Primary goal:
+
+- Fill `public.all_service_data.contact_phones` from `public.contact_details.cell_phone_no` when the target phone is missing, using a chassis match and a Customer-only source gate.
+
+Authoritative schema basis (`supabase/backups/full_metadata.sql`):
+
+- Source `public.contact_details`:
+  - `id bigint` PK (identity)
+  - `chassis_no text NOT NULL`
+  - `first_name text` (not mapped)
+  - `last_name text` (not mapped)
+  - `cell_phone_no text` (source phone)
+  - `contact_status text` (source gate)
+  - `created_at timestamptz`
+  - `"Status" text` (quoted identifier; ignored)
+  - Existing index: `contact_details_chassis_number_idx` on raw `chassis_no` (not unique)
+  - No RLS on this table
+- Target `public.all_service_data`:
+  - `contact_phones text`
+  - Unique on raw `chassis_no` (`all_service_data_new_chassis_number_unique`)
+  - Normalized chassis index already present: `idx_all_service_data_chassis_no_norm` on `upper(btrim(chassis_no))`
+- `public.all_service_data_dynamic` does not contain `contact_phones`; this flow does not project into the dynamic table.
+
+Final mapping list (source -> target):
+
+| Source (`contact_details`) | Target (`all_service_data`) | Rule | Confidence |
+|---|---|---|---|
+| `chassis_no` | `chassis_no` | Join key only (`upper(btrim(...))`); never rewrite target chassis | HIGH |
+| `cell_phone_no` | `contact_phones` | Write only when target is `NULL` or blank; source must be non-blank | HIGH |
+| `contact_status` | (gate, not a mapped column) | Eligible when trimmed/lowercased value equals `customer` | HIGH |
+
+Locked execution contract:
+
+1. Source eligibility: `lower(btrim(coalesce(contact_status, ''))) = 'customer'` AND `nullif(btrim(cell_phone_no), '') IS NOT NULL` AND chassis is present.
+2. Duplicate-source winner: for the same normalized chassis, keep the latest Customer row with a phone (`created_at DESC NULLS LAST`, then `id DESC`).
+3. Target match: `upper(btrim(all_service_data.chassis_no))` only. No VRN fallback. No insert of missing chassis rows.
+4. Target write gate: `nullif(btrim(contact_phones), '') IS NULL`. Existing non-blank phones are never overwritten, even if the Customer source phone later changes.
+5. Delete behavior: deleting a `contact_details` row does not clear target phones. Refresh the old chassis so a remaining Customer row can still fill a blank target.
+6. Audit: stamp `last_updated_at = now()` on the UPDATE path. Do not add a new `updated_by_*` column for this flow.
+7. Realtime:
+  - `BEFORE INSERT OR UPDATE OF chassis_no, contact_phones` on `all_service_data` fills `NEW.contact_phones` from the Customer winner when the incoming phone is null/blank.
+  - `AFTER INSERT OR UPDATE OF chassis_no, cell_phone_no, contact_status OR DELETE` on `contact_details` calls `refresh_all_service_data_from_contact_details(...)`.
+  - A new `contact_details` row with `contact_status = Customer` and a non-blank `cell_phone_no` therefore fills a matching blank `all_service_data.contact_phones` immediately. No extra job is required for that path.
+8. Backfill: one-shot set-based UPDATE of blank target phones from Customer winners; plus timeout-safe `reconcile_all_service_data_from_contact_details_chunked(p_limit)` for later catch-up.
+9. Supporting index: partial normalized chassis index on Customer rows that have a phone.
+10. Retention (locked 2026-08-17):
+  - `public.contact_details` must contain only rows from the last 10 days.
+  - Cutoff: `created_at < now() - interval '10 days'` (NULL `created_at` is also purged).
+  - Daily pg_cron job `contact-details-10d-purge` at `02:15 IST` (`45 20 * * *` UTC) calls `public.purge_contact_details_older_than(10, 1000, 55000)`.
+  - Purge fills remaining Customer phones first, then batched-deletes older rows with the fill trigger disabled so bulk delete does not fire per-row refresh.
+  - Already-copied `all_service_data.contact_phones` values are not cleared when source rows are deleted.
+
+Safety contract:
+
+- Idempotent: rerunning backfill/reconcile must not change rows that already have a non-blank `contact_phones`.
+- Do not write blank/null source phones onto the target.
+- Do not map names, quoted `"Status"`, or any other `all_service_data` column in this phase.
+
+Artifacts:
+
+- `supabase/migrations/20260817160000_all_service_data_fill_contact_phones_from_contact_details.sql`
+- `supabase/sql_checks/20260817160000_all_service_data_fill_contact_phones_from_contact_details_checks.sql`
+- `supabase/migrations/20260817161000_contact_details_10day_retention_purge.sql`
+- `supabase/sql_checks/20260817161000_contact_details_10day_retention_purge_checks.sql`
 
 ### Robot Update Audit Columns (`all_service_data`)
 
@@ -1237,6 +1332,17 @@ EXECUTE FUNCTION public.sync_all_service_data_dynamic();
 ⏳ 7.7 | Extend mapping matrix wave-2+ | Platform Team | - | - | Pending additional business mapping rules
 ```
 
+### Phase 8 (`contact_details` -> `all_service_data.contact_phones` fill-null)
+```text
+✅ 8.1 | Lock source/target fill-null contract from metadata | Platform Team | 2026-08-17 | 2026-08-17 | Locked: chassis-only match, Customer gate, update blank/null contact_phones only, no overwrite, no insert
+✅ 8.2 | Add Customer-phone normalized chassis index | Platform Team | 2026-08-17 | 2026-08-17 | `idx_contact_details_customer_chassis_norm` in `20260817160000`
+✅ 8.3 | Implement lookup/refresh/triggers/reconcile helper | Platform Team | 2026-08-17 | 2026-08-17 | `lookup_customer_phone_from_contact_details`, `refresh_all_service_data_from_contact_details`, fill + source triggers, chunked reconcile
+✅ 8.4 | One-time set-based backfill of blank target phones | Platform Team | 2026-08-17 | 2026-08-17 | Applied; `remaining_fillable_rows=0`, reconcile returned `0`
+✅ 8.5 | Add read-only object + safety checks | Platform Team | 2026-08-17 | 2026-08-17 | Checks passed: index + 5 functions + both triggers present; `target_rows_with_phone=47187`, `target_rows_without_phone=28074`, `customer_rows_with_phone=65` / `33` chassis
+✅ 8.6 | 10-day `contact_details` retention + daily IST purge | Platform Team | 2026-08-17 | 2026-08-17 | `purge_contact_details_older_than`; cron `contact-details-10d-purge` `45 20 * * *` UTC = `02:15 IST`
+✅ 8.7 | Confirm realtime Customer-insert fill stays active | Platform Team | 2026-08-17 | 2026-08-17 | `trg_refresh_all_service_data_from_contact_details` AFTER INSERT on `contact_details` verified present
+```
+
 ---
 
 ## Dependencies & Prerequisites
@@ -1255,6 +1361,9 @@ EXECUTE FUNCTION public.sync_all_service_data_dynamic();
 |---|---|---|---|
 | Trigger overhead on heavy write load | Medium | Medium | Keep trigger logic minimal and indexed on `id`; monitor write latency post-deploy |
 | Incorrect filter interpretation (NULL vs empty string) | Medium | High | Confirm semantic rule before production rollout |
+| Phase 8 overwrites an existing `contact_phones` value | Low | High | Fill-null gate is mandatory; checks assert non-blank target phones are unchanged |
+| Duplicate Customer rows per chassis in `contact_details` | Medium | Medium | Deterministic winner: latest `created_at`, then `id DESC` |
+| Phase 8 retention purge drops an uncopied Customer phone | Low | High | Purge runs fill-null reconcile before delete; fill trigger is only disabled for the bulk delete |
 | Duplicate-key conflict during migration rerun | Low | Medium | Use deterministic delete-then-insert approach already included |
 | Drift if trigger disabled accidentally | Low | High | Add operational check and alert in runbook |
 
@@ -1266,6 +1375,9 @@ EXECUTE FUNCTION public.sync_all_service_data_dynamic();
 - ✅ Row count always matches source predicate result.
 - ✅ Insert/update/delete changes in source are reflected in target in real time.
 - ✅ Rollback steps documented and tested.
+- ✅ Blank/null `all_service_data.contact_phones` values are filled from Customer `contact_details.cell_phone_no` on matching chassis; existing non-blank phones are unchanged.
+- ✅ New Customer `contact_details` rows fill blank target phones in real time.
+- ✅ `contact_details` retains only the last 10 days of rows via daily purge.
 
 ---
 
@@ -1279,6 +1391,34 @@ EXECUTE FUNCTION public.sync_all_service_data_dynamic();
 ---
 
 ## Execution Notes
+
+### 2026-08-17 - Phase 8.6 10-day `contact_details` retention
+
+- Table must keep only rows with `created_at >= now() - interval '10 days'` (NULL `created_at` purged).
+- Artifacts (pending apply):
+  - `supabase/migrations/20260817161000_contact_details_10day_retention_purge.sql`
+  - `supabase/sql_checks/20260817161000_contact_details_10day_retention_purge_checks.sql`
+- Daily job: `contact-details-10d-purge`, schedule `45 20 * * *` UTC = `02:15 IST`
+- Command: `SELECT public.purge_contact_details_older_than(10, 1000, 55000);`
+- Purge fills remaining Customer phones first, then batched-deletes older rows.
+
+### 2026-08-17 - Phase 8 fill-null `contact_phones` from `contact_details` Customer rows
+
+- Contract locked from schema authority `supabase/backups/full_metadata.sql`:
+  - source `public.contact_details.cell_phone_no` / `contact_status` / `chassis_no`
+  - target `public.all_service_data.contact_phones`
+  - join `upper(btrim(chassis_no))`
+  - source gate `lower(btrim(contact_status)) = 'customer'`
+  - write only when target phone is NULL or blank
+- Applied and verified (operator sql_checks output, 2026-08-17):
+  - index `idx_contact_details_customer_chassis_norm` present
+  - functions present (lookup/refresh/reconcile + both trigger functions)
+  - triggers present on `all_service_data` (BEFORE fill) and `contact_details` (AFTER INSERT/UPDATE/DELETE)
+  - `reconcile_all_service_data_from_contact_details_chunked` returned `0`
+  - `remaining_fillable_rows = 0`
+  - `target_rows_with_phone = 47187`, `target_rows_without_phone = 28074`
+  - `customer_rows_with_phone = 65` across `33` chassis
+- Realtime path is live: a new Customer `contact_details` row with a phone fills a matching blank `all_service_data.contact_phones` immediately. No extra job is required for that path.
 
 ### 2026-06-25 - Closed-job winner-sync rollout executed (with chunked daily reconcile)
 
@@ -2031,6 +2171,22 @@ DROP FUNCTION IF EXISTS public.is_all_service_dynamic_match(public.all_service_d
 DROP TABLE IF EXISTS public.all_service_data_dynamic;
 ```
 
+Phase 8 fill-null phone sync (does not restore previously filled phone values):
+
+```sql
+DROP TRIGGER IF EXISTS trg_fill_all_service_data_contact_phones_from_contact_details ON public.all_service_data;
+DROP TRIGGER IF EXISTS trg_refresh_all_service_data_from_contact_details ON public.contact_details;
+DROP FUNCTION IF EXISTS public.trg_fill_all_service_data_contact_phones_from_contact_details();
+DROP FUNCTION IF EXISTS public.trg_refresh_all_service_data_from_contact_details();
+DROP FUNCTION IF EXISTS public.reconcile_all_service_data_from_contact_details_chunked(integer);
+DROP FUNCTION IF EXISTS public.refresh_all_service_data_from_contact_details(text);
+DROP FUNCTION IF EXISTS public.lookup_customer_phone_from_contact_details(text);
+DROP FUNCTION IF EXISTS public.purge_contact_details_older_than(integer, integer, integer);
+DROP INDEX IF EXISTS public.idx_contact_details_customer_chassis_norm;
+DROP INDEX IF EXISTS public.idx_contact_details_created_at;
+-- Also unschedule cron job `contact-details-10d-purge` if present.
+```
+
 ---
 
 ## Related Documentation
@@ -2099,8 +2255,12 @@ DROP TABLE IF EXISTS public.all_service_data_dynamic;
 - `supabase/exec_success_migrations/sql/20260624103000_soft_deprecate_legacy_service_history_tables.sql`
 - `supabase/exec_success_migrations/sql_check/20260624103000_soft_deprecate_legacy_service_history_tables_checks.sql`
 - `scripts/20260622_reusable_backfill_all_service_data_from_pv_ev.sql` (historical; retired from active operations)
+- `supabase/migrations/20260817160000_all_service_data_fill_contact_phones_from_contact_details.sql`
+- `supabase/sql_checks/20260817160000_all_service_data_fill_contact_phones_from_contact_details_checks.sql`
+- `supabase/migrations/20260817161000_contact_details_10day_retention_purge.sql`
+- `supabase/sql_checks/20260817161000_contact_details_10day_retention_purge_checks.sql`
 
 ---
 
-**Last Updated:** 2026-06-25 (Closed-job winner-sync + daily IST chunked reconcile implemented and validated) by GitHub Copilot  
-**Status:** 🟡 IN PROGRESS (Closed-job winner-sync objectives complete; remaining unrelated roadmap items continue)
+**Last Updated:** 2026-08-17 (Phase 8.6: 10-day contact_details retention; Customer-insert fill verified live) by Cursor Agent  
+**Status:** 🟡 IN PROGRESS (Phase 8 fill verified; 10-day purge artifacts pending apply)

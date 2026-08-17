@@ -2,6 +2,10 @@
 
 Tracks documentation-sync updates for business logic, architecture, and access control.
 
+## 2026-08-17
+
+- SUPABASE-002 Phase 8: fill-null `all_service_data.contact_phones` from `contact_details.cell_phone_no` when the target is NULL/blank, matching on normalized `chassis_no`, only for `contact_status = Customer`. Existing non-blank phones are not overwritten. Applied and verified 2026-08-17 (`remaining_fillable_rows=0`). New Customer inserts fill blank phones via trigger. 10-day `contact_details` retention purge pending apply (`20260817161000`).
+
 ## 2026-07-23
 
 - Added **Insurance Renewal Telecalling** call-card reference: `docs/web/modules/insurance-renewal-telecalling/reference/CALL_CARD_WORKFLOW_AND_IMPLEMENTATION_STATUS.md` — end-to-end telecaller workflow, every disposition/outreach button, working vs broken (including `no_answer` DB persistence bug, `get_next` vs RPC, refresh eligibility vs `effective_due_date`), My Queue/summary/counter gaps, ops SQL for stuck assignments, and prioritized remediation plan.

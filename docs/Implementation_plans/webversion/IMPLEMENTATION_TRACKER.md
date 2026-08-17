@@ -1,6 +1,6 @@
 # Web Version Implementation Tracker
 
-Last Updated: 2026-08-11
+Last Updated: 2026-08-17
 Scope: All webversion plans under active execution or review
 
 Legend:
@@ -35,7 +35,7 @@ Legend:
 | VEHICLE-PICKUP-001 | reception | Vehicle Pickup module (Driver Pickup workflow) | NS | Reception Team + Operations Team + Platform Team | docs/Implementation_plans/webversion/categories/reception/active/VEHICLE-PICKUP-001_VEHICLE_PICKUP_MODULE_PLAN.md | 2026-08-06 |
 | WEBREDESIGN-MASTER | redesign | Web redesign master tracker | IP | Web UX Team | docs/Implementation_plans/webversion/categories/redesign/active/Webredesign_IMPLEMENTATION_PLAN_MASTER_TRACKER.md | 2026-06-18 |
 | SUPABASE-001 | supabase | Supabase production hardening master plan | IP | Platform Team | docs/Implementation_plans/webversion/categories/supabase/active/SUPABASE-001_PRODUCTION_HARDENING_MASTER_PLAN.md | 2026-06-18 |
-| SUPABASE-002 | supabase | all_service_data dynamic physical table realtime sync | IP | Platform Team | docs/Implementation_plans/webversion/categories/supabase/active/SUPABASE-002_ALL_SERVICE_DATA_DYNAMIC_TABLE_REALTIME_SYNC_PLAN_2026-06-20.md | 2026-06-20 |
+| SUPABASE-002 | supabase | all_service_data dynamic physical table realtime sync | IP | Platform Team | docs/Implementation_plans/webversion/categories/supabase/active/SUPABASE-002_ALL_SERVICE_DATA_DYNAMIC_TABLE_REALTIME_SYNC_PLAN_2026-06-20.md | 2026-08-17 |
 | SUPABASE-003 | supabase | Service history sync queue performance (P1-12 completion) | DN | Platform Team | docs/Implementation_plans/webversion/categories/supabase/active/SUPABASE-003_SERVICE_HISTORY_SYNC_QUEUE_PERFORMANCE_PLAN_2026-07-21.md | 2026-07-21 |
 | IDSPay RC + Phase 5 insurance sync (`rto_idspay` → `all_service_data`) | IP | Platform Team | docs/Implementation_plans/webversion/categories/supabase/active/SUPABASE-004_IDSPAY_RC_ADVANCE_VERIFICATION_EDGE_FUNCTION_PLAN_2026-07-22.md | 2026-07-22 |
 | WARRANTY-001 | warranty | Warranty report import and reporting plan | IP | Warranty Team | docs/Implementation_plans/webversion/categories/warranty/active/WARRANTY-001_WARRANTY_REPORT_IMPORT_AND_REPORTING_PLAN.md | 2026-06-18 |
