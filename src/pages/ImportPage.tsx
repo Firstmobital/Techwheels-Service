@@ -1363,14 +1363,23 @@ export default function ImportPage() {
         const partsOrderHas = (columnName: string): boolean => partsOrderColumnSet.has(columnName)
         const partsOrderIncludesAll = (columns: string[]): boolean =>
           columns.every((columnName) => partsOrderHas(columnName))
+        const partsConsumptionColumns = isPartsConsumptionTable ? await getTableColumns(tableName) : []
+        const partsConsumptionColumnSet = new Set(partsConsumptionColumns)
+        const partsConsumptionHas = (columnName: string): boolean => partsConsumptionColumnSet.has(columnName)
+        const partsConsumptionIncludesAll = (columns: string[]): boolean =>
+          columns.every((columnName) => partsConsumptionHas(columnName))
+        const partsConsumptionOnConflictCandidates = isPartsConsumptionTable
+          ? [
+              // uq_parts_consumption_conflict (full_metadata.sql)
+              'part_number,branch,portal,transaction_date,source_row_hash',
+              // uq_parts_consumption_branch_portal_source_row_hash
+              'branch,portal,source_row_hash',
+            ].filter((candidate) => partsConsumptionIncludesAll(candidate.split(',')))
+          : []
         const partsOrderOnConflictCandidates = isPartsOrderTable
           ? [
-              // Exact key matching DB unique index uq_order_part_branch_portal_hash
-              // (source_row_hash is always present; order_date can be NULL)
-              'part_number,branch,portal,source_row_hash',
-              // Fallback if order_date is always populated
+              // uq_parts_order_conflict (full_metadata.sql)
               'part_number,branch,portal,order_date,source_row_hash',
-              'part_number,branch,order_date,source_row_hash',
             ].filter((candidate) => partsOrderIncludesAll(candidate.split(',')))
           : []
         const CHUNK = isJcClosedTable ? 250 : isPsfRevenueDmsTable ? 250 : isVasTable ? 2000 : 2000
@@ -2784,12 +2793,7 @@ export default function ImportPage() {
 
             totalInserted += await upsertOrInsertRows(
               insertRows,
-              [
-                // Exact key matching DB unique index uq_consumption_part_branch_portal_fy_month_hash
-                'part_number,branch,portal,fiscal_year,fiscal_month,source_row_hash',
-                // Fallback: if fiscal_month column is missing in source file
-                'part_number,branch,portal,fiscal_year,month_name,source_row_hash',
-              ],
+              partsConsumptionOnConflictCandidates,
             )
           } else if (isPartsOrderTable && partsOrderHeaderMapping) {
             const parseErrors: PartsOrderParseError[] = []
@@ -2900,9 +2904,7 @@ export default function ImportPage() {
 
             totalInserted += await upsertOrInsertRows(
               insertRows,
-              partsOrderOnConflictCandidates.length > 0
-                ? partsOrderOnConflictCandidates
-                : ['part_number,branch,order_date'],
+              partsOrderOnConflictCandidates,
             )
           } else if (isPartsStockTable && partsStockHeaderMapping) {
             const parseErrors: PartsStockParseError[] = []

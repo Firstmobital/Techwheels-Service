@@ -2,6 +2,16 @@
 
 ## 2026-08-17
 
+### P1-13 — restore bodyshop-floor list after SA own-code over-apply
+
+| Order | Migration | Change |
+|------|-----------|--------|
+| 1 | `20260817140000_fix_list_reception_floor_scope.sql` | Advisor own-code JOIN in `list_reception_entries_page` + `list_reception_reg_created_since` only when user is assigned SA and not `bodyshop_floor` / `floor_incharge`. Floor callers use `service_reception_entry_in_summary_scope` again. |
+
+- Checks: `supabase/sql_checks/20260817140000_fix_list_reception_floor_scope_checks.sql`
+- Status: **Applied** (2026-08-17, Management API)
+- Regression: `20260817120000` treated every non-CRM/SM/GM user as assigned SA. Bodyshop Floor (`listAccidentReceptionEntriesByDateRange`) returned 0 accident cars.
+
 ### P1-13 — SA list scope priority fix (57014 on Service Advisor page)
 
 | Order | Migration | Change |
