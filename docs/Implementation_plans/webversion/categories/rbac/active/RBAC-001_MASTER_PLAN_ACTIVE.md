@@ -3,8 +3,34 @@
 **Version**: 2026-06-01  
 **Status**: Phase 1C In Progress - Admin Unrestricted Access + Bodyshop Role-Scoped Visibility Alignment  
 **Owner**: Engineering Lead / Copilot (TBD)  
-**Last Updated**: 2026-07-18  
+**Last Updated**: 2026-08-17  
 **Authority**: Single source of truth — supersedes all separate RBAC plan files
+
+### Execution Update (2026-08-17 - Shared Reception List RPC Must Not Use SA-Only Gate)
+
+- Symptom (same day, two logins):
+  - `/bodyshop-floor` as Kedar (`3000840`) → 0 accident vehicles.
+  - `/reception` as `avanimeena4560@gmail.com` (Veika) → 0 intake rows.
+- Root cause: `list_reception_entries_page` / `list_reception_reg_created_since` are **shared** SECURITY DEFINER list RPCs (web + mobile Reception, SA, Floor Incharge, Bodyshop Floor/Repair, Dashboard, Technician fallback, Service Booking). `20260817120000` and then `20260817140000_optimize_reception_list_broad_path` applied the SA-summary gate (`NOT admin AND NOT user_needs_sa_summary_broad_scope()` → `user_employee_links.employee_code = sa_employee_code`) to that shared RPC. CRM/SM/GM are the only broad-scope roles in that helper. Everyone else became “own SA code only.”
+- Database truth (`supabase/backups/full_metadata.sql`):
+  - Veika: `users.role=staff`, **zero** `user_employee_links`, modules `reception` + `telecalling` only. Dealer `3000840` is JWT/`my_effective_dealer_codes()` only. Own-code JOIN matches 0 rows.
+  - Floor users are not `sa_employee_code` on accident cars; they need `service_reception_entry_in_summary_scope` (Accident + `user_has_bodyshop_floor_incharge_scope_for_sa_code`).
+- Locked list-RPC gate (do not regress):
+  1. Admin → unscoped.
+  2. CRM/SM/GM (`user_needs_sa_summary_broad_scope`) → dealer pre-filter + `service_reception_entry_in_summary_scope`.
+  3. Assigned SA only: `service_advisor` view/modify **and** an active employee link **and not** `floor_incharge` / `bodyshop_floor` → own-code JOIN (keeps SA 57014 fix).
+  4. Reception (module view, dealer codes from JWT **or** mapping, not floor/bodyshop) → `dealer_code = ANY(my_effective_dealer_codes())`.
+  5. Else → dealer pre-filter + `service_reception_entry_in_summary_scope`.
+- Governance rules added:
+  - Never copy `get_service_advisor_summary_counts` own-code gate onto a shared list RPC.
+  - Reception-only staff may have **no** `user_employee_links`. JWT `dealer_code` is a valid list scope (not a defect). Do not require a mapping to see intake.
+  - Same-timestamp migrations on one RPC overwrite each other (`17140000_fix_list_reception_floor_scope` was clobbered by `17140000_optimize_reception_list_broad_path`). New list-RPC changes must use a later prefix and restate the full gate.
+- Migrations:
+  - `supabase/migrations/20260817120000_fix_list_reception_sa_scope_priority.sql` (SA 57014; over-wide gate)
+  - `supabase/migrations/20260817140000_fix_list_reception_floor_scope.sql` (floor restore; then overwritten)
+  - `supabase/migrations/20260817140000_optimize_reception_list_broad_path.sql` (dealer pre-filter; restored over-wide gate)
+  - `supabase/migrations/20260817150000_fix_list_reception_shared_role_gate.sql` (**live** — shared-role gate + keep dealer pre-filter / 10k cap)
+- Status: ✓ Applied on prod 2026-08-17. Hard-refresh Reception / Floor; no frontend deploy.
 
 ### Execution Update (2026-07-21 - Parts SPM `/parts-spm` Route Guard Gap)
 
@@ -975,6 +1001,9 @@ Use this section as the real-time status dashboard. Update immediately after eac
 | 3.6 | Test all policies in staging with test users | ⚪ Not Started | TBD | — | Verify view/modify/delete semantics | ☐ |
 | 3.7 | Test SA policy: user with mapping sees assigned rows only | ⚪ Not Started | TBD | — | Staging, full data set | ☐ |
 | 3.8 | Test SA policy: user without mapping sees nothing | ⚪ Not Started | TBD | — | Staging | ☐ |
+| 3.9 | Lock shared list-RPC gate (reception / floor / SA) | ✓ Done | Copilot | 2026-08-17 | `20260817150000_fix_list_reception_shared_role_gate.sql` applied; own-code only for assigned SA | ☑ |
+| 3.10 | UAT: reception-only JWT dealer (Veika) sees This Month intake | 🟡 In Progress | User | 2026-08-17 | Hard-refresh `/reception` as `avanimeena4560@gmail.com` | ☐ |
+| 3.11 | UAT: bodyshop floor (Kedar) sees accident cars | 🟡 In Progress | User | 2026-08-17 | Hard-refresh `/bodyshop-floor`; confirm optimize did not regress gate | ☐ |
 
 ### 4.4 API & Backend Changes
 
@@ -1117,12 +1146,12 @@ This section captures implementation guardrails that must remain stable across f
 For application-layer visibility resolution (frontend/API helper path), use this precedence and keep it explicit in code and docs:
 
 1. **Mappings first**: active `user_employee_links` for the authenticated user
-2. **Metadata fallback**: `auth.users.raw_user_meta_data` / JWT (`dealer_code`, optional `dealer_codes`)
-3. **Users-table fallback**: `public.users.dealer_code` only for compatibility mode
+2. **Metadata / JWT**: `dealer_code` and `dealer_codes` (authoritative for reception-only staff who have **no** mapping)
+3. **Users-table fallback**: `public.users.dealer_code` only for compatibility mode (schema currently has no such columns)
 
 Rationale:
-- Mapping is the canonical operational scope because it ties auth user to Employee Master identity and dealer context.
-- Metadata is a fallback only (for users with missing mappings or transitional states).
+- Mapping is the canonical operational identity for SA / floor / CRM (ties auth user to Employee Master).
+- JWT dealer is a **valid primary list scope** for reception-only users (example: `avanimeena4560@gmail.com` / dealer `3000840` with zero `user_employee_links`). Do not treat “No dealer assigned” + JWT code as missing scope.
 - Users-table fallback is temporary compatibility and should not become a new source of truth.
 
 ### 8A.2 Set Dealer Popup Contract (Required)
@@ -1141,9 +1170,12 @@ Mapping lifecycle belongs only to Admin -> Mappings, seeded/validated against Em
 ### 8A.3 Visibility Resolution Rules (Do Not Regress)
 
 - Module-level visibility is deny-by-default and must come from `user_module_permissions` (`can_view`).
-- Row-level visibility is always RLS-enforced; frontend guards are UX only.
+- Row-level visibility is RLS-enforced on direct table reads; **list pages that call SECURITY DEFINER RPCs bypass RLS**. Those RPCs must encode the same role contract themselves.
+- Shared reception list RPCs (`list_reception_entries_page`, `list_reception_reg_created_since`) must **not** use the SA-summary own-code gate (`NOT admin AND NOT CRM/SM/GM`). Own-code JOIN is only for assigned `service_advisor` users with an employee link and without `floor_incharge` / `bodyshop_floor`.
+- Reception-only list scope is dealer codes from `my_effective_dealer_codes()` (JWT and/or mapping). Mapping is not required.
 - SA ownership checks use `sa_employee_code` membership, never `sa_name` or `sa_display_name`.
 - Floor Incharge visibility remains role+fuel-scope constrained through mapped employee/dealer context.
+- Bodyshop Floor accident list uses `service_reception_entry_in_summary_scope` (Accident + `user_has_bodyshop_floor_incharge_scope_for_sa_code`), not own SA code.
 
 ### 8A.4 Cross-Layer Drift Watchlist
 
@@ -1166,14 +1198,16 @@ When a user reports missing or excess data visibility, validate in this order:
 
 1. User is active (`users.is_active = true`)
 2. Module permission exists (`can_view` for target module)
-3. At least one active mapping exists for user/dealer in `user_employee_links`
-4. Expected primary mapping state per dealer (if primary-dependent flow)
-5. Dealer code on target rows matches resolved scope
-6. User re-authenticated after metadata/mapping changes (JWT refresh)
-7. No stale compatibility fallback masking missing mapping
+3. Scope source: active `user_employee_links` **or** JWT `dealer_code` / `dealer_codes`. Reception-only users may have **no** mapping — that is valid.
+4. If the page uses `list_reception_entries_page` / `list_reception_reg_created_since`, confirm the live function gate (dump `full_metadata.sql`) is the shared-role gate, not own-SA-for-everyone.
+5. Expected primary mapping state per dealer (if the flow is SA/floor/CRM and mapping-dependent)
+6. Dealer code on target rows matches `my_effective_dealer_codes()`
+7. User re-authenticated after metadata/mapping changes (JWT refresh)
+8. No stale compatibility fallback masking missing mapping
 
 Operational note:
 - Do not "fix" by broadening permissions first. Validate identity linkage and scope resolution before changing ACL.
+- Do not “fix” an SA timeout by changing a shared list RPC without a caller matrix (Reception, Floor, Bodyshop, Dashboard, mobile).
 
 ### 8A.6 Future Hardening Targets
 
@@ -1202,11 +1236,12 @@ Long-term:
 | 1.4 | 2026-06-01 | Copilot + User | Active | Added authoritative Floor Incharge row visibility requirement: role = Floor Incharge with fuel_type scope via SA CODE mapping |
 | 1.5 | 2026-06-01 | Copilot + User | Active | Executed Floor Incharge DB migrations for row-scope policy and stage workflow columns/triggers/RLS |
 | 1.6 | 2026-06-03 | Copilot + User | Active | Added Part 8A future operations playbook for RBAC/auth/visibility (scope precedence, popup contract, drift watchlist, troubleshooting/hardening targets) |
+| 1.7 | 2026-08-17 | Copilot + User | Active | Shared reception list RPC gate: do not apply SA own-code to Reception/Floor/Bodyshop; JWT-only reception scope is valid; live fix `20260817150000` |
 
 ---
 
 **This document is the single source of truth for RBAC implementation.**  
 **All previous separate RBAC plan files (RBAC_SA_DYNAMIC_CONTROL_PLAN_2026-06-01.md, RBAC_FULL_DUMP_AUDIT_2026-06-01.md, RBAC_MASTER_IMPLEMENTATION_PLAN_2026-06-01.md) are superseded and should be archived.**
 
-Last updated: 2026-06-03  
-Next review: After Phase 1C reception form + dealer-code profile delivery
+Last updated: 2026-08-17  
+Next review: After Veika reception + Kedar floor UAT on the shared list-RPC gate
