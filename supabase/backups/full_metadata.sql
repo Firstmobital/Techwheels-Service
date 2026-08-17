@@ -2,12 +2,12 @@
 -- PostgreSQL database dump
 --
 
-\restrict jrZ1ILKY4RAz07dUiggP6fBS8sUYVljGRvwTa2UyeAtlJgInZageZ7AvUS1VN3z
+\restrict 55Kzr8rwBgkpoIYfxJ7GqyiF84bXh8cgQzVPIrqwFMQeJfCZQDVvTG5A4B01FnA
 
 -- Dumped from database version 17.6
 -- Dumped by pg_dump version 17.7 (Homebrew)
 
--- Started on 2026-08-17 10:51:43 IST
+-- Started on 2026-08-17 11:17:29 IST
 
 SET statement_timeout = 0;
 SET lock_timeout = 0;
@@ -7823,7 +7823,6 @@ DECLARE
   v_page_size integer;
   v_is_admin boolean;
   v_broad_scope boolean;
-  v_use_advisor_own_codes boolean;
 BEGIN
   IF p_created_at_from IS NULL OR p_created_at_to IS NULL THEN
     RAISE EXCEPTION 'created_at range is required'
@@ -7834,27 +7833,9 @@ BEGIN
   v_page_size := least(greatest(coalesce(p_page_size, 100), 1), 100);
   v_is_admin := public.is_admin();
   v_broad_scope := public.user_needs_sa_summary_broad_scope();
-  v_use_advisor_own_codes :=
-    NOT v_is_admin
-    AND NOT v_broad_scope
-    AND (
-      public.has_module_view('service_advisor'::text)
-      OR public.has_module_modify('service_advisor'::text)
-    )
-    AND NOT public.has_module_view('floor_incharge'::text)
-    AND NOT public.has_module_view('bodyshop_floor'::text)
-    AND NOT public.has_module_modify('bodyshop_floor'::text)
-    AND NOT EXISTS (
-      SELECT 1
-      FROM public.user_employee_links uel
-      JOIN public.employee_master em ON em.employee_code = uel.employee_code
-      WHERE uel.user_id = auth.uid()
-        AND uel.is_active = true
-        AND public.employee_has_business_role(em.role, 'FLOOR_INCHARGE')
-    );
 
-  -- Assigned advisor only (SA+reception still uses this path to avoid 57014).
-  IF v_use_advisor_own_codes THEN
+  -- Assigned advisor fast path: JOIN own employee link rows only (matches summary RPC).
+  IF NOT v_is_admin AND NOT v_broad_scope THEN
     RETURN QUERY
     SELECT r.*
       FROM public.service_reception_entries r
@@ -7941,7 +7922,11 @@ BEGIN
      AND CASE
        WHEN sm.is_admin THEN true
        WHEN sm.reception_dealer_only THEN upper(btrim(r.dealer_code)) = ANY (md.codes)
-       ELSE public.service_reception_entry_in_summary_scope(
+       ELSE (
+         coalesce(array_length(md.codes, 1), 0) = 0
+         OR upper(btrim(r.dealer_code)) = ANY (md.codes)
+       )
+       AND public.service_reception_entry_in_summary_scope(
          r.dealer_code,
          r.sa_employee_code,
          r.service_type
@@ -7985,7 +7970,7 @@ $$;
 -- Name: FUNCTION list_reception_entries_page(p_created_at_from timestamp with time zone, p_created_at_to timestamp with time zone, p_page_size integer, p_cursor_created_at timestamp with time zone, p_cursor_id bigint, p_service_types text[], p_search_query text, p_require_non_empty_jc boolean); Type: COMMENT; Schema: public; Owner: -
 --
 
-COMMENT ON FUNCTION public.list_reception_entries_page(p_created_at_from timestamp with time zone, p_created_at_to timestamp with time zone, p_page_size integer, p_cursor_created_at timestamp with time zone, p_cursor_id bigint, p_service_types text[], p_search_query text, p_require_non_empty_jc boolean) IS 'Paginated reception list bypassing authenticated-role RLS (57014). Advisor own-code JOIN is only for assigned SA (not bodyshop_floor / floor_incharge).';
+COMMENT ON FUNCTION public.list_reception_entries_page(p_created_at_from timestamp with time zone, p_created_at_to timestamp with time zone, p_page_size integer, p_cursor_created_at timestamp with time zone, p_cursor_id bigint, p_service_types text[], p_search_query text, p_require_non_empty_jc boolean) IS 'Paginated reception list bypassing authenticated-role RLS (57014). SA advisor JOIN fast path; broad path pre-filters dealer_code before summary_scope.';
 
 
 --
@@ -8035,7 +8020,7 @@ CREATE FUNCTION public.list_reception_reg_created_since(p_since timestamp with t
 DECLARE
   v_is_admin boolean;
   v_broad_scope boolean;
-  v_use_advisor_own_codes boolean;
+  v_row_limit constant integer := 10000;
 BEGIN
   IF p_since IS NULL THEN
     RAISE EXCEPTION 'p_since is required' USING ERRCODE = '22023';
@@ -8043,26 +8028,8 @@ BEGIN
 
   v_is_admin := public.is_admin();
   v_broad_scope := public.user_needs_sa_summary_broad_scope();
-  v_use_advisor_own_codes :=
-    NOT v_is_admin
-    AND NOT v_broad_scope
-    AND (
-      public.has_module_view('service_advisor'::text)
-      OR public.has_module_modify('service_advisor'::text)
-    )
-    AND NOT public.has_module_view('floor_incharge'::text)
-    AND NOT public.has_module_view('bodyshop_floor'::text)
-    AND NOT public.has_module_modify('bodyshop_floor'::text)
-    AND NOT EXISTS (
-      SELECT 1
-      FROM public.user_employee_links uel
-      JOIN public.employee_master em ON em.employee_code = uel.employee_code
-      WHERE uel.user_id = auth.uid()
-        AND uel.is_active = true
-        AND public.employee_has_business_role(em.role, 'FLOOR_INCHARGE')
-    );
 
-  IF v_use_advisor_own_codes THEN
+  IF NOT v_is_admin AND NOT v_broad_scope THEN
     RETURN QUERY
     SELECT r.reg_number, r.created_at
       FROM public.service_reception_entries r
@@ -8071,7 +8038,8 @@ BEGIN
         AND uel.is_active = true
         AND uel.employee_code = r.sa_employee_code
      WHERE r.created_at >= p_since
-     ORDER BY r.created_at DESC;
+     ORDER BY r.created_at DESC
+     LIMIT v_row_limit;
     RETURN;
   END IF;
 
@@ -8120,13 +8088,18 @@ BEGIN
      AND CASE
        WHEN sm.is_admin THEN true
        WHEN sm.reception_dealer_only THEN upper(btrim(r.dealer_code)) = ANY (md.codes)
-       ELSE public.service_reception_entry_in_summary_scope(
+       ELSE (
+         coalesce(array_length(md.codes, 1), 0) = 0
+         OR upper(btrim(r.dealer_code)) = ANY (md.codes)
+       )
+       AND public.service_reception_entry_in_summary_scope(
          r.dealer_code,
          r.sa_employee_code,
          r.service_type
        )
      END
-   ORDER BY r.created_at DESC;
+   ORDER BY r.created_at DESC
+   LIMIT v_row_limit;
 END;
 $$;
 
@@ -8137,7 +8110,7 @@ $$;
 -- Name: FUNCTION list_reception_reg_created_since(p_since timestamp with time zone); Type: COMMENT; Schema: public; Owner: -
 --
 
-COMMENT ON FUNCTION public.list_reception_reg_created_since(p_since timestamp with time zone) IS 'Reg numbers + created_at since timestamp; advisor own-code JOIN excludes bodyshop_floor / floor_incharge.';
+COMMENT ON FUNCTION public.list_reception_reg_created_since(p_since timestamp with time zone) IS 'Reg numbers + created_at since timestamp; SA JOIN fast path; dealer pre-filter on broad path; max 10000 rows.';
 
 
 --
@@ -57889,11 +57862,11 @@ CREATE EVENT TRIGGER trg_auto_admin_bypass_policy_on_ddl ON ddl_command_end
    EXECUTE FUNCTION public.apply_admin_bypass_policy_on_ddl();
 
 
--- Completed on 2026-08-17 10:52:39 IST
+-- Completed on 2026-08-17 11:18:39 IST
 
 --
 -- PostgreSQL database dump complete
 --
 
-\unrestrict jrZ1ILKY4RAz07dUiggP6fBS8sUYVljGRvwTa2UyeAtlJgInZageZ7AvUS1VN3z
+\unrestrict 55Kzr8rwBgkpoIYfxJ7GqyiF84bXh8cgQzVPIrqwFMQeJfCZQDVvTG5A4B01FnA
 

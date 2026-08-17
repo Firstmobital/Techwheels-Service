@@ -2,6 +2,16 @@
 
 ## 2026-08-17
 
+### P1-13 — shared-role gate for reception list (Veika + floor)
+
+| Order | Migration | Change |
+|------|-----------|--------|
+| 1 | `20260817150000_fix_list_reception_shared_role_gate.sql` | Own-code JOIN only when user has `service_advisor` + an employee link and is not floor/bodyshop. Reception-only (no SA module, no `user_employee_links`) uses dealer codes from JWT. Keeps optimize dealer pre-filter + 10k cap. |
+
+- Checks: `supabase/sql_checks/20260817150000_fix_list_reception_shared_role_gate_checks.sql`
+- Status: **Applied** (2026-08-17, Management API)
+- Regression: `20260817140000_optimize_reception_list_broad_path` restored the 10:24 own-SA gate. `avanimeena4560@gmail.com` is reception-only with **zero** employee links, so the JOIN returned 0 intake rows.
+
 ### P1-13 — restore bodyshop-floor list after SA own-code over-apply
 
 | Order | Migration | Change |
