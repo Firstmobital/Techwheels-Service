@@ -1,5 +1,17 @@
 # DB Changes Ledger
 
+## 2026-08-17
+
+### P1-13 — SA list scope priority fix (57014 on Service Advisor page)
+
+| Order | Migration | Change |
+|------|-----------|--------|
+| 1 | `20260817120000_fix_list_reception_sa_scope_priority.sql` | Advisor fast path in `list_reception_entries_page` + `list_reception_reg_created_since`: `NOT user_needs_sa_summary_broad_scope()` → `user_employee_links` JOIN on `sa_employee_code` (same gate as `get_service_advisor_summary_counts`) |
+
+- Checks: `supabase/sql_checks/20260817120000_fix_list_reception_sa_scope_priority_checks.sql`
+- Frontend: empty-date guard in `normalizeCreatedAtRange` (fixes `T00:00:00+05:30` / 22007)
+- Status: **Pending apply + Vercel deploy**
+
 ## 2026-08-13
 
 ### P1-13 — optimize `list_reception_entries_page` + remaining caller RPCs

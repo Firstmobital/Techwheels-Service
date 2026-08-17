@@ -148,8 +148,14 @@ function getISOLookbackRange(days: number): { from: string; to: string } {
 }
 
 function normalizeCreatedAtRange(range: { from: string; to: string }): { from: string; to: string } {
-  const from = String(range.from ?? '').trim()
-  const to = String(range.to ?? '').trim()
+  let from = String(range.from ?? '').trim()
+  let to = String(range.to ?? '').trim()
+
+  if (!from || !to) {
+    const fallback = getISOLookbackRange(RECEPTION_DEFAULT_LOOKBACK_DAYS)
+    if (!from) from = fallback.from.slice(0, 10)
+    if (!to) to = fallback.to.slice(0, 10)
+  }
 
   return {
     from: from.includes('T') ? from : `${from}T00:00:00+05:30`,
@@ -232,13 +238,7 @@ type ReceptionEntryPageQuery = {
 }
 
 function toCreatedAtBounds(range: { from: string; to: string }): { from: string; to: string } {
-  const from = String(range.from ?? '').trim()
-  const to = String(range.to ?? '').trim()
-
-  return {
-    from: from.includes('T') ? from : `${from}T00:00:00+05:30`,
-    to: to.includes('T') ? to : `${to}T23:59:59+05:30`,
-  }
+  return normalizeCreatedAtRange(range)
 }
 
 async function fetchReceptionEntriesPage(
