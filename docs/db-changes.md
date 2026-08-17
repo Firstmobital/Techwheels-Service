@@ -22,6 +22,16 @@
 - Frontend: empty-date guard in `normalizeCreatedAtRange` + RPC boundary sanitize in `fetchReceptionEntriesPage` (fixes `T00:00:00+05:30` / 22007)
 - Status: **Applied + Vercel deployed** (2026-08-17)
 
+### P1-13 — broad-path reception list optimization (CRM/GM 57014)
+
+| Order | Migration | Change |
+|------|-----------|--------|
+| 1 | `20260817140000_optimize_reception_list_broad_path.sql` | Broad path: `dealer_code = ANY(my_dealers)` before `summary_scope`; `list_reception_reg_created_since` capped at 10k rows |
+
+- Checks: `supabase/sql_checks/20260817140000_optimize_reception_list_broad_path_checks.sql`
+- Preserves: SA advisor JOIN fast path from `20260817120000` (unchanged gate)
+- Status: **Pending apply**
+
 ### Complaints — fix 42703 / 42883 from prod logs
 
 | Order | Migration | Change |
