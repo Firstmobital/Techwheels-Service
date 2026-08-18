@@ -1,5 +1,17 @@
 # DB Changes Ledger
 
+## 2026-08-18
+
+### P1-13 — SA list/summary gate parity (service@techwheels.in regression)
+
+| Order | Migration | Change |
+|------|-----------|--------|
+| 1 | `20260818100000_fix_list_reception_gate_summary_parity.sql` | Remove `v_is_floor_or_bodyshop_only` from advisor JOIN gate (match summary exactly). Floor path requires `NOT user_needs_sa_summary_broad_scope()` so CRM/broad users reach residual `summary_scope` path. |
+
+- Checks: `supabase/sql_checks/20260818100000_fix_list_reception_gate_summary_parity_checks.sql`
+- Regression: `17180000` blocked advisor JOIN for floor-module users without SA module — summary 656, list 0 for `service@techwheels.in` / Govind Singh / `3000840`
+- Status: **Pending apply**
+
 ## 2026-08-17
 
 ### P1-13 — SA list gate aligned with summary RPC (vk1 empty assigned rows)
