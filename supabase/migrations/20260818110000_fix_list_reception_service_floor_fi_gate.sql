@@ -1,15 +1,12 @@
--- Unify list_reception_entries_page / list_reception_reg_created_since gates with
--- get_service_advisor_summary_counts for assigned SA users, without breaking bodyshop floor.
+-- Fix service Floor Incharge seeing zero job cards (pvfloortechwheels@gmail.com / Sanjay).
 --
--- 20260817180000 over-corrected for vk1: v_is_floor_or_bodyshop_only blocked the advisor
--- JOIN for floor-module users without SA module (service@techwheels.in: summary 656, list 0).
+-- 20260818100000 let any user with an employee link use the advisor own-code JOIN
+-- (except bodyshop_floor). Pure SERVICE floor incharge users are linked as FLOOR_INCHARGE,
+-- not as sa_employee_code on job cards — they must use the floor fuel-type JOIN path.
 --
--- First 18100000 draft removed all floor/bodyshop guards — fixed service@ but broke bodyshop
--- floor (prateek.mamodiya.30@gmail.com): bodyshop_floor users hit own-code JOIN → 0 Accident rows.
---
--- Final gate:
---   Advisor JOIN: NOT admin, NOT broad_scope, NOT bodyshop_floor, active employee link
---   Floor path: NOT broad_scope, no advisor path, floor_incharge module, not bodyshop
+-- Advisor JOIN: NOT admin, NOT broad_scope, NOT bodyshop_floor, active link,
+--   AND NOT linked as SERVICE FLOOR_INCHARGE-only (no SA role on employee_master).
+-- Floor path: unchanged (fuel-type matched SAs for SERVICE floor incharge module users).
 
 CREATE OR REPLACE FUNCTION public.list_reception_entries_page(
   p_created_at_from       timestamptz,
@@ -32,6 +29,7 @@ DECLARE
   v_page_size integer;
   v_is_admin boolean;
   v_broad_scope boolean;
+  v_linked_service_floor_fi_only boolean;
   v_use_advisor_own_codes boolean;
   v_reception_dealer_only boolean;
   v_use_floor_incharge_scope boolean;
@@ -62,12 +60,25 @@ BEGIN
     AND NOT public.has_module_view('bodyshop_floor'::text)
     AND NOT public.has_module_modify('bodyshop_floor'::text);
 
-  -- Assigned SA path (matches summary) — never for bodyshop_floor (Accident scope via summary_scope).
+  v_linked_service_floor_fi_only :=
+    EXISTS (
+      SELECT 1
+      FROM public.user_employee_links uel
+      JOIN public.employee_master em ON em.employee_code = uel.employee_code
+      WHERE uel.user_id = auth.uid()
+        AND uel.is_active = true
+        AND public.employee_has_business_role(em.role, 'FLOOR_INCHARGE')
+        AND upper(replace(btrim(coalesce(em.department, '')), ' ', '')) = 'SERVICE'
+        AND NOT public.employee_has_business_role(em.role, 'SA')
+    );
+
+  -- Assigned SA path — not bodyshop_floor; not SERVICE floor incharge-only links.
   v_use_advisor_own_codes :=
     NOT v_is_admin
     AND NOT v_broad_scope
     AND NOT public.has_module_view('bodyshop_floor'::text)
     AND NOT public.has_module_modify('bodyshop_floor'::text)
+    AND NOT v_linked_service_floor_fi_only
     AND EXISTS (
       SELECT 1
       FROM public.user_employee_links uel
@@ -311,8 +322,8 @@ $$;
 COMMENT ON FUNCTION public.list_reception_entries_page(
   timestamptz, timestamptz, integer, timestamptz, bigint, text[], text, boolean
 )
-IS 'Paginated reception list. Advisor JOIN matches summary for assigned SA (excludes bodyshop_floor). '
-   'Bodyshop floor uses summary_scope Accident path; floor incharge uses fuel-type JOIN when not broad.';
+IS 'Paginated reception list. Advisor JOIN for assigned SA; excludes bodyshop_floor and SERVICE floor-FI-only links. '
+   'Floor incharge uses fuel-type SA JOIN; bodyshop uses summary_scope Accident path.';
 
 GRANT EXECUTE ON FUNCTION public.list_reception_entries_page(
   timestamptz, timestamptz, integer, timestamptz, bigint, text[], text, boolean
@@ -331,6 +342,7 @@ AS $$
 DECLARE
   v_is_admin boolean;
   v_broad_scope boolean;
+  v_linked_service_floor_fi_only boolean;
   v_use_advisor_own_codes boolean;
   v_reception_dealer_only boolean;
   v_use_floor_incharge_scope boolean;
@@ -359,11 +371,24 @@ BEGIN
     AND NOT public.has_module_view('bodyshop_floor'::text)
     AND NOT public.has_module_modify('bodyshop_floor'::text);
 
+  v_linked_service_floor_fi_only :=
+    EXISTS (
+      SELECT 1
+      FROM public.user_employee_links uel
+      JOIN public.employee_master em ON em.employee_code = uel.employee_code
+      WHERE uel.user_id = auth.uid()
+        AND uel.is_active = true
+        AND public.employee_has_business_role(em.role, 'FLOOR_INCHARGE')
+        AND upper(replace(btrim(coalesce(em.department, '')), ' ', '')) = 'SERVICE'
+        AND NOT public.employee_has_business_role(em.role, 'SA')
+    );
+
   v_use_advisor_own_codes :=
     NOT v_is_admin
     AND NOT v_broad_scope
     AND NOT public.has_module_view('bodyshop_floor'::text)
     AND NOT public.has_module_modify('bodyshop_floor'::text)
+    AND NOT v_linked_service_floor_fi_only
     AND EXISTS (
       SELECT 1
       FROM public.user_employee_links uel

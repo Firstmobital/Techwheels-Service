@@ -2,12 +2,12 @@
 -- PostgreSQL database dump
 --
 
-\restrict gxbTaW6Wsy5sJAvWD5m87LEdj6Hs4psH1XKAz0f8IGnU46p9PMtejRqYRgwlu40
+\restrict DAEubLAiO8r1NNSLUs4tWBz1gKW9krNJEXEDvvJkcdHLjYkIB4V3uPvoMXrMVIV
 
 -- Dumped from database version 17.6
 -- Dumped by pg_dump version 17.7 (Homebrew)
 
--- Started on 2026-08-18 09:50:50 IST
+-- Started on 2026-08-18 11:47:37 IST
 
 SET statement_timeout = 0;
 SET lock_timeout = 0;
@@ -7856,7 +7856,7 @@ DECLARE
   v_page_size integer;
   v_is_admin boolean;
   v_broad_scope boolean;
-  v_is_floor_or_bodyshop_only boolean;
+  v_linked_service_floor_fi_only boolean;
   v_use_advisor_own_codes boolean;
   v_reception_dealer_only boolean;
   v_use_floor_incharge_scope boolean;
@@ -7879,15 +7879,6 @@ BEGIN
     INTO v_dealer_codes
     FROM unnest(public.my_effective_dealer_codes()) AS dc;
 
-  v_is_floor_or_bodyshop_only :=
-    (
-      public.has_module_view('floor_incharge'::text)
-      OR public.has_module_view('bodyshop_floor'::text)
-      OR public.has_module_modify('bodyshop_floor'::text)
-    )
-    AND NOT public.has_module_view('service_advisor'::text)
-    AND NOT public.has_module_modify('service_advisor'::text);
-
   v_reception_dealer_only :=
     NOT v_is_admin
     AND public.has_module_view('reception'::text)
@@ -7896,11 +7887,25 @@ BEGIN
     AND NOT public.has_module_view('bodyshop_floor'::text)
     AND NOT public.has_module_modify('bodyshop_floor'::text);
 
-  -- Same gate as get_service_advisor_summary_counts advisor fast path.
+  v_linked_service_floor_fi_only :=
+    EXISTS (
+      SELECT 1
+      FROM public.user_employee_links uel
+      JOIN public.employee_master em ON em.employee_code = uel.employee_code
+      WHERE uel.user_id = auth.uid()
+        AND uel.is_active = true
+        AND public.employee_has_business_role(em.role, 'FLOOR_INCHARGE')
+        AND upper(replace(btrim(coalesce(em.department, '')), ' ', '')) = 'SERVICE'
+        AND NOT public.employee_has_business_role(em.role, 'SA')
+    );
+
+  -- Assigned SA path — not bodyshop_floor; not SERVICE floor incharge-only links.
   v_use_advisor_own_codes :=
     NOT v_is_admin
     AND NOT v_broad_scope
-    AND NOT v_is_floor_or_bodyshop_only
+    AND NOT public.has_module_view('bodyshop_floor'::text)
+    AND NOT public.has_module_modify('bodyshop_floor'::text)
+    AND NOT v_linked_service_floor_fi_only
     AND EXISTS (
       SELECT 1
       FROM public.user_employee_links uel
@@ -7910,6 +7915,7 @@ BEGIN
 
   v_use_floor_incharge_scope :=
     NOT v_is_admin
+    AND NOT v_broad_scope
     AND NOT v_reception_dealer_only
     AND NOT v_use_advisor_own_codes
     AND public.has_module_view('floor_incharge'::text)
@@ -8147,7 +8153,7 @@ $$;
 -- Name: FUNCTION list_reception_entries_page(p_created_at_from timestamp with time zone, p_created_at_to timestamp with time zone, p_page_size integer, p_cursor_created_at timestamp with time zone, p_cursor_id bigint, p_service_types text[], p_search_query text, p_require_non_empty_jc boolean); Type: COMMENT; Schema: public; Owner: -
 --
 
-COMMENT ON FUNCTION public.list_reception_entries_page(p_created_at_from timestamp with time zone, p_created_at_to timestamp with time zone, p_page_size integer, p_cursor_created_at timestamp with time zone, p_cursor_id bigint, p_service_types text[], p_search_query text, p_require_non_empty_jc boolean) IS 'Paginated reception list. SA own-code gate matches get_service_advisor_summary_counts. Floor-only users (no SA module) use floor SA JOIN; reception-dealer for unlinked receptionists.';
+COMMENT ON FUNCTION public.list_reception_entries_page(p_created_at_from timestamp with time zone, p_created_at_to timestamp with time zone, p_page_size integer, p_cursor_created_at timestamp with time zone, p_cursor_id bigint, p_service_types text[], p_search_query text, p_require_non_empty_jc boolean) IS 'Paginated reception list. Advisor JOIN for assigned SA; excludes bodyshop_floor and SERVICE floor-FI-only links. Floor incharge uses fuel-type SA JOIN; bodyshop uses summary_scope Accident path.';
 
 
 --
@@ -8197,7 +8203,7 @@ CREATE FUNCTION public.list_reception_reg_created_since(p_since timestamp with t
 DECLARE
   v_is_admin boolean;
   v_broad_scope boolean;
-  v_is_floor_or_bodyshop_only boolean;
+  v_linked_service_floor_fi_only boolean;
   v_use_advisor_own_codes boolean;
   v_reception_dealer_only boolean;
   v_use_floor_incharge_scope boolean;
@@ -8218,15 +8224,6 @@ BEGIN
     INTO v_dealer_codes
     FROM unnest(public.my_effective_dealer_codes()) AS dc;
 
-  v_is_floor_or_bodyshop_only :=
-    (
-      public.has_module_view('floor_incharge'::text)
-      OR public.has_module_view('bodyshop_floor'::text)
-      OR public.has_module_modify('bodyshop_floor'::text)
-    )
-    AND NOT public.has_module_view('service_advisor'::text)
-    AND NOT public.has_module_modify('service_advisor'::text);
-
   v_reception_dealer_only :=
     NOT v_is_admin
     AND public.has_module_view('reception'::text)
@@ -8235,10 +8232,24 @@ BEGIN
     AND NOT public.has_module_view('bodyshop_floor'::text)
     AND NOT public.has_module_modify('bodyshop_floor'::text);
 
+  v_linked_service_floor_fi_only :=
+    EXISTS (
+      SELECT 1
+      FROM public.user_employee_links uel
+      JOIN public.employee_master em ON em.employee_code = uel.employee_code
+      WHERE uel.user_id = auth.uid()
+        AND uel.is_active = true
+        AND public.employee_has_business_role(em.role, 'FLOOR_INCHARGE')
+        AND upper(replace(btrim(coalesce(em.department, '')), ' ', '')) = 'SERVICE'
+        AND NOT public.employee_has_business_role(em.role, 'SA')
+    );
+
   v_use_advisor_own_codes :=
     NOT v_is_admin
     AND NOT v_broad_scope
-    AND NOT v_is_floor_or_bodyshop_only
+    AND NOT public.has_module_view('bodyshop_floor'::text)
+    AND NOT public.has_module_modify('bodyshop_floor'::text)
+    AND NOT v_linked_service_floor_fi_only
     AND EXISTS (
       SELECT 1
       FROM public.user_employee_links uel
@@ -8248,6 +8259,7 @@ BEGIN
 
   v_use_floor_incharge_scope :=
     NOT v_is_admin
+    AND NOT v_broad_scope
     AND NOT v_reception_dealer_only
     AND NOT v_use_advisor_own_codes
     AND public.has_module_view('floor_incharge'::text)
@@ -58549,11 +58561,11 @@ CREATE EVENT TRIGGER trg_auto_admin_bypass_policy_on_ddl ON ddl_command_end
    EXECUTE FUNCTION public.apply_admin_bypass_policy_on_ddl();
 
 
--- Completed on 2026-08-18 09:52:15 IST
+-- Completed on 2026-08-18 11:49:05 IST
 
 --
 -- PostgreSQL database dump complete
 --
 
-\unrestrict gxbTaW6Wsy5sJAvWD5m87LEdj6Hs4psH1XKAz0f8IGnU46p9PMtejRqYRgwlu40
+\unrestrict DAEubLAiO8r1NNSLUs4tWBz1gKW9krNJEXEDvvJkcdHLjYkIB4V3uPvoMXrMVIV
 

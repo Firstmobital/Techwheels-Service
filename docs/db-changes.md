@@ -2,15 +2,26 @@
 
 ## 2026-08-18
 
+### P1-13 — Service floor incharge list gate (pvfloortechwheels@gmail.com)
+
+| Order | Migration | Change |
+|------|-----------|--------|
+| 1 | `20260818110000_fix_list_reception_service_floor_fi_gate.sql` | Advisor own-code JOIN skips users linked as **SERVICE FLOOR_INCHARGE-only** (no SA role). They use floor fuel-type JOIN instead. Keeps `18100000` bodyshop_floor exclusion. |
+
+- Checks: `supabase/sql_checks/20260818110000_fix_list_reception_service_floor_fi_gate_checks.sql`
+- Regression: `18100000` routed pure floor incharge users to advisor JOIN → 0 rows on `/floor-incharge` for `pvfloortechwheels@gmail.com`
+- Status: **Applied** (2026-08-18; confirmed working by user)
+
 ### P1-13 — SA list/summary gate parity (service@techwheels.in regression)
 
 | Order | Migration | Change |
 |------|-----------|--------|
-| 1 | `20260818100000_fix_list_reception_gate_summary_parity.sql` | Remove `v_is_floor_or_bodyshop_only` from advisor JOIN gate (match summary exactly). Floor path requires `NOT user_needs_sa_summary_broad_scope()` so CRM/broad users reach residual `summary_scope` path. |
+| 1 | `20260818100000_fix_list_reception_gate_summary_parity.sql` | SA list advisor JOIN matches summary (`NOT broad_scope` + link) but **excludes `bodyshop_floor`** (Accident rows use `summary_scope`). Floor path requires `NOT broad_scope`. Fixes service@ list=0 regression from `17180000` and bodyshop floor regression from first `18100000` draft. |
 
 - Checks: `supabase/sql_checks/20260818100000_fix_list_reception_gate_summary_parity_checks.sql`
-- Regression: `17180000` blocked advisor JOIN for floor-module users without SA module — summary 656, list 0 for `service@techwheels.in` / Govind Singh / `3000840`
-- Status: **Pending apply**
+- Regressions: `17180000` → service@ summary 656 / list 0; first `18100000` draft → bodyshop floor 0 for `prateek.mamodiya.30@gmail.com`
+- Status: **Applied** (2026-08-18; dump `full_metadata.sql` 10:57 IST)
+- Dump verified: no `v_is_floor_or_bodyshop_only`; advisor gate excludes `bodyshop_floor`; floor path has `NOT v_broad_scope`
 
 ## 2026-08-17
 
