@@ -2,6 +2,25 @@
 
 ## 2026-08-17
 
+### P1-13 — SA list gate aligned with summary RPC (vk1 empty assigned rows)
+
+| Order | Migration | Change |
+|------|-----------|--------|
+| 1 | `20260817180000_fix_list_reception_sa_gate_match_summary.sql` | `list_reception_entries_page` / `list_reception_reg_created_since`: own-code JOIN gate matches `get_service_advisor_summary_counts` (`NOT broad_scope` + active employee link). Floor-only users (no SA module) still use floor path. |
+
+- Checks: `supabase/sql_checks/20260817180000_fix_list_reception_sa_gate_match_summary_checks.sql`
+- Regression: `17150000` blocked SA JOIN when user also had `floor_incharge` module or `FLOOR_INCHARGE` role — summary showed 81, list returned 0 for `vk1.techwheels@gmail.com` / `VK1_3000840`
+- Status: **Applied** (2026-08-17)
+
+### Bodyshop — linked repair-card SA intake read
+
+| Order | Migration | Change |
+|------|-----------|--------|
+| 1 | `20260718200000_bodyshop_reception_sa_intake_read_safe.sql` | `bodyshop_can_read_reception_via_linked_card()` + SELECT policies for linked-card SA and SA-modify-only read paths |
+
+- Status: **Applied + Vercel deployed** (2026-08-17)
+- Fixes: bodyshop SA on `bodyshop_repair_cards` can read JC/KM on linked reception when not `sa_employee_code` on the intake row (e.g. RJ60CG7594 / reception 3052)
+
 ### P1-13 — reception list role fast paths (CRM/floor/admin 57014)
 
 | Order | Migration | Change |
@@ -10,7 +29,7 @@
 
 - Checks: `supabase/sql_checks/20260817170000_fix_reception_list_role_fast_paths_checks.sql`
 - Root cause: `reception_dealer_only` excluded CRM roles (copied from SA-summary logic), forcing per-row `user_is_crm_for_dealer_sa` / `user_has_service_floor_incharge_scope_for_sa_code` on prod logs 2026-08-17 06:30–06:56 UTC
-- Status: **Pending apply**
+- Status: **Applied** (2026-08-17; confirmed in dump 12:34 IST)
 
 ### SUPABASE-002 Phase 8.6 — 10-day `contact_details` retention
 
@@ -20,7 +39,7 @@
 
 - Checks: `supabase/sql_checks/20260817161000_contact_details_10day_retention_purge_checks.sql`
 - Plan: SUPABASE-002 Phase 8.6
-- Status: **Pending apply**
+- Status: **Applied** (2026-08-17; RPC + index in dump; verify `contact-details-10d-purge` cron job live)
 - Authority: `supabase/backups/full_metadata.sql` (`public.contact_details.created_at`)
 
 ### SUPABASE-002 Phase 8 — fill-null `contact_phones` from `contact_details`
@@ -72,7 +91,7 @@
 
 - Checks: `supabase/sql_checks/20260817140000_optimize_reception_list_broad_path_checks.sql`
 - Preserves: SA advisor JOIN fast path from `20260817120000` (unchanged gate)
-- Status: **Pending apply**
+- Status: **Applied** (2026-08-17; superseded by `17150000` / `17170000` chain)
 
 ### Complaints — fix 42703 / 42883 from prod logs
 
@@ -82,7 +101,7 @@
 
 - Frontend: remove invalid `user_employee_links.deleted_at` filter in `ComplaintsPage.tsx` (42703)
 - Checks: `supabase/sql_checks/20260817130000_fix_generate_complaint_link_pgcrypto_checks.sql`
-- Status: **Pending apply + Vercel deploy**
+- Status: **Applied + Vercel deployed** (2026-08-17)
 
 ## 2026-08-13
 
@@ -94,7 +113,7 @@
 
 - Checks: `supabase/sql_checks/20260813120000_optimize_list_reception_entries_page_checks.sql`
 - Frontend: migrate remaining direct `service_reception_entries` callers (Dashboard, Technician, Bodyshop, ServiceBooking, mobile prefill/floor)
-- Status: **Pending apply + deploy**
+- Status: **Applied + Vercel deployed** (2026-08-17)
 
 ## 2026-08-07
 
