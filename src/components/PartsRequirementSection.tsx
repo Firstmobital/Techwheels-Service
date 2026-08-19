@@ -246,7 +246,7 @@ export default function PartsRequirementSection({ isAdmin = false }: Props) {
   const [vehicleNoFilter, setVehicleNoFilter] = useState('')
   const [stockStatusFilter, setStockStatusFilter] = useState('all')
   const [orderStatusFilter, setOrderStatusFilter] = useState('all')
-  const [orderNoFilter, setOrderNoFilter] = useState('')
+  const [orderNoFilter, setOrderNoFilter] = useState('all')
 
   // ── Reg No auto-fetch state ─────────────────────────────────────────────────
   const [regFetchStatus, setRegFetchStatus] = useState<'idle' | 'loading' | 'found' | 'notfound' | 'error'>('idle')
@@ -514,15 +514,23 @@ export default function PartsRequirementSection({ isAdmin = false }: Props) {
     }
 
     // ── Order No. filter (visible to all users) ──
-    if (orderNoFilter.trim()) {
-      const onq = orderNoFilter.trim().toLowerCase()
-      list = list.filter((r) => orderNoOf(r).toLowerCase().includes(onq))
+    if (orderNoFilter !== 'all') {
+      list = list.filter((r) => {
+        const on = orderNoOf(r)
+        if (orderNoFilter === 'blank') return !on
+        if (orderNoFilter === 'other') return !!on
+        return true
+      })
     }
 
     // ── Order Status filter (visible to all users) ──
     if (orderStatusFilter !== 'all') {
       list = list.filter((r) => {
-        const os = orderStatuses[normPartNumber(r.parts_number)] ?? 'Order Pending'
+        const os = orderStatuses[normPartNumber(r.parts_number)] ?? ''
+        if (orderStatusFilter === 'blank') return !os
+        if (orderStatusFilter === 'other') {
+          return os !== 'Order Pending' && !os.startsWith('Confirmed') && !os.startsWith('Challan') && !os.startsWith('Invoiced') && !os.startsWith('Dispatched')
+        }
         if (orderStatusFilter === 'pending') return os === 'Order Pending'
         if (orderStatusFilter === 'confirmed') return os.startsWith('Confirmed')
         if (orderStatusFilter === 'challan') return os.startsWith('Challan')
@@ -971,13 +979,15 @@ export default function PartsRequirementSection({ isAdmin = false }: Props) {
       <div className="flex flex-col gap-3 rounded-xl border border-gray-200 bg-white p-3 shadow-sm sm:flex-row sm:items-center sm:gap-4">
         <label className="text-xs font-semibold text-gray-600 sm:w-64">
           Order No.
-          <input
-            type="text"
+          <select
             value={orderNoFilter}
             onChange={(e) => setOrderNoFilter(e.target.value)}
-            placeholder="Search order no..."
             className="mt-1 block w-full rounded-lg border border-gray-300 bg-white px-2 py-1.5 text-sm shadow-sm focus:border-blue-500 focus:outline-none"
-          />
+          >
+            <option value="all">All</option>
+            <option value="blank">Blank (No Order No.)</option>
+            <option value="other">Other (Has Order No.)</option>
+          </select>
         </label>
         <label className="text-xs font-semibold text-gray-600 sm:w-56">
           Order Status
@@ -992,6 +1002,8 @@ export default function PartsRequirementSection({ isAdmin = false }: Props) {
             <option value="challan">Challan Generated</option>
             <option value="invoiced">Invoiced</option>
             <option value="dispatched">Dispatched</option>
+            <option value="blank">Blank (No Status)</option>
+            <option value="other">Other</option>
           </select>
         </label>
       </div>
