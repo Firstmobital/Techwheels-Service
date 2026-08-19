@@ -1,0 +1,407 @@
+{
+  "status": "ok",
+  "endpoint": "/v1/projects/jmdndcphkmaljhwgzqxq/analytics/endpoints/logs?sql=select+timestamp%2C+event_message+from+logs+where+source+%3D+%27auth_logs%27+order+by+timestamp+desc+limit+100&iso_timestamp_start=2026-08-18T04%3A10%3A21.212Z&iso_timestamp_end=2026-08-19T04%3A10%3A21.212Z",
+  "count": 100,
+  "records": [
+    {
+      "event_message": "{\"component\":\"api\",\"duration\":2639810,\"level\":\"info\",\"method\":\"GET\",\"msg\":\"request completed\",\"path\":\"/user\",\"referer\":\"https://techwheels-service.vercel.app/\",\"remote_addr\":\"49.43.176.242\",\"request_id\":\"01a01835-c23b-7c96-a809-e08bbe363be2\",\"status\":200,\"time\":\"2026-08-19T04:09:31Z\"}",
+      "timestamp": "2026-08-19T04:09:31.000000"
+    },
+    {
+      "event_message": "{\"component\":\"api\",\"duration\":2674476,\"level\":\"info\",\"method\":\"GET\",\"msg\":\"request completed\",\"path\":\"/user\",\"referer\":\"https://techwheels-service.vercel.app/\",\"remote_addr\":\"49.43.176.242\",\"request_id\":\"01a01835-b8a3-7ed1-86ea-dc2364df7442\",\"status\":200,\"time\":\"2026-08-19T04:09:29Z\"}",
+      "timestamp": "2026-08-19T04:09:29.000000"
+    },
+    {
+      "event_message": "{\"component\":\"api\",\"duration\":2656909,\"level\":\"info\",\"method\":\"GET\",\"msg\":\"request completed\",\"path\":\"/user\",\"referer\":\"https://techwheels-service.vercel.app/\",\"remote_addr\":\"49.43.176.242\",\"request_id\":\"01a01835-b04f-7884-b1c8-be42659d0222\",\"status\":200,\"time\":\"2026-08-19T04:09:26Z\"}",
+      "timestamp": "2026-08-19T04:09:26.000000"
+    },
+    {
+      "event_message": "{\"component\":\"api\",\"duration\":2628995,\"level\":\"info\",\"method\":\"GET\",\"msg\":\"request completed\",\"path\":\"/user\",\"referer\":\"https://techwheels-service.vercel.app/\",\"remote_addr\":\"49.43.176.242\",\"request_id\":\"01a01835-aab0-7889-9fa4-c7365d5de1a7\",\"status\":200,\"time\":\"2026-08-19T04:09:25Z\"}",
+      "timestamp": "2026-08-19T04:09:25.000000"
+    },
+    {
+      "event_message": "{\"component\":\"api\",\"duration\":2491149,\"level\":\"info\",\"method\":\"GET\",\"msg\":\"request completed\",\"path\":\"/user\",\"referer\":\"https://techwheels-service.vercel.app/\",\"remote_addr\":\"49.43.176.242\",\"request_id\":\"01a01835-9dcb-7d18-91b7-4b26b4b91663\",\"status\":200,\"time\":\"2026-08-19T04:09:22Z\"}",
+      "timestamp": "2026-08-19T04:09:22.000000"
+    },
+    {
+      "event_message": "{\"component\":\"api\",\"duration\":2926282,\"level\":\"info\",\"method\":\"GET\",\"msg\":\"request completed\",\"path\":\"/user\",\"referer\":\"https://techwheels-service.vercel.app/\",\"remote_addr\":\"49.43.176.242\",\"request_id\":\"01a01835-52b4-782e-ab87-7cfe8af68a50\",\"status\":200,\"time\":\"2026-08-19T04:09:02Z\"}",
+      "timestamp": "2026-08-19T04:09:02.000000"
+    },
+    {
+      "event_message": "{\"component\":\"api\",\"duration\":7747409,\"level\":\"info\",\"method\":\"GET\",\"msg\":\"request completed\",\"path\":\"/user\",\"referer\":\"https://techwheels-service.vercel.app/\",\"remote_addr\":\"49.43.176.242\",\"request_id\":\"01a01835-4057-722a-8df3-58d5430c02ce\",\"status\":200,\"time\":\"2026-08-19T04:08:58Z\"}",
+      "timestamp": "2026-08-19T04:08:58.000000"
+    },
+    {
+      "event_message": "{\"component\":\"api\",\"duration\":3077355,\"level\":\"info\",\"method\":\"GET\",\"msg\":\"request completed\",\"path\":\"/user\",\"referer\":\"https://techwheels-service.vercel.app/\",\"remote_addr\":\"49.43.176.242\",\"request_id\":\"01a01835-3421-7ee7-98da-c431586667e3\",\"status\":200,\"time\":\"2026-08-19T04:08:55Z\"}",
+      "timestamp": "2026-08-19T04:08:55.000000"
+    },
+    {
+      "event_message": "{\"auth_event\":{\"action\":\"login\",\"actor_id\":\"2e8835b8-a9f7-4c81-9f9e-e75eeb8699dd\",\"actor_name\":\"Veika meena\",\"actor_username\":\"avanimeena4560@gmail.com\",\"actor_via_sso\":false,\"log_type\":\"account\",\"traits\":{\"provider\":\"email\"}},\"component\":\"api\",\"duration\":85638038,\"grant_type\":\"password\",\"level\":\"info\",\"method\":\"POST\",\"msg\":\"request completed\",\"path\":\"/token\",\"referer\":\"https://techwheels-service.vercel.app/\",\"remote_addr\":\"49.43.176.242\",\"request_id\":\"01a01835-278c-75bc-9410-e6634610258b\",\"status\":200,\"time\":\"2026-08-19T04:08:51Z\"}",
+      "timestamp": "2026-08-19T04:08:51.000000"
+    },
+    {
+      "event_message": "{\"action\":\"login\",\"instance_id\":\"00000000-0000-0000-0000-000000000000\",\"level\":\"info\",\"login_method\":\"password\",\"metering\":true,\"msg\":\"Login\",\"provider\":\"email\",\"time\":\"2026-08-19T04:08:51Z\",\"user_id\":\"2e8835b8-a9f7-4c81-9f9e-e75eeb8699dd\"}",
+      "timestamp": "2026-08-19T04:08:51.000000"
+    },
+    {
+      "event_message": "{\"component\":\"api\",\"duration\":2354132,\"error\":\"400: Invalid Refresh Token: Refresh Token Not Found\",\"error_code\":\"refresh_token_not_found\",\"grant_type\":\"refresh_token\",\"level\":\"warning\",\"method\":\"POST\",\"msg\":\"request completed\",\"path\":\"/token\",\"referer\":\"https://techwheels-service.vercel.app/\",\"remote_addr\":\"49.43.176.242\",\"request_id\":\"01a01835-1ccb-72a2-a022-129413ea2961\",\"status\":400,\"time\":\"2026-08-19T04:08:49Z\"}",
+      "timestamp": "2026-08-19T04:08:49.000000"
+    },
+    {
+      "event_message": "{\"auth_event\":{\"action\":\"token_revoked\",\"actor_id\":\"1e2f2549-9458-454e-8d91-b0eb3c48bc0a\",\"actor_name\":\"Prateek Mamodiya\",\"actor_username\":\"prateek.mamodiya.30@gmail.com\",\"actor_via_sso\":false,\"log_type\":\"token\"},\"component\":\"api\",\"duration\":11113435,\"grant_type\":\"refresh_token\",\"level\":\"info\",\"method\":\"POST\",\"msg\":\"request completed\",\"path\":\"/token\",\"referer\":\"https://techwheels-service.vercel.app/\",\"remote_addr\":\"49.43.176.242\",\"request_id\":\"01a01834-e3e0-7607-801b-68f5611a7024\",\"status\":200,\"time\":\"2026-08-19T04:08:34Z\"}",
+      "timestamp": "2026-08-19T04:08:34.000000"
+    },
+    {
+      "event_message": "{\"action\":\"login\",\"instance_id\":\"00000000-0000-0000-0000-000000000000\",\"level\":\"info\",\"login_method\":\"token\",\"metering\":true,\"msg\":\"Login\",\"time\":\"2026-08-19T04:08:34Z\",\"user_id\":\"1e2f2549-9458-454e-8d91-b0eb3c48bc0a\"}",
+      "timestamp": "2026-08-19T04:08:34.000000"
+    },
+    {
+      "event_message": "{\"auth_event\":{\"action\":\"token_revoked\",\"actor_id\":\"4467e270-4f97-47e2-aa4f-6a0fe16ad759\",\"actor_name\":\"PAVAN BHARGAVA\",\"actor_username\":\"9116667295\",\"actor_via_sso\":false,\"log_type\":\"token\"},\"component\":\"api\",\"duration\":15848277,\"grant_type\":\"refresh_token\",\"level\":\"info\",\"method\":\"POST\",\"msg\":\"request completed\",\"path\":\"/token\",\"referer\":\"https://techwheels-service.vercel.app/\",\"remote_addr\":\"49.43.176.242\",\"request_id\":\"01a01834-92f8-7b08-9654-e01aaa83ab80\",\"status\":200,\"time\":\"2026-08-19T04:08:13Z\"}",
+      "timestamp": "2026-08-19T04:08:13.000000"
+    },
+    {
+      "event_message": "{\"action\":\"login\",\"instance_id\":\"00000000-0000-0000-0000-000000000000\",\"level\":\"info\",\"login_method\":\"token\",\"metering\":true,\"msg\":\"Login\",\"time\":\"2026-08-19T04:08:13Z\",\"user_id\":\"4467e270-4f97-47e2-aa4f-6a0fe16ad759\"}",
+      "timestamp": "2026-08-19T04:08:13.000000"
+    },
+    {
+      "event_message": "{\"auth_event\":{\"action\":\"login\",\"actor_id\":\"d051fbfc-9905-4fe1-bcf6-8574d2dbd7b1\",\"actor_name\":\"VIJENDRA KP\",\"actor_username\":\"9116667280\",\"actor_via_sso\":false,\"log_type\":\"account\",\"traits\":{\"provider\":\"email\"}},\"component\":\"api\",\"duration\":93095201,\"grant_type\":\"password\",\"level\":\"info\",\"method\":\"POST\",\"msg\":\"request completed\",\"path\":\"/token\",\"referer\":\"https://techwheels-service.vercel.app/\",\"remote_addr\":\"49.43.176.242\",\"request_id\":\"01a01834-6229-7486-8629-c7ddf0c52de1\",\"status\":200,\"time\":\"2026-08-19T04:08:01Z\"}",
+      "timestamp": "2026-08-19T04:08:01.000000"
+    },
+    {
+      "event_message": "{\"action\":\"login\",\"instance_id\":\"00000000-0000-0000-0000-000000000000\",\"level\":\"info\",\"login_method\":\"password\",\"metering\":true,\"msg\":\"Login\",\"provider\":\"email\",\"time\":\"2026-08-19T04:08:01Z\",\"user_id\":\"d051fbfc-9905-4fe1-bcf6-8574d2dbd7b1\"}",
+      "timestamp": "2026-08-19T04:08:01.000000"
+    },
+    {
+      "event_message": "{\"auth_event\":{\"action\":\"logout\",\"actor_id\":\"2e8835b8-a9f7-4c81-9f9e-e75eeb8699dd\",\"actor_name\":\"Veika meena\",\"actor_username\":\"avanimeena4560@gmail.com\",\"actor_via_sso\":false,\"log_type\":\"account\"},\"component\":\"api\",\"duration\":4667011,\"level\":\"info\",\"method\":\"POST\",\"msg\":\"request completed\",\"path\":\"/logout\",\"referer\":\"https://techwheels-service.vercel.app/\",\"remote_addr\":\"49.43.176.242\",\"request_id\":\"01a01834-52e4-7c24-9dc6-c6f8bacdabd4\",\"status\":204,\"time\":\"2026-08-19T04:07:57Z\"}",
+      "timestamp": "2026-08-19T04:07:57.000000"
+    },
+    {
+      "event_message": "{\"auth_event\":{\"action\":\"login\",\"actor_id\":\"a5bd39cc-b4be-4326-b951-c94abcf55ffa\",\"actor_name\":\"SUNIL SHARMA\",\"actor_username\":\"7424926980\",\"actor_via_sso\":false,\"log_type\":\"account\",\"traits\":{\"provider\":\"email\"}},\"component\":\"api\",\"duration\":85350450,\"grant_type\":\"password\",\"level\":\"info\",\"method\":\"POST\",\"msg\":\"request completed\",\"path\":\"/token\",\"referer\":\"https://techwheels-service.vercel.app/\",\"remote_addr\":\"49.43.176.242\",\"request_id\":\"01a01834-4aa4-7093-9d23-a737f2527625\",\"status\":200,\"time\":\"2026-08-19T04:07:55Z\"}",
+      "timestamp": "2026-08-19T04:07:55.000000"
+    },
+    {
+      "event_message": "{\"action\":\"login\",\"instance_id\":\"00000000-0000-0000-0000-000000000000\",\"level\":\"info\",\"login_method\":\"password\",\"metering\":true,\"msg\":\"Login\",\"provider\":\"email\",\"time\":\"2026-08-19T04:07:55Z\",\"user_id\":\"a5bd39cc-b4be-4326-b951-c94abcf55ffa\"}",
+      "timestamp": "2026-08-19T04:07:55.000000"
+    },
+    {
+      "event_message": "{\"auth_event\":{\"action\":\"logout\",\"actor_id\":\"fbedf579-8090-4167-a52f-010a336defbc\",\"actor_name\":\"Ajay shaarma\",\"actor_username\":\"ajaysharma946260@gmail.com\",\"actor_via_sso\":false,\"log_type\":\"account\"},\"component\":\"api\",\"duration\":5150832,\"level\":\"info\",\"method\":\"POST\",\"msg\":\"request completed\",\"path\":\"/logout\",\"referer\":\"https://techwheels-service.vercel.app/\",\"remote_addr\":\"49.43.176.242\",\"request_id\":\"01a01834-41fc-71f2-b473-64a30abdd0fb\",\"status\":204,\"time\":\"2026-08-19T04:07:53Z\"}",
+      "timestamp": "2026-08-19T04:07:53.000000"
+    },
+    {
+      "event_message": "{\"action\":\"login\",\"instance_id\":\"00000000-0000-0000-0000-000000000000\",\"level\":\"info\",\"login_method\":\"token\",\"metering\":true,\"msg\":\"Login\",\"time\":\"2026-08-19T04:07:51Z\",\"user_id\":\"a3505291-2429-43cb-be9b-de0edb27f7a5\"}",
+      "timestamp": "2026-08-19T04:07:51.000000"
+    },
+    {
+      "event_message": "{\"auth_event\":{\"action\":\"token_revoked\",\"actor_id\":\"a3505291-2429-43cb-be9b-de0edb27f7a5\",\"actor_name\":\"Anju Mishra\",\"actor_username\":\"techwheelsanju2015@gmail.com\",\"actor_via_sso\":false,\"log_type\":\"token\"},\"component\":\"api\",\"duration\":11495990,\"grant_type\":\"refresh_token\",\"level\":\"info\",\"method\":\"POST\",\"msg\":\"request completed\",\"path\":\"/token\",\"referer\":\"https://techwheels-service.vercel.app/\",\"remote_addr\":\"49.43.176.242\",\"request_id\":\"01a01834-3b83-71ff-b6c9-99f122d24bb5\",\"status\":200,\"time\":\"2026-08-19T04:07:51Z\"}",
+      "timestamp": "2026-08-19T04:07:51.000000"
+    },
+    {
+      "event_message": "{\"auth_event\":{\"action\":\"token_revoked\",\"actor_id\":\"ebe01ada-61b8-428e-9576-17e0658c2a45\",\"actor_name\":\"YOGENDERA SINGH SHEKHAWAT\",\"actor_username\":\"9257034019\",\"actor_via_sso\":false,\"log_type\":\"token\"},\"component\":\"api\",\"duration\":13013441,\"grant_type\":\"refresh_token\",\"level\":\"info\",\"method\":\"POST\",\"msg\":\"request completed\",\"path\":\"/token\",\"referer\":\"https://techwheels-service.vercel.app/\",\"remote_addr\":\"49.43.176.242\",\"request_id\":\"01a01833-a8cf-7eca-9e13-1e82fb34771c\",\"status\":200,\"time\":\"2026-08-19T04:07:13Z\"}",
+      "timestamp": "2026-08-19T04:07:13.000000"
+    },
+    {
+      "event_message": "{\"action\":\"login\",\"instance_id\":\"00000000-0000-0000-0000-000000000000\",\"level\":\"info\",\"login_method\":\"token\",\"metering\":true,\"msg\":\"Login\",\"time\":\"2026-08-19T04:07:13Z\",\"user_id\":\"ebe01ada-61b8-428e-9576-17e0658c2a45\"}",
+      "timestamp": "2026-08-19T04:07:13.000000"
+    },
+    {
+      "event_message": "{\"auth_event\":{\"action\":\"login\",\"actor_id\":\"fbedf579-8090-4167-a52f-010a336defbc\",\"actor_name\":\"Ajay shaarma\",\"actor_username\":\"ajaysharma946260@gmail.com\",\"actor_via_sso\":false,\"log_type\":\"account\",\"traits\":{\"provider\":\"email\"}},\"component\":\"api\",\"duration\":88184278,\"grant_type\":\"password\",\"level\":\"info\",\"method\":\"POST\",\"msg\":\"request completed\",\"path\":\"/token\",\"referer\":\"https://techwheels-service.vercel.app/\",\"remote_addr\":\"49.43.176.242\",\"request_id\":\"01a01833-4eda-7891-b656-d1cd2c16c698\",\"status\":200,\"time\":\"2026-08-19T04:06:50Z\"}",
+      "timestamp": "2026-08-19T04:06:50.000000"
+    },
+    {
+      "event_message": "{\"action\":\"login\",\"instance_id\":\"00000000-0000-0000-0000-000000000000\",\"level\":\"info\",\"login_method\":\"password\",\"metering\":true,\"msg\":\"Login\",\"provider\":\"email\",\"time\":\"2026-08-19T04:06:50Z\",\"user_id\":\"fbedf579-8090-4167-a52f-010a336defbc\"}",
+      "timestamp": "2026-08-19T04:06:50.000000"
+    },
+    {
+      "event_message": "{\"auth_event\":{\"action\":\"logout\",\"actor_id\":\"a5bd39cc-b4be-4326-b951-c94abcf55ffa\",\"actor_name\":\"SUNIL SHARMA\",\"actor_username\":\"7424926980\",\"actor_via_sso\":false,\"log_type\":\"account\"},\"component\":\"api\",\"duration\":6039764,\"level\":\"info\",\"method\":\"POST\",\"msg\":\"request completed\",\"path\":\"/logout\",\"referer\":\"https://techwheels-service.vercel.app/\",\"remote_addr\":\"49.43.176.242\",\"request_id\":\"01a01833-46d4-7e9b-b724-f6fec3d9171c\",\"status\":204,\"time\":\"2026-08-19T04:06:48Z\"}",
+      "timestamp": "2026-08-19T04:06:48.000000"
+    },
+    {
+      "event_message": "{\"action\":\"login\",\"instance_id\":\"00000000-0000-0000-0000-000000000000\",\"level\":\"info\",\"login_method\":\"password\",\"metering\":true,\"msg\":\"Login\",\"provider\":\"email\",\"time\":\"2026-08-19T04:06:02Z\",\"user_id\":\"2e8835b8-a9f7-4c81-9f9e-e75eeb8699dd\"}",
+      "timestamp": "2026-08-19T04:06:02.000000"
+    },
+    {
+      "event_message": "{\"auth_event\":{\"action\":\"login\",\"actor_id\":\"2e8835b8-a9f7-4c81-9f9e-e75eeb8699dd\",\"actor_name\":\"Veika meena\",\"actor_username\":\"avanimeena4560@gmail.com\",\"actor_via_sso\":false,\"log_type\":\"account\",\"traits\":{\"provider\":\"email\"}},\"component\":\"api\",\"duration\":85074308,\"grant_type\":\"password\",\"level\":\"info\",\"method\":\"POST\",\"msg\":\"request completed\",\"path\":\"/token\",\"referer\":\"https://techwheels-service.vercel.app/\",\"remote_addr\":\"49.43.176.242\",\"request_id\":\"01a01832-91f6-7dfc-aeed-2dba3e78f786\",\"status\":200,\"time\":\"2026-08-19T04:06:02Z\"}",
+      "timestamp": "2026-08-19T04:06:02.000000"
+    },
+    {
+      "event_message": "{\"action\":\"login\",\"instance_id\":\"00000000-0000-0000-0000-000000000000\",\"level\":\"info\",\"login_method\":\"token\",\"metering\":true,\"msg\":\"Login\",\"time\":\"2026-08-19T04:05:56Z\",\"user_id\":\"f5679d7d-5d87-4424-863e-a670e312bf53\"}",
+      "timestamp": "2026-08-19T04:05:56.000000"
+    },
+    {
+      "event_message": "{\"auth_event\":{\"action\":\"token_revoked\",\"actor_id\":\"f5679d7d-5d87-4424-863e-a670e312bf53\",\"actor_name\":\"Lokesh Singh\",\"actor_username\":\"lokeshsinghrathore705@gmail.com\",\"actor_via_sso\":false,\"log_type\":\"token\"},\"component\":\"api\",\"duration\":12149641,\"grant_type\":\"refresh_token\",\"level\":\"info\",\"method\":\"POST\",\"msg\":\"request completed\",\"path\":\"/token\",\"referer\":\"https://techwheels-service.vercel.app/\",\"remote_addr\":\"49.43.176.242\",\"request_id\":\"01a01832-7abc-748a-b575-dda0cb75e980\",\"status\":200,\"time\":\"2026-08-19T04:05:56Z\"}",
+      "timestamp": "2026-08-19T04:05:56.000000"
+    },
+    {
+      "event_message": "{\"auth_event\":{\"action\":\"logout\",\"actor_id\":\"d051fbfc-9905-4fe1-bcf6-8574d2dbd7b1\",\"actor_name\":\"VIJENDRA KP\",\"actor_username\":\"9116667280\",\"actor_via_sso\":false,\"log_type\":\"account\"},\"component\":\"api\",\"duration\":6877595,\"level\":\"info\",\"method\":\"POST\",\"msg\":\"request completed\",\"path\":\"/logout\",\"referer\":\"https://techwheels-service.vercel.app/\",\"remote_addr\":\"49.43.176.242\",\"request_id\":\"01a01831-dab2-7243-a471-3bc90b42150f\",\"status\":204,\"time\":\"2026-08-19T04:05:15Z\"}",
+      "timestamp": "2026-08-19T04:05:15.000000"
+    },
+    {
+      "event_message": "{\"auth_event\":{\"action\":\"login\",\"actor_id\":\"ce3c9816-edb0-43b9-96df-4978479a1df9\",\"actor_name\":\"YUGANTER \",\"actor_username\":\"9257051607\",\"actor_via_sso\":false,\"log_type\":\"account\",\"traits\":{\"provider\":\"email\"}},\"component\":\"api\",\"duration\":86229447,\"grant_type\":\"password\",\"level\":\"info\",\"method\":\"POST\",\"msg\":\"request completed\",\"path\":\"/token\",\"referer\":\"https://techwheels-service.vercel.app/\",\"remote_addr\":\"49.43.176.242\",\"request_id\":\"01a01831-8016-79af-863a-ecebd29f4104\",\"status\":200,\"time\":\"2026-08-19T04:04:52Z\"}",
+      "timestamp": "2026-08-19T04:04:52.000000"
+    },
+    {
+      "event_message": "{\"action\":\"login\",\"instance_id\":\"00000000-0000-0000-0000-000000000000\",\"level\":\"info\",\"login_method\":\"password\",\"metering\":true,\"msg\":\"Login\",\"provider\":\"email\",\"time\":\"2026-08-19T04:04:52Z\",\"user_id\":\"ce3c9816-edb0-43b9-96df-4978479a1df9\"}",
+      "timestamp": "2026-08-19T04:04:52.000000"
+    },
+    {
+      "event_message": "{\"auth_event\":{\"action\":\"logout\",\"actor_id\":\"2e8835b8-a9f7-4c81-9f9e-e75eeb8699dd\",\"actor_name\":\"Veika meena\",\"actor_username\":\"avanimeena4560@gmail.com\",\"actor_via_sso\":false,\"log_type\":\"account\"},\"component\":\"api\",\"duration\":5695593,\"level\":\"info\",\"method\":\"POST\",\"msg\":\"request completed\",\"path\":\"/logout\",\"referer\":\"https://techwheels-service.vercel.app/\",\"remote_addr\":\"49.43.176.242\",\"request_id\":\"01a01831-7685-70fa-988a-2e469e42f086\",\"status\":204,\"time\":\"2026-08-19T04:04:49Z\"}",
+      "timestamp": "2026-08-19T04:04:49.000000"
+    },
+    {
+      "event_message": "{\"auth_event\":{\"action\":\"login\",\"actor_id\":\"2e8835b8-a9f7-4c81-9f9e-e75eeb8699dd\",\"actor_name\":\"Veika meena\",\"actor_username\":\"avanimeena4560@gmail.com\",\"actor_via_sso\":false,\"log_type\":\"account\",\"traits\":{\"provider\":\"email\"}},\"component\":\"api\",\"duration\":85234645,\"grant_type\":\"password\",\"level\":\"info\",\"method\":\"POST\",\"msg\":\"request completed\",\"path\":\"/token\",\"referer\":\"https://techwheels-service.vercel.app/\",\"remote_addr\":\"49.43.176.242\",\"request_id\":\"01a01830-d012-753d-a325-0ba4e5d03142\",\"status\":200,\"time\":\"2026-08-19T04:04:07Z\"}",
+      "timestamp": "2026-08-19T04:04:07.000000"
+    },
+    {
+      "event_message": "{\"action\":\"login\",\"instance_id\":\"00000000-0000-0000-0000-000000000000\",\"level\":\"info\",\"login_method\":\"password\",\"metering\":true,\"msg\":\"Login\",\"provider\":\"email\",\"time\":\"2026-08-19T04:04:07Z\",\"user_id\":\"2e8835b8-a9f7-4c81-9f9e-e75eeb8699dd\"}",
+      "timestamp": "2026-08-19T04:04:07.000000"
+    },
+    {
+      "event_message": "{\"auth_event\":{\"action\":\"login\",\"actor_id\":\"2e8835b8-a9f7-4c81-9f9e-e75eeb8699dd\",\"actor_name\":\"Veika meena\",\"actor_username\":\"avanimeena4560@gmail.com\",\"actor_via_sso\":false,\"log_type\":\"account\",\"traits\":{\"provider\":\"email\"}},\"component\":\"api\",\"duration\":90647999,\"grant_type\":\"password\",\"level\":\"info\",\"method\":\"POST\",\"msg\":\"request completed\",\"path\":\"/token\",\"referer\":\"https://techwheels-service.vercel.app/\",\"remote_addr\":\"49.43.176.242\",\"request_id\":\"01a01830-c004-78d8-91c2-b58644f00719\",\"status\":200,\"time\":\"2026-08-19T04:04:03Z\"}",
+      "timestamp": "2026-08-19T04:04:03.000000"
+    },
+    {
+      "event_message": "{\"action\":\"login\",\"instance_id\":\"00000000-0000-0000-0000-000000000000\",\"level\":\"info\",\"login_method\":\"password\",\"metering\":true,\"msg\":\"Login\",\"provider\":\"email\",\"time\":\"2026-08-19T04:04:03Z\",\"user_id\":\"2e8835b8-a9f7-4c81-9f9e-e75eeb8699dd\"}",
+      "timestamp": "2026-08-19T04:04:03.000000"
+    },
+    {
+      "event_message": "{\"auth_event\":{\"action\":\"logout\",\"actor_id\":\"7dfe82ad-598d-43a2-b793-28d90371c065\",\"actor_name\":\"Hariram sharma \",\"actor_username\":\"harrysharma17611@gmail.com\",\"actor_via_sso\":false,\"log_type\":\"account\"},\"component\":\"api\",\"duration\":7962637,\"level\":\"info\",\"method\":\"POST\",\"msg\":\"request completed\",\"path\":\"/logout\",\"referer\":\"https://techwheels-service.vercel.app/\",\"remote_addr\":\"49.43.176.242\",\"request_id\":\"01a01830-baaf-7ce0-9849-39e11c2ed03a\",\"status\":204,\"time\":\"2026-08-19T04:04:01Z\"}",
+      "timestamp": "2026-08-19T04:04:01.000000"
+    },
+    {
+      "event_message": "{\"auth_event\":{\"action\":\"logout\",\"actor_id\":\"ce3c9816-edb0-43b9-96df-4978479a1df9\",\"actor_name\":\"YUGANTER \",\"actor_username\":\"9257051607\",\"actor_via_sso\":false,\"log_type\":\"account\"},\"component\":\"api\",\"duration\":49401302,\"level\":\"info\",\"method\":\"POST\",\"msg\":\"request completed\",\"path\":\"/logout\",\"referer\":\"https://techwheels-service.vercel.app/\",\"remote_addr\":\"49.43.176.242\",\"request_id\":\"01a01830-b3f2-76ad-a557-861b8258bd29\",\"status\":204,\"time\":\"2026-08-19T04:04:00Z\"}",
+      "timestamp": "2026-08-19T04:04:00.000000"
+    },
+    {
+      "event_message": "{\"action\":\"login\",\"instance_id\":\"00000000-0000-0000-0000-000000000000\",\"level\":\"info\",\"login_method\":\"token\",\"metering\":true,\"msg\":\"Login\",\"time\":\"2026-08-19T04:03:06Z\",\"user_id\":\"a5bd39cc-b4be-4326-b951-c94abcf55ffa\"}",
+      "timestamp": "2026-08-19T04:03:06.000000"
+    },
+    {
+      "event_message": "{\"auth_event\":{\"action\":\"token_revoked\",\"actor_id\":\"a5bd39cc-b4be-4326-b951-c94abcf55ffa\",\"actor_name\":\"SUNIL SHARMA\",\"actor_username\":\"7424926980\",\"actor_via_sso\":false,\"log_type\":\"token\"},\"component\":\"api\",\"duration\":13700322,\"grant_type\":\"refresh_token\",\"level\":\"info\",\"method\":\"POST\",\"msg\":\"request completed\",\"path\":\"/token\",\"referer\":\"https://techwheels-service.vercel.app/\",\"remote_addr\":\"49.43.176.242\",\"request_id\":\"01a0182f-e0b1-7930-986e-f12c43cd033d\",\"status\":200,\"time\":\"2026-08-19T04:03:06Z\"}",
+      "timestamp": "2026-08-19T04:03:06.000000"
+    },
+    {
+      "event_message": "{\"auth_event\":{\"action\":\"token_revoked\",\"actor_id\":\"fa21dba8-be5e-455a-8b77-9f94fce20b84\",\"actor_name\":\"PANKAJ SINGH\",\"actor_username\":\"9116667297\",\"actor_via_sso\":false,\"log_type\":\"token\"},\"component\":\"api\",\"duration\":15975268,\"grant_type\":\"refresh_token\",\"level\":\"info\",\"method\":\"POST\",\"msg\":\"request completed\",\"path\":\"/token\",\"referer\":\"https://techwheels-service.vercel.app/\",\"remote_addr\":\"49.43.176.242\",\"request_id\":\"01a0182f-dcf8-716b-9498-91ac6102b118\",\"status\":200,\"time\":\"2026-08-19T04:03:05Z\"}",
+      "timestamp": "2026-08-19T04:03:05.000000"
+    },
+    {
+      "event_message": "{\"action\":\"login\",\"instance_id\":\"00000000-0000-0000-0000-000000000000\",\"level\":\"info\",\"login_method\":\"token\",\"metering\":true,\"msg\":\"Login\",\"time\":\"2026-08-19T04:03:05Z\",\"user_id\":\"fa21dba8-be5e-455a-8b77-9f94fce20b84\"}",
+      "timestamp": "2026-08-19T04:03:05.000000"
+    },
+    {
+      "event_message": "{\"auth_event\":{\"action\":\"token_revoked\",\"actor_id\":\"7dfe82ad-598d-43a2-b793-28d90371c065\",\"actor_name\":\"Hariram sharma \",\"actor_username\":\"harrysharma17611@gmail.com\",\"actor_via_sso\":false,\"log_type\":\"token\"},\"component\":\"api\",\"duration\":18524198,\"grant_type\":\"refresh_token\",\"level\":\"info\",\"method\":\"POST\",\"msg\":\"request completed\",\"path\":\"/token\",\"referer\":\"https://techwheels-service.vercel.app/\",\"remote_addr\":\"49.43.176.242\",\"request_id\":\"01a0182f-60c6-7644-9a36-5d199f867517\",\"status\":200,\"time\":\"2026-08-19T04:02:33Z\"}",
+      "timestamp": "2026-08-19T04:02:33.000000"
+    },
+    {
+      "event_message": "{\"action\":\"login\",\"instance_id\":\"00000000-0000-0000-0000-000000000000\",\"level\":\"info\",\"login_method\":\"token\",\"metering\":true,\"msg\":\"Login\",\"time\":\"2026-08-19T04:02:33Z\",\"user_id\":\"7dfe82ad-598d-43a2-b793-28d90371c065\"}",
+      "timestamp": "2026-08-19T04:02:33.000000"
+    },
+    {
+      "event_message": "{\"auth_event\":{\"action\":\"token_revoked\",\"actor_id\":\"217fa8a3-ec37-4256-9307-da2c79690c9b\",\"actor_name\":\"Govind singh chouhan \",\"actor_username\":\"rohitsingh12rp@gmail.com\",\"actor_via_sso\":false,\"log_type\":\"token\"},\"component\":\"api\",\"duration\":40691591,\"grant_type\":\"refresh_token\",\"level\":\"info\",\"method\":\"POST\",\"msg\":\"request completed\",\"path\":\"/token\",\"referer\":\"https://techwheels-service.vercel.app/\",\"remote_addr\":\"49.43.176.242\",\"request_id\":\"01a0182f-3d7f-7710-8ad3-42c2857103ab\",\"status\":200,\"time\":\"2026-08-19T04:02:24Z\"}",
+      "timestamp": "2026-08-19T04:02:24.000000"
+    },
+    {
+      "event_message": "{\"action\":\"login\",\"instance_id\":\"00000000-0000-0000-0000-000000000000\",\"level\":\"info\",\"login_method\":\"token\",\"metering\":true,\"msg\":\"Login\",\"time\":\"2026-08-19T04:02:24Z\",\"user_id\":\"217fa8a3-ec37-4256-9307-da2c79690c9b\"}",
+      "timestamp": "2026-08-19T04:02:24.000000"
+    },
+    {
+      "event_message": "{\"action\":\"login\",\"instance_id\":\"00000000-0000-0000-0000-000000000000\",\"level\":\"info\",\"login_method\":\"token\",\"metering\":true,\"msg\":\"Login\",\"time\":\"2026-08-19T04:01:27Z\",\"user_id\":\"8f0b07cb-7d3b-4127-a863-899c48c34fd3\"}",
+      "timestamp": "2026-08-19T04:01:27.000000"
+    },
+    {
+      "event_message": "{\"auth_event\":{\"action\":\"token_revoked\",\"actor_id\":\"8f0b07cb-7d3b-4127-a863-899c48c34fd3\",\"actor_name\":\"Admin\",\"actor_username\":\"admin@firstmobital.com\",\"actor_via_sso\":false,\"log_type\":\"token\"},\"component\":\"api\",\"duration\":13059472,\"grant_type\":\"refresh_token\",\"level\":\"info\",\"method\":\"POST\",\"msg\":\"request completed\",\"path\":\"/token\",\"referer\":\"https://techwheels-service.vercel.app/\",\"remote_addr\":\"49.36.236.142\",\"request_id\":\"01a0182e-5e8d-7104-8148-0dabd6f7ffec\",\"status\":200,\"time\":\"2026-08-19T04:01:27Z\"}",
+      "timestamp": "2026-08-19T04:01:27.000000"
+    },
+    {
+      "event_message": "{\"action\":\"login\",\"instance_id\":\"00000000-0000-0000-0000-000000000000\",\"level\":\"info\",\"login_method\":\"token\",\"metering\":true,\"msg\":\"Login\",\"time\":\"2026-08-19T04:01:06Z\",\"user_id\":\"f5679d7d-5d87-4424-863e-a670e312bf53\"}",
+      "timestamp": "2026-08-19T04:01:06.000000"
+    },
+    {
+      "event_message": "{\"auth_event\":{\"action\":\"token_revoked\",\"actor_id\":\"f5679d7d-5d87-4424-863e-a670e312bf53\",\"actor_name\":\"Lokesh Singh\",\"actor_username\":\"lokeshsinghrathore705@gmail.com\",\"actor_via_sso\":false,\"log_type\":\"token\"},\"component\":\"api\",\"duration\":16621124,\"grant_type\":\"refresh_token\",\"level\":\"info\",\"method\":\"POST\",\"msg\":\"request completed\",\"path\":\"/token\",\"referer\":\"https://techwheels-service.vercel.app/\",\"remote_addr\":\"49.43.176.242\",\"request_id\":\"01a0182e-0f6d-7543-ba46-0d3babe642f9\",\"status\":200,\"time\":\"2026-08-19T04:01:06Z\"}",
+      "timestamp": "2026-08-19T04:01:06.000000"
+    },
+    {
+      "event_message": "{\"auth_event\":{\"action\":\"token_revoked\",\"actor_id\":\"ce3c9816-edb0-43b9-96df-4978479a1df9\",\"actor_name\":\"YUGANTER \",\"actor_username\":\"9257051607\",\"actor_via_sso\":false,\"log_type\":\"token\"},\"component\":\"api\",\"duration\":12730144,\"grant_type\":\"refresh_token\",\"level\":\"info\",\"method\":\"POST\",\"msg\":\"request completed\",\"path\":\"/token\",\"referer\":\"https://techwheels-service.vercel.app/\",\"remote_addr\":\"49.43.176.242\",\"request_id\":\"01a0182d-8f0c-78aa-b6f8-1f6ad97fc299\",\"status\":200,\"time\":\"2026-08-19T04:00:34Z\"}",
+      "timestamp": "2026-08-19T04:00:34.000000"
+    },
+    {
+      "event_message": "{\"action\":\"login\",\"instance_id\":\"00000000-0000-0000-0000-000000000000\",\"level\":\"info\",\"login_method\":\"token\",\"metering\":true,\"msg\":\"Login\",\"time\":\"2026-08-19T04:00:34Z\",\"user_id\":\"ce3c9816-edb0-43b9-96df-4978479a1df9\"}",
+      "timestamp": "2026-08-19T04:00:34.000000"
+    },
+    {
+      "event_message": "{\"auth_event\":{\"action\":\"token_revoked\",\"actor_id\":\"3a807ce7-6901-4abd-9d11-2947681d3eae\",\"actor_name\":\"Aman gupta\",\"actor_username\":\"8824885029\",\"actor_via_sso\":false,\"log_type\":\"token\"},\"component\":\"api\",\"duration\":14418408,\"grant_type\":\"refresh_token\",\"level\":\"info\",\"method\":\"POST\",\"msg\":\"request completed\",\"path\":\"/token\",\"referer\":\"https://techwheels-service.vercel.app/\",\"remote_addr\":\"49.43.176.242\",\"request_id\":\"01a0182d-8239-7ecb-878c-71a0c7ebb492\",\"status\":200,\"time\":\"2026-08-19T04:00:30Z\"}",
+      "timestamp": "2026-08-19T04:00:30.000000"
+    },
+    {
+      "event_message": "{\"action\":\"login\",\"instance_id\":\"00000000-0000-0000-0000-000000000000\",\"level\":\"info\",\"login_method\":\"token\",\"metering\":true,\"msg\":\"Login\",\"time\":\"2026-08-19T04:00:30Z\",\"user_id\":\"3a807ce7-6901-4abd-9d11-2947681d3eae\"}",
+      "timestamp": "2026-08-19T04:00:30.000000"
+    },
+    {
+      "event_message": "{\"action\":\"login\",\"instance_id\":\"00000000-0000-0000-0000-000000000000\",\"level\":\"info\",\"login_method\":\"password\",\"metering\":true,\"msg\":\"Login\",\"provider\":\"email\",\"time\":\"2026-08-19T04:00:08Z\",\"user_id\":\"2e8835b8-a9f7-4c81-9f9e-e75eeb8699dd\"}",
+      "timestamp": "2026-08-19T04:00:08.000000"
+    },
+    {
+      "event_message": "{\"auth_event\":{\"action\":\"login\",\"actor_id\":\"2e8835b8-a9f7-4c81-9f9e-e75eeb8699dd\",\"actor_name\":\"Veika meena\",\"actor_username\":\"avanimeena4560@gmail.com\",\"actor_via_sso\":false,\"log_type\":\"account\",\"traits\":{\"provider\":\"email\"}},\"component\":\"api\",\"duration\":93584762,\"grant_type\":\"password\",\"level\":\"info\",\"method\":\"POST\",\"msg\":\"request completed\",\"path\":\"/token\",\"referer\":\"https://techwheels-service.vercel.app/\",\"remote_addr\":\"49.43.176.242\",\"request_id\":\"01a0182d-2ba7-72c1-a49a-8cb99dd0512d\",\"status\":200,\"time\":\"2026-08-19T04:00:08Z\"}",
+      "timestamp": "2026-08-19T04:00:08.000000"
+    },
+    {
+      "event_message": "{\"component\":\"api\",\"duration\":865121,\"error\":\"400: Invalid Refresh Token: Refresh Token Not Found\",\"error_code\":\"refresh_token_not_found\",\"grant_type\":\"refresh_token\",\"level\":\"warning\",\"method\":\"POST\",\"msg\":\"request completed\",\"path\":\"/token\",\"referer\":\"https://techwheels-service.vercel.app/\",\"remote_addr\":\"49.43.176.242\",\"request_id\":\"01a0182d-20a0-7cb6-8253-8776c89b21a8\",\"status\":400,\"time\":\"2026-08-19T04:00:05Z\"}",
+      "timestamp": "2026-08-19T04:00:05.000000"
+    },
+    {
+      "event_message": "{\"auth_event\":{\"action\":\"token_revoked\",\"actor_id\":\"d00e47f4-b80f-4a76-a617-b45113a69326\",\"actor_name\":\"GAUTAM JANGID\",\"actor_username\":\"gautam.techwheels@gmail.com\",\"actor_via_sso\":false,\"log_type\":\"token\"},\"component\":\"api\",\"duration\":25957016,\"grant_type\":\"refresh_token\",\"level\":\"info\",\"method\":\"POST\",\"msg\":\"request completed\",\"path\":\"/token\",\"referer\":\"https://techwheels-service.vercel.app/\",\"remote_addr\":\"49.43.176.242\",\"request_id\":\"01a0182c-908c-7fec-b34c-480975590c93\",\"status\":200,\"time\":\"2026-08-19T03:59:28Z\"}",
+      "timestamp": "2026-08-19T03:59:28.000000"
+    },
+    {
+      "event_message": "{\"action\":\"login\",\"instance_id\":\"00000000-0000-0000-0000-000000000000\",\"level\":\"info\",\"login_method\":\"token\",\"metering\":true,\"msg\":\"Login\",\"time\":\"2026-08-19T03:59:28Z\",\"user_id\":\"d00e47f4-b80f-4a76-a617-b45113a69326\"}",
+      "timestamp": "2026-08-19T03:59:28.000000"
+    },
+    {
+      "event_message": "{\"auth_event\":{\"action\":\"token_revoked\",\"actor_id\":\"d051fbfc-9905-4fe1-bcf6-8574d2dbd7b1\",\"actor_name\":\"VIJENDRA KP\",\"actor_username\":\"9116667280\",\"actor_via_sso\":false,\"log_type\":\"token\"},\"component\":\"api\",\"duration\":27755726,\"grant_type\":\"refresh_token\",\"level\":\"info\",\"method\":\"POST\",\"msg\":\"request completed\",\"path\":\"/token\",\"referer\":\"https://techwheels-service.vercel.app/\",\"remote_addr\":\"49.43.176.242\",\"request_id\":\"01a01829-bfd4-7b90-8686-fa124315d680\",\"status\":200,\"time\":\"2026-08-19T03:56:24Z\"}",
+      "timestamp": "2026-08-19T03:56:24.000000"
+    },
+    {
+      "event_message": "{\"action\":\"login\",\"instance_id\":\"00000000-0000-0000-0000-000000000000\",\"level\":\"info\",\"login_method\":\"token\",\"metering\":true,\"msg\":\"Login\",\"time\":\"2026-08-19T03:56:24Z\",\"user_id\":\"d051fbfc-9905-4fe1-bcf6-8574d2dbd7b1\"}",
+      "timestamp": "2026-08-19T03:56:24.000000"
+    },
+    {
+      "event_message": "{\"component\":\"api\",\"duration\":7831905,\"error\":\"400: Invalid Refresh Token: Refresh Token Not Found\",\"error_code\":\"refresh_token_not_found\",\"grant_type\":\"refresh_token\",\"level\":\"warning\",\"method\":\"POST\",\"msg\":\"request completed\",\"path\":\"/token\",\"referer\":\"https://techwheels-service.vercel.app/\",\"remote_addr\":\"103.59.75.86\",\"request_id\":\"01a01828-14ed-7399-a3a0-8e894326f644\",\"status\":400,\"time\":\"2026-08-19T03:54:35Z\"}",
+      "timestamp": "2026-08-19T03:54:35.000000"
+    },
+    {
+      "event_message": "{\"action\":\"login\",\"instance_id\":\"00000000-0000-0000-0000-000000000000\",\"level\":\"info\",\"login_method\":\"token\",\"metering\":true,\"msg\":\"Login\",\"time\":\"2026-08-19T03:34:55Z\",\"user_id\":\"c43dcd39-6892-4aa0-9084-500fc3f6af8c\"}",
+      "timestamp": "2026-08-19T03:34:55.000000"
+    },
+    {
+      "event_message": "{\"auth_event\":{\"action\":\"token_revoked\",\"actor_id\":\"c43dcd39-6892-4aa0-9084-500fc3f6af8c\",\"actor_name\":\"Kedar narayan Sharma\",\"actor_username\":\"kedar.sunita0311@gmail.com\",\"actor_via_sso\":false,\"log_type\":\"token\"},\"component\":\"api\",\"duration\":25990470,\"grant_type\":\"refresh_token\",\"level\":\"info\",\"method\":\"POST\",\"msg\":\"request completed\",\"path\":\"/token\",\"referer\":\"https://techwheels-service.vercel.app/\",\"remote_addr\":\"49.43.176.242\",\"request_id\":\"01a01816-13c3-77e1-a9cb-82ff959d5256\",\"status\":200,\"time\":\"2026-08-19T03:34:55Z\"}",
+      "timestamp": "2026-08-19T03:34:55.000000"
+    },
+    {
+      "event_message": "{\"action\":\"login\",\"instance_id\":\"00000000-0000-0000-0000-000000000000\",\"level\":\"info\",\"login_method\":\"token\",\"metering\":true,\"msg\":\"Login\",\"time\":\"2026-08-19T03:00:21Z\",\"user_id\":\"8f0b07cb-7d3b-4127-a863-899c48c34fd3\"}",
+      "timestamp": "2026-08-19T03:00:21.000000"
+    },
+    {
+      "event_message": "{\"auth_event\":{\"action\":\"token_revoked\",\"actor_id\":\"8f0b07cb-7d3b-4127-a863-899c48c34fd3\",\"actor_name\":\"Admin\",\"actor_username\":\"admin@firstmobital.com\",\"actor_via_sso\":false,\"log_type\":\"token\"},\"component\":\"api\",\"duration\":33739205,\"grant_type\":\"refresh_token\",\"level\":\"info\",\"method\":\"POST\",\"msg\":\"request completed\",\"path\":\"/token\",\"referer\":\"https://techwheels-service.vercel.app/\",\"remote_addr\":\"49.36.236.142\",\"request_id\":\"01a017f6-6e59-7285-924b-ec0266858c9a\",\"status\":200,\"time\":\"2026-08-19T03:00:21Z\"}",
+      "timestamp": "2026-08-19T03:00:21.000000"
+    },
+    {
+      "event_message": "{\"action\":\"login\",\"instance_id\":\"00000000-0000-0000-0000-000000000000\",\"level\":\"info\",\"login_method\":\"token\",\"metering\":true,\"msg\":\"Login\",\"time\":\"2026-08-19T02:36:17Z\",\"user_id\":\"c43dcd39-6892-4aa0-9084-500fc3f6af8c\"}",
+      "timestamp": "2026-08-19T02:36:17.000000"
+    },
+    {
+      "event_message": "{\"auth_event\":{\"action\":\"token_revoked\",\"actor_id\":\"c43dcd39-6892-4aa0-9084-500fc3f6af8c\",\"actor_name\":\"Kedar narayan Sharma\",\"actor_username\":\"kedar.sunita0311@gmail.com\",\"actor_via_sso\":false,\"log_type\":\"token\"},\"component\":\"api\",\"duration\":27995716,\"grant_type\":\"refresh_token\",\"level\":\"info\",\"method\":\"POST\",\"msg\":\"request completed\",\"path\":\"/token\",\"referer\":\"https://techwheels-service.vercel.app/\",\"remote_addr\":\"49.43.176.242\",\"request_id\":\"01a017e0-684e-7620-95d3-961a8baed465\",\"status\":200,\"time\":\"2026-08-19T02:36:17Z\"}",
+      "timestamp": "2026-08-19T02:36:17.000000"
+    },
+    {
+      "event_message": "{\"auth_event\":{\"action\":\"token_revoked\",\"actor_id\":\"11dfb34b-2d02-4186-bc95-01719eca808b\",\"actor_name\":\"Vijendra Singh jesawat \",\"actor_username\":\"9887623329\",\"actor_via_sso\":false,\"log_type\":\"token\"},\"component\":\"api\",\"duration\":78538381,\"grant_type\":\"refresh_token\",\"level\":\"info\",\"method\":\"POST\",\"msg\":\"request completed\",\"path\":\"/token\",\"referer\":\"https://techwheels-service.vercel.app\",\"remote_addr\":\"157.48.91.89\",\"request_id\":\"01a017dd-6f44-7ff4-bda4-3f6e2ac1b17a\",\"status\":200,\"time\":\"2026-08-19T02:33:03Z\"}",
+      "timestamp": "2026-08-19T02:33:03.000000"
+    },
+    {
+      "event_message": "{\"action\":\"login\",\"instance_id\":\"00000000-0000-0000-0000-000000000000\",\"level\":\"info\",\"login_method\":\"token\",\"metering\":true,\"msg\":\"Login\",\"time\":\"2026-08-19T02:33:03Z\",\"user_id\":\"11dfb34b-2d02-4186-bc95-01719eca808b\"}",
+      "timestamp": "2026-08-19T02:33:03.000000"
+    },
+    {
+      "event_message": "{\"action\":\"login\",\"instance_id\":\"00000000-0000-0000-0000-000000000000\",\"level\":\"info\",\"login_method\":\"password\",\"metering\":true,\"msg\":\"Login\",\"provider\":\"email\",\"time\":\"2026-08-19T02:22:41Z\",\"user_id\":\"8f0b07cb-7d3b-4127-a863-899c48c34fd3\"}",
+      "timestamp": "2026-08-19T02:22:41.000000"
+    },
+    {
+      "event_message": "{\"auth_event\":{\"action\":\"login\",\"actor_id\":\"8f0b07cb-7d3b-4127-a863-899c48c34fd3\",\"actor_name\":\"Admin\",\"actor_username\":\"admin@firstmobital.com\",\"actor_via_sso\":false,\"log_type\":\"account\",\"traits\":{\"provider\":\"email\"}},\"component\":\"api\",\"duration\":157192616,\"grant_type\":\"password\",\"level\":\"info\",\"method\":\"POST\",\"msg\":\"request completed\",\"path\":\"/token\",\"referer\":\"https://techwheels-service.vercel.app/\",\"remote_addr\":\"49.36.236.142\",\"request_id\":\"01a017d3-f165-7e5a-9c96-de6374ece518\",\"status\":200,\"time\":\"2026-08-19T02:22:41Z\"}",
+      "timestamp": "2026-08-19T02:22:41.000000"
+    },
+    {
+      "event_message": "{\"auth_event\":{\"action\":\"token_revoked\",\"actor_id\":\"8f0b07cb-7d3b-4127-a863-899c48c34fd3\",\"actor_name\":\"Admin\",\"actor_username\":\"admin@firstmobital.com\",\"actor_via_sso\":false,\"log_type\":\"token\"},\"component\":\"api\",\"duration\":30181431,\"grant_type\":\"refresh_token\",\"level\":\"info\",\"method\":\"POST\",\"msg\":\"request completed\",\"path\":\"/token\",\"referer\":\"https://techwheels-service.vercel.app/\",\"remote_addr\":\"49.36.236.142\",\"request_id\":\"01a017a5-dba3-7959-948e-44564bdba1b8\",\"status\":200,\"time\":\"2026-08-19T01:32:20Z\"}",
+      "timestamp": "2026-08-19T01:32:20.000000"
+    },
+    {
+      "event_message": "{\"action\":\"login\",\"instance_id\":\"00000000-0000-0000-0000-000000000000\",\"level\":\"info\",\"login_method\":\"token\",\"metering\":true,\"msg\":\"Login\",\"time\":\"2026-08-19T01:32:20Z\",\"user_id\":\"8f0b07cb-7d3b-4127-a863-899c48c34fd3\"}",
+      "timestamp": "2026-08-19T01:32:20.000000"
+    },
+    {
+      "event_message": "{\"action\":\"login\",\"instance_id\":\"00000000-0000-0000-0000-000000000000\",\"level\":\"info\",\"login_method\":\"token\",\"metering\":true,\"msg\":\"Login\",\"time\":\"2026-08-19T01:09:44Z\",\"user_id\":\"d051fbfc-9905-4fe1-bcf6-8574d2dbd7b1\"}",
+      "timestamp": "2026-08-19T01:09:44.000000"
+    },
+    {
+      "event_message": "{\"auth_event\":{\"action\":\"token_revoked\",\"actor_id\":\"d051fbfc-9905-4fe1-bcf6-8574d2dbd7b1\",\"actor_name\":\"VIJENDRA KP\",\"actor_username\":\"9116667280\",\"actor_via_sso\":false,\"log_type\":\"token\"},\"component\":\"api\",\"duration\":28731891,\"grant_type\":\"refresh_token\",\"level\":\"info\",\"method\":\"POST\",\"msg\":\"request completed\",\"path\":\"/token\",\"referer\":\"https://techwheels-service.vercel.app/\",\"remote_addr\":\"49.43.176.242\",\"request_id\":\"01a01791-2a18-7f84-9919-79bc0e628671\",\"status\":200,\"time\":\"2026-08-19T01:09:44Z\"}",
+      "timestamp": "2026-08-19T01:09:44.000000"
+    },
+    {
+      "event_message": "{\"auth_event\":{\"action\":\"token_revoked\",\"actor_id\":\"8f0b07cb-7d3b-4127-a863-899c48c34fd3\",\"actor_name\":\"Admin\",\"actor_username\":\"admin@firstmobital.com\",\"actor_via_sso\":false,\"log_type\":\"token\"},\"component\":\"api\",\"duration\":44637953,\"grant_type\":\"refresh_token\",\"level\":\"info\",\"method\":\"POST\",\"msg\":\"request completed\",\"path\":\"/token\",\"referer\":\"https://techwheels-service.vercel.app/\",\"remote_addr\":\"49.36.236.142\",\"request_id\":\"01a0176a-0d87-79db-bf4c-966f2e43d1de\",\"status\":200,\"time\":\"2026-08-19T00:27:01Z\"}",
+      "timestamp": "2026-08-19T00:27:01.000000"
+    },
+    {
+      "event_message": "{\"action\":\"login\",\"instance_id\":\"00000000-0000-0000-0000-000000000000\",\"level\":\"info\",\"login_method\":\"token\",\"metering\":true,\"msg\":\"Login\",\"time\":\"2026-08-19T00:27:01Z\",\"user_id\":\"8f0b07cb-7d3b-4127-a863-899c48c34fd3\"}",
+      "timestamp": "2026-08-19T00:27:01.000000"
+    },
+    {
+      "event_message": "{\"auth_event\":{\"action\":\"token_revoked\",\"actor_id\":\"d051fbfc-9905-4fe1-bcf6-8574d2dbd7b1\",\"actor_name\":\"VIJENDRA KP\",\"actor_username\":\"9116667280\",\"actor_via_sso\":false,\"log_type\":\"token\"},\"component\":\"api\",\"duration\":55830371,\"grant_type\":\"refresh_token\",\"level\":\"info\",\"method\":\"POST\",\"msg\":\"request completed\",\"path\":\"/token\",\"referer\":\"https://techwheels-service.vercel.app/\",\"remote_addr\":\"49.43.176.242\",\"request_id\":\"01a0175b-2596-7b33-8a1b-2795d02eb7e1\",\"status\":200,\"time\":\"2026-08-19T00:10:44Z\"}",
+      "timestamp": "2026-08-19T00:10:44.000000"
+    },
+    {
+      "event_message": "{\"action\":\"login\",\"instance_id\":\"00000000-0000-0000-0000-000000000000\",\"level\":\"info\",\"login_method\":\"token\",\"metering\":true,\"msg\":\"Login\",\"time\":\"2026-08-19T00:10:44Z\",\"user_id\":\"d051fbfc-9905-4fe1-bcf6-8574d2dbd7b1\"}",
+      "timestamp": "2026-08-19T00:10:44.000000"
+    },
+    {
+      "event_message": "{\"auth_event\":{\"action\":\"token_revoked\",\"actor_id\":\"d051fbfc-9905-4fe1-bcf6-8574d2dbd7b1\",\"actor_name\":\"VIJENDRA KP\",\"actor_username\":\"9116667280\",\"actor_via_sso\":false,\"log_type\":\"token\"},\"component\":\"api\",\"duration\":31023812,\"grant_type\":\"refresh_token\",\"level\":\"info\",\"method\":\"POST\",\"msg\":\"request completed\",\"path\":\"/token\",\"referer\":\"https://techwheels-service.vercel.app/\",\"remote_addr\":\"49.43.176.242\",\"request_id\":\"01a01725-2189-7dad-b82c-3c3e80cd55f6\",\"status\":200,\"time\":\"2026-08-18T23:11:44Z\"}",
+      "timestamp": "2026-08-18T23:11:44.000000"
+    },
+    {
+      "event_message": "{\"action\":\"login\",\"instance_id\":\"00000000-0000-0000-0000-000000000000\",\"level\":\"info\",\"login_method\":\"token\",\"metering\":true,\"msg\":\"Login\",\"time\":\"2026-08-18T23:11:44Z\",\"user_id\":\"d051fbfc-9905-4fe1-bcf6-8574d2dbd7b1\"}",
+      "timestamp": "2026-08-18T23:11:44.000000"
+    },
+    {
+      "event_message": "{\"auth_event\":{\"action\":\"token_revoked\",\"actor_id\":\"8f0b07cb-7d3b-4127-a863-899c48c34fd3\",\"actor_name\":\"Admin\",\"actor_username\":\"admin@firstmobital.com\",\"actor_via_sso\":false,\"log_type\":\"token\"},\"component\":\"api\",\"duration\":29166743,\"grant_type\":\"refresh_token\",\"level\":\"info\",\"method\":\"POST\",\"msg\":\"request completed\",\"path\":\"/token\",\"referer\":\"https://techwheels-service.vercel.app/\",\"remote_addr\":\"49.36.236.142\",\"request_id\":\"01a01721-5e49-78b1-8b8d-f2a7107b325d\",\"status\":200,\"time\":\"2026-08-18T23:07:37Z\"}",
+      "timestamp": "2026-08-18T23:07:37.000000"
+    },
+    {
+      "event_message": "{\"action\":\"login\",\"instance_id\":\"00000000-0000-0000-0000-000000000000\",\"level\":\"info\",\"login_method\":\"token\",\"metering\":true,\"msg\":\"Login\",\"time\":\"2026-08-18T23:07:37Z\",\"user_id\":\"8f0b07cb-7d3b-4127-a863-899c48c34fd3\"}",
+      "timestamp": "2026-08-18T23:07:37.000000"
+    },
+    {
+      "event_message": "{\"auth_event\":{\"action\":\"token_revoked\",\"actor_id\":\"d051fbfc-9905-4fe1-bcf6-8574d2dbd7b1\",\"actor_name\":\"VIJENDRA KP\",\"actor_username\":\"9116667280\",\"actor_via_sso\":false,\"log_type\":\"token\"},\"component\":\"api\",\"duration\":28992293,\"grant_type\":\"refresh_token\",\"level\":\"info\",\"method\":\"POST\",\"msg\":\"request completed\",\"path\":\"/token\",\"referer\":\"https://techwheels-service.vercel.app/\",\"remote_addr\":\"49.43.176.242\",\"request_id\":\"01a016ef-1d31-744a-994d-7f0c2844fef4\",\"status\":200,\"time\":\"2026-08-18T22:12:44Z\"}",
+      "timestamp": "2026-08-18T22:12:44.000000"
+    },
+    {
+      "event_message": "{\"action\":\"login\",\"instance_id\":\"00000000-0000-0000-0000-000000000000\",\"level\":\"info\",\"login_method\":\"token\",\"metering\":true,\"msg\":\"Login\",\"time\":\"2026-08-18T22:12:44Z\",\"user_id\":\"d051fbfc-9905-4fe1-bcf6-8574d2dbd7b1\"}",
+      "timestamp": "2026-08-18T22:12:44.000000"
+    },
+    {
+      "event_message": "{\"action\":\"login\",\"instance_id\":\"00000000-0000-0000-0000-000000000000\",\"level\":\"info\",\"login_method\":\"token\",\"metering\":true,\"msg\":\"Login\",\"time\":\"2026-08-18T21:13:44Z\",\"user_id\":\"d051fbfc-9905-4fe1-bcf6-8574d2dbd7b1\"}",
+      "timestamp": "2026-08-18T21:13:44.000000"
+    },
+    {
+      "event_message": "{\"auth_event\":{\"action\":\"token_revoked\",\"actor_id\":\"d051fbfc-9905-4fe1-bcf6-8574d2dbd7b1\",\"actor_name\":\"VIJENDRA KP\",\"actor_username\":\"9116667280\",\"actor_via_sso\":false,\"log_type\":\"token\"},\"component\":\"api\",\"duration\":29960071,\"grant_type\":\"refresh_token\",\"level\":\"info\",\"method\":\"POST\",\"msg\":\"request completed\",\"path\":\"/token\",\"referer\":\"https://techwheels-service.vercel.app/\",\"remote_addr\":\"49.43.176.242\",\"request_id\":\"01a016b9-192f-7a96-9e87-5855b4089b3b\",\"status\":200,\"time\":\"2026-08-18T21:13:44Z\"}",
+      "timestamp": "2026-08-18T21:13:44.000000"
+    },
+    {
+      "event_message": "{\"action\":\"login\",\"instance_id\":\"00000000-0000-0000-0000-000000000000\",\"level\":\"info\",\"login_method\":\"token\",\"metering\":true,\"msg\":\"Login\",\"time\":\"2026-08-18T20:56:12Z\",\"user_id\":\"8f0b07cb-7d3b-4127-a863-899c48c34fd3\"}",
+      "timestamp": "2026-08-18T20:56:12.000000"
+    },
+    {
+      "event_message": "{\"auth_event\":{\"action\":\"token_revoked\",\"actor_id\":\"8f0b07cb-7d3b-4127-a863-899c48c34fd3\",\"actor_name\":\"Admin\",\"actor_username\":\"admin@firstmobital.com\",\"actor_via_sso\":false,\"log_type\":\"token\"},\"component\":\"api\",\"duration\":26508720,\"grant_type\":\"refresh_token\",\"level\":\"info\",\"method\":\"POST\",\"msg\":\"request completed\",\"path\":\"/token\",\"referer\":\"https://techwheels-service.vercel.app/\",\"remote_addr\":\"49.36.236.142\",\"request_id\":\"01a016a9-0cb7-7681-9fbd-736025d7c3e0\",\"status\":200,\"time\":\"2026-08-18T20:56:12Z\"}",
+      "timestamp": "2026-08-18T20:56:12.000000"
+    },
+    {
+      "event_message": "{\"auth_event\":{\"action\":\"token_revoked\",\"actor_id\":\"d051fbfc-9905-4fe1-bcf6-8574d2dbd7b1\",\"actor_name\":\"VIJENDRA KP\",\"actor_username\":\"9116667280\",\"actor_via_sso\":false,\"log_type\":\"token\"},\"component\":\"api\",\"duration\":29098307,\"grant_type\":\"refresh_token\",\"level\":\"info\",\"method\":\"POST\",\"msg\":\"request completed\",\"path\":\"/token\",\"referer\":\"https://techwheels-service.vercel.app/\",\"remote_addr\":\"49.43.176.242\",\"request_id\":\"01a01683-14cc-7530-9d4b-4d2b8bb30214\",\"status\":200,\"time\":\"2026-08-18T20:14:44Z\"}",
+      "timestamp": "2026-08-18T20:14:44.000000"
+    },
+    {
+      "event_message": "{\"action\":\"login\",\"instance_id\":\"00000000-0000-0000-0000-000000000000\",\"level\":\"info\",\"login_method\":\"token\",\"metering\":true,\"msg\":\"Login\",\"time\":\"2026-08-18T20:14:44Z\",\"user_id\":\"d051fbfc-9905-4fe1-bcf6-8574d2dbd7b1\"}",
+      "timestamp": "2026-08-18T20:14:44.000000"
+    },
+    {
+      "event_message": "{\"auth_event\":{\"action\":\"token_revoked\",\"actor_id\":\"8f0b07cb-7d3b-4127-a863-899c48c34fd3\",\"actor_name\":\"Admin\",\"actor_username\":\"admin@firstmobital.com\",\"actor_via_sso\":false,\"log_type\":\"token\"},\"component\":\"api\",\"duration\":29209272,\"grant_type\":\"refresh_token\",\"level\":\"info\",\"method\":\"POST\",\"msg\":\"request completed\",\"path\":\"/token\",\"referer\":\"https://techwheels-service.vercel.app/\",\"remote_addr\":\"49.36.236.142\",\"request_id\":\"01a01664-c74c-7738-a1b2-f3f19a09480f\",\"status\":200,\"time\":\"2026-08-18T19:41:38Z\"}",
+      "timestamp": "2026-08-18T19:41:38.000000"
+    },
+    {
+      "event_message": "{\"action\":\"login\",\"instance_id\":\"00000000-0000-0000-0000-000000000000\",\"level\":\"info\",\"login_method\":\"token\",\"metering\":true,\"msg\":\"Login\",\"time\":\"2026-08-18T19:41:38Z\",\"user_id\":\"8f0b07cb-7d3b-4127-a863-899c48c34fd3\"}",
+      "timestamp": "2026-08-18T19:41:38.000000"
+    },
+    {
+      "event_message": "{\"action\":\"login\",\"instance_id\":\"00000000-0000-0000-0000-000000000000\",\"level\":\"info\",\"login_method\":\"token\",\"metering\":true,\"msg\":\"Login\",\"time\":\"2026-08-18T19:15:44Z\",\"user_id\":\"d051fbfc-9905-4fe1-bcf6-8574d2dbd7b1\"}",
+      "timestamp": "2026-08-18T19:15:44.000000"
+    },
+    {
+      "event_message": "{\"auth_event\":{\"action\":\"token_revoked\",\"actor_id\":\"d051fbfc-9905-4fe1-bcf6-8574d2dbd7b1\",\"actor_name\":\"VIJENDRA KP\",\"actor_username\":\"9116667280\",\"actor_via_sso\":false,\"log_type\":\"token\"},\"component\":\"api\",\"duration\":40211220,\"grant_type\":\"refresh_token\",\"level\":\"info\",\"method\":\"POST\",\"msg\":\"request completed\",\"path\":\"/token\",\"referer\":\"https://techwheels-service.vercel.app/\",\"remote_addr\":\"49.43.176.242\",\"request_id\":\"01a0164d-10ca-7acf-9336-e7b32d2d6db2\",\"status\":200,\"time\":\"2026-08-18T19:15:44Z\"}",
+      "timestamp": "2026-08-18T19:15:44.000000"
+    }
+  ]
+}

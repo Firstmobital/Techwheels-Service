@@ -163,8 +163,8 @@ Retention rule:
 | 2026-06-26 (manual dashboard checkpoint, 10:54 IST) | 65% | 15% | 34% | 24/60 | - | - | - | - | Observability Overview + Query Performance screenshot evidence: slow queries reported as 932/933 (panel variance), Disk IO 45%, API Gateway errors 14%, Database errors 5.3%, PostgREST requests 2,892 |
 | 2026-07-06 (automated audit cycle, post-deploy Batch B) | - | - | - | 26/60 | - | - | - | - | Snapshot 14.35 (08:13 UTC); top query 3220864789079889211 calls=22 total_ms=31092.85 mean_ms=1413.31; slow_queries=18 (was 1117); cache_hit=100%; comparison=improved; delta_total_ms_sum=-198283995.58; guard=ok |
 | 2026-07-07 (automated audit 14.36 + metadata backup) | 71% | 8% | 36% | 24/60 | - | - | - | - | Snapshot 14.36 (06:14 UTC); top query 6462467893367818088 calls=214; slow_queries=200; comparison=regressed; delta_total_ms_sum=3425053.57; guard=blocked_requires_checklist; egress=125%; db_size=88%; metadata dump sha256=aa70820a (06:18 UTC) |
-| 2026-08-14 (automated audit cycle) | - | - | - | - | - | - | - | - | Top query -2876120296317350531 calls=2235233 total_ms=18176158.96 mean_ms=8.13; comparison=regressed; delta_total_ms_sum=6947123.9 |
 | 2026-08-17 (automated audit cycle) | - | - | - | - | - | - | - | - | Top query 4868736656759022764 calls=26728 total_ms=20913605.44 mean_ms=782.46; comparison=regressed; delta_total_ms_sum=12375912.72 |
+| 2026-08-19 (automated audit cycle) | - | - | - | - | - | - | - | - | Top query 4868736656759022764 calls=39234 total_ms=23422698.54 mean_ms=597.00; comparison=regressed; delta_total_ms_sum=9888364.82 |
 
 ## 6) Change Log (What Was Updated in This Plan)
 
@@ -184,8 +184,8 @@ Retention rule:
 | 2026-07-24 | Copilot | P1-06 Batch E implemented: paginated SA/Reception list APIs, background slim summary scan for SA tiles, Load more UX. Evidence: [P1_06_RECEPTION_PAGINATED_LIST_BATCH_E_2026-07-24.md](../evidence/P1_06_RECEPTION_PAGINATED_LIST_BATCH_E_2026-07-24.md). Deploy + audit pending. |
 | 2026-07-28 | Copilot | Snapshot **14.46** post-deploy Batch E verification: page-2/page-1 ratio ~2.0 (was ~3.8); reception still #2/#3; slim summary `3827816949739656130` costly. Metadata dump refreshed (sha256=3dd4899f). Batch F plan added; P2-05 reopened for `on_hand_qty` drift. |
 | 2026-08-07 | Copilot | **P1-13 Reception page 57014 fix (code complete):** migration `20260807130000` — list/create/update SECURITY DEFINER RPCs; ReceptionPage removed 5× period preset RLS probes on load; `reception.ts` switched to RPCs. Clarifies SA save fix (`20260807120000`) was one path only — Reception uses separate SELECT/INSERT endpoints. |
-| 2026-08-14 | Copilot | Automated Supabase audit cycle appended run summary (2026-08-14 10:14:51 IST) and refreshed plan evidence block from generated audit artifacts. |
 | 2026-08-17 | Copilot | Automated Supabase audit cycle appended run summary (2026-08-17 09:55:51 IST) and refreshed plan evidence block from generated audit artifacts. |
+| 2026-08-19 | Copilot | Automated Supabase audit cycle appended run summary (2026-08-19 09:40:19 IST) and refreshed plan evidence block from generated audit artifacts. |
 
 ## 7) Update Protocol For Future Chats
 
@@ -311,43 +311,6 @@ Retention policy:
 - Keep comparison status and compact top-10 table in each retained snapshot.
 - Archive detailed historical logs under `supabase/evidence/audit_runs/`.
 
-### 14.51 Capture Snapshot: 2026-08-14 (Automated Audit Cycle)
-
-What was captured:
-- Timestamp (IST): 2026-08-14 10:14:51 IST
-- Capture mode: automated_supabase_audit_cycle
-- Top queryid: -2876120296317350531 (calls=2235233, total_ms=18176158.96, mean_ms=8.13)
-- Platform logs capture status: auth=ok, edge_functions=ok, realtime=ok, storage=ok, database_health=ok
-- Comparison vs previous run (2026-08-13__04-37-06-535Z): status=regressed, delta_total_ms_sum=6947123.9, delta_calls_sum=88948
-- Top regressions by delta_total_ms: 4868736656759022764 (4388835.59); -2876120296317350531 (605833.51); -6327570512180762919 (411333.12)
-- Top postgres log messages (by frequency): canceling statement due to statement timeout (343); invalid input syntax for type timestamp with time zone: "T00:00:00+05:30" (56); function gen_random_bytes(integer) does not exist (52)
-
-Compact Top 10 (run-local):
-| rank | queryid | calls | total_ms | mean_ms |
-|---:|---|---:|---:|---:|
-| 1 | -2876120296317350531 | 2235233 | 18176158.96 | 8.13 |
-| 2 | 4868736656759022764 | 14251 | 13797668.57 | 968.19 |
-| 3 | 852176900607336119 | 7797 | 12094748.46 | 1551.21 |
-| 4 | 8843009277484467611 | 1074 | 5145534.15 | 4791.00 |
-| 5 | -397576279058981298 | 1399 | 4986579.51 | 3564.39 |
-| 6 | 3787216458397661678 | 8951 | 4894882.24 | 546.85 |
-| 7 | -2147031708195470770 | 3250 | 3946776.29 | 1214.39 |
-| 8 | 8976932172498995662 | 20011 | 3422635.90 | 171.04 |
-| 9 | 9034250094703622185 | 746 | 3242810.86 | 4346.93 |
-| 10 | 3109077696112254485 | 1043 | 3148514.52 | 3018.71 |
-
-Interpretation:
-- This snapshot is append-only and intended to keep log evidence current for the hardening cycle.
-- Prioritize fixes by highest delta_total_ms and call movement from run-to-run comparison.
-
-Self-heal plan:
-- Realtime WAL polling increased; reduce duplicate subscriptions and channel fan-out.
-- Postgres statement timeouts increased; reduce pg_cron batch sizes and add indexes for hot refresh/sync paths.
-- Postgres missing-relation errors in logs; verify function/table identifiers match live schema (quoted vs lowercase names).
-
-Next action:
-- Re-run the cycle after the next production traffic window and validate that comparison status moves toward improved.
-
 ### 14.52 Capture Snapshot: 2026-08-17 (Automated Audit Cycle)
 
 What was captured:
@@ -372,6 +335,43 @@ Compact Top 10 (run-local):
 | 8 | 9034250094703622185 | 891 | 4046500.55 | 4541.53 |
 | 9 | -6327570512180762919 | 27565 | 3879420.84 | 140.74 |
 | 10 | 8976932172498995662 | 24524 | 3839983.66 | 156.58 |
+
+Interpretation:
+- This snapshot is append-only and intended to keep log evidence current for the hardening cycle.
+- Prioritize fixes by highest delta_total_ms and call movement from run-to-run comparison.
+
+Self-heal plan:
+- Realtime WAL polling increased; reduce duplicate subscriptions and channel fan-out.
+- Postgres statement timeouts increased; reduce pg_cron batch sizes and add indexes for hot refresh/sync paths.
+- Postgres missing-relation errors in logs; verify function/table identifiers match live schema (quoted vs lowercase names).
+
+Next action:
+- Re-run the cycle after the next production traffic window and validate that comparison status moves toward improved.
+
+### 14.53 Capture Snapshot: 2026-08-19 (Automated Audit Cycle)
+
+What was captured:
+- Timestamp (IST): 2026-08-19 09:40:19 IST
+- Capture mode: automated_supabase_audit_cycle
+- Top queryid: 4868736656759022764 (calls=39234, total_ms=23422698.54, mean_ms=597.00)
+- Platform logs capture status: auth=ok, edge_functions=ok, realtime=ok, storage=ok, database_health=ok
+- Comparison vs previous run (2026-08-17__04-25-51-709Z): status=regressed, delta_total_ms_sum=9888364.82, delta_calls_sum=199982
+- Top regressions by delta_total_ms: 4868736656759022764 (2509093.1); -5005470507640866181 (2100591.64); 7020006022636007382 (1998141.1)
+- Top postgres log messages (by frequency): canceling statement due to statement timeout (36); Cannot delete: bodyshop repair card has a DMS job card assigned (JC-MBTPLT-JP1-2 (5); Cannot delete: bodyshop repair card has a DMS job card assigned (JC-MBTPLT-JP1-2 (4)
+
+Compact Top 10 (run-local):
+| rank | queryid | calls | total_ms | mean_ms |
+|---:|---|---:|---:|---:|
+| 1 | 4868736656759022764 | 39234 | 23422698.54 | 597.00 |
+| 2 | -2876120296317350531 | 2587915 | 20721402.40 | 8.01 |
+| 3 | 852176900607336119 | 7798 | 12095778.11 | 1551.14 |
+| 4 | 8843009277484467611 | 1074 | 5145534.15 | 4791.00 |
+| 5 | 9034250094703622185 | 1068 | 5033839.69 | 4713.33 |
+| 6 | -397576279058981298 | 1400 | 4989895.36 | 3564.21 |
+| 7 | 3787216458397661678 | 8951 | 4894882.24 | 546.85 |
+| 8 | -2147031708195470770 | 3965 | 4850747.39 | 1223.39 |
+| 9 | 8976932172498995662 | 29263 | 4570641.05 | 156.19 |
+| 10 | -6327570512180762919 | 31481 | 4317307.11 | 137.14 |
 
 Interpretation:
 - This snapshot is append-only and intended to keep log evidence current for the hardening cycle.

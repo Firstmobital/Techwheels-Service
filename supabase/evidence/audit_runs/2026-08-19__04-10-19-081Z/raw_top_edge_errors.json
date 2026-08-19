@@ -1,0 +1,46 @@
+{
+  "status": "ok",
+  "records": [
+    {
+      "event_message": "ReferenceError: history is not defined\n    at Object.handler (file:///var/tmp/sb-compile-edge-runtime/source/index.ts:1155:53)\n    at eventLoopTick (ext:core/01_core.js:175:7)\n    at async mapped (ext:runtime/http.js:246:20)\n",
+      "occurrences": 12
+    },
+    {
+      "event_message": "GET | 500 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/service_reception_entries?select=id%2Creg_number%2Cmodel%2Cservice_type%2Csa_name%2Csa_employee_code%2Cjc_number%2Cowner_name%2Cowner_phone%2Cbranch%2Clocation%2Cportal%2Cbranch_label%2Ckm_reading%2Csource%2Ccreated_at%2Cis_revisit%2Cprior_reception_entry_id%2Csuggested_technician_code%2Csuggested_technician_name%2Chas_updation_available%2Cupdation_code%2Cupdation_name&service_type=in.%28Running+Repairs%2CFirst+Free+Service%2CSecond+Free+Service%2CThird+Free+Service%2CPaid+Service%2CUpdation%2CE+Breakdown%2CCampaign%29&jc_number=not.is.null&order=created_at.desc%2Cid.desc&limit=1000 | okhttp/4.12.0",
+      "occurrences": 10
+    },
+    {
+      "event_message": "HEAD | 500 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/post_service_feedback_messages?select=id&sent_at=not.is.null | Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+      "occurrences": 6
+    },
+    {
+      "event_message": "POST | 500 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/rpc/search_reception_reg_numbers | Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+      "occurrences": 4
+    },
+    {
+      "event_message": "POST | 500 | https://jmdndcphkmaljhwgzqxq.supabase.co/rest/v1/rpc/list_reception_entries_page | Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+      "occurrences": 4
+    },
+    {
+      "event_message": "[universal-drive-upload] pending log write failed: invalid input syntax for type uuid: \"3676\"\n",
+      "occurrences": 3
+    },
+    {
+      "event_message": "GET | 500 | https://jmdndcphkmaljhwgzqxq.supabase.co/auth/v1/admin/users?page=2&per_page=100 | Deno/2.1.4 (variant; SupabaseEdgeRuntime/1.74.3)",
+      "occurrences": 3
+    },
+    {
+      "event_message": "Audit log failed: {\n  code: \"22P02\",\n  details: null,\n  hint: null,\n  message: 'invalid input syntax for type uuid: \"system:internal-dispatch\"'\n}\n",
+      "occurrences": 2
+    },
+    {
+      "event_message": "[universal-drive-upload] pending log write failed: invalid input syntax for type uuid: \"3686\"\n",
+      "occurrences": 2
+    },
+    {
+      "event_message": "[universal-drive-upload] pending log write failed: invalid input syntax for type uuid: \"6570\"\n",
+      "occurrences": 2
+    }
+  ],
+  "sql": "select event_message, sum(occurrences) as occurrences\n    from (\n      select\n        event_message,\n        count() as occurrences\n      from logs\n      where source = 'edge_logs'\n        and toInt32OrZero(log_attributes['response.status_code']) >= 500\n      group by event_message\n\n      union all\n\n      select\n        event_message,\n        count() as occurrences\n      from logs\n      where source = 'function_logs'\n        and match(coalesce(severity_text, log_attributes['metadata.level'], ''), '(?i)error|warning')\n      group by event_message\n    )\n    group by event_message\n    order by occurrences desc\n    limit 10"
+}

@@ -3,8 +3,35 @@
 **Version**: 2026-06-01  
 **Status**: Phase 1C In Progress - Admin Unrestricted Access + Bodyshop Role-Scoped Visibility Alignment  
 **Owner**: Engineering Lead / Copilot (TBD)  
-**Last Updated**: 2026-08-17  
+**Last Updated**: 2026-08-18  
 **Authority**: Single source of truth — supersedes all separate RBAC plan files
+
+### Execution Update (2026-08-18 - Shared List RPC Gate: Role-Aware Advisor Path)
+
+- Symptom chain (same shared RPC, three logins):
+  - `/service-advisor` as `service@techwheels.in` (Govind) → summary 656, assigned list 0.
+  - `/bodyshop-floor` as `prateek.mamodiya.30@gmail.com` → 0 accident vehicles after first `18100000` apply.
+  - `/floor-incharge` as `pvfloortechwheels@gmail.com` (Sanjay) → 0 job cards after `18100000` apply.
+- Root cause: list gate oscillated between **module-only** blocks (`17180000` `v_is_floor_or_bodyshop_only`) and **summary-blind** advisor JOIN (`18100000` matched `get_service_advisor_summary_counts` too literally). A shared RPC cannot use one boolean for SA, service floor incharge, and bodyshop floor.
+- **Live gate** (`20260818110000_fix_list_reception_service_floor_fi_gate.sql` on prod; dump `full_metadata.sql` 2026-08-18):
+  1. **Admin** → unscoped.
+  2. **Advisor own-code JOIN** when ALL: `NOT admin`, `NOT user_needs_sa_summary_broad_scope()`, active `user_employee_links`, **NOT** `bodyshop_floor` module, **NOT** linked as **SERVICE FLOOR_INCHARGE-only** (`employee_master.role` has `FLOOR_INCHARGE` + `SERVICE` department + no `SA` role).
+  3. **Reception-dealer** → `reception` module + `my_effective_dealer_codes()` + not floor/bodyshop modules.
+  4. **Service floor incharge** → `floor_incharge` module, `NOT broad_scope`, not bodyshop → fuel-type matched SA JOIN (`user_has_service_floor_incharge_scope_for_sa_code` contract).
+  5. **Residual** → dealer pre-filter + `service_reception_entry_in_summary_scope` (bodyshop Accident path, CRM bodyshop, etc.).
+- Do-not-regress rules (learned from prod):
+  - **Never** copy `get_service_advisor_summary_counts` gate wholesale onto shared list RPCs — summary has no bodyshop/floor-FI exclusions.
+  - **Never** block advisor path with `floor_incharge` **module alone** — breaks assigned SAs who also hold floor module (`service@`, vk1).
+  - **Never** allow advisor path for `bodyshop_floor` module — use Accident + `user_has_bodyshop_floor_incharge_scope_for_sa_code`.
+  - **Never** allow advisor path for SERVICE **FLOOR_INCHARGE-only** links — use floor fuel-type JOIN.
+  - Always restate the **full** `CREATE OR REPLACE FUNCTION` when changing this RPC; same-timestamp migrations clobber each other.
+- Migrations (chronological):
+  - `20260817170000_fix_reception_list_role_fast_paths.sql` — CRM/floor/admin fast paths
+  - `20260817180000_fix_list_reception_sa_gate_match_summary.sql` — partial SA/summary align; regressed service@ via `v_is_floor_or_bodyshop_only`
+  - `20260818100000_fix_list_reception_gate_summary_parity.sql` — removed floor-only block; regressed bodyshop + service FI
+  - `20260818110000_fix_list_reception_service_floor_fi_gate.sql` — **live** role-aware gate
+- Checks: `supabase/sql_checks/20260818110000_fix_list_reception_service_floor_fi_gate_checks.sql`
+- UAT (2026-08-18): service@ SA list ✓, Prateek bodyshop floor ✓, Sanjay floor incharge ✓
 
 ### Execution Update (2026-08-17 - Shared Reception List RPC Must Not Use SA-Only Gate)
 
@@ -15,7 +42,7 @@
 - Database truth (`supabase/backups/full_metadata.sql`):
   - Veika: `users.role=staff`, **zero** `user_employee_links`, modules `reception` + `telecalling` only. Dealer `3000840` is JWT/`my_effective_dealer_codes()` only. Own-code JOIN matches 0 rows.
   - Floor users are not `sa_employee_code` on accident cars; they need `service_reception_entry_in_summary_scope` (Accident + `user_has_bodyshop_floor_incharge_scope_for_sa_code`).
-- Locked list-RPC gate (do not regress):
+- Locked list-RPC gate (superseded by 2026-08-18 update above — kept for history):
   1. Admin → unscoped.
   2. CRM/SM/GM (`user_needs_sa_summary_broad_scope`) → dealer pre-filter + `service_reception_entry_in_summary_scope`.
   3. Assigned SA only: `service_advisor` view/modify **and** an active employee link **and not** `floor_incharge` / `bodyshop_floor` → own-code JOIN (keeps SA 57014 fix).
@@ -29,7 +56,7 @@
   - `supabase/migrations/20260817120000_fix_list_reception_sa_scope_priority.sql` (SA 57014; over-wide gate)
   - `supabase/migrations/20260817140000_fix_list_reception_floor_scope.sql` (floor restore; then overwritten)
   - `supabase/migrations/20260817140000_optimize_reception_list_broad_path.sql` (dealer pre-filter; restored over-wide gate)
-  - `supabase/migrations/20260817150000_fix_list_reception_shared_role_gate.sql` (**live** — shared-role gate + keep dealer pre-filter / 10k cap)
+  - `supabase/migrations/20260817150000_fix_list_reception_shared_role_gate.sql` (superseded by `18100000` / `18110000`)
 - Status: ✓ Applied on prod 2026-08-17. Hard-refresh Reception / Floor; no frontend deploy.
 
 ### Execution Update (2026-07-21 - Parts SPM `/parts-spm` Route Guard Gap)
@@ -1001,9 +1028,11 @@ Use this section as the real-time status dashboard. Update immediately after eac
 | 3.6 | Test all policies in staging with test users | ⚪ Not Started | TBD | — | Verify view/modify/delete semantics | ☐ |
 | 3.7 | Test SA policy: user with mapping sees assigned rows only | ⚪ Not Started | TBD | — | Staging, full data set | ☐ |
 | 3.8 | Test SA policy: user without mapping sees nothing | ⚪ Not Started | TBD | — | Staging | ☐ |
-| 3.9 | Lock shared list-RPC gate (reception / floor / SA) | ✓ Done | Copilot | 2026-08-17 | `20260817150000_fix_list_reception_shared_role_gate.sql` applied; own-code only for assigned SA | ☑ |
+| 3.9 | Lock shared list-RPC gate (reception / floor / SA / bodyshop) | ✓ Done | Copilot | 2026-08-18 | Live: `20260818110000`; role-aware advisor path; UAT service@ + Prateek + Sanjay | ☑ |
 | 3.10 | UAT: reception-only JWT dealer (Veika) sees This Month intake | 🟡 In Progress | User | 2026-08-17 | Hard-refresh `/reception` as `avanimeena4560@gmail.com` | ☐ |
-| 3.11 | UAT: bodyshop floor (Kedar) sees accident cars | 🟡 In Progress | User | 2026-08-17 | Hard-refresh `/bodyshop-floor`; confirm optimize did not regress gate | ☐ |
+| 3.11 | UAT: bodyshop floor (Prateek) sees accident cars | ✓ Done | User | 2026-08-18 | Confirmed after `18100000` bodyshop exclusion + `18110000` | ☑ |
+| 3.12 | UAT: service floor incharge (Sanjay) sees job cards | ✓ Done | User | 2026-08-18 | Confirmed after `18110000` SERVICE FI-only gate | ☑ |
+| 3.13 | UAT: assigned SA (service@) list matches summary | ✓ Done | User | 2026-08-18 | Confirmed after `18100000` / `18110000` | ☑ |
 
 ### 4.4 API & Backend Changes
 
@@ -1171,10 +1200,13 @@ Mapping lifecycle belongs only to Admin -> Mappings, seeded/validated against Em
 
 - Module-level visibility is deny-by-default and must come from `user_module_permissions` (`can_view`).
 - Row-level visibility is RLS-enforced on direct table reads; **list pages that call SECURITY DEFINER RPCs bypass RLS**. Those RPCs must encode the same role contract themselves.
-- Shared reception list RPCs (`list_reception_entries_page`, `list_reception_reg_created_since`) must **not** use the SA-summary own-code gate (`NOT admin AND NOT CRM/SM/GM`). Own-code JOIN is only for assigned `service_advisor` users with an employee link and without `floor_incharge` / `bodyshop_floor`.
+- Shared reception list RPCs (`list_reception_entries_page`, `list_reception_reg_created_since`) encode role contracts directly (SECURITY DEFINER bypasses RLS). **Live gate:** `20260818110000`.
+- **Advisor own-code JOIN** only when: `NOT admin`, `NOT user_needs_sa_summary_broad_scope()`, active employee link, **NOT** `bodyshop_floor` module, **NOT** linked as SERVICE **FLOOR_INCHARGE-only** (no `SA` role on `employee_master.role`). Assigned SAs with `floor_incharge` module but SA-linked (e.g. `service@`) still use this path.
+- **Do not** require `service_advisor` module on the advisor path — summary RPC and prod UAT use link + role, not module alone.
+- **Do not** block advisor path with `floor_incharge` module alone — use SERVICE FI-only **role** check instead.
 - Reception-only list scope is dealer codes from `my_effective_dealer_codes()` (JWT and/or mapping). Mapping is not required.
 - SA ownership checks use `sa_employee_code` membership, never `sa_name` or `sa_display_name`.
-- Floor Incharge visibility remains role+fuel-scope constrained through mapped employee/dealer context.
+- Service Floor Incharge list path: `floor_incharge` module → fuel-type matched SA JOIN (not own-code).
 - Bodyshop Floor accident list uses `service_reception_entry_in_summary_scope` (Accident + `user_has_bodyshop_floor_incharge_scope_for_sa_code`), not own SA code.
 
 ### 8A.4 Cross-Layer Drift Watchlist
@@ -1199,7 +1231,7 @@ When a user reports missing or excess data visibility, validate in this order:
 1. User is active (`users.is_active = true`)
 2. Module permission exists (`can_view` for target module)
 3. Scope source: active `user_employee_links` **or** JWT `dealer_code` / `dealer_codes`. Reception-only users may have **no** mapping — that is valid.
-4. If the page uses `list_reception_entries_page` / `list_reception_reg_created_since`, confirm the live function gate (dump `full_metadata.sql`) is the shared-role gate, not own-SA-for-everyone.
+4. If the page uses `list_reception_entries_page` / `list_reception_reg_created_since`, confirm dump gate matches `20260818110000` (advisor path excludes `bodyshop_floor` + SERVICE FI-only links; floor path has `NOT broad_scope`).
 5. Expected primary mapping state per dealer (if the flow is SA/floor/CRM and mapping-dependent)
 6. Dealer code on target rows matches `my_effective_dealer_codes()`
 7. User re-authenticated after metadata/mapping changes (JWT refresh)
@@ -1236,12 +1268,13 @@ Long-term:
 | 1.4 | 2026-06-01 | Copilot + User | Active | Added authoritative Floor Incharge row visibility requirement: role = Floor Incharge with fuel_type scope via SA CODE mapping |
 | 1.5 | 2026-06-01 | Copilot + User | Active | Executed Floor Incharge DB migrations for row-scope policy and stage workflow columns/triggers/RLS |
 | 1.6 | 2026-06-03 | Copilot + User | Active | Added Part 8A future operations playbook for RBAC/auth/visibility (scope precedence, popup contract, drift watchlist, troubleshooting/hardening targets) |
-| 1.7 | 2026-08-17 | Copilot + User | Active | Shared reception list RPC gate: do not apply SA own-code to Reception/Floor/Bodyshop; JWT-only reception scope is valid; live fix `20260817150000` |
+| 1.7 | 2026-08-17 | Copilot + User | Active | Shared reception list RPC gate: do not apply SA own-code to Reception/Floor/Bodyshop; JWT-only reception scope is valid; fix `20260817150000` |
+| 1.8 | 2026-08-18 | Copilot + User | Active | Role-aware shared list RPC gate live (`18110000`); advisor path by link+role not module; UAT service@/Prateek/Sanjay |
 
 ---
 
 **This document is the single source of truth for RBAC implementation.**  
 **All previous separate RBAC plan files (RBAC_SA_DYNAMIC_CONTROL_PLAN_2026-06-01.md, RBAC_FULL_DUMP_AUDIT_2026-06-01.md, RBAC_MASTER_IMPLEMENTATION_PLAN_2026-06-01.md) are superseded and should be archived.**
 
-Last updated: 2026-08-17  
-Next review: After Veika reception + Kedar floor UAT on the shared list-RPC gate
+Last updated: 2026-08-18  
+Next review: After Veika reception UAT; keep dump in sync after any list-RPC migration

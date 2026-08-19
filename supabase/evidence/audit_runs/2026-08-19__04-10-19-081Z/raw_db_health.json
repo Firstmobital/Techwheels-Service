@@ -1,0 +1,17 @@
+{
+  "status": "ok",
+  "label": "db_health",
+  "rows": [
+    {
+      "db_name": "postgres",
+      "commits": 15450129,
+      "rollbacks": 1432720,
+      "blks_read": 1744745,
+      "blks_hit": 17274543395,
+      "blks_hit_ratio_pct": "99.99",
+      "deadlocks": 2,
+      "temp_files": 201220,
+      "temp_bytes": 842059813939
+    }
+  ]
+}
