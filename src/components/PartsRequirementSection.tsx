@@ -246,6 +246,7 @@ export default function PartsRequirementSection({ isAdmin = false }: Props) {
   const [vehicleNoFilter, setVehicleNoFilter] = useState('')
   const [stockStatusFilter, setStockStatusFilter] = useState('all')
   const [orderStatusFilter, setOrderStatusFilter] = useState('all')
+  const [orderNoFilter, setOrderNoFilter] = useState('')
 
   // ── Reg No auto-fetch state ─────────────────────────────────────────────────
   const [regFetchStatus, setRegFetchStatus] = useState<'idle' | 'loading' | 'found' | 'notfound' | 'error'>('idle')
@@ -512,6 +513,25 @@ export default function PartsRequirementSection({ isAdmin = false }: Props) {
       }
     }
 
+    // ── Order No. filter (visible to all users) ──
+    if (orderNoFilter.trim()) {
+      const onq = orderNoFilter.trim().toLowerCase()
+      list = list.filter((r) => orderNoOf(r).toLowerCase().includes(onq))
+    }
+
+    // ── Order Status filter (visible to all users) ──
+    if (orderStatusFilter !== 'all') {
+      list = list.filter((r) => {
+        const os = orderStatuses[normPartNumber(r.parts_number)] ?? 'Order Pending'
+        if (orderStatusFilter === 'pending') return os === 'Order Pending'
+        if (orderStatusFilter === 'confirmed') return os.startsWith('Confirmed')
+        if (orderStatusFilter === 'challan') return os.startsWith('Challan')
+        if (orderStatusFilter === 'invoiced') return os.startsWith('Invoiced')
+        if (orderStatusFilter === 'dispatched') return os.startsWith('Dispatched')
+        return true
+      })
+    }
+
     const q = search.trim().toLowerCase()
     if (q) {
       list = list.filter((r) =>
@@ -520,7 +540,7 @@ export default function PartsRequirementSection({ isAdmin = false }: Props) {
       )
     }
     return list
-  }, [visibleRows, quickFilter, search, isAdmin, advisorFilter, vehicleNoFilter, stockStatusFilter, orderStatusFilter, orderStatuses])
+  }, [visibleRows, quickFilter, search, isAdmin, advisorFilter, vehicleNoFilter, stockStatusFilter, orderStatusFilter, orderNoFilter, orderStatuses])
 
   const showMarkReceived = (row: PartsRequestRow): boolean => {
     if (['Received', 'Ready', 'Done', 'Delivered to Workshop', 'Cancelled'].includes(row.parts_status)) return false
@@ -945,6 +965,35 @@ export default function PartsRequirementSection({ isAdmin = false }: Props) {
           placeholder="Search Job Card, Reg No., Part No./Name..."
           className="w-full rounded-lg border border-gray-300 px-3 py-1.5 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 sm:w-72"
         />
+      </div>
+
+      {/* ── Order No. + Order Status filters (visible to all users) ── */}
+      <div className="flex flex-col gap-3 rounded-xl border border-gray-200 bg-white p-3 shadow-sm sm:flex-row sm:items-center sm:gap-4">
+        <label className="text-xs font-semibold text-gray-600 sm:w-64">
+          Order No.
+          <input
+            type="text"
+            value={orderNoFilter}
+            onChange={(e) => setOrderNoFilter(e.target.value)}
+            placeholder="Search order no..."
+            className="mt-1 block w-full rounded-lg border border-gray-300 bg-white px-2 py-1.5 text-sm shadow-sm focus:border-blue-500 focus:outline-none"
+          />
+        </label>
+        <label className="text-xs font-semibold text-gray-600 sm:w-56">
+          Order Status
+          <select
+            value={orderStatusFilter}
+            onChange={(e) => setOrderStatusFilter(e.target.value)}
+            className="mt-1 block w-full rounded-lg border border-gray-300 bg-white px-2 py-1.5 text-sm shadow-sm focus:border-blue-500 focus:outline-none"
+          >
+            <option value="all">All</option>
+            <option value="pending">Order Pending</option>
+            <option value="confirmed">Confirmed</option>
+            <option value="challan">Challan Generated</option>
+            <option value="invoiced">Invoiced</option>
+            <option value="dispatched">Dispatched</option>
+          </select>
+        </label>
       </div>
 
       {error && (
