@@ -62,6 +62,7 @@ import {
 import { PORTAL_BRANCHES } from '../lib/branches'
 import { PniGrnImportSection } from '../components/PniGrnImportSection'
 import { BackOrderImportSection } from '../components/BackOrderImportSection'
+import { EvBackOrderImportSection } from '../components/EvBackOrderImportSection'
 import { VehicleUpdationImportSection } from '../components/VehicleUpdationImportSection'
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
@@ -3333,6 +3334,9 @@ export default function ImportPage() {
 
         {/* ── Back Order Data (VOR BO + Co-Dealer Stock) ─────────────────── */}
         <BackOrderImportSection />
+
+        {/* ── Sitapura EV Back Order & Dispatch (Dealer 500A841) ──────────── */}
+        <EvBackOrderImportSection />
 
         <VehicleUpdationImportSection />
 
