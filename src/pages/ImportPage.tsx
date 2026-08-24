@@ -1500,7 +1500,15 @@ export default function ImportPage() {
               'part_number,branch,portal,order_date,source_row_hash',
             ].filter((candidate) => partsOrderIncludesAll(candidate.split(',')))
           : []
-        const CHUNK = isJcClosedTable ? 250 : isPsfRevenueDmsTable ? 250 : isVasTable ? 2000 : 2000
+        const CHUNK = isGgnStockTable
+          ? 250
+          : isJcClosedTable
+            ? 250
+            : isPsfRevenueDmsTable
+              ? 250
+              : isVasTable
+                ? 2000
+                : 2000
         let totalInserted = 0
         let processedRows = 0
         const mappingIssues: MappingIssueInsert[] = []
@@ -3304,12 +3312,17 @@ export default function ImportPage() {
         broadcastLastUpdated(tableName, persistedLastUpdated)
 
         const shouldShowUploadedRowsCount =
-          REVENUE_REPORT_TABLES.has(tableName) || PARTS_REPORT_TABLES.has(tableName)
+          (REVENUE_REPORT_TABLES.has(tableName) || PARTS_REPORT_TABLES.has(tableName)) &&
+          !isGgnStockTable
 
         const displayedInsertedCount =
           shouldShowUploadedRowsCount
             ? Math.max(totalInserted, totalReadyRowsForUpload)
             : totalInserted
+
+        if (isGgnStockTable && totalInserted === 0) {
+          throw new Error('GGN Stock upload inserted 0 rows. The previous sheet was not replaced.')
+        }
 
         updateCard(tableName, (prev) => ({
           ...prev,
@@ -3349,7 +3362,9 @@ export default function ImportPage() {
           if (isGgnStockTable) {
             const { error: ggnRefreshError } = await supabase.rpc('refresh_parts_requests_ggn_stock')
             if (ggnRefreshError) {
-              console.warn(`GGN stock status refresh failed: ${ggnRefreshError.message}`)
+              throw new Error(
+                `GGN file saved (${totalInserted.toLocaleString('en-IN')} rows) but request badges did not refresh: ${ggnRefreshError.message}`,
+              )
             }
           }
           // Auto-match the freshly uploaded Parts Order Sheet / Stock Snapshot / GGN rows against
