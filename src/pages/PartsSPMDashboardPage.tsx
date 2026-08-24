@@ -727,8 +727,7 @@ export default function PartsSPMDashboardPage() {
                         </>
                       ) : (
                         <>
-                          <td className={`px-4 py-2.5 font-mono text-xs ${row.parts_number ? 'text-gray-700' : 'text-gray-400'}`}>{row.parts_number || '—'}</td>
-                          {/* Order No. + Order Date merged */}
+                          {/* Order No. + Order Date merged — Parts No. already sits under Parts Required */}
                           <td className="whitespace-nowrap px-3 py-2.5 text-xs">
                             <div className="leading-tight">
                               <div className="flex items-center gap-1">
