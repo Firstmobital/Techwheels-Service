@@ -53,6 +53,9 @@ export interface PartsRequestRow {
   vehicle_model: string | null
   customer_update: string | null
   customer_mobile: string | null
+  matched_order_number: string | null
+  matched_order_status_label: string | null
+  ggn_stock_status: 'Available' | 'Not Available' | null
 }
 
 export async function listMyPartsRequests(): Promise<ApiResult<PartsRequestRow[]>> {
@@ -148,7 +151,7 @@ export async function createPartsRequest(input: {
   })
 
   if (error) return fail(error)
-  if (input.partsNumber) triggerPartsOrderMatch()
+  if (input.partsNumber || input.entryDate) triggerPartsOrderMatch()
   return ok(data as number)
 }
 
@@ -175,7 +178,7 @@ export async function updateMyPartsRequestFields(input: {
   })
 
   if (error) return fail(error)
-  if (input.partsNumber) triggerPartsOrderMatch()
+  if (input.partsNumber || input.entryDate) triggerPartsOrderMatch()
   return ok(undefined)
 }
 
@@ -287,6 +290,14 @@ export const ADVISOR_WORKFLOW_STAGES: PartsStatus[] = ['Ordered', 'Received', 'R
 // stored required-qty to compare against). Every other status (Ordered, Received, Ready,
 // Done, Back Order, In Transit, Partially Received, Cancelled, Delivered to Workshop)
 // reflects an actual action already taken and is never overridden by stock level.
+export function displayOrderNumber(row: Pick<PartsRequestRow, 'parts_order_number' | 'matched_order_number'>): string {
+  return (row.parts_order_number || row.matched_order_number || '').trim()
+}
+
+export function displayOrderStatusLabel(row: Pick<PartsRequestRow, 'matched_order_status_label'>): string {
+  return row.matched_order_status_label?.trim() || 'Order Pending'
+}
+
 export function computedStatusBadge(
   status: PartsStatus,
   qty: number | null,

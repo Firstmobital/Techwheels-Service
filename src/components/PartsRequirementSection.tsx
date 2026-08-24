@@ -25,11 +25,14 @@ import {
   updateMyPartsRequestFields,
   updatePartsRequestCustomerUpdate,
   computedStatusBadge,
+  displayOrderNumber,
+  displayOrderStatusLabel,
   type PartsRequestRow,
   type PartsStatus,
 } from '../lib/api'
 import { supabase } from '../lib/supabase'
 import Icon from '../components/Icon'
+import GgnStockBadge from './GgnStockBadge'
 
 type PartLine = {
   parts_required: string
@@ -227,8 +230,6 @@ export default function PartsRequirementSection({ isAdmin = false }: Props) {
   const [expandedId, setExpandedId] = useState<number | null>(null)
   const [toast, setToast] = useState<string | null>(null)
   const [descriptions, setDescriptions] = useState<Record<string, string>>({})
-  const [orderNumbers, setOrderNumbers] = useState<Record<string, string>>({})
-  const [orderStatuses, setOrderStatuses] = useState<Record<string, string>>({})
   // ── Back Order + Jaipur Co-Dealer stock data (Status 1 column) ──────────────
   const [vorBackOrderParts, setVorBackOrderParts] = useState<Set<string>>(new Set())
   const [jaipurDealerCount, setJaipurDealerCount] = useState<Record<string, number>>({})
@@ -355,8 +356,6 @@ export default function PartsRequirementSection({ isAdmin = false }: Props) {
     const res = await fetchPartsOrderDescriptions()
     if (!res.error) {
       setDescriptions(res.data?.descriptions ?? {})
-      setOrderNumbers(res.data?.orderNumbers ?? {})
-      setOrderStatuses(res.data?.orderStatuses ?? {})
     }
   }, [])
 
@@ -483,6 +482,10 @@ export default function PartsRequirementSection({ isAdmin = false }: Props) {
     return 'available'
   }
 
+  const orderNoOf = (row: PartsRequestRow): string => displayOrderNumber(row)
+  const orderStatusOf = (row: PartsRequestRow): string => displayOrderStatusLabel(row)
+  const isVOR = (row: PartsRequestRow): boolean => orderNoOf(row).startsWith('33')
+
   const filteredRows = useMemo(() => {
     let list = visibleRows
     if (quickFilter === 'mine') list = list.filter((r) => !r.advisor_seen)
@@ -502,7 +505,7 @@ export default function PartsRequirementSection({ isAdmin = false }: Props) {
       }
       if (orderStatusFilter !== 'all') {
         list = list.filter((r) => {
-          const os = orderStatuses[normPartNumber(r.parts_number)] ?? 'Order Pending'
+          const os = orderStatusOf(r)
           if (orderStatusFilter === 'pending') return os === 'Order Pending'
           if (orderStatusFilter === 'confirmed') return os.startsWith('Confirmed')
           if (orderStatusFilter === 'challan') return os.startsWith('Challan')
@@ -526,8 +529,8 @@ export default function PartsRequirementSection({ isAdmin = false }: Props) {
     // ── Order Status filter (visible to all users) ──
     if (orderStatusFilter !== 'all') {
       list = list.filter((r) => {
-        const os = orderStatuses[normPartNumber(r.parts_number)] ?? ''
-        if (orderStatusFilter === 'blank') return !os
+        const os = orderStatusOf(r)
+        if (orderStatusFilter === 'blank') return !os || os === 'Order Pending'
         if (orderStatusFilter === 'other') {
           return os !== 'Order Pending' && !os.startsWith('Confirmed') && !os.startsWith('Challan') && !os.startsWith('Invoiced') && !os.startsWith('Dispatched')
         }
@@ -548,7 +551,7 @@ export default function PartsRequirementSection({ isAdmin = false }: Props) {
       )
     }
     return list
-  }, [visibleRows, quickFilter, search, isAdmin, advisorFilter, vehicleNoFilter, stockStatusFilter, orderStatusFilter, orderNoFilter, orderStatuses])
+  }, [visibleRows, quickFilter, search, isAdmin, advisorFilter, vehicleNoFilter, stockStatusFilter, orderStatusFilter, orderNoFilter])
 
   const showMarkReceived = (row: PartsRequestRow): boolean => {
     if (['Received', 'Ready', 'Done', 'Delivered to Workshop', 'Cancelled'].includes(row.parts_status)) return false
@@ -613,17 +616,6 @@ export default function PartsRequirementSection({ isAdmin = false }: Props) {
   // ── EV/PV category — vehicle_type is the primary source.
   // Special exception: SINGH, PANKAJ (employee_code PS2_3000840) is EV even though
   // his suffix code contains 3000840 (normal PV prefix).
-  // ── Order number lookup (must be declared before isVOR uses it) ──────────
-  const orderNoOf = (row: PartsRequestRow): string =>
-    orderNumbers[normPartNumber(row.parts_number)] || ''
-
-  // ── VOR check: order number starts with "33"
-  const isVOR = (row: PartsRequestRow): boolean =>
-    orderNoOf(row).startsWith('33')
-
-  const orderStatusOf = (row: PartsRequestRow): string =>
-    orderStatuses[normPartNumber(row.parts_number)] || 'Order Pending'
-
   const openCreateForm = () => {
     setFormMode('create')
     setEditingId(null)
@@ -1340,6 +1332,7 @@ export default function PartsRequirementSection({ isAdmin = false }: Props) {
                   </div>
                 </th>
                 <th className="whitespace-nowrap px-3 py-3 text-left">Order Status</th>
+                <th className="whitespace-nowrap px-3 py-3 text-left">GGN Stock</th>
                 <th className="whitespace-nowrap px-3 py-3 text-left">Stock</th>
                 <th className="whitespace-nowrap px-3 py-3 text-left">Status</th>
                 <th className="whitespace-nowrap px-3 py-3 text-left">Status 1</th>
@@ -1424,6 +1417,7 @@ export default function PartsRequirementSection({ isAdmin = false }: Props) {
                         </div>
                       </td>
                       <td className="px-3 py-2.5"><OrderStatusBadge label={orderStatus} /></td>
+                      <td className="px-3 py-2.5"><GgnStockBadge status={row.ggn_stock_status} /></td>
                       <td className="px-3 py-2.5"><StockStatusBadge qty={row.parts_qty} /></td>
                       <td className="px-3 py-2.5"><StatusBadge status={row.parts_status} qty={row.parts_qty} /></td>
                       <td className="px-3 py-2.5 text-xs">
@@ -1544,6 +1538,7 @@ export default function PartsRequirementSection({ isAdmin = false }: Props) {
                   <div className="mb-4 flex flex-wrap items-center gap-2">
                     <span className="text-[10px] font-bold uppercase text-gray-400 mr-1">Status:</span>
                     <StockStatusBadge qty={row.parts_qty} />
+                    <GgnStockBadge status={row.ggn_stock_status} />
                     <OrderStatusBadge label={orderStatus} />
                     {s1.isBackOrder && (
                       <>
@@ -1650,6 +1645,7 @@ export default function PartsRequirementSection({ isAdmin = false }: Props) {
                   </div>
                   <div className="mt-2 flex flex-wrap gap-1.5">
                     <StockStatusBadge qty={row.parts_qty} />
+                    <GgnStockBadge status={row.ggn_stock_status} />
                     <OrderStatusBadge label={orderStatus} />
                   </div>
                   {s1.isBackOrder && (

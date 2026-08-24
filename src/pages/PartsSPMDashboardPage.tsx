@@ -5,11 +5,14 @@ import {
   spmUpdatePartsRequest,
   PARTS_STATUS_VALUES,
   computedStatusBadge,
+  displayOrderNumber,
+  displayOrderStatusLabel,
   type PartsRequestRow,
   type PartsStatus,
 } from '../lib/api'
 import { supabase } from '../lib/supabase'
 import Icon from '../components/Icon'
+import GgnStockBadge from '../components/GgnStockBadge'
 
 type SortKey = 'entry_date' | 'advisor_name' | 'registration_number' | 'parts_status' | 'parts_order_date'
 type SortDir = 'asc' | 'desc'
@@ -97,6 +100,19 @@ function computeOrderStatus(row: OrderLookupRow): string {
   return 'Order Pending'
 }
 
+function pickLatestValidOrder(
+  rows: OrderLookupRow[] | undefined,
+  entryDate: string | null | undefined,
+): OrderLookupRow | undefined {
+  if (!rows?.length) return undefined
+  const x = (entryDate ?? '').slice(0, 10)
+  if (!x) return undefined
+  return rows.find((row) => {
+    const orderDate = (row.order_date ?? '').slice(0, 10)
+    return !!orderDate && orderDate >= x
+  })
+}
+
 type EditDraft = {
   parts_number: string
   parts_order_date: string    // auto-filled from Parts Order sheet, read-only
@@ -133,8 +149,8 @@ export default function PartsSPMDashboardPage() {
   const [saving, setSaving] = useState(false)
   const [toast, setToast] = useState<{ kind: 'success' | 'error'; text: string } | null>(null)
 
-  // ── Parts Order lookup cache: normPartNo → row ───────────────────────────
-  const [orderLookup, setOrderLookup] = useState<Map<string, OrderLookupRow>>(new Map())
+  // ── Parts Order lookup cache: normPartNo → date-desc candidates ──────────
+  const [orderLookup, setOrderLookup] = useState<Map<string, OrderLookupRow[]>>(new Map())
   const [orderLookupLoaded, setOrderLookupLoaded] = useState(false)
 
   // ── Part No → Stock (qty) lookup ─────────────────────────────────────────
@@ -212,19 +228,24 @@ export default function PartsSPMDashboardPage() {
         allRows.push(...chunk)
         if (chunk.length < pageSize) break
       }
-      const best = new Map<string, OrderLookupRow>()
+      const grouped = new Map<string, OrderLookupRow[]>()
       for (const row of allRows) {
         const pn = norm(row.part_number)
         if (!pn) continue
-        const existing = best.get(pn)
-        if (!existing ||
-          ((row.order_date ?? '') > (existing.order_date ?? '')) ||
-          ((row.order_date ?? '') === (existing.order_date ?? '') &&
-           (row.updated_at ?? '') > (existing.updated_at ?? ''))) {
-          best.set(pn, row)
-        }
+        const list = grouped.get(pn) ?? []
+        list.push(row)
+        grouped.set(pn, list)
       }
-      setOrderLookup(best)
+      for (const [pn, list] of grouped) {
+        list.sort((a, b) => {
+          const da = a.order_date ?? ''
+          const db = b.order_date ?? ''
+          if (da !== db) return db.localeCompare(da)
+          return (b.updated_at ?? '').localeCompare(a.updated_at ?? '')
+        })
+        grouped.set(pn, list)
+      }
+      setOrderLookup(grouped)
       setOrderLookupLoaded(true)
     } catch { /* silent */ }
   }, [])
@@ -326,11 +347,11 @@ export default function PartsSPMDashboardPage() {
   }
 
   // ── Open edit — auto-fill order data from Parts Order sheet ───────────────
-  const lookupOrderForPartNo = useCallback((partNo: string): {
+  const lookupOrderForPartNo = useCallback((partNo: string, entryDate?: string | null): {
     orderDate: string; orderNo: string; orderStatus: string; stock: number | null
   } => {
     const pn = norm(partNo)
-    const orderRow = orderLookup.get(pn)
+    const orderRow = pickLatestValidOrder(orderLookup.get(pn), entryDate)
     const stockQty = stockLookup.has(pn) ? stockLookup.get(pn)! : null
     if (!orderRow) return { orderDate: '', orderNo: '', orderStatus: 'Order Pending', stock: stockQty }
     const orderNo = orderRow.sap_order_number || orderRow.crm_order_number || ''
@@ -344,9 +365,8 @@ export default function PartsSPMDashboardPage() {
 
   const openEdit = useCallback((row: PartsRequestRow) => {
     setEditingId(row.id)
-    const { orderDate, orderNo, orderStatus, stock } = lookupOrderForPartNo(row.parts_number ?? '')
-    // Use saved manual order number if present, else fall back to auto-lookup
-    const savedOrderNo = (row as any).parts_order_number ?? ''
+    const { orderDate, orderNo, orderStatus, stock } = lookupOrderForPartNo(row.parts_number ?? '', row.entry_date)
+    const savedOrderNo = row.parts_order_number ?? ''
     setEditDraft({
       parts_number: row.parts_number ?? '',
       parts_order_date: row.parts_order_date ?? orderDate,
@@ -354,7 +374,7 @@ export default function PartsSPMDashboardPage() {
       spm_remarks: row.spm_remarks ?? '',
       parts_qty: stock != null ? String(stock) : (row.parts_qty != null ? String(row.parts_qty) : ''),
       order_no: savedOrderNo || orderNo,
-      order_status_display: orderStatus,
+      order_status_display: row.matched_order_status_label || orderStatus,
       vehicle_model: row.vehicle_model ?? '',
     })
     setPartNoFetchStatus('idle')
@@ -367,18 +387,19 @@ export default function PartsSPMDashboardPage() {
     if (partNoDebounceRef.current) clearTimeout(partNoDebounceRef.current)
     if (!val.trim()) return
     partNoDebounceRef.current = setTimeout(() => {
-      const { orderDate, orderNo, orderStatus, stock } = lookupOrderForPartNo(val)
+      const entryDate = rows.find((r) => r.id === editingId)?.entry_date ?? null
+      const { orderDate, orderNo, orderStatus, stock } = lookupOrderForPartNo(val, entryDate)
       const found = !!(orderDate || orderNo)
       setPartNoFetchStatus(found ? 'found' : 'notfound')
       setEditDraft((d) => d ? {
         ...d,
-        parts_order_date: orderDate || d.parts_order_date,
-        order_no: orderNo || d.order_no,
+        parts_order_date: orderDate,
+        order_no: orderNo,
         order_status_display: orderStatus,
         parts_qty: stock != null ? String(stock) : d.parts_qty,
       } : d)
     }, 400)
-  }, [lookupOrderForPartNo])
+  }, [lookupOrderForPartNo, rows, editingId])
 
   const handleSave = async (id: number) => {
     if (!editDraft) return
@@ -408,17 +429,17 @@ export default function PartsSPMDashboardPage() {
   const handleExport = () => {
     const header = [
       'Entry Date', 'Job Card', 'Advisor', 'Reg No.', 'Customer', 'Customer Mobile No', 'Vehicle Model', 'Portal',
-      'Parts Required', 'Parts No.', 'Order No.', 'Order Date', 'Order Status',
+      'Parts Required', 'Parts No.', 'Order No.', 'Order Date', 'Order Status', 'GGN Stock',
       'Stock', 'Parts Status', 'Status 1', 'Advisor Remarks', 'Customer Update', 'SPM Remarks',
       'Received At', 'Received By', 'Done At', 'Done By',
     ]
     const dataRows = sorted.map((r) => {
-      const { orderDate, orderNo, orderStatus, stock } = lookupOrderForPartNo(r.parts_number ?? '')
+      const { stock } = lookupOrderForPartNo(r.parts_number ?? '', r.entry_date)
       return [
         r.entry_date, r.job_card_number ?? '', r.advisor_name, r.registration_number,
         r.customer_name ?? '', r.customer_mobile ?? '', r.vehicle_model ?? '', evpvOf(r),
-        r.parts_required, r.parts_number ?? '', orderNo, r.parts_order_date ?? orderDate,
-        orderStatus, stock ?? r.parts_qty ?? '', r.parts_status, getStatus1(vorBackOrderParts, jaipurDealerCount, r.parts_number).isBackOrder ? `Back Order; Jaipur: ${getStatus1(vorBackOrderParts, jaipurDealerCount, r.parts_number).jaipurDealers} dealer(s)` : '',
+        r.parts_required, r.parts_number ?? '', displayOrderNumber(r), r.parts_order_date ?? '',
+        displayOrderStatusLabel(r), r.ggn_stock_status ?? 'No Data', stock ?? r.parts_qty ?? '', r.parts_status, getStatus1(vorBackOrderParts, jaipurDealerCount, r.parts_number).isBackOrder ? `Back Order; Jaipur: ${getStatus1(vorBackOrderParts, jaipurDealerCount, r.parts_number).jaipurDealers} dealer(s)` : '',
         r.advisor_remarks ?? '', r.customer_update ?? '', r.spm_remarks ?? '',
         r.received_at ?? '', r.received_by_name ?? '', r.done_at ?? '', r.done_by_name ?? '',
       ]
@@ -551,6 +572,7 @@ export default function PartsSPMDashboardPage() {
                     </div>
                   </th>
                   <th className="px-3 py-3">Order Status</th>
+                  <th className="px-3 py-3">GGN Stock</th>
                   <th className="px-3 py-3">Stock</th>
                   <SortHeader label="Status" sortField="parts_status" />
                   <th className="px-3 py-3">Status 1</th>
@@ -565,10 +587,10 @@ export default function PartsSPMDashboardPage() {
               <tbody>
                 {pageRows.map((row) => {
                   const isEditing = editingId === row.id
-                  const { orderDate, orderNo, orderStatus, stock } = lookupOrderForPartNo(row.parts_number ?? '')
-                  const displayOrderNo = (row as any).parts_order_number || orderNo || (row as any).sap_order_number || ''
-                  const displayOrderDate = row.parts_order_date ?? orderDate
-                  const displayOrderStatus = orderStatus
+                  const { stock } = lookupOrderForPartNo(row.parts_number ?? '', row.entry_date)
+                  const displayOrderNo = displayOrderNumber(row)
+                  const displayOrderDate = row.parts_order_date
+                  const displayOrderStatus = displayOrderStatusLabel(row)
                   const displayStock = stock ?? row.parts_qty
                   const isVOR = isVORRow(displayOrderNo)
 
@@ -632,6 +654,9 @@ export default function PartsSPMDashboardPage() {
                               <span className="text-xs text-gray-700">{editDraft?.order_status_display || '—'}</span>
                               <span className="text-[9px] text-gray-400">Auto</span>
                             </div>
+                          </td>
+                          <td className="px-4 py-2.5">
+                            <GgnStockBadge status={row.ggn_stock_status} />
                           </td>
                           {/* Stock — auto-filled from snapshot */}
                           <td className="px-4 py-2.5">
@@ -714,6 +739,7 @@ export default function PartsSPMDashboardPage() {
                             </div>
                           </td>
                           <td className="px-4 py-2.5 text-xs text-gray-600">{displayOrderStatus}</td>
+                          <td className="px-4 py-2.5"><GgnStockBadge status={row.ggn_stock_status} /></td>
                           <td className="px-4 py-2.5"><QtyBadge qty={displayStock} /></td>
                           <td className="px-4 py-2.5"><StatusBadge status={row.parts_status} qty={row.parts_qty} /></td>
                           {/* Status 1 — Back Order + Jaipur Co-Dealer availability */}

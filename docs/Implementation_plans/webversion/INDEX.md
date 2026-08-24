@@ -1,6 +1,6 @@
 # Web Version Plans Index
 
-Last Updated: 2026-08-11
+Last Updated: 2026-08-24
 Scope: Web project implementation plans only
 Authority: This index is the routing source for webversion plans
 
@@ -19,6 +19,7 @@ Web categories currently in use:
 - `help-tickets`
 - `import`
 - `operations`
+- `parts`
 - `rbac`
 - `reception`
 - `redesign`
@@ -57,6 +58,7 @@ Use this file as daily command center:
 | OPS-WA-GROUP | operations | Active | Operations Team | `docs/Implementation_plans/webversion/categories/operations/active/WA_GROUP_CREATION_IMPLEMENTATION_PLAN.md` |
 | OPS-INCOME-LEGACY | operations | Active | Operations Team | `docs/Implementation_plans/webversion/categories/operations/active/income_technician.md` |
 | OPS-UPDATION-001 | operations | Implemented (pending manual Meta setup) | Operations Team | `docs/Implementation_plans/webversion/categories/operations/active/OPS-UPDATION-001_UPDATION_REMINDER_WHATSAPP_AUTOMATION_PLAN.md` |
+| PARTS-001 | parts | Active (spec locked; preview first) | Parts Team + Platform Team | `docs/Implementation_plans/webversion/categories/parts/active/PARTS-001_SERVICE_ADVISOR_PARTS_ORDER_DATE_AND_GGN_STOCK_PLAN_2026-08-24.md` |
 | RBAC-001 | rbac | Active | RBAC Team | `docs/Implementation_plans/webversion/categories/rbac/active/RBAC-001_MASTER_PLAN_ACTIVE.md` |
 | RBAC-HOME | rbac | Active | RBAC Team | `docs/Implementation_plans/webversion/categories/rbac/active/RBAC_HOME_DYNAMIC_ROLE_VISIBILITY_PLAN_2026-06-05.md` |
 | RBAC-002 | rbac | Pending Execution | RBAC Team + Bodyshop Team + Platform Team | `docs/Implementation_plans/webversion/categories/rbac/active/RBAC-002_BODYSHOP_STANDALONE_RECEPTION_RBAC_PLAN_2026-06-20.md` |
@@ -92,6 +94,8 @@ Use this file as daily command center:
 | supabase | `docs/Implementation_plans/webversion/categories/supabase/evidence/runbooks/SUPABASE_P0_05_LEAKED_PASSWORD_ROLLOUT_CHECKLIST.md` |
 | warranty | `docs/Implementation_plans/webversion/categories/warranty/evidence/WARRANTY-001_JSONB_EXTRACTION_MAPPINGS.md` |
 | warranty | `docs/Implementation_plans/webversion/categories/warranty/evidence/WARRANTY-002_DESIGN_AUDIT_MISSING_WIRING.md` |
+| parts | `docs/Implementation_plans/webversion/categories/parts/evidence/PARTS-001_GGN_STOCK_SHEET_AUDIT_2026-08-24.md` |
+| parts | `docs/Implementation_plans/webversion/categories/parts/evidence/PARTS-001_GGN_STOCK_MOCKUP.html` |
 
 ---
 

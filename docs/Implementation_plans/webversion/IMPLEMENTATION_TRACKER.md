@@ -1,6 +1,6 @@
 # Web Version Implementation Tracker
 
-Last Updated: 2026-08-17
+Last Updated: 2026-08-24
 Scope: All webversion plans under active execution or review
 
 Legend:
@@ -27,6 +27,7 @@ Legend:
 | IMPORT-003 | import | Vehicle Updation import (portal EV/PV replace-all) | IP | Import Team + Platform Team | docs/Implementation_plans/webversion/categories/import/active/IMPORT-003_VEHICLE_UPDATION_IMPORT_PLAN_2026-08-06.md | 2026-08-06 |
 | TECH-EARNINGS-001 | operations | Technician daily earnings email automation | IP | Operations Team | docs/Implementation_plans/webversion/categories/operations/active/TECH-EARNINGS-001_TECHNICIAN_DAILY_EARNINGS_EMAIL_AUTOMATION_PLAN_2026-06-09.md | 2026-06-18 |
 | EARNINGS-EMAIL-002 | operations | SA + Bodyshop manpower earnings email report | IP | Operations Team + Bodyshop Team | docs/Implementation_plans/webversion/categories/operations/active/EARNINGS-EMAIL-002_SA_BODYSHOP_MANPOWER_EARNINGS_EMAIL_PLAN_2026-07-17.md | 2026-07-17 |
+| PARTS-001 | parts | Service Advisor Parts order-date guard + GGN Stock | IP | Parts Team + Platform Team | docs/Implementation_plans/webversion/categories/parts/active/PARTS-001_SERVICE_ADVISOR_PARTS_ORDER_DATE_AND_GGN_STOCK_PLAN_2026-08-24.md | 2026-08-24 |
 | RBAC-001 | rbac | RBAC implementation master | IP | RBAC Team | docs/Implementation_plans/webversion/categories/rbac/active/RBAC_IMPLEMENTATION_MASTER_2026-06-01.md | 2026-06-18 |
 | RBAC-002 | rbac | Bodyshop standalone reception RBAC decoupling | NS | RBAC Team + Bodyshop Team + Platform Team | docs/Implementation_plans/webversion/categories/rbac/active/RBAC-002_BODYSHOP_STANDALONE_RECEPTION_RBAC_PLAN_2026-06-20.md | 2026-06-20 |
 | RBAC-003 | rbac | Employee Master multi Business Role CSV (Option B) | NS | RBAC Team + Platform Team | docs/Implementation_plans/webversion/categories/rbac/active/RBAC-003_EMPLOYEE_MASTER_MULTI_BUSINESS_ROLE_CSV_PLAN_2026-07-18.md | 2026-07-18 |

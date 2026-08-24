@@ -1,6 +1,6 @@
 {
-  "generated_at_utc": "2026-07-03T08:11:54.345Z",
-  "scanned_files": 45,
+  "generated_at_utc": "2026-08-24T07:10:31.845Z",
+  "scanned_files": 60,
   "violations": 0,
   "scanned": [
     {
@@ -100,6 +100,14 @@
       }
     },
     {
+      "file": "docs/Implementation_plans/mobileversion/categories/help-tickets/active/MOBILE-HELP-001_EMPLOYEE_HELP_LITE_PLAN.md",
+      "checks": {
+        "metrics_automated_rows": 0,
+        "changelog_automated_rows": 0,
+        "snapshot_blocks": 0
+      }
+    },
+    {
       "file": "docs/Implementation_plans/mobileversion/categories/operations/active/MOBILE-008_BACKGROUND_PROCESSING_STATE_UX_PLAN.md",
       "checks": {
         "metrics_automated_rows": 0,
@@ -141,6 +149,14 @@
     },
     {
       "file": "docs/Implementation_plans/mobileversion/categories/redesign/active/redesign_bodypaint_module.md",
+      "checks": {
+        "metrics_automated_rows": 0,
+        "changelog_automated_rows": 0,
+        "snapshot_blocks": 0
+      }
+    },
+    {
+      "file": "docs/Implementation_plans/webversion/categories/bodyshop/active/BODYSHOP-EARNINGS-001_BODYSHOP_TRACKER_SOLO_BONUS_SUPPORT_SPLIT_PLAN_2026-07-17.md",
       "checks": {
         "metrics_automated_rows": 0,
         "changelog_automated_rows": 0,
@@ -252,6 +268,38 @@
       }
     },
     {
+      "file": "docs/Implementation_plans/webversion/categories/help-tickets/active/00_INDEX.md",
+      "checks": {
+        "metrics_automated_rows": 0,
+        "changelog_automated_rows": 0,
+        "snapshot_blocks": 0
+      }
+    },
+    {
+      "file": "docs/Implementation_plans/webversion/categories/help-tickets/active/CHECKLIST.md",
+      "checks": {
+        "metrics_automated_rows": 0,
+        "changelog_automated_rows": 0,
+        "snapshot_blocks": 0
+      }
+    },
+    {
+      "file": "docs/Implementation_plans/webversion/categories/help-tickets/active/HELP-001_COMPREHENSIVE_PLAN.md",
+      "checks": {
+        "metrics_automated_rows": 0,
+        "changelog_automated_rows": 0,
+        "snapshot_blocks": 0
+      }
+    },
+    {
+      "file": "docs/Implementation_plans/webversion/categories/help-tickets/active/PHASES.md",
+      "checks": {
+        "metrics_automated_rows": 0,
+        "changelog_automated_rows": 0,
+        "snapshot_blocks": 0
+      }
+    },
+    {
       "file": "docs/Implementation_plans/webversion/categories/import/active/IMPORT-002_PSF_INCREMENTAL_UPSERT_GOVERNANCE_PLAN_2026-06-26.md",
       "checks": {
         "metrics_automated_rows": 0,
@@ -260,7 +308,31 @@
       }
     },
     {
+      "file": "docs/Implementation_plans/webversion/categories/import/active/IMPORT-003_VEHICLE_UPDATION_IMPORT_PLAN_2026-08-06.md",
+      "checks": {
+        "metrics_automated_rows": 0,
+        "changelog_automated_rows": 0,
+        "snapshot_blocks": 0
+      }
+    },
+    {
       "file": "docs/Implementation_plans/webversion/categories/import/active/IMPORT_UPLOAD_GOVERNING_PLAN_2026-06-06.md",
+      "checks": {
+        "metrics_automated_rows": 0,
+        "changelog_automated_rows": 0,
+        "snapshot_blocks": 0
+      }
+    },
+    {
+      "file": "docs/Implementation_plans/webversion/categories/operations/active/EARNINGS-EMAIL-002_SA_BODYSHOP_MANPOWER_EARNINGS_EMAIL_PLAN_2026-07-17.md",
+      "checks": {
+        "metrics_automated_rows": 0,
+        "changelog_automated_rows": 0,
+        "snapshot_blocks": 0
+      }
+    },
+    {
+      "file": "docs/Implementation_plans/webversion/categories/operations/active/OPS-UPDATION-001_UPDATION_REMINDER_WHATSAPP_AUTOMATION_PLAN.md",
       "checks": {
         "metrics_automated_rows": 0,
         "changelog_automated_rows": 0,
@@ -300,6 +372,14 @@
       }
     },
     {
+      "file": "docs/Implementation_plans/webversion/categories/parts/active/PARTS-001_SERVICE_ADVISOR_PARTS_ORDER_DATE_AND_GGN_STOCK_PLAN_2026-08-24.md",
+      "checks": {
+        "metrics_automated_rows": 0,
+        "changelog_automated_rows": 0,
+        "snapshot_blocks": 0
+      }
+    },
+    {
       "file": "docs/Implementation_plans/webversion/categories/rbac/active/RBAC-001_MASTER_PLAN_ACTIVE.md",
       "checks": {
         "metrics_automated_rows": 0,
@@ -316,6 +396,14 @@
       }
     },
     {
+      "file": "docs/Implementation_plans/webversion/categories/rbac/active/RBAC-003_EMPLOYEE_MASTER_MULTI_BUSINESS_ROLE_CSV_PLAN_2026-07-18.md",
+      "checks": {
+        "metrics_automated_rows": 0,
+        "changelog_automated_rows": 0,
+        "snapshot_blocks": 0
+      }
+    },
+    {
       "file": "docs/Implementation_plans/webversion/categories/rbac/active/RBAC_HOME_DYNAMIC_ROLE_VISIBILITY_PLAN_2026-06-05.md",
       "checks": {
         "metrics_automated_rows": 0,
@@ -325,6 +413,22 @@
     },
     {
       "file": "docs/Implementation_plans/webversion/categories/reception/active/RECEPTION-001_RECEPTION_MODULE_PLAN.md",
+      "checks": {
+        "metrics_automated_rows": 0,
+        "changelog_automated_rows": 0,
+        "snapshot_blocks": 0
+      }
+    },
+    {
+      "file": "docs/Implementation_plans/webversion/categories/reception/active/RECEPTION-002_REVISIT_DETECTION_PLAN_2026-08-06.md",
+      "checks": {
+        "metrics_automated_rows": 0,
+        "changelog_automated_rows": 0,
+        "snapshot_blocks": 0
+      }
+    },
+    {
+      "file": "docs/Implementation_plans/webversion/categories/reception/active/VEHICLE-PICKUP-001_VEHICLE_PICKUP_MODULE_PLAN.md",
       "checks": {
         "metrics_automated_rows": 0,
         "changelog_automated_rows": 0,
@@ -349,6 +453,22 @@
     },
     {
       "file": "docs/Implementation_plans/webversion/categories/supabase/active/SUPABASE-002_ALL_SERVICE_DATA_DYNAMIC_TABLE_REALTIME_SYNC_PLAN_2026-06-20.md",
+      "checks": {
+        "metrics_automated_rows": 0,
+        "changelog_automated_rows": 0,
+        "snapshot_blocks": 0
+      }
+    },
+    {
+      "file": "docs/Implementation_plans/webversion/categories/supabase/active/SUPABASE-003_SERVICE_HISTORY_SYNC_QUEUE_PERFORMANCE_PLAN_2026-07-21.md",
+      "checks": {
+        "metrics_automated_rows": 0,
+        "changelog_automated_rows": 0,
+        "snapshot_blocks": 0
+      }
+    },
+    {
+      "file": "docs/Implementation_plans/webversion/categories/supabase/active/SUPABASE-004_IDSPAY_RC_ADVANCE_VERIFICATION_EDGE_FUNCTION_PLAN_2026-07-22.md",
       "checks": {
         "metrics_automated_rows": 0,
         "changelog_automated_rows": 0,

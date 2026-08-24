@@ -59,6 +59,13 @@ import {
   formatPartsStockParseErrors,
   type PartsStockParseError,
 } from '../lib/partsStockColumnMapper'
+import {
+  mapGgnStockHeaders,
+  buildGgnStockInsertRow,
+  aggregateGgnStockRows,
+  formatGgnStockParseErrors,
+  type PartsGgnStockParseError,
+} from '../lib/partsGgnStockColumnMapper'
 import { PORTAL_BRANCHES } from '../lib/branches'
 import { PniGrnImportSection } from '../components/PniGrnImportSection'
 import { BackOrderImportSection } from '../components/BackOrderImportSection'
@@ -177,6 +184,12 @@ const CARDS: CardConfig[] = [
     description: 'On-hand inventory snapshot by part number across all branches.',
   },
   {
+    tableName: 'ggn_stock_data',
+    title: 'GGN Stock',
+    description: 'Latest GGN warehouse (Plant 4770) Free Stock. Replaces the previous sheet on each upload. Available = Free Stock > 0.',
+    branches: ['GGN Stock (Plant 4770)'],
+  },
+  {
     tableName: 'warranty_claim_settlement_report_data',
     title: 'Claim-Settlement-Report',
     description: 'Warranty claim settlement report uploads across all warranty branches.',
@@ -231,6 +244,7 @@ const PARTS_REPORT_TABLES = new Set([
   'service_parts_consumption_data',
   'service_parts_order_data',
   'service_parts_stock_snapshot_data',
+  'ggn_stock_data',
 ])
 
 const WARRANTY_REPORT_TABLES = new Set([
@@ -254,6 +268,15 @@ const PSF_DMS_SERVER_IMPORT_RPC_ENABLED = true
 const PSF_DMS_SERVER_IMPORT_CHUNK_SIZE = 75
 const PSF_DMS_JCC_SYNC_CHUNK_SIZE = 50
 const PARTS_REPLACE_ALL_ON_IMPORT = true
+
+function acceptedImportExts(tableName: string): string[] {
+  if (tableName === 'ggn_stock_data') return ['xlsx', 'xls', 'xlsb']
+  return ['xlsx', 'xls', 'csv']
+}
+
+function acceptAttrForTable(tableName: string): string {
+  return acceptedImportExts(tableName).map((ext) => `.${ext}`).join(',')
+}
 
 const DEALER_CODE_LOCATION_PORTAL_RULES = [
   { key: '3000840', location: 'Sitapura', portal: 'PV' },
@@ -403,7 +426,7 @@ function parseWorkbook(file: File, tableName?: string): Promise<Record<string, u
         } catch {
           // Fall through to user-friendly parse error below.
         }
-        reject(new Error('Failed to parse the file. Make sure it is a valid .xlsx, .xls, or .csv file.'))
+        reject(new Error('Failed to parse the file. Make sure it is a valid .xlsx, .xls, .xlsb, or .csv file.'))
       }
     }
     reader.onerror = () => reject(new Error('Could not read the file.'))
@@ -501,6 +524,23 @@ async function getTableColumns(tableName: string): Promise<string[]> {
       'source_row_hash',
       'branch',
       'portal',
+      'created_at',
+      'updated_at',
+    ]
+  }
+
+  if (tableName === 'ggn_stock_data') {
+    return [
+      'id',
+      'part_number',
+      'part_description',
+      'plant',
+      'storage_location',
+      'free_stock',
+      'source_file_name',
+      'uploaded_at',
+      'uploaded_by',
+      'source_row_hash',
       'created_at',
       'updated_at',
     ]
@@ -822,21 +862,23 @@ function normalizeLocationValue(value: string | null | undefined): 'Ajmer Road' 
 interface SlotDropzoneProps {
   branch: Branch
   slot: SlotState
+  accept: string
+  allowedExts: string[]
   onFile: (branch: Branch, file: File) => void
   onClear: (branch: Branch) => void
 }
 
-function SlotDropzone({ branch, slot, onFile, onClear }: SlotDropzoneProps) {
+function SlotDropzone({ branch, slot, accept, allowedExts, onFile, onClear }: SlotDropzoneProps) {
   const inputId = useId()
   const [isDragging, setIsDragging] = useState(false)
 
   const handleFile = useCallback(
     (file: File) => {
       const ext = file.name.split('.').pop()?.toLowerCase()
-      if (ext !== 'xlsx' && ext !== 'xls' && ext !== 'csv') return
+      if (!ext || !allowedExts.includes(ext)) return
       onFile(branch, file)
     },
-    [branch, onFile],
+    [allowedExts, branch, onFile],
   )
 
   return (
@@ -890,7 +932,7 @@ function SlotDropzone({ branch, slot, onFile, onClear }: SlotDropzoneProps) {
           <input
             id={inputId}
             type="file"
-            accept=".xlsx,.xls,.csv"
+            accept={accept}
             className="hidden"
             onChange={(e) => {
               const file = e.target.files?.[0]
@@ -900,6 +942,75 @@ function SlotDropzone({ branch, slot, onFile, onClear }: SlotDropzoneProps) {
           />
         </label>
       )}
+    </div>
+  )
+}
+
+function GgnStockCardMeta({ lastUpdated }: { lastUpdated: Date | null }) {
+  const [meta, setMeta] = useState<{
+    fileName: string | null
+    uploadedAt: string | null
+    total: number
+    available: number
+    notAvailable: number
+  } | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    void (async () => {
+      try {
+        const { data: sample } = await supabase
+          .from('ggn_stock_data')
+          .select('source_file_name, uploaded_at')
+          .limit(1)
+        const { count: total } = await supabase
+          .from('ggn_stock_data')
+          .select('id', { count: 'exact', head: true })
+        const { count: available } = await supabase
+          .from('ggn_stock_data')
+          .select('id', { count: 'exact', head: true })
+          .gt('free_stock', 0)
+        const { count: notAvailable } = await supabase
+          .from('ggn_stock_data')
+          .select('id', { count: 'exact', head: true })
+          .lte('free_stock', 0)
+        if (cancelled) return
+        const row = sample?.[0] as { source_file_name?: string | null; uploaded_at?: string | null } | undefined
+        setMeta({
+          fileName: row?.source_file_name ?? null,
+          uploadedAt: row?.uploaded_at ?? null,
+          total: total ?? 0,
+          available: available ?? 0,
+          notAvailable: notAvailable ?? 0,
+        })
+      } catch {
+        if (!cancelled) setMeta(null)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [lastUpdated])
+
+  if (!meta || meta.total === 0) return null
+
+  const uploadedLabel = meta.uploadedAt
+    ? new Date(meta.uploadedAt).toLocaleString('en-IN', {
+        timeZone: 'Asia/Kolkata',
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+      })
+    : null
+
+  return (
+    <div className="imp-card__meta" style={{ marginTop: 6, flexWrap: 'wrap', gap: 8 }}>
+      {meta.fileName && <span className="imp-card__rows">File: {meta.fileName}</span>}
+      {uploadedLabel && <span className="imp-card__upd">Uploaded: {uploadedLabel} IST</span>}
+      <span className="imp-card__rows">{meta.available.toLocaleString('en-IN')} Available</span>
+      <span className="imp-card__rows">{meta.notAvailable.toLocaleString('en-IN')} Not Available</span>
     </div>
   )
 }
@@ -956,6 +1067,7 @@ function ImportCard({ config, state, branches, onSlotFile, onSlotClear, onUpload
             )}
             {lastUpdatedLabel && <span className="imp-card__upd">Last: {lastUpdatedLabel}</span>}
           </div>
+          {config.tableName === 'ggn_stock_data' && <GgnStockCardMeta lastUpdated={lastUpdated} />}
         </div>
         <code className="imp-card__tbl">{config.tableName}</code>
       </div>
@@ -966,6 +1078,8 @@ function ImportCard({ config, state, branches, onSlotFile, onSlotClear, onUpload
             key={branch}
             branch={branch}
             slot={state.slots[branch]}
+            accept={acceptAttrForTable(config.tableName)}
+            allowedExts={acceptedImportExts(config.tableName)}
             onFile={onSlotFile}
             onClear={onSlotClear}
           />
@@ -1204,9 +1318,10 @@ export default function ImportPage() {
   const handleSlotFile = useCallback(
     (tableName: string, branch: Branch, file: File) => {
       const ext = file.name.split('.').pop()?.toLowerCase()
+      const allowed = acceptedImportExts(tableName)
       const parseError =
-        ext !== 'xlsx' && ext !== 'xls' && ext !== 'csv'
-          ? 'Only .xlsx, .xls, and .csv files are accepted.'
+        !ext || !allowed.includes(ext)
+          ? `Only ${allowed.map((e) => `.${e}`).join(', ')} files are accepted.`
           : null
 
       updateCard(tableName, (prev) => ({
@@ -1318,6 +1433,7 @@ export default function ImportPage() {
         const isPartsConsumptionTable = tableName === 'service_parts_consumption_data'
         const isPartsOrderTable = tableName === 'service_parts_order_data'
         const isPartsStockTable = tableName === 'service_parts_stock_snapshot_data'
+        const isGgnStockTable = tableName === 'ggn_stock_data'
         const isWarrantyTable = WARRANTY_REPORT_TABLES.has(tableName)
         const isSpecialMappedTable =
           isVasTable ||
@@ -1328,6 +1444,7 @@ export default function ImportPage() {
           isPartsConsumptionTable ||
           isPartsOrderTable ||
           isPartsStockTable ||
+          isGgnStockTable ||
           isWarrantyTable
         const tableColumns = isSpecialMappedTable ? [] : await getTableColumns(tableName)
         const jcClosedColumns = isJcClosedTable ? await getTableColumns(tableName) : []
@@ -2128,6 +2245,23 @@ export default function ImportPage() {
             partsStockHeaderMapping = mapPartsStockHeaders(excelHeaders)
           } catch (err) {
             throw new Error(`Parts In Stock: ${err instanceof Error ? err.message : String(err)}`)
+          }
+        }
+
+        let ggnStockHeaderMapping: ReturnType<typeof mapGgnStockHeaders> | null = null
+        let ggnUploadedBy: string | null = null
+        const ggnUploadedAtIso = new Date().toISOString()
+        if (isGgnStockTable) {
+          try {
+            const excelHeaders = await getFirstAvailableHeaders()
+            if (excelHeaders.length === 0) {
+              throw new Error('No valid data found in uploaded files')
+            }
+            ggnStockHeaderMapping = mapGgnStockHeaders(excelHeaders)
+            const { data: authData } = await supabase.auth.getUser()
+            ggnUploadedBy = authData.user?.id ?? null
+          } catch (err) {
+            throw new Error(`GGN Stock: ${err instanceof Error ? err.message : String(err)}`)
           }
         }
 
@@ -2989,6 +3123,59 @@ export default function ImportPage() {
                 'part_number,branch,portal',
               ],
             )
+          } else if (isGgnStockTable && ggnStockHeaderMapping) {
+            const parseErrors: PartsGgnStockParseError[] = []
+            const mappedRows: Record<string, unknown>[] = []
+            const sourceFileName = file.name
+
+            for (let rowIdx = 0; rowIdx < rawRows.length; rowIdx++) {
+              const sourceRowHash = `ggn|${sourceFileName}|${rowIdx + 2}`
+              const { row, errors } = buildGgnStockInsertRow(
+                rawRows[rowIdx],
+                ggnStockHeaderMapping,
+                rowIdx + 2,
+                sourceRowHash,
+                sourceFileName,
+                ggnUploadedAtIso,
+                ggnUploadedBy,
+              )
+              if (errors.length > 0) {
+                parseErrors.push(...errors)
+              } else if (row) {
+                mappedRows.push(row)
+              }
+            }
+
+            if (parseErrors.length > 0) {
+              throw new Error(
+                `GGN Stock parse errors found:\n${formatGgnStockParseErrors(parseErrors.slice(0, 10))}`,
+              )
+            }
+
+            const insertRows = aggregateGgnStockRows(mappedRows)
+            for (const row of insertRows) {
+              row.source_row_hash = `ggn|${String(row.part_number)}|${String(row.free_stock)}|${sourceFileName}`
+            }
+
+            updateCard(tableName, (prev) => ({
+              ...prev,
+              uploadProgress: {
+                ...prev.uploadProgress,
+                currentStep: 'processing',
+                currentBranch: 'Clearing previous GGN Stock sheet',
+              },
+            }))
+
+            const { error: clearGgnError } = await supabase
+              .from(tableName)
+              .delete()
+              .not('id', 'is', null)
+
+            if (clearGgnError) {
+              throw new Error(`Failed to clear previous GGN Stock rows: ${clearGgnError.message}`)
+            }
+
+            totalInserted += await insertRowsInChunks(insertRows)
           } else if (isWarrantyTable) {
             const { location } = resolveLocationAndPortalFromSlotBranch(branch)
             const insertRows = rawRows.map((rawRow, rowIdx) => {
@@ -3158,13 +3345,15 @@ export default function ImportPage() {
             })
         }
 
-        if (isPartsOrderTable || isPartsStockTable) {
-          // Auto-match the freshly uploaded Parts Order Sheet / Stock Snapshot rows against
-          // advisor Parts Requests: Order Sheet drives status/order-date/tracking, Stock
-          // Snapshot drives the auto-computed Parts Qty column. Matches by Parts Number, or
-          // Parts Description as an unambiguous fallback. Runs server-side (service role)
-          // so it works regardless of uploader RBAC role. Never fails the upload itself if
-          // matching has an issue.
+        if (isPartsOrderTable || isPartsStockTable || isGgnStockTable) {
+          if (isGgnStockTable) {
+            const { error: ggnRefreshError } = await supabase.rpc('refresh_parts_requests_ggn_stock')
+            if (ggnRefreshError) {
+              console.warn(`GGN stock status refresh failed: ${ggnRefreshError.message}`)
+            }
+          }
+          // Auto-match the freshly uploaded Parts Order Sheet / Stock Snapshot / GGN rows against
+          // advisor Parts Requests. Never fails the upload itself if matching has an issue.
           void supabase.functions
             .invoke('parts-request-order-match', { body: {} })
             .then(({ error: matchError }) => {
@@ -3305,7 +3494,7 @@ export default function ImportPage() {
               <span className="imp-group__ic"><Icon name="grid" size={18} /></span>
               <span style={{ flex: 1, textAlign: 'left', minWidth: 0 }}>
                 <span className="imp-group__title">Parts Reports <span className="imp-group__count">{partsReportCards.length}</span></span>
-                <span className="imp-group__desc">Consumption, ordering and on-hand stock snapshots.</span>
+                <span className="imp-group__desc">Consumption, ordering, dealer on-hand stock, and GGN warehouse stock.</span>
               </span>
               <Icon name="chevron" size={18} className="imp-group__chev" style={{ transform: expandedGroups.parts_report ? 'rotate(180deg)' : 'none' }} />
             </button>

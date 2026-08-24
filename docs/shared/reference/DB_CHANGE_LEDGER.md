@@ -1,6 +1,6 @@
 # Database Change Ledger
 
-Last Updated: 2026-08-17
+Last Updated: 2026-08-24
 Authority: See docs/shared/reference/DATABASE_TRUTH.md for the full hierarchy. supabase/backups/full_metadata.sql is primary for schema/object metadata; local_folder/backups/full_database.sql is primary for row/seed data and full DB evidence. Existing rows below predate this split and reference full_database.sql as written at the time — left as historical record, not rewritten.
 Purpose: Single source of truth for planned and applied DB changes so no one guesses schema state.
 
@@ -44,6 +44,7 @@ Purpose: Single source of truth for planned and applied DB changes so no one gue
 | DBL-0022 | 2026-08-06 | Vehicle Updation import: `vehicle_updation_data` + `vehicle_updation_uploads` master tables (portal-scoped replace-all), `replace_vehicle_updation_portal()` RPC, RLS via `job_cards` module | schema,function,rls | supabase/migrations/20260806170000_vehicle_updation_import.sql | Import Team + Platform Team | Techwheels Admin | APPLIED | Supabase SQL Editor (prod) | Applied 2026-08-06 per staff; paired checks in supabase/sql_checks/20260806170000_vehicle_updation_import_checks.sql; frontend deployed Vercel `/import` | supabase/backups/full_metadata.sql (pending metadata refresh) |
 | DBL-0023 | 2026-08-17 | Fill-null sync: `contact_details.cell_phone_no` -> `all_service_data.contact_phones` for Customer rows on matching chassis; no overwrite of existing phones | function,data-backfill | supabase/migrations/20260817160000_all_service_data_fill_contact_phones_from_contact_details.sql | Platform Team | Techwheels Admin | VERIFIED | Supabase (prod) | Operator sql_checks 2026-08-17: index+functions+triggers present; remaining_fillable_rows=0; reconcile=0; target_rows_with_phone=47187 | supabase/backups/full_metadata.sql (`public.contact_details`, `public.all_service_data.contact_phones`) |
 | DBL-0024 | 2026-08-17 | 10-day retention for `contact_details`: purge rows older than 10 days (`created_at`), daily pg_cron 02:15 IST | function | supabase/migrations/20260817161000_contact_details_10day_retention_purge.sql | Platform Team | Techwheels Admin | PROPOSED | N/A | Pending apply + sql_checks/20260817161000_contact_details_10day_retention_purge_checks.sql | supabase/backups/full_metadata.sql (`public.contact_details.created_at`) |
+| DBL-0025 | 2026-08-24 | GGN Stock: new `ggn_stock_data` (Material, Free Stock, plant, SLoc, upload metadata); `parts_requests.matched_order_number` / `matched_order_status_label` / `ggn_stock_status`; RLS via `parts_inventory` + admin | schema,rls | supabase/migrations/20260824140000_ggn_stock_data.sql | Parts Team + Platform Team | Techwheels Admin | PROPOSED | N/A | Preview implementation per PARTS-001; paired checks in supabase/sql_checks/20260824140000_ggn_stock_data_checks.sql. Apply on the localhost-connected project before GitHub deploy. | supabase/backups/full_metadata.sql (no `ggn_stock_data` today; `parts_requests` at ~22488) |
 
 ---
 

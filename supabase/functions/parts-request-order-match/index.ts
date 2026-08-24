@@ -54,6 +54,11 @@ interface OrderRow {
   eta_2: string | null
   eta_3: string | null
   docket_number: string | null
+  confirmation_date: string | null
+  challan_date: string | null
+  invoice_date: string | null
+  sap_order_number: string | null
+  crm_order_number: string | null
   updated_at: string | null
 }
 
@@ -71,7 +76,11 @@ interface RequestRow {
   parts_status: string
   parts_qty: number | null
   parts_order_date: string | null
+  parts_order_number: string | null
   matched_order_row_id: number | null
+  matched_order_number: string | null
+  matched_order_status_label: string | null
+  ggn_stock_status: string | null
   auto_match_note: string | null
   entry_date: string | null
 }
@@ -94,20 +103,50 @@ function dateStr(v: string | null | undefined): string {
   return (v ?? '').trim().slice(0, 10)
 }
 
-// Order Date guard: reject an incoming order date if it would regress before the
-// currently-stored order date, or fall before the advisor's own requirement (entry) date.
-// Only compares when both sides of a given check are present — never blocks on missing data.
-function isOrderDateAllowed(newDate: string | null, existingOrderDate: string | null, requirementDate: string | null): boolean {
-  const nd = dateStr(newDate)
-  if (!nd) return true // nothing to validate against if the new date itself is blank
+function isNewer(a: OrderRow, b: OrderRow): boolean {
+  const ad = a.order_date ?? ''
+  const bd = b.order_date ?? ''
+  if (ad !== bd) return ad > bd
+  return (a.updated_at ?? '') > (b.updated_at ?? '')
+}
 
-  const existing = dateStr(existingOrderDate)
-  if (existing && nd < existing) return false // never move the order date backwards
-
+// PARTS-001: a candidate is valid only when it has an Order Date and Order Date >= X (entry_date).
+function isOrderDateValidForRequest(orderDate: string | null, requirementDate: string | null): boolean {
+  const nd = dateStr(orderDate)
+  if (!nd) return false
   const requirement = dateStr(requirementDate)
-  if (requirement && nd < requirement) return false // order can never predate the requirement
-
+  if (requirement && nd < requirement) return false
   return true
+}
+
+function fmtDate(v: string | null | undefined): string {
+  if (!v) return ''
+  const m = v.match(/^(\d{4})-(\d{2})-(\d{2})/)
+  if (!m) return v
+  return `${m[3]}/${m[2]}/${m[1]}`
+}
+
+function computeOrderStatusLabel(row: OrderRow): string {
+  if (row.docket_number && row.docket_number.trim()) {
+    return `Dispatched – Docket No: ${row.docket_number.trim()}`
+  }
+  if (row.invoice_date && row.invoice_date.trim()) {
+    return `Invoiced – ${fmtDate(row.invoice_date)}`
+  }
+  if (row.challan_date && row.challan_date.trim()) {
+    return `Challan Generated – ${fmtDate(row.challan_date)}`
+  }
+  if (row.confirmation_date && row.confirmation_date.trim()) {
+    return `Confirmed – ${fmtDate(row.confirmation_date)}`
+  }
+  return 'Order Pending'
+}
+
+function autoOrderNumber(row: OrderRow): string | null {
+  const sap = (row.sap_order_number ?? '').trim()
+  if (sap) return sap
+  const crm = (row.crm_order_number ?? '').trim()
+  return crm || null
 }
 
 function mapStatus(row: OrderRow): string {
@@ -154,7 +193,7 @@ Deno.serve(async (req) => {
     // matching below additionally filters out terminal-status rows)
     const { data: requestRows, error: reqErr } = await supabase
       .from('parts_requests')
-      .select('id, parts_number, parts_required, parts_description, parts_status, parts_qty, parts_order_date, matched_order_row_id, auto_match_note, entry_date')
+      .select('id, parts_number, parts_required, parts_description, parts_status, parts_qty, parts_order_date, parts_order_number, matched_order_row_id, matched_order_number, matched_order_status_label, ggn_stock_status, auto_match_note, entry_date')
 
     if (reqErr) throw new Error(`Failed to load parts_requests: ${reqErr.message}`)
     const requests = (requestRows ?? []) as RequestRow[]
@@ -171,7 +210,7 @@ Deno.serve(async (req) => {
     for (let from = 0; ; from += pageSize) {
       const { data, error } = await supabase
         .from('service_parts_order_data')
-        .select('id, part_number, part_description, order_date, expected_date, ordered_quantity, received_quantity, backorder_quantity, intransit_qty, status, order_status, eta_1, eta_2, eta_3, docket_number, updated_at')
+        .select('id, part_number, part_description, order_date, expected_date, ordered_quantity, received_quantity, backorder_quantity, intransit_qty, status, order_status, eta_1, eta_2, eta_3, docket_number, confirmation_date, challan_date, invoice_date, sap_order_number, crm_order_number, updated_at')
         .range(from, from + pageSize - 1)
       if (error) throw new Error(`Failed to load service_parts_order_data: ${error.message}`)
       const chunk = (data ?? []) as OrderRow[]
@@ -192,33 +231,55 @@ Deno.serve(async (req) => {
       if (chunk.length < pageSize) break
     }
 
-    // 4. Build best-match-per-part-number index for the order sheet (most recent
-    // order_date, then updated_at)
-    const byPartNumber = new Map<string, OrderRow>()
-    const byDescription = new Map<string, Set<string>>() // normalized description -> set of part numbers
-    const byDescriptionRow = new Map<string, OrderRow>() // normalized description -> best row (for single-match case)
+    // 3b. GGN Free Stock index
+    const ggnQtyByPartNumber = new Map<string, number>()
+    for (let from = 0; ; from += pageSize) {
+      const { data, error } = await supabase
+        .from('ggn_stock_data')
+        .select('part_number, free_stock')
+        .range(from, from + pageSize - 1)
+      if (error) {
+        console.warn(`ggn_stock_data not available yet: ${error.message}`)
+        break
+      }
+      const chunk = (data ?? []) as { part_number: string | null; free_stock: number | null }[]
+      for (const row of chunk) {
+        const pn = norm(row.part_number)
+        if (!pn) continue
+        ggnQtyByPartNumber.set(pn, (ggnQtyByPartNumber.get(pn) ?? 0) + num(row.free_stock))
+      }
+      if (chunk.length < pageSize) break
+    }
+
+    // 4. Index ALL order-sheet rows by part number so each request can filter
+    // Order Date >= X before picking the latest valid row (PARTS-001).
+    const rowsByPartNumber = new Map<string, OrderRow[]>()
+    const byDescription = new Map<string, Set<string>>()
+    const rowsByDescription = new Map<string, OrderRow[]>()
 
     for (const row of orderRows) {
       const pn = norm(row.part_number)
       if (pn) {
-        const existing = byPartNumber.get(pn)
-        if (!existing || isNewer(row, existing)) byPartNumber.set(pn, row)
+        const list = rowsByPartNumber.get(pn) ?? []
+        list.push(row)
+        rowsByPartNumber.set(pn, list)
       }
 
       const desc = normDesc(row.part_description)
       if (desc) {
         if (!byDescription.has(desc)) byDescription.set(desc, new Set())
         if (pn) byDescription.get(desc)!.add(pn)
-        const existingDescRow = byDescriptionRow.get(desc)
-        if (!existingDescRow || isNewer(row, existingDescRow)) byDescriptionRow.set(desc, row)
+        const descList = rowsByDescription.get(desc) ?? []
+        descList.push(row)
+        rowsByDescription.set(desc, descList)
       }
     }
 
-    function isNewer(a: OrderRow, b: OrderRow): boolean {
-      const ad = a.order_date ?? ''
-      const bd = b.order_date ?? ''
-      if (ad !== bd) return ad > bd
-      return (a.updated_at ?? '') > (b.updated_at ?? '')
+    function pickLatestValid(candidates: OrderRow[] | undefined, entryDate: string | null): OrderRow | undefined {
+      if (!candidates || candidates.length === 0) return undefined
+      const valid = candidates.filter((row) => isOrderDateValidForRequest(row.order_date, entryDate))
+      if (valid.length === 0) return undefined
+      return valid.reduce((best, row) => (isNewer(row, best) ? row : best))
     }
 
     // 5. Build stock qty index: sum on-hand qty per part number, and per description
@@ -276,46 +337,66 @@ Deno.serve(async (req) => {
         updatePayload.parts_qty = newQty
       }
 
+      // -- GGN Stock (independent of order-date; does not flip advisor_seen) --
+      const ggnPn = norm(reqRow.parts_number)
+      let newGgn: string | null = null
+      if (ggnPn && ggnQtyByPartNumber.size > 0) {
+        if (ggnQtyByPartNumber.has(ggnPn)) {
+          newGgn = (ggnQtyByPartNumber.get(ggnPn) ?? 0) > 0 ? 'Available' : 'Not Available'
+        } else {
+          newGgn = null
+        }
+      }
+      if ((newGgn ?? null) !== (reqRow.ggn_stock_status ?? null)) {
+        updatePayload.ggn_stock_status = newGgn
+      }
+
       // -- Status / order-date / tracking match (non-terminal rows only) --
       if (!TERMINAL_STATUSES.has(reqRow.parts_status)) {
         let matchRow: OrderRow | undefined
         let matchedPartNumber: string | null = null
 
         const pn = norm(reqRow.parts_number)
-        if (pn && byPartNumber.has(pn)) {
-          matchRow = byPartNumber.get(pn)
+        if (pn) {
+          matchRow = pickLatestValid(rowsByPartNumber.get(pn), reqRow.entry_date)
           matchedPartNumber = reqRow.parts_number
-        } else if (!pn) {
+        } else {
           const desc = normDesc(reqRow.parts_description)
           if (desc && byDescription.has(desc) && byDescription.get(desc)!.size === 1) {
-            matchRow = byDescriptionRow.get(desc)
+            matchRow = pickLatestValid(rowsByDescription.get(desc), reqRow.entry_date)
             matchedPartNumber = matchRow?.part_number ?? null
           }
         }
 
-        if (matchRow && reqRow.matched_order_row_id !== matchRow.id) {
-          const candidateOrderDate = matchRow.order_date ?? matchRow.expected_date ?? null
-
-          if (isOrderDateAllowed(candidateOrderDate, reqRow.parts_order_date, reqRow.entry_date)) {
+        if (matchRow) {
+          if (reqRow.matched_order_row_id !== matchRow.id) {
+            const candidateOrderDate = matchRow.order_date ?? null
             const status = mapStatus(matchRow)
             const note = buildNote(matchRow, status)
+            const orderNo = autoOrderNumber(matchRow)
             updatePayload.parts_status = status
             updatePayload.parts_order_date = candidateOrderDate
             updatePayload.auto_match_note = note
             updatePayload.last_matched_at = nowIso
             updatePayload.matched_order_row_id = matchRow.id
+            updatePayload.matched_order_number = orderNo
+            updatePayload.matched_order_status_label = computeOrderStatusLabel(matchRow)
             updatePayload.advisor_seen = false
             updatePayload.status_updated_at = nowIso
             if (!reqRow.parts_number && matchedPartNumber) {
               updatePayload.parts_number = matchedPartNumber
             }
             statusMatched += 1
-          } else {
-            // Imported Order Date would regress before the existing Order Date, or falls
-            // before the advisor's Requirement (Entry) Date — ignore this record entirely,
-            // keep the existing Order Date / status / tracking untouched this run.
-            orderDateRejected += 1
           }
+        } else if (reqRow.matched_order_row_id != null) {
+          updatePayload.matched_order_row_id = null
+          updatePayload.matched_order_number = null
+          updatePayload.matched_order_status_label = null
+          if (!reqRow.parts_order_number) {
+            updatePayload.parts_order_date = null
+          }
+          updatePayload.auto_match_note = 'No valid Order Sheet row (Order Date >= Entry Date)'
+          orderDateRejected += 1
         }
       }
 

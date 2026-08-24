@@ -1,0 +1,742 @@
+<!doctype html><html dir="auto"><head><meta http-equiv="Content-Security-Policy" content="default-src 'unsafe-inline' 'unsafe-eval' https: data: blob:; connect-src 'none'; form-action 'none'; base-uri 'none'">
+<script id="__base44_dark_class__">document.documentElement.classList.remove('dark');</script>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Wix+Madefor+Text:wght@400;500;600;700&display=swap">
+<style id="__base44_editor_theme__">
+:root {
+  --background: 38 27% 94%;
+  --foreground: 0 0% 4%;
+  --card: 0 0% 100%;
+  --card-foreground: 0 0% 4%;
+  --popover: 0 0% 100%;
+  --popover-foreground: 0 0% 4%;
+  --primary: 21 42% 55%;
+  --primary-foreground: 0 0% 100%;
+  --secondary: 0 0% 96%;
+  --secondary-foreground: 0 0% 9%;
+  --muted: 39 17% 93%;
+  --muted-foreground: 0 0% 45%;
+  --accent: 0 0% 96%;
+  --accent-foreground: 0 0% 9%;
+  --destructive: 0 84% 60%;
+  --destructive-foreground: 0 0% 98%;
+  --border: 0 0% 98%;
+  --input: 0 0% 98%;
+  --ring: 21 42% 55%;
+  --radius: 0.5rem;
+  color-scheme: light;
+}
+.dark {
+  --background: 220 5% 11%;
+  --foreground: 0 0% 99%;
+  --card: 0 1% 14%;
+  --card-foreground: 0 0% 99%;
+  --popover: 0 1% 14%;
+  --popover-foreground: 0 0% 99%;
+  --primary: 21 42% 55%;
+  --primary-foreground: 0 0% 99%;
+  --secondary: 0 0% 18%;
+  --secondary-foreground: 0 0% 99%;
+  --muted: 0 0% 18%;
+  --muted-foreground: 0 0% 65%;
+  --accent: 0 0% 18%;
+  --accent-foreground: 0 0% 99%;
+  --destructive: 0 62% 30%;
+  --destructive-foreground: 0 0% 99%;
+  --border: 0 0% 16%;
+  --input: 0 0% 16%;
+  --ring: 21 42% 55%;
+  color-scheme: dark;
+}
+*, *::before, *::after { box-sizing: border-box; }
+/* shadcn's base layer: default every element's border-color to the theme
+   token. Without this, Tailwind's bare `border` utility only sets width and
+   the color falls back to currentColor (near-black text) — so the model's
+   `border` cards render heavy/dark and the `--border` value is ignored.
+   Explicit `border-{color}` utilities and inline styles still override. */
+*, *::before, *::after { border-color: hsl(var(--border)); }
+html, body {
+  margin: 0 !important;
+  padding: 0;
+  overflow: auto !important;
+  /* Inline card: transparent, so the real chat surface (a gradient, not the
+     single flat `--background` stop) shows straight through and the artifact
+     reads as inline chat content in both themes. Standalone saved file: opaque
+     `--background` so it stays readable on its own page. `--card` stays
+     elevated for emphasis blocks (stat tiles, panels) so hierarchy reads. */
+  background: hsl(var(--background)) !important;
+  color: hsl(var(--foreground));
+  font-family: 'WixMadeforText', 'Wix Madefor Text', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-size: 16px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+/* 8px (vs 16px) — minimal breathing room from the iframe edge so tightly-composed
+   dashboards don't ship a fat empty halo before their first element. */
+body { padding: 8px; }
+
+code, kbd, pre, samp { font-family: 'WixMadeforMonospace', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+a { color: hsl(var(--primary)); }
+hr { border: 0; border-top: 1px solid hsl(var(--border)); }
+h1, h2, h3, h4, h5, h6 { font-weight: 600; color: hsl(var(--foreground)); }
+</style>
+<script id="__base44_tw_config__">
+window.tailwind = window.tailwind || {};
+window.tailwind.config = {
+  darkMode: 'class',
+  theme: {
+    extend: {
+      colors: {
+        border: 'hsl(var(--border))',
+        input: 'hsl(var(--input))',
+        ring: 'hsl(var(--ring))',
+        background: 'hsl(var(--background))',
+        foreground: 'hsl(var(--foreground))',
+        primary: { DEFAULT: 'hsl(var(--primary))', foreground: 'hsl(var(--primary-foreground))' },
+        secondary: { DEFAULT: 'hsl(var(--secondary))', foreground: 'hsl(var(--secondary-foreground))' },
+        destructive: { DEFAULT: 'hsl(var(--destructive))', foreground: 'hsl(var(--destructive-foreground))' },
+        muted: { DEFAULT: 'hsl(var(--muted))', foreground: 'hsl(var(--muted-foreground))' },
+        accent: { DEFAULT: 'hsl(var(--accent))', foreground: 'hsl(var(--accent-foreground))' },
+        popover: { DEFAULT: 'hsl(var(--popover))', foreground: 'hsl(var(--popover-foreground))' },
+        card: { DEFAULT: 'hsl(var(--card))', foreground: 'hsl(var(--card-foreground))' },
+      },
+      // A bare `border` / `divide-*` (no color) falls back to Tailwind
+      // preflight's DEFAULT, which is a FIXED gray-200 (#e5e7eb) — subtle on the
+      // light card but near-white glare on the dark card. The `colors.border`
+      // map above only creates the `border-border` class; it does NOT set the
+      // uncolored default. Point the DEFAULT at the theme token so an uncolored
+      // border adapts to dark mode like the rest of the palette. (Explicit
+      // `border-primary` etc. still override.)
+      borderColor: { DEFAULT: 'hsl(var(--border))' },
+      divideColor: { DEFAULT: 'hsl(var(--border))' },
+      borderRadius: {
+        lg: 'var(--radius)',
+        md: 'calc(var(--radius) - 2px)',
+        sm: 'calc(var(--radius) - 4px)',
+      },
+      fontFamily: {
+        // Same two-name stack as `FONT_SANS_STACK` above. The
+        // sandboxed null-origin iframe lands on `Wix Madefor Text`
+        // (Google Fonts' name); `WixMadeforText` is here only for
+        // defense-in-depth in case the iframe ever runs same-origin.
+        sans: ['WixMadeforText', 'Wix Madefor Text', 'system-ui', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'sans-serif'],
+        mono: ['WixMadeforMonospace', 'ui-monospace', 'SFMono-Regular', 'Menlo', 'monospace'],
+      },
+    },
+  },
+};
+</script>
+<script src="https://cdn.tailwindcss.com" id="__base44_tw_cdn__"></script></head><body><!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GGN Stock Enhancement — Mockup Preview</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  * { font-family: -apple-system, 'Segoe UI', sans-serif; }
+  .tab-active { background: #2563eb; color: white; }
+  .tab-inactive { background: white; color: #374151; border: 1px solid #e5e7eb; }
+  .mockup-frame { border: 1px solid #e5e7eb; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.08); }
+  .mockup-header { background: #f9fafb; border-bottom: 1px solid #e5e7eb; padding: 12px 20px; font-weight: 600; color: #111827; font-size: 14px; display: flex; align-items: center; gap: 8px; }
+  .badge-available { background: #d1fae5; color: #065f46; border: 1px solid #a7f3d0; }
+  .badge-not-available { background: #fee2e2; color: #991b1b; border: 1px solid #fecaca; }
+  .badge-pending { background: #f3f4f6; color: #6b7280; border: 1px solid #e5e7eb; }
+  .badge-ordered { background: #dbeafe; color: #1e40af; border: 1px solid #bfdbfe; }
+  .badge-received { background: #d1fae5; color: #065f46; border: 1px solid #a7f3d0; }
+  .badge-pending-status { background: #fef3c7; color: #92400e; border: 1px solid #fde68a; }
+  .badge-transit { background: #ede9fe; color: #5b21b6; border: 1px solid #ddd6fe; }
+  .badge-backorder { background: #ffedd5; color: #9a3412; border: 1px solid #fed7aa; }
+  .flow-box { border: 1.5px solid #e5e7eb; border-radius: 10px; padding: 14px 20px; text-align: center; font-size: 13px; font-weight: 600; color: #374151; background: white; }
+  .flow-arrow { font-size: 24px; color: #9ca3af; line-height: 1; }
+  .flow-yes { color: #059669; font-weight: 700; }
+  .flow-no { color: #dc2626; font-weight: 700; }
+  .section-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: #6b7280; margin-bottom: 8px; }
+  table { border-collapse: collapse; width: 100%; font-size: 13px; }
+  th { background: #f9fafb; text-align: left; padding: 10px 12px; font-weight: 600; color: #6b7280; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 1px solid #e5e7eb; white-space: nowrap; }
+  td { padding: 10px 12px; border-bottom: 1px solid #f3f4f6; color: #374151; white-space: nowrap; }
+  tr:hover td { background: #f9fafb; }
+  .new-col { background: #eff6ff; }
+  .new-col-header { background: #dbeafe !important; color: #1e40af !important; border-bottom: 2px solid #3b82f6 !important; }
+  .new-badge { background: #2563eb; color: white; font-size: 9px; font-weight: 700; padding: 1px 5px; border-radius: 4px; margin-left: 4px; vertical-align: middle; }
+</style>
+</head>
+<body>
+<div class="max-w-6xl mx-auto p-6 space-y-6">
+
+  <!-- Title -->
+  <div>
+    <h1 class="text-2xl font-bold text-gray-900">GGN Stock Enhancement — Mockup Preview</h1>
+    <p class="text-sm text-gray-500 mt-1">Service Advisor Parts Module · TechWheels Service</p>
+    <div class="mt-3 flex flex-wrap gap-2 text-xs">
+      <span class="px-2.5 py-1 rounded-full bg-blue-100 text-blue-700 font-semibold">1. Order Date Validation</span>
+      <span class="px-2.5 py-1 rounded-full bg-green-100 text-green-700 font-semibold">2. GGN Stock Upload</span>
+      <span class="px-2.5 py-1 rounded-full bg-purple-100 text-purple-700 font-semibold">3. GGN Stock Column</span>
+      <span class="px-2.5 py-1 rounded-full bg-amber-100 text-amber-700 font-semibold">4. Auto Stock Check</span>
+    </div>
+  </div>
+
+  <!-- Tab Switcher -->
+  <div class="flex gap-2 flex-wrap">
+    <button onclick="showTab('import')" id="tab-import" class="px-4 py-2 rounded-lg text-sm font-semibold transition tab-active">📦 Parts Reports (Import)</button>
+    <button onclick="showTab('advisor')" id="tab-advisor" class="px-4 py-2 rounded-lg text-sm font-semibold transition tab-inactive">👤 Advisor View</button>
+    <button onclick="showTab('spm')" id="tab-spm" class="px-4 py-2 rounded-lg text-sm font-semibold transition tab-inactive">🔧 SPM View</button>
+    <button onclick="showTab('validation')" id="tab-validation" class="px-4 py-2 rounded-lg text-sm font-semibold transition tab-inactive">✅ Order Date Validation</button>
+    <button onclick="showTab('ggn-data')" id="tab-ggn-data" class="px-4 py-2 rounded-lg text-sm font-semibold transition tab-inactive">📊 GGN Stock Data Format</button>
+  </div>
+
+  <!-- TAB 1: Import Page -->
+  <div id="content-import" class="space-y-4">
+    <div class="mockup-frame">
+      <div class="mockup-header">📄 Import Page — Parts Reports Section</div>
+      <div class="p-6 space-y-4">
+        <p class="text-xs text-gray-500">Below the existing Parts upload cards, a new "GGN Stock" upload card is added.</p>
+
+        <!-- Existing uploads (dimmed) -->
+        <div class="space-y-3 opacity-50">
+          <div class="flex items-center justify-between rounded-lg border border-gray-200 p-4">
+            <div>
+              <div class="font-semibold text-sm text-gray-800">Parts Consumption</div>
+              <div class="text-xs text-gray-500">Parts consumption transactions across all branches.</div>
+            </div>
+            <button class="px-3 py-1.5 rounded-lg bg-blue-600 text-white text-xs font-medium">Upload</button>
+          </div>
+          <div class="flex items-center justify-between rounded-lg border border-gray-200 p-4">
+            <div>
+              <div class="font-semibold text-sm text-gray-800">Parts Order</div>
+              <div class="text-xs text-gray-500">Parts ordering, in-transit, and backorder lines across all branches.</div>
+            </div>
+            <button class="px-3 py-1.5 rounded-lg bg-blue-600 text-white text-xs font-medium">Upload</button>
+          </div>
+          <div class="flex items-center justify-between rounded-lg border border-gray-200 p-4">
+            <div>
+              <div class="font-semibold text-sm text-gray-800">Parts In Stock</div>
+              <div class="text-xs text-gray-500">On-hand inventory snapshot by part number across all branches.</div>
+            </div>
+            <button class="px-3 py-1.5 rounded-lg bg-blue-600 text-white text-xs font-medium">Upload</button>
+          </div>
+        </div>
+
+        <!-- New GGN Stock upload -->
+        <div class="border-2 border-blue-300 rounded-lg p-4 bg-blue-50/30">
+          <div class="flex items-center justify-between mb-3">
+            <div>
+              <div class="flex items-center gap-2">
+                <span class="font-semibold text-sm text-gray-900">GGN Stock</span>
+                <span class="new-badge">NEW</span>
+              </div>
+              <div class="text-xs text-gray-500 mt-0.5">Upload GGN Stock report. Column P (Free Stock) is used for stock availability checking.</div>
+            </div>
+            <div class="flex gap-2">
+              <label class="cursor-pointer px-3 py-1.5 rounded-lg bg-blue-600 text-white text-xs font-medium hover:bg-blue-700 transition">
+                Upload GGN Stock
+                <input type="file" class="hidden" accept=".xlsx,.xls,.xlsb,.csv" onchange="handleGGNUpload(this)">
+              </label>
+              <button class="px-3 py-1.5 rounded-lg border border-gray-300 bg-white text-xs font-medium text-gray-600 hover:bg-gray-50">View Latest</button>
+            </div>
+          </div>
+          <!-- Upload status -->
+          <div id="ggn-upload-status" class="hidden mt-3 rounded-lg border border-green-200 bg-green-50 p-3 text-xs">
+            <div class="flex items-center gap-2 text-green-700 font-semibold">
+              <span>✅</span>
+              <span>Latest Upload: <span id="ggn-filename">GGN_Stock_Aug24.xlsx</span></span>
+            </div>
+            <div class="text-green-600 mt-1">Updated: 24-Aug-2026 · 10:30 AM · 33,873 rows processed · 21,211 available · 12,662 not available</div>
+          </div>
+          <div id="ggn-upload-status-default" class="mt-3 rounded-lg border border-gray-200 bg-gray-50 p-3 text-xs text-gray-500">
+            <div class="flex items-center gap-2">
+              <span>📦</span>
+              <span>No GGN Stock file uploaded yet. Upload an Excel file to enable stock availability checking.</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Implementation notes -->
+    <div class="rounded-lg border border-blue-200 bg-blue-50 p-4 text-xs text-blue-800 space-y-1">
+      <div class="font-semibold mb-1">Implementation Notes:</div>
+      <div>• New Supabase table: <code class="bg-blue-100 px-1 rounded">ggn_stock_data</code> — stores uploaded GGN Stock rows (Material, Material Description, Free Stock, Plnt, SLoc, etc.)</div>
+      <div>• New upload config in <code class="bg-blue-100 px-1 rounded">ImportPage.tsx</code> — similar to existing Parts Order/Stock uploads</div>
+      <div>• On upload: parse Excel, extract Column A (Material/Part Number) + Column P (Free Stock), insert into table</div>
+      <div>• Replace previous data on new upload (latest active sheet always used)</div>
+      <div>• Show filename + upload timestamp after successful upload</div>
+      <div>• Only Admin / authorized roles can upload (SPM optional, Advisor cannot)</div>
+    </div>
+  </div>
+
+  <!-- TAB 2: Advisor View -->
+  <div id="content-advisor" class="space-y-4 hidden">
+    <div class="mockup-frame">
+      <div class="mockup-header">👤 Service Advisor — Parts View</div>
+      <div class="p-4">
+        <div class="mb-3 flex items-center justify-between">
+          <h3 class="font-bold text-gray-900">My Parts Requests</h3>
+          <button class="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white">+ New Parts Requirement</button>
+        </div>
+        <div class="overflow-x-auto">
+          <table>
+            <thead>
+              <tr>
+                <th>Entry Date</th>
+                <th>Reg. Number</th>
+                <th>Parts Required</th>
+                <th>Parts Number</th>
+                <th>Req. Qty</th>
+                <th>Order No.</th>
+                <th>Order Date</th>
+                <th>Order Status</th>
+                <th class="new-col-header">GGN Stock <span class="new-badge">NEW</span></th>
+                <th>Status</th>
+                <th>SPM Remarks</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>24-Aug-26</td>
+                <td class="font-semibold text-gray-900">RJ14AB1234</td>
+                <td>Front Bumper</td>
+                <td>283488500101A6</td>
+                <td>2</td>
+                <td>ORD-45821</td>
+                <td>24-Aug-26</td>
+                <td><span class="badge-ordered px-2 py-0.5 rounded-full text-xs font-semibold">Ordered</span></td>
+                <td class="new-col"><span class="badge-not-available px-2 py-0.5 rounded-full text-xs font-semibold">Not Available</span></td>
+                <td><span class="badge-pending-status px-2 py-0.5 rounded-full text-xs font-semibold">Pending</span></td>
+                <td class="text-gray-400">—</td>
+              </tr>
+              <tr>
+                <td>24-Aug-26</td>
+                <td class="font-semibold text-gray-900">RJ14CD5678</td>
+                <td>Headlamp LH</td>
+                <td>542488600118</td>
+                <td>1</td>
+                <td class="text-gray-400">—</td>
+                <td class="text-gray-400">—</td>
+                <td><span class="badge-pending-status px-2 py-0.5 rounded-full text-xs font-semibold">Pending</span></td>
+                <td class="new-col"><span class="badge-available px-2 py-0.5 rounded-full text-xs font-semibold">Available</span></td>
+                <td><span class="badge-pending-status px-2 py-0.5 rounded-full text-xs font-semibold">Pending</span></td>
+                <td class="text-gray-400">—</td>
+              </tr>
+              <tr>
+                <td>23-Aug-26</td>
+                <td class="font-semibold text-gray-900">RJ20EF9012</td>
+                <td>Wiper Blade</td>
+                <td>543888506376</td>
+                <td>2</td>
+                <td>ORD-45600</td>
+                <td>23-Aug-26</td>
+                <td><span class="badge-ordered px-2 py-0.5 rounded-full text-xs font-semibold">Ordered</span></td>
+                <td class="new-col"><span class="badge-available px-2 py-0.5 rounded-full text-xs font-semibold">Available</span></td>
+                <td><span class="badge-ordered px-2 py-0.5 rounded-full text-xs font-semibold">Ordered</span></td>
+                <td>Part on the way</td>
+              </tr>
+              <tr>
+                <td>22-Aug-26</td>
+                <td class="font-semibold text-gray-900">RJ14GH3456</td>
+                <td>Brake Pad Set</td>
+                <td>885527790015</td>
+                <td>1</td>
+                <td>ORD-45501</td>
+                <td>22-Aug-26</td>
+                <td><span class="badge-transit px-2 py-0.5 rounded-full text-xs font-semibold">In Transit</span></td>
+                <td class="new-col"><span class="badge-not-available px-2 py-0.5 rounded-full text-xs font-semibold">Not Available</span></td>
+                <td><span class="badge-transit px-2 py-0.5 rounded-full text-xs font-semibold">In Transit</span></td>
+                <td>ETA 2 days</td>
+              </tr>
+              <tr>
+                <td>20-Aug-26</td>
+                <td class="font-semibold text-gray-900">RJ14JK7890</td>
+                <td>Clutch Plate</td>
+                <td class="text-gray-400">—</td>
+                <td class="text-gray-400">—</td>
+                <td class="text-gray-400">—</td>
+                <td class="text-gray-400">—</td>
+                <td><span class="badge-pending-status px-2 py-0.5 rounded-full text-xs font-semibold">Pending</span></td>
+                <td class="new-col"><span class="badge-pending px-2 py-0.5 rounded-full text-xs font-semibold">No Data</span></td>
+                <td><span class="badge-pending-status px-2 py-0.5 rounded-full text-xs font-semibold">Pending</span></td>
+                <td class="text-gray-400">—</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- GGN Stock auto-check note -->
+        <div class="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
+          <span class="font-semibold">⚡ Auto-Check:</span> When the advisor enters all required part details (Parts Number + Registration + Parts Required), the system automatically checks the latest GGN Stock sheet and displays the result. No manual "Check Stock" button needed. Status refreshes when Part Number changes, vehicle details change, or a new GGN Stock sheet is uploaded.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- TAB 3: SPM View -->
+  <div id="content-spm" class="space-y-4 hidden">
+    <div class="mockup-frame">
+      <div class="mockup-header">🔧 Parts SPM Dashboard — Parts View</div>
+      <div class="p-4">
+        <div class="mb-3 flex items-center justify-between">
+          <div>
+            <h3 class="font-bold text-gray-900">Parts SPM Dashboard</h3>
+            <p class="text-xs text-gray-500">Live · last refreshed 11:46 AM</p>
+          </div>
+          <div class="flex gap-2">
+            <button class="px-3.5 py-2 rounded-lg border border-gray-300 bg-white text-sm font-medium text-gray-700">🔄 Refresh</button>
+            <button class="px-3.5 py-2 rounded-lg border border-gray-300 bg-white text-sm font-medium text-gray-700">📊 Export</button>
+          </div>
+        </div>
+
+        <!-- Filter bar -->
+        <div class="flex flex-wrap items-center gap-3 rounded-xl border border-gray-200 bg-white p-3 mb-3 shadow-sm">
+          <input class="w-44 rounded-lg border border-gray-300 px-3 py-1.5 text-sm" placeholder="Search Reg Number..." />
+          <select class="rounded-lg border border-gray-300 px-3 py-1.5 text-sm"><option>All Advisors</option></select>
+          <select class="rounded-lg border border-gray-300 px-3 py-1.5 text-sm"><option>All Status</option></select>
+          <select class="rounded-lg border border-gray-300 px-3 py-1.5 text-sm"><option>EV/PV — All</option></select>
+          <span class="ml-auto text-xs text-gray-500">5 of 5 requests</span>
+        </div>
+
+        <div class="overflow-x-auto">
+          <table>
+            <thead>
+              <tr>
+                <th>Entry Date</th>
+                <th>Advisor</th>
+                <th>Reg. Number</th>
+                <th>Parts Required</th>
+                <th>Parts Number</th>
+                <th>Order No.</th>
+                <th>Order Date</th>
+                <th>Order Status</th>
+                <th class="new-col-header">GGN Stock <span class="new-badge">NEW</span></th>
+                <th>Status</th>
+                <th>SPM Remarks</th>
+                <th>Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>24-Aug-26</td>
+                <td>Pankaj Singh</td>
+                <td class="font-semibold text-gray-900">RJ14AB1234</td>
+                <td>Front Bumper</td>
+                <td>283488500101A6</td>
+                <td>ORD-45821</td>
+                <td>24-Aug-26</td>
+                <td><span class="badge-ordered px-2 py-0.5 rounded-full text-xs font-semibold">Ordered</span></td>
+                <td class="new-col"><span class="badge-not-available px-2 py-0.5 rounded-full text-xs font-semibold">Not Available</span></td>
+                <td><span class="badge-ordered px-2 py-0.5 rounded-full text-xs font-semibold">Ordered</span></td>
+                <td>Order placed</td>
+                <td><button class="rounded-md border border-gray-300 bg-white px-2.5 py-1 text-xs font-medium text-gray-700">Edit</button></td>
+              </tr>
+              <tr>
+                <td>24-Aug-26</td>
+                <td>Ravi Kumar</td>
+                <td class="font-semibold text-gray-900">RJ14CD5678</td>
+                <td>Headlamp LH</td>
+                <td>542488600118</td>
+                <td class="text-gray-400">—</td>
+                <td class="text-gray-400">—</td>
+                <td><span class="badge-pending-status px-2 py-0.5 rounded-full text-xs font-semibold">Pending</span></td>
+                <td class="new-col"><span class="badge-available px-2 py-0.5 rounded-full text-xs font-semibold">Available</span></td>
+                <td><span class="badge-pending-status px-2 py-0.5 rounded-full text-xs font-semibold">Pending</span></td>
+                <td class="text-gray-400">—</td>
+                <td><button class="rounded-md border border-gray-300 bg-white px-2.5 py-1 text-xs font-medium text-gray-700">Edit</button></td>
+              </tr>
+              <tr>
+                <td>23-Aug-26</td>
+                <td>Pankaj Singh</td>
+                <td class="font-semibold text-gray-900">RJ20EF9012</td>
+                <td>Wiper Blade</td>
+                <td>543888506376</td>
+                <td>ORD-45600</td>
+                <td>23-Aug-26</td>
+                <td><span class="badge-ordered px-2 py-0.5 rounded-full text-xs font-semibold">Ordered</span></td>
+                <td class="new-col"><span class="badge-available px-2 py-0.5 rounded-full text-xs font-semibold">Available</span></td>
+                <td><span class="badge-received px-2 py-0.5 rounded-full text-xs font-semibold">Received</span></td>
+                <td>Stock received</td>
+                <td><button class="rounded-md border border-gray-300 bg-white px-2.5 py-1 text-xs font-medium text-gray-700">Edit</button></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <div class="rounded-lg border border-purple-200 bg-purple-50 p-4 text-xs text-purple-800 space-y-1">
+      <div class="font-semibold mb-1">SPM View Notes:</div>
+      <div>• GGN Stock column visible alongside existing columns — placed after Order Status, before Status</div>
+      <div>• SPM can see the same stock status as advisors — helps in decision making for ordering</div>
+      <div>• SPM (optional) can upload GGN Stock sheet — depends on permission configuration</div>
+      <div>• All existing functionality (filters, sorting, pagination, editing) remains unchanged</div>
+    </div>
+  </div>
+
+  <!-- TAB 4: Order Date Validation -->
+  <div id="content-validation" class="space-y-4 hidden">
+    <div class="mockup-frame">
+      <div class="mockup-header">✅ Order Date Validation Logic</div>
+      <div class="p-6 space-y-5">
+        <p class="text-sm text-gray-600">Prevents an old order from being matched with a current vehicle/part requirement. When the relevant order/request reference date is <strong>X</strong>, the Order Date must not be earlier than X.</p>
+
+        <!-- Flow Diagram -->
+        <div class="flex flex-col items-center gap-2 py-4">
+          <div class="flow-box" style="width: 200px;">Part / Vehicle Requirement</div>
+          <div class="flow-arrow">↓</div>
+          <div class="flow-box" style="width: 200px;">Reference Date = X<br><span class="text-xs font-normal text-gray-500">(Entry Date of parts request)</span></div>
+          <div class="flow-arrow">↓</div>
+          <div class="flow-box" style="width: 240px;">Find Matching Part in Order Sheet<br><span class="text-xs font-normal text-gray-500">(by Part Number)</span></div>
+          <div class="flow-arrow">↓</div>
+          <div class="flow-box" style="width: 200px;">Is Order Date ≥ X?</div>
+          <div class="flex gap-8 items-start mt-1">
+            <div class="flex flex-col items-center gap-2">
+              <div class="text-2xl flow-no">← NO</div>
+              <div class="flow-box" style="border-color: #fca5a5; background: #fef2f2; color: #991b1b;">Ignore Old Record<br><span class="text-xs font-normal">Order Date &lt; X</span></div>
+            </div>
+            <div class="flex flex-col items-center gap-2">
+              <div class="text-2xl flow-yes">YES →</div>
+              <div class="flow-box" style="border-color: #86efac; background: #f0fdf4; color: #065f46;">Update Order No.<br>+ Order Date<br>+ Order Status</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Validation Table -->
+        <div class="overflow-x-auto">
+          <table class="border border-gray-200 rounded-lg">
+            <thead>
+              <tr>
+                <th>Required Date (X)</th>
+                <th>Order Date</th>
+                <th>Result</th>
+                <th>Explanation</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>24-Aug-2026</td>
+                <td>23-Aug-2026</td>
+                <td><span class="badge-not-available px-2 py-1 rounded-full text-xs font-semibold">❌ Ignore</span></td>
+                <td class="text-xs text-gray-600">Order date is before requirement date — old order for another vehicle</td>
+              </tr>
+              <tr>
+                <td>24-Aug-2026</td>
+                <td>24-Aug-2026</td>
+                <td><span class="badge-available px-2 py-1 rounded-full text-xs font-semibold">✅ Valid</span></td>
+                <td class="text-xs text-gray-600">Same date — order placed on the same day as requirement</td>
+              </tr>
+              <tr>
+                <td>24-Aug-2026</td>
+                <td>25-Aug-2026</td>
+                <td><span class="badge-available px-2 py-1 rounded-full text-xs font-semibold">✅ Valid</span></td>
+                <td class="text-xs text-gray-600">Future date — order placed after requirement was raised</td>
+              </tr>
+              <tr>
+                <td>24-Aug-2026</td>
+                <td class="text-gray-400">—</td>
+                <td><span class="badge-pending px-2 py-1 rounded-full text-xs font-semibold">No Match</span></td>
+                <td class="text-xs text-gray-600">No order found for this part number in the Order Sheet</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Matching Priority -->
+        <div class="rounded-lg border border-gray-200 bg-gray-50 p-4">
+          <div class="section-label">Matching Priority</div>
+          <ol class="text-sm text-gray-700 space-y-1 list-decimal list-inside">
+            <li>Match the relevant <strong>Part Number</strong> from the Order Sheet</li>
+            <li>Apply the applicable vehicle/request reference (Entry Date = X)</li>
+            <li>Check the <strong>Order Date</strong> against X</li>
+            <li>Ignore all records where <code class="bg-gray-200 px-1 rounded text-xs">Order Date &lt; X</code></li>
+            <li>From remaining valid records, use the <strong>latest</strong> valid order to update Order No., Order Date, and Order Status</li>
+          </ol>
+        </div>
+
+        <div class="rounded-lg border border-amber-200 bg-amber-50 p-4 text-xs text-amber-800 space-y-1">
+          <div class="font-semibold mb-1">Current State & Enhancement:</div>
+          <div>• The <code class="bg-amber-100 px-1 rounded">parts-request-order-match</code> edge function ALREADY has partial validation (rejects Order Date before Entry Date)</div>
+          <div>• Enhancement: strengthen the matching logic to explicitly filter out all Order Sheet rows with Order Date &lt; Entry Date <em>before</em> selecting the best match, rather than just checking the final candidate</div>
+          <div>• This prevents edge cases where an old order with a newer <code class="bg-amber-100 px-1 rounded">updated_at</code> timestamp could slip through</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- TAB 5: GGN Stock Data Format -->
+  <div id="content-ggn-data" class="space-y-4 hidden">
+    <div class="mockup-frame">
+      <div class="mockup-header">📊 GGN Stock Sheet — Data Format</div>
+      <div class="p-6 space-y-4">
+        <p class="text-sm text-gray-600">The uploaded GGN Stock Excel file (33,873 rows) has 16 columns (A–P). Column A is the Part Number used for matching, and Column P (Free Stock) determines availability.</p>
+
+        <!-- Column mapping table -->
+        <div class="overflow-x-auto">
+          <table class="border border-gray-200 rounded-lg">
+            <thead>
+              <tr>
+                <th>Column</th>
+                <th>Field Name</th>
+                <th>Used?</th>
+                <th>Purpose</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr style="background: #dbeafe;">
+                <td class="font-bold text-blue-700">A</td>
+                <td class="font-semibold">Material</td>
+                <td><span class="badge-available px-2 py-0.5 rounded-full text-xs font-semibold">Primary Key</span></td>
+                <td class="text-xs">Part Number — used to match against advisor's parts_number</td>
+              </tr>
+              <tr><td>B</td><td>Plnt</td><td class="text-gray-400">Optional</td><td class="text-xs">Plant code (4770)</td></tr>
+              <tr><td>C</td><td>Material Description</td><td class="text-gray-400">Display</td><td class="text-xs">Part description for reference</td></tr>
+              <tr><td>D</td><td>SLoc</td><td class="text-gray-400">Optional</td><td class="text-xs">Storage Location</td></tr>
+              <tr><td>E</td><td>ABC</td><td class="text-gray-400">No</td><td class="text-xs">ABC classification</td></tr>
+              <tr><td>F</td><td>Bin</td><td class="text-gray-400">No</td><td class="text-xs">Bin location</td></tr>
+              <tr><td>G</td><td>Unrestricted</td><td class="text-gray-400">No</td><td class="text-xs">Unrestricted stock qty</td></tr>
+              <tr><td>H</td><td>NDP</td><td class="text-gray-400">No</td><td class="text-xs">NDP value</td></tr>
+              <tr><td>I</td><td>Total Ndp</td><td class="text-gray-400">No</td><td class="text-xs">Total NDP value</td></tr>
+              <tr><td>J</td><td>Cost</td><td class="text-gray-400">No</td><td class="text-xs">Unit cost</td></tr>
+              <tr><td>K</td><td>Total Cost</td><td class="text-gray-400">No</td><td class="text-xs">Total cost</td></tr>
+              <tr><td>L</td><td>Lot Size</td><td class="text-gray-400">No</td><td class="text-xs">Lot size</td></tr>
+              <tr><td>M</td><td>Safety Stock</td><td class="text-gray-400">No</td><td class="text-xs">Safety stock level</td></tr>
+              <tr><td>N</td><td>Float Qty</td><td class="text-gray-400">No</td><td class="text-xs">Float quantity</td></tr>
+              <tr><td>O</td><td>Actual Qty</td><td class="text-gray-400">No</td><td class="text-xs">Actual quantity</td></tr>
+              <tr style="background: #d1fae5;">
+                <td class="font-bold text-green-700">P</td>
+                <td class="font-semibold">Free Stock</td>
+                <td><span class="badge-available px-2 py-0.5 rounded-full text-xs font-semibold">Decision</span></td>
+                <td class="text-xs"><strong>Free Stock &gt; 0 → Available</strong> · Free Stock ≤ 0 → Not Available</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Sample data -->
+        <div class="rounded-lg border border-gray-200 p-4">
+          <div class="section-label">Sample Data (from uploaded file)</div>
+          <div class="overflow-x-auto">
+            <table>
+              <thead>
+                <tr>
+                  <th>Material (A)</th>
+                  <th>Description (C)</th>
+                  <th>Free Stock (P)</th>
+                  <th>Result</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td class="font-mono">283488500101A6</td>
+                  <td>EBONY_4-ASSY FRONT BUMPER COMPLETE ST</td>
+                  <td>0</td>
+                  <td><span class="badge-not-available px-2 py-0.5 rounded-full text-xs font-semibold">Not Available</span></td>
+                </tr>
+                <tr>
+                  <td class="font-mono">542488600118</td>
+                  <td>REAR BUMPER MOULDING ASSY,LOWER</td>
+                  <td>1</td>
+                  <td><span class="badge-available px-2 py-0.5 rounded-full text-xs font-semibold">Available</span></td>
+                </tr>
+                <tr>
+                  <td class="font-mono">543888506376</td>
+                  <td>TOP GRILL,FRONT BUMPER</td>
+                  <td>131</td>
+                  <td><span class="badge-available px-2 py-0.5 rounded-full text-xs font-semibold">Available</span></td>
+                </tr>
+                <tr>
+                  <td class="font-mono">885527790015</td>
+                  <td>ASSY REAR BUMPER LUX</td>
+                  <td>0</td>
+                  <td><span class="badge-not-available px-2 py-0.5 rounded-full text-xs font-semibold">Not Available</span></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Matching logic -->
+        <div class="rounded-lg border border-blue-200 bg-blue-50 p-4 text-xs text-blue-800 space-y-2">
+          <div class="font-semibold">Matching & Normalization Logic:</div>
+          <div>1. <strong>Primary match:</strong> Part Number (Column A) — normalized (trim, uppercase, remove spaces)</div>
+          <div>2. <strong>Normalization:</strong> Remove leading/trailing spaces · Ignore case differences · Handle numeric/text formatting</div>
+          <div>3. <strong>Duplicate handling:</strong> If duplicate Part Numbers exist, sum the Free Stock values or use the latest row</div>
+          <div>4. <strong>Stock determination:</strong> Column P (Free Stock) > 0 → "Available" · ≤ 0 → "Not Available" · No match → "No Data"</div>
+          <div>5. <strong>Auto-refresh:</strong> Status updates when Part Number changes, vehicle/job details change, or new sheet is uploaded</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Acceptance Criteria Checklist -->
+  <div class="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+    <h3 class="font-bold text-gray-900 mb-3">Acceptance Criteria Checklist</h3>
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm">
+      <div class="flex items-center gap-2"><input type="checkbox" class="w-4 h-4 accent-blue-600"> Old orders cannot be matched when Order Date &lt; X</div>
+      <div class="flex items-center gap-2"><input type="checkbox" class="w-4 h-4 accent-blue-600"> Same-date and future-date orders are accepted</div>
+      <div class="flex items-center gap-2"><input type="checkbox" class="w-4 h-4 accent-blue-600"> Order No., Date, Status update only from valid records</div>
+      <div class="flex items-center gap-2"><input type="checkbox" class="w-4 h-4 accent-blue-600"> GGN Stock upload option available under Parts Reports</div>
+      <div class="flex items-center gap-2"><input type="checkbox" class="w-4 h-4 accent-blue-600"> Excel sheet processed successfully</div>
+      <div class="flex items-center gap-2"><input type="checkbox" class="w-4 h-4 accent-blue-600"> Column P used for stock result</div>
+      <div class="flex items-center gap-2"><input type="checkbox" class="w-4 h-4 accent-blue-600"> GGN Stock visible on Admin, SPM, Advisor pages</div>
+      <div class="flex items-center gap-2"><input type="checkbox" class="w-4 h-4 accent-blue-600"> Auto stock check triggers when details entered</div>
+      <div class="flex items-center gap-2"><input type="checkbox" class="w-4 h-4 accent-blue-600"> Displays exactly "Available" or "Not Available"</div>
+      <div class="flex items-center gap-2"><input type="checkbox" class="w-4 h-4 accent-blue-600"> Existing Parts module functionality not affected</div>
+    </div>
+  </div>
+
+  <!-- Role Visibility Matrix -->
+  <div class="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+    <h3 class="font-bold text-gray-900 mb-3">Role Visibility Matrix</h3>
+    <div class="overflow-x-auto">
+      <table class="border border-gray-200 rounded-lg">
+        <thead>
+          <tr>
+            <th>Feature</th>
+            <th>Admin</th>
+            <th>SPM</th>
+            <th>Advisor</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td>View GGN Stock status</td><td>✅ Yes</td><td>✅ Yes</td><td>✅ Yes</td></tr>
+          <tr><td>Upload GGN Stock sheet</td><td>✅ Yes (as per permission)</td><td>🔶 Optional</td><td>❌ No</td></tr>
+          <tr><td>View Order No.</td><td>✅ Yes</td><td>✅ Yes</td><td>✅ Yes</td></tr>
+          <tr><td>View Order Date</td><td>✅ Yes</td><td>✅ Yes</td><td>✅ Yes</td></tr>
+          <tr><td>View Order Status</td><td>✅ Yes</td><td>✅ Yes</td><td>✅ Yes</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="text-center text-xs text-gray-400 pb-4">
+    Mockup Preview — Not deployed to production. Awaiting approval before implementation.
+  </div>
+</div>
+
+<script>
+function showTab(tab) {
+  const tabs = ['import', 'advisor', 'spm', 'validation', 'ggn-data'];
+  tabs.forEach(t => {
+    const content = document.getElementById('content-' + t);
+    const btn = document.getElementById('tab-' + t);
+    if (t === tab) {
+      content.classList.remove('hidden');
+      btn.classList.remove('tab-inactive');
+      btn.classList.add('tab-active');
+    } else {
+      content.classList.add('hidden');
+      btn.classList.remove('tab-active');
+      btn.classList.add('tab-inactive');
+    }
+  });
+}
+
+function handleGGNUpload(input) {
+  if (input.files && input.files.length > 0) {
+    const filename = input.files[0].name;
+    document.getElementById('ggn-filename').textContent = filename;
+    document.getElementById('ggn-upload-status').classList.remove('hidden');
+    document.getElementById('ggn-upload-status-default').classList.add('hidden');
+  }
+}
+</script>
+</body>
+</html><script id="__base44_dark_class_post__">document.documentElement.classList.remove('dark');</script></body></html>
