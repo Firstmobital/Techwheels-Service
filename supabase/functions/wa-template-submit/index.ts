@@ -249,6 +249,21 @@ serve(async (req) => {
         const footer = components.find(c => c.type === 'FOOTER')
         const btns   = components.find(c => c.type === 'BUTTONS')
 
+        const bodyText = String(body?.text ?? '')
+
+        // Derive variable placeholders ({{1}}, {{2}}, ...) from the body text so the
+        // variable-mapping UI has something to render. Prefer Meta's own example
+        // values (body.example.body_text[0]) when present, otherwise fall back to
+        // a generic placeholder per variable number.
+        const varNumbers = Array.from(
+          new Set((bodyText.match(/\{\{\s*(\d+)\s*\}\}/g) ?? []).map(m => m.replace(/\D/g, '')))
+        ).sort((a, b) => Number(a) - Number(b))
+
+        const metaExamples = (body?.example as { body_text?: string[][] } | undefined)?.body_text?.[0] ?? []
+        const variableExamples = varNumbers.length > 0
+          ? varNumbers.map((n, i) => ({ name: n, example_value: metaExamples[i] ?? `Example${n}` }))
+          : null
+
         const tplData = {
           name: String(mt.name),
           display_name: String(mt.name).replace(/_/g, ' '),
@@ -258,9 +273,10 @@ serve(async (req) => {
           meta_template_id: String(mt.id ?? ''),
           header_type: header ? String(header.format ?? 'TEXT') : null,
           header_text: header?.format === 'TEXT' ? String(header.text ?? '') : null,
-          body_text: String(body?.text ?? ''),
+          body_text: bodyText,
           footer_text: footer ? String(footer.text ?? '') : null,
           buttons: btns?.buttons ?? null,
+          variable_examples: variableExamples,
           rejection_reason: mt.rejection_reason ? String(mt.rejection_reason) : null,
         }
 
