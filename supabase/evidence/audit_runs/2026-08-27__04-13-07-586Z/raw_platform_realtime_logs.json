@@ -1,0 +1,143 @@
+{
+  "status": "ok",
+  "endpoint": "/v1/projects/jmdndcphkmaljhwgzqxq/analytics/endpoints/logs?sql=select+timestamp%2C+event_message+from+logs+where+source+%3D+%27realtime_logs%27+order+by+timestamp+desc+limit+100&iso_timestamp_start=2026-08-26T04%3A13%3A08.790Z&iso_timestamp_end=2026-08-27T04%3A13%3A08.790Z",
+  "count": 34,
+  "records": [
+    {
+      "event_message": "Stop tenant jmdndcphkmaljhwgzqxq because of no connected users",
+      "timestamp": "2026-08-27T04:07:01.374000"
+    },
+    {
+      "event_message": "#PID<0.245746727.5> Starting stream replication for slot supabase_realtime_messages_replication_slot_2_129_6_38e1bef using publication supabase_realtime_messages_publication and protocol version 2",
+      "timestamp": "2026-08-27T03:56:01.516000"
+    },
+    {
+      "event_message": "Create replication slot supabase_realtime_messages_replication_slot_2_129_6_38e1bef using plugin pgoutput",
+      "timestamp": "2026-08-27T03:56:01.499000"
+    },
+    {
+      "event_message": "Check publication supabase_realtime_messages_publication for table realtime.messages exists",
+      "timestamp": "2026-08-27T03:56:01.495000"
+    },
+    {
+      "event_message": "Publication supabase_realtime_messages_publication exists, validating contents",
+      "timestamp": "2026-08-27T03:56:01.495000"
+    },
+    {
+      "event_message": "Checking if replication slot supabase_realtime_messages_replication_slot_2_129_6_38e1bef exists",
+      "timestamp": "2026-08-27T03:56:01.492000"
+    },
+    {
+      "event_message": "Initializing connection with the status: %Realtime.Tenants.ReplicationConnection{\n  tenant_id: \"jmdndcphkmaljhwgzqxq\",\n  opts: [],\n  step: :disconnected,\n  publication_name: \"supabase_realtime_messages_publication\",\n  replication_slot_name: \"supabase_realtime_messages_replication_slot_2_129_6_38e1bef\",\n  output_plugin: \"pgoutput\",\n  proto_version: 2,\n  relations: %{},\n  buffer: [],\n  monitored_pid: #PID<0.216237604.5>,\n  latency_committed_at: nil,\n  query_timeout: 240000\n}",
+      "timestamp": "2026-08-27T03:56:01.435000"
+    },
+    {
+      "event_message": "Tenant jmdndcphkmaljhwgzqxq is initializing: :\"realtime@2406:da1a:f3c:4500:714f:d929:3fb6:cca1\"",
+      "timestamp": "2026-08-27T03:56:01.272000"
+    },
+    {
+      "event_message": "Creating partitions for realtime.messages",
+      "timestamp": "2026-08-27T03:56:01.272000"
+    },
+    {
+      "event_message": "Realtime.Tenants.Connect.RegisterProcess executed in 0 ms",
+      "timestamp": "2026-08-27T03:56:01.272000"
+    },
+    {
+      "event_message": "Realtime.Tenants.Connect.CheckConnection executed in 91 ms",
+      "timestamp": "2026-08-27T03:56:01.271000"
+    },
+    {
+      "event_message": "Realtime.Tenants.Connect.ReconcileMigrations executed in 0 ms",
+      "timestamp": "2026-08-27T03:56:01.271000"
+    },
+    {
+      "event_message": "Realtime.Tenants.Connect.GetTenant executed in 0 ms",
+      "timestamp": "2026-08-27T03:56:01.180000"
+    },
+    {
+      "event_message": "Tenant has no connected users, database connection will be terminated",
+      "timestamp": "2026-08-26T19:03:12.480000"
+    },
+    {
+      "event_message": "Tenant jmdndcphkmaljhwgzqxq has been terminated: :shutdown",
+      "timestamp": "2026-08-26T19:03:12.480000"
+    },
+    {
+      "event_message": "Disconnecting broadcast changes handler in the step : :streaming",
+      "timestamp": "2026-08-26T19:03:12.480000"
+    },
+    {
+      "event_message": "Stop tenant jmdndcphkmaljhwgzqxq because of no connected users",
+      "timestamp": "2026-08-26T19:01:44.281000"
+    },
+    {
+      "event_message": "Janitor finished",
+      "timestamp": "2026-08-26T18:44:51.943000"
+    },
+    {
+      "event_message": "Creating partitions for realtime.messages",
+      "timestamp": "2026-08-26T18:44:51.907000"
+    },
+    {
+      "event_message": "Janitor starting realtime.messages cleanup",
+      "timestamp": "2026-08-26T18:44:51.846000"
+    },
+    {
+      "event_message": "PoolingReplicationError: %DBConnection.ConnectionError{\n  message: \"ssl recv (idle): closed (the connection was closed by the pool, possibly due to a timeout or because the pool has been terminated)\",\n  severity: :error,\n  reason: :closed\n}",
+      "timestamp": "2026-08-26T18:30:18.813000"
+    },
+    {
+      "event_message": "Janitor finished",
+      "timestamp": "2026-08-26T15:40:15.583000"
+    },
+    {
+      "event_message": "Creating partitions for realtime.messages",
+      "timestamp": "2026-08-26T15:40:15.549000"
+    },
+    {
+      "event_message": "Janitor starting realtime.messages cleanup",
+      "timestamp": "2026-08-26T15:40:15.484000"
+    },
+    {
+      "event_message": "Janitor finished",
+      "timestamp": "2026-08-26T12:24:51.859000"
+    },
+    {
+      "event_message": "Creating partitions for realtime.messages",
+      "timestamp": "2026-08-26T12:24:51.819000"
+    },
+    {
+      "event_message": "Janitor starting realtime.messages cleanup",
+      "timestamp": "2026-08-26T12:24:51.751000"
+    },
+    {
+      "event_message": "Stop tenant jmdndcphkmaljhwgzqxq because of no connected users",
+      "timestamp": "2026-08-26T09:42:11.902000"
+    },
+    {
+      "event_message": "Janitor finished",
+      "timestamp": "2026-08-26T09:14:51.987000"
+    },
+    {
+      "event_message": "Creating partitions for realtime.messages",
+      "timestamp": "2026-08-26T09:14:51.952000"
+    },
+    {
+      "event_message": "Janitor starting realtime.messages cleanup",
+      "timestamp": "2026-08-26T09:14:51.886000"
+    },
+    {
+      "event_message": "Janitor finished",
+      "timestamp": "2026-08-26T05:34:52.319000"
+    },
+    {
+      "event_message": "Creating partitions for realtime.messages",
+      "timestamp": "2026-08-26T05:34:52.241000"
+    },
+    {
+      "event_message": "Janitor starting realtime.messages cleanup",
+      "timestamp": "2026-08-26T05:34:52.082000"
+    }
+  ]
+}

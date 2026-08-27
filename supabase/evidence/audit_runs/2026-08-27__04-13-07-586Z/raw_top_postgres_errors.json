@@ -1,0 +1,66 @@
+{
+  "status": "ok",
+  "records": [
+    {
+      "event_message": "canceling statement due to statement timeout",
+      "occurrences": 71
+    },
+    {
+      "event_message": "there is no unique or exclusion constraint matching the ON CONFLICT specification",
+      "occurrences": 22
+    },
+    {
+      "event_message": "duplicate key value violates unique constraint \"uq_service_reception_entries_jc_number_norm\"",
+      "occurrences": 4
+    },
+    {
+      "event_message": "permission denied for table technician_assignments",
+      "occurrences": 3
+    },
+    {
+      "event_message": "invalid input syntax for type uuid: \"6383\"",
+      "occurrences": 1
+    },
+    {
+      "event_message": "invalid input syntax for type uuid: \"4027\"",
+      "occurrences": 1
+    },
+    {
+      "event_message": "invalid input syntax for type uuid: \"4026\"",
+      "occurrences": 1
+    },
+    {
+      "event_message": "invalid input syntax for type uuid: \"4030\"",
+      "occurrences": 1
+    },
+    {
+      "event_message": "invalid input syntax for type uuid: \"4029\"",
+      "occurrences": 1
+    },
+    {
+      "event_message": "invalid input syntax for type uuid: \"4025\"",
+      "occurrences": 1
+    },
+    {
+      "event_message": "invalid input syntax for type uuid: \"4028\"",
+      "occurrences": 1
+    },
+    {
+      "event_message": "invalid input syntax for type uuid: \"2712\"",
+      "occurrences": 1
+    },
+    {
+      "event_message": "invalid input syntax for type uuid: \"5082\"",
+      "occurrences": 1
+    },
+    {
+      "event_message": "invalid input syntax for type uuid: \"6390\"",
+      "occurrences": 1
+    },
+    {
+      "event_message": "invalid input syntax for type uuid: \"7336\"",
+      "occurrences": 1
+    }
+  ],
+  "sql": "select\n      event_message,\n      count() as occurrences\n    from logs\n    where source = 'postgres_logs'\n      and match(severity_text, '(?i)ERROR|FATAL|PANIC|WARNING')\n    group by event_message\n    order by occurrences desc\n    limit 15"
+}

@@ -1,0 +1,274 @@
+{
+  "performance_kpis": [
+    {
+      "slow_queries_total_time_gt_1000": 796,
+      "cache_hit_rate_pct": "99.99",
+      "avg_rows_per_call": "2.07"
+    }
+  ],
+  "connection_snapshot": [
+    {
+      "max_connections": 60,
+      "total_connections": 30,
+      "active_connections": 4,
+      "idle_connections": 24,
+      "waiting_connections": 27
+    }
+  ],
+  "table_io_hotspots": [
+    {
+      "table_name": "service_parts_stock_snapshot_data",
+      "heap_blks_read": 16670,
+      "heap_blks_hit": 137920603,
+      "idx_blks_read": 467458,
+      "idx_blks_hit": 20910082,
+      "toast_blks_read": 0,
+      "toast_blks_hit": 0,
+      "heap_cache_hit_rate_pct": "99.99",
+      "total_read_blocks": 484128
+    },
+    {
+      "table_name": "service_parts_consumption_data",
+      "heap_blks_read": 17151,
+      "heap_blks_hit": 51924111,
+      "idx_blks_read": 282110,
+      "idx_blks_hit": 17206745,
+      "toast_blks_read": 0,
+      "toast_blks_hit": 0,
+      "heap_cache_hit_rate_pct": "99.97",
+      "total_read_blocks": 299261
+    },
+    {
+      "table_name": "service_invoice_order_data",
+      "heap_blks_read": 226691,
+      "heap_blks_hit": 5992580,
+      "idx_blks_read": 54269,
+      "idx_blks_hit": 7436893,
+      "toast_blks_read": 0,
+      "toast_blks_hit": 0,
+      "heap_cache_hit_rate_pct": "96.36",
+      "total_read_blocks": 280960
+    },
+    {
+      "table_name": "pv_service_history_test",
+      "heap_blks_read": 126695,
+      "heap_blks_hit": 96869633,
+      "idx_blks_read": 66910,
+      "idx_blks_hit": 2510403,
+      "toast_blks_read": 0,
+      "toast_blks_hit": 0,
+      "heap_cache_hit_rate_pct": "99.87",
+      "total_read_blocks": 193605
+    },
+    {
+      "table_name": "all_service_data",
+      "heap_blks_read": 10591,
+      "heap_blks_hit": 1068518992,
+      "idx_blks_read": 113182,
+      "idx_blks_hit": 52228690,
+      "toast_blks_read": 96,
+      "toast_blks_hit": 52,
+      "heap_cache_hit_rate_pct": "100.00",
+      "total_read_blocks": 123869
+    },
+    {
+      "table_name": "ev_service_history_test",
+      "heap_blks_read": 46711,
+      "heap_blks_hit": 38288037,
+      "idx_blks_read": 17140,
+      "idx_blks_hit": 1025291,
+      "toast_blks_read": 0,
+      "toast_blks_hit": 0,
+      "heap_cache_hit_rate_pct": "99.88",
+      "total_read_blocks": 63851
+    },
+    {
+      "table_name": "all_service_data_dynamic",
+      "heap_blks_read": 17685,
+      "heap_blks_hit": 446851471,
+      "idx_blks_read": 34170,
+      "idx_blks_hit": 25199743,
+      "toast_blks_read": 0,
+      "toast_blks_hit": 0,
+      "heap_cache_hit_rate_pct": "100.00",
+      "total_read_blocks": 51855
+    },
+    {
+      "table_name": "auto_service_reminders",
+      "heap_blks_read": 28841,
+      "heap_blks_hit": 1125557,
+      "idx_blks_read": 18492,
+      "idx_blks_hit": 2151323,
+      "toast_blks_read": 0,
+      "toast_blks_hit": 0,
+      "heap_cache_hit_rate_pct": "97.50",
+      "total_read_blocks": 47333
+    },
+    {
+      "table_name": "service_parts_order_data",
+      "heap_blks_read": 810,
+      "heap_blks_hit": 704951,
+      "idx_blks_read": 44302,
+      "idx_blks_hit": 2075082,
+      "toast_blks_read": 0,
+      "toast_blks_hit": 0,
+      "heap_cache_hit_rate_pct": "99.89",
+      "total_read_blocks": 45112
+    },
+    {
+      "table_name": "warranty_wc_data",
+      "heap_blks_read": 42075,
+      "heap_blks_hit": 1895180,
+      "idx_blks_read": 1792,
+      "idx_blks_hit": 311682,
+      "toast_blks_read": 0,
+      "toast_blks_hit": 0,
+      "heap_cache_hit_rate_pct": "97.83",
+      "total_read_blocks": 43867
+    },
+    {
+      "table_name": "warranty_updation_claim_data",
+      "heap_blks_read": 38678,
+      "heap_blks_hit": 1504778,
+      "idx_blks_read": 1612,
+      "idx_blks_hit": 409323,
+      "toast_blks_read": 0,
+      "toast_blks_hit": 0,
+      "heap_cache_hit_rate_pct": "97.49",
+      "total_read_blocks": 40290
+    },
+    {
+      "table_name": "warranty_fsb_data",
+      "heap_blks_read": 32756,
+      "heap_blks_hit": 2181949,
+      "idx_blks_read": 2405,
+      "idx_blks_hit": 645456,
+      "toast_blks_read": 0,
+      "toast_blks_hit": 0,
+      "heap_cache_hit_rate_pct": "98.52",
+      "total_read_blocks": 35161
+    },
+    {
+      "table_name": "job_run_details",
+      "heap_blks_read": 32420,
+      "heap_blks_hit": 1094518,
+      "idx_blks_read": 364,
+      "idx_blks_hit": 811427,
+      "toast_blks_read": 0,
+      "toast_blks_hit": 0,
+      "heap_cache_hit_rate_pct": "97.12",
+      "total_read_blocks": 32784
+    },
+    {
+      "table_name": "warranty_claim_settlement_report_data",
+      "heap_blks_read": 26956,
+      "heap_blks_hit": 2791991,
+      "idx_blks_read": 2165,
+      "idx_blks_hit": 429751,
+      "toast_blks_read": 0,
+      "toast_blks_hit": 0,
+      "heap_cache_hit_rate_pct": "99.04",
+      "total_read_blocks": 29121
+    },
+    {
+      "table_name": "job_card_closed_data",
+      "heap_blks_read": 6853,
+      "heap_blks_hit": 280848970,
+      "idx_blks_read": 17832,
+      "idx_blks_hit": 39088679,
+      "toast_blks_read": 0,
+      "toast_blks_hit": 0,
+      "heap_cache_hit_rate_pct": "100.00",
+      "total_read_blocks": 24685
+    },
+    {
+      "table_name": "parts_not_invoiced_data",
+      "heap_blks_read": 4764,
+      "heap_blks_hit": 731179,
+      "idx_blks_read": 17761,
+      "idx_blks_hit": 2481781,
+      "toast_blks_read": 0,
+      "toast_blks_hit": 0,
+      "heap_cache_hit_rate_pct": "99.35",
+      "total_read_blocks": 22525
+    },
+    {
+      "table_name": "jc_closed_invoiced_data",
+      "heap_blks_read": 9399,
+      "heap_blks_hit": 692269,
+      "idx_blks_read": 9754,
+      "idx_blks_hit": 2271701,
+      "toast_blks_read": 0,
+      "toast_blks_hit": 0,
+      "heap_cache_hit_rate_pct": "98.66",
+      "total_read_blocks": 19153
+    },
+    {
+      "table_name": "service_vas_jc_data",
+      "heap_blks_read": 4048,
+      "heap_blks_hit": 13823179,
+      "idx_blks_read": 13402,
+      "idx_blks_hit": 2920113,
+      "toast_blks_read": 0,
+      "toast_blks_hit": 0,
+      "heap_cache_hit_rate_pct": "99.97",
+      "total_read_blocks": 17450
+    },
+    {
+      "table_name": "rto_idspay",
+      "heap_blks_read": 11844,
+      "heap_blks_hit": 10119141,
+      "idx_blks_read": 1340,
+      "idx_blks_hit": 85455,
+      "toast_blks_read": 2492,
+      "toast_blks_hit": 29802,
+      "heap_cache_hit_rate_pct": "99.88",
+      "total_read_blocks": 15676
+    },
+    {
+      "table_name": "psf_revenue_dms",
+      "heap_blks_read": 11159,
+      "heap_blks_hit": 1366653,
+      "idx_blks_read": 3893,
+      "idx_blks_hit": 855546,
+      "toast_blks_read": 0,
+      "toast_blks_hit": 0,
+      "heap_cache_hit_rate_pct": "99.19",
+      "total_read_blocks": 15052
+    }
+  ],
+  "postgres_log_severity": {
+    "error": 3,
+    "warning": 0,
+    "fatal": 0,
+    "panic": 0,
+    "total_records": 100
+  },
+  "platform_logs_status": {
+    "auth": {
+      "status": "ok",
+      "count": 100,
+      "endpoint": "/v1/projects/jmdndcphkmaljhwgzqxq/analytics/endpoints/logs?sql=select+timestamp%2C+event_message+from+logs+where+source+%3D+%27auth_logs%27+order+by+timestamp+desc+limit+100&iso_timestamp_start=2026-08-26T04%3A13%3A08.789Z&iso_timestamp_end=2026-08-27T04%3A13%3A08.789Z"
+    },
+    "edge_functions": {
+      "status": "ok",
+      "count": 100,
+      "endpoint": "/v1/projects/jmdndcphkmaljhwgzqxq/analytics/endpoints/logs?sql=select+timestamp%2C+event_message+from+logs+where+source+%3D+%27edge_logs%27+order+by+timestamp+desc+limit+100&iso_timestamp_start=2026-08-26T04%3A13%3A08.790Z&iso_timestamp_end=2026-08-27T04%3A13%3A08.790Z"
+    },
+    "realtime": {
+      "status": "ok",
+      "count": 34,
+      "endpoint": "/v1/projects/jmdndcphkmaljhwgzqxq/analytics/endpoints/logs?sql=select+timestamp%2C+event_message+from+logs+where+source+%3D+%27realtime_logs%27+order+by+timestamp+desc+limit+100&iso_timestamp_start=2026-08-26T04%3A13%3A08.790Z&iso_timestamp_end=2026-08-27T04%3A13%3A08.790Z"
+    },
+    "storage": {
+      "status": "ok",
+      "count": 100,
+      "endpoint": "/v1/projects/jmdndcphkmaljhwgzqxq/analytics/endpoints/logs?sql=select+timestamp%2C+event_message+from+logs+where+source+%3D+%27storage_logs%27+order+by+timestamp+desc+limit+100&iso_timestamp_start=2026-08-26T04%3A13%3A08.791Z&iso_timestamp_end=2026-08-27T04%3A13%3A08.791Z"
+    },
+    "database_health": {
+      "status": "ok",
+      "count": 100,
+      "endpoint": "/v1/projects/jmdndcphkmaljhwgzqxq/analytics/endpoints/logs?sql=select+timestamp%2C+event_message+from+logs+where+source+%3D+%27postgres_logs%27+order+by+timestamp+desc+limit+100&iso_timestamp_start=2026-08-26T04%3A13%3A08.791Z&iso_timestamp_end=2026-08-27T04%3A13%3A08.791Z"
+    }
+  }
+}
