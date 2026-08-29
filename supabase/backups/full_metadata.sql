@@ -2,12 +2,12 @@
 -- PostgreSQL database dump
 --
 
-\restrict PUpIJbeCfTd1RRoeADTcQwHPw0z2Aha43T9o4gr30KGSpyxvwRUnWyLaeOMBotV
+\restrict hgVeIHuma5y1gI8VINijeQt3Qt0gdd07LqR9qawhLrG8hmmlM8E52QldHgcDrOA
 
 -- Dumped from database version 17.6
 -- Dumped by pg_dump version 17.7 (Homebrew)
 
--- Started on 2026-08-27 09:42:09 IST
+-- Started on 2026-08-29 09:45:05 IST
 
 SET statement_timeout = 0;
 SET lock_timeout = 0;
@@ -20336,7 +20336,7 @@ CREATE TABLE public.contact_details (
 
 
 --
--- TOC entry 655 (class 1259 OID 52693)
+-- TOC entry 653 (class 1259 OID 52693)
 -- Name: contact_details_ev; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -20354,7 +20354,7 @@ CREATE TABLE public.contact_details_ev (
 
 --
 -- TOC entry 10459 (class 0 OID 0)
--- Dependencies: 655
+-- Dependencies: 653
 -- Name: TABLE contact_details_ev; Type: COMMENT; Schema: public; Owner: -
 --
 
@@ -20362,7 +20362,7 @@ COMMENT ON TABLE public.contact_details_ev IS 'This is a duplicate of contact_de
 
 
 --
--- TOC entry 654 (class 1259 OID 52692)
+-- TOC entry 652 (class 1259 OID 52692)
 -- Name: contact_details_ev_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
@@ -20916,7 +20916,7 @@ ALTER SEQUENCE public.ew_service_reminders_id_seq OWNED BY public.ew_service_rem
 
 
 --
--- TOC entry 653 (class 1259 OID 52534)
+-- TOC entry 651 (class 1259 OID 52534)
 -- Name: ggn_stock_data; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -20938,7 +20938,7 @@ CREATE TABLE public.ggn_stock_data (
 
 --
 -- TOC entry 10503 (class 0 OID 0)
--- Dependencies: 653
+-- Dependencies: 651
 -- Name: TABLE ggn_stock_data; Type: COMMENT; Schema: public; Owner: -
 --
 
@@ -20947,7 +20947,7 @@ COMMENT ON TABLE public.ggn_stock_data IS 'Latest GGN (Plant 4770) stock report.
 
 --
 -- TOC entry 10504 (class 0 OID 0)
--- Dependencies: 653
+-- Dependencies: 651
 -- Name: COLUMN ggn_stock_data.part_number; Type: COMMENT; Schema: public; Owner: -
 --
 
@@ -20956,7 +20956,7 @@ COMMENT ON COLUMN public.ggn_stock_data.part_number IS 'Normalized Material (col
 
 --
 -- TOC entry 10505 (class 0 OID 0)
--- Dependencies: 653
+-- Dependencies: 651
 -- Name: COLUMN ggn_stock_data.free_stock; Type: COMMENT; Schema: public; Owner: -
 --
 
@@ -20964,7 +20964,7 @@ COMMENT ON COLUMN public.ggn_stock_data.free_stock IS 'Column P Free Stock. May 
 
 
 --
--- TOC entry 652 (class 1259 OID 52533)
+-- TOC entry 650 (class 1259 OID 52533)
 -- Name: ggn_stock_data_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
@@ -25835,45 +25835,7 @@ PARTITION BY RANGE (inserted_at);
 
 
 --
--- TOC entry 647 (class 1259 OID 51145)
--- Name: messages_2026_08_23; Type: TABLE; Schema: realtime; Owner: -
---
-
-CREATE TABLE realtime.messages_2026_08_23 (
-    topic text NOT NULL,
-    extension text NOT NULL,
-    payload jsonb,
-    event text,
-    private boolean DEFAULT false,
-    updated_at timestamp without time zone DEFAULT now() NOT NULL,
-    inserted_at timestamp without time zone DEFAULT now() NOT NULL,
-    id uuid DEFAULT gen_random_uuid() NOT NULL,
-    binary_payload bytea,
-    CONSTRAINT messages_payload_exclusive CHECK (((payload IS NULL) OR (binary_payload IS NULL)))
-);
-
-
---
--- TOC entry 648 (class 1259 OID 51669)
--- Name: messages_2026_08_24; Type: TABLE; Schema: realtime; Owner: -
---
-
-CREATE TABLE realtime.messages_2026_08_24 (
-    topic text NOT NULL,
-    extension text NOT NULL,
-    payload jsonb,
-    event text,
-    private boolean DEFAULT false,
-    updated_at timestamp without time zone DEFAULT now() NOT NULL,
-    inserted_at timestamp without time zone DEFAULT now() NOT NULL,
-    id uuid DEFAULT gen_random_uuid() NOT NULL,
-    binary_payload bytea,
-    CONSTRAINT messages_payload_exclusive CHECK (((payload IS NULL) OR (binary_payload IS NULL)))
-);
-
-
---
--- TOC entry 649 (class 1259 OID 51952)
+-- TOC entry 647 (class 1259 OID 51952)
 -- Name: messages_2026_08_25; Type: TABLE; Schema: realtime; Owner: -
 --
 
@@ -25892,7 +25854,7 @@ CREATE TABLE realtime.messages_2026_08_25 (
 
 
 --
--- TOC entry 650 (class 1259 OID 52104)
+-- TOC entry 648 (class 1259 OID 52104)
 -- Name: messages_2026_08_26; Type: TABLE; Schema: realtime; Owner: -
 --
 
@@ -25911,7 +25873,7 @@ CREATE TABLE realtime.messages_2026_08_26 (
 
 
 --
--- TOC entry 651 (class 1259 OID 52430)
+-- TOC entry 649 (class 1259 OID 52430)
 -- Name: messages_2026_08_27; Type: TABLE; Schema: realtime; Owner: -
 --
 
@@ -25930,7 +25892,7 @@ CREATE TABLE realtime.messages_2026_08_27 (
 
 
 --
--- TOC entry 656 (class 1259 OID 52951)
+-- TOC entry 654 (class 1259 OID 52951)
 -- Name: messages_2026_08_28; Type: TABLE; Schema: realtime; Owner: -
 --
 
@@ -25949,7 +25911,7 @@ CREATE TABLE realtime.messages_2026_08_28 (
 
 
 --
--- TOC entry 657 (class 1259 OID 53536)
+-- TOC entry 655 (class 1259 OID 53536)
 -- Name: messages_2026_08_29; Type: TABLE; Schema: realtime; Owner: -
 --
 
@@ -25968,11 +25930,49 @@ CREATE TABLE realtime.messages_2026_08_29 (
 
 
 --
--- TOC entry 658 (class 1259 OID 53882)
+-- TOC entry 656 (class 1259 OID 53882)
 -- Name: messages_2026_08_30; Type: TABLE; Schema: realtime; Owner: -
 --
 
 CREATE TABLE realtime.messages_2026_08_30 (
+    topic text NOT NULL,
+    extension text NOT NULL,
+    payload jsonb,
+    event text,
+    private boolean DEFAULT false,
+    updated_at timestamp without time zone DEFAULT now() NOT NULL,
+    inserted_at timestamp without time zone DEFAULT now() NOT NULL,
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    binary_payload bytea,
+    CONSTRAINT messages_payload_exclusive CHECK (((payload IS NULL) OR (binary_payload IS NULL)))
+);
+
+
+--
+-- TOC entry 657 (class 1259 OID 54404)
+-- Name: messages_2026_08_31; Type: TABLE; Schema: realtime; Owner: -
+--
+
+CREATE TABLE realtime.messages_2026_08_31 (
+    topic text NOT NULL,
+    extension text NOT NULL,
+    payload jsonb,
+    event text,
+    private boolean DEFAULT false,
+    updated_at timestamp without time zone DEFAULT now() NOT NULL,
+    inserted_at timestamp without time zone DEFAULT now() NOT NULL,
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    binary_payload bytea,
+    CONSTRAINT messages_payload_exclusive CHECK (((payload IS NULL) OR (binary_payload IS NULL)))
+);
+
+
+--
+-- TOC entry 658 (class 1259 OID 54629)
+-- Name: messages_2026_09_01; Type: TABLE; Schema: realtime; Owner: -
+--
+
+CREATE TABLE realtime.messages_2026_09_01 (
     topic text NOT NULL,
     extension text NOT NULL,
     payload jsonb,
@@ -26212,22 +26212,6 @@ CREATE TABLE supabase_migrations.schema_migrations (
 
 --
 -- TOC entry 5857 (class 0 OID 0)
--- Name: messages_2026_08_23; Type: TABLE ATTACH; Schema: realtime; Owner: -
---
-
-ALTER TABLE ONLY realtime.messages ATTACH PARTITION realtime.messages_2026_08_23 FOR VALUES FROM ('2026-08-23 00:00:00') TO ('2026-08-24 00:00:00');
-
-
---
--- TOC entry 5858 (class 0 OID 0)
--- Name: messages_2026_08_24; Type: TABLE ATTACH; Schema: realtime; Owner: -
---
-
-ALTER TABLE ONLY realtime.messages ATTACH PARTITION realtime.messages_2026_08_24 FOR VALUES FROM ('2026-08-24 00:00:00') TO ('2026-08-25 00:00:00');
-
-
---
--- TOC entry 5859 (class 0 OID 0)
 -- Name: messages_2026_08_25; Type: TABLE ATTACH; Schema: realtime; Owner: -
 --
 
@@ -26235,7 +26219,7 @@ ALTER TABLE ONLY realtime.messages ATTACH PARTITION realtime.messages_2026_08_25
 
 
 --
--- TOC entry 5860 (class 0 OID 0)
+-- TOC entry 5858 (class 0 OID 0)
 -- Name: messages_2026_08_26; Type: TABLE ATTACH; Schema: realtime; Owner: -
 --
 
@@ -26243,7 +26227,7 @@ ALTER TABLE ONLY realtime.messages ATTACH PARTITION realtime.messages_2026_08_26
 
 
 --
--- TOC entry 5861 (class 0 OID 0)
+-- TOC entry 5859 (class 0 OID 0)
 -- Name: messages_2026_08_27; Type: TABLE ATTACH; Schema: realtime; Owner: -
 --
 
@@ -26251,7 +26235,7 @@ ALTER TABLE ONLY realtime.messages ATTACH PARTITION realtime.messages_2026_08_27
 
 
 --
--- TOC entry 5862 (class 0 OID 0)
+-- TOC entry 5860 (class 0 OID 0)
 -- Name: messages_2026_08_28; Type: TABLE ATTACH; Schema: realtime; Owner: -
 --
 
@@ -26259,7 +26243,7 @@ ALTER TABLE ONLY realtime.messages ATTACH PARTITION realtime.messages_2026_08_28
 
 
 --
--- TOC entry 5863 (class 0 OID 0)
+-- TOC entry 5861 (class 0 OID 0)
 -- Name: messages_2026_08_29; Type: TABLE ATTACH; Schema: realtime; Owner: -
 --
 
@@ -26267,11 +26251,27 @@ ALTER TABLE ONLY realtime.messages ATTACH PARTITION realtime.messages_2026_08_29
 
 
 --
--- TOC entry 5864 (class 0 OID 0)
+-- TOC entry 5862 (class 0 OID 0)
 -- Name: messages_2026_08_30; Type: TABLE ATTACH; Schema: realtime; Owner: -
 --
 
 ALTER TABLE ONLY realtime.messages ATTACH PARTITION realtime.messages_2026_08_30 FOR VALUES FROM ('2026-08-30 00:00:00') TO ('2026-08-31 00:00:00');
+
+
+--
+-- TOC entry 5863 (class 0 OID 0)
+-- Name: messages_2026_08_31; Type: TABLE ATTACH; Schema: realtime; Owner: -
+--
+
+ALTER TABLE ONLY realtime.messages ATTACH PARTITION realtime.messages_2026_08_31 FOR VALUES FROM ('2026-08-31 00:00:00') TO ('2026-09-01 00:00:00');
+
+
+--
+-- TOC entry 5864 (class 0 OID 0)
+-- Name: messages_2026_09_01; Type: TABLE ATTACH; Schema: realtime; Owner: -
+--
+
+ALTER TABLE ONLY realtime.messages ATTACH PARTITION realtime.messages_2026_09_01 FOR VALUES FROM ('2026-09-01 00:00:00') TO ('2026-09-02 00:00:00');
 
 
 --
@@ -27287,7 +27287,7 @@ ALTER TABLE ONLY public.complaint_tickets
 
 
 --
--- TOC entry 7721 (class 2606 OID 52700)
+-- TOC entry 7715 (class 2606 OID 52700)
 -- Name: contact_details_ev contact_details_ev_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -27413,7 +27413,7 @@ ALTER TABLE ONLY public.ew_service_reminders
 
 
 --
--- TOC entry 7714 (class 2606 OID 52545)
+-- TOC entry 7708 (class 2606 OID 52545)
 -- Name: ggn_stock_data ggn_stock_data_part_number_key; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -27422,7 +27422,7 @@ ALTER TABLE ONLY public.ggn_stock_data
 
 
 --
--- TOC entry 7716 (class 2606 OID 52543)
+-- TOC entry 7710 (class 2606 OID 52543)
 -- Name: ggn_stock_data ggn_stock_data_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -28592,25 +28592,7 @@ ALTER TABLE ONLY realtime.messages
 
 
 --
--- TOC entry 7700 (class 2606 OID 51154)
--- Name: messages_2026_08_23 messages_2026_08_23_pkey; Type: CONSTRAINT; Schema: realtime; Owner: -
---
-
-ALTER TABLE ONLY realtime.messages_2026_08_23
-    ADD CONSTRAINT messages_2026_08_23_pkey PRIMARY KEY (id, inserted_at);
-
-
---
--- TOC entry 7703 (class 2606 OID 51678)
--- Name: messages_2026_08_24 messages_2026_08_24_pkey; Type: CONSTRAINT; Schema: realtime; Owner: -
---
-
-ALTER TABLE ONLY realtime.messages_2026_08_24
-    ADD CONSTRAINT messages_2026_08_24_pkey PRIMARY KEY (id, inserted_at);
-
-
---
--- TOC entry 7706 (class 2606 OID 51961)
+-- TOC entry 7700 (class 2606 OID 51961)
 -- Name: messages_2026_08_25 messages_2026_08_25_pkey; Type: CONSTRAINT; Schema: realtime; Owner: -
 --
 
@@ -28619,7 +28601,7 @@ ALTER TABLE ONLY realtime.messages_2026_08_25
 
 
 --
--- TOC entry 7709 (class 2606 OID 52113)
+-- TOC entry 7703 (class 2606 OID 52113)
 -- Name: messages_2026_08_26 messages_2026_08_26_pkey; Type: CONSTRAINT; Schema: realtime; Owner: -
 --
 
@@ -28628,7 +28610,7 @@ ALTER TABLE ONLY realtime.messages_2026_08_26
 
 
 --
--- TOC entry 7712 (class 2606 OID 52439)
+-- TOC entry 7706 (class 2606 OID 52439)
 -- Name: messages_2026_08_27 messages_2026_08_27_pkey; Type: CONSTRAINT; Schema: realtime; Owner: -
 --
 
@@ -28637,7 +28619,7 @@ ALTER TABLE ONLY realtime.messages_2026_08_27
 
 
 --
--- TOC entry 7725 (class 2606 OID 52960)
+-- TOC entry 7719 (class 2606 OID 52960)
 -- Name: messages_2026_08_28 messages_2026_08_28_pkey; Type: CONSTRAINT; Schema: realtime; Owner: -
 --
 
@@ -28646,7 +28628,7 @@ ALTER TABLE ONLY realtime.messages_2026_08_28
 
 
 --
--- TOC entry 7728 (class 2606 OID 53545)
+-- TOC entry 7722 (class 2606 OID 53545)
 -- Name: messages_2026_08_29 messages_2026_08_29_pkey; Type: CONSTRAINT; Schema: realtime; Owner: -
 --
 
@@ -28655,12 +28637,30 @@ ALTER TABLE ONLY realtime.messages_2026_08_29
 
 
 --
--- TOC entry 7731 (class 2606 OID 53891)
+-- TOC entry 7725 (class 2606 OID 53891)
 -- Name: messages_2026_08_30 messages_2026_08_30_pkey; Type: CONSTRAINT; Schema: realtime; Owner: -
 --
 
 ALTER TABLE ONLY realtime.messages_2026_08_30
     ADD CONSTRAINT messages_2026_08_30_pkey PRIMARY KEY (id, inserted_at);
+
+
+--
+-- TOC entry 7728 (class 2606 OID 54413)
+-- Name: messages_2026_08_31 messages_2026_08_31_pkey; Type: CONSTRAINT; Schema: realtime; Owner: -
+--
+
+ALTER TABLE ONLY realtime.messages_2026_08_31
+    ADD CONSTRAINT messages_2026_08_31_pkey PRIMARY KEY (id, inserted_at);
+
+
+--
+-- TOC entry 7731 (class 2606 OID 54638)
+-- Name: messages_2026_09_01 messages_2026_09_01_pkey; Type: CONSTRAINT; Schema: realtime; Owner: -
+--
+
+ALTER TABLE ONLY realtime.messages_2026_09_01
+    ADD CONSTRAINT messages_2026_09_01_pkey PRIMARY KEY (id, inserted_at);
 
 
 --
@@ -29304,7 +29304,7 @@ CREATE INDEX contact_details_chassis_number_idx ON public.contact_details USING 
 
 
 --
--- TOC entry 7718 (class 1259 OID 52701)
+-- TOC entry 7712 (class 1259 OID 52701)
 -- Name: contact_details_ev_chassis_number_idx; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -29312,7 +29312,7 @@ CREATE INDEX contact_details_ev_chassis_number_idx ON public.contact_details_ev 
 
 
 --
--- TOC entry 7719 (class 1259 OID 52703)
+-- TOC entry 7713 (class 1259 OID 52703)
 -- Name: contact_details_ev_created_at_idx; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -29321,7 +29321,7 @@ CREATE INDEX contact_details_ev_created_at_idx ON public.contact_details_ev USIN
 
 --
 -- TOC entry 10816 (class 0 OID 0)
--- Dependencies: 7719
+-- Dependencies: 7713
 -- Name: INDEX contact_details_ev_created_at_idx; Type: COMMENT; Schema: public; Owner: -
 --
 
@@ -29329,7 +29329,7 @@ COMMENT ON INDEX public.contact_details_ev_created_at_idx IS 'Supports 10-day re
 
 
 --
--- TOC entry 7722 (class 1259 OID 52702)
+-- TOC entry 7716 (class 1259 OID 52702)
 -- Name: contact_details_ev_upper_idx; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -29338,7 +29338,7 @@ CREATE INDEX contact_details_ev_upper_idx ON public.contact_details_ev USING btr
 
 --
 -- TOC entry 10817 (class 0 OID 0)
--- Dependencies: 7722
+-- Dependencies: 7716
 -- Name: INDEX contact_details_ev_upper_idx; Type: COMMENT; Schema: public; Owner: -
 --
 
@@ -30079,7 +30079,7 @@ COMMENT ON INDEX public.idx_ev_service_history_test_created_at IS 'Supports 30-d
 
 
 --
--- TOC entry 7717 (class 1259 OID 52546)
+-- TOC entry 7711 (class 1259 OID 52546)
 -- Name: idx_ggn_stock_data_part_number; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -32028,23 +32028,7 @@ CREATE INDEX messages_inserted_at_topic_index ON ONLY realtime.messages USING bt
 
 
 --
--- TOC entry 7698 (class 1259 OID 51155)
--- Name: messages_2026_08_23_inserted_at_topic_idx; Type: INDEX; Schema: realtime; Owner: -
---
-
-CREATE INDEX messages_2026_08_23_inserted_at_topic_idx ON realtime.messages_2026_08_23 USING btree (inserted_at DESC, topic) WHERE ((extension = 'broadcast'::text) AND (private IS TRUE));
-
-
---
--- TOC entry 7701 (class 1259 OID 51679)
--- Name: messages_2026_08_24_inserted_at_topic_idx; Type: INDEX; Schema: realtime; Owner: -
---
-
-CREATE INDEX messages_2026_08_24_inserted_at_topic_idx ON realtime.messages_2026_08_24 USING btree (inserted_at DESC, topic) WHERE ((extension = 'broadcast'::text) AND (private IS TRUE));
-
-
---
--- TOC entry 7704 (class 1259 OID 51962)
+-- TOC entry 7698 (class 1259 OID 51962)
 -- Name: messages_2026_08_25_inserted_at_topic_idx; Type: INDEX; Schema: realtime; Owner: -
 --
 
@@ -32052,7 +32036,7 @@ CREATE INDEX messages_2026_08_25_inserted_at_topic_idx ON realtime.messages_2026
 
 
 --
--- TOC entry 7707 (class 1259 OID 52114)
+-- TOC entry 7701 (class 1259 OID 52114)
 -- Name: messages_2026_08_26_inserted_at_topic_idx; Type: INDEX; Schema: realtime; Owner: -
 --
 
@@ -32060,7 +32044,7 @@ CREATE INDEX messages_2026_08_26_inserted_at_topic_idx ON realtime.messages_2026
 
 
 --
--- TOC entry 7710 (class 1259 OID 52440)
+-- TOC entry 7704 (class 1259 OID 52440)
 -- Name: messages_2026_08_27_inserted_at_topic_idx; Type: INDEX; Schema: realtime; Owner: -
 --
 
@@ -32068,7 +32052,7 @@ CREATE INDEX messages_2026_08_27_inserted_at_topic_idx ON realtime.messages_2026
 
 
 --
--- TOC entry 7723 (class 1259 OID 52961)
+-- TOC entry 7717 (class 1259 OID 52961)
 -- Name: messages_2026_08_28_inserted_at_topic_idx; Type: INDEX; Schema: realtime; Owner: -
 --
 
@@ -32076,7 +32060,7 @@ CREATE INDEX messages_2026_08_28_inserted_at_topic_idx ON realtime.messages_2026
 
 
 --
--- TOC entry 7726 (class 1259 OID 53546)
+-- TOC entry 7720 (class 1259 OID 53546)
 -- Name: messages_2026_08_29_inserted_at_topic_idx; Type: INDEX; Schema: realtime; Owner: -
 --
 
@@ -32084,11 +32068,27 @@ CREATE INDEX messages_2026_08_29_inserted_at_topic_idx ON realtime.messages_2026
 
 
 --
--- TOC entry 7729 (class 1259 OID 53892)
+-- TOC entry 7723 (class 1259 OID 53892)
 -- Name: messages_2026_08_30_inserted_at_topic_idx; Type: INDEX; Schema: realtime; Owner: -
 --
 
 CREATE INDEX messages_2026_08_30_inserted_at_topic_idx ON realtime.messages_2026_08_30 USING btree (inserted_at DESC, topic) WHERE ((extension = 'broadcast'::text) AND (private IS TRUE));
+
+
+--
+-- TOC entry 7726 (class 1259 OID 54414)
+-- Name: messages_2026_08_31_inserted_at_topic_idx; Type: INDEX; Schema: realtime; Owner: -
+--
+
+CREATE INDEX messages_2026_08_31_inserted_at_topic_idx ON realtime.messages_2026_08_31 USING btree (inserted_at DESC, topic) WHERE ((extension = 'broadcast'::text) AND (private IS TRUE));
+
+
+--
+-- TOC entry 7729 (class 1259 OID 54639)
+-- Name: messages_2026_09_01_inserted_at_topic_idx; Type: INDEX; Schema: realtime; Owner: -
+--
+
+CREATE INDEX messages_2026_09_01_inserted_at_topic_idx ON realtime.messages_2026_09_01 USING btree (inserted_at DESC, topic) WHERE ((extension = 'broadcast'::text) AND (private IS TRUE));
 
 
 --
@@ -32165,38 +32165,6 @@ CREATE UNIQUE INDEX vector_indexes_name_bucket_id_idx ON storage.vector_indexes 
 
 --
 -- TOC entry 7732 (class 0 OID 0)
--- Name: messages_2026_08_23_inserted_at_topic_idx; Type: INDEX ATTACH; Schema: realtime; Owner: -
---
-
-ALTER INDEX realtime.messages_inserted_at_topic_index ATTACH PARTITION realtime.messages_2026_08_23_inserted_at_topic_idx;
-
-
---
--- TOC entry 7733 (class 0 OID 0)
--- Name: messages_2026_08_23_pkey; Type: INDEX ATTACH; Schema: realtime; Owner: -
---
-
-ALTER INDEX realtime.messages_pkey ATTACH PARTITION realtime.messages_2026_08_23_pkey;
-
-
---
--- TOC entry 7734 (class 0 OID 0)
--- Name: messages_2026_08_24_inserted_at_topic_idx; Type: INDEX ATTACH; Schema: realtime; Owner: -
---
-
-ALTER INDEX realtime.messages_inserted_at_topic_index ATTACH PARTITION realtime.messages_2026_08_24_inserted_at_topic_idx;
-
-
---
--- TOC entry 7735 (class 0 OID 0)
--- Name: messages_2026_08_24_pkey; Type: INDEX ATTACH; Schema: realtime; Owner: -
---
-
-ALTER INDEX realtime.messages_pkey ATTACH PARTITION realtime.messages_2026_08_24_pkey;
-
-
---
--- TOC entry 7736 (class 0 OID 0)
 -- Name: messages_2026_08_25_inserted_at_topic_idx; Type: INDEX ATTACH; Schema: realtime; Owner: -
 --
 
@@ -32204,7 +32172,7 @@ ALTER INDEX realtime.messages_inserted_at_topic_index ATTACH PARTITION realtime.
 
 
 --
--- TOC entry 7737 (class 0 OID 0)
+-- TOC entry 7733 (class 0 OID 0)
 -- Name: messages_2026_08_25_pkey; Type: INDEX ATTACH; Schema: realtime; Owner: -
 --
 
@@ -32212,7 +32180,7 @@ ALTER INDEX realtime.messages_pkey ATTACH PARTITION realtime.messages_2026_08_25
 
 
 --
--- TOC entry 7738 (class 0 OID 0)
+-- TOC entry 7734 (class 0 OID 0)
 -- Name: messages_2026_08_26_inserted_at_topic_idx; Type: INDEX ATTACH; Schema: realtime; Owner: -
 --
 
@@ -32220,7 +32188,7 @@ ALTER INDEX realtime.messages_inserted_at_topic_index ATTACH PARTITION realtime.
 
 
 --
--- TOC entry 7739 (class 0 OID 0)
+-- TOC entry 7735 (class 0 OID 0)
 -- Name: messages_2026_08_26_pkey; Type: INDEX ATTACH; Schema: realtime; Owner: -
 --
 
@@ -32228,7 +32196,7 @@ ALTER INDEX realtime.messages_pkey ATTACH PARTITION realtime.messages_2026_08_26
 
 
 --
--- TOC entry 7740 (class 0 OID 0)
+-- TOC entry 7736 (class 0 OID 0)
 -- Name: messages_2026_08_27_inserted_at_topic_idx; Type: INDEX ATTACH; Schema: realtime; Owner: -
 --
 
@@ -32236,7 +32204,7 @@ ALTER INDEX realtime.messages_inserted_at_topic_index ATTACH PARTITION realtime.
 
 
 --
--- TOC entry 7741 (class 0 OID 0)
+-- TOC entry 7737 (class 0 OID 0)
 -- Name: messages_2026_08_27_pkey; Type: INDEX ATTACH; Schema: realtime; Owner: -
 --
 
@@ -32244,7 +32212,7 @@ ALTER INDEX realtime.messages_pkey ATTACH PARTITION realtime.messages_2026_08_27
 
 
 --
--- TOC entry 7742 (class 0 OID 0)
+-- TOC entry 7738 (class 0 OID 0)
 -- Name: messages_2026_08_28_inserted_at_topic_idx; Type: INDEX ATTACH; Schema: realtime; Owner: -
 --
 
@@ -32252,7 +32220,7 @@ ALTER INDEX realtime.messages_inserted_at_topic_index ATTACH PARTITION realtime.
 
 
 --
--- TOC entry 7743 (class 0 OID 0)
+-- TOC entry 7739 (class 0 OID 0)
 -- Name: messages_2026_08_28_pkey; Type: INDEX ATTACH; Schema: realtime; Owner: -
 --
 
@@ -32260,7 +32228,7 @@ ALTER INDEX realtime.messages_pkey ATTACH PARTITION realtime.messages_2026_08_28
 
 
 --
--- TOC entry 7744 (class 0 OID 0)
+-- TOC entry 7740 (class 0 OID 0)
 -- Name: messages_2026_08_29_inserted_at_topic_idx; Type: INDEX ATTACH; Schema: realtime; Owner: -
 --
 
@@ -32268,7 +32236,7 @@ ALTER INDEX realtime.messages_inserted_at_topic_index ATTACH PARTITION realtime.
 
 
 --
--- TOC entry 7745 (class 0 OID 0)
+-- TOC entry 7741 (class 0 OID 0)
 -- Name: messages_2026_08_29_pkey; Type: INDEX ATTACH; Schema: realtime; Owner: -
 --
 
@@ -32276,7 +32244,7 @@ ALTER INDEX realtime.messages_pkey ATTACH PARTITION realtime.messages_2026_08_29
 
 
 --
--- TOC entry 7746 (class 0 OID 0)
+-- TOC entry 7742 (class 0 OID 0)
 -- Name: messages_2026_08_30_inserted_at_topic_idx; Type: INDEX ATTACH; Schema: realtime; Owner: -
 --
 
@@ -32284,11 +32252,43 @@ ALTER INDEX realtime.messages_inserted_at_topic_index ATTACH PARTITION realtime.
 
 
 --
--- TOC entry 7747 (class 0 OID 0)
+-- TOC entry 7743 (class 0 OID 0)
 -- Name: messages_2026_08_30_pkey; Type: INDEX ATTACH; Schema: realtime; Owner: -
 --
 
 ALTER INDEX realtime.messages_pkey ATTACH PARTITION realtime.messages_2026_08_30_pkey;
+
+
+--
+-- TOC entry 7744 (class 0 OID 0)
+-- Name: messages_2026_08_31_inserted_at_topic_idx; Type: INDEX ATTACH; Schema: realtime; Owner: -
+--
+
+ALTER INDEX realtime.messages_inserted_at_topic_index ATTACH PARTITION realtime.messages_2026_08_31_inserted_at_topic_idx;
+
+
+--
+-- TOC entry 7745 (class 0 OID 0)
+-- Name: messages_2026_08_31_pkey; Type: INDEX ATTACH; Schema: realtime; Owner: -
+--
+
+ALTER INDEX realtime.messages_pkey ATTACH PARTITION realtime.messages_2026_08_31_pkey;
+
+
+--
+-- TOC entry 7746 (class 0 OID 0)
+-- Name: messages_2026_09_01_inserted_at_topic_idx; Type: INDEX ATTACH; Schema: realtime; Owner: -
+--
+
+ALTER INDEX realtime.messages_inserted_at_topic_index ATTACH PARTITION realtime.messages_2026_09_01_inserted_at_topic_idx;
+
+
+--
+-- TOC entry 7747 (class 0 OID 0)
+-- Name: messages_2026_09_01_pkey; Type: INDEX ATTACH; Schema: realtime; Owner: -
+--
+
+ALTER INDEX realtime.messages_pkey ATTACH PARTITION realtime.messages_2026_09_01_pkey;
 
 
 --
@@ -36029,7 +36029,7 @@ CREATE POLICY "estimate_rows: own dealership update" ON public.estimate_rows FOR
 
 --
 -- TOC entry 8256 (class 0 OID 52534)
--- Dependencies: 653
+-- Dependencies: 651
 -- Name: ggn_stock_data; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
@@ -56578,7 +56578,7 @@ GRANT ALL ON TABLE public.contact_details TO service_role;
 
 --
 -- TOC entry 10460 (class 0 OID 0)
--- Dependencies: 655
+-- Dependencies: 653
 -- Name: TABLE contact_details_ev; Type: ACL; Schema: public; Owner: -
 --
 
@@ -56589,7 +56589,7 @@ GRANT ALL ON TABLE public.contact_details_ev TO service_role;
 
 --
 -- TOC entry 10461 (class 0 OID 0)
--- Dependencies: 654
+-- Dependencies: 652
 -- Name: SEQUENCE contact_details_ev_id_seq; Type: ACL; Schema: public; Owner: -
 --
 
@@ -56771,7 +56771,7 @@ GRANT ALL ON SEQUENCE public.ew_service_reminders_id_seq TO service_role;
 
 --
 -- TOC entry 10506 (class 0 OID 0)
--- Dependencies: 653
+-- Dependencies: 651
 -- Name: TABLE ggn_stock_data; Type: ACL; Schema: public; Owner: -
 --
 
@@ -56782,7 +56782,7 @@ GRANT ALL ON TABLE public.ggn_stock_data TO service_role;
 
 --
 -- TOC entry 10507 (class 0 OID 0)
--- Dependencies: 652
+-- Dependencies: 650
 -- Name: SEQUENCE ggn_stock_data_id_seq; Type: ACL; Schema: public; Owner: -
 --
 
@@ -58533,26 +58533,6 @@ GRANT SELECT,INSERT,UPDATE ON TABLE realtime.messages TO service_role;
 --
 -- TOC entry 10791 (class 0 OID 0)
 -- Dependencies: 647
--- Name: TABLE messages_2026_08_23; Type: ACL; Schema: realtime; Owner: -
---
-
-GRANT ALL ON TABLE realtime.messages_2026_08_23 TO postgres;
-GRANT ALL ON TABLE realtime.messages_2026_08_23 TO dashboard_user;
-
-
---
--- TOC entry 10792 (class 0 OID 0)
--- Dependencies: 648
--- Name: TABLE messages_2026_08_24; Type: ACL; Schema: realtime; Owner: -
---
-
-GRANT ALL ON TABLE realtime.messages_2026_08_24 TO postgres;
-GRANT ALL ON TABLE realtime.messages_2026_08_24 TO dashboard_user;
-
-
---
--- TOC entry 10793 (class 0 OID 0)
--- Dependencies: 649
 -- Name: TABLE messages_2026_08_25; Type: ACL; Schema: realtime; Owner: -
 --
 
@@ -58561,8 +58541,8 @@ GRANT ALL ON TABLE realtime.messages_2026_08_25 TO dashboard_user;
 
 
 --
--- TOC entry 10794 (class 0 OID 0)
--- Dependencies: 650
+-- TOC entry 10792 (class 0 OID 0)
+-- Dependencies: 648
 -- Name: TABLE messages_2026_08_26; Type: ACL; Schema: realtime; Owner: -
 --
 
@@ -58571,8 +58551,8 @@ GRANT ALL ON TABLE realtime.messages_2026_08_26 TO dashboard_user;
 
 
 --
--- TOC entry 10795 (class 0 OID 0)
--- Dependencies: 651
+-- TOC entry 10793 (class 0 OID 0)
+-- Dependencies: 649
 -- Name: TABLE messages_2026_08_27; Type: ACL; Schema: realtime; Owner: -
 --
 
@@ -58581,8 +58561,8 @@ GRANT ALL ON TABLE realtime.messages_2026_08_27 TO dashboard_user;
 
 
 --
--- TOC entry 10796 (class 0 OID 0)
--- Dependencies: 656
+-- TOC entry 10794 (class 0 OID 0)
+-- Dependencies: 654
 -- Name: TABLE messages_2026_08_28; Type: ACL; Schema: realtime; Owner: -
 --
 
@@ -58591,8 +58571,8 @@ GRANT ALL ON TABLE realtime.messages_2026_08_28 TO dashboard_user;
 
 
 --
--- TOC entry 10797 (class 0 OID 0)
--- Dependencies: 657
+-- TOC entry 10795 (class 0 OID 0)
+-- Dependencies: 655
 -- Name: TABLE messages_2026_08_29; Type: ACL; Schema: realtime; Owner: -
 --
 
@@ -58601,13 +58581,33 @@ GRANT ALL ON TABLE realtime.messages_2026_08_29 TO dashboard_user;
 
 
 --
--- TOC entry 10798 (class 0 OID 0)
--- Dependencies: 658
+-- TOC entry 10796 (class 0 OID 0)
+-- Dependencies: 656
 -- Name: TABLE messages_2026_08_30; Type: ACL; Schema: realtime; Owner: -
 --
 
 GRANT ALL ON TABLE realtime.messages_2026_08_30 TO postgres;
 GRANT ALL ON TABLE realtime.messages_2026_08_30 TO dashboard_user;
+
+
+--
+-- TOC entry 10797 (class 0 OID 0)
+-- Dependencies: 657
+-- Name: TABLE messages_2026_08_31; Type: ACL; Schema: realtime; Owner: -
+--
+
+GRANT ALL ON TABLE realtime.messages_2026_08_31 TO postgres;
+GRANT ALL ON TABLE realtime.messages_2026_08_31 TO dashboard_user;
+
+
+--
+-- TOC entry 10798 (class 0 OID 0)
+-- Dependencies: 658
+-- Name: TABLE messages_2026_09_01; Type: ACL; Schema: realtime; Owner: -
+--
+
+GRANT ALL ON TABLE realtime.messages_2026_09_01 TO postgres;
+GRANT ALL ON TABLE realtime.messages_2026_09_01 TO dashboard_user;
 
 
 --
@@ -59074,11 +59074,11 @@ CREATE EVENT TRIGGER trg_auto_admin_bypass_policy_on_ddl ON ddl_command_end
    EXECUTE FUNCTION public.apply_admin_bypass_policy_on_ddl();
 
 
--- Completed on 2026-08-27 09:43:04 IST
+-- Completed on 2026-08-29 09:46:04 IST
 
 --
 -- PostgreSQL database dump complete
 --
 
-\unrestrict PUpIJbeCfTd1RRoeADTcQwHPw0z2Aha43T9o4gr30KGSpyxvwRUnWyLaeOMBotV
+\unrestrict hgVeIHuma5y1gI8VINijeQt3Qt0gdd07LqR9qawhLrG8hmmlM8E52QldHgcDrOA
 
