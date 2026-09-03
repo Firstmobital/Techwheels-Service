@@ -13,7 +13,13 @@ import {
 import type { VariableSourceDetail } from './types'
 
 const QUERY_PAGE_SIZE = 1000
+const IN_FILTER_BATCH_SIZE = 200
 const TECHNICIAN_INCOME_SOURCE = 'vw_technician_income_assignments'
+
+function invoiceDateBounds(payrollMonth: string): { fromDate: string; toDate: string } {
+  const { from, to } = monthRangeIst(payrollMonth)
+  return { fromDate: from.slice(0, 10), toDate: to.slice(0, 10) }
+}
 
 export interface MonthlyVariableEarning {
   employeeCode: string
@@ -66,7 +72,7 @@ async function fetchCompletedJobCards(jcNumbers: string[]): Promise<Set<string>>
 }
 
 export async function fetchMonthlySaEarningsByCode(payrollMonth: string): Promise<Map<string, number>> {
-  const { from, to } = monthRangeIst(payrollMonth)
+  const { fromDate, toDate } = invoiceDateBounds(payrollMonth)
   const { pvPercent, evPercent } = await fetchSharePercents('sa_earnings_settings')
   const fuelMap = await fetchSaEmployeeFuelMap()
 
@@ -75,16 +81,16 @@ export async function fetchMonthlySaEarningsByCode(payrollMonth: string): Promis
   while (true) {
     const res = await supabase
       .from('job_card_closed_data')
-      .select('employee_code, sr_assigned_to, labour_amount, job_card_number, closed_date_time, invoice_date')
-      .gte('invoice_date', from.slice(0, 10))
-      .lte('invoice_date', to.slice(0, 10))
+      .select('employee_code, sr_assigned_to, dms_final_labour_amount, job_card_number, closed_date_time, invoice_date')
+      .gte('invoice_date', fromDate)
+      .lte('invoice_date', toDate)
       .range(offset, offset + QUERY_PAGE_SIZE - 1)
     if (res.error) throw new Error(res.error.message)
     const batch = res.data ?? []
     batch.forEach((r) => {
       rows.push({
         employee_code: (r as { employee_code?: string }).employee_code ?? null,
-        labour: parseAmount((r as { labour_amount?: unknown }).labour_amount),
+        labour: parseAmount((r as { dms_final_labour_amount?: unknown }).dms_final_labour_amount),
         job_card_number: (r as { job_card_number?: string }).job_card_number ?? null,
       })
     })
@@ -108,44 +114,70 @@ export async function fetchMonthlySaEarningsByCode(payrollMonth: string): Promis
   return totals
 }
 
+async function fetchClosedLabourByInvoiceMonth(payrollMonth: string): Promise<Map<string, number>> {
+  const { fromDate, toDate } = invoiceDateBounds(payrollMonth)
+  const latest = new Map<string, { amount: number; ts: number }>()
+  let offset = 0
+  while (true) {
+    const res = await supabase
+      .from('job_card_closed_data')
+      .select('job_card_number, dms_final_labour_amount, closed_date_time, invoice_date')
+      .gte('invoice_date', fromDate)
+      .lte('invoice_date', toDate)
+      .range(offset, offset + QUERY_PAGE_SIZE - 1)
+    if (res.error) throw new Error(res.error.message)
+    const batch = res.data ?? []
+    batch.forEach((row) => {
+      const jc = normalizeJobCardNumber((row as { job_card_number?: string }).job_card_number)
+      if (!jc) return
+      const amount = parseAmount((row as { dms_final_labour_amount?: unknown }).dms_final_labour_amount)
+      const ts = new Date(String(
+        (row as { closed_date_time?: string }).closed_date_time
+        ?? (row as { invoice_date?: string }).invoice_date
+        ?? 0,
+      )).getTime()
+      const existing = latest.get(jc)
+      if (!existing || ts > existing.ts) latest.set(jc, { amount, ts })
+    })
+    if (batch.length < QUERY_PAGE_SIZE) break
+    offset += batch.length
+  }
+  const labourByJc = new Map<string, number>()
+  latest.forEach((value, jc) => labourByJc.set(jc, value.amount))
+  return labourByJc
+}
+
 export async function fetchMonthlyTechnicianEarningsByCode(payrollMonth: string): Promise<Map<string, number>> {
-  const { from, to } = monthRangeIst(payrollMonth)
   const { pvPercent, evPercent } = await fetchSharePercents('technician_earnings_settings')
   const technicianCodeSet = await fetchTechnicianCodeSet()
+  const labourByJc = await fetchClosedLabourByInvoiceMonth(payrollMonth)
+  const jcNumbers = Array.from(labourByJc.keys())
+  if (jcNumbers.length === 0) return new Map()
 
   const assignmentRows: Array<{
     technician_code: string | null
     bay_no: string | null
-    gross_labour: number
     job_card_number: string | null
     work_status: string | null
-    invoice_date: string | null
   }> = []
 
-  let offset = 0
-  while (true) {
+  for (let i = 0; i < jcNumbers.length; i += IN_FILTER_BATCH_SIZE) {
+    const jcBatch = jcNumbers.slice(i, i + IN_FILTER_BATCH_SIZE)
     const res = await supabase
       .from(TECHNICIAN_INCOME_SOURCE)
-      .select('technician_code, bay_no, gross_labour, job_card_number, work_status, invoice_date, assigned_at')
-      .gte('assigned_at', from)
-      .lte('assigned_at', to)
-      .range(offset, offset + QUERY_PAGE_SIZE - 1)
+      .select('technician_code, bay_no, job_card_number, work_status')
+      .in('job_card_number', jcBatch)
     if (res.error) throw new Error(res.error.message)
-    const batch = res.data ?? []
-    batch.forEach((r) => {
+    ;(res.data ?? []).forEach((r) => {
       const code = normalizeEmployeeCode((r as { technician_code?: string }).technician_code)
       if (!technicianCodeSet.has(code)) return
       assignmentRows.push({
         technician_code: (r as { technician_code?: string }).technician_code ?? null,
         bay_no: (r as { bay_no?: string }).bay_no ?? null,
-        gross_labour: parseAmount((r as { gross_labour?: unknown }).gross_labour),
         job_card_number: (r as { job_card_number?: string }).job_card_number ?? null,
         work_status: (r as { work_status?: string }).work_status ?? null,
-        invoice_date: (r as { invoice_date?: string }).invoice_date ?? null,
       })
     })
-    if (batch.length < QUERY_PAGE_SIZE) break
-    offset += batch.length
   }
 
   const jcSplitCounts = new Map<string, number>()
@@ -162,8 +194,9 @@ export async function fetchMonthlyTechnicianEarningsByCode(payrollMonth: string)
     const code = normalizeEmployeeCode(r.technician_code)
     if (!code) return
     const jc = normalizeJobCardNumber(r.job_card_number)
+    const grossLabour = labourByJc.get(jc) ?? 0
     const splitCount = jcSplitCounts.get(jc) ?? 1
-    const income = calculateTechnicianIncome(r.gross_labour, r.bay_no, pvPercent, evPercent, splitCount)
+    const income = calculateTechnicianIncome(grossLabour, r.bay_no, pvPercent, evPercent, splitCount)
     totals.set(code, (totals.get(code) ?? 0) + income)
   })
   return totals
