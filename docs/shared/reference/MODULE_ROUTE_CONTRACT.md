@@ -2,7 +2,7 @@
 
 **Document ID:** MODULE-ROUTE-001  
 **Version:** 1.0  
-**Last Updated:** 2026-05-23  
+**Last Updated:** 2026-09-03  
 **Owner:** Techwheels Dev Team + GitHub Copilot  
 
 ---
@@ -32,6 +32,7 @@ This document defines the authoritative mapping between database modules and fro
 | 7 | `reports` | `/reports` | `/reports` | ReportsPage + sub-routes | Active | Analytics and cross-module dashboards |
 | 8 | `admin` | `/admin` | `/admin` | AdminPage | Active | User and permission management |
 | 10 | `reception` | `/reception` | `/reception` | ReceptionPage | Active | Front desk vehicle intake and SA assignment |
+| 11 | `payroll` | `/payroll` | `/payroll` | PayrollPage | Active | Payroll management: attendance, advances, processing, salary slips |
 | — | `help_tickets` | `/help-tickets` | `/help-tickets` | HelpTicketsAdminPage | Active | Support inbox (org-wide). Employee self-service at `/help/tickets*` is auth-only (no module grant). |
 
 **Legend:**

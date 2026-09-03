@@ -8,6 +8,7 @@ import {
   type EmployeeLookupIndex,
 } from '../lib/employeeMatcher'
 import { sendSAEarningsTestEmail } from '../lib/api/email'
+import { getBlockedDisbursementCodesForRange } from '../lib/payroll/disbursementGuard'
 import { supabase } from '../lib/supabase'
 import * as XLSX from 'xlsx'
 
@@ -76,6 +77,7 @@ type SaEmployee = {
 // Payout report types
 type PayoutReportRow = {
   saName: string
+  employeeCode: string
   department: string
   location: string
   portal: string
@@ -1155,6 +1157,7 @@ export default function SATrackerPage() {
       const pct  = fuel === 'EV' ? evSharePercent : saSharePercent
       reportRows.push({
         saName:        name,
+        employeeCode:  String(emp?.employee_code ?? data.employeeCode ?? '').trim().toUpperCase(),
         department:    data.dept || '—',
         location:      Array.from(data.loc).join(', ') || '—',
         portal:        Array.from(data.por).join(', ') || '—',
@@ -1172,9 +1175,19 @@ export default function SATrackerPage() {
     setPayoutReport(s => ({ ...s, rows: reportRows, generating: false }))
   }
 
-  function downloadPayoutExcel() {
+  async function downloadPayoutExcel() {
     if (!payoutReport.rows) return
     const { payoutDate, rows } = payoutReport
+    const monthStart = payoutDate.slice(0, 7) + '-01'
+    const monthEnd = payoutDate.slice(0, 7) + '-28'
+    const blockedCodes = await getBlockedDisbursementCodesForRange(monthStart, monthEnd)
+    const blockedInReport = rows.filter((r) => r.employeeCode && blockedCodes.has(r.employeeCode))
+    if (blockedInReport.length > 0) {
+      window.alert(
+        `Cannot export SA payout: ${blockedInReport.length} SA(s) have variable earnings in finalized payroll for ${payoutDate.slice(0, 7)}. Use Payroll bank payout instead.`,
+      )
+      return
+    }
     const header = [
       'SA Name', 'Department', 'Location', 'Portal',
       'JC Count', 'Total Labour (₹)', 'Payout %', 'Payout Amount (₹)',

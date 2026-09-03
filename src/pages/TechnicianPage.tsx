@@ -13,6 +13,7 @@ import RevisitBadge from '../components/RevisitBadge'
 import UpdationAvailableBadge from '../components/UpdationAvailableBadge'
 import { sendTechnicianDailyEarningsTestEmail } from '../lib/api/email'
 import { isTechnicianBusinessRole } from '../lib/businessRoles'
+import { getBlockedDisbursementCodesForRange } from '../lib/payroll/disbursementGuard'
 import * as XLSX from 'xlsx'
 
 type TechnicianAssignmentRow = {
@@ -1807,6 +1808,16 @@ export default function TechnicianPage() {
       setReportEmailState({
         type: 'error',
         message: 'No filtered technician rows available for the selected range.',
+      })
+      return
+    }
+
+    const blockedCodes = await getBlockedDisbursementCodesForRange(fromDate, toDate)
+    const blockedRows = technicianCards.filter((card) => blockedCodes.has(String(card.code ?? '').trim().toUpperCase()))
+    if (blockedRows.length > 0) {
+      setReportEmailState({
+        type: 'error',
+        message: `Cannot send bank disbursement: ${blockedRows.length} technician(s) have variable earnings included in finalized payroll for this period (${blockedRows.slice(0, 3).map((r) => r.code).join(', ')}${blockedRows.length > 3 ? '…' : ''}). Use Payroll bank payout instead.`,
       })
       return
     }

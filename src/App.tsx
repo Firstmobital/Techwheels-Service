@@ -21,6 +21,7 @@ import BodyshopFloorPage from './pages/BodyshopFloorPage'
 import BodyshopRepairPage from './pages/BodyshopRepairPage'
 import FloorInchargePage from './pages/FloorInchargePage'
 import TechnicianPage from './pages/TechnicianPage'
+import PayrollPage from './pages/PayrollPage'
 import CREIncentivePage from './pages/CREIncentivePage'
 import { Icon } from './components/Icon'
 import ComplaintsPage from './pages/ComplaintsPage'
@@ -71,6 +72,7 @@ const NAV_ITEMS = [
   { to: '/bodyshop-tracker', label: 'Bodyshop', icon: 'floor' },
   { to: '/bodyshop-floor', label: 'Bodyshop Floor', icon: 'floor' },
   { to: '/technician', label: 'Technician', icon: 'tech' },
+  { to: '/payroll', label: 'Payroll', icon: 'reports' },
   { to: '/import', label: 'Imports', icon: 'import' },
   { to: '/reports', label: 'Reports', icon: 'reports' },
   { to: '/autodoc', label: 'AutoDoc', icon: 'autodoc' },
@@ -109,6 +111,7 @@ type ModuleName =
   | 'bodyshop_tracker'
   | 'bodyshop_floor'
   | 'technician'
+  | 'payroll'
   | 'complaints'
   | 'help_tickets'
   | 'bodyshop_repair'
@@ -122,7 +125,7 @@ type ModuleName =
   | 'post_service_feedback_cre'
   | 'parts_spm'
 
-type AppRoute = '/import' | '/reports' | '/settings' | '/admin' | '/autodoc' | '/reception' | '/service-advisor' | '/floor-incharge' | '/sa-tracker' | '/bodyshop-tracker' | '/bodyshop-floor' | '/technician' | '/complaints' | '/help-tickets' | '/bodyshop-repair' | '/ew-reminder' | '/service-booking' | '/wa-agent' | '/telecalling' | '/insurance-renewal-telecalling' | '/auto-service-reminder' | '/cre-incentive' | '/post-service-feedback' | '/parts-spm'
+type AppRoute = '/import' | '/reports' | '/settings' | '/admin' | '/autodoc' | '/reception' | '/service-advisor' | '/floor-incharge' | '/sa-tracker' | '/bodyshop-tracker' | '/bodyshop-floor' | '/technician' | '/payroll' | '/complaints' | '/help-tickets' | '/bodyshop-repair' | '/ew-reminder' | '/service-booking' | '/wa-agent' | '/telecalling' | '/insurance-renewal-telecalling' | '/auto-service-reminder' | '/cre-incentive' | '/post-service-feedback' | '/parts-spm'
 
 interface PermissionRow {
   module_name: string
@@ -141,6 +144,7 @@ const ROUTE_MODULE_MAP: Record<AppRoute, ModuleName[]> = {
   '/bodyshop-tracker': ['bodyshop_tracker'],
   '/bodyshop-floor': ['bodyshop_floor'],
   '/technician': ['technician'],
+  '/payroll': ['payroll'],
   '/complaints': ['complaints'],
   '/help-tickets': ['help_tickets'],
   '/bodyshop-repair': ['bodyshop_repair'],
@@ -874,6 +878,7 @@ function canAccessPath(pathname: string, allowedModules: Set<string>) {
   if (pathname.startsWith('/bodyshop-tracker')) return hasAnyModuleAccess(allowedModules, ROUTE_MODULE_MAP['/bodyshop-tracker'])
   if (pathname.startsWith('/bodyshop-floor')) return hasAnyModuleAccess(allowedModules, ROUTE_MODULE_MAP['/bodyshop-floor'])
   if (pathname.startsWith('/technician')) return hasAnyModuleAccess(allowedModules, ROUTE_MODULE_MAP['/technician'])
+  if (pathname.startsWith('/payroll')) return hasAnyModuleAccess(allowedModules, ROUTE_MODULE_MAP['/payroll'])
   if (pathname.startsWith('/complaints')) return hasAnyModuleAccess(allowedModules, ROUTE_MODULE_MAP['/complaints'])
   if (pathname.startsWith('/help-tickets')) return hasAnyModuleAccess(allowedModules, ROUTE_MODULE_MAP['/help-tickets'])
   // Employee Get Help self-service — auth only; RPCs enforce employee link
@@ -1391,6 +1396,14 @@ VITE_SUPABASE_ANON_KEY=your-anon-key`}
                   element={(
                     <RequireAccess allowedModules={allowedModules} modules={ROUTE_MODULE_MAP['/technician']}>
                       <TechnicianPage />
+                    </RequireAccess>
+                  )}
+                />
+                <Route
+                  path="/payroll"
+                  element={(
+                    <RequireAccess allowedModules={allowedModules} modules={ROUTE_MODULE_MAP['/payroll']}>
+                      <PayrollPage />
                     </RequireAccess>
                   )}
                 />
