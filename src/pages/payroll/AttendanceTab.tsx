@@ -198,8 +198,8 @@ export default function AttendanceTab({ payrollMonth, monthInput, onMonthChange,
         </div>
       )}
 
-      <div style={{ overflowX: 'auto' }}>
-        <table className="table" style={{ fontSize: '0.78rem', width: '100%' }}>
+      <div className="payroll-table-scroll">
+        <table className="table" style={{ fontSize: '0.78rem' }}>
           <thead>
             <tr>
               <th>Code</th><th>Name</th><th>Dept</th><th>Branch</th><th>Salary Type</th><th>Base</th>

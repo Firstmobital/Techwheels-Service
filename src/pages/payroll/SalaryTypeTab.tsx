@@ -175,12 +175,13 @@ export default function SalaryTypeTab({ canModify }: Props) {
         </div>
       )}
 
-      <div style={{ overflowX: 'auto' }}>
-        <table className="table" style={{ fontSize: '0.78rem', width: '100%' }}>
+      <div className="payroll-table-scroll">
+        <table className="table" style={{ fontSize: '0.78rem' }}>
           <thead>
             <tr>
               <th>Employee</th><th>Department</th><th>Branch</th><th>Base Salary</th><th>Salary Type</th>
               <th>Bank Account</th><th>IFSC</th><th>Bank Name</th>
+              {canModify && <th>Action</th>}
             </tr>
           </thead>
           <tbody>
@@ -244,9 +245,11 @@ function CompRow({
       <td>{employee.account_number ?? '—'}</td>
       <td>{employee.ifsc ?? '—'}</td>
       <td>{employee.bank_name ?? '—'}</td>
-      {canModify && comp && (
+      {canModify && (
         <td>
-          <button type="button" className="btn btn--sm btn--ghost" onClick={() => onSave(Number(base), salaryType)}>Save</button>
+          {comp ? (
+            <button type="button" className="btn btn--sm btn--ghost" onClick={() => onSave(Number(base), salaryType)}>Save</button>
+          ) : '—'}
         </td>
       )}
     </tr>

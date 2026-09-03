@@ -59,7 +59,8 @@ function SettingsTable({
   return (
     <div style={{ marginBottom: '1.25rem' }}>
       <h3 style={{ fontSize: '0.95rem', fontWeight: 700, marginBottom: '0.5rem' }}>{title}</h3>
-      <table className="table" style={{ fontSize: '0.78rem', width: '100%', maxWidth: '720px' }}>
+      <div className="payroll-table-scroll" style={{ maxHeight: 'min(40vh, 360px)', maxWidth: '720px' }}>
+      <table className="table" style={{ fontSize: '0.78rem' }}>
         <thead>
           <tr>
             <th>Rule Group</th>
@@ -89,6 +90,7 @@ function SettingsTable({
           ))}
         </tbody>
       </table>
+      </div>
       {canModify && (
         <button type="button" className="btn btn--primary btn--sm" style={{ marginTop: '0.5rem' }} disabled={saving} onClick={() => void handleSave()}>
           {saving ? 'Saving…' : `Save ${title} Rules`}

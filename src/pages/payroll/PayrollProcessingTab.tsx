@@ -211,8 +211,8 @@ export default function PayrollProcessingTab({
         Gross: {formatCurrency(totals.gross)} · Net: {formatCurrency(totals.net)} · {filtered.length} employees
       </div>
 
-      <div style={{ overflowX: 'auto' }}>
-        <table className="table" style={{ fontSize: '0.72rem', width: '100%' }}>
+      <div className="payroll-table-scroll">
+        <table className="table" style={{ fontSize: '0.72rem' }}>
           <thead>
             <tr>
               <th>Code</th><th>Name</th><th>Type</th><th>Base</th><th>Days</th><th>Earned Base</th>

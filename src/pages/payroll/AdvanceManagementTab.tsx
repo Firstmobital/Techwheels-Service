@@ -146,7 +146,8 @@ export default function AdvanceManagementTab({ canModify, payrollMonth }: Props)
       {error && <div className="toast error">{error}</div>}
       {message && <div className="toast">{message}</div>}
 
-      <table className="table" style={{ fontSize: '0.78rem', width: '100%' }}>
+      <div className="payroll-table-scroll">
+      <table className="table" style={{ fontSize: '0.78rem' }}>
         <thead>
           <tr>
             <th>Employee</th><th>Issue Date</th><th>Original</th><th>Recovered</th><th>Balance</th><th>Type</th><th>Status</th><th></th>
@@ -196,6 +197,7 @@ export default function AdvanceManagementTab({ canModify, payrollMonth }: Props)
           })}
         </tbody>
       </table>
+      </div>
     </div>
   )
 }
