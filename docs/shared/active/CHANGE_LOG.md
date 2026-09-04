@@ -4,6 +4,7 @@ Tracks documentation-sync updates for business logic, architecture, and access c
 
 ## 2026-09-04
 
+- Recovery **More** no longer errors with `column d.id does not exist`. Ledger: DBL-0035.
 - Recovery Excel is three sheets (book + posted entries + document URLs). Insurer **Mismatch** is policy company vs DMS bill-to after stripping C/O — not a raw string compare. Ledger: DBL-0034. Plan: `BODYSHOP-RECOVERY-001`.
 - Recovery **More** (case sheet + documents) and **Post Payment** (Stage 18 DO Payment on the Recovery page). Repair Tracker is not required. Period: This month / Last month / All / Custom. Insurer filter uses policy company. Ledger: DBL-0033. Plan: `BODYSHOP-RECOVERY-001`.
 - Bodyshop Recovery is **org-wide**: no dealer, branch, or fuel row filter. An EDP / Accounts login with **NO-DEALER** still sees every open insurance-due JC. Ledger: DBL-0032. Plan: `BODYSHOP-RECOVERY-001`.

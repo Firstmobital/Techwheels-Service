@@ -266,6 +266,7 @@ BEGIN
     INTO v_docs
     FROM (
       SELECT
+        doc.id,
         doc.doc_key,
         doc.file_name,
         doc.content_type,
