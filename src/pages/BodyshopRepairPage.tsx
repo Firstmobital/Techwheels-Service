@@ -20,7 +20,7 @@ import {
 import DateRangeFilter, { currentMonthRange, type DateRange } from '../components/DateRangeFilter'
 import { fetchVehicleFromRcLookup } from '../lib/api/rcLookup'
 import {
-  listRepairCards, searchRepairCards, createRepairCard, updateRepairCard, getRepairCard, advanceStage,
+  listRepairCards, searchRepairCards, createRepairCard, updateRepairCard, getRepairCard, advanceStage, cancelRepairCard,
   getGroupForStage, STAGE_LABELS, STAGE_GROUPS,
   cardMatchesRepairLookup, cardInReceivedDateRange,
   REPAIR_LOOKUP_MIN_CHARS, REPAIR_LOOKUP_DEBOUNCE_MS,
@@ -2244,6 +2244,24 @@ export default function BodyshopRepairPage() {
       setEditPatch({})
       toast_('Saved ✅')
     } catch (e: any) { toast_(e.message, false) }
+    setSaving(false)
+  }
+
+  async function handleCancelRepair() {
+    if (!selected || selected.overall_status !== 'active') return
+    const ok = window.confirm(
+      `Cancel repair ${selected.job_card_no}?\n\nIt leaves the Active queue. Then delete the matching Reception entry if this JC was created by mistake.`,
+    )
+    if (!ok) return
+    setSaving(true)
+    try {
+      const updated = await cancelRepairCard(selected.id)
+      setSelected(updated)
+      setCards((prev) => prev.map((c) => (c.id === updated.id ? updated : c)))
+      toast_('Repair cancelled')
+    } catch (e: any) {
+      toast_(e.message ?? 'Cancel failed', false)
+    }
     setSaving(false)
   }
 
@@ -4595,6 +4613,11 @@ export default function BodyshopRepairPage() {
             <span className={`brx-dstatus ${selected.overall_status === 'delivered' ? 'is-delivered' : selected.overall_status === 'cancelled' ? 'is-cancelled' : 'is-active'}`}>
               {selected.overall_status}
             </span>
+            {selected.overall_status === 'active' && (
+              <button type="button" className="btn" onClick={() => void handleCancelRepair()} disabled={saving}>
+                Cancel repair
+              </button>
+            )}
           </div>
 
           {/* ── Body: Left sidebar + Right content ── */}

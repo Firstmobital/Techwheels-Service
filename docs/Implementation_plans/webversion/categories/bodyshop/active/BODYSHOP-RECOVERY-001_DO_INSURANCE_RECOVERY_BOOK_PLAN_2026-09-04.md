@@ -8,7 +8,7 @@
 **Status:** Active (v1 DO-only)  
 **Platform:** webversion  
 **Category:** bodyshop  
-**Ledger:** DBL-0031 (applied); DBL-0032 (APPLIED); DBL-0033 (APPLIED — Recovery DO post); DBL-0034 (APPLIED — export + mismatch)  
+**Ledger:** DBL-0031 (applied); DBL-0032 (APPLIED); DBL-0033 (APPLIED — Recovery DO post); DBL-0034 (APPLIED — export + mismatch); DBL-0036 (APPLIED — Reception delete after Cancel; Recovery hides cancelled); DBL-0037 (APPLIED — Recovery More View storage read + export l.id)  
 **Route:** `/bodyshop-recovery`  
 **Module:** `bodyshop_recovery`  
 **Depends on:** BODYSHOP-SETTLEMENT-001 (`bodyshop_settlements.insurance_due_amount`)
@@ -36,6 +36,8 @@ Add a fourth Bodyshop nav item **Bodyshop Recovery**. It is the accounts rupee b
 5. **More** is a read-only case sheet (customer, policy no, claim no, documents). **Post Payment** opens Stage 18 · DO Payment on this page. Repair Tracker is not required. Customer remaining stays off this page.
 6. Grant by named user in Admin → Permissions (`bodyshop_recovery` view). View is enough to list, open More, and post DO Main/GST/TDS. Do **not** add a `BS Recovery` Employee Master business role.
 7. **Org-wide visibility.** List, More, and DO post do not use dealer/branch/fuel. Customer posts and invoice/DO capture stay Repair Tracker (`bodyshop_repair` modify + dealer scope).
+8. **Cancelled repairs are not Recovery rows.** `list_bodyshop_do_recovery` excludes `overall_status = cancelled`. Delivered + unpaid still lists. Reception Delete is allowed only after Cancel (DBL-0036) — not for delivered cards.
+9. **More → View is org-wide.** Open Drive URL when stored; otherwise a signed autodoc URL. Recovery view/modify may SELECT `autodoc` objects under `service-advisor-bodyshop-docs` (DBL-0037). Do not require the viewer’s dealer code to match the file path.
 
 ```
 insurance_due = do_amount − (Main + GST + TDS, not reversed)

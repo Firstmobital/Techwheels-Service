@@ -28,6 +28,7 @@ export interface RecoveryCaseDocument {
   file_name: string | null
   content_type: string | null
   drive_url: string | null
+  drive_file_id: string | null
   storage_bucket: string | null
   storage_path: string | null
   uploaded_at: string | null
@@ -177,6 +178,11 @@ export async function openRecoveryDocument(doc: RecoveryCaseDocument): Promise<v
   const drive = String(doc.drive_url ?? '').trim()
   if (drive) {
     window.open(drive, '_blank', 'noopener,noreferrer')
+    return
+  }
+  const fileId = String(doc.drive_file_id ?? '').trim()
+  if (fileId) {
+    window.open(`https://drive.google.com/file/d/${fileId}/view`, '_blank', 'noopener,noreferrer')
     return
   }
   const bucket = String(doc.storage_bucket ?? '').trim()

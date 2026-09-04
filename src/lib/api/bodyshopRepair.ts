@@ -462,3 +462,7 @@ export async function advanceStage(id: number, card: RepairCard): Promise<Repair
     delivered_at: isLast ? new Date().toISOString() : undefined,
   })
 }
+
+export async function cancelRepairCard(id: number): Promise<RepairCard> {
+  return updateRepairCard(id, { overall_status: 'cancelled' })
+}
