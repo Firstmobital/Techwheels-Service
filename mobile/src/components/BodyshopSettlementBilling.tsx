@@ -127,9 +127,6 @@ export function BodyshopSettlementBilling<T extends SettlementCardCache>({
         invoiceNumber: inv.invoice_number,
         invoiceDate: inv.invoice_date,
         invoiceAmount: inv.total_invoice_amount,
-        invoiceLabourAmount: inv.final_labour_amount,
-        invoiceSparesAmount: inv.final_spares_amount,
-        invoiceAccount: inv.account,
         invoiceSource: 'psf_revenue_dms',
         doAmount: numOrNull(doAmount),
         doStatus,
@@ -232,7 +229,7 @@ export function BodyshopSettlementBilling<T extends SettlementCardCache>({
     <>
       <Text style={styles.sectionTitle}>Billing & DO</Text>
       {payload?.payer_mismatch ? (
-        <Text style={{ fontSize: 12, color: '#92400e', marginBottom: 8 }}>Policy company does not match the invoice account.</Text>
+        <Text style={{ fontSize: 12, color: '#92400e', marginBottom: 8 }}>Policy company on the card does not match the DMS invoice bill-to.</Text>
       ) : null}
       {header?.needs_accounts_review ? (
         <Text style={{ fontSize: 12, color: '#92400e', marginBottom: 8 }}>Old Payment Received had no posted lines. Statuses stay Pending until amounts are posted.</Text>
@@ -273,15 +270,21 @@ export function BodyshopSettlementBilling<T extends SettlementCardCache>({
         </View>
         <Text style={[styles.fieldLabel, { marginTop: 8 }]}>DO Amount (₹)</Text>
         <TextInput style={styles.input} keyboardType="numeric" value={doAmount} onChangeText={setDoAmount} placeholder="0" placeholderTextColor="#a7a99f" />
-        <Text style={[styles.fieldLabel, { marginTop: 10 }]}>Customer Diff</Text>
-        <Text style={{ fontSize: 13, fontWeight: '700', color: '#1a1b21', marginBottom: 10 }}>
-          {inr(header?.customer_diff_amount ?? card.customer_diff_amount)} · {kindLabel}
-        </Text>
+        {(header?.do_amount ?? card.do_amount) != null && (
+          <>
+            <Text style={[styles.fieldLabel, { marginTop: 10 }]}>Customer Diff</Text>
+            <Text style={{ fontSize: 13, fontWeight: '700', color: '#1a1b21', marginBottom: 10 }}>
+              {inr(header?.customer_diff_amount ?? card.customer_diff_amount)} · {kindLabel}
+            </Text>
+          </>
+        )}
         <TouchableOpacity onPress={() => void saveHeader()} disabled={busy} style={styles.saveBtnSmall}>
           <Text style={{ color: '#fff', fontWeight: '700' }}>{busy ? 'Saving…' : 'Save Billing & DO'}</Text>
         </TouchableOpacity>
       </View>
 
+      {(header?.do_amount ?? card.do_amount) != null && (
+      <>
       <Text style={[styles.sectionTitle, { marginTop: 16 }]}>Stage 18 · DO Payment</Text>
       <View style={styles.formCard}>
         <View style={[styles.statusPill, { alignSelf: 'flex-start', backgroundColor: doPill.bg, borderColor: doPill.fg, marginBottom: 10 }]}>
@@ -340,6 +343,8 @@ export function BodyshopSettlementBilling<T extends SettlementCardCache>({
           ))
         )}
       </View>
+      </>
+      )}
     </>
   )
 }

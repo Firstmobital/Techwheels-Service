@@ -4881,6 +4881,7 @@ export default function BodyshopRepairPage() {
                     ))}
                   </div>
 
+                  {selected.do_amount != null && (
                   <div className="brx-settle-pills">
                     <div className="brx-settle-pill-row">
                       <span className="brx-settle-pill-k">DO Payment</span>
@@ -4895,6 +4896,7 @@ export default function BodyshopRepairPage() {
                       </span>
                     </div>
                   </div>
+                  )}
 
                   {/* current stage */}
                   <div className="brx-overview-stagebox">

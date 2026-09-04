@@ -56,9 +56,6 @@ export function BodyshopSettlementPanel({
   const [invoiceNumber, setInvoiceNumber] = useState('')
   const [invoiceDate, setInvoiceDate] = useState('')
   const [invoiceAmount, setInvoiceAmount] = useState(card.billed_amount != null ? String(card.billed_amount) : '')
-  const [invoiceLabour, setInvoiceLabour] = useState('')
-  const [invoiceSpares, setInvoiceSpares] = useState('')
-  const [invoiceAccount, setInvoiceAccount] = useState('')
   const [doStatus, setDoStatus] = useState(card.do_status ?? 'pending')
   const [doAmount, setDoAmount] = useState(card.do_amount != null ? String(card.do_amount) : '')
   const [doHeaderRef, setDoHeaderRef] = useState('')
@@ -85,9 +82,6 @@ export function BodyshopSettlementPanel({
       setInvoiceDate(h?.invoice_date ?? next.suggested_invoice?.invoice_date ?? '')
       const billed = c.billed_amount ?? h?.invoice_amount ?? card.billed_amount
       setInvoiceAmount(billed != null ? String(billed) : '')
-      setInvoiceLabour(h?.invoice_labour_amount != null ? String(h.invoice_labour_amount) : (next.suggested_invoice?.final_labour_amount != null ? String(next.suggested_invoice.final_labour_amount) : ''))
-      setInvoiceSpares(h?.invoice_spares_amount != null ? String(h.invoice_spares_amount) : (next.suggested_invoice?.final_spares_amount != null ? String(next.suggested_invoice.final_spares_amount) : ''))
-      setInvoiceAccount(h?.invoice_account ?? next.suggested_invoice?.account ?? '')
       setDoStatus(String(c.do_status ?? h?.do_status ?? card.do_status ?? 'pending'))
       const dAmt = c.do_amount ?? h?.do_amount ?? card.do_amount
       setDoAmount(dAmt != null ? String(dAmt) : '')
@@ -128,9 +122,6 @@ export function BodyshopSettlementPanel({
         invoiceNumber: invoiceNumber.trim() || null,
         invoiceDate: invoiceDate.trim() || null,
         invoiceAmount: numOrNull(invoiceAmount),
-        invoiceLabourAmount: numOrNull(invoiceLabour),
-        invoiceSparesAmount: numOrNull(invoiceSpares),
-        invoiceAccount: invoiceAccount.trim() || null,
         doAmount: nextDoAmt,
         doStatus: nextDo,
         doReference: doHeaderRef.trim() || null,
@@ -159,9 +150,6 @@ export function BodyshopSettlementPanel({
         invoiceNumber: inv.invoice_number,
         invoiceDate: inv.invoice_date,
         invoiceAmount: inv.total_invoice_amount,
-        invoiceLabourAmount: inv.final_labour_amount,
-        invoiceSparesAmount: inv.final_spares_amount,
-        invoiceAccount: inv.account,
         invoiceSource: 'psf_revenue_dms',
         doAmount: numOrNull(doAmount),
         doStatus,
@@ -170,9 +158,6 @@ export function BodyshopSettlementPanel({
       setInvoiceNumber(inv.invoice_number ?? '')
       setInvoiceDate(inv.invoice_date ?? '')
       setInvoiceAmount(String(inv.total_invoice_amount))
-      setInvoiceLabour(inv.final_labour_amount != null ? String(inv.final_labour_amount) : '')
-      setInvoiceSpares(inv.final_spares_amount != null ? String(inv.final_spares_amount) : '')
-      setInvoiceAccount(inv.account ?? '')
       onCardChange(mergeSettlementCard(card, next))
       toast(`Attached invoice ${inv.invoice_number ?? ''}`.trim())
     } catch (e: any) {
@@ -278,7 +263,7 @@ export function BodyshopSettlementPanel({
     if (byDate !== 0) return byDate
     return String(b.created_at).localeCompare(String(a.created_at))
   })
-  const invoiceGst = payload?.suggested_invoice?.tax_parts
+  const doCaptured = (header?.do_amount ?? card.do_amount) != null
 
   return (
     <>
@@ -286,11 +271,10 @@ export function BodyshopSettlementPanel({
         <div className="brx-panel-h">Billing &amp; DO (stages 15–16)</div>
         {payload?.payer_mismatch && (
           <div className="brx-settle-banner">
-            Policy company on the card does not match the invoice account
-            {payload.suggested_invoice?.account ? ` (${payload.suggested_invoice.account})` : ''}.
+            Policy company on the card does not match the DMS invoice bill-to.
           </div>
         )}
-        {header?.needs_accounts_review && (
+        {doCaptured && header?.needs_accounts_review && (
           <div className="brx-settle-banner">
             Old Payment Received had no posted lines. Both payment statuses are Pending until amounts are posted.
           </div>
@@ -317,24 +301,6 @@ export function BodyshopSettlementPanel({
             <input className="inp" type="number" value={invoiceAmount} onChange={(e) => setInvoiceAmount(e.target.value)} />
           </label>
           <label className="brx-field">
-            <span className="brx-field-label">Labour (₹)</span>
-            <input className="inp" type="number" value={invoiceLabour} onChange={(e) => setInvoiceLabour(e.target.value)} />
-          </label>
-          <label className="brx-field">
-            <span className="brx-field-label">Parts (₹)</span>
-            <input className="inp" type="number" value={invoiceSpares} onChange={(e) => setInvoiceSpares(e.target.value)} />
-          </label>
-          <label className="brx-field">
-            <span className="brx-field-label">Invoice account</span>
-            <input className="inp" value={invoiceAccount} onChange={(e) => setInvoiceAccount(e.target.value)} />
-          </label>
-          <div className="brx-field">
-            <span className="brx-field-label">Invoice GST (display only)</span>
-            <div className="inp" style={{ display: 'flex', alignItems: 'center', background: 'var(--bg)', color: 'var(--text-2)' }}>
-              {inr(invoiceGst)} — not the DO GST line
-            </div>
-          </div>
-          <label className="brx-field">
             <span className="brx-field-label">DO Status</span>
             <select className="sel" value={doStatus} onChange={(e) => setDoStatus(e.target.value)}>
               <option value="pending">Pending</option>
@@ -352,12 +318,14 @@ export function BodyshopSettlementPanel({
             <span className="brx-field-label">DO reference</span>
             <input className="inp" value={doHeaderRef} onChange={(e) => setDoHeaderRef(e.target.value)} />
           </label>
+          {doCaptured && (
           <div className="brx-field">
             <span className="brx-field-label">Customer Diff</span>
             <div className="inp" style={{ display: 'flex', alignItems: 'center', background: 'var(--bg)', color: 'var(--text-2)' }}>
               {inr(custDiff)} · {kindLabel}
             </div>
           </div>
+          )}
           <div className="brx-field">
             <span className="brx-field-label">DMS invoice</span>
             <div className="inp" style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'var(--bg)' }}>
@@ -377,6 +345,8 @@ export function BodyshopSettlementPanel({
         </div>
       </div>
 
+      {doCaptured && (
+      <>
       <div className="brx-panel">
         <div className="brx-panel-h">Stage 18 · DO Payment</div>
         <div className="brx-settle-status">
@@ -515,6 +485,8 @@ export function BodyshopSettlementPanel({
           </table>
         )}
       </div>
+      </>
+      )}
     </>
   )
 }
