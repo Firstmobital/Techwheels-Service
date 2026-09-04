@@ -28,36 +28,21 @@ function statusLabel(s: string | null | undefined) {
   return 'Pending'
 }
 
-function istTodayYmd(): string {
-  return new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'Asia/Kolkata',
+function invoiceParts(iso: string | null | undefined): { year: number; month: number } {
+  if (!iso) return { year: 0, month: 0 }
+  const raw = String(iso).slice(0, 10)
+  const [y, m] = raw.split('-').map(Number)
+  if (!y || !m) return { year: 0, month: 0 }
+  return { year: y, month: m }
+}
+
+function monthLabel(year: number, month: number) {
+  if (!year || !month) return 'No invoice date'
+  return new Date(Date.UTC(year, month - 1, 1)).toLocaleDateString('en-IN', {
+    month: 'short',
     year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).format(new Date())
-}
-
-function monthBounds(offsetFromCurrent: number): { from: string; to: string } {
-  const today = istTodayYmd()
-  let year = Number(today.slice(0, 4))
-  let month = Number(today.slice(5, 7)) + offsetFromCurrent
-  while (month < 1) {
-    month += 12
-    year -= 1
-  }
-  while (month > 12) {
-    month -= 12
-    year += 1
-  }
-  const from = `${year}-${String(month).padStart(2, '0')}-01`
-  const lastDay = new Date(Date.UTC(year, month, 0)).getUTCDate()
-  return { from, to: `${year}-${String(month).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}` }
-}
-
-function rowInvoiceYmd(iso: string | null | undefined): string | null {
-  if (!iso) return null
-  const ymd = String(iso).slice(0, 10)
-  return /^\d{4}-\d{2}-\d{2}$/.test(ymd) ? ymd : null
+    timeZone: 'UTC',
+  })
 }
 
 function ageingDays(iso: string | null | undefined) {
@@ -102,25 +87,6 @@ const DOC_LABELS: Record<string, string> = {
 }
 
 type StatusFilter = 'all' | 'pending' | 'partial' | 'not_received'
-type PeriodFilter = 'all' | 'this_month' | 'last_month' | 'custom' | 'no_date'
-
-function inPeriod(ymd: string | null, period: PeriodFilter, customFrom: string, customTo: string): boolean {
-  if (period === 'all') return true
-  if (period === 'no_date') return ymd == null
-  if (ymd == null) return false
-  if (period === 'this_month') {
-    const { from, to } = monthBounds(0)
-    return ymd >= from && ymd <= to
-  }
-  if (period === 'last_month') {
-    const { from, to } = monthBounds(-1)
-    return ymd >= from && ymd <= to
-  }
-  if (!customFrom && !customTo) return true
-  if (customFrom && ymd < customFrom) return false
-  if (customTo && ymd > customTo) return false
-  return true
-}
 
 function Field({ label, value }: { label: string; value: string }) {
   return (
@@ -141,9 +107,8 @@ export default function BodyshopRecoveryPage() {
   const [error, setError] = useState<string | null>(null)
   const [toast, setToast] = useState<{ msg: string; ok: boolean } | null>(null)
   const [search, setSearch] = useState('')
-  const [period, setPeriod] = useState<PeriodFilter>('all')
-  const [customFrom, setCustomFrom] = useState('')
-  const [customTo, setCustomTo] = useState('')
+  const [year, setYear] = useState<number | 'all'>('all')
+  const [month, setMonth] = useState<number | 'all'>('all')
   const [insurer, setInsurer] = useState('all')
   const [status, setStatus] = useState<StatusFilter>('all')
   const [moreId, setMoreId] = useState<number | null>(null)
@@ -214,11 +179,6 @@ export default function BodyshopRecoveryPage() {
       .sort((a, b) => b.due - a.due)
   }, [rows])
 
-  const noDateCount = useMemo(
-    () => rows.filter((r) => rowInvoiceYmd(r.invoice_date) == null).length,
-    [rows],
-  )
-
   const searched = useMemo(() => {
     const q = search.trim().toLowerCase()
     return rows.filter((r) => {
@@ -226,21 +186,54 @@ export default function BodyshopRecoveryPage() {
         const key = String(r.insurance_company ?? '').trim() ? String(r.insurance_company).trim().toLowerCase() : '__blank__'
         if (key !== insurer) return false
       }
-      if (!inPeriod(rowInvoiceYmd(r.invoice_date), period, customFrom, customTo)) return false
       if (!q) return true
       const blob = [r.job_card_no, r.reg_number, r.customer_name, r.sa_name, r.branch, r.insurance_company, r.invoice_number, r.invoice_account]
         .map((v) => String(v ?? '').toLowerCase())
         .join(' ')
       return blob.includes(q)
     })
-  }, [rows, search, insurer, period, customFrom, customTo])
+  }, [rows, search, insurer])
+
+  const years = useMemo(() => {
+    const map = new Map<number, { due: number; count: number }>()
+    for (const r of searched) {
+      const { year: y } = invoiceParts(r.invoice_date)
+      const cur = map.get(y) ?? { due: 0, count: 0 }
+      cur.due += Number(r.insurance_due_amount) || 0
+      cur.count += 1
+      map.set(y, cur)
+    }
+    return [...map.entries()]
+      .map(([y, v]) => ({ year: y, ...v }))
+      .sort((a, b) => b.year - a.year)
+  }, [searched])
+
+  const yearScoped = useMemo(() => {
+    if (year === 'all') return searched
+    return searched.filter((r) => invoiceParts(r.invoice_date).year === year)
+  }, [searched, year])
+
+  const months = useMemo(() => {
+    const map = new Map<number, { due: number; count: number }>()
+    for (const r of yearScoped) {
+      const { month: m } = invoiceParts(r.invoice_date)
+      const cur = map.get(m) ?? { due: 0, count: 0 }
+      cur.due += Number(r.insurance_due_amount) || 0
+      cur.count += 1
+      map.set(m, cur)
+    }
+    return [...map.entries()]
+      .map(([m, v]) => ({ month: m, ...v }))
+      .sort((a, b) => a.month - b.month)
+  }, [yearScoped])
 
   const visible = useMemo(() => {
-    return searched.filter((r) => {
+    return yearScoped.filter((r) => {
+      if (month !== 'all' && invoiceParts(r.invoice_date).month !== month) return false
       if (status !== 'all' && String(r.do_payment_status ?? 'pending').toLowerCase() !== status) return false
       return true
     })
-  }, [searched, status])
+  }, [yearScoped, month, status])
 
   const kpis = useMemo(() => {
     const due = visible.reduce((s, r) => s + (Number(r.insurance_due_amount) || 0), 0)
@@ -443,40 +436,48 @@ export default function BodyshopRecoveryPage() {
       </div>
 
       <div className="brx-pipeline" style={{ marginTop: 8 }}>
-        <button type="button" className={`brx-pipe-pill ${period === 'all' ? 'is-active' : ''}`} onClick={() => setPeriod('all')}>
-          <span className="brx-pipe-pill__n">{rows.length}</span>
-          <span className="brx-pipe-pill__l">All<small>invoice date</small></span>
+        <button
+          type="button"
+          className={`brx-pipe-pill ${year === 'all' ? 'is-active' : ''}`}
+          onClick={() => { setYear('all'); setMonth('all') }}
+        >
+          <span className="brx-pipe-pill__n">{searched.length}</span>
+          <span className="brx-pipe-pill__l">All years<small>invoice date</small></span>
         </button>
-        <button type="button" className={`brx-pipe-pill ${period === 'this_month' ? 'is-active' : ''}`} onClick={() => setPeriod('this_month')}>
-          <span className="brx-pipe-pill__n">{monthBounds(0).from.slice(0, 7)}</span>
-          <span className="brx-pipe-pill__l">This month<small>calendar IST</small></span>
-        </button>
-        <button type="button" className={`brx-pipe-pill ${period === 'last_month' ? 'is-active' : ''}`} onClick={() => setPeriod('last_month')}>
-          <span className="brx-pipe-pill__n">{monthBounds(-1).from.slice(0, 7)}</span>
-          <span className="brx-pipe-pill__l">Last month<small>calendar IST</small></span>
-        </button>
-        <button type="button" className={`brx-pipe-pill ${period === 'custom' ? 'is-active' : ''}`} onClick={() => setPeriod('custom')}>
-          <span className="brx-pipe-pill__n">From–to</span>
-          <span className="brx-pipe-pill__l">Custom<small>inclusive</small></span>
-        </button>
-        {noDateCount > 0 && (
-          <button type="button" className={`brx-pipe-pill ${period === 'no_date' ? 'is-active' : ''}`} onClick={() => setPeriod('no_date')}>
-            <span className="brx-pipe-pill__n">{noDateCount}</span>
-            <span className="brx-pipe-pill__l">No date<small>missing invoice date</small></span>
+        {years.map((y) => (
+          <button
+            key={y.year}
+            type="button"
+            className={`brx-pipe-pill ${year === y.year ? 'is-active' : ''}`}
+            onClick={() => { setYear(y.year); setMonth('all') }}
+          >
+            <span className="brx-pipe-pill__n">{inr(y.due)}</span>
+            <span className="brx-pipe-pill__l">{y.year === 0 ? 'No date' : String(y.year)}<small>{y.count} JC</small></span>
           </button>
-        )}
+        ))}
       </div>
 
-      {period === 'custom' && (
-        <div className="brx-recov-filters" style={{ marginTop: 8 }}>
-          <label className="brx-field">
-            <span className="brx-field-label">From</span>
-            <input className="inp" type="date" value={customFrom} onChange={(e) => setCustomFrom(e.target.value)} />
-          </label>
-          <label className="brx-field">
-            <span className="brx-field-label">To</span>
-            <input className="inp" type="date" value={customTo} onChange={(e) => setCustomTo(e.target.value)} />
-          </label>
+      {year !== 'all' && (
+        <div className="brx-pipeline" style={{ marginTop: 8 }}>
+          <button
+            type="button"
+            className={`brx-pipe-pill ${month === 'all' ? 'is-active' : ''}`}
+            onClick={() => setMonth('all')}
+          >
+            <span className="brx-pipe-pill__n">{yearScoped.length}</span>
+            <span className="brx-pipe-pill__l">All months<small>{year === 0 ? 'no date' : String(year)}</small></span>
+          </button>
+          {months.map((m) => (
+            <button
+              key={m.month}
+              type="button"
+              className={`brx-pipe-pill ${month === m.month ? 'is-active' : ''}`}
+              onClick={() => setMonth(m.month)}
+            >
+              <span className="brx-pipe-pill__n">{inr(m.due)}</span>
+              <span className="brx-pipe-pill__l">{monthLabel(year === 0 ? 0 : year, m.month)}<small>{m.count} JC</small></span>
+            </button>
+          ))}
         </div>
       )}
 
