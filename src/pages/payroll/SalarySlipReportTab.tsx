@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { fetchPayrollEmployees, fetchPayrollEntries, fetchPayrollMonth } from '../../lib/api/payroll'
 import { formatCurrency, maskBankAccount } from '../../lib/payroll/calculations'
+import { displayOptional, resolvePayrollEntryIdentity } from '../../lib/payroll/entryIdentity'
 import { exportWorkbook } from '../../lib/payroll/excelUtils'
-import type { PayrollEntry } from '../../lib/payroll/types'
 
 interface Props {
   payrollMonth: string
@@ -11,7 +11,7 @@ interface Props {
 }
 
 export default function SalarySlipReportTab({ payrollMonth, monthInput, onMonthChange }: Props) {
-  const [entries, setEntries] = useState<PayrollEntry[]>([])
+  const [entries, setEntries] = useState<Awaited<ReturnType<typeof fetchPayrollEntries>>>([])
   const [employees, setEmployees] = useState<Awaited<ReturnType<typeof fetchPayrollEmployees>>>([])
   const [monthStatus, setMonthStatus] = useState<'draft' | 'finalized'>('draft')
   const [selectedCode, setSelectedCode] = useState('')
@@ -29,14 +29,26 @@ export default function SalarySlipReportTab({ payrollMonth, monthInput, onMonthC
 
   useEffect(() => { void reload() }, [reload])
 
+  // Live employee_master is a legacy NULL-snapshot fallback only.
   const empByCode = useMemo(() => {
     const m = new Map<string, (typeof employees)[0]>()
     employees.forEach((e) => m.set(e.employee_code.trim().toUpperCase(), e))
     return m
   }, [employees])
 
+  const identityByCode = useMemo(() => {
+    const m = new Map<string, ReturnType<typeof resolvePayrollEntryIdentity>>()
+    entries.forEach((entry) => {
+      const code = entry.employee_code.trim().toUpperCase()
+      m.set(code, resolvePayrollEntryIdentity(entry, empByCode.get(code)))
+    })
+    return m
+  }, [entries, empByCode])
+
   const selectedEntry = entries.find((e) => e.employee_code.trim().toUpperCase() === selectedCode.trim().toUpperCase())
-  const selectedEmp = selectedCode ? empByCode.get(selectedCode.trim().toUpperCase()) : undefined
+  const selectedIdentity = selectedCode
+    ? identityByCode.get(selectedCode.trim().toUpperCase())
+    : undefined
 
   function exportConsolidated() {
     const headers = [
@@ -45,9 +57,9 @@ export default function SalarySlipReportTab({ payrollMonth, monthInput, onMonthC
       'Advance Recovery', 'Other Deductions', 'Net Payable', 'Status',
     ]
     const rows = entries.map((e) => {
-      const emp = empByCode.get(e.employee_code.trim().toUpperCase())
+      const identity = identityByCode.get(e.employee_code.trim().toUpperCase())
       return [
-        e.employee_code, emp?.employee_name ?? '', emp?.department ?? '', emp?.location ?? '', emp?.role ?? '',
+        e.employee_code, identity?.employeeName ?? e.employee_code, identity?.department ?? '', identity?.branch ?? '', identity?.role ?? '',
         payrollMonth.slice(0, 7),
         e.earned_base, e.sa_variable_earning, e.technician_variable_earning, e.custom_additions, e.gross_payout,
         e.advance_deduction, e.other_deductions, e.net_payable, monthStatus.toUpperCase(),
@@ -68,8 +80,8 @@ export default function SalarySlipReportTab({ payrollMonth, monthInput, onMonthC
         <select value={selectedCode} onChange={(ev) => setSelectedCode(ev.target.value)}>
           <option value="">Select employee for slip…</option>
           {entries.map((e) => {
-            const emp = empByCode.get(e.employee_code.trim().toUpperCase())
-            return <option key={e.id} value={e.employee_code}>{e.employee_code} — {emp?.employee_name}</option>
+            const identity = identityByCode.get(e.employee_code.trim().toUpperCase())
+            return <option key={e.id} value={e.employee_code}>{e.employee_code} — {identity?.employeeName ?? e.employee_code}</option>
           })}
         </select>
         <button type="button" className="btn btn--ghost btn--sm" onClick={exportConsolidated}>Consolidated Excel</button>
@@ -83,14 +95,14 @@ export default function SalarySlipReportTab({ payrollMonth, monthInput, onMonthC
         </span>
       </div>
 
-      {selectedEntry && selectedEmp && (
+      {selectedEntry && selectedIdentity && (
         <div id="salary-slip" style={{ maxWidth: '520px', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '1rem' }}>
           <h3 style={{ margin: '0 0 0.25rem', fontSize: '1rem' }}>Salary Slip — {monthStatus === 'finalized' ? 'Final' : 'Draft'}</h3>
           <div style={{ fontSize: '0.78rem', color: '#64748b', marginBottom: '0.75rem' }}>{payrollMonth.slice(0, 7)}</div>
           <div style={{ fontSize: '0.82rem', marginBottom: '0.75rem' }}>
-            <div><strong>{selectedEmp.employee_name}</strong> ({selectedEntry.employee_code})</div>
-            <div>{selectedEmp.department ?? '—'} · {selectedEmp.location ?? '—'} · {selectedEmp.role ?? '—'}</div>
-            <div>Bank: {maskBankAccount(selectedEmp.account_number)} · {selectedEmp.ifsc ?? '—'}</div>
+            <div><strong>{selectedIdentity.employeeName}</strong> ({selectedEntry.employee_code})</div>
+            <div>{displayOptional(selectedIdentity.department)} · {displayOptional(selectedIdentity.branch)} · {displayOptional(selectedIdentity.role)}</div>
+            <div>Bank: {displayOptional(selectedIdentity.bankName)} · {maskBankAccount(selectedIdentity.accountNumber)} · {displayOptional(selectedIdentity.ifsc)}</div>
           </div>
           <table style={{ width: '100%', fontSize: '0.78rem', borderCollapse: 'collapse' }}>
             <tbody>

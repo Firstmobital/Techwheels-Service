@@ -9,6 +9,7 @@ import {
   unlockPayrollMonth,
 } from '../../lib/api/payroll'
 import { formatCurrency } from '../../lib/payroll/calculations'
+import { resolvePayrollEntryIdentity } from '../../lib/payroll/entryIdentity'
 import { exportWorkbookWithTextAccounts } from '../../lib/payroll/excelUtils'
 import { SALARY_TYPE_LABELS, type PayrollEntry } from '../../lib/payroll/types'
 import { supabase } from '../../lib/supabase'
@@ -58,32 +59,46 @@ export default function PayrollProcessingTab({
 
   useEffect(() => { void reload() }, [reload])
 
+  // Live employee_master is used only as a legacy NULL-snapshot fallback.
+  // Historical row existence, filters, KPIs, and display use payroll entry snapshots.
   const empByCode = useMemo(() => {
     const m = new Map<string, (typeof employees)[0]>()
     employees.forEach((e) => m.set(e.employee_code.trim().toUpperCase(), e))
     return m
   }, [employees])
 
-  const depts = useMemo(() => Array.from(new Set(employees.map((e) => e.department?.trim()).filter(Boolean))).sort(), [employees])
-  const branches = useMemo(() => Array.from(new Set(employees.map((e) => e.location?.trim()).filter(Boolean))).sort(), [employees])
+  const identityByCode = useMemo(() => {
+    const m = new Map<string, ReturnType<typeof resolvePayrollEntryIdentity>>()
+    entries.forEach((entry) => {
+      const code = entry.employee_code.trim().toUpperCase()
+      m.set(code, resolvePayrollEntryIdentity(entry, empByCode.get(code)))
+    })
+    return m
+  }, [entries, empByCode])
+
+  const depts = useMemo(() => Array.from(new Set(
+    entries.map((entry) => identityByCode.get(entry.employee_code.trim().toUpperCase())?.department?.trim()).filter(Boolean),
+  )).sort(), [entries, identityByCode])
+  const branches = useMemo(() => Array.from(new Set(
+    entries.map((entry) => identityByCode.get(entry.employee_code.trim().toUpperCase())?.branch?.trim()).filter(Boolean),
+  )).sort(), [entries, identityByCode])
 
   const aggregateScopedRows = useMemo(() => entries.filter((entry) => {
-    const emp = empByCode.get(entry.employee_code.trim().toUpperCase())
-    if (!emp) return false
-    if (deptFilter !== 'all' && (emp.department?.trim() ?? '') !== deptFilter) return false
-    if (branchFilter !== 'all' && (emp.location?.trim() ?? '') !== branchFilter) return false
+    const identity = identityByCode.get(entry.employee_code.trim().toUpperCase())
+    if (deptFilter !== 'all' && (identity?.department?.trim() ?? '') !== deptFilter) return false
+    if (branchFilter !== 'all' && (identity?.branch?.trim() ?? '') !== branchFilter) return false
     if (salaryTypeFilter !== 'all' && entry.salary_type_snapshot !== salaryTypeFilter) return false
     return true
-  }), [entries, empByCode, deptFilter, branchFilter, salaryTypeFilter])
+  }), [entries, identityByCode, deptFilter, branchFilter, salaryTypeFilter])
 
   const tableRows = useMemo(() => {
     const term = search.trim().toLowerCase()
     if (!term) return aggregateScopedRows
     return aggregateScopedRows.filter((entry) => {
-      const emp = empByCode.get(entry.employee_code.trim().toUpperCase())
-      return Boolean(emp && `${emp.employee_name} ${emp.employee_code}`.toLowerCase().includes(term))
+      const identity = identityByCode.get(entry.employee_code.trim().toUpperCase())
+      return `${identity?.employeeName ?? ''} ${entry.employee_code}`.toLowerCase().includes(term)
     })
-  }, [aggregateScopedRows, empByCode, search])
+  }, [aggregateScopedRows, identityByCode, search])
 
   const totals = useMemo(() => aggregateScopedRows.reduce((acc, e) => {
     acc.employeeCount += 1
@@ -191,8 +206,15 @@ export default function PayrollProcessingTab({
     const rows = tableRows
       .filter((e) => Number(e.net_payable) > 0)
       .map((e) => {
-        const emp = empByCode.get(e.employee_code.trim().toUpperCase())!
-        return [e.employee_code, emp.employee_name, e.net_payable, emp.bank_name ?? '', emp.account_number ?? '', emp.ifsc ?? '']
+        const identity = identityByCode.get(e.employee_code.trim().toUpperCase())
+        return [
+          e.employee_code,
+          identity?.employeeName ?? e.employee_code,
+          e.net_payable,
+          identity?.bankName ?? '',
+          identity?.accountNumber ?? '',
+          identity?.ifsc ?? '',
+        ]
       })
     exportWorkbookWithTextAccounts('Bank Payout', headers, rows, `Payroll_Bank_Payout_${monthInput}.xlsx`, [4])
   }
@@ -281,12 +303,12 @@ export default function PayrollProcessingTab({
           </thead>
           <tbody>
             {tableRows.map((e) => {
-              const emp = empByCode.get(e.employee_code.trim().toUpperCase())
+              const identity = identityByCode.get(e.employee_code.trim().toUpperCase())
               const needsReview = Boolean((e.review_flags as { needsReview?: boolean } | null)?.needsReview)
               return (
                 <tr key={e.id} style={needsReview ? { background: '#fffbeb' } : undefined}>
                   <td>{e.employee_code}</td>
-                  <td>{emp?.employee_name ?? '—'}</td>
+                  <td>{identity?.employeeName ?? e.employee_code}</td>
                   <td>{SALARY_TYPE_LABELS[e.salary_type_snapshot]}</td>
                   <td>{formatCurrency(Number(e.base_salary_snapshot))}</td>
                   <td>{e.payable_days_snapshot}</td>

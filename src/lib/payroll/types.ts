@@ -99,6 +99,13 @@ export interface PayrollEntry {
   salary_type_snapshot: SalaryType
   base_salary_snapshot: number
   payable_days_snapshot: number
+  employee_name_snapshot: string | null
+  department_snapshot: string | null
+  branch_snapshot: string | null
+  role_snapshot: string | null
+  bank_name_snapshot: string | null
+  account_number_snapshot: string | null
+  ifsc_snapshot: string | null
   earned_base: number
   sa_variable_earning: number
   technician_variable_earning: number
