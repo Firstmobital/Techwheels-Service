@@ -1,6 +1,6 @@
 {
-  "generated_at_utc": "2026-08-24T07:10:31.845Z",
-  "scanned_files": 60,
+  "generated_at_utc": "2026-09-04T06:40:18.281Z",
+  "scanned_files": 62,
   "violations": 0,
   "scanned": [
     {
@@ -164,7 +164,23 @@
       }
     },
     {
+      "file": "docs/Implementation_plans/webversion/categories/bodyshop/active/BODYSHOP-LOOKUP-001_REPAIR_TRACKER_GLOBAL_SEARCH_PLAN_2026-09-04.md",
+      "checks": {
+        "metrics_automated_rows": 0,
+        "changelog_automated_rows": 0,
+        "snapshot_blocks": 0
+      }
+    },
+    {
       "file": "docs/Implementation_plans/webversion/categories/bodyshop/active/BODYSHOP-QUEUE-001_CANONICAL_STAGE_WORKLIST_BACKEND_PLAN_2026-06-20.md",
+      "checks": {
+        "metrics_automated_rows": 0,
+        "changelog_automated_rows": 0,
+        "snapshot_blocks": 0
+      }
+    },
+    {
+      "file": "docs/Implementation_plans/webversion/categories/bodyshop/active/BODYSHOP-SETTLEMENT-001_PAYMENT_RECONCILIATION_LEDGER_PLAN_2026-09-04.md",
       "checks": {
         "metrics_automated_rows": 0,
         "changelog_automated_rows": 0,
