@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import type { RepairCard } from '../lib/api/bodyshopRepair'
 import {
+  applyDmsInvoiceAndAlignPayer,
   getBodyshopSettlement,
   mergeSettlementCard,
   postCustomerAmount,
@@ -141,13 +142,10 @@ export function BodyshopSettlementPanel({
     }
     setSavingHeader(true)
     try {
-      const next = await upsertBodyshopSettlementHeader({
-        repairCardId: card.id,
+      const { payload: next, card: aligned } = await applyDmsInvoiceAndAlignPayer({
+        card,
+        invoice: inv,
         partsEntryStatus: partsStatus,
-        invoiceNumber: inv.invoice_number,
-        invoiceDate: inv.invoice_date,
-        invoiceAmount: inv.total_invoice_amount,
-        invoiceSource: 'psf_revenue_dms',
         doAmount: numOrNull(doAmount),
         doStatus,
       })
@@ -155,8 +153,12 @@ export function BodyshopSettlementPanel({
       setInvoiceNumber(inv.invoice_number ?? '')
       setInvoiceDate(inv.invoice_date ?? '')
       setInvoiceAmount(String(inv.total_invoice_amount))
-      onCardChange(mergeSettlementCard(card, next))
-      toast(`Attached invoice ${inv.invoice_number ?? ''}`.trim())
+      onCardChange(aligned)
+      toast(
+        inv.account
+          ? `Invoice attached. Policy company set to DMS bill-to.`
+          : `Attached invoice ${inv.invoice_number ?? ''}`.trim(),
+      )
     } catch (e: any) {
       toast(e?.message ?? 'Could not attach DMS invoice', false)
     } finally {

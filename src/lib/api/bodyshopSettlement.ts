@@ -1,5 +1,5 @@
 import { supabase } from '../supabase'
-import type { RepairCard } from './bodyshopRepair'
+import { updateRepairCard, type RepairCard } from './bodyshopRepair'
 
 export type SettlementKind = 'due' | 'refund' | 'none'
 export type PaymentStatus = 'pending' | 'partial' | 'received' | 'not_received'
@@ -182,7 +182,34 @@ export function mergeSettlementCard(card: RepairCard, payload: SettlementPayload
     do_payment_status: (c.do_payment_status ?? h?.do_payment_status ?? card.do_payment_status) ?? null,
     customer_payment_status: (c.customer_payment_status ?? h?.customer_payment_status ?? card.customer_payment_status) ?? null,
     customer_settlement_kind: (c.customer_settlement_kind ?? h?.customer_settlement_kind ?? card.customer_settlement_kind) ?? null,
+    insurance_company: (c.insurance_company ?? card.insurance_company) ?? null,
   }
+}
+
+export async function applyDmsInvoiceAndAlignPayer(input: {
+  card: RepairCard
+  invoice: SuggestedInvoice
+  partsEntryStatus?: string | null
+  doAmount?: number | null
+  doStatus?: string | null
+}): Promise<{ payload: SettlementPayload; card: RepairCard }> {
+  const account = String(input.invoice.account ?? '').trim() || null
+  let nextCard = input.card
+  if (account && account !== String(input.card.insurance_company ?? '').trim()) {
+    nextCard = await updateRepairCard(input.card.id, { insurance_company: account })
+  }
+  const payload = await upsertBodyshopSettlementHeader({
+    repairCardId: input.card.id,
+    partsEntryStatus: input.partsEntryStatus,
+    invoiceNumber: input.invoice.invoice_number,
+    invoiceDate: input.invoice.invoice_date,
+    invoiceAmount: input.invoice.total_invoice_amount,
+    invoiceAccount: account,
+    invoiceSource: 'psf_revenue_dms',
+    doAmount: input.doAmount,
+    doStatus: input.doStatus,
+  })
+  return { payload, card: mergeSettlementCard(nextCard, payload) }
 }
 
 export function bothPaymentsReceived(card: Pick<RepairCard, 'do_payment_status' | 'customer_payment_status'>): boolean {

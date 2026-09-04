@@ -171,7 +171,39 @@ export function mergeSettlementCard<T extends SettlementCardCache>(card: T, payl
     do_payment_status: c.do_payment_status ?? h?.do_payment_status ?? card.do_payment_status,
     customer_payment_status: c.customer_payment_status ?? h?.customer_payment_status ?? card.customer_payment_status,
     customer_settlement_kind: c.customer_settlement_kind ?? h?.customer_settlement_kind ?? card.customer_settlement_kind,
+    insurance_company: c.insurance_company ?? card.insurance_company,
   }
+}
+
+export async function applyDmsInvoiceAndAlignPayer<T extends SettlementCardCache>(input: {
+  card: T
+  invoice: NonNullable<SettlementPayload['suggested_invoice']>
+  partsEntryStatus?: string | null
+  doAmount?: number | null
+  doStatus?: string | null
+}): Promise<{ payload: SettlementPayload; card: T }> {
+  const account = String(input.invoice.account ?? '').trim() || null
+  let nextCard = input.card
+  if (account && account !== String(input.card.insurance_company ?? '').trim()) {
+    const { error } = await supabase
+      .from('bodyshop_repair_cards')
+      .update({ insurance_company: account, updated_at: new Date().toISOString() })
+      .eq('id', input.card.id)
+    if (error) throw error
+    nextCard = { ...input.card, insurance_company: account }
+  }
+  const payload = await upsertBodyshopSettlementHeader({
+    repairCardId: input.card.id,
+    partsEntryStatus: input.partsEntryStatus,
+    invoiceNumber: input.invoice.invoice_number,
+    invoiceDate: input.invoice.invoice_date,
+    invoiceAmount: input.invoice.total_invoice_amount,
+    invoiceAccount: account,
+    invoiceSource: 'psf_revenue_dms',
+    doAmount: input.doAmount,
+    doStatus: input.doStatus,
+  })
+  return { payload, card: mergeSettlementCard(nextCard, payload) }
 }
 
 export function settlementStatusLabel(status: string | null | undefined): string {

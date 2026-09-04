@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Alert, Text, TextInput, TouchableOpacity, View } from 'react-native'
 import {
+  applyDmsInvoiceAndAlignPayer,
   getBodyshopSettlement,
   mergeSettlementCard,
   postCustomerAmount,
@@ -121,20 +122,22 @@ export function BodyshopSettlementBilling<T extends SettlementCardCache>({
     }
     setBusy(true)
     try {
-      const next = await upsertBodyshopSettlementHeader({
-        repairCardId: card.id,
+      const { payload: next, card: aligned } = await applyDmsInvoiceAndAlignPayer({
+        card,
+        invoice: inv,
         partsEntryStatus: partsStatus,
-        invoiceNumber: inv.invoice_number,
-        invoiceDate: inv.invoice_date,
-        invoiceAmount: inv.total_invoice_amount,
-        invoiceSource: 'psf_revenue_dms',
         doAmount: numOrNull(doAmount),
         doStatus,
       })
       setPayload(next)
       setInvoiceAmount(String(inv.total_invoice_amount))
-      onCardChange(mergeSettlementCard(card, next))
-      onToast(`Attached invoice ${inv.invoice_number ?? ''}`.trim(), 'success')
+      onCardChange(aligned)
+      onToast(
+        inv.account
+          ? 'Invoice attached. Policy company set to DMS bill-to.'
+          : `Attached invoice ${inv.invoice_number ?? ''}`.trim(),
+        'success',
+      )
     } catch (e) {
       onToast(e instanceof Error ? e.message : 'Could not attach DMS invoice', 'error')
     } finally {
