@@ -39,6 +39,18 @@ function numOrNull(raw: string) {
   return Number.isFinite(n) ? n : null
 }
 
+function textOrNull(raw: string) {
+  const t = raw.trim()
+  return t || null
+}
+
+function lineRefRemark(line: { reference?: string | null; remarks?: string | null }) {
+  const a = String(line.reference ?? '').trim()
+  const b = String(line.remarks ?? '').trim()
+  if (a && b && a !== b) return `${a} · ${b}`
+  return a || b || '—'
+}
+
 export function BodyshopSettlementPanel({
   card,
   onCardChange,
@@ -66,6 +78,8 @@ export function BodyshopSettlementPanel({
   const [tdsAmt, setTdsAmt] = useState('')
 
   const [custAmt, setCustAmt] = useState('')
+  const [doNote, setDoNote] = useState('')
+  const [custNote, setCustNote] = useState('')
   const [doError, setDoError] = useState<string | null>(null)
   const [custError, setCustError] = useState<string | null>(null)
 
@@ -189,17 +203,21 @@ export function BodyshopSettlementPanel({
     setDoError(null)
     setSavingDo(true)
     try {
+      const note = textOrNull(doNote)
       const next = await postDoRelease({
         repairCardId: card.id,
         mainAmount: main,
         gstAmount: gst,
         tdsAmount: tds,
+        reference: note,
+        remarks: note,
       })
       setPayload(next)
       onCardChange(mergeSettlementCard(card, next))
       setMainAmt('')
       setGstAmt('')
       setTdsAmt('')
+      setDoNote('')
       toast('DO payment posted')
     } catch (e: unknown) {
       const msg = settlementRpcError(e)
@@ -222,13 +240,17 @@ export function BodyshopSettlementPanel({
     setCustError(null)
     setSavingCust(true)
     try {
+      const note = textOrNull(custNote)
       const next = await postCustomerAmount({
         repairCardId: card.id,
         amount: amt,
+        reference: note,
+        remarks: note,
       })
       setPayload(next)
       onCardChange(mergeSettlementCard(card, next))
       setCustAmt('')
+      setCustNote('')
       toast(kind === 'refund' ? 'Refund posted' : 'Customer receipt posted')
     } catch (e: unknown) {
       const msg = settlementRpcError(e)
@@ -272,7 +294,7 @@ export function BodyshopSettlementPanel({
         <div className="brx-panel-h">Billing &amp; DO (stages 15–16)</div>
         {payload?.payer_mismatch && (
           <div className="brx-settle-banner">
-            Policy company on the card does not match the DMS invoice bill-to.
+            Policy on card: {card.insurance_company || '—'} · DMS bill-to: {payload.suggested_invoice?.account || header?.invoice_account || '—'}
           </div>
         )}
         {doCaptured && header?.needs_accounts_review && (
@@ -324,11 +346,17 @@ export function BodyshopSettlementPanel({
           </div>
           )}
           <div className="brx-field">
+            <span className="brx-field-label">Policy company on card</span>
+            <div className="inp" style={{ display: 'flex', alignItems: 'center', background: 'var(--bg)', color: 'var(--text-2)' }}>
+              {card.insurance_company || '—'}
+            </div>
+          </div>
+          <div className="brx-field">
             <span className="brx-field-label">DMS invoice</span>
             <div className="inp" style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', background: 'var(--bg)' }}>
               <span>{payload?.suggested_invoice?.invoice_number ?? header?.invoice_number ?? '—'}</span>
-              {card.insurance_company && (
-                <span style={{ color: 'var(--text-2)' }}>{card.insurance_company}</span>
+              {(payload?.suggested_invoice?.account || header?.invoice_account) && (
+                <span style={{ color: 'var(--text-2)' }}>{payload?.suggested_invoice?.account ?? header?.invoice_account}</span>
               )}
               {payload?.suggested_invoice?.total_invoice_amount != null && (
                 <button type="button" className="btn" onClick={() => void useDmsInvoice()} disabled={savingHeader}>
@@ -373,8 +401,17 @@ export function BodyshopSettlementPanel({
             <span className="brx-field-label">TDS (₹)</span>
             <input className="inp" type="number" value={tdsAmt} onChange={(e) => setTdsAmt(e.target.value)} />
           </label>
+          <label className="brx-field brx-grid-full">
+            <span className="brx-field-label">Reference / Remark</span>
+            <input
+              className="inp"
+              value={doNote}
+              onChange={(e) => setDoNote(e.target.value)}
+              placeholder="UTR, cheque, or note"
+            />
+          </label>
           <div className="brx-grid-full" style={{ fontSize: 13, color: 'var(--muted)' }}>
-            Post any combination — Main, GST, and TDS can be saved separately or together. Each save stores who posted it and when.
+            Post any combination — Main, GST, and TDS can be saved separately or together. Each save stores who posted it, when, and this reference.
           </div>
           <div className="brx-grid-full" style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
             <button className="btn btn--primary" type="button" disabled={savingDo} onClick={() => void saveDoPayment(false)}>
@@ -409,6 +446,15 @@ export function BodyshopSettlementPanel({
               <span className="brx-field-label">{kind === 'refund' ? 'Remaining refund' : 'Remaining recoverable'}</span>
               <div className="inp" style={{ display: 'flex', alignItems: 'center', background: 'var(--bg)' }}>{inr(remaining)}</div>
             </div>
+            <label className="brx-field brx-grid-full">
+              <span className="brx-field-label">Reference / Remark</span>
+              <input
+                className="inp"
+                value={custNote}
+                onChange={(e) => setCustNote(e.target.value)}
+                placeholder="UTR, cheque, or note"
+              />
+            </label>
             <div className="brx-grid-full" style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
               <button className="btn btn--primary" type="button" disabled={savingCust} onClick={() => void saveCustomer(false)}>
                 {savingCust ? 'Posting…' : kind === 'refund' ? 'Post refund' : 'Post customer receipt'}
@@ -456,6 +502,7 @@ export function BodyshopSettlementPanel({
                 <th>When</th>
                 <th>Type</th>
                 <th>Amount</th>
+                <th>Reference / Remark</th>
                 <th>By</th>
                 <th></th>
               </tr>
@@ -466,6 +513,7 @@ export function BodyshopSettlementPanel({
                   <td>{formatWhen(line.created_at)}</td>
                   <td>{line.component}{line.line_type === 'reversal' ? ' · reversal' : ''}{line.is_reversed ? ' · reversed' : ''}</td>
                   <td>{inr(line.amount)}</td>
+                  <td className="brx-settle-ref">{lineRefRemark(line)}</td>
                   <td>{line.actor_email || '—'}</td>
                   <td>
                     {!line.is_reversed && line.line_type !== 'reversal' && (

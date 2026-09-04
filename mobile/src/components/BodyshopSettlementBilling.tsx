@@ -25,6 +25,18 @@ function numOrNull(raw: string) {
   return Number.isFinite(n) ? n : null
 }
 
+function textOrNull(raw: string) {
+  const t = raw.trim()
+  return t || null
+}
+
+function lineRefRemark(line: { reference?: string | null; remarks?: string | null }) {
+  const a = String(line.reference ?? '').trim()
+  const b = String(line.remarks ?? '').trim()
+  if (a && b && a !== b) return `${a} · ${b}`
+  return a || b || '—'
+}
+
 const pillColor = (status: string | null | undefined) => {
   const v = String(status ?? 'pending').toLowerCase()
   if (v === 'received') return { bg: '#e4f4ec', fg: '#1c8f63' }
@@ -53,6 +65,8 @@ export function BodyshopSettlementBilling<T extends SettlementCardCache>({
   const [gstAmt, setGstAmt] = useState('')
   const [tdsAmt, setTdsAmt] = useState('')
   const [custAmt, setCustAmt] = useState('')
+  const [doNote, setDoNote] = useState('')
+  const [custNote, setCustNote] = useState('')
   const [busy, setBusy] = useState(false)
 
   async function load() {
@@ -148,17 +162,21 @@ export function BodyshopSettlementBilling<T extends SettlementCardCache>({
     }
     setBusy(true)
     try {
+      const note = textOrNull(doNote)
       const next = await postDoRelease({
         repairCardId: card.id,
         mainAmount: main,
         gstAmount: gst,
         tdsAmount: tds,
+        reference: note,
+        remarks: note,
       })
       setPayload(next)
       onCardChange(mergeSettlementCard(card, next))
       setMainAmt('')
       setGstAmt('')
       setTdsAmt('')
+      setDoNote('')
       onToast('DO payment posted', 'success')
     } catch (e) {
       onToast(e instanceof Error ? e.message : 'DO payment failed', 'error')
@@ -175,13 +193,17 @@ export function BodyshopSettlementBilling<T extends SettlementCardCache>({
     }
     setBusy(true)
     try {
+      const note = textOrNull(custNote)
       const next = await postCustomerAmount({
         repairCardId: card.id,
         amount: amt,
+        reference: note,
+        remarks: note,
       })
       setPayload(next)
       onCardChange(mergeSettlementCard(card, next))
       setCustAmt('')
+      setCustNote('')
       onToast(kind === 'refund' ? 'Refund posted' : 'Customer receipt posted', 'success')
     } catch (e) {
       onToast(e instanceof Error ? e.message : 'Customer post failed', 'error')
@@ -221,7 +243,9 @@ export function BodyshopSettlementBilling<T extends SettlementCardCache>({
     <>
       <Text style={styles.sectionTitle}>Billing & DO</Text>
       {payload?.payer_mismatch ? (
-        <Text style={{ fontSize: 12, color: '#92400e', marginBottom: 8 }}>Policy company on the card does not match the DMS invoice bill-to.</Text>
+        <Text style={{ fontSize: 12, color: '#92400e', marginBottom: 8 }}>
+          Policy on card: {card.insurance_company || '—'} · DMS bill-to: {payload.suggested_invoice?.account || '—'}
+        </Text>
       ) : null}
       {header?.needs_accounts_review ? (
         <Text style={{ fontSize: 12, color: '#92400e', marginBottom: 8 }}>Old Payment Received had no posted lines. Statuses stay Pending until amounts are posted.</Text>
@@ -247,8 +271,11 @@ export function BodyshopSettlementBilling<T extends SettlementCardCache>({
             <Text style={styles.fieldLabel}>DMS invoice</Text>
             <Text style={{ fontSize: 13, fontWeight: '700', color: '#1a1b21' }}>
               {payload.suggested_invoice.invoice_number ?? '—'}
-              {card.insurance_company ? ` · ${card.insurance_company}` : ''}
+              {payload.suggested_invoice.account ? ` · ${payload.suggested_invoice.account}` : ''}
             </Text>
+            {card.insurance_company ? (
+              <Text style={{ fontSize: 12, color: '#82858f', marginTop: 4 }}>Policy on card: {card.insurance_company}</Text>
+            ) : null}
             <TouchableOpacity onPress={() => void useDmsInvoice()} disabled={busy} style={{ marginTop: 6 }}>
               <Text style={{ fontSize: 12, fontWeight: '700', color: '#2a4cd0' }}>Use DMS invoice</Text>
             </TouchableOpacity>
@@ -300,7 +327,9 @@ export function BodyshopSettlementBilling<T extends SettlementCardCache>({
             <TextInput style={styles.input} keyboardType="numeric" value={gstAmt} onChangeText={setGstAmt} placeholder="0" placeholderTextColor="#a7a99f" />
             <Text style={[styles.fieldLabel, { marginTop: 8 }]}>TDS (₹)</Text>
             <TextInput style={styles.input} keyboardType="numeric" value={tdsAmt} onChangeText={setTdsAmt} placeholder="0" placeholderTextColor="#a7a99f" />
-            <Text style={{ fontSize: 12, color: '#82858f', marginVertical: 8 }}>Post any combination. Each save stores who posted it and when.</Text>
+            <Text style={[styles.fieldLabel, { marginTop: 8 }]}>Reference / Remark</Text>
+            <TextInput style={styles.input} value={doNote} onChangeText={setDoNote} placeholder="UTR, cheque, or note" placeholderTextColor="#a7a99f" />
+            <Text style={{ fontSize: 12, color: '#82858f', marginVertical: 8 }}>Post any combination. Each save stores who posted it, when, and this reference.</Text>
             <TouchableOpacity onPress={() => void saveDo()} disabled={busy} style={styles.saveBtnSmall}>
               <Text style={{ color: '#fff', fontWeight: '700' }}>Post DO payment</Text>
             </TouchableOpacity>
@@ -321,6 +350,8 @@ export function BodyshopSettlementBilling<T extends SettlementCardCache>({
           <>
             <Text style={styles.fieldLabel}>{kind === 'refund' ? 'Amount refunded (₹)' : 'Amount received from customer (₹)'}</Text>
             <TextInput style={styles.input} keyboardType="numeric" value={custAmt} onChangeText={setCustAmt} placeholder="0" placeholderTextColor="#a7a99f" />
+            <Text style={[styles.fieldLabel, { marginTop: 8 }]}>Reference / Remark</Text>
+            <TextInput style={styles.input} value={custNote} onChangeText={setCustNote} placeholder="UTR, cheque, or note" placeholderTextColor="#a7a99f" />
             <Text style={{ fontSize: 12, color: '#82858f', marginVertical: 8 }}>Remaining {inr(header?.customer_remaining_amount)}</Text>
             <TouchableOpacity onPress={() => void saveCustomer()} disabled={busy} style={styles.saveBtnSmall}>
               <Text style={{ color: '#fff', fontWeight: '700' }}>{kind === 'refund' ? 'Post refund' : 'Post customer receipt'}</Text>
@@ -338,6 +369,7 @@ export function BodyshopSettlementBilling<T extends SettlementCardCache>({
             <View key={line.id} style={{ paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: '#f6f4ee', opacity: line.is_reversed || line.line_type === 'reversal' ? 0.5 : 1 }}>
               <Text style={{ fontSize: 12, fontWeight: '700', color: '#1a1b21' }}>{line.component} · {inr(line.amount)}</Text>
               <Text style={{ fontSize: 11, color: '#82858f' }}>{line.created_at ? new Date(line.created_at).toLocaleString('en-IN') : ''}{line.actor_email ? ` · ${line.actor_email}` : ''}</Text>
+              <Text style={{ fontSize: 12, color: '#4b4e59', marginTop: 2 }}>Ref: {lineRefRemark(line)}</Text>
               {!line.is_reversed && line.line_type !== 'reversal' ? (
                 <TouchableOpacity onPress={() => reverseLine(line.id)}>
                   <Text style={{ fontSize: 12, color: '#c33b53', fontWeight: '700', marginTop: 4 }}>Reverse</Text>

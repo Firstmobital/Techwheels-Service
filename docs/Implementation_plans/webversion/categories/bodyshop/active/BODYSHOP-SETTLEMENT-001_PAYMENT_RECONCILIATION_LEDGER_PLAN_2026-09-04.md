@@ -2,7 +2,7 @@
 
 **Plan ID:** BODYSHOP-SETTLEMENT-001  
 **Created:** 2026-09-04  
-**Last Updated:** 2026-09-04 (DO Received hides amount form; no Date/UTR fields; actor + created_at is the trail)  
+**Last Updated:** 2026-09-04 (Posted entries show optional Reference/Remark; post forms capture it)  
 **Priority:** HIGH  
 **Owner:** Bodyshop Team + Platform Team + Accounts  
 **Status:** Active (implementation in progress; DBL-0026 VERIFIED in `full_metadata.sql`; DBL-0029 APPLIED)  
@@ -142,8 +142,8 @@ Stage 18 is two derived statuses plus an append-only ledger:
 
 | Surface | What the user enters | What the system derives |
 |---------|----------------------|-------------------------|
-| **DO Payment** | Main, GST, TDS posted separately or together | `insurance_due = do_amount − (Main + GST + TDS)` and **DO Payment Status**. Who/when = `actor_email` + `created_at` |
-| **Customer Diff Payment** | Amount received **or** amount refunded | Remaining due / remaining refund and **Customer Diff Payment Status** |
+| **DO Payment** | Main, GST, TDS posted separately or together; optional Reference / Remark | `insurance_due = do_amount − (Main + GST + TDS)` and **DO Payment Status**. Who/when = `actor_email` + `created_at`; note = `reference` / `remarks` |
+| **Customer Diff Payment** | Amount received **or** amount refunded; optional Reference / Remark | Remaining due / remaining refund and **Customer Diff Payment Status** |
 
 `do_status = received` on stage 16 only means the DO amount was captured. It is **not** DO Payment Status.
 
@@ -243,7 +243,7 @@ The user never writes status. They only post money. The trigger/RPC recomputes s
 
 **Allowed shortcut (still auto):** a button **Post remaining as received**. It does **not** write status. It opens the amount form with remaining pre-filled:
 
-- DO: remaining insurance due must be split into Main / GST / TDS (at least one > 0, sum = remaining). No Date or UTR field — `created_at` + `actor_email` are the trail.
+- DO: remaining insurance due must be split into Main / GST / TDS (at least one > 0, sum = remaining). No Date field. Optional **Reference / Remark** (UTR, cheque, or note) is stored on each line. Trail also includes `created_at` + `actor_email`.
 - Customer due: remaining recoverable pre-filled as the receipt.
 - Customer refund: remaining refund pre-filled.
 
@@ -255,8 +255,8 @@ On save, lines are inserted; status flips to `received` only because remaining h
 
 Status pills are read-only.
 
-1. **DO Payment** — while not `received`: Main ₹, GST ₹, TDS ₹ (any subset). Read-only: Insurance due, status pill. When `received`, hide amount inputs. No Date or UTR fields.
-2. **Customer Diff Payment** — while not `received`: Amount received (or Amount refunded). Read-only: Remaining, status pill, kind badge. When `received`, hide amount inputs.
+1. **DO Payment** — while not `received`: Main ₹, GST ₹, TDS ₹ (any subset), optional Reference / Remark. Read-only: Insurance due, status pill. When `received`, hide amount inputs. No Date field.
+2. **Customer Diff Payment** — while not `received`: Amount received (or Amount refunded), optional Reference / Remark. Read-only: Remaining, status pill, kind badge. When `received`, hide amount inputs.
 
 No Payment Status `<select>`.
 
@@ -282,7 +282,7 @@ Overall Payment Received must **not** auto-advance Delivery.
 | Customer refund | `party=customer`, `line_type=refund`, component CUSTOMER_REFUND (only when kind=refund) |
 | Reverse | New `reversal` line. Never UPDATE/DELETE a posted line. |
 
-Required: `amount > 0`, actor (`actor_id` / `actor_email`), `created_at`. `txn_date` defaults to current date in the RPC. No UI Date or UTR.
+Required: `amount > 0`, actor (`actor_id` / `actor_email`), `created_at`. `txn_date` defaults to current date in the RPC. No UI Date field. Optional `reference` / `remarks` (one **Reference / Remark** input; shown on Posted entries).
 
 A single Stage 18 save may post up to three DO lines (Main / GST / TDS) in one RPC call, each as its own immutable row.
 
@@ -488,11 +488,11 @@ Existing list/queue queries keep working.
 
 ### Phase 4: Web Billing tab
 
-- [x] **Task 4.1:** Invoice block: number, date, amount, labour/parts, DMS account, “Use DMS invoice” action.
+- [x] **Task 4.1:** Invoice block: number, date, amount. DMS invoice row = DMS number + DMS `account` (bill-to) + “Use DMS invoice”. Policy company stays on the card; mismatch banner if they differ.
 - [x] **Task 4.2:** DO block: status, amount, reference. Customer due read-only.
-- [x] **Task 4.3:** Stage 18 **DO Payment** panel: Main / GST / TDS (any subset). Hide inputs when received. Who/when from `actor_email` + `created_at`. No Date/UTR fields.
+- [x] **Task 4.3:** Stage 18 **DO Payment** panel: Main / GST / TDS (any subset). Hide inputs when received. Who/when from `actor_email` + `created_at`. Optional Reference / Remark on post. No Date field.
 - [x] **Task 4.4:** Stage 18 **Customer Diff Payment** panel: receipt or refund by kind. Show remaining due/refund + Customer Diff Payment Status pill.
-- [x] **Task 4.5:** Event table (newest first) with reverse action.
+- [x] **Task 4.5:** Event table (newest first) with reverse action and Reference / Remark column.
 - [x] **Task 4.6:** Summary: Invoice / DO / Main+GST/TDS / Insurance due / Customer diff / Posted / Remaining / Outstanding.
 - [x] **Task 4.7:** Remove the single Payment Status dropdown. Overview stage 18 shows the two pills.
 - [x] **Task 4.8:** Payer-mismatch warning. `needs_accounts_review` banner.
@@ -576,9 +576,9 @@ Existing list/queue queries keep working.
 ```text
 ✅ 4.1 | Invoice block | Web | 2026-09-04 | 2026-09-04 | BodyshopSettlementPanel
 ✅ 4.2 | DO + customer due | Web | 2026-09-04 | 2026-09-04 | read-only diff
-✅ 4.3 | Stage 18 DO Payment panel (Main/GST/TDS) | Web | 2026-09-04 | 2026-09-04 | hide form when received; no Date/UTR
-✅ 4.4 | Stage 18 Customer Diff panel (due/refund) | Web | 2026-09-04 | 2026-09-04 | auto status pill
-✅ 4.5 | Event table + reverse | Web | 2026-09-04 | 2026-09-04 | newest first
+✅ 4.3 | Stage 18 DO Payment panel (Main/GST/TDS) | Web | 2026-09-04 | 2026-09-04 | hide form when received; optional Reference/Remark
+✅ 4.4 | Stage 18 Customer Diff panel (due/refund) | Web | 2026-09-04 | 2026-09-04 | auto status pill; optional Reference/Remark
+✅ 4.5 | Event table + reverse | Web | 2026-09-04 | 2026-09-04 | newest first; Reference/Remark column
 ✅ 4.6 | Settlement summary | Web | 2026-09-04 | 2026-09-04 | 8 totals
 ✅ 4.7 | Remove single payment dropdown; two pills | Web | 2026-09-04 | 2026-09-04 | overview + billing
 ✅ 4.8 | Payer warning + review banner | Web | 2026-09-04 | 2026-09-04 | 005071 Go Digit vs United India
@@ -697,4 +697,4 @@ Existing list/queue queries keep working.
 - INS renamed to **Main** to match Accounts language. Component enum: `MAIN` / `GST` / `TDS`.
 - Overall `payment_status` is AND of the two derived statuses. Stage 18 done only when both are `received`.
 - Status is auto. User posts amounts; they do not click Received first. “Post remaining as received” is a prefill shortcut that still inserts lines.
-- When a side is `received`, amount inputs hide. No Date or UTR fields. Trail is `actor_email` + `created_at`. Main / GST / TDS may be posted in any combination, together or later.
+- When a side is `received`, amount inputs hide. No Date field. Optional **Reference / Remark** is saved on the line (`reference` + `remarks`) and shown in Posted entries. Trail also includes `actor_email` + `created_at`. Main / GST / TDS may be posted in any combination, together or later.

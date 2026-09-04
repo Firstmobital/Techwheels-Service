@@ -3870,6 +3870,11 @@ code.k--b { background: var(--accent-soft); color: var(--accent); }
   text-decoration: line-through;
 }
 
+.brx-settle-table .brx-settle-ref {
+  max-width: 240px;
+  word-break: break-word;
+}
+
 @media (max-width: 1180px) {
   .brx-settle-summary-grid {
     grid-template-columns: 1fr 1fr;

@@ -42,6 +42,7 @@ export interface BodyshopSettlementLine {
   amount: number
   txn_date: string
   reference: string | null
+  remarks: string | null
   is_reversed: boolean
   actor_email: string | null
   created_at: string
@@ -129,6 +130,7 @@ export async function postDoRelease(input: {
   tdsAmount?: number | null
   txnDate?: string | null
   reference?: string | null
+  remarks?: string | null
 }): Promise<SettlementPayload> {
   const { data, error } = await supabase.rpc('add_bodyshop_settlement_line', {
     p_repair_card_id: input.repairCardId,
@@ -138,7 +140,7 @@ export async function postDoRelease(input: {
     p_amount: null,
     p_txn_date: input.txnDate ?? null,
     p_reference: input.reference ?? null,
-    p_remarks: null,
+    p_remarks: input.remarks ?? null,
     p_main_amount: money2(input.mainAmount),
     p_gst_amount: money2(input.gstAmount),
     p_tds_amount: money2(input.tdsAmount),
@@ -152,6 +154,7 @@ export async function postCustomerAmount(input: {
   amount: number
   txnDate?: string | null
   reference?: string | null
+  remarks?: string | null
 }): Promise<SettlementPayload> {
   const { data, error } = await supabase.rpc('add_bodyshop_settlement_line', {
     p_repair_card_id: input.repairCardId,
@@ -161,7 +164,7 @@ export async function postCustomerAmount(input: {
     p_amount: money2(input.amount),
     p_txn_date: input.txnDate ?? null,
     p_reference: input.reference ?? null,
-    p_remarks: null,
+    p_remarks: input.remarks ?? null,
     p_main_amount: null,
     p_gst_amount: null,
     p_tds_amount: null,

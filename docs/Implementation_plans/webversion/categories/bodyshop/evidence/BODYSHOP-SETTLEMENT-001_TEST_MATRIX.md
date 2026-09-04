@@ -84,7 +84,7 @@ Opening after backfill (no Main/GST/TDS/receipt lines):
 | I2 | Main + GST + TDS = DO | Insurance due ₹0 · DO Payment `received` |
 | I2b | Main + TDS = DO, GST empty (005071: 140571 + 2424) | Allowed · two lines · GST not required | [ ] |
 | I3 | GST line ≠ invoice `tax_parts` | Allowed · invoice GST stays display-only | [ ] |
-| I4 | Missing UTR / Date on Main | Allowed. Trail is `actor_email` + `created_at` on the line | [ ] |
+| I4 | Missing Reference / Remark / Date on Main | Allowed. Optional note. Trail is `actor_email` + `created_at` on the line | [ ] |
 | I7 | DO Payment already `received` | Amount inputs hidden. Insurance due ₹0. Posted entries still visible | [ ] |
 | I5 | Amount 0 or negative | Rejected | [ ] |
 | I6 | `do_status = received` with no Main/GST/TDS | Stage 16 done · DO Payment still `pending` | [ ] |
