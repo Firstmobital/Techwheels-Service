@@ -10,7 +10,13 @@ import {
 } from '../../lib/api/payroll'
 import { formatCurrency } from '../../lib/payroll/calculations'
 import { resolvePayrollEntryIdentity } from '../../lib/payroll/entryIdentity'
-import { exportWorkbookWithTextAccounts } from '../../lib/payroll/excelUtils'
+import {
+  EARNED_BASE_BANK_PAYOUT_HEADERS,
+  EARNED_BASE_BANK_PAYOUT_TEXT_COLUMNS,
+  bankBaseSalaryFilename,
+  buildEarnedBaseBankPayoutRows,
+  exportWorkbookWithTextAccounts,
+} from '../../lib/payroll/excelUtils'
 import { SALARY_TYPE_LABELS, type PayrollEntry } from '../../lib/payroll/types'
 import { supabase } from '../../lib/supabase'
 
@@ -219,6 +225,32 @@ export default function PayrollProcessingTab({
     exportWorkbookWithTextAccounts('Bank Payout', headers, rows, `Payroll_Bank_Payout_${monthInput}.xlsx`, [4])
   }
 
+  function exportEarnedBaseBankPayout() {
+    try {
+      const rows = buildEarnedBaseBankPayoutRows(
+        aggregateScopedRows.map((entry) => {
+          const identity = identityByCode.get(entry.employee_code.trim().toUpperCase())
+          return {
+            employeeName: identity?.employeeName ?? entry.employee_code,
+            bankName: identity?.bankName ?? '',
+            accountNumber: identity?.accountNumber ?? '',
+            ifsc: identity?.ifsc ?? '',
+            earnedBase: Number(entry.earned_base),
+          }
+        }),
+      )
+      exportWorkbookWithTextAccounts(
+        'Bank Payout',
+        [...EARNED_BASE_BANK_PAYOUT_HEADERS],
+        rows,
+        bankBaseSalaryFilename(monthInput),
+        EARNED_BASE_BANK_PAYOUT_TEXT_COLUMNS,
+      )
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Earned base export failed')
+    }
+  }
+
   return (
     <div>
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', marginBottom: '0.75rem', alignItems: 'center' }}>
@@ -275,9 +307,12 @@ export default function PayrollProcessingTab({
           </div>
           <div className="kpi__lab">Status</div>
         </div>
-        <div className="kpi">
+        <div className="kpi kpi--earned-base-export">
           <div className="kpi__val">{formatCurrency(totals.earnedBase)}</div>
           <div className="kpi__lab">Earned Base Total</div>
+          <button type="button" className="btn btn--ghost btn--sm" onClick={exportEarnedBaseBankPayout}>
+            Export
+          </button>
         </div>
         <div className="kpi">
           <div className="kpi__val">{formatCurrency(totals.saVariable)}</div>

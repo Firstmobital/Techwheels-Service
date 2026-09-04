@@ -6177,6 +6177,12 @@ tr.brx-recov-row--mismatch td:first-child {
   font-size: 20px;
   overflow-wrap: anywhere;
 }
+.payroll-kpis .kpi--earned-base-export .btn {
+  margin-top: 0.4rem;
+  height: 26px;
+  padding: 0 8px;
+  font-size: 11px;
+}
 
 /* Payroll data tables: sticky header + both-axis scroll */
 .payroll-table-scroll {

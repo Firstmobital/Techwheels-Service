@@ -42,6 +42,86 @@ export function exportWorkbook(sheetName: string, headers: string[], rows: unkno
   XLSX.writeFile(wb, filename)
 }
 
+export const EARNED_BASE_BANK_PAYOUT_HEADERS = [
+  'Code',
+  'Dealer Name',
+  'Account',
+  'Type',
+  'Employee Name',
+  'Bank Account Number',
+  'IFSC Code',
+  'Amount',
+  'ID',
+  'Currency',
+  'City',
+  'Contact',
+  'Contact Code',
+] as const
+
+export const EARNED_BASE_BANK_PAYOUT_TEXT_COLUMNS = [0, 2, 5, 6]
+
+/** Company payout account for base-salary bank import. Do not reuse technician earnings account 39171760445. */
+export const EARNED_BASE_COMPANY_ACCOUNT = '39169685030'
+
+export type SbiBankInput = {
+  bankName?: string | null
+  ifsc?: string | null
+}
+
+/** Same SBI rule as supabase/functions/_shared/bankPayoutExcel.ts isSbiBank. */
+export function isSbiBank(bank: SbiBankInput | undefined): boolean {
+  const bankName = String(bank?.bankName ?? '').trim().toUpperCase()
+  const ifsc = String(bank?.ifsc ?? '').trim().toUpperCase()
+  return bankName.includes('STATE BANK OF INDIA') || bankName === 'SBI' || ifsc.startsWith('SBIN')
+}
+
+export type EarnedBaseBankPayoutInput = {
+  employeeName: string
+  bankName?: string | null
+  accountNumber?: string | null
+  ifsc?: string | null
+  earnedBase: number
+}
+
+export function buildEarnedBaseBankPayoutRows(
+  rows: EarnedBaseBankPayoutInput[],
+): Array<Array<string | number>> {
+  return rows.map((row, index) => {
+    const earnedBase = Number(row.earnedBase)
+    const amount = Number.isFinite(earnedBase) ? earnedBase : 0
+    return [
+      '300971',
+      'FIRST MOBITAL PRIVATE LIMITED',
+      EARNED_BASE_COMPANY_ACCOUNT,
+      isSbiBank({ bankName: row.bankName, ifsc: row.ifsc }) ? 'DCR' : 'NEFT',
+      row.employeeName,
+      String(row.accountNumber ?? '').trim(),
+      String(row.ifsc ?? '').trim().toUpperCase(),
+      amount,
+      `SALARY${index + 1}`,
+      'INR',
+      'JAIPUR',
+      'SHRUTI@INDIRASWITCH.COM',
+      'E',
+    ]
+  })
+}
+
+const BANK_BASE_SALARY_MONTH_ABBREV = [
+  'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+  'Jul', 'Aug', 'Sept', 'Oct', 'Nov', 'Dec',
+] as const
+
+export function bankBaseSalaryFilename(monthInput: string): string {
+  const [yearRaw, monthRaw] = String(monthInput ?? '').split('-')
+  const year = Number(yearRaw)
+  const month = Number(monthRaw)
+  if (!Number.isFinite(year) || month < 1 || month > 12) {
+    return `Bank_BaseSalary_${monthInput || 'unknown'}.xlsx`
+  }
+  return `Bank_BaseSalary_${BANK_BASE_SALARY_MONTH_ABBREV[month - 1]}${year}.xlsx`
+}
+
 /** Force text cells for bank account columns in export. */
 export function exportWorkbookWithTextAccounts(
   sheetName: string,
@@ -56,12 +136,11 @@ export function exportWorkbookWithTextAccounts(
   for (let r = 1; r <= range.e.r; r += 1) {
     textColumnIndexes.forEach((c) => {
       const addr = XLSX.utils.encode_cell({ r, c })
-      const cell = ws[addr]
-      if (cell) {
-        cell.t = 's'
-        cell.v = String(cell.v ?? '')
-        cell.z = '@'
-      }
+      const cell = ws[addr] ?? { t: 's', v: '' }
+      cell.t = 's'
+      cell.v = String(cell.v ?? '')
+      cell.z = '@'
+      ws[addr] = cell
     })
   }
   XLSX.utils.book_append_sheet(wb, ws, sheetName)

@@ -59,6 +59,7 @@ Snapshot Basis: Code and dump audit only (no inferred/assumed behavior)
 - `/bodyshop-tracker`
 - `/bodyshop-floor`
 - `/technician`
+- `/payroll`
 - `/autodoc`
 - `/autodoc/:id`
 - `/complaints`
@@ -81,6 +82,7 @@ Snapshot Basis: Code and dump audit only (no inferred/assumed behavior)
 - `bodyshop_tracker`
 - `bodyshop_floor`
 - `technician`
+- `payroll`
 - `complaints`
 - `bodyshop_repair`
 - `bodyshop_recovery`
