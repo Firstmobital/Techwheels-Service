@@ -25,13 +25,13 @@ const TAB_DESCRIPTIONS: Record<TabId, string> = {
   advance: 'Issue advances and manage monthly recovery schedules applied during payroll processing.',
   processing: 'Recompute, review, and finalize monthly payroll. Locked months preserve historical snapshots.',
   slip: 'Generate individual salary slips and consolidated payroll reports from finalized data.',
-  'salary-type': 'Manage employee base salary, salary type, and bank details linked to employee master.',
+  'salary-type': 'Manage employee department, branch, base salary, salary type, bank details, and active status.',
 }
 
 export default function PayrollPage() {
   const [activeTab, setActiveTab] = useState<TabId>('attendance')
   const [payrollMonth, setPayrollMonth] = useState(() => formatPayrollMonth(new Date()))
-  const [permissions, setPermissions] = useState({ canView: false, canModify: false, canDelete: false })
+  const [permissions, setPermissions] = useState({ canView: false, canModify: false, canDelete: false, isAdmin: false })
   const [loadingPerms, setLoadingPerms] = useState(true)
 
   useEffect(() => {
@@ -111,7 +111,9 @@ export default function PayrollPage() {
         {activeTab === 'slip' && (
           <SalarySlipReportTab payrollMonth={payrollMonth} monthInput={monthInput} onMonthChange={handleMonthChange} />
         )}
-        {activeTab === 'salary-type' && <SalaryTypeTab canModify={permissions.canModify} />}
+        {activeTab === 'salary-type' && (
+          <SalaryTypeTab canModify={permissions.canModify} isAdmin={permissions.isAdmin} />
+        )}
       </div>
     </div>
   )

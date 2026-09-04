@@ -85,6 +85,7 @@ export type Database = {
           fuel_type: string | null
           id: number
           ifsc: string | null
+          is_active: boolean
           location: string | null
           role: string | null
           updated_at: string
@@ -99,6 +100,7 @@ export type Database = {
           fuel_type?: string | null
           id?: never
           ifsc?: string | null
+          is_active?: boolean
           location?: string | null
           role?: string | null
           updated_at?: string
@@ -113,6 +115,7 @@ export type Database = {
           fuel_type?: string | null
           id?: never
           ifsc?: string | null
+          is_active?: boolean
           location?: string | null
           role?: string | null
           updated_at?: string
@@ -1290,6 +1293,23 @@ export type Database = {
         }[]
       }
       is_admin: { Args: never; Returns: boolean }
+      payroll_save_salary_type_master: {
+        Args: {
+          p_employee_code: string
+          p_department: string | null
+          p_location: string | null
+          p_account_number: string | null
+          p_ifsc: string | null
+          p_bank_name: string | null
+          p_base_salary: number
+          p_salary_type: string
+        }
+        Returns: Json
+      }
+      payroll_set_employee_active: {
+        Args: { p_employee_code: string; p_is_active: boolean }
+        Returns: Json
+      }
       my_dealer_code: { Args: never; Returns: string }
     }
     Enums: {

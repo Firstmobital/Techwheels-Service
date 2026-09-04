@@ -531,6 +531,7 @@ export default function BodyshopFloorScreen() {
       const { data: empData } = await supabase
         .from('employee_master')
         .select('employee_code, employee_name, department, role')
+        .eq('is_active', true)
         .limit(500)
       setEmployees((empData ?? []) as Employee[])
 

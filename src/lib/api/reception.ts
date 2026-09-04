@@ -1257,6 +1257,7 @@ export async function listReceptionEmployees(): Promise<ApiResult<ReceptionEmplo
   const { data, error } = await supabase
     .from('employee_master')
     .select('employee_code, employee_name, role, department, fuel_type, location')
+    .eq('is_active', true)
     .order('employee_name', { ascending: true })
 
   if (error) return fail(error)

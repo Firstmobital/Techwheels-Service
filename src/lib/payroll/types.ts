@@ -24,6 +24,7 @@ export interface PayrollEmployee {
   bank_name: string | null
   account_number: string | null
   ifsc: string | null
+  is_active: boolean
 }
 
 export interface PayrollCompensation {

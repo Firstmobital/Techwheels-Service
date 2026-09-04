@@ -246,6 +246,7 @@ export default function BodyshopRepairScreen() {
       const { data: empData } = await supabase
         .from('employee_master')
         .select('employee_name, department')
+        .eq('is_active', true)
         .limit(500)
       setEmployees((empData ?? []) as Array<{ employee_name: string; department: string | null }>)
 

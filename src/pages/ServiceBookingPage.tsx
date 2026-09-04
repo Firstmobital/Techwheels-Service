@@ -154,12 +154,12 @@ export default function ServiceBookingPage() {
   async function loadBranchesAndSAs() {
     const branchRes = await supabase.from('service_branches').select('name').order('name')
     if (branchRes.data) setBranches((branchRes.data as { name: string }[]).map(b => b.name))
-    const creRes = await supabase.from('employee_master').select('id, employee_name, role').order('employee_name')
+    const creRes = await supabase.from('employee_master').select('id, employee_name, role').eq('is_active', true).order('employee_name')
     if (creRes.data) {
       setCreUsers((creRes.data as { id: string; employee_name: string; role: string | null }[])
         .filter((u) => u.employee_name && hasBusinessRole(u.role, 'CRE')))
     }
-    const driverRes = await supabase.from('employee_master').select('id, employee_name, role').order('employee_name')
+    const driverRes = await supabase.from('employee_master').select('id, employee_name, role').eq('is_active', true).order('employee_name')
     if (driverRes.data) {
       setDrivers((driverRes.data as { id: string; employee_name: string; role: string | null }[])
         .filter((u) => u.employee_name && hasBusinessRole(u.role, 'DRIVER')))

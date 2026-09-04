@@ -68,7 +68,7 @@ export function exportWorkbookWithTextAccounts(
   XLSX.writeFile(wb, filename)
 }
 
-function isUnsafeBankAccount(value: string): boolean {
+export function isUnsafeBankAccount(value: string): boolean {
   if (!value) return false
   if (/e\+/i.test(value) || /e-/i.test(value)) return true
   if (/^\d+\.\d+$/.test(value)) return true

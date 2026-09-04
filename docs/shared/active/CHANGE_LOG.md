@@ -9,6 +9,7 @@ Tracks documentation-sync updates for business logic, architecture, and access c
 - Lookup does not run the Accident intake sync used by Period browse. RBAC SA/SSA/Survey scope is unchanged.
 - Plan: `BODYSHOP-LOOKUP-001`. No schema change. Mobile Repair Tracker unchanged (already loads without Period).
 - Payroll historical integrity: `payroll_entries` now stores payroll-period employee name, department, branch (`employee_master.location`), role, and bank details. Historical Processing filters/KPIs, salary slips, consolidated Excel, and finalized bank payout export read those snapshots. Live `employee_master` is used only when a snapshot column is NULL (legacy best-effort baseline, not reconstructed historical truth). Draft recompute may refresh snapshots; finalized-month RLS still blocks all `payroll_entries` writes. Ledger: DBL-0027.
+- Salary Type admin editor + employee lifecycle: `employee_master.is_active` (default true). Admin Save atomically updates approved master columns + compensation via `payroll_save_salary_type_master`. Non-admin payroll-modify may edit compensation only. Soft deactivate/reactivate via `payroll_set_employee_active` does not change login/mapping flags. Ledger: DBL-0028.
 
 ## 2026-08-17
 

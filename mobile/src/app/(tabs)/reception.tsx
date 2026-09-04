@@ -345,6 +345,7 @@ export default function ReceptionScreen() {
       supabase
         .from('employee_master')
         .select('employee_code,employee_name,department,fuel_type,role,location')
+        .eq('is_active', true)
         .order('employee_name'),
       supabase.from('settings_model_options').select('model_name').eq('is_active', true).order('sort_order', { ascending: true }).order('model_name', { ascending: true }),
     ])

@@ -537,6 +537,7 @@ export default function FloorInchargePage() {
         supabase
           .from('employee_master')
           .select('id, employee_code, employee_name, department, location, fuel_type, role')
+          .eq('is_active', true)
           .order('employee_name'),
       ])
 

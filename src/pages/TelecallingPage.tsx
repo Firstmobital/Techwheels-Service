@@ -285,14 +285,14 @@ function TelecallerDashboard({ activeCampaign }: { activeCampaign: Campaign | nu
   useEffect(() => { refreshQueue(); refreshSummary() }, [refreshQueue, refreshSummary])
 
   useEffect(() => {
-    supabase.from('employee_master').select('id, employee_name, role').order('employee_name')
+    supabase.from('employee_master').select('id, employee_name, role').eq('is_active', true).order('employee_name')
       .then(({ data }) => {
         if (data) {
           setCreUsers((data as { id: string; employee_name: string; role: string | null }[])
             .filter((u) => u.employee_name && hasBusinessRole(u.role, 'CRE')))
         }
       })
-    supabase.from('employee_master').select('id, employee_name, role').order('employee_name')
+    supabase.from('employee_master').select('id, employee_name, role').eq('is_active', true).order('employee_name')
       .then(({ data }) => {
         if (data) {
           setDrivers((data as { id: string; employee_name: string; role: string | null }[])

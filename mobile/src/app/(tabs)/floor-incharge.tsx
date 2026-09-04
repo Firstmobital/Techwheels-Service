@@ -393,7 +393,7 @@ export default function FloorInchargeScreen() {
     try {
       const [rawEntries, empRes] = await Promise.all([
         fetchFloorInchargeEntries(),
-        supabase.from('employee_master').select('id, employee_code, employee_name, department, location, fuel_type, role').order('employee_name'),
+        supabase.from('employee_master').select('id, employee_code, employee_name, department, location, fuel_type, role').eq('is_active', true).order('employee_name'),
       ])
 
       // Enrich fuel_type from SA's employee_master record (exact web logic)

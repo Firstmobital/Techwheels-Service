@@ -85,6 +85,7 @@ export type Database = {
           fuel_type: string | null
           id: number
           ifsc: string | null
+          is_active: boolean
           location: string | null
           role: string | null
           updated_at: string
@@ -99,6 +100,7 @@ export type Database = {
           fuel_type?: string | null
           id?: never
           ifsc?: string | null
+          is_active?: boolean
           location?: string | null
           role?: string | null
           updated_at?: string
@@ -113,6 +115,7 @@ export type Database = {
           fuel_type?: string | null
           id?: never
           ifsc?: string | null
+          is_active?: boolean
           location?: string | null
           role?: string | null
           updated_at?: string

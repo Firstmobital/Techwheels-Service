@@ -12,13 +12,17 @@ import type {
   SalaryType,
 } from '../payroll/types'
 
+/** Returns all employees including inactive. Do not use for current operational assignment pickers. */
 export async function fetchPayrollEmployees(): Promise<PayrollEmployee[]> {
   const res = await supabase
     .from('employee_master')
-    .select('id, employee_code, employee_name, department, location, role, bank_name, account_number, ifsc')
+    .select('id, employee_code, employee_name, department, location, role, bank_name, account_number, ifsc, is_active')
     .order('employee_name')
   if (res.error) throw new Error(res.error.message)
-  return (res.data ?? []) as PayrollEmployee[]
+  return ((res.data ?? []) as PayrollEmployee[]).map((row) => ({
+    ...row,
+    is_active: row.is_active !== false,
+  }))
 }
 
 export async function fetchCompensationMap(): Promise<Map<string, PayrollCompensation>> {
@@ -335,15 +339,53 @@ export async function addPayrollAdjustment(input: {
   if (updRes.error) throw new Error(updRes.error.message)
 }
 
-export async function checkPayrollPermissions(): Promise<{ canView: boolean; canModify: boolean; canDelete: boolean }> {
-  const [viewRes, modRes, delRes] = await Promise.all([
+export async function saveSalaryTypeMasterRow(input: {
+  employeeCode: string
+  department: string | null
+  location: string | null
+  accountNumber: string | null
+  ifsc: string | null
+  bankName: string | null
+  baseSalary: number
+  salaryType: SalaryType
+}): Promise<void> {
+  const res = await supabase.rpc('payroll_save_salary_type_master', {
+    p_employee_code: input.employeeCode,
+    p_department: input.department,
+    p_location: input.location,
+    p_account_number: input.accountNumber,
+    p_ifsc: input.ifsc,
+    p_bank_name: input.bankName,
+    p_base_salary: input.baseSalary,
+    p_salary_type: input.salaryType,
+  })
+  if (res.error) throw new Error(res.error.message)
+}
+
+export async function setEmployeeActive(employeeCode: string, isActive: boolean): Promise<void> {
+  const res = await supabase.rpc('payroll_set_employee_active', {
+    p_employee_code: employeeCode,
+    p_is_active: isActive,
+  })
+  if (res.error) throw new Error(res.error.message)
+}
+
+export async function checkPayrollPermissions(): Promise<{
+  canView: boolean
+  canModify: boolean
+  canDelete: boolean
+  isAdmin: boolean
+}> {
+  const [viewRes, modRes, delRes, adminRes] = await Promise.all([
     supabase.rpc('has_module_view', { p_module: 'payroll' }),
     supabase.rpc('has_module_modify', { p_module: 'payroll' }),
     supabase.rpc('has_module_delete', { p_module: 'payroll' }),
+    supabase.rpc('is_admin'),
   ])
   return {
     canView: Boolean(viewRes.data),
     canModify: Boolean(modRes.data),
     canDelete: Boolean(delRes.data),
+    isAdmin: Boolean(adminRes.data),
   }
 }
