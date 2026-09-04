@@ -58,7 +58,6 @@ export function BodyshopSettlementPanel({
   const [invoiceAmount, setInvoiceAmount] = useState(card.billed_amount != null ? String(card.billed_amount) : '')
   const [doStatus, setDoStatus] = useState(card.do_status ?? 'pending')
   const [doAmount, setDoAmount] = useState(card.do_amount != null ? String(card.do_amount) : '')
-  const [doHeaderRef, setDoHeaderRef] = useState('')
 
   const [mainAmt, setMainAmt] = useState('')
   const [gstAmt, setGstAmt] = useState('')
@@ -85,7 +84,6 @@ export function BodyshopSettlementPanel({
       setDoStatus(String(c.do_status ?? h?.do_status ?? card.do_status ?? 'pending'))
       const dAmt = c.do_amount ?? h?.do_amount ?? card.do_amount
       setDoAmount(dAmt != null ? String(dAmt) : '')
-      setDoHeaderRef(h?.do_reference ?? '')
       onCardChange(mergeSettlementCard(card, next))
     } catch (e: any) {
       toast(e?.message ?? 'Failed to load settlement', false)
@@ -124,7 +122,6 @@ export function BodyshopSettlementPanel({
         invoiceAmount: numOrNull(invoiceAmount),
         doAmount: nextDoAmt,
         doStatus: nextDo,
-        doReference: doHeaderRef.trim() || null,
       })
       setPayload(next)
       onCardChange(mergeSettlementCard(card, next))
@@ -314,10 +311,6 @@ export function BodyshopSettlementPanel({
             </span>
             <input className="inp" type="number" value={doAmount} onChange={(e) => setDoAmount(e.target.value)} />
           </label>
-          <label className="brx-field">
-            <span className="brx-field-label">DO reference</span>
-            <input className="inp" value={doHeaderRef} onChange={(e) => setDoHeaderRef(e.target.value)} />
-          </label>
           {doCaptured && (
           <div className="brx-field">
             <span className="brx-field-label">Customer Diff</span>
@@ -328,8 +321,11 @@ export function BodyshopSettlementPanel({
           )}
           <div className="brx-field">
             <span className="brx-field-label">DMS invoice</span>
-            <div className="inp" style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'var(--bg)' }}>
+            <div className="inp" style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', background: 'var(--bg)' }}>
               <span>{payload?.suggested_invoice?.invoice_number ?? header?.invoice_number ?? '—'}</span>
+              {card.insurance_company && (
+                <span style={{ color: 'var(--text-2)' }}>{card.insurance_company}</span>
+              )}
               {payload?.suggested_invoice?.total_invoice_amount != null && (
                 <button type="button" className="btn" onClick={() => void useDmsInvoice()} disabled={savingHeader}>
                   Use DMS invoice

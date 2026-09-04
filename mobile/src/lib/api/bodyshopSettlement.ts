@@ -14,6 +14,7 @@ export interface SettlementCardCache {
   do_payment_status?: string | null
   customer_payment_status?: string | null
   customer_settlement_kind?: SettlementKind | null
+  insurance_company?: string | null
 }
 
 export interface BodyshopSettlementHeader {

@@ -251,9 +251,16 @@ export function BodyshopSettlementBilling<T extends SettlementCardCache>({
         <Text style={[styles.fieldLabel, { marginTop: 8 }]}>Invoice / Billed Amount (₹)</Text>
         <TextInput style={styles.input} keyboardType="numeric" value={invoiceAmount} onChangeText={setInvoiceAmount} placeholder="0" placeholderTextColor="#a7a99f" />
         {payload?.suggested_invoice?.total_invoice_amount != null && (
-          <TouchableOpacity onPress={() => void useDmsInvoice()} disabled={busy} style={{ marginTop: 8 }}>
-            <Text style={{ fontSize: 12, fontWeight: '700', color: '#2a4cd0' }}>Use DMS invoice {payload.suggested_invoice.invoice_number ?? ''}</Text>
-          </TouchableOpacity>
+          <View style={{ marginTop: 8 }}>
+            <Text style={styles.fieldLabel}>DMS invoice</Text>
+            <Text style={{ fontSize: 13, fontWeight: '700', color: '#1a1b21' }}>
+              {payload.suggested_invoice.invoice_number ?? '—'}
+              {card.insurance_company ? ` · ${card.insurance_company}` : ''}
+            </Text>
+            <TouchableOpacity onPress={() => void useDmsInvoice()} disabled={busy} style={{ marginTop: 6 }}>
+              <Text style={{ fontSize: 12, fontWeight: '700', color: '#2a4cd0' }}>Use DMS invoice</Text>
+            </TouchableOpacity>
+          </View>
         )}
         <Text style={[styles.fieldLabel, { marginTop: 10 }]}>DO Status</Text>
         <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap', marginBottom: 8 }}>
