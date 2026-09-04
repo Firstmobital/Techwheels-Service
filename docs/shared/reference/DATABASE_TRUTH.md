@@ -1,6 +1,6 @@
 # Database Truth (Authoritative)
 
-Last Updated: 2026-06-29
+Last Updated: 2026-09-04
 Status: Mandatory — this file is the top-level entry point for "which database file do I trust?" for every human and AI agent working in this repo.
 Classification: state = truth, scope = shared, intent = reference. (Moved here 2026-06-29 from `docs/database-truth.md` per `docs/STRUCTURE_GUIDE.md` Section 2.1 — docs root is reserved for governance anchors only; this is shared reference content, same category as `DB_TRUTH_PROTOCOL.md` and `DB_CHANGE_PROTOCOL.md` in this folder.)
 
@@ -49,7 +49,7 @@ Found during audit (2026-06-29). Nothing below was deleted; this is a classifica
 
 | Path | Classification | Notes |
 |---|---|---|
-| `supabase/backups/full_metadata.sql` | **Current authoritative (primary)** | Schema-only, 136 tables, 314 policies, 102 RLS-enabled tables, 90 triggers, 260 indexes, 213 comments, 5,476 GRANT statements, 0 data rows. Generated 2026-06-29. |
+| `supabase/backups/full_metadata.sql` | **Current authoritative (primary)** | Schema-only dump. Regenerated 2026-09-04 13:05 IST (`supabase/evidence/authoritative_metadata_manifest.json` sha256=`074311759167fd4049087061f1df4d3452729625a089a216425240c79d89041a`). Includes DBL-0026 settlement tables/RPCs and DBL-0029 write-path fix. 0 data rows. |
 | `local_folder/backups/full_database.sql` | **Current authoritative (secondary)** | Schema + data, 136 tables, includes COPY data blocks. Generated 2026-06-29. Git-ignored (see `.gitignore`: `local_folder`). |
 | `local_folder/backups/chunks/full_database.sql.part_000`–`part_005` | **Current (mirror, not a version)** | Exact split of the secondary dump above. Git-ignored along with the rest of `local_folder`. |
 | `supabase/backups/full_dump.sql` | **Historical / non-authoritative** | Older schema-only dump (2026-05-11), only 46 tables, 0 GRANT statements — predates most of the current schema and was generated without privileges. Superseded by `full_metadata.sql`. Do not use as schema authority. Kept for historical reference only; not deleted. |

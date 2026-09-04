@@ -25,11 +25,11 @@ function statusLabel(s: string | null | undefined) {
   return 'Pending'
 }
 
-function todayIso() {
-  const d = new Date()
-  const m = String(d.getMonth() + 1).padStart(2, '0')
-  const day = String(d.getDate()).padStart(2, '0')
-  return `${d.getFullYear()}-${m}-${day}`
+function formatWhen(iso: string | null | undefined) {
+  if (!iso) return '—'
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return String(iso)
+  return d.toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })
 }
 
 function numOrNull(raw: string) {
@@ -64,12 +64,8 @@ export function BodyshopSettlementPanel({
   const [mainAmt, setMainAmt] = useState('')
   const [gstAmt, setGstAmt] = useState('')
   const [tdsAmt, setTdsAmt] = useState('')
-  const [doDate, setDoDate] = useState(todayIso())
-  const [doRef, setDoRef] = useState('')
 
   const [custAmt, setCustAmt] = useState('')
-  const [custDate, setCustDate] = useState(todayIso())
-  const [custRef, setCustRef] = useState('')
   const [doError, setDoError] = useState<string | null>(null)
   const [custError, setCustError] = useState<string | null>(null)
 
@@ -198,8 +194,6 @@ export function BodyshopSettlementPanel({
         mainAmount: main,
         gstAmount: gst,
         tdsAmount: tds,
-        txnDate: doDate || todayIso(),
-        reference: doRef.trim() || null,
       })
       setPayload(next)
       onCardChange(mergeSettlementCard(card, next))
@@ -231,8 +225,6 @@ export function BodyshopSettlementPanel({
       const next = await postCustomerAmount({
         repairCardId: card.id,
         amount: amt,
-        txnDate: custDate || todayIso(),
-        reference: custRef.trim() || null,
       })
       setPayload(next)
       onCardChange(mergeSettlementCard(card, next))
@@ -267,12 +259,12 @@ export function BodyshopSettlementPanel({
     : kind === 'none'
       ? 'Settled'
       : 'Recoverable from customer'
-  const lines = [...(payload?.lines ?? [])].sort((a, b) => {
-    const byDate = String(b.txn_date).localeCompare(String(a.txn_date))
-    if (byDate !== 0) return byDate
-    return String(b.created_at).localeCompare(String(a.created_at))
-  })
+  const lines = [...(payload?.lines ?? [])].sort((a, b) =>
+    String(b.created_at).localeCompare(String(a.created_at)),
+  )
   const doCaptured = (header?.do_amount ?? card.do_amount) != null
+  const doReceived = String(doPay ?? '').toLowerCase() === 'received'
+  const custReceived = String(custPay ?? '').toLowerCase() === 'received'
 
   return (
     <>
@@ -361,6 +353,13 @@ export function BodyshopSettlementPanel({
           <span className={`brx-settle-pill is-${String(doPay ?? 'pending').toLowerCase()}`}>{statusLabel(doPay)}</span>
           <span>Auto from posted Main + GST + TDS — not a dropdown</span>
         </div>
+        <div className="brx-field" style={{ marginBottom: 12 }}>
+          <span className="brx-field-label">Insurance due</span>
+          <div className="inp" style={{ display: 'flex', alignItems: 'center', background: 'var(--bg)' }}>{inr(insuranceDue)}</div>
+        </div>
+        {doReceived ? (
+          <div className="brx-settle-status">DO is fully posted. Who and when for each line are in Posted entries.</div>
+        ) : (
         <div className="brx-form-grid-2">
           <label className="brx-field">
             <span className="brx-field-label">Main (₹)</span>
@@ -374,17 +373,8 @@ export function BodyshopSettlementPanel({
             <span className="brx-field-label">TDS (₹)</span>
             <input className="inp" type="number" value={tdsAmt} onChange={(e) => setTdsAmt(e.target.value)} />
           </label>
-          <label className="brx-field">
-            <span className="brx-field-label">Date</span>
-            <input className="inp" type="date" value={doDate} onChange={(e) => setDoDate(e.target.value)} />
-          </label>
-          <label className="brx-field">
-            <span className="brx-field-label">UTR / reference</span>
-            <input className="inp" value={doRef} onChange={(e) => setDoRef(e.target.value)} />
-          </label>
-          <div className="brx-field">
-            <span className="brx-field-label">Insurance due</span>
-            <div className="inp" style={{ display: 'flex', alignItems: 'center', background: 'var(--bg)' }}>{inr(insuranceDue)}</div>
+          <div className="brx-grid-full" style={{ fontSize: 13, color: 'var(--muted)' }}>
+            Post any combination — Main, GST, and TDS can be saved separately or together. Each save stores who posted it and when.
           </div>
           <div className="brx-grid-full" style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
             <button className="btn btn--primary" type="button" disabled={savingDo} onClick={() => void saveDoPayment(false)}>
@@ -396,6 +386,7 @@ export function BodyshopSettlementPanel({
             {doError && <div className="brx-settle-error">{doError}</div>}
           </div>
         </div>
+        )}
       </div>
 
       <div className="brx-panel">
@@ -404,21 +395,15 @@ export function BodyshopSettlementPanel({
           <span className={`brx-settle-pill is-${String(custPay ?? 'pending').toLowerCase()}`}>{statusLabel(custPay)}</span>
           <span>{kindLabel} — auto from posted amounts</span>
         </div>
-        {kind === 'none' ? (
-          <div className="brx-settle-status">Nothing to collect or refund.</div>
+        {kind === 'none' || custReceived ? (
+          <div className="brx-settle-status">
+            {kind === 'none' ? 'Nothing to collect or refund.' : 'Customer side is fully posted. Who and when for each line are in Posted entries.'}
+          </div>
         ) : (
           <div className="brx-form-grid-2">
             <label className="brx-field">
               <span className="brx-field-label">{kind === 'refund' ? 'Amount refunded (₹)' : 'Amount received from customer (₹)'}</span>
               <input className="inp" type="number" value={custAmt} onChange={(e) => setCustAmt(e.target.value)} />
-            </label>
-            <label className="brx-field">
-              <span className="brx-field-label">Date</span>
-              <input className="inp" type="date" value={custDate} onChange={(e) => setCustDate(e.target.value)} />
-            </label>
-            <label className="brx-field">
-              <span className="brx-field-label">Reference</span>
-              <input className="inp" value={custRef} onChange={(e) => setCustRef(e.target.value)} />
             </label>
             <div className="brx-field">
               <span className="brx-field-label">{kind === 'refund' ? 'Remaining refund' : 'Remaining recoverable'}</span>
@@ -471,7 +456,6 @@ export function BodyshopSettlementPanel({
                 <th>When</th>
                 <th>Type</th>
                 <th>Amount</th>
-                <th>Ref</th>
                 <th>By</th>
                 <th></th>
               </tr>
@@ -479,10 +463,9 @@ export function BodyshopSettlementPanel({
             <tbody>
               {lines.map((line) => (
                 <tr key={line.id} className={line.is_reversed || line.line_type === 'reversal' ? 'is-reversed' : undefined}>
-                  <td>{line.txn_date}</td>
+                  <td>{formatWhen(line.created_at)}</td>
                   <td>{line.component}{line.line_type === 'reversal' ? ' · reversal' : ''}{line.is_reversed ? ' · reversed' : ''}</td>
                   <td>{inr(line.amount)}</td>
-                  <td>{line.reference || '—'}</td>
                   <td>{line.actor_email || '—'}</td>
                   <td>
                     {!line.is_reversed && line.line_type !== 'reversal' && (

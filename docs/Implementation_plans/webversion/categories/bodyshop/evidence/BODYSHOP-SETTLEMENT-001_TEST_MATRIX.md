@@ -10,7 +10,8 @@
 
 ## Preconditions
 
-- [ ] DBL-0026 applied and sql_checks passed
+- [x] DBL-0026 applied and sql_checks passed; `full_metadata.sql` refreshed 2026-09-04 13:05 IST
+- [x] DBL-0029 applied (same dump: JWT actor, `row_security=off`, insert_internal policies)
 - [ ] Stage 18 shows **two** payment panels (no single Payment Status dropdown)
 - [ ] Tester has `bodyshop_repair` modify
 - [ ] 005071 (or a staging clone) is available
@@ -83,7 +84,8 @@ Opening after backfill (no Main/GST/TDS/receipt lines):
 | I2 | Main + GST + TDS = DO | Insurance due ₹0 · DO Payment `received` |
 | I2b | Main + TDS = DO, GST empty (005071: 140571 + 2424) | Allowed · two lines · GST not required | [ ] |
 | I3 | GST line ≠ invoice `tax_parts` | Allowed · invoice GST stays display-only | [ ] |
-| I4 | Missing UTR on Main | **Lock at Phase 0:** UTR required for Main; optional for GST/TDS | [ ] |
+| I4 | Missing UTR / Date on Main | Allowed. Trail is `actor_email` + `created_at` on the line | [ ] |
+| I7 | DO Payment already `received` | Amount inputs hidden. Insurance due ₹0. Posted entries still visible | [ ] |
 | I5 | Amount 0 or negative | Rejected | [ ] |
 | I6 | `do_status = received` with no Main/GST/TDS | Stage 16 done · DO Payment still `pending` | [ ] |
 
@@ -99,7 +101,7 @@ Opening after backfill (no Main/GST/TDS/receipt lines):
 | C4 | Negative diff, post refund X | Remaining refund decreases · status `partial` until full | [ ] |
 | C5 | Try receipt on a refund case | Rejected | [ ] |
 | C6 | Try refund on a due case (005071) | Rejected | [ ] |
-| C7 | Event table | Newest first · actor + timestamp · component label Main/GST/TDS/Customer | [ ] |
+| C7 | Event table | Newest first by `created_at` · actor email · component label Main/GST/TDS/Customer | [ ] |
 
 ---
 

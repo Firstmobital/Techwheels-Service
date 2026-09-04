@@ -18,11 +18,6 @@ function inr(v: number | null | undefined) {
   return `₹${Number(v).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 }
 
-function todayIso() {
-  const d = new Date()
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-}
-
 function numOrNull(raw: string) {
   const t = raw.trim()
   if (!t) return null
@@ -57,9 +52,7 @@ export function BodyshopSettlementBilling<T extends SettlementCardCache>({
   const [mainAmt, setMainAmt] = useState('')
   const [gstAmt, setGstAmt] = useState('')
   const [tdsAmt, setTdsAmt] = useState('')
-  const [doRef, setDoRef] = useState('')
   const [custAmt, setCustAmt] = useState('')
-  const [custRef, setCustRef] = useState('')
   const [busy, setBusy] = useState(false)
 
   async function load() {
@@ -160,8 +153,6 @@ export function BodyshopSettlementBilling<T extends SettlementCardCache>({
         mainAmount: main,
         gstAmount: gst,
         tdsAmount: tds,
-        txnDate: todayIso(),
-        reference: doRef.trim() || null,
       })
       setPayload(next)
       onCardChange(mergeSettlementCard(card, next))
@@ -187,8 +178,6 @@ export function BodyshopSettlementBilling<T extends SettlementCardCache>({
       const next = await postCustomerAmount({
         repairCardId: card.id,
         amount: amt,
-        txnDate: todayIso(),
-        reference: custRef.trim() || null,
       })
       setPayload(next)
       onCardChange(mergeSettlementCard(card, next))
@@ -300,18 +289,23 @@ export function BodyshopSettlementBilling<T extends SettlementCardCache>({
         <View style={[styles.statusPill, { alignSelf: 'flex-start', backgroundColor: doPill.bg, borderColor: doPill.fg, marginBottom: 10 }]}>
           <Text style={{ fontSize: 11, fontWeight: '800', color: doPill.fg }}>{settlementStatusLabel(doPay)}</Text>
         </View>
-        <Text style={styles.fieldLabel}>Main (₹)</Text>
-        <TextInput style={styles.input} keyboardType="numeric" value={mainAmt} onChangeText={setMainAmt} placeholder="0" placeholderTextColor="#a7a99f" />
-        <Text style={[styles.fieldLabel, { marginTop: 8 }]}>GST (₹)</Text>
-        <TextInput style={styles.input} keyboardType="numeric" value={gstAmt} onChangeText={setGstAmt} placeholder="0" placeholderTextColor="#a7a99f" />
-        <Text style={[styles.fieldLabel, { marginTop: 8 }]}>TDS (₹)</Text>
-        <TextInput style={styles.input} keyboardType="numeric" value={tdsAmt} onChangeText={setTdsAmt} placeholder="0" placeholderTextColor="#a7a99f" />
-        <Text style={[styles.fieldLabel, { marginTop: 8 }]}>UTR / reference</Text>
-        <TextInput style={styles.input} value={doRef} onChangeText={setDoRef} placeholder="Optional" placeholderTextColor="#a7a99f" />
-        <Text style={{ fontSize: 12, color: '#82858f', marginVertical: 8 }}>Insurance due {inr(header?.insurance_due_amount)}</Text>
-        <TouchableOpacity onPress={() => void saveDo()} disabled={busy} style={styles.saveBtnSmall}>
-          <Text style={{ color: '#fff', fontWeight: '700' }}>Post DO payment</Text>
-        </TouchableOpacity>
+        <Text style={{ fontSize: 12, color: '#82858f', marginBottom: 8 }}>Insurance due {inr(header?.insurance_due_amount)}</Text>
+        {String(doPay ?? '').toLowerCase() === 'received' ? (
+          <Text style={{ fontSize: 13, color: '#82858f' }}>DO is fully posted. Who and when for each line are in Posted entries.</Text>
+        ) : (
+          <>
+            <Text style={styles.fieldLabel}>Main (₹)</Text>
+            <TextInput style={styles.input} keyboardType="numeric" value={mainAmt} onChangeText={setMainAmt} placeholder="0" placeholderTextColor="#a7a99f" />
+            <Text style={[styles.fieldLabel, { marginTop: 8 }]}>GST (₹)</Text>
+            <TextInput style={styles.input} keyboardType="numeric" value={gstAmt} onChangeText={setGstAmt} placeholder="0" placeholderTextColor="#a7a99f" />
+            <Text style={[styles.fieldLabel, { marginTop: 8 }]}>TDS (₹)</Text>
+            <TextInput style={styles.input} keyboardType="numeric" value={tdsAmt} onChangeText={setTdsAmt} placeholder="0" placeholderTextColor="#a7a99f" />
+            <Text style={{ fontSize: 12, color: '#82858f', marginVertical: 8 }}>Post any combination. Each save stores who posted it and when.</Text>
+            <TouchableOpacity onPress={() => void saveDo()} disabled={busy} style={styles.saveBtnSmall}>
+              <Text style={{ color: '#fff', fontWeight: '700' }}>Post DO payment</Text>
+            </TouchableOpacity>
+          </>
+        )}
       </View>
 
       <Text style={[styles.sectionTitle, { marginTop: 16 }]}>Stage 18 · Customer Diff Payment</Text>
@@ -319,14 +313,14 @@ export function BodyshopSettlementBilling<T extends SettlementCardCache>({
         <View style={[styles.statusPill, { alignSelf: 'flex-start', backgroundColor: custPill.bg, borderColor: custPill.fg, marginBottom: 10 }]}>
           <Text style={{ fontSize: 11, fontWeight: '800', color: custPill.fg }}>{settlementStatusLabel(custPay)} · {kindLabel}</Text>
         </View>
-        {kind === 'none' ? (
-          <Text style={{ fontSize: 13, color: '#82858f' }}>Nothing to collect or refund.</Text>
+        {kind === 'none' || String(custPay ?? '').toLowerCase() === 'received' ? (
+          <Text style={{ fontSize: 13, color: '#82858f' }}>
+            {kind === 'none' ? 'Nothing to collect or refund.' : 'Customer side is fully posted. Who and when for each line are in Posted entries.'}
+          </Text>
         ) : (
           <>
             <Text style={styles.fieldLabel}>{kind === 'refund' ? 'Amount refunded (₹)' : 'Amount received from customer (₹)'}</Text>
             <TextInput style={styles.input} keyboardType="numeric" value={custAmt} onChangeText={setCustAmt} placeholder="0" placeholderTextColor="#a7a99f" />
-            <Text style={[styles.fieldLabel, { marginTop: 8 }]}>Reference</Text>
-            <TextInput style={styles.input} value={custRef} onChangeText={setCustRef} placeholder="Optional" placeholderTextColor="#a7a99f" />
             <Text style={{ fontSize: 12, color: '#82858f', marginVertical: 8 }}>Remaining {inr(header?.customer_remaining_amount)}</Text>
             <TouchableOpacity onPress={() => void saveCustomer()} disabled={busy} style={styles.saveBtnSmall}>
               <Text style={{ color: '#fff', fontWeight: '700' }}>{kind === 'refund' ? 'Post refund' : 'Post customer receipt'}</Text>
@@ -343,7 +337,7 @@ export function BodyshopSettlementBilling<T extends SettlementCardCache>({
           (payload?.lines ?? []).map((line) => (
             <View key={line.id} style={{ paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: '#f6f4ee', opacity: line.is_reversed || line.line_type === 'reversal' ? 0.5 : 1 }}>
               <Text style={{ fontSize: 12, fontWeight: '700', color: '#1a1b21' }}>{line.component} · {inr(line.amount)}</Text>
-              <Text style={{ fontSize: 11, color: '#82858f' }}>{line.txn_date} · {line.reference || 'no ref'}</Text>
+              <Text style={{ fontSize: 11, color: '#82858f' }}>{line.created_at ? new Date(line.created_at).toLocaleString('en-IN') : ''}{line.actor_email ? ` · ${line.actor_email}` : ''}</Text>
               {!line.is_reversed && line.line_type !== 'reversal' ? (
                 <TouchableOpacity onPress={() => reverseLine(line.id)}>
                   <Text style={{ fontSize: 12, color: '#c33b53', fontWeight: '700', marginTop: 4 }}>Reverse</Text>

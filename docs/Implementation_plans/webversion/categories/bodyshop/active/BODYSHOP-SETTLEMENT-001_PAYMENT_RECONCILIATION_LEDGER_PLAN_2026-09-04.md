@@ -2,15 +2,15 @@
 
 **Plan ID:** BODYSHOP-SETTLEMENT-001  
 **Created:** 2026-09-04  
-**Last Updated:** 2026-09-04 (Post DO payment 400 fix: DBL-0029 + full RPC args + inline error)  
+**Last Updated:** 2026-09-04 (DO Received hides amount form; no Date/UTR fields; actor + created_at is the trail)  
 **Priority:** HIGH  
 **Owner:** Bodyshop Team + Platform Team + Accounts  
-**Status:** Active (implementation in progress; DBL-0026 applied)  
+**Status:** Active (implementation in progress; DBL-0026 VERIFIED in `full_metadata.sql`; DBL-0029 APPLIED)  
 **Platform:** webversion  
 **Category:** bodyshop  
-**Ledger:** DBL-0026 (APPLIED); DBL-0029 (PROPOSED — post-DO 400)  
+**Ledger:** DBL-0026 (VERIFIED); DBL-0029 (APPLIED — post-DO 400)  
 **Reference pages:** `/bodyshop-repair` (Billing tab stages 15/16; **Stage 18 Payment** = two payment statuses)  
-**DB authority:** `supabase/backups/full_metadata.sql`  
+**DB authority:** `supabase/backups/full_metadata.sql` (dumped 2026-09-04 13:05 IST; sha256 `074311759167fd4049087061f1df4d3452729625a089a216425240c79d89041a`)  
 **Row-data authority:** live production (4 Sep 2026) + `local_folder/backups/chunks/full_database.sql.part_*`  
 **Investigation canvas:** `/Users/vkbin/.cursor/projects/Users-vkbin-Techwheels-Service/canvases/jc-005071-payment-reconciliation.canvas.tsx`  
 **Evidence:** `docs/Implementation_plans/webversion/categories/bodyshop/evidence/BODYSHOP-SETTLEMENT-001_TEST_MATRIX.md`
@@ -50,11 +50,24 @@ This plan adds an **append-only settlement ledger**. Card billing columns (plus 
 
 ## Authoritative Audit (`full_metadata.sql` + live rows 2026-09-04)
 
-Audit date: 2026-09-04. Schema: `supabase/backups/full_metadata.sql`. Live verification: production `bodyshop_repair_cards.id = 630`.
+**Pre-apply audit** (morning 2026-09-04) is kept below as the gap that justified DBL-0026. It is not current schema truth.
 
-### Finding 1 — Billing lives only on the repair card
+**Post-apply schema authority** — `supabase/backups/full_metadata.sql` regenerated 2026-09-04 13:05 IST (`supabase/evidence/authoritative_metadata_manifest.json` sha256=`074311759167fd4049087061f1df4d3452729625a089a216425240c79d89041a`):
 
-`public.bodyshop_repair_cards` (metadata ~19624):
+| Object | Dump location |
+|--------|----------------|
+| Card cache `do_payment_status` / `customer_payment_status` / `customer_settlement_kind` | `bodyshop_repair_cards` ~20660 |
+| `public.bodyshop_settlement_lines` | CREATE TABLE ~20770 |
+| `public.bodyshop_settlements` | CREATE TABLE ~20822 |
+| `add_bodyshop_settlement_line` (`row_security=off`, paise rounding) | ~1318 |
+| `_bodyshop_settlement_actor` (JWT email) | ~1211 |
+| `bodyshop_settlement_lines_insert_internal` | ~37449 |
+
+DBL-0026 objects and DBL-0029 write-path fix are both present. Row facts for 005071 still come from live production, not this schema-only dump.
+
+### Finding 1 — Billing lived only on the repair card (pre-apply)
+
+`public.bodyshop_repair_cards` (pre-apply metadata; current dump ~20600):
 
 | Column | Constraint / default | Role today |
 |--------|----------------------|------------|
@@ -66,7 +79,7 @@ Audit date: 2026-09-04. Schema: `supabase/backups/full_metadata.sql`. Live verif
 | `payment_status` | `pending` / `received` / `not_received` | Stage 15 “done” + stage 18 |
 | `payment_slip_url` | text nullable | Unused on 005071 |
 
-No `tds`, `ins_amount`, `gst_amount` (except `doc_gst` boolean), receipt, ledger, or settlement table exists. Grep of metadata for those names: no matches.
+No `tds`, `ins_amount`, `gst_amount` (except `doc_gst` boolean), receipt, ledger, or settlement table existed **in the pre-apply dump**. That gap is closed; see the post-apply table above.
 
 ### Finding 2 — Invoice money already exists in DMS tables (not wired)
 
@@ -129,7 +142,7 @@ Stage 18 is two derived statuses plus an append-only ledger:
 
 | Surface | What the user enters | What the system derives |
 |---------|----------------------|-------------------------|
-| **DO Payment** | Main, GST, TDS received (date + UTR per post) | `insurance_due = do_amount − (Main + GST + TDS)` and **DO Payment Status** |
+| **DO Payment** | Main, GST, TDS posted separately or together | `insurance_due = do_amount − (Main + GST + TDS)` and **DO Payment Status**. Who/when = `actor_email` + `created_at` |
 | **Customer Diff Payment** | Amount received **or** amount refunded | Remaining due / remaining refund and **Customer Diff Payment Status** |
 
 `do_status = received` on stage 16 only means the DO amount was captured. It is **not** DO Payment Status.
@@ -230,7 +243,7 @@ The user never writes status. They only post money. The trigger/RPC recomputes s
 
 **Allowed shortcut (still auto):** a button **Post remaining as received**. It does **not** write status. It opens the amount form with remaining pre-filled:
 
-- DO: remaining insurance due must be split into Main / GST / TDS (at least one > 0, sum = remaining). Date + UTR required.
+- DO: remaining insurance due must be split into Main / GST / TDS (at least one > 0, sum = remaining). No Date or UTR field — `created_at` + `actor_email` are the trail.
 - Customer due: remaining recoverable pre-filled as the receipt.
 - Customer refund: remaining refund pre-filled.
 
@@ -242,8 +255,8 @@ On save, lines are inserted; status flips to `received` only because remaining h
 
 Status pills are read-only.
 
-1. **DO Payment** — always-visible inputs: Main ₹, GST ₹, TDS ₹, date, UTR. Read-only: Released, Insurance due, status pill.
-2. **Customer Diff Payment** — always-visible input: Amount received (or Amount refunded). Read-only: Remaining, status pill, kind badge.
+1. **DO Payment** — while not `received`: Main ₹, GST ₹, TDS ₹ (any subset). Read-only: Insurance due, status pill. When `received`, hide amount inputs. No Date or UTR fields.
+2. **Customer Diff Payment** — while not `received`: Amount received (or Amount refunded). Read-only: Remaining, status pill, kind badge. When `received`, hide amount inputs.
 
 No Payment Status `<select>`.
 
@@ -269,7 +282,7 @@ Overall Payment Received must **not** auto-advance Delivery.
 | Customer refund | `party=customer`, `line_type=refund`, component CUSTOMER_REFUND (only when kind=refund) |
 | Reverse | New `reversal` line. Never UPDATE/DELETE a posted line. |
 
-Required: `amount > 0`, `txn_date`, actor, optional `reference`.
+Required: `amount > 0`, actor (`actor_id` / `actor_email`), `created_at`. `txn_date` defaults to current date in the RPC. No UI Date or UTR.
 
 A single Stage 18 save may post up to three DO lines (Main / GST / TDS) in one RPC call, each as its own immutable row.
 
@@ -456,7 +469,7 @@ Existing list/queue queries keep working.
 - [x] **Task 1.2:** Author paired `supabase/sql_checks/20260904120000_bodyshop_settlement_ledger_checks.sql` (`Execution: This file can be run in one go.`).
 - [x] **Task 1.3:** Widen `payment_status` CHECK with `partial`; add `do_payment_status`, `customer_payment_status`, `customer_settlement_kind` on the card.
 - [x] **Task 1.4:** Reviewer APPROVED on DBL-0026; operator apply; VERIFIED; promote per `DB_CHANGE_PROTOCOL.md`.
-- [ ] **Task 1.5:** `npm run db:backup:metadata` after apply.
+- [x] **Task 1.5:** `npm run db:backup:metadata` after apply.
 
 ### Phase 2: Backfill
 
@@ -477,7 +490,7 @@ Existing list/queue queries keep working.
 
 - [x] **Task 4.1:** Invoice block: number, date, amount, labour/parts, DMS account, “Use DMS invoice” action.
 - [x] **Task 4.2:** DO block: status, amount, reference. Customer due read-only.
-- [x] **Task 4.3:** Stage 18 **DO Payment** panel: Main / GST / TDS + date + UTR. Show insurance due + DO Payment Status pill.
+- [x] **Task 4.3:** Stage 18 **DO Payment** panel: Main / GST / TDS (any subset). Hide inputs when received. Who/when from `actor_email` + `created_at`. No Date/UTR fields.
 - [x] **Task 4.4:** Stage 18 **Customer Diff Payment** panel: receipt or refund by kind. Show remaining due/refund + Customer Diff Payment Status pill.
 - [x] **Task 4.5:** Event table (newest first) with reverse action.
 - [x] **Task 4.6:** Summary: Invoice / DO / Main+GST/TDS / Insurance due / Customer diff / Posted / Remaining / Outstanding.
@@ -536,7 +549,7 @@ Existing list/queue queries keep working.
 ✅ 1.2 | Author paired sql_checks | Platform | 2026-09-04 | 2026-09-04 | sql_checks passed
 ✅ 1.3 | Widen payment_status + add two status cache columns | Platform | 2026-09-04 | 2026-09-04 | CHECK includes partial
 ✅ 1.4 | Apply + verify DBL-0026 | Operator + Reviewer | 2026-09-04 | 2026-09-04 | APPLIED prod; 299 headers
-⏳ 1.5 | Refresh full_metadata.sql | Platform | - | - | After apply
+✅ 1.5 | Refresh full_metadata.sql | Platform | 2026-09-04 | 2026-09-04 | dump 13:05 IST; sha256=07431175…; DBL-0026+0029 in dump
 ```
 
 ### Phase 2
@@ -563,7 +576,7 @@ Existing list/queue queries keep working.
 ```text
 ✅ 4.1 | Invoice block | Web | 2026-09-04 | 2026-09-04 | BodyshopSettlementPanel
 ✅ 4.2 | DO + customer due | Web | 2026-09-04 | 2026-09-04 | read-only diff
-✅ 4.3 | Stage 18 DO Payment panel (Main/GST/TDS) | Web | 2026-09-04 | 2026-09-04 | auto status pill; 400 post fixed DBL-0029
+✅ 4.3 | Stage 18 DO Payment panel (Main/GST/TDS) | Web | 2026-09-04 | 2026-09-04 | hide form when received; no Date/UTR
 ✅ 4.4 | Stage 18 Customer Diff panel (due/refund) | Web | 2026-09-04 | 2026-09-04 | auto status pill
 ✅ 4.5 | Event table + reverse | Web | 2026-09-04 | 2026-09-04 | newest first
 ✅ 4.6 | Settlement summary | Web | 2026-09-04 | 2026-09-04 | 8 totals
@@ -599,7 +612,9 @@ Existing list/queue queries keep working.
 | `supabase/sql_checks/20260904120000_bodyshop_settlement_ledger_checks.sql` | **Add** (Phase 1) |
 | `supabase/migrations/20260904150000_bodyshop_settlement_post_do_rpc_fix.sql` | **Add** (DBL-0029 post-DO 400) |
 | `supabase/sql_checks/20260904150000_bodyshop_settlement_post_do_rpc_fix_checks.sql` | **Add** |
-| `docs/shared/reference/DB_CHANGE_LEDGER.md` | **Modify** DBL-0026 |
+| `docs/shared/reference/DB_CHANGE_LEDGER.md` | **Modify** DBL-0026 VERIFIED; DBL-0029 APPLIED |
+| `supabase/backups/full_metadata.sql` | **Refresh** 2026-09-04 13:05 IST |
+| `supabase/evidence/authoritative_metadata_manifest.json` | **Refresh** sha256 `07431175…` |
 | `src/lib/api/bodyshopSettlement.ts` | **Add** |
 | `src/components/BodyshopSettlementPanel.tsx` | **Add** |
 | `src/lib/api/bodyshopRepair.ts` | **Modify** (types; stop billing overwrite) |
@@ -618,10 +633,10 @@ Existing list/queue queries keep working.
 
 ## Dependencies & Prerequisites
 
-- [x] Schema audit against `full_metadata.sql` (2026-09-04).
+- [x] Schema audit against `full_metadata.sql` (pre-apply 2026-09-04; post-apply dump 13:05 IST).
 - [x] Live 005071 financial trail (invoice, DO, DMS outstanding).
 - [ ] Accounts sign-off on Main+GST+TDS against DO, and positive customer_diff = recoverable.
-- [ ] DBL-0026 apply window (no overlap with other `bodyshop_repair_cards` CHECK changes).
+- [x] DBL-0026 apply window (no overlap with other `bodyshop_repair_cards` CHECK changes).
 - [ ] Staging `/bodyshop-repair` with at least one billed Accident JC.
 - [ ] No new RBAC module. Writes require existing `bodyshop_repair` modify.
 
@@ -650,7 +665,7 @@ Existing list/queue queries keep working.
 - ✅ Stage 18 completes only when **both** statuses are `received`. Delivery does not auto-flip.
 - ✅ Posted lines cannot be edited or deleted; reverse creates a new line.
 - ✅ Card cache includes both component statuses plus overall `payment_status`.
-- ✅ sql_checks + metadata refresh complete; DBL-0026 VERIFIED.
+- ✅ sql_checks + metadata refresh complete; DBL-0026 VERIFIED in `full_metadata.sql` (2026-09-04 13:05 IST). DBL-0029 APPLIED (same dump).
 
 ---
 
@@ -682,3 +697,4 @@ Existing list/queue queries keep working.
 - INS renamed to **Main** to match Accounts language. Component enum: `MAIN` / `GST` / `TDS`.
 - Overall `payment_status` is AND of the two derived statuses. Stage 18 done only when both are `received`.
 - Status is auto. User posts amounts; they do not click Received first. “Post remaining as received” is a prefill shortcut that still inserts lines.
+- When a side is `received`, amount inputs hide. No Date or UTR fields. Trail is `actor_email` + `created_at`. Main / GST / TDS may be posted in any combination, together or later.
