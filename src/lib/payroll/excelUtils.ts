@@ -80,31 +80,37 @@ export type EarnedBaseBankPayoutInput = {
   bankName?: string | null
   accountNumber?: string | null
   ifsc?: string | null
-  earnedBase: number
+  netPayable: number
+}
+
+export function isExportableNetPayable(value: unknown): boolean {
+  const amount = Number(value)
+  return Number.isFinite(amount) && amount !== 0
 }
 
 export function buildEarnedBaseBankPayoutRows(
   rows: EarnedBaseBankPayoutInput[],
 ): Array<Array<string | number>> {
-  return rows.map((row, index) => {
-    const earnedBase = Number(row.earnedBase)
-    const amount = Number.isFinite(earnedBase) ? earnedBase : 0
-    return [
-      '300971',
-      'FIRST MOBITAL PRIVATE LIMITED',
-      EARNED_BASE_COMPANY_ACCOUNT,
-      isSbiBank({ bankName: row.bankName, ifsc: row.ifsc }) ? 'DCR' : 'NEFT',
-      row.employeeName,
-      String(row.accountNumber ?? '').trim(),
-      String(row.ifsc ?? '').trim().toUpperCase(),
-      amount,
-      `SALARY${index + 1}`,
-      'INR',
-      'JAIPUR',
-      'SHRUTI@INDIRASWITCH.COM',
-      'E',
-    ]
-  })
+  return rows
+    .filter((row) => isExportableNetPayable(row.netPayable))
+    .map((row, index) => {
+      const amount = Number(row.netPayable)
+      return [
+        '300971',
+        'FIRST MOBITAL PRIVATE LIMITED',
+        EARNED_BASE_COMPANY_ACCOUNT,
+        isSbiBank({ bankName: row.bankName, ifsc: row.ifsc }) ? 'DCR' : 'NEFT',
+        row.employeeName,
+        String(row.accountNumber ?? '').trim(),
+        String(row.ifsc ?? '').trim().toUpperCase(),
+        amount,
+        `SALARY${index + 1}`,
+        'INR',
+        'JAIPUR',
+        'SHRUTI@INDIRASWITCH.COM',
+        'E',
+      ]
+    })
 }
 
 const BANK_BASE_SALARY_MONTH_ABBREV = [

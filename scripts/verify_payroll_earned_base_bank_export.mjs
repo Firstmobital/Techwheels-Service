@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-/** Mirrors src/lib/payroll/excelUtils.ts earned-base bank payout helpers. */
+/** Mirrors src/lib/payroll/excelUtils.ts earned-base card bank payout helpers. */
 
 const EARNED_BASE_COMPANY_ACCOUNT = '39169685030'
 const TECHNICIAN_COMPANY_ACCOUNT = '39171760445'
@@ -10,26 +10,32 @@ function isSbiBank(bank) {
   return bankName.includes('STATE BANK OF INDIA') || bankName === 'SBI' || ifsc.startsWith('SBIN')
 }
 
+function isExportableNetPayable(value) {
+  const amount = Number(value)
+  return Number.isFinite(amount) && amount !== 0
+}
+
 function buildEarnedBaseBankPayoutRows(rows) {
-  return rows.map((row, index) => {
-    const earnedBase = Number(row.earnedBase)
-    const amount = Number.isFinite(earnedBase) ? earnedBase : 0
-    return [
-      '300971',
-      'FIRST MOBITAL PRIVATE LIMITED',
-      EARNED_BASE_COMPANY_ACCOUNT,
-      isSbiBank({ bankName: row.bankName, ifsc: row.ifsc }) ? 'DCR' : 'NEFT',
-      row.employeeName,
-      String(row.accountNumber ?? '').trim(),
-      String(row.ifsc ?? '').trim().toUpperCase(),
-      amount,
-      `SALARY${index + 1}`,
-      'INR',
-      'JAIPUR',
-      'SHRUTI@INDIRASWITCH.COM',
-      'E',
-    ]
-  })
+  return rows
+    .filter((row) => isExportableNetPayable(row.netPayable))
+    .map((row, index) => {
+      const amount = Number(row.netPayable)
+      return [
+        '300971',
+        'FIRST MOBITAL PRIVATE LIMITED',
+        EARNED_BASE_COMPANY_ACCOUNT,
+        isSbiBank({ bankName: row.bankName, ifsc: row.ifsc }) ? 'DCR' : 'NEFT',
+        row.employeeName,
+        String(row.accountNumber ?? '').trim(),
+        String(row.ifsc ?? '').trim().toUpperCase(),
+        amount,
+        `SALARY${index + 1}`,
+        'INR',
+        'JAIPUR',
+        'SHRUTI@INDIRASWITCH.COM',
+        'E',
+      ]
+    })
 }
 
 const BANK_BASE_SALARY_MONTH_ABBREV = [
@@ -48,32 +54,41 @@ function bankBaseSalaryFilename(monthInput) {
 }
 
 const scopedEntries = [
-  { employeeName: 'A', bankName: 'HDFC', accountNumber: '001234', ifsc: 'HDFC0001234', earnedBase: 16000, netPayable: 9000, baseSalary: 28000 },
-  { employeeName: 'B', bankName: 'SBI', accountNumber: '00000039975234227', ifsc: 'sbin0032155', earnedBase: 0, netPayable: 5000, baseSalary: 22000 },
-  { employeeName: 'C', bankName: null, accountNumber: null, ifsc: null, earnedBase: 27067, netPayable: 0, baseSalary: 27067 },
+  { employeeName: 'A', bankName: 'HDFC', accountNumber: '001234', ifsc: 'HDFC0001234', earnedBase: 16000, netPayable: 15000 },
+  { employeeName: 'B', bankName: null, accountNumber: null, ifsc: null, earnedBase: 16000, netPayable: 0 },
+  { employeeName: 'C', bankName: 'SBI', accountNumber: '00000039975234227', ifsc: 'sbin0032155', earnedBase: 16000, netPayable: 12000 },
 ]
 
-const cardTotal = scopedEntries.reduce((sum, row) => sum + Number(row.earnedBase), 0)
+const cardEarnedBaseTotal = scopedEntries.reduce((sum, row) => sum + Number(row.earnedBase), 0)
 const rows = buildEarnedBaseBankPayoutRows(scopedEntries)
 const exportedSum = rows.reduce((sum, row) => sum + Number(row[7]), 0)
+const eligibleNetSum = scopedEntries
+  .filter((row) => isExportableNetPayable(row.netPayable))
+  .reduce((sum, row) => sum + Number(row.netPayable), 0)
+
+const gapCase = buildEarnedBaseBankPayoutRows([
+  { employeeName: 'A', bankName: 'PNB', accountNumber: '1', ifsc: 'PUNB0113310', netPayable: 10000 },
+  { employeeName: 'B', bankName: 'SBI', accountNumber: '', ifsc: '', netPayable: 0 },
+  { employeeName: 'C', bankName: 'PNB', accountNumber: '2', ifsc: 'PUNB0113310', netPayable: 12000 },
+])
 
 const tests = [
   { name: 'SBI by exact bank name', got: isSbiBank({ bankName: 'SBI', ifsc: 'HDFC0001234' }), want: true },
   { name: 'SBI by full bank name', got: isSbiBank({ bankName: 'State Bank of India - Sitapura', ifsc: '' }), want: true },
   { name: 'SBI by IFSC prefix', got: isSbiBank({ bankName: 'Other', ifsc: 'SBIN0061319' }), want: true },
   { name: 'non-SBI is NEFT', got: isSbiBank({ bankName: 'PNB', ifsc: 'PUNB0113310' }), want: false },
-  { name: 'row0 Type NEFT', got: rows[0][3], want: 'NEFT' },
-  { name: 'row1 Type DCR', got: rows[1][3], want: 'DCR' },
+  { name: 'Amount uses net_payable not earned_base', got: rows[0][7], want: 15000 },
+  { name: 'zero net_payable row is excluded', got: rows.map((row) => row[4]), want: ['A', 'C'] },
+  { name: 'zero-net missing bank does not appear', got: rows.some((row) => row[4] === 'B'), want: false },
+  { name: 'SBI non-zero is DCR', got: rows[1][3], want: 'DCR' },
+  { name: 'non-SBI non-zero is NEFT', got: rows[0][3], want: 'NEFT' },
   { name: 'company account is base-salary account', got: rows[0][2], want: EARNED_BASE_COMPANY_ACCOUNT },
   { name: 'does not reuse technician account', got: rows.every((row) => row[2] !== TECHNICIAN_COMPANY_ACCOUNT), want: true },
-  { name: 'Amount uses earned_base not net or configured salary', got: rows[0][7], want: 16000 },
-  { name: 'zero earned_base row is kept', got: rows[1][7], want: 0 },
-  { name: 'missing bank fields stay as empty strings', got: rows[2][5] === '' && rows[2][6] === '', want: true },
   { name: 'leading zeros preserved as text value', got: rows[1][5], want: '00000039975234227' },
   { name: 'IFSC uppercased', got: rows[1][6], want: 'SBIN0032155' },
-  { name: 'ID sequence restarts at SALARY1', got: rows.map((row) => row[8]), want: ['SALARY1', 'SALARY2', 'SALARY3'] },
-  { name: 'SUM(Amount) == Earned Base Total', got: exportedSum, want: cardTotal },
-  { name: 'row count matches scoped card rows', got: rows.length, want: scopedEntries.length },
+  { name: 'SALARY IDs assigned after zero filter with no gap', got: gapCase.map((row) => [row[4], row[8]]), want: [['A', 'SALARY1'], ['C', 'SALARY2']] },
+  { name: 'SUM(Amount) == SUM(eligible net_payable)', got: exportedSum, want: eligibleNetSum },
+  { name: 'SUM(Amount) is not required to equal Earned Base Total', got: exportedSum === cardEarnedBaseTotal, want: false },
   { name: 'filename Sept2026', got: bankBaseSalaryFilename('2026-09'), want: 'Bank_BaseSalary_Sept2026.xlsx' },
   { name: 'filename Aug2026', got: bankBaseSalaryFilename('2026-08'), want: 'Bank_BaseSalary_Aug2026.xlsx' },
   { name: 'static Code', got: rows[0][0], want: '300971' },

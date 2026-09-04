@@ -235,7 +235,7 @@ export default function PayrollProcessingTab({
             bankName: identity?.bankName ?? '',
             accountNumber: identity?.accountNumber ?? '',
             ifsc: identity?.ifsc ?? '',
-            earnedBase: Number(entry.earned_base),
+            netPayable: Number(entry.net_payable),
           }
         }),
       )
