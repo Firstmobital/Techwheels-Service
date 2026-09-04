@@ -4,6 +4,7 @@ Tracks documentation-sync updates for business logic, architecture, and access c
 
 ## 2026-09-04
 
+- Stage 18 **Post DO payment** was returning HTTP 400 without a visible reason (toast sat under DevTools). Writes now send the full `add_bodyshop_settlement_line` argument list, show the Postgres error on the Billing panel, and DBL-0029 lets SECURITY DEFINER insert settlement lines under RLS. GST and UTR remain optional. Empty GST + Main 140571 + TDS 2424 on 005071 is a valid post.
 - Repair Tracker (`/bodyshop-repair`) search is now a **lookup**: JC / VRN / customer queries of 3+ characters fetch matching `bodyshop_repair_cards` with no Period predicate (limit 50). Default This Month + Active no longer hide prior-month cards such as `RJ52UA9900`.
 - Entering lookup resets Period / Branch / Advisor / Status / Stage / Pipeline to All. Those controls then filter only the hit set. Clearing search restores the previous browse filters.
 - Lookup does not run the Accident intake sync used by Period browse. RBAC SA/SSA/Survey scope is unchanged.

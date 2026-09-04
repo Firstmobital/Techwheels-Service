@@ -2,13 +2,13 @@
 
 **Plan ID:** BODYSHOP-SETTLEMENT-001  
 **Created:** 2026-09-04  
-**Last Updated:** 2026-09-04 (web + mobile Billing wired to settlement RPCs; status auto from posted amounts)  
+**Last Updated:** 2026-09-04 (Post DO payment 400 fix: DBL-0029 + full RPC args + inline error)  
 **Priority:** HIGH  
 **Owner:** Bodyshop Team + Platform Team + Accounts  
 **Status:** Active (implementation in progress; DBL-0026 applied)  
 **Platform:** webversion  
 **Category:** bodyshop  
-**Ledger:** DBL-0026 (APPLIED)  
+**Ledger:** DBL-0026 (APPLIED); DBL-0029 (PROPOSED — post-DO 400)  
 **Reference pages:** `/bodyshop-repair` (Billing tab stages 15/16; **Stage 18 Payment** = two payment statuses)  
 **DB authority:** `supabase/backups/full_metadata.sql`  
 **Row-data authority:** live production (4 Sep 2026) + `local_folder/backups/chunks/full_database.sql.part_*`  
@@ -563,7 +563,7 @@ Existing list/queue queries keep working.
 ```text
 ✅ 4.1 | Invoice block | Web | 2026-09-04 | 2026-09-04 | BodyshopSettlementPanel
 ✅ 4.2 | DO + customer due | Web | 2026-09-04 | 2026-09-04 | read-only diff
-✅ 4.3 | Stage 18 DO Payment panel (Main/GST/TDS) | Web | 2026-09-04 | 2026-09-04 | auto status pill
+✅ 4.3 | Stage 18 DO Payment panel (Main/GST/TDS) | Web | 2026-09-04 | 2026-09-04 | auto status pill; 400 post fixed DBL-0029
 ✅ 4.4 | Stage 18 Customer Diff panel (due/refund) | Web | 2026-09-04 | 2026-09-04 | auto status pill
 ✅ 4.5 | Event table + reverse | Web | 2026-09-04 | 2026-09-04 | newest first
 ✅ 4.6 | Settlement summary | Web | 2026-09-04 | 2026-09-04 | 8 totals
@@ -597,6 +597,8 @@ Existing list/queue queries keep working.
 |------|--------|
 | `supabase/migrations/20260904120000_bodyshop_settlement_ledger.sql` | **Add** (Phase 1) |
 | `supabase/sql_checks/20260904120000_bodyshop_settlement_ledger_checks.sql` | **Add** (Phase 1) |
+| `supabase/migrations/20260904150000_bodyshop_settlement_post_do_rpc_fix.sql` | **Add** (DBL-0029 post-DO 400) |
+| `supabase/sql_checks/20260904150000_bodyshop_settlement_post_do_rpc_fix_checks.sql` | **Add** |
 | `docs/shared/reference/DB_CHANGE_LEDGER.md` | **Modify** DBL-0026 |
 | `src/lib/api/bodyshopSettlement.ts` | **Add** |
 | `src/components/BodyshopSettlementPanel.tsx` | **Add** |

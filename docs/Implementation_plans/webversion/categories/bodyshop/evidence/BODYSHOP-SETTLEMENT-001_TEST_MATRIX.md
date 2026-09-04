@@ -80,7 +80,8 @@ Opening after backfill (no Main/GST/TDS/receipt lines):
 | ID | Setup | Expected | Pass |
 |----|-------|----------|------|
 | I1 | Main only, less than DO | Insurance due = DO − Main · DO Payment `partial` | [ ] |
-| I2 | Main + GST + TDS = DO | Insurance due ₹0 · DO Payment `received` | [ ] |
+| I2 | Main + GST + TDS = DO | Insurance due ₹0 · DO Payment `received` |
+| I2b | Main + TDS = DO, GST empty (005071: 140571 + 2424) | Allowed · two lines · GST not required | [ ] |
 | I3 | GST line ≠ invoice `tax_parts` | Allowed · invoice GST stays display-only | [ ] |
 | I4 | Missing UTR on Main | **Lock at Phase 0:** UTR required for Main; optional for GST/TDS | [ ] |
 | I5 | Amount 0 or negative | Rejected | [ ] |

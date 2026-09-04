@@ -2075,7 +2075,7 @@ export default function BodyshopRepairPage() {
 
   function toast_(msg: string, ok = true) {
     setToast({ msg, ok })
-    setTimeout(() => setToast(null), 3000)
+    setTimeout(() => setToast(null), ok ? 3000 : 8000)
   }
 
   async function handleCreate() {

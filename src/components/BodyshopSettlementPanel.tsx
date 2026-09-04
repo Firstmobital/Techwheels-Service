@@ -7,6 +7,7 @@ import {
   postCustomerAmount,
   postDoRelease,
   reverseSettlementLine,
+  settlementRpcError,
   upsertBodyshopSettlementHeader,
   type SettlementPayload,
 } from '../lib/api/bodyshopSettlement'
@@ -69,6 +70,8 @@ export function BodyshopSettlementPanel({
   const [custAmt, setCustAmt] = useState('')
   const [custDate, setCustDate] = useState(todayIso())
   const [custRef, setCustRef] = useState('')
+  const [doError, setDoError] = useState<string | null>(null)
+  const [custError, setCustError] = useState<string | null>(null)
 
   async function load() {
     setLoading(true)
@@ -184,8 +187,10 @@ export function BodyshopSettlementPanel({
     }
     if ((main ?? 0) + (gst ?? 0) + (tds ?? 0) <= 0) {
       toast('Enter Main, GST or TDS', false)
+      setDoError('Enter Main, GST or TDS')
       return
     }
+    setDoError(null)
     setSavingDo(true)
     try {
       const next = await postDoRelease({
@@ -202,8 +207,10 @@ export function BodyshopSettlementPanel({
       setGstAmt('')
       setTdsAmt('')
       toast('DO payment posted')
-    } catch (e: any) {
-      toast(e?.message ?? 'DO payment failed', false)
+    } catch (e: unknown) {
+      const msg = settlementRpcError(e)
+      setDoError(msg)
+      toast(msg, false)
     } finally {
       setSavingDo(false)
     }
@@ -218,6 +225,7 @@ export function BodyshopSettlementPanel({
       toast(kind === 'refund' ? 'Enter refund amount' : 'Enter amount received from customer', false)
       return
     }
+    setCustError(null)
     setSavingCust(true)
     try {
       const next = await postCustomerAmount({
@@ -230,8 +238,10 @@ export function BodyshopSettlementPanel({
       onCardChange(mergeSettlementCard(card, next))
       setCustAmt('')
       toast(kind === 'refund' ? 'Refund posted' : 'Customer receipt posted')
-    } catch (e: any) {
-      toast(e?.message ?? 'Customer post failed', false)
+    } catch (e: unknown) {
+      const msg = settlementRpcError(e)
+      setCustError(msg)
+      toast(msg, false)
     } finally {
       setSavingCust(false)
     }
@@ -383,6 +393,7 @@ export function BodyshopSettlementPanel({
             <button className="btn" type="button" disabled={savingDo || !(Number(insuranceDue) > 0)} onClick={() => void saveDoPayment(true)}>
               Post remaining as received
             </button>
+            {doError && <div className="brx-settle-error">{doError}</div>}
           </div>
         </div>
       </div>
@@ -420,6 +431,7 @@ export function BodyshopSettlementPanel({
               <button className="btn" type="button" disabled={savingCust || !(Number(remaining) > 0)} onClick={() => void saveCustomer(true)}>
                 Post remaining as received
               </button>
+              {custError && <div className="brx-settle-error">{custError}</div>}
             </div>
           </div>
         )}

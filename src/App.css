@@ -3571,6 +3571,8 @@ code.k--b { background: var(--accent-soft); color: var(--accent); }
   border-radius: 8px;
   font-size: 14px;
   font-weight: 600;
+  max-width: min(480px, calc(100vw - 32px));
+  white-space: pre-wrap;
 }
 
 .brx-toast.is-ok {
@@ -3769,6 +3771,19 @@ code.k--b { background: var(--accent-soft); color: var(--accent); }
   color: #92400e;
   font-size: 13px;
   font-weight: 600;
+}
+
+.brx-settle-error {
+  flex: 1 1 100%;
+  margin: 4px 0 0;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: #fef2f2;
+  border: 1px solid #f87171;
+  color: #991b1b;
+  font-size: 13px;
+  font-weight: 600;
+  white-space: pre-wrap;
 }
 
 .brx-settle-status {

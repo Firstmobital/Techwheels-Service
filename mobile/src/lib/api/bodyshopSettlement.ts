@@ -62,6 +62,17 @@ export interface SettlementPayload {
   card: Partial<SettlementCardCache> & { id: number }
 }
 
+function settlementRpcError(e: unknown): string {
+  const err = e as { message?: string; details?: string; hint?: string }
+  const parts = [err?.message, err?.details, err?.hint].filter((p) => typeof p === 'string' && p.trim())
+  return parts.join(' — ') || 'Request failed'
+}
+
+function money2(n: number | null | undefined): number | null {
+  if (n == null || !Number.isFinite(Number(n))) return null
+  return Math.round(Number(n) * 100) / 100
+}
+
 function asPayload(data: unknown): SettlementPayload {
   const raw = (data ?? {}) as SettlementPayload
   return {
@@ -77,7 +88,7 @@ export async function getBodyshopSettlement(repairCardId: number): Promise<Settl
   const { data, error } = await supabase.rpc('get_bodyshop_settlement', {
     p_repair_card_id: repairCardId,
   })
-  if (error) throw error
+  if (error) throw new Error(settlementRpcError(error))
   return asPayload(data)
 }
 
@@ -107,7 +118,7 @@ export async function upsertBodyshopSettlementHeader(input: {
     p_do_amount: input.doAmount ?? null,
     p_do_status: input.doStatus ?? null,
   })
-  if (error) throw error
+  if (error) throw new Error(settlementRpcError(error))
   return asPayload(data)
 }
 
@@ -121,13 +132,18 @@ export async function postDoRelease(input: {
 }): Promise<SettlementPayload> {
   const { data, error } = await supabase.rpc('add_bodyshop_settlement_line', {
     p_repair_card_id: input.repairCardId,
-    p_main_amount: input.mainAmount ?? null,
-    p_gst_amount: input.gstAmount ?? null,
-    p_tds_amount: input.tdsAmount ?? null,
+    p_party: null,
+    p_line_type: null,
+    p_component: null,
+    p_amount: null,
     p_txn_date: input.txnDate ?? null,
     p_reference: input.reference ?? null,
+    p_remarks: null,
+    p_main_amount: money2(input.mainAmount),
+    p_gst_amount: money2(input.gstAmount),
+    p_tds_amount: money2(input.tdsAmount),
   })
-  if (error) throw error
+  if (error) throw new Error(settlementRpcError(error))
   return asPayload(data)
 }
 
@@ -140,11 +156,17 @@ export async function postCustomerAmount(input: {
   const { data, error } = await supabase.rpc('add_bodyshop_settlement_line', {
     p_repair_card_id: input.repairCardId,
     p_party: 'customer',
-    p_amount: input.amount,
+    p_line_type: null,
+    p_component: null,
+    p_amount: money2(input.amount),
     p_txn_date: input.txnDate ?? null,
     p_reference: input.reference ?? null,
+    p_remarks: null,
+    p_main_amount: null,
+    p_gst_amount: null,
+    p_tds_amount: null,
   })
-  if (error) throw error
+  if (error) throw new Error(settlementRpcError(error))
   return asPayload(data)
 }
 
@@ -153,7 +175,7 @@ export async function reverseSettlementLine(lineId: number, reason?: string): Pr
     p_line_id: lineId,
     p_reason: reason ?? null,
   })
-  if (error) throw error
+  if (error) throw new Error(settlementRpcError(error))
   return asPayload(data)
 }
 
