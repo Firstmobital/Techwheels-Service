@@ -34,7 +34,7 @@ This document defines the authoritative mapping between database modules and fro
 | 10 | `reception` | `/reception` | `/reception` | ReceptionPage | Active | Front desk vehicle intake and SA assignment |
 | 11 | `payroll` | `/payroll` | `/payroll` | PayrollPage | Active | Payroll management: attendance, advances, processing, salary slips |
 | — | `help_tickets` | `/help-tickets` | `/help-tickets` | HelpTicketsAdminPage | Active | Support inbox (org-wide). Employee self-service at `/help/tickets*` is auth-only (no module grant). |
-| — | `bodyshop_recovery` | `/bodyshop-recovery` | `/bodyshop-recovery` | BodyshopRecoveryPage | Active | DO / insurance-due recovery book (v1). Org-wide: no dealer/branch/fuel row filter. Customer remaining deferred. |
+| — | `bodyshop_recovery` | `/bodyshop-recovery` | `/bodyshop-recovery` | BodyshopRecoveryPage | Active | DO / insurance-due book. Org-wide. More + Post Payment (Stage 18 DO) on-page. |
 
 **Legend:**
 - **Module Name**: Authoritative name from `public.modules.name`

@@ -561,6 +561,7 @@ table.tbl { width: 100%; border-collapse: collapse; font-size: 13.5px; }
 @keyframes fade { from { opacity: 0; } to { opacity: 1; } }
 .modal { width: 100%; max-width: 460px; background: var(--surface); border-radius: var(--r-lg); box-shadow: var(--sh-3); animation: pop .16s ease; max-height: 90vh; display: flex; flex-direction: column; }
 .modal--md { max-width: 560px; }
+.modal--xl { max-width: 920px; }
 .modal__head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 18px 20px; border-bottom: 1px solid var(--border); }
 .modal__header { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 18px 20px; border-bottom: 1px solid var(--border); }
 .modal__head h3 { margin: 0; font-size: 16.5px; font-weight: 700; letter-spacing: -.01em; }
@@ -587,7 +588,8 @@ table.tbl { width: 100%; border-collapse: collapse; font-size: 13.5px; }
   }
 
   .modal,
-  .modal--md {
+  .modal--md,
+  .modal--xl {
     max-width: 100%;
     max-height: calc(100vh - 24px);
   }
@@ -3931,11 +3933,63 @@ code.k--b { background: var(--accent-soft); color: var(--accent); }
 }
 
 .brx-recov-filters {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: flex-end;
   margin-bottom: 8px;
 }
 
 .brx-recov-filters .inp {
-  max-width: 420px;
+  max-width: 280px;
+}
+
+.brx-recov-filters .sel {
+  min-width: 220px;
+}
+
+.brx-recov-actions {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.brx-recov-dl {
+  display: grid;
+  grid-template-columns: 120px 1fr;
+  gap: 6px 12px;
+  font-size: 13px;
+}
+
+.brx-recov-dl__k {
+  color: var(--muted);
+}
+
+.brx-recov-dl__v {
+  min-width: 0;
+  word-break: break-word;
+}
+
+.brx-recov-docs {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.brx-recov-doc {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 13px;
+}
+
+.brx-recov-doc__miss {
+  color: var(--muted);
+  font-size: 12px;
 }
 
 @media (max-width: 960px) {

@@ -2,13 +2,13 @@
 
 **Plan ID:** BODYSHOP-RECOVERY-001  
 **Created:** 2026-09-04  
-**Last Updated:** 2026-09-04 (DBL-0032: org-wide list, no dealer/branch/fuel row filter)  
+**Last Updated:** 2026-09-04 (filters + More + Post Payment; DBL-0033)  
 **Priority:** HIGH  
 **Owner:** Bodyshop Team + Platform Team + Accounts  
 **Status:** Active (v1 DO-only)  
 **Platform:** webversion  
 **Category:** bodyshop  
-**Ledger:** DBL-0031 (applied earlier); DBL-0032 (APPLIED — org-wide visibility)  
+**Ledger:** DBL-0031 (applied); DBL-0032 (APPLIED); DBL-0033 (APPLIED — Recovery DO post)  
 **Route:** `/bodyshop-recovery`  
 **Module:** `bodyshop_recovery`  
 **Depends on:** BODYSHOP-SETTLEMENT-001 (`bodyshop_settlements.insurance_due_amount`)
@@ -32,10 +32,10 @@ Add a fourth Bodyshop nav item **Bodyshop Recovery**. It is the accounts rupee b
 1. Nav label **Bodyshop Recovery**. Module `bodyshop_recovery`. Route `/bodyshop-recovery`.
 2. Open row = `do_amount IS NOT NULL` AND `insurance_due_amount > 0`. Fully posted DO (`received`, due ₹0) is hidden — 005071 after Main+TDS covering DO must not appear.
 3. Headline KPI = sum of `insurance_due_amount`. Secondary = open vehicle count. Split pending / partial / not_received.
-4. Year → month drill uses **invoice_date** (IST). Default view is **all open dues**, not This Month.
-5. No posting UI. Open JC → Repair Tracker lookup `?q=`. Customer pending is out of scope.
-6. Grant by named user in Admin → Permissions (`bodyshop_recovery` view). Do not auto-grant to SA / Floor / Survey. Do **not** add a `BS Recovery` Employee Master business role. EDP (or blank) on the employee row is unrelated to this page’s row set.
-7. **Org-wide visibility.** `list_bodyshop_do_recovery` does not use `dealer_code_in_scope`, branch, or fuel. A Recovery user with **NO-DEALER** still sees every open insurance-due JC. Repair Tracker posting keeps its own SA/branch rules.
+4. Period filter on **invoice_date** (IST calendar): This month · Last month · All · Custom. Default **All**. No-date chip when present. Insurer dropdown uses card `insurance_company` (not DMS bill-to).
+5. **More** is a read-only case sheet (customer, policy no, claim no, documents). **Post Payment** opens Stage 18 · DO Payment on this page. Repair Tracker is not required. Customer remaining stays off this page.
+6. Grant by named user in Admin → Permissions (`bodyshop_recovery` view). View is enough to list, open More, and post DO Main/GST/TDS. Do **not** add a `BS Recovery` Employee Master business role.
+7. **Org-wide visibility.** List, More, and DO post do not use dealer/branch/fuel. Customer posts and invoice/DO capture stay Repair Tracker (`bodyshop_repair` modify + dealer scope).
 
 ```
 insurance_due = do_amount − (Main + GST + TDS, not reversed)
@@ -50,7 +50,7 @@ insurance_due = do_amount − (Main + GST + TDS, not reversed)
 - [x] **Task 1.3:** Paired sql_checks.
 - [x] **Task 2.1:** Web page + API + Bodyshop dropdown.
 - [x] **Task 2.2:** Operator apply DBL-0031 then DBL-0032; Sanjay Kansotia has `bodyshop_recovery` view. Grant other Accounts users as needed.
-- [x] **Task 2.3:** Org-wide Recovery list (no dealer/branch/fuel filter). DBL-0032.
+- [x] **Task 2.4:** Period pills + insurer filter; More modal; Post Payment Stage 18 on Recovery (DBL-0033).
 - [ ] **Task 3.1:** Customer remaining book (later plan). Not v1.
 
 ---
@@ -64,6 +64,7 @@ insurance_due = do_amount − (Main + GST + TDS, not reversed)
 ✅ 2.1 | Web Recovery page | Eng | 2026-09-04 | 2026-09-04 |
 ✅ 2.3 | Org-wide list (no dealer scope) | Eng | 2026-09-04 | 2026-09-04 | DBL-0032; NO-DEALER must see all
 ✅ 2.2 | Apply DBL-0031 + DBL-0032 + grant Accounts | Operator | 2026-09-04 | 2026-09-04 | DBL-0032 APPLIED prod; Sanjay has view; other Accounts as needed
+✅ 2.4 | Period + insurer + More + Post Payment | Eng | 2026-09-04 | 2026-09-04 | DBL-0033; DO only; no Repair Tracker
 ⏳ 3.1 | Customer book | - | - | - | Deferred
 ```
 
@@ -71,7 +72,6 @@ insurance_due = do_amount − (Main + GST + TDS, not reversed)
 
 ## Out of v1
 
-- Customer due / refund KPIs
+- Customer due / refund KPIs and posting (stay on Repair Tracker)
 - Bank UTR matching
 - Mobile
-- Posting Main/GST/TDS on this page
