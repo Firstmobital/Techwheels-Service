@@ -110,6 +110,7 @@ export default function BodyshopRecoveryPage() {
   const [year, setYear] = useState<number | 'all'>('all')
   const [month, setMonth] = useState<number | 'all'>('all')
   const [insurer, setInsurer] = useState('all')
+  const [mismatch, setMismatch] = useState<'all' | 'mismatch'>('all')
   const [status, setStatus] = useState<StatusFilter>('all')
   const [moreId, setMoreId] = useState<number | null>(null)
   const [moreCase, setMoreCase] = useState<RecoveryCase | null>(null)
@@ -179,6 +180,11 @@ export default function BodyshopRecoveryPage() {
       .sort((a, b) => b.due - a.due)
   }, [rows])
 
+  const mismatchCount = useMemo(
+    () => rows.filter((r) => insurerPayerMismatch(r.insurance_company, r.invoice_account)).length,
+    [rows],
+  )
+
   const searched = useMemo(() => {
     const q = search.trim().toLowerCase()
     return rows.filter((r) => {
@@ -186,13 +192,14 @@ export default function BodyshopRecoveryPage() {
         const key = String(r.insurance_company ?? '').trim() ? String(r.insurance_company).trim().toLowerCase() : '__blank__'
         if (key !== insurer) return false
       }
+      if (mismatch === 'mismatch' && !insurerPayerMismatch(r.insurance_company, r.invoice_account)) return false
       if (!q) return true
       const blob = [r.job_card_no, r.reg_number, r.customer_name, r.sa_name, r.branch, r.insurance_company, r.invoice_number, r.invoice_account]
         .map((v) => String(v ?? '').toLowerCase())
         .join(' ')
       return blob.includes(q)
     })
-  }, [rows, search, insurer])
+  }, [rows, search, insurer, mismatch])
 
   const years = useMemo(() => {
     const map = new Map<number, { due: number; count: number }>()
@@ -432,6 +439,14 @@ export default function BodyshopRecoveryPage() {
           {insurers.map((i) => (
             <option key={i.key} value={i.key}>{i.label} ({i.count})</option>
           ))}
+        </select>
+        <select
+          className="sel"
+          value={mismatch}
+          onChange={(e) => setMismatch(e.target.value === 'mismatch' ? 'mismatch' : 'all')}
+        >
+          <option value="all">All cases</option>
+          <option value="mismatch">Mismatch ({mismatchCount})</option>
         </select>
       </div>
 

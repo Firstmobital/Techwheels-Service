@@ -32,7 +32,7 @@ Add a fourth Bodyshop nav item **Bodyshop Recovery**. It is the accounts rupee b
 1. Nav label **Bodyshop Recovery**. Module `bodyshop_recovery`. Route `/bodyshop-recovery`.
 2. Open row = `do_amount IS NOT NULL` AND `insurance_due_amount > 0`. Fully posted DO (`received`, due ₹0) is hidden — 005071 after Main+TDS covering DO must not appear.
 3. Headline KPI = sum of `insurance_due_amount`. Secondary = open vehicle count. Split pending / partial / not_received.
-4. Period is **invoice_date**: year chips, then months after a year is selected. Default **All years**. Insurer dropdown uses card `insurance_company` (not DMS bill-to). No This month / Last month / Custom pills.
+4. Period is **invoice_date**: year chips, then months after a year is selected. Default **All years**. Insurer dropdown uses card `insurance_company` (not DMS bill-to). Separate **Mismatch** dropdown (All cases / Mismatch) uses the same card-vs-DMS bill-to rule as the orange pill (C/O + M/S stripped). No This month / Last month / Custom pills.
 5. **More** is a read-only case sheet (customer, policy no, claim no, documents). **Post Payment** opens Stage 18 · DO Payment on this page. Repair Tracker is not required. Customer remaining stays off this page.
 6. Grant by named user in Admin → Permissions (`bodyshop_recovery` view). View is enough to list, open More, and post DO Main/GST/TDS. Do **not** add a `BS Recovery` Employee Master business role.
 7. **Org-wide visibility.** List, More, and DO post do not use dealer/branch/fuel. Customer posts and invoice/DO capture stay Repair Tracker (`bodyshop_repair` modify + dealer scope).

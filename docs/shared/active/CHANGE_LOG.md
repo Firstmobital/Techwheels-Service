@@ -4,6 +4,7 @@ Tracks documentation-sync updates for business logic, architecture, and access c
 
 ## 2026-09-04
 
+- Recovery has a **Mismatch** dropdown next to All insurers. It keeps only rows where policy company vs DMS bill-to is a mismatch (same C/O + M/S rule as the orange pill). Year / KPI / Export follow the filter. Plan: `BODYSHOP-RECOVERY-001`.
 - Recovery **More → View** opens the file for org-wide Recovery logins (NO-DEALER / other dealer). Autodoc storage was dealer-scoped so signed URLs returned Object not found even when the object existed. Drive URL still opens first when stored. Ledger: DBL-0037. Export Excel no longer errors `column l.id does not exist`.
 - Reception Delete is allowed when the linked bodyshop repair is **cancelled**. Active/delivered cards with a real DMS JC still block. Recovery list hides cancelled cards. Ledger: DBL-0036. Repair Tracker detail has **Cancel repair**.
 - Recovery **More** no longer errors with `column d.id does not exist`. Ledger: DBL-0035.
