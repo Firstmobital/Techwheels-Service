@@ -166,7 +166,10 @@ export default function BodyshopRecoveryPage() {
         <div>
           <div className="greet">Bodyshop · Accounts</div>
           <h1>Bodyshop Recovery</h1>
-          <p>Open DO / insurance due only. Customer remaining is not on this page. Open card needs Repair Tracker access to post Main / GST / TDS.</p>
+          <p>
+            Open DO / insurance due across every branch and fuel. No dealer or location row filter.
+            Customer remaining is not on this page. Open card needs Repair Tracker access to post Main / GST / TDS.
+          </p>
         </div>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           <button type="button" className="btn" onClick={() => void load()} disabled={loading}>
