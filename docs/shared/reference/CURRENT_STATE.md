@@ -83,6 +83,7 @@ Snapshot Basis: Code and dump audit only (no inferred/assumed behavior)
 - `technician`
 - `complaints`
 - `bodyshop_repair`
+- `bodyshop_recovery`
 - `ew_reminder`
 - `service_booking`
 - `wa_agent`

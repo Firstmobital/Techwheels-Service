@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
+import { useSearchParams } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { getDealerContext, getDealerScopeContext } from '../lib/api'
 import {
@@ -924,6 +925,7 @@ const isLegacyBooleanDocKey = (docKey: BodyshopDocKey): docKey is Exclude<Bodysh
 
 // ── component ──────────────────────────────────────────────────────────────────
 export default function BodyshopRepairPage() {
+  const [searchParams] = useSearchParams()
   const [dateRange, setDateRange] = useState<DateRange>(currentMonthRange())
   const [cards, setCards]         = useState<RepairCard[]>([])
   const [projectionPendingStagesByCard, setProjectionPendingStagesByCard] = useState<Record<number, number[]>>({})
@@ -1043,6 +1045,11 @@ export default function BodyshopRepairPage() {
     }, REPAIR_LOOKUP_DEBOUNCE_MS)
     return () => window.clearTimeout(timer)
   }, [search])
+
+  useEffect(() => {
+    const q = (searchParams.get('q') ?? '').trim()
+    if (q.length >= REPAIR_LOOKUP_MIN_CHARS) setSearch(q)
+  }, [searchParams])
 
   useEffect(() => {
     const wantLookup = debouncedSearch.length >= REPAIR_LOOKUP_MIN_CHARS

@@ -2,7 +2,7 @@
 
 **Plan ID:** BODYSHOP-SETTLEMENT-001  
 **Created:** 2026-09-04  
-**Last Updated:** 2026-09-04 (Posted entries show optional Reference/Remark; post forms capture it)  
+**Last Updated:** 2026-09-04 (Bodyshop Recovery v1 is DO / insurance due only; customer remaining stays on Stage 18)  
 **Priority:** HIGH  
 **Owner:** Bodyshop Team + Platform Team + Accounts  
 **Status:** Active (implementation in progress; DBL-0026 VERIFIED in `full_metadata.sql`; DBL-0029 APPLIED)  

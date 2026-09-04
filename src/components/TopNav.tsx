@@ -10,12 +10,13 @@ interface NavItem {
   icon?: string
 }
 
-// Bodyshop group: these three routes collapse into one dropdown tab.
-// Order in the dropdown: Repair Tracker → Bodyshop Floor → Bodyshop
+// Bodyshop group: these routes collapse into one dropdown tab.
+// Order: Repair Tracker → Bodyshop Floor → Bodyshop → Bodyshop Recovery
 const BODYSHOP_GROUP_ITEMS = [
   { to: '/bodyshop-repair', label: 'Repair Tracker', icon: 'floor' },
   { to: '/bodyshop-floor', label: 'Bodyshop Floor', icon: 'floor' },
   { to: '/bodyshop-tracker', label: 'Bodyshop', icon: 'floor' },
+  { to: '/bodyshop-recovery', label: 'Bodyshop Recovery', icon: 'reports' },
 ]
 const BODYSHOP_ROUTES = new Set(BODYSHOP_GROUP_ITEMS.map(i => i.to))
 

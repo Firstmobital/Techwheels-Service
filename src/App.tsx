@@ -19,6 +19,7 @@ import SATrackerPage from './pages/SATrackerPage'
 import BodyshopTrackerPage from './pages/BodyshopTrackerPage'
 import BodyshopFloorPage from './pages/BodyshopFloorPage'
 import BodyshopRepairPage from './pages/BodyshopRepairPage'
+import BodyshopRecoveryPage from './pages/BodyshopRecoveryPage'
 import FloorInchargePage from './pages/FloorInchargePage'
 import TechnicianPage from './pages/TechnicianPage'
 import PayrollPage from './pages/PayrollPage'
@@ -82,6 +83,7 @@ const NAV_ITEMS = [
   { to: '/complaints', label: 'Complaints', icon: 'complaints' },
   { to: '/help-tickets', label: 'Help Tickets', icon: 'message-circle' },
   { to: '/bodyshop-repair', label: 'Repair Tracker', icon: 'floor' },
+  { to: '/bodyshop-recovery', label: 'Bodyshop Recovery', icon: 'reports' },
   { to: '/ew-reminder', label: 'EW Reminder', icon: 'shield' },
   { to: '/service-booking', label: 'Service Booking', icon: 'calendar' },
   { to: '/wa-agent', label: 'WA AI Agent', icon: 'message-circle' },
@@ -115,6 +117,7 @@ type ModuleName =
   | 'complaints'
   | 'help_tickets'
   | 'bodyshop_repair'
+  | 'bodyshop_recovery'
   | 'ew_reminder'
   | 'service_booking'
   | 'wa_agent'
@@ -125,7 +128,7 @@ type ModuleName =
   | 'post_service_feedback_cre'
   | 'parts_spm'
 
-type AppRoute = '/import' | '/reports' | '/settings' | '/admin' | '/autodoc' | '/reception' | '/service-advisor' | '/floor-incharge' | '/sa-tracker' | '/bodyshop-tracker' | '/bodyshop-floor' | '/technician' | '/payroll' | '/complaints' | '/help-tickets' | '/bodyshop-repair' | '/ew-reminder' | '/service-booking' | '/wa-agent' | '/telecalling' | '/insurance-renewal-telecalling' | '/auto-service-reminder' | '/cre-incentive' | '/post-service-feedback' | '/parts-spm'
+type AppRoute = '/import' | '/reports' | '/settings' | '/admin' | '/autodoc' | '/reception' | '/service-advisor' | '/floor-incharge' | '/sa-tracker' | '/bodyshop-tracker' | '/bodyshop-floor' | '/technician' | '/payroll' | '/complaints' | '/help-tickets' | '/bodyshop-repair' | '/bodyshop-recovery' | '/ew-reminder' | '/service-booking' | '/wa-agent' | '/telecalling' | '/insurance-renewal-telecalling' | '/auto-service-reminder' | '/cre-incentive' | '/post-service-feedback' | '/parts-spm'
 
 interface PermissionRow {
   module_name: string
@@ -148,6 +151,7 @@ const ROUTE_MODULE_MAP: Record<AppRoute, ModuleName[]> = {
   '/complaints': ['complaints'],
   '/help-tickets': ['help_tickets'],
   '/bodyshop-repair': ['bodyshop_repair'],
+  '/bodyshop-recovery': ['bodyshop_recovery'],
   '/ew-reminder': ['ew_reminder'],
   '/service-booking': ['service_booking'],
   '/wa-agent': ['wa_agent'],
@@ -160,7 +164,7 @@ const ROUTE_MODULE_MAP: Record<AppRoute, ModuleName[]> = {
 }
 
 const BODYSHOP_GROUP_ROUTE = '__bodyshop-group__' as const
-const BODYSHOP_ROUTE_PATHS = ['/bodyshop-tracker', '/bodyshop-floor', '/bodyshop-repair'] as const
+const BODYSHOP_ROUTE_PATHS = ['/bodyshop-tracker', '/bodyshop-floor', '/bodyshop-repair', '/bodyshop-recovery'] as const
 
 type NavItem = {
   to: AppRoute
@@ -428,7 +432,7 @@ function TopNav({
 
   // Collapse the three Bodyshop routes into a single dropdown group.
   // The group slot appears where the first Bodyshop-family item is found.
-  // Dropdown order: Repair Tracker → Bodyshop Floor → Bodyshop
+  // Dropdown order: Repair Tracker → Bodyshop Floor → Bodyshop → Bodyshop Recovery
   const BODYSHOP_ROUTES_SET = new Set<string>(BODYSHOP_ROUTE_PATHS)
   const BODYSHOP_GROUP_NAV_ITEM: BodyshopGroupNavItem = {
     to: BODYSHOP_GROUP_ROUTE,
@@ -440,6 +444,7 @@ function TopNav({
     { to: '/bodyshop-repair', label: 'Repair Tracker', icon: 'floor', key: 'bodyshop-repair' },
     { to: '/bodyshop-floor', label: 'Bodyshop Floor', icon: 'floor', key: 'bodyshop-floor' },
     { to: '/bodyshop-tracker', label: 'Bodyshop', icon: 'floor', key: 'bodyshop-tracker' },
+    { to: '/bodyshop-recovery', label: 'Bodyshop Recovery', icon: 'reports', key: 'bodyshop-recovery' },
   ] satisfies NavItem[]).filter((g) => visibleItems.some((v) => v.to === g.to))
 
   const collapsedItems: DisplayNavItem[] = []
@@ -884,6 +889,7 @@ function canAccessPath(pathname: string, allowedModules: Set<string>) {
   // Employee Get Help self-service — auth only; RPCs enforce employee link
   if (pathname.startsWith('/help')) return true
   if (pathname.startsWith('/bodyshop-repair')) return hasAnyModuleAccess(allowedModules, ROUTE_MODULE_MAP['/bodyshop-repair'])
+  if (pathname.startsWith('/bodyshop-recovery')) return hasAnyModuleAccess(allowedModules, ROUTE_MODULE_MAP['/bodyshop-recovery'])
   if (pathname.startsWith('/ew-reminder')) return hasAnyModuleAccess(allowedModules, ROUTE_MODULE_MAP['/ew-reminder'])
   if (pathname.startsWith('/service-booking')) return hasAnyModuleAccess(allowedModules, ROUTE_MODULE_MAP['/service-booking'])
   if (pathname.startsWith('/wa-agent')) return hasAnyModuleAccess(allowedModules, ROUTE_MODULE_MAP['/wa-agent'])
@@ -1448,6 +1454,14 @@ VITE_SUPABASE_ANON_KEY=your-anon-key`}
                   element={(
                     <RequireAccess allowedModules={allowedModules} modules={ROUTE_MODULE_MAP['/bodyshop-repair']}>
                       <BodyshopRepairPage />
+                    </RequireAccess>
+                  )}
+                />
+                <Route
+                  path="/bodyshop-recovery"
+                  element={(
+                    <RequireAccess allowedModules={allowedModules} modules={ROUTE_MODULE_MAP['/bodyshop-recovery']}>
+                      <BodyshopRecoveryPage />
                     </RequireAccess>
                   )}
                 />

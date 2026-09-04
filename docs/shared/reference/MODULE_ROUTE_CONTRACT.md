@@ -2,7 +2,7 @@
 
 **Document ID:** MODULE-ROUTE-001  
 **Version:** 1.0  
-**Last Updated:** 2026-09-03  
+**Last Updated:** 2026-09-04  
 **Owner:** Techwheels Dev Team + GitHub Copilot  
 
 ---
@@ -34,6 +34,7 @@ This document defines the authoritative mapping between database modules and fro
 | 10 | `reception` | `/reception` | `/reception` | ReceptionPage | Active | Front desk vehicle intake and SA assignment |
 | 11 | `payroll` | `/payroll` | `/payroll` | PayrollPage | Active | Payroll management: attendance, advances, processing, salary slips |
 | — | `help_tickets` | `/help-tickets` | `/help-tickets` | HelpTicketsAdminPage | Active | Support inbox (org-wide). Employee self-service at `/help/tickets*` is auth-only (no module grant). |
+| — | `bodyshop_recovery` | `/bodyshop-recovery` | `/bodyshop-recovery` | BodyshopRecoveryPage | Active | DO / insurance-due recovery book (v1). Customer remaining deferred. |
 
 **Legend:**
 - **Module Name**: Authoritative name from `public.modules.name`

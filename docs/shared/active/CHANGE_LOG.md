@@ -4,6 +4,7 @@ Tracks documentation-sync updates for business logic, architecture, and access c
 
 ## 2026-09-04
 
+- New Bodyshop nav item **Bodyshop Recovery** (`/bodyshop-recovery`, module `bodyshop_recovery`). v1 is the DO / insurance-due book only: sum of open `insurance_due_amount`, year/month by invoice date, JC list. Customer remaining is not on this page. Ledger: DBL-0031. Plan: `BODYSHOP-RECOVERY-001`.
 - Posted entries show **Reference / Remark**. The same optional field is on Post DO payment and Post customer receipt (UTR, cheque, or note). Stored on the line as `reference` + `remarks`. Still not required. Plan: `BODYSHOP-SETTLEMENT-001`.
 - Billing mismatch is named in full: policy on card vs DMS bill-to. The DMS invoice row shows DMS `account` (Go Digit on 005071) before **Use DMS invoice**, not the card policy (United India). Plan: `BODYSHOP-SETTLEMENT-001`.
 - Stage 18 **DO Payment**: when status is Received, Main/GST/TDS inputs are hidden (insurance due stays ₹0). Date fields are removed. Main, GST, and TDS can be posted separately or together. Each line stores who (`actor_email`), when (`created_at`), and optional Reference / Remark. Same hide-when-received rule on Customer Diff. Plan: `BODYSHOP-SETTLEMENT-001`.
