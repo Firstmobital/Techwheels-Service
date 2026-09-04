@@ -81,18 +81,23 @@ export type EarnedBaseBankPayoutInput = {
   accountNumber?: string | null
   ifsc?: string | null
   netPayable: number
+  salaryType: SalaryType
 }
 
-export function isExportableNetPayable(value: unknown): boolean {
-  const amount = Number(value)
-  return Number.isFinite(amount) && amount !== 0
+/** Base Salary payout only. Do not use salaryTypeIncludesBase. */
+export function isEligibleEarnedBaseBankPayoutRow(row: {
+  salaryType?: string | null
+  netPayable: unknown
+}): boolean {
+  const amount = Number(row.netPayable)
+  return row.salaryType === 'base' && Number.isFinite(amount) && amount > 0
 }
 
 export function buildEarnedBaseBankPayoutRows(
   rows: EarnedBaseBankPayoutInput[],
 ): Array<Array<string | number>> {
   return rows
-    .filter((row) => isExportableNetPayable(row.netPayable))
+    .filter((row) => isEligibleEarnedBaseBankPayoutRow(row))
     .map((row, index) => {
       const amount = Number(row.netPayable)
       return [
