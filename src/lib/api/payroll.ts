@@ -339,6 +339,35 @@ export async function addPayrollAdjustment(input: {
   if (updRes.error) throw new Error(updRes.error.message)
 }
 
+export async function createSalaryTypeEmployee(input: {
+  employeeCode: string
+  employeeName: string
+  department: string | null
+  location: string | null
+  role: string | null
+  fuelType: string | null
+  accountNumber: string | null
+  ifsc: string | null
+  bankName: string | null
+  baseSalary: number
+  salaryType: SalaryType
+}): Promise<void> {
+  const res = await supabase.rpc('payroll_create_salary_type_employee', {
+    p_employee_code: input.employeeCode,
+    p_employee_name: input.employeeName,
+    p_department: input.department,
+    p_location: input.location,
+    p_role: input.role,
+    p_fuel_type: input.fuelType,
+    p_account_number: input.accountNumber,
+    p_ifsc: input.ifsc,
+    p_bank_name: input.bankName,
+    p_base_salary: input.baseSalary,
+    p_salary_type: input.salaryType,
+  })
+  if (res.error) throw new Error(res.error.message)
+}
+
 export async function saveSalaryTypeMasterRow(input: {
   employeeCode: string
   department: string | null

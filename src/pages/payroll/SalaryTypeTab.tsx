@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
+  createSalaryTypeEmployee,
   fetchCompensationMap,
   fetchPayrollEmployees,
   saveSalaryTypeMasterRow,
   setEmployeeActive,
   upsertCompensation,
 } from '../../lib/api/payroll'
+import { KNOWN_BUSINESS_ROLES, validateAndCanonicalizeRoles } from '../../lib/businessRoles'
 import { isEmployeeCurrentlyActive } from '../../lib/employeeActive'
 import { isBodyshopDepartment, normalizeDepartmentDisplay } from '../../lib/department'
 import { formatCurrency } from '../../lib/payroll/calculations'
@@ -18,6 +20,52 @@ import {
 } from '../../lib/payroll/excelUtils'
 import { SALARY_TYPE_LABELS, type ImportPreviewResult, type PayrollEmployee, type SalaryType } from '../../lib/payroll/types'
 import { supabase } from '../../lib/supabase'
+
+const DEALER_CODE_RULES = [
+  { key: '3000840', location: 'Sitapura', fuel_type: 'PV' },
+  { key: '500A840', location: 'Sitapura', fuel_type: 'EV' },
+  { key: '3001440', location: 'Ajmer Road', fuel_type: 'PV' },
+] as const
+
+const KNOWN_ROLE_OPTIONS = Array.from(KNOWN_BUSINESS_ROLES).sort((a, b) => a.localeCompare(b))
+
+type AddEmployeeForm = {
+  employeeCode: string
+  employeeName: string
+  department: string
+  location: string
+  role: string
+  fuelType: string
+  baseSalary: string
+  salaryType: SalaryType
+  accountNumber: string
+  ifsc: string
+  bankName: string
+}
+
+function emptyAddForm(): AddEmployeeForm {
+  return {
+    employeeCode: '',
+    employeeName: '',
+    department: '',
+    location: '',
+    role: '',
+    fuelType: '',
+    baseSalary: '',
+    salaryType: 'base',
+    accountNumber: '',
+    ifsc: '',
+    bankName: '',
+  }
+}
+
+function deriveLocationAndFuelType(employeeCode: string): { key: string; location: string; fuel_type: string } | null {
+  const normalizedCode = employeeCode.trim().toUpperCase()
+  if (!normalizedCode) return null
+  const match = DEALER_CODE_RULES.find((rule) => normalizedCode.includes(rule.key))
+  if (!match) return null
+  return { key: match.key, location: match.location, fuel_type: match.fuel_type }
+}
 
 type StatusScope = 'active' | 'inactive' | 'all'
 
@@ -83,7 +131,9 @@ export default function SalaryTypeTab({ canModify, isAdmin }: Props) {
   const [message, setMessage] = useState<string | null>(null)
   const [importPreview, setImportPreview] = useState<ImportPreviewResult | null>(null)
   const [showAdd, setShowAdd] = useState(false)
-  const [newRow, setNewRow] = useState({ employeeCode: '', baseSalary: '', salaryType: 'base' as SalaryType })
+  const [addForm, setAddForm] = useState<AddEmployeeForm>(emptyAddForm)
+  const [addError, setAddError] = useState<string | null>(null)
+  const [addSaving, setAddSaving] = useState(false)
   const [savingCode, setSavingCode] = useState<string | null>(null)
   const [lifecycleCode, setLifecycleCode] = useState<string | null>(null)
 
@@ -94,6 +144,18 @@ export default function SalaryTypeTab({ canModify, isAdmin }: Props) {
   }, [])
 
   useEffect(() => { void reload() }, [reload])
+
+  useEffect(() => {
+    if (!showAdd) return
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && !addSaving) {
+        setShowAdd(false)
+        setAddError(null)
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [showAdd, addSaving])
 
   const depts = useMemo(
     () => Array.from(new Set(employees.map((e) => e.department?.trim()).filter(Boolean))).sort(),
@@ -115,10 +177,15 @@ export default function SalaryTypeTab({ canModify, isAdmin }: Props) {
     return true
   }), [employees, compMap, search, deptFilter, branchFilter, salaryTypeFilter, statusFilter])
 
-  const addableEmployees = useMemo(
-    () => employees.filter((e) => !compMap.has(e.employee_code.trim().toUpperCase())),
-    [employees, compMap],
+  const addDepartmentOptions = useMemo(
+    () => collectDepartmentOptions(employees, addForm.department),
+    [employees, addForm.department],
   )
+  const addBranchOptions = useMemo(
+    () => collectBranchOptions(employees, addForm.location),
+    [employees, addForm.location],
+  )
+  const dealerDerived = deriveLocationAndFuelType(addForm.employeeCode)
 
   async function handleSaveCompensation(code: string, baseSalary: number, salaryType: SalaryType) {
     if (!canModify || isAdmin) return
@@ -185,20 +252,94 @@ export default function SalaryTypeTab({ canModify, isAdmin }: Props) {
     }
   }
 
-  async function handleAddEmployee() {
-    if (!canModify || !newRow.employeeCode) return
-    const parsed = parseBaseSalary(newRow.baseSalary)
-    if (!parsed.ok) {
-      setError(parsed.error)
+  function closeAddModal() {
+    if (addSaving) return
+    setShowAdd(false)
+    setAddError(null)
+  }
+
+  function openAddModal() {
+    setAddForm(emptyAddForm())
+    setAddError(null)
+    setShowAdd(true)
+  }
+
+  function patchAddForm(patch: Partial<AddEmployeeForm>) {
+    setAddForm((prev) => ({ ...prev, ...patch }))
+  }
+
+  async function handleCreateEmployee() {
+    if (!isAdmin || addSaving) return
+    const code = addForm.employeeCode.trim()
+    const name = addForm.employeeName.trim()
+    if (!code) {
+      setAddError('Employee code is required')
       return
     }
+    if (!name) {
+      setAddError('Employee name is required')
+      return
+    }
+    if (!addForm.baseSalary.trim()) {
+      setAddError('Base salary is required')
+      return
+    }
+    const parsed = parseBaseSalary(addForm.baseSalary)
+    if (!parsed.ok) {
+      setAddError(parsed.error)
+      return
+    }
+    if (!['base', 'variable', 'both'].includes(addForm.salaryType)) {
+      setAddError('Invalid salary type')
+      return
+    }
+    const account = addForm.accountNumber.trim()
+    if (isUnsafeBankAccount(account)) {
+      setAddError('Bank account must remain exact text (no scientific notation or decimals)')
+      return
+    }
+    const normalizedIfsc = addForm.ifsc.trim().toUpperCase()
+    if (!validateIfsc(normalizedIfsc)) {
+      setAddError('Invalid IFSC. Use 11 characters, for example ABCD0123456.')
+      return
+    }
+    let role: string | null = emptyToNull(addForm.role)
+    if (role) {
+      const validated = validateAndCanonicalizeRoles(role)
+      if (!validated.ok) {
+        setAddError(validated.errors.join(' '))
+        return
+      }
+      role = validated.canonical
+    }
+
+    setAddError(null)
     setError(null)
     setMessage(null)
-    await upsertCompensation(newRow.employeeCode.trim().toUpperCase(), parsed.value, newRow.salaryType)
-    setShowAdd(false)
-    setNewRow({ employeeCode: '', baseSalary: '', salaryType: 'base' })
-    await reload()
-    setMessage('Employee added to payroll compensation')
+    setAddSaving(true)
+    try {
+      await createSalaryTypeEmployee({
+        employeeCode: code,
+        employeeName: name,
+        department: emptyToNull(normalizeDepartmentDisplay(addForm.department) || addForm.department),
+        location: emptyToNull(addForm.location),
+        role,
+        fuelType: emptyToNull(addForm.fuelType),
+        accountNumber: emptyToNull(account),
+        ifsc: emptyToNull(normalizedIfsc),
+        bankName: emptyToNull(addForm.bankName),
+        baseSalary: parsed.value,
+        salaryType: addForm.salaryType,
+      })
+      setShowAdd(false)
+      setAddForm(emptyAddForm())
+      await reload()
+      setMessage(`Added ${code.trim().toUpperCase()}`)
+    } catch (err) {
+      setAddError(err instanceof Error ? err.message : 'Failed to add employee')
+    } finally {
+      setAddSaving(false)
+    }
   }
 
   function handleExport() {
@@ -269,11 +410,13 @@ export default function SalaryTypeTab({ canModify, isAdmin }: Props) {
           <option value="both">Base + Variable</option>
         </select>
         <span style={{ flex: 1 }} />
-        {canModify && <button type="button" className="btn btn--primary btn--sm" onClick={() => setShowAdd(true)}>+ Add Employee</button>}
-        <button type="button" className="btn btn--ghost btn--sm" onClick={handleExport}>Export Excel</button>
+        {isAdmin && (
+          <button type="button" className="btn btn--primary btn--sm" onClick={openAddModal}>+ Add Employee</button>
+        )}
+        <button type="button" className="btn btn--ghost btn--sm" onClick={handleExport}>Export</button>
         {canModify && (
           <label className="btn btn--ghost btn--sm" style={{ cursor: 'pointer' }}>
-            Import Excel
+            Import
             <input type="file" accept=".xlsx,.xls" hidden onChange={(ev) => { const f = ev.target.files?.[0]; if (f) void handleImportFile(f) }} />
           </label>
         )}
@@ -298,25 +441,191 @@ export default function SalaryTypeTab({ canModify, isAdmin }: Props) {
       )}
 
       {showAdd && (
-        <div style={{ border: '1px solid #e2e8f0', borderRadius: '8px', padding: '0.75rem', marginBottom: '0.75rem' }}>
-          <h4 style={{ margin: '0 0 0.5rem' }}>Add Employee to Payroll</h4>
-          <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-            <select value={newRow.employeeCode} onChange={(ev) => setNewRow((p) => ({ ...p, employeeCode: ev.target.value }))}>
-              <option value="">Select from employee master…</option>
-              {addableEmployees.map((e) => (
-                <option key={e.employee_code} value={e.employee_code}>
-                  {e.employee_code} — {e.employee_name}{isEmployeeCurrentlyActive(e) ? '' : ' (Inactive)'}
-                </option>
-              ))}
-            </select>
-            <input placeholder="Base salary" type="number" min="0" step="0.01" value={newRow.baseSalary} onChange={(ev) => setNewRow((p) => ({ ...p, baseSalary: ev.target.value }))} />
-            <select value={newRow.salaryType} onChange={(ev) => setNewRow((p) => ({ ...p, salaryType: ev.target.value as SalaryType }))}>
-              <option value="base">Base Salary</option>
-              <option value="variable">Variable Salary</option>
-              <option value="both">Base + Variable</option>
-            </select>
-            <button type="button" className="btn btn--primary btn--sm" onClick={() => void handleAddEmployee()}>Save</button>
-            <button type="button" className="btn btn--ghost btn--sm" onClick={() => setShowAdd(false)}>Cancel</button>
+        <div className="modal-back" role="presentation" onClick={closeAddModal}>
+          <div
+            className="modal modal--md"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="add-employee-title"
+            onClick={(event) => event.stopPropagation()}
+            style={{ maxWidth: '720px' }}
+          >
+            <div className="modal__head">
+              <h3 id="add-employee-title">Add Employee</h3>
+              <button type="button" className="modal__x" onClick={closeAddModal} aria-label="Close" disabled={addSaving}>
+                ✕
+              </button>
+            </div>
+            <div className="modal__body">
+              <div className="payroll-add-grid">
+                {addError && <p className="payroll-add-error">{addError}</p>}
+                <div className="payroll-add-field">
+                  <label htmlFor="add-employee-code">Employee code *</label>
+                  <input
+                    id="add-employee-code"
+                    value={addForm.employeeCode}
+                    autoComplete="off"
+                    disabled={addSaving}
+                    onChange={(event) => {
+                      const employeeCode = event.target.value
+                      const derived = deriveLocationAndFuelType(employeeCode)
+                      setAddForm((prev) => ({
+                        ...prev,
+                        employeeCode,
+                        location: derived?.location ?? prev.location,
+                        fuelType: derived?.fuel_type ?? prev.fuelType,
+                      }))
+                    }}
+                  />
+                </div>
+                <div className="payroll-add-field">
+                  <label htmlFor="add-employee-name">Employee name *</label>
+                  <input
+                    id="add-employee-name"
+                    value={addForm.employeeName}
+                    autoComplete="off"
+                    disabled={addSaving}
+                    onChange={(event) => patchAddForm({ employeeName: event.target.value })}
+                  />
+                </div>
+                <div className="payroll-add-field">
+                  <label htmlFor="add-employee-department">Department</label>
+                  <input
+                    id="add-employee-department"
+                    list="add-employee-department-options"
+                    value={addForm.department}
+                    autoComplete="off"
+                    disabled={addSaving}
+                    onChange={(event) => patchAddForm({ department: event.target.value })}
+                  />
+                  <datalist id="add-employee-department-options">
+                    {addDepartmentOptions.map((option) => (
+                      <option key={option} value={option} />
+                    ))}
+                  </datalist>
+                </div>
+                <div className="payroll-add-field">
+                  <label htmlFor="add-employee-branch">Branch</label>
+                  <input
+                    id="add-employee-branch"
+                    list="add-employee-branch-options"
+                    value={addForm.location}
+                    autoComplete="off"
+                    disabled={addSaving}
+                    onChange={(event) => patchAddForm({ location: event.target.value })}
+                  />
+                  <datalist id="add-employee-branch-options">
+                    {addBranchOptions.map((option) => (
+                      <option key={option} value={option} />
+                    ))}
+                  </datalist>
+                </div>
+                <div className="payroll-add-field">
+                  <label htmlFor="add-employee-role">Business role</label>
+                  <input
+                    id="add-employee-role"
+                    list="add-employee-role-options"
+                    value={addForm.role}
+                    autoComplete="off"
+                    disabled={addSaving}
+                    placeholder="e.g. SA, TECHNICIAN"
+                    onChange={(event) => patchAddForm({ role: event.target.value })}
+                  />
+                  <datalist id="add-employee-role-options">
+                    {KNOWN_ROLE_OPTIONS.map((option) => (
+                      <option key={option} value={option} />
+                    ))}
+                  </datalist>
+                </div>
+                <div className="payroll-add-field">
+                  <label htmlFor="add-employee-fuel">Fuel type</label>
+                  <input
+                    id="add-employee-fuel"
+                    list="add-employee-fuel-options"
+                    value={addForm.fuelType}
+                    autoComplete="off"
+                    disabled={addSaving}
+                    placeholder="PV / EV"
+                    onChange={(event) => patchAddForm({ fuelType: event.target.value })}
+                  />
+                  <datalist id="add-employee-fuel-options">
+                    <option value="PV" />
+                    <option value="EV" />
+                  </datalist>
+                </div>
+                {dealerDerived && (
+                  <p className="payroll-add-hint">
+                    Codes containing {dealerDerived.key} are stored as {dealerDerived.location} / {dealerDerived.fuel_type} by the existing dealer-code rule.
+                  </p>
+                )}
+                <div className="payroll-add-field">
+                  <label htmlFor="add-employee-salary">Base salary *</label>
+                  <input
+                    id="add-employee-salary"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={addForm.baseSalary}
+                    disabled={addSaving}
+                    onChange={(event) => patchAddForm({ baseSalary: event.target.value })}
+                  />
+                </div>
+                <div className="payroll-add-field">
+                  <label htmlFor="add-employee-salary-type">Salary type *</label>
+                  <select
+                    id="add-employee-salary-type"
+                    value={addForm.salaryType}
+                    disabled={addSaving}
+                    onChange={(event) => patchAddForm({ salaryType: event.target.value as SalaryType })}
+                  >
+                    <option value="base">Base Salary</option>
+                    <option value="variable">Variable Salary</option>
+                    <option value="both">Base + Variable</option>
+                  </select>
+                </div>
+                <div className="payroll-add-field">
+                  <label htmlFor="add-employee-account">Bank account number</label>
+                  <input
+                    id="add-employee-account"
+                    type="text"
+                    inputMode="numeric"
+                    autoComplete="off"
+                    value={addForm.accountNumber}
+                    disabled={addSaving}
+                    onChange={(event) => patchAddForm({ accountNumber: event.target.value })}
+                  />
+                </div>
+                <div className="payroll-add-field">
+                  <label htmlFor="add-employee-ifsc">IFSC</label>
+                  <input
+                    id="add-employee-ifsc"
+                    type="text"
+                    autoComplete="off"
+                    value={addForm.ifsc}
+                    disabled={addSaving}
+                    style={{ textTransform: 'uppercase' }}
+                    onChange={(event) => patchAddForm({ ifsc: event.target.value.toUpperCase() })}
+                  />
+                </div>
+                <div className="payroll-add-field">
+                  <label htmlFor="add-employee-bank">Bank name</label>
+                  <input
+                    id="add-employee-bank"
+                    type="text"
+                    autoComplete="off"
+                    value={addForm.bankName}
+                    disabled={addSaving}
+                    onChange={(event) => patchAddForm({ bankName: event.target.value })}
+                  />
+                </div>
+              </div>
+            </div>
+            <div className="modal__foot">
+              <button type="button" className="btn btn--ghost" onClick={closeAddModal} disabled={addSaving}>Cancel</button>
+              <button type="button" className="btn btn--primary" onClick={() => void handleCreateEmployee()} disabled={addSaving}>
+                {addSaving ? 'Adding…' : 'Add Employee'}
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -392,7 +701,7 @@ function CompRow({
   const code = employee.employee_code.trim().toUpperCase()
   const inactive = !isEmployeeCurrentlyActive(employee)
   const canEditCompensation = canModify || isAdmin
-  const showSave = isAdmin || (canModify && Boolean(comp))
+  const showSave = isAdmin || canModify
 
   function submit() {
     setRowError(null)

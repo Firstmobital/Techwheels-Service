@@ -1293,6 +1293,22 @@ export type Database = {
         }[]
       }
       is_admin: { Args: never; Returns: boolean }
+      payroll_create_salary_type_employee: {
+        Args: {
+          p_employee_code: string
+          p_employee_name: string
+          p_department: string | null
+          p_location: string | null
+          p_role: string | null
+          p_fuel_type: string | null
+          p_account_number: string | null
+          p_ifsc: string | null
+          p_bank_name: string | null
+          p_base_salary: number
+          p_salary_type: string
+        }
+        Returns: Json
+      }
       payroll_save_salary_type_master: {
         Args: {
           p_employee_code: string

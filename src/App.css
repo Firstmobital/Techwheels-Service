@@ -572,6 +572,13 @@ table.tbl { width: 100%; border-collapse: collapse; font-size: 13.5px; }
 .modal__body { padding: 20px; overflow-y: auto; }
 .modal__foot { display: flex; justify-content: flex-end; gap: 10px; padding: 16px 20px; border-top: 1px solid var(--border); }
 .modal__footer { display: flex; justify-content: flex-end; gap: 10px; padding: 16px 20px; border-top: 1px solid var(--border); }
+.payroll-add-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.65rem; }
+.payroll-add-field { display: flex; flex-direction: column; gap: 0.25rem; min-width: 0; }
+.payroll-add-field label { font-size: 0.72rem; font-weight: 600; color: #475569; }
+.payroll-add-field input,
+.payroll-add-field select { width: 100%; }
+.payroll-add-hint { grid-column: 1 / -1; margin: 0; font-size: 0.72rem; color: #64748b; }
+.payroll-add-error { grid-column: 1 / -1; margin: 0; font-size: 0.78rem; color: #b91c1c; }
 
 @media (max-width: 640px) {
   .modal-overlay,
@@ -583,6 +590,10 @@ table.tbl { width: 100%; border-collapse: collapse; font-size: 13.5px; }
   .modal--md {
     max-width: 100%;
     max-height: calc(100vh - 24px);
+  }
+
+  .payroll-add-grid {
+    grid-template-columns: 1fr;
   }
 }
 
