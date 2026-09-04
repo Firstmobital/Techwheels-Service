@@ -1,6 +1,6 @@
 # Web Version Implementation Tracker
 
-Last Updated: 2026-08-24
+Last Updated: 2026-09-04
 Scope: All webversion plans under active execution or review
 
 Legend:
@@ -19,6 +19,8 @@ Legend:
 | BODYSHOP-FLOW | bodyshop | Bodyshop module flow | IP | Bodyshop Team | docs/Implementation_plans/webversion/categories/bodyshop/active/Bodyshop-Flow.md | 2026-06-18 |
 | BODYSHOP-QUEUE-001 | bodyshop | Canonical stage worklist backend | IP | Bodyshop Team + Platform Team | docs/Implementation_plans/webversion/categories/bodyshop/active/BODYSHOP-QUEUE-001_CANONICAL_STAGE_WORKLIST_BACKEND_PLAN_2026-06-20.md | 2026-06-20 |
 | BODYSHOP-EARNINGS-001 | bodyshop | Bodyshop tracker solo bonus + support split earnings | IP | Bodyshop Team + Platform Team | docs/Implementation_plans/webversion/categories/bodyshop/active/BODYSHOP-EARNINGS-001_BODYSHOP_TRACKER_SOLO_BONUS_SUPPORT_SPLIT_PLAN_2026-07-17.md | 2026-07-17 |
+| BODYSHOP-SETTLEMENT-001 | bodyshop | Stage 18 dual payment status (DO Main/GST/TDS + customer due/refund) | IP | Bodyshop Team + Platform Team + Accounts | docs/Implementation_plans/webversion/categories/bodyshop/active/BODYSHOP-SETTLEMENT-001_PAYMENT_RECONCILIATION_LEDGER_PLAN_2026-09-04.md | 2026-09-04 |
+| BODYSHOP-LOOKUP-001 | bodyshop | Repair Tracker global search lookup | IP | Bodyshop Team + Platform Team | docs/Implementation_plans/webversion/categories/bodyshop/active/BODYSHOP-LOOKUP-001_REPAIR_TRACKER_GLOBAL_SEARCH_PLAN_2026-09-04.md | 2026-09-04 |
 | CMP-01 | complaints | Complaints comprehensive plan | IP | Complaints Team | docs/Implementation_plans/webversion/categories/complaints/active/01_COMPREHENSIVE_PLAN.md | 2026-06-18 |
 | DRIVE-001 | drive | Universal drive upload and storage offload | IP | Platform Team | docs/Implementation_plans/webversion/categories/drive/active/DRIVE-001_UNIVERSAL_DRIVE_UPLOAD_AND_STORAGE_OFFLOAD.md | 2026-06-18 |
 | HELP-001 | help-tickets | Employee Help Tickets (Get Help) — web + shared backend | DN | Platform Team + Web + Mobile | docs/Implementation_plans/webversion/categories/help-tickets/active/HELP-001_COMPREHENSIVE_PLAN.md | 2026-08-11 |

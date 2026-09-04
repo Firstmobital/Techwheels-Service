@@ -2,6 +2,13 @@
 
 Tracks documentation-sync updates for business logic, architecture, and access control.
 
+## 2026-09-04
+
+- Repair Tracker (`/bodyshop-repair`) search is now a **lookup**: JC / VRN / customer queries of 3+ characters fetch matching `bodyshop_repair_cards` with no Period predicate (limit 50). Default This Month + Active no longer hide prior-month cards such as `RJ52UA9900`.
+- Entering lookup resets Period / Branch / Advisor / Status / Stage / Pipeline to All. Those controls then filter only the hit set. Clearing search restores the previous browse filters.
+- Lookup does not run the Accident intake sync used by Period browse. RBAC SA/SSA/Survey scope is unchanged.
+- Plan: `BODYSHOP-LOOKUP-001`. No schema change. Mobile Repair Tracker unchanged (already loads without Period).
+
 ## 2026-08-17
 
 - SUPABASE-002 Phase 8: fill-null `all_service_data.contact_phones` from `contact_details.cell_phone_no` when the target is NULL/blank, matching on normalized `chassis_no`, only for `contact_status = Customer`. Existing non-blank phones are not overwritten. Applied and verified 2026-08-17 (`remaining_fillable_rows=0`). New Customer inserts fill blank phones via trigger. 10-day `contact_details` retention purge pending apply (`20260817161000`).

@@ -1,6 +1,6 @@
 # Web Version Plans Index
 
-Last Updated: 2026-08-24
+Last Updated: 2026-09-04
 Scope: Web project implementation plans only
 Authority: This index is the routing source for webversion plans
 
@@ -42,6 +42,8 @@ Use this file as daily command center:
 | BODYSHOP-FLOW | bodyshop | In Progress | Bodyshop Team | `docs/Implementation_plans/webversion/categories/bodyshop/active/Bodyshop-Flow.md` |
 | BODYSHOP-QUEUE-001 | bodyshop | Active | Bodyshop Team + Platform Team | `docs/Implementation_plans/webversion/categories/bodyshop/active/BODYSHOP-QUEUE-001_CANONICAL_STAGE_WORKLIST_BACKEND_PLAN_2026-06-20.md` |
 | BODYSHOP-EARNINGS-001 | bodyshop | Active | Bodyshop Team + Platform Team | `docs/Implementation_plans/webversion/categories/bodyshop/active/BODYSHOP-EARNINGS-001_BODYSHOP_TRACKER_SOLO_BONUS_SUPPORT_SPLIT_PLAN_2026-07-17.md` |
+| BODYSHOP-SETTLEMENT-001 | bodyshop | In Progress (DBL-0026 applied; web+mobile UI) | Bodyshop Team + Platform Team + Accounts | `docs/Implementation_plans/webversion/categories/bodyshop/active/BODYSHOP-SETTLEMENT-001_PAYMENT_RECONCILIATION_LEDGER_PLAN_2026-09-04.md` |
+| BODYSHOP-LOOKUP-001 | bodyshop | Active (web implemented; QA pending) | Bodyshop Team + Platform Team | `docs/Implementation_plans/webversion/categories/bodyshop/active/BODYSHOP-LOOKUP-001_REPAIR_TRACKER_GLOBAL_SEARCH_PLAN_2026-09-04.md` |
 | CMP-00 | complaints | Active | Complaints Team | `docs/Implementation_plans/webversion/categories/complaints/active/00_INDEX.md` |
 | CMP-01 | complaints | Active | Complaints Team | `docs/Implementation_plans/webversion/categories/complaints/active/01_COMPREHENSIVE_PLAN.md` |
 | CMP-CHECKLIST | complaints | Active | Complaints Team | `docs/Implementation_plans/webversion/categories/complaints/active/CHECKLIST.md` |
@@ -82,6 +84,8 @@ Use this file as daily command center:
 | bodyshop | `docs/Implementation_plans/webversion/categories/bodyshop/evidence/BP-01_DASHBOARD_DEEP_AUDIT.md` |
 | bodyshop | `docs/Implementation_plans/webversion/categories/bodyshop/evidence/BODYSHOP-QUEUE-001_PARITY_CHECKLIST_2026-06-20.md` |
 | bodyshop | `docs/Implementation_plans/webversion/categories/bodyshop/evidence/BODYSHOP-EARNINGS-001_TEST_MATRIX.md` |
+| bodyshop | `docs/Implementation_plans/webversion/categories/bodyshop/evidence/BODYSHOP-SETTLEMENT-001_TEST_MATRIX.md` |
+| bodyshop | `docs/Implementation_plans/webversion/categories/bodyshop/evidence/BODYSHOP-LOOKUP-001_TEST_MATRIX.md` |
 | rbac | `docs/Implementation_plans/webversion/categories/rbac/evidence/runbooks/ADMIN_BYPASS_RLS_GOVERNANCE.md` |
 | rbac | `docs/Implementation_plans/webversion/categories/rbac/evidence/RBAC-003_BUSINESS_ROLES_CSV_AUDIT_2026-07-18.md` |
 | rbac | `docs/Implementation_plans/webversion/categories/rbac/evidence/RBAC-003_BUSINESS_ROLES_CSV_TEST_MATRIX.md` |

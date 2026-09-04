@@ -12,6 +12,7 @@ import {
 import { useFocusEffect } from '@react-navigation/native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { supabase } from '../../lib/supabase'
+import { BodyshopSettlementBilling } from '../../components/BodyshopSettlementBilling'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -76,6 +77,9 @@ interface RepairCard {
   do_amount: number | null
   customer_diff_amount: number | null
   payment_status: string | null
+  do_payment_status: string | null
+  customer_payment_status: string | null
+  customer_settlement_kind: 'due' | 'refund' | 'none' | null
   delivery_status: string | null
   received_at: string | null
   delivered_at: string | null
@@ -303,11 +307,29 @@ export default function BodyshopRepairScreen() {
 
   async function savePatch() {
     if (!selectedCard || !hasPendingChanges) return
+    const blocked = new Set([
+      'payment_status',
+      'customer_diff_amount',
+      'do_payment_status',
+      'customer_payment_status',
+      'customer_settlement_kind',
+      'parts_entry_status',
+      'billed_amount',
+      'do_status',
+      'do_amount',
+    ])
+    const nextPatch = Object.fromEntries(
+      Object.entries(patch).filter(([key]) => !blocked.has(key)),
+    ) as Partial<RepairCard>
+    if (Object.keys(nextPatch).length === 0) {
+      setPatch({})
+      return
+    }
     setSaving(true)
     try {
-      const { error } = await supabase.from('bodyshop_repair_cards').update(patch).eq('id', selectedCard.id)
+      const { error } = await supabase.from('bodyshop_repair_cards').update(nextPatch).eq('id', selectedCard.id)
       if (error) throw error
-      const merged = { ...selectedCard, ...patch }
+      const merged = { ...selectedCard, ...nextPatch }
       setSelectedCard(merged)
       setCards(prev => prev.map(c => c.id === merged.id ? merged : c))
       setPatch({})
@@ -872,74 +894,15 @@ export default function BodyshopRepairScreen() {
 
           {activeTab === 'billing' && (
             <>
-              {/* Parts & Billing */}
-              <Text style={S.sectionTitle}>Billing</Text>
-              <View style={S.formCard}>
-                <Text style={S.fieldLabel}>Parts Entry Status</Text>
-                <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap', marginBottom: 2 }}>
-                  {['pending', 'done'].map(s => {
-                    const active = (card.parts_entry_status ?? '') === s
-                    return (
-                      <TouchableOpacity key={s} onPress={() => applyPatch({ parts_entry_status: s })}>
-                        <View style={[S.chip, active && { backgroundColor: '#2a4cd0', borderColor: '#2a4cd0' }]}>
-                          <Text style={[S.chipText, active && { color: '#fff' }]}>{s.charAt(0).toUpperCase() + s.slice(1)}</Text>
-                        </View>
-                      </TouchableOpacity>
-                    )
-                  })}
-                </View>
-
-                <Text style={[S.fieldLabel, { marginTop: 10 }]}>Billed Amount (₹)</Text>
-                <TextInput style={S.input} placeholder="0" placeholderTextColor="#a7a99f" keyboardType="numeric"
-                  value={card.billed_amount != null ? String(card.billed_amount) : ''}
-                  onChangeText={t => applyPatch({ billed_amount: t ? Number(t) : null })} />
-              </View>
-
-              {/* DO */}
-              <Text style={[S.sectionTitle, { marginTop: 16 }]}>DO Status</Text>
-              <View style={S.formCard}>
-                <Text style={S.fieldLabel}>DO Status</Text>
-                <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap', marginBottom: 2 }}>
-                  {['pending', 'raised', 'approved', 'rejected'].map(s => {
-                    const active = (card.do_status ?? '') === s
-                    return (
-                      <TouchableOpacity key={s} onPress={() => applyPatch({ do_status: s })}>
-                        <View style={[S.chip, active && { backgroundColor: '#1c8f63', borderColor: '#1c8f63' }]}>
-                          <Text style={[S.chipText, active && { color: '#fff' }]}>{s.charAt(0).toUpperCase() + s.slice(1)}</Text>
-                        </View>
-                      </TouchableOpacity>
-                    )
-                  })}
-                </View>
-
-                <Text style={[S.fieldLabel, { marginTop: 10 }]}>DO Amount (₹)</Text>
-                <TextInput style={S.input} placeholder="0" placeholderTextColor="#a7a99f" keyboardType="numeric"
-                  value={card.do_amount != null ? String(card.do_amount) : ''}
-                  onChangeText={t => applyPatch({ do_amount: t ? Number(t) : null })} />
-
-                <Text style={[S.fieldLabel, { marginTop: 10 }]}>Customer Difference Amount (₹)</Text>
-                <TextInput style={S.input} placeholder="0" placeholderTextColor="#a7a99f" keyboardType="numeric"
-                  value={card.customer_diff_amount != null ? String(card.customer_diff_amount) : ''}
-                  onChangeText={t => applyPatch({ customer_diff_amount: t ? Number(t) : null })} />
-              </View>
-
-              {/* Payment */}
-              <Text style={[S.sectionTitle, { marginTop: 16 }]}>Payment</Text>
-              <View style={S.formCard}>
-                <Text style={S.fieldLabel}>Payment Status</Text>
-                <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap', marginBottom: 2 }}>
-                  {['pending', 'partial', 'paid'].map(s => {
-                    const active = (card.payment_status ?? '') === s
-                    return (
-                      <TouchableOpacity key={s} onPress={() => applyPatch({ payment_status: s })}>
-                        <View style={[S.chip, active && { backgroundColor: s === 'paid' ? '#1c8f63' : '#c9751b', borderColor: s === 'paid' ? '#1c8f63' : '#c9751b' }]}>
-                          <Text style={[S.chipText, active && { color: '#fff' }]}>{s.charAt(0).toUpperCase() + s.slice(1)}</Text>
-                        </View>
-                      </TouchableOpacity>
-                    )
-                  })}
-                </View>
-              </View>
+              <BodyshopSettlementBilling
+                card={card}
+                styles={S}
+                onToast={showToast}
+                onCardChange={(next) => {
+                  setSelectedCard(next)
+                  setCards(prev => prev.map(c => c.id === next.id ? next : c))
+                }}
+              />
 
               {/* Delivery */}
               <Text style={[S.sectionTitle, { marginTop: 16 }]}>Delivery</Text>

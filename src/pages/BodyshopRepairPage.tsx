@@ -19,11 +19,24 @@ import {
 import DateRangeFilter, { currentMonthRange, type DateRange } from '../components/DateRangeFilter'
 import { fetchVehicleFromRcLookup } from '../lib/api/rcLookup'
 import {
-  listRepairCards, createRepairCard, updateRepairCard, getRepairCard, advanceStage,
+  listRepairCards, searchRepairCards, createRepairCard, updateRepairCard, getRepairCard, advanceStage,
   getGroupForStage, STAGE_LABELS, STAGE_GROUPS,
+  cardMatchesRepairLookup, cardInReceivedDateRange,
+  REPAIR_LOOKUP_MIN_CHARS, REPAIR_LOOKUP_DEBOUNCE_MS,
   type RepairCard, type CustomerType,
 } from '../lib/api/bodyshopRepair'
 import { listBodyshopSurveyors, type BodyshopSurveyor } from '../lib/api/settings'
+import { BodyshopSettlementPanel } from '../components/BodyshopSettlementPanel'
+import {
+  hasAnyBillingData,
+  isBillingStage15Done,
+  isBillingStage16Done,
+  isCustomerRemainingPending,
+  isInsuranceDuePending,
+  isStage18PaymentActive,
+  isStage18PaymentDone,
+  settlementStatusLabel,
+} from '../lib/api/bodyshopSettlement'
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 function fmt(v: string | null | undefined) {
@@ -480,7 +493,16 @@ function getAdvisorFilterLabel(card: RepairCard): string {
 }
 
 type DetailTab = 'overview' | 'sa' | 'approval' | 'survey' | 'floor' | 'qc' | 'billing'
-type PipelineFilter = 'all' | 'SA Intake' | 'EDP' | 'Survey' | 'Floor Work' | 'QC' | 'RI' | 'Billing' | 'Delivery' | 'Delivered'
+type PipelineFilter = 'all' | 'SA Intake' | 'EDP' | 'Survey' | 'Floor Work' | 'QC' | 'RI' | 'Billing' | 'Delivery' | 'Delivered' | 'Insurance due' | 'Customer remaining'
+
+type BrowseFilterSnapshot = {
+  dateRange: DateRange
+  branchFilter: string
+  advisorFilter: string
+  statusFilter: string
+  stageFilter: number | 'all'
+  pipelineFilter: PipelineFilter
+}
 
 type AdditionalApprovalDecisionStatus = 'pending' | 'approved' | 'rejected'
 type AdditionalApprovalAggregateStatus = AdditionalApprovalDecisionStatus | 'none' | 'mixed'
@@ -909,6 +931,8 @@ export default function BodyshopRepairPage() {
   const [loading, setLoading]     = useState(true)
   const [branches, setBranches]   = useState<string[]>([])
   const [search, setSearch]       = useState('')
+  const [debouncedSearch, setDebouncedSearch] = useState('')
+  const [lookupSession, setLookupSession] = useState(false)
   const [branchFilter, setBranchFilter]   = useState('all')
   const [advisorFilter, setAdvisorFilter] = useState('all')
   const [statusFilter, setStatusFilter]   = useState('active')
@@ -966,6 +990,15 @@ export default function BodyshopRepairPage() {
   const intakePhotoInputRef = useRef<HTMLInputElement | null>(null)
   const bodyshopDocInputRef = useRef<HTMLInputElement | null>(null)
   const additionalApprovalPhotoInputRef = useRef<HTMLInputElement | null>(null)
+  const browseSnapshotRef = useRef<BrowseFilterSnapshot | null>(null)
+  const browseFiltersRef = useRef<BrowseFilterSnapshot>({
+    dateRange: currentMonthRange(),
+    branchFilter: 'all',
+    advisorFilter: 'all',
+    statusFilter: 'active',
+    stageFilter: 'all',
+    pipelineFilter: 'all',
+  })
   const autoAdvanceDocsLockRef = useRef(false)
   const autoAdvanceStage11LockRef = useRef<Record<number, boolean>>({})
   const floorRoleRowRefs = useRef<Record<FloorRole, HTMLTableRowElement | null>>({
@@ -995,10 +1028,59 @@ export default function BodyshopRepairPage() {
     customer_type: '', branch: '', sa_name: '',
   })
 
+  browseFiltersRef.current = {
+    dateRange,
+    branchFilter,
+    advisorFilter,
+    statusFilter,
+    stageFilter,
+    pipelineFilter,
+  }
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setDebouncedSearch(search.trim())
+    }, REPAIR_LOOKUP_DEBOUNCE_MS)
+    return () => window.clearTimeout(timer)
+  }, [search])
+
+  useEffect(() => {
+    const wantLookup = debouncedSearch.length >= REPAIR_LOOKUP_MIN_CHARS
+    if (wantLookup && !lookupSession) {
+      browseSnapshotRef.current = browseFiltersRef.current
+      setLookupSession(true)
+      setDateRange({ from: '', to: '' })
+      setBranchFilter('all')
+      setAdvisorFilter('all')
+      setStatusFilter('all')
+      setStageFilter('all')
+      setPipelineFilter('all')
+      return
+    }
+    if (!wantLookup && lookupSession) {
+      const snap = browseSnapshotRef.current
+      browseSnapshotRef.current = null
+      setLookupSession(false)
+      if (snap) {
+        setDateRange(snap.dateRange)
+        setBranchFilter(snap.branchFilter)
+        setAdvisorFilter(snap.advisorFilter)
+        setStatusFilter(snap.statusFilter)
+        setStageFilter(snap.stageFilter)
+        setPipelineFilter(snap.pipelineFilter)
+      }
+    }
+  }, [debouncedSearch, lookupSession])
+
   useEffect(() => {
     if (!userScopeResolved) return
+    if (debouncedSearch.length >= REPAIR_LOOKUP_MIN_CHARS) {
+      void load({ searchQuery: debouncedSearch })
+      return
+    }
+    if (lookupSession) return
     void load()
-  }, [dateRange, userScopeResolved, isAdminLikeUser, bodyshopSaCodesForUser, bodyshopSsaBranchesForUser, bodyshopSurveyBranchesForUser])
+  }, [dateRange, debouncedSearch, lookupSession, userScopeResolved, isAdminLikeUser, bodyshopSaCodesForUser, bodyshopSsaBranchesForUser, bodyshopSurveyBranchesForUser])
 
   useEffect(() => {
     let cancelled = false
@@ -1502,7 +1584,7 @@ export default function BodyshopRepairPage() {
         setSelected(updated)
         setCards((prev) => prev.map((card) => card.id === updated.id ? updated : card))
         toast_('Stage 11 completed. Auto-moved to Stage 13 ✅')
-        void load()
+        void reloadVisibleList()
       } catch (e: any) {
         // Allow retry if the update fails due to transient network or policy issues.
         delete autoAdvanceStage11LockRef.current[cardId]
@@ -1620,7 +1702,16 @@ export default function BodyshopRepairPage() {
     return { data: rows, error: null }
   }
 
-  async function load() {
+  function reloadVisibleList() {
+    const q = debouncedSearch.trim()
+    if (q.length >= REPAIR_LOOKUP_MIN_CHARS) {
+      void load({ searchQuery: q })
+      return
+    }
+    void load()
+  }
+
+  async function load(options?: { searchQuery?: string }) {
     setLoading(true)
     try {
       // For SA role: always include SA-code visibility for mapped users.
@@ -1657,6 +1748,18 @@ export default function BodyshopRepairPage() {
         console.warn('[BodyshopRepair] No derived scope from employee links; falling back to RLS-scoped query')
       }
 
+      const lookupQuery = (options?.searchQuery ?? '').trim()
+      const isLookupLoad = lookupQuery.length >= REPAIR_LOOKUP_MIN_CHARS
+      let mergedData: RepairCard[] = []
+
+      if (isLookupLoad) {
+        mergedData = await searchRepairCards({
+          query: lookupQuery,
+          saCodes: scopedSaCodes ?? undefined,
+          saNames: scopedSaNames ?? undefined,
+          branches: scopedBranches.length > 0 ? scopedBranches : undefined,
+        })
+      } else {
       const [data, accidentRes] = await Promise.all([
         listRepairCards({
           from: dateRange.from,
@@ -1804,7 +1907,7 @@ export default function BodyshopRepairPage() {
         }))
       }
 
-      let mergedData = (toInsert.length > 0 || rowsToHeal.length > 0)
+      mergedData = (toInsert.length > 0 || rowsToHeal.length > 0)
         ? await listRepairCards({
             from: dateRange.from,
             to: dateRange.to,
@@ -1824,6 +1927,7 @@ export default function BodyshopRepairPage() {
           .order('created_at', { ascending: false })
 
         mergedData = ((fallbackCardsRes.data ?? []) as RepairCard[])
+      }
       }
 
       const nextCards = dedupeCards(mergedData)
@@ -1987,7 +2091,7 @@ export default function BodyshopRepairPage() {
       toast_('Repair card created ✅')
       setShowNew(false)
       setNf({ job_card_no: '', reg_number: '', customer_name: '', customer_phone: '', customer_type: '', branch: '', sa_name: '' })
-      void load()
+      void reloadVisibleList()
     } catch (e: any) { toast_(e.message, false) }
     setSaving(false)
   }
@@ -2058,7 +2162,7 @@ export default function BodyshopRepairPage() {
       setSelected(updated)
       setCards((prev) => prev.map((c) => c.id === updated.id ? updated : c))
       toast_(`Advanced to Stage ${updated.current_stage}`)
-      void load()
+      void reloadVisibleList()
     } catch (e: any) { toast_(e.message, false) }
     setSaving(false)
   }
@@ -2124,40 +2228,6 @@ export default function BodyshopRepairPage() {
           reinspection_at: String((patchToSave.reinspection_at ?? selected.reinspection_at ?? nowIso)).trim() || nowIso,
           current_stage: 14,
           current_stage_name: STAGE_LABELS[14] ?? 'Re-Inspection',
-        }
-      }
-
-      // ── Billing save logic ──────────────────────────────────────────────────
-      const billingKeysTouched = ['parts_entry_status', 'billed_amount', 'do_status', 'do_amount', 'payment_status'].some((key) => key in editPatch)
-      if (billingKeysTouched && selected.current_stage === 15) {
-        const nextDoStatus = String(editPatch.do_status ?? selected.do_status ?? 'pending').trim().toLowerCase()
-        const nextDoAmount = editPatch.do_amount ?? selected.do_amount ?? null
-        const nextPaymentStatus = String(editPatch.payment_status ?? selected.payment_status ?? 'pending').trim().toLowerCase()
-
-        // DO Amount required when DO Status = Received
-        if (nextDoStatus === 'received' && (nextDoAmount === null || nextDoAmount === undefined || String(nextDoAmount).trim() === '')) {
-          toast_('DO Amount is required when DO Status is Received', false)
-          setSaving(false)
-          return
-        }
-
-        // Auto-calc customer diff = billed - DO (only when DO received)
-        const nextBilledAmount = editPatch.billed_amount ?? selected.billed_amount ?? null
-        if (nextDoStatus === 'received' && nextBilledAmount !== null && nextDoAmount !== null) {
-          patchToSave = {
-            ...patchToSave,
-            customer_diff_amount: Number(nextBilledAmount) - Number(nextDoAmount),
-          }
-        }
-
-        // Payment received → advance to stage 17 (Delivery) + 18 (Payment) simultaneously
-        // Both stages become active at once — set current_stage to 17 (Delivery first)
-        if (nextPaymentStatus === 'received') {
-          patchToSave = {
-            ...patchToSave,
-            current_stage: 17,
-            current_stage_name: STAGE_LABELS[17] ?? 'Delivery',
-          }
         }
       }
 
@@ -3615,60 +3685,24 @@ export default function BodyshopRepairPage() {
       return floorCompleted && qcPassed && !riDone
     }
 
-    // ── Billing stages 15 & 16: data-driven, concurrent with stage 14 ──────
-    //
-    // Stage 15 (Billing) active  = any billing field has been saved
-    // Stage 15 completed         = parts=billed + billed_amount + do=received + do_amount + payment=received
-    //
-    // Stage 16 (DO Status) active  = parts_entry_status=billed AND billed_amount filled
-    // Stage 16 completed           = do_status=received
-    //
-    // Both stages can be active simultaneously with stage 14 (RI pending).
+    // Billing 15/16 and Payment 18 are data-driven. Payment received does not
+    // auto-advance Delivery (stage 17).
+    const stage15Done = isBillingStage15Done(card)
+    const stage16Done = isBillingStage16Done(card)
 
-    const partsStatus   = String(card.parts_entry_status ?? '').trim().toLowerCase()
-    const billedAmt     = card.billed_amount
-    const doStatus      = String(card.do_status ?? '').trim().toLowerCase()
-    const doAmt         = card.do_amount
-    const paymentStatus = String(card.payment_status ?? '').trim().toLowerCase()
+    if (stage === 15) return hasAnyBillingData(card) && !stage15Done
+    if (stage === 16) return stage15Done && !stage16Done
+    if (stage === 18) return isStage18PaymentActive(card)
 
-    const hasBilledAmt  = billedAmt !== null && billedAmt !== undefined
-    const hasDoAmt      = doAmt !== null && doAmt !== undefined
-
-    // Stage 16 done = DO received
-    const stage16Done = doStatus === 'received'
-
-    // Stage 15 done = all billing fields complete
-    const stage15Done = partsStatus === 'billed'
-      && hasBilledAmt
-      && doStatus === 'received'
-      && hasDoAmt
-      && paymentStatus === 'received'
-
-    // Any billing field saved = at least one field has a non-default value
-    const anyBillingData = partsStatus === 'billed'
-      || partsStatus === 'entered'
-      || hasBilledAmt
-      || (doStatus !== '' && doStatus !== 'pending')
-      || hasDoAmt
-      || (paymentStatus !== '' && paymentStatus !== 'pending')
-
-    if (stage === 15) return anyBillingData && !stage15Done
-    if (stage === 16) return partsStatus === 'billed' && hasBilledAmt && !stage16Done
-
-    // For stage 17+: clamp so a card whose DB stage is 17+ but RI isn't done
-    // still appears in stage 14 (RI), not in Delivery.
     const clampedStage = clampStageUntilRiComplete(card, effectiveCurrentStage)
-
-    // When billing is done (payment received) the vehicle moves to Delivery (17) AND Payment (18)
-    // simultaneously — both stages are active at the same time at current_stage = 17.
-    if (clampedStage === 17 && (stage === 17 || stage === 18)) return true
+    if (stage === 17) return clampedStage === 17
 
     return clampedStage === stage
   }
 
   function isCardInStageQueue(card: RepairCard, stage: number): boolean {
     // Stages 13-18: always use worklist logic — projection has no knowledge of
-    // reinspection_status gate, concurrent billing stages, or 17+18 simultaneous active.
+    // reinspection_status gate, concurrent billing, or independent stage 18 payment.
     if (stage >= 13) {
       return isCardInStageWorklist(card, stage)
     }
@@ -4049,18 +4083,16 @@ export default function BodyshopRepairPage() {
   }, [cards])
 
   const scopeFilteredCards = useMemo(() => roleScopedCards.filter((c) => {
+    if (lookupSession && (dateRange.from || dateRange.to)) {
+      if (!cardInReceivedDateRange(c, dateRange.from, dateRange.to)) return false
+    }
     if (branchFilter !== 'all' && c.branch !== branchFilter) return false
     if (statusFilter !== 'all' && c.overall_status !== statusFilter) return false
     if (search.trim()) {
-      const q = search.toLowerCase()
-      return (
-        c.job_card_no?.toLowerCase().includes(q) ||
-        (c.reg_number ?? '').toLowerCase().includes(q) ||
-        (c.customer_name ?? '').toLowerCase().includes(q)
-      )
+      return cardMatchesRepairLookup(c, search)
     }
     return true
-  }), [roleScopedCards, branchFilter, statusFilter, search])
+  }), [roleScopedCards, branchFilter, statusFilter, search, lookupSession, dateRange.from, dateRange.to])
 
   const stageScopedCards = useMemo(() => {
     if (stageFilter === 'all') return scopeFilteredCards
@@ -4112,6 +4144,13 @@ export default function BodyshopRepairPage() {
       return baseFiltered.filter((card) => card.overall_status === 'delivered')
     }
 
+    if (pipelineFilter === 'Insurance due') {
+      return baseFiltered.filter((card) => isInsuranceDuePending(card))
+    }
+    if (pipelineFilter === 'Customer remaining') {
+      return baseFiltered.filter((card) => isCustomerRemainingPending(card))
+    }
+
     const selectedGroup = STAGE_GROUPS.find((g) => g.label === pipelineFilter)
     if (!selectedGroup) return baseFiltered
     const filterStages = selectedGroup.stages
@@ -4158,6 +4197,16 @@ export default function BodyshopRepairPage() {
 
   const deliveredCount = useMemo(
     () => advisorScopedCards.filter((c) => c.overall_status === 'delivered').length,
+    [advisorScopedCards],
+  )
+
+  const insuranceDueCount = useMemo(
+    () => advisorScopedCards.filter((c) => isInsuranceDuePending(c)).length,
+    [advisorScopedCards],
+  )
+
+  const customerRemainingCount = useMemo(
+    () => advisorScopedCards.filter((c) => isCustomerRemainingPending(c)).length,
     [advisorScopedCards],
   )
 
@@ -4214,7 +4263,11 @@ export default function BodyshopRepairPage() {
         <div>
           <div className="greet">Bodyshop · End-to-end repair pipeline</div>
           <h1>Repair Tracker</h1>
-          <p>{cards.length} repair cards · accident repairs from receiving to delivery across 18 stages.</p>
+          <p>
+            {lookupSession
+              ? `${filtered.length} match${filtered.length === 1 ? '' : 'es'} across all records for “${debouncedSearch}”.`
+              : `${cards.length} repair cards · accident repairs from receiving to delivery across 18 stages.`}
+          </p>
         </div>
 
         <button className="btn btn--primary" onClick={() => setShowNew(true)}>
@@ -4257,16 +4310,45 @@ export default function BodyshopRepairPage() {
           <span className="brx-pipe-pill__n">{deliveredCount}</span>
           <span className="brx-pipe-pill__l">Delivered<small>completed</small></span>
         </button>
+        <button
+          type="button"
+          className={`brx-pipe-pill brx-pipe-pill--accounts ${pipelineFilter === 'Insurance due' ? 'is-active' : ''}`}
+          onClick={() => {
+            setPipelineFilter((prev) => prev === 'Insurance due' ? 'all' : 'Insurance due')
+            setStageFilter('all')
+          }}
+        >
+          <span className="brx-pipe-pill__n">{insuranceDueCount}</span>
+          <span className="brx-pipe-pill__l">Insurance due<small>DO payment open</small></span>
+        </button>
+        <button
+          type="button"
+          className={`brx-pipe-pill brx-pipe-pill--accounts ${pipelineFilter === 'Customer remaining' ? 'is-active' : ''}`}
+          onClick={() => {
+            setPipelineFilter((prev) => prev === 'Customer remaining' ? 'all' : 'Customer remaining')
+            setStageFilter('all')
+          }}
+        >
+          <span className="brx-pipe-pill__n">{customerRemainingCount}</span>
+          <span className="brx-pipe-pill__l">Customer remaining<small>due or refund</small></span>
+        </button>
       </div>
 
       {/* ── TOP CONTROL BAR ─────────────────────────────────────────────── */}
+      <div className="brx-toolbar-stack">
       <div className="brx-toolbar">
         <DateRangeFilter range={dateRange} onChange={setDateRange} label="Period:" includeAll />
 
         <span className="brx-sep" />
 
-        <input className="inp brx-search" placeholder="Search JC / reg / customer…"
-          value={search} onChange={(e) => setSearch(e.target.value)} />
+        <input
+          className="inp brx-search"
+          type="search"
+          placeholder="Search JC / reg / customer…"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          aria-label="Search all repair cards by job card, registration, or customer"
+        />
 
         <select className="sel brx-sel brx-sel--branch" value={branchFilter} onChange={(e) => setBranchFilter(e.target.value)}>
           <option value="all">All Branches</option>
@@ -4289,6 +4371,18 @@ export default function BodyshopRepairPage() {
           <option value="delivered">Delivered</option>
           <option value="cancelled">Cancelled</option>
         </select>
+      </div>
+      {lookupSession && (
+        <div className="brx-lookup-hint" role="status">
+          <span>
+            Searching all records for “{debouncedSearch}”
+            {dateRange.from || dateRange.to ? ' · Period applied on results' : ' · Period not applied'}
+          </span>
+          <button type="button" className="brx-lookup-hint__clear" onClick={() => setSearch('')}>
+            Clear search
+          </button>
+        </div>
+      )}
       </div>
 
       {/* ── Card Grid ─────────────────────────────────────────────────────── */}
@@ -4343,7 +4437,11 @@ export default function BodyshopRepairPage() {
         ) : !isAdminLikeUser && hasBodyshopSaAccess && !hasBodyshopSsaAccess && !hasBodyshopSurveyAccess && bodyshopSaCodeSetForUser.size === 0 ? (
           <div className="empty-state">No BODY SHOP SA code is linked to this login. Please map this user in Employee Master and User-Employee Links.</div>
         ) : filtered.length === 0 ? (
-          <div className="empty-state">No repair cards found</div>
+          <div className="empty-state">
+            {lookupSession
+              ? `No repair cards match “${debouncedSearch}”`
+              : 'No repair cards found'}
+          </div>
         ) : (
           <div className="brx-cardgrid">
             {filtered.map((card) => {
@@ -4566,28 +4664,12 @@ export default function BodyshopRepairPage() {
                     && surveyApprovalDoc
                   const stage11Ready = stage10Ready && stage9Done
 
-                  // Billing stages — data-driven, concurrent with stage 14
-                  const billingPartsStatus   = String(selected.parts_entry_status ?? '').trim().toLowerCase()
-                  const billingBilledAmt     = selected.billed_amount
-                  const billingDoStatus      = String(selected.do_status ?? '').trim().toLowerCase()
-                  const billingDoAmt         = selected.do_amount
-                  const billingPaymentStatus = String(selected.payment_status ?? '').trim().toLowerCase()
-                  const billingHasBilledAmt  = billingBilledAmt !== null && billingBilledAmt !== undefined
-                  const billingHasDoAmt      = billingDoAmt !== null && billingDoAmt !== undefined
-                  const stage16Done = billingDoStatus === 'received'
-                  const stage15Done = billingPartsStatus === 'billed'
-                    && billingHasBilledAmt
-                    && billingDoStatus === 'received'
-                    && billingHasDoAmt
-                    && billingPaymentStatus === 'received'
-                  const anyBillingData = billingPartsStatus === 'billed'
-                    || billingPartsStatus === 'entered'
-                    || billingHasBilledAmt
-                    || (billingDoStatus !== '' && billingDoStatus !== 'pending')
-                    || billingHasDoAmt
-                    || (billingPaymentStatus !== '' && billingPaymentStatus !== 'pending')
-                  const stage15Active = anyBillingData && !stage15Done
-                  const stage16Active = billingPartsStatus === 'billed' && billingHasBilledAmt && !stage16Done
+                  const stage15Done = isBillingStage15Done(selected)
+                  const stage16Done = isBillingStage16Done(selected)
+                  const stage18Done = isStage18PaymentDone(selected)
+                  const stage15Active = hasAnyBillingData(selected) && !stage15Done
+                  const stage16Active = stage15Done && !stage16Done
+                  const stage18Active = isStage18PaymentActive(selected)
 
                   const num    = Number(numStr)
                   const isDone = num <= 4
@@ -4614,6 +4696,8 @@ export default function BodyshopRepairPage() {
                             ? stage15Done
                           : num === 16
                             ? stage16Done
+                          : num === 18
+                            ? stage18Done
                         : effectiveCurrentStage > num
                   const stage10Active = stage10Ready && !stage10Done
                   const stage11Active = !stage11Done /* stage11 forced active immediately, bypassing readiness gate per business request */
@@ -4635,6 +4719,8 @@ export default function BodyshopRepairPage() {
                               ? stage15Active
                               : num === 16
                                 ? stage16Active
+                              : num === 18
+                                ? stage18Active
                         : isStageConcurrentActive(num, effectiveCurrentStage, floorWorkStarted && !floorStageCompleted)
                   const grp    = getGroupForStage(num)
                   const rows = [
@@ -4795,6 +4881,21 @@ export default function BodyshopRepairPage() {
                     ))}
                   </div>
 
+                  <div className="brx-settle-pills">
+                    <div className="brx-settle-pill-row">
+                      <span className="brx-settle-pill-k">DO Payment</span>
+                      <span className={`brx-settle-pill is-${String(selected.do_payment_status ?? 'pending').toLowerCase()}`}>
+                        {settlementStatusLabel(selected.do_payment_status)}
+                      </span>
+                    </div>
+                    <div className="brx-settle-pill-row">
+                      <span className="brx-settle-pill-k">Customer Diff Payment</span>
+                      <span className={`brx-settle-pill is-${String(selected.customer_payment_status ?? 'pending').toLowerCase()}`}>
+                        {settlementStatusLabel(selected.customer_payment_status)}
+                      </span>
+                    </div>
+                  </div>
+
                   {/* current stage */}
                   <div className="brx-overview-stagebox">
                     <div className="brx-overview-stagebox-k">Current Stage</div>
@@ -4883,6 +4984,12 @@ export default function BodyshopRepairPage() {
                             ? isQcPassed(selected)
                           : num === 14
                             ? isRiCompleted(selected)
+                          : num === 15
+                            ? isBillingStage15Done(selected)
+                          : num === 16
+                            ? isBillingStage16Done(selected)
+                          : num === 18
+                            ? isStage18PaymentDone(selected)
                           : effectiveCurrentStage > num
                       const stage10Active = stage10Ready && !stage10Done
                       const stage11Active = !stage11Done /* stage11 forced active immediately, bypassing readiness gate per business request */
@@ -4899,6 +5006,12 @@ export default function BodyshopRepairPage() {
                               ? stage13Active
                               : num === 14
                                 ? stage14Active
+                              : num === 15
+                                ? (hasAnyBillingData(selected) && !isBillingStage15Done(selected))
+                              : num === 16
+                                ? (isBillingStage15Done(selected) && !isBillingStage16Done(selected))
+                              : num === 18
+                                ? isStage18PaymentActive(selected)
                             : isStageConcurrentActive(num, effectiveCurrentStage, floorWorkStarted && !floorStageCompleted)
                       const grp     = getGroupForStage(num)
                       return (
@@ -6264,107 +6377,24 @@ export default function BodyshopRepairPage() {
 
               {/* ── Billing ── */}
               {detailTab === 'billing' && (
-                <div className="brx-panel">
-                  <div className="brx-panel-h">Billing, DO &amp; Payment</div>
-                  <div className="brx-form-grid-2">
-                    <label className="brx-field">
-                      <span className="brx-field-label">Parts Entry Status</span>
-                      <select className="sel" value={selected.parts_entry_status ?? 'pending'}
-                        onChange={(e) => patch('parts_entry_status', e.target.value)}>
-                        <option value="pending">Pending</option>
-                        <option value="entered">Entered</option>
-                        <option value="billed">Billed</option>
-                      </select>
-                    </label>
-                    <label className="brx-field">
-                      <span className="brx-field-label">Billed Amount (₹)</span>
-                      <input className="inp" type="number" value={selected.billed_amount ?? ''}
-                        onChange={(e) => {
-                          const billedVal = e.target.value ? Number(e.target.value) : null
-                          patch('billed_amount', billedVal)
-                          // Auto-calc customer diff when DO is received
-                          const doStatus = String(editPatch.do_status ?? selected.do_status ?? '').trim().toLowerCase()
-                          const doAmt = editPatch.do_amount ?? selected.do_amount ?? null
-                          if (doStatus === 'received' && billedVal !== null && doAmt !== null) {
-                            patch('customer_diff_amount', Number(billedVal) - Number(doAmt))
-                          }
-                        }} />
-                    </label>
-                    <label className="brx-field">
-                      <span className="brx-field-label">DO Status</span>
-                      <select className="sel" value={selected.do_status ?? 'pending'}
-                        onChange={(e) => patch('do_status', e.target.value)}>
-                        <option value="pending">Pending</option>
-                        <option value="received">Received</option>
-                        <option value="not_received">Not Received</option>
-                      </select>
-                    </label>
-                    {(() => {
-                      const doStatus = String(editPatch.do_status ?? selected.do_status ?? '').trim().toLowerCase()
-                      const doRequired = doStatus === 'received'
-                      const doMissing = doRequired && (editPatch.do_amount ?? selected.do_amount) === null
-                      return (
-                        <label className="brx-field">
-                          <span className="brx-field-label">
-                            DO Amount (₹){doRequired && <span style={{ color: '#ef4444', marginLeft: 4 }}>*</span>}
-                          </span>
-                          <input
-                            className={`inp${doMissing ? ' is-required' : ''}`}
-                            type="number"
-                            value={selected.do_amount ?? ''}
-                            onChange={(e) => {
-                              const doVal = e.target.value ? Number(e.target.value) : null
-                              patch('do_amount', doVal)
-                              // Auto-calc customer diff
-                              if (doRequired) {
-                                const billedAmt = editPatch.billed_amount ?? selected.billed_amount ?? null
-                                if (billedAmt !== null && doVal !== null) {
-                                  patch('customer_diff_amount', Number(billedAmt) - Number(doVal))
-                                }
-                              }
-                            }}
-                          />
-                        </label>
-                      )
-                    })()}
-                    <div className="brx-field">
-                      <span className="brx-field-label">Customer Diff Amount (₹)</span>
-                      <div className="inp" style={{ display: 'flex', alignItems: 'center', background: 'var(--bg)', color: 'var(--text-2)' }}>
-                        {selected.customer_diff_amount !== null && selected.customer_diff_amount !== undefined
-                          ? `₹${Number(selected.customer_diff_amount).toLocaleString('en-IN')}`
-                          : '—'}
-                      </div>
-                    </div>
-                    <label className="brx-field">
-                      <span className="brx-field-label">Payment Status</span>
-                      <select className="sel" value={selected.payment_status ?? 'pending'}
-                        onChange={(e) => patch('payment_status', e.target.value)}>
-                        <option value="pending">Pending</option>
-                        <option value="received">Received</option>
-                        <option value="not_received">Not Received</option>
-                      </select>
-                    </label>
-                    {/* summary */}
-                    <div className="brx-billing-summary">
-                      <div className="brx-billing-summary-title">Billing Summary</div>
-                      <div className="brx-billing-summary-grid">
-                        {[['Billed', selected.billed_amount], ['DO', selected.do_amount], ['Customer Diff', selected.customer_diff_amount]].map(([l, v]) => (
-                          <div key={String(l)}>
-                            <div className="brx-billing-k">{l}</div>
-                            <div className="brx-billing-v">{inr(v as number | null)}</div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                    {Object.keys(editPatch).length > 0 && (
-                      <div className="brx-grid-full">
-                        <button className="btn btn--primary" onClick={() => void handleSavePatch()} disabled={saving}>
-                          {saving ? 'Saving…' : 'Save Billing'}
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                </div>
+                <BodyshopSettlementPanel
+                  card={selected}
+                  toast={toast_}
+                  onCardChange={(next) => {
+                    setSelected(next)
+                    setCards((prev) => prev.map((c) => (c.id === next.id ? next : c)))
+                    setEditPatch((prev) => {
+                      const nextPatch = { ...prev }
+                      delete nextPatch.parts_entry_status
+                      delete nextPatch.billed_amount
+                      delete nextPatch.do_status
+                      delete nextPatch.do_amount
+                      delete nextPatch.customer_diff_amount
+                      delete nextPatch.payment_status
+                      return nextPatch
+                    })
+                  }}
+                />
               )}
 
               </div>

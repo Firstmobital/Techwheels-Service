@@ -4,6 +4,11 @@ import { supabase } from '../supabase'
 import {
   listReceptionEntriesByJobCardNumbers,
 } from './reception'
+import { normalizeRegNumber } from './types'
+
+export const REPAIR_LOOKUP_MIN_CHARS = 3
+export const REPAIR_LOOKUP_LIMIT = 50
+export const REPAIR_LOOKUP_DEBOUNCE_MS = 300
 
 export type CustomerType = 'individual' | 'firm' | 'foc' | 'cash'
 export type OverallStatus = 'active' | 'delivered' | 'cancelled'
@@ -124,6 +129,9 @@ export interface RepairCard {
   customer_diff_amount: number | null
   payment_slip_url: string | null
   payment_status: string | null
+  do_payment_status: string | null
+  customer_payment_status: string | null
+  customer_settlement_kind: 'due' | 'refund' | 'none' | null
   // delivery
   delivery_status: string | null
   delivery_marked_by: string | null
@@ -134,6 +142,74 @@ export interface RepairCard {
   created_by: string | null
   created_at: string
   updated_at: string
+}
+
+function escapePostgrestIlike(value: string): string {
+  return value.replace(/\\/g, '\\\\').replace(/%/g, '\\%').replace(/_/g, '\\_')
+}
+
+export function repairLookupNeedles(query: string): string[] {
+  const trimmed = query.trim()
+  if (trimmed.length < REPAIR_LOOKUP_MIN_CHARS) return []
+  const compact = normalizeRegNumber(trimmed)
+  return Array.from(new Set(
+    [trimmed, compact].filter((needle) => needle.length >= REPAIR_LOOKUP_MIN_CHARS),
+  ))
+}
+
+export function cardMatchesRepairLookup(
+  card: Pick<RepairCard, 'job_card_no' | 'reg_number' | 'customer_name'>,
+  query: string,
+): boolean {
+  const needles = repairLookupNeedles(query).map((needle) => needle.toLowerCase())
+  if (needles.length === 0) return true
+
+  const jc = String(card.job_card_no ?? '').toLowerCase()
+  const reg = String(card.reg_number ?? '').toLowerCase()
+  const name = String(card.customer_name ?? '').toLowerCase()
+  const compactReg = normalizeRegNumber(String(card.reg_number ?? '')).toLowerCase()
+  const compactJc = normalizeRegNumber(String(card.job_card_no ?? '')).toLowerCase()
+
+  return needles.some((needle) => {
+    const compactNeedle = normalizeRegNumber(needle).toLowerCase()
+    return jc.includes(needle)
+      || reg.includes(needle)
+      || name.includes(needle)
+      || (
+        compactNeedle.length >= REPAIR_LOOKUP_MIN_CHARS
+        && (compactReg.includes(compactNeedle) || compactJc.includes(compactNeedle))
+      )
+  })
+}
+
+export function cardInReceivedDateRange(
+  card: Pick<RepairCard, 'received_at' | 'created_at'>,
+  from?: string,
+  to?: string,
+): boolean {
+  const fromDate = String(from ?? '').trim()
+  const toDate = String(to ?? '').trim()
+  if (!fromDate && !toDate) return true
+  const received = String(card.received_at ?? card.created_at ?? '').slice(0, 10)
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(received)) return false
+  if (fromDate && received < fromDate) return false
+  if (toDate && received > toDate) return false
+  return true
+}
+
+function buildLookupOrFilter(query: string): string | null {
+  const needles = repairLookupNeedles(query)
+  if (needles.length === 0) return null
+
+  const parts: string[] = []
+  for (const needle of needles) {
+    const pattern = `%${escapePostgrestIlike(needle)}%`
+    const quoted = `"${pattern.replace(/"/g, '\\"')}"`
+    parts.push(`job_card_no.ilike.${quoted}`)
+    parts.push(`reg_number.ilike.${quoted}`)
+    parts.push(`customer_name.ilike.${quoted}`)
+  }
+  return parts.join(',')
 }
 
 export async function listRepairCards(opts: {
@@ -185,6 +261,60 @@ export async function listRepairCards(opts: {
     q = q.in('sa_name', scopedSaNames)
   }
   // For SSA: filter by branch
+  if (scopedBranches && scopedBranches.length > 0) {
+    q = q.in('branch', scopedBranches)
+  }
+
+  const { data, error } = await q
+  if (error) throw error
+  return (data ?? []) as RepairCard[]
+}
+
+export async function searchRepairCards(opts: {
+  query: string
+  saCodes?: string[]
+  saNames?: string[]
+  branches?: string[]
+  limit?: number
+}): Promise<RepairCard[]> {
+  const orFilter = buildLookupOrFilter(opts.query)
+  if (!orFilter) return []
+
+  const scopedSaCodes = Array.isArray(opts.saCodes)
+    ? opts.saCodes.map((code) => String(code ?? '').trim().toUpperCase()).filter(Boolean)
+    : null
+  const scopedSaNames = Array.isArray(opts.saNames)
+    ? opts.saNames.map((name) => String(name ?? '').trim()).filter(Boolean)
+    : null
+  const scopedBranches = Array.isArray(opts.branches)
+    ? opts.branches.map((b) => String(b ?? '').trim()).filter(Boolean)
+    : null
+
+  if (
+    (Array.isArray(opts.saCodes) || Array.isArray(opts.saNames) || Array.isArray(opts.branches))
+    && (scopedSaCodes?.length ?? 0) === 0
+    && (scopedSaNames?.length ?? 0) === 0
+    && (scopedBranches?.length ?? 0) === 0
+  ) {
+    return []
+  }
+
+  let q = supabase
+    .from('bodyshop_repair_cards')
+    .select('*')
+    .or(orFilter)
+    .order('created_at', { ascending: false })
+    .limit(opts.limit ?? REPAIR_LOOKUP_LIMIT)
+
+  if (scopedSaCodes && scopedSaCodes.length > 0 && scopedSaNames && scopedSaNames.length > 0) {
+    const codeCsv = scopedSaCodes.map((v) => `"${v.replace(/"/g, '')}"`).join(',')
+    const nameCsv = scopedSaNames.map((v) => `"${v.replace(/"/g, '')}"`).join(',')
+    q = q.or(`sa_employee_code.in.(${codeCsv}),sa_name.in.(${nameCsv})`)
+  } else if (scopedSaCodes && scopedSaCodes.length > 0) {
+    q = q.in('sa_employee_code', scopedSaCodes)
+  } else if (scopedSaNames && scopedSaNames.length > 0) {
+    q = q.in('sa_name', scopedSaNames)
+  }
   if (scopedBranches && scopedBranches.length > 0) {
     q = q.in('branch', scopedBranches)
   }
@@ -301,10 +431,20 @@ export async function createRepairCard(input: Partial<RepairCard> & { job_card_n
   return data as RepairCard
 }
 
+const SETTLEMENT_DERIVED_KEYS = [
+  'payment_status',
+  'customer_diff_amount',
+  'do_payment_status',
+  'customer_payment_status',
+  'customer_settlement_kind',
+] as const
+
 export async function updateRepairCard(id: number, patch: Partial<RepairCard>): Promise<RepairCard> {
+  const next: Partial<RepairCard> = { ...patch }
+  for (const key of SETTLEMENT_DERIVED_KEYS) delete next[key]
   const { data, error } = await supabase
     .from('bodyshop_repair_cards')
-    .update({ ...patch, updated_at: new Date().toISOString() })
+    .update({ ...next, updated_at: new Date().toISOString() })
     .eq('id', id)
     .select()
     .single()
