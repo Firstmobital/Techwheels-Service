@@ -8,7 +8,7 @@
 **Status:** Active (v1 DO-only)  
 **Platform:** webversion  
 **Category:** bodyshop  
-**Ledger:** DBL-0031 (applied); DBL-0032 (APPLIED); DBL-0033 (APPLIED — Recovery DO post)  
+**Ledger:** DBL-0031 (applied); DBL-0032 (APPLIED); DBL-0033 (APPLIED — Recovery DO post); DBL-0034 (APPLIED — export + mismatch)  
 **Route:** `/bodyshop-recovery`  
 **Module:** `bodyshop_recovery`  
 **Depends on:** BODYSHOP-SETTLEMENT-001 (`bodyshop_settlements.insurance_due_amount`)

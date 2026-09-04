@@ -2,7 +2,10 @@ import { useEffect, useMemo, useState } from 'react'
 import * as XLSX from 'xlsx'
 import { BodyshopSettlementPanel } from '../components/BodyshopSettlementPanel'
 import {
+  documentExportUrl,
+  exportBodyshopDoRecovery,
   getBodyshopRecoveryCase,
+  insurerPayerMismatch,
   listBodyshopDoRecovery,
   openRecoveryDocument,
   settlementCardFromRecoveryRow,
@@ -149,6 +152,7 @@ export default function BodyshopRecoveryPage() {
   const [moreError, setMoreError] = useState<string | null>(null)
   const [postRow, setPostRow] = useState<DoRecoveryRow | null>(null)
   const [postCard, setPostCard] = useState<RepairCard | null>(null)
+  const [exporting, setExporting] = useState(false)
 
   function flash(msg: string, ok = true) {
     setToast({ msg, ok })
@@ -246,26 +250,109 @@ export default function BodyshopRecoveryPage() {
     return { due, count: visible.length, pending, partial, notReceived }
   }, [visible])
 
-  function exportExcel() {
-    const sheet = visible.map((r) => ({
-      JC: r.job_card_no,
-      VRN: r.reg_number ?? '',
-      Customer: r.customer_name ?? '',
-      Branch: r.branch ?? '',
-      SA: r.sa_name ?? '',
-      Insurer: r.insurance_company ?? '',
-      'Invoice no': r.invoice_number ?? '',
-      'Invoice date': r.invoice_date ?? '',
-      Invoice: r.invoice_amount,
-      DO: r.do_amount,
-      Released: r.do_released_amount,
-      'Insurance due': r.insurance_due_amount,
-      'DO payment': r.do_payment_status,
-      'Ageing days': ageingDays(r.invoice_date),
-    }))
-    const wb = XLSX.utils.book_new()
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(sheet), 'DO recovery')
-    XLSX.writeFile(wb, `bodyshop-do-recovery-${new Date().toISOString().slice(0, 10)}.xlsx`)
+  async function exportExcel() {
+    if (visible.length === 0) return
+    setExporting(true)
+    try {
+      const payload = await exportBodyshopDoRecovery(visible.map((r) => r.repair_card_id))
+      const caseById = new Map(payload.cases.map((c) => [c.repair_card_id, c]))
+      const linesById = new Map<number, typeof payload.lines>()
+      for (const line of payload.lines) {
+        const cur = linesById.get(line.repair_card_id) ?? []
+        cur.push(line)
+        linesById.set(line.repair_card_id, cur)
+      }
+      const docsById = new Map<number, typeof payload.documents>()
+      for (const doc of payload.documents) {
+        const cur = docsById.get(doc.repair_card_id) ?? []
+        cur.push(doc)
+        docsById.set(doc.repair_card_id, cur)
+      }
+
+      const bookRows = visible.map((r) => {
+        const extra = caseById.get(r.repair_card_id)
+        const docs = docsById.get(r.repair_card_id) ?? []
+        const lines = linesById.get(r.repair_card_id) ?? []
+        const mismatch = extra?.insurer_mismatch ?? insurerPayerMismatch(r.insurance_company, r.invoice_account)
+        const urlFor = (key: string) => {
+          const doc = docs.find((d) => d.doc_key === key)
+          return doc ? documentExportUrl(doc) : ''
+        }
+        const otherUrls = docs
+          .filter((d) => !PRIMARY_DOCS.some((p) => p.key === d.doc_key))
+          .map((d) => `${DOC_LABELS[d.doc_key] || d.doc_key}: ${documentExportUrl(d)}`)
+          .filter((v) => !v.endsWith(': '))
+          .join(' | ')
+        return {
+          JC: r.job_card_no,
+          VRN: r.reg_number ?? '',
+          Customer: extra?.customer_name ?? r.customer_name ?? '',
+          Phone: extra?.customer_phone ?? '',
+          Branch: r.branch ?? '',
+          SA: r.sa_name ?? '',
+          'Policy company': extra?.insurance_company ?? r.insurance_company ?? '',
+          'DMS bill-to': extra?.invoice_account ?? r.invoice_account ?? '',
+          'Insurer mismatch': mismatch ? 'Yes' : 'No',
+          'Policy no': extra?.insurance_policy_no ?? '',
+          'Claim no': extra?.claim_intimation_no ?? '',
+          'Invoice no': r.invoice_number ?? '',
+          'Invoice date': r.invoice_date ?? '',
+          Invoice: r.invoice_amount,
+          DO: r.do_amount,
+          Released: r.do_released_amount,
+          'Insurance due': r.insurance_due_amount,
+          'DO payment': r.do_payment_status,
+          'Ageing days': ageingDays(r.invoice_date),
+          'Posted line count': lines.filter((l) => !l.is_reversed && l.line_type !== 'reversal').length,
+          'PAN URL': urlFor('doc_pan'),
+          'Company PAN URL': urlFor('doc_company_pan'),
+          'Driving licence URL': urlFor('doc_dl'),
+          'Claim form URL': urlFor('doc_claim_form'),
+          'Insurance copy URL': urlFor('doc_insurance'),
+          'RC URL': urlFor('doc_rc'),
+          'Other document URLs': otherUrls,
+        }
+      })
+
+      const lineRows = payload.lines.map((l) => ({
+        JC: l.job_card_no,
+        VRN: l.reg_number ?? '',
+        When: l.created_at ?? '',
+        Type: l.component ?? '',
+        'Line type': l.line_type ?? '',
+        Amount: l.amount,
+        Reference: l.reference ?? '',
+        Remark: l.remarks ?? '',
+        By: l.actor_email ?? '',
+        Reversed: l.is_reversed ? 'Yes' : 'No',
+      }))
+
+      const docRows = payload.documents.map((d) => ({
+        JC: d.job_card_no,
+        VRN: d.reg_number ?? '',
+        Document: DOC_LABELS[d.doc_key] || d.doc_key,
+        'File name': d.file_name ?? '',
+        URL: documentExportUrl(d),
+      }))
+
+      const wb = XLSX.utils.book_new()
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(bookRows), 'DO recovery')
+      XLSX.utils.book_append_sheet(
+        wb,
+        XLSX.utils.json_to_sheet(lineRows.length ? lineRows : [{ JC: '', Note: 'No posted payment entries in this view' }]),
+        'Posted entries',
+      )
+      XLSX.utils.book_append_sheet(
+        wb,
+        XLSX.utils.json_to_sheet(docRows.length ? docRows : [{ JC: '', Note: 'No document URLs in this view' }]),
+        'Documents',
+      )
+      XLSX.writeFile(wb, `bodyshop-do-recovery-${new Date().toISOString().slice(0, 10)}.xlsx`)
+    } catch (e) {
+      flash(e instanceof Error ? e.message : 'Export failed', false)
+    } finally {
+      setExporting(false)
+    }
   }
 
   function openPost(row: DoRecoveryRow) {
@@ -304,8 +391,8 @@ export default function BodyshopRecoveryPage() {
           <button type="button" className="btn" onClick={() => void load()} disabled={loading}>
             {loading ? 'Loading…' : 'Refresh'}
           </button>
-          <button type="button" className="btn btn--primary" onClick={exportExcel} disabled={visible.length === 0}>
-            Export Excel
+          <button type="button" className="btn btn--primary" onClick={() => void exportExcel()} disabled={visible.length === 0 || exporting}>
+            {exporting ? 'Exporting…' : 'Export Excel'}
           </button>
         </div>
       </div>
@@ -417,13 +504,22 @@ export default function BodyshopRecoveryPage() {
             <tbody>
               {visible.map((r) => {
                 const days = ageingDays(r.invoice_date)
+                const mismatch = insurerPayerMismatch(r.insurance_company, r.invoice_account)
                 return (
-                  <tr key={r.repair_card_id}>
+                  <tr key={r.repair_card_id} className={mismatch ? 'brx-recov-row--mismatch' : undefined}>
                     <td>
                       <div>{r.job_card_no}</div>
                       <div style={{ color: 'var(--muted)', fontSize: 12 }}>{r.reg_number || '—'} · {r.branch || '—'}</div>
                     </td>
-                    <td>{r.insurance_company || '—'}</td>
+                    <td>
+                      <div>{r.insurance_company || '—'}</div>
+                      {mismatch && (
+                        <div className="brx-recov-mismatch">
+                          <span className="brx-settle-pill is-mismatch">Mismatch</span>
+                          <span>DMS: {r.invoice_account}</span>
+                        </div>
+                      )}
+                    </td>
                     <td>
                       <div>{r.invoice_number || '—'}</div>
                       <div style={{ color: 'var(--muted)', fontSize: 12 }}>{fmtDate(r.invoice_date)} · {inr(r.invoice_amount)}</div>
@@ -463,6 +559,11 @@ export default function BodyshopRecoveryPage() {
               {moreError && <div className="brx-settle-banner">{moreError}</div>}
               {moreCase && (
                 <>
+                  {insurerPayerMismatch(moreCase.insurance_company, moreCase.invoice_account) && (
+                    <div className="brx-settle-banner" style={{ marginBottom: 12 }}>
+                      Insurer mismatch · Policy: {moreCase.insurance_company || '—'} · DMS bill-to: {moreCase.invoice_account || '—'}
+                    </div>
+                  )}
                   <div className="brx-recov-dl">
                     <Field label="JC" value={moreCase.job_card_no} />
                     <Field label="VRN" value={moreCase.reg_number ?? ''} />
@@ -470,7 +571,8 @@ export default function BodyshopRecoveryPage() {
                     <Field label="Phone" value={moreCase.customer_phone ?? ''} />
                     <Field label="Branch" value={moreCase.branch ?? ''} />
                     <Field label="SA" value={moreCase.sa_name ?? ''} />
-                    <Field label="Insurer" value={moreCase.insurance_company ?? ''} />
+                    <Field label="Policy company" value={moreCase.insurance_company ?? ''} />
+                    <Field label="DMS bill-to" value={moreCase.invoice_account ?? ''} />
                     <Field label="Policy no" value={moreCase.insurance_policy_no ?? ''} />
                     <Field label="Claim no" value={moreCase.claim_intimation_no ?? ''} />
                     <Field label="Invoice" value={[moreCase.invoice_number, fmtDate(moreCase.invoice_date)].filter((v) => v && v !== '—').join(' · ')} />

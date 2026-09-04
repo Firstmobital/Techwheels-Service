@@ -3861,6 +3861,11 @@ code.k--b { background: var(--accent-soft); color: var(--accent); }
   color: #991b1b;
 }
 
+.brx-settle-pill.is-mismatch {
+  background: #fef3c7;
+  color: #92400e;
+}
+
 .brx-settle-summary-grid {
   grid-template-columns: repeat(4, minmax(0, 1fr));
 }
@@ -3990,6 +3995,20 @@ code.k--b { background: var(--accent-soft); color: var(--accent); }
 .brx-recov-doc__miss {
   color: var(--muted);
   font-size: 12px;
+}
+
+.brx-recov-mismatch {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 4px;
+  font-size: 11px;
+  color: var(--muted);
+  max-width: 240px;
+}
+
+tr.brx-recov-row--mismatch td:first-child {
+  border-left: 3px solid #d97706;
 }
 
 @media (max-width: 960px) {

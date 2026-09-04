@@ -58,10 +58,107 @@ export interface RecoveryCase {
   documents: RecoveryCaseDocument[]
 }
 
+export interface RecoveryExportCase {
+  repair_card_id: number
+  job_card_no: string
+  reg_number: string | null
+  customer_name: string | null
+  customer_phone: string | null
+  branch: string | null
+  sa_name: string | null
+  insurance_company: string | null
+  insurance_policy_no: string | null
+  claim_intimation_no: string | null
+  invoice_number: string | null
+  invoice_date: string | null
+  invoice_amount: number | null
+  invoice_account: string | null
+  do_amount: number | null
+  do_released_amount: number | null
+  insurance_due_amount: number | null
+  do_payment_status: string | null
+  insurer_mismatch: boolean
+}
+
+export interface RecoveryExportLine {
+  repair_card_id: number
+  job_card_no: string
+  reg_number: string | null
+  component: string | null
+  line_type: string | null
+  amount: number | null
+  reference: string | null
+  remarks: string | null
+  actor_email: string | null
+  created_at: string | null
+  is_reversed: boolean
+}
+
+export interface RecoveryExportDocument {
+  repair_card_id: number
+  job_card_no: string
+  reg_number: string | null
+  doc_key: string
+  file_name: string | null
+  drive_url: string | null
+  storage_bucket: string | null
+  storage_path: string | null
+}
+
+export interface RecoveryExportPayload {
+  cases: RecoveryExportCase[]
+  lines: RecoveryExportLine[]
+  documents: RecoveryExportDocument[]
+}
+
+export function insurerPayerMismatch(
+  policy: string | null | undefined,
+  billTo: string | null | undefined,
+): boolean {
+  const strip = (raw: string) => {
+    const lower = raw.trim().toLowerCase()
+    const beforeCo = lower.split(/\s+c\/o\s+/)[0] ?? lower
+    return beforeCo.replace(/^m\/s\.?\s+/, '').replace(/^the\s+/, '').trim()
+  }
+  const p = strip(String(policy ?? ''))
+  const b = strip(String(billTo ?? ''))
+  if (!p || !b) return false
+  const p1 = p.split(/\s+/)[0] ?? ''
+  const b1 = b.split(/\s+/)[0] ?? ''
+  if (!p1 || !b1) return false
+  return !b.includes(p1) && !p.includes(b1)
+}
+
+export function documentExportUrl(doc: {
+  drive_url?: string | null
+  storage_bucket?: string | null
+  storage_path?: string | null
+}): string {
+  const drive = String(doc.drive_url ?? '').trim()
+  if (drive) return drive
+  const bucket = String(doc.storage_bucket ?? '').trim()
+  const path = String(doc.storage_path ?? '').trim()
+  if (bucket && path) return `storage://${bucket}/${path}`
+  return ''
+}
+
 export async function listBodyshopDoRecovery(): Promise<DoRecoveryRow[]> {
   const { data, error } = await supabase.rpc('list_bodyshop_do_recovery')
   if (error) throw new Error(settlementRpcError(error))
   return Array.isArray(data) ? (data as DoRecoveryRow[]) : []
+}
+
+export async function exportBodyshopDoRecovery(repairCardIds: number[]): Promise<RecoveryExportPayload> {
+  const { data, error } = await supabase.rpc('export_bodyshop_do_recovery', {
+    p_repair_card_ids: repairCardIds,
+  })
+  if (error) throw new Error(settlementRpcError(error))
+  const raw = (data ?? {}) as RecoveryExportPayload
+  return {
+    cases: Array.isArray(raw.cases) ? raw.cases : [],
+    lines: Array.isArray(raw.lines) ? raw.lines : [],
+    documents: Array.isArray(raw.documents) ? raw.documents : [],
+  }
 }
 
 export async function getBodyshopRecoveryCase(repairCardId: number): Promise<RecoveryCase> {
