@@ -67,20 +67,51 @@ export default function PayrollProcessingTab({
   const depts = useMemo(() => Array.from(new Set(employees.map((e) => e.department?.trim()).filter(Boolean))).sort(), [employees])
   const branches = useMemo(() => Array.from(new Set(employees.map((e) => e.location?.trim()).filter(Boolean))).sort(), [employees])
 
-  const filtered = useMemo(() => entries.filter((entry) => {
+  const aggregateScopedRows = useMemo(() => entries.filter((entry) => {
     const emp = empByCode.get(entry.employee_code.trim().toUpperCase())
     if (!emp) return false
-    if (search && !`${emp.employee_name} ${emp.employee_code}`.toLowerCase().includes(search.toLowerCase())) return false
     if (deptFilter !== 'all' && (emp.department?.trim() ?? '') !== deptFilter) return false
     if (branchFilter !== 'all' && (emp.location?.trim() ?? '') !== branchFilter) return false
     if (salaryTypeFilter !== 'all' && entry.salary_type_snapshot !== salaryTypeFilter) return false
     return true
-  }), [entries, empByCode, search, deptFilter, branchFilter, salaryTypeFilter])
+  }), [entries, empByCode, deptFilter, branchFilter, salaryTypeFilter])
 
-  const totals = useMemo(() => ({
-    net: filtered.reduce((s, e) => s + Number(e.net_payable), 0),
-    gross: filtered.reduce((s, e) => s + Number(e.gross_payout), 0),
-  }), [filtered])
+  const tableRows = useMemo(() => {
+    const term = search.trim().toLowerCase()
+    if (!term) return aggregateScopedRows
+    return aggregateScopedRows.filter((entry) => {
+      const emp = empByCode.get(entry.employee_code.trim().toUpperCase())
+      return Boolean(emp && `${emp.employee_name} ${emp.employee_code}`.toLowerCase().includes(term))
+    })
+  }, [aggregateScopedRows, empByCode, search])
+
+  const totals = useMemo(() => aggregateScopedRows.reduce((acc, e) => {
+    acc.employeeCount += 1
+    acc.gross += Number(e.gross_payout)
+    acc.advance += Number(e.advance_deduction)
+    acc.earnedBase += Number(e.earned_base)
+    acc.saVariable += Number(e.sa_variable_earning)
+    acc.technicianVariable += Number(e.technician_variable_earning)
+    acc.net += Number(e.net_payable)
+    return acc
+  }, {
+    employeeCount: 0,
+    gross: 0,
+    advance: 0,
+    earnedBase: 0,
+    saVariable: 0,
+    technicianVariable: 0,
+    net: 0,
+  }), [aggregateScopedRows])
+
+  const statusBadgeStyle = {
+    padding: '0.2rem 0.5rem',
+    borderRadius: '4px',
+    fontSize: '0.72rem',
+    fontWeight: 700,
+    background: monthStatus === 'finalized' ? '#dcfce7' : '#fef9c3',
+    color: monthStatus === 'finalized' ? '#166534' : '#854d0e',
+  } as const
 
   async function handleRecompute() {
     if (!canModify || monthStatus === 'finalized') return
@@ -157,7 +188,7 @@ export default function PayrollProcessingTab({
       return
     }
     const headers = ['Employee Code', 'Employee Name', 'Net Payable', 'Bank Name', 'Account Number', 'IFSC']
-    const rows = filtered
+    const rows = tableRows
       .filter((e) => Number(e.net_payable) > 0)
       .map((e) => {
         const emp = empByCode.get(e.employee_code.trim().toUpperCase())!
@@ -178,11 +209,7 @@ export default function PayrollProcessingTab({
           <option value="all">All salary types</option>
           <option value="base">Base</option><option value="variable">Variable</option><option value="both">Both</option>
         </select>
-        <span style={{
-          padding: '0.2rem 0.5rem', borderRadius: '4px', fontSize: '0.72rem', fontWeight: 700,
-          background: monthStatus === 'finalized' ? '#dcfce7' : '#fef9c3',
-          color: monthStatus === 'finalized' ? '#166534' : '#854d0e',
-        }}>
+        <span style={statusBadgeStyle}>
           {monthStatus === 'finalized' ? 'FINALIZED' : 'DRAFT'}
         </span>
         <span style={{ flex: 1 }} />
@@ -207,8 +234,41 @@ export default function PayrollProcessingTab({
       {error && <div className="toast error">{error}</div>}
       {message && <div className="toast">{message}</div>}
 
-      <div style={{ marginBottom: '0.5rem', fontSize: '0.78rem', color: '#475569' }}>
-        Gross: {formatCurrency(totals.gross)} · Net: {formatCurrency(totals.net)} · {filtered.length} employees
+      <div className="kpis payroll-kpis">
+        <div className="kpi">
+          <div className="kpi__val">{totals.employeeCount}</div>
+          <div className="kpi__lab">Total Employees</div>
+        </div>
+        <div className="kpi">
+          <div className="kpi__val">{formatCurrency(totals.gross)}</div>
+          <div className="kpi__lab">Total Gross</div>
+        </div>
+        <div className="kpi">
+          <div className="kpi__val">{formatCurrency(totals.advance)}</div>
+          <div className="kpi__lab">Total Advance Deducted</div>
+        </div>
+        <div className="kpi">
+          <div className="kpi__val">
+            <span style={statusBadgeStyle}>{monthStatus === 'finalized' ? 'FINALIZED' : 'DRAFT'}</span>
+          </div>
+          <div className="kpi__lab">Status</div>
+        </div>
+        <div className="kpi">
+          <div className="kpi__val">{formatCurrency(totals.earnedBase)}</div>
+          <div className="kpi__lab">Earned Base Total</div>
+        </div>
+        <div className="kpi">
+          <div className="kpi__val">{formatCurrency(totals.saVariable)}</div>
+          <div className="kpi__lab">SA Variable Total</div>
+        </div>
+        <div className="kpi">
+          <div className="kpi__val">{formatCurrency(totals.technicianVariable)}</div>
+          <div className="kpi__lab">Technician Variable Total</div>
+        </div>
+        <div className="kpi">
+          <div className="kpi__val">{formatCurrency(totals.net)}</div>
+          <div className="kpi__lab">Net Payable Total</div>
+        </div>
       </div>
 
       <div className="payroll-table-scroll">
@@ -220,7 +280,7 @@ export default function PayrollProcessingTab({
             </tr>
           </thead>
           <tbody>
-            {filtered.map((e) => {
+            {tableRows.map((e) => {
               const emp = empByCode.get(e.employee_code.trim().toUpperCase())
               const needsReview = Boolean((e.review_flags as { needsReview?: boolean } | null)?.needsReview)
               return (

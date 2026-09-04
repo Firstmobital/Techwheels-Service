@@ -5861,6 +5861,19 @@ code.k--b { background: var(--accent-soft); color: var(--accent); }
   to { transform: rotate(360deg); }
 }
 
+/* Payroll Processing KPI row: reuse .kpis/.kpi, prevent value overflow */
+.payroll-kpis {
+  margin-bottom: 0.75rem;
+}
+.payroll-kpis .kpi {
+  min-width: 0;
+  padding: 14px;
+}
+.payroll-kpis .kpi__val {
+  font-size: 20px;
+  overflow-wrap: anywhere;
+}
+
 /* Payroll data tables: sticky header + both-axis scroll */
 .payroll-table-scroll {
   max-height: calc(100dvh - var(--nav-h) - 230px);
