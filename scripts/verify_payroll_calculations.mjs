@@ -57,10 +57,15 @@ function buildAdvanceSchedule(input) {
   if (!Number.isFinite(amount) || amount <= 0) return { ok: false, error: 'amount' }
   const issueMonth = parsePayrollMonthInput(input.issueMonth)
   if (!issueMonth) return { ok: false, error: 'month' }
-  const firstDeductionMonth = addPayrollMonths(issueMonth, 1)
   if (input.deductionType === 'lump_sum') {
-    return { ok: true, schedules: [{ payrollMonth: firstDeductionMonth, scheduledAmount: amount }] }
+    const rawPay = String(input.payMonth ?? '').trim()
+    const payMonth = rawPay ? parsePayrollMonthInput(rawPay) : addPayrollMonths(issueMonth, 1)
+    if (rawPay && !parsePayrollMonthInput(rawPay)) return { ok: false, error: 'Invalid pay month (use YYYY-MM)' }
+    if (!payMonth) return { ok: false, error: 'Pay month is required' }
+    if (payMonth < issueMonth) return { ok: false, error: 'Pay month cannot be before issue month' }
+    return { ok: true, schedules: [{ payrollMonth: payMonth, scheduledAmount: amount }] }
   }
+  const firstDeductionMonth = addPayrollMonths(issueMonth, 1)
   if (input.deductionType === 'emi') {
     const n = Number(input.emiMonths)
     if (!Number.isFinite(n) || n < 1 || !Number.isInteger(n)) return { ok: false, error: 'emi' }
@@ -166,8 +171,35 @@ const tests = [
     want: '2026-10-01=10000',
   },
   {
+    name: 'lump default next month when pay month blank',
+    got: scheduleKey(buildAdvanceSchedule({ issueMonth: '2026-09', amount: 10000, deductionType: 'lump_sum', payMonth: '' })),
+    want: '2026-10-01=10000',
+  },
+  {
+    name: 'lump same month Sep 2026',
+    got: scheduleKey(buildAdvanceSchedule({ issueMonth: '2026-09', amount: 10000, deductionType: 'lump_sum', payMonth: '2026-09' })),
+    want: '2026-09-01=10000',
+  },
+  {
+    name: 'lump +3 months Dec 2026',
+    got: scheduleKey(buildAdvanceSchedule({ issueMonth: '2026-09', amount: 10000, deductionType: 'lump_sum', payMonth: '2026-12' })),
+    want: '2026-12-01=10000',
+  },
+  {
+    name: 'lump invalid past month Aug 2026',
+    got: scheduleKey(buildAdvanceSchedule({ issueMonth: '2026-09', amount: 10000, deductionType: 'lump_sum', payMonth: '2026-08' })),
+    want: 'ERR:Pay month cannot be before issue month',
+  },
+  {
     name: 'emi 10000 / 3 issued 2026-09',
     got: scheduleKey(buildAdvanceSchedule({ issueMonth: '2026-09', amount: 10000, deductionType: 'emi', emiMonths: 3 })),
+    want: '2026-10-01=3333.33|2026-11-01=3333.33|2026-12-01=3333.34',
+  },
+  {
+    name: 'emi ignores lump pay month',
+    got: scheduleKey(buildAdvanceSchedule({
+      issueMonth: '2026-09', amount: 10000, deductionType: 'emi', emiMonths: 3, payMonth: '2026-12',
+    })),
     want: '2026-10-01=3333.33|2026-11-01=3333.33|2026-12-01=3333.34',
   },
   {

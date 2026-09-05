@@ -132,6 +132,14 @@ export async function createAdvance(input: {
   const issueDate = parsePayrollMonthInput(input.issueDate)
   if (!issueDate) throw new Error('Invalid issue month')
   if (input.schedules.length === 0) throw new Error('Advance schedule is required')
+  for (const schedule of input.schedules) {
+    const scheduleMonth = parsePayrollMonthInput(schedule.payrollMonth)
+    if (!scheduleMonth) throw new Error('Invalid advance schedule month')
+    const monthState = await fetchPayrollMonth(scheduleMonth)
+    if (monthState?.status === 'finalized') {
+      throw new Error(`Cannot schedule an advance deduction in finalized payroll month ${scheduleMonth.slice(0, 7)}`)
+    }
+  }
   const originalAmount = roundPayrollPaise(Number(input.originalAmount))
   if (!Number.isFinite(originalAmount) || originalAmount <= 0) {
     throw new Error('Advance amount must be greater than 0')

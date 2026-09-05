@@ -358,6 +358,7 @@ export const ADVANCE_IMPORT_HEADERS = [
   'Advance Amount',
   'Issue Month',
   'Deduction Method',
+  'Pay Month',
   'EMI Months',
   'Custom Amounts',
   'Notes',
@@ -400,6 +401,7 @@ function isBlankAdvanceImportRow(row: Record<string, string>): boolean {
     row.issued_month,
     row.deduction_method,
     row.deduction_type,
+    row.pay_month,
     row.custom_amounts,
     row.custom_schedule,
     row.notes,
@@ -411,6 +413,7 @@ function advanceImportDuplicateKey(input: {
   amount: number
   issueMonth: string
   deductionType: string
+  payMonth: string
   emiMonths: string
   customAmounts: string
 }): string {
@@ -419,6 +422,7 @@ function advanceImportDuplicateKey(input: {
     String(input.amount),
     input.issueMonth,
     input.deductionType,
+    input.payMonth,
     input.emiMonths,
     input.customAmounts,
   ].join('|')
@@ -447,6 +451,7 @@ export function previewAdvanceImport(
     const issueMonth = parsePayrollMonthInput(issueRaw)
     const methodRaw = row.deduction_method ?? row.deduction_type ?? row.method ?? ''
     const deductionType = normalizeDeductionMethod(methodRaw)
+    const payRaw = String(row.pay_month ?? row.paymonth ?? '').trim()
     const emiMonthsRaw = String(row.emi_months ?? row.n_months ?? row.months ?? '').trim()
     const customText = String(row.custom_amounts ?? row.custom_schedule ?? row.custom ?? '').trim()
     const notes = String(row.notes ?? '').trim() || null
@@ -487,6 +492,7 @@ export function previewAdvanceImport(
       amount,
       issueMonth,
       deductionType,
+      payMonth: deductionType === 'lump_sum' ? payRaw : '',
       emiMonths: deductionType === 'emi' ? emiMonthsRaw : '',
       customAmounts: deductionType === 'custom' ? customText : '',
     })
@@ -501,6 +507,7 @@ export function previewAdvanceImport(
       issueMonth,
       amount,
       deductionType,
+      payMonth: deductionType === 'lump_sum' ? payRaw : undefined,
       emiMonths: deductionType === 'emi' ? Number(emiMonthsRaw) : undefined,
       customText: deductionType === 'custom' ? customText : undefined,
     })

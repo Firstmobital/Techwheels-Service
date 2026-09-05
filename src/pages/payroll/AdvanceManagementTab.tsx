@@ -6,6 +6,7 @@ import {
   advanceLedgerDisplayStatus,
   advanceProgressPercent,
   buildAdvanceSchedule,
+  defaultLumpPayMonth,
   formatAdvanceMonthLabel,
   type AdvanceLedgerDisplayStatus,
 } from '../../lib/payroll/advanceSchedule'
@@ -43,11 +44,13 @@ const STATUS_BADGE: Record<AdvanceLedgerDisplayStatus, string> = {
 }
 
 function emptyForm(payrollMonth: string) {
+  const issueMonth = payrollMonth.slice(0, 7)
   return {
     employeeCode: '',
     employeeSearch: '',
     originalAmount: '',
-    issueMonth: payrollMonth.slice(0, 7),
+    issueMonth,
+    payMonth: defaultLumpPayMonth(issueMonth),
     deductionType: 'lump_sum' as AdvanceDeductionType,
     emiMonths: '3',
     customAmounts: '',
@@ -137,10 +140,11 @@ export default function AdvanceManagementTab({ canModify, payrollMonth }: Props)
       issueMonth: form.issueMonth,
       amount,
       deductionType: form.deductionType,
+      payMonth: form.deductionType === 'lump_sum' ? form.payMonth : undefined,
       emiMonths: form.deductionType === 'emi' ? Number(form.emiMonths) : undefined,
       customText: form.deductionType === 'custom' ? form.customAmounts : undefined,
     })
-  }, [form.originalAmount, form.issueMonth, form.deductionType, form.emiMonths, form.customAmounts])
+  }, [form.originalAmount, form.issueMonth, form.payMonth, form.deductionType, form.emiMonths, form.customAmounts])
 
   const visibleAdvances = useMemo(() => {
     if (ledgerFilter === 'all') return advances
@@ -249,9 +253,10 @@ export default function AdvanceManagementTab({ canModify, payrollMonth }: Props)
       'Advance Import',
       [...ADVANCE_IMPORT_HEADERS],
       [
-        ['', '10000', '2026-09', 'LUMP', '', '', ''],
-        ['', '10000', '2026-09', 'EMI', '3', '', ''],
-        ['', '15000', '2026-09', 'CUSTOM', '', '5000,7000,3000', ''],
+        ['', '10000', '2026-09', 'LUMP', '', '', '', ''],
+        ['', '10000', '2026-09', 'LUMP', '2026-12', '', '', ''],
+        ['', '10000', '2026-09', 'EMI', '', '3', '', ''],
+        ['', '15000', '2026-09', 'CUSTOM', '', '', '5000,7000,3000', ''],
       ],
       'Payroll_Advance_Import_Template.xlsx',
     )
@@ -386,7 +391,18 @@ export default function AdvanceManagementTab({ canModify, payrollMonth }: Props)
                   id="advance-issue-month"
                   type="month"
                   value={form.issueMonth}
-                  onChange={(event) => setForm((prev) => ({ ...prev, issueMonth: event.target.value }))}
+                  onChange={(event) => {
+                    const nextIssue = event.target.value
+                    setForm((prev) => {
+                      const prevDefault = defaultLumpPayMonth(prev.issueMonth)
+                      const keepManual = Boolean(prev.payMonth) && prev.payMonth !== prevDefault
+                      return {
+                        ...prev,
+                        issueMonth: nextIssue,
+                        payMonth: keepManual ? prev.payMonth : defaultLumpPayMonth(nextIssue),
+                      }
+                    })
+                  }}
                 />
               </div>
 
@@ -394,7 +410,7 @@ export default function AdvanceManagementTab({ canModify, payrollMonth }: Props)
                 <label>Deduction method</label>
                 <div className="payroll-advance-methods">
                   {([
-                    ['lump_sum', 'Lump Sum — full amount deducted next salary'],
+                    ['lump_sum', 'Lump Sum — full amount deducted in the selected Pay Month'],
                     ['emi', 'Equal EMI — split over N months'],
                     ['custom', 'Custom — comma-separated monthly amounts'],
                   ] as const).map(([value, label]) => (
@@ -403,13 +419,32 @@ export default function AdvanceManagementTab({ canModify, payrollMonth }: Props)
                         type="radio"
                         name="advance-deduction-type"
                         checked={form.deductionType === value}
-                        onChange={() => setForm((prev) => ({ ...prev, deductionType: value }))}
+                        onChange={() => setForm((prev) => ({
+                          ...prev,
+                          deductionType: value,
+                          payMonth: value === 'lump_sum' && !prev.payMonth
+                            ? defaultLumpPayMonth(prev.issueMonth)
+                            : prev.payMonth,
+                        }))}
                       />
                       {label}
                     </label>
                   ))}
                 </div>
               </div>
+
+              {form.deductionType === 'lump_sum' && (
+                <div className="payroll-add-field">
+                  <label htmlFor="advance-pay-month">Pay month</label>
+                  <input
+                    id="advance-pay-month"
+                    type="month"
+                    value={form.payMonth}
+                    onChange={(event) => setForm((prev) => ({ ...prev, payMonth: event.target.value }))}
+                  />
+                  <p className="payroll-add-hint">Defaults to the month after Issue Month. Same month and later months are allowed.</p>
+                </div>
+              )}
 
               {form.deductionType === 'emi' && (
                 <div className="payroll-add-field">
@@ -460,7 +495,11 @@ export default function AdvanceManagementTab({ canModify, payrollMonth }: Props)
 
           <div className="payroll-advance-preview">
             <h3>Live deduction preview</h3>
-            <p className="payroll-add-hint">Repayment starts the month after Issue Month. Nothing is saved until you confirm.</p>
+            <p className="payroll-add-hint">
+              {form.deductionType === 'lump_sum'
+                ? 'Lump Sum is deducted entirely in the selected Pay Month. Nothing is saved until you confirm.'
+                : 'EMI and Custom repayment start the month after Issue Month. Nothing is saved until you confirm.'}
+            </p>
             {scheduleResult.ok ? (
               <table className="table" style={{ fontSize: '0.78rem', marginTop: '0.5rem' }}>
                 <thead>
@@ -491,7 +530,7 @@ export default function AdvanceManagementTab({ canModify, payrollMonth }: Props)
           <div style={{ fontSize: '0.78rem', margin: '0.35rem 0' }}>
             Total: {importPreview.totalRows} · Valid: {importPreview.valid} · Rejected: {importPreview.rejected}
           </div>
-          <p className="payroll-add-hint">Issue Month YYYY-MM. Deduction Method: LUMP, EMI, or CUSTOM. Employee Code is required.</p>
+          <p className="payroll-add-hint">Issue Month YYYY-MM. Deduction Method: LUMP, EMI, or CUSTOM. Pay Month is optional for LUMP (blank = Issue Month + 1) and ignored for EMI/CUSTOM.</p>
           <div style={{ maxHeight: '180px', overflow: 'auto', fontSize: '0.75rem' }}>
             {importPreview.rows.filter((row) => row.status === 'rejected').slice(0, 30).map((row) => (
               <div key={row.rowNumber}>{row.rowNumber}: {row.employeeCode || '—'} — {row.status}: {row.message}</div>
@@ -566,6 +605,9 @@ export default function AdvanceManagementTab({ canModify, payrollMonth }: Props)
                 recoveredAmount: recovered,
               })
               const progress = advanceProgressPercent(recovered, original)
+              const lumpPayMonth = advance.deduction_type === 'lump_sum'
+                ? (schedulesByAdvance.get(advance.id) ?? [])[0]?.payroll_month
+                : null
               return (
                 <Fragment key={advance.id}>
                   <tr>
@@ -573,7 +615,12 @@ export default function AdvanceManagementTab({ canModify, payrollMonth }: Props)
                       <div>{code} — {employee?.employee_name ?? ''}</div>
                       <div style={{ fontSize: '0.7rem', color: '#64748b' }}>{employee?.role ?? '—'}</div>
                     </td>
-                    <td>{formatAdvanceMonthLabel(advance.issue_date)}</td>
+                    <td>
+                      <div>{formatAdvanceMonthLabel(advance.issue_date)}</div>
+                      {lumpPayMonth && (
+                        <div style={{ fontSize: '0.7rem', color: '#64748b' }}>Pay {formatAdvanceMonthLabel(lumpPayMonth)}</div>
+                      )}
+                    </td>
                     <td>{formatPayrollMoney(original)}</td>
                     <td>{formatPayrollMoney(recovered)}</td>
                     <td>{formatPayrollMoney(balance)}</td>

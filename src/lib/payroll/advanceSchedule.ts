@@ -12,6 +12,8 @@ export interface BuildAdvanceScheduleInput {
   deductionType: AdvanceDeductionType
   emiMonths?: number
   customText?: string
+  /** Lump Sum only. Blank defaults to issue month + 1. Ignored for EMI / Custom. */
+  payMonth?: string
 }
 
 export type BuildAdvanceScheduleResult =
@@ -29,6 +31,12 @@ export const ADVANCE_LEDGER_STATUS_LABELS: Record<AdvanceLedgerDisplayStatus, st
 
 export function roundPayrollPaise(value: number): number {
   return Math.round(value * 100) / 100
+}
+
+/** YYYY-MM value for the default Lump Sum pay month (issue + 1). */
+export function defaultLumpPayMonth(issueMonth: string): string {
+  const next = addPayrollMonths(issueMonth, 1)
+  return next ? next.slice(0, 7) : ''
 }
 
 export function addPayrollMonths(monthStart: string, offset: number): string | null {
@@ -90,13 +98,24 @@ export function buildAdvanceSchedule(input: BuildAdvanceScheduleInput): BuildAdv
     return { ok: false, error: 'Issue month is required' }
   }
 
+  if (input.deductionType === 'lump_sum') {
+    const rawPay = String(input.payMonth ?? '').trim()
+    const payMonth = rawPay ? parsePayrollMonthInput(rawPay) : addPayrollMonths(issueMonth, 1)
+    if (rawPay && !parsePayrollMonthInput(rawPay)) {
+      return { ok: false, error: 'Invalid pay month (use YYYY-MM)' }
+    }
+    if (!payMonth) {
+      return { ok: false, error: 'Pay month is required' }
+    }
+    if (payMonth < issueMonth) {
+      return { ok: false, error: 'Pay month cannot be before issue month' }
+    }
+    return { ok: true, schedules: [{ payrollMonth: payMonth, scheduledAmount: amount }] }
+  }
+
   const firstDeductionMonth = addPayrollMonths(issueMonth, 1)
   if (!firstDeductionMonth) {
     return { ok: false, error: 'Could not calculate deduction start month' }
-  }
-
-  if (input.deductionType === 'lump_sum') {
-    return { ok: true, schedules: [{ payrollMonth: firstDeductionMonth, scheduledAmount: amount }] }
   }
 
   if (input.deductionType === 'emi') {
