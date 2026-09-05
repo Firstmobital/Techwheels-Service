@@ -17,6 +17,7 @@ import {
   buildEarnedBaseBankPayoutRows,
   exportWorkbookWithTextAccounts,
 } from '../../lib/payroll/excelUtils'
+import { fetchMonthlyBodyshopStakeholderEarnings, type BodyshopStakeholderEarnings } from '../../lib/bodyshopMonthlyEarnings'
 import { SALARY_TYPE_LABELS, type PayrollEntry } from '../../lib/payroll/types'
 import { supabase } from '../../lib/supabase'
 
@@ -43,19 +44,22 @@ export default function PayrollProcessingTab({
   const [message, setMessage] = useState<string | null>(null)
   const [unlockReason, setUnlockReason] = useState('')
   const [adjForm, setAdjForm] = useState<{ entryId: number; type: 'addition' | 'deduction'; amount: string; reason: string } | null>(null)
+  const [bodyshopStakeholder, setBodyshopStakeholder] = useState<BodyshopStakeholderEarnings | null>(null)
 
   const reload = useCallback(async () => {
     setLoading(true)
     setError(null)
     try {
-      const [ents, emps, monthState] = await Promise.all([
+      const [ents, emps, monthState, stakeholder] = await Promise.all([
         fetchPayrollEntries(payrollMonth),
         fetchPayrollEmployees(),
         fetchPayrollMonth(payrollMonth),
+        fetchMonthlyBodyshopStakeholderEarnings(payrollMonth),
       ])
       setEntries(ents)
       setEmployees(emps)
       setMonthStatus(monthState?.status ?? 'draft')
+      setBodyshopStakeholder(stakeholder)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Load failed')
     } finally {
@@ -113,7 +117,6 @@ export default function PayrollProcessingTab({
     acc.earnedBase += Number(e.earned_base)
     acc.saVariable += Number(e.sa_variable_earning)
     acc.technicianVariable += Number(e.technician_variable_earning)
-    acc.bodyshopVariable += Number(e.bodyshop_variable_earning ?? 0)
     acc.net += Number(e.net_payable)
     return acc
   }, {
@@ -123,9 +126,19 @@ export default function PayrollProcessingTab({
     earnedBase: 0,
     saVariable: 0,
     technicianVariable: 0,
-    bodyshopVariable: 0,
     net: 0,
   }), [aggregateScopedRows])
+
+  const payableBodyshopTotal = useMemo(
+    () => entries.reduce((sum, entry) => sum + Number(entry.bodyshop_variable_earning ?? 0), 0),
+    [entries],
+  )
+  const bodyshopTrackerTotal = bodyshopStakeholder?.totalBodyshopEarning ?? 0
+  const bodyshopUnmapped = bodyshopStakeholder?.unmappedBodyshopEarning ?? 0
+  const showBodyshopReconcile = Boolean(
+    bodyshopStakeholder
+    && (bodyshopUnmapped > 0 || Math.abs(bodyshopTrackerTotal - payableBodyshopTotal) > 0.009),
+  )
 
   const statusBadgeStyle = {
     padding: '0.2rem 0.5rem',
@@ -305,10 +318,14 @@ export default function PayrollProcessingTab({
           <div className="kpi__lab">Total Advance Deducted</div>
         </div>
         <div className="kpi">
-          <div className="kpi__val">
-            <span style={statusBadgeStyle}>{monthStatus === 'finalized' ? 'FINALIZED' : 'DRAFT'}</span>
-          </div>
-          <div className="kpi__lab">Status</div>
+          <div className="kpi__val">{formatCurrency(bodyshopTrackerTotal)}</div>
+          <div className="kpi__lab">Bodyshop Variable Total</div>
+          {showBodyshopReconcile && (
+            <div className="kpi__hint">
+              Payable in payroll {formatCurrency(payableBodyshopTotal)}
+              {bodyshopUnmapped > 0 ? ` · Unmapped ${formatCurrency(bodyshopUnmapped)}` : ''}
+            </div>
+          )}
         </div>
         <div className="kpi kpi--earned-base-export">
           <div className="kpi__val">{formatCurrency(totals.earnedBase)}</div>
@@ -324,10 +341,6 @@ export default function PayrollProcessingTab({
         <div className="kpi">
           <div className="kpi__val">{formatCurrency(totals.technicianVariable)}</div>
           <div className="kpi__lab">Technician Variable Total</div>
-        </div>
-        <div className="kpi">
-          <div className="kpi__val">{formatCurrency(totals.bodyshopVariable)}</div>
-          <div className="kpi__lab">Bodyshop Variable Total</div>
         </div>
         <div className="kpi">
           <div className="kpi__val">{formatCurrency(totals.net)}</div>

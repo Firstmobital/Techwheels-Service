@@ -1,4 +1,4 @@
-/** Monthly Bodyshop earnings by employee_code — same rules as /bodyshop-tracker. */
+/** Monthly Bodyshop earnings — same rules as /bodyshop-tracker. */
 
 import { supabase } from './supabase'
 import {
@@ -17,6 +17,13 @@ import { calculateSAIncome, normalizeEmployeeCode, parseAmount } from './payroll
 
 const QUERY_PAGE_SIZE = 1000
 const ASSIGNMENT_BATCH_SIZE = 100
+
+export type BodyshopStakeholderRole = BodyshopRole | 'SA'
+
+export const BODYSHOP_STAKEHOLDER_ROLES: BodyshopStakeholderRole[] = [
+  'SA',
+  ...ALL_BODYSHOP_ROLES,
+]
 
 const BODYSHOP_ASSIGNMENT_SELECT = [
   'job_card_number',
@@ -37,14 +44,49 @@ type AccidentClosedRow = {
   dms_final_labour_amount: unknown
 }
 
-type BodyshopSharePercents = Record<BodyshopRole | 'SA', number>
+type BodyshopSharePercents = Record<BodyshopStakeholderRole, number>
+
+export interface BodyshopEmployeeComponent {
+  role: BodyshopStakeholderRole
+  kind: 'primary' | 'support'
+  amount: number
+}
+
+export interface BodyshopStakeholderEarnings {
+  earningsByEmployeeCode: Map<string, number>
+  componentsByEmployeeCode: Map<string, BodyshopEmployeeComponent[]>
+  byRole: Record<BodyshopStakeholderRole, number>
+  supportEarning: number
+  mappedBodyshopEarning: number
+  unmappedBodyshopEarning: number
+  totalBodyshopEarning: number
+}
+
+function emptyRoleTotals(): Record<BodyshopStakeholderRole, number> {
+  return {
+    SA: 0,
+    FLOOR_INCHARGE: 0,
+    DENTOR: 0,
+    DENTOR_HELPER: 0,
+    PAINTER: 0,
+    PAINTER_HELPER: 0,
+    TECHNICIAN: 0,
+    RUBBING: 0,
+    EDP: 0,
+    PARTS_INCHARGE: 0,
+  }
+}
+
+function roundPaise(value: number): number {
+  return Math.round(value * 100) / 100
+}
 
 async function fetchBodyshopSharePercents(): Promise<BodyshopSharePercents> {
   const percents: BodyshopSharePercents = { ...DEFAULT_BODYSHOP_SHARE_PERCENTS }
   const res = await supabase.from('bodyshop_role_earning_settings').select('role, percentage')
   if (res.error) throw new Error(res.error.message)
   ;(res.data ?? []).forEach((row) => {
-    const role = String((row as { role?: string }).role ?? '').trim().toUpperCase() as BodyshopRole | 'SA'
+    const role = String((row as { role?: string }).role ?? '').trim().toUpperCase() as BodyshopStakeholderRole
     if (!(role in percents)) return
     const n = Number((row as { percentage?: unknown }).percentage)
     if (!Number.isFinite(n)) return
@@ -101,16 +143,25 @@ async function fetchAssignmentsForJcNumbers(jcNumbers: string[]): Promise<{
   return { bsRows, supportRows }
 }
 
-function addEarning(totals: Map<string, number>, rawCode: string | null | undefined, amount: number) {
-  const code = normalizeEmployeeCode(rawCode)
-  if (!code || !Number.isFinite(amount) || amount === 0) return
-  totals.set(code, (totals.get(code) ?? 0) + amount)
+function addComponent(
+  components: Map<string, BodyshopEmployeeComponent[]>,
+  code: string,
+  role: BodyshopStakeholderRole,
+  kind: 'primary' | 'support',
+  amount: number,
+) {
+  const list = components.get(code) ?? []
+  list.push({ role, kind, amount })
+  components.set(code, list)
 }
 
-/** Accident closed_date_time IST month → employee_code totals. Mirrors Bodyshop Tracker email aggregate. */
-export async function fetchMonthlyBodyshopEarningsByCode(
+/**
+ * Authoritative monthly Bodyshop Tracker stakeholder earnings.
+ * totalBodyshopEarning includes legitimate income with no employee_code (unmapped).
+ */
+export async function fetchMonthlyBodyshopStakeholderEarnings(
   payrollMonth: string,
-): Promise<Map<string, number>> {
+): Promise<BodyshopStakeholderEarnings> {
   const sharePct = await fetchBodyshopSharePercents()
   const accidentJCs = await fetchAccidentClosedByClosedDate(payrollMonth)
   const jcNumbers = Array.from(new Set(accidentJCs.map((r) => r.job_card_number).filter(Boolean)))
@@ -122,11 +173,33 @@ export async function fetchMonthlyBodyshopEarningsByCode(
     if (row.job_card_number) accidentJCMap.set(row.job_card_number, row)
   })
 
-  const totals = new Map<string, number>()
+  const earningsByEmployeeCode = new Map<string, number>()
+  const componentsByEmployeeCode = new Map<string, BodyshopEmployeeComponent[]>()
+  const byRole = emptyRoleTotals()
+  let supportEarning = 0
+  let unmappedBodyshopEarning = 0
+
+  const addStakeholder = (
+    rawCode: string | null | undefined,
+    amount: number,
+    role: BodyshopStakeholderRole,
+    kind: 'primary' | 'support',
+  ) => {
+    if (!Number.isFinite(amount) || amount === 0) return
+    byRole[role] += amount
+    if (kind === 'support') supportEarning += amount
+    const code = normalizeEmployeeCode(rawCode)
+    if (!code) {
+      unmappedBodyshopEarning += amount
+      return
+    }
+    earningsByEmployeeCode.set(code, (earningsByEmployeeCode.get(code) ?? 0) + amount)
+    addComponent(componentsByEmployeeCode, code, role, kind, amount)
+  }
 
   accidentJCs.forEach((row) => {
     const dmsLabour = parseAmount(row.dms_final_labour_amount)
-    addEarning(totals, row.employee_code, calculateSAIncome(dmsLabour, sharePct.SA))
+    addStakeholder(row.employee_code, calculateSAIncome(dmsLabour, sharePct.SA), 'SA', 'primary')
   })
 
   for (const bsRow of bsRows) {
@@ -139,16 +212,46 @@ export async function fetchMonthlyBodyshopEarningsByCode(
       if (!incomeMeta) continue
 
       const primary = getRolePrimaryFields(bsRow, role)
-      addEarning(totals, primary.employee_code, incomeMeta.technician_income)
+      addStakeholder(primary.employee_code, incomeMeta.technician_income, role, 'primary')
 
       const primaryCode = normalizeEmployeeCode(primary.employee_code)
       getActiveSupportForRole(supportByJcRole, bsRow.job_card_number, role).forEach((supportRow) => {
         const supportCode = normalizeEmployeeCode(supportRow.employee_code)
         if (!supportCode || supportCode === primaryCode) return
-        addEarning(totals, supportCode, incomeMeta.technician_income)
+        addStakeholder(supportCode, incomeMeta.technician_income, role, 'support')
       })
     }
   }
 
-  return totals
+  let mappedBodyshopEarning = 0
+  earningsByEmployeeCode.forEach((amount, code) => {
+    const rounded = roundPaise(amount)
+    earningsByEmployeeCode.set(code, rounded)
+    mappedBodyshopEarning += rounded
+  })
+  BODYSHOP_STAKEHOLDER_ROLES.forEach((role) => {
+    byRole[role] = roundPaise(byRole[role])
+  })
+  supportEarning = roundPaise(supportEarning)
+  unmappedBodyshopEarning = roundPaise(unmappedBodyshopEarning)
+  mappedBodyshopEarning = roundPaise(mappedBodyshopEarning)
+  const totalBodyshopEarning = roundPaise(mappedBodyshopEarning + unmappedBodyshopEarning)
+
+  return {
+    earningsByEmployeeCode,
+    componentsByEmployeeCode,
+    byRole,
+    supportEarning,
+    mappedBodyshopEarning,
+    unmappedBodyshopEarning,
+    totalBodyshopEarning,
+  }
+}
+
+/** Per-employee map used by payroll recompute. Does not include unmapped stakeholder income. */
+export async function fetchMonthlyBodyshopEarningsByCode(
+  payrollMonth: string,
+): Promise<Map<string, number>> {
+  const result = await fetchMonthlyBodyshopStakeholderEarnings(payrollMonth)
+  return result.earningsByEmployeeCode
 }
