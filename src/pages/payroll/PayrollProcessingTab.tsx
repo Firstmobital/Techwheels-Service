@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
 import {
   addPayrollAdjustment,
   fetchPayrollEmployees,
@@ -11,15 +11,42 @@ import {
 import { formatCurrency } from '../../lib/payroll/calculations'
 import { resolvePayrollEntryIdentity } from '../../lib/payroll/entryIdentity'
 import {
-  EARNED_BASE_BANK_PAYOUT_HEADERS,
-  EARNED_BASE_BANK_PAYOUT_TEXT_COLUMNS,
   bankBaseSalaryFilename,
-  buildEarnedBaseBankPayoutRows,
+  exportPayrollBankCsv,
   exportWorkbookWithTextAccounts,
+  isEligibleEarnedBaseBankPayoutRow,
+  payrollCardExportFilename,
 } from '../../lib/payroll/excelUtils'
 import { fetchMonthlyBodyshopStakeholderEarnings, type BodyshopStakeholderEarnings } from '../../lib/bodyshopMonthlyEarnings'
 import { SALARY_TYPE_LABELS, type PayrollEntry } from '../../lib/payroll/types'
 import { supabase } from '../../lib/supabase'
+
+function PayrollSummaryCard({
+  value,
+  label,
+  onExport,
+  hint,
+}: {
+  value: ReactNode
+  label: string
+  onExport: () => void
+  hint?: ReactNode
+}) {
+  return (
+    <div className="kpi">
+      <div className="payroll-kpi__top">
+        <div className="payroll-kpi__copy">
+          <div className="kpi__val">{value}</div>
+          <div className="kpi__lab">{label}</div>
+        </div>
+        <button type="button" className="btn btn--ghost btn--sm" onClick={onExport}>
+          Export
+        </button>
+      </div>
+      {hint}
+    </div>
+  )
+}
 
 interface Props {
   payrollMonth: string
@@ -240,31 +267,43 @@ export default function PayrollProcessingTab({
     exportWorkbookWithTextAccounts('Bank Payout', headers, rows, `Payroll_Bank_Payout_${monthInput}.xlsx`, [4])
   }
 
-  function exportEarnedBaseBankPayout() {
-    try {
-      const rows = buildEarnedBaseBankPayoutRows(
-        aggregateScopedRows.map((entry) => {
-          const identity = identityByCode.get(entry.employee_code.trim().toUpperCase())
-          return {
-            employeeName: identity?.employeeName ?? entry.employee_code,
-            bankName: identity?.bankName ?? '',
-            accountNumber: identity?.accountNumber ?? '',
-            ifsc: identity?.ifsc ?? '',
-            netPayable: Number(entry.net_payable),
-            salaryType: entry.salary_type_snapshot,
-          }
-        }),
-      )
-      exportWorkbookWithTextAccounts(
-        'Bank Payout',
-        [...EARNED_BASE_BANK_PAYOUT_HEADERS],
-        rows,
-        bankBaseSalaryFilename(monthInput),
-        EARNED_BASE_BANK_PAYOUT_TEXT_COLUMNS,
-      )
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Earned base export failed')
+  function resolveBankPayee(entry: PayrollEntry) {
+    const identity = identityByCode.get(entry.employee_code.trim().toUpperCase())
+    return {
+      employeeName: identity?.employeeName ?? entry.employee_code,
+      bankName: identity?.bankName ?? '',
+      accountNumber: identity?.accountNumber ?? '',
+      ifsc: identity?.ifsc ?? '',
     }
+  }
+
+  function exportCardBankCsv(
+    amountSelector: (entry: PayrollEntry) => number,
+    filename: string,
+    rowPredicate?: (entry: PayrollEntry) => boolean,
+  ) {
+    try {
+      exportPayrollBankCsv({
+        entries: aggregateScopedRows,
+        amountSelector,
+        rowPredicate,
+        filename,
+        resolvePayee: resolveBankPayee,
+      })
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Export failed')
+    }
+  }
+
+  function exportEarnedBaseBankPayout() {
+    exportCardBankCsv(
+      (entry) => Number(entry.net_payable),
+      bankBaseSalaryFilename(monthInput),
+      (entry) => isEligibleEarnedBaseBankPayoutRow({
+        salaryType: entry.salary_type_snapshot,
+        netPayable: entry.net_payable,
+      }),
+    )
   }
 
   return (
@@ -305,47 +344,73 @@ export default function PayrollProcessingTab({
       {message && <div className="toast">{message}</div>}
 
       <div className="kpis payroll-kpis">
-        <div className="kpi">
-          <div className="kpi__val">{totals.employeeCount}</div>
-          <div className="kpi__lab">Total Employees</div>
-        </div>
-        <div className="kpi">
-          <div className="kpi__val">{formatCurrency(totals.gross)}</div>
-          <div className="kpi__lab">Total Gross</div>
-        </div>
-        <div className="kpi">
-          <div className="kpi__val">{formatCurrency(totals.advance)}</div>
-          <div className="kpi__lab">Total Advance Deducted</div>
-        </div>
-        <div className="kpi">
-          <div className="kpi__val">{formatCurrency(bodyshopTrackerTotal)}</div>
-          <div className="kpi__lab">Bodyshop Variable Total</div>
-          {showBodyshopReconcile && (
+        <PayrollSummaryCard
+          value={totals.employeeCount}
+          label="Total Employees"
+          onExport={() => exportCardBankCsv(
+            (entry) => Number(entry.net_payable),
+            payrollCardExportFilename('total-employees', monthInput),
+          )}
+        />
+        <PayrollSummaryCard
+          value={formatCurrency(totals.gross)}
+          label="Total Gross"
+          onExport={() => exportCardBankCsv(
+            (entry) => Number(entry.gross_payout),
+            payrollCardExportFilename('total-gross', monthInput),
+          )}
+        />
+        <PayrollSummaryCard
+          value={formatCurrency(totals.advance)}
+          label="Total Advance Deducted"
+          onExport={() => exportCardBankCsv(
+            (entry) => Number(entry.advance_deduction),
+            payrollCardExportFilename('advance-deducted', monthInput),
+          )}
+        />
+        <PayrollSummaryCard
+          value={formatCurrency(bodyshopTrackerTotal)}
+          label="Bodyshop Variable Total"
+          onExport={() => exportCardBankCsv(
+            (entry) => Number(entry.bodyshop_variable_earning ?? 0),
+            payrollCardExportFilename('bodyshop-variable', monthInput),
+          )}
+          hint={showBodyshopReconcile ? (
             <div className="kpi__hint">
               Payable in payroll {formatCurrency(payableBodyshopTotal)}
               {bodyshopUnmapped > 0 ? ` · Unmapped ${formatCurrency(bodyshopUnmapped)}` : ''}
             </div>
+          ) : undefined}
+        />
+        <PayrollSummaryCard
+          value={formatCurrency(totals.earnedBase)}
+          label="Earned Base Total"
+          onExport={exportEarnedBaseBankPayout}
+        />
+        <PayrollSummaryCard
+          value={formatCurrency(totals.saVariable)}
+          label="SA Variable Total"
+          onExport={() => exportCardBankCsv(
+            (entry) => Number(entry.sa_variable_earning),
+            payrollCardExportFilename('sa-variable', monthInput),
           )}
-        </div>
-        <div className="kpi kpi--earned-base-export">
-          <div className="kpi__val">{formatCurrency(totals.earnedBase)}</div>
-          <div className="kpi__lab">Earned Base Total</div>
-          <button type="button" className="btn btn--ghost btn--sm" onClick={exportEarnedBaseBankPayout}>
-            Export
-          </button>
-        </div>
-        <div className="kpi">
-          <div className="kpi__val">{formatCurrency(totals.saVariable)}</div>
-          <div className="kpi__lab">SA Variable Total</div>
-        </div>
-        <div className="kpi">
-          <div className="kpi__val">{formatCurrency(totals.technicianVariable)}</div>
-          <div className="kpi__lab">Technician Variable Total</div>
-        </div>
-        <div className="kpi">
-          <div className="kpi__val">{formatCurrency(totals.net)}</div>
-          <div className="kpi__lab">Net Payable Total</div>
-        </div>
+        />
+        <PayrollSummaryCard
+          value={formatCurrency(totals.technicianVariable)}
+          label="Technician Variable Total"
+          onExport={() => exportCardBankCsv(
+            (entry) => Number(entry.technician_variable_earning),
+            payrollCardExportFilename('technician-variable', monthInput),
+          )}
+        />
+        <PayrollSummaryCard
+          value={formatCurrency(totals.net)}
+          label="Net Payable Total"
+          onExport={() => exportCardBankCsv(
+            (entry) => Number(entry.net_payable),
+            payrollCardExportFilename('net-payable', monthInput),
+          )}
+        />
       </div>
 
       <div className="payroll-table-scroll">

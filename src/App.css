@@ -6174,15 +6174,25 @@ tr.brx-recov-row--mismatch td:first-child {
   min-width: 0;
   padding: 14px;
 }
-.payroll-kpis .kpi__val {
-  font-size: 20px;
-  overflow-wrap: anywhere;
+.payroll-kpis .payroll-kpi__top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 0.5rem;
 }
-.payroll-kpis .kpi--earned-base-export .btn {
-  margin-top: 0.4rem;
+.payroll-kpis .payroll-kpi__copy {
+  min-width: 0;
+  flex: 1;
+}
+.payroll-kpis .payroll-kpi__top .btn {
+  flex-shrink: 0;
   height: 26px;
   padding: 0 8px;
   font-size: 11px;
+}
+.payroll-kpis .kpi__val {
+  font-size: 20px;
+  overflow-wrap: anywhere;
 }
 .payroll-kpis .kpi__hint {
   margin-top: 0.35rem;

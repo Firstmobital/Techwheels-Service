@@ -80,13 +80,59 @@ export function isSbiBank(bank: SbiBankInput | undefined): boolean {
   return bankName.includes('STATE BANK OF INDIA') || bankName === 'SBI' || ifsc.startsWith('SBIN')
 }
 
-export type EarnedBaseBankPayoutInput = {
+export type PayrollBankPayee = {
   employeeName: string
   bankName?: string | null
   accountNumber?: string | null
   ifsc?: string | null
+}
+
+export type PayrollBankPayoutInput = PayrollBankPayee & {
+  amount: number
+}
+
+export type EarnedBaseBankPayoutInput = PayrollBankPayee & {
   netPayable: number
   salaryType: SalaryType
+}
+
+function formatPayrollBankPayoutRow(
+  row: PayrollBankPayee & { amount: number },
+  index: number,
+): Array<string | number> {
+  return [
+    '300971',
+    'FIRST MOBITAL PRIVATE LIMITED',
+    EARNED_BASE_COMPANY_ACCOUNT,
+    isSbiBank({ bankName: row.bankName, ifsc: row.ifsc }) ? 'DCR' : 'NEFT',
+    row.employeeName,
+    String(row.accountNumber ?? '').trim(),
+    String(row.ifsc ?? '').trim().toUpperCase(),
+    row.amount,
+    `SALARY${index + 1}`,
+    'INR',
+    'JAIPUR',
+    'SHRUTI@INDIRASWITCH.COM',
+    'E',
+  ]
+}
+
+/** Shared bank-payout row builder. Amount <= 0 is never exported. */
+export function buildPayrollBankPayoutRows(
+  rows: PayrollBankPayoutInput[],
+): Array<Array<string | number>> {
+  return rows
+    .filter((row) => {
+      const amount = Number(row.amount)
+      return Number.isFinite(amount) && amount > 0
+    })
+    .map((row, index) => formatPayrollBankPayoutRow({
+      employeeName: row.employeeName,
+      bankName: row.bankName,
+      accountNumber: row.accountNumber,
+      ifsc: row.ifsc,
+      amount: Number(row.amount),
+    }, index))
 }
 
 /** Base Salary payout only. Do not use salaryTypeIncludesBase. */
@@ -101,26 +147,41 @@ export function isEligibleEarnedBaseBankPayoutRow(row: {
 export function buildEarnedBaseBankPayoutRows(
   rows: EarnedBaseBankPayoutInput[],
 ): Array<Array<string | number>> {
-  return rows
-    .filter((row) => isEligibleEarnedBaseBankPayoutRow(row))
-    .map((row, index) => {
-      const amount = Number(row.netPayable)
-      return [
-        '300971',
-        'FIRST MOBITAL PRIVATE LIMITED',
-        EARNED_BASE_COMPANY_ACCOUNT,
-        isSbiBank({ bankName: row.bankName, ifsc: row.ifsc }) ? 'DCR' : 'NEFT',
-        row.employeeName,
-        String(row.accountNumber ?? '').trim(),
-        String(row.ifsc ?? '').trim().toUpperCase(),
-        amount,
-        `SALARY${index + 1}`,
-        'INR',
-        'JAIPUR',
-        'SHRUTI@INDIRASWITCH.COM',
-        'E',
-      ]
-    })
+  return buildPayrollBankPayoutRows(
+    rows
+      .filter((row) => isEligibleEarnedBaseBankPayoutRow(row))
+      .map((row) => ({
+        employeeName: row.employeeName,
+        bankName: row.bankName,
+        accountNumber: row.accountNumber,
+        ifsc: row.ifsc,
+        amount: Number(row.netPayable),
+      })),
+  )
+}
+
+export function exportPayrollBankCsv<T>(opts: {
+  entries: T[]
+  amountSelector: (entry: T) => number
+  rowPredicate?: (entry: T) => boolean
+  filename: string
+  resolvePayee: (entry: T) => PayrollBankPayee
+}): void {
+  const rows = buildPayrollBankPayoutRows(
+    opts.entries
+      .filter((entry) => (opts.rowPredicate ? opts.rowPredicate(entry) : true))
+      .map((entry) => ({
+        ...opts.resolvePayee(entry),
+        amount: Number(opts.amountSelector(entry)),
+      })),
+  )
+  exportWorkbookWithTextAccounts(
+    'Bank Payout',
+    [...EARNED_BASE_BANK_PAYOUT_HEADERS],
+    rows,
+    opts.filename,
+    EARNED_BASE_BANK_PAYOUT_TEXT_COLUMNS,
+  )
 }
 
 const BANK_BASE_SALARY_MONTH_ABBREV = [
@@ -136,6 +197,16 @@ export function bankBaseSalaryFilename(monthInput: string): string {
     return `Bank_BaseSalary_${monthInput || 'unknown'}.xlsx`
   }
   return `Bank_BaseSalary_${BANK_BASE_SALARY_MONTH_ABBREV[month - 1]}${year}.xlsx`
+}
+
+export function payrollCardExportFilename(slug: string, monthInput: string): string {
+  const [yearRaw, monthRaw] = String(monthInput ?? '').split('-')
+  const year = Number(yearRaw)
+  const month = Number(monthRaw)
+  if (!Number.isFinite(year) || month < 1 || month > 12) {
+    return `payroll-${slug}-${monthInput || 'unknown'}.xlsx`
+  }
+  return `payroll-${slug}-${yearRaw}-${String(month).padStart(2, '0')}.xlsx`
 }
 
 /** Force text cells for bank account columns in export. */
