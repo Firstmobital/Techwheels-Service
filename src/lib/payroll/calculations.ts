@@ -98,6 +98,16 @@ export function formatCurrency(value: number): string {
   return new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(value)
 }
 
+/** Paise-preserving currency for advance schedules and preview. */
+export function formatPayrollMoney(value: number): string {
+  return new Intl.NumberFormat('en-IN', {
+    style: 'currency',
+    currency: 'INR',
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(value)
+}
+
 export function maskBankAccount(account: string | null | undefined): string {
   const raw = String(account ?? '').trim()
   if (!raw) return '—'

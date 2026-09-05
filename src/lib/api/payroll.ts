@@ -1,5 +1,6 @@
 import { supabase } from '../supabase'
 import { computePayrollAmounts, parsePayrollMonthInput, salaryTypeIncludesVariable } from '../payroll/calculations'
+import { roundPayrollPaise } from '../payroll/advanceSchedule'
 import { fetchMonthlyVariableEarnings } from '../payroll/variableEarnings'
 import type {
   PayrollAdvance,
@@ -120,13 +121,23 @@ export async function createAdvance(input: {
   employeeCode: string
   originalAmount: number
   deductionType: 'lump_sum' | 'emi' | 'custom'
+  issueDate: string
   notes?: string
   createdBy: string
   schedules: Array<{ payrollMonth: string; scheduledAmount: number }>
 }): Promise<void> {
+  const issueDate = parsePayrollMonthInput(input.issueDate)
+  if (!issueDate) throw new Error('Invalid issue month')
+  if (input.schedules.length === 0) throw new Error('Advance schedule is required')
+  const originalAmount = roundPayrollPaise(Number(input.originalAmount))
+  if (!Number.isFinite(originalAmount) || originalAmount <= 0) {
+    throw new Error('Advance amount must be greater than 0')
+  }
+
   const advRes = await supabase.from('payroll_advances').insert({
     employee_code: input.employeeCode.trim().toUpperCase(),
-    original_amount: input.originalAmount,
+    issue_date: issueDate,
+    original_amount: originalAmount,
     recovered_amount: 0,
     deduction_type: input.deductionType,
     status: 'active',

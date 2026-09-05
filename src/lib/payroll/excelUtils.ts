@@ -1,5 +1,10 @@
 import * as XLSX from 'xlsx'
-import type { ImportPreviewResult, ImportPreviewRow, SalaryType } from './types'
+import {
+  buildAdvanceSchedule,
+  normalizeDeductionMethod,
+  roundPayrollPaise,
+} from './advanceSchedule'
+import type { AdvanceDeductionType, ImportPreviewResult, ImportPreviewRow, SalaryType } from './types'
 import { isValidPayableDays, isValidSalaryType, normalizeSalaryTypeInput, parsePayrollMonthInput } from './calculations'
 
 export function normalizeHeader(value: string): string {
@@ -343,6 +348,191 @@ export function previewSalaryTypeImport(
     updates,
     unchanged,
     warnings,
+    rejected,
+    rows: previewRows,
+  }
+}
+
+export const ADVANCE_IMPORT_HEADERS = [
+  'Employee Code',
+  'Advance Amount',
+  'Issue Month',
+  'Deduction Method',
+  'EMI Months',
+  'Custom Amounts',
+  'Notes',
+] as const
+
+export const ADVANCE_LEDGER_EXPORT_HEADERS = [
+  'Employee Code',
+  'Employee Name',
+  'Role',
+  'Issue Month',
+  'Deduction Type',
+  'Total Amount',
+  'Recovered',
+  'Balance',
+  'Status',
+  'Progress %',
+] as const
+
+export interface AdvanceImportCommitData {
+  originalAmount: number
+  deductionType: AdvanceDeductionType
+  issueDate: string
+  notes: string | null
+  schedules: Array<{ payrollMonth: string; scheduledAmount: number }>
+}
+
+export interface AdvanceImportContext {
+  knownCodes: Set<string>
+  activeCodes: Set<string>
+}
+
+function isBlankAdvanceImportRow(row: Record<string, string>): boolean {
+  return ![
+    row.employee_code,
+    row.sa_code,
+    row.advance_amount,
+    row.original_amount,
+    row.amount,
+    row.issue_month,
+    row.issued_month,
+    row.deduction_method,
+    row.deduction_type,
+    row.custom_amounts,
+    row.custom_schedule,
+    row.notes,
+  ].some((value) => String(value ?? '').trim())
+}
+
+function advanceImportDuplicateKey(input: {
+  employeeCode: string
+  amount: number
+  issueMonth: string
+  deductionType: string
+  emiMonths: string
+  customAmounts: string
+}): string {
+  return [
+    input.employeeCode,
+    String(input.amount),
+    input.issueMonth,
+    input.deductionType,
+    input.emiMonths,
+    input.customAmounts,
+  ].join('|')
+}
+
+export function previewAdvanceImport(
+  rows: Array<Record<string, string>>,
+  ctx: AdvanceImportContext,
+): ImportPreviewResult {
+  const previewRows: ImportPreviewRow[] = []
+  const seenKeys = new Set<string>()
+  let valid = 0
+  let rejected = 0
+  let skippedBlank = 0
+
+  rows.forEach((row, idx) => {
+    const rowNumber = idx + 2
+    if (isBlankAdvanceImportRow(row)) {
+      skippedBlank += 1
+      return
+    }
+
+    const code = String(row.employee_code ?? row.sa_code ?? '').trim().toUpperCase()
+    const amount = roundPayrollPaise(Number(row.advance_amount ?? row.original_amount ?? row.amount ?? ''))
+    const issueRaw = row.issue_month ?? row.issued_month ?? row.month ?? ''
+    const issueMonth = parsePayrollMonthInput(issueRaw)
+    const methodRaw = row.deduction_method ?? row.deduction_type ?? row.method ?? ''
+    const deductionType = normalizeDeductionMethod(methodRaw)
+    const emiMonthsRaw = String(row.emi_months ?? row.n_months ?? row.months ?? '').trim()
+    const customText = String(row.custom_amounts ?? row.custom_schedule ?? row.custom ?? '').trim()
+    const notes = String(row.notes ?? '').trim() || null
+
+    if (!code) {
+      rejected += 1
+      previewRows.push({ rowNumber, employeeCode: '', status: 'rejected', message: 'Missing employee code' })
+      return
+    }
+    if (!ctx.knownCodes.has(code)) {
+      rejected += 1
+      previewRows.push({ rowNumber, employeeCode: code, status: 'rejected', message: 'Unknown employee code' })
+      return
+    }
+    if (!ctx.activeCodes.has(code)) {
+      rejected += 1
+      previewRows.push({ rowNumber, employeeCode: code, status: 'rejected', message: 'Inactive employee' })
+      return
+    }
+    if (!Number.isFinite(amount) || amount <= 0) {
+      rejected += 1
+      previewRows.push({ rowNumber, employeeCode: code, status: 'rejected', message: 'Advance amount must be greater than 0' })
+      return
+    }
+    if (!issueMonth) {
+      rejected += 1
+      previewRows.push({ rowNumber, employeeCode: code, status: 'rejected', message: 'Invalid issue month (use YYYY-MM)' })
+      return
+    }
+    if (!deductionType) {
+      rejected += 1
+      previewRows.push({ rowNumber, employeeCode: code, status: 'rejected', message: 'Deduction method must be LUMP, EMI, or CUSTOM' })
+      return
+    }
+
+    const duplicateKey = advanceImportDuplicateKey({
+      employeeCode: code,
+      amount,
+      issueMonth,
+      deductionType,
+      emiMonths: deductionType === 'emi' ? emiMonthsRaw : '',
+      customAmounts: deductionType === 'custom' ? customText : '',
+    })
+    if (seenKeys.has(duplicateKey)) {
+      rejected += 1
+      previewRows.push({ rowNumber, employeeCode: code, status: 'rejected', message: 'Duplicate row in file' })
+      return
+    }
+    seenKeys.add(duplicateKey)
+
+    const schedule = buildAdvanceSchedule({
+      issueMonth,
+      amount,
+      deductionType,
+      emiMonths: deductionType === 'emi' ? Number(emiMonthsRaw) : undefined,
+      customText: deductionType === 'custom' ? customText : undefined,
+    })
+    if (!schedule.ok) {
+      rejected += 1
+      previewRows.push({ rowNumber, employeeCode: code, status: 'rejected', message: schedule.error })
+      return
+    }
+
+    valid += 1
+    const commit: AdvanceImportCommitData = {
+      originalAmount: amount,
+      deductionType,
+      issueDate: issueMonth,
+      notes,
+      schedules: schedule.schedules,
+    }
+    previewRows.push({
+      rowNumber,
+      employeeCode: code,
+      status: 'valid',
+      message: `New ${deductionType} advance`,
+      data: commit as unknown as Record<string, unknown>,
+    })
+  })
+
+  return {
+    totalRows: rows.length - skippedBlank,
+    valid,
+    updates: 0,
+    unchanged: 0,
+    warnings: 0,
     rejected,
     rows: previewRows,
   }

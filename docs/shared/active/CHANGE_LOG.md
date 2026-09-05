@@ -2,6 +2,10 @@
 
 Tracks documentation-sync updates for business logic, architecture, and access control.
 
+## 2026-09-05
+
+- Payroll Advance Management now uses Techwheels-Web issue-month semantics (first deduction = issue month + 1), persists `issue_date` as the first of the selected month, and builds lump / EMI / custom schedules from one shared function used by preview, manual issue, and Excel import. Ledger shows issued month, derived Open/Partial/Closed/Cancelled, progress, and schedule expand. Export is the ledger; import commits valid rows through existing `createAdvance`. New advances are limited to currently active employees. Finalize, snapshots, and payroll amount formulas are unchanged.
+
 ## 2026-09-04
 
 - Recovery has a **Mismatch** dropdown next to All insurers. It keeps only rows where policy company vs DMS bill-to is a mismatch (same C/O + M/S rule as the orange pill). Year / KPI / Export follow the filter. Plan: `BODYSHOP-RECOVERY-001`.
