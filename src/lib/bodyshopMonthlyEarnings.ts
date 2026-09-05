@@ -12,6 +12,7 @@ import {
   type BodyshopRole,
   type BodyshopSupportRow,
 } from './bodyshopEarnings'
+import { matchesBranchSelection } from './branches'
 import { monthRangeIst } from './payroll/calculations'
 import { calculateSAIncome, normalizeEmployeeCode, parseAmount } from './payroll/earningsFormulas'
 
@@ -254,4 +255,68 @@ export async function fetchMonthlyBodyshopEarningsByCode(
 ): Promise<Map<string, number>> {
   const result = await fetchMonthlyBodyshopStakeholderEarnings(payrollMonth)
   return result.earningsByEmployeeCode
+}
+
+/**
+ * Payroll branch authority for Bodyshop Tracker scoping:
+ * employee_code → employee_master.location.
+ * Bidirectional alias match covers Sitapura ↔ Sitapura PV/EV.
+ */
+export function employeeMasterBranchMatches(
+  employeeBranch: unknown,
+  selectedBranch: string,
+): boolean {
+  const selected = String(selectedBranch ?? '').trim()
+  if (!selected || selected.toLowerCase() === 'all') return true
+  return (
+    matchesBranchSelection(employeeBranch, selected)
+    || matchesBranchSelection(selected, String(employeeBranch ?? ''))
+  )
+}
+
+export interface BodyshopBranchScope {
+  displayedTotal: number
+  mappedInScope: number
+  unmappedInScope: number
+  includeUnmapped: boolean
+}
+
+/**
+ * View/scope already-calculated Tracker earnings by employee_master branch.
+ * Does not recompute role percentages. Unmapped income is All-branches only.
+ */
+export function scopeBodyshopTrackerByBranch(input: {
+  earningsByEmployeeCode: Map<string, number>
+  totalBodyshopEarning: number
+  mappedBodyshopEarning: number
+  unmappedBodyshopEarning: number
+  branchByEmployeeCode: Map<string, string | null | undefined>
+  selectedBranch: string
+}): BodyshopBranchScope {
+  const selected = String(input.selectedBranch ?? '').trim()
+  const isAll = !selected || selected.toLowerCase() === 'all'
+
+  if (isAll) {
+    return {
+      displayedTotal: input.totalBodyshopEarning,
+      mappedInScope: input.mappedBodyshopEarning,
+      unmappedInScope: input.unmappedBodyshopEarning,
+      includeUnmapped: true,
+    }
+  }
+
+  let mappedInScope = 0
+  input.earningsByEmployeeCode.forEach((amount, code) => {
+    const branch = input.branchByEmployeeCode.get(normalizeEmployeeCode(code))
+    if (employeeMasterBranchMatches(branch, selected)) {
+      mappedInScope += amount
+    }
+  })
+  mappedInScope = roundPaise(mappedInScope)
+  return {
+    displayedTotal: mappedInScope,
+    mappedInScope,
+    unmappedInScope: 0,
+    includeUnmapped: false,
+  }
 }

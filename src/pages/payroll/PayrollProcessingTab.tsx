@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { Icon } from '../../components/Icon'
 import {
   addPayrollAdjustment,
   fetchPayrollEmployees,
@@ -8,7 +9,14 @@ import {
   recomputePayrollMonth,
   unlockPayrollMonth,
 } from '../../lib/api/payroll'
+import {
+  employeeMasterBranchMatches,
+  fetchMonthlyBodyshopStakeholderEarnings,
+  scopeBodyshopTrackerByBranch,
+  type BodyshopStakeholderEarnings,
+} from '../../lib/bodyshopMonthlyEarnings'
 import { formatCurrency } from '../../lib/payroll/calculations'
+import { normalizeEmployeeCode } from '../../lib/payroll/earningsFormulas'
 import { resolvePayrollEntryIdentity } from '../../lib/payroll/entryIdentity'
 import {
   bankBaseSalaryFilename,
@@ -17,27 +25,35 @@ import {
   isEligibleEarnedBaseBankPayoutRow,
   payrollCardExportFilename,
 } from '../../lib/payroll/excelUtils'
-import { fetchMonthlyBodyshopStakeholderEarnings, type BodyshopStakeholderEarnings } from '../../lib/bodyshopMonthlyEarnings'
 import { SALARY_TYPE_LABELS, type PayrollEntry } from '../../lib/payroll/types'
 import { supabase } from '../../lib/supabase'
 
 function PayrollSummaryCard({
   value,
   label,
+  icon,
+  tone,
   onExport,
   hint,
 }: {
   value: ReactNode
   label: string
+  icon: string
+  tone: string
   onExport: () => void
   hint?: ReactNode
 }) {
   return (
-    <div className="kpi">
+    <div className={`kpi payroll-kpi--${tone}`}>
       <div className="payroll-kpi__top">
-        <div className="payroll-kpi__copy">
-          <div className="kpi__val">{value}</div>
-          <div className="kpi__lab">{label}</div>
+        <div className="payroll-kpi__main">
+          <span className="payroll-kpi__ic" aria-hidden="true">
+            <Icon name={icon} size={15} strokeWidth={1.8} />
+          </span>
+          <div className="payroll-kpi__copy">
+            <div className="kpi__val">{value}</div>
+            <div className="kpi__lab">{label}</div>
+          </div>
         </div>
         <button type="button" className="btn btn--ghost btn--sm" onClick={onExport}>
           Export
@@ -156,16 +172,62 @@ export default function PayrollProcessingTab({
     net: 0,
   }), [aggregateScopedRows])
 
-  const payableBodyshopTotal = useMemo(
-    () => entries.reduce((sum, entry) => sum + Number(entry.bodyshop_variable_earning ?? 0), 0),
-    [entries],
+  const masterBranchByCode = useMemo(() => {
+    const m = new Map<string, string | null>()
+    employees.forEach((employee) => {
+      m.set(normalizeEmployeeCode(employee.employee_code), employee.location ?? null)
+    })
+    return m
+  }, [employees])
+
+  const bodyshopScope = useMemo(() => {
+    if (!bodyshopStakeholder) {
+      return {
+        displayedTotal: 0,
+        mappedInScope: 0,
+        unmappedInScope: 0,
+        includeUnmapped: branchFilter === 'all',
+      }
+    }
+    return scopeBodyshopTrackerByBranch({
+      earningsByEmployeeCode: bodyshopStakeholder.earningsByEmployeeCode,
+      totalBodyshopEarning: bodyshopStakeholder.totalBodyshopEarning,
+      mappedBodyshopEarning: bodyshopStakeholder.mappedBodyshopEarning,
+      unmappedBodyshopEarning: bodyshopStakeholder.unmappedBodyshopEarning,
+      branchByEmployeeCode: masterBranchByCode,
+      selectedBranch: branchFilter,
+    })
+  }, [bodyshopStakeholder, masterBranchByCode, branchFilter])
+
+  const payableBodyshopInScope = useMemo(
+    () => entries.reduce((sum, entry) => {
+      const code = normalizeEmployeeCode(entry.employee_code)
+      if (!employeeMasterBranchMatches(masterBranchByCode.get(code), branchFilter)) return sum
+      return sum + Number(entry.bodyshop_variable_earning ?? 0)
+    }, 0),
+    [entries, masterBranchByCode, branchFilter],
   )
-  const bodyshopTrackerTotal = bodyshopStakeholder?.totalBodyshopEarning ?? 0
-  const bodyshopUnmapped = bodyshopStakeholder?.unmappedBodyshopEarning ?? 0
-  const showBodyshopReconcile = Boolean(
-    bodyshopStakeholder
-    && (bodyshopUnmapped > 0 || Math.abs(bodyshopTrackerTotal - payableBodyshopTotal) > 0.009),
-  )
+
+  const bodyshopHint = useMemo(() => {
+    if (!bodyshopStakeholder) return undefined
+    if (bodyshopScope.includeUnmapped) {
+      const show = bodyshopScope.unmappedInScope > 0
+        || Math.abs(bodyshopScope.displayedTotal - payableBodyshopInScope) > 0.009
+      if (!show) return undefined
+      return (
+        <div className="kpi__hint">
+          Payable in payroll {formatCurrency(payableBodyshopInScope)}
+          {bodyshopScope.unmappedInScope > 0 ? ` · Unmapped ${formatCurrency(bodyshopScope.unmappedInScope)}` : ''}
+        </div>
+      )
+    }
+    if (Math.abs(bodyshopScope.displayedTotal - payableBodyshopInScope) <= 0.009) return undefined
+    return (
+      <div className="kpi__hint">
+        Mapped to payroll {formatCurrency(payableBodyshopInScope)}
+      </div>
+    )
+  }, [bodyshopStakeholder, bodyshopScope, payableBodyshopInScope])
 
   const statusBadgeStyle = {
     padding: '0.2rem 0.5rem',
@@ -281,10 +343,11 @@ export default function PayrollProcessingTab({
     amountSelector: (entry: PayrollEntry) => number,
     filename: string,
     rowPredicate?: (entry: PayrollEntry) => boolean,
+    sourceEntries: PayrollEntry[] = aggregateScopedRows,
   ) {
     try {
       exportPayrollBankCsv({
-        entries: aggregateScopedRows,
+        entries: sourceEntries,
         amountSelector,
         rowPredicate,
         filename,
@@ -293,6 +356,18 @@ export default function PayrollProcessingTab({
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Export failed')
     }
+  }
+
+  function exportBodyshopBankPayout() {
+    exportCardBankCsv(
+      (entry) => Number(entry.bodyshop_variable_earning ?? 0),
+      payrollCardExportFilename('bodyshop-variable', monthInput),
+      (entry) => employeeMasterBranchMatches(
+        masterBranchByCode.get(normalizeEmployeeCode(entry.employee_code)),
+        branchFilter,
+      ),
+      entries,
+    )
   }
 
   function exportEarnedBaseBankPayout() {
@@ -345,6 +420,8 @@ export default function PayrollProcessingTab({
 
       <div className="kpis payroll-kpis">
         <PayrollSummaryCard
+          tone="employees"
+          icon="user"
           value={totals.employeeCount}
           label="Total Employees"
           onExport={() => exportCardBankCsv(
@@ -353,6 +430,8 @@ export default function PayrollProcessingTab({
           )}
         />
         <PayrollSummaryCard
+          tone="gross"
+          icon="reports"
           value={formatCurrency(totals.gross)}
           label="Total Gross"
           onExport={() => exportCardBankCsv(
@@ -361,6 +440,8 @@ export default function PayrollProcessingTab({
           )}
         />
         <PayrollSummaryCard
+          tone="advance"
+          icon="download"
           value={formatCurrency(totals.advance)}
           label="Total Advance Deducted"
           onExport={() => exportCardBankCsv(
@@ -369,25 +450,23 @@ export default function PayrollProcessingTab({
           )}
         />
         <PayrollSummaryCard
-          value={formatCurrency(bodyshopTrackerTotal)}
+          tone="bodyshop"
+          icon="truck"
+          value={formatCurrency(bodyshopScope.displayedTotal)}
           label="Bodyshop Variable Total"
-          onExport={() => exportCardBankCsv(
-            (entry) => Number(entry.bodyshop_variable_earning ?? 0),
-            payrollCardExportFilename('bodyshop-variable', monthInput),
-          )}
-          hint={showBodyshopReconcile ? (
-            <div className="kpi__hint">
-              Payable in payroll {formatCurrency(payableBodyshopTotal)}
-              {bodyshopUnmapped > 0 ? ` · Unmapped ${formatCurrency(bodyshopUnmapped)}` : ''}
-            </div>
-          ) : undefined}
+          onExport={exportBodyshopBankPayout}
+          hint={bodyshopHint}
         />
         <PayrollSummaryCard
+          tone="earned"
+          icon="autodoc"
           value={formatCurrency(totals.earnedBase)}
           label="Earned Base Total"
           onExport={exportEarnedBaseBankPayout}
         />
         <PayrollSummaryCard
+          tone="sa"
+          icon="admin"
           value={formatCurrency(totals.saVariable)}
           label="SA Variable Total"
           onExport={() => exportCardBankCsv(
@@ -396,6 +475,8 @@ export default function PayrollProcessingTab({
           )}
         />
         <PayrollSummaryCard
+          tone="technician"
+          icon="tech"
           value={formatCurrency(totals.technicianVariable)}
           label="Technician Variable Total"
           onExport={() => exportCardBankCsv(
@@ -404,6 +485,8 @@ export default function PayrollProcessingTab({
           )}
         />
         <PayrollSummaryCard
+          tone="net"
+          icon="check"
           value={formatCurrency(totals.net)}
           label="Net Payable Total"
           onExport={() => exportCardBankCsv(

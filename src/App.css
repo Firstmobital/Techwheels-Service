@@ -6173,12 +6173,39 @@ tr.brx-recov-row--mismatch td:first-child {
 .payroll-kpis .kpi {
   min-width: 0;
   padding: 14px;
+  background: color-mix(in srgb, var(--payroll-kpi-tone, var(--accent)) 8%, var(--surface));
+  border-color: color-mix(in srgb, var(--payroll-kpi-tone, var(--accent)) 22%, var(--border));
 }
+.payroll-kpis .payroll-kpi--employees { --payroll-kpi-tone: var(--accent); }
+.payroll-kpis .payroll-kpi--gross { --payroll-kpi-tone: var(--success); }
+.payroll-kpis .payroll-kpi--advance { --payroll-kpi-tone: var(--warn); }
+.payroll-kpis .payroll-kpi--bodyshop { --payroll-kpi-tone: color-mix(in srgb, var(--accent) 62%, #6d28d9); }
+.payroll-kpis .payroll-kpi--earned { --payroll-kpi-tone: color-mix(in srgb, var(--accent) 70%, #0891b2); }
+.payroll-kpis .payroll-kpi--sa { --payroll-kpi-tone: color-mix(in srgb, var(--accent) 78%, #4338ca); }
+.payroll-kpis .payroll-kpi--technician { --payroll-kpi-tone: color-mix(in srgb, var(--success) 55%, var(--ink-2)); }
+.payroll-kpis .payroll-kpi--net { --payroll-kpi-tone: var(--success); }
 .payroll-kpis .payroll-kpi__top {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
   gap: 0.5rem;
+}
+.payroll-kpis .payroll-kpi__main {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.45rem;
+  min-width: 0;
+  flex: 1;
+}
+.payroll-kpis .payroll-kpi__ic {
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  background: color-mix(in srgb, var(--payroll-kpi-tone, var(--accent)) 16%, var(--surface));
+  color: var(--payroll-kpi-tone, var(--accent));
 }
 .payroll-kpis .payroll-kpi__copy {
   min-width: 0;
@@ -6193,6 +6220,10 @@ tr.brx-recov-row--mismatch td:first-child {
 .payroll-kpis .kpi__val {
   font-size: 20px;
   overflow-wrap: anywhere;
+  color: var(--ink);
+}
+.payroll-kpis .kpi__lab {
+  color: var(--muted);
 }
 .payroll-kpis .kpi__hint {
   margin-top: 0.35rem;
