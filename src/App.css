@@ -6350,6 +6350,8 @@ tr.brx-recov-row--mismatch td:first-child {
 
 .payroll-advance-form {
   min-width: 0;
+  position: relative;
+  z-index: 2;
 }
 
 .payroll-advance-fields {
@@ -6521,6 +6523,8 @@ tr.brx-recov-row--mismatch td:first-child {
 
 .payroll-advance-preview {
   min-width: 0;
+  position: relative;
+  z-index: 1;
   background: #f1f5fb;
   border: 1px solid #dbe4f0;
   border-radius: 9px;
@@ -6695,12 +6699,13 @@ tr.brx-recov-row--mismatch td:first-child {
 
 .payroll-emp-picker__list {
   position: absolute;
-  z-index: 6;
+  z-index: 8;
   top: calc(100% + 4px);
   left: 0;
   right: 0;
   max-height: 220px;
-  overflow: auto;
+  overflow-x: hidden;
+  overflow-y: auto;
   background: #fff;
   border: 1px solid #e2e8f0;
   border-radius: 8px;
@@ -6718,8 +6723,9 @@ tr.brx-recov-row--mismatch td:first-child {
   cursor: pointer;
 }
 
-.payroll-emp-picker__option:hover {
-  background: #f8fafc;
+.payroll-emp-picker__option:hover,
+.payroll-emp-picker__option.is-active {
+  background: #eff6ff;
 }
 
 .payroll-emp-picker__name {

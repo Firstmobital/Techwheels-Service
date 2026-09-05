@@ -1,4 +1,4 @@
-import { Fragment, useCallback, useEffect, useMemo, useState } from 'react'
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
 import { Icon } from '../../components/Icon'
 import { createAdvance, fetchAdvanceSchedules, fetchAdvances, fetchPayrollEmployees } from '../../lib/api/payroll'
 import {
@@ -55,6 +55,10 @@ const STATUS_BADGE: Record<AdvanceLedgerDisplayStatus, string> = {
   cancelled: 'badge badge--inactive',
 }
 
+function employeeOptionId(code: string) {
+  return `advance-employee-option-${code.replace(/[^A-Za-z0-9_-]/g, '_')}`
+}
+
 function emptyForm(payrollMonth: string) {
   const issueMonth = payrollMonth.slice(0, 7)
   return {
@@ -79,6 +83,8 @@ export default function AdvanceManagementTab({ canModify, payrollMonth }: Props)
   const [message, setMessage] = useState<string | null>(null)
   const [issuing, setIssuing] = useState(false)
   const [showEmployeeOptions, setShowEmployeeOptions] = useState(false)
+  const [highlightedEmployeeIndex, setHighlightedEmployeeIndex] = useState(0)
+  const employeePickerRef = useRef<HTMLDivElement>(null)
   const [ledgerFilter, setLedgerFilter] = useState<LedgerFilter>('all')
   const [importPreview, setImportPreview] = useState<ImportPreviewResult | null>(null)
   const [form, setForm] = useState(() => emptyForm(payrollMonth))
@@ -132,6 +138,18 @@ export default function AdvanceManagementTab({ canModify, payrollMonth }: Props)
       })
       .slice(0, 30)
   }, [activeEmployees, form.employeeSearch])
+
+  useEffect(() => {
+    if (!showEmployeeOptions) return
+    function handlePointerDown(event: PointerEvent) {
+      const root = employeePickerRef.current
+      if (!root) return
+      if (event.target instanceof Node && root.contains(event.target)) return
+      setShowEmployeeOptions(false)
+    }
+    document.addEventListener('pointerdown', handlePointerDown)
+    return () => document.removeEventListener('pointerdown', handlePointerDown)
+  }, [showEmployeeOptions])
 
   const schedulesByAdvance = useMemo(() => {
     const map = new Map<number, PayrollAdvanceSchedule[]>()
@@ -197,6 +215,57 @@ export default function AdvanceManagementTab({ canModify, payrollMonth }: Props)
       employeeSearch: `${code} — ${employee.employee_name}`,
     }))
     setShowEmployeeOptions(false)
+  }
+
+  function handleEmployeeKeyDown(event: KeyboardEvent<HTMLInputElement>) {
+    if (event.key === 'Escape') {
+      if (!showEmployeeOptions) return
+      event.preventDefault()
+      setShowEmployeeOptions(false)
+      return
+    }
+    if (event.key === 'Tab') {
+      setShowEmployeeOptions(false)
+      return
+    }
+    if (event.key === 'ArrowDown') {
+      event.preventDefault()
+      if (!showEmployeeOptions) {
+        setShowEmployeeOptions(true)
+        setHighlightedEmployeeIndex(0)
+        return
+      }
+      if (filteredEmployeeOptions.length === 0) return
+      setHighlightedEmployeeIndex((index) => (index + 1) % filteredEmployeeOptions.length)
+      return
+    }
+    if (event.key === 'ArrowUp') {
+      event.preventDefault()
+      if (!showEmployeeOptions) {
+        setShowEmployeeOptions(true)
+        setHighlightedEmployeeIndex(0)
+        return
+      }
+      if (filteredEmployeeOptions.length === 0) return
+      setHighlightedEmployeeIndex((index) => (
+        (index - 1 + filteredEmployeeOptions.length) % filteredEmployeeOptions.length
+      ))
+      return
+    }
+    if (event.key === 'Enter' && showEmployeeOptions) {
+      const highlighted = filteredEmployeeOptions[highlightedEmployeeIndex]
+      if (!highlighted) return
+      event.preventDefault()
+      selectEmployee(highlighted)
+    }
+  }
+
+  function handleEmployeeBlur() {
+    window.setTimeout(() => {
+      const root = employeePickerRef.current
+      if (root?.contains(document.activeElement)) return
+      setShowEmployeeOptions(false)
+    }, 0)
   }
 
   async function handleIssueAdvance() {
@@ -381,7 +450,7 @@ export default function AdvanceManagementTab({ canModify, payrollMonth }: Props)
             <div className="payroll-advance-fields">
               <div className="payroll-add-field payroll-advance-fields__full">
                 <label htmlFor="advance-employee">Employee</label>
-                <div className="payroll-emp-picker">
+                <div className="payroll-emp-picker" ref={employeePickerRef}>
                   <div className="payroll-advance-affix payroll-advance-affix--icon">
                     <span className="payroll-advance-affix__icon" aria-hidden="true">
                       <Icon name="search" size={15} strokeWidth={1.8} />
@@ -389,30 +458,53 @@ export default function AdvanceManagementTab({ canModify, payrollMonth }: Props)
                     <input
                       id="advance-employee"
                       className="inp"
+                      role="combobox"
+                      aria-expanded={showEmployeeOptions}
+                      aria-controls="advance-employee-list"
+                      aria-autocomplete="list"
+                      aria-activedescendant={
+                        showEmployeeOptions && filteredEmployeeOptions[highlightedEmployeeIndex]
+                          ? employeeOptionId(filteredEmployeeOptions[highlightedEmployeeIndex].employee_code.trim().toUpperCase())
+                          : undefined
+                      }
                       value={form.employeeSearch}
                       placeholder="Search employee by code, name, or role"
                       autoComplete="off"
-                      onFocus={() => setShowEmployeeOptions(true)}
+                      onFocus={() => {
+                        setHighlightedEmployeeIndex(0)
+                        setShowEmployeeOptions(true)
+                      }}
+                      onBlur={handleEmployeeBlur}
+                      onKeyDown={handleEmployeeKeyDown}
                       onChange={(event) => {
                         setForm((prev) => ({ ...prev, employeeSearch: event.target.value, employeeCode: '' }))
+                        setHighlightedEmployeeIndex(0)
                         setShowEmployeeOptions(true)
                       }}
                     />
                   </div>
                   {showEmployeeOptions && (
-                    <div className="payroll-emp-picker__list">
+                    <div className="payroll-emp-picker__list" id="advance-employee-list" role="listbox">
                       {filteredEmployeeOptions.length === 0 ? (
                         <div className="payroll-emp-picker__empty">No matching active employees.</div>
                       ) : (
-                        filteredEmployeeOptions.map((employee) => {
+                        filteredEmployeeOptions.map((employee, index) => {
                           const code = employee.employee_code.trim().toUpperCase()
+                          const active = index === highlightedEmployeeIndex
                           return (
                             <button
                               key={code}
+                              id={employeeOptionId(code)}
                               type="button"
-                              className="payroll-emp-picker__option"
+                              role="option"
+                              aria-selected={active}
+                              tabIndex={-1}
+                              className={`payroll-emp-picker__option${active ? ' is-active' : ''}`}
                               onMouseDown={(event) => event.preventDefault()}
                               onClick={() => selectEmployee(employee)}
+                              ref={(node) => {
+                                if (active) node?.scrollIntoView({ block: 'nearest' })
+                              }}
                             >
                               <span className="payroll-emp-picker__name">{code} — {employee.employee_name}</span>
                               <span className="payroll-emp-picker__role">{employee.role ?? '—'}</span>
