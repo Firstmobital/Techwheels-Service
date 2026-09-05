@@ -10,7 +10,7 @@ import {
   unlockPayrollMonth,
 } from '../../lib/api/payroll'
 import {
-  employeeMasterBranchMatches,
+  employeeMatchesBodyshopPayrollScope,
   fetchMonthlyBodyshopStakeholderEarnings,
   scopeBodyshopTrackerByBranch,
   type BodyshopStakeholderEarnings,
@@ -180,13 +180,41 @@ export default function PayrollProcessingTab({
     return m
   }, [employees])
 
+  const departmentByCode = useMemo(() => {
+    const m = new Map<string, string | null>()
+    entries.forEach((entry) => {
+      const code = normalizeEmployeeCode(entry.employee_code)
+      m.set(code, identityByCode.get(code)?.department ?? null)
+    })
+    return m
+  }, [entries, identityByCode])
+
+  const salaryTypeByCode = useMemo(() => {
+    const m = new Map<string, string | null>()
+    entries.forEach((entry) => {
+      m.set(normalizeEmployeeCode(entry.employee_code), entry.salary_type_snapshot)
+    })
+    return m
+  }, [entries])
+
+  const matchesBodyshopCardFilters = useCallback((code: string) => (
+    employeeMatchesBodyshopPayrollScope({
+      department: departmentByCode.get(code),
+      salaryType: salaryTypeByCode.get(code),
+      masterBranch: masterBranchByCode.get(code),
+      selectedDepartment: deptFilter,
+      selectedSalaryType: salaryTypeFilter,
+      selectedBranch: branchFilter,
+    })
+  ), [departmentByCode, salaryTypeByCode, masterBranchByCode, deptFilter, salaryTypeFilter, branchFilter])
+
   const bodyshopScope = useMemo(() => {
     if (!bodyshopStakeholder) {
       return {
         displayedTotal: 0,
         mappedInScope: 0,
         unmappedInScope: 0,
-        includeUnmapped: branchFilter === 'all',
+        includeUnmapped: deptFilter === 'all' && branchFilter === 'all' && salaryTypeFilter === 'all',
       }
     }
     return scopeBodyshopTrackerByBranch({
@@ -195,17 +223,29 @@ export default function PayrollProcessingTab({
       mappedBodyshopEarning: bodyshopStakeholder.mappedBodyshopEarning,
       unmappedBodyshopEarning: bodyshopStakeholder.unmappedBodyshopEarning,
       branchByEmployeeCode: masterBranchByCode,
+      departmentByEmployeeCode: departmentByCode,
+      salaryTypeByEmployeeCode: salaryTypeByCode,
       selectedBranch: branchFilter,
+      selectedDepartment: deptFilter,
+      selectedSalaryType: salaryTypeFilter,
     })
-  }, [bodyshopStakeholder, masterBranchByCode, branchFilter])
+  }, [
+    bodyshopStakeholder,
+    masterBranchByCode,
+    departmentByCode,
+    salaryTypeByCode,
+    branchFilter,
+    deptFilter,
+    salaryTypeFilter,
+  ])
 
   const payableBodyshopInScope = useMemo(
     () => entries.reduce((sum, entry) => {
       const code = normalizeEmployeeCode(entry.employee_code)
-      if (!employeeMasterBranchMatches(masterBranchByCode.get(code), branchFilter)) return sum
+      if (!matchesBodyshopCardFilters(code)) return sum
       return sum + Number(entry.bodyshop_variable_earning ?? 0)
     }, 0),
-    [entries, masterBranchByCode, branchFilter],
+    [entries, matchesBodyshopCardFilters],
   )
 
   const bodyshopHint = useMemo(() => {
@@ -362,10 +402,7 @@ export default function PayrollProcessingTab({
     exportCardBankCsv(
       (entry) => Number(entry.bodyshop_variable_earning ?? 0),
       payrollCardExportFilename('bodyshop-variable', monthInput),
-      (entry) => employeeMasterBranchMatches(
-        masterBranchByCode.get(normalizeEmployeeCode(entry.employee_code)),
-        branchFilter,
-      ),
+      (entry) => matchesBodyshopCardFilters(normalizeEmployeeCode(entry.employee_code)),
       entries,
     )
   }
