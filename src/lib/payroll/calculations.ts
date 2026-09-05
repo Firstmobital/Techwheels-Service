@@ -21,6 +21,7 @@ export interface PayrollCalcInput {
   payableDays: number
   saVariableEarning: number
   technicianVariableEarning: number
+  bodyshopVariableEarning: number
   customAdditions: number
   otherDeductions: number
   advanceDeduction: number
@@ -40,7 +41,8 @@ export function computePayrollAmounts(input: PayrollCalcInput): PayrollCalcResul
 
   const saVar = salaryTypeIncludesVariable(input.salaryType) ? input.saVariableEarning : 0
   const techVar = salaryTypeIncludesVariable(input.salaryType) ? input.technicianVariableEarning : 0
-  const variableTotal = Math.round((saVar + techVar) * 100) / 100
+  const bodyshopVar = salaryTypeIncludesVariable(input.salaryType) ? input.bodyshopVariableEarning : 0
+  const variableTotal = Math.round((saVar + techVar + bodyshopVar) * 100) / 100
 
   const grossPayout = Math.round((earnedBase + variableTotal + input.customAdditions) * 100) / 100
   const netPayable = Math.round((grossPayout - input.advanceDeduction - input.otherDeductions) * 100) / 100

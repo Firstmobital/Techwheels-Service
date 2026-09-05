@@ -13,11 +13,42 @@ function isValidPayableDays(value) {
   return Math.abs(value * 2 - Math.round(value * 2)) < 0.001
 }
 
-function computeNet(input) {
+function computePayrollAmounts(input) {
   const earnedBase = input.salaryType === 'variable' ? 0 : calcEarnedBaseSalary(input.baseSalary, input.payableDays)
-  const variableTotal = input.salaryType === 'base' ? 0 : input.saVariableEarning + input.technicianVariableEarning
-  const gross = earnedBase + variableTotal + input.customAdditions
-  return Math.round((gross - input.advanceDeduction - input.otherDeductions) * 100) / 100
+  const saVar = input.salaryType === 'base' ? 0 : Number(input.saVariableEarning ?? 0)
+  const techVar = input.salaryType === 'base' ? 0 : Number(input.technicianVariableEarning ?? 0)
+  const bodyshopVar = input.salaryType === 'base' ? 0 : Number(input.bodyshopVariableEarning ?? 0)
+  const variableTotal = Math.round((saVar + techVar + bodyshopVar) * 100) / 100
+  const grossPayout = Math.round((earnedBase + variableTotal + Number(input.customAdditions ?? 0)) * 100) / 100
+  const netPayable = Math.round((grossPayout - Number(input.advanceDeduction ?? 0) - Number(input.otherDeductions ?? 0)) * 100) / 100
+  return { earnedBase, variableTotal, grossPayout, netPayable }
+}
+
+function computeNet(input) {
+  return computePayrollAmounts(input).netPayable
+}
+
+function normalizeServiceType(value) {
+  return String(value ?? '').trim().replace(/\s+/g, ' ').toLowerCase()
+}
+
+function isAccidentSrType(value) {
+  return normalizeServiceType(value) === 'accident'
+}
+
+function isSaTrackerAllowedServiceType(value) {
+  const allowed = [
+    'Running Repairs',
+    'First Free Service',
+    'Second Free Service',
+    'Third Free Service',
+    'Paid Service',
+    'Updation',
+    'E Breakdown',
+    'Campaign',
+  ]
+  const normalized = normalizeServiceType(value)
+  return allowed.some((serviceType) => normalizeServiceType(serviceType) === normalized)
 }
 
 function parsePayrollMonthInput(value) {
@@ -231,6 +262,101 @@ const tests = [
     got: Number(advanceProgressPercent(3333.33, 10000).toFixed(1)),
     want: 33.3,
   },
+  {
+    name: 'CASE A variable total SA only',
+    got: computePayrollAmounts({
+      salaryType: 'both', baseSalary: 20000, payableDays: 30,
+      saVariableEarning: 1000, technicianVariableEarning: 0, bodyshopVariableEarning: 0,
+      customAdditions: 0, otherDeductions: 0, advanceDeduction: 0,
+    }).variableTotal,
+    want: 1000,
+  },
+  {
+    name: 'CASE A gross SA only',
+    got: computePayrollAmounts({
+      salaryType: 'both', baseSalary: 20000, payableDays: 30,
+      saVariableEarning: 1000, technicianVariableEarning: 0, bodyshopVariableEarning: 0,
+      customAdditions: 0, otherDeductions: 0, advanceDeduction: 0,
+    }).grossPayout,
+    want: 21000,
+  },
+  {
+    name: 'CASE B variable total Tech only',
+    got: computePayrollAmounts({
+      salaryType: 'both', baseSalary: 20000, payableDays: 30,
+      saVariableEarning: 0, technicianVariableEarning: 2000, bodyshopVariableEarning: 0,
+      customAdditions: 0, otherDeductions: 0, advanceDeduction: 0,
+    }).variableTotal,
+    want: 2000,
+  },
+  {
+    name: 'CASE C variable total Bodyshop only',
+    got: computePayrollAmounts({
+      salaryType: 'both', baseSalary: 20000, payableDays: 30,
+      saVariableEarning: 0, technicianVariableEarning: 0, bodyshopVariableEarning: 5000,
+      customAdditions: 0, otherDeductions: 0, advanceDeduction: 0,
+    }).variableTotal,
+    want: 5000,
+  },
+  {
+    name: 'CASE C gross Bodyshop only',
+    got: computePayrollAmounts({
+      salaryType: 'both', baseSalary: 20000, payableDays: 30,
+      saVariableEarning: 0, technicianVariableEarning: 0, bodyshopVariableEarning: 5000,
+      customAdditions: 0, otherDeductions: 0, advanceDeduction: 0,
+    }).grossPayout,
+    want: 25000,
+  },
+  {
+    name: 'CASE D variable total all three streams',
+    got: computePayrollAmounts({
+      salaryType: 'both', baseSalary: 20000, payableDays: 30,
+      saVariableEarning: 1000, technicianVariableEarning: 2000, bodyshopVariableEarning: 3000,
+      customAdditions: 0, otherDeductions: 0, advanceDeduction: 0,
+    }).variableTotal,
+    want: 6000,
+  },
+  {
+    name: 'CASE D gross all three streams',
+    got: computePayrollAmounts({
+      salaryType: 'both', baseSalary: 20000, payableDays: 30,
+      saVariableEarning: 1000, technicianVariableEarning: 2000, bodyshopVariableEarning: 3000,
+      customAdditions: 0, otherDeductions: 0, advanceDeduction: 0,
+    }).grossPayout,
+    want: 26000,
+  },
+  {
+    name: 'CASE E net includes Bodyshop once',
+    got: computePayrollAmounts({
+      salaryType: 'both', baseSalary: 20000, payableDays: 30,
+      saVariableEarning: 0, technicianVariableEarning: 0, bodyshopVariableEarning: 3000,
+      customAdditions: 0, otherDeductions: 500, advanceDeduction: 1000,
+    }).netPayable,
+    want: 21500,
+  },
+  {
+    name: 'scenario 9 net Bodyshop once',
+    got: computePayrollAmounts({
+      salaryType: 'both', baseSalary: 20000, payableDays: 30,
+      saVariableEarning: 0, technicianVariableEarning: 0, bodyshopVariableEarning: 5000,
+      customAdditions: 0, otherDeductions: 500, advanceDeduction: 1000,
+    }).netPayable,
+    want: 23500,
+  },
+  {
+    name: 'base-only ignores Bodyshop Variable',
+    got: computePayrollAmounts({
+      salaryType: 'base', baseSalary: 20000, payableDays: 30,
+      saVariableEarning: 0, technicianVariableEarning: 0, bodyshopVariableEarning: 5000,
+      customAdditions: 0, otherDeductions: 0, advanceDeduction: 0,
+    }).variableTotal,
+    want: 0,
+  },
+  { name: 'Accident sr_type is accident', got: isAccidentSrType('Accident'), want: true },
+  { name: 'ACCIDENT sr_type is accident', got: isAccidentSrType('ACCIDENT'), want: true },
+  { name: 'Paid Service is not accident', got: isAccidentSrType('Paid Service'), want: false },
+  { name: 'Paid Service is SA-allowed', got: isSaTrackerAllowedServiceType('Paid Service'), want: true },
+  { name: 'Accident is not SA-allowed', got: isSaTrackerAllowedServiceType('Accident'), want: false },
 ]
 
 let failed = 0

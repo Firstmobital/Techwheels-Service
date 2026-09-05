@@ -1,9 +1,13 @@
+import { fetchMonthlyBodyshopEarningsByCode } from '../bodyshopMonthlyEarnings'
 import { supabase } from '../supabase'
 import { monthRangeIst } from './calculations'
 import {
+  SA_TRACKER_ALLOWED_SERVICE_TYPES,
   calculateSAIncome,
   calculateTechnicianIncome,
   fetchSharePercents,
+  isAccidentSrType,
+  isSaTrackerAllowedServiceType,
   normFuelBucket,
   normalizeEmployeeCode,
   normalizeJobCardNumber,
@@ -25,6 +29,7 @@ export interface MonthlyVariableEarning {
   employeeCode: string
   saEarning: number
   technicianEarning: number
+  bodyshopEarning: number
   detail: VariableSourceDetail
 }
 
@@ -81,13 +86,16 @@ export async function fetchMonthlySaEarningsByCode(payrollMonth: string): Promis
   while (true) {
     const res = await supabase
       .from('job_card_closed_data')
-      .select('employee_code, sr_assigned_to, dms_final_labour_amount, job_card_number, closed_date_time, invoice_date')
+      .select('employee_code, sr_assigned_to, dms_final_labour_amount, job_card_number, closed_date_time, invoice_date, sr_type')
+      .in('sr_type', [...SA_TRACKER_ALLOWED_SERVICE_TYPES])
       .gte('invoice_date', fromDate)
       .lte('invoice_date', toDate)
       .range(offset, offset + QUERY_PAGE_SIZE - 1)
     if (res.error) throw new Error(res.error.message)
     const batch = res.data ?? []
     batch.forEach((r) => {
+      const srType = (r as { sr_type?: string }).sr_type ?? null
+      if (isAccidentSrType(srType) || !isSaTrackerAllowedServiceType(srType)) return
       rows.push({
         employee_code: (r as { employee_code?: string }).employee_code ?? null,
         labour: parseAmount((r as { dms_final_labour_amount?: unknown }).dms_final_labour_amount),
@@ -121,13 +129,14 @@ async function fetchClosedLabourByInvoiceMonth(payrollMonth: string): Promise<Ma
   while (true) {
     const res = await supabase
       .from('job_card_closed_data')
-      .select('job_card_number, dms_final_labour_amount, closed_date_time, invoice_date')
+      .select('job_card_number, dms_final_labour_amount, closed_date_time, invoice_date, sr_type')
       .gte('invoice_date', fromDate)
       .lte('invoice_date', toDate)
       .range(offset, offset + QUERY_PAGE_SIZE - 1)
     if (res.error) throw new Error(res.error.message)
     const batch = res.data ?? []
     batch.forEach((row) => {
+      if (isAccidentSrType((row as { sr_type?: string }).sr_type)) return
       const jc = normalizeJobCardNumber((row as { job_card_number?: string }).job_card_number)
       if (!jc) return
       const amount = parseAmount((row as { dms_final_labour_amount?: unknown }).dms_final_labour_amount)
@@ -202,13 +211,16 @@ export async function fetchMonthlyTechnicianEarningsByCode(payrollMonth: string)
   return totals
 }
 
+export { fetchMonthlyBodyshopEarningsByCode }
+
 export async function fetchMonthlyVariableEarnings(
   payrollMonth: string,
   employeeCodes: string[],
 ): Promise<Map<string, MonthlyVariableEarning>> {
-  const [saMap, techMap] = await Promise.all([
+  const [saMap, techMap, bodyshopMap] = await Promise.all([
     fetchMonthlySaEarningsByCode(payrollMonth),
     fetchMonthlyTechnicianEarningsByCode(payrollMonth),
+    fetchMonthlyBodyshopEarningsByCode(payrollMonth),
   ])
 
   const out = new Map<string, MonthlyVariableEarning>()
@@ -216,15 +228,19 @@ export async function fetchMonthlyVariableEarnings(
     const code = normalizeEmployeeCode(rawCode)
     const saEarning = Math.round((saMap.get(code) ?? 0) * 100) / 100
     const technicianEarning = Math.round((techMap.get(code) ?? 0) * 100) / 100
+    const bodyshopEarning = Math.round((bodyshopMap.get(code) ?? 0) * 100) / 100
+    const noVariable = saEarning === 0 && technicianEarning === 0 && bodyshopEarning === 0
     out.set(code, {
       employeeCode: code,
       saEarning,
       technicianEarning,
+      bodyshopEarning,
       detail: {
         saEarning,
         technicianEarning,
-        needsReview: saEarning === 0 && technicianEarning === 0,
-        reviewReason: saEarning === 0 && technicianEarning === 0 ? 'No variable source for month' : undefined,
+        bodyshopEarning,
+        needsReview: noVariable,
+        reviewReason: noVariable ? 'No variable source for month' : undefined,
       },
     })
   })

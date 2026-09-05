@@ -55,6 +55,31 @@ export function normalizeStatusValue(value: string | null | undefined): string {
   return String(value ?? '').trim().toLowerCase() || 'work_inprocess'
 }
 
+/** Same allowlist as SA Tracker (`FLOOR_INCHARGE_ALLOWED_SERVICE_TYPES`). Accident is not included. */
+export const SA_TRACKER_ALLOWED_SERVICE_TYPES = [
+  'Running Repairs',
+  'First Free Service',
+  'Second Free Service',
+  'Third Free Service',
+  'Paid Service',
+  'Updation',
+  'E Breakdown',
+  'Campaign',
+] as const
+
+export function normalizeServiceType(value: string | null | undefined): string {
+  return String(value ?? '').trim().replace(/\s+/g, ' ').toLowerCase()
+}
+
+export function isAccidentSrType(value: string | null | undefined): boolean {
+  return normalizeServiceType(value) === 'accident'
+}
+
+export function isSaTrackerAllowedServiceType(value: string | null | undefined): boolean {
+  const normalized = normalizeServiceType(value)
+  return SA_TRACKER_ALLOWED_SERVICE_TYPES.some((serviceType) => normalizeServiceType(serviceType) === normalized)
+}
+
 import { supabase } from '../supabase'
 
 export async function fetchSharePercents(

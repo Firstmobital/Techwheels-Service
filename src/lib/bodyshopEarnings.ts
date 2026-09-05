@@ -26,6 +26,20 @@ export const ALL_BODYSHOP_ROLES: BodyshopRole[] = [
   'PARTS_INCHARGE',
 ]
 
+/** Tracker tab defaults when `bodyshop_role_earning_settings` has no row. Includes SA (not a floor role). */
+export const DEFAULT_BODYSHOP_SHARE_PERCENTS: Record<BodyshopRole | 'SA', number> = {
+  SA: 3,
+  FLOOR_INCHARGE: 3,
+  DENTOR: 5,
+  DENTOR_HELPER: 3,
+  PAINTER: 5,
+  PAINTER_HELPER: 3,
+  TECHNICIAN: 4,
+  RUBBING: 2,
+  EDP: 2,
+  PARTS_INCHARGE: 2,
+}
+
 const PARTNER_ROLE: Partial<Record<BodyshopRole, BodyshopRole>> = {
   DENTOR: 'DENTOR_HELPER',
   DENTOR_HELPER: 'DENTOR',

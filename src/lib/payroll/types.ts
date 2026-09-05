@@ -84,6 +84,7 @@ export interface PayrollMonth {
 export interface VariableSourceDetail {
   saEarning?: number
   technicianEarning?: number
+  bodyshopEarning?: number
   saJobCount?: number
   technicianJobCount?: number
   saSharePercent?: number
@@ -110,6 +111,7 @@ export interface PayrollEntry {
   earned_base: number
   sa_variable_earning: number
   technician_variable_earning: number
+  bodyshop_variable_earning: number
   variable_earning_total: number
   custom_additions: number
   other_deductions: number

@@ -4,6 +4,7 @@ import { Icon } from '../components/Icon'
 import DateRangeFilter, { currentMonthRange, type DateRange } from '../components/DateRangeFilter'
 import {
   ALL_BODYSHOP_ROLES,
+  DEFAULT_BODYSHOP_SHARE_PERCENTS,
   buildSupportByJcRole,
   formatEffectivePercentLabel,
   getActiveSupportForRole,
@@ -93,16 +94,16 @@ type TabMeta = { key: TabKey; label: string; icon: string; defaultPct: number; m
 
 // Mirrors Bodyshop Floor's current role set exactly (ROLE_META / ALL_ROLES in BodyshopFloorPage.tsx)
 const TABS: TabMeta[] = [
-  { key: 'SA',             label: 'SA',             icon: '🧑‍💼', defaultPct: 3, mode: 'sa'   },
-  { key: 'FLOOR_INCHARGE', label: 'Floor Incharge', icon: '👷', defaultPct: 3, mode: 'tech' },
-  { key: 'DENTOR',         label: 'Dentor',         icon: '🔨', defaultPct: 5, mode: 'tech' },
-  { key: 'DENTOR_HELPER',  label: 'Dentor Helper',  icon: '🔩', defaultPct: 3, mode: 'tech' },
-  { key: 'PAINTER',        label: 'Painter',        icon: '🎨', defaultPct: 5, mode: 'tech' },
-  { key: 'PAINTER_HELPER', label: 'Painter Helper', icon: '🖌️', defaultPct: 3, mode: 'tech' },
-  { key: 'TECHNICIAN',     label: 'Technician',     icon: '🔧', defaultPct: 4, mode: 'tech' },
-  { key: 'RUBBING',        label: 'Rubbing',        icon: '🪣', defaultPct: 2, mode: 'tech' },
-  { key: 'EDP',            label: 'EDP',            icon: '🧴', defaultPct: 2, mode: 'tech' },
-  { key: 'PARTS_INCHARGE', label: 'Parts Incharge', icon: '📦', defaultPct: 2, mode: 'tech' },
+  { key: 'SA',             label: 'SA',             icon: '🧑‍💼', defaultPct: DEFAULT_BODYSHOP_SHARE_PERCENTS.SA, mode: 'sa'   },
+  { key: 'FLOOR_INCHARGE', label: 'Floor Incharge', icon: '👷', defaultPct: DEFAULT_BODYSHOP_SHARE_PERCENTS.FLOOR_INCHARGE, mode: 'tech' },
+  { key: 'DENTOR',         label: 'Dentor',         icon: '🔨', defaultPct: DEFAULT_BODYSHOP_SHARE_PERCENTS.DENTOR, mode: 'tech' },
+  { key: 'DENTOR_HELPER',  label: 'Dentor Helper',  icon: '🔩', defaultPct: DEFAULT_BODYSHOP_SHARE_PERCENTS.DENTOR_HELPER, mode: 'tech' },
+  { key: 'PAINTER',        label: 'Painter',        icon: '🎨', defaultPct: DEFAULT_BODYSHOP_SHARE_PERCENTS.PAINTER, mode: 'tech' },
+  { key: 'PAINTER_HELPER', label: 'Painter Helper', icon: '🖌️', defaultPct: DEFAULT_BODYSHOP_SHARE_PERCENTS.PAINTER_HELPER, mode: 'tech' },
+  { key: 'TECHNICIAN',     label: 'Technician',     icon: '🔧', defaultPct: DEFAULT_BODYSHOP_SHARE_PERCENTS.TECHNICIAN, mode: 'tech' },
+  { key: 'RUBBING',        label: 'Rubbing',        icon: '🪣', defaultPct: DEFAULT_BODYSHOP_SHARE_PERCENTS.RUBBING, mode: 'tech' },
+  { key: 'EDP',            label: 'EDP',            icon: '🧴', defaultPct: DEFAULT_BODYSHOP_SHARE_PERCENTS.EDP, mode: 'tech' },
+  { key: 'PARTS_INCHARGE', label: 'Parts Incharge', icon: '📦', defaultPct: DEFAULT_BODYSHOP_SHARE_PERCENTS.PARTS_INCHARGE, mode: 'tech' },
 ]
 
 const QUERY_PAGE = 1000
@@ -214,11 +215,18 @@ export default function BodyshopTrackerPage() {
   const [reportEmailState, setReportEmailState] = useState<{ type: 'success' | 'error'; message: string } | null>(null)
 
   // Per-tab earning %
-  const [sharePct, setSharePct] = useState<Record<TabKey, number>>({
-    SA: 3, FLOOR_INCHARGE: 3, DENTOR: 5, DENTOR_HELPER: 3, PAINTER: 5, PAINTER_HELPER: 3, TECHNICIAN: 4, RUBBING: 2, EDP: 2, PARTS_INCHARGE: 2
-  })
+  const [sharePct, setSharePct] = useState<Record<TabKey, number>>({ ...DEFAULT_BODYSHOP_SHARE_PERCENTS })
   const [draftPct, setDraftPct] = useState<Record<TabKey, string>>({
-    SA: '3', FLOOR_INCHARGE: '3', DENTOR: '5', DENTOR_HELPER: '3', PAINTER: '5', PAINTER_HELPER: '3', TECHNICIAN: '4', RUBBING: '2', EDP: '2', PARTS_INCHARGE: '2'
+    SA: String(DEFAULT_BODYSHOP_SHARE_PERCENTS.SA),
+    FLOOR_INCHARGE: String(DEFAULT_BODYSHOP_SHARE_PERCENTS.FLOOR_INCHARGE),
+    DENTOR: String(DEFAULT_BODYSHOP_SHARE_PERCENTS.DENTOR),
+    DENTOR_HELPER: String(DEFAULT_BODYSHOP_SHARE_PERCENTS.DENTOR_HELPER),
+    PAINTER: String(DEFAULT_BODYSHOP_SHARE_PERCENTS.PAINTER),
+    PAINTER_HELPER: String(DEFAULT_BODYSHOP_SHARE_PERCENTS.PAINTER_HELPER),
+    TECHNICIAN: String(DEFAULT_BODYSHOP_SHARE_PERCENTS.TECHNICIAN),
+    RUBBING: String(DEFAULT_BODYSHOP_SHARE_PERCENTS.RUBBING),
+    EDP: String(DEFAULT_BODYSHOP_SHARE_PERCENTS.EDP),
+    PARTS_INCHARGE: String(DEFAULT_BODYSHOP_SHARE_PERCENTS.PARTS_INCHARGE),
   })
 
   const curPct    = sharePct[activeTab]

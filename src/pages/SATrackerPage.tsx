@@ -9,6 +9,7 @@ import {
 } from '../lib/employeeMatcher'
 import { sendSAEarningsTestEmail } from '../lib/api/email'
 import { getBlockedDisbursementCodesForRange } from '../lib/payroll/disbursementGuard'
+import { SA_TRACKER_ALLOWED_SERVICE_TYPES, isSaTrackerAllowedServiceType } from '../lib/payroll/earningsFormulas'
 import { supabase } from '../lib/supabase'
 import * as XLSX from 'xlsx'
 
@@ -115,16 +116,7 @@ type YesterdaySARow = {
 
 const DEFAULT_SA_SHARE_PERCENT = 3
 const DEFAULT_EV_SHARE_PERCENT = 4
-const FLOOR_INCHARGE_ALLOWED_SERVICE_TYPES = [
-  'Running Repairs',
-  'First Free Service',
-  'Second Free Service',
-  'Third Free Service',
-  'Paid Service',
-  'Updation',
-  'E Breakdown',
-  'Campaign',
-]
+const FLOOR_INCHARGE_ALLOWED_SERVICE_TYPES = SA_TRACKER_ALLOWED_SERVICE_TYPES
 const ASSIGNMENT_QUERY_CHUNK_SIZE = 200
 
 type TechnicianAssignmentStatusRow = {
@@ -228,13 +220,8 @@ function statusLabel(value: string | null | undefined): string {
   return String(value ?? '').trim() || 'Not assigned'
 }
 
-function normalizeServiceType(value: string | null | undefined): string {
-  return String(value ?? '').trim().replace(/\s+/g, ' ').toLowerCase()
-}
-
 function isFloorInchargeAllowedServiceType(value: string | null | undefined): boolean {
-  const normalized = normalizeServiceType(value)
-  return FLOOR_INCHARGE_ALLOWED_SERVICE_TYPES.some((serviceType) => normalizeServiceType(serviceType) === normalized)
+  return isSaTrackerAllowedServiceType(value)
 }
 
 function getAssignmentRecencyMs(assignment: TechnicianAssignmentStatusRow): number {

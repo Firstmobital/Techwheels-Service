@@ -232,6 +232,7 @@ export async function recomputePayrollMonth(payrollMonth: string): Promise<Payro
     const variable = variableMap.get(code)
     const saVar = variable?.saEarning ?? 0
     const techVar = variable?.technicianEarning ?? 0
+    const bodyshopVar = variable?.bodyshopEarning ?? 0
 
     const role = String(emp.role ?? '').trim().toUpperCase()
     let finalSaVar = saVar
@@ -247,7 +248,8 @@ export async function recomputePayrollMonth(payrollMonth: string): Promise<Payro
     const otherDeductions = existing?.other_deductions ?? 0
     const advanceDeduction = await getAdvanceDeductionForMonth(code, month)
 
-    const needsReview = salaryTypeIncludesVariable(comp.salary_type) && finalSaVar + finalTechVar <= 0
+    const needsReview = salaryTypeIncludesVariable(comp.salary_type)
+      && finalSaVar + finalTechVar + bodyshopVar <= 0
 
     const amounts = computePayrollAmounts({
       salaryType: comp.salary_type,
@@ -255,6 +257,7 @@ export async function recomputePayrollMonth(payrollMonth: string): Promise<Payro
       payableDays,
       saVariableEarning: finalSaVar,
       technicianVariableEarning: finalTechVar,
+      bodyshopVariableEarning: bodyshopVar,
       customAdditions,
       otherDeductions,
       advanceDeduction,
@@ -276,6 +279,7 @@ export async function recomputePayrollMonth(payrollMonth: string): Promise<Payro
       earned_base: amounts.earnedBase,
       sa_variable_earning: finalSaVar,
       technician_variable_earning: finalTechVar,
+      bodyshop_variable_earning: bodyshopVar,
       variable_earning_total: amounts.variableTotal,
       custom_additions: customAdditions,
       other_deductions: otherDeductions,
@@ -346,6 +350,7 @@ export async function addPayrollAdjustment(input: {
     payableDays: entry.payable_days_snapshot,
     saVariableEarning: entry.sa_variable_earning,
     technicianVariableEarning: entry.technician_variable_earning,
+    bodyshopVariableEarning: Number(entry.bodyshop_variable_earning ?? 0),
     customAdditions,
     otherDeductions,
     advanceDeduction: entry.advance_deduction,

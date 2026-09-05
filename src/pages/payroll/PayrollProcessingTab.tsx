@@ -113,6 +113,7 @@ export default function PayrollProcessingTab({
     acc.earnedBase += Number(e.earned_base)
     acc.saVariable += Number(e.sa_variable_earning)
     acc.technicianVariable += Number(e.technician_variable_earning)
+    acc.bodyshopVariable += Number(e.bodyshop_variable_earning ?? 0)
     acc.net += Number(e.net_payable)
     return acc
   }, {
@@ -122,6 +123,7 @@ export default function PayrollProcessingTab({
     earnedBase: 0,
     saVariable: 0,
     technicianVariable: 0,
+    bodyshopVariable: 0,
     net: 0,
   }), [aggregateScopedRows])
 
@@ -324,6 +326,10 @@ export default function PayrollProcessingTab({
           <div className="kpi__lab">Technician Variable Total</div>
         </div>
         <div className="kpi">
+          <div className="kpi__val">{formatCurrency(totals.bodyshopVariable)}</div>
+          <div className="kpi__lab">Bodyshop Variable Total</div>
+        </div>
+        <div className="kpi">
           <div className="kpi__val">{formatCurrency(totals.net)}</div>
           <div className="kpi__lab">Net Payable Total</div>
         </div>
@@ -334,7 +340,7 @@ export default function PayrollProcessingTab({
           <thead>
             <tr>
               <th>Code</th><th>Name</th><th>Type</th><th>Base</th><th>Days</th><th>Earned Base</th>
-              <th>SA Var</th><th>Tech Var</th><th>Additions</th><th>Advance</th><th>Other Ded.</th><th>Net</th><th>Flags</th><th></th>
+              <th>SA Var</th><th>Tech Var</th><th>Bodyshop Var</th><th>Additions</th><th>Advance</th><th>Other Ded.</th><th>Net</th><th>Flags</th><th></th>
             </tr>
           </thead>
           <tbody>
@@ -351,6 +357,7 @@ export default function PayrollProcessingTab({
                   <td>{formatCurrency(Number(e.earned_base))}</td>
                   <td>{formatCurrency(Number(e.sa_variable_earning))}</td>
                   <td>{formatCurrency(Number(e.technician_variable_earning))}</td>
+                  <td>{formatCurrency(Number(e.bodyshop_variable_earning ?? 0))}</td>
                   <td>{formatCurrency(Number(e.custom_additions))}</td>
                   <td>{formatCurrency(Number(e.advance_deduction))}</td>
                   <td>{formatCurrency(Number(e.other_deductions))}</td>

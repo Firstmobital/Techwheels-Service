@@ -53,7 +53,7 @@ export default function SalarySlipReportTab({ payrollMonth, monthInput, onMonthC
   function exportConsolidated() {
     const headers = [
       'Employee Code', 'Employee Name', 'Department', 'Branch', 'Role', 'Payroll Month',
-      'Earned Base', 'SA Variable', 'Tech Variable', 'Additions', 'Gross',
+      'Earned Base', 'SA Variable', 'Tech Variable', 'Bodyshop Variable', 'Additions', 'Gross',
       'Advance Recovery', 'Other Deductions', 'Net Payable', 'Status',
     ]
     const rows = entries.map((e) => {
@@ -61,7 +61,7 @@ export default function SalarySlipReportTab({ payrollMonth, monthInput, onMonthC
       return [
         e.employee_code, identity?.employeeName ?? e.employee_code, identity?.department ?? '', identity?.branch ?? '', identity?.role ?? '',
         payrollMonth.slice(0, 7),
-        e.earned_base, e.sa_variable_earning, e.technician_variable_earning, e.custom_additions, e.gross_payout,
+        e.earned_base, e.sa_variable_earning, e.technician_variable_earning, e.bodyshop_variable_earning ?? 0, e.custom_additions, e.gross_payout,
         e.advance_deduction, e.other_deductions, e.net_payable, monthStatus.toUpperCase(),
       ]
     })
@@ -113,6 +113,9 @@ export default function SalarySlipReportTab({ payrollMonth, monthInput, onMonthC
               )}
               {Number(selectedEntry.technician_variable_earning) > 0 && (
                 <tr><td>Technician Variable Earnings</td><td style={{ textAlign: 'right' }}>{formatCurrency(Number(selectedEntry.technician_variable_earning))}</td></tr>
+              )}
+              {Number(selectedEntry.bodyshop_variable_earning ?? 0) > 0 && (
+                <tr><td>Bodyshop Variable Earnings</td><td style={{ textAlign: 'right' }}>{formatCurrency(Number(selectedEntry.bodyshop_variable_earning ?? 0))}</td></tr>
               )}
               {Number(selectedEntry.custom_additions) > 0 && (
                 <tr><td>Other Additions / Arrears</td><td style={{ textAlign: 'right' }}>{formatCurrency(Number(selectedEntry.custom_additions))}</td></tr>
