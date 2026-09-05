@@ -48,8 +48,9 @@ export function computePayrollAmounts(input: PayrollCalcInput): PayrollCalcResul
   return { earnedBase, variableTotal, grossPayout, netPayable }
 }
 
+/** 30 is the salary divisor, not a payable-days cap. Rejects NaN/negative/non-half-day values. */
 export function isValidPayableDays(value: number): boolean {
-  if (!Number.isFinite(value) || value < 0 || value > 30) return false
+  if (!Number.isFinite(value) || value < 0) return false
   return Math.abs(value * 2 - Math.round(value * 2)) < 0.001
 }
 

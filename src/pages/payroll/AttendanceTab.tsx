@@ -6,7 +6,7 @@ import {
   fetchPayrollMonth,
   saveAttendance,
 } from '../../lib/api/payroll'
-import { calcEarnedBaseSalary, formatCurrency } from '../../lib/payroll/calculations'
+import { calcEarnedBaseSalary, formatCurrency, isValidPayableDays } from '../../lib/payroll/calculations'
 import { exportWorkbook, previewAttendanceImport, readWorkbookRows } from '../../lib/payroll/excelUtils'
 import { SALARY_TYPE_LABELS } from '../../lib/payroll/types'
 import type { ImportPreviewResult } from '../../lib/payroll/types'
@@ -84,6 +84,9 @@ export default function AttendanceTab({ payrollMonth, monthInput, onMonthChange,
     setError(null)
     try {
       const payableDays = Number(draftDays[code])
+      if (!isValidPayableDays(payableDays)) {
+        throw new Error('Payable days must be a non-negative number in 0.5 increments')
+      }
       await saveAttendance(code, payrollMonth, payableDays, draftNotes[code]?.trim() || null)
       await reload()
       setMessage(`Saved attendance for ${code}`)
@@ -223,7 +226,7 @@ export default function AttendanceTab({ payrollMonth, monthInput, onMonthChange,
                   <td>{formatCurrency(Number(comp.base_salary))}</td>
                   <td>
                     <input
-                      type="number" step="0.5" min={0} max={30}
+                      type="number" step="0.5" min={0}
                       value={draftDays[code] ?? ''}
                       disabled={!canModify || locked}
                       onChange={(ev) => setDraftDays((prev) => ({ ...prev, [code]: ev.target.value }))}

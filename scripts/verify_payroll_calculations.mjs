@@ -8,6 +8,11 @@ function calcEarnedBaseSalary(baseSalary, payableDays) {
   return Math.round((baseSalary / 30) * payableDays)
 }
 
+function isValidPayableDays(value) {
+  if (!Number.isFinite(value) || value < 0) return false
+  return Math.abs(value * 2 - Math.round(value * 2)) < 0.001
+}
+
 function computeNet(input) {
   const earnedBase = input.salaryType === 'variable' ? 0 : calcEarnedBaseSalary(input.baseSalary, input.payableDays)
   const variableTotal = input.salaryType === 'base' ? 0 : input.saVariableEarning + input.technicianVariableEarning
@@ -105,6 +110,36 @@ function advanceProgressPercent(recoveredAmount, originalAmount) {
 }
 
 const tests = [
+  { name: '30000 x 30 days', got: calcEarnedBaseSalary(30000, 30), want: 30000 },
+  { name: '30000 x 31 days', got: calcEarnedBaseSalary(30000, 31), want: 31000 },
+  { name: '30000 x 32 days', got: calcEarnedBaseSalary(30000, 32), want: 32000 },
+  { name: '30000 x 28 days', got: calcEarnedBaseSalary(30000, 28), want: 28000 },
+  { name: '20150 x 32 days (nearest rupee)', got: calcEarnedBaseSalary(20150, 32), want: 21493 },
+  {
+    name: '30000 x 32 days net with no other components',
+    got: computeNet({
+      salaryType: 'base', baseSalary: 30000, payableDays: 32,
+      saVariableEarning: 0, technicianVariableEarning: 0,
+      customAdditions: 0, otherDeductions: 0, advanceDeduction: 0,
+    }),
+    want: 32000,
+  },
+  { name: 'payable days 32 is valid', got: isValidPayableDays(32), want: true },
+  { name: 'payable days 31.5 is valid', got: isValidPayableDays(31.5), want: true },
+  { name: 'payable days 0 is valid', got: isValidPayableDays(0), want: true },
+  { name: 'payable days 31.3 increment is invalid', got: isValidPayableDays(31.3), want: false },
+  { name: 'payable days -1 is invalid', got: isValidPayableDays(-1), want: false },
+  { name: 'payable days NaN is invalid', got: isValidPayableDays(Number.NaN), want: false },
+  {
+    name: 'excel import accepts payable days 32',
+    got: isValidPayableDays(Number('32')),
+    want: true,
+  },
+  {
+    name: 'excel import rejects payable days -1',
+    got: isValidPayableDays(Number('-1')),
+    want: false,
+  },
   { name: '28000 x 29 days', got: calcEarnedBaseSalary(28000, 29), want: 27067 },
   { name: '22000 x 29.5 days', got: calcEarnedBaseSalary(22000, 29.5), want: 21633 },
   {

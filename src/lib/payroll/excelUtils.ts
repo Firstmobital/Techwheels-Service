@@ -227,7 +227,7 @@ export function previewAttendanceImport(
     }
     if (!isValidPayableDays(payableDays)) {
       rejected += 1
-      previewRows.push({ rowNumber, employeeCode: code, status: 'rejected', message: 'Payable days must be 0–30 in 0.5 increments' })
+      previewRows.push({ rowNumber, employeeCode: code, status: 'rejected', message: 'Payable days must be a non-negative number in 0.5 increments' })
       return
     }
 

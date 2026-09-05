@@ -1,5 +1,5 @@
 import { supabase } from '../supabase'
-import { computePayrollAmounts, parsePayrollMonthInput, salaryTypeIncludesVariable } from '../payroll/calculations'
+import { computePayrollAmounts, isValidPayableDays, parsePayrollMonthInput, salaryTypeIncludesVariable } from '../payroll/calculations'
 import { roundPayrollPaise } from '../payroll/advanceSchedule'
 import { fetchMonthlyVariableEarnings } from '../payroll/variableEarnings'
 import type {
@@ -74,6 +74,9 @@ export async function saveAttendance(
 ): Promise<void> {
   const month = parsePayrollMonthInput(payrollMonth)
   if (!month) throw new Error('Invalid payroll month')
+  if (!isValidPayableDays(payableDays)) {
+    throw new Error('Payable days must be a non-negative number in 0.5 increments')
+  }
   const res = await supabase.from('payroll_attendance').upsert(
     {
       employee_code: employeeCode.trim().toUpperCase(),
