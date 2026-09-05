@@ -269,7 +269,7 @@ Optional/admin-sensitive:
 - Dealer metadata updates may require user re-login to refresh JWT claims.
 - Large import duplicate handling can become expensive for heavily duplicated files.
 - Ensure module-permission schema remains present and consistent across environments.
-- After applying DBL-0040, an admin must set the Payroll Security Code with `SELECT public.payroll_set_security_code('<code>');`. Do not commit the plaintext. `technician_earnings_settings` and `employee_master` bank fields remain on their existing (non-payroll-grant) write authorities because those tables are shared with Technician / master-data flows.
+- After applying DBL-0040, set the Payroll Security Code from the Supabase SQL Editor (no app JWT). Prefer a direct hash insert, or apply DBL-0041 and then `SELECT public.payroll_set_security_code('<code>');`. Do not commit the plaintext. `technician_earnings_settings` and `employee_master` bank fields remain on their existing (non-payroll-grant) write authorities because those tables are shared with Technician / master-data flows.
 
 ## 11. Documentation Governance
 

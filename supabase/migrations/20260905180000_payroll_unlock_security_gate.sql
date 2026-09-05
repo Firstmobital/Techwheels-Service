@@ -8,9 +8,13 @@
 -- for non-admin payroll writes. Unlock requires a fresh code for every caller,
 -- including admin. Do not seed a plaintext code in this file.
 --
--- Operator after apply (SQL editor, as an admin session or via payroll_set_security_code):
---   SELECT public.payroll_set_security_code('<operator-chosen-code>');
--- Rotate the same way. Never commit the plaintext.
+-- Operator after apply (Supabase SQL Editor has no app JWT, so is_admin() is false).
+-- Preferred SQL Editor path (hashes in-place; do not commit the plaintext):
+--   INSERT INTO public.payroll_security_settings (id, security_code_hash, updated_at)
+--   VALUES (1, extensions.crypt('<operator-chosen-code>', extensions.gen_salt('bf')), now())
+--   ON CONFLICT (id) DO UPDATE
+--   SET security_code_hash = EXCLUDED.security_code_hash, updated_at = now();
+-- App admins can also call payroll_set_security_code() from an authenticated admin session.
 --
 -- Rollback:
 --   DROP FUNCTION IF EXISTS public.payroll_unlock_month(date, text, text, text);
@@ -219,8 +223,20 @@ SECURITY DEFINER
 SET search_path = public
 SET row_security = off
 AS $$
+DECLARE
+  v_jwt_role text := coalesce(current_setting('request.jwt.claim.role', true), '');
+  v_has_jwt boolean := auth.uid() IS NOT NULL
+    OR nullif(current_setting('request.jwt.claim.sub', true), '') IS NOT NULL;
 BEGIN
-  IF NOT public.is_admin() THEN
+  -- App admin JWT may rotate. SQL Editor has no JWT (auth.uid() is null).
+  -- service_role may provision. Authenticated non-admin JWT must fail.
+  -- Do not use current_user: this function is SECURITY DEFINER and runs as owner.
+  IF NOT (
+    public.is_admin()
+    OR v_jwt_role = 'service_role'
+    OR coalesce(auth.role(), '') = 'service_role'
+    OR NOT v_has_jwt
+  ) THEN
     RAISE EXCEPTION 'Unauthorized: setting the payroll security code requires admin';
   END IF;
 
