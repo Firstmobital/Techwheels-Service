@@ -6270,46 +6270,429 @@ tr.brx-recov-row--mismatch td:first-child {
   vertical-align: middle;
 }
 
-.payroll-advance-issue {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(240px, 0.9fr);
-  gap: 1rem;
-  border: 1px solid #e2e8f0;
-  border-radius: 8px;
-  padding: 0.85rem;
-  margin-bottom: 1rem;
-}
-.payroll-advance-methods {
+.payroll-advance {
   display: flex;
   flex-direction: column;
-  gap: 0.35rem;
+  gap: 0.7rem;
 }
-.payroll-advance-method {
+
+.payroll-advance-toolbar {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
+  justify-content: space-between;
+  gap: 0.45rem 0.75rem;
+}
+
+.payroll-advance-toolbar__copy h2 {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 750;
+  letter-spacing: -0.01em;
+  color: #0f172a;
+}
+
+.payroll-advance-toolbar__copy p {
+  margin: 0.1rem 0 0;
+  font-size: 0.72rem;
+  color: #64748b;
+}
+
+.payroll-advance-toolbar__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.payroll-advance-sectionhead {
+  display: flex;
+  align-items: flex-start;
   gap: 0.45rem;
-  font-size: 0.78rem;
-  color: #334155;
+  margin: 0 0 0.55rem;
 }
-.payroll-advance-preview {
-  background: #f8fafc;
-  border: 1px solid #e2e8f0;
-  border-radius: 8px;
-  padding: 0.75rem;
-}
-.payroll-advance-preview h3 {
+
+.payroll-advance-sectionhead h3 {
   margin: 0;
   font-size: 0.82rem;
+  font-weight: 750;
+  color: #0f172a;
+}
+
+.payroll-advance-sectionhead p {
+  margin: 0.08rem 0 0;
+  font-size: 0.68rem;
+  color: #64748b;
+  line-height: 1.35;
+}
+
+.payroll-advance-sectionhead__ic {
+  width: 26px;
+  height: 26px;
+  border-radius: 7px;
+  display: grid;
+  place-items: center;
+  flex: none;
+  background: #eff6ff;
+  color: #2563eb;
+}
+
+.payroll-advance-issue {
+  display: grid;
+  grid-template-columns: minmax(0, 1.5fr) minmax(220px, 1fr);
+  align-items: start;
+  gap: 0.75rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 0.7rem 0.75rem;
+  background: #fff;
+}
+
+.payroll-advance-form {
+  min-width: 0;
+}
+
+.payroll-advance-fields {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.5rem 0.65rem;
+}
+
+.payroll-advance-fields__full {
+  grid-column: 1 / -1;
+}
+
+.payroll-advance .inp,
+.payroll-advance .sel {
+  height: 36px;
+  font-size: 13px;
+  padding: 0 11px;
+}
+
+.payroll-advance textarea.inp {
+  height: auto;
+  min-height: 0;
+  padding: 7px 11px;
+  resize: vertical;
+  line-height: 1.4;
+}
+
+.payroll-advance-fieldlabel {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: #475569;
+}
+
+.payroll-advance-affix {
+  position: relative;
+}
+
+.payroll-advance-affix .inp {
+  padding-left: 28px;
+}
+
+.payroll-advance-affix--icon .inp {
+  padding-left: 32px;
+}
+
+.payroll-advance-affix--narrow,
+.payroll-advance-input--narrow {
+  max-width: 220px;
+}
+
+.payroll-advance-affix__icon,
+.payroll-advance-affix__text {
+  position: absolute;
+  left: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #64748b;
+  pointer-events: none;
+  display: grid;
+  place-items: center;
+}
+
+.payroll-advance-affix__text {
+  font-size: 13px;
   font-weight: 700;
 }
+
+.payroll-advance-methods {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.4rem;
+}
+
+.payroll-advance-method input[type="radio"] {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.payroll-advance-method {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  gap: 0.4rem;
+  min-width: 0;
+  margin: 0;
+  padding: 0.5rem 1.35rem 0.5rem 0.55rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 9px;
+  background: #fff;
+  color: #334155;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s, box-shadow 0.15s;
+}
+
+.payroll-advance-method:hover {
+  border-color: #cbd5e1;
+  background: #f8fafc;
+}
+
+.payroll-advance-method.is-selected {
+  background: #eff6ff;
+  border-color: #2563eb;
+  box-shadow: 0 0 0 3px color-mix(in srgb, #2563eb 14%, transparent);
+}
+
+.payroll-advance-method:has(input:focus-visible) {
+  box-shadow: 0 0 0 3px color-mix(in srgb, #2563eb 22%, transparent);
+}
+
+.payroll-advance-method__ic {
+  width: 26px;
+  height: 26px;
+  border-radius: 7px;
+  display: grid;
+  place-items: center;
+  flex: none;
+  background: #f1f5f9;
+  color: #64748b;
+}
+
+.payroll-advance-method.is-selected .payroll-advance-method__ic {
+  background: #dbeafe;
+  color: #2563eb;
+}
+
+.payroll-advance-method__copy {
+  display: flex;
+  flex-direction: column;
+  gap: 0.08rem;
+  min-width: 0;
+}
+
+.payroll-advance-method__title {
+  font-size: 0.75rem;
+  font-weight: 750;
+  color: #0f172a;
+  line-height: 1.2;
+}
+
+.payroll-advance-method__hint {
+  font-size: 0.65rem;
+  line-height: 1.3;
+  color: #64748b;
+}
+
+.payroll-advance-method__check {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 16px;
+  height: 16px;
+  border-radius: 99px;
+  display: grid;
+  place-items: center;
+  background: #2563eb;
+  color: #fff;
+}
+
+.payroll-advance-submit {
+  margin-top: 0.65rem;
+}
+
+.payroll-advance-preview {
+  min-width: 0;
+  background: #f1f5fb;
+  border: 1px solid #dbe4f0;
+  border-radius: 9px;
+  padding: 0.65rem 0.7rem;
+}
+
+.payroll-advance-preview .payroll-advance-sectionhead {
+  margin-bottom: 0.4rem;
+}
+
+.payroll-advance-preview .payroll-advance-sectionhead__ic {
+  background: #e0ecff;
+}
+
+.payroll-advance-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  margin-bottom: 0.4rem;
+}
+
+.payroll-advance-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.12rem 0.45rem;
+  border-radius: 99px;
+  background: #fff;
+  border: 1px solid #d7e3f4;
+  color: #334155;
+  font-size: 0.65rem;
+  font-weight: 650;
+}
+
+.payroll-advance-preview__table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.75rem;
+}
+
+.payroll-advance-preview__table th,
+.payroll-advance-preview__table td {
+  padding: 0.32rem 0;
+  text-align: left;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.payroll-advance-preview__table th:last-child,
+.payroll-advance-preview__table td:last-child {
+  text-align: right;
+}
+
+.payroll-advance-preview__table th {
+  font-size: 0.65rem;
+  font-weight: 700;
+  color: #64748b;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.payroll-advance-preview__table tfoot td {
+  border-bottom: 0;
+  padding-top: 0.4rem;
+  font-weight: 750;
+  color: #0f172a;
+}
+
 .payroll-advance-preview__empty {
-  margin: 0.65rem 0 0;
-  font-size: 0.78rem;
+  display: flex;
+  align-items: flex-start;
+  gap: 0.45rem;
+  margin: 0.15rem 0 0;
+  padding: 0.35rem 0 0.1rem;
+}
+
+.payroll-advance-preview__empty-ic {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  display: grid;
+  place-items: center;
+  flex: none;
+  background: #e8eef7;
+  color: #64748b;
+}
+
+.payroll-advance-preview__empty p {
+  margin: 0;
+  font-size: 0.74rem;
+  line-height: 1.4;
+  color: #64748b;
+}
+
+.payroll-advance-preview__error {
+  margin: 0.25rem 0 0;
+  font-size: 0.74rem;
+  line-height: 1.4;
   color: #b91c1c;
 }
+
+.payroll-advance-import {
+  border: 1px solid #e2e8f0;
+  border-radius: 9px;
+  padding: 0.65rem 0.75rem;
+  background: #fff;
+}
+
+.payroll-advance-import__meta {
+  font-size: 0.78rem;
+  margin: 0.3rem 0;
+}
+
+.payroll-advance-import__rows {
+  max-height: 180px;
+  overflow: auto;
+  font-size: 0.75rem;
+}
+
+.payroll-advance-import__actions {
+  margin-top: 0.5rem;
+  display: flex;
+  gap: 0.5rem;
+}
+
+.payroll-advance-ledger {
+  background: #fff;
+}
+
+.payroll-advance-ledger__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.45rem 0.75rem;
+  margin-bottom: 0.45rem;
+}
+
+.payroll-advance-ledger__head .payroll-advance-sectionhead {
+  margin: 0;
+}
+
+.payroll-advance-filter {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.75rem;
+  font-weight: 650;
+  color: #475569;
+}
+
+.payroll-advance-filter .sel {
+  width: auto;
+  min-width: 120px;
+}
+
+.payroll-advance-empcell {
+  white-space: normal;
+}
+
+.payroll-advance-empcell__name {
+  font-weight: 650;
+  color: #0f172a;
+}
+
+.payroll-advance-empcell__meta {
+  font-size: 0.7rem;
+  color: #64748b;
+}
+
 .payroll-emp-picker {
   position: relative;
 }
+
 .payroll-emp-picker__list {
   position: absolute;
   z-index: 6;
@@ -6321,7 +6704,9 @@ tr.brx-recov-row--mismatch td:first-child {
   background: #fff;
   border: 1px solid #e2e8f0;
   border-radius: 8px;
+  box-shadow: var(--sh-2);
 }
+
 .payroll-emp-picker__option {
   display: block;
   width: 100%;
@@ -6332,50 +6717,74 @@ tr.brx-recov-row--mismatch td:first-child {
   padding: 0.45rem 0.65rem;
   cursor: pointer;
 }
+
 .payroll-emp-picker__option:hover {
   background: #f8fafc;
 }
+
 .payroll-emp-picker__name {
   display: block;
   font-size: 0.78rem;
   font-weight: 600;
   color: #0f172a;
 }
+
 .payroll-emp-picker__role {
   display: block;
   font-size: 0.7rem;
   color: #64748b;
 }
+
 .payroll-emp-picker__empty {
   padding: 0.55rem 0.65rem;
   font-size: 0.75rem;
   color: #64748b;
 }
+
 .payroll-progress {
   min-width: 110px;
 }
+
 .payroll-progress__track {
   height: 6px;
   background: #e2e8f0;
   border-radius: 99px;
   overflow: hidden;
 }
+
 .payroll-progress__fill {
   height: 100%;
-  background: #334155;
+  background: #2563eb;
   border-radius: 99px;
 }
+
 .payroll-progress__pct {
   margin-top: 2px;
   font-size: 0.7rem;
   color: #64748b;
 }
+
 .badge--open { background: #fef9c3; color: #854d0e; }
 .badge--partial { background: #dbeafe; color: #1d4ed8; }
 .badge--closed { background: #dcfce7; color: #166534; }
 
 @media (max-width: 860px) {
   .payroll-advance-issue {
+    grid-template-columns: 1fr;
+  }
+
+  .payroll-advance-fields {
+    grid-template-columns: 1fr;
+  }
+
+  .payroll-advance-affix--narrow,
+  .payroll-advance-input--narrow {
+    max-width: none;
+  }
+}
+
+@media (max-width: 560px) {
+  .payroll-advance-methods {
     grid-template-columns: 1fr;
   }
 }

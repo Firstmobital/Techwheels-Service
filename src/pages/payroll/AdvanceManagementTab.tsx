@@ -1,4 +1,5 @@
 import { Fragment, useCallback, useEffect, useMemo, useState } from 'react'
+import { Icon } from '../../components/Icon'
 import { createAdvance, fetchAdvanceSchedules, fetchAdvances, fetchPayrollEmployees } from '../../lib/api/payroll'
 import {
   ADVANCE_LEDGER_STATUS_LABELS,
@@ -35,6 +36,17 @@ const DEDUCTION_LABELS: Record<AdvanceDeductionType, string> = {
   emi: 'Equal EMI',
   custom: 'Custom',
 }
+
+const DEDUCTION_OPTIONS: {
+  value: AdvanceDeductionType
+  title: string
+  hint: string
+  icon: string
+}[] = [
+  { value: 'lump_sum', title: 'Lump Sum', hint: 'Full repayment in one payroll month', icon: 'banknote' },
+  { value: 'emi', title: 'Equal EMI', hint: 'Split equally across multiple months', icon: 'calendar' },
+  { value: 'custom', title: 'Custom', hint: 'Define month-wise repayment amounts', icon: 'sliders' },
+]
 
 const STATUS_BADGE: Record<AdvanceLedgerDisplayStatus, string> = {
   open: 'badge badge--open',
@@ -131,6 +143,8 @@ export default function AdvanceManagementTab({ canModify, payrollMonth }: Props)
     return map
   }, [schedules])
 
+  const previewIncomplete = !form.originalAmount.trim() || !form.issueMonth
+
   const scheduleResult = useMemo(() => {
     const amount = Number(form.originalAmount)
     if (!form.originalAmount.trim() || !form.issueMonth) {
@@ -145,6 +159,23 @@ export default function AdvanceManagementTab({ canModify, payrollMonth }: Props)
       customText: form.deductionType === 'custom' ? form.customAmounts : undefined,
     })
   }, [form.originalAmount, form.issueMonth, form.payMonth, form.deductionType, form.emiMonths, form.customAmounts])
+
+  const previewTotal = scheduleResult.ok
+    ? scheduleResult.schedules.reduce((sum, row) => sum + row.scheduledAmount, 0)
+    : 0
+
+  const previewChip = useMemo(() => {
+    if (form.deductionType === 'lump_sum') return { method: 'Lump Sum', detail: '1 Payment' }
+    if (form.deductionType === 'emi') {
+      const months = Number(form.emiMonths)
+      const label = Number.isFinite(months) && months > 0 ? `${months} Months` : 'EMI'
+      return { method: 'EMI', detail: label }
+    }
+    const count = scheduleResult.ok
+      ? scheduleResult.schedules.length
+      : form.customAmounts.split(',').map((part) => part.trim()).filter(Boolean).length
+    return { method: 'Custom', detail: count > 0 ? `${count} Payment${count === 1 ? '' : 's'}` : 'Custom' }
+  }, [form.customAmounts, form.deductionType, form.emiMonths, scheduleResult])
 
   const visibleAdvances = useMemo(() => {
     if (ledgerFilter === 'all') return advances
@@ -301,49 +332,73 @@ export default function AdvanceManagementTab({ canModify, payrollMonth }: Props)
   }
 
   return (
-    <div>
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', marginBottom: '0.75rem', alignItems: 'center' }}>
-        <span style={{ flex: 1 }} />
-        <button type="button" className="btn btn--ghost btn--sm" onClick={handleExportLedger}>Export Ledger</button>
-        {canModify && (
-          <>
-            <button type="button" className="btn btn--ghost btn--sm" onClick={handleDownloadTemplate}>Download Template</button>
-            <label className="btn btn--ghost btn--sm" style={{ cursor: 'pointer' }}>
-              Import
-              <input
-                type="file"
-                accept=".xlsx,.xls"
-                hidden
-                onChange={(event) => {
-                  const file = event.target.files?.[0]
-                  if (file) void handleImportFile(file)
-                  event.target.value = ''
-                }}
-              />
-            </label>
-          </>
-        )}
+    <div className="payroll-advance">
+      <div className="payroll-advance-toolbar">
+        <div className="payroll-advance-toolbar__copy">
+          <h2>Advance Management</h2>
+          <p>Issue employee advances and manage repayment schedules.</p>
+        </div>
+        <div className="payroll-advance-toolbar__actions">
+          <button type="button" className="btn btn--ghost btn--sm" onClick={handleExportLedger}>
+            <Icon name="download" size={14} strokeWidth={1.8} />
+            Export Ledger
+          </button>
+          {canModify && (
+            <>
+              <button type="button" className="btn btn--ghost btn--sm" onClick={handleDownloadTemplate}>
+                <Icon name="doc" size={14} strokeWidth={1.8} />
+                Download Template
+              </button>
+              <label className="btn btn--ghost btn--sm" style={{ cursor: 'pointer' }}>
+                <Icon name="upload" size={14} strokeWidth={1.8} />
+                Import
+                <input
+                  type="file"
+                  accept=".xlsx,.xls"
+                  hidden
+                  onChange={(event) => {
+                    const file = event.target.files?.[0]
+                    if (file) void handleImportFile(file)
+                    event.target.value = ''
+                  }}
+                />
+              </label>
+            </>
+          )}
+        </div>
       </div>
 
       {canModify && (
         <div className="payroll-advance-issue">
-          <div>
-            <h3 style={{ fontSize: '0.9rem', fontWeight: 700, margin: '0 0 0.65rem' }}>Issue Advance</h3>
-            <div className="payroll-add-grid">
-              <div className="payroll-add-field" style={{ gridColumn: '1 / -1' }}>
+          <div className="payroll-advance-form">
+            <div className="payroll-advance-sectionhead">
+              <span className="payroll-advance-sectionhead__ic" aria-hidden="true">
+                <Icon name="banknote" size={15} strokeWidth={1.8} />
+              </span>
+              <h3>Issue Advance</h3>
+            </div>
+
+            <div className="payroll-advance-fields">
+              <div className="payroll-add-field payroll-advance-fields__full">
                 <label htmlFor="advance-employee">Employee</label>
                 <div className="payroll-emp-picker">
-                  <input
-                    id="advance-employee"
-                    value={form.employeeSearch}
-                    placeholder="Search active employee by code, name, or role"
-                    autoComplete="off"
-                    onFocus={() => setShowEmployeeOptions(true)}
-                    onChange={(event) => {
-                      setForm((prev) => ({ ...prev, employeeSearch: event.target.value, employeeCode: '' }))
-                      setShowEmployeeOptions(true)
-                    }}
-                  />
+                  <div className="payroll-advance-affix payroll-advance-affix--icon">
+                    <span className="payroll-advance-affix__icon" aria-hidden="true">
+                      <Icon name="search" size={15} strokeWidth={1.8} />
+                    </span>
+                    <input
+                      id="advance-employee"
+                      className="inp"
+                      value={form.employeeSearch}
+                      placeholder="Search employee by code, name, or role"
+                      autoComplete="off"
+                      onFocus={() => setShowEmployeeOptions(true)}
+                      onChange={(event) => {
+                        setForm((prev) => ({ ...prev, employeeSearch: event.target.value, employeeCode: '' }))
+                        setShowEmployeeOptions(true)
+                      }}
+                    />
+                  </div>
                   {showEmployeeOptions && (
                     <div className="payroll-emp-picker__list">
                       {filteredEmployeeOptions.length === 0 ? (
@@ -374,150 +429,222 @@ export default function AdvanceManagementTab({ canModify, payrollMonth }: Props)
               </div>
 
               <div className="payroll-add-field">
-                <label htmlFor="advance-amount">Advance amount</label>
-                <input
-                  id="advance-amount"
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  value={form.originalAmount}
-                  onChange={(event) => setForm((prev) => ({ ...prev, originalAmount: event.target.value }))}
-                />
+                <label htmlFor="advance-amount">Advance Amount</label>
+                <div className="payroll-advance-affix">
+                  <span className="payroll-advance-affix__text" aria-hidden="true">₹</span>
+                  <input
+                    id="advance-amount"
+                    className="inp"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={form.originalAmount}
+                    onChange={(event) => setForm((prev) => ({ ...prev, originalAmount: event.target.value }))}
+                  />
+                </div>
               </div>
 
               <div className="payroll-add-field">
-                <label htmlFor="advance-issue-month">Issue month</label>
-                <input
-                  id="advance-issue-month"
-                  type="month"
-                  value={form.issueMonth}
-                  onChange={(event) => {
-                    const nextIssue = event.target.value
-                    setForm((prev) => {
-                      const prevDefault = defaultLumpPayMonth(prev.issueMonth)
-                      const keepManual = Boolean(prev.payMonth) && prev.payMonth !== prevDefault
-                      return {
-                        ...prev,
-                        issueMonth: nextIssue,
-                        payMonth: keepManual ? prev.payMonth : defaultLumpPayMonth(nextIssue),
-                      }
-                    })
-                  }}
-                />
+                <label htmlFor="advance-issue-month">Issue Month</label>
+                <div className="payroll-advance-affix payroll-advance-affix--icon">
+                  <span className="payroll-advance-affix__icon" aria-hidden="true">
+                    <Icon name="calendar" size={14} strokeWidth={1.8} />
+                  </span>
+                  <input
+                    id="advance-issue-month"
+                    className="inp"
+                    type="month"
+                    value={form.issueMonth}
+                    onChange={(event) => {
+                      const nextIssue = event.target.value
+                      setForm((prev) => {
+                        const prevDefault = defaultLumpPayMonth(prev.issueMonth)
+                        const keepManual = Boolean(prev.payMonth) && prev.payMonth !== prevDefault
+                        return {
+                          ...prev,
+                          issueMonth: nextIssue,
+                          payMonth: keepManual ? prev.payMonth : defaultLumpPayMonth(nextIssue),
+                        }
+                      })
+                    }}
+                  />
+                </div>
               </div>
 
-              <div className="payroll-add-field" style={{ gridColumn: '1 / -1' }}>
-                <label>Deduction method</label>
-                <div className="payroll-advance-methods">
-                  {([
-                    ['lump_sum', 'Lump Sum — full amount deducted in the selected Pay Month'],
-                    ['emi', 'Equal EMI — split over N months'],
-                    ['custom', 'Custom — comma-separated monthly amounts'],
-                  ] as const).map(([value, label]) => (
-                    <label key={value} className="payroll-advance-method">
-                      <input
-                        type="radio"
-                        name="advance-deduction-type"
-                        checked={form.deductionType === value}
-                        onChange={() => setForm((prev) => ({
-                          ...prev,
-                          deductionType: value,
-                          payMonth: value === 'lump_sum' && !prev.payMonth
-                            ? defaultLumpPayMonth(prev.issueMonth)
-                            : prev.payMonth,
-                        }))}
-                      />
-                      {label}
-                    </label>
-                  ))}
+              <div className="payroll-add-field payroll-advance-fields__full">
+                <span id="advance-deduction-label" className="payroll-advance-fieldlabel">Deduction Method</span>
+                <div
+                  className="payroll-advance-methods"
+                  role="radiogroup"
+                  aria-labelledby="advance-deduction-label"
+                >
+                  {DEDUCTION_OPTIONS.map((option) => {
+                    const selected = form.deductionType === option.value
+                    return (
+                      <label
+                        key={option.value}
+                        className={`payroll-advance-method${selected ? ' is-selected' : ''}`}
+                      >
+                        <input
+                          type="radio"
+                          className="sr-only"
+                          name="advance-deduction-type"
+                          value={option.value}
+                          checked={selected}
+                          onChange={() => setForm((prev) => ({
+                            ...prev,
+                            deductionType: option.value,
+                            payMonth: option.value === 'lump_sum' && !prev.payMonth
+                              ? defaultLumpPayMonth(prev.issueMonth)
+                              : prev.payMonth,
+                          }))}
+                        />
+                        <span className="payroll-advance-method__ic" aria-hidden="true">
+                          <Icon name={option.icon} size={16} strokeWidth={1.8} />
+                        </span>
+                        <span className="payroll-advance-method__copy">
+                          <span className="payroll-advance-method__title">{option.title}</span>
+                          <span className="payroll-advance-method__hint">{option.hint}</span>
+                        </span>
+                        {selected && (
+                          <span className="payroll-advance-method__check" aria-hidden="true">
+                            <Icon name="checksm" size={12} strokeWidth={2.2} />
+                          </span>
+                        )}
+                      </label>
+                    )
+                  })}
                 </div>
               </div>
 
               {form.deductionType === 'lump_sum' && (
-                <div className="payroll-add-field">
-                  <label htmlFor="advance-pay-month">Pay month</label>
-                  <input
-                    id="advance-pay-month"
-                    type="month"
-                    value={form.payMonth}
-                    onChange={(event) => setForm((prev) => ({ ...prev, payMonth: event.target.value }))}
-                  />
-                  <p className="payroll-add-hint">Defaults to the month after Issue Month. Same month and later months are allowed.</p>
+                <div className="payroll-add-field payroll-advance-fields__full">
+                  <label htmlFor="advance-pay-month">Pay Month</label>
+                  <div className="payroll-advance-affix payroll-advance-affix--icon payroll-advance-affix--narrow">
+                    <span className="payroll-advance-affix__icon" aria-hidden="true">
+                      <Icon name="calendar" size={14} strokeWidth={1.8} />
+                    </span>
+                    <input
+                      id="advance-pay-month"
+                      className="inp"
+                      type="month"
+                      value={form.payMonth}
+                      onChange={(event) => setForm((prev) => ({ ...prev, payMonth: event.target.value }))}
+                    />
+                  </div>
+                  <p className="payroll-add-hint">Defaults to the month after Issue Month. Same or later months are allowed.</p>
                 </div>
               )}
 
               {form.deductionType === 'emi' && (
-                <div className="payroll-add-field">
-                  <label htmlFor="advance-emi-months">N months</label>
+                <div className="payroll-add-field payroll-advance-fields__full">
+                  <label htmlFor="advance-emi-months">Number of Months</label>
                   <input
                     id="advance-emi-months"
+                    className="inp payroll-advance-input--narrow"
                     type="number"
                     min={1}
                     step={1}
                     value={form.emiMonths}
                     onChange={(event) => setForm((prev) => ({ ...prev, emiMonths: event.target.value }))}
                   />
+                  <p className="payroll-add-hint">Repayment starts according to the existing approved schedule rule.</p>
                 </div>
               )}
 
               {form.deductionType === 'custom' && (
-                <div className="payroll-add-field" style={{ gridColumn: '1 / -1' }}>
-                  <label htmlFor="advance-custom-amounts">Monthly amounts (comma-separated)</label>
-                  <textarea
+                <div className="payroll-add-field payroll-advance-fields__full">
+                  <label htmlFor="advance-custom-amounts">Monthly Amounts</label>
+                  <input
                     id="advance-custom-amounts"
-                    rows={3}
-                    placeholder="e.g. 5000, 7000, 3000"
+                    className="inp"
+                    type="text"
+                    placeholder="5000, 7000, 3000"
                     value={form.customAmounts}
                     onChange={(event) => setForm((prev) => ({ ...prev, customAmounts: event.target.value }))}
                   />
+                  <p className="payroll-add-hint">Enter comma-separated monthly amounts.</p>
+                  {!scheduleResult.ok && !previewIncomplete && form.customAmounts.trim() && (
+                    <p className="payroll-add-error">{scheduleResult.error}</p>
+                  )}
                 </div>
               )}
 
-              <div className="payroll-add-field" style={{ gridColumn: '1 / -1' }}>
+              <div className="payroll-add-field payroll-advance-fields__full">
                 <label htmlFor="advance-notes">Notes</label>
-                <input
+                <textarea
                   id="advance-notes"
+                  className="inp"
+                  rows={2}
+                  placeholder="Optional reason or reference..."
                   value={form.notes}
                   onChange={(event) => setForm((prev) => ({ ...prev, notes: event.target.value }))}
                 />
               </div>
             </div>
+
             <button
               type="button"
-              className="btn btn--primary btn--sm"
-              style={{ marginTop: '0.75rem' }}
+              className="btn btn--primary btn--sm payroll-advance-submit"
               disabled={issuing}
               onClick={() => void handleIssueAdvance()}
             >
+              <Icon name="check" size={15} strokeWidth={2} />
               {issuing ? 'Issuing…' : 'Confirm & Issue'}
             </button>
           </div>
 
-          <div className="payroll-advance-preview">
-            <h3>Live deduction preview</h3>
-            <p className="payroll-add-hint">
-              {form.deductionType === 'lump_sum'
-                ? 'Lump Sum is deducted entirely in the selected Pay Month. Nothing is saved until you confirm.'
-                : 'EMI and Custom repayment start the month after Issue Month. Nothing is saved until you confirm.'}
-            </p>
+          <aside className="payroll-advance-preview">
+            <div className="payroll-advance-sectionhead">
+              <span className="payroll-advance-sectionhead__ic" aria-hidden="true">
+                <Icon name="calendar" size={15} strokeWidth={1.8} />
+              </span>
+              <div>
+                <h3>Live Deduction Preview</h3>
+                <p>Review the repayment schedule before issuing.</p>
+              </div>
+            </div>
+
             {scheduleResult.ok ? (
-              <table className="table" style={{ fontSize: '0.78rem', marginTop: '0.5rem' }}>
-                <thead>
-                  <tr><th>Month</th><th>Amount to Deduct</th></tr>
-                </thead>
-                <tbody>
-                  {scheduleResult.schedules.map((row) => (
-                    <tr key={`${row.payrollMonth}_${row.scheduledAmount}`}>
-                      <td>{formatAdvanceMonthLabel(row.payrollMonth)}</td>
-                      <td>{formatPayrollMoney(row.scheduledAmount)}</td>
+              <>
+                <div className="payroll-advance-chips" aria-hidden="true">
+                  <span className="payroll-advance-chip">{previewChip.method}</span>
+                  <span className="payroll-advance-chip">{previewChip.detail}</span>
+                </div>
+                <table className="payroll-advance-preview__table">
+                  <thead>
+                    <tr>
+                      <th>Month</th>
+                      <th>Amount</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {scheduleResult.schedules.map((row) => (
+                      <tr key={`${row.payrollMonth}_${row.scheduledAmount}`}>
+                        <td>{formatAdvanceMonthLabel(row.payrollMonth)}</td>
+                        <td>{formatPayrollMoney(row.scheduledAmount)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot>
+                    <tr>
+                      <td>Total</td>
+                      <td>{formatPayrollMoney(previewTotal)}</td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </>
+            ) : previewIncomplete ? (
+              <div className="payroll-advance-preview__empty">
+                <span className="payroll-advance-preview__empty-ic" aria-hidden="true">
+                  <Icon name="calendar" size={18} strokeWidth={1.6} />
+                </span>
+                <p>Enter amount and issue details to preview the deduction schedule.</p>
+              </div>
             ) : (
-              <p className="payroll-advance-preview__empty">{scheduleResult.error}</p>
+              <p className="payroll-advance-preview__error">{scheduleResult.error}</p>
             )}
-          </div>
+          </aside>
         </div>
       )}
 
@@ -525,13 +652,13 @@ export default function AdvanceManagementTab({ canModify, payrollMonth }: Props)
       {message && <div className="toast">{message}</div>}
 
       {importPreview && (
-        <div style={{ border: '1px solid #e2e8f0', borderRadius: '8px', padding: '0.75rem', marginBottom: '0.75rem' }}>
+        <div className="payroll-advance-import">
           <strong>Import preview</strong>
-          <div style={{ fontSize: '0.78rem', margin: '0.35rem 0' }}>
+          <div className="payroll-advance-import__meta">
             Total: {importPreview.totalRows} · Valid: {importPreview.valid} · Rejected: {importPreview.rejected}
           </div>
           <p className="payroll-add-hint">Issue Month YYYY-MM. Deduction Method: LUMP, EMI, or CUSTOM. Pay Month is optional for LUMP (blank = Issue Month + 1) and ignored for EMI/CUSTOM.</p>
-          <div style={{ maxHeight: '180px', overflow: 'auto', fontSize: '0.75rem' }}>
+          <div className="payroll-advance-import__rows">
             {importPreview.rows.filter((row) => row.status === 'rejected').slice(0, 30).map((row) => (
               <div key={row.rowNumber}>{row.rowNumber}: {row.employeeCode || '—'} — {row.status}: {row.message}</div>
             ))}
@@ -540,7 +667,7 @@ export default function AdvanceManagementTab({ canModify, payrollMonth }: Props)
             ))}
           </div>
           {canModify && (
-            <div style={{ marginTop: '0.5rem', display: 'flex', gap: '0.5rem' }}>
+            <div className="payroll-advance-import__actions">
               <button
                 type="button"
                 className="btn btn--primary btn--sm"
@@ -555,125 +682,135 @@ export default function AdvanceManagementTab({ canModify, payrollMonth }: Props)
         </div>
       )}
 
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', alignItems: 'center', margin: '0.75rem 0' }}>
-        <h3 style={{ fontSize: '0.9rem', fontWeight: 700, margin: 0 }}>Advance ledger</h3>
-        <span style={{ flex: 1 }} />
-        <label style={{ fontSize: '0.78rem', fontWeight: 600 }}>
-          Filter
-          <select
-            value={ledgerFilter}
-            onChange={(event) => setLedgerFilter(event.target.value as LedgerFilter)}
-            style={{ marginLeft: '0.4rem' }}
-          >
-            <option value="all">All</option>
-            <option value="open">Open</option>
-            <option value="partial">Partial</option>
-            <option value="closed">Closed</option>
-            <option value="cancelled">Cancelled</option>
-          </select>
-        </label>
-      </div>
+      <div className="payroll-advance-ledger">
+        <div className="payroll-advance-ledger__head">
+          <div className="payroll-advance-sectionhead">
+            <span className="payroll-advance-sectionhead__ic" aria-hidden="true">
+              <Icon name="list" size={15} strokeWidth={1.8} />
+            </span>
+            <div>
+              <h3>Advance Ledger</h3>
+              <p>{visibleAdvances.length} {visibleAdvances.length === 1 ? 'advance' : 'advances'}</p>
+            </div>
+          </div>
+          <label className="payroll-advance-filter">
+            Filter
+            <select
+              className="sel"
+              value={ledgerFilter}
+              onChange={(event) => setLedgerFilter(event.target.value as LedgerFilter)}
+            >
+              <option value="all">All</option>
+              <option value="open">Open</option>
+              <option value="partial">Partial</option>
+              <option value="closed">Closed</option>
+              <option value="cancelled">Cancelled</option>
+            </select>
+          </label>
+        </div>
 
-      <div className="payroll-table-scroll">
-        <table className="table" style={{ fontSize: '0.78rem' }}>
-          <thead>
-            <tr>
-              <th>Employee</th>
-              <th>Issued Month</th>
-              <th>Total Amount</th>
-              <th>Recovered</th>
-              <th>Balance</th>
-              <th>Status</th>
-              <th>Progress</th>
-              <th>Schedule</th>
-            </tr>
-          </thead>
-          <tbody>
-            {visibleAdvances.length === 0 ? (
+        <div className="payroll-table-scroll">
+          <table className="table" style={{ fontSize: '0.78rem' }}>
+            <thead>
               <tr>
-                <td colSpan={8} style={{ color: '#64748b' }}>No advances found for selected filter.</td>
+                <th>Employee</th>
+                <th>Issued Month</th>
+                <th>Total Amount</th>
+                <th>Recovered</th>
+                <th>Balance</th>
+                <th>Status</th>
+                <th>Progress</th>
+                <th>Schedule</th>
               </tr>
-            ) : visibleAdvances.map((advance) => {
-              const code = advance.employee_code.trim().toUpperCase()
-              const employee = employeeByCode.get(code)
-              const original = Number(advance.original_amount)
-              const recovered = Number(advance.recovered_amount)
-              const balance = advanceBalance(original, recovered)
-              const display = advanceLedgerDisplayStatus({
-                status: advance.status,
-                originalAmount: original,
-                recoveredAmount: recovered,
-              })
-              const progress = advanceProgressPercent(recovered, original)
-              const lumpPayMonth = advance.deduction_type === 'lump_sum'
-                ? (schedulesByAdvance.get(advance.id) ?? [])[0]?.payroll_month
-                : null
-              return (
-                <Fragment key={advance.id}>
-                  <tr>
-                    <td style={{ whiteSpace: 'normal' }}>
-                      <div>{code} — {employee?.employee_name ?? ''}</div>
-                      <div style={{ fontSize: '0.7rem', color: '#64748b' }}>{employee?.role ?? '—'}</div>
-                    </td>
-                    <td>
-                      <div>{formatAdvanceMonthLabel(advance.issue_date)}</div>
-                      {lumpPayMonth && (
-                        <div style={{ fontSize: '0.7rem', color: '#64748b' }}>Pay {formatAdvanceMonthLabel(lumpPayMonth)}</div>
-                      )}
-                    </td>
-                    <td>{formatPayrollMoney(original)}</td>
-                    <td>{formatPayrollMoney(recovered)}</td>
-                    <td>{formatPayrollMoney(balance)}</td>
-                    <td><span className={STATUS_BADGE[display]}>{ADVANCE_LEDGER_STATUS_LABELS[display]}</span></td>
-                    <td>
-                      <div className="payroll-progress">
-                        <div className="payroll-progress__track">
-                          <div className="payroll-progress__fill" style={{ width: `${progress}%` }} />
-                        </div>
-                        <div className="payroll-progress__pct">{progress.toFixed(1)}%</div>
-                      </div>
-                    </td>
-                    <td>
-                      <button
-                        type="button"
-                        className="btn btn--ghost btn--sm"
-                        onClick={() => setExpandedId(expandedId === advance.id ? null : advance.id)}
-                      >
-                        {expandedId === advance.id ? 'Hide schedule' : 'View schedule'}
-                      </button>
-                    </td>
-                  </tr>
-                  {expandedId === advance.id && (
+            </thead>
+            <tbody>
+              {visibleAdvances.length === 0 ? (
+                <tr>
+                  <td colSpan={8} style={{ color: '#64748b' }}>No advances found for selected filter.</td>
+                </tr>
+              ) : visibleAdvances.map((advance) => {
+                const code = advance.employee_code.trim().toUpperCase()
+                const employee = employeeByCode.get(code)
+                const original = Number(advance.original_amount)
+                const recovered = Number(advance.recovered_amount)
+                const balance = advanceBalance(original, recovered)
+                const display = advanceLedgerDisplayStatus({
+                  status: advance.status,
+                  originalAmount: original,
+                  recoveredAmount: recovered,
+                })
+                const progress = advanceProgressPercent(recovered, original)
+                const lumpPayMonth = advance.deduction_type === 'lump_sum'
+                  ? (schedulesByAdvance.get(advance.id) ?? [])[0]?.payroll_month
+                  : null
+                return (
+                  <Fragment key={advance.id}>
                     <tr>
-                      <td colSpan={8}>
-                        <table className="table" style={{ fontSize: '0.72rem', margin: '0.25rem 0' }}>
-                          <thead>
-                            <tr>
-                              <th>Month</th>
-                              <th>Scheduled Amount</th>
-                              <th>Applied Amount</th>
-                              <th>Status</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {(schedulesByAdvance.get(advance.id) ?? []).map((schedule) => (
-                              <tr key={schedule.id}>
-                                <td>{formatAdvanceMonthLabel(schedule.payroll_month)}</td>
-                                <td>{formatPayrollMoney(Number(schedule.scheduled_amount))}</td>
-                                <td>{formatPayrollMoney(Number(schedule.applied_amount))}</td>
-                                <td>{schedule.status}</td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
+                      <td className="payroll-advance-empcell">
+                        <div className="payroll-advance-empcell__name">{employee?.employee_name || code}</div>
+                        <div className="payroll-advance-empcell__meta">{code} · {employee?.role ?? '—'}</div>
+                      </td>
+                      <td>
+                        <div>{formatAdvanceMonthLabel(advance.issue_date)}</div>
+                        {lumpPayMonth && (
+                          <div className="payroll-advance-empcell__meta">Pay {formatAdvanceMonthLabel(lumpPayMonth)}</div>
+                        )}
+                      </td>
+                      <td>{formatPayrollMoney(original)}</td>
+                      <td>{formatPayrollMoney(recovered)}</td>
+                      <td>{formatPayrollMoney(balance)}</td>
+                      <td><span className={STATUS_BADGE[display]}>{ADVANCE_LEDGER_STATUS_LABELS[display]}</span></td>
+                      <td>
+                        <div className="payroll-progress">
+                          <div className="payroll-progress__track">
+                            <div className="payroll-progress__fill" style={{ width: `${progress}%` }} />
+                          </div>
+                          <div className="payroll-progress__pct">{progress.toFixed(1)}%</div>
+                        </div>
+                      </td>
+                      <td>
+                        <button
+                          type="button"
+                          className="btn btn--ghost btn--sm"
+                          onClick={() => setExpandedId(expandedId === advance.id ? null : advance.id)}
+                        >
+                          <Icon name="calendar" size={13} strokeWidth={1.8} />
+                          {expandedId === advance.id ? 'Hide schedule' : 'View schedule'}
+                        </button>
                       </td>
                     </tr>
-                  )}
-                </Fragment>
-              )
-            })}
-          </tbody>
-        </table>
+                    {expandedId === advance.id && (
+                      <tr>
+                        <td colSpan={8}>
+                          <table className="table payroll-advance-schedule" style={{ fontSize: '0.72rem', margin: '0.25rem 0' }}>
+                            <thead>
+                              <tr>
+                                <th>Month</th>
+                                <th>Scheduled Amount</th>
+                                <th>Applied Amount</th>
+                                <th>Status</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {(schedulesByAdvance.get(advance.id) ?? []).map((schedule) => (
+                                <tr key={schedule.id}>
+                                  <td>{formatAdvanceMonthLabel(schedule.payroll_month)}</td>
+                                  <td>{formatPayrollMoney(Number(schedule.scheduled_amount))}</td>
+                                  <td>{formatPayrollMoney(Number(schedule.applied_amount))}</td>
+                                  <td>{schedule.status}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </td>
+                      </tr>
+                    )}
+                  </Fragment>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   )
