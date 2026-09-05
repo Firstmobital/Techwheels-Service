@@ -7,6 +7,7 @@ import SalarySlipReportTab from './payroll/SalarySlipReportTab'
 import SalaryTypeTab from './payroll/SalaryTypeTab'
 import { checkPayrollPermissions } from '../lib/api/payroll'
 import { formatPayrollMonth } from '../lib/payroll/calculations'
+import { PayrollSecurityIndicator, PayrollSecurityProvider } from './payroll/PayrollSecurityGate'
 
 const TABS = [
   { id: 'attendance', label: 'Attendance' },
@@ -53,12 +54,16 @@ export default function PayrollPage() {
   }
 
   return (
+    <PayrollSecurityProvider isAdmin={permissions.isAdmin} canModify={permissions.canModify}>
     <div className="page" style={{ padding: '0.75rem' }}>
-      <div style={{ marginBottom: '0.75rem' }}>
-        <h1 style={{ fontSize: '1.35rem', fontWeight: 800, color: '#0f172a', margin: 0 }}>Payroll Management</h1>
-        <p style={{ margin: '0.25rem 0 0', color: '#64748b', fontSize: '0.85rem' }}>
-          Configure incentives, advances, attendance, and finalize monthly payroll
-        </p>
+      <div style={{ marginBottom: '0.75rem', display: 'flex', flexWrap: 'wrap', alignItems: 'flex-start', justifyContent: 'space-between', gap: '0.5rem' }}>
+        <div>
+          <h1 style={{ fontSize: '1.35rem', fontWeight: 800, color: '#0f172a', margin: 0 }}>Payroll Management</h1>
+          <p style={{ margin: '0.25rem 0 0', color: '#64748b', fontSize: '0.85rem' }}>
+            Configure incentives, advances, attendance, and finalize monthly payroll
+          </p>
+        </div>
+        <PayrollSecurityIndicator />
       </div>
 
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.25rem', borderBottom: '2px solid #e2e8f0', marginBottom: '0.5rem' }}>
@@ -116,5 +121,6 @@ export default function PayrollPage() {
         )}
       </div>
     </div>
+    </PayrollSecurityProvider>
   )
 }

@@ -314,11 +314,26 @@ export async function finalizePayrollMonth(payrollMonth: string, actor: string):
   if (res.error) throw new Error(res.error.message)
 }
 
-export async function unlockPayrollMonth(payrollMonth: string, reason: string, actor: string): Promise<void> {
+export async function unlockPayrollMonth(
+  payrollMonth: string,
+  reason: string,
+  securityCode: string,
+  actor: string,
+): Promise<void> {
   const month = parsePayrollMonthInput(payrollMonth)
   if (!month) throw new Error('Invalid payroll month')
-  const res = await supabase.rpc('payroll_unlock_month', { p_month: month, p_reason: reason, p_actor: actor })
-  if (res.error) throw new Error(res.error.message)
+  const res = await supabase.rpc('payroll_unlock_month', {
+    p_month: month,
+    p_reason: reason,
+    p_security_code: securityCode,
+    p_actor: actor,
+  })
+  if (res.error) {
+    const message = res.error.message || ''
+    if (message.includes('Incorrect security code')) throw new Error('Incorrect security code.')
+    if (message.includes('Unlock reason is required')) throw new Error('Unlock reason is required')
+    throw new Error(message)
+  }
 }
 
 export async function addPayrollAdjustment(input: {

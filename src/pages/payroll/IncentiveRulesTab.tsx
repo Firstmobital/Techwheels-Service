@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../../lib/supabase'
+import { usePayrollSecurity } from './PayrollSecurityGate'
 
 interface SettingRow {
   key: string
@@ -27,6 +28,7 @@ function SettingsTable({
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const { requireSecurityThen } = usePayrollSecurity()
 
   useEffect(() => {
     void (async () => {
@@ -41,19 +43,21 @@ function SettingsTable({
   }, [table])
 
   async function handleSave() {
-    setSaving(true)
-    setError(null)
-    setMessage(null)
-    try {
-      const upserts = Object.entries(draft).map(([key, value]) => ({ key, value }))
-      const res = await supabase.from(table).upsert(upserts)
-      if (res.error) throw new Error(res.error.message)
-      setMessage(`${title} settings saved`)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Save failed')
-    } finally {
-      setSaving(false)
-    }
+    await requireSecurityThen(async () => {
+      setSaving(true)
+      setError(null)
+      setMessage(null)
+      try {
+        const upserts = Object.entries(draft).map(([key, value]) => ({ key, value }))
+        const res = await supabase.from(table).upsert(upserts)
+        if (res.error) throw new Error(res.error.message)
+        setMessage(`${title} settings saved`)
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Save failed')
+      } finally {
+        setSaving(false)
+      }
+    })
   }
 
   return (

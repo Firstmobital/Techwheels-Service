@@ -581,6 +581,30 @@ table.tbl { width: 100%; border-collapse: collapse; font-size: 13.5px; }
 .payroll-add-field textarea { width: 100%; }
 .payroll-add-hint { grid-column: 1 / -1; margin: 0; font-size: 0.72rem; color: #64748b; }
 .payroll-add-error { grid-column: 1 / -1; margin: 0; font-size: 0.78rem; color: #b91c1c; }
+.payroll-security-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.2rem 0.55rem;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 650;
+  letter-spacing: 0.01em;
+  border: 1px solid #e2e8f0;
+  background: #f8fafc;
+  color: #475569;
+}
+.payroll-security-chip.is-locked { background: #fff7ed; border-color: #fdba74; color: #9a3412; }
+.payroll-security-chip.is-unlocked { background: #ecfdf5; border-color: #86efac; color: #166534; }
+.payroll-security-field { display: flex; flex-direction: column; gap: 0.3rem; font-size: 0.78rem; font-weight: 600; color: #334155; }
+.payroll-security-field input,
+.payroll-security-field textarea { font-weight: 500; width: 100%; }
+.payroll-unlock-btn {
+  background: #fffbeb;
+  color: #92400e;
+  border: 1px solid #f59e0b;
+}
+.payroll-unlock-btn:hover { background: #fef3c7; }
 
 @media (max-width: 640px) {
   .modal-overlay,

@@ -27,6 +27,13 @@ import {
 } from '../../lib/payroll/excelUtils'
 import { SALARY_TYPE_LABELS, type PayrollEntry } from '../../lib/payroll/types'
 import { supabase } from '../../lib/supabase'
+import { usePayrollSecurity } from './PayrollSecurityGate'
+
+function formatUnlockMonthLabel(monthInput: string): string {
+  const [year, month] = monthInput.split('-').map(Number)
+  if (!Number.isFinite(year) || !Number.isFinite(month)) return monthInput
+  return new Date(year, month - 1, 1).toLocaleString('en-US', { month: 'long', year: 'numeric' })
+}
 
 function PayrollSummaryCard({
   value,
@@ -85,8 +92,13 @@ export default function PayrollProcessingTab({
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [message, setMessage] = useState<string | null>(null)
+  const [unlockOpen, setUnlockOpen] = useState(false)
   const [unlockReason, setUnlockReason] = useState('')
+  const [unlockCode, setUnlockCode] = useState('')
+  const [unlockBusy, setUnlockBusy] = useState(false)
+  const [unlockError, setUnlockError] = useState<string | null>(null)
   const [adjForm, setAdjForm] = useState<{ entryId: number; type: 'addition' | 'deduction'; amount: string; reason: string } | null>(null)
+  const { requireSecurityThen } = usePayrollSecurity()
   const [bodyshopStakeholder, setBodyshopStakeholder] = useState<BodyshopStakeholderEarnings | null>(null)
 
   const reload = useCallback(async () => {
@@ -280,47 +292,64 @@ export default function PayrollProcessingTab({
 
   async function handleRecompute() {
     if (!canModify || monthStatus === 'finalized') return
-    setLoading(true)
-    try {
-      await recomputePayrollMonth(payrollMonth)
-      await reload()
-      setMessage('Payroll recomputed')
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Recompute failed')
-    } finally {
-      setLoading(false)
-    }
+    await requireSecurityThen(async () => {
+      setLoading(true)
+      try {
+        await recomputePayrollMonth(payrollMonth)
+        await reload()
+        setMessage('Payroll recomputed')
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Recompute failed')
+      } finally {
+        setLoading(false)
+      }
+    })
   }
 
   async function handleFinalize() {
     if (!canModify || monthStatus === 'finalized') return
-    if (!window.confirm('Finalize and lock this payroll month?')) return
-    const { data: { user } } = await supabase.auth.getUser()
-    setLoading(true)
-    try {
-      await finalizePayrollMonth(payrollMonth, user?.email ?? 'unknown')
-      await reload()
-      setMessage('Payroll finalized and locked')
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Finalize failed')
-    } finally {
-      setLoading(false)
-    }
+    await requireSecurityThen(async () => {
+      if (!window.confirm('Finalize and lock this payroll month?')) return
+      const { data: { user } } = await supabase.auth.getUser()
+      setLoading(true)
+      try {
+        await finalizePayrollMonth(payrollMonth, user?.email ?? 'unknown')
+        await reload()
+        setMessage('Payroll finalized and locked')
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Finalize failed')
+      } finally {
+        setLoading(false)
+      }
+    })
+  }
+
+  function openUnlockModal() {
+    if (!canDelete || monthStatus !== 'finalized') return
+    setUnlockReason('')
+    setUnlockCode('')
+    setUnlockError(null)
+    setError(null)
+    setUnlockOpen(true)
   }
 
   async function handleUnlock() {
-    if (!canDelete || !unlockReason.trim()) return
+    if (!canDelete || !unlockReason.trim() || !unlockCode.trim()) return
     const { data: { user } } = await supabase.auth.getUser()
-    setLoading(true)
+    setUnlockBusy(true)
+    setUnlockError(null)
     try {
-      await unlockPayrollMonth(payrollMonth, unlockReason.trim(), user?.email ?? 'unknown')
+      await unlockPayrollMonth(payrollMonth, unlockReason.trim(), unlockCode, user?.email ?? 'unknown')
+      setUnlockOpen(false)
       setUnlockReason('')
+      setUnlockCode('')
       await reload()
       setMessage('Payroll month unlocked')
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Unlock failed')
+      const message = err instanceof Error ? err.message : 'Unlock failed'
+      setUnlockError(message.includes('Incorrect security code') ? 'Incorrect security code.' : message)
     } finally {
-      setLoading(false)
+      setUnlockBusy(false)
     }
   }
 
@@ -330,21 +359,23 @@ export default function PayrollProcessingTab({
       setError('Adjustment reason is required')
       return
     }
-    const { data: { user } } = await supabase.auth.getUser()
-    try {
-      await addPayrollAdjustment({
-        payrollEntryId: adjForm.entryId,
-        adjustmentType: adjForm.type,
-        amount: Number(adjForm.amount),
-        reason: adjForm.reason.trim(),
-        actor: user?.email ?? 'unknown',
-      })
-      setAdjForm(null)
-      await reload()
-      setMessage('Adjustment applied')
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Adjustment failed')
-    }
+    await requireSecurityThen(async () => {
+      const { data: { user } } = await supabase.auth.getUser()
+      try {
+        await addPayrollAdjustment({
+          payrollEntryId: adjForm.entryId,
+          adjustmentType: adjForm.type,
+          amount: Number(adjForm.amount),
+          reason: adjForm.reason.trim(),
+          actor: user?.email ?? 'unknown',
+        })
+        setAdjForm(null)
+        await reload()
+        setMessage('Adjustment applied')
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Adjustment failed')
+      }
+    })
   }
 
   function exportBankPayout() {
@@ -443,14 +474,12 @@ export default function PayrollProcessingTab({
         {monthStatus === 'finalized' && (
           <button type="button" className="btn btn--ghost btn--sm" onClick={exportBankPayout}>Bank Payout Export</button>
         )}
+        {canDelete && monthStatus === 'finalized' && (
+          <button type="button" className="btn btn--sm payroll-unlock-btn" disabled={loading} onClick={openUnlockModal}>
+            Unlock Month
+          </button>
+        )}
       </div>
-
-      {canDelete && monthStatus === 'finalized' && (
-        <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.75rem', alignItems: 'center' }}>
-          <input placeholder="Unlock reason (required)" value={unlockReason} onChange={(ev) => setUnlockReason(ev.target.value)} style={{ flex: 1 }} />
-          <button type="button" className="btn btn--ghost btn--sm" onClick={() => void handleUnlock()}>Unlock Month</button>
-        </div>
-      )}
 
       {error && <div className="toast error">{error}</div>}
       {message && <div className="toast">{message}</div>}
@@ -572,6 +601,39 @@ export default function PayrollProcessingTab({
           </tbody>
         </table>
       </div>
+
+      {unlockOpen && (
+        <div className="modal-back" role="presentation" onClick={() => { if (!unlockBusy) setUnlockOpen(false) }}>
+          <div className="modal" role="dialog" aria-modal="true" aria-labelledby="payroll-unlock-title" onClick={(event) => event.stopPropagation()}>
+            <div className="modal__head">
+              <h3 id="payroll-unlock-title">Unlock Payroll — {formatUnlockMonthLabel(monthInput)}</h3>
+              <button type="button" className="modal__x" onClick={() => setUnlockOpen(false)} disabled={unlockBusy} aria-label="Close">✕</button>
+            </div>
+            <div className="modal__body">
+              <label className="payroll-security-field">
+                <span>Security Code</span>
+                <input type="password" autoComplete="off" value={unlockCode} onChange={(ev) => setUnlockCode(ev.target.value)} disabled={unlockBusy} />
+              </label>
+              <label className="payroll-security-field" style={{ marginTop: '0.75rem' }}>
+                <span>Reason for Unlock</span>
+                <textarea value={unlockReason} onChange={(ev) => setUnlockReason(ev.target.value)} disabled={unlockBusy} rows={3} />
+              </label>
+              {unlockError && <p className="payroll-add-error" style={{ marginTop: '0.65rem' }}>{unlockError}</p>}
+            </div>
+            <div className="modal__foot">
+              <button type="button" className="btn btn--ghost btn--sm" onClick={() => setUnlockOpen(false)} disabled={unlockBusy}>Cancel</button>
+              <button
+                type="button"
+                className="btn btn--sm payroll-unlock-btn"
+                disabled={unlockBusy || !unlockCode.trim() || !unlockReason.trim()}
+                onClick={() => void handleUnlock()}
+              >
+                {unlockBusy ? 'Unlocking…' : 'Unlock Month'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {adjForm && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50 }}>

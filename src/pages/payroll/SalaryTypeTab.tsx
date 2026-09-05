@@ -20,6 +20,7 @@ import {
 } from '../../lib/payroll/excelUtils'
 import { SALARY_TYPE_LABELS, type ImportPreviewResult, type PayrollEmployee, type SalaryType } from '../../lib/payroll/types'
 import { supabase } from '../../lib/supabase'
+import { usePayrollSecurity } from './PayrollSecurityGate'
 
 const DEALER_CODE_RULES = [
   { key: '3000840', location: 'Sitapura', fuel_type: 'PV' },
@@ -120,6 +121,7 @@ function emptyToNull(value: string): string | null {
 }
 
 export default function SalaryTypeTab({ canModify, isAdmin }: Props) {
+  const { requireSecurityThen } = usePayrollSecurity()
   const [employees, setEmployees] = useState<PayrollEmployee[]>([])
   const [compMap, setCompMap] = useState<Awaited<ReturnType<typeof fetchCompensationMap>>>(new Map())
   const [search, setSearch] = useState('')
@@ -189,18 +191,20 @@ export default function SalaryTypeTab({ canModify, isAdmin }: Props) {
 
   async function handleSaveCompensation(code: string, baseSalary: number, salaryType: SalaryType) {
     if (!canModify || isAdmin) return
-    setError(null)
-    setMessage(null)
-    setSavingCode(code)
-    try {
-      await upsertCompensation(code, baseSalary, salaryType)
-      await reload()
-      setMessage(`Saved compensation for ${code}`)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Save failed')
-    } finally {
-      setSavingCode(null)
-    }
+    await requireSecurityThen(async () => {
+      setError(null)
+      setMessage(null)
+      setSavingCode(code)
+      try {
+        await upsertCompensation(code, baseSalary, salaryType)
+        await reload()
+        setMessage(`Saved compensation for ${code}`)
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Save failed')
+      } finally {
+        setSavingCode(null)
+      }
+    })
   }
 
   async function handleSaveMasterRow(input: {
@@ -214,42 +218,46 @@ export default function SalaryTypeTab({ canModify, isAdmin }: Props) {
     salaryType: SalaryType
   }) {
     if (!isAdmin) return
-    setError(null)
-    setMessage(null)
-    setSavingCode(input.employeeCode)
-    try {
-      await saveSalaryTypeMasterRow(input)
-      await reload()
-      setMessage(`Saved master and compensation for ${input.employeeCode}`)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Save failed')
-    } finally {
-      setSavingCode(null)
-    }
+    await requireSecurityThen(async () => {
+      setError(null)
+      setMessage(null)
+      setSavingCode(input.employeeCode)
+      try {
+        await saveSalaryTypeMasterRow(input)
+        await reload()
+        setMessage(`Saved master and compensation for ${input.employeeCode}`)
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Save failed')
+      } finally {
+        setSavingCode(null)
+      }
+    })
   }
 
   async function handleLifecycle(employee: PayrollEmployee, nextActive: boolean) {
     if (!isAdmin) return
-    const code = employee.employee_code.trim().toUpperCase()
-    const label = `${employee.employee_code} — ${employee.employee_name}`
-    if (!nextActive) {
-      const confirmed = window.confirm(
-        `Deactivate ${label}?\n\nThe employee will be removed from current operational selections. Historical records will remain.`,
-      )
-      if (!confirmed) return
-    }
-    setError(null)
-    setMessage(null)
-    setLifecycleCode(code)
-    try {
-      await setEmployeeActive(code, nextActive)
-      await reload()
-      setMessage(nextActive ? `Reactivated ${code}` : `Deactivated ${code}`)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Lifecycle update failed')
-    } finally {
-      setLifecycleCode(null)
-    }
+    await requireSecurityThen(async () => {
+      const code = employee.employee_code.trim().toUpperCase()
+      const label = `${employee.employee_code} — ${employee.employee_name}`
+      if (!nextActive) {
+        const confirmed = window.confirm(
+          `Deactivate ${label}?\n\nThe employee will be removed from current operational selections. Historical records will remain.`,
+        )
+        if (!confirmed) return
+      }
+      setError(null)
+      setMessage(null)
+      setLifecycleCode(code)
+      try {
+        await setEmployeeActive(code, nextActive)
+        await reload()
+        setMessage(nextActive ? `Reactivated ${code}` : `Deactivated ${code}`)
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Lifecycle update failed')
+      } finally {
+        setLifecycleCode(null)
+      }
+    })
   }
 
   function closeAddModal() {
@@ -269,6 +277,11 @@ export default function SalaryTypeTab({ canModify, isAdmin }: Props) {
   }
 
   async function handleCreateEmployee() {
+    if (!isAdmin || addSaving) return
+    await requireSecurityThen(() => createEmployeeAfterSecurity())
+  }
+
+  async function createEmployeeAfterSecurity() {
     if (!isAdmin || addSaving) return
     const code = addForm.employeeCode.trim()
     const name = addForm.employeeName.trim()
@@ -366,6 +379,11 @@ export default function SalaryTypeTab({ canModify, isAdmin }: Props) {
   }
 
   async function commitImport() {
+    if (!importPreview || !canModify) return
+    await requireSecurityThen(() => commitImportAfterSecurity())
+  }
+
+  async function commitImportAfterSecurity() {
     if (!importPreview || !canModify) return
     for (const row of importPreview.rows) {
       if (row.status !== 'valid' && row.status !== 'warning') continue

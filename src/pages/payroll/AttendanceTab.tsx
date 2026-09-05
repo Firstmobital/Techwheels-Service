@@ -10,6 +10,7 @@ import { calcEarnedBaseSalary, formatCurrency, isValidPayableDays } from '../../
 import { exportWorkbook, previewAttendanceImport, readWorkbookRows } from '../../lib/payroll/excelUtils'
 import { SALARY_TYPE_LABELS } from '../../lib/payroll/types'
 import type { ImportPreviewResult } from '../../lib/payroll/types'
+import { usePayrollSecurity } from './PayrollSecurityGate'
 
 interface Props {
   payrollMonth: string
@@ -33,6 +34,7 @@ export default function AttendanceTab({ payrollMonth, monthInput, onMonthChange,
   const [error, setError] = useState<string | null>(null)
   const [importPreview, setImportPreview] = useState<ImportPreviewResult | null>(null)
   const [message, setMessage] = useState<string | null>(null)
+  const { requireSecurityThen } = usePayrollSecurity()
 
   const reload = useCallback(async () => {
     setError(null)
@@ -80,21 +82,23 @@ export default function AttendanceTab({ payrollMonth, monthInput, onMonthChange,
 
   async function handleSave(code: string) {
     if (!canModify || locked) return
-    setSavingCode(code)
-    setError(null)
-    try {
-      const payableDays = Number(draftDays[code])
-      if (!isValidPayableDays(payableDays)) {
-        throw new Error('Payable days must be a non-negative number in 0.5 increments')
+    await requireSecurityThen(async () => {
+      setSavingCode(code)
+      setError(null)
+      try {
+        const payableDays = Number(draftDays[code])
+        if (!isValidPayableDays(payableDays)) {
+          throw new Error('Payable days must be a non-negative number in 0.5 increments')
+        }
+        await saveAttendance(code, payrollMonth, payableDays, draftNotes[code]?.trim() || null)
+        await reload()
+        setMessage(`Saved attendance for ${code}`)
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Save failed')
+      } finally {
+        setSavingCode(null)
       }
-      await saveAttendance(code, payrollMonth, payableDays, draftNotes[code]?.trim() || null)
-      await reload()
-      setMessage(`Saved attendance for ${code}`)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Save failed')
-    } finally {
-      setSavingCode(null)
-    }
+    })
   }
 
   function handleExport() {
@@ -128,26 +132,30 @@ export default function AttendanceTab({ payrollMonth, monthInput, onMonthChange,
 
   async function commitImport() {
     if (!importPreview || !canModify || locked) return
-    for (const row of importPreview.rows) {
-      if (row.status !== 'valid' && row.status !== 'warning') continue
-      const data = row.data as { payable_days: number; notes?: string }
-      await saveAttendance(row.employeeCode, payrollMonth, data.payable_days, data.notes ?? null)
-    }
-    setImportPreview(null)
-    await reload()
-    setMessage('Attendance import committed')
+    await requireSecurityThen(async () => {
+      for (const row of importPreview.rows) {
+        if (row.status !== 'valid' && row.status !== 'warning') continue
+        const data = row.data as { payable_days: number; notes?: string }
+        await saveAttendance(row.employeeCode, payrollMonth, data.payable_days, data.notes ?? null)
+      }
+      setImportPreview(null)
+      await reload()
+      setMessage('Attendance import committed')
+    })
   }
 
   async function fill30Days() {
     if (!canModify || locked) return
-    if (!window.confirm('Fill 30 payable days for all visible employees without existing attendance?')) return
-    for (const e of filtered) {
-      const code = e.employee_code.trim().toUpperCase()
-      if (attendanceMap.has(code)) continue
-      await saveAttendance(code, payrollMonth, 30, null)
-    }
-    await reload()
-    setMessage('Filled 30 days for employees without attendance')
+    await requireSecurityThen(async () => {
+      if (!window.confirm('Fill 30 payable days for all visible employees without existing attendance?')) return
+      for (const e of filtered) {
+        const code = e.employee_code.trim().toUpperCase()
+        if (attendanceMap.has(code)) continue
+        await saveAttendance(code, payrollMonth, 30, null)
+      }
+      await reload()
+      setMessage('Filled 30 days for employees without attendance')
+    })
   }
 
   return (

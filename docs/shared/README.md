@@ -102,6 +102,7 @@ Core dealership isolation is enforced in SQL policies, not in frontend-only role
 - RLS helper function: `public.my_dealer_code()`
 - RLS-enabled tables: `vehicles`, `job_cards`, `panels`, `panel_photos`, `estimate_rows`, `documents`
 - Policies constrain access to rows matching dealer context in JWT metadata.
+- Payroll month `status` changes only through `payroll_finalize_month` / `payroll_unlock_month`. Non-admin payroll table writes require `payroll_has_security_grant()`. The security-code hash in `payroll_security_settings` is not selectable by `authenticated`.
 
 Primary policy source:
 
@@ -207,6 +208,7 @@ Dealer-based data access isolation:
 
 - Frontend/UI level: role and permission-driven controls in admin and navigation.
 - Database level: dealer-code-based row policies for AutoDoc core tables.
+- Payroll: module VIEW/MODIFY/DELETE remain authoritative. The Payroll Security Code is an additional server grant (`payroll_verify_security_code`, 30 minutes). Unlock always requires a fresh code plus reason, including for admin.
 
 ## 6.3 Important design implication
 
@@ -236,6 +238,7 @@ Reporting sources include service and parts tables/views:
 - `service_parts_order_data`
 - `service_parts_stock_snapshot_data`
 - supporting views used by report query modules
+- Payroll: `payroll_months`, `payroll_entries`, `payroll_advances`, `payroll_advance_schedules`, `payroll_security_settings` (hash only), `payroll_security_grants`
 
 ## 9. Operational Runbook
 
@@ -266,6 +269,7 @@ Optional/admin-sensitive:
 - Dealer metadata updates may require user re-login to refresh JWT claims.
 - Large import duplicate handling can become expensive for heavily duplicated files.
 - Ensure module-permission schema remains present and consistent across environments.
+- After applying DBL-0040, an admin must set the Payroll Security Code with `SELECT public.payroll_set_security_code('<code>');`. Do not commit the plaintext. `technician_earnings_settings` and `employee_master` bank fields remain on their existing (non-payroll-grant) write authorities because those tables are shared with Technician / master-data flows.
 
 ## 11. Documentation Governance
 

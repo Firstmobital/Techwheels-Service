@@ -22,6 +22,7 @@ import {
   type AdvanceImportCommitData,
 } from '../../lib/payroll/excelUtils'
 import type { AdvanceDeductionType, ImportPreviewResult, PayrollAdvance, PayrollAdvanceSchedule, PayrollEmployee } from '../../lib/payroll/types'
+import { usePayrollSecurity } from './PayrollSecurityGate'
 import { supabase } from '../../lib/supabase'
 
 interface Props {
@@ -87,6 +88,7 @@ export default function AdvanceManagementTab({ canModify, payrollMonth }: Props)
   const employeePickerRef = useRef<HTMLDivElement>(null)
   const [ledgerFilter, setLedgerFilter] = useState<LedgerFilter>('all')
   const [importPreview, setImportPreview] = useState<ImportPreviewResult | null>(null)
+  const { requireSecurityThen } = usePayrollSecurity()
   const [form, setForm] = useState(() => emptyForm(payrollMonth))
 
   const reload = useCallback(async () => {
@@ -270,6 +272,11 @@ export default function AdvanceManagementTab({ canModify, payrollMonth }: Props)
 
   async function handleIssueAdvance() {
     if (!canModify || issuing) return
+    await requireSecurityThen(() => issueAdvanceAfterSecurity())
+  }
+
+  async function issueAdvanceAfterSecurity() {
+    if (!canModify || issuing) return
     setError(null)
     setMessage(null)
 
@@ -375,6 +382,11 @@ export default function AdvanceManagementTab({ canModify, payrollMonth }: Props)
   }
 
   async function commitImport() {
+    if (!importPreview || !canModify) return
+    await requireSecurityThen(() => commitImportAfterSecurity())
+  }
+
+  async function commitImportAfterSecurity() {
     if (!importPreview || !canModify) return
     setError(null)
     const { data: { user } } = await supabase.auth.getUser()
