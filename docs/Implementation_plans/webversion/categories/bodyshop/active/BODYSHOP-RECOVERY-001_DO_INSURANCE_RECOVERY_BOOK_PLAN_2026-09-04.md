@@ -8,10 +8,11 @@
 **Status:** Active (v1 DO-only)  
 **Platform:** webversion  
 **Category:** bodyshop  
-**Ledger:** DBL-0031 (applied); DBL-0032 (APPLIED); DBL-0033 (APPLIED — Recovery DO post); DBL-0034 (APPLIED — export + mismatch); DBL-0036 (APPLIED — Reception delete after Cancel; Recovery hides cancelled); DBL-0037 (APPLIED — Recovery More View storage read + export l.id)  
+**Ledger:** DBL-0031–0037 in `full_metadata.sql` 2026-09-04 16:50 IST (sha256 `85bb6e06c43e4dfeb1516d51242c9c87637d2eef52bd08c2efd36b4c8d24ff4e`). DBL-0042 insurer master is PROPOSED / not in dump.  
 **Route:** `/bodyshop-recovery`  
 **Module:** `bodyshop_recovery`  
-**Depends on:** BODYSHOP-SETTLEMENT-001 (`bodyshop_settlements.insurance_due_amount`)
+**Depends on:** BODYSHOP-SETTLEMENT-001 (`bodyshop_settlements.insurance_due_amount`)  
+**Related (later):** BODYSHOP-INSURER-001 — Settings insurer master + SA dropdown. Recovery All insurers / Mismatch stay policy vs DMS bill-to until that plan’s Phase 4.
 
 ---
 
@@ -54,6 +55,7 @@ insurance_due = do_amount − (Main + GST + TDS, not reversed)
 - [x] **Task 2.2:** Operator apply DBL-0031 then DBL-0032; Sanjay Kansotia has `bodyshop_recovery` view. Grant other Accounts users as needed.
 - [x] **Task 2.4:** Period pills + insurer filter; More modal; Post Payment Stage 18 on Recovery (DBL-0033).
 - [ ] **Task 3.1:** Customer remaining book (later plan). Not v1.
+- [ ] **Task 3.2:** Insurer master / SA dropdown — **BODYSHOP-INSURER-001** (planned; not this Recovery v1).
 
 ---
 
@@ -68,6 +70,7 @@ insurance_due = do_amount − (Main + GST + TDS, not reversed)
 ✅ 2.2 | Apply DBL-0031 + DBL-0032 + grant Accounts | Operator | 2026-09-04 | 2026-09-04 | DBL-0032 APPLIED prod; Sanjay has view; other Accounts as needed
 ✅ 2.4 | Period + insurer + More + Post Payment | Eng | 2026-09-04 | 2026-09-04 | DBL-0033; DO only; no Repair Tracker
 ⏳ 3.1 | Customer book | - | - | - | Deferred
+⏳ 3.2 | Insurer master | - | - | - | BODYSHOP-INSURER-001
 ```
 
 ---
@@ -77,3 +80,4 @@ insurance_due = do_amount − (Main + GST + TDS, not reversed)
 - Customer due / refund KPIs and posting (stay on Repair Tracker)
 - Bank UTR matching
 - Mobile
+- Insurance Company Settings master + SA dropdown (BODYSHOP-INSURER-001)

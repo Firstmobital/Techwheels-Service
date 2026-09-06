@@ -45,6 +45,7 @@ Use this file as daily command center:
 | BODYSHOP-SETTLEMENT-001 | bodyshop | In Progress (DBL-0026 VERIFIED in full_metadata; DBL-0029 APPLIED) | Bodyshop Team + Platform Team + Accounts | `docs/Implementation_plans/webversion/categories/bodyshop/active/BODYSHOP-SETTLEMENT-001_PAYMENT_RECONCILIATION_LEDGER_PLAN_2026-09-04.md` |
 | BODYSHOP-RECOVERY-001 | bodyshop | Active (v1 DO-only; DBL-0033 Post Payment) | Bodyshop Team + Platform Team + Accounts | `docs/Implementation_plans/webversion/categories/bodyshop/active/BODYSHOP-RECOVERY-001_DO_INSURANCE_RECOVERY_BOOK_PLAN_2026-09-04.md` |
 | BODYSHOP-LOOKUP-001 | bodyshop | Active (web implemented; QA pending) | Bodyshop Team + Platform Team | `docs/Implementation_plans/webversion/categories/bodyshop/active/BODYSHOP-LOOKUP-001_REPAIR_TRACKER_GLOBAL_SEARCH_PLAN_2026-09-04.md` |
+| BODYSHOP-INSURER-001 | bodyshop | Planned (implement later) | Bodyshop Team + Platform Team + Accounts | `docs/Implementation_plans/webversion/categories/bodyshop/active/BODYSHOP-INSURER-001_INSURANCE_COMPANY_MASTER_PLAN_2026-09-04.md` |
 | CMP-00 | complaints | Active | Complaints Team | `docs/Implementation_plans/webversion/categories/complaints/active/00_INDEX.md` |
 | CMP-01 | complaints | Active | Complaints Team | `docs/Implementation_plans/webversion/categories/complaints/active/01_COMPREHENSIVE_PLAN.md` |
 | CMP-CHECKLIST | complaints | Active | Complaints Team | `docs/Implementation_plans/webversion/categories/complaints/active/CHECKLIST.md` |
@@ -87,6 +88,7 @@ Use this file as daily command center:
 | bodyshop | `docs/Implementation_plans/webversion/categories/bodyshop/evidence/BODYSHOP-EARNINGS-001_TEST_MATRIX.md` |
 | bodyshop | `docs/Implementation_plans/webversion/categories/bodyshop/evidence/BODYSHOP-SETTLEMENT-001_TEST_MATRIX.md` |
 | bodyshop | `docs/Implementation_plans/webversion/categories/bodyshop/evidence/BODYSHOP-LOOKUP-001_TEST_MATRIX.md` |
+| bodyshop | `docs/Implementation_plans/webversion/categories/bodyshop/evidence/BODYSHOP-INSURER-001_TEST_MATRIX.md` |
 | rbac | `docs/Implementation_plans/webversion/categories/rbac/evidence/runbooks/ADMIN_BYPASS_RLS_GOVERNANCE.md` |
 | rbac | `docs/Implementation_plans/webversion/categories/rbac/evidence/RBAC-003_BUSINESS_ROLES_CSV_AUDIT_2026-07-18.md` |
 | rbac | `docs/Implementation_plans/webversion/categories/rbac/evidence/RBAC-003_BUSINESS_ROLES_CSV_TEST_MATRIX.md` |

@@ -10,7 +10,7 @@
 **Category:** bodyshop  
 **Ledger:** DBL-0026 (VERIFIED); DBL-0029 (APPLIED — post-DO 400)  
 **Reference pages:** `/bodyshop-repair` (Billing tab stages 15/16; **Stage 18 Payment** = two payment statuses)  
-**DB authority:** `supabase/backups/full_metadata.sql` (dumped 2026-09-04 13:05 IST; sha256 `074311759167fd4049087061f1df4d3452729625a089a216425240c79d89041a`)  
+**DB authority:** `supabase/backups/full_metadata.sql` (dumped 2026-09-04 16:50 IST; sha256 `85bb6e06c43e4dfeb1516d51242c9c87637d2eef52bd08c2efd36b4c8d24ff4e`; prior same-day dump 13:05 IST superseded)  
 **Row-data authority:** live production (4 Sep 2026) + `local_folder/backups/chunks/full_database.sql.part_*`  
 **Investigation canvas:** `/Users/vkbin/.cursor/projects/Users-vkbin-Techwheels-Service/canvases/jc-005071-payment-reconciliation.canvas.tsx`  
 **Evidence:** `docs/Implementation_plans/webversion/categories/bodyshop/evidence/BODYSHOP-SETTLEMENT-001_TEST_MATRIX.md`
@@ -52,7 +52,7 @@ This plan adds an **append-only settlement ledger**. Card billing columns (plus 
 
 **Pre-apply audit** (morning 2026-09-04) is kept below as the gap that justified DBL-0026. It is not current schema truth.
 
-**Post-apply schema authority** — `supabase/backups/full_metadata.sql` regenerated 2026-09-04 13:05 IST (`supabase/evidence/authoritative_metadata_manifest.json` sha256=`074311759167fd4049087061f1df4d3452729625a089a216425240c79d89041a`):
+**Post-apply schema authority** — `supabase/backups/full_metadata.sql` regenerated 2026-09-04 16:50 IST (`supabase/evidence/authoritative_metadata_manifest.json` sha256=`85bb6e06c43e4dfeb1516d51242c9c87637d2eef52bd08c2efd36b4c8d24ff4e`). Earlier same-day 13:05 IST dump (`07431175…`) is superseded. Current dump still includes DBL-0026/0029 and later Recovery objects through DBL-0037:
 
 | Object | Dump location |
 |--------|----------------|
@@ -295,7 +295,7 @@ A single Stage 18 save may post up to three DO lines (Main / GST / TDS) in one R
 
 ### Payer warning (operational, not a hard block)
 
-If `bodyshop_repair_cards.insurance_company` does not fuzzy-match `psf_revenue_dms.account`, show a warning. 005071: United India vs Go Digit.
+If `bodyshop_repair_cards.insurance_company` does not fuzzy-match `psf_revenue_dms.account`, show a warning. 005071: United India vs Go Digit. Official policy labels (Settings master, no free text) are **BODYSHOP-INSURER-001** — later. That plan must not copy DMS bill-to into `insurance_company`.
 
 ---
 
@@ -549,7 +549,7 @@ Existing list/queue queries keep working.
 ✅ 1.2 | Author paired sql_checks | Platform | 2026-09-04 | 2026-09-04 | sql_checks passed
 ✅ 1.3 | Widen payment_status + add two status cache columns | Platform | 2026-09-04 | 2026-09-04 | CHECK includes partial
 ✅ 1.4 | Apply + verify DBL-0026 | Operator + Reviewer | 2026-09-04 | 2026-09-04 | APPLIED prod; 299 headers
-✅ 1.5 | Refresh full_metadata.sql | Platform | 2026-09-04 | 2026-09-04 | dump 13:05 IST; sha256=07431175…; DBL-0026+0029 in dump
+✅ 1.5 | Refresh full_metadata.sql | Platform | 2026-09-04 | 2026-09-04 | 16:50 IST dump supersedes 13:05; sha256=85bb6e06…; DBL-0026–0037 in dump
 ```
 
 ### Phase 2
@@ -613,8 +613,8 @@ Existing list/queue queries keep working.
 | `supabase/migrations/20260904150000_bodyshop_settlement_post_do_rpc_fix.sql` | **Add** (DBL-0029 post-DO 400) |
 | `supabase/sql_checks/20260904150000_bodyshop_settlement_post_do_rpc_fix_checks.sql` | **Add** |
 | `docs/shared/reference/DB_CHANGE_LEDGER.md` | **Modify** DBL-0026 VERIFIED; DBL-0029 APPLIED |
-| `supabase/backups/full_metadata.sql` | **Refresh** 2026-09-04 13:05 IST |
-| `supabase/evidence/authoritative_metadata_manifest.json` | **Refresh** sha256 `07431175…` |
+| `supabase/backups/full_metadata.sql` | **Refresh** 2026-09-04 16:50 IST (13:05 superseded) |
+| `supabase/evidence/authoritative_metadata_manifest.json` | **Refresh** sha256 `85bb6e06…` |
 | `src/lib/api/bodyshopSettlement.ts` | **Add** |
 | `src/components/BodyshopSettlementPanel.tsx` | **Add** |
 | `src/lib/api/bodyshopRepair.ts` | **Modify** (types; stop billing overwrite) |
@@ -665,7 +665,7 @@ Existing list/queue queries keep working.
 - ✅ Stage 18 completes only when **both** statuses are `received`. Delivery does not auto-flip.
 - ✅ Posted lines cannot be edited or deleted; reverse creates a new line.
 - ✅ Card cache includes both component statuses plus overall `payment_status`.
-- ✅ sql_checks + metadata refresh complete; DBL-0026 VERIFIED in `full_metadata.sql` (2026-09-04 13:05 IST). DBL-0029 APPLIED (same dump).
+- ✅ sql_checks + metadata refresh complete; DBL-0026 VERIFIED in `full_metadata.sql` (current 2026-09-04 16:50 IST). DBL-0029 and Recovery DBL-0031–0037 are in the same dump.
 
 ---
 

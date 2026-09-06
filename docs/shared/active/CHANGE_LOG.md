@@ -12,6 +12,8 @@ Tracks documentation-sync updates for business logic, architecture, and access c
 
 ## 2026-09-04
 
+- Regenerated schema authority `supabase/backups/full_metadata.sql` (2026-09-04 16:50 IST; sha256 `85bb6e06c43e4dfeb1516d51242c9c87637d2eef52bd08c2efd36b4c8d24ff4e`). Manifest matches. Dump includes DBL-0026 through DBL-0037 (settlement, Recovery, cancel-delete, autodoc Recovery read). DBL-0042 insurer master is not in the dump. Post-dump promotions window reset.
+- Planned later: **BODYSHOP-INSURER-001** — Settings Insurance Companies master (like Models), SA dropdown, Fetch maps via aliases. Do not implement until that phase is scheduled. Ledger reserved: DBL-0042. Recovery Mismatch / DMS bill-to stay as they are.
 - Recovery has a **Mismatch** dropdown next to All insurers. It keeps only rows where policy company vs DMS bill-to is a mismatch (same C/O + M/S rule as the orange pill). Year / KPI / Export follow the filter. Plan: `BODYSHOP-RECOVERY-001`.
 - Recovery **More → View** opens the file for org-wide Recovery logins (NO-DEALER / other dealer). Autodoc storage was dealer-scoped so signed URLs returned Object not found even when the object existed. Drive URL still opens first when stored. Ledger: DBL-0037. Export Excel no longer errors `column l.id does not exist`.
 - Reception Delete is allowed when the linked bodyshop repair is **cancelled**. Active/delivered cards with a real DMS JC still block. Recovery list hides cancelled cards. Ledger: DBL-0036. Repair Tracker detail has **Cancel repair**.

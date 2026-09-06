@@ -49,7 +49,7 @@ Found during audit (2026-06-29). Nothing below was deleted; this is a classifica
 
 | Path | Classification | Notes |
 |---|---|---|
-| `supabase/backups/full_metadata.sql` | **Current authoritative (primary)** | Schema-only dump. Regenerated 2026-09-04 13:05 IST (`supabase/evidence/authoritative_metadata_manifest.json` sha256=`074311759167fd4049087061f1df4d3452729625a089a216425240c79d89041a`). Includes DBL-0026 settlement tables/RPCs and DBL-0029 write-path fix. 0 data rows. |
+| `supabase/backups/full_metadata.sql` | **Current authoritative (primary)** | Schema-only dump. Regenerated 2026-09-04 16:50 IST (`supabase/evidence/authoritative_metadata_manifest.json` sha256=`85bb6e06c43e4dfeb1516d51242c9c87637d2eef52bd08c2efd36b4c8d24ff4e`, 2,154,911 bytes). Includes DBL-0026…DBL-0037 (settlement ledger, Recovery RPCs, cancel-delete, Recovery autodoc SELECT). Does **not** include DBL-0042 (`settings_insurance_companies` — PROPOSED). 0 data rows. |
 | `local_folder/backups/full_database.sql` | **Current authoritative (secondary)** | Schema + data, 136 tables, includes COPY data blocks. Generated 2026-06-29. Git-ignored (see `.gitignore`: `local_folder`). |
 | `local_folder/backups/chunks/full_database.sql.part_000`–`part_005` | **Current (mirror, not a version)** | Exact split of the secondary dump above. Git-ignored along with the rest of `local_folder`. |
 | `supabase/backups/full_dump.sql` | **Historical / non-authoritative** | Older schema-only dump (2026-05-11), only 46 tables, 0 GRANT statements — predates most of the current schema and was generated without privileges. Superseded by `full_metadata.sql`. Do not use as schema authority. Kept for historical reference only; not deleted. |
