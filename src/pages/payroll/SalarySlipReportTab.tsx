@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { fetchPayrollEmployees, fetchPayrollEntries, fetchPayrollMonth } from '../../lib/api/payroll'
-import { formatCurrency, maskBankAccount } from '../../lib/payroll/calculations'
+import { formatCurrency, maskBankAccount, shouldIncludePayrollEntryInWorkingRoster } from '../../lib/payroll/calculations'
 import { displayOptional, resolvePayrollEntryIdentity } from '../../lib/payroll/entryIdentity'
 import { exportWorkbook } from '../../lib/payroll/excelUtils'
 
@@ -36,16 +36,26 @@ export default function SalarySlipReportTab({ payrollMonth, monthInput, onMonthC
     return m
   }, [employees])
 
+  const visibleEntries = useMemo(
+    () => entries.filter((entry) => (
+      shouldIncludePayrollEntryInWorkingRoster(
+        empByCode.get(entry.employee_code.trim().toUpperCase()),
+        entry,
+      )
+    )),
+    [entries, empByCode],
+  )
+
   const identityByCode = useMemo(() => {
     const m = new Map<string, ReturnType<typeof resolvePayrollEntryIdentity>>()
-    entries.forEach((entry) => {
+    visibleEntries.forEach((entry) => {
       const code = entry.employee_code.trim().toUpperCase()
       m.set(code, resolvePayrollEntryIdentity(entry, empByCode.get(code)))
     })
     return m
-  }, [entries, empByCode])
+  }, [visibleEntries, empByCode])
 
-  const selectedEntry = entries.find((e) => e.employee_code.trim().toUpperCase() === selectedCode.trim().toUpperCase())
+  const selectedEntry = visibleEntries.find((e) => e.employee_code.trim().toUpperCase() === selectedCode.trim().toUpperCase())
   const selectedIdentity = selectedCode
     ? identityByCode.get(selectedCode.trim().toUpperCase())
     : undefined
@@ -56,7 +66,7 @@ export default function SalarySlipReportTab({ payrollMonth, monthInput, onMonthC
       'Earned Base', 'SA Variable', 'Tech Variable', 'Bodyshop Variable', 'Additions', 'Gross',
       'Advance Recovery', 'Other Deductions', 'Net Payable', 'Status',
     ]
-    const rows = entries.map((e) => {
+    const rows = visibleEntries.map((e) => {
       const identity = identityByCode.get(e.employee_code.trim().toUpperCase())
       return [
         e.employee_code, identity?.employeeName ?? e.employee_code, identity?.department ?? '', identity?.branch ?? '', identity?.role ?? '',
@@ -79,7 +89,7 @@ export default function SalarySlipReportTab({ payrollMonth, monthInput, onMonthC
         <input type="month" value={monthInput} onChange={(ev) => onMonthChange(ev.target.value)} />
         <select value={selectedCode} onChange={(ev) => setSelectedCode(ev.target.value)}>
           <option value="">Select employee for slip…</option>
-          {entries.map((e) => {
+          {visibleEntries.map((e) => {
             const identity = identityByCode.get(e.employee_code.trim().toUpperCase())
             return <option key={e.id} value={e.employee_code}>{e.employee_code} — {identity?.employeeName ?? e.employee_code}</option>
           })}

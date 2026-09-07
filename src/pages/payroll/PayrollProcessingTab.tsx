@@ -15,7 +15,7 @@ import {
   scopeBodyshopTrackerByBranch,
   type BodyshopStakeholderEarnings,
 } from '../../lib/bodyshopMonthlyEarnings'
-import { formatCurrency } from '../../lib/payroll/calculations'
+import { formatCurrency, shouldIncludePayrollEntryInWorkingRoster } from '../../lib/payroll/calculations'
 import { normalizeEmployeeCode } from '../../lib/payroll/earningsFormulas'
 import { resolvePayrollEntryIdentity } from '../../lib/payroll/entryIdentity'
 import {
@@ -132,29 +132,39 @@ export default function PayrollProcessingTab({
     return m
   }, [employees])
 
+  const visibleEntries = useMemo(
+    () => entries.filter((entry) => (
+      shouldIncludePayrollEntryInWorkingRoster(
+        empByCode.get(entry.employee_code.trim().toUpperCase()),
+        entry,
+      )
+    )),
+    [entries, empByCode],
+  )
+
   const identityByCode = useMemo(() => {
     const m = new Map<string, ReturnType<typeof resolvePayrollEntryIdentity>>()
-    entries.forEach((entry) => {
+    visibleEntries.forEach((entry) => {
       const code = entry.employee_code.trim().toUpperCase()
       m.set(code, resolvePayrollEntryIdentity(entry, empByCode.get(code)))
     })
     return m
-  }, [entries, empByCode])
+  }, [visibleEntries, empByCode])
 
   const depts = useMemo(() => Array.from(new Set(
-    entries.map((entry) => identityByCode.get(entry.employee_code.trim().toUpperCase())?.department?.trim()).filter(Boolean),
-  )).sort(), [entries, identityByCode])
+    visibleEntries.map((entry) => identityByCode.get(entry.employee_code.trim().toUpperCase())?.department?.trim()).filter(Boolean),
+  )).sort(), [visibleEntries, identityByCode])
   const branches = useMemo(() => Array.from(new Set(
-    entries.map((entry) => identityByCode.get(entry.employee_code.trim().toUpperCase())?.branch?.trim()).filter(Boolean),
-  )).sort(), [entries, identityByCode])
+    visibleEntries.map((entry) => identityByCode.get(entry.employee_code.trim().toUpperCase())?.branch?.trim()).filter(Boolean),
+  )).sort(), [visibleEntries, identityByCode])
 
-  const aggregateScopedRows = useMemo(() => entries.filter((entry) => {
+  const aggregateScopedRows = useMemo(() => visibleEntries.filter((entry) => {
     const identity = identityByCode.get(entry.employee_code.trim().toUpperCase())
     if (deptFilter !== 'all' && (identity?.department?.trim() ?? '') !== deptFilter) return false
     if (branchFilter !== 'all' && (identity?.branch?.trim() ?? '') !== branchFilter) return false
     if (salaryTypeFilter !== 'all' && entry.salary_type_snapshot !== salaryTypeFilter) return false
     return true
-  }), [entries, identityByCode, deptFilter, branchFilter, salaryTypeFilter])
+  }), [visibleEntries, identityByCode, deptFilter, branchFilter, salaryTypeFilter])
 
   const tableRows = useMemo(() => {
     const term = search.trim().toLowerCase()
@@ -194,20 +204,20 @@ export default function PayrollProcessingTab({
 
   const departmentByCode = useMemo(() => {
     const m = new Map<string, string | null>()
-    entries.forEach((entry) => {
+    visibleEntries.forEach((entry) => {
       const code = normalizeEmployeeCode(entry.employee_code)
       m.set(code, identityByCode.get(code)?.department ?? null)
     })
     return m
-  }, [entries, identityByCode])
+  }, [visibleEntries, identityByCode])
 
   const salaryTypeByCode = useMemo(() => {
     const m = new Map<string, string | null>()
-    entries.forEach((entry) => {
+    visibleEntries.forEach((entry) => {
       m.set(normalizeEmployeeCode(entry.employee_code), entry.salary_type_snapshot)
     })
     return m
-  }, [entries])
+  }, [visibleEntries])
 
   const matchesBodyshopCardFilters = useCallback((code: string) => (
     employeeMatchesBodyshopPayrollScope({
@@ -252,12 +262,12 @@ export default function PayrollProcessingTab({
   ])
 
   const payableBodyshopInScope = useMemo(
-    () => entries.reduce((sum, entry) => {
+    () => visibleEntries.reduce((sum, entry) => {
       const code = normalizeEmployeeCode(entry.employee_code)
       if (!matchesBodyshopCardFilters(code)) return sum
       return sum + Number(entry.bodyshop_variable_earning ?? 0)
     }, 0),
-    [entries, matchesBodyshopCardFilters],
+    [visibleEntries, matchesBodyshopCardFilters],
   )
 
   const bodyshopHint = useMemo(() => {
@@ -434,7 +444,7 @@ export default function PayrollProcessingTab({
       (entry) => Number(entry.bodyshop_variable_earning ?? 0),
       payrollCardExportFilename('bodyshop-variable', monthInput),
       (entry) => matchesBodyshopCardFilters(normalizeEmployeeCode(entry.employee_code)),
-      entries,
+      visibleEntries,
     )
   }
 

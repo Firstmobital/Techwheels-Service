@@ -1,4 +1,5 @@
-import type { SalaryType } from './types'
+import { isEmployeeCurrentlyActive } from '../employeeActive'
+import type { PayrollEntry, SalaryType } from './types'
 
 /** Service Center rule: round((baseSalary / 30) * payableDays) to nearest rupee. */
 export function calcEarnedBaseSalary(baseSalary: number, payableDays: number): number {
@@ -32,6 +33,90 @@ export interface PayrollCalcResult {
   variableTotal: number
   grossPayout: number
   netPayable: number
+}
+
+export interface PayrollMonthActivity {
+  payableDays?: number | null
+  earnedBase?: number | null
+  saVariableEarning?: number | null
+  technicianVariableEarning?: number | null
+  bodyshopVariableEarning?: number | null
+  customAdditions?: number | null
+  otherDeductions?: number | null
+  advanceDeduction?: number | null
+  grossPayout?: number | null
+  netPayable?: number | null
+}
+
+function isNonZeroPayrollAmount(value: number | null | undefined): boolean {
+  const amount = Number(value)
+  return Number.isFinite(amount) && amount !== 0
+}
+
+/** True when the month already has payable days or any non-zero payroll amount. */
+export function hasGenuinePayrollMonthActivity(activity: PayrollMonthActivity | null | undefined): boolean {
+  if (!activity) return false
+  return (
+    isNonZeroPayrollAmount(activity.payableDays)
+    || isNonZeroPayrollAmount(activity.earnedBase)
+    || isNonZeroPayrollAmount(activity.saVariableEarning)
+    || isNonZeroPayrollAmount(activity.technicianVariableEarning)
+    || isNonZeroPayrollAmount(activity.bodyshopVariableEarning)
+    || isNonZeroPayrollAmount(activity.customAdditions)
+    || isNonZeroPayrollAmount(activity.otherDeductions)
+    || isNonZeroPayrollAmount(activity.advanceDeduction)
+    || isNonZeroPayrollAmount(activity.grossPayout)
+    || isNonZeroPayrollAmount(activity.netPayable)
+  )
+}
+
+export function payrollActivityFromEntry(
+  entry: Pick<
+    PayrollEntry,
+    | 'payable_days_snapshot'
+    | 'earned_base'
+    | 'sa_variable_earning'
+    | 'technician_variable_earning'
+    | 'bodyshop_variable_earning'
+    | 'custom_additions'
+    | 'other_deductions'
+    | 'advance_deduction'
+    | 'gross_payout'
+    | 'net_payable'
+  > | null | undefined,
+): PayrollMonthActivity | null {
+  if (!entry) return null
+  return {
+    payableDays: entry.payable_days_snapshot,
+    earnedBase: entry.earned_base,
+    saVariableEarning: entry.sa_variable_earning,
+    technicianVariableEarning: entry.technician_variable_earning,
+    bodyshopVariableEarning: entry.bodyshop_variable_earning,
+    customAdditions: entry.custom_additions,
+    otherDeductions: entry.other_deductions,
+    advanceDeduction: entry.advance_deduction,
+    grossPayout: entry.gross_payout,
+    netPayable: entry.net_payable,
+  }
+}
+
+/**
+ * Working-roster rule: active employees stay visible even at zero activity.
+ * Inactive employees stay visible only when this month already has genuine activity.
+ */
+export function shouldIncludeInPayrollWorkingRoster(
+  employee: { is_active?: boolean | null } | null | undefined,
+  activity?: PayrollMonthActivity | null,
+): boolean {
+  if (isEmployeeCurrentlyActive(employee)) return true
+  return hasGenuinePayrollMonthActivity(activity)
+}
+
+export function shouldIncludePayrollEntryInWorkingRoster(
+  employee: { is_active?: boolean | null } | null | undefined,
+  entry: Parameters<typeof payrollActivityFromEntry>[0],
+): boolean {
+  return shouldIncludeInPayrollWorkingRoster(employee, payrollActivityFromEntry(entry))
 }
 
 export function computePayrollAmounts(input: PayrollCalcInput): PayrollCalcResult {

@@ -3,10 +3,17 @@ import {
   fetchAttendanceForMonth,
   fetchCompensationMap,
   fetchPayrollEmployees,
+  fetchPayrollEntries,
   fetchPayrollMonth,
   saveAttendance,
 } from '../../lib/api/payroll'
-import { calcEarnedBaseSalary, formatCurrency, isValidPayableDays } from '../../lib/payroll/calculations'
+import {
+  calcEarnedBaseSalary,
+  formatCurrency,
+  isValidPayableDays,
+  payrollActivityFromEntry,
+  shouldIncludeInPayrollWorkingRoster,
+} from '../../lib/payroll/calculations'
 import { exportWorkbook, previewAttendanceImport, readWorkbookRows } from '../../lib/payroll/excelUtils'
 import { SALARY_TYPE_LABELS } from '../../lib/payroll/types'
 import type { ImportPreviewResult } from '../../lib/payroll/types'
@@ -39,13 +46,24 @@ export default function AttendanceTab({ payrollMonth, monthInput, onMonthChange,
   const reload = useCallback(async () => {
     setError(null)
     try {
-      const [emps, comp, att, monthState] = await Promise.all([
+      const [emps, comp, att, monthState, ents] = await Promise.all([
         fetchPayrollEmployees(),
         fetchCompensationMap(),
         fetchAttendanceForMonth(payrollMonth),
         fetchPayrollMonth(payrollMonth),
+        fetchPayrollEntries(payrollMonth),
       ])
-      setEmployees(emps.filter((e) => comp.has(e.employee_code.trim().toUpperCase())))
+      const entryByCode = new Map(ents.map((entry) => [entry.employee_code.trim().toUpperCase(), entry]))
+      setEmployees(emps.filter((e) => {
+        const code = e.employee_code.trim().toUpperCase()
+        if (!comp.has(code)) return false
+        const attendance = att.get(code)
+        const existing = entryByCode.get(code)
+        return shouldIncludeInPayrollWorkingRoster(e, {
+          ...payrollActivityFromEntry(existing),
+          payableDays: attendance?.payable_days ?? existing?.payable_days_snapshot ?? 0,
+        })
+      }))
       setCompMap(comp)
       setAttendanceMap(att)
       setLocked(monthState?.status === 'finalized')

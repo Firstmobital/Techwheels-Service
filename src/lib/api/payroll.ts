@@ -1,5 +1,13 @@
 import { supabase } from '../supabase'
-import { computePayrollAmounts, isValidPayableDays, parsePayrollMonthInput, salaryTypeIncludesVariable } from '../payroll/calculations'
+import {
+  computePayrollAmounts,
+  hasGenuinePayrollMonthActivity,
+  isValidPayableDays,
+  parsePayrollMonthInput,
+  payrollActivityFromEntry,
+  salaryTypeIncludesVariable,
+  shouldIncludeInPayrollWorkingRoster,
+} from '../payroll/calculations'
 import { roundPayrollPaise } from '../payroll/advanceSchedule'
 import { fetchMonthlyVariableEarnings } from '../payroll/variableEarnings'
 import type {
@@ -247,6 +255,21 @@ export async function recomputePayrollMonth(payrollMonth: string): Promise<Payro
     const customAdditions = existing?.custom_additions ?? 0
     const otherDeductions = existing?.other_deductions ?? 0
     const advanceDeduction = await getAdvanceDeductionForMonth(code, month)
+    const currentActivity = {
+      payableDays,
+      saVariableEarning: finalSaVar,
+      technicianVariableEarning: finalTechVar,
+      bodyshopVariableEarning: bodyshopVar,
+      customAdditions,
+      otherDeductions,
+      advanceDeduction,
+    }
+    if (
+      !shouldIncludeInPayrollWorkingRoster(emp, currentActivity)
+      && !hasGenuinePayrollMonthActivity(payrollActivityFromEntry(existing))
+    ) {
+      continue
+    }
 
     const needsReview = salaryTypeIncludesVariable(comp.salary_type)
       && finalSaVar + finalTechVar + bodyshopVar <= 0
