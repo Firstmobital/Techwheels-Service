@@ -27,6 +27,7 @@ import CREIncentivePage from './pages/CREIncentivePage'
 import { Icon } from './components/Icon'
 import ComplaintsPage from './pages/ComplaintsPage'
 import ComplaintPortalPage from './pages/ComplaintPortalPage'
+import BodyShopCustomerAppPage from './pages/customer-app/BodyShopCustomerAppPage'
 import {
   getUnreadComplaintNotificationCount,
   listMyComplaintNotifications,
@@ -188,7 +189,7 @@ function isBodyshopPath(pathname: string): boolean {
 const HOME_ROUTE = '/home'
 
 function isPublicAuthPath(pathname: string): boolean {
-  return pathname === '/' || pathname === '/signup' || pathname === '/forgot-password' || pathname === '/auth/callback' || pathname.startsWith('/c/')
+  return pathname === '/' || pathname === '/signup' || pathname === '/forgot-password' || pathname === '/auth/callback' || pathname.startsWith('/c/') || pathname === '/b' || pathname.startsWith('/b/')
 }
 
 function isNavItemActive(pathname: string, route: AppRoute) {
@@ -900,6 +901,7 @@ function canAccessPath(pathname: string, allowedModules: Set<string>) {
   if (pathname.startsWith('/post-service-feedback')) return hasAnyModuleAccess(allowedModules, ROUTE_MODULE_MAP['/post-service-feedback'])
   if (pathname.startsWith('/parts-spm')) return hasAnyModuleAccess(allowedModules, ROUTE_MODULE_MAP['/parts-spm'])
   if (pathname.startsWith('/c/')) return true
+  if (pathname === '/b' || pathname.startsWith('/b/')) return true
   if (pathname.startsWith('/reset-password') || pathname.startsWith('/auth/callback') || pathname.startsWith('/forgot-password')) return true
   return false
 }
@@ -1243,6 +1245,15 @@ VITE_SUPABASE_ANON_KEY=your-anon-key`}
         <Route path="/verify-preview" element={<VerifyScreenPreview />} />
         <Route path="/c/:token" element={<ComplaintPortalPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    )
+  }
+
+  if (location.pathname === '/b' || location.pathname.startsWith('/b/')) {
+    return (
+      <Routes>
+        <Route path="/b" element={<BodyShopCustomerAppPage />} />
+        <Route path="*" element={<Navigate to="/b" replace />} />
       </Routes>
     )
   }
