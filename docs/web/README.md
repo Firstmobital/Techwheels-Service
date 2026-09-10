@@ -11,6 +11,7 @@ Standalone web features with their own implementation lifecycles:
 - `autodoc/` - AutoDoc module for web
 - `complaints/` - Complaints module for web
 - `telecalling/` - Telecalling module for web
+- `busy/` - BUSY accounting export
 - `warranty/` - Warranty module for web
 
 ### cross-cutting/

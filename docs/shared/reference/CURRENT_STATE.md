@@ -67,6 +67,8 @@ Snapshot Basis: Code and dump audit only (no inferred/assumed behavior)
 - `/ew-reminder`
 - `/service-booking`
 - `/wa-agent`
+- `/parts-spm`
+- `/busy`
 
 ### Module Keys Used by Web Route Gating
 
@@ -89,6 +91,7 @@ Snapshot Basis: Code and dump audit only (no inferred/assumed behavior)
 - `ew_reminder`
 - `service_booking`
 - `wa_agent`
+- `busy`
 
 ## Mobile Version (Audited)
 

@@ -1,6 +1,6 @@
 # Web Version Plans Index
 
-Last Updated: 2026-09-04
+Last Updated: 2026-09-10
 Scope: Web project implementation plans only
 Authority: This index is the routing source for webversion plans
 
@@ -62,6 +62,7 @@ Use this file as daily command center:
 | OPS-WA-GROUP | operations | Active | Operations Team | `docs/Implementation_plans/webversion/categories/operations/active/WA_GROUP_CREATION_IMPLEMENTATION_PLAN.md` |
 | OPS-INCOME-LEGACY | operations | Active | Operations Team | `docs/Implementation_plans/webversion/categories/operations/active/income_technician.md` |
 | OPS-UPDATION-001 | operations | Implemented (pending manual Meta setup) | Operations Team | `docs/Implementation_plans/webversion/categories/operations/active/OPS-UPDATION-001_UPDATION_REMINDER_WHATSAPP_AUTOMATION_PLAN.md` |
+| BUSY-001 | operations | Active (web implemented; BUSY import pending) | Accounts + Platform Team | `docs/Implementation_plans/webversion/categories/operations/active/BUSY-001_BUSY_ACCOUNTING_EXPORT_PLAN_2026-09-10.md` |
 | PARTS-001 | parts | Active (spec locked; preview first) | Parts Team + Platform Team | `docs/Implementation_plans/webversion/categories/parts/active/PARTS-001_SERVICE_ADVISOR_PARTS_ORDER_DATE_AND_GGN_STOCK_PLAN_2026-08-24.md` |
 | RBAC-001 | rbac | Active | RBAC Team | `docs/Implementation_plans/webversion/categories/rbac/active/RBAC-001_MASTER_PLAN_ACTIVE.md` |
 | RBAC-HOME | rbac | Active | RBAC Team | `docs/Implementation_plans/webversion/categories/rbac/active/RBAC_HOME_DYNAMIC_ROLE_VISIBILITY_PLAN_2026-06-05.md` |

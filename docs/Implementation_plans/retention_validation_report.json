@@ -1,6 +1,6 @@
 {
-  "generated_at_utc": "2026-09-04T06:40:18.281Z",
-  "scanned_files": 62,
+  "generated_at_utc": "2026-09-10T11:00:06.928Z",
+  "scanned_files": 65,
   "violations": 0,
   "scanned": [
     {
@@ -164,6 +164,14 @@
       }
     },
     {
+      "file": "docs/Implementation_plans/webversion/categories/bodyshop/active/BODYSHOP-INSURER-001_INSURANCE_COMPANY_MASTER_PLAN_2026-09-04.md",
+      "checks": {
+        "metrics_automated_rows": 0,
+        "changelog_automated_rows": 0,
+        "snapshot_blocks": 0
+      }
+    },
+    {
       "file": "docs/Implementation_plans/webversion/categories/bodyshop/active/BODYSHOP-LOOKUP-001_REPAIR_TRACKER_GLOBAL_SEARCH_PLAN_2026-09-04.md",
       "checks": {
         "metrics_automated_rows": 0,
@@ -173,6 +181,14 @@
     },
     {
       "file": "docs/Implementation_plans/webversion/categories/bodyshop/active/BODYSHOP-QUEUE-001_CANONICAL_STAGE_WORKLIST_BACKEND_PLAN_2026-06-20.md",
+      "checks": {
+        "metrics_automated_rows": 0,
+        "changelog_automated_rows": 0,
+        "snapshot_blocks": 0
+      }
+    },
+    {
+      "file": "docs/Implementation_plans/webversion/categories/bodyshop/active/BODYSHOP-RECOVERY-001_DO_INSURANCE_RECOVERY_BOOK_PLAN_2026-09-04.md",
       "checks": {
         "metrics_automated_rows": 0,
         "changelog_automated_rows": 0,
@@ -333,6 +349,14 @@
     },
     {
       "file": "docs/Implementation_plans/webversion/categories/import/active/IMPORT_UPLOAD_GOVERNING_PLAN_2026-06-06.md",
+      "checks": {
+        "metrics_automated_rows": 0,
+        "changelog_automated_rows": 0,
+        "snapshot_blocks": 0
+      }
+    },
+    {
+      "file": "docs/Implementation_plans/webversion/categories/operations/active/BUSY-001_BUSY_ACCOUNTING_EXPORT_PLAN_2026-09-10.md",
       "checks": {
         "metrics_automated_rows": 0,
         "changelog_automated_rows": 0,

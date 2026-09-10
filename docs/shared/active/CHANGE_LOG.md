@@ -2,6 +2,10 @@
 
 Tracks documentation-sync updates for business logic, architecture, and access control.
 
+## 2026-09-10
+
+- Added web **BUSY** accounting export at `/busy` (module `busy`). Labour invoices come from existing `psf_revenue_dms` (Import → PSF Revenue Report (DMS)). PV/EV Parts files are session-only and used only for 5%/18% GST-inclusive Parts amounts. Eligible series: PV `IMBTAI*`, EV `EMBTAI*`. Ledger: DBL-0043. Plan: `BUSY-001`. Transformation: `src/lib/busy/`. Mobile: no impact.
+
 ## 2026-09-05
 
 - `payroll_set_security_code` now allows the Supabase SQL Editor (no JWT) and `service_role` to provision the hash. App `is_admin()` still required for authenticated sessions. Non-admin JWTs still fail. Ledger: DBL-0041.

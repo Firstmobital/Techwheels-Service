@@ -2,7 +2,7 @@
 
 **Document ID:** MODULE-ROUTE-001  
 **Version:** 1.0  
-**Last Updated:** 2026-09-04  
+**Last Updated:** 2026-09-10  
 **Owner:** Techwheels Dev Team + GitHub Copilot  
 
 ---
@@ -35,6 +35,7 @@ This document defines the authoritative mapping between database modules and fro
 | 11 | `payroll` | `/payroll` | `/payroll` | PayrollPage | Active | Payroll management: attendance, advances, processing, salary slips |
 | — | `help_tickets` | `/help-tickets` | `/help-tickets` | HelpTicketsAdminPage | Active | Support inbox (org-wide). Employee self-service at `/help/tickets*` is auth-only (no module grant). |
 | — | `bodyshop_recovery` | `/bodyshop-recovery` | `/bodyshop-recovery` | BodyshopRecoveryPage | Active | DO / insurance-due book. Org-wide. More + Post Payment (Stage 18 DO) on-page. |
+| — | `busy` | `/busy` | `/busy` | BusyAccountingPage | Active | BUSY Party Account + Invoice Voucher export from `psf_revenue_dms` + session Parts files. |
 
 **Legend:**
 - **Module Name**: Authoritative name from `public.modules.name`
@@ -57,7 +58,9 @@ const ROUTE_MODULE_MAP: Record<AppRoute, ModuleName[]> = {
   '/reports':  ['reports'],                // Reports & Analytics
   '/settings': ['employees'],              // Employee master data
   '/admin':    ['admin'],                  // Admin panel
-  '/autodoc':  ['job_cards'],              // AutoDoc (vehicle documentation)
+  '/autodoc':  ['autodoc'],
+  '/parts-spm': ['parts_spm'],
+  '/busy': ['busy'],
 }
 ```
 
