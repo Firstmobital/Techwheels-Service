@@ -12,8 +12,10 @@ import {
   type DoRecoveryRow,
   type RecoveryCase,
   type RecoveryCaseDocument,
+  type RecoveryExportPayload,
 } from '../lib/api/bodyshopRecovery'
 import type { RepairCard } from '../lib/api/bodyshopRepair'
+import { supabase } from '../lib/supabase'
 
 function inr(v: number | null | undefined) {
   if (v == null || Number.isNaN(Number(v))) return '—'
@@ -254,7 +256,22 @@ export default function BodyshopRecoveryPage() {
     if (visible.length === 0) return
     setExporting(true)
     try {
-      const payload = await exportBodyshopDoRecovery(visible.map((r) => r.repair_card_id))
+      const cardIds = visible.map((r) => r.repair_card_id)
+      const payload: RecoveryExportPayload = await exportBodyshopDoRecovery(cardIds)
+      const settleMap = new Map<number, number>()
+      try {
+        const { data: settleRows } = await supabase
+          .from('bodyshop_settlements')
+          .select('repair_card_id, customer_posted_amount')
+          .in('repair_card_id', cardIds)
+        if (settleRows) {
+          for (const s of settleRows as { repair_card_id: number; customer_posted_amount: number | null }[]) {
+            settleMap.set(s.repair_card_id, Number(s.customer_posted_amount ?? 0))
+          }
+        }
+      } catch {
+        // fallback to lines
+      }
       const caseById = new Map(payload.cases.map((c) => [c.repair_card_id, c]))
       const linesById = new Map<number, typeof payload.lines>()
       for (const line of payload.lines) {
@@ -283,6 +300,20 @@ export default function BodyshopRecoveryPage() {
           .map((d) => `${DOC_LABELS[d.doc_key] || d.doc_key}: ${documentExportUrl(d)}`)
           .filter((v) => !v.endsWith(': '))
           .join(' | ')
+
+        const linesCustAmount = lines
+          .filter(
+            (l) =>
+              !l.is_reversed &&
+              l.line_type !== 'reversal' &&
+              (l.component === 'CUSTOMER' || l.line_type === 'receipt'),
+          )
+          .reduce((sum, l) => sum + (Number(l.amount) || 0), 0)
+
+        const fromSettle = settleMap.get(r.repair_card_id) ?? 0
+        const fromExtra = Number((extra as unknown as { customer_posted_amount?: number | null })?.customer_posted_amount ?? 0)
+        const customerAmount = fromSettle > 0 ? fromSettle : linesCustAmount > 0 ? linesCustAmount : fromExtra
+
         return {
           JC: r.job_card_no,
           VRN: r.reg_number ?? '',
@@ -301,6 +332,7 @@ export default function BodyshopRecoveryPage() {
           DO: r.do_amount,
           Released: r.do_released_amount,
           'Insurance due': r.insurance_due_amount,
+          'Customer amount (CA)': customerAmount,
           'DO payment': r.do_payment_status,
           'Ageing days': ageingDays(r.invoice_date),
           'Posted line count': lines.filter((l) => !l.is_reversed && l.line_type !== 'reversal').length,

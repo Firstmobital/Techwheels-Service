@@ -79,6 +79,7 @@ export interface RecoveryExportCase {
   insurance_due_amount: number | null
   do_payment_status: string | null
   insurer_mismatch: boolean
+  customer_posted_amount?: number | null
 }
 
 export interface RecoveryExportLine {
