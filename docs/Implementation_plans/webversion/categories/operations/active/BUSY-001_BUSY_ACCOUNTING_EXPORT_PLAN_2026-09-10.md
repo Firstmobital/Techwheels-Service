@@ -28,6 +28,7 @@ Add a web **BUSY** page that reads persisted PV/EV Labour from `public.psf_reven
 2. Filter eligible invoices: PV `IMBTAI*`, EV `EMBTAI*`, inclusive Labour invoice date range.
 3. Resolve branch from `sr_assigned_to`, Party Name, and exact BUSY debtor group strings.
 4. Export Party and Invoice XLSX files from ready invoices only.
+5. Invoice Voucher rows: always emit `SPARE PARTS @18%` and `LABOUR CHARGES @18%` (including Amount 0). Emit `SPARE PARTS @5%` only when matched Parts data contains a genuine 5% GST line. Do not use `eligible × 3` as a row-count rule.
 
 ---
 
@@ -50,7 +51,7 @@ Reference CRM/BUSY sample files were not in the repository workspace.
 - [x] **Task 2.2:** Module `busy`, nav, `ROUTE_MODULE_MAP`, `RequireAccess`.
 
 ### Phase 3: Verification
-- [x] **Task 3.1:** `scripts/verify_busy_accounting.mjs` (26 required cases).
+- [x] **Task 3.1:** `scripts/verify_busy_accounting.mjs` (required cases + per-invoice voucher contract: 18% Parts and Labour always; 5% only when a genuine 5% Parts line exists).
 - [ ] **Task 3.2:** Operator applies DBL-0043 and grants the module. Real BUSY import not available in this session.
 
 ---

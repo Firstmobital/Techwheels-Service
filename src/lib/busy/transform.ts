@@ -32,6 +32,7 @@ export interface BusyPreviewRow {
   parts5: number
   parts18: number
   labour: number
+  hasParts5Line: boolean
   total: number
   issue: string
   exclusionKind: 'series' | 'date' | 'cancelled' | 'empty' | ''
@@ -94,6 +95,7 @@ function labourKey(jobCard: string, invoiceNumber: string, invoiceDate: string):
 function aggregateParts(lines: BusyPartsLine[]): {
   parts5: number
   parts18: number
+  hasParts5Line: boolean
   gstIssue: string | null
 } {
   let net5 = 0
@@ -102,6 +104,7 @@ function aggregateParts(lines: BusyPartsLine[]): {
   let net18 = 0
   let tax18 = 0
   let hasTax18 = true
+  let hasParts5Line = false
   const gstIssues: string[] = []
 
   for (const line of lines) {
@@ -110,6 +113,7 @@ function aggregateParts(lines: BusyPartsLine[]): {
       continue
     }
     if (line.gstRate === 5) {
+      hasParts5Line = true
       net5 += line.netAmount
       if (line.taxAmount == null) hasTax5 = false
       else tax5 += line.taxAmount
@@ -123,6 +127,7 @@ function aggregateParts(lines: BusyPartsLine[]): {
   return {
     parts5: net5 === 0 ? 0 : hasTax5 ? inclusiveFromNetAndTax(net5, tax5) : inclusiveFromNet(net5, 5),
     parts18: net18 === 0 ? 0 : hasTax18 ? inclusiveFromNetAndTax(net18, tax18) : inclusiveFromNet(net18, 18),
+    hasParts5Line,
     gstIssue: gstIssues.length > 0 ? gstIssues.join('; ') : null,
   }
 }
@@ -267,10 +272,7 @@ export function transformBusyAccounting(input: {
 
     const blocked = Boolean(party.issue || partsAgg.gstIssue)
     const warning = !blocked && mismatched.length > 0
-    const empty = partsAgg.parts5 === 0 && partsAgg.parts18 === 0 && labourAmount === 0
-    if (empty) issues.push('No Labour or Parts amount to export')
-
-    const status: BusyRowStatus = blocked || empty ? (empty && !blocked ? 'excluded' : 'blocked') : warning ? 'warning' : 'ready'
+    const status: BusyRowStatus = blocked ? 'blocked' : warning ? 'warning' : 'ready'
     const total = roundPaise(partsAgg.parts5 + partsAgg.parts18 + labourAmount)
 
     preview.push({
@@ -287,9 +289,10 @@ export function transformBusyAccounting(input: {
       parts5: partsAgg.parts5,
       parts18: partsAgg.parts18,
       labour: labourAmount,
+      hasParts5Line: partsAgg.hasParts5Line,
       total,
       issue: issues.join('; '),
-      exclusionKind: empty && !blocked ? 'empty' : '',
+      exclusionKind: '',
     })
 
     const owners = invoiceNumberOwners.get(invoiceNumber.toUpperCase()) ?? []
@@ -321,9 +324,11 @@ export function transformBusyAccounting(input: {
 
   for (const row of exportable) {
     const voucherNarration = buildNarration(row)
-    if (row.parts5 !== 0) invoiceRows.push(voucherRow(row, ITEM_SPARE_PARTS_5, row.parts5, voucherNarration))
-    if (row.parts18 !== 0) invoiceRows.push(voucherRow(row, ITEM_SPARE_PARTS_18, row.parts18, voucherNarration))
-    if (row.labour !== 0) invoiceRows.push(voucherRow(row, ITEM_LABOUR_18, row.labour, voucherNarration))
+    // 5% row only when matched Parts data has a genuine 5% GST line (not amount > 0).
+    // 18% Parts and Labour rows are always emitted, including Amount 0.
+    if (row.hasParts5Line) invoiceRows.push(voucherRow(row, ITEM_SPARE_PARTS_5, row.parts5, voucherNarration))
+    invoiceRows.push(voucherRow(row, ITEM_SPARE_PARTS_18, row.parts18, voucherNarration))
+    invoiceRows.push(voucherRow(row, ITEM_LABOUR_18, row.labour, voucherNarration))
   }
 
   const partySeen = new Set<string>()
@@ -411,6 +416,7 @@ function blockedPreview(input: {
     parts5: 0,
     parts18: 0,
     labour: 0,
+    hasParts5Line: false,
     total: 0,
     issue: input.issue,
     exclusionKind: '',
@@ -439,6 +445,7 @@ function excludedPreview(input: {
     parts5: 0,
     parts18: 0,
     labour: 0,
+    hasParts5Line: false,
     total: 0,
     issue: input.issue,
     exclusionKind: input.exclusionKind,

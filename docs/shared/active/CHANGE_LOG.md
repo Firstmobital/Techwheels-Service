@@ -4,6 +4,7 @@ Tracks documentation-sync updates for business logic, architecture, and access c
 
 ## 2026-09-10
 
+- BUSY Invoice Vouchers always emit `SPARE PARTS @18%` and `LABOUR CHARGES @18%` for each eligible invoice, including Amount 0. `SPARE PARTS @5%` is emitted only when matched Parts data contains a genuine 5% GST line, not merely because the 5% amount is non-zero. Plan: `BUSY-001`.
 - Added web **BUSY** accounting export at `/busy` (module `busy`). Labour invoices come from existing `psf_revenue_dms` (Import → PSF Revenue Report (DMS)). PV/EV Parts files are session-only and used only for 5%/18% GST-inclusive Parts amounts. Eligible series: PV `IMBTAI*`, EV `EMBTAI*`. Ledger: DBL-0043. Plan: `BUSY-001`. Transformation: `src/lib/busy/`. Mobile: no impact.
 
 ## 2026-09-05
