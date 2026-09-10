@@ -10,6 +10,7 @@ export interface DoRecoveryRow {
   branch: string | null
   sa_name: string | null
   insurance_company: string | null
+  insurance_policy_no?: string | null
   overall_status: string | null
   current_stage: number | null
   invoice_number: string | null
@@ -19,6 +20,7 @@ export interface DoRecoveryRow {
   do_amount: number | null
   do_released_amount: number | null
   insurance_due_amount: number
+  customer_posted_amount?: number | null
   do_payment_status: string | null
   needs_accounts_review: boolean
 }

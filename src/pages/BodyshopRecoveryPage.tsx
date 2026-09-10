@@ -131,7 +131,45 @@ export default function BodyshopRecoveryPage() {
     setLoading(true)
     setError(null)
     try {
-      setRows(await listBodyshopDoRecovery())
+      const data = await listBodyshopDoRecovery()
+      const cardIds = data.map((r) => r.repair_card_id)
+      let settleMap = new Map<number, number>()
+      let policyMap = new Map<number, string>()
+      if (cardIds.length > 0) {
+        try {
+          const [settleRes, cardRes] = await Promise.all([
+            supabase
+              .from('bodyshop_settlements')
+              .select('repair_card_id, customer_posted_amount')
+              .in('repair_card_id', cardIds),
+            supabase
+              .from('bodyshop_repair_cards')
+              .select('id, insurance_policy_no')
+              .in('id', cardIds),
+          ])
+          if (settleRes.data) {
+            for (const s of settleRes.data as { repair_card_id: number; customer_posted_amount: number | null }[]) {
+              settleMap.set(s.repair_card_id, Number(s.customer_posted_amount ?? 0))
+            }
+          }
+          if (cardRes.data) {
+            for (const c of cardRes.data as { id: number; insurance_policy_no: string | null }[]) {
+              if (c.insurance_policy_no) {
+                policyMap.set(c.id, c.insurance_policy_no)
+              }
+            }
+          }
+        } catch (err) {
+          console.warn('Failed to load extra data for recovery rows:', err)
+        }
+      }
+      setRows(
+        data.map((r) => ({
+          ...r,
+          customer_posted_amount: settleMap.get(r.repair_card_id) ?? (r.customer_posted_amount ?? 0),
+          insurance_policy_no: policyMap.get(r.repair_card_id) ?? (r.insurance_policy_no ?? null),
+        })),
+      )
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load DO recovery')
     } finally {
@@ -196,7 +234,7 @@ export default function BodyshopRecoveryPage() {
       }
       if (mismatch === 'mismatch' && !insurerPayerMismatch(r.insurance_company, r.invoice_account)) return false
       if (!q) return true
-      const blob = [r.job_card_no, r.reg_number, r.customer_name, r.sa_name, r.branch, r.insurance_company, r.invoice_number, r.invoice_account]
+      const blob = [r.job_card_no, r.reg_number, r.customer_name, r.sa_name, r.branch, r.insurance_company, r.insurance_policy_no, r.invoice_number, r.invoice_account]
         .map((v) => String(v ?? '').toLowerCase())
         .join(' ')
       return blob.includes(q)
@@ -539,11 +577,13 @@ export default function BodyshopRecoveryPage() {
             <thead>
               <tr>
                 <th>JC / VRN</th>
+                <th>Customer</th>
                 <th>Insurer</th>
                 <th>Invoice</th>
                 <th>DO</th>
                 <th>Released</th>
                 <th>Insurance due</th>
+                <th>Customer payment (CP)</th>
                 <th>Status</th>
                 <th>Ageing</th>
                 <th></th>
@@ -560,7 +600,13 @@ export default function BodyshopRecoveryPage() {
                       <div style={{ color: 'var(--muted)', fontSize: 12 }}>{r.reg_number || '—'} · {r.branch || '—'}</div>
                     </td>
                     <td>
+                      <div style={{ fontWeight: 600 }}>{r.customer_name || '—'}</div>
+                    </td>
+                    <td>
                       <div>{r.insurance_company || '—'}</div>
+                      {r.insurance_policy_no && (
+                        <div style={{ color: 'var(--muted)', fontSize: 12 }}>Policy: {r.insurance_policy_no}</div>
+                      )}
                       {mismatch && (
                         <div className="brx-recov-mismatch">
                           <span className="brx-settle-pill is-mismatch">Mismatch</span>
@@ -575,6 +621,9 @@ export default function BodyshopRecoveryPage() {
                     <td>{inr(r.do_amount)}</td>
                     <td>{inr(r.do_released_amount)}</td>
                     <td>{inr(r.insurance_due_amount)}</td>
+                    <td style={Number(r.customer_posted_amount) > 0 ? { fontWeight: 600 } : undefined}>
+                      {inr(r.customer_posted_amount ?? 0)}
+                    </td>
                     <td>
                       <span className={`brx-settle-pill is-${String(r.do_payment_status ?? 'pending').toLowerCase()}`}>
                         {statusLabel(r.do_payment_status)}
@@ -625,6 +674,7 @@ export default function BodyshopRecoveryPage() {
                     <Field label="Claim no" value={moreCase.claim_intimation_no ?? ''} />
                     <Field label="Invoice" value={[moreCase.invoice_number, fmtDate(moreCase.invoice_date)].filter((v) => v && v !== '—').join(' · ')} />
                     <Field label="DO / due" value={`${inr(moreCase.do_amount)} · due ${inr(moreCase.insurance_due_amount)}`} />
+                    <Field label="Customer payment" value={inr(rows.find((r) => r.repair_card_id === moreCase.repair_card_id)?.customer_posted_amount ?? 0)} />
                   </div>
                   <div className="brx-panel-h" style={{ marginTop: 16 }}>Documents</div>
                   <div className="brx-recov-docs">
@@ -672,11 +722,11 @@ export default function BodyshopRecoveryPage() {
       )}
 
       {postRow && postCard && (
-        <div className="modal-back" role="presentation" onClick={() => { setPostRow(null); setPostCard(null) }}>
+        <div className="modal-back" role="presentation" onClick={() => { setPostRow(null); setPostCard(null); void load(); }}>
           <div className="modal modal--xl" role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
             <div className="modal__head">
               <h3>Stage 18 · DO Payment · {postRow.job_card_no}</h3>
-              <button type="button" className="modal__x" onClick={() => { setPostRow(null); setPostCard(null) }} aria-label="Close">×</button>
+              <button type="button" className="modal__x" onClick={() => { setPostRow(null); setPostCard(null); void load(); }} aria-label="Close">×</button>
             </div>
             <div className="modal__body">
               <p style={{ marginTop: 0, color: 'var(--muted)', fontSize: 13 }}>
