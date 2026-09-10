@@ -186,6 +186,7 @@ export function BodyshopSettlementPanel({
     let main = numOrNull(mainAmt)
     let gst = numOrNull(gstAmt)
     let tds = numOrNull(tdsAmt)
+    let cp = numOrNull(custAmt)
     if (postRemaining) {
       const due = Number(insuranceDue ?? 0)
       if (due <= 0) {
@@ -198,30 +199,47 @@ export function BodyshopSettlementPanel({
         tds = null
       }
     }
-    if ((main ?? 0) + (gst ?? 0) + (tds ?? 0) <= 0) {
-      toast('Enter Main, GST or TDS', false)
-      setDoError('Enter Main, GST or TDS')
+    const hasDo = (main ?? 0) + (gst ?? 0) + (tds ?? 0) > 0
+    const hasCp = (cp ?? 0) > 0
+
+    if (!hasDo && !hasCp) {
+      toast('Enter Main, GST, TDS, or Customer Payment (CP)', false)
+      setDoError('Enter Main, GST, TDS, or Customer Payment (CP)')
       return
     }
     setDoError(null)
     setSavingDo(true)
     try {
       const note = textOrNull(doNote)
-      const next = await postDoRelease({
-        repairCardId: card.id,
-        mainAmount: main,
-        gstAmount: gst,
-        tdsAmount: tds,
-        reference: note,
-        remarks: note,
-      })
-      setPayload(next)
-      onCardChange(mergeSettlementCard(card, next))
+      let next = payload
+      if (hasDo) {
+        next = await postDoRelease({
+          repairCardId: card.id,
+          mainAmount: main,
+          gstAmount: gst,
+          tdsAmount: tds,
+          reference: note,
+          remarks: note,
+        })
+      }
+      if (hasCp && cp != null) {
+        next = await postCustomerAmount({
+          repairCardId: card.id,
+          amount: cp,
+          reference: note,
+          remarks: note,
+        })
+      }
+      if (next) {
+        setPayload(next)
+        onCardChange(mergeSettlementCard(card, next))
+      }
       setMainAmt('')
       setGstAmt('')
       setTdsAmt('')
+      setCustAmt('')
       setDoNote('')
-      toast('DO payment posted')
+      toast(hasDo && hasCp ? 'DO and Customer payments posted' : hasCp ? 'Customer payment posted' : 'DO payment posted')
     } catch (e: unknown) {
       const msg = settlementRpcError(e)
       setDoError(msg)
@@ -393,12 +411,26 @@ export function BodyshopSettlementPanel({
           <span className={`brx-settle-pill is-${String(doPay ?? 'pending').toLowerCase()}`}>{statusLabel(doPay)}</span>
           <span>Auto from posted Main + GST + TDS — not a dropdown</span>
         </div>
-        <div className="brx-field" style={{ marginBottom: 12 }}>
-          <span className="brx-field-label">Insurance due</span>
-          <div className="inp" style={{ display: 'flex', alignItems: 'center', background: 'var(--bg)' }}>{inr(insuranceDue)}</div>
+        <div className="brx-form-grid-2" style={{ marginBottom: 12 }}>
+          <div className="brx-field">
+            <span className="brx-field-label">Insurance due</span>
+            <div className="inp" style={{ display: 'flex', alignItems: 'center', background: 'var(--bg)', fontWeight: 600 }}>
+              {inr(insuranceDue)}
+            </div>
+          </div>
+          <div className="brx-field">
+            <span className="brx-field-label">Customer payment (CP)</span>
+            <div className="inp" style={{ display: 'flex', alignItems: 'center', background: 'var(--bg)', fontWeight: 600 }}>
+              {inr(header?.customer_posted_amount ?? 0)}
+            </div>
+          </div>
         </div>
-        {doReceived ? (
-          <div className="brx-settle-status">DO is fully posted. Who and when for each line are in Posted entries.</div>
+        {doReceived && (!doOnly || custReceived) ? (
+          <div className="brx-settle-status">
+            {doReceived && custReceived
+              ? 'DO and Customer payments are fully posted. Who and when for each line are in Posted entries.'
+              : 'DO is fully posted. Who and when for each line are in Posted entries.'}
+          </div>
         ) : (
         <div className="brx-form-grid-2">
           <label className="brx-field">
@@ -413,6 +445,16 @@ export function BodyshopSettlementPanel({
             <span className="brx-field-label">TDS (₹)</span>
             <input className="inp" type="number" value={tdsAmt} onChange={(e) => setTdsAmt(e.target.value)} />
           </label>
+          <label className="brx-field">
+            <span className="brx-field-label">Customer payment (CP) (₹)</span>
+            <input
+              className="inp"
+              type="number"
+              value={custAmt}
+              onChange={(e) => setCustAmt(e.target.value)}
+              placeholder="0.00"
+            />
+          </label>
           <label className="brx-field brx-grid-full">
             <span className="brx-field-label">Reference / Remark</span>
             <input
@@ -423,14 +465,14 @@ export function BodyshopSettlementPanel({
             />
           </label>
           <div className="brx-grid-full" style={{ fontSize: 13, color: 'var(--muted)' }}>
-            Post any combination — Main, GST, and TDS can be saved separately or together. Each save stores who posted it, when, and this reference.
+            Post any combination — Main, GST, TDS, and Customer Payment (CP) can be saved separately or together. Each save stores who posted it, when, and this reference.
           </div>
           <div className="brx-grid-full" style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
             <button className="btn btn--primary" type="button" disabled={savingDo} onClick={() => void saveDoPayment(false)}>
-              {savingDo ? 'Posting…' : 'Post DO payment'}
+              {savingDo ? 'Posting…' : 'Post payment'}
             </button>
             <button className="btn" type="button" disabled={savingDo || !(Number(insuranceDue) > 0)} onClick={() => void saveDoPayment(true)}>
-              Post remaining as received
+              Post remaining DO as received
             </button>
             {doError && <div className="brx-settle-error">{doError}</div>}
           </div>
@@ -491,9 +533,9 @@ export function BodyshopSettlementPanel({
               ['DO', header?.do_amount ?? card.do_amount],
               ['Released', header?.do_released_amount],
               ['Insurance due', insuranceDue],
+              ['Customer payment (CP)', header?.customer_posted_amount ?? 0],
               ...(!doOnly ? [
                 ['Customer diff', custDiff],
-                ['Posted', header?.customer_posted_amount],
                 ['Remaining', remaining],
                 ['Outstanding', header?.outstanding_amount],
               ] as const : []),
@@ -532,7 +574,7 @@ export function BodyshopSettlementPanel({
                   <td className="brx-settle-ref">{lineRefRemark(line)}</td>
                   <td>{line.actor_email || '—'}</td>
                   <td>
-                    {!line.is_reversed && line.line_type !== 'reversal' && (!doOnly || (line.party === 'insurance' && line.line_type === 'do_component')) && (
+                    {!line.is_reversed && line.line_type !== 'reversal' && (!doOnly || (line.party === 'insurance' && line.line_type === 'do_component') || (line.party === 'customer' && line.line_type === 'receipt')) && (
                       <button type="button" className="btn" onClick={() => void reverseLine(line.id)}>Reverse</button>
                     )}
                   </td>
