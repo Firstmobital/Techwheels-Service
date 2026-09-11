@@ -13,6 +13,7 @@ import {
   type BodyshopSupportRow,
 } from './bodyshopEarnings'
 import { matchesBranchSelection } from './branches'
+import { matchesBusinessRoleFilter } from './businessRoles'
 import { monthRangeIst } from './payroll/calculations'
 import { calculateSAIncome, normalizeEmployeeCode, parseAmount } from './payroll/earningsFormulas'
 
@@ -296,17 +297,20 @@ function salaryTypeMatches(employeeSalaryType: unknown, selectedSalaryType: stri
   return String(employeeSalaryType ?? '') === String(selectedSalaryType).trim()
 }
 
-/** Same payroll UI filters as the other Processing cards: department, salary type, and branch. */
+/** Same payroll UI filters as the other Processing cards: department, role, salary type, and branch. */
 export function employeeMatchesBodyshopPayrollScope(input: {
   department?: string | null
+  role?: string | null
   salaryType?: string | null
   masterBranch?: string | null
   selectedDepartment?: string
+  selectedRole?: string
   selectedSalaryType?: string
   selectedBranch?: string
 }): boolean {
   return (
     departmentMatches(input.department, input.selectedDepartment ?? 'all')
+    && matchesBusinessRoleFilter(input.role, input.selectedRole ?? 'all')
     && salaryTypeMatches(input.salaryType, input.selectedSalaryType ?? 'all')
     && employeeMasterBranchMatches(input.masterBranch, input.selectedBranch ?? 'all')
   )
@@ -315,7 +319,7 @@ export function employeeMatchesBodyshopPayrollScope(input: {
 /**
  * View/scope already-calculated Tracker earnings by the current payroll filters.
  * Does not recompute role percentages. Unmapped income is included only when
- * department, branch, and salary type are all unscoped.
+ * department, business role, branch, and salary type are all unscoped.
  */
 export function scopeBodyshopTrackerByBranch(input: {
   earningsByEmployeeCode: Map<string, number>
@@ -325,13 +329,16 @@ export function scopeBodyshopTrackerByBranch(input: {
   branchByEmployeeCode: Map<string, string | null | undefined>
   selectedBranch: string
   departmentByEmployeeCode?: Map<string, string | null | undefined>
+  roleByEmployeeCode?: Map<string, string | null | undefined>
   salaryTypeByEmployeeCode?: Map<string, string | null | undefined>
   selectedDepartment?: string
+  selectedRole?: string
   selectedSalaryType?: string
 }): BodyshopBranchScope {
   const unscoped = (
     isAllFilter(input.selectedBranch)
     && isAllFilter(input.selectedDepartment)
+    && isAllFilter(input.selectedRole)
     && isAllFilter(input.selectedSalaryType)
   )
 
@@ -349,9 +356,11 @@ export function scopeBodyshopTrackerByBranch(input: {
     const key = normalizeEmployeeCode(code)
     if (employeeMatchesBodyshopPayrollScope({
       department: input.departmentByEmployeeCode?.get(key),
+      role: input.roleByEmployeeCode?.get(key),
       salaryType: input.salaryTypeByEmployeeCode?.get(key),
       masterBranch: input.branchByEmployeeCode.get(key),
       selectedDepartment: input.selectedDepartment,
+      selectedRole: input.selectedRole,
       selectedSalaryType: input.selectedSalaryType,
       selectedBranch: input.selectedBranch,
     })) {

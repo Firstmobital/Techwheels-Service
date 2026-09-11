@@ -154,6 +154,24 @@ function filterKeepsSnapshotDept(entry, liveEmp, deptFilter) {
   return (identity.department?.trim() ?? '') === deptFilter
 }
 
+function parseBusinessRoles(raw) {
+  return String(raw ?? '')
+    .split(',')
+    .map((part) => part.trim().toUpperCase().replace(/\s+/g, '_'))
+    .filter(Boolean)
+}
+
+function matchesBusinessRoleFilter(raw, selected) {
+  const value = String(selected ?? '').trim()
+  if (!value || value.toLowerCase() === 'all') return true
+  return parseBusinessRoles(raw).includes(value.toUpperCase().replace(/\s+/g, '_'))
+}
+
+function filterKeepsSnapshotRole(entry, liveEmp, roleFilter) {
+  const identity = resolvePayrollEntryIdentity(entry, liveEmp)
+  return matchesBusinessRoleFilter(identity.role, roleFilter)
+}
+
 const filterTests = [
   {
     name: 'historical SERVICE filter keeps snapshot SERVICE despite live BODY SHOP',
@@ -181,6 +199,34 @@ const filterTests = [
       account_number_snapshot: null,
       ifsc_snapshot: null,
     }, live, 'BODY SHOP'),
+    want: false,
+  },
+  {
+    name: 'historical SA role filter keeps snapshot SA despite live TECHNICIAN',
+    got: filterKeepsSnapshotRole({
+      employee_code: 'E001',
+      employee_name_snapshot: 'Snap Name',
+      department_snapshot: 'SERVICE',
+      branch_snapshot: 'Sitapura',
+      role_snapshot: 'SA',
+      bank_name_snapshot: null,
+      account_number_snapshot: null,
+      ifsc_snapshot: null,
+    }, live, 'SA'),
+    want: true,
+  },
+  {
+    name: 'historical SA role filter excludes snapshot SA from TECHNICIAN filter',
+    got: filterKeepsSnapshotRole({
+      employee_code: 'E001',
+      employee_name_snapshot: 'Snap Name',
+      department_snapshot: 'SERVICE',
+      branch_snapshot: 'Sitapura',
+      role_snapshot: 'SA',
+      bank_name_snapshot: null,
+      account_number_snapshot: null,
+      ifsc_snapshot: null,
+    }, live, 'TECHNICIAN'),
     want: false,
   },
 ]

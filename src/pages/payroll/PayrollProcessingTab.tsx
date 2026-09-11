@@ -15,6 +15,7 @@ import {
   scopeBodyshopTrackerByBranch,
   type BodyshopStakeholderEarnings,
 } from '../../lib/bodyshopMonthlyEarnings'
+import { collectBusinessRolesFromMappings, matchesBusinessRoleFilter } from '../../lib/businessRoles'
 import { formatCurrency, shouldIncludePayrollEntryInWorkingRoster } from '../../lib/payroll/calculations'
 import { normalizeEmployeeCode } from '../../lib/payroll/earningsFormulas'
 import { resolvePayrollEntryIdentity } from '../../lib/payroll/entryIdentity'
@@ -87,6 +88,7 @@ export default function PayrollProcessingTab({
   const [monthStatus, setMonthStatus] = useState<'draft' | 'finalized'>('draft')
   const [search, setSearch] = useState('')
   const [deptFilter, setDeptFilter] = useState('all')
+  const [roleFilter, setRoleFilter] = useState('all')
   const [branchFilter, setBranchFilter] = useState('all')
   const [salaryTypeFilter, setSalaryTypeFilter] = useState('all')
   const [loading, setLoading] = useState(false)
@@ -154,6 +156,12 @@ export default function PayrollProcessingTab({
   const depts = useMemo(() => Array.from(new Set(
     visibleEntries.map((entry) => identityByCode.get(entry.employee_code.trim().toUpperCase())?.department?.trim()).filter(Boolean),
   )).sort(), [visibleEntries, identityByCode])
+  const roles = useMemo(
+    () => collectBusinessRolesFromMappings(
+      visibleEntries.map((entry) => identityByCode.get(entry.employee_code.trim().toUpperCase())?.role),
+    ),
+    [visibleEntries, identityByCode],
+  )
   const branches = useMemo(() => Array.from(new Set(
     visibleEntries.map((entry) => identityByCode.get(entry.employee_code.trim().toUpperCase())?.branch?.trim()).filter(Boolean),
   )).sort(), [visibleEntries, identityByCode])
@@ -161,10 +169,11 @@ export default function PayrollProcessingTab({
   const aggregateScopedRows = useMemo(() => visibleEntries.filter((entry) => {
     const identity = identityByCode.get(entry.employee_code.trim().toUpperCase())
     if (deptFilter !== 'all' && (identity?.department?.trim() ?? '') !== deptFilter) return false
+    if (!matchesBusinessRoleFilter(identity?.role, roleFilter)) return false
     if (branchFilter !== 'all' && (identity?.branch?.trim() ?? '') !== branchFilter) return false
     if (salaryTypeFilter !== 'all' && entry.salary_type_snapshot !== salaryTypeFilter) return false
     return true
-  }), [visibleEntries, identityByCode, deptFilter, branchFilter, salaryTypeFilter])
+  }), [visibleEntries, identityByCode, deptFilter, roleFilter, branchFilter, salaryTypeFilter])
 
   const tableRows = useMemo(() => {
     const term = search.trim().toLowerCase()
@@ -211,6 +220,15 @@ export default function PayrollProcessingTab({
     return m
   }, [visibleEntries, identityByCode])
 
+  const roleByCode = useMemo(() => {
+    const m = new Map<string, string | null>()
+    visibleEntries.forEach((entry) => {
+      const code = normalizeEmployeeCode(entry.employee_code)
+      m.set(code, identityByCode.get(code)?.role ?? null)
+    })
+    return m
+  }, [visibleEntries, identityByCode])
+
   const salaryTypeByCode = useMemo(() => {
     const m = new Map<string, string | null>()
     visibleEntries.forEach((entry) => {
@@ -222,13 +240,15 @@ export default function PayrollProcessingTab({
   const matchesBodyshopCardFilters = useCallback((code: string) => (
     employeeMatchesBodyshopPayrollScope({
       department: departmentByCode.get(code),
+      role: roleByCode.get(code),
       salaryType: salaryTypeByCode.get(code),
       masterBranch: masterBranchByCode.get(code),
       selectedDepartment: deptFilter,
+      selectedRole: roleFilter,
       selectedSalaryType: salaryTypeFilter,
       selectedBranch: branchFilter,
     })
-  ), [departmentByCode, salaryTypeByCode, masterBranchByCode, deptFilter, salaryTypeFilter, branchFilter])
+  ), [departmentByCode, roleByCode, salaryTypeByCode, masterBranchByCode, deptFilter, roleFilter, salaryTypeFilter, branchFilter])
 
   const bodyshopScope = useMemo(() => {
     if (!bodyshopStakeholder) {
@@ -236,7 +256,7 @@ export default function PayrollProcessingTab({
         displayedTotal: 0,
         mappedInScope: 0,
         unmappedInScope: 0,
-        includeUnmapped: deptFilter === 'all' && branchFilter === 'all' && salaryTypeFilter === 'all',
+        includeUnmapped: deptFilter === 'all' && roleFilter === 'all' && branchFilter === 'all' && salaryTypeFilter === 'all',
       }
     }
     return scopeBodyshopTrackerByBranch({
@@ -246,18 +266,22 @@ export default function PayrollProcessingTab({
       unmappedBodyshopEarning: bodyshopStakeholder.unmappedBodyshopEarning,
       branchByEmployeeCode: masterBranchByCode,
       departmentByEmployeeCode: departmentByCode,
+      roleByEmployeeCode: roleByCode,
       salaryTypeByEmployeeCode: salaryTypeByCode,
       selectedBranch: branchFilter,
       selectedDepartment: deptFilter,
+      selectedRole: roleFilter,
       selectedSalaryType: salaryTypeFilter,
     })
   }, [
     bodyshopStakeholder,
     masterBranchByCode,
     departmentByCode,
+    roleByCode,
     salaryTypeByCode,
     branchFilter,
     deptFilter,
+    roleFilter,
     salaryTypeFilter,
   ])
 
@@ -466,6 +490,7 @@ export default function PayrollProcessingTab({
         <input type="month" value={monthInput} onChange={(ev) => onMonthChange(ev.target.value)} />
         <input placeholder="Search…" value={search} onChange={(ev) => setSearch(ev.target.value)} />
         <select value={deptFilter} onChange={(ev) => setDeptFilter(ev.target.value)}><option value="all">All departments</option>{depts.map((d) => <option key={d} value={d!}>{d}</option>)}</select>
+        <select value={roleFilter} onChange={(ev) => setRoleFilter(ev.target.value)}><option value="all">All business roles</option>{roles.map((r) => <option key={r} value={r}>{r}</option>)}</select>
         <select value={branchFilter} onChange={(ev) => setBranchFilter(ev.target.value)}><option value="all">All branches</option>{branches.map((b) => <option key={b} value={b!}>{b}</option>)}</select>
         <select value={salaryTypeFilter} onChange={(ev) => setSalaryTypeFilter(ev.target.value)}>
           <option value="all">All salary types</option>

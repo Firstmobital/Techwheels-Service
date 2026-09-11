@@ -7,7 +7,7 @@ import {
   setEmployeeActive,
   upsertCompensation,
 } from '../../lib/api/payroll'
-import { KNOWN_BUSINESS_ROLES, validateAndCanonicalizeRoles } from '../../lib/businessRoles'
+import { collectBusinessRolesFromMappings, KNOWN_BUSINESS_ROLES, matchesBusinessRoleFilter, validateAndCanonicalizeRoles } from '../../lib/businessRoles'
 import { isEmployeeCurrentlyActive } from '../../lib/employeeActive'
 import { isBodyshopDepartment, normalizeDepartmentDisplay } from '../../lib/department'
 import { formatCurrency } from '../../lib/payroll/calculations'
@@ -126,6 +126,7 @@ export default function SalaryTypeTab({ canModify, isAdmin }: Props) {
   const [compMap, setCompMap] = useState<Awaited<ReturnType<typeof fetchCompensationMap>>>(new Map())
   const [search, setSearch] = useState('')
   const [deptFilter, setDeptFilter] = useState('all')
+  const [roleFilter, setRoleFilter] = useState('all')
   const [branchFilter, setBranchFilter] = useState('all')
   const [salaryTypeFilter, setSalaryTypeFilter] = useState('all')
   const [statusFilter, setStatusFilter] = useState<StatusScope>('active')
@@ -163,6 +164,10 @@ export default function SalaryTypeTab({ canModify, isAdmin }: Props) {
     () => Array.from(new Set(employees.map((e) => e.department?.trim()).filter(Boolean))).sort(),
     [employees],
   )
+  const roles = useMemo(
+    () => collectBusinessRolesFromMappings(employees.map((e) => e.role)),
+    [employees],
+  )
   const branches = useMemo(
     () => Array.from(new Set(employees.map((e) => e.location?.trim()).filter(Boolean))).sort(),
     [employees],
@@ -174,10 +179,11 @@ export default function SalaryTypeTab({ canModify, isAdmin }: Props) {
     if (statusFilter === 'inactive' && isEmployeeCurrentlyActive(e)) return false
     if (search && !`${e.employee_name} ${e.employee_code}`.toLowerCase().includes(search.toLowerCase())) return false
     if (deptFilter !== 'all' && (e.department?.trim() ?? '') !== deptFilter) return false
+    if (!matchesBusinessRoleFilter(e.role, roleFilter)) return false
     if (branchFilter !== 'all' && (e.location?.trim() ?? '') !== branchFilter) return false
     if (salaryTypeFilter !== 'all' && comp?.salary_type !== salaryTypeFilter) return false
     return true
-  }), [employees, compMap, search, deptFilter, branchFilter, salaryTypeFilter, statusFilter])
+  }), [employees, compMap, search, deptFilter, roleFilter, branchFilter, salaryTypeFilter, statusFilter])
 
   const addDepartmentOptions = useMemo(
     () => collectDepartmentOptions(employees, addForm.department),
@@ -420,6 +426,7 @@ export default function SalaryTypeTab({ canModify, isAdmin }: Props) {
           <option value="all">All</option>
         </select>
         <select value={deptFilter} onChange={(ev) => setDeptFilter(ev.target.value)}><option value="all">All departments</option>{depts.map((d) => <option key={d} value={d!}>{d}</option>)}</select>
+        <select value={roleFilter} onChange={(ev) => setRoleFilter(ev.target.value)}><option value="all">All business roles</option>{roles.map((r) => <option key={r} value={r}>{r}</option>)}</select>
         <select value={branchFilter} onChange={(ev) => setBranchFilter(ev.target.value)}><option value="all">All branches</option>{branches.map((b) => <option key={b} value={b!}>{b}</option>)}</select>
         <select value={salaryTypeFilter} onChange={(ev) => setSalaryTypeFilter(ev.target.value)}>
           <option value="all">All salary types</option>

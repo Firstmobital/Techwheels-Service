@@ -57,9 +57,24 @@ function salaryTypeMatches(employeeSalaryType, selectedSalaryType) {
   return String(employeeSalaryType ?? '') === String(selectedSalaryType).trim()
 }
 
+function parseBusinessRoles(raw) {
+  return String(raw ?? '')
+    .split(',')
+    .map((part) => part.trim().toUpperCase().replace(/\s+/g, '_'))
+    .filter(Boolean)
+}
+
+function matchesBusinessRoleFilter(raw, selected) {
+  const value = String(selected ?? '').trim()
+  if (!value || value.toLowerCase() === 'all') return true
+  const target = value.toUpperCase().replace(/\s+/g, '_')
+  return parseBusinessRoles(raw).includes(target)
+}
+
 function employeeMatchesBodyshopPayrollScope(input) {
   return (
     departmentMatches(input.department, input.selectedDepartment ?? 'all')
+    && matchesBusinessRoleFilter(input.role, input.selectedRole ?? 'all')
     && salaryTypeMatches(input.salaryType, input.selectedSalaryType ?? 'all')
     && employeeMasterBranchMatches(input.masterBranch, input.selectedBranch ?? 'all')
   )
@@ -73,6 +88,7 @@ function scopeBodyshopTrackerByBranch(input) {
   const unscoped = (
     isAllFilter(input.selectedBranch)
     && isAllFilter(input.selectedDepartment)
+    && isAllFilter(input.selectedRole)
     && isAllFilter(input.selectedSalaryType)
   )
   if (unscoped) {
@@ -88,9 +104,11 @@ function scopeBodyshopTrackerByBranch(input) {
     const key = normalizeEmployeeCode(code)
     if (employeeMatchesBodyshopPayrollScope({
       department: input.departmentByEmployeeCode?.get(key),
+      role: input.roleByEmployeeCode?.get(key),
       salaryType: input.salaryTypeByEmployeeCode?.get(key),
       masterBranch: input.branchByEmployeeCode.get(key),
       selectedDepartment: input.selectedDepartment,
+      selectedRole: input.selectedRole,
       selectedSalaryType: input.selectedSalaryType,
       selectedBranch: input.selectedBranch,
     })) mappedInScope += amount
@@ -124,6 +142,11 @@ const salaryTypeByEmployeeCode = new Map([
   ['SITA2', 'base'],
   ['SHAH1', 'both'],
 ])
+const roleByEmployeeCode = new Map([
+  ['SITA1', 'PAINTER, RUBBING'],
+  ['SITA2', 'SA'],
+  ['SHAH1', 'DENTOR'],
+])
 const snapshot = {
   earningsByEmployeeCode,
   mappedBodyshopEarning: 901475,
@@ -132,6 +155,7 @@ const snapshot = {
   branchByEmployeeCode,
   departmentByEmployeeCode,
   salaryTypeByEmployeeCode,
+  roleByEmployeeCode,
 }
 
 const all = scopeBodyshopTrackerByBranch({ ...snapshot, selectedBranch: 'all' })
@@ -150,9 +174,11 @@ function exportBodyshopRows(filters) {
     const code = normalizeEmployeeCode(entry.employee_code)
     return employeeMatchesBodyshopPayrollScope({
       department: departmentByEmployeeCode.get(code),
+      role: roleByEmployeeCode.get(code),
       salaryType: salaryTypeByEmployeeCode.get(code),
       masterBranch: branchByEmployeeCode.get(code),
       selectedDepartment: filters.selectedDepartment,
+      selectedRole: filters.selectedRole,
       selectedSalaryType: filters.selectedSalaryType,
       selectedBranch: filters.selectedBranch,
     }) && Number(entry.bodyshop_variable_earning) > 0
@@ -173,6 +199,23 @@ const sitapuraVariable = scopeBodyshopTrackerByBranch({
 })
 const serviceExport = exportBodyshopRows({ selectedDepartment: 'SERVICE' })
 const variableExport = exportBodyshopRows({ selectedSalaryType: 'variable' })
+const painterRole = scopeBodyshopTrackerByBranch({ ...snapshot, selectedBranch: 'all', selectedRole: 'PAINTER' })
+const rubbingRole = scopeBodyshopTrackerByBranch({ ...snapshot, selectedBranch: 'all', selectedRole: 'RUBBING' })
+const saRole = scopeBodyshopTrackerByBranch({ ...snapshot, selectedBranch: 'all', selectedRole: 'SA' })
+const technicianRole = scopeBodyshopTrackerByBranch({ ...snapshot, selectedBranch: 'all', selectedRole: 'TECHNICIAN' })
+const sitapuraPainter = scopeBodyshopTrackerByBranch({
+  ...snapshot,
+  selectedBranch: 'Sitapura',
+  selectedRole: 'PAINTER',
+})
+const servicePainter = scopeBodyshopTrackerByBranch({
+  ...snapshot,
+  selectedBranch: 'all',
+  selectedDepartment: 'SERVICE',
+  selectedRole: 'PAINTER',
+})
+const painterExport = exportBodyshopRows({ selectedRole: 'PAINTER' })
+const saExport = exportBodyshopRows({ selectedRole: 'SA' })
 
 const tests = [
   { name: 'All branches keeps Tracker total including unmapped', got: all.displayedTotal, want: 1010746 },
@@ -203,6 +246,15 @@ const tests = [
   { name: 'Sitapura + variable combines filters', got: sitapuraVariable.displayedTotal, want: 800000 },
   { name: 'SERVICE export excludes BODY SHOP employee', got: serviceExport.map((row) => row.employee_code), want: ['SITA2'] },
   { name: 'variable export excludes base employee', got: variableExport.map((row) => row.employee_code), want: ['SITA1'] },
+  { name: 'PAINTER role is SITA1 even with CSV roles', got: painterRole.displayedTotal, want: 800000 },
+  { name: 'RUBBING alias of CSV roles matches SITA1', got: rubbingRole.displayedTotal, want: 800000 },
+  { name: 'SA role is SITA2 only', got: saRole.displayedTotal, want: 101475 },
+  { name: 'TECHNICIAN role is empty', got: technicianRole.displayedTotal, want: 0 },
+  { name: 'role filter excludes unmapped', got: painterRole.includeUnmapped, want: false },
+  { name: 'Sitapura + PAINTER combines filters', got: sitapuraPainter.displayedTotal, want: 800000 },
+  { name: 'SERVICE + PAINTER is empty intersection', got: servicePainter.displayedTotal, want: 0 },
+  { name: 'PAINTER export is SITA1 only', got: painterExport.map((row) => row.employee_code), want: ['SITA1'] },
+  { name: 'SA export is SITA2 only', got: saExport.map((row) => row.employee_code), want: ['SITA2'] },
 ]
 
 let failed = 0

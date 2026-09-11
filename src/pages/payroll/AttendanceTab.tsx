@@ -15,6 +15,7 @@ import {
   shouldIncludeInPayrollWorkingRoster,
 } from '../../lib/payroll/calculations'
 import { exportWorkbook, previewAttendanceImport, readWorkbookRows } from '../../lib/payroll/excelUtils'
+import { collectBusinessRolesFromMappings, matchesBusinessRoleFilter } from '../../lib/businessRoles'
 import { SALARY_TYPE_LABELS } from '../../lib/payroll/types'
 import type { ImportPreviewResult } from '../../lib/payroll/types'
 import { usePayrollSecurity } from './PayrollSecurityGate'
@@ -33,6 +34,7 @@ export default function AttendanceTab({ payrollMonth, monthInput, onMonthChange,
   const [locked, setLocked] = useState(false)
   const [search, setSearch] = useState('')
   const [deptFilter, setDeptFilter] = useState('all')
+  const [roleFilter, setRoleFilter] = useState('all')
   const [branchFilter, setBranchFilter] = useState('all')
   const [salaryTypeFilter, setSalaryTypeFilter] = useState('all')
   const [draftDays, setDraftDays] = useState<Record<string, string>>({})
@@ -85,6 +87,7 @@ export default function AttendanceTab({ payrollMonth, monthInput, onMonthChange,
   useEffect(() => { void reload() }, [reload])
 
   const depts = useMemo(() => Array.from(new Set(employees.map((e) => e.department?.trim()).filter(Boolean))).sort(), [employees])
+  const roles = useMemo(() => collectBusinessRolesFromMappings(employees.map((e) => e.role)), [employees])
   const branches = useMemo(() => Array.from(new Set(employees.map((e) => e.location?.trim()).filter(Boolean))).sort(), [employees])
 
   const filtered = useMemo(() => employees.filter((e) => {
@@ -93,10 +96,11 @@ export default function AttendanceTab({ payrollMonth, monthInput, onMonthChange,
     if (!comp) return false
     if (search && !`${e.employee_name} ${e.employee_code}`.toLowerCase().includes(search.toLowerCase())) return false
     if (deptFilter !== 'all' && (e.department?.trim() ?? '') !== deptFilter) return false
+    if (!matchesBusinessRoleFilter(e.role, roleFilter)) return false
     if (branchFilter !== 'all' && (e.location?.trim() ?? '') !== branchFilter) return false
     if (salaryTypeFilter !== 'all' && comp.salary_type !== salaryTypeFilter) return false
     return true
-  }), [employees, compMap, search, deptFilter, branchFilter, salaryTypeFilter])
+  }), [employees, compMap, search, deptFilter, roleFilter, branchFilter, salaryTypeFilter])
 
   async function handleSave(code: string) {
     if (!canModify || locked) return
@@ -183,6 +187,7 @@ export default function AttendanceTab({ payrollMonth, monthInput, onMonthChange,
         <input type="month" value={monthInput} onChange={(ev) => onMonthChange(ev.target.value)} style={{ padding: '0.3rem 0.5rem' }} />
         <input placeholder="Search employee…" value={search} onChange={(ev) => setSearch(ev.target.value)} style={{ padding: '0.3rem 0.5rem', minWidth: '160px' }} />
         <select value={deptFilter} onChange={(ev) => setDeptFilter(ev.target.value)}><option value="all">All departments</option>{depts.map((d) => <option key={d} value={d!}>{d}</option>)}</select>
+        <select value={roleFilter} onChange={(ev) => setRoleFilter(ev.target.value)}><option value="all">All business roles</option>{roles.map((r) => <option key={r} value={r}>{r}</option>)}</select>
         <select value={branchFilter} onChange={(ev) => setBranchFilter(ev.target.value)}><option value="all">All branches</option>{branches.map((b) => <option key={b} value={b!}>{b}</option>)}</select>
         <select value={salaryTypeFilter} onChange={(ev) => setSalaryTypeFilter(ev.target.value)}>
           <option value="all">All salary types</option>

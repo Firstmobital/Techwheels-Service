@@ -112,6 +112,13 @@ export function hasBusinessRole(raw: string | null | undefined, target: string):
   return parseBusinessRoles(raw).includes(canonicalTarget)
 }
 
+/** Payroll dropdown filter: `all` is a no-op; otherwise match any CSV role token. */
+export function matchesBusinessRoleFilter(raw: string | null | undefined, selected: string): boolean {
+  const value = String(selected ?? '').trim()
+  if (!value || value.toLowerCase() === 'all') return true
+  return hasBusinessRole(raw, value)
+}
+
 export function hasAnyBusinessRole(raw: string | null | undefined, targets: string[]): boolean {
   const parsed = parseBusinessRoles(raw)
   if (parsed.length === 0) return false
