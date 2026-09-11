@@ -25,6 +25,7 @@ import {
   type MechanicalDmsInvoiceLookup,
 } from '../lib/api/accounts'
 import { uploadServiceAdvisorInvoice } from '../lib/api/reception'
+import { supabase } from '../lib/supabase'
 import type { RepairCard } from '../lib/api/bodyshopRepair'
 import { settlementStatusLabel } from '../lib/api/bodyshopSettlement'
 
@@ -115,6 +116,7 @@ export default function AccountsPage() {
   const [payError, setPayError] = useState<string | null>(null)
   const [dmsLookup, setDmsLookup] = useState<MechanicalDmsInvoiceLookup | null>(null)
   const [loadingDms, setLoadingDms] = useState(false)
+  const [isAdmin, setIsAdmin] = useState(false)
 
   const [postRow, setPostRow] = useState<AccountsBodyshopCase | null>(null)
   const [postCard, setPostCard] = useState<RepairCard | null>(null)
@@ -143,6 +145,23 @@ export default function AccountsPage() {
 
   useEffect(() => {
     void load()
+    async function checkAdmin() {
+      try {
+        const { data: session } = await supabase.auth.getSession()
+        if (!session?.session?.user) return
+        const { data: profile } = await supabase
+          .from('users')
+          .select('role, is_active')
+          .eq('id', session.session.user.id)
+          .maybeSingle()
+        const role = String(profile?.role ?? '').trim().toLowerCase()
+        const isActive = profile?.is_active === true
+        setIsAdmin((role === 'admin' || role === 'super_admin') && isActive)
+      } catch {
+        setIsAdmin(false)
+      }
+    }
+    void checkAdmin()
   }, [])
 
   const periodSource = section === 'mechanical'
@@ -857,32 +876,32 @@ export default function AccountsPage() {
                             <span>👁</span> View Document
                           </button>
                           {!isInvoiceLocked && (
-                            <>
-                              <label className="btn btn--sm" style={{ cursor: uploadingInvoice || deletingInvoice ? 'wait' : 'pointer' }}>
-                                {uploadingInvoice ? 'Uploading…' : 'Replace'}
-                                <input
-                                  type="file"
-                                  accept="application/pdf,image/*"
-                                  hidden
-                                  disabled={uploadingInvoice || deletingInvoice}
-                                  onChange={(e) => {
-                                    const file = e.target.files?.[0]
-                                    e.target.value = ''
-                                    if (file) void uploadMechanicalInvoice(file)
-                                  }}
-                                />
-                              </label>
-                              <button
-                                type="button"
-                                className="btn btn--sm"
-                                style={{ color: '#b91c1c', borderColor: '#fca5a5', background: '#fff5f5' }}
+                            <label className="btn btn--sm" style={{ cursor: uploadingInvoice || deletingInvoice ? 'wait' : 'pointer' }}>
+                              {uploadingInvoice ? 'Uploading…' : 'Replace'}
+                              <input
+                                type="file"
+                                accept="application/pdf,image/*"
+                                hidden
                                 disabled={uploadingInvoice || deletingInvoice}
-                                onClick={() => void removeMechanicalInvoice()}
-                                title="Delete uploaded invoice document"
-                              >
-                                {deletingInvoice ? 'Deleting…' : '🗑 Delete'}
-                              </button>
-                            </>
+                                onChange={(e) => {
+                                  const file = e.target.files?.[0]
+                                  e.target.value = ''
+                                  if (file) void uploadMechanicalInvoice(file)
+                                }}
+                              />
+                            </label>
+                          )}
+                          {isAdmin && (
+                            <button
+                              type="button"
+                              className="btn btn--sm"
+                              style={{ color: '#b91c1c', borderColor: '#fca5a5', background: '#fff5f5' }}
+                              disabled={uploadingInvoice || deletingInvoice}
+                              onClick={() => void removeMechanicalInvoice()}
+                              title="Admin only: Delete uploaded invoice document"
+                            >
+                              {deletingInvoice ? 'Deleting…' : '🗑 Delete (Admin)'}
+                            </button>
                           )}
                         </div>
                       ) : isInvoiceLocked ? (
