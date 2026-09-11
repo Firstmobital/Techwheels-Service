@@ -629,6 +629,20 @@ export default function AccountsPage() {
                     <td>
                       <div>{r.invoice_number || '—'}</div>
                       <div style={{ color: 'var(--muted)', fontSize: 12 }}>{fmtDate(r.invoice_date)}</div>
+                      {(r.invoice_storage_path || r.invoice_drive_url) && (
+                        <button
+                          type="button"
+                          className="linkbtn linkbtn--sm"
+                          style={{ display: 'inline-flex', alignItems: 'center', gap: 4, marginTop: 4, fontSize: 11.5 }}
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            void openMechanicalInvoiceFile(r).catch((err) => flash(err instanceof Error ? err.message : 'Could not open invoice', false))
+                          }}
+                          title={r.invoice_file_name || 'View invoice document'}
+                        >
+                          <span>👁</span> View Doc
+                        </button>
+                      )}
                     </td>
                     <td>{inr(r.billed_amount)}</td>
                     <td>{inr(mechanicalRemaining(r))}</td>
@@ -741,42 +755,108 @@ export default function AccountsPage() {
         </div>
       )}
 
-      {editRow && (
-        <div className="modal-back" role="presentation" onClick={() => setEditRow(null)}>
-          <div className="modal modal--md" role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
-            <div className="modal__head">
-              <h3>{editRow.invoice_number ? 'Mechanical payment' : 'Capture invoice'} · {editRow.jc_number}</h3>
-              <button type="button" className="modal__x" onClick={() => setEditRow(null)} aria-label="Close">×</button>
-            </div>
-            <div className="modal__body">
-              <p style={{ margin: '0 0 16px', color: 'var(--muted)' }}>
-                {editRow.reg_number || '—'} · {editRow.service_type || '—'} · Mark Done {fmtWhen(editRow.invoice_done_at)}
-              </p>
+      {editRow && (() => {
+        const isInvoiceLocked = Boolean((editRow.invoice_number && editRow.billed_amount != null) || payLines.length > 0)
+        return (
+          <div className="modal-back" role="presentation" onClick={() => setEditRow(null)}>
+            <div className="modal modal--md" role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
+              <div className="modal__head">
+                <h3 style={{ wordBreak: 'break-word' }}>{editRow.invoice_number ? 'Mechanical payment' : 'Capture invoice'} · {editRow.jc_number}</h3>
+                <button type="button" className="modal__x" onClick={() => setEditRow(null)} aria-label="Close">×</button>
+              </div>
+              <div className="modal__body">
+                <p style={{ margin: '0 0 16px', color: 'var(--muted)', fontSize: 13 }}>
+                  {editRow.reg_number || '—'} · {editRow.service_type || '—'} · Mark Done {fmtWhen(editRow.invoice_done_at)}
+                </p>
 
-              <div className="acct-modal-section">
-                <p className="acct-modal-kicker">Invoice (captured once)</p>
-                <div className="brx-form-grid-2">
-                  <label className="brx-field">
-                    <span className="brx-field-label">Invoice number</span>
-                    <input className="inp" value={invoiceNumber} disabled={payLines.length > 0} onChange={(e) => setInvoiceNumber(e.target.value)} />
-                  </label>
-                  <label className="brx-field">
-                    <span className="brx-field-label">Invoice date</span>
-                    <input className="inp" type="date" value={invoiceDate} disabled={payLines.length > 0} onChange={(e) => setInvoiceDate(e.target.value)} />
-                  </label>
-                  <label className="brx-field">
-                    <span className="brx-field-label">Invoice / Billed Amount (₹)</span>
-                    <input className="inp" type="number" value={billedAmount} disabled={payLines.length > 0} onChange={(e) => setBilledAmount(e.target.value)} />
-                  </label>
-                  <label className="brx-field">
-                    <span className="brx-field-label">Invoice file</span>
-                    {editRow.invoice_storage_path || editRow.invoice_drive_url ? (
-                      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-                        <button type="button" className="btn btn--sm" onClick={() => void openMechanicalInvoiceFile(editRow).catch((e) => flash(e instanceof Error ? e.message : 'Could not open invoice', false))}>
-                          {editRow.invoice_file_name || 'View invoice'}
-                        </button>
-                        <label className="btn btn--sm">
-                          {uploadingInvoice ? 'Uploading…' : 'Replace'}
+                <div className="acct-modal-section">
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
+                    <p className="acct-modal-kicker" style={{ margin: 0 }}>
+                      Invoice details
+                    </p>
+                    {isInvoiceLocked ? (
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 11.5, fontWeight: 700, color: '#166534', background: '#dcfce7', border: '1px solid #bbf7d0', padding: '2px 8px', borderRadius: 999 }}>
+                        <span>🔒</span> Locked (Editable once)
+                      </span>
+                    ) : (
+                      <span style={{ fontSize: 11.5, color: 'var(--muted)' }}>
+                        Enter details once & save
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="brx-form-grid-2">
+                    <label className="brx-field">
+                      <span className="brx-field-label">Invoice number</span>
+                      <input
+                        className="inp"
+                        value={invoiceNumber}
+                        disabled={isInvoiceLocked}
+                        placeholder="e.g. INV-1002"
+                        onChange={(e) => setInvoiceNumber(e.target.value)}
+                        style={isInvoiceLocked ? { background: 'var(--canvas)', cursor: 'not-allowed', opacity: 0.85 } : undefined}
+                      />
+                    </label>
+                    <label className="brx-field">
+                      <span className="brx-field-label">Invoice date</span>
+                      <input
+                        className="inp"
+                        type="date"
+                        value={invoiceDate}
+                        disabled={isInvoiceLocked}
+                        onChange={(e) => setInvoiceDate(e.target.value)}
+                        style={isInvoiceLocked ? { background: 'var(--canvas)', cursor: 'not-allowed', opacity: 0.85 } : undefined}
+                      />
+                    </label>
+                    <label className="brx-field">
+                      <span className="brx-field-label">Invoice / Billed Amount (₹)</span>
+                      <input
+                        className="inp"
+                        type="number"
+                        value={billedAmount}
+                        disabled={isInvoiceLocked}
+                        placeholder="e.g. 2500"
+                        onChange={(e) => setBilledAmount(e.target.value)}
+                        style={isInvoiceLocked ? { background: 'var(--canvas)', cursor: 'not-allowed', opacity: 0.85 } : undefined}
+                      />
+                    </label>
+                    <label className="brx-field">
+                      <span className="brx-field-label">Invoice file</span>
+                      {editRow.invoice_storage_path || editRow.invoice_drive_url ? (
+                        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+                          <button
+                            type="button"
+                            className="btn btn--sm btn--primary"
+                            style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}
+                            onClick={() => void openMechanicalInvoiceFile(editRow).catch((e) => flash(e instanceof Error ? e.message : 'Could not open invoice', false))}
+                            title={editRow.invoice_file_name || 'View uploaded invoice document'}
+                          >
+                            <span>👁</span> View Document
+                          </button>
+                          {!isInvoiceLocked && (
+                            <label className="btn btn--sm" style={{ cursor: uploadingInvoice ? 'wait' : 'pointer' }}>
+                              {uploadingInvoice ? 'Uploading…' : 'Replace'}
+                              <input
+                                type="file"
+                                accept="application/pdf,image/*"
+                                hidden
+                                disabled={uploadingInvoice}
+                                onChange={(e) => {
+                                  const file = e.target.files?.[0]
+                                  e.target.value = ''
+                                  if (file) void uploadMechanicalInvoice(file)
+                                }}
+                              />
+                            </label>
+                          )}
+                        </div>
+                      ) : isInvoiceLocked ? (
+                        <div style={{ fontSize: 12.5, color: 'var(--muted)', padding: '6px 0' }}>
+                          No document uploaded
+                        </div>
+                      ) : (
+                        <label className="btn btn--sm" style={{ cursor: uploadingInvoice ? 'wait' : 'pointer', width: 'fit-content' }}>
+                          {uploadingInvoice ? 'Uploading…' : 'Upload invoice'}
                           <input
                             type="file"
                             accept="application/pdf,image/*"
@@ -789,6 +869,7 @@ export default function AccountsPage() {
                             }}
                           />
                         </label>
+<<<<<<< HEAD
                       </div>
                     ) : (
                       <label className="btn btn--sm">
@@ -867,61 +948,120 @@ export default function AccountsPage() {
                         >
                           Use remaining {inr(mechanicalRemaining(editRow))}
                         </button>
+=======
+>>>>>>> 535c8d8c (fix(accounts): responsive modal layout, invoice document view button, and lock captured invoice fields)
                       )}
                     </label>
-                    <label className="brx-field">
-                      <span className="brx-field-label">Payment mode</span>
-                      <select className="sel" value={paymentMode} onChange={(e) => setPaymentMode(e.target.value as AccountsPaymentMode)}>
-                        {ACCOUNTS_PAYMENT_MODES.map((m) => (
-                          <option key={m.value} value={m.value}>{m.label}</option>
-                        ))}
-                      </select>
-                    </label>
-                    <label className="brx-field brx-grid-full">
-                      <span className="brx-field-label">Reference</span>
-                      <input className="inp" value={paymentReference} onChange={(e) => setPaymentReference(e.target.value)} placeholder="UTR, cheque no, or note" />
-                    </label>
-                    <div className="brx-field brx-grid-full">
-                      <button type="button" className="btn btn--primary" disabled={postingPay || editRow.billed_amount == null} onClick={() => void postMechanicalReceipt()}>
-                        {postingPay ? 'Posting…' : 'Post payment'}
+                  </div>
+                  {!isInvoiceLocked && (
+                    <div style={{ marginTop: 14 }}>
+                      <button
+                        type="button"
+                        className="btn btn--primary"
+                        disabled={saving || !invoiceNumber.trim() || !billedAmount.trim()}
+                        onClick={() => void saveCapture()}
+                      >
+                        {saving ? 'Saving…' : 'Save invoice (Lock details)'}
                       </button>
                     </div>
+                  )}
+                </div>
+
+                <div className="acct-modal-section">
+                  <p className="acct-modal-kicker">Payment status (automatic)</p>
+                  <div className="acct-modal-summary">
+                    <div>
+                      <span>Received</span>
+                      <strong>{inr(editRow.amount_received)}</strong>
+                    </div>
+                    <div>
+                      <span>Remaining</span>
+                      <strong>{inr(mechanicalRemaining(editRow))}</strong>
+                    </div>
+                    <div>
+                      <span>Status</span>
+                      <strong>{settlementStatusLabel(editRow.payment_status)}</strong>
+                    </div>
+                  </div>
+                  {payError && (
+                    <div className="brx-settle-banner is-error" style={{ marginBottom: 12 }}>{payError}</div>
+                  )}
+                  {isMechanicalPaymentClosed(editRow) ? (
+                    <button type="button" className="btn btn--primary" onClick={() => printMechGatepass(editRow)}>
+                      Create Gatepass
+                    </button>
+                  ) : (
+                    <div className="brx-form-grid-2">
+                      <label className="brx-field">
+                        <span className="brx-field-label">This receipt (₹)</span>
+                        <input className="inp" type="number" value={receiptAmount} onChange={(e) => { setReceiptAmount(e.target.value); setPayError(null) }} placeholder="Additional amount" />
+                        {mechanicalRemaining(editRow) != null && Number(mechanicalRemaining(editRow)) > 0 && (
+                          <button
+                            type="button"
+                            className="linkbtn linkbtn--sm"
+                            onClick={() => {
+                              setReceiptAmount(String(mechanicalRemaining(editRow)))
+                              setPayError(null)
+                            }}
+                          >
+                            Use remaining {inr(mechanicalRemaining(editRow))}
+                          </button>
+                        )}
+                      </label>
+                      <label className="brx-field">
+                        <span className="brx-field-label">Payment mode</span>
+                        <select className="sel" value={paymentMode} onChange={(e) => setPaymentMode(e.target.value as AccountsPaymentMode)}>
+                          {ACCOUNTS_PAYMENT_MODES.map((m) => (
+                            <option key={m.value} value={m.value}>{m.label}</option>
+                          ))}
+                        </select>
+                      </label>
+                      <label className="brx-field brx-grid-full">
+                        <span className="brx-field-label">Reference</span>
+                        <input className="inp" value={paymentReference} onChange={(e) => setPaymentReference(e.target.value)} placeholder="UTR, cheque no, or note" />
+                      </label>
+                      <div className="brx-field brx-grid-full">
+                        <button type="button" className="btn btn--primary" disabled={postingPay || editRow.billed_amount == null} onClick={() => void postMechanicalReceipt()}>
+                          {postingPay ? 'Posting…' : 'Post payment'}
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {payLines.length > 0 && (
+                  <div className="acct-modal-section">
+                    <p className="acct-modal-kicker">Receipts</p>
+                    <table className="acct-pay-hist">
+                      <thead>
+                        <tr>
+                          <th>When</th>
+                          <th>Mode</th>
+                          <th>Amount</th>
+                          <th>Reference</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {payLines.map((l) => (
+                          <tr key={l.id}>
+                            <td>{fmtWhen(l.posted_at)}</td>
+                            <td>{paymentModeLabel(l.payment_mode)}</td>
+                            <td>{inr(l.amount)}</td>
+                            <td>{l.reference || '—'}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
                   </div>
                 )}
               </div>
-
-              {payLines.length > 0 && (
-                <div className="acct-modal-section">
-                  <p className="acct-modal-kicker">Receipts</p>
-                  <table className="acct-pay-hist">
-                    <thead>
-                      <tr>
-                        <th>When</th>
-                        <th>Mode</th>
-                        <th>Amount</th>
-                        <th>Reference</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {payLines.map((l) => (
-                        <tr key={l.id}>
-                          <td>{fmtWhen(l.posted_at)}</td>
-                          <td>{paymentModeLabel(l.payment_mode)}</td>
-                          <td>{inr(l.amount)}</td>
-                          <td>{l.reference || '—'}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </div>
-            <div className="modal__foot">
-              <button type="button" className="btn" onClick={() => setEditRow(null)}>Close</button>
+              <div className="modal__foot">
+                <button type="button" className="btn" onClick={() => setEditRow(null)}>Close</button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        )
+      })()}
 
       {postRow && postCard && (
         <div className="modal-back" role="presentation" onClick={() => { setPostRow(null); setPostCard(null); void load() }}>
@@ -949,15 +1089,20 @@ export default function AccountsPage() {
                 <button type="button" className="modal__x" onClick={() => { setPostRow(null); setPostCard(null); void load() }} aria-label="Close">×</button>
               </div>
             </div>
-            <p style={{ margin: '0 16px 8px', color: 'var(--muted)' }}>
-              {postRow.reg_number || '—'} · {postRow.customer_name || '—'}
-            </p>
-            <BodyshopSettlementPanel
-              card={postCard}
-              onCardChange={setPostCard}
-              toast={flash}
-              variant="customer_payment"
-            />
+            <div className="modal__body">
+              <p style={{ margin: '0 0 12px', color: 'var(--muted)' }}>
+                {postRow.reg_number || '—'} · {postRow.customer_name || '—'}
+              </p>
+              <BodyshopSettlementPanel
+                card={postCard}
+                onCardChange={setPostCard}
+                toast={flash}
+                variant="customer_payment"
+              />
+            </div>
+            <div className="modal__foot">
+              <button type="button" className="btn" onClick={() => { setPostRow(null); setPostCard(null); void load() }}>Close</button>
+            </div>
           </div>
         </div>
       )}
