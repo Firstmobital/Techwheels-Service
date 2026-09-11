@@ -96,8 +96,14 @@ export default function CustomerRemarkModal({
   }
 
   async function handleSave() {
-    if (!selectedEntry) {
-      setError('Please select a vehicle registration number first.')
+    const regNo = (selectedEntry?.reg_number || regSearch).trim().toUpperCase()
+    if (!regNo) {
+      setError('Please enter or select a vehicle registration number.')
+      return
+    }
+
+    if (!remarkText.trim()) {
+      setError('Please enter a customer feedback remark.')
       return
     }
 
@@ -105,20 +111,47 @@ export default function CustomerRemarkModal({
     setError(null)
 
     try {
-      const res = await updateServiceAdvisorEntry(selectedEntry.id, {
-        service_type: selectedEntry.service_type || 'Running Repairs',
-        jc_number: selectedEntry.jc_number,
-        km_reading: selectedEntry.km_reading,
-        remark: remarkText.trim() || null,
-      })
-
-      if (res.error || !res.data) {
-        throw new Error(res.error || 'Failed to save customer remark')
+      // 1. Save data into post_feedback_bot_data table
+      const botPayload = {
+        vehicle_registration_number: regNo,
+        feedback_text: remarkText.trim(),
+        customer_name: selectedEntry?.owner_name || null,
+        mobile_number: selectedEntry?.owner_phone || null,
+        service_advisor_name: selectedEntry?.sa_display_name || selectedEntry?.sa_name || null,
+        branch: selectedEntry?.branch || null,
+        service_type: selectedEntry?.service_type || null,
+        model: selectedEntry?.model || null,
+        mode: 'manual_service_advisor',
+        complaint_date_time: new Date().toISOString(),
       }
 
-      const updated = res.data as ReceptionEntryRow
-      onSaveSuccess(updated, remarkText.trim())
-      showToast(`Customer remark saved for ${selectedEntry.reg_number}`)
+      const { error: botError } = await supabase
+        .from('post_feedback_bot_data')
+        .insert([botPayload])
+
+      if (botError) {
+        console.error('[CustomerRemarkModal] Failed to insert into post_feedback_bot_data:', botError)
+        throw new Error(`Failed to save to post_feedback_bot_data: ${botError.message}`)
+      }
+
+      // 2. Also update reception entry remark if entry exists so it shows in Service Advisor table
+      if (selectedEntry) {
+        try {
+          const res = await updateServiceAdvisorEntry(selectedEntry.id, {
+            service_type: selectedEntry.service_type || 'Running Repairs',
+            jc_number: selectedEntry.jc_number,
+            km_reading: selectedEntry.km_reading,
+            remark: remarkText.trim() || null,
+          })
+          if (res.data) {
+            onSaveSuccess(res.data as ReceptionEntryRow, remarkText.trim())
+          }
+        } catch (updateErr) {
+          console.warn('[CustomerRemarkModal] updateServiceAdvisorEntry skipped:', updateErr)
+        }
+      }
+
+      showToast(`Customer remark saved in post_feedback_bot_data for ${regNo}`)
       onClose()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to save customer remark')
@@ -143,7 +176,12 @@ export default function CustomerRemarkModal({
         <div className="modal__head">
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <span style={{ fontSize: 20 }}>💬</span>
-            <h3 style={{ margin: 0, fontSize: 17, fontWeight: 700 }}>Customer Remark / Feedback</h3>
+            <div>
+              <h3 style={{ margin: 0, fontSize: 17, fontWeight: 700 }}>Customer Remark / Feedback</h3>
+              <div style={{ fontSize: 11.5, color: 'var(--muted, #6b7280)', marginTop: 2 }}>
+                Saves to <code style={{ fontSize: 11, background: '#f1f5f9', padding: '1px 4px', borderRadius: 4 }}>post_feedback_bot_data</code>
+              </div>
+            </div>
           </div>
           <button type="button" className="modal__x" onClick={onClose} aria-label="Close">
             ×
@@ -314,7 +352,7 @@ export default function CustomerRemarkModal({
           ) : (
             cleanQuery.length >= 2 && allSuggestions.length === 0 && !searchingDb && (
               <div style={{ padding: '10px 14px', background: '#fffbeb', border: '1px solid #fef3c7', borderRadius: 6, fontSize: 12.5, color: '#92400e', marginBottom: 14 }}>
-                ℹ️ Type full or partial registration number above and click <strong>Search</strong> to load the vehicle.
+                ℹ️ Type registration number and click <strong>Search</strong> or directly enter feedback below to save to <code style={{ fontSize: 11.5 }}>post_feedback_bot_data</code>.
               </div>
             )
           )}
@@ -330,59 +368,55 @@ export default function CustomerRemarkModal({
               placeholder="Enter customer remark, feedback, special request, or voice details here…"
               value={remarkText}
               onChange={(e) => setRemarkText(e.target.value)}
-              disabled={!selectedEntry || saving}
+              disabled={saving}
               style={{
                 width: '100%',
                 resize: 'vertical',
                 minHeight: 90,
                 fontSize: 13.5,
-                background: !selectedEntry ? 'var(--canvas, #f9fafb)' : undefined,
-                cursor: !selectedEntry ? 'not-allowed' : undefined,
               }}
             />
 
             {/* Quick remark tags */}
-            {selectedEntry && (
-              <div style={{ marginTop: 8 }}>
-                <div style={{ fontSize: 11, color: 'var(--muted, #6b7280)', marginBottom: 4 }}>Quick Suggestions:</div>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                  {QUICK_REMARK_TAGS.map((tag) => (
-                    <button
-                      key={tag}
-                      type="button"
-                      onClick={() => {
-                        setRemarkText((prev) => {
-                          const trimmed = prev.trim()
-                          return trimmed ? `${trimmed}; ${tag}` : tag
-                        })
-                      }}
-                      style={{
-                        fontSize: 11.5,
-                        padding: '3px 8px',
-                        background: '#f1f5f9',
-                        border: '1px solid #cbd5e1',
-                        borderRadius: 999,
-                        cursor: 'pointer',
-                        color: '#334155',
-                        transition: 'all 0.15s ease',
-                      }}
-                      onMouseEnter={(e) => {
-                        e.currentTarget.style.background = '#e0f2fe'
-                        e.currentTarget.style.borderColor = '#93c5fd'
-                        e.currentTarget.style.color = '#0369a1'
-                      }}
-                      onMouseLeave={(e) => {
-                        e.currentTarget.style.background = '#f1f5f9'
-                        e.currentTarget.style.borderColor = '#cbd5e1'
-                        e.currentTarget.style.color = '#334155'
-                      }}
-                    >
-                      + {tag}
-                    </button>
-                  ))}
-                </div>
+            <div style={{ marginTop: 8 }}>
+              <div style={{ fontSize: 11, color: 'var(--muted, #6b7280)', marginBottom: 4 }}>Quick Suggestions:</div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                {QUICK_REMARK_TAGS.map((tag) => (
+                  <button
+                    key={tag}
+                    type="button"
+                    onClick={() => {
+                      setRemarkText((prev) => {
+                        const trimmed = prev.trim()
+                        return trimmed ? `${trimmed}; ${tag}` : tag
+                      })
+                    }}
+                    style={{
+                      fontSize: 11.5,
+                      padding: '3px 8px',
+                      background: '#f1f5f9',
+                      border: '1px solid #cbd5e1',
+                      borderRadius: 999,
+                      cursor: 'pointer',
+                      color: '#334155',
+                      transition: 'all 0.15s ease',
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.background = '#e0f2fe'
+                      e.currentTarget.style.borderColor = '#93c5fd'
+                      e.currentTarget.style.color = '#0369a1'
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.background = '#f1f5f9'
+                      e.currentTarget.style.borderColor = '#cbd5e1'
+                      e.currentTarget.style.color = '#334155'
+                    }}
+                  >
+                    + {tag}
+                  </button>
+                ))}
               </div>
-            )}
+            </div>
           </div>
         </div>
 
@@ -394,7 +428,7 @@ export default function CustomerRemarkModal({
             type="button"
             className="btn btn--primary"
             onClick={() => void handleSave()}
-            disabled={saving || !selectedEntry || !remarkText.trim()}
+            disabled={saving || (!selectedEntry && !regSearch.trim()) || !remarkText.trim()}
           >
             {saving ? 'Saving…' : 'Save Customer Remark'}
           </button>
