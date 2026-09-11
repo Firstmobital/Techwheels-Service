@@ -198,6 +198,32 @@ export async function openMechanicalInvoiceFile(row: Pick<AccountsMechanicalCase
   window.open(data.signedUrl, '_blank', 'noopener,noreferrer')
 }
 
+export async function deleteAccountsMechanicalInvoiceFile(
+  receptionEntryId: number,
+  storagePath?: string | null,
+): Promise<void> {
+  if (storagePath) {
+    try {
+      await supabase.storage.from(AUTODOC_BUCKET).remove([storagePath])
+    } catch {
+      // ignore
+    }
+  }
+  const { error } = await supabase
+    .from('service_reception_entries')
+    .update({
+      invoice_storage_path: null,
+      invoice_file_name: null,
+      invoice_content_type: null,
+      invoice_uploaded_at: null,
+      invoice_uploaded_by: null,
+      invoice_drive_url: null,
+      invoice_drive_file_id: null,
+    })
+    .eq('id', receptionEntryId)
+  if (error) throw new Error(error.message || 'Failed to remove invoice document')
+}
+
 export function isCustomerPaymentClosed(row: Pick<AccountsBodyshopCase, 'customer_payment_status' | 'customer_settlement_kind'>): boolean {
   const kind = String(row.customer_settlement_kind ?? '').toLowerCase()
   const status = String(row.customer_payment_status ?? 'pending').toLowerCase()

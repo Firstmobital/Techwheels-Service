@@ -4,6 +4,7 @@ import { BodyshopSettlementPanel } from '../components/BodyshopSettlementPanel'
 import {
   ACCOUNTS_PAYMENT_MODES,
   addAccountsMechanicalPayment,
+  deleteAccountsMechanicalInvoiceFile,
   isCustomerPaymentClosed,
   isMechanicalPaymentClosed,
   listAccountsBodyshopCases,
@@ -110,6 +111,7 @@ export default function AccountsPage() {
   const [saving, setSaving] = useState(false)
   const [postingPay, setPostingPay] = useState(false)
   const [uploadingInvoice, setUploadingInvoice] = useState(false)
+  const [deletingInvoice, setDeletingInvoice] = useState(false)
   const [payError, setPayError] = useState<string | null>(null)
   const [dmsLookup, setDmsLookup] = useState<MechanicalDmsInvoiceLookup | null>(null)
   const [loadingDms, setLoadingDms] = useState(false)
@@ -371,6 +373,27 @@ export default function AccountsPage() {
       flash(e instanceof Error ? e.message : 'Invoice upload failed', false)
     } finally {
       setUploadingInvoice(false)
+    }
+  }
+
+  async function removeMechanicalInvoice() {
+    if (!editRow) return
+    if (!window.confirm('Are you sure you want to delete this uploaded invoice document?')) return
+    setDeletingInvoice(true)
+    try {
+      await deleteAccountsMechanicalInvoiceFile(editRow.reception_entry_id, editRow.invoice_storage_path)
+      const next = {
+        ...editRow,
+        invoice_storage_path: null,
+        invoice_file_name: null,
+        invoice_drive_url: null,
+      }
+      patchMechRow(next)
+      flash('Invoice document deleted')
+    } catch (e) {
+      flash(e instanceof Error ? e.message : 'Failed to delete invoice document', false)
+    } finally {
+      setDeletingInvoice(false)
     }
   }
 
@@ -834,20 +857,32 @@ export default function AccountsPage() {
                             <span>👁</span> View Document
                           </button>
                           {!isInvoiceLocked && (
-                            <label className="btn btn--sm" style={{ cursor: uploadingInvoice ? 'wait' : 'pointer' }}>
-                              {uploadingInvoice ? 'Uploading…' : 'Replace'}
-                              <input
-                                type="file"
-                                accept="application/pdf,image/*"
-                                hidden
-                                disabled={uploadingInvoice}
-                                onChange={(e) => {
-                                  const file = e.target.files?.[0]
-                                  e.target.value = ''
-                                  if (file) void uploadMechanicalInvoice(file)
-                                }}
-                              />
-                            </label>
+                            <>
+                              <label className="btn btn--sm" style={{ cursor: uploadingInvoice || deletingInvoice ? 'wait' : 'pointer' }}>
+                                {uploadingInvoice ? 'Uploading…' : 'Replace'}
+                                <input
+                                  type="file"
+                                  accept="application/pdf,image/*"
+                                  hidden
+                                  disabled={uploadingInvoice || deletingInvoice}
+                                  onChange={(e) => {
+                                    const file = e.target.files?.[0]
+                                    e.target.value = ''
+                                    if (file) void uploadMechanicalInvoice(file)
+                                  }}
+                                />
+                              </label>
+                              <button
+                                type="button"
+                                className="btn btn--sm"
+                                style={{ color: '#b91c1c', borderColor: '#fca5a5', background: '#fff5f5' }}
+                                disabled={uploadingInvoice || deletingInvoice}
+                                onClick={() => void removeMechanicalInvoice()}
+                                title="Delete uploaded invoice document"
+                              >
+                                {deletingInvoice ? 'Deleting…' : '🗑 Delete'}
+                              </button>
+                            </>
                           )}
                         </div>
                       ) : isInvoiceLocked ? (
