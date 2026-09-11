@@ -23,6 +23,7 @@ import RevisitBadge from '../components/RevisitBadge'
 import UpdationAvailableBadge from '../components/UpdationAvailableBadge'
 import { buildSaFloorCompletedWaTemplate } from '../lib/waTemplates'
 import PartsRequirementSection from '../components/PartsRequirementSection'
+import CustomerRemarkModal from '../components/CustomerRemarkModal'
 
 type RowDraft = {
   service_type: string
@@ -536,6 +537,18 @@ export default function ServiceAdvisorPage() {
   // Complaint link modal state
   const [complaintLinkModal, setComplaintLinkModal] = useState<{ open: boolean; url: string | null; regNumber: string | null }>({ open: false, url: null, regNumber: null })
   const [generatingComplaintLink, setGeneratingComplaintLink] = useState<number | null>(null)
+  const [customerRemarkModalOpen, setCustomerRemarkModalOpen] = useState(false)
+
+  function handleRemarkSaved(updatedRow: ReceptionEntryRow, newRemark: string) {
+    setRows((prev) => prev.map((r) => (r.id === updatedRow.id ? { ...r, remark: newRemark || null } : r)))
+    setDrafts((prev) => ({
+      ...prev,
+      [updatedRow.id]: {
+        ...(prev[updatedRow.id] ?? EMPTY_DRAFT),
+        remark: newRemark,
+      },
+    }))
+  }
 
   const searchQuery = useMemo(() => search.trim().toLowerCase(), [search])
   // Include old pending job card numbers so their assignment statuses are fetched too
@@ -1978,7 +1991,7 @@ export default function ServiceAdvisorPage() {
       )}
 
       {/* ── PAGE MODE TABS ──────────────────────────────────────────────────── */}
-      <div className="mb-4 flex gap-2">
+      <div className="mb-4 flex flex-wrap items-center gap-2">
         <button
           type="button"
           onClick={() => setPageMode('jobcards')}
@@ -1992,6 +2005,14 @@ export default function ServiceAdvisorPage() {
           className={`rounded-lg px-4 py-2 text-sm font-semibold shadow-sm transition ${pageMode === 'parts' ? 'bg-blue-600 text-white' : 'border border-gray-300 bg-white text-gray-700 hover:bg-gray-50'}`}
         >
           Parts Requirement
+        </button>
+        <button
+          type="button"
+          onClick={() => setCustomerRemarkModalOpen(true)}
+          className="rounded-lg px-4 py-2 text-sm font-semibold shadow-sm transition border border-indigo-200 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 flex items-center gap-1.5"
+          title="Open form to add or update customer remark / feedback by registration number"
+        >
+          <span>💬</span> Customer Remark
         </button>
       </div>
 
@@ -2460,6 +2481,14 @@ export default function ServiceAdvisorPage() {
       </div>
         </>
       )}
+
+      <CustomerRemarkModal
+        isOpen={customerRemarkModalOpen}
+        onClose={() => setCustomerRemarkModalOpen(false)}
+        rows={allVisibleRows}
+        onSaveSuccess={handleRemarkSaved}
+        showToast={showToast}
+      />
     </div>
   )
 }
