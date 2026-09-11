@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Techwheels Bodyshop</string>
+    <string name="title_activity_main">Techwheels Bodyshop</string>
+    <string name="package_name">com.techwheels.bodyshop</string>
+    <string name="custom_url_scheme">com.techwheels.bodyshop</string>
+</resources>
