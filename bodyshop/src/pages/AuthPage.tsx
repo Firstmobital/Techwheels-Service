@@ -5,15 +5,20 @@ interface AuthPageProps {
   onLoginSuccess: (vehicle: CustomerVehicle, allVehicles: CustomerVehicle[]) => void
 }
 
+const SAMPLE_VEHICLES = [
+  { reg: 'RJ60CH2388', desc: 'Kajal (Sitapura)' },
+  { reg: 'RJ06CH0620', desc: 'Kamal Nayan (Sitapura)' },
+  { reg: 'RJ45VR4545', desc: 'Safari (Admin Scope)' },
+]
+
 export default function AuthPage({ onLoginSuccess }: AuthPageProps) {
   const [searchQuery, setSearchQuery] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [searchResults, setSearchResults] = useState<CustomerVehicle[]>([])
 
-  async function handleSearch(e: React.FormEvent) {
-    e.preventDefault()
-    const query = searchQuery.trim().toUpperCase()
+  async function handleSearchWithQuery(queryStr: string) {
+    const query = queryStr.trim().toUpperCase()
     if (!query || query.length < 3) {
       setError('Please enter at least 3 characters of Registration or Mobile number.')
       return
@@ -39,15 +44,20 @@ export default function AuthPage({ onLoginSuccess }: AuthPageProps) {
     }
   }
 
+  function handleSearch(e: React.FormEvent) {
+    e.preventDefault()
+    void handleSearchWithQuery(searchQuery)
+  }
+
   return (
-    <div style={{ padding: '24px 16px', display: 'flex', flexDirection: 'column', justifyContent: 'center', minHeight: '80vh' }}>
+    <div style={{ maxWidth: 480, width: '100%', margin: '0 auto', padding: '24px 0' }}>
       <div style={{ textAlign: 'center', marginBottom: 28 }}>
         <div
           style={{
             width: 64,
             height: 64,
             margin: '0 auto 16px',
-            borderRadius: 18,
+            borderRadius: 20,
             background: 'linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%)',
             display: 'flex',
             alignItems: 'center',
@@ -58,15 +68,15 @@ export default function AuthPage({ onLoginSuccess }: AuthPageProps) {
         >
           🚘
         </div>
-        <h1 style={{ fontSize: 22, fontWeight: 800, color: 'var(--text)', marginBottom: 6 }}>
-          Customer Service Portal
+        <h1 style={{ fontSize: 24, fontWeight: 900, color: 'var(--text)', marginBottom: 6 }}>
+          Techwheels Customer Portal
         </h1>
-        <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>
-          Track repairs, book service, view invoices & submit feedback
+        <p style={{ fontSize: 13.5, color: 'var(--text-muted)' }}>
+          Vehicle Services, Complaints, Estimates, Invoices & Gate Pass
         </p>
       </div>
 
-      <div className="card" style={{ padding: 22, boxShadow: 'var(--shadow-md)' }}>
+      <div className="card" style={{ padding: 26, boxShadow: '0 10px 30px rgba(0,0,0,0.06)' }}>
         <form onSubmit={handleSearch}>
           <div className="form-group">
             <label className="form-label">
@@ -75,11 +85,42 @@ export default function AuthPage({ onLoginSuccess }: AuthPageProps) {
             <input
               className="form-input mono"
               style={{ textTransform: 'uppercase', fontSize: 16, fontWeight: 700 }}
-              placeholder="e.g. GJ36AJ2837 or 9978526575"
+              placeholder="e.g. RJ60CH2388 or 9680460999"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value.toUpperCase())}
               autoFocus
             />
+          </div>
+
+          {/* Quick 1-Click Test Chips */}
+          <div style={{ margin: '10px 0 16px' }}>
+            <span style={{ fontSize: 11.5, color: 'var(--text-muted)', fontWeight: 600 }}>
+              Quick test vehicles:
+            </span>
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 4 }}>
+              {SAMPLE_VEHICLES.map((sample) => (
+                <button
+                  key={sample.reg}
+                  type="button"
+                  onClick={() => {
+                    setSearchQuery(sample.reg)
+                    void handleSearchWithQuery(sample.reg)
+                  }}
+                  style={{
+                    fontSize: 11,
+                    padding: '3px 8px',
+                    borderRadius: 6,
+                    border: '1px solid #cbd5e1',
+                    background: '#f8fafc',
+                    color: '#1e293b',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                  }}
+                >
+                  {sample.reg}
+                </button>
+              ))}
+            </div>
           </div>
 
           {error && (
@@ -93,9 +134,9 @@ export default function AuthPage({ onLoginSuccess }: AuthPageProps) {
             type="submit"
             className="btn-primary"
             disabled={loading || !searchQuery.trim()}
-            style={{ marginTop: 8 }}
+            style={{ width: '100%', padding: '13px' }}
           >
-            {loading ? 'Searching Vehicle…' : 'Access My Vehicle'}
+            {loading ? 'Accessing Vehicle Portal…' : 'Access Vehicle Portal →'}
           </button>
         </form>
 
@@ -119,6 +160,7 @@ export default function AuthPage({ onLoginSuccess }: AuthPageProps) {
                     border: '1px solid var(--border)',
                     background: 'var(--surface-sub)',
                     textAlign: 'left',
+                    cursor: 'pointer',
                   }}
                 >
                   <div>
@@ -133,8 +175,8 @@ export default function AuthPage({ onLoginSuccess }: AuthPageProps) {
         )}
       </div>
 
-      <div style={{ textAlign: 'center', marginTop: 20, fontSize: 12, color: 'var(--text-sub)' }}>
-        Techwheels After-Purchase Customer Services · Available on Android & iOS
+      <div style={{ textAlign: 'center', marginTop: 24, fontSize: 12, color: 'var(--text-muted)' }}>
+        Techwheels Dealership After-Purchase Service Portal · Version 1.0
       </div>
     </div>
   )

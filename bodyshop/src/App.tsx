@@ -45,38 +45,59 @@ export default function App() {
 
   if (!selectedVehicle) {
     return (
-      <div className="app-container">
+      <div className="auth-wrapper">
         <AuthPage onLoginSuccess={handleLogin} />
       </div>
     )
   }
 
   return (
-    <div className="app-container">
-      <Header vehicleReg={selectedVehicle.reg_number} onLogout={handleLogout} />
+    <div className="website-container">
+      <Header
+        vehicleReg={selectedVehicle.reg_number}
+        currentTab={currentTab}
+        onSelectTab={setCurrentTab}
+        onLogout={handleLogout}
+      />
 
-      <main className="main-content">
-        {currentTab === 'dashboard' && (
-          <DashboardPage vehicle={selectedVehicle} onNavigate={setCurrentTab} />
-        )}
-        {currentTab === 'complaint' && (
-          <ComplaintPage vehicle={selectedVehicle} onSuccess={() => setCurrentTab('dashboard')} />
-        )}
-        {currentTab === 'estimate' && (
-          <EstimatePage vehicle={selectedVehicle} />
-        )}
-        {currentTab === 'invoices' && (
-          <InvoicesPage vehicle={selectedVehicle} />
-        )}
-        {currentTab === 'gatepass' && (
-          <GatePassPage vehicle={selectedVehicle} />
-        )}
-        {currentTab === 'feedback' && (
-          <FeedbackPage vehicle={selectedVehicle} />
-        )}
+      <main className="website-main">
+        <div className="content-inner">
+          {currentTab === 'dashboard' && (
+            <DashboardPage vehicle={selectedVehicle} onNavigate={setCurrentTab} />
+          )}
+          {currentTab === 'complaint' && (
+            <ComplaintPage vehicle={selectedVehicle} onSuccess={() => setCurrentTab('dashboard')} />
+          )}
+          {currentTab === 'estimate' && (
+            <EstimatePage vehicle={selectedVehicle} />
+          )}
+          {currentTab === 'invoices' && (
+            <InvoicesPage vehicle={selectedVehicle} />
+          )}
+          {currentTab === 'gatepass' && (
+            <GatePassPage vehicle={selectedVehicle} />
+          )}
+          {currentTab === 'feedback' && (
+            <FeedbackPage vehicle={selectedVehicle} />
+          )}
+        </div>
       </main>
 
-      <BottomNav currentTab={currentTab} onSelectTab={setCurrentTab} />
+      <footer className="website-footer">
+        <div className="footer-inner">
+          <div>
+            <strong>Techwheels Dealership Vehicle Services</strong> · Powered by Firstmobital
+          </div>
+          <div style={{ opacity: 0.8, fontSize: 12 }}>
+            After-Purchase Service & Bodyshop Management System · SRD v1.0
+          </div>
+        </div>
+      </footer>
+
+      {/* Bottom Nav on Mobile Devices only */}
+      <div className="mobile-only-nav">
+        <BottomNav currentTab={currentTab} onSelectTab={setCurrentTab} />
+      </div>
     </div>
   )
 }
