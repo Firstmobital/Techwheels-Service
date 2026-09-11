@@ -1,6 +1,23 @@
 import * as XLSX from 'xlsx'
+import { parsePartsInvoiceDate } from './dates.ts'
 import { parseAmount } from './money.ts'
-import type { BusyGstBucket, BusyPartsLine, BusyPartsParseResult, VehiclePortal } from './types.ts'
+import { classifyGstRate } from './partsGst.ts'
+import { buildBusyPartsSourceRowKey } from './sourceRowKey.ts'
+import type { BusyPartsLine, BusyPartsParseResult, VehiclePortal } from './types.ts'
+
+export const PARTS_CRM_INVOICE_NO = 'Invoice_No'
+export const PARTS_CRM_INVOICE_DATE = 'Invoice_Date'
+export const PARTS_CRM_JOB_CARD_NO = 'Job Card_No'
+export const PARTS_CRM_NET_AMOUNT = 'Net_Amount'
+export const PARTS_CRM_PART_NO = 'Part #'
+export const PARTS_CRM_QUANTITY = 'Quantity'
+export const PARTS_CRM_CGST_CLASSIFICATION = 'CGST Classification'
+export const PARTS_CRM_SGST_CLASSIFICATION = 'SGST Classification'
+export const PARTS_CRM_IGST_CLASSIFICATION = 'IGST Classification'
+export const PARTS_CRM_OUTPUT_CGST = 'Output CGST'
+export const PARTS_CRM_OUTPUT_SGST = 'Output SGST'
+export const PARTS_CRM_OUTPUT_IGST = 'Output IGST'
+export const PARTS_CRM_TAX_AMOUNT = 'Tax Amount'
 
 function normalizeHeader(header: string): string {
   return header.toLowerCase().replace(/[^a-z0-9]/g, '')
@@ -20,135 +37,150 @@ function cell(row: Record<string, unknown>, header: string | undefined): unknown
   return row[header]
 }
 
-function classifyGstRate(rate: number): BusyGstBucket | null {
-  if (Math.abs(rate - 5) <= 0.15) return 5
-  if (Math.abs(rate - 18) <= 0.15) return 18
-  return null
+function parseClassificationPercent(value: unknown): number | null {
+  const raw = String(value ?? '').trim()
+  if (!raw) return null
+  const match = raw.match(/@\s*(\d+(?:\.\d+)?)\s*%/i)
+  if (!match) return null
+  const parsed = Number(match[1])
+  return Number.isFinite(parsed) ? parsed : null
 }
 
-function readRate(value: unknown): number | null {
-  const parsed = parseAmount(value)
-  if (parsed == null) return null
-  return parsed
+function combinedClassificationRate(cgst: unknown, sgst: unknown, igst: unknown): number | null {
+  const igstRate = parseClassificationPercent(igst)
+  if (igstRate != null) return igstRate
+  const cgstRate = parseClassificationPercent(cgst)
+  const sgstRate = parseClassificationPercent(sgst)
+  if (cgstRate == null && sgstRate == null) return null
+  return (cgstRate ?? 0) + (sgstRate ?? 0)
 }
 
 export function mapPartsRows(
   rows: Record<string, unknown>[],
   portal: VehiclePortal,
-): { lines: BusyPartsLine[]; errors: string[] } {
-  if (rows.length === 0) return { lines: [], errors: [] }
+  fileName = '',
+): { lines: BusyPartsLine[]; errors: string[]; skippedIncomplete: number } {
+  if (rows.length === 0) return { lines: [], errors: [], skippedIncomplete: 0 }
 
   const headers = Object.keys(rows[0] ?? {})
-  const jobCardHeader = findHeader(headers, ['Job Card_No', 'Job Card No', 'Job Card #', 'Job Card Number', 'JC #', 'Order #', 'Order No'])
-  const netHeader = findHeader(headers, ['Net Amount', 'Net Amt', 'Assessable Amount', 'Taxable Amount', 'Taxable Value'])
-  const invoiceHeader = findHeader(headers, ['Invoice #', 'Invoice Number', 'Invoice No', 'Invoice Number #'])
-  const gstRateHeader = findHeader(headers, ['GST %', 'GST%', 'GST Rate', 'Tax %', 'Tax%', 'Tax Rate', 'GST Perc'])
-  const cgstRateHeader = findHeader(headers, ['CGST %', 'CGST%', 'CGST Rate'])
-  const sgstRateHeader = findHeader(headers, ['SGST %', 'SGST%', 'SGST Rate'])
-  const igstRateHeader = findHeader(headers, ['IGST %', 'IGST%', 'IGST Rate'])
-  const taxAmountHeader = findHeader(headers, ['Tax Amount', 'GST Amount', 'Tax Amt', 'GST Amt', 'Total Tax'])
-  const cgstAmountHeader = findHeader(headers, ['CGST Amount', 'CGST Amt'])
-  const sgstAmountHeader = findHeader(headers, ['SGST Amount', 'SGST Amt'])
-  const igstAmountHeader = findHeader(headers, ['IGST Amount', 'IGST Amt'])
-  const cgstHeader = findHeader(headers, ['CGST'])
-  const sgstHeader = findHeader(headers, ['SGST'])
-  const igstHeader = findHeader(headers, ['IGST'])
+  const jobCardHeader = findHeader(headers, [PARTS_CRM_JOB_CARD_NO])
+  const netHeader = findHeader(headers, [PARTS_CRM_NET_AMOUNT])
+  const invoiceHeader = findHeader(headers, [PARTS_CRM_INVOICE_NO])
+  const invoiceDateHeader = findHeader(headers, [PARTS_CRM_INVOICE_DATE])
+  const partHeader = findHeader(headers, [PARTS_CRM_PART_NO])
+  const quantityHeader = findHeader(headers, [PARTS_CRM_QUANTITY])
+  const cgstClassHeader = findHeader(headers, [PARTS_CRM_CGST_CLASSIFICATION])
+  const sgstClassHeader = findHeader(headers, [PARTS_CRM_SGST_CLASSIFICATION])
+  const igstClassHeader = findHeader(headers, [PARTS_CRM_IGST_CLASSIFICATION])
+  const outputCgstHeader = findHeader(headers, [PARTS_CRM_OUTPUT_CGST])
+  const outputSgstHeader = findHeader(headers, [PARTS_CRM_OUTPUT_SGST])
+  const outputIgstHeader = findHeader(headers, [PARTS_CRM_OUTPUT_IGST])
+  const taxAmountHeader = findHeader(headers, [PARTS_CRM_TAX_AMOUNT])
 
   const errors: string[] = []
-  if (!jobCardHeader) errors.push('Missing Job Card / Order number column')
-  if (!netHeader) errors.push('Missing Net Amount column')
-  if (!gstRateHeader && !cgstRateHeader && !sgstRateHeader && !igstRateHeader && !taxAmountHeader && !cgstAmountHeader && !igstAmountHeader && !cgstHeader && !igstHeader) {
-    errors.push('Missing GST rate or tax-amount column')
+  if (!jobCardHeader) errors.push(`Missing ${PARTS_CRM_JOB_CARD_NO} column`)
+  if (!netHeader) errors.push(`Missing ${PARTS_CRM_NET_AMOUNT} column`)
+  if (!invoiceHeader) errors.push(`Missing ${PARTS_CRM_INVOICE_NO} column`)
+  if (!invoiceDateHeader) errors.push(`Missing ${PARTS_CRM_INVOICE_DATE} column`)
+  if (!cgstClassHeader && !sgstClassHeader && !igstClassHeader && !taxAmountHeader && !outputCgstHeader && !outputIgstHeader) {
+    errors.push(`Missing ${PARTS_CRM_CGST_CLASSIFICATION} / ${PARTS_CRM_TAX_AMOUNT} column`)
   }
-  if (errors.length > 0) return { lines: [], errors }
+  if (errors.length > 0) return { lines: [], errors, skippedIncomplete: 0 }
 
   const lines: BusyPartsLine[] = []
+  let skippedIncomplete = 0
 
   rows.forEach((row, index) => {
     const sourceRowNumber = index + 2
     const jobCardNumber = String(cell(row, jobCardHeader) ?? '').trim()
-    if (!jobCardNumber) return
-
-    const netAmount = parseAmount(cell(row, netHeader))
-    if (netAmount == null) {
-      lines.push({
-        portal,
-        jobCardNumber,
-        invoiceNumber: String(cell(row, invoiceHeader) ?? '').trim(),
-        netAmount: 0,
-        taxAmount: null,
-        gstRate: null,
-        gstIssue: `Row ${sourceRowNumber}: Net Amount is not numeric`,
-        sourceRowNumber,
-      })
+    const invoiceNumber = String(cell(row, invoiceHeader) ?? '').trim()
+    const invoiceDate = parsePartsInvoiceDate(cell(row, invoiceDateHeader))
+    if (!jobCardNumber || !invoiceNumber || !invoiceDate) {
+      skippedIncomplete += 1
       return
     }
 
-    const explicitRate = gstRateHeader ? readRate(cell(row, gstRateHeader)) : null
-    const cgstRate = cgstRateHeader ? readRate(cell(row, cgstRateHeader)) : null
-    const sgstRate = sgstRateHeader ? readRate(cell(row, sgstRateHeader)) : null
-    const igstRate = igstRateHeader ? readRate(cell(row, igstRateHeader)) : null
+    const netAmount = parseAmount(cell(row, netHeader))
+    if (netAmount == null) {
+      skippedIncomplete += 1
+      return
+    }
 
-    let combinedRate: number | null = null
-    if (explicitRate != null) combinedRate = explicitRate
-    else if (cgstRate != null || sgstRate != null) combinedRate = (cgstRate ?? 0) + (sgstRate ?? 0)
-    else if (igstRate != null) combinedRate = igstRate
-
-    const cgstAmount = parseAmount(cell(row, cgstAmountHeader ?? cgstHeader))
-    const sgstAmount = parseAmount(cell(row, sgstAmountHeader ?? sgstHeader))
-    const igstAmount = parseAmount(cell(row, igstAmountHeader ?? igstHeader))
+    const classificationRate = combinedClassificationRate(
+      cell(row, cgstClassHeader),
+      cell(row, sgstClassHeader),
+      cell(row, igstClassHeader),
+    )
     const taxAmountDirect = parseAmount(cell(row, taxAmountHeader))
-    const taxPieces = [cgstAmount, sgstAmount, igstAmount, taxAmountDirect].filter((value): value is number => value != null)
-    const taxAmount = taxPieces.length > 0 ? taxPieces.reduce((sum, value) => sum + value, 0) : null
+    const outputCgst = parseAmount(cell(row, outputCgstHeader))
+    const outputSgst = parseAmount(cell(row, outputSgstHeader))
+    const outputIgst = parseAmount(cell(row, outputIgstHeader))
+    const outputTaxPieces = [outputCgst, outputSgst, outputIgst].filter((value): value is number => value != null)
+    const taxAmount = taxAmountDirect != null
+      ? taxAmountDirect
+      : outputTaxPieces.length > 0
+        ? outputTaxPieces.reduce((sum, value) => sum + value, 0)
+        : null
 
+    let combinedRate = classificationRate
     if (combinedRate == null && taxAmount != null && netAmount !== 0) {
       combinedRate = (taxAmount / netAmount) * 100
     }
 
-    if (combinedRate == null) {
-      lines.push({
-        portal,
-        jobCardNumber,
-        invoiceNumber: String(cell(row, invoiceHeader) ?? '').trim(),
-        netAmount,
-        taxAmount,
-        gstRate: null,
-        gstIssue: `Row ${sourceRowNumber}: unsupported or missing GST classification`,
-        sourceRowNumber,
-      })
-      return
-    }
+    const gstRate = combinedRate == null ? null : classifyGstRate(combinedRate)
+    const gstIssue = combinedRate == null
+      ? `Row ${sourceRowNumber}: unsupported or missing GST classification`
+      : gstRate == null
+        ? `Row ${sourceRowNumber}: unsupported GST rate ${combinedRate}`
+        : null
 
-    const gstRate = classifyGstRate(combinedRate)
+    const partNo = String(cell(row, partHeader) ?? '').trim()
+    const quantity = cell(row, quantityHeader)
+    const sourceRowKey = buildBusyPartsSourceRowKey({
+      sourceType: portal,
+      jobCardNo: jobCardNumber,
+      invoiceNo: invoiceNumber,
+      invoiceDate,
+      gstRate: combinedRate,
+      netAmount,
+      partNo,
+      quantity,
+    })
+
     lines.push({
       portal,
       jobCardNumber,
-      invoiceNumber: String(cell(row, invoiceHeader) ?? '').trim(),
+      invoiceNumber,
+      invoiceDate,
       netAmount,
       taxAmount,
       gstRate,
-      gstIssue: gstRate == null ? `Row ${sourceRowNumber}: unsupported GST rate ${combinedRate}` : null,
+      gstRateRaw: combinedRate,
+      gstIssue,
       sourceRowNumber,
+      sourceRowKey,
+      sourceFileName: fileName,
     })
   })
 
-  return { lines, errors: [] }
+  return { lines, errors: [], skippedIncomplete }
 }
 
 export async function parsePartsSpreadsheet(file: File, portal: VehiclePortal): Promise<BusyPartsParseResult> {
   const buffer = await file.arrayBuffer()
   const rows = parseSpreadsheetBuffer(buffer, file.name)
-  const mapped = mapPartsRows(rows, portal)
+  const mapped = mapPartsRows(rows, portal, file.name)
   return {
     portal,
     fileName: file.name,
     lines: mapped.lines,
     errors: mapped.errors,
+    skippedIncomplete: mapped.skippedIncomplete,
   }
 }
 
-export function parseSpreadsheetBuffer(buffer: ArrayBuffer, fileName: string): Record<string, unknown>[] {
-  const bytes = new Uint8Array(buffer)
+export function parseSpreadsheetBuffer(buffer: ArrayBuffer | Uint8Array, fileName: string): Record<string, unknown>[] {
+  const bytes = buffer instanceof Uint8Array ? buffer : new Uint8Array(buffer)
   const lower = fileName.toLowerCase()
 
   if (lower.endsWith('.xlsx') || lower.endsWith('.xls') || lower.endsWith('.xlsb')) {

@@ -2,10 +2,10 @@
 
 **Plan ID:** BUSY-001  
 **Created:** 2026-09-10  
-**Last Updated:** 2026-09-10  
+**Last Updated:** 2026-09-11  
 **Priority:** HIGH  
 **Owner:** Accounts + Platform Team  
-**Status:** Active (web implemented; BUSY import pending)  
+**Status:** Active (web implemented; Parts persist pending apply; BUSY import pending)  
 **Platform:** webversion  
 **Category:** operations  
 **Reference page:** `/busy`
@@ -34,9 +34,9 @@ Add a web **BUSY** page that reads persisted PV/EV Labour from `public.psf_reven
 
 ## Context & Background
 
-Labour columns live on `psf_revenue_dms` (`invoice_number`, `invoice_date`, `job_card_number` from Order #, `first_name`, `last_name`, `account`, `sr_type`, `sr_assigned_to`, `vehicle_registration_number`, `final_labour_amount`, `portal`). Reports treat `final_labour_amount` as GST-inclusive. Parts files are not persisted.
+Labour columns live on `psf_revenue_dms` (`invoice_number`, `invoice_date`, `job_card_number` from Order #, `first_name`, `last_name`, `account`, `sr_type`, `sr_assigned_to`, `vehicle_registration_number`, `final_labour_amount`, `portal`). Reports treat `final_labour_amount` as GST-inclusive.
 
-Reference CRM/BUSY sample files were not in the repository workspace.
+Parts persist in `public.busy_parts` (DBL-0044). Inspected CRM files `Parts - PV.csv` and `Parts - EV.csv` use `Invoice_No` and `Invoice_Date`. Those values are stored for evidence and mismatch detection. Labour invoice number/date remain BUSY voucher identity.
 
 ---
 
@@ -52,7 +52,8 @@ Reference CRM/BUSY sample files were not in the repository workspace.
 
 ### Phase 3: Verification
 - [x] **Task 3.1:** `scripts/verify_busy_accounting.mjs` (required cases + per-invoice voucher contract: 18% Parts and Labour always; 5% only when a genuine 5% Parts line exists).
-- [ ] **Task 3.2:** Operator applies DBL-0043 and grants the module. Real BUSY import not available in this session.
+- [x] **Task 3.3:** Persist Parts with mandatory `invoice_no`/`invoice_date` from CRM `Invoice_No`/`Invoice_Date`. Labour remains voucher truth.
+- [ ] **Task 3.2:** Operator applies DBL-0043, DBL-0044, and grants the module. Real BUSY import not available in this session.
 
 ---
 
@@ -64,14 +65,15 @@ Reference CRM/BUSY sample files were not in the repository workspace.
 ✅ 2.1 | BUSY page | Agent | 2026-09-10 | 2026-09-10 | /busy
 ✅ 2.2 | Module/RBAC | Agent | 2026-09-10 | 2026-09-10 | DBL-0043 PROPOSED
 ✅ 3.1 | Automated checks | Agent | 2026-09-10 | 2026-09-10 | scripts/verify_busy_accounting.mjs
-⏳ 3.2 | Apply module row + BUSY import | Operator | - | - | Pending
+✅ 3.3 | Persist Parts invoice evidence | Agent | 2026-09-11 | 2026-09-11 | busy_parts / DBL-0044
+⏳ 3.2 | Apply module + Parts table + BUSY import | Operator | - | - | Pending DBL-0043 and DBL-0044
 ```
 
 ---
 
 ## Next actions
 
-1. Apply `supabase/migrations/20260910120000_busy_accounting_module.sql` and run paired sql_checks.
+1. Apply `supabase/migrations/20260910120000_busy_accounting_module.sql` and `supabase/migrations/20260911120000_busy_parts.sql`, then run paired sql_checks.
 2. Grant `busy` in Admin → Permissions (admins already receive every route module).
 3. Import a generated workbook into BUSY when the accounting app is available.
 
@@ -81,7 +83,7 @@ Reference CRM/BUSY sample files were not in the repository workspace.
 
 - `docs/shared/reference/MODULE_ROUTE_CONTRACT.md`
 - `docs/web/modules/busy/README.md`
-- Ledger: DBL-0043
+- Ledger: DBL-0043, DBL-0044
 
-**Last Updated:** 2026-09-10  
+**Last Updated:** 2026-09-11  
 **Status:** 🟡 IN PROGRESS

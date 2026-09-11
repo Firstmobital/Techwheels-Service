@@ -5,11 +5,21 @@
  */
 import assert from 'node:assert/strict'
 import { resolveBusyBranch, resolveDebtorGroup, BUSY_DEBTOR_GROUPS } from '../src/lib/busy/branch.ts'
-import { isDateInInclusiveRange, dateRangeError, formatBusyBillDate } from '../src/lib/busy/dates.ts'
+import { existsSync, readFileSync } from 'node:fs'
+import { isDateInInclusiveRange, dateRangeError, formatBusyBillDate, parsePartsInvoiceDate } from '../src/lib/busy/dates.ts'
 import { invoiceMatchesPortalSeries } from '../src/lib/busy/eligibility.ts'
 import { inclusiveFromNet } from '../src/lib/busy/money.ts'
 import { classifyBusyInvoice, parseBodyshopPartyName, PDI_PARTY_NAME, resolvePartyName } from '../src/lib/busy/partyName.ts'
-import { mapPartsRows } from '../src/lib/busy/partsParser.ts'
+import {
+  mapPartsRows,
+  parseSpreadsheetBuffer,
+  PARTS_CRM_INVOICE_DATE,
+  PARTS_CRM_INVOICE_NO,
+  PARTS_CRM_JOB_CARD_NO,
+  PARTS_CRM_NET_AMOUNT,
+} from '../src/lib/busy/partsParser.ts'
+import { buildBusyPartsSourceRowKey } from '../src/lib/busy/sourceRowKey.ts'
+import { toBusyPartsPersistRows } from '../src/lib/busy/partsPersist.ts'
 import { transformBusyAccounting } from '../src/lib/busy/transform.ts'
 import { buildInvoiceVoucherWorkbook, buildPartyAccountWorkbook, workbookHeaders, workbookDataRows } from '../src/lib/busy/xlsx.ts'
 import { INVOICE_VOUCHER_HEADERS, PARTY_ACCOUNT_HEADERS } from '../src/lib/busy/types.ts'
@@ -337,7 +347,16 @@ test('25. branch gets exact debtor group string', () => {
 
 test('26. unsupported GST classification surfaces exception', () => {
   const mapped = mapPartsRows([
-    { 'Job Card_No': 'JC-1001', 'Net Amount': '100', 'GST %': '12' },
+    {
+      Invoice_No: 'IMBTAI2627000001',
+      Invoice_Date: '01/09/2026 05:30:00 AM',
+      'Job Card_No': 'JC-1001',
+      Net_Amount: '100',
+      'Part #': 'P12',
+      Quantity: '1',
+      'CGST Classification': 'Output CGST @6%',
+      'SGST Classification': 'Output SGST @6%',
+    },
   ], 'PV')
   assert.equal(mapped.lines[0].gstRate, null)
   const result = transformBusyAccounting({
@@ -451,7 +470,16 @@ test('workbook round-trip keeps per-invoice voucher shape', () => {
 
 test('parsed GST % 5 source line creates the 5% voucher row', () => {
   const mapped = mapPartsRows([
-    { 'Job Card_No': 'JC-1001', 'Net Amount': '100', 'GST %': '5' },
+    {
+      Invoice_No: 'IMBTAI2627000001',
+      Invoice_Date: '01/09/2026 05:30:00 AM',
+      'Job Card_No': 'JC-1001',
+      Net_Amount: '100',
+      'Part #': 'P5',
+      Quantity: '1',
+      'CGST Classification': 'Output CGST @2.5%',
+      'SGST Classification': 'Output SGST @2.5%',
+    },
   ], 'PV')
   assert.equal(mapped.lines[0].gstRate, 5)
   const result = transformBusyAccounting({
@@ -463,6 +491,79 @@ test('parsed GST % 5 source line creates the 5% voucher row', () => {
   assertInvoiceVoucherContract(result)
   assert.equal(result.preview[0].hasParts5Line, true)
   assert.equal(result.invoiceRows[0]['Item Name'], 'SPARE PARTS @5%')
+})
+
+test('Parts CRM Invoice_No and Invoice_Date are mapped and persisted as evidence', () => {
+  const mapped = mapPartsRows([
+    {
+      Invoice_No: 'PARTS-INV-9',
+      Invoice_Date: '08/09/2026 05:30:00 AM',
+      'Job Card_No': 'JC-1001',
+      Net_Amount: '200',
+      'Part #': '541288506307',
+      Quantity: '1',
+      'CGST Classification': 'Output CGST @9%',
+      'SGST Classification': 'Output SGST @9%',
+      'Tax Amount': '36',
+    },
+  ], 'PV', 'Parts - PV.csv')
+  assert.equal(mapped.errors.length, 0)
+  assert.equal(mapped.lines[0].invoiceNumber, 'PARTS-INV-9')
+  assert.equal(mapped.lines[0].invoiceDate, '2026-09-08')
+  assert.equal(parsePartsInvoiceDate('08/09/2026 05:30:00 AM'), '2026-09-08')
+  const persistRows = toBusyPartsPersistRows(mapped.lines, 'PV', 'Parts - PV.csv')
+  assert.equal(persistRows.length, 1)
+  assert.equal(persistRows[0].invoice_no, 'PARTS-INV-9')
+  assert.equal(persistRows[0].invoice_date, '2026-09-08')
+  assert.equal(persistRows[0].job_card_no, 'JC-1001')
+  assert.equal(persistRows[0].gst_rate, 18)
+  assert.equal(persistRows[0].net_amount, 200)
+  assert.ok(persistRows[0].source_row_key)
+  const result = transformBusyAccounting({
+    labourRows: [labour()],
+    partsLines: mapped.lines,
+    fromDate: '2026-09-01',
+    toDate: '2026-09-10',
+  })
+  assert.equal(result.invoiceRows[0]['bill no'], 'IMBTAI2627000001')
+  assert.equal(result.invoiceRows[0]['Bill date'], '01-09-2026')
+  assert.match(result.preview[0].issue, /Invoice_No PARTS-INV-9/)
+  assert.match(result.preview[0].issue, /Invoice_Date 2026-09-08/)
+  assert.equal(result.preview[0].status, 'warning')
+})
+
+test('re-upload of the same Parts content keeps the same source_row_key', () => {
+  const row = {
+    Invoice_No: 'IMBTAI2627007262',
+    Invoice_Date: '08/09/2026 05:30:00 AM',
+    'Job Card_No': 'JC-MbtPlt-JP1-2627-005977',
+    Net_Amount: '4,933.050850000',
+    'Part #': '541288506307',
+    Quantity: '1',
+    'CGST Classification': 'Output CGST @9%',
+    'SGST Classification': 'Output SGST @9%',
+    'Tax Amount': '887.949140000',
+  }
+  const first = mapPartsRows([row], 'PV', 'Parts - PV.csv')
+  const second = mapPartsRows([row], 'PV', 'Parts - PV (1).csv')
+  assert.equal(first.lines[0].sourceRowKey, second.lines[0].sourceRowKey)
+  assert.equal(
+    first.lines[0].sourceRowKey,
+    buildBusyPartsSourceRowKey({
+      sourceType: 'PV',
+      jobCardNo: 'JC-MbtPlt-JP1-2627-005977',
+      invoiceNo: 'IMBTAI2627007262',
+      invoiceDate: '2026-09-08',
+      gstRate: 18,
+      netAmount: 4933.05085,
+      partNo: '541288506307',
+      quantity: '1',
+    }),
+  )
+  const persistFirst = toBusyPartsPersistRows(first.lines, 'PV', 'Parts - PV.csv')
+  const persistSecond = toBusyPartsPersistRows(second.lines, 'PV', 'Parts - PV (1).csv')
+  assert.equal(persistFirst[0].source_row_key, persistSecond[0].source_row_key)
+  assert.notEqual(persistFirst[0].source_file_name, persistSecond[0].source_file_name)
 })
 
 test('PDI debtor group is Sitapura even when Labour branch is Tonk', () => {
@@ -477,6 +578,41 @@ test('PDI debtor group is Sitapura even when Labour branch is Tonk', () => {
   assert.equal(result.preview[0].branch, 'Tonk')
   assertInvoiceVoucherContract(result)
   assert.equal(result.invoiceRows.every((row) => row.naration === PDI_PARTY_NAME), true)
+})
+
+test('practical CRM Parts PV/EV files map Invoice_No and Invoice_Date', () => {
+  const files = [
+    { path: '/Users/apple/Downloads/Parts - PV.csv', portal: 'PV' },
+    { path: '/Users/apple/Downloads/Parts - EV.csv', portal: 'EV' },
+  ]
+  let inspected = 0
+  for (const file of files) {
+    if (!existsSync(file.path)) continue
+    inspected += 1
+    const buffer = readFileSync(file.path)
+    const rows = parseSpreadsheetBuffer(buffer, file.path)
+    assert.ok(rows.length > 0, `${file.path} has no data rows`)
+    const headers = Object.keys(rows[0])
+    assert.ok(headers.includes(PARTS_CRM_INVOICE_NO), `${file.path} missing ${PARTS_CRM_INVOICE_NO}`)
+    assert.ok(headers.includes(PARTS_CRM_INVOICE_DATE), `${file.path} missing ${PARTS_CRM_INVOICE_DATE}`)
+    assert.ok(headers.includes(PARTS_CRM_JOB_CARD_NO), `${file.path} missing ${PARTS_CRM_JOB_CARD_NO}`)
+    assert.ok(headers.includes(PARTS_CRM_NET_AMOUNT), `${file.path} missing ${PARTS_CRM_NET_AMOUNT}`)
+    const mapped = mapPartsRows(rows, file.portal, file.path.split('/').pop())
+    assert.equal(mapped.errors.length, 0)
+    assert.ok(mapped.lines.length > 0)
+    assert.equal(mapped.lines.every((line) => Boolean(line.invoiceNumber)), true)
+    assert.equal(mapped.lines.every((line) => Boolean(line.invoiceDate)), true)
+    const first = toBusyPartsPersistRows(mapped.lines, file.portal, file.path.split('/').pop())
+    const second = toBusyPartsPersistRows(mapped.lines, file.portal, 're-upload.csv')
+    assert.equal(first.length, second.length)
+    assert.deepEqual(first.map((row) => row.source_row_key), second.map((row) => row.source_row_key))
+    const with5 = mapped.lines.filter((line) => line.gstRate === 5).length
+    const with18 = mapped.lines.filter((line) => line.gstRate === 18).length
+    console.log(`  ${file.portal}: ${mapped.lines.length} persistable lines, 5%=${with5}, 18%=${with18}, skipped=${mapped.skippedIncomplete}`)
+  }
+  if (inspected === 0) {
+    console.log('  skipped: CRM Parts files were not on disk')
+  }
 })
 
 if (failed > 0) {

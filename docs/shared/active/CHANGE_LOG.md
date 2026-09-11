@@ -2,6 +2,10 @@
 
 Tracks documentation-sync updates for business logic, architecture, and access control.
 
+## 2026-09-11
+
+- BUSY Parts PV/EV uploads persist to `public.busy_parts` with mandatory CRM `Invoice_No` → `invoice_no` and `Invoice_Date` → `invoice_date`. Those fields are source evidence only; Labour invoice number/date remain BUSY voucher identity. Mismatches stay in the Parts table and surface as validation warnings. Dedup key is `source_row_key`. Re-upload replaces one `source_type`. Ledger: DBL-0044. Plan: `BUSY-001`.
+
 ## 2026-09-10
 
 - BUSY Invoice Vouchers always emit `SPARE PARTS @18%` and `LABOUR CHARGES @18%` for each eligible invoice, including Amount 0. `SPARE PARTS @5%` is emitted only when matched Parts data contains a genuine 5% GST line, not merely because the 5% amount is non-zero. Plan: `BUSY-001`.

@@ -259,19 +259,29 @@ export function transformBusyAccounting(input: {
     if (partsLines.length > 0) matchedPartKeys.add(partsKey)
 
     const partsAgg = aggregateParts(partsLines)
-    const mismatched = partsLines
-      .map((line) => normalizeInvoiceNumber(line.invoiceNumber))
-      .filter((partsInvoice) => partsInvoice && partsInvoice.toUpperCase() !== invoiceNumber.toUpperCase())
+    const mismatchedInvoices = [...new Set(
+      partsLines
+        .map((line) => normalizeInvoiceNumber(line.invoiceNumber))
+        .filter((partsInvoice) => partsInvoice && partsInvoice.toUpperCase() !== invoiceNumber.toUpperCase()),
+    )]
+    const mismatchedDates = [...new Set(
+      partsLines
+        .map((line) => String(line.invoiceDate ?? '').slice(0, 10))
+        .filter((partsDate) => partsDate && partsDate !== invoiceDate),
+    )]
 
     const issues: string[] = []
     if (party.issue) issues.push(party.issue)
     if (partsAgg.gstIssue) issues.push(partsAgg.gstIssue)
-    if (mismatched.length > 0) {
-      issues.push(`Parts invoice number ignored; Labour invoice ${invoiceNumber} used`)
+    if (mismatchedInvoices.length > 0) {
+      issues.push(`Parts Invoice_No ${mismatchedInvoices.join(', ')} stored but ignored; Labour invoice ${invoiceNumber} used`)
+    }
+    if (mismatchedDates.length > 0) {
+      issues.push(`Parts Invoice_Date ${mismatchedDates.join(', ')} stored but ignored; Labour invoice date ${invoiceDate} used`)
     }
 
     const blocked = Boolean(party.issue || partsAgg.gstIssue)
-    const warning = !blocked && mismatched.length > 0
+    const warning = !blocked && (mismatchedInvoices.length > 0 || mismatchedDates.length > 0)
     const status: BusyRowStatus = blocked ? 'blocked' : warning ? 'warning' : 'ready'
     const total = roundPaise(partsAgg.parts5 + partsAgg.parts18 + labourAmount)
 

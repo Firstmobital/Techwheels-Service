@@ -1,6 +1,6 @@
 # Database Change Ledger
 
-Last Updated: 2026-09-10
+Last Updated: 2026-09-11
 Authority: See docs/shared/reference/DATABASE_TRUTH.md for the full hierarchy. supabase/backups/full_metadata.sql is primary for schema/object metadata; local_folder/backups/full_database.sql is primary for row/seed data and full DB evidence. Existing rows below predate this split and reference full_database.sql as written at the time — left as historical record, not rewritten.
 Purpose: Single source of truth for planned and applied DB changes so no one guesses schema state.
 
@@ -59,6 +59,7 @@ Purpose: Single source of truth for planned and applied DB changes so no one gue
 | DBL-0041 | 2026-09-05 | `payroll_set_security_code` accepts SQL Editor (no JWT) and service_role in addition to `is_admin()`. Authenticated non-admin still rejected. No plaintext in migration. Timestamp 20260905183000. | function | supabase/migrations/20260905183000_payroll_set_security_code_sql_editor.sql | Cursor Agent | Techwheels Admin | PROPOSED | N/A | Paired checks in supabase/sql_checks/20260905183000_payroll_set_security_code_sql_editor_checks.sql | supabase/backups/full_metadata.sql (`public.payroll_set_security_code`) |
 | DBL-0042 | 2026-09-04 | Insurance company Settings catalog (`settings_insurance_companies` + aliases), GLOBAL like Models. Seed after Phase 0 collapse — not 59 raw card spellings. Timestamp assigned at apply (next unused after 20260905183000 / DBL-0041). Plan BODYSHOP-INSURER-001. Do not implement until that phase is scheduled. | schema,rls,data-backfill | supabase/migrations/YYYYMMDDHHMMSS_settings_insurance_companies.sql | Bodyshop Team + Platform Team + Accounts | Techwheels Admin | PROPOSED | N/A | Pending Phase 0 sign-off + apply + sql_checks. Confirmed absent from `full_metadata.sql` 2026-09-04 16:50 IST. | supabase/backups/full_metadata.sql (`public.settings_model_options` as pattern; new tables not present) |
 | DBL-0043 | 2026-09-10 | Register `busy` module (`/busy`) for BUSY accounting export. No new tables. Labour remains `psf_revenue_dms`. | schema | supabase/migrations/20260910120000_busy_accounting_module.sql | Cursor Agent | Techwheels Admin | PROPOSED | N/A | Paired checks in supabase/sql_checks/20260910120000_busy_accounting_module_checks.sql | supabase/backups/full_metadata.sql (`public.modules`) |
+| DBL-0044 | 2026-09-11 | Persist BUSY Parts PV/EV lines in `public.busy_parts` with mandatory `invoice_no`/`invoice_date` from CRM `Invoice_No`/`Invoice_Date`. Unique `source_row_key`. Replace-all per `source_type` via `replace_busy_parts_source`. Parts invoice fields are evidence only; Labour remains voucher identity. | schema,function,rls | supabase/migrations/20260911120000_busy_parts.sql | Cursor Agent | Techwheels Admin | PROPOSED | N/A | Paired checks in supabase/sql_checks/20260911120000_busy_parts_checks.sql | supabase/backups/full_metadata.sql (new table; Labour `psf_revenue_dms`) |
 
 ---
 

@@ -5,15 +5,19 @@ import {
   dateRangeError,
   downloadBusyWorkbook,
   fetchBusyLabourRows,
+  fetchBusyPartsLines,
   formatInr,
   loadBusyLabourSourceStatus,
+  loadBusyPartsSourceStatus,
   parsePartsSpreadsheet,
+  replaceBusyPartsSource,
   transformBusyAccounting,
   buildInvoiceVoucherWorkbook,
   buildPartyAccountWorkbook,
   type BusyPreviewRow,
 } from '../lib/busy'
 import type { BusyLabourSourceStatus } from '../lib/busy/labourSource'
+import type { BusyPartsSourceStatus } from '../lib/busy/partsSource'
 import type { BusyPartsLine, VehiclePortal } from '../lib/busy/types'
 
 interface PartsSlotState {
@@ -21,9 +25,20 @@ interface PartsSlotState {
   rowCount: number
   error: string | null
   lines: BusyPartsLine[]
+  persisted: boolean
+  uploadedAt: string | null
+  saving: boolean
 }
 
-const EMPTY_SLOT: PartsSlotState = { fileName: null, rowCount: 0, error: null, lines: [] }
+const EMPTY_SLOT: PartsSlotState = {
+  fileName: null,
+  rowCount: 0,
+  error: null,
+  lines: [],
+  persisted: false,
+  uploadedAt: null,
+  saving: false,
+}
 
 function statusTone(status: BusyPreviewRow['status']): { bg: string; color: string; label: string } {
   if (status === 'ready') return { bg: '#f0fdf4', color: '#15803d', label: 'Ready' }
@@ -35,6 +50,7 @@ function statusTone(status: BusyPreviewRow['status']): { bg: string; color: stri
 export default function BusyAccountingPage() {
   const [dateRange, setDateRange] = useState<DateRange>(currentMonthRange)
   const [labourStatus, setLabourStatus] = useState<BusyLabourSourceStatus | null>(null)
+  const [partsStatus, setPartsStatus] = useState<BusyPartsSourceStatus | null>(null)
   const [labourLoading, setLabourLoading] = useState(false)
   const [processError, setProcessError] = useState<string | null>(null)
   const [pvParts, setPvParts] = useState<PartsSlotState>(EMPTY_SLOT)
@@ -49,6 +65,46 @@ export default function BusyAccountingPage() {
     let active = true
     loadBusyLabourSourceStatus().then((status) => {
       if (active) setLabourStatus(status)
+    })
+    Promise.all([loadBusyPartsSourceStatus(), fetchBusyPartsLines().catch((error: unknown) => {
+      throw error
+    })]).then(([status, lines]) => {
+      if (!active) return
+      setPartsStatus(status)
+      const pvLines = lines.filter((line) => line.portal === 'PV')
+      const evLines = lines.filter((line) => line.portal === 'EV')
+      setPvParts({
+        fileName: status.pvFileName,
+        rowCount: pvLines.length,
+        error: status.error,
+        lines: pvLines,
+        persisted: pvLines.length > 0,
+        uploadedAt: status.latestPvUploadedAt,
+        saving: false,
+      })
+      setEvParts({
+        fileName: status.evFileName,
+        rowCount: evLines.length,
+        error: status.error,
+        lines: evLines,
+        persisted: evLines.length > 0,
+        uploadedAt: status.latestEvUploadedAt,
+        saving: false,
+      })
+    }).catch((error: unknown) => {
+      if (!active) return
+      const message = error instanceof Error ? error.message : String(error)
+      setPartsStatus({
+        pvAvailable: false,
+        evAvailable: false,
+        pvCount: 0,
+        evCount: 0,
+        pvFileName: null,
+        evFileName: null,
+        latestPvUploadedAt: null,
+        latestEvUploadedAt: null,
+        error: message,
+      })
     })
     return () => { active = false }
   }, [])
@@ -92,20 +148,72 @@ export default function BusyAccountingPage() {
 
   const handlePartsFile = useCallback(async (file: File, portal: VehiclePortal) => {
     const setter = portal === 'PV' ? setPvParts : setEvParts
-    setter({ fileName: file.name, rowCount: 0, error: null, lines: [] })
+    setter({
+      fileName: file.name,
+      rowCount: 0,
+      error: null,
+      lines: [],
+      persisted: false,
+      uploadedAt: null,
+      saving: true,
+    })
     try {
       const parsed = await parsePartsSpreadsheet(file, portal)
       if (parsed.errors.length > 0) {
-        setter({ fileName: file.name, rowCount: 0, error: parsed.errors.join('; '), lines: [] })
+        setter({
+          fileName: file.name,
+          rowCount: 0,
+          error: parsed.errors.join('; '),
+          lines: [],
+          persisted: false,
+          uploadedAt: null,
+          saving: false,
+        })
         return
       }
-      setter({ fileName: file.name, rowCount: parsed.lines.length, error: null, lines: parsed.lines })
+      try {
+        const replaced = await replaceBusyPartsSource(portal, file.name, parsed.lines)
+        const persisted = await fetchBusyPartsLines()
+        const portalLines = persisted.filter((line) => line.portal === portal)
+        const status = await loadBusyPartsSourceStatus()
+        setPartsStatus(status)
+        setter({
+          fileName: file.name,
+          rowCount: portalLines.length,
+          error: parsed.skippedIncomplete > 0
+            ? `${parsed.skippedIncomplete} incomplete source rows skipped (Invoice_No / Invoice_Date / Job Card_No / Net_Amount required)`
+            : null,
+          lines: portalLines,
+          persisted: true,
+          uploadedAt: portal === 'PV' ? status.latestPvUploadedAt : status.latestEvUploadedAt,
+          saving: false,
+        })
+        if (replaced.inserted !== portalLines.length) {
+          setter((current) => ({
+            ...current,
+            error: [current.error, `Persisted ${replaced.inserted} rows; reloaded ${portalLines.length}`].filter(Boolean).join('; '),
+          }))
+        }
+      } catch (persistError) {
+        setter({
+          fileName: file.name,
+          rowCount: parsed.lines.length,
+          error: `Parsed locally; persist failed: ${persistError instanceof Error ? persistError.message : String(persistError)}`,
+          lines: parsed.lines,
+          persisted: false,
+          uploadedAt: null,
+          saving: false,
+        })
+      }
     } catch (error) {
       setter({
         fileName: file.name,
         rowCount: 0,
         error: error instanceof Error ? error.message : String(error),
         lines: [],
+        persisted: false,
+        uploadedAt: null,
+        saving: false,
       })
     }
   }, [])
@@ -199,20 +307,18 @@ export default function BusyAccountingPage() {
 
         <PartsUploadCard
           title="Parts - PV"
-          description="Used only for 5% / 18% Parts GST segregation."
+          description="Persisted for 5% / 18% GST amounts. Invoice_No and Invoice_Date are source evidence; Labour remains voucher truth."
           slot={pvParts}
           inputRef={pvInputRef}
           onPick={() => pvInputRef.current?.click()}
-          onClear={() => setPvParts(EMPTY_SLOT)}
           onFile={(file) => void handlePartsFile(file, 'PV')}
         />
         <PartsUploadCard
           title="Parts - EV"
-          description="Used only for 5% / 18% Parts GST segregation."
+          description="Persisted for 5% / 18% GST amounts. Invoice_No and Invoice_Date are source evidence; Labour remains voucher truth."
           slot={evParts}
           inputRef={evInputRef}
           onPick={() => evInputRef.current?.click()}
-          onClear={() => setEvParts(EMPTY_SLOT)}
           onFile={(file) => void handlePartsFile(file, 'EV')}
         />
       </div>
@@ -221,6 +327,12 @@ export default function BusyAccountingPage() {
         <div className="toast error" style={{ marginBottom: 12 }}>
           <Icon name="alert" size={14} />
           {processError}
+        </div>
+      )}
+      {partsStatus?.error && (
+        <div className="toast error" style={{ marginBottom: 12 }}>
+          <Icon name="alert" size={14} />
+          Parts persist: {partsStatus.error}
         </div>
       )}
 
@@ -356,7 +468,6 @@ function PartsUploadCard({
   slot,
   inputRef,
   onPick,
-  onClear,
   onFile,
 }: {
   title: string
@@ -364,7 +475,6 @@ function PartsUploadCard({
   slot: PartsSlotState
   inputRef: RefObject<HTMLInputElement | null>
   onPick: () => void
-  onClear: () => void
   onFile: (file: File) => void
 }) {
   return (
@@ -393,15 +503,19 @@ function PartsUploadCard({
           <div>
             <div style={{ fontWeight: 700, fontSize: 13 }}>{slot.fileName ?? 'Choose CSV / Excel'}</div>
             <div style={{ fontSize: 12, color: 'var(--muted)' }}>
-              {slot.fileName ? `${slot.rowCount.toLocaleString('en-IN')} Parts lines` : 'Drop or browse a Parts file'}
+              {slot.saving
+                ? 'Saving Parts lines…'
+                : slot.fileName
+                  ? `${slot.rowCount.toLocaleString('en-IN')} Parts lines${slot.persisted ? ' persisted' : ''}`
+                  : 'Drop or browse a Parts file. Re-upload replaces this source.'}
             </div>
           </div>
         </div>
         {slot.error && <div className="toast error" style={{ marginTop: 8 }}>{slot.error}</div>}
-        {slot.fileName && (
-          <button type="button" className="btn btn--ghost btn--sm" style={{ marginTop: 8 }} onClick={onClear}>
-            Remove file
-          </button>
+        {slot.persisted && slot.uploadedAt && (
+          <div style={{ marginTop: 8, fontSize: 12, color: 'var(--muted)' }}>
+            Last upload {new Date(slot.uploadedAt).toLocaleString('en-IN')}
+          </div>
         )}
       </div>
     </div>

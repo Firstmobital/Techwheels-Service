@@ -26,11 +26,15 @@ export interface BusyPartsLine {
   portal: VehiclePortal
   jobCardNumber: string
   invoiceNumber: string
+  invoiceDate: string
   netAmount: number
   taxAmount: number | null
   gstRate: BusyGstBucket | null
+  gstRateRaw: number | null
   gstIssue: string | null
   sourceRowNumber: number
+  sourceRowKey: string
+  sourceFileName: string
 }
 
 export interface BusyPartsParseResult {
@@ -38,6 +42,7 @@ export interface BusyPartsParseResult {
   fileName: string
   lines: BusyPartsLine[]
   errors: string[]
+  skippedIncomplete: number
 }
 
 export const INVOICE_VOUCHER_HEADERS = [
