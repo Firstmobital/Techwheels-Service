@@ -3,7 +3,6 @@ import Header from './components/Header'
 import BottomNav, { type TabType } from './components/BottomNav'
 import AuthPage from './pages/AuthPage'
 import DashboardPage from './pages/DashboardPage'
-import RepairTrackerPage from './pages/RepairTrackerPage'
 import ServiceBookingPage from './pages/ServiceBookingPage'
 import InvoicesPage from './pages/InvoicesPage'
 import FeedbackPage from './pages/FeedbackPage'
@@ -57,9 +56,6 @@ export default function App() {
       <main className="main-content">
         {currentTab === 'dashboard' && (
           <DashboardPage vehicle={selectedVehicle} onNavigate={setCurrentTab} />
-        )}
-        {currentTab === 'tracker' && (
-          <RepairTrackerPage vehicle={selectedVehicle} />
         )}
         {currentTab === 'booking' && (
           <ServiceBookingPage vehicle={selectedVehicle} />

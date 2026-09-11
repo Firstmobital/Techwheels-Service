@@ -1,4 +1,4 @@
-export type TabType = 'dashboard' | 'tracker' | 'booking' | 'invoices' | 'feedback'
+export type TabType = 'dashboard' | 'booking' | 'invoices' | 'feedback'
 
 interface BottomNavProps {
   currentTab: TabType
@@ -8,7 +8,6 @@ interface BottomNavProps {
 export default function BottomNav({ currentTab, onSelectTab }: BottomNavProps) {
   const tabs: Array<{ key: TabType; label: string; icon: string }> = [
     { key: 'dashboard', label: 'Home', icon: '🏠' },
-    { key: 'tracker', label: 'Live Track', icon: '🔧' },
     { key: 'booking', label: 'Book Service', icon: '📅' },
     { key: 'invoices', label: 'Bills', icon: '📄' },
     { key: 'feedback', label: 'Feedback', icon: '⭐' },
@@ -24,7 +23,7 @@ export default function BottomNav({ currentTab, onSelectTab }: BottomNavProps) {
           onClick={() => onSelectTab(tab.key)}
         >
           <div className="nav-icon-wrap">
-            <span style={{ fontSize: 18 }}>{tab.icon}</span>
+            <span style={{ fontSize: 19 }}>{tab.icon}</span>
           </div>
           <span>{tab.label}</span>
         </button>

@@ -72,19 +72,96 @@ export async function fetchCustomerVehicles(searchQuery: string): Promise<Custom
   const query = searchQuery.trim().toUpperCase()
   if (!query) return []
 
-  const { data, error } = await supabase
-    .from('service_reception_entries')
-    .select('*')
-    .or(`reg_number.ilike.%${query}%,owner_phone.ilike.%${query}%,jc_number.ilike.%${query}%`)
-    .order('created_at', { ascending: false })
-    .limit(10)
+  const results: CustomerVehicle[] = []
 
-  if (error) {
-    console.error('Error fetching customer vehicles:', error)
-    throw new Error(error.message)
+  // A. Search service_reception_entries
+  try {
+    const { data, error } = await supabase
+      .from('service_reception_entries')
+      .select('*')
+      .or(`reg_number.ilike.%${query}%,owner_phone.ilike.%${query}%,jc_number.ilike.%${query}%`)
+      .order('created_at', { ascending: false })
+      .limit(10)
+
+    if (!error && data) {
+      results.push(...(data as CustomerVehicle[]))
+    }
+  } catch (err) {
+    console.warn('service_reception_entries lookup failed:', err)
   }
 
-  return (data || []) as CustomerVehicle[]
+  // B. Search bodyshop_repair_cards
+  try {
+    const { data: bCards, error: bError } = await supabase
+      .from('bodyshop_repair_cards')
+      .select('*')
+      .or(`reg_number.ilike.%${query}%,customer_phone.ilike.%${query}%,job_card_no.ilike.%${query}%`)
+      .order('created_at', { ascending: false })
+      .limit(10)
+
+    if (!bError && bCards) {
+      for (const card of bCards) {
+        // avoid duplicate if already found
+        if (!results.some((r) => r.reg_number?.toUpperCase() === card.reg_number?.toUpperCase())) {
+          results.push({
+            id: card.id,
+            reg_number: card.reg_number,
+            model: card.model || 'Tata Vehicle',
+            owner_name: card.customer_name,
+            owner_phone: card.customer_phone,
+            service_type: 'Bodyshop Repair',
+            sa_name: card.sa_name || 'Service Advisor',
+            sa_display_name: card.sa_name || 'Service Advisor',
+            jc_number: card.job_card_no,
+            branch: card.branch || 'Main Workshop',
+            created_at: card.created_at || new Date().toISOString(),
+            invoice_done_at: card.delivery_marked_at || null,
+            billed_amount: card.billed_amount || card.estimated_amount || null,
+            payment_status: card.payment_status || card.do_payment_status || 'pending',
+          })
+        }
+      }
+    }
+  } catch (err) {
+    console.warn('bodyshop_repair_cards lookup failed:', err)
+  }
+
+  // C. Search vehicles master table
+  if (results.length === 0) {
+    try {
+      const { data: vList, error: vError } = await supabase
+        .from('vehicles')
+        .select('*')
+        .or(`reg_number.ilike.%${query}%,owner_phone.ilike.%${query}%`)
+        .limit(5)
+
+      if (!vError && vList) {
+        for (const v of vList) {
+          if (!results.some((r) => r.reg_number?.toUpperCase() === v.reg_number?.toUpperCase())) {
+            results.push({
+              id: 9999,
+              reg_number: v.reg_number,
+              model: v.model,
+              owner_name: v.owner_name,
+              owner_phone: v.owner_phone,
+              service_type: 'General Service',
+              sa_name: 'Customer Relationship Advisor',
+              jc_number: null,
+              branch: v.dealer_city || 'Workshop',
+              created_at: v.created_at || new Date().toISOString(),
+              invoice_done_at: null,
+              billed_amount: null,
+              payment_status: 'none',
+            })
+          }
+        }
+      }
+    } catch (err) {
+      console.warn('vehicles table lookup failed:', err)
+    }
+  }
+
+  return results
 }
 
 // 2. Fetch Bodyshop Repair Card for vehicle
