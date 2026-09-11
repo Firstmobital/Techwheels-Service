@@ -47,7 +47,7 @@ BODYSHOP-SETTLEMENT-001 Phase 7 Task 7.1 (dedicated `/accounts` queue) and BODYS
 **Locked product decisions**
 
 - v1 is a full desk, not view-only.
-- Mechanical money is **manual capture**. Do not auto-join `psf_revenue_dms` / `job_card_closed_data`.
+- Mechanical money is **manual Save**. Capture may **Fetch from DMS** into the form (invoice number, date, billed = `total_invoice_amount`) when exactly one live `psf_revenue_dms` row exists. Do not auto-write remaining or receipts. Do not auto-join `job_card_closed_data`.
 - Do not change Mark Done, Floor Incharge, Repair Tracker invoice/DO capture, Recovery list filter, or BUSY.
 
 ```mermaid
@@ -143,7 +143,7 @@ Pattern: `src/pages/BodyshopRecoveryPage.tsx` (KPIs, search, table, Excel, on-pa
 **Mechanical desk**
 
 - Columns: Mark Done at, JC, reg, model, service type, SA, branch, owner, invoice number, billed amount, payment status, notes
-- Capture / Payments modal: invoice number, date, billed amount, and invoice file (reuse unused SA `invoice_storage_path` upload). Invoice header locks after the first receipt.
+- Capture / Payments modal: invoice number, date, billed amount, and invoice file (reuse unused SA `invoice_storage_path` upload). **Fetch from DMS** fills those fields when the JC has exactly one live DMS invoice; Accounts still taps Save. 0 or 2+ DMS rows shows “No unique DMS invoice”. Remaining stays billed minus receipts. Invoice header locks after the first receipt.
 - Receipts are append-only (`accounts_mechanical_payment_lines`): this amount + Payment mode (Cash/UPI/Card/Cheque/Bank/Other) + reference. Payment status is automatic from billed vs sum(receipts). Create Gatepass when remaining is ₹0.
 - KPI: Mark Done count, invoice-pending count, billed sum, customer remaining / received
 
@@ -172,6 +172,7 @@ Pattern: `src/pages/BodyshopRecoveryPage.tsx` (KPIs, search, table, Excel, on-pa
 - [x] **Task 3.2:** `customer_payment` variant on settlement panel.
 - [x] **Task 3.3:** Accounts page — Mechanical capture desk.
 - [x] **Task 3.4:** Accounts page — Bodyshop customer-diff desk + Excel.
+- [x] **Task 3.5:** Mechanical Capture **Fetch from DMS** (form fill only; DBL-0048). No remaining write. No bulk list fill.
 
 ### Phase 4: Closeout
 - [x] **Task 4.1:** MODULE_ROUTE_CONTRACT (grant Accounts users after SQL apply).
@@ -210,6 +211,7 @@ Pattern: `src/pages/BodyshopRecoveryPage.tsx` (KPIs, search, table, Excel, on-pa
 ✅ 3.2 | customer_payment variant | Eng | 2026-09-11 | 2026-09-11 | Do not reuse do_payment
 ✅ 3.3 | Mechanical desk | Eng | 2026-09-11 | 2026-09-11 | Manual invoice capture
 ✅ 3.4 | Bodyshop desk | Eng | 2026-09-11 | 2026-09-11 | Customer remaining book
+⏳ 3.5 | Capture Fetch from DMS | Eng | 2026-09-11 | 2026-09-11 | DBL-0048 applied; web button pending deploy
 ```
 
 ### Phase 4
@@ -259,7 +261,8 @@ Pattern: `src/pages/BodyshopRecoveryPage.tsx` (KPIs, search, table, Excel, on-pa
 ## Out of v1
 
 - Mobile
-- Auto-fill mechanical invoice from DMS
+- Bulk “Fill unmatched from DMS” on the Mechanical list (Capture Fetch is in v1.1)
+- Auto-write Remaining / mark DMS CASH as received
 - Changing BUSY eligibility or `/busy` UI
 - Bank UTR matching
 - Changing SA Mark Done or Floor Incharge

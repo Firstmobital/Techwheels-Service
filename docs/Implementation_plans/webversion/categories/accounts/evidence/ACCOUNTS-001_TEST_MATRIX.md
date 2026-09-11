@@ -15,6 +15,9 @@
 - [ ] Floor Incharge type + Mark Done JC appears in Accounts → Mechanical
 - [ ] Accident / Rusting never appear
 - [ ] Capture invoice number, billed amount, notes; row updates
+- [ ] Capture **Fetch from DMS** fills invoice number/date/billed when exactly one live DMS row exists; Save still required; Remaining unchanged
+- [ ] 0 or 2+ DMS rows shows “No unique DMS invoice”; typing still works
+- [ ] Fetch hidden after first receipt (invoice locked)
 - [ ] User without `accounts` gets AccessDenied at `/accounts`
 
 ## Bodyshop

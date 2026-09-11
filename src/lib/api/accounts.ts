@@ -89,6 +89,15 @@ export interface UpsertMechanicalInvoiceInput {
   billedAmount: number | null
 }
 
+export interface MechanicalDmsInvoiceLookup {
+  jc_number: string | null
+  match_count: number
+  unique: boolean
+  invoice_number: string | null
+  invoice_date: string | null
+  total_invoice_amount: number | null
+}
+
 function asArray<T>(data: unknown): T[] {
   return Array.isArray(data) ? (data as T[]) : []
 }
@@ -103,6 +112,24 @@ export async function listAccountsBodyshopCases(): Promise<AccountsBodyshopCase[
   const { data, error } = await supabase.rpc('list_accounts_bodyshop_cases')
   if (error) throw new Error(settlementRpcError(error))
   return asArray<AccountsBodyshopCase>(data)
+}
+
+export async function lookupAccountsMechanicalDmsInvoice(
+  jcNumber: string,
+): Promise<MechanicalDmsInvoiceLookup> {
+  const { data, error } = await supabase.rpc('lookup_accounts_mechanical_dms_invoice', {
+    p_jc_number: jcNumber,
+  })
+  if (error) throw new Error(settlementRpcError(error))
+  const raw = (data ?? {}) as MechanicalDmsInvoiceLookup
+  return {
+    jc_number: raw.jc_number ?? null,
+    match_count: Number(raw.match_count ?? 0),
+    unique: Boolean(raw.unique),
+    invoice_number: raw.invoice_number ?? null,
+    invoice_date: raw.invoice_date ? String(raw.invoice_date).slice(0, 10) : null,
+    total_invoice_amount: raw.total_invoice_amount == null ? null : Number(raw.total_invoice_amount),
+  }
 }
 
 export async function upsertAccountsMechanicalInvoice(

@@ -9,6 +9,7 @@ import {
   listAccountsBodyshopCases,
   listAccountsMechanicalCases,
   listAccountsMechanicalPayments,
+  lookupAccountsMechanicalDmsInvoice,
   mechanicalRemaining,
   openBodyshopGatepass,
   openMechanicalGatepass,
@@ -20,6 +21,7 @@ import {
   type AccountsMechanicalCase,
   type AccountsMechanicalPayment,
   type AccountsPaymentMode,
+  type MechanicalDmsInvoiceLookup,
 } from '../lib/api/accounts'
 import { uploadServiceAdvisorInvoice } from '../lib/api/reception'
 import type { RepairCard } from '../lib/api/bodyshopRepair'
@@ -109,6 +111,8 @@ export default function AccountsPage() {
   const [postingPay, setPostingPay] = useState(false)
   const [uploadingInvoice, setUploadingInvoice] = useState(false)
   const [payError, setPayError] = useState<string | null>(null)
+  const [dmsLookup, setDmsLookup] = useState<MechanicalDmsInvoiceLookup | null>(null)
+  const [loadingDms, setLoadingDms] = useState(false)
 
   const [postRow, setPostRow] = useState<AccountsBodyshopCase | null>(null)
   const [postCard, setPostCard] = useState<RepairCard | null>(null)
@@ -249,12 +253,39 @@ export default function AccountsPage() {
     setPaymentReference('')
     setPayError(null)
     setPayLines([])
+    setDmsLookup(null)
     try {
       const lines = await listAccountsMechanicalPayments(row.reception_entry_id)
       setPayLines(lines)
     } catch {
       setPayLines([])
     }
+    setLoadingDms(true)
+    try {
+      setDmsLookup(await lookupAccountsMechanicalDmsInvoice(row.jc_number))
+    } catch {
+      setDmsLookup({
+        jc_number: row.jc_number,
+        match_count: 0,
+        unique: false,
+        invoice_number: null,
+        invoice_date: null,
+        total_invoice_amount: null,
+      })
+    } finally {
+      setLoadingDms(false)
+    }
+  }
+
+  function applyDmsToForm() {
+    if (!dmsLookup?.unique || dmsLookup.invoice_number == null || dmsLookup.total_invoice_amount == null) {
+      flash('No unique DMS invoice', false)
+      return
+    }
+    setInvoiceNumber(dmsLookup.invoice_number)
+    setInvoiceDate(dmsLookup.invoice_date ?? '')
+    setBilledAmount(String(dmsLookup.total_invoice_amount))
+    flash('DMS invoice loaded. Save invoice to keep it.')
   }
 
   async function saveCapture() {
@@ -778,10 +809,21 @@ export default function AccountsPage() {
                   </label>
                 </div>
                 {payLines.length === 0 && (
-                  <div style={{ marginTop: 14 }}>
+                  <div style={{ marginTop: 14, display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center' }}>
                     <button type="button" className="btn btn--primary" disabled={saving} onClick={() => void saveCapture()}>
                       {saving ? 'Saving…' : 'Save invoice'}
                     </button>
+                    {loadingDms ? (
+                      <span style={{ color: 'var(--muted)', fontSize: 13 }}>Looking up DMS…</span>
+                    ) : dmsLookup?.unique ? (
+                      <button type="button" className="btn" onClick={applyDmsToForm}>
+                        Fetch from DMS
+                        {dmsLookup.invoice_number ? ` · ${dmsLookup.invoice_number}` : ''}
+                        {dmsLookup.total_invoice_amount != null ? ` · ${inr(dmsLookup.total_invoice_amount)}` : ''}
+                      </button>
+                    ) : (
+                      <span style={{ color: 'var(--muted)', fontSize: 13 }}>No unique DMS invoice</span>
+                    )}
                   </div>
                 )}
               </div>
