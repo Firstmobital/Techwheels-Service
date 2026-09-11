@@ -1,5 +1,5 @@
 {
-  "generated_at_utc": "2026-09-11T05:47:16.171Z",
+  "generated_at_utc": "2026-09-11T08:29:42.646Z",
   "scanned_files": 66,
   "violations": 0,
   "scanned": [
@@ -373,6 +373,14 @@
     },
     {
       "file": "docs/Implementation_plans/webversion/categories/operations/active/EARNINGS-EMAIL-002_SA_BODYSHOP_MANPOWER_EARNINGS_EMAIL_PLAN_2026-07-17.md",
+      "checks": {
+        "metrics_automated_rows": 0,
+        "changelog_automated_rows": 0,
+        "snapshot_blocks": 0
+      }
+    },
+    {
+      "file": "docs/Implementation_plans/webversion/categories/operations/active/OPS-PSF-BOT-001_POST_FEEDBACK_BOT_ROUTING_PLAN_2026-09-11.md",
       "checks": {
         "metrics_automated_rows": 0,
         "changelog_automated_rows": 0,

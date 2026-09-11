@@ -128,3 +128,9 @@ Tracks migration/check files promoted to supabase/exec_success_migrations after 
 - moved migration: 20260709180000_updation_reminders.sql
 - moved checks: 20260709180000_updation_reminders_checks.sql
 - dump reference: dump_missing
+
+## 2026-09-11T08:29:01Z
+- prefix: 20260911140000
+- moved migration: 20260911140000_route_eligible_post_feedback_to_bot.sql
+- moved checks: 20260911140000_route_eligible_post_feedback_to_bot_checks.sql
+- dump reference: dump_missing

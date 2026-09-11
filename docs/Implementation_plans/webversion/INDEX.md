@@ -65,6 +65,7 @@ Use this file as daily command center:
 | OPS-INCOME-LEGACY | operations | Active | Operations Team | `docs/Implementation_plans/webversion/categories/operations/active/income_technician.md` |
 | OPS-UPDATION-001 | operations | Implemented (pending manual Meta setup) | Operations Team | `docs/Implementation_plans/webversion/categories/operations/active/OPS-UPDATION-001_UPDATION_REMINDER_WHATSAPP_AUTOMATION_PLAN.md` |
 | BUSY-001 | operations | Active (web implemented; BUSY import pending) | Accounts + Platform Team | `docs/Implementation_plans/webversion/categories/operations/active/BUSY-001_BUSY_ACCOUNTING_EXPORT_PLAN_2026-09-10.md` |
+| OPS-PSF-BOT-001 | operations | Active (DBL-0049 VERIFIED) | Operations Team + Platform Team | `docs/Implementation_plans/webversion/categories/operations/active/OPS-PSF-BOT-001_POST_FEEDBACK_BOT_ROUTING_PLAN_2026-09-11.md` |
 | PARTS-001 | parts | Active (spec locked; preview first) | Parts Team + Platform Team | `docs/Implementation_plans/webversion/categories/parts/active/PARTS-001_SERVICE_ADVISOR_PARTS_ORDER_DATE_AND_GGN_STOCK_PLAN_2026-08-24.md` |
 | RBAC-001 | rbac | Active | RBAC Team | `docs/Implementation_plans/webversion/categories/rbac/active/RBAC-001_MASTER_PLAN_ACTIVE.md` |
 | RBAC-HOME | rbac | Active | RBAC Team | `docs/Implementation_plans/webversion/categories/rbac/active/RBAC_HOME_DYNAMIC_ROLE_VISIBILITY_PLAN_2026-06-05.md` |
@@ -107,6 +108,7 @@ Use this file as daily command center:
 | warranty | `docs/Implementation_plans/webversion/categories/warranty/evidence/WARRANTY-002_DESIGN_AUDIT_MISSING_WIRING.md` |
 | parts | `docs/Implementation_plans/webversion/categories/parts/evidence/PARTS-001_GGN_STOCK_SHEET_AUDIT_2026-08-24.md` |
 | parts | `docs/Implementation_plans/webversion/categories/parts/evidence/PARTS-001_GGN_STOCK_MOCKUP.html` |
+| operations | `docs/Implementation_plans/webversion/categories/operations/evidence/OPS-PSF-BOT-001_VALIDATION_2026-09-11.md` |
 
 ---
 

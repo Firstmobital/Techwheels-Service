@@ -1,10 +1,23 @@
 {
-  "generated_at_utc": "2026-07-03T08:11:54.543Z",
+  "generated_at_utc": "2026-09-11T08:29:49.702Z",
   "advisory_only": true,
-  "governance_docs_scanned": 34,
+  "governance_docs_scanned": 35,
   "checks": {
-    "broken_or_stale_links": [],
-    "root_level_doc_violations": [],
+    "broken_or_stale_links": [
+      {
+        "file": "docs/shared/reference/MODULE_ROUTE_CONTRACT.md",
+        "link_target": "../../../local_folder/backups/full_database.sql",
+        "resolved_path": "local_folder/backups/full_database.sql",
+        "possible_moved_to": null
+      }
+    ],
+    "root_level_doc_violations": [
+      {
+        "scope": "docs-root",
+        "file": "docs/META_WHATSAPP_TEMPLATES.md",
+        "rule": "STRUCTURE_GUIDE.md Section 2.1 — docs/ root reserved for governance anchors only"
+      }
+    ],
     "vendor_ai_instruction_files": [],
     "db_hierarchy_contradiction_flags": [],
     "generated_artifact_drift": {
@@ -20,5 +33,5 @@
       }
     ]
   },
-  "total_issues": 1
+  "total_issues": 3
 }
