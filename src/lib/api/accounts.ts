@@ -1,8 +1,19 @@
+import { AUTODOC_BUCKET } from '../autodocStorage'
 import { supabase } from '../supabase'
 import type { OverallStatus, RepairCard } from './bodyshopRepair'
 import { settlementRpcError } from './bodyshopSettlement'
 
 export type AccountsPaymentStatus = 'pending' | 'partial' | 'received' | 'not_received'
+export type AccountsPaymentMode = 'cash' | 'upi' | 'card' | 'cheque' | 'bank' | 'other'
+
+export const ACCOUNTS_PAYMENT_MODES: { value: AccountsPaymentMode; label: string }[] = [
+  { value: 'cash', label: 'Cash' },
+  { value: 'upi', label: 'UPI' },
+  { value: 'card', label: 'Card' },
+  { value: 'cheque', label: 'Cheque' },
+  { value: 'bank', label: 'Bank transfer' },
+  { value: 'other', label: 'Other' },
+]
 
 export interface AccountsMechanicalCase {
   reception_entry_id: number
@@ -24,10 +35,25 @@ export interface AccountsMechanicalCase {
   billed_amount: number | null
   payment_status: AccountsPaymentStatus | null
   amount_received: number | null
+  remaining_amount: number | null
   payment_notes: string | null
   captured_by: string | null
   captured_at: string | null
   invoice_updated_at: string | null
+  invoice_storage_path: string | null
+  invoice_file_name: string | null
+  invoice_drive_url: string | null
+}
+
+export interface AccountsMechanicalPayment {
+  id: number
+  reception_entry_id: number
+  mechanical_invoice_id: number
+  amount: number
+  payment_mode: AccountsPaymentMode
+  reference: string | null
+  posted_by: string | null
+  posted_at: string
 }
 
 export interface AccountsBodyshopCase {
@@ -61,9 +87,6 @@ export interface UpsertMechanicalInvoiceInput {
   invoiceNumber: string | null
   invoiceDate: string | null
   billedAmount: number | null
-  paymentStatus: AccountsPaymentStatus
-  amountReceived: number | null
-  paymentNotes: string | null
 }
 
 function asArray<T>(data: unknown): T[] {
@@ -90,12 +113,62 @@ export async function upsertAccountsMechanicalInvoice(
     p_invoice_number: input.invoiceNumber,
     p_invoice_date: input.invoiceDate,
     p_billed_amount: input.billedAmount,
-    p_payment_status: input.paymentStatus,
-    p_amount_received: input.amountReceived,
-    p_payment_notes: input.paymentNotes,
   })
   if (error) throw new Error(settlementRpcError(error))
   return data as AccountsMechanicalCase
+}
+
+export async function addAccountsMechanicalPayment(input: {
+  receptionEntryId: number
+  amount: number
+  paymentMode: AccountsPaymentMode
+  reference: string | null
+}): Promise<AccountsMechanicalCase> {
+  const { data, error } = await supabase.rpc('add_accounts_mechanical_payment', {
+    p_reception_entry_id: input.receptionEntryId,
+    p_amount: input.amount,
+    p_payment_mode: input.paymentMode,
+    p_reference: input.reference,
+  })
+  if (error) throw new Error(settlementRpcError(error))
+  return data as AccountsMechanicalCase
+}
+
+export async function listAccountsMechanicalPayments(
+  receptionEntryId: number,
+): Promise<AccountsMechanicalPayment[]> {
+  const { data, error } = await supabase.rpc('list_accounts_mechanical_payments', {
+    p_reception_entry_id: receptionEntryId,
+  })
+  if (error) throw new Error(settlementRpcError(error))
+  return asArray<AccountsMechanicalPayment>(data)
+}
+
+export function mechanicalRemaining(row: Pick<AccountsMechanicalCase, 'billed_amount' | 'amount_received' | 'remaining_amount'>): number | null {
+  if (row.remaining_amount != null) return Number(row.remaining_amount)
+  if (row.billed_amount == null) return null
+  return Math.max(0, Number(row.billed_amount) - Number(row.amount_received ?? 0))
+}
+
+export function isMechanicalPaymentClosed(row: Pick<AccountsMechanicalCase, 'billed_amount' | 'amount_received' | 'remaining_amount' | 'payment_status'>): boolean {
+  if (row.billed_amount == null) return false
+  const remaining = mechanicalRemaining(row)
+  return remaining != null && remaining <= 0
+}
+
+export function paymentModeLabel(mode: string | null | undefined): string {
+  return ACCOUNTS_PAYMENT_MODES.find((m) => m.value === mode)?.label ?? (mode || '—')
+}
+
+export async function openMechanicalInvoiceFile(row: Pick<AccountsMechanicalCase, 'invoice_drive_url' | 'invoice_storage_path'>): Promise<void> {
+  if (row.invoice_drive_url) {
+    window.open(row.invoice_drive_url, '_blank', 'noopener,noreferrer')
+    return
+  }
+  if (!row.invoice_storage_path) throw new Error('No invoice file uploaded')
+  const { data, error } = await supabase.storage.from(AUTODOC_BUCKET).createSignedUrl(row.invoice_storage_path, 300)
+  if (error || !data?.signedUrl) throw new Error(error?.message || 'Could not open invoice file')
+  window.open(data.signedUrl, '_blank', 'noopener,noreferrer')
 }
 
 export function isCustomerPaymentClosed(row: Pick<AccountsBodyshopCase, 'customer_payment_status' | 'customer_settlement_kind'>): boolean {
@@ -184,8 +257,7 @@ function showGatepassInPage(html: string): void {
   document.body.appendChild(iframe)
 }
 
-export function openBodyshopGatepass(row: AccountsBodyshopCase): void {
-  const html = bodyshopGatepassHtml(row)
+function openHtmlGatepass(html: string): void {
   const blob = new Blob([html], { type: 'text/html;charset=utf-8' })
   const url = URL.createObjectURL(blob)
   const win = window.open(url, '_blank')
@@ -196,6 +268,62 @@ export function openBodyshopGatepass(row: AccountsBodyshopCase): void {
   }
   win.focus()
   window.setTimeout(() => URL.revokeObjectURL(url), 60_000)
+}
+
+export function openBodyshopGatepass(row: AccountsBodyshopCase): void {
+  openHtmlGatepass(bodyshopGatepassHtml(row))
+}
+
+function mechanicalGatepassHtml(row: AccountsMechanicalCase): string {
+  const printed = new Date().toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'Asia/Kolkata' })
+  return `<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Gatepass · ${escapeHtml(row.jc_number)}</title>
+  <style>
+    body { font-family: ui-sans-serif, system-ui, sans-serif; color: #111; margin: 24px; }
+    h1 { font-size: 20px; margin: 0 0 4px; letter-spacing: 0.04em; }
+    .sub { color: #555; margin: 0 0 16px; font-size: 13px; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { text-align: left; padding: 8px 10px; border: 1px solid #ccc; font-size: 13px; vertical-align: top; }
+    th { width: 34%; background: #f4f4f5; }
+    .signs { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 24px; margin-top: 48px; }
+    .signs div { border-top: 1px solid #111; padding-top: 8px; font-size: 12px; }
+    .actions { display: flex; gap: 8px; margin-bottom: 16px; }
+    @media print { .actions { display: none; } body { margin: 12mm; } }
+  </style>
+</head>
+<body>
+  <div class="actions">
+    <button onclick="window.print()">Print gatepass</button>
+    <button onclick="try { parent.document.getElementById('accounts-gatepass-frame')?.remove() } catch (e) {} window.close()">Close</button>
+  </div>
+  <h1>VEHICLE GATEPASS</h1>
+  <p class="sub">Techwheels Service · Mechanical · Printed ${escapeHtml(printed)}</p>
+  <table>
+    <tr><th>Job card</th><td>${escapeHtml(row.jc_number)}</td></tr>
+    <tr><th>Registration</th><td>${escapeHtml(row.reg_number)}</td></tr>
+    <tr><th>Owner</th><td>${escapeHtml(row.owner_name)}</td></tr>
+    <tr><th>Service / Branch / SA</th><td>${escapeHtml(row.service_type)} · ${escapeHtml(row.branch)} · ${escapeHtml(row.sa_display_name || row.sa_name)}</td></tr>
+    <tr><th>Invoice number</th><td>${escapeHtml(row.invoice_number)}</td></tr>
+    <tr><th>Invoice date</th><td>${escapeHtml(row.invoice_date)}</td></tr>
+    <tr><th>Billed amount</th><td>${escapeHtml(gatepassMoney(row.billed_amount))}</td></tr>
+    <tr><th>Amount received</th><td>${escapeHtml(gatepassMoney(row.amount_received))}</td></tr>
+    <tr><th>Remaining</th><td>${escapeHtml(gatepassMoney(mechanicalRemaining(row)))}</td></tr>
+    <tr><th>Payment status</th><td>${escapeHtml(row.payment_status || 'pending')}</td></tr>
+  </table>
+  <div class="signs">
+    <div>Accounts</div>
+    <div>Security / Gate</div>
+    <div>Customer</div>
+  </div>
+</body>
+</html>`
+}
+
+export function openMechanicalGatepass(row: AccountsMechanicalCase): void {
+  openHtmlGatepass(mechanicalGatepassHtml(row))
 }
 
 export function settlementCardFromAccountsRow(row: AccountsBodyshopCase): RepairCard {

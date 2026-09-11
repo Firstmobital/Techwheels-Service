@@ -2,16 +2,26 @@ import { useEffect, useMemo, useState } from 'react'
 import * as XLSX from 'xlsx'
 import { BodyshopSettlementPanel } from '../components/BodyshopSettlementPanel'
 import {
+  ACCOUNTS_PAYMENT_MODES,
+  addAccountsMechanicalPayment,
   isCustomerPaymentClosed,
+  isMechanicalPaymentClosed,
   listAccountsBodyshopCases,
   listAccountsMechanicalCases,
+  listAccountsMechanicalPayments,
+  mechanicalRemaining,
   openBodyshopGatepass,
+  openMechanicalGatepass,
+  openMechanicalInvoiceFile,
+  paymentModeLabel,
   settlementCardFromAccountsRow,
   upsertAccountsMechanicalInvoice,
   type AccountsBodyshopCase,
   type AccountsMechanicalCase,
-  type AccountsPaymentStatus,
+  type AccountsMechanicalPayment,
+  type AccountsPaymentMode,
 } from '../lib/api/accounts'
+import { uploadServiceAdvisorInvoice } from '../lib/api/reception'
 import type { RepairCard } from '../lib/api/bodyshopRepair'
 import { settlementStatusLabel } from '../lib/api/bodyshopSettlement'
 
@@ -91,10 +101,13 @@ export default function AccountsPage() {
   const [invoiceNumber, setInvoiceNumber] = useState('')
   const [invoiceDate, setInvoiceDate] = useState('')
   const [billedAmount, setBilledAmount] = useState('')
-  const [amountReceived, setAmountReceived] = useState('')
-  const [paymentStatus, setPaymentStatus] = useState<AccountsPaymentStatus>('pending')
-  const [paymentNotes, setPaymentNotes] = useState('')
+  const [receiptAmount, setReceiptAmount] = useState('')
+  const [paymentMode, setPaymentMode] = useState<AccountsPaymentMode>('cash')
+  const [paymentReference, setPaymentReference] = useState('')
+  const [payLines, setPayLines] = useState<AccountsMechanicalPayment[]>([])
   const [saving, setSaving] = useState(false)
+  const [postingPay, setPostingPay] = useState(false)
+  const [uploadingInvoice, setUploadingInvoice] = useState(false)
 
   const [postRow, setPostRow] = useState<AccountsBodyshopCase | null>(null)
   const [postCard, setPostCard] = useState<RepairCard | null>(null)
@@ -202,8 +215,9 @@ export default function AccountsPage() {
   const mechKpis = useMemo(() => {
     const pending = searchedMech.filter((r) => !r.invoice_number).length
     const billed = searchedMech.reduce((s, r) => s + Number(r.billed_amount ?? 0), 0)
-    const payPending = searchedMech.filter((r) => String(r.payment_status ?? 'pending') !== 'received').length
-    return { count: searchedMech.length, pending, billed, payPending }
+    const remaining = searchedMech.reduce((s, r) => s + Number(mechanicalRemaining(r) ?? 0), 0)
+    const received = searchedMech.filter((r) => isMechanicalPaymentClosed(r)).length
+    return { count: searchedMech.length, pending, billed, remaining, received }
   }, [searchedMech])
 
   const bsKpis = useMemo(() => {
@@ -219,14 +233,26 @@ export default function AccountsPage() {
     return { remainingCount: remainingRows.length, remaining, pending, partial, received, billed: periodBs.length }
   }, [periodBs])
 
-  function openCapture(row: AccountsMechanicalCase) {
+  function patchMechRow(saved: AccountsMechanicalCase) {
+    setMechRows((prev) => prev.map((r) => (r.reception_entry_id === saved.reception_entry_id ? { ...r, ...saved } : r)))
+    setEditRow((prev) => (prev && prev.reception_entry_id === saved.reception_entry_id ? { ...prev, ...saved } : prev))
+  }
+
+  async function openCapture(row: AccountsMechanicalCase) {
     setEditRow(row)
     setInvoiceNumber(row.invoice_number ?? '')
     setInvoiceDate(row.invoice_date ?? '')
     setBilledAmount(row.billed_amount != null ? String(row.billed_amount) : '')
-    setAmountReceived(row.amount_received != null ? String(row.amount_received) : '')
-    setPaymentStatus((row.payment_status ?? 'pending') as AccountsPaymentStatus)
-    setPaymentNotes(row.payment_notes ?? '')
+    setReceiptAmount('')
+    setPaymentMode('cash')
+    setPaymentReference('')
+    setPayLines([])
+    try {
+      const lines = await listAccountsMechanicalPayments(row.reception_entry_id)
+      setPayLines(lines)
+    } catch {
+      setPayLines([])
+    }
   }
 
   async function saveCapture() {
@@ -238,29 +264,70 @@ export default function AccountsPage() {
         invoiceNumber: invoiceNumber.trim() || null,
         invoiceDate: invoiceDate.trim() || null,
         billedAmount: numOrNull(billedAmount),
-        paymentStatus,
-        amountReceived: numOrNull(amountReceived),
-        paymentNotes: paymentNotes.trim() || null,
       })
-      setMechRows((prev) => prev.map((r) => (
-        r.reception_entry_id === editRow.reception_entry_id
-          ? {
-            ...r,
-            invoice_number: saved.invoice_number ?? (invoiceNumber.trim() || null),
-            invoice_date: saved.invoice_date ?? (invoiceDate.trim() || null),
-            billed_amount: saved.billed_amount ?? numOrNull(billedAmount),
-            payment_status: (saved.payment_status ?? paymentStatus) as AccountsPaymentStatus,
-            amount_received: saved.amount_received ?? numOrNull(amountReceived),
-            payment_notes: saved.payment_notes ?? (paymentNotes.trim() || null),
-          }
-          : r
-      )))
-      setEditRow(null)
+      patchMechRow(saved)
       flash('Invoice saved')
     } catch (e) {
       flash(e instanceof Error ? e.message : 'Save failed', false)
     } finally {
       setSaving(false)
+    }
+  }
+
+  async function postMechanicalReceipt() {
+    if (!editRow) return
+    const amount = numOrNull(receiptAmount)
+    if (amount == null || amount <= 0) {
+      flash('Enter this receipt amount', false)
+      return
+    }
+    setPostingPay(true)
+    try {
+      const saved = await addAccountsMechanicalPayment({
+        receptionEntryId: editRow.reception_entry_id,
+        amount,
+        paymentMode,
+        reference: paymentReference.trim() || null,
+      })
+      patchMechRow(saved)
+      setReceiptAmount('')
+      setPaymentReference('')
+      const lines = await listAccountsMechanicalPayments(editRow.reception_entry_id)
+      setPayLines(lines)
+      flash(isMechanicalPaymentClosed(saved) ? 'Payment completed' : 'Receipt posted')
+    } catch (e) {
+      flash(e instanceof Error ? e.message : 'Receipt failed', false)
+    } finally {
+      setPostingPay(false)
+    }
+  }
+
+  async function uploadMechanicalInvoice(file: File) {
+    if (!editRow) return
+    setUploadingInvoice(true)
+    try {
+      const res = await uploadServiceAdvisorInvoice(editRow.reception_entry_id, file)
+      if (res.error || !res.data) throw new Error(res.error || 'Invoice upload failed')
+      const next = {
+        ...editRow,
+        invoice_storage_path: res.data.invoice_storage_path,
+        invoice_file_name: res.data.invoice_file_name,
+        invoice_drive_url: res.data.invoice_drive_url,
+      }
+      patchMechRow(next)
+      flash('Invoice file uploaded')
+    } catch (e) {
+      flash(e instanceof Error ? e.message : 'Invoice upload failed', false)
+    } finally {
+      setUploadingInvoice(false)
+    }
+  }
+
+  function printMechGatepass(row: AccountsMechanicalCase) {
+    try {
+      openMechanicalGatepass(row)
+    } catch (e) {
+      flash(e instanceof Error ? e.message : 'Could not open gatepass', false)
     }
   }
 
@@ -292,7 +359,9 @@ export default function AccountsPage() {
         'Invoice date': r.invoice_date ?? '',
         'Billed amount': r.billed_amount ?? '',
         'Amount received': r.amount_received ?? '',
+        Remaining: mechanicalRemaining(r) ?? '',
         'Payment status': r.payment_status ?? 'pending',
+        'Invoice file': r.invoice_file_name ?? '',
         Notes: r.payment_notes ?? '',
       })))
       const wb = XLSX.utils.book_new()
@@ -388,9 +457,9 @@ export default function AccountsPage() {
             <span className="brx-recov-kpi__s">Captured billed amount</span>
           </div>
           <div className="brx-recov-kpi">
-            <span className="brx-recov-kpi__l">Payment pending</span>
-            <span className="brx-recov-kpi__v">{mechKpis.payPending}</span>
-            <span className="brx-recov-kpi__s">Not marked received</span>
+            <span className="brx-recov-kpi__l">Customer remaining</span>
+            <span className="brx-recov-kpi__v">{inr(mechKpis.remaining)}</span>
+            <span className="brx-recov-kpi__s">{mechKpis.received} received</span>
           </div>
         </div>
       ) : (
@@ -487,6 +556,7 @@ export default function AccountsPage() {
                   <th>Owner</th>
                   <th>Invoice</th>
                   <th>Billed</th>
+                  <th>Remaining</th>
                   <th>Status</th>
                   <th></th>
                 </tr>
@@ -510,15 +580,27 @@ export default function AccountsPage() {
                       <div style={{ color: 'var(--muted)', fontSize: 12 }}>{fmtDate(r.invoice_date)}</div>
                     </td>
                     <td>{inr(r.billed_amount)}</td>
+                    <td>{inr(mechanicalRemaining(r))}</td>
                     <td>
                       <span className={`brx-settle-pill is-${String(r.payment_status ?? 'pending').toLowerCase()}`}>
                         {settlementStatusLabel(r.payment_status)}
                       </span>
                     </td>
                     <td>
-                      <button type="button" className="btn btn--primary" onClick={() => openCapture(r)}>
-                        {r.invoice_number ? 'Edit' : 'Capture'}
-                      </button>
+                      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                        <button type="button" className="btn btn--sm btn--primary" onClick={() => void openCapture(r)}>
+                          {r.invoice_number ? 'Payments' : 'Capture'}
+                        </button>
+                        <button
+                          type="button"
+                          className="btn btn--sm"
+                          disabled={!isMechanicalPaymentClosed(r)}
+                          title={isMechanicalPaymentClosed(r) ? 'Print gatepass copy' : 'Available after remaining is ₹0'}
+                          onClick={() => printMechGatepass(r)}
+                        >
+                          Create Gatepass
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -610,50 +692,155 @@ export default function AccountsPage() {
 
       {editRow && (
         <div className="modal-back" role="presentation" onClick={() => setEditRow(null)}>
-          <div className="modal" role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
+          <div className="modal modal--md" role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
             <div className="modal__head">
-              <h3>Capture invoice · {editRow.jc_number}</h3>
+              <h3>{editRow.invoice_number ? 'Mechanical payment' : 'Capture invoice'} · {editRow.jc_number}</h3>
               <button type="button" className="modal__x" onClick={() => setEditRow(null)} aria-label="Close">×</button>
             </div>
-            <p style={{ marginTop: 0, color: 'var(--muted)' }}>
-              {editRow.reg_number || '—'} · {editRow.service_type || '—'} · Mark Done {fmtWhen(editRow.invoice_done_at)}
-            </p>
-            <div className="brx-form-grid-2">
-              <label className="brx-field">
-                <span className="brx-field-label">Invoice number</span>
-                <input className="inp" value={invoiceNumber} onChange={(e) => setInvoiceNumber(e.target.value)} />
-              </label>
-              <label className="brx-field">
-                <span className="brx-field-label">Invoice date</span>
-                <input className="inp" type="date" value={invoiceDate} onChange={(e) => setInvoiceDate(e.target.value)} />
-              </label>
-              <label className="brx-field">
-                <span className="brx-field-label">Invoice / Billed Amount (₹)</span>
-                <input className="inp" type="number" value={billedAmount} onChange={(e) => setBilledAmount(e.target.value)} />
-              </label>
-              <label className="brx-field">
-                <span className="brx-field-label">Amount received (₹)</span>
-                <input className="inp" type="number" value={amountReceived} onChange={(e) => setAmountReceived(e.target.value)} />
-              </label>
-              <label className="brx-field">
-                <span className="brx-field-label">Payment status</span>
-                <select className="sel" value={paymentStatus} onChange={(e) => setPaymentStatus(e.target.value as AccountsPaymentStatus)}>
-                  <option value="pending">Pending</option>
-                  <option value="partial">Partial</option>
-                  <option value="received">Received</option>
-                  <option value="not_received">Not received</option>
-                </select>
-              </label>
-              <label className="brx-field brx-grid-full">
-                <span className="brx-field-label">Payment notes</span>
-                <input className="inp" value={paymentNotes} onChange={(e) => setPaymentNotes(e.target.value)} placeholder="UTR, cheque, or note" />
-              </label>
+            <div className="modal__body">
+              <p style={{ margin: '0 0 16px', color: 'var(--muted)' }}>
+                {editRow.reg_number || '—'} · {editRow.service_type || '—'} · Mark Done {fmtWhen(editRow.invoice_done_at)}
+              </p>
+
+              <div className="acct-modal-section">
+                <p className="acct-modal-kicker">Invoice (captured once)</p>
+                <div className="brx-form-grid-2">
+                  <label className="brx-field">
+                    <span className="brx-field-label">Invoice number</span>
+                    <input className="inp" value={invoiceNumber} disabled={payLines.length > 0} onChange={(e) => setInvoiceNumber(e.target.value)} />
+                  </label>
+                  <label className="brx-field">
+                    <span className="brx-field-label">Invoice date</span>
+                    <input className="inp" type="date" value={invoiceDate} disabled={payLines.length > 0} onChange={(e) => setInvoiceDate(e.target.value)} />
+                  </label>
+                  <label className="brx-field">
+                    <span className="brx-field-label">Invoice / Billed Amount (₹)</span>
+                    <input className="inp" type="number" value={billedAmount} disabled={payLines.length > 0} onChange={(e) => setBilledAmount(e.target.value)} />
+                  </label>
+                  <label className="brx-field">
+                    <span className="brx-field-label">Invoice file</span>
+                    {editRow.invoice_storage_path || editRow.invoice_drive_url ? (
+                      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+                        <button type="button" className="btn btn--sm" onClick={() => void openMechanicalInvoiceFile(editRow).catch((e) => flash(e instanceof Error ? e.message : 'Could not open invoice', false))}>
+                          {editRow.invoice_file_name || 'View invoice'}
+                        </button>
+                        <label className="btn btn--sm">
+                          {uploadingInvoice ? 'Uploading…' : 'Replace'}
+                          <input
+                            type="file"
+                            accept="application/pdf,image/*"
+                            hidden
+                            disabled={uploadingInvoice}
+                            onChange={(e) => {
+                              const file = e.target.files?.[0]
+                              e.target.value = ''
+                              if (file) void uploadMechanicalInvoice(file)
+                            }}
+                          />
+                        </label>
+                      </div>
+                    ) : (
+                      <label className="btn btn--sm">
+                        {uploadingInvoice ? 'Uploading…' : 'Upload invoice'}
+                        <input
+                          type="file"
+                          accept="application/pdf,image/*"
+                          hidden
+                          disabled={uploadingInvoice}
+                          onChange={(e) => {
+                            const file = e.target.files?.[0]
+                            e.target.value = ''
+                            if (file) void uploadMechanicalInvoice(file)
+                          }}
+                        />
+                      </label>
+                    )}
+                  </label>
+                </div>
+                {payLines.length === 0 && (
+                  <div style={{ marginTop: 14 }}>
+                    <button type="button" className="btn btn--primary" disabled={saving} onClick={() => void saveCapture()}>
+                      {saving ? 'Saving…' : 'Save invoice'}
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              <div className="acct-modal-section">
+                <p className="acct-modal-kicker">Payment status (automatic)</p>
+                <div className="acct-modal-summary">
+                  <div>
+                    <span>Received</span>
+                    <strong>{inr(editRow.amount_received)}</strong>
+                  </div>
+                  <div>
+                    <span>Remaining</span>
+                    <strong>{inr(mechanicalRemaining(editRow))}</strong>
+                  </div>
+                  <div>
+                    <span>Status</span>
+                    <strong>{settlementStatusLabel(editRow.payment_status)}</strong>
+                  </div>
+                </div>
+                {isMechanicalPaymentClosed(editRow) ? (
+                  <button type="button" className="btn btn--primary" onClick={() => printMechGatepass(editRow)}>
+                    Create Gatepass
+                  </button>
+                ) : (
+                  <div className="brx-form-grid-2">
+                    <label className="brx-field">
+                      <span className="brx-field-label">This receipt (₹)</span>
+                      <input className="inp" type="number" value={receiptAmount} onChange={(e) => setReceiptAmount(e.target.value)} placeholder="Additional amount" />
+                    </label>
+                    <label className="brx-field">
+                      <span className="brx-field-label">Payment mode</span>
+                      <select className="sel" value={paymentMode} onChange={(e) => setPaymentMode(e.target.value as AccountsPaymentMode)}>
+                        {ACCOUNTS_PAYMENT_MODES.map((m) => (
+                          <option key={m.value} value={m.value}>{m.label}</option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="brx-field brx-grid-full">
+                      <span className="brx-field-label">Reference</span>
+                      <input className="inp" value={paymentReference} onChange={(e) => setPaymentReference(e.target.value)} placeholder="UTR, cheque no, or note" />
+                    </label>
+                    <div className="brx-field brx-grid-full">
+                      <button type="button" className="btn btn--primary" disabled={postingPay || editRow.billed_amount == null} onClick={() => void postMechanicalReceipt()}>
+                        {postingPay ? 'Posting…' : 'Post payment'}
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {payLines.length > 0 && (
+                <div className="acct-modal-section">
+                  <p className="acct-modal-kicker">Receipts</p>
+                  <table className="acct-pay-hist">
+                    <thead>
+                      <tr>
+                        <th>When</th>
+                        <th>Mode</th>
+                        <th>Amount</th>
+                        <th>Reference</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {payLines.map((l) => (
+                        <tr key={l.id}>
+                          <td>{fmtWhen(l.posted_at)}</td>
+                          <td>{paymentModeLabel(l.payment_mode)}</td>
+                          <td>{inr(l.amount)}</td>
+                          <td>{l.reference || '—'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
             <div className="modal__foot">
-              <button type="button" className="btn" onClick={() => setEditRow(null)}>Cancel</button>
-              <button type="button" className="btn btn--primary" disabled={saving} onClick={() => void saveCapture()}>
-                {saving ? 'Saving…' : 'Save'}
-              </button>
+              <button type="button" className="btn" onClick={() => setEditRow(null)}>Close</button>
             </div>
           </div>
         </div>

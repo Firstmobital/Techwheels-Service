@@ -572,6 +572,16 @@ table.tbl { width: 100%; border-collapse: collapse; font-size: 13.5px; }
 .modal__close:hover { background: var(--canvas); color: var(--ink); }
 .modal__body { padding: 20px; overflow-y: auto; }
 .modal__foot { display: flex; justify-content: flex-end; gap: 10px; padding: 16px 20px; border-top: 1px solid var(--border); }
+.acct-modal-section { margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--border); }
+.acct-modal-section:first-child { margin-top: 0; padding-top: 0; border-top: 0; }
+.acct-modal-kicker { margin: 0 0 12px; font-size: 12px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted); }
+.acct-modal-summary { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin-bottom: 14px; }
+.acct-modal-summary div { background: var(--canvas); border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; }
+.acct-modal-summary span { display: block; font-size: 11px; color: var(--muted); }
+.acct-modal-summary strong { display: block; margin-top: 4px; font-size: 14px; }
+.acct-pay-hist { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+.acct-pay-hist th, .acct-pay-hist td { text-align: left; padding: 8px 6px; border-bottom: 1px solid var(--border); }
+.acct-pay-hist th { color: var(--muted); font-weight: 600; }
 .modal__footer { display: flex; justify-content: flex-end; gap: 10px; padding: 16px 20px; border-top: 1px solid var(--border); }
 .payroll-add-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.65rem; }
 .payroll-add-field { display: flex; flex-direction: column; gap: 0.25rem; min-width: 0; }
@@ -5993,7 +6003,8 @@ tr.brx-recov-row--mismatch td:first-child {
   .brx-survey-grid,
   .brx-sa-grid-3,
   .brx-floor-meta-grid,
-  .brx-form-grid-2 {
+  .brx-form-grid-2,
+  .acct-modal-summary {
     grid-template-columns: 1fr;
   }
 

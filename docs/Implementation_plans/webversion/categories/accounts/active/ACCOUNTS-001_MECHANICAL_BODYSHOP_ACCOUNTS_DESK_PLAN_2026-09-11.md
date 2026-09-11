@@ -8,7 +8,7 @@
 **Status:** Active (web implemented; DBL-0045 SQL Editor apply pending)  
 **Platform:** webversion  
 **Category:** accounts  
-**Ledger:** DBL-0045 (PROPOSED). Do not reuse DBL-0043 (`busy`) or DBL-0044 (`busy_parts`). Timestamp at apply: `20260911130000`.  
+**Ledger:** DBL-0045 APPLIED. DBL-0046 (PROPOSED) mechanical payment lines. Do not reuse DBL-0043 (`busy`) or DBL-0044 (`busy_parts`). Timestamp at apply: `20260911140000`.  
 **Route:** `/accounts`  
 **Module:** `accounts`  
 **Depends on:** BODYSHOP-SETTLEMENT-001 (`bodyshop_settlements`, Stage 18 customer lines); Service Advisor Mark Done (`invoice_done_at`)  
@@ -143,8 +143,9 @@ Pattern: `src/pages/BodyshopRecoveryPage.tsx` (KPIs, search, table, Excel, on-pa
 **Mechanical desk**
 
 - Columns: Mark Done at, JC, reg, model, service type, SA, branch, owner, invoice number, billed amount, payment status, notes
-- Capture / Edit drawer: invoice number, invoice date, billed amount, amount received, payment status, payment notes
-- KPI: Mark Done count, invoice-pending count, billed sum, payment-pending count
+- Capture / Payments modal: invoice number, date, billed amount, and invoice file (reuse unused SA `invoice_storage_path` upload). Invoice header locks after the first receipt.
+- Receipts are append-only (`accounts_mechanical_payment_lines`): this amount + Payment mode (Cash/UPI/Card/Cheque/Bank/Other) + reference. Payment status is automatic from billed vs sum(receipts). Create Gatepass when remaining is ₹0.
+- KPI: Mark Done count, invoice-pending count, billed sum, customer remaining / received
 
 **Bodyshop desk**
 
