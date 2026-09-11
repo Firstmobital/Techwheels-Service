@@ -117,11 +117,9 @@ function gatepassMoney(v: number | null | undefined): string {
   return `₹${Number(v).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 }
 
-export function openBodyshopGatepass(row: AccountsBodyshopCase): void {
+function bodyshopGatepassHtml(row: AccountsBodyshopCase): string {
   const printed = new Date().toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'Asia/Kolkata' })
-  const win = window.open('', '_blank', 'noopener,noreferrer,width=780,height=980')
-  if (!win) throw new Error('Allow pop-ups to print the gatepass')
-  win.document.write(`<!doctype html>
+  return `<!doctype html>
 <html>
 <head>
   <meta charset="utf-8" />
@@ -135,11 +133,15 @@ export function openBodyshopGatepass(row: AccountsBodyshopCase): void {
     th { width: 34%; background: #f4f4f5; }
     .signs { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 24px; margin-top: 48px; }
     .signs div { border-top: 1px solid #111; padding-top: 8px; font-size: 12px; }
-    @media print { button { display: none; } body { margin: 12mm; } }
+    .actions { display: flex; gap: 8px; margin-bottom: 16px; }
+    @media print { .actions { display: none; } body { margin: 12mm; } }
   </style>
 </head>
 <body>
-  <button onclick="window.print()">Print gatepass</button>
+  <div class="actions">
+    <button onclick="window.print()">Print gatepass</button>
+    <button onclick="try { parent.document.getElementById('accounts-gatepass-frame')?.remove() } catch (e) {} window.close()">Close</button>
+  </div>
   <h1>VEHICLE GATEPASS</h1>
   <p class="sub">Techwheels Service · Printed ${escapeHtml(printed)}</p>
   <table>
@@ -161,8 +163,39 @@ export function openBodyshopGatepass(row: AccountsBodyshopCase): void {
     <div>Customer</div>
   </div>
 </body>
-</html>`)
-  win.document.close()
+</html>`
+}
+
+function showGatepassInPage(html: string): void {
+  document.getElementById('accounts-gatepass-frame')?.remove()
+  const iframe = document.createElement('iframe')
+  iframe.id = 'accounts-gatepass-frame'
+  iframe.title = 'Vehicle gatepass'
+  iframe.setAttribute('srcdoc', html)
+  Object.assign(iframe.style, {
+    position: 'fixed',
+    inset: '0',
+    width: '100%',
+    height: '100%',
+    border: '0',
+    zIndex: '2147483647',
+    background: '#fff',
+  })
+  document.body.appendChild(iframe)
+}
+
+export function openBodyshopGatepass(row: AccountsBodyshopCase): void {
+  const html = bodyshopGatepassHtml(row)
+  const blob = new Blob([html], { type: 'text/html;charset=utf-8' })
+  const url = URL.createObjectURL(blob)
+  const win = window.open(url, '_blank')
+  if (!win) {
+    URL.revokeObjectURL(url)
+    showGatepassInPage(html)
+    return
+  }
+  win.focus()
+  window.setTimeout(() => URL.revokeObjectURL(url), 60_000)
 }
 
 export function settlementCardFromAccountsRow(row: AccountsBodyshopCase): RepairCard {
