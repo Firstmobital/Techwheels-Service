@@ -17,11 +17,6 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-
       - name: Setup Java JDK
         uses: actions/setup-java@v4
         with:
@@ -31,20 +26,12 @@ jobs:
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
 
-      - name: Install Dependencies & Build Web App
-        working-directory: bodyshop
-        run: |
-          npm install --legacy-peer-deps
-          npx vite build
-          npx @capacitor/cli sync android
-
       - name: Make Gradle executable
         run: chmod +x bodyshop/android/gradlew
 
       - name: Build Android Debug APK
-        run: |
-          cd bodyshop/android
-          ./gradlew assembleDebug --no-daemon --stacktrace
+        working-directory: bodyshop/android
+        run: ./gradlew assembleDebug --no-daemon --stacktrace
 
       - name: Copy APK to root for easy access
         run: |
