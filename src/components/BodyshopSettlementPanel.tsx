@@ -479,6 +479,7 @@ export function BodyshopSettlementPanel({
         </div>
         )}
       </div>
+      )}
 
       {(customerOnly || (!doOnly && doCaptured)) && (
       <div className="brx-panel">

@@ -231,12 +231,12 @@ export default function AccountsPage() {
         r.reception_entry_id === editRow.reception_entry_id
           ? {
             ...r,
-            invoice_number: saved.invoice_number ?? invoiceNumber.trim() || null,
-            invoice_date: saved.invoice_date ?? invoiceDate.trim() || null,
+            invoice_number: saved.invoice_number ?? (invoiceNumber.trim() || null),
+            invoice_date: saved.invoice_date ?? (invoiceDate.trim() || null),
             billed_amount: saved.billed_amount ?? numOrNull(billedAmount),
             payment_status: (saved.payment_status ?? paymentStatus) as AccountsPaymentStatus,
             amount_received: saved.amount_received ?? numOrNull(amountReceived),
-            payment_notes: saved.payment_notes ?? paymentNotes.trim() || null,
+            payment_notes: saved.payment_notes ?? (paymentNotes.trim() || null),
           }
           : r
       )))
