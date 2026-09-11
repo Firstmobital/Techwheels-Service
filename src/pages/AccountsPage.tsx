@@ -799,6 +799,7 @@ export default function AccountsPage() {
 
       {editRow && (() => {
         const isInvoiceLocked = Boolean((editRow.invoice_number && editRow.billed_amount != null) || payLines.length > 0)
+        const isFieldDisabled = !isAdmin && isInvoiceLocked
         return (
           <div className="modal-back" role="presentation" onClick={() => setEditRow(null)}>
             <div className="modal modal--md" role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
@@ -816,7 +817,11 @@ export default function AccountsPage() {
                     <p className="acct-modal-kicker" style={{ margin: 0 }}>
                       Invoice details
                     </p>
-                    {isInvoiceLocked ? (
+                    {isAdmin ? (
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 11.5, fontWeight: 700, color: '#1e40af', background: '#dbeafe', border: '1px solid #bfdbfe', padding: '2px 8px', borderRadius: 999 }}>
+                        <span>👑</span> Admin (Editable)
+                      </span>
+                    ) : isInvoiceLocked ? (
                       <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 11.5, fontWeight: 700, color: '#166534', background: '#dcfce7', border: '1px solid #bbf7d0', padding: '2px 8px', borderRadius: 999 }}>
                         <span>🔒</span> Locked (Editable once)
                       </span>
@@ -833,10 +838,10 @@ export default function AccountsPage() {
                       <input
                         className="inp"
                         value={invoiceNumber}
-                        disabled={isInvoiceLocked}
+                        disabled={isFieldDisabled}
                         placeholder="e.g. INV-1002"
                         onChange={(e) => setInvoiceNumber(e.target.value)}
-                        style={isInvoiceLocked ? { background: 'var(--canvas)', cursor: 'not-allowed', opacity: 0.85 } : undefined}
+                        style={isFieldDisabled ? { background: 'var(--canvas)', cursor: 'not-allowed', opacity: 0.85 } : undefined}
                       />
                     </label>
                     <label className="brx-field">
@@ -845,9 +850,9 @@ export default function AccountsPage() {
                         className="inp"
                         type="date"
                         value={invoiceDate}
-                        disabled={isInvoiceLocked}
+                        disabled={isFieldDisabled}
                         onChange={(e) => setInvoiceDate(e.target.value)}
-                        style={isInvoiceLocked ? { background: 'var(--canvas)', cursor: 'not-allowed', opacity: 0.85 } : undefined}
+                        style={isFieldDisabled ? { background: 'var(--canvas)', cursor: 'not-allowed', opacity: 0.85 } : undefined}
                       />
                     </label>
                     <label className="brx-field">
@@ -856,10 +861,10 @@ export default function AccountsPage() {
                         className="inp"
                         type="number"
                         value={billedAmount}
-                        disabled={isInvoiceLocked}
+                        disabled={isFieldDisabled}
                         placeholder="e.g. 2500"
                         onChange={(e) => setBilledAmount(e.target.value)}
-                        style={isInvoiceLocked ? { background: 'var(--canvas)', cursor: 'not-allowed', opacity: 0.85 } : undefined}
+                        style={isFieldDisabled ? { background: 'var(--canvas)', cursor: 'not-allowed', opacity: 0.85 } : undefined}
                       />
                     </label>
                     <label className="brx-field">
@@ -875,7 +880,7 @@ export default function AccountsPage() {
                           >
                             <span>👁</span> View Document
                           </button>
-                          {!isInvoiceLocked && (
+                          {(!isInvoiceLocked || isAdmin) && (
                             <label className="btn btn--sm" style={{ cursor: uploadingInvoice || deletingInvoice ? 'wait' : 'pointer' }}>
                               {uploadingInvoice ? 'Uploading…' : 'Replace'}
                               <input
@@ -904,11 +909,7 @@ export default function AccountsPage() {
                             </button>
                           )}
                         </div>
-                      ) : isInvoiceLocked ? (
-                        <div style={{ fontSize: 12.5, color: 'var(--muted)', padding: '6px 0' }}>
-                          No document uploaded
-                        </div>
-                      ) : (
+                      ) : (!isInvoiceLocked || isAdmin) ? (
                         <label className="btn btn--sm" style={{ cursor: uploadingInvoice ? 'wait' : 'pointer', width: 'fit-content' }}>
                           {uploadingInvoice ? 'Uploading…' : 'Upload invoice'}
                           <input
@@ -923,11 +924,15 @@ export default function AccountsPage() {
                             }}
                           />
                         </label>
+                      ) : (
+                        <div style={{ fontSize: 12.5, color: 'var(--muted)', padding: '6px 0' }}>
+                          No document uploaded
+                        </div>
                       )}
                     </label>
                   </div>
 
-                  {!isInvoiceLocked && (
+                  {(!isInvoiceLocked || isAdmin) && (
                     <div style={{ marginTop: 14, display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center' }}>
                       <button
                         type="button"
@@ -935,7 +940,7 @@ export default function AccountsPage() {
                         disabled={saving || !invoiceNumber.trim() || !billedAmount.trim()}
                         onClick={() => void saveCapture()}
                       >
-                        {saving ? 'Saving…' : 'Save invoice (Lock details)'}
+                        {saving ? 'Saving…' : (isInvoiceLocked ? 'Update invoice (Admin)' : 'Save invoice (Lock details)')}
                       </button>
                       {loadingDms ? (
                         <span style={{ color: 'var(--muted)', fontSize: 13 }}>Looking up DMS…</span>
