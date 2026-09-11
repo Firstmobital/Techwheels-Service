@@ -32,11 +32,11 @@ jobs:
         uses: android-actions/setup-android@v3
 
       - name: Install Dependencies & Build Web App
+        working-directory: bodyshop
         run: |
-          cd bodyshop
           npm install --legacy-peer-deps
-          npm run build
-          npx cap sync android
+          npx vite build
+          npx @capacitor/cli sync android
 
       - name: Make Gradle executable
         run: chmod +x bodyshop/android/gradlew
