@@ -419,6 +419,14 @@ BEGIN
   END IF;
 
   v_remaining := GREATEST(0, round(v_inv.billed_amount - COALESCE(v_inv.amount_received, 0), 2));
+  IF v_remaining <= 0 THEN
+    RAISE EXCEPTION 'nothing remaining to post'
+      USING ERRCODE = '23514';
+  END IF;
+  -- UPI/app amounts often include extra paise vs the billed total.
+  IF v_amount > v_remaining AND (v_amount - v_remaining) <= 1 THEN
+    v_amount := v_remaining;
+  END IF;
   IF v_amount > v_remaining THEN
     RAISE EXCEPTION 'receipt ₹% exceeds remaining ₹%', v_amount, v_remaining
       USING ERRCODE = '23514';
@@ -481,3 +489,5 @@ GRANT EXECUTE ON FUNCTION public.list_accounts_mechanical_cases() TO authenticat
 GRANT EXECUTE ON FUNCTION public.upsert_accounts_mechanical_invoice(bigint, text, date, numeric, text, numeric, text) TO authenticated, service_role;
 GRANT EXECUTE ON FUNCTION public.add_accounts_mechanical_payment(bigint, numeric, text, text) TO authenticated, service_role;
 GRANT EXECUTE ON FUNCTION public.list_accounts_mechanical_payments(bigint) TO authenticated, service_role;
+
+NOTIFY pgrst, 'reload schema';

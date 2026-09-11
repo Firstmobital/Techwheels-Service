@@ -108,6 +108,7 @@ export default function AccountsPage() {
   const [saving, setSaving] = useState(false)
   const [postingPay, setPostingPay] = useState(false)
   const [uploadingInvoice, setUploadingInvoice] = useState(false)
+  const [payError, setPayError] = useState<string | null>(null)
 
   const [postRow, setPostRow] = useState<AccountsBodyshopCase | null>(null)
   const [postCard, setPostCard] = useState<RepairCard | null>(null)
@@ -246,6 +247,7 @@ export default function AccountsPage() {
     setReceiptAmount('')
     setPaymentMode('cash')
     setPaymentReference('')
+    setPayError(null)
     setPayLines([])
     try {
       const lines = await listAccountsMechanicalPayments(row.reception_entry_id)
@@ -276,11 +278,29 @@ export default function AccountsPage() {
 
   async function postMechanicalReceipt() {
     if (!editRow) return
-    const amount = numOrNull(receiptAmount)
-    if (amount == null || amount <= 0) {
-      flash('Enter this receipt amount', false)
+    const remaining = mechanicalRemaining(editRow)
+    let amount = numOrNull(receiptAmount)
+    if (editRow.billed_amount == null || remaining == null) {
+      setPayError('Save invoice number and billed amount first, then post the receipt.')
       return
     }
+    if (amount == null || amount <= 0) {
+      setPayError('Enter this receipt amount.')
+      return
+    }
+    if (remaining <= 0) {
+      setPayError('Nothing remaining to post.')
+      return
+    }
+    if (amount > remaining) {
+      if (amount - remaining <= 1) {
+        amount = remaining
+      } else {
+        setPayError(`This receipt ${inr(amount)} is more than remaining ${inr(remaining)}. Use remaining or raise billed.`)
+        return
+      }
+    }
+    setPayError(null)
     setPostingPay(true)
     try {
       const saved = await addAccountsMechanicalPayment({
@@ -296,7 +316,7 @@ export default function AccountsPage() {
       setPayLines(lines)
       flash(isMechanicalPaymentClosed(saved) ? 'Payment completed' : 'Receipt posted')
     } catch (e) {
-      flash(e instanceof Error ? e.message : 'Receipt failed', false)
+      setPayError(e instanceof Error ? e.message : 'Receipt failed')
     } finally {
       setPostingPay(false)
     }
@@ -782,6 +802,9 @@ export default function AccountsPage() {
                     <strong>{settlementStatusLabel(editRow.payment_status)}</strong>
                   </div>
                 </div>
+                {payError && (
+                  <div className="brx-settle-banner is-error" style={{ marginBottom: 12 }}>{payError}</div>
+                )}
                 {isMechanicalPaymentClosed(editRow) ? (
                   <button type="button" className="btn btn--primary" onClick={() => printMechGatepass(editRow)}>
                     Create Gatepass
@@ -790,7 +813,19 @@ export default function AccountsPage() {
                   <div className="brx-form-grid-2">
                     <label className="brx-field">
                       <span className="brx-field-label">This receipt (₹)</span>
-                      <input className="inp" type="number" value={receiptAmount} onChange={(e) => setReceiptAmount(e.target.value)} placeholder="Additional amount" />
+                      <input className="inp" type="number" value={receiptAmount} onChange={(e) => { setReceiptAmount(e.target.value); setPayError(null) }} placeholder="Additional amount" />
+                      {mechanicalRemaining(editRow) != null && Number(mechanicalRemaining(editRow)) > 0 && (
+                        <button
+                          type="button"
+                          className="linkbtn linkbtn--sm"
+                          onClick={() => {
+                            setReceiptAmount(String(mechanicalRemaining(editRow)))
+                            setPayError(null)
+                          }}
+                        >
+                          Use remaining {inr(mechanicalRemaining(editRow))}
+                        </button>
+                      )}
                     </label>
                     <label className="brx-field">
                       <span className="brx-field-label">Payment mode</span>
