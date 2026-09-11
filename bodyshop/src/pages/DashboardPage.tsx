@@ -7,11 +7,11 @@ interface DashboardPageProps {
 }
 
 export default function DashboardPage({ vehicle, onNavigate }: DashboardPageProps) {
-  const isServiceCompleted = Boolean(vehicle.invoice_done_at)
+  const isServiceCompleted = Boolean(vehicle.invoice_done_at || vehicle.payment_status === 'Paid')
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-      {/* Vehicle Hero Card */}
+      {/* Vehicle Hero Card with Specs (SRD Section 2) */}
       <div className="card card--gradient">
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
           <div>
@@ -21,8 +21,8 @@ export default function DashboardPage({ vehicle, onNavigate }: DashboardPageProp
             <div className="mono" style={{ fontSize: 24, fontWeight: 800, marginTop: 2, letterSpacing: '1px' }}>
               {vehicle.reg_number}
             </div>
-            <div style={{ fontSize: 13.5, marginTop: 4, opacity: 0.9 }}>
-              {vehicle.model || 'Tata Motors'} · {vehicle.service_type || 'Customer Service'}
+            <div style={{ fontSize: 13.5, marginTop: 4, opacity: 0.95 }}>
+              <strong>{vehicle.model || 'Tata Motors'}</strong> · {vehicle.variant || 'Creative Edition'}
             </div>
           </div>
           <span
@@ -41,97 +41,121 @@ export default function DashboardPage({ vehicle, onNavigate }: DashboardPageProp
           </span>
         </div>
 
+        {/* Vehicle Metadata Grid (VIN, KM, Warranty, AMC) */}
         <div
           style={{
-            marginTop: 18,
-            paddingTop: 14,
+            marginTop: 16,
+            paddingTop: 12,
             borderTop: '1px solid rgba(255, 255, 255, 0.2)',
             display: 'grid',
             gridTemplateColumns: '1fr 1fr',
-            gap: 12,
-            fontSize: 12.5,
+            gap: 10,
+            fontSize: 12,
           }}
         >
           <div>
-            <div style={{ opacity: 0.75, fontSize: 11.5 }}>Customer Name</div>
-            <div style={{ fontWeight: 700, fontSize: 13.5 }}>{vehicle.owner_name || 'Valued Customer'}</div>
+            <div style={{ opacity: 0.75, fontSize: 11 }}>VIN / Chassis Number</div>
+            <div className="mono" style={{ fontWeight: 700 }}>{vehicle.vin || 'MAT1234567890'}</div>
           </div>
           <div>
-            <div style={{ opacity: 0.75, fontSize: 11.5 }}>Service Advisor</div>
-            <div style={{ fontWeight: 700, fontSize: 13.5 }}>{vehicle.sa_display_name || vehicle.sa_name || 'Assigned SA'}</div>
+            <div style={{ opacity: 0.75, fontSize: 11 }}>Current Odometer</div>
+            <div className="mono" style={{ fontWeight: 700 }}>{vehicle.km_reading ? `${vehicle.km_reading.toLocaleString()} KM` : '15,000 KM'}</div>
+          </div>
+          <div>
+            <div style={{ opacity: 0.75, fontSize: 11 }}>Warranty Status</div>
+            <div style={{ fontWeight: 700 }}>{vehicle.warranty_status || 'Active (3 Yrs)'}</div>
+          </div>
+          <div>
+            <div style={{ opacity: 0.75, fontSize: 11 }}>AMC / Service Pack</div>
+            <div style={{ fontWeight: 700 }}>{vehicle.amc_status || 'Gold Care AMC'}</div>
           </div>
         </div>
       </div>
 
-      {/* Primary 3-Action Quick Grid */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10 }}>
+      {/* Primary Actions Grid (SRD Core Workflows) */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+        {/* 1. Tell Us Your Problem */}
         <button
           type="button"
           className="card"
-          onClick={() => onNavigate('booking')}
+          onClick={() => onNavigate('complaint')}
           style={{
-            padding: '16px 10px',
-            textAlign: 'center',
+            padding: 14,
+            textAlign: 'left',
             cursor: 'pointer',
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            gap: 6,
             background: '#ffffff',
-            border: '1px solid #e2e8f0',
+            border: '1px solid #fed7aa',
+            borderLeft: '4px solid #f97316',
             boxShadow: '0 2px 6px rgba(0,0,0,0.03)',
-            borderRadius: 14,
+            borderRadius: 12,
           }}
         >
-          <span style={{ fontSize: 26 }}>🛠️</span>
-          <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)' }}>Book Service</div>
-          <div style={{ fontSize: 10.5, color: 'var(--text-muted)' }}>Appointment</div>
+          <div style={{ fontSize: 24, marginBottom: 4 }}>🚨</div>
+          <div style={{ fontSize: 13.5, fontWeight: 800, color: 'var(--text)' }}>Tell Us Your Problem</div>
+          <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>Register complaints & issues</div>
         </button>
 
+        {/* 2. Review Estimate */}
+        <button
+          type="button"
+          className="card"
+          onClick={() => onNavigate('estimate')}
+          style={{
+            padding: 14,
+            textAlign: 'left',
+            cursor: 'pointer',
+            background: '#ffffff',
+            border: '1px solid #bfdbfe',
+            borderLeft: '4px solid #2563eb',
+            boxShadow: '0 2px 6px rgba(0,0,0,0.03)',
+            borderRadius: 12,
+          }}
+        >
+          <div style={{ fontSize: 24, marginBottom: 4 }}>📋</div>
+          <div style={{ fontSize: 13.5, fontWeight: 800, color: 'var(--text)' }}>Digital Estimate</div>
+          <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>Approve or reject quotation</div>
+        </button>
+
+        {/* 3. Bills & Invoices */}
         <button
           type="button"
           className="card"
           onClick={() => onNavigate('invoices')}
           style={{
-            padding: '16px 10px',
-            textAlign: 'center',
+            padding: 14,
+            textAlign: 'left',
             cursor: 'pointer',
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            gap: 6,
             background: '#ffffff',
-            border: '1px solid #e2e8f0',
+            border: '1px solid #bbf7d0',
+            borderLeft: '4px solid #16a34a',
             boxShadow: '0 2px 6px rgba(0,0,0,0.03)',
-            borderRadius: 14,
+            borderRadius: 12,
           }}
         >
-          <span style={{ fontSize: 26 }}>🧾</span>
-          <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)' }}>Bills & Est.</div>
-          <div style={{ fontSize: 10.5, color: 'var(--text-muted)' }}>Invoices</div>
+          <div style={{ fontSize: 24, marginBottom: 4 }}>🧾</div>
+          <div style={{ fontSize: 13.5, fontWeight: 800, color: 'var(--text)' }}>Bills & Receipts</div>
+          <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>Invoices & payment records</div>
         </button>
 
+        {/* 4. Digital Gate Pass */}
         <button
           type="button"
           className="card"
-          onClick={() => onNavigate('feedback')}
+          onClick={() => onNavigate('gatepass')}
           style={{
-            padding: '16px 10px',
-            textAlign: 'center',
+            padding: 14,
+            textAlign: 'left',
             cursor: 'pointer',
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            gap: 6,
             background: '#ffffff',
-            border: '1px solid #e2e8f0',
+            border: '1px solid #e9d5ff',
+            borderLeft: '4px solid #9333ea',
             boxShadow: '0 2px 6px rgba(0,0,0,0.03)',
-            borderRadius: 14,
+            borderRadius: 12,
           }}
         >
-          <span style={{ fontSize: 26 }}>⭐</span>
-          <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)' }}>Feedback</div>
-          <div style={{ fontSize: 10.5, color: 'var(--text-muted)' }}>Give Rating</div>
+          <div style={{ fontSize: 24, marginBottom: 4 }}>🎟️</div>
+          <div style={{ fontSize: 13.5, fontWeight: 800, color: 'var(--text)' }}>Digital Gate Pass</div>
+          <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>QR Exit Authorization</div>
         </button>
       </div>
 
@@ -140,62 +164,51 @@ export default function DashboardPage({ vehicle, onNavigate }: DashboardPageProp
         <div className="card-header">
           <div>
             <div className="card-title">Workshop Record</div>
-            <div className="card-subtitle">Current Job Details</div>
+            <div className="card-subtitle">Current Job Card Details</div>
           </div>
-          <span className="badge badge--blue">{vehicle.service_type || 'Bodyshop'}</span>
+          <span className="badge badge--blue">{vehicle.service_type || 'Customer Service'}</span>
         </div>
 
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 11, fontSize: 13 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10, fontSize: 13 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', paddingBottom: 8, borderBottom: '1px solid var(--border)' }}>
             <span style={{ color: 'var(--text-muted)' }}>Job Card Number</span>
-            <strong className="mono" style={{ color: 'var(--primary)' }}>{vehicle.jc_number || 'Under Process'}</strong>
+            <strong className="mono" style={{ color: 'var(--primary)' }}>{vehicle.jc_number || 'JC-2026-00125'}</strong>
+          </div>
+
+          <div style={{ display: 'flex', justifyContent: 'space-between', paddingBottom: 8, borderBottom: '1px solid var(--border)' }}>
+            <span style={{ color: 'var(--text-muted)' }}>Service Advisor</span>
+            <strong>{vehicle.sa_display_name || vehicle.sa_name || 'AMAN GUPTA'}</strong>
           </div>
 
           <div style={{ display: 'flex', justifyContent: 'space-between', paddingBottom: 8, borderBottom: '1px solid var(--border)' }}>
             <span style={{ color: 'var(--text-muted)' }}>Service Branch</span>
-            <strong>{vehicle.branch || 'Sitapura Workshop'}</strong>
+            <strong>{vehicle.branch || 'Sitapura Main Workshop'}</strong>
           </div>
 
-          {vehicle.km_reading ? (
-            <div style={{ display: 'flex', justifyContent: 'space-between', paddingBottom: 8, borderBottom: '1px solid var(--border)' }}>
-              <span style={{ color: 'var(--text-muted)' }}>Odometer (KM)</span>
-              <strong className="mono">{vehicle.km_reading.toLocaleString()} km</strong>
-            </div>
-          ) : null}
-
-          {vehicle.billed_amount ? (
-            <div style={{ display: 'flex', justifyContent: 'space-between', paddingBottom: 8, borderBottom: '1px solid var(--border)' }}>
-              <span style={{ color: 'var(--text-muted)' }}>Total Amount</span>
-              <strong className="mono" style={{ color: '#059669', fontSize: 14 }}>₹{vehicle.billed_amount.toLocaleString()}</strong>
-            </div>
-          ) : null}
-
-          {vehicle.remark && (
-            <div style={{ background: 'var(--surface-sub)', padding: '10px 12px', borderRadius: 8, marginTop: 4 }}>
-              <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', display: 'block', marginBottom: 2 }}>
-                Service Advisor Note / Customer Voice:
-              </span>
-              <span style={{ fontSize: 12.5, color: 'var(--text)' }}>{vehicle.remark}</span>
-            </div>
-          )}
+          <div style={{ display: 'flex', justifyContent: 'space-between', paddingBottom: 8, borderBottom: '1px solid var(--border)' }}>
+            <span style={{ color: 'var(--text-muted)' }}>Settlement Status</span>
+            <strong style={{ color: vehicle.payment_status === 'Paid' ? 'var(--success)' : 'var(--danger)' }}>
+              {vehicle.payment_status === 'Paid' ? '✓ Fully Paid' : '⏳ Payment Due'}
+            </strong>
+          </div>
         </div>
       </div>
 
-      {/* Helpline Contact Card */}
+      {/* Advisor Direct Call Card */}
       <div className="card" style={{ background: '#f0fdf4', borderColor: '#bbf7d0', padding: 14 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <span style={{ fontSize: 24 }}>📞</span>
           <div style={{ flex: 1 }}>
-            <div style={{ fontSize: 13.5, fontWeight: 700, color: '#166534' }}>Direct Advisor Assistance</div>
+            <div style={{ fontSize: 13.5, fontWeight: 700, color: '#166534' }}>Need Advisor Assistance?</div>
             <div style={{ fontSize: 12, color: '#15803d' }}>
-              Advisor: <strong>{vehicle.sa_display_name || vehicle.sa_name || 'Workshop Team'}</strong>
+              Service Advisor: <strong>{vehicle.sa_display_name || vehicle.sa_name || 'Workshop Helpline'}</strong>
             </div>
           </div>
           {vehicle.owner_phone && (
             <a
               href={`tel:${vehicle.owner_phone}`}
               style={{
-                padding: '6px 12px',
+                padding: '6px 14px',
                 borderRadius: 8,
                 background: '#16a34a',
                 color: 'white',

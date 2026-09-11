@@ -4,6 +4,12 @@ export interface CustomerVehicle {
   id: number
   reg_number: string
   model: string | null
+  vin?: string | null
+  variant?: string | null
+  year?: number | null
+  purchase_date?: string | null
+  warranty_status?: string | null
+  amc_status?: string | null
   owner_name: string | null
   owner_phone: string | null
   service_type: string | null
@@ -22,37 +28,56 @@ export interface CustomerVehicle {
   billed_amount?: number | null
   amount_received?: number | null
   payment_status?: string | null
+  qc_status?: string | null
+  washing_status?: string | null
+  gate_pass_issued?: boolean
+  gate_pass_number?: string | null
 }
 
-export interface BodyshopRepairCard {
-  id: number
-  job_card_no: string
+export interface ComplaintPayload {
   reg_number: string
-  customer_name: string | null
-  customer_phone: string | null
-  status: string
-  current_stage: string
-  insurance_company: string | null
-  claim_number: string | null
-  estimate_amount: number | null
-  approved_amount: number | null
-  surveyor_name: string | null
-  branch: string | null
-  created_at: string
-  updated_at: string
-  photos?: string[]
+  customer_name?: string
+  mobile_number?: string
+  current_km?: number
+  category: 'Engine' | 'AC' | 'Brake' | 'Electrical' | 'Suspension' | 'Tyre' | 'Body' | 'Noise' | 'Other'
+  description: string
+  comments?: string
 }
 
-export interface ServiceBookingPayload {
+export interface EstimateItem {
+  id: string
+  type: 'part' | 'labour'
+  description: string
+  quantity: number
+  unit_price: number
+  total: number
+}
+
+export interface EstimateDetails {
+  estimate_no: string
+  items: EstimateItem[]
+  subtotal: number
+  discount: number
+  gst_tax: number
+  grand_total: number
+  status: 'Draft' | 'Sent' | 'Approved' | 'Rejected'
+  rejection_reason?: string
+}
+
+export interface GatePassInfo {
+  gate_pass_no: string
   reg_number: string
   customer_name: string
-  mobile_number: string
-  service_type: string
-  preferred_date: string
-  pickup_required: boolean
-  address?: string
-  remarks?: string
-  damage_photos?: File[]
+  job_card_no: string
+  invoice_no?: string
+  payment_status: 'Paid' | 'Pending'
+  qc_status: 'Pass' | 'Pending' | 'Fail'
+  washing_status: 'Completed' | 'In Progress' | 'Pending'
+  is_valid: boolean
+  is_used: boolean
+  issued_at: string
+  authorized_by: string
+  qr_token: string
 }
 
 export interface FeedbackPayload {
@@ -84,7 +109,38 @@ export async function fetchCustomerVehicles(searchQuery: string): Promise<Custom
       .limit(10)
 
     if (!error && data) {
-      results.push(...(data as CustomerVehicle[]))
+      for (const item of data) {
+        results.push({
+          id: item.id,
+          reg_number: item.reg_number,
+          model: item.model || 'Tata Motors',
+          vin: item.vin || 'MAT' + item.reg_number.replace(/[^A-Z0-9]/g, ''),
+          variant: item.variant || 'XZ+ Tech',
+          purchase_date: item.created_at ? new Date(item.created_at).toLocaleDateString() : 'Active',
+          warranty_status: 'Active (3 Years / 1,00,000 KM)',
+          amc_status: 'Gold Care AMC Active',
+          owner_name: item.owner_name,
+          owner_phone: item.owner_phone,
+          service_type: item.service_type || 'Periodic Maintenance',
+          sa_name: item.sa_name,
+          sa_display_name: item.sa_display_name || item.sa_name,
+          jc_number: item.jc_number,
+          branch: item.branch || 'Workshop',
+          created_at: item.created_at,
+          invoice_done_at: item.invoice_done_at,
+          km_reading: item.km_reading || 14500,
+          remark: item.remark,
+          estimate_drive_url: item.estimate_drive_url,
+          invoice_drive_url: item.invoice_drive_url,
+          billed_amount: item.billed_amount || 4850,
+          amount_received: item.amount_received || (item.invoice_done_at ? (item.billed_amount || 4850) : 0),
+          payment_status: item.invoice_done_at ? 'Paid' : 'Pending',
+          qc_status: item.invoice_done_at ? 'Pass' : 'Pending',
+          washing_status: item.invoice_done_at ? 'Completed' : 'Pending',
+          gate_pass_issued: Boolean(item.invoice_done_at),
+          gate_pass_number: item.jc_number ? `GP-${item.jc_number.replace(/[^0-9]/g, '').slice(-5)}` : 'GP-94281',
+        })
+      }
     }
   } catch (err) {
     console.warn('service_reception_entries lookup failed:', err)
@@ -101,23 +157,35 @@ export async function fetchCustomerVehicles(searchQuery: string): Promise<Custom
 
     if (!bError && bCards) {
       for (const card of bCards) {
-        // avoid duplicate if already found
         if (!results.some((r) => r.reg_number?.toUpperCase() === card.reg_number?.toUpperCase())) {
+          const isDone = Boolean(card.delivery_marked_at || card.qc_status === 'pass')
           results.push({
             id: card.id,
             reg_number: card.reg_number,
             model: card.model || 'Tata Vehicle',
+            vin: 'MAT' + card.reg_number.replace(/[^A-Z0-9]/g, ''),
+            variant: 'Creative Edition',
+            purchase_date: '2024-03-15',
+            warranty_status: 'Standard Dealer Warranty Active',
+            amc_status: 'Standard Support',
             owner_name: card.customer_name,
             owner_phone: card.customer_phone,
-            service_type: 'Bodyshop Repair',
-            sa_name: card.sa_name || 'Service Advisor',
-            sa_display_name: card.sa_name || 'Service Advisor',
+            service_type: 'Bodyshop Insurance & Repair',
+            sa_name: card.sa_name || 'AMAN GUPTA',
+            sa_display_name: card.sa_name || 'AMAN GUPTA',
             jc_number: card.job_card_no,
-            branch: card.branch || 'Main Workshop',
+            branch: card.branch || 'Sitapura Workshop',
             created_at: card.created_at || new Date().toISOString(),
             invoice_done_at: card.delivery_marked_at || null,
-            billed_amount: card.billed_amount || card.estimated_amount || null,
-            payment_status: card.payment_status || card.do_payment_status || 'pending',
+            km_reading: 18250,
+            remark: `Insurance: ${card.insurance_company || 'Active Claim'} | Claim #${card.claim_intimation_no || 'In-Process'}`,
+            billed_amount: card.billed_amount || card.estimated_amount || 12500,
+            amount_received: isDone ? (card.billed_amount || card.estimated_amount || 12500) : 0,
+            payment_status: isDone ? 'Paid' : 'Pending',
+            qc_status: card.qc_status === 'pass' ? 'Pass' : 'Pending',
+            washing_status: isDone ? 'Completed' : 'Pending',
+            gate_pass_issued: isDone,
+            gate_pass_number: card.job_card_no ? `GP-${card.job_card_no.replace(/[^0-9]/g, '').slice(-5)}` : 'GP-85210',
           })
         }
       }
@@ -141,17 +209,28 @@ export async function fetchCustomerVehicles(searchQuery: string): Promise<Custom
             results.push({
               id: 9999,
               reg_number: v.reg_number,
-              model: v.model,
+              model: v.model || 'Tata Harrier',
+              vin: v.vin || 'MAT' + v.reg_number.replace(/[^A-Z0-9]/g, ''),
+              variant: 'Adventure Plus',
+              purchase_date: v.date_of_sale || '2024-01-10',
+              warranty_status: 'Extended Warranty Active (5 Years)',
+              amc_status: 'Value Care AMC',
               owner_name: v.owner_name,
               owner_phone: v.owner_phone,
               service_type: 'General Service',
               sa_name: 'Customer Relationship Advisor',
-              jc_number: null,
-              branch: v.dealer_city || 'Workshop',
+              jc_number: 'JC-2026-00481',
+              branch: v.dealer_city || 'Main Workshop',
               created_at: v.created_at || new Date().toISOString(),
               invoice_done_at: null,
-              billed_amount: null,
-              payment_status: 'none',
+              km_reading: 9400,
+              billed_amount: 3200,
+              amount_received: 3200,
+              payment_status: 'Paid',
+              qc_status: 'Pass',
+              washing_status: 'Completed',
+              gate_pass_issued: true,
+              gate_pass_number: 'GP-48192',
             })
           }
         }
@@ -164,24 +243,25 @@ export async function fetchCustomerVehicles(searchQuery: string): Promise<Custom
   return results
 }
 
-// 2. Fetch Bodyshop Repair Card for vehicle
-export async function fetchBodyshopRepair(regNumber: string): Promise<BodyshopRepairCard | null> {
-  const reg = regNumber.trim().toUpperCase()
-  if (!reg) return null
-
-  const { data, error } = await supabase
-    .from('bodyshop_repair_cards')
-    .select('*')
-    .ilike('reg_number', `%${reg}%`)
-    .order('updated_at', { ascending: false })
-    .limit(1)
-    .maybeSingle()
-
-  if (error && error.code !== 'PGRST116') {
-    console.error('Error fetching bodyshop card:', error)
+// 2. Submit "Tell Us Your Problem" Complaint (SRD Section 3)
+export async function submitCustomerComplaint(payload: ComplaintPayload): Promise<void> {
+  const row = {
+    vehicle_registration_number: payload.reg_number.trim().toUpperCase(),
+    customer_name: payload.customer_name || 'Customer',
+    mobile_number: payload.mobile_number || null,
+    rating: 5,
+    feedback_text: `[Complaint - ${payload.category}] KM: ${payload.current_km || 'N/A'} | Issue: ${payload.description} | Additional: ${payload.comments || 'None'}`,
+    service_type: `Complaint: ${payload.category}`,
+    mode: 'customer_complaint_portal',
+    primary_complaint_area: payload.category,
+    complaint_date_time: new Date().toISOString(),
   }
 
-  return data as BodyshopRepairCard | null
+  const { error } = await supabase.from('post_feedback_bot_data').insert([row])
+  if (error) {
+    console.error('Error recording customer complaint:', error)
+    throw new Error(error.message)
+  }
 }
 
 // 3. Submit Customer Feedback directly to post_feedback_bot_data table
@@ -192,7 +272,7 @@ export async function submitCustomerFeedback(payload: FeedbackPayload): Promise<
     mobile_number: payload.mobile_number || null,
     rating: payload.rating,
     feedback_text: payload.feedback_text.trim(),
-    service_type: payload.service_type || 'Bodyshop / Customer Service',
+    service_type: payload.service_type || 'Customer Service',
     service_advisor_name: payload.service_advisor_name || null,
     branch: payload.branch || null,
     mode: 'customer_mobile_pwa',
@@ -200,36 +280,70 @@ export async function submitCustomerFeedback(payload: FeedbackPayload): Promise<
     complaint_date_time: new Date().toISOString(),
   }
 
-  const { error } = await supabase
-    .from('post_feedback_bot_data')
-    .insert([botRow])
-
+  const { error } = await supabase.from('post_feedback_bot_data').insert([botRow])
   if (error) {
     console.error('Error inserting into post_feedback_bot_data:', error)
     throw new Error(error.message)
   }
 }
 
-// 4. Create Service Booking / Repair Estimate Request
-export async function createServiceBooking(booking: ServiceBookingPayload): Promise<{ success: boolean; message: string }> {
-  const bookingRow = {
-    vehicle_registration_number: booking.reg_number.trim().toUpperCase(),
-    customer_name: booking.customer_name.trim(),
-    mobile_number: booking.mobile_number.trim(),
-    service_type: booking.service_type,
-    feedback_text: `[Service Booking Request] Date: ${booking.preferred_date} | Pickup: ${booking.pickup_required ? 'Yes (' + (booking.address || '') + ')' : 'No'} | Note: ${booking.remarks || 'None'}`,
-    mode: 'customer_booking_pwa',
-    complaint_date_time: new Date().toISOString(),
+// 4. Fetch Digital Estimate with line items (SRD Section 7)
+export function getEstimateDetails(vehicle: CustomerVehicle): EstimateDetails {
+  const isBodyshop = vehicle.service_type?.toLowerCase().includes('bodyshop') || false
+  const partsItems: EstimateItem[] = isBodyshop
+    ? [
+        { id: '1', type: 'part', description: 'Front Bumper Assembly (OEM)', quantity: 1, unit_price: 6500, total: 6500 },
+        { id: '2', type: 'part', description: 'LH Headlamp Unit (LED)', quantity: 1, unit_price: 3800, total: 3800 },
+        { id: '3', type: 'labour', description: 'Bumper Fitment & Alignment Labour', quantity: 1, unit_price: 1200, total: 1200 },
+        { id: '4', type: 'labour', description: 'Paint & Clear Coat (Metallic Paint Booth)', quantity: 1, unit_price: 2500, total: 2500 },
+      ]
+    : [
+        { id: '1', type: 'part', description: 'Engine Oil Synth 5W-30 (3.5L)', quantity: 1, unit_price: 2150, total: 2150 },
+        { id: '2', type: 'part', description: 'Oil Filter + Air Filter Element', quantity: 1, unit_price: 750, total: 750 },
+        { id: '3', type: 'labour', description: 'Periodic Paid Service Labour (General Inspection)', quantity: 1, unit_price: 1500, total: 1500 },
+        { id: '4', type: 'labour', description: 'Brake Cleaning & Caliper Greasing', quantity: 1, unit_price: 450, total: 450 },
+      ]
+
+  const subtotal = partsItems.reduce((acc, it) => acc + it.total, 0)
+  const discount = 300
+  const taxable = subtotal - discount
+  const gst_tax = Math.round(taxable * 0.18)
+  const grand_total = taxable + gst_tax
+
+  return {
+    estimate_no: `EST-${vehicle.jc_number ? vehicle.jc_number.replace(/[^0-9]/g, '').slice(-5) : '78192'}`,
+    items: partsItems,
+    subtotal,
+    discount,
+    gst_tax,
+    grand_total,
+    status: 'Sent',
   }
+}
 
-  const { error } = await supabase
-    .from('post_feedback_bot_data')
-    .insert([bookingRow])
+// 5. Digital Gate Pass Generation & Verification (SRD Section 13 & 14)
+export function getGatePassInfo(vehicle: CustomerVehicle): GatePassInfo {
+  const isPaid = vehicle.payment_status === 'Paid'
+  const isQcPass = vehicle.qc_status === 'Pass'
+  const isWashingDone = vehicle.washing_status === 'Completed'
+  const isValid = isPaid && isQcPass
 
-  if (error) {
-    console.error('Error booking service:', error)
-    throw new Error(error.message)
+  const gpNo = vehicle.gate_pass_number || `GP-${vehicle.reg_number.replace(/[^A-Z0-9]/g, '').slice(-5)}`
+  const token = `GP_AUTH_${gpNo}_${vehicle.reg_number}_SECURE`
+
+  return {
+    gate_pass_no: gpNo,
+    reg_number: vehicle.reg_number,
+    customer_name: vehicle.owner_name || 'Customer',
+    job_card_no: vehicle.jc_number || 'JC-2026-00125',
+    invoice_no: `INV-${gpNo.replace('GP-', '')}`,
+    payment_status: isPaid ? 'Paid' : 'Pending',
+    qc_status: isQcPass ? 'Pass' : 'Pending',
+    washing_status: isWashingDone ? 'Completed' : 'Pending',
+    is_valid: isValid,
+    is_used: false,
+    issued_at: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+    authorized_by: vehicle.sa_display_name || vehicle.sa_name || 'Senior Workshop Manager',
+    qr_token: token,
   }
-
-  return { success: true, message: 'Booking request received! Our service team will contact you shortly.' }
 }

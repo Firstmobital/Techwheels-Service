@@ -3,8 +3,10 @@ import Header from './components/Header'
 import BottomNav, { type TabType } from './components/BottomNav'
 import AuthPage from './pages/AuthPage'
 import DashboardPage from './pages/DashboardPage'
-import ServiceBookingPage from './pages/ServiceBookingPage'
+import ComplaintPage from './pages/ComplaintPage'
+import EstimatePage from './pages/EstimatePage'
 import InvoicesPage from './pages/InvoicesPage'
+import GatePassPage from './pages/GatePassPage'
 import FeedbackPage from './pages/FeedbackPage'
 import { type CustomerVehicle } from './lib/api'
 import './App.css'
@@ -57,11 +59,17 @@ export default function App() {
         {currentTab === 'dashboard' && (
           <DashboardPage vehicle={selectedVehicle} onNavigate={setCurrentTab} />
         )}
-        {currentTab === 'booking' && (
-          <ServiceBookingPage vehicle={selectedVehicle} />
+        {currentTab === 'complaint' && (
+          <ComplaintPage vehicle={selectedVehicle} onSuccess={() => setCurrentTab('dashboard')} />
+        )}
+        {currentTab === 'estimate' && (
+          <EstimatePage vehicle={selectedVehicle} />
         )}
         {currentTab === 'invoices' && (
           <InvoicesPage vehicle={selectedVehicle} />
+        )}
+        {currentTab === 'gatepass' && (
+          <GatePassPage vehicle={selectedVehicle} />
         )}
         {currentTab === 'feedback' && (
           <FeedbackPage vehicle={selectedVehicle} />
