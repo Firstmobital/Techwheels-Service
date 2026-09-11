@@ -4,15 +4,14 @@ on:
   push:
     branches:
       - main
-    paths:
-      - 'bodyshop/**'
-      - '.github/workflows/build-bodyshop-apk.yml'
   workflow_dispatch:
 
 jobs:
   build-apk:
     name: Build Android APK
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
 
     steps:
       - name: Checkout Repository
@@ -22,13 +21,11 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: 'npm'
-          cache-dependency-path: 'bodyshop/package-lock.json'
 
       - name: Setup Java JDK
         uses: actions/setup-java@v4
         with:
-          distribution: 'zulu'
+          distribution: 'temurin'
           java-version: '17'
 
       - name: Setup Android SDK
@@ -37,7 +34,7 @@ jobs:
       - name: Install Dependencies & Build Web App
         run: |
           cd bodyshop
-          npm install
+          npm install --legacy-peer-deps
           npm run build
           npx cap sync android
 
@@ -47,11 +44,30 @@ jobs:
       - name: Build Android Debug APK
         run: |
           cd bodyshop/android
-          ./gradlew assembleDebug --no-daemon
+          ./gradlew assembleDebug --no-daemon --stacktrace
+
+      - name: Copy APK to root for easy access
+        run: |
+          mkdir -p apk-output
+          cp bodyshop/android/app/build/outputs/apk/debug/app-debug.apk apk-output/Techwheels-Bodyshop-v1.0.apk
 
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: Techwheels-Bodyshop-Debug-APK
-          path: bodyshop/android/app/build/outputs/apk/debug/app-debug.apk
+          name: Techwheels-Bodyshop-APK
+          path: apk-output/Techwheels-Bodyshop-v1.0.apk
           retention-days: 30
+
+      - name: Create GitHub Release with APK Download
+        uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/heads/main')
+        with:
+          tag_name: bodyshop-apk-latest
+          name: 'Techwheels Bodyshop Android APK (Latest)'
+          body: |
+            ### 🚗 Techwheels Bodyshop & Customer Services Mobile App
+            Download the standalone APK below and install on any Android phone:
+            - **File**: `Techwheels-Bodyshop-v1.0.apk`
+          files: apk-output/Techwheels-Bodyshop-v1.0.apk
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
