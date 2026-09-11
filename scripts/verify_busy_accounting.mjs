@@ -19,7 +19,11 @@ import {
   PARTS_CRM_NET_AMOUNT,
 } from '../src/lib/busy/partsParser.ts'
 import { buildBusyPartsSourceRowKey } from '../src/lib/busy/sourceRowKey.ts'
-import { toBusyPartsPersistRows } from '../src/lib/busy/partsPersist.ts'
+import {
+  busyPartsInvoiceKey,
+  partitionBusyPartsImport,
+  toBusyPartsPersistRows,
+} from '../src/lib/busy/partsPersist.ts'
 import { transformBusyAccounting } from '../src/lib/busy/transform.ts'
 import { buildInvoiceVoucherWorkbook, buildPartyAccountWorkbook, workbookHeaders, workbookDataRows } from '../src/lib/busy/xlsx.ts'
 import { INVOICE_VOUCHER_HEADERS, PARTY_ACCOUNT_HEADERS } from '../src/lib/busy/types.ts'
@@ -612,6 +616,222 @@ test('practical CRM Parts PV/EV files map Invoice_No and Invoice_Date', () => {
   }
   if (inspected === 0) {
     console.log('  skipped: CRM Parts files were not on disk')
+  }
+})
+
+function persistLine(overrides) {
+  const invoiceNo = overrides.invoice_no ?? 'IMBTAI001'
+  const invoiceDate = overrides.invoice_date ?? '2026-09-10'
+  const sourceType = overrides.source_type ?? 'PV'
+  const partNo = overrides.part_no ?? 'PART-A'
+  const netAmount = overrides.net_amount ?? 100
+  const gstRate = overrides.gst_rate ?? 18
+  const jobCardNo = overrides.job_card_no ?? 'JC-1'
+  return {
+    source_type: sourceType,
+    job_card_no: jobCardNo,
+    invoice_no: invoiceNo,
+    invoice_date: invoiceDate,
+    gst_rate: gstRate,
+    net_amount: netAmount,
+    source_row_key: buildBusyPartsSourceRowKey({
+      sourceType,
+      jobCardNo,
+      invoiceNo,
+      invoiceDate,
+      gstRate,
+      netAmount,
+      partNo,
+      quantity: overrides.quantity ?? '1',
+    }),
+    source_file_name: overrides.source_file_name ?? 'parts.csv',
+  }
+}
+
+function createPartsStore() {
+  const rows = []
+  function existingKeys() {
+    return rows.map((row) => busyPartsInvoiceKey(row.source_type, row.invoice_no, row.invoice_date))
+  }
+  function importRows(incoming) {
+    const result = partitionBusyPartsImport(existingKeys(), incoming)
+    rows.push(...result.newRows)
+    return result
+  }
+  function snapshot() {
+    return {
+      totalRows: rows.length,
+      pvInvoices: new Set(rows.filter((row) => row.source_type === 'PV').map((row) => busyPartsInvoiceKey(row.source_type, row.invoice_no, row.invoice_date))).size,
+      evInvoices: new Set(rows.filter((row) => row.source_type === 'EV').map((row) => busyPartsInvoiceKey(row.source_type, row.invoice_no, row.invoice_date))).size,
+      invoices: [...new Set(rows.map((row) => busyPartsInvoiceKey(row.source_type, row.invoice_no, row.invoice_date)))],
+      rows: rows.map((row) => ({ ...row })),
+    }
+  }
+  return { importRows, snapshot }
+}
+
+test('Test A — first upload stores every line of one invoice', () => {
+  const store = createPartsStore()
+  const incoming = [
+    persistLine({ part_no: 'PART-A', net_amount: 100, gst_rate: 18 }),
+    persistLine({ part_no: 'PART-B', net_amount: 250, gst_rate: 18 }),
+    persistLine({ part_no: 'PART-C', net_amount: 500, gst_rate: 5 }),
+  ]
+  const result = store.importRows(incoming)
+  assert.equal(result.newInvoices, 1)
+  assert.equal(result.newRows.length, 3)
+  assert.equal(result.skippedInvoices, 0)
+  assert.equal(store.snapshot().totalRows, 3)
+})
+
+test('Test B — same file again inserts nothing', () => {
+  const store = createPartsStore()
+  const incoming = [
+    persistLine({ part_no: 'PART-A', net_amount: 100 }),
+    persistLine({ part_no: 'PART-B', net_amount: 250 }),
+    persistLine({ part_no: 'PART-C', net_amount: 500, gst_rate: 5 }),
+  ]
+  store.importRows(incoming)
+  const before = store.snapshot()
+  const result = store.importRows(incoming)
+  const after = store.snapshot()
+  assert.equal(result.newInvoices, 0)
+  assert.equal(result.newRows.length, 0)
+  assert.equal(result.skippedInvoices, 1)
+  assert.equal(result.skippedRows.length, 3)
+  assert.equal(after.totalRows, before.totalRows)
+  assert.deepEqual(after.rows.map((row) => row.source_row_key), before.rows.map((row) => row.source_row_key))
+})
+
+test('Test C — overlapping file skips B, inserts C, keeps A', () => {
+  const store = createPartsStore()
+  const invoiceA = Array.from({ length: 5 }, (_, index) => persistLine({ invoice_no: 'INV-A', part_no: `A-${index}`, net_amount: 10 + index }))
+  const invoiceB = Array.from({ length: 7 }, (_, index) => persistLine({ invoice_no: 'INV-B', part_no: `B-${index}`, net_amount: 20 + index }))
+  const invoiceC = Array.from({ length: 4 }, (_, index) => persistLine({ invoice_no: 'INV-C', part_no: `C-${index}`, net_amount: 30 + index }))
+  store.importRows([...invoiceA, ...invoiceB])
+  const result = store.importRows([...invoiceB, ...invoiceC])
+  const after = store.snapshot()
+  assert.equal(result.skippedInvoices, 1)
+  assert.equal(result.skippedRows.length, 7)
+  assert.equal(result.newInvoices, 1)
+  assert.equal(result.newRows.length, 4)
+  assert.equal(after.totalRows, 16)
+  assert.equal(after.rows.filter((row) => row.invoice_no === 'INV-A').length, 5)
+  assert.equal(after.rows.filter((row) => row.invoice_no === 'INV-B').length, 7)
+  assert.equal(after.rows.filter((row) => row.invoice_no === 'INV-C').length, 4)
+})
+
+test('Test D — September remains after October upload', () => {
+  const store = createPartsStore()
+  const september = [
+    persistLine({ invoice_no: 'INV-SEP-1', invoice_date: '2026-09-10', part_no: 'S1' }),
+    persistLine({ invoice_no: 'INV-SEP-1', invoice_date: '2026-09-10', part_no: 'S2' }),
+    persistLine({ invoice_no: 'INV-SEP-2', invoice_date: '2026-09-11', part_no: 'S3' }),
+  ]
+  const october = [
+    persistLine({ invoice_no: 'INV-OCT-1', invoice_date: '2026-10-01', part_no: 'O1' }),
+    persistLine({ invoice_no: 'INV-OCT-1', invoice_date: '2026-10-01', part_no: 'O2' }),
+  ]
+  store.importRows(september)
+  const result = store.importRows(october)
+  const after = store.snapshot()
+  assert.equal(result.newInvoices, 1)
+  assert.equal(result.newRows.length, 2)
+  assert.equal(result.skippedInvoices, 0)
+  assert.equal(after.totalRows, 5)
+  assert.equal(after.rows.filter((row) => row.invoice_date.startsWith('2026-09')).length, 3)
+  assert.equal(after.rows.filter((row) => row.invoice_date.startsWith('2026-10')).length, 2)
+})
+
+test('Test E — PV upload does not replace EV', () => {
+  const store = createPartsStore()
+  const evRows = [
+    persistLine({ source_type: 'EV', invoice_no: 'EMBTAI001', part_no: 'E1' }),
+    persistLine({ source_type: 'EV', invoice_no: 'EMBTAI001', part_no: 'E2' }),
+  ]
+  const pvRows = [
+    persistLine({ source_type: 'PV', invoice_no: 'IMBTAI001', part_no: 'P1' }),
+    persistLine({ source_type: 'PV', invoice_no: 'IMBTAI001', part_no: 'P2' }),
+    persistLine({ source_type: 'PV', invoice_no: 'IMBTAI001', part_no: 'P3' }),
+  ]
+  store.importRows(evRows)
+  const afterEv = store.snapshot()
+  const pvResult = store.importRows(pvRows)
+  const afterPv = store.snapshot()
+  assert.equal(pvResult.newInvoices, 1)
+  assert.equal(pvResult.skippedInvoices, 0)
+  assert.equal(afterPv.evInvoices, afterEv.evInvoices)
+  assert.equal(afterPv.rows.filter((row) => row.source_type === 'EV').length, 2)
+  assert.equal(afterPv.rows.filter((row) => row.source_type === 'PV').length, 3)
+  const evAgain = store.importRows(evRows)
+  const afterEvAgain = store.snapshot()
+  assert.equal(evAgain.newInvoices, 0)
+  assert.equal(evAgain.skippedInvoices, 1)
+  assert.equal(afterEvAgain.totalRows, afterPv.totalRows)
+  assert.equal(afterEvAgain.pvInvoices, 1)
+  assert.equal(afterEvAgain.evInvoices, 1)
+})
+
+test('duplicate detection is invoice-level, not row-level unique on invoice_no+invoice_date', () => {
+  const key = busyPartsInvoiceKey('PV', 'IMBTAI2627001234', '2026-09-10')
+  assert.equal(key, 'PV|IMBTAI2627001234|2026-09-10')
+  const store = createPartsStore()
+  const first = [
+    persistLine({ invoice_no: 'IMBTAI2627001234', invoice_date: '2026-09-10', part_no: 'A', net_amount: 100 }),
+    persistLine({ invoice_no: 'IMBTAI2627001234', invoice_date: '2026-09-10', part_no: 'B', net_amount: 250 }),
+  ]
+  store.importRows(first)
+  const extraLineSameInvoice = persistLine({ invoice_no: 'IMBTAI2627001234', invoice_date: '2026-09-10', part_no: 'C', net_amount: 500, gst_rate: 5 })
+  const skipped = store.importRows([extraLineSameInvoice])
+  assert.equal(skipped.newInvoices, 0)
+  assert.equal(skipped.skippedInvoices, 1)
+  assert.equal(skipped.skippedRows.length, 1)
+  assert.equal(store.snapshot().totalRows, 2)
+})
+
+test('practical CRM Parts re-upload does not increase invoice or row counts', () => {
+  const files = [
+    { path: '/Users/apple/Downloads/Parts - PV.csv', portal: 'PV' },
+    { path: '/Users/apple/Downloads/Parts - EV.csv', portal: 'EV' },
+  ]
+  const store = createPartsStore()
+  let inspected = 0
+  for (const file of files) {
+    if (!existsSync(file.path)) continue
+    inspected += 1
+    const rows = parseSpreadsheetBuffer(readFileSync(file.path), file.path)
+    const mapped = mapPartsRows(rows, file.portal, file.path.split('/').pop())
+    const persistRows = toBusyPartsPersistRows(mapped.lines, file.portal, file.path.split('/').pop())
+    const first = store.importRows(persistRows)
+    const before = store.snapshot()
+    const second = store.importRows(persistRows)
+    const after = store.snapshot()
+    assert.equal(second.newInvoices, 0)
+    assert.equal(second.newRows.length, 0)
+    assert.equal(second.skippedInvoices, first.newInvoices)
+    assert.equal(second.skippedRows.length, first.newRows.length)
+    assert.equal(after.totalRows, before.totalRows)
+    assert.equal(after.pvInvoices, before.pvInvoices)
+    assert.equal(after.evInvoices, before.evInvoices)
+    console.log(`  ${file.portal} first upload: new invoices=${first.newInvoices}, new rows=${first.newRows.length}`)
+    console.log(`  ${file.portal} re-upload: new invoices=${second.newInvoices}, skipped invoices=${second.skippedInvoices}, skipped rows=${second.skippedRows.length}, store rows=${after.totalRows}`)
+  }
+  if (inspected === 0) {
+    console.log('  skipped: CRM Parts files were not on disk')
+  } else {
+    const beforeNew = store.snapshot()
+    const newInvoice = [
+      persistLine({ source_type: 'PV', invoice_no: 'IMBTAI-NEW-ONLY', invoice_date: '2026-10-31', part_no: 'N1', net_amount: 11 }),
+      persistLine({ source_type: 'PV', invoice_no: 'IMBTAI-NEW-ONLY', invoice_date: '2026-10-31', part_no: 'N2', net_amount: 22 }),
+    ]
+    const added = store.importRows(newInvoice)
+    const afterNew = store.snapshot()
+    assert.equal(added.newInvoices, 1)
+    assert.equal(added.newRows.length, 2)
+    assert.equal(afterNew.totalRows, beforeNew.totalRows + 2)
+    assert.equal(afterNew.pvInvoices, beforeNew.pvInvoices + 1)
+    assert.equal(afterNew.evInvoices, beforeNew.evInvoices)
+    console.log(`  after genuine new invoice: rows ${beforeNew.totalRows} -> ${afterNew.totalRows}, PV invoices ${beforeNew.pvInvoices} -> ${afterNew.pvInvoices}, EV invoices ${beforeNew.evInvoices} -> ${afterNew.evInvoices}`)
   }
 })
 

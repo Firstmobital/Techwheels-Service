@@ -107,11 +107,28 @@ export async function fetchBusyPartsLines(): Promise<BusyPartsLine[]> {
   return rows
 }
 
-export async function replaceBusyPartsSource(
+export interface BusyPartsImportResult {
+  newInvoices: number
+  newPartsRows: number
+  skippedInvoices: number
+  skippedPartsRows: number
+  persistRows: BusyPartsPersistRow[]
+}
+
+export function formatBusyPartsImportSummary(result: Pick<BusyPartsImportResult, 'newInvoices' | 'newPartsRows' | 'skippedInvoices' | 'skippedPartsRows'>): string {
+  return [
+    `New invoices: ${result.newInvoices}`,
+    `New Parts rows: ${result.newPartsRows}`,
+    `Already uploaded invoices skipped: ${result.skippedInvoices}`,
+    `Skipped Parts rows: ${result.skippedPartsRows}`,
+  ].join('\n')
+}
+
+export async function importBusyPartsSource(
   sourceType: VehiclePortal,
   sourceFileName: string,
   lines: BusyPartsLine[],
-): Promise<{ deleted: number; inserted: number; persistRows: BusyPartsPersistRow[] }> {
+): Promise<BusyPartsImportResult> {
   const persistRows = toBusyPartsPersistRows(lines, sourceType, sourceFileName)
   const { data, error } = await supabase.rpc('replace_busy_parts_source' as never, {
     p_source_type: sourceType,
@@ -127,10 +144,21 @@ export async function replaceBusyPartsSource(
   } as never)
 
   if (error) throw error
-  const result = (data ?? {}) as { deleted?: number; inserted?: number }
+  const result = (data ?? {}) as {
+    new_invoices?: number
+    new_parts_rows?: number
+    skipped_invoices?: number
+    skipped_parts_rows?: number
+    inserted?: number
+  }
   return {
-    deleted: Number(result.deleted ?? 0),
-    inserted: Number(result.inserted ?? persistRows.length),
+    newInvoices: Number(result.new_invoices ?? 0),
+    newPartsRows: Number(result.new_parts_rows ?? result.inserted ?? 0),
+    skippedInvoices: Number(result.skipped_invoices ?? 0),
+    skippedPartsRows: Number(result.skipped_parts_rows ?? 0),
     persistRows,
   }
 }
+
+/** @deprecated Use importBusyPartsSource. Kept so older callers keep compiling during the append-only switch. */
+export const replaceBusyPartsSource = importBusyPartsSource

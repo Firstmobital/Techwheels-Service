@@ -10,7 +10,8 @@ import {
   loadBusyLabourSourceStatus,
   loadBusyPartsSourceStatus,
   parsePartsSpreadsheet,
-  replaceBusyPartsSource,
+  importBusyPartsSource,
+  formatBusyPartsImportSummary,
   transformBusyAccounting,
   buildInvoiceVoucherWorkbook,
   buildPartyAccountWorkbook,
@@ -24,6 +25,7 @@ interface PartsSlotState {
   fileName: string | null
   rowCount: number
   error: string | null
+  summary: string | null
   lines: BusyPartsLine[]
   persisted: boolean
   uploadedAt: string | null
@@ -34,6 +36,7 @@ const EMPTY_SLOT: PartsSlotState = {
   fileName: null,
   rowCount: 0,
   error: null,
+  summary: null,
   lines: [],
   persisted: false,
   uploadedAt: null,
@@ -77,6 +80,7 @@ export default function BusyAccountingPage() {
         fileName: status.pvFileName,
         rowCount: pvLines.length,
         error: status.error,
+        summary: null,
         lines: pvLines,
         persisted: pvLines.length > 0,
         uploadedAt: status.latestPvUploadedAt,
@@ -86,6 +90,7 @@ export default function BusyAccountingPage() {
         fileName: status.evFileName,
         rowCount: evLines.length,
         error: status.error,
+        summary: null,
         lines: evLines,
         persisted: evLines.length > 0,
         uploadedAt: status.latestEvUploadedAt,
@@ -148,73 +153,61 @@ export default function BusyAccountingPage() {
 
   const handlePartsFile = useCallback(async (file: File, portal: VehiclePortal) => {
     const setter = portal === 'PV' ? setPvParts : setEvParts
-    setter({
+    setter((current) => ({
+      ...current,
       fileName: file.name,
-      rowCount: 0,
       error: null,
-      lines: [],
-      persisted: false,
-      uploadedAt: null,
+      summary: null,
       saving: true,
-    })
+    }))
     try {
       const parsed = await parsePartsSpreadsheet(file, portal)
       if (parsed.errors.length > 0) {
-        setter({
+        setter((current) => ({
+          ...current,
           fileName: file.name,
-          rowCount: 0,
           error: parsed.errors.join('; '),
-          lines: [],
-          persisted: false,
-          uploadedAt: null,
+          summary: null,
           saving: false,
-        })
+        }))
         return
       }
       try {
-        const replaced = await replaceBusyPartsSource(portal, file.name, parsed.lines)
+        const imported = await importBusyPartsSource(portal, file.name, parsed.lines)
         const persisted = await fetchBusyPartsLines()
         const portalLines = persisted.filter((line) => line.portal === portal)
         const status = await loadBusyPartsSourceStatus()
         setPartsStatus(status)
+        const incomplete = parsed.skippedIncomplete > 0
+          ? `${parsed.skippedIncomplete} incomplete source rows skipped (Invoice_No / Invoice_Date / Job Card_No / Net_Amount required)`
+          : null
         setter({
           fileName: file.name,
           rowCount: portalLines.length,
-          error: parsed.skippedIncomplete > 0
-            ? `${parsed.skippedIncomplete} incomplete source rows skipped (Invoice_No / Invoice_Date / Job Card_No / Net_Amount required)`
-            : null,
+          error: incomplete,
+          summary: formatBusyPartsImportSummary(imported),
           lines: portalLines,
           persisted: true,
           uploadedAt: portal === 'PV' ? status.latestPvUploadedAt : status.latestEvUploadedAt,
           saving: false,
         })
-        if (replaced.inserted !== portalLines.length) {
-          setter((current) => ({
-            ...current,
-            error: [current.error, `Persisted ${replaced.inserted} rows; reloaded ${portalLines.length}`].filter(Boolean).join('; '),
-          }))
-        }
       } catch (persistError) {
-        setter({
+        setter((current) => ({
+          ...current,
           fileName: file.name,
-          rowCount: parsed.lines.length,
           error: `Parsed locally; persist failed: ${persistError instanceof Error ? persistError.message : String(persistError)}`,
-          lines: parsed.lines,
-          persisted: false,
-          uploadedAt: null,
+          summary: null,
           saving: false,
-        })
+        }))
       }
     } catch (error) {
-      setter({
+      setter((current) => ({
+        ...current,
         fileName: file.name,
-        rowCount: 0,
         error: error instanceof Error ? error.message : String(error),
-        lines: [],
-        persisted: false,
-        uploadedAt: null,
+        summary: null,
         saving: false,
-      })
+      }))
     }
   }, [])
 
@@ -507,11 +500,14 @@ function PartsUploadCard({
                 ? 'Saving Parts lines…'
                 : slot.fileName
                   ? `${slot.rowCount.toLocaleString('en-IN')} Parts lines${slot.persisted ? ' persisted' : ''}`
-                  : 'Drop or browse a Parts file. Re-upload replaces this source.'}
+                  : 'Drop or browse a Parts file. New invoices are appended; already uploaded invoices are skipped.'}
             </div>
           </div>
         </div>
         {slot.error && <div className="toast error" style={{ marginTop: 8 }}>{slot.error}</div>}
+        {slot.summary && (
+          <div className="toast" style={{ marginTop: 8, whiteSpace: 'pre-line' }}>{slot.summary}</div>
+        )}
         {slot.persisted && slot.uploadedAt && (
           <div style={{ marginTop: 8, fontSize: 12, color: 'var(--muted)' }}>
             Last upload {new Date(slot.uploadedAt).toLocaleString('en-IN')}

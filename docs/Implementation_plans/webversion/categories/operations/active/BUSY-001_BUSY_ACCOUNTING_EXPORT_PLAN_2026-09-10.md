@@ -36,7 +36,7 @@ Add a web **BUSY** page that reads persisted PV/EV Labour from `public.psf_reven
 
 Labour columns live on `psf_revenue_dms` (`invoice_number`, `invoice_date`, `job_card_number` from Order #, `first_name`, `last_name`, `account`, `sr_type`, `sr_assigned_to`, `vehicle_registration_number`, `final_labour_amount`, `portal`). Reports treat `final_labour_amount` as GST-inclusive.
 
-Parts persist in `public.busy_parts` (DBL-0044). Inspected CRM files `Parts - PV.csv` and `Parts - EV.csv` use `Invoice_No` and `Invoice_Date`. Those values are stored for evidence and mismatch detection. Labour invoice number/date remain BUSY voucher identity.
+Parts persist in `public.busy_parts` (DBL-0044, DBL-0050). Inspected CRM files `Parts - PV.csv` and `Parts - EV.csv` use `Invoice_No` and `Invoice_Date`. Those values are stored for evidence, duplicate detection, and mismatch detection. Labour invoice number/date remain BUSY voucher identity. Parts uploads append new invoices and skip invoices already uploaded for that source type.
 
 ---
 
@@ -83,7 +83,7 @@ Parts persist in `public.busy_parts` (DBL-0044). Inspected CRM files `Parts - PV
 
 - `docs/shared/reference/MODULE_ROUTE_CONTRACT.md`
 - `docs/web/modules/busy/README.md`
-- Ledger: DBL-0043, DBL-0044
+- Ledger: DBL-0043, DBL-0044, DBL-0050
 
 **Last Updated:** 2026-09-11  
 **Status:** 🟡 IN PROGRESS

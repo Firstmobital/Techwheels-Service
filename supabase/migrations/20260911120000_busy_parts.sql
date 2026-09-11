@@ -2,6 +2,8 @@
 -- Persist PV/EV Parts lines used by BUSY accounting.
 -- Invoice_No and Invoice_Date are mandatory source evidence.
 -- They are not BUSY voucher identity; Labour invoice number/date remain final truth.
+-- Import semantics: DBL-0050 (20260911153000_busy_parts_append_only.sql) replaces the
+-- DELETE-by-source_type body below with append-only invoice skip/insert.
 -- Reversible: DROP FUNCTION public.replace_busy_parts_source; DROP TABLE public.busy_parts;
 
 CREATE TABLE IF NOT EXISTS public.busy_parts (

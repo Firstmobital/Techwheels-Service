@@ -4,7 +4,7 @@ Web page `/busy` (module `busy`) exports BUSY Party Accounts and Invoice Voucher
 
 Labour source: `public.psf_revenue_dms` already imported on `/import` (PSF Revenue Report (DMS)).
 
-Parts PV/EV files uploaded on `/busy` are persisted in `public.busy_parts` (ledger DBL-0044). Re-upload of a source replaces that source only.
+Parts PV/EV files uploaded on `/busy` are persisted in `public.busy_parts` (ledger DBL-0044, DBL-0050). Uploads are append-only. An invoice already stored for the same `source_type` + `Invoice_No` + `Invoice_Date` is skipped as a group; new invoices insert every Parts line. Uploading PV does not delete EV, and neither upload truncates historical Parts data.
 
 Exact CRM columns inspected from `Parts - PV.csv` and `Parts - EV.csv`:
 

@@ -12,6 +12,17 @@ export interface BusyPartsPersistRow {
   source_file_name: string
 }
 
+export interface BusyPartsImportPartition {
+  newRows: BusyPartsPersistRow[]
+  skippedRows: BusyPartsPersistRow[]
+  newInvoices: number
+  skippedInvoices: number
+}
+
+export function busyPartsInvoiceKey(sourceType: string, invoiceNo: string, invoiceDate: string): string {
+  return `${String(sourceType).trim().toUpperCase()}|${String(invoiceNo).trim().toUpperCase()}|${String(invoiceDate).slice(0, 10)}`
+}
+
 export function toBusyPartsPersistRows(lines: BusyPartsLine[], sourceType: VehiclePortal, sourceFileName: string): BusyPartsPersistRow[] {
   const byKey = new Map<string, BusyPartsPersistRow>()
   for (const line of lines) {
@@ -29,6 +40,35 @@ export function toBusyPartsPersistRows(lines: BusyPartsLine[], sourceType: Vehic
     })
   }
   return [...byKey.values()]
+}
+
+export function partitionBusyPartsImport(
+  existingInvoiceKeys: Iterable<string>,
+  incomingRows: BusyPartsPersistRow[],
+): BusyPartsImportPartition {
+  const existing = new Set(existingInvoiceKeys)
+  const groups = new Map<string, BusyPartsPersistRow[]>()
+  for (const row of incomingRows) {
+    const key = busyPartsInvoiceKey(row.source_type, row.invoice_no, row.invoice_date)
+    const group = groups.get(key)
+    if (group) group.push(row)
+    else groups.set(key, [row])
+  }
+
+  const newRows: BusyPartsPersistRow[] = []
+  const skippedRows: BusyPartsPersistRow[] = []
+  let newInvoices = 0
+  let skippedInvoices = 0
+  for (const [key, rows] of groups) {
+    if (existing.has(key)) {
+      skippedInvoices += 1
+      skippedRows.push(...rows)
+    } else {
+      newInvoices += 1
+      newRows.push(...rows)
+    }
+  }
+  return { newRows, skippedRows, newInvoices, skippedInvoices }
 }
 
 export function persistedRowToPartsLine(row: {
