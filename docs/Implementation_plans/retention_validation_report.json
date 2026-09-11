@@ -1,6 +1,6 @@
 {
-  "generated_at_utc": "2026-09-11T05:44:58.693Z",
-  "scanned_files": 65,
+  "generated_at_utc": "2026-09-11T05:47:16.171Z",
+  "scanned_files": 66,
   "violations": 0,
   "scanned": [
     {
@@ -149,6 +149,14 @@
     },
     {
       "file": "docs/Implementation_plans/mobileversion/categories/redesign/active/redesign_bodypaint_module.md",
+      "checks": {
+        "metrics_automated_rows": 0,
+        "changelog_automated_rows": 0,
+        "snapshot_blocks": 0
+      }
+    },
+    {
+      "file": "docs/Implementation_plans/webversion/categories/accounts/active/ACCOUNTS-001_MECHANICAL_BODYSHOP_ACCOUNTS_DESK_PLAN_2026-09-11.md",
       "checks": {
         "metrics_automated_rows": 0,
         "changelog_automated_rows": 0,

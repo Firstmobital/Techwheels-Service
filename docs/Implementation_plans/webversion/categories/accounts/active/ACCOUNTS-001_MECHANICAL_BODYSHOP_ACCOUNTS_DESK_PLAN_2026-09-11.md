@@ -1,0 +1,304 @@
+# ACCOUNTS-001: Mechanical and Bodyshop Accounts Desk
+
+**Plan ID:** ACCOUNTS-001  
+**Created:** 2026-09-11  
+**Last Updated:** 2026-09-11  
+**Priority:** HIGH  
+**Owner:** Accounts + Platform Team  
+**Status:** Active (web implemented; DBL-0045 SQL Editor apply pending)  
+**Platform:** webversion  
+**Category:** accounts  
+**Ledger:** DBL-0045 (PROPOSED). Do not reuse DBL-0043 (`busy`) or DBL-0044 (`busy_parts`). Timestamp at apply: `20260911130000`.  
+**Route:** `/accounts`  
+**Module:** `accounts`  
+**Depends on:** BODYSHOP-SETTLEMENT-001 (`bodyshop_settlements`, Stage 18 customer lines); Service Advisor Mark Done (`invoice_done_at`)  
+**Related (do not merge):** BODYSHOP-RECOVERY-001 (insurance due); BUSY-001 (`/busy` DMS Labour export)  
+**Audit baseline:** HEAD `8c76f16` after rebase onto `fcbbd01`. Schema authority: `supabase/backups/full_metadata.sql`.
+
+---
+
+## Executive Summary
+
+Add a top-level **Accounts** desk at `/accounts` with two sections. **Mechanical** lists Floor Incharge service types after Service Advisor **Mark Done**, then Accounts captures invoice number, billed amount, and payment notes. **Bodyshop** lists Repair Tracker cases that already have invoice number and billed amount so Stage 18 Customer Diff Payment can be posted here.
+
+This is not `/busy` (BUSY Party/Invoice export) and not `/bodyshop-recovery` (insurance-due book). Recovery may display or opportunistically post Customer payment (CP) on its DO panel; it still only *lists* rows with insurance due. Accounts owns the customer-remaining book, including billed JCs with insurance due ₹0.
+
+**Risk Level:** MEDIUM  
+**Estimated Duration:** 2–3 days  
+**Rollback Strategy:** Drop DBL-0045 RPCs/table/module row; revert `/accounts` nav/page and the `customer_payment` settlement variant. Leave `bodyshop_settlements` and Recovery/BUSY untouched.
+
+---
+
+## Objectives
+
+1. Register RBAC module `accounts` and route `/accounts` without colliding with `busy` or `invoices`.
+2. Show Mechanical cases only after Mark Done on floor service types; let Accounts enter invoice number, billed amount, and payment notes.
+3. Show Bodyshop cases when invoice number and billed amount exist; post Stage 18 customer receipt/refund from this page.
+4. Keep Recovery insurance-due listing, Repair Tracker invoice/DO capture, SA Mark Done, and BUSY export unchanged.
+
+---
+
+## Context & Background
+
+There is no `/accounts` page today. Mechanical completion is `service_reception_entries.invoice_done_at` (Mark Done). That flag has no invoice number or billed amount. Bodyshop money lives on `bodyshop_settlements` / `bodyshop_settlement_lines`. Recovery lists `insurance_due_amount > 0` only. After 2026-09-11 rebase, Recovery shows Customer / Policy / CP via a client-side join and `do_payment` can also post CP. That does not replace a customer-diff queue.
+
+BODYSHOP-SETTLEMENT-001 Phase 7 Task 7.1 (dedicated `/accounts` queue) and BODYSHOP-RECOVERY-001 Task 3.1 (customer remaining book) are owned by this plan.
+
+**Locked product decisions**
+
+- v1 is a full desk, not view-only.
+- Mechanical money is **manual capture**. Do not auto-join `psf_revenue_dms` / `job_card_closed_data`.
+- Do not change Mark Done, Floor Incharge, Repair Tracker invoice/DO capture, Recovery list filter, or BUSY.
+
+```mermaid
+flowchart TD
+  reception[service_reception_entries]
+  reception -->|floor service types| fi[Floor Incharge]
+  fi -->|work_status completed| sa[Service Advisor]
+  sa -->|invoice_done_at set| mech[Accounts Mechanical]
+  mech -->|manual invoice plus notes| mechInv[accounts_mechanical_invoices]
+  reception -->|service_type Accident| bs[Bodyshop Repair]
+  bs -->|invoice_number and billed_amount| acctBs[Accounts Bodyshop]
+  acctBs -->|customer receipt or refund| lines[bodyshop_settlement_lines]
+  bs -->|do_amount and insurance due| rec[Bodyshop Recovery]
+  dms[psf_revenue_dms] -->|Labour invoices| busy[BUSY export]
+```
+
+---
+
+## Locked rules (v1)
+
+1. Nav label **Accounts**. Module `accounts`. Route `/accounts`. Top-level nav beside BUSY / Reports — not inside the Bodyshop dropdown, not a BUSY tab.
+2. Grant by named user in Admin → Permissions (`accounts` view). View is enough to list, capture mechanical, and post customer. No Employee Master business role.
+3. Org-wide visibility. No dealer/branch/fuel filter.
+4. Mechanical row = `is_floor_incharge_service_type` + `invoice_done_at IS NOT NULL` + non-empty `jc_number`. Exclude Accident and Rusting.
+5. Bodyshop row = non-blank `invoice_number` AND `invoice_amount` / `billed_amount` not null, settlement header exists, `overall_status <> cancelled`. Do **not** require `insurance_due_amount > 0`.
+6. Default Bodyshop filter = customer remaining pending (`due`/`refund` and status not `received`). Toggle All billed / Received. `kind = none` only under All billed.
+7. Settlement panel: add `variant="customer_payment"`. Do not reuse `do_payment` (that now includes Main/GST/TDS plus opportunistic CP).
+8. Accounts must not upsert invoice/DO header or post Main/GST/TDS.
+9. Cancelled repairs are not Accounts Bodyshop rows.
+
+Floor Incharge types (authority: `src/lib/api/reception.ts` + `is_floor_incharge_service_type`): Running Repairs, First/Second/Third Free Service, Paid Service, Updation, E Breakdown, Campaign.
+
+---
+
+## Database changes (DBL-0045)
+
+Do not reuse module `invoices` (id 2) or module `busy`. Do not re-run DBL-0026 / 0031–0037 / 0042 / 0043.
+
+### A. `public.modules`
+
+- `name = accounts`, `label = Accounts`, `route = /accounts`, `is_active = true`
+- `sort_order` next to BUSY (BUSY is 29) — use 30 or the next free value at apply
+
+### B. `public.accounts_mechanical_invoices` (1:1 reception entry)
+
+- `reception_entry_id` unique FK to `service_reception_entries`
+- denormalized `jc_number`
+- `invoice_number` text, `invoice_date` date, `billed_amount` numeric(14,2)
+- `payment_status` `pending` / `partial` / `received` / `not_received` default `pending`
+- `amount_received` numeric(14,2) nullable
+- `payment_notes` text
+- `captured_by`, `captured_at`, `updated_at`
+- RLS: authenticated direct writes denied; SELECT/write only via SECURITY DEFINER RPCs
+- Do not add these money columns onto `service_reception_entries`
+
+### C. RPCs
+
+- `list_accounts_mechanical_cases()` — org-wide; floor types + `invoice_done_at`; left join invoice table
+- `upsert_accounts_mechanical_invoice(...)` — requires `accounts` view/modify; validates Mark Done + floor type
+- `list_accounts_bodyshop_cases()` — org-wide; invoice number + billed amount; return customer name, policy no, `customer_diff_amount`, `customer_remaining_amount`, `customer_posted_amount` (CP), kind, statuses. Do not rely on a second client join the way Recovery does today.
+- `bodyshop_settlement_can_post_customer(repair_card_id)` — admin or `accounts` view/modify, org-wide (same pattern as `bodyshop_settlement_can_post_do`)
+- Extend `add_bodyshop_settlement_line` **customer path only** to accept that helper
+
+### D. Checks
+
+Paired file under `supabase/sql_checks/`. After apply: refresh `full_metadata.sql`.
+
+---
+
+## Web UI
+
+Pattern: `src/pages/BodyshopRecoveryPage.tsx` (KPIs, search, table, Excel, on-page post). Use Recovery labels: Customer, Policy, **Customer payment (CP)**.
+
+**Wiring** (`src/App.tsx`, `src/components/TopNav.tsx`)
+
+- Add `accounts` to `ModuleName`, `AppRoute`, `ROUTE_MODULE_MAP`, `NAV_ITEMS`
+- Add `canAccessPath` prefix for `/accounts` next to `/busy`
+- Update `docs/shared/reference/MODULE_ROUTE_CONTRACT.md` with an `accounts` row under `busy`
+
+**Settlement panel** (`src/components/BodyshopSettlementPanel.tsx`)
+
+- Extend variant to `'full' | 'do_payment' | 'customer_payment'`
+- `customer_payment`: hide Billing & DO and Stage 18 DO Payment; show Stage 18 Customer Diff Payment + summary (Invoice, Customer diff, Remaining, CP)
+- Recovery stays `do_payment`
+
+**Page** `src/pages/AccountsPage.tsx` + `src/lib/api/accounts.ts`
+
+- Tabs: Mechanical | Bodyshop
+- Search: JC / reg / invoice
+- Period chips on Mark Done date (mechanical) and invoice date (bodyshop)
+- Excel export per section
+
+**Mechanical desk**
+
+- Columns: Mark Done at, JC, reg, model, service type, SA, branch, owner, invoice number, billed amount, payment status, notes
+- Capture / Edit drawer: invoice number, invoice date, billed amount, amount received, payment status, payment notes
+- KPI: Mark Done count, invoice-pending count, billed sum, payment-pending count
+
+**Bodyshop desk**
+
+- Columns: JC, reg, customer, branch, SA, invoice number, invoice date, billed amount, customer diff, kind, remaining, Customer payment (CP), customer payment status
+- Post Payment opens `variant="customer_payment"`
+- KPI: billed vehicles, customer remaining sum, pending / partial / received split
+
+---
+
+## Implementation Tasks
+
+### Phase 1: Docs
+- [x] **Task 1.1:** Write this plan under `categories/accounts/active/`.
+- [x] **Task 1.2:** Register in web INDEX + IMPLEMENTATION_TRACKER; DBL-0045 PROPOSED.
+- [x] **Task 1.3:** Point SETTLEMENT Task 7.1 and RECOVERY Task 3.1 here.
+
+### Phase 2: Database
+- [x] **Task 2.1:** Migration: module, `accounts_mechanical_invoices`, list/upsert RPCs, customer-post grant.
+- [x] **Task 2.2:** Paired sql_checks.
+- [x] **Task 2.3:** Operator apply DBL-0045 (sql_checks passed 2026-09-11). Refresh `full_metadata.sql` still pending.
+
+### Phase 3: Web
+- [x] **Task 3.1:** Route, nav, RBAC, `canAccessPath`.
+- [x] **Task 3.2:** `customer_payment` variant on settlement panel.
+- [x] **Task 3.3:** Accounts page — Mechanical capture desk.
+- [x] **Task 3.4:** Accounts page — Bodyshop customer-diff desk + Excel.
+
+### Phase 4: Closeout
+- [x] **Task 4.1:** MODULE_ROUTE_CONTRACT (grant Accounts users after SQL apply).
+- [x] **Task 4.2:** Evidence test matrix.
+- [ ] **Task 4.3:** `npm run docs:validate`; Accounts + Eng sign-off after SQL apply.
+
+---
+
+## Activity Tracker
+
+> Update this section in real-time as work progresses.
+
+### Legend
+- COMPLETED
+- IN PROGRESS
+- PENDING
+- BLOCKED
+
+### Phase 1
+```
+✅ 1.1 | Plan file | Eng | 2026-09-11 | 2026-09-11 | ACCOUNTS-001
+✅ 1.2 | Index + tracker + DBL-0045 | Eng | 2026-09-11 | 2026-09-11 | After DBL-0043 busy
+✅ 1.3 | Related-plan pointers | Eng | 2026-09-11 | 2026-09-11 | Settlement 7.1 / Recovery 3.1
+```
+
+### Phase 2
+```
+✅ 2.1 | Migration | Eng | 2026-09-11 | 2026-09-11 | 20260911130000
+✅ 2.2 | sql_checks | Eng | 2026-09-11 | 2026-09-11 |
+✅ 2.3 | Apply + sql_checks | Operator | 2026-09-11 | 2026-09-11 | All 7 checks true; metadata refresh pending
+```
+
+### Phase 3
+```
+✅ 3.1 | Route/nav/RBAC | Eng | 2026-09-11 | 2026-09-11 | Beside BUSY
+✅ 3.2 | customer_payment variant | Eng | 2026-09-11 | 2026-09-11 | Do not reuse do_payment
+✅ 3.3 | Mechanical desk | Eng | 2026-09-11 | 2026-09-11 | Manual invoice capture
+✅ 3.4 | Bodyshop desk | Eng | 2026-09-11 | 2026-09-11 | Customer remaining book
+```
+
+### Phase 4
+```
+✅ 4.1 | Contract | Eng | 2026-09-11 | 2026-09-11 | Grant users after apply
+✅ 4.2 | Test matrix | Eng | 2026-09-11 | 2026-09-11 | evidence/
+⏳ 4.3 | Validate + sign-off | Eng + Accounts | - | - | After SQL apply
+```
+
+---
+
+## Dependencies & Prerequisites
+
+- [x] BODYSHOP-SETTLEMENT-001 ledger tables and `postCustomerAmount` exist.
+- [x] Service Advisor Mark Done writes `invoice_done_at`.
+- [x] Post-rebase frontend audit (BUSY + Recovery CP) recorded 2026-09-11.
+- [x] DBL-0045 applied (sql_checks passed 2026-09-11).
+- [ ] Named Accounts users granted `accounts` view.
+
+---
+
+## Risk Assessment
+
+| Risk | Probability | Impact | Mitigation |
+|------|------------|--------|-----------|
+| Colliding with BUSY or DBL-0043 | Medium | High | Separate module/route; ledger DBL-0045 only |
+| Reusing `do_payment` leaks DO posting onto Accounts | Medium | High | New `customer_payment` variant only |
+| Recovery CP column mistaken for the customer book | Medium | Medium | Recovery list stays insurance-due; Accounts includes due ₹0 |
+| Mechanical money written onto reception | Low | High | Dedicated `accounts_mechanical_invoices`; SA flag stays `invoice_done_at` |
+| Accounts user cannot post customer lines | High if helper omitted | High | Extend customer path with `bodyshop_settlement_can_post_customer` |
+
+---
+
+## Success Criteria
+
+- Mark Done mechanical JC appears in Accounts → Mechanical without a Floor/SA code change.
+- Accident cases never appear in Mechanical.
+- Accounts can save invoice number / billed amount / notes on a Mark Done row.
+- Bodyshop row appears after invoice number + billed amount exist, including insurance due ₹0.
+- Customer receipt/refund from Accounts updates `bodyshop_settlements` / card cache.
+- Recovery still lists only insurance due; Recovery CP column still works.
+- `/busy` still exports; user with only `busy` cannot open `/accounts`.
+- User without `accounts` sees AccessDenied at `/accounts`.
+
+---
+
+## Out of v1
+
+- Mobile
+- Auto-fill mechanical invoice from DMS
+- Changing BUSY eligibility or `/busy` UI
+- Bank UTR matching
+- Changing SA Mark Done or Floor Incharge
+- Moving invoice/DO capture off Repair Tracker
+- Replacing `/bodyshop-recovery` or removing its CP/CA columns
+- Multi-invoice per JC
+- Rusting / PDI / other non-floor types
+
+---
+
+## Communication & Sign-Off
+
+**Stakeholders:**
+- [ ] Accounts Lead: _______________ (Date)
+- [ ] Platform / Engineering: _______________ (Date)
+- [ ] Bodyshop Ops: _______________ (Date)
+
+---
+
+## Notes & Lessons Learned
+
+### 2026-09-11 - Kickoff / post-rebase audit
+
+- HEAD `8c76f16`. Dump has no `accounts` or `busy` module row; BUSY is frontend + DBL-0043 PROPOSED.
+- Recovery CP/policy are client-side joins after `list_bodyshop_do_recovery()`.
+- `do_payment` now posts CP via `postCustomerAmount` when CP is entered.
+- Mechanical Mark Done still has no invoice number/amount on reception.
+
+---
+
+## Related Documentation
+
+- `docs/Implementation_plans/webversion/categories/bodyshop/active/BODYSHOP-SETTLEMENT-001_PAYMENT_RECONCILIATION_LEDGER_PLAN_2026-09-04.md`
+- `docs/Implementation_plans/webversion/categories/bodyshop/active/BODYSHOP-RECOVERY-001_DO_INSURANCE_RECOVERY_BOOK_PLAN_2026-09-04.md`
+- `docs/Implementation_plans/webversion/categories/operations/active/BUSY-001_BUSY_ACCOUNTING_EXPORT_PLAN_2026-09-10.md`
+- `docs/shared/reference/MODULE_ROUTE_CONTRACT.md`
+- `docs/shared/reference/DB_CHANGE_LEDGER.md` (DBL-0045)
+- Evidence (later): `docs/Implementation_plans/webversion/categories/accounts/evidence/ACCOUNTS-001_TEST_MATRIX.md`
+
+---
+
+**Last Updated:** 2026-09-11  
+**Status:** IN PROGRESS (web shipped; SQL Editor apply pending)

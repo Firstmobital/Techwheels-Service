@@ -51,6 +51,7 @@ import WhatsAppAutomationsPage from './pages/WhatsAppAutomationsPage'
 import PostServiceFeedbackCREPage from './pages/PostServiceFeedbackCREPage'
 import PartsSPMDashboardPage from './pages/PartsSPMDashboardPage'
 import BusyAccountingPage from './pages/BusyAccountingPage'
+import AccountsPage from './pages/AccountsPage'
 import VerifyScreenPreview from './pages/VerifyScreenPreview'
 import HelpTicketsAdminPage from './pages/HelpTicketsAdminPage'
 import MyHelpTicketsPage from './pages/help/MyHelpTicketsPage'
@@ -77,6 +78,7 @@ const NAV_ITEMS = [
   { to: '/payroll', label: 'Payroll', icon: 'reports' },
   { to: '/import', label: 'Imports', icon: 'import' },
   { to: '/busy', label: 'BUSY', icon: 'banknote' },
+  { to: '/accounts', label: 'Accounts', icon: 'reports' },
   { to: '/reports', label: 'Reports', icon: 'reports' },
   { to: '/autodoc', label: 'AutoDoc', icon: 'autodoc' },
   { to: '/settings', label: 'Settings', icon: 'settings' },
@@ -130,8 +132,9 @@ type ModuleName =
   | 'post_service_feedback_cre'
   | 'parts_spm'
   | 'busy'
+  | 'accounts'
 
-type AppRoute = '/import' | '/reports' | '/settings' | '/admin' | '/autodoc' | '/reception' | '/service-advisor' | '/floor-incharge' | '/sa-tracker' | '/bodyshop-tracker' | '/bodyshop-floor' | '/technician' | '/payroll' | '/complaints' | '/help-tickets' | '/bodyshop-repair' | '/bodyshop-recovery' | '/ew-reminder' | '/service-booking' | '/wa-agent' | '/telecalling' | '/insurance-renewal-telecalling' | '/auto-service-reminder' | '/cre-incentive' | '/post-service-feedback' | '/parts-spm' | '/busy'
+type AppRoute = '/import' | '/reports' | '/settings' | '/admin' | '/autodoc' | '/reception' | '/service-advisor' | '/floor-incharge' | '/sa-tracker' | '/bodyshop-tracker' | '/bodyshop-floor' | '/technician' | '/payroll' | '/complaints' | '/help-tickets' | '/bodyshop-repair' | '/bodyshop-recovery' | '/ew-reminder' | '/service-booking' | '/wa-agent' | '/telecalling' | '/insurance-renewal-telecalling' | '/auto-service-reminder' | '/cre-incentive' | '/post-service-feedback' | '/parts-spm' | '/busy' | '/accounts'
 
 interface PermissionRow {
   module_name: string
@@ -165,6 +168,7 @@ const ROUTE_MODULE_MAP: Record<AppRoute, ModuleName[]> = {
   '/post-service-feedback': ['post_service_feedback_cre'],
   '/parts-spm': ['parts_spm'],
   '/busy': ['busy'],
+  '/accounts': ['accounts'],
 }
 
 const BODYSHOP_GROUP_ROUTE = '__bodyshop-group__' as const
@@ -904,6 +908,7 @@ function canAccessPath(pathname: string, allowedModules: Set<string>) {
   if (pathname.startsWith('/post-service-feedback')) return hasAnyModuleAccess(allowedModules, ROUTE_MODULE_MAP['/post-service-feedback'])
   if (pathname.startsWith('/parts-spm')) return hasAnyModuleAccess(allowedModules, ROUTE_MODULE_MAP['/parts-spm'])
   if (pathname.startsWith('/busy')) return hasAnyModuleAccess(allowedModules, ROUTE_MODULE_MAP['/busy'])
+  if (pathname.startsWith('/accounts')) return hasAnyModuleAccess(allowedModules, ROUTE_MODULE_MAP['/accounts'])
   if (pathname.startsWith('/c/')) return true
   if (pathname.startsWith('/reset-password') || pathname.startsWith('/auth/callback') || pathname.startsWith('/forgot-password')) return true
   return false
@@ -1547,6 +1552,14 @@ VITE_SUPABASE_ANON_KEY=your-anon-key`}
                   element={(
                     <RequireAccess allowedModules={allowedModules} modules={ROUTE_MODULE_MAP['/busy']}>
                       <BusyAccountingPage />
+                    </RequireAccess>
+                  )}
+                />
+                <Route
+                  path="/accounts"
+                  element={(
+                    <RequireAccess allowedModules={allowedModules} modules={ROUTE_MODULE_MAP['/accounts']}>
+                      <AccountsPage />
                     </RequireAccess>
                   )}
                 />

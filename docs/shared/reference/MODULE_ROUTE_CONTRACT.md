@@ -2,7 +2,7 @@
 
 **Document ID:** MODULE-ROUTE-001  
 **Version:** 1.0  
-**Last Updated:** 2026-09-10  
+**Last Updated:** 2026-09-11  
 **Owner:** Techwheels Dev Team + GitHub Copilot  
 
 ---
@@ -36,6 +36,7 @@ This document defines the authoritative mapping between database modules and fro
 | — | `help_tickets` | `/help-tickets` | `/help-tickets` | HelpTicketsAdminPage | Active | Support inbox (org-wide). Employee self-service at `/help/tickets*` is auth-only (no module grant). |
 | — | `bodyshop_recovery` | `/bodyshop-recovery` | `/bodyshop-recovery` | BodyshopRecoveryPage | Active | DO / insurance-due book. Org-wide. More + Post Payment (Stage 18 DO) on-page. |
 | — | `busy` | `/busy` | `/busy` | BusyAccountingPage | Active | BUSY Party Account + Invoice Voucher export from `psf_revenue_dms` + persisted `busy_parts`. |
+| — | `accounts` | `/accounts` | `/accounts` | AccountsPage | Active | Mechanical Mark Done invoice capture + Bodyshop Stage 18 customer-diff book. Not Recovery. Not BUSY. |
 
 **Legend:**
 - **Module Name**: Authoritative name from `public.modules.name`
@@ -61,6 +62,7 @@ const ROUTE_MODULE_MAP: Record<AppRoute, ModuleName[]> = {
   '/autodoc':  ['autodoc'],
   '/parts-spm': ['parts_spm'],
   '/busy': ['busy'],
+  '/accounts': ['accounts'],
 }
 ```
 

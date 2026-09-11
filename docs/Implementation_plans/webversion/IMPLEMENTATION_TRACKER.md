@@ -1,6 +1,6 @@
 # Web Version Implementation Tracker
 
-Last Updated: 2026-09-10
+Last Updated: 2026-09-11
 Scope: All webversion plans under active execution or review
 
 Legend:
@@ -16,6 +16,7 @@ Legend:
 
 | Plan ID | Category | Title | Status | Owner | Source File | Last Updated |
 |---|---|---|---|---|---|---|
+| ACCOUNTS-001 | accounts | Mechanical + Bodyshop Accounts desk | IP | Accounts + Platform Team | docs/Implementation_plans/webversion/categories/accounts/active/ACCOUNTS-001_MECHANICAL_BODYSHOP_ACCOUNTS_DESK_PLAN_2026-09-11.md | 2026-09-11 |
 | BODYSHOP-FLOW | bodyshop | Bodyshop module flow | IP | Bodyshop Team | docs/Implementation_plans/webversion/categories/bodyshop/active/Bodyshop-Flow.md | 2026-06-18 |
 | BODYSHOP-QUEUE-001 | bodyshop | Canonical stage worklist backend | IP | Bodyshop Team + Platform Team | docs/Implementation_plans/webversion/categories/bodyshop/active/BODYSHOP-QUEUE-001_CANONICAL_STAGE_WORKLIST_BACKEND_PLAN_2026-06-20.md | 2026-06-20 |
 | BODYSHOP-EARNINGS-001 | bodyshop | Bodyshop tracker solo bonus + support split earnings | IP | Bodyshop Team + Platform Team | docs/Implementation_plans/webversion/categories/bodyshop/active/BODYSHOP-EARNINGS-001_BODYSHOP_TRACKER_SOLO_BONUS_SUPPORT_SPLIT_PLAN_2026-07-17.md | 2026-07-17 |

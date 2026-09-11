@@ -513,7 +513,7 @@ Existing list/queue queries keep working.
 
 ### Phase 7: Deferred
 
-- [ ] **Task 7.1:** Dedicated `/accounts` queue + export.
+- [ ] **Task 7.1:** Dedicated `/accounts` queue + export — **owned by ACCOUNTS-001** (`docs/Implementation_plans/webversion/categories/accounts/active/ACCOUNTS-001_MECHANICAL_BODYSHOP_ACCOUNTS_DESK_PLAN_2026-09-11.md`). Do not implement here.
 - [ ] **Task 7.2:** Multi-invoice per JC.
 - [ ] **Task 7.3:** Map future DMS payment adjustments to receipt lines.
 - [ ] **Task 7.4:** Watch billing columns in BODYSHOP-QUEUE-001 projection (optional).

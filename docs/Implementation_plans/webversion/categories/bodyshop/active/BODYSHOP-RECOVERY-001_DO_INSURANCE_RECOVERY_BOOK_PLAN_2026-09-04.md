@@ -54,7 +54,7 @@ insurance_due = do_amount − (Main + GST + TDS, not reversed)
 - [x] **Task 2.1:** Web page + API + Bodyshop dropdown.
 - [x] **Task 2.2:** Operator apply DBL-0031 then DBL-0032; Sanjay Kansotia has `bodyshop_recovery` view. Grant other Accounts users as needed.
 - [x] **Task 2.4:** Period pills + insurer filter; More modal; Post Payment Stage 18 on Recovery (DBL-0033).
-- [ ] **Task 3.1:** Customer remaining book (later plan). Not v1.
+- [ ] **Task 3.1:** Customer remaining book — **owned by ACCOUNTS-001**. Recovery CP/CA columns are display/opportunistic post only; list stays insurance-due. Not Recovery v1.
 - [ ] **Task 3.2:** Insurer master / SA dropdown — **BODYSHOP-INSURER-001** (planned; not this Recovery v1).
 
 ---
@@ -69,7 +69,7 @@ insurance_due = do_amount − (Main + GST + TDS, not reversed)
 ✅ 2.3 | Org-wide list (no dealer scope) | Eng | 2026-09-04 | 2026-09-04 | DBL-0032; NO-DEALER must see all
 ✅ 2.2 | Apply DBL-0031 + DBL-0032 + grant Accounts | Operator | 2026-09-04 | 2026-09-04 | DBL-0032 APPLIED prod; Sanjay has view; other Accounts as needed
 ✅ 2.4 | Period + insurer + More + Post Payment | Eng | 2026-09-04 | 2026-09-04 | DBL-0033; DO only; no Repair Tracker
-⏳ 3.1 | Customer book | - | - | - | Deferred
+⏳ 3.1 | Customer book | - | - | - | ACCOUNTS-001 owns this; Recovery CP is not the book
 ⏳ 3.2 | Insurer master | - | - | - | BODYSHOP-INSURER-001
 ```
 

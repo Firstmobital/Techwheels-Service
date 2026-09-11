@@ -5,6 +5,7 @@ Tracks documentation-sync updates for business logic, architecture, and access c
 ## 2026-09-11
 
 - BUSY Parts PV/EV uploads persist to `public.busy_parts` with mandatory CRM `Invoice_No` → `invoice_no` and `Invoice_Date` → `invoice_date`. Those fields are source evidence only; Labour invoice number/date remain BUSY voucher identity. Mismatches stay in the Parts table and surface as validation warnings. Dedup key is `source_row_key`. Re-upload replaces one `source_type`. Ledger: DBL-0044. Plan: `BUSY-001`.
+- Planned web **Accounts** desk at `/accounts` (module `accounts`, DBL-0045). Mechanical = Floor Incharge types after Service Advisor Mark Done, with manual invoice number / billed amount / payment notes. Bodyshop = Repair Tracker cases that already have invoice number + billed amount, for Stage 18 Customer Diff Payment. Does not replace `/bodyshop-recovery` (insurance due) or `/busy` (DBL-0043). Plan: `ACCOUNTS-001`. Mobile: no impact.
 
 ## 2026-09-10
 

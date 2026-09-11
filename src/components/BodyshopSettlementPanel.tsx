@@ -60,9 +60,10 @@ export function BodyshopSettlementPanel({
   card: RepairCard
   onCardChange: (next: RepairCard) => void
   toast: (msg: string, ok?: boolean) => void
-  variant?: 'full' | 'do_payment'
+  variant?: 'full' | 'do_payment' | 'customer_payment'
 }) {
   const doOnly = variant === 'do_payment'
+  const customerOnly = variant === 'customer_payment'
   const [payload, setPayload] = useState<SettlementPayload | null>(null)
   const [loading, setLoading] = useState(true)
   const [savingHeader, setSavingHeader] = useState(false)
@@ -311,7 +312,7 @@ export function BodyshopSettlementPanel({
 
   return (
     <>
-      {!doOnly && (
+      {!doOnly && !customerOnly && (
       <div className="brx-panel">
         <div className="brx-panel-h">Billing &amp; DO (stages 15–16)</div>
         {payload?.payer_mismatch && (
@@ -403,8 +404,7 @@ export function BodyshopSettlementPanel({
         </div>
       )}
 
-      {doCaptured && (
-      <>
+      {doCaptured && !customerOnly && (
       <div className="brx-panel">
         <div className="brx-panel-h">Stage 18 · DO Payment</div>
         <div className="brx-settle-status">
@@ -480,7 +480,7 @@ export function BodyshopSettlementPanel({
         )}
       </div>
 
-      {!doOnly && (
+      {(customerOnly || (!doOnly && doCaptured)) && (
       <div className="brx-panel">
         <div className="brx-panel-h">Stage 18 · Customer Diff Payment</div>
         <div className="brx-settle-status">
@@ -524,20 +524,24 @@ export function BodyshopSettlementPanel({
       </div>
       )}
 
+      {(customerOnly || doCaptured) && (
+      <>
       <div className="brx-panel">
         <div className="brx-panel-h">Settlement summary</div>
         <div className="brx-billing-summary">
           <div className="brx-billing-summary-grid brx-settle-summary-grid">
             {[
               ['Invoice', header?.invoice_amount ?? card.billed_amount],
-              ['DO', header?.do_amount ?? card.do_amount],
-              ['Released', header?.do_released_amount],
-              ['Insurance due', insuranceDue],
+              ...(!customerOnly ? [
+                ['DO', header?.do_amount ?? card.do_amount],
+                ['Released', header?.do_released_amount],
+                ['Insurance due', insuranceDue],
+              ] as const : []),
               ['Customer payment (CP)', header?.customer_posted_amount ?? 0],
               ...(!doOnly ? [
                 ['Customer diff', custDiff],
                 ['Remaining', remaining],
-                ['Outstanding', header?.outstanding_amount],
+                ...(!customerOnly ? [['Outstanding', header?.outstanding_amount] as const] : []),
               ] as const : []),
             ].map(([l, v]) => (
               <div key={String(l)}>
@@ -574,7 +578,7 @@ export function BodyshopSettlementPanel({
                   <td className="brx-settle-ref">{lineRefRemark(line)}</td>
                   <td>{line.actor_email || '—'}</td>
                   <td>
-                    {!line.is_reversed && line.line_type !== 'reversal' && (!doOnly || (line.party === 'insurance' && line.line_type === 'do_component') || (line.party === 'customer' && line.line_type === 'receipt')) && (
+                    {!line.is_reversed && line.line_type !== 'reversal' && (customerOnly ? line.party === 'customer' : (!doOnly || (line.party === 'insurance' && line.line_type === 'do_component') || (line.party === 'customer' && line.line_type === 'receipt'))) && (
                       <button type="button" className="btn" onClick={() => void reverseLine(line.id)}>Reverse</button>
                     )}
                   </td>

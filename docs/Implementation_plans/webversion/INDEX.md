@@ -1,6 +1,6 @@
 # Web Version Plans Index
 
-Last Updated: 2026-09-10
+Last Updated: 2026-09-11
 Scope: Web project implementation plans only
 Authority: This index is the routing source for webversion plans
 
@@ -12,6 +12,7 @@ All web planning documents must be inside:
 - `docs/Implementation_plans/webversion/categories/<category>/{active|evidence|inactive}/`
 
 Web categories currently in use:
+- `accounts`
 - `autodoc`
 - `bodyshop`
 - `complaints`
@@ -39,6 +40,7 @@ Use this file as daily command center:
 
 | Plan ID | Category | Status | Owner | File |
 |---|---|---|---|---|
+| ACCOUNTS-001 | accounts | Active (web implemented; DBL-0045 SQL apply pending) | Accounts + Platform Team | `docs/Implementation_plans/webversion/categories/accounts/active/ACCOUNTS-001_MECHANICAL_BODYSHOP_ACCOUNTS_DESK_PLAN_2026-09-11.md` |
 | BODYSHOP-FLOW | bodyshop | In Progress | Bodyshop Team | `docs/Implementation_plans/webversion/categories/bodyshop/active/Bodyshop-Flow.md` |
 | BODYSHOP-QUEUE-001 | bodyshop | Active | Bodyshop Team + Platform Team | `docs/Implementation_plans/webversion/categories/bodyshop/active/BODYSHOP-QUEUE-001_CANONICAL_STAGE_WORKLIST_BACKEND_PLAN_2026-06-20.md` |
 | BODYSHOP-EARNINGS-001 | bodyshop | Active | Bodyshop Team + Platform Team | `docs/Implementation_plans/webversion/categories/bodyshop/active/BODYSHOP-EARNINGS-001_BODYSHOP_TRACKER_SOLO_BONUS_SUPPORT_SPLIT_PLAN_2026-07-17.md` |
@@ -83,6 +85,7 @@ Use this file as daily command center:
 
 | Category | File |
 |---|---|
+| accounts | `docs/Implementation_plans/webversion/categories/accounts/evidence/ACCOUNTS-001_TEST_MATRIX.md` |
 | autodoc | `docs/Implementation_plans/webversion/categories/autodoc/evidence/AUTODOC_EXECUTION_STATUS_2026-05-22.md` |
 | bodyshop | `docs/Implementation_plans/webversion/categories/bodyshop/evidence/BP-01_DASHBOARD_DEEP_AUDIT.md` |
 | bodyshop | `docs/Implementation_plans/webversion/categories/bodyshop/evidence/BODYSHOP-QUEUE-001_PARITY_CHECKLIST_2026-06-20.md` |
