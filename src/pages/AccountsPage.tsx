@@ -869,92 +869,12 @@ export default function AccountsPage() {
                             }}
                           />
                         </label>
-<<<<<<< HEAD
-                      </div>
-                    ) : (
-                      <label className="btn btn--sm">
-                        {uploadingInvoice ? 'Uploading…' : 'Upload invoice'}
-                        <input
-                          type="file"
-                          accept="application/pdf,image/*"
-                          hidden
-                          disabled={uploadingInvoice}
-                          onChange={(e) => {
-                            const file = e.target.files?.[0]
-                            e.target.value = ''
-                            if (file) void uploadMechanicalInvoice(file)
-                          }}
-                        />
-                      </label>
-                    )}
-                  </label>
-                </div>
-                {payLines.length === 0 && (
-                  <div style={{ marginTop: 14, display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center' }}>
-                    <button type="button" className="btn btn--primary" disabled={saving} onClick={() => void saveCapture()}>
-                      {saving ? 'Saving…' : 'Save invoice'}
-                    </button>
-                    {loadingDms ? (
-                      <span style={{ color: 'var(--muted)', fontSize: 13 }}>Looking up DMS…</span>
-                    ) : dmsLookup?.unique ? (
-                      <button type="button" className="btn" onClick={applyDmsToForm}>
-                        Fetch from DMS
-                        {dmsLookup.invoice_number ? ` · ${dmsLookup.invoice_number}` : ''}
-                        {dmsLookup.total_invoice_amount != null ? ` · ${inr(dmsLookup.total_invoice_amount)}` : ''}
-                      </button>
-                    ) : (
-                      <span style={{ color: 'var(--muted)', fontSize: 13 }}>No unique DMS invoice</span>
-                    )}
-                  </div>
-                )}
-              </div>
-
-              <div className="acct-modal-section">
-                <p className="acct-modal-kicker">Payment status (automatic)</p>
-                <div className="acct-modal-summary">
-                  <div>
-                    <span>Received</span>
-                    <strong>{inr(editRow.amount_received)}</strong>
-                  </div>
-                  <div>
-                    <span>Remaining</span>
-                    <strong>{inr(mechanicalRemaining(editRow))}</strong>
-                  </div>
-                  <div>
-                    <span>Status</span>
-                    <strong>{settlementStatusLabel(editRow.payment_status)}</strong>
-                  </div>
-                </div>
-                {payError && (
-                  <div className="brx-settle-banner is-error" style={{ marginBottom: 12 }}>{payError}</div>
-                )}
-                {isMechanicalPaymentClosed(editRow) ? (
-                  <button type="button" className="btn btn--primary" onClick={() => printMechGatepass(editRow)}>
-                    Create Gatepass
-                  </button>
-                ) : (
-                  <div className="brx-form-grid-2">
-                    <label className="brx-field">
-                      <span className="brx-field-label">This receipt (₹)</span>
-                      <input className="inp" type="number" value={receiptAmount} onChange={(e) => { setReceiptAmount(e.target.value); setPayError(null) }} placeholder="Additional amount" />
-                      {mechanicalRemaining(editRow) != null && Number(mechanicalRemaining(editRow)) > 0 && (
-                        <button
-                          type="button"
-                          className="linkbtn linkbtn--sm"
-                          onClick={() => {
-                            setReceiptAmount(String(mechanicalRemaining(editRow)))
-                            setPayError(null)
-                          }}
-                        >
-                          Use remaining {inr(mechanicalRemaining(editRow))}
-                        </button>
-=======
->>>>>>> 535c8d8c (fix(accounts): responsive modal layout, invoice document view button, and lock captured invoice fields)
                       )}
                     </label>
                   </div>
+
                   {!isInvoiceLocked && (
-                    <div style={{ marginTop: 14 }}>
+                    <div style={{ marginTop: 14, display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center' }}>
                       <button
                         type="button"
                         className="btn btn--primary"
@@ -963,6 +883,17 @@ export default function AccountsPage() {
                       >
                         {saving ? 'Saving…' : 'Save invoice (Lock details)'}
                       </button>
+                      {loadingDms ? (
+                        <span style={{ color: 'var(--muted)', fontSize: 13 }}>Looking up DMS…</span>
+                      ) : dmsLookup?.unique ? (
+                        <button type="button" className="btn btn--sm" onClick={applyDmsToForm}>
+                          Fetch from DMS
+                          {dmsLookup.invoice_number ? ` · ${dmsLookup.invoice_number}` : ''}
+                          {dmsLookup.total_invoice_amount != null ? ` · ${inr(dmsLookup.total_invoice_amount)}` : ''}
+                        </button>
+                      ) : (
+                        <span style={{ color: 'var(--muted)', fontSize: 13 }}>No unique DMS invoice</span>
+                      )}
                     </div>
                   )}
                 </div>
