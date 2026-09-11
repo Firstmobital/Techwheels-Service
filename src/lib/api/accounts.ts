@@ -98,6 +98,73 @@ export async function upsertAccountsMechanicalInvoice(
   return data as AccountsMechanicalCase
 }
 
+export function isCustomerPaymentClosed(row: Pick<AccountsBodyshopCase, 'customer_payment_status' | 'customer_settlement_kind'>): boolean {
+  const kind = String(row.customer_settlement_kind ?? '').toLowerCase()
+  const status = String(row.customer_payment_status ?? 'pending').toLowerCase()
+  return status === 'received' || kind === 'none'
+}
+
+function escapeHtml(value: string | number | null | undefined): string {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+}
+
+function gatepassMoney(v: number | null | undefined): string {
+  if (v == null || Number.isNaN(Number(v))) return '—'
+  return `₹${Number(v).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+}
+
+export function openBodyshopGatepass(row: AccountsBodyshopCase): void {
+  const printed = new Date().toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'Asia/Kolkata' })
+  const win = window.open('', '_blank', 'noopener,noreferrer,width=780,height=980')
+  if (!win) throw new Error('Allow pop-ups to print the gatepass')
+  win.document.write(`<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Gatepass · ${escapeHtml(row.job_card_no)}</title>
+  <style>
+    body { font-family: ui-sans-serif, system-ui, sans-serif; color: #111; margin: 24px; }
+    h1 { font-size: 20px; margin: 0 0 4px; letter-spacing: 0.04em; }
+    .sub { color: #555; margin: 0 0 16px; font-size: 13px; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { text-align: left; padding: 8px 10px; border: 1px solid #ccc; font-size: 13px; vertical-align: top; }
+    th { width: 34%; background: #f4f4f5; }
+    .signs { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 24px; margin-top: 48px; }
+    .signs div { border-top: 1px solid #111; padding-top: 8px; font-size: 12px; }
+    @media print { button { display: none; } body { margin: 12mm; } }
+  </style>
+</head>
+<body>
+  <button onclick="window.print()">Print gatepass</button>
+  <h1>VEHICLE GATEPASS</h1>
+  <p class="sub">Techwheels Service · Printed ${escapeHtml(printed)}</p>
+  <table>
+    <tr><th>Job card</th><td>${escapeHtml(row.job_card_no)}</td></tr>
+    <tr><th>Registration</th><td>${escapeHtml(row.reg_number)}</td></tr>
+    <tr><th>Customer</th><td>${escapeHtml(row.customer_name)}</td></tr>
+    <tr><th>Branch / SA</th><td>${escapeHtml(row.branch)} · ${escapeHtml(row.sa_name)}</td></tr>
+    <tr><th>Invoice number</th><td>${escapeHtml(row.invoice_number)}</td></tr>
+    <tr><th>Invoice date</th><td>${escapeHtml(row.invoice_date)}</td></tr>
+    <tr><th>Billed amount</th><td>${escapeHtml(gatepassMoney(row.invoice_amount ?? row.billed_amount))}</td></tr>
+    <tr><th>DO Amount (₹)</th><td>${escapeHtml(gatepassMoney(row.do_amount))}</td></tr>
+    <tr><th>Customer payment (CP)</th><td>${escapeHtml(gatepassMoney(row.customer_posted_amount))} · ${escapeHtml(row.customer_payment_status || 'pending')}</td></tr>
+    <tr><th>Customer remaining</th><td>${escapeHtml(gatepassMoney(row.customer_remaining_amount))}</td></tr>
+    <tr><th>Insurer / Policy</th><td>${escapeHtml(row.insurance_company)} · ${escapeHtml(row.insurance_policy_no)}</td></tr>
+  </table>
+  <div class="signs">
+    <div>Accounts</div>
+    <div>Security / Gate</div>
+    <div>Customer</div>
+  </div>
+</body>
+</html>`)
+  win.document.close()
+}
+
 export function settlementCardFromAccountsRow(row: AccountsBodyshopCase): RepairCard {
   const overall: OverallStatus =
     row.overall_status === 'delivered' || row.overall_status === 'cancelled'

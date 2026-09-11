@@ -2,8 +2,10 @@ import { useEffect, useMemo, useState } from 'react'
 import * as XLSX from 'xlsx'
 import { BodyshopSettlementPanel } from '../components/BodyshopSettlementPanel'
 import {
+  isCustomerPaymentClosed,
   listAccountsBodyshopCases,
   listAccountsMechanicalCases,
+  openBodyshopGatepass,
   settlementCardFromAccountsRow,
   upsertAccountsMechanicalInvoice,
   type AccountsBodyshopCase,
@@ -14,7 +16,7 @@ import type { RepairCard } from '../lib/api/bodyshopRepair'
 import { settlementStatusLabel } from '../lib/api/bodyshopSettlement'
 
 type Section = 'mechanical' | 'bodyshop'
-type BodyshopFilter = 'remaining' | 'all' | 'received'
+type BodyshopFilter = 'remaining' | 'all' | 'received' | 'pending'
 
 function inr(v: number | null | undefined) {
   if (v == null || Number.isNaN(Number(v))) return '—'
@@ -171,23 +173,31 @@ export default function AccountsPage() {
     return rows.filter((r) => blobOf(r.jc_number, r.reg_number, r.invoice_number, r.owner_name, r.sa_name).includes(q))
   }, [mechRows, yearScopedMech, year, month, search])
 
-  const searchedBs = useMemo(() => {
+  const periodBs = useMemo(() => {
     const q = search.trim().toLowerCase()
     let rows = year === 'all' ? bsRows : yearScopedBs
     if (month !== 'all') rows = rows.filter((r) => dateParts(r.invoice_date).month === month)
+    if (q) rows = rows.filter((r) => blobOf(r.job_card_no, r.reg_number, r.invoice_number, r.customer_name, r.sa_name).includes(q))
+    return rows
+  }, [bsRows, yearScopedBs, year, month, search])
+
+  const searchedBs = useMemo(() => {
     if (bsFilter === 'remaining') {
-      rows = rows.filter((r) => {
+      return periodBs.filter((r) => {
+        if (isCustomerPaymentClosed(r)) return false
         const kind = String(r.customer_settlement_kind ?? '').toLowerCase()
-        const status = String(r.customer_payment_status ?? 'pending').toLowerCase()
-        if (kind === 'none' || status === 'received') return false
         return kind === 'due' || kind === 'refund' || Number(r.customer_diff_amount ?? 0) !== 0
       })
-    } else if (bsFilter === 'received') {
-      rows = rows.filter((r) => String(r.customer_payment_status ?? '').toLowerCase() === 'received')
     }
-    if (!q) return rows
-    return rows.filter((r) => blobOf(r.job_card_no, r.reg_number, r.invoice_number, r.customer_name, r.sa_name).includes(q))
-  }, [bsRows, yearScopedBs, year, month, search, bsFilter])
+    if (bsFilter === 'received') return periodBs.filter((r) => isCustomerPaymentClosed(r))
+    if (bsFilter === 'pending') {
+      return periodBs.filter((r) => {
+        const status = String(r.customer_payment_status ?? 'pending').toLowerCase()
+        return status === 'pending' || status === 'partial'
+      })
+    }
+    return periodBs
+  }, [periodBs, bsFilter])
 
   const mechKpis = useMemo(() => {
     const pending = searchedMech.filter((r) => !r.invoice_number).length
@@ -197,12 +207,17 @@ export default function AccountsPage() {
   }, [searchedMech])
 
   const bsKpis = useMemo(() => {
-    const remaining = searchedBs.reduce((s, r) => s + Number(r.customer_remaining_amount ?? 0), 0)
-    const pending = searchedBs.filter((r) => String(r.customer_payment_status ?? 'pending').toLowerCase() === 'pending').length
-    const partial = searchedBs.filter((r) => String(r.customer_payment_status ?? '').toLowerCase() === 'partial').length
-    const received = searchedBs.filter((r) => String(r.customer_payment_status ?? '').toLowerCase() === 'received').length
-    return { count: searchedBs.length, remaining, pending, partial, received }
-  }, [searchedBs])
+    const remainingRows = periodBs.filter((r) => {
+      if (isCustomerPaymentClosed(r)) return false
+      const kind = String(r.customer_settlement_kind ?? '').toLowerCase()
+      return kind === 'due' || kind === 'refund' || Number(r.customer_diff_amount ?? 0) !== 0
+    })
+    const remaining = remainingRows.reduce((s, r) => s + Number(r.customer_remaining_amount ?? 0), 0)
+    const pending = periodBs.filter((r) => String(r.customer_payment_status ?? 'pending').toLowerCase() === 'pending').length
+    const partial = periodBs.filter((r) => String(r.customer_payment_status ?? '').toLowerCase() === 'partial').length
+    const received = periodBs.filter((r) => isCustomerPaymentClosed(r)).length
+    return { remainingCount: remainingRows.length, remaining, pending, partial, received, billed: periodBs.length }
+  }, [periodBs])
 
   function openCapture(row: AccountsMechanicalCase) {
     setEditRow(row)
@@ -254,6 +269,14 @@ export default function AccountsPage() {
     setPostCard(settlementCardFromAccountsRow(row))
   }
 
+  function printGatepass(row: AccountsBodyshopCase) {
+    try {
+      openBodyshopGatepass(row)
+    } catch (e) {
+      flash(e instanceof Error ? e.message : 'Could not open gatepass', false)
+    }
+  }
+
   function exportExcel() {
     if (section === 'mechanical') {
       const sheet = XLSX.utils.json_to_sheet(searchedMech.map((r) => ({
@@ -286,6 +309,7 @@ export default function AccountsPage() {
       'Invoice number': r.invoice_number ?? '',
       'Invoice date': r.invoice_date ?? '',
       'Billed amount': r.invoice_amount ?? r.billed_amount ?? '',
+      'DO Amount (₹)': r.do_amount ?? '',
       'Customer diff': r.customer_diff_amount ?? '',
       Kind: r.customer_settlement_kind ?? '',
       Remaining: r.customer_remaining_amount ?? '',
@@ -374,11 +398,11 @@ export default function AccountsPage() {
           <button type="button" className={`brx-recov-kpi ${bsFilter === 'remaining' ? 'is-active' : ''}`} onClick={() => setBsFilter('remaining')}>
             <span className="brx-recov-kpi__l">Customer remaining</span>
             <span className="brx-recov-kpi__v">{inr(bsKpis.remaining)}</span>
-            <span className="brx-recov-kpi__s">{bsKpis.count} vehicle{bsKpis.count === 1 ? '' : 's'}</span>
+            <span className="brx-recov-kpi__s">{bsKpis.remainingCount} vehicle{bsKpis.remainingCount === 1 ? '' : 's'}</span>
           </button>
           <button type="button" className={`brx-recov-kpi ${bsFilter === 'all' ? 'is-active' : ''}`} onClick={() => setBsFilter('all')}>
             <span className="brx-recov-kpi__l">All billed</span>
-            <span className="brx-recov-kpi__v">{bsRows.length}</span>
+            <span className="brx-recov-kpi__v">{bsKpis.billed}</span>
             <span className="brx-recov-kpi__s">Invoice + billed amount</span>
           </button>
           <button type="button" className={`brx-recov-kpi ${bsFilter === 'received' ? 'is-active' : ''}`} onClick={() => setBsFilter('received')}>
@@ -386,11 +410,11 @@ export default function AccountsPage() {
             <span className="brx-recov-kpi__v">{bsKpis.received}</span>
             <span className="brx-recov-kpi__s">Customer side closed</span>
           </button>
-          <div className="brx-recov-kpi">
+          <button type="button" className={`brx-recov-kpi ${bsFilter === 'pending' ? 'is-active' : ''}`} onClick={() => setBsFilter('pending')}>
             <span className="brx-recov-kpi__l">Pending / Partial</span>
             <span className="brx-recov-kpi__v">{bsKpis.pending} / {bsKpis.partial}</span>
-            <span className="brx-recov-kpi__s">In this view</span>
-          </div>
+            <span className="brx-recov-kpi__s">Customer payment open</span>
+          </button>
         </div>
       )}
 
@@ -504,7 +528,12 @@ export default function AccountsPage() {
         </div>
       ) : (
         <div className="brx-panel" style={{ marginTop: 16 }}>
-          <div className="brx-panel-h">Bodyshop · Customer remaining</div>
+          <div className="brx-panel-h">
+            {bsFilter === 'remaining' && 'Bodyshop · Customer remaining'}
+            {bsFilter === 'all' && 'Bodyshop · All billed'}
+            {bsFilter === 'received' && 'Bodyshop · Received'}
+            {bsFilter === 'pending' && 'Bodyshop · Pending / Partial'}
+          </div>
           {loading && bsRows.length === 0 ? (
             <div className="brx-settle-status">Loading billed bodyshop cases…</div>
           ) : searchedBs.length === 0 ? (
@@ -517,6 +546,7 @@ export default function AccountsPage() {
                   <th>Customer</th>
                   <th>Invoice</th>
                   <th>Billed</th>
+                  <th>DO Amount (₹)*</th>
                   <th>Diff / Kind</th>
                   <th>Remaining</th>
                   <th>Customer payment (CP)</th>
@@ -540,6 +570,7 @@ export default function AccountsPage() {
                       <div style={{ color: 'var(--muted)', fontSize: 12 }}>{fmtDate(r.invoice_date)}</div>
                     </td>
                     <td>{inr(r.invoice_amount ?? r.billed_amount)}</td>
+                    <td>{inr(r.do_amount)}</td>
                     <td>
                       <div>{inr(r.customer_diff_amount)}</div>
                       <div style={{ color: 'var(--muted)', fontSize: 12 }}>{kindLabel(r.customer_settlement_kind)}</div>
@@ -554,7 +585,20 @@ export default function AccountsPage() {
                       </span>
                     </td>
                     <td>
-                      <button type="button" className="btn btn--primary" onClick={() => openPost(r)}>Post Payment</button>
+                      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                        <button type="button" className="btn btn--sm btn--primary" onClick={() => openPost(r)}>
+                          Post Payment
+                        </button>
+                        <button
+                          type="button"
+                          className="btn btn--sm"
+                          disabled={!isCustomerPaymentClosed(r)}
+                          title={isCustomerPaymentClosed(r) ? 'Print gatepass copy' : 'Available after customer payment is completed'}
+                          onClick={() => printGatepass(r)}
+                        >
+                          Create Gatepass
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -620,7 +664,26 @@ export default function AccountsPage() {
           <div className="modal modal--xl" role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
             <div className="modal__head">
               <h3>Stage 18 · Customer Diff Payment · {postRow.job_card_no}</h3>
-              <button type="button" className="modal__x" onClick={() => { setPostRow(null); setPostCard(null); void load() }} aria-label="Close">×</button>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                {isCustomerPaymentClosed({
+                  customer_payment_status: postCard.customer_payment_status,
+                  customer_settlement_kind: postCard.customer_settlement_kind,
+                }) && (
+                  <button
+                    type="button"
+                    className="btn btn--sm"
+                    onClick={() => printGatepass({
+                      ...postRow,
+                      customer_payment_status: postCard.customer_payment_status,
+                      customer_settlement_kind: postCard.customer_settlement_kind,
+                      do_amount: postCard.do_amount ?? postRow.do_amount,
+                    })}
+                  >
+                    Create Gatepass
+                  </button>
+                )}
+                <button type="button" className="modal__x" onClick={() => { setPostRow(null); setPostCard(null); void load() }} aria-label="Close">×</button>
+              </div>
             </div>
             <p style={{ margin: '0 16px 8px', color: 'var(--muted)' }}>
               {postRow.reg_number || '—'} · {postRow.customer_name || '—'}
