@@ -37,7 +37,7 @@ export default function CustomerPortalPage({
 
   // Live Estimates State
   const [liveEstimates, setLiveEstimates] = useState<CustomerEstimateRecord[]>([])
-  const [loadingEstimates, setLoadingEstimates] = useState(false)
+  const [_loadingEstimates, setLoadingEstimates] = useState(false)
   const [approvingEstNo, setApprovingEstNo] = useState<string | null>(null)
   const [rejectingEstNo, setRejectingEstNo] = useState<string | null>(null)
   const [rejectReason, setRejectReason] = useState('')
@@ -45,7 +45,7 @@ export default function CustomerPortalPage({
 
   // Live Gate Pass State (Accounts Module Sync)
   const [issuedGatePass, setIssuedGatePass] = useState<IssuedGatePassRecord | null>(null)
-  const [loadingGatePass, setLoadingGatePass] = useState(false)
+  const [_loadingGatePass, setLoadingGatePass] = useState(false)
 
   // Multi-Problem List State (Customer Problem Submission)
   const [problemList, setProblemList] = useState<ProblemItem[]>([

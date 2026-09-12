@@ -520,7 +520,14 @@ export function CustomerPortalAdminModal({
                     </thead>
                     <tbody className="divide-y divide-gray-100">
                       {displayedComplaints.map((c, i) => {
-                        const isApp = isFromCustomerApp(c)
+                        const isApp =
+                          c.mode === 'customer_app_problem' ||
+                          c.mode === 'customer_app_complaint' ||
+                          c.mode === 'customer_app' ||
+                          Boolean(c.primary_complaint_area && c.primary_complaint_area.toLowerCase().includes('app'))
+                        const isProblemForm =
+                          c.mode === 'customer_app_problem' ||
+                          Boolean(c.primary_complaint_area && c.primary_complaint_area.toLowerCase().includes('problem'))
                         const normReg = c.vehicle_registration_number ? c.vehicle_registration_number.trim().toUpperCase() : ''
                         const est = (c.id ? estimatesMap[`complaint_${c.id}`] : undefined) ||
                                     (normReg ? estimatesMap[`vreg_${normReg}`] : undefined)

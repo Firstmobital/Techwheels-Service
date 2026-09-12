@@ -127,7 +127,7 @@ export default function LoginPage({ onSwitchToSignUp, onSwitchToForgot, onCustom
   }
 
   // Quick-fill test credentials
-  const fillCustomerDemo = (phone: string, vehicleNo: string) => {
+  const fillCustomerDemo = (phone: string, _vehicleNo?: string) => {
     setCustomerUsername(phone)
     setCustomerPassword(phone)
     setCustError(null)

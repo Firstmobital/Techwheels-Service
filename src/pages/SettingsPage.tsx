@@ -548,7 +548,7 @@ export default function SettingsPage() {
       const matchSearch =
         !estSearch ||
         item.service_name.toLowerCase().includes(estSearch.toLowerCase()) ||
-        item.id.toLowerCase().includes(estSearch.toLowerCase())
+        String(item.id).toLowerCase().includes(estSearch.toLowerCase())
       const matchModel = estModelFilter === 'All' || item.model === estModelFilter
       const matchFuel = estFuelFilter === 'All' || item.fuel === estFuelFilter
       const matchType = estServiceTypeFilter === 'All' || item.service_type === estServiceTypeFilter
@@ -608,7 +608,7 @@ export default function SettingsPage() {
     setEstIsAddOpen(true)
   }
 
-  function handleDeleteEstItem(id: string) {
+  function handleDeleteEstItem(id: number) {
     if (window.confirm('Are you sure you want to delete this pricing item?')) {
       deletePartPricingItem(id)
       showEstToast('Item deleted')
@@ -661,19 +661,20 @@ export default function SettingsPage() {
           return
         }
         const imported: PartPricingItem[] = json.map((row, idx) => {
-          const id = String(row['Item ID'] || row['id'] || `P${Date.now()}_${idx}`)
+          const rawId = row['Item ID'] ?? row['id']
+          const id = typeof rawId === 'number' ? rawId : Number(rawId) || (Date.now() + idx)
           const name = String(row['Item Name'] || row['service_name'] || row['Name'] || row['Item'] || 'Custom Item')
-          const model = String(row['Model'] || row['model'] || '')
-          const fuel = String(row['Fuel'] || row['fuel'] || '')
+          const model = String(row['Model'] || row['model'] || 'Nexon')
+          const fuel = String(row['Fuel'] || row['fuel'] || 'Petrol')
           const stype = String(row['Service Type'] || row['service_type'] || 'Paid Service')
           const price = Number(row['Part Price (₹)'] || row['price'] || row['Price'] || 0)
           const labour = Number(row['Labour (₹)'] || row['labour'] || row['Labour'] || 0)
           return {
             id,
             service_name: name,
-            model: model && model !== 'All' ? model : undefined,
-            fuel: fuel && fuel !== 'All' ? fuel : undefined,
-            service_type: stype && stype !== 'All' ? stype : undefined,
+            model,
+            fuel,
+            service_type: stype,
             price: isNaN(price) ? 0 : price,
             labour: isNaN(labour) ? 0 : labour,
           }

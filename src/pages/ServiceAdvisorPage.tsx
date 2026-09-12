@@ -23,7 +23,6 @@ import UpdationAvailableBadge from '../components/UpdationAvailableBadge'
 import PartsRequirementSection from '../components/PartsRequirementSection'
 import CustomerRemarkModal from '../components/CustomerRemarkModal'
 import { CustomerPortalAdminModal } from '../components/CustomerPortalAdminModal'
-import { EstimateMasterModal } from '../components/EstimateMasterModal'
 
 type RowDraft = {
   service_type: string
@@ -602,7 +601,6 @@ export default function ServiceAdvisorPage() {
   const [generatingComplaintLink, setGeneratingComplaintLink] = useState<number | null>(null)
   const [customerRemarkModalOpen, setCustomerRemarkModalOpen] = useState(false)
   const [customerPortalModalOpen, setCustomerPortalModalOpen] = useState(false)
-  const [estimateMasterModalOpen, setEstimateMasterModalOpen] = useState(false)
   const [selectedPortalRegNumber, setSelectedPortalRegNumber] = useState<string | undefined>(undefined)
   const [customerProblemsMap, setCustomerProblemsMap] = useState<Record<string, CustomerProblemSummary>>({})
 
