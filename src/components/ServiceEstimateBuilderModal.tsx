@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { ALL_PARTS_PRICING, type PartPricingItem } from '../lib/partsPricing'
 import {
   saveAndSendEstimate,
+  fetchEstimateForComplaint,
   fetchEstimateForVehicle,
   type CustomerEstimateRecord,
   type EstimateItem,
@@ -30,7 +31,9 @@ export function ServiceEstimateBuilderModal({
   complaintId,
   onEstimateSent,
 }: ServiceEstimateBuilderModalProps) {
-  const [estimateNo] = useState(() => `EST-${vehicleReg.replace(/[^A-Z0-9]/g, '')}-${Date.now().toString().slice(-4)}`)
+  const [estimateNo, setEstimateNo] = useState(
+    () => `EST-${vehicleReg.replace(/[^A-Z0-9]/g, '')}-${complaintId ? `C${complaintId}` : Date.now().toString().slice(-4)}`
+  )
   const [items, setItems] = useState<EstimateItem[]>([])
   const [modelFilter, setModelFilter] = useState('All')
   const [fuelFilter, setFuelFilter] = useState('All')
@@ -48,13 +51,20 @@ export function ServiceEstimateBuilderModal({
   const portalUrl = typeof window !== 'undefined' ? `${window.location.protocol}//${window.location.hostname}:5174` : 'http://localhost:5174'
   const customerLink = `${portalUrl}/?reg=${vehicleReg.trim().toUpperCase()}`
 
-  // Load existing estimate if one already exists for this vehicle
+  // Load existing estimate if one already exists for this specific complaint/vehicle
   useEffect(() => {
     if (!isOpen || !vehicleReg) return
 
+    const initialEstNo = `EST-${vehicleReg.replace(/[^A-Z0-9]/g, '')}-${complaintId ? `C${complaintId}` : Date.now().toString().slice(-4)}`
+    setEstimateNo(initialEstNo)
+
     async function loadExisting() {
-      const existing = await fetchEstimateForVehicle(vehicleReg)
+      const existing = complaintId
+        ? await fetchEstimateForComplaint(complaintId, vehicleReg)
+        : await fetchEstimateForVehicle(vehicleReg)
+
       if (existing) {
+        setEstimateNo(existing.estimate_no || initialEstNo)
         setItems(existing.items || [])
         setDiscount(existing.discount || 0)
         setEstimateStatus(existing.status || 'Draft')
@@ -71,12 +81,14 @@ export function ServiceEstimateBuilderModal({
             total: 650,
           },
         ])
+        setDiscount(0)
         setEstimateStatus('Draft')
+        setRejectionReason(null)
       }
     }
 
     void loadExisting()
-  }, [isOpen, vehicleReg, category])
+  }, [isOpen, vehicleReg, complaintId, category])
 
   // Listen for real-time customer approval/rejection updates
   useEffect(() => {

@@ -58,9 +58,11 @@ export function CustomerPortalAdminModal({
     const list = await fetchAllEstimates()
     const map: Record<string, CustomerEstimateRecord> = {}
     for (const est of list) {
-      const reg = est.vehicle_registration_number?.toUpperCase()
-      if (reg && !map[reg]) {
-        map[reg] = est
+      if (est.complaint_id) {
+        map[`complaint_${est.complaint_id}`] = est
+      }
+      if (est.estimate_no) {
+        map[`estno_${est.estimate_no}`] = est
       }
     }
     setEstimatesMap(map)
@@ -514,8 +516,7 @@ export function CustomerPortalAdminModal({
                       {displayedComplaints.map((c, i) => {
                         const isApp = isFromCustomerApp(c)
                         const isProblemForm = c.mode === 'customer_complaint_portal' || c.feedback_text?.startsWith('[Complaint')
-                        const reg = c.vehicle_registration_number?.toUpperCase()
-                        const est = reg ? estimatesMap[reg] : undefined
+                        const est = c.id ? estimatesMap[`complaint_${c.id}`] : undefined
                         
                         return (
                           <tr

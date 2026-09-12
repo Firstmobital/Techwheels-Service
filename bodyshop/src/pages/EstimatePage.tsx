@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
 import { getEstimateDetails, type CustomerVehicle, type EstimateDetails } from '../lib/api'
 import {
-  fetchEstimateForVehicle,
+  fetchEstimatesForVehicle,
   updateEstimateApproval,
   type CustomerEstimateRecord,
 } from '../lib/estimates'
@@ -12,6 +12,8 @@ interface EstimatePageProps {
 }
 
 export default function EstimatePage({ vehicle }: EstimatePageProps) {
+  const [allEstimates, setAllEstimates] = useState<CustomerEstimateRecord[]>([])
+  const [selectedIdx, setSelectedIdx] = useState<number>(0)
   const [estimate, setEstimate] = useState<EstimateDetails>(() => getEstimateDetails(vehicle))
   const [isLoading, setIsLoading] = useState(false)
   const [showRejectModal, setShowRejectModal] = useState(false)
@@ -22,17 +24,20 @@ export default function EstimatePage({ vehicle }: EstimatePageProps) {
     if (!vehicle.reg_number) return
     setIsLoading(true)
     try {
-      const live = await fetchEstimateForVehicle(vehicle.reg_number)
-      if (live && live.items && live.items.length > 0) {
+      const list = await fetchEstimatesForVehicle(vehicle.reg_number)
+      setAllEstimates(list)
+
+      if (list && list.length > 0) {
+        const cur = list[selectedIdx] || list[0]
         setEstimate({
-          estimate_no: live.estimate_no,
-          items: live.items,
-          subtotal: live.subtotal,
-          discount: live.discount,
-          gst_tax: live.gst_tax,
-          grand_total: live.grand_total,
-          status: live.status,
-          rejection_reason: live.rejection_reason || undefined,
+          estimate_no: cur.estimate_no,
+          items: cur.items || [],
+          subtotal: cur.subtotal || 0,
+          discount: cur.discount || 0,
+          gst_tax: cur.gst_tax || 0,
+          grand_total: cur.grand_total || 0,
+          status: cur.status || 'Draft',
+          rejection_reason: cur.rejection_reason || undefined,
         })
       }
     } finally {
@@ -78,7 +83,24 @@ export default function EstimatePage({ vehicle }: EstimatePageProps) {
       void supabase.removeChannel(channel)
       window.removeEventListener('techwheels_estimate_updated', handleEstimateSync)
     }
-  }, [vehicle.reg_number])
+  }, [vehicle.reg_number, selectedIdx])
+
+  function selectEstimate(idx: number) {
+    setSelectedIdx(idx)
+    const cur = allEstimates[idx]
+    if (cur) {
+      setEstimate({
+        estimate_no: cur.estimate_no,
+        items: cur.items || [],
+        subtotal: cur.subtotal || 0,
+        discount: cur.discount || 0,
+        gst_tax: cur.gst_tax || 0,
+        grand_total: cur.grand_total || 0,
+        status: cur.status || 'Draft',
+        rejection_reason: cur.rejection_reason || undefined,
+      })
+    }
+  }
 
   async function handleApprove() {
     setEstimate((prev) => ({ ...prev, status: 'Approved' }))
@@ -87,6 +109,7 @@ export default function EstimatePage({ vehicle }: EstimatePageProps) {
       ok: true,
       msg: `Estimate #${estimate.estimate_no} Approved! Assigned Technician has been notified to commence repairs.`,
     })
+    void loadLiveEstimate()
   }
 
   async function handleRejectSubmit() {
@@ -99,6 +122,7 @@ export default function EstimatePage({ vehicle }: EstimatePageProps) {
       ok: false,
       msg: `Estimate #${estimate.estimate_no} has been rejected. Service Advisor will connect with a revised estimate.`,
     })
+    void loadLiveEstimate()
   }
 
   return (
@@ -139,6 +163,47 @@ export default function EstimatePage({ vehicle }: EstimatePageProps) {
           {isLoading ? 'Checking…' : 'Refresh'}
         </button>
       </div>
+
+      {/* Multiple Estimates Tab Switcher if more than 1 estimate exists */}
+      {allEstimates.length > 1 && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-muted)' }}>
+            Multiple Quotations Available ({allEstimates.length}):
+          </div>
+          <div style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 4 }}>
+            {allEstimates.map((estItem, idx) => {
+              const isSel = idx === selectedIdx
+              const isAppr = estItem.status === 'Approved'
+              const isRej = estItem.status === 'Rejected'
+              return (
+                <button
+                  key={estItem.estimate_no || idx}
+                  type="button"
+                  onClick={() => selectEstimate(idx)}
+                  style={{
+                    padding: '8px 14px',
+                    borderRadius: 10,
+                    border: isSel ? '2px solid #2563eb' : '1px solid var(--border)',
+                    background: isSel ? '#eff6ff' : 'var(--surface)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 8,
+                    cursor: 'pointer',
+                    fontSize: 12,
+                    fontWeight: 700,
+                    color: isSel ? '#1e40af' : 'var(--text)',
+                    boxShadow: isSel ? '0 2px 6px rgba(37,99,235,0.15)' : 'none',
+                  }}
+                >
+                  <span>{isAppr ? '✅' : isRej ? '❌' : '⏳'}</span>
+                  <span>Quotation #{idx + 1}</span>
+                  <span style={{ fontFamily: 'monospace', color: '#047857' }}>₹{estItem.grand_total.toLocaleString()}</span>
+                </button>
+              )
+            })}
+          </div>
+        </div>
+      )}
 
       {toast && (
         <div className={`toast-banner ${toast.ok ? '' : 'error'}`}>
@@ -200,7 +265,7 @@ export default function EstimatePage({ vehicle }: EstimatePageProps) {
                       {it.type.toUpperCase()}
                     </span>
                   </td>
-                  <td style={{ padding: '8px 4px', textAlign: 'right', fontWeight: 700 }} className="mono">
+                  <td style={{ padding: '8px 4px', textAlign: 'right', fontWeight: 700, fontFamily: 'monospace' }}>
                     ₹{it.total.toLocaleString()}
                   </td>
                 </tr>
@@ -209,64 +274,135 @@ export default function EstimatePage({ vehicle }: EstimatePageProps) {
           </table>
         </div>
 
-        {/* Totals Summary Calculation */}
-        <div style={{ background: 'var(--surface-sub)', padding: '12px 14px', borderRadius: 10, display: 'flex', flexDirection: 'column', gap: 6, fontSize: 12.5 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-            <span style={{ color: 'var(--text-muted)' }}>Subtotal</span>
-            <span className="mono">₹{estimate.subtotal.toLocaleString()}</span>
+        {/* Summary Breakdown */}
+        <div
+          style={{
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 6,
+            padding: '12px 14px',
+            background: 'var(--bg)',
+            borderRadius: 10,
+            fontSize: 12.5,
+            border: '1px solid var(--border)',
+          }}
+        >
+          <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-muted)' }}>
+            <span>Parts & Labour Subtotal</span>
+            <span style={{ fontFamily: 'monospace' }}>₹{estimate.subtotal.toLocaleString()}</span>
           </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--success)' }}>
-            <span>Special Dealership Discount</span>
-            <span className="mono">- ₹{estimate.discount.toLocaleString()}</span>
+
+          {estimate.discount > 0 && (
+            <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--success)' }}>
+              <span>Special Discount</span>
+              <span style={{ fontFamily: 'monospace' }}>- ₹{estimate.discount.toLocaleString()}</span>
+            </div>
+          )}
+
+          <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-muted)' }}>
+            <span>GST (18% Applicable)</span>
+            <span style={{ fontFamily: 'monospace' }}>₹{estimate.gst_tax.toLocaleString()}</span>
           </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-            <span style={{ color: 'var(--text-muted)' }}>GST / Taxes (18%)</span>
-            <span className="mono">₹{estimate.gst_tax.toLocaleString()}</span>
-          </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: 6, borderTop: '1px solid var(--border)', fontSize: 15, fontWeight: 800 }}>
-            <span>Grand Total (Est.)</span>
-            <span className="mono" style={{ color: 'var(--primary)' }}>₹{estimate.grand_total.toLocaleString()}</span>
+
+          <div
+            style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              fontWeight: 800,
+              fontSize: 15,
+              paddingTop: 8,
+              borderTop: '1.5px dashed var(--border)',
+              color: 'var(--text)',
+            }}
+          >
+            <span>Grand Total (Net Payable)</span>
+            <span style={{ color: 'var(--primary)', fontFamily: 'monospace' }}>
+              ₹{estimate.grand_total.toLocaleString()}
+            </span>
           </div>
         </div>
 
+        {/* Rejection Note if rejected */}
+        {estimate.status === 'Rejected' && estimate.rejection_reason && (
+          <div
+            style={{
+              marginTop: 10,
+              padding: 10,
+              borderRadius: 8,
+              background: '#fef2f2',
+              border: '1px solid #fecaca',
+              color: '#991b1b',
+              fontSize: 12,
+            }}
+          >
+            <strong>Rejection Reason:</strong> {estimate.rejection_reason}
+          </div>
+        )}
+
         {/* Action Buttons */}
-        {estimate.status === 'Sent' && (
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginTop: 14 }}>
-            <button
-              type="button"
-              className="btn-secondary"
-              onClick={() => setShowRejectModal(true)}
-              style={{ color: 'var(--danger)', borderColor: 'var(--danger)' }}
+        <div style={{ display: 'flex', gap: 10, marginTop: 14 }}>
+          {estimate.status === 'Approved' ? (
+            <div
+              style={{
+                width: '100%',
+                padding: '12px',
+                textAlign: 'center',
+                background: '#ecfdf5',
+                border: '1.5px solid #a7f3d0',
+                borderRadius: 10,
+                color: '#065f46',
+                fontWeight: 800,
+                fontSize: 14,
+              }}
             >
-              ❌ Reject / Discuss
-            </button>
-            <button type="button" className="btn-primary" onClick={handleApprove}>
-              ✅ Approve Estimate
-            </button>
-          </div>
-        )}
-
-        {estimate.status === 'Approved' && (
-          <div style={{ marginTop: 14, padding: 10, background: '#f0fdf4', borderRadius: 8, color: '#166534', fontSize: 12.5, textAlign: 'center', fontWeight: 700 }}>
-            ✓ You have approved this estimate. Technician is performing approved repairs.
-          </div>
-        )}
-
-        {estimate.status === 'Rejected' && (
-          <div style={{ marginTop: 14, padding: 10, background: '#fef2f2', borderRadius: 8, color: '#991b1b', fontSize: 12.5 }}>
-            <div style={{ fontWeight: 700 }}>Estimate Rejected</div>
-            <div>Reason: {estimate.rejection_reason || 'Customer requested revision'}</div>
-          </div>
-        )}
+              ✅ You Have Approved This Quotation (Repair Authorized)
+            </div>
+          ) : estimate.status === 'Rejected' ? (
+            <div
+              style={{
+                width: '100%',
+                padding: '12px',
+                textAlign: 'center',
+                background: '#fff1f2',
+                border: '1.5px solid #fecdd3',
+                borderRadius: 10,
+                color: '#9f1239',
+                fontWeight: 700,
+                fontSize: 13,
+              }}
+            >
+              ❌ Quotation Rejected. Service Advisor will contact you with a revised quotation.
+            </div>
+          ) : (
+            <>
+              <button
+                type="button"
+                onClick={() => void handleApprove()}
+                className="btn btn-primary"
+                style={{ flex: 1, padding: '12px', fontSize: 14, fontWeight: 800 }}
+              >
+                ✅ Approve Estimate
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowRejectModal(true)}
+                className="btn btn-secondary"
+                style={{ flex: 1, padding: '12px', fontSize: 14, color: '#dc2626', borderColor: '#fca5a5' }}
+              >
+                ❌ Reject / Need Revision
+              </button>
+            </>
+          )}
+        </div>
       </div>
 
-      {/* Reject Modal */}
+      {/* Reject Reason Modal */}
       {showRejectModal && (
         <div
           style={{
             position: 'fixed',
             inset: 0,
-            background: 'rgba(0,0,0,0.5)',
+            background: 'rgba(0,0,0,0.6)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
@@ -274,28 +410,35 @@ export default function EstimatePage({ vehicle }: EstimatePageProps) {
             zIndex: 100,
           }}
         >
-          <div className="card" style={{ maxWidth: 400, width: '100%', background: 'white' }}>
-            <h3 style={{ fontSize: 16, fontWeight: 800, marginBottom: 8 }}>Reason for Rejecting Estimate</h3>
-            <p style={{ fontSize: 12.5, color: 'var(--text-muted)', marginBottom: 12 }}>
-              Help the Service Advisor understand why this estimate is being revised.
+          <div className="card" style={{ maxWidth: 440, width: '100%', padding: 20 }}>
+            <h3 style={{ fontSize: 16, fontWeight: 800, marginBottom: 8, color: 'var(--text)' }}>
+              Reason for Estimate Rejection
+            </h3>
+            <p style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 12 }}>
+              Please let your Service Advisor know why you are rejecting this quotation (e.g. price high, part not needed).
             </p>
             <textarea
-              className="form-textarea"
+              className="form-input"
               rows={3}
-              placeholder="e.g. Estimate cost is high, please exclude optional labour or discuss parts discount…"
+              placeholder="Enter reason for rejection…"
               value={rejectReason}
               onChange={(e) => setRejectReason(e.target.value)}
+              style={{ width: '100%', marginBottom: 14, fontSize: 13 }}
             />
-            <div style={{ display: 'flex', gap: 10, marginTop: 14 }}>
-              <button type="button" className="btn-secondary" onClick={() => setShowRejectModal(false)} style={{ flex: 1 }}>
+            <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+              <button
+                type="button"
+                onClick={() => setShowRejectModal(false)}
+                className="btn btn-secondary"
+                style={{ fontSize: 12.5 }}
+              >
                 Cancel
               </button>
               <button
                 type="button"
-                className="btn-primary"
-                onClick={handleRejectSubmit}
-                disabled={!rejectReason.trim()}
-                style={{ flex: 1, background: 'var(--danger)' }}
+                onClick={() => void handleRejectSubmit()}
+                className="btn"
+                style={{ background: '#dc2626', color: '#fff', fontSize: 12.5, fontWeight: 700 }}
               >
                 Submit Rejection
               </button>
