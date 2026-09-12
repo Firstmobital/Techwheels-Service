@@ -19,7 +19,7 @@ export function currentMonthRange(): DateRange {
   return { from: `${y}-${m}-01`, to: `${y}-${m}-${String(lastDay).padStart(2, '0')}` }
 }
 
-function getRange(preset: DateRangePreset, custom: DateRange): DateRange {
+export function getRange(preset: DateRangePreset, custom: DateRange): DateRange {
   const now = new Date()
   const today = toIST(now)
 

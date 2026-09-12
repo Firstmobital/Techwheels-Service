@@ -1,5 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from 'react'
-import DateRangeFilter, { currentMonthRange, type DateRange } from '../components/DateRangeFilter'
+import DateRangeFilter, {
+  currentMonthRange,
+  getRange,
+  inferPresetFromRange,
+  type DateRange,
+  type DateRangePreset,
+} from '../components/DateRangeFilter'
 import { Icon } from '../components/Icon'
 import {
   dateRangeError,
@@ -51,7 +57,8 @@ function statusTone(status: BusyPreviewRow['status']): { bg: string; color: stri
 }
 
 export default function BusyAccountingPage() {
-  const [dateRange, setDateRange] = useState<DateRange>(currentMonthRange)
+  const [period, setPeriod] = useState<DateRangePreset>('this-month')
+  const [customRange, setCustomRange] = useState<DateRange>(currentMonthRange)
   const [labourStatus, setLabourStatus] = useState<BusyLabourSourceStatus | null>(null)
   const [partsStatus, setPartsStatus] = useState<BusyPartsSourceStatus | null>(null)
   const [labourLoading, setLabourLoading] = useState(false)
@@ -62,7 +69,18 @@ export default function BusyAccountingPage() {
   const pvInputRef = useRef<HTMLInputElement>(null)
   const evInputRef = useRef<HTMLInputElement>(null)
 
-  const rangeIssue = dateRangeError(dateRange.from, dateRange.to)
+  const { from: fromDate, to: toDate } = useMemo(
+    () => getRange(period, customRange),
+    [period, customRange],
+  )
+  const rangeIssue = dateRangeError(fromDate, toDate)
+
+  const handlePeriodRangeChange = useCallback((range: DateRange) => {
+    const nextPeriod = inferPresetFromRange(range)
+    if (nextPeriod === 'all') return
+    setPeriod(nextPeriod)
+    if (nextPeriod === 'custom') setCustomRange(range)
+  }, [])
 
   useEffect(() => {
     let active = true
@@ -121,10 +139,9 @@ export default function BusyAccountingPage() {
 
     let active = true
     // Existing pages load data in useEffect the same way (CRE Incentive, reports).
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     setLabourLoading(true)
     setProcessError(null)
-    fetchBusyLabourRows(dateRange.from, dateRange.to)
+    fetchBusyLabourRows(fromDate, toDate)
       .then((rows) => {
         if (!active) return
         setLabourRows(rows)
@@ -139,17 +156,17 @@ export default function BusyAccountingPage() {
       })
 
     return () => { active = false }
-  }, [dateRange.from, dateRange.to, rangeIssue])
+  }, [fromDate, toDate, rangeIssue])
 
   const result = useMemo(() => {
     if (rangeIssue) return null
     return transformBusyAccounting({
       labourRows,
       partsLines: [...pvParts.lines, ...evParts.lines],
-      fromDate: dateRange.from,
-      toDate: dateRange.to,
+      fromDate,
+      toDate,
     })
-  }, [labourRows, pvParts.lines, evParts.lines, dateRange.from, dateRange.to, rangeIssue])
+  }, [labourRows, pvParts.lines, evParts.lines, fromDate, toDate, rangeIssue])
 
   const handlePartsFile = useCallback(async (file: File, portal: VehiclePortal) => {
     const setter = portal === 'PV' ? setPvParts : setEvParts
@@ -223,13 +240,13 @@ export default function BusyAccountingPage() {
   function exportParties() {
     if (!result || !canExport) return
     const workbook = buildPartyAccountWorkbook(result.partyRows)
-    downloadBusyWorkbook(workbook, `BUSY_Party_Accounts_${dateRange.from}_to_${dateRange.to}.xlsx`)
+    downloadBusyWorkbook(workbook, `BUSY_Party_Accounts_${fromDate}_to_${toDate}.xlsx`)
   }
 
   function exportInvoices() {
     if (!result || !canExport) return
     const workbook = buildInvoiceVoucherWorkbook(result.invoiceRows)
-    downloadBusyWorkbook(workbook, `BUSY_Invoice_Vouchers_${dateRange.from}_to_${dateRange.to}.xlsx`)
+    downloadBusyWorkbook(workbook, `BUSY_Invoice_Vouchers_${fromDate}_to_${toDate}.xlsx`)
   }
 
   return (
@@ -244,44 +261,16 @@ export default function BusyAccountingPage() {
           <p>Create Party Accounts and Invoice Vouchers from DMS Labour Revenue plus PV/EV Parts files.</p>
         </div>
         <div className="toolbar toolbar--tight">
-          <DateRangeFilter range={dateRange} onChange={setDateRange} label="Period:" />
+          <DateRangeFilter range={{ from: fromDate, to: toDate }} onChange={handlePeriodRangeChange} label="Period:" />
         </div>
       </div>
 
-      <div className="card mb-gap">
-        <div className="card__head">
-          <div>
-            <h3>Date Range</h3>
-            <div className="sub">Inclusive Labour invoice dates. Both exports use this range.</div>
-          </div>
+      {rangeIssue && (
+        <div className="toast error" style={{ marginBottom: 12 }}>
+          <Icon name="alert" size={14} />
+          {rangeIssue}
         </div>
-        <div className="card__body" style={{ display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'end' }}>
-          <label className="field field--no-gap" style={{ minWidth: 180 }}>
-            <span className="label">From Date <span className="req">*</span></span>
-            <input
-              type="date"
-              className="inp"
-              value={dateRange.from}
-              onChange={(e) => setDateRange((current) => ({ ...current, from: e.target.value }))}
-            />
-          </label>
-          <label className="field field--no-gap" style={{ minWidth: 180 }}>
-            <span className="label">To Date <span className="req">*</span></span>
-            <input
-              type="date"
-              className="inp"
-              value={dateRange.to}
-              onChange={(e) => setDateRange((current) => ({ ...current, to: e.target.value }))}
-            />
-          </label>
-          {rangeIssue && (
-            <div className="toast error" style={{ margin: 0 }}>
-              <Icon name="alert" size={14} />
-              {rangeIssue}
-            </div>
-          )}
-        </div>
-      </div>
+      )}
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 12, marginBottom: 18 }}>
         <div className="card" style={{ margin: 0 }}>
