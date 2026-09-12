@@ -27,6 +27,7 @@ import {
   type MechanicalDmsInvoiceLookup,
 } from '../lib/api/accounts'
 import { uploadServiceAdvisorInvoice } from '../lib/api/reception'
+import { supabase } from '../lib/supabase'
 import type { RepairCard } from '../lib/api/bodyshopRepair'
 import { settlementStatusLabel } from '../lib/api/bodyshopSettlement'
 import { issueAccountsGatePass } from '../lib/gatepass'
@@ -135,6 +136,7 @@ export default function AccountsPage() {
   const [payError, setPayError] = useState<string | null>(null)
   const [dmsLookup, setDmsLookup] = useState<MechanicalDmsInvoiceLookup | null>(null)
   const [loadingDms, setLoadingDms] = useState(false)
+  const [isAdmin, setIsAdmin] = useState(false)
   const [postRow, setPostRow] = useState<AccountsBodyshopCase | null>(null)
   const [postCard, setPostCard] = useState<RepairCard | null>(null)
   const [gatepassConfirmTarget, setGatepassConfirmTarget] = useState<{
