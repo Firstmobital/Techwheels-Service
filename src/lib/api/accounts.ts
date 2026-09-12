@@ -222,6 +222,40 @@ export function mechanicalRemaining(row: Pick<AccountsMechanicalCase, 'billed_am
   return Math.max(0, Number(row.billed_amount) - Number(row.amount_received ?? 0))
 }
 
+export function roundAccountsMoney(n: number): number {
+  return Math.round((Number(n) + Number.EPSILON) * 100) / 100
+}
+
+export function mechanicalDraftEnteredTotal(amounts: Array<number | null | undefined>): number {
+  let sum = 0
+  for (const raw of amounts) {
+    const n = Number(raw)
+    if (Number.isFinite(n) && n > 0) sum += n
+  }
+  return roundAccountsMoney(sum)
+}
+
+/** Remaining billed amount still unallocated after other unsaved draft rows. */
+export function mechanicalDraftRowRemaining(
+  billedRemaining: number,
+  otherDraftAmounts: Array<number | null | undefined>,
+): number {
+  return Math.max(0, roundAccountsMoney(billedRemaining - mechanicalDraftEnteredTotal(otherDraftAmounts)))
+}
+
+export function mechanicalDraftsFitRemaining(
+  billedRemaining: number,
+  enteredAmounts: number[],
+): { total: number; over: number; withinPaiseCap: boolean } {
+  const total = mechanicalDraftEnteredTotal(enteredAmounts)
+  const over = roundAccountsMoney(total - billedRemaining)
+  return {
+    total,
+    over,
+    withinPaiseCap: over > 0 && over <= 1,
+  }
+}
+
 export function isMechanicalPaymentClosed(row: Pick<AccountsMechanicalCase, 'billed_amount' | 'amount_received' | 'remaining_amount' | 'payment_status'>): boolean {
   if (row.billed_amount == null) return false
   const remaining = mechanicalRemaining(row)

@@ -25,6 +25,7 @@ import {
   partitionBusyPartsImport,
   toBusyPartsPersistRows,
 } from '../src/lib/busy/partsPersist.ts'
+import { evaluateBusyVoucherSourceAvailability, VOUCHER_SOURCE_WARNING } from '../src/lib/busy/sourceAvailability.ts'
 import { transformBusyAccounting } from '../src/lib/busy/transform.ts'
 import { buildInvoiceVoucherWorkbook, buildPartyAccountWorkbook, workbookHeaders, workbookDataRows } from '../src/lib/busy/xlsx.ts'
 import { INVOICE_VOUCHER_HEADERS, PARTY_ACCOUNT_HEADERS } from '../src/lib/busy/types.ts'
@@ -1022,6 +1023,203 @@ test('Rounded Off (+) is emitted only when labour+parts subtotal has a decimal p
   assert.equal(result.preview.find((row) => row.invoiceNumber === 'IMBTAI1').total, 10824)
   assert.equal(result.preview.find((row) => row.invoiceNumber === 'IMBTAI2').total, 9003)
   assert.equal(result.preview.find((row) => row.invoiceNumber === 'IMBTAI3').roundOff, 0)
+})
+
+const partsLine = (overrides = {}) => ({
+  portal: 'PV',
+  jobCardNumber: 'JC-1001',
+  invoiceNumber: 'IMBTAI2627000001',
+  invoiceDate: '2026-09-01',
+  netAmount: 100,
+  taxAmount: null,
+  gstRate: 18,
+  gstRateRaw: 18,
+  gstIssue: null,
+  sourceRowNumber: 2,
+  sourceRowKey: 'row-1',
+  sourceFileName: 'parts-pv.csv',
+  ...overrides,
+})
+
+function attemptInvoiceVoucherExport(input) {
+  const availability = evaluateBusyVoucherSourceAvailability(input)
+  if (!availability.sourcesComplete) {
+    return { downloaded: false, warning: availability.warning, invoiceRows: [] }
+  }
+  const result = transformBusyAccounting(input)
+  if (result.summary.eligible === 0) {
+    return { downloaded: false, warning: null, invoiceRows: [] }
+  }
+  return { downloaded: true, warning: null, invoiceRows: result.invoiceRows }
+}
+
+test('voucher source A. Labour + applicable Parts enables export', () => {
+  const input = {
+    labourRows: [labour()],
+    partsLines: [partsLine()],
+    fromDate: '2026-09-01',
+    toDate: '2026-09-10',
+  }
+  const availability = evaluateBusyVoucherSourceAvailability(input)
+  assert.equal(availability.labourAvailable, true)
+  assert.equal(availability.partsAvailable, true)
+  assert.equal(availability.sourcesComplete, true)
+  assert.equal(availability.warning, null)
+  const exported = attemptInvoiceVoucherExport(input)
+  assert.equal(exported.downloaded, true)
+  assert.ok(exported.invoiceRows.length > 0)
+})
+
+test('voucher source B. Labour exists, applicable Parts missing', () => {
+  const input = {
+    labourRows: [labour()],
+    partsLines: [],
+    fromDate: '2026-09-01',
+    toDate: '2026-09-10',
+  }
+  const availability = evaluateBusyVoucherSourceAvailability(input)
+  assert.equal(availability.labourAvailable, true)
+  assert.equal(availability.partsAvailable, false)
+  assert.equal(availability.sourcesComplete, false)
+  assert.equal(availability.warning, VOUCHER_SOURCE_WARNING.parts)
+  const exported = attemptInvoiceVoucherExport(input)
+  assert.equal(exported.downloaded, false)
+  assert.equal(exported.invoiceRows.length, 0)
+  assert.equal(exported.warning, VOUCHER_SOURCE_WARNING.parts)
+})
+
+test('voucher source C. Parts exists, Labour missing', () => {
+  const input = {
+    labourRows: [],
+    partsLines: [partsLine()],
+    fromDate: '2026-09-01',
+    toDate: '2026-09-10',
+  }
+  const availability = evaluateBusyVoucherSourceAvailability(input)
+  assert.equal(availability.labourAvailable, false)
+  assert.equal(availability.partsAvailable, true)
+  assert.equal(availability.sourcesComplete, false)
+  assert.equal(availability.warning, VOUCHER_SOURCE_WARNING.labour)
+  const exported = attemptInvoiceVoucherExport(input)
+  assert.equal(exported.downloaded, false)
+  assert.equal(exported.invoiceRows.length, 0)
+})
+
+test('voucher source D. Labour and Parts both missing', () => {
+  const input = {
+    labourRows: [],
+    partsLines: [],
+    fromDate: '2026-09-01',
+    toDate: '2026-09-10',
+  }
+  const availability = evaluateBusyVoucherSourceAvailability(input)
+  assert.equal(availability.labourAvailable, false)
+  assert.equal(availability.partsAvailable, false)
+  assert.equal(availability.sourcesComplete, false)
+  assert.equal(availability.warning, VOUCHER_SOURCE_WARNING.both)
+  const exported = attemptInvoiceVoucherExport(input)
+  assert.equal(exported.downloaded, false)
+  assert.equal(exported.invoiceRows.length, 0)
+})
+
+test('voucher source E/F. Period change recomputes from the same date bounds', () => {
+  const labourRows = [labour({ invoice_date: '2026-09-05' })]
+  const partsLines = [partsLine({ invoiceDate: '2026-09-05' })]
+  const complete = evaluateBusyVoucherSourceAvailability({
+    labourRows,
+    partsLines,
+    fromDate: '2026-09-01',
+    toDate: '2026-09-10',
+  })
+  assert.equal(complete.sourcesComplete, true)
+  assert.equal(complete.warning, null)
+
+  const incomplete = evaluateBusyVoucherSourceAvailability({
+    labourRows,
+    partsLines,
+    fromDate: '2026-08-01',
+    toDate: '2026-08-31',
+  })
+  assert.equal(incomplete.sourcesComplete, false)
+  assert.equal(incomplete.warning, VOUCHER_SOURCE_WARNING.both)
+  assert.equal(attemptInvoiceVoucherExport({
+    labourRows,
+    partsLines,
+    fromDate: '2026-08-01',
+    toDate: '2026-08-31',
+  }).downloaded, false)
+
+  const restored = evaluateBusyVoucherSourceAvailability({
+    labourRows,
+    partsLines,
+    fromDate: '2026-09-01',
+    toDate: '2026-09-10',
+  })
+  assert.equal(restored.sourcesComplete, true)
+  assert.equal(restored.warning, null)
+})
+
+test('voucher source G. EV-only period does not require PV Parts', () => {
+  const evOnly = evaluateBusyVoucherSourceAvailability({
+    labourRows: [labour({ invoice_number: 'EMBTAI2627000001', portal: 'EV', sr_assigned_to: 'EV_500A840' })],
+    partsLines: [partsLine({ portal: 'EV', invoiceNumber: 'EMBTAI2627000001' })],
+    fromDate: '2026-09-01',
+    toDate: '2026-09-10',
+  })
+  assert.equal(evOnly.sourcesComplete, true)
+  assert.equal(evOnly.warning, null)
+
+  const pvOnly = evaluateBusyVoucherSourceAvailability({
+    labourRows: [labour()],
+    partsLines: [partsLine()],
+    fromDate: '2026-09-01',
+    toDate: '2026-09-10',
+  })
+  assert.equal(pvOnly.sourcesComplete, true)
+
+  const evLabourPvParts = evaluateBusyVoucherSourceAvailability({
+    labourRows: [labour({ invoice_number: 'EMBTAI2627000001', portal: 'EV', sr_assigned_to: 'EV_500A840' })],
+    partsLines: [partsLine({ portal: 'PV' })],
+    fromDate: '2026-09-01',
+    toDate: '2026-09-10',
+  })
+  assert.equal(evLabourPvParts.sourcesComplete, false)
+  assert.equal(evLabourPvParts.warning, VOUCHER_SOURCE_WARNING.parts)
+
+  const mixedNeedsBoth = evaluateBusyVoucherSourceAvailability({
+    labourRows: [
+      labour(),
+      labour({ invoice_number: 'EMBTAI2627000001', portal: 'EV', sr_assigned_to: 'EV_500A840' }),
+    ],
+    partsLines: [partsLine()],
+    fromDate: '2026-09-01',
+    toDate: '2026-09-10',
+  })
+  assert.equal(mixedNeedsBoth.sourcesComplete, false)
+  assert.equal(mixedNeedsBoth.warning, VOUCHER_SOURCE_WARNING.parts)
+})
+
+test('voucher source H. handler refuses when prerequisites are false', () => {
+  const refused = attemptInvoiceVoucherExport({
+    labourRows: [labour()],
+    partsLines: [partsLine({ invoiceDate: '2026-08-01' })],
+    fromDate: '2026-09-01',
+    toDate: '2026-09-10',
+  })
+  assert.equal(refused.downloaded, false)
+  assert.equal(refused.invoiceRows.length, 0)
+  assert.equal(refused.warning, VOUCHER_SOURCE_WARNING.parts)
+})
+
+test('voucher source ignores other-period and upload-timestamp evidence', () => {
+  const availability = evaluateBusyVoucherSourceAvailability({
+    labourRows: [labour({ invoice_date: '2026-07-01' })],
+    partsLines: [partsLine({ invoiceDate: '2026-07-01' })],
+    fromDate: '2026-09-01',
+    toDate: '2026-09-10',
+  })
+  assert.equal(availability.sourcesComplete, false)
+  assert.equal(availability.warning, VOUCHER_SOURCE_WARNING.both)
 })
 
 if (failed > 0) {

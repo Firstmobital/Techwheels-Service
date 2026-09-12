@@ -14,6 +14,8 @@ import {
   listAccountsMechanicalPaymentLines,
   listAccountsMechanicalPayments,
   lookupAccountsMechanicalDmsInvoice,
+  mechanicalDraftRowRemaining,
+  mechanicalDraftsFitRemaining,
   mechanicalInvoiceAmountPrefill,
   asiaKolkataTodayDate,
   mechanicalInvoiceDateInputValue,
@@ -41,6 +43,27 @@ import { issueAccountsGatePass } from '../lib/gatepass'
 type Section = 'mechanical' | 'bodyshop'
 type BodyshopFilter = 'remaining' | 'all' | 'received' | 'pending'
 type MechanicalStatusFilter = 'all' | 'pending' | 'received'
+
+type MechanicalPaymentDraft = {
+  key: string
+  amount: string
+  paymentMode: AccountsPaymentMode
+  paymentReceivedDate: string
+  paymentReference: string
+}
+
+let paymentDraftSeq = 0
+
+function emptyMechanicalPaymentDraft(): MechanicalPaymentDraft {
+  paymentDraftSeq += 1
+  return {
+    key: `pay-${paymentDraftSeq}`,
+    amount: '',
+    paymentMode: 'cash',
+    paymentReceivedDate: asiaKolkataTodayDate(),
+    paymentReference: '',
+  }
+}
 
 function inr(v: number | null | undefined) {
   if (v == null || Number.isNaN(Number(v))) return '—'
@@ -178,10 +201,7 @@ export default function AccountsPage() {
   const [invoiceNumber, setInvoiceNumber] = useState('')
   const [invoiceDate, setInvoiceDate] = useState('')
   const [billedAmount, setBilledAmount] = useState('')
-  const [receiptAmount, setReceiptAmount] = useState('')
-  const [paymentMode, setPaymentMode] = useState<AccountsPaymentMode>('cash')
-  const [paymentReceivedDate, setPaymentReceivedDate] = useState(asiaKolkataTodayDate)
-  const [paymentReference, setPaymentReference] = useState('')
+  const [paymentDrafts, setPaymentDrafts] = useState<MechanicalPaymentDraft[]>(() => [emptyMechanicalPaymentDraft()])
   const [payLines, setPayLines] = useState<AccountsMechanicalPayment[]>([])
   const [saving, setSaving] = useState(false)
   const [postingPay, setPostingPay] = useState(false)
@@ -353,10 +373,7 @@ export default function AccountsPage() {
     setInvoiceNumber(row.invoice_number ?? '')
     setInvoiceDate(mechanicalInvoiceDateInputValue(row.invoice_date))
     setBilledAmount(mechanicalInvoiceAmountPrefill(row))
-    setReceiptAmount('')
-    setPaymentMode('cash')
-    setPaymentReceivedDate(asiaKolkataTodayDate())
-    setPaymentReference('')
+    setPaymentDrafts([emptyMechanicalPaymentDraft()])
     setPayError(null)
     setPayLines([])
     setDmsLookup(null)
@@ -413,57 +430,139 @@ export default function AccountsPage() {
     }
   }
 
+  function updatePaymentDraft(key: string, patch: Partial<MechanicalPaymentDraft>) {
+    setPaymentDrafts((prev) => prev.map((draft) => (draft.key === key ? { ...draft, ...patch } : draft)))
+    setPayError(null)
+  }
+
+  function addPaymentDraft() {
+    setPaymentDrafts((prev) => [...prev, emptyMechanicalPaymentDraft()])
+    setPayError(null)
+  }
+
+  function removePaymentDraft(key: string) {
+    setPaymentDrafts((prev) => {
+      if (prev.length <= 1) return prev
+      const index = prev.findIndex((draft) => draft.key === key)
+      if (index <= 0) return prev
+      return prev.filter((draft) => draft.key !== key)
+    })
+    setPayError(null)
+  }
+
+  async function refreshMechanicalPayLines(receptionEntryId: number) {
+    const lines = await listAccountsMechanicalPayments(receptionEntryId)
+    setPayLines(lines)
+    setMechPayLines((prev) => [
+      ...prev.filter((line) => line.reception_entry_id !== receptionEntryId),
+      ...lines,
+    ])
+    return lines
+  }
+
   async function postMechanicalReceipt() {
     if (!editRow) return
     const remaining = mechanicalRemaining(editRow)
-    let amount = numOrNull(receiptAmount)
     if (editRow.billed_amount == null || remaining == null) {
       setPayError('Save invoice number and billed amount first, then post the receipt.')
-      return
-    }
-    if (amount == null || amount <= 0) {
-      setPayError('Enter this receipt amount.')
-      return
-    }
-    const receivedDate = paymentReceivedDate.trim()
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(receivedDate)) {
-      setPayError('Enter the payment received date.')
       return
     }
     if (remaining <= 0) {
       setPayError('Nothing remaining to post.')
       return
     }
-    if (amount > remaining) {
-      if (amount - remaining <= 1) {
-        amount = remaining
+
+    const payments: Array<{
+      key: string
+      amount: number
+      paymentMode: AccountsPaymentMode
+      reference: string | null
+      paymentReceivedDate: string
+    }> = []
+
+    for (let i = 0; i < paymentDrafts.length; i++) {
+      const draft = paymentDrafts[i]
+      const amount = numOrNull(draft.amount)
+      const reference = draft.paymentReference.trim()
+      const receivedDate = draft.paymentReceivedDate.trim()
+      const emptyExtra = i > 0 && amount == null && !reference
+      if (emptyExtra) continue
+      if (amount == null || amount <= 0) {
+        setPayError(paymentDrafts.length > 1 ? `Enter the amount for Payment ${i + 1}.` : 'Enter this receipt amount.')
+        return
+      }
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(receivedDate)) {
+        setPayError(paymentDrafts.length > 1 ? `Enter the payment received date for Payment ${i + 1}.` : 'Enter the payment received date.')
+        return
+      }
+      payments.push({
+        key: draft.key,
+        amount,
+        paymentMode: draft.paymentMode,
+        reference: reference || null,
+        paymentReceivedDate: receivedDate,
+      })
+    }
+
+    if (payments.length === 0) {
+      setPayError('Enter this receipt amount.')
+      return
+    }
+
+    const fit = mechanicalDraftsFitRemaining(remaining, payments.map((p) => p.amount))
+    if (fit.over > 0) {
+      if (fit.withinPaiseCap) {
+        const last = payments[payments.length - 1]
+        last.amount = mechanicalDraftRowRemaining(remaining, payments.slice(0, -1).map((p) => p.amount))
+        if (last.amount <= 0) {
+          setPayError(`These receipts ${inr(fit.total)} are more than remaining ${inr(remaining)}. Use remaining or raise billed.`)
+          return
+        }
       } else {
-        setPayError(`This receipt ${inr(amount)} is more than remaining ${inr(remaining)}. Use remaining or raise billed.`)
+        setPayError(
+          payments.length === 1
+            ? `This receipt ${inr(fit.total)} is more than remaining ${inr(remaining)}. Use remaining or raise billed.`
+            : `These receipts ${inr(fit.total)} are more than remaining ${inr(remaining)}. Use remaining or raise billed.`,
+        )
         return
       }
     }
+
     setPayError(null)
     setPostingPay(true)
+    const postedKeys = new Set<string>()
     try {
-      const saved = await addAccountsMechanicalPayment({
-        receptionEntryId: editRow.reception_entry_id,
-        amount,
-        paymentMode,
-        reference: paymentReference.trim() || null,
-        paymentReceivedDate: receivedDate,
-      })
-      patchMechRow(saved)
-      setReceiptAmount('')
-      setPaymentReference('')
-      setPaymentReceivedDate(asiaKolkataTodayDate())
-      const lines = await listAccountsMechanicalPayments(editRow.reception_entry_id)
-      setPayLines(lines)
-      setMechPayLines((prev) => [
-        ...prev.filter((line) => line.reception_entry_id !== editRow.reception_entry_id),
-        ...lines,
-      ])
-      flash(isMechanicalPaymentClosed(saved) ? 'Payment completed' : 'Receipt posted')
+      let saved = editRow
+      for (const payment of payments) {
+        saved = await addAccountsMechanicalPayment({
+          receptionEntryId: editRow.reception_entry_id,
+          amount: payment.amount,
+          paymentMode: payment.paymentMode,
+          reference: payment.reference,
+          paymentReceivedDate: payment.paymentReceivedDate,
+        })
+        postedKeys.add(payment.key)
+        patchMechRow(saved)
+      }
+      setPaymentDrafts([emptyMechanicalPaymentDraft()])
+      await refreshMechanicalPayLines(editRow.reception_entry_id)
+      flash(
+        isMechanicalPaymentClosed(saved)
+          ? 'Payment completed'
+          : payments.length > 1
+            ? 'Receipts posted'
+            : 'Receipt posted',
+      )
     } catch (e) {
+      setPaymentDrafts((prev) => {
+        const leftover = prev.filter((draft) => !postedKeys.has(draft.key))
+        return leftover.length > 0 ? leftover : [emptyMechanicalPaymentDraft()]
+      })
+      try {
+        await refreshMechanicalPayLines(editRow.reception_entry_id)
+      } catch {
+        // keep last patched row / history if refresh fails
+      }
       setPayError(e instanceof Error ? e.message : 'Receipt failed')
     } finally {
       setPostingPay(false)
@@ -1177,47 +1276,106 @@ export default function AccountsPage() {
                       </button>
                     </div>
                   ) : (
-                    <div className="brx-form-grid-2">
-                      <label className="brx-field">
-                        <span className="brx-field-label">This receipt (₹)</span>
-                        <input className="inp" type="number" value={receiptAmount} onChange={(e) => { setReceiptAmount(e.target.value); setPayError(null) }} placeholder="Additional amount" />
-                        {mechanicalRemaining(editRow) != null && Number(mechanicalRemaining(editRow)) > 0 && (
-                          <button
-                            type="button"
-                            className="linkbtn linkbtn--sm"
-                            onClick={() => {
-                              setReceiptAmount(String(mechanicalRemaining(editRow)))
-                              setPayError(null)
-                            }}
-                          >
-                            Use remaining {inr(mechanicalRemaining(editRow))}
-                          </button>
-                        )}
-                      </label>
-                      <label className="brx-field">
-                        <span className="brx-field-label">Payment mode</span>
-                        <select className="sel" value={paymentMode} onChange={(e) => setPaymentMode(e.target.value as AccountsPaymentMode)}>
-                          {ACCOUNTS_PAYMENT_MODES.map((m) => (
-                            <option key={m.value} value={m.value}>{m.label}</option>
-                          ))}
-                        </select>
-                      </label>
-                      <label className="brx-field">
-                        <span className="brx-field-label">Payment received date</span>
-                        <input
-                          className="inp"
-                          type="date"
-                          value={paymentReceivedDate}
-                          required
-                          onChange={(e) => { setPaymentReceivedDate(e.target.value); setPayError(null) }}
-                        />
-                      </label>
-                      <label className="brx-field">
-                        <span className="brx-field-label">Reference</span>
-                        <input className="inp" value={paymentReference} onChange={(e) => setPaymentReference(e.target.value)} placeholder="UTR, cheque no, or note" />
-                      </label>
-                      <div className="brx-field brx-grid-full">
-                        <button type="button" className="btn btn--primary" disabled={postingPay || editRow.billed_amount == null} onClick={() => void postMechanicalReceipt()}>
+                    <div>
+                      {paymentDrafts.map((draft, index) => {
+                        const billedRemaining = Number(mechanicalRemaining(editRow) ?? 0)
+                        const rowRemaining = mechanicalDraftRowRemaining(
+                          billedRemaining,
+                          paymentDrafts.filter((_, i) => i !== index).map((other) => numOrNull(other.amount)),
+                        )
+                        return (
+                          <div key={draft.key} className="acct-pay-draft">
+                            <div className="acct-pay-draft__title">
+                              <span>Payment {index + 1}</span>
+                              <div className="acct-pay-draft__actions">
+                                {index === 0 && (
+                                  <button
+                                    type="button"
+                                    className="btn btn--sm acct-pay-add"
+                                    onClick={addPaymentDraft}
+                                    disabled={postingPay}
+                                    title="Add another payment"
+                                    aria-label="Add another payment"
+                                  >
+                                    +
+                                  </button>
+                                )}
+                                {index > 0 && (
+                                  <button
+                                    type="button"
+                                    className="modal__x acct-pay-remove"
+                                    onClick={() => removePaymentDraft(draft.key)}
+                                    disabled={postingPay}
+                                    title="Remove this payment"
+                                    aria-label={`Remove payment ${index + 1}`}
+                                  >
+                                    ×
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                            <div className="brx-form-grid-2">
+                              <label className="brx-field">
+                                <span className="brx-field-label">{index === 0 ? 'This receipt (₹)' : 'Amount (₹)'}</span>
+                                <input
+                                  className="inp"
+                                  type="number"
+                                  value={draft.amount}
+                                  onChange={(e) => updatePaymentDraft(draft.key, { amount: e.target.value })}
+                                  placeholder="Additional amount"
+                                />
+                                {rowRemaining > 0 && (
+                                  <button
+                                    type="button"
+                                    className="linkbtn linkbtn--sm"
+                                    onClick={() => updatePaymentDraft(draft.key, { amount: String(rowRemaining) })}
+                                  >
+                                    Use remaining {inr(rowRemaining)}
+                                  </button>
+                                )}
+                              </label>
+                              <label className="brx-field">
+                                <span className="brx-field-label">Payment mode</span>
+                                <select
+                                  className="sel"
+                                  value={draft.paymentMode}
+                                  onChange={(e) => updatePaymentDraft(draft.key, { paymentMode: e.target.value as AccountsPaymentMode })}
+                                >
+                                  {ACCOUNTS_PAYMENT_MODES.map((m) => (
+                                    <option key={m.value} value={m.value}>{m.label}</option>
+                                  ))}
+                                </select>
+                              </label>
+                              <label className="brx-field">
+                                <span className="brx-field-label">Payment received date</span>
+                                <input
+                                  className="inp"
+                                  type="date"
+                                  value={draft.paymentReceivedDate}
+                                  required
+                                  onChange={(e) => updatePaymentDraft(draft.key, { paymentReceivedDate: e.target.value })}
+                                />
+                              </label>
+                              <label className="brx-field">
+                                <span className="brx-field-label">Reference</span>
+                                <input
+                                  className="inp"
+                                  value={draft.paymentReference}
+                                  onChange={(e) => updatePaymentDraft(draft.key, { paymentReference: e.target.value })}
+                                  placeholder="UTR, cheque no, or note"
+                                />
+                              </label>
+                            </div>
+                          </div>
+                        )
+                      })}
+                      <div className="brx-field">
+                        <button
+                          type="button"
+                          className="btn btn--primary"
+                          disabled={postingPay || editRow.billed_amount == null}
+                          onClick={() => void postMechanicalReceipt()}
+                        >
                           {postingPay ? 'Posting…' : 'Post payment'}
                         </button>
                       </div>

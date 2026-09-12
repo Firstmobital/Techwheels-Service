@@ -10,6 +10,7 @@ import { Icon } from '../components/Icon'
 import {
   dateRangeError,
   downloadBusyWorkbook,
+  evaluateBusyVoucherSourceAvailability,
   fetchBusyLabourRows,
   fetchBusyPartsLines,
   formatInr,
@@ -61,8 +62,11 @@ export default function BusyAccountingPage() {
   const [customRange, setCustomRange] = useState<DateRange>(currentMonthRange)
   const [labourStatus, setLabourStatus] = useState<BusyLabourSourceStatus | null>(null)
   const [partsStatus, setPartsStatus] = useState<BusyPartsSourceStatus | null>(null)
-  const [labourLoading, setLabourLoading] = useState(false)
+  const [labourLoading, setLabourLoading] = useState(true)
+  const [partsLoading, setPartsLoading] = useState(true)
+  const [labourResolvedRange, setLabourResolvedRange] = useState<string | null>(null)
   const [processError, setProcessError] = useState<string | null>(null)
+  const [voucherHandlerWarning, setVoucherHandlerWarning] = useState<string | null>(null)
   const [pvParts, setPvParts] = useState<PartsSlotState>(EMPTY_SLOT)
   const [evParts, setEvParts] = useState<PartsSlotState>(EMPTY_SLOT)
   const [previewFilter, setPreviewFilter] = useState<'all' | 'ready' | 'blocked' | 'excluded'>('all')
@@ -83,10 +87,15 @@ export default function BusyAccountingPage() {
   }, [])
 
   useEffect(() => {
+    setVoucherHandlerWarning(null)
+  }, [fromDate, toDate])
+
+  useEffect(() => {
     let active = true
     loadBusyLabourSourceStatus().then((status) => {
       if (active) setLabourStatus(status)
     })
+    setPartsLoading(true)
     Promise.all([loadBusyPartsSourceStatus(), fetchBusyPartsLines().catch((error: unknown) => {
       throw error
     })]).then(([status, lines]) => {
@@ -117,6 +126,8 @@ export default function BusyAccountingPage() {
     }).catch((error: unknown) => {
       if (!active) return
       const message = error instanceof Error ? error.message : String(error)
+      setPvParts(EMPTY_SLOT)
+      setEvParts(EMPTY_SLOT)
       setPartsStatus({
         pvAvailable: false,
         evAvailable: false,
@@ -128,6 +139,8 @@ export default function BusyAccountingPage() {
         latestEvUploadedAt: null,
         error: message,
       })
+    }).finally(() => {
+      if (active) setPartsLoading(false)
     })
     return () => { active = false }
   }, [])
@@ -145,10 +158,12 @@ export default function BusyAccountingPage() {
       .then((rows) => {
         if (!active) return
         setLabourRows(rows)
+        setLabourResolvedRange(`${fromDate}:${toDate}`)
       })
       .catch((error: unknown) => {
         if (!active) return
         setLabourRows([])
+        setLabourResolvedRange(`${fromDate}:${toDate}`)
         setProcessError(error instanceof Error ? error.message : String(error))
       })
       .finally(() => {
@@ -158,15 +173,20 @@ export default function BusyAccountingPage() {
     return () => { active = false }
   }, [fromDate, toDate, rangeIssue])
 
+  const partsLines = useMemo(
+    () => [...pvParts.lines, ...evParts.lines],
+    [pvParts.lines, evParts.lines],
+  )
+
   const result = useMemo(() => {
     if (rangeIssue) return null
     return transformBusyAccounting({
       labourRows,
-      partsLines: [...pvParts.lines, ...evParts.lines],
+      partsLines,
       fromDate,
       toDate,
     })
-  }, [labourRows, pvParts.lines, evParts.lines, fromDate, toDate, rangeIssue])
+  }, [labourRows, partsLines, fromDate, toDate, rangeIssue])
 
   const handlePartsFile = useCallback(async (file: File, portal: VehiclePortal) => {
     const setter = portal === 'PV' ? setPvParts : setEvParts
@@ -235,16 +255,50 @@ export default function BusyAccountingPage() {
     return rows.filter((row) => row.status === previewFilter)
   }, [result, previewFilter])
 
-  const canExport = Boolean(result && result.summary.eligible > 0 && !rangeIssue)
+  const sourceAvailability = useMemo(() => {
+    if (rangeIssue) return null
+    return evaluateBusyVoucherSourceAvailability({
+      labourRows,
+      partsLines,
+      fromDate,
+      toDate,
+    })
+  }, [labourRows, partsLines, fromDate, toDate, rangeIssue])
+
+  const sourcesPending = Boolean(
+    !rangeIssue && (labourLoading || partsLoading || labourResolvedRange !== `${fromDate}:${toDate}`),
+  )
+
+  const canExportParties = Boolean(result && result.summary.eligible > 0 && !rangeIssue)
+  const canExportInvoices = Boolean(
+    canExportParties
+    && !sourcesPending
+    && sourceAvailability?.sourcesComplete,
+  )
+  const voucherSourceWarning = voucherHandlerWarning
+    ?? (!sourcesPending && sourceAvailability && !sourceAvailability.sourcesComplete
+      ? sourceAvailability.warning
+      : null)
 
   function exportParties() {
-    if (!result || !canExport) return
+    if (!result || !canExportParties) return
     const workbook = buildPartyAccountWorkbook(result.partyRows)
     downloadBusyWorkbook(workbook, `BUSY_Party_Accounts_${fromDate}_to_${toDate}.xlsx`)
   }
 
   function exportInvoices() {
-    if (!result || !canExport) return
+    if (sourcesPending) return
+    const availability = evaluateBusyVoucherSourceAvailability({
+      labourRows,
+      partsLines,
+      fromDate,
+      toDate,
+    })
+    if (!availability.sourcesComplete) {
+      setVoucherHandlerWarning(availability.warning)
+      return
+    }
+    if (!result || result.summary.eligible === 0 || rangeIssue) return
     const workbook = buildInvoiceVoucherWorkbook(result.invoiceRows)
     downloadBusyWorkbook(workbook, `BUSY_Invoice_Vouchers_${fromDate}_to_${toDate}.xlsx`)
   }
@@ -348,16 +402,22 @@ export default function BusyAccountingPage() {
               <option value="blocked">Blocked</option>
               <option value="excluded">Excluded</option>
             </select>
-            <button type="button" className="btn btn--ghost btn--sm" disabled={!canExport} onClick={exportParties}>
+            <button type="button" className="btn btn--ghost btn--sm" disabled={!canExportParties} onClick={exportParties}>
               Export Party Accounts
             </button>
-            <button type="button" className="btn btn--primary btn--sm" disabled={!canExport} onClick={exportInvoices}>
+            <button type="button" className="btn btn--primary btn--sm" disabled={!canExportInvoices} onClick={exportInvoices}>
               Export Invoice Vouchers
             </button>
           </div>
         </div>
         <div className="card__body dense">
-          {!canExport && result && result.summary.eligible === 0 && !labourLoading && (
+          {voucherSourceWarning && (
+            <div className="alert alert--err" style={{ marginBottom: 12 }}>
+              <Icon name="alert" size={14} />
+              {voucherSourceWarning}
+            </div>
+          )}
+          {!canExportParties && result && result.summary.eligible === 0 && !labourLoading && (
             <div className="empty-state">No eligible invoices to export for this date range.</div>
           )}
           {filteredPreview.length === 0 && !labourLoading ? (
