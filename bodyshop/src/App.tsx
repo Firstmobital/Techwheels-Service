@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { supabase } from './lib/supabase'
 import Header from './components/Header'
 import BottomNav, { type TabType } from './components/BottomNav'
 import AuthPage from './pages/AuthPage'
@@ -8,7 +9,7 @@ import EstimatePage from './pages/EstimatePage'
 import InvoicesPage from './pages/InvoicesPage'
 import GatePassPage from './pages/GatePassPage'
 import FeedbackPage from './pages/FeedbackPage'
-import { type CustomerVehicle } from './lib/api'
+import { fetchCustomerVehicles, type CustomerVehicle } from './lib/api'
 import './App.css'
 
 export default function App() {
@@ -26,6 +27,7 @@ export default function App() {
 
   const [currentTab, setCurrentTab] = useState<TabType>('dashboard')
 
+  // Save selected vehicle to local storage
   useEffect(() => {
     if (selectedVehicle) {
       localStorage.setItem('bodyshop_customer_vehicle', JSON.stringify(selectedVehicle))
@@ -33,6 +35,68 @@ export default function App() {
       localStorage.removeItem('bodyshop_customer_vehicle')
     }
   }, [selectedVehicle])
+
+  // Live real-time sync for active vehicle data (KM reading, JC number, service type, advisor updates)
+  useEffect(() => {
+    if (!selectedVehicle?.reg_number) return
+
+    async function refreshActiveVehicle() {
+      if (!selectedVehicle?.reg_number) return
+      try {
+        const list = await fetchCustomerVehicles(selectedVehicle.reg_number)
+        if (list && list.length > 0) {
+          const fresh = list[0]
+          setSelectedVehicle((prev) => {
+            if (!prev) return fresh
+            // Only update if something changed
+            if (
+              prev.km_reading !== fresh.km_reading ||
+              prev.jc_number !== fresh.jc_number ||
+              prev.service_type !== fresh.service_type ||
+              prev.sa_name !== fresh.sa_name ||
+              prev.payment_status !== fresh.payment_status
+            ) {
+              return fresh
+            }
+            return prev
+          })
+        }
+      } catch (err) {
+        console.warn('Live vehicle refresh error:', err)
+      }
+    }
+
+    void refreshActiveVehicle()
+
+    // Real-time Supabase channels
+    const channel = supabase
+      .channel(`active-vehicle-sync-${selectedVehicle.reg_number}`)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'service_reception_entries' },
+        () => {
+          void refreshActiveVehicle()
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'bodyshop_repair_cards' },
+        () => {
+          void refreshActiveVehicle()
+        }
+      )
+      .subscribe()
+
+    // Fallback polling every 4 seconds
+    const interval = setInterval(() => {
+      void refreshActiveVehicle()
+    }, 4000)
+
+    return () => {
+      void supabase.removeChannel(channel)
+      clearInterval(interval)
+    }
+  }, [selectedVehicle?.reg_number])
 
   function handleLogin(vehicle: CustomerVehicle) {
     setSelectedVehicle(vehicle)

@@ -55,19 +55,21 @@ export default function DashboardPage({ vehicle, onNavigate }: DashboardPageProp
         >
           <div>
             <div style={{ opacity: 0.75, fontSize: 11 }}>VIN / Chassis Number</div>
-            <div className="mono" style={{ fontWeight: 700 }}>{vehicle.vin || 'MAT1234567890'}</div>
+            <div className="mono" style={{ fontWeight: 700 }}>{vehicle.vin || 'MAT' + vehicle.reg_number.replace(/[^A-Z0-9]/g, '')}</div>
           </div>
           <div>
             <div style={{ opacity: 0.75, fontSize: 11 }}>Current Odometer</div>
-            <div className="mono" style={{ fontWeight: 700 }}>{vehicle.km_reading ? `${vehicle.km_reading.toLocaleString()} KM` : '15,000 KM'}</div>
+            <div className="mono" style={{ fontWeight: 700, color: vehicle.km_reading ? 'inherit' : '#f59e0b' }}>
+              {vehicle.km_reading != null ? `${vehicle.km_reading.toLocaleString()} KM` : '⏳ Awaiting KM Entry'}
+            </div>
           </div>
           <div>
-            <div style={{ opacity: 0.75, fontSize: 11 }}>Warranty Status</div>
-            <div style={{ fontWeight: 700 }}>{vehicle.warranty_status || 'Active (3 Yrs)'}</div>
+            <div style={{ opacity: 0.75, fontSize: 11 }}>Service Type</div>
+            <div style={{ fontWeight: 700 }}>{vehicle.service_type || 'General Service'}</div>
           </div>
           <div>
-            <div style={{ opacity: 0.75, fontSize: 11 }}>AMC / Service Pack</div>
-            <div style={{ fontWeight: 700 }}>{vehicle.amc_status || 'Gold Care AMC'}</div>
+            <div style={{ opacity: 0.75, fontSize: 11 }}>Assigned Advisor</div>
+            <div style={{ fontWeight: 700 }}>{vehicle.sa_display_name || vehicle.sa_name || 'Workshop Team'}</div>
           </div>
         </div>
       </div>
