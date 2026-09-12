@@ -1,4 +1,5 @@
 import { supabase } from './supabase'
+import { buildEstimateForVehicle } from './partsPricing'
 
 export interface CustomerVehicle {
   id: number
@@ -289,36 +290,11 @@ export async function submitCustomerFeedback(payload: FeedbackPayload): Promise<
 
 // 4. Fetch Digital Estimate with line items (SRD Section 7)
 export function getEstimateDetails(vehicle: CustomerVehicle): EstimateDetails {
-  const isBodyshop = vehicle.service_type?.toLowerCase().includes('bodyshop') || false
-  const partsItems: EstimateItem[] = isBodyshop
-    ? [
-        { id: '1', type: 'part', description: 'Front Bumper Assembly (OEM)', quantity: 1, unit_price: 6500, total: 6500 },
-        { id: '2', type: 'part', description: 'LH Headlamp Unit (LED)', quantity: 1, unit_price: 3800, total: 3800 },
-        { id: '3', type: 'labour', description: 'Bumper Fitment & Alignment Labour', quantity: 1, unit_price: 1200, total: 1200 },
-        { id: '4', type: 'labour', description: 'Paint & Clear Coat (Metallic Paint Booth)', quantity: 1, unit_price: 2500, total: 2500 },
-      ]
-    : [
-        { id: '1', type: 'part', description: 'Engine Oil Synth 5W-30 (3.5L)', quantity: 1, unit_price: 2150, total: 2150 },
-        { id: '2', type: 'part', description: 'Oil Filter + Air Filter Element', quantity: 1, unit_price: 750, total: 750 },
-        { id: '3', type: 'labour', description: 'Periodic Paid Service Labour (General Inspection)', quantity: 1, unit_price: 1500, total: 1500 },
-        { id: '4', type: 'labour', description: 'Brake Cleaning & Caliper Greasing', quantity: 1, unit_price: 450, total: 450 },
-      ]
+  const model = vehicle.model || 'Nexon'
+  const serviceType = vehicle.service_type || 'Paid Service'
+  const fuel = 'Petrol' // default or inferred
 
-  const subtotal = partsItems.reduce((acc, it) => acc + it.total, 0)
-  const discount = 300
-  const taxable = subtotal - discount
-  const gst_tax = Math.round(taxable * 0.18)
-  const grand_total = taxable + gst_tax
-
-  return {
-    estimate_no: `EST-${vehicle.jc_number ? vehicle.jc_number.replace(/[^0-9]/g, '').slice(-5) : '78192'}`,
-    items: partsItems,
-    subtotal,
-    discount,
-    gst_tax,
-    grand_total,
-    status: 'Sent',
-  }
+  return buildEstimateForVehicle(model, fuel, serviceType)
 }
 
 // 5. Digital Gate Pass Generation & Verification (SRD Section 13 & 14)

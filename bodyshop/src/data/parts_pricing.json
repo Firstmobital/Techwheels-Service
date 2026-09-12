@@ -1,0 +1,8336 @@
+[
+  {
+    "id": 1,
+    "service_type": "First Service",
+    "model": "Altroz",
+    "fuel": "Petrol",
+    "service_name": "Distilled Water",
+    "price": 20,
+    "labour": 0
+  },
+  {
+    "id": 2,
+    "service_type": "First Service",
+    "model": "Altroz",
+    "fuel": "Petrol",
+    "service_name": "Shampoo",
+    "price": 120,
+    "labour": 0
+  },
+  {
+    "id": 3,
+    "service_type": "First Service",
+    "model": "Altroz",
+    "fuel": "Petrol",
+    "service_name": "Seat Protection Cover",
+    "price": 80,
+    "labour": 0
+  },
+  {
+    "id": 4,
+    "service_type": "First Service",
+    "model": "Altroz",
+    "fuel": "Petrol",
+    "service_name": "Coolant Top Up",
+    "price": 100,
+    "labour": 0
+  },
+  {
+    "id": 5,
+    "service_type": "First Service",
+    "model": "Altroz",
+    "fuel": "Petrol",
+    "service_name": "Oil Filter Change",
+    "price": 179,
+    "labour": 0
+  },
+  {
+    "id": 6,
+    "service_type": "First Service",
+    "model": "Altroz",
+    "fuel": "Petrol",
+    "service_name": "Sunroof Greece",
+    "price": 800,
+    "labour": 0
+  },
+  {
+    "id": 7,
+    "service_type": "First Service",
+    "model": "Altroz",
+    "fuel": "Petrol",
+    "service_name": "AC Disinfection",
+    "price": 800,
+    "labour": 0
+  },
+  {
+    "id": 8,
+    "service_type": "First Service",
+    "model": "Altroz",
+    "fuel": "Petrol",
+    "service_name": "Antirust Underbody",
+    "price": 1900,
+    "labour": 0
+  },
+  {
+    "id": 9,
+    "service_type": "First Service",
+    "model": "Altroz",
+    "fuel": "Petrol",
+    "service_name": "Antirust Cavity",
+    "price": 1600,
+    "labour": 0
+  },
+  {
+    "id": 11,
+    "service_type": "First Service",
+    "model": "Altroz",
+    "fuel": "Petrol",
+    "service_name": "Interior cleaning",
+    "price": 1300,
+    "labour": 0
+  },
+  {
+    "id": 12,
+    "service_type": "First Service",
+    "model": "Altroz",
+    "fuel": "Petrol",
+    "service_name": "Interior cleaning standard",
+    "price": 875,
+    "labour": 0
+  },
+  {
+    "id": 13,
+    "service_type": "First Service",
+    "model": "Altroz",
+    "fuel": "Petrol",
+    "service_name": "Paint Protection",
+    "price": 1100,
+    "labour": 0
+  },
+  {
+    "id": 14,
+    "service_type": "First Service",
+    "model": "Altroz",
+    "fuel": "Petrol",
+    "service_name": "Service Pro Plus",
+    "price": 300,
+    "labour": 0
+  },
+  {
+    "id": 16,
+    "service_type": "First Service",
+    "model": "Altroz",
+    "fuel": "Petrol",
+    "service_name": "Surface Coating",
+    "price": 1800,
+    "labour": 0
+  },
+  {
+    "id": 17,
+    "service_type": "First Service",
+    "model": "Altroz",
+    "fuel": "Petrol",
+    "service_name": "Engine Wiring Surface",
+    "price": 800,
+    "labour": 0
+  },
+  {
+    "id": 18,
+    "service_type": "First Service",
+    "model": "Altroz",
+    "fuel": "Petrol",
+    "service_name": "Oil Flushing",
+    "price": 800,
+    "labour": 0
+  },
+  {
+    "id": 19,
+    "service_type": "First Service",
+    "model": "Altroz",
+    "fuel": "Petrol",
+    "service_name": "TBC Clean",
+    "price": 800,
+    "labour": 0
+  },
+  {
+    "id": 20,
+    "service_type": "First Service",
+    "model": "Altroz",
+    "fuel": "Petrol",
+    "service_name": "Exhaust Cleaning",
+    "price": 1200,
+    "labour": 0
+  },
+  {
+    "id": 6,
+    "service_type": "First Service",
+    "model": "Altroz",
+    "fuel": "Diesel",
+    "service_name": "Distilled Water",
+    "price": 20,
+    "labour": 0
+  },
+  {
+    "id": 7,
+    "service_type": "First Service",
+    "model": "Altroz",
+    "fuel": "Diesel",
+    "service_name": "Shampoo",
+    "price": 120,
+    "labour": 0
+  },
+  {
+    "id": 8,
+    "service_type": "First Service",
+    "model": "Altroz",
+    "fuel": "Diesel",
+    "service_name": "Coolant Top Up",
+    "price": 100,
+    "labour": 0
+  },
+  {
+    "id": 9,
+    "service_type": "First Service",
+    "model": "Altroz",
+    "fuel": "Diesel",
+    "service_name": "Oil Filter Change",
+    "price": 192,
+    "labour": 0
+  },
+  {
+    "id": 10,
+    "service_type": "First Service",
+    "model": "Altroz",
+    "fuel": "Diesel",
+    "service_name": "Sunroof Greece",
+    "price": 800,
+    "labour": 0
+  },
+  {
+    "id": 11,
+    "service_type": "First Service",
+    "model": "Altroz",
+    "fuel": "CNG",
+    "service_name": "Distilled Water",
+    "price": 20,
+    "labour": 0
+  },
+  {
+    "id": 12,
+    "service_type": "First Service",
+    "model": "Altroz",
+    "fuel": "CNG",
+    "service_name": "Shampoo",
+    "price": 120,
+    "labour": 0
+  },
+  {
+    "id": 13,
+    "service_type": "First Service",
+    "model": "Altroz",
+    "fuel": "CNG",
+    "service_name": "Coolant Top Up",
+    "price": 100,
+    "labour": 0
+  },
+  {
+    "id": 14,
+    "service_type": "First Service",
+    "model": "Altroz",
+    "fuel": "CNG",
+    "service_name": "Oil Filter Change",
+    "price": 179,
+    "labour": 0
+  },
+  {
+    "id": 15,
+    "service_type": "First Service",
+    "model": "Altroz",
+    "fuel": "CNG",
+    "service_name": "Sunroof Greece",
+    "price": 800,
+    "labour": 0
+  },
+  {
+    "id": 16,
+    "service_type": "First Service",
+    "model": "Tiago",
+    "fuel": "Petrol",
+    "service_name": "Distilled Water",
+    "price": 20,
+    "labour": 0
+  },
+  {
+    "id": 17,
+    "service_type": "First Service",
+    "model": "Tiago",
+    "fuel": "Petrol",
+    "service_name": "Shampoo",
+    "price": 120,
+    "labour": 0
+  },
+  {
+    "id": 18,
+    "service_type": "First Service",
+    "model": "Tiago",
+    "fuel": "Petrol",
+    "service_name": "Coolant Top Up",
+    "price": 100,
+    "labour": 0
+  },
+  {
+    "id": 19,
+    "service_type": "First Service",
+    "model": "Tiago",
+    "fuel": "Petrol",
+    "service_name": "Oil Filter Change",
+    "price": 179,
+    "labour": 0
+  },
+  {
+    "id": 20,
+    "service_type": "First Service",
+    "model": "Tiago",
+    "fuel": "Diesel",
+    "service_name": "Distilled Water",
+    "price": 20,
+    "labour": 0
+  },
+  {
+    "id": 21,
+    "service_type": "First Service",
+    "model": "Tiago",
+    "fuel": "Diesel",
+    "service_name": "Shampoo",
+    "price": 120,
+    "labour": 0
+  },
+  {
+    "id": 22,
+    "service_type": "First Service",
+    "model": "Tiago",
+    "fuel": "Diesel",
+    "service_name": "Coolant Top Up",
+    "price": 100,
+    "labour": 0
+  },
+  {
+    "id": 23,
+    "service_type": "First Service",
+    "model": "Tiago",
+    "fuel": "Diesel",
+    "service_name": "Oil Filter Change",
+    "price": 192,
+    "labour": 0
+  },
+  {
+    "id": 24,
+    "service_type": "First Service",
+    "model": "Tiago",
+    "fuel": "CNG",
+    "service_name": "Distilled Water",
+    "price": 20,
+    "labour": 0
+  },
+  {
+    "id": 25,
+    "service_type": "First Service",
+    "model": "Tiago",
+    "fuel": "CNG",
+    "service_name": "Shampoo",
+    "price": 120,
+    "labour": 0
+  },
+  {
+    "id": 26,
+    "service_type": "First Service",
+    "model": "Tiago",
+    "fuel": "CNG",
+    "service_name": "Coolant Top Up",
+    "price": 100,
+    "labour": 0
+  },
+  {
+    "id": 27,
+    "service_type": "First Service",
+    "model": "Tiago",
+    "fuel": "CNG",
+    "service_name": "Oil Filter Change",
+    "price": 170,
+    "labour": 0
+  },
+  {
+    "id": 28,
+    "service_type": "First Service",
+    "model": "Tiago",
+    "fuel": "EV",
+    "service_name": "Distilled Water",
+    "price": 20,
+    "labour": 0
+  },
+  {
+    "id": 29,
+    "service_type": "First Service",
+    "model": "Tiago",
+    "fuel": "EV",
+    "service_name": "Shampoo",
+    "price": 120,
+    "labour": 0
+  },
+  {
+    "id": 30,
+    "service_type": "First Service",
+    "model": "Tiago",
+    "fuel": "EV",
+    "service_name": "Coolant Top Up",
+    "price": 212,
+    "labour": 0
+  },
+  {
+    "id": 31,
+    "service_type": "First Service",
+    "model": "Nexon",
+    "fuel": "Petrol",
+    "service_name": "Distilled Water",
+    "price": 20,
+    "labour": 0
+  },
+  {
+    "id": 32,
+    "service_type": "First Service",
+    "model": "Nexon",
+    "fuel": "Petrol",
+    "service_name": "Shampoo",
+    "price": 120,
+    "labour": 0
+  },
+  {
+    "id": 33,
+    "service_type": "First Service",
+    "model": "Nexon",
+    "fuel": "Petrol",
+    "service_name": "Coolant Top Up",
+    "price": 100,
+    "labour": 0
+  },
+  {
+    "id": 34,
+    "service_type": "First Service",
+    "model": "Nexon",
+    "fuel": "Petrol",
+    "service_name": "Oil Filter Change",
+    "price": 179,
+    "labour": 0
+  },
+  {
+    "id": 35,
+    "service_type": "First Service",
+    "model": "Nexon",
+    "fuel": "Petrol",
+    "service_name": "Sunroof Greece",
+    "price": 800,
+    "labour": 0
+  },
+  {
+    "id": 36,
+    "service_type": "First Service",
+    "model": "Nexon",
+    "fuel": "Diesel",
+    "service_name": "Distilled Water",
+    "price": 20,
+    "labour": 0
+  },
+  {
+    "id": 37,
+    "service_type": "First Service",
+    "model": "Nexon",
+    "fuel": "Diesel",
+    "service_name": "Shampoo",
+    "price": 120,
+    "labour": 0
+  },
+  {
+    "id": 38,
+    "service_type": "First Service",
+    "model": "Nexon",
+    "fuel": "Diesel",
+    "service_name": "Coolant Top Up",
+    "price": 100,
+    "labour": 0
+  },
+  {
+    "id": 39,
+    "service_type": "First Service",
+    "model": "Nexon",
+    "fuel": "Diesel",
+    "service_name": "Oil Filter Change",
+    "price": 192,
+    "labour": 0
+  },
+  {
+    "id": 40,
+    "service_type": "First Service",
+    "model": "Nexon",
+    "fuel": "Diesel",
+    "service_name": "Sunroof Greece",
+    "price": 800,
+    "labour": 0
+  },
+  {
+    "id": 41,
+    "service_type": "First Service",
+    "model": "Nexon",
+    "fuel": "CNG",
+    "service_name": "Distilled Water",
+    "price": 20,
+    "labour": 0
+  },
+  {
+    "id": 42,
+    "service_type": "First Service",
+    "model": "Nexon",
+    "fuel": "CNG",
+    "service_name": "Shampoo",
+    "price": 120,
+    "labour": 0
+  },
+  {
+    "id": 43,
+    "service_type": "First Service",
+    "model": "Nexon",
+    "fuel": "CNG",
+    "service_name": "Coolant Top Up",
+    "price": 100,
+    "labour": 0
+  },
+  {
+    "id": 44,
+    "service_type": "First Service",
+    "model": "Nexon",
+    "fuel": "CNG",
+    "service_name": "Oil Filter Change",
+    "price": 192,
+    "labour": 0
+  },
+  {
+    "id": 45,
+    "service_type": "First Service",
+    "model": "Nexon",
+    "fuel": "CNG",
+    "service_name": "Sunroof Greece",
+    "price": 800,
+    "labour": 0
+  },
+  {
+    "id": 46,
+    "service_type": "First Service",
+    "model": "Nexon",
+    "fuel": "EV",
+    "service_name": "Distilled Water",
+    "price": 20,
+    "labour": 0
+  },
+  {
+    "id": 47,
+    "service_type": "First Service",
+    "model": "Nexon",
+    "fuel": "EV",
+    "service_name": "Shampoo",
+    "price": 120,
+    "labour": 0
+  },
+  {
+    "id": 48,
+    "service_type": "First Service",
+    "model": "Nexon",
+    "fuel": "EV",
+    "service_name": "Coolant Top Up",
+    "price": 212,
+    "labour": 0
+  },
+  {
+    "id": 49,
+    "service_type": "First Service",
+    "model": "Nexon",
+    "fuel": "EV",
+    "service_name": "Sunroof Greece",
+    "price": 800,
+    "labour": 0
+  },
+  {
+    "id": 50,
+    "service_type": "First Service",
+    "model": "Punch",
+    "fuel": "Petrol",
+    "service_name": "Distilled Water",
+    "price": 20,
+    "labour": 0
+  },
+  {
+    "id": 51,
+    "service_type": "First Service",
+    "model": "Punch",
+    "fuel": "Petrol",
+    "service_name": "Shampoo",
+    "price": 120,
+    "labour": 0
+  },
+  {
+    "id": 52,
+    "service_type": "First Service",
+    "model": "Punch",
+    "fuel": "Petrol",
+    "service_name": "Coolant Top Up",
+    "price": 100,
+    "labour": 0
+  },
+  {
+    "id": 53,
+    "service_type": "First Service",
+    "model": "Punch",
+    "fuel": "Petrol",
+    "service_name": "Oil Filter Change",
+    "price": 179,
+    "labour": 0
+  },
+  {
+    "id": 54,
+    "service_type": "First Service",
+    "model": "Punch",
+    "fuel": "Petrol",
+    "service_name": "Sunroof Greece",
+    "price": 800,
+    "labour": 0
+  },
+  {
+    "id": 55,
+    "service_type": "First Service",
+    "model": "Punch",
+    "fuel": "CNG",
+    "service_name": "Distilled Water",
+    "price": 20,
+    "labour": 0
+  },
+  {
+    "id": 56,
+    "service_type": "First Service",
+    "model": "Punch",
+    "fuel": "CNG",
+    "service_name": "Shampoo",
+    "price": 120,
+    "labour": 0
+  },
+  {
+    "id": 57,
+    "service_type": "First Service",
+    "model": "Punch",
+    "fuel": "CNG",
+    "service_name": "Coolant Top Up",
+    "price": 100,
+    "labour": 0
+  },
+  {
+    "id": 58,
+    "service_type": "First Service",
+    "model": "Punch",
+    "fuel": "CNG",
+    "service_name": "Oil Filter Change",
+    "price": 179,
+    "labour": 0
+  },
+  {
+    "id": 59,
+    "service_type": "First Service",
+    "model": "Punch",
+    "fuel": "CNG",
+    "service_name": "Sunroof Greece",
+    "price": 800,
+    "labour": 0
+  },
+  {
+    "id": 60,
+    "service_type": "First Service",
+    "model": "Punch",
+    "fuel": "EV",
+    "service_name": "Distilled Water",
+    "price": 20,
+    "labour": 0
+  },
+  {
+    "id": 61,
+    "service_type": "First Service",
+    "model": "Punch",
+    "fuel": "EV",
+    "service_name": "Shampoo",
+    "price": 120,
+    "labour": 0
+  },
+  {
+    "id": 62,
+    "service_type": "First Service",
+    "model": "Punch",
+    "fuel": "EV",
+    "service_name": "Coolant Top Up",
+    "price": 212,
+    "labour": 0
+  },
+  {
+    "id": 63,
+    "service_type": "First Service",
+    "model": "Punch",
+    "fuel": "EV",
+    "service_name": "Sunroof Greece",
+    "price": 800,
+    "labour": 0
+  },
+  {
+    "id": 64,
+    "service_type": "First Service",
+    "model": "Tigor",
+    "fuel": "Petrol",
+    "service_name": "Distilled Water",
+    "price": 20,
+    "labour": 0
+  },
+  {
+    "id": 65,
+    "service_type": "First Service",
+    "model": "Tigor",
+    "fuel": "Petrol",
+    "service_name": "Shampoo",
+    "price": 120,
+    "labour": 0
+  },
+  {
+    "id": 66,
+    "service_type": "First Service",
+    "model": "Tigor",
+    "fuel": "Petrol",
+    "service_name": "Coolant Top Up",
+    "price": 100,
+    "labour": 0
+  },
+  {
+    "id": 67,
+    "service_type": "First Service",
+    "model": "Tigor",
+    "fuel": "Petrol",
+    "service_name": "Oil Filter Change",
+    "price": 179,
+    "labour": 0
+  },
+  {
+    "id": 68,
+    "service_type": "First Service",
+    "model": "Tigor",
+    "fuel": "Diesel",
+    "service_name": "Distilled Water",
+    "price": 20,
+    "labour": 0
+  },
+  {
+    "id": 69,
+    "service_type": "First Service",
+    "model": "Tigor",
+    "fuel": "Diesel",
+    "service_name": "Shampoo",
+    "price": 120,
+    "labour": 0
+  },
+  {
+    "id": 70,
+    "service_type": "First Service",
+    "model": "Tigor",
+    "fuel": "Diesel",
+    "service_name": "Coolant Top Up",
+    "price": 100,
+    "labour": 0
+  },
+  {
+    "id": 71,
+    "service_type": "First Service",
+    "model": "Tigor",
+    "fuel": "Diesel",
+    "service_name": "Oil Filter Change",
+    "price": 192,
+    "labour": 0
+  },
+  {
+    "id": 72,
+    "service_type": "First Service",
+    "model": "Tigor",
+    "fuel": "CNG",
+    "service_name": "Distilled Water",
+    "price": 20,
+    "labour": 0
+  },
+  {
+    "id": 73,
+    "service_type": "First Service",
+    "model": "Tigor",
+    "fuel": "CNG",
+    "service_name": "Shampoo",
+    "price": 120,
+    "labour": 0
+  },
+  {
+    "id": 74,
+    "service_type": "First Service",
+    "model": "Tigor",
+    "fuel": "CNG",
+    "service_name": "Coolant Top Up",
+    "price": 100,
+    "labour": 0
+  },
+  {
+    "id": 75,
+    "service_type": "First Service",
+    "model": "Tigor",
+    "fuel": "CNG",
+    "service_name": "Oil Filter Change",
+    "price": 170,
+    "labour": 0
+  },
+  {
+    "id": 76,
+    "service_type": "First Service",
+    "model": "Tigor",
+    "fuel": "EV",
+    "service_name": "Distilled Water",
+    "price": 20,
+    "labour": 0
+  },
+  {
+    "id": 77,
+    "service_type": "First Service",
+    "model": "Tigor",
+    "fuel": "EV",
+    "service_name": "Shampoo",
+    "price": 120,
+    "labour": 0
+  },
+  {
+    "id": 78,
+    "service_type": "First Service",
+    "model": "Tigor",
+    "fuel": "EV",
+    "service_name": "Coolant Top Up",
+    "price": 212,
+    "labour": 0
+  },
+  {
+    "id": 79,
+    "service_type": "First Service",
+    "model": "Curvv",
+    "fuel": "Petrol",
+    "service_name": "Shampoo",
+    "price": 120,
+    "labour": 0
+  },
+  {
+    "id": 80,
+    "service_type": "First Service",
+    "model": "Curvv",
+    "fuel": "Petrol",
+    "service_name": "Coolant Top Up",
+    "price": 100,
+    "labour": 0
+  },
+  {
+    "id": 81,
+    "service_type": "First Service",
+    "model": "Curvv",
+    "fuel": "Petrol",
+    "service_name": "Oil Filter Change",
+    "price": 0,
+    "labour": 0
+  },
+  {
+    "id": 82,
+    "service_type": "First Service",
+    "model": "Curvv",
+    "fuel": "Petrol",
+    "service_name": "Sunroof Greece",
+    "price": 800,
+    "labour": 0
+  },
+  {
+    "id": 83,
+    "service_type": "First Service",
+    "model": "Curvv",
+    "fuel": "Diesel",
+    "service_name": "Distilled Water",
+    "price": 20,
+    "labour": 0
+  },
+  {
+    "id": 84,
+    "service_type": "First Service",
+    "model": "Curvv",
+    "fuel": "Diesel",
+    "service_name": "Shampoo",
+    "price": 120,
+    "labour": 0
+  },
+  {
+    "id": 85,
+    "service_type": "First Service",
+    "model": "Curvv",
+    "fuel": "Diesel",
+    "service_name": "Coolant Top Up",
+    "price": 100,
+    "labour": 0
+  },
+  {
+    "id": 86,
+    "service_type": "First Service",
+    "model": "Curvv",
+    "fuel": "Diesel",
+    "service_name": "Oil Filter Change",
+    "price": 0,
+    "labour": 0
+  },
+  {
+    "id": 87,
+    "service_type": "First Service",
+    "model": "Curvv",
+    "fuel": "Diesel",
+    "service_name": "Sunroof Greece",
+    "price": 800,
+    "labour": 0
+  },
+  {
+    "id": 88,
+    "service_type": "First Service",
+    "model": "Curvv",
+    "fuel": "EV",
+    "service_name": "Distilled Water",
+    "price": 20,
+    "labour": 0
+  },
+  {
+    "id": 89,
+    "service_type": "First Service",
+    "model": "Curvv",
+    "fuel": "EV",
+    "service_name": "Shampoo",
+    "price": 120,
+    "labour": 0
+  },
+  {
+    "id": 90,
+    "service_type": "First Service",
+    "model": "Curvv",
+    "fuel": "EV",
+    "service_name": "Coolant Top Up",
+    "price": 212,
+    "labour": 0
+  },
+  {
+    "id": 91,
+    "service_type": "First Service",
+    "model": "Curvv",
+    "fuel": "EV",
+    "service_name": "Sunroof Greece",
+    "price": 800,
+    "labour": 0
+  },
+  {
+    "id": 92,
+    "service_type": "First Service",
+    "model": "Harrier",
+    "fuel": "Diesel",
+    "service_name": "Distilled Water",
+    "price": 20,
+    "labour": 0
+  },
+  {
+    "id": 93,
+    "service_type": "First Service",
+    "model": "Harrier",
+    "fuel": "Diesel",
+    "service_name": "Shampoo",
+    "price": 120,
+    "labour": 0
+  },
+  {
+    "id": 94,
+    "service_type": "First Service",
+    "model": "Harrier",
+    "fuel": "Diesel",
+    "service_name": "Coolant Top Up",
+    "price": 100,
+    "labour": 0
+  },
+  {
+    "id": 95,
+    "service_type": "First Service",
+    "model": "Harrier",
+    "fuel": "Diesel",
+    "service_name": "Oil Filter Change",
+    "price": 850,
+    "labour": 0
+  },
+  {
+    "id": 96,
+    "service_type": "First Service",
+    "model": "Harrier",
+    "fuel": "Diesel",
+    "service_name": "Sunroof Greece",
+    "price": 800,
+    "labour": 0
+  },
+  {
+    "id": 110,
+    "service_type": "First Service",
+    "model": "Harrier",
+    "fuel": "Diesel",
+    "service_name": "Def",
+    "price": 620,
+    "labour": 0
+  },
+  {
+    "id": 97,
+    "service_type": "First Service",
+    "model": "Safari",
+    "fuel": "Diesel",
+    "service_name": "Distilled Water",
+    "price": 20,
+    "labour": 0
+  },
+  {
+    "id": 98,
+    "service_type": "First Service",
+    "model": "Safari",
+    "fuel": "Diesel",
+    "service_name": "Shampoo",
+    "price": 120,
+    "labour": 0
+  },
+  {
+    "id": 99,
+    "service_type": "First Service",
+    "model": "Safari",
+    "fuel": "Diesel",
+    "service_name": "Coolant Top Up",
+    "price": 100,
+    "labour": 0
+  },
+  {
+    "id": 100,
+    "service_type": "First Service",
+    "model": "Safari",
+    "fuel": "Diesel",
+    "service_name": "Oil Filter Change",
+    "price": 850,
+    "labour": 0
+  },
+  {
+    "id": 101,
+    "service_type": "First Service",
+    "model": "Safari",
+    "fuel": "Diesel",
+    "service_name": "Sunroof Greece",
+    "price": 800,
+    "labour": 0
+  },
+  {
+    "id": 116,
+    "service_type": "First Service",
+    "model": "Safari",
+    "fuel": "Diesel",
+    "service_name": "Def",
+    "price": 620,
+    "labour": 0
+  },
+  {
+    "id": 102,
+    "service_type": "Second Service",
+    "model": "Altroz",
+    "fuel": "Petrol",
+    "service_name": "Distilled Water",
+    "price": 20,
+    "labour": 0
+  },
+  {
+    "id": 103,
+    "service_type": "Second Service",
+    "model": "Altroz",
+    "fuel": "Petrol",
+    "service_name": "Shampoo",
+    "price": 120,
+    "labour": 0
+  },
+  {
+    "id": 104,
+    "service_type": "Second Service",
+    "model": "Altroz",
+    "fuel": "Petrol",
+    "service_name": "Coolant Top Up",
+    "price": 100,
+    "labour": 0
+  },
+  {
+    "id": 105,
+    "service_type": "Second Service",
+    "model": "Altroz",
+    "fuel": "Petrol",
+    "service_name": "Oil Filter Change",
+    "price": 179,
+    "labour": 0
+  },
+  {
+    "id": 106,
+    "service_type": "Second Service",
+    "model": "Altroz",
+    "fuel": "Petrol",
+    "service_name": "Sunroof Greece",
+    "price": 800,
+    "labour": 0
+  },
+  {
+    "id": 107,
+    "service_type": "Second Service",
+    "model": "Altroz",
+    "fuel": "Diesel",
+    "service_name": "Distilled Water",
+    "price": 20,
+    "labour": 0
+  },
+  {
+    "id": 108,
+    "service_type": "Second Service",
+    "model": "Altroz",
+    "fuel": "Diesel",
+    "service_name": "Shampoo",
+    "price": 120,
+    "labour": 0
+  },
+  {
+    "id": 109,
+    "service_type": "Second Service",
+    "model": "Altroz",
+    "fuel": "Diesel",
+    "service_name": "Coolant Top Up",
+    "price": 100,
+    "labour": 0
+  },
+  {
+    "id": 110,
+    "service_type": "Second Service",
+    "model": "Altroz",
+    "fuel": "Diesel",
+    "service_name": "Oil Filter Change",
+    "price": 192,
+    "labour": 0
+  },
+  {
+    "id": 111,
+    "service_type": "Second Service",
+    "model": "Altroz",
+    "fuel": "Diesel",
+    "service_name": "Sunroof Greece",
+    "price": 800,
+    "labour": 0
+  },
+  {
+    "id": 112,
+    "service_type": "Second Service",
+    "model": "Altroz",
+    "fuel": "CNG",
+    "service_name": "Distilled Water",
+    "price": 20,
+    "labour": 0
+  },
+  {
+    "id": 113,
+    "service_type": "Second Service",
+    "model": "Altroz",
+    "fuel": "CNG",
+    "service_name": "Shampoo",
+    "price": 120,
+    "labour": 0
+  },
+  {
+    "id": 114,
+    "service_type": "Second Service",
+    "model": "Altroz",
+    "fuel": "CNG",
+    "service_name": "Coolant Top Up",
+    "price": 100,
+    "labour": 0
+  },
+  {
+    "id": 115,
+    "service_type": "Second Service",
+    "model": "Altroz",
+    "fuel": "CNG",
+    "service_name": "Oil Filter Change",
+    "price": 179,
+    "labour": 0
+  },
+  {
+    "id": 116,
+    "service_type": "Second Service",
+    "model": "Altroz",
+    "fuel": "CNG",
+    "service_name": "Sunroof Greece",
+    "price": 800,
+    "labour": 0
+  },
+  {
+    "id": 117,
+    "service_type": "Second Service",
+    "model": "Tiago",
+    "fuel": "Petrol",
+    "service_name": "Distilled Water",
+    "price": 20,
+    "labour": 0
+  },
+  {
+    "id": 118,
+    "service_type": "Second Service",
+    "model": "Tiago",
+    "fuel": "Petrol",
+    "service_name": "Shampoo",
+    "price": 120,
+    "labour": 0
+  },
+  {
+    "id": 119,
+    "service_type": "Second Service",
+    "model": "Tiago",
+    "fuel": "Petrol",
+    "service_name": "Coolant Top Up",
+    "price": 100,
+    "labour": 0
+  },
+  {
+    "id": 120,
+    "service_type": "Second Service",
+    "model": "Tiago",
+    "fuel": "Petrol",
+    "service_name": "Oil Filter Change",
+    "price": 179,
+    "labour": 0
+  },
+  {
+    "id": 121,
+    "service_type": "Second Service",
+    "model": "Tiago",
+    "fuel": "Diesel",
+    "service_name": "Distilled Water",
+    "price": 20,
+    "labour": 0
+  },
+  {
+    "id": 122,
+    "service_type": "Second Service",
+    "model": "Tiago",
+    "fuel": "Diesel",
+    "service_name": "Shampoo",
+    "price": 120,
+    "labour": 0
+  },
+  {
+    "id": 123,
+    "service_type": "Second Service",
+    "model": "Tiago",
+    "fuel": "Diesel",
+    "service_name": "Coolant Top Up",
+    "price": 100,
+    "labour": 0
+  },
+  {
+    "id": 124,
+    "service_type": "Second Service",
+    "model": "Tiago",
+    "fuel": "Diesel",
+    "service_name": "Oil Filter Change",
+    "price": 192,
+    "labour": 0
+  },
+  {
+    "id": 125,
+    "service_type": "Second Service",
+    "model": "Tiago",
+    "fuel": "CNG",
+    "service_name": "Distilled Water",
+    "price": 20,
+    "labour": 0
+  },
+  {
+    "id": 126,
+    "service_type": "Second Service",
+    "model": "Tiago",
+    "fuel": "CNG",
+    "service_name": "Shampoo",
+    "price": 120,
+    "labour": 0
+  },
+  {
+    "id": 127,
+    "service_type": "Second Service",
+    "model": "Tiago",
+    "fuel": "CNG",
+    "service_name": "Coolant Top Up",
+    "price": 100,
+    "labour": 0
+  },
+  {
+    "id": 128,
+    "service_type": "Second Service",
+    "model": "Tiago",
+    "fuel": "CNG",
+    "service_name": "Oil Filter Change",
+    "price": 179,
+    "labour": 0
+  },
+  {
+    "id": 129,
+    "service_type": "Second Service",
+    "model": "Tiago",
+    "fuel": "EV",
+    "service_name": "Distilled Water",
+    "price": 20,
+    "labour": 0
+  },
+  {
+    "id": 130,
+    "service_type": "Second Service",
+    "model": "Tiago",
+    "fuel": "EV",
+    "service_name": "Shampoo",
+    "price": 120,
+    "labour": 0
+  },
+  {
+    "id": 131,
+    "service_type": "Second Service",
+    "model": "Tiago",
+    "fuel": "EV",
+    "service_name": "Coolant Top Up",
+    "price": 212,
+    "labour": 0
+  },
+  {
+    "id": 132,
+    "service_type": "Second Service",
+    "model": "Nexon",
+    "fuel": "Petrol",
+    "service_name": "Distilled Water",
+    "price": 20,
+    "labour": 0
+  },
+  {
+    "id": 133,
+    "service_type": "Second Service",
+    "model": "Nexon",
+    "fuel": "Petrol",
+    "service_name": "Shampoo",
+    "price": 120,
+    "labour": 0
+  },
+  {
+    "id": 134,
+    "service_type": "Second Service",
+    "model": "Nexon",
+    "fuel": "Petrol",
+    "service_name": "Coolant Top Up",
+    "price": 100,
+    "labour": 0
+  },
+  {
+    "id": 135,
+    "service_type": "Second Service",
+    "model": "Nexon",
+    "fuel": "Petrol",
+    "service_name": "Oil Filter Change",
+    "price": 179,
+    "labour": 0
+  },
+  {
+    "id": 136,
+    "service_type": "Second Service",
+    "model": "Nexon",
+    "fuel": "Petrol",
+    "service_name": "Sunroof Greece",
+    "price": 800,
+    "labour": 0
+  },
+  {
+    "id": 137,
+    "service_type": "Second Service",
+    "model": "Nexon",
+    "fuel": "Diesel",
+    "service_name": "Distilled Water",
+    "price": 20,
+    "labour": 0
+  },
+  {
+    "id": 138,
+    "service_type": "Second Service",
+    "model": "Nexon",
+    "fuel": "Diesel",
+    "service_name": "Shampoo",
+    "price": 120,
+    "labour": 0
+  },
+  {
+    "id": 139,
+    "service_type": "Second Service",
+    "model": "Nexon",
+    "fuel": "Diesel",
+    "service_name": "Coolant Top Up",
+    "price": 100,
+    "labour": 0
+  },
+  {
+    "id": 140,
+    "service_type": "Second Service",
+    "model": "Nexon",
+    "fuel": "Diesel",
+    "service_name": "Oil Filter Change",
+    "price": 192,
+    "labour": 0
+  },
+  {
+    "id": 141,
+    "service_type": "Second Service",
+    "model": "Nexon",
+    "fuel": "Diesel",
+    "service_name": "Sunroof Greece",
+    "price": 800,
+    "labour": 0
+  },
+  {
+    "id": 142,
+    "service_type": "Second Service",
+    "model": "Nexon",
+    "fuel": "CNG",
+    "service_name": "Distilled Water",
+    "price": 20,
+    "labour": 0
+  },
+  {
+    "id": 143,
+    "service_type": "Second Service",
+    "model": "Nexon",
+    "fuel": "CNG",
+    "service_name": "Shampoo",
+    "price": 120,
+    "labour": 0
+  },
+  {
+    "id": 144,
+    "service_type": "Second Service",
+    "model": "Nexon",
+    "fuel": "CNG",
+    "service_name": "Coolant Top Up",
+    "price": 100,
+    "labour": 0
+  },
+  {
+    "id": 145,
+    "service_type": "Second Service",
+    "model": "Nexon",
+    "fuel": "CNG",
+    "service_name": "Oil Filter Change",
+    "price": 179,
+    "labour": 0
+  },
+  {
+    "id": 146,
+    "service_type": "Second Service",
+    "model": "Nexon",
+    "fuel": "CNG",
+    "service_name": "Sunroof Greece",
+    "price": 800,
+    "labour": 0
+  },
+  {
+    "id": 147,
+    "service_type": "Second Service",
+    "model": "Nexon",
+    "fuel": "EV",
+    "service_name": "Distilled Water",
+    "price": 20,
+    "labour": 0
+  },
+  {
+    "id": 148,
+    "service_type": "Second Service",
+    "model": "Nexon",
+    "fuel": "EV",
+    "service_name": "Shampoo",
+    "price": 120,
+    "labour": 0
+  },
+  {
+    "id": 149,
+    "service_type": "Second Service",
+    "model": "Nexon",
+    "fuel": "EV",
+    "service_name": "Coolant Top Up",
+    "price": 212,
+    "labour": 0
+  },
+  {
+    "id": 150,
+    "service_type": "Second Service",
+    "model": "Nexon",
+    "fuel": "EV",
+    "service_name": "Sunroof Greece",
+    "price": 800,
+    "labour": 0
+  },
+  {
+    "id": 151,
+    "service_type": "Second Service",
+    "model": "Punch",
+    "fuel": "Petrol",
+    "service_name": "Distilled Water",
+    "price": 20,
+    "labour": 0
+  },
+  {
+    "id": 152,
+    "service_type": "Second Service",
+    "model": "Punch",
+    "fuel": "Petrol",
+    "service_name": "Shampoo",
+    "price": 120,
+    "labour": 0
+  },
+  {
+    "id": 153,
+    "service_type": "Second Service",
+    "model": "Punch",
+    "fuel": "Petrol",
+    "service_name": "Coolant Top Up",
+    "price": 100,
+    "labour": 0
+  },
+  {
+    "id": 154,
+    "service_type": "Second Service",
+    "model": "Punch",
+    "fuel": "Petrol",
+    "service_name": "Oil Filter Change",
+    "price": 179,
+    "labour": 0
+  },
+  {
+    "id": 155,
+    "service_type": "Second Service",
+    "model": "Punch",
+    "fuel": "Petrol",
+    "service_name": "Sunroof Greece",
+    "price": 800,
+    "labour": 0
+  },
+  {
+    "id": 171,
+    "service_type": "Second Service",
+    "model": "Punch",
+    "fuel": "Petrol",
+    "service_name": "oil Top up",
+    "price": 273,
+    "labour": 0
+  },
+  {
+    "id": 156,
+    "service_type": "Second Service",
+    "model": "Punch",
+    "fuel": "CNG",
+    "service_name": "Distilled Water",
+    "price": 20,
+    "labour": 0
+  },
+  {
+    "id": 157,
+    "service_type": "Second Service",
+    "model": "Punch",
+    "fuel": "CNG",
+    "service_name": "Shampoo",
+    "price": 120,
+    "labour": 0
+  },
+  {
+    "id": 158,
+    "service_type": "Second Service",
+    "model": "Punch",
+    "fuel": "CNG",
+    "service_name": "Coolant Top Up",
+    "price": 100,
+    "labour": 0
+  },
+  {
+    "id": 159,
+    "service_type": "Second Service",
+    "model": "Punch",
+    "fuel": "CNG",
+    "service_name": "Oil Filter Change",
+    "price": 179,
+    "labour": 0
+  },
+  {
+    "id": 160,
+    "service_type": "Second Service",
+    "model": "Punch",
+    "fuel": "CNG",
+    "service_name": "Sunroof Greece",
+    "price": 800,
+    "labour": 0
+  },
+  {
+    "id": 161,
+    "service_type": "Second Service",
+    "model": "Punch",
+    "fuel": "EV",
+    "service_name": "Distilled Water",
+    "price": 20,
+    "labour": 0
+  },
+  {
+    "id": 162,
+    "service_type": "Second Service",
+    "model": "Punch",
+    "fuel": "EV",
+    "service_name": "Shampoo",
+    "price": 120,
+    "labour": 0
+  },
+  {
+    "id": 163,
+    "service_type": "Second Service",
+    "model": "Punch",
+    "fuel": "EV",
+    "service_name": "Coolant Top Up",
+    "price": 212,
+    "labour": 0
+  },
+  {
+    "id": 164,
+    "service_type": "Second Service",
+    "model": "Punch",
+    "fuel": "EV",
+    "service_name": "Sunroof Greece",
+    "price": 800,
+    "labour": 0
+  },
+  {
+    "id": 165,
+    "service_type": "Second Service",
+    "model": "Tigor",
+    "fuel": "Petrol",
+    "service_name": "Distilled Water",
+    "price": 20,
+    "labour": 0
+  },
+  {
+    "id": 166,
+    "service_type": "Second Service",
+    "model": "Tigor",
+    "fuel": "Petrol",
+    "service_name": "Shampoo",
+    "price": 120,
+    "labour": 0
+  },
+  {
+    "id": 167,
+    "service_type": "Second Service",
+    "model": "Tigor",
+    "fuel": "Petrol",
+    "service_name": "Coolant Top Up",
+    "price": 100,
+    "labour": 0
+  },
+  {
+    "id": 168,
+    "service_type": "Second Service",
+    "model": "Tigor",
+    "fuel": "Petrol",
+    "service_name": "Oil Filter Change",
+    "price": 179,
+    "labour": 0
+  },
+  {
+    "id": 169,
+    "service_type": "Second Service",
+    "model": "Tigor",
+    "fuel": "Diesel",
+    "service_name": "Distilled Water",
+    "price": 20,
+    "labour": 0
+  },
+  {
+    "id": 170,
+    "service_type": "Second Service",
+    "model": "Tigor",
+    "fuel": "Diesel",
+    "service_name": "Shampoo",
+    "price": 120,
+    "labour": 0
+  },
+  {
+    "id": 171,
+    "service_type": "Second Service",
+    "model": "Tigor",
+    "fuel": "Diesel",
+    "service_name": "Coolant Top Up",
+    "price": 100,
+    "labour": 0
+  },
+  {
+    "id": 172,
+    "service_type": "Second Service",
+    "model": "Tigor",
+    "fuel": "Diesel",
+    "service_name": "Oil Filter Change",
+    "price": 192,
+    "labour": 0
+  },
+  {
+    "id": 173,
+    "service_type": "Second Service",
+    "model": "Tigor",
+    "fuel": "CNG",
+    "service_name": "Distilled Water",
+    "price": 20,
+    "labour": 0
+  },
+  {
+    "id": 174,
+    "service_type": "Second Service",
+    "model": "Tigor",
+    "fuel": "CNG",
+    "service_name": "Shampoo",
+    "price": 120,
+    "labour": 0
+  },
+  {
+    "id": 175,
+    "service_type": "Second Service",
+    "model": "Tigor",
+    "fuel": "CNG",
+    "service_name": "Coolant Top Up",
+    "price": 100,
+    "labour": 0
+  },
+  {
+    "id": 176,
+    "service_type": "Second Service",
+    "model": "Tigor",
+    "fuel": "CNG",
+    "service_name": "Oil Filter Change",
+    "price": 179,
+    "labour": 0
+  },
+  {
+    "id": 177,
+    "service_type": "Second Service",
+    "model": "Tigor",
+    "fuel": "EV",
+    "service_name": "Distilled Water",
+    "price": 20,
+    "labour": 0
+  },
+  {
+    "id": 178,
+    "service_type": "Second Service",
+    "model": "Tigor",
+    "fuel": "EV",
+    "service_name": "Shampoo",
+    "price": 120,
+    "labour": 0
+  },
+  {
+    "id": 179,
+    "service_type": "Second Service",
+    "model": "Tigor",
+    "fuel": "EV",
+    "service_name": "Coolant Top Up",
+    "price": 212,
+    "labour": 0
+  },
+  {
+    "id": 180,
+    "service_type": "Second Service",
+    "model": "Curvv",
+    "fuel": "Petrol",
+    "service_name": "Shampoo",
+    "price": 120,
+    "labour": 0
+  },
+  {
+    "id": 181,
+    "service_type": "Second Service",
+    "model": "Curvv",
+    "fuel": "Petrol",
+    "service_name": "Coolant Top Up",
+    "price": 100,
+    "labour": 0
+  },
+  {
+    "id": 182,
+    "service_type": "Second Service",
+    "model": "Curvv",
+    "fuel": "Petrol",
+    "service_name": "Oil Filter Change",
+    "price": 0,
+    "labour": 0
+  },
+  {
+    "id": 183,
+    "service_type": "Second Service",
+    "model": "Curvv",
+    "fuel": "Petrol",
+    "service_name": "Sunroof Greece",
+    "price": 800,
+    "labour": 0
+  },
+  {
+    "id": 184,
+    "service_type": "Second Service",
+    "model": "Curvv",
+    "fuel": "Diesel",
+    "service_name": "Distilled Water",
+    "price": 20,
+    "labour": 0
+  },
+  {
+    "id": 185,
+    "service_type": "Second Service",
+    "model": "Curvv",
+    "fuel": "Diesel",
+    "service_name": "Shampoo",
+    "price": 120,
+    "labour": 0
+  },
+  {
+    "id": 186,
+    "service_type": "Second Service",
+    "model": "Curvv",
+    "fuel": "Diesel",
+    "service_name": "Coolant Top Up",
+    "price": 100,
+    "labour": 0
+  },
+  {
+    "id": 187,
+    "service_type": "Second Service",
+    "model": "Curvv",
+    "fuel": "Diesel",
+    "service_name": "Oil Filter Change",
+    "price": 0,
+    "labour": 0
+  },
+  {
+    "id": 188,
+    "service_type": "Second Service",
+    "model": "Curvv",
+    "fuel": "Diesel",
+    "service_name": "Sunroof Greece",
+    "price": 800,
+    "labour": 0
+  },
+  {
+    "id": 189,
+    "service_type": "Second Service",
+    "model": "Curvv",
+    "fuel": "EV",
+    "service_name": "Distilled Water",
+    "price": 20,
+    "labour": 0
+  },
+  {
+    "id": 190,
+    "service_type": "Second Service",
+    "model": "Curvv",
+    "fuel": "EV",
+    "service_name": "Shampoo",
+    "price": 120,
+    "labour": 0
+  },
+  {
+    "id": 191,
+    "service_type": "Second Service",
+    "model": "Curvv",
+    "fuel": "EV",
+    "service_name": "Coolant Top Up",
+    "price": 212,
+    "labour": 0
+  },
+  {
+    "id": 192,
+    "service_type": "Second Service",
+    "model": "Curvv",
+    "fuel": "EV",
+    "service_name": "Sunroof Greece",
+    "price": 800,
+    "labour": 0
+  },
+  {
+    "id": 193,
+    "service_type": "Second Service",
+    "model": "Harrier",
+    "fuel": "Diesel",
+    "service_name": "Distilled Water",
+    "price": 20,
+    "labour": 0
+  },
+  {
+    "id": 194,
+    "service_type": "Second Service",
+    "model": "Harrier",
+    "fuel": "Diesel",
+    "service_name": "Shampoo",
+    "price": 120,
+    "labour": 0
+  },
+  {
+    "id": 195,
+    "service_type": "Second Service",
+    "model": "Harrier",
+    "fuel": "Diesel",
+    "service_name": "Coolant Top Up",
+    "price": 100,
+    "labour": 0
+  },
+  {
+    "id": 196,
+    "service_type": "Second Service",
+    "model": "Harrier",
+    "fuel": "Diesel",
+    "service_name": "Oil Filter Change",
+    "price": 850,
+    "labour": 0
+  },
+  {
+    "id": 197,
+    "service_type": "Second Service",
+    "model": "Harrier",
+    "fuel": "Diesel",
+    "service_name": "Sunroof Greece",
+    "price": 800,
+    "labour": 0
+  },
+  {
+    "id": 214,
+    "service_type": "Second Service",
+    "model": "Harrier",
+    "fuel": "Diesel",
+    "service_name": "Def",
+    "price": 620,
+    "labour": 0
+  },
+  {
+    "id": 198,
+    "service_type": "Second Service",
+    "model": "Safari",
+    "fuel": "Diesel",
+    "service_name": "Distilled Water",
+    "price": 20,
+    "labour": 0
+  },
+  {
+    "id": 199,
+    "service_type": "Second Service",
+    "model": "Safari",
+    "fuel": "Diesel",
+    "service_name": "Shampoo",
+    "price": 120,
+    "labour": 0
+  },
+  {
+    "id": 200,
+    "service_type": "Second Service",
+    "model": "Safari",
+    "fuel": "Diesel",
+    "service_name": "Coolant Top Up",
+    "price": 100,
+    "labour": 0
+  },
+  {
+    "id": 201,
+    "service_type": "Second Service",
+    "model": "Safari",
+    "fuel": "Diesel",
+    "service_name": "Oil Filter Change",
+    "price": 792,
+    "labour": 0
+  },
+  {
+    "id": 202,
+    "service_type": "Second Service",
+    "model": "Safari",
+    "fuel": "Diesel",
+    "service_name": "Sunroof Greece",
+    "price": 800,
+    "labour": 0
+  },
+  {
+    "id": 220,
+    "service_type": "Second Service",
+    "model": "Safari",
+    "fuel": "Diesel",
+    "service_name": "oil Top up",
+    "price": 650,
+    "labour": 0
+  },
+  {
+    "id": 221,
+    "service_type": "Second Service",
+    "model": "Safari",
+    "fuel": "Diesel",
+    "service_name": "Def",
+    "price": 620,
+    "labour": 0
+  },
+  {
+    "id": 203,
+    "service_type": "Third Service",
+    "model": "Altroz",
+    "fuel": "Petrol",
+    "service_name": "Distilled Water",
+    "price": 20,
+    "labour": 0
+  },
+  {
+    "id": 204,
+    "service_type": "Third Service",
+    "model": "Altroz",
+    "fuel": "Petrol",
+    "service_name": "Shampoo",
+    "price": 120,
+    "labour": 0
+  },
+  {
+    "id": 205,
+    "service_type": "Third Service",
+    "model": "Altroz",
+    "fuel": "Petrol",
+    "service_name": "Coolant Top Up",
+    "price": 100,
+    "labour": 0
+  },
+  {
+    "id": 206,
+    "service_type": "Third Service",
+    "model": "Altroz",
+    "fuel": "Petrol",
+    "service_name": "Engine Oil",
+    "price": 2159.5,
+    "labour": 0
+  },
+  {
+    "id": 207,
+    "service_type": "Third Service",
+    "model": "Altroz",
+    "fuel": "Petrol",
+    "service_name": "Oil Filter Change",
+    "price": 179,
+    "labour": 0
+  },
+  {
+    "id": 208,
+    "service_type": "Third Service",
+    "model": "Altroz",
+    "fuel": "Petrol",
+    "service_name": "AC Filter",
+    "price": 347,
+    "labour": 0
+  },
+  {
+    "id": 209,
+    "service_type": "Third Service",
+    "model": "Altroz",
+    "fuel": "Petrol",
+    "service_name": "Sunroof Greece",
+    "price": 800,
+    "labour": 0
+  },
+  {
+    "id": 229,
+    "service_type": "Third Service",
+    "model": "Altroz",
+    "fuel": "Petrol",
+    "service_name": "Air Filter",
+    "price": 850,
+    "labour": 0
+  },
+  {
+    "id": 230,
+    "service_type": "Third Service",
+    "model": "Altroz",
+    "fuel": "Petrol",
+    "service_name": "Alignment",
+    "price": 737,
+    "labour": 0
+  },
+  {
+    "id": 231,
+    "service_type": "Third Service",
+    "model": "Altroz",
+    "fuel": "Petrol",
+    "service_name": "Balancing",
+    "price": 550,
+    "labour": 0
+  },
+  {
+    "id": 210,
+    "service_type": "Third Service",
+    "model": "Altroz",
+    "fuel": "Diesel",
+    "service_name": "Distilled Water",
+    "price": 20,
+    "labour": 0
+  },
+  {
+    "id": 211,
+    "service_type": "Third Service",
+    "model": "Altroz",
+    "fuel": "Diesel",
+    "service_name": "Shampoo",
+    "price": 120,
+    "labour": 0
+  },
+  {
+    "id": 212,
+    "service_type": "Third Service",
+    "model": "Altroz",
+    "fuel": "Diesel",
+    "service_name": "Coolant Top Up",
+    "price": 100,
+    "labour": 0
+  },
+  {
+    "id": 213,
+    "service_type": "Third Service",
+    "model": "Altroz",
+    "fuel": "Diesel",
+    "service_name": "Engine Oil",
+    "price": 3085,
+    "labour": 0
+  },
+  {
+    "id": 214,
+    "service_type": "Third Service",
+    "model": "Altroz",
+    "fuel": "Diesel",
+    "service_name": "Oil Filter Change",
+    "price": 192,
+    "labour": 0
+  },
+  {
+    "id": 215,
+    "service_type": "Third Service",
+    "model": "Altroz",
+    "fuel": "Diesel",
+    "service_name": "AC Filter",
+    "price": 347,
+    "labour": 0
+  },
+  {
+    "id": 216,
+    "service_type": "Third Service",
+    "model": "Altroz",
+    "fuel": "Diesel",
+    "service_name": "Sunroof Greece",
+    "price": 800,
+    "labour": 0
+  },
+  {
+    "id": 217,
+    "service_type": "Third Service",
+    "model": "Altroz",
+    "fuel": "CNG",
+    "service_name": "Distilled Water",
+    "price": 20,
+    "labour": 0
+  },
+  {
+    "id": 218,
+    "service_type": "Third Service",
+    "model": "Altroz",
+    "fuel": "CNG",
+    "service_name": "Shampoo",
+    "price": 120,
+    "labour": 0
+  },
+  {
+    "id": 219,
+    "service_type": "Third Service",
+    "model": "Altroz",
+    "fuel": "CNG",
+    "service_name": "Coolant Top Up",
+    "price": 100,
+    "labour": 0
+  },
+  {
+    "id": 220,
+    "service_type": "Third Service",
+    "model": "Altroz",
+    "fuel": "CNG",
+    "service_name": "Engine Oil",
+    "price": 2159.5,
+    "labour": 0
+  },
+  {
+    "id": 221,
+    "service_type": "Third Service",
+    "model": "Altroz",
+    "fuel": "CNG",
+    "service_name": "Oil Filter Change",
+    "price": 179,
+    "labour": 0
+  },
+  {
+    "id": 222,
+    "service_type": "Third Service",
+    "model": "Altroz",
+    "fuel": "CNG",
+    "service_name": "AC Filter",
+    "price": 347,
+    "labour": 0
+  },
+  {
+    "id": 223,
+    "service_type": "Third Service",
+    "model": "Altroz",
+    "fuel": "CNG",
+    "service_name": "Sunroof Greece",
+    "price": 800,
+    "labour": 0
+  },
+  {
+    "id": 246,
+    "service_type": "Third Service",
+    "model": "Altroz",
+    "fuel": "CNG",
+    "service_name": "Alignment",
+    "price": 750,
+    "labour": 0
+  },
+  {
+    "id": 247,
+    "service_type": "Third Service",
+    "model": "Altroz",
+    "fuel": "CNG",
+    "service_name": "Balancing",
+    "price": 550,
+    "labour": 0
+  },
+  {
+    "id": 248,
+    "service_type": "Third Service",
+    "model": "Altroz",
+    "fuel": "CNG",
+    "service_name": "Air Filter",
+    "price": 750,
+    "labour": 0
+  },
+  {
+    "id": 224,
+    "service_type": "Third Service",
+    "model": "Tiago",
+    "fuel": "Petrol",
+    "service_name": "Distilled Water",
+    "price": 20,
+    "labour": 0
+  },
+  {
+    "id": 225,
+    "service_type": "Third Service",
+    "model": "Tiago",
+    "fuel": "Petrol",
+    "service_name": "Shampoo",
+    "price": 120,
+    "labour": 0
+  },
+  {
+    "id": 226,
+    "service_type": "Third Service",
+    "model": "Tiago",
+    "fuel": "Petrol",
+    "service_name": "Coolant Top Up",
+    "price": 100,
+    "labour": 0
+  },
+  {
+    "id": 227,
+    "service_type": "Third Service",
+    "model": "Tiago",
+    "fuel": "Petrol",
+    "service_name": "Engine Oil",
+    "price": 2159.5,
+    "labour": 0
+  },
+  {
+    "id": 228,
+    "service_type": "Third Service",
+    "model": "Tiago",
+    "fuel": "Petrol",
+    "service_name": "Oil Filter Change",
+    "price": 179,
+    "labour": 0
+  },
+  {
+    "id": 229,
+    "service_type": "Third Service",
+    "model": "Tiago",
+    "fuel": "Petrol",
+    "service_name": "AC Filter",
+    "price": 241,
+    "labour": 0
+  },
+  {
+    "id": 230,
+    "service_type": "Third Service",
+    "model": "Tiago",
+    "fuel": "Diesel",
+    "service_name": "Distilled Water",
+    "price": 20,
+    "labour": 0
+  },
+  {
+    "id": 231,
+    "service_type": "Third Service",
+    "model": "Tiago",
+    "fuel": "Diesel",
+    "service_name": "Shampoo",
+    "price": 120,
+    "labour": 0
+  },
+  {
+    "id": 232,
+    "service_type": "Third Service",
+    "model": "Tiago",
+    "fuel": "Diesel",
+    "service_name": "Coolant Top Up",
+    "price": 100,
+    "labour": 0
+  },
+  {
+    "id": 233,
+    "service_type": "Third Service",
+    "model": "Tiago",
+    "fuel": "Diesel",
+    "service_name": "Engine Oil",
+    "price": 3085,
+    "labour": 0
+  },
+  {
+    "id": 234,
+    "service_type": "Third Service",
+    "model": "Tiago",
+    "fuel": "Diesel",
+    "service_name": "Oil Filter Change",
+    "price": 192,
+    "labour": 0
+  },
+  {
+    "id": 235,
+    "service_type": "Third Service",
+    "model": "Tiago",
+    "fuel": "Diesel",
+    "service_name": "AC Filter",
+    "price": 241,
+    "labour": 0
+  },
+  {
+    "id": 236,
+    "service_type": "Third Service",
+    "model": "Tiago",
+    "fuel": "CNG",
+    "service_name": "Distilled Water",
+    "price": 20,
+    "labour": 0
+  },
+  {
+    "id": 237,
+    "service_type": "Third Service",
+    "model": "Tiago",
+    "fuel": "CNG",
+    "service_name": "Shampoo",
+    "price": 120,
+    "labour": 0
+  },
+  {
+    "id": 238,
+    "service_type": "Third Service",
+    "model": "Tiago",
+    "fuel": "CNG",
+    "service_name": "Coolant Top Up",
+    "price": 100,
+    "labour": 0
+  },
+  {
+    "id": 239,
+    "service_type": "Third Service",
+    "model": "Tiago",
+    "fuel": "CNG",
+    "service_name": "Engine Oil",
+    "price": 2159.5,
+    "labour": 0
+  },
+  {
+    "id": 240,
+    "service_type": "Third Service",
+    "model": "Tiago",
+    "fuel": "CNG",
+    "service_name": "Oil Filter Change",
+    "price": 179,
+    "labour": 0
+  },
+  {
+    "id": 241,
+    "service_type": "Third Service",
+    "model": "Tiago",
+    "fuel": "CNG",
+    "service_name": "AC Filter",
+    "price": 241,
+    "labour": 0
+  },
+  {
+    "id": 242,
+    "service_type": "Third Service",
+    "model": "Tiago",
+    "fuel": "EV",
+    "service_name": "Distilled Water",
+    "price": 20,
+    "labour": 0
+  },
+  {
+    "id": 243,
+    "service_type": "Third Service",
+    "model": "Tiago",
+    "fuel": "EV",
+    "service_name": "Shampoo",
+    "price": 120,
+    "labour": 0
+  },
+  {
+    "id": 244,
+    "service_type": "Third Service",
+    "model": "Tiago",
+    "fuel": "EV",
+    "service_name": "Coolant Top Up",
+    "price": 212,
+    "labour": 0
+  },
+  {
+    "id": 245,
+    "service_type": "Third Service",
+    "model": "Nexon",
+    "fuel": "Petrol",
+    "service_name": "Distilled Water",
+    "price": 20,
+    "labour": 0
+  },
+  {
+    "id": 246,
+    "service_type": "Third Service",
+    "model": "Nexon",
+    "fuel": "Petrol",
+    "service_name": "Shampoo",
+    "price": 120,
+    "labour": 0
+  },
+  {
+    "id": 247,
+    "service_type": "Third Service",
+    "model": "Nexon",
+    "fuel": "Petrol",
+    "service_name": "Coolant Top Up",
+    "price": 100,
+    "labour": 0
+  },
+  {
+    "id": 248,
+    "service_type": "Third Service",
+    "model": "Nexon",
+    "fuel": "Petrol",
+    "service_name": "Engine Oil",
+    "price": 2159.5,
+    "labour": 0
+  },
+  {
+    "id": 249,
+    "service_type": "Third Service",
+    "model": "Nexon",
+    "fuel": "Petrol",
+    "service_name": "Oil Filter Change",
+    "price": 179,
+    "labour": 0
+  },
+  {
+    "id": 250,
+    "service_type": "Third Service",
+    "model": "Nexon",
+    "fuel": "Petrol",
+    "service_name": "AC Filter",
+    "price": 1027,
+    "labour": 0
+  },
+  {
+    "id": 251,
+    "service_type": "Third Service",
+    "model": "Nexon",
+    "fuel": "Petrol",
+    "service_name": "Sunroof Greece",
+    "price": 800,
+    "labour": 0
+  },
+  {
+    "id": 252,
+    "service_type": "Third Service",
+    "model": "Nexon",
+    "fuel": "Petrol",
+    "service_name": "Alignment",
+    "price": 750,
+    "labour": 0
+  },
+  {
+    "id": 253,
+    "service_type": "Third Service",
+    "model": "Nexon",
+    "fuel": "Petrol",
+    "service_name": "Balancing",
+    "price": 650,
+    "labour": 0
+  },
+  {
+    "id": 254,
+    "service_type": "Third Service",
+    "model": "Nexon",
+    "fuel": "Diesel",
+    "service_name": "Distilled Water",
+    "price": 20,
+    "labour": 0
+  },
+  {
+    "id": 255,
+    "service_type": "Third Service",
+    "model": "Nexon",
+    "fuel": "Diesel",
+    "service_name": "Shampoo",
+    "price": 120,
+    "labour": 0
+  },
+  {
+    "id": 256,
+    "service_type": "Third Service",
+    "model": "Nexon",
+    "fuel": "Diesel",
+    "service_name": "Coolant Top Up",
+    "price": 100,
+    "labour": 0
+  },
+  {
+    "id": 257,
+    "service_type": "Third Service",
+    "model": "Nexon",
+    "fuel": "Diesel",
+    "service_name": "Engine Oil",
+    "price": 3085,
+    "labour": 0
+  },
+  {
+    "id": 258,
+    "service_type": "Third Service",
+    "model": "Nexon",
+    "fuel": "Diesel",
+    "service_name": "Oil Filter Change",
+    "price": 192,
+    "labour": 0
+  },
+  {
+    "id": 259,
+    "service_type": "Third Service",
+    "model": "Nexon",
+    "fuel": "Diesel",
+    "service_name": "AC Filter",
+    "price": 1027,
+    "labour": 0
+  },
+  {
+    "id": 260,
+    "service_type": "Third Service",
+    "model": "Nexon",
+    "fuel": "Diesel",
+    "service_name": "Sunroof Greece",
+    "price": 800,
+    "labour": 0
+  },
+  {
+    "id": 261,
+    "service_type": "Third Service",
+    "model": "Nexon",
+    "fuel": "Diesel",
+    "service_name": "Alignment",
+    "price": 750,
+    "labour": 0
+  },
+  {
+    "id": 262,
+    "service_type": "Third Service",
+    "model": "Nexon",
+    "fuel": "Diesel",
+    "service_name": "Balancing",
+    "price": 650,
+    "labour": 0
+  },
+  {
+    "id": 263,
+    "service_type": "Third Service",
+    "model": "Nexon",
+    "fuel": "CNG",
+    "service_name": "Distilled Water",
+    "price": 20,
+    "labour": 0
+  },
+  {
+    "id": 264,
+    "service_type": "Third Service",
+    "model": "Nexon",
+    "fuel": "CNG",
+    "service_name": "Shampoo",
+    "price": 120,
+    "labour": 0
+  },
+  {
+    "id": 265,
+    "service_type": "Third Service",
+    "model": "Nexon",
+    "fuel": "CNG",
+    "service_name": "Coolant Top Up",
+    "price": 100,
+    "labour": 0
+  },
+  {
+    "id": 266,
+    "service_type": "Third Service",
+    "model": "Nexon",
+    "fuel": "CNG",
+    "service_name": "Engine Oil",
+    "price": 2159.5,
+    "labour": 0
+  },
+  {
+    "id": 267,
+    "service_type": "Third Service",
+    "model": "Nexon",
+    "fuel": "CNG",
+    "service_name": "Oil Filter Change",
+    "price": 179,
+    "labour": 0
+  },
+  {
+    "id": 268,
+    "service_type": "Third Service",
+    "model": "Nexon",
+    "fuel": "CNG",
+    "service_name": "AC Filter",
+    "price": 442,
+    "labour": 0
+  },
+  {
+    "id": 269,
+    "service_type": "Third Service",
+    "model": "Nexon",
+    "fuel": "CNG",
+    "service_name": "Sunroof Greece",
+    "price": 800,
+    "labour": 0
+  },
+  {
+    "id": 270,
+    "service_type": "Third Service",
+    "model": "Nexon",
+    "fuel": "EV",
+    "service_name": "Distilled Water",
+    "price": 20,
+    "labour": 0
+  },
+  {
+    "id": 271,
+    "service_type": "Third Service",
+    "model": "Nexon",
+    "fuel": "EV",
+    "service_name": "Shampoo",
+    "price": 120,
+    "labour": 0
+  },
+  {
+    "id": 272,
+    "service_type": "Third Service",
+    "model": "Nexon",
+    "fuel": "EV",
+    "service_name": "Coolant Top Up",
+    "price": 212,
+    "labour": 0
+  },
+  {
+    "id": 273,
+    "service_type": "Third Service",
+    "model": "Nexon",
+    "fuel": "EV",
+    "service_name": "Sunroof Greece",
+    "price": 800,
+    "labour": 0
+  },
+  {
+    "id": 274,
+    "service_type": "Third Service",
+    "model": "Punch",
+    "fuel": "Petrol",
+    "service_name": "Distilled Water",
+    "price": 20,
+    "labour": 0
+  },
+  {
+    "id": 275,
+    "service_type": "Third Service",
+    "model": "Punch",
+    "fuel": "Petrol",
+    "service_name": "Shampoo",
+    "price": 120,
+    "labour": 0
+  },
+  {
+    "id": 276,
+    "service_type": "Third Service",
+    "model": "Punch",
+    "fuel": "Petrol",
+    "service_name": "Coolant Top Up",
+    "price": 100,
+    "labour": 0
+  },
+  {
+    "id": 277,
+    "service_type": "Third Service",
+    "model": "Punch",
+    "fuel": "Petrol",
+    "service_name": "Engine Oil",
+    "price": 2159.5,
+    "labour": 0
+  },
+  {
+    "id": 278,
+    "service_type": "Third Service",
+    "model": "Punch",
+    "fuel": "Petrol",
+    "service_name": "Oil Filter Change",
+    "price": 179,
+    "labour": 0
+  },
+  {
+    "id": 279,
+    "service_type": "Third Service",
+    "model": "Punch",
+    "fuel": "Petrol",
+    "service_name": "AC Filter",
+    "price": 241,
+    "labour": 0
+  },
+  {
+    "id": 280,
+    "service_type": "Third Service",
+    "model": "Punch",
+    "fuel": "Petrol",
+    "service_name": "Alignment",
+    "price": 737,
+    "labour": 0
+  },
+  {
+    "id": 281,
+    "service_type": "Third Service",
+    "model": "Punch",
+    "fuel": "Petrol",
+    "service_name": "Balancing",
+    "price": 442,
+    "labour": 0
+  },
+  {
+    "id": 282,
+    "service_type": "Third Service",
+    "model": "Punch",
+    "fuel": "Petrol",
+    "service_name": "Air Filter",
+    "price": 650,
+    "labour": 0
+  },
+  {
+    "id": 283,
+    "service_type": "Third Service",
+    "model": "Punch",
+    "fuel": "Petrol",
+    "service_name": "Sunroof Greece",
+    "price": 800,
+    "labour": 0
+  },
+  {
+    "id": 284,
+    "service_type": "Third Service",
+    "model": "Punch",
+    "fuel": "CNG",
+    "service_name": "Distilled Water",
+    "price": 20,
+    "labour": 0
+  },
+  {
+    "id": 285,
+    "service_type": "Third Service",
+    "model": "Punch",
+    "fuel": "CNG",
+    "service_name": "Shampoo",
+    "price": 120,
+    "labour": 0
+  },
+  {
+    "id": 286,
+    "service_type": "Third Service",
+    "model": "Punch",
+    "fuel": "CNG",
+    "service_name": "Coolant Top Up",
+    "price": 100,
+    "labour": 0
+  },
+  {
+    "id": 287,
+    "service_type": "Third Service",
+    "model": "Punch",
+    "fuel": "CNG",
+    "service_name": "Engine Oil",
+    "price": 2159.5,
+    "labour": 0
+  },
+  {
+    "id": 288,
+    "service_type": "Third Service",
+    "model": "Punch",
+    "fuel": "CNG",
+    "service_name": "Oil Filter Change",
+    "price": 179,
+    "labour": 0
+  },
+  {
+    "id": 289,
+    "service_type": "Third Service",
+    "model": "Punch",
+    "fuel": "CNG",
+    "service_name": "AC Filter",
+    "price": 241,
+    "labour": 0
+  },
+  {
+    "id": 290,
+    "service_type": "Third Service",
+    "model": "Punch",
+    "fuel": "CNG",
+    "service_name": "Sunroof Greece",
+    "price": 800,
+    "labour": 0
+  },
+  {
+    "id": 291,
+    "service_type": "Third Service",
+    "model": "Punch",
+    "fuel": "EV",
+    "service_name": "Distilled Water",
+    "price": 20,
+    "labour": 0
+  },
+  {
+    "id": 292,
+    "service_type": "Third Service",
+    "model": "Punch",
+    "fuel": "EV",
+    "service_name": "Shampoo",
+    "price": 120,
+    "labour": 0
+  },
+  {
+    "id": 293,
+    "service_type": "Third Service",
+    "model": "Punch",
+    "fuel": "EV",
+    "service_name": "Coolant Top Up",
+    "price": 212,
+    "labour": 0
+  },
+  {
+    "id": 294,
+    "service_type": "Third Service",
+    "model": "Punch",
+    "fuel": "EV",
+    "service_name": "Sunroof Greece",
+    "price": 800,
+    "labour": 0
+  },
+  {
+    "id": 295,
+    "service_type": "Third Service",
+    "model": "Tigor",
+    "fuel": "Petrol",
+    "service_name": "Distilled Water",
+    "price": 20,
+    "labour": 0
+  },
+  {
+    "id": 296,
+    "service_type": "Third Service",
+    "model": "Tigor",
+    "fuel": "Petrol",
+    "service_name": "Shampoo",
+    "price": 120,
+    "labour": 0
+  },
+  {
+    "id": 297,
+    "service_type": "Third Service",
+    "model": "Tigor",
+    "fuel": "Petrol",
+    "service_name": "Coolant Top Up",
+    "price": 100,
+    "labour": 0
+  },
+  {
+    "id": 298,
+    "service_type": "Third Service",
+    "model": "Tigor",
+    "fuel": "Petrol",
+    "service_name": "Engine Oil",
+    "price": 2159.5,
+    "labour": 0
+  },
+  {
+    "id": 299,
+    "service_type": "Third Service",
+    "model": "Tigor",
+    "fuel": "Petrol",
+    "service_name": "Oil Filter Change",
+    "price": 179,
+    "labour": 0
+  },
+  {
+    "id": 300,
+    "service_type": "Third Service",
+    "model": "Tigor",
+    "fuel": "Petrol",
+    "service_name": "AC Filter",
+    "price": 241,
+    "labour": 0
+  },
+  {
+    "id": 301,
+    "service_type": "Third Service",
+    "model": "Tigor",
+    "fuel": "Diesel",
+    "service_name": "Distilled Water",
+    "price": 20,
+    "labour": 0
+  },
+  {
+    "id": 302,
+    "service_type": "Third Service",
+    "model": "Tigor",
+    "fuel": "Diesel",
+    "service_name": "Shampoo",
+    "price": 120,
+    "labour": 0
+  },
+  {
+    "id": 303,
+    "service_type": "Third Service",
+    "model": "Tigor",
+    "fuel": "Diesel",
+    "service_name": "Coolant Top Up",
+    "price": 100,
+    "labour": 0
+  },
+  {
+    "id": 304,
+    "service_type": "Third Service",
+    "model": "Tigor",
+    "fuel": "Diesel",
+    "service_name": "Engine Oil",
+    "price": 3085,
+    "labour": 0
+  },
+  {
+    "id": 305,
+    "service_type": "Third Service",
+    "model": "Tigor",
+    "fuel": "Diesel",
+    "service_name": "Oil Filter Change",
+    "price": 192,
+    "labour": 0
+  },
+  {
+    "id": 306,
+    "service_type": "Third Service",
+    "model": "Tigor",
+    "fuel": "Diesel",
+    "service_name": "AC Filter",
+    "price": 241,
+    "labour": 0
+  },
+  {
+    "id": 307,
+    "service_type": "Third Service",
+    "model": "Tigor",
+    "fuel": "CNG",
+    "service_name": "Distilled Water",
+    "price": 20,
+    "labour": 0
+  },
+  {
+    "id": 308,
+    "service_type": "Third Service",
+    "model": "Tigor",
+    "fuel": "CNG",
+    "service_name": "Shampoo",
+    "price": 120,
+    "labour": 0
+  },
+  {
+    "id": 309,
+    "service_type": "Third Service",
+    "model": "Tigor",
+    "fuel": "CNG",
+    "service_name": "Coolant Top Up",
+    "price": 100,
+    "labour": 0
+  },
+  {
+    "id": 310,
+    "service_type": "Third Service",
+    "model": "Tigor",
+    "fuel": "CNG",
+    "service_name": "Engine Oil",
+    "price": 2159.5,
+    "labour": 0
+  },
+  {
+    "id": 311,
+    "service_type": "Third Service",
+    "model": "Tigor",
+    "fuel": "CNG",
+    "service_name": "Oil Filter Change",
+    "price": 179,
+    "labour": 0
+  },
+  {
+    "id": 312,
+    "service_type": "Third Service",
+    "model": "Tigor",
+    "fuel": "CNG",
+    "service_name": "AC Filter",
+    "price": 241,
+    "labour": 0
+  },
+  {
+    "id": 313,
+    "service_type": "Third Service",
+    "model": "Tigor",
+    "fuel": "EV",
+    "service_name": "Distilled Water",
+    "price": 20,
+    "labour": 0
+  },
+  {
+    "id": 314,
+    "service_type": "Third Service",
+    "model": "Tigor",
+    "fuel": "EV",
+    "service_name": "Shampoo",
+    "price": 120,
+    "labour": 0
+  },
+  {
+    "id": 315,
+    "service_type": "Third Service",
+    "model": "Tigor",
+    "fuel": "EV",
+    "service_name": "Coolant Top Up",
+    "price": 212,
+    "labour": 0
+  },
+  {
+    "id": 316,
+    "service_type": "Third Service",
+    "model": "Curvv",
+    "fuel": "Petrol",
+    "service_name": "Shampoo",
+    "price": 120,
+    "labour": 0
+  },
+  {
+    "id": 317,
+    "service_type": "Third Service",
+    "model": "Curvv",
+    "fuel": "Petrol",
+    "service_name": "Coolant Top Up",
+    "price": 100,
+    "labour": 0
+  },
+  {
+    "id": 318,
+    "service_type": "Third Service",
+    "model": "Curvv",
+    "fuel": "Petrol",
+    "service_name": "Engine Oil",
+    "price": 2159.5,
+    "labour": 0
+  },
+  {
+    "id": 319,
+    "service_type": "Third Service",
+    "model": "Curvv",
+    "fuel": "Petrol",
+    "service_name": "Oil Filter Change",
+    "price": 0,
+    "labour": 0
+  },
+  {
+    "id": 320,
+    "service_type": "Third Service",
+    "model": "Curvv",
+    "fuel": "Petrol",
+    "service_name": "AC Filter",
+    "price": 1027,
+    "labour": 0
+  },
+  {
+    "id": 321,
+    "service_type": "Third Service",
+    "model": "Curvv",
+    "fuel": "Petrol",
+    "service_name": "Sunroof Greece",
+    "price": 800,
+    "labour": 0
+  },
+  {
+    "id": 322,
+    "service_type": "Third Service",
+    "model": "Curvv",
+    "fuel": "Diesel",
+    "service_name": "Distilled Water",
+    "price": 20,
+    "labour": 0
+  },
+  {
+    "id": 323,
+    "service_type": "Third Service",
+    "model": "Curvv",
+    "fuel": "Diesel",
+    "service_name": "Shampoo",
+    "price": 120,
+    "labour": 0
+  },
+  {
+    "id": 324,
+    "service_type": "Third Service",
+    "model": "Curvv",
+    "fuel": "Diesel",
+    "service_name": "Coolant Top Up",
+    "price": 100,
+    "labour": 0
+  },
+  {
+    "id": 325,
+    "service_type": "Third Service",
+    "model": "Curvv",
+    "fuel": "Diesel",
+    "service_name": "Engine Oil",
+    "price": 3085,
+    "labour": 0
+  },
+  {
+    "id": 326,
+    "service_type": "Third Service",
+    "model": "Curvv",
+    "fuel": "Diesel",
+    "service_name": "Oil Filter Change",
+    "price": 212,
+    "labour": 0
+  },
+  {
+    "id": 327,
+    "service_type": "Third Service",
+    "model": "Curvv",
+    "fuel": "Diesel",
+    "service_name": "AC Filter",
+    "price": 1027,
+    "labour": 0
+  },
+  {
+    "id": 328,
+    "service_type": "Third Service",
+    "model": "Curvv",
+    "fuel": "Diesel",
+    "service_name": "Sunroof Greece",
+    "price": 800,
+    "labour": 0
+  },
+  {
+    "id": 329,
+    "service_type": "Third Service",
+    "model": "Curvv",
+    "fuel": "EV",
+    "service_name": "Distilled Water",
+    "price": 20,
+    "labour": 0
+  },
+  {
+    "id": 330,
+    "service_type": "Third Service",
+    "model": "Curvv",
+    "fuel": "EV",
+    "service_name": "Shampoo",
+    "price": 120,
+    "labour": 0
+  },
+  {
+    "id": 331,
+    "service_type": "Third Service",
+    "model": "Curvv",
+    "fuel": "EV",
+    "service_name": "Coolant Top Up",
+    "price": 212,
+    "labour": 0
+  },
+  {
+    "id": 332,
+    "service_type": "Third Service",
+    "model": "Curvv",
+    "fuel": "EV",
+    "service_name": "Sunroof Greece",
+    "price": 800,
+    "labour": 0
+  },
+  {
+    "id": 333,
+    "service_type": "Third Service",
+    "model": "Harrier",
+    "fuel": "Diesel",
+    "service_name": "Distilled Water",
+    "price": 20,
+    "labour": 0
+  },
+  {
+    "id": 334,
+    "service_type": "Third Service",
+    "model": "Harrier",
+    "fuel": "Diesel",
+    "service_name": "Shampoo",
+    "price": 120,
+    "labour": 0
+  },
+  {
+    "id": 335,
+    "service_type": "Third Service",
+    "model": "Harrier",
+    "fuel": "Diesel",
+    "service_name": "Coolant Top Up",
+    "price": 100,
+    "labour": 0
+  },
+  {
+    "id": 336,
+    "service_type": "Third Service",
+    "model": "Harrier",
+    "fuel": "Diesel",
+    "service_name": "Engine Oil",
+    "price": 5295,
+    "labour": 0
+  },
+  {
+    "id": 337,
+    "service_type": "Third Service",
+    "model": "Harrier",
+    "fuel": "Diesel",
+    "service_name": "Oil Filter Change",
+    "price": 792,
+    "labour": 0
+  },
+  {
+    "id": 338,
+    "service_type": "Third Service",
+    "model": "Harrier",
+    "fuel": "Diesel",
+    "service_name": "Pollen Filter",
+    "price": 1582,
+    "labour": 0
+  },
+  {
+    "id": 339,
+    "service_type": "Third Service",
+    "model": "Harrier",
+    "fuel": "Diesel",
+    "service_name": "Sunroof Greece",
+    "price": 800,
+    "labour": 0
+  },
+  {
+    "id": 365,
+    "service_type": "Third Service",
+    "model": "Harrier",
+    "fuel": "Diesel",
+    "service_name": "Balancing",
+    "price": 600,
+    "labour": 0
+  },
+  {
+    "id": 366,
+    "service_type": "Third Service",
+    "model": "Harrier",
+    "fuel": "Diesel",
+    "service_name": "Diesel Filter",
+    "price": 3000,
+    "labour": 0
+  },
+  {
+    "id": 367,
+    "service_type": "Third Service",
+    "model": "Harrier",
+    "fuel": "Diesel",
+    "service_name": "air Filter",
+    "price": 1000,
+    "labour": 0
+  },
+  {
+    "id": 368,
+    "service_type": "Third Service",
+    "model": "Harrier",
+    "fuel": "Diesel",
+    "service_name": "Alignment",
+    "price": 1200,
+    "labour": 0
+  },
+  {
+    "id": 369,
+    "service_type": "Third Service",
+    "model": "Harrier",
+    "fuel": "Diesel",
+    "service_name": "Def",
+    "price": 620,
+    "labour": 0
+  },
+  {
+    "id": 340,
+    "service_type": "Third Service",
+    "model": "Safari",
+    "fuel": "Diesel",
+    "service_name": "Distilled Water",
+    "price": 20,
+    "labour": 0
+  },
+  {
+    "id": 341,
+    "service_type": "Third Service",
+    "model": "Safari",
+    "fuel": "Diesel",
+    "service_name": "Shampoo",
+    "price": 120,
+    "labour": 0
+  },
+  {
+    "id": 342,
+    "service_type": "Third Service",
+    "model": "Safari",
+    "fuel": "Diesel",
+    "service_name": "Coolant Top Up",
+    "price": 100,
+    "labour": 0
+  },
+  {
+    "id": 343,
+    "service_type": "Third Service",
+    "model": "Safari",
+    "fuel": "Diesel",
+    "service_name": "Engine Oil",
+    "price": 5295,
+    "labour": 0
+  },
+  {
+    "id": 344,
+    "service_type": "Third Service",
+    "model": "Safari",
+    "fuel": "Diesel",
+    "service_name": "Oil Filter Change",
+    "price": 792,
+    "labour": 0
+  },
+  {
+    "id": 345,
+    "service_type": "Third Service",
+    "model": "Safari",
+    "fuel": "Diesel",
+    "service_name": "Pollen Filter",
+    "price": 1581,
+    "labour": 0
+  },
+  {
+    "id": 346,
+    "service_type": "Third Service",
+    "model": "Safari",
+    "fuel": "Diesel",
+    "service_name": "Sunroof Greece",
+    "price": 800,
+    "labour": 0
+  },
+  {
+    "id": 377,
+    "service_type": "Third Service",
+    "model": "Safari",
+    "fuel": "Diesel",
+    "service_name": "Balancing",
+    "price": 600,
+    "labour": 0
+  },
+  {
+    "id": 378,
+    "service_type": "Third Service",
+    "model": "Safari",
+    "fuel": "Diesel",
+    "service_name": "Diesel Filter",
+    "price": 3000,
+    "labour": 0
+  },
+  {
+    "id": 379,
+    "service_type": "Third Service",
+    "model": "Safari",
+    "fuel": "Diesel",
+    "service_name": "air Filter",
+    "price": 1000,
+    "labour": 0
+  },
+  {
+    "id": 380,
+    "service_type": "Third Service",
+    "model": "Safari",
+    "fuel": "Diesel",
+    "service_name": "Alignment",
+    "price": 1200,
+    "labour": 0
+  },
+  {
+    "id": 381,
+    "service_type": "Third Service",
+    "model": "Safari",
+    "fuel": "Diesel",
+    "service_name": "Def",
+    "price": 620,
+    "labour": 0
+  },
+  {
+    "id": 347,
+    "service_type": "Paid Service",
+    "model": "Altroz",
+    "fuel": "Petrol",
+    "service_name": "Distilled Water",
+    "price": 20,
+    "labour": 2160
+  },
+  {
+    "id": 348,
+    "service_type": "Paid Service",
+    "model": "Altroz",
+    "fuel": "Petrol",
+    "service_name": "Shampoo",
+    "price": 120,
+    "labour": 2160
+  },
+  {
+    "id": 349,
+    "service_type": "Paid Service",
+    "model": "Altroz",
+    "fuel": "Petrol",
+    "service_name": "Oil Filter Change",
+    "price": 179,
+    "labour": 2160
+  },
+  {
+    "id": 350,
+    "service_type": "Paid Service",
+    "model": "Altroz",
+    "fuel": "Petrol",
+    "service_name": "Gear Oil",
+    "price": 832,
+    "labour": 2160
+  },
+  {
+    "id": 351,
+    "service_type": "Paid Service",
+    "model": "Altroz",
+    "fuel": "Petrol",
+    "service_name": "Air Filter",
+    "price": 519,
+    "labour": 2160
+  },
+  {
+    "id": 352,
+    "service_type": "Paid Service",
+    "model": "Altroz",
+    "fuel": "Petrol",
+    "service_name": "AC Filter",
+    "price": 347,
+    "labour": 2160
+  },
+  {
+    "id": 353,
+    "service_type": "Paid Service",
+    "model": "Altroz",
+    "fuel": "Petrol",
+    "service_name": "Alignment",
+    "price": 750,
+    "labour": 2160
+  },
+  {
+    "id": 354,
+    "service_type": "Paid Service",
+    "model": "Altroz",
+    "fuel": "Petrol",
+    "service_name": "Balancing",
+    "price": 580,
+    "labour": 2160
+  },
+  {
+    "id": 355,
+    "service_type": "Paid Service",
+    "model": "Altroz",
+    "fuel": "Petrol",
+    "service_name": "Engine Oil",
+    "price": 2159.5,
+    "labour": 2160
+  },
+  {
+    "id": 356,
+    "service_type": "Paid Service",
+    "model": "Altroz",
+    "fuel": "Petrol",
+    "service_name": "Fuel Filter",
+    "price": 443,
+    "labour": 2160
+  },
+  {
+    "id": 357,
+    "service_type": "Paid Service",
+    "model": "Altroz",
+    "fuel": "Petrol",
+    "service_name": "Break oil",
+    "price": 224,
+    "labour": 2160
+  },
+  {
+    "id": 358,
+    "service_type": "Paid Service",
+    "model": "Altroz",
+    "fuel": "Petrol",
+    "service_name": "Sunroof Greece",
+    "price": 800,
+    "labour": 2160
+  },
+  {
+    "id": 359,
+    "service_type": "Paid Service",
+    "model": "Altroz",
+    "fuel": "Petrol",
+    "service_name": "Service Kit",
+    "price": 1467,
+    "labour": 2160
+  },
+  {
+    "id": 360,
+    "service_type": "Paid Service",
+    "model": "Altroz",
+    "fuel": "Petrol",
+    "service_name": "Spark Plug",
+    "price": 540,
+    "labour": 2160
+  },
+  {
+    "id": 361,
+    "service_type": "Paid Service",
+    "model": "Altroz",
+    "fuel": "Diesel",
+    "service_name": "Distilled Water",
+    "price": 20,
+    "labour": 2160
+  },
+  {
+    "id": 362,
+    "service_type": "Paid Service",
+    "model": "Altroz",
+    "fuel": "Diesel",
+    "service_name": "Shampoo",
+    "price": 120,
+    "labour": 2160
+  },
+  {
+    "id": 363,
+    "service_type": "Paid Service",
+    "model": "Altroz",
+    "fuel": "Diesel",
+    "service_name": "Oil Filter Change",
+    "price": 212,
+    "labour": 2160
+  },
+  {
+    "id": 364,
+    "service_type": "Paid Service",
+    "model": "Altroz",
+    "fuel": "Diesel",
+    "service_name": "Gear Oil",
+    "price": 832,
+    "labour": 2160
+  },
+  {
+    "id": 365,
+    "service_type": "Paid Service",
+    "model": "Altroz",
+    "fuel": "Diesel",
+    "service_name": "Air Filter",
+    "price": 406,
+    "labour": 2160
+  },
+  {
+    "id": 366,
+    "service_type": "Paid Service",
+    "model": "Altroz",
+    "fuel": "Diesel",
+    "service_name": "AC Filter",
+    "price": 347,
+    "labour": 2160
+  },
+  {
+    "id": 367,
+    "service_type": "Paid Service",
+    "model": "Altroz",
+    "fuel": "Diesel",
+    "service_name": "Alignment",
+    "price": 750,
+    "labour": 2160
+  },
+  {
+    "id": 368,
+    "service_type": "Paid Service",
+    "model": "Altroz",
+    "fuel": "Diesel",
+    "service_name": "Balancing",
+    "price": 580,
+    "labour": 2160
+  },
+  {
+    "id": 369,
+    "service_type": "Paid Service",
+    "model": "Altroz",
+    "fuel": "Diesel",
+    "service_name": "Engine Oil",
+    "price": 3085,
+    "labour": 2160
+  },
+  {
+    "id": 370,
+    "service_type": "Paid Service",
+    "model": "Altroz",
+    "fuel": "Diesel",
+    "service_name": "Fuel Filter",
+    "price": 944,
+    "labour": 2160
+  },
+  {
+    "id": 371,
+    "service_type": "Paid Service",
+    "model": "Altroz",
+    "fuel": "Diesel",
+    "service_name": "Break oil",
+    "price": 224,
+    "labour": 2160
+  },
+  {
+    "id": 372,
+    "service_type": "Paid Service",
+    "model": "Altroz",
+    "fuel": "Diesel",
+    "service_name": "Sunroof Greece",
+    "price": 800,
+    "labour": 2160
+  },
+  {
+    "id": 373,
+    "service_type": "Paid Service",
+    "model": "Altroz",
+    "fuel": "Diesel",
+    "service_name": "Service Kit",
+    "price": 1807,
+    "labour": 2160
+  },
+  {
+    "id": 374,
+    "service_type": "Paid Service",
+    "model": "Altroz",
+    "fuel": "CNG",
+    "service_name": "Distilled Water",
+    "price": 20,
+    "labour": 2160
+  },
+  {
+    "id": 375,
+    "service_type": "Paid Service",
+    "model": "Altroz",
+    "fuel": "CNG",
+    "service_name": "Shampoo",
+    "price": 120,
+    "labour": 2160
+  },
+  {
+    "id": 376,
+    "service_type": "Paid Service",
+    "model": "Altroz",
+    "fuel": "CNG",
+    "service_name": "Oil Filter Change",
+    "price": 179,
+    "labour": 2160
+  },
+  {
+    "id": 377,
+    "service_type": "Paid Service",
+    "model": "Altroz",
+    "fuel": "CNG",
+    "service_name": "Gear Oil",
+    "price": 832,
+    "labour": 2160
+  },
+  {
+    "id": 378,
+    "service_type": "Paid Service",
+    "model": "Altroz",
+    "fuel": "CNG",
+    "service_name": "Air Filter",
+    "price": 861,
+    "labour": 2160
+  },
+  {
+    "id": 379,
+    "service_type": "Paid Service",
+    "model": "Altroz",
+    "fuel": "CNG",
+    "service_name": "AC Filter",
+    "price": 347,
+    "labour": 2160
+  },
+  {
+    "id": 380,
+    "service_type": "Paid Service",
+    "model": "Altroz",
+    "fuel": "CNG",
+    "service_name": "Alignment",
+    "price": 750,
+    "labour": 2160
+  },
+  {
+    "id": 381,
+    "service_type": "Paid Service",
+    "model": "Altroz",
+    "fuel": "CNG",
+    "service_name": "Balancing",
+    "price": 580,
+    "labour": 2160
+  },
+  {
+    "id": 382,
+    "service_type": "Paid Service",
+    "model": "Altroz",
+    "fuel": "CNG",
+    "service_name": "Engine Oil",
+    "price": 2159.5,
+    "labour": 2160
+  },
+  {
+    "id": 383,
+    "service_type": "Paid Service",
+    "model": "Altroz",
+    "fuel": "CNG",
+    "service_name": "Fuel Filter",
+    "price": 443,
+    "labour": 2160
+  },
+  {
+    "id": 384,
+    "service_type": "Paid Service",
+    "model": "Altroz",
+    "fuel": "CNG",
+    "service_name": "Break oil",
+    "price": 224,
+    "labour": 2160
+  },
+  {
+    "id": 385,
+    "service_type": "Paid Service",
+    "model": "Altroz",
+    "fuel": "CNG",
+    "service_name": "Sunroof Greece",
+    "price": 800,
+    "labour": 2160
+  },
+  {
+    "id": 386,
+    "service_type": "Paid Service",
+    "model": "Altroz",
+    "fuel": "CNG",
+    "service_name": "Service Kit",
+    "price": 1467,
+    "labour": 2160
+  },
+  {
+    "id": 387,
+    "service_type": "Paid Service",
+    "model": "Altroz",
+    "fuel": "CNG",
+    "service_name": "Spark Plug",
+    "price": 540,
+    "labour": 2160
+  },
+  {
+    "id": 388,
+    "service_type": "Paid Service",
+    "model": "Tiago",
+    "fuel": "Petrol",
+    "service_name": "Distilled Water",
+    "price": 20,
+    "labour": 2160
+  },
+  {
+    "id": 389,
+    "service_type": "Paid Service",
+    "model": "Tiago",
+    "fuel": "Petrol",
+    "service_name": "Shampoo",
+    "price": 120,
+    "labour": 2160
+  },
+  {
+    "id": 390,
+    "service_type": "Paid Service",
+    "model": "Tiago",
+    "fuel": "Petrol",
+    "service_name": "Oil Filter Change",
+    "price": 179,
+    "labour": 2160
+  },
+  {
+    "id": 391,
+    "service_type": "Paid Service",
+    "model": "Tiago",
+    "fuel": "Petrol",
+    "service_name": "Gear Oil",
+    "price": 832,
+    "labour": 2160
+  },
+  {
+    "id": 392,
+    "service_type": "Paid Service",
+    "model": "Tiago",
+    "fuel": "Petrol",
+    "service_name": "Air Filter",
+    "price": 509,
+    "labour": 2160
+  },
+  {
+    "id": 393,
+    "service_type": "Paid Service",
+    "model": "Tiago",
+    "fuel": "Petrol",
+    "service_name": "AC Filter",
+    "price": 241,
+    "labour": 2160
+  },
+  {
+    "id": 394,
+    "service_type": "Paid Service",
+    "model": "Tiago",
+    "fuel": "Petrol",
+    "service_name": "Alignment",
+    "price": 680,
+    "labour": 2160
+  },
+  {
+    "id": 395,
+    "service_type": "Paid Service",
+    "model": "Tiago",
+    "fuel": "Petrol",
+    "service_name": "Balancing",
+    "price": 580,
+    "labour": 2160
+  },
+  {
+    "id": 396,
+    "service_type": "Paid Service",
+    "model": "Tiago",
+    "fuel": "Petrol",
+    "service_name": "Engine Oil",
+    "price": 2159.5,
+    "labour": 2160
+  },
+  {
+    "id": 397,
+    "service_type": "Paid Service",
+    "model": "Tiago",
+    "fuel": "Petrol",
+    "service_name": "Fuel Filter",
+    "price": 443,
+    "labour": 2160
+  },
+  {
+    "id": 398,
+    "service_type": "Paid Service",
+    "model": "Tiago",
+    "fuel": "Petrol",
+    "service_name": "Break oil",
+    "price": 224,
+    "labour": 2160
+  },
+  {
+    "id": 399,
+    "service_type": "Paid Service",
+    "model": "Tiago",
+    "fuel": "Petrol",
+    "service_name": "Service Kit",
+    "price": 1134,
+    "labour": 2160
+  },
+  {
+    "id": 400,
+    "service_type": "Paid Service",
+    "model": "Tiago",
+    "fuel": "Petrol",
+    "service_name": "Spark Plug",
+    "price": 540,
+    "labour": 2160
+  },
+  {
+    "id": 401,
+    "service_type": "Paid Service",
+    "model": "Tiago",
+    "fuel": "Petrol",
+    "service_name": "Coolant Top Up",
+    "price": 950,
+    "labour": 0
+  },
+  {
+    "id": 402,
+    "service_type": "Paid Service",
+    "model": "Tiago",
+    "fuel": "Diesel",
+    "service_name": "Distilled Water",
+    "price": 20,
+    "labour": 2160
+  },
+  {
+    "id": 403,
+    "service_type": "Paid Service",
+    "model": "Tiago",
+    "fuel": "Diesel",
+    "service_name": "Shampoo",
+    "price": 120,
+    "labour": 2160
+  },
+  {
+    "id": 404,
+    "service_type": "Paid Service",
+    "model": "Tiago",
+    "fuel": "Diesel",
+    "service_name": "Oil Filter Change",
+    "price": 212,
+    "labour": 2160
+  },
+  {
+    "id": 405,
+    "service_type": "Paid Service",
+    "model": "Tiago",
+    "fuel": "Diesel",
+    "service_name": "Gear Oil",
+    "price": 832,
+    "labour": 2160
+  },
+  {
+    "id": 406,
+    "service_type": "Paid Service",
+    "model": "Tiago",
+    "fuel": "Diesel",
+    "service_name": "Air Filter",
+    "price": 679,
+    "labour": 2160
+  },
+  {
+    "id": 407,
+    "service_type": "Paid Service",
+    "model": "Tiago",
+    "fuel": "Diesel",
+    "service_name": "AC Filter",
+    "price": 241,
+    "labour": 2160
+  },
+  {
+    "id": 408,
+    "service_type": "Paid Service",
+    "model": "Tiago",
+    "fuel": "Diesel",
+    "service_name": "Alignment",
+    "price": 680,
+    "labour": 2160
+  },
+  {
+    "id": 409,
+    "service_type": "Paid Service",
+    "model": "Tiago",
+    "fuel": "Diesel",
+    "service_name": "Balancing",
+    "price": 580,
+    "labour": 2160
+  },
+  {
+    "id": 410,
+    "service_type": "Paid Service",
+    "model": "Tiago",
+    "fuel": "Diesel",
+    "service_name": "Engine Oil",
+    "price": 3085,
+    "labour": 2160
+  },
+  {
+    "id": 411,
+    "service_type": "Paid Service",
+    "model": "Tiago",
+    "fuel": "Diesel",
+    "service_name": "Fuel Filter",
+    "price": 944,
+    "labour": 2160
+  },
+  {
+    "id": 412,
+    "service_type": "Paid Service",
+    "model": "Tiago",
+    "fuel": "Diesel",
+    "service_name": "Break oil",
+    "price": 224,
+    "labour": 2160
+  },
+  {
+    "id": 413,
+    "service_type": "Paid Service",
+    "model": "Tiago",
+    "fuel": "Diesel",
+    "service_name": "Service Kit",
+    "price": 4253,
+    "labour": 2160
+  },
+  {
+    "id": 414,
+    "service_type": "Paid Service",
+    "model": "Tiago",
+    "fuel": "CNG",
+    "service_name": "Distilled Water",
+    "price": 20,
+    "labour": 2160
+  },
+  {
+    "id": 415,
+    "service_type": "Paid Service",
+    "model": "Tiago",
+    "fuel": "CNG",
+    "service_name": "Shampoo",
+    "price": 120,
+    "labour": 2160
+  },
+  {
+    "id": 416,
+    "service_type": "Paid Service",
+    "model": "Tiago",
+    "fuel": "CNG",
+    "service_name": "Oil Filter Change",
+    "price": 179,
+    "labour": 2160
+  },
+  {
+    "id": 417,
+    "service_type": "Paid Service",
+    "model": "Tiago",
+    "fuel": "CNG",
+    "service_name": "Gear Oil",
+    "price": 832,
+    "labour": 2160
+  },
+  {
+    "id": 418,
+    "service_type": "Paid Service",
+    "model": "Tiago",
+    "fuel": "CNG",
+    "service_name": "Air Filter",
+    "price": 861,
+    "labour": 2160
+  },
+  {
+    "id": 419,
+    "service_type": "Paid Service",
+    "model": "Tiago",
+    "fuel": "CNG",
+    "service_name": "AC Filter",
+    "price": 241,
+    "labour": 2160
+  },
+  {
+    "id": 420,
+    "service_type": "Paid Service",
+    "model": "Tiago",
+    "fuel": "CNG",
+    "service_name": "Alignment",
+    "price": 680,
+    "labour": 2160
+  },
+  {
+    "id": 421,
+    "service_type": "Paid Service",
+    "model": "Tiago",
+    "fuel": "CNG",
+    "service_name": "Balancing",
+    "price": 580,
+    "labour": 2160
+  },
+  {
+    "id": 422,
+    "service_type": "Paid Service",
+    "model": "Tiago",
+    "fuel": "CNG",
+    "service_name": "Engine Oil",
+    "price": 2159.5,
+    "labour": 2160
+  },
+  {
+    "id": 423,
+    "service_type": "Paid Service",
+    "model": "Tiago",
+    "fuel": "CNG",
+    "service_name": "Fuel Filter",
+    "price": 443,
+    "labour": 2160
+  },
+  {
+    "id": 424,
+    "service_type": "Paid Service",
+    "model": "Tiago",
+    "fuel": "CNG",
+    "service_name": "Break oil",
+    "price": 224,
+    "labour": 2160
+  },
+  {
+    "id": 425,
+    "service_type": "Paid Service",
+    "model": "Tiago",
+    "fuel": "CNG",
+    "service_name": "Service Kit",
+    "price": 1467,
+    "labour": 2160
+  },
+  {
+    "id": 426,
+    "service_type": "Paid Service",
+    "model": "Tiago",
+    "fuel": "CNG",
+    "service_name": "Spark Plug",
+    "price": 540,
+    "labour": 2160
+  },
+  {
+    "id": 427,
+    "service_type": "Paid Service",
+    "model": "Tiago",
+    "fuel": "EV",
+    "service_name": "Distilled Water",
+    "price": 20,
+    "labour": 2160
+  },
+  {
+    "id": 428,
+    "service_type": "Paid Service",
+    "model": "Tiago",
+    "fuel": "EV",
+    "service_name": "Shampoo",
+    "price": 120,
+    "labour": 2160
+  },
+  {
+    "id": 429,
+    "service_type": "Paid Service",
+    "model": "Tiago",
+    "fuel": "EV",
+    "service_name": "Oil Filter Change",
+    "price": 0,
+    "labour": 2160
+  },
+  {
+    "id": 430,
+    "service_type": "Paid Service",
+    "model": "Tiago",
+    "fuel": "EV",
+    "service_name": "Gear Oil",
+    "price": 1761,
+    "labour": 2160
+  },
+  {
+    "id": 431,
+    "service_type": "Paid Service",
+    "model": "Tiago",
+    "fuel": "EV",
+    "service_name": "Air Filter",
+    "price": 861,
+    "labour": 2160
+  },
+  {
+    "id": 432,
+    "service_type": "Paid Service",
+    "model": "Tiago",
+    "fuel": "EV",
+    "service_name": "AC Filter",
+    "price": 241,
+    "labour": 2160
+  },
+  {
+    "id": 433,
+    "service_type": "Paid Service",
+    "model": "Tiago",
+    "fuel": "EV",
+    "service_name": "Alignment",
+    "price": 680,
+    "labour": 2160
+  },
+  {
+    "id": 434,
+    "service_type": "Paid Service",
+    "model": "Tiago",
+    "fuel": "EV",
+    "service_name": "Balancing",
+    "price": 580,
+    "labour": 2160
+  },
+  {
+    "id": 435,
+    "service_type": "Paid Service",
+    "model": "Tiago",
+    "fuel": "EV",
+    "service_name": "Fuel Filter",
+    "price": 0,
+    "labour": 2160
+  },
+  {
+    "id": 436,
+    "service_type": "Paid Service",
+    "model": "Tiago",
+    "fuel": "EV",
+    "service_name": "Break oil",
+    "price": 224,
+    "labour": 2160
+  },
+  {
+    "id": 437,
+    "service_type": "Paid Service",
+    "model": "Tiago",
+    "fuel": "EV",
+    "service_name": "Service Kit",
+    "price": 0,
+    "labour": 2160
+  },
+  {
+    "id": 438,
+    "service_type": "Paid Service",
+    "model": "Tiago",
+    "fuel": "EV",
+    "service_name": "Spark Plug",
+    "price": 0,
+    "labour": 2160
+  },
+  {
+    "id": 439,
+    "service_type": "Paid Service",
+    "model": "Nexon",
+    "fuel": "Petrol",
+    "service_name": "Distilled Water",
+    "price": 20,
+    "labour": 2160
+  },
+  {
+    "id": 440,
+    "service_type": "Paid Service",
+    "model": "Nexon",
+    "fuel": "Petrol",
+    "service_name": "Shampoo",
+    "price": 120,
+    "labour": 2160
+  },
+  {
+    "id": 441,
+    "service_type": "Paid Service",
+    "model": "Nexon",
+    "fuel": "Petrol",
+    "service_name": "Oil Filter Change",
+    "price": 179,
+    "labour": 2160
+  },
+  {
+    "id": 442,
+    "service_type": "Paid Service",
+    "model": "Nexon",
+    "fuel": "Petrol",
+    "service_name": "Gear Oil",
+    "price": 832,
+    "labour": 2160
+  },
+  {
+    "id": 443,
+    "service_type": "Paid Service",
+    "model": "Nexon",
+    "fuel": "Petrol",
+    "service_name": "Air Filter",
+    "price": 527,
+    "labour": 2160
+  },
+  {
+    "id": 444,
+    "service_type": "Paid Service",
+    "model": "Nexon",
+    "fuel": "Petrol",
+    "service_name": "AC Filter",
+    "price": 1027,
+    "labour": 2160
+  },
+  {
+    "id": 445,
+    "service_type": "Paid Service",
+    "model": "Nexon",
+    "fuel": "Petrol",
+    "service_name": "Alignment",
+    "price": 680,
+    "labour": 2160
+  },
+  {
+    "id": 446,
+    "service_type": "Paid Service",
+    "model": "Nexon",
+    "fuel": "Petrol",
+    "service_name": "Balancing",
+    "price": 580,
+    "labour": 2160
+  },
+  {
+    "id": 447,
+    "service_type": "Paid Service",
+    "model": "Nexon",
+    "fuel": "Petrol",
+    "service_name": "Engine Oil",
+    "price": 2159.5,
+    "labour": 2160
+  },
+  {
+    "id": 448,
+    "service_type": "Paid Service",
+    "model": "Nexon",
+    "fuel": "Petrol",
+    "service_name": "Fuel Filter",
+    "price": 443,
+    "labour": 2160
+  },
+  {
+    "id": 449,
+    "service_type": "Paid Service",
+    "model": "Nexon",
+    "fuel": "Petrol",
+    "service_name": "Break oil",
+    "price": 224,
+    "labour": 2160
+  },
+  {
+    "id": 450,
+    "service_type": "Paid Service",
+    "model": "Nexon",
+    "fuel": "Petrol",
+    "service_name": "Sunroof Greece",
+    "price": 800,
+    "labour": 2160
+  },
+  {
+    "id": 451,
+    "service_type": "Paid Service",
+    "model": "Nexon",
+    "fuel": "Petrol",
+    "service_name": "Service Kit",
+    "price": 2600,
+    "labour": 2160
+  },
+  {
+    "id": 452,
+    "service_type": "Paid Service",
+    "model": "Nexon",
+    "fuel": "Petrol",
+    "service_name": "Spark Plug",
+    "price": 1062,
+    "labour": 2160
+  },
+  {
+    "id": 453,
+    "service_type": "Paid Service",
+    "model": "Nexon",
+    "fuel": "Petrol",
+    "service_name": "Pollen Filter",
+    "price": 1027,
+    "labour": 2160
+  },
+  {
+    "id": 454,
+    "service_type": "Paid Service",
+    "model": "Nexon",
+    "fuel": "Petrol",
+    "service_name": "Comby Filter",
+    "price": 1027,
+    "labour": 2160
+  },
+  {
+    "id": 490,
+    "service_type": "Paid Service",
+    "model": "Nexon",
+    "fuel": "Petrol",
+    "service_name": "Coolant",
+    "price": 1000,
+    "labour": 2160
+  },
+  {
+    "id": 455,
+    "service_type": "Paid Service",
+    "model": "Nexon",
+    "fuel": "Diesel",
+    "service_name": "Distilled Water",
+    "price": 20,
+    "labour": 2160
+  },
+  {
+    "id": 456,
+    "service_type": "Paid Service",
+    "model": "Nexon",
+    "fuel": "Diesel",
+    "service_name": "Shampoo",
+    "price": 120,
+    "labour": 2160
+  },
+  {
+    "id": 457,
+    "service_type": "Paid Service",
+    "model": "Nexon",
+    "fuel": "Diesel",
+    "service_name": "Oil Filter Change",
+    "price": 212,
+    "labour": 2160
+  },
+  {
+    "id": 458,
+    "service_type": "Paid Service",
+    "model": "Nexon",
+    "fuel": "Diesel",
+    "service_name": "Gear Oil",
+    "price": 832,
+    "labour": 2160
+  },
+  {
+    "id": 459,
+    "service_type": "Paid Service",
+    "model": "Nexon",
+    "fuel": "Diesel",
+    "service_name": "Air Filter",
+    "price": 539,
+    "labour": 2160
+  },
+  {
+    "id": 460,
+    "service_type": "Paid Service",
+    "model": "Nexon",
+    "fuel": "Diesel",
+    "service_name": "AC Filter",
+    "price": 1027,
+    "labour": 2160
+  },
+  {
+    "id": 461,
+    "service_type": "Paid Service",
+    "model": "Nexon",
+    "fuel": "Diesel",
+    "service_name": "Alignment",
+    "price": 680,
+    "labour": 2160
+  },
+  {
+    "id": 462,
+    "service_type": "Paid Service",
+    "model": "Nexon",
+    "fuel": "Diesel",
+    "service_name": "Balancing",
+    "price": 580,
+    "labour": 2160
+  },
+  {
+    "id": 463,
+    "service_type": "Paid Service",
+    "model": "Nexon",
+    "fuel": "Diesel",
+    "service_name": "Engine Oil",
+    "price": 3085,
+    "labour": 2160
+  },
+  {
+    "id": 464,
+    "service_type": "Paid Service",
+    "model": "Nexon",
+    "fuel": "Diesel",
+    "service_name": "Fuel Filter",
+    "price": 944,
+    "labour": 2160
+  },
+  {
+    "id": 465,
+    "service_type": "Paid Service",
+    "model": "Nexon",
+    "fuel": "Diesel",
+    "service_name": "Break oil",
+    "price": 224,
+    "labour": 2160
+  },
+  {
+    "id": 466,
+    "service_type": "Paid Service",
+    "model": "Nexon",
+    "fuel": "Diesel",
+    "service_name": "Sunroof Greece",
+    "price": 800,
+    "labour": 2160
+  },
+  {
+    "id": 467,
+    "service_type": "Paid Service",
+    "model": "Nexon",
+    "fuel": "Diesel",
+    "service_name": "Service Kit",
+    "price": 2520,
+    "labour": 2160
+  },
+  {
+    "id": 468,
+    "service_type": "Paid Service",
+    "model": "Nexon",
+    "fuel": "Diesel",
+    "service_name": "Pollen Filter",
+    "price": 1027,
+    "labour": 2160
+  },
+  {
+    "id": 469,
+    "service_type": "Paid Service",
+    "model": "Nexon",
+    "fuel": "Diesel",
+    "service_name": "Comby Filter",
+    "price": 1027,
+    "labour": 2160
+  },
+  {
+    "id": 470,
+    "service_type": "Paid Service",
+    "model": "Nexon",
+    "fuel": "CNG",
+    "service_name": "Distilled Water",
+    "price": 20,
+    "labour": 2160
+  },
+  {
+    "id": 471,
+    "service_type": "Paid Service",
+    "model": "Nexon",
+    "fuel": "CNG",
+    "service_name": "Shampoo",
+    "price": 120,
+    "labour": 2160
+  },
+  {
+    "id": 472,
+    "service_type": "Paid Service",
+    "model": "Nexon",
+    "fuel": "CNG",
+    "service_name": "Oil Filter Change",
+    "price": 179,
+    "labour": 2160
+  },
+  {
+    "id": 473,
+    "service_type": "Paid Service",
+    "model": "Nexon",
+    "fuel": "CNG",
+    "service_name": "Gear Oil",
+    "price": 832,
+    "labour": 2160
+  },
+  {
+    "id": 474,
+    "service_type": "Paid Service",
+    "model": "Nexon",
+    "fuel": "CNG",
+    "service_name": "Air Filter",
+    "price": 527,
+    "labour": 2160
+  },
+  {
+    "id": 475,
+    "service_type": "Paid Service",
+    "model": "Nexon",
+    "fuel": "CNG",
+    "service_name": "AC Filter",
+    "price": 442,
+    "labour": 2160
+  },
+  {
+    "id": 476,
+    "service_type": "Paid Service",
+    "model": "Nexon",
+    "fuel": "CNG",
+    "service_name": "Alignment",
+    "price": 680,
+    "labour": 2160
+  },
+  {
+    "id": 477,
+    "service_type": "Paid Service",
+    "model": "Nexon",
+    "fuel": "CNG",
+    "service_name": "Balancing",
+    "price": 580,
+    "labour": 2160
+  },
+  {
+    "id": 478,
+    "service_type": "Paid Service",
+    "model": "Nexon",
+    "fuel": "CNG",
+    "service_name": "Engine Oil",
+    "price": 2159.5,
+    "labour": 2160
+  },
+  {
+    "id": 479,
+    "service_type": "Paid Service",
+    "model": "Nexon",
+    "fuel": "CNG",
+    "service_name": "Fuel Filter",
+    "price": 443,
+    "labour": 2160
+  },
+  {
+    "id": 480,
+    "service_type": "Paid Service",
+    "model": "Nexon",
+    "fuel": "CNG",
+    "service_name": "Break oil",
+    "price": 224,
+    "labour": 2160
+  },
+  {
+    "id": 481,
+    "service_type": "PaidService",
+    "model": "Nexon",
+    "fuel": "CNG",
+    "service_name": "Sunroof Greece",
+    "price": 800,
+    "labour": 2160
+  },
+  {
+    "id": 482,
+    "service_type": "Paid Service",
+    "model": "Nexon",
+    "fuel": "CNG",
+    "service_name": "Service Kit",
+    "price": 2600,
+    "labour": 2160
+  },
+  {
+    "id": 483,
+    "service_type": "Paid Service",
+    "model": "Nexon",
+    "fuel": "CNG",
+    "service_name": "Spark Plug",
+    "price": 1062,
+    "labour": 2160
+  },
+  {
+    "id": 484,
+    "service_type": "Paid Service",
+    "model": "Nexon",
+    "fuel": "CNG",
+    "service_name": "Pollen Filter",
+    "price": 1027,
+    "labour": 2160
+  },
+  {
+    "id": 485,
+    "service_type": "Paid Service",
+    "model": "Nexon",
+    "fuel": "CNG",
+    "service_name": "Comby Filter",
+    "price": 1027,
+    "labour": 2160
+  },
+  {
+    "id": 486,
+    "service_type": "Paid Service",
+    "model": "Nexon",
+    "fuel": "EV",
+    "service_name": "Distilled Water",
+    "price": 20,
+    "labour": 2160
+  },
+  {
+    "id": 487,
+    "service_type": "Paid Service",
+    "model": "Nexon",
+    "fuel": "EV",
+    "service_name": "Shampoo",
+    "price": 120,
+    "labour": 2160
+  },
+  {
+    "id": 488,
+    "service_type": "Paid Service",
+    "model": "Nexon",
+    "fuel": "EV",
+    "service_name": "Oil Filter Change",
+    "price": 0,
+    "labour": 2160
+  },
+  {
+    "id": 489,
+    "service_type": "Paid Service",
+    "model": "Nexon",
+    "fuel": "EV",
+    "service_name": "Gear Oil",
+    "price": 1851,
+    "labour": 2160
+  },
+  {
+    "id": 490,
+    "service_type": "Paid Service",
+    "model": "Nexon",
+    "fuel": "EV",
+    "service_name": "Air Filter",
+    "price": 527,
+    "labour": 2160
+  },
+  {
+    "id": 491,
+    "service_type": "Paid Service",
+    "model": "Nexon",
+    "fuel": "EV",
+    "service_name": "AC Filter",
+    "price": 442,
+    "labour": 2160
+  },
+  {
+    "id": 492,
+    "service_type": "Paid Service",
+    "model": "Nexon",
+    "fuel": "EV",
+    "service_name": "Alignment",
+    "price": 680,
+    "labour": 2160
+  },
+  {
+    "id": 493,
+    "service_type": "Paid Service",
+    "model": "Nexon",
+    "fuel": "EV",
+    "service_name": "Balancing",
+    "price": 580,
+    "labour": 2160
+  },
+  {
+    "id": 494,
+    "service_type": "Paid Service",
+    "model": "Nexon",
+    "fuel": "EV",
+    "service_name": "Fuel Filter",
+    "price": 0,
+    "labour": 2160
+  },
+  {
+    "id": 495,
+    "service_type": "Paid Service",
+    "model": "Nexon",
+    "fuel": "EV",
+    "service_name": "Break oil",
+    "price": 224,
+    "labour": 2160
+  },
+  {
+    "id": 496,
+    "service_type": "Paid Service",
+    "model": "Nexon",
+    "fuel": "EV",
+    "service_name": "Sunroof Greece",
+    "price": 800,
+    "labour": 2160
+  },
+  {
+    "id": 497,
+    "service_type": "Paid Service",
+    "model": "Nexon",
+    "fuel": "EV",
+    "service_name": "Service Kit",
+    "price": 0,
+    "labour": 2160
+  },
+  {
+    "id": 498,
+    "service_type": "Paid Service",
+    "model": "Nexon",
+    "fuel": "EV",
+    "service_name": "Spark Plug",
+    "price": 0,
+    "labour": 2160
+  },
+  {
+    "id": 499,
+    "service_type": "Paid Service",
+    "model": "Nexon",
+    "fuel": "EV",
+    "service_name": "Pollen Filter",
+    "price": 1027,
+    "labour": 2160
+  },
+  {
+    "id": 500,
+    "service_type": "Paid Service",
+    "model": "Nexon",
+    "fuel": "EV",
+    "service_name": "Comby Filter",
+    "price": 1027,
+    "labour": 2160
+  },
+  {
+    "id": 501,
+    "service_type": "Paid Service",
+    "model": "Punch",
+    "fuel": "Petrol",
+    "service_name": "Distilled Water",
+    "price": 20,
+    "labour": 2160
+  },
+  {
+    "id": 502,
+    "service_type": "Paid Service",
+    "model": "Punch",
+    "fuel": "Petrol",
+    "service_name": "Shampoo",
+    "price": 120,
+    "labour": 2160
+  },
+  {
+    "id": 503,
+    "service_type": "Paid Service",
+    "model": "Punch",
+    "fuel": "Petrol",
+    "service_name": "Oil Filter Change",
+    "price": 179,
+    "labour": 2160
+  },
+  {
+    "id": 504,
+    "service_type": "Paid Service",
+    "model": "Punch",
+    "fuel": "Petrol",
+    "service_name": "Gear Oil",
+    "price": 832,
+    "labour": 2160
+  },
+  {
+    "id": 505,
+    "service_type": "Paid Service",
+    "model": "Punch",
+    "fuel": "Petrol",
+    "service_name": "Air Filter",
+    "price": 509,
+    "labour": 2160
+  },
+  {
+    "id": 506,
+    "service_type": "Paid Service",
+    "model": "Punch",
+    "fuel": "Petrol",
+    "service_name": "AC Filter",
+    "price": 241,
+    "labour": 2160
+  },
+  {
+    "id": 507,
+    "service_type": "Paid Service",
+    "model": "Punch",
+    "fuel": "Petrol",
+    "service_name": "Alignment",
+    "price": 680,
+    "labour": 2160
+  },
+  {
+    "id": 508,
+    "service_type": "Paid Service",
+    "model": "Punch",
+    "fuel": "Petrol",
+    "service_name": "Balancing",
+    "price": 580,
+    "labour": 2160
+  },
+  {
+    "id": 509,
+    "service_type": "Paid Service",
+    "model": "Punch",
+    "fuel": "Petrol",
+    "service_name": "Engine Oil",
+    "price": 2159.5,
+    "labour": 2160
+  },
+  {
+    "id": 510,
+    "service_type": "Paid Service",
+    "model": "Punch",
+    "fuel": "Petrol",
+    "service_name": "Fuel Filter",
+    "price": 443,
+    "labour": 2160
+  },
+  {
+    "id": 511,
+    "service_type": "Paid Service",
+    "model": "Punch",
+    "fuel": "Petrol",
+    "service_name": "Break oil",
+    "price": 224,
+    "labour": 2160
+  },
+  {
+    "id": 512,
+    "service_type": "Paid Service",
+    "model": "Punch",
+    "fuel": "Petrol",
+    "service_name": "Sunroof Greece",
+    "price": 800,
+    "labour": 2160
+  },
+  {
+    "id": 513,
+    "service_type": "Paid Service",
+    "model": "Punch",
+    "fuel": "Petrol",
+    "service_name": "Service Kit",
+    "price": 1467,
+    "labour": 2160
+  },
+  {
+    "id": 514,
+    "service_type": "Paid Service",
+    "model": "Punch",
+    "fuel": "Petrol",
+    "service_name": "Spark Plug",
+    "price": 540,
+    "labour": 2160
+  },
+  {
+    "id": 515,
+    "service_type": "Paid Service",
+    "model": "Punch",
+    "fuel": "CNG",
+    "service_name": "Distilled Water",
+    "price": 20,
+    "labour": 2160
+  },
+  {
+    "id": 516,
+    "service_type": "Paid Service",
+    "model": "Punch",
+    "fuel": "CNG",
+    "service_name": "Shampoo",
+    "price": 120,
+    "labour": 2160
+  },
+  {
+    "id": 517,
+    "service_type": "Paid Service",
+    "model": "Punch",
+    "fuel": "CNG",
+    "service_name": "Oil Filter Change",
+    "price": 179,
+    "labour": 2160
+  },
+  {
+    "id": 518,
+    "service_type": "Paid Service",
+    "model": "Punch",
+    "fuel": "CNG",
+    "service_name": "Gear Oil",
+    "price": 832,
+    "labour": 2160
+  },
+  {
+    "id": 519,
+    "service_type": "Paid Service",
+    "model": "Punch",
+    "fuel": "CNG",
+    "service_name": "Air Filter",
+    "price": 861,
+    "labour": 2160
+  },
+  {
+    "id": 520,
+    "service_type": "Paid Service",
+    "model": "Punch",
+    "fuel": "CNG",
+    "service_name": "AC Filter",
+    "price": 241,
+    "labour": 2160
+  },
+  {
+    "id": 521,
+    "service_type": "Paid Service",
+    "model": "Punch",
+    "fuel": "CNG",
+    "service_name": "Alignment",
+    "price": 680,
+    "labour": 2160
+  },
+  {
+    "id": 522,
+    "service_type": "Paid Service",
+    "model": "Punch",
+    "fuel": "CNG",
+    "service_name": "Balancing",
+    "price": 580,
+    "labour": 2160
+  },
+  {
+    "id": 523,
+    "service_type": "Paid Service",
+    "model": "Punch",
+    "fuel": "CNG",
+    "service_name": "Engine Oil",
+    "price": 2159.5,
+    "labour": 2160
+  },
+  {
+    "id": 524,
+    "service_type": "Paid Service",
+    "model": "Punch",
+    "fuel": "CNG",
+    "service_name": "Fuel Filter",
+    "price": 443,
+    "labour": 2160
+  },
+  {
+    "id": 525,
+    "service_type": "Paid Service",
+    "model": "Punch",
+    "fuel": "CNG",
+    "service_name": "Break oil",
+    "price": 224,
+    "labour": 2160
+  },
+  {
+    "id": 526,
+    "service_type": "Paid Service",
+    "model": "Punch",
+    "fuel": "CNG",
+    "service_name": "Sunroof Greece",
+    "price": 800,
+    "labour": 2160
+  },
+  {
+    "id": 527,
+    "service_type": "Paid Service",
+    "model": "Punch",
+    "fuel": "CNG",
+    "service_name": "Service Kit",
+    "price": 1467,
+    "labour": 2160
+  },
+  {
+    "id": 528,
+    "service_type": "Paid Service",
+    "model": "Punch",
+    "fuel": "CNG",
+    "service_name": "Spark Plug",
+    "price": 540,
+    "labour": 2160
+  },
+  {
+    "id": 529,
+    "service_type": "Paid Service",
+    "model": "Punch",
+    "fuel": "EV",
+    "service_name": "Distilled Water",
+    "price": 20,
+    "labour": 2160
+  },
+  {
+    "id": 530,
+    "service_type": "Paid Service",
+    "model": "Punch",
+    "fuel": "EV",
+    "service_name": "Shampoo",
+    "price": 120,
+    "labour": 2160
+  },
+  {
+    "id": 531,
+    "service_type": "Paid Service",
+    "model": "Punch",
+    "fuel": "EV",
+    "service_name": "Oil Filter Change",
+    "price": 0,
+    "labour": 2160
+  },
+  {
+    "id": 532,
+    "service_type": "Paid Service",
+    "model": "Punch",
+    "fuel": "EV",
+    "service_name": "Gear Oil",
+    "price": 1762,
+    "labour": 2160
+  },
+  {
+    "id": 533,
+    "service_type": "Paid Service",
+    "model": "Punch",
+    "fuel": "EV",
+    "service_name": "Air Filter",
+    "price": 861,
+    "labour": 2160
+  },
+  {
+    "id": 534,
+    "service_type": "Paid Service",
+    "model": "Punch",
+    "fuel": "EV",
+    "service_name": "AC Filter",
+    "price": 241,
+    "labour": 2160
+  },
+  {
+    "id": 535,
+    "service_type": "Paid Service",
+    "model": "Punch",
+    "fuel": "EV",
+    "service_name": "Alignment",
+    "price": 680,
+    "labour": 2160
+  },
+  {
+    "id": 536,
+    "service_type": "Paid Service",
+    "model": "Punch",
+    "fuel": "EV",
+    "service_name": "Balancing",
+    "price": 580,
+    "labour": 2160
+  },
+  {
+    "id": 537,
+    "service_type": "Paid Service",
+    "model": "Punch",
+    "fuel": "EV",
+    "service_name": "Fuel Filter",
+    "price": 0,
+    "labour": 2160
+  },
+  {
+    "id": 538,
+    "service_type": "Paid Service",
+    "model": "Punch",
+    "fuel": "EV",
+    "service_name": "Break oil",
+    "price": 224,
+    "labour": 2160
+  },
+  {
+    "id": 539,
+    "service_type": "Paid Service",
+    "model": "Punch",
+    "fuel": "EV",
+    "service_name": "Sunroof Greece",
+    "price": 800,
+    "labour": 2160
+  },
+  {
+    "id": 540,
+    "service_type": "Paid Service",
+    "model": "Punch",
+    "fuel": "EV",
+    "service_name": "Service Kit",
+    "price": 0,
+    "labour": 2160
+  },
+  {
+    "id": 541,
+    "service_type": "Paid Service",
+    "model": "Punch",
+    "fuel": "EV",
+    "service_name": "Spark Plug",
+    "price": 0,
+    "labour": 2160
+  },
+  {
+    "id": 542,
+    "service_type": "Paid Service",
+    "model": "Tigor",
+    "fuel": "Petrol",
+    "service_name": "Distilled Water",
+    "price": 20,
+    "labour": 2160
+  },
+  {
+    "id": 543,
+    "service_type": "Paid Service",
+    "model": "Tigor",
+    "fuel": "Petrol",
+    "service_name": "Shampoo",
+    "price": 120,
+    "labour": 2160
+  },
+  {
+    "id": 544,
+    "service_type": "Paid Service",
+    "model": "Tigor",
+    "fuel": "Petrol",
+    "service_name": "Oil Filter Change",
+    "price": 179,
+    "labour": 2160
+  },
+  {
+    "id": 545,
+    "service_type": "Paid Service",
+    "model": "Tigor",
+    "fuel": "Petrol",
+    "service_name": "Gear Oil",
+    "price": 832,
+    "labour": 2160
+  },
+  {
+    "id": 546,
+    "service_type": "Paid Service",
+    "model": "Tigor",
+    "fuel": "Petrol",
+    "service_name": "Air Filter",
+    "price": 509,
+    "labour": 2160
+  },
+  {
+    "id": 547,
+    "service_type": "Paid Service",
+    "model": "Tigor",
+    "fuel": "Petrol",
+    "service_name": "AC Filter",
+    "price": 241,
+    "labour": 2160
+  },
+  {
+    "id": 548,
+    "service_type": "Paid Service",
+    "model": "Tigor",
+    "fuel": "Petrol",
+    "service_name": "Alignment",
+    "price": 680,
+    "labour": 2160
+  },
+  {
+    "id": 549,
+    "service_type": "Paid Service",
+    "model": "Tigor",
+    "fuel": "Petrol",
+    "service_name": "Balancing",
+    "price": 580,
+    "labour": 2160
+  },
+  {
+    "id": 550,
+    "service_type": "Paid Service",
+    "model": "Tigor",
+    "fuel": "Petrol",
+    "service_name": "Engine Oil",
+    "price": 2159.5,
+    "labour": 2160
+  },
+  {
+    "id": 551,
+    "service_type": "Paid Service",
+    "model": "Tigor",
+    "fuel": "Petrol",
+    "service_name": "Fuel Filter",
+    "price": 443,
+    "labour": 2160
+  },
+  {
+    "id": 552,
+    "service_type": "Paid Service",
+    "model": "Tigor",
+    "fuel": "Petrol",
+    "service_name": "Break oil",
+    "price": 224,
+    "labour": 2160
+  },
+  {
+    "id": 553,
+    "service_type": "Paid Service",
+    "model": "Tigor",
+    "fuel": "Petrol",
+    "service_name": "Service Kit",
+    "price": 1134,
+    "labour": 2160
+  },
+  {
+    "id": 554,
+    "service_type": "Paid Service",
+    "model": "Tigor",
+    "fuel": "Petrol",
+    "service_name": "Spark Plug",
+    "price": 540,
+    "labour": 2160
+  },
+  {
+    "id": 555,
+    "service_type": "Paid Service",
+    "model": "Tigor",
+    "fuel": "Diesel",
+    "service_name": "Distilled Water",
+    "price": 20,
+    "labour": 2160
+  },
+  {
+    "id": 556,
+    "service_type": "Paid Service",
+    "model": "Tigor",
+    "fuel": "Diesel",
+    "service_name": "Shampoo",
+    "price": 120,
+    "labour": 2160
+  },
+  {
+    "id": 557,
+    "service_type": "Paid Service",
+    "model": "Tigor",
+    "fuel": "Diesel",
+    "service_name": "Oil Filter Change",
+    "price": 212,
+    "labour": 2160
+  },
+  {
+    "id": 558,
+    "service_type": "Paid Service",
+    "model": "Tigor",
+    "fuel": "Diesel",
+    "service_name": "Gear Oil",
+    "price": 832,
+    "labour": 2160
+  },
+  {
+    "id": 559,
+    "service_type": "Paid Service",
+    "model": "Tigor",
+    "fuel": "Diesel",
+    "service_name": "Air Filter",
+    "price": 679,
+    "labour": 2160
+  },
+  {
+    "id": 560,
+    "service_type": "Paid Service",
+    "model": "Tigor",
+    "fuel": "Diesel",
+    "service_name": "AC Filter",
+    "price": 241,
+    "labour": 2160
+  },
+  {
+    "id": 561,
+    "service_type": "Paid Service",
+    "model": "Tigor",
+    "fuel": "Diesel",
+    "service_name": "Alignment",
+    "price": 680,
+    "labour": 2160
+  },
+  {
+    "id": 562,
+    "service_type": "Paid Service",
+    "model": "Tigor",
+    "fuel": "Diesel",
+    "service_name": "Balancing",
+    "price": 580,
+    "labour": 2160
+  },
+  {
+    "id": 563,
+    "service_type": "Paid Service",
+    "model": "Tigor",
+    "fuel": "Diesel",
+    "service_name": "Engine Oil",
+    "price": 3085,
+    "labour": 2160
+  },
+  {
+    "id": 564,
+    "service_type": "Paid Service",
+    "model": "Tigor",
+    "fuel": "Diesel",
+    "service_name": "Fuel Filter",
+    "price": 944,
+    "labour": 2160
+  },
+  {
+    "id": 565,
+    "service_type": "Paid Service",
+    "model": "Tigor",
+    "fuel": "Diesel",
+    "service_name": "Break oil",
+    "price": 224,
+    "labour": 2160
+  },
+  {
+    "id": 566,
+    "service_type": "Paid Service",
+    "model": "Tigor",
+    "fuel": "Diesel",
+    "service_name": "Service Kit",
+    "price": 4253,
+    "labour": 2160
+  },
+  {
+    "id": 567,
+    "service_type": "Paid Service",
+    "model": "Tigor",
+    "fuel": "CNG",
+    "service_name": "Distilled Water",
+    "price": 20,
+    "labour": 2160
+  },
+  {
+    "id": 568,
+    "service_type": "Paid Service",
+    "model": "Tigor",
+    "fuel": "CNG",
+    "service_name": "Shampoo",
+    "price": 120,
+    "labour": 2160
+  },
+  {
+    "id": 569,
+    "service_type": "Paid Service",
+    "model": "Tigor",
+    "fuel": "CNG",
+    "service_name": "Oil Filter Change",
+    "price": 179,
+    "labour": 2160
+  },
+  {
+    "id": 570,
+    "service_type": "Paid Service",
+    "model": "Tigor",
+    "fuel": "CNG",
+    "service_name": "Gear Oil",
+    "price": 832,
+    "labour": 2160
+  },
+  {
+    "id": 571,
+    "service_type": "Paid Service",
+    "model": "Tigor",
+    "fuel": "CNG",
+    "service_name": "Air Filter",
+    "price": 861,
+    "labour": 2160
+  },
+  {
+    "id": 572,
+    "service_type": "Paid Service",
+    "model": "Tigor",
+    "fuel": "CNG",
+    "service_name": "AC Filter",
+    "price": 241,
+    "labour": 2160
+  },
+  {
+    "id": 573,
+    "service_type": "Paid Service",
+    "model": "Tigor",
+    "fuel": "CNG",
+    "service_name": "Alignment",
+    "price": 680,
+    "labour": 2160
+  },
+  {
+    "id": 574,
+    "service_type": "Paid Service",
+    "model": "Tigor",
+    "fuel": "CNG",
+    "service_name": "Balancing",
+    "price": 580,
+    "labour": 2160
+  },
+  {
+    "id": 575,
+    "service_type": "Paid Service",
+    "model": "Tigor",
+    "fuel": "CNG",
+    "service_name": "Engine Oil",
+    "price": 2159.5,
+    "labour": 2160
+  },
+  {
+    "id": 576,
+    "service_type": "Paid Service",
+    "model": "Tigor",
+    "fuel": "CNG",
+    "service_name": "Fuel Filter",
+    "price": 443,
+    "labour": 2160
+  },
+  {
+    "id": 577,
+    "service_type": "Paid Service",
+    "model": "Tigor",
+    "fuel": "CNG",
+    "service_name": "Break oil",
+    "price": 224,
+    "labour": 2160
+  },
+  {
+    "id": 578,
+    "service_type": "Paid Service",
+    "model": "Tigor",
+    "fuel": "CNG",
+    "service_name": "Service Kit",
+    "price": 1467,
+    "labour": 2160
+  },
+  {
+    "id": 579,
+    "service_type": "Paid Service",
+    "model": "Tigor",
+    "fuel": "CNG",
+    "service_name": "Spark Plug",
+    "price": 540,
+    "labour": 2160
+  },
+  {
+    "id": 580,
+    "service_type": "Paid Service",
+    "model": "Tigor",
+    "fuel": "EV",
+    "service_name": "Distilled Water",
+    "price": 20,
+    "labour": 2160
+  },
+  {
+    "id": 581,
+    "service_type": "Paid Service",
+    "model": "Tigor",
+    "fuel": "EV",
+    "service_name": "Shampoo",
+    "price": 120,
+    "labour": 2160
+  },
+  {
+    "id": 582,
+    "service_type": "Paid Service",
+    "model": "Tigor",
+    "fuel": "EV",
+    "service_name": "Oil Filter Change",
+    "price": 0,
+    "labour": 2160
+  },
+  {
+    "id": 583,
+    "service_type": "Paid Service",
+    "model": "Tigor",
+    "fuel": "EV",
+    "service_name": "Gear Oil",
+    "price": 1762,
+    "labour": 2160
+  },
+  {
+    "id": 584,
+    "service_type": "Paid Service",
+    "model": "Tigor",
+    "fuel": "EV",
+    "service_name": "Air Filter",
+    "price": 861,
+    "labour": 2160
+  },
+  {
+    "id": 585,
+    "service_type": "Paid Service",
+    "model": "Tigor",
+    "fuel": "EV",
+    "service_name": "AC Filter",
+    "price": 241,
+    "labour": 2160
+  },
+  {
+    "id": 586,
+    "service_type": "Paid Service",
+    "model": "Tigor",
+    "fuel": "EV",
+    "service_name": "Alignment",
+    "price": 680,
+    "labour": 2160
+  },
+  {
+    "id": 587,
+    "service_type": "Paid Service",
+    "model": "Tigor",
+    "fuel": "EV",
+    "service_name": "Balancing",
+    "price": 580,
+    "labour": 2160
+  },
+  {
+    "id": 588,
+    "service_type": "Paid Service",
+    "model": "Tigor",
+    "fuel": "EV",
+    "service_name": "Fuel Filter",
+    "price": 0,
+    "labour": 2160
+  },
+  {
+    "id": 589,
+    "service_type": "Paid Service",
+    "model": "Tigor",
+    "fuel": "EV",
+    "service_name": "Break oil",
+    "price": 224,
+    "labour": 2160
+  },
+  {
+    "id": 590,
+    "service_type": "Paid Service",
+    "model": "Tigor",
+    "fuel": "EV",
+    "service_name": "Service Kit",
+    "price": 0,
+    "labour": 2160
+  },
+  {
+    "id": 591,
+    "service_type": "Paid Service",
+    "model": "Tigor",
+    "fuel": "EV",
+    "service_name": "Spark Plug",
+    "price": 0,
+    "labour": 2160
+  },
+  {
+    "id": 592,
+    "service_type": "Paid Service",
+    "model": "Curvv",
+    "fuel": "Petrol",
+    "service_name": "Distilled Water",
+    "price": 20,
+    "labour": 1510
+  },
+  {
+    "id": 593,
+    "service_type": "Paid Service",
+    "model": "Curvv",
+    "fuel": "Petrol",
+    "service_name": "Shampoo",
+    "price": 120,
+    "labour": 1510
+  },
+  {
+    "id": 594,
+    "service_type": "Paid Service",
+    "model": "Curvv",
+    "fuel": "Petrol",
+    "service_name": "Oil Filter Change",
+    "price": 179,
+    "labour": 1510
+  },
+  {
+    "id": 595,
+    "service_type": "Paid Service",
+    "model": "Curvv",
+    "fuel": "Petrol",
+    "service_name": "Gear Oil",
+    "price": 832,
+    "labour": 1510
+  },
+  {
+    "id": 596,
+    "service_type": "Paid Service",
+    "model": "Curvv",
+    "fuel": "Petrol",
+    "service_name": "Air Filter",
+    "price": 527,
+    "labour": 1510
+  },
+  {
+    "id": 597,
+    "service_type": "Paid Service",
+    "model": "Curvv",
+    "fuel": "Petrol",
+    "service_name": "AC Filter",
+    "price": 1027,
+    "labour": 1510
+  },
+  {
+    "id": 598,
+    "service_type": "Paid Service",
+    "model": "Curvv",
+    "fuel": "Petrol",
+    "service_name": "Alignment",
+    "price": 750,
+    "labour": 1510
+  },
+  {
+    "id": 599,
+    "service_type": "Paid Service",
+    "model": "Curvv",
+    "fuel": "Petrol",
+    "service_name": "Balancing",
+    "price": 0,
+    "labour": 1510
+  },
+  {
+    "id": 600,
+    "service_type": "Paid Service",
+    "model": "Curvv",
+    "fuel": "Petrol",
+    "service_name": "Engine Oil",
+    "price": 2159.5,
+    "labour": 1510
+  },
+  {
+    "id": 601,
+    "service_type": "Paid Service",
+    "model": "Curvv",
+    "fuel": "Petrol",
+    "service_name": "Fuel Filter",
+    "price": 443,
+    "labour": 1510
+  },
+  {
+    "id": 602,
+    "service_type": "Paid Service",
+    "model": "Curvv",
+    "fuel": "Petrol",
+    "service_name": "Break oil",
+    "price": 224,
+    "labour": 1510
+  },
+  {
+    "id": 603,
+    "service_type": "Paid Service",
+    "model": "Curvv",
+    "fuel": "Petrol",
+    "service_name": "Sunroof Greece",
+    "price": 800,
+    "labour": 1510
+  },
+  {
+    "id": 604,
+    "service_type": "Paid Service",
+    "model": "Curvv",
+    "fuel": "Petrol",
+    "service_name": "Service Kit",
+    "price": 2600,
+    "labour": 1510
+  },
+  {
+    "id": 605,
+    "service_type": "Paid Service",
+    "model": "Curvv",
+    "fuel": "Petrol",
+    "service_name": "Spark Plug",
+    "price": 0,
+    "labour": 1510
+  },
+  {
+    "id": 606,
+    "service_type": "Paid Service",
+    "model": "Curvv",
+    "fuel": "Petrol",
+    "service_name": "Pollen Filter",
+    "price": 0,
+    "labour": 1510
+  },
+  {
+    "id": 607,
+    "service_type": "Paid Service",
+    "model": "Curvv",
+    "fuel": "Petrol",
+    "service_name": "Comby Filter",
+    "price": 1027,
+    "labour": 1510
+  },
+  {
+    "id": 608,
+    "service_type": "Paid Service",
+    "model": "Curvv",
+    "fuel": "Diesel",
+    "service_name": "Distilled Water",
+    "price": 20,
+    "labour": 1510
+  },
+  {
+    "id": 609,
+    "service_type": "Paid Service",
+    "model": "Curvv",
+    "fuel": "Diesel",
+    "service_name": "Shampoo",
+    "price": 120,
+    "labour": 1510
+  },
+  {
+    "id": 610,
+    "service_type": "Paid Service",
+    "model": "Curvv",
+    "fuel": "Diesel",
+    "service_name": "Oil Filter Change",
+    "price": 212,
+    "labour": 1510
+  },
+  {
+    "id": 611,
+    "service_type": "Paid Service",
+    "model": "Curvv",
+    "fuel": "Diesel",
+    "service_name": "Gear Oil",
+    "price": 832,
+    "labour": 1510
+  },
+  {
+    "id": 612,
+    "service_type": "Paid Service",
+    "model": "Curvv",
+    "fuel": "Diesel",
+    "service_name": "Air Filter",
+    "price": 539,
+    "labour": 1510
+  },
+  {
+    "id": 613,
+    "service_type": "Paid Service",
+    "model": "Curvv",
+    "fuel": "Diesel",
+    "service_name": "AC Filter",
+    "price": 1027,
+    "labour": 1510
+  },
+  {
+    "id": 614,
+    "service_type": "Paid Service",
+    "model": "Curvv",
+    "fuel": "Diesel",
+    "service_name": "Alignment",
+    "price": 750,
+    "labour": 1510
+  },
+  {
+    "id": 615,
+    "service_type": "Paid Service",
+    "model": "Curvv",
+    "fuel": "Diesel",
+    "service_name": "Balancing",
+    "price": 0,
+    "labour": 1510
+  },
+  {
+    "id": 616,
+    "service_type": "Paid Service",
+    "model": "Curvv",
+    "fuel": "Diesel",
+    "service_name": "Engine Oil",
+    "price": 3085,
+    "labour": 1510
+  },
+  {
+    "id": 617,
+    "service_type": "Paid Service",
+    "model": "Curvv",
+    "fuel": "Diesel",
+    "service_name": "Fuel Filter",
+    "price": 944,
+    "labour": 1510
+  },
+  {
+    "id": 618,
+    "service_type": "Paid Service",
+    "model": "Curvv",
+    "fuel": "Diesel",
+    "service_name": "Break oil",
+    "price": 224,
+    "labour": 1510
+  },
+  {
+    "id": 619,
+    "service_type": "Paid Service",
+    "model": "Curvv",
+    "fuel": "Diesel",
+    "service_name": "Sunroof Greece",
+    "price": 800,
+    "labour": 1510
+  },
+  {
+    "id": 620,
+    "service_type": "Paid Service",
+    "model": "Curvv",
+    "fuel": "Diesel",
+    "service_name": "Service Kit",
+    "price": 2520,
+    "labour": 1510
+  },
+  {
+    "id": 621,
+    "service_type": "Paid Service",
+    "model": "Curvv",
+    "fuel": "Diesel",
+    "service_name": "Pollen Filter",
+    "price": 0,
+    "labour": 1510
+  },
+  {
+    "id": 622,
+    "service_type": "Paid Service",
+    "model": "Curvv",
+    "fuel": "Diesel",
+    "service_name": "Comby Filter",
+    "price": 1027,
+    "labour": 1510
+  },
+  {
+    "id": 623,
+    "service_type": "Paid Service",
+    "model": "Curvv",
+    "fuel": "EV",
+    "service_name": "Distilled Water",
+    "price": 20,
+    "labour": 2335
+  },
+  {
+    "id": 624,
+    "service_type": "Paid Service",
+    "model": "Curvv",
+    "fuel": "EV",
+    "service_name": "Shampoo",
+    "price": 120,
+    "labour": 2335
+  },
+  {
+    "id": 625,
+    "service_type": "Paid Service",
+    "model": "Curvv",
+    "fuel": "EV",
+    "service_name": "Oil Filter Change",
+    "price": 0,
+    "labour": 2335
+  },
+  {
+    "id": 626,
+    "service_type": "Paid Service",
+    "model": "Curvv",
+    "fuel": "EV",
+    "service_name": "Gear Oil",
+    "price": 1762,
+    "labour": 2335
+  },
+  {
+    "id": 627,
+    "service_type": "Paid Service",
+    "model": "Curvv",
+    "fuel": "EV",
+    "service_name": "Air Filter",
+    "price": 539,
+    "labour": 2335
+  },
+  {
+    "id": 628,
+    "service_type": "Paid Service",
+    "model": "Curvv",
+    "fuel": "EV",
+    "service_name": "AC Filter",
+    "price": 1027,
+    "labour": 2335
+  },
+  {
+    "id": 629,
+    "service_type": "Paid Service",
+    "model": "Curvv",
+    "fuel": "EV",
+    "service_name": "Alignment",
+    "price": 750,
+    "labour": 2335
+  },
+  {
+    "id": 630,
+    "service_type": "Paid Service",
+    "model": "Curvv",
+    "fuel": "EV",
+    "service_name": "Balancing",
+    "price": 0,
+    "labour": 2335
+  },
+  {
+    "id": 631,
+    "service_type": "Paid Service",
+    "model": "Curvv",
+    "fuel": "EV",
+    "service_name": "Fuel Filter",
+    "price": 0,
+    "labour": 2335
+  },
+  {
+    "id": 632,
+    "service_type": "Paid Service",
+    "model": "Curvv",
+    "fuel": "EV",
+    "service_name": "Break oil",
+    "price": 224,
+    "labour": 2335
+  },
+  {
+    "id": 633,
+    "service_type": "Paid Service",
+    "model": "Curvv",
+    "fuel": "EV",
+    "service_name": "Sunroof Greece",
+    "price": 800,
+    "labour": 2335
+  },
+  {
+    "id": 634,
+    "service_type": "Paid Service",
+    "model": "Curvv",
+    "fuel": "EV",
+    "service_name": "Service Kit",
+    "price": 0,
+    "labour": 2335
+  },
+  {
+    "id": 635,
+    "service_type": "Paid Service",
+    "model": "Curvv",
+    "fuel": "EV",
+    "service_name": "Spark Plug",
+    "price": 0,
+    "labour": 2335
+  },
+  {
+    "id": 636,
+    "service_type": "Paid Service",
+    "model": "Curvv",
+    "fuel": "EV",
+    "service_name": "Pollen Filter",
+    "price": 0,
+    "labour": 2335
+  },
+  {
+    "id": 637,
+    "service_type": "Paid Service",
+    "model": "Curvv",
+    "fuel": "EV",
+    "service_name": "Comby Filter",
+    "price": 1027,
+    "labour": 2335
+  },
+  {
+    "id": 638,
+    "service_type": "Paid Service",
+    "model": "Harrier",
+    "fuel": "Diesel",
+    "service_name": "Balancing",
+    "price": 600,
+    "labour": 3960
+  },
+  {
+    "id": 639,
+    "service_type": "Paid Service",
+    "model": "Harrier",
+    "fuel": "Diesel",
+    "service_name": "Shampoo",
+    "price": 120,
+    "labour": 3960
+  },
+  {
+    "id": 640,
+    "service_type": "Paid Service",
+    "model": "Harrier",
+    "fuel": "Diesel",
+    "service_name": "Oil Filter Change",
+    "price": 792,
+    "labour": 3960
+  },
+  {
+    "id": 641,
+    "service_type": "Paid Service",
+    "model": "Harrier",
+    "fuel": "Diesel",
+    "service_name": "Gear Oil",
+    "price": 3715,
+    "labour": 3960
+  },
+  {
+    "id": 642,
+    "service_type": "Paid Service",
+    "model": "Harrier",
+    "fuel": "Diesel",
+    "service_name": "Air Filter",
+    "price": 906,
+    "labour": 3960
+  },
+  {
+    "id": 643,
+    "service_type": "Paid Service",
+    "model": "Harrier",
+    "fuel": "Diesel",
+    "service_name": "Alignment",
+    "price": 1328,
+    "labour": 3960
+  },
+  {
+    "id": 644,
+    "service_type": "Paid Service",
+    "model": "Harrier",
+    "fuel": "Diesel",
+    "service_name": "Balancing",
+    "price": 580,
+    "labour": 3960
+  },
+  {
+    "id": 645,
+    "service_type": "Paid Service",
+    "model": "Harrier",
+    "fuel": "Diesel",
+    "service_name": "Engine Oil",
+    "price": 5295,
+    "labour": 3960
+  },
+  {
+    "id": 646,
+    "service_type": "Paid Service",
+    "model": "Harrier",
+    "fuel": "Diesel",
+    "service_name": "Fuel Filter",
+    "price": 2654,
+    "labour": 3960
+  },
+  {
+    "id": 647,
+    "service_type": "Paid Service",
+    "model": "Harrier",
+    "fuel": "Diesel",
+    "service_name": "Break oil",
+    "price": 224,
+    "labour": 3960
+  },
+  {
+    "id": 648,
+    "service_type": "Paid Service",
+    "model": "Harrier",
+    "fuel": "Diesel",
+    "service_name": "Sunroof Greece",
+    "price": 800,
+    "labour": 3960
+  },
+  {
+    "id": 649,
+    "service_type": "Paid Service",
+    "model": "Harrier",
+    "fuel": "Diesel",
+    "service_name": "Service Kit",
+    "price": 5532,
+    "labour": 3960
+  },
+  {
+    "id": 650,
+    "service_type": "Paid Service",
+    "model": "Harrier",
+    "fuel": "Diesel",
+    "service_name": "Pollen Filter",
+    "price": 1581,
+    "labour": 3960
+  },
+  {
+    "id": 651,
+    "service_type": "Paid Service",
+    "model": "Harrier",
+    "fuel": "Diesel",
+    "service_name": "Comby Filter",
+    "price": 1581,
+    "labour": 3960
+  },
+  {
+    "id": 688,
+    "service_type": "Paid Service",
+    "model": "Harrier",
+    "fuel": "Diesel",
+    "service_name": "Def",
+    "price": 620,
+    "labour": 3960
+  },
+  {
+    "id": 652,
+    "service_type": "Paid Service",
+    "model": "Safari",
+    "fuel": "Diesel",
+    "service_name": "Distilled Water",
+    "price": 20,
+    "labour": 3983
+  },
+  {
+    "id": 653,
+    "service_type": "Paid Service",
+    "model": "Safari",
+    "fuel": "Diesel",
+    "service_name": "Shampoo",
+    "price": 120,
+    "labour": 3983
+  },
+  {
+    "id": 654,
+    "service_type": "Paid Service",
+    "model": "Safari",
+    "fuel": "Diesel",
+    "service_name": "Oil Filter Change",
+    "price": 792,
+    "labour": 3983
+  },
+  {
+    "id": 655,
+    "service_type": "Paid Service",
+    "model": "Safari",
+    "fuel": "Diesel",
+    "service_name": "Gear Oil",
+    "price": 3715,
+    "labour": 3983
+  },
+  {
+    "id": 656,
+    "service_type": "Paid Service",
+    "model": "Safari",
+    "fuel": "Diesel",
+    "service_name": "Air Filter",
+    "price": 906,
+    "labour": 3983
+  },
+  {
+    "id": 657,
+    "service_type": "Paid Service",
+    "model": "Safari",
+    "fuel": "Diesel",
+    "service_name": "Alignment",
+    "price": 1328,
+    "labour": 3983
+  },
+  {
+    "id": 658,
+    "service_type": "Paid Service",
+    "model": "Safari",
+    "fuel": "Diesel",
+    "service_name": "Balancing",
+    "price": 580,
+    "labour": 3983
+  },
+  {
+    "id": 659,
+    "service_type": "Paid Service",
+    "model": "Safari",
+    "fuel": "Diesel",
+    "service_name": "Engine Oil",
+    "price": 5295,
+    "labour": 3983
+  },
+  {
+    "id": 660,
+    "service_type": "Paid Service",
+    "model": "Safari",
+    "fuel": "Diesel",
+    "service_name": "Fuel Filter",
+    "price": 2654,
+    "labour": 3983
+  },
+  {
+    "id": 661,
+    "service_type": "Paid Service",
+    "model": "Safari",
+    "fuel": "Diesel",
+    "service_name": "Break oil",
+    "price": 224,
+    "labour": 3983
+  },
+  {
+    "id": 662,
+    "service_type": "Paid Service",
+    "model": "Safari",
+    "fuel": "Diesel",
+    "service_name": "Sunroof Greece",
+    "price": 800,
+    "labour": 3983
+  },
+  {
+    "id": 663,
+    "service_type": "Paid Service",
+    "model": "Safari",
+    "fuel": "Diesel",
+    "service_name": "Service Kit",
+    "price": 5532,
+    "labour": 3983
+  },
+  {
+    "id": 664,
+    "service_type": "Paid Service",
+    "model": "Safari",
+    "fuel": "Diesel",
+    "service_name": "Pollen Filter",
+    "price": 1581,
+    "labour": 3983
+  },
+  {
+    "id": 665,
+    "service_type": "Paid Service",
+    "model": "Safari",
+    "fuel": "Diesel",
+    "service_name": "Comby Filter",
+    "price": 1581,
+    "labour": 3983
+  },
+  {
+    "id": 703,
+    "service_type": "Paid Service",
+    "model": "Safari",
+    "fuel": "Diesel",
+    "service_name": "Def",
+    "price": 620,
+    "labour": 3983
+  },
+  {
+    "id": 666,
+    "service_type": "Campaign",
+    "model": "Altroz",
+    "fuel": "Petrol",
+    "service_name": "",
+    "price": 0,
+    "labour": 0
+  },
+  {
+    "id": 667,
+    "service_type": "Campaign",
+    "model": "Altroz",
+    "fuel": "Diesel",
+    "service_name": "",
+    "price": 0,
+    "labour": 0
+  },
+  {
+    "id": 668,
+    "service_type": "Campaign",
+    "model": "Altroz",
+    "fuel": "CNG",
+    "service_name": "",
+    "price": 0,
+    "labour": 0
+  },
+  {
+    "id": 669,
+    "service_type": "Campaign",
+    "model": "Tiago",
+    "fuel": "Petrol",
+    "service_name": "",
+    "price": 0,
+    "labour": 0
+  },
+  {
+    "id": 670,
+    "service_type": "Campaign",
+    "model": "Tiago",
+    "fuel": "Diesel",
+    "service_name": "",
+    "price": 0,
+    "labour": 0
+  },
+  {
+    "id": 671,
+    "service_type": "Campaign",
+    "model": "Tiago",
+    "fuel": "CNG",
+    "service_name": "",
+    "price": 0,
+    "labour": 0
+  },
+  {
+    "id": 672,
+    "service_type": "Campaign",
+    "model": "Tiago",
+    "fuel": "EV",
+    "service_name": "",
+    "price": 0,
+    "labour": 0
+  },
+  {
+    "id": 673,
+    "service_type": "Campaign",
+    "model": "Nexon",
+    "fuel": "Petrol",
+    "service_name": "",
+    "price": 0,
+    "labour": 0
+  },
+  {
+    "id": 674,
+    "service_type": "Campaign",
+    "model": "Nexon",
+    "fuel": "Diesel",
+    "service_name": "",
+    "price": 0,
+    "labour": 0
+  },
+  {
+    "id": 675,
+    "service_type": "Campaign",
+    "model": "Nexon",
+    "fuel": "CNG",
+    "service_name": "",
+    "price": 0,
+    "labour": 0
+  },
+  {
+    "id": 676,
+    "service_type": "Campaign",
+    "model": "Nexon",
+    "fuel": "EV",
+    "service_name": "",
+    "price": 0,
+    "labour": 0
+  },
+  {
+    "id": 677,
+    "service_type": "Campaign",
+    "model": "Punch",
+    "fuel": "Petrol",
+    "service_name": "",
+    "price": 0,
+    "labour": 0
+  },
+  {
+    "id": 678,
+    "service_type": "Campaign",
+    "model": "Punch",
+    "fuel": "CNG",
+    "service_name": "",
+    "price": 0,
+    "labour": 0
+  },
+  {
+    "id": 679,
+    "service_type": "Campaign",
+    "model": "Punch",
+    "fuel": "EV",
+    "service_name": "",
+    "price": 0,
+    "labour": 0
+  },
+  {
+    "id": 680,
+    "service_type": "Campaign",
+    "model": "Tigor",
+    "fuel": "Petrol",
+    "service_name": "",
+    "price": 0,
+    "labour": 0
+  },
+  {
+    "id": 681,
+    "service_type": "Campaign",
+    "model": "Tigor",
+    "fuel": "Diesel",
+    "service_name": "",
+    "price": 0,
+    "labour": 0
+  },
+  {
+    "id": 682,
+    "service_type": "Campaign",
+    "model": "Tigor",
+    "fuel": "CNG",
+    "service_name": "",
+    "price": 0,
+    "labour": 0
+  },
+  {
+    "id": 683,
+    "service_type": "Campaign",
+    "model": "Tigor",
+    "fuel": "EV",
+    "service_name": "",
+    "price": 0,
+    "labour": 0
+  },
+  {
+    "id": 684,
+    "service_type": "Campaign",
+    "model": "Curvv",
+    "fuel": "Petrol",
+    "service_name": "",
+    "price": 0,
+    "labour": 0
+  },
+  {
+    "id": 685,
+    "service_type": "Campaign",
+    "model": "Curvv",
+    "fuel": "Diesel",
+    "service_name": "",
+    "price": 0,
+    "labour": 0
+  },
+  {
+    "id": 686,
+    "service_type": "Campaign",
+    "model": "Curvv",
+    "fuel": "EV",
+    "service_name": "",
+    "price": 0,
+    "labour": 0
+  },
+  {
+    "id": 687,
+    "service_type": "Campaign",
+    "model": "Harrier",
+    "fuel": "Diesel",
+    "service_name": "",
+    "price": 0,
+    "labour": 0
+  },
+  {
+    "id": 688,
+    "service_type": "Campaign",
+    "model": "Safari",
+    "fuel": "Diesel",
+    "service_name": "",
+    "price": 0,
+    "labour": 0
+  },
+  {
+    "id": 689,
+    "service_type": "E Breakdown",
+    "model": "Altroz",
+    "fuel": "Petrol",
+    "service_name": "",
+    "price": 0,
+    "labour": 0
+  },
+  {
+    "id": 690,
+    "service_type": "E Breakdown",
+    "model": "Altroz",
+    "fuel": "Diesel",
+    "service_name": "",
+    "price": 0,
+    "labour": 0
+  },
+  {
+    "id": 691,
+    "service_type": "E Breakdown",
+    "model": "Altroz",
+    "fuel": "CNG",
+    "service_name": "",
+    "price": 0,
+    "labour": 0
+  },
+  {
+    "id": 692,
+    "service_type": "E Breakdown",
+    "model": "Tiago",
+    "fuel": "Petrol",
+    "service_name": "",
+    "price": 0,
+    "labour": 0
+  },
+  {
+    "id": 693,
+    "service_type": "E Breakdown",
+    "model": "Tiago",
+    "fuel": "Diesel",
+    "service_name": "",
+    "price": 0,
+    "labour": 0
+  },
+  {
+    "id": 694,
+    "service_type": "E Breakdown",
+    "model": "Tiago",
+    "fuel": "CNG",
+    "service_name": "",
+    "price": 0,
+    "labour": 0
+  },
+  {
+    "id": 695,
+    "service_type": "E Breakdown",
+    "model": "Tiago",
+    "fuel": "EV",
+    "service_name": "",
+    "price": 0,
+    "labour": 0
+  },
+  {
+    "id": 696,
+    "service_type": "E Breakdown",
+    "model": "Nexon",
+    "fuel": "Petrol",
+    "service_name": "",
+    "price": 0,
+    "labour": 0
+  },
+  {
+    "id": 697,
+    "service_type": "E Breakdown",
+    "model": "Nexon",
+    "fuel": "Diesel",
+    "service_name": "",
+    "price": 0,
+    "labour": 0
+  },
+  {
+    "id": 698,
+    "service_type": "E Breakdown",
+    "model": "Nexon",
+    "fuel": "CNG",
+    "service_name": "",
+    "price": 0,
+    "labour": 0
+  },
+  {
+    "id": 699,
+    "service_type": "E Breakdown",
+    "model": "Nexon",
+    "fuel": "EV",
+    "service_name": "",
+    "price": 0,
+    "labour": 0
+  },
+  {
+    "id": 700,
+    "service_type": "E Breakdown",
+    "model": "Punch",
+    "fuel": "Petrol",
+    "service_name": "",
+    "price": 0,
+    "labour": 0
+  },
+  {
+    "id": 701,
+    "service_type": "E Breakdown",
+    "model": "Punch",
+    "fuel": "CNG",
+    "service_name": "",
+    "price": 0,
+    "labour": 0
+  },
+  {
+    "id": 702,
+    "service_type": "E Breakdown",
+    "model": "Punch",
+    "fuel": "EV",
+    "service_name": "",
+    "price": 0,
+    "labour": 0
+  },
+  {
+    "id": 703,
+    "service_type": "E Breakdown",
+    "model": "Tigor",
+    "fuel": "Petrol",
+    "service_name": "",
+    "price": 0,
+    "labour": 0
+  },
+  {
+    "id": 704,
+    "service_type": "E Breakdown",
+    "model": "Tigor",
+    "fuel": "Diesel",
+    "service_name": "",
+    "price": 0,
+    "labour": 0
+  },
+  {
+    "id": 705,
+    "service_type": "E Breakdown",
+    "model": "Tigor",
+    "fuel": "CNG",
+    "service_name": "",
+    "price": 0,
+    "labour": 0
+  },
+  {
+    "id": 706,
+    "service_type": "E Breakdown",
+    "model": "Tigor",
+    "fuel": "EV",
+    "service_name": "",
+    "price": 0,
+    "labour": 0
+  },
+  {
+    "id": 707,
+    "service_type": "E Breakdown",
+    "model": "Curvv",
+    "fuel": "Petrol",
+    "service_name": "",
+    "price": 0,
+    "labour": 0
+  },
+  {
+    "id": 708,
+    "service_type": "E Breakdown",
+    "model": "Curvv",
+    "fuel": "Diesel",
+    "service_name": "",
+    "price": 0,
+    "labour": 0
+  },
+  {
+    "id": 709,
+    "service_type": "E Breakdown",
+    "model": "Curvv",
+    "fuel": "EV",
+    "service_name": "",
+    "price": 0,
+    "labour": 0
+  },
+  {
+    "id": 710,
+    "service_type": "E Breakdown",
+    "model": "Harrier",
+    "fuel": "Diesel",
+    "service_name": "",
+    "price": 0,
+    "labour": 0
+  },
+  {
+    "id": 711,
+    "service_type": "E Breakdown",
+    "model": "Safari",
+    "fuel": "Diesel",
+    "service_name": "",
+    "price": 0,
+    "labour": 0
+  },
+  {
+    "id": 712,
+    "service_type": "Running Repairs",
+    "model": "Altroz",
+    "fuel": "Petrol",
+    "service_name": "Tyre Issue",
+    "price": 0,
+    "labour": 0
+  },
+  {
+    "id": 713,
+    "service_type": "Running Repairs",
+    "model": "Altroz",
+    "fuel": "Petrol",
+    "service_name": "Battery Issue",
+    "price": 0,
+    "labour": 0
+  },
+  {
+    "id": 714,
+    "service_type": "Running Repairs",
+    "model": "Altroz",
+    "fuel": "Petrol",
+    "service_name": "Updation",
+    "price": 0,
+    "labour": 0
+  },
+  {
+    "id": 715,
+    "service_type": "Running Repairs",
+    "model": "Altroz",
+    "fuel": "Diesel",
+    "service_name": "Tyre Issue",
+    "price": 0,
+    "labour": 0
+  },
+  {
+    "id": 716,
+    "service_type": "Running Repairs",
+    "model": "Altroz",
+    "fuel": "Diesel",
+    "service_name": "Battery Issue",
+    "price": 0,
+    "labour": 0
+  },
+  {
+    "id": 717,
+    "service_type": "Running Repairs",
+    "model": "Altroz",
+    "fuel": "Diesel",
+    "service_name": "Updation",
+    "price": 0,
+    "labour": 0
+  },
+  {
+    "id": 718,
+    "service_type": "Running Repairs",
+    "model": "Altroz",
+    "fuel": "CNG",
+    "service_name": "Tyre Issue",
+    "price": 0,
+    "labour": 0
+  },
+  {
+    "id": 719,
+    "service_type": "Running Repairs",
+    "model": "Altroz",
+    "fuel": "CNG",
+    "service_name": "Battery Issue",
+    "price": 0,
+    "labour": 0
+  },
+  {
+    "id": 720,
+    "service_type": "Running Repairs",
+    "model": "Altroz",
+    "fuel": "CNG",
+    "service_name": "Updation",
+    "price": 0,
+    "labour": 0
+  },
+  {
+    "id": 721,
+    "service_type": "Running Repairs",
+    "model": "Tiago",
+    "fuel": "Petrol",
+    "service_name": "Tyre Issue",
+    "price": 0,
+    "labour": 0
+  },
+  {
+    "id": 722,
+    "service_type": "Running Repairs",
+    "model": "Tiago",
+    "fuel": "Petrol",
+    "service_name": "Battery Issue",
+    "price": 0,
+    "labour": 0
+  },
+  {
+    "id": 723,
+    "service_type": "Running Repairs",
+    "model": "Tiago",
+    "fuel": "Petrol",
+    "service_name": "Updation",
+    "price": 0,
+    "labour": 0
+  },
+  {
+    "id": 724,
+    "service_type": "Running Repairs",
+    "model": "Tiago",
+    "fuel": "Diesel",
+    "service_name": "Tyre Issue",
+    "price": 0,
+    "labour": 0
+  },
+  {
+    "id": 725,
+    "service_type": "Running Repairs",
+    "model": "Tiago",
+    "fuel": "Diesel",
+    "service_name": "Battery Issue",
+    "price": 0,
+    "labour": 0
+  },
+  {
+    "id": 726,
+    "service_type": "Running Repairs",
+    "model": "Tiago",
+    "fuel": "Diesel",
+    "service_name": "Updation",
+    "price": 0,
+    "labour": 0
+  },
+  {
+    "id": 727,
+    "service_type": "Running Repairs",
+    "model": "Tiago",
+    "fuel": "CNG",
+    "service_name": "Tyre Issue",
+    "price": 0,
+    "labour": 0
+  },
+  {
+    "id": 728,
+    "service_type": "Running Repairs",
+    "model": "Tiago",
+    "fuel": "CNG",
+    "service_name": "Battery Issue",
+    "price": 0,
+    "labour": 0
+  },
+  {
+    "id": 729,
+    "service_type": "Running Repairs",
+    "model": "Tiago",
+    "fuel": "CNG",
+    "service_name": "Updation",
+    "price": 0,
+    "labour": 0
+  },
+  {
+    "id": 730,
+    "service_type": "Running Repairs",
+    "model": "Tiago",
+    "fuel": "EV",
+    "service_name": "Tyre Issue",
+    "price": 0,
+    "labour": 0
+  },
+  {
+    "id": 731,
+    "service_type": "Running Repairs",
+    "model": "Tiago",
+    "fuel": "EV",
+    "service_name": "Battery Issue",
+    "price": 0,
+    "labour": 0
+  },
+  {
+    "id": 732,
+    "service_type": "Running Repairs",
+    "model": "Tiago",
+    "fuel": "EV",
+    "service_name": "Updation",
+    "price": 0,
+    "labour": 0
+  },
+  {
+    "id": 733,
+    "service_type": "Running Repairs",
+    "model": "Nexon",
+    "fuel": "Petrol",
+    "service_name": "Tyre Issue",
+    "price": 0,
+    "labour": 0
+  },
+  {
+    "id": 734,
+    "service_type": "Running Repairs",
+    "model": "Nexon",
+    "fuel": "Petrol",
+    "service_name": "Battery Issue",
+    "price": 0,
+    "labour": 0
+  },
+  {
+    "id": 735,
+    "service_type": "Running Repairs",
+    "model": "Nexon",
+    "fuel": "Petrol",
+    "service_name": "Updation",
+    "price": 0,
+    "labour": 0
+  },
+  {
+    "id": 736,
+    "service_type": "Running Repairs",
+    "model": "Nexon",
+    "fuel": "Diesel",
+    "service_name": "Tyre Issue",
+    "price": 0,
+    "labour": 0
+  },
+  {
+    "id": 737,
+    "service_type": "Running Repairs",
+    "model": "Nexon",
+    "fuel": "Diesel",
+    "service_name": "Battery Issue",
+    "price": 0,
+    "labour": 0
+  },
+  {
+    "id": 738,
+    "service_type": "Running Repairs",
+    "model": "Nexon",
+    "fuel": "Diesel",
+    "service_name": "Updation",
+    "price": 0,
+    "labour": 0
+  },
+  {
+    "id": 739,
+    "service_type": "Running Repairs",
+    "model": "Nexon",
+    "fuel": "CNG",
+    "service_name": "Tyre Issue",
+    "price": 0,
+    "labour": 0
+  },
+  {
+    "id": 740,
+    "service_type": "Running Repairs",
+    "model": "Nexon",
+    "fuel": "CNG",
+    "service_name": "Battery Issue",
+    "price": 0,
+    "labour": 0
+  },
+  {
+    "id": 741,
+    "service_type": "Running Repairs",
+    "model": "Nexon",
+    "fuel": "CNG",
+    "service_name": "Updation",
+    "price": 0,
+    "labour": 0
+  },
+  {
+    "id": 742,
+    "service_type": "Running Repairs",
+    "model": "Nexon",
+    "fuel": "EV",
+    "service_name": "Tyre Issue",
+    "price": 0,
+    "labour": 0
+  },
+  {
+    "id": 743,
+    "service_type": "Running Repairs",
+    "model": "Nexon",
+    "fuel": "EV",
+    "service_name": "Battery Issue",
+    "price": 0,
+    "labour": 0
+  },
+  {
+    "id": 744,
+    "service_type": "Running Repairs",
+    "model": "Nexon",
+    "fuel": "EV",
+    "service_name": "Updation",
+    "price": 0,
+    "labour": 0
+  },
+  {
+    "id": 745,
+    "service_type": "Running Repairs",
+    "model": "Punch",
+    "fuel": "Petrol",
+    "service_name": "Tyre Issue",
+    "price": 0,
+    "labour": 0
+  },
+  {
+    "id": 746,
+    "service_type": "Running Repairs",
+    "model": "Punch",
+    "fuel": "Petrol",
+    "service_name": "Battery Issue",
+    "price": 0,
+    "labour": 0
+  },
+  {
+    "id": 747,
+    "service_type": "Running Repairs",
+    "model": "Punch",
+    "fuel": "Petrol",
+    "service_name": "Updation",
+    "price": 0,
+    "labour": 0
+  },
+  {
+    "id": 748,
+    "service_type": "Running Repairs",
+    "model": "Punch",
+    "fuel": "CNG",
+    "service_name": "Tyre Issue",
+    "price": 0,
+    "labour": 0
+  },
+  {
+    "id": 749,
+    "service_type": "Running Repairs",
+    "model": "Punch",
+    "fuel": "CNG",
+    "service_name": "Battery Issue",
+    "price": 0,
+    "labour": 0
+  },
+  {
+    "id": 750,
+    "service_type": "Running Repairs",
+    "model": "Punch",
+    "fuel": "CNG",
+    "service_name": "Updation",
+    "price": 0,
+    "labour": 0
+  },
+  {
+    "id": 751,
+    "service_type": "Running Repairs",
+    "model": "Punch",
+    "fuel": "EV",
+    "service_name": "Tyre Issue",
+    "price": 0,
+    "labour": 0
+  },
+  {
+    "id": 752,
+    "service_type": "Running Repairs",
+    "model": "Punch",
+    "fuel": "EV",
+    "service_name": "Battery Issue",
+    "price": 0,
+    "labour": 0
+  },
+  {
+    "id": 753,
+    "service_type": "Running Repairs",
+    "model": "Punch",
+    "fuel": "EV",
+    "service_name": "Updation",
+    "price": 0,
+    "labour": 0
+  },
+  {
+    "id": 754,
+    "service_type": "Running Repairs",
+    "model": "Tigor",
+    "fuel": "Petrol",
+    "service_name": "Tyre Issue",
+    "price": 0,
+    "labour": 0
+  },
+  {
+    "id": 755,
+    "service_type": "Running Repairs",
+    "model": "Tigor",
+    "fuel": "Petrol",
+    "service_name": "Battery Issue",
+    "price": 0,
+    "labour": 0
+  },
+  {
+    "id": 756,
+    "service_type": "Running Repairs",
+    "model": "Tigor",
+    "fuel": "Petrol",
+    "service_name": "Updation",
+    "price": 0,
+    "labour": 0
+  },
+  {
+    "id": 757,
+    "service_type": "Running Repairs",
+    "model": "Tigor",
+    "fuel": "Diesel",
+    "service_name": "Tyre Issue",
+    "price": 0,
+    "labour": 0
+  },
+  {
+    "id": 758,
+    "service_type": "Running Repairs",
+    "model": "Tigor",
+    "fuel": "Diesel",
+    "service_name": "Battery Issue",
+    "price": 0,
+    "labour": 0
+  },
+  {
+    "id": 759,
+    "service_type": "Running Repairs",
+    "model": "Tigor",
+    "fuel": "Diesel",
+    "service_name": "Updation",
+    "price": 0,
+    "labour": 0
+  },
+  {
+    "id": 760,
+    "service_type": "Running Repairs",
+    "model": "Tigor",
+    "fuel": "CNG",
+    "service_name": "Tyre Issue",
+    "price": 0,
+    "labour": 0
+  },
+  {
+    "id": 761,
+    "service_type": "Running Repairs",
+    "model": "Tigor",
+    "fuel": "CNG",
+    "service_name": "Battery Issue",
+    "price": 0,
+    "labour": 0
+  },
+  {
+    "id": 762,
+    "service_type": "Running Repairs",
+    "model": "Tigor",
+    "fuel": "CNG",
+    "service_name": "Updation",
+    "price": 0,
+    "labour": 0
+  },
+  {
+    "id": 763,
+    "service_type": "Running Repairs",
+    "model": "Tigor",
+    "fuel": "EV",
+    "service_name": "Tyre Issue",
+    "price": 0,
+    "labour": 0
+  },
+  {
+    "id": 764,
+    "service_type": "Running Repairs",
+    "model": "Tigor",
+    "fuel": "EV",
+    "service_name": "Battery Issue",
+    "price": 0,
+    "labour": 0
+  },
+  {
+    "id": 765,
+    "service_type": "Running Repairs",
+    "model": "Tigor",
+    "fuel": "EV",
+    "service_name": "Updation",
+    "price": 0,
+    "labour": 0
+  },
+  {
+    "id": 766,
+    "service_type": "Running Repairs",
+    "model": "Curvv",
+    "fuel": "Petrol",
+    "service_name": "Tyre Issue",
+    "price": 0,
+    "labour": 0
+  },
+  {
+    "id": 767,
+    "service_type": "Running Repairs",
+    "model": "Curvv",
+    "fuel": "Petrol",
+    "service_name": "Battery Issue",
+    "price": 0,
+    "labour": 0
+  },
+  {
+    "id": 768,
+    "service_type": "Running Repairs",
+    "model": "Curvv",
+    "fuel": "Petrol",
+    "service_name": "Updation",
+    "price": 0,
+    "labour": 0
+  },
+  {
+    "id": 769,
+    "service_type": "Running Repairs",
+    "model": "Curvv",
+    "fuel": "Diesel",
+    "service_name": "Tyre Issue",
+    "price": 0,
+    "labour": 0
+  },
+  {
+    "id": 770,
+    "service_type": "Running Repairs",
+    "model": "Curvv",
+    "fuel": "Diesel",
+    "service_name": "Battery Issue",
+    "price": 0,
+    "labour": 0
+  },
+  {
+    "id": 771,
+    "service_type": "Running Repairs",
+    "model": "Curvv",
+    "fuel": "Diesel",
+    "service_name": "Updation",
+    "price": 0,
+    "labour": 0
+  },
+  {
+    "id": 772,
+    "service_type": "Running Repairs",
+    "model": "Curvv",
+    "fuel": "EV",
+    "service_name": "Tyre Issue",
+    "price": 0,
+    "labour": 0
+  },
+  {
+    "id": 773,
+    "service_type": "Running Repairs",
+    "model": "Curvv",
+    "fuel": "EV",
+    "service_name": "Battery Issue",
+    "price": 0,
+    "labour": 0
+  },
+  {
+    "id": 774,
+    "service_type": "Running Repairs",
+    "model": "Curvv",
+    "fuel": "EV",
+    "service_name": "Updation",
+    "price": 0,
+    "labour": 0
+  },
+  {
+    "id": 775,
+    "service_type": "Running Repairs",
+    "model": "Harrier",
+    "fuel": "Diesel",
+    "service_name": "Tyre Issue",
+    "price": 0,
+    "labour": 0
+  },
+  {
+    "id": 776,
+    "service_type": "Running Repairs",
+    "model": "Harrier",
+    "fuel": "Diesel",
+    "service_name": "Def Refill",
+    "price": 0,
+    "labour": 0
+  },
+  {
+    "id": 777,
+    "service_type": "Running Repairs",
+    "model": "Harrier",
+    "fuel": "Diesel",
+    "service_name": "Battery Issue",
+    "price": 0,
+    "labour": 0
+  },
+  {
+    "id": 778,
+    "service_type": "Running Repairs",
+    "model": "Harrier",
+    "fuel": "Diesel",
+    "service_name": "Updation",
+    "price": 0,
+    "labour": 0
+  },
+  {
+    "id": 779,
+    "service_type": "Running Repairs",
+    "model": "Safari",
+    "fuel": "Diesel",
+    "service_name": "Tyre Issue",
+    "price": 0,
+    "labour": 0
+  },
+  {
+    "id": 780,
+    "service_type": "Running Repairs",
+    "model": "Safari",
+    "fuel": "Diesel",
+    "service_name": "Def Refill",
+    "price": 0,
+    "labour": 0
+  },
+  {
+    "id": 781,
+    "service_type": "Running Repairs",
+    "model": "Safari",
+    "fuel": "Diesel",
+    "service_name": "Battery Issue",
+    "price": 0,
+    "labour": 0
+  },
+  {
+    "id": 782,
+    "service_type": "Running Repairs",
+    "model": "Safari",
+    "fuel": "Diesel",
+    "service_name": "Updation",
+    "price": 0,
+    "labour": 0
+  },
+  {
+    "id": 783,
+    "service_type": "Mini Paid Service",
+    "model": "Altroz",
+    "fuel": "Petrol",
+    "service_name": "Distilled Water",
+    "price": 20,
+    "labour": 1080
+  },
+  {
+    "id": 784,
+    "service_type": "Mini Paid Service",
+    "model": "Altroz",
+    "fuel": "Petrol",
+    "service_name": "Shampoo",
+    "price": 120,
+    "labour": 1080
+  },
+  {
+    "id": 785,
+    "service_type": "Mini Paid Service",
+    "model": "Altroz",
+    "fuel": "Petrol",
+    "service_name": "Coolant Top Up",
+    "price": 100,
+    "labour": 1080
+  },
+  {
+    "id": 786,
+    "service_type": "Mini Paid Service",
+    "model": "Altroz",
+    "fuel": "Petrol",
+    "service_name": "Oil Filter Change",
+    "price": 179,
+    "labour": 1080
+  },
+  {
+    "id": 787,
+    "service_type": "Mini Paid Service",
+    "model": "Altroz",
+    "fuel": "Petrol",
+    "service_name": "Sunroof Greece",
+    "price": 800,
+    "labour": 1080
+  },
+  {
+    "id": 788,
+    "service_type": "Mini Paid Service",
+    "model": "Altroz",
+    "fuel": "Diesel",
+    "service_name": "Distilled Water",
+    "price": 20,
+    "labour": 1080
+  },
+  {
+    "id": 789,
+    "service_type": "Mini Paid Service",
+    "model": "Altroz",
+    "fuel": "Diesel",
+    "service_name": "Shampoo",
+    "price": 120,
+    "labour": 1080
+  },
+  {
+    "id": 790,
+    "service_type": "Mini Paid Service",
+    "model": "Altroz",
+    "fuel": "Diesel",
+    "service_name": "Coolant Top Up",
+    "price": 100,
+    "labour": 1080
+  },
+  {
+    "id": 791,
+    "service_type": "Mini Paid Service",
+    "model": "Altroz",
+    "fuel": "Diesel",
+    "service_name": "Oil Filter Change",
+    "price": 212,
+    "labour": 1080
+  },
+  {
+    "id": 792,
+    "service_type": "Mini Paid Service",
+    "model": "Altroz",
+    "fuel": "Diesel",
+    "service_name": "Sunroof Greece",
+    "price": 800,
+    "labour": 1080
+  },
+  {
+    "id": 793,
+    "service_type": "Mini Paid Service",
+    "model": "Altroz",
+    "fuel": "CNG",
+    "service_name": "Distilled Water",
+    "price": 20,
+    "labour": 1080
+  },
+  {
+    "id": 794,
+    "service_type": "Mini Paid Service",
+    "model": "Altroz",
+    "fuel": "CNG",
+    "service_name": "Shampoo",
+    "price": 120,
+    "labour": 1080
+  },
+  {
+    "id": 795,
+    "service_type": "Mini Paid Service",
+    "model": "Altroz",
+    "fuel": "CNG",
+    "service_name": "Coolant Top Up",
+    "price": 100,
+    "labour": 1080
+  },
+  {
+    "id": 796,
+    "service_type": "Mini Paid Service",
+    "model": "Altroz",
+    "fuel": "CNG",
+    "service_name": "Oil Filter Change",
+    "price": 179,
+    "labour": 1080
+  },
+  {
+    "id": 797,
+    "service_type": "Mini Paid Service",
+    "model": "Altroz",
+    "fuel": "CNG",
+    "service_name": "Sunroof Greece",
+    "price": 800,
+    "labour": 1080
+  },
+  {
+    "id": 798,
+    "service_type": "Mini Paid Service",
+    "model": "Tiago",
+    "fuel": "Petrol",
+    "service_name": "Distilled Water",
+    "price": 20,
+    "labour": 1080
+  },
+  {
+    "id": 799,
+    "service_type": "Mini Paid Service",
+    "model": "Tiago",
+    "fuel": "Petrol",
+    "service_name": "Shampoo",
+    "price": 120,
+    "labour": 1080
+  },
+  {
+    "id": 800,
+    "service_type": "Mini Paid Service",
+    "model": "Tiago",
+    "fuel": "Petrol",
+    "service_name": "Coolant Top Up",
+    "price": 100,
+    "labour": 1080
+  },
+  {
+    "id": 801,
+    "service_type": "Mini Paid Service",
+    "model": "Tiago",
+    "fuel": "Petrol",
+    "service_name": "Oil Filter Change",
+    "price": 179,
+    "labour": 1080
+  },
+  {
+    "id": 802,
+    "service_type": "Mini Paid Service",
+    "model": "Tiago",
+    "fuel": "Diesel",
+    "service_name": "Distilled Water",
+    "price": 20,
+    "labour": 1080
+  },
+  {
+    "id": 803,
+    "service_type": "Mini Paid Service",
+    "model": "Tiago",
+    "fuel": "Diesel",
+    "service_name": "Shampoo",
+    "price": 120,
+    "labour": 1080
+  },
+  {
+    "id": 804,
+    "service_type": "Mini Paid Service",
+    "model": "Tiago",
+    "fuel": "Diesel",
+    "service_name": "Coolant Top Up",
+    "price": 100,
+    "labour": 1080
+  },
+  {
+    "id": 805,
+    "service_type": "Mini Paid Service",
+    "model": "Tiago",
+    "fuel": "Diesel",
+    "service_name": "Oil Filter Change",
+    "price": 212,
+    "labour": 1080
+  },
+  {
+    "id": 806,
+    "service_type": "Mini Paid Service",
+    "model": "Tiago",
+    "fuel": "CNG",
+    "service_name": "Distilled Water",
+    "price": 20,
+    "labour": 1080
+  },
+  {
+    "id": 807,
+    "service_type": "Mini Paid Service",
+    "model": "Tiago",
+    "fuel": "CNG",
+    "service_name": "Shampoo",
+    "price": 120,
+    "labour": 1080
+  },
+  {
+    "id": 808,
+    "service_type": "Mini Paid Service",
+    "model": "Tiago",
+    "fuel": "CNG",
+    "service_name": "Coolant Top Up",
+    "price": 100,
+    "labour": 1080
+  },
+  {
+    "id": 809,
+    "service_type": "Mini Paid Service",
+    "model": "Tiago",
+    "fuel": "CNG",
+    "service_name": "Oil Filter Change",
+    "price": 179,
+    "labour": 1080
+  },
+  {
+    "id": 810,
+    "service_type": "Mini Paid Service",
+    "model": "Tiago",
+    "fuel": "EV",
+    "service_name": "Distilled Water",
+    "price": 20,
+    "labour": 1080
+  },
+  {
+    "id": 811,
+    "service_type": "Mini Paid Service",
+    "model": "Tiago",
+    "fuel": "EV",
+    "service_name": "Shampoo",
+    "price": 120,
+    "labour": 1080
+  },
+  {
+    "id": 812,
+    "service_type": "Mini Paid Service",
+    "model": "Tiago",
+    "fuel": "EV",
+    "service_name": "Coolant Top Up",
+    "price": 212,
+    "labour": 1080
+  },
+  {
+    "id": 813,
+    "service_type": "Mini Paid Service",
+    "model": "Nexon",
+    "fuel": "Petrol",
+    "service_name": "Distilled Water",
+    "price": 20,
+    "labour": 1080
+  },
+  {
+    "id": 814,
+    "service_type": "Mini Paid Service",
+    "model": "Nexon",
+    "fuel": "Petrol",
+    "service_name": "Shampoo",
+    "price": 120,
+    "labour": 1080
+  },
+  {
+    "id": 815,
+    "service_type": "Mini Paid Service",
+    "model": "Nexon",
+    "fuel": "Petrol",
+    "service_name": "Coolant Top Up",
+    "price": 100,
+    "labour": 1080
+  },
+  {
+    "id": 816,
+    "service_type": "Mini Paid Service",
+    "model": "Nexon",
+    "fuel": "Petrol",
+    "service_name": "Oil Filter Change",
+    "price": 179,
+    "labour": 1080
+  },
+  {
+    "id": 855,
+    "service_type": "Mini Paid Service",
+    "model": "Nexon",
+    "fuel": "Petrol",
+    "service_name": "Alignment",
+    "price": 750,
+    "labour": 1080
+  },
+  {
+    "id": 856,
+    "service_type": "Mini Paid Service",
+    "model": "Nexon",
+    "fuel": "Petrol",
+    "service_name": "Balancing",
+    "price": 500,
+    "labour": 1080
+  },
+  {
+    "id": 817,
+    "service_type": "Mini Paid Service",
+    "model": "Nexon",
+    "fuel": "Petrol",
+    "service_name": "Sunroof Greece",
+    "price": 800,
+    "labour": 1080
+  },
+  {
+    "id": 818,
+    "service_type": "Mini Paid Service",
+    "model": "Nexon",
+    "fuel": "Diesel",
+    "service_name": "Distilled Water",
+    "price": 20,
+    "labour": 1080
+  },
+  {
+    "id": 819,
+    "service_type": "Mini Paid Service",
+    "model": "Nexon",
+    "fuel": "Diesel",
+    "service_name": "Shampoo",
+    "price": 120,
+    "labour": 1080
+  },
+  {
+    "id": 820,
+    "service_type": "Mini Paid Service",
+    "model": "Nexon",
+    "fuel": "Diesel",
+    "service_name": "Coolant Top Up",
+    "price": 100,
+    "labour": 1080
+  },
+  {
+    "id": 821,
+    "service_type": "Mini Paid Service",
+    "model": "Nexon",
+    "fuel": "Diesel",
+    "service_name": "Oil Filter Change",
+    "price": 212,
+    "labour": 1080
+  },
+  {
+    "id": 822,
+    "service_type": "Mini Paid Service",
+    "model": "Nexon",
+    "fuel": "Diesel",
+    "service_name": "Sunroof Greece",
+    "price": 800,
+    "labour": 1080
+  },
+  {
+    "id": 863,
+    "service_type": "Mini Paid Service",
+    "model": "Nexon",
+    "fuel": "Petrol",
+    "service_name": "Alignment",
+    "price": 750,
+    "labour": 1080
+  },
+  {
+    "id": 864,
+    "service_type": "Mini Paid Service",
+    "model": "Nexon",
+    "fuel": "Petrol",
+    "service_name": "Balancing",
+    "price": 500,
+    "labour": 1080
+  },
+  {
+    "id": 823,
+    "service_type": "Mini Paid Service",
+    "model": "Nexon",
+    "fuel": "CNG",
+    "service_name": "Distilled Water",
+    "price": 20,
+    "labour": 1080
+  },
+  {
+    "id": 824,
+    "service_type": "Mini Paid Service",
+    "model": "Nexon",
+    "fuel": "CNG",
+    "service_name": "Shampoo",
+    "price": 120,
+    "labour": 1080
+  },
+  {
+    "id": 825,
+    "service_type": "Mini Paid Service",
+    "model": "Nexon",
+    "fuel": "CNG",
+    "service_name": "Coolant Top Up",
+    "price": 100,
+    "labour": 1080
+  },
+  {
+    "id": 826,
+    "service_type": "Mini Paid Service",
+    "model": "Nexon",
+    "fuel": "CNG",
+    "service_name": "Oil Filter Change",
+    "price": 179,
+    "labour": 1080
+  },
+  {
+    "id": 827,
+    "service_type": "Mini Paid Service",
+    "model": "Nexon",
+    "fuel": "CNG",
+    "service_name": "Sunroof Greece",
+    "price": 800,
+    "labour": 1080
+  },
+  {
+    "id": 828,
+    "service_type": "Mini Paid Service",
+    "model": "Nexon",
+    "fuel": "EV",
+    "service_name": "Distilled Water",
+    "price": 20,
+    "labour": 1080
+  },
+  {
+    "id": 829,
+    "service_type": "Mini Paid Service",
+    "model": "Nexon",
+    "fuel": "EV",
+    "service_name": "Shampoo",
+    "price": 120,
+    "labour": 1080
+  },
+  {
+    "id": 830,
+    "service_type": "Mini Paid Service",
+    "model": "Nexon",
+    "fuel": "EV",
+    "service_name": "Coolant Top Up",
+    "price": 212,
+    "labour": 1080
+  },
+  {
+    "id": 831,
+    "service_type": "Mini Paid Service",
+    "model": "Nexon",
+    "fuel": "EV",
+    "service_name": "Sunroof Greece",
+    "price": 800,
+    "labour": 1080
+  },
+  {
+    "id": 832,
+    "service_type": "Mini Paid Service",
+    "model": "Punch",
+    "fuel": "Petrol",
+    "service_name": "Distilled Water",
+    "price": 20,
+    "labour": 1080
+  },
+  {
+    "id": 833,
+    "service_type": "Mini Paid Service",
+    "model": "Punch",
+    "fuel": "Petrol",
+    "service_name": "Shampoo",
+    "price": 120,
+    "labour": 1080
+  },
+  {
+    "id": 834,
+    "service_type": "Mini Paid Service",
+    "model": "Punch",
+    "fuel": "Petrol",
+    "service_name": "Coolant Top Up",
+    "price": 100,
+    "labour": 1080
+  },
+  {
+    "id": 835,
+    "service_type": "Mini Paid Service",
+    "model": "Punch",
+    "fuel": "Petrol",
+    "service_name": "Oil Filter Change",
+    "price": 179,
+    "labour": 1080
+  },
+  {
+    "id": 836,
+    "service_type": "Mini Paid Service",
+    "model": "Punch",
+    "fuel": "Petrol",
+    "service_name": "Sunroof Greece",
+    "price": 800,
+    "labour": 1080
+  },
+  {
+    "id": 837,
+    "service_type": "Mini Paid Service",
+    "model": "Punch",
+    "fuel": "CNG",
+    "service_name": "Distilled Water",
+    "price": 20,
+    "labour": 1080
+  },
+  {
+    "id": 838,
+    "service_type": "Mini Paid Service",
+    "model": "Punch",
+    "fuel": "CNG",
+    "service_name": "Shampoo",
+    "price": 120,
+    "labour": 1080
+  },
+  {
+    "id": 839,
+    "service_type": "Mini Paid Service",
+    "model": "Punch",
+    "fuel": "CNG",
+    "service_name": "Coolant Top Up",
+    "price": 100,
+    "labour": 1080
+  },
+  {
+    "id": 840,
+    "service_type": "Mini Paid Service",
+    "model": "Punch",
+    "fuel": "CNG",
+    "service_name": "Oil Filter Change",
+    "price": 179,
+    "labour": 1080
+  },
+  {
+    "id": 841,
+    "service_type": "Mini Paid Service",
+    "model": "Punch",
+    "fuel": "CNG",
+    "service_name": "Sunroof Greece",
+    "price": 800,
+    "labour": 1080
+  },
+  {
+    "id": 842,
+    "service_type": "Mini Paid Service",
+    "model": "Punch",
+    "fuel": "EV",
+    "service_name": "Distilled Water",
+    "price": 20,
+    "labour": 1080
+  },
+  {
+    "id": 843,
+    "service_type": "Mini Paid Service",
+    "model": "Punch",
+    "fuel": "EV",
+    "service_name": "Shampoo",
+    "price": 120,
+    "labour": 1080
+  },
+  {
+    "id": 844,
+    "service_type": "Mini Paid Service",
+    "model": "Punch",
+    "fuel": "EV",
+    "service_name": "Coolant Top Up",
+    "price": 212,
+    "labour": 1080
+  },
+  {
+    "id": 845,
+    "service_type": "Mini Paid Service",
+    "model": "Punch",
+    "fuel": "EV",
+    "service_name": "Sunroof Greece",
+    "price": 800,
+    "labour": 1080
+  },
+  {
+    "id": 846,
+    "service_type": "Mini Paid Service",
+    "model": "Tigor",
+    "fuel": "Petrol",
+    "service_name": "Distilled Water",
+    "price": 20,
+    "labour": 1080
+  },
+  {
+    "id": 847,
+    "service_type": "Mini Paid Service",
+    "model": "Tigor",
+    "fuel": "Petrol",
+    "service_name": "Shampoo",
+    "price": 120,
+    "labour": 1080
+  },
+  {
+    "id": 848,
+    "service_type": "Mini Paid Service",
+    "model": "Tigor",
+    "fuel": "Petrol",
+    "service_name": "Coolant Top Up",
+    "price": 100,
+    "labour": 1080
+  },
+  {
+    "id": 849,
+    "service_type": "Mini Paid Service",
+    "model": "Tigor",
+    "fuel": "Petrol",
+    "service_name": "Oil Filter Change",
+    "price": 179,
+    "labour": 1080
+  },
+  {
+    "id": 850,
+    "service_type": "Mini Paid Service",
+    "model": "Tigor",
+    "fuel": "Diesel",
+    "service_name": "Distilled Water",
+    "price": 20,
+    "labour": 1080
+  },
+  {
+    "id": 851,
+    "service_type": "Mini Paid Service",
+    "model": "Tigor",
+    "fuel": "Diesel",
+    "service_name": "Shampoo",
+    "price": 120,
+    "labour": 1080
+  },
+  {
+    "id": 852,
+    "service_type": "Mini Paid Service",
+    "model": "Tigor",
+    "fuel": "Diesel",
+    "service_name": "Coolant Top Up",
+    "price": 100,
+    "labour": 1080
+  },
+  {
+    "id": 853,
+    "service_type": "Mini Paid Service",
+    "model": "Tigor",
+    "fuel": "Diesel",
+    "service_name": "Oil Filter Change",
+    "price": 212,
+    "labour": 1080
+  },
+  {
+    "id": 854,
+    "service_type": "Mini Paid Service",
+    "model": "Tigor",
+    "fuel": "CNG",
+    "service_name": "Distilled Water",
+    "price": 20,
+    "labour": 1080
+  },
+  {
+    "id": 855,
+    "service_type": "Mini Paid Service",
+    "model": "Tigor",
+    "fuel": "CNG",
+    "service_name": "Shampoo",
+    "price": 120,
+    "labour": 1080
+  },
+  {
+    "id": 856,
+    "service_type": "Mini Paid Service",
+    "model": "Tigor",
+    "fuel": "CNG",
+    "service_name": "Coolant Top Up",
+    "price": 100,
+    "labour": 1080
+  },
+  {
+    "id": 857,
+    "service_type": "Mini Paid Service",
+    "model": "Tigor",
+    "fuel": "CNG",
+    "service_name": "Oil Filter Change",
+    "price": 179,
+    "labour": 1080
+  },
+  {
+    "id": 858,
+    "service_type": "Mini Paid Service",
+    "model": "Tigor",
+    "fuel": "EV",
+    "service_name": "Distilled Water",
+    "price": 20,
+    "labour": 1080
+  },
+  {
+    "id": 859,
+    "service_type": "Mini Paid Service",
+    "model": "Tigor",
+    "fuel": "EV",
+    "service_name": "Shampoo",
+    "price": 120,
+    "labour": 1080
+  },
+  {
+    "id": 860,
+    "service_type": "Mini Paid Service",
+    "model": "Tigor",
+    "fuel": "EV",
+    "service_name": "Coolant Top Up",
+    "price": 212,
+    "labour": 1080
+  },
+  {
+    "id": 861,
+    "service_type": "Mini Paid Service",
+    "model": "Curvv",
+    "fuel": "Petrol",
+    "service_name": "Shampoo",
+    "price": 120,
+    "labour": 755
+  },
+  {
+    "id": 862,
+    "service_type": "Mini Paid Service",
+    "model": "Curvv",
+    "fuel": "Petrol",
+    "service_name": "Coolant Top Up",
+    "price": 100,
+    "labour": 755
+  },
+  {
+    "id": 863,
+    "service_type": "Mini Paid Service",
+    "model": "Curvv",
+    "fuel": "Petrol",
+    "service_name": "Oil Filter Change",
+    "price": 179,
+    "labour": 755
+  },
+  {
+    "id": 864,
+    "service_type": "Mini Paid Service",
+    "model": "Curvv",
+    "fuel": "Petrol",
+    "service_name": "Sunroof Greece",
+    "price": 800,
+    "labour": 755
+  },
+  {
+    "id": 865,
+    "service_type": "Mini Paid Service",
+    "model": "Curvv",
+    "fuel": "Diesel",
+    "service_name": "Distilled Water",
+    "price": 20,
+    "labour": 755
+  },
+  {
+    "id": 866,
+    "service_type": "Mini Paid Service",
+    "model": "Curvv",
+    "fuel": "Diesel",
+    "service_name": "Shampoo",
+    "price": 120,
+    "labour": 755
+  },
+  {
+    "id": 867,
+    "service_type": "Mini Paid Service",
+    "model": "Curvv",
+    "fuel": "Diesel",
+    "service_name": "Coolant Top Up",
+    "price": 100,
+    "labour": 755
+  },
+  {
+    "id": 868,
+    "service_type": "Mini Paid Service",
+    "model": "Curvv",
+    "fuel": "Diesel",
+    "service_name": "Oil Filter Change",
+    "price": 212,
+    "labour": 755
+  },
+  {
+    "id": 869,
+    "service_type": "Mini Paid Service",
+    "model": "Curvv",
+    "fuel": "Diesel",
+    "service_name": "Sunroof Greece",
+    "price": 800,
+    "labour": 755
+  },
+  {
+    "id": 870,
+    "service_type": "Mini Paid Service",
+    "model": "Curvv",
+    "fuel": "EV",
+    "service_name": "Distilled Water",
+    "price": 20,
+    "labour": 1168
+  },
+  {
+    "id": 871,
+    "service_type": "Mini Paid Service",
+    "model": "Curvv",
+    "fuel": "EV",
+    "service_name": "Shampoo",
+    "price": 120,
+    "labour": 1168
+  },
+  {
+    "id": 872,
+    "service_type": "Mini Paid Service",
+    "model": "Curvv",
+    "fuel": "EV",
+    "service_name": "Coolant Top Up",
+    "price": 212,
+    "labour": 1168
+  },
+  {
+    "id": 873,
+    "service_type": "Mini Paid Service",
+    "model": "Curvv",
+    "fuel": "EV",
+    "service_name": "Sunroof Greece",
+    "price": 800,
+    "labour": 1168
+  },
+  {
+    "id": 874,
+    "service_type": "Mini Paid Service",
+    "model": "Harrier",
+    "fuel": "Diesel",
+    "service_name": "Distilled Water",
+    "price": 20,
+    "labour": 1250
+  },
+  {
+    "id": 875,
+    "service_type": "Mini Paid Service",
+    "model": "Harrier",
+    "fuel": "Diesel",
+    "service_name": "Shampoo",
+    "price": 120,
+    "labour": 1250
+  },
+  {
+    "id": 876,
+    "service_type": "Mini Paid Service",
+    "model": "Harrier",
+    "fuel": "Diesel",
+    "service_name": "Coolant Top Up",
+    "price": 100,
+    "labour": 1250
+  },
+  {
+    "id": 877,
+    "service_type": "Mini Paid Service",
+    "model": "Harrier",
+    "fuel": "Diesel",
+    "service_name": "Oil Filter Change",
+    "price": 792,
+    "labour": 1250
+  },
+  {
+    "id": 878,
+    "service_type": "Mini Paid Service",
+    "model": "Harrier",
+    "fuel": "Diesel",
+    "service_name": "Sunroof Greece",
+    "price": 800,
+    "labour": 1250
+  },
+  {
+    "id": 879,
+    "service_type": "Mini Paid Service",
+    "model": "Safari",
+    "fuel": "Diesel",
+    "service_name": "Distilled Water",
+    "price": 20,
+    "labour": 1250
+  },
+  {
+    "id": 880,
+    "service_type": "Mini Paid Service",
+    "model": "Safari",
+    "fuel": "Diesel",
+    "service_name": "Shampoo",
+    "price": 120,
+    "labour": 1250
+  },
+  {
+    "id": 881,
+    "service_type": "Mini Paid Service",
+    "model": "Safari",
+    "fuel": "Diesel",
+    "service_name": "Coolant Top Up",
+    "price": 100,
+    "labour": 1250
+  },
+  {
+    "id": 882,
+    "service_type": "Mini Paid Service",
+    "model": "Safari",
+    "fuel": "Diesel",
+    "service_name": "Oil Filter Change",
+    "price": 792,
+    "labour": 1250
+  },
+  {
+    "id": 883,
+    "service_type": "Mini Paid Service",
+    "model": "Safari",
+    "fuel": "Diesel",
+    "service_name": "Sunroof Greece",
+    "price": 800,
+    "labour": 1250
+  },
+  {
+    "id": 926,
+    "service_type": "Mini Paid Service",
+    "model": "Safari",
+    "fuel": "Diesel",
+    "service_name": "oil Top up",
+    "price": 650,
+    "labour": 1250
+  }
+]
