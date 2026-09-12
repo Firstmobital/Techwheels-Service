@@ -1383,12 +1383,12 @@ export default function ServiceAdvisorPage() {
         'Source',
         'Reg No',
         'KM Reading',
+        'Customer Problems',
         'Model',
         'Service Type',
         'JC Number',
         'Owner Name',
         'Owner Phone',
-        'Customer Problems',
         'Remark',
         'Branch',
         'Portal',
@@ -1438,12 +1438,12 @@ export default function ServiceAdvisorPage() {
           row.source || '',
           row.reg_number || '',
           kmReading,
+          problemSummary,
           row.model || '',
           serviceType,
           jcNumber,
           row.owner_name || '',
           row.owner_phone || '',
-          problemSummary,
           remark,
           row.branch || '',
           getFuelTypeLabel(row.fuel_type),
@@ -2220,11 +2220,11 @@ export default function ServiceAdvisorPage() {
                     <th>Created</th>
                     <th>Reg No</th>
                     <th>KM Reading</th>
+                    <th>Customer Problems</th>
                     <th>Model</th>
                     <th>Service Type</th>
                     <th>JC Number</th>
                     <th>Owner</th>
-                    <th>Customer Problems</th>
                     <th>Remark</th>
                     <th>Estimate</th>
                     <th>Invoice Amount (₹)</th>
@@ -2273,44 +2273,6 @@ export default function ServiceAdvisorPage() {
                             className="inp mono"
                           />
                         </td>
-                        <td>{row.model || '-'}</td>
-                        <td>
-                          <select
-                            value={draftServiceType}
-                            onChange={(event) => patchDraft(row.id, { service_type: event.target.value })}
-                            className="sel sel--service-type"
-                          >
-                            <option value="">Select service type</option>
-                            {serviceTypeOptions.map((option) => (
-                              <option key={option} value={option}>{option}</option>
-                            ))}
-                            {!serviceTypeOptions.some((option) => option.toLowerCase() === normalizedDraftServiceType) && normalizedDraftServiceType && (
-                              <option value={draftServiceType}>{draftServiceType}</option>
-                            )}
-                          </select>
-                        </td>
-                        <td>
-                          {(() => {
-                            const jcValue = String(draft.jc_number ?? '')
-                            const jcSize = Math.max(20, Math.min(34, jcValue.length || 20))
-                            return (
-                          <input
-                            value={draft.jc_number}
-                            onChange={(event) =>
-                              patchDraft(row.id, { jc_number: event.target.value.toUpperCase() })
-                            }
-                            maxLength={25}
-                            placeholder="JC number"
-                            size={jcSize}
-                            className="inp mono inp--jc"
-                          />
-                            )
-                          })()}
-                        </td>
-                        <td className="td-owner">
-                          <div className="strong owner-name">{row.owner_name || '-'}</div>
-                          <div className="mono owner-phone">{row.owner_phone || '-'}</div>
-                        </td>
                         <td className="td-problems">
                           {(() => {
                             const regKey = String(row.reg_number || '').trim().toUpperCase().replace(/[\s-]/g, '')
@@ -2350,6 +2312,44 @@ export default function ServiceAdvisorPage() {
                               </div>
                             )
                           })()}
+                        </td>
+                        <td>{row.model || '-'}</td>
+                        <td>
+                          <select
+                            value={draftServiceType}
+                            onChange={(event) => patchDraft(row.id, { service_type: event.target.value })}
+                            className="sel sel--service-type"
+                          >
+                            <option value="">Select service type</option>
+                            {serviceTypeOptions.map((option) => (
+                              <option key={option} value={option}>{option}</option>
+                            ))}
+                            {!serviceTypeOptions.some((option) => option.toLowerCase() === normalizedDraftServiceType) && normalizedDraftServiceType && (
+                              <option value={draftServiceType}>{draftServiceType}</option>
+                            )}
+                          </select>
+                        </td>
+                        <td>
+                          {(() => {
+                            const jcValue = String(draft.jc_number ?? '')
+                            const jcSize = Math.max(20, Math.min(34, jcValue.length || 20))
+                            return (
+                          <input
+                            value={draft.jc_number}
+                            onChange={(event) =>
+                              patchDraft(row.id, { jc_number: event.target.value.toUpperCase() })
+                            }
+                            maxLength={25}
+                            placeholder="JC number"
+                            size={jcSize}
+                            className="inp mono inp--jc"
+                          />
+                            )
+                          })()}
+                        </td>
+                        <td className="td-owner">
+                          <div className="strong owner-name">{row.owner_name || '-'}</div>
+                          <div className="mono owner-phone">{row.owner_phone || '-'}</div>
                         </td>
                         <td>
                           <textarea
