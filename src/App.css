@@ -664,41 +664,55 @@ table.tbl { width: 100%; border-collapse: collapse; font-size: 13.5px; }
   height: calc(100dvh - var(--nav-h));
   max-height: calc(100dvh - var(--nav-h));
   overflow: hidden;
-  padding-top: 16px;
-  padding-bottom: 14px;
+  overflow-x: hidden;
+  padding-top: 12px;
+  padding-bottom: 12px;
 }
 .acct-page .pagehead {
-  margin-bottom: 8px;
+  margin-bottom: 6px;
   gap: 10px;
   align-items: center;
+  flex-wrap: nowrap;
 }
-.acct-page .pagehead h1 { font-size: 20px; }
-.acct-page .pagehead .greet { margin-bottom: 2px; }
-.acct-page .pagehead p {
-  margin-top: 2px;
-  font-size: 12.5px;
-  line-height: 1.35;
-  display: -webkit-box;
-  -webkit-line-clamp: 1;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
+.acct-page .pagehead h1 {
+  font-size: 20px;
+  line-height: 1.2;
+  margin: 0;
+  min-width: 0;
 }
-.acct-toolbar {
+.acct-pagehead-actions {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
+  gap: 8px;
   flex-wrap: wrap;
-  margin-bottom: 8px;
+  flex: none;
 }
-.acct-toolbar .brx-pipeline {
+.acct-filter-strip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  margin-bottom: 8px;
+  min-width: 0;
+}
+.acct-filter-strip .brx-pipeline {
   margin: 0;
   gap: 6px;
+  flex: 0 0 auto;
 }
-.acct-toolbar .inp {
-  flex: 1 1 220px;
-  min-width: 180px;
-  max-width: 320px;
+.acct-filter-strip .acct-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.acct-filter-strip .inp {
+  flex: 0 1 220px;
+  min-width: 160px;
+  max-width: 260px;
+  margin-left: auto;
 }
 .acct-page .brx-pipe-pill {
   padding: 5px 10px;
@@ -707,7 +721,7 @@ table.tbl { width: 100%; border-collapse: collapse; font-size: 13.5px; }
 .acct-page .brx-pipe-pill__n { font-size: 16px; }
 .acct-page .brx-pipeline {
   gap: 6px;
-  margin-bottom: 8px;
+  margin-bottom: 0;
   margin-top: 0;
 }
 .acct-page .brx-recov-kpis,
@@ -745,7 +759,7 @@ table.tbl { width: 100%; border-collapse: collapse; font-size: 13.5px; }
   flex-wrap: wrap;
   gap: 6px;
   align-items: center;
-  margin-bottom: 8px;
+  margin-bottom: 0;
 }
 .acct-table-panel {
   flex: 1 1 auto;
@@ -794,6 +808,14 @@ table.tbl { width: 100%; border-collapse: collapse; font-size: 13.5px; }
     height: auto;
     max-height: none;
     overflow: visible;
+  }
+  .acct-page .pagehead {
+    flex-wrap: wrap;
+  }
+  .acct-filter-strip .inp {
+    margin-left: 0;
+    max-width: none;
+    flex: 1 1 100%;
   }
   .acct-page .brx-recov-kpis,
   .acct-page .acct-kpis {

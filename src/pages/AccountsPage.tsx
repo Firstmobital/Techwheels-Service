@@ -636,15 +636,8 @@ export default function AccountsPage() {
   return (
     <div className="page acct-page">
       <div className="pagehead">
-        <div>
-          <div className="greet">Accounts</div>
-          <h1>Accounts desk</h1>
-          <p>
-            Mechanical cases after Service Advisor Mark Done. Bodyshop cases after invoice number and billed amount.
-            Bodyshop receipts post to the shared settlement ledger. Recovery remains the insurance-due follow-up book. This is not BUSY export.
-          </p>
-        </div>
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+        <h1>Accounts desk</h1>
+        <div className="acct-pagehead-actions">
           <button type="button" className="btn" onClick={() => void load()} disabled={loading}>
             {loading ? 'Loading…' : 'Refresh'}
           </button>
@@ -661,7 +654,7 @@ export default function AccountsPage() {
         </div>
       )}
 
-      <div className="acct-toolbar">
+      <div className="acct-filter-strip">
         <div className="brx-pipeline">
           <button
             type="button"
@@ -679,6 +672,46 @@ export default function AccountsPage() {
             <span className="brx-pipe-pill__n">{bsRows.length}</span>
             <span className="brx-pipe-pill__l">Bodyshop<small>Invoice + billed</small></span>
           </button>
+        </div>
+        <div className="acct-filters">
+          <button
+            type="button"
+            className={`brx-pipe-pill ${year === 'all' ? 'is-active' : ''}`}
+            onClick={() => { setYear('all'); setMonth('all') }}
+          >
+            <span className="brx-pipe-pill__n">{section === 'mechanical' ? mechRows.length : bsRows.length}</span>
+            <span className="brx-pipe-pill__l">All years<small>{section === 'mechanical' ? 'Mark Done date' : 'invoice date'}</small></span>
+          </button>
+          {years.map((y) => (
+            <button
+              key={y.year}
+              type="button"
+              className={`brx-pipe-pill ${year === y.year ? 'is-active' : ''}`}
+              onClick={() => { setYear(y.year); setMonth('all') }}
+            >
+              <span className="brx-pipe-pill__n">{y.count}</span>
+              <span className="brx-pipe-pill__l">{y.year === 0 ? 'No date' : String(y.year)}<small>{y.count} JC</small></span>
+            </button>
+          ))}
+          {year !== 'all' && (
+            <>
+              <button type="button" className={`brx-pipe-pill ${month === 'all' ? 'is-active' : ''}`} onClick={() => setMonth('all')}>
+                <span className="brx-pipe-pill__n">{section === 'mechanical' ? yearScopedMech.length : yearScopedBs.length}</span>
+                <span className="brx-pipe-pill__l">All months<small>{year === 0 ? 'no date' : String(year)}</small></span>
+              </button>
+              {months.map((m) => (
+                <button
+                  key={m.month}
+                  type="button"
+                  className={`brx-pipe-pill ${month === m.month ? 'is-active' : ''}`}
+                  onClick={() => setMonth(m.month)}
+                >
+                  <span className="brx-pipe-pill__n">{m.count}</span>
+                  <span className="brx-pipe-pill__l">{monthLabel(year === 0 ? 0 : year, m.month)}<small>{m.count} JC</small></span>
+                </button>
+              ))}
+            </>
+          )}
         </div>
         <input
           className="inp"
@@ -758,47 +791,6 @@ export default function AccountsPage() {
           />
         </div>
       )}
-
-      <div className="acct-filters">
-        <button
-          type="button"
-          className={`brx-pipe-pill ${year === 'all' ? 'is-active' : ''}`}
-          onClick={() => { setYear('all'); setMonth('all') }}
-        >
-          <span className="brx-pipe-pill__n">{section === 'mechanical' ? mechRows.length : bsRows.length}</span>
-          <span className="brx-pipe-pill__l">All years<small>{section === 'mechanical' ? 'Mark Done date' : 'invoice date'}</small></span>
-        </button>
-        {years.map((y) => (
-          <button
-            key={y.year}
-            type="button"
-            className={`brx-pipe-pill ${year === y.year ? 'is-active' : ''}`}
-            onClick={() => { setYear(y.year); setMonth('all') }}
-          >
-            <span className="brx-pipe-pill__n">{y.count}</span>
-            <span className="brx-pipe-pill__l">{y.year === 0 ? 'No date' : String(y.year)}<small>{y.count} JC</small></span>
-          </button>
-        ))}
-        {year !== 'all' && (
-          <>
-            <button type="button" className={`brx-pipe-pill ${month === 'all' ? 'is-active' : ''}`} onClick={() => setMonth('all')}>
-              <span className="brx-pipe-pill__n">{section === 'mechanical' ? yearScopedMech.length : yearScopedBs.length}</span>
-              <span className="brx-pipe-pill__l">All months<small>{year === 0 ? 'no date' : String(year)}</small></span>
-            </button>
-            {months.map((m) => (
-              <button
-                key={m.month}
-                type="button"
-                className={`brx-pipe-pill ${month === m.month ? 'is-active' : ''}`}
-                onClick={() => setMonth(m.month)}
-              >
-                <span className="brx-pipe-pill__n">{m.count}</span>
-                <span className="brx-pipe-pill__l">{monthLabel(year === 0 ? 0 : year, m.month)}<small>{m.count} JC</small></span>
-              </button>
-            ))}
-          </>
-        )}
-      </div>
 
       {section === 'mechanical' ? (
         <div className="brx-panel acct-table-panel">
