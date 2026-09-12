@@ -98,6 +98,11 @@ function parseCustomerProblemFeedback(feedbackText: string | null | undefined): 
   if (!feedbackText) return { issues: [], summary: '' }
   const text = feedbackText.trim()
 
+  // Ignore technical JSON payloads (estimates, payments, etc.)
+  if (text.startsWith('{') || text.startsWith('{"')) {
+    return { issues: [], summary: '' }
+  }
+
   const issueMatch = text.match(/Issue:\s*([^|]+)/i)
   const kmMatch = text.match(/KM:\s*([^|]+)/i)
   const km = kmMatch ? kmMatch[1].trim() : undefined
@@ -119,7 +124,7 @@ function parseCustomerProblemFeedback(feedbackText: string | null | undefined): 
 
   const clean = text.replace(/^\[Complaint\s*-[^\]]+\]\s*/i, '').replace(/^Customer Remark[^:]*:\s*/i, '').trim()
   return {
-    issues: [clean],
+    issues: clean ? [clean] : [],
     summary: clean,
     km: km && km !== 'N/A' ? km : undefined,
   }
@@ -615,9 +620,12 @@ export default function ServiceAdvisorPage() {
         for (const row of data) {
           const reg = String(row.vehicle_registration_number || '').trim().toUpperCase().replace(/[\s-]/g, '')
           if (!reg) continue
-          if (row.feedback_text?.startsWith('{"estimate_no"')) continue
+          if (row.mode === 'customer_estimate_payload' || row.mode === 'customer_payment_payload') continue
+          if (row.feedback_text?.trim().startsWith('{')) continue
 
           const parsed = parseCustomerProblemFeedback(row.feedback_text)
+          if (parsed.issues.length === 0) continue
+
           if (!map[reg]) {
             map[reg] = {
               count: parsed.issues.length || 1,
