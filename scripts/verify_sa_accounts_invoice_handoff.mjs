@@ -44,6 +44,8 @@ const cases = [
   ['TEST 1 parse 13166.08', parseInvoiceAmountInput('13166.08').value === 13166.08],
   ['TEST 2 parse 2500', parseInvoiceAmountInput('2500').value === 2500],
   ['blank allowed', parseInvoiceAmountInput('').value === null],
+  ['explicit 0 is valid', parseInvoiceAmountInput('0').ok && parseInvoiceAmountInput('0').value === 0],
+  ['explicit 0.00 is valid', parseInvoiceAmountInput('0.00').ok && parseInvoiceAmountInput('0.00').value === 0],
   ['negative rejected', parseInvoiceAmountInput('-1').ok === false],
   ['sanitize strips minus', sanitizeInvoiceAmountInput('-13166.08') === '13166.08'],
   ['TEST 3 SA amount prefill', mechanicalInvoiceAmountPrefill({ billed_amount: null, expected_invoice_amount: 2500 }) === '2500'],

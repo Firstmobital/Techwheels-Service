@@ -8,7 +8,6 @@ import {
   fetchServiceAdvisorSummaryCounts,
   updateServiceAdvisorEntry,
   uploadServiceAdvisorEstimate,
-  markServiceAdvisorInvoiceDone,
   getDealerScopeContext,
   generateComplaintLink,
   type ReceptionEntryPageCursor,
@@ -539,8 +538,6 @@ export default function ServiceAdvisorPage() {
   const [selectedAdvisor, setSelectedAdvisor] = useState<string>('all')
   const [search, setSearch] = useState('')
   const [, setHasMultipleDealers] = useState(false)
-  const [canModifyReception, setCanModifyReception] = useState(false)
-  const [canModifyServiceAdvisor, setCanModifyServiceAdvisor] = useState(false)
 
   const [summaryCounts, setSummaryCounts] = useState<ServiceAdvisorSummaryCounts | null>(null)
   const [summaryFromClient, setSummaryFromClient] = useState(false)
@@ -560,7 +557,6 @@ export default function ServiceAdvisorPage() {
   const [toastMsg, setToastMsg] = useState<string | null>(null)
   const [savingId, setSavingId] = useState<number | null>(null)
   const [uploadingId, setUploadingId] = useState<number | null>(null)
-  const [uploadingInvoiceId, setUploadingInvoiceId] = useState<number | null>(null)
   const [serviceTypeOptions, setServiceTypeOptions] = useState<string[]>(DEFAULT_SERVICE_TYPE_OPTIONS)
   const [fuelTypeOptions, setFuelTypeOptions] = useState<string[]>([])
   const [completedJobCardNumbers, setCompletedJobCardNumbers] = useState<Set<string>>(new Set())
@@ -985,45 +981,24 @@ export default function ServiceAdvisorPage() {
         setIsAdmin(false)
         setIsSuperAdmin(false)
         setHasMultipleDealers(false)
-        setCanModifyReception(false)
-        setCanModifyServiceAdvisor(false)
         return false
       }
 
       const userId = session.session.user.id
 
-      const [{ data: profile }, { data: permissionRows }] = await Promise.all([
-        supabase
-          .from('users')
-          .select('role, is_active')
-          .eq('id', userId)
-          .maybeSingle(),
-        supabase.rpc('get_all_my_permissions'),
-      ])
+      const { data: profile } = await supabase
+        .from('users')
+        .select('role, is_active')
+        .eq('id', userId)
+        .maybeSingle()
 
       const role = String((profile as { role?: string | null } | null)?.role ?? '').trim().toLowerCase()
       const isActive = (profile as { is_active?: boolean | null } | null)?.is_active === true
       const nextIsAdmin = role === 'admin' && isActive
       const nextIsSuperAdmin = role === 'super_admin' && isActive
 
-      type PermissionRow = {
-        module_name?: string | null
-        can_modify?: boolean | null
-      }
-
-      const permissions = (permissionRows ?? []) as PermissionRow[]
-      const nextCanModifyReception = permissions.some(
-        (row) => String(row.module_name ?? '').trim().toLowerCase() === 'reception' && row.can_modify === true,
-      )
-      const nextCanModifyServiceAdvisor = permissions.some(
-        (row) => String(row.module_name ?? '').trim().toLowerCase() === 'service_advisor' && row.can_modify === true,
-      )
-
-
       setIsAdmin(nextIsAdmin)
       setIsSuperAdmin(nextIsSuperAdmin)
-      setCanModifyReception(nextCanModifyReception)
-      setCanModifyServiceAdvisor(nextCanModifyServiceAdvisor)
 
       // Get dealer scope context
       const scopeRes = await getDealerScopeContext()
@@ -1036,17 +1011,8 @@ export default function ServiceAdvisorPage() {
       setIsAdmin(false)
       setIsSuperAdmin(false)
       setHasMultipleDealers(false)
-      setCanModifyReception(false)
-      setCanModifyServiceAdvisor(false)
       return false
     }
-  }
-
-  function canUpdateRow(row: ReceptionEntryRow): boolean {
-    void row
-    if (isAdmin || isSuperAdmin) return true
-    if (canModifyReception) return true
-    return canModifyServiceAdvisor
   }
 
   function getLoadRange(): DateRange {
@@ -1749,6 +1715,12 @@ export default function ServiceAdvisorPage() {
         [id]: draftFromRow(updatedRow),
       }))
     }
+
+    // Preserve the Mark Done WhatsApp send on the first invoice completion only.
+    const becameComplete = Boolean(updatedRow?.invoice_done_at) && !row?.invoice_done_at
+    if (becameComplete && updatedRow) {
+      await handleSendWhatsApp({ ...(row ?? updatedRow), ...updatedRow })
+    }
   }
 
   async function handleEstimateUpload(id: number, file: File) {
@@ -1784,70 +1756,6 @@ export default function ServiceAdvisorPage() {
     if (res.data) {
       const updatedRow = res.data as ReceptionEntryRow
       setRows((prev) => prev.map((r) => (r.id === id ? updatedRow : r)))
-    }
-  }
-
-  async function handleInvoiceDone(row: ReceptionEntryRow) {
-    if (isNoEstimateInvoiceRequiredServiceType(row.service_type)) {
-      showToast('No invoice action required for Rusting service type')
-      return
-    }
-
-    if (row && !canUpdateRow(row)) {
-      const deniedMessage = 'You do not have edit permission for Mark Done.'
-      setError(deniedMessage)
-      showToast(deniedMessage)
-      return
-    }
-
-    const draft = drafts[row.id] ?? EMPTY_DRAFT
-    const parsedAmount = parseInvoiceAmountInput(draft.invoice_amount)
-    if (!parsedAmount.ok) {
-      setError(parsedAmount.error)
-      showToast(parsedAmount.error)
-      return
-    }
-
-    setUploadingInvoiceId(row.id)
-    setError(null)
-
-    try {
-      const res = await markServiceAdvisorInvoiceDone(row.id, {
-        expected_invoice_amount: parsedAmount.value,
-      })
-
-      if (res.error) {
-        setError(res.error)
-        showToast(`Failed to mark invoice: ${res.error}`)
-        return
-      }
-
-      showToast('Invoice marked as done')
-      // Patch local row instead of full reload to avoid statement_timeout on unbounded scans.
-      if (res.data) {
-        const updatedRow = res.data as ReceptionEntryRow
-        setRows((prev) => prev.map((r) => (r.id === updatedRow.id ? updatedRow : r)))
-        setDrafts((prev) => ({
-          ...prev,
-          [updatedRow.id]: {
-            ...(prev[updatedRow.id] ?? draftFromRow(updatedRow)),
-            invoice_amount: formatInvoiceAmountDraft(updatedRow.expected_invoice_amount),
-          },
-        }))
-        setDirtyRowIds((prev) => {
-          const next = new Set(prev)
-          next.delete(updatedRow.id)
-          return next
-        })
-      }
-      // Reuse the existing WA compose flow so Mark Done always triggers one WA send action.
-      await handleSendWhatsApp(row)
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Unable to mark invoice as done'
-      setError(message)
-      showToast(`Failed to mark invoice: ${message}`)
-    } finally {
-      setUploadingInvoiceId(null)
     }
   }
 
@@ -2315,7 +2223,6 @@ export default function ServiceAdvisorPage() {
                     <th>Remark</th>
                     <th>Estimate</th>
                     <th>Invoice Amount (₹)</th>
-                    <th>Invoice</th>
                     <th>Action</th>
                   </tr>
                 </thead>
@@ -2331,7 +2238,6 @@ export default function ServiceAdvisorPage() {
                     const hasJcNumber = Boolean(String(draft.jc_number ?? '').trim())
                     const isBodyshopPending = isBodyshopRow && !hasJcNumber
                     const isCompleted = completedJobCardNumbers.has((row.jc_number ?? '').toUpperCase())
-                    const canMarkDone = canUpdateRow(row) && isCompleted
                     const isHoldRow = holdJobCardNumbers.has((row.jc_number ?? '').toUpperCase())
                     const isInProcessRow = inProcessJobCardNumbers.has((row.jc_number ?? '').toUpperCase())
                     const rowUrgency = classifyRowUrgency(row, isCompleted, isHoldRow, isInProcessRow)
@@ -2489,36 +2395,6 @@ export default function ServiceAdvisorPage() {
                               className="inp mono inp--invoice-amount"
                               aria-label="Invoice Amount (₹)"
                             />
-                          )}
-                        </td>
-                        <td className="td-invoice">
-                          {isBodyshopRow ? (
-                            <div className="invoice-col">
-                              <span className="td-muted-nowrap">Not applicable</span>
-                            </div>
-                          ) : isNoActionRequiredRow ? (
-                            <div className="invoice-col">
-                              <span className="td-muted-nowrap">Not required</span>
-                            </div>
-                          ) : (
-                            <div className="invoice-col">
-                              {row.invoice_done_at ? (
-                                <span className="invoice-status">
-                                  <Icon name="checksm" size={13} strokeWidth={2.4} />
-                                  Done
-                                </span>
-                              ) : (
-                                <button
-                                  type="button"
-                                  onClick={() => void handleInvoiceDone(row)}
-                                  disabled={uploadingInvoiceId === row.id || !canMarkDone}
-                                  className="tbtn tbtn--accent"
-                                  title={!canUpdateRow(row) ? 'Edit permission required' : !isCompleted ? 'Work status must be completed in Floor Incharge first' : undefined}
-                                >
-                                  {uploadingInvoiceId === row.id ? 'Marking...' : 'Mark Done'}
-                                </button>
-                              )}
-                            </div>
                           )}
                         </td>
                         <td className="td-save">

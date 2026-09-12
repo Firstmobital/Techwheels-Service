@@ -1442,35 +1442,6 @@ export async function uploadServiceAdvisorInvoice(
   return ok(refetch.data)
 }
 
-export async function markServiceAdvisorInvoiceDone(
-  id: number,
-  input?: { expected_invoice_amount?: number | null },
-): Promise<ApiResult<ReceptionEntryRow>> {
-  try {
-    const expectedInvoiceAmount = normalizeExpectedInvoiceAmount(input?.expected_invoice_amount)
-    if (input?.expected_invoice_amount != null && expectedInvoiceAmount == null) {
-      return fail('Invoice Amount cannot be negative')
-    }
-
-    const { data, error } = await supabase.rpc('service_advisor_mark_invoice_done', {
-      p_reception_entry_id: id,
-      p_expected_invoice_amount: expectedInvoiceAmount,
-    })
-
-    if (error) return fail(error)
-
-    const row = (Array.isArray(data) ? data[0] : data) as ReceptionEntryRow | undefined
-    if (!row) {
-      return fail('Unable to mark invoice as done. Please refresh and retry.')
-    }
-
-    const enriched = await enrichEntriesWithEmployeeBranch([row])
-    return ok(enriched[0] ?? row)
-  } catch (error) {
-    return fail(error)
-  }
-}
-
 /* ─────────────────────────────────────────────────────────────────────────────
    Vehicle Lookup by Reg Number
    Fetches the most recent reception entry + vehicles table for auto-fill

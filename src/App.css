@@ -1638,7 +1638,6 @@ code.k--b { background: var(--accent-soft); color: var(--accent); }
 
 .sa-tbl .td-estimate,
 .sa-tbl .td-invoice-amount,
-.sa-tbl .td-invoice,
 .sa-tbl .td-save {
   min-width: 0;
 }
