@@ -79,8 +79,12 @@ export interface AccountsBodyshopCase {
   customer_remaining_amount: number | null
   customer_payment_status: string | null
   do_amount: number | null
+  do_status: string | null
+  do_released_amount: number | null
   insurance_due_amount: number | null
   do_payment_status: string | null
+  outstanding_amount: number | null
+  derived_payment_status: string | null
 }
 
 export interface UpsertMechanicalInvoiceInput {
@@ -476,11 +480,11 @@ export function settlementCardFromAccountsRow(row: AccountsBodyshopCase): Repair
     reinspection_at: null,
     parts_entry_status: 'billed',
     billed_amount: row.invoice_amount ?? row.billed_amount,
-    do_status: row.do_amount != null ? 'received' : null,
+    do_status: row.do_status ?? (row.do_amount != null ? 'received' : null),
     do_amount: row.do_amount,
     customer_diff_amount: row.customer_diff_amount,
     payment_slip_url: null,
-    payment_status: row.customer_payment_status,
+    payment_status: row.derived_payment_status ?? row.customer_payment_status,
     do_payment_status: row.do_payment_status,
     customer_payment_status: row.customer_payment_status,
     customer_settlement_kind: row.customer_settlement_kind,

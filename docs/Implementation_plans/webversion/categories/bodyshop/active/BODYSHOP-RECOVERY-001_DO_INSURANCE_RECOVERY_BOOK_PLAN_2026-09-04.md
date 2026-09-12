@@ -2,7 +2,7 @@
 
 **Plan ID:** BODYSHOP-RECOVERY-001  
 **Created:** 2026-09-04  
-**Last Updated:** 2026-09-04 (filters + More + Post Payment; DBL-0033)  
+**Last Updated:** 2026-09-12 (Accounts is an additional DO receipt surface; Recovery list unchanged)  
 **Priority:** HIGH  
 **Owner:** Bodyshop Team + Platform Team + Accounts  
 **Status:** Active (v1 DO-only)  
@@ -36,7 +36,7 @@ Add a fourth Bodyshop nav item **Bodyshop Recovery**. It is the accounts rupee b
 4. Period is **invoice_date**: year chips, then months after a year is selected. Default **All years**. Insurer dropdown uses card `insurance_company` (not DMS bill-to). Separate **Mismatch** dropdown (All cases / Mismatch) uses the same card-vs-DMS bill-to rule as the orange pill (C/O + M/S stripped). No This month / Last month / Custom pills.
 5. **More** is a read-only case sheet (customer, policy no, claim no, documents). **Post Payment** opens Stage 18 · DO Payment on this page. Repair Tracker is not required. Customer remaining stays off this page.
 6. Grant by named user in Admin → Permissions (`bodyshop_recovery` view). View is enough to list, open More, and post DO Main/GST/TDS. Do **not** add a `BS Recovery` Employee Master business role.
-7. **Org-wide visibility.** List, More, and DO post do not use dealer/branch/fuel. Customer posts and invoice/DO capture stay Repair Tracker (`bodyshop_repair` modify + dealer scope).
+7. **Org-wide visibility.** List, More, and DO post do not use dealer/branch/fuel. Invoice/DO capture stays Repair Tracker (`bodyshop_repair` modify + dealer scope). Accounts (`/accounts`, DBL-0055) may also post insurer/DO and customer-diff receipts onto the same `bodyshop_settlement_lines`. Recovery remains the insurance-due follow-up book; do not add a second ledger.
 8. **Cancelled repairs are not Recovery rows.** `list_bodyshop_do_recovery` excludes `overall_status = cancelled`. Delivered + unpaid still lists. Reception Delete is allowed only after Cancel (DBL-0036) — not for delivered cards.
 9. **More → View is org-wide.** Open Drive URL when stored; otherwise a signed autodoc URL. Recovery view/modify may SELECT `autodoc` objects under `service-advisor-bodyshop-docs` (DBL-0037). Do not require the viewer’s dealer code to match the file path.
 

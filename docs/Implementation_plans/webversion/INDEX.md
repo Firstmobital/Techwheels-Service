@@ -1,6 +1,6 @@
 # Web Version Plans Index
 
-Last Updated: 2026-09-11
+Last Updated: 2026-09-12
 Scope: Web project implementation plans only
 Authority: This index is the routing source for webversion plans
 
@@ -40,7 +40,7 @@ Use this file as daily command center:
 
 | Plan ID | Category | Status | Owner | File |
 |---|---|---|---|---|
-| ACCOUNTS-001 | accounts | Active (DBL-0053 Mechanical cutoff; DBL-0054 Bodyshop cutoff removed) | Accounts + Platform Team | `docs/Implementation_plans/webversion/categories/accounts/active/ACCOUNTS-001_MECHANICAL_BODYSHOP_ACCOUNTS_DESK_PLAN_2026-09-11.md` |
+| ACCOUNTS-001 | accounts | Active (DBL-0055 Accounts DO/customer receipts on settlement ledger) | Accounts + Platform Team | `docs/Implementation_plans/webversion/categories/accounts/active/ACCOUNTS-001_MECHANICAL_BODYSHOP_ACCOUNTS_DESK_PLAN_2026-09-11.md` |
 | BODYSHOP-FLOW | bodyshop | In Progress | Bodyshop Team | `docs/Implementation_plans/webversion/categories/bodyshop/active/Bodyshop-Flow.md` |
 | BODYSHOP-QUEUE-001 | bodyshop | Active | Bodyshop Team + Platform Team | `docs/Implementation_plans/webversion/categories/bodyshop/active/BODYSHOP-QUEUE-001_CANONICAL_STAGE_WORKLIST_BACKEND_PLAN_2026-06-20.md` |
 | BODYSHOP-EARNINGS-001 | bodyshop | Active | Bodyshop Team + Platform Team | `docs/Implementation_plans/webversion/categories/bodyshop/active/BODYSHOP-EARNINGS-001_BODYSHOP_TRACKER_SOLO_BONUS_SUPPORT_SPLIT_PLAN_2026-07-17.md` |

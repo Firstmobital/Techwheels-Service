@@ -4,6 +4,7 @@ Tracks documentation-sync updates for business logic, architecture, and access c
 
 ## 2026-09-12
 
+- Accounts Bodyshop Stage 18 is a complete settlement receipt modal: DO / insurance receipts and customer-diff receipts both write `bodyshop_settlement_lines`. Accounts users may post insurer/DO lines through the existing `bodyshop_settlement_can_post_do` helper. Recovery remains the insurance-due follow-up book on the same ledger. Mechanical `accounts_mechanical_payment_lines` is unchanged. Ledger: DBL-0055. Plan: `ACCOUNTS-001`.
 - Accounts Desk Mechanical listing starts 11-Sep-2026 (`invoice_done_at >= 2026-09-11 00:00:00+05:30`). Bodyshop listing is all billed cases; the 11-Sep date is not a Bodyshop cutoff (DBL-0054 corrects DBL-0053). Ledger: DBL-0053, DBL-0054. Plan: `ACCOUNTS-001`.
 
 ## 2026-09-11

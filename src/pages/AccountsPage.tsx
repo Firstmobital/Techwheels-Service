@@ -80,6 +80,23 @@ function kindLabel(kind: string | null | undefined) {
   return '—'
 }
 
+function bodyshopOutstanding(row: Pick<AccountsBodyshopCase, 'outstanding_amount' | 'insurance_due_amount' | 'customer_remaining_amount'>): number {
+  if (row.outstanding_amount != null) return Number(row.outstanding_amount)
+  return Number(row.insurance_due_amount ?? 0) + Number(row.customer_remaining_amount ?? 0)
+}
+
+function bodyshopOverallStatus(row: Pick<AccountsBodyshopCase, 'derived_payment_status'>): string {
+  return String(row.derived_payment_status ?? 'pending').toLowerCase()
+}
+
+function isBodyshopOverallReceived(row: Pick<AccountsBodyshopCase, 'derived_payment_status'>): boolean {
+  return bodyshopOverallStatus(row) === 'received'
+}
+
+function isBodyshopOutstandingOpen(row: Pick<AccountsBodyshopCase, 'outstanding_amount' | 'insurance_due_amount' | 'customer_remaining_amount'>): boolean {
+  return bodyshopOutstanding(row) > 0
+}
+
 function blobOf(...parts: Array<string | number | null | undefined>) {
   return parts.map((p) => String(p ?? '').toLowerCase()).join(' ')
 }
@@ -223,17 +240,11 @@ export default function AccountsPage() {
   }, [bsRows, yearScopedBs, year, month, search])
 
   const searchedBs = useMemo(() => {
-    if (bsFilter === 'remaining') {
-      return periodBs.filter((r) => {
-        if (isCustomerPaymentClosed(r)) return false
-        const kind = String(r.customer_settlement_kind ?? '').toLowerCase()
-        return kind === 'due' || kind === 'refund' || Number(r.customer_diff_amount ?? 0) !== 0
-      })
-    }
-    if (bsFilter === 'received') return periodBs.filter((r) => isCustomerPaymentClosed(r))
+    if (bsFilter === 'remaining') return periodBs.filter((r) => isBodyshopOutstandingOpen(r))
+    if (bsFilter === 'received') return periodBs.filter((r) => isBodyshopOverallReceived(r))
     if (bsFilter === 'pending') {
       return periodBs.filter((r) => {
-        const status = String(r.customer_payment_status ?? 'pending').toLowerCase()
+        const status = bodyshopOverallStatus(r)
         return status === 'pending' || status === 'partial'
       })
     }
@@ -249,15 +260,11 @@ export default function AccountsPage() {
   }, [searchedMech])
 
   const bsKpis = useMemo(() => {
-    const remainingRows = periodBs.filter((r) => {
-      if (isCustomerPaymentClosed(r)) return false
-      const kind = String(r.customer_settlement_kind ?? '').toLowerCase()
-      return kind === 'due' || kind === 'refund' || Number(r.customer_diff_amount ?? 0) !== 0
-    })
-    const remaining = remainingRows.reduce((s, r) => s + Number(r.customer_remaining_amount ?? 0), 0)
-    const pending = periodBs.filter((r) => String(r.customer_payment_status ?? 'pending').toLowerCase() === 'pending').length
-    const partial = periodBs.filter((r) => String(r.customer_payment_status ?? '').toLowerCase() === 'partial').length
-    const received = periodBs.filter((r) => isCustomerPaymentClosed(r)).length
+    const remainingRows = periodBs.filter((r) => isBodyshopOutstandingOpen(r))
+    const remaining = remainingRows.reduce((s, r) => s + bodyshopOutstanding(r), 0)
+    const pending = periodBs.filter((r) => bodyshopOverallStatus(r) === 'pending').length
+    const partial = periodBs.filter((r) => bodyshopOverallStatus(r) === 'partial').length
+    const received = periodBs.filter((r) => isBodyshopOverallReceived(r)).length
     return { remainingCount: remainingRows.length, remaining, pending, partial, received, billed: periodBs.length }
   }, [periodBs])
 
@@ -474,11 +481,16 @@ export default function AccountsPage() {
       'Invoice date': r.invoice_date ?? '',
       'Billed amount': r.invoice_amount ?? r.billed_amount ?? '',
       'DO Amount (₹)': r.do_amount ?? '',
+      'DO received': r.do_released_amount ?? '',
+      'DO remaining': r.insurance_due_amount ?? '',
+      'DO payment status': r.do_payment_status ?? '',
       'Customer diff': r.customer_diff_amount ?? '',
       Kind: r.customer_settlement_kind ?? '',
-      Remaining: r.customer_remaining_amount ?? '',
-      'Customer payment (CP)': r.customer_posted_amount ?? 0,
+      'Customer remaining': r.customer_remaining_amount ?? '',
+      'Customer received': r.customer_posted_amount ?? 0,
       'Customer payment status': r.customer_payment_status ?? '',
+      Outstanding: r.outstanding_amount ?? '',
+      'Overall payment status': r.derived_payment_status ?? '',
     })))
     const wb = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(wb, sheet, 'Bodyshop')
@@ -495,7 +507,7 @@ export default function AccountsPage() {
           <h1>Accounts desk</h1>
           <p>
             Mechanical cases after Service Advisor Mark Done. Bodyshop cases after invoice number and billed amount.
-            This is not BUSY export and not Recovery insurance due.
+            Bodyshop receipts post to the shared settlement ledger. Recovery remains the insurance-due follow-up book. This is not BUSY export.
           </p>
         </div>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
@@ -568,7 +580,7 @@ export default function AccountsPage() {
       ) : (
         <div className="brx-recov-kpis">
           <button type="button" className={`brx-recov-kpi ${bsFilter === 'remaining' ? 'is-active' : ''}`} onClick={() => setBsFilter('remaining')}>
-            <span className="brx-recov-kpi__l">Customer remaining</span>
+            <span className="brx-recov-kpi__l">Outstanding</span>
             <span className="brx-recov-kpi__v">{inr(bsKpis.remaining)}</span>
             <span className="brx-recov-kpi__s">{bsKpis.remainingCount} vehicle{bsKpis.remainingCount === 1 ? '' : 's'}</span>
           </button>
@@ -580,12 +592,12 @@ export default function AccountsPage() {
           <button type="button" className={`brx-recov-kpi ${bsFilter === 'received' ? 'is-active' : ''}`} onClick={() => setBsFilter('received')}>
             <span className="brx-recov-kpi__l">Received</span>
             <span className="brx-recov-kpi__v">{bsKpis.received}</span>
-            <span className="brx-recov-kpi__s">Customer side closed</span>
+            <span className="brx-recov-kpi__s">Overall settlement closed</span>
           </button>
           <button type="button" className={`brx-recov-kpi ${bsFilter === 'pending' ? 'is-active' : ''}`} onClick={() => setBsFilter('pending')}>
             <span className="brx-recov-kpi__l">Pending / Partial</span>
             <span className="brx-recov-kpi__v">{bsKpis.pending} / {bsKpis.partial}</span>
-            <span className="brx-recov-kpi__s">Customer payment open</span>
+            <span className="brx-recov-kpi__s">Overall settlement open</span>
           </button>
         </div>
       )}
@@ -720,9 +732,9 @@ export default function AccountsPage() {
       ) : (
         <div className="brx-panel acct-table-panel">
           <div className="brx-panel-h">
-            {bsFilter === 'remaining' && 'Bodyshop · Customer remaining'}
+            {bsFilter === 'remaining' && 'Bodyshop · Outstanding'}
             {bsFilter === 'all' && 'Bodyshop · All billed'}
-            {bsFilter === 'received' && 'Bodyshop · Received'}
+            {bsFilter === 'received' && 'Bodyshop · Overall received'}
             {bsFilter === 'pending' && 'Bodyshop · Pending / Partial'}
           </div>
           {loading && bsRows.length === 0 ? (
@@ -738,11 +750,13 @@ export default function AccountsPage() {
                   <th>Customer</th>
                   <th>Invoice</th>
                   <th>Billed</th>
-                  <th>DO Amount (₹)*</th>
+                  <th>DO Amount</th>
+                  <th>DO Remaining</th>
                   <th>Diff / Kind</th>
-                  <th>Remaining</th>
-                  <th>Customer payment (CP)</th>
-                  <th>Status</th>
+                  <th>Customer Remaining</th>
+                  <th>Customer Received</th>
+                  <th>Outstanding</th>
+                  <th>Overall Status</th>
                   <th></th>
                 </tr>
               </thead>
@@ -763,6 +777,7 @@ export default function AccountsPage() {
                     </td>
                     <td>{inr(r.invoice_amount ?? r.billed_amount)}</td>
                     <td>{inr(r.do_amount)}</td>
+                    <td>{inr(r.insurance_due_amount)}</td>
                     <td>
                       <div>{inr(r.customer_diff_amount)}</div>
                       <div style={{ color: 'var(--muted)', fontSize: 12 }}>{kindLabel(r.customer_settlement_kind)}</div>
@@ -771,9 +786,10 @@ export default function AccountsPage() {
                     <td style={Number(r.customer_posted_amount) > 0 ? { fontWeight: 600 } : undefined}>
                       {inr(r.customer_posted_amount ?? 0)}
                     </td>
+                    <td>{inr(bodyshopOutstanding(r))}</td>
                     <td>
-                      <span className={`brx-settle-pill is-${String(r.customer_payment_status ?? 'pending').toLowerCase()}`}>
-                        {settlementStatusLabel(r.customer_payment_status)}
+                      <span className={`brx-settle-pill is-${bodyshopOverallStatus(r)}`}>
+                        {settlementStatusLabel(r.derived_payment_status)}
                       </span>
                     </td>
                     <td>
@@ -1061,7 +1077,7 @@ export default function AccountsPage() {
         <div className="modal-back" role="presentation" onClick={() => { setPostRow(null); setPostCard(null); void load() }}>
           <div className="modal modal--xl" role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
             <div className="modal__head">
-              <h3>Stage 18 · Customer Diff Payment · {postRow.job_card_no}</h3>
+              <h3>Stage 18 · Settlement Receipt · {postRow.job_card_no}</h3>
               <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                 {isCustomerPaymentClosed({
                   customer_payment_status: postCard.customer_payment_status,
@@ -1091,7 +1107,7 @@ export default function AccountsPage() {
                 card={postCard}
                 onCardChange={setPostCard}
                 toast={flash}
-                variant="customer_payment"
+                variant="accounts_receipt"
               />
             </div>
             <div className="modal__foot">

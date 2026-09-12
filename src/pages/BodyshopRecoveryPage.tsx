@@ -584,7 +584,7 @@ export default function BodyshopRecoveryPage() {
                 <th>Released</th>
                 <th>Insurance due</th>
                 <th>Customer payment (CP)</th>
-                <th>Status</th>
+                <th>DO Payment Status</th>
                 <th>Ageing</th>
                 <th></th>
               </tr>

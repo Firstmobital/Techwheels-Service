@@ -23,7 +23,9 @@
 ## Bodyshop
 
 - [ ] Invoice number + billed amount appears, including insurance due ₹0
-- [ ] Default filter hides `kind=none` and received
-- [ ] Post Payment opens Stage 18 Customer Diff only (no Main/GST/TDS)
-- [ ] Customer receipt/refund updates CP and remaining
+- [ ] Default filter is outstanding > 0 (DO remaining or customer remaining)
+- [ ] Post Payment opens Stage 18 Settlement Receipt (Section A DO + Section B customer)
+- [ ] Customer receipt/refund updates customer posted / remaining only
+- [ ] DO receipt posts via existing MAIN path; insurance due and overall status update
+- [ ] Example 43395 / 41195 / 2200: ₹30k DO → due 11195 overall Partial; ₹2200 customer → customer Received overall still Partial; remaining DO → overall Received
 - [ ] Recovery list still insurance due only; `/busy` still exports
