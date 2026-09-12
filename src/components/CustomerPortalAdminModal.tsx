@@ -99,7 +99,7 @@ export function CustomerPortalAdminModal({ isOpen, onClose, isAdmin = true }: Cu
               <div className="flex items-center gap-2">
                 <h2 className="text-base font-bold text-white">Customer Form & Bodyshop Admin Hub</h2>
                 <span className="rounded-full bg-emerald-500/20 px-2.5 py-0.5 text-xs font-semibold text-emerald-300 border border-emerald-500/40">
-                  Admin Scope
+                  {isAdmin ? 'Admin Scope' : 'Advisor Scope'}
                 </span>
               </div>
               <p className="text-xs text-slate-300">

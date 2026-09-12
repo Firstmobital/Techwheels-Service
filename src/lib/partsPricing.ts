@@ -58,11 +58,14 @@ export function getServicePrice(
   const mLower = model.toLowerCase().trim()
   const fLower = fuel.toLowerCase().trim()
 
+  const sTypeLower = serviceType.toLowerCase().trim()
+
   const match = ALL_PARTS_PRICING.find((item) => {
     return (
       item.service_name.toLowerCase().includes(sNameLower) &&
       item.model.toLowerCase().includes(mLower) &&
-      (item.fuel.toLowerCase() === fLower || item.fuel === '')
+      (item.fuel.toLowerCase() === fLower || item.fuel === '') &&
+      (!sTypeLower || item.service_type.toLowerCase().includes(sTypeLower))
     )
   })
 
