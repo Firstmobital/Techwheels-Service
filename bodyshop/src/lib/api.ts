@@ -376,6 +376,56 @@ export async function fetchCustomerVehicles(searchQuery: string): Promise<Custom
   return results
 }
 
+// 1.5 Authenticate customer: Username (Vehicle No or Mobile No) + Password (Mobile No)
+export async function authenticateCustomer(
+  usernameInput: string,
+  passwordInput: string
+): Promise<{ success: boolean; vehicle?: CustomerVehicle; allVehicles?: CustomerVehicle[]; error?: string }> {
+  const username = usernameInput.trim().toUpperCase()
+  const cleanPassword = passwordInput.trim().replace(/[^0-9]/g, '')
+
+  if (!username) {
+    return { success: false, error: 'Please enter your Vehicle Registration Number or Mobile Number.' }
+  }
+  if (!cleanPassword || cleanPassword.length < 4) {
+    return { success: false, error: 'Please enter your registered 10-digit mobile number as password.' }
+  }
+
+  // Fetch matching vehicles from reception / bodyshop / test sandbox
+  const vehicles = await fetchCustomerVehicles(username)
+
+  if (!vehicles || vehicles.length === 0) {
+    return {
+      success: false,
+      error: `No reception intake found for "${usernameInput}". Please verify your Vehicle Registration / Mobile number.`,
+    }
+  }
+
+  // Match password with vehicle owner_phone
+  const matched = vehicles.filter((v) => {
+    if (!v.owner_phone) return false
+    const vPhoneClean = v.owner_phone.replace(/[^0-9]/g, '')
+    return (
+      vPhoneClean.endsWith(cleanPassword) ||
+      cleanPassword.endsWith(vPhoneClean) ||
+      vPhoneClean === cleanPassword
+    )
+  })
+
+  if (matched.length === 0) {
+    return {
+      success: false,
+      error: 'Invalid password. Please enter the 10-digit mobile number registered during reception intake.',
+    }
+  }
+
+  return {
+    success: true,
+    vehicle: matched[0],
+    allVehicles: matched,
+  }
+}
+
 // 2. Submit "Tell Us Your Problem" Complaint (SRD Section 3)
 export async function submitCustomerComplaint(payload: ComplaintPayload): Promise<void> {
   const row = {

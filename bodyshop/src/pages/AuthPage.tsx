@@ -1,157 +1,289 @@
-import { useState } from 'react'
-import { fetchCustomerVehicles, type CustomerVehicle } from '../lib/api'
+import { useState, useEffect } from 'react'
+import { authenticateCustomer, type CustomerVehicle } from '../lib/api'
 
 interface AuthPageProps {
   onLoginSuccess: (vehicle: CustomerVehicle, allVehicles: CustomerVehicle[]) => void
 }
 
-const SAMPLE_VEHICLES = [
-  { reg: 'RJ14TEST01', desc: 'Nexon EV (Paid Service)' },
-  { reg: 'RJ14TEST02', desc: 'Safari (Accident & Gatepass)' },
-  { reg: 'RJ14TEST03', desc: 'Punch (First Free Service)' },
-  { reg: 'RJ14TEST04', desc: 'Altroz (Third Free Service)' },
+const QUICK_TEST_CREDENTIALS = [
+  { label: 'RJ60CJ6764 (Reception Entry)', reg: 'RJ60CJ6764', pass: '9950042708', desc: 'Nexon EV · SHARMA, SUNIL' },
+  { label: 'RJ14UL0485 (Reception Entry)', reg: 'RJ14UL0485', pass: '9460517971', desc: 'Safari · SHEKHAWAT, YOGENDRA SINGH' },
+  { label: 'RJ45CW4065 (Reception Entry)', reg: 'RJ45CW4065', pass: '9529615370', desc: 'Nexon · SHEKHAWAT, YOGENDRA SINGH' },
+  { label: 'RJ14TEST01 (Sandbox)', reg: 'RJ14TEST01', pass: '9888877771', desc: 'Nexon EV · Rahul Sharma' },
 ]
 
 export default function AuthPage({ onLoginSuccess }: AuthPageProps) {
-  const [searchQuery, setSearchQuery] = useState('')
+  const [username, setUsername] = useState('')
+  const [password, setPassword] = useState('')
+  const [showPassword, setShowPassword] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [searchResults, setSearchResults] = useState<CustomerVehicle[]>([])
+  const [multipleVehicles, setMultipleVehicles] = useState<CustomerVehicle[]>([])
 
-  async function handleSearchWithQuery(queryStr: string) {
-    const query = queryStr.trim().toUpperCase()
-    if (!query || query.length < 3) {
-      setError('Please enter at least 3 characters of Registration or Mobile number.')
+  // Check URL params for direct link: e.g. /?reg=RJ14TEST01
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const urlReg = params.get('reg')
+    if (urlReg) {
+      setUsername(urlReg.trim().toUpperCase())
+    }
+  }, [])
+
+  async function handleLoginSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    setError(null)
+    setMultipleVehicles([])
+
+    if (!username.trim()) {
+      setError('Please enter your Vehicle Registration Number or Mobile Number as Username.')
+      return
+    }
+
+    if (!password.trim()) {
+      setError('Please enter your 10-digit registered Mobile Number as Password.')
       return
     }
 
     setLoading(true)
-    setError(null)
-    setSearchResults([])
-
     try {
-      const results = await fetchCustomerVehicles(query)
-      if (results.length === 0) {
-        setError(`No vehicle found matching "${query}". Please check the number or contact your service advisor.`)
-      } else if (results.length === 1) {
-        onLoginSuccess(results[0], results)
-      } else {
-        setSearchResults(results)
+      const res = await authenticateCustomer(username, password)
+      if (!res.success) {
+        setError(res.error || 'Authentication failed. Please check your credentials.')
+      } else if (res.allVehicles && res.allVehicles.length > 1) {
+        setMultipleVehicles(res.allVehicles)
+      } else if (res.vehicle) {
+        onLoginSuccess(res.vehicle, res.allVehicles || [res.vehicle])
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to search vehicle')
+      setError(err instanceof Error ? err.message : 'Login failed. Please try again.')
     } finally {
       setLoading(false)
     }
   }
 
-  function handleSearch(e: React.FormEvent) {
-    e.preventDefault()
-    void handleSearchWithQuery(searchQuery)
+  function handleFillQuickTest(item: typeof QUICK_TEST_CREDENTIALS[0]) {
+    setUsername(item.reg)
+    setPassword(item.pass)
+    setError(null)
   }
 
   return (
-    <div style={{ maxWidth: 480, width: '100%', margin: '0 auto', padding: '24px 0' }}>
-      <div style={{ textAlign: 'center', marginBottom: 28 }}>
+    <div style={{ maxWidth: 490, width: '100%', margin: '0 auto', padding: '24px 0' }}>
+      {/* Brand Header */}
+      <div style={{ textAlign: 'center', marginBottom: 24 }}>
         <div
           style={{
-            width: 64,
-            height: 64,
-            margin: '0 auto 16px',
-            borderRadius: 20,
-            background: 'linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%)',
+            width: 68,
+            height: 68,
+            margin: '0 auto 14px',
+            borderRadius: 22,
+            background: 'linear-gradient(135deg, #1e40af 0%, #3b82f6 100%)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            fontSize: 32,
-            boxShadow: '0 10px 25px rgba(37, 99, 235, 0.35)',
+            fontSize: 34,
+            boxShadow: '0 12px 28px rgba(30, 64, 175, 0.35)',
           }}
         >
           🚘
         </div>
-        <h1 style={{ fontSize: 24, fontWeight: 900, color: 'var(--text)', marginBottom: 6 }}>
+        <h1 style={{ fontSize: 23, fontWeight: 900, color: 'var(--text)', marginBottom: 4 }}>
           Techwheels Customer Portal
         </h1>
-        <p style={{ fontSize: 13.5, color: 'var(--text-muted)' }}>
-          Vehicle Services, Complaints, Estimates, Invoices & Gate Pass
+        <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>
+          Access your live service job card, estimates, complaints & gate pass
         </p>
       </div>
 
-      <div className="card" style={{ padding: 26, boxShadow: '0 10px 30px rgba(0,0,0,0.06)' }}>
-        <form onSubmit={handleSearch}>
-          <div className="form-group">
-            <label className="form-label">
-              Vehicle Registration No or Mobile No
+      {/* Login Card */}
+      <div className="card" style={{ padding: 26, boxShadow: '0 12px 36px rgba(0,0,0,0.07)' }}>
+        <div style={{ marginBottom: 18, borderBottom: '1px solid var(--border)', paddingBottom: 12 }}>
+          <h2 style={{ fontSize: 16, fontWeight: 800, color: 'var(--text)' }}>Customer Sign In</h2>
+          <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>
+            Use credentials registered during reception intake
+          </p>
+        </div>
+
+        <form onSubmit={handleLoginSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          {/* USERNAME FIELD */}
+          <div className="form-group" style={{ margin: 0 }}>
+            <label className="form-label" style={{ display: 'flex', justifyContent: 'space-between' }}>
+              <span>Username</span>
+              <span style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 500 }}>
+                (Vehicle No or Mobile No)
+              </span>
             </label>
-            <input
-              className="form-input mono"
-              style={{ textTransform: 'uppercase', fontSize: 16, fontWeight: 700 }}
-              placeholder="e.g. RJ60CH2388 or 9680460999"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value.toUpperCase())}
-              autoFocus
-            />
+            <div style={{ position: 'relative' }}>
+              <input
+                className="form-input mono"
+                style={{
+                  textTransform: 'uppercase',
+                  fontSize: 15,
+                  fontWeight: 700,
+                  paddingLeft: 38,
+                }}
+                placeholder="e.g. RJ60CJ6764 or 9950042708"
+                value={username}
+                onChange={(e) => setUsername(e.target.value.toUpperCase())}
+                autoFocus
+              />
+              <span
+                style={{
+                  position: 'absolute',
+                  left: 12,
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  fontSize: 16,
+                  color: '#64748b',
+                  pointerEvents: 'none',
+                }}
+              >
+                🚗
+              </span>
+            </div>
           </div>
 
-          {/* Quick 1-Click Test Chips */}
-          <div style={{ margin: '10px 0 16px' }}>
-            <span style={{ fontSize: 11.5, color: 'var(--text-muted)', fontWeight: 600 }}>
-              Quick test vehicles:
-            </span>
-            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 4 }}>
-              {SAMPLE_VEHICLES.map((sample) => (
-                <button
-                  key={sample.reg}
-                  type="button"
-                  onClick={() => {
-                    setSearchQuery(sample.reg)
-                    void handleSearchWithQuery(sample.reg)
-                  }}
-                  style={{
-                    fontSize: 11,
-                    padding: '3px 8px',
-                    borderRadius: 6,
-                    border: '1px solid #cbd5e1',
-                    background: '#f8fafc',
-                    color: '#1e293b',
-                    fontWeight: 700,
-                    cursor: 'pointer',
-                  }}
-                >
-                  {sample.reg}
-                </button>
-              ))}
+          {/* PASSWORD FIELD */}
+          <div className="form-group" style={{ margin: 0 }}>
+            <label className="form-label" style={{ display: 'flex', justifyContent: 'space-between' }}>
+              <span>Password</span>
+              <span style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 500 }}>
+                (10-digit Registered Mobile No)
+              </span>
+            </label>
+            <div style={{ position: 'relative' }}>
+              <input
+                className="form-input mono"
+                type={showPassword ? 'text' : 'password'}
+                style={{
+                  fontSize: 15,
+                  fontWeight: 700,
+                  paddingLeft: 38,
+                  paddingRight: 40,
+                }}
+                placeholder="e.g. 9950042708"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+              />
+              <span
+                style={{
+                  position: 'absolute',
+                  left: 12,
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  fontSize: 16,
+                  color: '#64748b',
+                  pointerEvents: 'none',
+                }}
+              >
+                🔒
+              </span>
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                style={{
+                  position: 'absolute',
+                  right: 10,
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  background: 'transparent',
+                  border: 'none',
+                  cursor: 'pointer',
+                  fontSize: 15,
+                  padding: 4,
+                  color: '#64748b',
+                }}
+                title={showPassword ? 'Hide password' : 'Show password'}
+              >
+                {showPassword ? '🙈' : '👁️'}
+              </button>
             </div>
           </div>
 
           {error && (
-            <div className="toast-banner error" style={{ margin: '12px 0' }}>
+            <div className="toast-banner error" style={{ margin: 0, fontSize: 12.5 }}>
               <span>⚠️</span>
               <span>{error}</span>
             </div>
           )}
 
+          {/* Sign In Button */}
           <button
             type="submit"
             className="btn-primary"
-            disabled={loading || !searchQuery.trim()}
-            style={{ width: '100%', padding: '13px' }}
+            disabled={loading || !username.trim() || !password.trim()}
+            style={{
+              padding: '13px',
+              fontSize: 14,
+              fontWeight: 800,
+              boxShadow: '0 4px 14px rgba(37, 99, 235, 0.3)',
+            }}
           >
-            {loading ? 'Accessing Vehicle Portal…' : 'Access Vehicle Portal →'}
+            {loading ? 'Verifying Credentials…' : 'Sign In to Portal →'}
           </button>
         </form>
 
-        {searchResults.length > 1 && (
-          <div style={{ marginTop: 20 }}>
+        {/* Info Note */}
+        <div
+          style={{
+            marginTop: 18,
+            padding: '10px 12px',
+            borderRadius: 8,
+            background: '#f8fafc',
+            border: '1px solid #e2e8f0',
+            fontSize: 11.5,
+            color: '#475569',
+            lineHeight: 1.45,
+          }}
+        >
+          💡 <strong>Login Rule:</strong> Reception par jab vehicle intake entry create hoti hai, customer apna <strong>Vehicle Number</strong> (ya Mobile No) username me aur <strong>Registered Mobile Number</strong> password me daal kar login kar sakte hain.
+        </div>
+
+        {/* Quick Test Accounts Fill */}
+        <div style={{ marginTop: 20, paddingTop: 16, borderTop: '1px solid var(--border)' }}>
+          <div style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--text-muted)', marginBottom: 8, textTransform: 'uppercase' }}>
+            ⚡ 1-Click Quick Test Credentials:
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {QUICK_TEST_CREDENTIALS.map((item) => (
+              <button
+                key={item.reg}
+                type="button"
+                onClick={() => handleFillQuickTest(item)}
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  padding: '7px 10px',
+                  borderRadius: 8,
+                  border: '1px solid #e2e8f0',
+                  background: '#f8fafc',
+                  cursor: 'pointer',
+                  textAlign: 'left',
+                }}
+              >
+                <div>
+                  <strong className="mono" style={{ fontSize: 12, color: '#1d4ed8' }}>{item.reg}</strong>
+                  <span style={{ fontSize: 11, color: '#64748b', marginLeft: 8 }}>Pass: {item.pass}</span>
+                </div>
+                <span style={{ fontSize: 11, color: '#0284c7', fontWeight: 600 }}>Fill ↗</span>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Multiple Vehicles Picker if any */}
+        {multipleVehicles.length > 1 && (
+          <div style={{ marginTop: 20, paddingTop: 16, borderTop: '1px solid var(--border)' }}>
             <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-muted)', marginBottom: 8, textTransform: 'uppercase' }}>
-              Multiple vehicles found — Select yours:
+              Multiple Vehicles Registered Under This Account:
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {searchResults.map((v) => (
+              {multipleVehicles.map((v) => (
                 <button
                   key={v.id}
                   type="button"
-                  onClick={() => onLoginSuccess(v, searchResults)}
+                  onClick={() => onLoginSuccess(v, multipleVehicles)}
                   style={{
                     display: 'flex',
                     justifyContent: 'space-between',
@@ -166,7 +298,9 @@ export default function AuthPage({ onLoginSuccess }: AuthPageProps) {
                 >
                   <div>
                     <strong className="mono" style={{ fontSize: 14, color: '#1d4ed8' }}>{v.reg_number}</strong>
-                    <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{v.model || 'Vehicle'} · {v.service_type || 'Service'}</div>
+                    <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                      {v.model || 'Vehicle'} · {v.service_type || 'Service'}
+                    </div>
                   </div>
                   <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--primary)' }}>Select →</span>
                 </button>
@@ -177,7 +311,7 @@ export default function AuthPage({ onLoginSuccess }: AuthPageProps) {
       </div>
 
       <div style={{ textAlign: 'center', marginTop: 24, fontSize: 12, color: 'var(--text-muted)' }}>
-        Techwheels Dealership After-Purchase Service Portal · Version 1.0
+        Techwheels Dealership After-Purchase Service Portal · SRD v1.0
       </div>
     </div>
   )
