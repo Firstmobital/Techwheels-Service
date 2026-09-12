@@ -2272,7 +2272,7 @@ export default function ServiceAdvisorPage() {
                     <th>Owner</th>
                     <th>Remark</th>
                     <th>Estimate</th>
-                    <th>Payment & Invoice (₹)</th>
+                    <th>Invoice Amount (₹)</th>
                     <th>Action</th>
                   </tr>
                 </thead>
@@ -2467,64 +2467,25 @@ export default function ServiceAdvisorPage() {
                           )}
                         </td>
                         <td className="td-invoice-amount">
-                          {(() => {
-                            const regKey = String(row.reg_number || '').trim().toUpperCase().replace(/[\s-]/g, '')
-                            const pay = paymentsMap[regKey]
-                            const invoiceNum = Number(draft.invoice_amount) || 0
-                            const billedTotal = (pay && pay.total_billed > 0 ? pay.total_billed : 0) || invoiceNum
-                            const amountReceived = pay ? pay.amount_received : 0
-                            const remaining = Math.max(0, billedTotal - amountReceived)
-                            const isPaid = billedTotal > 0 && remaining === 0
-                            const isPartial = amountReceived > 0 && remaining > 0
-
-                            return (
-                              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    setPaymentModalState({
-                                      open: true,
-                                      row,
-                                      initialInvoiceAmount: invoiceNum || (pay ? pay.total_billed : 0),
-                                    })
-                                  }
-                                  className={`btn-payment-pill ${
-                                    isPaid
-                                      ? 'btn-payment-pill--paid'
-                                      : isPartial
-                                      ? 'btn-payment-pill--partial'
-                                      : 'btn-payment-pill--pending'
-                                  }`}
-                                  title="Click to enter payment status (Full / Partial / Pending) & release gate pass"
-                                >
-                                  {isPaid ? (
-                                    <span>✅ Paid ₹{billedTotal.toLocaleString()}</span>
-                                  ) : isPartial ? (
-                                    <span>⚡ Part ₹{amountReceived.toLocaleString()} / ₹{billedTotal.toLocaleString()}</span>
-                                  ) : (
-                                    <span>⏳ Payment (₹{billedTotal > 0 ? billedTotal.toLocaleString() : 'Set'})</span>
-                                  )}
-                                </button>
-
-                                {!isBodyshopRow && !isNoActionRequiredRow && (
-                                  <input
-                                    type="number"
-                                    value={draft.invoice_amount}
-                                    onChange={(event) =>
-                                      patchDraft(row.id, { invoice_amount: sanitizeInvoiceAmountInput(event.target.value) })
-                                    }
-                                    inputMode="decimal"
-                                    min="0"
-                                    step="0.01"
-                                    placeholder="0.00"
-                                    className="inp mono inp--invoice-amount"
-                                    aria-label="Invoice Amount (₹)"
-                                    style={{ fontSize: 11, padding: '2px 6px', height: 26 }}
-                                  />
-                                )}
-                              </div>
-                            )
-                          })()}
+                          {isBodyshopRow ? (
+                            <span className="td-muted-nowrap">Not applicable</span>
+                          ) : isNoActionRequiredRow ? (
+                            <span className="td-muted-nowrap">Not required</span>
+                          ) : (
+                            <input
+                              type="number"
+                              value={draft.invoice_amount}
+                              onChange={(event) =>
+                                patchDraft(row.id, { invoice_amount: sanitizeInvoiceAmountInput(event.target.value) })
+                              }
+                              inputMode="decimal"
+                              min="0"
+                              step="0.01"
+                              placeholder="0.00"
+                              className="inp mono inp--invoice-amount"
+                              aria-label="Invoice Amount (₹)"
+                            />
+                          )}
                         </td>
                         <td className="td-save">
                           <div className="tactions tactions--stack">
