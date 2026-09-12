@@ -11,11 +11,77 @@ export interface PartPricingItem {
   labour: number
 }
 
-// Local dataset of 926 items
-export const ALL_PARTS_PRICING: PartPricingItem[] = partsPricingData as PartPricingItem[]
+const STORAGE_KEY = 'techwheels_custom_parts_pricing'
+
+function loadInitialPricing(): PartPricingItem[] {
+  if (typeof window !== 'undefined') {
+    try {
+      const stored = localStorage.getItem(STORAGE_KEY)
+      if (stored) {
+        const parsed = JSON.parse(stored)
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed as PartPricingItem[]
+        }
+      }
+    } catch (e) {
+      console.warn('Failed to load custom pricing from localStorage:', e)
+    }
+  }
+  return partsPricingData as PartPricingItem[]
+}
+
+// In-memory active parts pricing list (926+ items)
+export let ALL_PARTS_PRICING: PartPricingItem[] = loadInitialPricing()
+
+export function getMasterPricingList(): PartPricingItem[] {
+  return ALL_PARTS_PRICING
+}
+
+export function saveMasterPricingList(items: PartPricingItem[]): void {
+  ALL_PARTS_PRICING = [...items]
+  if (typeof window !== 'undefined') {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(items))
+      window.dispatchEvent(new CustomEvent('techwheels_pricing_updated', { detail: items }))
+    } catch (e) {
+      console.warn('Failed to save custom pricing to localStorage:', e)
+    }
+  }
+}
+
+export function addPartPricingItem(item: Omit<PartPricingItem, 'id'>): PartPricingItem {
+  const maxId = ALL_PARTS_PRICING.reduce((max, cur) => Math.max(max, cur.id || 0), 0)
+  const newItem: PartPricingItem = {
+    ...item,
+    id: maxId + 1,
+  }
+  const updated = [newItem, ...ALL_PARTS_PRICING]
+  saveMasterPricingList(updated)
+  return newItem
+}
+
+export function updatePartPricingItem(id: number, updates: Partial<Omit<PartPricingItem, 'id'>>): boolean {
+  const idx = ALL_PARTS_PRICING.findIndex((i) => i.id === id)
+  if (idx === -1) return false
+  const updated = [...ALL_PARTS_PRICING]
+  updated[idx] = { ...updated[idx], ...updates }
+  saveMasterPricingList(updated)
+  return true
+}
+
+export function deletePartPricingItem(id: number): boolean {
+  const updated = ALL_PARTS_PRICING.filter((i) => i.id !== id)
+  if (updated.length === ALL_PARTS_PRICING.length) return false
+  saveMasterPricingList(updated)
+  return true
+}
+
+export function resetPricingToDefault(): void {
+  saveMasterPricingList(partsPricingData as PartPricingItem[])
+}
 
 /**
- * Fetch pricing from Supabase service_parts_pricing table with fallback to local JSON database
+ * Fetch pricing with fallback
  */
 export async function getPartsPricing(
   model?: string,
@@ -33,10 +99,10 @@ export async function getPartsPricing(
       return data as PartPricingItem[]
     }
   } catch (err) {
-    console.warn('Supabase service_parts_pricing lookup failed, using local dataset:', err)
+    console.warn('Supabase service_parts_pricing lookup failed, using master dataset:', err)
   }
 
-  // Fallback to local 926 items dataset
+  // Fallback to active master dataset
   return ALL_PARTS_PRICING.filter((item) => {
     const matchModel = !model || item.model.toLowerCase().includes(model.toLowerCase())
     const matchFuel = !fuel || item.fuel.toLowerCase() === fuel.toLowerCase()
@@ -57,7 +123,6 @@ export function getServicePrice(
   const sNameLower = serviceName.toLowerCase().trim()
   const mLower = model.toLowerCase().trim()
   const fLower = fuel.toLowerCase().trim()
-
   const sTypeLower = serviceType.toLowerCase().trim()
 
   const match = ALL_PARTS_PRICING.find((item) => {

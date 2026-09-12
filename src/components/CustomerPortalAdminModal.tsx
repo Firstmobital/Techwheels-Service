@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
-import { ALL_PARTS_PRICING, type PartPricingItem } from '../lib/partsPricing'
 import { ServiceEstimateBuilderModal } from './ServiceEstimateBuilderModal'
 import {
   fetchAllEstimates,
@@ -12,7 +11,7 @@ interface CustomerPortalAdminModalProps {
   onClose: () => void
   isAdmin?: boolean
   initialRegNumber?: string
-  initialTab?: 'overview' | 'complaints' | 'pricing' | 'live_preview'
+  initialTab?: 'overview' | 'complaints' | 'live_preview'
 }
 
 interface ComplaintRecord {
@@ -39,8 +38,8 @@ export function CustomerPortalAdminModal({
   initialRegNumber,
   initialTab,
 }: CustomerPortalAdminModalProps) {
-  const [activeTab, setActiveTab] = useState<'overview' | 'complaints' | 'pricing' | 'live_preview'>(
-    initialTab || (initialRegNumber ? 'complaints' : 'overview')
+  const [activeTab, setActiveTab] = useState<'overview' | 'complaints' | 'live_preview'>(
+    initialTab || (initialRegNumber ? 'complaints' : 'complaints')
   )
   const [complaints, setComplaints] = useState<ComplaintRecord[]>([])
   const [loadingComplaints, setLoadingComplaints] = useState(false)
@@ -49,11 +48,6 @@ export function CustomerPortalAdminModal({
   const [selectedProblemForEstimate, setSelectedProblemForEstimate] = useState<ComplaintRecord | null>(null)
   const [estimatesMap, setEstimatesMap] = useState<Record<string, CustomerEstimateRecord>>({})
   
-  // Pricing filters
-  const [pricingSearch, setPricingSearch] = useState('')
-  const [selectedModel, setSelectedModel] = useState('All')
-  const [selectedFuel, setSelectedFuel] = useState('All')
-
   // Search vehicle test link
   const [testRegNumber, setTestRegNumber] = useState('RJ14TEST01')
   const [copiedLink, setCopiedLink] = useState(false)
@@ -204,19 +198,6 @@ export function CustomerPortalAdminModal({
     return <div className="font-semibold text-gray-800 line-clamp-2">{text}</div>
   }
 
-  const filteredPricing = ALL_PARTS_PRICING.filter((item: PartPricingItem) => {
-    const matchSearch =
-      !pricingSearch ||
-      item.service_name.toLowerCase().includes(pricingSearch.toLowerCase()) ||
-      item.service_type.toLowerCase().includes(pricingSearch.toLowerCase())
-    const matchModel = selectedModel === 'All' || item.model.toLowerCase() === selectedModel.toLowerCase()
-    const matchFuel = selectedFuel === 'All' || item.fuel.toLowerCase() === selectedFuel.toLowerCase()
-    return matchSearch && matchModel && matchFuel
-  }).slice(0, 50)
-
-  const modelsList = ['All', 'Altroz', 'Tiago', 'Nexon', 'Punch', 'Tigor', 'Curvv', 'Harrier', 'Safari']
-  const fuelsList = ['All', 'Petrol', 'Diesel', 'CNG', 'EV']
-
   function handleCopyCustomerLink() {
     const link = `${portalUrl}/?reg=${testRegNumber.trim().toUpperCase()}`
     void navigator.clipboard.writeText(link)
@@ -262,17 +243,6 @@ export function CustomerPortalAdminModal({
           <div className="flex gap-2">
             <button
               type="button"
-              onClick={() => setActiveTab('overview')}
-              className={`rounded-lg px-3.5 py-1.5 text-xs font-semibold transition ${
-                activeTab === 'overview'
-                  ? 'bg-blue-600 text-white shadow-sm'
-                  : 'text-gray-600 hover:bg-gray-200'
-              }`}
-            >
-              📊 Overview & Share Link
-            </button>
-            <button
-              type="button"
               onClick={() => setActiveTab('complaints')}
               className={`rounded-lg px-3.5 py-1.5 text-xs font-semibold transition flex items-center gap-1.5 ${
                 activeTab === 'complaints'
@@ -284,14 +254,14 @@ export function CustomerPortalAdminModal({
             </button>
             <button
               type="button"
-              onClick={() => setActiveTab('pricing')}
-              className={`rounded-lg px-3.5 py-1.5 text-xs font-semibold transition flex items-center gap-1.5 ${
-                activeTab === 'pricing'
+              onClick={() => setActiveTab('overview')}
+              className={`rounded-lg px-3.5 py-1.5 text-xs font-semibold transition ${
+                activeTab === 'overview'
                   ? 'bg-blue-600 text-white shadow-sm'
                   : 'text-gray-600 hover:bg-gray-200'
               }`}
             >
-              <span>🏷️</span> Parts & Labour Pricing (926 Items)
+              📊 Overview & Share Link
             </button>
             <button
               type="button"
@@ -350,18 +320,18 @@ export function CustomerPortalAdminModal({
                   </span>
                 </div>
 
-                <div className="rounded-xl border border-purple-100 bg-purple-50/60 p-4">
-                  <div className="text-2xl mb-1">🏷️</div>
-                  <div className="text-sm font-bold text-purple-950">Parts & Labour Pricing</div>
-                  <div className="text-xs text-purple-700 mt-1 mb-3">
-                    Tata Motors Model/Fuel rate card connected with Estimate engine
+                <div className="rounded-xl border border-indigo-100 bg-indigo-50/60 p-4">
+                  <div className="text-2xl mb-1">📱</div>
+                  <div className="text-sm font-bold text-indigo-950">Customer Mobile App</div>
+                  <div className="text-xs text-indigo-700 mt-1 mb-3">
+                    Live customer app running on Port 5174 with instant reception sync
                   </div>
                   <button
                     type="button"
-                    onClick={() => setActiveTab('pricing')}
-                    className="rounded-lg bg-purple-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-purple-700"
+                    onClick={() => setActiveTab('live_preview')}
+                    className="rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-indigo-700 cursor-pointer"
                   >
-                    Browse Catalogue ({ALL_PARTS_PRICING.length}) →
+                    Open Live Preview →
                   </button>
                 </div>
               </div>
@@ -645,88 +615,7 @@ export function CustomerPortalAdminModal({
             </div>
           )}
 
-          {/* TAB 3: PRICING CATALOGUE */}
-          {activeTab === 'pricing' && (
-            <div className="space-y-4">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div>
-                  <h3 className="text-sm font-bold text-gray-900">
-                    Parts & Labour Master Pricing Database
-                  </h3>
-                  <p className="text-xs text-gray-500">
-                    Total 926 records mapped by Model, Fuel type & Service package
-                  </p>
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <input
-                    type="text"
-                    className="rounded-lg border border-gray-300 px-3 py-1.5 text-xs text-gray-900 focus:border-blue-500 focus:outline-none"
-                    placeholder="Search parts/services…"
-                    value={pricingSearch}
-                    onChange={(e) => setPricingSearch(e.target.value)}
-                  />
-                  <select
-                    className="rounded-lg border border-gray-300 px-2 py-1.5 text-xs text-gray-900"
-                    value={selectedModel}
-                    onChange={(e) => setSelectedModel(e.target.value)}
-                  >
-                    {modelsList.map((m) => (
-                      <option key={m} value={m}>Model: {m}</option>
-                    ))}
-                  </select>
-                  <select
-                    className="rounded-lg border border-gray-300 px-2 py-1.5 text-xs text-gray-900"
-                    value={selectedFuel}
-                    onChange={(e) => setSelectedFuel(e.target.value)}
-                  >
-                    {fuelsList.map((f) => (
-                      <option key={f} value={f}>Fuel: {f}</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              <div className="overflow-x-auto rounded-xl border border-gray-200">
-                <table className="w-full text-left text-xs">
-                  <thead className="bg-gray-50 text-[11px] font-bold text-gray-500 uppercase border-b border-gray-200">
-                    <tr>
-                      <th className="px-3 py-2.5">ID</th>
-                      <th className="px-3 py-2.5">Service Type</th>
-                      <th className="px-3 py-2.5">Model</th>
-                      <th className="px-3 py-2.5">Fuel</th>
-                      <th className="px-3 py-2.5">Service / Part Name</th>
-                      <th className="px-3 py-2.5 text-right">Part Price</th>
-                      <th className="px-3 py-2.5 text-right">Labour</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-100">
-                    {filteredPricing.map((p) => (
-                      <tr key={p.id} className="hover:bg-gray-50/80">
-                        <td className="px-3 py-2 font-mono text-gray-400">{p.id}</td>
-                        <td className="px-3 py-2 font-semibold text-gray-800">{p.service_type}</td>
-                        <td className="px-3 py-2 font-bold text-blue-900">{p.model}</td>
-                        <td className="px-3 py-2">
-                          <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-bold text-slate-700">
-                            {p.fuel || 'General'}
-                          </span>
-                        </td>
-                        <td className="px-3 py-2 font-medium text-gray-900">{p.service_name}</td>
-                        <td className="px-3 py-2 text-right font-mono font-bold text-emerald-700">
-                          {p.price > 0 ? `₹${p.price.toLocaleString()}` : '—'}
-                        </td>
-                        <td className="px-3 py-2 text-right font-mono text-purple-700 font-semibold">
-                          {p.labour > 0 ? `₹${p.labour.toLocaleString()}` : '—'}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
-
-          {/* TAB 4: LIVE EMBEDDED PREVIEW */}
+          {/* TAB 3: LIVE EMBEDDED PREVIEW */}
           {activeTab === 'live_preview' && (
             <div className="h-full flex flex-col space-y-3">
               <div className="flex items-center justify-between text-xs text-gray-600 bg-blue-50/50 p-2.5 rounded-lg border border-blue-100">

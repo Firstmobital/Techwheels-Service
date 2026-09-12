@@ -23,6 +23,7 @@ import UpdationAvailableBadge from '../components/UpdationAvailableBadge'
 import PartsRequirementSection from '../components/PartsRequirementSection'
 import CustomerRemarkModal from '../components/CustomerRemarkModal'
 import { CustomerPortalAdminModal } from '../components/CustomerPortalAdminModal'
+import { EstimateMasterModal } from '../components/EstimateMasterModal'
 
 type RowDraft = {
   service_type: string
@@ -596,6 +597,7 @@ export default function ServiceAdvisorPage() {
   const [generatingComplaintLink, setGeneratingComplaintLink] = useState<number | null>(null)
   const [customerRemarkModalOpen, setCustomerRemarkModalOpen] = useState(false)
   const [customerPortalModalOpen, setCustomerPortalModalOpen] = useState(false)
+  const [estimateMasterModalOpen, setEstimateMasterModalOpen] = useState(false)
   const [selectedPortalRegNumber, setSelectedPortalRegNumber] = useState<string | undefined>(undefined)
   const [customerProblemsMap, setCustomerProblemsMap] = useState<Record<string, CustomerProblemSummary>>({})
 
@@ -1987,11 +1989,19 @@ export default function ServiceAdvisorPage() {
         </button>
         <button
           type="button"
+          onClick={() => setEstimateMasterModalOpen(true)}
+          className="rounded-lg px-4 py-2 text-sm font-semibold shadow-sm transition border border-amber-300 bg-amber-50 text-amber-900 hover:bg-amber-100 flex items-center gap-1.5"
+          title="Open Estimate & Parts Price Master (Manage prices, add new items, edit catalogue)"
+        >
+          <span>📋</span> Estimate
+        </button>
+        <button
+          type="button"
           onClick={() => setCustomerPortalModalOpen(true)}
           className="rounded-lg px-4 py-2 text-sm font-semibold shadow-sm transition border border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 flex items-center gap-1.5"
-          title="Open Customer Form & Bodyshop Customer Service Portal Admin"
+          title="Open Customer App & Bodyshop Customer Service Portal"
         >
-          <span>🚗</span> Customer Form
+          <span>📱</span> Customer App
         </button>
       </div>
 
@@ -2508,6 +2518,12 @@ export default function ServiceAdvisorPage() {
         }}
         isAdmin={true}
         initialRegNumber={selectedPortalRegNumber}
+      />
+
+      <EstimateMasterModal
+        isOpen={estimateMasterModalOpen}
+        onClose={() => setEstimateMasterModalOpen(false)}
+        isAdmin={isAdmin || isSuperAdmin}
       />
     </div>
   )
