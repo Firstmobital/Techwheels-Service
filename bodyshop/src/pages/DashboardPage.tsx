@@ -54,8 +54,10 @@ export default function DashboardPage({ vehicle, onNavigate }: DashboardPageProp
           }}
         >
           <div>
-            <div style={{ opacity: 0.75, fontSize: 11 }}>VIN / Chassis Number</div>
-            <div className="mono" style={{ fontWeight: 700 }}>{vehicle.vin || 'MAT' + vehicle.reg_number.replace(/[^A-Z0-9]/g, '')}</div>
+            <div style={{ opacity: 0.75, fontSize: 11 }}>Customer Name</div>
+            <div style={{ fontWeight: 800, fontSize: 13.5, textTransform: 'uppercase', letterSpacing: '0.3px' }}>
+              {vehicle.owner_name || 'Valued Customer'}
+            </div>
           </div>
           <div>
             <div style={{ opacity: 0.75, fontSize: 11 }}>Current Odometer</div>
