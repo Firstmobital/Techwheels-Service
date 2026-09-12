@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Techwheels Service</string>
+    <string name="title_activity_main">Techwheels Service</string>
+    <string name="package_name">com.techwheels.service</string>
+    <string name="custom_url_scheme">com.techwheels.service</string>
+</resources>

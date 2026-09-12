@@ -1,0 +1,6 @@
+{
+  "appId": "com.techwheels.service",
+  "appName": "Techwheels Service",
+  "webDir": "dist",
+  "bundledWebRuntime": false
+}

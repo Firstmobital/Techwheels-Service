@@ -29,9 +29,14 @@
     "mobile:start:clear": "npm --prefix ./mobile run start -- --clear --tunnel",
     "mobile:typecheck": "npm --prefix ./mobile run -s typecheck",
     "bodyshop:dev": "npm --prefix ./bodyshop run dev",
-    "bodyshop:build": "npm --prefix ./bodyshop run build"
+    "bodyshop:build": "npm --prefix ./bodyshop run build",
+    "cap:sync": "npm run build && npx cap sync android",
+    "cap:open": "npx cap open android"
   },
   "dependencies": {
+    "@capacitor/android": "^8.5.2",
+    "@capacitor/cli": "^8.5.2",
+    "@capacitor/core": "^8.5.2",
     "@supabase/supabase-js": "^2.103.3",
     "exceljs": "^4.4.0",
     "html2canvas": "^1.4.1",
