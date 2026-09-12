@@ -36,7 +36,7 @@ This document defines the authoritative mapping between database modules and fro
 | — | `help_tickets` | `/help-tickets` | `/help-tickets` | HelpTicketsAdminPage | Active | Support inbox (org-wide). Employee self-service at `/help/tickets*` is auth-only (no module grant). |
 | — | `bodyshop_recovery` | `/bodyshop-recovery` | `/bodyshop-recovery` | BodyshopRecoveryPage | Active | DO / insurance-due book. Org-wide. More + Post Payment (Stage 18 DO) on-page. |
 | — | `busy` | `/busy` | `/busy` | BusyAccountingPage | Active | BUSY Party Account + Invoice Voucher export from `psf_revenue_dms` + persisted `busy_parts`. |
-| — | `accounts` | `/accounts` | `/accounts` | AccountsPage | Active | Mechanical Mark Done invoice capture + Bodyshop Stage 18 customer-diff book. Not Recovery. Not BUSY. |
+| — | `accounts` | `/accounts` | `/accounts` | AccountsPage | Active | Mechanical Mark Done invoice capture + Bodyshop Stage 18 customer-diff book from 11-Sep-2026. Not Recovery. Not BUSY. |
 
 **Legend:**
 - **Module Name**: Authoritative name from `public.modules.name`

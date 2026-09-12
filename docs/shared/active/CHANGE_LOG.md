@@ -2,6 +2,10 @@
 
 Tracks documentation-sync updates for business logic, architecture, and access control.
 
+## 2026-09-12
+
+- Accounts Desk listing starts 11-Sep-2026. Mechanical list requires `invoice_done_at >= 2026-09-11 00:00:00+05:30`. Bodyshop list requires `invoice_date >= 2026-09-11`. Source SA / Bodyshop / Accounts invoice and payment rows are not deleted. Ledger: DBL-0053. Plan: `ACCOUNTS-001`.
+
 ## 2026-09-11
 
 - Eligible post-service feedback (`status=responded`, `rating<=3`, `cre_status=open`) is routed into `public.post_feedback_bot_data` by a trigger on `post_service_feedback_messages` (not the CRE queue view). Idempotency is `source_feedback_message_id` unique to `post_service_feedback_messages.id` plus `ON CONFLICT DO NOTHING`. Bot rows are not deleted when CRE status later leaves `open`. Historical 33 eligible rows were already represented; source ids were attached, 0 new bot rows inserted. Ledger: DBL-0049. Plan: `OPS-PSF-BOT-001`.

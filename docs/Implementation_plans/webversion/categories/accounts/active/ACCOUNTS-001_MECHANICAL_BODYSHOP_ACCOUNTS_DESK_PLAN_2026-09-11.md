@@ -8,7 +8,7 @@
 **Status:** Active (web implemented; DBL-0045 SQL Editor apply pending)  
 **Platform:** webversion  
 **Category:** accounts  
-**Ledger:** DBL-0045 APPLIED. DBL-0046 (PROPOSED) mechanical payment lines. Do not reuse DBL-0043 (`busy`) or DBL-0044 (`busy_parts`). Timestamp at apply: `20260911140000`.  
+**Ledger:** DBL-0045/0046/0051/0052 APPLIED. DBL-0053 (11-Sep-2026 listing cutoff). Do not reuse DBL-0043 (`busy`) or DBL-0044 (`busy_parts`).  
 **Route:** `/accounts`  
 **Module:** `accounts`  
 **Depends on:** BODYSHOP-SETTLEMENT-001 (`bodyshop_settlements`, Stage 18 customer lines); Service Advisor Mark Done (`invoice_done_at`)  
@@ -71,8 +71,8 @@ flowchart TD
 1. Nav label **Accounts**. Module `accounts`. Route `/accounts`. Top-level nav beside BUSY / Reports — not inside the Bodyshop dropdown, not a BUSY tab.
 2. Grant by named user in Admin → Permissions (`accounts` view). View is enough to list, capture mechanical, and post customer. No Employee Master business role.
 3. Org-wide visibility. No dealer/branch/fuel filter.
-4. Mechanical row = `is_floor_incharge_service_type` + `invoice_done_at IS NOT NULL` + non-empty `jc_number`. Exclude Accident and Rusting.
-5. Bodyshop row = non-blank `invoice_number` AND `invoice_amount` / `billed_amount` not null, settlement header exists, `overall_status <> cancelled`. Do **not** require `insurance_due_amount > 0`.
+4. Mechanical row = `is_floor_incharge_service_type` + `invoice_done_at IS NOT NULL` + non-empty `jc_number` + `invoice_done_at >= 2026-09-11 00:00:00+05:30` (DBL-0053). Exclude Accident and Rusting. Pre-cutoff Mark Done cases stay in reception/Accounts invoice tables but are not listed.
+5. Bodyshop row = non-blank `invoice_number` AND `invoice_amount` / `billed_amount` not null, settlement header exists, `overall_status <> cancelled`, AND `invoice_date >= 2026-09-11` (DBL-0053). Do **not** require `insurance_due_amount > 0`. Pre-cutoff invoice dates are hidden, not deleted.
 6. Default Bodyshop filter = customer remaining pending (`due`/`refund` and status not `received`). Toggle All billed / Received. `kind = none` only under All billed.
 7. Settlement panel: add `variant="customer_payment"`. Do not reuse `do_payment` (that now includes Main/GST/TDS plus opportunistic CP).
 8. Accounts must not upsert invoice/DO header or post Main/GST/TDS.
