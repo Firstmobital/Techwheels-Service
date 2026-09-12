@@ -21,12 +21,16 @@ interface ComplaintRecord {
   primary_complaint_area: string | null
   complaint_date_time: string | null
   created_at?: string | null
+  mode?: string | null
+  source_feedback_message_id?: number | null
 }
 
 export function CustomerPortalAdminModal({ isOpen, onClose, isAdmin = true }: CustomerPortalAdminModalProps) {
   const [activeTab, setActiveTab] = useState<'overview' | 'complaints' | 'pricing' | 'live_preview'>('overview')
   const [complaints, setComplaints] = useState<ComplaintRecord[]>([])
   const [loadingComplaints, setLoadingComplaints] = useState(false)
+  const [filterSource, setFilterSource] = useState<'app_only' | 'all'>('app_only')
+  const [complaintSearch, setComplaintSearch] = useState('')
   
   // Pricing filters
   const [pricingSearch, setPricingSearch] = useState('')
@@ -39,32 +43,74 @@ export function CustomerPortalAdminModal({ isOpen, onClose, isAdmin = true }: Cu
 
   const portalUrl = typeof window !== 'undefined' ? `${window.location.protocol}//${window.location.hostname}:5174` : 'http://localhost:5174'
 
+  async function fetchComplaints() {
+    setLoadingComplaints(true)
+    try {
+      const { data, error } = await supabase
+        .from('post_feedback_bot_data')
+        .select('*')
+        .order('complaint_date_time', { ascending: false })
+        .limit(100)
+
+      if (!error && data) {
+        setComplaints(data as ComplaintRecord[])
+      }
+    } catch (err) {
+      console.warn('Failed to load complaints from post_feedback_bot_data:', err)
+    } finally {
+      setLoadingComplaints(false)
+    }
+  }
+
   useEffect(() => {
     if (!isOpen) return
-
-    async function fetchComplaints() {
-      setLoadingComplaints(true)
-      try {
-        const { data, error } = await supabase
-          .from('post_feedback_bot_data')
-          .select('*')
-          .order('complaint_date_time', { ascending: false })
-          .limit(50)
-
-        if (!error && data) {
-          setComplaints(data as ComplaintRecord[])
-        }
-      } catch (err) {
-        console.warn('Failed to load complaints from post_feedback_bot_data:', err)
-      } finally {
-        setLoadingComplaints(false)
-      }
-    }
-
     void fetchComplaints()
+
+    // Realtime Supabase Sync for instant updates when customer submits a problem
+    const channel = supabase
+      .channel('customer-complaints-realtime')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'post_feedback_bot_data' },
+        () => {
+          void fetchComplaints()
+        }
+      )
+      .subscribe()
+
+    return () => {
+      void supabase.removeChannel(channel)
+    }
   }, [isOpen])
 
   if (!isOpen) return null
+
+  // Determine if a record is from the Customer / Bodyshop App
+  const isFromCustomerApp = (c: ComplaintRecord) => {
+    if (c.mode === 'customer_complaint_portal' || c.mode === 'customer_mobile_pwa' || c.mode === 'customer_booking_pwa') {
+      return true
+    }
+    if (c.feedback_text?.startsWith('[Complaint') || c.feedback_text?.includes('[Sandbox Test]')) {
+      return true
+    }
+    if (c.mode && c.mode.includes('customer')) {
+      return true
+    }
+    return false
+  }
+
+  const appOnlyComplaints = complaints.filter(isFromCustomerApp)
+
+  const displayedComplaints = (filterSource === 'app_only' ? appOnlyComplaints : complaints).filter((c) => {
+    if (!complaintSearch) return true
+    const q = complaintSearch.toLowerCase()
+    return (
+      c.vehicle_registration_number?.toLowerCase().includes(q) ||
+      c.customer_name?.toLowerCase().includes(q) ||
+      c.feedback_text?.toLowerCase().includes(q) ||
+      c.mobile_number?.includes(q)
+    )
+  })
 
   const filteredPricing = ALL_PARTS_PRICING.filter((item: PartPricingItem) => {
     const matchSearch =
@@ -101,9 +147,12 @@ export function CustomerPortalAdminModal({ isOpen, onClose, isAdmin = true }: Cu
                 <span className="rounded-full bg-emerald-500/20 px-2.5 py-0.5 text-xs font-semibold text-emerald-300 border border-emerald-500/40">
                   {isAdmin ? 'Admin Scope' : 'Advisor Scope'}
                 </span>
+                <span className="rounded-full bg-blue-500/20 px-2 py-0.5 text-[11px] font-bold text-blue-300 border border-blue-400/30">
+                  🟢 Live Realtime Sync
+                </span>
               </div>
               <p className="text-xs text-slate-300">
-                Manage Customer Form submissions, review complaints, access pricing catalogue & launch customer app
+                Manage customer problem submissions from Bodyshop app, review feedback & access pricing catalogue
               </p>
             </div>
           </div>
@@ -139,7 +188,7 @@ export function CustomerPortalAdminModal({ isOpen, onClose, isAdmin = true }: Cu
                   : 'text-gray-600 hover:bg-gray-200'
               }`}
             >
-              <span>🚨</span> Complaints / Form Submissions ({complaints.length})
+              <span>🚨</span> App Problems & Submissions ({appOnlyComplaints.length})
             </button>
             <button
               type="button"
@@ -186,7 +235,7 @@ export function CustomerPortalAdminModal({ isOpen, onClose, isAdmin = true }: Cu
                   <div className="text-2xl mb-1">📱</div>
                   <div className="text-sm font-bold text-blue-950">Customer Web Application</div>
                   <div className="text-xs text-blue-700 mt-1 mb-3">
-                    Standalone customer portal for Estimates, Gate Pass & Complaints
+                    Customer portal for "Tell Us Your Problem", Estimates & Gate Pass
                   </div>
                   <a
                     href={portalUrl}
@@ -200,12 +249,12 @@ export function CustomerPortalAdminModal({ isOpen, onClose, isAdmin = true }: Cu
 
                 <div className="rounded-xl border border-emerald-100 bg-emerald-50/60 p-4">
                   <div className="text-2xl mb-1">💬</div>
-                  <div className="text-sm font-bold text-emerald-950">Customer Remark & Voice</div>
+                  <div className="text-sm font-bold text-emerald-950">App Form Submissions</div>
                   <div className="text-xs text-emerald-700 mt-1 mb-3">
-                    Syncs directly with table <code className="font-bold">post_feedback_bot_data</code>
+                    Live submissions from Bodyshop & Customer Service App
                   </div>
-                  <span className="rounded-full bg-emerald-200 px-2 py-0.5 text-xs font-bold text-emerald-800">
-                    {complaints.length} Total Records Logged
+                  <span className="rounded-full bg-emerald-200 px-2.5 py-0.5 text-xs font-bold text-emerald-900">
+                    {appOnlyComplaints.length} App Submissions Logged
                   </span>
                 </div>
 
@@ -231,7 +280,7 @@ export function CustomerPortalAdminModal({ isOpen, onClose, isAdmin = true }: Cu
                   📤 Send Customer Portal Link to Customer
                 </h3>
                 <p className="text-xs text-gray-500 mb-4">
-                  Generate a direct access link for the customer to review their vehicle estimate, submit complaints or download gate pass.
+                  Generate a direct access link for the customer to submit problems, review estimates or download gate pass.
                 </p>
 
                 <div className="flex flex-wrap items-center gap-3">
@@ -244,7 +293,7 @@ export function CustomerPortalAdminModal({ isOpen, onClose, isAdmin = true }: Cu
                       className="w-full rounded-lg border border-gray-300 px-3 py-2 text-xs font-mono font-bold uppercase text-gray-900 focus:border-blue-500 focus:outline-none"
                       value={testRegNumber}
                       onChange={(e) => setTestRegNumber(e.target.value.toUpperCase())}
-                      placeholder="e.g. RJ60CH2388"
+                      placeholder="e.g. RJ14TEST01"
                     />
                   </div>
 
@@ -277,31 +326,120 @@ export function CustomerPortalAdminModal({ isOpen, onClose, isAdmin = true }: Cu
           {/* TAB 2: COMPLAINTS LIST */}
           {activeTab === 'complaints' && (
             <div className="space-y-4">
-              <div className="flex items-center justify-between">
+              <div className="flex flex-wrap items-center justify-between gap-3 bg-slate-50 p-3.5 rounded-xl border border-slate-200">
                 <div>
-                  <h3 className="text-sm font-bold text-gray-900">
-                    Live Form Submissions & Complaints
+                  <h3 className="text-sm font-bold text-gray-900 flex items-center gap-2">
+                    <span>🚨 Live Customer Submissions & Problems</span>
                   </h3>
-                  <p className="text-xs text-gray-500">
-                    Submissions from Customer Portal ("Tell Us Your Problem") & Feedback forms
+                  <p className="text-xs text-gray-500 mt-0.5">
+                    Showing submissions entered via Bodyshop & Customer Services App ("Tell Us Your Problem" / Feedback)
                   </p>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2">
+                  {/* Filter source toggle */}
+                  <div className="inline-flex rounded-lg border border-gray-300 bg-white p-0.5 shadow-sm text-xs">
+                    <button
+                      type="button"
+                      onClick={() => setFilterSource('app_only')}
+                      className={`px-3 py-1 font-bold rounded-md transition ${
+                        filterSource === 'app_only'
+                          ? 'bg-blue-600 text-white shadow-xs'
+                          : 'text-gray-600 hover:text-gray-900'
+                      }`}
+                    >
+                      📱 Bodyshop App Only ({appOnlyComplaints.length})
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setFilterSource('all')}
+                      className={`px-3 py-1 font-medium rounded-md transition ${
+                        filterSource === 'all'
+                          ? 'bg-slate-700 text-white shadow-xs'
+                          : 'text-gray-500 hover:text-gray-800'
+                      }`}
+                    >
+                      🌐 All Bot History ({complaints.length})
+                    </button>
+                  </div>
+
+                  {/* Refresh Button */}
+                  <button
+                    type="button"
+                    onClick={() => void fetchComplaints()}
+                    disabled={loadingComplaints}
+                    className="rounded-lg border border-gray-300 bg-white px-3 py-1 text-xs font-semibold text-gray-700 shadow-sm hover:bg-gray-100 flex items-center gap-1 disabled:opacity-50"
+                  >
+                    <span className={loadingComplaints ? 'animate-spin' : ''}>🔄</span>
+                    Refresh
+                  </button>
+
+                  <a
+                    href={`${portalUrl}/complaint`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="rounded-lg bg-rose-600 px-3 py-1 text-xs font-bold text-white shadow-sm hover:bg-rose-700 flex items-center gap-1"
+                  >
+                    + Submit New Problem ↗
+                  </a>
                 </div>
               </div>
 
+              {/* Search within complaints */}
+              <div className="flex items-center gap-3">
+                <input
+                  type="text"
+                  className="w-full max-w-sm rounded-lg border border-gray-300 px-3 py-1.5 text-xs text-gray-900 focus:border-blue-500 focus:outline-none"
+                  placeholder="Filter by vehicle reg, customer name, issue..."
+                  value={complaintSearch}
+                  onChange={(e) => setComplaintSearch(e.target.value)}
+                />
+              </div>
+
               {loadingComplaints ? (
-                <div className="py-12 text-center text-xs text-gray-500">
-                  Loading complaints from database…
+                <div className="py-12 text-center text-xs text-gray-500 flex flex-col items-center justify-center gap-2">
+                  <span className="text-2xl animate-spin">⏳</span>
+                  <span>Fetching live data from database…</span>
                 </div>
-              ) : complaints.length === 0 ? (
-                <div className="rounded-xl border border-dashed border-gray-300 p-8 text-center text-xs text-gray-500">
-                  No complaints or feedback logged yet.
+              ) : displayedComplaints.length === 0 ? (
+                <div className="rounded-xl border border-dashed border-gray-300 bg-slate-50/50 p-8 text-center space-y-3">
+                  <div className="text-3xl">📱</div>
+                  <div className="text-sm font-bold text-gray-800">
+                    {filterSource === 'app_only'
+                      ? 'No Bodyshop App Submissions Yet'
+                      : 'No records found'}
+                  </div>
+                  <p className="text-xs text-gray-500 max-w-md mx-auto">
+                    {filterSource === 'app_only'
+                      ? 'Jab bhi customer Bodyshop App ("Tell Us Your Problem" ya Feedback form) me problem submit karega, woh instant yahan real-time me show hoga.'
+                      : 'Koi bhi feedback ya problem record nahi mila.'}
+                  </p>
+                  <div className="flex items-center justify-center gap-3 pt-2">
+                    <a
+                      href={`${portalUrl}/complaint`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="rounded-lg bg-blue-600 px-4 py-2 text-xs font-bold text-white shadow-sm hover:bg-blue-700"
+                    >
+                      🚀 Open Customer Complaint Form ({portalUrl}/complaint)
+                    </a>
+                    {filterSource === 'app_only' && (
+                      <button
+                        type="button"
+                        onClick={() => setFilterSource('all')}
+                        className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-xs font-semibold text-gray-700 hover:bg-gray-100"
+                      >
+                        View All Bot History ({complaints.length})
+                      </button>
+                    )}
+                  </div>
                 </div>
               ) : (
                 <div className="overflow-x-auto rounded-xl border border-gray-200">
                   <table className="w-full text-left text-xs">
                     <thead className="bg-gray-50 text-[11px] font-bold text-gray-500 uppercase border-b border-gray-200">
                       <tr>
-                        <th className="px-3 py-2.5">Date & Time</th>
+                        <th className="px-3 py-2.5">Source / Date</th>
                         <th className="px-3 py-2.5">Vehicle Reg</th>
                         <th className="px-3 py-2.5">Customer / Phone</th>
                         <th className="px-3 py-2.5">Category</th>
@@ -311,37 +449,59 @@ export function CustomerPortalAdminModal({ isOpen, onClose, isAdmin = true }: Cu
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100">
-                      {complaints.map((c, i) => (
-                        <tr key={c.id || i} className="hover:bg-gray-50/80">
-                          <td className="px-3 py-2.5 text-gray-500 whitespace-nowrap">
-                            {c.complaint_date_time ? new Date(c.complaint_date_time).toLocaleString() : 'Recent'}
-                          </td>
-                          <td className="px-3 py-2.5 font-mono font-bold text-blue-700 whitespace-nowrap">
-                            {c.vehicle_registration_number}
-                          </td>
-                          <td className="px-3 py-2.5">
-                            <div className="font-semibold text-gray-900">{c.customer_name || 'Customer'}</div>
-                            <div className="text-[11px] text-gray-500">{c.mobile_number || '—'}</div>
-                          </td>
-                          <td className="px-3 py-2.5 whitespace-nowrap">
-                            <span className="rounded-full bg-orange-100 px-2 py-0.5 text-[11px] font-semibold text-orange-800">
-                              {c.primary_complaint_area || c.service_type || 'General'}
-                            </span>
-                          </td>
-                          <td className="px-3 py-2.5 whitespace-nowrap">
-                            <span className="font-bold text-amber-500">
-                              {'★'.repeat(c.rating || 5)}
-                            </span>
-                          </td>
-                          <td className="px-3 py-2.5 text-gray-700 max-w-xs truncate" title={c.feedback_text}>
-                            {c.feedback_text}
-                          </td>
-                          <td className="px-3 py-2.5 text-gray-500 whitespace-nowrap">
-                            <div>{c.service_advisor_name || 'Advisor'}</div>
-                            <div className="text-[11px] text-gray-400">{c.branch || 'Workshop'}</div>
-                          </td>
-                        </tr>
-                      ))}
+                      {displayedComplaints.map((c, i) => {
+                        const isApp = isFromCustomerApp(c)
+                        const isProblemForm = c.mode === 'customer_complaint_portal' || c.feedback_text?.startsWith('[Complaint')
+                        
+                        return (
+                          <tr key={c.id || i} className={isApp ? 'bg-blue-50/30 hover:bg-blue-50/60' : 'hover:bg-gray-50/80'}>
+                            <td className="px-3 py-2.5 whitespace-nowrap">
+                              <div className="mb-0.5">
+                                {isProblemForm ? (
+                                  <span className="rounded-md bg-rose-100 px-2 py-0.5 text-[10px] font-bold text-rose-800 border border-rose-200">
+                                    📱 App Problem
+                                  </span>
+                                ) : isApp ? (
+                                  <span className="rounded-md bg-indigo-100 px-2 py-0.5 text-[10px] font-bold text-indigo-800 border border-indigo-200">
+                                    ⭐ App Feedback
+                                  </span>
+                                ) : (
+                                  <span className="rounded-md bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-600 border border-slate-200">
+                                    🤖 Bot Record
+                                  </span>
+                                )}
+                              </div>
+                              <div className="text-[10px] text-gray-400">
+                                {c.complaint_date_time ? new Date(c.complaint_date_time).toLocaleString() : 'Recent'}
+                              </div>
+                            </td>
+                            <td className="px-3 py-2.5 font-mono font-bold text-blue-700 whitespace-nowrap">
+                              {c.vehicle_registration_number}
+                            </td>
+                            <td className="px-3 py-2.5">
+                              <div className="font-semibold text-gray-900">{c.customer_name || 'Customer'}</div>
+                              <div className="text-[11px] text-gray-500">{c.mobile_number || '—'}</div>
+                            </td>
+                            <td className="px-3 py-2.5 whitespace-nowrap">
+                              <span className="rounded-full bg-orange-100 px-2 py-0.5 text-[11px] font-semibold text-orange-800">
+                                {c.primary_complaint_area || c.service_type || 'General'}
+                              </span>
+                            </td>
+                            <td className="px-3 py-2.5 whitespace-nowrap">
+                              <span className="font-bold text-amber-500">
+                                {'★'.repeat(c.rating || 5)}
+                              </span>
+                            </td>
+                            <td className="px-3 py-2.5 text-gray-700 max-w-sm font-medium" title={c.feedback_text}>
+                              {c.feedback_text}
+                            </td>
+                            <td className="px-3 py-2.5 text-gray-500 whitespace-nowrap">
+                              <div>{c.service_advisor_name || 'Advisor'}</div>
+                              <div className="text-[11px] text-gray-400">{c.branch || 'Workshop'}</div>
+                            </td>
+                          </tr>
+                        )
+                      })}
                     </tbody>
                   </table>
                 </div>
