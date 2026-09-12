@@ -27,6 +27,15 @@ import {
   type FuelQueueResponse,
   type ModelOption,
 } from '../lib/api'
+import {
+  getMasterPricingList,
+  addPartPricingItem,
+  updatePartPricingItem,
+  deletePartPricingItem,
+  saveMasterPricingList,
+  resetPricingToDefault,
+  type PartPricingItem,
+} from '../lib/partsPricing'
 
 interface EmployeeRow {
   id: number
@@ -101,6 +110,7 @@ const SETTINGS_SECTION_IDS = [
   'report-email',
   'autodoc-rate-cards',
   'unmapped-sr-entries',
+  'estimate-parts-master',
 ] as const
 
 type SettingsSectionId = (typeof SETTINGS_SECTION_IDS)[number]
@@ -469,6 +479,217 @@ export default function SettingsPage() {
     surveyor_contact_number: '',
     surveyor_email: '',
   })
+
+  // Estimate & Parts Pricing Master State
+  const [estimatePricingList, setEstimatePricingList] = useState<PartPricingItem[]>([])
+  const [estSearch, setEstSearch] = useState('')
+  const [estModelFilter, setEstModelFilter] = useState('All')
+  const [estFuelFilter, setEstFuelFilter] = useState('All')
+  const [estServiceTypeFilter, setEstServiceTypeFilter] = useState('All')
+  const [estEditingItem, setEstEditingItem] = useState<PartPricingItem | null>(null)
+  const [estIsAddOpen, setEstIsAddOpen] = useState(false)
+  const [estFormData, setEstFormData] = useState({
+    service_name: '',
+    model: 'Nexon',
+    fuel: 'Petrol',
+    service_type: 'Paid Service',
+    price: 0,
+    labour: 0,
+  })
+  const [estToast, setEstToast] = useState<{ msg: string; ok: boolean } | null>(null)
+  const estFileInputRef = useRef<HTMLInputElement>(null)
+
+  function showEstToast(msg: string, ok = true) {
+    setEstToast({ msg, ok })
+    setTimeout(() => setEstToast(null), 3000)
+  }
+
+  function reloadEstimatePricing() {
+    setEstimatePricingList(getMasterPricingList())
+  }
+
+  useEffect(() => {
+    reloadEstimatePricing()
+    function handlePricingUpdate() {
+      reloadEstimatePricing()
+    }
+    window.addEventListener('techwheels_pricing_updated', handlePricingUpdate)
+    return () => {
+      window.removeEventListener('techwheels_pricing_updated', handlePricingUpdate)
+    }
+  }, [])
+
+  const estModelsList = useMemo(() => {
+    const set = new Set<string>()
+    estimatePricingList.forEach((p) => {
+      if (p.model) set.add(p.model)
+    })
+    return ['All', ...Array.from(set).sort()]
+  }, [estimatePricingList])
+
+  const estFuelsList = useMemo(() => {
+    const set = new Set<string>()
+    estimatePricingList.forEach((p) => {
+      if (p.fuel) set.add(p.fuel)
+    })
+    return ['All', ...Array.from(set).sort()]
+  }, [estimatePricingList])
+
+  const estServiceTypesList = useMemo(() => {
+    const set = new Set<string>()
+    estimatePricingList.forEach((p) => {
+      if (p.service_type) set.add(p.service_type)
+    })
+    return ['All', ...Array.from(set).sort()]
+  }, [estimatePricingList])
+
+  const filteredPricingItems = useMemo(() => {
+    return estimatePricingList.filter((item) => {
+      const matchSearch =
+        !estSearch ||
+        item.service_name.toLowerCase().includes(estSearch.toLowerCase()) ||
+        item.id.toLowerCase().includes(estSearch.toLowerCase())
+      const matchModel = estModelFilter === 'All' || item.model === estModelFilter
+      const matchFuel = estFuelFilter === 'All' || item.fuel === estFuelFilter
+      const matchType = estServiceTypeFilter === 'All' || item.service_type === estServiceTypeFilter
+      return matchSearch && matchModel && matchFuel && matchType
+    })
+  }, [estimatePricingList, estSearch, estModelFilter, estFuelFilter, estServiceTypeFilter])
+
+  function handleSaveEstItem() {
+    if (!estFormData.service_name.trim()) {
+      showEstToast('Service/Item name is required', false)
+      return
+    }
+    if (estEditingItem) {
+      updatePartPricingItem(estEditingItem.id, {
+        service_name: estFormData.service_name.trim(),
+        model: estFormData.model,
+        fuel: estFormData.fuel,
+        service_type: estFormData.service_type,
+        price: Number(estFormData.price) || 0,
+        labour: Number(estFormData.labour) || 0,
+      })
+      showEstToast('Item updated successfully')
+    } else {
+      addPartPricingItem({
+        service_name: estFormData.service_name.trim(),
+        model: estFormData.model,
+        fuel: estFormData.fuel,
+        service_type: estFormData.service_type,
+        price: Number(estFormData.price) || 0,
+        labour: Number(estFormData.labour) || 0,
+      })
+      showEstToast('Item added successfully')
+    }
+    setEstIsAddOpen(false)
+    setEstEditingItem(null)
+    setEstFormData({
+      service_name: '',
+      model: 'Nexon',
+      fuel: 'Petrol',
+      service_type: 'Paid Service',
+      price: 0,
+      labour: 0,
+    })
+    reloadEstimatePricing()
+  }
+
+  function handleOpenEditEst(item: PartPricingItem) {
+    setEstEditingItem(item)
+    setEstFormData({
+      service_name: item.service_name,
+      model: item.model || 'Nexon',
+      fuel: item.fuel || 'Petrol',
+      service_type: item.service_type || 'Paid Service',
+      price: item.price || 0,
+      labour: item.labour || 0,
+    })
+    setEstIsAddOpen(true)
+  }
+
+  function handleDeleteEstItem(id: string) {
+    if (window.confirm('Are you sure you want to delete this pricing item?')) {
+      deletePartPricingItem(id)
+      showEstToast('Item deleted')
+      reloadEstimatePricing()
+    }
+  }
+
+  function handleResetEstPricing() {
+    if (window.confirm('Reset all pricing and catalogue items to default built-in list? This will overwrite manual changes.')) {
+      resetPricingToDefault()
+      showEstToast('Reset catalogue to factory defaults')
+      reloadEstimatePricing()
+    }
+  }
+
+  function handleExportEstExcel() {
+    try {
+      const exportData = estimatePricingList.map((item) => ({
+        'Item ID': item.id,
+        'Item Name': item.service_name,
+        'Model': item.model || 'All',
+        'Fuel': item.fuel || 'All',
+        'Service Type': item.service_type || 'Paid Service',
+        'Part Price (₹)': item.price || 0,
+        'Labour (₹)': item.labour || 0,
+        'Total (₹)': (item.price || 0) + (item.labour || 0),
+      }))
+      const ws = XLSX.utils.json_to_sheet(exportData)
+      const wb = XLSX.utils.book_new()
+      XLSX.utils.book_append_sheet(wb, ws, 'EstimatePricingMaster')
+      XLSX.writeFile(wb, `Techwheels_Estimate_Pricing_Master_${new Date().toISOString().slice(0, 10)}.xlsx`)
+      showEstToast('Catalogue exported to Excel')
+    } catch {
+      showEstToast('Export failed', false)
+    }
+  }
+
+  function handleImportEstExcel(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const reader = new FileReader()
+    reader.onload = (evt) => {
+      try {
+        const data = new Uint8Array(evt.target?.result as ArrayBuffer)
+        const wb = XLSX.read(data, { type: 'array' })
+        const ws = wb.Sheets[wb.SheetNames[0]]
+        const json = XLSX.utils.sheet_to_json<Record<string, unknown>>(ws)
+        if (!json || json.length === 0) {
+          showEstToast('Empty or invalid Excel file', false)
+          return
+        }
+        const imported: PartPricingItem[] = json.map((row, idx) => {
+          const id = String(row['Item ID'] || row['id'] || `P${Date.now()}_${idx}`)
+          const name = String(row['Item Name'] || row['service_name'] || row['Name'] || row['Item'] || 'Custom Item')
+          const model = String(row['Model'] || row['model'] || '')
+          const fuel = String(row['Fuel'] || row['fuel'] || '')
+          const stype = String(row['Service Type'] || row['service_type'] || 'Paid Service')
+          const price = Number(row['Part Price (₹)'] || row['price'] || row['Price'] || 0)
+          const labour = Number(row['Labour (₹)'] || row['labour'] || row['Labour'] || 0)
+          return {
+            id,
+            service_name: name,
+            model: model && model !== 'All' ? model : undefined,
+            fuel: fuel && fuel !== 'All' ? fuel : undefined,
+            service_type: stype && stype !== 'All' ? stype : undefined,
+            price: isNaN(price) ? 0 : price,
+            labour: isNaN(labour) ? 0 : labour,
+          }
+        })
+        saveMasterPricingList(imported)
+        reloadEstimatePricing()
+        showEstToast(`Imported ${imported.length} items from Excel`)
+      } catch {
+        showEstToast('Failed to parse Excel file', false)
+      } finally {
+        if (estFileInputRef.current) estFileInputRef.current.value = ''
+      }
+    }
+    reader.readAsArrayBuffer(file)
+  }
+
   const [savingBodyshopSurveyor, setSavingBodyshopSurveyor] = useState(false)
   const [deletingBodyshopSurveyorId, setDeletingBodyshopSurveyorId] = useState<number | null>(null)
   const [editingBodyshopSurveyorId, setEditingBodyshopSurveyorId] = useState<number | null>(null)
@@ -698,6 +919,13 @@ export default function SettingsPage() {
         description: 'Review and resolve unresolved SR mapping issues.',
         stat: `${issues.length} issues`,
       },
+      {
+        id: 'estimate-parts-master',
+        icon: 'reports',
+        title: 'Estimate & Parts Master',
+        description: 'Maintain catalogue parts pricing, labour rates, and estimate rate cards.',
+        stat: `${estimatePricingList.length} items`,
+      },
     ],
     [
       bodyshopSurveyors.length,
@@ -707,6 +935,7 @@ export default function SettingsPage() {
       issues.length,
       modelOptions.length,
       rateCards.length,
+      estimatePricingList.length,
     ],
   )
 
@@ -3271,7 +3500,409 @@ export default function SettingsPage() {
           </div>
         </section>
         )}
+
+        {selectedSectionId === 'estimate-parts-master' && (
+        <section id="estimate-parts-master" className="scroll-mt-24 rounded-xl border border-gray-200 bg-white shadow-sm">
+          {/* Header */}
+          <div className="flex flex-col gap-3 border-b border-gray-100 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <div className="flex items-center gap-2">
+                <h2 className="text-sm font-semibold text-gray-900">
+                  Estimate & Parts Master
+                </h2>
+                <span className="rounded-full bg-blue-50 px-2.5 py-0.5 text-xs font-semibold text-blue-700">
+                  {filteredPricingItems.length} of {estimatePricingList.length} items
+                </span>
+              </div>
+              <p className="mt-0.5 text-xs text-gray-500">
+                Maintain catalogue items, parts pricing, labour rates, and default packages for customer estimates and approvals.
+              </p>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <input
+                ref={estFileInputRef}
+                type="file"
+                accept=".xlsx,.xls,.csv"
+                onChange={handleImportEstExcel}
+                className="hidden"
+              />
+              <button
+                type="button"
+                onClick={handleResetEstPricing}
+                className="inline-flex items-center gap-1 rounded-lg border border-gray-200 bg-gray-50 px-3 py-1.5 text-xs font-semibold text-gray-700 transition-colors hover:bg-gray-100"
+                title="Reset all catalogue items to default settings"
+              >
+                <Icon name="refresh" size={13} strokeWidth={2} />
+                Reset Defaults
+              </button>
+              <button
+                type="button"
+                onClick={() => estFileInputRef.current?.click()}
+                className="inline-flex items-center gap-1 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-semibold text-gray-700 transition-colors hover:bg-gray-50"
+              >
+                <Icon name="upload" size={13} strokeWidth={2.2} />
+                Import Excel
+              </button>
+              <button
+                type="button"
+                onClick={handleExportEstExcel}
+                className="inline-flex items-center gap-1 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-700 transition-colors hover:bg-emerald-100"
+              >
+                <Icon name="download" size={13} strokeWidth={2.2} />
+                Export Excel
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setEstEditingItem(null)
+                  setEstFormData({
+                    service_name: '',
+                    model: 'Nexon',
+                    fuel: 'Petrol',
+                    service_type: 'Paid Service',
+                    price: 0,
+                    labour: 0,
+                  })
+                  setEstIsAddOpen(true)
+                }}
+                className="inline-flex items-center gap-1 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-blue-700 shadow-sm"
+              >
+                <Icon name="plus" size={13} strokeWidth={2.3} />
+                Add Item
+              </button>
+            </div>
+          </div>
+
+          {/* Toast Notification */}
+          {estToast && (
+            <div
+              className={`mx-5 mt-4 flex items-center justify-between rounded-lg px-4 py-2 text-xs font-medium ${
+                estToast.ok
+                  ? 'border border-emerald-200 bg-emerald-50 text-emerald-800'
+                  : 'border border-red-200 bg-red-50 text-red-800'
+              }`}
+            >
+              <span>{estToast.msg}</span>
+              <button
+                type="button"
+                onClick={() => setEstToast(null)}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <Icon name="x" size={12} strokeWidth={2.4} />
+              </button>
+            </div>
+          )}
+
+          <div className="space-y-4 p-5">
+            {/* Filter Toolbar */}
+            <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-4">
+              <div>
+                <label className="mb-1 block text-[11px] font-semibold text-gray-500 uppercase tracking-wider">
+                  Search Item / ID
+                </label>
+                <div className="relative">
+                  <input
+                    type="text"
+                    value={estSearch}
+                    onChange={(e) => setEstSearch(e.target.value)}
+                    placeholder="Search name, code..."
+                    className="w-full rounded-lg border border-gray-300 py-1.5 pl-8 pr-3 text-xs outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                  />
+                  <span className="absolute left-2.5 top-2 text-gray-400">
+                    <Icon name="search" size={12} strokeWidth={2} />
+                  </span>
+                </div>
+              </div>
+
+              <div>
+                <label className="mb-1 block text-[11px] font-semibold text-gray-500 uppercase tracking-wider">
+                  Model Filter
+                </label>
+                <select
+                  value={estModelFilter}
+                  onChange={(e) => setEstModelFilter(e.target.value)}
+                  className="w-full rounded-lg border border-gray-300 px-2.5 py-1.5 text-xs outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                >
+                  {estModelsList.map((m) => (
+                    <option key={m} value={m}>
+                      {m === 'All' ? 'All Models' : m}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="mb-1 block text-[11px] font-semibold text-gray-500 uppercase tracking-wider">
+                  Fuel Type
+                </label>
+                <select
+                  value={estFuelFilter}
+                  onChange={(e) => setEstFuelFilter(e.target.value)}
+                  className="w-full rounded-lg border border-gray-300 px-2.5 py-1.5 text-xs outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                >
+                  {estFuelsList.map((f) => (
+                    <option key={f} value={f}>
+                      {f === 'All' ? 'All Fuel Types' : f}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="mb-1 block text-[11px] font-semibold text-gray-500 uppercase tracking-wider">
+                  Service Type
+                </label>
+                <select
+                  value={estServiceTypeFilter}
+                  onChange={(e) => setEstServiceTypeFilter(e.target.value)}
+                  className="w-full rounded-lg border border-gray-300 px-2.5 py-1.5 text-xs outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                >
+                  {estServiceTypesList.map((st) => (
+                    <option key={st} value={st}>
+                      {st === 'All' ? 'All Service Types' : st}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            {/* Table */}
+            <div className="overflow-x-auto rounded-lg border border-gray-200">
+              <table className="min-w-full border-collapse text-xs">
+                <thead>
+                  <tr className="border-b border-gray-200 bg-gray-50 text-left text-gray-500">
+                    <th className="px-3 py-2.5 font-semibold">#</th>
+                    <th className="px-3 py-2.5 font-semibold">Item / Part Name</th>
+                    <th className="px-3 py-2.5 font-semibold">Model</th>
+                    <th className="px-3 py-2.5 font-semibold">Fuel</th>
+                    <th className="px-3 py-2.5 font-semibold">Service Type</th>
+                    <th className="px-3 py-2.5 text-right font-semibold">Part Price (₹)</th>
+                    <th className="px-3 py-2.5 text-right font-semibold">Labour (₹)</th>
+                    <th className="px-3 py-2.5 text-right font-semibold">Total (₹)</th>
+                    <th className="px-3 py-2.5 text-center font-semibold">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {filteredPricingItems.length === 0 ? (
+                    <tr>
+                      <td colSpan={9} className="py-8 text-center text-sm text-gray-400">
+                        No pricing items found matching the selected filters.
+                      </td>
+                    </tr>
+                  ) : (
+                    filteredPricingItems.map((item, idx) => {
+                      const total = (item.price || 0) + (item.labour || 0)
+                      return (
+                        <tr key={item.id} className="hover:bg-blue-50/40 transition-colors">
+                          <td className="px-3 py-2 text-gray-400">{idx + 1}</td>
+                          <td className="px-3 py-2">
+                            <div className="font-semibold text-gray-900">{item.service_name}</div>
+                            <div className="text-[10px] font-mono text-gray-400">{item.id}</div>
+                          </td>
+                          <td className="px-3 py-2">
+                            <span className="inline-flex rounded bg-blue-50 px-2 py-0.5 text-[11px] font-semibold text-blue-700">
+                              {item.model || 'All'}
+                            </span>
+                          </td>
+                          <td className="px-3 py-2">
+                            <span className="inline-flex rounded bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-700">
+                              {item.fuel || 'All'}
+                            </span>
+                          </td>
+                          <td className="px-3 py-2">
+                            <span className="inline-flex rounded bg-purple-50 px-2 py-0.5 text-[11px] font-semibold text-purple-700">
+                              {item.service_type || 'Paid Service'}
+                            </span>
+                          </td>
+                          <td className="px-3 py-2 text-right font-mono font-medium text-gray-700">
+                            ₹{(item.price || 0).toLocaleString('en-IN')}
+                          </td>
+                          <td className="px-3 py-2 text-right font-mono font-medium text-gray-700">
+                            ₹{(item.labour || 0).toLocaleString('en-IN')}
+                          </td>
+                          <td className="px-3 py-2 text-right font-mono font-bold text-blue-700">
+                            ₹{total.toLocaleString('en-IN')}
+                          </td>
+                          <td className="px-3 py-2 text-center">
+                            <div className="inline-flex items-center gap-1.5">
+                              <button
+                                type="button"
+                                onClick={() => handleOpenEditEst(item)}
+                                className="rounded border border-blue-200 bg-blue-50 px-2 py-1 text-[11px] font-semibold text-blue-700 hover:bg-blue-100 transition-colors"
+                              >
+                                Edit
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteEstItem(item.id)}
+                                className="rounded border border-red-200 bg-red-50 px-2 py-1 text-[11px] font-semibold text-red-700 hover:bg-red-100 transition-colors"
+                              >
+                                Delete
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      )
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* Add / Edit Item Modal */}
+          {estIsAddOpen && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-xs p-4">
+              <div className="w-full max-w-md rounded-2xl border border-gray-200 bg-white p-6 shadow-2xl animate-in fade-in zoom-in-95 duration-150">
+                <div className="flex items-center justify-between border-b border-gray-100 pb-3">
+                  <h3 className="text-base font-bold text-gray-900">
+                    {estEditingItem ? 'Edit Pricing Item' : 'Add New Pricing Item'}
+                  </h3>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEstIsAddOpen(false)
+                      setEstEditingItem(null)
+                    }}
+                    className="rounded-lg p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
+                  >
+                    <Icon name="x" size={16} strokeWidth={2.4} />
+                  </button>
+                </div>
+
+                <div className="mt-4 space-y-3.5 text-xs">
+                  <div>
+                    <label className="mb-1 block font-semibold text-gray-700">
+                      Service / Part Name <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={estFormData.service_name}
+                      onChange={(e) =>
+                        setEstFormData((prev) => ({ ...prev, service_name: e.target.value }))
+                      }
+                      placeholder="e.g. Engine Oil (Synthetic), Front Brake Pad..."
+                      className="w-full rounded-lg border border-gray-300 px-3 py-2 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="mb-1 block font-semibold text-gray-700">Model</label>
+                      <input
+                        type="text"
+                        value={estFormData.model}
+                        onChange={(e) =>
+                          setEstFormData((prev) => ({ ...prev, model: e.target.value }))
+                        }
+                        placeholder="Nexon, Punch, Harrier..."
+                        className="w-full rounded-lg border border-gray-300 px-3 py-2 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="mb-1 block font-semibold text-gray-700">Fuel Type</label>
+                      <select
+                        value={estFormData.fuel}
+                        onChange={(e) =>
+                          setEstFormData((prev) => ({ ...prev, fuel: e.target.value }))
+                        }
+                        className="w-full rounded-lg border border-gray-300 px-3 py-2 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                      >
+                        <option value="Petrol">Petrol</option>
+                        <option value="Diesel">Diesel</option>
+                        <option value="EV">EV</option>
+                        <option value="CNG">CNG</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="mb-1 block font-semibold text-gray-700">Service Type</label>
+                    <select
+                      value={estFormData.service_type}
+                      onChange={(e) =>
+                        setEstFormData((prev) => ({ ...prev, service_type: e.target.value }))
+                      }
+                      className="w-full rounded-lg border border-gray-300 px-3 py-2 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                    >
+                      <option value="Paid Service">Paid Service</option>
+                      <option value="First Free Service">First Free Service</option>
+                      <option value="Second Free Service">Second Free Service</option>
+                      <option value="Third Free Service">Third Free Service</option>
+                      <option value="Running Repairs">Running Repairs</option>
+                      <option value="Bodyshop">Bodyshop</option>
+                    </select>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="mb-1 block font-semibold text-gray-700">
+                        Part Price (₹)
+                      </label>
+                      <input
+                        type="number"
+                        min="0"
+                        value={estFormData.price}
+                        onChange={(e) =>
+                          setEstFormData((prev) => ({
+                            ...prev,
+                            price: Math.max(0, Number(e.target.value)),
+                          }))
+                        }
+                        className="w-full rounded-lg border border-gray-300 px-3 py-2 font-mono outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="mb-1 block font-semibold text-gray-700">Labour (₹)</label>
+                      <input
+                        type="number"
+                        min="0"
+                        value={estFormData.labour}
+                        onChange={(e) =>
+                          setEstFormData((prev) => ({
+                            ...prev,
+                            labour: Math.max(0, Number(e.target.value)),
+                          }))
+                        }
+                        className="w-full rounded-lg border border-gray-300 px-3 py-2 font-mono outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="rounded-lg bg-blue-50/70 p-3 flex items-center justify-between border border-blue-100">
+                    <span className="font-semibold text-blue-900">Total Rate (₹):</span>
+                    <span className="font-mono text-base font-bold text-blue-700">
+                      ₹{((Number(estFormData.price) || 0) + (Number(estFormData.labour) || 0)).toLocaleString('en-IN')}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="mt-6 flex justify-end gap-2 border-t border-gray-100 pt-4">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEstIsAddOpen(false)
+                      setEstEditingItem(null)
+                    }}
+                    className="rounded-lg border border-gray-200 px-4 py-2 text-xs font-semibold text-gray-600 hover:bg-gray-50"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleSaveEstItem}
+                    className="rounded-lg bg-blue-600 px-4 py-2 text-xs font-semibold text-white hover:bg-blue-700 shadow-sm"
+                  >
+                    {estEditingItem ? 'Save Changes' : 'Add Item'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+        </section>
+        )}
       </div>
     </div>
   )
 }
+

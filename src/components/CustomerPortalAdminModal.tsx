@@ -64,6 +64,12 @@ export function CustomerPortalAdminModal({
       if (est.estimate_no) {
         map[`estno_${est.estimate_no}`] = est
       }
+      if (est.vehicle_registration_number) {
+        const vReg = est.vehicle_registration_number.trim().toUpperCase()
+        if (!map[`vreg_${vReg}`]) {
+          map[`vreg_${vReg}`] = est
+        }
+      }
     }
     setEstimatesMap(map)
   }
@@ -515,8 +521,9 @@ export function CustomerPortalAdminModal({
                     <tbody className="divide-y divide-gray-100">
                       {displayedComplaints.map((c, i) => {
                         const isApp = isFromCustomerApp(c)
-                        const isProblemForm = c.mode === 'customer_complaint_portal' || c.feedback_text?.startsWith('[Complaint')
-                        const est = c.id ? estimatesMap[`complaint_${c.id}`] : undefined
+                        const normReg = c.vehicle_registration_number ? c.vehicle_registration_number.trim().toUpperCase() : ''
+                        const est = (c.id ? estimatesMap[`complaint_${c.id}`] : undefined) ||
+                                    (normReg ? estimatesMap[`vreg_${normReg}`] : undefined)
                         
                         return (
                           <tr

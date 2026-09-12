@@ -7,6 +7,8 @@ import { REPORT_CATEGORIES } from './pages/reports'
 import SettingsPage from './pages/SettingsPage'
 import AdminPage from './pages/AdminPage'
 import LoginPage from './pages/LoginPage'
+import CustomerPortalPage from './pages/CustomerPortalPage'
+import { type CustomerVehicle } from './lib/api/customer'
 import SignUpPage from './pages/SignUpPage'
 import ForgotPasswordPage from './pages/ForgotPasswordPage'
 import AuthCallback from './pages/AuthCallback'
@@ -984,6 +986,15 @@ function AuthGate({ children }: { children: React.ReactNode }) {
   const navigate = useNavigate()
   const [user, setUser] = useState<User | null | undefined>(undefined)
   const [authView, setAuthView] = useState<'login' | 'signup' | 'forgot'>('login')
+  const [customerVehicle, setCustomerVehicle] = useState<CustomerVehicle | null>(() => {
+    try {
+      const saved = localStorage.getItem('active_customer_vehicle')
+      return saved ? JSON.parse(saved) : null
+    } catch {
+      return null
+    }
+  })
+  const [allCustomerVehicles, setAllCustomerVehicles] = useState<CustomerVehicle[]>([])
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => setUser(data.session?.user ?? null))
@@ -999,7 +1010,7 @@ function AuthGate({ children }: { children: React.ReactNode }) {
   }, [location.pathname, navigate])
 
   useEffect(() => {
-    if (user) return
+    if (user || customerVehicle) return
     if (location.pathname === '/forgot-password') {
       setAuthView('forgot')
       return
@@ -1009,7 +1020,25 @@ function AuthGate({ children }: { children: React.ReactNode }) {
       return
     }
     setAuthView('login')
-  }, [location.pathname, user])
+  }, [location.pathname, user, customerVehicle])
+
+  if (customerVehicle) {
+    return (
+      <CustomerPortalPage
+        vehicle={customerVehicle}
+        allVehicles={allCustomerVehicles}
+        onLogout={() => {
+          localStorage.removeItem('active_customer_vehicle')
+          setCustomerVehicle(null)
+          setAllCustomerVehicles([])
+        }}
+        onSelectVehicle={(v) => {
+          setCustomerVehicle(v)
+          localStorage.setItem('active_customer_vehicle', JSON.stringify(v))
+        }}
+      />
+    )
+  }
 
   if (user === undefined) {
     return (
@@ -1050,6 +1079,11 @@ function AuthGate({ children }: { children: React.ReactNode }) {
         onSwitchToForgot={() => {
           setAuthView('forgot')
           navigate('/forgot-password', { replace: true })
+        }}
+        onCustomerLogin={(veh, all) => {
+          setCustomerVehicle(veh)
+          setAllCustomerVehicles(all)
+          localStorage.setItem('active_customer_vehicle', JSON.stringify(veh))
         }}
       />
     )

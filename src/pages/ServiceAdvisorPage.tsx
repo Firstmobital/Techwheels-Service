@@ -1997,14 +1997,6 @@ export default function ServiceAdvisorPage() {
         </button>
         <button
           type="button"
-          onClick={() => setEstimateMasterModalOpen(true)}
-          className="rounded-lg px-4 py-2 text-sm font-semibold shadow-sm transition border border-amber-300 bg-amber-50 text-amber-900 hover:bg-amber-100 flex items-center gap-1.5"
-          title="Open Estimate & Parts Price Master (Manage prices, add new items, edit catalogue)"
-        >
-          <span>📋</span> Estimate
-        </button>
-        <button
-          type="button"
           onClick={() => setCustomerPortalModalOpen(true)}
           className="rounded-lg px-4 py-2 text-sm font-semibold shadow-sm transition border border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 flex items-center gap-1.5"
           title="Open Customer App & Bodyshop Customer Service Portal"
@@ -2526,12 +2518,6 @@ export default function ServiceAdvisorPage() {
         }}
         isAdmin={true}
         initialRegNumber={selectedPortalRegNumber}
-      />
-
-      <EstimateMasterModal
-        isOpen={estimateMasterModalOpen}
-        onClose={() => setEstimateMasterModalOpen(false)}
-        isAdmin={isAdmin || isSuperAdmin}
       />
     </div>
   )
