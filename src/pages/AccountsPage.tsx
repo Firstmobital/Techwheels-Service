@@ -27,9 +27,9 @@ import {
   type MechanicalDmsInvoiceLookup,
 } from '../lib/api/accounts'
 import { uploadServiceAdvisorInvoice } from '../lib/api/reception'
-import { supabase } from '../lib/supabase'
 import type { RepairCard } from '../lib/api/bodyshopRepair'
 import { settlementStatusLabel } from '../lib/api/bodyshopSettlement'
+import { issueAccountsGatePass } from '../lib/gatepass'
 
 type Section = 'mechanical' | 'bodyshop'
 type BodyshopFilter = 'remaining' | 'all' | 'received' | 'pending'
@@ -135,10 +135,14 @@ export default function AccountsPage() {
   const [payError, setPayError] = useState<string | null>(null)
   const [dmsLookup, setDmsLookup] = useState<MechanicalDmsInvoiceLookup | null>(null)
   const [loadingDms, setLoadingDms] = useState(false)
-  const [isAdmin, setIsAdmin] = useState(false)
-
   const [postRow, setPostRow] = useState<AccountsBodyshopCase | null>(null)
   const [postCard, setPostCard] = useState<RepairCard | null>(null)
+  const [gatepassConfirmTarget, setGatepassConfirmTarget] = useState<{
+    type: 'mechanical' | 'bodyshop'
+    mechRow?: AccountsMechanicalCase
+    bsRow?: AccountsBodyshopCase
+  } | null>(null)
+  const [issuingGatepass, setIssuingGatepass] = useState(false)
 
   function flash(msg: string, ok = true) {
     setToast({ msg, ok })
@@ -426,11 +430,7 @@ export default function AccountsPage() {
   }
 
   function printMechGatepass(row: AccountsMechanicalCase) {
-    try {
-      openMechanicalGatepass(row)
-    } catch (e) {
-      flash(e instanceof Error ? e.message : 'Could not open gatepass', false)
-    }
+    setGatepassConfirmTarget({ type: 'mechanical', mechRow: row })
   }
 
   function openPost(row: AccountsBodyshopCase) {
@@ -439,10 +439,61 @@ export default function AccountsPage() {
   }
 
   function printGatepass(row: AccountsBodyshopCase) {
+    setGatepassConfirmTarget({ type: 'bodyshop', bsRow: row })
+  }
+
+  async function handleConfirmIssueGatepass() {
+    if (!gatepassConfirmTarget) return
+    setIssuingGatepass(true)
     try {
-      openBodyshopGatepass(row)
+      if (gatepassConfirmTarget.type === 'mechanical' && gatepassConfirmTarget.mechRow) {
+        const row = gatepassConfirmTarget.mechRow
+        const gpNo = `GP-${row.jc_number ? row.jc_number.replace(/[^0-9]/g, '').slice(-5) : Date.now().toString().slice(-5)}`
+        await issueAccountsGatePass({
+          gate_pass_no: gpNo,
+          reg_number: row.reg_number || 'VEHICLE',
+          customer_name: row.owner_name || 'Customer',
+          customer_phone: row.owner_phone || null,
+          job_card_no: row.jc_number,
+          invoice_no: row.invoice_number || `INV-${gpNo.replace('GP-', '')}`,
+          invoice_date: row.invoice_date || null,
+          billed_amount: Number(row.billed_amount) || 0,
+          amount_received: Number(row.amount_received) || Number(row.billed_amount) || 0,
+          payment_status: 'Paid',
+          issued_at: new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }),
+          issued_by: 'Accounts Desk · Dealership',
+          branch: row.branch || 'Sitapura Workshop',
+          qr_token: `GP_AUTH_${gpNo}_${row.reg_number}_SECURE`,
+        })
+        openMechanicalGatepass(row)
+        flash(`✅ Gate Pass #${gpNo} generated & released to Customer App for ${row.reg_number}!`)
+      } else if (gatepassConfirmTarget.type === 'bodyshop' && gatepassConfirmTarget.bsRow) {
+        const row = gatepassConfirmTarget.bsRow
+        const gpNo = `GP-${row.job_card_no ? row.job_card_no.replace(/[^0-9]/g, '').slice(-5) : Date.now().toString().slice(-5)}`
+        await issueAccountsGatePass({
+          gate_pass_no: gpNo,
+          reg_number: row.reg_number || 'VEHICLE',
+          customer_name: row.customer_name || 'Customer',
+          customer_phone: null,
+          job_card_no: row.job_card_no,
+          invoice_no: row.invoice_number || `INV-${gpNo.replace('GP-', '')}`,
+          invoice_date: row.invoice_date || null,
+          billed_amount: Number(row.invoice_amount || row.billed_amount) || 0,
+          amount_received: Number(row.customer_posted_amount || row.billed_amount) || 0,
+          payment_status: 'Paid',
+          issued_at: new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }),
+          issued_by: 'Accounts Desk · Dealership',
+          branch: row.branch || 'Sitapura Workshop',
+          qr_token: `GP_AUTH_${gpNo}_${row.reg_number}_SECURE`,
+        })
+        openBodyshopGatepass(row)
+        flash(`✅ Gate Pass #${gpNo} generated & released to Customer App for ${row.reg_number}!`)
+      }
     } catch (e) {
-      flash(e instanceof Error ? e.message : 'Could not open gatepass', false)
+      flash(e instanceof Error ? e.message : 'Failed to issue gatepass', false)
+    } finally {
+      setIssuingGatepass(false)
+      setGatepassConfirmTarget(null)
     }
   }
 
@@ -1112,6 +1163,127 @@ export default function AccountsPage() {
             </div>
             <div className="modal__foot">
               <button type="button" className="btn" onClick={() => { setPostRow(null); setPostCard(null); void load() }}>Close</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {gatepassConfirmTarget && (
+        <div className="modal-back" role="presentation" onClick={() => setGatepassConfirmTarget(null)}>
+          <div
+            className="modal modal--sm"
+            role="dialog"
+            aria-modal="true"
+            onClick={(e) => e.stopPropagation()}
+            style={{ maxWidth: 480, borderRadius: 16, overflow: 'hidden' }}
+          >
+            <div
+              className="modal__head"
+              style={{
+                background: 'linear-gradient(135deg, #0f172a 0%, #1e1b4b 100%)',
+                color: 'white',
+                padding: '16px 20px',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <span style={{ fontSize: 22 }}>🚗</span>
+                <div>
+                  <h3 style={{ margin: 0, color: 'white', fontSize: 16, fontWeight: 800 }}>
+                    Issue Customer Gate Pass?
+                  </h3>
+                  <p style={{ margin: 0, fontSize: 11.5, color: '#cbd5e1' }}>
+                    Confirm release of official vehicle departure pass
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                className="modal__x"
+                style={{ color: 'white', opacity: 0.8 }}
+                onClick={() => setGatepassConfirmTarget(null)}
+                aria-label="Close"
+              >
+                ×
+              </button>
+            </div>
+
+            <div className="modal__body" style={{ padding: '20px' }}>
+              <div
+                style={{
+                  background: '#f8fafc',
+                  border: '1px solid #e2e8f0',
+                  borderRadius: 12,
+                  padding: '14px',
+                  marginBottom: '16px',
+                  fontSize: '13px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '8px',
+                }}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span style={{ color: 'var(--muted)' }}>Vehicle Reg:</span>
+                  <strong className="mono" style={{ fontSize: '14px', color: '#0369a1' }}>
+                    {gatepassConfirmTarget.mechRow?.reg_number || gatepassConfirmTarget.bsRow?.reg_number}
+                  </strong>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span style={{ color: 'var(--muted)' }}>Customer Name:</span>
+                  <strong>
+                    {gatepassConfirmTarget.mechRow?.owner_name || gatepassConfirmTarget.bsRow?.customer_name || 'Customer'}
+                  </strong>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span style={{ color: 'var(--muted)' }}>Job Card:</span>
+                  <span className="mono font-bold">
+                    {gatepassConfirmTarget.mechRow?.jc_number || gatepassConfirmTarget.bsRow?.job_card_no}
+                  </span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span style={{ color: 'var(--muted)' }}>Settled Amount:</span>
+                  <span className="mono font-bold text-emerald-700" style={{ color: '#15803d', fontWeight: 800 }}>
+                    {inr(gatepassConfirmTarget.mechRow?.billed_amount || gatepassConfirmTarget.bsRow?.billed_amount)} (✓ Full Payment Received)
+                  </span>
+                </div>
+              </div>
+
+              <div
+                style={{
+                  background: '#ecfdf5',
+                  border: '1px solid #a7f3d0',
+                  borderRadius: 10,
+                  padding: '10px 12px',
+                  fontSize: '12px',
+                  color: '#065f46',
+                  lineHeight: 1.4,
+                  marginBottom: '16px',
+                }}
+              >
+                <strong>📢 Confirmation Notice:</strong>
+                <div style={{ marginTop: 2 }}>
+                  Are you sure you want to release this Gate Pass? Once confirmed, the Gate Pass will be <strong>instantly unlocked and downloadable</strong> in the Customer App.
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
+                <button
+                  type="button"
+                  className="btn"
+                  onClick={() => setGatepassConfirmTarget(null)}
+                  disabled={issuingGatepass}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="btn btn--primary"
+                  style={{ background: '#16a34a', borderColor: '#15803d' }}
+                  onClick={() => void handleConfirmIssueGatepass()}
+                  disabled={issuingGatepass}
+                >
+                  {issuingGatepass ? 'Issuing…' : '✅ Confirm & Release Gate Pass'}
+                </button>
+              </div>
             </div>
           </div>
         </div>
