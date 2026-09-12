@@ -77,16 +77,18 @@ for (const [billNo, rows] of byBill) {
       naration: row.naration,
     })
   }
-  correctedRows.push({
-    'Bill date': template['Bill date'],
-    'bill no': template['bill no'],
-    'Party Name': template['Party Name'],
-    'Item Name': 'Rounded Off (+)',
-    Qty: 0,
-    Price: 0,
-    Amount: roundOff,
-    naration: template.naration,
-  })
+  if (roundOff !== 0) {
+    correctedRows.push({
+      'Bill date': template['Bill date'],
+      'bill no': template['bill no'],
+      'Party Name': template['Party Name'],
+      'Item Name': 'Rounded Off (+)',
+      Qty: 0,
+      Price: 0,
+      Amount: roundOff,
+      naration: template.naration,
+    })
+  }
 }
 
 const voucherWb = buildInvoiceVoucherWorkbook(correctedRows)
@@ -107,6 +109,7 @@ for (const row of rereadRows) {
 
 let missingRoundOff = 0
 let duplicateRoundOff = 0
+let unexpectedRoundOffOnWhole = 0
 let notWholeRupee = 0
 let missingParts18 = 0
 let missingLabour = 0
@@ -121,19 +124,22 @@ for (const [billNo, rows] of rereadByBill) {
   const roundOff = rows.filter((row) => row['Item Name'] === 'Rounded Off (+)')
   if (parts18.length !== 1) missingParts18 += 1
   if (labour.length !== 1) missingLabour += 1
-  if (roundOff.length === 0) missingRoundOff += 1
-  if (roundOff.length > 1) duplicateRoundOff += 1
   if (parts5.length !== 0) unexpectedParts5 += 1
-  const expected = parts5.length > 0
-    ? ['SPARE PARTS @5%', 'SPARE PARTS @18%', 'LABOUR CHARGES @18%', 'Rounded Off (+)']
-    : ['SPARE PARTS @18%', 'LABOUR CHARGES @18%', 'Rounded Off (+)']
-  assert.deepEqual(items, expected, billNo)
 
   const subtotal = roundPaise(
     [...parts5, ...parts18, ...labour].reduce((sum, row) => sum + Number(row.Amount || 0), 0),
   )
   const expectedRoundOff = roundOffToNearestRupee(subtotal)
-  const actualRoundOff = Number(roundOff[0]?.Amount ?? NaN)
+  const needsRoundOff = expectedRoundOff !== 0
+  if (needsRoundOff && roundOff.length === 0) missingRoundOff += 1
+  if (!needsRoundOff && roundOff.length > 0) unexpectedRoundOffOnWhole += 1
+  if (roundOff.length > 1) duplicateRoundOff += 1
+  const baseItems = parts5.length > 0
+    ? ['SPARE PARTS @5%', 'SPARE PARTS @18%', 'LABOUR CHARGES @18%']
+    : ['SPARE PARTS @18%', 'LABOUR CHARGES @18%']
+  assert.deepEqual(items, needsRoundOff ? [...baseItems, 'Rounded Off (+)'] : baseItems, billNo)
+
+  const actualRoundOff = needsRoundOff ? Number(roundOff[0]?.Amount ?? NaN) : 0
   if (actualRoundOff !== expectedRoundOff) signedMismatch += 1
   const finalPaise = Math.round(subtotal * 100) + Math.round(actualRoundOff * 100)
   if (finalPaise % 100 !== 0) notWholeRupee += 1
@@ -205,6 +211,7 @@ const report = {
   generatedParty: partyPath,
   distinctInvoiceCount: rereadByBill.size,
   invoicesMissingRoundOff: missingRoundOff,
+  invoicesWithUnexpectedRoundOffOnWhole: unexpectedRoundOffOnWhole,
   invoicesWithDuplicateRoundOff: duplicateRoundOff,
   invoicesWhoseFinalTotalIsNotWholeRupee: notWholeRupee,
   invoicesMissingParts18: missingParts18,
@@ -221,6 +228,7 @@ const report = {
 
 assert.equal(report.distinctInvoiceCount, 102)
 assert.equal(report.invoicesMissingRoundOff, 0)
+assert.equal(report.invoicesWithUnexpectedRoundOffOnWhole, 0)
 assert.equal(report.invoicesWithDuplicateRoundOff, 0)
 assert.equal(report.invoicesWhoseFinalTotalIsNotWholeRupee, 0)
 assert.equal(report.invoicesMissingParts18, 0)
@@ -238,6 +246,7 @@ console.log('PASS  practical workbook re-read')
 console.log(JSON.stringify({
   distinctInvoiceCount: report.distinctInvoiceCount,
   invoicesMissingRoundOff: report.invoicesMissingRoundOff,
+  invoicesWithUnexpectedRoundOffOnWhole: report.invoicesWithUnexpectedRoundOffOnWhole,
   invoicesWithDuplicateRoundOff: report.invoicesWithDuplicateRoundOff,
   invoicesWhoseFinalTotalIsNotWholeRupee: report.invoicesWhoseFinalTotalIsNotWholeRupee,
   bodyshopPartiesWithoutMappedInsurer: report.bodyshopPartiesWithoutMappedInsurer,

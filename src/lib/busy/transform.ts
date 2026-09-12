@@ -356,7 +356,7 @@ export function transformBusyAccounting(input: {
     if (row.hasParts5Line) invoiceRows.push(voucherRow(row, ITEM_SPARE_PARTS_5, row.parts5, voucherNarration))
     invoiceRows.push(voucherRow(row, ITEM_SPARE_PARTS_18, row.parts18, voucherNarration))
     invoiceRows.push(voucherRow(row, ITEM_LABOUR_18, row.labour, voucherNarration))
-    invoiceRows.push(voucherRow(row, ITEM_ROUND_OFF, row.roundOff, voucherNarration))
+    if (row.roundOff !== 0) invoiceRows.push(voucherRow(row, ITEM_ROUND_OFF, row.roundOff, voucherNarration))
   }
 
   const partySeen = new Set<string>()

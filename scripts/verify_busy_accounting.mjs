@@ -67,7 +67,7 @@ test('1. PV + IMBTAI => included', () => {
   assert.equal(result.summary.eligible, 1)
   assert.equal(result.preview[0].status, 'ready')
   assertInvoiceVoucherContract(result)
-  assert.equal(result.invoiceRows.length, 3)
+  assert.equal(result.invoiceRows.length, 2)
 })
 
 test('2. PV + other prefix => excluded', () => {
@@ -92,7 +92,7 @@ test('3. EV + EMBTAI => included', () => {
   assert.equal(result.summary.eligible, 1)
   assert.equal(invoiceMatchesPortalSeries('EMBTAI2627000001', 'EV'), true)
   assertInvoiceVoucherContract(result)
-  assert.equal(result.invoiceRows.length, 3)
+  assert.equal(result.invoiceRows.length, 2)
 })
 
 test('4. EV + other prefix => excluded', () => {
@@ -179,15 +179,15 @@ function assertInvoiceVoucherContract(result) {
     const parts18 = rows.filter((row) => row['Item Name'] === 'SPARE PARTS @18%')
     const labour = rows.filter((row) => row['Item Name'] === 'LABOUR CHARGES @18%')
     const roundOff = rows.filter((row) => row['Item Name'] === 'Rounded Off (+)')
+    const needsRoundOff = preview.roundOff !== 0
     assert.equal(parts18.length, 1)
     assert.equal(labour.length, 1)
-    assert.equal(roundOff.length, 1)
+    assert.equal(roundOff.length, needsRoundOff ? 1 : 0)
     assert.equal(parts5.length, preview.hasParts5Line ? 1 : 0)
-    if (preview.hasParts5Line) {
-      assert.deepEqual(items, ['SPARE PARTS @5%', 'SPARE PARTS @18%', 'LABOUR CHARGES @18%', 'Rounded Off (+)'])
-    } else {
-      assert.deepEqual(items, ['SPARE PARTS @18%', 'LABOUR CHARGES @18%', 'Rounded Off (+)'])
-    }
+    const baseItems = preview.hasParts5Line
+      ? ['SPARE PARTS @5%', 'SPARE PARTS @18%', 'LABOUR CHARGES @18%']
+      : ['SPARE PARTS @18%', 'LABOUR CHARGES @18%']
+    assert.deepEqual(items, needsRoundOff ? [...baseItems, 'Rounded Off (+)'] : baseItems)
     for (const row of rows) {
       assert.equal(row['Bill date'], formatBusyBillDate(preview.invoiceDate))
       assert.equal(row['Bill date'], rows[0]['Bill date'])
@@ -199,7 +199,7 @@ function assertInvoiceVoucherContract(result) {
     }
     assert.equal(parts18[0].Amount, preview.parts18)
     assert.equal(labour[0].Amount, preview.labour)
-    assert.equal(roundOff[0].Amount, preview.roundOff)
+    if (needsRoundOff) assert.equal(roundOff[0].Amount, preview.roundOff)
     if (preview.hasParts5Line) assert.equal(parts5[0].Amount, preview.parts5)
     const subtotalPaise = Math.round((preview.parts5 + preview.parts18 + preview.labour) * 100)
     const finalPaise = subtotalPaise + Math.round(preview.roundOff * 100)
@@ -219,7 +219,7 @@ test('16. invoice with both 5% and 18% Parts produces separated accounting rows'
   })
   assertInvoiceVoucherContract(result)
   const items = result.invoiceRows.map((row) => row['Item Name'])
-  assert.deepEqual(items, ['SPARE PARTS @5%', 'SPARE PARTS @18%', 'LABOUR CHARGES @18%', 'Rounded Off (+)'])
+  assert.deepEqual(items, ['SPARE PARTS @5%', 'SPARE PARTS @18%', 'LABOUR CHARGES @18%'])
   assert.equal(result.invoiceRows[0].Amount, 105)
   assert.equal(result.invoiceRows[1].Amount, 236)
   assert.equal(result.invoiceRows[0]['bill no'], 'IMBTAI2627000001')
@@ -237,7 +237,7 @@ test('17. no 5% source line does not create a 5% row', () => {
   assertInvoiceVoucherContract(result)
   assert.equal(result.preview[0].hasParts5Line, false)
   assert.equal(result.invoiceRows.some((row) => row['Item Name'] === 'SPARE PARTS @5%'), false)
-  assert.equal(result.invoiceRows.length, 3)
+  assert.equal(result.invoiceRows.length, 2)
 })
 
 test('18. multiple Parts rows for same invoice aggregate correctly', () => {
@@ -279,10 +279,9 @@ test('mandatory 18% Parts and Labour rows are retained at Amount 0', () => {
     toDate: '2026-09-10',
   })
   assertInvoiceVoucherContract(result)
-  assert.deepEqual(result.invoiceRows.map((row) => row['Item Name']), ['SPARE PARTS @18%', 'LABOUR CHARGES @18%', 'Rounded Off (+)'])
+  assert.deepEqual(result.invoiceRows.map((row) => row['Item Name']), ['SPARE PARTS @18%', 'LABOUR CHARGES @18%'])
   assert.equal(result.invoiceRows[0].Amount, 0)
   assert.equal(result.invoiceRows[1].Amount, 0)
-  assert.equal(result.invoiceRows[2].Amount, 0)
 })
 
 test('5% row is created from a genuine 5% line even when Amount is 0', () => {
@@ -313,7 +312,7 @@ test('20. unmatched Parts do not create independent invoice', () => {
   assert.equal(result.unmatchedParts.length, 1)
   assert.equal(result.invoiceRows.every((row) => row.Amount !== 1178.82), true)
   assert.equal(result.summary.eligible, 1)
-  assert.equal(result.invoiceRows.length, 3)
+  assert.equal(result.invoiceRows.length, 2)
 })
 
 test('21-23. inclusive date filter', () => {
@@ -333,7 +332,7 @@ test('21-23. inclusive date filter', () => {
   assert.equal(result.summary.eligible, 2)
   assert.equal(result.preview.filter((row) => row.exclusionKind === 'date').length, 1)
   assertInvoiceVoucherContract(result)
-  assert.equal(result.invoiceRows.length, 6)
+  assert.equal(result.invoiceRows.length, 4)
 })
 
 test('24. duplicate Party Names export once', () => {
@@ -438,10 +437,10 @@ test('eligible invoices do not always emit 3 voucher rows', () => {
   assertInvoiceVoucherContract(result)
   assert.equal(result.summary.eligible, 2)
   assert.notEqual(result.invoiceRows.length, result.summary.eligible * 3)
-  assert.equal(result.invoiceRows.length, 7)
+  assert.equal(result.invoiceRows.length, 5)
   const byBill = voucherGroups(result.invoiceRows)
-  assert.deepEqual(byBill.get('IMBTAI1').map((row) => row['Item Name']), ['SPARE PARTS @5%', 'SPARE PARTS @18%', 'LABOUR CHARGES @18%', 'Rounded Off (+)'])
-  assert.deepEqual(byBill.get('IMBTAI2').map((row) => row['Item Name']), ['SPARE PARTS @18%', 'LABOUR CHARGES @18%', 'Rounded Off (+)'])
+  assert.deepEqual(byBill.get('IMBTAI1').map((row) => row['Item Name']), ['SPARE PARTS @5%', 'SPARE PARTS @18%', 'LABOUR CHARGES @18%'])
+  assert.deepEqual(byBill.get('IMBTAI2').map((row) => row['Item Name']), ['SPARE PARTS @18%', 'LABOUR CHARGES @18%'])
 })
 
 test('workbook round-trip keeps per-invoice voucher shape', () => {
@@ -460,12 +459,12 @@ test('workbook round-trip keeps per-invoice voucher shape', () => {
   assertInvoiceVoucherContract(result)
   const workbook = buildInvoiceVoucherWorkbook(result.invoiceRows)
   const workbookRows = workbookDataRows(workbook)
-  assert.equal(workbookRows.length, 7)
+  assert.equal(workbookRows.length, 5)
   const groups = voucherGroups(workbookRows)
   const with5 = groups.get('IMBTAI1')
   const without5 = groups.get('IMBTAI2')
-  assert.deepEqual(with5.map((row) => row['Item Name']), ['SPARE PARTS @5%', 'SPARE PARTS @18%', 'LABOUR CHARGES @18%', 'Rounded Off (+)'])
-  assert.deepEqual(without5.map((row) => row['Item Name']), ['SPARE PARTS @18%', 'LABOUR CHARGES @18%', 'Rounded Off (+)'])
+  assert.deepEqual(with5.map((row) => row['Item Name']), ['SPARE PARTS @5%', 'SPARE PARTS @18%', 'LABOUR CHARGES @18%'])
+  assert.deepEqual(without5.map((row) => row['Item Name']), ['SPARE PARTS @18%', 'LABOUR CHARGES @18%'])
   for (const row of workbookRows) {
     assert.equal(row['Bill date'], '01-09-2026')
     assert.equal(row.Qty, 0)
@@ -474,10 +473,8 @@ test('workbook round-trip keeps per-invoice voucher shape', () => {
   assert.equal(with5[0].Amount, 105)
   assert.equal(with5[1].Amount, 0)
   assert.equal(with5[2].Amount, 0)
-  assert.equal(with5[3].Amount, 0)
   assert.equal(without5[0].Amount, 236)
   assert.equal(without5[1].Amount, 1180)
-  assert.equal(without5[2].Amount, 0)
   assert.equal(with5.every((row) => row['Party Name'] === with5[0]['Party Name']), true)
   assert.equal(with5.every((row) => row.naration === with5[0].naration), true)
 })
@@ -1003,7 +1000,7 @@ test('round off uses nearest whole rupee and existing half-up paise convention',
   assert.equal(String(roundOffToNearestRupee(10823.55)), '0.45')
 })
 
-test('every eligible invoice emits exactly one Rounded Off (+) row including zero', () => {
+test('Rounded Off (+) is emitted only when labour+parts subtotal has a decimal part', () => {
   const result = transformBusyAccounting({
     labourRows: [
       labour({ invoice_number: 'IMBTAI1', job_card_number: 'JC-A', final_labour_amount: 10823.55 }),
@@ -1016,11 +1013,15 @@ test('every eligible invoice emits exactly one Rounded Off (+) row including zer
   })
   assertInvoiceVoucherContract(result)
   const groups = voucherGroups(result.invoiceRows)
+  assert.equal(groups.get('IMBTAI1').at(-1)['Item Name'], 'Rounded Off (+)')
   assert.equal(groups.get('IMBTAI1').at(-1).Amount, 0.45)
+  assert.equal(groups.get('IMBTAI2').at(-1)['Item Name'], 'Rounded Off (+)')
   assert.equal(groups.get('IMBTAI2').at(-1).Amount, -0.20)
-  assert.equal(groups.get('IMBTAI3').at(-1).Amount, 0)
+  assert.equal(groups.get('IMBTAI3').some((row) => row['Item Name'] === 'Rounded Off (+)'), false)
+  assert.equal(groups.get('IMBTAI3').length, 2)
   assert.equal(result.preview.find((row) => row.invoiceNumber === 'IMBTAI1').total, 10824)
   assert.equal(result.preview.find((row) => row.invoiceNumber === 'IMBTAI2').total, 9003)
+  assert.equal(result.preview.find((row) => row.invoiceNumber === 'IMBTAI3').roundOff, 0)
 })
 
 if (failed > 0) {

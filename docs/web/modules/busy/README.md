@@ -25,8 +25,8 @@ Invoice Voucher rows are generated per eligible Labour invoice:
 
 - Always emit `SPARE PARTS @18%` and `LABOUR CHARGES @18%`, including Amount 0.
 - Emit `SPARE PARTS @5%` only when matched Parts data contains a genuine 5% GST line item. Do not emit it merely because the calculated 5% amount is 0.
-- Always emit a final `Rounded Off (+)` row (exact BUSY account name). Amount is nearest whole rupee minus the GST-inclusive subtotal, rounded to 2 decimals with the existing half-up paise helper (`Math.round`). Exact `.50` goes to the next rupee. A whole-rupee subtotal still emits `Rounded Off (+)` = 0.
-- Order without 5%: 18% Parts, Labour, `Rounded Off (+)`. Order with 5%: 5% Parts, 18% Parts, Labour, `Rounded Off (+)`.
+- Emit a final `Rounded Off (+)` row (exact BUSY account name) only when labour + Parts inclusive subtotal has a non-zero decimal part. Amount is nearest whole rupee minus that subtotal, rounded to 2 decimals with the existing half-up paise helper (`Math.round`). Exact `.50` goes to the next rupee. A whole-rupee subtotal does not emit this row.
+- Order without 5%: 18% Parts, Labour, then `Rounded Off (+)` only if needed. Order with 5%: 5% Parts, 18% Parts, Labour, then `Rounded Off (+)` only if needed.
 
 Party Account columns are `Party Name`, `Group`, `GSTIN`.
 
