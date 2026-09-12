@@ -1,6 +1,11 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
 import { ALL_PARTS_PRICING, type PartPricingItem } from '../lib/partsPricing'
+import { ServiceEstimateBuilderModal } from './ServiceEstimateBuilderModal'
+import {
+  fetchAllEstimates,
+  type CustomerEstimateRecord,
+} from '../lib/estimates'
 
 interface CustomerPortalAdminModalProps {
   isOpen: boolean
@@ -31,6 +36,8 @@ export function CustomerPortalAdminModal({ isOpen, onClose, isAdmin = true }: Cu
   const [loadingComplaints, setLoadingComplaints] = useState(false)
   const [filterSource, setFilterSource] = useState<'app_only' | 'all'>('app_only')
   const [complaintSearch, setComplaintSearch] = useState('')
+  const [selectedProblemForEstimate, setSelectedProblemForEstimate] = useState<ComplaintRecord | null>(null)
+  const [estimatesMap, setEstimatesMap] = useState<Record<string, CustomerEstimateRecord>>({})
   
   // Pricing filters
   const [pricingSearch, setPricingSearch] = useState('')
@@ -42,6 +49,18 @@ export function CustomerPortalAdminModal({ isOpen, onClose, isAdmin = true }: Cu
   const [copiedLink, setCopiedLink] = useState(false)
 
   const portalUrl = typeof window !== 'undefined' ? `${window.location.protocol}//${window.location.hostname}:5174` : 'http://localhost:5174'
+
+  async function loadEstimates() {
+    const list = await fetchAllEstimates()
+    const map: Record<string, CustomerEstimateRecord> = {}
+    for (const est of list) {
+      const reg = est.vehicle_registration_number?.toUpperCase()
+      if (reg && !map[reg]) {
+        map[reg] = est
+      }
+    }
+    setEstimatesMap(map)
+  }
 
   async function fetchComplaints() {
     setLoadingComplaints(true)
@@ -55,6 +74,7 @@ export function CustomerPortalAdminModal({ isOpen, onClose, isAdmin = true }: Cu
       if (!error && data) {
         setComplaints(data as ComplaintRecord[])
       }
+      await loadEstimates()
     } catch (err) {
       console.warn('Failed to load complaints from post_feedback_bot_data:', err)
     } finally {
@@ -76,10 +96,24 @@ export function CustomerPortalAdminModal({ isOpen, onClose, isAdmin = true }: Cu
           void fetchComplaints()
         }
       )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'customer_estimates' },
+        () => {
+          void loadEstimates()
+        }
+      )
       .subscribe()
+
+    function handleEstimateSync() {
+      void loadEstimates()
+    }
+
+    window.addEventListener('techwheels_estimate_updated', handleEstimateSync)
 
     return () => {
       void supabase.removeChannel(channel)
+      window.removeEventListener('techwheels_estimate_updated', handleEstimateSync)
     }
   }, [isOpen])
 
@@ -443,8 +477,8 @@ export function CustomerPortalAdminModal({ isOpen, onClose, isAdmin = true }: Cu
                         <th className="px-3 py-2.5">Vehicle Reg</th>
                         <th className="px-3 py-2.5">Customer / Phone</th>
                         <th className="px-3 py-2.5">Category</th>
-                        <th className="px-3 py-2.5">Rating</th>
                         <th className="px-3 py-2.5">Description / Remark</th>
+                        <th className="px-3 py-2.5 text-center">Parts Estimate & Approval</th>
                         <th className="px-3 py-2.5">Advisor / Branch</th>
                       </tr>
                     </thead>
@@ -452,9 +486,17 @@ export function CustomerPortalAdminModal({ isOpen, onClose, isAdmin = true }: Cu
                       {displayedComplaints.map((c, i) => {
                         const isApp = isFromCustomerApp(c)
                         const isProblemForm = c.mode === 'customer_complaint_portal' || c.feedback_text?.startsWith('[Complaint')
+                        const reg = c.vehicle_registration_number?.toUpperCase()
+                        const est = reg ? estimatesMap[reg] : undefined
                         
                         return (
-                          <tr key={c.id || i} className={isApp ? 'bg-blue-50/30 hover:bg-blue-50/60' : 'hover:bg-gray-50/80'}>
+                          <tr
+                            key={c.id || i}
+                            onClick={() => setSelectedProblemForEstimate(c)}
+                            className={`cursor-pointer transition ${
+                              isApp ? 'bg-blue-50/30 hover:bg-blue-100/50' : 'hover:bg-gray-50/80'
+                            }`}
+                          >
                             <td className="px-3 py-2.5 whitespace-nowrap">
                               <div className="mb-0.5">
                                 {isProblemForm ? (
@@ -487,13 +529,49 @@ export function CustomerPortalAdminModal({ isOpen, onClose, isAdmin = true }: Cu
                                 {c.primary_complaint_area || c.service_type || 'General'}
                               </span>
                             </td>
-                            <td className="px-3 py-2.5 whitespace-nowrap">
-                              <span className="font-bold text-amber-500">
-                                {'★'.repeat(c.rating || 5)}
-                              </span>
+                            <td className="px-3 py-2.5 text-gray-700 max-w-xs font-medium" title={c.feedback_text}>
+                              <div className="line-clamp-2">{c.feedback_text}</div>
                             </td>
-                            <td className="px-3 py-2.5 text-gray-700 max-w-sm font-medium" title={c.feedback_text}>
-                              {c.feedback_text}
+                            <td className="px-3 py-2.5 text-center whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
+                              {est ? (
+                                est.status === 'Approved' ? (
+                                  <button
+                                    type="button"
+                                    onClick={() => setSelectedProblemForEstimate(c)}
+                                    className="rounded-lg bg-emerald-100 border border-emerald-300 px-2.5 py-1 text-xs font-bold text-emerald-900 shadow-xs hover:bg-emerald-200 flex items-center gap-1 mx-auto"
+                                  >
+                                    <span>✅ Approved</span>
+                                    <span className="font-mono font-extrabold text-emerald-800">₹{est.grand_total.toLocaleString()}</span>
+                                  </button>
+                                ) : est.status === 'Rejected' ? (
+                                  <button
+                                    type="button"
+                                    onClick={() => setSelectedProblemForEstimate(c)}
+                                    className="rounded-lg bg-rose-100 border border-rose-300 px-2.5 py-1 text-xs font-bold text-rose-900 shadow-xs hover:bg-rose-200 flex items-center gap-1 mx-auto"
+                                  >
+                                    <span>❌ Rejected</span>
+                                    <span>· Revise</span>
+                                  </button>
+                                ) : (
+                                  <button
+                                    type="button"
+                                    onClick={() => setSelectedProblemForEstimate(c)}
+                                    className="rounded-lg bg-amber-100 border border-amber-300 px-2.5 py-1 text-xs font-bold text-amber-900 shadow-xs hover:bg-amber-200 flex items-center gap-1 mx-auto"
+                                  >
+                                    <span>⏳ Sent</span>
+                                    <span className="font-mono text-amber-800">₹{est.grand_total.toLocaleString()}</span>
+                                  </button>
+                                )
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={() => setSelectedProblemForEstimate(c)}
+                                  className="rounded-lg bg-blue-600 px-3 py-1 text-xs font-bold text-white shadow-xs hover:bg-blue-700 flex items-center gap-1 mx-auto"
+                                >
+                                  <span>📝</span>
+                                  <span>Create Estimate</span>
+                                </button>
+                              )}
                             </td>
                             <td className="px-3 py-2.5 text-gray-500 whitespace-nowrap">
                               <div>{c.service_advisor_name || 'Advisor'}</div>
@@ -631,6 +709,24 @@ export function CustomerPortalAdminModal({ isOpen, onClose, isAdmin = true }: Cu
           </button>
         </div>
       </div>
+
+      {/* Interactive Service Estimate Builder Modal on Problem Click */}
+      {selectedProblemForEstimate && (
+        <ServiceEstimateBuilderModal
+          isOpen={Boolean(selectedProblemForEstimate)}
+          onClose={() => setSelectedProblemForEstimate(null)}
+          vehicleReg={selectedProblemForEstimate.vehicle_registration_number}
+          customerName={selectedProblemForEstimate.customer_name || 'Customer'}
+          customerPhone={selectedProblemForEstimate.mobile_number || ''}
+          problemDescription={selectedProblemForEstimate.feedback_text}
+          category={selectedProblemForEstimate.primary_complaint_area || selectedProblemForEstimate.service_type || 'General'}
+          complaintId={selectedProblemForEstimate.id}
+          onEstimateSent={() => {
+            void loadEstimates()
+          }}
+        />
+      )}
     </div>
   )
 }
+

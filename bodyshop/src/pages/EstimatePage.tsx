@@ -1,5 +1,10 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { getEstimateDetails, type CustomerVehicle, type EstimateDetails } from '../lib/api'
+import {
+  fetchEstimateForVehicle,
+  updateEstimateApproval,
+  type CustomerEstimateRecord,
+} from '../lib/estimates'
 
 interface EstimatePageProps {
   vehicle: CustomerVehicle
@@ -11,17 +16,53 @@ export default function EstimatePage({ vehicle }: EstimatePageProps) {
   const [rejectReason, setRejectReason] = useState('')
   const [toast, setToast] = useState<{ ok: boolean; msg: string } | null>(null)
 
-  function handleApprove() {
+  useEffect(() => {
+    async function loadLiveEstimate() {
+      if (!vehicle.reg_number) return
+      const live = await fetchEstimateForVehicle(vehicle.reg_number)
+      if (live && live.items && live.items.length > 0) {
+        setEstimate({
+          estimate_no: live.estimate_no,
+          items: live.items,
+          subtotal: live.subtotal,
+          discount: live.discount,
+          gst_tax: live.gst_tax,
+          grand_total: live.grand_total,
+          status: live.status,
+          rejection_reason: live.rejection_reason || undefined,
+        })
+      }
+    }
+
+    void loadLiveEstimate()
+
+    function handleEstimateSync(e: Event) {
+      const customEv = e as CustomEvent<CustomerEstimateRecord>
+      if (customEv.detail && (!customEv.detail.vehicle_registration_number || customEv.detail.vehicle_registration_number === vehicle.reg_number)) {
+        void loadLiveEstimate()
+      }
+    }
+
+    window.addEventListener('techwheels_estimate_updated', handleEstimateSync)
+    return () => {
+      window.removeEventListener('techwheels_estimate_updated', handleEstimateSync)
+    }
+  }, [vehicle.reg_number])
+
+  async function handleApprove() {
     setEstimate((prev) => ({ ...prev, status: 'Approved' }))
+    await updateEstimateApproval(estimate.estimate_no, 'Approved')
     setToast({
       ok: true,
       msg: `Estimate #${estimate.estimate_no} Approved! Assigned Technician has been notified to commence repairs.`,
     })
   }
 
-  function handleRejectSubmit() {
+  async function handleRejectSubmit() {
     if (!rejectReason.trim()) return
-    setEstimate((prev) => ({ ...prev, status: 'Rejected', rejection_reason: rejectReason.trim() }))
+    const reason = rejectReason.trim()
+    setEstimate((prev) => ({ ...prev, status: 'Rejected', rejection_reason: reason }))
+    await updateEstimateApproval(estimate.estimate_no, 'Rejected', reason)
     setShowRejectModal(false)
     setToast({
       ok: false,
