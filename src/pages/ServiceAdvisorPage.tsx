@@ -25,7 +25,7 @@ import CustomerRemarkModal from '../components/CustomerRemarkModal'
 import { CustomerPortalAdminModal } from '../components/CustomerPortalAdminModal'
 import { EstimateMasterModal } from '../components/EstimateMasterModal'
 import { PaymentStatusModal } from '../components/PaymentStatusModal'
-import { fetchVehiclePayment, type VehiclePaymentRecord } from '../lib/payments'
+import { type VehiclePaymentRecord } from '../lib/payments'
 
 type RowDraft = {
   service_type: string
@@ -2470,7 +2470,7 @@ export default function ServiceAdvisorPage() {
                           {(() => {
                             const regKey = String(row.reg_number || '').trim().toUpperCase().replace(/[\s-]/g, '')
                             const pay = paymentsMap[regKey]
-                            const invoiceNum = Number(draft.invoice_amount) || Number(row.invoice_amount) || 0
+                            const invoiceNum = Number(draft.invoice_amount) || 0
                             const billedTotal = (pay && pay.total_billed > 0 ? pay.total_billed : 0) || invoiceNum
                             const amountReceived = pay ? pay.amount_received : 0
                             const remaining = Math.max(0, billedTotal - amountReceived)
@@ -2612,7 +2612,7 @@ export default function ServiceAdvisorPage() {
           onPaymentSaved={(updated) => {
             const cleanReg = updated.reg_number.trim().toUpperCase().replace(/[\s-]/g, '')
             setPaymentsMap((prev) => ({ ...prev, [cleanReg]: updated }))
-            showToast({ ok: true, msg: `Payment status for ${updated.reg_number} saved as ${updated.status}!` })
+            showToast(`Payment status for ${updated.reg_number} saved as ${updated.status}!`)
           }}
         />
       )}
