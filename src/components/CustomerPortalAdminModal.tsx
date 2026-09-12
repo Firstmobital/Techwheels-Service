@@ -68,11 +68,16 @@ export function CustomerPortalAdminModal({ isOpen, onClose, isAdmin = true }: Cu
       const { data, error } = await supabase
         .from('post_feedback_bot_data')
         .select('*')
+        .neq('mode', 'customer_estimate_payload')
         .order('complaint_date_time', { ascending: false })
         .limit(100)
 
       if (!error && data) {
-        setComplaints(data as ComplaintRecord[])
+        // Exclude any estimate sync rows from complaints list
+        const cleanList = (data as ComplaintRecord[]).filter(
+          (c) => c.mode !== 'customer_estimate_payload' && !c.feedback_text?.startsWith('{"estimate_no"')
+        )
+        setComplaints(cleanList)
       }
       await loadEstimates()
     } catch (err) {
@@ -121,13 +126,13 @@ export function CustomerPortalAdminModal({ isOpen, onClose, isAdmin = true }: Cu
 
   // Determine if a record is from the Customer / Bodyshop App
   const isFromCustomerApp = (c: ComplaintRecord) => {
+    if (c.mode === 'customer_estimate_payload' || c.feedback_text?.startsWith('{"estimate_no"')) {
+      return false
+    }
     if (c.mode === 'customer_complaint_portal' || c.mode === 'customer_mobile_pwa' || c.mode === 'customer_booking_pwa') {
       return true
     }
     if (c.feedback_text?.startsWith('[Complaint') || c.feedback_text?.includes('[Sandbox Test]')) {
-      return true
-    }
-    if (c.mode && c.mode.includes('customer')) {
       return true
     }
     return false
@@ -145,6 +150,41 @@ export function CustomerPortalAdminModal({ isOpen, onClose, isAdmin = true }: Cu
       c.mobile_number?.includes(q)
     )
   })
+
+  // Format problem text cleanly without raw technical prefixes
+  function renderCleanDescription(text: string) {
+    if (!text) return <span className="text-gray-400 italic">No description</span>
+
+    if (text.startsWith('[Complaint')) {
+      const issueMatch = text.match(/Issue:\s*([^|]+)/i)
+      const kmMatch = text.match(/KM:\s*([^|]+)/i)
+      const addMatch = text.match(/Additional:\s*(.+)/i)
+
+      const issueText = issueMatch ? issueMatch[1].trim() : text
+      const km = kmMatch ? kmMatch[1].trim() : null
+      const add = addMatch && addMatch[1].trim() !== 'None' && addMatch[1].trim() !== 'undefined' ? addMatch[1].trim() : null
+
+      return (
+        <div className="space-y-0.5">
+          <div className="font-semibold text-gray-900 line-clamp-2">{issueText}</div>
+          <div className="flex flex-wrap items-center gap-1.5 text-[10px] text-gray-500">
+            {km && km !== 'N/A' && (
+              <span className="rounded bg-slate-100 px-1.5 py-0.2 font-mono text-slate-700 font-bold">
+                ⚡ {km} KM
+              </span>
+            )}
+            {add && (
+              <span className="text-gray-500 italic truncate max-w-[200px]" title={add}>
+                Note: {add}
+              </span>
+            )}
+          </div>
+        </div>
+      )
+    }
+
+    return <div className="font-semibold text-gray-800 line-clamp-2">{text}</div>
+  }
 
   const filteredPricing = ALL_PARTS_PRICING.filter((item: PartPricingItem) => {
     const matchSearch =
@@ -529,8 +569,8 @@ export function CustomerPortalAdminModal({ isOpen, onClose, isAdmin = true }: Cu
                                 {c.primary_complaint_area || c.service_type || 'General'}
                               </span>
                             </td>
-                            <td className="px-3 py-2.5 text-gray-700 max-w-xs font-medium" title={c.feedback_text}>
-                              <div className="line-clamp-2">{c.feedback_text}</div>
+                            <td className="px-3 py-2.5 text-gray-700 max-w-sm" title={c.feedback_text}>
+                              {renderCleanDescription(c.feedback_text)}
                             </td>
                             <td className="px-3 py-2.5 text-center whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
                               {est ? (
