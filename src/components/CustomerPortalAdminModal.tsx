@@ -11,6 +11,8 @@ interface CustomerPortalAdminModalProps {
   isOpen: boolean
   onClose: () => void
   isAdmin?: boolean
+  initialRegNumber?: string
+  initialTab?: 'overview' | 'complaints' | 'pricing' | 'live_preview'
 }
 
 interface ComplaintRecord {
@@ -30,12 +32,20 @@ interface ComplaintRecord {
   source_feedback_message_id?: number | null
 }
 
-export function CustomerPortalAdminModal({ isOpen, onClose, isAdmin = true }: CustomerPortalAdminModalProps) {
-  const [activeTab, setActiveTab] = useState<'overview' | 'complaints' | 'pricing' | 'live_preview'>('overview')
+export function CustomerPortalAdminModal({
+  isOpen,
+  onClose,
+  isAdmin = true,
+  initialRegNumber,
+  initialTab,
+}: CustomerPortalAdminModalProps) {
+  const [activeTab, setActiveTab] = useState<'overview' | 'complaints' | 'pricing' | 'live_preview'>(
+    initialTab || (initialRegNumber ? 'complaints' : 'overview')
+  )
   const [complaints, setComplaints] = useState<ComplaintRecord[]>([])
   const [loadingComplaints, setLoadingComplaints] = useState(false)
   const [filterSource, setFilterSource] = useState<'app_only' | 'all'>('app_only')
-  const [complaintSearch, setComplaintSearch] = useState('')
+  const [complaintSearch, setComplaintSearch] = useState(initialRegNumber || '')
   const [selectedProblemForEstimate, setSelectedProblemForEstimate] = useState<ComplaintRecord | null>(null)
   const [estimatesMap, setEstimatesMap] = useState<Record<string, CustomerEstimateRecord>>({})
   
@@ -89,6 +99,14 @@ export function CustomerPortalAdminModal({ isOpen, onClose, isAdmin = true }: Cu
 
   useEffect(() => {
     if (!isOpen) return
+    if (initialTab) {
+      setActiveTab(initialTab)
+    } else if (initialRegNumber) {
+      setActiveTab('complaints')
+    }
+    if (initialRegNumber) {
+      setComplaintSearch(initialRegNumber)
+    }
     void fetchComplaints()
 
     // Realtime Supabase Sync for instant updates when customer submits a problem

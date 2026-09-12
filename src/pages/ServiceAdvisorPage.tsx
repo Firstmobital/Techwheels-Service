@@ -83,6 +83,47 @@ type AssignmentStatusSets = {
   allAssigned: Set<string>
 }
 
+interface CustomerProblemSummary {
+  count: number
+  issues: string[]
+  summary: string
+  fullText: string
+  kmReading?: string | null
+  dateTime?: string | null
+  rawRecord?: unknown
+}
+
+function parseCustomerProblemFeedback(feedbackText: string | null | undefined): { issues: string[]; summary: string; km?: string } {
+  if (!feedbackText) return { issues: [], summary: '' }
+  const text = feedbackText.trim()
+
+  const issueMatch = text.match(/Issue:\s*([^|]+)/i)
+  const kmMatch = text.match(/KM:\s*([^|]+)/i)
+  const km = kmMatch ? kmMatch[1].trim() : undefined
+
+  if (issueMatch) {
+    const issueRaw = issueMatch[1].trim()
+    const parts = issueRaw
+      .split(/;\s*|\s+(?=\d+\.\s+)/)
+      .map((p) => p.replace(/^\d+\.\s*/, '').trim())
+      .filter(Boolean)
+    if (parts.length > 0) {
+      return {
+        issues: parts,
+        summary: parts.join(', '),
+        km: km && km !== 'N/A' ? km : undefined,
+      }
+    }
+  }
+
+  const clean = text.replace(/^\[Complaint\s*-[^\]]+\]\s*/i, '').replace(/^Customer Remark[^:]*:\s*/i, '').trim()
+  return {
+    issues: [clean],
+    summary: clean,
+    km: km && km !== 'N/A' ? km : undefined,
+  }
+}
+
 function normalizeJobCardKey(jobCardNumber: unknown): string {
   return String(jobCardNumber ?? '').trim().toUpperCase()
 }
@@ -555,6 +596,44 @@ export default function ServiceAdvisorPage() {
   const [generatingComplaintLink, setGeneratingComplaintLink] = useState<number | null>(null)
   const [customerRemarkModalOpen, setCustomerRemarkModalOpen] = useState(false)
   const [customerPortalModalOpen, setCustomerPortalModalOpen] = useState(false)
+  const [selectedPortalRegNumber, setSelectedPortalRegNumber] = useState<string | undefined>(undefined)
+  const [customerProblemsMap, setCustomerProblemsMap] = useState<Record<string, CustomerProblemSummary>>({})
+
+  async function loadCustomerProblems() {
+    try {
+      const { data, error } = await supabase
+        .from('post_feedback_bot_data')
+        .select('*')
+        .neq('mode', 'customer_estimate_payload')
+        .order('complaint_date_time', { ascending: false })
+        .limit(500)
+
+      if (!error && data) {
+        const map: Record<string, CustomerProblemSummary> = {}
+        for (const row of data) {
+          const reg = String(row.vehicle_registration_number || '').trim().toUpperCase().replace(/[\s-]/g, '')
+          if (!reg) continue
+          if (row.feedback_text?.startsWith('{"estimate_no"')) continue
+
+          const parsed = parseCustomerProblemFeedback(row.feedback_text)
+          if (!map[reg]) {
+            map[reg] = {
+              count: parsed.issues.length || 1,
+              issues: parsed.issues,
+              summary: parsed.summary || row.feedback_text,
+              fullText: row.feedback_text,
+              kmReading: parsed.km,
+              dateTime: row.complaint_date_time || row.created_at,
+              rawRecord: row,
+            }
+          }
+        }
+        setCustomerProblemsMap(map)
+      }
+    } catch (err) {
+      console.warn('Error fetching customer problems for ServiceAdvisorPage:', err)
+    }
+  }
 
   function handleRemarkSaved(updatedRow: ReceptionEntryRow, newRemark: string) {
     setRows((prev) => prev.map((r) => (r.id === updatedRow.id ? { ...r, remark: newRemark || null } : r)))
@@ -583,6 +662,10 @@ export default function ServiceAdvisorPage() {
   const matchesSearch = (row: ReceptionEntryRow): boolean => {
     if (!searchQuery) return true
 
+    const regKey = String(row.reg_number || '').trim().toUpperCase().replace(/[\s-]/g, '')
+    const problemInfo = customerProblemsMap[regKey]
+    const problemSummaryText = problemInfo ? problemInfo.summary : ''
+
     const haystack = [
       row.reg_number,
       String(row.km_reading ?? ''),
@@ -594,6 +677,7 @@ export default function ServiceAdvisorPage() {
       row.source,
       row.branch ?? '',
       row.created_by,
+      problemSummaryText,
     ]
       .join(' ')
       .toLowerCase()
@@ -1304,6 +1388,7 @@ export default function ServiceAdvisorPage() {
         'JC Number',
         'Owner Name',
         'Owner Phone',
+        'Customer Problems',
         'Remark',
         'Branch',
         'Portal',
@@ -1322,6 +1407,9 @@ export default function ServiceAdvisorPage() {
         const invoiceAmount = String(draft?.invoice_amount ?? formatInvoiceAmountDraft(row.expected_invoice_amount))
         const isBodyshopRow = isBodyshopServiceType(serviceType)
         const isNoActionRequiredRow = isNoEstimateInvoiceRequiredServiceType(serviceType)
+
+        const regKey = String(row.reg_number || '').trim().toUpperCase().replace(/[\s-]/g, '')
+        const problemSummary = customerProblemsMap[regKey]?.summary || ''
 
         let estimateStatus = 'Pending'
         if (isBodyshopRow) {
@@ -1355,6 +1443,7 @@ export default function ServiceAdvisorPage() {
           jcNumber,
           row.owner_name || '',
           row.owner_phone || '',
+          problemSummary,
           remark,
           row.branch || '',
           getFuelTypeLabel(row.fuel_type),
@@ -1377,6 +1466,7 @@ export default function ServiceAdvisorPage() {
         { wch: 16 },
         { wch: 20 },
         { wch: 14 },
+        { wch: 28 },
         { wch: 24 },
         { wch: 16 },
         { wch: 10 },
@@ -1410,8 +1500,27 @@ export default function ServiceAdvisorPage() {
 
   useEffect(() => {
     void loadRows()
+    void loadCustomerProblems()
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dateRange, searchQuery])
+
+  // Realtime customer complaints sync
+  useEffect(() => {
+    const channel = supabase
+      .channel('sa-customer-complaints-realtime')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'post_feedback_bot_data' },
+        () => {
+          void loadCustomerProblems()
+        }
+      )
+      .subscribe()
+
+    return () => {
+      void supabase.removeChannel(channel)
+    }
+  }, [])
 
   useEffect(() => {
     if (loading) return
@@ -2115,6 +2224,7 @@ export default function ServiceAdvisorPage() {
                     <th>Service Type</th>
                     <th>JC Number</th>
                     <th>Owner</th>
+                    <th>Customer Problems</th>
                     <th>Remark</th>
                     <th>Estimate</th>
                     <th>Invoice Amount (₹)</th>
@@ -2200,6 +2310,46 @@ export default function ServiceAdvisorPage() {
                         <td className="td-owner">
                           <div className="strong owner-name">{row.owner_name || '-'}</div>
                           <div className="mono owner-phone">{row.owner_phone || '-'}</div>
+                        </td>
+                        <td className="td-problems">
+                          {(() => {
+                            const regKey = String(row.reg_number || '').trim().toUpperCase().replace(/[\s-]/g, '')
+                            const problemInfo = customerProblemsMap[regKey]
+                            if (!problemInfo || problemInfo.issues.length === 0) {
+                              return <span className="problem-empty-dash">—</span>
+                            }
+                            return (
+                              <div
+                                className="problem-card-compact"
+                                onClick={() => {
+                                  setSelectedPortalRegNumber(row.reg_number)
+                                  setCustomerPortalModalOpen(true)
+                                }}
+                                title="Click to view details & create parts estimate in Customer Portal"
+                              >
+                                <div className="problem-badge-pill">
+                                  <span>🚨</span>
+                                  <span>{problemInfo.count} {problemInfo.count === 1 ? 'Problem' : 'Problems'}</span>
+                                  {problemInfo.kmReading && (
+                                    <span className="km-pill">{problemInfo.kmReading} KM</span>
+                                  )}
+                                </div>
+                                <div className="problem-list-preview">
+                                  {problemInfo.issues.slice(0, 3).map((issue, idx) => (
+                                    <div key={idx} className="problem-item-row">
+                                      <span className="num">{idx + 1}.</span>
+                                      <span>{issue}</span>
+                                    </div>
+                                  ))}
+                                  {problemInfo.issues.length > 3 && (
+                                    <span style={{ fontSize: 11, color: '#e11d48', fontWeight: 600 }}>
+                                      +{problemInfo.issues.length - 3} more problem(s)...
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                            )
+                          })()}
                         </td>
                         <td>
                           <textarea
@@ -2352,8 +2502,12 @@ export default function ServiceAdvisorPage() {
 
       <CustomerPortalAdminModal
         isOpen={customerPortalModalOpen}
-        onClose={() => setCustomerPortalModalOpen(false)}
+        onClose={() => {
+          setCustomerPortalModalOpen(false)
+          setSelectedPortalRegNumber(undefined)
+        }}
         isAdmin={true}
+        initialRegNumber={selectedPortalRegNumber}
       />
     </div>
   )
