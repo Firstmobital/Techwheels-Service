@@ -40,6 +40,7 @@ export interface ReceptionEntryRow {
   invoice_drive_file_id: string | null
   invoice_done_at: string | null
   invoice_done_by: string | null
+  expected_invoice_amount?: number | null
   is_revisit: boolean
   prior_reception_entry_id: number | null
   suggested_technician_code: string | null
@@ -104,6 +105,7 @@ export interface ServiceAdvisorEntryUpdateInput {
   jc_number?: string | null
   km_reading?: number | null
   remark?: string | null
+  expected_invoice_amount?: number | null
 }
 
 const FLOOR_INCHARGE_ALLOWED_SERVICE_TYPES = [
@@ -227,6 +229,7 @@ const RECEPTION_ENTRY_SELECT_COLUMNS = [
   'invoice_drive_file_id',
   'invoice_done_at',
   'invoice_done_by',
+  'expected_invoice_amount',
   'is_revisit',
   'prior_reception_entry_id',
   'suggested_technician_code',
@@ -346,6 +349,14 @@ function normalizeKmReading(value?: number | null): number | null {
   if (value == null) return null
   if (!Number.isFinite(value)) return null
   const normalized = Math.trunc(value)
+  if (normalized < 0) return null
+  return normalized
+}
+
+function normalizeExpectedInvoiceAmount(value?: number | null): number | null {
+  if (value == null) return null
+  if (!Number.isFinite(value)) return null
+  const normalized = Math.round(value * 100) / 100
   if (normalized < 0) return null
   return normalized
 }
@@ -1306,9 +1317,13 @@ export async function updateServiceAdvisorEntry(
     jc_number: input.jc_number?.trim().toUpperCase() || null,
     km_reading: normalizeKmReading(input.km_reading),
     remark: input.remark?.trim() || null,
+    expected_invoice_amount: normalizeExpectedInvoiceAmount(input.expected_invoice_amount),
   }
 
   if (!payload.service_type) return fail('Service Type is required')
+  if (payload.expected_invoice_amount != null && payload.expected_invoice_amount < 0) {
+    return fail('Invoice Amount cannot be negative')
+  }
 
   // SECURITY DEFINER RPC bypasses expensive authenticated-role RLS on
   // service_reception_entries (57014 statement_timeout on direct UPDATE).
@@ -1318,6 +1333,8 @@ export async function updateServiceAdvisorEntry(
     p_jc_number: payload.jc_number,
     p_km_reading: payload.km_reading,
     p_remark: payload.remark,
+    p_expected_invoice_amount: payload.expected_invoice_amount,
+    p_set_expected_invoice_amount: Object.prototype.hasOwnProperty.call(input, 'expected_invoice_amount'),
   })
 
   if (error) return fail(error)
@@ -1427,10 +1444,17 @@ export async function uploadServiceAdvisorInvoice(
 
 export async function markServiceAdvisorInvoiceDone(
   id: number,
+  input?: { expected_invoice_amount?: number | null },
 ): Promise<ApiResult<ReceptionEntryRow>> {
   try {
+    const expectedInvoiceAmount = normalizeExpectedInvoiceAmount(input?.expected_invoice_amount)
+    if (input?.expected_invoice_amount != null && expectedInvoiceAmount == null) {
+      return fail('Invoice Amount cannot be negative')
+    }
+
     const { data, error } = await supabase.rpc('service_advisor_mark_invoice_done', {
       p_reception_entry_id: id,
+      p_expected_invoice_amount: expectedInvoiceAmount,
     })
 
     if (error) return fail(error)

@@ -1637,9 +1637,16 @@ code.k--b { background: var(--accent-soft); color: var(--accent); }
 }
 
 .sa-tbl .td-estimate,
+.sa-tbl .td-invoice-amount,
 .sa-tbl .td-invoice,
 .sa-tbl .td-save {
   min-width: 0;
+}
+
+.sa-tbl .inp--invoice-amount {
+  width: 108px;
+  min-width: 96px;
+  text-align: right;
 }
 
 /* Text right alignment utility */

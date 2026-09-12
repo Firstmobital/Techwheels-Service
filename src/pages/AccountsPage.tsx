@@ -11,6 +11,8 @@ import {
   listAccountsMechanicalCases,
   listAccountsMechanicalPayments,
   lookupAccountsMechanicalDmsInvoice,
+  mechanicalInvoiceAmountPrefill,
+  mechanicalInvoiceDateInputValue,
   mechanicalRemaining,
   openBodyshopGatepass,
   openMechanicalGatepass,
@@ -267,8 +269,8 @@ export default function AccountsPage() {
   async function openCapture(row: AccountsMechanicalCase) {
     setEditRow(row)
     setInvoiceNumber(row.invoice_number ?? '')
-    setInvoiceDate(row.invoice_date ?? '')
-    setBilledAmount(row.billed_amount != null ? String(row.billed_amount) : '')
+    setInvoiceDate(mechanicalInvoiceDateInputValue(row.invoice_date))
+    setBilledAmount(mechanicalInvoiceAmountPrefill(row))
     setReceiptAmount('')
     setPaymentMode('cash')
     setPaymentReference('')
@@ -304,7 +306,7 @@ export default function AccountsPage() {
       return
     }
     setInvoiceNumber(dmsLookup.invoice_number)
-    setInvoiceDate(dmsLookup.invoice_date ?? '')
+    setInvoiceDate(dmsLookup.invoice_date || invoiceDate)
     setBilledAmount(String(dmsLookup.total_invoice_amount))
     flash('DMS invoice loaded. Save invoice to keep it.')
   }

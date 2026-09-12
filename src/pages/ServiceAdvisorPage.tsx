@@ -31,6 +31,7 @@ type RowDraft = {
   jc_number: string
   km_reading: string
   remark: string
+  invoice_amount: string
 }
 
 const DEFAULT_SERVICE_TYPE_OPTIONS = [
@@ -66,6 +67,7 @@ const EMPTY_DRAFT: RowDraft = {
   jc_number: '',
   km_reading: '',
   remark: '',
+  invoice_amount: '',
 }
 
 const UNKNOWN_FUEL_TYPE = 'Unknown'
@@ -361,6 +363,39 @@ function parseKmInput(value: string): number | null {
   const parsed = Number.parseInt(trimmed, 10)
   if (!Number.isFinite(parsed) || parsed < 0) return null
   return parsed
+}
+
+function formatInvoiceAmountDraft(value: number | string | null | undefined): string {
+  if (value == null || value === '') return ''
+  const parsed = Number(value)
+  if (!Number.isFinite(parsed)) return ''
+  return String(parsed)
+}
+
+function sanitizeInvoiceAmountInput(value: string): string {
+  const next = String(value ?? '').replace(/[^0-9.]/g, '')
+  const firstDot = next.indexOf('.')
+  if (firstDot === -1) return next
+  return `${next.slice(0, firstDot + 1)}${next.slice(firstDot + 1).replace(/\./g, '')}`
+}
+
+function parseInvoiceAmountInput(value: string): { ok: true; value: number | null } | { ok: false; error: string } {
+  const trimmed = String(value ?? '').trim()
+  if (!trimmed) return { ok: true, value: null }
+  const parsed = Number(trimmed)
+  if (!Number.isFinite(parsed)) return { ok: false, error: 'Invoice Amount must be a valid number' }
+  if (parsed < 0) return { ok: false, error: 'Invoice Amount cannot be negative' }
+  return { ok: true, value: Math.round(parsed * 100) / 100 }
+}
+
+function draftFromRow(row: ReceptionEntryRow): RowDraft {
+  return {
+    service_type: typeof row.service_type === 'string' ? row.service_type : '',
+    jc_number: row.jc_number ?? '',
+    km_reading: row.km_reading == null ? '' : String(row.km_reading),
+    remark: row.remark ?? '',
+    invoice_amount: formatInvoiceAmountDraft(row.expected_invoice_amount),
+  }
 }
 
 function getAdvisorFilterLabel(row: ReceptionEntryRow): string {
@@ -1111,12 +1146,7 @@ export default function ServiceAdvisorPage() {
 
     const mappedDrafts: Record<number, RowDraft> = {}
     data.forEach((row) => {
-      mappedDrafts[row.id] = {
-        service_type: typeof row.service_type === 'string' ? row.service_type : '',
-        jc_number: row.jc_number ?? '',
-        km_reading: row.km_reading == null ? '' : String(row.km_reading),
-        remark: row.remark ?? '',
-      }
+      mappedDrafts[row.id] = draftFromRow(row)
     })
 
     setServiceTypeOptions((prev) => mergeServiceTypes(prev, data.map((row) => row.service_type ?? '')))
@@ -1205,12 +1235,7 @@ export default function ServiceAdvisorPage() {
       const next = { ...prev }
       data.forEach((row) => {
         if (next[row.id]) return
-        next[row.id] = {
-          service_type: typeof row.service_type === 'string' ? row.service_type : '',
-          jc_number: row.jc_number ?? '',
-          km_reading: row.km_reading == null ? '' : String(row.km_reading),
-          remark: row.remark ?? '',
-        }
+        next[row.id] = draftFromRow(row)
       })
       return next
     })
@@ -1334,6 +1359,7 @@ export default function ServiceAdvisorPage() {
         'Portal',
         'Advisor',
         'Estimate',
+        'Invoice Amount (₹)',
         'Invoice',
       ]
 
@@ -1343,6 +1369,7 @@ export default function ServiceAdvisorPage() {
         const jcNumber = String(draft?.jc_number ?? row.jc_number ?? '')
         const kmReading = draft?.km_reading ?? (row.km_reading == null ? '' : String(row.km_reading))
         const remark = String(draft?.remark ?? row.remark ?? '')
+        const invoiceAmount = String(draft?.invoice_amount ?? formatInvoiceAmountDraft(row.expected_invoice_amount))
         const isBodyshopRow = isBodyshopServiceType(serviceType)
         const isNoActionRequiredRow = isNoEstimateInvoiceRequiredServiceType(serviceType)
 
@@ -1364,6 +1391,10 @@ export default function ServiceAdvisorPage() {
           invoiceStatus = 'Done'
         }
 
+        let invoiceAmountExport: string | number = invoiceAmount
+        if (isBodyshopRow) invoiceAmountExport = 'Not applicable'
+        else if (isNoActionRequiredRow) invoiceAmountExport = 'Not required'
+
         return [
           formatDate(row.created_at),
           row.source || '',
@@ -1379,6 +1410,7 @@ export default function ServiceAdvisorPage() {
           getFuelTypeLabel(row.fuel_type),
           row.sa_display_name || row.sa_name || '',
           estimateStatus,
+          invoiceAmountExport,
           invoiceStatus,
         ]
       })
@@ -1400,6 +1432,7 @@ export default function ServiceAdvisorPage() {
         { wch: 10 },
         { wch: 20 },
         { wch: 24 },
+        { wch: 16 },
         { wch: 14 },
       ]
       XLSX.utils.book_append_sheet(wb, ws, 'Service Advisor')
@@ -1622,6 +1655,12 @@ export default function ServiceAdvisorPage() {
       }
     }
 
+    const parsedAmount = parseInvoiceAmountInput(draft.invoice_amount)
+    if (!parsedAmount.ok) {
+      setError(parsedAmount.error)
+      return
+    }
+
     setSavingId(id)
 
     const res = await updateServiceAdvisorEntry(id, {
@@ -1629,6 +1668,7 @@ export default function ServiceAdvisorPage() {
       jc_number: draft.jc_number,
       km_reading: parseKmInput(draft.km_reading),
       remark: draft.remark,
+      expected_invoice_amount: parsedAmount.value,
     })
 
     setSavingId(null)
@@ -1706,12 +1746,7 @@ export default function ServiceAdvisorPage() {
       setRows((prev) => prev.map((r) => (r.id === id ? updatedRow : r)))
       setDrafts((prev) => ({
         ...prev,
-        [id]: {
-          service_type: typeof updatedRow.service_type === 'string' ? updatedRow.service_type : '',
-          jc_number: updatedRow.jc_number ?? '',
-          km_reading: updatedRow.km_reading != null ? String(updatedRow.km_reading) : '',
-          remark: updatedRow.remark ?? '',
-        },
+        [id]: draftFromRow(updatedRow),
       }))
     }
   }
@@ -1765,11 +1800,21 @@ export default function ServiceAdvisorPage() {
       return
     }
 
+    const draft = drafts[row.id] ?? EMPTY_DRAFT
+    const parsedAmount = parseInvoiceAmountInput(draft.invoice_amount)
+    if (!parsedAmount.ok) {
+      setError(parsedAmount.error)
+      showToast(parsedAmount.error)
+      return
+    }
+
     setUploadingInvoiceId(row.id)
     setError(null)
 
     try {
-      const res = await markServiceAdvisorInvoiceDone(row.id)
+      const res = await markServiceAdvisorInvoiceDone(row.id, {
+        expected_invoice_amount: parsedAmount.value,
+      })
 
       if (res.error) {
         setError(res.error)
@@ -1782,6 +1827,18 @@ export default function ServiceAdvisorPage() {
       if (res.data) {
         const updatedRow = res.data as ReceptionEntryRow
         setRows((prev) => prev.map((r) => (r.id === updatedRow.id ? updatedRow : r)))
+        setDrafts((prev) => ({
+          ...prev,
+          [updatedRow.id]: {
+            ...(prev[updatedRow.id] ?? draftFromRow(updatedRow)),
+            invoice_amount: formatInvoiceAmountDraft(updatedRow.expected_invoice_amount),
+          },
+        }))
+        setDirtyRowIds((prev) => {
+          const next = new Set(prev)
+          next.delete(updatedRow.id)
+          return next
+        })
       }
       // Reuse the existing WA compose flow so Mark Done always triggers one WA send action.
       await handleSendWhatsApp(row)
@@ -2257,6 +2314,7 @@ export default function ServiceAdvisorPage() {
                     <th>Owner</th>
                     <th>Remark</th>
                     <th>Estimate</th>
+                    <th>Invoice Amount (₹)</th>
                     <th>Invoice</th>
                     <th>Action</th>
                   </tr>
@@ -2410,6 +2468,27 @@ export default function ServiceAdvisorPage() {
                                 }}
                               />
                             </div>
+                          )}
+                        </td>
+                        <td className="td-invoice-amount">
+                          {isBodyshopRow ? (
+                            <span className="td-muted-nowrap">Not applicable</span>
+                          ) : isNoActionRequiredRow ? (
+                            <span className="td-muted-nowrap">Not required</span>
+                          ) : (
+                            <input
+                              type="number"
+                              value={draft.invoice_amount}
+                              onChange={(event) =>
+                                patchDraft(row.id, { invoice_amount: sanitizeInvoiceAmountInput(event.target.value) })
+                              }
+                              inputMode="decimal"
+                              min="0"
+                              step="0.01"
+                              placeholder="0.00"
+                              className="inp mono inp--invoice-amount"
+                              aria-label="Invoice Amount (₹)"
+                            />
                           )}
                         </td>
                         <td className="td-invoice">

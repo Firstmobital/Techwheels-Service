@@ -33,6 +33,7 @@ export interface AccountsMechanicalCase {
   invoice_number: string | null
   invoice_date: string | null
   billed_amount: number | null
+  expected_invoice_amount: number | null
   payment_status: AccountsPaymentStatus | null
   amount_received: number | null
   remaining_amount: number | null
@@ -169,6 +170,28 @@ export async function listAccountsMechanicalPayments(
   })
   if (error) throw new Error(settlementRpcError(error))
   return asArray<AccountsMechanicalPayment>(data)
+}
+
+export function asiaKolkataTodayDate(): string {
+  return new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
+}
+
+export function mechanicalInvoiceDateInputValue(stored: string | null | undefined): string {
+  const raw = String(stored ?? '').trim()
+  if (raw) return raw.slice(0, 10)
+  return asiaKolkataTodayDate()
+}
+
+export function mechanicalInvoiceAmountPrefill(
+  row: Pick<AccountsMechanicalCase, 'billed_amount' | 'expected_invoice_amount'>,
+): string {
+  if (row.billed_amount != null && Number.isFinite(Number(row.billed_amount))) {
+    return String(row.billed_amount)
+  }
+  if (row.expected_invoice_amount != null && Number.isFinite(Number(row.expected_invoice_amount))) {
+    return String(row.expected_invoice_amount)
+  }
+  return ''
 }
 
 export function mechanicalRemaining(row: Pick<AccountsMechanicalCase, 'billed_amount' | 'amount_received' | 'remaining_amount'>): number | null {
