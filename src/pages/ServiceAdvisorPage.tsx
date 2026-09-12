@@ -24,6 +24,8 @@ import PartsRequirementSection from '../components/PartsRequirementSection'
 import CustomerRemarkModal from '../components/CustomerRemarkModal'
 import { CustomerPortalAdminModal } from '../components/CustomerPortalAdminModal'
 import { EstimateMasterModal } from '../components/EstimateMasterModal'
+import { PaymentStatusModal } from '../components/PaymentStatusModal'
+import { fetchVehiclePayment, type VehiclePaymentRecord } from '../lib/payments'
 
 type RowDraft = {
   service_type: string
@@ -600,6 +602,38 @@ export default function ServiceAdvisorPage() {
   const [estimateMasterModalOpen, setEstimateMasterModalOpen] = useState(false)
   const [selectedPortalRegNumber, setSelectedPortalRegNumber] = useState<string | undefined>(undefined)
   const [customerProblemsMap, setCustomerProblemsMap] = useState<Record<string, CustomerProblemSummary>>({})
+  const [paymentModalState, setPaymentModalState] = useState<{
+    open: boolean
+    row?: ReceptionEntryRow
+    initialInvoiceAmount?: number
+  }>({ open: false })
+  const [paymentsMap, setPaymentsMap] = useState<Record<string, VehiclePaymentRecord>>({})
+
+  async function loadPayments() {
+    try {
+      const { data, error } = await supabase
+        .from('post_feedback_bot_data')
+        .select('vehicle_registration_number, feedback_text')
+        .eq('mode', 'customer_payment_payload')
+        .limit(500)
+
+      if (!error && data) {
+        const map: Record<string, VehiclePaymentRecord> = {}
+        for (const row of data) {
+          try {
+            const parsed = JSON.parse(row.feedback_text) as VehiclePaymentRecord
+            if (parsed && parsed.reg_number) {
+              const cleanReg = parsed.reg_number.trim().toUpperCase().replace(/[\s-]/g, '')
+              map[cleanReg] = parsed
+            }
+          } catch {}
+        }
+        setPaymentsMap((prev) => ({ ...prev, ...map }))
+      }
+    } catch (err) {
+      console.warn('Error loading payments in ServiceAdvisorPage:', err)
+    }
+  }
 
   async function loadCustomerProblems() {
     try {
@@ -632,6 +666,7 @@ export default function ServiceAdvisorPage() {
         }
         setCustomerProblemsMap(map)
       }
+      await loadPayments()
     } catch (err) {
       console.warn('Error fetching customer problems for ServiceAdvisorPage:', err)
     }
@@ -2237,7 +2272,7 @@ export default function ServiceAdvisorPage() {
                     <th>Owner</th>
                     <th>Remark</th>
                     <th>Estimate</th>
-                    <th>Invoice Amount (₹)</th>
+                    <th>Payment & Invoice (₹)</th>
                     <th>Action</th>
                   </tr>
                 </thead>
@@ -2432,25 +2467,64 @@ export default function ServiceAdvisorPage() {
                           )}
                         </td>
                         <td className="td-invoice-amount">
-                          {isBodyshopRow ? (
-                            <span className="td-muted-nowrap">Not applicable</span>
-                          ) : isNoActionRequiredRow ? (
-                            <span className="td-muted-nowrap">Not required</span>
-                          ) : (
-                            <input
-                              type="number"
-                              value={draft.invoice_amount}
-                              onChange={(event) =>
-                                patchDraft(row.id, { invoice_amount: sanitizeInvoiceAmountInput(event.target.value) })
-                              }
-                              inputMode="decimal"
-                              min="0"
-                              step="0.01"
-                              placeholder="0.00"
-                              className="inp mono inp--invoice-amount"
-                              aria-label="Invoice Amount (₹)"
-                            />
-                          )}
+                          {(() => {
+                            const regKey = String(row.reg_number || '').trim().toUpperCase().replace(/[\s-]/g, '')
+                            const pay = paymentsMap[regKey]
+                            const invoiceNum = Number(draft.invoice_amount) || Number(row.invoice_amount) || 0
+                            const billedTotal = (pay && pay.total_billed > 0 ? pay.total_billed : 0) || invoiceNum
+                            const amountReceived = pay ? pay.amount_received : 0
+                            const remaining = Math.max(0, billedTotal - amountReceived)
+                            const isPaid = billedTotal > 0 && remaining === 0
+                            const isPartial = amountReceived > 0 && remaining > 0
+
+                            return (
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    setPaymentModalState({
+                                      open: true,
+                                      row,
+                                      initialInvoiceAmount: invoiceNum || (pay ? pay.total_billed : 0),
+                                    })
+                                  }
+                                  className={`btn-payment-pill ${
+                                    isPaid
+                                      ? 'btn-payment-pill--paid'
+                                      : isPartial
+                                      ? 'btn-payment-pill--partial'
+                                      : 'btn-payment-pill--pending'
+                                  }`}
+                                  title="Click to enter payment status (Full / Partial / Pending) & release gate pass"
+                                >
+                                  {isPaid ? (
+                                    <span>✅ Paid ₹{billedTotal.toLocaleString()}</span>
+                                  ) : isPartial ? (
+                                    <span>⚡ Part ₹{amountReceived.toLocaleString()} / ₹{billedTotal.toLocaleString()}</span>
+                                  ) : (
+                                    <span>⏳ Payment (₹{billedTotal > 0 ? billedTotal.toLocaleString() : 'Set'})</span>
+                                  )}
+                                </button>
+
+                                {!isBodyshopRow && !isNoActionRequiredRow && (
+                                  <input
+                                    type="number"
+                                    value={draft.invoice_amount}
+                                    onChange={(event) =>
+                                      patchDraft(row.id, { invoice_amount: sanitizeInvoiceAmountInput(event.target.value) })
+                                    }
+                                    inputMode="decimal"
+                                    min="0"
+                                    step="0.01"
+                                    placeholder="0.00"
+                                    className="inp mono inp--invoice-amount"
+                                    aria-label="Invoice Amount (₹)"
+                                    style={{ fontSize: 11, padding: '2px 6px', height: 26 }}
+                                  />
+                                )}
+                              </div>
+                            )
+                          })()}
                         </td>
                         <td className="td-save">
                           <div className="tactions tactions--stack">
@@ -2525,6 +2599,23 @@ export default function ServiceAdvisorPage() {
         onClose={() => setEstimateMasterModalOpen(false)}
         isAdmin={isAdmin || isSuperAdmin}
       />
+
+      {paymentModalState.open && paymentModalState.row && (
+        <PaymentStatusModal
+          isOpen={paymentModalState.open}
+          onClose={() => setPaymentModalState({ open: false })}
+          regNumber={paymentModalState.row.reg_number}
+          customerName={paymentModalState.row.owner_name || 'Customer'}
+          customerPhone={paymentModalState.row.owner_phone || ''}
+          jcNumber={drafts[paymentModalState.row.id]?.jc_number || paymentModalState.row.jc_number || ''}
+          initialInvoiceAmount={paymentModalState.initialInvoiceAmount}
+          onPaymentSaved={(updated) => {
+            const cleanReg = updated.reg_number.trim().toUpperCase().replace(/[\s-]/g, '')
+            setPaymentsMap((prev) => ({ ...prev, [cleanReg]: updated }))
+            showToast({ ok: true, msg: `Payment status for ${updated.reg_number} saved as ${updated.status}!` })
+          }}
+        />
+      )}
     </div>
   )
 }

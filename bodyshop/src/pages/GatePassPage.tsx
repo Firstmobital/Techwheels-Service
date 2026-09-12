@@ -1,5 +1,8 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { getGatePassInfo, type CustomerVehicle, type GatePassInfo } from '../lib/api'
+import { supabase } from '../lib/supabase'
+import { fetchVehiclePayment, type VehiclePaymentRecord } from '../lib/payments'
+import { fetchEstimatesForVehicle } from '../lib/estimates'
 
 interface GatePassPageProps {
   vehicle: CustomerVehicle
@@ -7,12 +10,82 @@ interface GatePassPageProps {
 
 export default function GatePassPage({ vehicle }: GatePassPageProps) {
   const [gatePass, setGatePass] = useState<GatePassInfo>(() => getGatePassInfo(vehicle))
+  const [payment, setPayment] = useState<VehiclePaymentRecord | null>(null)
   const [isSecurityMode, setIsSecurityMode] = useState(false)
   const [securityActionMsg, setSecurityActionMsg] = useState<string | null>(null)
 
+  async function syncGatePassData() {
+    if (!vehicle.reg_number) return
+    const pay = await fetchVehiclePayment(vehicle.reg_number)
+    const estimates = await fetchEstimatesForVehicle(vehicle.reg_number)
+    const estTotal = estimates.reduce((sum, e) => sum + (e.grand_total || 0), 0)
+
+    setPayment(pay)
+
+    const effectiveBilled = (pay && pay.total_billed > 0 ? pay.total_billed : 0) || estTotal || (vehicle.billed_amount ?? 0)
+    const effectiveReceived = pay ? pay.amount_received : (vehicle.amount_received ?? 0)
+    const remaining = Math.max(0, effectiveBilled - effectiveReceived)
+    const isPaymentSettled = (effectiveBilled > 0 && remaining === 0) || pay?.status === 'Fully Paid'
+
+    setGatePass((prev) => ({
+      ...prev,
+      payment_status: isPaymentSettled ? 'Paid' : 'Pending',
+      is_valid: isPaymentSettled && prev.qc_status === 'Pass',
+    }))
+  }
+
+  useEffect(() => {
+    void syncGatePassData()
+
+    const channel = supabase
+      .channel(`gatepass-sync-${vehicle.reg_number}`)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'post_feedback_bot_data' },
+        () => {
+          void syncGatePassData()
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'customer_estimates' },
+        () => {
+          void syncGatePassData()
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'service_reception_entries' },
+        () => {
+          void syncGatePassData()
+        }
+      )
+      .subscribe()
+
+    function handlePaymentSync(e: Event) {
+      const customEv = e as CustomEvent<VehiclePaymentRecord>
+      if (
+        !customEv.detail ||
+        !customEv.detail.reg_number ||
+        customEv.detail.reg_number.toUpperCase() === vehicle.reg_number.toUpperCase()
+      ) {
+        void syncGatePassData()
+      }
+    }
+
+    window.addEventListener('techwheels_payment_updated', handlePaymentSync)
+    window.addEventListener('techwheels_estimate_updated', syncGatePassData)
+
+    return () => {
+      void supabase.removeChannel(channel)
+      window.removeEventListener('techwheels_payment_updated', handlePaymentSync)
+      window.removeEventListener('techwheels_estimate_updated', syncGatePassData)
+    }
+  }, [vehicle.reg_number])
+
   function handleSecurityAuthorize() {
     if (!gatePass.is_valid) {
-      setSecurityActionMsg('❌ EXIT DENIED: Gate Pass is invalid. Outstanding bill must be paid and QC passed before exit.')
+      setSecurityActionMsg('❌ EXIT DENIED: Gate Pass is invalid. Outstanding bill must be fully paid and QC passed before exit.')
       return
     }
     if (gatePass.is_used) {
@@ -22,6 +95,9 @@ export default function GatePassPage({ vehicle }: GatePassPageProps) {
     setGatePass((prev) => ({ ...prev, is_used: true }))
     setSecurityActionMsg(`✅ EXIT GRANTED: Vehicle ${gatePass.reg_number} authorized for departure! Gate pass marked DELIVERED & retired.`)
   }
+
+  const effectiveRemaining = payment ? payment.remaining_amount : (vehicle.billed_amount ?? 0) - (vehicle.amount_received ?? 0)
+  const isPendingPayment = gatePass.payment_status !== 'Paid'
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
@@ -50,19 +126,38 @@ export default function GatePassPage({ vehicle }: GatePassPageProps) {
         </button>
       </div>
 
-      {/* If Gate Pass is locked due to pending payment or QC */}
+      {/* If Gate Pass is locked due to pending payment */}
       {!gatePass.is_valid && (
         <div className="card" style={{ background: '#fffbeb', borderColor: '#fde68a', borderLeft: '4px solid #f59e0b' }}>
           <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
             <span style={{ fontSize: 24 }}>🔒</span>
             <div>
-              <div style={{ fontSize: 14, fontWeight: 800, color: '#92400e' }}>Gate Pass Locked</div>
+              <div style={{ fontSize: 14, fontWeight: 800, color: '#92400e' }}>
+                Gate Pass Locked {isPendingPayment ? '(Payment Settlement Pending)' : '(Inspection Pending)'}
+              </div>
               <div style={{ fontSize: 12.5, color: '#b45309', marginTop: 3, lineHeight: 1.4 }}>
-                Gate pass is automatically enabled once:
-                <ul style={{ margin: '4px 0 0 16px', padding: 0 }}>
-                  <li>Final invoice payment is marked <strong>Paid</strong></li>
-                  <li>Vehicle Quality Inspection is marked <strong>QC Passed</strong></li>
-                  <li>Washing is marked <strong>Completed</strong></li>
+                {isPendingPayment ? (
+                  <>
+                    Outstanding balance of <strong>₹{effectiveRemaining > 0 ? effectiveRemaining.toLocaleString() : '0'}</strong> must be fully cleared at the billing counter. Once the workshop employee marks full payment received, your Digital Gate Pass will unlock instantly.
+                  </>
+                ) : (
+                  <>
+                    Vehicle inspection / washing is currently finishing up. Gate Pass will become active shortly.
+                  </>
+                )}
+                <ul style={{ margin: '6px 0 0 16px', padding: 0 }}>
+                  <li>
+                    Payment Status:{' '}
+                    <strong style={{ color: gatePass.payment_status === 'Paid' ? '#16a34a' : '#dc2626' }}>
+                      {gatePass.payment_status === 'Paid' ? '✓ Fully Paid' : '⏳ Pending / Unsettled'}
+                    </strong>
+                  </li>
+                  <li>
+                    Quality Check:{' '}
+                    <strong style={{ color: gatePass.qc_status === 'Pass' ? '#16a34a' : '#d97706' }}>
+                      {gatePass.qc_status === 'Pass' ? '✓ QC Passed' : '⏳ In Progress'}
+                    </strong>
+                  </li>
                 </ul>
               </div>
             </div>
@@ -89,7 +184,7 @@ export default function GatePassPage({ vehicle }: GatePassPageProps) {
             <div style={{ fontSize: 16, fontWeight: 900, color: 'var(--text)' }}>OFFICIAL VEHICLE GATE PASS</div>
           </div>
           <span className={`badge ${gatePass.is_used ? 'badge--purple' : gatePass.is_valid ? 'badge--green' : 'badge--amber'}`}>
-            {gatePass.is_used ? '🚪 USED / DELIVERED' : gatePass.is_valid ? '✅ VALID FOR EXIT' : '⏳ LOCKED'}
+            {gatePass.is_used ? '🚪 USED / DELIVERED' : gatePass.is_valid ? '✅ VALID FOR EXIT' : '⏳ LOCKED (PAYMENT DUE)'}
           </span>
         </div>
 
@@ -134,13 +229,15 @@ export default function GatePassPage({ vehicle }: GatePassPageProps) {
                 background: '#f1f5f9',
                 borderRadius: 12,
                 display: 'flex',
+                flexDirection: 'column',
                 alignItems: 'center',
                 justifyContent: 'center',
                 color: 'var(--text-muted)',
-                fontSize: 32,
+                gap: 4,
               }}
             >
-              🔒
+              <span style={{ fontSize: 32 }}>🔒</span>
+              <span style={{ fontSize: 10, fontWeight: 700, color: '#94a3b8' }}>LOCKED</span>
             </div>
           )}
           <span className="mono" style={{ fontSize: 12, fontWeight: 700, color: 'var(--text)' }}>
@@ -174,11 +271,11 @@ export default function GatePassPage({ vehicle }: GatePassPageProps) {
             <div className="mono" style={{ fontWeight: 700 }}>{gatePass.job_card_no}</div>
           </div>
           <div>
-            <span style={{ color: 'var(--text-muted)' }}>Invoice No:</span>
+            <span style={{ color: 'var(--text-muted)' }}>Invoice / Settlement:</span>
             <div className="mono" style={{ fontWeight: 700 }}>{gatePass.invoice_no}</div>
           </div>
           <div>
-            <span style={{ color: 'var(--text-muted)' }}>Payment Settlement:</span>
+            <span style={{ color: 'var(--text-muted)' }}>Payment Status:</span>
             <div style={{ fontWeight: 800, color: gatePass.payment_status === 'Paid' ? 'var(--success)' : 'var(--danger)' }}>
               {gatePass.payment_status === 'Paid' ? '✓ FULLY PAID' : '⏳ PENDING'}
             </div>
@@ -211,7 +308,7 @@ export default function GatePassPage({ vehicle }: GatePassPageProps) {
             <div>Vehicle: <strong className="mono" style={{ color: '#38bdf8' }}>{gatePass.reg_number}</strong></div>
             <div>Payment: <strong style={{ color: gatePass.payment_status === 'Paid' ? '#4ade80' : '#f87171' }}>{gatePass.payment_status}</strong></div>
             <div>QC Clearance: <strong style={{ color: '#4ade80' }}>{gatePass.qc_status}</strong></div>
-            <div>Gate Pass Status: <strong style={{ color: gatePass.is_used ? '#c084fc' : '#4ade80' }}>{gatePass.is_used ? 'ALREADY DELIVERED' : 'READY FOR EXIT'}</strong></div>
+            <div>Gate Pass Status: <strong style={{ color: gatePass.is_used ? '#c084fc' : gatePass.is_valid ? '#4ade80' : '#f87171' }}>{gatePass.is_used ? 'ALREADY DELIVERED' : gatePass.is_valid ? 'READY FOR EXIT' : 'EXIT LOCKED (UNPAID)'}</strong></div>
           </div>
 
           {securityActionMsg && (
@@ -224,10 +321,10 @@ export default function GatePassPage({ vehicle }: GatePassPageProps) {
             type="button"
             className="btn-primary"
             onClick={handleSecurityAuthorize}
-            disabled={gatePass.is_used}
-            style={{ width: '100%', background: gatePass.is_used ? '#475569' : '#16a34a' }}
+            disabled={gatePass.is_used || !gatePass.is_valid}
+            style={{ width: '100%', background: gatePass.is_used ? '#475569' : !gatePass.is_valid ? '#dc2626' : '#16a34a' }}
           >
-            {gatePass.is_used ? '✓ Vehicle Already Exited' : '🚪 Confirm QR Scan & Allow Vehicle Exit'}
+            {gatePass.is_used ? '✓ Vehicle Already Exited' : !gatePass.is_valid ? '❌ Exit Denied (Payment Pending)' : '🚪 Confirm QR Scan & Allow Vehicle Exit'}
           </button>
         </div>
       )}

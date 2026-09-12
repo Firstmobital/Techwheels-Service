@@ -7104,3 +7104,45 @@ tr.brx-recov-row--mismatch td:first-child {
     grid-template-columns: 1fr;
   }
 }
+
+/* Service Advisor Payment Status Pill Button */
+.btn-payment-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 3px 8px;
+  font-size: 11px;
+  font-weight: 700;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+  font-family: inherit;
+}
+.btn-payment-pill--paid {
+  background: #dcfce7;
+  color: #15803d;
+  border-color: #86efac;
+}
+.btn-payment-pill--paid:hover {
+  background: #bbf7d0;
+}
+.btn-payment-pill--partial {
+  background: #ede9fe;
+  color: #6d28d9;
+  border-color: #c4b5fd;
+}
+.btn-payment-pill--partial:hover {
+  background: #ddd6fe;
+}
+.btn-payment-pill--pending {
+  background: #fef3c7;
+  color: #b45309;
+  border-color: #fde68a;
+}
+.btn-payment-pill--pending:hover {
+  background: #fde68a;
+}
+
