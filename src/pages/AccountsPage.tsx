@@ -5,10 +5,13 @@ import {
   ACCOUNTS_PAYMENT_MODES,
   addAccountsMechanicalPayment,
   deleteAccountsMechanicalInvoiceFile,
+  isAccountsStatusPending,
+  isAccountsStatusReceived,
   isCustomerPaymentClosed,
   isMechanicalPaymentClosed,
   listAccountsBodyshopCases,
   listAccountsMechanicalCases,
+  listAccountsMechanicalPaymentLines,
   listAccountsMechanicalPayments,
   lookupAccountsMechanicalDmsInvoice,
   mechanicalInvoiceAmountPrefill,
@@ -21,6 +24,7 @@ import {
   openMechanicalInvoiceFile,
   paymentModeLabel,
   settlementCardFromAccountsRow,
+  sumAccountsPaymentModeTotals,
   upsertAccountsMechanicalInvoice,
   type AccountsBodyshopCase,
   type AccountsMechanicalCase,
@@ -36,10 +40,21 @@ import { issueAccountsGatePass } from '../lib/gatepass'
 
 type Section = 'mechanical' | 'bodyshop'
 type BodyshopFilter = 'remaining' | 'all' | 'received' | 'pending'
+type MechanicalStatusFilter = 'all' | 'pending' | 'received'
 
 function inr(v: number | null | undefined) {
   if (v == null || Number.isNaN(Number(v))) return '—'
   return `₹${Number(v).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+}
+
+function inrKpi(v: number | null | undefined) {
+  if (v == null || Number.isNaN(Number(v))) return '—'
+  const n = Number(v)
+  const whole = Math.abs(n - Math.round(n)) < 0.005
+  return `₹${n.toLocaleString('en-IN', {
+    minimumFractionDigits: whole ? 0 : 2,
+    maximumFractionDigits: whole ? 0 : 2,
+  })}`
 }
 
 function fmtWhen(iso: string | null | undefined) {
@@ -111,6 +126,40 @@ function numOrNull(raw: string) {
   return Number.isFinite(n) ? n : null
 }
 
+function KpiTile({
+  label,
+  value,
+  active,
+  onClick,
+  title,
+}: {
+  label: string
+  value: string | number
+  active?: boolean
+  onClick?: () => void
+  title?: string
+}) {
+  const className = `brx-recov-kpi${active ? ' is-active' : ''}${onClick ? '' : ' is-static'}`
+  const body = (
+    <>
+      <span className="brx-recov-kpi__l">{label}</span>
+      <span className="brx-recov-kpi__v">{value}</span>
+    </>
+  )
+  if (onClick) {
+    return (
+      <button type="button" className={className} onClick={onClick} title={title}>
+        {body}
+      </button>
+    )
+  }
+  return (
+    <div className={className} title={title}>
+      {body}
+    </div>
+  )
+}
+
 export default function AccountsPage() {
   const [section, setSection] = useState<Section>('mechanical')
   const [mechRows, setMechRows] = useState<AccountsMechanicalCase[]>([])
@@ -122,6 +171,8 @@ export default function AccountsPage() {
   const [year, setYear] = useState<number | 'all'>('all')
   const [month, setMonth] = useState<number | 'all'>('all')
   const [bsFilter, setBsFilter] = useState<BodyshopFilter>('remaining')
+  const [mechStatusFilter, setMechStatusFilter] = useState<MechanicalStatusFilter>('all')
+  const [mechPayLines, setMechPayLines] = useState<AccountsMechanicalPayment[]>([])
 
   const [editRow, setEditRow] = useState<AccountsMechanicalCase | null>(null)
   const [invoiceNumber, setInvoiceNumber] = useState('')
@@ -158,12 +209,14 @@ export default function AccountsPage() {
     setLoading(true)
     setError(null)
     try {
-      const [mech, bs] = await Promise.all([
+      const [mech, bs, lines] = await Promise.all([
         listAccountsMechanicalCases(),
         listAccountsBodyshopCases(),
+        listAccountsMechanicalPaymentLines().catch(() => [] as AccountsMechanicalPayment[]),
       ])
       setMechRows(mech)
       setBsRows(bs)
+      setMechPayLines(lines)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load Accounts')
     } finally {
@@ -232,13 +285,19 @@ export default function AccountsPage() {
       .sort((a, b) => a.month - b.month)
   }, [section, yearScopedMech, yearScopedBs])
 
-  const searchedMech = useMemo(() => {
+  const periodMech = useMemo(() => {
     const q = search.trim().toLowerCase()
     let rows = year === 'all' ? mechRows : yearScopedMech
     if (month !== 'all') rows = rows.filter((r) => dateParts(r.invoice_done_at).month === month)
     if (!q) return rows
     return rows.filter((r) => blobOf(r.jc_number, r.reg_number, r.invoice_number, r.owner_name, r.sa_name).includes(q))
   }, [mechRows, yearScopedMech, year, month, search])
+
+  const searchedMech = useMemo(() => {
+    if (mechStatusFilter === 'pending') return periodMech.filter((r) => isAccountsStatusPending(r.payment_status))
+    if (mechStatusFilter === 'received') return periodMech.filter((r) => isAccountsStatusReceived(r.payment_status))
+    return periodMech
+  }, [periodMech, mechStatusFilter])
 
   const periodBs = useMemo(() => {
     const q = search.trim().toLowerCase()
@@ -252,29 +311,36 @@ export default function AccountsPage() {
     if (bsFilter === 'remaining') return periodBs.filter((r) => isBodyshopOutstandingOpen(r))
     if (bsFilter === 'received') return periodBs.filter((r) => isBodyshopOverallReceived(r))
     if (bsFilter === 'pending') {
-      return periodBs.filter((r) => {
-        const status = bodyshopOverallStatus(r)
-        return status === 'pending' || status === 'partial'
-      })
+      return periodBs.filter((r) => isAccountsStatusPending(r.derived_payment_status))
     }
     return periodBs
   }, [periodBs, bsFilter])
 
   const mechKpis = useMemo(() => {
-    const pending = searchedMech.filter((r) => !r.invoice_number).length
-    const billed = searchedMech.reduce((s, r) => s + Number(r.billed_amount ?? 0), 0)
-    const remaining = searchedMech.reduce((s, r) => s + Number(mechanicalRemaining(r) ?? 0), 0)
-    const received = searchedMech.filter((r) => isMechanicalPaymentClosed(r)).length
-    return { count: searchedMech.length, pending, billed, remaining, received }
-  }, [searchedMech])
+    const pending = periodMech.filter((r) => isAccountsStatusPending(r.payment_status)).length
+    const received = periodMech.filter((r) => isAccountsStatusReceived(r.payment_status)).length
+    const billed = periodMech.reduce((s, r) => s + Number(r.billed_amount ?? 0), 0)
+    const remaining = periodMech.reduce((s, r) => s + Number(mechanicalRemaining(r) ?? 0), 0)
+    const scopedIds = new Set(periodMech.map((r) => r.reception_entry_id))
+    const modes = sumAccountsPaymentModeTotals(
+      mechPayLines.filter((line) => scopedIds.has(line.reception_entry_id)),
+    )
+    return { count: periodMech.length, pending, received, billed, remaining, ...modes }
+  }, [periodMech, mechPayLines])
 
   const bsKpis = useMemo(() => {
     const remainingRows = periodBs.filter((r) => isBodyshopOutstandingOpen(r))
     const remaining = remainingRows.reduce((s, r) => s + bodyshopOutstanding(r), 0)
-    const pending = periodBs.filter((r) => bodyshopOverallStatus(r) === 'pending').length
-    const partial = periodBs.filter((r) => bodyshopOverallStatus(r) === 'partial').length
+    const pending = periodBs.filter((r) => isAccountsStatusPending(r.derived_payment_status)).length
     const received = periodBs.filter((r) => isBodyshopOverallReceived(r)).length
-    return { remainingCount: remainingRows.length, remaining, pending, partial, received, billed: periodBs.length }
+    const billed = periodBs.reduce((s, r) => s + Number(r.invoice_amount ?? r.billed_amount ?? 0), 0)
+    return {
+      remaining,
+      pending,
+      received,
+      billed,
+      billedCount: periodBs.length,
+    }
   }, [periodBs])
 
   function patchMechRow(saved: AccountsMechanicalCase) {
@@ -392,6 +458,10 @@ export default function AccountsPage() {
       setPaymentReceivedDate(asiaKolkataTodayDate())
       const lines = await listAccountsMechanicalPayments(editRow.reception_entry_id)
       setPayLines(lines)
+      setMechPayLines((prev) => [
+        ...prev.filter((line) => line.reception_entry_id !== editRow.reception_entry_id),
+        ...lines,
+      ])
       flash(isMechanicalPaymentClosed(saved) ? 'Payment completed' : 'Receipt posted')
     } catch (e) {
       setPayError(e instanceof Error ? e.message : 'Receipt failed')
@@ -596,7 +666,7 @@ export default function AccountsPage() {
           <button
             type="button"
             className={`brx-pipe-pill ${section === 'mechanical' ? 'is-active' : ''}`}
-            onClick={() => { setSection('mechanical'); setYear('all'); setMonth('all'); setSearch('') }}
+            onClick={() => { setSection('mechanical'); setYear('all'); setMonth('all'); setSearch(''); setMechStatusFilter('all') }}
           >
             <span className="brx-pipe-pill__n">{mechRows.length}</span>
             <span className="brx-pipe-pill__l">Mechanical<small>Mark Done</small></span>
@@ -604,7 +674,7 @@ export default function AccountsPage() {
           <button
             type="button"
             className={`brx-pipe-pill ${section === 'bodyshop' ? 'is-active' : ''}`}
-            onClick={() => { setSection('bodyshop'); setYear('all'); setMonth('all'); setSearch('') }}
+            onClick={() => { setSection('bodyshop'); setYear('all'); setMonth('all'); setSearch(''); setMechStatusFilter('all') }}
           >
             <span className="brx-pipe-pill__n">{bsRows.length}</span>
             <span className="brx-pipe-pill__l">Bodyshop<small>Invoice + billed</small></span>
@@ -619,50 +689,73 @@ export default function AccountsPage() {
       </div>
 
       {section === 'mechanical' ? (
-        <div className="brx-recov-kpis">
-          <div className="brx-recov-kpi is-active">
-            <span className="brx-recov-kpi__l">Mark Done</span>
-            <span className="brx-recov-kpi__v">{mechKpis.count}</span>
-            <span className="brx-recov-kpi__s">In this view</span>
-          </div>
-          <div className="brx-recov-kpi">
-            <span className="brx-recov-kpi__l">Invoice pending</span>
-            <span className="brx-recov-kpi__v">{mechKpis.pending}</span>
-            <span className="brx-recov-kpi__s">No invoice number yet</span>
-          </div>
-          <div className="brx-recov-kpi">
-            <span className="brx-recov-kpi__l">Billed</span>
-            <span className="brx-recov-kpi__v">{inr(mechKpis.billed)}</span>
-            <span className="brx-recov-kpi__s">Captured billed amount</span>
-          </div>
-          <div className="brx-recov-kpi">
-            <span className="brx-recov-kpi__l">Customer remaining</span>
-            <span className="brx-recov-kpi__v">{inr(mechKpis.remaining)}</span>
-            <span className="brx-recov-kpi__s">{mechKpis.received} received</span>
-          </div>
+        <div className="brx-recov-kpis acct-kpis">
+          <KpiTile
+            label="Mark Done"
+            value={mechKpis.count}
+            active={mechStatusFilter === 'all'}
+            onClick={() => setMechStatusFilter('all')}
+          />
+          <KpiTile
+            label="Pending"
+            value={mechKpis.pending}
+            active={mechStatusFilter === 'pending'}
+            onClick={() => setMechStatusFilter('pending')}
+          />
+          <KpiTile
+            label="Received"
+            value={mechKpis.received}
+            active={mechStatusFilter === 'received'}
+            onClick={() => setMechStatusFilter('received')}
+          />
+          <KpiTile label="Billed" value={inrKpi(mechKpis.billed)} />
+          <KpiTile label="Customer Remaining" value={inrKpi(mechKpis.remaining)} />
+          <KpiTile label="Cash" value={inrKpi(mechKpis.cash)} />
+          <KpiTile label="UPI" value={inrKpi(mechKpis.upi)} />
+          <KpiTile label="Credit Card" value={inrKpi(mechKpis.card)} title="Stored payment mode: card" />
         </div>
       ) : (
-        <div className="brx-recov-kpis">
-          <button type="button" className={`brx-recov-kpi ${bsFilter === 'remaining' ? 'is-active' : ''}`} onClick={() => setBsFilter('remaining')}>
-            <span className="brx-recov-kpi__l">Outstanding</span>
-            <span className="brx-recov-kpi__v">{inr(bsKpis.remaining)}</span>
-            <span className="brx-recov-kpi__s">{bsKpis.remainingCount} vehicle{bsKpis.remainingCount === 1 ? '' : 's'}</span>
-          </button>
-          <button type="button" className={`brx-recov-kpi ${bsFilter === 'all' ? 'is-active' : ''}`} onClick={() => setBsFilter('all')}>
-            <span className="brx-recov-kpi__l">All billed</span>
-            <span className="brx-recov-kpi__v">{bsKpis.billed}</span>
-            <span className="brx-recov-kpi__s">Invoice + billed amount</span>
-          </button>
-          <button type="button" className={`brx-recov-kpi ${bsFilter === 'received' ? 'is-active' : ''}`} onClick={() => setBsFilter('received')}>
-            <span className="brx-recov-kpi__l">Received</span>
-            <span className="brx-recov-kpi__v">{bsKpis.received}</span>
-            <span className="brx-recov-kpi__s">Overall settlement closed</span>
-          </button>
-          <button type="button" className={`brx-recov-kpi ${bsFilter === 'pending' ? 'is-active' : ''}`} onClick={() => setBsFilter('pending')}>
-            <span className="brx-recov-kpi__l">Pending / Partial</span>
-            <span className="brx-recov-kpi__v">{bsKpis.pending} / {bsKpis.partial}</span>
-            <span className="brx-recov-kpi__s">Overall settlement open</span>
-          </button>
+        <div className="brx-recov-kpis acct-kpis">
+          <KpiTile
+            label="Mark Done"
+            value={bsKpis.billedCount}
+            active={bsFilter === 'all'}
+            onClick={() => setBsFilter('all')}
+          />
+          <KpiTile
+            label="Pending"
+            value={bsKpis.pending}
+            active={bsFilter === 'pending'}
+            onClick={() => setBsFilter('pending')}
+          />
+          <KpiTile
+            label="Received"
+            value={bsKpis.received}
+            active={bsFilter === 'received'}
+            onClick={() => setBsFilter('received')}
+          />
+          <KpiTile label="Billed" value={inrKpi(bsKpis.billed)} />
+          <KpiTile
+            label="Customer Remaining"
+            value={inrKpi(bsKpis.remaining)}
+            active={bsFilter === 'remaining'}
+            onClick={() => setBsFilter('remaining')}
+          />
+          <KpiTile
+            label="Cash"
+            value="—"
+            title="Bodyshop settlement lines do not store payment mode"
+          />
+          <KpiTile
+            label="UPI"
+            value="—"
+            title="Bodyshop settlement lines do not store payment mode"
+          />
+          <KpiTile
+            label="Credit Card"
+            value="—"
+            title="Bodyshop settlement lines do not store payment mode"
+          />
         </div>
       )}
 
@@ -709,7 +802,11 @@ export default function AccountsPage() {
 
       {section === 'mechanical' ? (
         <div className="brx-panel acct-table-panel">
-          <div className="brx-panel-h">Mechanical · Mark Done</div>
+          <div className="brx-panel-h">
+            {mechStatusFilter === 'pending' && 'Mechanical · Pending'}
+            {mechStatusFilter === 'received' && 'Mechanical · Received'}
+            {mechStatusFilter === 'all' && 'Mechanical · Mark Done'}
+          </div>
           {loading && mechRows.length === 0 ? (
             <div className="brx-settle-status">Loading Mark Done cases…</div>
           ) : searchedMech.length === 0 ? (
@@ -805,10 +902,10 @@ export default function AccountsPage() {
       ) : (
         <div className="brx-panel acct-table-panel">
           <div className="brx-panel-h">
-            {bsFilter === 'remaining' && 'Bodyshop · Outstanding'}
-            {bsFilter === 'all' && 'Bodyshop · All billed'}
-            {bsFilter === 'received' && 'Bodyshop · Overall received'}
-            {bsFilter === 'pending' && 'Bodyshop · Pending / Partial'}
+            {bsFilter === 'remaining' && 'Bodyshop · Customer remaining'}
+            {bsFilter === 'all' && 'Bodyshop · Mark Done'}
+            {bsFilter === 'received' && 'Bodyshop · Received'}
+            {bsFilter === 'pending' && 'Bodyshop · Pending'}
           </div>
           {loading && bsRows.length === 0 ? (
             <div className="brx-settle-status">Loading billed bodyshop cases…</div>

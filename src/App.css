@@ -710,18 +710,35 @@ table.tbl { width: 100%; border-collapse: collapse; font-size: 13.5px; }
   margin-bottom: 8px;
   margin-top: 0;
 }
-.acct-page .brx-recov-kpis {
+.acct-page .brx-recov-kpis,
+.acct-page .acct-kpis {
+  display: grid;
+  grid-template-columns: repeat(8, minmax(0, 1fr));
   gap: 6px;
   margin-bottom: 8px;
 }
-.acct-page .brx-recov-kpi { padding: 7px 10px; }
+.acct-page .brx-recov-kpi {
+  padding: 4px 8px;
+  min-width: 0;
+}
+.acct-page .brx-recov-kpi.is-static {
+  cursor: default;
+}
+.acct-page .brx-recov-kpi__l {
+  font-size: 10px;
+  letter-spacing: 0.03em;
+}
 .acct-page .brx-recov-kpi__v {
-  margin-top: 2px;
-  font-size: 16px;
+  margin-top: 1px;
+  font-size: 13px;
+  line-height: 1.25;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .acct-page .brx-recov-kpi__s {
-  font-size: 11px;
-  margin-top: 1px;
+  display: none;
 }
 .acct-filters {
   display: flex;
@@ -765,11 +782,22 @@ table.tbl { width: 100%; border-collapse: collapse; font-size: 13.5px; }
   padding: 24px 8px;
 }
 
+@media (max-width: 1200px) {
+  .acct-page .brx-recov-kpis,
+  .acct-page .acct-kpis {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
 @media (max-width: 960px) {
   .acct-page.page {
     height: auto;
     max-height: none;
     overflow: visible;
+  }
+  .acct-page .brx-recov-kpis,
+  .acct-page .acct-kpis {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
   .acct-table-panel,
   .acct-table-scroll {

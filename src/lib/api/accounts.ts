@@ -232,6 +232,66 @@ export function paymentModeLabel(mode: string | null | undefined): string {
   return ACCOUNTS_PAYMENT_MODES.find((m) => m.value === mode)?.label ?? (mode || '—')
 }
 
+export function accountsPaymentStatus(
+  status: string | null | undefined,
+): AccountsPaymentStatus {
+  const v = String(status ?? 'pending').toLowerCase()
+  if (v === 'received' || v === 'partial' || v === 'not_received' || v === 'pending') return v
+  return 'pending'
+}
+
+export function isAccountsStatusPending(status: string | null | undefined): boolean {
+  return accountsPaymentStatus(status) === 'pending'
+}
+
+export function isAccountsStatusReceived(status: string | null | undefined): boolean {
+  return accountsPaymentStatus(status) === 'received'
+}
+
+export function normalizeAccountsPaymentMode(
+  mode: string | null | undefined,
+): AccountsPaymentMode | null {
+  const v = String(mode ?? '').trim().toLowerCase()
+  if (v === 'cash' || v === 'upi' || v === 'card' || v === 'cheque' || v === 'bank' || v === 'other') {
+    return v
+  }
+  return null
+}
+
+export function sumAccountsPaymentModeTotals(
+  lines: Array<Pick<AccountsMechanicalPayment, 'amount' | 'payment_mode'>>,
+): { cash: number; upi: number; card: number } {
+  let cash = 0
+  let upi = 0
+  let card = 0
+  for (const line of lines) {
+    const mode = normalizeAccountsPaymentMode(line.payment_mode)
+    const amount = Number(line.amount ?? 0)
+    if (!Number.isFinite(amount) || amount === 0) continue
+    if (mode === 'cash') cash += amount
+    else if (mode === 'upi') upi += amount
+    else if (mode === 'card') card += amount
+  }
+  return { cash, upi, card }
+}
+
+export async function listAccountsMechanicalPaymentLines(): Promise<AccountsMechanicalPayment[]> {
+  const pageSize = 1000
+  const rows: AccountsMechanicalPayment[] = []
+  for (let from = 0; ; from += pageSize) {
+    const { data, error } = await supabase
+      .from('accounts_mechanical_payment_lines')
+      .select('id, reception_entry_id, mechanical_invoice_id, amount, payment_mode, reference, posted_by, posted_at, payment_received_date')
+      .order('id', { ascending: true })
+      .range(from, from + pageSize - 1)
+    if (error) throw new Error(settlementRpcError(error))
+    const batch = asArray<AccountsMechanicalPayment>(data)
+    rows.push(...batch)
+    if (batch.length < pageSize) break
+  }
+  return rows
+}
+
 export async function openMechanicalInvoiceFile(row: Pick<AccountsMechanicalCase, 'invoice_drive_url' | 'invoice_storage_path'>): Promise<void> {
   if (row.invoice_drive_url) {
     window.open(row.invoice_drive_url, '_blank', 'noopener,noreferrer')
