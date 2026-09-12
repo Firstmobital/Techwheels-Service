@@ -24,6 +24,7 @@ import UpdationAvailableBadge from '../components/UpdationAvailableBadge'
 import { buildSaFloorCompletedWaTemplate } from '../lib/waTemplates'
 import PartsRequirementSection from '../components/PartsRequirementSection'
 import CustomerRemarkModal from '../components/CustomerRemarkModal'
+import { CustomerPortalAdminModal } from '../components/CustomerPortalAdminModal'
 
 type RowDraft = {
   service_type: string
@@ -538,6 +539,7 @@ export default function ServiceAdvisorPage() {
   const [complaintLinkModal, setComplaintLinkModal] = useState<{ open: boolean; url: string | null; regNumber: string | null }>({ open: false, url: null, regNumber: null })
   const [generatingComplaintLink, setGeneratingComplaintLink] = useState<number | null>(null)
   const [customerRemarkModalOpen, setCustomerRemarkModalOpen] = useState(false)
+  const [customerPortalModalOpen, setCustomerPortalModalOpen] = useState(false)
 
   function handleRemarkSaved(updatedRow: ReceptionEntryRow, newRemark: string) {
     setRows((prev) => prev.map((r) => (r.id === updatedRow.id ? { ...r, remark: newRemark || null } : r)))
@@ -2014,6 +2016,14 @@ export default function ServiceAdvisorPage() {
         >
           <span>💬</span> Customer Remark
         </button>
+        <button
+          type="button"
+          onClick={() => setCustomerPortalModalOpen(true)}
+          className="rounded-lg px-4 py-2 text-sm font-semibold shadow-sm transition border border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 flex items-center gap-1.5"
+          title="Open Customer Form & Bodyshop Customer Service Portal Admin"
+        >
+          <span>🚗</span> Customer Form
+        </button>
       </div>
 
       {pageMode === 'parts' ? (
@@ -2488,6 +2498,12 @@ export default function ServiceAdvisorPage() {
         rows={allVisibleRows}
         onSaveSuccess={handleRemarkSaved}
         showToast={showToast}
+      />
+
+      <CustomerPortalAdminModal
+        isOpen={customerPortalModalOpen}
+        onClose={() => setCustomerPortalModalOpen(false)}
+        isAdmin={true}
       />
     </div>
   )
