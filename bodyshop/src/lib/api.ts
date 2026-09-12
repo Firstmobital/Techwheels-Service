@@ -93,12 +93,144 @@ export interface FeedbackPayload {
   primary_complaint_area?: string
 }
 
+// Predefined Safe Test Vehicles (Sandbox Data - never disturbs live database)
+const SANDBOX_TEST_VEHICLES: CustomerVehicle[] = [
+  {
+    id: 9901,
+    reg_number: 'RJ14TEST01',
+    model: 'Nexon EV',
+    variant: 'Empowered Plus LR',
+    vin: 'MATTESTNEXON202601',
+    year: 2024,
+    purchase_date: '2024-02-15',
+    warranty_status: 'Battery 8 Yrs / Vehicle 3 Yrs Active',
+    amc_status: 'Gold Care AMC Active',
+    owner_name: 'Rahul Sharma (Test Account)',
+    owner_phone: '9888877771',
+    service_type: 'Paid Service',
+    sa_name: 'AMAN GUPTA',
+    sa_display_name: 'AMAN GUPTA',
+    jc_number: 'JC-2026-TEST01',
+    branch: 'Sitapura Workshop (Test Scope)',
+    created_at: new Date().toISOString(),
+    invoice_done_at: null,
+    km_reading: 14200,
+    remark: '[Sandbox Test] Vehicle in regular service test flow.',
+    billed_amount: 3850,
+    amount_received: 0,
+    payment_status: 'Pending',
+    qc_status: 'Pending',
+    washing_status: 'Pending',
+    gate_pass_issued: false,
+    gate_pass_number: 'GP-TEST01',
+  },
+  {
+    id: 9902,
+    reg_number: 'RJ14TEST02',
+    model: 'Safari',
+    variant: 'Accomplished Plus 6S',
+    vin: 'MATTESTSAFARI202602',
+    year: 2024,
+    purchase_date: '2024-01-10',
+    warranty_status: 'Extended Warranty Active (5 Years)',
+    amc_status: 'Value Care AMC',
+    owner_name: 'Vikram Singh (Test Account)',
+    owner_phone: '9888877772',
+    service_type: 'Bodyshop Insurance & Repair',
+    sa_name: 'AMAN GUPTA',
+    sa_display_name: 'AMAN GUPTA',
+    jc_number: 'JC-2026-TEST02',
+    branch: 'Sitapura Workshop (Test Scope)',
+    created_at: new Date().toISOString(),
+    invoice_done_at: new Date().toISOString(),
+    km_reading: 22400,
+    remark: '[Sandbox Test] Accidental repair completed, ready for gate pass verification.',
+    billed_amount: 14500,
+    amount_received: 14500,
+    payment_status: 'Paid',
+    qc_status: 'Pass',
+    washing_status: 'Completed',
+    gate_pass_issued: true,
+    gate_pass_number: 'GP-TEST02',
+  },
+  {
+    id: 9903,
+    reg_number: 'RJ14TEST03',
+    model: 'Punch',
+    variant: 'Accomplished iCNG',
+    vin: 'MATTESTPUNCH202603',
+    year: 2024,
+    purchase_date: '2024-04-20',
+    warranty_status: 'Standard Warranty Active',
+    amc_status: 'None',
+    owner_name: 'Amit Verma (Test Account)',
+    owner_phone: '9888877773',
+    service_type: 'First Free Service',
+    sa_name: 'RAMPRASAD MEENA',
+    sa_display_name: 'RAMPRASAD MEENA',
+    jc_number: 'JC-2026-TEST03',
+    branch: 'Sitapura Workshop (Test Scope)',
+    created_at: new Date().toISOString(),
+    invoice_done_at: null,
+    km_reading: 1500,
+    remark: '[Sandbox Test] First service intake.',
+    billed_amount: 450,
+    amount_received: 450,
+    payment_status: 'Paid',
+    qc_status: 'Pass',
+    washing_status: 'Completed',
+    gate_pass_issued: true,
+    gate_pass_number: 'GP-TEST03',
+  },
+  {
+    id: 9904,
+    reg_number: 'RJ14TEST04',
+    model: 'Altroz',
+    variant: 'XZ Plus Petrol',
+    vin: 'MATTESTALTROZ202604',
+    year: 2023,
+    purchase_date: '2023-11-12',
+    warranty_status: 'Active (3 Years)',
+    amc_status: 'Gold Care AMC Active',
+    owner_name: 'Pooja Meena (Test Account)',
+    owner_phone: '9888877774',
+    service_type: 'Third Free Service',
+    sa_name: 'AMAN GUPTA',
+    sa_display_name: 'AMAN GUPTA',
+    jc_number: 'JC-2026-TEST04',
+    branch: 'Sitapura Workshop (Test Scope)',
+    created_at: new Date().toISOString(),
+    invoice_done_at: null,
+    km_reading: 14800,
+    remark: '[Sandbox Test] Regular maintenance test entry.',
+    billed_amount: 2850,
+    amount_received: 0,
+    payment_status: 'Pending',
+    qc_status: 'Pending',
+    washing_status: 'Pending',
+    gate_pass_issued: false,
+    gate_pass_number: 'GP-TEST04',
+  },
+]
+
 // 1. Fetch customer vehicle & active service by VRN or Phone
 export async function fetchCustomerVehicles(searchQuery: string): Promise<CustomerVehicle[]> {
   const query = searchQuery.trim().toUpperCase()
   if (!query) return []
 
   const results: CustomerVehicle[] = []
+
+  // Check Sandbox Test Vehicles first
+  const sandboxMatches = SANDBOX_TEST_VEHICLES.filter(
+    (v) =>
+      v.reg_number.includes(query) ||
+      v.owner_phone?.includes(query) ||
+      v.jc_number?.includes(query) ||
+      v.owner_name?.toUpperCase().includes(query)
+  )
+  if (sandboxMatches.length > 0) {
+    results.push(...sandboxMatches)
+  }
 
   // A. Search service_reception_entries
   try {

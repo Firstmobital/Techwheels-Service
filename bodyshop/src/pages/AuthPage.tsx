@@ -6,9 +6,10 @@ interface AuthPageProps {
 }
 
 const SAMPLE_VEHICLES = [
-  { reg: 'RJ60CH2388', desc: 'Kajal (Sitapura)' },
-  { reg: 'RJ06CH0620', desc: 'Kamal Nayan (Sitapura)' },
-  { reg: 'RJ45VR4545', desc: 'Safari (Admin Scope)' },
+  { reg: 'RJ14TEST01', desc: 'Nexon EV (Paid Service)' },
+  { reg: 'RJ14TEST02', desc: 'Safari (Accident & Gatepass)' },
+  { reg: 'RJ14TEST03', desc: 'Punch (First Free Service)' },
+  { reg: 'RJ14TEST04', desc: 'Altroz (Third Free Service)' },
 ]
 
 export default function AuthPage({ onLoginSuccess }: AuthPageProps) {

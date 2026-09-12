@@ -34,7 +34,7 @@ export function CustomerPortalAdminModal({ isOpen, onClose, isAdmin = true }: Cu
   const [selectedFuel, setSelectedFuel] = useState('All')
 
   // Search vehicle test link
-  const [testRegNumber, setTestRegNumber] = useState('RJ60CH2388')
+  const [testRegNumber, setTestRegNumber] = useState('RJ14TEST01')
   const [copiedLink, setCopiedLink] = useState(false)
 
   const portalUrl = typeof window !== 'undefined' ? `${window.location.protocol}//${window.location.hostname}:5174` : 'http://localhost:5174'
