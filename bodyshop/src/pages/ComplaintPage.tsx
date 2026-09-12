@@ -1,35 +1,44 @@
 import { useState } from 'react'
-import { submitCustomerComplaint, type CustomerVehicle, type ComplaintPayload } from '../lib/api'
+import { submitCustomerComplaint, type CustomerVehicle } from '../lib/api'
 
 interface ComplaintPageProps {
   vehicle: CustomerVehicle
   onSuccess?: () => void
 }
 
-const CATEGORIES: Array<{ key: ComplaintPayload['category']; label: string; icon: string; desc: string }> = [
-  { key: 'Engine', label: 'Engine & Performance', icon: '⚙️', desc: 'Starting trouble, pickup drop, abnormal sound' },
-  { key: 'AC', label: 'AC & Climate Control', icon: '❄️', desc: 'Low cooling, blower noise, foul smell' },
-  { key: 'Brake', label: 'Brakes & Safety', icon: '🛑', desc: 'Spongy pedal, squeaking noise, vibration' },
-  { key: 'Electrical', label: 'Electrical & Battery', icon: '⚡', desc: 'Lights, horn, power windows, battery' },
-  { key: 'Suspension', label: 'Suspension & Steering', icon: '🚗', desc: 'Bumpy ride, alignment pull, noise' },
-  { key: 'Tyre', label: 'Tyres & Wheel', icon: '🛞', desc: 'Pressure loss, puncture, uneven wear' },
-  { key: 'Body', label: 'Body & Denting/Painting', icon: '🔨', desc: 'Scratches, bumper damage, door dings' },
-  { key: 'Noise', label: 'Rattle & Noise', icon: '🔊', desc: 'Cabin rattles, squeaks, underbody noise' },
-  { key: 'Other', label: 'Other Issue', icon: '📝', desc: 'General inspection or other problems' },
-]
-
 export default function ComplaintPage({ vehicle, onSuccess }: ComplaintPageProps) {
-  const [category, setCategory] = useState<ComplaintPayload['category']>('Engine')
-  const [kmReading, setKmReading] = useState<number>(vehicle.km_reading || 15000)
-  const [description, setDescription] = useState('')
+  const [kmReading, setKmReading] = useState<number | ''>(
+    vehicle.km_reading != null && vehicle.km_reading > 0 ? vehicle.km_reading : ''
+  )
+  const [problems, setProblems] = useState<string[]>([''])
   const [comments, setComments] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [toast, setToast] = useState<{ ok: boolean; msg: string } | null>(null)
 
+  function handleAddProblem() {
+    setProblems((prev) => [...prev, ''])
+  }
+
+  function handleProblemChange(index: number, value: string) {
+    setProblems((prev) => {
+      const next = [...prev]
+      next[index] = value
+      return next
+    })
+  }
+
+  function handleRemoveProblem(index: number) {
+    if (problems.length <= 1) return
+    setProblems((prev) => prev.filter((_, i) => i !== index))
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    if (!description.trim()) {
-      setToast({ ok: false, msg: 'Please enter a description of the problem.' })
+
+    const validProblems = problems.map((p) => p.trim()).filter(Boolean)
+
+    if (validProblems.length === 0) {
+      setToast({ ok: false, msg: 'Please describe at least one problem with your vehicle.' })
       return
     }
 
@@ -41,23 +50,28 @@ export default function ComplaintPage({ vehicle, onSuccess }: ComplaintPageProps
         reg_number: vehicle.reg_number,
         customer_name: vehicle.owner_name || undefined,
         mobile_number: vehicle.owner_phone || undefined,
-        current_km: kmReading,
-        category,
-        description: description.trim(),
+        current_km: typeof kmReading === 'number' && kmReading > 0 ? kmReading : undefined,
+        category: 'Customer Problems',
+        description: validProblems[0],
+        problems: validProblems,
         comments: comments.trim() || undefined,
       })
 
       setToast({
         ok: true,
-        msg: `Complaint for [${category}] successfully logged! Routed to Service Advisor (${vehicle.sa_display_name || vehicle.sa_name || 'Assigned Advisor'}).`,
+        msg: `✅ ${validProblems.length} Problem(s) registered successfully! Your Service Advisor (${
+          vehicle.sa_display_name || vehicle.sa_name || 'Advisor'
+        }) has been notified.`,
       })
-      setDescription('')
+
+      setProblems([''])
       setComments('')
+
       if (onSuccess) {
         setTimeout(onSuccess, 1800)
       }
     } catch (err) {
-      setToast({ ok: false, msg: err instanceof Error ? err.message : 'Failed to log complaint' })
+      setToast({ ok: false, msg: err instanceof Error ? err.message : 'Failed to submit problem.' })
     } finally {
       setSubmitting(false)
     }
@@ -68,7 +82,7 @@ export default function ComplaintPage({ vehicle, onSuccess }: ComplaintPageProps
       <div>
         <h2 style={{ fontSize: 18, fontWeight: 800, color: 'var(--text)' }}>Tell Us Your Problem</h2>
         <p style={{ fontSize: 12.5, color: 'var(--text-muted)' }}>
-          Register vehicle complaints & issues directly to your Service Advisor (SRD v1.0)
+          Enter current odometer and add all vehicle problems to share directly with your Service Advisor.
         </p>
       </div>
 
@@ -79,80 +93,169 @@ export default function ComplaintPage({ vehicle, onSuccess }: ComplaintPageProps
         </div>
       )}
 
-      <form onSubmit={handleSubmit} className="card" style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-        {/* Category Picker Grid */}
-        <div>
-          <label className="form-label" style={{ marginBottom: 8, display: 'block' }}>
-            Select Problem Category <span style={{ color: 'var(--danger)' }}>*</span>
+      <form onSubmit={handleSubmit} className="card" style={{ display: 'flex', flexDirection: 'column', gap: 16, padding: 22 }}>
+        {/* Current Odometer KM Reading */}
+        <div className="form-group" style={{ margin: 0 }}>
+          <label className="form-label" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span>Current Odometer (KM Reading)</span>
+            <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>From dashboard odometer</span>
           </label>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
-            {CATEGORIES.map((cat) => {
-              const selected = category === cat.key
-              return (
-                <button
-                  key={cat.key}
-                  type="button"
-                  onClick={() => setCategory(cat.key)}
-                  style={{
-                    padding: '10px 6px',
-                    borderRadius: 10,
-                    border: `1.5px solid ${selected ? 'var(--primary)' : 'var(--border)'}`,
-                    background: selected ? 'var(--primary-sub)' : 'var(--surface)',
-                    color: selected ? 'var(--primary)' : 'var(--text)',
-                    cursor: 'pointer',
-                    textAlign: 'center',
-                    transition: 'all 0.15s ease',
-                  }}
-                >
-                  <div style={{ fontSize: 20 }}>{cat.icon}</div>
-                  <div style={{ fontSize: 11, fontWeight: selected ? 800 : 600, marginTop: 4 }}>{cat.label}</div>
-                </button>
-              )
-            })}
+          <div style={{ position: 'relative' }}>
+            <input
+              type="number"
+              className="form-input mono"
+              style={{ fontSize: 15, fontWeight: 700, paddingLeft: 36 }}
+              value={kmReading}
+              onChange={(e) => setKmReading(e.target.value === '' ? '' : Number(e.target.value))}
+              placeholder="e.g. 32825"
+            />
+            <span
+              style={{
+                position: 'absolute',
+                left: 12,
+                top: '50%',
+                transform: 'translateY(-50%)',
+                fontSize: 15,
+                color: '#64748b',
+                pointerEvents: 'none',
+              }}
+            >
+              ⚡
+            </span>
           </div>
         </div>
 
-        {/* Current KM */}
-        <div className="form-group">
-          <label className="form-label">Current Odometer (KM Reading)</label>
-          <input
-            type="number"
-            className="form-input mono"
-            value={kmReading}
-            onChange={(e) => setKmReading(Number(e.target.value))}
-            placeholder="e.g. 18500"
-          />
+        {/* Dynamic Multiple Problems Section */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <label className="form-label" style={{ margin: 0, fontSize: 13, fontWeight: 700 }}>
+              Vehicle Problems & Complaints <span style={{ color: 'var(--danger)' }}>*</span>
+            </label>
+            <span style={{ fontSize: 11.5, color: '#2563eb', fontWeight: 600 }}>
+              {problems.length} Problem{problems.length > 1 ? 's' : ''} Listed
+            </span>
+          </div>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {problems.map((prob, idx) => (
+              <div
+                key={idx}
+                style={{
+                  borderRadius: 10,
+                  border: '1.5px solid #e2e8f0',
+                  background: '#f8fafc',
+                  padding: 12,
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 8,
+                }}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span
+                    style={{
+                      fontSize: 11,
+                      fontWeight: 800,
+                      padding: '2px 8px',
+                      borderRadius: 6,
+                      background: '#dbeafe',
+                      color: '#1e40af',
+                      textTransform: 'uppercase',
+                      letterSpacing: '0.4px',
+                    }}
+                  >
+                    Problem #{idx + 1}
+                  </span>
+
+                  {problems.length > 1 && (
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveProblem(idx)}
+                      style={{
+                        background: 'transparent',
+                        border: 'none',
+                        color: '#ef4444',
+                        fontSize: 12,
+                        fontWeight: 700,
+                        cursor: 'pointer',
+                        padding: '2px 6px',
+                        borderRadius: 4,
+                      }}
+                      title="Remove this problem"
+                    >
+                      🗑️ Remove
+                    </button>
+                  )}
+                </div>
+
+                <textarea
+                  className="form-textarea"
+                  rows={2}
+                  style={{
+                    background: '#ffffff',
+                    border: '1px solid #cbd5e1',
+                    fontSize: 13,
+                    borderRadius: 8,
+                  }}
+                  placeholder={`Describe Problem #${idx + 1} (e.g. AC cooling is slow, strange noise on rough roads, wheel vibrating...)`}
+                  value={prob}
+                  onChange={(e) => handleProblemChange(idx, e.target.value)}
+                  required={idx === 0}
+                />
+              </div>
+            ))}
+          </div>
+
+          {/* + Add Another Problem Button */}
+          <button
+            type="button"
+            onClick={handleAddProblem}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 6,
+              padding: '10px 14px',
+              borderRadius: 8,
+              border: '1.5px dashed #3b82f6',
+              background: '#eff6ff',
+              color: '#1d4ed8',
+              fontSize: 13,
+              fontWeight: 700,
+              cursor: 'pointer',
+              transition: 'all 0.15s ease',
+            }}
+          >
+            <span>➕</span>
+            <span>+ Add Another Problem</span>
+          </button>
         </div>
 
-        {/* Detailed Issue Description */}
-        <div className="form-group">
-          <label className="form-label">
-            Detailed Issue Description <span style={{ color: 'var(--danger)' }}>*</span>
-          </label>
-          <textarea
-            className="form-textarea"
-            rows={3}
-            placeholder={`Describe what is happening with the ${category} (when did it start, symptoms, sound, etc.)…`}
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            required
-          />
-        </div>
-
-        {/* Additional Comments */}
-        <div className="form-group">
-          <label className="form-label">Special Request / Additional Comments</label>
+        {/* Special Request / Additional Comments */}
+        <div className="form-group" style={{ margin: 0 }}>
+          <label className="form-label">Special Request / Additional Comments (Optional)</label>
           <input
             type="text"
             className="form-input"
-            placeholder="e.g. Need vehicle by 5 PM, please check AC gas as well"
+            placeholder="e.g. Need vehicle by 5 PM, please check tyre pressure as well"
             value={comments}
             onChange={(e) => setComments(e.target.value)}
           />
         </div>
 
-        <button type="submit" className="btn-primary" disabled={submitting || !description.trim()} style={{ marginTop: 6 }}>
-          {submitting ? 'Registering Problem…' : '🚀 Submit Problem to Workshop'}
+        {/* Submit Button */}
+        <button
+          type="submit"
+          className="btn-primary"
+          disabled={submitting || problems.every((p) => !p.trim())}
+          style={{
+            marginTop: 4,
+            padding: '13px',
+            fontSize: 14,
+            fontWeight: 800,
+            boxShadow: '0 4px 14px rgba(37, 99, 235, 0.3)',
+          }}
+        >
+          {submitting ? 'Submitting to Workshop…' : '🚀 Submit Problems to Workshop'}
         </button>
       </form>
     </div>

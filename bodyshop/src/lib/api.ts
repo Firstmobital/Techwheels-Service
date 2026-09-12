@@ -426,17 +426,36 @@ export async function authenticateCustomer(
   }
 }
 
+export interface ComplaintPayload {
+  reg_number: string
+  customer_name?: string
+  mobile_number?: string
+  current_km?: number
+  category?: string
+  description: string
+  problems?: string[]
+  comments?: string
+}
+
 // 2. Submit "Tell Us Your Problem" Complaint (SRD Section 3)
 export async function submitCustomerComplaint(payload: ComplaintPayload): Promise<void> {
+  const normReg = payload.reg_number.trim().toUpperCase()
+  const categoryLabel = payload.category || 'Customer Issue'
+
+  const formattedDescription =
+    payload.problems && payload.problems.length > 1
+      ? payload.problems.map((p, idx) => `${idx + 1}. ${p.trim()}`).join(' ; ')
+      : payload.description.trim()
+
   const row = {
-    vehicle_registration_number: payload.reg_number.trim().toUpperCase(),
+    vehicle_registration_number: normReg,
     customer_name: payload.customer_name || 'Customer',
     mobile_number: payload.mobile_number || null,
     rating: 5,
-    feedback_text: `[Complaint - ${payload.category}] KM: ${payload.current_km || 'N/A'} | Issue: ${payload.description} | Additional: ${payload.comments || 'None'}`,
-    service_type: `Complaint: ${payload.category}`,
+    feedback_text: `[Complaint - ${categoryLabel}] KM: ${payload.current_km || 'N/A'} | Issue: ${formattedDescription} | Additional: ${payload.comments || 'None'}`,
+    service_type: `Complaint: ${categoryLabel}`,
     mode: 'customer_complaint_portal',
-    primary_complaint_area: payload.category,
+    primary_complaint_area: categoryLabel,
     complaint_date_time: new Date().toISOString(),
   }
 
@@ -444,6 +463,18 @@ export async function submitCustomerComplaint(payload: ComplaintPayload): Promis
   if (error) {
     console.error('Error recording customer complaint:', error)
     throw new Error(error.message)
+  }
+
+  // Also update km_reading in service_reception_entries if provided
+  if (payload.current_km && payload.current_km > 0) {
+    try {
+      await supabase
+        .from('service_reception_entries')
+        .update({ km_reading: payload.current_km })
+        .eq('reg_number', normReg)
+    } catch (e) {
+      console.warn('Could not update km_reading in service_reception_entries:', e)
+    }
   }
 }
 
