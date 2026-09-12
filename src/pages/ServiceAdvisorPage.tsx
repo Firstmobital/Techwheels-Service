@@ -20,7 +20,6 @@ import { supabase } from '../lib/supabase'
 import Icon from '../components/Icon'
 import RevisitBadge from '../components/RevisitBadge'
 import UpdationAvailableBadge from '../components/UpdationAvailableBadge'
-import { buildSaFloorCompletedWaTemplate } from '../lib/waTemplates'
 import PartsRequirementSection from '../components/PartsRequirementSection'
 import CustomerRemarkModal from '../components/CustomerRemarkModal'
 import { CustomerPortalAdminModal } from '../components/CustomerPortalAdminModal'
@@ -272,21 +271,6 @@ function isJobCardPending(jcNumber: string | null | undefined): boolean {
 
 function isServiceTypeMissing(serviceType: string | null | undefined): boolean {
   return !String(serviceType ?? '').trim()
-}
-
-function normalizeWhatsAppPhone(raw: string | null | undefined): string | null {
-  const digits = String(raw ?? '').replace(/\D/g, '')
-  if (!digits) return null
-  if (digits.length === 10) return `91${digits}`
-  if (digits.length === 12 && digits.startsWith('91')) return digits
-  return null
-}
-
-function getServiceTypeForMessage(rowServiceType: string | null | undefined, draftServiceType: string | null | undefined): string {
-  const draftValue = String(draftServiceType ?? '').trim()
-  if (draftValue) return draftValue
-  const rowValue = String(rowServiceType ?? '').trim()
-  return rowValue || 'Service'
 }
 
 function isWithinDateRange(createdAt: string | null | undefined, range: DateRange): boolean {
@@ -1715,12 +1699,6 @@ export default function ServiceAdvisorPage() {
         [id]: draftFromRow(updatedRow),
       }))
     }
-
-    // Preserve the Mark Done WhatsApp send on the first invoice completion only.
-    const becameComplete = Boolean(updatedRow?.invoice_done_at) && !row?.invoice_done_at
-    if (becameComplete && updatedRow) {
-      await handleSendWhatsApp({ ...(row ?? updatedRow), ...updatedRow })
-    }
   }
 
   async function handleEstimateUpload(id: number, file: File) {
@@ -1756,89 +1734,6 @@ export default function ServiceAdvisorPage() {
     if (res.data) {
       const updatedRow = res.data as ReceptionEntryRow
       setRows((prev) => prev.map((r) => (r.id === id ? updatedRow : r)))
-    }
-  }
-
-  async function handleSendWhatsApp(row: ReceptionEntryRow) {
-    const draft = drafts[row.id] ?? EMPTY_DRAFT
-    const ownerPhone = normalizeWhatsAppPhone(row.owner_phone)
-
-    if (!ownerPhone) {
-      setError('Send WA needs a valid customer mobile number on this row.')
-      return
-    }
-
-    const regNo = String(row.reg_number ?? '').trim().toUpperCase() || 'REG-NO'
-    const serviceType = getServiceTypeForMessage(row.service_type, draft.service_type)
-    const vehicleModel = String(row.model ?? '').trim()
-    const vehicleDetails = vehicleModel ? `${vehicleModel} - ${serviceType}` : serviceType
-    const completedOn = row.invoice_done_at
-      ? formatDate(row.invoice_done_at)
-      : formatDate(new Date().toISOString())
-
-    let message = ''
-
-    try {
-      const link = await generateComplaintLink(BigInt(row.id))
-      const complaintUrl = `${window.location.origin}/c/${link.token}`
-      message = buildSaFloorCompletedWaTemplate({
-        customerName: String(row.owner_name ?? '').trim() || 'Customer',
-        regNumber: regNo,
-        vehicleDetails,
-        completedOn,
-        complaintUrl,
-      })
-    } catch (error) {
-      const reason = error instanceof Error ? error.message : String(error ?? 'Unknown error')
-      console.error('[service-advisor][mark-done][generate-complaint-link] failed', {
-        rowId: row.id,
-        regNumber: row.reg_number,
-        ownerPhoneRaw: row.owner_phone,
-        reason,
-      })
-      // Keep WA flow reliable even if complaints module permission/link generation is unavailable.
-      message = [
-        `Hello ${String(row.owner_name ?? '').trim() || 'Customer'},`,
-        '',
-        `Your vehicle ${regNo} (${vehicleDetails}) work is completed on ${completedOn}.`,
-        '',
-        'If you face any issue, please contact your service advisor to raise a complaint.',
-        '',
-        'Thank you,',
-        'Techwheels Service',
-      ].join('\n')
-      showToast(`Complaint link unavailable (${reason}). Opening WhatsApp without complaint link.`)
-    }
-
-    const isMobileDevice = /android|iphone|ipad|ipod/i.test(navigator.userAgent)
-    const appUrl = `whatsapp://send?phone=${ownerPhone}&text=${encodeURIComponent(message)}`
-    const fallbackUrl = isMobileDevice
-      ? `https://wa.me/${ownerPhone}?text=${encodeURIComponent(message)}`
-      : `https://web.whatsapp.com/send?phone=${ownerPhone}&text=${encodeURIComponent(message)}`
-
-    // Open a tab synchronously to reduce popup-blocker failures after awaited calls.
-    const opened = window.open('', '_blank', 'noopener,noreferrer')
-
-    if (opened) {
-      opened.location.href = appUrl
-      window.setTimeout(() => {
-        try {
-          if (!opened.closed) opened.location.href = fallbackUrl
-        } catch {
-          opened.location.href = fallbackUrl
-        }
-      }, 1400)
-      showToast('Opening WhatsApp app. Falling back to web if app is unavailable.')
-      return
-    }
-
-    if (!opened) {
-      // Popup blockers may block window.open; fallback to same-tab navigation.
-      window.location.href = appUrl
-      window.setTimeout(() => {
-        window.location.href = fallbackUrl
-      }, 1400)
-      return
     }
   }
 
