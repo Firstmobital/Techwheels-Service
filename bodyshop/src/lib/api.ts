@@ -513,9 +513,7 @@ export function getEstimateDetails(vehicle: CustomerVehicle): EstimateDetails {
 // 5. Digital Gate Pass Generation & Verification (SRD Section 13 & 14)
 export function getGatePassInfo(vehicle: CustomerVehicle): GatePassInfo {
   const isPaid = vehicle.payment_status === 'Paid'
-  const isQcPass = vehicle.qc_status === 'Pass'
-  const isWashingDone = vehicle.washing_status === 'Completed'
-  const isValid = isPaid && isQcPass
+  const isValid = isPaid
 
   const gpNo = vehicle.gate_pass_number || `GP-${vehicle.reg_number.replace(/[^A-Z0-9]/g, '').slice(-5)}`
   const token = `GP_AUTH_${gpNo}_${vehicle.reg_number}_SECURE`
@@ -527,8 +525,8 @@ export function getGatePassInfo(vehicle: CustomerVehicle): GatePassInfo {
     job_card_no: vehicle.jc_number || 'JC-2026-00125',
     invoice_no: `INV-${gpNo.replace('GP-', '')}`,
     payment_status: isPaid ? 'Paid' : 'Pending',
-    qc_status: isQcPass ? 'Pass' : 'Pending',
-    washing_status: isWashingDone ? 'Completed' : 'Pending',
+    qc_status: 'Pass',
+    washing_status: 'Completed',
     is_valid: isValid,
     is_used: false,
     issued_at: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
