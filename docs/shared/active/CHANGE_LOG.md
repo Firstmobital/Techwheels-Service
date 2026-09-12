@@ -4,7 +4,7 @@ Tracks documentation-sync updates for business logic, architecture, and access c
 
 ## 2026-09-12
 
-- Accounts Desk listing starts 11-Sep-2026. Mechanical list requires `invoice_done_at >= 2026-09-11 00:00:00+05:30`. Bodyshop list requires `invoice_date >= 2026-09-11`. Source SA / Bodyshop / Accounts invoice and payment rows are not deleted. Ledger: DBL-0053. Plan: `ACCOUNTS-001`.
+- Accounts Desk Mechanical listing starts 11-Sep-2026 (`invoice_done_at >= 2026-09-11 00:00:00+05:30`). Bodyshop listing is all billed cases; the 11-Sep date is not a Bodyshop cutoff (DBL-0054 corrects DBL-0053). Ledger: DBL-0053, DBL-0054. Plan: `ACCOUNTS-001`.
 
 ## 2026-09-11
 

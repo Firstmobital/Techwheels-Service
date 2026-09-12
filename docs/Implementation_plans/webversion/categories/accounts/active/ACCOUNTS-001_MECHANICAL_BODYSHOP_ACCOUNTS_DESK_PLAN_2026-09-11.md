@@ -72,7 +72,7 @@ flowchart TD
 2. Grant by named user in Admin → Permissions (`accounts` view). View is enough to list, capture mechanical, and post customer. No Employee Master business role.
 3. Org-wide visibility. No dealer/branch/fuel filter.
 4. Mechanical row = `is_floor_incharge_service_type` + `invoice_done_at IS NOT NULL` + non-empty `jc_number` + `invoice_done_at >= 2026-09-11 00:00:00+05:30` (DBL-0053). Exclude Accident and Rusting. Pre-cutoff Mark Done cases stay in reception/Accounts invoice tables but are not listed.
-5. Bodyshop row = non-blank `invoice_number` AND `invoice_amount` / `billed_amount` not null, settlement header exists, `overall_status <> cancelled`, AND `invoice_date >= 2026-09-11` (DBL-0053). Do **not** require `insurance_due_amount > 0`. Pre-cutoff invoice dates are hidden, not deleted.
+5. Bodyshop row = non-blank `invoice_number` AND `invoice_amount` / `billed_amount` not null, settlement header exists, `overall_status <> cancelled`. Do **not** require `insurance_due_amount > 0`. Do **not** apply the Mechanical 11-Sep cutoff (DBL-0054).
 6. Default Bodyshop filter = customer remaining pending (`due`/`refund` and status not `received`). Toggle All billed / Received. `kind = none` only under All billed.
 7. Settlement panel: add `variant="customer_payment"`. Do not reuse `do_payment` (that now includes Main/GST/TDS plus opportunistic CP).
 8. Accounts must not upsert invoice/DO header or post Main/GST/TDS.
