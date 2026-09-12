@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { supabase } from '../lib/supabase'
 import { getEstimateDetails, type CustomerVehicle, type EstimateDetails } from '../lib/api'
 import {
   fetchEstimateForVehicle,
@@ -12,13 +13,15 @@ interface EstimatePageProps {
 
 export default function EstimatePage({ vehicle }: EstimatePageProps) {
   const [estimate, setEstimate] = useState<EstimateDetails>(() => getEstimateDetails(vehicle))
+  const [isLoading, setIsLoading] = useState(false)
   const [showRejectModal, setShowRejectModal] = useState(false)
   const [rejectReason, setRejectReason] = useState('')
   const [toast, setToast] = useState<{ ok: boolean; msg: string } | null>(null)
 
-  useEffect(() => {
-    async function loadLiveEstimate() {
-      if (!vehicle.reg_number) return
+  async function loadLiveEstimate() {
+    if (!vehicle.reg_number) return
+    setIsLoading(true)
+    try {
       const live = await fetchEstimateForVehicle(vehicle.reg_number)
       if (live && live.items && live.items.length > 0) {
         setEstimate({
@@ -32,19 +35,47 @@ export default function EstimatePage({ vehicle }: EstimatePageProps) {
           rejection_reason: live.rejection_reason || undefined,
         })
       }
+    } finally {
+      setIsLoading(false)
     }
+  }
 
+  useEffect(() => {
     void loadLiveEstimate()
+
+    // Realtime Supabase Channel
+    const channel = supabase
+      .channel(`estimate-realtime-${vehicle.reg_number}`)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'post_feedback_bot_data' },
+        () => {
+          void loadLiveEstimate()
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'customer_estimates' },
+        () => {
+          void loadLiveEstimate()
+        }
+      )
+      .subscribe()
 
     function handleEstimateSync(e: Event) {
       const customEv = e as CustomEvent<CustomerEstimateRecord>
-      if (customEv.detail && (!customEv.detail.vehicle_registration_number || customEv.detail.vehicle_registration_number === vehicle.reg_number)) {
+      if (
+        customEv.detail &&
+        (!customEv.detail.vehicle_registration_number ||
+          customEv.detail.vehicle_registration_number === vehicle.reg_number)
+      ) {
         void loadLiveEstimate()
       }
     }
 
     window.addEventListener('techwheels_estimate_updated', handleEstimateSync)
     return () => {
+      void supabase.removeChannel(channel)
       window.removeEventListener('techwheels_estimate_updated', handleEstimateSync)
     }
   }, [vehicle.reg_number])
@@ -72,11 +103,41 @@ export default function EstimatePage({ vehicle }: EstimatePageProps) {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-      <div>
-        <h2 style={{ fontSize: 18, fontWeight: 800, color: 'var(--text)' }}>Digital Service Estimate</h2>
-        <p style={{ fontSize: 12.5, color: 'var(--text-muted)' }}>
-          Transparent parts & labour quotation with instant approval (SRD v1.0)
-        </p>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
+        <div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <h2 style={{ fontSize: 18, fontWeight: 800, color: 'var(--text)' }}>Digital Service Estimate</h2>
+            <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 999, background: '#dbeafe', color: '#1d4ed8' }}>
+              🟢 Live Synced
+            </span>
+          </div>
+          <p style={{ fontSize: 12.5, color: 'var(--text-muted)' }}>
+            Transparent parts & labour quotation with instant approval (SRD v1.0)
+          </p>
+        </div>
+
+        <button
+          type="button"
+          onClick={() => void loadLiveEstimate()}
+          disabled={isLoading}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 6,
+            fontSize: 12,
+            fontWeight: 700,
+            padding: '6px 12px',
+            borderRadius: 8,
+            border: '1px solid var(--border)',
+            background: 'var(--surface)',
+            cursor: 'pointer',
+          }}
+        >
+          <span style={{ display: 'inline-block', transform: isLoading ? 'rotate(360deg)' : 'none', transition: 'transform 0.5s' }}>
+            🔄
+          </span>
+          {isLoading ? 'Checking…' : 'Refresh'}
+        </button>
       </div>
 
       {toast && (
