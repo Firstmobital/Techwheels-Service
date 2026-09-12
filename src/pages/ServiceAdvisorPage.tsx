@@ -24,8 +24,6 @@ import PartsRequirementSection from '../components/PartsRequirementSection'
 import CustomerRemarkModal from '../components/CustomerRemarkModal'
 import { CustomerPortalAdminModal } from '../components/CustomerPortalAdminModal'
 import { EstimateMasterModal } from '../components/EstimateMasterModal'
-import { PaymentStatusModal } from '../components/PaymentStatusModal'
-import { type VehiclePaymentRecord } from '../lib/payments'
 
 type RowDraft = {
   service_type: string
@@ -602,38 +600,6 @@ export default function ServiceAdvisorPage() {
   const [estimateMasterModalOpen, setEstimateMasterModalOpen] = useState(false)
   const [selectedPortalRegNumber, setSelectedPortalRegNumber] = useState<string | undefined>(undefined)
   const [customerProblemsMap, setCustomerProblemsMap] = useState<Record<string, CustomerProblemSummary>>({})
-  const [paymentModalState, setPaymentModalState] = useState<{
-    open: boolean
-    row?: ReceptionEntryRow
-    initialInvoiceAmount?: number
-  }>({ open: false })
-  const [paymentsMap, setPaymentsMap] = useState<Record<string, VehiclePaymentRecord>>({})
-
-  async function loadPayments() {
-    try {
-      const { data, error } = await supabase
-        .from('post_feedback_bot_data')
-        .select('vehicle_registration_number, feedback_text')
-        .eq('mode', 'customer_payment_payload')
-        .limit(500)
-
-      if (!error && data) {
-        const map: Record<string, VehiclePaymentRecord> = {}
-        for (const row of data) {
-          try {
-            const parsed = JSON.parse(row.feedback_text) as VehiclePaymentRecord
-            if (parsed && parsed.reg_number) {
-              const cleanReg = parsed.reg_number.trim().toUpperCase().replace(/[\s-]/g, '')
-              map[cleanReg] = parsed
-            }
-          } catch {}
-        }
-        setPaymentsMap((prev) => ({ ...prev, ...map }))
-      }
-    } catch (err) {
-      console.warn('Error loading payments in ServiceAdvisorPage:', err)
-    }
-  }
 
   async function loadCustomerProblems() {
     try {
@@ -666,7 +632,6 @@ export default function ServiceAdvisorPage() {
         }
         setCustomerProblemsMap(map)
       }
-      await loadPayments()
     } catch (err) {
       console.warn('Error fetching customer problems for ServiceAdvisorPage:', err)
     }
@@ -2560,23 +2525,6 @@ export default function ServiceAdvisorPage() {
         onClose={() => setEstimateMasterModalOpen(false)}
         isAdmin={isAdmin || isSuperAdmin}
       />
-
-      {paymentModalState.open && paymentModalState.row && (
-        <PaymentStatusModal
-          isOpen={paymentModalState.open}
-          onClose={() => setPaymentModalState({ open: false })}
-          regNumber={paymentModalState.row.reg_number}
-          customerName={paymentModalState.row.owner_name || 'Customer'}
-          customerPhone={paymentModalState.row.owner_phone || ''}
-          jcNumber={drafts[paymentModalState.row.id]?.jc_number || paymentModalState.row.jc_number || ''}
-          initialInvoiceAmount={paymentModalState.initialInvoiceAmount}
-          onPaymentSaved={(updated) => {
-            const cleanReg = updated.reg_number.trim().toUpperCase().replace(/[\s-]/g, '')
-            setPaymentsMap((prev) => ({ ...prev, [cleanReg]: updated }))
-            showToast(`Payment status for ${updated.reg_number} saved as ${updated.status}!`)
-          }}
-        />
-      )}
     </div>
   )
 }
