@@ -769,6 +769,15 @@ export default function AccountsPage() {
                           className="btn btn--sm"
                           disabled={!isMechanicalPaymentClosed(r)}
                           title={isMechanicalPaymentClosed(r) ? 'Print gatepass copy' : 'Available after remaining is ₹0'}
+                          onClick={() => openMechanicalGatepass(r)}
+                        >
+                          🖨️ Print
+                        </button>
+                        <button
+                          type="button"
+                          className="btn btn--sm btn--primary"
+                          disabled={!isMechanicalPaymentClosed(r)}
+                          title={isMechanicalPaymentClosed(r) ? 'Create and release gatepass to customer' : 'Available after remaining is ₹0'}
                           onClick={() => printMechGatepass(r)}
                         >
                           Create Gatepass
@@ -855,6 +864,15 @@ export default function AccountsPage() {
                           className="btn btn--sm"
                           disabled={!isCustomerPaymentClosed(r)}
                           title={isCustomerPaymentClosed(r) ? 'Print gatepass copy' : 'Available after customer payment is completed'}
+                          onClick={() => openBodyshopGatepass(r)}
+                        >
+                          🖨️ Print
+                        </button>
+                        <button
+                          type="button"
+                          className="btn btn--sm btn--primary"
+                          disabled={!isCustomerPaymentClosed(r)}
+                          title={isCustomerPaymentClosed(r) ? 'Create and release gatepass to customer' : 'Available after customer payment is completed'}
                           onClick={() => printGatepass(r)}
                         >
                           Create Gatepass
@@ -1050,9 +1068,14 @@ export default function AccountsPage() {
                     <div className="brx-settle-banner is-error" style={{ marginBottom: 12 }}>{payError}</div>
                   )}
                   {isMechanicalPaymentClosed(editRow) ? (
-                    <button type="button" className="btn btn--primary" onClick={() => printMechGatepass(editRow)}>
-                      Create Gatepass
-                    </button>
+                    <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                      <button type="button" className="btn" onClick={() => openMechanicalGatepass(editRow)}>
+                        🖨️ Print Gatepass
+                      </button>
+                      <button type="button" className="btn btn--primary" onClick={() => printMechGatepass(editRow)}>
+                        Create Gatepass
+                      </button>
+                    </div>
                   ) : (
                     <div className="brx-form-grid-2">
                       <label className="brx-field">
@@ -1136,18 +1159,32 @@ export default function AccountsPage() {
                   customer_payment_status: postCard.customer_payment_status,
                   customer_settlement_kind: postCard.customer_settlement_kind,
                 }) && (
-                  <button
-                    type="button"
-                    className="btn btn--sm"
-                    onClick={() => printGatepass({
-                      ...postRow,
-                      customer_payment_status: postCard.customer_payment_status,
-                      customer_settlement_kind: postCard.customer_settlement_kind,
-                      do_amount: postCard.do_amount ?? postRow.do_amount,
-                    })}
-                  >
-                    Create Gatepass
-                  </button>
+                  <div style={{ display: 'flex', gap: 6 }}>
+                    <button
+                      type="button"
+                      className="btn btn--sm"
+                      onClick={() => openBodyshopGatepass({
+                        ...postRow,
+                        customer_payment_status: postCard.customer_payment_status,
+                        customer_settlement_kind: postCard.customer_settlement_kind,
+                        do_amount: postCard.do_amount ?? postRow.do_amount,
+                      })}
+                    >
+                      🖨️ Print Gatepass
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn--sm btn--primary"
+                      onClick={() => printGatepass({
+                        ...postRow,
+                        customer_payment_status: postCard.customer_payment_status,
+                        customer_settlement_kind: postCard.customer_settlement_kind,
+                        do_amount: postCard.do_amount ?? postRow.do_amount,
+                      })}
+                    >
+                      Create Gatepass
+                    </button>
+                  </div>
                 )}
                 <button type="button" className="modal__x" onClick={() => { setPostRow(null); setPostCard(null); void load() }} aria-label="Close">×</button>
               </div>
@@ -1267,7 +1304,7 @@ export default function AccountsPage() {
                 </div>
               </div>
 
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, flexWrap: 'wrap' }}>
                 <button
                   type="button"
                   className="btn"
@@ -1275,6 +1312,20 @@ export default function AccountsPage() {
                   disabled={issuingGatepass}
                 >
                   Cancel
+                </button>
+                <button
+                  type="button"
+                  className="btn"
+                  onClick={() => {
+                    if (gatepassConfirmTarget.type === 'mechanical' && gatepassConfirmTarget.mechRow) {
+                      openMechanicalGatepass(gatepassConfirmTarget.mechRow)
+                    } else if (gatepassConfirmTarget.type === 'bodyshop' && gatepassConfirmTarget.bsRow) {
+                      openBodyshopGatepass(gatepassConfirmTarget.bsRow)
+                    }
+                  }}
+                  disabled={issuingGatepass}
+                >
+                  🖨️ Print Copy
                 </button>
                 <button
                   type="button"
