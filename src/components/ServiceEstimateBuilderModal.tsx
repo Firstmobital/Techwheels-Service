@@ -608,18 +608,10 @@ export function ServiceEstimateBuilderModal({
                 <button
                   type="button"
                   onClick={handleCopyLink}
-                  className="flex-1 rounded-lg border border-gray-300 bg-white py-1.5 text-[11px] font-semibold text-gray-700 hover:bg-gray-100"
+                  className="w-full rounded-lg border border-gray-300 bg-white py-1.5 text-[11px] font-semibold text-gray-700 hover:bg-gray-100"
                 >
                   {copiedLink ? '✓ Customer URL Copied!' : '📋 Copy Customer Approval Link'}
                 </button>
-                <a
-                  href={`${portalUrl}/estimate?reg=${vehicleReg.trim().toUpperCase()}`}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="rounded-lg bg-emerald-600 px-3 py-1.5 text-[11px] font-bold text-white hover:bg-emerald-700"
-                >
-                  Customer View ↗
-                </a>
               </div>
             </div>
           </div>
