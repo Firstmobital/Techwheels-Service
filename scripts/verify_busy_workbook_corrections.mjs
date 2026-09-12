@@ -81,7 +81,7 @@ for (const [billNo, rows] of byBill) {
     'Bill date': template['Bill date'],
     'bill no': template['bill no'],
     'Party Name': template['Party Name'],
-    'Item Name': 'ROUND OFF',
+    'Item Name': 'Rounded Off (+)',
     Qty: 0,
     Price: 0,
     Amount: roundOff,
@@ -118,15 +118,15 @@ for (const [billNo, rows] of rereadByBill) {
   const parts5 = rows.filter((row) => row['Item Name'] === 'SPARE PARTS @5%')
   const parts18 = rows.filter((row) => row['Item Name'] === 'SPARE PARTS @18%')
   const labour = rows.filter((row) => row['Item Name'] === 'LABOUR CHARGES @18%')
-  const roundOff = rows.filter((row) => row['Item Name'] === 'ROUND OFF')
+  const roundOff = rows.filter((row) => row['Item Name'] === 'Rounded Off (+)')
   if (parts18.length !== 1) missingParts18 += 1
   if (labour.length !== 1) missingLabour += 1
   if (roundOff.length === 0) missingRoundOff += 1
   if (roundOff.length > 1) duplicateRoundOff += 1
   if (parts5.length !== 0) unexpectedParts5 += 1
   const expected = parts5.length > 0
-    ? ['SPARE PARTS @5%', 'SPARE PARTS @18%', 'LABOUR CHARGES @18%', 'ROUND OFF']
-    : ['SPARE PARTS @18%', 'LABOUR CHARGES @18%', 'ROUND OFF']
+    ? ['SPARE PARTS @5%', 'SPARE PARTS @18%', 'LABOUR CHARGES @18%', 'Rounded Off (+)']
+    : ['SPARE PARTS @18%', 'LABOUR CHARGES @18%', 'Rounded Off (+)']
   assert.deepEqual(items, expected, billNo)
 
   const subtotal = roundPaise(

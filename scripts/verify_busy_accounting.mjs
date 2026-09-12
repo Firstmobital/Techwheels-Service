@@ -178,15 +178,15 @@ function assertInvoiceVoucherContract(result) {
     const parts5 = rows.filter((row) => row['Item Name'] === 'SPARE PARTS @5%')
     const parts18 = rows.filter((row) => row['Item Name'] === 'SPARE PARTS @18%')
     const labour = rows.filter((row) => row['Item Name'] === 'LABOUR CHARGES @18%')
-    const roundOff = rows.filter((row) => row['Item Name'] === 'ROUND OFF')
+    const roundOff = rows.filter((row) => row['Item Name'] === 'Rounded Off (+)')
     assert.equal(parts18.length, 1)
     assert.equal(labour.length, 1)
     assert.equal(roundOff.length, 1)
     assert.equal(parts5.length, preview.hasParts5Line ? 1 : 0)
     if (preview.hasParts5Line) {
-      assert.deepEqual(items, ['SPARE PARTS @5%', 'SPARE PARTS @18%', 'LABOUR CHARGES @18%', 'ROUND OFF'])
+      assert.deepEqual(items, ['SPARE PARTS @5%', 'SPARE PARTS @18%', 'LABOUR CHARGES @18%', 'Rounded Off (+)'])
     } else {
-      assert.deepEqual(items, ['SPARE PARTS @18%', 'LABOUR CHARGES @18%', 'ROUND OFF'])
+      assert.deepEqual(items, ['SPARE PARTS @18%', 'LABOUR CHARGES @18%', 'Rounded Off (+)'])
     }
     for (const row of rows) {
       assert.equal(row['Bill date'], formatBusyBillDate(preview.invoiceDate))
@@ -219,7 +219,7 @@ test('16. invoice with both 5% and 18% Parts produces separated accounting rows'
   })
   assertInvoiceVoucherContract(result)
   const items = result.invoiceRows.map((row) => row['Item Name'])
-  assert.deepEqual(items, ['SPARE PARTS @5%', 'SPARE PARTS @18%', 'LABOUR CHARGES @18%', 'ROUND OFF'])
+  assert.deepEqual(items, ['SPARE PARTS @5%', 'SPARE PARTS @18%', 'LABOUR CHARGES @18%', 'Rounded Off (+)'])
   assert.equal(result.invoiceRows[0].Amount, 105)
   assert.equal(result.invoiceRows[1].Amount, 236)
   assert.equal(result.invoiceRows[0]['bill no'], 'IMBTAI2627000001')
@@ -279,7 +279,7 @@ test('mandatory 18% Parts and Labour rows are retained at Amount 0', () => {
     toDate: '2026-09-10',
   })
   assertInvoiceVoucherContract(result)
-  assert.deepEqual(result.invoiceRows.map((row) => row['Item Name']), ['SPARE PARTS @18%', 'LABOUR CHARGES @18%', 'ROUND OFF'])
+  assert.deepEqual(result.invoiceRows.map((row) => row['Item Name']), ['SPARE PARTS @18%', 'LABOUR CHARGES @18%', 'Rounded Off (+)'])
   assert.equal(result.invoiceRows[0].Amount, 0)
   assert.equal(result.invoiceRows[1].Amount, 0)
   assert.equal(result.invoiceRows[2].Amount, 0)
@@ -440,8 +440,8 @@ test('eligible invoices do not always emit 3 voucher rows', () => {
   assert.notEqual(result.invoiceRows.length, result.summary.eligible * 3)
   assert.equal(result.invoiceRows.length, 7)
   const byBill = voucherGroups(result.invoiceRows)
-  assert.deepEqual(byBill.get('IMBTAI1').map((row) => row['Item Name']), ['SPARE PARTS @5%', 'SPARE PARTS @18%', 'LABOUR CHARGES @18%', 'ROUND OFF'])
-  assert.deepEqual(byBill.get('IMBTAI2').map((row) => row['Item Name']), ['SPARE PARTS @18%', 'LABOUR CHARGES @18%', 'ROUND OFF'])
+  assert.deepEqual(byBill.get('IMBTAI1').map((row) => row['Item Name']), ['SPARE PARTS @5%', 'SPARE PARTS @18%', 'LABOUR CHARGES @18%', 'Rounded Off (+)'])
+  assert.deepEqual(byBill.get('IMBTAI2').map((row) => row['Item Name']), ['SPARE PARTS @18%', 'LABOUR CHARGES @18%', 'Rounded Off (+)'])
 })
 
 test('workbook round-trip keeps per-invoice voucher shape', () => {
@@ -464,8 +464,8 @@ test('workbook round-trip keeps per-invoice voucher shape', () => {
   const groups = voucherGroups(workbookRows)
   const with5 = groups.get('IMBTAI1')
   const without5 = groups.get('IMBTAI2')
-  assert.deepEqual(with5.map((row) => row['Item Name']), ['SPARE PARTS @5%', 'SPARE PARTS @18%', 'LABOUR CHARGES @18%', 'ROUND OFF'])
-  assert.deepEqual(without5.map((row) => row['Item Name']), ['SPARE PARTS @18%', 'LABOUR CHARGES @18%', 'ROUND OFF'])
+  assert.deepEqual(with5.map((row) => row['Item Name']), ['SPARE PARTS @5%', 'SPARE PARTS @18%', 'LABOUR CHARGES @18%', 'Rounded Off (+)'])
+  assert.deepEqual(without5.map((row) => row['Item Name']), ['SPARE PARTS @18%', 'LABOUR CHARGES @18%', 'Rounded Off (+)'])
   for (const row of workbookRows) {
     assert.equal(row['Bill date'], '01-09-2026')
     assert.equal(row.Qty, 0)
@@ -1003,7 +1003,7 @@ test('round off uses nearest whole rupee and existing half-up paise convention',
   assert.equal(String(roundOffToNearestRupee(10823.55)), '0.45')
 })
 
-test('every eligible invoice emits exactly one ROUND OFF row including zero', () => {
+test('every eligible invoice emits exactly one Rounded Off (+) row including zero', () => {
   const result = transformBusyAccounting({
     labourRows: [
       labour({ invoice_number: 'IMBTAI1', job_card_number: 'JC-A', final_labour_amount: 10823.55 }),
