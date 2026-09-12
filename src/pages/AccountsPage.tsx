@@ -488,7 +488,7 @@ export default function AccountsPage() {
   const visibleCount = section === 'mechanical' ? searchedMech.length : searchedBs.length
 
   return (
-    <div className="page">
+    <div className="page acct-page">
       <div className="pagehead">
         <div>
           <div className="greet">Accounts</div>
@@ -515,23 +515,31 @@ export default function AccountsPage() {
         </div>
       )}
 
-      <div className="brx-pipeline" style={{ marginBottom: 12 }}>
-        <button
-          type="button"
-          className={`brx-pipe-pill ${section === 'mechanical' ? 'is-active' : ''}`}
-          onClick={() => { setSection('mechanical'); setYear('all'); setMonth('all'); setSearch('') }}
-        >
-          <span className="brx-pipe-pill__n">{mechRows.length}</span>
-          <span className="brx-pipe-pill__l">Mechanical<small>Mark Done</small></span>
-        </button>
-        <button
-          type="button"
-          className={`brx-pipe-pill ${section === 'bodyshop' ? 'is-active' : ''}`}
-          onClick={() => { setSection('bodyshop'); setYear('all'); setMonth('all'); setSearch('') }}
-        >
-          <span className="brx-pipe-pill__n">{bsRows.length}</span>
-          <span className="brx-pipe-pill__l">Bodyshop<small>Invoice + billed</small></span>
-        </button>
+      <div className="acct-toolbar">
+        <div className="brx-pipeline">
+          <button
+            type="button"
+            className={`brx-pipe-pill ${section === 'mechanical' ? 'is-active' : ''}`}
+            onClick={() => { setSection('mechanical'); setYear('all'); setMonth('all'); setSearch('') }}
+          >
+            <span className="brx-pipe-pill__n">{mechRows.length}</span>
+            <span className="brx-pipe-pill__l">Mechanical<small>Mark Done</small></span>
+          </button>
+          <button
+            type="button"
+            className={`brx-pipe-pill ${section === 'bodyshop' ? 'is-active' : ''}`}
+            onClick={() => { setSection('bodyshop'); setYear('all'); setMonth('all'); setSearch('') }}
+          >
+            <span className="brx-pipe-pill__n">{bsRows.length}</span>
+            <span className="brx-pipe-pill__l">Bodyshop<small>Invoice + billed</small></span>
+          </button>
+        </div>
+        <input
+          className="inp"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Search JC / VRN / invoice / name"
+        />
       </div>
 
       {section === 'mechanical' ? (
@@ -582,16 +590,7 @@ export default function AccountsPage() {
         </div>
       )}
 
-      <div className="brx-recov-filters">
-        <input
-          className="inp"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search JC / VRN / invoice / name"
-        />
-      </div>
-
-      <div className="brx-pipeline" style={{ marginTop: 8 }}>
+      <div className="acct-filters">
         <button
           type="button"
           className={`brx-pipe-pill ${year === 'all' ? 'is-active' : ''}`}
@@ -611,36 +610,36 @@ export default function AccountsPage() {
             <span className="brx-pipe-pill__l">{y.year === 0 ? 'No date' : String(y.year)}<small>{y.count} JC</small></span>
           </button>
         ))}
+        {year !== 'all' && (
+          <>
+            <button type="button" className={`brx-pipe-pill ${month === 'all' ? 'is-active' : ''}`} onClick={() => setMonth('all')}>
+              <span className="brx-pipe-pill__n">{section === 'mechanical' ? yearScopedMech.length : yearScopedBs.length}</span>
+              <span className="brx-pipe-pill__l">All months<small>{year === 0 ? 'no date' : String(year)}</small></span>
+            </button>
+            {months.map((m) => (
+              <button
+                key={m.month}
+                type="button"
+                className={`brx-pipe-pill ${month === m.month ? 'is-active' : ''}`}
+                onClick={() => setMonth(m.month)}
+              >
+                <span className="brx-pipe-pill__n">{m.count}</span>
+                <span className="brx-pipe-pill__l">{monthLabel(year === 0 ? 0 : year, m.month)}<small>{m.count} JC</small></span>
+              </button>
+            ))}
+          </>
+        )}
       </div>
 
-      {year !== 'all' && (
-        <div className="brx-pipeline" style={{ marginTop: 8 }}>
-          <button type="button" className={`brx-pipe-pill ${month === 'all' ? 'is-active' : ''}`} onClick={() => setMonth('all')}>
-            <span className="brx-pipe-pill__n">{section === 'mechanical' ? yearScopedMech.length : yearScopedBs.length}</span>
-            <span className="brx-pipe-pill__l">All months<small>{year === 0 ? 'no date' : String(year)}</small></span>
-          </button>
-          {months.map((m) => (
-            <button
-              key={m.month}
-              type="button"
-              className={`brx-pipe-pill ${month === m.month ? 'is-active' : ''}`}
-              onClick={() => setMonth(m.month)}
-            >
-              <span className="brx-pipe-pill__n">{m.count}</span>
-              <span className="brx-pipe-pill__l">{monthLabel(year === 0 ? 0 : year, m.month)}<small>{m.count} JC</small></span>
-            </button>
-          ))}
-        </div>
-      )}
-
       {section === 'mechanical' ? (
-        <div className="brx-panel" style={{ marginTop: 16 }}>
+        <div className="brx-panel acct-table-panel">
           <div className="brx-panel-h">Mechanical · Mark Done</div>
           {loading && mechRows.length === 0 ? (
             <div className="brx-settle-status">Loading Mark Done cases…</div>
           ) : searchedMech.length === 0 ? (
             <div className="brx-settle-status">No Mark Done mechanical cases in this view.</div>
           ) : (
+            <div className="acct-table-scroll">
             <table className="brx-settle-table">
               <thead>
                 <tr>
@@ -715,10 +714,11 @@ export default function AccountsPage() {
                 ))}
               </tbody>
             </table>
+            </div>
           )}
         </div>
       ) : (
-        <div className="brx-panel" style={{ marginTop: 16 }}>
+        <div className="brx-panel acct-table-panel">
           <div className="brx-panel-h">
             {bsFilter === 'remaining' && 'Bodyshop · Customer remaining'}
             {bsFilter === 'all' && 'Bodyshop · All billed'}
@@ -730,6 +730,7 @@ export default function AccountsPage() {
           ) : searchedBs.length === 0 ? (
             <div className="brx-settle-status">No billed bodyshop cases in this view.</div>
           ) : (
+            <div className="acct-table-scroll">
             <table className="brx-settle-table">
               <thead>
                 <tr>
@@ -795,6 +796,7 @@ export default function AccountsPage() {
                 ))}
               </tbody>
             </table>
+            </div>
           )}
         </div>
       )}

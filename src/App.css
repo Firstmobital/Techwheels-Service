@@ -656,6 +656,127 @@ table.tbl { width: 100%; border-collapse: collapse; font-size: 13.5px; }
 .acct-pay-hist { width: 100%; border-collapse: collapse; font-size: 12.5px; }
 .acct-pay-hist th, .acct-pay-hist td { text-align: left; padding: 8px 6px; border-bottom: 1px solid var(--border); }
 .acct-pay-hist th { color: var(--muted); font-weight: 600; }
+
+/* Accounts desk: compact chrome so the table owns at least half the viewport */
+.acct-page.page {
+  display: flex;
+  flex-direction: column;
+  height: calc(100dvh - var(--nav-h));
+  max-height: calc(100dvh - var(--nav-h));
+  overflow: hidden;
+  padding-top: 16px;
+  padding-bottom: 14px;
+}
+.acct-page .pagehead {
+  margin-bottom: 8px;
+  gap: 10px;
+  align-items: center;
+}
+.acct-page .pagehead h1 { font-size: 20px; }
+.acct-page .pagehead .greet { margin-bottom: 2px; }
+.acct-page .pagehead p {
+  margin-top: 2px;
+  font-size: 12.5px;
+  line-height: 1.35;
+  display: -webkit-box;
+  -webkit-line-clamp: 1;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.acct-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+.acct-toolbar .brx-pipeline {
+  margin: 0;
+  gap: 6px;
+}
+.acct-toolbar .inp {
+  flex: 1 1 220px;
+  min-width: 180px;
+  max-width: 320px;
+}
+.acct-page .brx-pipe-pill {
+  padding: 5px 10px;
+  gap: 8px;
+}
+.acct-page .brx-pipe-pill__n { font-size: 16px; }
+.acct-page .brx-pipeline {
+  gap: 6px;
+  margin-bottom: 8px;
+  margin-top: 0;
+}
+.acct-page .brx-recov-kpis {
+  gap: 6px;
+  margin-bottom: 8px;
+}
+.acct-page .brx-recov-kpi { padding: 7px 10px; }
+.acct-page .brx-recov-kpi__v {
+  margin-top: 2px;
+  font-size: 16px;
+}
+.acct-page .brx-recov-kpi__s {
+  font-size: 11px;
+  margin-top: 1px;
+}
+.acct-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  margin-bottom: 8px;
+}
+.acct-table-panel {
+  flex: 1 1 auto;
+  min-height: 50vh;
+  display: flex;
+  flex-direction: column;
+  margin-top: 0;
+  margin-bottom: 0;
+  padding: 10px 12px 0;
+  overflow: hidden;
+}
+.acct-table-panel .brx-panel-h {
+  margin-bottom: 8px;
+  flex: none;
+}
+.acct-table-scroll {
+  flex: 1 1 auto;
+  min-height: 50vh;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+.acct-table-scroll .brx-settle-table {
+  border-collapse: separate;
+  border-spacing: 0;
+}
+.acct-table-scroll .brx-settle-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--canvas);
+  box-shadow: inset 0 -1px 0 var(--border);
+}
+.acct-table-scroll .brx-settle-status {
+  padding: 24px 8px;
+}
+
+@media (max-width: 960px) {
+  .acct-page.page {
+    height: auto;
+    max-height: none;
+    overflow: visible;
+  }
+  .acct-table-panel,
+  .acct-table-scroll {
+    min-height: 50vh;
+    max-height: 70vh;
+  }
+}
 .modal__footer { display: flex; justify-content: flex-end; gap: 10px; padding: 12px 20px; border-top: 1px solid var(--border); flex-shrink: 0; }
 .payroll-add-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.65rem; }
 .payroll-add-field { display: flex; flex-direction: column; gap: 0.25rem; min-width: 0; }
