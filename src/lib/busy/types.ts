@@ -20,6 +20,8 @@ export interface BusyLabourRow {
   final_labour_amount: unknown
   invoice_status: unknown
   portal: unknown
+  /** Authoritative customer GSTIN only. Absent on current psf_revenue_dms. */
+  gstin?: unknown
 }
 
 export interface BusyPartsLine {
@@ -56,8 +58,9 @@ export const INVOICE_VOUCHER_HEADERS = [
   'naration',
 ] as const
 
-export const PARTY_ACCOUNT_HEADERS = ['Party Name', 'Group'] as const
+export const PARTY_ACCOUNT_HEADERS = ['Party Name', 'Group', 'GSTIN'] as const
 
 export const ITEM_SPARE_PARTS_5 = 'SPARE PARTS @5%'
 export const ITEM_SPARE_PARTS_18 = 'SPARE PARTS @18%'
 export const ITEM_LABOUR_18 = 'LABOUR CHARGES @18%'
+export const ITEM_ROUND_OFF = 'ROUND OFF'

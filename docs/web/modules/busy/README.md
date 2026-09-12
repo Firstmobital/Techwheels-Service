@@ -25,7 +25,14 @@ Invoice Voucher rows are generated per eligible Labour invoice:
 
 - Always emit `SPARE PARTS @18%` and `LABOUR CHARGES @18%`, including Amount 0.
 - Emit `SPARE PARTS @5%` only when matched Parts data contains a genuine 5% GST line item. Do not emit it merely because the calculated 5% amount is 0.
-- Order when 5% exists: 5% Parts, 18% Parts, Labour. Otherwise: 18% Parts, Labour.
+- Always emit a final `ROUND OFF` row. Amount is nearest whole rupee minus the GST-inclusive subtotal, rounded to 2 decimals with the existing half-up paise helper (`Math.round`). Exact `.50` goes to the next rupee. A whole-rupee subtotal still emits ROUND OFF = 0.
+- Order without 5%: 18% Parts, Labour, ROUND OFF. Order with 5%: 5% Parts, 18% Parts, Labour, ROUND OFF.
+
+Party Account columns are `Party Name`, `Group`, `GSTIN`.
+
+- Normal: branch debtor group; GSTIN only if an authoritative Labour/DMS GSTIN exists (`psf_revenue_dms` currently has no GSTIN column, so this stays blank).
+- PDI: Party `CASH AT SITAPURA`, Sitapura debtor group, GSTIN blank unless an authoritative source GSTIN exists.
+- Bodyshop (`Account` contains `C/O`): Party Name remains first two words before `C/O` plus everything after `C/O`. Group and GSTIN come from `src/lib/busy/insuranceMaster.ts` (INSU.DATA.xlsx). Do not use the branch debtor group. Unmapped insurers are blocked and shown in validation.
 
 Do not assume `voucher rows = eligible invoices × 3`.
 

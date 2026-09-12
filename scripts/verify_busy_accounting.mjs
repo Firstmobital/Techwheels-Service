@@ -8,7 +8,8 @@ import { resolveBusyBranch, resolveDebtorGroup, BUSY_DEBTOR_GROUPS } from '../sr
 import { existsSync, readFileSync } from 'node:fs'
 import { isDateInInclusiveRange, dateRangeError, formatBusyBillDate, parsePartsInvoiceDate } from '../src/lib/busy/dates.ts'
 import { invoiceMatchesPortalSeries } from '../src/lib/busy/eligibility.ts'
-import { inclusiveFromNet } from '../src/lib/busy/money.ts'
+import { matchBusyInsurance, readAuthoritativeGstin } from '../src/lib/busy/insuranceMaster.ts'
+import { inclusiveFromNet, nearestWholeRupee, roundOffToNearestRupee } from '../src/lib/busy/money.ts'
 import { classifyBusyInvoice, parseBodyshopPartyName, PDI_PARTY_NAME, resolvePartyName } from '../src/lib/busy/partyName.ts'
 import {
   mapPartsRows,
@@ -66,7 +67,7 @@ test('1. PV + IMBTAI => included', () => {
   assert.equal(result.summary.eligible, 1)
   assert.equal(result.preview[0].status, 'ready')
   assertInvoiceVoucherContract(result)
-  assert.equal(result.invoiceRows.length, 2)
+  assert.equal(result.invoiceRows.length, 3)
 })
 
 test('2. PV + other prefix => excluded', () => {
@@ -91,7 +92,7 @@ test('3. EV + EMBTAI => included', () => {
   assert.equal(result.summary.eligible, 1)
   assert.equal(invoiceMatchesPortalSeries('EMBTAI2627000001', 'EV'), true)
   assertInvoiceVoucherContract(result)
-  assert.equal(result.invoiceRows.length, 2)
+  assert.equal(result.invoiceRows.length, 3)
 })
 
 test('4. EV + other prefix => excluded', () => {
@@ -177,13 +178,15 @@ function assertInvoiceVoucherContract(result) {
     const parts5 = rows.filter((row) => row['Item Name'] === 'SPARE PARTS @5%')
     const parts18 = rows.filter((row) => row['Item Name'] === 'SPARE PARTS @18%')
     const labour = rows.filter((row) => row['Item Name'] === 'LABOUR CHARGES @18%')
+    const roundOff = rows.filter((row) => row['Item Name'] === 'ROUND OFF')
     assert.equal(parts18.length, 1)
     assert.equal(labour.length, 1)
+    assert.equal(roundOff.length, 1)
     assert.equal(parts5.length, preview.hasParts5Line ? 1 : 0)
     if (preview.hasParts5Line) {
-      assert.deepEqual(items, ['SPARE PARTS @5%', 'SPARE PARTS @18%', 'LABOUR CHARGES @18%'])
+      assert.deepEqual(items, ['SPARE PARTS @5%', 'SPARE PARTS @18%', 'LABOUR CHARGES @18%', 'ROUND OFF'])
     } else {
-      assert.deepEqual(items, ['SPARE PARTS @18%', 'LABOUR CHARGES @18%'])
+      assert.deepEqual(items, ['SPARE PARTS @18%', 'LABOUR CHARGES @18%', 'ROUND OFF'])
     }
     for (const row of rows) {
       assert.equal(row['Bill date'], formatBusyBillDate(preview.invoiceDate))
@@ -196,7 +199,11 @@ function assertInvoiceVoucherContract(result) {
     }
     assert.equal(parts18[0].Amount, preview.parts18)
     assert.equal(labour[0].Amount, preview.labour)
+    assert.equal(roundOff[0].Amount, preview.roundOff)
     if (preview.hasParts5Line) assert.equal(parts5[0].Amount, preview.parts5)
+    const subtotalPaise = Math.round((preview.parts5 + preview.parts18 + preview.labour) * 100)
+    const finalPaise = subtotalPaise + Math.round(preview.roundOff * 100)
+    assert.equal(finalPaise % 100, 0)
   }
 }
 
@@ -212,7 +219,7 @@ test('16. invoice with both 5% and 18% Parts produces separated accounting rows'
   })
   assertInvoiceVoucherContract(result)
   const items = result.invoiceRows.map((row) => row['Item Name'])
-  assert.deepEqual(items, ['SPARE PARTS @5%', 'SPARE PARTS @18%', 'LABOUR CHARGES @18%'])
+  assert.deepEqual(items, ['SPARE PARTS @5%', 'SPARE PARTS @18%', 'LABOUR CHARGES @18%', 'ROUND OFF'])
   assert.equal(result.invoiceRows[0].Amount, 105)
   assert.equal(result.invoiceRows[1].Amount, 236)
   assert.equal(result.invoiceRows[0]['bill no'], 'IMBTAI2627000001')
@@ -230,7 +237,7 @@ test('17. no 5% source line does not create a 5% row', () => {
   assertInvoiceVoucherContract(result)
   assert.equal(result.preview[0].hasParts5Line, false)
   assert.equal(result.invoiceRows.some((row) => row['Item Name'] === 'SPARE PARTS @5%'), false)
-  assert.equal(result.invoiceRows.length, 2)
+  assert.equal(result.invoiceRows.length, 3)
 })
 
 test('18. multiple Parts rows for same invoice aggregate correctly', () => {
@@ -245,7 +252,7 @@ test('18. multiple Parts rows for same invoice aggregate correctly', () => {
   })
   assertInvoiceVoucherContract(result)
   assert.equal(result.preview[0].parts5, 157.5)
-  assert.equal(result.invoiceRows.length, 3)
+  assert.equal(result.invoiceRows.length, 4)
   assert.equal(result.invoiceRows.find((row) => row['Item Name'] === 'SPARE PARTS @18%').Amount, 0)
   assert.equal(result.invoiceRows.find((row) => row['Item Name'] === 'LABOUR CHARGES @18%').Amount, 0)
 })
@@ -272,9 +279,10 @@ test('mandatory 18% Parts and Labour rows are retained at Amount 0', () => {
     toDate: '2026-09-10',
   })
   assertInvoiceVoucherContract(result)
-  assert.deepEqual(result.invoiceRows.map((row) => row['Item Name']), ['SPARE PARTS @18%', 'LABOUR CHARGES @18%'])
+  assert.deepEqual(result.invoiceRows.map((row) => row['Item Name']), ['SPARE PARTS @18%', 'LABOUR CHARGES @18%', 'ROUND OFF'])
   assert.equal(result.invoiceRows[0].Amount, 0)
   assert.equal(result.invoiceRows[1].Amount, 0)
+  assert.equal(result.invoiceRows[2].Amount, 0)
 })
 
 test('5% row is created from a genuine 5% line even when Amount is 0', () => {
@@ -305,7 +313,7 @@ test('20. unmatched Parts do not create independent invoice', () => {
   assert.equal(result.unmatchedParts.length, 1)
   assert.equal(result.invoiceRows.every((row) => row.Amount !== 1178.82), true)
   assert.equal(result.summary.eligible, 1)
-  assert.equal(result.invoiceRows.length, 2)
+  assert.equal(result.invoiceRows.length, 3)
 })
 
 test('21-23. inclusive date filter', () => {
@@ -325,7 +333,7 @@ test('21-23. inclusive date filter', () => {
   assert.equal(result.summary.eligible, 2)
   assert.equal(result.preview.filter((row) => row.exclusionKind === 'date').length, 1)
   assertInvoiceVoucherContract(result)
-  assert.equal(result.invoiceRows.length, 4)
+  assert.equal(result.invoiceRows.length, 6)
 })
 
 test('24. duplicate Party Names export once', () => {
@@ -396,7 +404,7 @@ test('workbook headers match BUSY contracts', () => {
   assert.equal(invoiceRows[0].Price, 0)
 
   const partyWb = buildPartyAccountWorkbook([
-    { 'Party Name': 'RAMESH KUMAR-SITAPURA RJ14AB1234', Group: 'SERVICE CENTRE DEBTORS 2022-23' },
+    { 'Party Name': 'RAMESH KUMAR-SITAPURA RJ14AB1234', Group: 'SERVICE CENTRE DEBTORS 2022-23', GSTIN: '' },
   ])
   assert.deepEqual(workbookHeaders(partyWb), [...PARTY_ACCOUNT_HEADERS])
 })
@@ -430,10 +438,10 @@ test('eligible invoices do not always emit 3 voucher rows', () => {
   assertInvoiceVoucherContract(result)
   assert.equal(result.summary.eligible, 2)
   assert.notEqual(result.invoiceRows.length, result.summary.eligible * 3)
-  assert.equal(result.invoiceRows.length, 5)
+  assert.equal(result.invoiceRows.length, 7)
   const byBill = voucherGroups(result.invoiceRows)
-  assert.deepEqual(byBill.get('IMBTAI1').map((row) => row['Item Name']), ['SPARE PARTS @5%', 'SPARE PARTS @18%', 'LABOUR CHARGES @18%'])
-  assert.deepEqual(byBill.get('IMBTAI2').map((row) => row['Item Name']), ['SPARE PARTS @18%', 'LABOUR CHARGES @18%'])
+  assert.deepEqual(byBill.get('IMBTAI1').map((row) => row['Item Name']), ['SPARE PARTS @5%', 'SPARE PARTS @18%', 'LABOUR CHARGES @18%', 'ROUND OFF'])
+  assert.deepEqual(byBill.get('IMBTAI2').map((row) => row['Item Name']), ['SPARE PARTS @18%', 'LABOUR CHARGES @18%', 'ROUND OFF'])
 })
 
 test('workbook round-trip keeps per-invoice voucher shape', () => {
@@ -452,12 +460,12 @@ test('workbook round-trip keeps per-invoice voucher shape', () => {
   assertInvoiceVoucherContract(result)
   const workbook = buildInvoiceVoucherWorkbook(result.invoiceRows)
   const workbookRows = workbookDataRows(workbook)
-  assert.equal(workbookRows.length, 5)
+  assert.equal(workbookRows.length, 7)
   const groups = voucherGroups(workbookRows)
   const with5 = groups.get('IMBTAI1')
   const without5 = groups.get('IMBTAI2')
-  assert.deepEqual(with5.map((row) => row['Item Name']), ['SPARE PARTS @5%', 'SPARE PARTS @18%', 'LABOUR CHARGES @18%'])
-  assert.deepEqual(without5.map((row) => row['Item Name']), ['SPARE PARTS @18%', 'LABOUR CHARGES @18%'])
+  assert.deepEqual(with5.map((row) => row['Item Name']), ['SPARE PARTS @5%', 'SPARE PARTS @18%', 'LABOUR CHARGES @18%', 'ROUND OFF'])
+  assert.deepEqual(without5.map((row) => row['Item Name']), ['SPARE PARTS @18%', 'LABOUR CHARGES @18%', 'ROUND OFF'])
   for (const row of workbookRows) {
     assert.equal(row['Bill date'], '01-09-2026')
     assert.equal(row.Qty, 0)
@@ -466,8 +474,10 @@ test('workbook round-trip keeps per-invoice voucher shape', () => {
   assert.equal(with5[0].Amount, 105)
   assert.equal(with5[1].Amount, 0)
   assert.equal(with5[2].Amount, 0)
+  assert.equal(with5[3].Amount, 0)
   assert.equal(without5[0].Amount, 236)
   assert.equal(without5[1].Amount, 1180)
+  assert.equal(without5[2].Amount, 0)
   assert.equal(with5.every((row) => row['Party Name'] === with5[0]['Party Name']), true)
   assert.equal(with5.every((row) => row.naration === with5[0].naration), true)
 })
@@ -833,6 +843,184 @@ test('practical CRM Parts re-upload does not increase invoice or row counts', ()
     assert.equal(afterNew.evInvoices, beforeNew.evInvoices)
     console.log(`  after genuine new invoice: rows ${beforeNew.totalRows} -> ${afterNew.totalRows}, PV invoices ${beforeNew.pvInvoices} -> ${afterNew.pvInvoices}, EV invoices ${beforeNew.evInvoices} -> ${afterNew.evInvoices}`)
   }
+})
+
+test('normal customer uses branch debtor group and blank GSTIN when source has none', () => {
+  const result = transformBusyAccounting({
+    labourRows: [labour({ sr_assigned_to: 'PUM_3000840' })],
+    partsLines: [],
+    fromDate: '2026-09-01',
+    toDate: '2026-09-10',
+  })
+  assert.equal(result.preview[0].classification, 'Normal')
+  assert.equal(result.preview[0].partyName, 'RAMESH KUMAR-TONK RJ14AB1234')
+  assert.equal(result.preview[0].debtorGroup, 'TONK DEBTORS')
+  assert.equal(result.preview[0].gstin, '')
+  assert.equal(result.partyRows[0].Group, 'TONK DEBTORS')
+  assert.equal(result.partyRows[0].GSTIN, '')
+})
+
+test('normal customer GSTIN is included only when authoritative source GSTIN exists', () => {
+  const withGstin = transformBusyAccounting({
+    labourRows: [labour({ gstin: '08ABCDE1234F1Z5' })],
+    partsLines: [],
+    fromDate: '2026-09-01',
+    toDate: '2026-09-10',
+  })
+  assert.equal(withGstin.preview[0].gstin, '08ABCDE1234F1Z5')
+  assert.equal(withGstin.partyRows[0].GSTIN, '08ABCDE1234F1Z5')
+
+  const inventedRejected = transformBusyAccounting({
+    labourRows: [labour({ gstin: 'NOT-A-GSTIN' })],
+    partsLines: [],
+    fromDate: '2026-09-01',
+    toDate: '2026-09-10',
+  })
+  assert.equal(inventedRejected.preview[0].gstin, '')
+  assert.equal(readAuthoritativeGstin('NOT-A-GSTIN'), '')
+  assert.equal(readAuthoritativeGstin(''), '')
+})
+
+test('PDI remains CASH AT SITAPURA with Sitapura group and blank GSTIN', () => {
+  const result = transformBusyAccounting({
+    labourRows: [labour({ sr_type: 'PDI', sr_assigned_to: 'PUM_3000840' })],
+    partsLines: [],
+    fromDate: '2026-09-01',
+    toDate: '2026-09-10',
+  })
+  assert.equal(result.preview[0].partyName, PDI_PARTY_NAME)
+  assert.equal(result.preview[0].debtorGroup, 'SERVICE CENTRE DEBTORS 2022-23')
+  assert.equal(result.preview[0].gstin, '')
+  assert.equal(result.partyRows[0]['Party Name'], PDI_PARTY_NAME)
+  assert.equal(result.partyRows[0].GSTIN, '')
+})
+
+test('Bodyshop ICICI maps Party Name, BUSY Group, and GSTIN from insurance master', () => {
+  const account = 'ICICI LOMBARD GENERAL INSURANCE COMPANY LIMITED C/O PREM CHAND KUMAWAT'
+  const mapped = matchBusyInsurance(account)
+  assert.equal(mapped.match?.busyGroup, 'ICICI LOMBARD')
+  assert.equal(mapped.match?.gstin, '08AAACI7904G1ZN')
+
+  const result = transformBusyAccounting({
+    labourRows: [labour({
+      account,
+      sr_type: 'Accidental Repair',
+      first_name: 'PREM',
+      last_name: 'KUMAWAT',
+    })],
+    partsLines: [],
+    fromDate: '2026-09-01',
+    toDate: '2026-09-10',
+  })
+  assert.equal(result.preview[0].status, 'ready')
+  assert.equal(result.preview[0].classification, 'Bodyshop')
+  assert.equal(result.preview[0].partyName, 'ICICI LOMBARD PREM CHAND KUMAWAT')
+  assert.equal(result.preview[0].debtorGroup, 'ICICI LOMBARD')
+  assert.equal(result.preview[0].gstin, '08AAACI7904G1ZN')
+  assert.notEqual(result.preview[0].debtorGroup, 'SERVICE CENTRE DEBTORS 2022-23')
+  assert.equal(result.partyRows[0].Group, 'ICICI LOMBARD')
+  assert.equal(result.partyRows[0].GSTIN, '08AAACI7904G1ZN')
+})
+
+test('additional Bodyshop insurers map from INSU.DATA without changing C/O Party Name', () => {
+  const cases = [
+    {
+      account: 'HDFC ERGO GENERAL INSURANCE COMPANY C/O MANOJ KUMAR JAIN',
+      party: 'HDFC ERGO MANOJ KUMAR JAIN',
+      group: 'HDFC ERGO GIC LTD',
+      gstin: '08AABCL5045N1Z8',
+    },
+    {
+      account: 'THE ORIENTAL INSURANCE COMPANY LIMITED C/O ROBIN PRAKASH',
+      party: 'THE ORIENTAL ROBIN PRAKASH',
+      group: 'ORIENTAL INSURANCE COMPANY',
+      gstin: '08AAACT0627R3ZX',
+    },
+    {
+      account: 'TATA AIG GENERAL INSURANCE COMPANY LIMITED C/O KUNAL KHADOLIYA',
+      party: 'TATA AIG KUNAL KHADOLIYA',
+      group: 'TATA AIG',
+      gstin: '08AABCT3518Q1ZW',
+    },
+  ]
+  for (const item of cases) {
+    const result = transformBusyAccounting({
+      labourRows: [labour({ account: item.account, sr_type: 'Accidental Repair' })],
+      partsLines: [],
+      fromDate: '2026-09-01',
+      toDate: '2026-09-10',
+    })
+    assert.equal(result.preview[0].partyName, item.party, item.account)
+    assert.equal(result.preview[0].debtorGroup, item.group, item.account)
+    assert.equal(result.preview[0].gstin, item.gstin, item.account)
+    assert.equal(result.summary.unmappedBodyshop, 0)
+  }
+})
+
+test('unmapped Bodyshop insurer is surfaced and blocked from Party/voucher export', () => {
+  const account = 'MAGMA GENERAL INSURANCE COMPANY LIMITED C/O PRAJAPATI DIPAKKUMAR MAGANBHAI'
+  const result = transformBusyAccounting({
+    labourRows: [labour({ account, sr_type: 'Accidental Repair' })],
+    partsLines: [],
+    fromDate: '2026-09-01',
+    toDate: '2026-09-10',
+  })
+  assert.equal(result.preview[0].status, 'blocked')
+  assert.match(result.preview[0].issue, /Unmapped Bodyshop insurance company/)
+  assert.equal(result.preview[0].debtorGroup, '')
+  assert.equal(result.preview[0].gstin, '')
+  assert.notEqual(result.preview[0].debtorGroup, 'SERVICE CENTRE DEBTORS 2022-23')
+  assert.equal(result.summary.eligible, 0)
+  assert.equal(result.summary.unmappedBodyshop, 1)
+  assert.equal(result.partyRows.length, 0)
+  assert.equal(result.invoiceRows.length, 0)
+})
+
+test('duplicate Party Names still export once after GSTIN addition', () => {
+  const result = transformBusyAccounting({
+    labourRows: [
+      labour({ invoice_number: 'IMBTAI1', job_card_number: 'JC-A', gstin: '08ABCDE1234F1Z5' }),
+      labour({ invoice_number: 'IMBTAI2', job_card_number: 'JC-B', gstin: '08ABCDE1234F1Z5' }),
+    ],
+    partsLines: [],
+    fromDate: '2026-09-01',
+    toDate: '2026-09-10',
+  })
+  assert.equal(result.partyRows.length, 1)
+  assert.deepEqual(Object.keys(result.partyRows[0]), ['Party Name', 'Group', 'GSTIN'])
+})
+
+test('round off uses nearest whole rupee and existing half-up paise convention', () => {
+  assert.equal(roundOffToNearestRupee(10823.55), 0.45)
+  assert.equal(roundOffToNearestRupee(9003.20), -0.20)
+  assert.equal(roundOffToNearestRupee(2719.90), 0.10)
+  assert.equal(roundOffToNearestRupee(3090.42), -0.42)
+  assert.equal(roundOffToNearestRupee(1180), 0)
+  assert.equal(roundOffToNearestRupee(10.50), 0.50)
+  assert.equal(roundOffToNearestRupee(11.50), 0.50)
+  assert.equal(nearestWholeRupee(10.50), 11)
+  assert.equal(nearestWholeRupee(11.50), 12)
+  assert.equal(String(roundOffToNearestRupee(10823.55)), '0.45')
+})
+
+test('every eligible invoice emits exactly one ROUND OFF row including zero', () => {
+  const result = transformBusyAccounting({
+    labourRows: [
+      labour({ invoice_number: 'IMBTAI1', job_card_number: 'JC-A', final_labour_amount: 10823.55 }),
+      labour({ invoice_number: 'IMBTAI2', job_card_number: 'JC-B', final_labour_amount: 9003.20 }),
+      labour({ invoice_number: 'IMBTAI3', job_card_number: 'JC-C', final_labour_amount: 1180 }),
+    ],
+    partsLines: [],
+    fromDate: '2026-09-01',
+    toDate: '2026-09-10',
+  })
+  assertInvoiceVoucherContract(result)
+  const groups = voucherGroups(result.invoiceRows)
+  assert.equal(groups.get('IMBTAI1').at(-1).Amount, 0.45)
+  assert.equal(groups.get('IMBTAI2').at(-1).Amount, -0.20)
+  assert.equal(groups.get('IMBTAI3').at(-1).Amount, 0)
+  assert.equal(result.preview.find((row) => row.invoiceNumber === 'IMBTAI1').total, 10824)
+  assert.equal(result.preview.find((row) => row.invoiceNumber === 'IMBTAI2').total, 9003)
 })
 
 if (failed > 0) {

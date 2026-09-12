@@ -54,3 +54,23 @@ export function inclusiveFromNetAndTax(netAmount: number, taxAmount: number): nu
 export function formatInr(value: number): string {
   return value.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }
+
+/**
+ * Nearest whole rupee using the same half-up paise convention as `toPaise`:
+ * `Math.round(value * 100)` then `Math.round(paise / 100) * 100`.
+ *
+ * Exact `.50` therefore rounds away from the lower rupee for positive amounts
+ * (10.50 → 11.00, 11.50 → 12.00). This is JS Math.round / half-up, not
+ * banker's rounding.
+ */
+export function nearestWholeRupee(amount: number): number {
+  const paise = toPaise(roundPaise(amount))
+  return fromPaise(Math.round(paise / 100) * 100)
+}
+
+/** Signed Round Off: nearestWholeRupee(subtotal) − subtotal, at 2 decimals. */
+export function roundOffToNearestRupee(subtotal: number): number {
+  const subPaise = toPaise(roundPaise(subtotal))
+  const targetPaise = Math.round(subPaise / 100) * 100
+  return fromPaise(targetPaise - subPaise)
+}

@@ -4,6 +4,7 @@ Tracks documentation-sync updates for business logic, architecture, and access c
 
 ## 2026-09-12
 
+- BUSY Party Account export adds `GSTIN` after `Party Name` / `Group`. Normal/PDI GSTIN is blank unless an authoritative Labour GSTIN exists (`psf_revenue_dms` has none today). Bodyshop (`C/O`) Group and GSTIN come from the INSU.DATA insurance master in `src/lib/busy/insuranceMaster.ts`; unmapped insurers are blocked instead of receiving a branch debtor group. Invoice vouchers always end with a `ROUND OFF` row (nearest whole rupee, half-up paise). Plan: `BUSY-001`.
 - Accounts Bodyshop Stage 18 is a complete settlement receipt modal: DO / insurance receipts and customer-diff receipts both write `bodyshop_settlement_lines`. Accounts users may post insurer/DO lines through the existing `bodyshop_settlement_can_post_do` helper. Recovery remains the insurance-due follow-up book on the same ledger. Mechanical `accounts_mechanical_payment_lines` is unchanged. Ledger: DBL-0055. Plan: `ACCOUNTS-001`.
 - Accounts Desk Mechanical listing starts 11-Sep-2026 (`invoice_done_at >= 2026-09-11 00:00:00+05:30`). Bodyshop listing is all billed cases; the 11-Sep date is not a Bodyshop cutoff (DBL-0054 corrects DBL-0053). Ledger: DBL-0053, DBL-0054. Plan: `ACCOUNTS-001`.
 

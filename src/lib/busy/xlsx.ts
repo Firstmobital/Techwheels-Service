@@ -29,7 +29,7 @@ export function buildInvoiceVoucherWorkbook(rows: InvoiceVoucherRow[]): XLSX.Wor
 export function buildPartyAccountWorkbook(rows: PartyAccountRow[]): XLSX.WorkBook {
   const workbook = XLSX.utils.book_new()
   const sheet = XLSX.utils.aoa_to_sheet(aoaFromObjects(PARTY_ACCOUNT_HEADERS, rows as unknown as Array<Record<string, unknown>>))
-  sheet['!cols'] = [{ wch: 48 }, { wch: 36 }]
+  sheet['!cols'] = [{ wch: 48 }, { wch: 36 }, { wch: 20 }]
   XLSX.utils.book_append_sheet(workbook, sheet, 'Party Name')
   return workbook
 }

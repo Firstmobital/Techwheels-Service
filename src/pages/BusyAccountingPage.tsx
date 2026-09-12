@@ -328,6 +328,7 @@ export default function BusyAccountingPage() {
         <SummaryChip label="Distinct Parties" value={result?.summary.distinctParties ?? 0} color="#334155" bg="#f8fafc" />
         <SummaryChip label="Ready" value={result?.summary.ready ?? 0} color="#15803d" bg="#f0fdf4" />
         <SummaryChip label="Blocked / Exceptions" value={(result?.summary.blocked ?? 0) + (result?.summary.warnings ?? 0)} color="#b91c1c" bg="#fef2f2" />
+        <SummaryChip label="Unmapped Bodyshop" value={result?.summary.unmappedBodyshop ?? 0} color="#b45309" bg="#fffbeb" />
       </div>
 
       <div className="card mb-gap">
@@ -374,10 +375,12 @@ export default function BusyAccountingPage() {
                     <th>Classification</th>
                     <th>Branch</th>
                     <th>Party Name</th>
-                    <th>Debtor Group</th>
+                    <th>Group</th>
+                    <th>GSTIN</th>
                     <th>Parts 5%</th>
                     <th>Parts 18%</th>
                     <th>Labour</th>
+                    <th>Round Off</th>
                     <th>Total</th>
                     <th>Validation</th>
                   </tr>
@@ -400,9 +403,11 @@ export default function BusyAccountingPage() {
                         <td>{row.branch || '—'}</td>
                         <td>{row.partyName || '—'}</td>
                         <td style={{ fontSize: 12 }}>{row.debtorGroup || '—'}</td>
+                        <td style={{ fontSize: 12 }}>{row.gstin || '—'}</td>
                         <td>{formatInr(row.parts5)}</td>
                         <td>{formatInr(row.parts18)}</td>
                         <td>{formatInr(row.labour)}</td>
+                        <td>{formatInr(row.roundOff)}</td>
                         <td style={{ fontWeight: 700 }}>{formatInr(row.total)}</td>
                         <td style={{ fontSize: 12, color: row.status === 'blocked' ? '#b91c1c' : '#64748b' }}>{row.issue || '—'}</td>
                       </tr>

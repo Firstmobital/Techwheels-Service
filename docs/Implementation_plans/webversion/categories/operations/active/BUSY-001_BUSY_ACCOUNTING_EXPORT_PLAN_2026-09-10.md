@@ -2,10 +2,10 @@
 
 **Plan ID:** BUSY-001  
 **Created:** 2026-09-10  
-**Last Updated:** 2026-09-11  
+**Last Updated:** 2026-09-12  
 **Priority:** HIGH  
 **Owner:** Accounts + Platform Team  
-**Status:** Active (web implemented; Parts persist pending apply; BUSY import pending)  
+**Status:** Active (web implemented; GSTIN + ROUND OFF corrections in code; BUSY import pending)  
 **Platform:** webversion  
 **Category:** operations  
 **Reference page:** `/busy`
@@ -28,7 +28,8 @@ Add a web **BUSY** page that reads persisted PV/EV Labour from `public.psf_reven
 2. Filter eligible invoices: PV `IMBTAI*`, EV `EMBTAI*`, inclusive Labour invoice date range.
 3. Resolve branch from `sr_assigned_to`, Party Name, and exact BUSY debtor group strings.
 4. Export Party and Invoice XLSX files from ready invoices only.
-5. Invoice Voucher rows: always emit `SPARE PARTS @18%` and `LABOUR CHARGES @18%` (including Amount 0). Emit `SPARE PARTS @5%` only when matched Parts data contains a genuine 5% GST line. Do not use `eligible × 3` as a row-count rule.
+5. Invoice Voucher rows: always emit `SPARE PARTS @18%` and `LABOUR CHARGES @18%` (including Amount 0). Emit `SPARE PARTS @5%` only when matched Parts data contains a genuine 5% GST line. Always emit a final `ROUND OFF` row. Do not use `eligible × 3` as a row-count rule.
+6. Party Account columns are `Party Name`, `Group`, `GSTIN`. Bodyshop (`Account` contains `C/O`) takes Group/GSTIN from the INSU.DATA insurance master, not the branch debtor group. Unmapped insurers are blocked.
 
 ---
 
@@ -45,6 +46,8 @@ Parts persist in `public.busy_parts` (DBL-0044, DBL-0050). Inspected CRM files `
 ### Phase 1: Transformation layer
 - [x] **Task 1.1:** Branch, debtor group, Party Name, date, series, Parts GST, aggregation in `src/lib/busy/`.
 - [x] **Task 1.2:** XLSX writers for Party and Invoice contracts.
+- [x] **Task 1.3:** Party GSTIN column + Bodyshop insurance master (`src/lib/busy/insuranceMaster.ts`, evidence `BUSY-001_INSU.DATA.xlsx`). Unmapped insurers block export.
+- [x] **Task 1.4:** Mandatory `ROUND OFF` voucher row using `roundOffToNearestRupee` (half-up paise; exact `.50` → next rupee).
 
 ### Phase 2: Page and RBAC
 - [x] **Task 2.1:** `/busy` page with date range, Labour status, Parts PV/EV uploads, preview, exports.
@@ -66,6 +69,8 @@ Parts persist in `public.busy_parts` (DBL-0044, DBL-0050). Inspected CRM files `
 ✅ 2.2 | Module/RBAC | Agent | 2026-09-10 | 2026-09-10 | DBL-0043 PROPOSED
 ✅ 3.1 | Automated checks | Agent | 2026-09-10 | 2026-09-10 | scripts/verify_busy_accounting.mjs
 ✅ 3.3 | Persist Parts invoice evidence | Agent | 2026-09-11 | 2026-09-11 | busy_parts / DBL-0044
+✅ 1.3 | GSTIN + insurance master | Agent | 2026-09-12 | 2026-09-12 | insuranceMaster.ts
+✅ 1.4 | ROUND OFF voucher row | Agent | 2026-09-12 | 2026-09-12 | money.ts / transform.ts
 ⏳ 3.2 | Apply module + Parts table + BUSY import | Operator | - | - | Pending DBL-0043 and DBL-0044
 ```
 
@@ -85,5 +90,5 @@ Parts persist in `public.busy_parts` (DBL-0044, DBL-0050). Inspected CRM files `
 - `docs/web/modules/busy/README.md`
 - Ledger: DBL-0043, DBL-0044, DBL-0050
 
-**Last Updated:** 2026-09-11  
+**Last Updated:** 2026-09-12  
 **Status:** 🟡 IN PROGRESS

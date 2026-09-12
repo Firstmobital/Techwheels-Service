@@ -1,4 +1,4 @@
-import { resolveBusyBranch, resolveDebtorGroup, type BusyBranch, type BusyDebtorGroup } from './branch.ts'
+import { resolveBusyBranch, resolveDebtorGroup, type BusyBranch } from './branch.ts'
 import { formatBusyBillDate, isDateInInclusiveRange, isIsoDate } from './dates.ts'
 import {
   expectedPrefixForPortal,
@@ -7,7 +7,8 @@ import {
   normalizeInvoiceNumber,
   normalizePortal,
 } from './eligibility.ts'
-import { inclusiveFromNet, inclusiveFromNetAndTax, parseAmount, roundPaise, toPaise } from './money.ts'
+import { matchBusyInsurance, readAuthoritativeGstin } from './insuranceMaster.ts'
+import { inclusiveFromNet, inclusiveFromNetAndTax, parseAmount, roundOffToNearestRupee, roundPaise, toPaise } from './money.ts'
 import { classifyBusyInvoice, PDI_PARTY_NAME, resolvePartyName } from './partyName.ts'
 import type {
   BusyClassification,
@@ -15,7 +16,7 @@ import type {
   BusyPartsLine,
   BusyRowStatus,
 } from './types.ts'
-import { ITEM_LABOUR_18, ITEM_SPARE_PARTS_18, ITEM_SPARE_PARTS_5 } from './types.ts'
+import { ITEM_LABOUR_18, ITEM_ROUND_OFF, ITEM_SPARE_PARTS_18, ITEM_SPARE_PARTS_5 } from './types.ts'
 import type { VehiclePortal } from './types.ts'
 
 export interface BusyPreviewRow {
@@ -27,11 +28,13 @@ export interface BusyPreviewRow {
   classification: BusyClassification | ''
   branch: BusyBranch | ''
   partyName: string
-  debtorGroup: BusyDebtorGroup | ''
+  debtorGroup: string
+  gstin: string
   vehicleRegistration: string
   parts5: number
   parts18: number
   labour: number
+  roundOff: number
   hasParts5Line: boolean
   total: number
   issue: string
@@ -52,6 +55,7 @@ export interface InvoiceVoucherRow {
 export interface PartyAccountRow {
   'Party Name': string
   Group: string
+  GSTIN: string
 }
 
 export interface BusyTransformResult {
@@ -71,6 +75,7 @@ export interface BusyTransformResult {
     blocked: number
     excluded: number
     warnings: number
+    unmappedBodyshop: number
   }
 }
 
@@ -250,9 +255,16 @@ export function transformBusyAccounting(input: {
       vehicleRegistrationNumber: labour.vehicle_registration_number,
     })
 
+    const insurance = classification === 'Bodyshop' ? matchBusyInsurance(labour.account) : null
+    const customerGstin = readAuthoritativeGstin(labour.gstin)
     const debtorGroup = classification === 'PDI'
       ? resolveDebtorGroup('Sitapura')
-      : resolveDebtorGroup(branch)
+      : classification === 'Bodyshop'
+        ? (insurance?.match?.busyGroup ?? '')
+        : resolveDebtorGroup(branch)
+    const gstin = classification === 'Bodyshop'
+      ? (insurance?.match?.gstin ?? '')
+      : customerGstin
 
     const partsKey = `${portal}::${normalizeJobCard(jobCard)}`
     const partsLines = partsByJob.get(partsKey) ?? []
@@ -272,6 +284,7 @@ export function transformBusyAccounting(input: {
 
     const issues: string[] = []
     if (party.issue) issues.push(party.issue)
+    if (insurance?.issue) issues.push(insurance.issue)
     if (partsAgg.gstIssue) issues.push(partsAgg.gstIssue)
     if (mismatchedInvoices.length > 0) {
       issues.push(`Parts Invoice_No ${mismatchedInvoices.join(', ')} stored but ignored; Labour invoice ${invoiceNumber} used`)
@@ -280,10 +293,12 @@ export function transformBusyAccounting(input: {
       issues.push(`Parts Invoice_Date ${mismatchedDates.join(', ')} stored but ignored; Labour invoice date ${invoiceDate} used`)
     }
 
-    const blocked = Boolean(party.issue || partsAgg.gstIssue)
+    const blocked = Boolean(party.issue || insurance?.issue || partsAgg.gstIssue)
     const warning = !blocked && (mismatchedInvoices.length > 0 || mismatchedDates.length > 0)
     const status: BusyRowStatus = blocked ? 'blocked' : warning ? 'warning' : 'ready'
-    const total = roundPaise(partsAgg.parts5 + partsAgg.parts18 + labourAmount)
+    const subtotal = roundPaise(partsAgg.parts5 + partsAgg.parts18 + labourAmount)
+    const roundOff = roundOffToNearestRupee(subtotal)
+    const total = roundPaise(subtotal + roundOff)
 
     preview.push({
       status,
@@ -295,10 +310,12 @@ export function transformBusyAccounting(input: {
       branch,
       partyName: party.partyName ?? '',
       debtorGroup,
+      gstin,
       vehicleRegistration,
       parts5: partsAgg.parts5,
       parts18: partsAgg.parts18,
       labour: labourAmount,
+      roundOff,
       hasParts5Line: partsAgg.hasParts5Line,
       total,
       issue: issues.join('; '),
@@ -339,6 +356,7 @@ export function transformBusyAccounting(input: {
     if (row.hasParts5Line) invoiceRows.push(voucherRow(row, ITEM_SPARE_PARTS_5, row.parts5, voucherNarration))
     invoiceRows.push(voucherRow(row, ITEM_SPARE_PARTS_18, row.parts18, voucherNarration))
     invoiceRows.push(voucherRow(row, ITEM_LABOUR_18, row.labour, voucherNarration))
+    invoiceRows.push(voucherRow(row, ITEM_ROUND_OFF, row.roundOff, voucherNarration))
   }
 
   const partySeen = new Set<string>()
@@ -347,13 +365,14 @@ export function transformBusyAccounting(input: {
     const key = row.partyName
     if (!key || partySeen.has(key)) continue
     partySeen.add(key)
-    partyRows.push({ 'Party Name': row.partyName, Group: row.debtorGroup })
+    partyRows.push({ 'Party Name': row.partyName, Group: row.debtorGroup, GSTIN: row.gstin })
   }
 
   const ready = preview.filter((row) => row.status === 'ready').length
   const blocked = preview.filter((row) => row.status === 'blocked').length
   const excluded = preview.filter((row) => row.status === 'excluded').length
   const warnings = preview.filter((row) => row.status === 'warning').length
+  const unmappedBodyshop = preview.filter((row) => /Unmapped Bodyshop insurance company|Ambiguous Bodyshop insurance company/.test(row.issue)).length
   const eligible = exportable.length
 
   return {
@@ -373,6 +392,7 @@ export function transformBusyAccounting(input: {
       blocked,
       excluded,
       warnings,
+      unmappedBodyshop,
     },
   }
 }
@@ -422,10 +442,12 @@ function blockedPreview(input: {
     branch: '',
     partyName: '',
     debtorGroup: '',
+    gstin: '',
     vehicleRegistration: '',
     parts5: 0,
     parts18: 0,
     labour: 0,
+    roundOff: 0,
     hasParts5Line: false,
     total: 0,
     issue: input.issue,
@@ -451,10 +473,12 @@ function excludedPreview(input: {
     branch: '',
     partyName: '',
     debtorGroup: '',
+    gstin: '',
     vehicleRegistration: '',
     parts5: 0,
     parts18: 0,
     labour: 0,
+    roundOff: 0,
     hasParts5Line: false,
     total: 0,
     issue: input.issue,
