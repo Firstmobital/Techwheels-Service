@@ -18,6 +18,9 @@
 - [ ] Capture **Fetch from DMS** fills invoice number/date/billed when exactly one live DMS row exists; Save still required; Remaining unchanged
 - [ ] 0 or 2+ DMS rows shows “No unique DMS invoice”; typing still works
 - [ ] Fetch hidden after first receipt (invoice locked)
+- [ ] Payment received date defaults to today IST; required before Post payment
+- [ ] Posted line stores selected `payment_received_date` and an independent `posted_at`
+- [ ] Receipts history shows Received Date from `payment_received_date`; older rows still render after IST backfill
 - [ ] User without `accounts` gets AccessDenied at `/accounts`
 
 ## Bodyshop

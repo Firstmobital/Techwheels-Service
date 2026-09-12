@@ -12,7 +12,9 @@ import {
   listAccountsMechanicalPayments,
   lookupAccountsMechanicalDmsInvoice,
   mechanicalInvoiceAmountPrefill,
+  asiaKolkataTodayDate,
   mechanicalInvoiceDateInputValue,
+  mechanicalPaymentReceivedDate,
   mechanicalRemaining,
   openBodyshopGatepass,
   openMechanicalGatepass,
@@ -127,6 +129,7 @@ export default function AccountsPage() {
   const [billedAmount, setBilledAmount] = useState('')
   const [receiptAmount, setReceiptAmount] = useState('')
   const [paymentMode, setPaymentMode] = useState<AccountsPaymentMode>('cash')
+  const [paymentReceivedDate, setPaymentReceivedDate] = useState(asiaKolkataTodayDate)
   const [paymentReference, setPaymentReference] = useState('')
   const [payLines, setPayLines] = useState<AccountsMechanicalPayment[]>([])
   const [saving, setSaving] = useState(false)
@@ -286,6 +289,7 @@ export default function AccountsPage() {
     setBilledAmount(mechanicalInvoiceAmountPrefill(row))
     setReceiptAmount('')
     setPaymentMode('cash')
+    setPaymentReceivedDate(asiaKolkataTodayDate())
     setPaymentReference('')
     setPayError(null)
     setPayLines([])
@@ -355,6 +359,11 @@ export default function AccountsPage() {
       setPayError('Enter this receipt amount.')
       return
     }
+    const receivedDate = paymentReceivedDate.trim()
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(receivedDate)) {
+      setPayError('Enter the payment received date.')
+      return
+    }
     if (remaining <= 0) {
       setPayError('Nothing remaining to post.')
       return
@@ -375,10 +384,12 @@ export default function AccountsPage() {
         amount,
         paymentMode,
         reference: paymentReference.trim() || null,
+        paymentReceivedDate: receivedDate,
       })
       patchMechRow(saved)
       setReceiptAmount('')
       setPaymentReference('')
+      setPaymentReceivedDate(asiaKolkataTodayDate())
       const lines = await listAccountsMechanicalPayments(editRow.reception_entry_id)
       setPayLines(lines)
       flash(isMechanicalPaymentClosed(saved) ? 'Payment completed' : 'Receipt posted')
@@ -1102,7 +1113,17 @@ export default function AccountsPage() {
                           ))}
                         </select>
                       </label>
-                      <label className="brx-field brx-grid-full">
+                      <label className="brx-field">
+                        <span className="brx-field-label">Payment received date</span>
+                        <input
+                          className="inp"
+                          type="date"
+                          value={paymentReceivedDate}
+                          required
+                          onChange={(e) => { setPaymentReceivedDate(e.target.value); setPayError(null) }}
+                        />
+                      </label>
+                      <label className="brx-field">
                         <span className="brx-field-label">Reference</span>
                         <input className="inp" value={paymentReference} onChange={(e) => setPaymentReference(e.target.value)} placeholder="UTR, cheque no, or note" />
                       </label>
@@ -1121,7 +1142,7 @@ export default function AccountsPage() {
                     <table className="acct-pay-hist">
                       <thead>
                         <tr>
-                          <th>When</th>
+                          <th>Received Date</th>
                           <th>Mode</th>
                           <th>Amount</th>
                           <th>Reference</th>
@@ -1130,7 +1151,7 @@ export default function AccountsPage() {
                       <tbody>
                         {payLines.map((l) => (
                           <tr key={l.id}>
-                            <td>{fmtWhen(l.posted_at)}</td>
+                            <td>{fmtDate(mechanicalPaymentReceivedDate(l))}</td>
                             <td>{paymentModeLabel(l.payment_mode)}</td>
                             <td>{inr(l.amount)}</td>
                             <td>{l.reference || '—'}</td>

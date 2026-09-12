@@ -8,7 +8,7 @@
 **Status:** Active (web implemented; DBL-0055 Accounts DO post pending apply)  
 **Platform:** webversion  
 **Category:** accounts  
-**Ledger:** DBL-0045/0046/0051/0052/0053/0054 APPLIED. DBL-0055 PROPOSED (Accounts may post insurer/DO lines). Do not reuse DBL-0043 (`busy`) or DBL-0044 (`busy_parts`).  
+**Ledger:** DBL-0045/0046/0051/0052/0053/0054/0056 APPLIED. DBL-0055 PROPOSED (Accounts may post insurer/DO lines). Do not reuse DBL-0043 (`busy`) or DBL-0044 (`busy_parts`).  
 **Route:** `/accounts`  
 **Module:** `accounts`  
 **Depends on:** BODYSHOP-SETTLEMENT-001 (`bodyshop_settlements`, Stage 18 lines); Service Advisor Mark Done (`invoice_done_at`)  
@@ -145,7 +145,7 @@ Pattern: `src/pages/BodyshopRecoveryPage.tsx` (KPIs, search, table, Excel, on-pa
 
 - Columns: Mark Done at, JC, reg, model, service type, SA, branch, owner, invoice number, billed amount, payment status, notes
 - Capture / Payments modal: invoice number, date, billed amount, and invoice file (reuse unused SA `invoice_storage_path` upload). **Fetch from DMS** fills those fields when the JC has exactly one live DMS invoice; Accounts still taps Save. 0 or 2+ DMS rows shows “No unique DMS invoice”. Remaining stays billed minus receipts. Invoice header locks after the first receipt.
-- Receipts are append-only (`accounts_mechanical_payment_lines`): this amount + Payment mode (Cash/UPI/Card/Cheque/Bank/Other) + reference. Payment status is automatic from billed vs sum(receipts). Create Gatepass when remaining is ₹0.
+- Receipts are append-only (`accounts_mechanical_payment_lines`): this amount + Payment mode (Cash/UPI/Card/Cheque/Bank/Other) + Payment received date + reference. `payment_received_date` is the business date (Asia/Kolkata); `posted_at` remains the system insert timestamp. History shows Received Date. Payment status is automatic from billed vs sum(receipts). Create Gatepass when remaining is ₹0.
 - KPI: Mark Done count, invoice-pending count, billed sum, customer remaining / received
 
 **Bodyshop desk**
@@ -286,6 +286,10 @@ Pattern: `src/pages/BodyshopRecoveryPage.tsx` (KPIs, search, table, Excel, on-pa
 ---
 
 ## Notes & Lessons Learned
+
+### 2026-09-12 - Mechanical payment received date
+
+- Mechanical Post payment captures `payment_received_date` on the existing payment-line table. Defaults to today IST. Distinct from `posted_at`. Ledger: DBL-0056.
 
 ### 2026-09-12 - Unified Bodyshop receipts
 

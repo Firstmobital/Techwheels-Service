@@ -55,6 +55,7 @@ export interface AccountsMechanicalPayment {
   reference: string | null
   posted_by: string | null
   posted_at: string
+  payment_received_date: string | null
 }
 
 export interface AccountsBodyshopCase {
@@ -155,12 +156,14 @@ export async function addAccountsMechanicalPayment(input: {
   amount: number
   paymentMode: AccountsPaymentMode
   reference: string | null
+  paymentReceivedDate: string
 }): Promise<AccountsMechanicalCase> {
   const { data, error } = await supabase.rpc('add_accounts_mechanical_payment', {
     p_reception_entry_id: input.receptionEntryId,
     p_amount: input.amount,
     p_payment_mode: input.paymentMode,
     p_reference: input.reference,
+    p_payment_received_date: input.paymentReceivedDate,
   })
   if (error) throw new Error(settlementRpcError(error))
   return data as AccountsMechanicalCase
@@ -178,6 +181,21 @@ export async function listAccountsMechanicalPayments(
 
 export function asiaKolkataTodayDate(): string {
   return new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
+}
+
+export function asiaKolkataDateFromTimestamp(iso: string | null | undefined): string | null {
+  if (!iso) return null
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return null
+  return d.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
+}
+
+export function mechanicalPaymentReceivedDate(
+  line: Pick<AccountsMechanicalPayment, 'payment_received_date' | 'posted_at'>,
+): string | null {
+  const raw = String(line.payment_received_date ?? '').trim()
+  if (raw) return raw.slice(0, 10)
+  return asiaKolkataDateFromTimestamp(line.posted_at)
 }
 
 export function mechanicalInvoiceDateInputValue(stored: string | null | undefined): string {
