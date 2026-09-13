@@ -93,13 +93,76 @@ input, select, textarea { font-family: inherit; }
 .no-scrollbar::-webkit-scrollbar { display: none; }
 .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
 
-/* Safe-area bottom padding for iOS home indicator */
-.safe-bottom { padding-bottom: env(safe-area-inset-bottom, 0); }
+/* Safe-area bottom & top padding for iOS / Android notch & home bar */
+.safe-bottom { padding-bottom: max(16px, env(safe-area-inset-bottom, 0px)); }
+.safe-top { padding-top: max(12px, env(safe-area-inset-top, 0px)); }
+.safe-mobile-container {
+  padding-top: max(12px, env(safe-area-inset-top, 0px));
+  padding-bottom: max(80px, calc(env(safe-area-inset-bottom, 0px) + 70px));
+}
 
-@import "tailwindcss";
+/* ── Mobile Glassmorphism & Card Styles ─────────────────────────── */
+.mobile-glass-nav {
+  background: rgba(15, 23, 42, 0.88);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 -8px 30px rgba(0, 0, 0, 0.2);
+}
 
-/* Safe-area bottom padding for iOS home indicator */
-.safe-bottom { padding-bottom: env(safe-area-inset-bottom, 0); }
+.mobile-glass-card {
+  background: rgba(255, 255, 255, 0.92);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(226, 232, 240, 0.8);
+  box-shadow: 0 4px 20px -2px rgba(15, 23, 42, 0.06);
+}
+
+.mobile-glass-dark {
+  background: linear-gradient(135deg, rgba(15, 23, 42, 0.95), rgba(30, 41, 59, 0.92));
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 0 8px 32px -4px rgba(0, 0, 0, 0.35);
+}
+
+/* ── Tap Micro-Interactions ──────────────────────────────────────── */
+.tap-bounce {
+  transition: transform 0.15s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.15s ease;
+}
+.tap-bounce:active {
+  transform: scale(0.96);
+}
+
+/* ── Shimmer & Pulsing Glowing Badges ────────────────────────────── */
+@keyframes pulse-ring {
+  0% { transform: scale(0.95); opacity: 0.8; }
+  50% { transform: scale(1.15); opacity: 0.3; }
+  100% { transform: scale(0.95); opacity: 0.8; }
+}
+
+.pulse-live-indicator {
+  position: relative;
+}
+.pulse-live-indicator::after {
+  content: '';
+  position: absolute;
+  inset: -3px;
+  border-radius: 9999px;
+  background: inherit;
+  opacity: 0.4;
+  animation: pulse-ring 2s infinite ease-in-out;
+  z-index: 0;
+}
+
+@keyframes float-subtle {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-4px); }
+}
+.animate-float {
+  animation: float-subtle 4s ease-in-out infinite;
+}
+
 
 /* ── Print styles ─────────────────────────────────────────────────────────── */
 @media print {

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { supabase } from '../lib/supabase'
 import type { CustomerVehicle } from '../lib/api/customer'
 import {
@@ -26,6 +26,17 @@ interface ProblemItem {
   category: string
 }
 
+const PRESET_CONCERN_CHIPS = [
+  { label: 'Periodic Service', icon: '🛢️', category: 'Service' },
+  { label: 'Brake Noise / Weak', icon: '🛑', category: 'Brakes' },
+  { label: 'AC Not Cooling', icon: '❄️', category: 'AC & Climate' },
+  { label: 'Wheel Alignment', icon: '🛞', category: 'Suspension' },
+  { label: 'Battery / Starting', icon: '⚡', category: 'Electrical' },
+  { label: 'Suspension Noise', icon: '🚗', category: 'Suspension' },
+  { label: 'Body Scratch / Dent', icon: '🛠️', category: 'Bodyshop' },
+  { label: 'Foam Wash & Polish', icon: '🧼', category: 'Cleaning' },
+]
+
 export default function CustomerPortalPage({
   vehicle: initialVehicle,
   allVehicles = [],
@@ -49,7 +60,7 @@ export default function CustomerPortalPage({
 
   // Multi-Problem List State (Customer Problem Submission)
   const [problemList, setProblemList] = useState<ProblemItem[]>([
-    { id: 'prob-1', text: '', category: 'Engine' },
+    { id: 'prob-1', text: '', category: 'General' },
   ])
   const [additionalNotes, setAdditionalNotes] = useState('')
   const [complaintKm, setComplaintKm] = useState(vehicle.km_reading || '')
@@ -62,12 +73,16 @@ export default function CustomerPortalPage({
   const [feedbackSubmitting, setFeedbackSubmitting] = useState(false)
   const [feedbackSuccess, setFeedbackSuccess] = useState(false)
 
-  // Sync active vehicle data
+  // Multi-vehicle modal
+  const [showVehiclePicker, setShowVehiclePicker] = useState(false)
+
+  // Sync initial vehicle update
   useEffect(() => {
     setVehicle(initialVehicle)
+    setComplaintKm(initialVehicle.km_reading || '')
   }, [initialVehicle])
 
-  // Load Live Estimates for this vehicle
+  // Load Live Estimates from Supabase
   async function loadVehicleEstimates() {
     if (!vehicle.reg_number) return
     setLoadingEstimates(true)
@@ -101,14 +116,7 @@ export default function CustomerPortalPage({
 
     // Realtime Supabase Sync for live estimates, gatepass & complaints
     const channel = supabase
-      .channel(`customer-portal-realtime-${vehicle.reg_number}`)
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'customer_estimates' },
-        () => {
-          void loadVehicleEstimates()
-        }
-      )
+      .channel(`cust-portal-${vehicle.reg_number}`)
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'post_feedback_bot_data' },
@@ -119,13 +127,14 @@ export default function CustomerPortalPage({
       )
       .on(
         'postgres_changes',
-        { event: '*', schema: 'public', table: 'service_reception_entries' },
+        { event: '*', schema: 'public', table: 'job_card_closed_data' },
         () => {
           void loadVehicleGatePass()
         }
       )
       .subscribe()
 
+    // Local custom event broadcasts
     function handleEstimateBroadcast() {
       void loadVehicleEstimates()
     }
@@ -161,13 +170,12 @@ export default function CustomerPortalPage({
     try {
       await updateEstimateApproval(est.estimate_no, 'Approved')
 
-      // Record approval log into feedback table for full traceability
       const botRow = {
         vehicle_registration_number: vehicle.reg_number.trim().toUpperCase(),
         customer_name: vehicle.owner_name || 'Customer',
         mobile_number: vehicle.owner_phone || null,
         rating: 5,
-        feedback_text: `[Estimate Approved] Customer approved Estimate #${est.estimate_no} (₹${est.grand_total.toLocaleString()}) via Customer Portal.`,
+        feedback_text: `[Estimate Approved] Customer approved Estimate #${est.estimate_no} (₹${est.grand_total.toLocaleString()}) via Mobile App.`,
         service_type: `Estimate #${est.estimate_no} Approved`,
         service_advisor_name: vehicle.sa_name || est.service_advisor_name || null,
         branch: vehicle.branch || est.branch || null,
@@ -175,8 +183,6 @@ export default function CustomerPortalPage({
         complaint_date_time: new Date().toISOString(),
       }
       await supabase.from('post_feedback_bot_data').insert([botRow])
-
-      // Re-fetch to update state
       await loadVehicleEstimates()
     } catch (err) {
       console.error('Estimate approval error:', err)
@@ -217,15 +223,27 @@ export default function CustomerPortalPage({
   }
 
   // Multi-problem helpers
-  function addProblemRow() {
+  function addProblemRow(initialCategory = 'General', initialText = '') {
     setProblemList((prev) => [
       ...prev,
-      { id: `prob-${Date.now()}`, text: '', category: 'General' },
+      { id: `prob-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`, text: initialText, category: initialCategory },
     ])
   }
 
+  function handleAddChip(chip: { label: string; category: string }) {
+    // If the first empty row exists, populate it, otherwise add new
+    if (problemList.length === 1 && !problemList[0].text.trim()) {
+      setProblemList([{ id: problemList[0].id, text: chip.label, category: chip.category }])
+    } else {
+      addProblemRow(chip.category, chip.label)
+    }
+  }
+
   function removeProblemRow(id: string) {
-    if (problemList.length <= 1) return
+    if (problemList.length <= 1) {
+      setProblemList([{ id: `prob-${Date.now()}`, text: '', category: 'General' }])
+      return
+    }
     setProblemList((prev) => prev.filter((p) => p.id !== id))
   }
 
@@ -242,15 +260,14 @@ export default function CustomerPortalPage({
 
     setComplaintSubmitting(true)
     try {
-      // Format as: 1. <desc1> ; 2. <desc2>
       const formattedProblems = validProblems
         .map((p, idx) => `${idx + 1}. ${p.text.trim()} [${p.category}]`)
         .join(' ; ')
 
       const primaryCategory = validProblems[0]?.category || 'Customer Problems'
 
-      const feedbackBody = `[Complaint - ${primaryCategory}] KM: ${complaintKm || 'N/A'} | Issue: ${formattedProblems}${
-        additionalNotes.trim() ? ` | Additional: ${additionalNotes.trim()}` : ''
+      const feedbackBody = `[Complaint - ${primaryCategory}] KM: ${complaintKm || 'N/A'} | Issues: ${formattedProblems}${
+        additionalNotes.trim() ? ` | Notes: ${additionalNotes.trim()}` : ''
       }`
 
       const row = {
@@ -262,18 +279,18 @@ export default function CustomerPortalPage({
         service_type: `Complaint: ${primaryCategory}`,
         service_advisor_name: vehicle.sa_name || null,
         branch: vehicle.branch || null,
-        mode: 'customer_complaint_portal',
+        mode: 'customer_app_problem',
         primary_complaint_area: primaryCategory,
         complaint_date_time: new Date().toISOString(),
       }
 
       await supabase.from('post_feedback_bot_data').insert([row])
       setComplaintSuccess(true)
-      setProblemList([{ id: `prob-${Date.now()}`, text: '', category: 'Engine' }])
+      setProblemList([{ id: `prob-${Date.now()}`, text: '', category: 'General' }])
       setAdditionalNotes('')
       setTimeout(() => setComplaintSuccess(false), 5000)
     } catch (err) {
-      console.error('Complaint submit error:', err)
+      console.error('Problem submit error:', err)
     } finally {
       setComplaintSubmitting(false)
     }
@@ -294,7 +311,7 @@ export default function CustomerPortalPage({
         service_type: vehicle.service_type || 'Customer Service',
         service_advisor_name: vehicle.sa_name || null,
         branch: vehicle.branch || null,
-        mode: 'customer_mobile_pwa',
+        mode: 'customer_mobile_app',
         complaint_date_time: new Date().toISOString(),
       }
 
@@ -309,7 +326,7 @@ export default function CustomerPortalPage({
     }
   }
 
-  // Cost calculation
+  // Cost calculations
   const totalEstimatedValue = latestLiveEstimate
     ? latestLiveEstimate.grand_total
     : Number(vehicle.billed_amount || (vehicle.invoice_done_at ? 4850 : 3850))
@@ -323,1212 +340,821 @@ export default function CustomerPortalPage({
     ? latestLiveEstimate.status === 'Sent' || latestLiveEstimate.status === 'Draft'
     : false
 
+  // Service Stage calculation (0 to 4)
+  const currentStageIndex = useMemo(() => {
+    if (effectiveGatePassIssued) return 4
+    if (vehicle.washing_status === 'Completed' || vehicle.qc_status === 'Passed') return 3
+    if (vehicle.invoice_done_at || vehicle.payment_status) return 2
+    if (latestLiveEstimate || vehicle.jc_number) return 1
+    return 0
+  }, [effectiveGatePassIssued, vehicle.washing_status, vehicle.qc_status, vehicle.invoice_done_at, vehicle.payment_status, latestLiveEstimate, vehicle.jc_number])
+
+  const stages = [
+    { label: 'Intake', desc: 'Vehicle Received at Workshop', icon: '📥' },
+    { label: 'Estimate', desc: 'Inspection & Parts Estimation', icon: '📋' },
+    { label: 'Repairs', desc: 'Technician Work In Progress', icon: '🔧' },
+    { label: 'QC & Wash', desc: 'Quality Check & Foam Wash', icon: '✨' },
+    { label: 'Ready', desc: 'Gate Pass & Release Ready', icon: '🎫' },
+  ]
+
   return (
-    <div style={{ maxWidth: 760, margin: '0 auto', padding: '16px 12px 60px' }}>
-      {/* Top Banner & Vehicle Header */}
-      <div
-        style={{
-          background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 100%)',
-          color: '#fff',
-          borderRadius: 20,
-          padding: '20px 22px',
-          boxShadow: '0 10px 30px rgba(15, 23, 42, 0.25)',
-          marginBottom: 16,
-        }}
-      >
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <span style={{ fontSize: 28 }}>🚘</span>
-            <div>
-              <div style={{ fontSize: 20, fontWeight: 900, letterSpacing: '0.5px' }} className="font-mono">
-                {vehicle.reg_number}
+    <div className="min-h-screen bg-slate-950 text-slate-100 font-sans safe-mobile-container selection:bg-blue-600/30">
+      {/* Background Decorative Ambient Mesh */}
+      <div className="fixed inset-0 pointer-events-none overflow-hidden z-0">
+        <div className="absolute -top-32 -left-32 w-96 h-96 bg-blue-600/15 rounded-full blur-3xl" />
+        <div className="absolute top-1/3 -right-32 w-96 h-96 bg-indigo-600/15 rounded-full blur-3xl" />
+        <div className="absolute -bottom-32 left-1/4 w-96 h-96 bg-emerald-600/10 rounded-full blur-3xl" />
+      </div>
+
+      <div className="relative z-10 max-w-lg mx-auto px-4 pt-3 pb-8 space-y-4">
+        {/* ── TOP APP BAR: BRAND & VEHICLE HERO CARD ── */}
+        <div className="mobile-glass-dark rounded-3xl p-5 shadow-2xl relative overflow-hidden border border-white/10">
+          {/* Subtle Top Gradient Accent */}
+          <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-blue-500 via-indigo-500 to-emerald-400" />
+
+          {/* Brand Header */}
+          <div className="flex items-center justify-between pb-4 border-b border-white/10">
+            <div className="flex items-center gap-2.5">
+              <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-blue-600 to-indigo-700 flex items-center justify-center text-white shadow-lg shadow-blue-500/25 ring-2 ring-white/15">
+                <span className="text-xl">🚘</span>
               </div>
-              <div style={{ fontSize: 12, color: '#94a3b8' }}>
-                {vehicle.model || 'Tata Vehicle'} · {vehicle.variant || 'Standard Edition'}
+              <div>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-xs font-bold uppercase tracking-wider text-blue-400">Tata Motors Service</span>
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 pulse-live-indicator" />
+                </div>
+                <h1 className="text-base font-extrabold text-white tracking-tight">Techwheels Service</h1>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={onLogout}
+              className="tap-bounce px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/15 active:bg-white/20 text-xs font-semibold text-slate-300 border border-white/10 flex items-center gap-1 transition"
+            >
+              <span>Logout</span>
+            </button>
+          </div>
+
+          {/* Vehicle Main Info Box */}
+          <div className="mt-4 flex items-center justify-between">
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="font-mono text-2xl font-black text-white tracking-wider bg-slate-900/80 px-3 py-1 rounded-xl border border-white/10 shadow-inner">
+                  {vehicle.reg_number}
+                </span>
+                {Boolean(vehicle.remark?.toLowerCase().includes('revisit')) && (
+                  <span className="bg-amber-500/20 text-amber-300 border border-amber-500/30 text-[10px] font-bold px-2 py-0.5 rounded-md uppercase tracking-wider">
+                    Revisit
+                  </span>
+                )}
+              </div>
+              <p className="mt-1.5 text-xs text-slate-300 font-medium">
+                {vehicle.model || 'Tata Vehicle'} {vehicle.variant ? `· ${vehicle.variant}` : ''}
+              </p>
+            </div>
+
+            {/* Switch Vehicle Button for multi-car users */}
+            {allVehicles.length > 1 && (
+              <button
+                type="button"
+                onClick={() => setShowVehiclePicker(true)}
+                className="tap-bounce px-3 py-2 rounded-xl bg-blue-600/30 hover:bg-blue-600/40 text-blue-300 border border-blue-400/30 text-xs font-bold flex flex-col items-center gap-0.5"
+              >
+                <span>Switch</span>
+                <span className="text-[10px] opacity-75">{allVehicles.length} Cars</span>
+              </button>
+            )}
+          </div>
+
+          {/* Key Info Grid */}
+          <div className="mt-4 grid grid-cols-2 gap-2.5 pt-3 border-t border-white/10 text-xs">
+            <div className="bg-white/5 p-2.5 rounded-xl border border-white/5">
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Service Advisor</span>
+              <span className="font-bold text-slate-200 truncate block mt-0.5">
+                {vehicle.sa_display_name || vehicle.sa_name || 'Assigned SA'}
+              </span>
+            </div>
+            <div className="bg-white/5 p-2.5 rounded-xl border border-white/5">
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Job Card No.</span>
+              <span className="font-mono font-bold text-amber-300 truncate block mt-0.5">
+                {vehicle.jc_number || 'JC-Pending'}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {/* ── ACTION REQUIRED BANNER (IF ESTIMATE PENDING) ── */}
+        {isPendingApproval && latestLiveEstimate && (
+          <div
+            onClick={() => setActiveTab('estimate')}
+            className="tap-bounce bg-gradient-to-r from-amber-500/20 via-orange-500/20 to-amber-600/20 border border-amber-500/40 rounded-2xl p-4 flex items-center justify-between shadow-lg shadow-amber-500/10 cursor-pointer animate-in fade-in zoom-in-95"
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-amber-500/30 flex items-center justify-center text-xl ring-1 ring-amber-400/40">
+                ⏳
+              </div>
+              <div>
+                <div className="text-xs font-extrabold text-amber-300 uppercase tracking-wider">
+                  Estimate Approval Needed
+                </div>
+                <div className="text-sm font-bold text-white mt-0.5">
+                  ₹{latestLiveEstimate.grand_total.toLocaleString('en-IN')} (Est #{latestLiveEstimate.estimate_no})
+                </div>
+              </div>
+            </div>
+            <span className="bg-amber-500 text-slate-950 font-extrabold text-xs px-3 py-1.5 rounded-xl shadow-md">
+              Review ➔
+            </span>
+          </div>
+        )}
+
+        {/* ── TAB 1: LIVE VEHICLE PROGRESS & OVERVIEW ── */}
+        {activeTab === 'dashboard' && (
+          <div className="space-y-4 animate-in fade-in duration-200">
+            {/* 5-Stage Visual Journey Stepper */}
+            <div className="mobile-glass-dark rounded-3xl p-5 border border-white/10 shadow-xl">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-xs font-extrabold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
+                  <span>🚀</span> Live Service Journey
+                </h3>
+                <span className="bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-[10px] font-bold px-2.5 py-0.5 rounded-full">
+                  Stage {currentStageIndex + 1} of 5
+                </span>
+              </div>
+
+              {/* Progress Line */}
+              <div className="relative flex justify-between items-center mb-6 px-2">
+                <div className="absolute top-1/2 left-4 right-4 -translate-y-1/2 h-1 bg-slate-800 z-0 rounded-full" />
+                <div
+                  className="absolute top-1/2 left-4 -translate-y-1/2 h-1 bg-gradient-to-r from-blue-500 to-emerald-500 z-0 rounded-full transition-all duration-500"
+                  style={{ width: `${(currentStageIndex / (stages.length - 1)) * 90}%` }}
+                />
+
+                {stages.map((stg, i) => {
+                  const isDone = i < currentStageIndex
+                  const isCurrent = i === currentStageIndex
+                  return (
+                    <div key={stg.label} className="relative z-10 flex flex-col items-center">
+                      <div
+                        className={`w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold transition-all duration-300 shadow-md ${
+                          isDone
+                            ? 'bg-emerald-500 text-slate-950 ring-4 ring-emerald-500/20'
+                            : isCurrent
+                            ? 'bg-blue-600 text-white ring-4 ring-blue-500/40 scale-110 pulse-live-indicator'
+                            : 'bg-slate-800 text-slate-500 border border-white/10'
+                        }`}
+                      >
+                        {isDone ? '✓' : stg.icon}
+                      </div>
+                      <span
+                        className={`text-[10px] mt-2 font-bold tracking-tight ${
+                          isCurrent ? 'text-blue-400 font-extrabold' : isDone ? 'text-emerald-400' : 'text-slate-500'
+                        }`}
+                      >
+                        {stg.label}
+                      </span>
+                    </div>
+                  )
+                })}
+              </div>
+
+              {/* Current Status Callout */}
+              <div className="bg-slate-900/90 rounded-2xl p-4 border border-white/10 flex items-start gap-3">
+                <span className="text-2xl mt-0.5">{stages[currentStageIndex].icon}</span>
+                <div className="flex-1">
+                  <div className="text-sm font-bold text-white">
+                    Current Stage: {stages[currentStageIndex].label}
+                  </div>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    {stages[currentStageIndex].desc}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Quick Action Cards Grid */}
+            <div className="grid grid-cols-2 gap-3">
+              <button
+                type="button"
+                onClick={() => setActiveTab('complaint')}
+                className="tap-bounce mobile-glass-dark p-4 rounded-2xl border border-white/10 text-left flex flex-col justify-between hover:border-blue-500/30"
+              >
+                <div className="w-10 h-10 rounded-xl bg-rose-500/20 text-rose-400 flex items-center justify-center text-xl mb-3">
+                  🚨
+                </div>
+                <div>
+                  <div className="text-xs font-extrabold text-white">Report Issues</div>
+                  <p className="text-[11px] text-slate-400 mt-0.5">Add vehicle problems & concerns</p>
+                </div>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setActiveTab('estimate')}
+                className="tap-bounce mobile-glass-dark p-4 rounded-2xl border border-white/10 text-left flex flex-col justify-between hover:border-blue-500/30"
+              >
+                <div className="w-10 h-10 rounded-xl bg-blue-500/20 text-blue-400 flex items-center justify-center text-xl mb-3">
+                  📋
+                </div>
+                <div>
+                  <div className="text-xs font-extrabold text-white">Estimates & Bills</div>
+                  <p className="text-[11px] text-slate-400 mt-0.5">View itemized parts & approve</p>
+                </div>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setActiveTab('gatepass')}
+                className="tap-bounce mobile-glass-dark p-4 rounded-2xl border border-white/10 text-left flex flex-col justify-between hover:border-blue-500/30"
+              >
+                <div className="w-10 h-10 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center text-xl mb-3">
+                  🎫
+                </div>
+                <div>
+                  <div className="text-xs font-extrabold text-white">Digital Gate Pass</div>
+                  <p className="text-[11px] text-slate-400 mt-0.5">
+                    {effectiveGatePassIssued ? 'Pass ready for exit' : 'Check release status'}
+                  </p>
+                </div>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setActiveTab('feedback')}
+                className="tap-bounce mobile-glass-dark p-4 rounded-2xl border border-white/10 text-left flex flex-col justify-between hover:border-blue-500/30"
+              >
+                <div className="w-10 h-10 rounded-xl bg-amber-500/20 text-amber-400 flex items-center justify-center text-xl mb-3">
+                  ⭐
+                </div>
+                <div>
+                  <div className="text-xs font-extrabold text-white">Service Rating</div>
+                  <p className="text-[11px] text-slate-400 mt-0.5">Rate advisor & quality</p>
+                </div>
+              </button>
+            </div>
+
+            {/* Financial Summary Card */}
+            <div className="mobile-glass-dark rounded-3xl p-5 border border-white/10 shadow-xl space-y-3">
+              <h3 className="text-xs font-extrabold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
+                <span>💳</span> Billing & Settlement Summary
+              </h3>
+
+              <div className="grid grid-cols-3 gap-2 pt-1 text-center">
+                <div className="bg-slate-900/80 p-3 rounded-2xl border border-white/5">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase">Estimated</span>
+                  <div className="text-sm font-black text-white mt-1">
+                    ₹{totalEstimatedValue.toLocaleString('en-IN')}
+                  </div>
+                </div>
+                <div className="bg-slate-900/80 p-3 rounded-2xl border border-white/5">
+                  <span className="text-[10px] font-bold text-emerald-400 uppercase">Paid / Settled</span>
+                  <div className="text-sm font-black text-emerald-400 mt-1">
+                    ₹{effectiveReceived.toLocaleString('en-IN')}
+                  </div>
+                </div>
+                <div className="bg-slate-900/80 p-3 rounded-2xl border border-white/5">
+                  <span className="text-[10px] font-bold text-amber-400 uppercase">Balance Due</span>
+                  <div className="text-sm font-black text-amber-400 mt-1">
+                    ₹{balanceDue.toLocaleString('en-IN')}
+                  </div>
+                </div>
               </div>
             </div>
           </div>
-          <button
-            type="button"
-            onClick={onLogout}
-            style={{
-              background: 'rgba(255,255,255,0.12)',
-              border: '1px solid rgba(255,255,255,0.2)',
-              color: '#fff',
-              borderRadius: 10,
-              padding: '6px 14px',
-              fontSize: 12,
-              fontWeight: 700,
-              cursor: 'pointer',
-            }}
-          >
-            ✕ Exit Portal
-          </button>
-        </div>
+        )}
 
-        {/* Customer Details Row */}
-        <div
-          style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))',
-            gap: 10,
-            background: 'rgba(255,255,255,0.06)',
-            padding: '12px 14px',
-            borderRadius: 14,
-            fontSize: 12,
-          }}
-        >
-          <div>
-            <div style={{ color: '#94a3b8', fontSize: 10.5, fontWeight: 600 }}>CUSTOMER</div>
-            <div style={{ fontWeight: 700, color: '#f8fafc' }}>{vehicle.owner_name || 'Customer'}</div>
-          </div>
-          <div>
-            <div style={{ color: '#94a3b8', fontSize: 10.5, fontWeight: 600 }}>SERVICE ADVISOR</div>
-            <div style={{ fontWeight: 700, color: '#38bdf8' }}>{vehicle.sa_display_name || vehicle.sa_name || 'Assigned Advisor'}</div>
-          </div>
-          <div>
-            <div style={{ color: '#94a3b8', fontSize: 10.5, fontWeight: 600 }}>JOB CARD NO</div>
-            <div style={{ fontWeight: 700, color: '#facc15' }} className="font-mono">{vehicle.jc_number || 'JC In-Progress'}</div>
-          </div>
-          <div>
-            <div style={{ color: '#94a3b8', fontSize: 10.5, fontWeight: 600 }}>WORKSHOP BRANCH</div>
-            <div style={{ fontWeight: 700, color: '#f8fafc' }}>{vehicle.branch || 'Sitapura Workshop'}</div>
-          </div>
-        </div>
+        {/* ── TAB 2: ESTIMATES & APPROVALS ── */}
+        {activeTab === 'estimate' && (
+          <div className="space-y-4 animate-in fade-in duration-200">
+            {liveEstimates.length === 0 ? (
+              <div className="mobile-glass-dark rounded-3xl p-8 border border-white/10 text-center space-y-3">
+                <div className="text-4xl">📋</div>
+                <h3 className="text-base font-bold text-white">No Estimate Generated Yet</h3>
+                <p className="text-xs text-slate-400 max-w-xs mx-auto">
+                  Your Service Advisor is currently inspecting the vehicle and will generate an itemized estimate shortly.
+                </p>
+              </div>
+            ) : (
+              liveEstimates.map((est) => {
+                const isPending = est.status === 'Sent' || est.status === 'Draft'
+                const isApproved = est.status === 'Approved'
+                const isRejected = est.status === 'Rejected'
 
-        {/* Multi-vehicle picker if customer has multiple registered vehicles */}
-        {allVehicles.length > 1 && (
-          <div style={{ marginTop: 12, display: 'flex', alignItems: 'center', gap: 8, fontSize: 12 }}>
-            <span style={{ color: '#94a3b8' }}>Switch Vehicle:</span>
-            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-              {allVehicles.map((v) => (
+                return (
+                  <div
+                    key={est.estimate_no}
+                    className="mobile-glass-dark rounded-3xl p-5 border border-white/10 shadow-2xl space-y-4 relative overflow-hidden"
+                  >
+                    {/* Status Ribbon */}
+                    <div className="flex items-center justify-between pb-3 border-b border-white/10">
+                      <div>
+                        <div className="text-[11px] font-mono text-slate-400">Estimate #{est.estimate_no}</div>
+                        <div className="text-sm font-bold text-white">{est.model || 'Repair Estimate'}</div>
+                      </div>
+                      <span
+                        className={`text-xs font-extrabold px-3 py-1 rounded-full uppercase tracking-wider ${
+                          isApproved
+                            ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
+                            : isRejected
+                            ? 'bg-rose-500/20 text-rose-300 border border-rose-500/40'
+                            : 'bg-amber-500/20 text-amber-300 border border-amber-500/40 pulse-live-indicator'
+                        }`}
+                      >
+                        {isApproved ? '✓ Approved' : isRejected ? '✕ Rejected' : 'Action Required'}
+                      </span>
+                    </div>
+
+                    {/* Itemized Parts Table */}
+                    <div className="space-y-2">
+                      <div className="text-xs font-bold text-slate-300">Itemized Parts & Services</div>
+                      <div className="bg-slate-900/90 rounded-2xl p-3 border border-white/5 space-y-2 text-xs">
+                        {est.items.map((item, idx) => (
+                          <div key={idx} className="flex justify-between items-center py-1 border-b border-white/5 last:border-0">
+                            <div>
+                              <div className="font-semibold text-slate-200">{item.description}</div>
+                              <div className="text-[10px] text-slate-500">
+                                Qty: {item.quantity} · Type: {item.type} · Rate: ₹{item.unit_price}
+                              </div>
+                            </div>
+                            <div className="font-mono font-bold text-slate-200">
+                              ₹{item.total.toLocaleString('en-IN')}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Cost Breakdown */}
+                    <div className="bg-slate-900/60 p-3 rounded-2xl border border-white/5 space-y-1.5 text-xs">
+                      <div className="flex justify-between text-slate-400">
+                        <span>Subtotal</span>
+                        <span className="font-mono">₹{est.subtotal.toLocaleString('en-IN')}</span>
+                      </div>
+                      {est.discount > 0 && (
+                        <div className="flex justify-between text-emerald-400">
+                          <span>Discount</span>
+                          <span className="font-mono">-₹{est.discount.toLocaleString('en-IN')}</span>
+                        </div>
+                      )}
+                      <div className="flex justify-between text-slate-400">
+                        <span>GST / Taxes</span>
+                        <span className="font-mono">₹{est.gst_tax.toLocaleString('en-IN')}</span>
+                      </div>
+                      <div className="flex justify-between font-bold text-sm text-white pt-2 border-t border-white/10">
+                        <span>Grand Total</span>
+                        <span className="font-mono text-blue-400 font-extrabold text-base">
+                          ₹{est.grand_total.toLocaleString('en-IN')}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Approval / Rejection Buttons (If Pending) */}
+                    {isPending && (
+                      <div className="pt-2 space-y-2">
+                        {showRejectBox ? (
+                          <div className="bg-slate-900 p-3 rounded-2xl border border-rose-500/30 space-y-2">
+                            <label className="text-xs font-bold text-rose-300">Reason for Rejection / Change Request:</label>
+                            <textarea
+                              rows={2}
+                              value={rejectReason}
+                              onChange={(e) => setRejectReason(e.target.value)}
+                              placeholder="e.g. Please remove optional accessories or check battery again..."
+                              className="w-full bg-slate-950 border border-white/10 rounded-xl p-2.5 text-xs text-white outline-none focus:border-rose-500"
+                            />
+                            <div className="flex gap-2 justify-end">
+                              <button
+                                type="button"
+                                onClick={() => setShowRejectBox(false)}
+                                className="px-3 py-1.5 rounded-xl bg-white/10 text-xs font-semibold text-slate-300"
+                              >
+                                Cancel
+                              </button>
+                              <button
+                                type="button"
+                                disabled={!rejectReason.trim() || rejectingEstNo === est.estimate_no}
+                                onClick={() => handleReject(est)}
+                                className="px-4 py-1.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-xs font-bold text-white disabled:opacity-50"
+                              >
+                                {rejectingEstNo === est.estimate_no ? 'Submitting...' : 'Confirm Reject'}
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="grid grid-cols-2 gap-2">
+                            <button
+                              type="button"
+                              onClick={() => setShowRejectBox(true)}
+                              className="tap-bounce py-2.5 rounded-2xl bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/40 text-xs font-bold transition"
+                            >
+                              ✕ Request Changes
+                            </button>
+                            <button
+                              type="button"
+                              disabled={approvingEstNo === est.estimate_no}
+                              onClick={() => handleApprove(est)}
+                              className="tap-bounce py-2.5 rounded-2xl bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 text-white font-extrabold text-xs shadow-lg shadow-emerald-600/30 transition disabled:opacity-50"
+                            >
+                              {approvingEstNo === est.estimate_no ? 'Approving...' : '✓ Approve Estimate'}
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )
+              })
+            )}
+          </div>
+        )}
+
+        {/* ── TAB 3: REPORT PROBLEMS & CONCERNS ── */}
+        {activeTab === 'complaint' && (
+          <div className="space-y-4 animate-in fade-in duration-200">
+            <div className="mobile-glass-dark rounded-3xl p-5 border border-white/10 shadow-xl space-y-4">
+              <div>
+                <h3 className="text-sm font-extrabold text-white flex items-center gap-2">
+                  <span>🚨</span> Tell Us Your Vehicle Concerns
+                </h3>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  Directly notify your Service Advisor before or during vehicle service.
+                </p>
+              </div>
+
+              {/* Quick Concern Preset Chips */}
+              <div>
+                <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2">
+                  Quick-Tap Common Concerns:
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {PRESET_CONCERN_CHIPS.map((chip) => (
+                    <button
+                      key={chip.label}
+                      type="button"
+                      onClick={() => handleAddChip(chip)}
+                      className="tap-bounce px-3 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 border border-white/10 text-xs font-semibold text-slate-200 flex items-center gap-1.5 shadow-sm"
+                    >
+                      <span>{chip.icon}</span>
+                      <span>{chip.label}</span>
+                      <span className="text-blue-400 font-bold ml-0.5">+</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {complaintSuccess && (
+                <div className="bg-emerald-500/20 border border-emerald-500/40 rounded-2xl p-4 text-xs text-emerald-300 font-bold flex items-center gap-2">
+                  <span>✓</span> Problems submitted successfully! Your advisor has received this list.
+                </div>
+              )}
+
+              <form onSubmit={handleMultiProblemSubmit} className="space-y-3">
+                {/* Odometer KM Reading */}
+                <div>
+                  <label className="text-xs font-bold text-slate-300 block mb-1">
+                    Current KM Reading (Odometer):
+                  </label>
+                  <input
+                    type="text"
+                    value={complaintKm}
+                    onChange={(e) => setComplaintKm(e.target.value.replace(/[^0-9]/g, ''))}
+                    placeholder="e.g. 34500"
+                    className="w-full bg-slate-900 border border-white/10 rounded-xl px-3 py-2 text-xs font-mono text-white outline-none focus:border-blue-500"
+                  />
+                </div>
+
+                {/* Problem Items List */}
+                <div className="space-y-2.5">
+                  <div className="flex justify-between items-center">
+                    <label className="text-xs font-bold text-slate-300">
+                      Problem List ({problemList.filter((p) => p.text.trim()).length} Entered):
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => addProblemRow()}
+                      className="text-xs font-bold text-blue-400 hover:text-blue-300 flex items-center gap-1"
+                    >
+                      + Add Another Issue
+                    </button>
+                  </div>
+
+                  {problemList.map((prob, idx) => (
+                    <div key={prob.id} className="bg-slate-900/90 rounded-2xl p-3 border border-white/10 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-blue-400">Problem #{idx + 1}</span>
+                        {problemList.length > 1 && (
+                          <button
+                            type="button"
+                            onClick={() => removeProblemRow(prob.id)}
+                            className="text-[11px] font-bold text-rose-400 hover:text-rose-300"
+                          >
+                            ✕ Remove
+                          </button>
+                        )}
+                      </div>
+
+                      <div className="grid grid-cols-3 gap-2">
+                        <div className="col-span-2">
+                          <input
+                            type="text"
+                            value={prob.text}
+                            onChange={(e) => updateProblemRow(prob.id, 'text', e.target.value)}
+                            placeholder="Describe issue (e.g. noise on braking)..."
+                            className="w-full bg-slate-950 border border-white/10 rounded-xl px-3 py-2 text-xs text-white outline-none focus:border-blue-500"
+                          />
+                        </div>
+                        <div>
+                          <select
+                            value={prob.category}
+                            onChange={(e) => updateProblemRow(prob.id, 'category', e.target.value)}
+                            className="w-full bg-slate-950 border border-white/10 rounded-xl px-2 py-2 text-xs text-slate-200 outline-none focus:border-blue-500"
+                          >
+                            <option value="General">General</option>
+                            <option value="Engine">Engine</option>
+                            <option value="Brakes">Brakes</option>
+                            <option value="AC & Climate">AC</option>
+                            <option value="Suspension">Suspension</option>
+                            <option value="Electrical">Electrical</option>
+                            <option value="Bodyshop">Bodyshop</option>
+                          </select>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Additional Notes */}
+                <div>
+                  <label className="text-xs font-bold text-slate-300 block mb-1">
+                    Special Instructions (Optional):
+                  </label>
+                  <textarea
+                    rows={2}
+                    value={additionalNotes}
+                    onChange={(e) => setAdditionalNotes(e.target.value)}
+                    placeholder="e.g. Please deliver vehicle before 5:00 PM today..."
+                    className="w-full bg-slate-900 border border-white/10 rounded-xl p-3 text-xs text-white outline-none focus:border-blue-500"
+                  />
+                </div>
+
                 <button
-                  key={v.id}
-                  type="button"
-                  onClick={() => onSelectVehicle?.(v)}
-                  style={{
-                    background: v.reg_number === vehicle.reg_number ? '#2563eb' : 'rgba(255,255,255,0.1)',
-                    border: 'none',
-                    color: '#fff',
-                    borderRadius: 6,
-                    padding: '3px 10px',
-                    fontSize: 11,
-                    fontWeight: 700,
-                    cursor: 'pointer',
-                  }}
+                  type="submit"
+                  disabled={complaintSubmitting || problemList.every((p) => !p.text.trim())}
+                  className="tap-bounce w-full py-3 rounded-2xl bg-blue-600 hover:bg-blue-500 active:bg-blue-700 text-white font-extrabold text-xs shadow-lg shadow-blue-600/30 disabled:opacity-50 transition"
                 >
-                  {v.reg_number}
+                  {complaintSubmitting ? 'Sending to Advisor...' : '🚀 Submit Vehicle Problems'}
                 </button>
-              ))}
+              </form>
+            </div>
+          </div>
+        )}
+
+        {/* ── TAB 4: DIGITAL GATE PASS ── */}
+        {activeTab === 'gatepass' && (
+          <div className="space-y-4 animate-in fade-in duration-200">
+            <div className="mobile-glass-dark rounded-3xl p-6 border border-white/10 shadow-2xl text-center relative overflow-hidden space-y-5">
+              {/* Status Header */}
+              <div className="flex items-center justify-between pb-3 border-b border-white/10">
+                <div className="text-left">
+                  <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400">Exit Authorization</span>
+                  <h3 className="text-sm font-extrabold text-white">Digital Gate Pass</h3>
+                </div>
+                <span
+                  className={`text-xs font-extrabold px-3 py-1 rounded-full uppercase tracking-wider ${
+                    effectiveGatePassIssued
+                      ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
+                      : 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
+                  }`}
+                >
+                  {effectiveGatePassIssued ? '✓ Ready For Release' : '⏳ In Workshop'}
+                </span>
+              </div>
+
+              {/* QR Code Pass Box */}
+              <div className="bg-white p-6 rounded-3xl inline-block shadow-2xl ring-4 ring-white/10 max-w-xs mx-auto">
+                <div className="w-48 h-48 mx-auto bg-slate-950 rounded-2xl flex flex-col items-center justify-center p-4 border-2 border-slate-900">
+                  {/* Generated Simulated High-Security QR SVG */}
+                  <svg className="w-full h-full text-white" viewBox="0 0 100 100" fill="currentColor">
+                    <rect x="5" y="5" width="28" height="28" rx="4" />
+                    <rect x="9" y="9" width="20" height="20" fill="#020617" />
+                    <rect x="13" y="13" width="12" height="12" />
+                    <rect x="67" y="5" width="28" height="28" rx="4" />
+                    <rect x="71" y="9" width="20" height="20" fill="#020617" />
+                    <rect x="75" y="13" width="12" height="12" />
+                    <rect x="5" y="67" width="28" height="28" rx="4" />
+                    <rect x="9" y="71" width="20" height="20" fill="#020617" />
+                    <rect x="13" y="75" width="12" height="12" />
+                    <rect x="42" y="15" width="16" height="16" />
+                    <rect x="42" y="42" width="16" height="16" />
+                    <rect x="15" y="42" width="16" height="16" />
+                    <rect x="67" y="42" width="16" height="16" />
+                    <rect x="42" y="67" width="16" height="16" />
+                    <rect x="67" y="67" width="16" height="16" />
+                  </svg>
+                </div>
+                <div className="mt-3 font-mono font-black text-slate-950 text-base tracking-wider">
+                  {effectiveGatePassNo}
+                </div>
+                <div className="text-[10px] text-slate-500 font-semibold uppercase tracking-wider">
+                  Verified Gate Exit Security Token
+                </div>
+              </div>
+
+              {/* Pass Security Details */}
+              <div className="bg-slate-900/80 rounded-2xl p-4 border border-white/5 text-xs text-left space-y-2">
+                <div className="flex justify-between">
+                  <span className="text-slate-400">Registration No:</span>
+                  <span className="font-mono font-bold text-white">{vehicle.reg_number}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-400">Job Card:</span>
+                  <span className="font-mono font-bold text-amber-300">{vehicle.jc_number || 'JC-Active'}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-400">Payment Status:</span>
+                  <span className="font-bold text-emerald-400">
+                    {balanceDue === 0 ? '✓ Fully Settled (₹0 Balance)' : `Pending ₹${balanceDue.toLocaleString('en-IN')}`}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-400">Issued By:</span>
+                  <span className="text-slate-200">{issuedGatePass?.issued_by || 'Accounts Desk'}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── TAB 5: SERVICE FEEDBACK ── */}
+        {activeTab === 'feedback' && (
+          <div className="space-y-4 animate-in fade-in duration-200">
+            <div className="mobile-glass-dark rounded-3xl p-5 border border-white/10 shadow-xl space-y-4">
+              <div>
+                <h3 className="text-sm font-extrabold text-white flex items-center gap-2">
+                  <span>⭐</span> Rate Your Workshop Experience
+                </h3>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  Your direct feedback helps us maintain premium Tata Motors quality standards.
+                </p>
+              </div>
+
+              {feedbackSuccess && (
+                <div className="bg-emerald-500/20 border border-emerald-500/40 rounded-2xl p-4 text-xs text-emerald-300 font-bold flex items-center gap-2">
+                  <span>✓</span> Thank you for your valuable feedback!
+                </div>
+              )}
+
+              <form onSubmit={handleFeedbackSubmit} className="space-y-4">
+                {/* Star Rating Picker */}
+                <div className="text-center py-2">
+                  <div className="text-xs font-bold text-slate-400 mb-2 uppercase tracking-wider">Overall Rating</div>
+                  <div className="flex justify-center gap-3">
+                    {[1, 2, 3, 4, 5].map((s) => (
+                      <button
+                        key={s}
+                        type="button"
+                        onClick={() => setRating(s)}
+                        className={`text-3xl transition-transform ${s <= rating ? 'scale-110' : 'opacity-30'}`}
+                      >
+                        ⭐
+                      </button>
+                    ))}
+                  </div>
+                  <div className="text-xs font-extrabold text-amber-400 mt-2">
+                    {rating === 5 ? '🌟 Excellent Experience' : rating === 4 ? '👍 Very Good' : rating === 3 ? '👌 Average' : '⚠️ Needs Improvement'}
+                  </div>
+                </div>
+
+                <div>
+                  <label className="text-xs font-bold text-slate-300 block mb-1">
+                    Your Remarks / Feedback:
+                  </label>
+                  <textarea
+                    rows={4}
+                    value={feedbackText}
+                    onChange={(e) => setFeedbackText(e.target.value)}
+                    placeholder="Tell us about the advisor interaction, wash quality, timing..."
+                    className="w-full bg-slate-900 border border-white/10 rounded-xl p-3 text-xs text-white outline-none focus:border-blue-500"
+                  />
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={feedbackSubmitting || !feedbackText.trim()}
+                  className="tap-bounce w-full py-3 rounded-2xl bg-amber-500 hover:bg-amber-400 active:bg-amber-600 text-slate-950 font-extrabold text-xs shadow-lg shadow-amber-500/20 disabled:opacity-50 transition"
+                >
+                  {feedbackSubmitting ? 'Submitting Feedback...' : '⭐ Submit Star Rating'}
+                </button>
+              </form>
             </div>
           </div>
         )}
       </div>
 
-      {/* Navigation Tabs */}
-      <div
-        style={{
-          display: 'flex',
-          gap: 6,
-          overflowX: 'auto',
-          paddingBottom: 8,
-          marginBottom: 16,
-          borderBottom: '1px solid #e2e8f0',
-        }}
-      >
-        <button
-          type="button"
-          onClick={() => setActiveTab('dashboard')}
-          style={{
-            padding: '8px 16px',
-            borderRadius: 12,
-            fontSize: 12.5,
-            fontWeight: 800,
-            whiteSpace: 'nowrap',
-            border: 'none',
-            cursor: 'pointer',
-            background: activeTab === 'dashboard' ? '#2563eb' : '#f1f5f9',
-            color: activeTab === 'dashboard' ? '#fff' : '#475569',
-          }}
-        >
-          📊 Live Job Card
-        </button>
+      {/* ── FLOATING GLASS BOTTOM NAVIGATION DOCK ── */}
+      <div className="fixed bottom-0 left-0 right-0 z-50 px-4 pb-3 pt-1 pointer-events-none safe-bottom">
+        <div className="max-w-md mx-auto pointer-events-auto mobile-glass-nav rounded-3xl p-2 flex justify-around items-center border border-white/10 shadow-2xl">
+          <button
+            type="button"
+            onClick={() => setActiveTab('dashboard')}
+            className={`tap-bounce flex flex-col items-center py-1.5 px-3 rounded-2xl transition ${
+              activeTab === 'dashboard' ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/30' : 'text-slate-400 hover:text-white'
+            }`}
+          >
+            <span className="text-lg">🏠</span>
+            <span className="text-[10px] font-bold mt-0.5">Overview</span>
+          </button>
 
-        <button
-          type="button"
-          onClick={() => setActiveTab('estimate')}
-          style={{
-            padding: '8px 16px',
-            borderRadius: 12,
-            fontSize: 12.5,
-            fontWeight: 800,
-            whiteSpace: 'nowrap',
-            border: 'none',
-            cursor: 'pointer',
-            background: activeTab === 'estimate' ? '#2563eb' : '#f1f5f9',
-            color: activeTab === 'estimate' ? '#fff' : '#475569',
-            position: 'relative',
-          }}
-        >
-          📑 Estimate & Bills
-          {isPendingApproval && (
-            <span
-              style={{
-                marginLeft: 6,
-                background: '#f59e0b',
-                color: '#fff',
-                fontSize: 10,
-                padding: '2px 6px',
-                borderRadius: 10,
-                fontWeight: 900,
-              }}
-            >
-              Action Required
-            </span>
-          )}
-        </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab('estimate')}
+            className={`tap-bounce flex flex-col items-center py-1.5 px-3 rounded-2xl transition relative ${
+              activeTab === 'estimate' ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/30' : 'text-slate-400 hover:text-white'
+            }`}
+          >
+            <span className="text-lg">📋</span>
+            <span className="text-[10px] font-bold mt-0.5">Estimates</span>
+            {isPendingApproval && (
+              <span className="absolute top-1 right-2 w-2 h-2 rounded-full bg-amber-400 pulse-live-indicator" />
+            )}
+          </button>
 
-        <button
-          type="button"
-          onClick={() => setActiveTab('complaint')}
-          style={{
-            padding: '8px 16px',
-            borderRadius: 12,
-            fontSize: 12.5,
-            fontWeight: 800,
-            whiteSpace: 'nowrap',
-            border: 'none',
-            cursor: 'pointer',
-            background: activeTab === 'complaint' ? '#2563eb' : '#f1f5f9',
-            color: activeTab === 'complaint' ? '#fff' : '#475569',
-          }}
-        >
-          🚨 Tell Us Your Problem
-        </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab('complaint')}
+            className={`tap-bounce flex flex-col items-center py-1.5 px-3 rounded-2xl transition ${
+              activeTab === 'complaint' ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/30' : 'text-slate-400 hover:text-white'
+            }`}
+          >
+            <span className="text-lg">🚨</span>
+            <span className="text-[10px] font-bold mt-0.5">Issues</span>
+          </button>
 
-        <button
-          type="button"
-          onClick={() => setActiveTab('gatepass')}
-          style={{
-            padding: '8px 16px',
-            borderRadius: 12,
-            fontSize: 12.5,
-            fontWeight: 800,
-            whiteSpace: 'nowrap',
-            border: 'none',
-            cursor: 'pointer',
-            background: activeTab === 'gatepass' ? '#2563eb' : '#f1f5f9',
-            color: activeTab === 'gatepass' ? '#fff' : '#475569',
-          }}
-        >
-          🎫 Digital Gate Pass
-          {effectiveGatePassIssued && (
-            <span
-              style={{
-                marginLeft: 6,
-                background: '#16a34a',
-                color: '#fff',
-                fontSize: 10,
-                padding: '2px 6px',
-                borderRadius: 10,
-                fontWeight: 900,
-              }}
-            >
-              Ready
-            </span>
-          )}
-        </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab('gatepass')}
+            className={`tap-bounce flex flex-col items-center py-1.5 px-3 rounded-2xl transition relative ${
+              activeTab === 'gatepass' ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/30' : 'text-slate-400 hover:text-white'
+            }`}
+          >
+            <span className="text-lg">🎫</span>
+            <span className="text-[10px] font-bold mt-0.5">Gate Pass</span>
+            {effectiveGatePassIssued && (
+              <span className="absolute top-1 right-2 w-2 h-2 rounded-full bg-emerald-400 pulse-live-indicator" />
+            )}
+          </button>
 
-        <button
-          type="button"
-          onClick={() => setActiveTab('feedback')}
-          style={{
-            padding: '8px 16px',
-            borderRadius: 12,
-            fontSize: 12.5,
-            fontWeight: 800,
-            whiteSpace: 'nowrap',
-            border: 'none',
-            cursor: 'pointer',
-            background: activeTab === 'feedback' ? '#2563eb' : '#f1f5f9',
-            color: activeTab === 'feedback' ? '#fff' : '#475569',
-          }}
-        >
-          ⭐ Service Feedback
-        </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab('feedback')}
+            className={`tap-bounce flex flex-col items-center py-1.5 px-3 rounded-2xl transition ${
+              activeTab === 'feedback' ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/30' : 'text-slate-400 hover:text-white'
+            }`}
+          >
+            <span className="text-lg">⭐</span>
+            <span className="text-[10px] font-bold mt-0.5">Review</span>
+          </button>
+        </div>
       </div>
 
-      {/* TAB 1: LIVE JOB CARD DASHBOARD */}
-      {activeTab === 'dashboard' && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-          {/* Pending Estimate Approval Alert Banner */}
-          {isPendingApproval && latestLiveEstimate && (
-            <div
-              style={{
-                background: 'linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%)',
-                border: '1px solid #fde68a',
-                borderRadius: 16,
-                padding: '16px 18px',
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                boxShadow: '0 4px 12px rgba(245, 158, 11, 0.12)',
-              }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                <span style={{ fontSize: 26 }}>⏳</span>
-                <div>
-                  <div style={{ fontSize: 13.5, fontWeight: 800, color: '#92400e' }}>
-                    Repair Estimate Received: ₹{latestLiveEstimate.grand_total.toLocaleString()}
-                  </div>
-                  <div style={{ fontSize: 12, color: '#b45309', marginTop: 1 }}>
-                    Service Advisor sent Estimate #{latestLiveEstimate.estimate_no}. Your approval is requested.
-                  </div>
-                </div>
-              </div>
+      {/* Multi-vehicle Switcher Modal */}
+      {showVehiclePicker && (
+        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="w-full max-w-sm mobile-glass-dark rounded-3xl p-5 border border-white/10 shadow-2xl space-y-3 animate-in zoom-in-95">
+            <div className="flex justify-between items-center pb-2 border-b border-white/10">
+              <h3 className="text-sm font-bold text-white">Select Vehicle</h3>
               <button
                 type="button"
-                onClick={() => setActiveTab('estimate')}
-                style={{
-                  background: '#d97706',
-                  color: '#fff',
-                  border: 'none',
-                  padding: '8px 16px',
-                  borderRadius: 10,
-                  fontSize: 12.5,
-                  fontWeight: 800,
-                  cursor: 'pointer',
-                  whiteSpace: 'nowrap',
-                }}
+                onClick={() => setShowVehiclePicker(false)}
+                className="text-slate-400 hover:text-white text-xs"
               >
-                Review & Approve →
+                ✕ Close
               </button>
             </div>
-          )}
-
-          {/* Service Progress Card */}
-          <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #e2e8f0', padding: 20, boxShadow: '0 2px 10px rgba(0,0,0,0.03)' }}>
-            <div style={{ fontSize: 14, fontWeight: 800, color: '#1e293b', marginBottom: 12 }}>
-              🔄 Live Service Progress Tracker
-            </div>
-
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: 12, marginBottom: 16 }}>
-              <div style={{ background: '#f8fafc', padding: 12, borderRadius: 12, border: '1px solid #f1f5f9' }}>
-                <div style={{ fontSize: 11, color: '#64748b' }}>Service Type</div>
-                <div style={{ fontSize: 13, fontWeight: 800, color: '#0284c7', marginTop: 2 }}>{vehicle.service_type || 'General Service'}</div>
-              </div>
-              <div style={{ background: '#f8fafc', padding: 12, borderRadius: 12, border: '1px solid #f1f5f9' }}>
-                <div style={{ fontSize: 11, color: '#64748b' }}>Current Odometer</div>
-                <div style={{ fontSize: 13, fontWeight: 800, color: '#1e293b', marginTop: 2 }}>{vehicle.km_reading ? `${vehicle.km_reading.toLocaleString()} KM` : 'Recorded'}</div>
-              </div>
-              <div style={{ background: '#f8fafc', padding: 12, borderRadius: 12, border: '1px solid #f1f5f9' }}>
-                <div style={{ fontSize: 11, color: '#64748b' }}>Estimate Amount</div>
-                <div style={{ fontSize: 13, fontWeight: 800, color: '#0f172a', marginTop: 2 }}>
-                  ₹{totalEstimatedValue.toLocaleString()}
-                </div>
-              </div>
-              <div style={{ background: '#f8fafc', padding: 12, borderRadius: 12, border: '1px solid #f1f5f9' }}>
-                <div style={{ fontSize: 11, color: '#64748b' }}>Gate Pass Status</div>
-                <div
-                  style={{
-                    fontSize: 13,
-                    fontWeight: 800,
-                    color: effectiveGatePassIssued ? '#16a34a' : '#d97706',
-                    marginTop: 2,
-                  }}
-                >
-                  {effectiveGatePassIssued ? 'Issued (Ready)' : 'Under Service'}
-                </div>
-              </div>
-            </div>
-
-            {vehicle.remark && (
-              <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 10, padding: '10px 14px', fontSize: 12, color: '#1e40af' }}>
-                📌 <strong>Advisor Note:</strong> {vehicle.remark}
-              </div>
-            )}
-          </div>
-
-          {/* Quick Action Cards */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12 }}>
-            <button
-              type="button"
-              onClick={() => setActiveTab('estimate')}
-              style={{
-                background: 'linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%)',
-                border: '1px solid #bfdbfe',
-                borderRadius: 16,
-                padding: 16,
-                textAlign: 'left',
-                cursor: 'pointer',
-              }}
-            >
-              <div style={{ fontSize: 24, marginBottom: 6 }}>📑</div>
-              <div style={{ fontSize: 14, fontWeight: 800, color: '#1e40af' }}>Estimate & Bills</div>
-              <div style={{ fontSize: 11.5, color: '#2563eb', marginTop: 2 }}>
-                {latestLiveEstimate
-                  ? `Estimate #${latestLiveEstimate.estimate_no} (${latestLiveEstimate.status})`
-                  : 'View service cost breakdown, approve estimate & view invoice'}
-              </div>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setActiveTab('complaint')}
-              style={{
-                background: 'linear-gradient(135deg, #fef2f2 0%, #ffe4e6 100%)',
-                border: '1px solid #fecdd3',
-                borderRadius: 16,
-                padding: 16,
-                textAlign: 'left',
-                cursor: 'pointer',
-              }}
-            >
-              <div style={{ fontSize: 24, marginBottom: 6 }}>🚨</div>
-              <div style={{ fontSize: 14, fontWeight: 800, color: '#9f1239' }}>Tell Us Your Problem</div>
-              <div style={{ fontSize: 11.5, color: '#be123c', marginTop: 2 }}>Submit multiple issues directly to advisor & workshop team</div>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setActiveTab('gatepass')}
-              style={{
-                background: 'linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%)',
-                border: '1px solid #bbf7d0',
-                borderRadius: 16,
-                padding: 16,
-                textAlign: 'left',
-                cursor: 'pointer',
-              }}
-            >
-              <div style={{ fontSize: 24, marginBottom: 6 }}>🎫</div>
-              <div style={{ fontSize: 14, fontWeight: 800, color: '#14532d' }}>Digital Gate Pass</div>
-              <div style={{ fontSize: 11.5, color: '#15803d', marginTop: 2 }}>
-                {effectiveGatePassIssued ? 'Pass Active - QR ready for exit' : 'View QR verification pass for vehicle release'}
-              </div>
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* TAB 2: ESTIMATE & INVOICE WINDOW (LIVE SYNCED WITH ADMIN) */}
-      {activeTab === 'estimate' && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-          {/* Summary Box */}
-          <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #e2e8f0', padding: 20, boxShadow: '0 2px 10px rgba(0,0,0,0.03)' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16, flexWrap: 'wrap', gap: 10 }}>
-              <div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <h2 style={{ fontSize: 16, fontWeight: 800, color: '#1e293b' }}>📑 Service Estimate & Quotation</h2>
-                  {latestLiveEstimate && (
-                    <span className="font-mono text-xs font-bold text-blue-700 bg-blue-50 px-2 py-0.5 rounded border border-blue-200">
-                      {latestLiveEstimate.estimate_no}
-                    </span>
-                  )}
-                </div>
-                <p style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>
-                  {latestLiveEstimate
-                    ? `Created by Service Advisor on ${new Date(latestLiveEstimate.created_at || latestLiveEstimate.updated_at || Date.now()).toLocaleDateString()}`
-                    : 'Transparent cost estimate for your vehicle maintenance and repairs.'}
-                </p>
-              </div>
-
-              {/* Status Badge */}
-              <span
-                style={{
-                  background:
-                    latestLiveEstimate?.status === 'Approved'
-                      ? '#dcfce7'
-                      : latestLiveEstimate?.status === 'Rejected'
-                      ? '#fee2e2'
-                      : '#fef3c7',
-                  color:
-                    latestLiveEstimate?.status === 'Approved'
-                      ? '#15803d'
-                      : latestLiveEstimate?.status === 'Rejected'
-                      ? '#b91c1c'
-                      : '#b45309',
-                  padding: '4px 12px',
-                  borderRadius: 8,
-                  fontSize: 12,
-                  fontWeight: 800,
-                  border: '1px solid rgba(0,0,0,0.05)',
-                }}
-              >
-                {latestLiveEstimate?.status === 'Approved'
-                  ? '✅ APPROVED'
-                  : latestLiveEstimate?.status === 'Rejected'
-                  ? '❌ REJECTED'
-                  : '⏳ AWAITING APPROVAL'}
-              </span>
-            </div>
-
-            {/* Financial Stat Cards */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 12, marginBottom: 20 }}>
-              <div style={{ background: '#f8fafc', padding: 14, borderRadius: 12, border: '1px solid #e2e8f0' }}>
-                <div style={{ fontSize: 11, color: '#64748b', fontWeight: 600 }}>TOTAL ESTIMATE</div>
-                <div style={{ fontSize: 18, fontWeight: 900, color: '#0f172a', marginTop: 4 }}>
-                  ₹{totalEstimatedValue.toLocaleString()}
-                </div>
-              </div>
-
-              <div style={{ background: '#f0fdf4', padding: 14, borderRadius: 12, border: '1px solid #bbf7d0' }}>
-                <div style={{ fontSize: 11, color: '#15803d', fontWeight: 600 }}>AMOUNT RECEIVED</div>
-                <div style={{ fontSize: 18, fontWeight: 900, color: '#166534', marginTop: 4 }}>
-                  ₹{effectiveReceived.toLocaleString()}
-                </div>
-              </div>
-
-              <div
-                style={{
-                  background: balanceDue > 0 ? '#fef2f2' : '#f8fafc',
-                  padding: 14,
-                  borderRadius: 12,
-                  border: balanceDue > 0 ? '1px solid #fecdd3' : '1px solid #e2e8f0',
-                }}
-              >
-                <div style={{ fontSize: 11, color: balanceDue > 0 ? '#b91c1c' : '#64748b', fontWeight: 600 }}>
-                  BALANCE DUE
-                </div>
-                <div style={{ fontSize: 18, fontWeight: 900, color: balanceDue > 0 ? '#dc2626' : '#1e293b', marginTop: 4 }}>
-                  ₹{balanceDue.toLocaleString()}
-                </div>
-              </div>
-            </div>
-
-            {/* Itemized Estimate Breakdown Table */}
-            <div style={{ border: '1px solid #e2e8f0', borderRadius: 12, overflow: 'hidden', marginBottom: 20 }}>
-              <div style={{ background: '#f8fafc', padding: '10px 14px', fontSize: 12, fontWeight: 800, color: '#334155', borderBottom: '1px solid #e2e8f0' }}>
-                Estimated Service Scope & Spares
-              </div>
-
-              {latestLiveEstimate && latestLiveEstimate.items && latestLiveEstimate.items.length > 0 ? (
-                /* Render Real Live Items sent by Advisor */
-                <>
-                  {latestLiveEstimate.items.map((item, idx) => (
-                    <div
-                      key={item.id || idx}
-                      style={{
-                        padding: '10px 14px',
-                        borderBottom: '1px solid #f1f5f9',
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        alignItems: 'center',
-                        fontSize: 12.5,
-                      }}
-                    >
-                      <div>
-                        <div style={{ color: '#1e293b', fontWeight: 600 }}>
-                          {item.type === 'part' ? '⚙️' : '🔧'} {item.description}
-                        </div>
-                        <div style={{ fontSize: 11, color: '#64748b' }}>
-                          Qty: {item.quantity} × ₹{item.unit_price.toLocaleString()} ({item.type === 'part' ? 'Genuine Part' : 'Labour & Fitting'})
-                        </div>
-                      </div>
-                      <span style={{ fontWeight: 800, color: '#0f172a' }}>₹{item.total.toLocaleString()}</span>
-                    </div>
-                  ))}
-
-                  {latestLiveEstimate.gst_tax > 0 && (
-                    <div style={{ padding: '8px 14px', borderBottom: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', fontSize: 12, color: '#64748b' }}>
-                      <span>Taxes & GST (18%)</span>
-                      <span style={{ fontWeight: 600 }}>₹{latestLiveEstimate.gst_tax.toLocaleString()}</span>
-                    </div>
-                  )}
-
-                  {latestLiveEstimate.discount > 0 && (
-                    <div style={{ padding: '8px 14px', borderBottom: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', fontSize: 12, color: '#16a34a' }}>
-                      <span>Special Workshop Discount</span>
-                      <span style={{ fontWeight: 700 }}>-₹{latestLiveEstimate.discount.toLocaleString()}</span>
-                    </div>
-                  )}
-
-                  <div style={{ padding: '12px 14px', background: '#faf5ff', display: 'flex', justifyContent: 'space-between', fontSize: 13.5, fontWeight: 900, color: '#6b21a8' }}>
-                    <span>Grand Total Estimated Value</span>
-                    <span>₹{latestLiveEstimate.grand_total.toLocaleString()}</span>
-                  </div>
-                </>
-              ) : (
-                /* Fallback Default Service Items */
-                <>
-                  <div style={{ padding: '10px 14px', borderBottom: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', fontSize: 12.5 }}>
-                    <span style={{ color: '#334155' }}>🔧 Periodic Inspection & General Service Labour</span>
-                    <span style={{ fontWeight: 700 }}>₹1,650</span>
-                  </div>
-                  <div style={{ padding: '10px 14px', borderBottom: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', fontSize: 12.5 }}>
-                    <span style={{ color: '#334155' }}>🛢️ Engine Oil, Synthetic Lubricants & Oil Filter</span>
-                    <span style={{ fontWeight: 700 }}>₹1,450</span>
-                  </div>
-                  <div style={{ padding: '10px 14px', borderBottom: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', fontSize: 12.5 }}>
-                    <span style={{ color: '#334155' }}>🧼 Complete Foam Washing, Vacuuming & Sanitization</span>
-                    <span style={{ fontWeight: 700, color: '#16a34a' }}>Complimentary (Free)</span>
-                  </div>
-                  <div style={{ padding: '10px 14px', background: '#faf5ff', display: 'flex', justifyContent: 'space-between', fontSize: 13, fontWeight: 800, color: '#6b21a8' }}>
-                    <span>Total Estimated Job Value</span>
-                    <span>₹{totalEstimatedValue.toLocaleString()}</span>
-                  </div>
-                </>
-              )}
-            </div>
-
-            {/* Estimate Approval & Decision Box (Realtime Connected to Admin) */}
-            <div
-              style={{
-                background:
-                  latestLiveEstimate?.status === 'Approved'
-                    ? '#f0fdf4'
-                    : latestLiveEstimate?.status === 'Rejected'
-                    ? '#fef2f2'
-                    : '#eff6ff',
-                border:
-                  latestLiveEstimate?.status === 'Approved'
-                    ? '1px solid #bbf7d0'
-                    : latestLiveEstimate?.status === 'Rejected'
-                    ? '1px solid #fecdd3'
-                    : '1px solid #bfdbfe',
-                borderRadius: 14,
-                padding: 16,
-                display: 'flex',
-                flexDirection: 'column',
-                gap: 10,
-              }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <span style={{ fontSize: 24 }}>
-                  {latestLiveEstimate?.status === 'Approved'
-                    ? '✅'
-                    : latestLiveEstimate?.status === 'Rejected'
-                    ? '❌'
-                    : '✍️'}
-                </span>
-                <div>
-                  <div
-                    style={{
-                      fontSize: 14,
-                      fontWeight: 800,
-                      color:
-                        latestLiveEstimate?.status === 'Approved'
-                          ? '#166534'
-                          : latestLiveEstimate?.status === 'Rejected'
-                          ? '#991b1b'
-                          : '#1e40af',
-                    }}
-                  >
-                    {latestLiveEstimate?.status === 'Approved'
-                      ? 'Estimate Approved by Customer'
-                      : latestLiveEstimate?.status === 'Rejected'
-                      ? 'Estimate Change Requested / Rejected'
-                      : 'Digital Estimate Approval Required'}
-                  </div>
-                  <div
-                    style={{
-                      fontSize: 12,
-                      color:
-                        latestLiveEstimate?.status === 'Approved'
-                          ? '#15803d'
-                          : latestLiveEstimate?.status === 'Rejected'
-                          ? '#b91c1c'
-                          : '#3b82f6',
-                      marginTop: 2,
-                    }}
-                  >
-                    {latestLiveEstimate?.status === 'Approved'
-                      ? `Thank you! Your approval was submitted on ${new Date(latestLiveEstimate.approved_at || latestLiveEstimate.updated_at || Date.now()).toLocaleString()}. The Service Advisor & workshop team are actively working.`
-                      : latestLiveEstimate?.status === 'Rejected'
-                      ? `Reason: "${latestLiveEstimate.rejection_reason || 'Modification requested'}". Your Advisor has been notified to revise the quote.`
-                      : 'Please review the scope and parts above. Approving allows the workshop team to start work immediately.'}
-                  </div>
-                </div>
-              </div>
-
-              {/* Action Buttons if not approved */}
-              {latestLiveEstimate && latestLiveEstimate.status !== 'Approved' && (
-                <div style={{ display: 'flex', gap: 8, marginTop: 4, flexWrap: 'wrap' }}>
-                  <button
-                    type="button"
-                    onClick={() => handleApprove(latestLiveEstimate)}
-                    disabled={approvingEstNo === latestLiveEstimate.estimate_no}
-                    style={{
-                      background: 'linear-gradient(135deg, #16a34a 0%, #15803d 100%)',
-                      color: '#fff',
-                      border: 'none',
-                      padding: '10px 20px',
-                      borderRadius: 10,
-                      fontSize: 13.5,
-                      fontWeight: 800,
-                      cursor: 'pointer',
-                      boxShadow: '0 2px 8px rgba(22, 163, 74, 0.25)',
-                    }}
-                  >
-                    {approvingEstNo === latestLiveEstimate.estimate_no
-                      ? 'Submitting Approval…'
-                      : `✓ Approve Estimate (₹${latestLiveEstimate.grand_total.toLocaleString()})`}
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setShowRejectBox(!showRejectBox)}
-                    style={{
-                      background: '#fff',
-                      color: '#b91c1c',
-                      border: '1px solid #fca5a5',
-                      padding: '10px 16px',
-                      borderRadius: 10,
-                      fontSize: 13,
-                      fontWeight: 700,
-                      cursor: 'pointer',
-                    }}
-                  >
-                    {showRejectBox ? 'Cancel' : '✕ Request Modification / Reject'}
-                  </button>
-                </div>
-              )}
-
-              {/* Rejection / Modification Input Box */}
-              {showRejectBox && latestLiveEstimate && latestLiveEstimate.status !== 'Approved' && (
-                <div
-                  style={{
-                    background: '#fff',
-                    border: '1px solid #fecdd3',
-                    borderRadius: 10,
-                    padding: 12,
-                    marginTop: 8,
-                  }}
-                >
-                  <label style={{ fontSize: 12, fontWeight: 700, color: '#991b1b', display: 'block', marginBottom: 4 }}>
-                    Please specify why you want modifications or rejection:
-                  </label>
-                  <textarea
-                    rows={2}
-                    placeholder="e.g. Please remove wiper replacement / price is too high / check only oil change..."
-                    value={rejectReason}
-                    onChange={(e) => setRejectReason(e.target.value)}
-                    style={{ width: '100%', padding: '8px 10px', borderRadius: 8, border: '1px solid #cbd5e1', fontSize: 12.5 }}
-                  />
-                  <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
-                    <button
-                      type="button"
-                      onClick={() => handleReject(latestLiveEstimate)}
-                      disabled={rejectingEstNo === latestLiveEstimate.estimate_no || !rejectReason.trim()}
-                      style={{
-                        background: '#dc2626',
-                        color: '#fff',
-                        border: 'none',
-                        padding: '6px 14px',
-                        borderRadius: 8,
-                        fontSize: 12,
-                        fontWeight: 800,
-                        cursor: 'pointer',
-                      }}
-                    >
-                      {rejectingEstNo === latestLiveEstimate.estimate_no ? 'Submitting…' : 'Send Rejection to Advisor'}
-                    </button>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* Documents & Links */}
-            {(vehicle.estimate_drive_url || vehicle.invoice_drive_url) && (
-              <div style={{ marginTop: 16, display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-                {vehicle.estimate_drive_url && (
-                  <a
-                    href={vehicle.estimate_drive_url}
-                    target="_blank"
-                    rel="noreferrer"
-                    style={{
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: 6,
-                      background: '#f1f5f9',
-                      color: '#1e293b',
-                      padding: '8px 14px',
-                      borderRadius: 8,
-                      fontSize: 12,
-                      fontWeight: 700,
-                      textDecoration: 'none',
-                      border: '1px solid #cbd5e1',
-                    }}
-                  >
-                    📥 Open Digital Estimate Document
-                  </a>
-                )}
-                {vehicle.invoice_drive_url && (
-                  <a
-                    href={vehicle.invoice_drive_url}
-                    target="_blank"
-                    rel="noreferrer"
-                    style={{
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: 6,
-                      background: '#f1f5f9',
-                      color: '#1e293b',
-                      padding: '8px 14px',
-                      borderRadius: 8,
-                      fontSize: 12,
-                      fontWeight: 700,
-                      textDecoration: 'none',
-                      border: '1px solid #cbd5e1',
-                    }}
-                  >
-                    📄 Open Final Tax Invoice
-                  </a>
-                )}
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* TAB 3: TELL US YOUR PROBLEM (MULTI-PROBLEM NUMBERED LIST) */}
-      {activeTab === 'complaint' && (
-        <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #e2e8f0', padding: 20, boxShadow: '0 2px 10px rgba(0,0,0,0.03)' }}>
-          <div style={{ marginBottom: 16 }}>
-            <h2 style={{ fontSize: 16, fontWeight: 800, color: '#1e293b' }}>🚨 Tell Us Your Problem (गाड़ी की समस्याएं दर्ज करें)</h2>
-            <p style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>
-              Aap apni gadi me aane wali sabhi problems list-wise add kar sakte hain. Advisor aur workshop team har problem ko inspect karegi.
-            </p>
-          </div>
-
-          {complaintSuccess && (
-            <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', color: '#166534', padding: '12px 14px', borderRadius: 10, fontSize: 13, fontWeight: 700, marginBottom: 16 }}>
-              ✅ All problems successfully submitted! Your Service Advisor ({vehicle.sa_display_name || vehicle.sa_name || 'Advisor'}) and Bodyshop Admin Hub have received your numbered list in real-time.
-            </div>
-          )}
-
-          <form onSubmit={handleMultiProblemSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-            {/* Numbered Problems List Builder */}
-            <div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                <label style={{ fontSize: 12.5, fontWeight: 800, color: '#1e293b' }}>
-                  List of Problems / Issues ({problemList.length}) <span style={{ color: '#ef4444' }}>*</span>
-                </label>
+            <div className="space-y-2">
+              {allVehicles.map((v) => (
                 <button
+                  key={v.id}
                   type="button"
-                  onClick={addProblemRow}
-                  style={{
-                    background: '#eff6ff',
-                    color: '#2563eb',
-                    border: '1px solid #bfdbfe',
-                    borderRadius: 8,
-                    padding: '4px 10px',
-                    fontSize: 11.5,
-                    fontWeight: 700,
-                    cursor: 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 4,
+                  onClick={() => {
+                    onSelectVehicle?.(v)
+                    setShowVehiclePicker(false)
                   }}
+                  className={`w-full p-3 rounded-2xl text-left border flex justify-between items-center transition ${
+                    v.reg_number === vehicle.reg_number
+                      ? 'bg-blue-600/30 border-blue-400 text-white'
+                      : 'bg-slate-900 border-white/5 text-slate-300 hover:bg-slate-800'
+                  }`}
                 >
-                  <span>+</span> Add Another Problem (और समस्या जोड़ें)
+                  <div>
+                    <div className="font-mono font-bold">{v.reg_number}</div>
+                    <div className="text-[11px] text-slate-400">{v.model || 'Tata Vehicle'}</div>
+                  </div>
+                  {v.reg_number === vehicle.reg_number && <span className="text-blue-400 font-bold">✓ Active</span>}
                 </button>
-              </div>
-
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                {problemList.map((prob, idx) => (
-                  <div
-                    key={prob.id}
-                    style={{
-                      display: 'flex',
-                      gap: 8,
-                      alignItems: 'center',
-                      background: '#f8fafc',
-                      padding: 10,
-                      borderRadius: 12,
-                      border: '1px solid #e2e8f0',
-                    }}
-                  >
-                    <span
-                      style={{
-                        background: '#2563eb',
-                        color: '#fff',
-                        width: 24,
-                        height: 24,
-                        borderRadius: '50%',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        fontSize: 11,
-                        fontWeight: 900,
-                        flexShrink: 0,
-                      }}
-                    >
-                      {idx + 1}
-                    </span>
-
-                    <input
-                      type="text"
-                      placeholder={`Problem ${idx + 1}: e.g. Brake vibration / Pickup low / AC not cooling`}
-                      value={prob.text}
-                      onChange={(e) => updateProblemRow(prob.id, 'text', e.target.value)}
-                      required={idx === 0}
-                      style={{
-                        flex: 1,
-                        padding: '8px 12px',
-                        borderRadius: 8,
-                        border: '1px solid #cbd5e1',
-                        fontSize: 12.5,
-                        fontWeight: 500,
-                        background: '#fff',
-                      }}
-                    />
-
-                    <select
-                      value={prob.category}
-                      onChange={(e) => updateProblemRow(prob.id, 'category', e.target.value)}
-                      style={{
-                        padding: '8px 10px',
-                        borderRadius: 8,
-                        border: '1px solid #cbd5e1',
-                        fontSize: 12,
-                        fontWeight: 600,
-                        background: '#fff',
-                        maxWidth: 140,
-                      }}
-                    >
-                      <option value="Engine">Engine</option>
-                      <option value="AC">AC / Climate</option>
-                      <option value="Brake">Brake / ABS</option>
-                      <option value="Electrical">Electrical</option>
-                      <option value="Suspension">Suspension</option>
-                      <option value="Bodyshop">Bodyshop/Dent</option>
-                      <option value="Noise">Noise/Vibration</option>
-                      <option value="General">General</option>
-                    </select>
-
-                    {problemList.length > 1 && (
-                      <button
-                        type="button"
-                        onClick={() => removeProblemRow(prob.id)}
-                        style={{
-                          background: '#fee2e2',
-                          color: '#dc2626',
-                          border: 'none',
-                          borderRadius: 6,
-                          width: 28,
-                          height: 28,
-                          fontSize: 12,
-                          fontWeight: 800,
-                          cursor: 'pointer',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          flexShrink: 0,
-                        }}
-                        title="Remove problem"
-                      >
-                        ✕
-                      </button>
-                    )}
-                  </div>
-                ))}
-              </div>
+              ))}
             </div>
-
-            {/* Current KM Reading */}
-            <div>
-              <label style={{ fontSize: 12, fontWeight: 700, color: '#334155', display: 'block', marginBottom: 4 }}>
-                Current KM Reading (Odometer)
-              </label>
-              <input
-                type="number"
-                placeholder="e.g. 14200"
-                value={complaintKm}
-                onChange={(e) => setComplaintKm(e.target.value)}
-                style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1px solid #cbd5e1', fontSize: 13, fontWeight: 600 }}
-              />
-            </div>
-
-            {/* Additional Notes */}
-            <div>
-              <label style={{ fontSize: 12, fontWeight: 700, color: '#334155', display: 'block', marginBottom: 4 }}>
-                Additional Notes or Special Instructions (Optional)
-              </label>
-              <textarea
-                rows={2}
-                placeholder="Any special remarks for Service Advisor or Technician..."
-                value={additionalNotes}
-                onChange={(e) => setAdditionalNotes(e.target.value)}
-                style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1px solid #cbd5e1', fontSize: 13 }}
-              />
-            </div>
-
-            <button
-              type="submit"
-              disabled={complaintSubmitting || !problemList.some((p) => p.text.trim().length > 0)}
-              style={{
-                background: 'linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%)',
-                color: '#fff',
-                border: 'none',
-                padding: '12px',
-                borderRadius: 10,
-                fontSize: 14,
-                fontWeight: 800,
-                cursor: 'pointer',
-                boxShadow: '0 2px 8px rgba(37, 99, 235, 0.25)',
-              }}
-            >
-              {complaintSubmitting ? 'Submitting Problem List…' : 'Submit Problem List to Workshop Team →'}
-            </button>
-          </form>
-        </div>
-      )}
-
-      {/* TAB 4: DIGITAL GATE PASS (ACCOUNTS MODULE LIVE SYNC) */}
-      {activeTab === 'gatepass' && (
-        <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #e2e8f0', padding: 20, boxShadow: '0 2px 10px rgba(0,0,0,0.03)', textAlign: 'center' }}>
-          <div style={{ fontSize: 36, marginBottom: 8 }}>🎫</div>
-          <h2 style={{ fontSize: 16, fontWeight: 800, color: '#1e293b' }}>Digital Security Gate Pass</h2>
-          <p style={{ fontSize: 12, color: '#64748b', marginTop: 2, marginBottom: 16 }}>
-            Official security exit verification pass connected live with the Accounts & Settlement Desk.
-          </p>
-
-          {effectiveGatePassIssued ? (
-            /* ACTIVE ISSUED GATE PASS CARD */
-            <div
-              style={{
-                maxWidth: 380,
-                margin: '0 auto',
-                background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 100%)',
-                color: '#fff',
-                borderRadius: 20,
-                padding: '24px 22px',
-                textAlign: 'left',
-                boxShadow: '0 12px 36px rgba(15, 23, 42, 0.35)',
-                border: '1px solid rgba(255, 255, 255, 0.1)',
-                position: 'relative',
-                overflow: 'hidden',
-              }}
-            >
-              {/* Security Hologram Strip */}
-              <div
-                style={{
-                  position: 'absolute',
-                  top: 0,
-                  left: 0,
-                  right: 0,
-                  height: 4,
-                  background: 'linear-gradient(90deg, #38bdf8 0%, #4ade80 50%, #facc15 100%)',
-                }}
-              />
-
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
-                <span style={{ fontSize: 11, color: '#38bdf8', fontWeight: 900, letterSpacing: '1px' }}>
-                  SECURITY CLEARANCE PASS
-                </span>
-                <span
-                  style={{
-                    fontSize: 11,
-                    background: '#16a34a',
-                    color: '#fff',
-                    padding: '3px 10px',
-                    borderRadius: 6,
-                    fontWeight: 900,
-                  }}
-                >
-                  🟢 READY FOR EXIT
-                </span>
-              </div>
-
-              <div style={{ fontSize: 24, fontWeight: 900, marginBottom: 4 }} className="font-mono text-emerald-400">
-                {effectiveGatePassNo}
-              </div>
-              <div style={{ fontSize: 12.5, color: '#94a3b8', marginBottom: 16 }}>
-                Vehicle: <strong style={{ color: '#fff', fontSize: 13.5 }}>{vehicle.reg_number}</strong> ({vehicle.model || 'Tata Motors'})
-              </div>
-
-              {/* QR Code / Security Token Bar */}
-              <div
-                style={{
-                  background: '#fff',
-                  borderRadius: 12,
-                  padding: '12px 14px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 12,
-                  marginBottom: 16,
-                }}
-              >
-                <div
-                  style={{
-                    background: '#0f172a',
-                    color: '#38bdf8',
-                    width: 48,
-                    height: 48,
-                    borderRadius: 8,
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    fontSize: 22,
-                    fontWeight: 900,
-                  }}
-                >
-                  QR
-                </div>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 10, color: '#64748b', fontWeight: 800, textTransform: 'uppercase' }}>
-                    Gate Security Auth Token
-                  </div>
-                  <div style={{ fontSize: 11, fontWeight: 700, color: '#0f172a', wordBreak: 'break-all' }} className="font-mono">
-                    {issuedGatePass?.qr_token || `GP_AUTH_${effectiveGatePassNo}_${vehicle.reg_number}_SECURE`}
-                  </div>
-                </div>
-              </div>
-
-              {/* Details table */}
-              <div style={{ borderTop: '1px solid #334155', paddingTop: 12, fontSize: 12, display: 'flex', flexDirection: 'column', gap: 7 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <span style={{ color: '#94a3b8' }}>Job Card:</span>
-                  <span style={{ fontWeight: 700 }} className="font-mono">{issuedGatePass?.job_card_no || vehicle.jc_number || 'JC-2026'}</span>
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <span style={{ color: '#94a3b8' }}>Invoice No:</span>
-                  <span style={{ fontWeight: 700 }} className="font-mono">{issuedGatePass?.invoice_no || 'INV-2026-FINAL'}</span>
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <span style={{ color: '#94a3b8' }}>Amount Paid:</span>
-                  <span style={{ fontWeight: 800, color: '#4ade80' }}>₹{(issuedGatePass?.amount_received || totalEstimatedValue).toLocaleString()} (Settled)</span>
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <span style={{ color: '#94a3b8' }}>Authorized By:</span>
-                  <span style={{ fontWeight: 700 }}>{issuedGatePass?.issued_by || 'Accounts & Billing Desk'}</span>
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <span style={{ color: '#94a3b8' }}>Issued At:</span>
-                  <span style={{ fontWeight: 600, color: '#cbd5e1' }}>{issuedGatePass?.issued_at || new Date().toLocaleString()}</span>
-                </div>
-              </div>
-
-              <div style={{ marginTop: 16 }}>
-                <button
-                  type="button"
-                  onClick={() => window.print()}
-                  style={{
-                    width: '100%',
-                    background: '#2563eb',
-                    color: '#fff',
-                    border: 'none',
-                    padding: '8px 12px',
-                    borderRadius: 10,
-                    fontSize: 12,
-                    fontWeight: 800,
-                    cursor: 'pointer',
-                  }}
-                >
-                  🖨️ Print / Save Gate Pass Receipt
-                </button>
-              </div>
-            </div>
-          ) : (
-            /* PENDING CLEARANCE STATE */
-            <div
-              style={{
-                maxWidth: 420,
-                margin: '0 auto',
-                background: '#f8fafc',
-                border: '1px solid #e2e8f0',
-                borderRadius: 16,
-                padding: 20,
-                textAlign: 'left',
-              }}
-            >
-              <div style={{ fontSize: 13.5, fontWeight: 800, color: '#1e293b', marginBottom: 12 }}>
-                ⏳ Gate Pass Status: Awaiting Accounts Clearance
-              </div>
-
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 16 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 12.5 }}>
-                  <span style={{ color: '#16a34a', fontWeight: 900 }}>✓</span>
-                  <span style={{ color: '#1e293b', fontWeight: 600 }}>1. Vehicle Reception Intake Completed</span>
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 12.5 }}>
-                  <span style={{ color: '#16a34a', fontWeight: 900 }}>✓</span>
-                  <span style={{ color: '#1e293b', fontWeight: 600 }}>2. Workshop Repair & Quality Check (Pass)</span>
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 12.5 }}>
-                  <span style={{ color: '#d97706', fontWeight: 900 }}>⏳</span>
-                  <span style={{ color: '#92400e', fontWeight: 600 }}>3. Accounts Desk Payment Settlement</span>
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 12.5 }}>
-                  <span style={{ color: '#94a3b8', fontWeight: 900 }}>○</span>
-                  <span style={{ color: '#64748b' }}>4. Security Gate Pass QR Release</span>
-                </div>
-              </div>
-
-              <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 10, padding: 12, fontSize: 12, color: '#1e40af', lineHeight: 1.45 }}>
-                💡 <strong>Note:</strong> Jaise hi Accounts Desk par aapka bill generate aur verify hoga, aapka Digital QR Gate Pass yahan live real-time me generate ho jayega.
-              </div>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* TAB 5: SERVICE FEEDBACK */}
-      {activeTab === 'feedback' && (
-        <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #e2e8f0', padding: 20, boxShadow: '0 2px 10px rgba(0,0,0,0.03)' }}>
-          <div style={{ marginBottom: 16 }}>
-            <h2 style={{ fontSize: 16, fontWeight: 800, color: '#1e293b' }}>⭐ Rate Your Service Experience</h2>
-            <p style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>
-              Share your feedback to help us continuously improve our service quality.
-            </p>
           </div>
-
-          {feedbackSuccess && (
-            <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', color: '#166534', padding: '12px 14px', borderRadius: 10, fontSize: 13, fontWeight: 700, marginBottom: 16 }}>
-              ✅ Thank you for your feedback! Your rating has been submitted to management.
-            </div>
-          )}
-
-          <form onSubmit={handleFeedbackSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-            <div>
-              <label style={{ fontSize: 12, fontWeight: 700, color: '#334155', display: 'block', marginBottom: 6 }}>
-                Rating
-              </label>
-              <div style={{ display: 'flex', gap: 8, fontSize: 28, cursor: 'pointer' }}>
-                {[1, 2, 3, 4, 5].map((star) => (
-                  <span
-                    key={star}
-                    onClick={() => setRating(star)}
-                    style={{ color: star <= rating ? '#f59e0b' : '#cbd5e1' }}
-                  >
-                    ★
-                  </span>
-                ))}
-              </div>
-            </div>
-
-            <div>
-              <label style={{ fontSize: 12, fontWeight: 700, color: '#334155', display: 'block', marginBottom: 4 }}>
-                Your Comments <span style={{ color: '#ef4444' }}>*</span>
-              </label>
-              <textarea
-                rows={3}
-                placeholder="How was your service experience with our advisor and workshop team?"
-                value={feedbackText}
-                onChange={(e) => setFeedbackText(e.target.value)}
-                required
-                style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1px solid #cbd5e1', fontSize: 13 }}
-              />
-            </div>
-
-            <button
-              type="submit"
-              disabled={feedbackSubmitting || !feedbackText.trim()}
-              style={{
-                background: '#16a34a',
-                color: '#fff',
-                border: 'none',
-                padding: '12px',
-                borderRadius: 10,
-                fontSize: 14,
-                fontWeight: 800,
-                cursor: 'pointer',
-              }}
-            >
-              {feedbackSubmitting ? 'Submitting Feedback…' : 'Submit Rating & Feedback →'}
-            </button>
-          </form>
         </div>
       )}
     </div>
