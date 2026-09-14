@@ -30,6 +30,7 @@
 - [ ] `account_name` prefers BUSY Party Name for the invoice (`IMBTAI2627007397` → `JAGDISH NARAYAN YADAV-SITAPURA RJ45CV5192`); unmatched invoices keep `OWNER-BRANCH VRN`; missing owner on fallback → blank account_name
 - [ ] Duplicate BUSY labour invoice numbers do not pick an arbitrary Party Name (Accounts fallback + toast)
 - [ ] Pending case with no receipts still exports one row with blank `voucher_no`
+- [ ] **Busy Export** (Mechanical): headers Invoice date, voucher_no, Account DR, Account CR, Amount DR, Amount CR, Reference no; cash DR `CASH AT SITAPURA`; UPI `PAYTM WALLET`; card `CREDIT CARD A/C`; Account CR for `IMBTAI2627007397` is `JAGDISH NARAYAN YADAV-SITAPURA RJ45CV5192`; split Cash+UPI is two rows; cheque/bank/other skipped; pending without receipts omitted; Export Excel unchanged
 
 ## Bodyshop
 

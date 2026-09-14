@@ -524,6 +524,115 @@ export function buildMechanicalAccountsExportRows(input: {
   return rows
 }
 
+export const BUSY_PAYMENT_ACCOUNT_DR = {
+  cash: 'CASH AT SITAPURA',
+  upi: 'PAYTM WALLET',
+  card: 'CREDIT CARD A/C',
+} as const
+
+export const BUSY_PAYMENT_EXPORT_HEADERS = [
+  'Invoice date',
+  'voucher_no',
+  'Account DR',
+  'Account CR',
+  'Amount DR',
+  'Amount CR',
+  'Reference no',
+] as const
+
+export type BusyPaymentAccountDr =
+  (typeof BUSY_PAYMENT_ACCOUNT_DR)[keyof typeof BUSY_PAYMENT_ACCOUNT_DR]
+
+export interface MechanicalBusyPaymentExportRow {
+  'Invoice date': string
+  voucher_no: string
+  'Account DR': BusyPaymentAccountDr
+  'Account CR': string
+  'Amount DR': number
+  'Amount CR': number
+  'Reference no': string
+}
+
+export interface MechanicalBusyPaymentExportResult {
+  rows: MechanicalBusyPaymentExportRow[]
+  skippedUnsupportedCount: number
+  missingVoucherCount: number
+}
+
+export function busyPaymentAccountDr(mode: unknown): BusyPaymentAccountDr | null {
+  const canonical = normalizeAccountsPaymentMode(typeof mode === 'string' ? mode : String(mode ?? ''))
+  if (canonical === 'cash' || canonical === 'upi' || canonical === 'card') {
+    return BUSY_PAYMENT_ACCOUNT_DR[canonical]
+  }
+  return null
+}
+
+export function mechanicalInvoiceDateYmd(raw: unknown): string {
+  const value = String(raw ?? '').trim()
+  if (!value) return ''
+  return value.slice(0, 10)
+}
+
+/**
+ * BUSY payment workbook: one row per cash/upi/card receipt.
+ * Pending cases without lines are omitted. cheque/bank/other are skipped, not mapped.
+ * voucher_no is persisted only — never generated here.
+ */
+export function buildMechanicalBusyPaymentExportRows(input: {
+  cases: AccountsMechanicalCase[]
+  lines: AccountsMechanicalPayment[]
+  paymentModeFilter?: MechanicalPaymentModeFilter
+  busyPartyNameByInvoice?: ReadonlyMap<string, string>
+}): MechanicalBusyPaymentExportResult {
+  const modeFilter = input.paymentModeFilter ?? 'all'
+  const wanted = modeFilter === 'all' ? null : normalizeAccountsPaymentMode(modeFilter)
+  const linesByCase = new Map<number, AccountsMechanicalPayment[]>()
+  for (const line of input.lines) {
+    const list = linesByCase.get(line.reception_entry_id) ?? []
+    list.push(line)
+    linesByCase.set(line.reception_entry_id, list)
+  }
+
+  const rows: MechanicalBusyPaymentExportRow[] = []
+  let skippedUnsupportedCount = 0
+  let missingVoucherCount = 0
+
+  for (const caseRow of input.cases) {
+    const caseLines = sortAccountsMechanicalPaymentLines(linesByCase.get(caseRow.reception_entry_id) ?? [])
+    for (const line of caseLines) {
+      const mode = normalizeAccountsPaymentMode(line.payment_mode)
+      const accountDr = busyPaymentAccountDr(mode)
+      if (!accountDr) {
+        skippedUnsupportedCount += 1
+        continue
+      }
+      if (wanted && mode !== wanted) continue
+
+      const voucherNo = String(line.voucher_no ?? '').trim()
+      if (!voucherNo) missingVoucherCount += 1
+
+      const amount = Number(line.amount)
+      rows.push({
+        'Invoice date': mechanicalInvoiceDateYmd(caseRow.invoice_date),
+        voucher_no: voucherNo,
+        'Account DR': accountDr,
+        'Account CR': resolveAccountsExportAccountName({
+          invoiceNumber: caseRow.invoice_number,
+          ownerName: caseRow.owner_name,
+          branch: caseRow.branch,
+          regNumber: caseRow.reg_number,
+          busyPartyNameByInvoice: input.busyPartyNameByInvoice,
+        }),
+        'Amount DR': amount,
+        'Amount CR': amount,
+        'Reference no': line.reference ?? '',
+      })
+    }
+  }
+
+  return { rows, skippedUnsupportedCount, missingVoucherCount }
+}
+
 export async function listAccountsMechanicalPaymentLines(): Promise<AccountsMechanicalPayment[]> {
   const pageSize = 1000
   const withVoucher =

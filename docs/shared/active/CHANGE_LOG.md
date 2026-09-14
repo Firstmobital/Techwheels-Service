@@ -4,6 +4,7 @@ Tracks documentation-sync updates for business logic, architecture, and access c
 
 ## 2026-09-14
 
+- Accounts Mechanical **Busy Export** writes a 7-column BUSY payment workbook (`accounts-mechanical-busy-payments.xlsx`) from cash/UPI/card receipt lines. Account DR is `CASH AT SITAPURA` / `PAYTM WALLET` / `CREDIT CARD A/C`; Account CR reuses BUSY Party Name lookup. Plan: `ACCOUNTS-001`.
 - Accounts Mechanical Excel `account_name` uses the exact BUSY Party Name from `psf_revenue_dms` labour (`resolvePartyName`) when the invoice exists; otherwise the existing owner/branch/VRN fallback. Plan: `ACCOUNTS-001`.
 - Accounts Mechanical receipt vouchers were fully recalculated from linked `accounts_mechanical_invoices.invoice_date >= 2026-09-02`. All previous RApp/JApp numbers were cleared and reassigned from `0001` in invoice-date order. Pre-2-Sep invoices and cheque/bank/other stay blank. Ledger: DBL-0059 (supersedes DBL-0058 numbering). Plan: `ACCOUNTS-001`.
 - Accounts Mechanical receipt vouchers are eligible from linked `accounts_mechanical_invoices.invoice_date >= 2026-09-02` (BUSY accounting start). `payment_received_date`, `posted_at`, and Mark Done date do not control the series. Ledger: DBL-0058, DBL-0059. Plan: `ACCOUNTS-001`.

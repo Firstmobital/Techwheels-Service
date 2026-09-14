@@ -5,6 +5,8 @@ import {
   ACCOUNTS_PAYMENT_MODES,
   addAccountsMechanicalPayment,
   buildMechanicalAccountsExportRows,
+  buildMechanicalBusyPaymentExportRows,
+  BUSY_PAYMENT_EXPORT_HEADERS,
   deleteAccountsMechanicalInvoiceFile,
   filterMechanicalCasesByPaymentMode,
   isAccountsStatusPending,
@@ -755,6 +757,57 @@ export default function AccountsPage() {
     XLSX.writeFile(wb, `accounts-bodyshop.xlsx`)
   }
 
+  async function exportBusyPayments() {
+    if (section !== 'mechanical' || exporting) return
+    setExporting(true)
+    try {
+      const labour = await fetchBusyLabourRowsByInvoiceNumbers(
+        mechanicalExportInvoiceNumbers(searchedMech),
+      )
+      const { partyNameByInvoice, duplicateInvoiceKeys } = buildBusyPartyNameByInvoice(labour)
+      const result = buildMechanicalBusyPaymentExportRows({
+        cases: searchedMech,
+        lines: mechPayLines,
+        paymentModeFilter: mechPaymentModeFilter,
+        busyPartyNameByInvoice: partyNameByInvoice,
+      })
+      if (result.rows.length === 0) {
+        const skipped = result.skippedUnsupportedCount > 0
+          ? ` Skipped ${result.skippedUnsupportedCount} cheque/bank/other receipt(s) with no BUSY Account DR mapping.`
+          : ''
+        flash(`No cash, UPI, or card receipts in the current view.${skipped}`, false)
+        return
+      }
+      const sheet = XLSX.utils.json_to_sheet(result.rows, {
+        header: [...BUSY_PAYMENT_EXPORT_HEADERS],
+      })
+      const wb = XLSX.utils.book_new()
+      XLSX.utils.book_append_sheet(wb, sheet, 'Payments')
+      XLSX.writeFile(wb, 'accounts-mechanical-busy-payments.xlsx')
+      const notices: string[] = []
+      if (duplicateInvoiceKeys.length > 0) {
+        notices.push(
+          `Duplicate BUSY labour invoice ${duplicateInvoiceKeys.join(', ')}; Accounts fallback used for Account CR`,
+        )
+      }
+      if (result.skippedUnsupportedCount > 0) {
+        notices.push(
+          `Skipped ${result.skippedUnsupportedCount} cheque/bank/other receipt(s); no BUSY Account DR mapping`,
+        )
+      }
+      if (result.missingVoucherCount > 0) {
+        notices.push(
+          `${result.missingVoucherCount} cash/UPI/card receipt(s) have no persisted voucher_no; left blank`,
+        )
+      }
+      if (notices.length > 0) flash(notices.join(' · '), false)
+    } catch (e) {
+      flash(e instanceof Error ? e.message : 'BUSY payment export failed', false)
+    } finally {
+      setExporting(false)
+    }
+  }
+
   const visibleCount = section === 'mechanical' ? searchedMech.length : searchedBs.length
 
   return (
@@ -765,6 +818,16 @@ export default function AccountsPage() {
           <button type="button" className="btn" onClick={() => void load()} disabled={loading}>
             {loading ? 'Loading…' : 'Refresh'}
           </button>
+          {section === 'mechanical' && (
+            <button
+              type="button"
+              className="btn"
+              onClick={() => void exportBusyPayments()}
+              disabled={visibleCount === 0 || exporting}
+            >
+              {exporting ? 'Exporting…' : 'Busy Export'}
+            </button>
+          )}
           <button type="button" className="btn btn--primary" onClick={() => void exportExcel()} disabled={visibleCount === 0 || exporting}>
             {exporting ? 'Exporting…' : 'Export Excel'}
           </button>

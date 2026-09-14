@@ -140,6 +140,7 @@ Pattern: `src/pages/BodyshopRecoveryPage.tsx` (KPIs, search, table, Excel, on-pa
 - Search: JC / reg / invoice
 - Period chips on Mark Done date (mechanical) and invoice date (bodyshop)
 - Excel export per section. Mechanical export is receipt-line grain when payment lines exist (`voucher_no`, `account_name`, `Reference no`); Cash/UPI/Credit Card cards filter receipt lines, not header totals. Vouchers persist on `accounts_mechanical_payment_lines` (DBL-0057/0058). `account_name` prefers the exact BUSY Party Name for the invoice (`psf_revenue_dms` → `resolvePartyName`); unmatched invoices keep the Accounts owner/branch/VRN fallback.
+- **Busy Export** (Mechanical only) downloads `accounts-mechanical-busy-payments.xlsx`: Invoice date, voucher_no, Account DR, Account CR, Amount DR, Amount CR, Reference no. Cash/UPI/card receipt lines only. Account DR: `CASH AT SITAPURA` / `PAYTM WALLET` / `CREDIT CARD A/C`. Account CR is BUSY Party Name (same lookup as Excel `account_name`). cheque/bank/other are skipped with a warning. Pending cases without receipts are omitted.
 
 **Mechanical desk**
 

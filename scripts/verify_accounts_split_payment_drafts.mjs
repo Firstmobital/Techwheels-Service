@@ -900,3 +900,300 @@ console.log('verify_accounts_split_payment_drafts: voucher export A–L checks p
   console.log('verify_accounts_split_payment_drafts: BUSY Party Name export checks passed')
 }
 
+const BUSY_PAYMENT_ACCOUNT_DR = {
+  cash: 'CASH AT SITAPURA',
+  upi: 'PAYTM WALLET',
+  card: 'CREDIT CARD A/C',
+}
+
+const BUSY_PAYMENT_EXPORT_HEADERS = [
+  'Invoice date',
+  'voucher_no',
+  'Account DR',
+  'Account CR',
+  'Amount DR',
+  'Amount CR',
+  'Reference no',
+]
+
+function busyPaymentAccountDr(mode) {
+  const canonical = normalizeAccountsPaymentMode(mode)
+  if (canonical === 'cash' || canonical === 'upi' || canonical === 'card') {
+    return BUSY_PAYMENT_ACCOUNT_DR[canonical]
+  }
+  return null
+}
+
+function mechanicalInvoiceDateYmd(raw) {
+  const value = String(raw ?? '').trim()
+  if (!value) return ''
+  return value.slice(0, 10)
+}
+
+function buildMechanicalBusyPaymentExportRows({
+  cases,
+  lines,
+  paymentModeFilter = 'all',
+  busyPartyNameByInvoice,
+}) {
+  const wanted = paymentModeFilter === 'all' ? null : normalizeAccountsPaymentMode(paymentModeFilter)
+  const linesByCase = new Map()
+  for (const line of lines) {
+    const list = linesByCase.get(line.reception_entry_id) ?? []
+    list.push(line)
+    linesByCase.set(line.reception_entry_id, list)
+  }
+  const rows = []
+  let skippedUnsupportedCount = 0
+  let missingVoucherCount = 0
+  for (const caseRow of cases) {
+    const caseLines = sortAccountsMechanicalPaymentLines(linesByCase.get(caseRow.reception_entry_id) ?? [])
+    for (const line of caseLines) {
+      const mode = normalizeAccountsPaymentMode(line.payment_mode)
+      const accountDr = busyPaymentAccountDr(mode)
+      if (!accountDr) {
+        skippedUnsupportedCount += 1
+        continue
+      }
+      if (wanted && mode !== wanted) continue
+      const voucherNo = String(line.voucher_no ?? '').trim()
+      if (!voucherNo) missingVoucherCount += 1
+      const key = busyInvoiceLookupKey(caseRow.invoice_number)
+      const busyName = key && busyPartyNameByInvoice ? busyPartyNameByInvoice.get(key) : null
+      const amount = Number(line.amount)
+      rows.push({
+        'Invoice date': mechanicalInvoiceDateYmd(caseRow.invoice_date),
+        voucher_no: voucherNo,
+        'Account DR': accountDr,
+        'Account CR': busyName || buildAccountsExportAccountName({
+          ownerName: caseRow.owner_name,
+          branch: caseRow.branch,
+          regNumber: caseRow.reg_number,
+        }),
+        'Amount DR': amount,
+        'Amount CR': amount,
+        'Reference no': line.reference ?? '',
+      })
+    }
+  }
+  return { rows, skippedUnsupportedCount, missingVoucherCount }
+}
+
+{
+  assert(busyPaymentAccountDr('cash') === 'CASH AT SITAPURA', 'A: cash Account DR')
+  assert(busyPaymentAccountDr('upi') === 'PAYTM WALLET', 'B: upi Account DR')
+  assert(busyPaymentAccountDr('card') === 'CREDIT CARD A/C', 'C: card Account DR')
+  assert(busyPaymentAccountDr('cheque') == null, 'L: cheque has no Account DR')
+  assert(busyPaymentAccountDr('bank') == null, 'L: bank has no Account DR')
+  assert(busyPaymentAccountDr('other') == null, 'L: other has no Account DR')
+
+  function labour(overrides = {}) {
+    return {
+      invoice_number: 'IMBTAI2627007397',
+      account: null,
+      first_name: 'JAGDISH NARAYAN',
+      last_name: 'YADAV',
+      job_card_number: 'JC-MBTPLT-JP1-2627-007048',
+      vehicle_registration_number: 'RJ45CV5192',
+      sr_type: 'Paid Service',
+      sr_assigned_to: 'VK1_3000840',
+      ...overrides,
+    }
+  }
+
+  const provenCase = {
+    reception_entry_id: 8563,
+    jc_number: 'JC-MBTPLT-JP1-2627-007048',
+    reg_number: 'RJ45CV5192',
+    owner_name: 'NARAYAN YADAV YADAV',
+    branch: 'Sitapura',
+    invoice_number: 'IMBTAI2627007397',
+    invoice_date: '2026-09-11',
+    billed_amount: 35103.33,
+    amount_received: 35103.33,
+    remaining_amount: 0,
+    payment_status: 'received',
+  }
+  const splitCase = {
+    reception_entry_id: 11,
+    jc_number: 'JC-SPLIT',
+    reg_number: 'RJ14AB1234',
+    owner_name: 'RAMESH KUMAR',
+    branch: 'Sitapura',
+    invoice_number: 'EMBTAI-1',
+    invoice_date: '2026-09-11',
+    billed_amount: 10000,
+    amount_received: 10000,
+    remaining_amount: 0,
+    payment_status: 'received',
+  }
+  const pendingCase = {
+    reception_entry_id: 10,
+    jc_number: 'JC-PEND',
+    reg_number: 'RJ14PEND',
+    owner_name: 'Pending Owner',
+    branch: 'Sitapura',
+    invoice_number: 'INV-P',
+    invoice_date: '2026-09-11',
+    billed_amount: 5000,
+    amount_received: null,
+    remaining_amount: 5000,
+    payment_status: 'pending',
+  }
+  const chequeCase = {
+    reception_entry_id: 13,
+    jc_number: 'JC-CHQ',
+    reg_number: 'RJ14CHQ',
+    owner_name: 'Cheque Owner',
+    branch: 'Sitapura',
+    invoice_number: 'INV-CHQ',
+    invoice_date: '2026-09-11',
+    billed_amount: 800,
+    amount_received: 800,
+    remaining_amount: 0,
+    payment_status: 'received',
+  }
+
+  const provenLookup = buildBusyPartyNameByInvoice([labour()])
+  const provenLines = [
+    {
+      id: 41,
+      reception_entry_id: 8563,
+      amount: 35000,
+      payment_mode: 'cash',
+      voucher_no: 'RApp/26-27/0001',
+      reference: null,
+      payment_received_date: '2026-09-11',
+      posted_at: '2026-09-11T10:00:00+05:30',
+    },
+    {
+      id: 42,
+      reception_entry_id: 8563,
+      amount: 103.33,
+      payment_mode: 'other',
+      voucher_no: null,
+      reference: 'DISCOUNT',
+      payment_received_date: '2026-09-12',
+      posted_at: '2026-09-12T10:00:00+05:30',
+    },
+  ]
+  const splitLines = [
+    {
+      id: 1,
+      reception_entry_id: 11,
+      amount: 4000,
+      payment_mode: 'cash',
+      voucher_no: 'RApp/26-27/0001',
+      reference: 'UPI123',
+      payment_received_date: '2026-09-11',
+      posted_at: '2026-09-11T10:00:00+05:30',
+    },
+    {
+      id: 2,
+      reception_entry_id: 11,
+      amount: 6000,
+      payment_mode: 'upi',
+      voucher_no: 'JApp/26-27/0001',
+      reference: 'UTR-6000',
+      payment_received_date: '2026-09-11',
+      posted_at: '2026-09-11T10:01:00+05:30',
+    },
+    {
+      id: 3,
+      reception_entry_id: 11,
+      amount: 500,
+      payment_mode: 'card',
+      voucher_no: 'JApp/26-27/0002',
+      reference: '',
+      payment_received_date: '2026-09-11',
+      posted_at: '2026-09-11T10:02:00+05:30',
+    },
+  ]
+  const chequeLine = {
+    id: 4,
+    reception_entry_id: 13,
+    amount: 800,
+    payment_mode: 'cheque',
+    voucher_no: null,
+    reference: 'CHQ',
+    payment_received_date: '2026-09-11',
+    posted_at: '2026-09-11T11:00:00+05:30',
+  }
+
+  const proven = buildMechanicalBusyPaymentExportRows({
+    cases: [provenCase],
+    lines: provenLines,
+    busyPartyNameByInvoice: provenLookup.partyNameByInvoice,
+  })
+  assert(proven.rows.length === 1, `A: cash+other → one BUSY row, got ${proven.rows.length}`)
+  assert(proven.skippedUnsupportedCount === 1, 'L: other receipt skipped')
+  const cashRow = proven.rows[0]
+  assert(cashRow['Invoice date'] === '2026-09-11', `6: invoice_date YYYY-MM-DD, got ${cashRow['Invoice date']}`)
+  assert(cashRow.voucher_no === 'RApp/26-27/0001', `E: persisted voucher, got ${cashRow.voucher_no}`)
+  assert(cashRow['Account DR'] === 'CASH AT SITAPURA', 'A: Account DR cash')
+  assert(cashRow['Account CR'] === 'JAGDISH NARAYAN YADAV-SITAPURA RJ45CV5192', `D: Account CR BUSY name, got ${cashRow['Account CR']}`)
+  assert(cashRow['Amount DR'] === 35000 && cashRow['Amount CR'] === 35000, 'A: DR equals CR equals receipt amount')
+  assert(cashRow['Reference no'] === '', 'G: null reference exports blank')
+  assert(Object.keys(cashRow).join('|') === BUSY_PAYMENT_EXPORT_HEADERS.join('|'), 'headers/order exact')
+
+  const split = buildMechanicalBusyPaymentExportRows({
+    cases: [pendingCase, splitCase],
+    lines: splitLines,
+  })
+  assert(split.rows.length === 3, `H: pending omitted; split emits 3 receipt rows, got ${split.rows.length}`)
+  assert(split.rows[0]['Account DR'] === 'CASH AT SITAPURA' && split.rows[0]['Amount DR'] === 4000 && split.rows[0]['Amount CR'] === 4000, 'H: cash 4000')
+  assert(split.rows[0]['Reference no'] === 'UPI123', 'F: cash reference')
+  assert(split.rows[1]['Account DR'] === 'PAYTM WALLET' && split.rows[1]['Amount DR'] === 6000, 'H/B: upi 6000')
+  assert(split.rows[1]['Reference no'] === 'UTR-6000', 'F: upi reference')
+  assert(split.rows[2]['Account DR'] === 'CREDIT CARD A/C' && split.rows[2]['Amount DR'] === 500, 'C: card 500')
+  assert(split.rows[2]['Reference no'] === '', 'G: empty reference blank')
+  assert(split.rows.every((r) => r['Amount DR'] === r['Amount CR']), 'Amount DR == Amount CR')
+  assert(!split.rows.some((r) => r['Amount DR'] === 10000), 'H: must not use header 10000')
+
+  const cashOnly = buildMechanicalBusyPaymentExportRows({
+    cases: [splitCase],
+    lines: splitLines,
+    paymentModeFilter: 'cash',
+  })
+  assert(cashOnly.rows.length === 1 && cashOnly.rows[0]['Account DR'] === 'CASH AT SITAPURA', 'I: cash filter one row')
+  const upiOnly = buildMechanicalBusyPaymentExportRows({
+    cases: [splitCase],
+    lines: splitLines,
+    paymentModeFilter: 'upi',
+  })
+  assert(upiOnly.rows.length === 1 && upiOnly.rows[0]['Account DR'] === 'PAYTM WALLET', 'J: upi filter one row')
+  const cardOnly = buildMechanicalBusyPaymentExportRows({
+    cases: [splitCase],
+    lines: splitLines,
+    paymentModeFilter: 'card',
+  })
+  assert(cardOnly.rows.length === 1 && cardOnly.rows[0]['Account DR'] === 'CREDIT CARD A/C', 'K: card filter one row')
+
+  const chequeOnly = buildMechanicalBusyPaymentExportRows({
+    cases: [chequeCase],
+    lines: [chequeLine],
+  })
+  assert(chequeOnly.rows.length === 0 && chequeOnly.skippedUnsupportedCount === 1, 'L: cheque excluded, no fabricated DR')
+
+  const missingVoucher = buildMechanicalBusyPaymentExportRows({
+    cases: [provenCase],
+    lines: [{ ...provenLines[0], voucher_no: null }],
+    busyPartyNameByInvoice: provenLookup.partyNameByInvoice,
+  })
+  assert(missingVoucher.rows[0].voucher_no === '', 'E: missing voucher stays blank, not manufactured')
+  assert(missingVoucher.missingVoucherCount === 1, 'E: missing voucher is reported')
+
+  const excelUnchanged = buildMechanicalAccountsExportRows({
+    cases: [provenCase],
+    lines: provenLines,
+    formatWhen: () => '',
+    busyPartyNameByInvoice: provenLookup.partyNameByInvoice,
+  })
+  assert(excelUnchanged.length === 2, 'regression: Export Excel still includes other-mode receipt')
+  assert(excelUnchanged[0].account_name === 'JAGDISH NARAYAN YADAV-SITAPURA RJ45CV5192', 'regression: Excel account_name still BUSY')
+  assert(excelUnchanged[0].voucher_no === 'RApp/26-27/0001', 'regression: Excel voucher unchanged')
+
+  console.log('verify_accounts_split_payment_drafts: BUSY payment export checks passed')
+}
+
+
