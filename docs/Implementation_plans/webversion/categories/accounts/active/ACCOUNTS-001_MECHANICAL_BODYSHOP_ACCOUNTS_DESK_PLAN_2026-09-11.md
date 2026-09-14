@@ -8,7 +8,7 @@
 **Status:** Active (web implemented; DBL-0055 Accounts DO post pending apply)  
 **Platform:** webversion  
 **Category:** accounts  
-**Ledger:** DBL-0045/0046/0051/0052/0053/0054/0056/0057/0058 APPLIED. DBL-0055 PROPOSED (Accounts may post insurer/DO lines). Mechanical voucher eligibility is `invoice_date >= 2026-09-02` (DBL-0058). Do not reuse DBL-0043 (`busy`) or DBL-0044 (`busy_parts`).  
+**Ledger:** DBL-0045/0046/0051/0052/0053/0054/0056/0057/0058/0059 APPLIED. DBL-0055 PROPOSED (Accounts may post insurer/DO lines). Mechanical vouchers recalculated from `invoice_date >= 2026-09-02`. Do not reuse DBL-0043 (`busy`) or DBL-0044 (`busy_parts`).  
 **Route:** `/accounts`  
 **Module:** `accounts`  
 **Depends on:** BODYSHOP-SETTLEMENT-001 (`bodyshop_settlements`, Stage 18 lines); Service Advisor Mark Done (`invoice_done_at`)  
@@ -215,6 +215,7 @@ Pattern: `src/pages/BodyshopRecoveryPage.tsx` (KPIs, search, table, Excel, on-pa
 ✅ 3.6 | Unified Bodyshop receipts | Eng | 2026-09-12 | 2026-09-12 | DBL-0055 + accounts_receipt
 ✅ 3.7 | Mechanical voucher Excel | Eng | 2026-09-14 | 2026-09-14 | DBL-0057 APPLIED; receipt-grain export
 ✅ 3.8 | Voucher eligibility invoice_date | Eng | 2026-09-14 | 2026-09-14 | DBL-0058 APPLIED; cutoff 2026-09-02
+✅ 3.9 | Recalculate vouchers from 2-Sep | Eng | 2026-09-14 | 2026-09-14 | DBL-0059 APPLIED; RApp 22 / JApp 78
 ⏳ 3.5 | Capture Fetch from DMS | Eng | 2026-09-11 | 2026-09-11 | DBL-0048 applied; web button pending deploy
 ```
 
@@ -294,7 +295,7 @@ Pattern: `src/pages/BodyshopRecoveryPage.tsx` (KPIs, search, table, Excel, on-pa
 - BUSY accounting started 2-Sep-2026. Accounts RApp/JApp follow `accounts_mechanical_invoices.invoice_date >= 2026-09-02`.
 - Do not use payment received date, posted_at, or Mark Done date as the voucher cutoff.
 - Existing persisted voucher numbers stay. Newly eligible NULL cash/upi/card lines take the next sequence (historical numbering vs earliest 2-Sep receipt is expected if DBL-0057 already issued 11-Sep numbers).
-- Ledger: DBL-0058.
+- Ledger: DBL-0058. Superseded by DBL-0059 full recalculation.
 
 ### 2026-09-12 - Mechanical payment received date
 

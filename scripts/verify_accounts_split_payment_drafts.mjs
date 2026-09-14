@@ -423,14 +423,24 @@ function createVoucherAllocator() {
 }
 
 {
-  const preserve = createVoucherAllocator()
-  preserve.next('cash', '2026-09-11')
-  const existing = { id: 9, payment_mode: 'cash', invoice_date: '2026-09-08', voucher_no: 'RApp/26-27/0001' }
-  const newlyEligible = { id: 10, payment_mode: 'cash', invoice_date: '2026-09-02', voucher_no: null }
-  assert(preserve.backfill(existing) === 'RApp/26-27/0001', '7: already assigned voucher stays')
-  const assignedNew = preserve.backfill(newlyEligible)
-  assert(assignedNew === 'RApp/26-27/0002', `7: newly eligible 02-Sep takes next safe number, got ${assignedNew}`)
-  assert(assignedNew !== existing.voucher_no, '7: does not steal existing number')
+  const reset = createVoucherAllocator()
+  const rows = [
+    { id: 9, payment_mode: 'cash', invoice_date: '2026-09-08', voucher_no: 'RApp/26-27/0001' },
+    { id: 10, payment_mode: 'cash', invoice_date: '2026-09-02', voucher_no: 'RApp/26-27/0002' },
+    { id: 11, payment_mode: 'cash', invoice_date: '2026-09-01', voucher_no: 'RApp/26-27/0006' },
+  ]
+  const ordered = [...rows].sort((a, b) => {
+    if (a.invoice_date < b.invoice_date) return -1
+    if (a.invoice_date > b.invoice_date) return 1
+    return a.id - b.id
+  })
+  const assigned = {}
+  for (const line of ordered) {
+    assigned[line.id] = reset.next(line.payment_mode, line.invoice_date)
+  }
+  assert(assigned[11] == null, '7: pre-2-Sep cash is cleared and stays blank')
+  assert(assigned[10] === 'RApp/26-27/0001', `7: earliest 02-Sep cash becomes RApp/0001, got ${assigned[10]}`)
+  assert(assigned[9] === 'RApp/26-27/0002', `7: later 08-Sep cash becomes RApp/0002, got ${assigned[9]}`)
 }
 
 {
