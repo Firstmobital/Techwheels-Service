@@ -9,7 +9,7 @@ export type AccountsPaymentStatus = 'pending' | 'partial' | 'received' | 'not_re
 export type AccountsPaymentMode = 'cash' | 'upi' | 'card' | 'cheque' | 'bank' | 'other'
 export type MechanicalPaymentModeFilter = 'all' | 'cash' | 'upi' | 'card'
 
-/** Linked mechanical invoice_date cutoff. payment_received_date / posted_at / invoice_done_at do not control voucher eligibility. */
+/** Effective invoice-date cutoff (Accounts invoice_date, else unique DMS labour invoice_date). payment_received_date / posted_at / invoice_done_at do not control voucher eligibility. */
 export const ACCOUNTS_VOUCHER_CUTOFF_DATE = '2026-09-02'
 export const ACCOUNTS_VOUCHER_FY = '26-27'
 

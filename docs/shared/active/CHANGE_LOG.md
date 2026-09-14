@@ -4,6 +4,7 @@ Tracks documentation-sync updates for business logic, architecture, and access c
 
 ## 2026-09-14
 
+- Accounts Mechanical receipt vouchers stay eligible from invoice date `>= 2026-09-02`, with Accounts `invoice_date` first and unique DMS labour `invoice_date` for the JC as fallback when Accounts date is missing. Existing RApp/JApp numbers are not renumbered. Ledger: DBL-0060. Plan: `ACCOUNTS-001`.
 - Accounts Mechanical **Busy Export** Invoice date prefers `payment_received_date`, then Accounts `invoice_date`, then unique DMS labour `invoice_date`. It does not use `posted_at` or Mark Done. Rows with no date are skipped with a warning. Plan: `ACCOUNTS-001`.
 - Accounts Mechanical **Busy Export** writes a 7-column BUSY payment workbook (`accounts-mechanical-busy-payments.xlsx`) from cash/UPI/card receipt lines. Account DR is `CASH AT SITAPURA` / `PAYTM WALLET` / `CREDIT CARD A/C`; Account CR reuses BUSY Party Name lookup. Plan: `ACCOUNTS-001`.
 - Accounts Mechanical Excel `account_name` uses the exact BUSY Party Name from `psf_revenue_dms` labour (`resolvePartyName`) when the invoice exists; otherwise the existing owner/branch/VRN fallback. Plan: `ACCOUNTS-001`.

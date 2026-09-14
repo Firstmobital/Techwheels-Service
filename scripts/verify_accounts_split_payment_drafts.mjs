@@ -419,6 +419,13 @@ function createVoucherAllocator() {
   }
 }
 
+function mechanicalEffectiveInvoiceDate({ accountsInvoiceDate, dmsInvoiceDate }) {
+  const accounts = String(accountsInvoiceDate ?? '').trim().slice(0, 10)
+  if (accounts) return accounts
+  const dms = String(dmsInvoiceDate ?? '').trim().slice(0, 10)
+  return dms || null
+}
+
 {
   const alloc = createVoucherAllocator()
   assert(alloc.next('cash', '2026-09-01') == null, '1: 01-Sep cash has no voucher')
@@ -436,6 +443,35 @@ function createVoucherAllocator() {
   assert(alloc.next('cheque', '2026-09-02') == null, 'I: cheque has no voucher')
   assert(alloc.next('bank', '2026-09-08') == null, 'I: bank has no voucher')
   assert(alloc.next('other', '2026-09-11') == null, 'I: other has no voucher')
+}
+
+{
+  assert(mechanicalEffectiveInvoiceDate({ accountsInvoiceDate: '2026-09-11', dmsInvoiceDate: '2026-09-13' }) === '2026-09-11', 'A: Accounts date wins')
+  assert(mechanicalEffectiveInvoiceDate({ accountsInvoiceDate: null, dmsInvoiceDate: '2026-09-13' }) === '2026-09-13', 'B: DMS fallback when Accounts null')
+  assert(mechanicalEffectiveInvoiceDate({ accountsInvoiceDate: null, dmsInvoiceDate: '2026-09-01' }) === '2026-09-01', 'C: DMS pre-cutoff date is returned; allocator still rejects')
+  assert(mechanicalEffectiveInvoiceDate({ accountsInvoiceDate: null, dmsInvoiceDate: null }) == null, 'D: both missing is unresolved')
+  const alloc = createVoucherAllocator()
+  assert(alloc.next('upi', mechanicalEffectiveInvoiceDate({ accountsInvoiceDate: '2026-09-11', dmsInvoiceDate: '2026-09-13' })) === 'JApp/26-27/0001', 'A: Accounts >= cutoff eligible')
+  assert(alloc.next('upi', mechanicalEffectiveInvoiceDate({ accountsInvoiceDate: null, dmsInvoiceDate: '2026-09-13' })) === 'JApp/26-27/0002', 'B: DMS 13-Sep eligible')
+  assert(alloc.next('upi', mechanicalEffectiveInvoiceDate({ accountsInvoiceDate: null, dmsInvoiceDate: '2026-09-01' })) == null, 'C: DMS before 2-Sep not eligible')
+  assert(alloc.next('upi', mechanicalEffectiveInvoiceDate({ accountsInvoiceDate: null, dmsInvoiceDate: null })) == null, 'D: unresolved not eligible')
+}
+
+{
+  const existing = { id: 172, payment_mode: 'upi', voucher_no: 'JApp/26-27/0091' }
+  const missing = [
+    { id: 84, payment_mode: 'upi', invoice_date: mechanicalEffectiveInvoiceDate({ accountsInvoiceDate: null, dmsInvoiceDate: '2026-09-13' }) },
+    { id: 103, payment_mode: 'card', invoice_date: mechanicalEffectiveInvoiceDate({ accountsInvoiceDate: null, dmsInvoiceDate: '2026-09-13' }) },
+  ]
+  let japp = 91
+  const assigned = { 172: existing.voucher_no }
+  for (const line of missing) {
+    japp += 1
+    assigned[line.id] = `JApp/26-27/${String(japp).padStart(4, '0')}`
+  }
+  assert(assigned[172] === 'JApp/26-27/0091', 'E/F: existing 0091 unchanged')
+  assert(assigned[84] === 'JApp/26-27/0092', `G: first new UPI continues 0092, got ${assigned[84]}`)
+  assert(assigned[103] === 'JApp/26-27/0093', `G: new card continues 0093, got ${assigned[103]}`)
 }
 
 {
