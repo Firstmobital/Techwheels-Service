@@ -1,10 +1,17 @@
 import { AUTODOC_BUCKET } from '../autodocStorage'
+import { busyInvoiceLookupKey, normalizeInvoiceNumber } from '../busy/eligibility'
+import { normalizePersonName } from '../busy/partyName'
 import { supabase } from '../supabase'
 import type { OverallStatus, RepairCard } from './bodyshopRepair'
 import { settlementRpcError } from './bodyshopSettlement'
 
 export type AccountsPaymentStatus = 'pending' | 'partial' | 'received' | 'not_received'
 export type AccountsPaymentMode = 'cash' | 'upi' | 'card' | 'cheque' | 'bank' | 'other'
+export type MechanicalPaymentModeFilter = 'all' | 'cash' | 'upi' | 'card'
+
+/** Linked mechanical invoice_date cutoff. payment_received_date / posted_at / invoice_done_at do not control voucher eligibility. */
+export const ACCOUNTS_VOUCHER_CUTOFF_DATE = '2026-09-02'
+export const ACCOUNTS_VOUCHER_FY = '26-27'
 
 export const ACCOUNTS_PAYMENT_MODES: { value: AccountsPaymentMode; label: string }[] = [
   { value: 'cash', label: 'Cash' },
@@ -56,6 +63,7 @@ export interface AccountsMechanicalPayment {
   posted_by: string | null
   posted_at: string
   payment_received_date: string | null
+  voucher_no: string | null
 }
 
 export interface AccountsBodyshopCase {
@@ -309,16 +317,235 @@ export function sumAccountsPaymentModeTotals(
   return { cash, upi, card }
 }
 
+type AccountsPaymentModeLine = Pick<AccountsMechanicalPayment, 'reception_entry_id' | 'amount' | 'payment_mode'>
+
+/** Cases that have at least one receipt line in the given canonical payment mode. Split receipts match every mode they contain. */
+export function receptionIdsWithAccountsPaymentMode(
+  lines: Array<AccountsPaymentModeLine>,
+  mode: AccountsPaymentMode,
+): Set<number> {
+  const wanted = normalizeAccountsPaymentMode(mode)
+  const ids = new Set<number>()
+  if (!wanted) return ids
+  for (const line of lines) {
+    if (normalizeAccountsPaymentMode(line.payment_mode) !== wanted) continue
+    const amount = Number(line.amount ?? 0)
+    if (!Number.isFinite(amount) || amount === 0) continue
+    ids.add(line.reception_entry_id)
+  }
+  return ids
+}
+
+export function filterMechanicalCasesByPaymentMode<T extends { reception_entry_id: number }>(
+  rows: T[],
+  lines: Array<AccountsPaymentModeLine>,
+  mode: AccountsPaymentMode,
+): T[] {
+  const ids = receptionIdsWithAccountsPaymentMode(lines, mode)
+  return rows.filter((row) => ids.has(row.reception_entry_id))
+}
+
+/**
+ * BUSY Normal visual convention using Accounts sources:
+ * `<owner_name>-<BRANCH_UPPER> <reg_number>`
+ * Hyphen after name, space before VRN. Does not use PDI/Bodyshop special cases
+ * or psf_revenue_dms first/last name.
+ * Missing owner, branch, or VRN → '' (do not invent a customer name).
+ */
+export function buildAccountsExportAccountName(input: {
+  ownerName: unknown
+  branch: unknown
+  regNumber: unknown
+}): string {
+  const name = normalizePersonName(input.ownerName)
+  const branch = normalizePersonName(input.branch).toUpperCase()
+  const vrn = normalizePersonName(input.regNumber)
+  if (!name || !branch || !vrn) return ''
+  return `${name}-${branch} ${vrn}`
+}
+
+/** Distinct trimmed invoice numbers from Mechanical export cases. One list for bulk BUSY labour fetch. */
+export function mechanicalExportInvoiceNumbers(cases: Array<{ invoice_number?: string | null }>): string[] {
+  const seen = new Set<string>()
+  const out: string[] = []
+  for (const row of cases) {
+    const trimmed = normalizeInvoiceNumber(row.invoice_number)
+    if (!trimmed) continue
+    const key = busyInvoiceLookupKey(trimmed)
+    if (seen.has(key)) continue
+    seen.add(key)
+    out.push(trimmed)
+  }
+  return out
+}
+
+/**
+ * BUSY Party Name for the invoice when the labour map has a usable value.
+ * Otherwise the existing Accounts fallback. Does not re-format a BUSY name.
+ */
+export function resolveAccountsExportAccountName(input: {
+  invoiceNumber: unknown
+  ownerName: unknown
+  branch: unknown
+  regNumber: unknown
+  busyPartyNameByInvoice?: ReadonlyMap<string, string>
+}): string {
+  const key = busyInvoiceLookupKey(input.invoiceNumber)
+  if (key && input.busyPartyNameByInvoice) {
+    const busyName = input.busyPartyNameByInvoice.get(key)
+    if (busyName) return busyName
+  }
+  return buildAccountsExportAccountName({
+    ownerName: input.ownerName,
+    branch: input.branch,
+    regNumber: input.regNumber,
+  })
+}
+
+export function sortAccountsMechanicalPaymentLines<T extends {
+  id: number
+  payment_received_date?: string | null
+  posted_at?: string | null
+}>(lines: T[]): T[] {
+  return [...lines].sort((a, b) => {
+    const da = String(a.payment_received_date ?? '').slice(0, 10)
+    const db = String(b.payment_received_date ?? '').slice(0, 10)
+    if (da !== db) return da < db ? -1 : 1
+    const pa = String(a.posted_at ?? '')
+    const pb = String(b.posted_at ?? '')
+    if (pa !== pb) return pa < pb ? -1 : 1
+    return Number(a.id) - Number(b.id)
+  })
+}
+
+export interface MechanicalAccountsExportRow {
+  'Mark Done': string
+  JC: string
+  VRN: string
+  Model: string
+  'Service type': string
+  SA: string
+  Branch: string
+  Owner: string
+  'Invoice number': string
+  'Invoice date': string
+  'Billed amount': number | string
+  'Amount received': number | string
+  Remaining: number | string
+  'Payment status': string
+  'Invoice file': string
+  Notes: string
+  voucher_no: string
+  account_name: string
+  'Reference no': string
+}
+
+function mechanicalExportSheetRow(
+  row: AccountsMechanicalCase,
+  formatWhen: (iso: string | null | undefined) => string,
+  extras: {
+    amountReceived: number | string
+    voucherNo: string
+    referenceNo: string
+    busyPartyNameByInvoice?: ReadonlyMap<string, string>
+  },
+): MechanicalAccountsExportRow {
+  return {
+    'Mark Done': formatWhen(row.invoice_done_at),
+    JC: row.jc_number,
+    VRN: row.reg_number ?? '',
+    Model: row.model ?? '',
+    'Service type': row.service_type ?? '',
+    SA: row.sa_display_name || row.sa_name || '',
+    Branch: row.branch ?? '',
+    Owner: row.owner_name ?? '',
+    'Invoice number': row.invoice_number ?? '',
+    'Invoice date': row.invoice_date ?? '',
+    'Billed amount': row.billed_amount ?? '',
+    'Amount received': extras.amountReceived,
+    Remaining: mechanicalRemaining(row) ?? '',
+    'Payment status': row.payment_status ?? 'pending',
+    'Invoice file': row.invoice_file_name ?? '',
+    Notes: row.payment_notes ?? '',
+    voucher_no: extras.voucherNo,
+    account_name: resolveAccountsExportAccountName({
+      invoiceNumber: row.invoice_number,
+      ownerName: row.owner_name,
+      branch: row.branch,
+      regNumber: row.reg_number,
+      busyPartyNameByInvoice: extras.busyPartyNameByInvoice,
+    }),
+    'Reference no': extras.referenceNo,
+  }
+}
+
+/** Receipt-line grain when lines exist; one case-level pending row when they do not. */
+export function buildMechanicalAccountsExportRows(input: {
+  cases: AccountsMechanicalCase[]
+  lines: AccountsMechanicalPayment[]
+  paymentModeFilter?: MechanicalPaymentModeFilter
+  formatWhen: (iso: string | null | undefined) => string
+  busyPartyNameByInvoice?: ReadonlyMap<string, string>
+}): MechanicalAccountsExportRow[] {
+  const modeFilter = input.paymentModeFilter ?? 'all'
+  const wanted = modeFilter === 'all' ? null : normalizeAccountsPaymentMode(modeFilter)
+  const linesByCase = new Map<number, AccountsMechanicalPayment[]>()
+  for (const line of input.lines) {
+    const list = linesByCase.get(line.reception_entry_id) ?? []
+    list.push(line)
+    linesByCase.set(line.reception_entry_id, list)
+  }
+
+  const rows: MechanicalAccountsExportRow[] = []
+  for (const caseRow of input.cases) {
+    const caseLines = sortAccountsMechanicalPaymentLines(linesByCase.get(caseRow.reception_entry_id) ?? [])
+    const matching = wanted
+      ? caseLines.filter((line) => normalizeAccountsPaymentMode(line.payment_mode) === wanted)
+      : caseLines
+    if (matching.length > 0) {
+      for (const line of matching) {
+        rows.push(mechanicalExportSheetRow(caseRow, input.formatWhen, {
+          amountReceived: line.amount,
+          voucherNo: line.voucher_no ?? '',
+          referenceNo: line.reference ?? '',
+          busyPartyNameByInvoice: input.busyPartyNameByInvoice,
+        }))
+      }
+      continue
+    }
+    if (wanted) continue
+    rows.push(mechanicalExportSheetRow(caseRow, input.formatWhen, {
+      amountReceived: caseRow.amount_received ?? '',
+      voucherNo: '',
+      referenceNo: '',
+      busyPartyNameByInvoice: input.busyPartyNameByInvoice,
+    }))
+  }
+  return rows
+}
+
 export async function listAccountsMechanicalPaymentLines(): Promise<AccountsMechanicalPayment[]> {
   const pageSize = 1000
+  const withVoucher =
+    'id, reception_entry_id, mechanical_invoice_id, amount, payment_mode, reference, posted_by, posted_at, payment_received_date, voucher_no'
+  const withoutVoucher =
+    'id, reception_entry_id, mechanical_invoice_id, amount, payment_mode, reference, posted_by, posted_at, payment_received_date'
+  let columns = withVoucher
   const rows: AccountsMechanicalPayment[] = []
   for (let from = 0; ; from += pageSize) {
     const { data, error } = await supabase
       .from('accounts_mechanical_payment_lines')
-      .select('id, reception_entry_id, mechanical_invoice_id, amount, payment_mode, reference, posted_by, posted_at, payment_received_date')
+      .select(columns)
       .order('id', { ascending: true })
       .range(from, from + pageSize - 1)
-    if (error) throw new Error(settlementRpcError(error))
+    if (error) {
+      if (columns === withVoucher && /voucher_no/i.test(error.message || '')) {
+        columns = withoutVoucher
+        from -= pageSize
+        continue
+      }
+      throw new Error(settlementRpcError(error))
+    }
     const batch = asArray<AccountsMechanicalPayment>(data)
     rows.push(...batch)
     if (batch.length < pageSize) break

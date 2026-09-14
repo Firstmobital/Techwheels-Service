@@ -2,6 +2,13 @@
 
 Tracks documentation-sync updates for business logic, architecture, and access control.
 
+## 2026-09-14
+
+- Accounts Mechanical Excel `account_name` uses the exact BUSY Party Name from `psf_revenue_dms` labour (`resolvePartyName`) when the invoice exists; otherwise the existing owner/branch/VRN fallback. Plan: `ACCOUNTS-001`.
+- Accounts Mechanical receipt vouchers were fully recalculated from linked `accounts_mechanical_invoices.invoice_date >= 2026-09-02`. All previous RApp/JApp numbers were cleared and reassigned from `0001` in invoice-date order. Pre-2-Sep invoices and cheque/bank/other stay blank. Ledger: DBL-0059 (supersedes DBL-0058 numbering). Plan: `ACCOUNTS-001`.
+- Accounts Mechanical receipt vouchers are eligible from linked `accounts_mechanical_invoices.invoice_date >= 2026-09-02` (BUSY accounting start). `payment_received_date`, `posted_at`, and Mark Done date do not control the series. Ledger: DBL-0058, DBL-0059. Plan: `ACCOUNTS-001`.
+- Accounts Mechanical Excel adds persisted `voucher_no`, BUSY-style `account_name`, and receipt `Reference no`. Receipt vouchers live on existing `accounts_mechanical_payment_lines` (Cash `RApp/26-27/nnnn`; UPI+Card share `JApp/26-27/nnnn`). Mode-card export is receipt-line grain (split Cash+UPI no longer repeats the header total). Ledger: DBL-0057, DBL-0058. Plan: `ACCOUNTS-001`.
+
 ## 2026-09-12
 
 - Accounts Mechanical receipts now capture a **Payment received date** (business date, Asia/Kolkata) separately from `posted_at` (system timestamp). Stored on existing `accounts_mechanical_payment_lines.payment_received_date`. History heading is **Received Date**. Ledger: DBL-0056. Plan: `ACCOUNTS-001`.

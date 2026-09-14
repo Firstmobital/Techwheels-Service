@@ -22,6 +22,14 @@
 - [ ] Posted line stores selected `payment_received_date` and an independent `posted_at`
 - [ ] Receipts history shows Received Date from `payment_received_date`; older rows still render after IST backfill
 - [ ] User without `accounts` gets AccessDenied at `/accounts`
+- [ ] Cash / UPI / Card receipt on an invoice dated on/after 2-Sep-2026 gets `RApp/26-27/nnnn` (cash) or shared `JApp/26-27/nnnn` (upi+card); sequences independent
+- [ ] Split Cash+UPI Excel: Cash export amount is the cash line only; UPI export is the UPI line only; All emits two rows
+- [ ] Repeated export / different mode cards keep the same persisted `voucher_no`
+- [ ] Invoice dated before 2-Sep-2026 and cheque/bank/other have blank `voucher_no`
+- [ ] Invoice dated 8-Sep with payment received 11-Sep still gets a voucher (invoice_date controls)
+- [ ] `account_name` prefers BUSY Party Name for the invoice (`IMBTAI2627007397` → `JAGDISH NARAYAN YADAV-SITAPURA RJ45CV5192`); unmatched invoices keep `OWNER-BRANCH VRN`; missing owner on fallback → blank account_name
+- [ ] Duplicate BUSY labour invoice numbers do not pick an arbitrary Party Name (Accounts fallback + toast)
+- [ ] Pending case with no receipts still exports one row with blank `voucher_no`
 
 ## Bodyshop
 

@@ -2,13 +2,13 @@
 
 **Plan ID:** ACCOUNTS-001  
 **Created:** 2026-09-11  
-**Last Updated:** 2026-09-12  
-**Priority:** HIGH  
+**Last Updated:** 2026-09-14
+**Priority:** HIGH
 **Owner:** Accounts + Platform Team  
 **Status:** Active (web implemented; DBL-0055 Accounts DO post pending apply)  
 **Platform:** webversion  
 **Category:** accounts  
-**Ledger:** DBL-0045/0046/0051/0052/0053/0054/0056 APPLIED. DBL-0055 PROPOSED (Accounts may post insurer/DO lines). Do not reuse DBL-0043 (`busy`) or DBL-0044 (`busy_parts`).  
+**Ledger:** DBL-0045/0046/0051/0052/0053/0054/0056/0057/0058/0059 APPLIED. DBL-0055 PROPOSED (Accounts may post insurer/DO lines). Mechanical vouchers recalculated from `invoice_date >= 2026-09-02`. Do not reuse DBL-0043 (`busy`) or DBL-0044 (`busy_parts`).  
 **Route:** `/accounts`  
 **Module:** `accounts`  
 **Depends on:** BODYSHOP-SETTLEMENT-001 (`bodyshop_settlements`, Stage 18 lines); Service Advisor Mark Done (`invoice_done_at`)  
@@ -139,13 +139,13 @@ Pattern: `src/pages/BodyshopRecoveryPage.tsx` (KPIs, search, table, Excel, on-pa
 - Tabs: Mechanical | Bodyshop
 - Search: JC / reg / invoice
 - Period chips on Mark Done date (mechanical) and invoice date (bodyshop)
-- Excel export per section
+- Excel export per section. Mechanical export is receipt-line grain when payment lines exist (`voucher_no`, `account_name`, `Reference no`); Cash/UPI/Credit Card cards filter receipt lines, not header totals. Vouchers persist on `accounts_mechanical_payment_lines` (DBL-0057/0058). `account_name` prefers the exact BUSY Party Name for the invoice (`psf_revenue_dms` → `resolvePartyName`); unmatched invoices keep the Accounts owner/branch/VRN fallback.
 
 **Mechanical desk**
 
 - Columns: Mark Done at, JC, reg, model, service type, SA, branch, owner, invoice number, billed amount, payment status, notes
 - Capture / Payments modal: invoice number, date, billed amount, and invoice file (reuse unused SA `invoice_storage_path` upload). **Fetch from DMS** fills those fields when the JC has exactly one live DMS invoice; Accounts still taps Save. 0 or 2+ DMS rows shows “No unique DMS invoice”. Remaining stays billed minus receipts. Invoice header locks after the first receipt.
-- Receipts are append-only (`accounts_mechanical_payment_lines`): this amount + Payment mode (Cash/UPI/Card/Cheque/Bank/Other) + Payment received date + reference. `payment_received_date` is the business date (Asia/Kolkata); `posted_at` remains the system insert timestamp. History shows Received Date. Payment status is automatic from billed vs sum(receipts). Create Gatepass when remaining is ₹0.
+- Receipts are append-only (`accounts_mechanical_payment_lines`): this amount + Payment mode (Cash/UPI/Card/Cheque/Bank/Other) + Payment received date + reference. `payment_received_date` is the business date (Asia/Kolkata); `posted_at` remains the system insert timestamp. Voucher series apply when the linked invoice `invoice_date >= 2026-09-02` (DBL-0058; DBL-0057’s `payment_received_date >= 2026-09-11` cutoff is incorrect). Cash gets `RApp/26-27/nnnn`; UPI+Card share `JApp/26-27/nnnn`. cheque/bank/other stay null. History shows Received Date. Payment status is automatic from billed vs sum(receipts). Create Gatepass when remaining is ₹0.
 - KPI: Mark Done count, invoice-pending count, billed sum, customer remaining / received
 
 **Bodyshop desk**
@@ -213,6 +213,9 @@ Pattern: `src/pages/BodyshopRecoveryPage.tsx` (KPIs, search, table, Excel, on-pa
 ✅ 3.3 | Mechanical desk | Eng | 2026-09-11 | 2026-09-11 | Manual invoice capture
 ✅ 3.4 | Bodyshop desk | Eng | 2026-09-11 | 2026-09-11 | Customer remaining book
 ✅ 3.6 | Unified Bodyshop receipts | Eng | 2026-09-12 | 2026-09-12 | DBL-0055 + accounts_receipt
+✅ 3.7 | Mechanical voucher Excel | Eng | 2026-09-14 | 2026-09-14 | DBL-0057 APPLIED; receipt-grain export
+✅ 3.8 | Voucher eligibility invoice_date | Eng | 2026-09-14 | 2026-09-14 | DBL-0058 APPLIED; cutoff 2026-09-02
+✅ 3.9 | Recalculate vouchers from 2-Sep | Eng | 2026-09-14 | 2026-09-14 | DBL-0059 APPLIED; RApp 22 / JApp 78
 ⏳ 3.5 | Capture Fetch from DMS | Eng | 2026-09-11 | 2026-09-11 | DBL-0048 applied; web button pending deploy
 ```
 
@@ -287,6 +290,13 @@ Pattern: `src/pages/BodyshopRecoveryPage.tsx` (KPIs, search, table, Excel, on-pa
 
 ## Notes & Lessons Learned
 
+### 2026-09-14 - Voucher eligibility is invoice_date
+
+- BUSY accounting started 2-Sep-2026. Accounts RApp/JApp follow `accounts_mechanical_invoices.invoice_date >= 2026-09-02`.
+- Do not use payment received date, posted_at, or Mark Done date as the voucher cutoff.
+- Existing persisted voucher numbers stay. Newly eligible NULL cash/upi/card lines take the next sequence (historical numbering vs earliest 2-Sep receipt is expected if DBL-0057 already issued 11-Sep numbers).
+- Ledger: DBL-0058. Superseded by DBL-0059 full recalculation.
+
 ### 2026-09-12 - Mechanical payment received date
 
 - Mechanical Post payment captures `payment_received_date` on the existing payment-line table. Defaults to today IST. Distinct from `posted_at`. Ledger: DBL-0056.
@@ -312,7 +322,7 @@ Pattern: `src/pages/BodyshopRecoveryPage.tsx` (KPIs, search, table, Excel, on-pa
 - `docs/Implementation_plans/webversion/categories/bodyshop/active/BODYSHOP-RECOVERY-001_DO_INSURANCE_RECOVERY_BOOK_PLAN_2026-09-04.md`
 - `docs/Implementation_plans/webversion/categories/operations/active/BUSY-001_BUSY_ACCOUNTING_EXPORT_PLAN_2026-09-10.md`
 - `docs/shared/reference/MODULE_ROUTE_CONTRACT.md`
-- `docs/shared/reference/DB_CHANGE_LEDGER.md` (DBL-0045, DBL-0055)
+- `docs/shared/reference/DB_CHANGE_LEDGER.md` (DBL-0045, DBL-0055, DBL-0057, DBL-0058)
 - Evidence (later): `docs/Implementation_plans/webversion/categories/accounts/evidence/ACCOUNTS-001_TEST_MATRIX.md`
 
 ---
