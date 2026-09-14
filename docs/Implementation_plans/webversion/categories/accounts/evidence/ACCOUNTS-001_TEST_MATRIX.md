@@ -27,7 +27,8 @@
 - [ ] Repeated export / different mode cards keep the same persisted `voucher_no`
 - [ ] Invoice dated before 2-Sep-2026 and cheque/bank/other have blank `voucher_no`
 - [ ] Invoice dated 8-Sep with payment received 11-Sep still gets a voucher (invoice_date controls)
-- [ ] `account_name` is `OWNER-BRANCH VRN` (space before VRN); missing owner → blank account_name
+- [ ] `account_name` prefers BUSY Party Name for the invoice (`IMBTAI2627007397` → `JAGDISH NARAYAN YADAV-SITAPURA RJ45CV5192`); unmatched invoices keep `OWNER-BRANCH VRN`; missing owner on fallback → blank account_name
+- [ ] Duplicate BUSY labour invoice numbers do not pick an arbitrary Party Name (Accounts fallback + toast)
 - [ ] Pending case with no receipts still exports one row with blank `voucher_no`
 
 ## Bodyshop

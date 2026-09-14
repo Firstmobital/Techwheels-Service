@@ -1,9 +1,25 @@
 export { resolveBusyBranch, resolveDebtorGroup, BUSY_DEBTOR_GROUPS, type BusyBranch } from './branch.ts'
 export { dateRangeError, formatBusyBillDate, parsePartsInvoiceDate } from './dates.ts'
-export { invoiceMatchesPortalSeries, PV_INVOICE_PREFIX, EV_INVOICE_PREFIX } from './eligibility.ts'
+export {
+  invoiceMatchesPortalSeries,
+  PV_INVOICE_PREFIX,
+  EV_INVOICE_PREFIX,
+  busyInvoiceLookupKey,
+  busyLabourInvoiceInValues,
+  BUSY_LABOUR_INVOICE_IN_CHUNK,
+  normalizeInvoiceNumber,
+} from './eligibility.ts'
 export { matchBusyInsurance, readAuthoritativeGstin, BUSY_INSURANCE_MASTER } from './insuranceMaster.ts'
 export { inclusiveFromNet, formatInr, roundPaise, nearestWholeRupee, roundOffToNearestRupee } from './money.ts'
-export { classifyBusyInvoice, parseBodyshopPartyName, PDI_PARTY_NAME, resolvePartyName } from './partyName.ts'
+export {
+  classifyBusyInvoice,
+  parseBodyshopPartyName,
+  PDI_PARTY_NAME,
+  resolvePartyName,
+  partyNameFromBusyLabour,
+  buildBusyPartyNameByInvoice,
+  type BusyPartyNameLookup,
+} from './partyName.ts'
 export {
   mapPartsRows,
   parsePartsSpreadsheet,
@@ -33,5 +49,9 @@ export {
 } from './sourceAvailability.ts'
 export { transformBusyAccounting, type BusyPreviewRow, type InvoiceVoucherRow, type PartyAccountRow } from './transform.ts'
 export { buildInvoiceVoucherWorkbook, buildPartyAccountWorkbook, downloadBusyWorkbook, workbookHeaders, workbookDataRows } from './xlsx.ts'
-export { fetchBusyLabourRows, loadBusyLabourSourceStatus } from './labourSource.ts'
+export {
+  fetchBusyLabourRows,
+  fetchBusyLabourRowsByInvoiceNumbers,
+  loadBusyLabourSourceStatus,
+} from './labourSource.ts'
 export { INVOICE_VOUCHER_HEADERS, PARTY_ACCOUNT_HEADERS, ITEM_LABOUR_18, ITEM_ROUND_OFF, ITEM_SPARE_PARTS_5, ITEM_SPARE_PARTS_18 } from './types.ts'

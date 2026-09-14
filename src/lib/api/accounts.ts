@@ -1,4 +1,5 @@
 import { AUTODOC_BUCKET } from '../autodocStorage'
+import { busyInvoiceLookupKey, normalizeInvoiceNumber } from '../busy/eligibility'
 import { normalizePersonName } from '../busy/partyName'
 import { supabase } from '../supabase'
 import type { OverallStatus, RepairCard } from './bodyshopRepair'
@@ -363,6 +364,44 @@ export function buildAccountsExportAccountName(input: {
   return `${name}-${branch} ${vrn}`
 }
 
+/** Distinct trimmed invoice numbers from Mechanical export cases. One list for bulk BUSY labour fetch. */
+export function mechanicalExportInvoiceNumbers(cases: Array<{ invoice_number?: string | null }>): string[] {
+  const seen = new Set<string>()
+  const out: string[] = []
+  for (const row of cases) {
+    const trimmed = normalizeInvoiceNumber(row.invoice_number)
+    if (!trimmed) continue
+    const key = busyInvoiceLookupKey(trimmed)
+    if (seen.has(key)) continue
+    seen.add(key)
+    out.push(trimmed)
+  }
+  return out
+}
+
+/**
+ * BUSY Party Name for the invoice when the labour map has a usable value.
+ * Otherwise the existing Accounts fallback. Does not re-format a BUSY name.
+ */
+export function resolveAccountsExportAccountName(input: {
+  invoiceNumber: unknown
+  ownerName: unknown
+  branch: unknown
+  regNumber: unknown
+  busyPartyNameByInvoice?: ReadonlyMap<string, string>
+}): string {
+  const key = busyInvoiceLookupKey(input.invoiceNumber)
+  if (key && input.busyPartyNameByInvoice) {
+    const busyName = input.busyPartyNameByInvoice.get(key)
+    if (busyName) return busyName
+  }
+  return buildAccountsExportAccountName({
+    ownerName: input.ownerName,
+    branch: input.branch,
+    regNumber: input.regNumber,
+  })
+}
+
 export function sortAccountsMechanicalPaymentLines<T extends {
   id: number
   payment_received_date?: string | null
@@ -408,6 +447,7 @@ function mechanicalExportSheetRow(
     amountReceived: number | string
     voucherNo: string
     referenceNo: string
+    busyPartyNameByInvoice?: ReadonlyMap<string, string>
   },
 ): MechanicalAccountsExportRow {
   return {
@@ -428,10 +468,12 @@ function mechanicalExportSheetRow(
     'Invoice file': row.invoice_file_name ?? '',
     Notes: row.payment_notes ?? '',
     voucher_no: extras.voucherNo,
-    account_name: buildAccountsExportAccountName({
+    account_name: resolveAccountsExportAccountName({
+      invoiceNumber: row.invoice_number,
       ownerName: row.owner_name,
       branch: row.branch,
       regNumber: row.reg_number,
+      busyPartyNameByInvoice: extras.busyPartyNameByInvoice,
     }),
     'Reference no': extras.referenceNo,
   }
@@ -443,6 +485,7 @@ export function buildMechanicalAccountsExportRows(input: {
   lines: AccountsMechanicalPayment[]
   paymentModeFilter?: MechanicalPaymentModeFilter
   formatWhen: (iso: string | null | undefined) => string
+  busyPartyNameByInvoice?: ReadonlyMap<string, string>
 }): MechanicalAccountsExportRow[] {
   const modeFilter = input.paymentModeFilter ?? 'all'
   const wanted = modeFilter === 'all' ? null : normalizeAccountsPaymentMode(modeFilter)
@@ -465,6 +508,7 @@ export function buildMechanicalAccountsExportRows(input: {
           amountReceived: line.amount,
           voucherNo: line.voucher_no ?? '',
           referenceNo: line.reference ?? '',
+          busyPartyNameByInvoice: input.busyPartyNameByInvoice,
         }))
       }
       continue
@@ -474,6 +518,7 @@ export function buildMechanicalAccountsExportRows(input: {
       amountReceived: caseRow.amount_received ?? '',
       voucherNo: '',
       referenceNo: '',
+      busyPartyNameByInvoice: input.busyPartyNameByInvoice,
     }))
   }
   return rows

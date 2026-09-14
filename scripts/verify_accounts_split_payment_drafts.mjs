@@ -1,7 +1,15 @@
 /**
  * Client-side allocation / overpayment checks for Accounts split receipts.
  * Keep formulas aligned with src/lib/api/accounts.ts helpers.
+ * Run: node --experimental-strip-types scripts/verify_accounts_split_payment_drafts.mjs
  */
+import {
+  BUSY_LABOUR_INVOICE_IN_CHUNK,
+  busyInvoiceLookupKey,
+  busyLabourInvoiceInValues,
+} from '../src/lib/busy/eligibility.ts'
+import { PDI_PARTY_NAME, buildBusyPartyNameByInvoice } from '../src/lib/busy/partyName.ts'
+
 
 function roundAccountsMoney(n) {
   return Math.round((Number(n) + Number.EPSILON) * 100) / 100
@@ -315,7 +323,13 @@ function mechanicalRemaining(row) {
   return Math.max(0, Number(row.billed_amount) - Number(row.amount_received ?? 0))
 }
 
-function buildMechanicalAccountsExportRows({ cases, lines, paymentModeFilter = 'all', formatWhen }) {
+function buildMechanicalAccountsExportRows({
+  cases,
+  lines,
+  paymentModeFilter = 'all',
+  formatWhen,
+  busyPartyNameByInvoice,
+}) {
   const wanted = paymentModeFilter === 'all' ? null : normalizeAccountsPaymentMode(paymentModeFilter)
   const linesByCase = new Map()
   for (const line of lines) {
@@ -329,7 +343,9 @@ function buildMechanicalAccountsExportRows({ cases, lines, paymentModeFilter = '
     const matching = wanted
       ? caseLines.filter((line) => normalizeAccountsPaymentMode(line.payment_mode) === wanted)
       : caseLines
-    const account_name = buildAccountsExportAccountName({
+    const key = busyInvoiceLookupKey(caseRow.invoice_number)
+    const busyName = key && busyPartyNameByInvoice ? busyPartyNameByInvoice.get(key) : null
+    const account_name = busyName || buildAccountsExportAccountName({
       ownerName: caseRow.owner_name,
       branch: caseRow.branch,
       regNumber: caseRow.reg_number,
@@ -736,5 +752,151 @@ console.log('verify_accounts_split_payment_drafts: voucher export A–L checks p
     card: observed.card.length,
     all: observed.all.map((r) => ({ jc: r.JC, invoice: r['Invoice number'], amount: r['Amount received'], voucher_no: r.voucher_no })),
   }))
+}
+
+{
+  function labour(overrides) {
+    return {
+      invoice_number: 'IMBTAI2627007397',
+      invoice_date: '2026-09-11',
+      account: null,
+      first_name: 'JAGDISH NARAYAN',
+      last_name: 'YADAV',
+      job_card_number: 'JC-MBTPLT-JP1-2627-007048',
+      vehicle_registration_number: 'RJ45CV5192',
+      sr_type: 'Paid Service',
+      sr_assigned_to: 'VK1_3000840',
+      final_labour_amount: 14423.14,
+      invoice_status: 'New',
+      portal: 'PV',
+      ...overrides,
+    }
+  }
+
+  const provenCase = {
+    reception_entry_id: 8563,
+    jc_number: 'JC-MBTPLT-JP1-2627-007048',
+    reg_number: 'RJ45CV5192',
+    owner_name: 'NARAYAN YADAV YADAV',
+    branch: 'Sitapura',
+    invoice_number: 'IMBTAI2627007397',
+    billed_amount: 35103.33,
+    amount_received: 35000,
+    remaining_amount: 103.33,
+    payment_status: 'partial',
+  }
+  const provenLine = {
+    id: 41,
+    reception_entry_id: 8563,
+    amount: 35000,
+    payment_mode: 'cash',
+    payment_received_date: '2026-09-11',
+    posted_at: '2026-09-11T10:00:00+05:30',
+    voucher_no: 'RApp/26-27/0001',
+    reference: 'CASH-7397',
+  }
+
+  const fallbackOnly = buildAccountsExportAccountName({
+    ownerName: provenCase.owner_name,
+    branch: provenCase.branch,
+    regNumber: provenCase.reg_number,
+  })
+  assert(fallbackOnly === 'NARAYAN YADAV YADAV-SITAPURA RJ45CV5192', `old Accounts name, got ${fallbackOnly}`)
+
+  const provenLookup = buildBusyPartyNameByInvoice([labour()])
+  assert(provenLookup.duplicateInvoiceKeys.length === 0, '1: proven invoice is unique')
+  assert(
+    provenLookup.partyNameByInvoice.get('IMBTAI2627007397') === 'JAGDISH NARAYAN YADAV-SITAPURA RJ45CV5192',
+    `1: BUSY Party Name, got ${provenLookup.partyNameByInvoice.get('IMBTAI2627007397')}`,
+  )
+
+  const provenExport = buildMechanicalAccountsExportRows({
+    cases: [provenCase],
+    lines: [provenLine],
+    formatWhen: () => '',
+    busyPartyNameByInvoice: provenLookup.partyNameByInvoice,
+  })
+  assert(provenExport.length === 1, '1: one receipt row')
+  assert(
+    provenExport[0].account_name === 'JAGDISH NARAYAN YADAV-SITAPURA RJ45CV5192',
+    `1/3: BUSY wins over owner_name, got ${provenExport[0].account_name}`,
+  )
+  assert(provenExport[0].voucher_no === 'RApp/26-27/0001', '9: voucher_no unchanged')
+  assert(provenExport[0]['Amount received'] === 35000, '9: receipt amount unchanged')
+  assert(provenExport[0]['Reference no'] === 'CASH-7397', '9: reference unchanged')
+
+  const noBusy = buildMechanicalAccountsExportRows({
+    cases: [provenCase],
+    lines: [provenLine],
+    formatWhen: () => '',
+    busyPartyNameByInvoice: new Map(),
+  })
+  assert(noBusy[0].account_name === fallbackOnly, `2: no BUSY row uses fallback, got ${noBusy[0].account_name}`)
+  assert(noBusy[0].voucher_no === 'RApp/26-27/0001', '9: fallback path keeps voucher')
+
+  const tonkLookup = buildBusyPartyNameByInvoice([labour({ sr_assigned_to: 'PUM_3000840' })])
+  const tonkExport = buildMechanicalAccountsExportRows({
+    cases: [provenCase],
+    lines: [provenLine],
+    formatWhen: () => '',
+    busyPartyNameByInvoice: tonkLookup.partyNameByInvoice,
+  })
+  assert(
+    tonkExport[0].account_name === 'JAGDISH NARAYAN YADAV-TONK RJ45CV5192',
+    `4: BUSY branch wins, got ${tonkExport[0].account_name}`,
+  )
+
+  const pdiLookup = buildBusyPartyNameByInvoice([labour({ sr_type: 'PDI', invoice_number: 'IMBTAI-PDI' })])
+  assert(pdiLookup.partyNameByInvoice.get('IMBTAI-PDI') === PDI_PARTY_NAME, `5: PDI Party Name, got ${pdiLookup.partyNameByInvoice.get('IMBTAI-PDI')}`)
+  const pdiExport = buildMechanicalAccountsExportRows({
+    cases: [{ ...provenCase, invoice_number: 'IMBTAI-PDI' }],
+    lines: [provenLine],
+    formatWhen: () => '',
+    busyPartyNameByInvoice: pdiLookup.partyNameByInvoice,
+  })
+  assert(pdiExport[0].account_name === PDI_PARTY_NAME, '5: PDI export uses CASH AT SITAPURA')
+
+  const bsLookup = buildBusyPartyNameByInvoice([labour({
+    invoice_number: 'IMBTAI-CO',
+    account: 'ICICI LOMBARD GENERAL INSURANCE COMPANY LIMITED C/O RAMESH KUMAR',
+  })])
+  assert(
+    bsLookup.partyNameByInvoice.get('IMBTAI-CO') === 'ICICI LOMBARD RAMESH KUMAR',
+    `6: Bodyshop Party Name, got ${bsLookup.partyNameByInvoice.get('IMBTAI-CO')}`,
+  )
+
+  const dupLookup = buildBusyPartyNameByInvoice([
+    labour({ job_card_number: 'JC-A' }),
+    labour({ job_card_number: 'JC-B' }),
+  ])
+  assert(dupLookup.duplicateInvoiceKeys.includes('IMBTAI2627007397'), `7: duplicate key reported, got ${dupLookup.duplicateInvoiceKeys}`)
+  assert(!dupLookup.partyNameByInvoice.has('IMBTAI2627007397'), '7: duplicate does not pick an arbitrary Party Name')
+  const dupExport = buildMechanicalAccountsExportRows({
+    cases: [provenCase],
+    lines: [provenLine],
+    formatWhen: () => '',
+    busyPartyNameByInvoice: dupLookup.partyNameByInvoice,
+  })
+  assert(dupExport[0].account_name === fallbackOnly, '7: duplicate uses Accounts fallback')
+
+  const manyInvoices = Array.from({ length: 250 }, (_, i) => `IMBTAI2627${String(i).padStart(6, '0')}`)
+  const inValues = busyLabourInvoiceInValues(manyInvoices)
+  assert(inValues.length === 500, `8: 250 uppercase invoices expand to original+lower IN values, got ${inValues.length}`)
+  const chunkCount = Math.ceil(inValues.length / BUSY_LABOUR_INVOICE_IN_CHUNK)
+  assert(chunkCount === 5, `8: 250 invoices → 5 bulk chunks not 250 queries, got ${chunkCount}`)
+  const mixedCase = busyLabourInvoiceInValues([' imbtai2627007397 '])
+  assert(mixedCase.includes('imbtai2627007397') && mixedCase.includes('IMBTAI2627007397'), '8: trim + case variants for IN list')
+
+  const cashFilter = buildMechanicalAccountsExportRows({
+    cases: [provenCase],
+    lines: [provenLine, { ...provenLine, id: 42, payment_mode: 'upi', amount: 103.33, voucher_no: 'JApp/26-27/0001' }],
+    paymentModeFilter: 'cash',
+    formatWhen: () => '',
+    busyPartyNameByInvoice: provenLookup.partyNameByInvoice,
+  })
+  assert(cashFilter.length === 1 && cashFilter[0]['Amount received'] === 35000, '9: cash filter grain unchanged')
+  assert(cashFilter[0].account_name === 'JAGDISH NARAYAN YADAV-SITAPURA RJ45CV5192', '9: BUSY name on filtered cash row')
+
+  console.log('verify_accounts_split_payment_drafts: BUSY Party Name export checks passed')
 }
 

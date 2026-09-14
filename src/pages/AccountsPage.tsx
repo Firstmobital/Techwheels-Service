@@ -23,6 +23,7 @@ import {
   mechanicalInvoiceDateInputValue,
   mechanicalPaymentReceivedDate,
   mechanicalRemaining,
+  mechanicalExportInvoiceNumbers,
   openBodyshopGatepass,
   openMechanicalGatepass,
   openMechanicalInvoiceFile,
@@ -42,6 +43,10 @@ import { supabase } from '../lib/supabase'
 import type { RepairCard } from '../lib/api/bodyshopRepair'
 import { settlementStatusLabel } from '../lib/api/bodyshopSettlement'
 import { issueAccountsGatePass } from '../lib/gatepass'
+import {
+  buildBusyPartyNameByInvoice,
+  fetchBusyLabourRowsByInvoiceNumbers,
+} from '../lib/busy'
 
 type Section = 'mechanical' | 'bodyshop'
 type BodyshopFilter = 'remaining' | 'all' | 'received' | 'pending'
@@ -223,6 +228,7 @@ export default function AccountsPage() {
     bsRow?: AccountsBodyshopCase
   } | null>(null)
   const [issuingGatepass, setIssuingGatepass] = useState(false)
+  const [exporting, setExporting] = useState(false)
 
   function selectMechPaymentMode(mode: Exclude<MechanicalPaymentModeFilter, 'all'>) {
     setMechPaymentModeFilter((prev) => (prev === mode ? 'all' : mode))
@@ -691,17 +697,36 @@ export default function AccountsPage() {
     }
   }
 
-  function exportExcel() {
+  async function exportExcel() {
     if (section === 'mechanical') {
-      const sheet = XLSX.utils.json_to_sheet(buildMechanicalAccountsExportRows({
-        cases: searchedMech,
-        lines: mechPayLines,
-        paymentModeFilter: mechPaymentModeFilter,
-        formatWhen: fmtWhen,
-      }))
-      const wb = XLSX.utils.book_new()
-      XLSX.utils.book_append_sheet(wb, sheet, 'Mechanical')
-      XLSX.writeFile(wb, `accounts-mechanical.xlsx`)
+      if (exporting) return
+      setExporting(true)
+      try {
+        const labour = await fetchBusyLabourRowsByInvoiceNumbers(
+          mechanicalExportInvoiceNumbers(searchedMech),
+        )
+        const { partyNameByInvoice, duplicateInvoiceKeys } = buildBusyPartyNameByInvoice(labour)
+        const sheet = XLSX.utils.json_to_sheet(buildMechanicalAccountsExportRows({
+          cases: searchedMech,
+          lines: mechPayLines,
+          paymentModeFilter: mechPaymentModeFilter,
+          formatWhen: fmtWhen,
+          busyPartyNameByInvoice: partyNameByInvoice,
+        }))
+        const wb = XLSX.utils.book_new()
+        XLSX.utils.book_append_sheet(wb, sheet, 'Mechanical')
+        XLSX.writeFile(wb, `accounts-mechanical.xlsx`)
+        if (duplicateInvoiceKeys.length > 0) {
+          flash(
+            `Duplicate BUSY labour invoice ${duplicateInvoiceKeys.join(', ')}; Accounts fallback used for those rows`,
+            false,
+          )
+        }
+      } catch (e) {
+        flash(e instanceof Error ? e.message : 'Mechanical Excel export failed', false)
+      } finally {
+        setExporting(false)
+      }
       return
     }
     const sheet = XLSX.utils.json_to_sheet(searchedBs.map((r) => ({
@@ -740,8 +765,8 @@ export default function AccountsPage() {
           <button type="button" className="btn" onClick={() => void load()} disabled={loading}>
             {loading ? 'Loading…' : 'Refresh'}
           </button>
-          <button type="button" className="btn btn--primary" onClick={exportExcel} disabled={visibleCount === 0}>
-            Export Excel
+          <button type="button" className="btn btn--primary" onClick={() => void exportExcel()} disabled={visibleCount === 0 || exporting}>
+            {exporting ? 'Exporting…' : 'Export Excel'}
           </button>
         </div>
       </div>
