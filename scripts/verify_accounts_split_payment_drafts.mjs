@@ -375,10 +375,11 @@ function buildMechanicalAccountsExportRows({ cases, lines, paymentModeFilter = '
 function createVoucherAllocator() {
   let rapp = 0
   let japp = 0
+  const assigned = new Map()
   return {
-    next(mode, paymentReceivedDate) {
-      const date = String(paymentReceivedDate ?? '').slice(0, 10)
-      if (!date || date < '2026-09-11') return null
+    next(mode, invoiceDate) {
+      const date = String(invoiceDate ?? '').slice(0, 10)
+      if (!date || date < '2026-09-02') return null
       const m = normalizeAccountsPaymentMode(mode)
       if (m === 'cash') {
         rapp += 1
@@ -390,6 +391,12 @@ function createVoucherAllocator() {
       }
       return null
     },
+    backfill(line) {
+      if (line.voucher_no) return line.voucher_no
+      const next = this.next(line.payment_mode, line.invoice_date)
+      if (next) assigned.set(line.id, next)
+      return next
+    },
     snapshot() {
       return { rapp, japp }
     },
@@ -398,19 +405,32 @@ function createVoucherAllocator() {
 
 {
   const alloc = createVoucherAllocator()
-  const cashVoucher = alloc.next('cash', '2026-09-11')
-  const upiVoucher = alloc.next('upi', '2026-09-12')
-  const cardVoucher = alloc.next('card', '2026-09-12')
-  const cash2 = alloc.next('cash', '2026-09-13')
-  assert(cashVoucher === 'RApp/26-27/0001', `A: cash RApp, got ${cashVoucher}`)
-  assert(upiVoucher === 'JApp/26-27/0001', `B: upi JApp, got ${upiVoucher}`)
-  assert(cardVoucher === 'JApp/26-27/0002', `C: card shares JApp, got ${cardVoucher}`)
-  assert(cash2 === 'RApp/26-27/0002', `D: RApp independent of JApp, got ${cash2}`)
-  assert(alloc.next('cash', '2026-09-10') == null, 'H: pre-cutoff cash has no voucher')
-  assert(alloc.next('upi', '2026-09-10') == null, 'H: pre-cutoff upi has no voucher')
-  assert(alloc.next('cheque', '2026-09-11') == null, 'I: cheque has no voucher')
-  assert(alloc.next('bank', '2026-09-11') == null, 'I: bank has no voucher')
+  assert(alloc.next('cash', '2026-09-01') == null, '1: 01-Sep cash has no voucher')
+  const cash02 = alloc.next('cash', '2026-09-02')
+  const upi02 = alloc.next('upi', '2026-09-02')
+  const card02 = alloc.next('card', '2026-09-02')
+  assert(cash02 === 'RApp/26-27/0001', `2: 02-Sep cash RApp, got ${cash02}`)
+  assert(upi02 === 'JApp/26-27/0001', `3: 02-Sep UPI JApp, got ${upi02}`)
+  assert(card02 === 'JApp/26-27/0002', `4: 02-Sep card shares JApp, got ${card02}`)
+  const cash08 = alloc.next('cash', '2026-09-08')
+  assert(cash08 === 'RApp/26-27/0002', `5: 08-Sep invoice eligible regardless of payment_received_date, got ${cash08}`)
+  const cash11early = alloc.next('cash', '2026-09-11')
+  const cash11late = alloc.next('cash', '2026-09-11')
+  assert(cash11early === 'RApp/26-27/0003' && cash11late === 'RApp/26-27/0004', '6: 11-Sep invoice eligible; payment_received_date does not control')
+  assert(alloc.next('cheque', '2026-09-02') == null, 'I: cheque has no voucher')
+  assert(alloc.next('bank', '2026-09-08') == null, 'I: bank has no voucher')
   assert(alloc.next('other', '2026-09-11') == null, 'I: other has no voucher')
+}
+
+{
+  const preserve = createVoucherAllocator()
+  preserve.next('cash', '2026-09-11')
+  const existing = { id: 9, payment_mode: 'cash', invoice_date: '2026-09-08', voucher_no: 'RApp/26-27/0001' }
+  const newlyEligible = { id: 10, payment_mode: 'cash', invoice_date: '2026-09-02', voucher_no: null }
+  assert(preserve.backfill(existing) === 'RApp/26-27/0001', '7: already assigned voucher stays')
+  const assignedNew = preserve.backfill(newlyEligible)
+  assert(assignedNew === 'RApp/26-27/0002', `7: newly eligible 02-Sep takes next safe number, got ${assignedNew}`)
+  assert(assignedNew !== existing.voucher_no, '7: does not steal existing number')
 }
 
 {
@@ -471,8 +491,22 @@ function createVoucherAllocator() {
     owner_name: 'Old Owner',
     branch: 'Sitapura',
     invoice_number: 'INV-OLD',
+    invoice_date: '2026-09-01',
     billed_amount: 1000,
     amount_received: 1000,
+    remaining_amount: 0,
+    payment_status: 'received',
+  }
+  const sep08 = {
+    reception_entry_id: 14,
+    jc_number: 'JC-08',
+    reg_number: 'RJ1408SEP',
+    owner_name: 'RAMESH KUMAR',
+    branch: 'Sitapura',
+    invoice_number: 'IMBTAI2627007276',
+    invoice_date: '2026-09-08',
+    billed_amount: 4000,
+    amount_received: 4000,
     remaining_amount: 0,
     payment_status: 'received',
   }
@@ -528,10 +562,20 @@ function createVoucherAllocator() {
       posted_at: '2026-09-11T11:00:00+05:30',
       voucher_no: null,
     },
+    {
+      id: 5,
+      reception_entry_id: 14,
+      amount: 4000,
+      payment_mode: 'cash',
+      payment_received_date: '2026-09-11',
+      posted_at: '2026-09-11T12:00:00+05:30',
+      voucher_no: 'RApp/26-27/0005',
+      reference: 'CASH-08SEP',
+    },
   ]
 
   const allRows = buildMechanicalAccountsExportRows({
-    cases: [pending, split, preCutoff, chequeCase],
+    cases: [pending, split, preCutoff, chequeCase, sep08],
     lines,
     paymentModeFilter: 'all',
     formatWhen: () => '',
@@ -600,7 +644,10 @@ function createVoucherAllocator() {
   assert(searchedOnlySplit[0].voucher_no === 'RApp/26-27/0001', 'G: narrower case set does not change persisted voucher')
 
   const oldRow = allRows.find((r) => r.JC === 'JC-OLD')
-  assert(oldRow && oldRow.voucher_no === '' && oldRow['Amount received'] === 1000, 'H: pre-cutoff receipt exports with blank voucher')
+  assert(oldRow && oldRow.voucher_no === '' && oldRow['Amount received'] === 1000, '1/H: 01-Sep invoice cash exports with blank voucher')
+
+  const sep08Row = allRows.find((r) => r['Invoice number'] === 'IMBTAI2627007276')
+  assert(sep08Row && sep08Row.voucher_no === 'RApp/26-27/0005' && sep08Row['Amount received'] === 4000, '5: 08-Sep invoice with payment received 11-Sep still exports persisted RApp')
 
   const chequeRow = allRows.find((r) => r.JC === 'JC-CHQ')
   assert(chequeRow && chequeRow.voucher_no === '' && chequeRow['Amount received'] === 800, 'I: cheque exports with blank voucher')
@@ -616,8 +663,11 @@ function createVoucherAllocator() {
   const alloc = createVoucherAllocator()
   const a = alloc.next('cash', '2026-09-11')
   const b = alloc.next('cash', '2026-09-11')
-  assert(a !== b, `L: two qualifying allocations cannot share a voucher (${a} vs ${b})`)
+  assert(a !== b, `L/8: two qualifying allocations cannot share a voucher (${a} vs ${b})`)
   assert(a === 'RApp/26-27/0001' && b === 'RApp/26-27/0002', 'L: monotonic nextval-style counter')
+  const j1 = alloc.next('upi', '2026-09-02')
+  const j2 = alloc.next('card', '2026-09-08')
+  assert(j1 === 'JApp/26-27/0001' && j2 === 'JApp/26-27/0002' && j1 !== j2, '9: no duplicate JApp numbers')
 }
 
 console.log('verify_accounts_split_payment_drafts: voucher export A–L checks passed')
@@ -647,21 +697,34 @@ console.log('verify_accounts_split_payment_drafts: voucher export A–L checks p
     remaining_amount: 5000,
     payment_status: 'pending',
   }
+  const demoSep08 = {
+    reception_entry_id: 14,
+    jc_number: 'JC-08',
+    reg_number: 'RJ1408SEP',
+    owner_name: 'RAMESH KUMAR',
+    branch: 'Sitapura',
+    invoice_number: 'IMBTAI2627007276',
+    billed_amount: 4000,
+    amount_received: 4000,
+    remaining_amount: 0,
+    payment_status: 'received',
+  }
   const demoLines = [
     { id: 1, reception_entry_id: 11, amount: 4000, payment_mode: 'cash', payment_received_date: '2026-09-11', posted_at: '2026-09-11T10:00:00+05:30', voucher_no: 'RApp/26-27/0001', reference: 'UPI123' },
     { id: 2, reception_entry_id: 11, amount: 6000, payment_mode: 'upi', payment_received_date: '2026-09-11', posted_at: '2026-09-11T10:01:00+05:30', voucher_no: 'JApp/26-27/0001', reference: 'UTR-6000' },
+    { id: 5, reception_entry_id: 14, amount: 4000, payment_mode: 'cash', payment_received_date: '2026-09-11', posted_at: '2026-09-11T12:00:00+05:30', voucher_no: 'RApp/26-27/0005', reference: 'CASH-08SEP' },
   ]
   const observed = {
-    cash: buildMechanicalAccountsExportRows({ cases: [demoCase], lines: demoLines, paymentModeFilter: 'cash', formatWhen: () => '' }),
+    cash: buildMechanicalAccountsExportRows({ cases: [demoCase, demoSep08], lines: demoLines, paymentModeFilter: 'cash', formatWhen: () => '' }),
     upi: buildMechanicalAccountsExportRows({ cases: [demoCase], lines: demoLines, paymentModeFilter: 'upi', formatWhen: () => '' }),
     card: buildMechanicalAccountsExportRows({ cases: [demoCase], lines: demoLines, paymentModeFilter: 'card', formatWhen: () => '' }),
-    all: buildMechanicalAccountsExportRows({ cases: [demoPending, demoCase], lines: demoLines, paymentModeFilter: 'all', formatWhen: () => '' }),
+    all: buildMechanicalAccountsExportRows({ cases: [demoPending, demoCase, demoSep08], lines: demoLines, paymentModeFilter: 'all', formatWhen: () => '' }),
   }
   console.log('practical export observation:', JSON.stringify({
-    cash: observed.cash.map((r) => ({ amount: r['Amount received'], voucher_no: r.voucher_no, account_name: r.account_name, reference: r['Reference no'] })),
+    cash: observed.cash.map((r) => ({ invoice: r['Invoice number'], amount: r['Amount received'], voucher_no: r.voucher_no, account_name: r.account_name, reference: r['Reference no'] })),
     upi: observed.upi.map((r) => ({ amount: r['Amount received'], voucher_no: r.voucher_no })),
     card: observed.card.length,
-    all: observed.all.map((r) => ({ jc: r.JC, amount: r['Amount received'], voucher_no: r.voucher_no })),
+    all: observed.all.map((r) => ({ jc: r.JC, invoice: r['Invoice number'], amount: r['Amount received'], voucher_no: r.voucher_no })),
   }))
 }
 

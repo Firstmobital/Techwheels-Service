@@ -22,10 +22,11 @@
 - [ ] Posted line stores selected `payment_received_date` and an independent `posted_at`
 - [ ] Receipts history shows Received Date from `payment_received_date`; older rows still render after IST backfill
 - [ ] User without `accounts` gets AccessDenied at `/accounts`
-- [ ] Cash receipt on/after 11-Sep gets `RApp/26-27/nnnn`; UPI and Card share `JApp/26-27/nnnn`; sequences independent
+- [ ] Cash / UPI / Card receipt on an invoice dated on/after 2-Sep-2026 gets `RApp/26-27/nnnn` (cash) or shared `JApp/26-27/nnnn` (upi+card); sequences independent
 - [ ] Split Cash+UPI Excel: Cash export amount is the cash line only; UPI export is the UPI line only; All emits two rows
 - [ ] Repeated export / different mode cards keep the same persisted `voucher_no`
-- [ ] Pre-11-Sep `payment_received_date` and cheque/bank/other have blank `voucher_no`
+- [ ] Invoice dated before 2-Sep-2026 and cheque/bank/other have blank `voucher_no` (unless a DBL-0057 number was already persisted and must be kept)
+- [ ] Invoice dated 8-Sep with payment received 11-Sep still gets a voucher (invoice_date controls)
 - [ ] `account_name` is `OWNER-BRANCH VRN` (space before VRN); missing owner → blank account_name
 - [ ] Pending case with no receipts still exports one row with blank `voucher_no`
 

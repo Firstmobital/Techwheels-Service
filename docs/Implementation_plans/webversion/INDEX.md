@@ -40,7 +40,7 @@ Use this file as daily command center:
 
 | Plan ID | Category | Status | Owner | File |
 |---|---|---|---|---|
-| ACCOUNTS-001 | accounts | Active (DBL-0057 mechanical receipt vouchers PROPOSED) | Accounts + Platform Team | `docs/Implementation_plans/webversion/categories/accounts/active/ACCOUNTS-001_MECHANICAL_BODYSHOP_ACCOUNTS_DESK_PLAN_2026-09-11.md` |
+| ACCOUNTS-001 | accounts | Active (DBL-0058 voucher eligibility invoice_date >= 2026-09-02 APPLIED) | Accounts + Platform Team | `docs/Implementation_plans/webversion/categories/accounts/active/ACCOUNTS-001_MECHANICAL_BODYSHOP_ACCOUNTS_DESK_PLAN_2026-09-11.md` |
 | BODYSHOP-FLOW | bodyshop | In Progress | Bodyshop Team | `docs/Implementation_plans/webversion/categories/bodyshop/active/Bodyshop-Flow.md` |
 | BODYSHOP-QUEUE-001 | bodyshop | Active | Bodyshop Team + Platform Team | `docs/Implementation_plans/webversion/categories/bodyshop/active/BODYSHOP-QUEUE-001_CANONICAL_STAGE_WORKLIST_BACKEND_PLAN_2026-06-20.md` |
 | BODYSHOP-EARNINGS-001 | bodyshop | Active | Bodyshop Team + Platform Team | `docs/Implementation_plans/webversion/categories/bodyshop/active/BODYSHOP-EARNINGS-001_BODYSHOP_TRACKER_SOLO_BONUS_SUPPORT_SPLIT_PLAN_2026-07-17.md` |

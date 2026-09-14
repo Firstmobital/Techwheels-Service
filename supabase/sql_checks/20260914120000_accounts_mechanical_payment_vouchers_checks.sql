@@ -1,6 +1,8 @@
 -- Read-only verification checks for:
 -- supabase/migrations/20260914120000_accounts_mechanical_payment_vouchers.sql
 -- Execution: This file can be run in one go.
+-- After DBL-0058, allocator cutoff is invoice_date >= 2026-09-02.
+-- Do not use these checks as go/no-go after 0058; run 20260914140000 instead.
 
 -- 1) Column + sequences + unique index
 SELECT
