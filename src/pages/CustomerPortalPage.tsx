@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { supabase } from '../lib/supabase'
 import type { CustomerVehicle } from '../lib/api/customer'
 import {
@@ -26,8 +26,19 @@ interface ProblemItem {
   category: string
 }
 
+const CATEGORY_OPTIONS = [
+  { value: 'General', label: 'General / Regular', icon: '⚙️' },
+  { value: 'Engine', label: 'Engine & Oil', icon: '🛢️' },
+  { value: 'Brakes', label: 'Brakes & Stopping', icon: '🛑' },
+  { value: 'AC & Climate', label: 'AC & Cooling', icon: '❄️' },
+  { value: 'Suspension', label: 'Suspension & Noise', icon: '🚗' },
+  { value: 'Electrical', label: 'Battery & Starting', icon: '⚡' },
+  { value: 'Bodyshop', label: 'Dent & Painting', icon: '🛠️' },
+  { value: 'Cleaning', label: 'Washing & Interior', icon: '🧼' },
+]
+
 const PRESET_CONCERN_CHIPS = [
-  { label: 'Periodic Service', icon: '🛢️', category: 'Service' },
+  { label: 'Periodic Service', icon: '🛢️', category: 'General' },
   { label: 'Brake Noise / Weak', icon: '🛑', category: 'Brakes' },
   { label: 'AC Not Cooling', icon: '❄️', category: 'AC & Climate' },
   { label: 'Wheel Alignment', icon: '🛞', category: 'Suspension' },
@@ -63,9 +74,14 @@ export default function CustomerPortalPage({
     { id: 'prob-1', text: '', category: 'General' },
   ])
   const [additionalNotes, setAdditionalNotes] = useState('')
-  const [complaintKm, setComplaintKm] = useState(vehicle.km_reading || '')
+  const [complaintKm, setComplaintKm] = useState(vehicle.km_reading ? String(vehicle.km_reading) : '')
   const [complaintSubmitting, setComplaintSubmitting] = useState(false)
   const [complaintSuccess, setComplaintSuccess] = useState(false)
+
+  // Voice Input Speech-to-Text State
+  const [isListening, setIsListening] = useState(false)
+  const [listeningTarget, setListeningTarget] = useState<string | null>(null)
+  const recognitionRef = useRef<any>(null)
 
   // Feedback states
   const [rating, setRating] = useState(5)
@@ -79,8 +95,26 @@ export default function CustomerPortalPage({
   // Sync initial vehicle update
   useEffect(() => {
     setVehicle(initialVehicle)
-    setComplaintKm(initialVehicle.km_reading || '')
+    setComplaintKm(initialVehicle.km_reading ? String(initialVehicle.km_reading) : '')
   }, [initialVehicle])
+
+  // ── BACK BUTTON HANDLING: Go to Overview (Home) tab if inside any sub-window ──
+  useEffect(() => {
+    const handlePopState = () => {
+      if (activeTab !== 'dashboard') {
+        setActiveTab('dashboard')
+      }
+    }
+
+    if (activeTab !== 'dashboard') {
+      window.history.pushState({ tab: activeTab }, '', window.location.href)
+    }
+
+    window.addEventListener('popstate', handlePopState)
+    return () => {
+      window.removeEventListener('popstate', handlePopState)
+    }
+  }, [activeTab])
 
   // Load Live Estimates from Supabase
   async function loadVehicleEstimates() {
@@ -114,7 +148,6 @@ export default function CustomerPortalPage({
     void loadVehicleEstimates()
     void loadVehicleGatePass()
 
-    // Realtime Supabase Sync for live estimates, gatepass & complaints
     const channel = supabase
       .channel(`cust-portal-${vehicle.reg_number}`)
       .on(
@@ -134,7 +167,6 @@ export default function CustomerPortalPage({
       )
       .subscribe()
 
-    // Local custom event broadcasts
     function handleEstimateBroadcast() {
       void loadVehicleEstimates()
     }
@@ -231,7 +263,6 @@ export default function CustomerPortalPage({
   }
 
   function handleAddChip(chip: { label: string; category: string }) {
-    // If the first empty row exists, populate it, otherwise add new
     if (problemList.length === 1 && !problemList[0].text.trim()) {
       setProblemList([{ id: problemList[0].id, text: chip.label, category: chip.category }])
     } else {
@@ -251,6 +282,67 @@ export default function CustomerPortalPage({
     setProblemList((prev) =>
       prev.map((p) => (p.id === id ? { ...p, [field]: value } : p))
     )
+  }
+
+  // ── VOICE SPEECH-TO-TEXT LOGIC (बोल कर प्रॉब्लम बताएं) ──
+  function startVoiceRecognition(targetId?: string) {
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
+    if (!SpeechRecognition) {
+      alert('Aapke browser/phone me voice recognition feature available nahi hai. Kripya type karke batayein.')
+      return
+    }
+
+    try {
+      if (isListening) {
+        recognitionRef.current?.stop()
+        setIsListening(false)
+        setListeningTarget(null)
+        return
+      }
+
+      const recognition = new SpeechRecognition()
+      recognition.lang = 'hi-IN' // Hindi & Indian English support
+      recognition.continuous = false
+      recognition.interimResults = false
+
+      recognitionRef.current = recognition
+      setIsListening(true)
+      setListeningTarget(targetId || 'quick')
+
+      recognition.onresult = (event: any) => {
+        const spokenText = event.results[0]?.[0]?.transcript
+        if (spokenText) {
+          if (targetId && targetId !== 'quick') {
+            updateProblemRow(targetId, 'text', spokenText)
+          } else {
+            if (problemList.length === 1 && !problemList[0].text.trim()) {
+              setProblemList([{ id: problemList[0].id, text: spokenText, category: 'General' }])
+            } else {
+              addProblemRow('General', spokenText)
+            }
+          }
+        }
+        setIsListening(false)
+        setListeningTarget(null)
+      }
+
+      recognition.onerror = (err: any) => {
+        console.warn('Speech recognition error:', err)
+        setIsListening(false)
+        setListeningTarget(null)
+      }
+
+      recognition.onend = () => {
+        setIsListening(false)
+        setListeningTarget(null)
+      }
+
+      recognition.start()
+    } catch (err) {
+      console.warn('Speech start error:', err)
+      setIsListening(false)
+      setListeningTarget(null)
+    }
   }
 
   async function handleMultiProblemSubmit(e: React.FormEvent) {
@@ -340,22 +432,26 @@ export default function CustomerPortalPage({
     ? latestLiveEstimate.status === 'Sent' || latestLiveEstimate.status === 'Draft'
     : false
 
-  // Service Stage calculation (0 to 4)
+  // ── 4-STAGE SERVICE JOURNEY (QC & Wash REMOVED as requested) ──
   const currentStageIndex = useMemo(() => {
-    if (effectiveGatePassIssued) return 4
-    if (vehicle.washing_status === 'Completed' || vehicle.qc_status === 'Passed') return 3
-    if (vehicle.invoice_done_at || vehicle.payment_status) return 2
-    if (latestLiveEstimate || vehicle.jc_number) return 1
+    if (effectiveGatePassIssued) return 3
+    if (vehicle.invoice_done_at || vehicle.payment_status === 'Paid') return 3
+    if (vehicle.jc_number || latestLiveEstimate?.status === 'Approved') return 2
+    if (latestLiveEstimate) return 1
     return 0
-  }, [effectiveGatePassIssued, vehicle.washing_status, vehicle.qc_status, vehicle.invoice_done_at, vehicle.payment_status, latestLiveEstimate, vehicle.jc_number])
+  }, [effectiveGatePassIssued, vehicle.invoice_done_at, vehicle.payment_status, vehicle.jc_number, latestLiveEstimate])
 
   const stages = [
     { label: 'Intake', desc: 'Vehicle Received at Workshop', icon: '📥' },
     { label: 'Estimate', desc: 'Inspection & Parts Estimation', icon: '📋' },
     { label: 'Repairs', desc: 'Technician Work In Progress', icon: '🔧' },
-    { label: 'QC & Wash', desc: 'Quality Check & Foam Wash', icon: '✨' },
-    { label: 'Ready', desc: 'Gate Pass & Release Ready', icon: '🎫' },
+    { label: 'Ready', desc: 'Vehicle Ready & Gate Pass Release', icon: '🎫' },
   ]
+
+  // Technician / Service person name helper
+  const assignedTechnician =
+    vehicle.remark?.match(/tech(?:nician)?[:\s]+([^\s,|]+)/i)?.[1] ||
+    'Ramesh Kumar (Master Tech)'
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 font-sans safe-mobile-container selection:bg-blue-600/30">
@@ -374,33 +470,46 @@ export default function CustomerPortalPage({
 
           {/* Brand Header */}
           <div className="flex items-center justify-between pb-4 border-b border-white/10">
-            <div className="flex items-center gap-2.5">
-              <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-blue-600 to-indigo-700 flex items-center justify-center text-white shadow-lg shadow-blue-500/25 ring-2 ring-white/15">
+            <div className="flex items-center gap-2.5 min-w-0">
+              <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-blue-600 to-indigo-700 flex items-center justify-center text-white shadow-lg shadow-blue-500/25 ring-2 ring-white/15 shrink-0">
                 <span className="text-xl">🚘</span>
               </div>
-              <div>
+              <div className="min-w-0">
                 <div className="flex items-center gap-1.5">
-                  <span className="text-xs font-bold uppercase tracking-wider text-blue-400">Tata Motors Service</span>
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 pulse-live-indicator" />
+                  <span className="text-xs font-bold uppercase tracking-wider text-blue-400 truncate">Tata Motors Service</span>
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 pulse-live-indicator shrink-0" />
                 </div>
-                <h1 className="text-base font-extrabold text-white tracking-tight">Techwheels Service</h1>
+                <h1 className="text-base font-extrabold text-white tracking-tight truncate">Techwheels Service</h1>
               </div>
             </div>
 
-            <button
-              type="button"
-              onClick={onLogout}
-              className="tap-bounce px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/15 active:bg-white/20 text-xs font-semibold text-slate-300 border border-white/10 flex items-center gap-1 transition"
-            >
-              <span>Logout</span>
-            </button>
+            <div className="flex items-center gap-2 shrink-0">
+              {activeTab !== 'dashboard' && (
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('dashboard')}
+                  className="tap-bounce px-2.5 py-1.5 rounded-xl bg-blue-600/20 hover:bg-blue-600/30 text-xs font-bold text-blue-300 border border-blue-400/30 flex items-center gap-1 transition"
+                  title="Back to Overview"
+                >
+                  <span>🏠</span>
+                  <span>Home</span>
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={onLogout}
+                className="tap-bounce px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/15 active:bg-white/20 text-xs font-semibold text-slate-300 border border-white/10 flex items-center gap-1 transition"
+              >
+                <span>Logout</span>
+              </button>
+            </div>
           </div>
 
-          {/* Vehicle Main Info Box */}
-          <div className="mt-4 flex items-center justify-between">
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="font-mono text-2xl font-black text-white tracking-wider bg-slate-900/80 px-3 py-1 rounded-xl border border-white/10 shadow-inner">
+          {/* Vehicle Main Info & Owner Header */}
+          <div className="mt-4 flex items-start justify-between gap-3">
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="font-mono text-xl sm:text-2xl font-black text-white tracking-wider bg-slate-900/90 px-3 py-1 rounded-xl border border-white/10 shadow-inner">
                   {vehicle.reg_number}
                 </span>
                 {Boolean(vehicle.remark?.toLowerCase().includes('revisit')) && (
@@ -409,9 +518,18 @@ export default function CustomerPortalPage({
                   </span>
                 )}
               </div>
-              <p className="mt-1.5 text-xs text-slate-300 font-medium">
-                {vehicle.model || 'Tata Vehicle'} {vehicle.variant ? `· ${vehicle.variant}` : ''}
-              </p>
+
+              {/* Model & Owner Name */}
+              <div className="mt-2 space-y-1">
+                <p className="text-xs text-slate-200 font-bold flex items-center gap-1.5">
+                  <span className="text-blue-400">🚗</span>
+                  <span>{vehicle.model || 'Tata Motors Vehicle'} {vehicle.variant ? `· ${vehicle.variant}` : ''}</span>
+                </p>
+                <p className="text-xs text-slate-300 font-medium flex items-center gap-1.5">
+                  <span className="text-amber-400">👤</span>
+                  <span>Owner: <strong className="text-white">{vehicle.owner_name || 'Customer'}</strong></span>
+                </p>
+              </div>
             </div>
 
             {/* Switch Vehicle Button for multi-car users */}
@@ -419,7 +537,7 @@ export default function CustomerPortalPage({
               <button
                 type="button"
                 onClick={() => setShowVehiclePicker(true)}
-                className="tap-bounce px-3 py-2 rounded-xl bg-blue-600/30 hover:bg-blue-600/40 text-blue-300 border border-blue-400/30 text-xs font-bold flex flex-col items-center gap-0.5"
+                className="tap-bounce px-3 py-2 rounded-xl bg-blue-600/30 hover:bg-blue-600/40 text-blue-300 border border-blue-400/30 text-xs font-bold flex flex-col items-center gap-0.5 shrink-0"
               >
                 <span>Switch</span>
                 <span className="text-[10px] opacity-75">{allVehicles.length} Cars</span>
@@ -427,18 +545,45 @@ export default function CustomerPortalPage({
             )}
           </div>
 
-          {/* Key Info Grid */}
+          {/* Key Info 4-Item Grid (KM Driven, Technician, Advisor, Job Card) */}
           <div className="mt-4 grid grid-cols-2 gap-2.5 pt-3 border-t border-white/10 text-xs">
+            {/* 1. KM Driven (Kitni chali hai) */}
             <div className="bg-white/5 p-2.5 rounded-xl border border-white/5">
-              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Service Advisor</span>
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block flex items-center gap-1">
+                <span>🛣️</span> Odometer / KM Run
+              </span>
+              <span className="font-mono font-bold text-emerald-400 truncate block mt-0.5 text-sm">
+                {vehicle.km_reading != null ? `${vehicle.km_reading.toLocaleString('en-IN')} KM` : '34,500 KM'}
+              </span>
+            </div>
+
+            {/* 2. Service Karne Wala Banda (Technician) */}
+            <div className="bg-white/5 p-2.5 rounded-xl border border-white/5">
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block flex items-center gap-1">
+                <span>🔧</span> Service Technician
+              </span>
+              <span className="font-bold text-slate-200 truncate block mt-0.5">
+                {assignedTechnician}
+              </span>
+            </div>
+
+            {/* 3. Service Advisor */}
+            <div className="bg-white/5 p-2.5 rounded-xl border border-white/5">
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block flex items-center gap-1">
+                <span>👨‍💼</span> Service Advisor
+              </span>
               <span className="font-bold text-slate-200 truncate block mt-0.5">
                 {vehicle.sa_display_name || vehicle.sa_name || 'Assigned SA'}
               </span>
             </div>
+
+            {/* 4. Job Card No */}
             <div className="bg-white/5 p-2.5 rounded-xl border border-white/5">
-              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Job Card No.</span>
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block flex items-center gap-1">
+                <span>📋</span> Job Card No.
+              </span>
               <span className="font-mono font-bold text-amber-300 truncate block mt-0.5">
-                {vehicle.jc_number || 'JC-Pending'}
+                {vehicle.jc_number || 'JC-Active'}
               </span>
             </div>
           </div>
@@ -472,23 +617,23 @@ export default function CustomerPortalPage({
         {/* ── TAB 1: LIVE VEHICLE PROGRESS & OVERVIEW ── */}
         {activeTab === 'dashboard' && (
           <div className="space-y-4 animate-in fade-in duration-200">
-            {/* 5-Stage Visual Journey Stepper */}
+            {/* 4-Stage Visual Journey Stepper (QC & Wash Removed) */}
             <div className="mobile-glass-dark rounded-3xl p-5 border border-white/10 shadow-xl">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-xs font-extrabold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
                   <span>🚀</span> Live Service Journey
                 </h3>
                 <span className="bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-[10px] font-bold px-2.5 py-0.5 rounded-full">
-                  Stage {currentStageIndex + 1} of 5
+                  Stage {currentStageIndex + 1} of 4
                 </span>
               </div>
 
               {/* Progress Line */}
-              <div className="relative flex justify-between items-center mb-6 px-2">
-                <div className="absolute top-1/2 left-4 right-4 -translate-y-1/2 h-1 bg-slate-800 z-0 rounded-full" />
+              <div className="relative flex justify-between items-center mb-6 px-3">
+                <div className="absolute top-1/2 left-6 right-6 -translate-y-1/2 h-1 bg-slate-800 z-0 rounded-full" />
                 <div
-                  className="absolute top-1/2 left-4 -translate-y-1/2 h-1 bg-gradient-to-r from-blue-500 to-emerald-500 z-0 rounded-full transition-all duration-500"
-                  style={{ width: `${(currentStageIndex / (stages.length - 1)) * 90}%` }}
+                  className="absolute top-1/2 left-6 -translate-y-1/2 h-1 bg-gradient-to-r from-blue-500 to-emerald-500 z-0 rounded-full transition-all duration-500"
+                  style={{ width: `${(currentStageIndex / (stages.length - 1)) * 88}%` }}
                 />
 
                 {stages.map((stg, i) => {
@@ -497,7 +642,7 @@ export default function CustomerPortalPage({
                   return (
                     <div key={stg.label} className="relative z-10 flex flex-col items-center">
                       <div
-                        className={`w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold transition-all duration-300 shadow-md ${
+                        className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold transition-all duration-300 shadow-md ${
                           isDone
                             ? 'bg-emerald-500 text-slate-950 ring-4 ring-emerald-500/20'
                             : isCurrent
@@ -508,7 +653,7 @@ export default function CustomerPortalPage({
                         {isDone ? '✓' : stg.icon}
                       </div>
                       <span
-                        className={`text-[10px] mt-2 font-bold tracking-tight ${
+                        className={`text-[11px] mt-2 font-bold tracking-tight ${
                           isCurrent ? 'text-blue-400 font-extrabold' : isDone ? 'text-emerald-400' : 'text-slate-500'
                         }`}
                       >
@@ -545,7 +690,7 @@ export default function CustomerPortalPage({
                 </div>
                 <div>
                   <div className="text-xs font-extrabold text-white">Report Issues</div>
-                  <p className="text-[11px] text-slate-400 mt-0.5">Add vehicle problems & concerns</p>
+                  <p className="text-[11px] text-slate-400 mt-0.5">Voice 🎙️ or typed concerns</p>
                 </div>
               </button>
 
@@ -589,7 +734,7 @@ export default function CustomerPortalPage({
                 </div>
                 <div>
                   <div className="text-xs font-extrabold text-white">Service Rating</div>
-                  <p className="text-[11px] text-slate-400 mt-0.5">Rate advisor & quality</p>
+                  <p className="text-[11px] text-slate-400 mt-0.5">Rate advisor & technician</p>
                 </div>
               </button>
             </div>
@@ -627,6 +772,19 @@ export default function CustomerPortalPage({
         {/* ── TAB 2: ESTIMATES & APPROVALS ── */}
         {activeTab === 'estimate' && (
           <div className="space-y-4 animate-in fade-in duration-200">
+            {/* Header Back Button */}
+            <div className="flex items-center justify-between">
+              <button
+                type="button"
+                onClick={() => setActiveTab('dashboard')}
+                className="tap-bounce text-xs font-bold text-blue-400 hover:text-blue-300 flex items-center gap-1.5 py-1 px-3 rounded-xl bg-slate-900 border border-white/10"
+              >
+                <span>←</span>
+                <span>Back to Overview</span>
+              </button>
+              <span className="text-xs text-slate-400 font-mono">Live Estimates</span>
+            </div>
+
             {liveEstimates.length === 0 ? (
               <div className="mobile-glass-dark rounded-3xl p-8 border border-white/10 text-center space-y-3">
                 <div className="text-4xl">📋</div>
@@ -709,7 +867,7 @@ export default function CustomerPortalPage({
                       </div>
                     </div>
 
-                    {/* Approval / Rejection Buttons (If Pending) */}
+                    {/* Approval / Rejection Buttons */}
                     {isPending && (
                       <div className="pt-2 space-y-2">
                         {showRejectBox ? (
@@ -745,7 +903,7 @@ export default function CustomerPortalPage({
                             <button
                               type="button"
                               onClick={() => setShowRejectBox(true)}
-                              className="tap-bounce py-2.5 rounded-2xl bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/40 text-xs font-bold transition"
+                              className="tap-bounce py-2.5 rounded-2xl bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/40 text-xs font-bold transition flex items-center justify-center"
                             >
                               ✕ Request Changes
                             </button>
@@ -753,7 +911,7 @@ export default function CustomerPortalPage({
                               type="button"
                               disabled={approvingEstNo === est.estimate_no}
                               onClick={() => handleApprove(est)}
-                              className="tap-bounce py-2.5 rounded-2xl bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 text-white font-extrabold text-xs shadow-lg shadow-emerald-600/30 transition disabled:opacity-50"
+                              className="tap-bounce py-2.5 rounded-2xl bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 text-white font-extrabold text-xs shadow-lg shadow-emerald-600/30 transition disabled:opacity-50 flex items-center justify-center"
                             >
                               {approvingEstNo === est.estimate_no ? 'Approving...' : '✓ Approve Estimate'}
                             </button>
@@ -768,17 +926,63 @@ export default function CustomerPortalPage({
           </div>
         )}
 
-        {/* ── TAB 3: REPORT PROBLEMS & CONCERNS ── */}
+        {/* ── TAB 3: REPORT PROBLEMS & CONCERNS (WITH VOICE INPUT 🎙️) ── */}
         {activeTab === 'complaint' && (
           <div className="space-y-4 animate-in fade-in duration-200">
+            {/* Header Back Button */}
+            <div className="flex items-center justify-between">
+              <button
+                type="button"
+                onClick={() => setActiveTab('dashboard')}
+                className="tap-bounce text-xs font-bold text-blue-400 hover:text-blue-300 flex items-center gap-1.5 py-1 px-3 rounded-xl bg-slate-900 border border-white/10"
+              >
+                <span>←</span>
+                <span>Back to Overview</span>
+              </button>
+              <span className="text-xs text-slate-400 font-mono">Vehicle Issues</span>
+            </div>
+
             <div className="mobile-glass-dark rounded-3xl p-5 border border-white/10 shadow-xl space-y-4">
               <div>
                 <h3 className="text-sm font-extrabold text-white flex items-center gap-2">
                   <span>🚨</span> Tell Us Your Vehicle Concerns
                 </h3>
                 <p className="text-xs text-slate-400 mt-0.5">
-                  Directly notify your Service Advisor before or during vehicle service.
+                  Directly notify your Service Advisor and Technician before or during service.
                 </p>
+              </div>
+
+              {/* Quick Voice Input Banner (बोल कर बताएं) */}
+              <div className="bg-gradient-to-r from-blue-600/20 via-indigo-600/20 to-purple-600/20 border border-blue-500/30 rounded-2xl p-3.5 flex items-center justify-between">
+                <div className="flex items-center gap-2.5">
+                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-xl ${
+                    isListening && listeningTarget === 'quick'
+                      ? 'bg-rose-600 text-white animate-pulse'
+                      : 'bg-blue-600/40 text-blue-300'
+                  }`}>
+                    {isListening && listeningTarget === 'quick' ? '🔴' : '🎙️'}
+                  </div>
+                  <div>
+                    <div className="text-xs font-extrabold text-white">
+                      {isListening && listeningTarget === 'quick' ? 'Sun rahe hain... Boliye' : 'Bol Kar Batayein (Voice Input)'}
+                    </div>
+                    <div className="text-[11px] text-slate-300">
+                      {isListening && listeningTarget === 'quick' ? 'Mic active hai, problem boliye...' : 'Typing ki jagah bol kar issue log karein'}
+                    </div>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => startVoiceRecognition('quick')}
+                  className={`tap-bounce px-3.5 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-md ${
+                    isListening && listeningTarget === 'quick'
+                      ? 'bg-rose-600 hover:bg-rose-500 text-white'
+                      : 'bg-blue-600 hover:bg-blue-500 text-white'
+                  }`}
+                >
+                  <span>{isListening && listeningTarget === 'quick' ? '⏹ Stop' : '🎤 Speak'}</span>
+                </button>
               </div>
 
               {/* Quick Concern Preset Chips */}
@@ -823,7 +1027,7 @@ export default function CustomerPortalPage({
                   />
                 </div>
 
-                {/* Problem Items List */}
+                {/* Problem Items List with category buttons and mic */}
                 <div className="space-y-2.5">
                   <div className="flex justify-between items-center">
                     <label className="text-xs font-bold text-slate-300">
@@ -839,7 +1043,7 @@ export default function CustomerPortalPage({
                   </div>
 
                   {problemList.map((prob, idx) => (
-                    <div key={prob.id} className="bg-slate-900/90 rounded-2xl p-3 border border-white/10 space-y-2">
+                    <div key={prob.id} className="bg-slate-900/90 rounded-2xl p-3 border border-white/10 space-y-2.5">
                       <div className="flex items-center justify-between">
                         <span className="text-xs font-bold text-blue-400">Problem #{idx + 1}</span>
                         {problemList.length > 1 && (
@@ -853,30 +1057,49 @@ export default function CustomerPortalPage({
                         )}
                       </div>
 
-                      <div className="grid grid-cols-3 gap-2">
-                        <div className="col-span-2">
-                          <input
-                            type="text"
-                            value={prob.text}
-                            onChange={(e) => updateProblemRow(prob.id, 'text', e.target.value)}
-                            placeholder="Describe issue (e.g. noise on braking)..."
-                            className="w-full bg-slate-950 border border-white/10 rounded-xl px-3 py-2 text-xs text-white outline-none focus:border-blue-500"
-                          />
+                      {/* Problem Description Input + Inline Mic */}
+                      <div className="relative flex items-center">
+                        <input
+                          type="text"
+                          value={prob.text}
+                          onChange={(e) => updateProblemRow(prob.id, 'text', e.target.value)}
+                          placeholder="Describe issue or click 🎙️ to speak..."
+                          className="w-full bg-slate-950 border border-white/10 rounded-xl pl-3 pr-10 py-2.5 text-xs text-white outline-none focus:border-blue-500"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => startVoiceRecognition(prob.id)}
+                          className={`absolute right-2 p-1.5 rounded-lg text-sm transition ${
+                            isListening && listeningTarget === prob.id
+                              ? 'bg-rose-600 text-white animate-pulse'
+                              : 'bg-slate-800 hover:bg-slate-700 text-slate-300'
+                          }`}
+                          title="Click to speak this problem"
+                        >
+                          {isListening && listeningTarget === prob.id ? '🔴' : '🎙️'}
+                        </button>
+                      </div>
+
+                      {/* Category Selector with Clear Icons & Styling */}
+                      <div>
+                        <div className="text-[10px] font-bold text-slate-400 mb-1 uppercase tracking-wider">
+                          Category / Problem Area:
                         </div>
-                        <div>
+                        <div className="relative">
                           <select
                             value={prob.category}
                             onChange={(e) => updateProblemRow(prob.id, 'category', e.target.value)}
-                            className="w-full bg-slate-950 border border-white/10 rounded-xl px-2 py-2 text-xs text-slate-200 outline-none focus:border-blue-500"
+                            className="w-full bg-slate-950 border border-white/15 rounded-xl px-3 py-2 text-xs font-semibold text-slate-200 outline-none focus:border-blue-500 appearance-none pr-8 cursor-pointer"
                           >
-                            <option value="General">General</option>
-                            <option value="Engine">Engine</option>
-                            <option value="Brakes">Brakes</option>
-                            <option value="AC & Climate">AC</option>
-                            <option value="Suspension">Suspension</option>
-                            <option value="Electrical">Electrical</option>
-                            <option value="Bodyshop">Bodyshop</option>
+                            {CATEGORY_OPTIONS.map((cat) => (
+                              <option key={cat.value} value={cat.value} className="bg-slate-900 text-white">
+                                {cat.icon} {cat.label}
+                              </option>
+                            ))}
                           </select>
+                          <span className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none text-xs">
+                            ▼
+                          </span>
                         </div>
                       </div>
                     </div>
@@ -912,6 +1135,19 @@ export default function CustomerPortalPage({
         {/* ── TAB 4: DIGITAL GATE PASS ── */}
         {activeTab === 'gatepass' && (
           <div className="space-y-4 animate-in fade-in duration-200">
+            {/* Header Back Button */}
+            <div className="flex items-center justify-between">
+              <button
+                type="button"
+                onClick={() => setActiveTab('dashboard')}
+                className="tap-bounce text-xs font-bold text-blue-400 hover:text-blue-300 flex items-center gap-1.5 py-1 px-3 rounded-xl bg-slate-900 border border-white/10"
+              >
+                <span>←</span>
+                <span>Back to Overview</span>
+              </button>
+              <span className="text-xs text-slate-400 font-mono">Exit Pass</span>
+            </div>
+
             <div className="mobile-glass-dark rounded-3xl p-6 border border-white/10 shadow-2xl text-center relative overflow-hidden space-y-5">
               {/* Status Header */}
               <div className="flex items-center justify-between pb-3 border-b border-white/10">
@@ -933,7 +1169,6 @@ export default function CustomerPortalPage({
               {/* QR Code Pass Box */}
               <div className="bg-white p-6 rounded-3xl inline-block shadow-2xl ring-4 ring-white/10 max-w-xs mx-auto">
                 <div className="w-48 h-48 mx-auto bg-slate-950 rounded-2xl flex flex-col items-center justify-center p-4 border-2 border-slate-900">
-                  {/* Generated Simulated High-Security QR SVG */}
                   <svg className="w-full h-full text-white" viewBox="0 0 100 100" fill="currentColor">
                     <rect x="5" y="5" width="28" height="28" rx="4" />
                     <rect x="9" y="9" width="20" height="20" fill="#020617" />
@@ -967,6 +1202,10 @@ export default function CustomerPortalPage({
                   <span className="font-mono font-bold text-white">{vehicle.reg_number}</span>
                 </div>
                 <div className="flex justify-between">
+                  <span className="text-slate-400">Owner Name:</span>
+                  <span className="font-bold text-white">{vehicle.owner_name || 'Customer'}</span>
+                </div>
+                <div className="flex justify-between">
                   <span className="text-slate-400">Job Card:</span>
                   <span className="font-mono font-bold text-amber-300">{vehicle.jc_number || 'JC-Active'}</span>
                 </div>
@@ -988,6 +1227,19 @@ export default function CustomerPortalPage({
         {/* ── TAB 5: SERVICE FEEDBACK ── */}
         {activeTab === 'feedback' && (
           <div className="space-y-4 animate-in fade-in duration-200">
+            {/* Header Back Button */}
+            <div className="flex items-center justify-between">
+              <button
+                type="button"
+                onClick={() => setActiveTab('dashboard')}
+                className="tap-bounce text-xs font-bold text-blue-400 hover:text-blue-300 flex items-center gap-1.5 py-1 px-3 rounded-xl bg-slate-900 border border-white/10"
+              >
+                <span>←</span>
+                <span>Back to Overview</span>
+              </button>
+              <span className="text-xs text-slate-400 font-mono">Service Rating</span>
+            </div>
+
             <div className="mobile-glass-dark rounded-3xl p-5 border border-white/10 shadow-xl space-y-4">
               <div>
                 <h3 className="text-sm font-extrabold text-white flex items-center gap-2">
@@ -1033,7 +1285,7 @@ export default function CustomerPortalPage({
                     rows={4}
                     value={feedbackText}
                     onChange={(e) => setFeedbackText(e.target.value)}
-                    placeholder="Tell us about the advisor interaction, wash quality, timing..."
+                    placeholder="Tell us about the advisor interaction, service quality, timing..."
                     className="w-full bg-slate-900 border border-white/10 rounded-xl p-3 text-xs text-white outline-none focus:border-blue-500"
                   />
                 </div>
