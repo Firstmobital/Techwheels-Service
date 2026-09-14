@@ -1052,28 +1052,28 @@ export default function CustomerPortalPage({
       </div>
 
       {/* ── FLOATING GLASS BOTTOM NAVIGATION DOCK ── */}
-      <div className="fixed bottom-0 left-0 right-0 z-50 px-4 pb-3 pt-1 pointer-events-none safe-bottom">
-        <div className="max-w-md mx-auto pointer-events-auto mobile-glass-nav rounded-3xl p-2 flex justify-around items-center border border-white/10 shadow-2xl">
+      <div className="fixed bottom-0 left-0 right-0 z-50 px-3 pb-3 pt-1 pointer-events-none safe-bottom">
+        <div className="max-w-md mx-auto pointer-events-auto mobile-glass-nav rounded-3xl p-1.5 sm:p-2 grid grid-cols-5 gap-1 items-center border border-white/10 shadow-2xl">
           <button
             type="button"
             onClick={() => setActiveTab('dashboard')}
-            className={`tap-bounce flex flex-col items-center py-1.5 px-3 rounded-2xl transition ${
+            className={`tap-bounce flex flex-col items-center justify-center py-1.5 px-1 rounded-2xl transition w-full ${
               activeTab === 'dashboard' ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/30' : 'text-slate-400 hover:text-white'
             }`}
           >
             <span className="text-lg">🏠</span>
-            <span className="text-[10px] font-bold mt-0.5">Overview</span>
+            <span className="text-[10px] font-bold mt-0.5 whitespace-nowrap">Overview</span>
           </button>
 
           <button
             type="button"
             onClick={() => setActiveTab('estimate')}
-            className={`tap-bounce flex flex-col items-center py-1.5 px-3 rounded-2xl transition relative ${
+            className={`tap-bounce flex flex-col items-center justify-center py-1.5 px-1 rounded-2xl transition relative w-full ${
               activeTab === 'estimate' ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/30' : 'text-slate-400 hover:text-white'
             }`}
           >
             <span className="text-lg">📋</span>
-            <span className="text-[10px] font-bold mt-0.5">Estimates</span>
+            <span className="text-[10px] font-bold mt-0.5 whitespace-nowrap">Estimates</span>
             {isPendingApproval && (
               <span className="absolute top-1 right-2 w-2 h-2 rounded-full bg-amber-400 pulse-live-indicator" />
             )}
@@ -1082,23 +1082,23 @@ export default function CustomerPortalPage({
           <button
             type="button"
             onClick={() => setActiveTab('complaint')}
-            className={`tap-bounce flex flex-col items-center py-1.5 px-3 rounded-2xl transition ${
+            className={`tap-bounce flex flex-col items-center justify-center py-1.5 px-1 rounded-2xl transition w-full ${
               activeTab === 'complaint' ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/30' : 'text-slate-400 hover:text-white'
             }`}
           >
             <span className="text-lg">🚨</span>
-            <span className="text-[10px] font-bold mt-0.5">Issues</span>
+            <span className="text-[10px] font-bold mt-0.5 whitespace-nowrap">Issues</span>
           </button>
 
           <button
             type="button"
             onClick={() => setActiveTab('gatepass')}
-            className={`tap-bounce flex flex-col items-center py-1.5 px-3 rounded-2xl transition relative ${
+            className={`tap-bounce flex flex-col items-center justify-center py-1.5 px-1 rounded-2xl transition relative w-full ${
               activeTab === 'gatepass' ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/30' : 'text-slate-400 hover:text-white'
             }`}
           >
             <span className="text-lg">🎫</span>
-            <span className="text-[10px] font-bold mt-0.5">Gate Pass</span>
+            <span className="text-[10px] font-bold mt-0.5 whitespace-nowrap">Gate Pass</span>
             {effectiveGatePassIssued && (
               <span className="absolute top-1 right-2 w-2 h-2 rounded-full bg-emerald-400 pulse-live-indicator" />
             )}
@@ -1107,12 +1107,12 @@ export default function CustomerPortalPage({
           <button
             type="button"
             onClick={() => setActiveTab('feedback')}
-            className={`tap-bounce flex flex-col items-center py-1.5 px-3 rounded-2xl transition ${
+            className={`tap-bounce flex flex-col items-center justify-center py-1.5 px-1 rounded-2xl transition w-full ${
               activeTab === 'feedback' ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/30' : 'text-slate-400 hover:text-white'
             }`}
           >
             <span className="text-lg">⭐</span>
-            <span className="text-[10px] font-bold mt-0.5">Review</span>
+            <span className="text-[10px] font-bold mt-0.5 whitespace-nowrap">Review</span>
           </button>
         </div>
       </div>

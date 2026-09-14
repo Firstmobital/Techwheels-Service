@@ -9,6 +9,37 @@
   display: grid;
   grid-template-columns: 1.05fr 1fr;
 }
+
+@media (max-width: 900px) {
+  .auth {
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+    min-height: 100dvh;
+    background: var(--surface);
+  }
+  .auth__aside {
+    display: none;
+  }
+  .auth__main {
+    flex: 1;
+    width: 100%;
+    padding: 24px 16px;
+    align-items: center;
+    justify-content: center;
+  }
+  .authcard {
+    width: 100%;
+    max-width: 440px;
+    margin: 0 auto;
+  }
+  .authcard h1 {
+    font-size: 22px;
+  }
+  .authcard__head {
+    margin-bottom: 18px;
+  }
+}
 .auth__aside {
   position: relative;
   overflow: hidden;

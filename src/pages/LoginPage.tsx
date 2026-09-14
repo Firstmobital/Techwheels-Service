@@ -144,7 +144,7 @@ export default function LoginPage({ onSwitchToSignUp, onSwitchToForgot, onCustom
           background: 'var(--surface-sunken, #f1f5f9)',
           padding: 4,
           borderRadius: 12,
-          marginBottom: 24,
+          marginBottom: 20,
           border: '1px solid var(--border, #e2e8f0)',
         }}
       >
@@ -155,8 +155,8 @@ export default function LoginPage({ onSwitchToSignUp, onSwitchToForgot, onCustom
             setError(null)
           }}
           style={{
-            padding: '8px 12px',
-            fontSize: 13.5,
+            padding: '9px 8px',
+            fontSize: 13,
             fontWeight: 600,
             borderRadius: 8,
             border: 'none',
@@ -169,6 +169,7 @@ export default function LoginPage({ onSwitchToSignUp, onSwitchToForgot, onCustom
             alignItems: 'center',
             justifyContent: 'center',
             gap: 6,
+            whiteSpace: 'nowrap',
           }}
         >
           <Icon name="shield" size={15} />
@@ -182,8 +183,8 @@ export default function LoginPage({ onSwitchToSignUp, onSwitchToForgot, onCustom
             setCustError(null)
           }}
           style={{
-            padding: '8px 12px',
-            fontSize: 13.5,
+            padding: '9px 8px',
+            fontSize: 13,
             fontWeight: 600,
             borderRadius: 8,
             border: 'none',
@@ -196,6 +197,7 @@ export default function LoginPage({ onSwitchToSignUp, onSwitchToForgot, onCustom
             alignItems: 'center',
             justifyContent: 'center',
             gap: 6,
+            whiteSpace: 'nowrap',
           }}
         >
           <Icon name="car" size={16} />
@@ -274,7 +276,7 @@ export default function LoginPage({ onSwitchToSignUp, onSwitchToForgot, onCustom
           </form>
 
           {/* Dedicated Customer Login Shortcut Button */}
-          <div style={{ marginTop: 20 }}>
+          <div style={{ marginTop: 18 }}>
             <button
               type="button"
               className="btn btn--block"
@@ -288,8 +290,13 @@ export default function LoginPage({ onSwitchToSignUp, onSwitchToForgot, onCustom
                 alignItems: 'center',
                 justifyContent: 'center',
                 gap: 8,
-                padding: '11px 16px',
+                padding: '10px 14px',
                 borderRadius: 10,
+                height: 'auto',
+                minHeight: '42px',
+                whiteSpace: 'normal',
+                textAlign: 'center',
+                fontSize: 13.5,
               }}
             >
               <Icon name="car" size={18} />
