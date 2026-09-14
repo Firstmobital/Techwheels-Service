@@ -309,6 +309,34 @@ export function sumAccountsPaymentModeTotals(
   return { cash, upi, card }
 }
 
+type AccountsPaymentModeLine = Pick<AccountsMechanicalPayment, 'reception_entry_id' | 'amount' | 'payment_mode'>
+
+/** Cases that have at least one receipt line in the given canonical payment mode. Split receipts match every mode they contain. */
+export function receptionIdsWithAccountsPaymentMode(
+  lines: Array<AccountsPaymentModeLine>,
+  mode: AccountsPaymentMode,
+): Set<number> {
+  const wanted = normalizeAccountsPaymentMode(mode)
+  const ids = new Set<number>()
+  if (!wanted) return ids
+  for (const line of lines) {
+    if (normalizeAccountsPaymentMode(line.payment_mode) !== wanted) continue
+    const amount = Number(line.amount ?? 0)
+    if (!Number.isFinite(amount) || amount === 0) continue
+    ids.add(line.reception_entry_id)
+  }
+  return ids
+}
+
+export function filterMechanicalCasesByPaymentMode<T extends { reception_entry_id: number }>(
+  rows: T[],
+  lines: Array<AccountsPaymentModeLine>,
+  mode: AccountsPaymentMode,
+): T[] {
+  const ids = receptionIdsWithAccountsPaymentMode(lines, mode)
+  return rows.filter((row) => ids.has(row.reception_entry_id))
+}
+
 export async function listAccountsMechanicalPaymentLines(): Promise<AccountsMechanicalPayment[]> {
   const pageSize = 1000
   const rows: AccountsMechanicalPayment[] = []

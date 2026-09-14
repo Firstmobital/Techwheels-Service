@@ -5,6 +5,7 @@ import {
   ACCOUNTS_PAYMENT_MODES,
   addAccountsMechanicalPayment,
   deleteAccountsMechanicalInvoiceFile,
+  filterMechanicalCasesByPaymentMode,
   isAccountsStatusPending,
   isAccountsStatusReceived,
   isCustomerPaymentClosed,
@@ -43,6 +44,7 @@ import { issueAccountsGatePass } from '../lib/gatepass'
 type Section = 'mechanical' | 'bodyshop'
 type BodyshopFilter = 'remaining' | 'all' | 'received' | 'pending'
 type MechanicalStatusFilter = 'all' | 'pending' | 'received'
+type MechanicalPaymentModeFilter = 'all' | 'cash' | 'upi' | 'card'
 
 type MechanicalPaymentDraft = {
   key: string
@@ -171,7 +173,7 @@ function KpiTile({
   )
   if (onClick) {
     return (
-      <button type="button" className={className} onClick={onClick} title={title}>
+      <button type="button" className={className} onClick={onClick} title={title} aria-pressed={Boolean(active)}>
         {body}
       </button>
     )
@@ -195,6 +197,7 @@ export default function AccountsPage() {
   const [month, setMonth] = useState<number | 'all'>('all')
   const [bsFilter, setBsFilter] = useState<BodyshopFilter>('remaining')
   const [mechStatusFilter, setMechStatusFilter] = useState<MechanicalStatusFilter>('all')
+  const [mechPaymentModeFilter, setMechPaymentModeFilter] = useState<MechanicalPaymentModeFilter>('all')
   const [mechPayLines, setMechPayLines] = useState<AccountsMechanicalPayment[]>([])
 
   const [editRow, setEditRow] = useState<AccountsMechanicalCase | null>(null)
@@ -219,6 +222,10 @@ export default function AccountsPage() {
     bsRow?: AccountsBodyshopCase
   } | null>(null)
   const [issuingGatepass, setIssuingGatepass] = useState(false)
+
+  function selectMechPaymentMode(mode: Exclude<MechanicalPaymentModeFilter, 'all'>) {
+    setMechPaymentModeFilter((prev) => (prev === mode ? 'all' : mode))
+  }
 
   function flash(msg: string, ok = true) {
     setToast({ msg, ok })
@@ -314,10 +321,14 @@ export default function AccountsPage() {
   }, [mechRows, yearScopedMech, year, month, search])
 
   const searchedMech = useMemo(() => {
-    if (mechStatusFilter === 'pending') return periodMech.filter((r) => isAccountsStatusPending(r.payment_status))
-    if (mechStatusFilter === 'received') return periodMech.filter((r) => isAccountsStatusReceived(r.payment_status))
-    return periodMech
-  }, [periodMech, mechStatusFilter])
+    let rows = periodMech
+    if (mechStatusFilter === 'pending') rows = rows.filter((r) => isAccountsStatusPending(r.payment_status))
+    else if (mechStatusFilter === 'received') rows = rows.filter((r) => isAccountsStatusReceived(r.payment_status))
+    if (mechPaymentModeFilter !== 'all') {
+      rows = filterMechanicalCasesByPaymentMode(rows, mechPayLines, mechPaymentModeFilter)
+    }
+    return rows
+  }, [periodMech, mechStatusFilter, mechPaymentModeFilter, mechPayLines])
 
   const periodBs = useMemo(() => {
     const q = search.trim().toLowerCase()
@@ -758,7 +769,7 @@ export default function AccountsPage() {
           <button
             type="button"
             className={`brx-pipe-pill ${section === 'mechanical' ? 'is-active' : ''}`}
-            onClick={() => { setSection('mechanical'); setYear('all'); setMonth('all'); setSearch(''); setMechStatusFilter('all') }}
+            onClick={() => { setSection('mechanical'); setYear('all'); setMonth('all'); setSearch(''); setMechStatusFilter('all'); setMechPaymentModeFilter('all') }}
           >
             <span className="brx-pipe-pill__n">{mechRows.length}</span>
             <span className="brx-pipe-pill__l">Mechanical<small>Mark Done</small></span>
@@ -766,7 +777,7 @@ export default function AccountsPage() {
           <button
             type="button"
             className={`brx-pipe-pill ${section === 'bodyshop' ? 'is-active' : ''}`}
-            onClick={() => { setSection('bodyshop'); setYear('all'); setMonth('all'); setSearch(''); setMechStatusFilter('all') }}
+            onClick={() => { setSection('bodyshop'); setYear('all'); setMonth('all'); setSearch(''); setMechStatusFilter('all'); setMechPaymentModeFilter('all') }}
           >
             <span className="brx-pipe-pill__n">{bsRows.length}</span>
             <span className="brx-pipe-pill__l">Bodyshop<small>Invoice + billed</small></span>
@@ -842,9 +853,25 @@ export default function AccountsPage() {
           />
           <KpiTile label="Billed" value={inrKpi(mechKpis.billed)} />
           <KpiTile label="Customer Remaining" value={inrKpi(mechKpis.remaining)} />
-          <KpiTile label="Cash" value={inrKpi(mechKpis.cash)} />
-          <KpiTile label="UPI" value={inrKpi(mechKpis.upi)} />
-          <KpiTile label="Credit Card" value={inrKpi(mechKpis.card)} title="Stored payment mode: card" />
+          <KpiTile
+            label="Cash"
+            value={inrKpi(mechKpis.cash)}
+            active={mechPaymentModeFilter === 'cash'}
+            onClick={() => selectMechPaymentMode('cash')}
+          />
+          <KpiTile
+            label="UPI"
+            value={inrKpi(mechKpis.upi)}
+            active={mechPaymentModeFilter === 'upi'}
+            onClick={() => selectMechPaymentMode('upi')}
+          />
+          <KpiTile
+            label="Credit Card"
+            value={inrKpi(mechKpis.card)}
+            title="Stored payment mode: card"
+            active={mechPaymentModeFilter === 'card'}
+            onClick={() => selectMechPaymentMode('card')}
+          />
         </div>
       ) : (
         <div className="brx-recov-kpis acct-kpis">
@@ -897,6 +924,9 @@ export default function AccountsPage() {
             {mechStatusFilter === 'pending' && 'Mechanical · Pending'}
             {mechStatusFilter === 'received' && 'Mechanical · Received'}
             {mechStatusFilter === 'all' && 'Mechanical · Mark Done'}
+            {mechPaymentModeFilter === 'cash' && ' · Cash'}
+            {mechPaymentModeFilter === 'upi' && ' · UPI'}
+            {mechPaymentModeFilter === 'card' && ' · Credit Card'}
           </div>
           {loading && mechRows.length === 0 ? (
             <div className="brx-settle-status">Loading Mark Done cases…</div>
