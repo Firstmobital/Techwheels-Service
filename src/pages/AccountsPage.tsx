@@ -764,18 +764,32 @@ export default function AccountsPage() {
       const labour = await fetchBusyLabourRowsByInvoiceNumbers(
         mechanicalExportInvoiceNumbers(searchedMech),
       )
-      const { partyNameByInvoice, duplicateInvoiceKeys } = buildBusyPartyNameByInvoice(labour)
+      const { partyNameByInvoice, duplicateInvoiceKeys, invoiceDateByInvoice } = buildBusyPartyNameByInvoice(labour)
       const result = buildMechanicalBusyPaymentExportRows({
         cases: searchedMech,
         lines: mechPayLines,
         paymentModeFilter: mechPaymentModeFilter,
         busyPartyNameByInvoice: partyNameByInvoice,
+        dmsInvoiceDateByInvoice: invoiceDateByInvoice,
       })
       if (result.rows.length === 0) {
-        const skipped = result.skippedUnsupportedCount > 0
-          ? ` Skipped ${result.skippedUnsupportedCount} cheque/bank/other receipt(s) with no BUSY Account DR mapping.`
-          : ''
-        flash(`No cash, UPI, or card receipts in the current view.${skipped}`, false)
+        const notices: string[] = []
+        if (result.missingDateCount > 0) {
+          notices.push(
+            `Skipped ${result.missingDateCount} receipt(s) with no payment_received_date, invoice_date, or DMS invoice date`,
+          )
+        }
+        if (result.skippedUnsupportedCount > 0) {
+          notices.push(
+            `Skipped ${result.skippedUnsupportedCount} cheque/bank/other receipt(s) with no BUSY Account DR mapping.`,
+          )
+        }
+        flash(
+          notices.length > 0
+            ? notices.join(' ')
+            : 'No cash, UPI, or card receipts in the current view.',
+          false,
+        )
         return
       }
       const sheet = XLSX.utils.json_to_sheet(result.rows, {
@@ -798,6 +812,11 @@ export default function AccountsPage() {
       if (result.missingVoucherCount > 0) {
         notices.push(
           `${result.missingVoucherCount} cash/UPI/card receipt(s) have no persisted voucher_no; left blank`,
+        )
+      }
+      if (result.missingDateCount > 0) {
+        notices.push(
+          `Skipped ${result.missingDateCount} receipt(s) with no payment_received_date, invoice_date, or DMS invoice date`,
         )
       }
       if (notices.length > 0) flash(notices.join(' · '), false)

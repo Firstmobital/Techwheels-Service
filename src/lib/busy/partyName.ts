@@ -90,6 +90,8 @@ export function resolvePartyName(input: {
 export interface BusyPartyNameLookup {
   partyNameByInvoice: Map<string, string>
   duplicateInvoiceKeys: string[]
+  /** Unique labour invoice_date (YYYY-MM-DD). Omitted when the invoice number is duplicated. */
+  invoiceDateByInvoice: Map<string, string>
 }
 
 /**
@@ -128,15 +130,18 @@ export function buildBusyPartyNameByInvoice(labourRows: BusyLabourRow[]): BusyPa
   }
 
   const partyNameByInvoice = new Map<string, string>()
+  const invoiceDateByInvoice = new Map<string, string>()
   const duplicateInvoiceKeys: string[] = []
   for (const [key, group] of groups) {
     if (group.length > 1) {
       duplicateInvoiceKeys.push(key)
       continue
     }
-    const partyName = partyNameFromBusyLabour(group[0])
-    if (!partyName) continue
-    partyNameByInvoice.set(key, partyName)
+    const labour = group[0]
+    const partyName = partyNameFromBusyLabour(labour)
+    if (partyName) partyNameByInvoice.set(key, partyName)
+    const dmsDate = String(labour.invoice_date ?? '').trim().slice(0, 10)
+    if (dmsDate) invoiceDateByInvoice.set(key, dmsDate)
   }
-  return { partyNameByInvoice, duplicateInvoiceKeys }
+  return { partyNameByInvoice, duplicateInvoiceKeys, invoiceDateByInvoice }
 }

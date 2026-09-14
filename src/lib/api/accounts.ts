@@ -557,6 +557,7 @@ export interface MechanicalBusyPaymentExportResult {
   rows: MechanicalBusyPaymentExportRow[]
   skippedUnsupportedCount: number
   missingVoucherCount: number
+  missingDateCount: number
 }
 
 export function busyPaymentAccountDr(mode: unknown): BusyPaymentAccountDr | null {
@@ -574,6 +575,23 @@ export function mechanicalInvoiceDateYmd(raw: unknown): string {
 }
 
 /**
+ * BUSY payment voucher date (column "Invoice date"):
+ * payment_received_date → Accounts invoice_date → unique DMS labour invoice_date.
+ * Does not use posted_at or Mark Done.
+ */
+export function mechanicalBusyPaymentExportDateYmd(input: {
+  paymentReceivedDate?: unknown
+  invoiceDate?: unknown
+  dmsInvoiceDate?: unknown
+}): string {
+  return (
+    mechanicalInvoiceDateYmd(input.paymentReceivedDate)
+    || mechanicalInvoiceDateYmd(input.invoiceDate)
+    || mechanicalInvoiceDateYmd(input.dmsInvoiceDate)
+  )
+}
+
+/**
  * BUSY payment workbook: one row per cash/upi/card receipt.
  * Pending cases without lines are omitted. cheque/bank/other are skipped, not mapped.
  * voucher_no is persisted only — never generated here.
@@ -583,6 +601,7 @@ export function buildMechanicalBusyPaymentExportRows(input: {
   lines: AccountsMechanicalPayment[]
   paymentModeFilter?: MechanicalPaymentModeFilter
   busyPartyNameByInvoice?: ReadonlyMap<string, string>
+  dmsInvoiceDateByInvoice?: ReadonlyMap<string, string>
 }): MechanicalBusyPaymentExportResult {
   const modeFilter = input.paymentModeFilter ?? 'all'
   const wanted = modeFilter === 'all' ? null : normalizeAccountsPaymentMode(modeFilter)
@@ -596,6 +615,7 @@ export function buildMechanicalBusyPaymentExportRows(input: {
   const rows: MechanicalBusyPaymentExportRow[] = []
   let skippedUnsupportedCount = 0
   let missingVoucherCount = 0
+  let missingDateCount = 0
 
   for (const caseRow of input.cases) {
     const caseLines = sortAccountsMechanicalPaymentLines(linesByCase.get(caseRow.reception_entry_id) ?? [])
@@ -608,12 +628,23 @@ export function buildMechanicalBusyPaymentExportRows(input: {
       }
       if (wanted && mode !== wanted) continue
 
+      const invoiceKey = busyInvoiceLookupKey(caseRow.invoice_number)
+      const exportDate = mechanicalBusyPaymentExportDateYmd({
+        paymentReceivedDate: line.payment_received_date,
+        invoiceDate: caseRow.invoice_date,
+        dmsInvoiceDate: invoiceKey ? input.dmsInvoiceDateByInvoice?.get(invoiceKey) : undefined,
+      })
+      if (!exportDate) {
+        missingDateCount += 1
+        continue
+      }
+
       const voucherNo = String(line.voucher_no ?? '').trim()
       if (!voucherNo) missingVoucherCount += 1
 
       const amount = Number(line.amount)
       rows.push({
-        'Invoice date': mechanicalInvoiceDateYmd(caseRow.invoice_date),
+        'Invoice date': exportDate,
         voucher_no: voucherNo,
         'Account DR': accountDr,
         'Account CR': resolveAccountsExportAccountName({
@@ -630,7 +661,7 @@ export function buildMechanicalBusyPaymentExportRows(input: {
     }
   }
 
-  return { rows, skippedUnsupportedCount, missingVoucherCount }
+  return { rows, skippedUnsupportedCount, missingVoucherCount, missingDateCount }
 }
 
 export async function listAccountsMechanicalPaymentLines(): Promise<AccountsMechanicalPayment[]> {

@@ -31,6 +31,7 @@
 - [ ] Duplicate BUSY labour invoice numbers do not pick an arbitrary Party Name (Accounts fallback + toast)
 - [ ] Pending case with no receipts still exports one row with blank `voucher_no`
 - [ ] **Busy Export** (Mechanical): headers Invoice date, voucher_no, Account DR, Account CR, Amount DR, Amount CR, Reference no; cash DR `CASH AT SITAPURA`; UPI `PAYTM WALLET`; card `CREDIT CARD A/C`; Account CR for `IMBTAI2627007397` is `JAGDISH NARAYAN YADAV-SITAPURA RJ45CV5192`; split Cash+UPI is two rows; cheque/bank/other skipped; pending without receipts omitted; Export Excel unchanged
+- [ ] **Busy Export** Invoice date is `payment_received_date` when present (even if Accounts `invoice_date` differs); otherwise Accounts `invoice_date`; otherwise unique DMS labour `invoice_date`; blank dates are skipped/warned, not exported. Split receipts with different received dates keep their own date. `voucher_no` is persisted only. Amount DR = Amount CR. Eligibility remains `invoice_date >= 2026-09-02`.
 
 ## Bodyshop
 

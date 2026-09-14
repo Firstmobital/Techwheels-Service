@@ -930,11 +930,20 @@ function mechanicalInvoiceDateYmd(raw) {
   return value.slice(0, 10)
 }
 
+function mechanicalBusyPaymentExportDateYmd({ paymentReceivedDate, invoiceDate, dmsInvoiceDate }) {
+  return (
+    mechanicalInvoiceDateYmd(paymentReceivedDate)
+    || mechanicalInvoiceDateYmd(invoiceDate)
+    || mechanicalInvoiceDateYmd(dmsInvoiceDate)
+  )
+}
+
 function buildMechanicalBusyPaymentExportRows({
   cases,
   lines,
   paymentModeFilter = 'all',
   busyPartyNameByInvoice,
+  dmsInvoiceDateByInvoice,
 }) {
   const wanted = paymentModeFilter === 'all' ? null : normalizeAccountsPaymentMode(paymentModeFilter)
   const linesByCase = new Map()
@@ -946,6 +955,7 @@ function buildMechanicalBusyPaymentExportRows({
   const rows = []
   let skippedUnsupportedCount = 0
   let missingVoucherCount = 0
+  let missingDateCount = 0
   for (const caseRow of cases) {
     const caseLines = sortAccountsMechanicalPaymentLines(linesByCase.get(caseRow.reception_entry_id) ?? [])
     for (const line of caseLines) {
@@ -956,13 +966,22 @@ function buildMechanicalBusyPaymentExportRows({
         continue
       }
       if (wanted && mode !== wanted) continue
+      const key = busyInvoiceLookupKey(caseRow.invoice_number)
+      const exportDate = mechanicalBusyPaymentExportDateYmd({
+        paymentReceivedDate: line.payment_received_date,
+        invoiceDate: caseRow.invoice_date,
+        dmsInvoiceDate: key && dmsInvoiceDateByInvoice ? dmsInvoiceDateByInvoice.get(key) : undefined,
+      })
+      if (!exportDate) {
+        missingDateCount += 1
+        continue
+      }
       const voucherNo = String(line.voucher_no ?? '').trim()
       if (!voucherNo) missingVoucherCount += 1
-      const key = busyInvoiceLookupKey(caseRow.invoice_number)
       const busyName = key && busyPartyNameByInvoice ? busyPartyNameByInvoice.get(key) : null
       const amount = Number(line.amount)
       rows.push({
-        'Invoice date': mechanicalInvoiceDateYmd(caseRow.invoice_date),
+        'Invoice date': exportDate,
         voucher_no: voucherNo,
         'Account DR': accountDr,
         'Account CR': busyName || buildAccountsExportAccountName({
@@ -976,7 +995,7 @@ function buildMechanicalBusyPaymentExportRows({
       })
     }
   }
-  return { rows, skippedUnsupportedCount, missingVoucherCount }
+  return { rows, skippedUnsupportedCount, missingVoucherCount, missingDateCount }
 }
 
 {
@@ -990,6 +1009,7 @@ function buildMechanicalBusyPaymentExportRows({
   function labour(overrides = {}) {
     return {
       invoice_number: 'IMBTAI2627007397',
+      invoice_date: '2026-09-11',
       account: null,
       first_name: 'JAGDISH NARAYAN',
       last_name: 'YADAV',
@@ -1120,21 +1140,57 @@ function buildMechanicalBusyPaymentExportRows({
     posted_at: '2026-09-11T11:00:00+05:30',
   }
 
+  assert(provenLookup.invoiceDateByInvoice.get('IMBTAI2627007397') === '2026-09-11', 'DMS labour invoice_date mapped')
+
   const proven = buildMechanicalBusyPaymentExportRows({
     cases: [provenCase],
     lines: provenLines,
     busyPartyNameByInvoice: provenLookup.partyNameByInvoice,
+    dmsInvoiceDateByInvoice: provenLookup.invoiceDateByInvoice,
   })
   assert(proven.rows.length === 1, `A: cash+other → one BUSY row, got ${proven.rows.length}`)
   assert(proven.skippedUnsupportedCount === 1, 'L: other receipt skipped')
   const cashRow = proven.rows[0]
-  assert(cashRow['Invoice date'] === '2026-09-11', `6: invoice_date YYYY-MM-DD, got ${cashRow['Invoice date']}`)
-  assert(cashRow.voucher_no === 'RApp/26-27/0001', `E: persisted voucher, got ${cashRow.voucher_no}`)
+  assert(cashRow['Invoice date'] === '2026-09-11', `1: received date used when present, got ${cashRow['Invoice date']}`)
+  assert(cashRow.voucher_no === 'RApp/26-27/0001', `4: persisted voucher, got ${cashRow.voucher_no}`)
   assert(cashRow['Account DR'] === 'CASH AT SITAPURA', 'A: Account DR cash')
   assert(cashRow['Account CR'] === 'JAGDISH NARAYAN YADAV-SITAPURA RJ45CV5192', `D: Account CR BUSY name, got ${cashRow['Account CR']}`)
-  assert(cashRow['Amount DR'] === 35000 && cashRow['Amount CR'] === 35000, 'A: DR equals CR equals receipt amount')
+  assert(cashRow['Amount DR'] === 35000 && cashRow['Amount CR'] === 35000, '6: DR equals CR equals receipt amount')
   assert(cashRow['Reference no'] === '', 'G: null reference exports blank')
   assert(Object.keys(cashRow).join('|') === BUSY_PAYMENT_EXPORT_HEADERS.join('|'), 'headers/order exact')
+
+  const receivedWins = buildMechanicalBusyPaymentExportRows({
+    cases: [{ ...provenCase, invoice_date: '2026-09-11' }],
+    lines: [{
+      ...provenLines[0],
+      payment_received_date: '2026-09-14',
+      posted_at: '2026-09-20T18:00:00+05:30',
+    }],
+    busyPartyNameByInvoice: provenLookup.partyNameByInvoice,
+  })
+  assert(receivedWins.rows[0]['Invoice date'] === '2026-09-14', `1: invoice_date 2026-09-11 + received 2026-09-14 → 2026-09-14, got ${receivedWins.rows[0]['Invoice date']}`)
+  assert(receivedWins.rows[0].voucher_no === 'RApp/26-27/0001', '4: voucher unchanged when date precedence changes')
+  assert(receivedWins.rows[0]['Amount DR'] === receivedWins.rows[0]['Amount CR'], '6: DR still equals CR')
+
+  const invoiceFallback = buildMechanicalBusyPaymentExportRows({
+    cases: [{ ...provenCase, invoice_date: '2026-09-08' }],
+    lines: [{ ...provenLines[0], payment_received_date: null, posted_at: '2026-09-20T18:00:00+05:30' }],
+  })
+  assert(invoiceFallback.rows[0]['Invoice date'] === '2026-09-08', `2: missing received date uses invoice_date, got ${invoiceFallback.rows[0]['Invoice date']}`)
+  assert(invoiceFallback.rows[0]['Invoice date'] !== '2026-09-20', '2: posted_at is not the BUSY voucher date')
+
+  const dmsFallback = buildMechanicalBusyPaymentExportRows({
+    cases: [{ ...provenCase, invoice_date: null }],
+    lines: [{ ...provenLines[0], payment_received_date: null }],
+    dmsInvoiceDateByInvoice: provenLookup.invoiceDateByInvoice,
+  })
+  assert(dmsFallback.rows[0]['Invoice date'] === '2026-09-11', `3: both missing uses DMS labour invoice_date, got ${dmsFallback.rows[0]['Invoice date']}`)
+
+  const noDate = buildMechanicalBusyPaymentExportRows({
+    cases: [{ ...provenCase, invoice_date: null }],
+    lines: [{ ...provenLines[0], payment_received_date: null }],
+  })
+  assert(noDate.rows.length === 0 && noDate.missingDateCount === 1, '3: no date skips the row instead of exporting blank')
 
   const split = buildMechanicalBusyPaymentExportRows({
     cases: [pendingCase, splitCase],
@@ -1147,8 +1203,21 @@ function buildMechanicalBusyPaymentExportRows({
   assert(split.rows[1]['Reference no'] === 'UTR-6000', 'F: upi reference')
   assert(split.rows[2]['Account DR'] === 'CREDIT CARD A/C' && split.rows[2]['Amount DR'] === 500, 'C: card 500')
   assert(split.rows[2]['Reference no'] === '', 'G: empty reference blank')
-  assert(split.rows.every((r) => r['Amount DR'] === r['Amount CR']), 'Amount DR == Amount CR')
+  assert(split.rows.every((r) => r['Amount DR'] === r['Amount CR']), '6: Amount DR == Amount CR')
   assert(!split.rows.some((r) => r['Amount DR'] === 10000), 'H: must not use header 10000')
+
+  const splitDates = buildMechanicalBusyPaymentExportRows({
+    cases: [{ ...splitCase, invoice_date: '2026-09-10' }],
+    lines: [
+      { ...splitLines[0], payment_received_date: '2026-09-12', posted_at: '2026-09-20T10:00:00+05:30' },
+      { ...splitLines[1], payment_received_date: '2026-09-14', posted_at: '2026-09-20T10:01:00+05:30' },
+    ],
+  })
+  assert(splitDates.rows.length === 2, `5: two receipts with different dates, got ${splitDates.rows.length}`)
+  assert(splitDates.rows[0]['Invoice date'] === '2026-09-12' && splitDates.rows[0].voucher_no === 'RApp/26-27/0001', `5: cash row uses 2026-09-12, got ${splitDates.rows[0]['Invoice date']}`)
+  assert(splitDates.rows[1]['Invoice date'] === '2026-09-14' && splitDates.rows[1].voucher_no === 'JApp/26-27/0001', `5: upi row uses 2026-09-14, got ${splitDates.rows[1]['Invoice date']}`)
+  assert(splitDates.rows.every((r) => r['Amount DR'] === r['Amount CR']), '6: split-date DR equals CR')
+  assert(!splitDates.rows.some((r) => r['Invoice date'] === '2026-09-10' || r['Invoice date'] === '2026-09-20'), '5: neither invoice_date nor posted_at wins when received dates exist')
 
   const cashOnly = buildMechanicalBusyPaymentExportRows({
     cases: [splitCase],
