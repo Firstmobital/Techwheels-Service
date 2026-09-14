@@ -281,3 +281,374 @@ function idsOf(rows) {
 
 console.log('verify_accounts_split_payment_drafts: J–T payment-mode filter checks passed')
 
+// ---------------------------------------------------------------------------
+// DBL-0057 voucher export — keep aligned with src/lib/api/accounts.ts
+// ---------------------------------------------------------------------------
+
+function normalizePersonName(raw) {
+  return String(raw ?? '').replace(/\s+/g, ' ').trim()
+}
+
+function buildAccountsExportAccountName({ ownerName, branch, regNumber }) {
+  const name = normalizePersonName(ownerName)
+  const branchLabel = normalizePersonName(branch).toUpperCase()
+  const vrn = normalizePersonName(regNumber)
+  if (!name || !branchLabel || !vrn) return ''
+  return `${name}-${branchLabel} ${vrn}`
+}
+
+function sortAccountsMechanicalPaymentLines(lines) {
+  return [...lines].sort((a, b) => {
+    const da = String(a.payment_received_date ?? '').slice(0, 10)
+    const db = String(b.payment_received_date ?? '').slice(0, 10)
+    if (da !== db) return da < db ? -1 : 1
+    const pa = String(a.posted_at ?? '')
+    const pb = String(b.posted_at ?? '')
+    if (pa !== pb) return pa < pb ? -1 : 1
+    return Number(a.id) - Number(b.id)
+  })
+}
+
+function mechanicalRemaining(row) {
+  if (row.remaining_amount != null) return Number(row.remaining_amount)
+  if (row.billed_amount == null) return null
+  return Math.max(0, Number(row.billed_amount) - Number(row.amount_received ?? 0))
+}
+
+function buildMechanicalAccountsExportRows({ cases, lines, paymentModeFilter = 'all', formatWhen }) {
+  const wanted = paymentModeFilter === 'all' ? null : normalizeAccountsPaymentMode(paymentModeFilter)
+  const linesByCase = new Map()
+  for (const line of lines) {
+    const list = linesByCase.get(line.reception_entry_id) ?? []
+    list.push(line)
+    linesByCase.set(line.reception_entry_id, list)
+  }
+  const rows = []
+  for (const caseRow of cases) {
+    const caseLines = sortAccountsMechanicalPaymentLines(linesByCase.get(caseRow.reception_entry_id) ?? [])
+    const matching = wanted
+      ? caseLines.filter((line) => normalizeAccountsPaymentMode(line.payment_mode) === wanted)
+      : caseLines
+    const base = {
+      JC: caseRow.jc_number,
+      VRN: caseRow.reg_number ?? '',
+      Branch: caseRow.branch ?? '',
+      Owner: caseRow.owner_name ?? '',
+      'Invoice number': caseRow.invoice_number ?? '',
+      'Billed amount': caseRow.billed_amount ?? '',
+      Remaining: mechanicalRemaining(caseRow) ?? '',
+      'Payment status': caseRow.payment_status ?? 'pending',
+      account_name: buildAccountsExportAccountName({
+        ownerName: caseRow.owner_name,
+        branch: caseRow.branch,
+        regNumber: caseRow.reg_number,
+      }),
+    }
+    if (matching.length > 0) {
+      for (const line of matching) {
+        rows.push({
+          ...base,
+          'Amount received': line.amount,
+          voucher_no: line.voucher_no ?? '',
+        })
+      }
+      continue
+    }
+    if (wanted) continue
+    rows.push({
+      ...base,
+      'Amount received': caseRow.amount_received ?? '',
+      voucher_no: '',
+    })
+  }
+  return rows
+}
+
+function createVoucherAllocator() {
+  let rapp = 0
+  let japp = 0
+  return {
+    next(mode, paymentReceivedDate) {
+      const date = String(paymentReceivedDate ?? '').slice(0, 10)
+      if (!date || date < '2026-09-11') return null
+      const m = normalizeAccountsPaymentMode(mode)
+      if (m === 'cash') {
+        rapp += 1
+        return `RApp/26-27/${String(rapp).padStart(4, '0')}`
+      }
+      if (m === 'upi' || m === 'card') {
+        japp += 1
+        return `JApp/26-27/${String(japp).padStart(4, '0')}`
+      }
+      return null
+    },
+    snapshot() {
+      return { rapp, japp }
+    },
+  }
+}
+
+{
+  const alloc = createVoucherAllocator()
+  const cashVoucher = alloc.next('cash', '2026-09-11')
+  const upiVoucher = alloc.next('upi', '2026-09-12')
+  const cardVoucher = alloc.next('card', '2026-09-12')
+  const cash2 = alloc.next('cash', '2026-09-13')
+  assert(cashVoucher === 'RApp/26-27/0001', `A: cash RApp, got ${cashVoucher}`)
+  assert(upiVoucher === 'JApp/26-27/0001', `B: upi JApp, got ${upiVoucher}`)
+  assert(cardVoucher === 'JApp/26-27/0002', `C: card shares JApp, got ${cardVoucher}`)
+  assert(cash2 === 'RApp/26-27/0002', `D: RApp independent of JApp, got ${cash2}`)
+  assert(alloc.next('cash', '2026-09-10') == null, 'H: pre-cutoff cash has no voucher')
+  assert(alloc.next('upi', '2026-09-10') == null, 'H: pre-cutoff upi has no voucher')
+  assert(alloc.next('cheque', '2026-09-11') == null, 'I: cheque has no voucher')
+  assert(alloc.next('bank', '2026-09-11') == null, 'I: bank has no voucher')
+  assert(alloc.next('other', '2026-09-11') == null, 'I: other has no voucher')
+}
+
+{
+  const account = buildAccountsExportAccountName({
+    ownerName: 'RAMESH KUMAR',
+    branch: 'Sitapura',
+    regNumber: 'RJ14AB1234',
+  })
+  assert(account === 'RAMESH KUMAR-SITAPURA RJ14AB1234', `J: account_name, got ${account}`)
+  assert(
+    buildAccountsExportAccountName({ ownerName: '  RAMESH   KUMAR ', branch: 'sitapura', regNumber: 'RJ14AB1234' })
+      === 'RAMESH KUMAR-SITAPURA RJ14AB1234',
+    'J: whitespace collapse + branch uppercase',
+  )
+  assert(
+    buildAccountsExportAccountName({ ownerName: '', branch: 'Sitapura', regNumber: 'RJ14AB1234' }) === '',
+    'J: missing owner_name exports blank account_name (does not invent a name)',
+  )
+  assert(
+    !buildAccountsExportAccountName({
+      ownerName: 'RAMESH KUMAR',
+      branch: 'Sitapura',
+      regNumber: 'RJ14AB1234',
+    }).includes('SITAPURA-RJ14'),
+    'J: must use space before VRN, not a second hyphen',
+  )
+}
+
+{
+  const pending = {
+    reception_entry_id: 10,
+    jc_number: 'JC-PEND',
+    reg_number: 'RJ14PEND',
+    owner_name: 'Pending Owner',
+    branch: 'Sitapura',
+    invoice_number: 'INV-P',
+    billed_amount: 5000,
+    amount_received: null,
+    remaining_amount: 5000,
+    payment_status: 'pending',
+  }
+  const split = {
+    reception_entry_id: 11,
+    jc_number: 'JC-SPLIT',
+    reg_number: 'RJ14AB1234',
+    owner_name: 'RAMESH KUMAR',
+    branch: 'Sitapura',
+    invoice_number: 'EMBTAI-1',
+    billed_amount: 10000,
+    amount_received: 10000,
+    remaining_amount: 0,
+    payment_status: 'received',
+  }
+  const preCutoff = {
+    reception_entry_id: 12,
+    jc_number: 'JC-OLD',
+    reg_number: 'RJ14OLD',
+    owner_name: 'Old Owner',
+    branch: 'Sitapura',
+    invoice_number: 'INV-OLD',
+    billed_amount: 1000,
+    amount_received: 1000,
+    remaining_amount: 0,
+    payment_status: 'received',
+  }
+  const chequeCase = {
+    reception_entry_id: 13,
+    jc_number: 'JC-CHQ',
+    reg_number: 'RJ14CHQ',
+    owner_name: 'Cheque Owner',
+    branch: 'Sitapura',
+    invoice_number: 'INV-CHQ',
+    billed_amount: 800,
+    amount_received: 800,
+    remaining_amount: 0,
+    payment_status: 'received',
+  }
+
+  const lines = [
+    {
+      id: 1,
+      reception_entry_id: 11,
+      amount: 4000,
+      payment_mode: 'cash',
+      payment_received_date: '2026-09-11',
+      posted_at: '2026-09-11T10:00:00+05:30',
+      voucher_no: 'RApp/26-27/0001',
+    },
+    {
+      id: 2,
+      reception_entry_id: 11,
+      amount: 6000,
+      payment_mode: 'upi',
+      payment_received_date: '2026-09-11',
+      posted_at: '2026-09-11T10:01:00+05:30',
+      voucher_no: 'JApp/26-27/0001',
+    },
+    {
+      id: 3,
+      reception_entry_id: 12,
+      amount: 1000,
+      payment_mode: 'cash',
+      payment_received_date: '2026-09-10',
+      posted_at: '2026-09-10T10:00:00+05:30',
+      voucher_no: null,
+    },
+    {
+      id: 4,
+      reception_entry_id: 13,
+      amount: 800,
+      payment_mode: 'cheque',
+      payment_received_date: '2026-09-11',
+      posted_at: '2026-09-11T11:00:00+05:30',
+      voucher_no: null,
+    },
+  ]
+
+  const allRows = buildMechanicalAccountsExportRows({
+    cases: [pending, split, preCutoff, chequeCase],
+    lines,
+    paymentModeFilter: 'all',
+    formatWhen: () => '',
+  })
+  const cashRows = buildMechanicalAccountsExportRows({
+    cases: [split],
+    lines,
+    paymentModeFilter: 'cash',
+    formatWhen: () => '',
+  })
+  const upiRows = buildMechanicalAccountsExportRows({
+    cases: [split],
+    lines,
+    paymentModeFilter: 'upi',
+    formatWhen: () => '',
+  })
+  const cardRows = buildMechanicalAccountsExportRows({
+    cases: [split],
+    lines,
+    paymentModeFilter: 'card',
+    formatWhen: () => '',
+  })
+  const pendingRows = buildMechanicalAccountsExportRows({
+    cases: [pending],
+    lines,
+    paymentModeFilter: 'all',
+    formatWhen: () => '',
+  })
+
+  const splitAll = allRows.filter((r) => r.JC === 'JC-SPLIT')
+  assert(splitAll.length === 2, `E/All: split invoice emits two receipt rows, got ${splitAll.length}`)
+  assert(splitAll[0]['Amount received'] === 4000 && splitAll[0].voucher_no === 'RApp/26-27/0001', 'E: cash row 4000/RApp')
+  assert(splitAll[1]['Amount received'] === 6000 && splitAll[1].voucher_no === 'JApp/26-27/0001', 'E: upi row 6000/JApp')
+  assert(splitAll.every((r) => r['Amount received'] !== 10000), 'E: must not repeat header amount_received 10000')
+  assert(splitAll[0].account_name === 'RAMESH KUMAR-SITAPURA RJ14AB1234', 'E: account_name on receipt rows')
+
+  assert(cashRows.length === 1 && cashRows[0]['Amount received'] === 4000, `E: Cash export amount 4000, got ${JSON.stringify(cashRows)}`)
+  assert(cashRows[0].voucher_no === 'RApp/26-27/0001', 'E: Cash export voucher')
+  assert(upiRows.length === 1 && upiRows[0]['Amount received'] === 6000, 'E: UPI export amount 6000')
+  assert(upiRows[0].voucher_no === 'JApp/26-27/0001', 'E: UPI export voucher')
+  assert(cardRows.length === 0, 'E: Credit Card export excludes cash+upi split')
+
+  const again = buildMechanicalAccountsExportRows({
+    cases: [split],
+    lines,
+    paymentModeFilter: 'all',
+    formatWhen: () => '',
+  })
+  assert(again[0].voucher_no === splitAll[0].voucher_no && again[1].voucher_no === splitAll[1].voucher_no, 'F: repeated export keeps vouchers')
+
+  const cashAgain = buildMechanicalAccountsExportRows({
+    cases: [split],
+    lines,
+    paymentModeFilter: 'cash',
+    formatWhen: () => '',
+  })
+  assert(cashAgain[0].voucher_no === 'RApp/26-27/0001', 'G: Cash filter does not change persisted voucher')
+  const searchedOnlySplit = buildMechanicalAccountsExportRows({
+    cases: [split],
+    lines,
+    paymentModeFilter: 'all',
+    formatWhen: () => '',
+  })
+  assert(searchedOnlySplit[0].voucher_no === 'RApp/26-27/0001', 'G: narrower case set does not change persisted voucher')
+
+  const oldRow = allRows.find((r) => r.JC === 'JC-OLD')
+  assert(oldRow && oldRow.voucher_no === '' && oldRow['Amount received'] === 1000, 'H: pre-cutoff receipt exports with blank voucher')
+
+  const chequeRow = allRows.find((r) => r.JC === 'JC-CHQ')
+  assert(chequeRow && chequeRow.voucher_no === '' && chequeRow['Amount received'] === 800, 'I: cheque exports with blank voucher')
+
+  assert(pendingRows.length === 1, 'K: pending case still exports one row')
+  assert(pendingRows[0].voucher_no === '', 'K: pending voucher blank')
+  assert(pendingRows[0]['Amount received'] === '', 'K: pending Amount received stays header empty')
+  assert(pendingRows[0].account_name === 'Pending Owner-SITAPURA RJ14PEND', 'K: pending still gets account_name')
+}
+
+{
+  const alloc = createVoucherAllocator()
+  const a = alloc.next('cash', '2026-09-11')
+  const b = alloc.next('cash', '2026-09-11')
+  assert(a !== b, `L: two qualifying allocations cannot share a voucher (${a} vs ${b})`)
+  assert(a === 'RApp/26-27/0001' && b === 'RApp/26-27/0002', 'L: monotonic nextval-style counter')
+}
+
+console.log('verify_accounts_split_payment_drafts: voucher export A–L checks passed')
+
+{
+  const demoCase = {
+    reception_entry_id: 11,
+    jc_number: 'JC-SPLIT',
+    reg_number: 'RJ14AB1234',
+    owner_name: 'RAMESH KUMAR',
+    branch: 'Sitapura',
+    invoice_number: 'EMBTAI-1',
+    billed_amount: 10000,
+    amount_received: 10000,
+    remaining_amount: 0,
+    payment_status: 'received',
+  }
+  const demoPending = {
+    reception_entry_id: 10,
+    jc_number: 'JC-PEND',
+    reg_number: 'RJ14PEND',
+    owner_name: 'Pending Owner',
+    branch: 'Sitapura',
+    invoice_number: 'INV-P',
+    billed_amount: 5000,
+    amount_received: null,
+    remaining_amount: 5000,
+    payment_status: 'pending',
+  }
+  const demoLines = [
+    { id: 1, reception_entry_id: 11, amount: 4000, payment_mode: 'cash', payment_received_date: '2026-09-11', posted_at: '2026-09-11T10:00:00+05:30', voucher_no: 'RApp/26-27/0001' },
+    { id: 2, reception_entry_id: 11, amount: 6000, payment_mode: 'upi', payment_received_date: '2026-09-11', posted_at: '2026-09-11T10:01:00+05:30', voucher_no: 'JApp/26-27/0001' },
+  ]
+  const observed = {
+    cash: buildMechanicalAccountsExportRows({ cases: [demoCase], lines: demoLines, paymentModeFilter: 'cash', formatWhen: () => '' }),
+    upi: buildMechanicalAccountsExportRows({ cases: [demoCase], lines: demoLines, paymentModeFilter: 'upi', formatWhen: () => '' }),
+    card: buildMechanicalAccountsExportRows({ cases: [demoCase], lines: demoLines, paymentModeFilter: 'card', formatWhen: () => '' }),
+    all: buildMechanicalAccountsExportRows({ cases: [demoPending, demoCase], lines: demoLines, paymentModeFilter: 'all', formatWhen: () => '' }),
+  }
+  console.log('practical export observation:', JSON.stringify({
+    cash: observed.cash.map((r) => ({ amount: r['Amount received'], voucher_no: r.voucher_no, account_name: r.account_name })),
+    upi: observed.upi.map((r) => ({ amount: r['Amount received'], voucher_no: r.voucher_no })),
+    card: observed.card.length,
+    all: observed.all.map((r) => ({ jc: r.JC, amount: r['Amount received'], voucher_no: r.voucher_no })),
+  }))
+}
+

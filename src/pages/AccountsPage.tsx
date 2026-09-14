@@ -4,6 +4,7 @@ import { BodyshopSettlementPanel } from '../components/BodyshopSettlementPanel'
 import {
   ACCOUNTS_PAYMENT_MODES,
   addAccountsMechanicalPayment,
+  buildMechanicalAccountsExportRows,
   deleteAccountsMechanicalInvoiceFile,
   filterMechanicalCasesByPaymentMode,
   isAccountsStatusPending,
@@ -34,6 +35,7 @@ import {
   type AccountsMechanicalPayment,
   type AccountsPaymentMode,
   type MechanicalDmsInvoiceLookup,
+  type MechanicalPaymentModeFilter,
 } from '../lib/api/accounts'
 import { uploadServiceAdvisorInvoice } from '../lib/api/reception'
 import { supabase } from '../lib/supabase'
@@ -44,7 +46,6 @@ import { issueAccountsGatePass } from '../lib/gatepass'
 type Section = 'mechanical' | 'bodyshop'
 type BodyshopFilter = 'remaining' | 'all' | 'received' | 'pending'
 type MechanicalStatusFilter = 'all' | 'pending' | 'received'
-type MechanicalPaymentModeFilter = 'all' | 'cash' | 'upi' | 'card'
 
 type MechanicalPaymentDraft = {
   key: string
@@ -692,24 +693,12 @@ export default function AccountsPage() {
 
   function exportExcel() {
     if (section === 'mechanical') {
-      const sheet = XLSX.utils.json_to_sheet(searchedMech.map((r) => ({
-        'Mark Done': fmtWhen(r.invoice_done_at),
-        JC: r.jc_number,
-        VRN: r.reg_number ?? '',
-        Model: r.model ?? '',
-        'Service type': r.service_type ?? '',
-        SA: r.sa_display_name || r.sa_name || '',
-        Branch: r.branch ?? '',
-        Owner: r.owner_name ?? '',
-        'Invoice number': r.invoice_number ?? '',
-        'Invoice date': r.invoice_date ?? '',
-        'Billed amount': r.billed_amount ?? '',
-        'Amount received': r.amount_received ?? '',
-        Remaining: mechanicalRemaining(r) ?? '',
-        'Payment status': r.payment_status ?? 'pending',
-        'Invoice file': r.invoice_file_name ?? '',
-        Notes: r.payment_notes ?? '',
-      })))
+      const sheet = XLSX.utils.json_to_sheet(buildMechanicalAccountsExportRows({
+        cases: searchedMech,
+        lines: mechPayLines,
+        paymentModeFilter: mechPaymentModeFilter,
+        formatWhen: fmtWhen,
+      }))
       const wb = XLSX.utils.book_new()
       XLSX.utils.book_append_sheet(wb, sheet, 'Mechanical')
       XLSX.writeFile(wb, `accounts-mechanical.xlsx`)

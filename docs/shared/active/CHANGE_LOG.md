@@ -2,6 +2,10 @@
 
 Tracks documentation-sync updates for business logic, architecture, and access control.
 
+## 2026-09-14
+
+- Accounts Mechanical Excel adds persisted `voucher_no` and BUSY-style `account_name`. Receipt vouchers live on existing `accounts_mechanical_payment_lines` (Cash `RApp/26-27/nnnn`; UPI+Card share `JApp/26-27/nnnn`) from `payment_received_date >= 2026-09-11`. Mode-card export is receipt-line grain (split Cash+UPI no longer repeats the header total). Ledger: DBL-0057. Plan: `ACCOUNTS-001`.
+
 ## 2026-09-12
 
 - Accounts Mechanical receipts now capture a **Payment received date** (business date, Asia/Kolkata) separately from `posted_at` (system timestamp). Stored on existing `accounts_mechanical_payment_lines.payment_received_date`. History heading is **Received Date**. Ledger: DBL-0056. Plan: `ACCOUNTS-001`.

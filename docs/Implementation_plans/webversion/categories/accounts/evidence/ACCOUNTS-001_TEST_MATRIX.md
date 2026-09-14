@@ -22,6 +22,12 @@
 - [ ] Posted line stores selected `payment_received_date` and an independent `posted_at`
 - [ ] Receipts history shows Received Date from `payment_received_date`; older rows still render after IST backfill
 - [ ] User without `accounts` gets AccessDenied at `/accounts`
+- [ ] Cash receipt on/after 11-Sep gets `RApp/26-27/nnnn`; UPI and Card share `JApp/26-27/nnnn`; sequences independent
+- [ ] Split Cash+UPI Excel: Cash export amount is the cash line only; UPI export is the UPI line only; All emits two rows
+- [ ] Repeated export / different mode cards keep the same persisted `voucher_no`
+- [ ] Pre-11-Sep `payment_received_date` and cheque/bank/other have blank `voucher_no`
+- [ ] `account_name` is `OWNER-BRANCH VRN` (space before VRN); missing owner → blank account_name
+- [ ] Pending case with no receipts still exports one row with blank `voucher_no`
 
 ## Bodyshop
 

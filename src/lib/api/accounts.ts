@@ -1,10 +1,15 @@
 import { AUTODOC_BUCKET } from '../autodocStorage'
+import { normalizePersonName } from '../busy/partyName'
 import { supabase } from '../supabase'
 import type { OverallStatus, RepairCard } from './bodyshopRepair'
 import { settlementRpcError } from './bodyshopSettlement'
 
 export type AccountsPaymentStatus = 'pending' | 'partial' | 'received' | 'not_received'
 export type AccountsPaymentMode = 'cash' | 'upi' | 'card' | 'cheque' | 'bank' | 'other'
+export type MechanicalPaymentModeFilter = 'all' | 'cash' | 'upi' | 'card'
+
+export const ACCOUNTS_VOUCHER_CUTOFF_DATE = '2026-09-11'
+export const ACCOUNTS_VOUCHER_FY = '26-27'
 
 export const ACCOUNTS_PAYMENT_MODES: { value: AccountsPaymentMode; label: string }[] = [
   { value: 'cash', label: 'Cash' },
@@ -56,6 +61,7 @@ export interface AccountsMechanicalPayment {
   posted_by: string | null
   posted_at: string
   payment_received_date: string | null
+  voucher_no: string | null
 }
 
 export interface AccountsBodyshopCase {
@@ -337,16 +343,155 @@ export function filterMechanicalCasesByPaymentMode<T extends { reception_entry_i
   return rows.filter((row) => ids.has(row.reception_entry_id))
 }
 
+/**
+ * BUSY Normal visual convention using Accounts sources:
+ * `<owner_name>-<BRANCH_UPPER> <reg_number>`
+ * Hyphen after name, space before VRN. Does not use PDI/Bodyshop special cases
+ * or psf_revenue_dms first/last name.
+ * Missing owner, branch, or VRN → '' (do not invent a customer name).
+ */
+export function buildAccountsExportAccountName(input: {
+  ownerName: unknown
+  branch: unknown
+  regNumber: unknown
+}): string {
+  const name = normalizePersonName(input.ownerName)
+  const branch = normalizePersonName(input.branch).toUpperCase()
+  const vrn = normalizePersonName(input.regNumber)
+  if (!name || !branch || !vrn) return ''
+  return `${name}-${branch} ${vrn}`
+}
+
+export function sortAccountsMechanicalPaymentLines<T extends {
+  id: number
+  payment_received_date?: string | null
+  posted_at?: string | null
+}>(lines: T[]): T[] {
+  return [...lines].sort((a, b) => {
+    const da = String(a.payment_received_date ?? '').slice(0, 10)
+    const db = String(b.payment_received_date ?? '').slice(0, 10)
+    if (da !== db) return da < db ? -1 : 1
+    const pa = String(a.posted_at ?? '')
+    const pb = String(b.posted_at ?? '')
+    if (pa !== pb) return pa < pb ? -1 : 1
+    return Number(a.id) - Number(b.id)
+  })
+}
+
+export interface MechanicalAccountsExportRow {
+  'Mark Done': string
+  JC: string
+  VRN: string
+  Model: string
+  'Service type': string
+  SA: string
+  Branch: string
+  Owner: string
+  'Invoice number': string
+  'Invoice date': string
+  'Billed amount': number | string
+  'Amount received': number | string
+  Remaining: number | string
+  'Payment status': string
+  'Invoice file': string
+  Notes: string
+  voucher_no: string
+  account_name: string
+}
+
+function mechanicalCaseExportBase(
+  row: AccountsMechanicalCase,
+  formatWhen: (iso: string | null | undefined) => string,
+): Omit<MechanicalAccountsExportRow, 'Amount received' | 'voucher_no'> {
+  return {
+    'Mark Done': formatWhen(row.invoice_done_at),
+    JC: row.jc_number,
+    VRN: row.reg_number ?? '',
+    Model: row.model ?? '',
+    'Service type': row.service_type ?? '',
+    SA: row.sa_display_name || row.sa_name || '',
+    Branch: row.branch ?? '',
+    Owner: row.owner_name ?? '',
+    'Invoice number': row.invoice_number ?? '',
+    'Invoice date': row.invoice_date ?? '',
+    'Billed amount': row.billed_amount ?? '',
+    Remaining: mechanicalRemaining(row) ?? '',
+    'Payment status': row.payment_status ?? 'pending',
+    'Invoice file': row.invoice_file_name ?? '',
+    Notes: row.payment_notes ?? '',
+    account_name: buildAccountsExportAccountName({
+      ownerName: row.owner_name,
+      branch: row.branch,
+      regNumber: row.reg_number,
+    }),
+  }
+}
+
+/** Receipt-line grain when lines exist; one case-level pending row when they do not. */
+export function buildMechanicalAccountsExportRows(input: {
+  cases: AccountsMechanicalCase[]
+  lines: AccountsMechanicalPayment[]
+  paymentModeFilter?: MechanicalPaymentModeFilter
+  formatWhen: (iso: string | null | undefined) => string
+}): MechanicalAccountsExportRow[] {
+  const modeFilter = input.paymentModeFilter ?? 'all'
+  const wanted = modeFilter === 'all' ? null : normalizeAccountsPaymentMode(modeFilter)
+  const linesByCase = new Map<number, AccountsMechanicalPayment[]>()
+  for (const line of input.lines) {
+    const list = linesByCase.get(line.reception_entry_id) ?? []
+    list.push(line)
+    linesByCase.set(line.reception_entry_id, list)
+  }
+
+  const rows: MechanicalAccountsExportRow[] = []
+  for (const caseRow of input.cases) {
+    const caseLines = sortAccountsMechanicalPaymentLines(linesByCase.get(caseRow.reception_entry_id) ?? [])
+    const matching = wanted
+      ? caseLines.filter((line) => normalizeAccountsPaymentMode(line.payment_mode) === wanted)
+      : caseLines
+    const base = mechanicalCaseExportBase(caseRow, input.formatWhen)
+    if (matching.length > 0) {
+      for (const line of matching) {
+        rows.push({
+          ...base,
+          'Amount received': line.amount,
+          voucher_no: line.voucher_no ?? '',
+        })
+      }
+      continue
+    }
+    if (wanted) continue
+    rows.push({
+      ...base,
+      'Amount received': caseRow.amount_received ?? '',
+      voucher_no: '',
+    })
+  }
+  return rows
+}
+
 export async function listAccountsMechanicalPaymentLines(): Promise<AccountsMechanicalPayment[]> {
   const pageSize = 1000
+  const withVoucher =
+    'id, reception_entry_id, mechanical_invoice_id, amount, payment_mode, reference, posted_by, posted_at, payment_received_date, voucher_no'
+  const withoutVoucher =
+    'id, reception_entry_id, mechanical_invoice_id, amount, payment_mode, reference, posted_by, posted_at, payment_received_date'
+  let columns = withVoucher
   const rows: AccountsMechanicalPayment[] = []
   for (let from = 0; ; from += pageSize) {
     const { data, error } = await supabase
       .from('accounts_mechanical_payment_lines')
-      .select('id, reception_entry_id, mechanical_invoice_id, amount, payment_mode, reference, posted_by, posted_at, payment_received_date')
+      .select(columns)
       .order('id', { ascending: true })
       .range(from, from + pageSize - 1)
-    if (error) throw new Error(settlementRpcError(error))
+    if (error) {
+      if (columns === withVoucher && /voucher_no/i.test(error.message || '')) {
+        columns = withoutVoucher
+        from -= pageSize
+        continue
+      }
+      throw new Error(settlementRpcError(error))
+    }
     const batch = asArray<AccountsMechanicalPayment>(data)
     rows.push(...batch)
     if (batch.length < pageSize) break
