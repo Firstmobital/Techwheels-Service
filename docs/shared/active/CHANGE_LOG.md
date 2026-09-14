@@ -4,7 +4,7 @@ Tracks documentation-sync updates for business logic, architecture, and access c
 
 ## 2026-09-14
 
-- Accounts Mechanical Excel adds persisted `voucher_no` and BUSY-style `account_name`. Receipt vouchers live on existing `accounts_mechanical_payment_lines` (Cash `RApp/26-27/nnnn`; UPI+Card share `JApp/26-27/nnnn`) from `payment_received_date >= 2026-09-11`. Mode-card export is receipt-line grain (split Cash+UPI no longer repeats the header total). Ledger: DBL-0057. Plan: `ACCOUNTS-001`.
+- Accounts Mechanical Excel adds persisted `voucher_no`, BUSY-style `account_name`, and receipt `Reference no`. Receipt vouchers live on existing `accounts_mechanical_payment_lines` (Cash `RApp/26-27/nnnn`; UPI+Card share `JApp/26-27/nnnn`) from `payment_received_date >= 2026-09-11`. Mode-card export is receipt-line grain (split Cash+UPI no longer repeats the header total). Ledger: DBL-0057. Plan: `ACCOUNTS-001`.
 
 ## 2026-09-12
 

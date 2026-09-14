@@ -139,7 +139,7 @@ Pattern: `src/pages/BodyshopRecoveryPage.tsx` (KPIs, search, table, Excel, on-pa
 - Tabs: Mechanical | Bodyshop
 - Search: JC / reg / invoice
 - Period chips on Mark Done date (mechanical) and invoice date (bodyshop)
-- Excel export per section. Mechanical export is receipt-line grain when payment lines exist (`voucher_no`, `account_name`); Cash/UPI/Credit Card cards filter receipt lines, not header totals. Vouchers persist on `accounts_mechanical_payment_lines` (DBL-0057).
+- Excel export per section. Mechanical export is receipt-line grain when payment lines exist (`voucher_no`, `account_name`, `Reference no`); Cash/UPI/Credit Card cards filter receipt lines, not header totals. Vouchers persist on `accounts_mechanical_payment_lines` (DBL-0057).
 
 **Mechanical desk**
 

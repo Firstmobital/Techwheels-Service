@@ -397,12 +397,18 @@ export interface MechanicalAccountsExportRow {
   Notes: string
   voucher_no: string
   account_name: string
+  'Reference no': string
 }
 
-function mechanicalCaseExportBase(
+function mechanicalExportSheetRow(
   row: AccountsMechanicalCase,
   formatWhen: (iso: string | null | undefined) => string,
-): Omit<MechanicalAccountsExportRow, 'Amount received' | 'voucher_no'> {
+  extras: {
+    amountReceived: number | string
+    voucherNo: string
+    referenceNo: string
+  },
+): MechanicalAccountsExportRow {
   return {
     'Mark Done': formatWhen(row.invoice_done_at),
     JC: row.jc_number,
@@ -415,15 +421,18 @@ function mechanicalCaseExportBase(
     'Invoice number': row.invoice_number ?? '',
     'Invoice date': row.invoice_date ?? '',
     'Billed amount': row.billed_amount ?? '',
+    'Amount received': extras.amountReceived,
     Remaining: mechanicalRemaining(row) ?? '',
     'Payment status': row.payment_status ?? 'pending',
     'Invoice file': row.invoice_file_name ?? '',
     Notes: row.payment_notes ?? '',
+    voucher_no: extras.voucherNo,
     account_name: buildAccountsExportAccountName({
       ownerName: row.owner_name,
       branch: row.branch,
       regNumber: row.reg_number,
     }),
+    'Reference no': extras.referenceNo,
   }
 }
 
@@ -449,23 +458,22 @@ export function buildMechanicalAccountsExportRows(input: {
     const matching = wanted
       ? caseLines.filter((line) => normalizeAccountsPaymentMode(line.payment_mode) === wanted)
       : caseLines
-    const base = mechanicalCaseExportBase(caseRow, input.formatWhen)
     if (matching.length > 0) {
       for (const line of matching) {
-        rows.push({
-          ...base,
-          'Amount received': line.amount,
-          voucher_no: line.voucher_no ?? '',
-        })
+        rows.push(mechanicalExportSheetRow(caseRow, input.formatWhen, {
+          amountReceived: line.amount,
+          voucherNo: line.voucher_no ?? '',
+          referenceNo: line.reference ?? '',
+        }))
       }
       continue
     }
     if (wanted) continue
-    rows.push({
-      ...base,
-      'Amount received': caseRow.amount_received ?? '',
-      voucher_no: '',
-    })
+    rows.push(mechanicalExportSheetRow(caseRow, input.formatWhen, {
+      amountReceived: caseRow.amount_received ?? '',
+      voucherNo: '',
+      referenceNo: '',
+    }))
   }
   return rows
 }

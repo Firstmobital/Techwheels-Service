@@ -329,36 +329,44 @@ function buildMechanicalAccountsExportRows({ cases, lines, paymentModeFilter = '
     const matching = wanted
       ? caseLines.filter((line) => normalizeAccountsPaymentMode(line.payment_mode) === wanted)
       : caseLines
-    const base = {
-      JC: caseRow.jc_number,
-      VRN: caseRow.reg_number ?? '',
-      Branch: caseRow.branch ?? '',
-      Owner: caseRow.owner_name ?? '',
-      'Invoice number': caseRow.invoice_number ?? '',
-      'Billed amount': caseRow.billed_amount ?? '',
-      Remaining: mechanicalRemaining(caseRow) ?? '',
-      'Payment status': caseRow.payment_status ?? 'pending',
-      account_name: buildAccountsExportAccountName({
-        ownerName: caseRow.owner_name,
-        branch: caseRow.branch,
-        regNumber: caseRow.reg_number,
-      }),
-    }
+    const account_name = buildAccountsExportAccountName({
+      ownerName: caseRow.owner_name,
+      branch: caseRow.branch,
+      regNumber: caseRow.reg_number,
+    })
     if (matching.length > 0) {
       for (const line of matching) {
         rows.push({
-          ...base,
+          JC: caseRow.jc_number,
+          VRN: caseRow.reg_number ?? '',
+          Branch: caseRow.branch ?? '',
+          Owner: caseRow.owner_name ?? '',
+          'Invoice number': caseRow.invoice_number ?? '',
+          'Billed amount': caseRow.billed_amount ?? '',
           'Amount received': line.amount,
+          Remaining: mechanicalRemaining(caseRow) ?? '',
+          'Payment status': caseRow.payment_status ?? 'pending',
           voucher_no: line.voucher_no ?? '',
+          account_name,
+          'Reference no': line.reference ?? '',
         })
       }
       continue
     }
     if (wanted) continue
     rows.push({
-      ...base,
+      JC: caseRow.jc_number,
+      VRN: caseRow.reg_number ?? '',
+      Branch: caseRow.branch ?? '',
+      Owner: caseRow.owner_name ?? '',
+      'Invoice number': caseRow.invoice_number ?? '',
+      'Billed amount': caseRow.billed_amount ?? '',
       'Amount received': caseRow.amount_received ?? '',
+      Remaining: mechanicalRemaining(caseRow) ?? '',
+      'Payment status': caseRow.payment_status ?? 'pending',
       voucher_no: '',
+      account_name,
+      'Reference no': '',
     })
   }
   return rows
@@ -490,6 +498,7 @@ function createVoucherAllocator() {
       payment_received_date: '2026-09-11',
       posted_at: '2026-09-11T10:00:00+05:30',
       voucher_no: 'RApp/26-27/0001',
+      reference: 'UPI123',
     },
     {
       id: 2,
@@ -499,6 +508,7 @@ function createVoucherAllocator() {
       payment_received_date: '2026-09-11',
       posted_at: '2026-09-11T10:01:00+05:30',
       voucher_no: 'JApp/26-27/0001',
+      reference: 'UTR-6000',
     },
     {
       id: 3,
@@ -557,6 +567,8 @@ function createVoucherAllocator() {
   assert(splitAll[1]['Amount received'] === 6000 && splitAll[1].voucher_no === 'JApp/26-27/0001', 'E: upi row 6000/JApp')
   assert(splitAll.every((r) => r['Amount received'] !== 10000), 'E: must not repeat header amount_received 10000')
   assert(splitAll[0].account_name === 'RAMESH KUMAR-SITAPURA RJ14AB1234', 'E: account_name on receipt rows')
+  assert(splitAll[0]['Reference no'] === 'UPI123', 'E: cash Reference no from receipt line')
+  assert(splitAll[1]['Reference no'] === 'UTR-6000', 'E: upi Reference no from receipt line')
 
   assert(cashRows.length === 1 && cashRows[0]['Amount received'] === 4000, `E: Cash export amount 4000, got ${JSON.stringify(cashRows)}`)
   assert(cashRows[0].voucher_no === 'RApp/26-27/0001', 'E: Cash export voucher')
@@ -597,6 +609,7 @@ function createVoucherAllocator() {
   assert(pendingRows[0].voucher_no === '', 'K: pending voucher blank')
   assert(pendingRows[0]['Amount received'] === '', 'K: pending Amount received stays header empty')
   assert(pendingRows[0].account_name === 'Pending Owner-SITAPURA RJ14PEND', 'K: pending still gets account_name')
+  assert(pendingRows[0]['Reference no'] === '', 'K: pending Reference no blank')
 }
 
 {
@@ -635,8 +648,8 @@ console.log('verify_accounts_split_payment_drafts: voucher export A–L checks p
     payment_status: 'pending',
   }
   const demoLines = [
-    { id: 1, reception_entry_id: 11, amount: 4000, payment_mode: 'cash', payment_received_date: '2026-09-11', posted_at: '2026-09-11T10:00:00+05:30', voucher_no: 'RApp/26-27/0001' },
-    { id: 2, reception_entry_id: 11, amount: 6000, payment_mode: 'upi', payment_received_date: '2026-09-11', posted_at: '2026-09-11T10:01:00+05:30', voucher_no: 'JApp/26-27/0001' },
+    { id: 1, reception_entry_id: 11, amount: 4000, payment_mode: 'cash', payment_received_date: '2026-09-11', posted_at: '2026-09-11T10:00:00+05:30', voucher_no: 'RApp/26-27/0001', reference: 'UPI123' },
+    { id: 2, reception_entry_id: 11, amount: 6000, payment_mode: 'upi', payment_received_date: '2026-09-11', posted_at: '2026-09-11T10:01:00+05:30', voucher_no: 'JApp/26-27/0001', reference: 'UTR-6000' },
   ]
   const observed = {
     cash: buildMechanicalAccountsExportRows({ cases: [demoCase], lines: demoLines, paymentModeFilter: 'cash', formatWhen: () => '' }),
@@ -645,7 +658,7 @@ console.log('verify_accounts_split_payment_drafts: voucher export A–L checks p
     all: buildMechanicalAccountsExportRows({ cases: [demoPending, demoCase], lines: demoLines, paymentModeFilter: 'all', formatWhen: () => '' }),
   }
   console.log('practical export observation:', JSON.stringify({
-    cash: observed.cash.map((r) => ({ amount: r['Amount received'], voucher_no: r.voucher_no, account_name: r.account_name })),
+    cash: observed.cash.map((r) => ({ amount: r['Amount received'], voucher_no: r.voucher_no, account_name: r.account_name, reference: r['Reference no'] })),
     upi: observed.upi.map((r) => ({ amount: r['Amount received'], voucher_no: r.voucher_no })),
     card: observed.card.length,
     all: observed.all.map((r) => ({ jc: r.JC, amount: r['Amount received'], voucher_no: r.voucher_no })),
