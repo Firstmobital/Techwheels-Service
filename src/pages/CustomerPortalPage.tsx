@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
+import { App as CapApp } from '@capacitor/app'
 import { supabase } from '../lib/supabase'
 import type { CustomerVehicle } from '../lib/api/customer'
 import {
@@ -98,21 +99,54 @@ export default function CustomerPortalPage({
     setComplaintKm(initialVehicle.km_reading ? String(initialVehicle.km_reading) : '')
   }, [initialVehicle])
 
+  const activeTabRef = useRef<CustomerTab>(activeTab)
+  useEffect(() => {
+    activeTabRef.current = activeTab
+  }, [activeTab])
+
   // ── BACK BUTTON HANDLING: Go to Overview (Home) tab if inside any sub-window ──
   useEffect(() => {
-    const handlePopState = () => {
-      if (activeTab !== 'dashboard') {
+    let listenerHandle: any = null
+
+    // 1. Native Android Hardware/Gesture Back Button Listener via Capacitor
+    try {
+      CapApp.addListener('backButton', () => {
+        if (activeTabRef.current !== 'dashboard') {
+          setActiveTab('dashboard')
+        } else {
+          CapApp.exitApp()
+        }
+      }).then((handle) => {
+        listenerHandle = handle
+      }).catch((err) => {
+        console.warn('Capacitor backButton setup error:', err)
+      })
+    } catch (e) {
+      console.warn('CapApp listener error:', e)
+    }
+
+    // 2. Browser History fallback
+    const handlePopState = (e: PopStateEvent) => {
+      if (activeTabRef.current !== 'dashboard') {
+        e.preventDefault()
         setActiveTab('dashboard')
       }
     }
 
+    window.addEventListener('popstate', handlePopState)
+
+    return () => {
+      if (listenerHandle && typeof listenerHandle.remove === 'function') {
+        listenerHandle.remove()
+      }
+      window.removeEventListener('popstate', handlePopState)
+    }
+  }, [])
+
+  // Sync browser history state when activeTab changes
+  useEffect(() => {
     if (activeTab !== 'dashboard') {
       window.history.pushState({ tab: activeTab }, '', window.location.href)
-    }
-
-    window.addEventListener('popstate', handlePopState)
-    return () => {
-      window.removeEventListener('popstate', handlePopState)
     }
   }, [activeTab])
 
