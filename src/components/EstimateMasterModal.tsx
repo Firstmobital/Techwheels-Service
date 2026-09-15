@@ -92,34 +92,55 @@ export function EstimateMasterModal({ isOpen, onClose }: EstimateMasterModalProp
   // Extract unique models & fuels for filters
   const modelsList = useMemo(() => {
     const set = new Set<string>()
-    items.forEach((i) => i.model && set.add(i.model))
-    const list = Array.from(set).sort()
-    return ['All', ...list]
+    items.forEach((p) => {
+      if (p.model && p.model.trim()) set.add(p.model.trim())
+    })
+    return ['All', ...Array.from(set).sort((a, b) => a.localeCompare(b))]
   }, [items])
 
   const fuelsList = useMemo(() => {
     const set = new Set<string>()
-    items.forEach((i) => i.fuel && set.add(i.fuel))
-    const list = Array.from(set).sort()
-    return ['All', ...list]
+    items.forEach((p) => {
+      if (p.fuel && p.fuel.trim()) set.add(p.fuel.trim())
+    })
+    return ['All', ...Array.from(set).sort((a, b) => a.localeCompare(b))]
   }, [items])
 
   const filteredItems = useMemo(() => {
     const q = search.trim().toLowerCase()
+    const selModel = selectedModel.trim().toLowerCase()
+    const selFuel = selectedFuel.trim().toLowerCase()
+    const selType = selectedServiceType.trim().toLowerCase()
+
     return items.filter((item) => {
-      if (selectedModel !== 'All' && item.model.toLowerCase() !== selectedModel.toLowerCase()) {
-        return false
+      if (selModel !== 'all') {
+        const itemModel = (item.model || '').trim().toLowerCase()
+        if (itemModel !== selModel && !itemModel.includes(selModel)) {
+          return false
+        }
       }
-      if (selectedFuel !== 'All' && (item.fuel || '').toLowerCase() !== selectedFuel.toLowerCase()) {
-        return false
+
+      if (selFuel !== 'all') {
+        const itemFuel = (item.fuel || '').trim().toLowerCase()
+        if (itemFuel !== selFuel && !itemFuel.includes(selFuel)) {
+          return false
+        }
       }
-      if (selectedServiceType !== 'All' && !item.service_type.toLowerCase().includes(selectedServiceType.toLowerCase())) {
-        return false
+
+      if (selType !== 'all') {
+        const itemType = (item.service_type || '').trim().toLowerCase()
+        if (itemType !== selType && !itemType.includes(selType)) {
+          return false
+        }
       }
+
       if (q) {
-        const text = `${item.service_name} ${item.model} ${item.fuel} ${item.service_type}`.toLowerCase()
-        if (!text.includes(q)) return false
+        const combined = `${item.service_name || ''} ${item.model || ''} ${item.fuel || ''} ${item.service_type || ''} ${item.id || ''} ${item.price || ''} ${item.labour || ''}`.toLowerCase()
+        if (!combined.includes(q)) {
+          return false
+        }
       }
+
       return true
     })
   }, [items, search, selectedModel, selectedFuel, selectedServiceType])
