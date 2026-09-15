@@ -40,7 +40,7 @@ export function ServiceEstimateBuilderModal({
   const [searchQuery, setSearchQuery] = useState('')
   const [discount, setDiscount] = useState<number>(0)
   const [isSaving, setIsSaving] = useState(false)
-  const [estimateStatus, setEstimateStatus] = useState<'Draft' | 'Sent' | 'Approved' | 'Rejected'>('Draft')
+  const [estimateStatus, setEstimateStatus] = useState<'Draft' | 'Sent' | 'Approved' | 'Rejected' | 'Supplementary_Pending'>('Draft')
   const [rejectionReason, setRejectionReason] = useState<string | null>(null)
   const [copiedLink, setCopiedLink] = useState(false)
   const [showCustomItem, setShowCustomItem] = useState(false)

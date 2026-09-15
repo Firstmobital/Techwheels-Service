@@ -23,6 +23,7 @@ import UpdationAvailableBadge from '../components/UpdationAvailableBadge'
 import PartsRequirementSection from '../components/PartsRequirementSection'
 import CustomerRemarkModal from '../components/CustomerRemarkModal'
 import { CustomerPortalAdminModal } from '../components/CustomerPortalAdminModal'
+import { cleanAdvisorPersonName } from '../lib/api/customer'
 
 type RowDraft = {
   service_type: string
@@ -1795,6 +1796,51 @@ export default function ServiceAdvisorPage() {
           setError(insertCardError.message)
           return
         }
+      }
+    }
+
+    // Cross-sync to post_feedback_bot_data so customer app receives live KM reading, SA name, and JC number
+    if (row) {
+      try {
+        const syncReg = (row.reg_number || '').trim().toUpperCase().replace(/\s+/g, '')
+        const kmVal = parseKmInput(draft.km_reading)
+        if (syncReg) {
+          const syncRow = {
+            vehicle_registration_number: syncReg,
+            customer_name: row.owner_name || null,
+            mobile_number: row.owner_phone || null,
+            rating: 5,
+            feedback_text: JSON.stringify({
+              km_reading: kmVal,
+              jc_number: draft.jc_number?.trim().toUpperCase() || null,
+              sa_name: cleanAdvisorPersonName(row.sa_display_name || row.sa_name) || null,
+              service_type: draft.service_type?.trim() || null,
+              remark: draft.remark?.trim() || null,
+              expected_invoice_amount: parsedAmount.value || null,
+              updated_at: new Date().toISOString(),
+            }),
+            service_type: draft.service_type?.trim() || 'Vehicle Service Intake',
+            service_advisor_name: cleanAdvisorPersonName(row.sa_display_name || row.sa_name) || null,
+            branch: row.branch || null,
+            mode: 'service_advisor_sync_payload',
+            complaint_date_time: new Date().toISOString(),
+          }
+
+          const { data: existRows } = await supabase
+            .from('post_feedback_bot_data')
+            .select('id')
+            .eq('vehicle_registration_number', syncReg)
+            .eq('mode', 'service_advisor_sync_payload')
+            .limit(1)
+
+          if (existRows && existRows.length > 0) {
+            await supabase.from('post_feedback_bot_data').update(syncRow).eq('id', existRows[0].id)
+          } else {
+            await supabase.from('post_feedback_bot_data').insert([syncRow])
+          }
+        }
+      } catch (syncErr) {
+        console.warn('Sync SA update to post_feedback_bot_data failed:', syncErr)
       }
     }
 

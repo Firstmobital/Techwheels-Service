@@ -903,6 +903,53 @@ export default function FloorInchargePage() {
         },
       }))
 
+      // Sync technician allocation to post_feedback_bot_data for customer app live view
+      try {
+        const jcObj = jobCards.find(
+          (c) =>
+            normalizeJobCardNumber(c.jc_number) === normalizedJobCardNumber ||
+            c.assignment_key === normalizedJobCardNumber,
+        )
+        const targetReg = jcObj?.reg_number || normalizedJobCardNumber
+        if (targetReg) {
+          const syncRow = {
+            vehicle_registration_number: targetReg.toUpperCase().replace(/\s+/g, ''),
+            customer_name: jcObj?.owner_name || null,
+            mobile_number: jcObj?.owner_phone || null,
+            rating: 5,
+            feedback_text: JSON.stringify({
+              technician_name: emp.employee_name,
+              technician_code: emp.employee_code,
+              job_card_number: normalizedJobCardNumber,
+              reg_number: targetReg,
+              bay_no: updated.bay_no || null,
+              assigned_at: new Date().toISOString(),
+              status: updated.work_status || 'work_inprocess',
+            }),
+            service_type: 'Technician Allocation',
+            service_advisor_name: emp.employee_name,
+            branch: jcObj?.branch || null,
+            mode: 'technician_allocation_payload',
+            complaint_date_time: new Date().toISOString(),
+          }
+
+          const { data: existRow } = await supabase
+            .from('post_feedback_bot_data')
+            .select('id')
+            .eq('vehicle_registration_number', targetReg.toUpperCase().replace(/\s+/g, ''))
+            .eq('mode', 'technician_allocation_payload')
+            .limit(1)
+
+          if (existRow && existRow.length > 0) {
+            await supabase.from('post_feedback_bot_data').update(syncRow).eq('id', existRow[0].id)
+          } else {
+            await supabase.from('post_feedback_bot_data').insert([syncRow])
+          }
+        }
+      } catch (syncErr) {
+        console.warn('Sync technician allocation to customer app failed:', syncErr)
+      }
+
       showToast(`Technician assigned to ${normalizedJobCardNumber}`, 'success')
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Failed to assign technician'

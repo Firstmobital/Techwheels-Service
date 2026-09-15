@@ -7,6 +7,8 @@ export interface EstimateItem {
   quantity: number
   unit_price: number
   total: number
+  is_supplementary?: boolean
+  approval_status?: 'Approved' | 'Pending' | 'Rejected'
 }
 
 export interface CustomerEstimateRecord {
@@ -25,7 +27,7 @@ export interface CustomerEstimateRecord {
   discount: number
   gst_tax: number
   grand_total: number
-  status: 'Draft' | 'Sent' | 'Approved' | 'Rejected'
+  status: 'Draft' | 'Sent' | 'Approved' | 'Rejected' | 'Supplementary_Pending'
   rejection_reason?: string | null
   approved_at?: string | null
   created_at?: string | null
@@ -72,12 +74,133 @@ export async function fetchEstimateForComplaint(
   return null
 }
 
-// Fetch all estimates for a specific vehicle
+// Fetch all estimates for a specific vehicle directly from website Supabase database
 export async function fetchEstimatesForVehicle(regNumber: string): Promise<CustomerEstimateRecord[]> {
   const norm = regNumber.trim().toUpperCase()
   if (!norm) return []
-  const all = await fetchAllEstimates()
-  return all.filter((e) => e.vehicle_registration_number?.toUpperCase() === norm)
+
+  const results: CustomerEstimateRecord[] = []
+  const seenEstNos = new Set<string>()
+
+  // A. Query customer_estimates table in Supabase
+  try {
+    const { data, error } = await supabase
+      .from('customer_estimates')
+      .select('*')
+      .eq('vehicle_registration_number', norm)
+      .order('created_at', { ascending: false })
+
+    if (!error && data && data.length > 0) {
+      for (const row of data) {
+        if (row && row.estimate_no && !seenEstNos.has(row.estimate_no)) {
+          seenEstNos.add(row.estimate_no)
+          results.push(row as CustomerEstimateRecord)
+        }
+      }
+    }
+  } catch (err) {
+    console.warn('Supabase customer_estimates query failed:', err)
+  }
+
+  // B. Query post_feedback_bot_data table for estimate payload
+  try {
+    const { data: botRows, error: botErr } = await supabase
+      .from('post_feedback_bot_data')
+      .select('*')
+      .eq('vehicle_registration_number', norm)
+      .eq('mode', 'customer_estimate_payload')
+      .order('complaint_date_time', { ascending: false })
+
+    if (!botErr && botRows && botRows.length > 0) {
+      for (const row of botRows) {
+        try {
+          const parsed = JSON.parse(row.feedback_text) as CustomerEstimateRecord
+          if (parsed && parsed.estimate_no && !seenEstNos.has(parsed.estimate_no)) {
+            seenEstNos.add(parsed.estimate_no)
+            results.push(parsed)
+          }
+        } catch {
+          // ignore parse error
+        }
+      }
+    }
+  } catch (err) {
+    console.warn('Supabase post_feedback_bot_data query failed:', err)
+  }
+
+  // C. Fallback to service_reception_entries from website if advisor has active reception entry
+  if (results.length === 0) {
+    try {
+      const { data: recRows, error: recErr } = await supabase
+        .from('service_reception_entries')
+        .select('*')
+        .eq('reg_number', norm)
+        .order('created_at', { ascending: false })
+        .limit(1)
+
+      if (!recErr && recRows && recRows.length > 0) {
+        const rec = recRows[0]
+        const estAmount = Number(rec.estimated_cost || rec.billed_amount || 0)
+        if (estAmount > 0) {
+          const estNo = `EST-${norm.replace(/[^A-Z0-9]/g, '')}-${rec.jc_number ? rec.jc_number.replace(/[^0-9]/g, '') : 'WEB'}`
+
+        const dynamicEst: CustomerEstimateRecord = {
+          estimate_no: estNo,
+          vehicle_registration_number: norm,
+          customer_name: rec.customer_name || 'Customer',
+          customer_phone: rec.mobile_number || null,
+          model: rec.model || 'Tata Motors',
+          fuel: rec.fuel_type || 'Petrol',
+          service_advisor_name: rec.sa_display_name || rec.sa_name || 'Assigned SA',
+          branch: rec.branch || 'Main Workshop',
+          items: [
+            {
+              id: 'item-rec-01',
+              type: 'labour',
+              description: `Inspection & Initial Service Work (${rec.service_type || 'General Service'})`,
+              quantity: 1,
+              unit_price: Math.round(estAmount * 0.4),
+              total: Math.round(estAmount * 0.4),
+            },
+            {
+              id: 'item-rec-02',
+              type: 'part',
+              description: rec.remark ? `Parts for: ${rec.remark}` : 'Standard Consumables & Oil Replacement',
+              quantity: 1,
+              unit_price: Math.round(estAmount * 0.45),
+              total: Math.round(estAmount * 0.45),
+            },
+          ],
+          subtotal: Math.round(estAmount * 0.85),
+          discount: 0,
+          gst_tax: Math.round(estAmount * 0.15),
+          grand_total: estAmount,
+          status: rec.estimate_status === 'Approved' ? 'Approved' : 'Sent',
+          created_at: rec.created_at || new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        }
+
+        if (!seenEstNos.has(dynamicEst.estimate_no)) {
+          seenEstNos.add(dynamicEst.estimate_no)
+          results.push(dynamicEst)
+        }
+      }
+    }
+  } catch (err) {
+      console.warn('Fallback reception query error:', err)
+    }
+  }
+
+  // D. Merge local store
+  const localList = getLocalEstimates()
+  for (const item of localList) {
+    if (item && item.vehicle_registration_number?.toUpperCase() === norm && item.estimate_no && !seenEstNos.has(item.estimate_no)) {
+      seenEstNos.add(item.estimate_no)
+      results.push(item)
+    }
+  }
+
+  return results
 }
 
 // Fetch latest estimate for vehicle
@@ -335,4 +458,38 @@ export async function updateEstimateApproval(
   } catch (err) {
     console.warn('Failed to update estimate status in post_feedback_bot_data:', err)
   }
+}
+
+// 5. Add extra / supplementary items to an existing estimate (even after initial approval)
+export async function addSupplementaryItemToEstimate(
+  estimateNo: string,
+  newItem: Omit<EstimateItem, 'id'>
+): Promise<CustomerEstimateRecord | null> {
+  const all = await fetchAllEstimates()
+  const match = all.find((e) => e.estimate_no === estimateNo)
+  if (!match) return null
+
+  const itemWithId: EstimateItem = {
+    ...newItem,
+    id: `item-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+    is_supplementary: true,
+    approval_status: 'Pending',
+  }
+
+  const updatedItems = [...match.items, itemWithId]
+  const subtotal = updatedItems.reduce((acc, curr) => acc + curr.total, 0)
+  const gst_tax = Math.round(subtotal * 0.18)
+  const grand_total = subtotal - (match.discount || 0) + gst_tax
+
+  const updatedEstimate: CustomerEstimateRecord = {
+    ...match,
+    items: updatedItems,
+    subtotal,
+    gst_tax,
+    grand_total,
+    status: 'Supplementary_Pending',
+    updated_at: new Date().toISOString(),
+  }
+
+  return saveAndSendEstimate(updatedEstimate)
 }

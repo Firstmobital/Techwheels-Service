@@ -522,37 +522,67 @@ export default function SettingsPage() {
   const estModelsList = useMemo(() => {
     const set = new Set<string>()
     estimatePricingList.forEach((p) => {
-      if (p.model) set.add(p.model)
+      if (p.model && p.model.trim()) set.add(p.model.trim())
     })
-    return ['All', ...Array.from(set).sort()]
+    return ['All', ...Array.from(set).sort((a, b) => a.localeCompare(b))]
   }, [estimatePricingList])
 
   const estFuelsList = useMemo(() => {
     const set = new Set<string>()
     estimatePricingList.forEach((p) => {
-      if (p.fuel) set.add(p.fuel)
+      if (p.fuel && p.fuel.trim()) set.add(p.fuel.trim())
     })
-    return ['All', ...Array.from(set).sort()]
+    return ['All', ...Array.from(set).sort((a, b) => a.localeCompare(b))]
   }, [estimatePricingList])
 
   const estServiceTypesList = useMemo(() => {
     const set = new Set<string>()
     estimatePricingList.forEach((p) => {
-      if (p.service_type) set.add(p.service_type)
+      if (p.service_type && p.service_type.trim()) set.add(p.service_type.trim())
     })
-    return ['All', ...Array.from(set).sort()]
+    return ['All', ...Array.from(set).sort((a, b) => a.localeCompare(b))]
   }, [estimatePricingList])
 
   const filteredPricingItems = useMemo(() => {
+    const q = estSearch.trim().toLowerCase()
+    const selModel = estModelFilter.trim().toLowerCase()
+    const selFuel = estFuelFilter.trim().toLowerCase()
+    const selType = estServiceTypeFilter.trim().toLowerCase()
+
     return estimatePricingList.filter((item) => {
-      const matchSearch =
-        !estSearch ||
-        item.service_name.toLowerCase().includes(estSearch.toLowerCase()) ||
-        String(item.id).toLowerCase().includes(estSearch.toLowerCase())
-      const matchModel = estModelFilter === 'All' || item.model === estModelFilter
-      const matchFuel = estFuelFilter === 'All' || item.fuel === estFuelFilter
-      const matchType = estServiceTypeFilter === 'All' || item.service_type === estServiceTypeFilter
-      return matchSearch && matchModel && matchFuel && matchType
+      // Model match (case-insensitive & trimmed)
+      if (selModel !== 'all') {
+        const itemModel = (item.model || '').trim().toLowerCase()
+        if (itemModel !== selModel && !itemModel.includes(selModel)) {
+          return false
+        }
+      }
+
+      // Fuel match (case-insensitive & trimmed)
+      if (selFuel !== 'all') {
+        const itemFuel = (item.fuel || '').trim().toLowerCase()
+        if (itemFuel !== selFuel && !itemFuel.includes(selFuel)) {
+          return false
+        }
+      }
+
+      // Service Type match (case-insensitive & trimmed)
+      if (selType !== 'all') {
+        const itemType = (item.service_type || '').trim().toLowerCase()
+        if (itemType !== selType && !itemType.includes(selType)) {
+          return false
+        }
+      }
+
+      // Search across all fields: service_name, model, fuel, service_type, id, price, labour
+      if (q) {
+        const combined = `${item.service_name || ''} ${item.model || ''} ${item.fuel || ''} ${item.service_type || ''} ${item.id || ''} ${item.price || ''} ${item.labour || ''}`.toLowerCase()
+        if (!combined.includes(q)) {
+          return false
+        }
+      }
+
+      return true
     })
   }, [estimatePricingList, estSearch, estModelFilter, estFuelFilter, estServiceTypeFilter])
 
@@ -3596,75 +3626,106 @@ export default function SettingsPage() {
 
           <div className="space-y-4 p-5">
             {/* Filter Toolbar */}
-            <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-4">
-              <div>
-                <label className="mb-1 block text-[11px] font-semibold text-gray-500 uppercase tracking-wider">
-                  Search Item / ID
-                </label>
-                <div className="relative">
-                  <input
-                    type="text"
-                    value={estSearch}
-                    onChange={(e) => setEstSearch(e.target.value)}
-                    placeholder="Search name, code..."
-                    className="w-full rounded-lg border border-gray-300 py-1.5 pl-8 pr-3 text-xs outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-                  />
-                  <span className="absolute left-2.5 top-2 text-gray-400">
-                    <Icon name="search" size={12} strokeWidth={2} />
-                  </span>
+            <div className="space-y-2">
+              <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-4">
+                <div>
+                  <label className="mb-1 block text-[11px] font-semibold text-gray-500 uppercase tracking-wider">
+                    Search Item / ID
+                  </label>
+                  <div className="relative">
+                    <input
+                      type="text"
+                      value={estSearch}
+                      onChange={(e) => setEstSearch(e.target.value)}
+                      placeholder="Search name, code..."
+                      className="w-full rounded-lg border border-gray-300 py-1.5 pl-8 pr-8 text-xs outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                    />
+                    <span className="absolute left-2.5 top-2 text-gray-400">
+                      <Icon name="search" size={12} strokeWidth={2} />
+                    </span>
+                    {estSearch && (
+                      <button
+                        type="button"
+                        onClick={() => setEstSearch('')}
+                        className="absolute right-2.5 top-2 text-xs text-gray-400 hover:text-gray-600 font-bold"
+                      >
+                        ✕
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                <div>
+                  <label className="mb-1 block text-[11px] font-semibold text-gray-500 uppercase tracking-wider">
+                    Model Filter
+                  </label>
+                  <select
+                    value={estModelFilter}
+                    onChange={(e) => setEstModelFilter(e.target.value)}
+                    className="w-full rounded-lg border border-gray-300 px-2.5 py-1.5 text-xs outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                  >
+                    {estModelsList.map((m) => (
+                      <option key={m} value={m}>
+                        {m === 'All' ? 'All Models' : m}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="mb-1 block text-[11px] font-semibold text-gray-500 uppercase tracking-wider">
+                    Fuel Type
+                  </label>
+                  <select
+                    value={estFuelFilter}
+                    onChange={(e) => setEstFuelFilter(e.target.value)}
+                    className="w-full rounded-lg border border-gray-300 px-2.5 py-1.5 text-xs outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                  >
+                    {estFuelsList.map((f) => (
+                      <option key={f} value={f}>
+                        {f === 'All' ? 'All Fuel Types' : f}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="mb-1 block text-[11px] font-semibold text-gray-500 uppercase tracking-wider">
+                    Service Type
+                  </label>
+                  <select
+                    value={estServiceTypeFilter}
+                    onChange={(e) => setEstServiceTypeFilter(e.target.value)}
+                    className="w-full rounded-lg border border-gray-300 px-2.5 py-1.5 text-xs outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                  >
+                    {estServiceTypesList.map((st) => (
+                      <option key={st} value={st}>
+                        {st === 'All' ? 'All Service Types' : st}
+                      </option>
+                    ))}
+                  </select>
                 </div>
               </div>
 
-              <div>
-                <label className="mb-1 block text-[11px] font-semibold text-gray-500 uppercase tracking-wider">
-                  Model Filter
-                </label>
-                <select
-                  value={estModelFilter}
-                  onChange={(e) => setEstModelFilter(e.target.value)}
-                  className="w-full rounded-lg border border-gray-300 px-2.5 py-1.5 text-xs outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-                >
-                  {estModelsList.map((m) => (
-                    <option key={m} value={m}>
-                      {m === 'All' ? 'All Models' : m}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="mb-1 block text-[11px] font-semibold text-gray-500 uppercase tracking-wider">
-                  Fuel Type
-                </label>
-                <select
-                  value={estFuelFilter}
-                  onChange={(e) => setEstFuelFilter(e.target.value)}
-                  className="w-full rounded-lg border border-gray-300 px-2.5 py-1.5 text-xs outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-                >
-                  {estFuelsList.map((f) => (
-                    <option key={f} value={f}>
-                      {f === 'All' ? 'All Fuel Types' : f}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="mb-1 block text-[11px] font-semibold text-gray-500 uppercase tracking-wider">
-                  Service Type
-                </label>
-                <select
-                  value={estServiceTypeFilter}
-                  onChange={(e) => setEstServiceTypeFilter(e.target.value)}
-                  className="w-full rounded-lg border border-gray-300 px-2.5 py-1.5 text-xs outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-                >
-                  {estServiceTypesList.map((st) => (
-                    <option key={st} value={st}>
-                      {st === 'All' ? 'All Service Types' : st}
-                    </option>
-                  ))}
-                </select>
-              </div>
+              {(estSearch || estModelFilter !== 'All' || estFuelFilter !== 'All' || estServiceTypeFilter !== 'All') && (
+                <div className="flex items-center justify-between pt-1 text-xs">
+                  <span className="text-gray-500">
+                    Showing <strong>{filteredPricingItems.length}</strong> matching items
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEstSearch('')
+                      setEstModelFilter('All')
+                      setEstFuelFilter('All')
+                      setEstServiceTypeFilter('All')
+                    }}
+                    className="text-blue-600 hover:text-blue-800 font-semibold inline-flex items-center gap-1"
+                  >
+                    <span>✕ Clear All Filters</span>
+                  </button>
+                </div>
+              )}
             </div>
 
             {/* Table */}

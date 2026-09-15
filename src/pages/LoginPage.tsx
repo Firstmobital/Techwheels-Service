@@ -94,17 +94,13 @@ export default function LoginPage({ onSwitchToSignUp, onSwitchToForgot, onCustom
     setCustLoading(true)
     setCustError(null)
 
-    const username = customerUsername.trim()
-    const pass = customerPassword.trim()
+    const rawUser = customerUsername.trim()
+    const rawPass = customerPassword.trim()
+    const username = rawUser || rawPass
+    const pass = rawPass || rawUser
 
     if (!username) {
       setCustError('Please enter your 10-digit mobile number or vehicle registration number.')
-      setCustLoading(false)
-      return
-    }
-
-    if (!pass) {
-      setCustError('Please enter your password or mobile number.')
       setCustLoading(false)
       return
     }
@@ -124,13 +120,6 @@ export default function LoginPage({ onSwitchToSignUp, onSwitchToForgot, onCustom
     } finally {
       setCustLoading(false)
     }
-  }
-
-  // Quick-fill test credentials
-  const fillCustomerDemo = (phone: string, _vehicleNo?: string) => {
-    setCustomerUsername(phone)
-    setCustomerPassword(phone)
-    setCustError(null)
   }
 
   return (
@@ -357,7 +346,6 @@ export default function LoginPage({ onSwitchToSignUp, onSwitchToForgot, onCustom
                   placeholder="Enter 10-digit mobile number as password"
                   value={customerPassword}
                   onChange={(e) => setCustomerPassword(e.target.value)}
-                  required
                 />
                 <button
                   type="button"
@@ -388,45 +376,6 @@ export default function LoginPage({ onSwitchToSignUp, onSwitchToForgot, onCustom
               <span>
                 <strong>Login Tip:</strong> You can enter your 10-digit mobile number in both fields to login directly and access your dashboard.
               </span>
-            </div>
-
-            {/* Quick Demo Fill Buttons */}
-            <div style={{ paddingTop: 2, paddingBottom: 2 }}>
-              <div style={{ fontSize: 11.5, color: 'var(--muted, #64748b)', marginBottom: 6, fontWeight: 600 }}>
-                Demo Accounts (Click to test):
-              </div>
-              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                <button
-                  type="button"
-                  onClick={() => fillCustomerDemo('9888877771', 'RJ14TEST01')}
-                  style={{
-                    fontSize: 11.5,
-                    padding: '4px 10px',
-                    borderRadius: 6,
-                    border: '1px solid #cbd5e1',
-                    background: '#fff',
-                    color: '#1e293b',
-                    cursor: 'pointer',
-                  }}
-                >
-                  🚗 Nexon EV (9888877771)
-                </button>
-                <button
-                  type="button"
-                  onClick={() => fillCustomerDemo('9888877772', 'RJ14TEST02')}
-                  style={{
-                    fontSize: 11.5,
-                    padding: '4px 10px',
-                    borderRadius: 6,
-                    border: '1px solid #cbd5e1',
-                    background: '#fff',
-                    color: '#1e293b',
-                    cursor: 'pointer',
-                  }}
-                >
-                  🚙 Safari (9888877772)
-                </button>
-              </div>
             </div>
 
             {custError && (

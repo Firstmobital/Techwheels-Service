@@ -998,6 +998,53 @@ export async function listReceptionEntriesByDateRange(range: { from: string; to:
   return ok(enriched)
 }
 
+async function syncReceptionToBotData(row: ReceptionEntryRow | undefined) {
+  if (!row) return
+  try {
+    const reg = (row.reg_number || '').trim().toUpperCase().replace(/\s+/g, '')
+    if (!reg) return
+    const saName = (row.sa_display_name || row.sa_name || '').trim() || null
+    const jc = (row.jc_number || '').trim().toUpperCase() || null
+    const km = row.km_reading != null && Number(row.km_reading) > 0 ? Number(row.km_reading) : null
+
+    const syncRow = {
+      vehicle_registration_number: reg,
+      customer_name: row.owner_name || null,
+      mobile_number: row.owner_phone || null,
+      rating: 5,
+      feedback_text: JSON.stringify({
+        km_reading: km,
+        jc_number: jc,
+        sa_name: saName,
+        service_type: row.service_type || null,
+        model: row.model || null,
+        branch: row.branch || null,
+        updated_at: new Date().toISOString(),
+      }),
+      service_type: row.service_type || 'Vehicle Service Intake',
+      service_advisor_name: saName,
+      branch: row.branch || null,
+      mode: 'service_advisor_sync_payload',
+      complaint_date_time: new Date().toISOString(),
+    }
+
+    const { data: existRows } = await supabase
+      .from('post_feedback_bot_data')
+      .select('id')
+      .eq('vehicle_registration_number', reg)
+      .eq('mode', 'service_advisor_sync_payload')
+      .limit(1)
+
+    if (existRows && existRows.length > 0) {
+      await supabase.from('post_feedback_bot_data').update(syncRow).eq('id', existRows[0].id)
+    } else {
+      await supabase.from('post_feedback_bot_data').insert([syncRow])
+    }
+  } catch (err) {
+    console.warn('syncReceptionToBotData failed:', err)
+  }
+}
+
 export async function createReceptionEntry(input: ReceptionEntryInput): Promise<ApiResult<ReceptionEntryRow>> {
   const payload = normalizePayload(input)
 
@@ -1037,7 +1084,9 @@ export async function createReceptionEntry(input: ReceptionEntryInput): Promise<
   if (!row) return fail('Create failed: no row returned')
 
   const enriched = await enrichEntriesWithEmployeeBranch([row])
-  return ok(enriched[0] ?? row)
+  const finalRow = enriched[0] ?? row
+  void syncReceptionToBotData(finalRow)
+  return ok(finalRow)
 }
 
 function parseReceptionRevisitContext(raw: unknown): ReceptionRevisitContext {
@@ -1185,7 +1234,9 @@ export async function updateReceptionEntry(id: number, input: ReceptionEntryInpu
   if (!row) return fail('Update failed: no row returned')
 
   const enriched = await enrichEntriesWithEmployeeBranch([row])
-  return ok(enriched[0] ?? row)
+  const finalRow = enriched[0] ?? row
+  void syncReceptionToBotData(finalRow)
+  return ok(finalRow)
 }
 
 export async function deleteReceptionEntry(id: number): Promise<ApiResult<null>> {
