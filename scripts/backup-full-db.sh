@@ -11,6 +11,8 @@ set -euo pipefail
 #   2. Discover large tables from live DB size stats.
 #   3. Phase 1: schema + all row data except large tables (one connection).
 #   4. Phase 2: each large table on its own connection, with pauses + retries.
+#      Data presence is checked with a byte search (COPY or INSERT), not grep.
+#      Attempts 3+ fall back to --inserts if COPY data is missing.
 #   5. Verify every large table landed in the dump before chunking.
 #
 # Required environment variables:
@@ -93,6 +95,9 @@ fi
 mkdir -p "$dump_dir" "$chunks_dir" "$evidence_dir"
 rm -f "$dump_file"
 
+# User grep config must not affect COPY-block detection (GREP_OPTIONS is inherited).
+unset GREP_OPTIONS
+
 export PGPASSWORD="$SUPABASE_DB_PASSWORD"
 export PGOPTIONS="${PGOPTIONS:--c statement_timeout=0 -c lock_timeout=0}"
 
@@ -115,7 +120,9 @@ resolve_connection() {
 
 resolve_connection
 
-pg_conn=(--host="$SUPABASE_DB_HOST" --port="$SUPABASE_DB_PORT" --username="$SUPABASE_DB_USER" --dbname="$SUPABASE_DB_NAME")
+# Conninfo (not --host/--user) so libpq keepalives survive long COPY streams.
+pg_conninfo="host=${SUPABASE_DB_HOST} port=${SUPABASE_DB_PORT} user=${SUPABASE_DB_USER} dbname=${SUPABASE_DB_NAME} sslmode=require keepalives=1 keepalives_idle=30 keepalives_interval=10 keepalives_count=5 tcp_user_timeout=60000"
+pg_conn=(--dbname="$pg_conninfo")
 table_pause_sec="${BACKUP_TABLE_PAUSE_SEC:-20}"
 large_table_min_bytes="${BACKUP_LARGE_TABLE_MIN_BYTES:-5242880}"
 max_attempts=5
@@ -198,16 +205,62 @@ pg_dump_table_selector() {
   fi
 }
 
-copy_marker_for_table() {
+# Byte search (not grep): ignores GREP_OPTIONS, binary rows, and quoted identifiers.
+dump_contains_table_data() {
   local table="$1"
-  local schema rel
-  schema="$(table_schema "$table")"
-  rel="$(table_relname "$table")"
-  if [[ "$rel" == *[A-Z]* ]]; then
-    printf 'COPY %s."%s"' "$schema" "$rel"
-  else
-    printf 'COPY %s.%s ' "$schema" "$rel"
-  fi
+  local file="$2"
+  python3 - "$(table_schema "$table")" "$(table_relname "$table")" "$file" <<'PY'
+import sys
+
+schema, rel, path = sys.argv[1], sys.argv[2], sys.argv[3]
+prefixes = (b"COPY ", b"INSERT INTO ")
+suffixes = [
+    f"{schema}.{rel} ".encode(),
+    f"{schema}.{rel}(".encode(),
+    f'{schema}."{rel}"'.encode(),
+    f'"{schema}"."{rel}"'.encode(),
+    f'"{schema}".{rel}'.encode(),
+]
+needles = [prefix + suffix for prefix in prefixes for suffix in suffixes]
+max_n = max(len(n) for n in needles)
+tail = b""
+with open(path, "rb") as fh:
+    while True:
+        chunk = fh.read(1024 * 1024)
+        if not chunk:
+            sys.exit(1)
+        data = tail + chunk
+        if any(n in data for n in needles):
+            sys.exit(0)
+        tail = data[-(max_n - 1) :]
+PY
+}
+
+describe_failed_table_dump() {
+  local table="$1"
+  local file="$2"
+  local size
+  size="$(wc -c < "$file" | tr -d ' ')"
+  echo "Dump diagnostics for ${table}: ${size} bytes" >&2
+  python3 - "$file" <<'PY'
+import sys
+from pathlib import Path
+
+path = Path(sys.argv[1])
+try:
+    text = path.read_bytes()[:4096].decode("utf-8", errors="replace")
+except OSError as exc:
+    print(f"  (could not read dump: {exc})", file=sys.stderr)
+    sys.exit(0)
+print("  --- dump prefix (SQL headers only) ---", file=sys.stderr)
+for i, line in enumerate(text.splitlines(), 1):
+    if i > 40:
+        break
+    if "\t" in line and not line.startswith(("COPY ", "INSERT ", "--", "SET ", "SELECT ")):
+        print("  ... (row payload omitted)", file=sys.stderr)
+        break
+    print(f"  {line[:240]}", file=sys.stderr)
+PY
 }
 
 discovered_large_tables=()
@@ -238,7 +291,7 @@ dump_with_retries() {
 
   while [[ "$attempt" -le "$max_attempts" ]]; do
     : > "$tmp_dump"
-    if run_pg_dump "$@" > "$tmp_dump"; then
+    if run_pg_dump "$@" --file="$tmp_dump"; then
       mv "$tmp_dump" "$dump_file"
       return 0
     fi
@@ -273,24 +326,30 @@ append_table_with_retries() {
   table_dump="$(mktemp "${TMPDIR:-/tmp}/backup-full-db.XXXXXX")"
 
   echo "Phase 2/2: ${table} (${index}/${total})..." >&2
-  local selector copy_marker
+  local selector dump_extras
   selector="$(pg_dump_table_selector "$table")"
-  copy_marker="$(copy_marker_for_table "$table")"
   while [[ "$attempt" -le "$max_attempts" ]]; do
     : > "$table_dump"
-    if run_pg_dump --data-only --table="$selector" "${pg_conn[@]}" > "$table_dump"; then
-      if ! grep -Fq "$copy_marker" "$table_dump"; then
-        echo "Warning: ${table} dump contained no COPY block; treating as failure." >&2
-      else
+    dump_extras=(--strict-names)
+    # COPY can fail open on some pooler/proxy paths; INSERT still restores.
+    if [[ "$attempt" -ge 3 ]]; then
+      echo "Retrying ${table} with INSERT statements instead of COPY..." >&2
+      dump_extras+=(--inserts)
+    fi
+    if run_pg_dump --data-only --table="$selector" --file="$table_dump" "${pg_conn[@]}" "${dump_extras[@]}"; then
+      if dump_contains_table_data "$table" "$table_dump"; then
         cat "$table_dump" >> "$dump_file"
         rm -f "$table_dump"
         return 0
       fi
+      echo "Warning: ${table} dump contained no COPY/INSERT data; treating as failure." >&2
+      describe_failed_table_dump "$table" "$table_dump"
     fi
 
     if [[ "$attempt" -eq "$max_attempts" ]]; then
-      rm -f "$table_dump" "$dump_file"
+      rm -f "$table_dump"
       echo "Error: failed to dump ${table} after ${max_attempts} attempts." >&2
+      echo "Incomplete Phase 1 dump left at: $dump_file" >&2
       return 1
     fi
 
@@ -307,7 +366,7 @@ append_table_with_retries() {
 
 verify_table_in_dump() {
   local table="$1"
-  grep -Fq "$(copy_marker_for_table "$table")" "$dump_file"
+  dump_contains_table_data "$table" "$dump_file"
 }
 
 echo "Phase 1/2: schema + row data except ${#large_tables[@]} large tables..." >&2
@@ -335,11 +394,10 @@ for table in "${large_tables[@]}"; do
   append_table_with_retries "$table" "$large_table_index" "$large_table_count"
 done
 
-echo "Verifying large-table COPY blocks in dump..." >&2
+echo "Verifying large-table data blocks in dump..." >&2
 for table in "${large_tables[@]}"; do
   if ! verify_table_in_dump "$table"; then
-    rm -f "$dump_file"
-    echo "Error: dump verification failed — missing COPY block for ${table}." >&2
+    echo "Error: dump verification failed — missing COPY/INSERT data for ${table}." >&2
     exit 1
   fi
 done
