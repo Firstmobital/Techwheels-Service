@@ -20,7 +20,7 @@ import {
   upsertServiceAdvisorEstimate,
   type ServiceAdvisorEstimateLine,
 } from '../lib/api/serviceAdvisorEstimates'
-import type { ReceptionEntryRow } from '../lib/api/reception'
+import { openServiceAdvisorEstimatePrint } from '../lib/printServiceAdvisorEstimate'
 
 interface ServiceAdvisorEstimateModalProps {
   isOpen: boolean
@@ -59,7 +59,7 @@ export function ServiceAdvisorEstimateModal({
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [hasSavedDraft, setHasSavedDraft] = useState(false)
+  const [printing, setPrinting] = useState(false)
 
   useEffect(() => {
     if (!isOpen || !row) return
@@ -147,15 +147,15 @@ export function ServiceAdvisorEstimateModal({
 
   const totals = totalsFromEstimateLines(lines)
 
-  async function handleSave() {
-    if (!row) return
+  async function persistEstimate(): Promise<boolean> {
+    if (!row) return false
     if (!model) {
       setError('Model is required')
-      return
+      return false
     }
     if (!fuel) {
       setError('Select vehicle fuel before saving')
-      return
+      return false
     }
     setSaving(true)
     setError(null)
@@ -169,12 +169,42 @@ export function ServiceAdvisorEstimateModal({
         service_type: lockedType,
         items: lines,
       })
+      setHasSavedDraft(true)
       onSaved?.(row.id)
-      onClose()
+      return true
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to save estimate')
+      return false
     } finally {
       setSaving(false)
+    }
+  }
+
+  async function handleSave() {
+    await persistEstimate()
+  }
+
+  async function handlePrint() {
+    if (!row) return
+    setPrinting(true)
+    try {
+      const saved = await persistEstimate()
+      if (!saved || !fuel) return
+      openServiceAdvisorEstimatePrint({
+        row,
+        model,
+        fuel,
+        make,
+        serviceType: lockedType,
+        items: lines,
+        partsTotal: totals.parts_total,
+        labourTotal: totals.labour_total,
+        grandTotal: totals.grand_total,
+      })
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to print estimate')
+    } finally {
+      setPrinting(false)
     }
   }
 
@@ -360,6 +390,14 @@ export function ServiceAdvisorEstimateModal({
           <div className="flex gap-2">
             <button type="button" onClick={onClose} className="rounded-lg border border-gray-300 px-3 py-1.5 font-semibold text-gray-700">
               Cancel
+            </button>
+            <button
+              type="button"
+              onClick={() => void handlePrint()}
+              disabled={saving || printing || loading || !fuel || !model || lines.length === 0}
+              className="rounded-lg border border-slate-700 bg-slate-800 px-4 py-1.5 font-bold text-white hover:bg-slate-700 disabled:opacity-50"
+            >
+              {printing ? 'Opening…' : hasSavedDraft ? 'Print' : 'Save & Print'}
             </button>
             <button
               type="button"

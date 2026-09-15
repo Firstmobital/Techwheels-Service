@@ -11,6 +11,7 @@ import {
   getDealerScopeContext,
   generateComplaintLink,
   listServiceAdvisorEstimateIds,
+  fetchServiceAdvisorEstimate,
   type ReceptionEntryPageCursor,
   type ReceptionEntryPageResult,
   type ReceptionEntryRow,
@@ -25,6 +26,7 @@ import PartsRequirementSection from '../components/PartsRequirementSection'
 import CustomerRemarkModal from '../components/CustomerRemarkModal'
 import { CustomerPortalAdminModal } from '../components/CustomerPortalAdminModal'
 import { ServiceAdvisorEstimateModal } from '../components/ServiceAdvisorEstimateModal'
+import { openServiceAdvisorEstimatePrint } from '../lib/printServiceAdvisorEstimate'
 import { cleanAdvisorPersonName } from '../lib/api/customer'
 
 type RowDraft = {
@@ -2466,6 +2468,38 @@ export default function ServiceAdvisorPage() {
                               >
                                 {savedEstimateIds.has(row.id) ? 'Edit Estimate' : 'Create Estimate'}
                               </button>
+                              {savedEstimateIds.has(row.id) && (
+                                <button
+                                  type="button"
+                                  className="tbtn tbtn--compact"
+                                  onClick={() => {
+                                    void (async () => {
+                                      try {
+                                        const existing = await fetchServiceAdvisorEstimate(row.id)
+                                        if (!existing) {
+                                          showToast('Save the estimate before printing')
+                                          return
+                                        }
+                                        openServiceAdvisorEstimatePrint({
+                                          row,
+                                          model: existing.model,
+                                          fuel: String(existing.fuel),
+                                          make: String(existing.make),
+                                          serviceType: existing.service_type || effectiveServiceType,
+                                          items: existing.items ?? [],
+                                          partsTotal: existing.parts_total,
+                                          labourTotal: existing.labour_total,
+                                          grandTotal: existing.grand_total,
+                                        })
+                                      } catch (err) {
+                                        showToast(err instanceof Error ? err.message : 'Failed to print estimate')
+                                      }
+                                    })()
+                                  }}
+                                >
+                                  Print
+                                </button>
+                              )}
                               {row.estimate_storage_path ? (
                                 <>
                                   <span className="estimate-status">
