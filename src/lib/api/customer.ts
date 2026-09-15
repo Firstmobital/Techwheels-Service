@@ -86,7 +86,7 @@ export function extractKmFromFeedback(item: any): number | null {
       // ignore
     }
   }
-  const match = text.match(/(?:KM|km_reading|odometer|kms)[\s:="']+([0-9,]+)/i)
+  const match = text.match(/(?:KM|km_reading|odometer|kms|km\s*reading)[\s:="']+([0-9,]+)/i)
   if (match && match[1]) {
     const num = Number(match[1].replace(/,/g, ''))
     if (!isNaN(num) && num > 0) return num
@@ -135,13 +135,55 @@ export async function fetchCustomerVehicles(searchQuery: string): Promise<Custom
     }
   }
 
-  // 1. Primary Live Intake: service_reception_entries (Active vehicles with real SA name, JC number, odometer)
+  // 1. Primary Live Intake: service_reception_entries & RPC (Active vehicles with real SA name, JC number, odometer)
   try {
     const searchTerms: string[] = []
     if (cleanUpper && cleanUpper.length >= 3) searchTerms.push(cleanUpper)
     if (last10Digits && last10Digits !== cleanUpper) searchTerms.push(last10Digits)
 
     if (searchTerms.length > 0) {
+      // 1a. Try dedicated security definer RPC first for zero-RLS lookup
+      try {
+        const { data: rpcRows } = await supabase.rpc('get_customer_live_intake', { p_search: cleanUpper || last10Digits })
+        if (rpcRows && rpcRows.length > 0) {
+          for (const item of rpcRows) {
+            const reg = item.reg_number || 'VEHICLE'
+            const saClean = cleanAdvisorPersonName(item.sa_display_name) || cleanAdvisorPersonName(item.sa_name) || null
+            const jc = (item.jc_number || '')?.trim().toUpperCase() || null
+            addVehicleResult({
+              id: Number(item.id) || Date.now(),
+              reg_number: reg,
+              model: item.model || 'Tata Motors Vehicle',
+              vin: (item.reg_number ? 'MAT' + item.reg_number.replace(/[^A-Z0-9]/g, '') : null),
+              variant: 'Standard Edition',
+              purchase_date: item.created_at ? new Date(item.created_at).toLocaleDateString() : null,
+              warranty_status: 'Active Warranty',
+              amc_status: 'Standard Care',
+              owner_name: item.owner_name || 'Vehicle Owner',
+              owner_phone: item.owner_phone || last10Digits || null,
+              service_type: item.service_type || 'Vehicle Service',
+              sa_name: saClean,
+              sa_display_name: saClean,
+              jc_number: jc,
+              branch: item.branch || 'Main Workshop',
+              created_at: item.created_at || new Date().toISOString(),
+              invoice_done_at: item.invoice_done_at || null,
+              km_reading: item.km_reading != null && Number(item.km_reading) > 0 ? Number(item.km_reading) : null,
+              remark: item.remark || null,
+              billed_amount: 0,
+              amount_received: 0,
+              payment_status: item.invoice_done_at ? 'Paid' : 'Pending',
+              qc_status: item.invoice_done_at ? 'Pass' : 'In-Progress',
+              washing_status: item.invoice_done_at ? 'Completed' : 'Pending',
+              gate_pass_issued: false,
+              gate_pass_number: null,
+            })
+          }
+        }
+      } catch {
+        // ignore RPC fallback
+      }
+
       const orFilters = searchTerms
         .map((t) => `reg_number.ilike.%${t}%,owner_phone.ilike.%${t}%,jc_number.ilike.%${t}%`)
         .join(',')

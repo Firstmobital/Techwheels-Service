@@ -398,8 +398,28 @@ export default function CustomerPortalPage({
         }
       }
 
-      // 2. Direct Reception Table: service_reception_entries
+      // 2. Direct Reception Table: get_customer_live_intake RPC & service_reception_entries
       if (regNorm || phoneNorm) {
+        try {
+          const { data: rpcData } = await supabase.rpc('get_customer_live_intake', { p_search: regNorm || phoneNorm })
+          if (rpcData && rpcData.length > 0) {
+            for (const r of rpcData) {
+              if (!liveJc && r.jc_number) liveJc = String(r.jc_number).trim().toUpperCase()
+              if (!liveSa && (r.sa_display_name || r.sa_name)) {
+                const cand = cleanAdvisorPersonName(r.sa_display_name || r.sa_name)
+                if (cand) liveSa = cand
+              }
+              if (liveKm == null && r.km_reading != null && Number(r.km_reading) > 0) {
+                liveKm = Number(r.km_reading)
+              }
+              if (!liveServiceType && r.service_type) liveServiceType = r.service_type
+              if (!liveInvoiceDoneAt && r.invoice_done_at) liveInvoiceDoneAt = r.invoice_done_at
+            }
+          }
+        } catch {
+          // ignore RPC
+        }
+
         const orParts: string[] = []
         if (regNorm) {
           orParts.push(`reg_number.ilike.%${regNorm}%`)

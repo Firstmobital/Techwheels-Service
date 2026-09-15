@@ -2322,6 +2322,11 @@ export default function ServiceAdvisorPage() {
                           <input
                             value={draft.km_reading}
                             onChange={(event) => patchDraft(row.id, { km_reading: event.target.value.replace(/[^0-9]/g, '') })}
+                            onBlur={() => {
+                              if (draft.km_reading && draft.km_reading !== String(row.km_reading ?? '')) {
+                                void saveRow(row.id)
+                              }
+                            }}
                             inputMode="numeric"
                             placeholder="KM"
                             className="inp mono"
