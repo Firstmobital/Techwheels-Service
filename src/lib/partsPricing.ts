@@ -11,11 +11,16 @@ export interface PartPricingItem {
   labour: number
 }
 
-const STORAGE_KEY = 'techwheels_custom_parts_pricing_v3'
+const STORAGE_KEY = 'techwheels_custom_parts_pricing_v4'
 
 function loadInitialPricing(): PartPricingItem[] {
   if (typeof window !== 'undefined') {
     try {
+      // Purge legacy storage keys to prevent corrupted cache
+      localStorage.removeItem('techwheels_custom_parts_pricing')
+      localStorage.removeItem('techwheels_custom_parts_pricing_v2')
+      localStorage.removeItem('techwheels_custom_parts_pricing_v3')
+
       const stored = localStorage.getItem(STORAGE_KEY)
       if (stored) {
         const parsed = JSON.parse(stored)

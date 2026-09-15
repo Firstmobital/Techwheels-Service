@@ -551,41 +551,44 @@ export default function SettingsPage() {
     const selType = estServiceTypeFilter.trim().toLowerCase()
 
     return estimatePricingList.filter((item) => {
-      // Model match
+      // 1. Model match (Strict)
       if (selModel !== 'all' && selModel) {
         const itemModel = (item.model || '').trim().toLowerCase()
-        if (itemModel && itemModel !== 'all') {
+        if (!itemModel) return false
+        if (itemModel !== 'all' && itemModel !== selModel) {
           const models = itemModel.split(/[\/,|+]/).map((m) => m.trim())
-          if (itemModel !== selModel && !models.includes(selModel) && !itemModel.includes(selModel)) {
+          if (!models.includes(selModel) && !itemModel.startsWith(`${selModel} `) && !itemModel.endsWith(` ${selModel}`)) {
             return false
           }
         }
       }
 
-      // Fuel match (Strict & handles compound fuels like Petrol/CNG)
+      // 2. Fuel match (Strict)
       if (selFuel !== 'all' && selFuel) {
         const itemFuel = (item.fuel || '').trim().toLowerCase()
-        if (itemFuel && itemFuel !== 'all') {
+        if (!itemFuel) return false
+        if (itemFuel !== 'all' && itemFuel !== selFuel) {
           const fuels = itemFuel.split(/[\/,|+]/).map((f) => f.trim())
-          if (itemFuel !== selFuel && !fuels.includes(selFuel)) {
+          if (!fuels.includes(selFuel)) {
             return false
           }
         }
       }
 
-      // Service Type match (Normalizes spaces)
+      // 3. Service Type match (Strict & space-insensitive)
       if (selType !== 'all' && selType) {
         const itemType = (item.service_type || '').trim().toLowerCase()
-        if (itemType && itemType !== 'all') {
+        if (!itemType) return false
+        if (itemType !== 'all' && itemType !== selType) {
           const normItem = itemType.replace(/\s+/g, '')
           const normSel = selType.replace(/\s+/g, '')
-          if (itemType !== selType && normItem !== normSel && !itemType.includes(selType) && !normItem.includes(normSel)) {
+          if (normItem !== normSel && !itemType.includes(selType) && !normItem.includes(normSel)) {
             return false
           }
         }
       }
 
-      // Multi-word search across all fields
+      // 4. Multi-word search
       if (tokens.length > 0) {
         const combined = `${item.service_name || ''} ${item.model || ''} ${item.fuel || ''} ${item.service_type || ''} ${item.id || ''} ${item.price || ''} ${item.labour || ''}`.toLowerCase()
         if (!tokens.every((token) => combined.includes(token))) {
