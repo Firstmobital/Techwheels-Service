@@ -23,7 +23,7 @@ const SOURCE_OPTIONS = ['Self', 'Driver Pickup', 'Walk-in', 'RSA']
 
 const RECEPTION_SERVICE_TYPE_OPTIONS = [
   'Running Repairs', 'First Free Service', 'Second Free Service',
-  'Third Free Service', 'Paid Service', 'Accident', 'Rusting',
+  'Third Free Service', 'Paid Service', 'Mini Paid Service', 'Accident', 'Rusting',
   'PDI', 'Campaign', 'E Breakdown', 'Updation',
 ]
 
@@ -33,6 +33,7 @@ const FLOOR_INCHARGE_SERVICE_TYPES = new Set([
   'Second Free Service',
   'Third Free Service',
   'Paid Service',
+  'Mini Paid Service',
   'Updation',
   'E Breakdown',
   'Campaign',
@@ -45,7 +46,7 @@ function isFloorInchargeServiceType(serviceType: string | null | undefined): boo
 
 const SERVICE_TYPE_ABB: Record<string, string> = {
   'running repairs': 'RR', 'first free service': 'FFS', 'second free service': 'SFS',
-  'third free service': 'TFS', 'paid service': 'PS', 'accident': 'ACC',
+  'third free service': 'TFS', 'paid service': 'PS', 'mini paid service': 'MPS', 'accident': 'ACC',
   'rusting': 'RST', 'pdi': 'PDI', 'campaign': 'CMP', 'e breakdown': 'EBD',
   'updation': 'UPD', 'null': 'NULL',
 }

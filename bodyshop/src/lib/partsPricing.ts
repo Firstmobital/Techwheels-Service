@@ -6,105 +6,120 @@ export interface PartPricingItem {
   service_type: string
   model: string
   fuel: string
+  make?: string
   service_name: string
   price: number
   labour: number
 }
 
-// Local dataset of 926 items
+const TABLE = 'settings_service_parts_pricing'
+
+function normalize(value: string | null | undefined): string {
+  return String(value ?? '').trim().replace(/\s+/g, ' ')
+}
+
+function equals(left: string | null | undefined, right: string | null | undefined): boolean {
+  return normalize(left).toLowerCase() === normalize(right).toLowerCase()
+}
+
+function splitCombinedModelName(value: string | null | undefined): { model: string; fuel: string | null } {
+  let label = normalize(value)
+  if (!label) return { model: '', fuel: null }
+  const compact = label.replace(/\s+/g, '')
+  if (/cng$/i.test(compact) && !/\scng$/i.test(label)) {
+    label = normalize(label.replace(/cng$/i, ' CNG'))
+  } else if (/ev$/i.test(compact) && !/\sev$/i.test(label) && !/cng$/i.test(compact)) {
+    label = normalize(label.replace(/ev$/i, ' EV'))
+  }
+  const lower = label.toLowerCase()
+  if (lower.endsWith(' cng')) return { model: normalize(label.slice(0, -4)), fuel: 'CNG' }
+  if (lower.endsWith(' ev')) return { model: normalize(label.slice(0, -3)), fuel: 'EV' }
+  return { model: label, fuel: null }
+}
+
 export const ALL_PARTS_PRICING: PartPricingItem[] = partsPricingData as PartPricingItem[]
 
-/**
- * Fetch pricing from Supabase service_parts_pricing table with fallback to local JSON database
- */
+function matchesExact(
+  item: PartPricingItem,
+  model?: string,
+  fuel?: string,
+  serviceType?: string,
+  make?: string,
+): boolean {
+  const split = splitCombinedModelName(model)
+  const family = split.model
+  const fuelValue = normalize(fuel) || split.fuel || ''
+  const typeValue = normalize(serviceType)
+  const makeValue = normalize(make).toUpperCase()
+  return (
+    (!family || equals(item.model, family)) &&
+    (!fuelValue || equals(item.fuel, fuelValue)) &&
+    (!typeValue || equals(item.service_type, typeValue)) &&
+    (!makeValue || equals(item.make || 'BS6', makeValue))
+  )
+}
+
 export async function getPartsPricing(
   model?: string,
   fuel?: string,
-  serviceType?: string
+  serviceType?: string,
 ): Promise<PartPricingItem[]> {
+  const split = splitCombinedModelName(model)
+  const family = split.model
+  const fuelValue = normalize(fuel) || split.fuel || ''
+  const typeValue = normalize(serviceType)
+
   try {
-    let query = supabase.from('service_parts_pricing').select('*')
-    if (model) query = query.ilike('model', `%${model}%`)
-    if (fuel) query = query.ilike('fuel', `%${fuel}%`)
-    if (serviceType) query = query.ilike('service_type', `%${serviceType}%`)
+    let query = supabase
+      .from(TABLE)
+      .select('id, service_type, model, fuel, make, service_name, price, labour')
+      .eq('dealer_code', 'GLOBAL')
+      .eq('is_active', true)
+    if (family) query = query.eq('model', family)
+    if (fuelValue) query = query.eq('fuel', fuelValue)
+    if (typeValue) query = query.eq('service_type', typeValue)
 
     const { data, error } = await query
-    if (!error && data && data.length > 0) {
+    if (!error && data) {
       return data as PartPricingItem[]
     }
   } catch (err) {
-    console.warn('Supabase service_parts_pricing lookup failed, using local dataset:', err)
+    console.warn('settings_service_parts_pricing lookup failed, using local dataset:', err)
   }
 
-  // Fallback to local 926 items dataset
-  return ALL_PARTS_PRICING.filter((item) => {
-    const matchModel = !model || item.model.toLowerCase().includes(model.toLowerCase())
-    const matchFuel = !fuel || item.fuel.toLowerCase() === fuel.toLowerCase()
-    const matchType = !serviceType || item.service_type.toLowerCase().includes(serviceType.toLowerCase())
-    return matchModel && matchFuel && matchType
-  })
+  return ALL_PARTS_PRICING.filter((item) => matchesExact(item, model, fuel, serviceType))
 }
 
-/**
- * Get exact price and labour for a specific service item
- */
 export function getServicePrice(
   serviceName: string,
   model: string = 'Altroz',
   fuel: string = 'Petrol',
-  serviceType: string = 'Paid Service'
+  serviceType: string = 'Paid Service',
 ): { price: number; labour: number; found: boolean } {
-  const sNameLower = serviceName.toLowerCase().trim()
-  const mLower = model.toLowerCase().trim()
-  const fLower = fuel.toLowerCase().trim()
-
-  const sTypeLower = serviceType.toLowerCase().trim()
-
-  const match = ALL_PARTS_PRICING.find((item) => {
-    return (
-      item.service_name.toLowerCase().includes(sNameLower) &&
-      item.model.toLowerCase().includes(mLower) &&
-      (item.fuel.toLowerCase() === fLower || item.fuel === '') &&
-      (!sTypeLower || item.service_type.toLowerCase().includes(sTypeLower))
-    )
-  })
-
-  if (match) {
-    return { price: match.price, labour: match.labour, found: true }
-  }
-
-  // Generic fallback if model/fuel not strictly matching
-  const genericMatch = ALL_PARTS_PRICING.find((item) =>
-    item.service_name.toLowerCase().includes(sNameLower)
+  const split = splitCombinedModelName(model)
+  const family = split.model || 'Altroz'
+  const fuelValue = normalize(fuel) || split.fuel || 'Petrol'
+  const match = ALL_PARTS_PRICING.find(
+    (item) =>
+      equals(item.service_name, serviceName) &&
+      equals(item.model, family) &&
+      equals(item.fuel, fuelValue) &&
+      equals(item.service_type, serviceType),
   )
-
-  if (genericMatch) {
-    return { price: genericMatch.price, labour: genericMatch.labour, found: true }
-  }
-
+  if (match) return { price: match.price, labour: match.labour, found: true }
   return { price: 0, labour: 0, found: false }
 }
 
-/**
- * Generate Estimate line items directly from the pricing database
- */
 export function buildEstimateForVehicle(
   model: string = 'Nexon',
   fuel: string = 'Petrol',
-  serviceType: string = 'Paid Service'
+  serviceType: string = 'Paid Service',
 ) {
-  const mLower = model.toLowerCase().trim()
-  const fLower = fuel.toLowerCase().trim()
-  const sTypeLower = serviceType.toLowerCase().trim()
+  const matchedItems = ALL_PARTS_PRICING.filter(
+    (item) => matchesExact(item, model, fuel, serviceType) && (item.price > 0 || item.labour > 0),
+  )
 
-  const matchedItems = ALL_PARTS_PRICING.filter((item) => {
-    const isModel = item.model.toLowerCase().includes(mLower) || mLower.includes(item.model.toLowerCase())
-    const isFuel = item.fuel.toLowerCase() === fLower
-    const isType = item.service_type.toLowerCase().includes(sTypeLower) || sTypeLower.includes(item.service_type.toLowerCase())
-    return isModel && isFuel && isType && (item.price > 0 || item.labour > 0)
-  })
-
-  const lineItems = (matchedItems.length > 0 ? matchedItems : ALL_PARTS_PRICING.slice(0, 8)).map((it, idx) => ({
+  const lineItems = matchedItems.map((it, idx) => ({
     id: String(idx + 1),
     type: it.labour > 0 && it.price === 0 ? ('labour' as const) : ('part' as const),
     description: it.service_name,
@@ -114,7 +129,7 @@ export function buildEstimateForVehicle(
   }))
 
   const subtotal = lineItems.reduce((acc, it) => acc + it.total, 0)
-  const discount = Math.round(subtotal * 0.05) // 5% dealership discount
+  const discount = Math.round(subtotal * 0.05)
   const taxable = subtotal - discount
   const gst_tax = Math.round(taxable * 0.18)
   const grand_total = taxable + gst_tax

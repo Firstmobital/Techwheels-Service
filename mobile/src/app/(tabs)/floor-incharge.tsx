@@ -23,7 +23,7 @@ const SCREEN_W = Dimensions.get('window').width
 // ─── Constants — exact web values ─────────────────────────────────────────────
 const FLOOR_INCHARGE_ALLOWED_SERVICE_TYPES = [
   'Running Repairs', 'First Free Service', 'Second Free Service',
-  'Third Free Service', 'Paid Service', 'Updation', 'E Breakdown', 'Campaign',
+  'Third Free Service', 'Paid Service', 'Mini Paid Service', 'Updation', 'E Breakdown', 'Campaign',
 ]
 
 const NOT_REQUIRED_TECHNICIAN_CODE = '__NOT_REQUIRED__'

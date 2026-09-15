@@ -75,6 +75,7 @@ export async function getReceptionRevisitContext(
     'Second Free Service',
     'Third Free Service',
     'Paid Service',
+    'Mini Paid Service',
     'Updation',
     'E Breakdown',
     'Campaign',

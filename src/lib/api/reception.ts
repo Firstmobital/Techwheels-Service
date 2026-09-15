@@ -114,6 +114,7 @@ const FLOOR_INCHARGE_ALLOWED_SERVICE_TYPES = [
   'Second Free Service',
   'Third Free Service',
   'Paid Service',
+  'Mini Paid Service',
   'Updation',
   'E Breakdown',
   'Campaign',

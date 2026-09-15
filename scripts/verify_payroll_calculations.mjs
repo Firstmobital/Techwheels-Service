@@ -43,6 +43,7 @@ function isSaTrackerAllowedServiceType(value) {
     'Second Free Service',
     'Third Free Service',
     'Paid Service',
+    'Mini Paid Service',
     'Updation',
     'E Breakdown',
     'Campaign',
@@ -356,6 +357,7 @@ const tests = [
   { name: 'ACCIDENT sr_type is accident', got: isAccidentSrType('ACCIDENT'), want: true },
   { name: 'Paid Service is not accident', got: isAccidentSrType('Paid Service'), want: false },
   { name: 'Paid Service is SA-allowed', got: isSaTrackerAllowedServiceType('Paid Service'), want: true },
+  { name: 'Mini Paid Service is SA-allowed', got: isSaTrackerAllowedServiceType('Mini Paid Service'), want: true },
   { name: 'Accident is not SA-allowed', got: isSaTrackerAllowedServiceType('Accident'), want: false },
 ]
 

@@ -1,6 +1,6 @@
 {
-  "generated_at_utc": "2026-09-15T09:12:58.505Z",
-  "scanned_files": 67,
+  "generated_at_utc": "2026-09-15T09:35:12.782Z",
+  "scanned_files": 68,
   "violations": 0,
   "scanned": [
     {
@@ -429,6 +429,14 @@
     },
     {
       "file": "docs/Implementation_plans/webversion/categories/parts/active/PARTS-001_SERVICE_ADVISOR_PARTS_ORDER_DATE_AND_GGN_STOCK_PLAN_2026-08-24.md",
+      "checks": {
+        "metrics_automated_rows": 0,
+        "changelog_automated_rows": 0,
+        "snapshot_blocks": 0
+      }
+    },
+    {
+      "file": "docs/Implementation_plans/webversion/categories/parts/active/PARTS-002_ESTIMATE_PARTS_MASTER_UNIQUE_ID_AND_DB_TRUTH_PLAN_2026-09-15.md",
       "checks": {
         "metrics_automated_rows": 0,
         "changelog_automated_rows": 0,

@@ -10,7 +10,7 @@ import { listReceptionRegCreatedSince } from '../lib/api'
 const BOOKING_SOURCES = ['Telecalling', 'WhatsApp', 'Walk-in', 'Self', 'Driver Pickup', 'Referral'] as const
 const STATUSES = ['New', 'Confirmed', 'Rescheduled', 'Arrived', 'In-Progress', 'Completed', 'Cancelled', 'No-Show'] as const
 const SERVICE_TYPES = [
-  'Paid Service', 'First Free Service', 'Second Free Service', 'Third Free Service',
+  'Paid Service', 'Mini Paid Service', 'First Free Service', 'Second Free Service', 'Third Free Service',
   'Running Repairs', 'Accident', 'PDI', 'Campaign', 'E Breakdown', 'Updation',
 ]
 const FUEL_TYPES = ['PV', 'EV']

@@ -32,10 +32,26 @@ import {
   addPartPricingItem,
   updatePartPricingItem,
   deletePartPricingItem,
-  saveMasterPricingList,
+  persistMasterPricingList,
   resetPricingToDefault,
+  hydrateMasterPricingFromDb,
+  isPricingUsingDatabase,
   type PartPricingItem,
 } from '../lib/partsPricing'
+import {
+  CATALOGUE_FUELS,
+  CATALOGUE_MAKES,
+  DEFAULT_CATALOGUE_MAKE,
+  ESTIMATE_SERVICE_TYPE_OPTIONS,
+  canonicalizeFuel,
+  canonicalizeMake,
+  canonicalizeServiceType,
+  otherCatalogueMake,
+  pricingRowKey,
+  remumberPricingRows,
+  splitCombinedModelName,
+  uniqueFamilyModels,
+} from '../lib/catalogueIdentity'
 
 interface EmployeeRow {
   id: number
@@ -485,19 +501,33 @@ export default function SettingsPage() {
   const [estSearch, setEstSearch] = useState('')
   const [estModelFilter, setEstModelFilter] = useState('All')
   const [estFuelFilter, setEstFuelFilter] = useState('All')
+  const [estMakeFilter, setEstMakeFilter] = useState('All')
   const [estServiceTypeFilter, setEstServiceTypeFilter] = useState('All')
   const [estEditingItem, setEstEditingItem] = useState<PartPricingItem | null>(null)
   const [estIsAddOpen, setEstIsAddOpen] = useState(false)
+  const [estAlsoCreateOtherMake, setEstAlsoCreateOtherMake] = useState(false)
   const [estFormData, setEstFormData] = useState({
     service_name: '',
     model: 'Nexon',
     fuel: 'Petrol',
+    make: DEFAULT_CATALOGUE_MAKE,
     service_type: 'Paid Service',
     price: 0,
     labour: 0,
   })
   const [estToast, setEstToast] = useState<{ msg: string; ok: boolean } | null>(null)
+  const [estSaving, setEstSaving] = useState(false)
   const estFileInputRef = useRef<HTMLInputElement>(null)
+
+  const emptyEstForm = {
+    service_name: '',
+    model: 'Nexon',
+    fuel: 'Petrol',
+    make: DEFAULT_CATALOGUE_MAKE,
+    service_type: 'Paid Service',
+    price: 0,
+    labour: 0,
+  }
 
   function showEstToast(msg: string, ok = true) {
     setEstToast({ msg, ok })
@@ -509,7 +539,12 @@ export default function SettingsPage() {
   }
 
   useEffect(() => {
-    reloadEstimatePricing()
+    void hydrateMasterPricingFromDb().then((rows) => {
+      setEstimatePricingList(rows)
+      if (!isPricingUsingDatabase()) {
+        showEstToast('Catalogue table not loaded yet; showing local list', false)
+      }
+    })
     function handlePricingUpdate() {
       reloadEstimatePricing()
     }
@@ -519,124 +554,78 @@ export default function SettingsPage() {
     }
   }, [])
 
-  const estModelsList = useMemo(() => {
-    const set = new Set<string>()
-    estimatePricingList.forEach((p) => {
-      if (p.model && p.model.trim()) set.add(p.model.trim())
-    })
-    return ['All', ...Array.from(set).sort((a, b) => a.localeCompare(b))]
-  }, [estimatePricingList])
+  const estFamilyModels = useMemo(() => {
+    const fromSettings = uniqueFamilyModels(modelOptions.map((row) => row.model_name))
+    const fromCatalogue = uniqueFamilyModels(estimatePricingList.map((row) => row.model))
+    return Array.from(new Set([...fromSettings, ...fromCatalogue])).sort((a, b) => a.localeCompare(b))
+  }, [modelOptions, estimatePricingList])
 
-  const estFuelsList = useMemo(() => {
-    const set = new Set<string>()
-    estimatePricingList.forEach((p) => {
-      if (p.fuel && p.fuel.trim()) set.add(p.fuel.trim())
-    })
-    return ['All', ...Array.from(set).sort((a, b) => a.localeCompare(b))]
-  }, [estimatePricingList])
-
-  const estServiceTypesList = useMemo(() => {
-    const set = new Set<string>()
-    estimatePricingList.forEach((p) => {
-      if (p.service_type && p.service_type.trim()) set.add(p.service_type.trim())
-    })
-    return ['All', ...Array.from(set).sort((a, b) => a.localeCompare(b))]
-  }, [estimatePricingList])
+  const estModelsList = useMemo(() => ['All', ...estFamilyModels], [estFamilyModels])
+  const estFuelsList = useMemo(() => ['All', ...CATALOGUE_FUELS], [])
+  const estMakesList = useMemo(() => ['All', ...CATALOGUE_MAKES], [])
+  const estServiceTypesList = useMemo(() => ['All', ...ESTIMATE_SERVICE_TYPE_OPTIONS], [])
 
   const filteredPricingItems = useMemo(() => {
     const q = estSearch.trim().toLowerCase()
     const tokens = q ? q.split(/\s+/).filter(Boolean) : []
-    const selModel = estModelFilter.trim().toLowerCase()
-    const selFuel = estFuelFilter.trim().toLowerCase()
-    const selType = estServiceTypeFilter.trim().toLowerCase()
 
     return estimatePricingList.filter((item) => {
-      // 1. Model match (Strict)
-      if (selModel !== 'all' && selModel) {
-        const itemModel = (item.model || '').trim().toLowerCase()
-        if (!itemModel) return false
-        if (itemModel !== 'all' && itemModel !== selModel) {
-          const models = itemModel.split(/[\/,|+]/).map((m) => m.trim())
-          if (!models.includes(selModel) && !itemModel.startsWith(`${selModel} `) && !itemModel.endsWith(` ${selModel}`)) {
-            return false
-          }
-        }
-      }
-
-      // 2. Fuel match (Strict)
-      if (selFuel !== 'all' && selFuel) {
-        const itemFuel = (item.fuel || '').trim().toLowerCase()
-        if (!itemFuel) return false
-        if (itemFuel !== 'all' && itemFuel !== selFuel) {
-          const fuels = itemFuel.split(/[\/,|+]/).map((f) => f.trim())
-          if (!fuels.includes(selFuel)) {
-            return false
-          }
-        }
-      }
-
-      // 3. Service Type match (Exact & space-insensitive)
-      if (selType !== 'all' && selType) {
-        const itemType = (item.service_type || '').trim().toLowerCase()
-        if (!itemType) return false
-        if (itemType !== 'all') {
-          const normItem = itemType.replace(/\s+/g, '')
-          const normSel = selType.replace(/\s+/g, '')
-          if (normItem !== normSel) {
-            return false
-          }
-        }
-      }
-
-      // 4. Multi-word search
+      const matchModel = estModelFilter === 'All' || item.model === estModelFilter
+      const matchFuel = estFuelFilter === 'All' || item.fuel === estFuelFilter
+      const matchMake = estMakeFilter === 'All' || item.make === estMakeFilter
+      const matchType = estServiceTypeFilter === 'All' || item.service_type === estServiceTypeFilter
+      if (!matchModel || !matchFuel || !matchMake || !matchType) return false
       if (tokens.length > 0) {
-        const combined = `${item.service_name || ''} ${item.model || ''} ${item.fuel || ''} ${item.service_type || ''} ${item.id || ''} ${item.price || ''} ${item.labour || ''}`.toLowerCase()
-        if (!tokens.every((token) => combined.includes(token))) {
-          return false
-        }
+        const combined =
+          `${item.service_name || ''} ${item.model || ''} ${item.fuel || ''} ${item.make || ''} ${item.service_type || ''} ${item.price || ''} ${item.labour || ''}`.toLowerCase()
+        if (!tokens.every((token) => combined.includes(token))) return false
       }
-
       return true
     })
-  }, [estimatePricingList, estSearch, estModelFilter, estFuelFilter, estServiceTypeFilter])
+  }, [estimatePricingList, estSearch, estModelFilter, estFuelFilter, estMakeFilter, estServiceTypeFilter])
 
-  function handleSaveEstItem() {
+  async function handleSaveEstItem() {
     if (!estFormData.service_name.trim()) {
       showEstToast('Service/Item name is required', false)
       return
     }
-    if (estEditingItem) {
-      updatePartPricingItem(estEditingItem.id, {
-        service_name: estFormData.service_name.trim(),
-        model: estFormData.model,
-        fuel: estFormData.fuel,
-        service_type: estFormData.service_type,
-        price: Number(estFormData.price) || 0,
-        labour: Number(estFormData.labour) || 0,
-      })
-      showEstToast('Item updated successfully')
-    } else {
-      addPartPricingItem({
-        service_name: estFormData.service_name.trim(),
-        model: estFormData.model,
-        fuel: estFormData.fuel,
-        service_type: estFormData.service_type,
-        price: Number(estFormData.price) || 0,
-        labour: Number(estFormData.labour) || 0,
-      })
-      showEstToast('Item added successfully')
+    const split = splitCombinedModelName(estFormData.model)
+    const payload = {
+      service_name: estFormData.service_name.trim(),
+      model: split.model || estFormData.model.trim(),
+      fuel: String(canonicalizeFuel(estFormData.fuel) || split.fuel || 'Petrol'),
+      make: canonicalizeMake(estFormData.make),
+      service_type: canonicalizeServiceType(estFormData.service_type) || 'Paid Service',
+      price: Number(estFormData.price) || 0,
+      labour: Number(estFormData.labour) || 0,
     }
-    setEstIsAddOpen(false)
-    setEstEditingItem(null)
-    setEstFormData({
-      service_name: '',
-      model: 'Nexon',
-      fuel: 'Petrol',
-      service_type: 'Paid Service',
-      price: 0,
-      labour: 0,
-    })
-    reloadEstimatePricing()
+    setEstSaving(true)
+    try {
+      if (estEditingItem) {
+        await updatePartPricingItem(estEditingItem.id, payload)
+        showEstToast('Item updated successfully')
+      } else {
+        await addPartPricingItem(payload)
+        if (estAlsoCreateOtherMake) {
+          await addPartPricingItem({
+            ...payload,
+            make: otherCatalogueMake(payload.make),
+          })
+          showEstToast('Item added for both BS4 and BS6')
+        } else {
+          showEstToast('Item added successfully')
+        }
+      }
+      setEstIsAddOpen(false)
+      setEstEditingItem(null)
+      setEstFormData(emptyEstForm)
+      setEstAlsoCreateOtherMake(false)
+      reloadEstimatePricing()
+    } catch (err) {
+      showEstToast(err instanceof Error ? err.message : 'Failed to save item', false)
+    } finally {
+      setEstSaving(false)
+    }
   }
 
   function handleOpenEditEst(item: PartPricingItem) {
@@ -645,36 +634,46 @@ export default function SettingsPage() {
       service_name: item.service_name,
       model: item.model || 'Nexon',
       fuel: item.fuel || 'Petrol',
+      make: canonicalizeMake(item.make),
       service_type: item.service_type || 'Paid Service',
       price: item.price || 0,
       labour: item.labour || 0,
     })
     setEstIsAddOpen(true)
+    setEstAlsoCreateOtherMake(false)
   }
 
-  function handleDeleteEstItem(id: number) {
-    if (window.confirm('Are you sure you want to delete this pricing item?')) {
-      deletePartPricingItem(id)
+  async function handleDeleteEstItem(id: number) {
+    if (!window.confirm('Are you sure you want to delete this pricing item?')) return
+    try {
+      await deletePartPricingItem(id)
       showEstToast('Item deleted')
       reloadEstimatePricing()
+    } catch (err) {
+      showEstToast(err instanceof Error ? err.message : 'Failed to delete item', false)
     }
   }
 
-  function handleResetEstPricing() {
-    if (window.confirm('Reset all pricing and catalogue items to default built-in list? This will overwrite manual changes.')) {
-      resetPricingToDefault()
+  async function handleResetEstPricing() {
+    if (!window.confirm('Reset all pricing and catalogue items to default built-in list? This will overwrite manual changes.')) {
+      return
+    }
+    try {
+      await resetPricingToDefault()
       showEstToast('Reset catalogue to factory defaults')
       reloadEstimatePricing()
+    } catch (err) {
+      showEstToast(err instanceof Error ? err.message : 'Failed to reset catalogue', false)
     }
   }
 
   function handleExportEstExcel() {
     try {
       const exportData = estimatePricingList.map((item) => ({
-        'Item ID': item.id,
         'Item Name': item.service_name,
-        'Model': item.model || 'All',
-        'Fuel': item.fuel || 'All',
+        'Model': item.model || '',
+        'Fuel': item.fuel || '',
+        'Make': item.make || DEFAULT_CATALOGUE_MAKE,
         'Service Type': item.service_type || 'Paid Service',
         'Part Price (₹)': item.price || 0,
         'Labour (₹)': item.labour || 0,
@@ -695,42 +694,46 @@ export default function SettingsPage() {
     if (!file) return
     const reader = new FileReader()
     reader.onload = (evt) => {
-      try {
-        const data = new Uint8Array(evt.target?.result as ArrayBuffer)
-        const wb = XLSX.read(data, { type: 'array' })
-        const ws = wb.Sheets[wb.SheetNames[0]]
-        const json = XLSX.utils.sheet_to_json<Record<string, unknown>>(ws)
-        if (!json || json.length === 0) {
-          showEstToast('Empty or invalid Excel file', false)
-          return
-        }
-        const imported: PartPricingItem[] = json.map((row, idx) => {
-          const rawId = row['Item ID'] ?? row['id']
-          const id = typeof rawId === 'number' ? rawId : Number(rawId) || (Date.now() + idx)
-          const name = String(row['Item Name'] || row['service_name'] || row['Name'] || row['Item'] || 'Custom Item')
-          const model = String(row['Model'] || row['model'] || 'Nexon')
-          const fuel = String(row['Fuel'] || row['fuel'] || 'Petrol')
-          const stype = String(row['Service Type'] || row['service_type'] || 'Paid Service')
-          const price = Number(row['Part Price (₹)'] || row['price'] || row['Price'] || 0)
-          const labour = Number(row['Labour (₹)'] || row['labour'] || row['Labour'] || 0)
-          return {
-            id,
-            service_name: name,
-            model,
-            fuel,
-            service_type: stype,
-            price: isNaN(price) ? 0 : price,
-            labour: isNaN(labour) ? 0 : labour,
+      void (async () => {
+        try {
+          const data = new Uint8Array(evt.target?.result as ArrayBuffer)
+          const wb = XLSX.read(data, { type: 'array' })
+          const ws = wb.Sheets[wb.SheetNames[0]]
+          const json = XLSX.utils.sheet_to_json<Record<string, unknown>>(ws)
+          if (!json || json.length === 0) {
+            showEstToast('Empty or invalid Excel file', false)
+            return
           }
-        })
-        saveMasterPricingList(imported)
-        reloadEstimatePricing()
-        showEstToast(`Imported ${imported.length} items from Excel`)
-      } catch {
-        showEstToast('Failed to parse Excel file', false)
-      } finally {
-        if (estFileInputRef.current) estFileInputRef.current.value = ''
-      }
+          const imported = remumberPricingRows(
+            json.map((row, idx) => {
+              const name = String(row['Item Name'] || row['service_name'] || row['Name'] || row['Item'] || 'Custom Item')
+              const model = String(row['Model'] || row['model'] || 'Nexon')
+              const fuel = String(row['Fuel'] || row['fuel'] || 'Petrol')
+              const make = String(row['Make'] || row['make'] || DEFAULT_CATALOGUE_MAKE)
+              const stype = String(row['Service Type'] || row['service_type'] || 'Paid Service')
+              const price = Number(row['Part Price (₹)'] || row['price'] || row['Price'] || 0)
+              const labour = Number(row['Labour (₹)'] || row['labour'] || row['Labour'] || 0)
+              return {
+                id: idx + 1,
+                service_name: name,
+                model,
+                fuel,
+                make,
+                service_type: stype,
+                price: Number.isNaN(price) ? 0 : price,
+                labour: Number.isNaN(labour) ? 0 : labour,
+              }
+            }),
+          )
+          const saved = await persistMasterPricingList(imported)
+          reloadEstimatePricing()
+          showEstToast(`Imported ${saved.length} items from Excel`)
+        } catch (err) {
+          showEstToast(err instanceof Error ? err.message : 'Failed to parse Excel file', false)
+        } finally {
+          if (estFileInputRef.current) estFileInputRef.current.value = ''
+        }
+      })()
     }
     reader.readAsArrayBuffer(file)
   }
@@ -3600,14 +3603,8 @@ export default function SettingsPage() {
                 type="button"
                 onClick={() => {
                   setEstEditingItem(null)
-                  setEstFormData({
-                    service_name: '',
-                    model: 'Nexon',
-                    fuel: 'Petrol',
-                    service_type: 'Paid Service',
-                    price: 0,
-                    labour: 0,
-                  })
+                  setEstFormData(emptyEstForm)
+                  setEstAlsoCreateOtherMake(false)
                   setEstIsAddOpen(true)
                 }}
                 className="inline-flex items-center gap-1 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-blue-700 shadow-sm"
@@ -3641,17 +3638,17 @@ export default function SettingsPage() {
           <div className="space-y-4 p-5">
             {/* Filter Toolbar */}
             <div className="space-y-2">
-              <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-4">
+              <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-5">
                 <div>
                   <label className="mb-1 block text-[11px] font-semibold text-gray-500 uppercase tracking-wider">
-                    Search Item / ID
+                    Search Item
                   </label>
                   <div className="relative">
                     <input
                       type="text"
                       value={estSearch}
                       onChange={(e) => setEstSearch(e.target.value)}
-                      placeholder="Search name, code..."
+                      placeholder="Search item or part name..."
                       className="w-full rounded-lg border border-gray-300 py-1.5 pl-8 pr-8 text-xs outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
                     />
                     <span className="absolute left-2.5 top-2 text-gray-400">
@@ -3705,6 +3702,23 @@ export default function SettingsPage() {
 
                 <div>
                   <label className="mb-1 block text-[11px] font-semibold text-gray-500 uppercase tracking-wider">
+                    Make
+                  </label>
+                  <select
+                    value={estMakeFilter}
+                    onChange={(e) => setEstMakeFilter(e.target.value)}
+                    className="w-full rounded-lg border border-gray-300 px-2.5 py-1.5 text-xs outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                  >
+                    {estMakesList.map((make) => (
+                      <option key={make} value={make}>
+                        {make === 'All' ? 'All Makes' : make}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="mb-1 block text-[11px] font-semibold text-gray-500 uppercase tracking-wider">
                     Service Type
                   </label>
                   <select
@@ -3721,7 +3735,11 @@ export default function SettingsPage() {
                 </div>
               </div>
 
-              {(estSearch || estModelFilter !== 'All' || estFuelFilter !== 'All' || estServiceTypeFilter !== 'All') && (
+              {(estSearch ||
+                estModelFilter !== 'All' ||
+                estFuelFilter !== 'All' ||
+                estMakeFilter !== 'All' ||
+                estServiceTypeFilter !== 'All') && (
                 <div className="flex items-center justify-between pt-1 text-xs">
                   <span className="text-gray-500">
                     Showing <strong>{filteredPricingItems.length}</strong> matching items
@@ -3732,6 +3750,7 @@ export default function SettingsPage() {
                       setEstSearch('')
                       setEstModelFilter('All')
                       setEstFuelFilter('All')
+                      setEstMakeFilter('All')
                       setEstServiceTypeFilter('All')
                     }}
                     className="text-blue-600 hover:text-blue-800 font-semibold inline-flex items-center gap-1"
@@ -3740,6 +3759,7 @@ export default function SettingsPage() {
                   </button>
                 </div>
               )}
+
             </div>
 
             {/* Table */}
@@ -3747,10 +3767,10 @@ export default function SettingsPage() {
               <table className="min-w-full border-collapse text-xs">
                 <thead>
                   <tr className="border-b border-gray-200 bg-gray-50 text-left text-gray-500">
-                    <th className="px-3 py-2.5 font-semibold">#</th>
                     <th className="px-3 py-2.5 font-semibold">Item / Part Name</th>
                     <th className="px-3 py-2.5 font-semibold">Model</th>
                     <th className="px-3 py-2.5 font-semibold">Fuel</th>
+                    <th className="px-3 py-2.5 font-semibold">Make</th>
                     <th className="px-3 py-2.5 font-semibold">Service Type</th>
                     <th className="px-3 py-2.5 text-right font-semibold">Part Price (₹)</th>
                     <th className="px-3 py-2.5 text-right font-semibold">Labour (₹)</th>
@@ -3766,14 +3786,12 @@ export default function SettingsPage() {
                       </td>
                     </tr>
                   ) : (
-                    filteredPricingItems.map((item, idx) => {
+                    filteredPricingItems.map((item) => {
                       const total = (item.price || 0) + (item.labour || 0)
                       return (
-                        <tr key={item.id} className="hover:bg-blue-50/40 transition-colors">
-                          <td className="px-3 py-2 text-gray-400">{idx + 1}</td>
+                        <tr key={pricingRowKey(item)} className="hover:bg-blue-50/40 transition-colors">
                           <td className="px-3 py-2">
                             <div className="font-semibold text-gray-900">{item.service_name}</div>
-                            <div className="text-[10px] font-mono text-gray-400">{item.id}</div>
                           </td>
                           <td className="px-3 py-2">
                             <span className="inline-flex rounded bg-blue-50 px-2 py-0.5 text-[11px] font-semibold text-blue-700">
@@ -3783,6 +3801,11 @@ export default function SettingsPage() {
                           <td className="px-3 py-2">
                             <span className="inline-flex rounded bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-700">
                               {item.fuel || 'All'}
+                            </span>
+                          </td>
+                          <td className="px-3 py-2">
+                            <span className="inline-flex rounded bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-700">
+                              {item.make || DEFAULT_CATALOGUE_MAKE}
                             </span>
                           </td>
                           <td className="px-3 py-2">
@@ -3862,18 +3885,22 @@ export default function SettingsPage() {
                     />
                   </div>
 
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                     <div>
                       <label className="mb-1 block font-semibold text-gray-700">Model</label>
-                      <input
-                        type="text"
+                      <select
                         value={estFormData.model}
                         onChange={(e) =>
                           setEstFormData((prev) => ({ ...prev, model: e.target.value }))
                         }
-                        placeholder="Nexon, Punch, Harrier..."
                         className="w-full rounded-lg border border-gray-300 px-3 py-2 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-                      />
+                      >
+                        {estFamilyModels.map((model) => (
+                          <option key={model} value={model}>
+                            {model}
+                          </option>
+                        ))}
+                      </select>
                     </div>
                     <div>
                       <label className="mb-1 block font-semibold text-gray-700">Fuel Type</label>
@@ -3884,13 +3911,42 @@ export default function SettingsPage() {
                         }
                         className="w-full rounded-lg border border-gray-300 px-3 py-2 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
                       >
-                        <option value="Petrol">Petrol</option>
-                        <option value="Diesel">Diesel</option>
-                        <option value="EV">EV</option>
-                        <option value="CNG">CNG</option>
+                        {CATALOGUE_FUELS.map((fuel) => (
+                          <option key={fuel} value={fuel}>
+                            {fuel}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="mb-1 block font-semibold text-gray-700">Make</label>
+                      <select
+                        value={estFormData.make}
+                        onChange={(e) =>
+                          setEstFormData((prev) => ({ ...prev, make: e.target.value }))
+                        }
+                        className="w-full rounded-lg border border-gray-300 px-3 py-2 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                      >
+                        {CATALOGUE_MAKES.map((make) => (
+                          <option key={make} value={make}>
+                            {make}
+                          </option>
+                        ))}
                       </select>
                     </div>
                   </div>
+
+                  {!estEditingItem && (
+                    <label className="flex items-center gap-2 text-gray-700">
+                      <input
+                        type="checkbox"
+                        checked={estAlsoCreateOtherMake}
+                        onChange={(e) => setEstAlsoCreateOtherMake(e.target.checked)}
+                        className="rounded border-gray-300"
+                      />
+                      Also create the other Make ({otherCatalogueMake(estFormData.make)})
+                    </label>
+                  )}
 
                   <div>
                     <label className="mb-1 block font-semibold text-gray-700">Service Type</label>
@@ -3901,12 +3957,11 @@ export default function SettingsPage() {
                       }
                       className="w-full rounded-lg border border-gray-300 px-3 py-2 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
                     >
-                      <option value="Paid Service">Paid Service</option>
-                      <option value="First Free Service">First Free Service</option>
-                      <option value="Second Free Service">Second Free Service</option>
-                      <option value="Third Free Service">Third Free Service</option>
-                      <option value="Running Repairs">Running Repairs</option>
-                      <option value="Bodyshop">Bodyshop</option>
+                      {ESTIMATE_SERVICE_TYPE_OPTIONS.map((serviceType) => (
+                        <option key={serviceType} value={serviceType}>
+                          {serviceType}
+                        </option>
+                      ))}
                     </select>
                   </div>
 
@@ -3966,10 +4021,11 @@ export default function SettingsPage() {
                   </button>
                   <button
                     type="button"
-                    onClick={handleSaveEstItem}
-                    className="rounded-lg bg-blue-600 px-4 py-2 text-xs font-semibold text-white hover:bg-blue-700 shadow-sm"
+                    onClick={() => void handleSaveEstItem()}
+                    disabled={estSaving}
+                    className="rounded-lg bg-blue-600 px-4 py-2 text-xs font-semibold text-white hover:bg-blue-700 shadow-sm disabled:opacity-50"
                   >
-                    {estEditingItem ? 'Save Changes' : 'Add Item'}
+                    {estSaving ? 'Saving...' : estEditingItem ? 'Save Changes' : 'Add Item'}
                   </button>
                 </div>
               </div>

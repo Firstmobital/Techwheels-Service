@@ -5,7 +5,7 @@ import {
   addPartPricingItem,
   updatePartPricingItem,
   deletePartPricingItem,
-  saveMasterPricingList,
+  persistMasterPricingList,
   resetPricingToDefault,
   type PartPricingItem,
 } from '../lib/partsPricing'
@@ -137,7 +137,6 @@ export function EstimateMasterModal({ isOpen, onClose }: EstimateMasterModalProp
           }
         }
       }
-
       // 3. Service Type match (Exact & space-insensitive)
       if (selType !== 'all' && selType) {
         const itemType = (item.service_type || '').trim().toLowerCase()
@@ -198,47 +197,55 @@ export function EstimateMasterModal({ isOpen, onClose }: EstimateMasterModalProp
       return
     }
 
-    if (editingItem) {
-      updatePartPricingItem(editingItem.id, {
-        service_name: formData.service_name.trim(),
-        model: formData.model.trim(),
-        fuel: formData.fuel.trim(),
-        service_type: formData.service_type.trim(),
-        price: Number(formData.price) || 0,
-        labour: Number(formData.labour) || 0,
-      })
-      showToast(`Updated "${formData.service_name}" successfully`)
-      setEditingItem(null)
-    } else {
-      addPartPricingItem({
-        service_name: formData.service_name.trim(),
-        model: formData.model.trim(),
-        fuel: formData.fuel.trim(),
-        service_type: formData.service_type.trim(),
-        price: Number(formData.price) || 0,
-        labour: Number(formData.labour) || 0,
-      })
-      showToast(`Added new item "${formData.service_name}"`)
-      setIsAddModalOpen(false)
-    }
-    reloadItems()
+    void (async () => {
+      try {
+        if (editingItem) {
+          await updatePartPricingItem(editingItem.id, {
+            service_name: formData.service_name.trim(),
+            model: formData.model.trim(),
+            fuel: formData.fuel.trim(),
+            service_type: formData.service_type.trim(),
+            price: Number(formData.price) || 0,
+            labour: Number(formData.labour) || 0,
+          })
+          showToast(`Updated "${formData.service_name}" successfully`)
+          setEditingItem(null)
+        } else {
+          await addPartPricingItem({
+            service_name: formData.service_name.trim(),
+            model: formData.model.trim(),
+            fuel: formData.fuel.trim(),
+            service_type: formData.service_type.trim(),
+            price: Number(formData.price) || 0,
+            labour: Number(formData.labour) || 0,
+          })
+          showToast(`Added new item "${formData.service_name}"`)
+          setIsAddModalOpen(false)
+        }
+        reloadItems()
+      } catch (err) {
+        showToast(err instanceof Error ? err.message : 'Failed to save item', false)
+      }
+    })()
   }
 
   // Delete item
   function handleDelete(item: PartPricingItem) {
     if (confirm(`Are you sure you want to delete "${item.service_name}" (${item.model})?`)) {
-      deletePartPricingItem(item.id)
-      showToast(`Deleted "${item.service_name}"`)
-      reloadItems()
+      void deletePartPricingItem(item.id).then(() => {
+        showToast(`Deleted "${item.service_name}"`)
+        reloadItems()
+      })
     }
   }
 
   // Reset to default list
   function handleReset() {
     if (confirm('Are you sure you want to reset all pricing items back to factory default? Any custom items will be replaced.')) {
-      resetPricingToDefault()
-      showToast('Reset to default 926 items catalogue')
-      reloadItems()
+      void resetPricingToDefault().then(() => {
+        showToast('Reset to default catalogue')
+        reloadItems()
+      })
     }
   }
 
@@ -291,9 +298,14 @@ export function EstimateMasterModal({ isOpen, onClose }: EstimateMasterModalProp
           labour: Number(row['Labour (₹)'] || row.labour || 0),
         }))
 
-        saveMasterPricingList(mapped)
-        showToast(`Imported ${mapped.length} pricing items successfully!`)
-        reloadItems()
+        void persistMasterPricingList(mapped)
+          .then((saved) => {
+            showToast(`Imported ${saved.length} pricing items successfully!`)
+            reloadItems()
+          })
+          .catch((err) => {
+            showToast(`Import failed: ${err instanceof Error ? err.message : String(err)}`, false)
+          })
       } catch (err) {
         showToast(`Import failed: ${err instanceof Error ? err.message : String(err)}`, false)
       } finally {
@@ -511,7 +523,6 @@ export function EstimateMasterModal({ isOpen, onClose }: EstimateMasterModalProp
               <table className="w-full text-left text-xs border-collapse">
                 <thead className="bg-gray-100 text-[11px] font-extrabold uppercase text-gray-600 border-b border-gray-200 sticky top-0 z-10">
                   <tr>
-                    <th className="px-3 py-3 w-14">#</th>
                     <th className="px-4 py-3">Service / Part Name</th>
                     <th className="px-3 py-3">Model</th>
                     <th className="px-3 py-3">Fuel</th>
@@ -523,11 +534,10 @@ export function EstimateMasterModal({ isOpen, onClose }: EstimateMasterModalProp
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100 bg-white">
-                  {filteredItems.map((item, index) => {
+                  {filteredItems.map((item) => {
                     const total = item.price + item.labour
                     return (
-                      <tr key={item.id || index} className="hover:bg-amber-50/40 transition">
-                        <td className="px-3 py-2.5 font-mono text-gray-400">{item.id || index + 1}</td>
+                      <tr key={`${item.model}|${item.fuel}|${item.service_type}|${item.service_name}|${item.id}`} className="hover:bg-amber-50/40 transition">
                         <td className="px-4 py-2.5 font-bold text-gray-900">{item.service_name}</td>
                         <td className="px-3 py-2.5">
                           <span className="inline-block rounded-md bg-blue-50 px-2 py-0.5 text-[11px] font-bold text-blue-800 border border-blue-100">

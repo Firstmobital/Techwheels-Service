@@ -62,6 +62,7 @@ const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov
 const SR_COLORS: Record<string, { bg: string; text: string; bar: string; hd: string }> = {
   'Running Repairs':    { bg: 'bg-blue-50 border-blue-100',     text: 'text-blue-800',    bar: 'bg-blue-500',    hd: 'bg-blue-50 border-blue-100' },
   'Paid Service':       { bg: 'bg-emerald-50 border-emerald-100', text: 'text-emerald-800', bar: 'bg-emerald-500', hd: 'bg-emerald-50 border-emerald-100' },
+  'Mini Paid Service':  { bg: 'bg-lime-50 border-lime-100',       text: 'text-lime-800',    bar: 'bg-lime-500',    hd: 'bg-lime-50 border-lime-100' },
   'Second Free Service':{ bg: 'bg-teal-50 border-teal-100',      text: 'text-teal-800',    bar: 'bg-teal-500',    hd: 'bg-teal-50 border-teal-100' },
   'Accident':           { bg: 'bg-rose-50 border-rose-100',      text: 'text-rose-800',    bar: 'bg-rose-500',    hd: 'bg-rose-50 border-rose-100' },
   'Third Free Service': { bg: 'bg-cyan-50 border-cyan-100',      text: 'text-cyan-800',    bar: 'bg-cyan-500',    hd: 'bg-cyan-50 border-cyan-100' },

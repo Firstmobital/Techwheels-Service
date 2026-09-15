@@ -62,6 +62,7 @@ export const SA_TRACKER_ALLOWED_SERVICE_TYPES = [
   'Second Free Service',
   'Third Free Service',
   'Paid Service',
+  'Mini Paid Service',
   'Updation',
   'E Breakdown',
   'Campaign',
