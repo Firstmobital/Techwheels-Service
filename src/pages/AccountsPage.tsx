@@ -834,13 +834,15 @@ export default function AccountsPage() {
           </button>
         </div>
         <div className="acct-filter-end">
-          <DateRangeFilter
-            range={dateRange}
-            onChange={setDateRange}
-            label="Period:"
-            includeAll
-            allLabel="All"
-          />
+          <div className="acct-date-range">
+            <DateRangeFilter
+              range={dateRange}
+              onChange={setDateRange}
+              label="Period:"
+              includeAll
+              allLabel="All"
+            />
+          </div>
           <input
             className="inp"
             value={search}
