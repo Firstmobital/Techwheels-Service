@@ -8,7 +8,7 @@ import SettingsPage from './pages/SettingsPage'
 import AdminPage from './pages/AdminPage'
 import LoginPage from './pages/LoginPage'
 import CustomerPortalPage from './pages/CustomerPortalPage'
-import { type CustomerVehicle } from './lib/api/customer'
+import { fetchCustomerVehicles, type CustomerVehicle } from './lib/api/customer'
 import SignUpPage from './pages/SignUpPage'
 import ForgotPasswordPage from './pages/ForgotPasswordPage'
 import AuthCallback from './pages/AuthCallback'
@@ -1008,6 +1008,26 @@ function AuthGate({ children }: { children: React.ReactNode }) {
     })
     return () => subscription.unsubscribe()
   }, [location.pathname, navigate])
+
+  useEffect(() => {
+    if (user) return
+    const params = new URLSearchParams(window.location.search)
+    const regParam = params.get('reg') || params.get('vehicle')
+    const phoneParam = params.get('phone') || params.get('mobile')
+    const query = (regParam || phoneParam || '').trim()
+
+    if (query) {
+      void fetchCustomerVehicles(query).then((vehicles) => {
+        if (vehicles && vehicles.length > 0) {
+          setCustomerVehicle(vehicles[0])
+          setAllCustomerVehicles(vehicles)
+          try {
+            localStorage.setItem('active_customer_vehicle', JSON.stringify(vehicles[0]))
+          } catch {}
+        }
+      })
+    }
+  }, [user, location.search])
 
   useEffect(() => {
     if (user || customerVehicle) return

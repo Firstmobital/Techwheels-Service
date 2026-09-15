@@ -527,17 +527,25 @@ export default function CustomerPortalPage({
 
       const cleanSaName = liveSa ? cleanAdvisorPersonName(liveSa) : null
 
-      setVehicle((prev) => ({
-        ...prev,
-        sa_name: cleanSaName !== null ? cleanSaName : (cleanAdvisorPersonName(prev.sa_name) || null),
-        sa_display_name: cleanSaName !== null ? cleanSaName : (cleanAdvisorPersonName(prev.sa_display_name) || null),
-        jc_number: liveJc || prev.jc_number,
-        km_reading: liveKm != null ? liveKm : prev.km_reading,
-        service_type: liveServiceType || prev.service_type,
-        invoice_done_at: liveInvoiceDoneAt || prev.invoice_done_at,
-        gate_pass_issued: liveGatePassIssued || prev.gate_pass_issued,
-        gate_pass_number: liveGatePassNo || prev.gate_pass_number,
-      }))
+      setVehicle((prev) => {
+        const nextVeh: CustomerVehicle = {
+          ...prev,
+          sa_name: cleanSaName !== null ? cleanSaName : (cleanAdvisorPersonName(prev.sa_name) || null),
+          sa_display_name: cleanSaName !== null ? cleanSaName : (cleanAdvisorPersonName(prev.sa_display_name) || null),
+          jc_number: liveJc || prev.jc_number,
+          km_reading: liveKm != null ? liveKm : prev.km_reading,
+          service_type: liveServiceType || prev.service_type,
+          invoice_done_at: liveInvoiceDoneAt || prev.invoice_done_at,
+          gate_pass_issued: liveGatePassIssued || prev.gate_pass_issued,
+          gate_pass_number: liveGatePassNo || prev.gate_pass_number,
+        }
+        try {
+          localStorage.setItem('active_customer_vehicle', JSON.stringify(nextVeh))
+        } catch (e) {
+          console.warn('Failed to persist active_customer_vehicle:', e)
+        }
+        return nextVeh
+      })
     } catch (err) {
       console.warn('loadLiveAdvisorAndJobCard error:', err)
     }
