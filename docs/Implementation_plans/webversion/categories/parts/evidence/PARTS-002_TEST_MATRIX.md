@@ -31,7 +31,7 @@
 | 23 | 0 | Mini Paid Service | In Estimate Master service-type filter and in reception/SA mechanical dropdowns. SA treats it as floor. |
 | 24 | 1b | After DBL-0063, existing Distilled Water | Make badge **BS6**. Filter Make=BS4 shows 0 of those seed rows. |
 | 25 | 1b | Add Distilled Water Altroz Petrol First Free Service BS4 | Allowed even if BS6 already exists. Unique error if same combo added twice. |
-| 26 | 1b | Add with **Also create the other Make** | Two rows, BS4 and BS6, same prices. Filter Make=BS4 shows only BS4. |
+| 26 | 1b | Add Seat Protection Cover for an identity that already exists | Blocked. Toast tells the user to edit that row. Add Item does not clone the other Make. |
 | 27 | 1c | Requirement pill on a row | Click switches Required ↔ Optional. Never both. Refresh still shows the new value. |
 | 28 | 5 | Create Estimate on Tiago EV Second Free Service | Required items (default all current catalogue) appear immediately. Fuel locked EV. |
 | 29 | 5 | Toggle Distilled Water to Optional, open Create Estimate | Distilled Water is not prefilled. Add Item lists it. |

@@ -70,10 +70,6 @@ export function canonicalizeMake(value: string | null | undefined): CatalogueMak
   return DEFAULT_CATALOGUE_MAKE
 }
 
-export function otherCatalogueMake(value: string | null | undefined): CatalogueMake {
-  return canonicalizeMake(value) === 'BS4' ? 'BS6' : 'BS4'
-}
-
 export function canonicalizeRequirement(value: string | null | undefined): CatalogueRequirement {
   const label = normalizeLabel(value).toLowerCase()
   if (label === 'optional') return 'Optional'
@@ -254,6 +250,25 @@ export function pricingIdentityKey(row: PricingIdentityRow): string {
     normalizeLabel(row.service_name).toLowerCase(),
     canonicalizeMake(row.make).toLowerCase(),
   ].join('|')
+}
+
+export function findDuplicatePricingItem<T extends PricingIdentityRow>(
+  rows: T[],
+  candidate: PricingIdentityRow,
+  excludeId?: number,
+): T | undefined {
+  const canonical = canonicalizePricingRow({ ...candidate, id: candidate.id ?? 0 }, Number(candidate.id) || 0)
+  const key = pricingIdentityKey(canonical)
+  const skip = excludeId != null ? Number(excludeId) : Number(canonical.id) || undefined
+  return rows.find((row) => {
+    if (skip != null && Number(row.id) === skip) return false
+    return pricingIdentityKey(row) === key
+  })
+}
+
+export function catalogueDuplicateMessage(row: PricingIdentityRow): string {
+  const canonical = canonicalizePricingRow({ ...row, id: row.id ?? 0 }, Number(row.id) || 0)
+  return `"${canonical.service_name}" already exists for ${canonical.model} ${canonical.fuel} ${canonical.make} ${canonical.service_type}. Edit that row instead of adding a duplicate.`
 }
 
 export function pricingRowKey(row: PricingIdentityRow): string {

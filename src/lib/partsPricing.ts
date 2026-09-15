@@ -6,9 +6,11 @@ import {
   canonicalizePricingRow,
   canonicalizeRequirement,
   canonicalizeServiceType,
+  catalogueDuplicateMessage,
   DEFAULT_CATALOGUE_MAKE,
   DEFAULT_CATALOGUE_REQUIREMENT,
   dedupePricingRows,
+  findDuplicatePricingItem,
   hasDuplicatePricingIds,
   labelsEqual,
   normalizeLabel,
@@ -149,12 +151,27 @@ function toWritePayload(item: Omit<PartPricingItem, 'id'> | PartPricingItem) {
   }
 }
 
-function uniqueConstraintMessage(error: { code?: string; message?: string } | null): string | null {
+function uniqueConstraintMessage(
+  error: { code?: string; message?: string } | null,
+  row?: Omit<PartPricingItem, 'id'> | PartPricingItem,
+): string | null {
   if (!error) return null
   if (error.code === '23505' || /duplicate key|unique/i.test(error.message ?? '')) {
-    return 'This model, fuel, make, service type, and item name already exists'
+    return row
+      ? catalogueDuplicateMessage(row)
+      : 'This item already exists for the same model, fuel, make, and service type'
   }
   return null
+}
+
+function assertNoDuplicateIdentity(
+  candidate: Omit<PartPricingItem, 'id'> | PartPricingItem,
+  excludeId?: number,
+): void {
+  const duplicate = findDuplicatePricingItem(ALL_PARTS_PRICING, candidate, excludeId)
+  if (duplicate) {
+    throw new Error(catalogueDuplicateMessage(candidate))
+  }
 }
 
 function matchesExact(
@@ -247,6 +264,7 @@ export async function persistMasterPricingList(items: PartPricingItem[]): Promis
 export async function addPartPricingItem(
   item: Omit<PartPricingItem, 'id'>,
 ): Promise<PartPricingItem> {
+  assertNoDuplicateIdentity(item)
   const payload = toWritePayload(item)
   if (usingDatabase) {
     const { data, error } = await supabase
@@ -254,7 +272,7 @@ export async function addPartPricingItem(
       .insert(payload)
       .select('id, service_type, model, fuel, make, requirement, service_name, price, labour')
       .single()
-    if (error) throw new Error(uniqueConstraintMessage(error) ?? error.message)
+    if (error) throw new Error(uniqueConstraintMessage(error, item) ?? error.message)
     const created = mapDbRow(data as Record<string, unknown>)
     notify([created, ...ALL_PARTS_PRICING.filter((row) => row.id !== created.id)], false)
     return created
@@ -273,11 +291,12 @@ export async function updatePartPricingItem(
   const current = ALL_PARTS_PRICING.find((item) => item.id === id)
   if (!current) return false
   const merged = { ...current, ...updates }
+  assertNoDuplicateIdentity(merged, id)
   const payload = toWritePayload(merged)
 
   if (usingDatabase) {
     const { error } = await supabase.from(TABLE).update(payload).eq('id', id)
-    if (error) throw new Error(uniqueConstraintMessage(error) ?? error.message)
+    if (error) throw new Error(uniqueConstraintMessage(error, merged) ?? error.message)
     notify(
       ALL_PARTS_PRICING.map((item) => (item.id === id ? { ...item, ...payload, id } : item)),
       false,

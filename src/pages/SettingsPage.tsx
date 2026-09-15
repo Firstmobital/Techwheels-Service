@@ -49,8 +49,9 @@ import {
   canonicalizeMake,
   canonicalizeRequirement,
   canonicalizeServiceType,
+  catalogueDuplicateMessage,
+  findDuplicatePricingItem,
   labelsEqual,
-  otherCatalogueMake,
   pricingRowKey,
   remumberPricingRows,
   splitCombinedModelName,
@@ -59,7 +60,6 @@ import {
   uniqueCatalogueServiceNames,
   resolveCatalogueServiceName,
   suggestCatalogueServiceNames,
-  pricingIdentityKey,
 } from '../lib/catalogueIdentity'
 
 interface EmployeeRow {
@@ -515,7 +515,6 @@ export default function SettingsPage() {
   const [estServiceTypeFilter, setEstServiceTypeFilter] = useState('All')
   const [estEditingItem, setEstEditingItem] = useState<PartPricingItem | null>(null)
   const [estIsAddOpen, setEstIsAddOpen] = useState(false)
-  const [estAlsoCreateOtherMake, setEstAlsoCreateOtherMake] = useState(false)
   const [estNameHintsOpen, setEstNameHintsOpen] = useState(false)
   const [estFormData, setEstFormData] = useState({
     service_name: '',
@@ -642,16 +641,13 @@ export default function SettingsPage() {
       price: Number(estFormData.price) || 0,
       labour: Number(estFormData.labour) || 0,
     }
-    const duplicate = estimatePricingList.find(
-      (item) =>
-        item.id !== estEditingItem?.id &&
-        pricingIdentityKey(item) === pricingIdentityKey(payload),
+    const duplicate = findDuplicatePricingItem(
+      estimatePricingList,
+      payload,
+      estEditingItem?.id,
     )
     if (duplicate) {
-      showEstToast(
-        `"${serviceName}" already exists for ${payload.model} ${payload.fuel} ${payload.make} ${payload.service_type}. Pick that existing name instead of typing a new spelling.`,
-        false,
-      )
+      showEstToast(catalogueDuplicateMessage(payload), false)
       setEstFormData((prev) => ({ ...prev, service_name: serviceName }))
       return
     }
@@ -662,20 +658,11 @@ export default function SettingsPage() {
         showEstToast('Item updated successfully')
       } else {
         await addPartPricingItem(payload)
-        if (estAlsoCreateOtherMake) {
-          await addPartPricingItem({
-            ...payload,
-            make: otherCatalogueMake(payload.make),
-          })
-          showEstToast('Item added for both BS4 and BS6')
-        } else {
-          showEstToast('Item added successfully')
-        }
+        showEstToast('Item added successfully')
       }
       setEstIsAddOpen(false)
       setEstEditingItem(null)
       setEstFormData(emptyEstForm)
-      setEstAlsoCreateOtherMake(false)
       reloadEstimatePricing()
     } catch (err) {
       showEstToast(err instanceof Error ? err.message : 'Failed to save item', false)
@@ -697,7 +684,6 @@ export default function SettingsPage() {
       labour: item.labour || 0,
     })
     setEstIsAddOpen(true)
-    setEstAlsoCreateOtherMake(false)
     setEstNameHintsOpen(false)
   }
 
@@ -3677,7 +3663,6 @@ export default function SettingsPage() {
                 onClick={() => {
                   setEstEditingItem(null)
                   setEstFormData(emptyEstForm)
-                  setEstAlsoCreateOtherMake(false)
                   setEstNameHintsOpen(false)
                   setEstIsAddOpen(true)
                 }}
@@ -4117,18 +4102,6 @@ export default function SettingsPage() {
                       </select>
                     </div>
                   </div>
-
-                  {!estEditingItem && (
-                    <label className="flex items-center gap-2 text-gray-700">
-                      <input
-                        type="checkbox"
-                        checked={estAlsoCreateOtherMake}
-                        onChange={(e) => setEstAlsoCreateOtherMake(e.target.checked)}
-                        className="rounded border-gray-300"
-                      />
-                      Also create the other Make ({otherCatalogueMake(estFormData.make)})
-                    </label>
-                  )}
 
                   <div>
                     <label className="mb-1 block font-semibold text-gray-700">Required / Optional</label>

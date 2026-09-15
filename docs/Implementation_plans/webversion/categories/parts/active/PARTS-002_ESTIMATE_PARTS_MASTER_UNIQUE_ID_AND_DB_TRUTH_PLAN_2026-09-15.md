@@ -76,7 +76,7 @@ This plan ships unique catalogue rows, then a real global Settings master table 
 14. **SA Create Estimate uses a dedicated modal** (`ServiceAdvisorEstimateModal`). Do not send to `customer_estimates` or `post_feedback_bot_data`. Hide All-model/All-fuel pickers; lock Model + Fuel + Service Type; Make defaults BS6. **Required** lines prefill. **Add Item** is Optional-only for that vehicle combo.
 15. **Save writes** `service_advisor_estimates` (DBL-0064). No localStorage master. No AutoDoc `estimate_rows`. Keep file Upload in v1.
 16. **Out of scope:** PARTS-001, `busy_parts`, `estimate_rows`, inventory parts tables, AutoDoc rate cards, mobile estimate screens, Accounts Gatepass, rewriting Settings `#models` into two DB columns.
-17. **Make is Bharat Stage, not manufacturer.** UI label **Make**. Values **BS4** and **BS6** only (CHECK). Same item name may exist many times; uniqueness includes Make. Do not store “Both” / “All”. If BS4 and BS6 share a price, Add Item writes two rows (checkbox **Also create the other Make**). Existing seed rows backfill **BS6**. Do not auto-clone 877 rows to BS4 with guessed prices. EV still uses the same dropdown (default BS6) until a later value is requested.
+17. **Make is Bharat Stage, not manufacturer.** UI label **Make**. Values **BS4** and **BS6** only (CHECK). Same item name may exist for a different Make. Uniqueness is item + Model + Fuel + Make + Service Type. Add Item never clones the other Make. Existing seed rows backfill **BS6**. Do not auto-clone 877 rows to BS4 with guessed prices. EV still uses the same dropdown (default BS6) until a later value is requested.
 18. **Required / Optional is a toggle, not identity.** One value at a time. Clicking the pill switches Required ↔ Optional. Existing 877 rows backfill Required so free-service packages prefill. Optional items never auto-add.
 
 ---
@@ -184,7 +184,7 @@ Estimate Master **Model dropdown = unique families parsed from Settings `#models
 - [x] **1b.1** Ledger DBL-0063. Timestamp after `20260915153000`. Add `make text not null` CHECK (`BS4`,`BS6`). Backfill existing 877 rows to **BS6**. Do not clone to BS4.
 - [x] **1b.2** Replace unique index to include `make`. Lookup index includes `make`. Normalize trigger trims `make`.
 - [x] **1b.3** Paired sql_checks: column present; only BS4/BS6; 877 rows still all BS6 after backfill; 0 duplicate identities including make.
-- [x] **1b.4** Estimate Master: Make column, Make filter (`All`/`BS4`/`BS6`), Add/Edit required Make dropdown, Add checkbox **Also create the other Make**. Exact match. Unique error names Make.
+- [x] **1b.4** Estimate Master: Make column, Make filter (`All`/`BS4`/`BS6`), Add/Edit required Make dropdown. Exact match. Same item + Model + Fuel + Make + Service Type is blocked (edit that row). Add Item does not clone the other Make.
 - [x] **1b.5** JSON + `partsPricing` identity includes `make`. Import/export Excel has Make (default BS6 if missing).
 - [x] **1b.6** Metadata dump refresh after apply.
 
@@ -317,7 +317,7 @@ Estimate Master **Model dropdown = unique families parsed from Settings `#models
 - [ ] Advisor adds items by name one by one; **Save** persists; reopen shows the same lines in another browser.
 - [ ] Bodyshop, Rusting, and `/accounts` do not get this button.
 - [x] Estimate Master Add Item: Model dropdown has families only (`Nexon`, not `Nexon EV`); Fuel is a separate dropdown; Mini Paid Service is in the service-type list.
-- [x] Estimate Master Make: filter All/BS4/BS6; Add/Edit required Make; same item name allowed across Makes; **Also create the other Make** writes two rows.
+- [x] Estimate Master Make: filter All/BS4/BS6; Add/Edit required Make; same item name allowed across Makes; same item + Model + Fuel + Make + Service Type cannot be added twice.
 - [x] Mini Paid Service is selectable on reception and SA and counts as mechanical/floor.
 
 ---
