@@ -9,6 +9,11 @@ import {
   resetPricingToDefault,
   type PartPricingItem,
 } from '../lib/partsPricing'
+import {
+  CATALOGUE_MAKES,
+  DEFAULT_CATALOGUE_MAKE,
+  canonicalizeMake,
+} from '../lib/catalogueIdentity'
 
 interface EstimateMasterModalProps {
   isOpen: boolean
@@ -49,6 +54,7 @@ export function EstimateMasterModal({ isOpen, onClose }: EstimateMasterModalProp
   const [search, setSearch] = useState('')
   const [selectedModel, setSelectedModel] = useState('All')
   const [selectedFuel, setSelectedFuel] = useState('All')
+  const [selectedMake, setSelectedMake] = useState('All')
   const [selectedServiceType, setSelectedServiceType] = useState('All')
 
   // Add / Edit Modal state
@@ -58,6 +64,7 @@ export function EstimateMasterModal({ isOpen, onClose }: EstimateMasterModalProp
     service_name: '',
     model: 'Altroz',
     fuel: 'Petrol',
+    make: DEFAULT_CATALOGUE_MAKE,
     service_type: 'Paid Service',
     price: 0,
     labour: 0,
@@ -111,6 +118,7 @@ export function EstimateMasterModal({ isOpen, onClose }: EstimateMasterModalProp
     const tokens = q ? q.split(/\s+/).filter(Boolean) : []
     const selModel = selectedModel.trim().toLowerCase()
     const selFuel = selectedFuel.trim().toLowerCase()
+    const selMake = selectedMake.trim().toLowerCase()
     const selType = selectedServiceType.trim().toLowerCase()
 
     return items.filter((item) => {
@@ -137,6 +145,11 @@ export function EstimateMasterModal({ isOpen, onClose }: EstimateMasterModalProp
           }
         }
       }
+
+      if (selMake !== 'all' && selMake) {
+        const itemMake = canonicalizeMake(item.make).toLowerCase()
+        if (itemMake !== selMake) return false
+      }
       // 3. Service Type match (Exact & space-insensitive)
       if (selType !== 'all' && selType) {
         const itemType = (item.service_type || '').trim().toLowerCase()
@@ -152,7 +165,7 @@ export function EstimateMasterModal({ isOpen, onClose }: EstimateMasterModalProp
 
       // 4. Multi-word search
       if (tokens.length > 0) {
-        const combined = `${item.service_name || ''} ${item.model || ''} ${item.fuel || ''} ${item.service_type || ''} ${item.id || ''} ${item.price || ''} ${item.labour || ''}`.toLowerCase()
+        const combined = `${item.service_name || ''} ${item.model || ''} ${item.fuel || ''} ${item.make || ''} ${item.service_type || ''} ${item.price || ''} ${item.labour || ''}`.toLowerCase()
         if (!tokens.every((token) => combined.includes(token))) {
           return false
         }
@@ -160,7 +173,7 @@ export function EstimateMasterModal({ isOpen, onClose }: EstimateMasterModalProp
 
       return true
     })
-  }, [items, search, selectedModel, selectedFuel, selectedServiceType])
+  }, [items, search, selectedModel, selectedFuel, selectedMake, selectedServiceType])
 
   // Open Edit Item
   function handleOpenEdit(item: PartPricingItem) {
@@ -169,6 +182,7 @@ export function EstimateMasterModal({ isOpen, onClose }: EstimateMasterModalProp
       service_name: item.service_name,
       model: item.model,
       fuel: item.fuel,
+      make: canonicalizeMake(item.make),
       service_type: item.service_type,
       price: item.price,
       labour: item.labour,
@@ -182,6 +196,7 @@ export function EstimateMasterModal({ isOpen, onClose }: EstimateMasterModalProp
       service_name: '',
       model: selectedModel !== 'All' ? selectedModel : 'Altroz',
       fuel: selectedFuel !== 'All' ? selectedFuel : 'Petrol',
+      make: selectedMake !== 'All' ? canonicalizeMake(selectedMake) : DEFAULT_CATALOGUE_MAKE,
       service_type: 'Paid Service',
       price: 0,
       labour: 0,
@@ -204,6 +219,7 @@ export function EstimateMasterModal({ isOpen, onClose }: EstimateMasterModalProp
             service_name: formData.service_name.trim(),
             model: formData.model.trim(),
             fuel: formData.fuel.trim(),
+            make: canonicalizeMake(formData.make),
             service_type: formData.service_type.trim(),
             price: Number(formData.price) || 0,
             labour: Number(formData.labour) || 0,
@@ -215,6 +231,7 @@ export function EstimateMasterModal({ isOpen, onClose }: EstimateMasterModalProp
             service_name: formData.service_name.trim(),
             model: formData.model.trim(),
             fuel: formData.fuel.trim(),
+            make: canonicalizeMake(formData.make),
             service_type: formData.service_type.trim(),
             price: Number(formData.price) || 0,
             labour: Number(formData.labour) || 0,
@@ -256,6 +273,7 @@ export function EstimateMasterModal({ isOpen, onClose }: EstimateMasterModalProp
       'Service Type': item.service_type,
       Model: item.model,
       Fuel: item.fuel,
+      Make: canonicalizeMake(item.make),
       'Service / Part Name': item.service_name,
       'Part Price (₹)': item.price,
       'Labour (₹)': item.labour,
@@ -293,6 +311,7 @@ export function EstimateMasterModal({ isOpen, onClose }: EstimateMasterModalProp
           service_type: String(row['Service Type'] || row.service_type || 'Paid Service').trim(),
           model: String(row.Model || row.model || 'Common').trim(),
           fuel: String(row.Fuel || row.fuel || 'General').trim(),
+          make: canonicalizeMake(String(row.Make || row.make || DEFAULT_CATALOGUE_MAKE)),
           service_name: String(row['Service / Part Name'] || row.service_name || row['Service Name'] || 'Part').trim(),
           price: Number(row['Part Price (₹)'] || row.price || 0),
           labour: Number(row['Labour (₹)'] || row.labour || 0),
@@ -466,6 +485,20 @@ export function EstimateMasterModal({ isOpen, onClose }: EstimateMasterModalProp
               </div>
 
               <div className="flex items-center gap-1.5">
+                <span className="text-[11px] font-semibold text-gray-500">Make:</span>
+                <select
+                  className="rounded-lg border border-gray-300 bg-white px-2.5 py-1.5 text-xs font-semibold text-gray-700 focus:border-amber-600 focus:outline-none"
+                  value={selectedMake}
+                  onChange={(e) => setSelectedMake(e.target.value)}
+                >
+                  <option value="All">All</option>
+                  {CATALOGUE_MAKES.map((make) => (
+                    <option key={make} value={make}>{make}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="flex items-center gap-1.5">
                 <span className="text-[11px] font-semibold text-gray-500">Service:</span>
                 <select
                   className="rounded-lg border border-gray-300 bg-white px-2.5 py-1.5 text-xs font-semibold text-gray-700 focus:border-amber-600 focus:outline-none"
@@ -478,12 +511,13 @@ export function EstimateMasterModal({ isOpen, onClose }: EstimateMasterModalProp
                 </select>
               </div>
 
-              {(selectedModel !== 'All' || selectedFuel !== 'All' || selectedServiceType !== 'All' || search) && (
+              {(selectedModel !== 'All' || selectedFuel !== 'All' || selectedMake !== 'All' || selectedServiceType !== 'All' || search) && (
                 <button
                   type="button"
                   onClick={() => {
                     setSelectedModel('All')
                     setSelectedFuel('All')
+                    setSelectedMake('All')
                     setSelectedServiceType('All')
                     setSearch('')
                   }}
@@ -526,6 +560,7 @@ export function EstimateMasterModal({ isOpen, onClose }: EstimateMasterModalProp
                     <th className="px-4 py-3">Service / Part Name</th>
                     <th className="px-3 py-3">Model</th>
                     <th className="px-3 py-3">Fuel</th>
+                    <th className="px-3 py-3">Make</th>
                     <th className="px-3 py-3">Service Type</th>
                     <th className="px-4 py-3 text-right">Part Price (₹)</th>
                     <th className="px-4 py-3 text-right">Labour (₹)</th>
@@ -537,7 +572,7 @@ export function EstimateMasterModal({ isOpen, onClose }: EstimateMasterModalProp
                   {filteredItems.map((item) => {
                     const total = item.price + item.labour
                     return (
-                      <tr key={`${item.model}|${item.fuel}|${item.service_type}|${item.service_name}|${item.id}`} className="hover:bg-amber-50/40 transition">
+                      <tr key={`${item.model}|${item.fuel}|${item.make}|${item.service_type}|${item.service_name}|${item.id}`} className="hover:bg-amber-50/40 transition">
                         <td className="px-4 py-2.5 font-bold text-gray-900">{item.service_name}</td>
                         <td className="px-3 py-2.5">
                           <span className="inline-block rounded-md bg-blue-50 px-2 py-0.5 text-[11px] font-bold text-blue-800 border border-blue-100">
@@ -547,6 +582,11 @@ export function EstimateMasterModal({ isOpen, onClose }: EstimateMasterModalProp
                         <td className="px-3 py-2.5">
                           <span className="inline-block rounded-md bg-slate-100 px-2 py-0.5 text-[10.5px] font-semibold text-slate-700">
                             {item.fuel || 'General'}
+                          </span>
+                        </td>
+                        <td className="px-3 py-2.5">
+                          <span className="inline-block rounded-md bg-slate-100 px-2 py-0.5 text-[10.5px] font-semibold text-slate-700">
+                            {canonicalizeMake(item.make)}
                           </span>
                         </td>
                         <td className="px-3 py-2.5 text-gray-600 font-medium">{item.service_type}</td>
@@ -672,6 +712,21 @@ export function EstimateMasterModal({ isOpen, onClose }: EstimateMasterModalProp
                     ))}
                   </select>
                 </div>
+              </div>
+
+              <div>
+                <label className="block font-bold text-gray-700 mb-1">Make</label>
+                <select
+                  className="w-full rounded-lg border border-gray-300 p-2 text-xs text-gray-900 focus:border-amber-600 focus:outline-none"
+                  value={formData.make}
+                  onChange={(e) =>
+                    setFormData({ ...formData, make: canonicalizeMake(e.target.value) })
+                  }
+                >
+                  {CATALOGUE_MAKES.map((make) => (
+                    <option key={make} value={make}>{make}</option>
+                  ))}
+                </select>
               </div>
 
               <div>

@@ -709,7 +709,7 @@ export default function SettingsPage() {
               const name = String(row['Item Name'] || row['service_name'] || row['Name'] || row['Item'] || 'Custom Item')
               const model = String(row['Model'] || row['model'] || 'Nexon')
               const fuel = String(row['Fuel'] || row['fuel'] || 'Petrol')
-              const make = String(row['Make'] || row['make'] || DEFAULT_CATALOGUE_MAKE)
+              const make = canonicalizeMake(String(row['Make'] || row['make'] || DEFAULT_CATALOGUE_MAKE))
               const stype = String(row['Service Type'] || row['service_type'] || 'Paid Service')
               const price = Number(row['Part Price (₹)'] || row['price'] || row['Price'] || 0)
               const labour = Number(row['Labour (₹)'] || row['labour'] || row['Labour'] || 0)
@@ -3923,7 +3923,10 @@ export default function SettingsPage() {
                       <select
                         value={estFormData.make}
                         onChange={(e) =>
-                          setEstFormData((prev) => ({ ...prev, make: e.target.value }))
+                          setEstFormData((prev) => ({
+                            ...prev,
+                            make: canonicalizeMake(e.target.value),
+                          }))
                         }
                         className="w-full rounded-lg border border-gray-300 px-3 py-2 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
                       >
