@@ -39,6 +39,9 @@
 - [ ] Keep on Credit requires Admin, GM, or module `accounts_keep_on_credit`. Unauthorized RPC is denied. Remaining and status unchanged.
 - [ ] `issue_accounts_mechanical_gatepass` rejects remaining > 2% without persisted Keep on Credit (no client eligible flag).
 - [ ] Reload after Keep on Credit still shows approved_by / approved_at.
+- [ ] Cash / UPI / Credit Card KPIs follow Received/Pending/All; a 13-Sep Mark Done case with cash received 14-Sep is omitted from 13-Sep mode money
+- [ ] Received + Cash KPI equals in-range cash on Received cases (13-Sep live: ₹10,300 not ₹16,900)
+- [ ] Clicking Cash does not zero the UPI or Credit Card tiles
 
 ## Bodyshop
 

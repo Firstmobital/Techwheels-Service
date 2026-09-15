@@ -14,6 +14,7 @@ import {
   deleteAccountsMechanicalInvoiceFile,
   filterAccountsCasesByViewDate,
   filterMechanicalCasesByPaymentMode,
+  filterMechanicalCasesByPaymentStatus,
   isAccountsStatusPending,
   isAccountsStatusReceived,
   isCustomerPaymentClosed,
@@ -41,13 +42,14 @@ import {
   canAccountsMechanicalKeepOnCredit,
   issueMechanicalAccountsGatePass,
   settlementCardFromAccountsRow,
-  sumAccountsPaymentModeTotals,
+  sumAccountsMechanicalPaymentModeKpis,
   upsertAccountsMechanicalInvoice,
   type AccountsBodyshopCase,
   type AccountsMechanicalCase,
   type AccountsMechanicalPayment,
   type AccountsPaymentMode,
   type MechanicalDmsInvoiceLookup,
+  type MechanicalStatusFilter,
   type MechanicalPaymentModeFilter,
 } from '../lib/api/accounts'
 import { uploadServiceAdvisorInvoice } from '../lib/api/reception'
@@ -62,7 +64,6 @@ import {
 
 type Section = 'mechanical' | 'bodyshop'
 type BodyshopFilter = 'remaining' | 'all' | 'received' | 'pending'
-type MechanicalStatusFilter = 'all' | 'pending' | 'received'
 
 type MechanicalPaymentDraft = {
   key: string
@@ -292,15 +293,15 @@ export default function AccountsPage() {
     return rows.filter((r) => blobOf(r.jc_number, r.reg_number, r.invoice_number, r.owner_name, r.sa_name).includes(q))
   }, [mechRows, dateRange, search])
 
+  const statusMech = useMemo(
+    () => filterMechanicalCasesByPaymentStatus(periodMech, mechStatusFilter),
+    [periodMech, mechStatusFilter],
+  )
+
   const searchedMech = useMemo(() => {
-    let rows = periodMech
-    if (mechStatusFilter === 'pending') rows = rows.filter((r) => isAccountsStatusPending(r.payment_status))
-    else if (mechStatusFilter === 'received') rows = rows.filter((r) => isAccountsStatusReceived(r.payment_status))
-    if (mechPaymentModeFilter !== 'all') {
-      rows = filterMechanicalCasesByPaymentMode(rows, mechPayLines, mechPaymentModeFilter)
-    }
-    return rows
-  }, [periodMech, mechStatusFilter, mechPaymentModeFilter, mechPayLines])
+    if (mechPaymentModeFilter === 'all') return statusMech
+    return filterMechanicalCasesByPaymentMode(statusMech, mechPayLines, mechPaymentModeFilter)
+  }, [statusMech, mechPaymentModeFilter, mechPayLines])
 
   const periodBs = useMemo(() => {
     const q = search.trim().toLowerCase()
@@ -327,12 +328,14 @@ export default function AccountsPage() {
     const received = periodMech.filter((r) => isAccountsStatusReceived(r.payment_status)).length
     const billed = periodMech.reduce((s, r) => s + Number(r.billed_amount ?? 0), 0)
     const remaining = periodMech.reduce((s, r) => s + Number(mechanicalRemaining(r) ?? 0), 0)
-    const scopedIds = new Set(periodMech.map((r) => r.reception_entry_id))
-    const modes = sumAccountsPaymentModeTotals(
-      mechPayLines.filter((line) => scopedIds.has(line.reception_entry_id)),
-    )
+    const modes = sumAccountsMechanicalPaymentModeKpis({
+      cases: periodMech,
+      lines: mechPayLines,
+      range: dateRange,
+      statusFilter: mechStatusFilter,
+    })
     return { count: periodMech.length, pending, received, billed, remaining, ...modes }
-  }, [periodMech, mechPayLines])
+  }, [periodMech, mechPayLines, dateRange, mechStatusFilter])
 
   const bsKpis = useMemo(() => {
     const remainingRows = periodBs.filter((r) => isBodyshopOutstandingOpen(r))

@@ -9,6 +9,7 @@ import { settlementRpcError } from './bodyshopSettlement'
 export type AccountsPaymentStatus = 'pending' | 'partial' | 'received' | 'not_received'
 export type AccountsPaymentMode = 'cash' | 'upi' | 'card' | 'cheque' | 'bank' | 'other'
 export type MechanicalPaymentModeFilter = 'all' | 'cash' | 'upi' | 'card'
+export type MechanicalStatusFilter = 'all' | 'pending' | 'received'
 export type MechanicalGatepassReason = 'paid' | 'short_payment' | 'keep_on_credit'
 
 /** Effective invoice-date cutoff (Accounts invoice_date, else unique DMS labour invoice_date). payment_received_date / posted_at / invoice_done_at do not control voucher eligibility. */
@@ -281,6 +282,21 @@ export function mechanicalPaymentReceivedDate(
   return asiaKolkataDateFromTimestamp(line.posted_at)
 }
 
+/** Payment-mode KPI receipt date: `payment_received_date`, else Asia/Kolkata `posted_at`. Not Mark Done / invoice_date. */
+export function isMechanicalPaymentReceivedDateInRange(
+  line: Pick<AccountsMechanicalPayment, 'payment_received_date' | 'posted_at'>,
+  range: { from: string; to: string },
+): boolean {
+  return isAccountsViewDateInRange(mechanicalPaymentReceivedDate(line), range)
+}
+
+export function filterMechanicalPaymentLinesByReceiptDate<
+  T extends Pick<AccountsMechanicalPayment, 'payment_received_date' | 'posted_at'>,
+>(lines: T[], range: { from: string; to: string }): T[] {
+  if (isAccountsDateRangeAll(range)) return lines
+  return lines.filter((line) => isMechanicalPaymentReceivedDateInRange(line, range))
+}
+
 export function mechanicalInvoiceDateInputValue(stored: string | null | undefined): string {
   const raw = String(stored ?? '').trim()
   if (raw) return raw.slice(0, 10)
@@ -400,6 +416,15 @@ export function isAccountsStatusReceived(status: string | null | undefined): boo
   return accountsPaymentStatus(status) === 'received'
 }
 
+export function filterMechanicalCasesByPaymentStatus<T extends { payment_status?: string | null }>(
+  rows: T[],
+  statusFilter: MechanicalStatusFilter,
+): T[] {
+  if (statusFilter === 'pending') return rows.filter((row) => isAccountsStatusPending(row.payment_status))
+  if (statusFilter === 'received') return rows.filter((row) => isAccountsStatusReceived(row.payment_status))
+  return rows
+}
+
 export function normalizeAccountsPaymentMode(
   mode: string | null | undefined,
 ): AccountsPaymentMode | null {
@@ -425,6 +450,34 @@ export function sumAccountsPaymentModeTotals(
     else if (mode === 'card') card += amount
   }
   return { cash, upi, card }
+}
+
+type MechanicalPaymentModeKpiLine = Pick<
+  AccountsMechanicalPayment,
+  'reception_entry_id' | 'amount' | 'payment_mode' | 'payment_received_date' | 'posted_at'
+>
+
+/**
+ * Cash / UPI / Credit Card monetary KPIs.
+ * Cases: caller-supplied Mechanical set (already Mark Done / search / period).
+ * Status: All / Pending / Received using the same case definition as the table.
+ * Lines: those cases, with receipt date in range (`payment_received_date`, else IST `posted_at`).
+ * Does not apply the Cash/UPI/Card table filter — clicking Cash must not zero UPI/Card.
+ */
+export function sumAccountsMechanicalPaymentModeKpis<T extends { reception_entry_id: number; payment_status?: string | null }>(input: {
+  cases: T[]
+  lines: MechanicalPaymentModeKpiLine[]
+  range: { from: string; to: string }
+  statusFilter?: MechanicalStatusFilter
+}): { cash: number; upi: number; card: number } {
+  const scoped = filterMechanicalCasesByPaymentStatus(input.cases, input.statusFilter ?? 'all')
+  const ids = new Set(scoped.map((row) => row.reception_entry_id))
+  return sumAccountsPaymentModeTotals(
+    filterMechanicalPaymentLinesByReceiptDate(
+      input.lines.filter((line) => ids.has(line.reception_entry_id)),
+      input.range,
+    ),
+  )
 }
 
 type AccountsPaymentModeLine = Pick<AccountsMechanicalPayment, 'reception_entry_id' | 'amount' | 'payment_mode'>

@@ -196,6 +196,38 @@ function isAccountsStatusReceived(status) {
   return accountsPaymentStatus(status) === 'received'
 }
 
+function filterMechanicalCasesByPaymentStatus(rows, statusFilter) {
+  if (statusFilter === 'pending') return rows.filter((row) => isAccountsStatusPending(row.payment_status))
+  if (statusFilter === 'received') return rows.filter((row) => isAccountsStatusReceived(row.payment_status))
+  return rows
+}
+
+function mechanicalPaymentReceivedDate(line) {
+  const raw = String(line.payment_received_date ?? '').trim()
+  if (raw) return raw.slice(0, 10)
+  return asiaKolkataDateFromTimestamp(line.posted_at)
+}
+
+function isMechanicalPaymentReceivedDateInRange(line, range) {
+  return isAccountsViewDateInRange(mechanicalPaymentReceivedDate(line), range)
+}
+
+function filterMechanicalPaymentLinesByReceiptDate(lines, range) {
+  if (isAccountsDateRangeAll(range)) return lines
+  return lines.filter((line) => isMechanicalPaymentReceivedDateInRange(line, range))
+}
+
+function sumAccountsMechanicalPaymentModeKpis({ cases, lines, range, statusFilter = 'all' }) {
+  const scoped = filterMechanicalCasesByPaymentStatus(cases, statusFilter)
+  const ids = new Set(scoped.map((row) => row.reception_entry_id))
+  return sumAccountsPaymentModeTotals(
+    filterMechanicalPaymentLinesByReceiptDate(
+      lines.filter((line) => ids.has(line.reception_entry_id)),
+      range,
+    ),
+  )
+}
+
 function blobOf(...parts) {
   return parts.map((p) => String(p ?? '').toLowerCase()).join(' ')
 }
@@ -356,9 +388,33 @@ function idsOf(rows) {
   assert(searchCashOwnerThenUpi.length === 0, 'Q: search + unmatched payment mode excludes the case')
 
   const scopedTotals = sumAccountsPaymentModeTotals(lines)
-  const cashFilteredTotals = sumAccountsPaymentModeTotals(lines)
+  const unfilteredKpis = sumAccountsMechanicalPaymentModeKpis({
+    cases: rows,
+    lines,
+    range: { from: '', to: '' },
+  })
+  const fromCashTableCases = sumAccountsMechanicalPaymentModeKpis({
+    cases: applyAccountsMechanicalTableFilters({ rows, lines, paymentModeFilter: 'cash' }),
+    lines,
+    range: { from: '', to: '' },
+  })
   assert(scopedTotals.cash === 15200 && scopedTotals.upi === 6500 && scopedTotals.card === 4100, `R: card totals stay receipt-line sums, got ${JSON.stringify(scopedTotals)}`)
-  assert(cashFilteredTotals.cash === scopedTotals.cash, 'R: filtering cases must not change payment-mode card totals')
+  assert(unfilteredKpis.cash === scopedTotals.cash && unfilteredKpis.upi === scopedTotals.upi && unfilteredKpis.card === scopedTotals.card, 'R: All-status KPIs match receipt-line sums')
+  assert(fromCashTableCases.upi !== unfilteredKpis.upi, 'R: feeding Cash-filtered cases into KPI would drop UPI-only receipts')
+  const afterCashClickKpis = sumAccountsMechanicalPaymentModeKpis({
+    cases: rows,
+    lines,
+    range: { from: '', to: '' },
+    statusFilter: 'all',
+  })
+  assert(afterCashClickKpis.cash === unfilteredKpis.cash && afterCashClickKpis.upi === unfilteredKpis.upi && afterCashClickKpis.card === unfilteredKpis.card, 'R: clicking Cash must not change Cash/UPI/Card KPI totals')
+  const receivedKpis = sumAccountsMechanicalPaymentModeKpis({
+    cases: rows,
+    lines,
+    range: { from: '', to: '' },
+    statusFilter: 'received',
+  })
+  assert(receivedKpis.cash === 14000 && receivedKpis.upi === 6500 && receivedKpis.card === 4100, `R: Received status excludes pending cash 1200, got ${JSON.stringify(receivedKpis)}`)
 
   let mode = 'all'
   const selectMode = (next) => { mode = mode === next ? 'all' : next }
@@ -376,6 +432,133 @@ function idsOf(rows) {
 }
 
 console.log('verify_accounts_split_payment_drafts: J–T payment-mode filter checks passed')
+
+// ---------------------------------------------------------------------------
+// Payment-mode KPI scope — keep aligned with src/lib/api/accounts.ts
+// Cash/UPI/Credit Card money uses receipt date + status, not Mark Done / invoice_date.
+// ---------------------------------------------------------------------------
+{
+  const day = { from: '2026-09-13', to: '2026-09-13' }
+  const allRange = { from: '', to: '' }
+
+  const receivedCash = { reception_entry_id: 8705, payment_status: 'received', invoice_done_at: '2026-09-13T16:12:50+05:30', invoice_date: '2026-09-13' }
+  const partialCash = { reception_entry_id: 8688, payment_status: 'partial', invoice_done_at: '2026-09-13T16:29:16+05:30', invoice_date: '2026-09-13' }
+  const pendingUpi = { reception_entry_id: 5, payment_status: 'pending', invoice_done_at: '2026-09-13T12:00:00+05:30', invoice_date: '2026-09-13' }
+  const splitReceived = { reception_entry_id: 4, payment_status: 'received', invoice_done_at: '2026-09-13T11:00:00+05:30', invoice_date: '2026-09-13' }
+  const receivedCard = { reception_entry_id: 3, payment_status: 'received', invoice_done_at: '2026-09-13T15:23:47+05:30', invoice_date: '2026-09-13' }
+  const receivedOffDateCash = { reception_entry_id: 9, payment_status: 'received', invoice_done_at: '2026-09-13T10:00:00+05:30', invoice_date: '2026-09-13' }
+  const legacyIst = { reception_entry_id: 10, payment_status: 'received', invoice_done_at: '2026-09-13T01:00:00+05:30', invoice_date: '2026-09-13' }
+  const boundaryBefore = { reception_entry_id: 11, payment_status: 'received', invoice_done_at: '2026-09-13T02:00:00+05:30', invoice_date: '2026-09-13' }
+  const boundaryOn = { reception_entry_id: 12, payment_status: 'received', invoice_done_at: '2026-09-13T02:10:00+05:30', invoice_date: '2026-09-13' }
+
+  const cases = [
+    receivedCash, partialCash, pendingUpi, splitReceived, receivedCard,
+    receivedOffDateCash, legacyIst, boundaryBefore, boundaryOn,
+  ]
+  const lines = [
+    { reception_entry_id: 8705, amount: 10300, payment_mode: 'cash', payment_received_date: '2026-09-13', posted_at: '2026-09-14T13:47:19+05:30' },
+    { reception_entry_id: 8705, amount: 29, payment_mode: 'other', payment_received_date: '2026-09-14', posted_at: '2026-09-14T13:47:29+05:30' },
+    { reception_entry_id: 8688, amount: 6600, payment_mode: 'cash', payment_received_date: '2026-09-13', posted_at: '2026-09-14T09:38:29+05:30' },
+    { reception_entry_id: 5, amount: 1200, payment_mode: 'upi', payment_received_date: '2026-09-13', posted_at: '2026-09-13T12:05:00+05:30' },
+    { reception_entry_id: 4, amount: 5000, payment_mode: 'cash', payment_received_date: '2026-09-13', posted_at: '2026-09-13T11:01:00+05:30' },
+    { reception_entry_id: 4, amount: 4000, payment_mode: 'upi', payment_received_date: '2026-09-13', posted_at: '2026-09-13T11:02:00+05:30' },
+    { reception_entry_id: 3, amount: 9432, payment_mode: 'card', payment_received_date: '2026-09-13', posted_at: '2026-09-13T15:28:54+05:30' },
+    { reception_entry_id: 9, amount: 5000, payment_mode: 'cash', payment_received_date: '2026-09-14', posted_at: '2026-09-14T10:00:00+05:30' },
+    { reception_entry_id: 10, amount: 800, payment_mode: 'cash', payment_received_date: null, posted_at: '2026-09-12T18:40:00.000Z' }, // 13 Sep 00:10 IST
+    { reception_entry_id: 11, amount: 100, payment_mode: 'cash', payment_received_date: null, posted_at: '2026-09-12T18:29:00.000Z' }, // 14 Sep 23:59 IST → 12 Sep
+    { reception_entry_id: 12, amount: 50, payment_mode: 'cash', payment_received_date: null, posted_at: '2026-09-12T18:31:00.000Z' }, // 15 Sep 00:01 IST → 13 Sep
+  ]
+
+  // 1. Payment line received on selected date is counted.
+  const allDay = sumAccountsMechanicalPaymentModeKpis({ cases, lines, range: day, statusFilter: 'all' })
+  assert(allDay.cash === 10300 + 6600 + 5000 + 800 + 50, `1: in-range cash counted, got ${allDay.cash}`)
+  assert(allDay.upi === 1200 + 4000, `1: in-range UPI counted, got ${allDay.upi}`)
+  assert(allDay.card === 9432, `1: in-range card counted, got ${allDay.card}`)
+
+  // 2. Mark Done on selected date but payment_received_date outside is NOT counted.
+  assert(!isMechanicalPaymentReceivedDateInRange(lines.find((l) => l.reception_entry_id === 9), day), '2: 14 Sep cash is outside 13 Sep')
+  const offDateOnly = sumAccountsMechanicalPaymentModeKpis({
+    cases: [receivedOffDateCash],
+    lines,
+    range: day,
+    statusFilter: 'all',
+  })
+  assert(offDateOnly.cash === 0, `2: Mark Done 13 Sep / received 14 Sep cash excluded, got ${offDateOnly.cash}`)
+  assert(allDay.cash === 10300 + 6600 + 5000 + 800 + 50, '2: 14 Sep cash on a 13 Sep Mark Done case is absent from the day total')
+
+  // 3. Legacy NULL payment_received_date uses posted_at IST fallback.
+  assert(mechanicalPaymentReceivedDate(lines.find((l) => l.reception_entry_id === 10)) === '2026-09-13', '3: null received date → IST posted_at 13 Sep')
+  const legacyOnly = sumAccountsMechanicalPaymentModeKpis({
+    cases: [legacyIst],
+    lines,
+    range: day,
+    statusFilter: 'all',
+  })
+  assert(legacyOnly.cash === 800, `3: legacy posted_at cash counted, got ${legacyOnly.cash}`)
+
+  // 4. Received excludes non-Received cases (partial + pending).
+  const receivedDay = sumAccountsMechanicalPaymentModeKpis({ cases, lines, range: day, statusFilter: 'received' })
+  assert(receivedDay.cash === 10300 + 5000 + 800 + 50, `4: Received cash excludes partial 6600, got ${receivedDay.cash}`)
+  assert(receivedDay.upi === 4000, `4: Received UPI excludes pending 1200, got ${receivedDay.upi}`)
+  assert(receivedDay.card === 9432, `4: Received card unchanged, got ${receivedDay.card}`)
+
+  // 5. Pending excludes non-Pending cases.
+  const pendingDay = sumAccountsMechanicalPaymentModeKpis({ cases, lines, range: day, statusFilter: 'pending' })
+  assert(pendingDay.cash === 0, `5: Pending has no cash, got ${pendingDay.cash}`)
+  assert(pendingDay.upi === 1200, `5: Pending UPI is the pending line only, got ${pendingDay.upi}`)
+  assert(pendingDay.card === 0, '5: Pending excludes received card')
+
+  // 6. All includes otherwise qualifying cases (including partial).
+  assert(allDay.cash - receivedDay.cash === 6600, '6: All includes partial cash that Received drops')
+  assert(allDay.upi - receivedDay.upi === 1200, '6: All includes pending UPI that Received drops')
+
+  // 7. Split Cash + UPI contributes independently.
+  const splitOnly = sumAccountsMechanicalPaymentModeKpis({
+    cases: [splitReceived],
+    lines,
+    range: day,
+    statusFilter: 'received',
+  })
+  assert(splitOnly.cash === 5000 && splitOnly.upi === 4000 && splitOnly.card === 0, `7: split Cash/UPI independent, got ${JSON.stringify(splitOnly)}`)
+
+  // 8. Canonical stored value is card; UI label stays Credit Card.
+  assert(normalizeAccountsPaymentMode('card') === 'card', '8: stored value card')
+  assert(normalizeAccountsPaymentMode('credit card') == null, '8: Credit Card is display label only')
+  assert(allDay.card === 9432, '8: Credit Card KPI sums payment_mode=card')
+
+  // 9. All-date includes receipts whose received date is outside a bounded day.
+  const allDates = sumAccountsMechanicalPaymentModeKpis({ cases, lines, range: allRange, statusFilter: 'all' })
+  assert(allDates.cash === allDay.cash + 5000 + 100, `9: All includes 14 Sep cash and pre-midnight fallback, got ${allDates.cash}`)
+  assert(isAccountsDateRangeAll(allRange), '9: empty from/to is All')
+
+  // 10. Asia/Kolkata timestamp boundary around IST midnight.
+  assert(asiaKolkataDateFromTimestamp('2026-09-12T18:29:00.000Z') === '2026-09-12', '10: 12 Sep 23:59 IST stays 12 Sep')
+  assert(asiaKolkataDateFromTimestamp('2026-09-12T18:31:00.000Z') === '2026-09-13', '10: 13 Sep 00:01 IST is 13 Sep')
+  const beforeOnly = sumAccountsMechanicalPaymentModeKpis({
+    cases: [boundaryBefore],
+    lines,
+    range: day,
+    statusFilter: 'all',
+  })
+  const onOnly = sumAccountsMechanicalPaymentModeKpis({
+    cases: [boundaryOn],
+    lines,
+    range: day,
+    statusFilter: 'all',
+  })
+  assert(beforeOnly.cash === 0, `10: posted_at just before IST 13 Sep excluded, got ${beforeOnly.cash}`)
+  assert(onOnly.cash === 50, `10: posted_at just after IST 13 Sep included, got ${onOnly.cash}`)
+
+  // Live 13 Sep Cash mismatch: All ₹16,900 vs Received ₹10,300
+  const liveCases = [receivedCash, partialCash]
+  const liveLines = lines.filter((l) => l.reception_entry_id === 8705 || l.reception_entry_id === 8688)
+  const liveAll = sumAccountsMechanicalPaymentModeKpis({ cases: liveCases, lines: liveLines, range: day, statusFilter: 'all' })
+  const liveReceived = sumAccountsMechanicalPaymentModeKpis({ cases: liveCases, lines: liveLines, range: day, statusFilter: 'received' })
+  assert(liveAll.cash === 16900, `live: All Cash KPI 16900, got ${liveAll.cash}`)
+  assert(liveReceived.cash === 10300, `live: Received Cash KPI 10300 (not billed 10329, not 16900), got ${liveReceived.cash}`)
+}
+
+console.log('verify_accounts_split_payment_drafts: payment-mode KPI receipt-date/status checks passed')
 
 // ---------------------------------------------------------------------------
 // DBL-0057 voucher export — keep aligned with src/lib/api/accounts.ts
