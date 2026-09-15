@@ -49,12 +49,17 @@ import {
   canonicalizeMake,
   canonicalizeRequirement,
   canonicalizeServiceType,
+  labelsEqual,
   otherCatalogueMake,
   pricingRowKey,
   remumberPricingRows,
   splitCombinedModelName,
   uniqueFamilyModels,
   fuelsForFamilyFromModelNames,
+  uniqueCatalogueServiceNames,
+  resolveCatalogueServiceName,
+  suggestCatalogueServiceNames,
+  pricingIdentityKey,
 } from '../lib/catalogueIdentity'
 
 interface EmployeeRow {
@@ -511,6 +516,7 @@ export default function SettingsPage() {
   const [estEditingItem, setEstEditingItem] = useState<PartPricingItem | null>(null)
   const [estIsAddOpen, setEstIsAddOpen] = useState(false)
   const [estAlsoCreateOtherMake, setEstAlsoCreateOtherMake] = useState(false)
+  const [estNameHintsOpen, setEstNameHintsOpen] = useState(false)
   const [estFormData, setEstFormData] = useState({
     service_name: '',
     model: 'Nexon',
@@ -576,6 +582,21 @@ export default function SettingsPage() {
     return fromModels.length > 0 ? fromModels : [...CATALOGUE_FUELS]
   }, [modelOptions, estFormData.model])
 
+  const estUniqueServiceNames = useMemo(
+    () => uniqueCatalogueServiceNames(estimatePricingList),
+    [estimatePricingList],
+  )
+
+  const estNameHints = useMemo(
+    () => suggestCatalogueServiceNames(estFormData.service_name, estUniqueServiceNames),
+    [estFormData.service_name, estUniqueServiceNames],
+  )
+
+  const estResolvedServiceName = useMemo(
+    () => resolveCatalogueServiceName(estFormData.service_name, estUniqueServiceNames),
+    [estFormData.service_name, estUniqueServiceNames],
+  )
+
   const estModelsList = useMemo(() => ['All', ...estFamilyModels], [estFamilyModels])
   const estFuelsList = useMemo(() => ['All', ...CATALOGUE_FUELS], [])
   const estMakesList = useMemo(() => ['All', ...CATALOGUE_MAKES], [])
@@ -610,8 +631,9 @@ export default function SettingsPage() {
       return
     }
     const split = splitCombinedModelName(estFormData.model)
+    const serviceName = resolveCatalogueServiceName(estFormData.service_name, estUniqueServiceNames)
     const payload = {
-      service_name: estFormData.service_name.trim(),
+      service_name: serviceName,
       model: split.model || estFormData.model.trim(),
       fuel: String(canonicalizeFuel(estFormData.fuel) || split.fuel || 'Petrol'),
       make: canonicalizeMake(estFormData.make),
@@ -619,6 +641,19 @@ export default function SettingsPage() {
       service_type: canonicalizeServiceType(estFormData.service_type) || 'Paid Service',
       price: Number(estFormData.price) || 0,
       labour: Number(estFormData.labour) || 0,
+    }
+    const duplicate = estimatePricingList.find(
+      (item) =>
+        item.id !== estEditingItem?.id &&
+        pricingIdentityKey(item) === pricingIdentityKey(payload),
+    )
+    if (duplicate) {
+      showEstToast(
+        `"${serviceName}" already exists for ${payload.model} ${payload.fuel} ${payload.make} ${payload.service_type}. Pick that existing name instead of typing a new spelling.`,
+        false,
+      )
+      setEstFormData((prev) => ({ ...prev, service_name: serviceName }))
+      return
     }
     setEstSaving(true)
     try {
@@ -663,6 +698,7 @@ export default function SettingsPage() {
     })
     setEstIsAddOpen(true)
     setEstAlsoCreateOtherMake(false)
+    setEstNameHintsOpen(false)
   }
 
   async function handleToggleEstRequirement(item: PartPricingItem) {
@@ -3642,6 +3678,7 @@ export default function SettingsPage() {
                   setEstEditingItem(null)
                   setEstFormData(emptyEstForm)
                   setEstAlsoCreateOtherMake(false)
+                  setEstNameHintsOpen(false)
                   setEstIsAddOpen(true)
                 }}
                 className="inline-flex items-center gap-1 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-blue-700 shadow-sm"
@@ -3941,19 +3978,78 @@ export default function SettingsPage() {
                 </div>
 
                 <div className="mt-4 space-y-3.5 text-xs">
-                  <div>
+                  <div className="relative">
                     <label className="mb-1 block font-semibold text-gray-700">
                       Service / Part Name <span className="text-red-500">*</span>
                     </label>
                     <input
                       type="text"
                       value={estFormData.service_name}
-                      onChange={(e) =>
+                      onChange={(e) => {
+                        setEstNameHintsOpen(true)
                         setEstFormData((prev) => ({ ...prev, service_name: e.target.value }))
-                      }
-                      placeholder="e.g. Engine Oil (Synthetic), Front Brake Pad..."
+                      }}
+                      onFocus={() => setEstNameHintsOpen(true)}
+                      onBlur={() => {
+                        window.setTimeout(() => setEstNameHintsOpen(false), 120)
+                        if (!estFormData.service_name.trim()) return
+                        setEstFormData((prev) => ({
+                          ...prev,
+                          service_name: resolveCatalogueServiceName(
+                            prev.service_name,
+                            estUniqueServiceNames,
+                          ),
+                        }))
+                      }}
+                      placeholder="Start typing — existing names appear as hints"
+                      autoComplete="off"
                       className="w-full rounded-lg border border-gray-300 px-3 py-2 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
                     />
+                    {estNameHintsOpen && estNameHints.length > 0 && (
+                      <ul className="absolute z-20 mt-1 max-h-40 w-full overflow-auto rounded-lg border border-gray-200 bg-white py-1 shadow-lg">
+                        {estNameHints.map((name) => {
+                          const selected = labelsEqual(name, estFormData.service_name)
+                          return (
+                            <li key={name}>
+                              <button
+                                type="button"
+                                onMouseDown={(e) => e.preventDefault()}
+                                onClick={() => {
+                                  setEstFormData((prev) => ({ ...prev, service_name: name }))
+                                  setEstNameHintsOpen(false)
+                                }}
+                                className={
+                                  selected
+                                    ? 'flex w-full items-center justify-between px-3 py-1.5 text-left font-semibold text-blue-800 bg-blue-50'
+                                    : 'flex w-full items-center justify-between px-3 py-1.5 text-left text-gray-800 hover:bg-gray-50'
+                                }
+                              >
+                                <span>{name}</span>
+                                <span className="text-[10px] font-semibold uppercase tracking-wide text-gray-400">
+                                  existing
+                                </span>
+                              </button>
+                            </li>
+                          )
+                        })}
+                      </ul>
+                    )}
+                    {estFormData.service_name.trim() &&
+                    estResolvedServiceName &&
+                    !labelsEqual(estFormData.service_name, estResolvedServiceName) ? (
+                      <p className="mt-1 text-[11px] text-amber-700">
+                        Will save as existing name <strong>{estResolvedServiceName}</strong>
+                      </p>
+                    ) : estFormData.service_name.trim() &&
+                      estNameHints.some((name) => labelsEqual(name, estFormData.service_name)) ? (
+                      <p className="mt-1 text-[11px] text-emerald-700">
+                        Using existing catalogue name
+                      </p>
+                    ) : (
+                      <p className="mt-1 text-[11px] text-gray-500">
+                        Pick an existing hint if this part already exists, so spellings stay unique.
+                      </p>
+                    )}
                   </div>
 
                   <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">

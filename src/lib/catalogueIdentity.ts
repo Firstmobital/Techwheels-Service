@@ -142,6 +142,61 @@ export function splitCombinedModelName(value: string | null | undefined): SplitM
   return { model: label, fuel: null }
 }
 
+export function uniqueCatalogueServiceNames(rows: Array<{ service_name?: string }>): string[] {
+  const spellings = new Map<string, Map<string, number>>()
+  rows.forEach((row) => {
+    const name = normalizeLabel(row.service_name)
+    if (!name) return
+    const key = name.toLowerCase()
+    const byName = spellings.get(key) ?? new Map<string, number>()
+    byName.set(name, (byName.get(name) ?? 0) + 1)
+    spellings.set(key, byName)
+  })
+  return Array.from(spellings.values())
+    .map((byName) => {
+      let best = ''
+      let bestCount = -1
+      byName.forEach((count, name) => {
+        if (count > bestCount || (count === bestCount && name.localeCompare(best) < 0)) {
+          best = name
+          bestCount = count
+        }
+      })
+      return best
+    })
+    .sort((a, b) => a.localeCompare(b))
+}
+
+export function resolveCatalogueServiceName(value: string, existingNames: string[]): string {
+  const wanted = normalizeLabel(value)
+  if (!wanted) return ''
+  const match = existingNames.find((name) => labelsEqual(name, wanted))
+  return match ?? wanted
+}
+
+export function suggestCatalogueServiceNames(
+  query: string,
+  existingNames: string[],
+  limit = 8,
+): string[] {
+  const q = normalizeLabel(query).toLowerCase()
+  if (!q) return []
+  return existingNames
+    .map((name) => {
+      const n = name.toLowerCase()
+      let score = 0
+      if (n === q) score = 100
+      else if (n.startsWith(q)) score = 80
+      else if (n.split(/\s+/).some((token) => token.startsWith(q))) score = 60
+      else if (n.includes(q)) score = 40
+      return { name, score }
+    })
+    .filter((row) => row.score > 0)
+    .sort((a, b) => b.score - a.score || a.name.localeCompare(b.name))
+    .slice(0, limit)
+    .map((row) => row.name)
+}
+
 export function uniqueFamilyModels(combinedNames: string[]): string[] {
   const set = new Set<string>()
   combinedNames.forEach((name) => {
