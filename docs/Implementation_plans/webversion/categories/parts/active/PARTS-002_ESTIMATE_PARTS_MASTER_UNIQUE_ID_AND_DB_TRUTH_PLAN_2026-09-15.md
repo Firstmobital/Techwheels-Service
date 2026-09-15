@@ -5,11 +5,11 @@
 **Last Updated:** 2026-09-15  
 **Priority:** HIGH  
 **Owner:** Parts Team + Platform Team  
-**Status:** In progress (Phases 0–2 landed; Phase 1b Make BS4/BS6 next; SA Create Estimate is Phase 5, later)  
+**Status:** In progress (Phases 0–2 + Make landed; Required/Optional + SA Create Estimate in progress)  
 **Platform:** webversion  
 **Category:** parts  
-**Ledger:** DBL-0062 (catalogue, VERIFIED 2026-09-15). DBL-0063 (Make BS4/BS6, VERIFIED 2026-09-15). DBL-0064 (SA estimate save table, PROPOSED — Phase 5). DBL-0061 is Accounts Mechanical Gatepass, not this catalogue. Do not reuse `20260912120000` / DBL-0051.  
-**Dump check:** `settings_service_parts_pricing` present in `supabase/backups/full_metadata.sql` after 2026-09-15 apply. Still **no** `service_parts_pricing`, **no** `customer_estimates`, **no** `service_advisor_estimates`.  
+**Ledger:** DBL-0062 (catalogue, VERIFIED 2026-09-15). DBL-0063 (Make BS4/BS6, VERIFIED 2026-09-15). DBL-0065 (Required/Optional, VERIFIED 2026-09-15). DBL-0064 (SA estimate save table, VERIFIED 2026-09-15). DBL-0061 is Accounts Mechanical Gatepass, not this catalogue. Do not reuse `20260912120000` / DBL-0051.  
+**Dump check:** `settings_service_parts_pricing` (with `make` and `requirement`) and `service_advisor_estimates` present in `supabase/backups/full_metadata.sql` after 2026-09-15 apply. Still **no** `service_parts_pricing`, **no** `customer_estimates`.  
 **Depends on:** nothing for Phase 0. Phase 5 depends on Phase 0 (unique ids) and should wait for Phase 2 (DB catalogue).  
 **Related:** Settings `#estimate-parts-master`; `/service-advisor` mechanical Create Estimate; existing customer-portal builder  
 **Evidence:** `docs/Implementation_plans/webversion/categories/parts/evidence/PARTS-002_TEST_MATRIX.md`  
@@ -25,7 +25,7 @@ This plan ships unique catalogue rows, then a real global Settings master table 
 
 **Make (locked 2026-09-15):** Distilled Water (and every item) can have the same or different price by Model, Fuel, Service Type, **and Make**. Make is a fifth identity field with dropdown **BS4** / **BS6** only. Existing 877 rows backfill as **BS6**. Do not store “Both”; Add Item may write the other Make as a second row. Do not auto-clone every row to BS4.
 
-**Later (Phase 5):** on `/service-advisor`, every **mechanical** case gets **Create Estimate**. That opens one builder, pre-filtered to that vehicle’s **Model + vehicle Fuel + Service Type + Make**, advisor adds catalogue **Item / Part Name** rows one by one, then **Save**. Do not ship this on the broken JSON catalogue.
+**Later (Phase 5):** on `/service-advisor`, every **mechanical** case gets **Create Estimate**. Required catalogue items for that Model + vehicle Fuel + Service Type + Make are added by default. **Add Item** lists remaining **Optional** items. Advisor can remove lines, then **Save** to `service_advisor_estimates`. Dedicated SA modal (not customer-portal Send). Do not use desk PV/EV as catalogue fuel.
 
 **Risk Level:** MEDIUM  
 **Estimated Duration:** Phase 0 same day; Phases 1–3 1–2 days after DBL-0062 apply; Phase 5 1 day after Phase 2  
@@ -73,10 +73,11 @@ This plan ships unique catalogue rows, then a real global Settings master table 
 11. **Do not split `settings_model_options` in this plan.** Reception/SA keep storing combined model strings. One shared parser: `Nexon EV` → model Nexon + fuel EV; `Punch CNG` → Punch + CNG; `Altroz` → Altroz + fuel from the fuel dropdown / vehicle. Aliases for messy spellings (`Xpres T Ev` → `Xpres T` + EV).
 12. **Mini Paid Service is mechanical.** Add it to reception, SA, floor-incharge allowlists, SA tracker, and Estimate Master. Category = floor (same as Paid Service).
 13. **Lock filters from the case (Phase 5).** Parse reception `model` into family+fuel hint; service type is the SA value. Vehicle fuel must agree with the parse (EV/CNG suffix) or come from `all_service_data.powertrain_type` for unsuffixed models. Desk PV/EV is never catalogue fuel. Make locks to BS4/BS6 when the vehicle has a known norm; otherwise advisor picks Make.
-14. **Reuse** `ServiceEstimateBuilderModal`. For SA: hide All-model/All-fuel pickers; add **Save**; do not hardcode advisor/branch; do not write SA mechanical estimates into `post_feedback_bot_data`.
+14. **SA Create Estimate uses a dedicated modal** (`ServiceAdvisorEstimateModal`). Do not send to `customer_estimates` or `post_feedback_bot_data`. Hide All-model/All-fuel pickers; lock Model + Fuel + Service Type; Make defaults BS6. **Required** lines prefill. **Add Item** is Optional-only for that vehicle combo.
 15. **Save writes** `service_advisor_estimates` (DBL-0064). No localStorage master. No AutoDoc `estimate_rows`. Keep file Upload in v1.
 16. **Out of scope:** PARTS-001, `busy_parts`, `estimate_rows`, inventory parts tables, AutoDoc rate cards, mobile estimate screens, Accounts Gatepass, rewriting Settings `#models` into two DB columns.
 17. **Make is Bharat Stage, not manufacturer.** UI label **Make**. Values **BS4** and **BS6** only (CHECK). Same item name may exist many times; uniqueness includes Make. Do not store “Both” / “All”. If BS4 and BS6 share a price, Add Item writes two rows (checkbox **Also create the other Make**). Existing seed rows backfill **BS6**. Do not auto-clone 877 rows to BS4 with guessed prices. EV still uses the same dropdown (default BS6) until a later value is requested.
+18. **Required / Optional is a toggle, not identity.** One value at a time. Clicking the pill switches Required ↔ Optional. Existing 877 rows backfill Required so free-service packages prefill. Optional items never auto-add.
 
 ---
 
@@ -95,6 +96,7 @@ Mirror Models. Name locked: `public.settings_service_parts_pricing`. Do not reus
 | `service_name` | Not blank |
 | `price` | numeric >= 0 |
 | `labour` | numeric >= 0 |
+| `requirement` | `Required` / `Optional` only (DBL-0065). Not part of unique identity. Existing rows backfill `Required`. Create Estimate prefills Required. Add Item lists Optional. |
 | `is_active` | Soft-hide; keep history |
 | `created_by` / `created_at` / `updated_at` | Same as Models |
 
@@ -148,9 +150,9 @@ Estimate Master **Add Item** and filters: Model dropdown = unique families from 
 
 **Fuel** desk PV/EV is never the catalogue fuel.
 
-**Save (v1):** upsert one row per `service_reception_entries.id` on `public.service_advisor_estimates` (DBL-0064). Items JSON + totals. Status `Saved`. Re-open loads that draft. File Upload remains until a follow-up counts this save toward `estimate_pending` (today that tile is `estimate_storage_path IS NULL`).
+**Save (v1):** upsert one row per `service_reception_entries.id` on `public.service_advisor_estimates` (DBL-0064). Items JSON + totals. Status `Saved`. Re-open loads that draft. File Upload remains until a follow-up counts this save toward `estimate_pending` (today that tile is `estimate_storage_path IS NULL`). Required catalogue rows for the locked Model+Fuel+Make+Service Type are prefilled. Add Item lists Optional rows not already on the estimate.
 
-**Proposed table (DBL-0064, timestamp at apply):** `public.service_advisor_estimates` — `id` identity; `reception_entry_id` unique FK; snapshot `model` / `fuel` / `service_type` (split, same as catalogue); `items` jsonb; money columns; `status`; `created_by` / timestamps. RLS like other SA writes. Not `estimate_rows`.
+**Proposed table (DBL-0064, timestamp `20260915183000`):** `public.service_advisor_estimates` — `id` identity; `reception_entry_id` unique FK; snapshot `model` / `fuel` / `make` / `service_type` (split, same as catalogue); `items` jsonb; money columns; `status`; `created_by` / timestamps. RLS inherits parent reception visibility. Not `estimate_rows`.
 
 ---
 
@@ -202,15 +204,21 @@ Estimate Master **Add Item** and filters: Model dropdown = unique families from 
 - [ ] **4.1** Run `PARTS-002_TEST_MATRIX.md` Phase 0–3 cases.
 - [ ] **4.2** Tracker stays active until Phase 5 is scheduled or explicitly deferred. CHANGE_LOG. Compact catalogue narrative only after promotion template is filled.
 
-### Phase 5: Service Advisor Create Estimate (later)
+### Phase 1c: Required / Optional (DBL-0065)
 
-- [ ] **5.0** Confirm split parser against production Models list (screenshot 2026-09-15) + Mini Paid on SA.
-- [ ] **5.1** DBL-0064 table `service_advisor_estimates` + sql_checks. Timestamp after DBL-0062. Do not create `customer_estimates` as a side effect.
-- [ ] **5.2** `/service-advisor` mechanical rows (including Mini Paid): **Create Estimate** next to Upload. Hidden for Bodyshop and Rusting. Require service type selected.
-- [ ] **5.3** Open `ServiceEstimateBuilderModal` with **split** model + fuel + serviceType locked. Catalogue = exact match. Add by Item / Part Name one by one.
-- [ ] **5.4** **Save** upserts DBL-0064 by `reception_entry_id`. Snapshot split model/fuel. Re-open restores lines.
-- [ ] **5.5** Keep file Upload. Do not change `estimate_pending` RPC in v1 unless a follow-up explicitly counts saved structured estimates.
-- [ ] **5.6** Test matrix Phase 5 (Altroz CNG First Free Service; Nexon EV row → Nexon + EV; Mini Paid Service on SA; Accounts unchanged).
+- [x] **1c.1** Ledger DBL-0065. Timestamp `20260915180000`. Add `requirement text not null` CHECK (`Required`,`Optional`). Backfill existing 877 rows to **Required**. Not part of unique identity.
+- [x] **1c.2** Estimate Master: Requirement column is a clickable toggle. Filter All/Required/Optional. Add/Edit toggle. Import/export Requirement.
+- [x] **1c.3** Paired sql_checks authored. Apply on prod with DBL-0064.
+
+### Phase 5: Service Advisor Create Estimate
+
+- [x] **5.0** Split parser + Mini Paid already on SA.
+- [x] **5.1** DBL-0064 table `service_advisor_estimates` + sql_checks. Timestamp `20260915183000`. Do not create `customer_estimates`.
+- [x] **5.2** `/service-advisor` mechanical rows (including Mini Paid): **Create Estimate** next to Upload. Hidden for Bodyshop and Rusting. Require service type selected.
+- [x] **5.3** Open `ServiceAdvisorEstimateModal` with split model + fuel + serviceType locked. Required items prefill. Add Item = Optional remaining.
+- [x] **5.4** **Save** upserts DBL-0064 by `reception_entry_id`. Snapshot split model/fuel/make. Re-open restores lines.
+- [x] **5.5** Keep file Upload. Do not change `estimate_pending` RPC in v1.
+- [ ] **5.6** Test matrix Phase 5 after deploy (Altroz CNG First Free Service; Nexon EV row → Nexon + EV; Mini Paid Service on SA; Accounts unchanged).
 
 ---
 
@@ -254,12 +262,13 @@ Estimate Master **Add Item** and filters: Model dropdown = unique families from 
 ⏳ 4.1 | Test matrix Phases 0–3 | Eng | - | - |
 ⏳ 4.2 | Catalogue promote when verified | Eng | - | - | Do not archive plan before Phase 5 decision
 ⏳ 5.0 | Confirm Phase 0 names match SA (no runtime map) | Eng + Parts | - | - | Split parser; Mini Paid mechanical
-⏳ 5.1 | DBL-0064 service_advisor_estimates | Eng | - | - | After DBL-0062
-⏳ 5.2 | Create Estimate on mechanical SA rows | Eng | - | - | Not Accounts; not Bodyshop/Rusting
-⏳ 5.3 | Modal locked Model+Fuel+Service Type | Eng | - | - | Reuse ServiceEstimateBuilderModal
-⏳ 5.4 | Save to DBL-0064 | Eng | - | - | No localStorage; no estimate_rows
-⏳ 5.5 | Keep file Upload in v1 | Eng | - | - | estimate_pending still file-based
-⏳ 5.6 | Test matrix Phase 5 | Eng | - | - |
+⏳ 1c.1 | DBL-0065 Required/Optional column | Eng | 2026-09-15 | - | Apply with 20260915180000
+⏳ 5.1 | DBL-0064 service_advisor_estimates | Eng | 2026-09-15 | - | 20260915183000
+🔄 5.2 | Create Estimate on mechanical SA rows | Eng | 2026-09-15 | - | Hidden Accident/Rusting
+🔄 5.3 | Required prefill + Optional Add Item | Eng | 2026-09-15 | - | Dedicated SA modal
+🔄 5.4 | Save to DBL-0064 | Eng | 2026-09-15 | - | No localStorage; no estimate_rows
+✅ 5.5 | Keep file Upload in v1 | Eng | 2026-09-15 | 2026-09-15 | estimate_pending still file-based
+⏳ 5.6 | Test matrix Phase 5 | Eng | - | - | After deploy
 ```
 
 ---

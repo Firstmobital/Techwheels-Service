@@ -4,8 +4,10 @@ import {
   canonicalizeFuel,
   canonicalizeMake,
   canonicalizePricingRow,
+  canonicalizeRequirement,
   canonicalizeServiceType,
   DEFAULT_CATALOGUE_MAKE,
+  DEFAULT_CATALOGUE_REQUIREMENT,
   dedupePricingRows,
   hasDuplicatePricingIds,
   labelsEqual,
@@ -20,6 +22,7 @@ export interface PartPricingItem {
   model: string
   fuel: string
   make: string
+  requirement: string
   service_name: string
   price: number
   labour: number
@@ -108,6 +111,7 @@ function mapDbRow(row: Record<string, unknown>): PartPricingItem {
       model: String(row.model ?? ''),
       fuel: String(row.fuel ?? ''),
       make: String(row.make ?? DEFAULT_CATALOGUE_MAKE),
+      requirement: String(row.requirement ?? DEFAULT_CATALOGUE_REQUIREMENT),
       service_name: String(row.service_name ?? ''),
       price: Number(row.price) || 0,
       labour: Number(row.labour) || 0,
@@ -124,6 +128,7 @@ function toWritePayload(item: Omit<PartPricingItem, 'id'> | PartPricingItem) {
       model: item.model,
       fuel: item.fuel,
       make: 'make' in item ? item.make : DEFAULT_CATALOGUE_MAKE,
+      requirement: 'requirement' in item ? item.requirement : DEFAULT_CATALOGUE_REQUIREMENT,
       service_name: item.service_name,
       price: item.price,
       labour: item.labour,
@@ -136,6 +141,7 @@ function toWritePayload(item: Omit<PartPricingItem, 'id'> | PartPricingItem) {
     model: canonical.model,
     fuel: canonical.fuel,
     make: canonical.make,
+    requirement: canonicalizeRequirement(canonical.requirement),
     service_name: canonical.service_name,
     price: canonical.price ?? 0,
     labour: canonical.labour ?? 0,
@@ -185,7 +191,7 @@ export async function hydrateMasterPricingFromDb(): Promise<PartPricingItem[]> {
     while (true) {
       const { data, error } = await supabase
         .from(TABLE)
-        .select('id, service_type, model, fuel, make, service_name, price, labour')
+        .select('id, service_type, model, fuel, make, requirement, service_name, price, labour')
         .eq('dealer_code', 'GLOBAL')
         .eq('is_active', true)
         .order('id', { ascending: true })
@@ -246,7 +252,7 @@ export async function addPartPricingItem(
     const { data, error } = await supabase
       .from(TABLE)
       .insert(payload)
-      .select('id, service_type, model, fuel, make, service_name, price, labour')
+      .select('id, service_type, model, fuel, make, requirement, service_name, price, labour')
       .single()
     if (error) throw new Error(uniqueConstraintMessage(error) ?? error.message)
     const created = mapDbRow(data as Record<string, unknown>)
@@ -322,7 +328,7 @@ export async function getPartsPricing(
   try {
     let query = supabase
       .from(TABLE)
-      .select('id, service_type, model, fuel, make, service_name, price, labour')
+      .select('id, service_type, model, fuel, make, requirement, service_name, price, labour')
       .eq('dealer_code', 'GLOBAL')
       .eq('is_active', true)
     if (family) query = query.eq('model', family)

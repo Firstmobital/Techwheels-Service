@@ -41,10 +41,13 @@ import {
 import {
   CATALOGUE_FUELS,
   CATALOGUE_MAKES,
+  CATALOGUE_REQUIREMENTS,
   DEFAULT_CATALOGUE_MAKE,
+  DEFAULT_CATALOGUE_REQUIREMENT,
   ESTIMATE_SERVICE_TYPE_OPTIONS,
   canonicalizeFuel,
   canonicalizeMake,
+  canonicalizeRequirement,
   canonicalizeServiceType,
   otherCatalogueMake,
   pricingRowKey,
@@ -502,6 +505,7 @@ export default function SettingsPage() {
   const [estModelFilter, setEstModelFilter] = useState('All')
   const [estFuelFilter, setEstFuelFilter] = useState('All')
   const [estMakeFilter, setEstMakeFilter] = useState('All')
+  const [estRequirementFilter, setEstRequirementFilter] = useState('All')
   const [estServiceTypeFilter, setEstServiceTypeFilter] = useState('All')
   const [estEditingItem, setEstEditingItem] = useState<PartPricingItem | null>(null)
   const [estIsAddOpen, setEstIsAddOpen] = useState(false)
@@ -511,6 +515,7 @@ export default function SettingsPage() {
     model: 'Nexon',
     fuel: 'Petrol',
     make: DEFAULT_CATALOGUE_MAKE,
+    requirement: DEFAULT_CATALOGUE_REQUIREMENT,
     service_type: 'Paid Service',
     price: 0,
     labour: 0,
@@ -524,6 +529,7 @@ export default function SettingsPage() {
     model: 'Nexon',
     fuel: 'Petrol',
     make: DEFAULT_CATALOGUE_MAKE,
+    requirement: DEFAULT_CATALOGUE_REQUIREMENT,
     service_type: 'Paid Service',
     price: 0,
     labour: 0,
@@ -563,6 +569,7 @@ export default function SettingsPage() {
   const estModelsList = useMemo(() => ['All', ...estFamilyModels], [estFamilyModels])
   const estFuelsList = useMemo(() => ['All', ...CATALOGUE_FUELS], [])
   const estMakesList = useMemo(() => ['All', ...CATALOGUE_MAKES], [])
+  const estRequirementList = useMemo(() => ['All', ...CATALOGUE_REQUIREMENTS], [])
   const estServiceTypesList = useMemo(() => ['All', ...ESTIMATE_SERVICE_TYPE_OPTIONS], [])
 
   const filteredPricingItems = useMemo(() => {
@@ -573,8 +580,11 @@ export default function SettingsPage() {
       const matchModel = estModelFilter === 'All' || item.model === estModelFilter
       const matchFuel = estFuelFilter === 'All' || item.fuel === estFuelFilter
       const matchMake = estMakeFilter === 'All' || item.make === estMakeFilter
+      const matchRequirement =
+        estRequirementFilter === 'All' ||
+        canonicalizeRequirement(item.requirement) === estRequirementFilter
       const matchType = estServiceTypeFilter === 'All' || item.service_type === estServiceTypeFilter
-      if (!matchModel || !matchFuel || !matchMake || !matchType) return false
+      if (!matchModel || !matchFuel || !matchMake || !matchRequirement || !matchType) return false
       if (tokens.length > 0) {
         const combined =
           `${item.service_name || ''} ${item.model || ''} ${item.fuel || ''} ${item.make || ''} ${item.service_type || ''} ${item.price || ''} ${item.labour || ''}`.toLowerCase()
@@ -582,7 +592,7 @@ export default function SettingsPage() {
       }
       return true
     })
-  }, [estimatePricingList, estSearch, estModelFilter, estFuelFilter, estMakeFilter, estServiceTypeFilter])
+  }, [estimatePricingList, estSearch, estModelFilter, estFuelFilter, estMakeFilter, estRequirementFilter, estServiceTypeFilter])
 
   async function handleSaveEstItem() {
     if (!estFormData.service_name.trim()) {
@@ -595,6 +605,7 @@ export default function SettingsPage() {
       model: split.model || estFormData.model.trim(),
       fuel: String(canonicalizeFuel(estFormData.fuel) || split.fuel || 'Petrol'),
       make: canonicalizeMake(estFormData.make),
+      requirement: canonicalizeRequirement(estFormData.requirement),
       service_type: canonicalizeServiceType(estFormData.service_type) || 'Paid Service',
       price: Number(estFormData.price) || 0,
       labour: Number(estFormData.labour) || 0,
@@ -635,12 +646,23 @@ export default function SettingsPage() {
       model: item.model || 'Nexon',
       fuel: item.fuel || 'Petrol',
       make: canonicalizeMake(item.make),
+      requirement: canonicalizeRequirement(item.requirement),
       service_type: item.service_type || 'Paid Service',
       price: item.price || 0,
       labour: item.labour || 0,
     })
     setEstIsAddOpen(true)
     setEstAlsoCreateOtherMake(false)
+  }
+
+  async function handleToggleEstRequirement(item: PartPricingItem) {
+    const next = canonicalizeRequirement(item.requirement) === 'Required' ? 'Optional' : 'Required'
+    try {
+      await updatePartPricingItem(item.id, { requirement: next })
+      reloadEstimatePricing()
+    } catch (err) {
+      showEstToast(err instanceof Error ? err.message : 'Failed to update Required/Optional', false)
+    }
   }
 
   async function handleDeleteEstItem(id: number) {
@@ -674,6 +696,7 @@ export default function SettingsPage() {
         'Model': item.model || '',
         'Fuel': item.fuel || '',
         'Make': item.make || DEFAULT_CATALOGUE_MAKE,
+        'Requirement': canonicalizeRequirement(item.requirement),
         'Service Type': item.service_type || 'Paid Service',
         'Part Price (₹)': item.price || 0,
         'Labour (₹)': item.labour || 0,
@@ -710,6 +733,9 @@ export default function SettingsPage() {
               const model = String(row['Model'] || row['model'] || 'Nexon')
               const fuel = String(row['Fuel'] || row['fuel'] || 'Petrol')
               const make = canonicalizeMake(String(row['Make'] || row['make'] || DEFAULT_CATALOGUE_MAKE))
+              const requirement = canonicalizeRequirement(
+                String(row['Requirement'] || row['requirement'] || DEFAULT_CATALOGUE_REQUIREMENT),
+              )
               const stype = String(row['Service Type'] || row['service_type'] || 'Paid Service')
               const price = Number(row['Part Price (₹)'] || row['price'] || row['Price'] || 0)
               const labour = Number(row['Labour (₹)'] || row['labour'] || row['Labour'] || 0)
@@ -719,6 +745,7 @@ export default function SettingsPage() {
                 model,
                 fuel,
                 make,
+                requirement,
                 service_type: stype,
                 price: Number.isNaN(price) ? 0 : price,
                 labour: Number.isNaN(labour) ? 0 : labour,
@@ -3638,7 +3665,7 @@ export default function SettingsPage() {
           <div className="space-y-4 p-5">
             {/* Filter Toolbar */}
             <div className="space-y-2">
-              <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-5">
+              <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
                 <div>
                   <label className="mb-1 block text-[11px] font-semibold text-gray-500 uppercase tracking-wider">
                     Search Item
@@ -3719,6 +3746,23 @@ export default function SettingsPage() {
 
                 <div>
                   <label className="mb-1 block text-[11px] font-semibold text-gray-500 uppercase tracking-wider">
+                    Requirement
+                  </label>
+                  <select
+                    value={estRequirementFilter}
+                    onChange={(e) => setEstRequirementFilter(e.target.value)}
+                    className="w-full rounded-lg border border-gray-300 px-2.5 py-1.5 text-xs outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                  >
+                    {estRequirementList.map((value) => (
+                      <option key={value} value={value}>
+                        {value === 'All' ? 'All (Required + Optional)' : value}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="mb-1 block text-[11px] font-semibold text-gray-500 uppercase tracking-wider">
                     Service Type
                   </label>
                   <select
@@ -3739,6 +3783,7 @@ export default function SettingsPage() {
                 estModelFilter !== 'All' ||
                 estFuelFilter !== 'All' ||
                 estMakeFilter !== 'All' ||
+                estRequirementFilter !== 'All' ||
                 estServiceTypeFilter !== 'All') && (
                 <div className="flex items-center justify-between pt-1 text-xs">
                   <span className="text-gray-500">
@@ -3751,6 +3796,7 @@ export default function SettingsPage() {
                       setEstModelFilter('All')
                       setEstFuelFilter('All')
                       setEstMakeFilter('All')
+                      setEstRequirementFilter('All')
                       setEstServiceTypeFilter('All')
                     }}
                     className="text-blue-600 hover:text-blue-800 font-semibold inline-flex items-center gap-1"
@@ -3771,6 +3817,7 @@ export default function SettingsPage() {
                     <th className="px-3 py-2.5 font-semibold">Model</th>
                     <th className="px-3 py-2.5 font-semibold">Fuel</th>
                     <th className="px-3 py-2.5 font-semibold">Make</th>
+                    <th className="px-3 py-2.5 font-semibold">Requirement</th>
                     <th className="px-3 py-2.5 font-semibold">Service Type</th>
                     <th className="px-3 py-2.5 text-right font-semibold">Part Price (₹)</th>
                     <th className="px-3 py-2.5 text-right font-semibold">Labour (₹)</th>
@@ -3781,7 +3828,7 @@ export default function SettingsPage() {
                 <tbody className="divide-y divide-gray-100">
                   {filteredPricingItems.length === 0 ? (
                     <tr>
-                      <td colSpan={9} className="py-8 text-center text-sm text-gray-400">
+                      <td colSpan={10} className="py-8 text-center text-sm text-gray-400">
                         No pricing items found matching the selected filters.
                       </td>
                     </tr>
@@ -3807,6 +3854,20 @@ export default function SettingsPage() {
                             <span className="inline-flex rounded bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-700">
                               {item.make || DEFAULT_CATALOGUE_MAKE}
                             </span>
+                          </td>
+                          <td className="px-3 py-2">
+                            <button
+                              type="button"
+                              onClick={() => void handleToggleEstRequirement(item)}
+                              className={
+                                canonicalizeRequirement(item.requirement) === 'Required'
+                                  ? 'inline-flex rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-0.5 text-[11px] font-bold text-emerald-800 hover:bg-emerald-100'
+                                  : 'inline-flex rounded-full border border-slate-200 bg-slate-50 px-2.5 py-0.5 text-[11px] font-bold text-slate-700 hover:bg-slate-100'
+                              }
+                              title="Toggle Required / Optional"
+                            >
+                              {canonicalizeRequirement(item.requirement)}
+                            </button>
                           </td>
                           <td className="px-3 py-2">
                             <span className="inline-flex rounded bg-purple-50 px-2 py-0.5 text-[11px] font-semibold text-purple-700">
@@ -3950,6 +4011,32 @@ export default function SettingsPage() {
                       Also create the other Make ({otherCatalogueMake(estFormData.make)})
                     </label>
                   )}
+
+                  <div>
+                    <label className="mb-1 block font-semibold text-gray-700">Required / Optional</label>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setEstFormData((prev) => ({
+                          ...prev,
+                          requirement:
+                            canonicalizeRequirement(prev.requirement) === 'Required'
+                              ? 'Optional'
+                              : 'Required',
+                        }))
+                      }
+                      className={
+                        canonicalizeRequirement(estFormData.requirement) === 'Required'
+                          ? 'w-full rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-bold text-emerald-800'
+                          : 'w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-bold text-slate-700'
+                      }
+                    >
+                      {canonicalizeRequirement(estFormData.requirement)}
+                    </button>
+                    <p className="mt-1 text-[11px] text-gray-500">
+                      Required items are added by default on Service Advisor Create Estimate. Optional items stay behind Add Item.
+                    </p>
+                  </div>
 
                   <div>
                     <label className="mb-1 block font-semibold text-gray-700">Service Type</label>

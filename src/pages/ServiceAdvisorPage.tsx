@@ -10,6 +10,7 @@ import {
   uploadServiceAdvisorEstimate,
   getDealerScopeContext,
   generateComplaintLink,
+  listServiceAdvisorEstimateIds,
   type ReceptionEntryPageCursor,
   type ReceptionEntryPageResult,
   type ReceptionEntryRow,
@@ -23,6 +24,7 @@ import UpdationAvailableBadge from '../components/UpdationAvailableBadge'
 import PartsRequirementSection from '../components/PartsRequirementSection'
 import CustomerRemarkModal from '../components/CustomerRemarkModal'
 import { CustomerPortalAdminModal } from '../components/CustomerPortalAdminModal'
+import { ServiceAdvisorEstimateModal } from '../components/ServiceAdvisorEstimateModal'
 import { cleanAdvisorPersonName } from '../lib/api/customer'
 
 type RowDraft = {
@@ -606,6 +608,9 @@ export default function ServiceAdvisorPage() {
   const [customerPortalModalOpen, setCustomerPortalModalOpen] = useState(false)
   const [selectedPortalRegNumber, setSelectedPortalRegNumber] = useState<string | undefined>(undefined)
   const [customerProblemsMap, setCustomerProblemsMap] = useState<Record<string, CustomerProblemSummary>>({})
+  const [estimateModalRow, setEstimateModalRow] = useState<ReceptionEntryRow | null>(null)
+  const [estimateModalServiceType, setEstimateModalServiceType] = useState('')
+  const [savedEstimateIds, setSavedEstimateIds] = useState<Set<number>>(new Set())
 
   async function loadCustomerProblems() {
     try {
@@ -954,6 +959,25 @@ export default function ServiceAdvisorPage() {
       allAssignedJobCardNumbers,
     )
   }, [displayedRows, oldHoldWipFiltered, selectedSummaryCard, completedJobCardNumbers, holdJobCardNumbers, inProcessJobCardNumbers, allAssignedJobCardNumbers])
+
+  useEffect(() => {
+    const ids = cardFilteredRows.map((row) => row.id)
+    if (ids.length === 0) {
+      setSavedEstimateIds(new Set())
+      return
+    }
+    let cancelled = false
+    void listServiceAdvisorEstimateIds(ids)
+      .then((next) => {
+        if (!cancelled) setSavedEstimateIds(next)
+      })
+      .catch(() => {
+        if (!cancelled) setSavedEstimateIds(new Set())
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [cardFilteredRows])
 
   const hasBaseRows = useMemo(
     () => (activeSummaryCounts?.total ?? 0) > 0 || rows.length > 0,
@@ -2428,6 +2452,20 @@ export default function ServiceAdvisorPage() {
                             <span className="td-muted-nowrap">Not required</span>
                           ) : (
                             <div className="estimate-col">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  if (!effectiveServiceType.trim()) {
+                                    showToast('Select service type before creating an estimate')
+                                    return
+                                  }
+                                  setEstimateModalRow(row)
+                                  setEstimateModalServiceType(effectiveServiceType)
+                                }}
+                                className="tbtn tbtn--accent"
+                              >
+                                {savedEstimateIds.has(row.id) ? 'Edit Estimate' : 'Create Estimate'}
+                              </button>
                               {row.estimate_storage_path ? (
                                 <>
                                   <span className="estimate-status">
@@ -2569,6 +2607,20 @@ export default function ServiceAdvisorPage() {
         }}
         isAdmin={true}
         initialRegNumber={selectedPortalRegNumber}
+      />
+
+      <ServiceAdvisorEstimateModal
+        isOpen={Boolean(estimateModalRow)}
+        onClose={() => {
+          setEstimateModalRow(null)
+          setEstimateModalServiceType('')
+        }}
+        row={estimateModalRow}
+        serviceType={estimateModalServiceType}
+        onSaved={(id) => {
+          setSavedEstimateIds((prev) => new Set([...prev, id]))
+          showToast('Estimate saved')
+        }}
       />
     </div>
   )

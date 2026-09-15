@@ -1,8 +1,8 @@
 # PARTS-002 — Manual Test Matrix
 
 **Plan:** `PARTS-002_ESTIMATE_PARTS_MASTER_UNIQUE_ID_AND_DB_TRUTH_PLAN_2026-09-15.md`  
-**Status:** Phases 0–2 + Make (DBL-0063) landed. Confirm Settings UI after deploy; Phase 5 still later.  
-**Surfaces:** `/settings#estimate-parts-master`, customer estimate builder, later `/service-advisor`.
+**Status:** Phases 0–2 + Make landed. Required/Optional + SA Create Estimate in progress.  
+**Surfaces:** `/settings#estimate-parts-master`, `/service-advisor`, customer estimate builder.
 
 | # | Phase | Case | Expected |
 |---|---|---|---|
@@ -32,5 +32,9 @@
 | 24 | 1b | After DBL-0063, existing Distilled Water | Make badge **BS6**. Filter Make=BS4 shows 0 of those seed rows. |
 | 25 | 1b | Add Distilled Water Altroz Petrol First Free Service BS4 | Allowed even if BS6 already exists. Unique error if same combo added twice. |
 | 26 | 1b | Add with **Also create the other Make** | Two rows, BS4 and BS6, same prices. Filter Make=BS4 shows only BS4. |
+| 27 | 1c | Requirement pill on a row | Click switches Required ↔ Optional. Never both. Refresh still shows the new value. |
+| 28 | 5 | Create Estimate on Tiago EV Second Free Service | Required items (default all current catalogue) appear immediately. Fuel locked EV. |
+| 29 | 5 | Toggle Distilled Water to Optional, open Create Estimate | Distilled Water is not prefilled. Add Item lists it. |
+| 30 | 5 | Accident / Rusting | No Create Estimate button. Upload/Not required unchanged. |
 
-**Phase 0 proof row (from JSON/DB after rename):** Altroz CNG First Free Service = 5 rows. Catalogue count is **877** (Excel 926 minus blank Campaign/E Breakdown placeholders and 3 duplicate identities). Estimate Master does not display internal ids. After DBL-0063 those 877 rows are **BS6**.
+**Phase 0 proof row (from JSON/DB after rename):** Altroz CNG First Free Service = 5 rows. Catalogue count is **877** (Excel 926 minus blank Campaign/E Breakdown placeholders and 3 duplicate identities). Estimate Master does not display internal ids. After DBL-0063 those 877 rows are **BS6**. After DBL-0065 they start as **Required**.

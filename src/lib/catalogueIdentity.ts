@@ -5,6 +5,10 @@ export const CATALOGUE_MAKES = ['BS6', 'BS4'] as const
 export type CatalogueMake = (typeof CATALOGUE_MAKES)[number]
 export const DEFAULT_CATALOGUE_MAKE: CatalogueMake = 'BS6'
 
+export const CATALOGUE_REQUIREMENTS = ['Required', 'Optional'] as const
+export type CatalogueRequirement = (typeof CATALOGUE_REQUIREMENTS)[number]
+export const DEFAULT_CATALOGUE_REQUIREMENT: CatalogueRequirement = 'Required'
+
 /** Reception / SA mechanical types, including Mini Paid Service. */
 export const MECHANICAL_SERVICE_TYPES = [
   'Running Repairs',
@@ -70,6 +74,29 @@ export function otherCatalogueMake(value: string | null | undefined): CatalogueM
   return canonicalizeMake(value) === 'BS4' ? 'BS6' : 'BS4'
 }
 
+export function canonicalizeRequirement(value: string | null | undefined): CatalogueRequirement {
+  const label = normalizeLabel(value).toLowerCase()
+  if (label === 'optional') return 'Optional'
+  return DEFAULT_CATALOGUE_REQUIREMENT
+}
+
+export function otherCatalogueRequirement(value: string | null | undefined): CatalogueRequirement {
+  return canonicalizeRequirement(value) === 'Required' ? 'Optional' : 'Required'
+}
+
+/** Map all_service_data powertrain / product_line to catalogue fuel. Never desk PV/EV. */
+export function canonicalizeFuelFromPowertrain(
+  value: string | null | undefined,
+): CatalogueFuel | null {
+  const label = normalizeLabel(value).toUpperCase()
+  if (!label) return null
+  if (label.includes('EV') || label.includes('ELECTRIC')) return 'EV'
+  if (label.includes('CNG')) return 'CNG'
+  if (label.includes('DIESEL')) return 'Diesel'
+  if (label.includes('PETROL')) return 'Petrol'
+  return null
+}
+
 export function labelsEqual(left: string | null | undefined, right: string | null | undefined): boolean {
   return normalizeLabel(left).toLowerCase() === normalizeLabel(right).toLowerCase()
 }
@@ -124,6 +151,7 @@ export interface PricingIdentityRow {
   model: string
   fuel: string
   make?: string
+  requirement?: string
   service_name: string
   price?: number
   labour?: number
@@ -138,6 +166,7 @@ export function canonicalizePricingRow<T extends PricingIdentityRow>(row: T, id:
     model: split.model || normalizeLabel(row.model),
     fuel: String(canonicalizeFuel(row.fuel) || split.fuel || ''),
     make: canonicalizeMake(row.make),
+    requirement: canonicalizeRequirement(row.requirement),
     service_name: normalizeLabel(row.service_name),
   }
 }

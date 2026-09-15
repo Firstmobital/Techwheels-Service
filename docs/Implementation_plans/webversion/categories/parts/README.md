@@ -13,4 +13,4 @@
 
 **Active plans:**
 - `PARTS-001` — Advisor/SPM order-date guard + GGN Stock
-- `PARTS-002` — Estimate & Parts Master unique identity + `settings_service_parts_pricing` (DBL-0062 APPLIED); later SA Create Estimate (DBL-0064)
+- `PARTS-002` — Estimate & Parts Master unique identity + `settings_service_parts_pricing` (DBL-0062 APPLIED); Required/Optional (DBL-0065); SA Create Estimate (DBL-0064)

@@ -12,7 +12,9 @@ import {
 import {
   CATALOGUE_MAKES,
   DEFAULT_CATALOGUE_MAKE,
+  DEFAULT_CATALOGUE_REQUIREMENT,
   canonicalizeMake,
+  canonicalizeRequirement,
 } from '../lib/catalogueIdentity'
 
 interface EstimateMasterModalProps {
@@ -65,6 +67,7 @@ export function EstimateMasterModal({ isOpen, onClose }: EstimateMasterModalProp
     model: 'Altroz',
     fuel: 'Petrol',
     make: DEFAULT_CATALOGUE_MAKE,
+    requirement: DEFAULT_CATALOGUE_REQUIREMENT,
     service_type: 'Paid Service',
     price: 0,
     labour: 0,
@@ -183,6 +186,7 @@ export function EstimateMasterModal({ isOpen, onClose }: EstimateMasterModalProp
       model: item.model,
       fuel: item.fuel,
       make: canonicalizeMake(item.make),
+      requirement: canonicalizeRequirement(item.requirement),
       service_type: item.service_type,
       price: item.price,
       labour: item.labour,
@@ -197,6 +201,7 @@ export function EstimateMasterModal({ isOpen, onClose }: EstimateMasterModalProp
       model: selectedModel !== 'All' ? selectedModel : 'Altroz',
       fuel: selectedFuel !== 'All' ? selectedFuel : 'Petrol',
       make: selectedMake !== 'All' ? canonicalizeMake(selectedMake) : DEFAULT_CATALOGUE_MAKE,
+      requirement: DEFAULT_CATALOGUE_REQUIREMENT,
       service_type: 'Paid Service',
       price: 0,
       labour: 0,
@@ -220,6 +225,7 @@ export function EstimateMasterModal({ isOpen, onClose }: EstimateMasterModalProp
             model: formData.model.trim(),
             fuel: formData.fuel.trim(),
             make: canonicalizeMake(formData.make),
+            requirement: canonicalizeRequirement(formData.requirement),
             service_type: formData.service_type.trim(),
             price: Number(formData.price) || 0,
             labour: Number(formData.labour) || 0,
@@ -232,6 +238,7 @@ export function EstimateMasterModal({ isOpen, onClose }: EstimateMasterModalProp
             model: formData.model.trim(),
             fuel: formData.fuel.trim(),
             make: canonicalizeMake(formData.make),
+            requirement: canonicalizeRequirement(formData.requirement),
             service_type: formData.service_type.trim(),
             price: Number(formData.price) || 0,
             labour: Number(formData.labour) || 0,
@@ -312,6 +319,7 @@ export function EstimateMasterModal({ isOpen, onClose }: EstimateMasterModalProp
           model: String(row.Model || row.model || 'Common').trim(),
           fuel: String(row.Fuel || row.fuel || 'General').trim(),
           make: canonicalizeMake(String(row.Make || row.make || DEFAULT_CATALOGUE_MAKE)),
+          requirement: canonicalizeRequirement(String(row.Requirement || row.requirement || DEFAULT_CATALOGUE_REQUIREMENT)),
           service_name: String(row['Service / Part Name'] || row.service_name || row['Service Name'] || 'Part').trim(),
           price: Number(row['Part Price (₹)'] || row.price || 0),
           labour: Number(row['Labour (₹)'] || row.labour || 0),
