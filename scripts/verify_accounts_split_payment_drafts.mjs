@@ -253,7 +253,7 @@ function sumAccountsMechanicalPaymentModeKpis({ cases, lines, range, statusFilte
   const ids = new Set(scoped.map((row) => row.reception_entry_id))
   return sumAccountsPaymentModeTotals(
     filterMechanicalPaymentLinesByReceiptDate(
-      lines.filter((line) => ids.has(line.reception_entry_id)),
+      lines.filter((line) => ids.has(line.reception_entry_id) && !isMechanicalDiscountPaymentLine(line)),
       range,
     ),
   )
@@ -590,6 +590,165 @@ console.log('verify_accounts_split_payment_drafts: J–T payment-mode filter che
 }
 
 console.log('verify_accounts_split_payment_drafts: payment-mode KPI receipt-date/status checks passed')
+
+// ---------------------------------------------------------------------------
+// Payment-mode KPIs: receipt-date period + Discount exclusion
+// Keep aligned with src/lib/api/accounts.ts sumAccountsMechanicalPaymentModeKpis
+// ---------------------------------------------------------------------------
+{
+  const day12 = { from: '2026-09-12', to: '2026-09-12' }
+  const day13 = { from: '2026-09-13', to: '2026-09-13' }
+  const allRange = { from: '', to: '' }
+
+  const done10 = { reception_entry_id: 20, payment_status: 'received', invoice_done_at: '2026-09-10T10:00:00+05:30' }
+  const done12 = { reception_entry_id: 21, payment_status: 'received', invoice_done_at: '2026-09-12T10:00:00+05:30' }
+  const pending12 = { reception_entry_id: 22, payment_status: 'pending', invoice_done_at: '2026-09-10T10:00:00+05:30' }
+  const receivedSplit = { reception_entry_id: 23, payment_status: 'received', invoice_done_at: '2026-09-08T10:00:00+05:30' }
+  const cases = [done10, done12, pending12, receivedSplit]
+
+  const lines = [
+    { reception_entry_id: 20, amount: 10000, payment_mode: 'cash', payment_received_date: '2026-09-12', posted_at: '2026-09-12T11:00:00+05:30', reference: null },
+    { reception_entry_id: 20, amount: 29.76, payment_mode: 'cash', payment_received_date: '2026-09-12', posted_at: '2026-09-12T11:01:00+05:30', reference: 'DISCOUNT' },
+    { reception_entry_id: 21, amount: 5000, payment_mode: 'upi', payment_received_date: '2026-09-12', posted_at: '2026-09-12T12:00:00+05:30', reference: null },
+    { reception_entry_id: 21, amount: 20.50, payment_mode: 'upi', payment_received_date: '2026-09-12', posted_at: '2026-09-12T12:01:00+05:30', reference: 'discount' },
+    { reception_entry_id: 21, amount: 7500, payment_mode: 'card', payment_received_date: '2026-09-12', posted_at: '2026-09-12T12:02:00+05:30', reference: null },
+    { reception_entry_id: 21, amount: 15, payment_mode: 'card', payment_received_date: '2026-09-12', posted_at: '2026-09-12T12:03:00+05:30', reference: '  Discount  ' },
+    { reception_entry_id: 21, amount: 800, payment_mode: 'cash', payment_received_date: '2026-09-13', posted_at: '2026-09-13T09:00:00+05:30', reference: null },
+    { reception_entry_id: 22, amount: 400, payment_mode: 'cash', payment_received_date: '2026-09-12', posted_at: '2026-09-12T08:00:00+05:30', reference: null },
+    { reception_entry_id: 23, amount: 3000, payment_mode: 'cash', payment_received_date: '2026-09-12', posted_at: '2026-09-12T13:00:00+05:30', reference: null },
+    { reception_entry_id: 23, amount: 2000, payment_mode: 'upi', payment_received_date: '2026-09-12', posted_at: '2026-09-12T13:01:00+05:30', reference: 'UTR' },
+    { reception_entry_id: 23, amount: 50, payment_mode: 'other', payment_received_date: '2026-09-12', posted_at: '2026-09-12T13:02:00+05:30', reference: 'DISCOUNT' },
+    { reception_entry_id: 20, amount: 111, payment_mode: 'cash', payment_received_date: null, posted_at: '2026-09-12T18:40:00.000Z', reference: null },
+  ]
+
+  const isolatedCase = { reception_entry_id: 1, payment_status: 'received' }
+  const cashOnly = sumAccountsMechanicalPaymentModeKpis({
+    cases: [isolatedCase],
+    lines: [{ reception_entry_id: 1, amount: 10000, payment_mode: 'cash', payment_received_date: '2026-09-12', posted_at: '2026-09-12T11:00:00+05:30', reference: null }],
+    range: day12,
+  })
+  assert(cashOnly.cash === 10000 && cashOnly.upi === 0 && cashOnly.card === 0, `1: Cash 10000, got ${JSON.stringify(cashOnly)}`)
+
+  const cashPlusDiscount = sumAccountsMechanicalPaymentModeKpis({
+    cases: [isolatedCase],
+    lines: [
+      { reception_entry_id: 1, amount: 10000, payment_mode: 'cash', payment_received_date: '2026-09-12', posted_at: '2026-09-12T11:00:00+05:30', reference: null },
+      { reception_entry_id: 1, amount: 29.76, payment_mode: 'cash', payment_received_date: '2026-09-12', posted_at: '2026-09-12T11:01:00+05:30', reference: 'DISCOUNT' },
+    ],
+    range: day12,
+  })
+  assert(cashPlusDiscount.cash === 10000, `2: Cash 10000 + Discount 29.76 stored as cash → 10000, got ${cashPlusDiscount.cash}`)
+
+  const upiPlusDiscount = sumAccountsMechanicalPaymentModeKpis({
+    cases: [isolatedCase],
+    lines: [
+      { reception_entry_id: 1, amount: 5000, payment_mode: 'upi', payment_received_date: '2026-09-12', posted_at: '2026-09-12T12:00:00+05:30', reference: null },
+      { reception_entry_id: 1, amount: 20.50, payment_mode: 'upi', payment_received_date: '2026-09-12', posted_at: '2026-09-12T12:01:00+05:30', reference: 'discount' },
+    ],
+    range: day12,
+  })
+  assert(upiPlusDiscount.upi === 5000 && upiPlusDiscount.cash === 0, `3: UPI 5000 + Discount 20.50 stored as upi → 5000, got ${upiPlusDiscount.upi}`)
+
+  const cardPlusDiscount = sumAccountsMechanicalPaymentModeKpis({
+    cases: [isolatedCase],
+    lines: [
+      { reception_entry_id: 1, amount: 7500, payment_mode: 'card', payment_received_date: '2026-09-12', posted_at: '2026-09-12T12:02:00+05:30', reference: null },
+      { reception_entry_id: 1, amount: 15.25, payment_mode: 'card', payment_received_date: '2026-09-12', posted_at: '2026-09-12T12:03:00+05:30', reference: 'DISCOUNT' },
+    ],
+    range: day12,
+  })
+  assert(cardPlusDiscount.card === 7500, `4: Card 7500 + Discount → 7500, got ${cardPlusDiscount.card}`)
+
+  const all12 = sumAccountsMechanicalPaymentModeKpis({ cases, lines, range: day12, statusFilter: 'all' })
+
+  // Combined Cash receipts on 12 Sep (Discount 29.76 excluded)
+  assert(all12.cash === 10000 + 400 + 3000, `combined: Cash KPI actual receipts, got ${all12.cash}`)
+
+  // Combined: Cash Discount 29.76 excluded
+  assert(all12.cash !== 10000 + 400 + 3000 + 29.76, 'combined: Discount 29.76 cash must not enter Cash KPI')
+
+  // 3. UPI Discount 20.50 excluded
+  assert(all12.upi === 5000 + 2000, `3: UPI KPI excludes 20.50 Discount, got ${all12.upi}`)
+
+  // 4. Card Discount excluded
+  assert(all12.card === 7500, `4: Credit Card KPI excludes Discount, got ${all12.card}`)
+
+  // 5. Discount matching case-insensitive via existing helper
+  assert(isMechanicalDiscountPaymentLine({ reference: 'DISCOUNT' }), '5: DISCOUNT')
+  assert(isMechanicalDiscountPaymentLine({ reference: 'discount' }), '5: discount')
+  assert(isMechanicalDiscountPaymentLine({ reference: '  Discount  ' }), '5: padded mixed case')
+
+  // 6. Mark Done 10 Sep, cash received 12 Sep, Period 12 Sep → included
+  const doneOutside = sumAccountsMechanicalPaymentModeKpis({
+    cases: [done10],
+    lines,
+    range: day12,
+    statusFilter: 'all',
+  })
+  assert(doneOutside.cash === 10000, `6: Mark Done 10 Sep cash received 12 Sep included, got ${doneOutside.cash}`)
+
+  // 7. Mark Done 12 Sep, cash received 13 Sep, Period 12 Sep → excluded
+  const receiptOutside = sumAccountsMechanicalPaymentModeKpis({
+    cases: [done12],
+    lines,
+    range: day12,
+    statusFilter: 'all',
+  })
+  assert(receiptOutside.cash === 0, `7: Mark Done 12 Sep cash received 13 Sep excluded from 12 Sep, got ${receiptOutside.cash}`)
+  const receiptOn13 = sumAccountsMechanicalPaymentModeKpis({
+    cases: [done12],
+    lines,
+    range: day13,
+    statusFilter: 'all',
+  })
+  assert(receiptOn13.cash === 800, `7: same cash included on 13 Sep, got ${receiptOn13.cash}`)
+
+  // 8. NULL payment_received_date uses posted_at IST (2026-09-12T18:40:00.000Z = 13 Sep 00:10 IST)
+  assert(mechanicalPaymentReceivedDate(lines.find((l) => l.amount === 111)) === '2026-09-13', '8: 18:40Z is 13 Sep IST')
+  const legacy13 = sumAccountsMechanicalPaymentModeKpis({
+    cases: [done10],
+    lines: lines.filter((l) => l.amount === 111),
+    range: day13,
+    statusFilter: 'all',
+  })
+  assert(legacy13.cash === 111, `8: posted_at fallback counted on 13 Sep IST, got ${legacy13.cash}`)
+  const legacy12 = sumAccountsMechanicalPaymentModeKpis({
+    cases: [done10],
+    lines: lines.filter((l) => l.amount === 111),
+    range: day12,
+    statusFilter: 'all',
+  })
+  assert(legacy12.cash === 0, '8: posted_at 13 Sep IST excluded from 12 Sep')
+
+  // 9. Received status: pending cash 400 excluded
+  const received12 = sumAccountsMechanicalPaymentModeKpis({ cases, lines, range: day12, statusFilter: 'received' })
+  assert(received12.cash === 10000 + 3000, `9: Received excludes pending 400, got ${received12.cash}`)
+  assert(received12.upi === 5000 + 2000, `9: Received UPI, got ${received12.upi}`)
+  assert(received12.card === 7500, '9: Received card')
+
+  // 10. Pending status
+  const pendingOnly = sumAccountsMechanicalPaymentModeKpis({ cases, lines, range: day12, statusFilter: 'pending' })
+  assert(pendingOnly.cash === 400 && pendingOnly.upi === 0 && pendingOnly.card === 0, `10: Pending cash 400 only, got ${JSON.stringify(pendingOnly)}`)
+
+  // 11. Split Cash + UPI
+  const split = sumAccountsMechanicalPaymentModeKpis({
+    cases: [receivedSplit],
+    lines,
+    range: day12,
+    statusFilter: 'received',
+  })
+  assert(split.cash === 3000 && split.upi === 2000 && split.card === 0, `11: split independent, got ${JSON.stringify(split)}`)
+
+  // 12. Discount does not affect any of the three cards (other Discount 50, cash 29.76, upi 20.50, card 15)
+  assert(all12.cash === 10000 + 400 + 3000, '12: no Discount in Cash')
+  assert(all12.upi === 7000, '12: no Discount in UPI')
+  assert(all12.card === 7500, '12: no Discount in Card')
+  const allDates = sumAccountsMechanicalPaymentModeKpis({ cases, lines, range: allRange, statusFilter: 'all' })
+  assert(allDates.cash === all12.cash + 800 + 111, `12: All-date still excludes Discount, got ${allDates.cash}`)
+}
+
+console.log('verify_accounts_split_payment_drafts: payment-mode KPI Discount + Mark Done independence checks passed')
+
 
 // ---------------------------------------------------------------------------
 // DBL-0057 voucher export — keep aligned with src/lib/api/accounts.ts

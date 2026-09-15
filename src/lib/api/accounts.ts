@@ -493,14 +493,14 @@ export function sumAccountsPaymentModeTotals(
 
 type MechanicalPaymentModeKpiLine = Pick<
   AccountsMechanicalPayment,
-  'reception_entry_id' | 'amount' | 'payment_mode' | 'payment_received_date' | 'posted_at'
+  'reception_entry_id' | 'amount' | 'payment_mode' | 'payment_received_date' | 'posted_at' | 'reference'
 >
 
 /**
- * Cash / UPI / Credit Card monetary KPIs.
- * Cases: caller-supplied Mechanical set (already Mark Done / search / period).
- * Status: All / Pending / Received using the same case definition as the table.
- * Lines: those cases, with receipt date in range (`payment_received_date`, else IST `posted_at`).
+ * Cash / UPI / Credit Card monetary KPIs = actual money received in the selected Period.
+ * Receipt date: `payment_received_date`, else Asia/Kolkata `posted_at`. Not Mark Done / invoice_date.
+ * Cases: caller-supplied Mechanical set for status/search only — do not pre-filter by Mark Done date.
+ * Discount `reference` lines contribute ₹0 regardless of payment_mode.
  * Does not apply the Cash/UPI/Card table filter — clicking Cash must not zero UPI/Card.
  */
 export function sumAccountsMechanicalPaymentModeKpis<T extends { reception_entry_id: number; payment_status?: string | null }>(input: {
@@ -513,7 +513,7 @@ export function sumAccountsMechanicalPaymentModeKpis<T extends { reception_entry
   const ids = new Set(scoped.map((row) => row.reception_entry_id))
   return sumAccountsPaymentModeTotals(
     filterMechanicalPaymentLinesByReceiptDate(
-      input.lines.filter((line) => ids.has(line.reception_entry_id)),
+      input.lines.filter((line) => ids.has(line.reception_entry_id) && !isMechanicalDiscountPaymentLine(line)),
       input.range,
     ),
   )

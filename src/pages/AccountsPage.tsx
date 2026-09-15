@@ -283,16 +283,19 @@ export default function AccountsPage() {
     void checkAdmin()
   }, [])
 
-  const periodMech = useMemo(() => {
+  const searchedMechAllDates = useMemo(() => {
     const q = search.trim().toLowerCase()
-    let rows = filterAccountsCasesByViewDate(
-      mechRows,
+    if (!q) return mechRows
+    return mechRows.filter((r) => blobOf(r.jc_number, r.reg_number, r.invoice_number, r.owner_name, r.sa_name).includes(q))
+  }, [mechRows, search])
+
+  const periodMech = useMemo(() => {
+    return filterAccountsCasesByViewDate(
+      searchedMechAllDates,
       (r) => accountsMechanicalViewDateYmd(r.invoice_done_at),
       dateRange,
     )
-    if (!q) return rows
-    return rows.filter((r) => blobOf(r.jc_number, r.reg_number, r.invoice_number, r.owner_name, r.sa_name).includes(q))
-  }, [mechRows, dateRange, search])
+  }, [searchedMechAllDates, dateRange])
 
   const statusMech = useMemo(
     () => filterMechanicalCasesByPaymentStatus(periodMech, mechStatusFilter),
@@ -330,13 +333,13 @@ export default function AccountsPage() {
     const billed = periodMech.reduce((s, r) => s + Number(r.billed_amount ?? 0), 0)
     const remaining = periodMech.reduce((s, r) => s + Number(mechanicalRemaining(r) ?? 0), 0)
     const modes = sumAccountsMechanicalPaymentModeKpis({
-      cases: periodMech,
+      cases: searchedMechAllDates,
       lines: mechPayLines,
       range: dateRange,
       statusFilter: mechStatusFilter,
     })
     return { count: periodMech.length, pending, received, billed, remaining, ...modes }
-  }, [periodMech, mechPayLines, dateRange, mechStatusFilter])
+  }, [periodMech, searchedMechAllDates, mechPayLines, dateRange, mechStatusFilter])
 
   const mechReceivedByCase = useMemo(
     () => mechanicalActualReceivedAmountByCase(mechPayLines),

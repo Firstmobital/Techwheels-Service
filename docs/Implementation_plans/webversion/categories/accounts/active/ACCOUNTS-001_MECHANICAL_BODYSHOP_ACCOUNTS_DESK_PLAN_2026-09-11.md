@@ -138,7 +138,7 @@ Pattern: `src/pages/BodyshopRecoveryPage.tsx` (KPIs, search, table, Excel, on-pa
 
 - Tabs: Mechanical | Bodyshop
 - Search: JC / reg / invoice
-- Period chips on Mark Done date (mechanical) and invoice date (bodyshop). Cash / UPI / Credit Card **monetary** KPIs are receipt-line sums for Mark Done-period cases after the current Mechanical status (All / Pending / Received). A line counts when `payment_received_date` (else Asia/Kolkata `posted_at`) is in the selected period. Mark Done / `invoice_date` are not the receipt-date authority. Clicking Cash/UPI/Card filters the table only — it does not zero the other mode tiles.
+- Period chips on Mark Done date (mechanical table / count / billed / remaining) and invoice date (bodyshop). Cash / UPI / Credit Card **monetary** KPIs mean actual money received in the selected Period: `payment_received_date` (else Asia/Kolkata `posted_at`). Mark Done / `invoice_done_at` / `invoice_date` do not decide whether a receipt belongs to the Period. Status All / Pending / Received still scopes which cases contribute, using the search-filtered Mechanical set (not the Mark Done-period table). Discount `reference` lines contribute ₹0 regardless of stored `payment_mode`. Clicking Cash/UPI/Card filters the table only — it does not zero the other mode tiles.
 - Excel export per section. Mechanical export is receipt-line grain when payment lines exist (`voucher_no`, `account_name`, `Reference no`); Cash/UPI/Credit Card cards filter receipt lines, not header totals. Vouchers persist on `accounts_mechanical_payment_lines` (DBL-0057/0058). `account_name` prefers the exact BUSY Party Name for the invoice (`psf_revenue_dms` → `resolvePartyName`); unmatched invoices keep the Accounts owner/branch/VRN fallback.
 - **Busy Export** (Mechanical only) downloads `accounts-mechanical-busy-payments.xlsx`: Invoice date, voucher_no, Account DR, Account CR, Amount DR, Amount CR, Reference no. Cash/UPI/card receipt lines only. Account DR: `CASH AT SITAPURA` / `PAYTM WALLET` / `CREDIT CARD A/C`. Account CR is BUSY Party Name (same lookup as Excel `account_name`). cheque/bank/other are skipped with a warning. Pending cases without receipts are omitted. Column **Invoice date** is the payment voucher date: `payment_received_date` → Accounts `invoice_date` → unique DMS labour `invoice_date`. `posted_at` and Mark Done are not used. Voucher eligibility is separate: effective invoice date `>= 2026-09-02` (Accounts, else unique DMS labour).
 
@@ -147,7 +147,7 @@ Pattern: `src/pages/BodyshopRecoveryPage.tsx` (KPIs, search, table, Excel, on-pa
 - Columns: Mark Done at, JC, reg, model, service type, SA, branch, owner, invoice number, billed amount, **Received Amount** (sum of `accounts_mechanical_payment_lines` excluding `reference` Discount), remaining, payment status, notes
 - Capture / Payments modal: invoice number, date, billed amount, and invoice file (reuse unused SA `invoice_storage_path` upload). **Fetch from DMS** fills those fields when the JC has exactly one live DMS invoice; Accounts still taps Save. 0 or 2+ DMS rows shows “No unique DMS invoice”. Remaining stays billed minus receipts. Invoice header locks after the first receipt.
 - Receipts are append-only (`accounts_mechanical_payment_lines`): this amount + Payment mode (Cash/UPI/Card/Cheque/Bank/Other) + Payment received date + reference. `payment_received_date` is the business date (Asia/Kolkata); `posted_at` remains the system insert timestamp. Voucher series apply when the **effective invoice date** `>= 2026-09-02`: Accounts `invoice_date` when present, otherwise the unique live DMS labour `invoice_date` for the JC (DBL-0060; does not use `payment_received_date` / Mark Done). Cash gets `RApp/26-27/nnnn`; UPI+Card share `JApp/26-27/nnnn`. cheque/bank/other stay null. Existing voucher numbers are not recalculated. History shows Received Date. Payment status is automatic from billed vs sum(receipts). Mechanical Gatepass is eligible when remaining ≤ 0, remaining ≤ 2% of billed, or persisted Keep on Credit is true. Financial remaining and `payment_status` are not rewritten for the 2% rule or Keep on Credit. Receipts may exceed remaining; the posted line keeps the entered amount. Create Gatepass goes through `issue_accounts_mechanical_gatepass`.
-- KPI: Mark Done count, invoice-pending count, billed sum, customer remaining / received. Cash / UPI / Credit Card money is receipt-line grain on that Mark Done case set after the status filter, dated by `payment_received_date` (IST `posted_at` fallback).
+- KPI: Mark Done count, invoice-pending count, billed sum, customer remaining / received still follow Mark Done Period. Cash / UPI / Credit Card money is actual receipt-line grain dated by `payment_received_date` (IST `posted_at` fallback), after status + Search, excluding Discount `reference`. Mark Done date does not restrict those three cards.
 
 **Bodyshop desk**
 
@@ -176,7 +176,7 @@ Pattern: `src/pages/BodyshopRecoveryPage.tsx` (KPIs, search, table, Excel, on-pa
 - [x] **Task 3.4:** Accounts page — Bodyshop customer-diff desk + Excel.
 - [x] **Task 3.5:** Mechanical Capture **Fetch from DMS** (form fill only; DBL-0048). No remaining write. No bulk list fill.
 - [x] **Task 3.10:** Mechanical Gatepass 2% short-payment, Keep on Credit, exact overpayment, trusted issue RPC (DBL-0061).
-- [x] **Task 3.11:** Mechanical Cash / UPI / Credit Card KPIs use status filter + `payment_received_date` (IST `posted_at` fallback). Mark Done case period unchanged.
+- [x] **Task 3.11:** Mechanical Cash / UPI / Credit Card KPIs use status filter + `payment_received_date` (IST `posted_at` fallback). Exclude Discount `reference`. Receipt Period is independent of Mark Done table period.
 
 ### Phase 4: Closeout
 - [x] **Task 4.1:** MODULE_ROUTE_CONTRACT (grant Accounts users after SQL apply).
@@ -220,7 +220,7 @@ Pattern: `src/pages/BodyshopRecoveryPage.tsx` (KPIs, search, table, Excel, on-pa
 ✅ 3.8 | Voucher eligibility invoice_date | Eng | 2026-09-14 | 2026-09-14 | DBL-0058 APPLIED; cutoff 2026-09-02
 ✅ 3.9 | Recalculate vouchers from 2-Sep | Eng | 2026-09-14 | 2026-09-14 | DBL-0059 APPLIED; RApp 22 / JApp 78
 ✅ 3.10 | Mechanical Gatepass 2% / credit / overpay | Eng | 2026-09-15 | 2026-09-15 | DBL-0061 APPLIED
-✅ 3.11 | Mechanical payment-mode KPI receipt-date + status | Eng | 2026-09-15 | 2026-09-15 | Client helper; no schema
+✅ 3.11 | Mechanical payment-mode KPI receipt-date + Discount exclusion | Eng | 2026-09-15 | 2026-09-15 | Client helper; no schema
 ⏳ 3.5 | Capture Fetch from DMS | Eng | 2026-09-11 | 2026-09-11 | DBL-0048 applied; web button pending deploy
 ```
 
@@ -303,9 +303,10 @@ Pattern: `src/pages/BodyshopRecoveryPage.tsx` (KPIs, search, table, Excel, on-pa
 
 ### 2026-09-15 - Mechanical Cash/UPI/Credit Card KPI scope
 
-- Case list period stays Mark Done (`invoice_done_at`, Asia/Kolkata).
-- Cash / UPI / Credit Card tiles sum receipt lines for status-scoped cases (`all` / `pending` / `received`). `partial` is not Received and not Pending.
-- Receipt date is `payment_received_date`, else Asia/Kolkata calendar date of `posted_at`. Not `invoice_done_at` / `invoice_date`.
+- Case list / count / billed / remaining period stays Mark Done (`invoice_done_at`, Asia/Kolkata).
+- Cash / UPI / Credit Card tiles mean actual money received in the selected Period. Receipt date is `payment_received_date`, else Asia/Kolkata calendar date of `posted_at`. Not `invoice_done_at` / Mark Done / `invoice_date`.
+- Status `all` / `pending` / `received` still scopes contributing cases (`partial` is neither Received nor Pending). Status uses the search-filtered Mechanical set, not the Mark Done-period table. Search still applies.
+- Discount `reference` (trim + case-insensitive `discount`, live `DISCOUNT`) contributes ₹0 to all three cards regardless of stored `payment_mode`. Same detector as table Received Amount (`isMechanicalDiscountPaymentLine`). Genuine `other` is not reclassified onto the cards.
 - Mode tiles are not inputs to the other mode totals (clicking Cash does not clear UPI/Card).
 - Helper: `sumAccountsMechanicalPaymentModeKpis` in `src/lib/api/accounts.ts`. Checks: `scripts/verify_accounts_split_payment_drafts.mjs`.
 
