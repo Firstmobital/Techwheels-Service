@@ -108,35 +108,50 @@ export function EstimateMasterModal({ isOpen, onClose }: EstimateMasterModalProp
 
   const filteredItems = useMemo(() => {
     const q = search.trim().toLowerCase()
+    const tokens = q ? q.split(/\s+/).filter(Boolean) : []
     const selModel = selectedModel.trim().toLowerCase()
     const selFuel = selectedFuel.trim().toLowerCase()
     const selType = selectedServiceType.trim().toLowerCase()
 
     return items.filter((item) => {
-      if (selModel !== 'all') {
+      // Model match
+      if (selModel !== 'all' && selModel) {
         const itemModel = (item.model || '').trim().toLowerCase()
-        if (itemModel !== selModel && !itemModel.includes(selModel)) {
-          return false
+        if (itemModel && itemModel !== 'all') {
+          const models = itemModel.split(/[\/,|+]/).map((m) => m.trim())
+          if (itemModel !== selModel && !models.includes(selModel) && !itemModel.includes(selModel)) {
+            return false
+          }
         }
       }
 
-      if (selFuel !== 'all') {
+      // Fuel match
+      if (selFuel !== 'all' && selFuel) {
         const itemFuel = (item.fuel || '').trim().toLowerCase()
-        if (itemFuel !== selFuel && !itemFuel.includes(selFuel)) {
-          return false
+        if (itemFuel && itemFuel !== 'all') {
+          const fuels = itemFuel.split(/[\/,|+]/).map((f) => f.trim())
+          if (itemFuel !== selFuel && !fuels.includes(selFuel)) {
+            return false
+          }
         }
       }
 
-      if (selType !== 'all') {
+      // Service Type match
+      if (selType !== 'all' && selType) {
         const itemType = (item.service_type || '').trim().toLowerCase()
-        if (itemType !== selType && !itemType.includes(selType)) {
-          return false
+        if (itemType && itemType !== 'all') {
+          const normItem = itemType.replace(/\s+/g, '')
+          const normSel = selType.replace(/\s+/g, '')
+          if (itemType !== selType && normItem !== normSel && !itemType.includes(selType) && !normItem.includes(normSel)) {
+            return false
+          }
         }
       }
 
-      if (q) {
+      // Multi-word search
+      if (tokens.length > 0) {
         const combined = `${item.service_name || ''} ${item.model || ''} ${item.fuel || ''} ${item.service_type || ''} ${item.id || ''} ${item.price || ''} ${item.labour || ''}`.toLowerCase()
-        if (!combined.includes(q)) {
+        if (!tokens.every((token) => combined.includes(token))) {
           return false
         }
       }

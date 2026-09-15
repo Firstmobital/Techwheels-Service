@@ -545,39 +545,50 @@ export default function SettingsPage() {
 
   const filteredPricingItems = useMemo(() => {
     const q = estSearch.trim().toLowerCase()
+    const tokens = q ? q.split(/\s+/).filter(Boolean) : []
     const selModel = estModelFilter.trim().toLowerCase()
     const selFuel = estFuelFilter.trim().toLowerCase()
     const selType = estServiceTypeFilter.trim().toLowerCase()
 
     return estimatePricingList.filter((item) => {
-      // Model match (case-insensitive & trimmed)
-      if (selModel !== 'all') {
+      // Model match
+      if (selModel !== 'all' && selModel) {
         const itemModel = (item.model || '').trim().toLowerCase()
-        if (itemModel !== selModel && !itemModel.includes(selModel)) {
-          return false
+        if (itemModel && itemModel !== 'all') {
+          const models = itemModel.split(/[\/,|+]/).map((m) => m.trim())
+          if (itemModel !== selModel && !models.includes(selModel) && !itemModel.includes(selModel)) {
+            return false
+          }
         }
       }
 
-      // Fuel match (case-insensitive & trimmed)
-      if (selFuel !== 'all') {
+      // Fuel match (Strict & handles compound fuels like Petrol/CNG)
+      if (selFuel !== 'all' && selFuel) {
         const itemFuel = (item.fuel || '').trim().toLowerCase()
-        if (itemFuel !== selFuel && !itemFuel.includes(selFuel)) {
-          return false
+        if (itemFuel && itemFuel !== 'all') {
+          const fuels = itemFuel.split(/[\/,|+]/).map((f) => f.trim())
+          if (itemFuel !== selFuel && !fuels.includes(selFuel)) {
+            return false
+          }
         }
       }
 
-      // Service Type match (case-insensitive & trimmed)
-      if (selType !== 'all') {
+      // Service Type match (Normalizes spaces)
+      if (selType !== 'all' && selType) {
         const itemType = (item.service_type || '').trim().toLowerCase()
-        if (itemType !== selType && !itemType.includes(selType)) {
-          return false
+        if (itemType && itemType !== 'all') {
+          const normItem = itemType.replace(/\s+/g, '')
+          const normSel = selType.replace(/\s+/g, '')
+          if (itemType !== selType && normItem !== normSel && !itemType.includes(selType) && !normItem.includes(normSel)) {
+            return false
+          }
         }
       }
 
-      // Search across all fields: service_name, model, fuel, service_type, id, price, labour
-      if (q) {
+      // Multi-word search across all fields
+      if (tokens.length > 0) {
         const combined = `${item.service_name || ''} ${item.model || ''} ${item.fuel || ''} ${item.service_type || ''} ${item.id || ''} ${item.price || ''} ${item.labour || ''}`.toLowerCase()
-        if (!combined.includes(q)) {
+        if (!tokens.every((token) => combined.includes(token))) {
           return false
         }
       }

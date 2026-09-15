@@ -11,7 +11,7 @@ export interface PartPricingItem {
   labour: number
 }
 
-const STORAGE_KEY = 'techwheels_custom_parts_pricing'
+const STORAGE_KEY = 'techwheels_custom_parts_pricing_v3'
 
 function loadInitialPricing(): PartPricingItem[] {
   if (typeof window !== 'undefined') {
@@ -19,7 +19,7 @@ function loadInitialPricing(): PartPricingItem[] {
       const stored = localStorage.getItem(STORAGE_KEY)
       if (stored) {
         const parsed = JSON.parse(stored)
-        if (Array.isArray(parsed) && parsed.length > 0) {
+        if (Array.isArray(parsed) && parsed.length >= (partsPricingData as PartPricingItem[]).length) {
           return parsed as PartPricingItem[]
         }
       }

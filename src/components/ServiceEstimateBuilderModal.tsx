@@ -112,13 +112,42 @@ export function ServiceEstimateBuilderModal({
 
   // Filter catalogue items
   const filteredCatalogue = ALL_PARTS_PRICING.filter((item: PartPricingItem) => {
-    const matchSearch =
-      !searchQuery ||
-      item.service_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      item.service_type.toLowerCase().includes(searchQuery.toLowerCase())
-    const matchModel = modelFilter === 'All' || item.model.toLowerCase() === modelFilter.toLowerCase()
-    const matchFuel = fuelFilter === 'All' || item.fuel.toLowerCase() === fuelFilter.toLowerCase()
-    return matchSearch && matchModel && matchFuel
+    const q = searchQuery.trim().toLowerCase()
+    const tokens = q ? q.split(/\s+/).filter(Boolean) : []
+    const selModel = modelFilter.trim().toLowerCase()
+    const selFuel = fuelFilter.trim().toLowerCase()
+
+    // Model match
+    if (selModel !== 'all' && selModel) {
+      const itemModel = (item.model || '').trim().toLowerCase()
+      if (itemModel && itemModel !== 'all') {
+        const models = itemModel.split(/[\/,|+]/).map((m) => m.trim())
+        if (itemModel !== selModel && !models.includes(selModel) && !itemModel.includes(selModel)) {
+          return false
+        }
+      }
+    }
+
+    // Fuel match
+    if (selFuel !== 'all' && selFuel) {
+      const itemFuel = (item.fuel || '').trim().toLowerCase()
+      if (itemFuel && itemFuel !== 'all') {
+        const fuels = itemFuel.split(/[\/,|+]/).map((f) => f.trim())
+        if (itemFuel !== selFuel && !fuels.includes(selFuel)) {
+          return false
+        }
+      }
+    }
+
+    // Search query
+    if (tokens.length > 0) {
+      const text = `${item.service_name || ''} ${item.service_type || ''} ${item.model || ''} ${item.fuel || ''}`.toLowerCase()
+      if (!tokens.every((token) => text.includes(token))) {
+        return false
+      }
+    }
+
+    return true
   }).slice(0, 30)
 
   function handleAddPart(item: PartPricingItem) {
