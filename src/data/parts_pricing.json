@@ -4645,7 +4645,7 @@
   },
   {
     "id": 481,
-    "service_type": "PaidService",
+    "service_type": "Paid Service",
     "model": "Nexon",
     "fuel": "CNG",
     "service_name": "Sunroof Greece",

@@ -138,14 +138,14 @@ export function EstimateMasterModal({ isOpen, onClose }: EstimateMasterModalProp
         }
       }
 
-      // 3. Service Type match (Strict & space-insensitive)
+      // 3. Service Type match (Exact & space-insensitive)
       if (selType !== 'all' && selType) {
         const itemType = (item.service_type || '').trim().toLowerCase()
         if (!itemType) return false
-        if (itemType !== 'all' && itemType !== selType) {
+        if (itemType !== 'all') {
           const normItem = itemType.replace(/\s+/g, '')
           const normSel = selType.replace(/\s+/g, '')
-          if (normItem !== normSel && !itemType.includes(selType) && !normItem.includes(normSel)) {
+          if (normItem !== normSel) {
             return false
           }
         }
