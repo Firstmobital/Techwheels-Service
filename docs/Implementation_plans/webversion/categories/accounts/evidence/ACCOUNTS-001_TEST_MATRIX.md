@@ -2,7 +2,7 @@
 
 **Plan:** ACCOUNTS-001  
 **Created:** 2026-09-11  
-**Status:** Ready after DBL-0061 apply (2026-09-15)
+**Status:** Ready after DBL-0066 apply (2026-09-15)
 
 ## SQL Editor
 
@@ -34,11 +34,16 @@
 - [ ] **Busy Export** (Mechanical): headers Invoice date, voucher_no, Account DR, Account CR, Amount DR, Amount CR, Reference no; cash DR `CASH AT SITAPURA`; UPI `PAYTM WALLET`; card `CREDIT CARD A/C`; Account CR for `IMBTAI2627007397` is `JAGDISH NARAYAN YADAV-SITAPURA RJ45CV5192`; split Cash+UPI is two rows; cheque/bank/other skipped; pending without receipts omitted; Export Excel unchanged
 - [ ] **Busy Export** Invoice date is `payment_received_date` when present (even if Accounts `invoice_date` differs); otherwise Accounts `invoice_date`; otherwise unique DMS labour `invoice_date`; blank dates are skipped/warned, not exported. Split receipts with different received dates keep their own date. `voucher_no` is persisted only. Amount DR = Amount CR. Eligibility remains `invoice_date >= 2026-09-02`.
 - [ ] Overpayment posts the entered amount (₹3,700 vs remaining ₹3,680 stays ₹3,700). Remaining display floors at ₹0; `payment_status` becomes received. Busy Export Amount DR/CR = ₹3,700.
-- [ ] Remaining ₹150 of billed ₹10,000: `payment_status` stays partial; Gatepass eligible (2%).
-- [ ] Remaining ₹300 of billed ₹10,000: Gatepass disabled unless Keep on Credit.
-- [ ] Keep on Credit requires Admin, GM, or module `accounts_keep_on_credit`. Unauthorized RPC is denied. Remaining and status unchanged.
-- [ ] `issue_accounts_mechanical_gatepass` rejects remaining > 2% without persisted Keep on Credit (no client eligible flag).
-- [ ] Reload after Keep on Credit still shows approved_by / approved_at.
+- [ ] Remaining ₹150 of billed ₹10,000: `payment_status` stays partial; Gatepass eligible (2%); wording "Gatepass allowed — short amount within 2% tolerance". No fake payment/discount line.
+- [ ] Remaining ₹199 / ₹200 of billed ₹10,000: Gatepass eligible. Remaining ₹201 / ₹200.01: Gatepass denied unless valid Keep on Credit.
+- [ ] Remaining ₹300 of billed ₹10,000: Gatepass disabled unless valid Keep on Credit.
+- [ ] Keep on Credit requires Admin, GM, or module `accounts_keep_on_credit` (View or Modify). Not `accounts.can_modify`. Unauthorized RPC is denied. Remaining and status unchanged.
+- [ ] Approve Keep on Credit with blank reason is rejected (UI + RPC `23514`). Checking the box alone does not enable Gatepass.
+- [ ] Valid reason persists `keep_on_credit_reason`, `keep_on_credit_approved_by` (authenticated actor), `keep_on_credit_approved_at` (server timestamp). Reload/reopen still shows them.
+- [ ] Non-GM user with Admin grant of `accounts_keep_on_credit` can approve; reason/actor/time persist.
+- [ ] `issue_accounts_mechanical_gatepass` rejects remaining > 2% without valid Keep on Credit (no client eligible flag). Direct RPC bypass fails.
+- [ ] Authorized revoke sets `keep_on_credit=false`, records `keep_on_credit_revoked_by` / `keep_on_credit_revoked_at`, preserves original reason/approver. Gatepass immediately ineligible if remaining > 2%.
+- [ ] Keep on Credit checkbox is not freely usable; unauthorized users see the audit when present but cannot approve or revoke.
 - [ ] Cash / UPI / Credit Card KPIs follow Received/Pending/All; Period is receipt date (`payment_received_date`, IST `posted_at` fallback), not Mark Done. A 10-Sep Mark Done case with cash received 12-Sep is included in 12-Sep Cash. A 12-Sep Mark Done case with cash received 13-Sep is omitted from 12-Sep Cash.
 - [ ] Discount `reference` (`DISCOUNT` / `discount`) contributes ₹0 to Cash/UPI/Card even when stored payment_mode is cash/upi/card. Cash ₹10,000 + Discount ₹29.76 cash → Cash KPI ₹10,000.
 - [ ] Received + Cash KPI equals in-range actual cash on Received cases (13-Sep live: ₹10,300 not ₹16,900)

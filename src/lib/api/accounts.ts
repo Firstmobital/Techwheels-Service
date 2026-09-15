@@ -55,8 +55,11 @@ export interface AccountsMechanicalCase {
   invoice_file_name: string | null
   invoice_drive_url: string | null
   keep_on_credit?: boolean | null
+  keep_on_credit_reason?: string | null
   keep_on_credit_approved_by?: string | null
   keep_on_credit_approved_at?: string | null
+  keep_on_credit_revoked_by?: string | null
+  keep_on_credit_revoked_at?: string | null
   gatepass_reason?: MechanicalGatepassReason | null
 }
 
@@ -187,10 +190,12 @@ export async function addAccountsMechanicalPayment(input: {
 export async function setAccountsMechanicalKeepOnCredit(
   receptionEntryId: number,
   keepOnCredit: boolean,
+  reason?: string | null,
 ): Promise<AccountsMechanicalCase> {
   const { data, error } = await supabase.rpc('set_accounts_mechanical_keep_on_credit', {
     p_reception_entry_id: receptionEntryId,
     p_keep_on_credit: keepOnCredit,
+    p_reason: reason ?? null,
   })
   if (error) throw new Error(settlementRpcError(error))
   return data as AccountsMechanicalCase
@@ -405,8 +410,22 @@ export function mechanicalShortPaymentAllowance(billed: number | null | undefine
   return roundAccountsMoney(Number(billed) * 0.02)
 }
 
+export type MechanicalKeepOnCreditFields = Pick<
+  AccountsMechanicalCase,
+  'keep_on_credit' | 'keep_on_credit_reason' | 'keep_on_credit_approved_by' | 'keep_on_credit_approved_at'
+>
+
+export function isMechanicalKeepOnCreditValid(row: MechanicalKeepOnCreditFields): boolean {
+  return Boolean(
+    row.keep_on_credit
+    && String(row.keep_on_credit_reason ?? '').trim()
+    && String(row.keep_on_credit_approved_by ?? '').trim()
+    && row.keep_on_credit_approved_at,
+  )
+}
+
 export function mechanicalGatepassEligibility(
-  row: Pick<AccountsMechanicalCase, 'billed_amount' | 'amount_received' | 'keep_on_credit'>,
+  row: Pick<AccountsMechanicalCase, 'billed_amount' | 'amount_received'> & MechanicalKeepOnCreditFields,
 ): { eligible: boolean; reason: MechanicalGatepassReason | null; remaining: number | null } {
   const billed = row.billed_amount == null ? null : Number(row.billed_amount)
   if (billed == null || !Number.isFinite(billed)) {
@@ -418,12 +437,12 @@ export function mechanicalGatepassEligibility(
   if (allowance != null && remaining <= allowance) {
     return { eligible: true, reason: 'short_payment', remaining }
   }
-  if (row.keep_on_credit) return { eligible: true, reason: 'keep_on_credit', remaining }
+  if (isMechanicalKeepOnCreditValid(row)) return { eligible: true, reason: 'keep_on_credit', remaining }
   return { eligible: false, reason: null, remaining }
 }
 
 export function isMechanicalGatepassEligible(
-  row: Pick<AccountsMechanicalCase, 'billed_amount' | 'amount_received' | 'keep_on_credit'>,
+  row: Pick<AccountsMechanicalCase, 'billed_amount' | 'amount_received'> & MechanicalKeepOnCreditFields,
 ): boolean {
   return mechanicalGatepassEligibility(row).eligible
 }
@@ -432,6 +451,13 @@ export function mechanicalGatepassReasonLabel(reason: MechanicalGatepassReason |
   if (reason === 'paid') return 'Paid'
   if (reason === 'short_payment') return 'Short payment allowed'
   if (reason === 'keep_on_credit') return 'Released on credit'
+  return ''
+}
+
+export function mechanicalGatepassReasonDetail(reason: MechanicalGatepassReason | null | undefined): string {
+  if (reason === 'paid') return 'Payment received'
+  if (reason === 'short_payment') return 'Gatepass allowed — short amount within 2% tolerance'
+  if (reason === 'keep_on_credit') return 'Gatepass allowed — kept on credit'
   return ''
 }
 
@@ -1037,6 +1063,13 @@ export function openBodyshopGatepass(row: AccountsBodyshopCase): void {
 
 function mechanicalGatepassHtml(row: AccountsMechanicalCase): string {
   const printed = new Date().toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'Asia/Kolkata' })
+  const gatepass = mechanicalGatepassEligibility(row)
+  const clearance = mechanicalGatepassReasonDetail(gatepass.reason) || mechanicalGatepassReasonLabel(gatepass.reason) || 'Not eligible'
+  const creditRows = gatepass.reason === 'keep_on_credit'
+    ? `<tr><th>Keep on Credit reason</th><td>${escapeHtml(row.keep_on_credit_reason)}</td></tr>
+    <tr><th>Approved by</th><td>${escapeHtml(row.keep_on_credit_approved_by)}</td></tr>
+    <tr><th>Approved at</th><td>${escapeHtml(row.keep_on_credit_approved_at)}</td></tr>`
+    : ''
   return `<!doctype html>
 <html>
 <head>
@@ -1073,7 +1106,8 @@ function mechanicalGatepassHtml(row: AccountsMechanicalCase): string {
     <tr><th>Amount received</th><td>${escapeHtml(gatepassMoney(row.amount_received))}</td></tr>
     <tr><th>Remaining</th><td>${escapeHtml(gatepassMoney(mechanicalRemaining(row)))}</td></tr>
     <tr><th>Payment status</th><td>${escapeHtml(row.payment_status || 'pending')}</td></tr>
-    <tr><th>Gatepass clearance</th><td>${escapeHtml(mechanicalGatepassReasonLabel(mechanicalGatepassEligibility(row).reason) || 'Not eligible')}</td></tr>
+    <tr><th>Gatepass clearance</th><td>${escapeHtml(clearance)}</td></tr>
+    ${creditRows}
   </table>
   <div class="signs">
     <div>Accounts</div>

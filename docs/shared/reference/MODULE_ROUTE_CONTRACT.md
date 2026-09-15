@@ -2,7 +2,7 @@
 
 **Document ID:** MODULE-ROUTE-001  
 **Version:** 1.0  
-**Last Updated:** 2026-09-11  
+**Last Updated:** 2026-09-15  
 **Owner:** Techwheels Dev Team + GitHub Copilot  
 
 ---
@@ -37,6 +37,7 @@ This document defines the authoritative mapping between database modules and fro
 | — | `bodyshop_recovery` | `/bodyshop-recovery` | `/bodyshop-recovery` | BodyshopRecoveryPage | Active | DO / insurance-due book. Org-wide. More + Post Payment (Stage 18 DO) on-page. |
 | — | `busy` | `/busy` | `/busy` | BusyAccountingPage | Active | BUSY Party Account + Invoice Voucher export from `psf_revenue_dms` + persisted `busy_parts`. |
 | — | `accounts` | `/accounts` | `/accounts` | AccountsPage | Active | Mechanical Mark Done invoice capture from 11-Sep-2026 + Bodyshop Stage 18 settlement receipts (DO/insurance and customer-diff on `bodyshop_settlement_lines`). Not BUSY. Recovery remains the insurance-due follow-up book. |
+| — | `accounts_keep_on_credit` | *(none)* | *(No frontend page)* | N/A | Active | Capability-only Admin → Permissions grant for Mechanical Keep on Credit. Not a nav/route module. Platform `is_admin()` and linked active GM also qualify. Not `accounts.can_modify`. Desk access still requires module `accounts`. |
 
 **Legend:**
 - **Module Name**: Authoritative name from `public.modules.name`

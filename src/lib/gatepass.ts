@@ -14,6 +14,9 @@ export interface IssuedGatePassRecord {
   payment_status: string
   settlement_reason?: string | null
   keep_on_credit?: boolean
+  keep_on_credit_reason?: string | null
+  keep_on_credit_approved_by?: string | null
+  keep_on_credit_approved_at?: string | null
   issued_at: string
   issued_by: string
   branch?: string | null

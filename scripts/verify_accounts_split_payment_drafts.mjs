@@ -78,8 +78,28 @@ function mechanicalGatepassEligibility(row) {
   if (remaining <= 0) return { eligible: true, reason: 'paid', remaining }
   const allowance = roundAccountsMoney(billed * 0.02)
   if (remaining <= allowance) return { eligible: true, reason: 'short_payment', remaining }
-  if (row.keep_on_credit) return { eligible: true, reason: 'keep_on_credit', remaining }
+  const creditValid = Boolean(
+    row.keep_on_credit
+    && String(row.keep_on_credit_reason ?? '').trim()
+    && String(row.keep_on_credit_approved_by ?? '').trim()
+    && row.keep_on_credit_approved_at,
+  )
+  if (creditValid) return { eligible: true, reason: 'keep_on_credit', remaining }
   return { eligible: false, reason: null, remaining }
+}
+
+function mechanicalGatepassReasonLabel(reason) {
+  if (reason === 'paid') return 'Paid'
+  if (reason === 'short_payment') return 'Short payment allowed'
+  if (reason === 'keep_on_credit') return 'Released on credit'
+  return ''
+}
+
+function mechanicalGatepassReasonDetail(reason) {
+  if (reason === 'paid') return 'Payment received'
+  if (reason === 'short_payment') return 'Gatepass allowed — short amount within 2% tolerance'
+  if (reason === 'keep_on_credit') return 'Gatepass allowed — kept on credit'
+  return ''
 }
 
 function isCustomerPaymentClosed(row) {
@@ -1941,10 +1961,13 @@ function buildMechanicalBusyPaymentExportRows({
   // A. Full payment
   const a = mechanicalGatepassEligibility({ billed_amount: 10000, amount_received: 10000, keep_on_credit: false })
   assert(a.eligible && a.reason === 'paid' && a.remaining === 0, 'A: full payment eligible as paid')
+  assert(mechanicalGatepassReasonDetail(a.reason) === 'Payment received', 'A: paid wording is Payment received')
+  assert(mechanicalGatepassReasonLabel(a.reason) === 'Paid', 'A: compact label Paid')
 
   // B. 1.99% short → allowed
   const b = mechanicalGatepassEligibility({ billed_amount: 10000, amount_received: 9801, keep_on_credit: false })
   assert(b.eligible && b.reason === 'short_payment' && b.remaining === 199, `B: 1.99% short allowed, got ${JSON.stringify(b)}`)
+  assert(mechanicalGatepassReasonDetail(b.reason) === 'Gatepass allowed — short amount within 2% tolerance', 'B: 2% wording')
 
   // C. exactly 2.00% short → allowed
   const c = mechanicalGatepassEligibility({ billed_amount: 10000, amount_received: 9800, keep_on_credit: false })
@@ -1953,17 +1976,54 @@ function buildMechanicalBusyPaymentExportRows({
   // D. >2.00% short → denied
   const d = mechanicalGatepassEligibility({ billed_amount: 10000, amount_received: 9799.99, keep_on_credit: false })
   assert(!d.eligible && d.reason == null && d.remaining === 200.01, `D: 200.01 denied, got ${JSON.stringify(d)}`)
+  const d201 = mechanicalGatepassEligibility({ billed_amount: 10000, amount_received: 9799, keep_on_credit: false })
+  assert(!d201.eligible && d201.remaining === 201, `D: remaining 201 denied, got ${JSON.stringify(d201)}`)
   const d300 = mechanicalGatepassEligibility({ billed_amount: 10000, amount_received: 9700, keep_on_credit: false })
   assert(!d300.eligible && d300.remaining === 300, 'D2: remaining 300 denied without credit')
 
-  // E. >2% + Keep on Credit → allowed; remaining and financial status stay unpaid/partial
-  const e = mechanicalGatepassEligibility({ billed_amount: 10000, amount_received: 7000, keep_on_credit: true })
-  assert(e.eligible && e.reason === 'keep_on_credit' && e.remaining === 3000, `E: credit allows remaining 3000, got ${JSON.stringify(e)}`)
+  // E/F. Keep on Credit flag alone is not valid; complete audit is
+  const incomplete = mechanicalGatepassEligibility({
+    billed_amount: 10000,
+    amount_received: 9700,
+    keep_on_credit: true,
+  })
+  assert(!incomplete.eligible, 'E: keep_on_credit true without reason/approver/time is not eligible')
+  const blankReason = mechanicalGatepassEligibility({
+    billed_amount: 10000,
+    amount_received: 9700,
+    keep_on_credit: true,
+    keep_on_credit_reason: '   ',
+    keep_on_credit_approved_by: 'GM',
+    keep_on_credit_approved_at: '2026-09-15T09:54:00+05:30',
+  })
+  assert(!blankReason.eligible, 'F: blank reason is not valid Keep on Credit')
+  const validCredit = mechanicalGatepassEligibility({
+    billed_amount: 10000,
+    amount_received: 7000,
+    keep_on_credit: true,
+    keep_on_credit_reason: 'Insurance payment pending',
+    keep_on_credit_approved_by: 'GM User',
+    keep_on_credit_approved_at: '2026-09-15T09:54:00+05:30',
+  })
+  assert(validCredit.eligible && validCredit.reason === 'keep_on_credit' && validCredit.remaining === 3000, `F: valid credit allows remaining 3000, got ${JSON.stringify(validCredit)}`)
+  assert(mechanicalGatepassReasonDetail(validCredit.reason) === 'Gatepass allowed — kept on credit', 'F: credit wording')
+  assert(mechanicalGatepassReasonLabel(validCredit.reason) === 'Released on credit', 'F: compact credit label')
 
-  // F/G unauthorized credit / direct Gatepass without override are server-enforced.
-  // Client eligibility still denies when keep_on_credit is false.
-  const f = mechanicalGatepassEligibility({ billed_amount: 10000, amount_received: 9700, keep_on_credit: false })
-  assert(!f.eligible, 'F/G client: unauthorized credit flag false is not eligible')
+  // G. Explicit grant / unauthorized RPC are server-enforced.
+  // Client eligibility still denies when Keep on Credit is not persisted as valid.
+  const unauthorizedFlag = mechanicalGatepassEligibility({ billed_amount: 10000, amount_received: 9700, keep_on_credit: false })
+  assert(!unauthorizedFlag.eligible, 'G client: unauthorized credit flag false is not eligible')
+
+  // L. Revocation: flag false even if reason/approver remain
+  const revoked = mechanicalGatepassEligibility({
+    billed_amount: 10000,
+    amount_received: 9700,
+    keep_on_credit: false,
+    keep_on_credit_reason: 'Insurance payment pending',
+    keep_on_credit_approved_by: 'GM User',
+    keep_on_credit_approved_at: '2026-09-15T09:54:00+05:30',
+  })
+  assert(!revoked.eligible && revoked.remaining === 300, 'L: revoked credit is not Gatepass eligible')
 
   // H/I. payment greater than remaining: entered amount kept; remaining floors; status received
   const over = { billed_amount: 3680, amount_received: 3700, keep_on_credit: false }
@@ -2006,8 +2066,10 @@ function buildMechanicalBusyPaymentExportRows({
   })
   assert(busyOver.rows.length === 1, `BUSY overpay row count ${busyOver.rows.length}`)
   assert(busyOver.rows[0]['Amount DR'] === 3700 && busyOver.rows[0]['Amount CR'] === 3700, `BUSY overpay must export 3700, got ${busyOver.rows[0]['Amount DR']}`)
+  assert(busyOver.rows[0]['Account DR'] === 'PAYTM WALLET', 'BUSY overpay UPI uses PAYTM WALLET')
+  assert(!busyOver.rows.some((r) => r['Amount DR'] === 150 || r['Amount DR'] === 300), 'BUSY must not invent a short-payment or credit line')
 
-  console.log('verify_accounts_split_payment_drafts: Gatepass 2%/credit/overpay checks A–K passed')
+  console.log('verify_accounts_split_payment_drafts: Gatepass 2%/credit/overpay checks A–L passed')
 }
 
 // ---------------------------------------------------------------------------

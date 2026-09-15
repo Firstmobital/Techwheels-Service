@@ -19,6 +19,7 @@ import {
   isAccountsStatusReceived,
   isCustomerPaymentClosed,
   isMechanicalGatepassEligible,
+  isMechanicalKeepOnCreditValid,
   isMechanicalPaymentClosed,
   listAccountsBodyshopCases,
   listAccountsMechanicalCases,
@@ -27,6 +28,7 @@ import {
   lookupAccountsMechanicalDmsInvoice,
   mechanicalDraftRowRemaining,
   mechanicalGatepassEligibility,
+  mechanicalGatepassReasonDetail,
   mechanicalGatepassReasonLabel,
   mechanicalInvoiceAmountPrefill,
   asiaKolkataTodayDate,
@@ -219,6 +221,8 @@ export default function AccountsPage() {
   const [isAdmin, setIsAdmin] = useState(false)
   const [canKeepOnCredit, setCanKeepOnCredit] = useState(false)
   const [savingKeepOnCredit, setSavingKeepOnCredit] = useState(false)
+  const [keepOnCreditDraft, setKeepOnCreditDraft] = useState(false)
+  const [keepOnCreditReasonDraft, setKeepOnCreditReasonDraft] = useState('')
   const [postRow, setPostRow] = useState<AccountsBodyshopCase | null>(null)
   const [postCard, setPostCard] = useState<RepairCard | null>(null)
   const [gatepassConfirmTarget, setGatepassConfirmTarget] = useState<{
@@ -375,6 +379,8 @@ export default function AccountsPage() {
     setPayError(null)
     setPayLines([])
     setDmsLookup(null)
+    setKeepOnCreditDraft(Boolean(row.keep_on_credit))
+    setKeepOnCreditReasonDraft(row.keep_on_credit_reason ?? '')
     try {
       const lines = await listAccountsMechanicalPayments(row.reception_entry_id)
       setPayLines(lines)
@@ -596,13 +602,28 @@ export default function AccountsPage() {
 
   async function toggleKeepOnCredit(next: boolean) {
     if (!editRow) return
+    if (next) {
+      const reason = keepOnCreditReasonDraft.trim()
+      if (!reason) {
+        setPayError('Reason for keeping on credit is required')
+        return
+      }
+    }
     setSavingKeepOnCredit(true)
     setPayError(null)
     try {
-      const saved = await setAccountsMechanicalKeepOnCredit(editRow.reception_entry_id, next)
+      const saved = await setAccountsMechanicalKeepOnCredit(
+        editRow.reception_entry_id,
+        next,
+        next ? keepOnCreditReasonDraft : null,
+      )
       patchMechRow(saved)
+      setKeepOnCreditDraft(Boolean(saved.keep_on_credit))
+      setKeepOnCreditReasonDraft(saved.keep_on_credit_reason ?? '')
       flash(next ? 'Keep on Credit approved' : 'Keep on Credit revoked')
     } catch (e) {
+      setKeepOnCreditDraft(Boolean(editRow.keep_on_credit))
+      setKeepOnCreditReasonDraft(editRow.keep_on_credit_reason ?? '')
       setPayError(e instanceof Error ? e.message : 'Keep on Credit update failed')
     } finally {
       setSavingKeepOnCredit(false)
@@ -626,11 +647,14 @@ export default function AccountsPage() {
         const row = gatepassConfirmTarget.mechRow
         const issued = await issueMechanicalAccountsGatePass(row.reception_entry_id)
         rememberIssuedGatePass(issued)
-        openMechanicalGatepass({
+                        openMechanicalGatepass({
           ...row,
           amount_received: issued.amount_received ?? row.amount_received,
           remaining_amount: issued.remaining_amount ?? row.remaining_amount,
           keep_on_credit: issued.keep_on_credit ?? row.keep_on_credit,
+          keep_on_credit_reason: issued.keep_on_credit_reason ?? row.keep_on_credit_reason,
+          keep_on_credit_approved_by: issued.keep_on_credit_approved_by ?? row.keep_on_credit_approved_by,
+          keep_on_credit_approved_at: issued.keep_on_credit_approved_at ?? row.keep_on_credit_approved_at,
         })
         const reason = mechanicalGatepassReasonLabel(
           issued.settlement_reason === 'paid' || issued.settlement_reason === 'short_payment' || issued.settlement_reason === 'keep_on_credit'
@@ -1037,7 +1061,7 @@ export default function AccountsPage() {
                           disabled={!isMechanicalGatepassEligible(r)}
                           title={
                             isMechanicalGatepassEligible(r)
-                              ? `Print gatepass copy · ${mechanicalGatepassReasonLabel(mechanicalGatepassEligibility(r).reason)}`
+                              ? `Print gatepass copy · ${mechanicalGatepassReasonDetail(mechanicalGatepassEligibility(r).reason) || mechanicalGatepassReasonLabel(mechanicalGatepassEligibility(r).reason)}`
                               : 'Available when remaining is ₹0, within 2% of billed, or Keep on Credit is approved'
                           }
                           onClick={() => openMechanicalGatepass(r)}
@@ -1050,7 +1074,7 @@ export default function AccountsPage() {
                           disabled={!isMechanicalGatepassEligible(r)}
                           title={
                             isMechanicalGatepassEligible(r)
-                              ? `Create and release gatepass · ${mechanicalGatepassReasonLabel(mechanicalGatepassEligibility(r).reason)}`
+                              ? `Create and release gatepass · ${mechanicalGatepassReasonDetail(mechanicalGatepassEligibility(r).reason) || mechanicalGatepassReasonLabel(mechanicalGatepassEligibility(r).reason)}`
                               : 'Available when remaining is ₹0, within 2% of billed, or Keep on Credit is approved'
                           }
                           onClick={() => printMechGatepass(r)}
@@ -1167,7 +1191,7 @@ export default function AccountsPage() {
         const isInvoiceLocked = Boolean((editRow.invoice_number && editRow.billed_amount != null) || payLines.length > 0)
         const isFieldDisabled = !isAdmin && isInvoiceLocked
         const gatepass = mechanicalGatepassEligibility(editRow)
-        const keepOnCreditOn = Boolean(editRow.keep_on_credit)
+        const creditPersisted = isMechanicalKeepOnCreditValid(editRow)
         return (
           <div className="modal-back" role="presentation" onClick={() => setEditRow(null)}>
             <div className="modal modal--md" role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
@@ -1344,30 +1368,72 @@ export default function AccountsPage() {
                   <label className="acct-credit">
                     <input
                       type="checkbox"
-                      checked={keepOnCreditOn}
+                      checked={keepOnCreditDraft}
                       disabled={!canKeepOnCredit || savingKeepOnCredit || editRow.billed_amount == null}
-                      onChange={(e) => void toggleKeepOnCredit(e.target.checked)}
+                      onChange={(e) => {
+                        const next = e.target.checked
+                        if (!next) {
+                          if (creditPersisted) {
+                            void toggleKeepOnCredit(false)
+                          } else {
+                            setKeepOnCreditDraft(false)
+                            setPayError(null)
+                          }
+                          return
+                        }
+                        setKeepOnCreditDraft(true)
+                        setPayError(null)
+                      }}
                     />
                     <span>
                       <strong>Keep on Credit</strong>
-                      {keepOnCreditOn ? (
-                        <span className="acct-credit__hint">
-                          Approved{editRow.keep_on_credit_approved_by ? ` by ${editRow.keep_on_credit_approved_by}` : ''}
-                          {editRow.keep_on_credit_approved_at ? ` · ${fmtWhen(editRow.keep_on_credit_approved_at)}` : ''}
-                        </span>
+                      {creditPersisted ? (
+                        <span className="acct-credit__hint">Persisted override. Uncheck to revoke.</span>
                       ) : canKeepOnCredit ? (
-                        <span className="acct-credit__hint">Release Gatepass while an amount remains unpaid</span>
+                        <span className="acct-credit__hint">Checking this does not release Gatepass until the reason is saved</span>
                       ) : (
                         <span className="acct-credit__hint">Requires Admin, GM, or Accounts Keep on Credit grant</span>
                       )}
                     </span>
                   </label>
+                  {keepOnCreditDraft && (
+                    <div className="acct-credit-fields">
+                      <label className="brx-field">
+                        <span className="brx-field-label">Reason for keeping on credit</span>
+                        <textarea
+                          className="inp"
+                          rows={2}
+                          value={keepOnCreditReasonDraft}
+                          disabled={!canKeepOnCredit || savingKeepOnCredit || creditPersisted}
+                          onChange={(e) => setKeepOnCreditReasonDraft(e.target.value)}
+                          placeholder="e.g. Insurance payment pending"
+                        />
+                      </label>
+                      {creditPersisted ? (
+                        <div className="acct-credit-meta">
+                          <div><span>Approved by</span><strong>{editRow.keep_on_credit_approved_by || '—'}</strong></div>
+                          <div><span>Approved at</span><strong>{fmtWhen(editRow.keep_on_credit_approved_at)}</strong></div>
+                        </div>
+                      ) : canKeepOnCredit ? (
+                        <button
+                          type="button"
+                          className="btn btn--sm btn--primary"
+                          disabled={savingKeepOnCredit || !keepOnCreditReasonDraft.trim()}
+                          onClick={() => void toggleKeepOnCredit(true)}
+                        >
+                          {savingKeepOnCredit ? 'Saving…' : 'Approve Keep on Credit'}
+                        </button>
+                      ) : null}
+                    </div>
+                  )}
                   {payError && (
                     <div className="brx-settle-banner is-error" style={{ marginBottom: 12 }}>{payError}</div>
                   )}
                   {gatepass.eligible && (
                     <div className="acct-gp-ready">
-                      <span>Gatepass {mechanicalGatepassReasonLabel(gatepass.reason)}</span>
+                      <span>
+                        {mechanicalGatepassReasonDetail(gatepass.reason) || mechanicalGatepassReasonLabel(gatepass.reason)}
+                      </span>
                       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                         <button type="button" className="btn" onClick={() => openMechanicalGatepass(editRow)}>
                           🖨️ Print Gatepass
@@ -1425,7 +1491,7 @@ export default function AccountsPage() {
                                   type="number"
                                   value={draft.amount}
                                   onChange={(e) => updatePaymentDraft(draft.key, { amount: e.target.value })}
-                                  placeholder="Amount received"
+                                  placeholder="Amount received (may exceed remaining)"
                                 />
                                 {rowRemaining > 0 && (
                                   <button
@@ -1665,10 +1731,28 @@ export default function AccountsPage() {
                     </div>
                     <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                       <span style={{ color: 'var(--muted)' }}>Gatepass clearance</span>
-                      <strong style={{ color: '#15803d' }}>
-                        {mechanicalGatepassReasonLabel(mechanicalGatepassEligibility(gatepassConfirmTarget.mechRow).reason) || '—'}
+                      <strong style={{ color: '#15803d', textAlign: 'right', maxWidth: '60%' }}>
+                        {mechanicalGatepassReasonDetail(mechanicalGatepassEligibility(gatepassConfirmTarget.mechRow).reason)
+                          || mechanicalGatepassReasonLabel(mechanicalGatepassEligibility(gatepassConfirmTarget.mechRow).reason)
+                          || '—'}
                       </strong>
                     </div>
+                    {mechanicalGatepassEligibility(gatepassConfirmTarget.mechRow).reason === 'keep_on_credit' && (
+                      <>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
+                          <span style={{ color: 'var(--muted)' }}>Credit reason</span>
+                          <strong style={{ textAlign: 'right' }}>{gatepassConfirmTarget.mechRow.keep_on_credit_reason || '—'}</strong>
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                          <span style={{ color: 'var(--muted)' }}>Approved by</span>
+                          <strong>{gatepassConfirmTarget.mechRow.keep_on_credit_approved_by || '—'}</strong>
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                          <span style={{ color: 'var(--muted)' }}>Approved at</span>
+                          <strong>{fmtWhen(gatepassConfirmTarget.mechRow.keep_on_credit_approved_at)}</strong>
+                        </div>
+                      </>
+                    )}
                   </>
                 )}
                 {gatepassConfirmTarget.type === 'bodyshop' && (

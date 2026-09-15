@@ -4,7 +4,8 @@ Tracks documentation-sync updates for business logic, architecture, and access c
 
 ## 2026-09-15
 
-- **PARTS-002** — Estimate Master now reads/writes `settings_service_parts_pricing` (DBL-0062 VERIFIED). **Make** BS4/BS6 is DBL-0063 VERIFIED (existing 877 rows = BS6). Each item has a **Required / Optional** toggle (DBL-0065). Mechanical Service Advisor **Create Estimate** prefills Required lines and Add Item lists Optional; Save is `service_advisor_estimates` (DBL-0064). DBL-0061 is Accounts Mechanical Gatepass.
+- **PARTS-002** — Estimate Master now reads/writes `settings_service_parts_pricing` (DBL-0062 VERIFIED). **Make** BS4/BS6 is DBL-0063 VERIFIED (existing 877 rows = BS6). Each item has a **Required / Optional** toggle (DBL-0065). Mechanical Service Advisor **Create Estimate** prefills Required lines and Add Item lists Optional; Save is `service_advisor_estimates` (DBL-0064). DBL-0061 is Accounts Mechanical Gatepass; DBL-0066 is Keep on Credit reason/validity.
+- Accounts Mechanical Gatepass may release on remaining ≤ 0, remaining ≤ 2% of billed, or valid persisted Keep on Credit (`keep_on_credit` + dedicated reason + approved_by + approved_at). Financial remaining and `payment_status` stay receipt-derived. Overpayment stores the entered line amount. Keep on Credit is Admin module `accounts_keep_on_credit`, plus platform admin and linked active GM — not `accounts.can_modify`. Ledger: DBL-0061, DBL-0066. Plan: `ACCOUNTS-001`.
 
 ## 2026-09-14
 

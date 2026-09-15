@@ -66,7 +66,7 @@ BEGIN
   );
 
   BEGIN
-    PERFORM public.set_accounts_mechanical_keep_on_credit(v_id, true);
+    PERFORM public.set_accounts_mechanical_keep_on_credit(v_id, true, 'Insurance payment pending');
     INSERT INTO _dbl0061_probe VALUES (
       'case_f_unauth_credit',
       false,
@@ -111,7 +111,7 @@ BEGIN
     )
   );
 
-  PERFORM public.set_accounts_mechanical_keep_on_credit(v_id, true);
+  PERFORM public.set_accounts_mechanical_keep_on_credit(v_id, true, 'Insurance payment pending');
   SELECT * INTO v_inv FROM public.accounts_mechanical_invoices WHERE reception_entry_id = v_id;
   SELECT * INTO v_inv_reload FROM public.accounts_mechanical_invoices WHERE reception_entry_id = v_id;
   v_reason := public.accounts_mechanical_gatepass_reason(
@@ -195,8 +195,11 @@ BEGIN
 
   UPDATE public.accounts_mechanical_invoices
      SET keep_on_credit = false,
+         keep_on_credit_reason = NULL,
          keep_on_credit_approved_by = NULL,
          keep_on_credit_approved_at = NULL,
+         keep_on_credit_revoked_by = NULL,
+         keep_on_credit_revoked_at = NULL,
          updated_at = now()
    WHERE reception_entry_id = v_id;
 
@@ -211,8 +214,11 @@ EXCEPTION WHEN OTHERS THEN
   END;
   UPDATE public.accounts_mechanical_invoices
      SET keep_on_credit = false,
+         keep_on_credit_reason = NULL,
          keep_on_credit_approved_by = NULL,
          keep_on_credit_approved_at = NULL,
+         keep_on_credit_revoked_by = NULL,
+         keep_on_credit_revoked_at = NULL,
          updated_at = now()
    WHERE reception_entry_id = 8783;
   INSERT INTO _dbl0061_probe VALUES (

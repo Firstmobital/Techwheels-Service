@@ -8,7 +8,7 @@
 **Status:** Active (web implemented; DBL-0055 Accounts DO post pending apply)  
 **Platform:** webversion  
 **Category:** accounts  
-**Ledger:** DBL-0045/0046/0051/0052/0053/0054/0056/0057/0058/0059/0060/0061 APPLIED. DBL-0061 Mechanical Gatepass 2% / Keep on Credit / exact overpayment; trusted issue RPC. DBL-0055 PROPOSED (Accounts may post insurer/DO lines). Mechanical vouchers recalculated from `invoice_date >= 2026-09-02`. Do not reuse DBL-0043 (`busy`) or DBL-0044 (`busy_parts`).  
+**Ledger:** DBL-0045/0046/0051/0052/0053/0054/0056/0057/0058/0059/0060/0061/0066 APPLIED. DBL-0055 PROPOSED (Accounts may post insurer/DO lines). Mechanical vouchers recalculated from `invoice_date >= 2026-09-02`. Do not reuse DBL-0043 (`busy`) or DBL-0044 (`busy_parts`).  
 **Route:** `/accounts`  
 **Module:** `accounts`  
 **Depends on:** BODYSHOP-SETTLEMENT-001 (`bodyshop_settlements`, Stage 18 lines); Service Advisor Mark Done (`invoice_done_at`)  
@@ -146,7 +146,7 @@ Pattern: `src/pages/BodyshopRecoveryPage.tsx` (KPIs, search, table, Excel, on-pa
 
 - Columns: Mark Done at, JC, reg, model, service type, SA, branch, owner, invoice number, billed amount, **Received Amount** (sum of `accounts_mechanical_payment_lines` excluding `reference` Discount), remaining, payment status, notes
 - Capture / Payments modal: invoice number, date, billed amount, and invoice file (reuse unused SA `invoice_storage_path` upload). **Fetch from DMS** fills those fields when the JC has exactly one live DMS invoice; Accounts still taps Save. 0 or 2+ DMS rows shows “No unique DMS invoice”. Remaining stays billed minus receipts. Invoice header locks after the first receipt.
-- Receipts are append-only (`accounts_mechanical_payment_lines`): this amount + Payment mode (Cash/UPI/Card/Cheque/Bank/Other) + Payment received date + reference. `payment_received_date` is the business date (Asia/Kolkata); `posted_at` remains the system insert timestamp. Voucher series apply when the **effective invoice date** `>= 2026-09-02`: Accounts `invoice_date` when present, otherwise the unique live DMS labour `invoice_date` for the JC (DBL-0060; does not use `payment_received_date` / Mark Done). Cash gets `RApp/26-27/nnnn`; UPI+Card share `JApp/26-27/nnnn`. cheque/bank/other stay null. Existing voucher numbers are not recalculated. History shows Received Date. Payment status is automatic from billed vs sum(receipts). Mechanical Gatepass is eligible when remaining ≤ 0, remaining ≤ 2% of billed, or persisted Keep on Credit is true. Financial remaining and `payment_status` are not rewritten for the 2% rule or Keep on Credit. Receipts may exceed remaining; the posted line keeps the entered amount. Create Gatepass goes through `issue_accounts_mechanical_gatepass`.
+- Receipts are append-only (`accounts_mechanical_payment_lines`): this amount + Payment mode (Cash/UPI/Card/Cheque/Bank/Other) + Payment received date + reference. `payment_received_date` is the business date (Asia/Kolkata); `posted_at` remains the system insert timestamp. Voucher series apply when the **effective invoice date** `>= 2026-09-02`: Accounts `invoice_date` when present, otherwise the unique live DMS labour `invoice_date` for the JC (DBL-0060; does not use `payment_received_date` / Mark Done). Cash gets `RApp/26-27/nnnn`; UPI+Card share `JApp/26-27/nnnn`. cheque/bank/other stay null. Existing voucher numbers are not recalculated. History shows Received Date. Payment status is automatic from billed vs sum(receipts). Mechanical Gatepass is eligible when remaining ≤ 0, remaining ≤ 2% of billed, or a **valid** persisted Keep on Credit exists (`keep_on_credit` + non-blank `keep_on_credit_reason` + `keep_on_credit_approved_by` + `keep_on_credit_approved_at`). Financial remaining and `payment_status` are not rewritten for the 2% rule or Keep on Credit. Receipts may exceed remaining; the posted line keeps the entered amount. Create Gatepass goes through `issue_accounts_mechanical_gatepass`.
 - KPI: Mark Done count, invoice-pending count, billed sum, customer remaining / received still follow Mark Done Period. Cash / UPI / Credit Card money is actual receipt-line grain dated by `payment_received_date` (IST `posted_at` fallback), after status + Search, excluding Discount `reference`. Mark Done date does not restrict those three cards.
 
 **Bodyshop desk**
@@ -175,7 +175,7 @@ Pattern: `src/pages/BodyshopRecoveryPage.tsx` (KPIs, search, table, Excel, on-pa
 - [x] **Task 3.3:** Accounts page — Mechanical capture desk.
 - [x] **Task 3.4:** Accounts page — Bodyshop customer-diff desk + Excel.
 - [x] **Task 3.5:** Mechanical Capture **Fetch from DMS** (form fill only; DBL-0048). No remaining write. No bulk list fill.
-- [x] **Task 3.10:** Mechanical Gatepass 2% short-payment, Keep on Credit, exact overpayment, trusted issue RPC (DBL-0061).
+- [x] **Task 3.10:** Mechanical Gatepass 2% short-payment, Keep on Credit, exact overpayment, trusted issue RPC (DBL-0061). Dedicated reason + validity + revocation metadata (DBL-0066).
 - [x] **Task 3.11:** Mechanical Cash / UPI / Credit Card KPIs use status filter + `payment_received_date` (IST `posted_at` fallback). Exclude Discount `reference`. Receipt Period is independent of Mark Done table period.
 
 ### Phase 4: Closeout
@@ -312,12 +312,14 @@ Pattern: `src/pages/BodyshopRecoveryPage.tsx` (KPIs, search, table, Excel, on-pa
 
 ### 2026-09-15 - Mechanical Gatepass 2% / Keep on Credit / overpay
 
-- Gatepass eligibility is remaining ≤ 0, remaining ≤ round(billed × 0.02, 2), or persisted `keep_on_credit`.
+- Gatepass eligibility is remaining ≤ 0, remaining ≤ round(billed × 0.02, 2), or **valid** persisted Keep on Credit.
+- Valid Keep on Credit = `keep_on_credit` true AND non-blank `keep_on_credit_reason` AND `keep_on_credit_approved_by` AND `keep_on_credit_approved_at`. A checkbox click or `keep_on_credit=true` alone does not release Gatepass.
 - 2% and Keep on Credit do not insert payment lines or change `payment_status` / remaining.
-- Keep on Credit is Admin module `accounts_keep_on_credit`, plus platform `is_admin()` and linked active GM. Not `accounts.can_modify`.
-- Issue RPC `issue_accounts_mechanical_gatepass` computes eligibility server-side.
-- Overpayment posts the entered amount. Remaining display still floors at 0; BUSY export uses the line amount.
-- Ledger: DBL-0061.
+- Keep on Credit is Admin module `accounts_keep_on_credit` (View or Modify grant), plus platform `is_admin()` and linked active GM. Not `accounts.can_modify`.
+- Trusted setter `set_accounts_mechanical_keep_on_credit(id, flag, reason)` stores authenticated actor + server timestamp. Revoke keeps original reason/approver and records `keep_on_credit_revoked_by` / `keep_on_credit_revoked_at` on the same header (no event-history table).
+- Issue RPC `issue_accounts_mechanical_gatepass` computes eligibility from persisted columns. Payload `payment_status` is the clearance label (`Paid` / `Short payment allowed` / `Released on credit`), not financial `payment_status`.
+- Overpayment posts the entered amount. Remaining display still floors at 0; BUSY export uses the line amount. 2% shortage and Keep on Credit do not create BUSY payment/discount lines.
+- Ledger: DBL-0061, DBL-0066.
 
 ### 2026-09-14 - Voucher eligibility is invoice_date
 
@@ -351,10 +353,10 @@ Pattern: `src/pages/BodyshopRecoveryPage.tsx` (KPIs, search, table, Excel, on-pa
 - `docs/Implementation_plans/webversion/categories/bodyshop/active/BODYSHOP-RECOVERY-001_DO_INSURANCE_RECOVERY_BOOK_PLAN_2026-09-04.md`
 - `docs/Implementation_plans/webversion/categories/operations/active/BUSY-001_BUSY_ACCOUNTING_EXPORT_PLAN_2026-09-10.md`
 - `docs/shared/reference/MODULE_ROUTE_CONTRACT.md`
-- `docs/shared/reference/DB_CHANGE_LEDGER.md` (DBL-0045, DBL-0055, DBL-0057, DBL-0058, DBL-0060, DBL-0061)
+- `docs/shared/reference/DB_CHANGE_LEDGER.md` (DBL-0045, DBL-0055, DBL-0057, DBL-0058, DBL-0060, DBL-0061, DBL-0066)
 - Evidence (later): `docs/Implementation_plans/webversion/categories/accounts/evidence/ACCOUNTS-001_TEST_MATRIX.md`
 
 ---
 
-**Last Updated:** 2026-09-12  
-**Status:** IN PROGRESS (unified Bodyshop receipts shipped; DBL-0055 SQL apply pending)
+**Last Updated:** 2026-09-15  
+**Status:** IN PROGRESS (Mechanical Gatepass 2%/Keep on Credit/overpay shipped as DBL-0061+0066; DBL-0055 SQL apply pending)

@@ -740,6 +740,28 @@ table.tbl { width: 100%; border-collapse: collapse; font-size: 13.5px; }
   color: var(--muted);
   font-weight: 400;
 }
+.acct-credit-fields {
+  margin: 0 0 12px 24px;
+  display: grid;
+  gap: 8px;
+}
+.acct-credit-fields textarea.inp {
+  min-height: 64px;
+  resize: vertical;
+}
+.acct-credit-meta {
+  display: grid;
+  gap: 4px;
+  font-size: 12.5px;
+}
+.acct-credit-meta div {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+.acct-credit-meta span {
+  color: var(--muted);
+}
 .acct-gp-ready {
   display: flex;
   align-items: center;
