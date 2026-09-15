@@ -20,6 +20,7 @@ import {
   upsertServiceAdvisorEstimate,
   type ServiceAdvisorEstimateLine,
 } from '../lib/api/serviceAdvisorEstimates'
+import type { ReceptionEntryRow } from '../lib/api/reception'
 import { openServiceAdvisorEstimatePrint } from '../lib/printServiceAdvisorEstimate'
 
 interface ServiceAdvisorEstimateModalProps {
@@ -60,6 +61,7 @@ export function ServiceAdvisorEstimateModal({
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [printing, setPrinting] = useState(false)
+  const [hasSavedDraft, setHasSavedDraft] = useState(false)
 
   useEffect(() => {
     if (!isOpen || !row) return
@@ -68,6 +70,7 @@ export function ServiceAdvisorEstimateModal({
     setError(null)
     setShowAdd(false)
     setAddSearch('')
+    setHasSavedDraft(false)
 
     void (async () => {
       try {
