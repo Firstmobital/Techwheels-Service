@@ -157,6 +157,7 @@ export async function fetchCustomerVehicles(searchQuery: string): Promise<Custom
         for (const item of data) {
           const reg = item.reg_number || 'VEHICLE'
           const saClean = cleanAdvisorPersonName(item.sa_display_name) || cleanAdvisorPersonName(item.sa_name) || null
+          const jc = (item.jc_number || item.job_card_number || item.job_card_no || item.jc || '')?.trim().toUpperCase() || null
           addVehicleResult({
             id: item.id,
             reg_number: reg,
@@ -171,7 +172,7 @@ export async function fetchCustomerVehicles(searchQuery: string): Promise<Custom
             service_type: item.service_type || 'Vehicle Service',
             sa_name: saClean,
             sa_display_name: saClean,
-            jc_number: item.jc_number?.trim() || null,
+            jc_number: jc,
             branch: item.branch || 'Main Workshop',
             created_at: item.created_at || new Date().toISOString(),
             invoice_done_at: item.invoice_done_at || null,
@@ -230,8 +231,8 @@ export async function fetchCustomerVehicles(searchQuery: string): Promise<Custom
           if (item.feedback_text && item.feedback_text.startsWith('{')) {
             try {
               const p = JSON.parse(item.feedback_text)
-              if (p.jc_number || p.job_card_no || p.job_card_number) {
-                jcNum = String(p.jc_number || p.job_card_no || p.job_card_number).trim().toUpperCase()
+              if (p.jc_number || p.job_card_no || p.job_card_number || p.job_card || p.jc) {
+                jcNum = String(p.jc_number || p.job_card_no || p.job_card_number || p.job_card || p.jc).trim().toUpperCase()
               }
               if (p.service_type) servType = p.service_type
               const candSa = cleanAdvisorPersonName(p.sa_name || p.service_advisor_name || p.advisor_name)
@@ -240,7 +241,7 @@ export async function fetchCustomerVehicles(searchQuery: string): Promise<Custom
               // ignore
             }
           } else if (item.feedback_text) {
-            const matchJc = item.feedback_text.match(/JC[-:\s]+([A-Z0-9-]+)/i)
+            const matchJc = item.feedback_text.match(/(?:JC|Job\s*Card|JobCard|JC\s*Number|JC\s*No)[-:\s#]+([A-Z0-9-]+)/i)
             if (matchJc && matchJc[1]) jcNum = matchJc[1].toUpperCase()
           }
 
@@ -277,6 +278,47 @@ export async function fetchCustomerVehicles(searchQuery: string): Promise<Custom
     }
   } catch (err) {
     console.warn('post_feedback_bot_data lookup failed:', err)
+  }
+
+  // 2.5. Check job_card_closed_data for active/recent Job Card Number & Service Advisor
+  try {
+    if (cleanUpper && cleanUpper.length >= 3) {
+      const { data: jcRows } = await supabase
+        .from('job_card_closed_data')
+        .select('job_card_number, vehicle_registration_number, sr_assigned_to, sr_type, location, created_date_time, closed_date_time')
+        .ilike('vehicle_registration_number', `%${cleanUpper}%`)
+        .order('closed_date_time', { ascending: false })
+        .limit(5)
+
+      if (jcRows && jcRows.length > 0) {
+        for (const jcRow of jcRows) {
+          const jc = (jcRow.job_card_number || '')?.trim().toUpperCase()
+          const sa = cleanAdvisorPersonName(jcRow.sr_assigned_to)
+          const reg = jcRow.vehicle_registration_number || cleanUpper
+          if (jc) {
+            addVehicleResult({
+              id: Date.now(),
+              reg_number: reg,
+              model: 'Tata Motors Vehicle',
+              vin: null,
+              variant: 'Service Vehicle',
+              owner_name: 'Vehicle Owner',
+              owner_phone: last10Digits || null,
+              service_type: jcRow.sr_type || 'Vehicle Service',
+              sa_name: sa,
+              sa_display_name: sa,
+              jc_number: jc,
+              branch: jcRow.location || 'Main Workshop',
+              created_at: jcRow.created_date_time || jcRow.closed_date_time || new Date().toISOString(),
+              invoice_done_at: jcRow.closed_date_time || null,
+              km_reading: null,
+            })
+          }
+        }
+      }
+    }
+  } catch (err) {
+    console.warn('job_card_closed_data lookup failed:', err)
   }
 
   // 3. Authoritative DB Table: all_service_data (75,000+ customer records)

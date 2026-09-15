@@ -335,7 +335,7 @@ export default function CustomerPortalPage({
       let liveGatePassNo: string | null = null
 
       // 1. PRIMARY RECEPTION INTAKE SYNC: post_feedback_bot_data with mode 'service_advisor_sync_payload'
-      // Strictly represents what Reception / Advisor entered on check-in (e.g. 16,717 KM)
+      // Strictly represents what Reception / Advisor entered on check-in
       if (regNorm || phoneNorm) {
         const orParts: string[] = []
         if (regNorm) {
@@ -351,7 +351,7 @@ export default function CustomerPortalPage({
           .select('*')
           .or(orParts.join(','))
           .order('created_at', { ascending: false })
-          .limit(15)
+          .limit(20)
 
         if (fbData && fbData.length > 0) {
           const sortedFb = [...fbData].sort((a, b) => {
@@ -377,7 +377,7 @@ export default function CustomerPortalPage({
                 const candidateSa = cleanAdvisorPersonName(p.sa_name || p.service_advisor_name || p.advisor_name)
                 if (!liveSa && candidateSa) liveSa = candidateSa
 
-                const candidateJc = (p.jc_number || p.job_card_no || p.job_card_number)?.trim()
+                const candidateJc = (p.jc_number || p.job_card_no || p.job_card_number || p.job_card || p.jc)?.trim()
                 if (!liveJc && candidateJc) liveJc = candidateJc.toUpperCase()
 
                 if (liveKm == null && (p.km_reading || p.km || p.kms || p.kms_driven || p.odometer)) {
@@ -391,7 +391,7 @@ export default function CustomerPortalPage({
                 // ignore
               }
             } else if (item.feedback_text) {
-              const matchJc = item.feedback_text.match(/JC[-:\s]+([A-Z0-9-]+)/i)
+              const matchJc = item.feedback_text.match(/(?:JC|Job\s*Card|JobCard|JC\s*Number|JC\s*No)[-:\s#]+([A-Z0-9-]+)/i)
               if (!liveJc && matchJc && matchJc[1]) liveJc = matchJc[1].toUpperCase()
             }
           }
@@ -401,74 +401,93 @@ export default function CustomerPortalPage({
       // 2. Direct Reception Table: service_reception_entries
       if (regNorm || phoneNorm) {
         const orParts: string[] = []
-        if (regNorm) orParts.push(`reg_number.ilike.%${regNorm}%`)
-        if (phoneNorm) orParts.push(`owner_phone.ilike.%${phoneNorm}%`)
+        if (regNorm) {
+          orParts.push(`reg_number.ilike.%${regNorm}%`)
+          orParts.push(`jc_number.ilike.%${regNorm}%`)
+        }
+        if (phoneNorm) {
+          orParts.push(`owner_phone.ilike.%${phoneNorm}%`)
+        }
 
         const { data: recData } = await supabase
           .from('service_reception_entries')
           .select('*')
           .or(orParts.join(','))
           .order('created_at', { ascending: false })
-          .limit(5)
+          .limit(10)
 
         if (recData && recData.length > 0) {
-          const match = recData.find((r) => r.reg_number && r.reg_number.toUpperCase().replace(/\s+/g, '').includes(regNorm)) || recData[0]
-          if (match.sa_name || match.sa_display_name) {
-            liveSa = match.sa_display_name || match.sa_name
-          }
-          if (match.jc_number) {
-            liveJc = match.jc_number
-          }
-          if (match.km_reading != null && Number(match.km_reading) > 0) {
-            liveKm = Number(match.km_reading)
-          }
-          if (match.service_type) {
-            liveServiceType = match.service_type
-          }
-          if (match.invoice_done_at) {
-            liveInvoiceDoneAt = match.invoice_done_at
-          }
-          if (match.gate_pass_issued) {
-            liveGatePassIssued = true
-            liveGatePassNo = match.gate_pass_number || null
+          for (const r of recData) {
+            if (!liveJc) {
+              const rawJc = (r.jc_number || r.job_card_number || r.job_card_no || r.jc)?.trim()
+              if (rawJc) liveJc = rawJc.toUpperCase()
+            }
+            if (!liveSa && (r.sa_display_name || r.sa_name)) {
+              const cand = cleanAdvisorPersonName(r.sa_display_name || r.sa_name)
+              if (cand) liveSa = cand
+            }
+            if (liveKm == null && r.km_reading != null && Number(r.km_reading) > 0) {
+              liveKm = Number(r.km_reading)
+            }
+            if (!liveServiceType && r.service_type) {
+              liveServiceType = r.service_type
+            }
+            if (!liveInvoiceDoneAt && r.invoice_done_at) {
+              liveInvoiceDoneAt = r.invoice_done_at
+            }
+            if (r.gate_pass_issued) {
+              liveGatePassIssued = true
+              liveGatePassNo = r.gate_pass_number || liveGatePassNo
+            }
           }
         }
       }
 
-      // 3. Check customer_estimates for assigned SA name & latest km_reading
+      // 3. Check customer_estimates for assigned SA name, JC number, & latest km_reading
       if (regNorm) {
         const { data: estData } = await supabase
           .from('customer_estimates')
-          .select('service_advisor_name, km_reading')
-          .eq('reg_number', regNorm)
+          .select('estimate_no, service_advisor_name, km_reading, items')
+          .ilike('vehicle_registration_number', `%${regNorm}%`)
           .order('created_at', { ascending: false })
-          .limit(1)
+          .limit(5)
 
         if (estData && estData.length > 0) {
-          if (!liveSa && estData[0].service_advisor_name) {
-            liveSa = estData[0].service_advisor_name
-          }
-          if (liveKm == null && estData[0].km_reading != null && Number(estData[0].km_reading) > 0) {
-            liveKm = Number(estData[0].km_reading)
+          for (const est of estData) {
+            if (!liveSa && est.service_advisor_name) {
+              const cand = cleanAdvisorPersonName(est.service_advisor_name)
+              if (cand) liveSa = cand
+            }
+            if (liveKm == null && est.km_reading != null && Number(est.km_reading) > 0) {
+              liveKm = Number(est.km_reading)
+            }
+            if (!liveJc && est.estimate_no) {
+              const matchJc = est.estimate_no.match(/JC-?([0-9A-Z]+)/i)
+              if (matchJc && matchJc[1]) liveJc = matchJc[1].toUpperCase()
+            }
           }
         }
       }
 
-      // 4. Check job_card_closed_data ONLY for missing JC number / SA name, NEVER to overwrite live KM
+      // 4. Check job_card_closed_data for missing JC number / SA name
       if (!liveJc || !liveSa) {
         if (regNorm) {
           const { data: jcData } = await supabase
             .from('job_card_closed_data')
-            .select('job_card_number, sr_assigned_to, closed_date_time, sr_type')
+            .select('job_card_number, vehicle_registration_number, sr_assigned_to, closed_date_time, sr_type')
             .ilike('vehicle_registration_number', `%${regNorm}%`)
             .order('closed_date_time', { ascending: false })
-            .limit(1)
+            .limit(5)
 
           if (jcData && jcData.length > 0) {
-            const j = jcData[0]
-            if (!liveJc && j.job_card_number) liveJc = j.job_card_number
-            if (!liveSa && j.sr_assigned_to) liveSa = j.sr_assigned_to
-            if (!liveServiceType && j.sr_type) liveServiceType = j.sr_type
+            for (const j of jcData) {
+              if (!liveJc && j.job_card_number) liveJc = String(j.job_card_number).trim().toUpperCase()
+              if (!liveSa && j.sr_assigned_to) {
+                const cand = cleanAdvisorPersonName(j.sr_assigned_to)
+                if (cand) liveSa = cand
+              }
+              if (!liveServiceType && j.sr_type) liveServiceType = j.sr_type
+            }
           }
         }
       }
