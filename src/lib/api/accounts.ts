@@ -198,6 +198,47 @@ export function asiaKolkataDateFromTimestamp(iso: string | null | undefined): st
   return d.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
 }
 
+export type AccountsDateRange = { from: string; to: string }
+
+/** Empty from/to: Accounts DateRangeFilter "All". Does not impose a lookback window. */
+export const ACCOUNTS_DATE_RANGE_ALL: AccountsDateRange = { from: '', to: '' }
+
+export function isAccountsDateRangeAll(range: { from?: string; to?: string } | null | undefined): boolean {
+  return !String(range?.from ?? '').trim() || !String(range?.to ?? '').trim()
+}
+
+/** Mechanical Accounts view date: Mark Done (`invoice_done_at`) as Asia/Kolkata YYYY-MM-DD. */
+export function accountsMechanicalViewDateYmd(invoiceDoneAt: string | null | undefined): string | null {
+  return asiaKolkataDateFromTimestamp(invoiceDoneAt)
+}
+
+/** Bodyshop Accounts view date: settlement `invoice_date` as YYYY-MM-DD. */
+export function accountsBodyshopViewDateYmd(invoiceDate: string | null | undefined): string | null {
+  const raw = String(invoiceDate ?? '').trim()
+  if (!raw) return null
+  const ymd = raw.slice(0, 10)
+  return /^\d{4}-\d{2}-\d{2}$/.test(ymd) ? ymd : null
+}
+
+export function isAccountsViewDateInRange(
+  viewDateYmd: string | null | undefined,
+  range: { from: string; to: string },
+): boolean {
+  if (isAccountsDateRangeAll(range)) return true
+  const ymd = String(viewDateYmd ?? '').trim()
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(ymd)) return false
+  return ymd >= range.from && ymd <= range.to
+}
+
+export function filterAccountsCasesByViewDate<T>(
+  rows: T[],
+  viewDateYmd: (row: T) => string | null,
+  range: { from: string; to: string },
+): T[] {
+  if (isAccountsDateRangeAll(range)) return rows
+  return rows.filter((row) => isAccountsViewDateInRange(viewDateYmd(row), range))
+}
+
 export function mechanicalPaymentReceivedDate(
   line: Pick<AccountsMechanicalPayment, 'payment_received_date' | 'posted_at'>,
 ): string | null {

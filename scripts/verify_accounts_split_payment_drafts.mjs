@@ -175,15 +175,78 @@ function blobOf(...parts) {
   return parts.map((p) => String(p ?? '').toLowerCase()).join(' ')
 }
 
+/** Keep aligned with src/lib/api/accounts.ts Accounts view-period helpers. */
+function asiaKolkataDateFromTimestamp(iso) {
+  if (!iso) return null
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return null
+  return d.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
+}
+
+function isAccountsDateRangeAll(range) {
+  return !String(range?.from ?? '').trim() || !String(range?.to ?? '').trim()
+}
+
+function accountsMechanicalViewDateYmd(invoiceDoneAt) {
+  return asiaKolkataDateFromTimestamp(invoiceDoneAt)
+}
+
+function accountsBodyshopViewDateYmd(invoiceDate) {
+  const raw = String(invoiceDate ?? '').trim()
+  if (!raw) return null
+  const ymd = raw.slice(0, 10)
+  return /^\d{4}-\d{2}-\d{2}$/.test(ymd) ? ymd : null
+}
+
+function isAccountsViewDateInRange(viewDateYmd, range) {
+  if (isAccountsDateRangeAll(range)) return true
+  const ymd = String(viewDateYmd ?? '').trim()
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(ymd)) return false
+  return ymd >= range.from && ymd <= range.to
+}
+
+function filterAccountsCasesByViewDate(rows, viewDateYmd, range) {
+  if (isAccountsDateRangeAll(range)) return rows
+  return rows.filter((row) => isAccountsViewDateInRange(viewDateYmd(row), range))
+}
+
+function applyAccountsBodyshopTableFilters({
+  rows,
+  search = '',
+  dateRange = { from: '', to: '' },
+  bsFilter = 'remaining',
+}) {
+  const q = search.trim().toLowerCase()
+  let next = filterAccountsCasesByViewDate(
+    rows,
+    (r) => accountsBodyshopViewDateYmd(r.invoice_date),
+    dateRange,
+  )
+  if (q) {
+    next = next.filter((r) => blobOf(r.job_card_no, r.reg_number, r.invoice_number, r.customer_name, r.sa_name).includes(q))
+  }
+  if (bsFilter === 'remaining') {
+    return next.filter((r) => Number(r.outstanding_amount ?? 0) > 0)
+  }
+  if (bsFilter === 'received') return next.filter((r) => isAccountsStatusReceived(r.derived_payment_status))
+  if (bsFilter === 'pending') return next.filter((r) => isAccountsStatusPending(r.derived_payment_status))
+  return next
+}
+
 function applyAccountsMechanicalTableFilters({
   rows,
   lines,
   statusFilter = 'all',
   paymentModeFilter = 'all',
   search = '',
+  dateRange = { from: '', to: '' },
 }) {
   const q = search.trim().toLowerCase()
-  let next = rows
+  let next = filterAccountsCasesByViewDate(
+    rows,
+    (r) => accountsMechanicalViewDateYmd(r.invoice_done_at),
+    dateRange,
+  )
   if (q) {
     next = next.filter((r) => blobOf(r.jc_number, r.reg_number, r.invoice_number, r.owner_name, r.sa_name).includes(q))
   }
@@ -1300,5 +1363,181 @@ function buildMechanicalBusyPaymentExportRows({
 
   console.log('verify_accounts_split_payment_drafts: BUSY payment export checks passed')
 }
+
+// ---------------------------------------------------------------------------
+// Accounts view period (DateRangeFilter) — keep aligned with
+// src/lib/api/accounts.ts + src/pages/AccountsPage.tsx
+// ---------------------------------------------------------------------------
+{
+  const range = { from: '2026-09-15', to: '2026-09-17' }
+  const allRange = { from: '', to: '' }
+  const thisMonthWouldBe = { from: '2026-09-01', to: '2026-09-30' }
+
+  const before = {
+    reception_entry_id: 101,
+    jc_number: 'JC-BEFORE',
+    reg_number: 'RJ14BEF',
+    invoice_number: 'INV-BEF',
+    owner_name: 'Before Owner',
+    sa_name: 'SA',
+    branch: 'Sitapura',
+    invoice_done_at: '2026-09-14T18:29:00.000Z', // 14 Sep 23:59 IST
+    invoice_date: '2026-09-20',
+    billed_amount: 1000,
+    amount_received: 1000,
+    remaining_amount: 0,
+    payment_status: 'received',
+  }
+  const firstDay = {
+    reception_entry_id: 102,
+    jc_number: 'JC-FIRST',
+    reg_number: 'RJ14FIR',
+    invoice_number: 'INV-FIR',
+    owner_name: 'First Owner',
+    sa_name: 'SA',
+    branch: 'Sitapura',
+    invoice_done_at: '2026-09-14T18:31:00.000Z', // 15 Sep 00:01 IST
+    invoice_date: '2026-09-01',
+    billed_amount: 2000,
+    amount_received: 2000,
+    remaining_amount: 0,
+    payment_status: 'received',
+  }
+  const middle = {
+    reception_entry_id: 103,
+    jc_number: 'JC-MID',
+    reg_number: 'RJ14MID',
+    invoice_number: 'INV-MID',
+    owner_name: 'Mid Owner',
+    sa_name: 'SA',
+    branch: 'Sitapura',
+    invoice_done_at: '2026-09-16T10:00:00+05:30',
+    invoice_date: '2026-09-16',
+    billed_amount: 3000,
+    amount_received: 0,
+    remaining_amount: 3000,
+    payment_status: 'pending',
+  }
+  const lastDay = {
+    reception_entry_id: 104,
+    jc_number: 'JC-LAST',
+    reg_number: 'RJ14LAS',
+    invoice_number: 'INV-LAS',
+    owner_name: 'Last Owner',
+    sa_name: 'SA',
+    branch: 'Sitapura',
+    invoice_done_at: '2026-09-17T23:59:00+05:30',
+    invoice_date: '2026-09-17',
+    billed_amount: 4000,
+    amount_received: 4000,
+    remaining_amount: 0,
+    payment_status: 'received',
+  }
+  const after = {
+    reception_entry_id: 105,
+    jc_number: 'JC-AFTER',
+    reg_number: 'RJ14AFT',
+    invoice_number: 'INV-AFT',
+    owner_name: 'After Owner',
+    sa_name: 'SA',
+    branch: 'Sitapura',
+    invoice_done_at: '2026-09-18T00:00:00+05:30',
+    invoice_date: '2026-09-18',
+    billed_amount: 5000,
+    amount_received: 5000,
+    remaining_amount: 0,
+    payment_status: 'received',
+  }
+
+  const cases = [before, firstDay, middle, lastDay, after]
+  const lines = [
+    { id: 1, reception_entry_id: 101, amount: 1000, payment_mode: 'cash', payment_received_date: '2026-09-20', posted_at: '2026-09-20T10:00:00+05:30', voucher_no: 'RApp/26-27/0101', reference: 'BEF' },
+    { id: 2, reception_entry_id: 102, amount: 2000, payment_mode: 'cash', payment_received_date: '2026-09-21', posted_at: '2026-09-21T10:00:00+05:30', voucher_no: 'RApp/26-27/0102', reference: 'FIR' },
+    { id: 3, reception_entry_id: 103, amount: 500, payment_mode: 'upi', payment_received_date: '2026-09-22', posted_at: '2026-09-22T10:00:00+05:30', voucher_no: 'JApp/26-27/0103', reference: 'MID' },
+    { id: 4, reception_entry_id: 104, amount: 4000, payment_mode: 'card', payment_received_date: '2026-09-23', posted_at: '2026-09-23T10:00:00+05:30', voucher_no: 'JApp/26-27/0104', reference: 'LAS' },
+    { id: 5, reception_entry_id: 105, amount: 5000, payment_mode: 'cash', payment_received_date: '2026-09-24', posted_at: '2026-09-24T10:00:00+05:30', voucher_no: 'RApp/26-27/0105', reference: 'AFT' },
+  ]
+
+  // A. inclusive Mechanical Mark Done range
+  const ranged = applyAccountsMechanicalTableFilters({ rows: cases, lines, dateRange: range })
+  assert(JSON.stringify(idsOf(ranged)) === JSON.stringify([102, 103, 104]), `A: first/middle/last included, before/after excluded, got ${idsOf(ranged)}`)
+  assert(!idsOf(ranged).includes(101) && !idsOf(ranged).includes(105), 'A: before and after Mark Done dates excluded')
+
+  // B. IST midnight boundary — UTC slice would put firstDay on 14 Sep
+  assert(String(firstDay.invoice_done_at).slice(0, 10) === '2026-09-14', 'B: UTC slice of 15 Sep 00:01 IST is 14 Sep')
+  assert(accountsMechanicalViewDateYmd(firstDay.invoice_done_at) === '2026-09-15', `B: IST view date is 15 Sep, got ${accountsMechanicalViewDateYmd(firstDay.invoice_done_at)}`)
+  assert(accountsMechanicalViewDateYmd(before.invoice_done_at) === '2026-09-14', `B: 14 Sep 23:59 IST stays 14 Sep, got ${accountsMechanicalViewDateYmd(before.invoice_done_at)}`)
+  assert(isAccountsViewDateInRange(accountsMechanicalViewDateYmd(firstDay.invoice_done_at), range), 'B: 15 Sep IST included in 15–17 range')
+  assert(!isAccountsViewDateInRange(accountsMechanicalViewDateYmd(before.invoice_done_at), range), 'B: 14 Sep IST excluded from 15–17 range')
+
+  // C. Bodyshop inclusive invoice_date
+  const bsRows = [
+    { repair_card_id: 1, job_card_no: 'BS-BEFORE', invoice_date: '2026-09-14', invoice_number: 'B-1', customer_name: 'Bs Before', outstanding_amount: 100, derived_payment_status: 'pending' },
+    { repair_card_id: 2, job_card_no: 'BS-FIRST', invoice_date: '2026-09-15', invoice_number: 'B-2', customer_name: 'Bs First', outstanding_amount: 200, derived_payment_status: 'pending' },
+    { repair_card_id: 3, job_card_no: 'BS-LAST', invoice_date: '2026-09-17', invoice_number: 'B-3', customer_name: 'Bs Last', outstanding_amount: 0, derived_payment_status: 'received' },
+    { repair_card_id: 4, job_card_no: 'BS-AFTER', invoice_date: '2026-09-18', invoice_number: 'B-4', customer_name: 'Bs After', outstanding_amount: 50, derived_payment_status: 'pending' },
+    { repair_card_id: 5, job_card_no: 'BS-NULL', invoice_date: null, invoice_number: 'B-5', customer_name: 'Bs Null', outstanding_amount: 10, derived_payment_status: 'pending' },
+  ]
+  const bsRangedAllStatus = applyAccountsBodyshopTableFilters({ rows: bsRows, dateRange: range, bsFilter: 'all' })
+  assert(bsRangedAllStatus.map((r) => r.repair_card_id).join(',') === '2,3', `C: Bodyshop 15 and 17 included, got ${bsRangedAllStatus.map((r) => r.repair_card_id)}`)
+  assert(!bsRangedAllStatus.some((r) => r.repair_card_id === 1 || r.repair_card_id === 4 || r.repair_card_id === 5), 'C: before/after/null invoice_date excluded when range is set')
+
+  // D. date AND search
+  const searchMid = applyAccountsMechanicalTableFilters({ rows: cases, lines, dateRange: range, search: 'mid' })
+  assert(JSON.stringify(idsOf(searchMid)) === JSON.stringify([103]), `D: date AND search JC-MID, got ${idsOf(searchMid)}`)
+  const searchBeforeInRange = applyAccountsMechanicalTableFilters({ rows: cases, lines, dateRange: range, search: 'before' })
+  assert(searchBeforeInRange.length === 0, 'D: search match outside date range is excluded')
+
+  // E. date AND status
+  const pendingInRange = applyAccountsMechanicalTableFilters({ rows: cases, lines, dateRange: range, statusFilter: 'pending' })
+  assert(JSON.stringify(idsOf(pendingInRange)) === JSON.stringify([103]), `E: date AND pending, got ${idsOf(pendingInRange)}`)
+  const receivedInRange = applyAccountsMechanicalTableFilters({ rows: cases, lines, dateRange: range, statusFilter: 'received' })
+  assert(JSON.stringify(idsOf(receivedInRange)) === JSON.stringify([102, 104]), `E: date AND received, got ${idsOf(receivedInRange)}`)
+
+  // F. date AND payment mode
+  const cashInRange = applyAccountsMechanicalTableFilters({ rows: cases, lines, dateRange: range, paymentModeFilter: 'cash' })
+  assert(JSON.stringify(idsOf(cashInRange)) === JSON.stringify([102]), `F: date AND cash, got ${idsOf(cashInRange)}`)
+  const upiInRange = applyAccountsMechanicalTableFilters({ rows: cases, lines, dateRange: range, paymentModeFilter: 'upi' })
+  assert(JSON.stringify(idsOf(upiInRange)) === JSON.stringify([103]), `F: date AND upi, got ${idsOf(upiInRange)}`)
+  const cardInRange = applyAccountsMechanicalTableFilters({ rows: cases, lines, dateRange: range, paymentModeFilter: 'card' })
+  assert(JSON.stringify(idsOf(cardInRange)) === JSON.stringify([104]), `F: date AND card, got ${idsOf(cardInRange)}`)
+
+  // G. Excel uses the same date-filtered cases
+  const excelCases = applyAccountsMechanicalTableFilters({ rows: cases, lines, dateRange: range })
+  const excelRows = buildMechanicalAccountsExportRows({ cases: excelCases, lines, formatWhen: () => '' })
+  const excelJcs = excelRows.map((r) => r.JC)
+  assert(excelJcs.includes('JC-FIRST') && excelJcs.includes('JC-MID') && excelJcs.includes('JC-LAST'), 'G: Excel includes in-range cases')
+  assert(!excelJcs.includes('JC-BEFORE') && !excelJcs.includes('JC-AFTER'), 'G: Excel excludes out-of-range cases')
+
+  // H. Busy Export starts from the same Mark Done case set; accounting date unchanged
+  const busyCases = applyAccountsMechanicalTableFilters({ rows: cases, lines, dateRange: range })
+  const busy = buildMechanicalBusyPaymentExportRows({ cases: busyCases, lines })
+  assert(busy.rows.length === 3, `H: three eligible receipts for in-range cases, got ${busy.rows.length}`)
+  assert(busy.rows.every((r) => r['Invoice date'] !== '2026-09-15' || r.voucher_no === 'RApp/26-27/0102'), 'H: Busy date is not rewritten to invoice_done_at')
+  const firstBusy = busy.rows.find((r) => r.voucher_no === 'RApp/26-27/0102')
+  assert(firstBusy && firstBusy['Invoice date'] === '2026-09-21', `H: in-range case keeps payment_received_date 2026-09-21, got ${firstBusy && firstBusy['Invoice date']}`)
+  assert(!busy.rows.some((r) => r.voucher_no === 'RApp/26-27/0101' || r.voucher_no === 'RApp/26-27/0105'), 'H: out-of-range Mark Done cases contribute no Busy rows')
+  const midBusy = busy.rows.find((r) => r.voucher_no === 'JApp/26-27/0103')
+  assert(midBusy && midBusy['Invoice date'] === '2026-09-22', 'H: receipt accounting date stays payment_received_date, not Mark Done')
+
+  // I. All preserves loaded population (does not impose this-month)
+  const allView = applyAccountsMechanicalTableFilters({ rows: cases, lines, dateRange: allRange })
+  assert(allView.length === cases.length, `I: All keeps loaded Mechanical population, got ${allView.length}`)
+  const thisMonthView = applyAccountsMechanicalTableFilters({ rows: cases, lines, dateRange: thisMonthWouldBe })
+  assert(thisMonthView.length === cases.length, 'I setup: fixtures happen to sit in September')
+  const augustOnly = applyAccountsMechanicalTableFilters({
+    rows: cases,
+    lines,
+    dateRange: { from: '2026-08-01', to: '2026-08-31' },
+  })
+  assert(augustOnly.length === 0, 'I: a non-All range can exclude the loaded set; All must not')
+  const bsAll = applyAccountsBodyshopTableFilters({ rows: bsRows, dateRange: allRange, bsFilter: 'all' })
+  assert(bsAll.length === bsRows.length, `I: All keeps loaded Bodyshop population including null invoice_date, got ${bsAll.length}`)
+  const bsRemainingInRange = applyAccountsBodyshopTableFilters({ rows: bsRows, dateRange: range, bsFilter: 'remaining' })
+  assert(bsRemainingInRange.map((r) => r.repair_card_id).join(',') === '2', 'E/C: Bodyshop date AND remaining keeps outstanding in-range only')
+
+  console.log('verify_accounts_split_payment_drafts: Accounts view-period date range checks passed')
+}
+
 
 

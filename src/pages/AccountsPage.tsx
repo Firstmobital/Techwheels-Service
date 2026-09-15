@@ -1,13 +1,18 @@
 import { useEffect, useMemo, useState } from 'react'
 import * as XLSX from 'xlsx'
 import { BodyshopSettlementPanel } from '../components/BodyshopSettlementPanel'
+import DateRangeFilter, { type DateRange } from '../components/DateRangeFilter'
 import {
+  ACCOUNTS_DATE_RANGE_ALL,
   ACCOUNTS_PAYMENT_MODES,
+  accountsBodyshopViewDateYmd,
+  accountsMechanicalViewDateYmd,
   addAccountsMechanicalPayment,
   buildMechanicalAccountsExportRows,
   buildMechanicalBusyPaymentExportRows,
   BUSY_PAYMENT_EXPORT_HEADERS,
   deleteAccountsMechanicalInvoiceFile,
+  filterAccountsCasesByViewDate,
   filterMechanicalCasesByPaymentMode,
   isAccountsStatusPending,
   isAccountsStatusReceived,
@@ -107,22 +112,6 @@ function fmtDate(iso: string | null | undefined) {
   })
 }
 
-function dateParts(iso: string | null | undefined): { year: number; month: number } {
-  if (!iso) return { year: 0, month: 0 }
-  const [y, m] = String(iso).slice(0, 10).split('-').map(Number)
-  if (!y || !m) return { year: 0, month: 0 }
-  return { year: y, month: m }
-}
-
-function monthLabel(year: number, month: number) {
-  if (!year || !month) return 'No date'
-  return new Date(Date.UTC(year, month - 1, 1)).toLocaleDateString('en-IN', {
-    month: 'short',
-    year: 'numeric',
-    timeZone: 'UTC',
-  })
-}
-
 function kindLabel(kind: string | null | undefined) {
   const v = String(kind ?? '').toLowerCase()
   if (v === 'refund') return 'Refund'
@@ -201,8 +190,7 @@ export default function AccountsPage() {
   const [error, setError] = useState<string | null>(null)
   const [toast, setToast] = useState<{ msg: string; ok: boolean } | null>(null)
   const [search, setSearch] = useState('')
-  const [year, setYear] = useState<number | 'all'>('all')
-  const [month, setMonth] = useState<number | 'all'>('all')
+  const [dateRange, setDateRange] = useState<DateRange>(ACCOUNTS_DATE_RANGE_ALL)
   const [bsFilter, setBsFilter] = useState<BodyshopFilter>('remaining')
   const [mechStatusFilter, setMechStatusFilter] = useState<MechanicalStatusFilter>('all')
   const [mechPaymentModeFilter, setMechPaymentModeFilter] = useState<MechanicalPaymentModeFilter>('all')
@@ -281,53 +269,16 @@ export default function AccountsPage() {
     void checkAdmin()
   }, [])
 
-  const periodSource = section === 'mechanical'
-    ? mechRows.map((r) => r.invoice_done_at)
-    : bsRows.map((r) => r.invoice_date)
-
-  const years = useMemo(() => {
-    const map = new Map<number, number>()
-    for (const iso of periodSource) {
-      const { year: y } = dateParts(iso)
-      map.set(y, (map.get(y) ?? 0) + 1)
-    }
-    return [...map.entries()]
-      .map(([y, count]) => ({ year: y, count }))
-      .sort((a, b) => b.year - a.year)
-  }, [periodSource])
-
-  const yearScopedMech = useMemo(() => {
-    if (year === 'all') return mechRows
-    return mechRows.filter((r) => dateParts(r.invoice_done_at).year === year)
-  }, [mechRows, year])
-
-  const yearScopedBs = useMemo(() => {
-    if (year === 'all') return bsRows
-    return bsRows.filter((r) => dateParts(r.invoice_date).year === year)
-  }, [bsRows, year])
-
-  const months = useMemo(() => {
-    const rows = section === 'mechanical' ? yearScopedMech : yearScopedBs
-    const map = new Map<number, number>()
-    for (const r of rows) {
-      const iso = section === 'mechanical'
-        ? (r as AccountsMechanicalCase).invoice_done_at
-        : (r as AccountsBodyshopCase).invoice_date
-      const { month: m } = dateParts(iso)
-      map.set(m, (map.get(m) ?? 0) + 1)
-    }
-    return [...map.entries()]
-      .map(([m, count]) => ({ month: m, count }))
-      .sort((a, b) => a.month - b.month)
-  }, [section, yearScopedMech, yearScopedBs])
-
   const periodMech = useMemo(() => {
     const q = search.trim().toLowerCase()
-    let rows = year === 'all' ? mechRows : yearScopedMech
-    if (month !== 'all') rows = rows.filter((r) => dateParts(r.invoice_done_at).month === month)
+    let rows = filterAccountsCasesByViewDate(
+      mechRows,
+      (r) => accountsMechanicalViewDateYmd(r.invoice_done_at),
+      dateRange,
+    )
     if (!q) return rows
     return rows.filter((r) => blobOf(r.jc_number, r.reg_number, r.invoice_number, r.owner_name, r.sa_name).includes(q))
-  }, [mechRows, yearScopedMech, year, month, search])
+  }, [mechRows, dateRange, search])
 
   const searchedMech = useMemo(() => {
     let rows = periodMech
@@ -341,11 +292,14 @@ export default function AccountsPage() {
 
   const periodBs = useMemo(() => {
     const q = search.trim().toLowerCase()
-    let rows = year === 'all' ? bsRows : yearScopedBs
-    if (month !== 'all') rows = rows.filter((r) => dateParts(r.invoice_date).month === month)
+    let rows = filterAccountsCasesByViewDate(
+      bsRows,
+      (r) => accountsBodyshopViewDateYmd(r.invoice_date),
+      dateRange,
+    )
     if (q) rows = rows.filter((r) => blobOf(r.job_card_no, r.reg_number, r.invoice_number, r.customer_name, r.sa_name).includes(q))
     return rows
-  }, [bsRows, yearScopedBs, year, month, search])
+  }, [bsRows, dateRange, search])
 
   const searchedBs = useMemo(() => {
     if (bsFilter === 'remaining') return periodBs.filter((r) => isBodyshopOutstandingOpen(r))
@@ -865,7 +819,7 @@ export default function AccountsPage() {
           <button
             type="button"
             className={`brx-pipe-pill ${section === 'mechanical' ? 'is-active' : ''}`}
-            onClick={() => { setSection('mechanical'); setYear('all'); setMonth('all'); setSearch(''); setMechStatusFilter('all'); setMechPaymentModeFilter('all') }}
+            onClick={() => { setSection('mechanical'); setSearch(''); setMechStatusFilter('all'); setMechPaymentModeFilter('all') }}
           >
             <span className="brx-pipe-pill__n">{mechRows.length}</span>
             <span className="brx-pipe-pill__l">Mechanical<small>Mark Done</small></span>
@@ -873,58 +827,27 @@ export default function AccountsPage() {
           <button
             type="button"
             className={`brx-pipe-pill ${section === 'bodyshop' ? 'is-active' : ''}`}
-            onClick={() => { setSection('bodyshop'); setYear('all'); setMonth('all'); setSearch(''); setMechStatusFilter('all'); setMechPaymentModeFilter('all') }}
+            onClick={() => { setSection('bodyshop'); setSearch(''); setMechStatusFilter('all'); setMechPaymentModeFilter('all') }}
           >
             <span className="brx-pipe-pill__n">{bsRows.length}</span>
             <span className="brx-pipe-pill__l">Bodyshop<small>Invoice + billed</small></span>
           </button>
         </div>
-        <div className="acct-filters">
-          <button
-            type="button"
-            className={`brx-pipe-pill ${year === 'all' ? 'is-active' : ''}`}
-            onClick={() => { setYear('all'); setMonth('all') }}
-          >
-            <span className="brx-pipe-pill__n">{section === 'mechanical' ? mechRows.length : bsRows.length}</span>
-            <span className="brx-pipe-pill__l">All years<small>{section === 'mechanical' ? 'Mark Done date' : 'invoice date'}</small></span>
-          </button>
-          {years.map((y) => (
-            <button
-              key={y.year}
-              type="button"
-              className={`brx-pipe-pill ${year === y.year ? 'is-active' : ''}`}
-              onClick={() => { setYear(y.year); setMonth('all') }}
-            >
-              <span className="brx-pipe-pill__n">{y.count}</span>
-              <span className="brx-pipe-pill__l">{y.year === 0 ? 'No date' : String(y.year)}<small>{y.count} JC</small></span>
-            </button>
-          ))}
-          {year !== 'all' && (
-            <>
-              <button type="button" className={`brx-pipe-pill ${month === 'all' ? 'is-active' : ''}`} onClick={() => setMonth('all')}>
-                <span className="brx-pipe-pill__n">{section === 'mechanical' ? yearScopedMech.length : yearScopedBs.length}</span>
-                <span className="brx-pipe-pill__l">All months<small>{year === 0 ? 'no date' : String(year)}</small></span>
-              </button>
-              {months.map((m) => (
-                <button
-                  key={m.month}
-                  type="button"
-                  className={`brx-pipe-pill ${month === m.month ? 'is-active' : ''}`}
-                  onClick={() => setMonth(m.month)}
-                >
-                  <span className="brx-pipe-pill__n">{m.count}</span>
-                  <span className="brx-pipe-pill__l">{monthLabel(year === 0 ? 0 : year, m.month)}<small>{m.count} JC</small></span>
-                </button>
-              ))}
-            </>
-          )}
+        <div className="acct-filter-end">
+          <DateRangeFilter
+            range={dateRange}
+            onChange={setDateRange}
+            label="Period:"
+            includeAll
+            allLabel="All"
+          />
+          <input
+            className="inp"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search JC / VRN / invoice / name"
+          />
         </div>
-        <input
-          className="inp"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search JC / VRN / invoice / name"
-        />
       </div>
 
       {section === 'mechanical' ? (

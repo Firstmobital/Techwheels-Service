@@ -72,6 +72,8 @@ interface Props {
   includeAll?: boolean
   /** When Period = All, API uses this many days — shown in the dropdown label. */
   allLookbackDays?: number
+  /** Override the All option label. Defaults to `All (${allLookbackDays}d)`. */
+  allLabel?: string
 }
 
 export default function DateRangeFilter({
@@ -81,6 +83,7 @@ export default function DateRangeFilter({
   disabledPresets,
   includeAll = false,
   allLookbackDays = 90,
+  allLabel,
 }: Props) {
   const [preset, setPreset] = useState<DateRangePreset | 'all'>(() => inferPresetFromRange(range))
   const [custom, setCustom] = useState<DateRange>(range)
@@ -110,7 +113,7 @@ export default function DateRangeFilter({
   }
 
   const OPTIONS: Array<{ key: DateRangePreset | 'all'; label: string }> = [
-    ...(includeAll ? [{ key: 'all' as const, label: `All (${allLookbackDays}d)` }] : []),
+    ...(includeAll ? [{ key: 'all' as const, label: allLabel ?? `All (${allLookbackDays}d)` }] : []),
     { key: 'this-month', label: 'This Month'  },
     { key: 'last-month', label: 'Last Month'  },
     { key: 'this-week',  label: 'This Week'   },

@@ -765,20 +765,26 @@ table.tbl { width: 100%; border-collapse: collapse; font-size: 13.5px; }
   gap: 6px;
   flex: 0 0 auto;
 }
-.acct-filter-strip .acct-filters {
+.acct-filter-end {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 6px;
-  margin: 0;
-  flex: 1 1 auto;
+  gap: 6px 8px;
+  margin-left: auto;
   min-width: 0;
+}
+.acct-filter-end .cft__label {
+  font-size: 11px;
+}
+.acct-filter-end .cft__sel {
+  height: 32px;
+  min-width: 92px;
 }
 .acct-filter-strip .inp {
   flex: 0 1 220px;
   min-width: 160px;
   max-width: 260px;
-  margin-left: auto;
+  margin-left: 0;
 }
 .acct-page .brx-pipe-pill {
   padding: 5px 10px;
@@ -877,6 +883,10 @@ table.tbl { width: 100%; border-collapse: collapse; font-size: 13.5px; }
   }
   .acct-page .pagehead {
     flex-wrap: wrap;
+  }
+  .acct-filter-end {
+    margin-left: 0;
+    flex: 1 1 100%;
   }
   .acct-filter-strip .inp {
     margin-left: 0;
