@@ -54,6 +54,7 @@ import {
   remumberPricingRows,
   splitCombinedModelName,
   uniqueFamilyModels,
+  fuelsForFamilyFromModelNames,
 } from '../lib/catalogueIdentity'
 
 interface EmployeeRow {
@@ -563,8 +564,17 @@ export default function SettingsPage() {
   const estFamilyModels = useMemo(() => {
     const fromSettings = uniqueFamilyModels(modelOptions.map((row) => row.model_name))
     const fromCatalogue = uniqueFamilyModels(estimatePricingList.map((row) => row.model))
-    return Array.from(new Set([...fromSettings, ...fromCatalogue])).sort((a, b) => a.localeCompare(b))
+    const missingOnSettings = fromCatalogue.filter((model) => !fromSettings.includes(model))
+    return [...fromSettings, ...missingOnSettings]
   }, [modelOptions, estimatePricingList])
+
+  const estAddFuels = useMemo(() => {
+    const fromModels = fuelsForFamilyFromModelNames(
+      modelOptions.map((row) => row.model_name),
+      estFormData.model,
+    )
+    return fromModels.length > 0 ? fromModels : [...CATALOGUE_FUELS]
+  }, [modelOptions, estFormData.model])
 
   const estModelsList = useMemo(() => ['All', ...estFamilyModels], [estFamilyModels])
   const estFuelsList = useMemo(() => ['All', ...CATALOGUE_FUELS], [])
@@ -3951,9 +3961,21 @@ export default function SettingsPage() {
                       <label className="mb-1 block font-semibold text-gray-700">Model</label>
                       <select
                         value={estFormData.model}
-                        onChange={(e) =>
-                          setEstFormData((prev) => ({ ...prev, model: e.target.value }))
-                        }
+                        onChange={(e) => {
+                          const nextModel = e.target.value
+                          const fuels = fuelsForFamilyFromModelNames(
+                            modelOptions.map((row) => row.model_name),
+                            nextModel,
+                          )
+                          const nextFuels = fuels.length > 0 ? fuels : [...CATALOGUE_FUELS]
+                          setEstFormData((prev) => ({
+                            ...prev,
+                            model: nextModel,
+                            fuel: nextFuels.includes(prev.fuel as (typeof CATALOGUE_FUELS)[number])
+                              ? prev.fuel
+                              : nextFuels[0],
+                          }))
+                        }}
                         className="w-full rounded-lg border border-gray-300 px-3 py-2 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
                       >
                         {estFamilyModels.map((model) => (
@@ -3972,7 +3994,7 @@ export default function SettingsPage() {
                         }
                         className="w-full rounded-lg border border-gray-300 px-3 py-2 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
                       >
-                        {CATALOGUE_FUELS.map((fuel) => (
+                        {estAddFuels.map((fuel) => (
                           <option key={fuel} value={fuel}>
                             {fuel}
                           </option>

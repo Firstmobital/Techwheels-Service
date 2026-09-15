@@ -106,24 +106,30 @@ export interface SplitModelName {
   fuel: CatalogueFuel | null
 }
 
-const COMBINED_FUEL_SUFFIXES: Array<{ suffix: string; fuel: CatalogueFuel }> = [
-  { suffix: ' cng', fuel: 'CNG' },
-  { suffix: ' ev', fuel: 'EV' },
+const COMBINED_FUEL_SUFFIXES: Array<{ suffix: string; compact: string; fuel: CatalogueFuel }> = [
+  { suffix: ' petrol', compact: 'petrol', fuel: 'Petrol' },
+  { suffix: ' diesel', compact: 'diesel', fuel: 'Diesel' },
+  { suffix: ' cng', compact: 'cng', fuel: 'CNG' },
+  { suffix: ' ev', compact: 'ev', fuel: 'EV' },
 ]
 
 /**
  * Split Settings Models / reception combined names:
- * Nexon EV → { model: Nexon, fuel: EV }, Punch CNG → { model: Punch, fuel: CNG }.
+ * Nexon EV → { model: Nexon, fuel: EV }, Punch CNG → { model: Punch, fuel: CNG },
+ * Nexon Petrol → { model: Nexon, fuel: Petrol }, Nexon Diesel → { model: Nexon, fuel: Diesel }.
  */
 export function splitCombinedModelName(value: string | null | undefined): SplitModelName {
   let label = normalizeLabel(value)
   if (!label) return { model: '', fuel: null }
 
   const compact = label.replace(/\s+/g, '')
-  if (/cng$/i.test(compact) && !/\scng$/i.test(label)) {
-    label = normalizeLabel(label.replace(/cng$/i, ' CNG'))
-  } else if (/ev$/i.test(compact) && !/\sev$/i.test(label) && !/cng$/i.test(compact)) {
-    label = normalizeLabel(label.replace(/ev$/i, ' EV'))
+  for (const { compact: compactSuffix, fuel } of COMBINED_FUEL_SUFFIXES) {
+    const compactRx = new RegExp(`${compactSuffix}$`, 'i')
+    const spacedRx = new RegExp(`\\s${compactSuffix}$`, 'i')
+    if (compactRx.test(compact) && !spacedRx.test(label)) {
+      label = normalizeLabel(label.replace(new RegExp(`${compactSuffix}$`, 'i'), ` ${fuel}`))
+      break
+    }
   }
 
   const lower = label.toLowerCase()
@@ -143,6 +149,20 @@ export function uniqueFamilyModels(combinedNames: string[]): string[] {
     if (model) set.add(model)
   })
   return Array.from(set).sort((a, b) => a.localeCompare(b))
+}
+
+export function fuelsForFamilyFromModelNames(
+  combinedNames: string[],
+  family: string,
+): CatalogueFuel[] {
+  const wanted = normalizeLabel(family).toLowerCase()
+  if (!wanted) return [...CATALOGUE_FUELS]
+  const fuels = new Set<CatalogueFuel>()
+  combinedNames.forEach((name) => {
+    const split = splitCombinedModelName(name)
+    if (split.model.toLowerCase() === wanted && split.fuel) fuels.add(split.fuel)
+  })
+  return CATALOGUE_FUELS.filter((fuel) => fuels.has(fuel))
 }
 
 export interface PricingIdentityRow {

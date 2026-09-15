@@ -26,14 +26,24 @@ function splitCombinedModelName(value: string | null | undefined): { model: stri
   let label = normalize(value)
   if (!label) return { model: '', fuel: null }
   const compact = label.replace(/\s+/g, '')
-  if (/cng$/i.test(compact) && !/\scng$/i.test(label)) {
-    label = normalize(label.replace(/cng$/i, ' CNG'))
-  } else if (/ev$/i.test(compact) && !/\sev$/i.test(label) && !/cng$/i.test(compact)) {
-    label = normalize(label.replace(/ev$/i, ' EV'))
+  const suffixes: Array<{ suffix: string; compact: string; fuel: string }> = [
+    { suffix: ' petrol', compact: 'petrol', fuel: 'Petrol' },
+    { suffix: ' diesel', compact: 'diesel', fuel: 'Diesel' },
+    { suffix: ' cng', compact: 'cng', fuel: 'CNG' },
+    { suffix: ' ev', compact: 'ev', fuel: 'EV' },
+  ]
+  for (const item of suffixes) {
+    if (new RegExp(`${item.compact}$`, 'i').test(compact) && !new RegExp(`\\s${item.compact}$`, 'i').test(label)) {
+      label = normalize(label.replace(new RegExp(`${item.compact}$`, 'i'), ` ${item.fuel}`))
+      break
+    }
   }
   const lower = label.toLowerCase()
-  if (lower.endsWith(' cng')) return { model: normalize(label.slice(0, -4)), fuel: 'CNG' }
-  if (lower.endsWith(' ev')) return { model: normalize(label.slice(0, -3)), fuel: 'EV' }
+  for (const item of suffixes) {
+    if (lower.endsWith(item.suffix)) {
+      return { model: normalize(label.slice(0, label.length - item.suffix.length)), fuel: item.fuel }
+    }
+  }
   return { model: label, fuel: null }
 }
 

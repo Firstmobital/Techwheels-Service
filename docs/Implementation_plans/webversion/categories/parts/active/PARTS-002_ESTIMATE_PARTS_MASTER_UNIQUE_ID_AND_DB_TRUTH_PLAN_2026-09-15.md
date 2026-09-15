@@ -141,12 +141,13 @@ Accident / Rusting / PDI / Updation stay on SA; no estimate for Rusting.
 | Combined name (Settings Models / SA) | Catalogue `model` | Catalogue `fuel` |
 |---|---|---|
 | Nexon EV, Curvv EV, Harrier EV, Punch EV, Tiago EV, Tigor EV, Xpres T EV | Nexon / Curvv / Harrier / Punch / Tiago / Tigor / Xpres T | EV |
-| Punch CNG | Punch | CNG |
-| Altroz, Nexon, Punch, Safari, … (no suffix) | same family | from Fuel dropdown or vehicle powertrain (Petrol/Diesel/CNG/EV) |
+| Punch CNG, Nexon CNG | Punch / Nexon | CNG |
+| Nexon Petrol, Nexon Diesel | Nexon | Petrol / Diesel |
+| Altroz, Hexa, Sierra, … (no suffix) | same family | from Fuel dropdown or vehicle powertrain (Petrol/Diesel/CNG/EV) |
 
-Normalize spaces (`NexonEV` → `Nexon EV`) before parse. Alias `Xpres T Ev` → `Xpres T` + EV.
+Normalize spaces (`NexonEV` → `Nexon EV`, `NexonPetrol` → `Nexon Petrol`) before parse. Alias `Xpres T Ev` → `Xpres T` + EV.
 
-Estimate Master **Add Item** and filters: Model dropdown = unique families from that parse; Fuel dropdown = Petrol, Diesel, CNG, EV; Service type dropdown = reception mechanical list including Mini Paid Service.
+Estimate Master **Model dropdown = unique families parsed from Settings `#models`**. Do not show combined names (`Nexon Petrol`) as models. Fuel is a separate dropdown. New `#models` rows appear as families immediately; catalogue items for that family+fuel are added later on Estimate Master. If a family exists only in the catalogue, add the combined names on `#models` (Nexon Petrol, Nexon Diesel, Nexon EV, Nexon CNG). Do not auto-clone catalogue items for a new model.
 
 **Fuel** desk PV/EV is never the catalogue fuel.
 
