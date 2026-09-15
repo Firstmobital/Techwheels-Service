@@ -10,7 +10,10 @@ export interface IssuedGatePassRecord {
   invoice_date?: string | null
   billed_amount?: number | null
   amount_received?: number | null
+  remaining_amount?: number | null
   payment_status: string
+  settlement_reason?: string | null
+  keep_on_credit?: boolean
   issued_at: string
   issued_by: string
   branch?: string | null
@@ -37,6 +40,17 @@ function saveLocalGatePass(record: IssuedGatePassRecord) {
   } catch (e) {
     console.warn('Failed to save gate pass to localStorage:', e)
   }
+}
+
+/** Local broadcast after a trusted Mechanical Gatepass RPC succeeds. Does not persist to the database. */
+export function rememberIssuedGatePass(record: IssuedGatePassRecord): IssuedGatePassRecord {
+  const norm = record.reg_number.trim().toUpperCase()
+  const payload: IssuedGatePassRecord = { ...record, reg_number: norm }
+  saveLocalGatePass(payload)
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('techwheels_gatepass_issued', { detail: payload }))
+  }
+  return payload
 }
 
 // 1. Fetch issued gate pass for a vehicle

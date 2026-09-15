@@ -17,6 +17,7 @@ import {
   isAccountsStatusPending,
   isAccountsStatusReceived,
   isCustomerPaymentClosed,
+  isMechanicalGatepassEligible,
   isMechanicalPaymentClosed,
   listAccountsBodyshopCases,
   listAccountsMechanicalCases,
@@ -24,7 +25,8 @@ import {
   listAccountsMechanicalPayments,
   lookupAccountsMechanicalDmsInvoice,
   mechanicalDraftRowRemaining,
-  mechanicalDraftsFitRemaining,
+  mechanicalGatepassEligibility,
+  mechanicalGatepassReasonLabel,
   mechanicalInvoiceAmountPrefill,
   asiaKolkataTodayDate,
   mechanicalInvoiceDateInputValue,
@@ -35,6 +37,9 @@ import {
   openMechanicalGatepass,
   openMechanicalInvoiceFile,
   paymentModeLabel,
+  setAccountsMechanicalKeepOnCredit,
+  canAccountsMechanicalKeepOnCredit,
+  issueMechanicalAccountsGatePass,
   settlementCardFromAccountsRow,
   sumAccountsPaymentModeTotals,
   upsertAccountsMechanicalInvoice,
@@ -49,7 +54,7 @@ import { uploadServiceAdvisorInvoice } from '../lib/api/reception'
 import { supabase } from '../lib/supabase'
 import type { RepairCard } from '../lib/api/bodyshopRepair'
 import { settlementStatusLabel } from '../lib/api/bodyshopSettlement'
-import { issueAccountsGatePass } from '../lib/gatepass'
+import { issueAccountsGatePass, rememberIssuedGatePass } from '../lib/gatepass'
 import {
   buildBusyPartyNameByInvoice,
   fetchBusyLabourRowsByInvoiceNumbers,
@@ -210,6 +215,8 @@ export default function AccountsPage() {
   const [dmsLookup, setDmsLookup] = useState<MechanicalDmsInvoiceLookup | null>(null)
   const [loadingDms, setLoadingDms] = useState(false)
   const [isAdmin, setIsAdmin] = useState(false)
+  const [canKeepOnCredit, setCanKeepOnCredit] = useState(false)
+  const [savingKeepOnCredit, setSavingKeepOnCredit] = useState(false)
   const [postRow, setPostRow] = useState<AccountsBodyshopCase | null>(null)
   const [postCard, setPostCard] = useState<RepairCard | null>(null)
   const [gatepassConfirmTarget, setGatepassConfirmTarget] = useState<{
@@ -262,6 +269,11 @@ export default function AccountsPage() {
         const role = String(profile?.role ?? '').trim().toLowerCase()
         const isActive = profile?.is_active === true
         setIsAdmin((role === 'admin' || role === 'super_admin') && isActive)
+        try {
+          setCanKeepOnCredit(await canAccountsMechanicalKeepOnCredit())
+        } catch {
+          setCanKeepOnCredit(false)
+        }
       } catch {
         setIsAdmin(false)
       }
@@ -483,25 +495,6 @@ export default function AccountsPage() {
       return
     }
 
-    const fit = mechanicalDraftsFitRemaining(remaining, payments.map((p) => p.amount))
-    if (fit.over > 0) {
-      if (fit.withinPaiseCap) {
-        const last = payments[payments.length - 1]
-        last.amount = mechanicalDraftRowRemaining(remaining, payments.slice(0, -1).map((p) => p.amount))
-        if (last.amount <= 0) {
-          setPayError(`These receipts ${inr(fit.total)} are more than remaining ${inr(remaining)}. Use remaining or raise billed.`)
-          return
-        }
-      } else {
-        setPayError(
-          payments.length === 1
-            ? `This receipt ${inr(fit.total)} is more than remaining ${inr(remaining)}. Use remaining or raise billed.`
-            : `These receipts ${inr(fit.total)} are more than remaining ${inr(remaining)}. Use remaining or raise billed.`,
-        )
-        return
-      }
-    }
-
     setPayError(null)
     setPostingPay(true)
     const postedKeys = new Set<string>()
@@ -589,6 +582,21 @@ export default function AccountsPage() {
     setGatepassConfirmTarget({ type: 'mechanical', mechRow: row })
   }
 
+  async function toggleKeepOnCredit(next: boolean) {
+    if (!editRow) return
+    setSavingKeepOnCredit(true)
+    setPayError(null)
+    try {
+      const saved = await setAccountsMechanicalKeepOnCredit(editRow.reception_entry_id, next)
+      patchMechRow(saved)
+      flash(next ? 'Keep on Credit approved' : 'Keep on Credit revoked')
+    } catch (e) {
+      setPayError(e instanceof Error ? e.message : 'Keep on Credit update failed')
+    } finally {
+      setSavingKeepOnCredit(false)
+    }
+  }
+
   function openPost(row: AccountsBodyshopCase) {
     setPostRow(row)
     setPostCard(settlementCardFromAccountsRow(row))
@@ -604,25 +612,20 @@ export default function AccountsPage() {
     try {
       if (gatepassConfirmTarget.type === 'mechanical' && gatepassConfirmTarget.mechRow) {
         const row = gatepassConfirmTarget.mechRow
-        const gpNo = `GP-${row.jc_number ? row.jc_number.replace(/[^0-9]/g, '').slice(-5) : Date.now().toString().slice(-5)}`
-        await issueAccountsGatePass({
-          gate_pass_no: gpNo,
-          reg_number: row.reg_number || 'VEHICLE',
-          customer_name: row.owner_name || 'Customer',
-          customer_phone: row.owner_phone || null,
-          job_card_no: row.jc_number,
-          invoice_no: row.invoice_number || `INV-${gpNo.replace('GP-', '')}`,
-          invoice_date: row.invoice_date || null,
-          billed_amount: Number(row.billed_amount) || 0,
-          amount_received: Number(row.amount_received) || Number(row.billed_amount) || 0,
-          payment_status: 'Paid',
-          issued_at: new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }),
-          issued_by: 'Accounts Desk · Dealership',
-          branch: row.branch || 'Sitapura Workshop',
-          qr_token: `GP_AUTH_${gpNo}_${row.reg_number}_SECURE`,
+        const issued = await issueMechanicalAccountsGatePass(row.reception_entry_id)
+        rememberIssuedGatePass(issued)
+        openMechanicalGatepass({
+          ...row,
+          amount_received: issued.amount_received ?? row.amount_received,
+          remaining_amount: issued.remaining_amount ?? row.remaining_amount,
+          keep_on_credit: issued.keep_on_credit ?? row.keep_on_credit,
         })
-        openMechanicalGatepass(row)
-        flash(`✅ Gate Pass #${gpNo} generated & released to Customer App for ${row.reg_number}!`)
+        const reason = mechanicalGatepassReasonLabel(
+          issued.settlement_reason === 'paid' || issued.settlement_reason === 'short_payment' || issued.settlement_reason === 'keep_on_credit'
+            ? issued.settlement_reason
+            : mechanicalGatepassEligibility(row).reason,
+        )
+        flash(`Gate Pass #${issued.gate_pass_no} released for ${issued.reg_number}${reason ? ` · ${reason}` : ''}`)
       } else if (gatepassConfirmTarget.type === 'bodyshop' && gatepassConfirmTarget.bsRow) {
         const row = gatepassConfirmTarget.bsRow
         const gpNo = `GP-${row.job_card_no ? row.job_card_no.replace(/[^0-9]/g, '').slice(-5) : Date.now().toString().slice(-5)}`
@@ -1017,8 +1020,12 @@ export default function AccountsPage() {
                         <button
                           type="button"
                           className="btn btn--sm"
-                          disabled={!isMechanicalPaymentClosed(r)}
-                          title={isMechanicalPaymentClosed(r) ? 'Print gatepass copy' : 'Available after remaining is ₹0'}
+                          disabled={!isMechanicalGatepassEligible(r)}
+                          title={
+                            isMechanicalGatepassEligible(r)
+                              ? `Print gatepass copy · ${mechanicalGatepassReasonLabel(mechanicalGatepassEligibility(r).reason)}`
+                              : 'Available when remaining is ₹0, within 2% of billed, or Keep on Credit is approved'
+                          }
                           onClick={() => openMechanicalGatepass(r)}
                         >
                           🖨️ Print
@@ -1026,8 +1033,12 @@ export default function AccountsPage() {
                         <button
                           type="button"
                           className="btn btn--sm btn--primary"
-                          disabled={!isMechanicalPaymentClosed(r)}
-                          title={isMechanicalPaymentClosed(r) ? 'Create and release gatepass to customer' : 'Available after remaining is ₹0'}
+                          disabled={!isMechanicalGatepassEligible(r)}
+                          title={
+                            isMechanicalGatepassEligible(r)
+                              ? `Create and release gatepass · ${mechanicalGatepassReasonLabel(mechanicalGatepassEligibility(r).reason)}`
+                              : 'Available when remaining is ₹0, within 2% of billed, or Keep on Credit is approved'
+                          }
                           onClick={() => printMechGatepass(r)}
                         >
                           Create Gatepass
@@ -1141,6 +1152,8 @@ export default function AccountsPage() {
       {editRow && (() => {
         const isInvoiceLocked = Boolean((editRow.invoice_number && editRow.billed_amount != null) || payLines.length > 0)
         const isFieldDisabled = !isAdmin && isInvoiceLocked
+        const gatepass = mechanicalGatepassEligibility(editRow)
+        const keepOnCreditOn = Boolean(editRow.keep_on_credit)
         return (
           <div className="modal-back" role="presentation" onClick={() => setEditRow(null)}>
             <div className="modal modal--md" role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
@@ -1314,19 +1327,44 @@ export default function AccountsPage() {
                       <strong>{settlementStatusLabel(editRow.payment_status)}</strong>
                     </div>
                   </div>
+                  <label className="acct-credit">
+                    <input
+                      type="checkbox"
+                      checked={keepOnCreditOn}
+                      disabled={!canKeepOnCredit || savingKeepOnCredit || editRow.billed_amount == null}
+                      onChange={(e) => void toggleKeepOnCredit(e.target.checked)}
+                    />
+                    <span>
+                      <strong>Keep on Credit</strong>
+                      {keepOnCreditOn ? (
+                        <span className="acct-credit__hint">
+                          Approved{editRow.keep_on_credit_approved_by ? ` by ${editRow.keep_on_credit_approved_by}` : ''}
+                          {editRow.keep_on_credit_approved_at ? ` · ${fmtWhen(editRow.keep_on_credit_approved_at)}` : ''}
+                        </span>
+                      ) : canKeepOnCredit ? (
+                        <span className="acct-credit__hint">Release Gatepass while an amount remains unpaid</span>
+                      ) : (
+                        <span className="acct-credit__hint">Requires Admin, GM, or Accounts Keep on Credit grant</span>
+                      )}
+                    </span>
+                  </label>
                   {payError && (
                     <div className="brx-settle-banner is-error" style={{ marginBottom: 12 }}>{payError}</div>
                   )}
-                  {isMechanicalPaymentClosed(editRow) ? (
-                    <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-                      <button type="button" className="btn" onClick={() => openMechanicalGatepass(editRow)}>
-                        🖨️ Print Gatepass
-                      </button>
-                      <button type="button" className="btn btn--primary" onClick={() => printMechGatepass(editRow)}>
-                        Create Gatepass
-                      </button>
+                  {gatepass.eligible && (
+                    <div className="acct-gp-ready">
+                      <span>Gatepass {mechanicalGatepassReasonLabel(gatepass.reason)}</span>
+                      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                        <button type="button" className="btn" onClick={() => openMechanicalGatepass(editRow)}>
+                          🖨️ Print Gatepass
+                        </button>
+                        <button type="button" className="btn btn--primary" onClick={() => printMechGatepass(editRow)}>
+                          Create Gatepass
+                        </button>
+                      </div>
                     </div>
-                  ) : (
+                  )}
+                  {!isMechanicalPaymentClosed(editRow) && (
                     <div>
                       {paymentDrafts.map((draft, index) => {
                         const billedRemaining = Number(mechanicalRemaining(editRow) ?? 0)
@@ -1373,7 +1411,7 @@ export default function AccountsPage() {
                                   type="number"
                                   value={draft.amount}
                                   onChange={(e) => updatePaymentDraft(draft.key, { amount: e.target.value })}
-                                  placeholder="Additional amount"
+                                  placeholder="Amount received"
                                 />
                                 {rowRemaining > 0 && (
                                   <button
@@ -1598,11 +1636,35 @@ export default function AccountsPage() {
                   </span>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <span style={{ color: 'var(--muted)' }}>Settled Amount:</span>
-                  <span className="mono font-bold text-emerald-700" style={{ color: '#15803d', fontWeight: 800 }}>
-                    {inr(gatepassConfirmTarget.mechRow?.billed_amount || gatepassConfirmTarget.bsRow?.billed_amount)} (✓ Full Payment Received)
+                  <span style={{ color: 'var(--muted)' }}>Billed / received</span>
+                  <span className="mono font-bold">
+                    {gatepassConfirmTarget.type === 'mechanical'
+                      ? `${inr(gatepassConfirmTarget.mechRow?.billed_amount)} / ${inr(gatepassConfirmTarget.mechRow?.amount_received)}`
+                      : inr(gatepassConfirmTarget.bsRow?.billed_amount)}
                   </span>
                 </div>
+                {gatepassConfirmTarget.type === 'mechanical' && gatepassConfirmTarget.mechRow && (
+                  <>
+                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <span style={{ color: 'var(--muted)' }}>Remaining</span>
+                      <strong>{inr(mechanicalRemaining(gatepassConfirmTarget.mechRow))}</strong>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <span style={{ color: 'var(--muted)' }}>Gatepass clearance</span>
+                      <strong style={{ color: '#15803d' }}>
+                        {mechanicalGatepassReasonLabel(mechanicalGatepassEligibility(gatepassConfirmTarget.mechRow).reason) || '—'}
+                      </strong>
+                    </div>
+                  </>
+                )}
+                {gatepassConfirmTarget.type === 'bodyshop' && (
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span style={{ color: 'var(--muted)' }}>Settled Amount:</span>
+                    <span className="mono font-bold text-emerald-700" style={{ color: '#15803d', fontWeight: 800 }}>
+                      {inr(gatepassConfirmTarget.bsRow?.billed_amount)}
+                    </span>
+                  </div>
+                )}
               </div>
 
               <div

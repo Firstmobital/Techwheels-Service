@@ -2,7 +2,7 @@
 
 **Plan:** ACCOUNTS-001  
 **Created:** 2026-09-11  
-**Status:** Ready after DBL-0045 apply
+**Status:** Ready after DBL-0061 apply (2026-09-15)
 
 ## SQL Editor
 
@@ -33,6 +33,12 @@
 - [ ] Pending case with no receipts still exports one row with blank `voucher_no`
 - [ ] **Busy Export** (Mechanical): headers Invoice date, voucher_no, Account DR, Account CR, Amount DR, Amount CR, Reference no; cash DR `CASH AT SITAPURA`; UPI `PAYTM WALLET`; card `CREDIT CARD A/C`; Account CR for `IMBTAI2627007397` is `JAGDISH NARAYAN YADAV-SITAPURA RJ45CV5192`; split Cash+UPI is two rows; cheque/bank/other skipped; pending without receipts omitted; Export Excel unchanged
 - [ ] **Busy Export** Invoice date is `payment_received_date` when present (even if Accounts `invoice_date` differs); otherwise Accounts `invoice_date`; otherwise unique DMS labour `invoice_date`; blank dates are skipped/warned, not exported. Split receipts with different received dates keep their own date. `voucher_no` is persisted only. Amount DR = Amount CR. Eligibility remains `invoice_date >= 2026-09-02`.
+- [ ] Overpayment posts the entered amount (₹3,700 vs remaining ₹3,680 stays ₹3,700). Remaining display floors at ₹0; `payment_status` becomes received. Busy Export Amount DR/CR = ₹3,700.
+- [ ] Remaining ₹150 of billed ₹10,000: `payment_status` stays partial; Gatepass eligible (2%).
+- [ ] Remaining ₹300 of billed ₹10,000: Gatepass disabled unless Keep on Credit.
+- [ ] Keep on Credit requires Admin, GM, or module `accounts_keep_on_credit`. Unauthorized RPC is denied. Remaining and status unchanged.
+- [ ] `issue_accounts_mechanical_gatepass` rejects remaining > 2% without persisted Keep on Credit (no client eligible flag).
+- [ ] Reload after Keep on Credit still shows approved_by / approved_at.
 
 ## Bodyshop
 

@@ -38,6 +38,25 @@ function mechanicalDraftsFitRemaining(billedRemaining, enteredAmounts) {
   }
 }
 
+function mechanicalGatepassEligibility(row) {
+  const billed = row.billed_amount == null ? null : Number(row.billed_amount)
+  if (billed == null || !Number.isFinite(billed)) {
+    return { eligible: false, reason: null, remaining: null }
+  }
+  const remaining = roundAccountsMoney(Math.max(0, billed - Number(row.amount_received ?? 0)))
+  if (remaining <= 0) return { eligible: true, reason: 'paid', remaining }
+  const allowance = roundAccountsMoney(billed * 0.02)
+  if (remaining <= allowance) return { eligible: true, reason: 'short_payment', remaining }
+  if (row.keep_on_credit) return { eligible: true, reason: 'keep_on_credit', remaining }
+  return { eligible: false, reason: null, remaining }
+}
+
+function isCustomerPaymentClosed(row) {
+  const kind = String(row.customer_settlement_kind ?? '').toLowerCase()
+  const status = String(row.customer_payment_status ?? 'pending').toLowerCase()
+  return status === 'received' || kind === 'none'
+}
+
 function assert(cond, message) {
   if (!cond) throw new Error(message)
 }
@@ -80,10 +99,16 @@ function assert(cond, message) {
   assert(fit.total === 8000 && fit.over <= 0, 'E: new drafts should fill remaining after saved 2000')
 }
 
-// F. Overpayment 3000 + 3000 vs remaining 5000
+// F. Overpayment 3000 + 3000 vs remaining 5000 — persist the entered total
 {
   const fit = mechanicalDraftsFitRemaining(5000, [3000, 3000])
-  assert(fit.total === 6000 && fit.over === 1000 && !fit.withinPaiseCap, 'F: 6000 vs 5000 must reject')
+  assert(fit.total === 6000 && fit.over === 1000, 'F: 6000 vs 5000 must keep entered 6000')
+}
+
+// F2. Example remaining 3680 entered 3700
+{
+  const fit = mechanicalDraftsFitRemaining(3680, [3700])
+  assert(fit.total === 3700 && fit.over === 20, 'F2: 3700 vs 3680 must keep entered 3700')
 }
 
 // G. Remove unsaved middle row: 4000 + 3000 remain
@@ -1537,6 +1562,79 @@ function buildMechanicalBusyPaymentExportRows({
   assert(bsRemainingInRange.map((r) => r.repair_card_id).join(',') === '2', 'E/C: Bodyshop date AND remaining keeps outstanding in-range only')
 
   console.log('verify_accounts_split_payment_drafts: Accounts view-period date range checks passed')
+}
+
+{
+  // A. Full payment
+  const a = mechanicalGatepassEligibility({ billed_amount: 10000, amount_received: 10000, keep_on_credit: false })
+  assert(a.eligible && a.reason === 'paid' && a.remaining === 0, 'A: full payment eligible as paid')
+
+  // B. 1.99% short → allowed
+  const b = mechanicalGatepassEligibility({ billed_amount: 10000, amount_received: 9801, keep_on_credit: false })
+  assert(b.eligible && b.reason === 'short_payment' && b.remaining === 199, `B: 1.99% short allowed, got ${JSON.stringify(b)}`)
+
+  // C. exactly 2.00% short → allowed
+  const c = mechanicalGatepassEligibility({ billed_amount: 10000, amount_received: 9800, keep_on_credit: false })
+  assert(c.eligible && c.reason === 'short_payment' && c.remaining === 200, `C: exact 2% allowed, got ${JSON.stringify(c)}`)
+
+  // D. >2.00% short → denied
+  const d = mechanicalGatepassEligibility({ billed_amount: 10000, amount_received: 9799.99, keep_on_credit: false })
+  assert(!d.eligible && d.reason == null && d.remaining === 200.01, `D: 200.01 denied, got ${JSON.stringify(d)}`)
+  const d300 = mechanicalGatepassEligibility({ billed_amount: 10000, amount_received: 9700, keep_on_credit: false })
+  assert(!d300.eligible && d300.remaining === 300, 'D2: remaining 300 denied without credit')
+
+  // E. >2% + Keep on Credit → allowed; remaining and financial status stay unpaid/partial
+  const e = mechanicalGatepassEligibility({ billed_amount: 10000, amount_received: 7000, keep_on_credit: true })
+  assert(e.eligible && e.reason === 'keep_on_credit' && e.remaining === 3000, `E: credit allows remaining 3000, got ${JSON.stringify(e)}`)
+
+  // F/G unauthorized credit / direct Gatepass without override are server-enforced.
+  // Client eligibility still denies when keep_on_credit is false.
+  const f = mechanicalGatepassEligibility({ billed_amount: 10000, amount_received: 9700, keep_on_credit: false })
+  assert(!f.eligible, 'F/G client: unauthorized credit flag false is not eligible')
+
+  // H/I. payment greater than remaining: entered amount kept; remaining floors; status received
+  const over = { billed_amount: 3680, amount_received: 3700, keep_on_credit: false }
+  const overGp = mechanicalGatepassEligibility(over)
+  assert(overGp.remaining === 0 && overGp.reason === 'paid', 'I: overpay remaining displayed as 0 and paid')
+  const overFit = mechanicalDraftsFitRemaining(3680, [3700])
+  assert(overFit.total === 3700, 'H: persisted draft total is the entered 3700')
+
+  // J. split Cash + UPI regression
+  const split = mechanicalDraftsFitRemaining(10000, [4000, 6000])
+  assert(split.total === 10000 && split.over <= 0, 'J: Cash 4000 + UPI 6000 still complete 10000')
+
+  // K. Bodyshop closed rule unchanged
+  assert(isCustomerPaymentClosed({ customer_payment_status: 'received', customer_settlement_kind: 'due' }), 'K: customer received still closed')
+  assert(isCustomerPaymentClosed({ customer_payment_status: 'pending', customer_settlement_kind: 'none' }), 'K: kind none still closed')
+  assert(!isCustomerPaymentClosed({ customer_payment_status: 'partial', customer_settlement_kind: 'due' }), 'K: customer partial due still open')
+
+  const busyOver = buildMechanicalBusyPaymentExportRows({
+    cases: [{
+      reception_entry_id: 99,
+      jc_number: 'JC-OVER',
+      reg_number: 'RJ14OVER',
+      owner_name: 'Over Pay',
+      branch: 'Sitapura',
+      invoice_number: 'INV-OVER',
+      invoice_date: '2026-09-11',
+      billed_amount: 3680,
+      amount_received: 3700,
+    }],
+    lines: [{
+      id: 99,
+      reception_entry_id: 99,
+      amount: 3700,
+      payment_mode: 'upi',
+      voucher_no: 'JApp/26-27/9999',
+      reference: 'OVER-3700',
+      payment_received_date: '2026-09-15',
+      posted_at: '2026-09-15T10:00:00+05:30',
+    }],
+  })
+  assert(busyOver.rows.length === 1, `BUSY overpay row count ${busyOver.rows.length}`)
+  assert(busyOver.rows[0]['Amount DR'] === 3700 && busyOver.rows[0]['Amount CR'] === 3700, `BUSY overpay must export 3700, got ${busyOver.rows[0]['Amount DR']}`)
+
+  console.log('verify_accounts_split_payment_drafts: Gatepass 2%/credit/overpay checks A–K passed')
 }
 
 

@@ -1,6 +1,7 @@
 import { AUTODOC_BUCKET } from '../autodocStorage'
 import { busyInvoiceLookupKey, normalizeInvoiceNumber } from '../busy/eligibility'
 import { normalizePersonName } from '../busy/partyName'
+import type { IssuedGatePassRecord } from '../gatepass'
 import { supabase } from '../supabase'
 import type { OverallStatus, RepairCard } from './bodyshopRepair'
 import { settlementRpcError } from './bodyshopSettlement'
@@ -8,6 +9,7 @@ import { settlementRpcError } from './bodyshopSettlement'
 export type AccountsPaymentStatus = 'pending' | 'partial' | 'received' | 'not_received'
 export type AccountsPaymentMode = 'cash' | 'upi' | 'card' | 'cheque' | 'bank' | 'other'
 export type MechanicalPaymentModeFilter = 'all' | 'cash' | 'upi' | 'card'
+export type MechanicalGatepassReason = 'paid' | 'short_payment' | 'keep_on_credit'
 
 /** Effective invoice-date cutoff (Accounts invoice_date, else unique DMS labour invoice_date). payment_received_date / posted_at / invoice_done_at do not control voucher eligibility. */
 export const ACCOUNTS_VOUCHER_CUTOFF_DATE = '2026-09-02'
@@ -51,6 +53,10 @@ export interface AccountsMechanicalCase {
   invoice_storage_path: string | null
   invoice_file_name: string | null
   invoice_drive_url: string | null
+  keep_on_credit?: boolean | null
+  keep_on_credit_approved_by?: string | null
+  keep_on_credit_approved_at?: string | null
+  gatepass_reason?: MechanicalGatepassReason | null
 }
 
 export interface AccountsMechanicalPayment {
@@ -175,6 +181,34 @@ export async function addAccountsMechanicalPayment(input: {
   })
   if (error) throw new Error(settlementRpcError(error))
   return data as AccountsMechanicalCase
+}
+
+export async function setAccountsMechanicalKeepOnCredit(
+  receptionEntryId: number,
+  keepOnCredit: boolean,
+): Promise<AccountsMechanicalCase> {
+  const { data, error } = await supabase.rpc('set_accounts_mechanical_keep_on_credit', {
+    p_reception_entry_id: receptionEntryId,
+    p_keep_on_credit: keepOnCredit,
+  })
+  if (error) throw new Error(settlementRpcError(error))
+  return data as AccountsMechanicalCase
+}
+
+export async function canAccountsMechanicalKeepOnCredit(): Promise<boolean> {
+  const { data, error } = await supabase.rpc('accounts_mechanical_can_keep_on_credit')
+  if (error) throw new Error(settlementRpcError(error))
+  return Boolean(data)
+}
+
+export async function issueMechanicalAccountsGatePass(
+  receptionEntryId: number,
+): Promise<IssuedGatePassRecord> {
+  const { data, error } = await supabase.rpc('issue_accounts_mechanical_gatepass', {
+    p_reception_entry_id: receptionEntryId,
+  })
+  if (error) throw new Error(settlementRpcError(error))
+  return data as IssuedGatePassRecord
 }
 
 export async function listAccountsMechanicalPayments(
@@ -309,6 +343,41 @@ export function isMechanicalPaymentClosed(row: Pick<AccountsMechanicalCase, 'bil
   if (row.billed_amount == null) return false
   const remaining = mechanicalRemaining(row)
   return remaining != null && remaining <= 0
+}
+
+export function mechanicalShortPaymentAllowance(billed: number | null | undefined): number | null {
+  if (billed == null || !Number.isFinite(Number(billed))) return null
+  return roundAccountsMoney(Number(billed) * 0.02)
+}
+
+export function mechanicalGatepassEligibility(
+  row: Pick<AccountsMechanicalCase, 'billed_amount' | 'amount_received' | 'keep_on_credit'>,
+): { eligible: boolean; reason: MechanicalGatepassReason | null; remaining: number | null } {
+  const billed = row.billed_amount == null ? null : Number(row.billed_amount)
+  if (billed == null || !Number.isFinite(billed)) {
+    return { eligible: false, reason: null, remaining: null }
+  }
+  const remaining = roundAccountsMoney(Math.max(0, billed - Number(row.amount_received ?? 0)))
+  if (remaining <= 0) return { eligible: true, reason: 'paid', remaining }
+  const allowance = mechanicalShortPaymentAllowance(billed)
+  if (allowance != null && remaining <= allowance) {
+    return { eligible: true, reason: 'short_payment', remaining }
+  }
+  if (row.keep_on_credit) return { eligible: true, reason: 'keep_on_credit', remaining }
+  return { eligible: false, reason: null, remaining }
+}
+
+export function isMechanicalGatepassEligible(
+  row: Pick<AccountsMechanicalCase, 'billed_amount' | 'amount_received' | 'keep_on_credit'>,
+): boolean {
+  return mechanicalGatepassEligibility(row).eligible
+}
+
+export function mechanicalGatepassReasonLabel(reason: MechanicalGatepassReason | null | undefined): string {
+  if (reason === 'paid') return 'Paid'
+  if (reason === 'short_payment') return 'Short payment allowed'
+  if (reason === 'keep_on_credit') return 'Released on credit'
+  return ''
 }
 
 export function paymentModeLabel(mode: string | null | undefined): string {
@@ -912,6 +981,7 @@ function mechanicalGatepassHtml(row: AccountsMechanicalCase): string {
     <tr><th>Amount received</th><td>${escapeHtml(gatepassMoney(row.amount_received))}</td></tr>
     <tr><th>Remaining</th><td>${escapeHtml(gatepassMoney(mechanicalRemaining(row)))}</td></tr>
     <tr><th>Payment status</th><td>${escapeHtml(row.payment_status || 'pending')}</td></tr>
+    <tr><th>Gatepass clearance</th><td>${escapeHtml(mechanicalGatepassReasonLabel(mechanicalGatepassEligibility(row).reason) || 'Not eligible')}</td></tr>
   </table>
   <div class="signs">
     <div>Accounts</div>
