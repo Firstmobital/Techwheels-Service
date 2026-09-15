@@ -1,6 +1,6 @@
 # Mobile Version Plans Index
 
-Last Updated: 2026-08-11
+Last Updated: 2026-09-15
 Scope: Mobile app implementation plans only
 Authority: This index is the routing source for mobileversion plans
 
@@ -45,6 +45,7 @@ Use this file as daily command center:
 | MOBILE-009 | redesign | Active | Mobile Team | `docs/Implementation_plans/mobileversion/categories/redesign/active/MOBILE-009_MOBILE_APP_REDESIGN_PARITY_TRACKER.md` |
 | MOBILE-010 | program | Active | Mobile Team | `docs/Implementation_plans/mobileversion/categories/program/active/MOBILE-010_MOBILE_PROGRAM_MASTER_TRACKER.md` |
 | MOBILE-BP-RD | redesign | In Progress | Mobile Team | `docs/Implementation_plans/mobileversion/categories/redesign/active/redesign_bodypaint_module.md` |
+| MOBILE-011 | auth | Not Started | Mobile Team + Platform | `docs/Implementation_plans/mobileversion/categories/auth/active/MOBILE-011_CUSTOMER_STAFF_SINGLE_APP_PLAN.md` |
 
 ---
 
@@ -61,6 +62,7 @@ Use this file as daily command center:
 | program | `docs/Implementation_plans/mobileversion/categories/program/evidence/PHASE-006_TESTING_GUIDE.md` |
 | program | `docs/Implementation_plans/mobileversion/categories/program/evidence/PHASE-006_COMPLETION_SUMMARY.md` |
 | program | `docs/Implementation_plans/mobileversion/categories/program/evidence/PHASE-006_METRO_TROUBLESHOOTING.md` |
+| program | `docs/Implementation_plans/mobileversion/categories/program/evidence/MOBILE-011_CUSTOMER_STAFF_SINGLE_APP_AUDIT_2026-09-15.md` |
 | redesign | `docs/Implementation_plans/mobileversion/categories/redesign/evidence/SCREEN_REDESIGN_PARITY_AUDIT_TEMPLATE.md` |
 
 ---

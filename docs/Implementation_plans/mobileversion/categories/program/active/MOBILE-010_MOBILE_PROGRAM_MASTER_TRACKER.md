@@ -3,7 +3,7 @@
 Created: 2026-06-17
 Owner: Techwheels Product + Mobile Engineering + GitHub Copilot
 Status: ACTIVE (Canonical Authority)
-Last Updated: 2026-06-18
+Last Updated: 2026-09-15
 
 ---
 
@@ -42,6 +42,7 @@ If any child tracker conflicts with this file, this file wins until explicitly u
 | MOBILE-008 | `docs/Implementation_plans/mobileversion/categories/operations/active/MOBILE-008_BACKGROUND_PROCESSING_STATE_UX_PLAN.md` | Async/background UX states | Pending | High | Child tracker for UX-state consistency |
 | MOBILE-009 | `docs/Implementation_plans/mobileversion/categories/redesign/active/MOBILE-009_MOBILE_APP_REDESIGN_PARITY_TRACKER.md` | Redesign parity tracker (non-Body & Paint) | Active | High | Foundation + Auth + Shell + Reports + Operations redesign tracking |
 | MOBILE-BP-RD | `docs/Implementation_plans/mobileversion/categories/redesign/active/redesign_bodypaint_module.md` | Body & Paint redesign (consolidated) | In Progress | Critical | Single source of truth for BP-01..BP-08 redesign execution |
+| MOBILE-011 | `docs/Implementation_plans/mobileversion/categories/auth/active/MOBILE-011_CUSTOMER_STAFF_SINGLE_APP_PLAN.md` | One Expo binary: customer + staff login shells + customer RPCs | Not Started | High | Phase 0 (service-role rotation) is a production security blocker and may run in parallel with BP redesign. Do not ship `bodyshop/`. Audit: `categories/program/evidence/MOBILE-011_CUSTOMER_STAFF_SINGLE_APP_AUDIT_2026-09-15.md` |
 
 ---
 
@@ -50,6 +51,7 @@ If any child tracker conflicts with this file, this file wins until explicitly u
 1. Highest priority now: Body & Paint mobile redesign parity execution.
 2. Execution anchor: `docs/Implementation_plans/mobileversion/categories/redesign/active/redesign_bodypaint_module.md`.
 3. Until this item reaches Review/Done in child tracking, no lower-priority item should preempt active execution except production blockers.
+4. Production blocker exception: MOBILE-011 Phase 0 (rotate leaked `service_role` key; remove it from `bodyshop/` client) may run in parallel. Do not start customer Expo screens until Phase 1 RPCs exist.
 
 ---
 
@@ -65,6 +67,7 @@ Use: Not Started | In Progress | Blocked | Review | Done
 | M10-004 | Processing-state UX rollout | MOBILE-008 | Not Started | Mobile Team | Start Sprint 1 critical items (M8-001/2/6/11) |
 | M10-005 | GPS stamp parity closure | MOBILE-005 | In Progress | Mobile Team | Complete remaining phases and QA gates |
 | M10-006 | Satellite hybrid provider rollout decision | MOBILE-006 | Pending | Product + Mobile | Confirm budget/quota and backend proxy readiness |
+| M10-007 | Single-app customer + staff identity (RPCs, Expo shells) | MOBILE-011 | Not Started | Mobile + Platform | Start Phase 0 secret rotation; do not copy `bodyshop/` into Expo |
 
 ### 4.1) Current Session Kickoff (2026-06-18)
 

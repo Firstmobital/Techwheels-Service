@@ -1,6 +1,6 @@
 {
-  "generated_at_utc": "2026-09-15T09:35:12.782Z",
-  "scanned_files": 68,
+  "generated_at_utc": "2026-09-15T11:32:33.955Z",
+  "scanned_files": 72,
   "violations": 0,
   "scanned": [
     {
@@ -69,6 +69,38 @@
     },
     {
       "file": "docs/Implementation_plans/completed/webversion/categories/supabase/active/SUPABASE-002_DB_CODE_COMPARISON_REMEDIATION_PLAN_2026-06-11.md",
+      "checks": {
+        "metrics_automated_rows": 0,
+        "changelog_automated_rows": 0,
+        "snapshot_blocks": 0
+      }
+    },
+    {
+      "file": "docs/Implementation_plans/mobileversion/categories/auth/active/00_INDEX.md",
+      "checks": {
+        "metrics_automated_rows": 0,
+        "changelog_automated_rows": 0,
+        "snapshot_blocks": 0
+      }
+    },
+    {
+      "file": "docs/Implementation_plans/mobileversion/categories/auth/active/CHECKLIST.md",
+      "checks": {
+        "metrics_automated_rows": 0,
+        "changelog_automated_rows": 0,
+        "snapshot_blocks": 0
+      }
+    },
+    {
+      "file": "docs/Implementation_plans/mobileversion/categories/auth/active/MOBILE-011_CUSTOMER_STAFF_SINGLE_APP_PLAN.md",
+      "checks": {
+        "metrics_automated_rows": 0,
+        "changelog_automated_rows": 0,
+        "snapshot_blocks": 0
+      }
+    },
+    {
+      "file": "docs/Implementation_plans/mobileversion/categories/auth/active/PHASES.md",
       "checks": {
         "metrics_automated_rows": 0,
         "changelog_automated_rows": 0,
