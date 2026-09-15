@@ -1,13 +1,13 @@
 {
   "authoritative_dump_path": "local_folder/backups/full_database.sql",
   "chunk_mirror_glob": "local_folder/backups/chunks/full_database.sql.part_*",
-  "created_at_utc": "2026-07-22T04:26:11Z",
-  "sha256": "ae1f8292dfbd3b60e86902e4edf151b16d42c93d593a800eea8933f7fff1aa99",
-  "size_bytes": 288884156,
+  "created_at_utc": "2026-09-15T04:37:26Z",
+  "sha256": "76a513f39c1ddc69b1ae8ffbfd17fce74f7a7e14c9a5e8636984d10c06769582",
+  "size_bytes": 442500891,
   "host": "db.jmdndcphkmaljhwgzqxq.supabase.co",
   "port": "5432",
   "database": "postgres",
   "username": "postgres",
-  "large_table_count": 23,
+  "large_table_count": 30,
   "connection_mode": "direct"
 }

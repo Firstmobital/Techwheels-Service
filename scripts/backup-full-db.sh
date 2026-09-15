@@ -8,12 +8,14 @@ set -euo pipefail
 #
 # Strategy (always starts fresh — never appends to an old dump):
 #   1. Resolve a direct DB connection when possible (pooler drops long COPY streams).
-#   2. Discover large tables from live DB size stats.
+#   2. Discover large tables from live DB size stats (skip extension-owned
+#      runtime tables such as net._http_response — pg_dump never emits their rows).
 #   3. Phase 1: schema + all row data except large tables (one connection).
 #   4. Phase 2: each large table on its own connection, with pauses + retries.
 #      Data presence is checked with a byte search (COPY or INSERT), not grep.
 #      Attempts 3+ fall back to --inserts if COPY data is missing.
-#   5. Verify every large table landed in the dump before chunking.
+#      Header-only dumps (extension / no dumpable data) are skipped, not retried.
+#   5. Verify every dumped large table landed in the file before chunking.
 #
 # Required environment variables:
 #   SUPABASE_DB_PASSWORD
@@ -153,8 +155,28 @@ SELECT n.nspname || '.' || c.relname
 FROM pg_class c
 JOIN pg_namespace n ON n.oid = c.relnamespace
 WHERE c.relkind = 'r'
-  AND n.nspname NOT IN ('pg_catalog', 'information_schema')
+  AND n.nspname NOT IN (
+    'pg_catalog',
+    'information_schema',
+    'net',
+    'pgbouncer',
+    'cron'
+  )
   AND pg_total_relation_size(c.oid) >= ${large_table_min_bytes}
+  AND (
+    NOT EXISTS (
+      SELECT 1
+      FROM pg_depend d
+      WHERE d.classid = 'pg_class'::regclass
+        AND d.objid = c.oid
+        AND d.deptype = 'e'
+    )
+    OR EXISTS (
+      SELECT 1
+      FROM pg_extension e
+      WHERE c.oid = ANY (e.extconfig)
+    )
+  )
 ORDER BY pg_total_relation_size(c.oid) DESC;
 SQL
 }
@@ -236,6 +258,20 @@ with open(path, "rb") as fh:
 PY
 }
 
+# Complete pg_dump that emitted only headers — typical for extension members.
+dump_is_header_only() {
+  local file="$1"
+  [[ -s "$file" ]] || return 1
+  grep -Fq "PostgreSQL database dump complete" "$file" || return 1
+  python3 - "$file" <<'PY'
+import sys
+data = open(sys.argv[1], "rb").read()
+has_copy = b"\nCOPY " in data or data.startswith(b"COPY ")
+has_insert = b"\nINSERT INTO " in data or data.startswith(b"INSERT INTO ")
+sys.exit(0 if not has_copy and not has_insert else 1)
+PY
+}
+
 describe_failed_table_dump() {
   local table="$1"
   local file="$2"
@@ -280,6 +316,19 @@ fi
 
 echo "Large tables (${#large_tables[@]}) will be dumped on separate connections:" >&2
 printf '  - %s\n' "${large_tables[@]}" >&2
+
+skipped_large_tables=()
+
+table_was_skipped() {
+  local table="$1"
+  local existing
+  for existing in "${skipped_large_tables[@]:-}"; do
+    if [[ "$existing" == "$table" ]]; then
+      return 0
+    fi
+  done
+  return 1
+}
 
 dump_with_retries() {
   local label="$1"
@@ -342,6 +391,12 @@ append_table_with_retries() {
         rm -f "$table_dump"
         return 0
       fi
+      if dump_is_header_only "$table_dump"; then
+        echo "Skipping ${table}: pg_dump has no dumpable row data (extension or non-data table)." >&2
+        skipped_large_tables+=("$table")
+        rm -f "$table_dump"
+        return 0
+      fi
       echo "Warning: ${table} dump contained no COPY/INSERT data; treating as failure." >&2
       describe_failed_table_dump "$table" "$table_dump"
     fi
@@ -396,6 +451,10 @@ done
 
 echo "Verifying large-table data blocks in dump..." >&2
 for table in "${large_tables[@]}"; do
+  if table_was_skipped "$table"; then
+    echo "  skip ${table} (no dumpable row data)" >&2
+    continue
+  fi
   if ! verify_table_in_dump "$table"; then
     echo "Error: dump verification failed — missing COPY/INSERT data for ${table}." >&2
     exit 1
