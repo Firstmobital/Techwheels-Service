@@ -42,6 +42,7 @@
 - [ ] Cash / UPI / Credit Card KPIs follow Received/Pending/All; a 13-Sep Mark Done case with cash received 14-Sep is omitted from 13-Sep mode money
 - [ ] Received + Cash KPI equals in-range cash on Received cases (13-Sep live: ₹10,300 not ₹16,900)
 - [ ] Clicking Cash does not zero the UPI or Credit Card tiles
+- [ ] Mechanical table **Received Amount** is after Billed and before Remaining; sums payment lines minus `reference` Discount (`DISCOUNT` / trim+case); genuine `other` stays in
 
 ## Bodyshop
 

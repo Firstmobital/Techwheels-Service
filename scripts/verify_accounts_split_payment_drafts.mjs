@@ -15,6 +15,37 @@ function roundAccountsMoney(n) {
   return Math.round((Number(n) + Number.EPSILON) * 100) / 100
 }
 
+const MECHANICAL_DISCOUNT_REFERENCE = 'discount'
+
+function isMechanicalDiscountPaymentLine(line) {
+  return String(line.reference ?? '').trim().toLowerCase() === MECHANICAL_DISCOUNT_REFERENCE
+}
+
+function mechanicalActualReceivedAmount(lines) {
+  let sum = 0
+  for (const line of lines) {
+    if (isMechanicalDiscountPaymentLine(line)) continue
+    const amount = Number(line.amount ?? 0)
+    if (!Number.isFinite(amount) || amount === 0) continue
+    sum += amount
+  }
+  return roundAccountsMoney(sum)
+}
+
+function mechanicalActualReceivedAmountByCase(lines) {
+  const byCase = new Map()
+  for (const line of lines) {
+    const list = byCase.get(line.reception_entry_id) ?? []
+    list.push(line)
+    byCase.set(line.reception_entry_id, list)
+  }
+  const totals = new Map()
+  for (const [id, caseLines] of byCase) {
+    totals.set(id, mechanicalActualReceivedAmount(caseLines))
+  }
+  return totals
+}
+
 function mechanicalDraftEnteredTotal(amounts) {
   let sum = 0
   for (const raw of amounts) {
@@ -1819,6 +1850,78 @@ function buildMechanicalBusyPaymentExportRows({
 
   console.log('verify_accounts_split_payment_drafts: Gatepass 2%/credit/overpay checks A–K passed')
 }
+
+// ---------------------------------------------------------------------------
+// Received Amount column — keep aligned with src/lib/api/accounts.ts
+// Sum payment lines; exclude reference Discount (trim + case-insensitive).
+// ---------------------------------------------------------------------------
+{
+  // 1. Single Cash receipt
+  assert(mechanicalActualReceivedAmount([
+    { amount: 5000, reference: null, payment_mode: 'cash' },
+  ]) === 5000, '1: single Cash = 5000')
+
+  // 2. Cash + UPI split
+  assert(mechanicalActualReceivedAmount([
+    { amount: 5000, reference: null, payment_mode: 'cash' },
+    { amount: 3000, reference: 'UTR-1', payment_mode: 'upi' },
+  ]) === 8000, '2: Cash + UPI = 8000')
+
+  // 3. Cash + Discount
+  assert(mechanicalActualReceivedAmount([
+    { amount: 5000, reference: null, payment_mode: 'cash' },
+    { amount: 500, reference: 'DISCOUNT', payment_mode: 'other' },
+  ]) === 5000, '3: Cash + Discount excludes 500')
+
+  // 4. UPI + Card + Discount
+  assert(mechanicalActualReceivedAmount([
+    { amount: 3000, reference: null, payment_mode: 'upi' },
+    { amount: 2000, reference: null, payment_mode: 'card' },
+    { amount: 150, reference: 'DISCOUNT', payment_mode: 'other' },
+  ]) === 5000, '4: UPI + Card, Discount excluded')
+
+  // 5. Discount-only
+  assert(mechanicalActualReceivedAmount([
+    { amount: 500, reference: 'DISCOUNT', payment_mode: 'other' },
+  ]) === 0, '5: Discount-only = 0')
+
+  // 6. Genuine other that is not Discount
+  assert(mechanicalActualReceivedAmount([
+    { amount: 1200, reference: 'ADJUST-NOTE', payment_mode: 'other' },
+  ]) === 1200, '6: genuine other remains included')
+
+  // 7. No payment lines
+  assert(mechanicalActualReceivedAmount([]) === 0, '7: no lines = 0')
+  const emptyMap = mechanicalActualReceivedAmountByCase([])
+  assert(emptyMap.get(99) == null, '7: missing case is absent from map (page uses ?? 0)')
+
+  // 8. Multiple Discount lines
+  assert(mechanicalActualReceivedAmount([
+    { amount: 8000, reference: null, payment_mode: 'bank' },
+    { amount: 10, reference: 'DISCOUNT', payment_mode: 'other' },
+    { amount: 20, reference: 'DISCOUNT', payment_mode: 'cash' },
+  ]) === 8000, '8: all Discount lines excluded, bank kept')
+
+  // 9. Canonical stored value DISCOUNT; trim + case-insensitive (live has `discount`)
+  assert(isMechanicalDiscountPaymentLine({ reference: 'DISCOUNT' }), '9: DISCOUNT')
+  assert(isMechanicalDiscountPaymentLine({ reference: 'discount' }), '9: lowercase discount')
+  assert(isMechanicalDiscountPaymentLine({ reference: '  Discount  ' }), '9: trimmed mixed case')
+  assert(!isMechanicalDiscountPaymentLine({ reference: 'DISCOUNT-NOTE' }), '9: not a substring match')
+  assert(!isMechanicalDiscountPaymentLine({ reference: null }), '9: null is not Discount')
+  assert(!isMechanicalDiscountPaymentLine({ reference: 'UPI123' }), '9: payment UTR is not Discount')
+
+  const byCase = mechanicalActualReceivedAmountByCase([
+    { reception_entry_id: 1, amount: 5000, reference: null },
+    { reception_entry_id: 1, amount: 500, reference: 'DISCOUNT' },
+    { reception_entry_id: 2, amount: 4000, reference: null },
+    { reception_entry_id: 2, amount: 6000, reference: 'UTR' },
+  ])
+  assert(byCase.get(1) === 5000, `by-case Discount exclusion, got ${byCase.get(1)}`)
+  assert(byCase.get(2) === 10000, `by-case split, got ${byCase.get(2)}`)
+  assert(byCase.get(3) == null, 'by-case missing case')
+}
+
+console.log('verify_accounts_split_payment_drafts: Received Amount Discount-exclusion checks passed')
 
 
 

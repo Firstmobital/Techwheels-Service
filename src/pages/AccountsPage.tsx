@@ -30,6 +30,7 @@ import {
   mechanicalGatepassReasonLabel,
   mechanicalInvoiceAmountPrefill,
   asiaKolkataTodayDate,
+  mechanicalActualReceivedAmountByCase,
   mechanicalInvoiceDateInputValue,
   mechanicalPaymentReceivedDate,
   mechanicalRemaining,
@@ -336,6 +337,11 @@ export default function AccountsPage() {
     })
     return { count: periodMech.length, pending, received, billed, remaining, ...modes }
   }, [periodMech, mechPayLines, dateRange, mechStatusFilter])
+
+  const mechReceivedByCase = useMemo(
+    () => mechanicalActualReceivedAmountByCase(mechPayLines),
+    [mechPayLines],
+  )
 
   const bsKpis = useMemo(() => {
     const remainingRows = periodBs.filter((r) => isBodyshopOutstandingOpen(r))
@@ -971,6 +977,7 @@ export default function AccountsPage() {
                   <th>Owner</th>
                   <th>Invoice</th>
                   <th>Billed</th>
+                  <th>Received Amount</th>
                   <th>Remaining</th>
                   <th>Status</th>
                   <th></th>
@@ -1009,6 +1016,7 @@ export default function AccountsPage() {
                       )}
                     </td>
                     <td>{inr(r.billed_amount)}</td>
+                    <td>{inr(mechReceivedByCase.get(r.reception_entry_id) ?? 0)}</td>
                     <td>{inr(mechanicalRemaining(r))}</td>
                     <td>
                       <span className={`brx-settle-pill is-${String(r.payment_status ?? 'pending').toLowerCase()}`}>

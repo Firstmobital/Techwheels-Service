@@ -144,7 +144,7 @@ Pattern: `src/pages/BodyshopRecoveryPage.tsx` (KPIs, search, table, Excel, on-pa
 
 **Mechanical desk**
 
-- Columns: Mark Done at, JC, reg, model, service type, SA, branch, owner, invoice number, billed amount, payment status, notes
+- Columns: Mark Done at, JC, reg, model, service type, SA, branch, owner, invoice number, billed amount, **Received Amount** (sum of `accounts_mechanical_payment_lines` excluding `reference` Discount), remaining, payment status, notes
 - Capture / Payments modal: invoice number, date, billed amount, and invoice file (reuse unused SA `invoice_storage_path` upload). **Fetch from DMS** fills those fields when the JC has exactly one live DMS invoice; Accounts still taps Save. 0 or 2+ DMS rows shows “No unique DMS invoice”. Remaining stays billed minus receipts. Invoice header locks after the first receipt.
 - Receipts are append-only (`accounts_mechanical_payment_lines`): this amount + Payment mode (Cash/UPI/Card/Cheque/Bank/Other) + Payment received date + reference. `payment_received_date` is the business date (Asia/Kolkata); `posted_at` remains the system insert timestamp. Voucher series apply when the **effective invoice date** `>= 2026-09-02`: Accounts `invoice_date` when present, otherwise the unique live DMS labour `invoice_date` for the JC (DBL-0060; does not use `payment_received_date` / Mark Done). Cash gets `RApp/26-27/nnnn`; UPI+Card share `JApp/26-27/nnnn`. cheque/bank/other stay null. Existing voucher numbers are not recalculated. History shows Received Date. Payment status is automatic from billed vs sum(receipts). Mechanical Gatepass is eligible when remaining ≤ 0, remaining ≤ 2% of billed, or persisted Keep on Credit is true. Financial remaining and `payment_status` are not rewritten for the 2% rule or Keep on Credit. Receipts may exceed remaining; the posted line keeps the entered amount. Create Gatepass goes through `issue_accounts_mechanical_gatepass`.
 - KPI: Mark Done count, invoice-pending count, billed sum, customer remaining / received. Cash / UPI / Credit Card money is receipt-line grain on that Mark Done case set after the status filter, dated by `payment_received_date` (IST `posted_at` fallback).
@@ -294,6 +294,12 @@ Pattern: `src/pages/BodyshopRecoveryPage.tsx` (KPIs, search, table, Excel, on-pa
 ---
 
 ## Notes & Lessons Learned
+
+### 2026-09-15 - Mechanical table Received Amount
+
+- Column sits after Billed and before Remaining.
+- Sum of `accounts_mechanical_payment_lines` for the case. Exclude when `reference` is Discount (`DISCOUNT` stored; match trim + case-insensitive). Genuine `other` stays in. Not billed − remaining and not header `amount_received`.
+- Independent of Cash/UPI/Credit Card table filters.
 
 ### 2026-09-15 - Mechanical Cash/UPI/Credit Card KPI scope
 

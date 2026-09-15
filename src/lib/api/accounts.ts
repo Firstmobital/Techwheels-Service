@@ -325,6 +325,45 @@ export function roundAccountsMoney(n: number): number {
   return Math.round((Number(n) + Number.EPSILON) * 100) / 100
 }
 
+/** Stored Discount marker on `accounts_mechanical_payment_lines.reference`. Live rows are `DISCOUNT`; one is `discount`. */
+export const MECHANICAL_DISCOUNT_REFERENCE = 'discount'
+
+export function isMechanicalDiscountPaymentLine(
+  line: Pick<AccountsMechanicalPayment, 'reference'>,
+): boolean {
+  return String(line.reference ?? '').trim().toLowerCase() === MECHANICAL_DISCOUNT_REFERENCE
+}
+
+/** Actual money received: sum of payment lines excluding Discount `reference`. Includes genuine `other`. */
+export function mechanicalActualReceivedAmount(
+  lines: Array<Pick<AccountsMechanicalPayment, 'amount' | 'reference'>>,
+): number {
+  let sum = 0
+  for (const line of lines) {
+    if (isMechanicalDiscountPaymentLine(line)) continue
+    const amount = Number(line.amount ?? 0)
+    if (!Number.isFinite(amount) || amount === 0) continue
+    sum += amount
+  }
+  return roundAccountsMoney(sum)
+}
+
+export function mechanicalActualReceivedAmountByCase(
+  lines: Array<Pick<AccountsMechanicalPayment, 'reception_entry_id' | 'amount' | 'reference'>>,
+): Map<number, number> {
+  const byCase = new Map<number, Array<Pick<AccountsMechanicalPayment, 'amount' | 'reference'>>>()
+  for (const line of lines) {
+    const list = byCase.get(line.reception_entry_id) ?? []
+    list.push(line)
+    byCase.set(line.reception_entry_id, list)
+  }
+  const totals = new Map<number, number>()
+  for (const [id, caseLines] of byCase) {
+    totals.set(id, mechanicalActualReceivedAmount(caseLines))
+  }
+  return totals
+}
+
 export function mechanicalDraftEnteredTotal(amounts: Array<number | null | undefined>): number {
   let sum = 0
   for (const raw of amounts) {
