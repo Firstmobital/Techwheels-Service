@@ -1053,7 +1053,7 @@ function AuthGate({ children }: { children: React.ReactNode }) {
         <ForgotPasswordPage
           onSwitchToLogin={() => {
             setAuthView('login')
-            navigate('/', { replace: true })
+            navigate(HOME_ROUTE, { replace: true })
           }}
         />
       )
@@ -1064,7 +1064,7 @@ function AuthGate({ children }: { children: React.ReactNode }) {
         <SignUpPage
           onSwitchToLogin={() => {
             setAuthView('login')
-            navigate('/', { replace: true })
+            navigate(HOME_ROUTE, { replace: true })
           }}
         />
       )
@@ -1136,6 +1136,12 @@ function AppInner() {
     localStorage.removeItem('tw_impersonate')
     setImpersonating(null)
   }
+
+  useEffect(() => {
+    if (location.pathname === '/') {
+      navigate(HOME_ROUTE, { replace: true })
+    }
+  }, [location.pathname, navigate])
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => setUser(data.session?.user ?? null))
@@ -1286,7 +1292,7 @@ VITE_SUPABASE_ANON_KEY=your-anon-key`}
       <Routes>
         <Route path="/verify-preview" element={<VerifyScreenPreview />} />
         <Route path="/c/:token" element={<ComplaintPortalPage />} />
-        <Route path="*" element={<Navigate to="/" replace />} />
+        <Route path="*" element={<Navigate to={HOME_ROUTE} replace />} />
       </Routes>
     )
   }
@@ -1335,6 +1341,7 @@ VITE_SUPABASE_ANON_KEY=your-anon-key`}
             ) : (
               <Routes>
                 <Route index element={<Navigate to={HOME_ROUTE} replace />} />
+                <Route path="/" element={<Navigate to={HOME_ROUTE} replace />} />
                 <Route
                   path="/home"
                   element={(
