@@ -6,10 +6,10 @@ import { useCustomerSession } from '../../context/CustomerSessionContext'
 
 const TAB_ICON: Record<string, string> = {
   index: '🏠',
-  complaint: '🛠️',
-  estimate: '📄',
+  complaint: '🚨',
+  estimate: '📋',
   invoices: '🧾',
-  gatepass: '🚪',
+  gatepass: '🎟️',
   feedback: '⭐',
 }
 
@@ -33,7 +33,10 @@ function CustomerTabBar({ state, descriptors, navigation }: any) {
         minHeight: tabBarHeight,
       }}
     >
-      {state.routes.map((route: any, index: number) => {
+      {state.routes
+        .filter((route: any) => Boolean(TAB_ICON[route.name]))
+        .map((route: any) => {
+        const index = state.routes.findIndex((candidate: any) => candidate.key === route.key)
         const focused = state.index === index
         const options = descriptors[route.key]?.options ?? {}
         const label = options.tabBarLabel ?? options.title ?? route.name
@@ -45,7 +48,7 @@ function CustomerTabBar({ state, descriptors, navigation }: any) {
             style={{ flex: 1, alignItems: 'center', justifyContent: 'center', minHeight: 48 }}
           >
             <Text style={{ fontSize: 18, opacity: focused ? 1 : 0.55 }}>{icon}</Text>
-            <Text style={{ fontSize: 11, fontWeight: '600', color: focused ? '#0284c7' : '#999' }}>
+            <Text style={{ fontSize: 10.5, fontWeight: '700', color: focused ? '#2563eb' : '#94a3b8' }}>
               {String(label)}
             </Text>
           </TouchableOpacity>
@@ -87,8 +90,10 @@ export default function CustomerTabsLayout() {
       <Tabs.Screen name="complaint" options={{ title: 'Problem', tabBarLabel: 'Problem' }} />
       <Tabs.Screen name="estimate" options={{ title: 'Estimate', tabBarLabel: 'Estimate' }} />
       <Tabs.Screen name="invoices" options={{ title: 'Bills', tabBarLabel: 'Bills' }} />
-      <Tabs.Screen name="gatepass" options={{ title: 'Gate pass', tabBarLabel: 'Gate' }} />
-      <Tabs.Screen name="feedback" options={{ title: 'Feedback', tabBarLabel: 'Review' }} />
+      <Tabs.Screen name="gatepass" options={{ title: 'Gate Pass', tabBarLabel: 'Gate Pass' }} />
+      <Tabs.Screen name="feedback" options={{ title: 'Feedback', tabBarLabel: 'Feedback' }} />
+      <Tabs.Screen name="booking" options={{ href: null, title: 'Book Service' }} />
+      <Tabs.Screen name="tracker" options={{ href: null, title: 'Repair Tracker' }} />
     </Tabs>
   )
 }

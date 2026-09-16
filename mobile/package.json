@@ -76,6 +76,7 @@
     "react-native-aws3": "^0.0.9",
     "react-native-css-interop": "^0.2.4",
     "react-native-gesture-handler": "2.28.0",
+    "react-native-qrcode-svg": "^6.3.24",
     "react-native-reanimated": "4.1.6",
     "react-native-safe-area-context": "5.6.2",
     "react-native-screens": "4.16.0",

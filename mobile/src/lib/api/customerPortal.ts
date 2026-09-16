@@ -91,3 +91,35 @@ export async function customerGetGatePass(sessionToken: string, regNumber?: stri
   if (error) throw new Error(rpcErrorMessage(error, 'Unable to load gate pass.'))
   return data as Record<string, unknown> | null
 }
+
+export async function customerGetSettlement(sessionToken: string, regNumber?: string | null) {
+  const { data, error } = await supabase.rpc('customer_get_settlement', {
+    p_session_token: sessionToken,
+    p_reg_number: regNumber || null,
+  })
+  if (error) throw new Error(rpcErrorMessage(error, 'Unable to load settlement.'))
+  return data as Record<string, unknown> | null
+}
+
+export async function customerSubmitBooking(
+  sessionToken: string,
+  regNumber: string,
+  payload: Record<string, unknown>
+) {
+  const { data, error } = await supabase.rpc('customer_submit_booking', {
+    p_session_token: sessionToken,
+    p_reg_number: regNumber,
+    p_payload: payload,
+  })
+  if (error) throw new Error(rpcErrorMessage(error, 'Unable to submit booking.'))
+  return data
+}
+
+export async function customerGetRepairCard(sessionToken: string, regNumber?: string | null) {
+  const { data, error } = await supabase.rpc('customer_get_repair_card', {
+    p_session_token: sessionToken,
+    p_reg_number: regNumber || null,
+  })
+  if (error) throw new Error(rpcErrorMessage(error, 'Unable to load repair tracker.'))
+  return data as Record<string, unknown> | null
+}

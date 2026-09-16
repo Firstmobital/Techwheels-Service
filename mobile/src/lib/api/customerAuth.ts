@@ -22,6 +22,12 @@ export interface CustomerVehicle {
   estimate_drive_url?: string | null
   invoice_storage_path?: string | null
   invoice_drive_url?: string | null
+  billed_amount?: number | null
+  amount_received?: number | null
+  payment_status?: string | null
+  gate_pass_issued?: boolean
+  gate_pass_number?: string | null
+  variant?: string | null
 }
 
 export interface CustomerSessionResult {
@@ -55,6 +61,12 @@ function mapVehicle(raw: Record<string, unknown>, index: number): CustomerVehicl
     estimate_drive_url: (raw.estimate_drive_url as string | null) ?? null,
     invoice_storage_path: (raw.invoice_storage_path as string | null) ?? null,
     invoice_drive_url: (raw.invoice_drive_url as string | null) ?? null,
+    billed_amount: raw.billed_amount == null || raw.billed_amount === '' ? null : Number(raw.billed_amount),
+    amount_received: raw.amount_received == null || raw.amount_received === '' ? null : Number(raw.amount_received),
+    payment_status: (raw.payment_status as string | null) ?? null,
+    gate_pass_issued: Boolean(raw.gate_pass_issued),
+    gate_pass_number: (raw.gate_pass_number as string | null) ?? null,
+    variant: (raw.variant as string | null) ?? null,
   }
 }
 

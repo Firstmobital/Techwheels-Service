@@ -7,7 +7,10 @@
 
 ### Product lock (2026-09-16)
 
-Customer login is **10-digit mobile as username and the same 10-digit mobile as password**. Session identity is that phone. Every customer screen and RPC may see **all vehicles/jobs for that phone only** — never other customers’ rows. This replaces the earlier “username may be vehicle reg” draft.  
+Customer login is **10-digit mobile as username and the same 10-digit mobile as password**. Session identity is that phone. Every customer screen and RPC may see **all vehicles/jobs for that phone only** — never other customers’ rows. This replaces the earlier “username may be vehicle reg” draft.
+
+**Visual / workflow source (locked 2026-09-16):** recreate the `bodyshop/` customer app in Expo (`mobile/src/app/(customer)*`) so that folder can be archived later without rebuilding screens. Same steps, cards, settlement math, estimate table, approve/reject modal, multi-problem form, booking, repair tracker, and chrome. Still **RPC-only**. Do **not** port fake catalog prices, invented warranty/AMC, sandbox vehicles, vehicle-as-username, a client-minted QR, or security-mode fake exit. Empty workshop fields stay pending.
+  
 **Owner:** Mobile + Platform  
 **Platform:** mobile (Expo binary) • shared Supabase • web customer login cutover to same RPCs  
 **Category:** auth  
@@ -31,7 +34,7 @@ Customers are **not** staff. DB truth has no customer role. Customer screens mus
 - No `'customer'` value added to `public.users.role`.
 - Customer data access uses RPCs only; workshop table grants stay `authenticated` + `service_role` (staff RLS unchanged).
 - Staff self-signup is invite-only before the dual-audience build is public.
-- Customer UX is ported from **web** `CustomerPortalPage`, not from the Capacitor prototype.
+- Customer UX is recreated from **`bodyshop/`** (visuals, workflows, calculations) inside Expo, still via RPCs.
 
 ---
 
@@ -53,7 +56,7 @@ Customers are **not** staff. DB truth has no customer role. Customer screens mus
 - Expo audience picker + customer auth screens + customer tab shell
 - Lock staff signup (`mobile/src/app/(auth)/signup.tsx`)
 - Route `src/app/index.tsx` / auth layout / tabs layout by **audience**, not only by “session present”
-- Port customer screens from `src/pages/CustomerPortalPage.tsx`
+- Port customer screens from `bodyshop/` into Expo (dashboard, problem, estimate, bills, gate pass, feedback, booking, tracker)
 - Replace web `authenticateCustomer` with the same phone=phone RPC (stop direct table reads and lookup-without-match)
 - OTA to existing EAS project; archive `bodyshop/` after customer shell ships
 - Runtime-gate camera / background location so customer mode does not request staff-only permissions
@@ -114,7 +117,8 @@ Locked by the 2026-09-15 audit against `full_metadata.sql`. Do not re-litigate w
 5. After login, RPCs take the phone from the **server session** (token / JWT). The client must not send a different phone to “switch customer.” Optional `p_reg_number` is allowed only if that reg belongs to the session phone.
 6. Customer phone is `^[0-9]{10}$`, same as `service_reception_entries.owner_phone`. No `endsWith` / partial match.
 7. Workshop RLS policies are not weakened. Customer access is RPC-only. **No `service_role` in any client.**
-8. Port customer **behavior** from web, not from `bodyshop/`.
+8. Recreate `bodyshop/` customer **visuals, workflows, and calculations** in Expo. Do not copy React DOM. Do not invent prices, warranty, or QR tokens.
+
 
 ### 4.4 How the two defects are closed
 
@@ -314,7 +318,7 @@ Phase 0 is client-only secret removal (no dashboard rotation). It may run in par
 |---|---|
 | Ship two store apps | User requirement; Capacitor customer has no iOS |
 | WebView `bodyshop/` inside Expo | Keeps service-role risk and a second stack |
-| Copy `bodyshop/src` DOM into RN | Wrong renderer |
+| Copy `bodyshop/src` DOM into RN | Wrong renderer; recreate the same screens/workflows in Expo |
 | Add `'customer'` to `users.role` | Breaks staff RBAC CHECK and admin |
 | `GRANT` workshop tables to `anon` | Destroys dealer/SA RLS |
 | Port vehicle-number as username | Product lock 2026-09-16: login is mobile=mobile only |
