@@ -165,7 +165,7 @@ export type IconName =
   | 'zoom-in'
   | 'zoom-out'
 
-interface IconProps extends Omit<LucideProps, 'ref'> {
+export interface IconProps extends Omit<LucideProps, 'ref'> {
   name: IconName
   size?: number
   color?: string

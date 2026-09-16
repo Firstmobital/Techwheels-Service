@@ -1,5 +1,5 @@
-import React from 'react'
-import { Text, View, type ReactNode } from 'react-native'
+import React, { type ReactNode } from 'react'
+import { Text, View } from 'react-native'
 
 export interface FieldProps {
   label: string

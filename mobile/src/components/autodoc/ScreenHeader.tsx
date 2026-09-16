@@ -1,5 +1,5 @@
-import React from 'react'
-import { Text, TouchableOpacity, View, type ReactNode } from 'react-native'
+import React, { type ReactNode } from 'react'
+import { Text, TouchableOpacity, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { Icon } from '../ui/Icon'
 

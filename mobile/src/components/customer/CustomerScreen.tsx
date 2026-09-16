@@ -96,6 +96,8 @@ export function CustomerScreen({
 
   const [hasSeenNotifications, setHasSeenNotifications] = useState(false)
 
+  const isDelivered = Boolean(selectedVehicle?.invoice_done_at)
+
   // Helper to check if event happened within last 24 hours (1 day)
   const isDeliveredToday = useMemo(() => {
     if (!selectedVehicle?.invoice_done_at) return false
