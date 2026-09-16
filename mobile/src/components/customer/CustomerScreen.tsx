@@ -118,23 +118,61 @@ export function CustomerScreen({
               accessibilityRole="button"
               accessibilityLabel="Notifications"
               hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-              className="h-10 w-10 items-center justify-center rounded-xl bg-slate-100 border border-slate-300 relative shadow-xs"
+              style={{
+                width: 40,
+                height: 40,
+                borderRadius: 12,
+                backgroundColor: '#f1f5f9',
+                borderWidth: 1,
+                borderColor: '#cbd5e1',
+                alignItems: 'center',
+                justifyContent: 'center',
+                position: 'relative',
+              }}
             >
-              <Icon name="bell" size={19} color="#0f172a" strokeWidth={2.2} />
+              <Text style={{ fontSize: 18 }}>🔔</Text>
               {isDelivered && (
-                <View className="absolute top-1.5 right-1.5 w-2.5 h-2.5 bg-emerald-500 rounded-full ring-2 ring-white" />
+                <View
+                  style={{
+                    position: 'absolute',
+                    top: 6,
+                    right: 6,
+                    width: 9,
+                    height: 9,
+                    borderRadius: 5,
+                    backgroundColor: '#10b981',
+                    borderWidth: 1.5,
+                    borderColor: '#ffffff',
+                  }}
+                />
               )}
             </TouchableOpacity>
 
-            {/* High-Contrast 3-Column / Hamburger Menu Button (Black Box with Crisp White Icon) */}
+            {/* High-Contrast 3-Column / Hamburger Menu Button (Solid Dark Box with Crisp 3 White Bars) */}
             <TouchableOpacity
               onPress={() => setShowMenu(true)}
               accessibilityRole="button"
               accessibilityLabel="Open Navigation Menu"
               hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-              className="h-10 w-10 items-center justify-center rounded-xl bg-slate-900 border border-slate-950 shadow-md"
+              style={{
+                width: 40,
+                height: 40,
+                borderRadius: 12,
+                backgroundColor: '#0f172a',
+                alignItems: 'center',
+                justifyContent: 'center',
+                shadowColor: '#000',
+                shadowOffset: { width: 0, height: 2 },
+                shadowOpacity: 0.25,
+                shadowRadius: 3,
+                elevation: 4,
+              }}
             >
-              <Icon name="menu" size={20} color="#ffffff" strokeWidth={2.6} />
+              <View style={{ width: 19, height: 13, justifyContent: 'space-between' }}>
+                <View style={{ width: 19, height: 2.4, backgroundColor: '#ffffff', borderRadius: 2 }} />
+                <View style={{ width: 13, height: 2.4, backgroundColor: '#ffffff', borderRadius: 2 }} />
+                <View style={{ width: 19, height: 2.4, backgroundColor: '#ffffff', borderRadius: 2 }} />
+              </View>
             </TouchableOpacity>
           </View>
         </View>

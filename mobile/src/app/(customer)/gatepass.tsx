@@ -14,7 +14,7 @@ import {
   formatWhen,
 } from '../../components/customer/customerUi'
 import { useCustomerSession } from '../../context/CustomerSessionContext'
-import { customerGetGatePass } from '../../lib/api/customerPortal'
+import { customerGetGatePass, customerGetSettlement } from '../../lib/api/customerPortal'
 
 // Helper to check if date matches today's date in Asia/Kolkata
 function isIssuedToday(dateString: string | null | undefined): boolean {
@@ -32,6 +32,7 @@ export default function CustomerGatePassScreen() {
   const { token, selectedReg, vehicles } = useCustomerSession()
   const selected = vehicles.find((v) => v.reg_number === selectedReg) || vehicles[0]
   const [pass, setPass] = useState<Record<string, unknown> | null>(null)
+  const [settlement, setSettlement] = useState<Record<string, unknown> | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
@@ -40,7 +41,12 @@ export default function CustomerGatePassScreen() {
     if (!token) return
     setError(null)
     try {
-      setPass(await customerGetGatePass(token, selectedReg))
+      const [passData, settleData] = await Promise.all([
+        customerGetGatePass(token, selectedReg).catch(() => null),
+        customerGetSettlement(token, selectedReg).catch(() => null),
+      ])
+      setPass(passData)
+      setSettlement(settleData)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unable to load gate pass.')
     } finally {
@@ -61,29 +67,31 @@ export default function CustomerGatePassScreen() {
   )
 
   const hasIssuedRecord = Boolean(asText(pass?.gate_pass_no))
-  const issuedAtDate = asText(pass?.issued_at) || asText(selected?.invoice_done_at)
+  const issuedAtDate = asText(pass?.issued_at) || asText(settlement?.updated_at) || asText(selected?.invoice_done_at)
   const isExpired = hasIssuedRecord && issuedAtDate ? !isIssuedToday(issuedAtDate) : false
 
-  const billedVal = Number(pass?.billed_amount ?? selected?.billed_amount ?? 0)
-  const receivedVal = Number(pass?.amount_received ?? selected?.amount_received ?? 0)
+  const billedVal = Number(settlement?.total_billed ?? settlement?.billed_amount ?? pass?.billed_amount ?? selected?.billed_amount ?? 0)
+  const receivedVal = Number(settlement?.amount_received ?? pass?.amount_received ?? selected?.amount_received ?? 0)
   const remainingVal = Math.max(0, billedVal - receivedVal)
 
-  // Valid gatepass requires: issued by accounts, not expired (issued today), and cleared settlement
-  const isValidToday = hasIssuedRecord && !isExpired && (remainingVal === 0 || pass?.keep_on_credit || pass?.payment_status === 'Paid')
+  // Valid gatepass requires: bill generated, issued or verified full payment, and valid today
+  const isPaidOrCleared = billedVal > 0 && (remainingVal === 0 || pass?.keep_on_credit || pass?.payment_status === 'Paid' || settlement?.status === 'received')
+  const isValidToday = (hasIssuedRecord || isPaidOrCleared) && !isExpired && isPaidOrCleared
 
   const billed = formatInr(billedVal)
   const received = formatInr(receivedVal)
   const remaining = formatInr(remainingVal)
 
-  const effectiveJcNumber = asText(pass?.job_card_no) || selected?.jc_number || '—'
-  const effectiveReg = asText(pass?.reg_number) || selected?.reg_number || '—'
+  const effectiveJcNumber = asText(pass?.job_card_no) || asText(settlement?.jc_number) || selected?.jc_number || '—'
+  const effectiveReg = asText(pass?.reg_number) || asText(settlement?.reg_number) || selected?.reg_number || '—'
   const effectiveOwner = asText(pass?.customer_name) || selected?.owner_name || 'Customer'
   const effectiveSa = selected?.sa_display_name || selected?.sa_name || 'Service Advisor'
-  const effectiveBranch = selected?.branch || 'Sitapura'
+  const effectiveBranch = selected?.branch || 'Sitapura Workshop'
   const effectiveServiceType = selected?.service_type || 'Paid Service'
-  const effectiveInvoiceNo = asText(pass?.invoice_no) || (selected?.invoice_done_at ? `INV-${effectiveJcNumber.replace(/[^A-Z0-9]/g, '')}` : '—')
-  const effectiveInvoiceDate = asText(pass?.invoice_date) || (selected?.invoice_done_at ? new Date(selected.invoice_done_at).toISOString().split('T')[0] : new Date().toISOString().split('T')[0])
+  const effectiveInvoiceNo = asText(pass?.invoice_no) || asText(settlement?.invoice_no) || (selected?.invoice_done_at ? `INV-${effectiveJcNumber.replace(/[^A-Z0-9]/g, '')}` : '—')
+  const effectiveInvoiceDate = asText(pass?.invoice_date) || asText(settlement?.invoice_date) || (selected?.invoice_done_at ? new Date(selected.invoice_done_at).toISOString().split('T')[0] : new Date().toISOString().split('T')[0])
   const clearanceStatus = asText(pass?.settlement_reason) || (remainingVal === 0 ? 'Payment received' : asText(pass?.payment_status) || 'Accounts Cleared')
+
 
   // Generate official Workshop Gatepass HTML for Print / PDF export
   const generateOfficialGatepassHtml = () => {
@@ -207,11 +215,11 @@ export default function CustomerGatePassScreen() {
                   <Text className="text-[12.5px] text-slate-600 mt-1.5 leading-5">
                     Your vehicle service is currently being processed on the workshop floor. The official Digital Gate Pass will be generated and unlocked here once the Accounts Desk enters the invoice details and releases clearance.
                   </Text>
-                  <View className="mt-3 bg-blue-50 border border-blue-200 rounded-xl p-2.5 flex-row items-center justify-between">
-                    <Text className="text-blue-800 text-xs font-bold">
+                  <View className="mt-3 bg-blue-50 border border-blue-200 rounded-xl p-2.5 flex-row flex-wrap items-center justify-between gap-1">
+                    <Text className="text-blue-900 text-xs font-bold" numberOfLines={1}>
                       Job Card: #{effectiveJcNumber}
                     </Text>
-                    <Text className="text-blue-600 text-[11px] font-semibold">
+                    <Text className="text-blue-600 text-[10.5px] font-semibold">
                       🔄 Live syncing…
                     </Text>
                   </View>

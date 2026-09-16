@@ -113,7 +113,7 @@ export default function CustomerDashboardScreen() {
   const trackerStages = [
     { title: 'Intake', icon: '📥', desc: 'Vehicle check-in & initial inspection' },
     { title: 'Job Card', icon: '📋', desc: `Assigned SA: ${advisor || 'Service Advisor'} · JC #${jc || 'Pending'}` },
-    { title: 'Estimate', icon: '📝', desc: 'Itemized parts & labour quotation' },
+    { title: 'Quote', icon: '📝', desc: 'Itemized parts & labour quotation' },
     { title: 'Bay Work', icon: '🔧', desc: `Technician: ${asText(job?.technician_name) || 'Assigned'} · Bay ${asText(job?.bay_no) || 'Floor'}` },
     { title: 'Ready', icon: '✅', desc: 'Repairs completed & tested for delivery' },
   ]
@@ -141,7 +141,7 @@ export default function CustomerDashboardScreen() {
             style={{ borderRadius: 16, padding: 16, marginBottom: 14, elevation: 4 }}
           >
             <View className="flex-row justify-between items-start">
-              <View className="flex-1 pr-3">
+              <View className="flex-1 pr-2">
                 <Text className="text-blue-200 text-[10px] font-black uppercase tracking-widest">
                   REGISTERED VEHICLE
                 </Text>
@@ -154,7 +154,7 @@ export default function CustomerDashboardScreen() {
                 </Text>
               </View>
 
-              <View className="items-end gap-1.5">
+              <View className="items-end gap-1.5" style={{ maxWidth: '52%' }}>
                 <View
                   style={{
                     paddingHorizontal: 10,
@@ -165,7 +165,7 @@ export default function CustomerDashboardScreen() {
                     borderColor: 'rgba(255,255,255,0.4)',
                   }}
                 >
-                  <Text className="text-white text-[11px] font-black">
+                  <Text className="text-white text-[11px] font-black" numberOfLines={1}>
                     {delivered ? '✅ Delivered / Ready' : '⏳ In Service'}
                   </Text>
                 </View>
@@ -173,8 +173,8 @@ export default function CustomerDashboardScreen() {
                 {/* PROMINENT JOB CARD NUMBER BADGE */}
                 {jc ? (
                   <View className="bg-white/20 border border-white/30 px-2.5 py-1 rounded-xl">
-                    <Text className="text-white font-mono font-black text-[11px]">
-                      JC #{jc}
+                    <Text className="text-white font-mono font-black text-[10px]" numberOfLines={1}>
+                      JC #{jc.length > 18 ? jc.slice(-12) : jc}
                     </Text>
                   </View>
                 ) : null}
@@ -184,19 +184,19 @@ export default function CustomerDashboardScreen() {
             <View className="mt-4 pt-3 border-t border-white/20 flex-row flex-wrap">
               <View className="w-1/2 pr-2 mb-2.5">
                 <Text className="text-blue-200 text-[10.5px] font-semibold">Customer Name</Text>
-                <Text className="text-white text-[13px] font-black uppercase">{dash(owner)}</Text>
+                <Text className="text-white text-[13px] font-black uppercase" numberOfLines={1}>{dash(owner)}</Text>
               </View>
               <View className="w-1/2 pl-2 mb-2.5">
                 <Text className="text-blue-200 text-[10.5px] font-semibold">Live Job Card No</Text>
-                <Text className="text-white text-[13px] font-mono font-black">{jc ? `#${jc}` : 'Opening…'}</Text>
+                <Text className="text-white text-[12.5px] font-mono font-black" numberOfLines={1}>{jc ? `#${jc}` : 'Opening…'}</Text>
               </View>
               <View className="w-1/2 pr-2 mb-2.5">
                 <Text className="text-blue-200 text-[10.5px] font-semibold">Service Type</Text>
-                <Text className="text-white text-[13px] font-bold">{dash(serviceType)}</Text>
+                <Text className="text-white text-[12.5px] font-bold" numberOfLines={1}>{dash(serviceType)}</Text>
               </View>
               <View className="w-1/2 pl-2 mb-2.5">
                 <Text className="text-blue-200 text-[10.5px] font-semibold">Assigned Advisor</Text>
-                <Text className="text-white text-[13px] font-bold">{dash(advisor)}</Text>
+                <Text className="text-white text-[12px] font-bold" numberOfLines={2}>{dash(advisor)}</Text>
               </View>
             </View>
 

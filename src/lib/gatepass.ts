@@ -142,18 +142,22 @@ export async function issueAccountsGatePass(record: IssuedGatePassRecord): Promi
     console.warn('Sync gatepass to post_feedback_bot_data failed:', err)
   }
 
-  // Update service_reception_entries table if entry exists
+  // Update service_reception_entries table if entry exists (soft-handled)
   try {
-    await supabase
+    const { error: recErr } = await supabase
       .from('service_reception_entries')
       .update({
         gate_pass_issued: true,
         gate_pass_number: payload.gate_pass_no,
       })
       .eq('reg_number', norm)
+    if (recErr) {
+      console.warn('Update service_reception_entries gatepass note:', recErr.message)
+    }
   } catch (err) {
     console.warn('Update service_reception_entries gatepass failed:', err)
   }
 
   return payload
 }
+
