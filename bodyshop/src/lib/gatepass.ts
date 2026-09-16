@@ -69,15 +69,15 @@ export async function fetchIssuedGatePass(regNumber: string): Promise<IssuedGate
     console.warn('fetchIssuedGatePass bot data error:', err)
   }
 
-  // B. Check service_reception_entries if gate_pass_issued is true
+  // B. Check service_reception_entries safely
   try {
     const { data: recData } = await supabase
       .from('service_reception_entries')
-      .select('reg_number, jc_number, owner_name, owner_phone, billed_amount, amount_received, gate_pass_issued, gate_pass_number, invoice_number, branch')
+      .select('*')
       .eq('reg_number', norm)
       .limit(1)
 
-    if (recData && recData.length > 0 && recData[0].gate_pass_issued) {
+    if (recData && recData.length > 0 && (recData[0].gate_pass_issued || recData[0].gate_pass_number)) {
       const r = recData[0]
       const gpNo = r.gate_pass_number || `GP-${r.jc_number ? r.jc_number.replace(/[^0-9]/g, '').slice(-5) : '85201'}`
       const rec: IssuedGatePassRecord = {
