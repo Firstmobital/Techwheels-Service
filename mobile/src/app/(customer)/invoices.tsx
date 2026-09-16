@@ -1,6 +1,6 @@
 import { useCallback, useState } from 'react'
 import { ActivityIndicator, Linking, Text, TouchableOpacity, View } from 'react-native'
-import { useFocusEffect } from 'expo-router'
+import { useFocusEffect, useRouter } from 'expo-router'
 import { CustomerScreen } from '../../components/customer/CustomerScreen'
 import { CustomerCard, CustomerToast, dash, formatInr, formatWhen } from '../../components/customer/customerUi'
 import { useCustomerSession } from '../../context/CustomerSessionContext'
@@ -12,6 +12,7 @@ import {
 import { computeSettlement, parseEstimate } from '../../lib/customer/math'
 
 export default function CustomerInvoicesScreen() {
+  const router = useRouter()
   const { token, selectedReg, vehicles } = useCustomerSession()
   const selected = vehicles.find((v) => v.reg_number === selectedReg) || vehicles[0]
   const [history, setHistory] = useState<Record<string, unknown>[]>([])
@@ -143,24 +144,45 @@ export default function CustomerInvoicesScreen() {
 
             {latestInvoiceUrl ? (
               <TouchableOpacity
-                className="bg-blue-600 rounded-xl py-3 items-center"
+                className="bg-blue-600 rounded-xl py-3 items-center mb-2"
                 onPress={() => void Linking.openURL(String(latestInvoiceUrl))}
               >
                 <Text className="text-white font-extrabold">📥 Download Tax Invoice</Text>
               </TouchableOpacity>
-            ) : pay.status === 'paid' ? (
-              <View className="bg-emerald-50 rounded-lg py-2 items-center">
-                <Text className="text-emerald-700 text-[12.5px] font-bold">
-                  ✓ Full payment settled. Your Digital Gate Pass is unlocked and ready!
-                </Text>
+            ) : null}
+
+            {pay.status === 'paid' ? (
+              <View className="space-y-2">
+                <View className="bg-emerald-50 rounded-xl p-3 items-center border border-emerald-200">
+                  <Text className="text-emerald-800 text-[13px] font-black">
+                    ✓ Payment Settled · Official Gate Pass Ready!
+                  </Text>
+                  <Text className="text-emerald-700 text-[11.5px] mt-0.5 text-center">
+                    Vehicle departure clearance released by Accounts Desk.
+                  </Text>
+                </View>
+                <TouchableOpacity
+                  className="bg-emerald-600 active:bg-emerald-700 rounded-xl py-3.5 items-center mt-2 shadow-sm"
+                  onPress={() => router.push('/(customer)/gatepass')}
+                >
+                  <Text className="text-white font-black text-sm">🎟️ View & Print Official Gate Pass (PDF)</Text>
+                </TouchableOpacity>
               </View>
             ) : pay.remaining != null && pay.remaining > 0 ? (
-              <Text className="text-center text-slate-500 text-[12.5px]">
-                Complete the balance payment of <Text className="font-bold">{formatInr(pay.remaining)}</Text> at workshop billing desk to release Gate Pass.
-              </Text>
+              <View className="space-y-2">
+                <Text className="text-center text-slate-600 text-[12.5px] leading-5">
+                  Complete balance payment of <Text className="font-extrabold text-slate-900">{formatInr(pay.remaining)}</Text> at workshop billing desk to release Gate Pass.
+                </Text>
+                <TouchableOpacity
+                  className="bg-slate-900 rounded-xl py-3 items-center mt-1"
+                  onPress={() => router.push('/(customer)/gatepass')}
+                >
+                  <Text className="text-white font-extrabold text-xs">Check Gate Pass Status →</Text>
+                </TouchableOpacity>
+              </View>
             ) : (
               <Text className="text-center text-slate-500 text-[12.5px]">
-                Invoice and settlement figures appear after Accounts posts them. The app does not invent a bill.
+                Invoice and settlement figures appear after Accounts posts them.
               </Text>
             )}
           </CustomerCard>
