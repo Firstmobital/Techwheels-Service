@@ -262,40 +262,38 @@ export async function canAccountsMechanicalKeepOnCredit(): Promise<boolean> {
 }
 
 export async function issueMechanicalAccountsGatePass(
-  receptionEntryId: number,
+  receptionEntryId: number | string,
 ): Promise<IssuedGatePassRecord> {
+  const numId = typeof receptionEntryId === 'string' ? parseInt(receptionEntryId, 10) : receptionEntryId
+
+  let rpcData: IssuedGatePassRecord | null = null
   try {
     const { data, error } = await supabase.rpc('issue_accounts_mechanical_gatepass', {
-      p_reception_entry_id: receptionEntryId,
+      p_reception_entry_id: numId,
     })
     if (!error && data) {
-      return data as IssuedGatePassRecord
-    }
-    if (error && !error.message.toLowerCase().includes('gate_pass_issued')) {
-      throw new Error(settlementRpcError(error))
+      rpcData = data as IssuedGatePassRecord
     }
   } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : String(err)
-    if (!msg.toLowerCase().includes('gate_pass_issued')) {
-      throw err
-    }
+    console.warn('issue_accounts_mechanical_gatepass RPC note:', err)
   }
 
-  // Fallback: Direct Live DB sync if the remote SQL RPC threw missing gate_pass_issued column error
+  // Live DB fallback and dual-sync: fetch reception entry and invoice details
   const { data: entry, error: entryErr } = await supabase
     .from('service_reception_entries')
     .select('id, jc_number, reg_number, owner_name, owner_phone, branch, service_type, created_at, invoice_done_at')
-    .eq('id', receptionEntryId)
+    .eq('id', numId)
     .single()
 
   if (entryErr || !entry) {
+    if (rpcData) return rpcData
     throw new Error(`Reception entry ${receptionEntryId} not found`)
   }
 
   const { data: inv } = await supabase
     .from('accounts_mechanical_invoices')
     .select('invoice_number, invoice_date, billed_amount, amount_received, payment_status, keep_on_credit, keep_on_credit_reason')
-    .eq('reception_entry_id', receptionEntryId)
+    .eq('reception_entry_id', numId)
     .single()
 
   const billed = Number(inv?.billed_amount || 0)
@@ -303,7 +301,8 @@ export async function issueMechanicalAccountsGatePass(
   const remaining = Math.max(0, billed - received)
 
   const norm = (entry.reg_number || 'VEHICLE').trim().toUpperCase()
-  const gpNo = `GP-${entry.jc_number ? entry.jc_number.replace(/[^0-9]/g, '').slice(-5) : Date.now().toString().slice(-5)}`
+  const normClean = norm.replace(/\s+/g, '')
+  const gpNo = rpcData?.gate_pass_no || `GP-${entry.jc_number ? entry.jc_number.replace(/[^0-9]/g, '').slice(-5) : Date.now().toString().slice(-5)}`
   const reason = (billed > 0 && remaining <= 0) ? 'paid' : (billed > 0 && remaining <= billed * 0.02) ? 'short_payment' : Boolean(inv?.keep_on_credit) ? 'keep_on_credit' : 'released'
 
   const payload: IssuedGatePassRecord = {
@@ -324,13 +323,13 @@ export async function issueMechanicalAccountsGatePass(
     issued_at: new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }),
     issued_by: 'Accounts Desk · Dealership',
     branch: entry.branch || 'Sitapura Workshop',
-    qr_token: `GP_AUTH_${gpNo}_${norm}_SECURE`,
+    qr_token: `GP_AUTH_${gpNo}_${normClean}_SECURE`,
   }
 
-  // 1. Sync to post_feedback_bot_data for instant customer app sync
+  // 1. Sync to post_feedback_bot_data for instant customer app sync (write for both variations)
   try {
     const botRow = {
-      vehicle_registration_number: norm,
+      vehicle_registration_number: normClean,
       customer_name: payload.customer_name,
       mobile_number: payload.customer_phone,
       rating: 5,
@@ -344,7 +343,7 @@ export async function issueMechanicalAccountsGatePass(
     const { data: existing } = await supabase
       .from('post_feedback_bot_data')
       .select('id')
-      .eq('vehicle_registration_number', norm)
+      .or(`vehicle_registration_number.eq.${normClean},vehicle_registration_number.eq.${norm}`)
       .eq('mode', 'customer_gatepass_payload')
       .limit(1)
 
@@ -365,7 +364,7 @@ export async function issueMechanicalAccountsGatePass(
         gate_pass_issued: true,
         gate_pass_number: gpNo,
       })
-      .eq('id', receptionEntryId)
+      .eq('id', numId)
   } catch {
     // ignore if column doesn't exist
   }

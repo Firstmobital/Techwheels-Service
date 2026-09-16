@@ -258,6 +258,40 @@ export default function CustomerDashboardScreen() {
             </TouchableOpacity>
           </LinearGradient>
 
+          {/* ── GATE PASS READY ALERT BANNER ── */}
+          {gatePass ? (
+            <TouchableOpacity
+              activeOpacity={0.88}
+              onPress={() => router.push('/(customer)/gatepass')}
+              className="bg-purple-900 border-2 border-purple-400 rounded-2xl p-4 mb-4 shadow-lg overflow-hidden"
+            >
+              <View className="flex-row items-center justify-between">
+                <View className="flex-row items-center gap-2.5 flex-1 pr-2">
+                  <Text className="text-2xl">🎟️</Text>
+                  <View className="flex-1">
+                    <View className="flex-row items-center gap-2">
+                      <Text className="text-amber-300 text-xs font-black uppercase tracking-wider">
+                        Gate Pass Ready
+                      </Text>
+                      <View className="bg-emerald-500 px-2 py-0.5 rounded-full">
+                        <Text className="text-white text-[10px] font-black">CLEARED</Text>
+                      </View>
+                    </View>
+                    <Text className="text-white text-base font-black tracking-tight mt-0.5">
+                      Gate Pass #{String(gatePass.gate_pass_no || 'OFFICIAL')}
+                    </Text>
+                    <Text className="text-purple-200 text-[11px] font-semibold">
+                      Approved by Accounts · Tap to View & Download PDF
+                    </Text>
+                  </View>
+                </View>
+                <View className="bg-white px-3 py-1.5 rounded-xl shadow-sm">
+                  <Text className="text-purple-950 font-black text-xs">Open Pass ➔</Text>
+                </View>
+              </View>
+            </TouchableOpacity>
+          ) : null}
+
           {/* ── FLIPKART-STYLE LIVE REPAIR TRACKER WITH MOVING LIGHT BEAM ── */}
           <TouchableOpacity
             activeOpacity={0.9}

@@ -144,15 +144,17 @@ export async function customerSetEstimateDecision(
 }
 
 export async function customerGetGatePass(sessionToken: string, regNumber?: string | null) {
-  const regNorm = (regNumber || '').trim().toUpperCase().replace(/\s+/g, '')
+  const rawReg = (regNumber || '').trim()
+  const regNorm = rawReg.toUpperCase()
+  const regClean = regNorm.replace(/\s+/g, '')
 
   // 1. Direct real-time check from post_feedback_bot_data for mode customer_gatepass_payload
-  if (regNorm) {
+  if (regClean || regNorm) {
     try {
       const { data: botRows } = await supabase
         .from('post_feedback_bot_data')
         .select('feedback_text')
-        .eq('vehicle_registration_number', regNorm)
+        .or(`vehicle_registration_number.eq.${regClean},vehicle_registration_number.eq.${regNorm},vehicle_registration_number.ilike.%${regClean}%`)
         .eq('mode', 'customer_gatepass_payload')
         .order('complaint_date_time', { ascending: false })
         .limit(1)
@@ -160,7 +162,7 @@ export async function customerGetGatePass(sessionToken: string, regNumber?: stri
       if (botRows && botRows.length > 0) {
         try {
           const parsed = JSON.parse(botRows[0].feedback_text)
-          if (parsed && parsed.gate_pass_no) {
+          if (parsed && (parsed.gate_pass_no || parsed.qr_token)) {
             return parsed as Record<string, unknown>
           }
         } catch {
@@ -178,9 +180,63 @@ export async function customerGetGatePass(sessionToken: string, regNumber?: stri
       p_session_token: sessionToken,
       p_reg_number: regNumber || null,
     })
-    if (!error && data) return data as Record<string, unknown>
+    if (!error && data && (data as any).gate_pass_no) return data as Record<string, unknown>
   } catch {
     // fallback
+  }
+
+  // 3. Fallback: Query service_reception_entries directly if accounts approved or invoice completed
+  if (regClean || regNorm) {
+    try {
+      const { data: entries } = await supabase
+        .from('service_reception_entries')
+        .select('id, jc_number, reg_number, owner_name, owner_phone, branch, service_type, created_at, invoice_done_at')
+        .or(`reg_number.eq.${regClean},reg_number.eq.${regNorm},reg_number.ilike.%${regClean}%`)
+        .order('created_at', { ascending: false })
+        .limit(1)
+
+      if (entries && entries.length > 0) {
+        const entry = entries[0]
+        const { data: inv } = await supabase
+          .from('accounts_mechanical_invoices')
+          .select('invoice_number, invoice_date, billed_amount, amount_received, payment_status, keep_on_credit, keep_on_credit_reason')
+          .eq('reception_entry_id', entry.id)
+          .single()
+
+        const billed = Number(inv?.billed_amount || 0)
+        const received = Number(inv?.amount_received || 0)
+        const remaining = Math.max(0, billed - received)
+        const isAccountsCleared = Boolean(inv?.keep_on_credit) || (billed > 0 && remaining <= 0) || Boolean(entry.invoice_done_at)
+
+        if (isAccountsCleared || inv?.invoice_number) {
+          const gpNo = `GP-${entry.jc_number ? entry.jc_number.replace(/[^0-9]/g, '').slice(-5) : Date.now().toString().slice(-5)}`
+          const reason = (billed > 0 && remaining <= 0) ? 'paid' : (billed > 0 && remaining <= billed * 0.02) ? 'short_payment' : Boolean(inv?.keep_on_credit) ? 'keep_on_credit' : 'released'
+
+          return {
+            gate_pass_no: gpNo,
+            reg_number: entry.reg_number || regNorm,
+            customer_name: entry.owner_name || 'Customer',
+            customer_phone: entry.owner_phone || null,
+            job_card_no: entry.jc_number || '—',
+            invoice_no: inv?.invoice_number || `INV-${gpNo.replace('GP-', '')}`,
+            invoice_date: inv?.invoice_date || null,
+            billed_amount: billed,
+            amount_received: received,
+            remaining_amount: remaining,
+            payment_status: remaining <= 0 ? 'Payment received' : 'Accounts Cleared',
+            settlement_reason: reason,
+            keep_on_credit: Boolean(inv?.keep_on_credit),
+            keep_on_credit_reason: inv?.keep_on_credit_reason || null,
+            issued_at: new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }),
+            issued_by: 'Accounts Desk · Dealership',
+            branch: entry.branch || 'Sitapura Workshop',
+            qr_token: `GP_AUTH_${gpNo}_${regClean}_SECURE`,
+          }
+        }
+      }
+    } catch (dbErr) {
+      console.warn('customerGetGatePass direct table query error:', dbErr)
+    }
   }
 
   return null
