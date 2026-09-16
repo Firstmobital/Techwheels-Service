@@ -207,7 +207,7 @@ export default function CustomerPortalPage({
         const list = await customerListEstimates(sessionToken, vehicle.reg_number)
         setLiveEstimates(
           list
-            .map((row) => {
+            .map((row): CustomerEstimateRecord | null => {
               const estimateNo = String(row.estimate_no || row.estimate_id || '')
               if (!estimateNo) return null
               return {
@@ -220,7 +220,7 @@ export default function CustomerPortalPage({
                 grand_total: Number(row.grand_total || 0),
                 status: (row.status as CustomerEstimateRecord['status']) || 'Sent',
                 created_at: (row.created_at as string | null) || null,
-              } satisfies CustomerEstimateRecord
+              }
             })
             .filter((row): row is CustomerEstimateRecord => row !== null)
         )
