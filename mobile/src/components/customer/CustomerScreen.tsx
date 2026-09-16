@@ -12,6 +12,7 @@ import {
 import { usePathname, useRouter } from 'expo-router'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { useCustomerSession } from '../../context/CustomerSessionContext'
+import { manualCheckForOTAUpdate } from '../../hooks/useMandatoryOTAUpdate'
 import { Icon } from '../ui/Icon'
 import { VehiclePicker } from './VehiclePicker'
 
@@ -31,6 +32,26 @@ export function CustomerScreen({
   const { vehicles, selectedReg, setSelectedReg, signOut } = useCustomerSession()
   const [showMenu, setShowMenu] = useState(false)
   const [showNotifications, setShowNotifications] = useState(false)
+  const [checkingUpdate, setCheckingUpdate] = useState(false)
+  const [updateStatusMsg, setUpdateStatusMsg] = useState<string | null>(null)
+
+  const handleCheckAppUpdate = async () => {
+    setCheckingUpdate(true)
+    setUpdateStatusMsg('Checking…')
+    try {
+      const res = await manualCheckForOTAUpdate((msg) => setUpdateStatusMsg(msg))
+      if (res.isAvailable) {
+        Alert.alert('🚀 Update Installed', 'App is restarting with the latest version!')
+      } else {
+        Alert.alert('App Update Status', res.message || 'You have the latest version of the app.')
+      }
+    } catch (e: any) {
+      Alert.alert('Update Error', e?.message || 'Could not verify update. Check your connection.')
+    } finally {
+      setCheckingUpdate(false)
+      setUpdateStatusMsg(null)
+    }
+  }
 
   const selectedVehicle = vehicles.find((v) => v.reg_number === selectedReg) || vehicles[0]
 
@@ -303,6 +324,18 @@ export function CustomerScreen({
                 </TouchableOpacity>
               ))}
             </ScrollView>
+
+            {/* In-App OTA Update Button */}
+            <TouchableOpacity
+              onPress={handleCheckAppUpdate}
+              disabled={checkingUpdate}
+              className="flex-row items-center justify-center bg-blue-50 border border-blue-200 rounded-2xl py-3 mb-2"
+            >
+              <Text className="text-base mr-2">{checkingUpdate ? '⏳' : '⚡'}</Text>
+              <Text className="text-blue-700 font-extrabold text-sm">
+                {checkingUpdate ? (updateStatusMsg || 'Checking for updates…') : 'Check for App Updates'}
+              </Text>
+            </TouchableOpacity>
 
             {/* Logout Action */}
             <TouchableOpacity

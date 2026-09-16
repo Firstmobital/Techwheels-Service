@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import {
   ActivityIndicator,
+  Alert,
   Linking,
   Modal,
   ScrollView,
@@ -27,6 +28,7 @@ import {
   customerGetSettlement,
 } from '../../lib/api/customerPortal'
 import { computeSettlement } from '../../lib/customer/math'
+import { manualCheckForOTAUpdate } from '../../hooks/useMandatoryOTAUpdate'
 
 export default function CustomerDashboardScreen() {
   const router = useRouter()
@@ -38,6 +40,26 @@ export default function CustomerDashboardScreen() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [selectedStageModal, setSelectedStageModal] = useState<number | null>(null)
+  const [checkingOta, setCheckingOta] = useState(false)
+  const [otaStatusText, setOtaStatusText] = useState<string | null>(null)
+
+  const handleManualOtaUpdate = async () => {
+    setCheckingOta(true)
+    setOtaStatusText('Checking for updates…')
+    try {
+      const res = await manualCheckForOTAUpdate((msg) => setOtaStatusText(msg))
+      if (res.isAvailable) {
+        Alert.alert('🚀 Update Installed', 'The app has been updated and is restarting now!')
+      } else {
+        Alert.alert('App Update Status', res.message || 'You have the latest version of the app.')
+      }
+    } catch (e: any) {
+      Alert.alert('Update Error', e?.message || 'Could not verify update status. Check your connection.')
+    } finally {
+      setCheckingOta(false)
+      setOtaStatusText(null)
+    }
+  }
 
   const load = useCallback(async () => {
     if (!token) return
@@ -424,6 +446,33 @@ export default function CustomerDashboardScreen() {
               ) : null}
             </View>
           </CustomerCard>
+
+          {/* ── APP UPDATE QUICK BANNER ── */}
+          <TouchableOpacity
+            activeOpacity={0.88}
+            onPress={handleManualOtaUpdate}
+            disabled={checkingOta}
+            className="bg-slate-900 rounded-2xl p-4 mb-3.5 flex-row items-center justify-between border border-slate-700 shadow-lg"
+          >
+            <View className="flex-row items-center gap-3 flex-1 pr-2">
+              <View className="w-10 h-10 rounded-xl bg-blue-500/20 items-center justify-center border border-blue-400/40">
+                <Text className="text-xl">⚡</Text>
+              </View>
+              <View className="flex-1">
+                <Text className="text-white text-xs font-black uppercase tracking-wider">
+                  {checkingOta ? 'Checking for updates…' : 'App Version & Updates'}
+                </Text>
+                <Text className="text-slate-400 text-[11px] mt-0.5" numberOfLines={1}>
+                  {otaStatusText || 'Tap to check and install latest OTA updates'}
+                </Text>
+              </View>
+            </View>
+            <View className="bg-blue-600 px-3 py-1.5 rounded-xl">
+              <Text className="text-white text-xs font-black">
+                {checkingOta ? 'Checking…' : 'Update ➔'}
+              </Text>
+            </View>
+          </TouchableOpacity>
         </>
       )}
 

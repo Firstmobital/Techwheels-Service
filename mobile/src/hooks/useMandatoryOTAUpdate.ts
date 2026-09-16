@@ -19,13 +19,56 @@ const getGateDecision = () => {
     return { enabled: false, reason: 'updates-disabled' }
   }
 
-  // Some production builds can have empty channel; only preview is blocked.
-  const channel = resolveChannel()
-  if (channel === 'preview') {
-    return { enabled: false, reason: 'preview-channel' }
+  return { enabled: true, reason: 'allowed' }
+}
+
+export async function manualCheckForOTAUpdate(
+  onProgress?: (msg: string) => void,
+): Promise<{ success: boolean; isAvailable: boolean; message: string }> {
+  if (__DEV__) {
+    return {
+      success: true,
+      isAvailable: false,
+      message: 'Development Mode: OTA updates work on installed APK/standalone builds.',
+    }
   }
 
-  return { enabled: true, reason: 'allowed' }
+  if (!Updates.isEnabled) {
+    return {
+      success: false,
+      isAvailable: false,
+      message: 'Updates are disabled in this environment.',
+    }
+  }
+
+  try {
+    onProgress?.('Checking for latest updates…')
+    const check = await Updates.checkForUpdateAsync()
+
+    if (check.isAvailable) {
+      onProgress?.('New update found! Downloading & installing…')
+      const fetchResult = await Updates.fetchUpdateAsync()
+      if (fetchResult.isNew) {
+        onProgress?.('Restarting app with new updates…')
+        await flushPendingLogsToS3({ reason: 'manual-ota-reload' }).catch(() => {})
+        await Updates.reloadAsync()
+        return { success: true, isAvailable: true, message: 'Update installed successfully!' }
+      }
+    }
+
+    return {
+      success: true,
+      isAvailable: false,
+      message: 'App is up to date with the latest version.',
+    }
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err)
+    return {
+      success: false,
+      isAvailable: false,
+      message: msg || 'Could not verify update status. Check internet connection.',
+    }
+  }
 }
 
 export function useMandatoryOTAUpdate() {
