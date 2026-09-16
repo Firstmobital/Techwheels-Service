@@ -26,7 +26,19 @@ docs/**/.DS_Store
 *.sln
 *.sw?
 .vercel
+# Environment files (Never commit secrets)
+.env
+.env.*
 .env*.local
+.env.local
+.env.production
+.env.development
+**/.env
+**/.env.*
+**/.env*.local
+!/.env.example
+!/**/.env.example
+
 .expo/
 mobile/dist-android-local-check/
 mobile/dist-android-local-check-2/
