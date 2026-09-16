@@ -53,6 +53,10 @@ const sanitizeEmailForFileName = (email: string) =>
     .replace(/[^a-zA-Z0-9._-]/g, '-')
 
 const resolveLogBaseUri = () => {
+  if (IS_WEB) {
+    return '/'
+  }
+
   try {
     const pathsUri = (FileSystem as unknown as { Paths?: { document?: { uri?: string } } }).Paths?.document?.uri
     if (typeof pathsUri === 'string' && pathsUri.length > 0) {
