@@ -1386,6 +1386,8 @@ export async function updateServiceAdvisorEntry(
     p_km_reading: payload.km_reading,
     p_remark: payload.remark,
     p_expected_invoice_amount: payload.expected_invoice_amount,
+    // Omit expected_invoice_amount unless Floor Incharge work_status is completed.
+    // Sending the field (even null) would set p_set_expected_invoice_amount and can complete Accounts.
     p_set_expected_invoice_amount: Object.prototype.hasOwnProperty.call(input, 'expected_invoice_amount'),
   })
 

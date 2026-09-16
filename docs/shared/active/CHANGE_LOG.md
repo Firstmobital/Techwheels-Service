@@ -4,6 +4,7 @@ Tracks documentation-sync updates for business logic, architecture, and access c
 
 ## 2026-09-16
 
+- Service Advisor **Invoice Amount (₹)** can be entered and saved only after Floor Incharge marks the JC **Completed**. Save of an amount no longer sets `invoice_done_at` on incomplete jobs. Other SA fields still save. Ledger: DBL-0069. Plan: `ACCOUNTS-001`.
 - Accounts Mechanical posted receipts may be edited by platform Admin / Super Admin on `/accounts` (Mechanical payment modal → Receipts). Trusted RPC `update_accounts_mechanical_payment` (`is_admin()` only). Amount, payment mode, reference, and payment received date are updatable; `voucher_no`, `posted_by`, and `posted_at` are preserved. Recalc reuses `accounts_mechanical_recalc`; Gatepass follows refreshed remaining. Ledger: DBL-0068. Plan: `ACCOUNTS-001`.
 - BUSY Bodyshop Group of Account mappings persist in `public.busy_insurance_master` (`company_name`, `gstin`, `busy_group`). Admin insert/update is on `/busy` only. Matching still uses Labour `account` before `C/O`. Unmapped insurers stay blocked. Not the planned SA insurance Settings catalog (DBL-0042). Ledger: DBL-0067. Plan: `BUSY-001`.
 

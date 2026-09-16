@@ -424,6 +424,14 @@ function parseInvoiceAmountInput(value: string): { ok: true; value: number | nul
   return { ok: true, value: Math.round(parsed * 100) / 100 }
 }
 
+function canCaptureInvoiceAmount(args: {
+  isCompleted: boolean
+  isBodyshop: boolean
+  isNoActionRequired: boolean
+}): boolean {
+  return args.isCompleted && !args.isBodyshop && !args.isNoActionRequired
+}
+
 function draftFromRow(row: ReceptionEntryRow): RowDraft {
   return {
     service_type: typeof row.service_type === 'string' ? row.service_type : '',
@@ -1741,31 +1749,43 @@ export default function ServiceAdvisorPage() {
     const row = rows.find((r) => r.id === id)
     const effectiveServiceType = String(draft.service_type ?? row?.service_type ?? '').trim()
     const isBodyshopRow = isBodyshopServiceType(effectiveServiceType)
+    const isNoActionRequiredRow = isNoEstimateInvoiceRequiredServiceType(effectiveServiceType)
+    const jcNumber = String(draft.jc_number ?? row?.jc_number ?? '').trim().toUpperCase()
+    const isCompleted = Boolean(jcNumber) && completedJobCardNumbers.has(jcNumber)
+    const canSetInvoiceAmount = canCaptureInvoiceAmount({
+      isCompleted,
+      isBodyshop: isBodyshopRow,
+      isNoActionRequired: isNoActionRequiredRow,
+    })
 
     if (isBodyshopRow) {
-      const jcNumber = String(draft.jc_number ?? '').trim().toUpperCase()
-
       if (!jcNumber) {
         setError('JC Number is required for Accident entries.')
         return
       }
     }
 
-    const parsedAmount = parseInvoiceAmountInput(draft.invoice_amount)
-    if (!parsedAmount.ok) {
-      setError(parsedAmount.error)
-      return
-    }
-
-    setSavingId(id)
-
-    const res = await updateServiceAdvisorEntry(id, {
+    const updatePayload: Parameters<typeof updateServiceAdvisorEntry>[1] = {
       service_type: draft.service_type,
       jc_number: draft.jc_number,
       km_reading: parseKmInput(draft.km_reading),
       remark: draft.remark,
-      expected_invoice_amount: parsedAmount.value,
-    })
+    }
+
+    let invoiceAmountToSave: number | null | undefined
+    if (canSetInvoiceAmount) {
+      const parsedAmount = parseInvoiceAmountInput(draft.invoice_amount)
+      if (!parsedAmount.ok) {
+        setError(parsedAmount.error)
+        return
+      }
+      invoiceAmountToSave = parsedAmount.value
+      updatePayload.expected_invoice_amount = parsedAmount.value
+    }
+
+    setSavingId(id)
+
+    const res = await updateServiceAdvisorEntry(id, updatePayload)
 
     setSavingId(null)
 
@@ -1844,7 +1864,9 @@ export default function ServiceAdvisorPage() {
               sa_name: cleanAdvisorPersonName(row.sa_display_name || row.sa_name) || null,
               service_type: draft.service_type?.trim() || null,
               remark: draft.remark?.trim() || null,
-              expected_invoice_amount: parsedAmount.value || null,
+              expected_invoice_amount: canSetInvoiceAmount
+                ? (invoiceAmountToSave ?? null)
+                : (row.expected_invoice_amount ?? null),
               updated_at: new Date().toISOString(),
             }),
             service_type: draft.service_type?.trim() || 'Vehicle Service Intake',
@@ -2572,6 +2594,8 @@ export default function ServiceAdvisorPage() {
                               placeholder="0.00"
                               className="inp mono inp--invoice-amount"
                               aria-label="Invoice Amount (₹)"
+                              disabled={!isCompleted}
+                              title={!isCompleted ? 'Work status must be completed in Floor Incharge first' : undefined}
                             />
                           )}
                         </td>
