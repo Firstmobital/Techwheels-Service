@@ -2,13 +2,13 @@
 
 **Plan ID:** ACCOUNTS-001  
 **Created:** 2026-09-11  
-**Last Updated:** 2026-09-15
+**Last Updated:** 2026-09-16
 **Priority:** HIGH
 **Owner:** Accounts + Platform Team  
 **Status:** Active (web implemented; DBL-0055 Accounts DO post pending apply)  
 **Platform:** webversion  
 **Category:** accounts  
-**Ledger:** DBL-0045/0046/0051/0052/0053/0054/0056/0057/0058/0059/0060/0061/0066 APPLIED. DBL-0055 PROPOSED (Accounts may post insurer/DO lines). Mechanical vouchers recalculated from `invoice_date >= 2026-09-02`. Do not reuse DBL-0043 (`busy`) or DBL-0044 (`busy_parts`).  
+**Ledger:** DBL-0045/0046/0051/0052/0053/0054/0056/0057/0058/0059/0060/0061/0066 APPLIED. DBL-0068 APPLIED (Admin edit of posted Mechanical receipts). DBL-0055 PROPOSED (Accounts may post insurer/DO lines). Mechanical vouchers recalculated from `invoice_date >= 2026-09-02`. Do not reuse DBL-0043 (`busy`) or DBL-0044 (`busy_parts`).  
 **Route:** `/accounts`  
 **Module:** `accounts`  
 **Depends on:** BODYSHOP-SETTLEMENT-001 (`bodyshop_settlements`, Stage 18 lines); Service Advisor Mark Done (`invoice_done_at`)  
@@ -146,7 +146,7 @@ Pattern: `src/pages/BodyshopRecoveryPage.tsx` (KPIs, search, table, Excel, on-pa
 
 - Columns: Mark Done at, JC, reg, model, service type, SA, branch, owner, invoice number, billed amount, **Received Amount** (sum of `accounts_mechanical_payment_lines` excluding `reference` Discount), remaining, payment status, notes
 - Capture / Payments modal: invoice number, date, billed amount, and invoice file (reuse unused SA `invoice_storage_path` upload). **Fetch from DMS** fills those fields when the JC has exactly one live DMS invoice; Accounts still taps Save. 0 or 2+ DMS rows shows “No unique DMS invoice”. Remaining stays billed minus receipts. Invoice header locks after the first receipt.
-- Receipts are append-only (`accounts_mechanical_payment_lines`): this amount + Payment mode (Cash/UPI/Card/Cheque/Bank/Other) + Payment received date + reference. `payment_received_date` is the business date (Asia/Kolkata); `posted_at` remains the system insert timestamp. Voucher series apply when the **effective invoice date** `>= 2026-09-02`: Accounts `invoice_date` when present, otherwise the unique live DMS labour `invoice_date` for the JC (DBL-0060; does not use `payment_received_date` / Mark Done). Cash gets `RApp/26-27/nnnn`; UPI+Card share `JApp/26-27/nnnn`. cheque/bank/other stay null. Existing voucher numbers are not recalculated. History shows Received Date. Payment status is automatic from billed vs sum(receipts). Mechanical Gatepass is eligible when remaining ≤ 0, remaining ≤ 2% of billed, or a **valid** persisted Keep on Credit exists (`keep_on_credit` + non-blank `keep_on_credit_reason` + `keep_on_credit_approved_by` + `keep_on_credit_approved_at`). Financial remaining and `payment_status` are not rewritten for the 2% rule or Keep on Credit. Receipts may exceed remaining; the posted line keeps the entered amount. Create Gatepass goes through `issue_accounts_mechanical_gatepass`.
+- Receipts are posted as lines on `accounts_mechanical_payment_lines`: this amount + Payment mode (Cash/UPI/Card/Cheque/Bank/Other) + Payment received date + reference. `payment_received_date` is the business date (Asia/Kolkata); `posted_at` remains the original system insert timestamp. Platform Admin / Super Admin may edit a posted Mechanical receipt (`amount`, `payment_mode`, `reference`, `payment_received_date`) through `update_accounts_mechanical_payment` (`is_admin()` only). The client sends `accounts_mechanical_payment_lines.id`. Invoice id, previous values, and totals are read from persistence. `posted_by`, `posted_at`, `voucher_no`, `mechanical_invoice_id`, and `reception_entry_id` are not rewritten. `edited_by` / `edited_at` record the last trusted edit. Recalc reuses `accounts_mechanical_recalc`. Overpayment is stored as-is. Voucher series apply when the **effective invoice date** `>= 2026-09-02`: Accounts `invoice_date` when present, otherwise the unique live DMS labour `invoice_date` for the JC (DBL-0060; does not use `payment_received_date` / Mark Done). Cash gets `RApp/26-27/nnnn`; UPI+Card share `JApp/26-27/nnnn` at insert. cheque/bank/other stay null at insert. Editing a posted line never regenerates, deletes, or replaces `voucher_no`. If mode/date/amount/reference no longer match an already-exported voucher, the number is kept and BUSY must be re-exported; the UI warns. History shows Received Date plus an Admin-only Action/Edit column. Payment status is automatic from billed vs sum(receipts). Mechanical Gatepass is eligible when remaining ≤ 0, remaining ≤ 2% of billed, or a **valid** persisted Keep on Credit exists (`keep_on_credit` + non-blank `keep_on_credit_reason` + `keep_on_credit_approved_by` + `keep_on_credit_approved_at`). Financial remaining and `payment_status` are not rewritten for the 2% rule or Keep on Credit. Receipts may exceed remaining; the posted line keeps the entered amount. Create Gatepass goes through `issue_accounts_mechanical_gatepass`. Bodyshop settlement receipts are unchanged.
 - KPI: Mark Done count, invoice-pending count, billed sum, customer remaining / received still follow Mark Done Period. Cash / UPI / Credit Card money is actual receipt-line grain dated by `payment_received_date` (IST `posted_at` fallback), after status + Search, excluding Discount `reference`. Mark Done date does not restrict those three cards.
 
 **Bodyshop desk**
@@ -177,6 +177,7 @@ Pattern: `src/pages/BodyshopRecoveryPage.tsx` (KPIs, search, table, Excel, on-pa
 - [x] **Task 3.5:** Mechanical Capture **Fetch from DMS** (form fill only; DBL-0048). No remaining write. No bulk list fill.
 - [x] **Task 3.10:** Mechanical Gatepass 2% short-payment, Keep on Credit, exact overpayment, trusted issue RPC (DBL-0061). Dedicated reason + validity + revocation metadata (DBL-0066).
 - [x] **Task 3.11:** Mechanical Cash / UPI / Credit Card KPIs use status filter + `payment_received_date` (IST `posted_at` fallback). Exclude Discount `reference`. Receipt Period is independent of Mark Done table period.
+- [x] **Task 3.12:** Admin-only edit of posted Mechanical receipts (DBL-0068). Trusted `update_accounts_mechanical_payment`. Non-admin RPC denied. Voucher number preserved. Recalc + Gatepass refresh. Bodyshop unchanged.
 
 ### Phase 4: Closeout
 - [x] **Task 4.1:** MODULE_ROUTE_CONTRACT (grant Accounts users after SQL apply).
@@ -221,6 +222,7 @@ Pattern: `src/pages/BodyshopRecoveryPage.tsx` (KPIs, search, table, Excel, on-pa
 ✅ 3.9 | Recalculate vouchers from 2-Sep | Eng | 2026-09-14 | 2026-09-14 | DBL-0059 APPLIED; RApp 22 / JApp 78
 ✅ 3.10 | Mechanical Gatepass 2% / credit / overpay | Eng | 2026-09-15 | 2026-09-15 | DBL-0061 APPLIED
 ✅ 3.11 | Mechanical payment-mode KPI receipt-date + Discount exclusion | Eng | 2026-09-15 | 2026-09-15 | Client helper; no schema
+✅ 3.12 | Admin edit posted Mechanical receipts | Eng | 2026-09-16 | 2026-09-16 | DBL-0068 APPLIED; is_admin() RPC
 ⏳ 3.5 | Capture Fetch from DMS | Eng | 2026-09-11 | 2026-09-11 | DBL-0048 applied; web button pending deploy
 ```
 
@@ -310,6 +312,18 @@ Pattern: `src/pages/BodyshopRecoveryPage.tsx` (KPIs, search, table, Excel, on-pa
 - Mode tiles are not inputs to the other mode totals (clicking Cash does not clear UPI/Card).
 - Helper: `sumAccountsMechanicalPaymentModeKpis` in `src/lib/api/accounts.ts`. Checks: `scripts/verify_accounts_split_payment_drafts.mjs`.
 
+### 2026-09-16 - Admin edit of posted Mechanical receipts
+
+- Platform Admin / Super Admin may edit a posted Mechanical receipt in the Accounts modal Receipts table (`isAdmin` in UI; `is_admin()` on the server).
+- Trusted RPC `update_accounts_mechanical_payment(payment_line_id, amount, payment_mode, reference, payment_received_date)`. Client must not UPDATE `accounts_mechanical_payment_lines` directly.
+- Updatable: amount (> 0, overpayment allowed), payment_mode (existing Accounts modes), reference (optional), payment_received_date (required).
+- Protected: id, mechanical_invoice_id, reception_entry_id, posted_by, posted_at, voucher_no.
+- Recalc reuses `accounts_mechanical_recalc`. Gatepass eligibility follows refreshed remaining / Keep on Credit.
+- `voucher_no` is never regenerated on edit. If mode no longer matches RApp/JApp, the number is kept; BUSY export uses the new mode for Account DR and the preserved voucher. Re-export if already sent.
+- Audit: `edited_by` / `edited_at` on the payment line. Original posting identity stays on `posted_by` / `posted_at`.
+- Bodyshop settlement receipts are unchanged.
+- Ledger: DBL-0068.
+
 ### 2026-09-15 - Mechanical Gatepass 2% / Keep on Credit / overpay
 
 - Gatepass eligibility is remaining ≤ 0, remaining ≤ round(billed × 0.02, 2), or **valid** persisted Keep on Credit.
@@ -353,10 +367,10 @@ Pattern: `src/pages/BodyshopRecoveryPage.tsx` (KPIs, search, table, Excel, on-pa
 - `docs/Implementation_plans/webversion/categories/bodyshop/active/BODYSHOP-RECOVERY-001_DO_INSURANCE_RECOVERY_BOOK_PLAN_2026-09-04.md`
 - `docs/Implementation_plans/webversion/categories/operations/active/BUSY-001_BUSY_ACCOUNTING_EXPORT_PLAN_2026-09-10.md`
 - `docs/shared/reference/MODULE_ROUTE_CONTRACT.md`
-- `docs/shared/reference/DB_CHANGE_LEDGER.md` (DBL-0045, DBL-0055, DBL-0057, DBL-0058, DBL-0060, DBL-0061, DBL-0066)
+- `docs/shared/reference/DB_CHANGE_LEDGER.md` (DBL-0045, DBL-0055, DBL-0057, DBL-0058, DBL-0060, DBL-0061, DBL-0066, DBL-0068)
 - Evidence (later): `docs/Implementation_plans/webversion/categories/accounts/evidence/ACCOUNTS-001_TEST_MATRIX.md`
 
 ---
 
-**Last Updated:** 2026-09-15  
-**Status:** IN PROGRESS (Mechanical Gatepass 2%/Keep on Credit/overpay shipped as DBL-0061+0066; DBL-0055 SQL apply pending)
+**Last Updated:** 2026-09-16  
+**Status:** IN PROGRESS (Mechanical Admin receipt edit shipped as DBL-0068; Gatepass 2%/Keep on Credit/overpay as DBL-0061+0066; DBL-0055 SQL apply pending)

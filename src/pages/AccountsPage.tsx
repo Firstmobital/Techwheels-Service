@@ -8,6 +8,7 @@ import {
   accountsBodyshopViewDateYmd,
   accountsMechanicalViewDateYmd,
   addAccountsMechanicalPayment,
+  updateAccountsMechanicalPayment,
   buildMechanicalAccountsExportRows,
   buildMechanicalBusyPaymentExportRows,
   BUSY_PAYMENT_EXPORT_HEADERS,
@@ -35,6 +36,7 @@ import {
   mechanicalActualReceivedAmountByCase,
   mechanicalInvoiceDateInputValue,
   mechanicalPaymentReceivedDate,
+  mechanicalPaymentVoucherEditWarning,
   mechanicalRemaining,
   mechanicalExportInvoiceNumbers,
   openBodyshopGatepass,
@@ -74,6 +76,15 @@ type MechanicalPaymentDraft = {
   paymentMode: AccountsPaymentMode
   paymentReceivedDate: string
   paymentReference: string
+}
+
+type MechanicalReceiptEdit = {
+  paymentLineId: number
+  amount: string
+  paymentMode: AccountsPaymentMode
+  paymentReceivedDate: string
+  paymentReference: string
+  voucherNo: string | null
 }
 
 let paymentDraftSeq = 0
@@ -216,6 +227,9 @@ export default function AccountsPage() {
   const [uploadingInvoice, setUploadingInvoice] = useState(false)
   const [deletingInvoice, setDeletingInvoice] = useState(false)
   const [payError, setPayError] = useState<string | null>(null)
+  const [receiptEdit, setReceiptEdit] = useState<MechanicalReceiptEdit | null>(null)
+  const [savingReceiptEdit, setSavingReceiptEdit] = useState(false)
+  const [receiptEditError, setReceiptEditError] = useState<string | null>(null)
   const [dmsLookup, setDmsLookup] = useState<MechanicalDmsInvoiceLookup | null>(null)
   const [loadingDms, setLoadingDms] = useState(false)
   const [isAdmin, setIsAdmin] = useState(false)
@@ -377,6 +391,8 @@ export default function AccountsPage() {
     setBilledAmount(mechanicalInvoiceAmountPrefill(row))
     setPaymentDrafts([emptyMechanicalPaymentDraft()])
     setPayError(null)
+    setReceiptEdit(null)
+    setReceiptEditError(null)
     setPayLines([])
     setDmsLookup(null)
     setKeepOnCreditDraft(Boolean(row.keep_on_credit))
@@ -462,6 +478,64 @@ export default function AccountsPage() {
       ...lines,
     ])
     return lines
+  }
+
+  function beginReceiptEdit(line: AccountsMechanicalPayment) {
+    setReceiptEdit({
+      paymentLineId: line.id,
+      amount: String(line.amount),
+      paymentMode: line.payment_mode,
+      paymentReceivedDate: mechanicalPaymentReceivedDate(line) ?? asiaKolkataTodayDate(),
+      paymentReference: line.reference ?? '',
+      voucherNo: line.voucher_no ?? null,
+    })
+    setReceiptEditError(null)
+    setPayError(null)
+  }
+
+  function cancelReceiptEdit() {
+    setReceiptEdit(null)
+    setReceiptEditError(null)
+  }
+
+  function patchReceiptEdit(patch: Partial<MechanicalReceiptEdit>) {
+    setReceiptEdit((prev) => (prev ? { ...prev, ...patch } : prev))
+    setReceiptEditError(null)
+  }
+
+  async function saveReceiptEdit() {
+    if (!editRow || !receiptEdit) return
+    const amount = numOrNull(receiptEdit.amount)
+    const receivedDate = receiptEdit.paymentReceivedDate.trim()
+    if (amount == null || amount <= 0) {
+      setReceiptEditError('Enter a receipt amount greater than 0.')
+      return
+    }
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(receivedDate)) {
+      setReceiptEditError('Enter the payment received date.')
+      return
+    }
+
+    setSavingReceiptEdit(true)
+    setReceiptEditError(null)
+    try {
+      const saved = await updateAccountsMechanicalPayment({
+        paymentLineId: receiptEdit.paymentLineId,
+        amount,
+        paymentMode: receiptEdit.paymentMode,
+        reference: receiptEdit.paymentReference.trim() || null,
+        paymentReceivedDate: receivedDate,
+      })
+      patchMechRow(saved)
+      await refreshMechanicalPayLines(editRow.reception_entry_id)
+      const voucherWarning = mechanicalPaymentVoucherEditWarning(receiptEdit.voucherNo, receiptEdit.paymentMode)
+      setReceiptEdit(null)
+      flash(voucherWarning ? `Receipt updated. ${voucherWarning}` : 'Receipt updated')
+    } catch (e) {
+      setReceiptEditError(e instanceof Error ? e.message : 'Receipt update failed')
+    } finally {
+      setSavingReceiptEdit(false)
+    }
   }
 
   async function postMechanicalReceipt() {
@@ -1193,11 +1267,11 @@ export default function AccountsPage() {
         const gatepass = mechanicalGatepassEligibility(editRow)
         const creditPersisted = isMechanicalKeepOnCreditValid(editRow)
         return (
-          <div className="modal-back" role="presentation" onClick={() => setEditRow(null)}>
+          <div className="modal-back" role="presentation" onClick={() => { setEditRow(null); cancelReceiptEdit() }}>
             <div className="modal modal--md" role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
               <div className="modal__head">
                 <h3 style={{ wordBreak: 'break-word' }}>{editRow.invoice_number ? 'Mechanical payment' : 'Capture invoice'} · {editRow.jc_number}</h3>
-                <button type="button" className="modal__x" onClick={() => setEditRow(null)} aria-label="Close">×</button>
+                <button type="button" className="modal__x" onClick={() => { setEditRow(null); cancelReceiptEdit() }} aria-label="Close">×</button>
               </div>
               <div className="modal__body">
                 <p style={{ margin: '0 0 16px', color: 'var(--muted)', fontSize: 13 }}>
@@ -1542,7 +1616,7 @@ export default function AccountsPage() {
                         <button
                           type="button"
                           className="btn btn--primary"
-                          disabled={postingPay || editRow.billed_amount == null}
+                          disabled={postingPay || editRow.billed_amount == null || receiptEdit != null}
                           onClick={() => void postMechanicalReceipt()}
                         >
                           {postingPay ? 'Posting…' : 'Post payment'}
@@ -1562,24 +1636,123 @@ export default function AccountsPage() {
                           <th>Mode</th>
                           <th>Amount</th>
                           <th>Reference</th>
+                          {isAdmin && <th>Action</th>}
                         </tr>
                       </thead>
                       <tbody>
-                        {payLines.map((l) => (
-                          <tr key={l.id}>
-                            <td>{fmtDate(mechanicalPaymentReceivedDate(l))}</td>
-                            <td>{paymentModeLabel(l.payment_mode)}</td>
-                            <td>{inr(l.amount)}</td>
-                            <td>{l.reference || '—'}</td>
-                          </tr>
-                        ))}
+                        {payLines.map((l) => {
+                          const draft = isAdmin && receiptEdit?.paymentLineId === l.id ? receiptEdit : null
+                          return (
+                            <tr key={l.id}>
+                              <td>
+                                {draft ? (
+                                  <input
+                                    className="inp"
+                                    type="date"
+                                    value={draft.paymentReceivedDate}
+                                    required
+                                    disabled={savingReceiptEdit}
+                                    onChange={(e) => patchReceiptEdit({ paymentReceivedDate: e.target.value })}
+                                  />
+                                ) : (
+                                  fmtDate(mechanicalPaymentReceivedDate(l))
+                                )}
+                              </td>
+                              <td>
+                                {draft ? (
+                                  <select
+                                    className="sel"
+                                    value={draft.paymentMode}
+                                    disabled={savingReceiptEdit}
+                                    onChange={(e) => patchReceiptEdit({ paymentMode: e.target.value as AccountsPaymentMode })}
+                                  >
+                                    {ACCOUNTS_PAYMENT_MODES.map((m) => (
+                                      <option key={m.value} value={m.value}>{m.label}</option>
+                                    ))}
+                                  </select>
+                                ) : (
+                                  paymentModeLabel(l.payment_mode)
+                                )}
+                              </td>
+                              <td>
+                                {draft ? (
+                                  <input
+                                    className="inp"
+                                    type="number"
+                                    min="0.01"
+                                    step="0.01"
+                                    value={draft.amount}
+                                    disabled={savingReceiptEdit}
+                                    onChange={(e) => patchReceiptEdit({ amount: e.target.value })}
+                                  />
+                                ) : (
+                                  inr(l.amount)
+                                )}
+                              </td>
+                              <td>
+                                {draft ? (
+                                  <input
+                                    className="inp"
+                                    value={draft.paymentReference}
+                                    disabled={savingReceiptEdit}
+                                    onChange={(e) => patchReceiptEdit({ paymentReference: e.target.value })}
+                                    placeholder="UTR, cheque no, or note"
+                                  />
+                                ) : (
+                                  l.reference || '—'
+                                )}
+                              </td>
+                              {isAdmin && (
+                                <td>
+                                  {draft ? (
+                                    <div className="acct-pay-hist__actions">
+                                      <button
+                                        type="button"
+                                        className="btn btn--sm btn--primary"
+                                        disabled={savingReceiptEdit}
+                                        onClick={() => void saveReceiptEdit()}
+                                      >
+                                        {savingReceiptEdit ? 'Saving…' : 'Save'}
+                                      </button>
+                                      <button
+                                        type="button"
+                                        className="btn btn--sm"
+                                        disabled={savingReceiptEdit}
+                                        onClick={cancelReceiptEdit}
+                                      >
+                                        Cancel
+                                      </button>
+                                    </div>
+                                  ) : (
+                                    <button
+                                      type="button"
+                                      className="linkbtn linkbtn--sm"
+                                      disabled={savingReceiptEdit || receiptEdit != null}
+                                      onClick={() => beginReceiptEdit(l)}
+                                    >
+                                      Edit
+                                    </button>
+                                  )}
+                                </td>
+                              )}
+                            </tr>
+                          )
+                        })}
                       </tbody>
                     </table>
+                    {receiptEdit && receiptEditError && (
+                      <p className="acct-pay-hist__error">{receiptEditError}</p>
+                    )}
+                    {receiptEdit && mechanicalPaymentVoucherEditWarning(receiptEdit.voucherNo, receiptEdit.paymentMode) && (
+                      <p className="acct-pay-hist__hint">
+                        {mechanicalPaymentVoucherEditWarning(receiptEdit.voucherNo, receiptEdit.paymentMode)}
+                      </p>
+                    )}
                   </div>
                 )}
               </div>
               <div className="modal__foot">
-                <button type="button" className="btn" onClick={() => setEditRow(null)}>Close</button>
+                <button type="button" className="btn" onClick={() => { setEditRow(null); cancelReceiptEdit() }}>Close</button>
               </div>
             </div>
           </div>

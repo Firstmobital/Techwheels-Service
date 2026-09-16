@@ -2,7 +2,7 @@
 
 **Plan:** ACCOUNTS-001  
 **Created:** 2026-09-11  
-**Status:** Ready after DBL-0066 apply (2026-09-15)
+**Status:** Ready after DBL-0068 apply (2026-09-16)
 
 ## SQL Editor
 
@@ -49,6 +49,14 @@
 - [ ] Received + Cash KPI equals in-range actual cash on Received cases (13-Sep live: ₹10,300 not ₹16,900)
 - [ ] Clicking Cash does not zero the UPI or Credit Card tiles
 - [ ] Mechanical table **Received Amount** is after Billed and before Remaining; sums payment lines minus `reference` Discount (`DISCOUNT` / trim+case); genuine `other` stays in
+- [ ] Admin sees Receipts **Action** / **Edit**; non-admin table stays read-only with no empty Action column
+- [ ] Admin Edit can change received date, mode, amount (> 0, overpayment allowed), and reference; Save reloads lines + Received/Remaining/Status/Gatepass
+- [ ] Cancel discards the inline edit and does not write the database
+- [ ] Non-admin `update_accounts_mechanical_payment` RPC is denied (`42501`); authenticated has no direct UPDATE on `accounts_mechanical_payment_lines`
+- [ ] After amount edit, `accounts_mechanical_recalc` updates `amount_received` / `payment_status`; remaining floors at 0; sibling lines unchanged
+- [ ] Editing a fully paid split so remaining > 2% makes Gatepass unavailable unless valid Keep on Credit exists
+- [ ] `voucher_no` is preserved on edit; `posted_by` / `posted_at` are preserved; `edited_by` / `edited_at` are stamped
+- [ ] Bodyshop settlement receipts are unchanged
 
 ## Bodyshop
 

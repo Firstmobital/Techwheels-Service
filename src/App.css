@@ -685,8 +685,13 @@ table.tbl { width: 100%; border-collapse: collapse; font-size: 13.5px; }
 .acct-modal-summary span { display: block; font-size: 11px; color: var(--muted); }
 .acct-modal-summary strong { display: block; margin-top: 4px; font-size: 14px; }
 .acct-pay-hist { width: 100%; border-collapse: collapse; font-size: 12.5px; }
-.acct-pay-hist th, .acct-pay-hist td { text-align: left; padding: 8px 6px; border-bottom: 1px solid var(--border); }
+.acct-pay-hist th, .acct-pay-hist td { text-align: left; padding: 8px 6px; border-bottom: 1px solid var(--border); vertical-align: top; }
 .acct-pay-hist th { color: var(--muted); font-weight: 600; }
+.acct-pay-hist .inp,
+.acct-pay-hist .sel { min-height: 32px; font-size: 12.5px; padding: 4px 8px; width: 100%; max-width: 160px; }
+.acct-pay-hist__actions { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.acct-pay-hist__error { margin: 8px 0 0; color: #b91c1c; font-size: 12.5px; }
+.acct-pay-hist__hint { margin: 8px 0 0; color: var(--muted); font-size: 12px; }
 .acct-pay-draft {
   border: 1px solid var(--border);
   border-radius: 10px;

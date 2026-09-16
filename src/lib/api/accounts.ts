@@ -74,6 +74,8 @@ export interface AccountsMechanicalPayment {
   posted_at: string
   payment_received_date: string | null
   voucher_no: string | null
+  edited_by?: string | null
+  edited_at?: string | null
 }
 
 export interface AccountsBodyshopCase {
@@ -185,6 +187,53 @@ export async function addAccountsMechanicalPayment(input: {
   })
   if (error) throw new Error(settlementRpcError(error))
   return data as AccountsMechanicalCase
+}
+
+export async function updateAccountsMechanicalPayment(input: {
+  paymentLineId: number
+  amount: number
+  paymentMode: AccountsPaymentMode
+  reference: string | null
+  paymentReceivedDate: string
+}): Promise<AccountsMechanicalCase> {
+  const { data, error } = await supabase.rpc('update_accounts_mechanical_payment', {
+    p_payment_line_id: input.paymentLineId,
+    p_amount: input.amount,
+    p_payment_mode: input.paymentMode,
+    p_reference: input.reference,
+    p_payment_received_date: input.paymentReceivedDate,
+  })
+  if (error) throw new Error(settlementRpcError(error))
+  return data as AccountsMechanicalCase
+}
+
+export function mechanicalVoucherSeries(voucherNo: string | null | undefined): 'RApp' | 'JApp' | null {
+  const raw = String(voucherNo ?? '').trim()
+  if (/^RApp\/26-27\/\d{4}$/.test(raw)) return 'RApp'
+  if (/^JApp\/26-27\/\d{4}$/.test(raw)) return 'JApp'
+  return null
+}
+
+/** BUSY Account DR series for a payment mode. cheque/bank/other are not vouchered at insert. */
+export function mechanicalVoucherSeriesForMode(mode: string | null | undefined): 'RApp' | 'JApp' | null {
+  const v = String(mode ?? '').trim().toLowerCase()
+  if (v === 'cash') return 'RApp'
+  if (v === 'upi' || v === 'card') return 'JApp'
+  return null
+}
+
+export function mechanicalPaymentVoucherEditWarning(
+  voucherNo: string | null | undefined,
+  paymentMode: string | null | undefined,
+): string | null {
+  const voucher = String(voucherNo ?? '').trim()
+  if (!voucher) return null
+  const series = mechanicalVoucherSeries(voucher)
+  const expected = mechanicalVoucherSeriesForMode(paymentMode)
+  if (series && expected && series !== expected) {
+    return `Voucher ${voucher} will be kept. It stays ${series} while the receipt mode is now ${paymentModeLabel(paymentMode)}. Re-export BUSY if this receipt was already sent.`
+  }
+  return `Voucher ${voucher} will be kept. Amount, mode, date, and reference edits do not regenerate it. Re-export BUSY if this receipt was already sent.`
 }
 
 export async function setAccountsMechanicalKeepOnCredit(

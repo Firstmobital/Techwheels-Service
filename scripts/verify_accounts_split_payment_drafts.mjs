@@ -2144,5 +2144,89 @@ function buildMechanicalBusyPaymentExportRows({
 
 console.log('verify_accounts_split_payment_drafts: Received Amount Discount-exclusion checks passed')
 
+// ---------------------------------------------------------------------------
+// Admin receipt edit — client recalc / Gatepass / voucher / KPI date (DBL-0068)
+// Server authorization and persistence are in sql_checks practical.
+// ---------------------------------------------------------------------------
+{
+  function headerFromLines(billed, lines) {
+    const received = roundAccountsMoney(lines.reduce((sum, line) => sum + Number(line.amount), 0))
+    const remaining = roundAccountsMoney(Math.max(0, billed - received))
+    let status = 'pending'
+    if (billed === 0 || received >= billed) status = 'received'
+    else if (received > 0) status = 'partial'
+    return { received, remaining, status }
+  }
+
+  function voucherSeries(voucherNo) {
+    const raw = String(voucherNo ?? '').trim()
+    if (/^RApp\/26-27\/\d{4}$/.test(raw)) return 'RApp'
+    if (/^JApp\/26-27\/\d{4}$/.test(raw)) return 'JApp'
+    return null
+  }
+
+  function voucherSeriesForMode(mode) {
+    const v = String(mode ?? '').trim().toLowerCase()
+    if (v === 'cash') return 'RApp'
+    if (v === 'upi' || v === 'card') return 'JApp'
+    return null
+  }
+
+  const line1 = { id: 1, amount: 2271.00, payment_mode: 'upi', reference: '62596241', payment_received_date: '2026-09-16', voucher_no: 'JApp/26-27/0104' }
+  const line2 = { id: 2, amount: 0.40, payment_mode: 'other', reference: 'DISCOUNT', payment_received_date: '2026-09-16', voucher_no: null }
+  const billed = 2271.40
+
+  // A. Edit receipt 2 amount 0.40 → 0.50; sibling unchanged
+  const afterAmount = [{ ...line1 }, { ...line2, amount: 0.50 }]
+  const a = headerFromLines(billed, afterAmount)
+  assert(afterAmount[0].amount === 2271.00 && afterAmount[0].reference === '62596241', 'A: other line unchanged')
+  assert(afterAmount[1].amount === 0.50, 'A: edited line is 0.50')
+  assert(a.received === 2271.50 && a.remaining === 0 && a.status === 'received', `A: received 2271.50 remaining 0, got ${JSON.stringify(a)}`)
+
+  // B/C. Mode Other → Cash, reference DISCOUNT → CASH ADJUSTMENT; totals unchanged
+  const afterMode = [{ ...line1 }, { ...line2, amount: 0.50, payment_mode: 'cash', reference: 'CASH ADJUSTMENT' }]
+  const bc = headerFromLines(billed, afterMode)
+  assert(afterMode[1].payment_mode === 'cash' && afterMode[1].reference === 'CASH ADJUSTMENT', 'B/C: mode and reference persist')
+  assert(bc.received === 2271.50 && bc.remaining === 0, 'B/C: totals unchanged after mode/reference edit')
+
+  // D. Edited received date drives KPI/filter, not posted_at
+  const dateEdited = { ...line2, payment_received_date: '2026-09-12', posted_at: '2026-09-16T12:00:00+05:30' }
+  assert(mechanicalPaymentReceivedDate(dateEdited) === '2026-09-12', 'D: KPI date is edited payment_received_date')
+  assert(isMechanicalPaymentReceivedDateInRange(dateEdited, { from: '2026-09-12', to: '2026-09-12' }), 'D: in 12-Sep filter')
+  assert(!isMechanicalPaymentReceivedDateInRange(dateEdited, { from: '2026-09-16', to: '2026-09-16' }), 'D: out of original 16-Sep filter')
+
+  // G. Overpayment edit 0.40 → 10.00
+  const over = headerFromLines(billed, [{ ...line1 }, { ...line2, amount: 10.00 }])
+  assert(over.received === 2281.00 && over.remaining === 0 && over.status === 'received', `G: overpay 2281 remaining 0, got ${JSON.stringify(over)}`)
+  const overGp = mechanicalGatepassEligibility({ billed_amount: billed, amount_received: over.received, keep_on_credit: false })
+  assert(overGp.eligible && overGp.reason === 'paid' && overGp.remaining === 0, 'G: overpay Gatepass paid')
+
+  // H/I/M. Split 6000+4000 edit second to 3500
+  const splitAfter = headerFromLines(10000, [
+    { id: 10, amount: 6000 },
+    { id: 11, amount: 3500 },
+  ])
+  assert(splitAfter.received === 9500 && splitAfter.remaining === 500 && splitAfter.status === 'partial', `H/M: split recalc, got ${JSON.stringify(splitAfter)}`)
+  const gp = mechanicalGatepassEligibility({ billed_amount: 10000, amount_received: 9500, keep_on_credit: false })
+  assert(!gp.eligible && gp.remaining === 500, 'I: remaining 500 > 2% Gatepass denied')
+  const gpCredit = mechanicalGatepassEligibility({
+    billed_amount: 10000,
+    amount_received: 9500,
+    keep_on_credit: true,
+    keep_on_credit_reason: 'Insurance payment pending',
+    keep_on_credit_approved_by: 'Admin',
+    keep_on_credit_approved_at: '2026-09-16T12:00:00+05:30',
+  })
+  assert(gpCredit.eligible && gpCredit.reason === 'keep_on_credit', 'I: valid Keep on Credit still allows Gatepass')
+
+  // J. voucher_no preserved across mode change
+  const modeChanged = { ...line1, payment_mode: 'cash', voucher_no: 'JApp/26-27/0104' }
+  assert(modeChanged.voucher_no === line1.voucher_no, 'J: voucher_no preserved')
+  assert(voucherSeries(modeChanged.voucher_no) === 'JApp', 'J: series stays JApp')
+  assert(voucherSeriesForMode(modeChanged.payment_mode) === 'RApp', 'J: cash expects RApp')
+  assert(voucherSeries(modeChanged.voucher_no) !== voucherSeriesForMode(modeChanged.payment_mode), 'J: exported voucher series may not match new mode')
+
+  console.log('verify_accounts_split_payment_drafts: Admin receipt-edit recalc/Gatepass/voucher checks passed')
+}
 
 
