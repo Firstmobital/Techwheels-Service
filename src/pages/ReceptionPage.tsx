@@ -333,6 +333,7 @@ export default function ReceptionPage() {
   const [employeeOptions, setEmployeeOptions] = useState<ReceptionEmployeeOption[]>([])
   const [modelOptions, setModelOptions] = useState<string[]>([...DEFAULT_MODEL_OPTIONS])
   const [canImport, setCanImport] = useState(false)
+  const [canDelete, setCanDelete] = useState(false)
 
   const [form, setForm] = useState<FormState>(EMPTY_FORM)
   const [editingId, setEditingId] = useState<number | null>(null)
@@ -535,6 +536,16 @@ export default function ReceptionPage() {
       (employee) => String(employee.employee_code ?? '').trim().toUpperCase() === selectedCode,
     )
   }, [form.sa_employee_code, sortedEmployeeOptions])
+
+  useEffect(() => {
+    let mounted = true
+    void supabase.rpc('has_module_delete', { p_module: 'reception' }).then(({ data }) => {
+      if (mounted) setCanDelete(Boolean(data))
+    })
+    return () => {
+      mounted = false
+    }
+  }, [])
 
   useEffect(() => {
     if (editingId !== null) return
@@ -1201,6 +1212,11 @@ export default function ReceptionPage() {
   }
 
   async function handleDelete(id: number) {
+    if (!canDelete) {
+      setError('You are not allowed to delete reception entries.')
+      return
+    }
+
     const confirmed = window.confirm('Delete this reception entry?')
     if (!confirmed) return
 
@@ -1753,14 +1769,16 @@ export default function ReceptionPage() {
                       >
                         Edit
                       </button>
-                      <button
-                        type="button"
-                        onClick={() => void handleDelete(entry.id)}
-                        disabled={deletingId === entry.id}
-                        className="tbtn tbtn--danger"
-                      >
-                        {deletingId === entry.id ? 'Deleting...' : 'Delete'}
-                      </button>
+                      {canDelete && (
+                        <button
+                          type="button"
+                          onClick={() => void handleDelete(entry.id)}
+                          disabled={deletingId === entry.id}
+                          className="tbtn tbtn--danger"
+                        >
+                          {deletingId === entry.id ? 'Deleting...' : 'Delete'}
+                        </button>
+                      )}
                     </div>
                   </div>
                   <div className="recep-item__time">{formatDate(entry.created_at)}</div>

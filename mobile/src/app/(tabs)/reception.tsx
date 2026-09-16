@@ -313,6 +313,7 @@ export default function ReceptionScreen() {
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [canDelete, setCanDelete] = useState(false)
 
   const [listMode, setListMode] = useState<'today' | 'month'>('today')
   const [selectedLocation, setSelectedLocation] = useState<string>('all')
@@ -378,6 +379,16 @@ export default function ReceptionScreen() {
   }, [])
 
   useFocusEffect(useCallback(() => { void loadAll() }, [loadAll]))
+
+  useEffect(() => {
+    let mounted = true
+    void supabase.rpc('has_module_delete', { p_module: 'reception' }).then(({ data }) => {
+      if (mounted) setCanDelete(Boolean(data))
+    })
+    return () => {
+      mounted = false
+    }
+  }, [])
 
   // ── Derived state ─────────────────────────────────────────────────────────
   const todayKey = useMemo(() => getTodayKey(), [])
@@ -743,6 +754,10 @@ export default function ReceptionScreen() {
   }
 
   async function handleDelete(id: number) {
+    if (!canDelete) {
+      Alert.alert('Error', 'You are not allowed to delete reception entries.')
+      return
+    }
     Alert.alert('Delete Entry', 'Are you sure?', [
       { text: 'Cancel', style: 'cancel' },
       { text: 'Delete', style: 'destructive', onPress: async () => {
@@ -852,9 +867,11 @@ export default function ReceptionScreen() {
           <TouchableOpacity style={s.editBtn} onPress={() => openEdit(entry)}>
             <Text style={s.editBtnText}>✏️  Edit</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={s.delBtn} onPress={() => handleDelete(entry.id)}>
-            <Text style={s.delBtnText}>🗑️  Delete</Text>
-          </TouchableOpacity>
+          {canDelete && (
+            <TouchableOpacity style={s.delBtn} onPress={() => handleDelete(entry.id)}>
+              <Text style={s.delBtnText}>🗑️  Delete</Text>
+            </TouchableOpacity>
+          )}
         </View>
       </View>
     )
