@@ -1,5 +1,5 @@
 import { AUTODOC_BUCKET } from '../autodocStorage'
-import { busyInvoiceLookupKey, normalizeInvoiceNumber } from '../busy/eligibility'
+import { busyInvoiceLookupKey, isCancelledInvoiceStatus, normalizeInvoiceNumber } from '../busy/eligibility'
 import { normalizePersonName } from '../busy/partyName'
 import type { IssuedGatePassRecord } from '../gatepass'
 import { supabase } from '../supabase'
@@ -946,7 +946,14 @@ export interface MechanicalBusyPaymentExportResult {
   rows: MechanicalBusyPaymentExportRow[]
   skippedUnsupportedCount: number
   missingVoucherCount: number
+  missingEligibleVoucherCount: number
   missingDateCount: number
+}
+
+export function isMechanicalBusyPaymentExportBlocked(
+  result: Pick<MechanicalBusyPaymentExportResult, 'missingEligibleVoucherCount'>,
+): boolean {
+  return result.missingEligibleVoucherCount > 0
 }
 
 export function busyPaymentAccountDr(mode: unknown): BusyPaymentAccountDr | null {
@@ -961,6 +968,72 @@ export function mechanicalInvoiceDateYmd(raw: unknown): string {
   const value = String(raw ?? '').trim()
   if (!value) return ''
   return value.slice(0, 10)
+}
+
+/** Effective invoice date for RApp/JApp: Accounts date, else unique DMS labour date. */
+export function mechanicalVoucherEligibilityYmd(input: {
+  invoiceDate?: unknown
+  dmsInvoiceDate?: unknown
+}): string {
+  return mechanicalInvoiceDateYmd(input.invoiceDate) || mechanicalInvoiceDateYmd(input.dmsInvoiceDate)
+}
+
+export function isMechanicalRappJappEligible(eligibilityYmd: string): boolean {
+  return Boolean(eligibilityYmd) && eligibilityYmd >= ACCOUNTS_VOUCHER_CUTOFF_DATE
+}
+
+/**
+ * Raise sequence last_value to persisted max. Never rewind.
+ * After setval(target, true), nextval is target+1 so an existing nnnn cannot repeat.
+ */
+export function mechanicalVoucherSequenceReconcileTarget(
+  persistedMax: number,
+  sequenceLastValue: number,
+): number {
+  const persisted = Math.max(0, Math.trunc(Number(persistedMax) || 0))
+  const last = Math.max(0, Math.trunc(Number(sequenceLastValue) || 0))
+  return Math.max(persisted, last)
+}
+
+export function uniqueDmsInvoiceDateByJc(
+  labourRows: ReadonlyArray<{
+    job_card_number?: unknown
+    invoice_number?: unknown
+    invoice_date?: unknown
+    invoice_status?: unknown
+  }>,
+): Map<string, string> {
+  const groups = new Map<string, string[]>()
+  for (const row of labourRows) {
+    const jc = String(row.job_card_number ?? '').trim().toUpperCase()
+    const invoiceNo = normalizeInvoiceNumber(row.invoice_number)
+    const invoiceDate = mechanicalInvoiceDateYmd(row.invoice_date)
+    if (!jc || !invoiceNo || !invoiceDate) continue
+    if (isCancelledInvoiceStatus(row.invoice_status)) continue
+    const list = groups.get(jc) ?? []
+    list.push(invoiceDate)
+    groups.set(jc, list)
+  }
+  const byJc = new Map<string, string>()
+  for (const [jc, dates] of groups) {
+    if (dates.length !== 1) continue
+    byJc.set(jc, dates[0])
+  }
+  return byJc
+}
+
+export function mechanicalExportJcNumbers(cases: Array<{ jc_number?: string | null }>): string[] {
+  const seen = new Set<string>()
+  const out: string[] = []
+  for (const row of cases) {
+    const trimmed = String(row.jc_number ?? '').trim()
+    if (!trimmed) continue
+    const key = trimmed.toUpperCase()
+    if (seen.has(key)) continue
+    seen.add(key)
+    out.push(trimmed)
+  }
+  return out
 }
 
 /**
@@ -984,6 +1057,8 @@ export function mechanicalBusyPaymentExportDateYmd(input: {
  * BUSY payment workbook: one row per cash/upi/card receipt.
  * Pending cases without lines are omitted. cheque/bank/other are skipped, not mapped.
  * voucher_no is persisted only — never generated here.
+ * Eligible cash/UPI/card rows with blank voucher_no are counted and omitted so the
+ * caller can refuse the workbook. Pre-cutoff blanks are omitted and do not block.
  */
 export function buildMechanicalBusyPaymentExportRows(input: {
   cases: AccountsMechanicalCase[]
@@ -991,6 +1066,7 @@ export function buildMechanicalBusyPaymentExportRows(input: {
   paymentModeFilter?: MechanicalPaymentModeFilter
   busyPartyNameByInvoice?: ReadonlyMap<string, string>
   dmsInvoiceDateByInvoice?: ReadonlyMap<string, string>
+  dmsInvoiceDateByJc?: ReadonlyMap<string, string>
 }): MechanicalBusyPaymentExportResult {
   const modeFilter = input.paymentModeFilter ?? 'all'
   const wanted = modeFilter === 'all' ? null : normalizeAccountsPaymentMode(modeFilter)
@@ -1004,6 +1080,7 @@ export function buildMechanicalBusyPaymentExportRows(input: {
   const rows: MechanicalBusyPaymentExportRow[] = []
   let skippedUnsupportedCount = 0
   let missingVoucherCount = 0
+  let missingEligibleVoucherCount = 0
   let missingDateCount = 0
 
   for (const caseRow of input.cases) {
@@ -1018,10 +1095,15 @@ export function buildMechanicalBusyPaymentExportRows(input: {
       if (wanted && mode !== wanted) continue
 
       const invoiceKey = busyInvoiceLookupKey(caseRow.invoice_number)
+      const jcKey = String(caseRow.jc_number ?? '').trim().toUpperCase()
+      const dmsInvoiceDate = (
+        (invoiceKey ? input.dmsInvoiceDateByInvoice?.get(invoiceKey) : undefined)
+        || (jcKey ? input.dmsInvoiceDateByJc?.get(jcKey) : undefined)
+      )
       const exportDate = mechanicalBusyPaymentExportDateYmd({
         paymentReceivedDate: line.payment_received_date,
         invoiceDate: caseRow.invoice_date,
-        dmsInvoiceDate: invoiceKey ? input.dmsInvoiceDateByInvoice?.get(invoiceKey) : undefined,
+        dmsInvoiceDate,
       })
       if (!exportDate) {
         missingDateCount += 1
@@ -1029,7 +1111,17 @@ export function buildMechanicalBusyPaymentExportRows(input: {
       }
 
       const voucherNo = String(line.voucher_no ?? '').trim()
-      if (!voucherNo) missingVoucherCount += 1
+      if (!voucherNo) {
+        const eligibilityYmd = mechanicalVoucherEligibilityYmd({
+          invoiceDate: caseRow.invoice_date,
+          dmsInvoiceDate,
+        })
+        if (!eligibilityYmd || isMechanicalRappJappEligible(eligibilityYmd)) {
+          missingEligibleVoucherCount += 1
+          missingVoucherCount += 1
+        }
+        continue
+      }
 
       const amount = Number(line.amount)
       rows.push({
@@ -1050,7 +1142,13 @@ export function buildMechanicalBusyPaymentExportRows(input: {
     }
   }
 
-  return { rows, skippedUnsupportedCount, missingVoucherCount, missingDateCount }
+  return {
+    rows,
+    skippedUnsupportedCount,
+    missingVoucherCount,
+    missingEligibleVoucherCount,
+    missingDateCount,
+  }
 }
 
 export async function listAccountsMechanicalPaymentLines(): Promise<AccountsMechanicalPayment[]> {

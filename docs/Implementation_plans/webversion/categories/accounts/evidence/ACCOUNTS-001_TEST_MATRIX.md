@@ -28,6 +28,9 @@
 - [ ] Invoice dated before 2-Sep-2026 and cheque/bank/other have blank `voucher_no`
 - [ ] Invoice dated 8-Sep with payment received 11-Sep still gets a voucher (invoice_date controls)
 - [ ] Accounts `invoice_date` NULL with unique DMS labour `invoice_date` on/after 2-Sep-2026 still gets RApp/JApp; existing numbered receipts are not renumbered (DBL-0060)
+- [ ] UPI/card posted before unique DMS exists stays `voucher_no` NULL; when unique DMS labour dated on/after 2-Sep arrives, that line receives the next JApp without rewriting existing vouchers (DBL-0074)
+- [ ] Accounts invoice date filled later on a NULL-voucher cash/UPI/card line assigns RApp/JApp; already-assigned numbers stay immutable
+- [ ] Eligible cash/UPI/card with blank `voucher_no` blocks Mechanical Busy Export (no xlsx). cheque/bank/other still skipped and do not block. Pre-cutoff blanks are omitted, not exported empty.
 - [ ] `account_name` prefers BUSY Party Name for the invoice (`IMBTAI2627007397` → `JAGDISH NARAYAN YADAV-SITAPURA RJ45CV5192`); unmatched invoices keep `OWNER-BRANCH VRN`; missing owner on fallback → blank account_name
 - [ ] Duplicate BUSY labour invoice numbers do not pick an arbitrary Party Name (Accounts fallback + toast)
 - [ ] Pending case with no receipts still exports one row with blank `voucher_no`

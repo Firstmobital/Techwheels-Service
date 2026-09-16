@@ -1447,6 +1447,24 @@ function mechanicalInvoiceDateYmd(raw) {
   return value.slice(0, 10)
 }
 
+function mechanicalVoucherEligibilityYmd({ invoiceDate, dmsInvoiceDate }) {
+  return mechanicalInvoiceDateYmd(invoiceDate) || mechanicalInvoiceDateYmd(dmsInvoiceDate)
+}
+
+function isMechanicalRappJappEligible(eligibilityYmd) {
+  return Boolean(eligibilityYmd) && eligibilityYmd >= '2026-09-02'
+}
+
+function mechanicalVoucherSequenceReconcileTarget(persistedMax, sequenceLastValue) {
+  const persisted = Math.max(0, Math.trunc(Number(persistedMax) || 0))
+  const last = Math.max(0, Math.trunc(Number(sequenceLastValue) || 0))
+  return Math.max(persisted, last)
+}
+
+function isMechanicalBusyPaymentExportBlocked(result) {
+  return result.missingEligibleVoucherCount > 0
+}
+
 function mechanicalBusyPaymentExportDateYmd({ paymentReceivedDate, invoiceDate, dmsInvoiceDate }) {
   return (
     mechanicalInvoiceDateYmd(paymentReceivedDate)
@@ -1461,6 +1479,7 @@ function buildMechanicalBusyPaymentExportRows({
   paymentModeFilter = 'all',
   busyPartyNameByInvoice,
   dmsInvoiceDateByInvoice,
+  dmsInvoiceDateByJc,
 }) {
   const wanted = paymentModeFilter === 'all' ? null : normalizeAccountsPaymentMode(paymentModeFilter)
   const linesByCase = new Map()
@@ -1472,6 +1491,7 @@ function buildMechanicalBusyPaymentExportRows({
   const rows = []
   let skippedUnsupportedCount = 0
   let missingVoucherCount = 0
+  let missingEligibleVoucherCount = 0
   let missingDateCount = 0
   for (const caseRow of cases) {
     const caseLines = sortAccountsMechanicalPaymentLines(linesByCase.get(caseRow.reception_entry_id) ?? [])
@@ -1484,17 +1504,32 @@ function buildMechanicalBusyPaymentExportRows({
       }
       if (wanted && mode !== wanted) continue
       const key = busyInvoiceLookupKey(caseRow.invoice_number)
+      const jcKey = String(caseRow.jc_number ?? '').trim().toUpperCase()
+      const dmsInvoiceDate = (
+        (key && dmsInvoiceDateByInvoice ? dmsInvoiceDateByInvoice.get(key) : undefined)
+        || (jcKey && dmsInvoiceDateByJc ? dmsInvoiceDateByJc.get(jcKey) : undefined)
+      )
       const exportDate = mechanicalBusyPaymentExportDateYmd({
         paymentReceivedDate: line.payment_received_date,
         invoiceDate: caseRow.invoice_date,
-        dmsInvoiceDate: key && dmsInvoiceDateByInvoice ? dmsInvoiceDateByInvoice.get(key) : undefined,
+        dmsInvoiceDate,
       })
       if (!exportDate) {
         missingDateCount += 1
         continue
       }
       const voucherNo = String(line.voucher_no ?? '').trim()
-      if (!voucherNo) missingVoucherCount += 1
+      if (!voucherNo) {
+        const eligibilityYmd = mechanicalVoucherEligibilityYmd({
+          invoiceDate: caseRow.invoice_date,
+          dmsInvoiceDate,
+        })
+        if (!eligibilityYmd || isMechanicalRappJappEligible(eligibilityYmd)) {
+          missingEligibleVoucherCount += 1
+          missingVoucherCount += 1
+        }
+        continue
+      }
       const busyName = key && busyPartyNameByInvoice ? busyPartyNameByInvoice.get(key) : null
       const amount = Number(line.amount)
       rows.push({
@@ -1512,7 +1547,7 @@ function buildMechanicalBusyPaymentExportRows({
       })
     }
   }
-  return { rows, skippedUnsupportedCount, missingVoucherCount, missingDateCount }
+  return { rows, skippedUnsupportedCount, missingVoucherCount, missingEligibleVoucherCount, missingDateCount }
 }
 
 {
@@ -1760,14 +1795,44 @@ function buildMechanicalBusyPaymentExportRows({
     lines: [chequeLine],
   })
   assert(chequeOnly.rows.length === 0 && chequeOnly.skippedUnsupportedCount === 1, 'L: cheque excluded, no fabricated DR')
+  assert(!isMechanicalBusyPaymentExportBlocked(chequeOnly), 'L: unsupported mode does not block export')
 
   const missingVoucher = buildMechanicalBusyPaymentExportRows({
     cases: [provenCase],
     lines: [{ ...provenLines[0], voucher_no: null }],
     busyPartyNameByInvoice: provenLookup.partyNameByInvoice,
   })
-  assert(missingVoucher.rows[0].voucher_no === '', 'E: missing voucher stays blank, not manufactured')
-  assert(missingVoucher.missingVoucherCount === 1, 'E: missing voucher is reported')
+  assert(missingVoucher.rows.length === 0, 'E: eligible missing voucher is not written')
+  assert(missingVoucher.missingEligibleVoucherCount === 1, 'E: eligible missing voucher is counted')
+  assert(isMechanicalBusyPaymentExportBlocked(missingVoucher), 'E: eligible missing voucher blocks export')
+  assert(!missingVoucher.rows.some((r) => r.voucher_no === ''), 'E: no blank voucher_no row is produced')
+
+  const preCutoffBlank = buildMechanicalBusyPaymentExportRows({
+    cases: [{ ...provenCase, invoice_date: '2026-09-01' }],
+    lines: [{ ...provenLines[0], voucher_no: null, payment_received_date: '2026-09-11' }],
+  })
+  assert(preCutoffBlank.rows.length === 0, 'pre-cutoff blank is omitted from BUSY')
+  assert(preCutoffBlank.missingEligibleVoucherCount === 0, 'pre-cutoff blank does not block')
+  assert(!isMechanicalBusyPaymentExportBlocked(preCutoffBlank), 'pre-cutoff does not fail-closed the file')
+
+  const mixedEligibleMissing = buildMechanicalBusyPaymentExportRows({
+    cases: [provenCase, splitCase],
+    lines: [
+      ...provenLines,
+      { ...splitLines[1], voucher_no: null },
+    ],
+    busyPartyNameByInvoice: provenLookup.partyNameByInvoice,
+    dmsInvoiceDateByInvoice: provenLookup.invoiceDateByInvoice,
+  })
+  assert(mixedEligibleMissing.rows.some((r) => r.voucher_no === 'RApp/26-27/0001'), 'valid rows are still built')
+  assert(mixedEligibleMissing.missingEligibleVoucherCount >= 1, 'eligible missing still counted beside valid rows')
+  assert(isMechanicalBusyPaymentExportBlocked(mixedEligibleMissing), 'file must not be written when any eligible voucher is missing')
+
+  const seqTarget = mechanicalVoucherSequenceReconcileTarget(190, 189)
+  assert(seqTarget === 190, `sequence reconcile raises last_value to persisted max, got ${seqTarget}`)
+  assert(seqTarget + 1 !== 190, 'nextval after reconcile cannot equal existing 0190')
+  assert(mechanicalVoucherSequenceReconcileTarget(190, 200) === 200, 'sequence reconcile never rewinds')
+  assert(mechanicalVoucherSequenceReconcileTarget(190, 190) === 190, 'sequence reconcile is idempotent at equality')
 
   const excelUnchanged = buildMechanicalAccountsExportRows({
     cases: [provenCase],

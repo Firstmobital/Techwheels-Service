@@ -146,3 +146,44 @@ export async function fetchBusyLabourRowsByInvoiceNumbers(
 
   return rows
 }
+
+/**
+ * Bulk labour fetch by job card. Same chunking as invoice-number lookup.
+ */
+export async function fetchBusyLabourRowsByJobCardNumbers(
+  jobCardNumbers: readonly unknown[],
+): Promise<BusyLabourRow[]> {
+  const values = busyLabourInvoiceInValues(jobCardNumbers)
+  if (values.length === 0) return []
+
+  const rows: BusyLabourRow[] = []
+  const seenIds = new Set<string>()
+  for (let i = 0; i < values.length; i += BUSY_LABOUR_INVOICE_IN_CHUNK) {
+    const chunk = values.slice(i, i + BUSY_LABOUR_INVOICE_IN_CHUNK)
+    let from = 0
+    while (true) {
+      const { data, error } = await supabase
+        .from('psf_revenue_dms' as never)
+        .select(LABOUR_COLUMNS)
+        .in('job_card_number', chunk)
+        .order('invoice_date', { ascending: true })
+        .order('invoice_number', { ascending: true })
+        .range(from, from + PAGE_SIZE - 1)
+
+      if (error) throw error
+      const batch = ((data ?? []) as unknown) as BusyLabourRow[]
+      for (const row of batch) {
+        const id = row.id == null ? '' : String(row.id)
+        if (id) {
+          if (seenIds.has(id)) continue
+          seenIds.add(id)
+        }
+        rows.push(row)
+      }
+      if (batch.length < PAGE_SIZE) break
+      from += PAGE_SIZE
+    }
+  }
+
+  return rows
+}

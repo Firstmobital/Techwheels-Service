@@ -12,6 +12,9 @@ import {
   buildMechanicalAccountsExportRows,
   buildMechanicalBusyPaymentExportRows,
   BUSY_PAYMENT_EXPORT_HEADERS,
+  isMechanicalBusyPaymentExportBlocked,
+  uniqueDmsInvoiceDateByJc,
+  mechanicalExportJcNumbers,
   deleteAccountsMechanicalInvoiceFile,
   filterAccountsCasesByViewDate,
   filterMechanicalCasesByPaymentMode,
@@ -64,6 +67,7 @@ import { issueAccountsGatePass, rememberIssuedGatePass } from '../lib/gatepass'
 import {
   buildBusyPartyNameByInvoice,
   fetchBusyLabourRowsByInvoiceNumbers,
+  fetchBusyLabourRowsByJobCardNumbers,
 } from '../lib/busy'
 
 type Section = 'mechanical' | 'bodyshop'
@@ -836,9 +840,11 @@ export default function AccountsPage() {
     if (section !== 'mechanical' || exporting) return
     setExporting(true)
     try {
-      const labour = await fetchBusyLabourRowsByInvoiceNumbers(
-        mechanicalExportInvoiceNumbers(searchedMech),
-      )
+      const [labourByInvoice, labourByJc] = await Promise.all([
+        fetchBusyLabourRowsByInvoiceNumbers(mechanicalExportInvoiceNumbers(searchedMech)),
+        fetchBusyLabourRowsByJobCardNumbers(mechanicalExportJcNumbers(searchedMech)),
+      ])
+      const labour = [...labourByInvoice, ...labourByJc]
       const { partyNameByInvoice, duplicateInvoiceKeys, invoiceDateByInvoice } = buildBusyPartyNameByInvoice(labour)
       const result = buildMechanicalBusyPaymentExportRows({
         cases: searchedMech,
@@ -846,7 +852,15 @@ export default function AccountsPage() {
         paymentModeFilter: mechPaymentModeFilter,
         busyPartyNameByInvoice: partyNameByInvoice,
         dmsInvoiceDateByInvoice: invoiceDateByInvoice,
+        dmsInvoiceDateByJc: uniqueDmsInvoiceDateByJc(labour),
       })
+      if (isMechanicalBusyPaymentExportBlocked(result)) {
+        flash(
+          `BUSY export blocked: ${result.missingEligibleVoucherCount} cash/UPI/card receipt(s) eligible for RApp/JApp have no persisted voucher_no. Capture the invoice date or wait for unique DMS labour, then Refresh.`,
+          false,
+        )
+        return
+      }
       if (result.rows.length === 0) {
         const notices: string[] = []
         if (result.missingDateCount > 0) {
@@ -882,11 +896,6 @@ export default function AccountsPage() {
       if (result.skippedUnsupportedCount > 0) {
         notices.push(
           `Skipped ${result.skippedUnsupportedCount} cheque/bank/other receipt(s); no BUSY Account DR mapping`,
-        )
-      }
-      if (result.missingVoucherCount > 0) {
-        notices.push(
-          `${result.missingVoucherCount} cash/UPI/card receipt(s) have no persisted voucher_no; left blank`,
         )
       }
       if (result.missingDateCount > 0) {
