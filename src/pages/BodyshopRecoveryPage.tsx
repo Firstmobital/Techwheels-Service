@@ -447,17 +447,18 @@ export default function BodyshopRecoveryPage() {
   }
 
   return (
-    <div className="page">
+    <div className="page recov-page">
       <div className="pagehead">
         <div>
-          <div className="greet">Bodyshop · Accounts</div>
           <h1>Bodyshop Recovery</h1>
-          <p>
-            Open DO / insurance due across every branch and fuel. Period is invoice date.
-            Post Payment is Stage 18 DO Payment on this page — Repair Tracker is not required.
+          <p
+            className="recov-pagehead-hint"
+            title="Open DO / insurance due across every branch and fuel. Period is invoice date. Post Payment is Stage 18 DO Payment on this page — Repair Tracker is not required."
+          >
+            Period is invoice date. Post Payment is Stage 18 DO Payment — Repair Tracker is not required.
           </p>
         </div>
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+        <div className="acct-pagehead-actions">
           <button type="button" className="btn" onClick={() => void load()} disabled={loading}>
             {loading ? 'Loading…' : 'Refresh'}
           </button>
@@ -467,9 +468,9 @@ export default function BodyshopRecoveryPage() {
         </div>
       </div>
 
-      {error && <div className="brx-settle-banner" style={{ marginBottom: 14 }}>{error}</div>}
+      {error && <div className="brx-settle-banner">{error}</div>}
       {toast && (
-        <div className={`brx-settle-banner ${toast.ok ? '' : 'is-error'}`} style={{ marginBottom: 14 }}>
+        <div className={`brx-settle-banner ${toast.ok ? '' : 'is-error'}`}>
           {toast.msg}
         </div>
       )}
@@ -520,7 +521,7 @@ export default function BodyshopRecoveryPage() {
         </select>
       </div>
 
-      <div className="brx-pipeline" style={{ marginTop: 8 }}>
+      <div className="brx-pipeline">
         <button
           type="button"
           className={`brx-pipe-pill ${year === 'all' ? 'is-active' : ''}`}
@@ -543,7 +544,7 @@ export default function BodyshopRecoveryPage() {
       </div>
 
       {year !== 'all' && (
-        <div className="brx-pipeline" style={{ marginTop: 8 }}>
+        <div className="brx-pipeline">
           <button
             type="button"
             className={`brx-pipe-pill ${month === 'all' ? 'is-active' : ''}`}
@@ -566,13 +567,14 @@ export default function BodyshopRecoveryPage() {
         </div>
       )}
 
-      <div className="brx-panel" style={{ marginTop: 16 }}>
+      <div className="brx-panel acct-table-panel">
         <div className="brx-panel-h">Open DO recovery</div>
         {loading && rows.length === 0 ? (
           <div className="brx-settle-status">Loading open insurance dues…</div>
         ) : visible.length === 0 ? (
           <div className="brx-settle-status">No open DO / insurance due in this view.</div>
         ) : (
+          <div className="acct-table-scroll">
           <table className="brx-settle-table">
             <thead>
               <tr>
@@ -632,8 +634,8 @@ export default function BodyshopRecoveryPage() {
                     <td>{days == null ? '—' : `${days}d`}</td>
                     <td>
                       <div className="brx-recov-actions">
-                        <button type="button" className="btn" onClick={() => setMoreId(r.repair_card_id)}>More</button>
-                        <button type="button" className="btn btn--primary" onClick={() => openPost(r)}>Post Payment</button>
+                        <button type="button" className="btn btn--sm" onClick={() => setMoreId(r.repair_card_id)}>More</button>
+                        <button type="button" className="btn btn--sm btn--primary" onClick={() => openPost(r)}>Post Payment</button>
                       </div>
                     </td>
                   </tr>
@@ -641,6 +643,7 @@ export default function BodyshopRecoveryPage() {
               })}
             </tbody>
           </table>
+          </div>
         )}
       </div>
 

@@ -989,6 +989,198 @@ table.tbl { width: 100%; border-collapse: collapse; font-size: 13.5px; }
     max-height: 70vh;
   }
 }
+
+/* Bodyshop Recovery compact desk — viewport/table pattern from .acct-page, Recovery-scoped KPI/filter/year rules */
+.recov-page.page {
+  display: flex;
+  flex-direction: column;
+  height: calc(100dvh - var(--nav-h));
+  max-height: calc(100dvh - var(--nav-h));
+  overflow: hidden;
+  overflow-x: hidden;
+  padding-top: 12px;
+  padding-bottom: 12px;
+}
+.recov-page .pagehead {
+  margin-bottom: 6px;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: nowrap;
+  flex: none;
+}
+.recov-page .pagehead h1 {
+  font-size: 20px;
+  line-height: 1.2;
+  margin: 0;
+  min-width: 0;
+}
+.recov-pagehead-hint {
+  margin: 2px 0 0;
+  font-size: 12px;
+  line-height: 1.3;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.recov-page .brx-settle-banner {
+  margin-bottom: 8px;
+  flex: none;
+}
+.recov-page .brx-recov-kpis {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+  margin-bottom: 8px;
+  flex: none;
+}
+.recov-page .brx-recov-kpi {
+  padding: 4px 8px;
+  min-width: 0;
+}
+.recov-page .brx-recov-kpi__l {
+  font-size: 10px;
+  letter-spacing: 0.03em;
+}
+.recov-page .brx-recov-kpi__v {
+  margin-top: 1px;
+  font-size: 15px;
+  line-height: 1.25;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.recov-page .brx-recov-kpi__s {
+  display: block;
+  margin-top: 0;
+  font-size: 10px;
+  line-height: 1.25;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.recov-page .brx-recov-filters {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  min-width: 0;
+  flex: none;
+}
+.recov-page .brx-recov-filters .inp,
+.recov-page .brx-recov-filters .sel {
+  width: auto;
+  height: 34px;
+  font-size: 13px;
+}
+.recov-page .brx-recov-filters .inp {
+  flex: 1 1 240px;
+  min-width: 180px;
+  max-width: none;
+}
+.recov-page .brx-recov-filters .sel {
+  flex: 1 1 220px;
+  min-width: 180px;
+}
+.recov-page .brx-recov-filters .sel:last-of-type {
+  flex: 0 1 160px;
+  min-width: 140px;
+  max-width: 220px;
+}
+.recov-page .brx-pipeline {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 6px;
+  margin: 0 0 8px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior-x: contain;
+  padding-bottom: 2px;
+  flex: none;
+  min-width: 0;
+}
+.recov-page .brx-pipe-pill {
+  padding: 5px 10px;
+  gap: 8px;
+}
+.recov-page .brx-pipe-pill__n {
+  font-size: 16px;
+}
+.recov-page .acct-table-panel,
+.recov-page .acct-table-scroll {
+  min-height: 0;
+}
+.recov-page .acct-table-scroll .brx-settle-table {
+  min-width: 1240px;
+}
+.recov-page .acct-table-scroll .brx-settle-table th:nth-child(1),
+.recov-page .acct-table-scroll .brx-settle-table td:nth-child(1) {
+  min-width: 118px;
+}
+.recov-page .acct-table-scroll .brx-settle-table th:nth-child(2),
+.recov-page .acct-table-scroll .brx-settle-table td:nth-child(2),
+.recov-page .acct-table-scroll .brx-settle-table th:nth-child(3),
+.recov-page .acct-table-scroll .brx-settle-table td:nth-child(3) {
+  min-width: 140px;
+  white-space: normal;
+}
+.recov-page .acct-table-scroll .brx-settle-table th:nth-child(4),
+.recov-page .acct-table-scroll .brx-settle-table td:nth-child(4) {
+  min-width: 128px;
+  white-space: normal;
+}
+.recov-page .acct-table-scroll .brx-settle-table th:nth-child(n+5):nth-child(-n+10),
+.recov-page .acct-table-scroll .brx-settle-table td:nth-child(n+5):nth-child(-n+10),
+.recov-page .acct-table-scroll .brx-settle-table th:nth-child(11),
+.recov-page .acct-table-scroll .brx-settle-table td:nth-child(11) {
+  white-space: nowrap;
+}
+.recov-page .acct-table-scroll .brx-settle-table th:nth-child(11),
+.recov-page .acct-table-scroll .brx-settle-table td:nth-child(11) {
+  min-width: 168px;
+}
+
+@media (max-width: 960px) {
+  .recov-page.page {
+    height: auto;
+    max-height: none;
+    overflow: visible;
+  }
+  .recov-page .pagehead {
+    flex-wrap: wrap;
+  }
+  .recov-pagehead-hint {
+    white-space: normal;
+  }
+  .recov-page .brx-recov-kpis {
+    grid-template-columns: 1fr 1fr;
+  }
+  .recov-page .brx-recov-kpi__s {
+    white-space: normal;
+  }
+  .recov-page .brx-recov-filters {
+    flex-wrap: wrap;
+  }
+  .recov-page .brx-recov-filters .inp,
+  .recov-page .brx-recov-filters .sel,
+  .recov-page .brx-recov-filters .sel:last-of-type {
+    width: 100%;
+    flex: 1 1 100%;
+    min-width: 0;
+    max-width: none;
+  }
+  .recov-page .brx-pipeline {
+    flex-wrap: nowrap;
+  }
+  .recov-page .acct-table-panel,
+  .recov-page .acct-table-scroll {
+    min-height: 50vh;
+    max-height: 70vh;
+  }
+}
+
 .modal__footer { display: flex; justify-content: flex-end; gap: 10px; padding: 12px 20px; border-top: 1px solid var(--border); flex-shrink: 0; }
 .payroll-add-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.65rem; }
 .payroll-add-field { display: flex; flex-direction: column; gap: 0.25rem; min-width: 0; }
