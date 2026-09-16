@@ -195,8 +195,31 @@ export default function CustomerGatePassScreen() {
         <ActivityIndicator color="#2563eb" className="py-8" />
       ) : (
         <>
-          {/* EXPIRED GATE PASS NOTICE (IF ISSUED ON PREVIOUS DAY) */}
-          {isExpired ? (
+          {/* 1. BILL NOT GENERATED YET (BILLED AMOUNT IS 0 / NULL) */}
+          {billedVal <= 0 ? (
+            <CustomerCard style={{ backgroundColor: '#f8fafc', borderColor: '#cbd5e1', borderLeftWidth: 4, borderLeftColor: '#64748b' }}>
+              <View className="flex-row">
+                <Text className="text-[26px] mr-3">🔒</Text>
+                <View className="flex-1">
+                  <Text className="text-[14px] font-black text-slate-900">
+                    Invoice / Bill Has Not Been Generated Yet
+                  </Text>
+                  <Text className="text-[12.5px] text-slate-600 mt-1.5 leading-5">
+                    Your vehicle service is currently being processed on the workshop floor. The official Digital Gate Pass will be generated and unlocked here once the Accounts Desk enters the invoice details and releases clearance.
+                  </Text>
+                  <View className="mt-3 bg-blue-50 border border-blue-200 rounded-xl p-2.5 flex-row items-center justify-between">
+                    <Text className="text-blue-800 text-xs font-bold">
+                      Job Card: #{effectiveJcNumber}
+                    </Text>
+                    <Text className="text-blue-600 text-[11px] font-semibold">
+                      🔄 Live syncing…
+                    </Text>
+                  </View>
+                </View>
+              </View>
+            </CustomerCard>
+          ) : isExpired ? (
+            /* 2. EXPIRED GATE PASS (PREVIOUS DAY) */
             <CustomerCard style={{ backgroundColor: '#fef2f2', borderColor: '#fca5a5', borderLeftWidth: 4, borderLeftColor: '#ef4444' }}>
               <View className="flex-row">
                 <Text className="text-[26px] mr-3">⚠️</Text>
@@ -208,101 +231,97 @@ export default function CustomerGatePassScreen() {
                 </View>
               </View>
             </CustomerCard>
-          ) : null}
-
-          {/* PENDING ACCOUNTS RELEASE NOTICE */}
-          {!isValidToday && !isExpired ? (
+          ) : !isValidToday ? (
+            /* 3. BILL GENERATED BUT PENDING ACCOUNTS DESK RELEASE */
             <CustomerCard style={{ backgroundColor: '#fffbeb', borderColor: '#fde68a', borderLeftWidth: 4, borderLeftColor: '#f59e0b' }}>
               <View className="flex-row">
                 <Text className="text-[26px] mr-3">⏳</Text>
                 <View className="flex-1">
                   <Text className="text-[14px] font-extrabold text-amber-900">Gate Pass Under Clearance at Accounts Desk</Text>
                   <Text className="text-[12.5px] text-amber-800 mt-1 leading-5">
-                    Your vehicle settlement is under review. Gate pass will be unlocked once total payment is verified (Billed: {billed}, Received: {received}, Remaining: {remaining}) and released by the Accounts Desk for today's departure.
+                    Invoice generated ({billed}). Once payment settlement is confirmed (Received: {received}, Remaining: {remaining}), Accounts Desk will release the departure Gate Pass.
                   </Text>
                   <Text className="text-[11.5px] font-bold text-amber-800 mt-2">🔄 Live syncing with Dealership Accounts Desk…</Text>
                 </View>
               </View>
             </CustomerCard>
-          ) : null}
-
-          {/* Official Vehicle Gatepass Document Card (Matching Workshop Design) */}
-          <CustomerCard
-            style={{
-              borderWidth: 2,
-              borderColor: isValidToday ? '#16a34a' : '#cbd5e1',
-              backgroundColor: '#ffffff',
-            }}
-          >
-            {/* Header Document Kicker */}
-            <View className="border-b border-slate-200 pb-3 mb-3">
-              <View className="flex-row justify-between items-start">
-                <View className="flex-1 pr-2">
-                  <Text className="text-[10px] font-extrabold text-blue-700 tracking-wider">
-                    TECHWHEELS SERVICE · MECHANICAL
-                  </Text>
-                  <Text className="text-[17px] font-black text-slate-900 mt-0.5 tracking-tight">
-                    VEHICLE GATEPASS
-                  </Text>
+          ) : (
+            /* 4. VALID GATE PASS DOCUMENT (SHOWN ONLY WHEN BILLED > 0 AND RELEASED TODAY) */
+            <CustomerCard
+              style={{
+                borderWidth: 2,
+                borderColor: '#16a34a',
+                backgroundColor: '#ffffff',
+              }}
+            >
+              {/* Header Document Kicker */}
+              <View className="border-b border-slate-200 pb-3 mb-3">
+                <View className="flex-row justify-between items-start">
+                  <View className="flex-1 pr-2">
+                    <Text className="text-[10px] font-extrabold text-blue-700 tracking-wider">
+                      TECHWHEELS SERVICE · MECHANICAL
+                    </Text>
+                    <Text className="text-[17px] font-black text-slate-900 mt-0.5 tracking-tight">
+                      VEHICLE GATEPASS
+                    </Text>
+                  </View>
+                  <View className="px-2.5 py-1 rounded-full bg-green-100">
+                    <Text className="text-[11px] font-extrabold text-green-800">
+                      ✅ VALID FOR VEHICLE EXIT TODAY
+                    </Text>
+                  </View>
                 </View>
-                <View className={`px-2.5 py-1 rounded-full ${isValidToday ? 'bg-green-100' : isExpired ? 'bg-red-100' : 'bg-amber-100'}`}>
-                  <Text className={`text-[11px] font-extrabold ${isValidToday ? 'text-green-800' : isExpired ? 'text-red-800' : 'text-amber-800'}`}>
-                    {isValidToday ? '✅ VALID FOR VEHICLE EXIT TODAY' : isExpired ? '❌ EXPIRED' : '⏳ AWAITING CLEARANCE'}
-                  </Text>
+                <Text className="text-slate-500 text-[11px] mt-1">
+                  Pass #{asText(pass?.gate_pass_no)} · Valid: 1 Day Only ({new Date().toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', day: 'numeric', month: 'short', year: 'numeric' })})
+                </Text>
+              </View>
+
+              {/* Official Gatepass Data Table */}
+              <View className="border border-slate-200 rounded-xl overflow-hidden mb-4 bg-slate-50/50">
+                <Row label="Job card" value={effectiveJcNumber} isBold mono />
+                <Row label="Registration" value={effectiveReg} isBold mono />
+                <Row label="Owner" value={effectiveOwner} />
+                <Row label="Service / Branch / SA" value={`${effectiveServiceType} · ${effectiveBranch} · ${effectiveSa}`} />
+                <Row label="Invoice number" value={effectiveInvoiceNo} mono />
+                <Row label="Invoice date" value={effectiveInvoiceDate} />
+                <Row label="Billed amount" value={billed} mono />
+                <Row label="Amount received" value={received} mono />
+                <Row label="Remaining" value={remaining} mono />
+                <Row
+                  label="Payment status"
+                  value={remainingVal === 0 ? 'received' : 'pending'}
+                  color={remainingVal === 0 ? '#16a34a' : '#d97706'}
+                  isBold
+                />
+                <Row
+                  label="Gatepass clearance"
+                  value={clearanceStatus}
+                  color="#15803d"
+                  isBold
+                  isLast
+                />
+              </View>
+
+              {/* 3 Signature Blocks */}
+              <View className="flex-row justify-between border-t border-slate-200 pt-4 px-1 mb-4">
+                <View className="flex-1 items-center">
+                  <View className="w-16 border-t-2 border-slate-900 pt-1">
+                    <Text className="text-[11px] font-bold text-slate-700 text-center">Accounts</Text>
+                  </View>
+                </View>
+                <View className="flex-1 items-center">
+                  <View className="w-20 border-t-2 border-slate-900 pt-1">
+                    <Text className="text-[11px] font-bold text-slate-700 text-center">Security / Gate</Text>
+                  </View>
+                </View>
+                <View className="flex-1 items-center">
+                  <View className="w-16 border-t-2 border-slate-900 pt-1">
+                    <Text className="text-[11px] font-bold text-slate-700 text-center">Customer</Text>
+                  </View>
                 </View>
               </View>
-              <Text className="text-slate-500 text-[11px] mt-1">
-                Pass #{isValidToday ? asText(pass?.gate_pass_no) : 'GP-PENDING'} · Valid: 1 Day Only ({new Date().toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', day: 'numeric', month: 'short', year: 'numeric' })})
-              </Text>
-            </View>
 
-            {/* Official Gatepass Data Table */}
-            <View className="border border-slate-200 rounded-xl overflow-hidden mb-4 bg-slate-50/50">
-              <Row label="Job card" value={effectiveJcNumber} isBold mono />
-              <Row label="Registration" value={effectiveReg} isBold mono />
-              <Row label="Owner" value={effectiveOwner} />
-              <Row label="Service / Branch / SA" value={`${effectiveServiceType} · ${effectiveBranch} · ${effectiveSa}`} />
-              <Row label="Invoice number" value={effectiveInvoiceNo} mono />
-              <Row label="Invoice date" value={effectiveInvoiceDate} />
-              <Row label="Billed amount" value={billed} mono />
-              <Row label="Amount received" value={received} mono />
-              <Row label="Remaining" value={remaining} mono />
-              <Row
-                label="Payment status"
-                value={remainingVal === 0 ? 'received' : 'pending'}
-                color={remainingVal === 0 ? '#16a34a' : '#d97706'}
-                isBold
-              />
-              <Row
-                label="Gatepass clearance"
-                value={isValidToday ? clearanceStatus : 'Pending Accounts Verification'}
-                color={isValidToday ? '#15803d' : '#d97706'}
-                isBold
-                isLast
-              />
-            </View>
-
-            {/* 3 Signature Blocks */}
-            <View className="flex-row justify-between border-t border-slate-200 pt-4 px-1 mb-4">
-              <View className="flex-1 items-center">
-                <View className="w-16 border-t-2 border-slate-900 pt-1">
-                  <Text className="text-[11px] font-bold text-slate-700 text-center">Accounts</Text>
-                </View>
-              </View>
-              <View className="flex-1 items-center">
-                <View className="w-20 border-t-2 border-slate-900 pt-1">
-                  <Text className="text-[11px] font-bold text-slate-700 text-center">Security / Gate</Text>
-                </View>
-              </View>
-              <View className="flex-1 items-center">
-                <View className="w-16 border-t-2 border-slate-900 pt-1">
-                  <Text className="text-[11px] font-bold text-slate-700 text-center">Customer</Text>
-                </View>
-              </View>
-            </View>
-
-            {/* Print / Download Action */}
-            {isValidToday ? (
+              {/* Print / Download Action */}
               <View className="mt-2">
                 <PrimaryButton
                   label={busy ? 'Preparing PDF…' : '🖨️ Print / Download Gate Pass (PDF)'}
@@ -310,8 +329,8 @@ export default function CustomerGatePassScreen() {
                   loading={busy}
                 />
               </View>
-            ) : null}
-          </CustomerCard>
+            </CustomerCard>
+          )}
         </>
       )}
     </CustomerScreen>

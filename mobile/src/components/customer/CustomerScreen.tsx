@@ -118,27 +118,23 @@ export function CustomerScreen({
               accessibilityRole="button"
               accessibilityLabel="Notifications"
               hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-              className="h-10 w-10 items-center justify-center rounded-xl bg-slate-100 border border-slate-200 relative"
+              className="h-10 w-10 items-center justify-center rounded-xl bg-slate-100 border border-slate-300 relative shadow-xs"
             >
-              <Text className="text-lg">🔔</Text>
+              <Icon name="bell" size={19} color="#0f172a" strokeWidth={2.2} />
               {isDelivered && (
                 <View className="absolute top-1.5 right-1.5 w-2.5 h-2.5 bg-emerald-500 rounded-full ring-2 ring-white" />
               )}
             </TouchableOpacity>
 
-            {/* High-Contrast 3-Column / Hamburger Menu Button (Black Lines) */}
+            {/* High-Contrast 3-Column / Hamburger Menu Button (Black Box with Crisp White Icon) */}
             <TouchableOpacity
               onPress={() => setShowMenu(true)}
               accessibilityRole="button"
               accessibilityLabel="Open Navigation Menu"
               hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-              className="h-10 w-10 items-center justify-center rounded-xl bg-slate-100 border-2 border-slate-900 shadow-sm"
+              className="h-10 w-10 items-center justify-center rounded-xl bg-slate-900 border border-slate-950 shadow-md"
             >
-              <View className="items-center justify-center gap-[3.5px]">
-                <View className="w-5 h-[2.5px] bg-slate-900 rounded-full" />
-                <View className="w-5 h-[2.5px] bg-slate-900 rounded-full" />
-                <View className="w-5 h-[2.5px] bg-slate-900 rounded-full" />
-              </View>
+              <Icon name="menu" size={20} color="#ffffff" strokeWidth={2.6} />
             </TouchableOpacity>
           </View>
         </View>

@@ -45,11 +45,17 @@ export function pickAdvisorPhone(record: Record<string, unknown> | null | undefi
     record.sa_phone ??
     record.advisor_phone ??
     record.service_advisor_phone ??
-    record.sa_mobile
+    record.sa_mobile ??
+    record.phone
   const digits = String(raw || '').replace(/\D/g, '')
   if (digits.length === 10) return digits
   if (digits.length === 12 && digits.startsWith('91')) return digits.slice(2)
   return null
+}
+
+export function getDirectAdvisorOrWorkshopPhone(record: Record<string, unknown> | null | undefined): string {
+  const phone = pickAdvisorPhone(record)
+  return phone || '9116667274'
 }
 
 export function CustomerCard({

@@ -19,6 +19,7 @@ import {
   asText,
   dash,
   formatKm,
+  getDirectAdvisorOrWorkshopPhone,
   pickAdvisorPhone,
 } from '../../components/customer/customerUi'
 import { useCustomerSession } from '../../context/CustomerSessionContext'
@@ -189,15 +190,31 @@ export default function CustomerDashboardScreen() {
                 <Text className="text-blue-200 text-[10.5px] font-semibold">Live Job Card No</Text>
                 <Text className="text-white text-[13px] font-mono font-black">{jc ? `#${jc}` : 'Opening…'}</Text>
               </View>
-              <View className="w-1/2 pr-2">
+              <View className="w-1/2 pr-2 mb-2.5">
                 <Text className="text-blue-200 text-[10.5px] font-semibold">Service Type</Text>
                 <Text className="text-white text-[13px] font-bold">{dash(serviceType)}</Text>
               </View>
-              <View className="w-1/2 pl-2">
+              <View className="w-1/2 pl-2 mb-2.5">
                 <Text className="text-blue-200 text-[10.5px] font-semibold">Assigned Advisor</Text>
                 <Text className="text-white text-[13px] font-bold">{dash(advisor)}</Text>
               </View>
             </View>
+
+            {/* Direct Call Advisor One-Tap Banner */}
+            <TouchableOpacity
+              onPress={() => void Linking.openURL(`tel:${getDirectAdvisorOrWorkshopPhone(job || (selected as unknown as Record<string, unknown>))}`)}
+              className="mt-2 bg-emerald-500 active:bg-emerald-600 rounded-xl py-2.5 px-4 flex-row items-center justify-between shadow-sm"
+            >
+              <View className="flex-row items-center gap-2">
+                <Text className="text-base">📞</Text>
+                <Text className="text-white text-xs font-black">
+                  Call Advisor: {dash(advisor)} ({getDirectAdvisorOrWorkshopPhone(job || (selected as unknown as Record<string, unknown>))})
+                </Text>
+              </View>
+              <View className="bg-white/25 px-2.5 py-0.5 rounded-full">
+                <Text className="text-white text-[11px] font-black">Call Now</Text>
+              </View>
+            </TouchableOpacity>
           </LinearGradient>
 
           {/* ── FLIPKART-STYLE LIVE REPAIR TRACKER WITH MOVING LIGHT BEAM ── */}
