@@ -41,8 +41,9 @@ Add a fourth Bodyshop nav item **Bodyshop Recovery**. It is the accounts rupee b
 9. **More → View is org-wide.** Open Drive URL when stored; otherwise a signed autodoc URL. Recovery view/modify may SELECT `autodoc` objects under `service-advisor-bodyshop-docs` (DBL-0037). Do not require the viewer’s dealer code to match the file path.
 
 ```
-insurance_due = do_amount − (Main + GST + TDS, not reversed)
+insurance_due = GREATEST(do_amount − (Main + GST + TDS, not reversed), 0)
 ```
+Extra over DO is allowed (DBL-0071) and stays on Released.
 
 ---
 

@@ -56,7 +56,7 @@ Opening after backfill (no Main/GST/TDS/receipt lines):
 | G6 | Post remaining customer ₹18,798.30 | Both statuses `received` · Stage 18 done · Delivery still pending | [ ] |
 | G7 | Reverse the ₹10,000 receipt | New reversal · Customer Diff back to `partial` · original line `is_reversed` | [ ] |
 | G8 | Authenticated UPDATE/DELETE a line | Rejected | [ ] |
-| G9 | Post Main that would exceed DO | RPC error · balances unchanged | [ ] |
+| G9 | Post Main that would exceed DO | Allowed · insurance due ₹0 · Released > DO · DO Payment `received` | [ ] |
 | G10 | Overview stage 18 row | Shows two pills (DO Payment + Customer Diff), not one | [ ] |
 | G11 | Try to set DO Payment Status via UI dropdown | Control does not exist / save cannot write status | [ ] |
 | G12 | Post remaining as received with Main+GST+TDS = remaining | Lines inserted · DO Payment becomes `received` only after save | [ ] |
@@ -85,7 +85,7 @@ Opening after backfill (no Main/GST/TDS/receipt lines):
 | I2b | Main + TDS = DO, GST empty (005071: 140571 + 2424) | Allowed · two lines · GST not required | [ ] |
 | I3 | GST line ≠ invoice `tax_parts` | Allowed · invoice GST stays display-only | [ ] |
 | I4 | Missing Reference / Remark / Date on Main | Allowed. Optional note. Trail is `actor_email` + `created_at` on the line | [ ] |
-| I7 | DO Payment already `received` | Amount inputs hidden. Insurance due ₹0. Posted entries still visible | [ ] |
+| I7 | DO Payment already `received` | Amount inputs stay so extra Main/GST/TDS can still post. Insurance due ₹0. Posted entries still visible | [ ] |
 | I5 | Amount 0 or negative | Rejected | [ ] |
 | I6 | `do_status = received` with no Main/GST/TDS | Stage 16 done · DO Payment still `pending` | [ ] |
 

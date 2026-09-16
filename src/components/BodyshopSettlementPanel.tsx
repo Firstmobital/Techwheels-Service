@@ -358,6 +358,12 @@ export function BodyshopSettlementPanel({
   const doCaptured = (header?.do_amount ?? card.do_amount) != null
   const doReceived = String(doPay ?? '').toLowerCase() === 'received'
   const custReceived = String(custPay ?? '').toLowerCase() === 'received'
+  const extraDo = Math.max(
+    0,
+    Math.round(
+      ((Number(header?.do_released_amount ?? 0) || 0) - (Number(header?.do_amount ?? card.do_amount ?? 0) || 0)) * 100,
+    ) / 100,
+  )
 
   const canReverseLine = (line: { is_reversed: boolean; line_type: string; party: string }) => {
     if (line.is_reversed || line.line_type === 'reversal') return false
@@ -496,9 +502,9 @@ export function BodyshopSettlementPanel({
         </div>
         {doReceived ? (
           <div className="brx-settle-status">
-            DO / insurance is fully posted. Who and when for each line are in Posted entries.
+            DO / insurance is fully posted. Extra amount can still be entered below. Who and when for each line are in Posted entries.
           </div>
-        ) : (
+        ) : null}
         <div className="brx-form-grid-2">
           <label className="brx-field">
             <span className="brx-field-label">Amount received from Insurance / DO (₹)</span>
@@ -523,7 +529,6 @@ export function BodyshopSettlementPanel({
             {doError && <div className="brx-settle-error">{doError}</div>}
           </div>
         </div>
-        )}
       </div>
       )}
 
@@ -547,14 +552,20 @@ export function BodyshopSettlementPanel({
               {inr(header?.customer_posted_amount ?? 0)}
             </div>
           </div>
+          {extraDo > 0 && (
+            <div className="brx-field">
+              <span className="brx-field-label">Extra over DO</span>
+              <div className="inp" style={{ display: 'flex', alignItems: 'center', background: 'var(--bg)', fontWeight: 600 }}>
+                {inr(extraDo)}
+              </div>
+            </div>
+          )}
         </div>
-        {doReceived && (!doOnly || custReceived) ? (
-          <div className="brx-settle-status">
-            {doReceived && custReceived
-              ? 'DO and Customer payments are fully posted. Who and when for each line are in Posted entries.'
-              : 'DO is fully posted. Who and when for each line are in Posted entries.'}
+        {doReceived ? (
+          <div className="brx-settle-status" style={{ marginBottom: 12 }}>
+            DO is fully posted. Extra Main / GST / TDS can still be entered. Who and when for each line are in Posted entries.
           </div>
-        ) : (
+        ) : null}
         <div className="brx-form-grid-2">
           <label className="brx-field">
             <span className="brx-field-label">Main (₹)</span>
@@ -588,7 +599,7 @@ export function BodyshopSettlementPanel({
             />
           </label>
           <div className="brx-grid-full" style={{ fontSize: 13, color: 'var(--muted)' }}>
-            Post any combination — Main, GST, TDS, and Customer Payment (CP) can be saved separately or together. Each save stores who posted it, when, and this reference.
+            Post any combination — Main, GST, TDS, and Customer Payment (CP) can be saved separately or together. Extra over the DO amount is allowed. Each save stores who posted it, when, and this reference.
           </div>
           <div className="brx-grid-full" style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
             <button className="btn btn--primary" type="button" disabled={savingDo} onClick={() => void saveDoPayment(false)}>
@@ -600,7 +611,6 @@ export function BodyshopSettlementPanel({
             {doError && <div className="brx-settle-error">{doError}</div>}
           </div>
         </div>
-        )}
       </div>
       )}
 
@@ -681,6 +691,7 @@ export function BodyshopSettlementPanel({
               ['DO Amount', header?.do_amount ?? card.do_amount],
               ['DO Received', header?.do_released_amount],
               ['DO Remaining', insuranceDue],
+              ...(extraDo > 0 ? [['Extra over DO', extraDo] as const] : []),
               ['Customer Difference', custDiff],
               ['Customer Received', header?.customer_posted_amount ?? 0],
               ['Customer Remaining', remaining],
@@ -691,6 +702,7 @@ export function BodyshopSettlementPanel({
                 ['DO', header?.do_amount ?? card.do_amount],
                 ['Released', header?.do_released_amount],
                 ['Insurance due', insuranceDue],
+                ...(extraDo > 0 ? [['Extra over DO', extraDo] as const] : []),
               ] as const : []),
               ['Customer payment (CP)', header?.customer_posted_amount ?? 0],
               ...(!doOnly ? [

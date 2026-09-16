@@ -318,9 +318,9 @@ export function BodyshopSettlementBilling<T extends SettlementCardCache>({
         </View>
         <Text style={{ fontSize: 12, color: '#82858f', marginBottom: 8 }}>Insurance due {inr(header?.insurance_due_amount)}</Text>
         {String(doPay ?? '').toLowerCase() === 'received' ? (
-          <Text style={{ fontSize: 13, color: '#82858f' }}>DO is fully posted. Who and when for each line are in Posted entries.</Text>
-        ) : (
-          <>
+          <Text style={{ fontSize: 13, color: '#82858f', marginBottom: 8 }}>DO is fully posted. Extra Main / GST / TDS can still be entered.</Text>
+        ) : null}
+        <>
             <Text style={styles.fieldLabel}>Main (₹)</Text>
             <TextInput style={styles.input} keyboardType="numeric" value={mainAmt} onChangeText={setMainAmt} placeholder="0" placeholderTextColor="#a7a99f" />
             <Text style={[styles.fieldLabel, { marginTop: 8 }]}>GST (₹)</Text>
@@ -329,12 +329,11 @@ export function BodyshopSettlementBilling<T extends SettlementCardCache>({
             <TextInput style={styles.input} keyboardType="numeric" value={tdsAmt} onChangeText={setTdsAmt} placeholder="0" placeholderTextColor="#a7a99f" />
             <Text style={[styles.fieldLabel, { marginTop: 8 }]}>Reference / Remark</Text>
             <TextInput style={styles.input} value={doNote} onChangeText={setDoNote} placeholder="UTR, cheque, or note" placeholderTextColor="#a7a99f" />
-            <Text style={{ fontSize: 12, color: '#82858f', marginVertical: 8 }}>Post any combination. Each save stores who posted it, when, and this reference.</Text>
+            <Text style={{ fontSize: 12, color: '#82858f', marginVertical: 8 }}>Post any combination. Extra over the DO amount is allowed. Each save stores who posted it, when, and this reference.</Text>
             <TouchableOpacity onPress={() => void saveDo()} disabled={busy} style={styles.saveBtnSmall}>
               <Text style={{ color: '#fff', fontWeight: '700' }}>Post DO payment</Text>
             </TouchableOpacity>
-          </>
-        )}
+        </>
       </View>
 
       <Text style={[styles.sectionTitle, { marginTop: 16 }]}>Stage 18 · Customer Diff Payment</Text>

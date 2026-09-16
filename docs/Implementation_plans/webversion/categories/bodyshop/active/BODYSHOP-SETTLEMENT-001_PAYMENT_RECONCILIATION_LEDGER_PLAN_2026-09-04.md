@@ -2,7 +2,7 @@
 
 **Plan ID:** BODYSHOP-SETTLEMENT-001  
 **Created:** 2026-09-04  
-**Last Updated:** 2026-09-04 (Bodyshop Recovery v1 is DO / insurance due only; customer remaining stays on Stage 18)  
+**Last Updated:** 2026-09-16 (Main + GST + TDS may exceed DO; extra on Released, due clamped ₹0 — DBL-0071)  
 **Priority:** HIGH  
 **Owner:** Bodyshop Team + Platform Team + Accounts  
 **Status:** Active (implementation in progress; DBL-0026 VERIFIED in `full_metadata.sql`; DBL-0029 APPLIED)  
@@ -288,7 +288,7 @@ A single Stage 18 save may post up to three DO lines (Main / GST / TDS) in one R
 
 ### Over-posting
 
-- `Main + GST + TDS` cannot exceed `do_amount` (v1 reject).
+- `Main + GST + TDS` **may exceed** `do_amount` (DBL-0071). Extra stays on `do_released_amount`. Insurance due is `GREATEST(do_amount − released, 0)` and DO Payment becomes `received`.
 - Customer receipts cannot exceed positive `customer_diff`.
 - Customer refunds cannot exceed `|customer_diff|` when negative.
 - Receipts are rejected when kind=refund; refunds are rejected when kind=due.
