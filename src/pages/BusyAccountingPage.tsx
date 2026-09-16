@@ -647,6 +647,7 @@ function BusyInsuranceMasterCard({
   const [editDraft, setEditDraft] = useState(emptyInsuranceDraft)
   const [saving, setSaving] = useState(false)
   const [formError, setFormError] = useState<string | null>(null)
+  const [open, setOpen] = useState(false)
 
   async function handleInsert() {
     setSaving(true)
@@ -682,6 +683,16 @@ function BusyInsuranceMasterCard({
     setFormError(null)
   }
 
+  function toggleOpen() {
+    setOpen((current) => {
+      if (current) {
+        setEditingId(null)
+        setFormError(null)
+      }
+      return !current
+    })
+  }
+
   return (
     <div className="card mb-gap">
       <div className="card__head">
@@ -692,7 +703,13 @@ function BusyInsuranceMasterCard({
             {loading ? ' Loading…' : ` ${rows.length} mapping${rows.length === 1 ? '' : 's'}.`}
           </div>
         </div>
+        <div className="toolbar toolbar--tight">
+          <button type="button" className="btn btn--ghost btn--sm" onClick={toggleOpen}>
+            {open ? 'Hide groups' : 'Show groups'}
+          </button>
+        </div>
       </div>
+      {open && (
       <div className="card__body dense">
         {loadError && (
           <div className="toast error" style={{ marginBottom: 12 }}>
@@ -790,6 +807,7 @@ function BusyInsuranceMasterCard({
           </div>
         )}
       </div>
+      )}
     </div>
   )
 }
