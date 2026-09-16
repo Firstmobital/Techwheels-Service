@@ -4,6 +4,7 @@ Tracks documentation-sync updates for business logic, architecture, and access c
 
 ## 2026-09-16
 
+- Recovery **Received** is only JCs with posted Main / GST / TDS covering the DO (`do_payment_status = received` and Released > 0). DO ₹0 with nothing posted (005783) is not Received. Ledger: DBL-0072. Plan: `BODYSHOP-RECOVERY-001`.
 - Stage 18 DO Payment may post Main / GST / TDS **above** the DO amount. Extra is kept on Released; insurance due stays ₹0 and status becomes Received. Ledger: DBL-0071. Plan: `BODYSHOP-SETTLEMENT-001`.
 - Bodyshop Recovery adds a **Received** KPI for billed DO cases with insurance due ₹0 (no recovery needed). Default list stays open due. Click Received to list those cases. Ledger: DBL-0070. Plan: `BODYSHOP-RECOVERY-001`.
 - Service Advisor **Invoice Amount (₹)** can be entered and saved only after Floor Incharge marks the JC **Completed**. Save of an amount no longer sets `invoice_done_at` on incomplete jobs. Other SA fields still save. Ledger: DBL-0069. Plan: `ACCOUNTS-001`.

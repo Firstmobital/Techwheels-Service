@@ -38,8 +38,8 @@ function isOpenRecovery(r: Pick<DoRecoveryRow, 'insurance_due_amount'>) {
   return (Number(r.insurance_due_amount) || 0) > 0
 }
 
-function isReceivedRecovery(r: Pick<DoRecoveryRow, 'insurance_due_amount'>) {
-  return !isOpenRecovery(r)
+function isReceivedRecovery(r: Pick<DoRecoveryRow, 'do_payment_status' | 'do_released_amount'>) {
+  return doPayStatus(r) === 'received' && (Number(r.do_released_amount) || 0) > 0
 }
 
 function invoiceParts(iso: string | null | undefined): { year: number; month: number } {
@@ -528,7 +528,7 @@ export default function BodyshopRecoveryPage() {
         <button type="button" className={`brx-recov-kpi ${status === 'received' ? 'is-active' : ''}`} onClick={() => setStatus((p) => p === 'received' ? 'all' : 'received')}>
           <span className="brx-recov-kpi__l">Received</span>
           <span className="brx-recov-kpi__v">{kpis.received}</span>
-          <span className="brx-recov-kpi__s">No recovery needed</span>
+          <span className="brx-recov-kpi__s">Posted Main / GST / TDS covering DO</span>
         </button>
       </div>
 
@@ -602,7 +602,7 @@ export default function BodyshopRecoveryPage() {
       )}
 
       <div className="brx-panel acct-table-panel">
-        <div className="brx-panel-h">{status === 'received' ? 'Received DO — no recovery needed' : 'Open DO recovery'}</div>
+        <div className="brx-panel-h">{status === 'received' ? 'Received DO' : 'Open DO recovery'}</div>
         {loading && rows.length === 0 ? (
           <div className="brx-settle-status">Loading insurance dues…</div>
         ) : visible.length === 0 ? (

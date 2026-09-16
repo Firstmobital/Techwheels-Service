@@ -2,7 +2,7 @@
 
 **Plan ID:** BODYSHOP-RECOVERY-001  
 **Created:** 2026-09-04  
-**Last Updated:** 2026-09-16 (Received KPI for due ₹0 / no recovery needed; DBL-0070)  
+**Last Updated:** 2026-09-16 (Received = posted DO only, DBL-0072; extra over DO DBL-0071)  
 **Priority:** HIGH  
 **Owner:** Bodyshop Team + Platform Team + Accounts  
 **Status:** Active (v1 DO-only)  
@@ -31,7 +31,7 @@ Add a fourth Bodyshop nav item **Bodyshop Recovery**. It is the accounts rupee b
 ## Locked rules (v1)
 
 1. Nav label **Bodyshop Recovery**. Module `bodyshop_recovery`. Route `/bodyshop-recovery`.
-2. Open row = `do_amount IS NOT NULL` AND `insurance_due_amount > 0`. Default list is open only. Received row = billed DO with `do_payment_status = received` or due ₹0 (no recovery needed). Cancelled stay hidden.
+2. Open row = `do_amount IS NOT NULL` AND `insurance_due_amount > 0`. Default list is open only. Received row = `do_payment_status = received` AND `do_released_amount > 0` (Main/GST/TDS actually posted). DO ₹0 with nothing posted is not a Recovery row. Cancelled stay hidden.
 3. Headline KPI = sum of open `insurance_due_amount`. Secondary = open vehicle count. Split pending / partial / not_received / **received**.
 4. Period is **invoice_date**: year chips, then months after a year is selected. Default **All years**. Insurer dropdown uses card `insurance_company` (not DMS bill-to). Separate **Mismatch** dropdown (All cases / Mismatch) uses the same card-vs-DMS bill-to rule as the orange pill (C/O + M/S stripped). No This month / Last month / Custom pills.
 5. **More** is a read-only case sheet (customer, policy no, claim no, documents). **Post Payment** opens Stage 18 · DO Payment on this page. Repair Tracker is not required. Customer remaining stays off this page.
@@ -56,6 +56,7 @@ Extra over DO is allowed (DBL-0071) and stays on Released.
 - [x] **Task 2.2:** Operator apply DBL-0031 then DBL-0032; Sanjay Kansotia has `bodyshop_recovery` view. Grant other Accounts users as needed.
 - [x] **Task 2.4:** Period pills + insurer filter; More modal; Post Payment Stage 18 on Recovery (DBL-0033).
 - [x] **Task 2.5:** Received KPI for due ₹0 / no recovery needed (DBL-0070). Default list stays open due.
+- [x] **Task 2.6:** Received requires posted Main/GST/TDS (DBL-0072). DO ₹0 pending is not Received.
 - [ ] **Task 3.1:** Customer remaining book — **owned by ACCOUNTS-001**. Recovery CP/CA columns are display/opportunistic post only; list stays insurance-due. Not Recovery v1.
 - [ ] **Task 3.2:** Insurer master / SA dropdown — **BODYSHOP-INSURER-001** (planned; not this Recovery v1).
 
@@ -72,6 +73,7 @@ Extra over DO is allowed (DBL-0071) and stays on Released.
 ✅ 2.2 | Apply DBL-0031 + DBL-0032 + grant Accounts | Operator | 2026-09-04 | 2026-09-04 | DBL-0032 APPLIED prod; Sanjay has view; other Accounts as needed
 ✅ 2.4 | Period + insurer + More + Post Payment | Eng | 2026-09-04 | 2026-09-04 | DBL-0033; DO only; no Repair Tracker
 ✅ 2.5 | Received KPI | Eng | 2026-09-16 | 2026-09-16 | DBL-0070; due ₹0 listed via Received
+✅ 2.6 | Received = posted DO | Eng | 2026-09-16 | 2026-09-16 | DBL-0072; 005783 DO ₹0 pending excluded
 ⏳ 3.1 | Customer book | - | - | - | ACCOUNTS-001 owns this; Recovery CP is not the book
 ⏳ 3.2 | Insurer master | - | - | - | BODYSHOP-INSURER-001
 ```
