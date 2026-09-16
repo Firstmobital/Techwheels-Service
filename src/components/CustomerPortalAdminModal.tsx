@@ -1,17 +1,14 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '../lib/supabase'
 import { ServiceEstimateBuilderModal } from './ServiceEstimateBuilderModal'
-import {
-  fetchAllEstimates,
-  type CustomerEstimateRecord,
-} from '../lib/estimates'
+import { fetchAllEstimates, type CustomerEstimateRecord } from '../lib/estimates'
 
 interface CustomerPortalAdminModalProps {
   isOpen: boolean
   onClose: () => void
   isAdmin?: boolean
   initialRegNumber?: string
-  initialTab?: 'overview' | 'complaints' | 'live_preview'
+  initialTab?: string
 }
 
 interface ComplaintRecord {
@@ -19,676 +16,439 @@ interface ComplaintRecord {
   vehicle_registration_number: string
   customer_name: string | null
   mobile_number: string | null
-  rating: number
   feedback_text: string
   service_type: string | null
   service_advisor_name: string | null
   branch: string | null
-  primary_complaint_area: string | null
   complaint_date_time: string | null
   created_at?: string | null
   mode?: string | null
-  source_feedback_message_id?: number | null
+}
+
+interface ReceptionVehicleInfo {
+  reg_number: string
+  model: string | null
+  customer_name: string | null
+  mobile_number: string | null
+  jc_number: string | null
+  km_reading: number | null
+  sa_name: string | null
+  sa_display_name: string | null
+  branch: string | null
+  service_type: string | null
+  created_at: string
 }
 
 export function CustomerPortalAdminModal({
   isOpen,
   onClose,
-  isAdmin = true,
   initialRegNumber,
-  initialTab,
 }: CustomerPortalAdminModalProps) {
-  const [activeTab, setActiveTab] = useState<'overview' | 'complaints' | 'live_preview'>(
-    initialTab || (initialRegNumber ? 'complaints' : 'complaints')
-  )
+  const [currentReg, setCurrentReg] = useState(initialRegNumber || '')
+  const [searchInput, setSearchInput] = useState(initialRegNumber || '')
+  const [loading, setLoading] = useState(false)
+  const [vehicleInfo, setVehicleInfo] = useState<ReceptionVehicleInfo | null>(null)
   const [complaints, setComplaints] = useState<ComplaintRecord[]>([])
-  const [loadingComplaints, setLoadingComplaints] = useState(false)
-  const [filterSource, setFilterSource] = useState<'app_only' | 'all'>('app_only')
-  const [complaintSearch, setComplaintSearch] = useState(initialRegNumber || '')
-  const [selectedProblemForEstimate, setSelectedProblemForEstimate] = useState<ComplaintRecord | null>(null)
-  const [estimatesMap, setEstimatesMap] = useState<Record<string, CustomerEstimateRecord>>({})
-  
-  // Search vehicle test link
-  const [testRegNumber, setTestRegNumber] = useState('RJ14TEST01')
-  const [copiedLink, setCopiedLink] = useState(false)
+  const [estimateRecord, setEstimateRecord] = useState<CustomerEstimateRecord | null>(null)
+  const [showEstimateBuilder, setShowEstimateBuilder] = useState(false)
 
-  const portalUrl = typeof window !== 'undefined' ? `${window.location.protocol}//${window.location.hostname}:5174` : 'http://localhost:5174'
-
-  async function loadEstimates() {
-    const list = await fetchAllEstimates()
-    const map: Record<string, CustomerEstimateRecord> = {}
-    for (const est of list) {
-      if (est.complaint_id) {
-        map[`complaint_${est.complaint_id}`] = est
-      }
-      if (est.estimate_no) {
-        map[`estno_${est.estimate_no}`] = est
-      }
-      if (est.vehicle_registration_number) {
-        const vReg = est.vehicle_registration_number.trim().toUpperCase()
-        if (!map[`vreg_${vReg}`]) {
-          map[`vreg_${vReg}`] = est
-        }
-      }
+  const loadDataForVehicle = useCallback(async (regNo: string) => {
+    const norm = regNo.trim().toUpperCase().replace(/[\s-]/g, '')
+    if (!norm) {
+      setVehicleInfo(null)
+      setComplaints([])
+      setEstimateRecord(null)
+      return
     }
-    setEstimatesMap(map)
-  }
 
-  async function fetchComplaints() {
-    setLoadingComplaints(true)
+    setLoading(true)
     try {
-      const { data, error } = await supabase
+      // 1. Fetch reception details for this vehicle
+      const { data: recData } = await supabase
+        .from('service_reception_entries')
+        .select('*')
+        .ilike('reg_number', `%${regNo.trim()}%`)
+        .order('created_at', { ascending: false })
+        .limit(1)
+
+      if (recData && recData.length > 0) {
+        setVehicleInfo(recData[0] as ReceptionVehicleInfo)
+      } else {
+        setVehicleInfo(null)
+      }
+
+      // 2. Fetch customer complaints from post_feedback_bot_data
+      const { data: botData } = await supabase
         .from('post_feedback_bot_data')
         .select('*')
-        .neq('mode', 'customer_estimate_payload')
+        .ilike('vehicle_registration_number', `%${regNo.trim()}%`)
         .order('complaint_date_time', { ascending: false })
-        .limit(100)
+        .limit(20)
 
-      if (!error && data) {
-        // Exclude any estimate sync rows from complaints list
-        const cleanList = (data as ComplaintRecord[]).filter(
-          (c) => c.mode !== 'customer_estimate_payload' && !c.feedback_text?.startsWith('{"estimate_no"')
-        )
-        setComplaints(cleanList)
+      let parsedComplaints: ComplaintRecord[] = []
+      let botEstimateDecision: { status: 'Approved' | 'Rejected'; reason?: string; dt?: string } | null = null
+
+      if (botData) {
+        for (const row of botData) {
+          if (row.mode === 'customer_estimate_approval' || row.mode === 'customer_estimate_rejection') {
+            if (!botEstimateDecision) {
+              const isApproved = row.mode === 'customer_estimate_approval'
+              let rReason = undefined
+              if (!isApproved && row.feedback_text) {
+                const rMatch = row.feedback_text.match(/Reason:\s*(.+)$/i)
+                rReason = rMatch ? rMatch[1].trim() : row.feedback_text
+              }
+              botEstimateDecision = {
+                status: isApproved ? 'Approved' : 'Rejected',
+                reason: rReason,
+                dt: row.complaint_date_time || row.created_at,
+              }
+            }
+            continue
+          }
+
+          if (row.mode === 'customer_estimate_payload' || row.mode === 'customer_payment_payload') continue
+          if (row.feedback_text?.trim().startsWith('{')) continue
+
+          parsedComplaints.push(row as ComplaintRecord)
+        }
       }
-      await loadEstimates()
+      setComplaints(parsedComplaints)
+
+      // 3. Fetch latest estimate record
+      const allEstimates = await fetchAllEstimates()
+      const match = allEstimates.find(
+        (e) => e.vehicle_registration_number?.trim().toUpperCase().replace(/[\s-]/g, '') === norm
+      )
+
+      if (match) {
+        if (botEstimateDecision && match.status !== botEstimateDecision.status) {
+          setEstimateRecord({
+            ...match,
+            status: botEstimateDecision.status,
+            rejection_reason: botEstimateDecision.reason || match.rejection_reason,
+            approved_at: botEstimateDecision.status === 'Approved' ? (botEstimateDecision.dt || match.approved_at) : match.approved_at,
+          })
+        } else {
+          setEstimateRecord(match)
+        }
+      } else if (botEstimateDecision) {
+        setEstimateRecord({
+          estimate_no: `EST-${norm}`,
+          vehicle_registration_number: norm,
+          items: [],
+          subtotal: 0,
+          discount: 0,
+          gst_tax: 0,
+          grand_total: 0,
+          status: botEstimateDecision.status,
+          rejection_reason: botEstimateDecision.reason,
+          approved_at: botEstimateDecision.status === 'Approved' ? botEstimateDecision.dt : undefined,
+        })
+      } else {
+        setEstimateRecord(null)
+      }
     } catch (err) {
-      console.warn('Failed to load complaints from post_feedback_bot_data:', err)
+      console.warn('Error loading customer vehicle problems:', err)
     } finally {
-      setLoadingComplaints(false)
+      setLoading(false)
     }
-  }
+  }, [])
 
   useEffect(() => {
     if (!isOpen) return
-    if (initialTab) {
-      setActiveTab(initialTab)
-    } else if (initialRegNumber) {
-      setActiveTab('complaints')
-    }
-    if (initialRegNumber) {
-      setComplaintSearch(initialRegNumber)
-    }
-    void fetchComplaints()
-
-    // Realtime Supabase Sync for instant updates when customer submits a problem
-    const channel = supabase
-      .channel('customer-complaints-realtime')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'post_feedback_bot_data' },
-        () => {
-          void fetchComplaints()
-        }
-      )
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'customer_estimates' },
-        () => {
-          void loadEstimates()
-        }
-      )
-      .subscribe()
-
-    function handleEstimateSync() {
-      void loadEstimates()
-    }
-
-    window.addEventListener('techwheels_estimate_updated', handleEstimateSync)
-
-    return () => {
-      void supabase.removeChannel(channel)
-      window.removeEventListener('techwheels_estimate_updated', handleEstimateSync)
-    }
-  }, [isOpen])
+    const reg = initialRegNumber || ''
+    setCurrentReg(reg)
+    setSearchInput(reg)
+    void loadDataForVehicle(reg)
+  }, [isOpen, initialRegNumber, loadDataForVehicle])
 
   if (!isOpen) return null
 
-  // Determine if a record is from the Customer / Bodyshop App
-  const isFromCustomerApp = (c: ComplaintRecord) => {
-    if (c.mode === 'customer_estimate_payload' || c.feedback_text?.startsWith('{"estimate_no"')) {
-      return false
+  // Parse problem issues list from feedback text
+  function parseProblems(feedbackText: string | null | undefined): { issues: string[]; km?: string } {
+    if (!feedbackText) return { issues: [] }
+    const text = feedbackText.trim()
+
+    const issueMatch = text.match(/Issue:\s*([^|]+)/i)
+    const kmMatch = text.match(/KM:\s*([^|]+)/i)
+    const km = kmMatch ? kmMatch[1].trim() : undefined
+
+    if (issueMatch) {
+      const parts = issueMatch[1]
+        .split(/;\s*|\s+(?=\d+\.\s+)/)
+        .map((p) => p.replace(/^\d+\.\s*/, '').trim())
+        .filter(Boolean)
+      if (parts.length > 0) return { issues: parts, km }
     }
-    if (c.mode === 'customer_complaint_portal' || c.mode === 'customer_mobile_pwa' || c.mode === 'customer_booking_pwa') {
-      return true
-    }
-    if (c.feedback_text?.startsWith('[Complaint') || c.feedback_text?.includes('[Sandbox Test]')) {
-      return true
-    }
-    return false
+
+    const clean = text.replace(/^\[Complaint\s*-[^\]]+\]\s*/i, '').replace(/^Customer Remark[^:]*:\s*/i, '').trim()
+    return { issues: clean ? [clean] : [], km }
   }
 
-  const appOnlyComplaints = complaints.filter(isFromCustomerApp)
-
-  const displayedComplaints = (filterSource === 'app_only' ? appOnlyComplaints : complaints).filter((c) => {
-    if (!complaintSearch) return true
-    const q = complaintSearch.toLowerCase()
-    return (
-      c.vehicle_registration_number?.toLowerCase().includes(q) ||
-      c.customer_name?.toLowerCase().includes(q) ||
-      c.feedback_text?.toLowerCase().includes(q) ||
-      c.mobile_number?.includes(q)
-    )
-  })
-
-  // Format problem text cleanly without raw technical prefixes
-  function renderCleanDescription(text: string) {
-    if (!text) return <span className="text-gray-400 italic">No description</span>
-
-    if (text.startsWith('[Complaint')) {
-      const issueMatch = text.match(/Issue:\s*([^|]+)/i)
-      const kmMatch = text.match(/KM:\s*([^|]+)/i)
-      const addMatch = text.match(/Additional:\s*(.+)/i)
-
-      const issueText = issueMatch ? issueMatch[1].trim() : text
-      const km = kmMatch ? kmMatch[1].trim() : null
-      const add = addMatch && addMatch[1].trim() !== 'None' && addMatch[1].trim() !== 'undefined' ? addMatch[1].trim() : null
-
-      return (
-        <div className="space-y-0.5">
-          <div className="font-semibold text-gray-900 line-clamp-2">{issueText}</div>
-          <div className="flex flex-wrap items-center gap-1.5 text-[10px] text-gray-500">
-            {km && km !== 'N/A' && (
-              <span className="rounded bg-slate-100 px-1.5 py-0.2 font-mono text-slate-700 font-bold">
-                ⚡ {km} KM
-              </span>
-            )}
-            {add && (
-              <span className="text-gray-500 italic truncate max-w-[200px]" title={add}>
-                Note: {add}
-              </span>
-            )}
-          </div>
-        </div>
-      )
-    }
-
-    return <div className="font-semibold text-gray-800 line-clamp-2">{text}</div>
-  }
-
-  function handleCopyCustomerLink() {
-    const link = `${portalUrl}/?reg=${testRegNumber.trim().toUpperCase()}`
-    void navigator.clipboard.writeText(link)
-    setCopiedLink(true)
-    setTimeout(() => setCopiedLink(false), 2500)
-  }
+  const activeReg = currentReg || vehicleInfo?.reg_number || 'Vehicle'
+  const activeModel = vehicleInfo?.model || 'Tata Vehicle'
+  const activeOwner = vehicleInfo?.customer_name || complaints[0]?.customer_name || 'Customer'
+  const activePhone = vehicleInfo?.mobile_number || complaints[0]?.mobile_number || '—'
+  const activeJc = vehicleInfo?.jc_number
+  const activeKm = vehicleInfo?.km_reading
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-3 backdrop-blur-sm">
-      <div className="flex h-[90vh] max-h-[820px] w-full max-w-5xl flex-col rounded-2xl bg-white shadow-2xl overflow-hidden border border-gray-200">
-        {/* Header */}
-        <div className="flex items-center justify-between border-b border-gray-200 bg-gradient-to-r from-slate-900 to-indigo-950 px-6 py-4 text-white">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-fade-in">
+      <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-2xl overflow-hidden flex flex-col max-h-[90vh]">
+        
+        {/* ── HEADER ── */}
+        <div className="bg-slate-900 text-white px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-600 text-xl font-bold shadow-md">
+            <div className="w-10 h-10 rounded-xl bg-blue-600 flex items-center justify-center font-bold text-xl shadow-xs">
               🚗
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h2 className="text-base font-bold text-white">Customer Form & Bodyshop Admin Hub</h2>
-                <span className="rounded-full bg-emerald-500/20 px-2.5 py-0.5 text-xs font-semibold text-emerald-300 border border-emerald-500/40">
-                  {isAdmin ? 'Admin Scope' : 'Advisor Scope'}
-                </span>
-                <span className="rounded-full bg-blue-500/20 px-2 py-0.5 text-[11px] font-bold text-blue-300 border border-blue-400/30">
-                  🟢 Live Realtime Sync
-                </span>
+                <h2 className="text-lg font-black tracking-wider text-white">
+                  {activeReg}
+                </h2>
+                {activeJc && (
+                  <span className="bg-white/20 text-white text-[11px] font-mono font-bold px-2 py-0.5 rounded-md border border-white/20">
+                    JC #{activeJc}
+                  </span>
+                )}
               </div>
-              <p className="text-xs text-slate-300">
-                Manage customer problem submissions from Bodyshop app, review feedback & access pricing catalogue
+              <p className="text-xs text-slate-300 mt-0.5 font-medium">
+                {activeModel} · {activeOwner} ({activePhone})
               </p>
             </div>
           </div>
+
           <button
-            type="button"
             onClick={onClose}
-            className="flex h-8 w-8 items-center justify-center rounded-lg bg-white/10 text-slate-300 hover:bg-white/20 hover:text-white"
+            className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center text-sm font-bold transition-all cursor-pointer"
+            title="Close"
           >
             ✕
           </button>
         </div>
 
-        {/* Tab Navigation */}
-        <div className="flex items-center justify-between border-b border-gray-200 bg-gray-50 px-6 py-2.5">
-          <div className="flex gap-2">
-            <button
-              type="button"
-              onClick={() => setActiveTab('complaints')}
-              className={`rounded-lg px-3.5 py-1.5 text-xs font-semibold transition flex items-center gap-1.5 ${
-                activeTab === 'complaints'
-                  ? 'bg-blue-600 text-white shadow-sm'
-                  : 'text-gray-600 hover:bg-gray-200'
-              }`}
-            >
-              <span>🚨</span> App Problems & Submissions ({appOnlyComplaints.length})
-            </button>
-            <button
-              type="button"
-              onClick={() => setActiveTab('overview')}
-              className={`rounded-lg px-3.5 py-1.5 text-xs font-semibold transition ${
-                activeTab === 'overview'
-                  ? 'bg-blue-600 text-white shadow-sm'
-                  : 'text-gray-600 hover:bg-gray-200'
-              }`}
-            >
-              📊 Overview & Share Link
-            </button>
-            <button
-              type="button"
-              onClick={() => setActiveTab('live_preview')}
-              className={`rounded-lg px-3.5 py-1.5 text-xs font-semibold transition flex items-center gap-1.5 ${
-                activeTab === 'live_preview'
-                  ? 'bg-blue-600 text-white shadow-sm'
-                  : 'text-gray-600 hover:bg-gray-200'
-              }`}
-            >
-              <span>📱</span> Embedded Customer App View
-            </button>
-          </div>
-
-          <a
-            href={portalUrl}
-            target="_blank"
-            rel="noreferrer"
-            className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-1 text-xs font-bold text-white shadow-sm hover:bg-emerald-700"
+        {/* ── SEARCH & SWITCH REGISTRATION (IF NEEDED) ── */}
+        <div className="bg-slate-50 border-b border-slate-200 px-6 py-2.5 flex items-center justify-between gap-3">
+          <form
+            onSubmit={(e) => {
+              e.preventDefault()
+              if (searchInput.trim()) {
+                setCurrentReg(searchInput.trim())
+                void loadDataForVehicle(searchInput.trim())
+              }
+            }}
+            className="flex items-center gap-2 flex-1"
           >
-            Launch Web App ↗
-          </a>
-        </div>
+            <span className="text-xs text-slate-500 font-bold">Vehicle Reg:</span>
+            <input
+              type="text"
+              value={searchInput}
+              onChange={(e) => setSearchInput(e.target.value.toUpperCase())}
+              placeholder="e.g. RJ60CH9549"
+              className="bg-white border border-slate-300 rounded-lg px-2.5 py-1 text-xs font-mono font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 w-44"
+            />
+            <button
+              type="submit"
+              className="bg-slate-200 hover:bg-slate-300 text-slate-800 text-xs font-bold px-2.5 py-1 rounded-lg transition-colors cursor-pointer"
+            >
+              Search
+            </button>
+          </form>
 
-        {/* Tab Content Body */}
-        <div className="flex-1 overflow-y-auto p-6">
-          {/* TAB 1: OVERVIEW & SHARE */}
-          {activeTab === 'overview' && (
-            <div className="space-y-6">
-              {/* Quick Launch Card */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="rounded-xl border border-blue-100 bg-blue-50/60 p-4">
-                  <div className="text-2xl mb-1">📱</div>
-                  <div className="text-sm font-bold text-blue-950">Customer Web Application</div>
-                  <div className="text-xs text-blue-700 mt-1 mb-3">
-                    Customer portal for "Tell Us Your Problem", Estimates & Gate Pass
-                  </div>
-                  <a
-                    href={portalUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="inline-block rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-blue-700"
-                  >
-                    Open on Port 5174 ↗
-                  </a>
-                </div>
-
-                <div className="rounded-xl border border-emerald-100 bg-emerald-50/60 p-4">
-                  <div className="text-2xl mb-1">💬</div>
-                  <div className="text-sm font-bold text-emerald-950">App Form Submissions</div>
-                  <div className="text-xs text-emerald-700 mt-1 mb-3">
-                    Live submissions from Bodyshop & Customer Service App
-                  </div>
-                  <span className="rounded-full bg-emerald-200 px-2.5 py-0.5 text-xs font-bold text-emerald-900">
-                    {appOnlyComplaints.length} App Submissions Logged
-                  </span>
-                </div>
-
-                <div className="rounded-xl border border-indigo-100 bg-indigo-50/60 p-4">
-                  <div className="text-2xl mb-1">📱</div>
-                  <div className="text-sm font-bold text-indigo-950">Customer Mobile App</div>
-                  <div className="text-xs text-indigo-700 mt-1 mb-3">
-                    Live customer app running on Port 5174 with instant reception sync
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setActiveTab('live_preview')}
-                    className="rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-indigo-700 cursor-pointer"
-                  >
-                    Open Live Preview →
-                  </button>
-                </div>
-              </div>
-
-              {/* Share Customer Link Generator */}
-              <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-                <h3 className="text-sm font-bold text-gray-900 mb-1">
-                  📤 Send Customer Portal Link to Customer
-                </h3>
-                <p className="text-xs text-gray-500 mb-4">
-                  Generate a direct access link for the customer to submit problems, review estimates or download gate pass.
-                </p>
-
-                <div className="flex flex-wrap items-center gap-3">
-                  <div className="w-48">
-                    <label className="text-[11px] font-semibold text-gray-600 block mb-1">
-                      Registration Number
-                    </label>
-                    <input
-                      type="text"
-                      className="w-full rounded-lg border border-gray-300 px-3 py-2 text-xs font-mono font-bold uppercase text-gray-900 focus:border-blue-500 focus:outline-none"
-                      value={testRegNumber}
-                      onChange={(e) => setTestRegNumber(e.target.value.toUpperCase())}
-                      placeholder="e.g. RJ14TEST01"
-                    />
-                  </div>
-
-                  <div className="flex-1 min-w-[280px]">
-                    <label className="text-[11px] font-semibold text-gray-600 block mb-1">
-                      Direct Customer URL
-                    </label>
-                    <input
-                      type="text"
-                      readOnly
-                      className="w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-xs font-mono text-gray-600"
-                      value={`${portalUrl}/?reg=${testRegNumber.trim().toUpperCase()}`}
-                    />
-                  </div>
-
-                  <div className="pt-5">
-                    <button
-                      type="button"
-                      onClick={handleCopyCustomerLink}
-                      className="rounded-lg bg-blue-600 px-4 py-2 text-xs font-bold text-white shadow-sm hover:bg-blue-700 flex items-center gap-1.5"
-                    >
-                      {copiedLink ? '✓ Copied!' : '📋 Copy Link'}
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* TAB 2: COMPLAINTS LIST */}
-          {activeTab === 'complaints' && (
-            <div className="space-y-4">
-              <div className="flex flex-wrap items-center justify-between gap-3 bg-slate-50 p-3.5 rounded-xl border border-slate-200">
-                <div>
-                  <h3 className="text-sm font-bold text-gray-900 flex items-center gap-2">
-                    <span>🚨 Live Customer Submissions & Problems</span>
-                  </h3>
-                  <p className="text-xs text-gray-500 mt-0.5">
-                    Showing submissions entered via Bodyshop & Customer Services App ("Tell Us Your Problem" / Feedback)
-                  </p>
-                </div>
-
-                <div className="flex flex-wrap items-center gap-2">
-                  {/* Filter source toggle */}
-                  <div className="inline-flex rounded-lg border border-gray-300 bg-white p-0.5 shadow-sm text-xs">
-                    <button
-                      type="button"
-                      onClick={() => setFilterSource('app_only')}
-                      className={`px-3 py-1 font-bold rounded-md transition ${
-                        filterSource === 'app_only'
-                          ? 'bg-blue-600 text-white shadow-xs'
-                          : 'text-gray-600 hover:text-gray-900'
-                      }`}
-                    >
-                      📱 Bodyshop App Only ({appOnlyComplaints.length})
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setFilterSource('all')}
-                      className={`px-3 py-1 font-medium rounded-md transition ${
-                        filterSource === 'all'
-                          ? 'bg-slate-700 text-white shadow-xs'
-                          : 'text-gray-500 hover:text-gray-800'
-                      }`}
-                    >
-                      🌐 All Bot History ({complaints.length})
-                    </button>
-                  </div>
-
-                  {/* Refresh Button */}
-                  <button
-                    type="button"
-                    onClick={() => void fetchComplaints()}
-                    disabled={loadingComplaints}
-                    className="rounded-lg border border-gray-300 bg-white px-3 py-1 text-xs font-semibold text-gray-700 shadow-sm hover:bg-gray-100 flex items-center gap-1 disabled:opacity-50"
-                  >
-                    <span className={loadingComplaints ? 'animate-spin' : ''}>🔄</span>
-                    Refresh
-                  </button>
-
-                  <a
-                    href={`${portalUrl}/complaint`}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="rounded-lg bg-rose-600 px-3 py-1 text-xs font-bold text-white shadow-sm hover:bg-rose-700 flex items-center gap-1"
-                  >
-                    + Submit New Problem ↗
-                  </a>
-                </div>
-              </div>
-
-              {/* Search within complaints */}
-              <div className="flex items-center gap-3">
-                <input
-                  type="text"
-                  className="w-full max-w-sm rounded-lg border border-gray-300 px-3 py-1.5 text-xs text-gray-900 focus:border-blue-500 focus:outline-none"
-                  placeholder="Filter by vehicle reg, customer name, issue..."
-                  value={complaintSearch}
-                  onChange={(e) => setComplaintSearch(e.target.value)}
-                />
-              </div>
-
-              {loadingComplaints ? (
-                <div className="py-12 text-center text-xs text-gray-500 flex flex-col items-center justify-center gap-2">
-                  <span className="text-2xl animate-spin">⏳</span>
-                  <span>Fetching live data from database…</span>
-                </div>
-              ) : displayedComplaints.length === 0 ? (
-                <div className="rounded-xl border border-dashed border-gray-300 bg-slate-50/50 p-8 text-center space-y-3">
-                  <div className="text-3xl">📱</div>
-                  <div className="text-sm font-bold text-gray-800">
-                    {filterSource === 'app_only'
-                      ? 'No Bodyshop App Submissions Yet'
-                      : 'No records found'}
-                  </div>
-                  <p className="text-xs text-gray-500 max-w-md mx-auto">
-                    {filterSource === 'app_only'
-                      ? 'Jab bhi customer Bodyshop App ("Tell Us Your Problem" ya Feedback form) me problem submit karega, woh instant yahan real-time me show hoga.'
-                      : 'Koi bhi feedback ya problem record nahi mila.'}
-                  </p>
-                  <div className="flex items-center justify-center gap-3 pt-2">
-                    <a
-                      href={`${portalUrl}/complaint`}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="rounded-lg bg-blue-600 px-4 py-2 text-xs font-bold text-white shadow-sm hover:bg-blue-700"
-                    >
-                      🚀 Open Customer Complaint Form ({portalUrl}/complaint)
-                    </a>
-                    {filterSource === 'app_only' && (
-                      <button
-                        type="button"
-                        onClick={() => setFilterSource('all')}
-                        className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-xs font-semibold text-gray-700 hover:bg-gray-100"
-                      >
-                        View All Bot History ({complaints.length})
-                      </button>
-                    )}
-                  </div>
-                </div>
-              ) : (
-                <div className="overflow-x-auto rounded-xl border border-gray-200">
-                  <table className="w-full text-left text-xs">
-                    <thead className="bg-gray-50 text-[11px] font-bold text-gray-500 uppercase border-b border-gray-200">
-                      <tr>
-                        <th className="px-3 py-2.5">Source / Date</th>
-                        <th className="px-3 py-2.5">Vehicle Reg</th>
-                        <th className="px-3 py-2.5">Customer / Phone</th>
-                        <th className="px-3 py-2.5">Category</th>
-                        <th className="px-3 py-2.5">Description / Remark</th>
-                        <th className="px-3 py-2.5 text-center">Parts Estimate & Approval</th>
-                        <th className="px-3 py-2.5">Advisor / Branch</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-100">
-                      {displayedComplaints.map((c, i) => {
-                        const isApp =
-                          c.mode === 'customer_app_problem' ||
-                          c.mode === 'customer_app_complaint' ||
-                          c.mode === 'customer_app' ||
-                          Boolean(c.primary_complaint_area && c.primary_complaint_area.toLowerCase().includes('app'))
-                        const isProblemForm =
-                          c.mode === 'customer_app_problem' ||
-                          Boolean(c.primary_complaint_area && c.primary_complaint_area.toLowerCase().includes('problem'))
-                        const normReg = c.vehicle_registration_number ? c.vehicle_registration_number.trim().toUpperCase() : ''
-                        const est = (c.id ? estimatesMap[`complaint_${c.id}`] : undefined) ||
-                                    (normReg ? estimatesMap[`vreg_${normReg}`] : undefined)
-                        
-                        return (
-                          <tr
-                            key={c.id || i}
-                            onClick={() => setSelectedProblemForEstimate(c)}
-                            className={`cursor-pointer transition ${
-                              isApp ? 'bg-blue-50/30 hover:bg-blue-100/50' : 'hover:bg-gray-50/80'
-                            }`}
-                          >
-                            <td className="px-3 py-2.5 whitespace-nowrap">
-                              <div className="mb-0.5">
-                                {isProblemForm ? (
-                                  <span className="rounded-md bg-rose-100 px-2 py-0.5 text-[10px] font-bold text-rose-800 border border-rose-200">
-                                    📱 App Problem
-                                  </span>
-                                ) : isApp ? (
-                                  <span className="rounded-md bg-indigo-100 px-2 py-0.5 text-[10px] font-bold text-indigo-800 border border-indigo-200">
-                                    ⭐ App Feedback
-                                  </span>
-                                ) : (
-                                  <span className="rounded-md bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-600 border border-slate-200">
-                                    🤖 Bot Record
-                                  </span>
-                                )}
-                              </div>
-                              <div className="text-[10px] text-gray-400">
-                                {c.complaint_date_time ? new Date(c.complaint_date_time).toLocaleString() : 'Recent'}
-                              </div>
-                            </td>
-                            <td className="px-3 py-2.5 font-mono font-bold text-blue-700 whitespace-nowrap">
-                              {c.vehicle_registration_number}
-                            </td>
-                            <td className="px-3 py-2.5">
-                              <div className="font-semibold text-gray-900">{c.customer_name || 'Customer'}</div>
-                              <div className="text-[11px] text-gray-500">{c.mobile_number || '—'}</div>
-                            </td>
-                            <td className="px-3 py-2.5 whitespace-nowrap">
-                              <span className="rounded-full bg-orange-100 px-2 py-0.5 text-[11px] font-semibold text-orange-800">
-                                {c.primary_complaint_area || c.service_type || 'General'}
-                              </span>
-                            </td>
-                            <td className="px-3 py-2.5 text-gray-700 max-w-sm" title={c.feedback_text}>
-                              {renderCleanDescription(c.feedback_text)}
-                            </td>
-                            <td className="px-3 py-2.5 text-center whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
-                              {est ? (
-                                est.status === 'Approved' ? (
-                                  <button
-                                    type="button"
-                                    onClick={() => setSelectedProblemForEstimate(c)}
-                                    className="rounded-lg bg-emerald-100 border border-emerald-300 px-2.5 py-1 text-xs font-bold text-emerald-900 shadow-xs hover:bg-emerald-200 flex items-center gap-1 mx-auto"
-                                  >
-                                    <span>✅ Approved</span>
-                                    <span className="font-mono font-extrabold text-emerald-800">₹{est.grand_total.toLocaleString()}</span>
-                                  </button>
-                                ) : est.status === 'Rejected' ? (
-                                  <button
-                                    type="button"
-                                    onClick={() => setSelectedProblemForEstimate(c)}
-                                    className="rounded-lg bg-rose-100 border border-rose-300 px-2.5 py-1 text-xs font-bold text-rose-900 shadow-xs hover:bg-rose-200 flex items-center gap-1 mx-auto"
-                                  >
-                                    <span>❌ Rejected</span>
-                                    <span>· Revise</span>
-                                  </button>
-                                ) : (
-                                  <button
-                                    type="button"
-                                    onClick={() => setSelectedProblemForEstimate(c)}
-                                    className="rounded-lg bg-amber-100 border border-amber-300 px-2.5 py-1 text-xs font-bold text-amber-900 shadow-xs hover:bg-amber-200 flex items-center gap-1 mx-auto"
-                                  >
-                                    <span>⏳ Sent</span>
-                                    <span className="font-mono text-amber-800">₹{est.grand_total.toLocaleString()}</span>
-                                  </button>
-                                )
-                              ) : (
-                                <button
-                                  type="button"
-                                  onClick={() => setSelectedProblemForEstimate(c)}
-                                  className="rounded-lg bg-blue-600 px-3 py-1 text-xs font-bold text-white shadow-xs hover:bg-blue-700 flex items-center gap-1 mx-auto"
-                                >
-                                  <span>📝</span>
-                                  <span>Create Estimate</span>
-                                </button>
-                              )}
-                            </td>
-                            <td className="px-3 py-2.5 text-gray-500 whitespace-nowrap">
-                              <div>{c.service_advisor_name || 'Advisor'}</div>
-                              <div className="text-[11px] text-gray-400">{c.branch || 'Workshop'}</div>
-                            </td>
-                          </tr>
-                        )
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* TAB 3: LIVE EMBEDDED PREVIEW */}
-          {activeTab === 'live_preview' && (
-            <div className="h-full flex flex-col space-y-3">
-              <div className="flex items-center justify-between text-xs text-gray-600 bg-blue-50/50 p-2.5 rounded-lg border border-blue-100">
-                <span>
-                  Showing live embedded Customer Web App (<strong className="font-mono text-blue-700">{portalUrl}</strong>)
-                </span>
-                <a
-                  href={portalUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="font-bold text-blue-600 hover:underline"
-                >
-                  Open in New Tab ↗
-                </a>
-              </div>
-              <div className="flex-1 rounded-xl border border-gray-300 overflow-hidden shadow-inner min-h-[480px]">
-                <iframe
-                  src={portalUrl}
-                  title="Customer Portal Preview"
-                  className="w-full h-full min-h-[480px] border-0"
-                />
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* Footer */}
-        <div className="flex items-center justify-between border-t border-gray-200 bg-gray-50 px-6 py-3 text-xs text-gray-500">
-          <div>
-            Techwheels Service Advisor · Bodyshop Customer Service Portal Hub
-          </div>
           <button
-            type="button"
+            onClick={() => void loadDataForVehicle(currentReg)}
+            className="text-xs text-blue-600 hover:text-blue-700 font-bold flex items-center gap-1 cursor-pointer"
+          >
+            🔄 Refresh
+          </button>
+        </div>
+
+        {/* ── MAIN BODY ── */}
+        <div className="p-6 overflow-y-auto space-y-5 flex-1">
+          {loading ? (
+            <div className="py-12 text-center text-slate-500 font-bold text-sm">
+              Loading customer problem details...
+            </div>
+          ) : (
+            <>
+              {/* 1. ESTIMATE APPROVAL / REJECTION STATUS CARD */}
+              <div className="rounded-xl border p-4 bg-slate-50/50">
+                <div className="text-[11px] font-black uppercase tracking-wider text-slate-500 mb-2">
+                  Quotation & Approval Status
+                </div>
+
+                {estimateRecord ? (
+                  <div
+                    className={`rounded-xl p-3.5 border flex items-start justify-between gap-3 ${
+                      estimateRecord.status === 'Approved'
+                        ? 'bg-emerald-50 border-emerald-300 text-emerald-900'
+                        : estimateRecord.status === 'Rejected'
+                        ? 'bg-rose-50 border-rose-300 text-rose-900'
+                        : 'bg-blue-50 border-blue-300 text-blue-900'
+                    }`}
+                  >
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 font-black text-sm">
+                        <span>
+                          {estimateRecord.status === 'Approved'
+                            ? '✅'
+                            : estimateRecord.status === 'Rejected'
+                            ? '❌'
+                            : '⏳'}
+                        </span>
+                        <span>
+                          {estimateRecord.status === 'Approved'
+                            ? 'Estimate Approved by Customer'
+                            : estimateRecord.status === 'Rejected'
+                            ? 'Estimate Rejected by Customer'
+                            : 'Estimate Sent (Awaiting Customer Decision)'}
+                        </span>
+                      </div>
+
+                      {estimateRecord.grand_total > 0 && (
+                        <div className="text-xs font-bold mt-1 font-mono">
+                          Approved Amount: ₹{estimateRecord.grand_total.toLocaleString('en-IN')}
+                        </div>
+                      )}
+
+                      {estimateRecord.rejection_reason && (
+                        <div className="text-xs text-rose-700 mt-1 font-semibold italic bg-rose-100/60 p-2 rounded-lg">
+                          Rejection Reason: "{estimateRecord.rejection_reason}"
+                        </div>
+                      )}
+
+                      {estimateRecord.approved_at && (
+                        <div className="text-[11px] text-emerald-700 mt-1 font-medium">
+                          Approved at: {new Date(estimateRecord.approved_at).toLocaleString('en-IN')}
+                        </div>
+                      )}
+                    </div>
+
+                    <button
+                      onClick={() => setShowEstimateBuilder(true)}
+                      className="bg-white border border-slate-300 text-slate-800 hover:bg-slate-100 px-3 py-1.5 rounded-lg text-xs font-bold shadow-xs cursor-pointer"
+                    >
+                      View / Edit Quote
+                    </button>
+                  </div>
+                ) : (
+                  <div className="bg-white border border-slate-200 rounded-xl p-3.5 flex items-center justify-between">
+                    <div className="text-xs text-slate-600 font-medium">
+                      No digital quotation sent yet for this job card.
+                    </div>
+                    <button
+                      onClick={() => setShowEstimateBuilder(true)}
+                      className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded-lg text-xs font-bold shadow-xs cursor-pointer"
+                    >
+                      + Create Quotation
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {/* 2. CUSTOMER REPORTED PROBLEMS & COMPLAINTS */}
+              <div className="rounded-xl border border-slate-200 p-4 bg-white shadow-xs">
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-2">
+                    <span className="text-base">🚨</span>
+                    <h3 className="text-sm font-black text-slate-900">
+                      Customer Problem Details
+                    </h3>
+                  </div>
+                  {activeKm && (
+                    <span className="bg-amber-100 text-amber-900 text-xs font-mono font-bold px-2 py-0.5 rounded-md">
+                      KM: {activeKm}
+                    </span>
+                  )}
+                </div>
+
+                {complaints.length > 0 ? (
+                  <div className="space-y-3">
+                    {complaints.map((comp, cIdx) => {
+                      const parsed = parseProblems(comp.feedback_text)
+                      return (
+                        <div
+                          key={comp.id || cIdx}
+                          className="bg-rose-50/70 border border-rose-200 rounded-xl p-3.5"
+                        >
+                          <div className="flex items-center justify-between mb-2">
+                            <span className="text-xs font-bold text-rose-800">
+                              Submission #{cIdx + 1}
+                              {comp.service_type ? ` · ${comp.service_type}` : ''}
+                            </span>
+                            <span className="text-[11px] text-slate-500 font-medium">
+                              {comp.complaint_date_time
+                                ? new Date(comp.complaint_date_time).toLocaleString('en-IN')
+                                : 'Recent'}
+                            </span>
+                          </div>
+
+                          <div className="space-y-1.5">
+                            {parsed.issues.map((issue, idx) => (
+                              <div key={idx} className="flex items-start gap-2 text-xs text-slate-900">
+                                <span className="font-bold text-rose-600">{idx + 1}.</span>
+                                <span className="font-semibold leading-relaxed">{issue}</span>
+                              </div>
+                            ))}
+                          </div>
+
+                          {comp.service_advisor_name && (
+                            <div className="mt-2 pt-2 border-t border-rose-200/60 text-[11px] text-slate-600">
+                              Assigned Advisor: <span className="font-bold">{comp.service_advisor_name}</span>
+                            </div>
+                          )}
+                        </div>
+                      )
+                    })}
+                  </div>
+                ) : (
+                  <div className="bg-slate-50 border border-dashed border-slate-300 rounded-xl p-6 text-center">
+                    <span className="text-2xl block mb-1">📋</span>
+                    <p className="text-xs font-bold text-slate-700">
+                      No customer complaints recorded for {activeReg}.
+                    </p>
+                    <p className="text-[11px] text-slate-500 mt-0.5">
+                      Submissions from the Customer App ("Tell Us Your Problem") will appear here automatically.
+                    </p>
+                  </div>
+                )}
+              </div>
+            </>
+          )}
+        </div>
+
+        {/* ── FOOTER ── */}
+        <div className="bg-slate-100 px-6 py-3.5 border-t border-slate-200 flex items-center justify-end">
+          <button
             onClick={onClose}
-            className="rounded-lg bg-gray-200 px-4 py-1.5 font-bold text-gray-700 hover:bg-gray-300"
+            className="bg-slate-900 hover:bg-black text-white px-5 py-2 rounded-xl text-xs font-extrabold shadow-sm transition-all cursor-pointer"
           >
             Close
           </button>
         </div>
       </div>
 
-      {/* Interactive Service Estimate Builder Modal on Problem Click */}
-      {selectedProblemForEstimate && (
+      {/* Estimate Builder Modal if opened */}
+      {showEstimateBuilder && (
         <ServiceEstimateBuilderModal
-          isOpen={Boolean(selectedProblemForEstimate)}
-          onClose={() => setSelectedProblemForEstimate(null)}
-          vehicleReg={selectedProblemForEstimate.vehicle_registration_number}
-          customerName={selectedProblemForEstimate.customer_name || 'Customer'}
-          customerPhone={selectedProblemForEstimate.mobile_number || ''}
-          problemDescription={selectedProblemForEstimate.feedback_text}
-          category={selectedProblemForEstimate.primary_complaint_area || selectedProblemForEstimate.service_type || 'General'}
-          complaintId={selectedProblemForEstimate.id}
+          isOpen={showEstimateBuilder}
+          onClose={() => {
+            setShowEstimateBuilder(false)
+            void loadDataForVehicle(currentReg)
+          }}
+          vehicleReg={activeReg}
+          customerName={activeOwner}
+          customerPhone={activePhone}
+          problemDescription={complaints[0]?.feedback_text || 'Regular Service Inspection'}
+          complaintId={complaints[0]?.id}
           onEstimateSent={() => {
-            void loadEstimates()
+            setShowEstimateBuilder(false)
+            void loadDataForVehicle(currentReg)
           }}
         />
       )}
     </div>
   )
 }
-
