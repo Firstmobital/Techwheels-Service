@@ -7,7 +7,7 @@ import {
   normalizeInvoiceNumber,
   normalizePortal,
 } from './eligibility.ts'
-import { matchBusyInsurance, readAuthoritativeGstin } from './insuranceMaster.ts'
+import { BUSY_INSURANCE_MASTER, matchBusyInsurance, readAuthoritativeGstin, type BusyInsuranceMasterRow } from './insuranceMaster.ts'
 import { inclusiveFromNet, inclusiveFromNetAndTax, parseAmount, roundOffToNearestRupee, roundPaise, toPaise } from './money.ts'
 import { classifyBusyInvoice, PDI_PARTY_NAME, resolvePartyName } from './partyName.ts'
 import type {
@@ -142,7 +142,11 @@ export function transformBusyAccounting(input: {
   partsLines: BusyPartsLine[]
   fromDate: string
   toDate: string
+  insuranceMaster?: readonly BusyInsuranceMasterRow[]
 }): BusyTransformResult {
+  const insuranceMaster = input.insuranceMaster && input.insuranceMaster.length > 0
+    ? input.insuranceMaster
+    : BUSY_INSURANCE_MASTER
   const partsByJob = new Map<string, BusyPartsLine[]>()
   for (const line of input.partsLines) {
     const key = `${line.portal}::${normalizeJobCard(line.jobCardNumber)}`
@@ -255,7 +259,7 @@ export function transformBusyAccounting(input: {
       vehicleRegistrationNumber: labour.vehicle_registration_number,
     })
 
-    const insurance = classification === 'Bodyshop' ? matchBusyInsurance(labour.account) : null
+    const insurance = classification === 'Bodyshop' ? matchBusyInsurance(labour.account, insuranceMaster) : null
     const customerGstin = readAuthoritativeGstin(labour.gstin)
     const debtorGroup = classification === 'PDI'
       ? resolveDebtorGroup('Sitapura')

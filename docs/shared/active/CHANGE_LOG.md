@@ -2,6 +2,10 @@
 
 Tracks documentation-sync updates for business logic, architecture, and access control.
 
+## 2026-09-16
+
+- BUSY Bodyshop Group of Account mappings persist in `public.busy_insurance_master` (`company_name`, `gstin`, `busy_group`). Admin insert/update is on `/busy` only. Matching still uses Labour `account` before `C/O`. Unmapped insurers stay blocked. Not the planned SA insurance Settings catalog (DBL-0042). Ledger: DBL-0067. Plan: `BUSY-001`.
+
 ## 2026-09-15
 
 - **PARTS-002** — Estimate Master now reads/writes `settings_service_parts_pricing` (DBL-0062 VERIFIED). **Make** BS4/BS6 is DBL-0063 VERIFIED (existing 877 rows = BS6). Each item has a **Required / Optional** toggle (DBL-0065). Mechanical Service Advisor **Create Estimate** prefills Required lines and Add Item lists Optional; Save is `service_advisor_estimates` (DBL-0064). DBL-0061 is Accounts Mechanical Gatepass; DBL-0066 is Keep on Credit reason/validity.

@@ -2,7 +2,7 @@
 
 **Plan ID:** BUSY-001  
 **Created:** 2026-09-10  
-**Last Updated:** 2026-09-12  
+**Last Updated:** 2026-09-16  
 **Priority:** HIGH  
 **Owner:** Accounts + Platform Team  
 **Status:** Active (web implemented; GSTIN + ROUND OFF corrections in code; BUSY import pending)  
@@ -29,7 +29,7 @@ Add a web **BUSY** page that reads persisted PV/EV Labour from `public.psf_reven
 3. Resolve branch from `sr_assigned_to`, Party Name, and exact BUSY debtor group strings.
 4. Export Party and Invoice XLSX files from ready invoices only.
 5. Invoice Voucher rows: always emit `SPARE PARTS @18%` and `LABOUR CHARGES @18%` (including Amount 0). Emit `SPARE PARTS @5%` only when matched Parts data contains a genuine 5% GST line. Emit a final `Rounded Off (+)` row only when labour + Parts subtotal has a +/− decimal. Do not use `eligible × 3` as a row-count rule.
-6. Party Account columns are `Party Name`, `Group`, `GSTIN`. Bodyshop (`Account` contains `C/O`) takes Group/GSTIN from the INSU.DATA insurance master, not the branch debtor group. Unmapped insurers are blocked.
+6. Party Account columns are `Party Name`, `Group`, `GSTIN`. Bodyshop (`Account` contains `C/O`) takes Group/GSTIN from `public.busy_insurance_master`, not the branch debtor group. Unmapped insurers are blocked. Admin insert/update of mappings is on `/busy` only.
 
 ---
 
@@ -52,11 +52,12 @@ Parts persist in `public.busy_parts` (DBL-0044, DBL-0050). Inspected CRM files `
 ### Phase 2: Page and RBAC
 - [x] **Task 2.1:** `/busy` page with date range, Labour status, Parts PV/EV uploads, preview, exports.
 - [x] **Task 2.2:** Module `busy`, nav, `ROUTE_MODULE_MAP`, `RequireAccess`.
+- [x] **Task 2.3:** Persist Bodyshop Group of Account mapping in `public.busy_insurance_master` (DBL-0067). Admin insert/update UI on `/busy` only.
 
 ### Phase 3: Verification
 - [x] **Task 3.1:** `scripts/verify_busy_accounting.mjs` (required cases + per-invoice voucher contract: 18% Parts and Labour always; 5% only when a genuine 5% Parts line exists).
 - [x] **Task 3.3:** Persist Parts with mandatory `invoice_no`/`invoice_date` from CRM `Invoice_No`/`Invoice_Date`. Labour remains voucher truth.
-- [ ] **Task 3.2:** Operator applies DBL-0043, DBL-0044, and grants the module. Real BUSY import not available in this session.
+- [ ] **Task 3.2:** Operator applies DBL-0043, DBL-0044, DBL-0067, and grants the module. Real BUSY import not available in this session.
 
 ---
 
@@ -71,14 +72,15 @@ Parts persist in `public.busy_parts` (DBL-0044, DBL-0050). Inspected CRM files `
 ✅ 3.3 | Persist Parts invoice evidence | Agent | 2026-09-11 | 2026-09-11 | busy_parts / DBL-0044
 ✅ 1.3 | GSTIN + insurance master | Agent | 2026-09-12 | 2026-09-12 | insuranceMaster.ts
 ✅ 1.4 | Rounded Off (+) voucher row | Agent | 2026-09-12 | 2026-09-12 | money.ts / transform.ts
-⏳ 3.2 | Apply module + Parts table + BUSY import | Operator | - | - | Pending DBL-0043 and DBL-0044
+✅ 2.3 | Persist insurance Group of Account | Agent | 2026-09-16 | 2026-09-16 | busy_insurance_master / DBL-0067
+⏳ 3.2 | Apply module + Parts table + BUSY import | Operator | - | - | Pending DBL-0043, DBL-0044, and DBL-0067
 ```
 
 ---
 
 ## Next actions
 
-1. Apply `supabase/migrations/20260910120000_busy_accounting_module.sql` and `supabase/migrations/20260911120000_busy_parts.sql`, then run paired sql_checks.
+1. Apply `supabase/migrations/20260910120000_busy_accounting_module.sql`, `supabase/migrations/20260911120000_busy_parts.sql`, and `supabase/migrations/20260916120000_busy_insurance_master.sql`, then run paired sql_checks.
 2. Grant `busy` in Admin → Permissions (admins already receive every route module).
 3. Import a generated workbook into BUSY when the accounting app is available.
 
@@ -88,7 +90,7 @@ Parts persist in `public.busy_parts` (DBL-0044, DBL-0050). Inspected CRM files `
 
 - `docs/shared/reference/MODULE_ROUTE_CONTRACT.md`
 - `docs/web/modules/busy/README.md`
-- Ledger: DBL-0043, DBL-0044, DBL-0050
+- Ledger: DBL-0043, DBL-0044, DBL-0050, DBL-0067
 
-**Last Updated:** 2026-09-12  
+**Last Updated:** 2026-09-16  
 **Status:** 🟡 IN PROGRESS

@@ -22,7 +22,14 @@ import {
   transformBusyAccounting,
   buildInvoiceVoucherWorkbook,
   buildPartyAccountWorkbook,
+  fetchBusyInsuranceMaster,
+  insertBusyInsuranceMaster,
+  updateBusyInsuranceMaster,
+  isBusyAdmin,
+  masterRowsForTransform,
+  BUSY_INSURANCE_MASTER,
   type BusyPreviewRow,
+  type BusyInsuranceStoredRow,
 } from '../lib/busy'
 import type { BusyLabourSourceStatus } from '../lib/busy/labourSource'
 import type { BusyPartsSourceStatus } from '../lib/busy/partsSource'
@@ -70,6 +77,10 @@ export default function BusyAccountingPage() {
   const [pvParts, setPvParts] = useState<PartsSlotState>(EMPTY_SLOT)
   const [evParts, setEvParts] = useState<PartsSlotState>(EMPTY_SLOT)
   const [previewFilter, setPreviewFilter] = useState<'all' | 'ready' | 'blocked' | 'excluded'>('all')
+  const [isAdmin, setIsAdmin] = useState(false)
+  const [insuranceStored, setInsuranceStored] = useState<BusyInsuranceStoredRow[]>([])
+  const [insuranceLoadError, setInsuranceLoadError] = useState<string | null>(null)
+  const [insuranceLoading, setInsuranceLoading] = useState(true)
   const pvInputRef = useRef<HTMLInputElement>(null)
   const evInputRef = useRef<HTMLInputElement>(null)
 
@@ -89,6 +100,29 @@ export default function BusyAccountingPage() {
   useEffect(() => {
     setVoucherHandlerWarning(null)
   }, [fromDate, toDate])
+
+  const reloadInsuranceMaster = useCallback(async () => {
+    setInsuranceLoading(true)
+    try {
+      const rows = await fetchBusyInsuranceMaster()
+      setInsuranceStored(rows)
+      setInsuranceLoadError(null)
+    } catch (error) {
+      setInsuranceStored([])
+      setInsuranceLoadError(error instanceof Error ? error.message : String(error))
+    } finally {
+      setInsuranceLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    let active = true
+    isBusyAdmin().then((admin) => {
+      if (active) setIsAdmin(admin)
+    })
+    reloadInsuranceMaster()
+    return () => { active = false }
+  }, [reloadInsuranceMaster])
 
   useEffect(() => {
     let active = true
@@ -178,6 +212,11 @@ export default function BusyAccountingPage() {
     [pvParts.lines, evParts.lines],
   )
 
+  const insuranceMaster = useMemo(
+    () => masterRowsForTransform(insuranceStored),
+    [insuranceStored],
+  )
+
   const result = useMemo(() => {
     if (rangeIssue) return null
     return transformBusyAccounting({
@@ -185,8 +224,9 @@ export default function BusyAccountingPage() {
       partsLines,
       fromDate,
       toDate,
+      insuranceMaster,
     })
-  }, [labourRows, partsLines, fromDate, toDate, rangeIssue])
+  }, [labourRows, partsLines, fromDate, toDate, rangeIssue, insuranceMaster])
 
   const handlePartsFile = useCallback(async (file: File, portal: VehiclePortal) => {
     const setter = portal === 'PV' ? setPvParts : setEvParts
@@ -370,6 +410,17 @@ export default function BusyAccountingPage() {
           <Icon name="alert" size={14} />
           Parts persist: {partsStatus.error}
         </div>
+      )}
+
+      {isAdmin && (
+        <BusyInsuranceMasterCard
+          rows={insuranceStored}
+          loading={insuranceLoading}
+          loadError={insuranceLoadError}
+          usingFallback={insuranceStored.length === 0}
+          fallbackCount={BUSY_INSURANCE_MASTER.length}
+          onReload={() => void reloadInsuranceMaster()}
+        />
       )}
 
       <div className="summary">
@@ -565,6 +616,177 @@ function PartsUploadCard({
         {slot.persisted && slot.uploadedAt && (
           <div style={{ marginTop: 8, fontSize: 12, color: 'var(--muted)' }}>
             Last upload {new Date(slot.uploadedAt).toLocaleString('en-IN')}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function emptyInsuranceDraft() {
+  return { companyName: '', gstin: '', busyGroup: '' }
+}
+
+function BusyInsuranceMasterCard({
+  rows,
+  loading,
+  loadError,
+  usingFallback,
+  fallbackCount,
+  onReload,
+}: {
+  rows: BusyInsuranceStoredRow[]
+  loading: boolean
+  loadError: string | null
+  usingFallback: boolean
+  fallbackCount: number
+  onReload: () => void
+}) {
+  const [draft, setDraft] = useState(emptyInsuranceDraft)
+  const [editingId, setEditingId] = useState<number | null>(null)
+  const [editDraft, setEditDraft] = useState(emptyInsuranceDraft)
+  const [saving, setSaving] = useState(false)
+  const [formError, setFormError] = useState<string | null>(null)
+
+  async function handleInsert() {
+    setSaving(true)
+    setFormError(null)
+    try {
+      await insertBusyInsuranceMaster(draft)
+      setDraft(emptyInsuranceDraft())
+      onReload()
+    } catch (error) {
+      setFormError(error instanceof Error ? error.message : String(error))
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function handleUpdate(id: number) {
+    setSaving(true)
+    setFormError(null)
+    try {
+      await updateBusyInsuranceMaster(id, editDraft)
+      setEditingId(null)
+      onReload()
+    } catch (error) {
+      setFormError(error instanceof Error ? error.message : String(error))
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  function startEdit(row: BusyInsuranceStoredRow) {
+    setEditingId(row.id)
+    setEditDraft({ companyName: row.companyName, gstin: row.gstin, busyGroup: row.busyGroup })
+    setFormError(null)
+  }
+
+  return (
+    <div className="card mb-gap">
+      <div className="card__head">
+        <div>
+          <h3>Bodyshop Group of Account</h3>
+          <div className="sub">
+            Admin insert or update. Insurance company before C/O maps to BUSY Group and GSTIN.
+            {loading ? ' Loading…' : ` ${rows.length} mapping${rows.length === 1 ? '' : 's'}.`}
+          </div>
+        </div>
+      </div>
+      <div className="card__body dense">
+        {loadError && (
+          <div className="toast error" style={{ marginBottom: 12 }}>
+            <Icon name="alert" size={14} />
+            {loadError}. Preview is using the {fallbackCount}-row seed until this table is applied.
+          </div>
+        )}
+        {!loadError && usingFallback && !loading && (
+          <div className="toast" style={{ marginBottom: 12 }}>
+            No persisted mappings yet. Preview is using the {fallbackCount}-row seed.
+          </div>
+        )}
+        {formError && (
+          <div className="toast error" style={{ marginBottom: 12 }}>
+            <Icon name="alert" size={14} />
+            {formError}
+          </div>
+        )}
+
+        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(220px, 2fr) minmax(160px, 1fr) minmax(180px, 1.4fr) auto', gap: 8, marginBottom: 12, alignItems: 'end' }}>
+          <label>
+            <div style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 4 }}>Insurance company</div>
+            <input className="inp" value={draft.companyName} onChange={(e) => setDraft((current) => ({ ...current, companyName: e.target.value }))} placeholder="Name before C/O" />
+          </label>
+          <label>
+            <div style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 4 }}>GSTIN</div>
+            <input className="inp" value={draft.gstin} onChange={(e) => setDraft((current) => ({ ...current, gstin: e.target.value }))} placeholder="22AAAAA0000A1Z5" />
+          </label>
+          <label>
+            <div style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 4 }}>Group of Account</div>
+            <input className="inp" value={draft.busyGroup} onChange={(e) => setDraft((current) => ({ ...current, busyGroup: e.target.value }))} placeholder="BUSY group spelling" />
+          </label>
+          <button type="button" className="btn btn--primary btn--sm" disabled={saving || Boolean(loadError)} onClick={() => void handleInsert()}>
+            {saving && editingId == null ? 'Saving…' : 'Add group'}
+          </button>
+        </div>
+
+        {rows.length === 0 ? (
+          <div className="empty-state">No persisted Group of Account mappings.</div>
+        ) : (
+          <div className="tbl-wrap scroll">
+            <table className="tbl">
+              <thead>
+                <tr>
+                  <th>Insurance company</th>
+                  <th>GSTIN</th>
+                  <th>Group of Account</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((row) => {
+                  const editing = editingId === row.id
+                  return (
+                    <tr key={row.id}>
+                      <td>
+                        {editing ? (
+                          <input className="inp" value={editDraft.companyName} onChange={(e) => setEditDraft((current) => ({ ...current, companyName: e.target.value }))} />
+                        ) : row.companyName}
+                      </td>
+                      <td>
+                        {editing ? (
+                          <input className="inp" value={editDraft.gstin} onChange={(e) => setEditDraft((current) => ({ ...current, gstin: e.target.value }))} />
+                        ) : (
+                          <code style={{ fontSize: 11 }}>{row.gstin}</code>
+                        )}
+                      </td>
+                      <td>
+                        {editing ? (
+                          <input className="inp" value={editDraft.busyGroup} onChange={(e) => setEditDraft((current) => ({ ...current, busyGroup: e.target.value }))} />
+                        ) : row.busyGroup}
+                      </td>
+                      <td style={{ whiteSpace: 'nowrap' }}>
+                        {editing ? (
+                          <>
+                            <button type="button" className="btn btn--primary btn--sm" disabled={saving} onClick={() => void handleUpdate(row.id)}>
+                              Save
+                            </button>
+                            {' '}
+                            <button type="button" className="btn btn--ghost btn--sm" disabled={saving} onClick={() => setEditingId(null)}>
+                              Cancel
+                            </button>
+                          </>
+                        ) : (
+                          <button type="button" className="btn btn--ghost btn--sm" disabled={saving} onClick={() => startEdit(row)}>
+                            Edit
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
           </div>
         )}
       </div>

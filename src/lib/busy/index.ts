@@ -9,7 +9,15 @@ export {
   BUSY_LABOUR_INVOICE_IN_CHUNK,
   normalizeInvoiceNumber,
 } from './eligibility.ts'
-export { matchBusyInsurance, readAuthoritativeGstin, BUSY_INSURANCE_MASTER } from './insuranceMaster.ts'
+export { matchBusyInsurance, readAuthoritativeGstin, BUSY_INSURANCE_MASTER, type BusyInsuranceMasterRow } from './insuranceMaster.ts'
+export {
+  fetchBusyInsuranceMaster,
+  insertBusyInsuranceMaster,
+  updateBusyInsuranceMaster,
+  isBusyAdmin,
+  masterRowsForTransform,
+  type BusyInsuranceStoredRow,
+} from './insuranceSource.ts'
 export { inclusiveFromNet, formatInr, roundPaise, nearestWholeRupee, roundOffToNearestRupee } from './money.ts'
 export {
   classifyBusyInvoice,

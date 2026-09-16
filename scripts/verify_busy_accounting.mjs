@@ -8,7 +8,7 @@ import { resolveBusyBranch, resolveDebtorGroup, BUSY_DEBTOR_GROUPS } from '../sr
 import { existsSync, readFileSync } from 'node:fs'
 import { isDateInInclusiveRange, dateRangeError, formatBusyBillDate, parsePartsInvoiceDate } from '../src/lib/busy/dates.ts'
 import { invoiceMatchesPortalSeries } from '../src/lib/busy/eligibility.ts'
-import { matchBusyInsurance, readAuthoritativeGstin } from '../src/lib/busy/insuranceMaster.ts'
+import { BUSY_INSURANCE_MASTER, matchBusyInsurance, readAuthoritativeGstin } from '../src/lib/busy/insuranceMaster.ts'
 import { inclusiveFromNet, nearestWholeRupee, roundOffToNearestRupee } from '../src/lib/busy/money.ts'
 import { classifyBusyInvoice, parseBodyshopPartyName, PDI_PARTY_NAME, resolvePartyName } from '../src/lib/busy/partyName.ts'
 import {
@@ -972,6 +972,30 @@ test('unmapped Bodyshop insurer is surfaced and blocked from Party/voucher expor
   assert.equal(result.summary.unmappedBodyshop, 1)
   assert.equal(result.partyRows.length, 0)
   assert.equal(result.invoiceRows.length, 0)
+})
+
+test('Bodyshop Group of Account can be added through the insurance master without changing the seed', () => {
+  const account = 'MAGMA GENERAL INSURANCE COMPANY LIMITED C/O PRAJAPATI DIPAKKUMAR MAGANBHAI'
+  const extra = [
+    ...BUSY_INSURANCE_MASTER,
+    {
+      companyName: 'MAGMA GENERAL INSURANCE COMPANY LIMITED',
+      gstin: '08AABCM1234A1Z1',
+      busyGroup: 'MAGMA HDI',
+    },
+  ]
+  const result = transformBusyAccounting({
+    labourRows: [labour({ account, sr_type: 'Accidental Repair' })],
+    partsLines: [],
+    fromDate: '2026-09-01',
+    toDate: '2026-09-10',
+    insuranceMaster: extra,
+  })
+  assert.equal(result.preview[0].status, 'ready')
+  assert.equal(result.preview[0].debtorGroup, 'MAGMA HDI')
+  assert.equal(result.preview[0].gstin, '08AABCM1234A1Z1')
+  assert.equal(result.partyRows[0].Group, 'MAGMA HDI')
+  assert.equal(result.summary.unmappedBodyshop, 0)
 })
 
 test('duplicate Party Names still export once after GSTIN addition', () => {

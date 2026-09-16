@@ -32,7 +32,7 @@ Party Account columns are `Party Name`, `Group`, `GSTIN`.
 
 - Normal: branch debtor group; GSTIN only if an authoritative Labour/DMS GSTIN exists (`psf_revenue_dms` currently has no GSTIN column, so this stays blank).
 - PDI: Party `CASH AT SITAPURA`, Sitapura debtor group, GSTIN blank unless an authoritative source GSTIN exists.
-- Bodyshop (`Account` contains `C/O`): Party Name remains first two words before `C/O` plus everything after `C/O`. Group and GSTIN come from `src/lib/busy/insuranceMaster.ts` (INSU.DATA.xlsx). Do not use the branch debtor group. Unmapped insurers are blocked and shown in validation.
+- Bodyshop (`Account` contains `C/O`): Party Name remains first two words before `C/O` plus everything after `C/O`. Group and GSTIN come from `public.busy_insurance_master` (DBL-0067), maintained by admin on `/busy`. Matching logic stays in `src/lib/busy/insuranceMaster.ts`. Do not use the branch debtor group. Unmapped insurers are blocked and shown in validation. The original INSU.DATA rows are the seed/fallback only. This is not the planned SA Settings catalog (BODYSHOP-INSURER-001 / DBL-0042).
 
 Do not assume `voucher rows = eligible invoices × 3`.
 

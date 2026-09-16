@@ -1,12 +1,15 @@
 /**
  * BUSY Bodyshop insurance mapping.
  *
- * Source: INSU.DATA.xlsx (INSURANCE CO. NAME / GST NUMBER / BUSY GROUP).
+ * Live authority: public.busy_insurance_master (DBL-0067), maintained on /busy.
+ * BUSY_INSURANCE_MASTER below is the original INSU.DATA seed and the fallback
+ * used by tests / when the table is not applied yet.
+ *
  * Exact BUSY GROUP spellings are preserved, including known source typos.
  *
  * BODYSHOP-INSURER-001 / DBL-0042 is a planned SA policy-name catalog and is
  * not this mapping. BUSY debtor groups already live as TypeScript constants
- * in branch.ts; this master follows the same reusable-mapping pattern.
+ * in branch.ts.
  */
 
 export interface BusyInsuranceMasterRow {
@@ -93,7 +96,10 @@ function keysForRow(row: BusyInsuranceMasterRow): string[] {
   ])]
 }
 
-export function matchBusyInsurance(account: unknown): BusyInsuranceMatch {
+export function matchBusyInsurance(
+  account: unknown,
+  master: readonly BusyInsuranceMasterRow[] = BUSY_INSURANCE_MASTER,
+): BusyInsuranceMatch {
   const insurerPortion = extractInsurerPortion(account)
   const normalized = normalizeInsuranceName(insurerPortion)
   if (!normalized) {
@@ -106,8 +112,9 @@ export function matchBusyInsurance(account: unknown): BusyInsuranceMatch {
 
   type Hit = { row: BusyInsuranceMasterRow; score: number; key: string }
   const hits: Hit[] = []
+  const rows = master.length > 0 ? master : BUSY_INSURANCE_MASTER
 
-  for (const row of BUSY_INSURANCE_MASTER) {
+  for (const row of rows) {
     for (const key of keysForRow(row)) {
       if (normalized === key) {
         hits.push({ row, score: 2000 + key.length, key })
