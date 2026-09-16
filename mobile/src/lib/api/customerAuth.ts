@@ -80,6 +80,22 @@ function rpcErrorMessage(error: { message?: string } | null, fallback: string): 
   return fallback
 }
 
+export function filterToLatestVehicleOnly(list: CustomerVehicle[]): CustomerVehicle[] {
+  if (!list || list.length <= 1) return list || []
+  const sorted = [...list].sort((a, b) => {
+    // 1. Active in-service vehicle comes first (invoice_done_at is null)
+    const activeA = !a.invoice_done_at ? 1 : 0
+    const activeB = !b.invoice_done_at ? 1 : 0
+    if (activeA !== activeB) return activeB - activeA
+
+    // 2. Latest check-in or invoice date
+    const dateA = new Date(a.invoice_done_at || a.created_at || 0).getTime()
+    const dateB = new Date(b.invoice_done_at || b.created_at || 0).getTime()
+    return dateB - dateA
+  })
+  return sorted.slice(0, 1)
+}
+
 export async function customerStartSession(
   username: string,
   password: string
@@ -94,9 +110,10 @@ export async function customerStartSession(
   }
 
   const payload = data as CustomerSessionResult
-  const vehicles = Array.isArray(payload.vehicles)
+  const rawVehicles = Array.isArray(payload.vehicles)
     ? payload.vehicles.map((v, i) => mapVehicle(v as unknown as Record<string, unknown>, i))
     : []
+  const vehicles = filterToLatestVehicleOnly(rawVehicles)
 
   if (!payload.session_token || vehicles.length === 0) {
     return { success: false, error: 'No vehicle found for this mobile number.' }
@@ -123,5 +140,6 @@ export async function customerListMyVehicles(sessionToken: string): Promise<Cust
     p_session_token: sessionToken,
   })
   if (error || !data) return []
-  return (data as Record<string, unknown>[]).map((v, i) => mapVehicle(v, i))
+  const mapped = (data as Record<string, unknown>[]).map((v, i) => mapVehicle(v, i))
+  return filterToLatestVehicleOnly(mapped)
 }

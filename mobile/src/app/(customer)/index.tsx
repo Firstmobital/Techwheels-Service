@@ -1,8 +1,6 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import {
   ActivityIndicator,
-  Animated,
-  Easing,
   Linking,
   Modal,
   ScrollView,
@@ -35,29 +33,6 @@ export default function CustomerDashboardScreen() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [selectedStageModal, setSelectedStageModal] = useState<number | null>(null)
-
-  // Flowing light beam animation value for Flipkart-style tracker
-  const lightAnim = useRef(new Animated.Value(0)).current
-
-  useEffect(() => {
-    const loop = Animated.loop(
-      Animated.sequence([
-        Animated.timing(lightAnim, {
-          toValue: 1,
-          duration: 2000,
-          easing: Easing.inOut(Easing.ease),
-          useNativeDriver: true,
-        }),
-        Animated.timing(lightAnim, {
-          toValue: 0,
-          duration: 0,
-          useNativeDriver: true,
-        }),
-      ])
-    )
-    loop.start()
-    return () => loop.stop()
-  }, [lightAnim])
 
   const load = useCallback(async () => {
     if (!token) return
@@ -117,11 +92,6 @@ export default function CustomerDashboardScreen() {
     { title: 'Bay Work', icon: '🔧', desc: `Technician: ${asText(job?.technician_name) || 'Assigned'} · Bay ${asText(job?.bay_no) || 'Floor'}` },
     { title: 'Ready', icon: '✅', desc: 'Repairs completed & tested for delivery' },
   ]
-
-  const lightTranslate = lightAnim.interpolate({
-    inputRange: [0, 1],
-    outputRange: [-100, 300],
-  })
 
   return (
     <CustomerScreen title="Dashboard" subtitle="Live service job card for the selected vehicle">
@@ -241,7 +211,7 @@ export default function CustomerDashboardScreen() {
               </View>
             </View>
 
-            {/* Flipkart-Style Track Bar with Flowing Light Beam */}
+            {/* Clean Progress Track Bar */}
             <View className="my-3 relative">
               {/* Background Grey Track Line */}
               <View className="h-2 bg-slate-200 rounded-full overflow-hidden relative">
@@ -249,18 +219,6 @@ export default function CustomerDashboardScreen() {
                 <View
                   className="h-full bg-blue-600 rounded-full"
                   style={{ width: `${((currentStageIndex + 1) / trackerStages.length) * 100}%` }}
-                />
-
-                {/* Animated Moving Neon Light Beam */}
-                <Animated.View
-                  style={{
-                    position: 'absolute',
-                    top: 0,
-                    bottom: 0,
-                    width: 60,
-                    backgroundColor: 'rgba(255, 255, 255, 0.85)',
-                    transform: [{ translateX: lightTranslate }],
-                  }}
                 />
               </View>
 

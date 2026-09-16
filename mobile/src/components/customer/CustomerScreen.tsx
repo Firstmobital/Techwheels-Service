@@ -94,7 +94,22 @@ export function CustomerScreen({
     { label: 'Dealership Feedback', icon: '⭐', route: '/(customer)/feedback', desc: 'Rate your service experience' },
   ]
 
-  const isDelivered = Boolean(selectedVehicle?.invoice_done_at || selectedVehicle?.payment_status === 'Paid')
+  const [hasSeenNotifications, setHasSeenNotifications] = useState(false)
+
+  // Helper to check if event happened within last 24 hours (1 day)
+  const isDeliveredToday = useMemo(() => {
+    if (!selectedVehicle?.invoice_done_at) return false
+    try {
+      const eventTime = new Date(selectedVehicle.invoice_done_at).getTime()
+      if (Number.isNaN(eventTime)) return false
+      const diffHours = (Date.now() - eventTime) / (1000 * 60 * 60)
+      return diffHours >= 0 && diffHours <= 24
+    } catch {
+      return false
+    }
+  }, [selectedVehicle?.invoice_done_at])
+
+  const showNotificationDot = !hasSeenNotifications && isDeliveredToday
 
   return (
     <SafeAreaView className="flex-1 bg-slate-50" edges={['top']}>
@@ -114,7 +129,10 @@ export function CustomerScreen({
           <View className="flex-row items-center gap-2">
             {/* Notification Bell Icon */}
             <TouchableOpacity
-              onPress={() => setShowNotifications(true)}
+              onPress={() => {
+                setHasSeenNotifications(true)
+                setShowNotifications(true)
+              }}
               accessibilityRole="button"
               accessibilityLabel="Notifications"
               hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
@@ -131,7 +149,7 @@ export function CustomerScreen({
               }}
             >
               <Text style={{ fontSize: 18 }}>🔔</Text>
-              {isDelivered && (
+              {showNotificationDot && (
                 <View
                   style={{
                     position: 'absolute',
