@@ -16,15 +16,37 @@ import {
 import { useCustomerSession } from '../../context/CustomerSessionContext'
 import { customerGetGatePass, customerGetSettlement } from '../../lib/api/customerPortal'
 
-// Helper to check if date matches today's date in Asia/Kolkata
+// Helper to parse date strings in various formats (DD/MM/YYYY, ISO, toLocaleString)
+function parseKolkataDateOnly(dateString: string | null | undefined): string | null {
+  if (!dateString) return null
+  try {
+    const str = String(dateString).trim()
+    const dmy = str.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})/)
+    if (dmy) {
+      const day = dmy[1].padStart(2, '0')
+      const month = dmy[2].padStart(2, '0')
+      const year = dmy[3]
+      return `${year}-${month}-${day}`
+    }
+    const d = new Date(str)
+    if (!isNaN(d.getTime())) {
+      return d.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
+    }
+    return null
+  } catch {
+    return null
+  }
+}
+
 function isIssuedToday(dateString: string | null | undefined): boolean {
-  if (!dateString) return false
+  if (!dateString) return true
   try {
     const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
-    const targetDate = new Date(dateString).toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
-    return todayStr === targetDate
+    const targetDateStr = parseKolkataDateOnly(dateString)
+    if (!targetDateStr) return true
+    return todayStr === targetDateStr
   } catch {
-    return false
+    return true
   }
 }
 
@@ -68,15 +90,14 @@ export default function CustomerGatePassScreen() {
 
   const hasIssuedRecord = Boolean(asText(pass?.gate_pass_no))
   const issuedAtDate = asText(pass?.issued_at) || asText(settlement?.updated_at) || asText(selected?.invoice_done_at)
-  const isExpired = hasIssuedRecord && issuedAtDate ? !isIssuedToday(issuedAtDate) : false
+  const isPastDate = hasIssuedRecord && issuedAtDate ? !isIssuedToday(issuedAtDate) : false
 
   const billedVal = Number(settlement?.total_billed ?? settlement?.billed_amount ?? pass?.billed_amount ?? selected?.billed_amount ?? 0)
   const receivedVal = Number(settlement?.amount_received ?? pass?.amount_received ?? selected?.amount_received ?? 0)
   const remainingVal = Math.max(0, billedVal - receivedVal)
 
-  // Gate pass is valid if issued by Accounts Desk or marked paid/cleared, and not expired
-  const isGatepassAuthorized = hasIssuedRecord || pass?.payment_status === 'Paid' || settlement?.status === 'received' || (billedVal > 0 && remainingVal === 0) || Boolean(pass?.keep_on_credit)
-  const isValidToday = isGatepassAuthorized && !isExpired
+  // Gate pass is authorized if issued by Accounts Desk or marked paid/cleared
+  const isGatepassAuthorized = hasIssuedRecord || Boolean(pass?.qr_token) || pass?.payment_status === 'Paid' || settlement?.status === 'received' || (billedVal > 0 && remainingVal === 0) || Boolean(pass?.keep_on_credit)
 
   const billed = formatInr(billedVal)
   const received = formatInr(receivedVal)
@@ -203,21 +224,8 @@ export default function CustomerGatePassScreen() {
         <ActivityIndicator color="#2563eb" className="py-8" />
       ) : (
         <>
-          {isExpired ? (
-            /* 1. EXPIRED GATE PASS (PREVIOUS DAY) */
-            <CustomerCard style={{ backgroundColor: '#fef2f2', borderColor: '#fca5a5', borderLeftWidth: 4, borderLeftColor: '#ef4444' }}>
-              <View className="flex-row">
-                <Text className="text-[26px] mr-3">⚠️</Text>
-                <View className="flex-1">
-                  <Text className="text-[14px] font-extrabold text-red-900">Gate Pass Expired (Valid For 1 Day Only)</Text>
-                  <Text className="text-[12.5px] text-red-800 mt-1 leading-5">
-                    Vehicle Gate Pass is only valid for the day it is issued. Since this pass was issued on {formatWhen(issuedAtDate)}, please request the Accounts Desk to re-issue a fresh Gate Pass for today.
-                  </Text>
-                </View>
-              </View>
-            </CustomerCard>
-          ) : !isValidToday ? (
-            /* 2. PENDING ACCOUNTS DESK RELEASE */
+          {!isGatepassAuthorized ? (
+            /* 1. PENDING ACCOUNTS DESK RELEASE */
             <CustomerCard style={{ backgroundColor: '#f8fafc', borderColor: '#cbd5e1', borderLeftWidth: 4, borderLeftColor: '#0284c7' }}>
               <View className="flex-row">
                 <Text className="text-[26px] mr-3">⏳</Text>
@@ -240,7 +248,7 @@ export default function CustomerGatePassScreen() {
               </View>
             </CustomerCard>
           ) : (
-            /* 3. VALID OFFICIAL GATE PASS (DIRECTLY ACCESSIBLE & DOWNLOADABLE) */
+            /* 2. VALID OFFICIAL GATE PASS (DIRECTLY ACCESSIBLE & DOWNLOADABLE) */
             <CustomerCard
               style={{
                 borderWidth: 2,

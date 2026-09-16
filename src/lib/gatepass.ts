@@ -115,8 +115,9 @@ export async function issueAccountsGatePass(record: IssuedGatePassRecord): Promi
 
   // Sync to post_feedback_bot_data for customer app (port 5174)
   try {
+    const normClean = norm.replace(/\s+/g, '')
     const botRow = {
-      vehicle_registration_number: norm,
+      vehicle_registration_number: normClean,
       customer_name: payload.customer_name || 'Customer',
       mobile_number: payload.customer_phone || null,
       rating: 5,
@@ -130,7 +131,7 @@ export async function issueAccountsGatePass(record: IssuedGatePassRecord): Promi
     const { data: existing } = await supabase
       .from('post_feedback_bot_data')
       .select('id')
-      .eq('vehicle_registration_number', norm)
+      .or(`vehicle_registration_number.eq.${normClean},vehicle_registration_number.eq.${norm}`)
       .eq('mode', 'customer_gatepass_payload')
 
     if (existing && existing.length > 0) {
