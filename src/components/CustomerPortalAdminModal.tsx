@@ -110,6 +110,21 @@ export function CustomerPortalAdminModal({
           if (row.mode === 'customer_estimate_payload' || row.mode === 'customer_payment_payload') continue
           if (row.feedback_text?.trim().startsWith('{')) continue
 
+          // Strictly filter for actual problem/complaint records, do NOT treat customer reviews / feedback as problems
+          const isConcern =
+            row.mode === 'customer_portal_concern' ||
+            row.mode === 'customer_complaint' ||
+            row.mode === 'customer_complaint_portal' ||
+            row.mode === 'customer_mobile_pwa' ||
+            String(row.service_type || '').toLowerCase().includes('issues') ||
+            String(row.service_type || '').toLowerCase().includes('concern') ||
+            String(row.service_type || '').toLowerCase().includes('complaint') ||
+            String(row.feedback_text || '').includes('Issue:') ||
+            String(row.feedback_text || '').includes('[Complaint') ||
+            String(row.feedback_text || '').includes('Point 1:')
+
+          if (!isConcern) continue
+
           parsedComplaints.push(row as ComplaintRecord)
         }
       }
@@ -154,6 +169,42 @@ export function CustomerPortalAdminModal({
       setLoading(false)
     }
   }, [])
+
+  async function handleDeleteComplaint(id?: number) {
+    if (!id) return
+    if (!window.confirm('Are you sure you want to delete this test problem/complaint?')) return
+    try {
+      setLoading(true)
+      const { error } = await supabase.from('post_feedback_bot_data').delete().eq('id', id)
+      if (error) throw error
+      await loadDataForVehicle(currentReg)
+    } catch (err) {
+      console.error('Failed to delete problem:', err)
+      alert('Error deleting problem')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  async function handleClearAllTestProblems() {
+    if (!window.confirm('Clear all test customer problems? Note: Actual customer reviews and ratings will NOT be touched.')) return
+    try {
+      setLoading(true)
+      const { error } = await supabase
+        .from('post_feedback_bot_data')
+        .delete()
+        .in('mode', ['customer_portal_concern', 'customer_complaint_portal', 'customer_complaint', 'customer_mobile_pwa'])
+
+      if (error) throw error
+      await loadDataForVehicle(currentReg)
+      alert('All test customer problems cleared successfully!')
+    } catch (err) {
+      console.error('Failed to clear test problems:', err)
+      alert('Error clearing test problems')
+    } finally {
+      setLoading(false)
+    }
+  }
 
   useEffect(() => {
     if (!isOpen) return
@@ -357,11 +408,22 @@ export function CustomerPortalAdminModal({
                       Customer Problem Details
                     </h3>
                   </div>
-                  {activeKm && (
-                    <span className="bg-amber-100 text-amber-900 text-xs font-mono font-bold px-2 py-0.5 rounded-md">
-                      KM: {activeKm}
-                    </span>
-                  )}
+                  <div className="flex items-center gap-2">
+                    {activeKm && (
+                      <span className="bg-amber-100 text-amber-900 text-xs font-mono font-bold px-2 py-0.5 rounded-md">
+                        KM: {activeKm}
+                      </span>
+                    )}
+                    {complaints.length > 0 && (
+                      <button
+                        onClick={() => void handleClearAllTestProblems()}
+                        className="text-[11px] font-bold text-rose-600 hover:text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 px-2.5 py-0.5 rounded-md transition-colors cursor-pointer"
+                        title="Clear all test problems from database"
+                      >
+                        🧹 Clear Test Problems
+                      </button>
+                    )}
+                  </div>
                 </div>
 
                 {complaints.length > 0 ? (
@@ -378,11 +440,22 @@ export function CustomerPortalAdminModal({
                               Submission #{cIdx + 1}
                               {comp.service_type ? ` · ${comp.service_type}` : ''}
                             </span>
-                            <span className="text-[11px] text-slate-500 font-medium">
-                              {comp.complaint_date_time
-                                ? new Date(comp.complaint_date_time).toLocaleString('en-IN')
-                                : 'Recent'}
-                            </span>
+                            <div className="flex items-center gap-2">
+                              <span className="text-[11px] text-slate-500 font-medium">
+                                {comp.complaint_date_time
+                                  ? new Date(comp.complaint_date_time).toLocaleString('en-IN')
+                                  : 'Recent'}
+                              </span>
+                              {comp.id && (
+                                <button
+                                  onClick={() => void handleDeleteComplaint(comp.id)}
+                                  className="text-slate-400 hover:text-rose-600 transition-colors p-1 rounded-md hover:bg-rose-100 cursor-pointer"
+                                  title="Delete this test problem"
+                                >
+                                  🗑️
+                                </button>
+                              )}
+                            </div>
                           </div>
 
                           <div className="space-y-1.5">
@@ -420,7 +493,14 @@ export function CustomerPortalAdminModal({
         </div>
 
         {/* ── FOOTER ── */}
-        <div className="bg-slate-100 px-6 py-3.5 border-t border-slate-200 flex items-center justify-end">
+        <div className="bg-slate-100 px-6 py-3.5 border-t border-slate-200 flex items-center justify-between">
+          <button
+            onClick={() => void handleClearAllTestProblems()}
+            className="text-rose-700 hover:text-rose-800 hover:bg-rose-50 border border-rose-300 px-3.5 py-1.5 rounded-xl text-xs font-bold shadow-2xs transition-all cursor-pointer"
+            title="Clear all test customer problems entered during testing"
+          >
+            🧹 Clear All Test Problems
+          </button>
           <button
             onClick={onClose}
             className="bg-slate-900 hover:bg-black text-white px-5 py-2 rounded-xl text-xs font-extrabold shadow-sm transition-all cursor-pointer"

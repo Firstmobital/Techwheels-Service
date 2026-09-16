@@ -725,6 +725,21 @@ export default function ServiceAdvisorPage() {
           if (row.mode === 'customer_payment_payload') continue
           if (row.feedback_text?.trim().startsWith('{')) continue
 
+          // Strictly filter for problem/complaint records, do NOT treat customer reviews / PSF feedback as vehicle breakdown problems
+          const isConcern =
+            row.mode === 'customer_portal_concern' ||
+            row.mode === 'customer_complaint' ||
+            row.mode === 'customer_complaint_portal' ||
+            row.mode === 'customer_mobile_pwa' ||
+            String(row.service_type || '').toLowerCase().includes('issues') ||
+            String(row.service_type || '').toLowerCase().includes('concern') ||
+            String(row.service_type || '').toLowerCase().includes('complaint') ||
+            String(row.feedback_text || '').includes('Issue:') ||
+            String(row.feedback_text || '').includes('[Complaint') ||
+            String(row.feedback_text || '').includes('Point 1:')
+
+          if (!isConcern) continue
+
           const parsed = parseCustomerProblemFeedback(row.feedback_text)
           if (parsed.issues.length === 0) continue
 
@@ -2078,6 +2093,24 @@ export default function ServiceAdvisorPage() {
     }
   }
 
+  async function handleClearAllTestCustomerProblems() {
+    if (!window.confirm('Clear all test customer problems? Note: Actual customer reviews and ratings will NOT be touched.')) return
+    try {
+      showToast('Clearing test customer problems...')
+      const { error } = await supabase
+        .from('post_feedback_bot_data')
+        .delete()
+        .in('mode', ['customer_portal_concern', 'customer_complaint_portal', 'customer_complaint', 'customer_mobile_pwa'])
+
+      if (error) throw error
+      await loadCustomerProblems()
+      showToast('All test customer problems cleared')
+    } catch (err) {
+      console.error('Failed to clear test problems:', err)
+      showToast('Failed to clear test problems')
+    }
+  }
+
   function copyComplaintLinkToClipboard() {
     if (complaintLinkModal.url) {
       navigator.clipboard.writeText(complaintLinkModal.url)
@@ -2205,6 +2238,14 @@ export default function ServiceAdvisorPage() {
           title="Open Customer App & Bodyshop Customer Service Portal"
         >
           <span>📱</span> Customer App
+        </button>
+        <button
+          type="button"
+          onClick={() => void handleClearAllTestCustomerProblems()}
+          className="rounded-lg px-3.5 py-2 text-sm font-semibold shadow-sm transition border border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100 flex items-center gap-1.5 cursor-pointer"
+          title="Clear all test customer problems entered from customer app/portal while preserving customer reviews"
+        >
+          <span>🧹</span> Clear Test Problems
         </button>
       </div>
 
