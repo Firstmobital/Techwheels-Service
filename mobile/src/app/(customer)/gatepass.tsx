@@ -16,6 +16,18 @@ import {
 import { useCustomerSession } from '../../context/CustomerSessionContext'
 import { customerGetGatePass } from '../../lib/api/customerPortal'
 
+// Helper to check if date matches today's date in Asia/Kolkata
+function isIssuedToday(dateString: string | null | undefined): boolean {
+  if (!dateString) return false
+  try {
+    const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
+    const targetDate = new Date(dateString).toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
+    return todayStr === targetDate
+  } catch {
+    return false
+  }
+}
+
 export default function CustomerGatePassScreen() {
   const { token, selectedReg, vehicles } = useCustomerSession()
   const selected = vehicles.find((v) => v.reg_number === selectedReg) || vehicles[0]
@@ -26,7 +38,6 @@ export default function CustomerGatePassScreen() {
 
   const load = useCallback(async () => {
     if (!token) return
-    setLoading(true)
     setError(null)
     try {
       setPass(await customerGetGatePass(token, selectedReg))
@@ -37,20 +48,28 @@ export default function CustomerGatePassScreen() {
     }
   }, [token, selectedReg])
 
+  // Fast 3.5s auto-refresh
   useFocusEffect(
     useCallback(() => {
+      setLoading(true)
       void load()
       const timer = setInterval(() => {
         void load()
-      }, 8000)
+      }, 3500)
       return () => clearInterval(timer)
     }, [load])
   )
 
-  const issued = Boolean(asText(pass?.gate_pass_no))
+  const hasIssuedRecord = Boolean(asText(pass?.gate_pass_no))
+  const issuedAtDate = asText(pass?.issued_at) || asText(selected?.invoice_done_at)
+  const isExpired = hasIssuedRecord && issuedAtDate ? !isIssuedToday(issuedAtDate) : false
+
   const billedVal = Number(pass?.billed_amount ?? selected?.billed_amount ?? 0)
-  const receivedVal = Number(pass?.amount_received ?? selected?.amount_received ?? (issued ? billedVal : 0))
+  const receivedVal = Number(pass?.amount_received ?? selected?.amount_received ?? 0)
   const remainingVal = Math.max(0, billedVal - receivedVal)
+
+  // Valid gatepass requires: issued by accounts, not expired (issued today), and cleared settlement
+  const isValidToday = hasIssuedRecord && !isExpired && (remainingVal === 0 || pass?.keep_on_credit || pass?.payment_status === 'Paid')
 
   const billed = formatInr(billedVal)
   const received = formatInr(receivedVal)
@@ -66,7 +85,7 @@ export default function CustomerGatePassScreen() {
   const effectiveInvoiceDate = asText(pass?.invoice_date) || (selected?.invoice_done_at ? new Date(selected.invoice_done_at).toISOString().split('T')[0] : new Date().toISOString().split('T')[0])
   const clearanceStatus = asText(pass?.settlement_reason) || (remainingVal === 0 ? 'Payment received' : asText(pass?.payment_status) || 'Accounts Cleared')
 
-  // Generate official Workshop Gatepass HTML for Print / PDF export (Matching exact Workshop standard)
+  // Generate official Workshop Gatepass HTML for Print / PDF export
   const generateOfficialGatepassHtml = () => {
     const printed = new Date().toLocaleString('en-IN', {
       day: 'numeric',
@@ -90,6 +109,7 @@ export default function CustomerGatePassScreen() {
     .header-top { display: flex; justify-content: space-between; font-size: 11px; color: #555; margin-bottom: 24px; border-bottom: 1px solid #eee; padding-bottom: 6px; }
     h1 { font-size: 20px; font-weight: 800; margin: 0 0 4px; letter-spacing: 0.04em; color: #000; text-transform: uppercase; }
     .sub { color: #555; margin: 0 0 16px; font-size: 12.5px; }
+    .validity-tag { display: inline-block; background: #ecfdf5; border: 1px solid #a7f3d0; color: #065f46; font-size: 11px; font-weight: bold; padding: 2px 8px; border-radius: 4px; margin-bottom: 12px; }
     table { width: 100%; border-collapse: collapse; margin-bottom: 24px; }
     th, td { text-align: left; padding: 7px 10px; border: 1px solid #d4d4d8; font-size: 12.5px; vertical-align: middle; }
     th { width: 32%; background: #f8fafc; font-weight: 600; color: #1e293b; }
@@ -110,6 +130,7 @@ export default function CustomerGatePassScreen() {
   </div>
   <h1>VEHICLE GATEPASS</h1>
   <p class="sub">Techwheels Service · Mechanical · Printed ${printed}</p>
+  <div class="validity-tag">✓ Valid for 1 Day: ${new Date().toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', day: 'numeric', month: 'short', year: 'numeric' })}</div>
   <table>
     <tr><th>Job card</th><td><strong>${effectiveJcNumber}</strong></td></tr>
     <tr><th>Registration</th><td><strong>${effectiveReg}</strong></td></tr>
@@ -134,7 +155,7 @@ export default function CustomerGatePassScreen() {
 
   // Print or Download Official PDF
   const handlePrintOrDownloadPdf = async () => {
-    if (!issued) return
+    if (!isValidToday) return
     setBusy(true)
     try {
       const html = generateOfficialGatepassHtml()
@@ -151,7 +172,7 @@ export default function CustomerGatePassScreen() {
     } catch (err) {
       console.error('Print error:', err)
       await Share.share({
-        message: `Official Vehicle Gate Pass #${asText(pass?.gate_pass_no)} for ${effectiveReg} (Job Card: ${effectiveJcNumber}). Status: Accounts Cleared.`,
+        message: `Official Vehicle Gate Pass #${asText(pass?.gate_pass_no)} for ${effectiveReg} (Job Card: ${effectiveJcNumber}). Status: Accounts Cleared. Valid Today Only.`,
       })
     } finally {
       setBusy(false)
@@ -174,14 +195,30 @@ export default function CustomerGatePassScreen() {
         <ActivityIndicator color="#2563eb" className="py-8" />
       ) : (
         <>
-          {!issued ? (
+          {/* EXPIRED GATE PASS NOTICE (IF ISSUED ON PREVIOUS DAY) */}
+          {isExpired ? (
+            <CustomerCard style={{ backgroundColor: '#fef2f2', borderColor: '#fca5a5', borderLeftWidth: 4, borderLeftColor: '#ef4444' }}>
+              <View className="flex-row">
+                <Text className="text-[26px] mr-3">⚠️</Text>
+                <View className="flex-1">
+                  <Text className="text-[14px] font-extrabold text-red-900">Gate Pass Expired (Valid For 1 Day Only)</Text>
+                  <Text className="text-[12.5px] text-red-800 mt-1 leading-5">
+                    Vehicle Gate Pass is only valid for the day it is issued. Since this pass was issued on {formatWhen(issuedAtDate)}, please request the Accounts Desk to re-issue a fresh Gate Pass for today.
+                  </Text>
+                </View>
+              </View>
+            </CustomerCard>
+          ) : null}
+
+          {/* PENDING ACCOUNTS RELEASE NOTICE */}
+          {!isValidToday && !isExpired ? (
             <CustomerCard style={{ backgroundColor: '#fffbeb', borderColor: '#fde68a', borderLeftWidth: 4, borderLeftColor: '#f59e0b' }}>
               <View className="flex-row">
                 <Text className="text-[26px] mr-3">⏳</Text>
                 <View className="flex-1">
                   <Text className="text-[14px] font-extrabold text-amber-900">Gate Pass Under Clearance at Accounts Desk</Text>
                   <Text className="text-[12.5px] text-amber-800 mt-1 leading-5">
-                    Your vehicle settlement is under review. As soon as the Accounts desk confirms and releases the Gate Pass, the official clearance document will appear below for print & PDF download.
+                    Your vehicle settlement is under review. Gate pass will be unlocked once total payment is verified (Billed: {billed}, Received: {received}, Remaining: {remaining}) and released by the Accounts Desk for today's departure.
                   </Text>
                   <Text className="text-[11.5px] font-bold text-amber-800 mt-2">🔄 Live syncing with Dealership Accounts Desk…</Text>
                 </View>
@@ -193,7 +230,7 @@ export default function CustomerGatePassScreen() {
           <CustomerCard
             style={{
               borderWidth: 2,
-              borderColor: issued ? '#16a34a' : '#cbd5e1',
+              borderColor: isValidToday ? '#16a34a' : '#cbd5e1',
               backgroundColor: '#ffffff',
             }}
           >
@@ -208,14 +245,14 @@ export default function CustomerGatePassScreen() {
                     VEHICLE GATEPASS
                   </Text>
                 </View>
-                <View className={`px-2.5 py-1 rounded-full ${issued ? 'bg-green-100' : 'bg-amber-100'}`}>
-                  <Text className={`text-[11px] font-extrabold ${issued ? 'text-green-800' : 'text-amber-800'}`}>
-                    {issued ? '✅ VALID FOR VEHICLE EXIT' : '⏳ AWAITING CLEARANCE'}
+                <View className={`px-2.5 py-1 rounded-full ${isValidToday ? 'bg-green-100' : isExpired ? 'bg-red-100' : 'bg-amber-100'}`}>
+                  <Text className={`text-[11px] font-extrabold ${isValidToday ? 'text-green-800' : isExpired ? 'text-red-800' : 'text-amber-800'}`}>
+                    {isValidToday ? '✅ VALID FOR VEHICLE EXIT TODAY' : isExpired ? '❌ EXPIRED' : '⏳ AWAITING CLEARANCE'}
                   </Text>
                 </View>
               </View>
               <Text className="text-slate-500 text-[11px] mt-1">
-                Pass #{issued ? asText(pass?.gate_pass_no) : 'GP-PENDING'} · Issued: {issued ? (formatWhen(pass?.issued_at) || asText(pass?.issued_at)) : 'Pending'}
+                Pass #{isValidToday ? asText(pass?.gate_pass_no) : 'GP-PENDING'} · Valid: 1 Day Only ({new Date().toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', day: 'numeric', month: 'short', year: 'numeric' })})
               </Text>
             </View>
 
@@ -238,14 +275,14 @@ export default function CustomerGatePassScreen() {
               />
               <Row
                 label="Gatepass clearance"
-                value={clearanceStatus}
-                color="#15803d"
+                value={isValidToday ? clearanceStatus : 'Pending Accounts Verification'}
+                color={isValidToday ? '#15803d' : '#d97706'}
                 isBold
                 isLast
               />
             </View>
 
-            {/* 3 Signature Blocks (Matching Screenshot 3) */}
+            {/* 3 Signature Blocks */}
             <View className="flex-row justify-between border-t border-slate-200 pt-4 px-1 mb-4">
               <View className="flex-1 items-center">
                 <View className="w-16 border-t-2 border-slate-900 pt-1">
@@ -265,7 +302,7 @@ export default function CustomerGatePassScreen() {
             </View>
 
             {/* Print / Download Action */}
-            {issued ? (
+            {isValidToday ? (
               <View className="mt-2">
                 <PrimaryButton
                   label={busy ? 'Preparing PDF…' : '🖨️ Print / Download Gate Pass (PDF)'}

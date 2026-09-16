@@ -30,6 +30,9 @@ export function CustomerScreen({
   const pathname = usePathname()
   const { vehicles, selectedReg, setSelectedReg, signOut } = useCustomerSession()
   const [showMenu, setShowMenu] = useState(false)
+  const [showNotifications, setShowNotifications] = useState(false)
+
+  const selectedVehicle = vehicles.find((v) => v.reg_number === selectedReg) || vehicles[0]
 
   // Determine if this screen is the root customer home screen
   const isHomeScreen = pathname === '/(customer)' || pathname === '/(customer)/' || pathname === '/' || pathname === '/index'
@@ -40,6 +43,10 @@ export function CustomerScreen({
     const onBackPress = () => {
       if (showMenu) {
         setShowMenu(false)
+        return true
+      }
+      if (showNotifications) {
+        setShowNotifications(false)
         return true
       }
       if (!isHomeScreen) {
@@ -55,7 +62,7 @@ export function CustomerScreen({
 
     const backSubscription = BackHandler.addEventListener('hardwareBackPress', onBackPress)
     return () => backSubscription.remove()
-  }, [isHomeScreen, showMenu, router])
+  }, [isHomeScreen, showMenu, showNotifications, router])
 
   const handleLogout = () => {
     setShowMenu(false)
@@ -87,6 +94,8 @@ export function CustomerScreen({
     { label: 'Dealership Feedback', icon: '⭐', route: '/(customer)/feedback', desc: 'Rate your service experience' },
   ]
 
+  const isDelivered = Boolean(selectedVehicle?.invoice_done_at || selectedVehicle?.payment_status === 'Paid')
+
   return (
     <SafeAreaView className="flex-1 bg-slate-50" edges={['top']}>
       {/* Top App Header */}
@@ -103,25 +112,32 @@ export function CustomerScreen({
           </View>
 
           <View className="flex-row items-center gap-2">
-            {selectedReg ? (
-              <View className="bg-blue-50 border border-blue-200 rounded-xl px-2.5 py-1">
-                <Text className="text-[8px] font-black uppercase text-blue-500">Active Vehicle</Text>
-                <Text className="text-[11.5px] font-extrabold text-blue-800">{selectedReg}</Text>
-              </View>
-            ) : null}
+            {/* Notification Bell Icon */}
+            <TouchableOpacity
+              onPress={() => setShowNotifications(true)}
+              accessibilityRole="button"
+              accessibilityLabel="Notifications"
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              className="h-10 w-10 items-center justify-center rounded-xl bg-slate-100 border border-slate-200 relative"
+            >
+              <Text className="text-lg">🔔</Text>
+              {isDelivered && (
+                <View className="absolute top-1.5 right-1.5 w-2.5 h-2.5 bg-emerald-500 rounded-full ring-2 ring-white" />
+              )}
+            </TouchableOpacity>
 
-            {/* 3-Column / Hamburger Menu Button */}
+            {/* High-Contrast 3-Column / Hamburger Menu Button (Black Lines) */}
             <TouchableOpacity
               onPress={() => setShowMenu(true)}
               accessibilityRole="button"
-              accessibilityLabel="Open Menu"
+              accessibilityLabel="Open Navigation Menu"
               hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-              className="h-10 w-10 items-center justify-center rounded-xl bg-slate-900 shadow-sm"
+              className="h-10 w-10 items-center justify-center rounded-xl bg-slate-100 border-2 border-slate-900 shadow-sm"
             >
               <View className="items-center justify-center gap-[3.5px]">
-                <View className="w-5 h-[2.5px] bg-white rounded-full" />
-                <View className="w-5 h-[2.5px] bg-white rounded-full" />
-                <View className="w-5 h-[2.5px] bg-white rounded-full" />
+                <View className="w-5 h-[2.5px] bg-slate-900 rounded-full" />
+                <View className="w-5 h-[2.5px] bg-slate-900 rounded-full" />
+                <View className="w-5 h-[2.5px] bg-slate-900 rounded-full" />
               </View>
             </TouchableOpacity>
           </View>
@@ -167,30 +183,25 @@ export function CustomerScreen({
         </View>
       </ScrollView>
 
-      {/* 3-Column Menu Modal Drawer */}
+      {/* ── TOP-SLIDING MENU DRAWER (OPENS FROM TOP) ── */}
       <Modal
         visible={showMenu}
         transparent
-        animationType="slide"
+        animationType="fade"
         onRequestClose={() => setShowMenu(false)}
       >
         <Pressable
-          className="flex-1 bg-black/60 justify-end"
+          className="flex-1 bg-black/60 justify-start"
           onPress={() => setShowMenu(false)}
         >
           <Pressable
-            className="bg-white rounded-t-3xl pt-5 pb-8 px-5 max-h-[85%]"
+            className="bg-white rounded-b-3xl pt-12 pb-6 px-5 max-h-[85%] shadow-2xl border-b-2 border-slate-900"
             onPress={(e) => e.stopPropagation()}
           >
-            {/* Modal Drag Handle */}
-            <View className="items-center mb-4">
-              <View className="w-12 h-1.5 bg-slate-300 rounded-full" />
-            </View>
-
             <View className="flex-row items-center justify-between border-b border-slate-100 pb-3 mb-3">
               <View className="flex-row items-center gap-2.5">
-                <View className="w-8 h-8 rounded-lg bg-blue-600 items-center justify-center">
-                  <Text className="text-base">🚗</Text>
+                <View className="w-9 h-9 rounded-xl bg-blue-600 items-center justify-center shadow-xs">
+                  <Text className="text-lg">🚗</Text>
                 </View>
                 <View>
                   <Text className="text-slate-900 text-[16px] font-black">Customer Services Menu</Text>
@@ -199,13 +210,13 @@ export function CustomerScreen({
               </View>
               <TouchableOpacity
                 onPress={() => setShowMenu(false)}
-                className="w-8 h-8 rounded-full bg-slate-100 items-center justify-center"
+                className="w-9 h-9 rounded-full bg-slate-100 border border-slate-200 items-center justify-center"
               >
-                <Text className="text-slate-600 font-bold text-sm">✕</Text>
+                <Text className="text-slate-800 font-extrabold text-sm">✕</Text>
               </TouchableOpacity>
             </View>
 
-            <ScrollView className="space-y-2 mb-4" showsVerticalScrollIndicator={false}>
+            <ScrollView className="space-y-1.5 mb-3" showsVerticalScrollIndicator={false}>
               {/* Home Shortcut */}
               <TouchableOpacity
                 onPress={() => navigateTo('/(customer)')}
@@ -242,11 +253,71 @@ export function CustomerScreen({
             {/* Logout Action */}
             <TouchableOpacity
               onPress={handleLogout}
-              className="flex-row items-center justify-center bg-red-50 border border-red-200 rounded-2xl py-3.5"
+              className="flex-row items-center justify-center bg-red-50 border border-red-200 rounded-2xl py-3"
             >
-              <Icon name="log-out" size={18} color="#dc2626" strokeWidth={2} />
+              <Icon name="log-out" size={17} color="#dc2626" strokeWidth={2} />
               <Text className="text-red-600 font-extrabold text-sm ml-2">Log Out of Customer Portal</Text>
             </TouchableOpacity>
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      {/* ── NOTIFICATIONS POPUP MODAL ── */}
+      <Modal
+        visible={showNotifications}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowNotifications(false)}
+      >
+        <Pressable
+          className="flex-1 bg-black/60 justify-start"
+          onPress={() => setShowNotifications(false)}
+        >
+          <Pressable
+            className="bg-white rounded-b-3xl pt-12 pb-6 px-5 shadow-2xl border-b-2 border-blue-600"
+            onPress={(e) => e.stopPropagation()}
+          >
+            <View className="flex-row items-center justify-between border-b border-slate-100 pb-3 mb-3">
+              <View className="flex-row items-center gap-2">
+                <Text className="text-xl">🔔</Text>
+                <Text className="text-slate-900 text-base font-black">Live Workshop Notifications</Text>
+              </View>
+              <TouchableOpacity
+                onPress={() => setShowNotifications(false)}
+                className="w-8 h-8 rounded-full bg-slate-100 items-center justify-center"
+              >
+                <Text className="text-slate-700 font-bold">✕</Text>
+              </TouchableOpacity>
+            </View>
+
+            <View className="space-y-3">
+              {isDelivered ? (
+                <View className="bg-emerald-50 border border-emerald-200 p-3.5 rounded-2xl">
+                  <View className="flex-row items-center gap-2">
+                    <Text className="text-base">✅</Text>
+                    <Text className="text-emerald-900 font-black text-sm">Vehicle Ready for Delivery & Billing!</Text>
+                  </View>
+                  <Text className="text-emerald-800 text-xs mt-1 leading-5">
+                    Your vehicle <Text className="font-bold">{selectedReg}</Text> repairs and quality inspection are complete. You can make payment and collect your vehicle from the workshop.
+                  </Text>
+                </View>
+              ) : selectedVehicle?.jc_number ? (
+                <View className="bg-blue-50 border border-blue-200 p-3.5 rounded-2xl">
+                  <View className="flex-row items-center gap-2">
+                    <Text className="text-base">🛠️</Text>
+                    <Text className="text-blue-900 font-black text-sm">Service in Progress</Text>
+                  </View>
+                  <Text className="text-blue-800 text-xs mt-1 leading-5">
+                    Job Card <Text className="font-bold">#{selectedVehicle.jc_number}</Text> is currently active on the workshop floor under advisor{' '}
+                    <Text className="font-bold">{selectedVehicle.sa_display_name || selectedVehicle.sa_name || 'Service Team'}</Text>.
+                  </Text>
+                </View>
+              ) : (
+                <View className="bg-slate-50 border border-slate-200 p-3.5 rounded-2xl">
+                  <Text className="text-slate-600 text-xs">No pending alerts for this vehicle.</Text>
+                </View>
+              )}
+            </View>
           </Pressable>
         </Pressable>
       </Modal>
