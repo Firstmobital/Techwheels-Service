@@ -122,6 +122,9 @@ export default function CustomerPortalPage({
   // 3-Line Hamburger Slide-Over Menu Drawer
   const [showMenuDrawer, setShowMenuDrawer] = useState(false)
 
+  // Interactive Service Stage Details Modal State (0: Intake, 1: Job Card, 2: Estimate, 3: Repairs, 4: Ready)
+  const [selectedStageModal, setSelectedStageModal] = useState<number | null>(null)
+
   // Sync initial vehicle update
   useEffect(() => {
     setVehicle(initialVehicle)
@@ -139,7 +142,9 @@ export default function CustomerPortalPage({
     // 1. Native Android Hardware/Gesture Back Button Listener via Capacitor
     try {
       CapApp.addListener('backButton', () => {
-        if (showMenuDrawer) {
+        if (selectedStageModal !== null) {
+          setSelectedStageModal(null)
+        } else if (showMenuDrawer) {
           setShowMenuDrawer(false)
         } else if (showPendingApprovalModal) {
           setShowPendingApprovalModal(false)
@@ -167,7 +172,9 @@ export default function CustomerPortalPage({
 
     // 2. Browser History fallback
     const handlePopState = (e: PopStateEvent) => {
-      if (showPendingApprovalModal) {
+      if (selectedStageModal !== null) {
+        setSelectedStageModal(null)
+      } else if (showPendingApprovalModal) {
         setShowPendingApprovalModal(false)
       } else if (showGatepassModal) {
         setShowGatepassModal(false)
@@ -189,7 +196,7 @@ export default function CustomerPortalPage({
       }
       window.removeEventListener('popstate', handlePopState)
     }
-  }, [showPendingApprovalModal, showGatepassModal, showPaymentModal, showHistoryModal])
+  }, [selectedStageModal, showPendingApprovalModal, showGatepassModal, showPaymentModal, showHistoryModal, showMenuDrawer, showVehiclePicker])
 
   // Sync browser history state when activeTab changes
   useEffect(() => {
@@ -657,22 +664,53 @@ export default function CustomerPortalPage({
     }
   }
 
-  // Live Allocated Service Technician from Floor Incharge
+  // Live Allocated Service Technician & Workshop Bay from Floor Incharge
   const [allocatedTechnician, setAllocatedTechnician] = useState<{
     name: string
     code?: string | null
     bay_no?: string | null
     assigned_at?: string | null
     work_status?: string | null
+    out_ts?: string | null
+    time_diff?: string | null
+    remark?: string | null
   } | null>(null)
 
   async function loadAllocatedTechnician() {
     if (!vehicle.reg_number && !vehicle.jc_number && !vehicle.owner_phone) return
     const regNorm = (vehicle.reg_number || '').trim().toUpperCase().replace(/\s+/g, '')
+    const jcNorm = (vehicle.jc_number || '').trim().toUpperCase()
     const phoneNorm = (vehicle.owner_phone || '').replace(/[^0-9]/g, '').slice(-10)
 
     try {
-      // 1. Check post_feedback_bot_data for live Floor Incharge technician allocation payload
+      // 1. PRIMARY SOURCE: Direct technician_assignments from Floor Incharge
+      if (jcNorm) {
+        const { data: assignData, error: assignError } = await supabase
+          .from('technician_assignments')
+          .select('*')
+          .eq('job_card_number', jcNorm)
+          .order('id', { ascending: false })
+          .limit(1)
+
+        if (!assignError && assignData && assignData.length > 0) {
+          const row = assignData[0]
+          if (row.technician_name && row.technician_name.toLowerCase() !== 'not required') {
+            setAllocatedTechnician({
+              name: row.technician_name,
+              code: row.technician_code,
+              bay_no: row.bay_no,
+              assigned_at: row.assigned_at,
+              work_status: row.work_status,
+              out_ts: row.out_ts,
+              time_diff: row.time_diff,
+              remark: row.remark,
+            })
+            return
+          }
+        }
+      }
+
+      // 2. Check post_feedback_bot_data for live Floor Incharge technician allocation payload
       const orParts: string[] = []
       if (regNorm) orParts.push(`vehicle_registration_number.ilike.%${regNorm}%`)
       if (phoneNorm) orParts.push(`mobile_number.ilike.%${phoneNorm}%`)
@@ -697,6 +735,7 @@ export default function CustomerPortalPage({
                 bay_no: parsed.bay_no,
                 assigned_at: parsed.assigned_at,
                 work_status: parsed.status,
+                remark: parsed.remark || null,
               })
               return
             }
@@ -712,11 +751,11 @@ export default function CustomerPortalPage({
         }
       }
 
-      // 2. Check service_reception_entries for suggested_technician_name
+      // 3. Check service_reception_entries for suggested_technician_name
       if (regNorm) {
         const { data: recData } = await supabase
           .from('service_reception_entries')
-          .select('suggested_technician_name, suggested_technician_code')
+          .select('suggested_technician_name, suggested_technician_code, jc_number')
           .eq('reg_number', regNorm)
           .not('suggested_technician_name', 'is', null)
           .order('created_at', { ascending: false })
@@ -744,6 +783,13 @@ export default function CustomerPortalPage({
 
     const channel = supabase
       .channel(`cust-portal-${vehicle.reg_number}`)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'technician_assignments' },
+        () => {
+          void loadAllocatedTechnician()
+        }
+      )
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'customer_estimates' },
@@ -1848,22 +1894,30 @@ export default function CustomerPortalPage({
               )}
             </div>
 
-            {/* ── 5-STAGE LIVE SERVICE JOURNEY STEPPER (PLACED AT BOTTOM) ── */}
-            <div className="mobile-glass-dark rounded-3xl p-5 border border-white/10 shadow-xl">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-xs font-extrabold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
-                  <span>🚀</span> Live Service Journey
-                </h3>
+            {/* ── 5-STAGE LIVE SERVICE JOURNEY STEPPER (INTERACTIVE ON CLICK) ── */}
+            <div className="mobile-glass-dark rounded-3xl p-5 border border-white/10 shadow-xl space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-xs font-extrabold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
+                    <span>🚀</span> Live Service Journey
+                  </h3>
+                  <div className="flex items-center gap-2 mt-0.5">
+                    <span className="font-mono text-xs font-bold text-amber-300">
+                      {vehicle.jc_number ? `JC #${vehicle.jc_number}` : 'JC Pending'}
+                    </span>
+                    <span className="text-[10px] text-slate-500">· Tap stage for details</span>
+                  </div>
+                </div>
                 <span className="bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-[10px] font-bold px-2.5 py-0.5 rounded-full">
                   Stage {currentStageIndex + 1} of {stages.length}
                 </span>
               </div>
 
-              {/* Progress Line */}
-              <div className="relative flex justify-between items-center mb-6 px-1">
-                <div className="absolute top-1/2 left-4 right-4 -translate-y-1/2 h-1 bg-slate-800 z-0 rounded-full" />
+              {/* Progress Line with Clickable Nodes */}
+              <div className="relative flex justify-between items-center px-1 pt-2 pb-1">
+                <div className="absolute top-[26px] left-4 right-4 -translate-y-1/2 h-1 bg-slate-800 z-0 rounded-full" />
                 <div
-                  className="absolute top-1/2 left-4 -translate-y-1/2 h-1 bg-gradient-to-r from-blue-500 via-indigo-500 to-emerald-500 z-0 rounded-full transition-all duration-500"
+                  className="absolute top-[26px] left-4 -translate-y-1/2 h-1 bg-gradient-to-r from-blue-500 via-indigo-500 to-emerald-500 z-0 rounded-full transition-all duration-500"
                   style={{ width: `${(currentStageIndex / (stages.length - 1)) * 92}%` }}
                 />
 
@@ -1871,9 +1925,15 @@ export default function CustomerPortalPage({
                   const isDone = i < currentStageIndex
                   const isCurrent = i === currentStageIndex
                   return (
-                    <div key={stg.label} className="relative z-10 flex flex-col items-center">
+                    <button
+                      key={stg.label}
+                      type="button"
+                      onClick={() => setSelectedStageModal(i)}
+                      className="relative z-10 flex flex-col items-center group cursor-pointer focus:outline-none transition active:scale-95"
+                      title={`Click to view ${stg.label} details`}
+                    >
                       <div
-                        className={`w-9 h-9 sm:w-10 sm:h-10 rounded-full flex items-center justify-center text-xs sm:text-sm font-bold transition-all duration-300 shadow-md ${
+                        className={`w-9 h-9 sm:w-10 sm:h-10 rounded-full flex items-center justify-center text-xs sm:text-sm font-bold transition-all duration-300 shadow-md group-hover:ring-4 group-hover:ring-blue-400/50 ${
                           isDone
                             ? 'bg-emerald-500 text-slate-950 ring-4 ring-emerald-500/20'
                             : isCurrent
@@ -1884,23 +1944,32 @@ export default function CustomerPortalPage({
                         {isDone ? '✓' : stg.icon}
                       </div>
                       <span
-                        className={`text-[10px] sm:text-[11px] mt-2 font-bold tracking-tight text-center ${
+                        className={`text-[10px] sm:text-[11px] mt-2 font-bold tracking-tight text-center transition group-hover:text-white ${
                           isCurrent ? 'text-blue-400 font-extrabold' : isDone ? 'text-emerald-400' : 'text-slate-500'
                         }`}
                       >
                         {stg.label}
                       </span>
-                    </div>
+                    </button>
                   )
                 })}
               </div>
 
-              {/* Current Status Callout */}
-              <div className="bg-slate-900/90 rounded-2xl p-4 border border-white/10 flex items-start gap-3">
-                <span className="text-2xl mt-0.5">{stages[currentStageIndex].icon}</span>
+              {/* Current Status Callout (Clickable for full details) */}
+              <div
+                onClick={() => setSelectedStageModal(currentStageIndex)}
+                className="tap-bounce bg-slate-900/90 hover:bg-slate-900 rounded-2xl p-4 border border-white/10 hover:border-blue-400/40 flex items-start gap-3 cursor-pointer transition group"
+              >
+                <span className="text-2xl mt-0.5 group-hover:scale-110 transition">{stages[currentStageIndex].icon}</span>
                 <div className="flex-1 min-w-0">
-                  <div className="text-sm font-bold text-white">
-                    Current Stage: {stages[currentStageIndex].label}
+                  <div className="flex items-center justify-between">
+                    <div className="text-sm font-bold text-white flex items-center gap-1.5">
+                      <span>Current Stage: {stages[currentStageIndex].label}</span>
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 pulse-live-indicator" />
+                    </div>
+                    <span className="text-[10px] font-bold text-blue-400 group-hover:underline flex items-center gap-0.5">
+                      Details ➔
+                    </span>
                   </div>
                   <p className="text-xs text-slate-400 mt-0.5 leading-relaxed">
                     {stages[currentStageIndex].desc}
@@ -3544,6 +3613,149 @@ export default function CustomerPortalPage({
                 Okay, Got it
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── MODAL: INTERACTIVE STAGE DETAILS (WITH LIVE JOB CARD, ADVISOR, TECHNICIAN & BAY) ── */}
+      {selectedStageModal !== null && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="w-full max-w-sm mobile-glass-dark rounded-3xl p-6 border border-blue-500/30 shadow-2xl space-y-4 animate-in zoom-in-95">
+            {/* Header with Stage Icon & Status */}
+            <div className="flex items-center justify-between border-b border-white/10 pb-3">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-blue-600 to-indigo-700 flex items-center justify-center text-2xl shadow-lg shadow-blue-500/25 ring-2 ring-white/10">
+                  {stages[selectedStageModal]?.icon || '📋'}
+                </div>
+                <div>
+                  <div className="text-[10px] font-extrabold uppercase tracking-wider text-blue-400">
+                    Stage {selectedStageModal + 1} of {stages.length}
+                  </div>
+                  <h3 className="text-base font-extrabold text-white">
+                    {stages[selectedStageModal]?.label}
+                  </h3>
+                </div>
+              </div>
+
+              <span
+                className={`text-[10px] font-extrabold px-2.5 py-1 rounded-full uppercase tracking-wider ${
+                  selectedStageModal < currentStageIndex
+                    ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
+                    : selectedStageModal === currentStageIndex
+                    ? 'bg-blue-500/20 text-blue-300 border border-blue-500/40 pulse-live-indicator'
+                    : 'bg-slate-800 text-slate-400 border border-white/10'
+                }`}
+              >
+                {selectedStageModal < currentStageIndex
+                  ? '✓ Completed'
+                  : selectedStageModal === currentStageIndex
+                  ? '⏳ Active Now'
+                  : 'Upcoming'}
+              </span>
+            </div>
+
+            {/* Description */}
+            <p className="text-xs text-slate-300 leading-relaxed bg-slate-900/60 p-3 rounded-2xl border border-white/5">
+              {stages[selectedStageModal]?.desc}
+            </p>
+
+            {/* Live Data Grid (Job Card, Advisor, Technician, Bay, Status) */}
+            <div className="bg-slate-900/90 rounded-2xl p-4 border border-white/10 space-y-2.5 text-xs">
+              {/* 1. Live Job Card Number */}
+              <div className="flex justify-between items-center py-1 border-b border-white/5">
+                <span className="text-slate-400 flex items-center gap-1.5">
+                  <span>📋</span>
+                  <span>Job Card No:</span>
+                </span>
+                <span className="font-mono font-bold text-amber-300">
+                  {vehicle.jc_number || 'Under Process'}
+                </span>
+              </div>
+
+              {/* 2. Service Advisor */}
+              <div className="flex justify-between items-center py-1 border-b border-white/5">
+                <span className="text-slate-400 flex items-center gap-1.5">
+                  <span>👨‍💼</span>
+                  <span>Service Advisor:</span>
+                </span>
+                <span className="font-bold text-white">
+                  {cleanAdvisorPersonName(vehicle.sa_display_name || vehicle.sa_name) || 'Assigned on check-in'}
+                </span>
+              </div>
+
+              {/* 3. Allocated Technician (from Floor Incharge) */}
+              <div className="flex justify-between items-center py-1 border-b border-white/5">
+                <span className="text-slate-400 flex items-center gap-1.5">
+                  <span>🔧</span>
+                  <span>Assigned Technician:</span>
+                </span>
+                <span className="font-bold text-emerald-300">
+                  {allocatedTechnician?.name || (selectedStageModal >= 3 ? 'In allocation queue' : 'Assigned in repair stage')}
+                </span>
+              </div>
+
+              {/* 4. Allocated Bay Number (from Floor Incharge) */}
+              <div className="flex justify-between items-center py-1 border-b border-white/5">
+                <span className="text-slate-400 flex items-center gap-1.5">
+                  <span>🏢</span>
+                  <span>Workshop Bay:</span>
+                </span>
+                {allocatedTechnician?.bay_no ? (
+                  <span className="font-mono font-bold bg-blue-600/30 text-blue-200 px-2 py-0.5 rounded border border-blue-400/30 text-[11px]">
+                    Bay {allocatedTechnician.bay_no}
+                  </span>
+                ) : (
+                  <span className="text-slate-400 italic">
+                    {selectedStageModal >= 3 ? 'Allocating Bay...' : '—'}
+                  </span>
+                )}
+              </div>
+
+              {/* 5. Work Status */}
+              <div className="flex justify-between items-center py-1 border-b border-white/5">
+                <span className="text-slate-400 flex items-center gap-1.5">
+                  <span>⚡</span>
+                  <span>Floor Work Status:</span>
+                </span>
+                <span className="font-bold text-slate-200 capitalize">
+                  {allocatedTechnician?.work_status
+                    ? allocatedTechnician.work_status.replace(/_/g, ' ')
+                    : (selectedStageModal < currentStageIndex ? 'Completed' : selectedStageModal === currentStageIndex ? 'In Process' : 'Pending')}
+                </span>
+              </div>
+
+              {/* 6. Floor Incharge Remark (if any) */}
+              {allocatedTechnician?.remark && (
+                <div className="py-1 border-b border-white/5">
+                  <div className="text-[11px] text-slate-400 mb-0.5">Floor Incharge Notes:</div>
+                  <div className="text-slate-200 text-[11px] italic bg-slate-950 p-2 rounded-xl border border-white/5">
+                    "{allocatedTechnician.remark}"
+                  </div>
+                </div>
+              )}
+
+              {/* 7. Timestamps */}
+              {allocatedTechnician?.assigned_at && (
+                <div className="flex justify-between items-center py-1 text-[11px] text-slate-400">
+                  <span>Assigned Time:</span>
+                  <span className="font-mono text-slate-300">
+                    {new Date(allocatedTechnician.assigned_at).toLocaleTimeString('en-IN', {
+                      hour: '2-digit',
+                      minute: '2-digit',
+                    })}
+                  </span>
+                </div>
+              )}
+            </div>
+
+            {/* Close Button */}
+            <button
+              type="button"
+              onClick={() => setSelectedStageModal(null)}
+              className="tap-bounce w-full py-3 rounded-2xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 text-white font-extrabold text-xs shadow-lg shadow-blue-500/25 transition"
+            >
+              Close Stage Details
+            </button>
           </div>
         </div>
       )}
