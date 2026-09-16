@@ -3,7 +3,7 @@
 **Implementation Plan:** MOBILE-011  
 **Last Updated:** 2026-09-16  
 **Total Phases:** 6 (0–5)  
-**Current Progress:** 1/6 phases complete; 1–3 coded, awaiting DB apply + device smoke  
+**Current Progress:** Phase 0 done; 1–3 coded (bodyshop visual port in Expo); apply `20260916123000`; device smoke + OTA still open  
 **Status:** In Progress  
 
 Authority: [MOBILE-011_CUSTOMER_STAFF_SINGLE_APP_PLAN.md](MOBILE-011_CUSTOMER_STAFF_SINGLE_APP_PLAN.md)  
@@ -17,9 +17,9 @@ Pre-plan audit: [MOBILE-011 audit](../../program/evidence/MOBILE-011_CUSTOMER_ST
 | Phase | Name | Duration | Status | Completion % |
 |-------|------|----------|--------|--------------|
 | 0 | Remove client `service_role` | 0.5 day | ✅ Done | 100% |
-| 1 | Customer RPCs + web cutover | ~1 week | 🟡 In Progress | 80% |
-| 2 | Expo audience shell + staff signup lock | ~1 week | 🟡 In Progress | 80% |
-| 3 | Customer screens (port web portal) | ~1.5–2 weeks | 🟡 In Progress | 80% |
+| 1 | Customer RPCs + web cutover | ~1 week | 🟡 In Progress | 90% |
+| 2 | Expo audience shell + staff signup lock | ~1 week | 🟡 In Progress | 90% |
+| 3 | Customer screens (bodyshop parity, RPC-only) | ~1.5–2 weeks | 🟡 In Progress | 85% |
 | 4 | Phone OTP (optional step-up) | ~1 week | ⏳ Not Started | 0% |
 | 5 | Release, OTA, archive `bodyshop/` | ~3–5 days | ⏳ Not Started | 0% |
 
@@ -53,16 +53,17 @@ Pre-plan audit: [MOBILE-011 audit](../../program/evidence/MOBILE-011_CUSTOMER_ST
 **Goal:** Phone=phone login RPC. Web `authenticateCustomer` replaced. Customer data is only that phone’s vehicles.
 
 ### Deliverables
-- [ ] Re-grep `full_metadata.sql` for `customer_profiles` / `customer_sessions` / `customer_*` functions (must still be absent)
-- [ ] Migration: `customer_profiles`, `customer_sessions`, indexes, RLS enabled, no `anon` table GRANT
-- [ ] `customer_start_session(username, password)`: both must be the same 10-digit mobile; return **all** vehicles for that phone
-- [ ] `customer_list_my_vehicles` + job/history/complaint/estimate/gate-pass RPCs scoped to session phone
-- [ ] Generic error on mismatch / unknown phone; no fake vehicle; no `endsWith`
-- [ ] Rate limit on start-session
-- [ ] Replace `src/lib/api/customer.ts` `authenticateCustomer` with the RPC (same rule on web LoginPage)
-- [ ] Remove `?reg=` auto-login in `src/App.tsx`
-- [ ] Apply to target DB; refresh `supabase/backups/full_metadata.sql`
-- [ ] Test matrix: C-01, C-02, C-02b, C-02c, C-03, C-03b, C-06, C-07, C-11
+- [x] Re-grep `full_metadata.sql` for `customer_profiles` / `customer_sessions` / `customer_*` functions (absent before apply, 2026-09-16)
+- [x] Migration: `customer_profiles`, `customer_sessions`, indexes, RLS enabled, no `anon` table GRANT (`20260916120000`)
+- [x] `customer_start_session(username, password)`: both must be the same 10-digit mobile; return **all** vehicles for that phone
+- [x] `customer_list_my_vehicles` + job/history/complaint/estimate/gate-pass RPCs scoped to session phone (`20260916120000` applied 2026-09-16)
+- [ ] Parity RPCs `customer_get_settlement` / `customer_submit_booking` / `customer_get_repair_card` + complaint KM (`20260916123000` — apply in SQL editor)
+- [x] Generic error on mismatch / unknown phone; no fake vehicle; no `endsWith`
+- [x] Rate limit on start-session
+- [x] Replace `src/lib/api/customer.ts` `authenticateCustomer` with the RPC (same rule on web LoginPage)
+- [x] Remove `?reg=` auto-login in `src/App.tsx`
+- [ ] Apply `20260916123000` to target DB; refresh `supabase/backups/full_metadata.sql`
+- [ ] Test matrix: C-01, C-02, C-02b, C-02c, C-03, C-03b, C-06, C-07, C-11 (device/SQL evidence)
 
 ### Success Criteria
 - [ ] C-01, C-02, C-02b, C-02c, C-03, C-03b, C-06, C-07, C-11 pass
@@ -96,25 +97,31 @@ Pre-plan audit: [MOBILE-011 audit](../../program/evidence/MOBILE-011_CUSTOMER_ST
 
 ---
 
-## Phase 3: Customer Screens
+## Phase 3: Customer Screens (bodyshop parity)
 
-**Goal:** Port web `CustomerPortalPage` behavior into Expo. RPC-only. Phone-scoped vehicle list on every screen.
+**Goal:** Recreate `bodyshop/` customer **visuals, workflows, and calculations** in Expo. RPC-only. Phone-scoped vehicle list on every screen. When `bodyshop/` is archived, these screens already exist in `mobile/`.
+
+Authority: plan §5.3. Do not copy React DOM. Do not invent prices, warranty, or QR tokens.
 
 ### Deliverables
-- [ ] Dashboard (reg, model, KM if present, service type, advisor, in-service vs delivered)
-- [ ] Problem / complaint submit
-- [ ] Estimate list + approve/reject when RPC returns real rows
-- [ ] Bills / invoice links when paths exist
-- [ ] Gate pass only if workshop issued
-- [ ] Feedback submit
-- [ ] Multi-vehicle picker when session returns more than one reg for that phone
-- [ ] `mobile/src/lib/api/customerPortal.ts`
-- [ ] Do not import `bodyshop/` pages or `parts_pricing.json` synthetic estimates
+- [x] Shared chrome (`CustomerScreen`, vehicle picker, footer, 6-tab nav matching `BottomNav`)
+- [x] Dashboard: gradient hero, action tiles (incl. booking + tracker), workshop record, advisor card, RPC poll
+- [x] Problem: multi-problem + KM + notes (`complaint.tsx`)
+- [x] Estimate: quotation switcher, line table, totals if issued, approve/reject modal
+- [x] Bills: settlement math + invoice URLs only (`invoices.tsx`)
+- [x] Gate pass: pending vs issued; QR only if workshop `qr_token`; share/print; no security-mode fake exit
+- [x] Feedback: stars + tags (`feedback.tsx`)
+- [x] Book service (`booking.tsx`, hidden tab, dashboard tile)
+- [x] Repair tracker (`tracker.tsx`, hidden tab, dashboard tile)
+- [x] `mobile/src/lib/api/customerPortal.ts` + `mobile/src/lib/customer/math.ts`
+- [x] Do not import `bodyshop/` pages, sandbox credentials, or `parts_pricing.json`
+- [ ] Apply `20260916123000` so settlement / booking / repair / KM RPCs exist on the target DB
+- [ ] Device smoke C-08, C-09, C-09b, C-09c, C-13–C-16
 
 ### Success Criteria
-- [ ] C-08, C-09 pass
-- [ ] Feature parity with web portal **data rules** (nulls stay null)
-- [ ] Visual polish may follow MOBILE-009; function cannot wait on redesign
+- [ ] C-08, C-09, C-09b, C-09c, C-13, C-14, C-15, C-16 pass
+- [ ] Every `bodyshop/` customer workflow in plan §5.3 exists in Expo
+- [ ] Null workshop fields stay pending / `—` (no Creative Edition / fake JC / fake QR)
 
 ### Dependencies
 - Phase 2 routing

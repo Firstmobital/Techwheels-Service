@@ -3,7 +3,7 @@
 **Project:** One Expo app — Login as Customer / Login as Staff  
 **Plan:** [MOBILE-011_CUSTOMER_STAFF_SINGLE_APP_PLAN.md](MOBILE-011_CUSTOMER_STAFF_SINGLE_APP_PLAN.md)  
 **Created:** 2026-09-15  
-**Last Updated:** 2026-09-16 — Phase 0: remove client `service_role` only (no dashboard rotation)  
+**Last Updated:** 2026-09-16 — bodyshop visual/workflow lock; Phase 3 screens coded in Expo  
 **Status:** In Progress  
 
 Legend: `[ ]` pending · `[x]` done · `N/A` skipped with note
@@ -43,6 +43,7 @@ Legend: `[ ]` pending · `[x]` done · `N/A` skipped with note
 - [x] **1.8** `customer_submit_complaint` / `customer_submit_feedback` (`customer_portal_concern` / `customer_portal_feedback`)
 - [x] **1.9** `customer_list_estimates` / `customer_set_estimate_decision`
 - [x] **1.10** `customer_get_gate_pass` — null if not issued
+- [ ] **1.10b** Apply `20260916123000`: `customer_get_settlement`, `customer_submit_booking`, `customer_get_repair_card`, complaint KM write-back
 - [x] **1.11** GRANT EXECUTE to `anon` on session RPCs; 10 attempts / 15 min per phone key
 - [x] **1.12** Staff JWT rejected via `customer_reject_staff_jwt`
 
@@ -75,19 +76,20 @@ Legend: `[ ]` pending · `[x]` done · `N/A` skipped with note
 
 ---
 
-## PHASE 3: CUSTOMER SCREENS
+## PHASE 3: CUSTOMER SCREENS (BODYSHOP PARITY)
 
 - [x] **3.1** `mobile/src/lib/api/customerPortal.ts` wrappers only (no `.from(workshop_table)` in screens)
-- [x] **3.2** Dashboard from `customer_list_my_vehicles` + `customer_get_active_job` (selected vehicle ∈ my list)
-- [x] **3.3** Complaint
-- [x] **3.4** Estimate (empty state if none)
-- [x] **3.5** Invoices / bills
-- [x] **3.6** Gate pass (hidden/disabled if null)
-- [x] **3.7** Feedback
+- [x] **3.2** Dashboard from `customer_list_my_vehicles` + `customer_get_active_job` (hero, action tiles, workshop record, advisor card)
+- [x] **3.3** Complaint — multi-problem + KM + notes
+- [x] **3.4** Estimate — table/totals/approve-reject when RPC returns real rows; empty if none
+- [x] **3.5** Invoices / bills — settlement math on workshop figures only
+- [x] **3.6** Gate pass — pending if null; QR only if workshop `qr_token`; no security-mode fake exit
+- [x] **3.7** Feedback — stars + tags
 - [x] **3.8** Multi-vehicle picker
-- [x] **3.9** Do not copy `bodyshop/src/pages/*` or sandbox quick-test credentials onto production UI
-- [ ] **3.10** C-08, C-09
-- [ ] **3.11** Browser/web portal still works via same RPCs
+- [x] **3.8b** Book service (`booking.tsx`) + repair tracker (`tracker.tsx`) from dashboard (hidden tabs)
+- [x] **3.9** Do not copy `bodyshop/src` DOM, sandbox credentials, `parts_pricing.json`, or client-made QR
+- [ ] **3.10** C-08, C-09, C-09b, C-09c, C-13–C-16 on device
+- [ ] **3.11** Browser/web portal still works via same login RPCs
 - [ ] **3.12** Evidence: `../evidence/MOBILE-011_PHASE3_SCREENS.md`
 
 ---

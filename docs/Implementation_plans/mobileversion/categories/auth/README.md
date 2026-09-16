@@ -13,8 +13,9 @@
 
 **Related live surfaces:**
 - Staff: `mobile/src/app/(auth)/login.tsx`, `mobile/src/app/(tabs)/`
+- Customer Expo shell (bodyshop workflows, RPC data): `mobile/src/app/(customer)/`, `mobile/src/app/(customer-auth)/`
 - Web dual login (must share RPCs): `src/pages/LoginPage.tsx`, `src/pages/CustomerPortalPage.tsx`
-- Do not ship: `bodyshop/` (Capacitor prototype)
+- Visual/workflow reference until Phase 5 archive: `bodyshop/` (do not ship Capacitor; do not copy fakes)
 
 **Active plans:**
 - `MOBILE-011` — One Expo app, Login as Customer / Login as Staff
