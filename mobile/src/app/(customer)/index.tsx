@@ -183,6 +183,14 @@ export default function CustomerDashboardScreen() {
               accent="#e11d48"
               onPress={() => router.push('/(customer)/tracker')}
             />
+            <ActionTile
+              emoji="🏛️"
+              title="Helpdesk & Escalation"
+              subtitle="Dealership & Tata Motors support"
+              border="#fed7aa"
+              accent="#ea580c"
+              onPress={() => router.push('/(customer)/helpdesk')}
+            />
           </View>
 
           <CustomerCard>

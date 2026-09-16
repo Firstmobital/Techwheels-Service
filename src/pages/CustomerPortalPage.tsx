@@ -110,7 +110,7 @@ export default function CustomerPortalPage({
   const [feedbackSuccess, setFeedbackSuccess] = useState(false)
 
   // Escalation Matrix Form State (Pre-service Call & Mail)
-  const [escalationTarget, setEscalationTarget] = useState<'advisor' | 'crm' | 'gm'>('advisor')
+  const [escalationTarget, setEscalationTarget] = useState<'crm' | 'sm' | 'gm' | 'tataccm' | 'tataregional'>('crm')
   const [escalationSubject, setEscalationSubject] = useState('')
   const [escalationMessage, setEscalationMessage] = useState('')
   const [escalationSubmitting, setEscalationSubmitting] = useState(false)
@@ -1159,47 +1159,70 @@ export default function CustomerPortalPage({
     }
   }
 
-  // ── ESCALATION MATRIX CONTACT CONFIGURATION ──
-  const advisorDisplayName = vehicle.sa_display_name || vehicle.sa_name || 'Assigned Service Advisor'
-  const advisorPhone = (vehicle as any).sa_phone || '9876543210'
-  const advisorEmail = (vehicle as any).sa_email || 'service.advisor@techwheels.in'
-
-  const escalationTiers = [
+  // ── OFFICIAL HELPDESK & ESCALATION MATRIX CONTACT CONFIGURATION ──
+  const dealershipEscalationTiers = [
     {
-      level: 'Level 1: Primary Advisor',
-      title: advisorDisplayName,
-      role: 'Dedicated Service Advisor',
-      desc: 'Vehicle check-in, repair updates, initial inspection & pre-service problem discussion.',
-      phone: advisorPhone,
-      email: advisorEmail,
-      whatsapp: advisorPhone,
-      badge: 'First Point of Contact',
+      level: 'Level 1: Customer Relationship Manager',
+      title: 'Payal Makhija',
+      role: 'Customer Relationship Manager (CRM)',
+      desc: 'Vehicle service queries, appointment coordination, delay issues & immediate customer support.',
+      phone: '9116667296',
+      email: 'Crmservice@techwheels.in',
+      whatsapp: '9116667296',
+      badge: 'Level 1 · CRM Desk',
       badgeColor: 'bg-blue-500/20 text-blue-300 border-blue-500/30',
+      icon: '👩‍💼',
+    },
+    {
+      level: 'Level 2: Service Manager',
+      title: 'Govind Singh',
+      role: 'Service Manager (Workshop Operations)',
+      desc: 'Technical disputes, estimation queries, repair quality oversight & workshop floor management.',
+      phone: '9116667274',
+      email: 'service@techwheels.in',
+      whatsapp: '9116667274',
+      badge: 'Level 2 · Service Head',
+      badgeColor: 'bg-amber-500/20 text-amber-300 border-amber-500/30',
       icon: '👨‍💼',
     },
     {
-      level: 'Level 2: Customer Relationship & Works Manager',
-      title: 'Er. Rajesh Verma',
-      role: 'CRM & Workshop Operations Manager',
-      desc: 'Escalate if your advisor is unreachable, repair is delayed, or estimate needs dispute resolution.',
-      phone: '9811223344',
-      email: 'crm.manager@techwheels.in',
-      whatsapp: '9811223344',
-      badge: 'Operations Escalation',
-      badgeColor: 'bg-amber-500/20 text-amber-300 border-amber-500/30',
-      icon: '👔',
-    },
-    {
-      level: 'Level 3: General Manager (Workshop Head)',
-      title: 'Mr. Sunil Sharma',
-      role: 'General Manager - Service & Quality',
-      desc: 'Direct executive intervention for critical complaints, repeat issues, or billing grievances.',
-      phone: '9822334455',
-      email: 'gm.service@techwheels.in',
-      whatsapp: '9822334455',
-      badge: 'Executive Escalation',
+      level: 'Level 3: General Manager',
+      title: 'Mr Rajesh Panday',
+      role: 'General Manager (Dealership Head)',
+      desc: 'Executive escalation, unresolved customer grievances, critical repeat issues & billing disputes.',
+      phone: '9257051606',
+      email: 'gmservice@techwheels.in',
+      whatsapp: '9257051606',
+      badge: 'Level 3 · Dealership GM',
       badgeColor: 'bg-rose-500/20 text-rose-300 border-rose-500/30',
       icon: '🏛️',
+    },
+  ]
+
+  const tataMotorsEscalationTiers = [
+    {
+      level: 'Level 1: Tata Motors Customer Care Manager',
+      title: 'Mr Akshay Jethalia',
+      role: 'Customer Care Manager (Tata Motors Official)',
+      desc: 'Official Tata Motors OEM customer care, warranty policies, vehicle escalation & direct OEM assistance.',
+      phone: '9328726988',
+      email: 'AJJ820986@tatamotors.com',
+      whatsapp: '9328726988',
+      badge: 'Tata Motors · Level 1',
+      badgeColor: 'bg-indigo-500/20 text-indigo-300 border-indigo-500/30',
+      icon: '🚘',
+    },
+    {
+      level: 'Level 2: Tata Motors Regional Customer Care Manager',
+      title: 'Mr Gurmeet Singh',
+      role: 'Regional Customer Care Manager (Tata Motors Official)',
+      desc: 'Regional OEM leadership intervention for state-level unresolved customer complaints and vehicle warranty escalations.',
+      phone: '8288004301',
+      email: 'gumeet.singh@tatamotors.com',
+      whatsapp: '8288004301',
+      badge: 'Tata Motors · Regional Head',
+      badgeColor: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30',
+      icon: '🌐',
     },
   ]
 
@@ -1213,25 +1236,32 @@ export default function CustomerPortalPage({
 
     setEscalationSubmitting(true)
     try {
-      const targetEmails = {
-        advisor: advisorEmail,
-        crm: 'crm.manager@techwheels.in',
-        gm: 'gm.service@techwheels.in',
+      const targetEmails: Record<string, string> = {
+        crm: 'Crmservice@techwheels.in',
+        sm: 'service@techwheels.in',
+        gm: 'gmservice@techwheels.in',
+        tataccm: 'AJJ820986@tatamotors.com',
+        tataregional: 'gumeet.singh@tatamotors.com',
       }
 
-      const targetLabels = {
-        advisor: `Service Advisor (${advisorDisplayName})`,
-        crm: 'CRM & Works Manager (Rajesh Verma)',
-        gm: 'General Manager (Sunil Sharma)',
+      const targetLabels: Record<string, string> = {
+        crm: 'Payal Makhija (CRM)',
+        sm: 'Govind Singh (Service Manager)',
+        gm: 'Mr Rajesh Panday (General Manager)',
+        tataccm: 'Mr Akshay Jethalia (Tata Motors CCM)',
+        tataregional: 'Mr Gurmeet Singh (Tata Motors RCCM)',
       }
+
+      const chosenEmail = targetEmails[escalationTarget] || 'Crmservice@techwheels.in'
+      const chosenLabel = targetLabels[escalationTarget] || 'Management Desk'
 
       const syncRow = {
         vehicle_registration_number: vehicle.reg_number.trim().toUpperCase(),
         customer_name: vehicle.owner_name || 'Customer',
         mobile_number: vehicle.owner_phone || null,
         rating: 1,
-        feedback_text: `[ESCALATION TO: ${targetLabels[escalationTarget]}]\nSubject: ${escalationSubject.trim() || 'Pre-Service Concern'}\nDetails: ${escalationMessage.trim()}`,
-        service_type: `Escalation: ${targetLabels[escalationTarget]}`,
+        feedback_text: `[ESCALATION TO: ${chosenLabel}]\nSubject: ${escalationSubject.trim() || 'Customer Helpdesk Concern'}\nDetails: ${escalationMessage.trim()}`,
+        service_type: `Escalation: ${chosenLabel}`,
         service_advisor_name: vehicle.sa_name || null,
         branch: vehicle.branch || null,
         mode: 'customer_escalation_payload',
@@ -1243,10 +1273,10 @@ export default function CustomerPortalPage({
       setEscalationSuccess(true)
 
       // Launch native device email composer pre-populated with vehicle details
-      const mailtoUrl = `mailto:${targetEmails[escalationTarget]}?subject=${encodeURIComponent(
-        `[PRIORITY ESCALATION] ${vehicle.reg_number} - ${escalationSubject.trim() || 'Pre-Service Vehicle Query'}`
+      const mailtoUrl = `mailto:${chosenEmail}?subject=${encodeURIComponent(
+        `[PRIORITY HELPDESK] ${vehicle.reg_number} - ${escalationSubject.trim() || 'Service Query'}`
       )}&body=${encodeURIComponent(
-        `Dear ${targetLabels[escalationTarget]},\n\nVehicle Reg: ${vehicle.reg_number}\nModel: ${vehicle.model || 'Tata Vehicle'}\nOwner: ${vehicle.owner_name || 'Customer'}\nContact: ${vehicle.owner_phone || ''}\nJob Card: ${vehicle.jc_number || 'Active'}\n\nProblem / Concern Details:\n${escalationMessage.trim()}\n\nRegards,\n${vehicle.owner_name || 'Customer'}`
+        `Dear ${chosenLabel},\n\nVehicle Registration: ${vehicle.reg_number}\nModel: ${vehicle.model || 'Tata Vehicle'}\nOwner Name: ${vehicle.owner_name || 'Customer'}\nContact Mobile: ${vehicle.owner_phone || ''}\nJob Card: ${vehicle.jc_number || 'Active Service'}\n\nQuery / Concern Details:\n${escalationMessage.trim()}\n\nRegards,\n${vehicle.owner_name || 'Customer'}`
       )}`
 
       window.location.href = mailtoUrl
@@ -2476,7 +2506,7 @@ export default function CustomerPortalPage({
                 <span>←</span>
                 <span>Back to Overview</span>
               </button>
-              <span className="text-xs text-slate-400 font-mono">Escalation & Helpdesk</span>
+              <span className="text-xs text-slate-400 font-mono">Helpdesk & Escalation</span>
             </div>
 
             {/* Hub Banner */}
@@ -2487,7 +2517,7 @@ export default function CustomerPortalPage({
                     🏛️
                   </div>
                   <div>
-                    <h3 className="text-sm font-extrabold text-white">Direct Workshop Escalation Matrix</h3>
+                    <h3 className="text-sm font-extrabold text-white">Helpdesk & Escalation Matrix</h3>
                     <p className="text-[11px] text-purple-200/80">Tata Motors Techwheels Authorised Service Hub</p>
                   </div>
                 </div>
@@ -2496,13 +2526,20 @@ export default function CustomerPortalPage({
                 </span>
               </div>
               <p className="text-xs text-slate-300 leading-relaxed pt-1">
-                Gadi service me dene se pehle ya service ke dauran kisi bhi problem ya query ke liye aap direct apne Service Advisor ya Management ko call aur mail kar sakte hain.
+                Gadi service me dene se pehle ya service ke dauran kisi bhi query ke liye aap direct Dealership Management ya Tata Motors OEM team ko direct call, email ya WhatsApp kar sakte hain.
               </p>
             </div>
 
-            {/* 3-Tier Multi-Level Escalation Cards */}
+            {/* SECTION 1: DEALERSHIP MANAGEMENT HIERARCHY */}
             <div className="space-y-3">
-              {escalationTiers.map((tier, idx) => (
+              <div className="flex items-center justify-between px-1">
+                <h4 className="text-xs font-black text-white uppercase tracking-wider flex items-center gap-1.5">
+                  <span>🏢</span> Techwheels Dealership Management
+                </h4>
+                <span className="text-[10px] text-blue-400 font-semibold">3 Levels</span>
+              </div>
+
+              {dealershipEscalationTiers.map((tier, idx) => (
                 <div
                   key={idx}
                   className="mobile-glass-dark rounded-3xl p-4 border border-white/10 shadow-lg space-y-3 transition hover:border-purple-500/30"
@@ -2516,6 +2553,7 @@ export default function CustomerPortalPage({
                         </span>
                         <h4 className="text-sm font-extrabold text-white mt-1">{tier.title}</h4>
                         <div className="text-[11px] font-medium text-slate-400">{tier.role}</div>
+                        <div className="text-[11px] font-mono text-emerald-400 mt-0.5">📞 +91 {tier.phone} · ✉️ {tier.email}</div>
                       </div>
                     </div>
                   </div>
@@ -2544,6 +2582,70 @@ export default function CustomerPortalPage({
 
                     <a
                       href={`https://wa.me/91${tier.whatsapp}?text=${encodeURIComponent(`Hello, I am the owner of Tata vehicle ${vehicle.reg_number}. I have a query regarding my vehicle service.`)}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="tap-bounce py-2.5 px-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 text-white font-extrabold text-[11px] flex items-center justify-center gap-1.5 shadow-md shadow-emerald-600/20"
+                    >
+                      <span>💬</span>
+                      <span>WhatsApp</span>
+                    </a>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* SECTION 2: TATA MOTORS OFFICIAL SUPPORT TEAM */}
+            <div className="space-y-3 pt-2">
+              <div className="flex items-center justify-between px-1">
+                <h4 className="text-xs font-black text-indigo-300 uppercase tracking-wider flex items-center gap-1.5">
+                  <span>🚘</span> Tata Motors Official Support Team
+                </h4>
+                <span className="text-[10px] text-indigo-400 font-semibold">OEM Escalation</span>
+              </div>
+
+              {tataMotorsEscalationTiers.map((tier, idx) => (
+                <div
+                  key={idx}
+                  className="mobile-glass-dark rounded-3xl p-4 border border-indigo-500/30 bg-gradient-to-br from-indigo-950/30 via-slate-900 to-slate-900 shadow-lg space-y-3 transition hover:border-indigo-400/50"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex items-start gap-2.5">
+                      <span className="text-2xl mt-0.5">{tier.icon}</span>
+                      <div>
+                        <span className={`text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-md border ${tier.badgeColor}`}>
+                          {tier.level}
+                        </span>
+                        <h4 className="text-sm font-extrabold text-white mt-1">{tier.title}</h4>
+                        <div className="text-[11px] font-medium text-indigo-200">{tier.role}</div>
+                        <div className="text-[11px] font-mono text-emerald-400 mt-0.5">📞 +91 {tier.phone} · ✉️ {tier.email}</div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <p className="text-[11px] text-slate-300 leading-relaxed bg-black/25 p-2.5 rounded-2xl border border-white/5">
+                    {tier.desc}
+                  </p>
+
+                  {/* 1-Tap Action Buttons (Call, Mail, WhatsApp) */}
+                  <div className="grid grid-cols-3 gap-2 pt-1">
+                    <a
+                      href={`tel:${tier.phone}`}
+                      className="tap-bounce py-2.5 px-2 rounded-xl bg-blue-600 hover:bg-blue-500 active:bg-blue-700 text-white font-extrabold text-[11px] flex items-center justify-center gap-1.5 shadow-md shadow-blue-600/20"
+                    >
+                      <span>📞</span>
+                      <span>Call Now</span>
+                    </a>
+
+                    <a
+                      href={`mailto:${tier.email}?subject=${encodeURIComponent(`[Tata Motors Official Escalation] Vehicle ${vehicle.reg_number} - ${vehicle.owner_name || 'Customer'}`)}`}
+                      className="tap-bounce py-2.5 px-2 rounded-xl bg-purple-600 hover:bg-purple-500 active:bg-purple-700 text-white font-extrabold text-[11px] flex items-center justify-center gap-1.5 shadow-md shadow-purple-600/20"
+                    >
+                      <span>✉️</span>
+                      <span>Send Mail</span>
+                    </a>
+
+                    <a
+                      href={`https://wa.me/91${tier.whatsapp}?text=${encodeURIComponent(`Hello, I am the owner of Tata vehicle ${vehicle.reg_number}. I have an escalation regarding my Tata Motors service.`)}`}
                       target="_blank"
                       rel="noreferrer"
                       className="tap-bounce py-2.5 px-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 text-white font-extrabold text-[11px] flex items-center justify-center gap-1.5 shadow-md shadow-emerald-600/20"
@@ -2588,7 +2690,7 @@ export default function CustomerPortalPage({
                     <span>📝</span> Submit Written Problem / Escalation
                   </h4>
                   <p className="text-[11px] text-slate-400 mt-0.5">
-                    Form bharne par turant management ko notification aur email draft ho jayega.
+                    Form submit karne par turant management ko notification aur email draft ho jayega.
                   </p>
                 </div>
               </div>
@@ -2605,39 +2707,61 @@ export default function CustomerPortalPage({
                   <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
                     Send Escalation To:
                   </label>
-                  <div className="grid grid-cols-3 gap-1.5 bg-slate-900/90 p-1 rounded-2xl border border-white/10 text-[11px] font-bold">
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5 bg-slate-900/90 p-1.5 rounded-2xl border border-white/10 text-[11px] font-bold">
                     <button
                       type="button"
-                      onClick={() => setEscalationTarget('advisor')}
-                      className={`py-2 rounded-xl transition ${
-                        escalationTarget === 'advisor'
+                      onClick={() => setEscalationTarget('crm')}
+                      className={`py-2 px-1 rounded-xl transition truncate ${
+                        escalationTarget === 'crm'
                           ? 'bg-blue-600 text-white shadow-md'
                           : 'text-slate-400 hover:text-white'
                       }`}
                     >
-                      Advisor
+                      Payal (CRM)
                     </button>
                     <button
                       type="button"
-                      onClick={() => setEscalationTarget('crm')}
-                      className={`py-2 rounded-xl transition ${
-                        escalationTarget === 'crm'
+                      onClick={() => setEscalationTarget('sm')}
+                      className={`py-2 px-1 rounded-xl transition truncate ${
+                        escalationTarget === 'sm'
                           ? 'bg-amber-600 text-white shadow-md'
                           : 'text-slate-400 hover:text-white'
                       }`}
                     >
-                      CRM Manager
+                      Govind (SM)
                     </button>
                     <button
                       type="button"
                       onClick={() => setEscalationTarget('gm')}
-                      className={`py-2 rounded-xl transition ${
+                      className={`py-2 px-1 rounded-xl transition truncate ${
                         escalationTarget === 'gm'
                           ? 'bg-rose-600 text-white shadow-md'
                           : 'text-slate-400 hover:text-white'
                       }`}
                     >
-                      General Mgr
+                      Rajesh Panday (GM)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setEscalationTarget('tataccm')}
+                      className={`py-2 px-1 rounded-xl transition truncate ${
+                        escalationTarget === 'tataccm'
+                          ? 'bg-indigo-600 text-white shadow-md'
+                          : 'text-slate-400 hover:text-white'
+                      }`}
+                    >
+                      Akshay (Tata CCM)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setEscalationTarget('tataregional')}
+                      className={`py-2 px-1 rounded-xl transition truncate ${
+                        escalationTarget === 'tataregional'
+                          ? 'bg-emerald-600 text-white shadow-md'
+                          : 'text-slate-400 hover:text-white'
+                      }`}
+                    >
+                      Gurmeet (Tata RCCM)
                     </button>
                   </div>
                 </div>
