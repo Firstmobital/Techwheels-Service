@@ -21,7 +21,11 @@ import {
   pickAdvisorPhone,
 } from '../../components/customer/customerUi'
 import { useCustomerSession } from '../../context/CustomerSessionContext'
-import { customerGetActiveJob, customerGetSettlement } from '../../lib/api/customerPortal'
+import {
+  customerGetActiveJob,
+  customerGetGatePass,
+  customerGetSettlement,
+} from '../../lib/api/customerPortal'
 import { computeSettlement } from '../../lib/customer/math'
 
 export default function CustomerDashboardScreen() {
