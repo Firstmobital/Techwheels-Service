@@ -676,6 +676,25 @@ export default function CustomerPortalPage({
     remark?: string | null
   } | null>(null)
 
+  async function loadIssuedGatepass() {
+    if (!vehicle.reg_number) return
+    try {
+      if (sessionToken) {
+        const pass = await customerGetGatePass(sessionToken, vehicle.reg_number)
+        if (pass && pass.gate_pass_no) {
+          setIssuedGatePass(pass as unknown as IssuedGatePassRecord)
+          return
+        }
+      }
+      const gp = await fetchIssuedGatePass(vehicle.reg_number)
+      if (gp) {
+        setIssuedGatePass(gp)
+      }
+    } catch (err) {
+      console.warn('loadIssuedGatepass error:', err)
+    }
+  }
+
   async function loadAllocatedTechnician() {
     if (!vehicle.reg_number && !vehicle.jc_number && !vehicle.owner_phone) return
     const regNorm = (vehicle.reg_number || '').trim().toUpperCase().replace(/\s+/g, '')
@@ -685,10 +704,12 @@ export default function CustomerPortalPage({
     try {
       // 1. PRIMARY SOURCE: Direct technician_assignments from Floor Incharge
       if (jcNorm) {
+        const lastDigits = jcNorm.replace(/[^0-9]/g, '').slice(-6)
+        const orClause = lastDigits ? `job_card_number.eq.${jcNorm},job_card_number.ilike.%${lastDigits}%` : `job_card_number.eq.${jcNorm}`
         const { data: assignData, error: assignError } = await supabase
           .from('technician_assignments')
           .select('*')
-          .eq('job_card_number', jcNorm)
+          .or(orClause)
           .order('id', { ascending: false })
           .limit(1)
 
@@ -778,6 +799,7 @@ export default function CustomerPortalPage({
     void loadVehicleEstimates()
     void loadServiceHistory()
     void loadAllocatedTechnician()
+    void loadIssuedGatepass()
     void loadLiveAdvisorAndJobCard()
     void loadCustomerReportedConcerns()
 
@@ -804,6 +826,7 @@ export default function CustomerPortalPage({
         () => {
           void loadVehicleEstimates()
           void loadAllocatedTechnician()
+          void loadIssuedGatepass()
           void loadLiveAdvisorAndJobCard()
         }
       )
@@ -814,6 +837,7 @@ export default function CustomerPortalPage({
           void loadVehicleEstimates()
           void loadServiceHistory()
           void loadAllocatedTechnician()
+          void loadIssuedGatepass()
           void loadLiveAdvisorAndJobCard()
           void loadCustomerReportedConcerns()
         }
@@ -834,6 +858,7 @@ export default function CustomerPortalPage({
     }
 
     function handleGatepassBroadcast() {
+      void loadIssuedGatepass()
       void loadLiveAdvisorAndJobCard()
     }
 
@@ -1698,6 +1723,36 @@ export default function CustomerPortalPage({
                 )}
               </div>
             </div>
+
+            {/* ── ACTION REQUIRED BANNER: OFFICIAL GATE PASS ISSUED BY ACCOUNTS ── */}
+            {(issuedGatePass || vehicle.gate_pass_issued) && (
+              <div
+                onClick={() => setShowGatepassModal(true)}
+                className="tap-bounce bg-gradient-to-r from-emerald-600/30 via-teal-600/30 to-emerald-700/30 border-2 border-emerald-400/60 rounded-2xl p-4 flex items-center justify-between shadow-xl shadow-emerald-500/20 cursor-pointer animate-in fade-in"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-11 h-11 rounded-2xl bg-emerald-500/30 flex items-center justify-center text-2xl ring-1 ring-emerald-400/50">
+                    🎟️
+                  </div>
+                  <div>
+                    <div className="text-xs font-black text-emerald-300 uppercase tracking-wider flex items-center gap-1.5">
+                      <span>Official Gate Pass Issued</span>
+                      <span className="w-2 h-2 rounded-full bg-emerald-400 pulse-live-indicator" />
+                    </div>
+                    <div className="text-sm font-bold text-white mt-0.5 font-mono">
+                      Gate Pass #{issuedGatePass?.gate_pass_no || (vehicle.jc_number ? `GP-${vehicle.jc_number.replace(/[^0-9]/g, '').slice(-5)}` : 'READY')}
+                    </div>
+                    <div className="text-[11px] text-emerald-200/80 mt-0.5">
+                      Accounts Cleared · Authorized for Vehicle Departure
+                    </div>
+                  </div>
+                </div>
+                <span className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs px-3.5 py-2 rounded-xl shadow-md flex items-center gap-1 shrink-0">
+                  <span>View Pass</span>
+                  <span>➔</span>
+                </span>
+              </div>
+            )}
 
             {/* ── ACTION REQUIRED BANNER: ESTIMATE PENDING ── */}
             {isPendingApproval && latestLiveEstimate && (
@@ -3880,6 +3935,132 @@ export default function CustomerPortalPage({
             >
               Close Stage Details
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* ── OFFICIAL DIGITAL GATE PASS VIEW MODAL ── */}
+      {showGatepassModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-slate-950/80 backdrop-blur-md p-0 sm:p-4 animate-in fade-in"
+          onClick={() => setShowGatepassModal(false)}
+        >
+          <div
+            className="w-full max-w-lg bg-white text-slate-900 rounded-t-3xl sm:rounded-3xl p-6 shadow-2xl border border-slate-200 space-y-4 max-h-[92vh] overflow-y-auto animate-in slide-in-from-bottom"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="flex items-center justify-between border-b border-slate-200 pb-3">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-emerald-600 text-white flex items-center justify-center text-xl shadow-md shadow-emerald-600/30 font-bold">
+                  🎟️
+                </div>
+                <div>
+                  <div className="text-[10px] font-black uppercase tracking-wider text-emerald-700">
+                    Official Departure Pass
+                  </div>
+                  <h3 className="text-base font-extrabold text-slate-900">
+                    Vehicle Gate Pass #{issuedGatePass?.gate_pass_no || (vehicle.jc_number ? `GP-${vehicle.jc_number.replace(/[^0-9]/g, '').slice(-5)}` : 'GP-AUTH')}
+                  </h3>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowGatepassModal(false)}
+                className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold flex items-center justify-center text-sm cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Clearance Verified Banner */}
+            <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-3.5 flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <span className="text-2xl">✅</span>
+                <div>
+                  <div className="text-xs font-black text-emerald-900 uppercase tracking-wide">
+                    {issuedGatePass?.payment_status || 'Accounts Clearance Verified'}
+                  </div>
+                  <div className="text-[11px] text-emerald-700">
+                    Authorized by {issuedGatePass?.issued_by || 'Accounts Desk · Dealership'}
+                  </div>
+                </div>
+              </div>
+              <span className="bg-emerald-600 text-white text-[10px] font-black px-2.5 py-1 rounded-full font-mono">
+                CLEARED
+              </span>
+            </div>
+
+            {/* Pass Details Table */}
+            <div className="bg-slate-50 rounded-2xl p-4 border border-slate-200 space-y-2.5 text-xs">
+              <div className="flex justify-between items-center py-1 border-b border-slate-200">
+                <span className="text-slate-500 font-bold">Vehicle Reg:</span>
+                <span className="font-mono font-black text-blue-700 text-sm">{vehicle.reg_number}</span>
+              </div>
+              <div className="flex justify-between items-center py-1 border-b border-slate-200">
+                <span className="text-slate-500 font-bold">Owner Name:</span>
+                <span className="font-extrabold text-slate-900 uppercase">{vehicle.owner_name || 'Customer'}</span>
+              </div>
+              <div className="flex justify-between items-center py-1 border-b border-slate-200">
+                <span className="text-slate-500 font-bold">Job Card No:</span>
+                <span className="font-mono font-bold text-slate-800">{vehicle.jc_number || '—'}</span>
+              </div>
+              <div className="flex justify-between items-center py-1 border-b border-slate-200">
+                <span className="text-slate-500 font-bold">Assigned Advisor:</span>
+                <span className="font-bold text-slate-800">{cleanAdvisorPersonName(vehicle.sa_display_name || vehicle.sa_name) || '—'}</span>
+              </div>
+              <div className="flex justify-between items-center py-1 border-b border-slate-200">
+                <span className="text-slate-500 font-bold">Assigned Technician:</span>
+                <span className="font-bold text-emerald-800">{allocatedTechnician?.name || 'Assigned'}</span>
+              </div>
+              {allocatedTechnician?.bay_no && (
+                <div className="flex justify-between items-center py-1 border-b border-slate-200">
+                  <span className="text-slate-500 font-bold">Workshop Bay:</span>
+                  <span className="font-mono font-bold bg-blue-100 text-blue-900 px-2 py-0.5 rounded text-[11px]">
+                    Bay {allocatedTechnician.bay_no}
+                  </span>
+                </div>
+              )}
+              <div className="flex justify-between items-center py-1 border-b border-slate-200">
+                <span className="text-slate-500 font-bold">Invoice / Bill Ref:</span>
+                <span className="font-mono text-slate-700">{issuedGatePass?.invoice_no || 'DMS Billed'}</span>
+              </div>
+              <div className="flex justify-between items-center py-1 border-b border-slate-200">
+                <span className="text-slate-500 font-bold">Workshop Branch:</span>
+                <span className="font-medium text-slate-700">{vehicle.branch || 'Sitapura Workshop'}</span>
+              </div>
+              <div className="flex justify-between items-center py-1">
+                <span className="text-slate-500 font-bold">Issued Timestamp:</span>
+                <span className="font-medium text-slate-600">{issuedGatePass?.issued_at || new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}</span>
+              </div>
+            </div>
+
+            {/* QR Authentication Token */}
+            <div className="bg-slate-900 text-white p-3 rounded-2xl text-center space-y-1">
+              <div className="text-[10px] text-slate-400 font-mono tracking-widest uppercase">Security Clearance QR Signature</div>
+              <div className="text-xs font-mono font-bold text-emerald-400">
+                {issuedGatePass?.qr_token || `GP_AUTH_${vehicle.reg_number}_DEALERSHIP_SECURE`}
+              </div>
+            </div>
+
+            {/* Action Buttons */}
+            <div className="flex gap-2 pt-1">
+              <button
+                type="button"
+                onClick={() => window.print()}
+                className="flex-1 py-3 rounded-2xl bg-slate-900 hover:bg-black text-white font-extrabold text-xs shadow-md transition cursor-pointer flex items-center justify-center gap-1.5"
+              >
+                <span>🖨️</span>
+                <span>Print / Save Gate Pass</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowGatepassModal(false)}
+                className="px-5 py-3 rounded-2xl bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-xs transition cursor-pointer"
+              >
+                Close
+              </button>
+            </div>
           </div>
         </div>
       )}

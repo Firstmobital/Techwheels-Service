@@ -30,6 +30,7 @@ export default function CustomerDashboardScreen() {
   const selected = vehicles.find((v) => v.reg_number === selectedReg) || vehicles[0]
   const [job, setJob] = useState<Record<string, unknown> | null>(null)
   const [settlement, setSettlement] = useState<Record<string, unknown> | null>(null)
+  const [gatePass, setGatePass] = useState<Record<string, unknown> | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [selectedStageModal, setSelectedStageModal] = useState<number | null>(null)
@@ -38,12 +39,14 @@ export default function CustomerDashboardScreen() {
     if (!token) return
     setError(null)
     try {
-      const [jobResult, payResult] = await Promise.all([
+      const [jobResult, payResult, passResult] = await Promise.all([
         customerGetActiveJob(token, selected?.reg_number),
         customerGetSettlement(token, selected?.reg_number).catch(() => null),
+        customerGetGatePass(token, selected?.reg_number).catch(() => null),
       ])
       setJob(jobResult.job)
       setSettlement(payResult)
+      setGatePass(passResult)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unable to load job.')
     } finally {
@@ -73,6 +76,8 @@ export default function CustomerDashboardScreen() {
   const km = formatKm(job?.km_reading ?? selected?.km_reading)
   const serviceType = asText(job?.service_type) || asText(selected?.service_type)
   const advisor = asText(job?.sa_display_name) || asText(job?.sa_name) || asText(selected?.sa_display_name) || asText(selected?.sa_name)
+  const technician = asText(job?.technician_name)
+  const bayNo = asText(job?.bay_no)
   const jc = asText(job?.jc_number) || asText(selected?.jc_number)
   const branch = asText(job?.branch) || asText(selected?.branch)
   const delivered = Boolean(job?.invoice_done_at || selected?.invoice_done_at)
@@ -89,7 +94,7 @@ export default function CustomerDashboardScreen() {
     { title: 'Intake', icon: '📥', desc: 'Vehicle check-in & initial inspection' },
     { title: 'Job Card', icon: '📋', desc: `Assigned SA: ${advisor || 'Service Advisor'} · JC #${jc || 'Pending'}` },
     { title: 'Quote', icon: '📝', desc: 'Itemized parts & labour quotation' },
-    { title: 'Bay Work', icon: '🔧', desc: `Technician: ${asText(job?.technician_name) || 'Assigned'} · Bay ${asText(job?.bay_no) || 'Floor'}` },
+    { title: 'Bay Work', icon: '🔧', desc: `Technician: ${technician || 'Assigned'} · Bay ${bayNo || 'Floor'}` },
     { title: 'Ready', icon: '✅', desc: 'Repairs completed & tested for delivery' },
   ]
 
@@ -103,6 +108,38 @@ export default function CustomerDashboardScreen() {
         <Text className="text-slate-600 text-center py-4">No vehicle found for this mobile number.</Text>
       ) : (
         <>
+          {/* ── GATE PASS UNLOCKED / READY BANNER ── */}
+          {gatePass && gatePass.gate_pass_no ? (
+            <TouchableOpacity
+              activeOpacity={0.88}
+              onPress={() => router.push('/(customer)/gatepass')}
+              className="bg-emerald-600 rounded-2xl p-4 mb-3.5 shadow-lg border-2 border-emerald-300 flex-row items-center justify-between"
+            >
+              <View className="flex-row items-center gap-3 flex-1 pr-2">
+                <View className="w-11 h-11 rounded-2xl bg-white/20 items-center justify-center">
+                  <Text className="text-2xl">🎟️</Text>
+                </View>
+                <View className="flex-1">
+                  <View className="flex-row items-center gap-1.5">
+                    <Text className="text-emerald-100 text-[10px] font-black uppercase tracking-wider">
+                      Official Departure Pass Issued
+                    </Text>
+                    <View className="w-2 h-2 rounded-full bg-white animate-pulse" />
+                  </View>
+                  <Text className="text-white text-[15px] font-black" numberOfLines={1}>
+                    Gate Pass #{asText(gatePass.gate_pass_no)} Ready
+                  </Text>
+                  <Text className="text-emerald-100 text-[11.5px] font-semibold mt-0.5" numberOfLines={1}>
+                    Authorized by Accounts · Tap to View Pass
+                  </Text>
+                </View>
+              </View>
+              <View className="bg-white px-3 py-1.5 rounded-xl shadow-xs">
+                <Text className="text-emerald-800 text-xs font-black">View Pass ➔</Text>
+              </View>
+            </TouchableOpacity>
+          ) : null}
+
           {/* ── REGISTERED VEHICLE HERO CARD WITH PROMINENT JOB CARD NUMBER ── */}
           <LinearGradient
             colors={['#0f172a', '#1e3a8a', '#2563eb']}
@@ -161,12 +198,20 @@ export default function CustomerDashboardScreen() {
                 <Text className="text-white text-[12.5px] font-mono font-black" numberOfLines={1}>{jc ? `#${jc}` : 'Opening…'}</Text>
               </View>
               <View className="w-1/2 pr-2 mb-2.5">
-                <Text className="text-blue-200 text-[10.5px] font-semibold">Service Type</Text>
-                <Text className="text-white text-[12.5px] font-bold" numberOfLines={1}>{dash(serviceType)}</Text>
+                <Text className="text-blue-200 text-[10.5px] font-semibold">Assigned Technician</Text>
+                <Text className="text-white text-[12.5px] font-bold" numberOfLines={1}>{dash(technician)}</Text>
               </View>
               <View className="w-1/2 pl-2 mb-2.5">
+                <Text className="text-blue-200 text-[10.5px] font-semibold">Workshop Bay No</Text>
+                <Text className="text-emerald-300 text-[12.5px] font-mono font-black" numberOfLines={1}>{dash(bayNo) || 'Floor Bay'}</Text>
+              </View>
+              <View className="w-1/2 pr-2 mb-1">
+                <Text className="text-blue-200 text-[10.5px] font-semibold">Service Type</Text>
+                <Text className="text-white text-[12px] font-bold" numberOfLines={1}>{dash(serviceType)}</Text>
+              </View>
+              <View className="w-1/2 pl-2 mb-1">
                 <Text className="text-blue-200 text-[10.5px] font-semibold">Assigned Advisor</Text>
-                <Text className="text-white text-[12px] font-bold" numberOfLines={2}>{dash(advisor)}</Text>
+                <Text className="text-white text-[12px] font-bold" numberOfLines={1}>{dash(advisor)}</Text>
               </View>
             </View>
 
@@ -335,6 +380,8 @@ export default function CustomerDashboardScreen() {
             </View>
             <RecordRow label="Job Card Number" value={dash(jc)} />
             <RecordRow label="Service Advisor" value={dash(advisor)} />
+            <RecordRow label="Assigned Technician" value={dash(technician)} />
+            <RecordRow label="Workshop Bay No" value={dash(bayNo) || 'Floor Bay'} />
             <RecordRow label="Service Branch" value={dash(branch)} />
             <RecordRow
               last

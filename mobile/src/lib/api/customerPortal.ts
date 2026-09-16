@@ -14,11 +14,71 @@ export async function customerGetActiveJob(sessionToken: string, regNumber?: str
     p_reg_number: regNumber || null,
   })
   if (error) throw new Error(rpcErrorMessage(error, 'Unable to load job.'))
-  return data as {
+
+  const res = (data || {}) as {
     phone?: string
     vehicle?: Record<string, unknown> | null
     job?: Record<string, unknown> | null
   }
+
+  const job = res.job ? { ...res.job } : null
+  const regNorm = (regNumber || (res.vehicle?.reg_number as string) || (job?.reg_number as string) || '').trim().toUpperCase().replace(/\s+/g, '')
+  const jc = (job?.jc_number as string) || (res.vehicle?.jc_number as string) || ''
+  const jcNorm = jc.trim().toUpperCase()
+
+  // Enrich with technician & bay if missing from RPC
+  if (job && (!job.technician_name || !job.bay_no)) {
+    try {
+      // 1. Check technician_assignments by JC or digits
+      if (jcNorm) {
+        const lastDigits = jcNorm.replace(/[^0-9]/g, '').slice(-6)
+        const orClause = lastDigits ? `job_card_number.eq.${jcNorm},job_card_number.ilike.%${lastDigits}%` : `job_card_number.eq.${jcNorm}`
+        const { data: assignRows } = await supabase
+          .from('technician_assignments')
+          .select('technician_name, technician_code, bay_no, work_status, assigned_at')
+          .or(orClause)
+          .order('id', { ascending: false })
+          .limit(1)
+
+        if (assignRows && assignRows.length > 0 && assignRows[0].technician_name) {
+          if (assignRows[0].technician_name.toLowerCase() !== 'not required') {
+            job.technician_name = assignRows[0].technician_name
+            job.technician_code = assignRows[0].technician_code
+            job.bay_no = assignRows[0].bay_no || job.bay_no
+            job.work_status = assignRows[0].work_status || job.work_status
+          }
+        }
+      }
+
+      // 2. Check post_feedback_bot_data for technician_allocation_payload
+      if (!job.technician_name && regNorm) {
+        const { data: botRows } = await supabase
+          .from('post_feedback_bot_data')
+          .select('feedback_text')
+          .eq('vehicle_registration_number', regNorm)
+          .eq('mode', 'technician_allocation_payload')
+          .order('complaint_date_time', { ascending: false })
+          .limit(1)
+
+        if (botRows && botRows.length > 0) {
+          try {
+            const parsed = JSON.parse(botRows[0].feedback_text)
+            if (parsed.technician_name && parsed.technician_name.toLowerCase() !== 'not required') {
+              job.technician_name = parsed.technician_name
+              job.technician_code = parsed.technician_code
+              job.bay_no = parsed.bay_no || job.bay_no
+            }
+          } catch {
+            // ignore
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('Enrich technician error:', e)
+    }
+  }
+
+  return { ...res, job }
 }
 
 export async function customerGetServiceHistory(sessionToken: string, regNumber?: string | null) {
@@ -84,12 +144,46 @@ export async function customerSetEstimateDecision(
 }
 
 export async function customerGetGatePass(sessionToken: string, regNumber?: string | null) {
-  const { data, error } = await supabase.rpc('customer_get_gate_pass', {
-    p_session_token: sessionToken,
-    p_reg_number: regNumber || null,
-  })
-  if (error) throw new Error(rpcErrorMessage(error, 'Unable to load gate pass.'))
-  return data as Record<string, unknown> | null
+  const regNorm = (regNumber || '').trim().toUpperCase().replace(/\s+/g, '')
+
+  // 1. Direct real-time check from post_feedback_bot_data for mode customer_gatepass_payload
+  if (regNorm) {
+    try {
+      const { data: botRows } = await supabase
+        .from('post_feedback_bot_data')
+        .select('feedback_text')
+        .eq('vehicle_registration_number', regNorm)
+        .eq('mode', 'customer_gatepass_payload')
+        .order('complaint_date_time', { ascending: false })
+        .limit(1)
+
+      if (botRows && botRows.length > 0) {
+        try {
+          const parsed = JSON.parse(botRows[0].feedback_text)
+          if (parsed && parsed.gate_pass_no) {
+            return parsed as Record<string, unknown>
+          }
+        } catch {
+          // ignore
+        }
+      }
+    } catch (e) {
+      console.warn('customerGetGatePass bot payload error:', e)
+    }
+  }
+
+  // 2. Try RPC
+  try {
+    const { data, error } = await supabase.rpc('customer_get_gate_pass', {
+      p_session_token: sessionToken,
+      p_reg_number: regNumber || null,
+    })
+    if (!error && data) return data as Record<string, unknown>
+  } catch {
+    // fallback
+  }
+
+  return null
 }
 
 export async function customerGetSettlement(sessionToken: string, regNumber?: string | null) {
