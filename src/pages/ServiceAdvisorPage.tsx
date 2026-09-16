@@ -100,6 +100,15 @@ interface CustomerProblemSummary {
   rawRecord?: unknown
 }
 
+export interface CustomerEstimateStatus {
+  estimateNo: string
+  status: 'Approved' | 'Rejected' | 'Sent' | 'Draft' | 'Supplementary_Pending'
+  amount?: number
+  approvedAt?: string | null
+  rejectionReason?: string | null
+  dateTime?: string | null
+}
+
 function parseCustomerProblemFeedback(feedbackText: string | null | undefined): { issues: string[]; summary: string; km?: string } {
   if (!feedbackText) return { issues: [], summary: '' }
   const text = feedbackText.trim()
@@ -618,32 +627,109 @@ export default function ServiceAdvisorPage() {
   const [customerPortalModalOpen, setCustomerPortalModalOpen] = useState(false)
   const [selectedPortalRegNumber, setSelectedPortalRegNumber] = useState<string | undefined>(undefined)
   const [customerProblemsMap, setCustomerProblemsMap] = useState<Record<string, CustomerProblemSummary>>({})
+  const [customerEstimatesMap, setCustomerEstimatesMap] = useState<Record<string, CustomerEstimateStatus>>({})
   const [estimateModalRow, setEstimateModalRow] = useState<ReceptionEntryRow | null>(null)
   const [estimateModalServiceType, setEstimateModalServiceType] = useState('')
   const [savedEstimateIds, setSavedEstimateIds] = useState<Set<number>>(new Set())
 
   async function loadCustomerProblems() {
     try {
+      const problemsMap: Record<string, CustomerProblemSummary> = {}
+      const estimatesMap: Record<string, CustomerEstimateStatus> = {}
+
+      // 1. Fetch from customer_estimates table
+      try {
+        const { data: estData, error: estErr } = await supabase
+          .from('customer_estimates')
+          .select('*')
+          .order('created_at', { ascending: false })
+          .limit(500)
+
+        if (!estErr && estData) {
+          for (const row of estData) {
+            const reg = String(row.vehicle_registration_number || '').trim().toUpperCase().replace(/[\s-]/g, '')
+            if (!reg || estimatesMap[reg]) continue
+
+            estimatesMap[reg] = {
+              estimateNo: row.estimate_no,
+              status: (row.status as CustomerEstimateStatus['status']) || 'Draft',
+              amount: Number(row.grand_total || row.subtotal || 0),
+              approvedAt: row.approved_at,
+              rejectionReason: row.rejection_reason,
+              dateTime: row.updated_at || row.created_at,
+            }
+          }
+        }
+      } catch (e) {
+        console.warn('Failed to fetch customer_estimates for SA page:', e)
+      }
+
+      // 2. Fetch from post_feedback_bot_data for complaints & real-time approval events
       const { data, error } = await supabase
         .from('post_feedback_bot_data')
         .select('*')
-        .neq('mode', 'customer_estimate_payload')
         .order('complaint_date_time', { ascending: false })
-        .limit(500)
+        .limit(600)
 
       if (!error && data) {
-        const map: Record<string, CustomerProblemSummary> = {}
         for (const row of data) {
           const reg = String(row.vehicle_registration_number || '').trim().toUpperCase().replace(/[\s-]/g, '')
           if (!reg) continue
-          if (row.mode === 'customer_estimate_payload' || row.mode === 'customer_payment_payload') continue
+
+          // Handle Estimate approval/rejection events
+          if (row.mode === 'customer_estimate_approval' || row.mode === 'customer_estimate_rejection') {
+            const isApproved = row.mode === 'customer_estimate_approval'
+            const dt = row.complaint_date_time || row.created_at
+            if (!estimatesMap[reg] || (dt && (!estimatesMap[reg].dateTime || dt > estimatesMap[reg].dateTime!))) {
+              let rejReason: string | undefined = undefined
+              if (!isApproved && row.feedback_text) {
+                const rMatch = row.feedback_text.match(/Reason:\s*(.+)$/i)
+                rejReason = rMatch ? rMatch[1].trim() : row.feedback_text
+              }
+              const estNoMatch = row.feedback_text?.match(/Estimate\s*#?([A-Za-z0-9_-]+)/i)
+              const estNo = estNoMatch ? estNoMatch[1] : (estimatesMap[reg]?.estimateNo || 'EST')
+
+              estimatesMap[reg] = {
+                estimateNo: estNo,
+                status: isApproved ? 'Approved' : 'Rejected',
+                amount: estimatesMap[reg]?.amount,
+                approvedAt: isApproved ? dt : undefined,
+                rejectionReason: rejReason,
+                dateTime: dt,
+              }
+            }
+            continue
+          }
+
+          // Handle customer_estimate_payload JSON records
+          if (row.mode === 'customer_estimate_payload' || row.feedback_text?.trim().startsWith('{"estimate_no"')) {
+            try {
+              const parsed = JSON.parse(row.feedback_text)
+              const dt = row.complaint_date_time || row.created_at
+              if (parsed && parsed.estimate_no && (!estimatesMap[reg] || (dt && (!estimatesMap[reg].dateTime || dt > estimatesMap[reg].dateTime!)))) {
+                estimatesMap[reg] = {
+                  estimateNo: parsed.estimate_no,
+                  status: parsed.status || 'Sent',
+                  amount: Number(parsed.grand_total || parsed.subtotal || 0),
+                  approvedAt: parsed.approved_at,
+                  rejectionReason: parsed.rejection_reason,
+                  dateTime: dt,
+                }
+              }
+            } catch {
+              // ignore
+            }
+            continue
+          }
+
+          if (row.mode === 'customer_payment_payload') continue
           if (row.feedback_text?.trim().startsWith('{')) continue
 
           const parsed = parseCustomerProblemFeedback(row.feedback_text)
           if (parsed.issues.length === 0) continue
 
-          if (!map[reg]) {
-            map[reg] = {
+          if (!problemsMap[reg]) {
+            problemsMap[reg] = {
               count: parsed.issues.length || 1,
               issues: parsed.issues,
               summary: parsed.summary || row.feedback_text,
@@ -654,8 +740,10 @@ export default function ServiceAdvisorPage() {
             }
           }
         }
-        setCustomerProblemsMap(map)
       }
+
+      setCustomerProblemsMap(problemsMap)
+      setCustomerEstimatesMap(estimatesMap)
     } catch (err) {
       console.warn('Error fetching customer problems for ServiceAdvisorPage:', err)
     }
@@ -691,6 +779,8 @@ export default function ServiceAdvisorPage() {
     const regKey = String(row.reg_number || '').trim().toUpperCase().replace(/[\s-]/g, '')
     const problemInfo = customerProblemsMap[regKey]
     const problemSummaryText = problemInfo ? problemInfo.summary : ''
+    const estimateInfo = customerEstimatesMap[regKey]
+    const estimateSearchText = estimateInfo ? `${estimateInfo.status} ${estimateInfo.estimateNo} ${estimateInfo.rejectionReason || ''}` : ''
 
     const haystack = [
       row.reg_number,
@@ -704,6 +794,7 @@ export default function ServiceAdvisorPage() {
       row.branch ?? '',
       row.created_by,
       problemSummaryText,
+      estimateSearchText,
     ]
       .join(' ')
       .toLowerCase()
@@ -1455,6 +1546,11 @@ export default function ServiceAdvisorPage() {
 
         const regKey = String(row.reg_number || '').trim().toUpperCase().replace(/[\s-]/g, '')
         const problemSummary = customerProblemsMap[regKey]?.summary || ''
+        const estimateInfo = customerEstimatesMap[regKey]
+        const combinedProblemExport = [
+          estimateInfo ? `[Estimate ${estimateInfo.status}${estimateInfo.amount ? `: ₹${estimateInfo.amount}` : ''}${estimateInfo.rejectionReason ? ` - ${estimateInfo.rejectionReason}` : ''}]` : null,
+          problemSummary || null,
+        ].filter(Boolean).join(' | ')
 
         let estimateStatus = 'Pending'
         if (isBodyshopRow) {
@@ -1483,7 +1579,7 @@ export default function ServiceAdvisorPage() {
           row.source || '',
           row.reg_number || '',
           kmReading,
-          problemSummary,
+          combinedProblemExport || '—',
           row.model || '',
           serviceType,
           jcNumber,
@@ -1549,7 +1645,7 @@ export default function ServiceAdvisorPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dateRange, searchQuery])
 
-  // Realtime customer complaints sync
+  // Realtime customer complaints & estimate approvals sync
   useEffect(() => {
     const channel = supabase
       .channel('sa-customer-complaints-realtime')
@@ -1560,10 +1656,23 @@ export default function ServiceAdvisorPage() {
           void loadCustomerProblems()
         }
       )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'customer_estimates' },
+        () => {
+          void loadCustomerProblems()
+        }
+      )
       .subscribe()
+
+    const onEstimateUpdate = () => {
+      void loadCustomerProblems()
+    }
+    window.addEventListener('techwheels_estimate_updated', onEstimateUpdate)
 
     return () => {
       void supabase.removeChannel(channel)
+      window.removeEventListener('techwheels_estimate_updated', onEstimateUpdate)
     }
   }, [])
 
@@ -2386,38 +2495,89 @@ export default function ServiceAdvisorPage() {
                           {(() => {
                             const regKey = String(row.reg_number || '').trim().toUpperCase().replace(/[\s-]/g, '')
                             const problemInfo = customerProblemsMap[regKey]
-                            if (!problemInfo || problemInfo.issues.length === 0) {
+                            const estimateInfo = customerEstimatesMap[regKey]
+                            const hasProblems = Boolean(problemInfo && problemInfo.issues.length > 0)
+                            const hasEstimate = Boolean(estimateInfo && estimateInfo.status)
+
+                            if (!hasProblems && !hasEstimate) {
                               return <span className="problem-empty-dash">—</span>
                             }
+
                             return (
                               <div
-                                className="problem-card-compact"
+                                className={`problem-card-compact ${estimateInfo?.status === 'Approved' ? 'problem-card--approved' : estimateInfo?.status === 'Rejected' ? 'problem-card--rejected' : ''}`}
                                 onClick={() => {
                                   setSelectedPortalRegNumber(row.reg_number)
                                   setCustomerPortalModalOpen(true)
                                 }}
-                                title="Click to view details & create parts estimate in Customer Portal"
+                                title="Click to view Customer Portal details & estimate actions"
                               >
-                                <div className="problem-badge-pill">
-                                  <span>🚨</span>
-                                  <span>{problemInfo.count} {problemInfo.count === 1 ? 'Problem' : 'Problems'}</span>
-                                  {problemInfo.kmReading && (
-                                    <span className="km-pill">{problemInfo.kmReading} KM</span>
-                                  )}
-                                </div>
-                                <div className="problem-list-preview">
-                                  {problemInfo.issues.slice(0, 3).map((issue, idx) => (
-                                    <div key={idx} className="problem-item-row">
-                                      <span className="num">{idx + 1}.</span>
-                                      <span>{issue}</span>
+                                {/* Estimate Approval / Rejection Live Badge */}
+                                {hasEstimate && (
+                                  <div
+                                    className={`estimate-approval-tag estimate-approval-tag--${estimateInfo!.status.toLowerCase()}`}
+                                  >
+                                    {estimateInfo!.status === 'Approved' ? (
+                                      <div className="approval-tag-content">
+                                        <span className="approval-icon">✅</span>
+                                        <span className="approval-title">Estimate Approved</span>
+                                        {estimateInfo!.amount ? (
+                                          <span className="approval-amt">₹{estimateInfo!.amount.toLocaleString('en-IN')}</span>
+                                        ) : null}
+                                      </div>
+                                    ) : estimateInfo!.status === 'Rejected' ? (
+                                      <div className="approval-tag-content flex-col">
+                                        <div className="flex-row items-center gap-1">
+                                          <span className="approval-icon">❌</span>
+                                          <span className="approval-title">Estimate Rejected</span>
+                                        </div>
+                                        {estimateInfo!.rejectionReason && (
+                                          <div className="rejection-reason-sub">
+                                            "{estimateInfo!.rejectionReason}"
+                                          </div>
+                                        )}
+                                      </div>
+                                    ) : estimateInfo!.status === 'Sent' || estimateInfo!.status === 'Supplementary_Pending' ? (
+                                      <div className="approval-tag-content">
+                                        <span className="approval-icon">⏳</span>
+                                        <span className="approval-title">Estimate Sent (Pending)</span>
+                                        {estimateInfo!.amount ? (
+                                          <span className="approval-amt">₹{estimateInfo!.amount.toLocaleString('en-IN')}</span>
+                                        ) : null}
+                                      </div>
+                                    ) : (
+                                      <div className="approval-tag-content">
+                                        <span className="approval-title">Estimate: {estimateInfo!.status}</span>
+                                      </div>
+                                    )}
+                                  </div>
+                                )}
+
+                                {/* Customer Problems / Complaints */}
+                                {hasProblems && (
+                                  <>
+                                    <div className="problem-badge-pill">
+                                      <span>🚨</span>
+                                      <span>{problemInfo!.count} {problemInfo!.count === 1 ? 'Problem' : 'Problems'}</span>
+                                      {problemInfo!.kmReading && (
+                                        <span className="km-pill">{problemInfo!.kmReading} KM</span>
+                                      )}
                                     </div>
-                                  ))}
-                                  {problemInfo.issues.length > 3 && (
-                                    <span style={{ fontSize: 11, color: '#e11d48', fontWeight: 600 }}>
-                                      +{problemInfo.issues.length - 3} more problem(s)...
-                                    </span>
-                                  )}
-                                </div>
+                                    <div className="problem-list-preview">
+                                      {problemInfo!.issues.slice(0, 3).map((issue, idx) => (
+                                        <div key={idx} className="problem-item-row">
+                                          <span className="num">{idx + 1}.</span>
+                                          <span>{issue}</span>
+                                        </div>
+                                      ))}
+                                      {problemInfo!.issues.length > 3 && (
+                                        <span style={{ fontSize: 11, color: '#e11d48', fontWeight: 600 }}>
+                                          +{problemInfo!.issues.length - 3} more problem(s)...
+                                        </span>
+                                      )}
+                                    </div>
+                                  </>
+                                )}
                               </div>
                             )
                           })()}

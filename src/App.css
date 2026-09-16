@@ -2268,6 +2268,98 @@ code.k--b { background: var(--accent-soft); color: var(--accent); }
   flex-shrink: 0;
 }
 
+.problem-card--approved {
+  background: #f0fdf4 !important;
+  border-color: #bbf7d0 !important;
+}
+
+.problem-card--approved:hover {
+  background: #dcfce7 !important;
+  border-color: #86efac !important;
+  box-shadow: 0 2px 8px rgba(22, 163, 74, 0.15) !important;
+}
+
+.problem-card--rejected {
+  background: #fef2f2 !important;
+  border-color: #fecaca !important;
+}
+
+.problem-card--rejected:hover {
+  background: #fee2e2 !important;
+  border-color: #fca5a5 !important;
+  box-shadow: 0 2px 8px rgba(220, 38, 38, 0.15) !important;
+}
+
+.estimate-approval-tag {
+  border-radius: 6px;
+  padding: 4px 8px;
+  font-size: 11.5px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 3px;
+}
+
+.estimate-approval-tag--approved {
+  background: #15803d;
+  color: #ffffff;
+  box-shadow: 0 1px 3px rgba(21, 128, 61, 0.25);
+}
+
+.estimate-approval-tag--approved .approval-amt {
+  background: rgba(255, 255, 255, 0.25);
+  padding: 1px 5px;
+  border-radius: 4px;
+  font-family: monospace;
+  font-size: 10.5px;
+}
+
+.estimate-approval-tag--rejected {
+  background: #dc2626;
+  color: #ffffff;
+  box-shadow: 0 1px 3px rgba(220, 38, 38, 0.25);
+}
+
+.estimate-approval-tag--rejected .rejection-reason-sub {
+  font-size: 10.5px;
+  font-weight: 500;
+  color: #fecaca;
+  margin-top: 2px;
+  font-style: italic;
+  white-space: normal;
+  word-break: break-word;
+}
+
+.estimate-approval-tag--sent,
+.estimate-approval-tag--supplementary_pending {
+  background: #0284c7;
+  color: #ffffff;
+  box-shadow: 0 1px 3px rgba(2, 132, 199, 0.25);
+}
+
+.estimate-approval-tag--sent .approval-amt,
+.estimate-approval-tag--supplementary_pending .approval-amt {
+  background: rgba(255, 255, 255, 0.25);
+  padding: 1px 5px;
+  border-radius: 4px;
+  font-family: monospace;
+  font-size: 10.5px;
+}
+
+.approval-tag-content {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  width: 100%;
+}
+
+.approval-tag-content.flex-col {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
+}
+
 .problem-empty-dash {
   color: #94a3b8;
   font-size: 13px;
