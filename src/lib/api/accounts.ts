@@ -70,6 +70,7 @@ export interface AccountsMechanicalPayment {
   amount: number
   payment_mode: AccountsPaymentMode
   reference: string | null
+  remark?: string | null
   posted_by: string | null
   posted_at: string
   payment_received_date: string | null
@@ -177,6 +178,7 @@ export async function addAccountsMechanicalPayment(input: {
   paymentMode: AccountsPaymentMode
   reference: string | null
   paymentReceivedDate: string
+  remark: string | null
 }): Promise<AccountsMechanicalCase> {
   const { data, error } = await supabase.rpc('add_accounts_mechanical_payment', {
     p_reception_entry_id: input.receptionEntryId,
@@ -184,6 +186,7 @@ export async function addAccountsMechanicalPayment(input: {
     p_payment_mode: input.paymentMode,
     p_reference: input.reference,
     p_payment_received_date: input.paymentReceivedDate,
+    p_remark: input.remark,
   })
   if (error) throw new Error(settlementRpcError(error))
   return data as AccountsMechanicalCase
@@ -195,6 +198,7 @@ export async function updateAccountsMechanicalPayment(input: {
   paymentMode: AccountsPaymentMode
   reference: string | null
   paymentReceivedDate: string
+  remark: string | null
 }): Promise<AccountsMechanicalCase> {
   const { data, error } = await supabase.rpc('update_accounts_mechanical_payment', {
     p_payment_line_id: input.paymentLineId,
@@ -202,6 +206,7 @@ export async function updateAccountsMechanicalPayment(input: {
     p_payment_mode: input.paymentMode,
     p_reference: input.reference,
     p_payment_received_date: input.paymentReceivedDate,
+    p_remark: input.remark,
   })
   if (error) throw new Error(settlementRpcError(error))
   return data as AccountsMechanicalCase
@@ -233,7 +238,7 @@ export function mechanicalPaymentVoucherEditWarning(
   if (series && expected && series !== expected) {
     return `Voucher ${voucher} will be kept. It stays ${series} while the receipt mode is now ${paymentModeLabel(paymentMode)}. Re-export BUSY if this receipt was already sent.`
   }
-  return `Voucher ${voucher} will be kept. Amount, mode, date, and reference edits do not regenerate it. Re-export BUSY if this receipt was already sent.`
+  return `Voucher ${voucher} will be kept. Amount, mode, date, reference, and remark edits do not regenerate it. Re-export BUSY if this receipt was already sent.`
 }
 
 export async function setAccountsMechanicalKeepOnCredit(
@@ -944,9 +949,9 @@ export function buildMechanicalBusyPaymentExportRows(input: {
 export async function listAccountsMechanicalPaymentLines(): Promise<AccountsMechanicalPayment[]> {
   const pageSize = 1000
   const withVoucher =
-    'id, reception_entry_id, mechanical_invoice_id, amount, payment_mode, reference, posted_by, posted_at, payment_received_date, voucher_no'
+    'id, reception_entry_id, mechanical_invoice_id, amount, payment_mode, reference, remark, posted_by, posted_at, payment_received_date, voucher_no'
   const withoutVoucher =
-    'id, reception_entry_id, mechanical_invoice_id, amount, payment_mode, reference, posted_by, posted_at, payment_received_date'
+    'id, reception_entry_id, mechanical_invoice_id, amount, payment_mode, reference, remark, posted_by, posted_at, payment_received_date'
   let columns = withVoucher
   const rows: AccountsMechanicalPayment[] = []
   for (let from = 0; ; from += pageSize) {
@@ -956,7 +961,13 @@ export async function listAccountsMechanicalPaymentLines(): Promise<AccountsMech
       .order('id', { ascending: true })
       .range(from, from + pageSize - 1)
     if (error) {
-      if (columns === withVoucher && /voucher_no/i.test(error.message || '')) {
+      const msg = error.message || ''
+      if (columns.includes('remark') && /remark/i.test(msg)) {
+        columns = columns.replace(', remark', '')
+        from -= pageSize
+        continue
+      }
+      if (columns === withVoucher && /voucher_no/i.test(msg)) {
         columns = withoutVoucher
         from -= pageSize
         continue

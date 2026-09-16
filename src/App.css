@@ -690,8 +690,9 @@ table.tbl { width: 100%; border-collapse: collapse; font-size: 13.5px; }
 .acct-modal-summary div { background: var(--canvas); border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; }
 .acct-modal-summary span { display: block; font-size: 11px; color: var(--muted); }
 .acct-modal-summary strong { display: block; margin-top: 4px; font-size: 14px; }
+.acct-pay-hist-wrap { overflow-x: auto; }
 .acct-pay-hist { width: 100%; border-collapse: collapse; font-size: 12.5px; }
-.acct-pay-hist th, .acct-pay-hist td { text-align: left; padding: 8px 6px; border-bottom: 1px solid var(--border); vertical-align: top; }
+.acct-pay-hist th, .acct-pay-hist td { text-align: left; padding: 8px 6px; border-bottom: 1px solid var(--border); vertical-align: top; word-break: break-word; }
 .acct-pay-hist th { color: var(--muted); font-weight: 600; }
 .acct-pay-hist .inp,
 .acct-pay-hist .sel { min-height: 32px; font-size: 12.5px; padding: 4px 8px; width: 100%; max-width: 160px; }
@@ -719,6 +720,26 @@ table.tbl { width: 100%; border-collapse: collapse; font-size: 13.5px; }
   color: var(--muted);
 }
 .acct-pay-draft__actions { display: flex; align-items: center; gap: 4px; }
+.acct-pay-draft__row3,
+.acct-pay-draft__row2 {
+  display: grid;
+  gap: 10px;
+}
+.acct-pay-draft__row3 {
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+}
+.acct-pay-draft__row2 {
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  margin-top: 10px;
+}
+.acct-pay-draft .inp,
+.acct-pay-draft .sel {
+  min-height: 32px;
+  font-size: 12.5px;
+  padding: 4px 8px;
+  width: 100%;
+  min-width: 0;
+}
 .acct-pay-add {
   width: 28px;
   min-width: 28px;
@@ -6695,7 +6716,9 @@ tr.brx-recov-row--mismatch td:first-child {
   .brx-sa-grid-3,
   .brx-floor-meta-grid,
   .brx-form-grid-2,
-  .acct-modal-summary {
+  .acct-modal-summary,
+  .acct-pay-draft__row3,
+  .acct-pay-draft__row2 {
     grid-template-columns: 1fr;
   }
 

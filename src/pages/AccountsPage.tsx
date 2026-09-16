@@ -27,7 +27,6 @@ import {
   listAccountsMechanicalPaymentLines,
   listAccountsMechanicalPayments,
   lookupAccountsMechanicalDmsInvoice,
-  mechanicalDraftRowRemaining,
   mechanicalGatepassEligibility,
   mechanicalGatepassReasonDetail,
   mechanicalGatepassReasonLabel,
@@ -76,6 +75,7 @@ type MechanicalPaymentDraft = {
   paymentMode: AccountsPaymentMode
   paymentReceivedDate: string
   paymentReference: string
+  paymentRemark: string
 }
 
 type MechanicalReceiptEdit = {
@@ -84,6 +84,7 @@ type MechanicalReceiptEdit = {
   paymentMode: AccountsPaymentMode
   paymentReceivedDate: string
   paymentReference: string
+  paymentRemark: string
   voucherNo: string | null
 }
 
@@ -97,6 +98,7 @@ function emptyMechanicalPaymentDraft(): MechanicalPaymentDraft {
     paymentMode: 'cash',
     paymentReceivedDate: asiaKolkataTodayDate(),
     paymentReference: '',
+    paymentRemark: '',
   }
 }
 
@@ -487,6 +489,7 @@ export default function AccountsPage() {
       paymentMode: line.payment_mode,
       paymentReceivedDate: mechanicalPaymentReceivedDate(line) ?? asiaKolkataTodayDate(),
       paymentReference: line.reference ?? '',
+      paymentRemark: line.remark ?? '',
       voucherNo: line.voucher_no ?? null,
     })
     setReceiptEditError(null)
@@ -525,6 +528,7 @@ export default function AccountsPage() {
         paymentMode: receiptEdit.paymentMode,
         reference: receiptEdit.paymentReference.trim() || null,
         paymentReceivedDate: receivedDate,
+        remark: receiptEdit.paymentRemark.trim() || null,
       })
       patchMechRow(saved)
       await refreshMechanicalPayLines(editRow.reception_entry_id)
@@ -556,14 +560,16 @@ export default function AccountsPage() {
       paymentMode: AccountsPaymentMode
       reference: string | null
       paymentReceivedDate: string
+      remark: string | null
     }> = []
 
     for (let i = 0; i < paymentDrafts.length; i++) {
       const draft = paymentDrafts[i]
       const amount = numOrNull(draft.amount)
       const reference = draft.paymentReference.trim()
+      const remark = draft.paymentRemark.trim()
       const receivedDate = draft.paymentReceivedDate.trim()
-      const emptyExtra = i > 0 && amount == null && !reference
+      const emptyExtra = i > 0 && amount == null && !reference && !remark
       if (emptyExtra) continue
       if (amount == null || amount <= 0) {
         setPayError(paymentDrafts.length > 1 ? `Enter the amount for Payment ${i + 1}.` : 'Enter this receipt amount.')
@@ -579,6 +585,7 @@ export default function AccountsPage() {
         paymentMode: draft.paymentMode,
         reference: reference || null,
         paymentReceivedDate: receivedDate,
+        remark: remark || null,
       })
     }
 
@@ -599,6 +606,7 @@ export default function AccountsPage() {
           paymentMode: payment.paymentMode,
           reference: payment.reference,
           paymentReceivedDate: payment.paymentReceivedDate,
+          remark: payment.remark,
         })
         postedKeys.add(payment.key)
         patchMechRow(saved)
@@ -1520,13 +1528,7 @@ export default function AccountsPage() {
                   )}
                   {!isMechanicalPaymentClosed(editRow) && (
                     <div>
-                      {paymentDrafts.map((draft, index) => {
-                        const billedRemaining = Number(mechanicalRemaining(editRow) ?? 0)
-                        const rowRemaining = mechanicalDraftRowRemaining(
-                          billedRemaining,
-                          paymentDrafts.filter((_, i) => i !== index).map((other) => numOrNull(other.amount)),
-                        )
-                        return (
+                      {paymentDrafts.map((draft, index) => (
                           <div key={draft.key} className="acct-pay-draft">
                             <div className="acct-pay-draft__title">
                               <span>Payment {index + 1}</span>
@@ -1557,25 +1559,16 @@ export default function AccountsPage() {
                                 )}
                               </div>
                             </div>
-                            <div className="brx-form-grid-2">
+                            <div className="acct-pay-draft__row3">
                               <label className="brx-field">
-                                <span className="brx-field-label">{index === 0 ? 'This receipt (₹)' : 'Amount (₹)'}</span>
+                                <span className="brx-field-label">Amount received</span>
                                 <input
                                   className="inp"
                                   type="number"
                                   value={draft.amount}
                                   onChange={(e) => updatePaymentDraft(draft.key, { amount: e.target.value })}
-                                  placeholder="Amount received (may exceed remaining)"
+                                  placeholder="₹ 0.00"
                                 />
-                                {rowRemaining > 0 && (
-                                  <button
-                                    type="button"
-                                    className="linkbtn linkbtn--sm"
-                                    onClick={() => updatePaymentDraft(draft.key, { amount: String(rowRemaining) })}
-                                  >
-                                    Use remaining {inr(rowRemaining)}
-                                  </button>
-                                )}
                               </label>
                               <label className="brx-field">
                                 <span className="brx-field-label">Payment mode</span>
@@ -1599,19 +1592,29 @@ export default function AccountsPage() {
                                   onChange={(e) => updatePaymentDraft(draft.key, { paymentReceivedDate: e.target.value })}
                                 />
                               </label>
+                            </div>
+                            <div className="acct-pay-draft__row2">
                               <label className="brx-field">
-                                <span className="brx-field-label">Reference</span>
+                                <span className="brx-field-label">Reference no.</span>
                                 <input
                                   className="inp"
                                   value={draft.paymentReference}
                                   onChange={(e) => updatePaymentDraft(draft.key, { paymentReference: e.target.value })}
-                                  placeholder="UTR, cheque no, or note"
+                                  placeholder="UTR, cheque no. or note"
+                                />
+                              </label>
+                              <label className="brx-field">
+                                <span className="brx-field-label">Remark</span>
+                                <input
+                                  className="inp"
+                                  value={draft.paymentRemark}
+                                  onChange={(e) => updatePaymentDraft(draft.key, { paymentRemark: e.target.value })}
+                                  placeholder="Enter remark..."
                                 />
                               </label>
                             </div>
                           </div>
-                        )
-                      })}
+                      ))}
                       <div className="brx-field">
                         <button
                           type="button"
@@ -1629,13 +1632,15 @@ export default function AccountsPage() {
                 {payLines.length > 0 && (
                   <div className="acct-modal-section">
                     <p className="acct-modal-kicker">Receipts</p>
+                    <div className="acct-pay-hist-wrap">
                     <table className="acct-pay-hist">
                       <thead>
                         <tr>
                           <th>Received Date</th>
                           <th>Mode</th>
                           <th>Amount</th>
-                          <th>Reference</th>
+                          <th>Reference no.</th>
+                          <th>Remark</th>
                           {isAdmin && <th>Action</th>}
                         </tr>
                       </thead>
@@ -1696,10 +1701,23 @@ export default function AccountsPage() {
                                     value={draft.paymentReference}
                                     disabled={savingReceiptEdit}
                                     onChange={(e) => patchReceiptEdit({ paymentReference: e.target.value })}
-                                    placeholder="UTR, cheque no, or note"
+                                    placeholder="UTR, cheque no. or note"
                                   />
                                 ) : (
                                   l.reference || '—'
+                                )}
+                              </td>
+                              <td>
+                                {draft ? (
+                                  <input
+                                    className="inp"
+                                    value={draft.paymentRemark}
+                                    disabled={savingReceiptEdit}
+                                    onChange={(e) => patchReceiptEdit({ paymentRemark: e.target.value })}
+                                    placeholder="Enter remark..."
+                                  />
+                                ) : (
+                                  (l.remark && l.remark.trim()) || '—'
                                 )}
                               </td>
                               {isAdmin && (
@@ -1740,6 +1758,7 @@ export default function AccountsPage() {
                         })}
                       </tbody>
                     </table>
+                    </div>
                     {receiptEdit && receiptEditError && (
                       <p className="acct-pay-hist__error">{receiptEditError}</p>
                     )}

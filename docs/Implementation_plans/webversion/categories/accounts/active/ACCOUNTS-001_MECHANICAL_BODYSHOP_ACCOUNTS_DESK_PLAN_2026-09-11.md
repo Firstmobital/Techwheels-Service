@@ -8,7 +8,7 @@
 **Status:** Active (web implemented; DBL-0055 Accounts DO post pending apply)  
 **Platform:** webversion  
 **Category:** accounts  
-**Ledger:** DBL-0045/0046/0051/0052/0053/0054/0056/0057/0058/0059/0060/0061/0066 APPLIED. DBL-0068 APPLIED (Admin edit of posted Mechanical receipts). DBL-0055 PROPOSED (Accounts may post insurer/DO lines). Mechanical vouchers recalculated from `invoice_date >= 2026-09-02`. Do not reuse DBL-0043 (`busy`) or DBL-0044 (`busy_parts`).  
+**Ledger:** DBL-0045/0046/0051/0052/0053/0054/0056/0057/0058/0059/0060/0061/0066 APPLIED. DBL-0068 APPLIED (Admin edit of posted Mechanical receipts). DBL-0069 APPLIED (SA invoice amount requires Floor completed). DBL-0073 PROPOSED (per-receipt remark on mechanical payment lines). DBL-0055 PROPOSED (Accounts may post insurer/DO lines). Mechanical vouchers recalculated from `invoice_date >= 2026-09-02`. Do not reuse DBL-0043 (`busy`) or DBL-0044 (`busy_parts`).  
 **Route:** `/accounts`  
 **Module:** `accounts`  
 **Depends on:** BODYSHOP-SETTLEMENT-001 (`bodyshop_settlements`, Stage 18 lines); Service Advisor Mark Done (`invoice_done_at`)  
@@ -178,6 +178,7 @@ Pattern: `src/pages/BodyshopRecoveryPage.tsx` (KPIs, search, table, Excel, on-pa
 - [x] **Task 3.10:** Mechanical Gatepass 2% short-payment, Keep on Credit, exact overpayment, trusted issue RPC (DBL-0061). Dedicated reason + validity + revocation metadata (DBL-0066).
 - [x] **Task 3.11:** Mechanical Cash / UPI / Credit Card KPIs use status filter + `payment_received_date` (IST `posted_at` fallback). Exclude Discount `reference`. Receipt Period is independent of Mark Done table period.
 - [x] **Task 3.12:** Admin-only edit of posted Mechanical receipts (DBL-0068). Trusted `update_accounts_mechanical_payment`. Non-admin RPC denied. Voucher number preserved. Recalc + Gatepass refresh. Bodyshop unchanged.
+- [ ] **Task 3.13:** Per-receipt Remark on Mechanical payment entries (DBL-0073). Layout Amount / Mode / Date then Reference no. / Remark. Persist on `accounts_mechanical_payment_lines.remark`.
 
 ### Phase 4: Closeout
 - [x] **Task 4.1:** MODULE_ROUTE_CONTRACT (grant Accounts users after SQL apply).
@@ -223,6 +224,7 @@ Pattern: `src/pages/BodyshopRecoveryPage.tsx` (KPIs, search, table, Excel, on-pa
 ✅ 3.10 | Mechanical Gatepass 2% / credit / overpay | Eng | 2026-09-15 | 2026-09-15 | DBL-0061 APPLIED
 ✅ 3.11 | Mechanical payment-mode KPI receipt-date + Discount exclusion | Eng | 2026-09-15 | 2026-09-15 | Client helper; no schema
 ✅ 3.12 | Admin edit posted Mechanical receipts | Eng | 2026-09-16 | 2026-09-16 | DBL-0068 APPLIED; is_admin() RPC
+⏳ 3.13 | Per-receipt remark | Eng | 2026-09-16 | - | DBL-0073 PROPOSED
 ⏳ 3.5 | Capture Fetch from DMS | Eng | 2026-09-11 | 2026-09-11 | DBL-0048 applied; web button pending deploy
 ```
 
@@ -367,7 +369,7 @@ Pattern: `src/pages/BodyshopRecoveryPage.tsx` (KPIs, search, table, Excel, on-pa
 - `docs/Implementation_plans/webversion/categories/bodyshop/active/BODYSHOP-RECOVERY-001_DO_INSURANCE_RECOVERY_BOOK_PLAN_2026-09-04.md`
 - `docs/Implementation_plans/webversion/categories/operations/active/BUSY-001_BUSY_ACCOUNTING_EXPORT_PLAN_2026-09-10.md`
 - `docs/shared/reference/MODULE_ROUTE_CONTRACT.md`
-- `docs/shared/reference/DB_CHANGE_LEDGER.md` (DBL-0045, DBL-0055, DBL-0057, DBL-0058, DBL-0060, DBL-0061, DBL-0066, DBL-0068)
+- `docs/shared/reference/DB_CHANGE_LEDGER.md` (DBL-0045, DBL-0055, DBL-0057, DBL-0058, DBL-0060, DBL-0061, DBL-0066, DBL-0068, DBL-0069, DBL-0073)
 - Evidence (later): `docs/Implementation_plans/webversion/categories/accounts/evidence/ACCOUNTS-001_TEST_MATRIX.md`
 
 ---
