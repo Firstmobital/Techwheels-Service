@@ -30,6 +30,18 @@ function statusLabel(s: string | null | undefined) {
   return 'Pending'
 }
 
+function doPayStatus(r: Pick<DoRecoveryRow, 'do_payment_status'>) {
+  return String(r.do_payment_status ?? 'pending').toLowerCase()
+}
+
+function isOpenRecovery(r: Pick<DoRecoveryRow, 'insurance_due_amount'>) {
+  return (Number(r.insurance_due_amount) || 0) > 0
+}
+
+function isReceivedRecovery(r: Pick<DoRecoveryRow, 'insurance_due_amount'>) {
+  return !isOpenRecovery(r)
+}
+
 function invoiceParts(iso: string | null | undefined): { year: number; month: number } {
   if (!iso) return { year: 0, month: 0 }
   const raw = String(iso).slice(0, 10)
@@ -88,7 +100,7 @@ const DOC_LABELS: Record<string, string> = {
   doc_survey_approval: 'Survey approval',
 }
 
-type StatusFilter = 'all' | 'pending' | 'partial' | 'not_received'
+type StatusFilter = 'all' | 'pending' | 'partial' | 'not_received' | 'received'
 
 function Field({ label, value }: { label: string; value: string }) {
   return (
@@ -241,54 +253,71 @@ export default function BodyshopRecoveryPage() {
     })
   }, [rows, search, insurer, mismatch])
 
+  const chipRows = useMemo(() => {
+    return searched.filter((r) => (status === 'received' ? isReceivedRecovery(r) : isOpenRecovery(r)))
+  }, [searched, status])
+
   const years = useMemo(() => {
+    const receivedChips = status === 'received'
     const map = new Map<number, { due: number; count: number }>()
-    for (const r of searched) {
+    for (const r of chipRows) {
       const { year: y } = invoiceParts(r.invoice_date)
       const cur = map.get(y) ?? { due: 0, count: 0 }
-      cur.due += Number(r.insurance_due_amount) || 0
+      cur.due += receivedChips ? Number(r.do_amount) || 0 : Number(r.insurance_due_amount) || 0
       cur.count += 1
       map.set(y, cur)
     }
     return [...map.entries()]
       .map(([y, v]) => ({ year: y, ...v }))
       .sort((a, b) => b.year - a.year)
-  }, [searched])
+  }, [chipRows, status])
 
   const yearScoped = useMemo(() => {
-    if (year === 'all') return searched
-    return searched.filter((r) => invoiceParts(r.invoice_date).year === year)
-  }, [searched, year])
+    if (year === 'all') return chipRows
+    return chipRows.filter((r) => invoiceParts(r.invoice_date).year === year)
+  }, [chipRows, year])
 
   const months = useMemo(() => {
+    const receivedChips = status === 'received'
     const map = new Map<number, { due: number; count: number }>()
     for (const r of yearScoped) {
       const { month: m } = invoiceParts(r.invoice_date)
       const cur = map.get(m) ?? { due: 0, count: 0 }
-      cur.due += Number(r.insurance_due_amount) || 0
+      cur.due += receivedChips ? Number(r.do_amount) || 0 : Number(r.insurance_due_amount) || 0
       cur.count += 1
       map.set(m, cur)
     }
     return [...map.entries()]
       .map(([m, v]) => ({ month: m, ...v }))
       .sort((a, b) => a.month - b.month)
-  }, [yearScoped])
+  }, [yearScoped, status])
 
-  const visible = useMemo(() => {
-    return yearScoped.filter((r) => {
-      if (month !== 'all' && invoiceParts(r.invoice_date).month !== month) return false
-      if (status !== 'all' && String(r.do_payment_status ?? 'pending').toLowerCase() !== status) return false
+  const periodRows = useMemo(() => {
+    return searched.filter((r) => {
+      const parts = invoiceParts(r.invoice_date)
+      if (year !== 'all' && parts.year !== year) return false
+      if (month !== 'all' && parts.month !== month) return false
       return true
     })
-  }, [yearScoped, month, status])
+  }, [searched, year, month])
+
+  const visible = useMemo(() => {
+    return periodRows.filter((r) => {
+      if (status === 'received') return isReceivedRecovery(r)
+      if (status === 'all') return isOpenRecovery(r)
+      return doPayStatus(r) === status && isOpenRecovery(r)
+    })
+  }, [periodRows, status])
 
   const kpis = useMemo(() => {
-    const due = visible.reduce((s, r) => s + (Number(r.insurance_due_amount) || 0), 0)
-    const pending = visible.filter((r) => String(r.do_payment_status ?? 'pending').toLowerCase() === 'pending').length
-    const partial = visible.filter((r) => String(r.do_payment_status ?? '').toLowerCase() === 'partial').length
-    const notReceived = visible.filter((r) => String(r.do_payment_status ?? '').toLowerCase() === 'not_received').length
-    return { due, count: visible.length, pending, partial, notReceived }
-  }, [visible])
+    const open = periodRows.filter(isOpenRecovery)
+    const due = open.reduce((s, r) => s + (Number(r.insurance_due_amount) || 0), 0)
+    const pending = open.filter((r) => doPayStatus(r) === 'pending').length
+    const partial = open.filter((r) => doPayStatus(r) === 'partial').length
+    const notReceived = open.filter((r) => doPayStatus(r) === 'not_received').length
+    const received = periodRows.filter(isReceivedRecovery).length
+    return { due, count: open.length, pending, partial, notReceived, received }
+  }, [periodRows])
 
   async function exportExcel() {
     if (visible.length === 0) return
@@ -496,6 +525,11 @@ export default function BodyshopRecoveryPage() {
           <span className="brx-recov-kpi__v">{kpis.notReceived}</span>
           <span className="brx-recov-kpi__s">Accounts marked not receivable</span>
         </button>
+        <button type="button" className={`brx-recov-kpi ${status === 'received' ? 'is-active' : ''}`} onClick={() => setStatus((p) => p === 'received' ? 'all' : 'received')}>
+          <span className="brx-recov-kpi__l">Received</span>
+          <span className="brx-recov-kpi__v">{kpis.received}</span>
+          <span className="brx-recov-kpi__s">No recovery needed</span>
+        </button>
       </div>
 
       <div className="brx-recov-filters">
@@ -527,7 +561,7 @@ export default function BodyshopRecoveryPage() {
           className={`brx-pipe-pill ${year === 'all' ? 'is-active' : ''}`}
           onClick={() => { setYear('all'); setMonth('all') }}
         >
-          <span className="brx-pipe-pill__n">{searched.length}</span>
+          <span className="brx-pipe-pill__n">{chipRows.length}</span>
           <span className="brx-pipe-pill__l">All years<small>invoice date</small></span>
         </button>
         {years.map((y) => (
@@ -568,11 +602,13 @@ export default function BodyshopRecoveryPage() {
       )}
 
       <div className="brx-panel acct-table-panel">
-        <div className="brx-panel-h">Open DO recovery</div>
+        <div className="brx-panel-h">{status === 'received' ? 'Received DO — no recovery needed' : 'Open DO recovery'}</div>
         {loading && rows.length === 0 ? (
-          <div className="brx-settle-status">Loading open insurance dues…</div>
+          <div className="brx-settle-status">Loading insurance dues…</div>
         ) : visible.length === 0 ? (
-          <div className="brx-settle-status">No open DO / insurance due in this view.</div>
+          <div className="brx-settle-status">
+            {status === 'received' ? 'No received DO cases in this view.' : 'No open DO / insurance due in this view.'}
+          </div>
         ) : (
           <div className="acct-table-scroll">
           <table className="brx-settle-table">

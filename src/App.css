@@ -1035,7 +1035,7 @@ table.tbl { width: 100%; border-collapse: collapse; font-size: 13.5px; }
 }
 .recov-page .brx-recov-kpis {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 6px;
   margin-bottom: 8px;
   flex: none;
@@ -1146,6 +1146,12 @@ table.tbl { width: 100%; border-collapse: collapse; font-size: 13.5px; }
 .recov-page .acct-table-scroll .brx-settle-table th:nth-child(11),
 .recov-page .acct-table-scroll .brx-settle-table td:nth-child(11) {
   min-width: 168px;
+}
+
+@media (max-width: 1200px) {
+  .recov-page .brx-recov-kpis {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
 }
 
 @media (max-width: 960px) {
@@ -4615,7 +4621,7 @@ code.k--b { background: var(--accent-soft); color: var(--accent); }
 
 .brx-recov-kpis {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 10px;
   margin-bottom: 14px;
 }
