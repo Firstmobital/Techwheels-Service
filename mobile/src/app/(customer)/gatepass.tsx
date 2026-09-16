@@ -74,9 +74,9 @@ export default function CustomerGatePassScreen() {
   const receivedVal = Number(settlement?.amount_received ?? pass?.amount_received ?? selected?.amount_received ?? 0)
   const remainingVal = Math.max(0, billedVal - receivedVal)
 
-  // Valid gatepass requires: bill generated, issued or verified full payment, and valid today
-  const isPaidOrCleared = billedVal > 0 && (remainingVal === 0 || pass?.keep_on_credit || pass?.payment_status === 'Paid' || settlement?.status === 'received')
-  const isValidToday = (hasIssuedRecord || isPaidOrCleared) && !isExpired && isPaidOrCleared
+  // Gate pass is valid if issued by Accounts Desk or marked paid/cleared, and not expired
+  const isGatepassAuthorized = hasIssuedRecord || pass?.payment_status === 'Paid' || settlement?.status === 'received' || (billedVal > 0 && remainingVal === 0) || Boolean(pass?.keep_on_credit)
+  const isValidToday = isGatepassAuthorized && !isExpired
 
   const billed = formatInr(billedVal)
   const received = formatInr(receivedVal)
@@ -203,31 +203,8 @@ export default function CustomerGatePassScreen() {
         <ActivityIndicator color="#2563eb" className="py-8" />
       ) : (
         <>
-          {/* 1. BILL NOT GENERATED YET (BILLED AMOUNT IS 0 / NULL) */}
-          {billedVal <= 0 ? (
-            <CustomerCard style={{ backgroundColor: '#f8fafc', borderColor: '#cbd5e1', borderLeftWidth: 4, borderLeftColor: '#64748b' }}>
-              <View className="flex-row">
-                <Text className="text-[26px] mr-3">🔒</Text>
-                <View className="flex-1">
-                  <Text className="text-[14px] font-black text-slate-900">
-                    Invoice / Bill Has Not Been Generated Yet
-                  </Text>
-                  <Text className="text-[12.5px] text-slate-600 mt-1.5 leading-5">
-                    Your vehicle service is currently being processed on the workshop floor. The official Digital Gate Pass will be generated and unlocked here once the Accounts Desk enters the invoice details and releases clearance.
-                  </Text>
-                  <View className="mt-3 bg-blue-50 border border-blue-200 rounded-xl p-2.5 flex-row flex-wrap items-center justify-between gap-1">
-                    <Text className="text-blue-900 text-xs font-bold" numberOfLines={1}>
-                      Job Card: #{effectiveJcNumber}
-                    </Text>
-                    <Text className="text-blue-600 text-[10.5px] font-semibold">
-                      🔄 Live syncing…
-                    </Text>
-                  </View>
-                </View>
-              </View>
-            </CustomerCard>
-          ) : isExpired ? (
-            /* 2. EXPIRED GATE PASS (PREVIOUS DAY) */
+          {isExpired ? (
+            /* 1. EXPIRED GATE PASS (PREVIOUS DAY) */
             <CustomerCard style={{ backgroundColor: '#fef2f2', borderColor: '#fca5a5', borderLeftWidth: 4, borderLeftColor: '#ef4444' }}>
               <View className="flex-row">
                 <Text className="text-[26px] mr-3">⚠️</Text>
@@ -240,21 +217,30 @@ export default function CustomerGatePassScreen() {
               </View>
             </CustomerCard>
           ) : !isValidToday ? (
-            /* 3. BILL GENERATED BUT PENDING ACCOUNTS DESK RELEASE */
-            <CustomerCard style={{ backgroundColor: '#fffbeb', borderColor: '#fde68a', borderLeftWidth: 4, borderLeftColor: '#f59e0b' }}>
+            /* 2. PENDING ACCOUNTS DESK RELEASE */
+            <CustomerCard style={{ backgroundColor: '#f8fafc', borderColor: '#cbd5e1', borderLeftWidth: 4, borderLeftColor: '#0284c7' }}>
               <View className="flex-row">
                 <Text className="text-[26px] mr-3">⏳</Text>
                 <View className="flex-1">
-                  <Text className="text-[14px] font-extrabold text-amber-900">Gate Pass Under Clearance at Accounts Desk</Text>
-                  <Text className="text-[12.5px] text-amber-800 mt-1 leading-5">
-                    Invoice generated ({billed}). Once payment settlement is confirmed (Received: {received}, Remaining: {remaining}), Accounts Desk will release the departure Gate Pass.
+                  <Text className="text-[14px] font-black text-slate-900">
+                    Gate Pass Under Clearance at Accounts Desk
                   </Text>
-                  <Text className="text-[11.5px] font-bold text-amber-800 mt-2">🔄 Live syncing with Dealership Accounts Desk…</Text>
+                  <Text className="text-[12.5px] text-slate-600 mt-1.5 leading-5">
+                    Your vehicle service is being processed. The official Digital Gate Pass will appear and unlock here automatically as soon as the Accounts Desk creates it.
+                  </Text>
+                  <View className="mt-3 bg-blue-50 border border-blue-200 rounded-xl p-2.5 flex-row flex-wrap items-center justify-between gap-1">
+                    <Text className="text-blue-900 text-xs font-bold" numberOfLines={1}>
+                      Job Card: #{effectiveJcNumber}
+                    </Text>
+                    <Text className="text-blue-600 text-[10.5px] font-semibold">
+                      🔄 Live syncing with Accounts Desk…
+                    </Text>
+                  </View>
                 </View>
               </View>
             </CustomerCard>
           ) : (
-            /* 4. VALID GATE PASS DOCUMENT (SHOWN ONLY WHEN BILLED > 0 AND RELEASED TODAY) */
+            /* 3. VALID OFFICIAL GATE PASS (DIRECTLY ACCESSIBLE & DOWNLOADABLE) */
             <CustomerCard
               style={{
                 borderWidth: 2,

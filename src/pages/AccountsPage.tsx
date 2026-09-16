@@ -733,7 +733,7 @@ export default function AccountsPage() {
         const row = gatepassConfirmTarget.mechRow
         const issued = await issueMechanicalAccountsGatePass(row.reception_entry_id)
         rememberIssuedGatePass(issued)
-                        openMechanicalGatepass({
+        patchMechRow({
           ...row,
           amount_received: issued.amount_received ?? row.amount_received,
           remaining_amount: issued.remaining_amount ?? row.remaining_amount,
@@ -742,12 +742,7 @@ export default function AccountsPage() {
           keep_on_credit_approved_by: issued.keep_on_credit_approved_by ?? row.keep_on_credit_approved_by,
           keep_on_credit_approved_at: issued.keep_on_credit_approved_at ?? row.keep_on_credit_approved_at,
         })
-        const reason = mechanicalGatepassReasonLabel(
-          issued.settlement_reason === 'paid' || issued.settlement_reason === 'short_payment' || issued.settlement_reason === 'keep_on_credit'
-            ? issued.settlement_reason
-            : mechanicalGatepassEligibility(row).reason,
-        )
-        flash(`Gate Pass #${issued.gate_pass_no} released for ${issued.reg_number}${reason ? ` · ${reason}` : ''}`)
+        flash(`✅ Gate Pass #${issued.gate_pass_no} generated & sent directly to Customer App for ${issued.reg_number}!`)
       } else if (gatepassConfirmTarget.type === 'bodyshop' && gatepassConfirmTarget.bsRow) {
         const row = gatepassConfirmTarget.bsRow
         const gpNo = `GP-${row.job_card_no ? row.job_card_no.replace(/[^0-9]/g, '').slice(-5) : Date.now().toString().slice(-5)}`
@@ -767,8 +762,7 @@ export default function AccountsPage() {
           branch: row.branch || 'Sitapura Workshop',
           qr_token: `GP_AUTH_${gpNo}_${row.reg_number}_SECURE`,
         })
-        openBodyshopGatepass(row)
-        flash(`✅ Gate Pass #${gpNo} generated & released to Customer App for ${row.reg_number}!`)
+        flash(`✅ Gate Pass #${gpNo} generated & sent directly to Customer App for ${row.reg_number}!`)
       }
     } catch (e) {
       flash(e instanceof Error ? e.message : 'Failed to issue gatepass', false)
