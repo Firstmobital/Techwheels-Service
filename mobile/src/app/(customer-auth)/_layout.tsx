@@ -3,11 +3,11 @@ import { ActivityIndicator, View } from 'react-native'
 import { useAuth } from '../../context/AuthContext'
 import { useCustomerSession } from '../../context/CustomerSessionContext'
 
-export default function AuthLayout() {
-  const { loading, session } = useAuth()
+export default function CustomerAuthLayout() {
+  const { loading: staffLoading, session } = useAuth()
   const { loading: customerLoading, token } = useCustomerSession()
 
-  if (loading || customerLoading) {
+  if (staffLoading || customerLoading) {
     return (
       <View className="flex-1 items-center justify-center bg-white">
         <ActivityIndicator size="large" color="#2563eb" />
@@ -24,14 +24,8 @@ export default function AuthLayout() {
   }
 
   return (
-    <Stack
-      screenOptions={{
-        headerShown: false,
-      }}
-    >
+    <Stack screenOptions={{ headerShown: false }}>
       <Stack.Screen name="login" />
-      <Stack.Screen name="signup" />
-      <Stack.Screen name="password-reset" />
     </Stack>
   )
 }

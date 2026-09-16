@@ -13,6 +13,7 @@ import {
 import { useRouter } from 'expo-router'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { useAuth } from '../../context/AuthContext'
+import { useCustomerSession } from '../../context/CustomerSessionContext'
 
 export default function LoginScreen() {
   const [email, setEmail] = useState('')
@@ -20,6 +21,7 @@ export default function LoginScreen() {
   const [loading, setLoading] = useState(false)
   const router = useRouter()
   const { signIn } = useAuth()
+  const { rememberAudience } = useCustomerSession()
 
   const handleLogin = async () => {
     if (!email || !password) {
@@ -34,7 +36,7 @@ export default function LoginScreen() {
       if (error) {
         Alert.alert('Login Failed', error.message)
       } else {
-        // Navigate to tabs
+        await rememberAudience('staff')
         router.replace('/(tabs)/home')
       }
     } catch (err: any) {
@@ -54,9 +56,11 @@ export default function LoginScreen() {
           className="flex-1"
           keyboardShouldPersistTaps="handled"
         >
-          {/* Blue Header - NO Back Button on Login */}
           <View className="bg-blue-600 px-6 pt-6 pb-8">
-            <Text className="text-white text-4xl font-bold">Techwheels</Text>
+            <TouchableOpacity onPress={() => router.replace('/(audience)')} className="mb-4">
+              <Text className="text-white text-[17px]">← Customer or Staff</Text>
+            </TouchableOpacity>
+            <Text className="text-white text-4xl font-bold">Staff</Text>
             <Text className="text-blue-200 text-sm tracking-wider mt-1">SERVICE PLATFORM</Text>
           </View>
 
@@ -110,20 +114,9 @@ export default function LoginScreen() {
               {!loading && <Text className="text-white ml-2">🔒</Text>}
             </TouchableOpacity>
 
-            {/* Divider */}
-            <View className="flex-row items-center my-6">
-              <View className="flex-1 h-px bg-slate-200" />
-              <Text className="text-slate-400 text-sm mx-3">OR</Text>
-              <View className="flex-1 h-px bg-slate-200" />
-            </View>
-
-            {/* Sign Up Link */}
-            <View className="flex-row justify-center">
-              <Text className="text-slate-900 text-[17px]">Don't have an account? </Text>
-              <TouchableOpacity onPress={() => router.push('/(auth)/signup')}>
-                <Text className="text-blue-600 font-semibold text-[17px]">Sign up</Text>
-              </TouchableOpacity>
-            </View>
+            <Text className="text-slate-500 text-sm text-center mt-6">
+              Staff accounts are invite-only. Ask your workshop admin.
+            </Text>
           </View>
         </ScrollView>
       </KeyboardAvoidingView>

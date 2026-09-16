@@ -1,0 +1,115 @@
+import { supabase } from '../supabase'
+
+export interface CustomerVehicle {
+  id: string | number
+  source?: string
+  reg_number: string
+  reg_key?: string
+  model: string | null
+  vin?: string | null
+  owner_name: string | null
+  owner_phone: string | null
+  service_type: string | null
+  sa_name: string | null
+  sa_display_name?: string | null
+  jc_number: string | null
+  branch: string | null
+  created_at: string
+  invoice_done_at: string | null
+  km_reading?: number | null
+  remark?: string | null
+  estimate_storage_path?: string | null
+  estimate_drive_url?: string | null
+  invoice_storage_path?: string | null
+  invoice_drive_url?: string | null
+}
+
+export interface CustomerSessionResult {
+  session_token: string
+  expires_at?: string
+  phone: string
+  vehicles: CustomerVehicle[]
+}
+
+function mapVehicle(raw: Record<string, unknown>, index: number): CustomerVehicle {
+  const km = raw.km_reading
+  return {
+    id: (raw.id as string | number) ?? index + 1,
+    source: raw.source as string | undefined,
+    reg_number: String(raw.reg_number || ''),
+    reg_key: raw.reg_key as string | undefined,
+    model: (raw.model as string | null) ?? null,
+    vin: (raw.vin as string | null) ?? null,
+    owner_name: (raw.owner_name as string | null) ?? null,
+    owner_phone: (raw.owner_phone as string | null) ?? null,
+    service_type: (raw.service_type as string | null) ?? null,
+    sa_name: (raw.sa_name as string | null) ?? null,
+    sa_display_name: (raw.sa_display_name as string | null) ?? null,
+    jc_number: (raw.jc_number as string | null) ?? null,
+    branch: (raw.branch as string | null) ?? null,
+    created_at: String(raw.created_at || new Date().toISOString()),
+    invoice_done_at: (raw.invoice_done_at as string | null) ?? null,
+    km_reading: km == null || km === '' ? null : Number(km),
+    remark: (raw.remark as string | null) ?? null,
+    estimate_storage_path: (raw.estimate_storage_path as string | null) ?? null,
+    estimate_drive_url: (raw.estimate_drive_url as string | null) ?? null,
+    invoice_storage_path: (raw.invoice_storage_path as string | null) ?? null,
+    invoice_drive_url: (raw.invoice_drive_url as string | null) ?? null,
+  }
+}
+
+function rpcErrorMessage(error: { message?: string } | null, fallback: string): string {
+  const raw = error?.message || ''
+  if (raw.includes('Invalid mobile number')) return 'Invalid mobile number.'
+  if (raw.includes('No vehicle found')) return 'No vehicle found for this mobile number.'
+  if (raw.includes('Session expired')) return 'Session expired.'
+  if (raw.includes('Vehicle not found')) return 'Vehicle not found for this session.'
+  if (raw.includes('forbidden')) return 'Not allowed.'
+  return fallback
+}
+
+export async function customerStartSession(
+  username: string,
+  password: string
+): Promise<{ success: boolean; data?: CustomerSessionResult; error?: string }> {
+  const { data, error } = await supabase.rpc('customer_start_session', {
+    p_username: username,
+    p_password: password,
+  })
+
+  if (error || !data) {
+    return { success: false, error: rpcErrorMessage(error, 'Invalid mobile number.') }
+  }
+
+  const payload = data as CustomerSessionResult
+  const vehicles = Array.isArray(payload.vehicles)
+    ? payload.vehicles.map((v, i) => mapVehicle(v as unknown as Record<string, unknown>, i))
+    : []
+
+  if (!payload.session_token || vehicles.length === 0) {
+    return { success: false, error: 'No vehicle found for this mobile number.' }
+  }
+
+  return {
+    success: true,
+    data: {
+      session_token: payload.session_token,
+      expires_at: payload.expires_at,
+      phone: payload.phone,
+      vehicles,
+    },
+  }
+}
+
+export async function customerEndSession(sessionToken: string | null | undefined): Promise<void> {
+  if (!sessionToken) return
+  await supabase.rpc('customer_end_session', { p_session_token: sessionToken })
+}
+
+export async function customerListMyVehicles(sessionToken: string): Promise<CustomerVehicle[]> {
+  const { data, error } = await supabase.rpc('customer_list_my_vehicles', {
+    p_session_token: sessionToken,
+  })
+  if (error || !data) return []
+  return (data as Record<string, unknown>[]).map((v, i) => mapVehicle(v, i))
+}

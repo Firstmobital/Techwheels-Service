@@ -17,10 +17,20 @@ import {
   type CustomerVehicle,
   type PastServiceRecord,
 } from '../lib/api/customer'
+import {
+  customerGetActiveJob,
+  customerGetGatePass,
+  customerGetServiceHistory,
+  customerListEstimates,
+  customerSetEstimateDecision,
+  customerSubmitComplaint,
+  customerSubmitFeedback,
+} from '../lib/api/customerAuth'
 
 interface CustomerPortalPageProps {
   vehicle: CustomerVehicle
   allVehicles?: CustomerVehicle[]
+  sessionToken?: string | null
   onLogout: () => void
   onSelectVehicle?: (v: CustomerVehicle) => void
 }
@@ -45,6 +55,7 @@ interface ProblemItem {
 export default function CustomerPortalPage({
   vehicle: initialVehicle,
   allVehicles = [],
+  sessionToken = null,
   onLogout,
   onSelectVehicle,
 }: CustomerPortalPageProps) {
@@ -192,6 +203,29 @@ export default function CustomerPortalPage({
     if (!vehicle.reg_number) return
     setLoadingEstimates(true)
     try {
+      if (sessionToken) {
+        const list = await customerListEstimates(sessionToken, vehicle.reg_number)
+        setLiveEstimates(
+          list
+            .map((row) => {
+              const estimateNo = String(row.estimate_no || row.estimate_id || '')
+              if (!estimateNo) return null
+              return {
+                estimate_no: estimateNo,
+                vehicle_registration_number: String(row.reg_number || row.vehicle_registration_number || vehicle.reg_number),
+                items: Array.isArray(row.items) ? (row.items as CustomerEstimateRecord['items']) : [],
+                subtotal: Number(row.subtotal || 0),
+                discount: Number(row.discount || 0),
+                gst_tax: Number(row.gst_tax || 0),
+                grand_total: Number(row.grand_total || 0),
+                status: (row.status as CustomerEstimateRecord['status']) || 'Sent',
+                created_at: (row.created_at as string | null) || null,
+              } satisfies CustomerEstimateRecord
+            })
+            .filter((row): row is CustomerEstimateRecord => row !== null)
+        )
+        return
+      }
       const list = await fetchEstimatesForVehicle(vehicle.reg_number)
       setLiveEstimates(list)
     } catch (err) {
@@ -206,6 +240,29 @@ export default function CustomerPortalPage({
     if (!vehicle.reg_number) return
     setLoadingHistory(true)
     try {
+      if (sessionToken) {
+        const hist = await customerGetServiceHistory(sessionToken, vehicle.reg_number)
+        setServiceHistory(
+          hist.map((row) => ({
+            id: String(row.id || ''),
+            service_date: row.service_date
+              ? new Date(String(row.service_date)).toLocaleDateString('en-IN', {
+                  day: '2-digit',
+                  month: 'short',
+                  year: 'numeric',
+                })
+              : 'Completed',
+            jc_number: String(row.jc_number || ''),
+            service_type: String(row.service_type || 'Service'),
+            km_reading: row.km_reading == null ? null : Number(row.km_reading),
+            service_advisor: String(row.service_advisor || ''),
+            total_amount: row.total_amount == null ? 0 : Number(row.total_amount),
+            status: String(row.status || 'Delivered') === 'In service' ? 'Completed' : 'Delivered',
+            invoice_no: (row.invoice_no as string | null) || null,
+          })) as PastServiceRecord[]
+        )
+        return
+      }
       const hist = await fetchVehicleServiceHistory(vehicle.reg_number)
       setServiceHistory(hist)
     } catch (err) {
@@ -333,6 +390,35 @@ export default function CustomerPortalPage({
       let liveInvoiceDoneAt: string | null = null
       let liveGatePassIssued = false
       let liveGatePassNo: string | null = null
+
+      if (sessionToken && vehicle.reg_number) {
+        const active = await customerGetActiveJob(sessionToken, vehicle.reg_number)
+        const job = active.job
+        if (job) {
+          liveSa = cleanAdvisorPersonName((job.sa_display_name as string) || (job.sa_name as string)) 
+          liveJc = (job.jc_number as string | null) || null
+          liveKm = job.km_reading == null ? null : Number(job.km_reading)
+          liveServiceType = (job.service_type as string | null) || null
+          liveInvoiceDoneAt = (job.invoice_done_at as string | null) || null
+        }
+        const gp = await customerGetGatePass(sessionToken, vehicle.reg_number)
+        if (gp && gp.gate_pass_no) {
+          liveGatePassIssued = true
+          liveGatePassNo = String(gp.gate_pass_no)
+        }
+        setVehicle((prev) => ({
+          ...prev,
+          sa_name: liveSa || prev.sa_name,
+          sa_display_name: liveSa || prev.sa_display_name,
+          jc_number: liveJc || prev.jc_number,
+          km_reading: liveKm != null && liveKm > 0 ? liveKm : prev.km_reading,
+          service_type: liveServiceType || prev.service_type,
+          invoice_done_at: liveInvoiceDoneAt || prev.invoice_done_at,
+          gate_pass_issued: liveGatePassIssued || prev.gate_pass_issued,
+          gate_pass_number: liveGatePassNo || prev.gate_pass_number,
+        }))
+        return
+      }
 
       // 1. PRIMARY RECEPTION INTAKE SYNC: post_feedback_bot_data with mode 'service_advisor_sync_payload'
       // Strictly represents what Reception / Advisor entered on check-in
@@ -722,34 +808,11 @@ export default function CustomerPortalPage({
   async function handleApprove(est: CustomerEstimateRecord) {
     setApprovingEstNo(est.estimate_no)
     try {
-      await updateEstimateApproval(est.estimate_no, 'Approved')
-
-      // Sync approval status to reception entries on website dashboard
-      try {
-        await supabase
-          .from('service_reception_entries')
-          .update({
-            estimate_status: 'Approved',
-            estimate_approved_at: new Date().toISOString(),
-          })
-          .eq('reg_number', vehicle.reg_number.trim().toUpperCase())
-      } catch (err) {
-        console.warn('Sync estimate approval to reception failed:', err)
+      if (sessionToken) {
+        await customerSetEstimateDecision(sessionToken, est.estimate_no, 'approve')
+      } else {
+        await updateEstimateApproval(est.estimate_no, 'Approved')
       }
-
-      const botRow = {
-        vehicle_registration_number: vehicle.reg_number.trim().toUpperCase(),
-        customer_name: vehicle.owner_name || 'Customer',
-        mobile_number: vehicle.owner_phone || null,
-        rating: 5,
-        feedback_text: `[Estimate Approved] Customer approved Estimate #${est.estimate_no} (₹${est.grand_total.toLocaleString()}) via Mobile App.`,
-        service_type: `Estimate #${est.estimate_no} Approved`,
-        service_advisor_name: vehicle.sa_name || est.service_advisor_name || null,
-        branch: vehicle.branch || est.branch || null,
-        mode: 'customer_estimate_approval',
-        complaint_date_time: new Date().toISOString(),
-      }
-      await supabase.from('post_feedback_bot_data').insert([botRow])
       await loadVehicleEstimates()
     } catch (err) {
       console.error('Estimate approval error:', err)
@@ -763,22 +826,11 @@ export default function CustomerPortalPage({
     if (!rejectReason.trim()) return
     setRejectingEstNo(est.estimate_no)
     try {
-      await updateEstimateApproval(est.estimate_no, 'Rejected', rejectReason.trim())
-
-      const botRow = {
-        vehicle_registration_number: vehicle.reg_number.trim().toUpperCase(),
-        customer_name: vehicle.owner_name || 'Customer',
-        mobile_number: vehicle.owner_phone || null,
-        rating: 3,
-        feedback_text: `[Estimate Rejected/Change Request] Estimate #${est.estimate_no} rejected. Reason: ${rejectReason.trim()}`,
-        service_type: `Estimate #${est.estimate_no} Rejected`,
-        service_advisor_name: vehicle.sa_name || est.service_advisor_name || null,
-        branch: vehicle.branch || est.branch || null,
-        mode: 'customer_estimate_rejection',
-        complaint_date_time: new Date().toISOString(),
+      if (sessionToken) {
+        await customerSetEstimateDecision(sessionToken, est.estimate_no, 'reject', rejectReason.trim())
+      } else {
+        await updateEstimateApproval(est.estimate_no, 'Rejected', rejectReason.trim())
       }
-      await supabase.from('post_feedback_bot_data').insert([botRow])
-
       setShowRejectBox(false)
       setRejectReason('')
       await loadVehicleEstimates()
@@ -978,20 +1030,32 @@ export default function CustomerPortalPage({
         .filter(Boolean)
         .join('\n')
 
-      const botRow = {
-        vehicle_registration_number: vehicle.reg_number.trim().toUpperCase(),
-        customer_name: vehicle.owner_name || 'Customer',
-        mobile_number: vehicle.owner_phone || null,
-        rating: 4,
-        feedback_text: allProblemsText,
-        service_type: 'Customer Reported Issues',
-        service_advisor_name: vehicle.sa_name || null,
-        branch: vehicle.branch || null,
-        mode: 'customer_portal_concern',
-        complaint_date_time: new Date().toISOString(),
+      if (sessionToken) {
+        await customerSubmitComplaint(sessionToken, vehicle.reg_number, {
+          problems: validProblems,
+          notes: additionalNotes.trim(),
+          text: allProblemsText,
+          owner_name: vehicle.owner_name,
+          service_type: 'Customer Reported Issues',
+          sa_name: vehicle.sa_name,
+          branch: vehicle.branch,
+          model: vehicle.model,
+        })
+      } else {
+        const botRow = {
+          vehicle_registration_number: vehicle.reg_number.trim().toUpperCase(),
+          customer_name: vehicle.owner_name || 'Customer',
+          mobile_number: vehicle.owner_phone || null,
+          rating: 4,
+          feedback_text: allProblemsText,
+          service_type: 'Customer Reported Issues',
+          service_advisor_name: vehicle.sa_name || null,
+          branch: vehicle.branch || null,
+          mode: 'customer_portal_concern',
+          complaint_date_time: new Date().toISOString(),
+        }
+        await supabase.from('post_feedback_bot_data').insert([botRow])
       }
-
-      await supabase.from('post_feedback_bot_data').insert([botRow])
 
       setComplaintSuccess(true)
       setProblemList([{ id: `prob-${Date.now()}`, text: '' }])
@@ -1013,20 +1077,31 @@ export default function CustomerPortalPage({
 
     setFeedbackSubmitting(true)
     try {
-      const botRow = {
-        vehicle_registration_number: vehicle.reg_number.trim().toUpperCase(),
-        customer_name: vehicle.owner_name || 'Customer',
-        mobile_number: vehicle.owner_phone || null,
-        rating,
-        feedback_text: feedbackText.trim(),
-        service_type: vehicle.service_type || 'General Service',
-        service_advisor_name: vehicle.sa_name || null,
-        branch: vehicle.branch || null,
-        mode: 'customer_portal_feedback',
-        complaint_date_time: new Date().toISOString(),
+      if (sessionToken) {
+        await customerSubmitFeedback(sessionToken, vehicle.reg_number, {
+          text: feedbackText.trim(),
+          rating,
+          owner_name: vehicle.owner_name,
+          service_type: vehicle.service_type || 'General Service',
+          sa_name: vehicle.sa_name,
+          branch: vehicle.branch,
+          model: vehicle.model,
+        })
+      } else {
+        const botRow = {
+          vehicle_registration_number: vehicle.reg_number.trim().toUpperCase(),
+          customer_name: vehicle.owner_name || 'Customer',
+          mobile_number: vehicle.owner_phone || null,
+          rating,
+          feedback_text: feedbackText.trim(),
+          service_type: vehicle.service_type || 'General Service',
+          service_advisor_name: vehicle.sa_name || null,
+          branch: vehicle.branch || null,
+          mode: 'customer_portal_feedback',
+          complaint_date_time: new Date().toISOString(),
+        }
+        await supabase.from('post_feedback_bot_data').insert([botRow])
       }
-
-      await supabase.from('post_feedback_bot_data').insert([botRow])
       setFeedbackSuccess(true)
       setFeedbackText('')
       setTimeout(() => setFeedbackSuccess(false), 5000)

@@ -1,5 +1,6 @@
 import { Redirect, Tabs } from 'expo-router'
 import { useAuth } from '../../context/AuthContext'
+import { useCustomerSession } from '../../context/CustomerSessionContext'
 import { ActivityIndicator, TouchableOpacity, Text, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
@@ -112,6 +113,7 @@ function CustomTabBar({ state, descriptors, navigation }: any) {
 
 export default function TabsLayout() {
   const { loading, session } = useAuth()
+  const { token } = useCustomerSession()
 
   if (loading) {
     return (
@@ -121,8 +123,12 @@ export default function TabsLayout() {
     )
   }
 
+  if (token && !session) {
+    return <Redirect href="/(customer)" />
+  }
+
   if (!session) {
-    return <Redirect href="/(auth)/login" />
+    return <Redirect href="/(audience)" />
   }
 
   return (

@@ -45,7 +45,7 @@ Use this file as daily command center:
 | MOBILE-009 | redesign | Active | Mobile Team | `docs/Implementation_plans/mobileversion/categories/redesign/active/MOBILE-009_MOBILE_APP_REDESIGN_PARITY_TRACKER.md` |
 | MOBILE-010 | program | Active | Mobile Team | `docs/Implementation_plans/mobileversion/categories/program/active/MOBILE-010_MOBILE_PROGRAM_MASTER_TRACKER.md` |
 | MOBILE-BP-RD | redesign | In Progress | Mobile Team | `docs/Implementation_plans/mobileversion/categories/redesign/active/redesign_bodypaint_module.md` |
-| MOBILE-011 | auth | Not Started | Mobile Team + Platform | `docs/Implementation_plans/mobileversion/categories/auth/active/MOBILE-011_CUSTOMER_STAFF_SINGLE_APP_PLAN.md` |
+| MOBILE-011 | auth | In Progress | Mobile Team + Platform | `docs/Implementation_plans/mobileversion/categories/auth/active/MOBILE-011_CUSTOMER_STAFF_SINGLE_APP_PLAN.md` |
 
 ---
 

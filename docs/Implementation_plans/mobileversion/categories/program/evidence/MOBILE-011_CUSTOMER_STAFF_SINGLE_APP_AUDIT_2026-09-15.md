@@ -75,7 +75,7 @@ Effect:
 - Anyone who unpacks the APK can read and write the whole database.
 - This is why the Capacitor app “works” against tables that have no customer/anon policies.
 
-**Must do before any customer build:** rotate that service-role key, remove it from client code, never put `service_role` in a mobile/web bundle.
+**Must do before any customer build:** remove that service-role key from client code (product decision 2026-09-16: do **not** rotate the dashboard key). Never put `service_role` in a mobile/web bundle.
 
 Staff mobile client is correct on this point: it uses the anon key from Expo env / `expo.extra` (`mobile/src/lib/supabase.ts`).
 
@@ -284,7 +284,7 @@ Staff modules stay behind `user_module_permissions`. Customer shell is a fixed s
 
 ## 8. Suggested build order (when implementation starts)
 
-1. **Rotate** the leaked service-role key. Remove it from `bodyshop/src/lib/supabase.ts` and any other client.
+1. **Remove** the service-role key from `bodyshop/src/lib/supabase.ts` and tracked `bodyshop/.env`. Do **not** rotate the dashboard key (product decision 2026-09-16).
 2. **DB:** customer RPCs (then OTP + `customer_profiles`). No customer rows in `public.users`.
 3. **Expo:** audience picker → customer login → customer tab shell. Staff login unchanged. Staff signup locked.
 4. **Port** dashboard / problem / estimate / bills / gate pass / feedback from `CustomerPortalPage`, talking only to those RPCs. Show real nulls, not invented fields.

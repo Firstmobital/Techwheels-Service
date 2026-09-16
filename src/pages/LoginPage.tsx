@@ -7,7 +7,7 @@ import { authenticateCustomer, type CustomerVehicle } from '../lib/api/customer'
 interface Props {
   onSwitchToSignUp: () => void
   onSwitchToForgot?: () => void
-  onCustomerLogin?: (vehicle: CustomerVehicle, allVehicles: CustomerVehicle[]) => void
+  onCustomerLogin?: (vehicle: CustomerVehicle, allVehicles: CustomerVehicle[], sessionToken: string) => void
 }
 
 const PITCH_STAFF = {
@@ -67,24 +67,13 @@ export default function LoginPage({ onSwitchToSignUp, onSwitchToForgot, onCustom
       return
     }
 
-    // 2. If non-email, try customer login fallback
-    const custRes = await authenticateCustomer(inputIdentifier, password)
-    if (custRes.success && custRes.vehicle) {
-      if (onCustomerLogin) {
-        onCustomerLogin(custRes.vehicle, custRes.allVehicles || [custRes.vehicle])
-      }
-      setLoading(false)
-      return
-    }
-
-    // 3. Fallback: try Supabase staff login
     const { error: staffErr } = await supabase.auth.signInWithPassword({ email: inputIdentifier, password })
     if (!staffErr) {
       setLoading(false)
       return
     }
 
-    setError('Invalid staff credentials or unrecognized account format.')
+    setError('Invalid staff credentials.')
     setLoading(false)
   }
 
@@ -94,27 +83,25 @@ export default function LoginPage({ onSwitchToSignUp, onSwitchToForgot, onCustom
     setCustLoading(true)
     setCustError(null)
 
-    const rawUser = customerUsername.trim()
-    const rawPass = customerPassword.trim()
-    const username = rawUser || rawPass
-    const pass = rawPass || rawUser
+    const username = customerUsername.trim()
+    const pass = customerPassword.trim()
 
-    if (!username) {
-      setCustError('Please enter your 10-digit mobile number or vehicle registration number.')
+    if (!username || !pass) {
+      setCustError('Enter your 10-digit mobile number in both fields.')
       setCustLoading(false)
       return
     }
 
     try {
       const custRes = await authenticateCustomer(username, pass)
-      if (custRes.success && custRes.vehicle) {
+      if (custRes.success && custRes.vehicle && custRes.sessionToken) {
         if (onCustomerLogin) {
-          onCustomerLogin(custRes.vehicle, custRes.allVehicles || [custRes.vehicle])
+          onCustomerLogin(custRes.vehicle, custRes.allVehicles || [custRes.vehicle], custRes.sessionToken)
         }
         setCustLoading(false)
         return
       }
-      setCustError(custRes.error || 'Unable to log in with provided customer credentials.')
+      setCustError(custRes.error || 'Invalid mobile number.')
     } catch (err: any) {
       setCustError(err?.message || 'Login request failed. Please check network connection.')
     } finally {
@@ -316,19 +303,21 @@ export default function LoginPage({ onSwitchToSignUp, onSwitchToForgot, onCustom
             </div>
             <h1>Track Your Vehicle</h1>
             <p className="authcard__sub">
-              Enter your registered Mobile Number or Vehicle Registration Number to view live service status.
+              Enter your registered 10-digit mobile number as both username and password.
             </p>
           </div>
 
           <form onSubmit={handleCustomerLogin} className="space-y-4">
             <label className="field">
-              <span className="label">Mobile Number / Vehicle No.</span>
+              <span className="label">Mobile Number</span>
               <span className="inp-wrap">
                 <span className="icon-l"><Icon name="phone" size={17} /></span>
                 <input
                   className="inp"
-                  type="text"
-                  placeholder="e.g. 9950042708 or RJ60CJ6764"
+                  type="tel"
+                  inputMode="numeric"
+                  maxLength={10}
+                  placeholder="e.g. 9950042708"
                   value={customerUsername}
                   onChange={(e) => setCustomerUsername(e.target.value)}
                   required
@@ -337,7 +326,7 @@ export default function LoginPage({ onSwitchToSignUp, onSwitchToForgot, onCustom
             </label>
 
             <label className="field">
-              <span className="label">Password / Mobile Number</span>
+              <span className="label">Password (same mobile number)</span>
               <span className="inp-wrap">
                 <span className="icon-l"><Icon name="lock" size={17} /></span>
                 <input
@@ -374,7 +363,7 @@ export default function LoginPage({ onSwitchToSignUp, onSwitchToForgot, onCustom
             >
               <span style={{ fontSize: 14 }}>💡</span>
               <span>
-                <strong>Login Tip:</strong> You can enter your 10-digit mobile number in both fields to login directly and access your dashboard.
+                <strong>Login:</strong> Username and password are both your 10-digit registered mobile number. You will see every vehicle on that number.
               </span>
             </div>
 

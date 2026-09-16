@@ -22,6 +22,7 @@ import {
   JetBrainsMono_600SemiBold,
 } from '@expo-google-fonts/jetbrains-mono'
 import { AuthProvider } from '../context/AuthContext'
+import { CustomerSessionProvider } from '../context/CustomerSessionContext'
 import { OfflineProvider } from '../context/OfflineContext'
 import MandatoryUpdateModal from '../components/MandatoryUpdateModal'
 import { useMandatoryOTAUpdate } from '../hooks/useMandatoryOTAUpdate'
@@ -68,8 +69,27 @@ export default function RootLayout() {
 
   return (
     <AuthProvider>
+      <CustomerSessionProvider>
       <OfflineProvider>
         <Stack>
+          <Stack.Screen
+            name="(audience)"
+            options={{
+              headerShown: false,
+            }}
+          />
+          <Stack.Screen
+            name="(customer-auth)"
+            options={{
+              headerShown: false,
+            }}
+          />
+          <Stack.Screen
+            name="(customer)"
+            options={{
+              headerShown: false,
+            }}
+          />
           <Stack.Screen
             name="(auth)"
             options={{
@@ -103,6 +123,7 @@ export default function RootLayout() {
           onUpdateNow={applyMandatoryUpdate}
         />
       </OfflineProvider>
+      </CustomerSessionProvider>
     </AuthProvider>
   )
 }

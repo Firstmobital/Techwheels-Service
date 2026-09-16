@@ -1,4 +1,5 @@
 import { supabase } from '../supabase'
+import { customerStartSession } from './customerAuth'
 
 export interface CustomerVehicle {
   id: number
@@ -441,48 +442,34 @@ export async function fetchCustomerVehicles(searchQuery: string): Promise<Custom
   return results
 }
 
-// 2. Authenticate customer purely from DB using customer mobile number (or vehicle reg)
+// 2. Authenticate customer: username and password must be the same 10-digit mobile.
 export async function authenticateCustomer(
   usernameInput: string,
   passwordInput: string
-): Promise<{ success: boolean; vehicle?: CustomerVehicle; allVehicles?: CustomerVehicle[]; error?: string }> {
+): Promise<{
+  success: boolean
+  vehicle?: CustomerVehicle
+  allVehicles?: CustomerVehicle[]
+  sessionToken?: string
+  error?: string
+}> {
   const username = (usernameInput || '').trim()
   const password = (passwordInput || '').trim()
 
-  const cleanUserDigits = username.replace(/[^0-9]/g, '')
-  const cleanPassDigits = password.replace(/[^0-9]/g, '')
-  const user10Digits = cleanUserDigits.length >= 10 ? cleanUserDigits.slice(-10) : cleanUserDigits
-  const pass10Digits = cleanPassDigits.length >= 10 ? cleanPassDigits.slice(-10) : cleanPassDigits
-
-  // If user entered nothing in username, but entered password
-  const primarySearch = user10Digits || username || pass10Digits || password
-  if (!primarySearch) {
-    return { success: false, error: 'Kripya apna 10-digit registered Mobile Number dalein.' }
+  if (!username || !password) {
+    return { success: false, error: 'Invalid mobile number.' }
   }
 
-  // 1. Fetch existing customer vehicles strictly from DB
-  let vehicles = await fetchCustomerVehicles(primarySearch)
-
-  // 2. Try secondary identifier if needed
-  if ((!vehicles || vehicles.length === 0) && pass10Digits && pass10Digits !== primarySearch) {
-    vehicles = await fetchCustomerVehicles(pass10Digits)
-  }
-  if ((!vehicles || vehicles.length === 0) && username && username !== primarySearch) {
-    vehicles = await fetchCustomerVehicles(username)
-  }
-
-  // 3. If vehicles found in database
-  if (vehicles && vehicles.length > 0) {
-    return {
-      success: true,
-      vehicle: vehicles[0],
-      allVehicles: vehicles,
-    }
+  const result = await customerStartSession(username, password)
+  if (!result.success || !result.data) {
+    return { success: false, error: result.error || 'Invalid mobile number.' }
   }
 
   return {
-    success: false,
-    error: 'Is Mobile Number / Vehicle Number ka record database me nahi mila. Kripya apna sahi 10-digit mobile number dalein.',
+    success: true,
+    vehicle: result.data.vehicles[0],
+    allVehicles: result.data.vehicles,
+    sessionToken: result.data.session_token,
   }
 }
 

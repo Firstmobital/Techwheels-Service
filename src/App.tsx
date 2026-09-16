@@ -8,7 +8,8 @@ import SettingsPage from './pages/SettingsPage'
 import AdminPage from './pages/AdminPage'
 import LoginPage from './pages/LoginPage'
 import CustomerPortalPage from './pages/CustomerPortalPage'
-import { fetchCustomerVehicles, type CustomerVehicle } from './lib/api/customer'
+import { customerEndSession, customerListMyVehicles } from './lib/api/customerAuth'
+import { type CustomerVehicle } from './lib/api/customer'
 import SignUpPage from './pages/SignUpPage'
 import ForgotPasswordPage from './pages/ForgotPasswordPage'
 import AuthCallback from './pages/AuthCallback'
@@ -995,6 +996,13 @@ function AuthGate({ children }: { children: React.ReactNode }) {
     }
   })
   const [allCustomerVehicles, setAllCustomerVehicles] = useState<CustomerVehicle[]>([])
+  const [customerSessionToken, setCustomerSessionToken] = useState<string | null>(() => {
+    try {
+      return localStorage.getItem('customer_session_token')
+    } catch {
+      return null
+    }
+  })
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => setUser(data.session?.user ?? null))
@@ -1010,24 +1018,23 @@ function AuthGate({ children }: { children: React.ReactNode }) {
   }, [location.pathname, navigate])
 
   useEffect(() => {
-    if (user) return
-    const params = new URLSearchParams(window.location.search)
-    const regParam = params.get('reg') || params.get('vehicle')
-    const phoneParam = params.get('phone') || params.get('mobile')
-    const query = (regParam || phoneParam || '').trim()
-
-    if (query) {
-      void fetchCustomerVehicles(query).then((vehicles) => {
-        if (vehicles && vehicles.length > 0) {
-          setCustomerVehicle(vehicles[0])
-          setAllCustomerVehicles(vehicles)
-          try {
-            localStorage.setItem('active_customer_vehicle', JSON.stringify(vehicles[0]))
-          } catch {}
-        }
-      })
-    }
-  }, [user, location.search])
+    if (user || customerVehicle || !customerSessionToken) return
+    void customerListMyVehicles(customerSessionToken).then((vehicles) => {
+      if (vehicles.length > 0) {
+        setCustomerVehicle(vehicles[0])
+        setAllCustomerVehicles(vehicles)
+        try {
+          localStorage.setItem('active_customer_vehicle', JSON.stringify(vehicles[0]))
+        } catch {}
+      } else {
+        try {
+          localStorage.removeItem('customer_session_token')
+          localStorage.removeItem('active_customer_vehicle')
+        } catch {}
+        setCustomerSessionToken(null)
+      }
+    })
+  }, [user, customerVehicle, customerSessionToken])
 
   useEffect(() => {
     if (user || customerVehicle) return
@@ -1047,10 +1054,14 @@ function AuthGate({ children }: { children: React.ReactNode }) {
       <CustomerPortalPage
         vehicle={customerVehicle}
         allVehicles={allCustomerVehicles}
+        sessionToken={customerSessionToken}
         onLogout={() => {
+          void customerEndSession(customerSessionToken)
           localStorage.removeItem('active_customer_vehicle')
+          localStorage.removeItem('customer_session_token')
           setCustomerVehicle(null)
           setAllCustomerVehicles([])
+          setCustomerSessionToken(null)
         }}
         onSelectVehicle={(v) => {
           setCustomerVehicle(v)
@@ -1100,10 +1111,12 @@ function AuthGate({ children }: { children: React.ReactNode }) {
           setAuthView('forgot')
           navigate('/forgot-password', { replace: true })
         }}
-        onCustomerLogin={(veh, all) => {
+        onCustomerLogin={(veh, all, token) => {
           setCustomerVehicle(veh)
           setAllCustomerVehicles(all)
+          setCustomerSessionToken(token)
           localStorage.setItem('active_customer_vehicle', JSON.stringify(veh))
+          localStorage.setItem('customer_session_token', token)
         }}
       />
     )

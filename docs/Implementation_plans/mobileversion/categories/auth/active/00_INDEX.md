@@ -1,7 +1,7 @@
 # MOBILE-011 — Documentation Index
 
 **Plan ID:** MOBILE-011  
-**Status:** Not Started (plan authored 2026-09-15)  
+**Status:** Not Started (plan authored 2026-09-15; product lock 2026-09-16: mobile=mobile login, phone-scoped vehicles)  
 **Created:** 2026-09-15  
 **Platform:** mobile (single Expo binary) • shared Supabase (customer RPCs) • web customer login must cut over to the same RPCs  
 **Category:** auth  

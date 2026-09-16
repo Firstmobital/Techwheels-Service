@@ -19,7 +19,7 @@ export default function ProfileScreen() {
         style: 'destructive',
         onPress: async () => {
           await signOut()
-          router.replace('/(auth)/login')
+          router.replace('/(audience)')
         },
       },
     ])

@@ -1,10 +1,10 @@
 # MOBILE-011 — Phase Tracking
 
 **Implementation Plan:** MOBILE-011  
-**Last Updated:** 2026-09-15  
+**Last Updated:** 2026-09-16  
 **Total Phases:** 6 (0–5)  
-**Current Progress:** 0/6 (0%)  
-**Status:** Not Started  
+**Current Progress:** 1/6 phases complete; 1–3 coded, awaiting DB apply + device smoke  
+**Status:** In Progress  
 
 Authority: [MOBILE-011_CUSTOMER_STAFF_SINGLE_APP_PLAN.md](MOBILE-011_CUSTOMER_STAFF_SINGLE_APP_PLAN.md)  
 Execution checklist: [CHECKLIST.md](CHECKLIST.md)  
@@ -16,60 +16,61 @@ Pre-plan audit: [MOBILE-011 audit](../../program/evidence/MOBILE-011_CUSTOMER_ST
 
 | Phase | Name | Duration | Status | Completion % |
 |-------|------|----------|--------|--------------|
-| 0 | Secret rotation | 0.5 day | ⏳ Not Started | 0% |
-| 1 | Customer RPCs + web cutover | ~1 week | ⏳ Not Started | 0% |
-| 2 | Expo audience shell + staff signup lock | ~1 week | ⏳ Not Started | 0% |
-| 3 | Customer screens (port web portal) | ~1.5–2 weeks | ⏳ Not Started | 0% |
-| 4 | Phone OTP | ~1 week | ⏳ Not Started | 0% |
+| 0 | Remove client `service_role` | 0.5 day | ✅ Done | 100% |
+| 1 | Customer RPCs + web cutover | ~1 week | 🟡 In Progress | 80% |
+| 2 | Expo audience shell + staff signup lock | ~1 week | 🟡 In Progress | 80% |
+| 3 | Customer screens (port web portal) | ~1.5–2 weeks | 🟡 In Progress | 80% |
+| 4 | Phone OTP (optional step-up) | ~1 week | ⏳ Not Started | 0% |
 | 5 | Release, OTA, archive `bodyshop/` | ~3–5 days | ⏳ Not Started | 0% |
 
 **Overall Progress: 0%**
 
 ---
 
-## Phase 0: Secret Rotation
+## Phase 0: Remove client `service_role`
 
-**Goal:** Remove the leaked privileged key from every client. Customer prototype must not be installable with it.
+**Goal:** Delete the privileged key from the bodyshop client. Do **not** rotate the Supabase dashboard key.
 
 ### Deliverables
-- [ ] Rotate Supabase `service_role` in the project dashboard
-- [ ] Confirm the old JWT is rejected
-- [ ] Delete hardcoded key and `VITE_SUPABASE_SERVICE_KEY` usage from `bodyshop/src/lib/supabase.ts`
-- [ ] Grep repo for other client-side `service_role` / service-key fallbacks (`bodyshop/`, `mobile/`, `src/`)
-- [ ] `bodyshop` uses anon key only, or is marked do-not-run until archive
+- [x] N/A — Do not rotate Supabase `service_role` in the dashboard (product decision 2026-09-16)
+- [x] Delete hardcoded key and `VITE_SUPABASE_SERVICE_KEY` from `bodyshop/src/lib/supabase.ts` (done 2026-09-16)
+- [x] Remove service-role values from tracked `bodyshop/.env` (done 2026-09-16; `VITE_SUPABASE_ANON_KEY` left empty)
+- [x] Grep repo: no client `SERVICE_KEY` / `service_role` JWT in `bodyshop/`, `mobile/src`, `src/lib/supabase.ts` (2026-09-16)
+- [x] `bodyshop` client is anon-only (env); no service-role fallback
 
 ### Success Criteria
-- [ ] No `service_role` JWT in any client source
-- [ ] Staff Expo still signs in with anon key
-- [ ] Evidence note in `../evidence/` (create folder with first evidence file)
+- [x] No `service_role` JWT in `bodyshop/` source or `.env`
+- [x] Staff Expo / web clients remain anon-only
+- [ ] Evidence note in `../evidence/` (optional)
 
 ### Dependencies
-- None. Production blocker. May run during MOBILE-BP-RD work.
+- None. Dashboard key rotation is out of scope.
 
 ---
 
 ## Phase 1: Customer RPCs + Web Cutover
 
-**Goal:** Database can prove a phone owns a vehicle and return only that customer’s payload. Web customer login stops direct table reads.
+**Goal:** Phone=phone login RPC. Web `authenticateCustomer` replaced. Customer data is only that phone’s vehicles.
 
 ### Deliverables
 - [ ] Re-grep `full_metadata.sql` for `customer_profiles` / `customer_sessions` / `customer_*` functions (must still be absent)
 - [ ] Migration: `customer_profiles`, `customer_sessions`, indexes, RLS enabled, no `anon` table GRANT
-- [ ] RPCs per plan §7 (`customer_start_session` … `customer_get_gate_pass`)
-- [ ] Generic error on mismatch; exact 10-digit phone; no `endsWith`
+- [ ] `customer_start_session(username, password)`: both must be the same 10-digit mobile; return **all** vehicles for that phone
+- [ ] `customer_list_my_vehicles` + job/history/complaint/estimate/gate-pass RPCs scoped to session phone
+- [ ] Generic error on mismatch / unknown phone; no fake vehicle; no `endsWith`
 - [ ] Rate limit on start-session
-- [ ] Web `src/lib/api/customer.ts` + `LoginPage` customer mode call RPCs
-- [ ] Remove `?reg=` auto-login in `src/App.tsx` (or require RPC session)
+- [ ] Replace `src/lib/api/customer.ts` `authenticateCustomer` with the RPC (same rule on web LoginPage)
+- [ ] Remove `?reg=` auto-login in `src/App.tsx`
 - [ ] Apply to target DB; refresh `supabase/backups/full_metadata.sql`
-- [ ] Test matrix file started: `../evidence/MOBILE-011_TEST_MATRIX.md`
+- [ ] Test matrix: C-01, C-02, C-02b, C-02c, C-03, C-03b, C-06, C-07, C-11
 
 ### Success Criteria
-- [ ] C-01, C-02, C-03, C-06, C-07, C-11 pass
+- [ ] C-01, C-02, C-02b, C-02c, C-03, C-03b, C-06, C-07, C-11 pass
 - [ ] `public.users_role_check` unchanged
 - [ ] Staff reception RLS still denies a customer token doing `.from('service_reception_entries').select()`
 
 ### Dependencies
-- Phase 0 complete (do not build customer UI on a leaked key)
+- Phase 0 client key removal (dashboard key is not rotated)
 
 ---
 
@@ -79,7 +80,7 @@ Pre-plan audit: [MOBILE-011 audit](../../program/evidence/MOBILE-011_CUSTOMER_ST
 
 ### Deliverables
 - [ ] `(audience)/index.tsx` chooser: Login as Customer / Login as Staff
-- [ ] `(customer-auth)/login.tsx` (reg + phone → `customer_start_session`)
+- [ ] `(customer-auth)/login.tsx` (username=password=10-digit mobile → `customer_start_session`)
 - [ ] `(customer)/_layout.tsx` empty shell (tabs ok, screens can be placeholders)
 - [ ] `index.tsx` / staff auth layout / tabs layout branch on audience
 - [ ] Staff `signup.tsx` invite-only or hidden; copy no longer “Join your dealership's service team” on the customer path
@@ -97,7 +98,7 @@ Pre-plan audit: [MOBILE-011 audit](../../program/evidence/MOBILE-011_CUSTOMER_ST
 
 ## Phase 3: Customer Screens
 
-**Goal:** Port web `CustomerPortalPage` behavior into Expo. RPC-only. No invented fields.
+**Goal:** Port web `CustomerPortalPage` behavior into Expo. RPC-only. Phone-scoped vehicle list on every screen.
 
 ### Deliverables
 - [ ] Dashboard (reg, model, KM if present, service type, advisor, in-service vs delivered)
@@ -120,9 +121,9 @@ Pre-plan audit: [MOBILE-011 audit](../../program/evidence/MOBILE-011_CUSTOMER_ST
 
 ---
 
-## Phase 4: Phone OTP
+## Phase 4: Phone OTP (optional step-up)
 
-**Goal:** Replace phone-as-secret with proof the customer received a code on `owner_phone`.
+**Goal:** Extra proof the person has the phone. Does **not** change row visibility (still session phone). Not a ship gate for phone=phone login.
 
 ### Deliverables
 - [ ] `customer_request_otp` / `customer_verify_otp`

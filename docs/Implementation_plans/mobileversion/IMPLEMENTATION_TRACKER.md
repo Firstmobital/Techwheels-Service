@@ -26,7 +26,7 @@ Legend:
 | MOBILE-009 | redesign | Redesign parity tracker (non-Body & Paint) | Active | Mobile Team | docs/Implementation_plans/mobileversion/categories/redesign/active/MOBILE-009_MOBILE_APP_REDESIGN_PARITY_TRACKER.md | 2026-06-18 |
 | MOBILE-010 | program | Mobile program master tracker | Active | Mobile Team | docs/Implementation_plans/mobileversion/categories/program/active/MOBILE-010_MOBILE_PROGRAM_MASTER_TRACKER.md | 2026-09-15 |
 | MOBILE-BP-RD | redesign | Body & Paint redesign consolidated plan | IP | Mobile Team | docs/Implementation_plans/mobileversion/categories/redesign/active/redesign_bodypaint_module.md | 2026-06-18 |
-| MOBILE-011 | auth | One Expo app: Login as Customer / Login as Staff | NS | Mobile Team + Platform | docs/Implementation_plans/mobileversion/categories/auth/active/MOBILE-011_CUSTOMER_STAFF_SINGLE_APP_PLAN.md | 2026-09-15 |
+| MOBILE-011 | auth | One Expo app: Login as Customer / Login as Staff | IP | Mobile Team + Platform | docs/Implementation_plans/mobileversion/categories/auth/active/MOBILE-011_CUSTOMER_STAFF_SINGLE_APP_PLAN.md | 2026-09-16 |
 
 ---
 
