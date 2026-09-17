@@ -233,6 +233,52 @@ function filterMechanicalCasesByPaymentMode(rows, lines, mode) {
   return rows.filter((row) => ids.has(row.reception_entry_id))
 }
 
+function isMechanicalQualifyingReceiptLine(line, range, modeFilter = 'all') {
+  if (isMechanicalDiscountPaymentLine(line)) return false
+  const amount = Number(line.amount ?? 0)
+  if (!Number.isFinite(amount) || amount === 0) return false
+  if (!isMechanicalPaymentReceivedDateInRange(line, range)) return false
+  const mode = normalizeAccountsPaymentMode(line.payment_mode)
+  if (!mode) return false
+  if (modeFilter === 'all') return true
+  return mode === modeFilter
+}
+
+function receptionIdsWithQualifyingReceiptInRange(lines, range, modeFilter = 'all') {
+  const ids = new Set()
+  for (const line of lines) {
+    if (!isMechanicalQualifyingReceiptLine(line, range, modeFilter)) continue
+    ids.add(line.reception_entry_id)
+  }
+  return ids
+}
+
+function filterMechanicalCasesByQualifyingReceiptInRange(rows, lines, range, modeFilter = 'all') {
+  const ids = receptionIdsWithQualifyingReceiptInRange(lines, range, modeFilter)
+  return rows.filter((row) => ids.has(row.reception_entry_id))
+}
+
+function filterMechanicalAccountsTableCases({
+  cases,
+  lines,
+  range,
+  statusFilter = 'all',
+  paymentModeFilter = 'all',
+}) {
+  if (statusFilter === 'received') {
+    const received = filterMechanicalCasesByPaymentStatus(cases, 'received')
+    return filterMechanicalCasesByQualifyingReceiptInRange(received, lines, range, paymentModeFilter)
+  }
+  let rows = filterAccountsCasesByViewDate(
+    cases,
+    (row) => accountsMechanicalViewDateYmd(row.invoice_done_at),
+    range,
+  )
+  rows = filterMechanicalCasesByPaymentStatus(rows, statusFilter)
+  if (paymentModeFilter === 'all') return rows
+  return filterMechanicalCasesByPaymentMode(rows, lines, paymentModeFilter)
+}
+
 function accountsPaymentStatus(status) {
   const v = String(status ?? 'pending').toLowerCase()
   if (v === 'received' || v === 'partial' || v === 'not_received' || v === 'pending') return v
@@ -350,20 +396,16 @@ function applyAccountsMechanicalTableFilters({
   dateRange = { from: '', to: '' },
 }) {
   const q = search.trim().toLowerCase()
-  let next = filterAccountsCasesByViewDate(
-    rows,
-    (r) => accountsMechanicalViewDateYmd(r.invoice_done_at),
-    dateRange,
-  )
-  if (q) {
-    next = next.filter((r) => blobOf(r.jc_number, r.reg_number, r.invoice_number, r.owner_name, r.sa_name).includes(q))
-  }
-  if (statusFilter === 'pending') next = next.filter((r) => isAccountsStatusPending(r.payment_status))
-  else if (statusFilter === 'received') next = next.filter((r) => isAccountsStatusReceived(r.payment_status))
-  if (paymentModeFilter !== 'all') {
-    next = filterMechanicalCasesByPaymentMode(next, lines, paymentModeFilter)
-  }
-  return next
+  const searched = q
+    ? rows.filter((r) => blobOf(r.jc_number, r.reg_number, r.invoice_number, r.owner_name, r.sa_name).includes(q))
+    : rows
+  return filterMechanicalAccountsTableCases({
+    cases: searched,
+    lines,
+    range: dateRange,
+    statusFilter,
+    paymentModeFilter,
+  })
 }
 
 function idsOf(rows) {
@@ -768,6 +810,163 @@ console.log('verify_accounts_split_payment_drafts: payment-mode KPI receipt-date
 }
 
 console.log('verify_accounts_split_payment_drafts: payment-mode KPI Discount + Mark Done independence checks passed')
+
+// ---------------------------------------------------------------------------
+// Mechanical table date authority by status — keep aligned with
+// src/lib/api/accounts.ts filterMechanicalAccountsTableCases
+// All / Pending = Mark Done. Received = payment_received_date (IST posted_at fallback).
+// ---------------------------------------------------------------------------
+{
+  const day15 = { from: '2026-09-15', to: '2026-09-15' }
+  const caseOf = (id, status, doneAt, extra = {}) => ({
+    reception_entry_id: id,
+    jc_number: extra.jc_number ?? `JC-${id}`,
+    reg_number: extra.reg_number ?? `RJ${id}`,
+    invoice_number: extra.invoice_number ?? `INV-${id}`,
+    owner_name: extra.owner_name ?? `Owner ${id}`,
+    sa_name: 'SA',
+    payment_status: status,
+    invoice_done_at: doneAt,
+  })
+  const lineOf = (id, receptionId, amount, mode, receivedDate, extra = {}) => ({
+    id,
+    reception_entry_id: receptionId,
+    amount,
+    payment_mode: mode,
+    payment_received_date: receivedDate,
+    posted_at: extra.posted_at ?? (receivedDate ? `${receivedDate}T12:00:00+05:30` : extra.posted_at),
+    reference: extra.reference ?? null,
+  })
+
+  const done15 = caseOf(1, 'received', '2026-09-15T10:00:00+05:30', { owner_name: 'Done 15' })
+  const done16 = caseOf(2, 'received', '2026-09-16T10:00:00+05:30', { owner_name: 'Done 16' })
+  const pending15 = caseOf(3, 'pending', '2026-09-15T11:00:00+05:30')
+  const pending16 = caseOf(4, 'pending', '2026-09-16T11:00:00+05:30')
+  const aniket = caseOf(5, 'received', '2026-09-16T14:04:00+05:30', {
+    jc_number: 'JC-MBTPLT-JP2-2627-006275',
+    owner_name: 'ANIKET SAINI',
+    reg_number: 'RJ60CF1125',
+  })
+  const cashNextDay = caseOf(6, 'received', '2026-09-15T12:00:00+05:30', { owner_name: 'Cash 16 Sep' })
+  const upiOnly = caseOf(7, 'received', '2026-09-16T09:00:00+05:30', { owner_name: 'UPI Only' })
+  const cardOnly = caseOf(8, 'received', '2026-09-16T09:00:00+05:30', { owner_name: 'Card Only' })
+  const discountOnly = caseOf(9, 'received', '2026-09-16T09:00:00+05:30', { owner_name: 'Discount Only' })
+  const multiUpi = caseOf(10, 'received', '2026-09-14T09:00:00+05:30', {
+    jc_number: 'JC-MULTI-UPI',
+    owner_name: 'SUSHIL AGARWAL',
+  })
+  const legacyPosted = caseOf(11, 'received', '2026-09-16T09:00:00+05:30', { owner_name: 'Legacy Posted' })
+  const split = caseOf(12, 'received', '2026-09-16T09:00:00+05:30', {
+    jc_number: 'JC-SPLIT-15',
+    owner_name: 'Split Owner',
+  })
+  const sharwan = caseOf(13, 'received', '2026-09-15T11:56:00+05:30', {
+    jc_number: 'JC-MBTPLT-JP1-2627-007181',
+    owner_name: 'SHARWAN LAL',
+  })
+
+  const rows = [
+    done15, done16, pending15, pending16, aniket, cashNextDay, upiOnly, cardOnly,
+    discountOnly, multiUpi, legacyPosted, split, sharwan,
+  ]
+  const lines = [
+    lineOf(101, 1, 100, 'cash', '2026-09-15'),
+    lineOf(102, 2, 200, 'cash', '2026-09-16'),
+    lineOf(103, 5, 11000, 'cash', '2026-09-15'),
+    lineOf(104, 6, 400, 'cash', '2026-09-16'),
+    lineOf(105, 7, 500, 'upi', '2026-09-15'),
+    lineOf(106, 8, 600, 'card', '2026-09-15'),
+    lineOf(107, 9, 700, 'cash', '2026-09-15', { reference: 'DISCOUNT' }),
+    lineOf(108, 10, 2000, 'upi', '2026-09-15'),
+    lineOf(109, 10, 2000, 'upi', '2026-09-15'),
+    lineOf(110, 10, 900, 'upi', '2026-09-15'),
+    lineOf(111, 10, 89, 'upi', '2026-09-15'),
+    lineOf(112, 11, 800, 'cash', null, { posted_at: '2026-09-15T18:00:00+05:30' }),
+    lineOf(113, 12, 300, 'cash', '2026-09-15'),
+    lineOf(114, 12, 200, 'upi', '2026-09-15'),
+    lineOf(115, 13, 750, 'cash', '2026-09-15'),
+    lineOf(116, 13, 3, 'other', '2026-09-15', { reference: 'DISCOUNT' }),
+  ]
+
+  // 1. All + Period 15 Sep: Mark Done 15 in, Mark Done 16 out
+  const all15 = applyAccountsMechanicalTableFilters({ rows, lines, dateRange: day15, statusFilter: 'all' })
+  assert(idsOf(all15).includes(1) && idsOf(all15).includes(13), `1: All includes Mark Done 15 Sep, got ${idsOf(all15)}`)
+  assert(!idsOf(all15).includes(2) && !idsOf(all15).includes(5), '1: All excludes Mark Done 16 Sep even with 15 Sep cash')
+
+  // 2. Pending + Period 15 Sep: Mark Done 15 in, 16 out
+  const pendingDay = applyAccountsMechanicalTableFilters({ rows, lines, dateRange: day15, statusFilter: 'pending' })
+  assert(JSON.stringify(idsOf(pendingDay)) === JSON.stringify([3]), `2: Pending Mark Done 15 only, got ${idsOf(pendingDay)}`)
+  assert(!idsOf(pendingDay).includes(4), '2: Pending Mark Done 16 Sep excluded')
+
+  // 3. Received + Period 15 Sep: Mark Done 16 + Cash 15 included
+  const received15 = applyAccountsMechanicalTableFilters({ rows, lines, dateRange: day15, statusFilter: 'received' })
+  assert(idsOf(received15).includes(5), `3: ANIKET Cash 15 Sep included despite Mark Done 16, got ${idsOf(received15)}`)
+
+  // 4. Received + Period 15 Sep: Mark Done 15 + Cash 16 excluded
+  assert(!idsOf(received15).includes(6), '4: Mark Done 15 with Cash 16 Sep excluded from Received 15 Sep')
+
+  // 5. Received + Cash: only Cash receipt lines in Period
+  const receivedCash = applyAccountsMechanicalTableFilters({
+    rows, lines, dateRange: day15, statusFilter: 'received', paymentModeFilter: 'cash',
+  })
+  assert(idsOf(receivedCash).includes(5) && idsOf(receivedCash).includes(13), `5: Cash includes ANIKET + SHARWAN, got ${idsOf(receivedCash)}`)
+  assert(!idsOf(receivedCash).includes(7) && !idsOf(receivedCash).includes(8), '5: UPI/Card-only cases excluded from Cash')
+
+  // 6. Received + UPI
+  const receivedUpi = applyAccountsMechanicalTableFilters({
+    rows, lines, dateRange: day15, statusFilter: 'received', paymentModeFilter: 'upi',
+  })
+  assert(idsOf(receivedUpi).includes(7) && idsOf(receivedUpi).includes(10) && idsOf(receivedUpi).includes(12), `6: UPI cases, got ${idsOf(receivedUpi)}`)
+  assert(!idsOf(receivedUpi).includes(5) && !idsOf(receivedUpi).includes(8), '6: Cash/Card-only excluded from UPI')
+
+  // 7. Received + Card
+  const receivedCard = applyAccountsMechanicalTableFilters({
+    rows, lines, dateRange: day15, statusFilter: 'received', paymentModeFilter: 'card',
+  })
+  assert(JSON.stringify(idsOf(receivedCard)) === JSON.stringify([8]), `7: Card-only in Period, got ${idsOf(receivedCard)}`)
+  assert(!idsOf(receivedCard).includes(5) && !idsOf(receivedCard).includes(7), '7: Cash/UPI-only excluded from Card')
+
+  // 8. Discount line in selected Period does not qualify case
+  assert(!idsOf(received15).includes(9), '8: Discount-only case excluded from Received')
+  assert(!idsOf(receivedCash).includes(9), '8: Discount cash line does not qualify Received + Cash')
+
+  // 9. Multiple matching receipt lines -> one table row
+  const multiRows = receivedUpi.filter((r) => r.reception_entry_id === 10)
+  assert(multiRows.length === 1, `9: four UPI lines still one case row, got ${multiRows.length}`)
+
+  // 10. payment_received_date NULL -> posted_at IST fallback
+  assert(idsOf(receivedCash).includes(11), `10: null received date uses posted_at 15 Sep IST, got ${idsOf(receivedCash)}`)
+  const legacy16 = applyAccountsMechanicalTableFilters({
+    rows: [legacyPosted],
+    lines: [lineOf(200, 11, 800, 'cash', null, { posted_at: '2026-09-16T00:30:00+05:30' })],
+    dateRange: day15,
+    statusFilter: 'received',
+    paymentModeFilter: 'cash',
+  })
+  assert(legacy16.length === 0, '10: posted_at 16 Sep IST does not enter 15 Sep Received')
+
+  // 11. Split Cash + UPI in Period appears under each mode
+  assert(idsOf(receivedCash).includes(12), '11: split appears under Cash')
+  assert(idsOf(receivedUpi).includes(12), '11: split appears under UPI')
+  assert(!idsOf(receivedCard).includes(12), '11: split Cash+UPI excluded from Card')
+
+  // 12. Search + Received + mode
+  const searchAniket = applyAccountsMechanicalTableFilters({
+    rows, lines, dateRange: day15, statusFilter: 'received', paymentModeFilter: 'cash', search: 'aniket',
+  })
+  assert(JSON.stringify(idsOf(searchAniket)) === JSON.stringify([5]), `12: search ANIKET + Received + Cash, got ${idsOf(searchAniket)}`)
+  const searchSharwanUpi = applyAccountsMechanicalTableFilters({
+    rows, lines, dateRange: day15, statusFilter: 'received', paymentModeFilter: 'upi', search: 'sharwan',
+  })
+  assert(searchSharwanUpi.length === 0, '12: search + unmatched mode excludes the case')
+
+  // Switching status changes date interpretation on the same fixtures
+  assert(idsOf(all15).includes(13) && !idsOf(all15).includes(5), 'switch: All keeps Mark Done 15, drops ANIKET 16')
+  assert(idsOf(received15).includes(5) && idsOf(received15).includes(13), 'switch: Received includes both 15 Sep cash cases')
+  assert(!idsOf(pendingDay).includes(5) && !idsOf(pendingDay).includes(13), 'switch: Pending stays Mark Done pending-only')
+}
+
+console.log('verify_accounts_split_payment_drafts: Mechanical table date-authority by status checks passed')
 
 
 // ---------------------------------------------------------------------------
@@ -1973,9 +2172,9 @@ function buildMechanicalBusyPaymentExportRows({
 
   // E. date AND status
   const pendingInRange = applyAccountsMechanicalTableFilters({ rows: cases, lines, dateRange: range, statusFilter: 'pending' })
-  assert(JSON.stringify(idsOf(pendingInRange)) === JSON.stringify([103]), `E: date AND pending, got ${idsOf(pendingInRange)}`)
+  assert(JSON.stringify(idsOf(pendingInRange)) === JSON.stringify([103]), `E: date AND pending uses Mark Done, got ${idsOf(pendingInRange)}`)
   const receivedInRange = applyAccountsMechanicalTableFilters({ rows: cases, lines, dateRange: range, statusFilter: 'received' })
-  assert(JSON.stringify(idsOf(receivedInRange)) === JSON.stringify([102, 104]), `E: date AND received, got ${idsOf(receivedInRange)}`)
+  assert(receivedInRange.length === 0, `E: Received uses receipt date; 21/23 Sep receipts are outside 15–17, got ${idsOf(receivedInRange)}`)
 
   // F. date AND payment mode
   const cashInRange = applyAccountsMechanicalTableFilters({ rows: cases, lines, dateRange: range, paymentModeFilter: 'cash' })

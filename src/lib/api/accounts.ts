@@ -762,6 +762,89 @@ export function filterMechanicalCasesByPaymentMode<T extends { reception_entry_i
 }
 
 /**
+ * Received-table receipt: non-Discount, non-zero, receipt date in Period
+ * (`payment_received_date`, else Asia/Kolkata `posted_at`). Mode `all` accepts
+ * any canonical payment mode. Cash/UPI/Card require that stored mode in Period.
+ */
+export function isMechanicalQualifyingReceiptLine(
+  line: MechanicalPaymentModeKpiLine,
+  range: { from: string; to: string },
+  modeFilter: MechanicalPaymentModeFilter = 'all',
+): boolean {
+  if (isMechanicalDiscountPaymentLine(line)) return false
+  const amount = Number(line.amount ?? 0)
+  if (!Number.isFinite(amount) || amount === 0) return false
+  if (!isMechanicalPaymentReceivedDateInRange(line, range)) return false
+  const mode = normalizeAccountsPaymentMode(line.payment_mode)
+  if (!mode) return false
+  if (modeFilter === 'all') return true
+  return mode === modeFilter
+}
+
+/** Unique reception ids with at least one qualifying receipt in Period. Dedupes split/multi lines. */
+export function receptionIdsWithQualifyingReceiptInRange(
+  lines: MechanicalPaymentModeKpiLine[],
+  range: { from: string; to: string },
+  modeFilter: MechanicalPaymentModeFilter = 'all',
+): Set<number> {
+  const ids = new Set<number>()
+  for (const line of lines) {
+    if (!isMechanicalQualifyingReceiptLine(line, range, modeFilter)) continue
+    ids.add(line.reception_entry_id)
+  }
+  return ids
+}
+
+export function filterMechanicalCasesByQualifyingReceiptInRange<T extends { reception_entry_id: number }>(
+  rows: T[],
+  lines: MechanicalPaymentModeKpiLine[],
+  range: { from: string; to: string },
+  modeFilter: MechanicalPaymentModeFilter = 'all',
+): T[] {
+  const ids = receptionIdsWithQualifyingReceiptInRange(lines, range, modeFilter)
+  return rows.filter((row) => ids.has(row.reception_entry_id))
+}
+
+/**
+ * Mechanical table date authority follows status:
+ * All / Pending = Mark Done (`invoice_done_at`).
+ * Received = receipt date (`payment_received_date`, else IST `posted_at`).
+ * Caller applies Search first. Received + Cash/UPI/Card uses Period-scoped
+ * receipts, not all-time `filterMechanicalCasesByPaymentMode`.
+ */
+export function filterMechanicalAccountsTableCases<
+  T extends { reception_entry_id: number; payment_status?: string | null; invoice_done_at?: string | null },
+>(input: {
+  cases: T[]
+  lines: MechanicalPaymentModeKpiLine[]
+  range: { from: string; to: string }
+  statusFilter?: MechanicalStatusFilter
+  paymentModeFilter?: MechanicalPaymentModeFilter
+}): T[] {
+  const statusFilter = input.statusFilter ?? 'all'
+  const paymentModeFilter = input.paymentModeFilter ?? 'all'
+
+  if (statusFilter === 'received') {
+    const received = filterMechanicalCasesByPaymentStatus(input.cases, 'received')
+    return filterMechanicalCasesByQualifyingReceiptInRange(
+      received,
+      input.lines,
+      input.range,
+      paymentModeFilter,
+    )
+  }
+
+  let rows = filterAccountsCasesByViewDate(
+    input.cases,
+    (row) => accountsMechanicalViewDateYmd(row.invoice_done_at),
+    input.range,
+  )
+  rows = filterMechanicalCasesByPaymentStatus(rows, statusFilter)
+  if (paymentModeFilter === 'all') return rows
+  return filterMechanicalCasesByPaymentMode(rows, input.lines, paymentModeFilter)
+}
+
+/**
  * BUSY Normal visual convention using Accounts sources:
  * `<owner_name>-<BRANCH_UPPER> <reg_number>`
  * Hyphen after name, space before VRN. Does not use PDI/Bodyshop special cases

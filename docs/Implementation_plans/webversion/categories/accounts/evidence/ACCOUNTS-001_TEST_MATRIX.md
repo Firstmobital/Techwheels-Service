@@ -50,6 +50,7 @@
 - [ ] Cash / UPI / Credit Card KPIs follow Received/Pending/All; Period is receipt date (`payment_received_date`, IST `posted_at` fallback), not Mark Done. A 10-Sep Mark Done case with cash received 12-Sep is included in 12-Sep Cash. A 12-Sep Mark Done case with cash received 13-Sep is omitted from 12-Sep Cash.
 - [ ] Discount `reference` (`DISCOUNT` / `discount`) contributes ₹0 to Cash/UPI/Card even when stored payment_mode is cash/upi/card. Cash ₹10,000 + Discount ₹29.76 cash → Cash KPI ₹10,000.
 - [ ] Received + Cash KPI equals in-range actual cash on Received cases (13-Sep live: ₹10,300 not ₹16,900)
+- [ ] Received table Period is receipt date, not Mark Done. 15-Sep Received + Cash shows SHARWAN LAL ₹750 and ANIKET SAINI ₹11,000 (Mark Done 16 Sep). All/Pending still use Mark Done. Discount lines do not qualify a Received row. Multiple in-Period receipts still one case.
 - [ ] Clicking Cash does not zero the UPI or Credit Card tiles
 - [ ] Mechanical table **Received Amount** is after Billed and before Remaining; sums payment lines minus `reference` Discount (`DISCOUNT` / trim+case); genuine `other` stays in
 - [ ] Admin sees Receipts **Action** / **Edit**; non-admin table stays read-only with no empty Action column

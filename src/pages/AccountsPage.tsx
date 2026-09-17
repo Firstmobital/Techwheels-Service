@@ -17,8 +17,7 @@ import {
   mechanicalExportJcNumbers,
   deleteAccountsMechanicalInvoiceFile,
   filterAccountsCasesByViewDate,
-  filterMechanicalCasesByPaymentMode,
-  filterMechanicalCasesByPaymentStatus,
+  filterMechanicalAccountsTableCases,
   isAccountsStatusPending,
   isAccountsStatusReceived,
   isCustomerPaymentClosed,
@@ -326,15 +325,17 @@ export default function AccountsPage() {
     )
   }, [searchedMechAllDates, dateRange])
 
-  const statusMech = useMemo(
-    () => filterMechanicalCasesByPaymentStatus(periodMech, mechStatusFilter),
-    [periodMech, mechStatusFilter],
+  const searchedMech = useMemo(
+    () =>
+      filterMechanicalAccountsTableCases({
+        cases: searchedMechAllDates,
+        lines: mechPayLines,
+        range: dateRange,
+        statusFilter: mechStatusFilter,
+        paymentModeFilter: mechPaymentModeFilter,
+      }),
+    [searchedMechAllDates, mechPayLines, dateRange, mechStatusFilter, mechPaymentModeFilter],
   )
-
-  const searchedMech = useMemo(() => {
-    if (mechPaymentModeFilter === 'all') return statusMech
-    return filterMechanicalCasesByPaymentMode(statusMech, mechPayLines, mechPaymentModeFilter)
-  }, [statusMech, mechPaymentModeFilter, mechPayLines])
 
   const periodBs = useMemo(() => {
     const q = search.trim().toLowerCase()

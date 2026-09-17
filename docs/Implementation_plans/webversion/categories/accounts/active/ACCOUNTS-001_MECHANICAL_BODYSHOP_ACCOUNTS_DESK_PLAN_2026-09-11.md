@@ -138,7 +138,7 @@ Pattern: `src/pages/BodyshopRecoveryPage.tsx` (KPIs, search, table, Excel, on-pa
 
 - Tabs: Mechanical | Bodyshop
 - Search: JC / reg / invoice
-- Period chips on Mark Done date (mechanical table / count / billed / remaining) and invoice date (bodyshop). Cash / UPI / Credit Card **monetary** KPIs mean actual money received in the selected Period: `payment_received_date` (else Asia/Kolkata `posted_at`). Mark Done / `invoice_done_at` / `invoice_date` do not decide whether a receipt belongs to the Period. Status All / Pending / Received still scopes which cases contribute, using the search-filtered Mechanical set (not the Mark Done-period table). Discount `reference` lines contribute ₹0 regardless of stored `payment_mode`. Clicking Cash/UPI/Card filters the table only — it does not zero the other mode tiles.
+- Period chips: Mechanical **table** date authority follows status. All / Pending use Mark Done (`invoice_done_at`). Received uses actual receipt date (`payment_received_date`, else Asia/Kolkata `posted_at`) — a Received case appears when it has at least one non-Discount receipt in Period, even if Mark Done is outside Period. Mark Done count / billed / remaining stay on Mark Done. Invoice date remains Bodyshop. Cash / UPI / Credit Card **monetary** KPIs mean actual money received in the selected Period: `payment_received_date` (else Asia/Kolkata `posted_at`). Mark Done / `invoice_done_at` / `invoice_date` do not decide whether a receipt belongs to the Period. Status All / Pending / Received still scopes which cases contribute to those three cards, using the search-filtered Mechanical set (not the Mark Done-period table). Discount `reference` lines contribute ₹0 regardless of stored `payment_mode` and never qualify a Received table row. Clicking Cash/UPI/Card filters the table only — it does not zero the other mode tiles. Received + Cash/UPI/Card requires a matching non-Discount receipt **in Period**, not all-time mode history.
 - Excel export per section. Mechanical export is receipt-line grain when payment lines exist (`voucher_no`, `account_name`, `Reference no`); Cash/UPI/Credit Card cards filter receipt lines, not header totals. Vouchers persist on `accounts_mechanical_payment_lines` (DBL-0057/0058). `account_name` prefers the exact BUSY Party Name for the invoice (`psf_revenue_dms` → `resolvePartyName`); unmatched invoices keep the Accounts owner/branch/VRN fallback.
 - **Busy Export** (Mechanical only) downloads `accounts-mechanical-busy-payments.xlsx`: Invoice date, voucher_no, Account DR, Account CR, Amount DR, Amount CR, Reference no. Cash/UPI/card receipt lines only. Account DR: `CASH AT SITAPURA` / `PAYTM WALLET` / `CREDIT CARD A/C`. Account CR is BUSY Party Name (same lookup as Excel `account_name`). cheque/bank/other are skipped with a warning. Pending cases without receipts are omitted. Column **Invoice date** is the payment voucher date: `payment_received_date` → Accounts `invoice_date` → unique DMS labour `invoice_date`. `posted_at` and Mark Done are not used. Voucher eligibility is separate: effective invoice date `>= 2026-09-02` (Accounts, else unique DMS labour). Eligible cash/UPI/card rows with blank persisted `voucher_no` **block** the download (DBL-0074). The exporter never fabricates voucher numbers.
 
@@ -180,6 +180,7 @@ Pattern: `src/pages/BodyshopRecoveryPage.tsx` (KPIs, search, table, Excel, on-pa
 - [x] **Task 3.12:** Admin-only edit of posted Mechanical receipts (DBL-0068). Trusted `update_accounts_mechanical_payment`. Non-admin RPC denied. Voucher number preserved. Recalc + Gatepass refresh. Bodyshop unchanged.
 - [ ] **Task 3.13:** Per-receipt Remark on Mechanical payment entries (DBL-0073). Layout Amount / Mode / Date then Reference no. / Remark. Persist on `accounts_mechanical_payment_lines.remark`.
 - [x] **Task 3.15:** Mechanical table Pending Remark between Remaining and Status (DBL-0075). Persist on existing `accounts_mechanical_invoices.payment_notes`. Inline save. Do not clear on received. Do not change money or vouchers.
+- [x] **Task 3.16:** Mechanical table date authority by status: All/Pending = Mark Done; Received = receipt date. Received + Cash/UPI/Card uses Period-scoped receipts. Case-level dedupe. Do not change Received Amount, payment-mode KPIs, or Bodyshop.
 
 ### Phase 4: Closeout
 - [x] **Task 4.1:** MODULE_ROUTE_CONTRACT (grant Accounts users after SQL apply).
@@ -228,6 +229,7 @@ Pattern: `src/pages/BodyshopRecoveryPage.tsx` (KPIs, search, table, Excel, on-pa
 ⏳ 3.13 | Per-receipt remark | Eng | 2026-09-16 | - | DBL-0073 PROPOSED
 ✅ 3.14 | Late voucher assign + fail-closed Busy Export | Eng | 2026-09-16 | 2026-09-16 | DBL-0074 APPLIED; line 222 JApp/26-27/0195; 221 stays 0140
 ✅ 3.15 | Mechanical Pending Remark | Eng | 2026-09-17 | 2026-09-17 | DBL-0075 APPLIED; reuses invoice payment_notes; practical leftover_fail=0
+✅ 3.16 | Mechanical table date authority by status | Eng | 2026-09-17 | 2026-09-17 | Received = receipt date; All/Pending = Mark Done; no schema
 ⏳ 3.5 | Capture Fetch from DMS | Eng | 2026-09-11 | 2026-09-11 | DBL-0048 applied; web button pending deploy
 ```
 
@@ -316,6 +318,16 @@ Pattern: `src/pages/BodyshopRecoveryPage.tsx` (KPIs, search, table, Excel, on-pa
 - Discount `reference` (trim + case-insensitive `discount`, live `DISCOUNT`) contributes ₹0 to all three cards regardless of stored `payment_mode`. Same detector as table Received Amount (`isMechanicalDiscountPaymentLine`). Genuine `other` is not reclassified onto the cards.
 - Mode tiles are not inputs to the other mode totals (clicking Cash does not clear UPI/Card).
 - Helper: `sumAccountsMechanicalPaymentModeKpis` in `src/lib/api/accounts.ts`. Checks: `scripts/verify_accounts_split_payment_drafts.mjs`.
+
+### 2026-09-17 - Mechanical table date authority by status
+
+- All / Pending table period stays Mark Done (`invoice_done_at`, Asia/Kolkata).
+- Received table period is receipt date (`payment_received_date`, else Asia/Kolkata `posted_at`). Mark Done may be outside Period.
+- A Received row is a listed Mechanical case with `payment_status = received` and at least one qualifying receipt in Period. Discount `reference` never qualifies. Multiple matching lines still show one case.
+- Received + Cash/UPI/Card requires that mode on a qualifying in-Period receipt. All/Pending + mode still uses all-time `filterMechanicalCasesByPaymentMode`.
+- Search still runs first on the desk list. Table Received Amount is unchanged (all-time actual received, excluding Discount).
+- Cash/UPI/Credit Card KPI helpers are unchanged (Task 3.11).
+- Helper: `filterMechanicalAccountsTableCases` in `src/lib/api/accounts.ts`.
 
 ### 2026-09-17 - Mechanical Pending Remark
 
