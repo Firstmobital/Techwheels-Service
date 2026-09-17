@@ -69,22 +69,6 @@ async function fetchAllRows<T>(
   return { rows };
 }
 
-async function countAssignments(
-  supabase: SupabaseClient,
-  campaignId: number,
-  statuses?: string | string[],
-): Promise<number> {
-  let q = supabase
-    .from("insurance_renewal_assignments")
-    .select("id", { count: "exact", head: true })
-    .eq("campaign_id", campaignId);
-  if (typeof statuses === "string") q = q.eq("status", statuses);
-  else if (statuses && statuses.length > 0) q = q.in("status", statuses);
-  const { count, error } = await q;
-  if (error) throw new Error(error.message);
-  return count ?? 0;
-}
-
 async function insertAssignmentsInChunks(
   supabase: SupabaseClient,
   rows: Array<{ campaign_id: number; customer_id: number; status: string }>,
@@ -2472,57 +2456,8 @@ async function safeUpdateCampaignCounts(supabase: SupabaseClient, campaignId: nu
 
 // ─── Update campaign counts ────────────────────────────────────────────────
 async function updateCampaignCounts(supabase: SupabaseClient, campaignId: number) {
-  const completedStatuses = [
-    "renewed_via_us",
-    "renewed_elsewhere",
-    "not_interested",
-    "wrong_number",
-    "not_reachable",
-    "policy_done",
-    "already_renewed_unknown",
-  ];
-
-  const [
-    total_leads,
-    pending_count,
-    in_progress_count,
-    callback_later_count,
-    quote_needed_count,
-    policy_requested_count,
-    quote_sent_count,
-    renewed_count,
-    policy_done_count,
-    completed_count,
-    out_of_window_count,
-  ] = await Promise.all([
-    countAssignments(supabase, campaignId),
-    countAssignments(supabase, campaignId, "pending"),
-    countAssignments(supabase, campaignId, "in_progress"),
-    countAssignments(supabase, campaignId, "callback_later"),
-    countAssignments(supabase, campaignId, "quote_needed"),
-    countAssignments(supabase, campaignId, "policy_requested"),
-    countAssignments(supabase, campaignId, "quote_sent"),
-    countAssignments(supabase, campaignId, "renewed_via_us"),
-    countAssignments(supabase, campaignId, POLICY_DONE_STATUSES),
-    countAssignments(supabase, campaignId, completedStatuses),
-    countAssignments(supabase, campaignId, "out_of_window"),
-  ]);
-
-  const { error } = await supabase
-    .from("insurance_renewal_campaigns")
-    .update({
-      total_leads,
-      pending_count,
-      in_progress_count,
-      callback_later_count,
-      quote_needed_count,
-      policy_requested_count,
-      quote_sent_count,
-      renewed_count,
-      policy_done_count,
-      completed_count,
-      out_of_window_count,
-    })
-    .eq("id", campaignId);
+  const { error } = await supabase.rpc("insurance_renewal_recount_campaign", {
+    p_campaign_id: campaignId,
+  });
   if (error) throw new Error(error.message);
 }
