@@ -5,6 +5,7 @@ import { CustomerScreen } from '../../components/customer/CustomerScreen'
 import { CustomerCard, CustomerToast, dash, formatInr, formatWhen } from '../../components/customer/customerUi'
 import { useCustomerSession } from '../../context/CustomerSessionContext'
 import {
+  customerGetGatePass,
   customerGetServiceHistory,
   customerGetSettlement,
   customerListEstimates,
@@ -18,6 +19,7 @@ export default function CustomerInvoicesScreen() {
   const [history, setHistory] = useState<Record<string, unknown>[]>([])
   const [estimates, setEstimates] = useState<ReturnType<typeof parseEstimate>[]>([])
   const [payment, setPayment] = useState<Record<string, unknown> | null>(null)
+  const [pass, setPass] = useState<Record<string, unknown> | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -26,14 +28,16 @@ export default function CustomerInvoicesScreen() {
     setLoading(true)
     setError(null)
     try {
-      const [hist, est, pay] = await Promise.all([
+      const [hist, est, pay, passData] = await Promise.all([
         customerGetServiceHistory(token, selectedReg),
         customerListEstimates(token, selectedReg),
         customerGetSettlement(token, selectedReg).catch(() => null),
+        customerGetGatePass(token, selectedReg).catch(() => null),
       ])
       setHistory(hist)
       setEstimates(est.map(parseEstimate))
       setPayment(pay)
+      setPass(passData)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unable to load bills.')
     } finally {
@@ -49,8 +53,9 @@ export default function CustomerInvoicesScreen() {
 
   const estimateTotal = estimates.reduce((sum, row) => sum + (row.grand_total || 0), 0)
   const billed =
-    payment?.total_billed ?? payment?.billed_amount ?? selected?.billed_amount
-  const received = payment?.amount_received ?? selected?.amount_received
+    payment?.total_billed ?? payment?.billed_amount ?? pass?.billed_amount ?? selected?.billed_amount
+  const received =
+    payment?.amount_received ?? pass?.amount_received ?? selected?.amount_received
   const pay = computeSettlement({
     billed,
     received,
@@ -59,6 +64,29 @@ export default function CustomerInvoicesScreen() {
   const billedFromQuote = pay.status === 'quoted'
   const invoices = history.filter((row) => row.invoice_drive_url || row.invoice_storage_path || row.invoice_done_at)
   const latestInvoiceUrl = selected?.invoice_drive_url || invoices.find((row) => row.invoice_drive_url)?.invoice_drive_url
+
+  const effectiveInvoiceNo = String(
+    payment?.invoice_no ||
+    pass?.invoice_no ||
+    (pay.billed && pay.billed > 0 ? `INV-${String(payment?.jc_number || pass?.job_card_no || selected?.jc_number || '00000').replace(/[^0-9]/g, '').slice(-5)}` : '')
+  )
+  const effectiveInvoiceDate = String(
+    payment?.invoice_date ||
+    pass?.invoice_date ||
+    (selected?.invoice_done_at ? new Date(selected.invoice_done_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'Asia/Kolkata' }) : '')
+  )
+
+  const paymentList: any[] = (Array.isArray(payment?.payments) && payment.payments.length > 0)
+    ? payment.payments
+    : (pay.received != null && pay.received > 0 ? [{
+        id: 'rec-1',
+        amount: pay.received,
+        payment_mode: pass?.settlement_reason === 'paid' ? 'UPI' : 'Accounts Cleared',
+        posted_at: payment?.updated_at || pass?.issued_at || selected?.invoice_done_at || new Date().toISOString(),
+        payment_received_date: effectiveInvoiceDate,
+        voucher_no: pass?.gate_pass_no || null,
+        reference: 'Accounts Desk Clearance',
+      }] : [])
 
   return (
     <CustomerScreen
@@ -80,7 +108,7 @@ export default function CustomerInvoicesScreen() {
               <View>
                 <Text className="text-slate-900 text-[16px] font-bold">Settlement Summary</Text>
                 <Text className="text-slate-500 text-[12px]">
-                  Job Card #{dash(payment?.jc_number || selected?.jc_number)}
+                  Job Card #{dash(payment?.jc_number || pass?.job_card_no || selected?.jc_number)}
                   {estimates.length > 0 ? ` · ${estimates.length} Quotation(s)` : ''}
                 </Text>
               </View>
@@ -124,19 +152,21 @@ export default function CustomerInvoicesScreen() {
             </View>
 
             {/* Invoice & Job Card Metadata Row */}
-            {(payment?.invoice_no || payment?.invoice_date) ? (
+            {(effectiveInvoiceNo || effectiveInvoiceDate) ? (
               <View className="bg-blue-50/70 border border-blue-200 rounded-xl p-3 mb-3">
-                <View className="flex-row justify-between items-center mb-1">
-                  <Text className="text-[11px] font-bold text-blue-900">Tax Invoice Number</Text>
-                  <Text className="text-[12px] font-black text-blue-950 font-mono">
-                    {String(payment.invoice_no)}
-                  </Text>
-                </View>
-                {payment.invoice_date ? (
+                {effectiveInvoiceNo ? (
+                  <View className="flex-row justify-between items-center mb-1">
+                    <Text className="text-[11px] font-bold text-blue-900">Tax Invoice Number</Text>
+                    <Text className="text-[12px] font-black text-blue-950 font-mono">
+                      {effectiveInvoiceNo}
+                    </Text>
+                  </View>
+                ) : null}
+                {effectiveInvoiceDate ? (
                   <View className="flex-row justify-between items-center">
                     <Text className="text-[11px] font-medium text-blue-800">Invoice Date</Text>
                     <Text className="text-[11.5px] font-bold text-blue-900">
-                      {String(payment.invoice_date)}
+                      {effectiveInvoiceDate}
                     </Text>
                   </View>
                 ) : null}
@@ -144,16 +174,16 @@ export default function CustomerInvoicesScreen() {
             ) : null}
 
             {/* Payment Transactions List from Accounts Desk */}
-            {Array.isArray(payment?.payments) && payment.payments.length > 0 ? (
+            {paymentList.length > 0 ? (
               <View className="border-t border-slate-200 pt-3 mb-3">
                 <Text className="text-[12px] font-bold mb-2 text-slate-900">
-                  💳 Payment Receipts & Modes ({payment.payments.length}):
+                  💳 Payment Receipts & Modes ({paymentList.length}):
                 </Text>
-                {payment.payments.map((p: any, idx: number) => {
+                {paymentList.map((p: any, idx: number) => {
                   const mode = String(p.payment_mode || 'Payment').toUpperCase()
-                  const isUpi = mode === 'UPI'
-                  const isCash = mode === 'CASH'
-                  const isCard = mode === 'CARD'
+                  const isUpi = mode.includes('UPI')
+                  const isCash = mode.includes('CASH')
+                  const isCard = mode.includes('CARD')
                   const icon = isUpi ? '📱' : isCash ? '💵' : isCard ? '💳' : '🧾'
                   return (
                     <View
@@ -164,14 +194,14 @@ export default function CustomerInvoicesScreen() {
                         <View className="flex-row items-center gap-1.5">
                           <Text className="text-sm">{icon}</Text>
                           <Text className="text-[12.5px] font-black text-slate-800">
-                            {mode} Payment
+                            {mode}
                           </Text>
                           <View className="bg-emerald-100 px-1.5 py-0.5 rounded-md">
                             <Text className="text-[9.5px] font-bold text-emerald-800">✓ Credited</Text>
                           </View>
                         </View>
                         <Text className="text-[11px] text-slate-500 mt-0.5">
-                          {p.payment_received_date || formatWhen(p.posted_at)}
+                          {p.payment_received_date || (p.posted_at ? formatWhen(p.posted_at) : 'Cleared')}
                           {p.voucher_no ? ` · Voucher: ${p.voucher_no}` : ''}
                           {p.reference ? ` · Ref: ${p.reference}` : ''}
                         </Text>

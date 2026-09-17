@@ -154,7 +154,7 @@ export async function customerGetGatePass(sessionToken: string, regNumber?: stri
       const { data: botRows } = await supabase
         .from('post_feedback_bot_data')
         .select('feedback_text')
-        .or(`vehicle_registration_number.eq.${regClean},vehicle_registration_number.eq.${regNorm},vehicle_registration_number.ilike.%${regClean}%`)
+        .ilike('vehicle_registration_number', `%${regClean}%`)
         .eq('mode', 'customer_gatepass_payload')
         .order('complaint_date_time', { ascending: false })
         .limit(1)
@@ -190,8 +190,8 @@ export async function customerGetGatePass(sessionToken: string, regNumber?: stri
     try {
       const { data: entries } = await supabase
         .from('service_reception_entries')
-        .select('id, jc_number, reg_number, owner_name, owner_phone, branch, service_type, created_at, invoice_done_at')
-        .or(`reg_number.eq.${regClean},reg_number.eq.${regNorm},reg_number.ilike.%${regClean}%`)
+        .select('id, jc_number, reg_number, owner_name, owner_phone, branch, service_type, created_at, invoice_done_at, expected_invoice_amount, billed_amount, amount_received')
+        .ilike('reg_number', `%${regClean}%`)
         .order('created_at', { ascending: false })
         .limit(1)
 
@@ -201,14 +201,14 @@ export async function customerGetGatePass(sessionToken: string, regNumber?: stri
           .from('accounts_mechanical_invoices')
           .select('invoice_number, invoice_date, billed_amount, amount_received, payment_status, keep_on_credit, keep_on_credit_reason')
           .eq('reception_entry_id', entry.id)
-          .single()
+          .maybeSingle()
 
-        const billed = Number(inv?.billed_amount || 0)
-        const received = Number(inv?.amount_received || 0)
+        const billed = Number(inv?.billed_amount ?? entry.billed_amount ?? entry.expected_invoice_amount ?? 0)
+        const received = Number(inv?.amount_received ?? entry.amount_received ?? 0)
         const remaining = Math.max(0, billed - received)
         const isAccountsCleared = Boolean(inv?.keep_on_credit) || (billed > 0 && remaining <= 0) || Boolean(entry.invoice_done_at)
 
-        if (isAccountsCleared || inv?.invoice_number) {
+        if (isAccountsCleared || inv?.invoice_number || billed > 0) {
           const gpNo = `GP-${entry.jc_number ? entry.jc_number.replace(/[^0-9]/g, '').slice(-5) : Date.now().toString().slice(-5)}`
           const reason = (billed > 0 && remaining <= 0) ? 'paid' : (billed > 0 && remaining <= billed * 0.02) ? 'short_payment' : Boolean(inv?.keep_on_credit) ? 'keep_on_credit' : 'released'
 
@@ -265,8 +265,8 @@ export async function customerGetSettlement(sessionToken: string, regNumber?: st
     try {
       const { data: entries } = await supabase
         .from('service_reception_entries')
-        .select('id, jc_number, reg_number, owner_name, owner_phone, branch, service_type, created_at, invoice_done_at')
-        .or(`reg_number.eq.${regClean},reg_number.eq.${regNorm},reg_number.ilike.%${regClean}%`)
+        .select('id, jc_number, reg_number, owner_name, owner_phone, branch, service_type, created_at, invoice_done_at, expected_invoice_amount, billed_amount, amount_received')
+        .ilike('reg_number', `%${regClean}%`)
         .order('created_at', { ascending: false })
         .limit(1)
 
@@ -276,7 +276,7 @@ export async function customerGetSettlement(sessionToken: string, regNumber?: st
           .from('accounts_mechanical_invoices')
           .select('id, invoice_number, invoice_date, billed_amount, amount_received, payment_status, keep_on_credit, keep_on_credit_reason, updated_at')
           .eq('reception_entry_id', entry.id)
-          .single()
+          .maybeSingle()
 
         // Fetch payment line items (UPI, Cash, Card, etc.)
         const { data: payments } = await supabase
@@ -291,7 +291,7 @@ export async function customerGetSettlement(sessionToken: string, regNumber?: st
           const { data: botRows } = await supabase
             .from('post_feedback_bot_data')
             .select('feedback_text')
-            .or(`vehicle_registration_number.eq.${regClean},vehicle_registration_number.eq.${regNorm},vehicle_registration_number.ilike.%${regClean}%`)
+            .ilike('vehicle_registration_number', `%${regClean}%`)
             .eq('mode', 'customer_gatepass_payload')
             .order('complaint_date_time', { ascending: false })
             .limit(1)
@@ -302,8 +302,8 @@ export async function customerGetSettlement(sessionToken: string, regNumber?: st
           // ignore
         }
 
-        const billed = Number(inv?.billed_amount ?? botPass?.billed_amount ?? rpcResult?.total_billed ?? rpcResult?.billed_amount ?? 0)
-        const received = Number(inv?.amount_received ?? botPass?.amount_received ?? rpcResult?.amount_received ?? 0)
+        const billed = Number(inv?.billed_amount ?? botPass?.billed_amount ?? entry.billed_amount ?? entry.expected_invoice_amount ?? rpcResult?.total_billed ?? rpcResult?.billed_amount ?? 0)
+        const received = Number(inv?.amount_received ?? botPass?.amount_received ?? entry.amount_received ?? rpcResult?.amount_received ?? 0)
         const remaining = Math.max(0, billed - received)
         const status = (billed > 0 && remaining <= 0) ? 'received' : (received > 0 ? 'partial' : 'pending')
 
