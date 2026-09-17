@@ -59,6 +59,10 @@
 - [ ] After amount edit, `accounts_mechanical_recalc` updates `amount_received` / `payment_status`; remaining floors at 0; sibling lines unchanged
 - [ ] Editing a fully paid split so remaining > 2% makes Gatepass unavailable unless valid Keep on Credit exists
 - [ ] `voucher_no` is preserved on edit; `posted_by` / `posted_at` are preserved; `edited_by` / `edited_at` are stamped
+- [ ] Mechanical table **Pending Remark** sits after Remaining and before Status; pending/outstanding rows are editable inline with explicit Save
+- [ ] Saved pending remark survives refresh, Pending/Received/search/period filters, and invoice Save that omits notes
+- [ ] Fully received rows show the stored remark read-only or `—`; settling a pending case does not delete the stored remark
+- [ ] Pending Remark does not change billed, received, remaining, payment-mode KPIs, Gatepass, or voucher numbers
 - [ ] Bodyshop settlement receipts are unchanged
 
 ## Bodyshop

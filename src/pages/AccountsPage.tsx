@@ -25,6 +25,9 @@ import {
   isMechanicalGatepassEligible,
   isMechanicalKeepOnCreditValid,
   isMechanicalPaymentClosed,
+  isMechanicalPendingRemarkEditable,
+  mechanicalPendingRemark,
+  setAccountsMechanicalPendingRemark,
   listAccountsBodyshopCases,
   listAccountsMechanicalCases,
   listAccountsMechanicalPaymentLines,
@@ -252,6 +255,8 @@ export default function AccountsPage() {
   } | null>(null)
   const [issuingGatepass, setIssuingGatepass] = useState(false)
   const [exporting, setExporting] = useState(false)
+  const [pendingRemarkDrafts, setPendingRemarkDrafts] = useState<Record<number, string>>({})
+  const [savingPendingRemarkId, setSavingPendingRemarkId] = useState<number | null>(null)
 
   function selectMechPaymentMode(mode: Exclude<MechanicalPaymentModeFilter, 'all'>) {
     setMechPaymentModeFilter((prev) => (prev === mode ? 'all' : mode))
@@ -388,6 +393,34 @@ export default function AccountsPage() {
   function patchMechRow(saved: AccountsMechanicalCase) {
     setMechRows((prev) => prev.map((r) => (r.reception_entry_id === saved.reception_entry_id ? { ...r, ...saved } : r)))
     setEditRow((prev) => (prev && prev.reception_entry_id === saved.reception_entry_id ? { ...prev, ...saved } : prev))
+  }
+
+  function pendingRemarkDraftValue(row: AccountsMechanicalCase) {
+    const id = row.reception_entry_id
+    if (Object.prototype.hasOwnProperty.call(pendingRemarkDrafts, id)) return pendingRemarkDrafts[id]
+    return row.payment_notes ?? ''
+  }
+
+  async function savePendingRemark(row: AccountsMechanicalCase) {
+    if (!isMechanicalPendingRemarkEditable(row)) return
+    const next = pendingRemarkDraftValue(row).trim()
+    const current = mechanicalPendingRemark(row)
+    if (next === current) return
+    setSavingPendingRemarkId(row.reception_entry_id)
+    try {
+      const saved = await setAccountsMechanicalPendingRemark(row.reception_entry_id, next || null)
+      patchMechRow(saved)
+      setPendingRemarkDrafts((prev) => {
+        const nextDrafts = { ...prev }
+        delete nextDrafts[row.reception_entry_id]
+        return nextDrafts
+      })
+      flash('Pending remark saved')
+    } catch (e) {
+      flash(e instanceof Error ? e.message : 'Could not save pending remark', false)
+    } finally {
+      setSavingPendingRemarkId(null)
+    }
   }
 
   async function openCapture(row: AccountsMechanicalCase) {
@@ -1091,6 +1124,7 @@ export default function AccountsPage() {
                   <th>Billed</th>
                   <th>Received Amount</th>
                   <th>Remaining</th>
+                  <th>Pending Remark</th>
                   <th>Status</th>
                   <th></th>
                 </tr>
@@ -1130,6 +1164,45 @@ export default function AccountsPage() {
                     <td>{inr(r.billed_amount)}</td>
                     <td>{inr(mechReceivedByCase.get(r.reception_entry_id) ?? 0)}</td>
                     <td>{inr(mechanicalRemaining(r))}</td>
+                    <td className="acct-pending-remark">
+                      {isMechanicalPendingRemarkEditable(r) ? (
+                        <div className="acct-pending-remark__edit">
+                          <input
+                            className="inp"
+                            value={pendingRemarkDraftValue(r)}
+                            maxLength={240}
+                            placeholder="Why still pending?"
+                            aria-label={`Pending remark for ${r.jc_number}`}
+                            disabled={savingPendingRemarkId === r.reception_entry_id}
+                            onChange={(e) => {
+                              const value = e.target.value
+                              setPendingRemarkDrafts((prev) => ({ ...prev, [r.reception_entry_id]: value }))
+                            }}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                e.preventDefault()
+                                void savePendingRemark(r)
+                              }
+                            }}
+                          />
+                          <button
+                            type="button"
+                            className="btn btn--sm btn--primary"
+                            disabled={
+                              savingPendingRemarkId === r.reception_entry_id
+                              || pendingRemarkDraftValue(r).trim() === mechanicalPendingRemark(r)
+                            }
+                            onClick={() => void savePendingRemark(r)}
+                          >
+                            {savingPendingRemarkId === r.reception_entry_id ? '…' : 'Save'}
+                          </button>
+                        </div>
+                      ) : (
+                        <span className="acct-pending-remark__ro" title={mechanicalPendingRemark(r) || undefined}>
+                          {mechanicalPendingRemark(r) || '—'}
+                        </span>
+                      )}
+                    </td>
                     <td>
                       <span className={`brx-settle-pill is-${String(r.payment_status ?? 'pending').toLowerCase()}`}>
                         {settlementStatusLabel(r.payment_status)}

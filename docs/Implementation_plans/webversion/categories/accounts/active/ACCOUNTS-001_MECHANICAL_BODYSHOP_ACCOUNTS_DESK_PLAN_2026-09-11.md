@@ -2,13 +2,13 @@
 
 **Plan ID:** ACCOUNTS-001  
 **Created:** 2026-09-11  
-**Last Updated:** 2026-09-16
+**Last Updated:** 2026-09-17
 **Priority:** HIGH
 **Owner:** Accounts + Platform Team  
 **Status:** Active (web implemented; DBL-0055 Accounts DO post pending apply)  
 **Platform:** webversion  
 **Category:** accounts  
-**Ledger:** DBL-0045/0046/0051/0052/0053/0054/0056/0057/0058/0059/0060/0061/0066 APPLIED. DBL-0068 APPLIED (Admin edit of posted Mechanical receipts). DBL-0069 APPLIED (SA invoice amount requires Floor completed). DBL-0073 PROPOSED (per-receipt remark on mechanical payment lines). DBL-0074 APPLIED (late RApp/JApp assign + JApp sequence reconcile + fail-closed Busy Export). DBL-0055 PROPOSED (Accounts may post insurer/DO lines). Mechanical vouchers recalculated from `invoice_date >= 2026-09-02`. Do not reuse DBL-0043 (`busy`) or DBL-0044 (`busy_parts`). Do not re-run DBL-0059.  
+**Ledger:** DBL-0045/0046/0051/0052/0053/0054/0056/0057/0058/0059/0060/0061/0066 APPLIED. DBL-0068 APPLIED (Admin edit of posted Mechanical receipts). DBL-0069 APPLIED (SA invoice amount requires Floor completed). DBL-0073 PROPOSED (per-receipt remark on mechanical payment lines). DBL-0074 APPLIED (late RApp/JApp assign + JApp sequence reconcile + fail-closed Busy Export). DBL-0075 APPLIED (Mechanical Pending Remark reuses invoice `payment_notes`). DBL-0055 PROPOSED (Accounts may post insurer/DO lines). Mechanical vouchers recalculated from `invoice_date >= 2026-09-02`. Do not reuse DBL-0043 (`busy`) or DBL-0044 (`busy_parts`). Do not re-run DBL-0059.  
 **Route:** `/accounts`  
 **Module:** `accounts`  
 **Depends on:** BODYSHOP-SETTLEMENT-001 (`bodyshop_settlements`, Stage 18 lines); Service Advisor Mark Done (`invoice_done_at`)  
@@ -144,7 +144,7 @@ Pattern: `src/pages/BodyshopRecoveryPage.tsx` (KPIs, search, table, Excel, on-pa
 
 **Mechanical desk**
 
-- Columns: Mark Done at, JC, reg, model, service type, SA, branch, owner, invoice number, billed amount, **Received Amount** (sum of `accounts_mechanical_payment_lines` excluding `reference` Discount), remaining, payment status, notes
+- Columns: Mark Done at, JC, reg, model, service type, SA, branch, owner, invoice number, billed amount, **Received Amount** (sum of `accounts_mechanical_payment_lines` excluding `reference` Discount), remaining, **Pending Remark** (`accounts_mechanical_invoices.payment_notes`), payment status, notes
 - Capture / Payments modal: invoice number, date, billed amount, and invoice file (reuse unused SA `invoice_storage_path` upload). **Fetch from DMS** fills those fields when the JC has exactly one live DMS invoice; Accounts still taps Save. 0 or 2+ DMS rows shows “No unique DMS invoice”. Remaining stays billed minus receipts. Invoice header locks after the first receipt.
 - Receipts are posted as lines on `accounts_mechanical_payment_lines`: this amount + Payment mode (Cash/UPI/Card/Cheque/Bank/Other) + Payment received date + reference. `payment_received_date` is the business date (Asia/Kolkata); `posted_at` remains the original system insert timestamp. Platform Admin / Super Admin may edit a posted Mechanical receipt (`amount`, `payment_mode`, `reference`, `payment_received_date`) through `update_accounts_mechanical_payment` (`is_admin()` only). The client sends `accounts_mechanical_payment_lines.id`. Invoice id, previous values, and totals are read from persistence. `posted_by`, `posted_at`, `voucher_no`, `mechanical_invoice_id`, and `reception_entry_id` are not rewritten. `edited_by` / `edited_at` record the last trusted edit. Recalc reuses `accounts_mechanical_recalc`. Overpayment is stored as-is. Voucher series apply when the **effective invoice date** `>= 2026-09-02`: Accounts `invoice_date` when present, otherwise the unique live DMS labour `invoice_date` for the JC (DBL-0060; does not use `payment_received_date` / Mark Done). Cash gets `RApp/26-27/nnnn`; UPI+Card share `JApp/26-27/nnnn` at insert. If the line is still NULL and later becomes eligible (Accounts fills a still-NULL invoice date, or unique DMS labour arrives), `accounts_mechanical_assign_eligible_null_vouchers` assigns the next number (DBL-0074). Non-null vouchers are never rewritten — they have already been posted into BUSY. cheque/bank/other stay null. Editing a posted line never regenerates, deletes, or replaces `voucher_no`. If mode/date/amount/reference no longer match an already-exported voucher, the number is kept and BUSY must be re-exported; the UI warns. History shows Received Date plus an Admin-only Action/Edit column. Payment status is automatic from billed vs sum(receipts). Mechanical Gatepass is eligible when remaining ≤ 0, remaining ≤ 2% of billed, or a **valid** persisted Keep on Credit exists (`keep_on_credit` + non-blank `keep_on_credit_reason` + `keep_on_credit_approved_by` + `keep_on_credit_approved_at`). Financial remaining and `payment_status` are not rewritten for the 2% rule or Keep on Credit. Receipts may exceed remaining; the posted line keeps the entered amount. Create Gatepass goes through `issue_accounts_mechanical_gatepass`. Bodyshop settlement receipts are unchanged.
 - KPI: Mark Done count, invoice-pending count, billed sum, customer remaining / received still follow Mark Done Period. Cash / UPI / Credit Card money is actual receipt-line grain dated by `payment_received_date` (IST `posted_at` fallback), after status + Search, excluding Discount `reference`. Mark Done date does not restrict those three cards.
@@ -179,6 +179,7 @@ Pattern: `src/pages/BodyshopRecoveryPage.tsx` (KPIs, search, table, Excel, on-pa
 - [x] **Task 3.11:** Mechanical Cash / UPI / Credit Card KPIs use status filter + `payment_received_date` (IST `posted_at` fallback). Exclude Discount `reference`. Receipt Period is independent of Mark Done table period.
 - [x] **Task 3.12:** Admin-only edit of posted Mechanical receipts (DBL-0068). Trusted `update_accounts_mechanical_payment`. Non-admin RPC denied. Voucher number preserved. Recalc + Gatepass refresh. Bodyshop unchanged.
 - [ ] **Task 3.13:** Per-receipt Remark on Mechanical payment entries (DBL-0073). Layout Amount / Mode / Date then Reference no. / Remark. Persist on `accounts_mechanical_payment_lines.remark`.
+- [x] **Task 3.15:** Mechanical table Pending Remark between Remaining and Status (DBL-0075). Persist on existing `accounts_mechanical_invoices.payment_notes`. Inline save. Do not clear on received. Do not change money or vouchers.
 
 ### Phase 4: Closeout
 - [x] **Task 4.1:** MODULE_ROUTE_CONTRACT (grant Accounts users after SQL apply).
@@ -226,6 +227,7 @@ Pattern: `src/pages/BodyshopRecoveryPage.tsx` (KPIs, search, table, Excel, on-pa
 ✅ 3.12 | Admin edit posted Mechanical receipts | Eng | 2026-09-16 | 2026-09-16 | DBL-0068 APPLIED; is_admin() RPC
 ⏳ 3.13 | Per-receipt remark | Eng | 2026-09-16 | - | DBL-0073 PROPOSED
 ✅ 3.14 | Late voucher assign + fail-closed Busy Export | Eng | 2026-09-16 | 2026-09-16 | DBL-0074 APPLIED; line 222 JApp/26-27/0195; 221 stays 0140
+✅ 3.15 | Mechanical Pending Remark | Eng | 2026-09-17 | 2026-09-17 | DBL-0075 APPLIED; reuses invoice payment_notes; practical leftover_fail=0
 ⏳ 3.5 | Capture Fetch from DMS | Eng | 2026-09-11 | 2026-09-11 | DBL-0048 applied; web button pending deploy
 ```
 
@@ -314,6 +316,14 @@ Pattern: `src/pages/BodyshopRecoveryPage.tsx` (KPIs, search, table, Excel, on-pa
 - Discount `reference` (trim + case-insensitive `discount`, live `DISCOUNT`) contributes ₹0 to all three cards regardless of stored `payment_mode`. Same detector as table Received Amount (`isMechanicalDiscountPaymentLine`). Genuine `other` is not reclassified onto the cards.
 - Mode tiles are not inputs to the other mode totals (clicking Cash does not clear UPI/Card).
 - Helper: `sumAccountsMechanicalPaymentModeKpis` in `src/lib/api/accounts.ts`. Checks: `scripts/verify_accounts_split_payment_drafts.mjs`.
+
+### 2026-09-17 - Mechanical Pending Remark
+
+- Table column sits between Remaining and Status. Compact inline input + explicit Save. Not a keystroke write.
+- Persists on existing `accounts_mechanical_invoices.payment_notes`. No new table. Not Keep on Credit reason. Not per-receipt `remark`.
+- Editable while remaining is outstanding and an invoice header exists. Fully received/settled rows are read-only (`—` when empty). Stored value is not cleared when the case later becomes received.
+- Trusted RPC `set_accounts_mechanical_pending_remark`. Invoice capture omitting `p_payment_notes` preserves the saved remark. Recalc, receipts, vouchers, billed, remaining, payment-mode KPIs, and Bodyshop are unchanged.
+- Ledger: DBL-0075.
 
 ### 2026-09-16 - Admin edit of posted Mechanical receipts
 

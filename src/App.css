@@ -974,6 +974,33 @@ table.tbl { width: 100%; border-collapse: collapse; font-size: 13.5px; }
 .acct-table-scroll .brx-settle-status {
   padding: 24px 8px;
 }
+.acct-pending-remark {
+  min-width: 176px;
+  max-width: 228px;
+  vertical-align: middle;
+}
+.acct-pending-remark__edit {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+.acct-pending-remark__edit .inp {
+  height: 30px;
+  font-size: 12px;
+  padding: 0 8px;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+.acct-pending-remark__ro {
+  display: block;
+  max-width: 228px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--muted);
+  font-size: 12px;
+}
 
 @media (max-width: 1200px) {
   .acct-page .brx-recov-kpis,

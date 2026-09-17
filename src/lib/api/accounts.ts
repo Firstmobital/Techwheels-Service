@@ -47,6 +47,7 @@ export interface AccountsMechanicalCase {
   payment_status: AccountsPaymentStatus | null
   amount_received: number | null
   remaining_amount: number | null
+  /** Invoice-header Pending Remark (`accounts_mechanical_invoices.payment_notes`). */
   payment_notes: string | null
   captured_by: string | null
   captured_at: string | null
@@ -239,6 +240,41 @@ export function mechanicalPaymentVoucherEditWarning(
     return `Voucher ${voucher} will be kept. It stays ${series} while the receipt mode is now ${paymentModeLabel(paymentMode)}. Re-export BUSY if this receipt was already sent.`
   }
   return `Voucher ${voucher} will be kept. Amount, mode, date, reference, and remark edits do not regenerate it. Re-export BUSY if this receipt was already sent.`
+}
+
+export async function setAccountsMechanicalPendingRemark(
+  receptionEntryId: number,
+  pendingRemark: string | null,
+): Promise<AccountsMechanicalCase> {
+  const { data, error } = await supabase.rpc('set_accounts_mechanical_pending_remark', {
+    p_reception_entry_id: receptionEntryId,
+    p_pending_remark: pendingRemark,
+  })
+  if (error) throw new Error(settlementRpcError(error))
+  return data as AccountsMechanicalCase
+}
+
+export function mechanicalPendingRemark(
+  row: Pick<AccountsMechanicalCase, 'payment_notes'>,
+): string {
+  return String(row.payment_notes ?? '').trim()
+}
+
+export function hasMechanicalInvoiceHeader(
+  row: Pick<AccountsMechanicalCase, 'captured_at' | 'invoice_updated_at' | 'billed_amount' | 'invoice_number'>,
+): boolean {
+  return Boolean(
+    row.captured_at
+    || row.invoice_updated_at
+    || row.billed_amount != null
+    || String(row.invoice_number ?? '').trim(),
+  )
+}
+
+export function isMechanicalPendingRemarkEditable(
+  row: Pick<AccountsMechanicalCase, 'billed_amount' | 'amount_received' | 'remaining_amount' | 'payment_status' | 'captured_at' | 'invoice_updated_at' | 'invoice_number'>,
+): boolean {
+  return hasMechanicalInvoiceHeader(row) && !isMechanicalPaymentClosed(row)
 }
 
 export async function setAccountsMechanicalKeepOnCredit(
