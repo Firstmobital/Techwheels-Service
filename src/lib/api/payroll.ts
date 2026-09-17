@@ -1,8 +1,11 @@
 import { supabase } from '../supabase'
 import {
+  calcEmployeeIncentiveAmount,
   computePayrollAmounts,
   hasGenuinePayrollMonthActivity,
   isValidPayableDays,
+  parseNonNegativeIncentivePercent,
+  parseNonNegativePayrollMoney,
   parsePayrollMonthInput,
   payrollActivityFromEntry,
   salaryTypeIncludesVariable,
@@ -10,12 +13,15 @@ import {
 } from '../payroll/calculations'
 import { roundPayrollPaise } from '../payroll/advanceSchedule'
 import { fetchMonthlyVariableEarnings } from '../payroll/variableEarnings'
+import { isEmployeeIncentiveType } from '../payroll/types'
 import type {
+  EmployeeIncentiveType,
   PayrollAdvance,
   PayrollAdvanceSchedule,
   PayrollAttendance,
   PayrollCompensation,
   PayrollEmployee,
+  PayrollEmployeeIncentive,
   PayrollEntry,
   PayrollMonth,
   SalaryType,
@@ -112,6 +118,155 @@ export async function fetchPayrollEntries(payrollMonth: string): Promise<Payroll
   const res = await supabase.from('payroll_entries').select('*').eq('payroll_month', month)
   if (res.error) throw new Error(res.error.message)
   return (res.data ?? []) as PayrollEntry[]
+}
+
+async function assertDraftPayrollMonth(payrollMonth: string): Promise<string> {
+  const month = parsePayrollMonthInput(payrollMonth)
+  if (!month) throw new Error('Invalid payroll month')
+  const monthState = await fetchPayrollMonth(month)
+  if (monthState?.status === 'finalized') {
+    throw new Error(`Cannot change incentives for finalized payroll month ${month.slice(0, 7)}`)
+  }
+  return month
+}
+
+function normalizeDescription(description: string | null | undefined): string | null {
+  const trimmed = String(description ?? '').trim()
+  return trimmed ? trimmed : null
+}
+
+function parseIncentiveWriteInput(input: {
+  employeeCode: string
+  incentiveType: string
+  value: number | string
+  incentivePercent: number | string
+  description?: string | null
+}): {
+  employeeCode: string
+  incentiveType: EmployeeIncentiveType
+  value: number
+  incentivePercent: number
+  amount: number
+  description: string | null
+} {
+  const employeeCode = String(input.employeeCode ?? '').trim().toUpperCase()
+  if (!employeeCode) throw new Error('Employee is required')
+  const incentiveType = String(input.incentiveType ?? '').trim()
+  if (!isEmployeeIncentiveType(incentiveType)) {
+    throw new Error('Type must be Parts, Rusting, VAS, or Others')
+  }
+  const valueParsed = parseNonNegativePayrollMoney(String(input.value))
+  if (!valueParsed.ok) throw new Error(valueParsed.error)
+  const percentParsed = parseNonNegativeIncentivePercent(String(input.incentivePercent))
+  if (!percentParsed.ok) throw new Error(percentParsed.error)
+  return {
+    employeeCode,
+    incentiveType,
+    value: valueParsed.value,
+    incentivePercent: percentParsed.value,
+    amount: calcEmployeeIncentiveAmount(valueParsed.value, percentParsed.value),
+    description: normalizeDescription(input.description),
+  }
+}
+
+export async function fetchEmployeeIncentivesForMonth(payrollMonth: string): Promise<PayrollEmployeeIncentive[]> {
+  const month = parsePayrollMonthInput(payrollMonth)
+  if (!month) throw new Error('Invalid payroll month')
+  const res = await supabase
+    .from('payroll_employee_incentives')
+    .select('*')
+    .eq('payroll_month', month)
+    .order('id', { ascending: true })
+  if (res.error) throw new Error(res.error.message)
+  return (res.data ?? []) as PayrollEmployeeIncentive[]
+}
+
+export async function fetchIncentiveTotalsByEmployee(payrollMonth: string): Promise<Map<string, number>> {
+  const rows = await fetchEmployeeIncentivesForMonth(payrollMonth)
+  const map = new Map<string, number>()
+  rows.forEach((row) => {
+    const code = String(row.employee_code).trim().toUpperCase()
+    map.set(code, roundPayrollPaise((map.get(code) ?? 0) + Number(row.amount ?? 0)))
+  })
+  return map
+}
+
+export async function createEmployeeIncentive(input: {
+  employeeCode: string
+  payrollMonth: string
+  incentiveType: string
+  value: number | string
+  incentivePercent: number | string
+  description?: string | null
+  createdBy: string
+}): Promise<PayrollEmployeeIncentive> {
+  const month = await assertDraftPayrollMonth(input.payrollMonth)
+  const parsed = parseIncentiveWriteInput(input)
+  const compensation = await supabase
+    .from('payroll_compensation')
+    .select('employee_code')
+    .eq('employee_code', parsed.employeeCode)
+    .maybeSingle()
+  if (compensation.error) throw new Error(compensation.error.message)
+  if (!compensation.data) {
+    throw new Error(`Employee ${parsed.employeeCode} has no payroll compensation profile and cannot receive incentives`)
+  }
+  const res = await supabase.from('payroll_employee_incentives').insert({
+    employee_code: parsed.employeeCode,
+    payroll_month: month,
+    incentive_type: parsed.incentiveType,
+    value: parsed.value,
+    incentive_percent: parsed.incentivePercent,
+    amount: parsed.amount,
+    description: parsed.description,
+    created_by: input.createdBy,
+    updated_at: new Date().toISOString(),
+  }).select('*').single()
+  if (res.error) throw new Error(res.error.message)
+  return res.data as PayrollEmployeeIncentive
+}
+
+export async function updateEmployeeIncentive(input: {
+  id: number
+  employeeCode: string
+  incentiveType: string
+  value: number | string
+  incentivePercent: number | string
+  description?: string | null
+}): Promise<PayrollEmployeeIncentive> {
+  const existingRes = await supabase.from('payroll_employee_incentives').select('*').eq('id', input.id).single()
+  if (existingRes.error) throw new Error(existingRes.error.message)
+  const existing = existingRes.data as PayrollEmployeeIncentive
+  await assertDraftPayrollMonth(existing.payroll_month)
+  const parsed = parseIncentiveWriteInput(input)
+  const compensation = await supabase
+    .from('payroll_compensation')
+    .select('employee_code')
+    .eq('employee_code', parsed.employeeCode)
+    .maybeSingle()
+  if (compensation.error) throw new Error(compensation.error.message)
+  if (!compensation.data) {
+    throw new Error(`Employee ${parsed.employeeCode} has no payroll compensation profile and cannot receive incentives`)
+  }
+  const res = await supabase.from('payroll_employee_incentives').update({
+    employee_code: parsed.employeeCode,
+    incentive_type: parsed.incentiveType,
+    value: parsed.value,
+    incentive_percent: parsed.incentivePercent,
+    amount: parsed.amount,
+    description: parsed.description,
+    updated_at: new Date().toISOString(),
+  }).eq('id', input.id).select('*').single()
+  if (res.error) throw new Error(res.error.message)
+  return res.data as PayrollEmployeeIncentive
+}
+
+export async function deleteEmployeeIncentive(id: number): Promise<void> {
+  const existingRes = await supabase.from('payroll_employee_incentives').select('payroll_month').eq('id', id).single()
+  if (existingRes.error) throw new Error(existingRes.error.message)
+  await assertDraftPayrollMonth((existingRes.data as { payroll_month: string }).payroll_month)
+  const res = await supabase.from('payroll_employee_incentives').delete().eq('id', id)
+  if (res.error) throw new Error(res.error.message)
 }
 
 export async function fetchAdvances(): Promise<PayrollAdvance[]> {
@@ -217,11 +372,12 @@ export async function recomputePayrollMonth(payrollMonth: string): Promise<Payro
     throw new Error('Cannot recompute a finalized payroll month')
   }
 
-  const [employees, compMap, attendanceMap, existingEntries] = await Promise.all([
+  const [employees, compMap, attendanceMap, existingEntries, incentiveTotals] = await Promise.all([
     fetchPayrollEmployees(),
     fetchCompensationMap(),
     fetchAttendanceForMonth(month),
     fetchPayrollEntries(month),
+    fetchIncentiveTotalsByEmployee(month),
   ])
 
   const existingByCode = new Map(existingEntries.map((e) => [e.employee_code.trim().toUpperCase(), e]))
@@ -254,6 +410,7 @@ export async function recomputePayrollMonth(payrollMonth: string): Promise<Payro
     const existing = existingByCode.get(code)
     const customAdditions = existing?.custom_additions ?? 0
     const otherDeductions = existing?.other_deductions ?? 0
+    const incentiveAmount = incentiveTotals.get(code) ?? 0
     const advanceDeduction = await getAdvanceDeductionForMonth(code, month)
     const currentActivity = {
       payableDays,
@@ -261,6 +418,7 @@ export async function recomputePayrollMonth(payrollMonth: string): Promise<Payro
       technicianVariableEarning: finalTechVar,
       bodyshopVariableEarning: bodyshopVar,
       customAdditions,
+      incentiveAmount,
       otherDeductions,
       advanceDeduction,
     }
@@ -281,6 +439,7 @@ export async function recomputePayrollMonth(payrollMonth: string): Promise<Payro
       saVariableEarning: finalSaVar,
       technicianVariableEarning: finalTechVar,
       bodyshopVariableEarning: bodyshopVar,
+      incentiveAmount,
       customAdditions,
       otherDeductions,
       advanceDeduction,
@@ -304,6 +463,7 @@ export async function recomputePayrollMonth(payrollMonth: string): Promise<Payro
       technician_variable_earning: finalTechVar,
       bodyshop_variable_earning: bodyshopVar,
       variable_earning_total: amounts.variableTotal,
+      incentive_amount: amounts.incentiveAmount,
       custom_additions: customAdditions,
       other_deductions: otherDeductions,
       advance_deduction: advanceDeduction,
@@ -389,6 +549,7 @@ export async function addPayrollAdjustment(input: {
     saVariableEarning: entry.sa_variable_earning,
     technicianVariableEarning: entry.technician_variable_earning,
     bodyshopVariableEarning: Number(entry.bodyshop_variable_earning ?? 0),
+    incentiveAmount: Number(entry.incentive_amount ?? 0),
     customAdditions,
     otherDeductions,
     advanceDeduction: entry.advance_deduction,

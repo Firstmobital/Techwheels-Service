@@ -14,6 +14,14 @@ export type AdvanceStatus = 'active' | 'closed' | 'cancelled'
 
 export type ScheduleStatus = 'pending' | 'applied' | 'skipped'
 
+export const EMPLOYEE_INCENTIVE_TYPES = ['Parts', 'Rusting', 'VAS', 'Others'] as const
+
+export type EmployeeIncentiveType = (typeof EMPLOYEE_INCENTIVE_TYPES)[number]
+
+export function isEmployeeIncentiveType(value: string): value is EmployeeIncentiveType {
+  return (EMPLOYEE_INCENTIVE_TYPES as readonly string[]).includes(value)
+}
+
 export interface PayrollEmployee {
   id: number
   employee_code: string
@@ -113,6 +121,7 @@ export interface PayrollEntry {
   technician_variable_earning: number
   bodyshop_variable_earning: number
   variable_earning_total: number
+  incentive_amount: number
   custom_additions: number
   other_deductions: number
   advance_deduction: number
@@ -121,6 +130,20 @@ export interface PayrollEntry {
   variable_source_detail: VariableSourceDetail | null
   review_flags: Record<string, unknown> | null
   computed_at: string
+  created_at: string
+  updated_at: string
+}
+
+export interface PayrollEmployeeIncentive {
+  id: number
+  employee_code: string
+  payroll_month: string
+  incentive_type: EmployeeIncentiveType
+  value: number
+  incentive_percent: number
+  amount: number
+  description: string | null
+  created_by: string | null
   created_at: string
   updated_at: string
 }

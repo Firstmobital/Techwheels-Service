@@ -26,11 +26,13 @@ export interface PayrollCalcInput {
   customAdditions: number
   otherDeductions: number
   advanceDeduction: number
+  incentiveAmount: number
 }
 
 export interface PayrollCalcResult {
   earnedBase: number
   variableTotal: number
+  incentiveAmount: number
   grossPayout: number
   netPayable: number
 }
@@ -44,6 +46,7 @@ export interface PayrollMonthActivity {
   customAdditions?: number | null
   otherDeductions?: number | null
   advanceDeduction?: number | null
+  incentiveAmount?: number | null
   grossPayout?: number | null
   netPayable?: number | null
 }
@@ -63,6 +66,7 @@ export function hasGenuinePayrollMonthActivity(activity: PayrollMonthActivity | 
     || isNonZeroPayrollAmount(activity.technicianVariableEarning)
     || isNonZeroPayrollAmount(activity.bodyshopVariableEarning)
     || isNonZeroPayrollAmount(activity.customAdditions)
+    || isNonZeroPayrollAmount(activity.incentiveAmount)
     || isNonZeroPayrollAmount(activity.otherDeductions)
     || isNonZeroPayrollAmount(activity.advanceDeduction)
     || isNonZeroPayrollAmount(activity.grossPayout)
@@ -79,6 +83,7 @@ export function payrollActivityFromEntry(
     | 'technician_variable_earning'
     | 'bodyshop_variable_earning'
     | 'custom_additions'
+    | 'incentive_amount'
     | 'other_deductions'
     | 'advance_deduction'
     | 'gross_payout'
@@ -93,6 +98,7 @@ export function payrollActivityFromEntry(
     technicianVariableEarning: entry.technician_variable_earning,
     bodyshopVariableEarning: entry.bodyshop_variable_earning,
     customAdditions: entry.custom_additions,
+    incentiveAmount: entry.incentive_amount,
     otherDeductions: entry.other_deductions,
     advanceDeduction: entry.advance_deduction,
     grossPayout: entry.gross_payout,
@@ -128,11 +134,45 @@ export function computePayrollAmounts(input: PayrollCalcInput): PayrollCalcResul
   const techVar = salaryTypeIncludesVariable(input.salaryType) ? input.technicianVariableEarning : 0
   const bodyshopVar = salaryTypeIncludesVariable(input.salaryType) ? input.bodyshopVariableEarning : 0
   const variableTotal = Math.round((saVar + techVar + bodyshopVar) * 100) / 100
+  const incentiveAmount = Number.isFinite(input.incentiveAmount)
+    ? Math.round(Number(input.incentiveAmount) * 100) / 100
+    : 0
 
-  const grossPayout = Math.round((earnedBase + variableTotal + input.customAdditions) * 100) / 100
+  const grossPayout = Math.round((earnedBase + variableTotal + incentiveAmount + input.customAdditions) * 100) / 100
   const netPayable = Math.round((grossPayout - input.advanceDeduction - input.otherDeductions) * 100) / 100
 
-  return { earnedBase, variableTotal, grossPayout, netPayable }
+  return { earnedBase, variableTotal, incentiveAmount, grossPayout, netPayable }
+}
+
+/** Derived incentive line amount. Value × percent / 100, rounded to 2 decimal places. */
+export function calcEmployeeIncentiveAmount(value: number, incentivePercent: number): number {
+  if (!Number.isFinite(value) || !Number.isFinite(incentivePercent)) {
+    throw new Error('Incentive value and percent must be finite numbers')
+  }
+  if (value < 0 || incentivePercent < 0) {
+    throw new Error('Incentive value and percent must be 0 or greater')
+  }
+  return Math.round((value * incentivePercent / 100) * 100) / 100
+}
+
+export function parseNonNegativePayrollMoney(raw: string): { ok: true; value: number } | { ok: false; error: string } {
+  const trimmed = String(raw ?? '').trim()
+  if (!trimmed) return { ok: false, error: 'Value is required' }
+  const n = Number(trimmed)
+  if (!Number.isFinite(n)) return { ok: false, error: 'Value must be a finite number' }
+  if (n < 0) return { ok: false, error: 'Value must be 0 or greater' }
+  if (n >= 1e10) return { ok: false, error: 'Value exceeds allowed precision' }
+  return { ok: true, value: Math.round(n * 100) / 100 }
+}
+
+export function parseNonNegativeIncentivePercent(raw: string): { ok: true; value: number } | { ok: false; error: string } {
+  const trimmed = String(raw ?? '').trim()
+  if (!trimmed) return { ok: false, error: 'Incentive % is required' }
+  const n = Number(trimmed)
+  if (!Number.isFinite(n)) return { ok: false, error: 'Incentive % must be a finite number' }
+  if (n < 0) return { ok: false, error: 'Incentive % must be 0 or greater' }
+  if (n >= 1e6) return { ok: false, error: 'Incentive % exceeds allowed precision' }
+  return { ok: true, value: Math.round(n * 10000) / 10000 }
 }
 
 /** 30 is the salary divisor, not a payable-days cap. Rejects NaN/negative/non-half-day values. */

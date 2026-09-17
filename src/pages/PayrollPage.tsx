@@ -22,7 +22,7 @@ type TabId = (typeof TABS)[number]['id']
 
 const TAB_DESCRIPTIONS: Record<TabId, string> = {
   attendance: 'Enter monthly payable days per employee. Attendance affects only the base salary component.',
-  incentive: 'View and edit SA / Technician variable earning rules. Changes apply to all earnings calculations.',
+  incentive: 'Enter monthly employee incentives and edit SA / Technician variable earning rules.',
   advance: 'Issue advances and manage monthly recovery schedules applied during payroll processing.',
   processing: 'Recompute, review, and finalize monthly payroll. Locked months preserve historical snapshots.',
   slip: 'Generate individual salary slips and consolidated payroll reports from finalized data.',
@@ -102,7 +102,14 @@ export default function PayrollPage() {
             canModify={permissions.canModify}
           />
         )}
-        {activeTab === 'incentive' && <IncentiveRulesTab canModify={permissions.canModify} />}
+        {activeTab === 'incentive' && (
+          <IncentiveRulesTab
+            canModify={permissions.canModify}
+            payrollMonth={payrollMonth}
+            monthInput={monthInput}
+            onMonthChange={handleMonthChange}
+          />
+        )}
         {activeTab === 'advance' && <AdvanceManagementTab canModify={permissions.canModify} payrollMonth={payrollMonth} />}
         {activeTab === 'processing' && (
           <PayrollProcessingTab

@@ -19,9 +19,18 @@ function computePayrollAmounts(input) {
   const techVar = input.salaryType === 'base' ? 0 : Number(input.technicianVariableEarning ?? 0)
   const bodyshopVar = input.salaryType === 'base' ? 0 : Number(input.bodyshopVariableEarning ?? 0)
   const variableTotal = Math.round((saVar + techVar + bodyshopVar) * 100) / 100
-  const grossPayout = Math.round((earnedBase + variableTotal + Number(input.customAdditions ?? 0)) * 100) / 100
+  const incentiveAmount = Number.isFinite(Number(input.incentiveAmount))
+    ? Math.round(Number(input.incentiveAmount ?? 0) * 100) / 100
+    : 0
+  const grossPayout = Math.round((earnedBase + variableTotal + incentiveAmount + Number(input.customAdditions ?? 0)) * 100) / 100
   const netPayable = Math.round((grossPayout - Number(input.advanceDeduction ?? 0) - Number(input.otherDeductions ?? 0)) * 100) / 100
-  return { earnedBase, variableTotal, grossPayout, netPayable }
+  return { earnedBase, variableTotal, incentiveAmount, grossPayout, netPayable }
+}
+
+function calcEmployeeIncentiveAmount(value, incentivePercent) {
+  if (!Number.isFinite(value) || !Number.isFinite(incentivePercent)) throw new Error('finite')
+  if (value < 0 || incentivePercent < 0) throw new Error('negative')
+  return Math.round((value * incentivePercent / 100) * 100) / 100
 }
 
 function computeNet(input) {
@@ -352,6 +361,74 @@ const tests = [
       customAdditions: 0, otherDeductions: 0, advanceDeduction: 0,
     }).variableTotal,
     want: 0,
+  },
+  {
+    name: 'Parts 100000 x 1% = 1000.00',
+    got: calcEmployeeIncentiveAmount(100000, 1),
+    want: 1000,
+  },
+  {
+    name: 'VAS 20000 x 2.5% = 500.00',
+    got: calcEmployeeIncentiveAmount(20000, 2.5),
+    want: 500,
+  },
+  {
+    name: 'employee incentive is not inside variableTotal',
+    got: computePayrollAmounts({
+      salaryType: 'both', baseSalary: 20000, payableDays: 30,
+      saVariableEarning: 1000, technicianVariableEarning: 0, bodyshopVariableEarning: 0,
+      incentiveAmount: 1500, customAdditions: 0, otherDeductions: 0, advanceDeduction: 0,
+    }).variableTotal,
+    want: 1000,
+  },
+  {
+    name: 'employee incentive enters gross exactly once',
+    got: computePayrollAmounts({
+      salaryType: 'both', baseSalary: 20000, payableDays: 30,
+      saVariableEarning: 1000, technicianVariableEarning: 0, bodyshopVariableEarning: 0,
+      incentiveAmount: 1500, customAdditions: 0, otherDeductions: 0, advanceDeduction: 0,
+    }).grossPayout,
+    want: 22500,
+  },
+  {
+    name: 'Δ net = Δ incentive exactly once',
+    got: computePayrollAmounts({
+      salaryType: 'both', baseSalary: 20000, payableDays: 30,
+      saVariableEarning: 0, technicianVariableEarning: 0, bodyshopVariableEarning: 0,
+      incentiveAmount: 1500, customAdditions: 0, otherDeductions: 0, advanceDeduction: 0,
+    }).netPayable - computePayrollAmounts({
+      salaryType: 'both', baseSalary: 20000, payableDays: 30,
+      saVariableEarning: 0, technicianVariableEarning: 0, bodyshopVariableEarning: 0,
+      incentiveAmount: 0, customAdditions: 0, otherDeductions: 0, advanceDeduction: 0,
+    }).netPayable,
+    want: 1500,
+  },
+  {
+    name: 'base salary type still receives incentive',
+    got: computePayrollAmounts({
+      salaryType: 'base', baseSalary: 20000, payableDays: 30,
+      saVariableEarning: 5000, technicianVariableEarning: 0, bodyshopVariableEarning: 0,
+      incentiveAmount: 1500, customAdditions: 0, otherDeductions: 0, advanceDeduction: 0,
+    }).netPayable,
+    want: 21500,
+  },
+  {
+    name: 'incentive is not custom_additions',
+    got: computePayrollAmounts({
+      salaryType: 'base', baseSalary: 20000, payableDays: 30,
+      saVariableEarning: 0, technicianVariableEarning: 0, bodyshopVariableEarning: 0,
+      incentiveAmount: 1500, customAdditions: 500, otherDeductions: 0, advanceDeduction: 0,
+    }).netPayable,
+    want: 22000,
+  },
+  {
+    name: 'adjustment preserves incentive in net',
+    got: computePayrollAmounts({
+      salaryType: 'base', baseSalary: 23500, payableDays: 30,
+      saVariableEarning: 0, technicianVariableEarning: 0, bodyshopVariableEarning: 0,
+      incentiveAmount: 1500, customAdditions: 500, otherDeductions: 0, advanceDeduction: 0,
+    }).netPayable,
+    want: 25500,
   },
   { name: 'Accident sr_type is accident', got: isAccidentSrType('Accident'), want: true },
   { name: 'ACCIDENT sr_type is accident', got: isAccidentSrType('ACCIDENT'), want: true },

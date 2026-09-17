@@ -238,7 +238,7 @@ Reporting sources include service and parts tables/views:
 - `service_parts_order_data`
 - `service_parts_stock_snapshot_data`
 - supporting views used by report query modules
-- Payroll: `payroll_months`, `payroll_entries`, `payroll_advances`, `payroll_advance_schedules`, `payroll_security_settings` (hash only), `payroll_security_grants`
+- Payroll: `payroll_months`, `payroll_entries`, `payroll_advances`, `payroll_advance_schedules`, `payroll_employee_incentives`, `payroll_security_settings` (hash only), `payroll_security_grants`
 
 ## 9. Operational Runbook
 

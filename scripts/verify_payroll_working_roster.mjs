@@ -20,6 +20,7 @@ function hasGenuinePayrollMonthActivity(activity) {
     || isNonZeroPayrollAmount(activity.technicianVariableEarning)
     || isNonZeroPayrollAmount(activity.bodyshopVariableEarning)
     || isNonZeroPayrollAmount(activity.customAdditions)
+    || isNonZeroPayrollAmount(activity.incentiveAmount)
     || isNonZeroPayrollAmount(activity.otherDeductions)
     || isNonZeroPayrollAmount(activity.advanceDeduction)
     || isNonZeroPayrollAmount(activity.grossPayout)
@@ -36,6 +37,7 @@ function payrollActivityFromEntry(entry) {
     technicianVariableEarning: entry.technician_variable_earning,
     bodyshopVariableEarning: entry.bodyshop_variable_earning,
     customAdditions: entry.custom_additions,
+    incentiveAmount: entry.incentive_amount,
     otherDeductions: entry.other_deductions,
     advanceDeduction: entry.advance_deduction,
     grossPayout: entry.gross_payout,
@@ -70,6 +72,7 @@ const zeroAugust = {
   technician_variable_earning: 0,
   bodyshop_variable_earning: 0,
   custom_additions: 0,
+  incentive_amount: 0,
   other_deductions: 0,
   advance_deduction: 0,
   gross_payout: 0,
@@ -96,6 +99,7 @@ const pendingAdvanceCurrent = {
   technicianVariableEarning: 0,
   bodyshopVariableEarning: 0,
   customAdditions: 0,
+  incentiveAmount: 0,
   otherDeductions: 0,
   advanceDeduction: 1500,
 }
@@ -204,6 +208,16 @@ const tests = [
   {
     name: 'inactive genuine addition remains visible',
     got: shouldIncludePayrollEntryInWorkingRoster(lv05, additionEntry),
+    want: true,
+  },
+  {
+    name: 'inactive non-zero incentive remains visible',
+    got: shouldIncludePayrollEntryInWorkingRoster(lv05, {
+      ...zeroAugust,
+      incentive_amount: 1500,
+      gross_payout: 1500,
+      net_payable: 1500,
+    }),
     want: true,
   },
   {
