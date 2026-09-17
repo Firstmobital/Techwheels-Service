@@ -430,6 +430,50 @@ const tests = [
     }).netPayable,
     want: 25500,
   },
+  {
+    name: 'Processing cards: Incentive Total 2300 and Net delta 2300 once',
+    got: (() => {
+      const before = [
+        computePayrollAmounts({
+          salaryType: 'base', baseSalary: 20000, payableDays: 30,
+          saVariableEarning: 0, technicianVariableEarning: 0, bodyshopVariableEarning: 0,
+          incentiveAmount: 0, customAdditions: 0, otherDeductions: 0, advanceDeduction: 0,
+        }),
+        computePayrollAmounts({
+          salaryType: 'base', baseSalary: 20000, payableDays: 30,
+          saVariableEarning: 0, technicianVariableEarning: 0, bodyshopVariableEarning: 0,
+          incentiveAmount: 0, customAdditions: 0, otherDeductions: 0, advanceDeduction: 0,
+        }),
+        computePayrollAmounts({
+          salaryType: 'base', baseSalary: 20000, payableDays: 30,
+          saVariableEarning: 0, technicianVariableEarning: 0, bodyshopVariableEarning: 0,
+          incentiveAmount: 0, customAdditions: 0, otherDeductions: 0, advanceDeduction: 0,
+        }),
+      ]
+      const after = [
+        computePayrollAmounts({
+          salaryType: 'base', baseSalary: 20000, payableDays: 30,
+          saVariableEarning: 0, technicianVariableEarning: 0, bodyshopVariableEarning: 0,
+          incentiveAmount: 1500, customAdditions: 0, otherDeductions: 0, advanceDeduction: 0,
+        }),
+        computePayrollAmounts({
+          salaryType: 'base', baseSalary: 20000, payableDays: 30,
+          saVariableEarning: 0, technicianVariableEarning: 0, bodyshopVariableEarning: 0,
+          incentiveAmount: 800, customAdditions: 0, otherDeductions: 0, advanceDeduction: 0,
+        }),
+        computePayrollAmounts({
+          salaryType: 'base', baseSalary: 20000, payableDays: 30,
+          saVariableEarning: 0, technicianVariableEarning: 0, bodyshopVariableEarning: 0,
+          incentiveAmount: 0, customAdditions: 0, otherDeductions: 0, advanceDeduction: 0,
+        }),
+      ]
+      const incentiveTotal = after.reduce((sum, row) => sum + row.incentiveAmount, 0)
+      const netBefore = before.reduce((sum, row) => sum + row.netPayable, 0)
+      const netAfter = after.reduce((sum, row) => sum + row.netPayable, 0)
+      return `${incentiveTotal}|${netBefore}|${netAfter}|${netAfter - netBefore}`
+    })(),
+    want: '2300|60000|62300|2300',
+  },
   { name: 'Accident sr_type is accident', got: isAccidentSrType('Accident'), want: true },
   { name: 'ACCIDENT sr_type is accident', got: isAccidentSrType('ACCIDENT'), want: true },
   { name: 'Paid Service is not accident', got: isAccidentSrType('Paid Service'), want: false },

@@ -7051,6 +7051,7 @@ tr.brx-recov-row--mismatch td:first-child {
 .payroll-kpis .payroll-kpi--earned { --payroll-kpi-tone: color-mix(in srgb, var(--accent) 70%, #0891b2); }
 .payroll-kpis .payroll-kpi--sa { --payroll-kpi-tone: color-mix(in srgb, var(--accent) 78%, #4338ca); }
 .payroll-kpis .payroll-kpi--technician { --payroll-kpi-tone: color-mix(in srgb, var(--success) 55%, var(--ink-2)); }
+.payroll-kpis .payroll-kpi--incentive { --payroll-kpi-tone: color-mix(in srgb, var(--warn) 58%, var(--accent)); }
 .payroll-kpis .payroll-kpi--net { --payroll-kpi-tone: var(--success); }
 .payroll-kpis .payroll-kpi__top {
   display: flex;

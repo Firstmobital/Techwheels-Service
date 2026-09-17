@@ -124,12 +124,12 @@ function resolvePayee(entry) {
 }
 
 const allSalaryTypesScope = [
-  { employeeName: 'A', salaryType: 'base', bankName: 'HDFC', accountNumber: '001234', ifsc: 'HDFC0001234', earnedBase: 16500, netPayable: 16500, grossPayout: 17000, advanceDeduction: 500, saVariable: 0, technicianVariable: 0, bodyshopVariable: 0 },
-  { employeeName: 'B', salaryType: 'variable', bankName: null, accountNumber: null, ifsc: null, earnedBase: 0, netPayable: 12899, grossPayout: 12899, advanceDeduction: 0, saVariable: 8000, technicianVariable: 0, bodyshopVariable: 4899 },
-  { employeeName: 'C', salaryType: 'base', bankName: 'SBI', accountNumber: '00000039975234227', ifsc: 'sbin0032155', earnedBase: 20000, netPayable: 18000, grossPayout: 20000, advanceDeduction: 2000, saVariable: 0, technicianVariable: 0, bodyshopVariable: 0 },
-  { employeeName: 'D', salaryType: 'base', bankName: 'PNB', accountNumber: '2', ifsc: 'PUNB0113310', earnedBase: 20150, netPayable: 0, grossPayout: 0, advanceDeduction: 0, saVariable: 0, technicianVariable: 0, bodyshopVariable: 0 },
-  { employeeName: 'E', salaryType: 'variable', bankName: 'SBI', accountNumber: '', ifsc: '', earnedBase: 0, netPayable: 6284, grossPayout: 6284, advanceDeduction: 0, saVariable: 0, technicianVariable: 6284, bodyshopVariable: 0 },
-  { employeeName: 'F', salaryType: 'both', bankName: 'HDFC', accountNumber: '99', ifsc: 'HDFC0001234', earnedBase: 10000, netPayable: 9000, grossPayout: 11000, advanceDeduction: 2000, saVariable: 1000, technicianVariable: 0, bodyshopVariable: 0 },
+  { employeeName: 'A', salaryType: 'base', bankName: 'HDFC', accountNumber: '001234', ifsc: 'HDFC0001234', earnedBase: 16500, netPayable: 16500, grossPayout: 17000, advanceDeduction: 500, saVariable: 0, technicianVariable: 0, bodyshopVariable: 0, incentiveAmount: 1500 },
+  { employeeName: 'B', salaryType: 'variable', bankName: null, accountNumber: null, ifsc: null, earnedBase: 0, netPayable: 12899, grossPayout: 12899, advanceDeduction: 0, saVariable: 8000, technicianVariable: 0, bodyshopVariable: 4899, incentiveAmount: 800 },
+  { employeeName: 'C', salaryType: 'base', bankName: 'SBI', accountNumber: '00000039975234227', ifsc: 'sbin0032155', earnedBase: 20000, netPayable: 18000, grossPayout: 20000, advanceDeduction: 2000, saVariable: 0, technicianVariable: 0, bodyshopVariable: 0, incentiveAmount: 0 },
+  { employeeName: 'D', salaryType: 'base', bankName: 'PNB', accountNumber: '2', ifsc: 'PUNB0113310', earnedBase: 20150, netPayable: 0, grossPayout: 0, advanceDeduction: 0, saVariable: 0, technicianVariable: 0, bodyshopVariable: 0, incentiveAmount: 0 },
+  { employeeName: 'E', salaryType: 'variable', bankName: 'SBI', accountNumber: '', ifsc: '', earnedBase: 0, netPayable: 6284, grossPayout: 6284, advanceDeduction: 0, saVariable: 0, technicianVariable: 6284, bodyshopVariable: 0, incentiveAmount: 0 },
+  { employeeName: 'F', salaryType: 'both', bankName: 'HDFC', accountNumber: '99', ifsc: 'HDFC0001234', earnedBase: 10000, netPayable: 9000, grossPayout: 11000, advanceDeduction: 2000, saVariable: 1000, technicianVariable: 0, bodyshopVariable: 0, incentiveAmount: 0 },
 ]
 
 const rows = buildEarnedBaseBankPayoutRows(allSalaryTypesScope)
@@ -171,6 +171,16 @@ const technicianExport = exportPayrollBankCsv({
 const netExport = exportPayrollBankCsv({
   entries: allSalaryTypesScope,
   amountSelector: (entry) => Number(entry.netPayable),
+  resolvePayee,
+})
+const incentiveExport = exportPayrollBankCsv({
+  entries: allSalaryTypesScope,
+  amountSelector: (entry) => Number(entry.incentiveAmount ?? 0),
+  resolvePayee,
+})
+const sitapuraIncentiveExport = exportPayrollBankCsv({
+  entries: allSalaryTypesScope.filter((entry) => entry.employeeName === 'A' || entry.employeeName === 'C'),
+  amountSelector: (entry) => Number(entry.incentiveAmount ?? 0),
   resolvePayee,
 })
 const earnedBaseViaShared = exportPayrollBankCsv({
@@ -249,13 +259,18 @@ const tests = [
   { name: 'Technician Variable amount sum', got: amountSum(technicianExport), want: 6284 },
   { name: 'Net Payable excludes 0', got: names(netExport), want: ['A', 'B', 'C', 'E', 'F'] },
   { name: 'Net Payable amount sum', got: amountSum(netExport), want: 16500 + 12899 + 18000 + 6284 + 9000 },
+  { name: 'Incentive excludes 0', got: names(incentiveExport), want: ['A', 'B'] },
+  { name: 'Incentive Amount is payroll snapshot', got: incentiveExport.find((row) => row[4] === 'A')?.[7], want: 1500 },
+  { name: 'Incentive amount sum', got: amountSum(incentiveExport), want: 1500 + 800 },
+  { name: 'Incentive filtered scope follows supplied rows', got: names(sitapuraIncentiveExport), want: ['A'] },
+  { name: 'Incentive filtered amount is snapshot not SA/Tech', got: sitapuraIncentiveExport[0]?.[7], want: 1500 },
   { name: 'zero amounts never exported', got: [
     ...employeesExport, ...grossExport, ...advanceExport, ...bodyshopExport,
-    ...saExport, ...technicianExport, ...netExport, ...rows,
+    ...saExport, ...technicianExport, ...netExport, ...incentiveExport, ...rows,
   ].every((row) => Number(row[7]) > 0), want: true },
   { name: 'all card exports share schema', got: [
     employeesExport, grossExport, advanceExport, bodyshopExport,
-    saExport, technicianExport, netExport, rows,
+    saExport, technicianExport, netExport, incentiveExport, rows,
   ].every(sameSchema), want: true },
   { name: 'employee appears once in Gross', got: new Set(names(grossExport)).size, want: grossExport.length },
   { name: 'filename total-gross', got: payrollCardExportFilename('total-gross', '2026-09'), want: 'payroll-total-gross-2026-09.xlsx' },
@@ -265,6 +280,7 @@ const tests = [
   { name: 'filename technician-variable', got: payrollCardExportFilename('technician-variable', '2026-09'), want: 'payroll-technician-variable-2026-09.xlsx' },
   { name: 'filename net-payable', got: payrollCardExportFilename('net-payable', '2026-09'), want: 'payroll-net-payable-2026-09.xlsx' },
   { name: 'filename total-employees', got: payrollCardExportFilename('total-employees', '2026-09'), want: 'payroll-total-employees-2026-09.xlsx' },
+  { name: 'filename incentive', got: payrollCardExportFilename('incentive', '2026-09'), want: 'payroll-incentive-2026-09.xlsx' },
 ]
 
 let failed = 0

@@ -191,6 +191,7 @@ export default function PayrollProcessingTab({
     acc.earnedBase += Number(e.earned_base)
     acc.saVariable += Number(e.sa_variable_earning)
     acc.technicianVariable += Number(e.technician_variable_earning)
+    acc.incentive += Number(e.incentive_amount ?? 0)
     acc.net += Number(e.net_payable)
     return acc
   }, {
@@ -200,6 +201,7 @@ export default function PayrollProcessingTab({
     earnedBase: 0,
     saVariable: 0,
     technicianVariable: 0,
+    incentive: 0,
     net: 0,
   }), [aggregateScopedRows])
 
@@ -551,12 +553,14 @@ export default function PayrollProcessingTab({
           )}
         />
         <PayrollSummaryCard
-          tone="bodyshop"
-          icon="truck"
-          value={formatCurrency(bodyshopScope.displayedTotal)}
-          label="Bodyshop Variable Total"
-          onExport={exportBodyshopBankPayout}
-          hint={bodyshopHint}
+          tone="net"
+          icon="check"
+          value={formatCurrency(totals.net)}
+          label="Net Payable Total"
+          onExport={() => exportCardBankCsv(
+            (entry) => Number(entry.net_payable),
+            payrollCardExportFilename('net-payable', monthInput),
+          )}
         />
         <PayrollSummaryCard
           tone="earned"
@@ -586,13 +590,21 @@ export default function PayrollProcessingTab({
           )}
         />
         <PayrollSummaryCard
-          tone="net"
-          icon="check"
-          value={formatCurrency(totals.net)}
-          label="Net Payable Total"
+          tone="bodyshop"
+          icon="truck"
+          value={formatCurrency(bodyshopScope.displayedTotal)}
+          label="Bodyshop Variable Total"
+          onExport={exportBodyshopBankPayout}
+          hint={bodyshopHint}
+        />
+        <PayrollSummaryCard
+          tone="incentive"
+          icon="sparkles"
+          value={formatCurrency(totals.incentive)}
+          label="Incentive Total"
           onExport={() => exportCardBankCsv(
-            (entry) => Number(entry.net_payable),
-            payrollCardExportFilename('net-payable', monthInput),
+            (entry) => Number(entry.incentive_amount ?? 0),
+            payrollCardExportFilename('incentive', monthInput),
           )}
         />
       </div>
@@ -602,7 +614,7 @@ export default function PayrollProcessingTab({
           <thead>
             <tr>
               <th>Code</th><th>Name</th><th>Type</th><th>Base</th><th>Days</th><th>Earned Base</th>
-              <th>SA Var</th><th>Tech Var</th><th>Bodyshop Var</th><th>Incentive</th><th>Additions</th><th>Advance</th><th>Other Ded.</th><th>Net</th><th>Flags</th><th></th>
+              <th>SA Var</th><th>Tech Var</th><th>Bodyshop Var</th><th>Additions</th><th>Advance</th><th>Other Ded.</th><th>Net</th><th>Flags</th><th></th>
             </tr>
           </thead>
           <tbody>
@@ -620,7 +632,6 @@ export default function PayrollProcessingTab({
                   <td>{formatCurrency(Number(e.sa_variable_earning))}</td>
                   <td>{formatCurrency(Number(e.technician_variable_earning))}</td>
                   <td>{formatCurrency(Number(e.bodyshop_variable_earning ?? 0))}</td>
-                  <td>{formatCurrency(Number(e.incentive_amount ?? 0))}</td>
                   <td>{formatCurrency(Number(e.custom_additions))}</td>
                   <td>{formatCurrency(Number(e.advance_deduction))}</td>
                   <td>{formatCurrency(Number(e.other_deductions))}</td>
