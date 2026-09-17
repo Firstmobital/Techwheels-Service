@@ -80,7 +80,7 @@ export default function CustomerInvoicesScreen() {
               <View>
                 <Text className="text-slate-900 text-[16px] font-bold">Settlement Summary</Text>
                 <Text className="text-slate-500 text-[12px]">
-                  Job Card #{dash(selected?.jc_number)}
+                  Job Card #{dash(payment?.jc_number || selected?.jc_number)}
                   {estimates.length > 0 ? ` · ${estimates.length} Quotation(s)` : ''}
                 </Text>
               </View>
