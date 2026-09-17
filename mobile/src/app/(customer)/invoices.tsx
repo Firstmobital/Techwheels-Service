@@ -109,19 +109,81 @@ export default function CustomerInvoicesScreen() {
               </View>
             </View>
 
-            <View className="flex-row bg-slate-50 rounded-xl py-3 mb-3">
+            <View className="flex-row bg-slate-50 rounded-xl py-3 mb-3 border border-slate-200/80">
               <MoneyCol label={billedFromQuote ? 'Quoted' : 'Total Billed'} value={formatInr(pay.billed)} />
               <MoneyCol
-                label="Received"
+                label="Received Amount"
                 value={pay.received != null ? formatInr(pay.received) : '—'}
                 color={pay.received != null && pay.received > 0 ? '#16a34a' : undefined}
               />
               <MoneyCol
                 label="Remaining Due"
                 value={pay.remaining != null ? formatInr(pay.remaining) : '—'}
-                color={pay.remaining != null && pay.remaining > 0 ? '#dc2626' : undefined}
+                color={pay.remaining != null && pay.remaining > 0 ? '#dc2626' : '#16a34a'}
               />
             </View>
+
+            {/* Invoice & Job Card Metadata Row */}
+            {(payment?.invoice_no || payment?.invoice_date) ? (
+              <View className="bg-blue-50/70 border border-blue-200 rounded-xl p-3 mb-3">
+                <View className="flex-row justify-between items-center mb-1">
+                  <Text className="text-[11px] font-bold text-blue-900">Tax Invoice Number</Text>
+                  <Text className="text-[12px] font-black text-blue-950 font-mono">
+                    {String(payment.invoice_no)}
+                  </Text>
+                </View>
+                {payment.invoice_date ? (
+                  <View className="flex-row justify-between items-center">
+                    <Text className="text-[11px] font-medium text-blue-800">Invoice Date</Text>
+                    <Text className="text-[11.5px] font-bold text-blue-900">
+                      {String(payment.invoice_date)}
+                    </Text>
+                  </View>
+                ) : null}
+              </View>
+            ) : null}
+
+            {/* Payment Transactions List from Accounts Desk */}
+            {Array.isArray(payment?.payments) && payment.payments.length > 0 ? (
+              <View className="border-t border-slate-200 pt-3 mb-3">
+                <Text className="text-[12px] font-bold mb-2 text-slate-900">
+                  💳 Payment Receipts & Modes ({payment.payments.length}):
+                </Text>
+                {payment.payments.map((p: any, idx: number) => {
+                  const mode = String(p.payment_mode || 'Payment').toUpperCase()
+                  const isUpi = mode === 'UPI'
+                  const isCash = mode === 'CASH'
+                  const isCard = mode === 'CARD'
+                  const icon = isUpi ? '📱' : isCash ? '💵' : isCard ? '💳' : '🧾'
+                  return (
+                    <View
+                      key={p.id || idx}
+                      className="bg-slate-50 border border-slate-200 rounded-xl p-2.5 mb-2 flex-row justify-between items-center"
+                    >
+                      <View className="flex-1 pr-2">
+                        <View className="flex-row items-center gap-1.5">
+                          <Text className="text-sm">{icon}</Text>
+                          <Text className="text-[12.5px] font-black text-slate-800">
+                            {mode} Payment
+                          </Text>
+                          <View className="bg-emerald-100 px-1.5 py-0.5 rounded-md">
+                            <Text className="text-[9.5px] font-bold text-emerald-800">✓ Credited</Text>
+                          </View>
+                        </View>
+                        <Text className="text-[11px] text-slate-500 mt-0.5">
+                          {p.payment_received_date || formatWhen(p.posted_at)}
+                          {p.voucher_no ? ` · Voucher: ${p.voucher_no}` : ''}
+                          {p.reference ? ` · Ref: ${p.reference}` : ''}
+                        </Text>
+                      </View>
+                      <Text className="text-[13px] font-black text-emerald-700 font-mono">
+                        {formatInr(Number(p.amount) || 0)}
+                      </Text>
+                    </View>
+                  )
+                })}
+              </View>
+            ) : null}
 
             {estimates.length > 0 ? (
               <View className="border-t border-slate-200 pt-3 mb-3">
@@ -151,7 +213,7 @@ export default function CustomerInvoicesScreen() {
               </TouchableOpacity>
             ) : null}
 
-            {pay.status === 'paid' ? (
+            {pay.status === 'paid' || (pay.remaining != null && pay.remaining <= 0 && pay.billed > 0) ? (
               <View className="space-y-2">
                 <View className="bg-emerald-50 rounded-xl p-3 items-center border border-emerald-200">
                   <Text className="text-emerald-800 text-[13px] font-black">

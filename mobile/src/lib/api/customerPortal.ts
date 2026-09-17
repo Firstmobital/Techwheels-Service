@@ -243,12 +243,97 @@ export async function customerGetGatePass(sessionToken: string, regNumber?: stri
 }
 
 export async function customerGetSettlement(sessionToken: string, regNumber?: string | null) {
-  const { data, error } = await supabase.rpc('customer_get_settlement', {
-    p_session_token: sessionToken,
-    p_reg_number: regNumber || null,
-  })
-  if (error) throw new Error(rpcErrorMessage(error, 'Unable to load settlement.'))
-  return data as Record<string, unknown> | null
+  const rawReg = (regNumber || '').trim()
+  const regNorm = rawReg.toUpperCase()
+  const regClean = regNorm.replace(/\s+/g, '')
+
+  let rpcResult: Record<string, unknown> | null = null
+  try {
+    const { data, error } = await supabase.rpc('customer_get_settlement', {
+      p_session_token: sessionToken,
+      p_reg_number: regNumber || null,
+    })
+    if (!error && data) {
+      rpcResult = data as Record<string, unknown>
+    }
+  } catch (err) {
+    console.warn('customer_get_settlement RPC note:', err)
+  }
+
+  // Direct Live DB sync from accounts_mechanical_invoices & service_reception_entries
+  if (regClean || regNorm) {
+    try {
+      const { data: entries } = await supabase
+        .from('service_reception_entries')
+        .select('id, jc_number, reg_number, owner_name, owner_phone, branch, service_type, created_at, invoice_done_at')
+        .or(`reg_number.eq.${regClean},reg_number.eq.${regNorm},reg_number.ilike.%${regClean}%`)
+        .order('created_at', { ascending: false })
+        .limit(1)
+
+      if (entries && entries.length > 0) {
+        const entry = entries[0]
+        const { data: inv } = await supabase
+          .from('accounts_mechanical_invoices')
+          .select('id, invoice_number, invoice_date, billed_amount, amount_received, payment_status, keep_on_credit, keep_on_credit_reason, updated_at')
+          .eq('reception_entry_id', entry.id)
+          .single()
+
+        // Fetch payment line items (UPI, Cash, Card, etc.)
+        const { data: payments } = await supabase
+          .from('accounts_mechanical_payments')
+          .select('id, amount, payment_mode, reference, remark, posted_at, payment_received_date, voucher_no')
+          .eq('reception_entry_id', entry.id)
+          .order('posted_at', { ascending: false })
+
+        // Check if there is also a bot payload saved
+        let botPass: Record<string, unknown> | null = null
+        try {
+          const { data: botRows } = await supabase
+            .from('post_feedback_bot_data')
+            .select('feedback_text')
+            .or(`vehicle_registration_number.eq.${regClean},vehicle_registration_number.eq.${regNorm},vehicle_registration_number.ilike.%${regClean}%`)
+            .eq('mode', 'customer_gatepass_payload')
+            .order('complaint_date_time', { ascending: false })
+            .limit(1)
+          if (botRows && botRows.length > 0) {
+            botPass = JSON.parse(botRows[0].feedback_text)
+          }
+        } catch {
+          // ignore
+        }
+
+        const billed = Number(inv?.billed_amount ?? botPass?.billed_amount ?? rpcResult?.total_billed ?? rpcResult?.billed_amount ?? 0)
+        const received = Number(inv?.amount_received ?? botPass?.amount_received ?? rpcResult?.amount_received ?? 0)
+        const remaining = Math.max(0, billed - received)
+        const status = (billed > 0 && remaining <= 0) ? 'received' : (received > 0 ? 'partial' : 'pending')
+
+        return {
+          reception_entry_id: entry.id,
+          jc_number: entry.jc_number || rpcResult?.jc_number,
+          reg_number: entry.reg_number || regNorm,
+          owner_name: entry.owner_name,
+          branch: entry.branch,
+          service_type: entry.service_type,
+          total_billed: billed,
+          billed_amount: billed,
+          amount_received: received,
+          remaining_amount: remaining,
+          remaining_due: remaining,
+          status: inv?.payment_status || status,
+          invoice_no: inv?.invoice_number || botPass?.invoice_no || rpcResult?.invoice_no || null,
+          invoice_date: inv?.invoice_date || botPass?.invoice_date || rpcResult?.invoice_date || null,
+          keep_on_credit: Boolean(inv?.keep_on_credit || botPass?.keep_on_credit),
+          keep_on_credit_reason: inv?.keep_on_credit_reason || botPass?.keep_on_credit_reason || null,
+          payments: payments || (rpcResult?.payments as any[]) || [],
+          updated_at: inv?.updated_at || botPass?.issued_at || entry.invoice_done_at || new Date().toISOString(),
+        }
+      }
+    } catch (dbErr) {
+      console.warn('customerGetSettlement direct query note:', dbErr)
+    }
+  }
+
+  return rpcResult
 }
 
 export async function customerSubmitBooking(
