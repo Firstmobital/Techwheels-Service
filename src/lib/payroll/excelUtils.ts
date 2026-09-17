@@ -4,8 +4,15 @@ import {
   normalizeDeductionMethod,
   roundPayrollPaise,
 } from './advanceSchedule'
-import type { AdvanceDeductionType, ImportPreviewResult, ImportPreviewRow, SalaryType } from './types'
-import { isValidPayableDays, isValidSalaryType, normalizeSalaryTypeInput, parsePayrollMonthInput } from './calculations'
+import type { AdvanceDeductionType, EmployeeIncentiveCalculationMethod, EmployeeIncentiveType, ImportPreviewResult, ImportPreviewRow, SalaryType } from './types'
+import { isEmployeeIncentiveType } from './types'
+import {
+  isValidPayableDays,
+  isValidSalaryType,
+  normalizeSalaryTypeInput,
+  parseEmployeeIncentiveWriteFields,
+  parsePayrollMonthInput,
+} from './calculations'
 
 export function normalizeHeader(value: string): string {
   return String(value ?? '').trim().toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '')
@@ -416,6 +423,246 @@ export function previewSalaryTypeImport(
   return {
     totalRows: rows.length,
     valid: valid + updates,
+    updates,
+    unchanged,
+    warnings,
+    rejected,
+    rows: previewRows,
+  }
+}
+
+export const EMPLOYEE_INCENTIVE_EXPORT_HEADERS = [
+  'Id',
+  'Payroll Month',
+  'Employee Code',
+  'Employee Name',
+  'Value',
+  'Incentive %',
+  'Amount',
+  'Type',
+  'Description',
+  'Calculation Method',
+] as const
+
+export function payrollEmployeeIncentiveFilename(monthInput: string): string {
+  return `Payroll_Employee_Incentives_${monthInput || 'unknown'}.xlsx`
+}
+
+export interface EmployeeIncentiveImportExisting {
+  payrollMonth: string
+  employeeCode: string
+  incentiveType: string
+  calculationMethod: EmployeeIncentiveCalculationMethod
+  value: number | null
+  incentivePercent: number | null
+  amount: number
+  description: string | null
+}
+
+export interface EmployeeIncentiveImportCommitData {
+  id: number | null
+  employeeCode: string
+  incentiveType: EmployeeIncentiveType
+  calculationMethod: EmployeeIncentiveCalculationMethod
+  value: number | null
+  incentivePercent: number | null
+  amount: number
+  description: string | null
+}
+
+export interface EmployeeIncentiveImportContext {
+  payrollMonth: string
+  knownCodes: Set<string>
+  existingById: Map<number, EmployeeIncentiveImportExisting>
+}
+
+function incentiveImportUnchanged(
+  existing: EmployeeIncentiveImportExisting,
+  next: EmployeeIncentiveImportCommitData,
+): boolean {
+  return (
+    existing.employeeCode === next.employeeCode
+    && existing.incentiveType === next.incentiveType
+    && existing.calculationMethod === next.calculationMethod
+    && Number(existing.value ?? 0) === Number(next.value ?? 0)
+    && existing.value == null === (next.value == null)
+    && Number(existing.incentivePercent ?? 0) === Number(next.incentivePercent ?? 0)
+    && existing.incentivePercent == null === (next.incentivePercent == null)
+    && Number(existing.amount) === Number(next.amount)
+    && (existing.description ?? '') === (next.description ?? '')
+  )
+}
+
+export function previewEmployeeIncentiveImport(
+  rows: Array<Record<string, string>>,
+  ctx: EmployeeIncentiveImportContext,
+): ImportPreviewResult {
+  const previewRows: ImportPreviewRow[] = []
+  const seenIds = new Set<number>()
+  let valid = 0
+  let updates = 0
+  let unchanged = 0
+  let warnings = 0
+  let rejected = 0
+
+  rows.forEach((row, idx) => {
+    const rowNumber = idx + 2
+    const code = String(row.employee_code ?? row.sa_code ?? '').trim().toUpperCase()
+    const monthRaw = row.payroll_month ?? row.month ?? ctx.payrollMonth
+    const month = parsePayrollMonthInput(monthRaw) ?? ctx.payrollMonth
+    const typeRaw = String(row.type ?? row.incentive_type ?? '').trim()
+    const methodRaw = String(row.calculation_method ?? row.method ?? '').trim()
+    const valueRaw = String(row.value ?? '').trim()
+    const percentRaw = String(row.incentive_percent ?? row.incentive ?? row.percent ?? '').trim()
+    const amountRaw = String(row.amount ?? '').trim()
+    const description = String(row.description ?? '').trim() || null
+    const idRaw = String(row.id ?? '').trim()
+
+    if (!code) {
+      rejected += 1
+      previewRows.push({ rowNumber, employeeCode: '', status: 'rejected', message: 'Employee Code is required' })
+      return
+    }
+    if (!ctx.knownCodes.has(code)) {
+      rejected += 1
+      previewRows.push({
+        rowNumber,
+        employeeCode: code,
+        status: 'rejected',
+        message: `Employee Code ${code} not found.`,
+      })
+      return
+    }
+    if (month !== ctx.payrollMonth) {
+      rejected += 1
+      previewRows.push({
+        rowNumber,
+        employeeCode: code,
+        status: 'rejected',
+        message: `Payroll month mismatch: expected ${ctx.payrollMonth.slice(0, 7)}`,
+      })
+      return
+    }
+    if (!isEmployeeIncentiveType(typeRaw)) {
+      rejected += 1
+      previewRows.push({
+        rowNumber,
+        employeeCode: code,
+        status: 'rejected',
+        message: `Type "${typeRaw || ''}" is invalid. Expected Parts/Rusting/VAS/Others.`,
+      })
+      return
+    }
+
+    let id: number | null = null
+    if (idRaw) {
+      const parsedId = Number(idRaw)
+      if (!Number.isInteger(parsedId) || parsedId <= 0) {
+        rejected += 1
+        previewRows.push({ rowNumber, employeeCode: code, status: 'rejected', message: `Id ${idRaw} is invalid.` })
+        return
+      }
+      if (seenIds.has(parsedId)) {
+        rejected += 1
+        previewRows.push({ rowNumber, employeeCode: code, status: 'rejected', message: `Duplicate Id ${parsedId} in file` })
+        return
+      }
+      seenIds.add(parsedId)
+      const existing = ctx.existingById.get(parsedId)
+      if (!existing) {
+        rejected += 1
+        previewRows.push({
+          rowNumber,
+          employeeCode: code,
+          status: 'rejected',
+          message: `Id ${parsedId} was not found.`,
+        })
+        return
+      }
+      if (existing.payrollMonth !== ctx.payrollMonth) {
+        rejected += 1
+        previewRows.push({
+          rowNumber,
+          employeeCode: code,
+          status: 'rejected',
+          message: `Id ${parsedId} does not belong to selected payroll month.`,
+        })
+        return
+      }
+      id = parsedId
+    }
+
+    const parsed = parseEmployeeIncentiveWriteFields({
+      calculationMethod: methodRaw,
+      value: valueRaw,
+      incentivePercent: percentRaw,
+      amount: amountRaw,
+    })
+    if (!parsed.ok) {
+      rejected += 1
+      const rejectMessage = (
+        parsed.error === 'Value is required' || parsed.error === 'Incentive % is required'
+          ? 'Percentage method requires Value and Incentive %.'
+          : parsed.error === 'Amount is required'
+            ? 'Fixed method requires Amount.'
+            : parsed.error.endsWith('.') ? parsed.error : `${parsed.error}.`
+      )
+      previewRows.push({ rowNumber, employeeCode: code, status: 'rejected', message: rejectMessage })
+      return
+    }
+
+    const commit: EmployeeIncentiveImportCommitData = {
+      id,
+      employeeCode: code,
+      incentiveType: typeRaw,
+      calculationMethod: parsed.calculationMethod,
+      value: parsed.value,
+      incentivePercent: parsed.incentivePercent,
+      amount: parsed.amount,
+      description,
+    }
+
+    let status: ImportPreviewRow['status'] = id == null ? 'valid' : 'valid'
+    let message = id == null ? 'New incentive row' : 'Update'
+    if (id != null) {
+      const existing = ctx.existingById.get(id)
+      if (existing && incentiveImportUnchanged(existing, commit)) {
+        unchanged += 1
+        previewRows.push({
+          rowNumber,
+          employeeCode: code,
+          status: 'unchanged',
+          message: 'No changes',
+          data: commit as unknown as Record<string, unknown>,
+        })
+        return
+      }
+      updates += 1
+    } else {
+      valid += 1
+    }
+
+    if (parsed.calculationMethod === 'percentage' && amountRaw) {
+      const excelAmount = Number(amountRaw)
+      if (Number.isFinite(excelAmount) && Math.abs(excelAmount - parsed.amount) > 0.009) {
+        warnings += 1
+        status = 'warning'
+        message = `Amount recalculated from Value × Incentive % (${parsed.amount})`
+      }
+    }
+
+    previewRows.push({
+      rowNumber,
+      employeeCode: code,
+      status,
+      message,
+      data: commit as unknown as Record<string, unknown>,
+    })
+  })
+
+  return {
+    totalRows: rows.length,
+    valid,
     updates,
     unchanged,
     warnings,

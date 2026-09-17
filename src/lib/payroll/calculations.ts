@@ -1,5 +1,10 @@
 import { isEmployeeCurrentlyActive } from '../employeeActive'
-import type { PayrollEntry, SalaryType } from './types'
+import {
+  normalizeEmployeeIncentiveCalculationMethod,
+  type EmployeeIncentiveCalculationMethod,
+  type PayrollEntry,
+  type SalaryType,
+} from './types'
 
 /** Service Center rule: round((baseSalary / 30) * payableDays) to nearest rupee. */
 export function calcEarnedBaseSalary(baseSalary: number, payableDays: number): number {
@@ -173,6 +178,56 @@ export function parseNonNegativeIncentivePercent(raw: string): { ok: true; value
   if (n < 0) return { ok: false, error: 'Incentive % must be 0 or greater' }
   if (n >= 1e6) return { ok: false, error: 'Incentive % exceeds allowed precision' }
   return { ok: true, value: Math.round(n * 10000) / 10000 }
+}
+
+export function parseEmployeeIncentiveAmount(raw: string): { ok: true; value: number } | { ok: false; error: string } {
+  const parsed = parseNonNegativePayrollMoney(raw)
+  if (parsed.ok) return parsed
+  return { ok: false, error: parsed.error.replace(/^Value/, 'Amount') }
+}
+
+export function parseEmployeeIncentiveWriteFields(input: {
+  calculationMethod?: string | null
+  value?: string | number | null
+  incentivePercent?: string | number | null
+  amount?: string | number | null
+}): {
+  ok: true
+  calculationMethod: EmployeeIncentiveCalculationMethod
+  value: number | null
+  incentivePercent: number | null
+  amount: number
+} | { ok: false; error: string } {
+  const method = normalizeEmployeeIncentiveCalculationMethod(String(input.calculationMethod ?? ''))
+  if (!method) return { ok: false, error: 'Calculation Method must be Percentage or Fixed' }
+
+  if (method === 'percentage') {
+    const valueParsed = parseNonNegativePayrollMoney(String(input.value ?? ''))
+    if (!valueParsed.ok) return valueParsed
+    const percentParsed = parseNonNegativeIncentivePercent(String(input.incentivePercent ?? ''))
+    if (!percentParsed.ok) return percentParsed
+    try {
+      return {
+        ok: true,
+        calculationMethod: 'percentage',
+        value: valueParsed.value,
+        incentivePercent: percentParsed.value,
+        amount: calcEmployeeIncentiveAmount(valueParsed.value, percentParsed.value),
+      }
+    } catch (err) {
+      return { ok: false, error: err instanceof Error ? err.message : 'Invalid percentage incentive' }
+    }
+  }
+
+  const amountParsed = parseEmployeeIncentiveAmount(String(input.amount ?? ''))
+  if (!amountParsed.ok) return amountParsed
+  return {
+    ok: true,
+    calculationMethod: 'fixed',
+    value: null,
+    incentivePercent: null,
+    amount: amountParsed.value,
+  }
 }
 
 /** 30 is the salary divisor, not a payable-days cap. Rejects NaN/negative/non-half-day values. */

@@ -22,6 +22,26 @@ export function isEmployeeIncentiveType(value: string): value is EmployeeIncenti
   return (EMPLOYEE_INCENTIVE_TYPES as readonly string[]).includes(value)
 }
 
+export const EMPLOYEE_INCENTIVE_CALCULATION_METHODS = ['percentage', 'fixed'] as const
+
+export type EmployeeIncentiveCalculationMethod = (typeof EMPLOYEE_INCENTIVE_CALCULATION_METHODS)[number]
+
+export const EMPLOYEE_INCENTIVE_CALCULATION_METHOD_LABELS: Record<EmployeeIncentiveCalculationMethod, string> = {
+  percentage: 'Percentage',
+  fixed: 'Fixed',
+}
+
+export function isEmployeeIncentiveCalculationMethod(value: string): value is EmployeeIncentiveCalculationMethod {
+  return (EMPLOYEE_INCENTIVE_CALCULATION_METHODS as readonly string[]).includes(value)
+}
+
+export function normalizeEmployeeIncentiveCalculationMethod(raw: string): EmployeeIncentiveCalculationMethod | null {
+  const v = String(raw ?? '').trim().toLowerCase().replace(/[_-]+/g, ' ').replace(/\s+/g, ' ')
+  if (v === 'percentage' || v === 'percent' || v === 'pct') return 'percentage'
+  if (v === 'fixed' || v === 'fixed amount' || v === 'absolute' || v === 'absolute amount') return 'fixed'
+  return null
+}
+
 export interface PayrollEmployee {
   id: number
   employee_code: string
@@ -139,8 +159,9 @@ export interface PayrollEmployeeIncentive {
   employee_code: string
   payroll_month: string
   incentive_type: EmployeeIncentiveType
-  value: number
-  incentive_percent: number
+  calculation_method: EmployeeIncentiveCalculationMethod
+  value: number | null
+  incentive_percent: number | null
   amount: number
   description: string | null
   created_by: string | null

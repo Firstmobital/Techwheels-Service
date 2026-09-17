@@ -10,12 +10,30 @@ import {
 } from '../../lib/api/payroll'
 import {
   calcEmployeeIncentiveAmount,
-  formatCurrency,
+  formatPayrollMoney,
   parseNonNegativeIncentivePercent,
   parseNonNegativePayrollMoney,
 } from '../../lib/payroll/calculations'
-import { EMPLOYEE_INCENTIVE_TYPES, isEmployeeIncentiveType } from '../../lib/payroll/types'
-import type { EmployeeIncentiveType, PayrollEmployee, PayrollEmployeeIncentive } from '../../lib/payroll/types'
+import {
+  EMPLOYEE_INCENTIVE_CALCULATION_METHOD_LABELS,
+  EMPLOYEE_INCENTIVE_TYPES,
+  isEmployeeIncentiveCalculationMethod,
+  isEmployeeIncentiveType,
+} from '../../lib/payroll/types'
+import type {
+  EmployeeIncentiveCalculationMethod,
+  EmployeeIncentiveType,
+  ImportPreviewResult,
+  PayrollEmployee,
+  PayrollEmployeeIncentive,
+} from '../../lib/payroll/types'
+import {
+  EMPLOYEE_INCENTIVE_EXPORT_HEADERS,
+  exportWorkbook,
+  payrollEmployeeIncentiveFilename,
+  previewEmployeeIncentiveImport,
+  readWorkbookRows,
+} from '../../lib/payroll/excelUtils'
 import { supabase } from '../../lib/supabase'
 import { usePayrollSecurity } from './PayrollSecurityGate'
 
@@ -51,8 +69,10 @@ interface DraftRow {
   key: string
   id: number | null
   employeeCode: string
+  calculationMethod: EmployeeIncentiveCalculationMethod
   value: string
   incentivePercent: string
+  amount: string
   incentiveType: EmployeeIncentiveType | ''
   description: string
   editing: boolean
@@ -160,8 +180,10 @@ function persistedToDraft(row: PayrollEmployeeIncentive): DraftRow {
     key: `saved-${row.id}`,
     id: row.id,
     employeeCode: row.employee_code.trim().toUpperCase(),
-    value: String(row.value),
-    incentivePercent: String(row.incentive_percent),
+    calculationMethod: row.calculation_method === 'fixed' ? 'fixed' : 'percentage',
+    value: row.value == null ? '' : String(row.value),
+    incentivePercent: row.incentive_percent == null ? '' : String(row.incentive_percent),
+    amount: String(row.amount),
     incentiveType: isEmployeeIncentiveType(row.incentive_type) ? row.incentive_type : '',
     description: row.description ?? '',
     editing: false,
@@ -173,10 +195,30 @@ function displayDerivedAmount(valueRaw: string, percentRaw: string): string {
   const percentParsed = parseNonNegativeIncentivePercent(percentRaw)
   if (!valueParsed.ok || !percentParsed.ok) return '—'
   try {
-    return formatCurrency(calcEmployeeIncentiveAmount(valueParsed.value, percentParsed.value))
+    return formatPayrollMoney(calcEmployeeIncentiveAmount(valueParsed.value, percentParsed.value))
   } catch {
     return '—'
   }
+}
+
+function derivedAmountNumber(valueRaw: string, percentRaw: string): number | null {
+  const valueParsed = parseNonNegativePayrollMoney(valueRaw)
+  const percentParsed = parseNonNegativeIncentivePercent(percentRaw)
+  if (!valueParsed.ok || !percentParsed.ok) return null
+  try {
+    return calcEmployeeIncentiveAmount(valueParsed.value, percentParsed.value)
+  } catch {
+    return null
+  }
+}
+
+function displayRowAmount(row: DraftRow): string {
+  if (row.editing && row.calculationMethod === 'percentage') {
+    return displayDerivedAmount(row.value, row.incentivePercent)
+  }
+  const amount = Number(row.amount)
+  if (row.amount.trim() && Number.isFinite(amount)) return formatPayrollMoney(amount)
+  return '—'
 }
 
 function EmployeeMonthlyIncentives({
@@ -186,12 +228,14 @@ function EmployeeMonthlyIncentives({
   onMonthChange,
 }: Props) {
   const [rows, setRows] = useState<DraftRow[]>([])
+  const [persisted, setPersisted] = useState<PayrollEmployeeIncentive[]>([])
   const [eligibleEmployees, setEligibleEmployees] = useState<PayrollEmployee[]>([])
   const [locked, setLocked] = useState(false)
   const [loading, setLoading] = useState(false)
   const [savingKey, setSavingKey] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [message, setMessage] = useState<string | null>(null)
+  const [importPreview, setImportPreview] = useState<ImportPreviewResult | null>(null)
   const { requireSecurityThen } = usePayrollSecurity()
 
   const [selectedYear, selectedMonth] = useMemo(() => {
@@ -221,6 +265,7 @@ function EmployeeMonthlyIncentives({
       setEligibleEmployees(
         emps.filter((employee) => comp.has(employee.employee_code.trim().toUpperCase())),
       )
+      setPersisted(incentives)
       setRows(incentives.map(persistedToDraft))
       setLocked(monthState?.status === 'finalized')
     } catch (err) {
@@ -254,13 +299,30 @@ function EmployeeMonthlyIncentives({
         key: `draft-${Date.now()}`,
         id: null,
         employeeCode: '',
+        calculationMethod: 'percentage',
         value: '',
         incentivePercent: '',
+        amount: '',
         incentiveType: '',
         description: '',
         editing: true,
       },
     ])
+  }
+
+  function setRowMethod(key: string, method: EmployeeIncentiveCalculationMethod) {
+    setRows((prev) => prev.map((row) => {
+      if (row.key !== key) return row
+      if (method === 'fixed') {
+        const derived = derivedAmountNumber(row.value, row.incentivePercent)
+        return {
+          ...row,
+          calculationMethod: 'fixed',
+          amount: row.amount.trim() || (derived == null ? '' : String(derived)),
+        }
+      }
+      return { ...row, calculationMethod: 'percentage' }
+    }))
   }
 
   async function handleSave(row: DraftRow) {
@@ -276,8 +338,10 @@ function EmployeeMonthlyIncentives({
             employeeCode: row.employeeCode,
             payrollMonth,
             incentiveType: row.incentiveType,
+            calculationMethod: row.calculationMethod,
             value: row.value,
             incentivePercent: row.incentivePercent,
+            amount: row.amount,
             description: row.description,
             createdBy: user?.email ?? 'unknown',
           })
@@ -287,8 +351,10 @@ function EmployeeMonthlyIncentives({
             id: row.id,
             employeeCode: row.employeeCode,
             incentiveType: row.incentiveType,
+            calculationMethod: row.calculationMethod,
             value: row.value,
             incentivePercent: row.incentivePercent,
+            amount: row.amount,
             description: row.description,
           })
           setMessage('Incentive updated')
@@ -325,6 +391,99 @@ function EmployeeMonthlyIncentives({
     })
   }
 
+  function handleExport() {
+    const headers = [...EMPLOYEE_INCENTIVE_EXPORT_HEADERS]
+    const exportRows = persisted.map((row) => {
+      const code = row.employee_code.trim().toUpperCase()
+      const employee = employeeByCode.get(code)
+      const method = row.calculation_method === 'fixed' ? 'fixed' : 'percentage'
+      return [
+        row.id,
+        payrollMonth.slice(0, 7),
+        code,
+        employee?.employee_name ?? '',
+        row.value ?? '',
+        row.incentive_percent ?? '',
+        row.amount,
+        row.incentive_type,
+        row.description ?? '',
+        EMPLOYEE_INCENTIVE_CALCULATION_METHOD_LABELS[method],
+      ]
+    })
+    exportWorkbook('Employee Incentives', headers, exportRows, payrollEmployeeIncentiveFilename(monthInput))
+  }
+
+  async function handleImportFile(file: File) {
+    if (!canModify || locked) return
+    setError(null)
+    setMessage(null)
+    const workbookRows = await readWorkbookRows(file)
+    const knownCodes = new Set(eligibleEmployees.map((employee) => employee.employee_code.trim().toUpperCase()))
+    const existingById = new Map(persisted.map((row) => [row.id, {
+      payrollMonth: `${String(row.payroll_month).slice(0, 7)}-01`,
+      employeeCode: row.employee_code.trim().toUpperCase(),
+      incentiveType: row.incentive_type,
+      calculationMethod: (row.calculation_method === 'fixed' ? 'fixed' : 'percentage') as EmployeeIncentiveCalculationMethod,
+      value: row.value,
+      incentivePercent: row.incentive_percent,
+      amount: Number(row.amount),
+      description: row.description,
+    }]))
+    setImportPreview(previewEmployeeIncentiveImport(workbookRows, {
+      payrollMonth,
+      knownCodes,
+      existingById,
+    }))
+  }
+
+  async function commitImport() {
+    if (!importPreview || !canModify || locked) return
+    await requireSecurityThen(async () => {
+      const { data: { user } } = await supabase.auth.getUser()
+      const actor = user?.email ?? 'unknown'
+      for (const row of importPreview.rows) {
+        if (row.status !== 'valid' && row.status !== 'warning') continue
+        const data = row.data as {
+          id: number | null
+          employeeCode: string
+          incentiveType: string
+          calculationMethod: string
+          value: number | null
+          incentivePercent: number | null
+          amount: number
+          description: string | null
+        }
+        if (data.id == null) {
+          await createEmployeeIncentive({
+            employeeCode: data.employeeCode,
+            payrollMonth,
+            incentiveType: data.incentiveType,
+            calculationMethod: data.calculationMethod,
+            value: data.value,
+            incentivePercent: data.incentivePercent,
+            amount: data.amount,
+            description: data.description,
+            createdBy: actor,
+          })
+        } else {
+          await updateEmployeeIncentive({
+            id: data.id,
+            employeeCode: data.employeeCode,
+            incentiveType: data.incentiveType,
+            calculationMethod: data.calculationMethod,
+            value: data.value,
+            incentivePercent: data.incentivePercent,
+            amount: data.amount,
+            description: data.description,
+          })
+        }
+      }
+      setImportPreview(null)
+      await reload()
+      setMessage('Incentive import committed')
+    })
+  }
+
   return (
     <div style={{ marginBottom: '1.25rem' }}>
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', marginBottom: '0.5rem', alignItems: 'center' }}>
@@ -358,18 +517,49 @@ function EmployeeMonthlyIncentives({
         </span>
         <span style={{ flex: 1 }} />
         {canModify && !locked && (
+          <label className="btn btn--ghost btn--sm" style={{ cursor: 'pointer' }}>
+            Import
+            <input type="file" accept=".xlsx,.xls" hidden onChange={(ev) => {
+              const file = ev.target.files?.[0]
+              ev.target.value = ''
+              if (file) void handleImportFile(file)
+            }} />
+          </label>
+        )}
+        <button type="button" className="btn btn--ghost btn--sm" onClick={handleExport}>Export</button>
+        {canModify && !locked && (
           <button type="button" className="btn btn--primary btn--sm" onClick={handleAdd}>+ Add Incentive</button>
         )}
       </div>
       {loading && <div style={{ fontSize: '0.78rem', color: '#64748b', marginBottom: '0.35rem' }}>Loading incentives…</div>}
       {error && <div className="toast error">{error}</div>}
       {message && <div className="toast">{message}</div>}
+      {importPreview && (
+        <div style={{ border: '1px solid #e2e8f0', borderRadius: '8px', padding: '0.75rem', marginBottom: '0.75rem' }}>
+          <strong>Import preview</strong>
+          <div style={{ fontSize: '0.78rem', margin: '0.35rem 0' }}>
+            Total: {importPreview.totalRows} · Valid: {importPreview.valid} · Updates: {importPreview.updates} · Unchanged: {importPreview.unchanged} · Warnings: {importPreview.warnings} · Rejected: {importPreview.rejected}
+          </div>
+          <div style={{ maxHeight: '180px', overflow: 'auto', fontSize: '0.75rem' }}>
+            {importPreview.rows.filter((r) => r.status === 'rejected' || r.status === 'warning').slice(0, 20).map((r) => (
+              <div key={r.rowNumber}>{r.rowNumber}: {r.employeeCode || '—'} — {r.status}: {r.message}</div>
+            ))}
+          </div>
+          {canModify && !locked && (
+            <div style={{ marginTop: '0.5rem', display: 'flex', gap: '0.5rem' }}>
+              <button type="button" className="btn btn--primary btn--sm" onClick={() => void commitImport()}>Commit valid rows</button>
+              <button type="button" className="btn btn--ghost btn--sm" onClick={() => setImportPreview(null)}>Cancel</button>
+            </div>
+          )}
+        </div>
+      )}
       <div className="payroll-table-scroll">
         <table className="table" style={{ fontSize: '0.78rem' }}>
           <thead>
             <tr>
               <th>Employee</th>
               <th>Code</th>
+              <th>Calculation</th>
               <th>Value</th>
               <th>Incentive %</th>
               <th>Type</th>
@@ -381,7 +571,7 @@ function EmployeeMonthlyIncentives({
           <tbody>
             {rows.length === 0 && (
               <tr>
-                <td colSpan={8} style={{ color: '#64748b' }}>No employee incentives for this month.</td>
+                <td colSpan={9} style={{ color: '#64748b' }}>No employee incentives for this month.</td>
               </tr>
             )}
             {rows.map((row) => {
@@ -411,22 +601,38 @@ function EmployeeMonthlyIncentives({
                   </td>
                   <td>{row.employeeCode || '—'}</td>
                   <td>
-                    {readOnly ? row.value : (
+                    {readOnly ? EMPLOYEE_INCENTIVE_CALCULATION_METHOD_LABELS[row.calculationMethod] : (
+                      <select
+                        value={row.calculationMethod}
+                        onChange={(ev) => {
+                          const next = ev.target.value
+                          if (isEmployeeIncentiveCalculationMethod(next)) setRowMethod(row.key, next)
+                        }}
+                      >
+                        <option value="percentage">Percentage</option>
+                        <option value="fixed">Fixed Amount</option>
+                      </select>
+                    )}
+                  </td>
+                  <td>
+                    {readOnly ? (row.value || '—') : (
                       <input
                         value={row.value}
                         onChange={(ev) => updateRow(row.key, { value: ev.target.value })}
                         style={{ width: '90px' }}
                         inputMode="decimal"
+                        disabled={row.calculationMethod === 'fixed'}
                       />
                     )}
                   </td>
                   <td>
-                    {readOnly ? row.incentivePercent : (
+                    {readOnly ? (row.incentivePercent || '—') : (
                       <input
                         value={row.incentivePercent}
                         onChange={(ev) => updateRow(row.key, { incentivePercent: ev.target.value })}
                         style={{ width: '70px' }}
                         inputMode="decimal"
+                        disabled={row.calculationMethod === 'fixed'}
                       />
                     )}
                   </td>
@@ -445,7 +651,16 @@ function EmployeeMonthlyIncentives({
                       </select>
                     )}
                   </td>
-                  <td>{displayDerivedAmount(row.value, row.incentivePercent)}</td>
+                  <td>
+                    {readOnly || row.calculationMethod === 'percentage' ? displayRowAmount(row) : (
+                      <input
+                        value={row.amount}
+                        onChange={(ev) => updateRow(row.key, { amount: ev.target.value })}
+                        style={{ width: '90px' }}
+                        inputMode="decimal"
+                      />
+                    )}
+                  </td>
                   <td>
                     {readOnly ? (row.description || '—') : (
                       <input
@@ -498,7 +713,7 @@ function EmployeeMonthlyIncentives({
         </table>
       </div>
       <p style={{ fontSize: '0.72rem', color: '#64748b', marginTop: '0.5rem' }}>
-        Amount = Value × Incentive % / 100. Multiple rows per employee and month are allowed. Recompute Payroll to include the month total in Net.
+        Percentage amount = Value × Incentive % / 100. Fixed amount is entered directly. Multiple rows per employee and month are allowed. Recompute Payroll to include the month total in Net.
         Only employees with a payroll compensation profile can be selected.
       </p>
     </div>

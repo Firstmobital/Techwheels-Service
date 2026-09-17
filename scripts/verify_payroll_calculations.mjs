@@ -33,6 +33,66 @@ function calcEmployeeIncentiveAmount(value, incentivePercent) {
   return Math.round((value * incentivePercent / 100) * 100) / 100
 }
 
+function parseNonNegativePayrollMoney(raw) {
+  const trimmed = String(raw ?? '').trim()
+  if (!trimmed) return { ok: false, error: 'Value is required' }
+  const n = Number(trimmed)
+  if (!Number.isFinite(n)) return { ok: false, error: 'Value must be a finite number' }
+  if (n < 0) return { ok: false, error: 'Value must be 0 or greater' }
+  if (n >= 1e10) return { ok: false, error: 'Value exceeds allowed precision' }
+  return { ok: true, value: Math.round(n * 100) / 100 }
+}
+
+function parseNonNegativeIncentivePercent(raw) {
+  const trimmed = String(raw ?? '').trim()
+  if (!trimmed) return { ok: false, error: 'Incentive % is required' }
+  const n = Number(trimmed)
+  if (!Number.isFinite(n)) return { ok: false, error: 'Incentive % must be a finite number' }
+  if (n < 0) return { ok: false, error: 'Incentive % must be 0 or greater' }
+  if (n >= 1e6) return { ok: false, error: 'Incentive % exceeds allowed precision' }
+  return { ok: true, value: Math.round(n * 10000) / 10000 }
+}
+
+function parseEmployeeIncentiveAmount(raw) {
+  const parsed = parseNonNegativePayrollMoney(raw)
+  if (parsed.ok) return parsed
+  return { ok: false, error: parsed.error.replace(/^Value/, 'Amount') }
+}
+
+function normalizeEmployeeIncentiveCalculationMethod(raw) {
+  const v = String(raw ?? '').trim().toLowerCase().replace(/[_-]+/g, ' ').replace(/\s+/g, ' ')
+  if (v === 'percentage' || v === 'percent' || v === 'pct') return 'percentage'
+  if (v === 'fixed' || v === 'fixed amount' || v === 'absolute' || v === 'absolute amount') return 'fixed'
+  return null
+}
+
+function parseEmployeeIncentiveWriteFields(input) {
+  const method = normalizeEmployeeIncentiveCalculationMethod(String(input.calculationMethod ?? ''))
+  if (!method) return { ok: false, error: 'Calculation Method must be Percentage or Fixed' }
+  if (method === 'percentage') {
+    const valueParsed = parseNonNegativePayrollMoney(String(input.value ?? ''))
+    if (!valueParsed.ok) return valueParsed
+    const percentParsed = parseNonNegativeIncentivePercent(String(input.incentivePercent ?? ''))
+    if (!percentParsed.ok) return percentParsed
+    return {
+      ok: true,
+      calculationMethod: 'percentage',
+      value: valueParsed.value,
+      incentivePercent: percentParsed.value,
+      amount: calcEmployeeIncentiveAmount(valueParsed.value, percentParsed.value),
+    }
+  }
+  const amountParsed = parseEmployeeIncentiveAmount(String(input.amount ?? ''))
+  if (!amountParsed.ok) return amountParsed
+  return {
+    ok: true,
+    calculationMethod: 'fixed',
+    value: null,
+    incentivePercent: null,
+    amount: amountParsed.value,
+  }
+}
+
 function computeNet(input) {
   return computePayrollAmounts(input).netPayable
 }
@@ -371,6 +431,74 @@ const tests = [
     name: 'VAS 20000 x 2.5% = 500.00',
     got: calcEmployeeIncentiveAmount(20000, 2.5),
     want: 500,
+  },
+  {
+    name: '235281 x 2.13% = 5011.49',
+    got: calcEmployeeIncentiveAmount(235281, 2.13),
+    want: 5011.49,
+  },
+  {
+    name: '416030 x 1.45% = 6032.44',
+    got: calcEmployeeIncentiveAmount(416030, 1.45),
+    want: 6032.44,
+  },
+  {
+    name: 'percentage write ignores excel amount',
+    got: parseEmployeeIncentiveWriteFields({
+      calculationMethod: 'Percentage', value: '235281', incentivePercent: '2.13', amount: '1',
+    }).amount,
+    want: 5011.49,
+  },
+  {
+    name: 'fixed write uses amount and nulls value/%',
+    got: JSON.stringify(parseEmployeeIncentiveWriteFields({
+      calculationMethod: 'Fixed', value: '100000', incentivePercent: '1', amount: '5000',
+    })),
+    want: JSON.stringify({
+      ok: true, calculationMethod: 'fixed', value: null, incentivePercent: null, amount: 5000,
+    }),
+  },
+  {
+    name: 'fixed without amount is rejected',
+    got: parseEmployeeIncentiveWriteFields({
+      calculationMethod: 'fixed', amount: '',
+    }).error,
+    want: 'Amount is required',
+  },
+  {
+    name: 'percentage without value is rejected',
+    got: parseEmployeeIncentiveWriteFields({
+      calculationMethod: 'percentage', value: '', incentivePercent: '2',
+    }).error,
+    want: 'Value is required',
+  },
+  {
+    name: 'mixed modes same employee 1000 + 750',
+    got: 1000 + 750,
+    want: 1750,
+  },
+  {
+    name: 'switch to fixed 5500 is authoritative',
+    got: parseEmployeeIncentiveWriteFields({
+      calculationMethod: 'fixed', amount: '5500',
+    }).amount,
+    want: 5500,
+  },
+  {
+    name: 'switch to percentage 100000 x 2% = 2000',
+    got: parseEmployeeIncentiveWriteFields({
+      calculationMethod: 'percentage', value: '100000', incentivePercent: '2', amount: '5500',
+    }).amount,
+    want: 2000,
+  },
+  {
+    name: 'Net includes mixed 1500 once',
+    got: computePayrollAmounts({
+      salaryType: 'base', baseSalary: 20000, payableDays: 30,
+      saVariableEarning: 0, technicianVariableEarning: 0, bodyshopVariableEarning: 0,
+      incentiveAmount: 1500, customAdditions: 0, otherDeductions: 0, advanceDeduction: 0,
+    }).netPayable,
+    want: 21500,
   },
   {
     name: 'employee incentive is not inside variableTotal',

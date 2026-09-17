@@ -1,11 +1,9 @@
 import { supabase } from '../supabase'
 import {
-  calcEmployeeIncentiveAmount,
   computePayrollAmounts,
   hasGenuinePayrollMonthActivity,
   isValidPayableDays,
-  parseNonNegativeIncentivePercent,
-  parseNonNegativePayrollMoney,
+  parseEmployeeIncentiveWriteFields,
   parsePayrollMonthInput,
   payrollActivityFromEntry,
   salaryTypeIncludesVariable,
@@ -15,6 +13,7 @@ import { roundPayrollPaise } from '../payroll/advanceSchedule'
 import { fetchMonthlyVariableEarnings } from '../payroll/variableEarnings'
 import { isEmployeeIncentiveType } from '../payroll/types'
 import type {
+  EmployeeIncentiveCalculationMethod,
   EmployeeIncentiveType,
   PayrollAdvance,
   PayrollAdvanceSchedule,
@@ -138,14 +137,17 @@ function normalizeDescription(description: string | null | undefined): string | 
 function parseIncentiveWriteInput(input: {
   employeeCode: string
   incentiveType: string
-  value: number | string
-  incentivePercent: number | string
+  calculationMethod?: string | null
+  value?: number | string | null
+  incentivePercent?: number | string | null
+  amount?: number | string | null
   description?: string | null
 }): {
   employeeCode: string
   incentiveType: EmployeeIncentiveType
-  value: number
-  incentivePercent: number
+  calculationMethod: EmployeeIncentiveCalculationMethod
+  value: number | null
+  incentivePercent: number | null
   amount: number
   description: string | null
 } {
@@ -155,16 +157,20 @@ function parseIncentiveWriteInput(input: {
   if (!isEmployeeIncentiveType(incentiveType)) {
     throw new Error('Type must be Parts, Rusting, VAS, or Others')
   }
-  const valueParsed = parseNonNegativePayrollMoney(String(input.value))
-  if (!valueParsed.ok) throw new Error(valueParsed.error)
-  const percentParsed = parseNonNegativeIncentivePercent(String(input.incentivePercent))
-  if (!percentParsed.ok) throw new Error(percentParsed.error)
+  const parsed = parseEmployeeIncentiveWriteFields({
+    calculationMethod: input.calculationMethod,
+    value: input.value,
+    incentivePercent: input.incentivePercent,
+    amount: input.amount,
+  })
+  if (!parsed.ok) throw new Error(parsed.error)
   return {
     employeeCode,
     incentiveType,
-    value: valueParsed.value,
-    incentivePercent: percentParsed.value,
-    amount: calcEmployeeIncentiveAmount(valueParsed.value, percentParsed.value),
+    calculationMethod: parsed.calculationMethod,
+    value: parsed.value,
+    incentivePercent: parsed.incentivePercent,
+    amount: parsed.amount,
     description: normalizeDescription(input.description),
   }
 }
@@ -178,7 +184,13 @@ export async function fetchEmployeeIncentivesForMonth(payrollMonth: string): Pro
     .eq('payroll_month', month)
     .order('id', { ascending: true })
   if (res.error) throw new Error(res.error.message)
-  return (res.data ?? []) as PayrollEmployeeIncentive[]
+  return ((res.data ?? []) as PayrollEmployeeIncentive[]).map((row) => ({
+    ...row,
+    calculation_method: row.calculation_method === 'fixed' ? 'fixed' : 'percentage',
+    value: row.value == null ? null : Number(row.value),
+    incentive_percent: row.incentive_percent == null ? null : Number(row.incentive_percent),
+    amount: Number(row.amount),
+  }))
 }
 
 export async function fetchIncentiveTotalsByEmployee(payrollMonth: string): Promise<Map<string, number>> {
@@ -195,8 +207,10 @@ export async function createEmployeeIncentive(input: {
   employeeCode: string
   payrollMonth: string
   incentiveType: string
-  value: number | string
-  incentivePercent: number | string
+  calculationMethod?: string | null
+  value?: number | string | null
+  incentivePercent?: number | string | null
+  amount?: number | string | null
   description?: string | null
   createdBy: string
 }): Promise<PayrollEmployeeIncentive> {
@@ -215,6 +229,7 @@ export async function createEmployeeIncentive(input: {
     employee_code: parsed.employeeCode,
     payroll_month: month,
     incentive_type: parsed.incentiveType,
+    calculation_method: parsed.calculationMethod,
     value: parsed.value,
     incentive_percent: parsed.incentivePercent,
     amount: parsed.amount,
@@ -230,8 +245,10 @@ export async function updateEmployeeIncentive(input: {
   id: number
   employeeCode: string
   incentiveType: string
-  value: number | string
-  incentivePercent: number | string
+  calculationMethod?: string | null
+  value?: number | string | null
+  incentivePercent?: number | string | null
+  amount?: number | string | null
   description?: string | null
 }): Promise<PayrollEmployeeIncentive> {
   const existingRes = await supabase.from('payroll_employee_incentives').select('*').eq('id', input.id).single()
@@ -251,6 +268,7 @@ export async function updateEmployeeIncentive(input: {
   const res = await supabase.from('payroll_employee_incentives').update({
     employee_code: parsed.employeeCode,
     incentive_type: parsed.incentiveType,
+    calculation_method: parsed.calculationMethod,
     value: parsed.value,
     incentive_percent: parsed.incentivePercent,
     amount: parsed.amount,
