@@ -3,6 +3,7 @@
  * Keep formulas aligned with src/lib/api/accounts.ts helpers.
  * Run: node --experimental-strip-types scripts/verify_accounts_split_payment_drafts.mjs
  */
+import { readFileSync } from 'node:fs'
 import {
   BUSY_LABOUR_INVOICE_IN_CHUNK,
   busyInvoiceLookupKey,
@@ -86,6 +87,10 @@ function mechanicalGatepassEligibility(row) {
   )
   if (creditValid) return { eligible: true, reason: 'keep_on_credit', remaining }
   return { eligible: false, reason: null, remaining }
+}
+
+function isMechanicalGatepassEligible(row) {
+  return mechanicalGatepassEligibility(row).eligible
 }
 
 function mechanicalGatepassReasonLabel(reason) {
@@ -2222,11 +2227,40 @@ function buildMechanicalBusyPaymentExportRows({
 }
 
 {
+  const accountsSrc = readFileSync(new URL('../src/lib/api/accounts.ts', import.meta.url), 'utf8')
+  assert(
+    accountsSrc.includes('return { eligible: false, reason: null, remaining }'),
+    'accounts.ts non-eligible gatepass fallback must be eligible: false, reason: null',
+  )
+  const eligibleFn = accountsSrc.slice(
+    accountsSrc.indexOf('export function isMechanicalGatepassEligible'),
+    accountsSrc.indexOf('export function mechanicalGatepassReasonLabel'),
+  )
+  assert(
+    eligibleFn.includes('return mechanicalGatepassEligibility(row).eligible'),
+    'isMechanicalGatepassEligible must derive from mechanicalGatepassEligibility(row).eligible',
+  )
+  assert(!/\breturn true\b/.test(eligibleFn), 'isMechanicalGatepassEligible must not return true unconditionally')
+
+  // Live unpaid cases: Print/Create both derive ineligible
+  const liveA = mechanicalGatepassEligibility({ billed_amount: 43009.30, amount_received: 0, keep_on_credit: false })
+  assert(!liveA.eligible && liveA.reason == null, `A live: 43009.30 / 0 disabled, got ${JSON.stringify(liveA)}`)
+  assert(!isMechanicalGatepassEligible({ billed_amount: 43009.30, amount_received: 0 }), 'A live: Print/Create disabled')
+  const liveB = mechanicalGatepassEligibility({ billed_amount: 6277.00, amount_received: 0, keep_on_credit: false })
+  assert(!liveB.eligible && liveB.reason == null, `B live: 6277 / 0 disabled, got ${JSON.stringify(liveB)}`)
+  const liveC = mechanicalGatepassEligibility({ billed_amount: 19936.25, amount_received: 0, keep_on_credit: false })
+  assert(!liveC.eligible && liveC.reason == null, `C live: 19936.25 / 0 disabled, got ${JSON.stringify(liveC)}`)
+
   // A. Full payment
   const a = mechanicalGatepassEligibility({ billed_amount: 10000, amount_received: 10000, keep_on_credit: false })
   assert(a.eligible && a.reason === 'paid' && a.remaining === 0, 'A: full payment eligible as paid')
+  assert(isMechanicalGatepassEligible({ billed_amount: 10000, amount_received: 10000 }), 'D: Print/Create enabled when paid')
   assert(mechanicalGatepassReasonDetail(a.reason) === 'Payment received', 'A: paid wording is Payment received')
   assert(mechanicalGatepassReasonLabel(a.reason) === 'Paid', 'A: compact label Paid')
+
+  const e9900 = mechanicalGatepassEligibility({ billed_amount: 10000, amount_received: 9900, keep_on_credit: false })
+  assert(e9900.eligible && e9900.reason === 'short_payment' && e9900.remaining === 100, `E: 10000/9900 short_payment, got ${JSON.stringify(e9900)}`)
+  assert(isMechanicalGatepassEligible({ billed_amount: 10000, amount_received: 9900 }), 'E: Print/Create enabled within 2%')
 
   // B. 1.99% short → allowed
   const b = mechanicalGatepassEligibility({ billed_amount: 10000, amount_received: 9801, keep_on_credit: false })
@@ -2242,16 +2276,28 @@ function buildMechanicalBusyPaymentExportRows({
   assert(!d.eligible && d.reason == null && d.remaining === 200.01, `D: 200.01 denied, got ${JSON.stringify(d)}`)
   const d201 = mechanicalGatepassEligibility({ billed_amount: 10000, amount_received: 9799, keep_on_credit: false })
   assert(!d201.eligible && d201.remaining === 201, `D: remaining 201 denied, got ${JSON.stringify(d201)}`)
+  assert(!isMechanicalGatepassEligible({ billed_amount: 10000, amount_received: 9799 }), 'F: Print/Create disabled remaining 201')
   const d300 = mechanicalGatepassEligibility({ billed_amount: 10000, amount_received: 9700, keep_on_credit: false })
   assert(!d300.eligible && d300.remaining === 300, 'D2: remaining 300 denied without credit')
 
   // E/F. Keep on Credit flag alone is not valid; complete audit is
-  const incomplete = mechanicalGatepassEligibility({
+  const incompleteRow = {
     billed_amount: 10000,
     amount_received: 9700,
     keep_on_credit: true,
-  })
+  }
+  const incomplete = mechanicalGatepassEligibility(incompleteRow)
   assert(!incomplete.eligible, 'E: keep_on_credit true without reason/approver/time is not eligible')
+  assert(!isMechanicalGatepassEligible(incompleteRow), 'H: Print/Create disabled for incomplete Keep on Credit')
+  const liveH = {
+    billed_amount: 11205,
+    amount_received: 0,
+    keep_on_credit: true,
+    keep_on_credit_reason: null,
+    keep_on_credit_approved_by: 'admin@firstmobital.com',
+    keep_on_credit_approved_at: '2026-09-15 14:39:06.012208+05:30',
+  }
+  assert(!isMechanicalGatepassEligible(liveH), 'H live: 8841 flag without reason keeps Print/Create disabled')
   const blankReason = mechanicalGatepassEligibility({
     billed_amount: 10000,
     amount_received: 9700,
@@ -2261,15 +2307,26 @@ function buildMechanicalBusyPaymentExportRows({
     keep_on_credit_approved_at: '2026-09-15T09:54:00+05:30',
   })
   assert(!blankReason.eligible, 'F: blank reason is not valid Keep on Credit')
-  const validCredit = mechanicalGatepassEligibility({
+  const validCreditRow = {
     billed_amount: 10000,
     amount_received: 7000,
     keep_on_credit: true,
     keep_on_credit_reason: 'Insurance payment pending',
     keep_on_credit_approved_by: 'GM User',
     keep_on_credit_approved_at: '2026-09-15T09:54:00+05:30',
-  })
+  }
+  const validCredit = mechanicalGatepassEligibility(validCreditRow)
   assert(validCredit.eligible && validCredit.reason === 'keep_on_credit' && validCredit.remaining === 3000, `F: valid credit allows remaining 3000, got ${JSON.stringify(validCredit)}`)
+  assert(isMechanicalGatepassEligible(validCreditRow), 'G: Print/Create enabled for valid Keep on Credit')
+  const validCreditUnpaid = mechanicalGatepassEligibility({
+    billed_amount: 10000,
+    amount_received: 0,
+    keep_on_credit: true,
+    keep_on_credit_reason: 'Insurance payment pending',
+    keep_on_credit_approved_by: 'GM User',
+    keep_on_credit_approved_at: '2026-09-15T09:54:00+05:30',
+  })
+  assert(validCreditUnpaid.eligible && validCreditUnpaid.reason === 'keep_on_credit', `G: 10000/0 valid credit enabled, got ${JSON.stringify(validCreditUnpaid)}`)
   assert(mechanicalGatepassReasonDetail(validCredit.reason) === 'Gatepass allowed — kept on credit', 'F: credit wording')
   assert(mechanicalGatepassReasonLabel(validCredit.reason) === 'Released on credit', 'F: compact credit label')
 

@@ -717,6 +717,7 @@ export default function AccountsPage() {
   }
 
   function printMechGatepass(row: AccountsMechanicalCase) {
+    if (!isMechanicalGatepassEligible(row)) return
     setGatepassConfirmTarget({ type: 'mechanical', mechRow: row })
   }
 

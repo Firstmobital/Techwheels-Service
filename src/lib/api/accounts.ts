@@ -303,15 +303,23 @@ export async function issueMechanicalAccountsGatePass(
   const numId = typeof receptionEntryId === 'string' ? parseInt(receptionEntryId, 10) : receptionEntryId
 
   let rpcData: IssuedGatePassRecord | null = null
+  let rpcError: unknown = null
   try {
     const { data, error } = await supabase.rpc('issue_accounts_mechanical_gatepass', {
       p_reception_entry_id: numId,
     })
     if (!error && data) {
       rpcData = data as IssuedGatePassRecord
+    } else if (error) {
+      rpcError = error
     }
   } catch (err: unknown) {
+    rpcError = err
     console.warn('issue_accounts_mechanical_gatepass RPC note:', err)
+  }
+
+  if (rpcError && /gatepass not eligible/i.test(settlementRpcError(rpcError))) {
+    throw new Error(settlementRpcError(rpcError))
   }
 
   // Live DB fallback and dual-sync: fetch reception entry and invoice details
@@ -328,9 +336,25 @@ export async function issueMechanicalAccountsGatePass(
 
   const { data: inv } = await supabase
     .from('accounts_mechanical_invoices')
-    .select('invoice_number, invoice_date, billed_amount, amount_received, payment_status, keep_on_credit, keep_on_credit_reason')
+    .select('invoice_number, invoice_date, billed_amount, amount_received, payment_status, keep_on_credit, keep_on_credit_reason, keep_on_credit_approved_by, keep_on_credit_approved_at')
     .eq('reception_entry_id', numId)
     .single()
+
+  const eligibility = mechanicalGatepassEligibility({
+    billed_amount: inv?.billed_amount ?? null,
+    amount_received: inv?.amount_received ?? null,
+    keep_on_credit: inv?.keep_on_credit,
+    keep_on_credit_reason: inv?.keep_on_credit_reason,
+    keep_on_credit_approved_by: inv?.keep_on_credit_approved_by,
+    keep_on_credit_approved_at: inv?.keep_on_credit_approved_at,
+  })
+  if (!rpcData && !eligibility.eligible) {
+    throw new Error(
+      rpcError
+        ? settlementRpcError(rpcError)
+        : `gatepass not eligible: remaining ₹${eligibility.remaining} exceeds 2% of billed ₹${inv?.billed_amount} and Keep on Credit is not approved`,
+    )
+  }
 
   const billed = Number(inv?.billed_amount || 0)
   const received = Number(inv?.amount_received || 0)
@@ -339,7 +363,12 @@ export async function issueMechanicalAccountsGatePass(
   const norm = (entry.reg_number || 'VEHICLE').trim().toUpperCase()
   const normClean = norm.replace(/\s+/g, '')
   const gpNo = rpcData?.gate_pass_no || `GP-${entry.jc_number ? entry.jc_number.replace(/[^0-9]/g, '').slice(-5) : Date.now().toString().slice(-5)}`
-  const reason = (billed > 0 && remaining <= 0) ? 'paid' : (billed > 0 && remaining <= billed * 0.02) ? 'short_payment' : Boolean(inv?.keep_on_credit) ? 'keep_on_credit' : 'released'
+  const rpcReason = rpcData?.settlement_reason
+  const reason: MechanicalGatepassReason = (
+    rpcReason === 'paid' || rpcReason === 'short_payment' || rpcReason === 'keep_on_credit'
+  )
+    ? rpcReason
+    : (eligibility.reason ?? 'paid')
 
   const payload: IssuedGatePassRecord = {
     gate_pass_no: gpNo,
@@ -619,20 +648,23 @@ export function mechanicalGatepassEligibility(
   row: Pick<AccountsMechanicalCase, 'billed_amount' | 'amount_received'> & MechanicalKeepOnCreditFields,
 ): { eligible: boolean; reason: MechanicalGatepassReason | null; remaining: number | null } {
   const billed = row.billed_amount == null ? null : Number(row.billed_amount)
-  const remaining = roundAccountsMoney(Math.max(0, (billed || 0) - Number(row.amount_received ?? 0)))
-  if (billed != null && remaining <= 0) return { eligible: true, reason: 'paid', remaining }
+  if (billed == null || !Number.isFinite(billed)) {
+    return { eligible: false, reason: null, remaining: null }
+  }
+  const remaining = roundAccountsMoney(Math.max(0, billed - Number(row.amount_received ?? 0)))
+  if (remaining <= 0) return { eligible: true, reason: 'paid', remaining }
   const allowance = mechanicalShortPaymentAllowance(billed)
   if (allowance != null && remaining <= allowance) {
     return { eligible: true, reason: 'short_payment', remaining }
   }
   if (isMechanicalKeepOnCreditValid(row)) return { eligible: true, reason: 'keep_on_credit', remaining }
-  return { eligible: true, reason: 'paid', remaining }
+  return { eligible: false, reason: null, remaining }
 }
 
 export function isMechanicalGatepassEligible(
-  _row: Pick<AccountsMechanicalCase, 'billed_amount' | 'amount_received'> & MechanicalKeepOnCreditFields,
+  row: Pick<AccountsMechanicalCase, 'billed_amount' | 'amount_received'> & MechanicalKeepOnCreditFields,
 ): boolean {
-  return true
+  return mechanicalGatepassEligibility(row).eligible
 }
 
 export function mechanicalGatepassReasonLabel(reason: MechanicalGatepassReason | null | undefined): string {
@@ -1494,6 +1526,7 @@ function mechanicalGatepassHtml(row: AccountsMechanicalCase): string {
 }
 
 export function openMechanicalGatepass(row: AccountsMechanicalCase): void {
+  if (!isMechanicalGatepassEligible(row)) return
   openHtmlGatepass(mechanicalGatepassHtml(row))
 }
 
