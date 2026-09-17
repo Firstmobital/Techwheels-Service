@@ -1,5 +1,6 @@
 import { Alert, ScrollView, Text, TouchableOpacity, View } from 'react-native'
 import { useRouter } from 'expo-router'
+import { LegalLinks } from '../../components/LegalLinks'
 import { useAuth } from '../../context/AuthContext'
 
 export default function ProfileScreen() {
@@ -103,6 +104,13 @@ export default function ProfileScreen() {
             </TouchableOpacity>
           </>
         )}
+
+        <Text className="text-slate-500 text-xs font-semibold uppercase tracking-wide mt-5 mb-2">
+          Legal
+        </Text>
+        <View className="bg-white border border-slate-200 rounded-xl px-4 py-3">
+          <LegalLinks />
+        </View>
 
         <TouchableOpacity
           className="bg-red-50 border border-red-200 rounded-xl px-4 py-3 mt-4"

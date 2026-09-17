@@ -46,6 +46,63 @@ function errorResponse(message: string, status = 400) {
   return json({ success: false, error: message }, status);
 }
 
+/** PostgREST silently truncates unpaginated selects at max_rows (prod is 10k). Always page. */
+const QUERY_PAGE_SIZE = 1000;
+const INSERT_CHUNK_SIZE = 200;
+
+async function fetchAllRows<T>(
+  makeQuery: (from: number, to: number) => PromiseLike<{
+    data: T[] | null;
+    error: { message: string } | null;
+  }>,
+): Promise<{ rows: T[]; error?: string }> {
+  const rows: T[] = [];
+  let offset = 0;
+  while (true) {
+    const { data, error } = await makeQuery(offset, offset + QUERY_PAGE_SIZE - 1);
+    if (error) return { rows: [], error: error.message };
+    if (!data?.length) break;
+    rows.push(...data);
+    if (data.length < QUERY_PAGE_SIZE) break;
+    offset += QUERY_PAGE_SIZE;
+  }
+  return { rows };
+}
+
+async function countAssignments(
+  supabase: SupabaseClient,
+  campaignId: number,
+  statuses?: string | string[],
+): Promise<number> {
+  let q = supabase
+    .from("insurance_renewal_assignments")
+    .select("id", { count: "exact", head: true })
+    .eq("campaign_id", campaignId);
+  if (typeof statuses === "string") q = q.eq("status", statuses);
+  else if (statuses && statuses.length > 0) q = q.in("status", statuses);
+  const { count, error } = await q;
+  if (error) throw new Error(error.message);
+  return count ?? 0;
+}
+
+async function insertAssignmentsInChunks(
+  supabase: SupabaseClient,
+  rows: Array<{ campaign_id: number; customer_id: number; status: string }>,
+): Promise<number> {
+  if (rows.length === 0) return 0;
+  let inserted = 0;
+  for (let i = 0; i < rows.length; i += INSERT_CHUNK_SIZE) {
+    const slice = rows.slice(i, i + INSERT_CHUNK_SIZE);
+    const { data, error } = await supabase
+      .from("insurance_renewal_assignments")
+      .upsert(slice, { onConflict: "campaign_id,customer_id", ignoreDuplicates: true })
+      .select("id");
+    if (error) throw new Error(error.message);
+    inserted += data?.length ?? 0;
+  }
+  return inserted;
+}
+
 // Insurance date estimation (mirrors frontend h9 function)
 function estimateInsuranceDate(expiryDate: string | null, saleDate: string | null) {
   if (expiryDate) return { date: expiryDate, estimated: false };
@@ -83,13 +140,11 @@ async function fetchEligibleVehiclesInWindow(
     futureDate: string;
     soldDealerFilter?: string[] | null;
     lastServiceDealerFilter?: string[] | null;
+    soldDealerExclude?: string[] | null;
   }
 ): Promise<{ vehicles: Record<string, unknown>[]; error?: string }> {
-  const PAGE = 1000;
-  const leadIds: number[] = [];
-  let offset = 0;
-  while (true) {
-    const { data, error } = await supabase
+  const { rows: leadRows, error: leadError } = await fetchAllRows<{ id: number }>((from, to) =>
+    supabase
       .from("insurance_renewal_leads")
       .select("id")
       .not("contact_phones", "is", null)
@@ -97,14 +152,12 @@ async function fetchEligibleVehiclesInWindow(
       .not("effective_due_date", "is", null)
       .gte("effective_due_date", params.today)
       .lte("effective_due_date", params.futureDate)
-      .range(offset, offset + PAGE - 1);
-    if (error) return { vehicles: [], error: error.message };
-    if (!data?.length) break;
-    for (const row of data) leadIds.push(row.id as number);
-    if (data.length < PAGE) break;
-    offset += PAGE;
-  }
+      .order("id", { ascending: true })
+      .range(from, to)
+  );
+  if (leadError) return { vehicles: [], error: leadError };
 
+  const leadIds = leadRows.map((row) => row.id);
   if (leadIds.length === 0) return { vehicles: [] };
 
   const vehicles: Record<string, unknown>[] = [];
@@ -117,6 +170,9 @@ async function fetchEligibleVehiclesInWindow(
     }
     if (params.lastServiceDealerFilter && params.lastServiceDealerFilter.length > 0) {
       q = q.in("last_service_dealer", params.lastServiceDealerFilter);
+    }
+    if (params.soldDealerExclude && params.soldDealerExclude.length > 0) {
+      q = q.not("sold_dealer", "in", params.soldDealerExclude);
     }
     const { data, error } = await q;
     if (error) return { vehicles: [], error: error.message };
@@ -177,27 +233,24 @@ async function fetchLiveCustomerOwnerCampaignMap(
 
   const campaignIds = activeCampaigns.map((c) => c.id as number);
   const owner = new Map<number, number>();
-  const PAGE = 1000;
 
   for (let i = 0; i < campaignIds.length; i += 40) {
     const idChunk = campaignIds.slice(i, i + 40);
-    let offset = 0;
-    while (true) {
-      const { data, error } = await supabase
+    const { rows, error } = await fetchAllRows<{ customer_id: number; campaign_id: number }>((from, to) =>
+      supabase
         .from("insurance_renewal_assignments")
         .select("customer_id, campaign_id")
         .in("campaign_id", idChunk)
         .in("status", LIVE_ASSIGNMENT_STATUSES)
-        .range(offset, offset + PAGE - 1);
-      if (error || !data?.length) break;
-      for (const row of data) {
-        const customerId = row.customer_id as number;
-        const campaignId = row.campaign_id as number;
-        const prev = owner.get(customerId);
-        if (prev === undefined || campaignId < prev) owner.set(customerId, campaignId);
-      }
-      if (data.length < PAGE) break;
-      offset += PAGE;
+        .order("id", { ascending: true })
+        .range(from, to)
+    );
+    if (error) throw new Error(error);
+    for (const row of rows) {
+      const customerId = row.customer_id;
+      const campaignId = row.campaign_id;
+      const prev = owner.get(customerId);
+      if (prev === undefined || campaignId < prev) owner.set(customerId, campaignId);
     }
   }
   return owner;
@@ -235,12 +288,17 @@ async function retireCrossCampaignDuplicatesInCampaign(
   campaignId: number,
   ownerMap: Map<number, number>,
 ): Promise<number> {
-  const { data: liveRows, error } = await supabase
-    .from("insurance_renewal_assignments")
-    .select("id, customer_id")
-    .eq("campaign_id", campaignId)
-    .in("status", LIVE_ASSIGNMENT_STATUSES);
-  if (error || !liveRows?.length) return 0;
+  const { rows: liveRows, error } = await fetchAllRows<{ id: number; customer_id: number }>((from, to) =>
+    supabase
+      .from("insurance_renewal_assignments")
+      .select("id, customer_id")
+      .eq("campaign_id", campaignId)
+      .in("status", LIVE_ASSIGNMENT_STATUSES)
+      .order("id", { ascending: true })
+      .range(from, to)
+  );
+  if (error) throw new Error(error);
+  if (!liveRows.length) return 0;
 
   const retireIds = liveRows
     .filter((r) => {
@@ -634,22 +692,23 @@ async function handleGetNext(
 
   // 2) Reclaim stale legacy RPC claims (assigned > 24h, never opened on call card)
   const staleCutoff = new Date(Date.now() - 24 * 3600000).toISOString();
-  const { data: staleRows } = await supabase
-    .from("insurance_renewal_assignments")
-    .select("id")
-    .eq("campaign_id", campaignId)
-    .eq("status", "assigned")
-    .lt("assigned_at", staleCutoff);
-  if (staleRows?.length) {
-    await supabase
+  const { rows: staleRows } = await fetchAllRows<{ id: number }>((from, to) =>
+    supabase
       .from("insurance_renewal_assignments")
-      .update({
-        status: "pending",
-        assigned_to: null,
-        assigned_to_name: null,
-        assigned_at: null,
-      })
-      .in("id", staleRows.map((r: { id: number }) => r.id));
+      .select("id")
+      .eq("campaign_id", campaignId)
+      .eq("status", "assigned")
+      .lt("assigned_at", staleCutoff)
+      .order("id", { ascending: true })
+      .range(from, to)
+  );
+  if (staleRows.length) {
+    await updateAssignmentsInChunks(supabase, staleRows.map((r) => r.id), {
+      status: "pending",
+      assigned_to: null,
+      assigned_to_name: null,
+      assigned_at: null,
+    });
   }
 
   const ownerMap = await fetchLiveCustomerOwnerCampaignMap(supabase);
@@ -703,7 +762,7 @@ async function handleGetNext(
 
   if (updateError) return errorResponse(updateError.message);
 
-  await updateCampaignCounts(supabase, campaignId);
+  await safeUpdateCampaignCounts(supabase, campaignId);
 
   const { data: full, error: fetchErr } = await supabase
     .from("insurance_renewal_assignments")
@@ -784,7 +843,7 @@ async function handleUpdateStatus(supabase: SupabaseClient, userId: string, user
 
     if (noAnswerUpdateError) return errorResponse(noAnswerUpdateError.message);
 
-    await updateCampaignCounts(supabase, campaignId);
+    await safeUpdateCampaignCounts(supabase, campaignId);
 
     return json({
       success: true,
@@ -824,7 +883,7 @@ async function handleUpdateStatus(supabase: SupabaseClient, userId: string, user
     }
   }
 
-  await updateCampaignCounts(supabase, campaignId);
+  await safeUpdateCampaignCounts(supabase, campaignId);
 
   return json({ success: true });
 }
@@ -841,24 +900,24 @@ async function handleMyQueue(
 
   const assigneeIds = [userId, userEmail].filter(Boolean);
 
-  let query = supabase
-    .from("insurance_renewal_assignments")
-    .select(`
-      *,
-      all_service_data!inner(*),
-      insurance_renewal_campaigns!inner(campaign_name, status)
-    `)
-    .in("assigned_to", assigneeIds)
-    .in("status", MY_QUEUE_STATUSES);
+  const { rows: data, error } = await fetchAllRows<Record<string, unknown>>((from, to) => {
+    let query = supabase
+      .from("insurance_renewal_assignments")
+      .select(`
+        *,
+        all_service_data!inner(*),
+        insurance_renewal_campaigns!inner(campaign_name, status)
+      `)
+      .in("assigned_to", assigneeIds)
+      .in("status", MY_QUEUE_STATUSES);
+    if (!allCampaigns && campaignId) {
+      query = query.eq("campaign_id", campaignId);
+    }
+    return query.order("id", { ascending: true }).range(from, to);
+  });
+  if (error) return errorResponse(error);
 
-  if (!allCampaigns && campaignId) {
-    query = query.eq("campaign_id", campaignId);
-  }
-
-  const { data, error } = await query;
-  if (error) return errorResponse(error.message);
-
-  const queue = (data || []).map((a: Record<string, unknown>) => {
+  const queue = data.map((a: Record<string, unknown>) => {
     const vehicle = a.all_service_data as unknown as Record<string, unknown>;
     const camp = a.insurance_renewal_campaigns as Record<string, unknown> | null;
     const insDate = estimateInsuranceDate(
@@ -981,7 +1040,7 @@ async function handleEditAssignment(supabase: SupabaseClient, userId: string, bo
 
   if (error) return errorResponse(error.message);
   if (body.status !== undefined && updated?.campaign_id) {
-    await updateCampaignCounts(supabase, Number(updated.campaign_id));
+    await safeUpdateCampaignCounts(supabase, Number(updated.campaign_id));
   }
   return json({ success: true });
 }
@@ -1013,21 +1072,22 @@ async function handleAdminStats(supabase: SupabaseClient, role: string, body: Re
   const dateFrom = body.date_from as string;
   const dateTo = body.date_to as string;
 
-  let query = supabase.from("insurance_renewal_assignments").select(`
-    assigned_to,
-    assigned_to_name,
-    status,
-    quoted_premium,
-    call_count,
-    updated_at
-  `);
-
-  if (campaignId) query = query.eq("campaign_id", campaignId);
-  if (dateFrom) query = query.gte("updated_at", dateFrom + "T00:00:00Z");
-  if (dateTo) query = query.lte("updated_at", dateTo + "T23:59:59Z");
-
-  const { data, error } = await query;
-  if (error) return errorResponse(error.message);
+  const { rows: data, error } = await fetchAllRows<Record<string, unknown>>((from, to) => {
+    let query = supabase.from("insurance_renewal_assignments").select(`
+      id,
+      assigned_to,
+      assigned_to_name,
+      status,
+      quoted_premium,
+      call_count,
+      updated_at
+    `);
+    if (campaignId) query = query.eq("campaign_id", campaignId);
+    if (dateFrom) query = query.gte("updated_at", dateFrom + "T00:00:00Z");
+    if (dateTo) query = query.lte("updated_at", dateTo + "T23:59:59Z");
+    return query.order("id", { ascending: true }).range(from, to);
+  });
+  if (error) return errorResponse(error);
 
   const TERMINAL_COMPLETED = [
     "renewed_via_us",
@@ -1040,7 +1100,7 @@ async function handleAdminStats(supabase: SupabaseClient, role: string, body: Re
   ];
 
   const statsMap = new Map<string, Record<string, unknown>>();
-  for (const row of data || []) {
+  for (const row of data) {
     // Skip idle pool rows (campaign counters still include these)
     if (!row.assigned_to && (row.status === "pending" || row.status === "out_of_window")) {
       continue;
@@ -1108,18 +1168,24 @@ async function handleAdminStats(supabase: SupabaseClient, role: string, body: Re
 
   // Today's Pending: callback due/overdue OR in_progress without callback date (IST snapshot)
   const todayIst = new Date(Date.now() + 5.5 * 3600000).toISOString().split("T")[0];
-  let pendingQuery = supabase
-    .from("insurance_renewal_assignments")
-    .select("id, assigned_to, assigned_to_name, callback_date, status")
-    .not("assigned_to", "is", null)
-    .in("status", MY_QUEUE_STATUSES);
+  const { rows: queueRows, error: pendingErr } = await fetchAllRows<{
+    id: number;
+    assigned_to: string | null;
+    assigned_to_name: string | null;
+    callback_date: string | null;
+    status: string;
+  }>((from, to) => {
+    let pendingQuery = supabase
+      .from("insurance_renewal_assignments")
+      .select("id, assigned_to, assigned_to_name, callback_date, status")
+      .not("assigned_to", "is", null)
+      .in("status", MY_QUEUE_STATUSES);
+    if (campaignId) pendingQuery = pendingQuery.eq("campaign_id", campaignId);
+    return pendingQuery.order("id", { ascending: true }).range(from, to);
+  });
+  if (pendingErr) return errorResponse(pendingErr);
 
-  if (campaignId) pendingQuery = pendingQuery.eq("campaign_id", campaignId);
-
-  const { data: queueRows, error: pendingErr } = await pendingQuery;
-  if (pendingErr) return errorResponse(pendingErr.message);
-
-  const pendingRows = (queueRows || []).filter((row) => {
+  const pendingRows = queueRows.filter((row) => {
     if (row.status === "in_progress" && !row.callback_date) return true;
     return row.callback_date != null && row.callback_date <= todayIst;
   });
@@ -1180,22 +1246,21 @@ async function handleAdminStats(supabase: SupabaseClient, role: string, body: Re
 async function handlePolicyDoneList(supabase: SupabaseClient, body: Record<string, unknown>) {
   const campaignId = body.campaign_id ? Number(body.campaign_id) : null;
 
-  let query = supabase
-    .from("insurance_renewal_assignments")
-    .select(`
-      id, campaign_id, status, quoted_premium, renewal_company, call_notes,
-      updated_at, assigned_to, assigned_to_name,
-      all_service_data!inner(first_name, last_name, contact_phones, model, vehicle_registration_number, last_insurance_expiry_date)
-    `)
-    .in("status", POLICY_DONE_STATUSES)
-    .order("updated_at", { ascending: false });
+  const { rows: data, error } = await fetchAllRows<Record<string, unknown>>((from, to) => {
+    let query = supabase
+      .from("insurance_renewal_assignments")
+      .select(`
+        id, campaign_id, status, quoted_premium, renewal_company, call_notes,
+        updated_at, assigned_to, assigned_to_name,
+        all_service_data!inner(first_name, last_name, contact_phones, model, vehicle_registration_number, last_insurance_expiry_date)
+      `)
+      .in("status", POLICY_DONE_STATUSES);
+    if (campaignId) query = query.eq("campaign_id", campaignId);
+    return query.order("updated_at", { ascending: false }).order("id", { ascending: true }).range(from, to);
+  });
+  if (error) return errorResponse(error);
 
-  if (campaignId) query = query.eq("campaign_id", campaignId);
-
-  const { data, error } = await query;
-  if (error) return errorResponse(error.message);
-
-  const policy_done = (data || []).map((r: Record<string, unknown>) => {
+  const policy_done = data.map((r: Record<string, unknown>) => {
     const v = r.all_service_data as Record<string, unknown>;
     return {
       id: r.id,
@@ -1248,7 +1313,12 @@ async function handleRefreshCampaign(supabase: SupabaseClient, body: Record<stri
   });
   if (vError) return errorResponse(vError);
 
-  const ownerMap = await fetchLiveCustomerOwnerCampaignMap(supabase);
+  let ownerMap: Map<number, number>;
+  try {
+    ownerMap = await fetchLiveCustomerOwnerCampaignMap(supabase);
+  } catch (ownerErr) {
+    return errorResponse((ownerErr as Error).message);
+  }
   let retiredCrossCampaign = 0;
   try {
     retiredCrossCampaign = await retireCrossCampaignDuplicatesInCampaign(
@@ -1260,49 +1330,58 @@ async function handleRefreshCampaign(supabase: SupabaseClient, body: Record<stri
     return errorResponse((dupErr as Error).message);
   }
 
-  // Get existing assignments to avoid duplicates
-  const { data: existing } = await supabase
-    .from("insurance_renewal_assignments")
-    .select("customer_id")
-    .eq("campaign_id", campaignId);
+  // Get existing assignments to avoid duplicates (must page — prod max_rows is 10k)
+  const { rows: existing, error: existingErr } = await fetchAllRows<{ customer_id: number }>((from, to) =>
+    supabase
+      .from("insurance_renewal_assignments")
+      .select("customer_id")
+      .eq("campaign_id", campaignId)
+      .order("id", { ascending: true })
+      .range(from, to)
+  );
+  if (existingErr) return errorResponse(existingErr);
 
-  const existingVehicleIds = new Set((existing || []).map((e: Record<string, unknown>) => e.customer_id));
+  const existingVehicleIds = new Set(existing.map((e) => e.customer_id));
 
   // Find new leads to add (skip customers owned by another active campaign)
-  let newVehicles = uniqueVehicles.filter((v: Record<string, unknown>) => !existingVehicleIds.has(v.id));
+  let newVehicles = uniqueVehicles.filter((v: Record<string, unknown>) => !existingVehicleIds.has(v.id as number));
   const addFilter = vehiclesAvailableToAddToCampaign(newVehicles, campaignId, ownerMap);
   newVehicles = addFilter.eligible;
 
   // Find out-of-window assignments to retire
-  const { data: allAssignments } = await supabase
-    .from("insurance_renewal_assignments")
-    .select("id, customer_id, status")
-    .eq("campaign_id", campaignId)
-    .in("status", ["pending", "in_progress"]);
+  const { rows: allAssignments, error: liveErr } = await fetchAllRows<{ id: number; customer_id: number; status: string }>((from, to) =>
+    supabase
+      .from("insurance_renewal_assignments")
+      .select("id, customer_id, status")
+      .eq("campaign_id", campaignId)
+      .in("status", ["pending", "in_progress"])
+      .order("id", { ascending: true })
+      .range(from, to)
+  );
+  if (liveErr) return errorResponse(liveErr);
 
   const stillInWindowVehicleIds = new Set(uniqueVehicles.map((v: Record<string, unknown>) => v.id));
-  const toRetire = (allAssignments || []).filter(
-    (a: Record<string, unknown>) => !stillInWindowVehicleIds.has(a.customer_id)
-  );
+  const toRetire = allAssignments.filter((a) => !stillInWindowVehicleIds.has(a.customer_id));
 
-  // Insert new assignments
+  // Insert new assignments in chunks so payload/max_rows cannot drop leads
   let added = 0;
   if (newVehicles.length > 0) {
     const newAssignments = newVehicles.map((v: Record<string, unknown>) => ({
       campaign_id: campaignId,
-      customer_id: v.id,
+      customer_id: v.id as number,
       status: "pending",
     }));
-    const { error: insertError } = await supabase
-      .from("insurance_renewal_assignments")
-      .insert(newAssignments);
-    if (!insertError) added = newVehicles.length;
+    try {
+      added = await insertAssignmentsInChunks(supabase, newAssignments);
+    } catch (insertError) {
+      return errorResponse((insertError as Error).message);
+    }
   }
 
   // Retire out-of-window (only pending / in_progress — never terminal dispositions)
   let retired = 0;
   if (toRetire.length > 0) {
-    const retireIds = toRetire.map((a: Record<string, unknown>) => a.id as number);
+    const retireIds = toRetire.map((a) => a.id);
     try {
       await updateAssignmentsInChunks(supabase, retireIds, { status: "out_of_window" });
       retired = retireIds.length;
@@ -1313,19 +1392,24 @@ async function handleRefreshCampaign(supabase: SupabaseClient, body: Record<stri
 
   // Re-open assignments that were retired but are in window again (effective_due_date)
   let reactivated = 0;
-  const { data: oowAssignments } = await supabase
-    .from("insurance_renewal_assignments")
-    .select("id, customer_id")
-    .eq("campaign_id", campaignId)
-    .eq("status", "out_of_window");
+  const { rows: oowAssignments, error: oowErr } = await fetchAllRows<{ id: number; customer_id: number }>((from, to) =>
+    supabase
+      .from("insurance_renewal_assignments")
+      .select("id, customer_id")
+      .eq("campaign_id", campaignId)
+      .eq("status", "out_of_window")
+      .order("id", { ascending: true })
+      .range(from, to)
+  );
+  if (oowErr) return errorResponse(oowErr);
 
-  const reactivateIds = (oowAssignments || [])
-    .filter((a: Record<string, unknown>) => stillInWindowVehicleIds.has(a.customer_id))
-    .filter((a: Record<string, unknown>) => {
-      const owner = ownerMap.get(a.customer_id as number);
+  const reactivateIds = oowAssignments
+    .filter((a) => stillInWindowVehicleIds.has(a.customer_id))
+    .filter((a) => {
+      const owner = ownerMap.get(a.customer_id);
       return owner === undefined || owner === campaignId;
     })
-    .map((a: Record<string, unknown>) => a.id as number);
+    .map((a) => a.id);
 
   if (reactivateIds.length > 0) {
     try {
@@ -1345,8 +1429,11 @@ async function handleRefreshCampaign(supabase: SupabaseClient, body: Record<stri
     .update({ date_from: today, date_to: futureDate })
     .eq("id", campaignId);
 
-  // Update campaign counts
-  await updateCampaignCounts(supabase, campaignId);
+  try {
+    await updateCampaignCounts(supabase, campaignId);
+  } catch (countErr) {
+    return errorResponse((countErr as Error).message);
+  }
 
   // Get refreshed campaign
   const { data: refreshedCampaign } = await supabase
@@ -1406,6 +1493,7 @@ async function handleCreateCampaign(supabase: SupabaseClient, body: Record<strin
 
   const soldDealerFilter = body.sold_dealer_filter as string[] | undefined;
   const lastServiceDealerFilter = body.last_service_dealer_filter as string[] | undefined;
+  const soldDealerExclude = body.sold_dealer_exclude as string[] | undefined;
   const priorityMode = (body.priority_mode as string) || "urgency";
 
   const today = new Date().toISOString().split("T")[0];
@@ -1435,6 +1523,7 @@ async function handleCreateCampaign(supabase: SupabaseClient, body: Record<strin
     futureDate,
     soldDealerFilter,
     lastServiceDealerFilter,
+    soldDealerExclude,
   });
   if (vError) return errorResponse(vError);
 
@@ -1452,20 +1541,19 @@ async function handleCreateCampaign(supabase: SupabaseClient, body: Record<strin
     });
   }
 
-  // Create assignments
+  // Create assignments in chunks so a 10k+ window is not silently truncated
   const assignments = eligible.map((v: Record<string, unknown>) => ({
-    campaign_id: campaign.id,
-    customer_id: v.id,
+    campaign_id: campaign.id as number,
+    customer_id: v.id as number,
     status: "pending",
   }));
 
-  const { error: assignError } = await supabase
-    .from("insurance_renewal_assignments")
-    .insert(assignments);
-  if (assignError) return errorResponse(assignError.message);
-
-  // Update campaign counts
-  await updateCampaignCounts(supabase, campaign.id);
+  try {
+    await insertAssignmentsInChunks(supabase, assignments);
+    await updateCampaignCounts(supabase, campaign.id);
+  } catch (assignError) {
+    return errorResponse((assignError as Error).message);
+  }
 
   const stats = {
     raw_from_db: unique.length,
@@ -1521,15 +1609,19 @@ async function handleDeleteCampaign(supabase: SupabaseClient, body: Record<strin
   const campaignId = Number(body.campaign_id);
   if (!campaignId) return errorResponse("Missing campaign_id");
 
-  const { data: liveRows, error: liveErr } = await supabase
-    .from("insurance_renewal_assignments")
-    .select("id, status, assigned_to")
-    .eq("campaign_id", campaignId)
-    .in("status", LIVE_ASSIGNMENT_STATUSES);
-  if (liveErr) return errorResponse(liveErr.message);
+  const { rows: liveRows, error: liveErr } = await fetchAllRows<{ id: number; status: string; assigned_to: string | null }>((from, to) =>
+    supabase
+      .from("insurance_renewal_assignments")
+      .select("id, status, assigned_to")
+      .eq("campaign_id", campaignId)
+      .in("status", LIVE_ASSIGNMENT_STATUSES)
+      .order("id", { ascending: true })
+      .range(from, to)
+  );
+  if (liveErr) return errorResponse(liveErr);
 
-  const activeTelecaller = (liveRows || []).filter(
-    (r) => r.assigned_to && ACTIVE_TELECALLER_STATUSES.includes(r.status as string),
+  const activeTelecaller = liveRows.filter(
+    (r) => r.assigned_to && ACTIVE_TELECALLER_STATUSES.includes(r.status),
   );
   if (activeTelecaller.length > 0) {
     return errorResponse(
@@ -1538,7 +1630,7 @@ async function handleDeleteCampaign(supabase: SupabaseClient, body: Record<strin
     );
   }
 
-  if ((liveRows || []).length > 0 && body.force !== true) {
+  if (liveRows.length > 0 && body.force !== true) {
     return errorResponse(
       `Cannot delete: ${liveRows.length} lead(s) still in queue (pending or assigned). Use Close campaign, or pass force after clearing work.`,
       409,
@@ -1600,19 +1692,20 @@ async function handleLeaderboard(supabase: SupabaseClient, body: Record<string, 
     const todayStart = date + "T00:00:00Z";
     const todayEnd = date + "T23:59:59Z";
 
-    let assignQuery = supabase
-      .from("insurance_renewal_assignments")
-      .select("assigned_to, assigned_to_name, status, quoted_premium, call_count, updated_at, campaign_id")
-      .not("assigned_to", "is", null)
-      .gte("updated_at", todayStart)
-      .lte("updated_at", todayEnd);
-
-    if (campaignId) assignQuery = assignQuery.eq("campaign_id", campaignId);
-
-    const { data: todayAssignments } = await assignQuery;
+    const { rows: todayAssignments, error: todayErr } = await fetchAllRows<Record<string, unknown>>((from, to) => {
+      let assignQuery = supabase
+        .from("insurance_renewal_assignments")
+        .select("id, assigned_to, assigned_to_name, status, quoted_premium, call_count, updated_at, campaign_id")
+        .not("assigned_to", "is", null)
+        .gte("updated_at", todayStart)
+        .lte("updated_at", todayEnd);
+      if (campaignId) assignQuery = assignQuery.eq("campaign_id", campaignId);
+      return assignQuery.order("id", { ascending: true }).range(from, to);
+    });
+    if (todayErr) return errorResponse(todayErr);
 
     const statsMap = new Map<string, Record<string, unknown>>();
-    for (const row of todayAssignments || []) {
+    for (const row of todayAssignments) {
       const key = row.assigned_to as string;
       if (!statsMap.has(key)) {
         statsMap.set(key, {
@@ -1662,21 +1755,21 @@ async function handleLeaderboard(supabase: SupabaseClient, body: Record<string, 
 async function handleRoiDashboard(supabase: SupabaseClient, body: Record<string, unknown>) {
   const campaignId = body.campaign_id ? Number(body.campaign_id) : null;
 
-  let query = supabase
-    .from("insurance_renewal_assignments")
-    .select("status, quoted_premium, renewal_company, created_at, updated_at, campaign_id");
+  const { rows: assignments, error } = await fetchAllRows<Record<string, unknown>>((from, to) => {
+    let query = supabase
+      .from("insurance_renewal_assignments")
+      .select("id, status, quoted_premium, renewal_company, created_at, updated_at, campaign_id");
+    if (campaignId) query = query.eq("campaign_id", campaignId);
+    return query.order("id", { ascending: true }).range(from, to);
+  });
+  if (error) return errorResponse(error);
 
-  if (campaignId) query = query.eq("campaign_id", campaignId);
-
-  const { data: assignments, error } = await query;
-  if (error) return errorResponse(error.message);
-
-  const total = assignments?.length || 0;
-  const renewedViaUs = assignments?.filter((a: Record<string, unknown>) => a.status === "renewed_via_us") || [];
-  const renewedElsewhere = assignments?.filter((a: Record<string, unknown>) => a.status === "renewed_elsewhere") || [];
-  const pending = assignments?.filter((a: Record<string, unknown>) => a.status === "pending") || [];
-  const callback = assignments?.filter((a: Record<string, unknown>) => a.status === "callback_later") || [];
-  const notInterested = assignments?.filter((a: Record<string, unknown>) => a.status === "not_interested") || [];
+  const total = assignments.length;
+  const renewedViaUs = assignments.filter((a) => a.status === "renewed_via_us");
+  const renewedElsewhere = assignments.filter((a) => a.status === "renewed_elsewhere");
+  const pending = assignments.filter((a) => a.status === "pending");
+  const callback = assignments.filter((a) => a.status === "callback_later");
+  const notInterested = assignments.filter((a) => a.status === "not_interested");
 
   const totalPremium = renewedViaUs.reduce((sum: number, a: Record<string, unknown>) => sum + Number(a.quoted_premium || 0), 0);
   const avgPremium = renewedViaUs.length > 0 ? totalPremium / renewedViaUs.length : 0;
@@ -1730,24 +1823,24 @@ async function handleExpiredLeads(supabase: SupabaseClient, body: Record<string,
   const today = new Date().toISOString().split("T")[0];
 
   // Find assignments where insurance has already expired but not renewed
-  let query = supabase
-    .from("insurance_renewal_assignments")
-    .select(`
-      id, campaign_id, status, call_count, no_answer_count, call_notes,
-      all_service_data!inner(
-        id, first_name, last_name, contact_phones, model, vehicle_registration_number,
-        last_insurance_expiry_date, vehicle_sale_date, sold_dealer, last_service_dealer,
-        idv, last_insurance_comapny
-      )
-    `)
-    .in("status", ["pending", "no_answer", "callback_later", "in_progress"]);
+  const { rows: expiredSource, error } = await fetchAllRows<Record<string, unknown>>((from, to) => {
+    let query = supabase
+      .from("insurance_renewal_assignments")
+      .select(`
+        id, campaign_id, status, call_count, no_answer_count, call_notes,
+        all_service_data!inner(
+          id, first_name, last_name, contact_phones, model, vehicle_registration_number,
+          last_insurance_expiry_date, vehicle_sale_date, sold_dealer, last_service_dealer,
+          idv, last_insurance_comapny
+        )
+      `)
+      .in("status", ["pending", "no_answer", "callback_later", "in_progress"]);
+    if (campaignId) query = query.eq("campaign_id", campaignId);
+    return query.order("id", { ascending: true }).range(from, to);
+  });
+  if (error) return errorResponse(error);
 
-  if (campaignId) query = query.eq("campaign_id", campaignId);
-
-  const { data, error } = await query;
-  if (error) return errorResponse(error.message);
-
-  const expired = (data || [])
+  const expired = expiredSource
     .map((a: Record<string, unknown>) => {
       const v = a.all_service_data as unknown as Record<string, unknown>;
       const insDate = estimateInsuranceDate(
@@ -1974,32 +2067,18 @@ async function handleConquestPreview(supabase: SupabaseClient, body: Record<stri
   const today = new Date().toISOString().split("T")[0];
   const futureDate = new Date(Date.now() + windowDays * 86400000).toISOString().split("T")[0];
 
-  const { data, error } = await supabase
-    .from("all_service_data")
-    .select("*")
-    .not("contact_phones", "is", null)
-    .neq("contact_phones", "")
-    .not("last_insurance_expiry_date", "is", null)
-    .gte("last_insurance_expiry_date", today)
-    .lte("last_insurance_expiry_date", futureDate)
-    .not("sold_dealer", "in", excludeDealers);
-
-  if (error) return errorResponse(error.message);
-
-  const seenChassis = new Set<string>();
-  const unique = (data || []).filter((v: Record<string, unknown>) => {
-    const chassis = v.chassis_no as string;
-    if (!chassis) return true;
-    if (seenChassis.has(chassis)) return false;
-    seenChassis.add(chassis);
-    return true;
+  const { vehicles: unique, error } = await fetchEligibleVehiclesInWindow(supabase, {
+    today,
+    futureDate,
+    soldDealerExclude: excludeDealers,
   });
+  if (error) return errorResponse(error);
 
   return json({
     success: true,
     preview: {
       filtered_count: unique.length,
-      raw_count: data?.length || 0,
+      raw_count: unique.length,
       date_from: today,
       date_to: futureDate,
       type: "conquest",
@@ -2019,9 +2098,8 @@ async function handleConquestCreate(supabase: SupabaseClient, body: Record<strin
     ...body,
     campaign_name: campaignName,
     window_days: windowDays,
-    priority_mode: "idv_value", // Conquest campaigns prioritize high-value vehicles
-    // Note: The dealer filter would exclude Techwheels — this needs the NOT IN filter
-    // For now, the frontend can pass sold_dealer_filter with conquest dealers
+    priority_mode: "idv_value",
+    sold_dealer_exclude: excludeDealers,
   });
 }
 
@@ -2103,17 +2181,20 @@ async function handleCronDailyRefresh() {
 // ─── Send pending drip messages (called by cron) ──────────────────────────
 async function sendPendingDripMessages(supabase: SupabaseClient) {
   // Find assignments with no_answer that have WhatsApp drip enabled
-  const { data: assignments } = await supabase
-    .from("insurance_renewal_assignments")
-    .select(`
-      id, campaign_id, no_answer_count, whatsapp_sent, whatsapp_status,
-      all_service_data!inner(contact_phones, first_name, last_name, model, vehicle_registration_number, last_insurance_expiry_date, vehicle_sale_date)
-    `)
-    .eq("status", "pending")
-    .not("retry_after", "is", null)
-    .lte("retry_after", new Date().toISOString().split("T")[0]);
-
-  if (!assignments || assignments.length === 0) return;
+  const { rows: assignments, error: dripErr } = await fetchAllRows<Record<string, unknown>>((from, to) =>
+    supabase
+      .from("insurance_renewal_assignments")
+      .select(`
+        id, campaign_id, no_answer_count, whatsapp_sent, whatsapp_status,
+        all_service_data!inner(contact_phones, first_name, last_name, model, vehicle_registration_number, last_insurance_expiry_date, vehicle_sale_date)
+      `)
+      .eq("status", "pending")
+      .not("retry_after", "is", null)
+      .lte("retry_after", new Date().toISOString().split("T")[0])
+      .order("id", { ascending: true })
+      .range(from, to)
+  );
+  if (dripErr || assignments.length === 0) return;
 
   const metaConfig = await getMetaConfig(supabase);
   if (!metaConfig) return;
@@ -2312,15 +2393,23 @@ async function snapshotLeaderboard(supabase: SupabaseClient) {
     .eq("status", "active");
 
   for (const campaign of campaigns || []) {
-    const { data: assignments } = await supabase
-      .from("insurance_renewal_assignments")
-      .select("assigned_to, assigned_to_name, status, quoted_premium, call_count")
-      .eq("campaign_id", campaign.id)
-      .not("assigned_to", "is", null)
-      .gte("updated_at", today + "T00:00:00Z");
+    const { rows: assignments, error: asgnErr } = await fetchAllRows<Record<string, unknown>>((from, to) =>
+      supabase
+        .from("insurance_renewal_assignments")
+        .select("id, assigned_to, assigned_to_name, status, quoted_premium, call_count")
+        .eq("campaign_id", campaign.id)
+        .not("assigned_to", "is", null)
+        .gte("updated_at", today + "T00:00:00Z")
+        .order("id", { ascending: true })
+        .range(from, to)
+    );
+    if (asgnErr) {
+      console.error(`Leaderboard snapshot failed for campaign ${campaign.id}:`, asgnErr);
+      continue;
+    }
 
     const statsMap = new Map<string, Record<string, unknown>>();
-    for (const row of assignments || []) {
+    for (const row of assignments) {
       const key = row.assigned_to as string;
       if (!statsMap.has(key)) {
         statsMap.set(key, {
@@ -2373,33 +2462,67 @@ async function snapshotLeaderboard(supabase: SupabaseClient) {
   }
 }
 
+async function safeUpdateCampaignCounts(supabase: SupabaseClient, campaignId: number) {
+  try {
+    await updateCampaignCounts(supabase, campaignId);
+  } catch (e) {
+    console.error("updateCampaignCounts failed", campaignId, e);
+  }
+}
+
 // ─── Update campaign counts ────────────────────────────────────────────────
 async function updateCampaignCounts(supabase: SupabaseClient, campaignId: number) {
-  const { data: assignments } = await supabase
-    .from("insurance_renewal_assignments")
-    .select("status")
-    .eq("campaign_id", campaignId);
+  const completedStatuses = [
+    "renewed_via_us",
+    "renewed_elsewhere",
+    "not_interested",
+    "wrong_number",
+    "not_reachable",
+    "policy_done",
+    "already_renewed_unknown",
+  ];
 
-  const counts = {
-    total_leads: assignments?.length || 0,
-    pending_count: assignments?.filter((a: Record<string, unknown>) => a.status === "pending").length || 0,
-    in_progress_count: assignments?.filter((a: Record<string, unknown>) => a.status === "in_progress").length || 0,
-    callback_later_count: assignments?.filter((a: Record<string, unknown>) => a.status === "callback_later").length || 0,
-    quote_needed_count: assignments?.filter((a: Record<string, unknown>) => a.status === "quote_needed").length || 0,
-    policy_requested_count: assignments?.filter((a: Record<string, unknown>) => a.status === "policy_requested").length || 0,
-    quote_sent_count: assignments?.filter((a: Record<string, unknown>) => a.status === "quote_sent").length || 0,
-    renewed_count: assignments?.filter((a: Record<string, unknown>) => a.status === "renewed_via_us").length || 0,
-    policy_done_count: assignments?.filter((a: Record<string, unknown>) =>
-      isPolicyDoneStatus(a.status as string)
-    ).length || 0,
-    completed_count: assignments?.filter((a: Record<string, unknown>) =>
-      ["renewed_via_us", "renewed_elsewhere", "not_interested", "wrong_number", "not_reachable", "policy_done", "already_renewed_unknown"].includes(a.status as string)
-    ).length || 0,
-    out_of_window_count: assignments?.filter((a: Record<string, unknown>) => a.status === "out_of_window").length || 0,
-  };
+  const [
+    total_leads,
+    pending_count,
+    in_progress_count,
+    callback_later_count,
+    quote_needed_count,
+    policy_requested_count,
+    quote_sent_count,
+    renewed_count,
+    policy_done_count,
+    completed_count,
+    out_of_window_count,
+  ] = await Promise.all([
+    countAssignments(supabase, campaignId),
+    countAssignments(supabase, campaignId, "pending"),
+    countAssignments(supabase, campaignId, "in_progress"),
+    countAssignments(supabase, campaignId, "callback_later"),
+    countAssignments(supabase, campaignId, "quote_needed"),
+    countAssignments(supabase, campaignId, "policy_requested"),
+    countAssignments(supabase, campaignId, "quote_sent"),
+    countAssignments(supabase, campaignId, "renewed_via_us"),
+    countAssignments(supabase, campaignId, POLICY_DONE_STATUSES),
+    countAssignments(supabase, campaignId, completedStatuses),
+    countAssignments(supabase, campaignId, "out_of_window"),
+  ]);
 
-  await supabase
+  const { error } = await supabase
     .from("insurance_renewal_campaigns")
-    .update(counts)
+    .update({
+      total_leads,
+      pending_count,
+      in_progress_count,
+      callback_later_count,
+      quote_needed_count,
+      policy_requested_count,
+      quote_sent_count,
+      renewed_count,
+      policy_done_count,
+      completed_count,
+      out_of_window_count,
+    })
     .eq("id", campaignId);
+  if (error) throw new Error(error.message);
 }

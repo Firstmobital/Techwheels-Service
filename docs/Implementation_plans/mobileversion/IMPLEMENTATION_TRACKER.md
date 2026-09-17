@@ -1,6 +1,6 @@
 # Mobile Version Implementation Tracker
 
-Last Updated: 2026-09-15
+Last Updated: 2026-09-17
 Scope: All mobileversion plans under active execution or review
 
 Legend:
@@ -24,9 +24,10 @@ Legend:
 | MOBILE-HELP-001 | help-tickets | Employee Help Lite (mobile raise/list/reply/verify) | DN | Mobile Team + Platform | docs/Implementation_plans/mobileversion/categories/help-tickets/active/MOBILE-HELP-001_EMPLOYEE_HELP_LITE_PLAN.md | 2026-08-11 |
 | MOBILE-008 | operations | Background processing state UX plan | NS | Mobile Team | docs/Implementation_plans/mobileversion/categories/operations/active/MOBILE-008_BACKGROUND_PROCESSING_STATE_UX_PLAN.md | 2026-06-18 |
 | MOBILE-009 | redesign | Redesign parity tracker (non-Body & Paint) | Active | Mobile Team | docs/Implementation_plans/mobileversion/categories/redesign/active/MOBILE-009_MOBILE_APP_REDESIGN_PARITY_TRACKER.md | 2026-06-18 |
-| MOBILE-010 | program | Mobile program master tracker | Active | Mobile Team | docs/Implementation_plans/mobileversion/categories/program/active/MOBILE-010_MOBILE_PROGRAM_MASTER_TRACKER.md | 2026-09-15 |
+| MOBILE-010 | program | Mobile program master tracker | Active | Mobile Team | docs/Implementation_plans/mobileversion/categories/program/active/MOBILE-010_MOBILE_PROGRAM_MASTER_TRACKER.md | 2026-09-17 |
 | MOBILE-BP-RD | redesign | Body & Paint redesign consolidated plan | IP | Mobile Team | docs/Implementation_plans/mobileversion/categories/redesign/active/redesign_bodypaint_module.md | 2026-06-18 |
 | MOBILE-011 | auth | One Expo app: Login as Customer / Login as Staff | IP | Mobile Team + Platform | docs/Implementation_plans/mobileversion/categories/auth/active/MOBILE-011_CUSTOMER_STAFF_SINGLE_APP_PLAN.md | 2026-09-16 |
+| MOBILE-012 | release | Play Store + App Store publish for com.techwheels.service | IP | Mobile Team + Platform | docs/Implementation_plans/mobileversion/categories/release/active/MOBILE-012_PLAY_APP_STORE_PUBLISH_PLAN.md | 2026-09-17 |
 
 ---
 

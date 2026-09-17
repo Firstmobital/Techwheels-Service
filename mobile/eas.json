@@ -45,7 +45,13 @@
   "submit": {
     "production": {
       "ios": {
+        "appleId": "admin@firstmobital.com",
+        "appleTeamId": "LTSQS2N52R",
         "ascAppId": "6774519420"
+      },
+      "android": {
+        "track": "internal",
+        "releaseStatus": "completed"
       }
     }
   }

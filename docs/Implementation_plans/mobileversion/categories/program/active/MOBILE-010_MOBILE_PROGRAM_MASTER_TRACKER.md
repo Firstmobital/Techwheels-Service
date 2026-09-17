@@ -3,7 +3,7 @@
 Created: 2026-06-17
 Owner: Techwheels Product + Mobile Engineering + GitHub Copilot
 Status: ACTIVE (Canonical Authority)
-Last Updated: 2026-09-15
+Last Updated: 2026-09-17
 
 ---
 
@@ -43,6 +43,7 @@ If any child tracker conflicts with this file, this file wins until explicitly u
 | MOBILE-009 | `docs/Implementation_plans/mobileversion/categories/redesign/active/MOBILE-009_MOBILE_APP_REDESIGN_PARITY_TRACKER.md` | Redesign parity tracker (non-Body & Paint) | Active | High | Foundation + Auth + Shell + Reports + Operations redesign tracking |
 | MOBILE-BP-RD | `docs/Implementation_plans/mobileversion/categories/redesign/active/redesign_bodypaint_module.md` | Body & Paint redesign (consolidated) | In Progress | Critical | Single source of truth for BP-01..BP-08 redesign execution |
 | MOBILE-011 | `docs/Implementation_plans/mobileversion/categories/auth/active/MOBILE-011_CUSTOMER_STAFF_SINGLE_APP_PLAN.md` | One Expo binary: customer + staff login shells + customer RPCs | In Progress | High | Phase 0 done. Phase 1–3 implemented in `mobile/` + web cutover. Apply `20260916120000_mobile_011_customer_sessions.sql` before the next prod APK/iOS. Do not ship `bodyshop/`. |
+| MOBILE-012 | `docs/Implementation_plans/mobileversion/categories/release/active/MOBILE-012_PLAY_APP_STORE_PUBLISH_PLAN.md` | Play Store + App Store publish for `com.techwheels.service` (ASC `6774519420`) | In Progress | High | Phases 0–2 + 3c in `mobile/`. Privacy URL live. Next: screenshots + AAB/IPA submit. Do not reuse Customer/Teela bundles. |
 
 ---
 
@@ -68,6 +69,7 @@ Use: Not Started | In Progress | Blocked | Review | Done
 | M10-005 | GPS stamp parity closure | MOBILE-005 | In Progress | Mobile Team | Complete remaining phases and QA gates |
 | M10-006 | Satellite hybrid provider rollout decision | MOBILE-006 | Pending | Product + Mobile | Confirm budget/quota and backend proxy readiness |
 | M10-007 | Single-app customer + staff identity (RPCs, Expo shells) | MOBILE-011 | Not Started | Mobile + Platform | Phase 0: delete client `service_role` (no dashboard rotation); do not copy `bodyshop/` into Expo |
+| M10-008 | Play + App Store first public listing | MOBILE-012 | In Progress | Mobile + Platform | Phases 0–2 + 3a–3c done. Next: Phase 4 screenshots from a new binary, then Play internal AAB + App Store IPA. |
 
 ### 4.1) Current Session Kickoff (2026-06-18)
 

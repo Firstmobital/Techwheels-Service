@@ -14,6 +14,7 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 import { useCustomerSession } from '../../context/CustomerSessionContext'
 import { manualCheckForOTAUpdate } from '../../hooks/useMandatoryOTAUpdate'
 import { Icon } from '../ui/Icon'
+import { LegalLinks } from '../LegalLinks'
 import { VehiclePicker } from './VehiclePicker'
 
 export function CustomerScreen({
@@ -255,6 +256,9 @@ export function CustomerScreen({
           <Text className="text-slate-400 text-[11px] mt-1 text-center">
             After-Purchase Service & Bodyshop Management System · SRD v1.0
           </Text>
+          <View className="mt-3">
+            <LegalLinks compact />
+          </View>
         </View>
       </ScrollView>
 
@@ -336,6 +340,10 @@ export function CustomerScreen({
                 {checkingUpdate ? (updateStatusMsg || 'Checking for updates…') : 'Check for App Updates'}
               </Text>
             </TouchableOpacity>
+
+            <View className="mb-3">
+              <LegalLinks compact />
+            </View>
 
             {/* Logout Action */}
             <TouchableOpacity

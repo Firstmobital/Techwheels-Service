@@ -11,6 +11,7 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 import { useAuth } from '../../context/AuthContext'
 import { useRouter } from 'expo-router'
 import { getDealerSettings, saveDealerSetting } from '../../lib/api/dealerSettings'
+import { LegalLinks } from '../../components/LegalLinks'
 import * as Application from 'expo-application'
 import * as Updates from 'expo-updates'
 
@@ -335,6 +336,15 @@ export default function SettingsScreen() {
                 />
               }
             />
+          </View>
+
+          {/* ── Legal ── */}
+          <SectionHeader title="Legal" icon="📄" />
+          <View style={{ backgroundColor: C.card, marginHorizontal: 16, borderRadius: 12, borderWidth: 1, borderColor: C.border, paddingVertical: 14, paddingHorizontal: 16 }}>
+            <LegalLinks />
+            <Text style={{ fontSize: 12, color: C.sub, marginTop: 8, textAlign: 'center' }}>
+              Privacy and deletion requests use www.techwheels.in
+            </Text>
           </View>
 
           {/* ── 5. Logout ── */}

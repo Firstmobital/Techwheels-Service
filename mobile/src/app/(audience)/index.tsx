@@ -1,6 +1,7 @@
 import { Text, TouchableOpacity, View } from 'react-native'
 import { useRouter } from 'expo-router'
 import { SafeAreaView } from 'react-native-safe-area-context'
+import { LegalLinks } from '../../components/LegalLinks'
 import { useCustomerSession } from '../../context/CustomerSessionContext'
 
 export default function AudienceChooserScreen() {
@@ -45,6 +46,10 @@ export default function AudienceChooserScreen() {
             Workshop email and password for reception, floor, and reports.
           </Text>
         </TouchableOpacity>
+      </View>
+
+      <View className="px-6 mt-auto pb-6 pt-8">
+        <LegalLinks compact />
       </View>
     </SafeAreaView>
   )

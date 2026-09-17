@@ -42,3 +42,4 @@ docs/**/.DS_Store
 .expo/
 mobile/dist-android-local-check/
 mobile/dist-android-local-check-2/
+mobile/play-service-account.json
