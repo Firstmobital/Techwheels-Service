@@ -221,10 +221,17 @@ export function parseEmployeeIncentiveWriteFields(input: {
 
   const amountParsed = parseEmployeeIncentiveAmount(String(input.amount ?? ''))
   if (!amountParsed.ok) return amountParsed
+  const valueRaw = String(input.value ?? '').trim()
+  let value: number | null = null
+  if (valueRaw) {
+    const valueParsed = parseNonNegativePayrollMoney(valueRaw)
+    if (!valueParsed.ok) return valueParsed
+    value = valueParsed.value
+  }
   return {
     ok: true,
     calculationMethod: 'fixed',
-    value: null,
+    value,
     incentivePercent: null,
     amount: amountParsed.value,
   }

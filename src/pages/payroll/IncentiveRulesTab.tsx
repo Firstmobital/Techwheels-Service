@@ -318,6 +318,7 @@ function EmployeeMonthlyIncentives({
         return {
           ...row,
           calculationMethod: 'fixed',
+          incentivePercent: '',
           amount: row.amount.trim() || (derived == null ? '' : String(derived)),
         }
       }
@@ -621,7 +622,6 @@ function EmployeeMonthlyIncentives({
                         onChange={(ev) => updateRow(row.key, { value: ev.target.value })}
                         style={{ width: '90px' }}
                         inputMode="decimal"
-                        disabled={row.calculationMethod === 'fixed'}
                       />
                     )}
                   </td>

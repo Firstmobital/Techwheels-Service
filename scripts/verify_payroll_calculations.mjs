@@ -84,10 +84,17 @@ function parseEmployeeIncentiveWriteFields(input) {
   }
   const amountParsed = parseEmployeeIncentiveAmount(String(input.amount ?? ''))
   if (!amountParsed.ok) return amountParsed
+  const valueRaw = String(input.value ?? '').trim()
+  let value = null
+  if (valueRaw) {
+    const valueParsed = parseNonNegativePayrollMoney(valueRaw)
+    if (!valueParsed.ok) return valueParsed
+    value = valueParsed.value
+  }
   return {
     ok: true,
     calculationMethod: 'fixed',
-    value: null,
+    value,
     incentivePercent: null,
     amount: amountParsed.value,
   }
@@ -450,13 +457,38 @@ const tests = [
     want: 5011.49,
   },
   {
-    name: 'fixed write uses amount and nulls value/%',
+    name: 'fixed write keeps value and nulls percent',
     got: JSON.stringify(parseEmployeeIncentiveWriteFields({
-      calculationMethod: 'Fixed', value: '100000', incentivePercent: '1', amount: '5000',
+      calculationMethod: 'Fixed', value: '235281', incentivePercent: '2.13', amount: '5011.49',
+    })),
+    want: JSON.stringify({
+      ok: true, calculationMethod: 'fixed', value: 235281, incentivePercent: null, amount: 5011.49,
+    }),
+  },
+  {
+    name: 'fixed write without value keeps value null',
+    got: JSON.stringify(parseEmployeeIncentiveWriteFields({
+      calculationMethod: 'Fixed', value: '', incentivePercent: '2.13', amount: '5000',
     })),
     want: JSON.stringify({
       ok: true, calculationMethod: 'fixed', value: null, incentivePercent: null, amount: 5000,
     }),
+  },
+  {
+    name: 'Rahul Sharma switch to fixed 5000 keeps value',
+    got: JSON.stringify(parseEmployeeIncentiveWriteFields({
+      calculationMethod: 'fixed', value: '235281', incentivePercent: '', amount: '5000',
+    })),
+    want: JSON.stringify({
+      ok: true, calculationMethod: 'fixed', value: 235281, incentivePercent: null, amount: 5000,
+    }),
+  },
+  {
+    name: 'Rahul Sharma switch back to 2.13% recalculates 5011.49',
+    got: parseEmployeeIncentiveWriteFields({
+      calculationMethod: 'percentage', value: '235281', incentivePercent: '2.13', amount: '5000',
+    }).amount,
+    want: 5011.49,
   },
   {
     name: 'fixed without amount is rejected',

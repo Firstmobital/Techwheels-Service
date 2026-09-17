@@ -70,7 +70,14 @@ function parseEmployeeIncentiveWriteFields(input) {
   }
   const amountParsed = parseEmployeeIncentiveAmount(String(input.amount ?? ''))
   if (!amountParsed.ok) return amountParsed
-  return { ok: true, calculationMethod: 'fixed', value: null, incentivePercent: null, amount: amountParsed.value }
+  const valueRaw = String(input.value ?? '').trim()
+  let value = null
+  if (valueRaw) {
+    const valueParsed = parseNonNegativePayrollMoney(valueRaw)
+    if (!valueParsed.ok) return valueParsed
+    value = valueParsed.value
+  }
+  return { ok: true, calculationMethod: 'fixed', value, incentivePercent: null, amount: amountParsed.value }
 }
 
 function payrollEmployeeIncentiveFilename(monthInput) {
@@ -250,6 +257,8 @@ const preview = previewEmployeeIncentiveImport([
   row({
     'Employee Code': '3000840_999',
     'Employee Name': 'XYZ EMPLOYEE',
+    Value: 235281,
+    'Incentive %': 2.13,
     Amount: 5000,
     Type: 'Others',
     Description: 'Special incentive',
@@ -290,7 +299,7 @@ const tests = [
   { name: 'percentage does not trust excel amount', got: roundTrip?.data?.amount, want: 2000 },
   { name: 'new percentage recalculates disagreeing amount', got: preview.rows.find((r) => r.employeeCode === '3000840_188' && r.data?.incentiveType === 'Parts')?.data?.amount, want: 1000 },
   { name: 'fixed insert amount 5000', got: insertFixed?.data?.amount, want: 5000 },
-  { name: 'fixed insert has null value/%', got: insertFixed?.data?.value == null && insertFixed?.data?.incentivePercent == null, want: true },
+  { name: 'fixed insert preserves Value and nulls percent', got: insertFixed?.data?.value === 235281 && insertFixed?.data?.incentivePercent == null, want: true },
   { name: 'two rows same employee are both valid', got: sameEmployee.length, want: 2 },
   { name: 'same employee amounts 1000 + 500', got: sameEmployee.reduce((s, r) => s + Number(r.data.amount), 0), want: 1500 },
   { name: 'bad employee code', got: invalid.rows[0].message, want: 'Employee Code 12345 not found.' },
