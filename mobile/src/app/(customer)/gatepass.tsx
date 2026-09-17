@@ -184,10 +184,30 @@ export default function CustomerGatePassScreen() {
 
   // Print or Download Official PDF
   const handlePrintOrDownloadPdf = async () => {
-    if (!isValidToday) return
+    if (!isGatepassAuthorized) return
     setBusy(true)
     try {
       const html = generateOfficialGatepassHtml()
+      
+      // On Web platform:
+      if (typeof window !== 'undefined' && (window as any).print && !(window as any).ReactNativeWebView) {
+        try {
+          const printWindow = window.open('', '_blank')
+          if (printWindow) {
+            printWindow.document.write(html)
+            printWindow.document.close()
+            printWindow.focus()
+            setTimeout(() => {
+              printWindow.print()
+            }, 250)
+            return
+          }
+        } catch {
+          // fallback to expo-print
+        }
+      }
+
+      // On Native Mobile (Android & iOS):
       const printed = await Print.printToFileAsync({ html })
       if (await Sharing.isAvailableAsync()) {
         await Sharing.shareAsync(printed.uri, {
@@ -200,9 +220,13 @@ export default function CustomerGatePassScreen() {
       }
     } catch (err) {
       console.error('Print error:', err)
-      await Share.share({
-        message: `Official Vehicle Gate Pass #${asText(pass?.gate_pass_no)} for ${effectiveReg} (Job Card: ${effectiveJcNumber}). Status: Accounts Cleared. Valid Today Only.`,
-      })
+      try {
+        await Share.share({
+          message: `Official Vehicle Gate Pass #${asText(pass?.gate_pass_no)} for ${effectiveReg} (Job Card: ${effectiveJcNumber}). Status: Accounts Cleared. Dealership Clearance.`,
+        })
+      } catch {
+        // ignore
+      }
     } finally {
       setBusy(false)
     }
@@ -323,13 +347,27 @@ export default function CustomerGatePassScreen() {
                 </View>
               </View>
 
-              {/* Print / Download Action */}
-              <View className="mt-2">
+              {/* Print / Download & Share Actions */}
+              <View className="mt-2 space-y-2">
                 <PrimaryButton
-                  label={busy ? 'Preparing PDF…' : '🖨️ Print / Download Gate Pass (PDF)'}
+                  label={busy ? 'Generating Official PDF…' : '🖨️ Print / Download Gate Pass (PDF)'}
                   onPress={() => void handlePrintOrDownloadPdf()}
                   loading={busy}
                 />
+                <TouchableOpacity
+                  onPress={async () => {
+                    try {
+                      await Share.share({
+                        message: `Official Vehicle Gate Pass #${asText(pass?.gate_pass_no)} for ${effectiveReg}\nJob Card: ${effectiveJcNumber}\nInvoice: ${effectiveInvoiceNo}\nStatus: Accounts Cleared (${clearanceStatus})\nBranch: ${effectiveBranch}\nTechwheels Dealership Clearance.`,
+                      })
+                    } catch {
+                      // ignore
+                    }
+                  }}
+                  className="bg-slate-100 active:bg-slate-200 border border-slate-300 rounded-xl py-3 items-center mt-2"
+                >
+                  <Text className="text-slate-800 font-extrabold text-xs">📤 Share Gate Pass Details</Text>
+                </TouchableOpacity>
               </View>
             </CustomerCard>
           )}
