@@ -15,6 +15,7 @@ import {
   type RecoveryExportPayload,
 } from '../lib/api/bodyshopRecovery'
 import type { RepairCard } from '../lib/api/bodyshopRepair'
+import { postedDoComponentAmounts } from '../lib/api/bodyshopSettlement'
 import { supabase } from '../lib/supabase'
 
 function inr(v: number | null | undefined) {
@@ -147,9 +148,10 @@ export default function BodyshopRecoveryPage() {
       const cardIds = data.map((r) => r.repair_card_id)
       let settleMap = new Map<number, number>()
       let policyMap = new Map<number, string>()
+      const doLinesByCard = new Map<number, Parameters<typeof postedDoComponentAmounts>[0]>()
       if (cardIds.length > 0) {
         try {
-          const [settleRes, cardRes] = await Promise.all([
+          const [settleRes, cardRes, lineRes] = await Promise.all([
             supabase
               .from('bodyshop_settlements')
               .select('repair_card_id, customer_posted_amount')
@@ -158,6 +160,14 @@ export default function BodyshopRecoveryPage() {
               .from('bodyshop_repair_cards')
               .select('id, insurance_policy_no')
               .in('id', cardIds),
+            supabase
+              .from('bodyshop_settlement_lines')
+              .select('repair_card_id, party, line_type, component, amount, is_reversed')
+              .in('repair_card_id', cardIds)
+              .eq('is_reversed', false)
+              .eq('party', 'insurance')
+              .eq('line_type', 'do_component')
+              .in('component', ['MAIN', 'GST', 'TDS']),
           ])
           if (settleRes.data) {
             for (const s of settleRes.data as { repair_card_id: number; customer_posted_amount: number | null }[]) {
@@ -171,16 +181,36 @@ export default function BodyshopRecoveryPage() {
               }
             }
           }
+          if (lineRes.data) {
+            for (const line of lineRes.data as {
+              repair_card_id: number
+              party: 'insurance' | 'customer'
+              line_type: 'do_component' | 'receipt' | 'refund' | 'waiver' | 'reversal'
+              component: 'MAIN' | 'GST' | 'TDS' | 'CUSTOMER' | 'CUSTOMER_REFUND' | 'WAIVER'
+              amount: number
+              is_reversed: boolean
+            }[]) {
+              const cur = doLinesByCard.get(line.repair_card_id) ?? []
+              cur.push(line)
+              doLinesByCard.set(line.repair_card_id, cur)
+            }
+          }
         } catch (err) {
           console.warn('Failed to load extra data for recovery rows:', err)
         }
       }
       setRows(
-        data.map((r) => ({
-          ...r,
-          customer_posted_amount: settleMap.get(r.repair_card_id) ?? (r.customer_posted_amount ?? 0),
-          insurance_policy_no: policyMap.get(r.repair_card_id) ?? (r.insurance_policy_no ?? null),
-        })),
+        data.map((r) => {
+          const posted = postedDoComponentAmounts(doLinesByCard.get(r.repair_card_id) ?? [])
+          return {
+            ...r,
+            customer_posted_amount: settleMap.get(r.repair_card_id) ?? (r.customer_posted_amount ?? 0),
+            insurance_policy_no: policyMap.get(r.repair_card_id) ?? (r.insurance_policy_no ?? null),
+            basic_amount: posted.basicAmount,
+            gst_amount: posted.gstAmount,
+            tds_amount: posted.tdsAmount,
+          }
+        }),
       )
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load DO recovery')
@@ -619,6 +649,9 @@ export default function BodyshopRecoveryPage() {
                 <th>Insurer</th>
                 <th>Invoice</th>
                 <th>DO</th>
+                <th>Basic Amount</th>
+                <th>GST Amount</th>
+                <th>TDS Amount</th>
                 <th>Released</th>
                 <th>Insurance due</th>
                 <th>Customer payment (CP)</th>
@@ -657,6 +690,9 @@ export default function BodyshopRecoveryPage() {
                       <div style={{ color: 'var(--muted)', fontSize: 12 }}>{fmtDate(r.invoice_date)} · {inr(r.invoice_amount)}</div>
                     </td>
                     <td>{inr(r.do_amount)}</td>
+                    <td>{inr(r.basic_amount)}</td>
+                    <td>{inr(r.gst_amount)}</td>
+                    <td>{inr(r.tds_amount)}</td>
                     <td>{inr(r.do_released_amount)}</td>
                     <td>{inr(r.insurance_due_amount)}</td>
                     <td style={Number(r.customer_posted_amount) > 0 ? { fontWeight: 600 } : undefined}>

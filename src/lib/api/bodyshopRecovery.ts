@@ -21,6 +21,9 @@ export interface DoRecoveryRow {
   do_released_amount: number | null
   insurance_due_amount: number
   customer_posted_amount?: number | null
+  basic_amount?: number | null
+  gst_amount?: number | null
+  tds_amount?: number | null
   do_payment_status: string | null
   needs_accounts_review: boolean
 }

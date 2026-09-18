@@ -78,6 +78,39 @@ function money2(n: number | null | undefined): number | null {
   return Math.round(Number(n) * 100) / 100
 }
 
+/** Posted Main/GST/TDS that make up Released. Same filter as recalc_bodyshop_settlement. */
+export function postedDoComponentAmounts(
+  lines: Array<Pick<BodyshopSettlementLine, 'party' | 'line_type' | 'component' | 'amount' | 'is_reversed'>>,
+): { basicAmount: number | null; gstAmount: number | null; tdsAmount: number | null } {
+  let basic = 0
+  let gst = 0
+  let tds = 0
+  let hasBasic = false
+  let hasGst = false
+  let hasTds = false
+  for (const line of lines) {
+    if (line.is_reversed || line.line_type === 'reversal') continue
+    if (line.party !== 'insurance' || line.line_type !== 'do_component') continue
+    const amt = Number(line.amount)
+    if (!Number.isFinite(amt)) continue
+    if (line.component === 'MAIN') {
+      basic += amt
+      hasBasic = true
+    } else if (line.component === 'GST') {
+      gst += amt
+      hasGst = true
+    } else if (line.component === 'TDS') {
+      tds += amt
+      hasTds = true
+    }
+  }
+  return {
+    basicAmount: hasBasic ? money2(basic) : null,
+    gstAmount: hasGst ? money2(gst) : null,
+    tdsAmount: hasTds ? money2(tds) : null,
+  }
+}
+
 function asPayload(data: unknown): SettlementPayload {
   const raw = (data ?? {}) as SettlementPayload
   return {
