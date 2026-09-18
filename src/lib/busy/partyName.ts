@@ -66,22 +66,26 @@ export function parseBodyshopPartyName(account: unknown): string | null {
 export function buildNormalPartyName(input: {
   firstName: unknown
   lastName: unknown
+  account?: unknown
   branch: BusyBranch
   vehicleRegistrationNumber: unknown
 }): { partyName: string | null; missing: string[] } {
   const firstName = normalizePersonName(input.firstName)
   const lastName = normalizePersonName(input.lastName)
+  const accountName = normalizePersonName(input.account)
   const registration = normalizePersonName(input.vehicleRegistrationNumber)
+  const person = firstName && lastName
+    ? `${firstName} ${lastName}`
+    : (firstName || lastName || accountName)
   const missing: string[] = []
 
-  if (!firstName) missing.push('Customer First Name')
-  if (!lastName) missing.push('Customer Last Name')
+  if (!person) missing.push('Customer First Name')
   if (!registration) missing.push('Vehicle Registration Number')
 
   if (missing.length > 0) return { partyName: null, missing }
 
   return {
-    partyName: `${firstName} ${lastName}-${busyBranchLabelForParty(input.branch)} ${registration}`,
+    partyName: `${person}-${busyBranchLabelForParty(input.branch)} ${registration}`,
     missing: [],
   }
 }
@@ -106,7 +110,13 @@ export function resolvePartyName(input: {
     return { partyName, issue: null }
   }
 
-  const normal = buildNormalPartyName(input)
+  const normal = buildNormalPartyName({
+    firstName: input.firstName,
+    lastName: input.lastName,
+    account: input.account,
+    branch: input.branch,
+    vehicleRegistrationNumber: input.vehicleRegistrationNumber,
+  })
   if (!normal.partyName) {
     return { partyName: null, issue: `Missing ${normal.missing.join(', ')}` }
   }
@@ -132,7 +142,7 @@ export interface BusyPartyNameByVehicleLookup {
 
 /**
  * Exact BUSY Party Name from one labour row. Null when branch cannot be resolved
- * or resolvePartyName has no usable name. Does not persist; does not use account as the name.
+ * or resolvePartyName has no usable name. Does not persist.
  */
 export function partyNameFromBusyLabour(labour: BusyLabourRow): string | null {
   const branch = resolveBusyBranch(labour.sr_assigned_to)
@@ -214,9 +224,10 @@ export function buildBusyPartyNameByJobCard(labourRows: BusyLabourRow[]): BusyPa
 
 /**
  * VRN lookup key → BUSY Party Name.
- * Cancelled rows are ignored. One live row, or several live rows that all resolve
- * to the same party name, are deterministic. Conflicting names or unresolvable
- * rows are omitted (no arbitrary winner).
+ * Cancelled rows are ignored. Historical visits are grouped by the resolved
+ * BUSY party name. One name across applicable rows is deterministic.
+ * Conflicting names are omitted (no arbitrary winner). Rows that cannot
+ * resolve a name are ignored, not treated as a conflict.
  */
 export function buildBusyPartyNameByVehicleRegistration(
   labourRows: BusyLabourRow[],
@@ -234,25 +245,23 @@ export function buildBusyPartyNameByVehicleRegistration(
   const partyNameByVrn = new Map<string, string>()
   const ambiguousVrnKeys: string[] = []
   for (const [key, group] of groups) {
-    const names = group.map((labour) => partyNameFromBusyLabour(labour))
-    if (names.some((name) => !name)) {
-      ambiguousVrnKeys.push(key)
+    const names = new Set<string>()
+    for (const labour of group) {
+      const partyName = partyNameFromBusyLabour(labour)
+      if (partyName) names.add(partyName)
+    }
+    if (names.size === 1) {
+      partyNameByVrn.set(key, [...names][0])
       continue
     }
-    const unique = new Set(names as string[])
-    if (unique.size !== 1) {
-      ambiguousVrnKeys.push(key)
-      continue
-    }
-    partyNameByVrn.set(key, names[0] as string)
+    if (names.size > 1) ambiguousVrnKeys.push(key)
   }
   return { partyNameByVrn, ambiguousVrnKeys }
 }
 
 /**
- * Mechanical Busy payment Account CR: unique invoice, else unique JC, else
- * deterministic VRN. Does not use Accounts owner/branch/VRN construction.
- * Blank when no map has a usable value.
+ * Mechanical Busy payment Account CR: VRN first, then invoice, then unique JC.
+ * Does not use Accounts owner/branch/VRN construction.
  */
 export function resolveBusyPaymentAccountCr(input: {
   invoiceNumber?: unknown
@@ -262,6 +271,11 @@ export function resolveBusyPaymentAccountCr(input: {
   busyPartyNameByJc?: ReadonlyMap<string, string>
   busyPartyNameByVrn?: ReadonlyMap<string, string>
 }): string {
+  const vrnKey = busyVehicleRegistrationLookupKey(input.vehicleRegistration)
+  if (vrnKey && input.busyPartyNameByVrn) {
+    const byVrn = input.busyPartyNameByVrn.get(vrnKey)
+    if (byVrn) return byVrn
+  }
   const invoiceKey = busyInvoiceLookupKey(input.invoiceNumber)
   if (invoiceKey && input.busyPartyNameByInvoice) {
     const byInvoice = input.busyPartyNameByInvoice.get(invoiceKey)
@@ -271,11 +285,6 @@ export function resolveBusyPaymentAccountCr(input: {
   if (jcKey && input.busyPartyNameByJc) {
     const byJc = input.busyPartyNameByJc.get(jcKey)
     if (byJc) return byJc
-  }
-  const vrnKey = busyVehicleRegistrationLookupKey(input.vehicleRegistration)
-  if (vrnKey && input.busyPartyNameByVrn) {
-    const byVrn = input.busyPartyNameByVrn.get(vrnKey)
-    if (byVrn) return byVrn
   }
   return ''
 }

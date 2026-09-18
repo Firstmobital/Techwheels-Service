@@ -1245,6 +1245,14 @@ export function buildMechanicalBusyPaymentExportRows(input: {
 
   for (const caseRow of input.cases) {
     const caseLines = sortAccountsMechanicalPaymentLines(linesByCase.get(caseRow.reception_entry_id) ?? [])
+    const accountCr = resolveBusyPaymentAccountCr({
+      invoiceNumber: caseRow.invoice_number,
+      jcNumber: caseRow.jc_number,
+      vehicleRegistration: caseRow.reg_number,
+      busyPartyNameByInvoice: input.busyPartyNameByInvoice,
+      busyPartyNameByJc: input.busyPartyNameByJc,
+      busyPartyNameByVrn: input.busyPartyNameByVrn,
+    })
     for (const line of caseLines) {
       const mode = normalizeAccountsPaymentMode(line.payment_mode)
       const accountDr = busyPaymentAccountDr(mode)
@@ -1283,14 +1291,6 @@ export function buildMechanicalBusyPaymentExportRows(input: {
         continue
       }
 
-      const accountCr = resolveBusyPaymentAccountCr({
-        invoiceNumber: caseRow.invoice_number,
-        jcNumber: caseRow.jc_number,
-        vehicleRegistration: caseRow.reg_number,
-        busyPartyNameByInvoice: input.busyPartyNameByInvoice,
-        busyPartyNameByJc: input.busyPartyNameByJc,
-        busyPartyNameByVrn: input.busyPartyNameByVrn,
-      })
       if (!accountCr) unresolvedAccountCrCount += 1
 
       const amount = Number(line.amount)

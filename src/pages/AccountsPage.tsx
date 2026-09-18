@@ -929,7 +929,7 @@ export default function AccountsPage() {
       const notices: string[] = []
       if (result.unresolvedAccountCrCount > 0) {
         notices.push(
-          `Account CR left blank for ${result.unresolvedAccountCrCount} receipt(s); no unique BUSY party name by invoice, job card, or vehicle registration`,
+          `Account CR left blank for ${result.unresolvedAccountCrCount} receipt(s); no unique BUSY party name by vehicle registration, invoice, or job card`,
         )
       }
       if (result.skippedUnsupportedCount > 0) {

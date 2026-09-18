@@ -128,6 +128,19 @@ test('11. Normal Party Name generation', () => {
   assert.equal(party.partyName, 'RAMESH KUMAR-SITAPURA RJ14AB1234')
 })
 
+test('11b. Normal Party Name uses DMS account when first and last are missing', () => {
+  const party = resolvePartyName({
+    classification: 'Normal',
+    firstName: null,
+    lastName: null,
+    account: 'LUCKY TOUR AND TRAVELS',
+    branch: 'Sitapura',
+    vehicleRegistrationNumber: 'RJ45CK1176',
+  })
+  assert.equal(party.partyName, 'LUCKY TOUR AND TRAVELS-SITAPURA RJ45CK1176')
+  assert.equal(party.issue, null)
+})
+
 test('12. PDI => CASH AT SITAPURA', () => {
   assert.equal(classifyBusyInvoice('PDI', 'ICICI C/O X'), 'PDI')
   const party = resolvePartyName({

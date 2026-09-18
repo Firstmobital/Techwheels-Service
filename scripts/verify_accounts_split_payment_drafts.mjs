@@ -9,6 +9,8 @@ import {
   busyInvoiceLookupKey,
   busyJobCardLookupKey,
   busyLabourInvoiceInValues,
+  busyLabourVrnInValues,
+  busyVehicleRegistrationLookupKey,
   isCancelledInvoiceStatus,
 } from '../src/lib/busy/eligibility.ts'
 import {
@@ -1617,6 +1619,12 @@ console.log('verify_accounts_split_payment_drafts: voucher export A–L checks p
   const mixedCase = busyLabourInvoiceInValues([' imbtai2627007397 '])
   assert(mixedCase.includes('imbtai2627007397') && mixedCase.includes('IMBTAI2627007397'), '8: trim + case variants for IN list')
 
+  const vrnIn = busyLabourVrnInValues([' rj 45 ck 1176 '])
+  assert(vrnIn.includes('rj 45 ck 1176'), 'VRN IN keeps trimmed original')
+  assert(vrnIn.includes('RJ 45 CK 1176'), 'VRN IN adds uppercase')
+  assert(vrnIn.includes('RJ45CK1176'), 'VRN IN adds compact lookup key for spaced registration')
+  assert(busyVehicleRegistrationLookupKey('rj 45 ck 1176') === 'RJ45CK1176', 'VRN lookup key strips spaces and uppercases')
+
   const cashFilter = buildMechanicalAccountsExportRows({
     cases: [provenCase],
     lines: [provenLine, { ...provenLine, id: 42, payment_mode: 'upi', amount: 103.33, voucher_no: 'JApp/26-27/0001' }],
@@ -1731,6 +1739,14 @@ function buildMechanicalBusyPaymentExportRows({
   let unresolvedAccountCrCount = 0
   for (const caseRow of cases) {
     const caseLines = sortAccountsMechanicalPaymentLines(linesByCase.get(caseRow.reception_entry_id) ?? [])
+    const accountCr = resolveBusyPaymentAccountCr({
+      invoiceNumber: caseRow.invoice_number,
+      jcNumber: caseRow.jc_number,
+      vehicleRegistration: caseRow.reg_number,
+      busyPartyNameByInvoice,
+      busyPartyNameByJc,
+      busyPartyNameByVrn,
+    })
     for (const line of caseLines) {
       const mode = normalizeAccountsPaymentMode(line.payment_mode)
       const accountDr = busyPaymentAccountDr(mode)
@@ -1766,14 +1782,6 @@ function buildMechanicalBusyPaymentExportRows({
         }
         continue
       }
-      const accountCr = resolveBusyPaymentAccountCr({
-        invoiceNumber: caseRow.invoice_number,
-        jcNumber: caseRow.jc_number,
-        vehicleRegistration: caseRow.reg_number,
-        busyPartyNameByInvoice,
-        busyPartyNameByJc,
-        busyPartyNameByVrn,
-      })
       if (!accountCr) unresolvedAccountCrCount += 1
       const amount = Number(line.amount)
       rows.push({
@@ -2135,21 +2143,33 @@ function buildMechanicalBusyPaymentExportRows({
   const jcOnlyLookup = buildBusyPartyNameByJobCard([labour({ id: 11, invoice_status: 'New' })])
   assert(jcOnlyLookup.partyNameByJc.get(jcKey) === busyName, '4: unique JC labour has BUSY name')
   const jcOnlyExport = buildMechanicalBusyPaymentExportRows({
-    cases: [{ ...provenCase, invoice_number: null }],
+    cases: [{ ...provenCase, invoice_number: null, reg_number: null }],
     lines: [provenLines[0]],
     busyPartyNameByInvoice: new Map(),
     busyPartyNameByJc: jcOnlyLookup.partyNameByJc,
   })
-  assert(jcOnlyExport.rows[0]['Account CR'] === busyName, `4: unique JC match, got ${jcOnlyExport.rows[0]['Account CR']}`)
+  assert(jcOnlyExport.rows[0]['Account CR'] === busyName, `7: unique JC match when VRN and invoice unavailable, got ${jcOnlyExport.rows[0]['Account CR']}`)
   assert(jcOnlyExport.rows[0].voucher_no === 'RApp/26-27/0001', '9: JC fallback keeps voucher')
   assert(
     resolveBusyPaymentAccountCr({
       invoiceNumber: provenCase.invoice_number,
       jcNumber: provenCase.jc_number,
+      vehicleRegistration: null,
       busyPartyNameByInvoice: provenLookup.partyNameByInvoice,
       busyPartyNameByJc: new Map([[jcKey, 'SHOULD-NOT-USE']]),
     }) === busyName,
-    'invoice match wins over JC',
+    '6: invoice fallback wins over JC when VRN is unavailable',
+  )
+  assert(
+    resolveBusyPaymentAccountCr({
+      invoiceNumber: provenCase.invoice_number,
+      jcNumber: provenCase.jc_number,
+      vehicleRegistration: 'RJ45CV5192',
+      busyPartyNameByInvoice: new Map([['IMBTAI2627007397', 'INVOICE-SHOULD-NOT-WIN']]),
+      busyPartyNameByJc: new Map([[jcKey, 'JC-SHOULD-NOT-WIN']]),
+      busyPartyNameByVrn: new Map([['RJ45CV5192', busyName]]),
+    }) === busyName,
+    'VRN is primary over invoice and JC',
   )
 
   const livePlusCancelled = [
@@ -2236,16 +2256,18 @@ function buildMechanicalBusyPaymentExportRows({
     invoice_number: 'IMBTAI-CK1176',
     job_card_number: 'JC-DMS-CK1176',
     vehicle_registration_number: 'RJ45CK1176',
-    first_name: 'VEER',
-    last_name: 'SINGH',
+    first_name: null,
+    last_name: null,
+    account: 'LUCKY TOUR AND TRAVELS',
     invoice_status: 'New',
   })
   const vrnLookup = buildBusyPartyNameByVehicleRegistration([vrnLabour])
-  assert(vrnLookup.partyNameByVrn.get('RJ45CK1176') === 'VEER SINGH-SITAPURA RJ45CK1176', `3: unique VRN party, got ${vrnLookup.partyNameByVrn.get('RJ45CK1176')}`)
+  assert(vrnLookup.partyNameByVrn.get('RJ45CK1176') === 'LUCKY TOUR AND TRAVELS-SITAPURA RJ45CK1176', `1: unique VRN party from DMS account, got ${vrnLookup.partyNameByVrn.get('RJ45CK1176')}`)
   const vrnLines = [
-    { ...provenLines[0], id: 61, payment_mode: 'cash', amount: 16000, voucher_no: 'RApp/26-27/0037' },
-    { ...provenLines[0], id: 62, payment_mode: 'upi', amount: 16000, voucher_no: 'JApp/26-27/0219' },
+    { ...provenLines[0], id: 61, payment_mode: 'cash', amount: 29000, voucher_no: 'RApp/26-27/0037' },
+    { ...provenLines[0], id: 62, payment_mode: 'upi', amount: 3000, voucher_no: 'JApp/26-27/0219' },
   ]
+  const luckyName = 'LUCKY TOUR AND TRAVELS-SITAPURA RJ45CK1176'
   const vrnExport = buildMechanicalBusyPaymentExportRows({
     cases: [vrnOnlyCase],
     lines: vrnLines,
@@ -2253,20 +2275,28 @@ function buildMechanicalBusyPaymentExportRows({
     busyPartyNameByJc: new Map(),
     busyPartyNameByVrn: vrnLookup.partyNameByVrn,
   })
-  assert(vrnExport.rows.length === 2, '3: invoice-less cash+UPI both exported')
-  assert(vrnExport.rows.every((r) => r['Account CR'] === 'VEER SINGH-SITAPURA RJ45CK1176'), '3: unique VRN fallback used for both receipts')
-  assert(vrnExport.rows[0].voucher_no === 'RApp/26-27/0037', '9: cash VRN voucher unchanged')
-  assert(vrnExport.rows[1].voucher_no === 'JApp/26-27/0219', '9: upi VRN voucher unchanged')
-  assert(vrnExport.unresolvedAccountCrCount === 0, '3: unique VRN is resolved')
+  assert(vrnExport.rows.length === 2, '4: invoice-less cash+UPI both exported')
+  assert(vrnExport.rows.every((r) => r['Account CR'] === luckyName), '1/4/5/9: unique VRN used for both receipts')
+  assert(vrnExport.rows.every((r) => r['Account CR'] !== 'VEER SINGH-SITAPURA RJ45CK1176'), '8: Accounts owner_name is not used')
+  assert(vrnExport.rows[0].voucher_no === 'RApp/26-27/0037', '11: cash VRN voucher unchanged')
+  assert(vrnExport.rows[1].voucher_no === 'JApp/26-27/0219', '11: upi VRN voucher unchanged')
+  assert(vrnExport.unresolvedAccountCrCount === 0, '1: unique VRN is resolved')
   assert(
     resolveBusyPaymentAccountCr({
       invoiceNumber: null,
       jcNumber: 'JC-UNKNOWN',
       vehicleRegistration: 'rj 45 ck 1176',
       busyPartyNameByVrn: vrnLookup.partyNameByVrn,
-    }) === 'VEER SINGH-SITAPURA RJ45CK1176',
-    '3: VRN lookup ignores spacing/case',
+    }) === luckyName,
+    '5: VRN lookup ignores spacing/case and JC mismatch',
   )
+
+  const mixedHistory = buildBusyPartyNameByVehicleRegistration([
+    labour({ id: 91, invoice_number: 'IMBTAI-OLD', job_card_number: 'JC-OLD', vehicle_registration_number: 'RJ45CK1176', first_name: null, last_name: null, account: null, invoice_status: 'New' }),
+    labour({ id: 92, invoice_number: 'IMBTAI-CK1176', job_card_number: 'JC-DMS-CK1176', vehicle_registration_number: 'RJ45CK1176', first_name: null, last_name: null, account: 'LUCKY TOUR AND TRAVELS', invoice_status: 'New' }),
+  ])
+  assert(mixedHistory.partyNameByVrn.get('RJ45CK1176') === luckyName, '2: unresolvable historical row does not hide the common BUSY name')
+  assert(mixedHistory.ambiguousVrnKeys.length === 0, '2: null names are ignored, not a conflict')
 
   const sameNameVrn = buildBusyPartyNameByVehicleRegistration([
     labour({ id: 71, invoice_number: 'IMBTAI-A', job_card_number: 'JC-A1', vehicle_registration_number: 'RJ45CK1176', first_name: 'VEER', last_name: 'SINGH', invoice_status: 'New' }),
@@ -2314,7 +2344,7 @@ function buildMechanicalBusyPaymentExportRows({
     lines: [{ ...vrnLines[0], id: 63, payment_mode: 'card', amount: 32000, voucher_no: 'JApp/26-27/0300' }],
     busyPartyNameByVrn: vrnLookup.partyNameByVrn,
   })
-  assert(cardVrn.rows[0]['Account CR'] === 'VEER SINGH-SITAPURA RJ45CK1176', '8: card uses the same VRN resolver')
+  assert(cardVrn.rows[0]['Account CR'] === luckyName, '10: card uses the same VRN resolver')
   assert(cardVrn.rows[0].voucher_no === 'JApp/26-27/0300', '9: card voucher unchanged')
 
   console.log('verify_accounts_split_payment_drafts: BUSY payment export checks passed')
