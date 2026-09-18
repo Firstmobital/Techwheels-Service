@@ -5,7 +5,6 @@ import {
   getBodyshopSettlement,
   mergeSettlementCard,
   postCustomerAmount,
-  postedDoComponentAmounts,
   postDoRelease,
   reverseSettlementLine,
   settlementRpcError,
@@ -365,7 +364,6 @@ export function BodyshopSettlementPanel({
       ((Number(header?.do_released_amount ?? 0) || 0) - (Number(header?.do_amount ?? card.do_amount ?? 0) || 0)) * 100,
     ) / 100,
   )
-  const postedDo = postedDoComponentAmounts(lines)
 
   const canReverseLine = (line: { is_reversed: boolean; line_type: string; party: string }) => {
     if (line.is_reversed || line.line_type === 'reversal') return false
@@ -542,24 +540,6 @@ export function BodyshopSettlementPanel({
           <span>Auto from posted Main + GST + TDS — not a dropdown</span>
         </div>
         <div className="brx-form-grid-2" style={{ marginBottom: 12 }}>
-          <div className="brx-field">
-            <span className="brx-field-label">Basic Amount</span>
-            <div className="inp" style={{ display: 'flex', alignItems: 'center', background: 'var(--bg)', fontWeight: 600 }}>
-              {inr(postedDo.basicAmount)}
-            </div>
-          </div>
-          <div className="brx-field">
-            <span className="brx-field-label">GST Amount</span>
-            <div className="inp" style={{ display: 'flex', alignItems: 'center', background: 'var(--bg)', fontWeight: 600 }}>
-              {inr(postedDo.gstAmount)}
-            </div>
-          </div>
-          <div className="brx-field">
-            <span className="brx-field-label">TDS Amount</span>
-            <div className="inp" style={{ display: 'flex', alignItems: 'center', background: 'var(--bg)', fontWeight: 600 }}>
-              {inr(postedDo.tdsAmount)}
-            </div>
-          </div>
           <div className="brx-field">
             <span className="brx-field-label">Insurance due</span>
             <div className="inp" style={{ display: 'flex', alignItems: 'center', background: 'var(--bg)', fontWeight: 600 }}>
