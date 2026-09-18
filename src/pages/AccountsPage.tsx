@@ -68,6 +68,8 @@ import { settlementStatusLabel } from '../lib/api/bodyshopSettlement'
 import { issueAccountsGatePass, rememberIssuedGatePass } from '../lib/gatepass'
 import {
   buildBusyPartyNameByInvoice,
+  buildBusyPartyNameByJobCard,
+  dedupeBusyLabourRows,
   fetchBusyLabourRowsByInvoiceNumbers,
   fetchBusyLabourRowsByJobCardNumbers,
 } from '../lib/busy'
@@ -873,13 +875,15 @@ export default function AccountsPage() {
         fetchBusyLabourRowsByInvoiceNumbers(mechanicalExportInvoiceNumbers(searchedMech)),
         fetchBusyLabourRowsByJobCardNumbers(mechanicalExportJcNumbers(searchedMech)),
       ])
-      const labour = [...labourByInvoice, ...labourByJc]
-      const { partyNameByInvoice, duplicateInvoiceKeys, invoiceDateByInvoice } = buildBusyPartyNameByInvoice(labour)
+      const labour = dedupeBusyLabourRows([...labourByInvoice, ...labourByJc])
+      const { partyNameByInvoice, invoiceDateByInvoice } = buildBusyPartyNameByInvoice(labour)
+      const { partyNameByJc } = buildBusyPartyNameByJobCard(labour)
       const result = buildMechanicalBusyPaymentExportRows({
         cases: searchedMech,
         lines: mechPayLines,
         paymentModeFilter: mechPaymentModeFilter,
         busyPartyNameByInvoice: partyNameByInvoice,
+        busyPartyNameByJc: partyNameByJc,
         dmsInvoiceDateByInvoice: invoiceDateByInvoice,
         dmsInvoiceDateByJc: uniqueDmsInvoiceDateByJc(labour),
       })
@@ -917,9 +921,9 @@ export default function AccountsPage() {
       XLSX.utils.book_append_sheet(wb, sheet, 'Payments')
       XLSX.writeFile(wb, 'accounts-mechanical-busy-payments.xlsx')
       const notices: string[] = []
-      if (duplicateInvoiceKeys.length > 0) {
+      if (result.unresolvedAccountCrCount > 0) {
         notices.push(
-          `Duplicate BUSY labour invoice ${duplicateInvoiceKeys.join(', ')}; Accounts fallback used for Account CR`,
+          `Account CR left blank for ${result.unresolvedAccountCrCount} receipt(s); no unique BUSY party name by invoice or job card`,
         )
       }
       if (result.skippedUnsupportedCount > 0) {

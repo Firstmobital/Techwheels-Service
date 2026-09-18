@@ -7,9 +7,17 @@ import { readFileSync } from 'node:fs'
 import {
   BUSY_LABOUR_INVOICE_IN_CHUNK,
   busyInvoiceLookupKey,
+  busyJobCardLookupKey,
   busyLabourInvoiceInValues,
+  isCancelledInvoiceStatus,
 } from '../src/lib/busy/eligibility.ts'
-import { PDI_PARTY_NAME, buildBusyPartyNameByInvoice } from '../src/lib/busy/partyName.ts'
+import {
+  PDI_PARTY_NAME,
+  buildBusyPartyNameByInvoice,
+  buildBusyPartyNameByJobCard,
+  dedupeBusyLabourRows,
+  resolveBusyPaymentAccountCr,
+} from '../src/lib/busy/partyName.ts'
 
 
 function roundAccountsMoney(n) {
@@ -1677,11 +1685,32 @@ function mechanicalBusyPaymentExportDateYmd({ paymentReceivedDate, invoiceDate, 
   )
 }
 
+function uniqueDmsInvoiceDateByJc(labourRows) {
+  const groups = new Map()
+  for (const row of labourRows) {
+    const jc = busyJobCardLookupKey(row.job_card_number)
+    const invoiceNo = String(row.invoice_number ?? '').trim()
+    const invoiceDate = mechanicalInvoiceDateYmd(row.invoice_date)
+    if (!jc || !invoiceNo || !invoiceDate) continue
+    if (isCancelledInvoiceStatus(row.invoice_status)) continue
+    const list = groups.get(jc) ?? []
+    list.push(invoiceDate)
+    groups.set(jc, list)
+  }
+  const byJc = new Map()
+  for (const [jc, dates] of groups) {
+    if (dates.length !== 1) continue
+    byJc.set(jc, dates[0])
+  }
+  return byJc
+}
+
 function buildMechanicalBusyPaymentExportRows({
   cases,
   lines,
   paymentModeFilter = 'all',
   busyPartyNameByInvoice,
+  busyPartyNameByJc,
   dmsInvoiceDateByInvoice,
   dmsInvoiceDateByJc,
 }) {
@@ -1697,6 +1726,7 @@ function buildMechanicalBusyPaymentExportRows({
   let missingVoucherCount = 0
   let missingEligibleVoucherCount = 0
   let missingDateCount = 0
+  let unresolvedAccountCrCount = 0
   for (const caseRow of cases) {
     const caseLines = sortAccountsMechanicalPaymentLines(linesByCase.get(caseRow.reception_entry_id) ?? [])
     for (const line of caseLines) {
@@ -1708,7 +1738,7 @@ function buildMechanicalBusyPaymentExportRows({
       }
       if (wanted && mode !== wanted) continue
       const key = busyInvoiceLookupKey(caseRow.invoice_number)
-      const jcKey = String(caseRow.jc_number ?? '').trim().toUpperCase()
+      const jcKey = busyJobCardLookupKey(caseRow.jc_number)
       const dmsInvoiceDate = (
         (key && dmsInvoiceDateByInvoice ? dmsInvoiceDateByInvoice.get(key) : undefined)
         || (jcKey && dmsInvoiceDateByJc ? dmsInvoiceDateByJc.get(jcKey) : undefined)
@@ -1734,24 +1764,33 @@ function buildMechanicalBusyPaymentExportRows({
         }
         continue
       }
-      const busyName = key && busyPartyNameByInvoice ? busyPartyNameByInvoice.get(key) : null
+      const accountCr = resolveBusyPaymentAccountCr({
+        invoiceNumber: caseRow.invoice_number,
+        jcNumber: caseRow.jc_number,
+        busyPartyNameByInvoice,
+        busyPartyNameByJc,
+      })
+      if (!accountCr) unresolvedAccountCrCount += 1
       const amount = Number(line.amount)
       rows.push({
         'Invoice date': exportDate,
         voucher_no: voucherNo,
         'Account DR': accountDr,
-        'Account CR': busyName || buildAccountsExportAccountName({
-          ownerName: caseRow.owner_name,
-          branch: caseRow.branch,
-          regNumber: caseRow.reg_number,
-        }),
+        'Account CR': accountCr,
         'Amount DR': amount,
         'Amount CR': amount,
         'Reference no': line.reference ?? '',
       })
     }
   }
-  return { rows, skippedUnsupportedCount, missingVoucherCount, missingEligibleVoucherCount, missingDateCount }
+  return {
+    rows,
+    skippedUnsupportedCount,
+    missingVoucherCount,
+    missingEligibleVoucherCount,
+    missingDateCount,
+    unresolvedAccountCrCount,
+  }
 }
 
 {
@@ -1960,6 +1999,8 @@ function buildMechanicalBusyPaymentExportRows({
   assert(split.rows[2]['Account DR'] === 'CREDIT CARD A/C' && split.rows[2]['Amount DR'] === 500, 'C: card 500')
   assert(split.rows[2]['Reference no'] === '', 'G: empty reference blank')
   assert(split.rows.every((r) => r['Amount DR'] === r['Amount CR']), '6: Amount DR == Amount CR')
+  assert(split.rows.every((r) => r['Account CR'] === ''), 'split without BUSY labour leaves Account CR blank')
+  assert(!split.rows.some((r) => String(r['Account CR']).includes('RAMESH KUMAR')), 'payment export does not reconstruct owner_name')
   assert(!split.rows.some((r) => r['Amount DR'] === 10000), 'H: must not use header 10000')
 
   const splitDates = buildMechanicalBusyPaymentExportRows({
@@ -2047,6 +2088,137 @@ function buildMechanicalBusyPaymentExportRows({
   assert(excelUnchanged.length === 2, 'regression: Export Excel still includes other-mode receipt')
   assert(excelUnchanged[0].account_name === 'JAGDISH NARAYAN YADAV-SITAPURA RJ45CV5192', 'regression: Excel account_name still BUSY')
   assert(excelUnchanged[0].voucher_no === 'RApp/26-27/0001', 'regression: Excel voucher unchanged')
+
+  const busyName = 'JAGDISH NARAYAN YADAV-SITAPURA RJ45CV5192'
+  const ownerFallback = 'NARAYAN YADAV YADAV-SITAPURA RJ45CV5192'
+  const jcKey = 'JC-MBTPLT-JP1-2627-007048'
+  const sameRow = labour({ id: 7397, invoice_status: 'New' })
+  const concatCopies = [sameRow, { ...sameRow }]
+  assert(
+    buildBusyPartyNameByInvoice(concatCopies).duplicateInvoiceKeys.includes('IMBTAI2627007397'),
+    'concat copies of one DMS row look like a duplicate invoice before dedupe',
+  )
+  assert(!uniqueDmsInvoiceDateByJc(concatCopies).has(jcKey), 'concat copies hide unique JC date before dedupe')
+  const dedupedLabour = dedupeBusyLabourRows(concatCopies)
+  assert(dedupedLabour.length === 1, `dedupe keeps one DMS row, got ${dedupedLabour.length}`)
+  const dedupedLookup = buildBusyPartyNameByInvoice(dedupedLabour)
+  const dedupedJc = buildBusyPartyNameByJobCard(dedupedLabour)
+  assert(dedupedLookup.duplicateInvoiceKeys.length === 0, 'deduped labour is a unique invoice')
+  assert(dedupedLookup.partyNameByInvoice.get('IMBTAI2627007397') === busyName, '1: concat+dedupe keeps BUSY party name')
+  assert(uniqueDmsInvoiceDateByJc(dedupedLabour).get(jcKey) === '2026-09-11', '10: unique JC date works after dedupe')
+
+  const concatExport = buildMechanicalBusyPaymentExportRows({
+    cases: [provenCase],
+    lines: [provenLines[0]],
+    busyPartyNameByInvoice: dedupedLookup.partyNameByInvoice,
+    busyPartyNameByJc: dedupedJc.partyNameByJc,
+    dmsInvoiceDateByInvoice: dedupedLookup.invoiceDateByInvoice,
+    dmsInvoiceDateByJc: uniqueDmsInvoiceDateByJc(dedupedLabour),
+  })
+  assert(concatExport.rows[0]['Account CR'] === busyName, `2: payment export uses BUSY not owner fallback, got ${concatExport.rows[0]['Account CR']}`)
+  assert(concatExport.rows[0]['Account CR'] !== ownerFallback, '2: owner fallback is not used')
+  assert(concatExport.rows[0].voucher_no === 'RApp/26-27/0001', '9: voucher_no unchanged after concat dedupe')
+  assert(concatExport.unresolvedAccountCrCount === 0, 'concat+dedupe resolves Account CR')
+
+  const uniqueInvoice = buildMechanicalBusyPaymentExportRows({
+    cases: [provenCase],
+    lines: [provenLines[0]],
+    busyPartyNameByInvoice: provenLookup.partyNameByInvoice,
+  })
+  assert(uniqueInvoice.rows[0]['Account CR'] === busyName, '3: unique invoice match')
+  assert(uniqueInvoice.rows[0].voucher_no === 'RApp/26-27/0001', '9: unique invoice keeps voucher')
+
+  const jcOnlyLookup = buildBusyPartyNameByJobCard([labour({ id: 11, invoice_status: 'New' })])
+  assert(jcOnlyLookup.partyNameByJc.get(jcKey) === busyName, '4: unique JC labour has BUSY name')
+  const jcOnlyExport = buildMechanicalBusyPaymentExportRows({
+    cases: [{ ...provenCase, invoice_number: null }],
+    lines: [provenLines[0]],
+    busyPartyNameByInvoice: new Map(),
+    busyPartyNameByJc: jcOnlyLookup.partyNameByJc,
+  })
+  assert(jcOnlyExport.rows[0]['Account CR'] === busyName, `4: unique JC match, got ${jcOnlyExport.rows[0]['Account CR']}`)
+  assert(jcOnlyExport.rows[0].voucher_no === 'RApp/26-27/0001', '9: JC fallback keeps voucher')
+  assert(
+    resolveBusyPaymentAccountCr({
+      invoiceNumber: provenCase.invoice_number,
+      jcNumber: provenCase.jc_number,
+      busyPartyNameByInvoice: provenLookup.partyNameByInvoice,
+      busyPartyNameByJc: new Map([[jcKey, 'SHOULD-NOT-USE']]),
+    }) === busyName,
+    'invoice match wins over JC',
+  )
+
+  const livePlusCancelled = [
+    labour({ id: 21, invoice_status: 'New' }),
+    labour({ id: 22, invoice_status: 'Cancelled', invoice_number: 'IMBTAI-OLD' }),
+  ]
+  assert(
+    buildBusyPartyNameByJobCard(livePlusCancelled).partyNameByJc.get(jcKey) === busyName,
+    '4: cancelled sibling does not make JC ambiguous',
+  )
+
+  const ambiguousLabour = [
+    labour({ id: 31, job_card_number: 'JC-A', invoice_status: 'New' }),
+    labour({ id: 32, job_card_number: 'JC-B', invoice_status: 'New' }),
+  ]
+  const ambiguousInvoice = buildBusyPartyNameByInvoice(ambiguousLabour)
+  const ambiguousJc = buildBusyPartyNameByJobCard(ambiguousLabour)
+  assert(ambiguousInvoice.duplicateInvoiceKeys.includes('IMBTAI2627007397'), '5: duplicate invoice reported')
+  assert(!ambiguousInvoice.partyNameByInvoice.has('IMBTAI2627007397'), '5: no arbitrary invoice party')
+  const ambiguousExport = buildMechanicalBusyPaymentExportRows({
+    cases: [provenCase],
+    lines: [provenLines[0]],
+    busyPartyNameByInvoice: ambiguousInvoice.partyNameByInvoice,
+    busyPartyNameByJc: ambiguousJc.partyNameByJc,
+  })
+  assert(ambiguousExport.rows[0]['Account CR'] === '', '5: ambiguous invoice leaves Account CR blank')
+  assert(ambiguousExport.unresolvedAccountCrCount === 1, '5: unresolved warning count')
+  assert(ambiguousExport.rows[0]['Account CR'] !== ownerFallback, '5: no owner-name fallback')
+  assert(ambiguousExport.rows[0].voucher_no === 'RApp/26-27/0001', '9: ambiguous path keeps voucher')
+
+  const missingLabour = buildMechanicalBusyPaymentExportRows({
+    cases: [provenCase],
+    lines: [provenLines[0]],
+  })
+  assert(missingLabour.rows[0]['Account CR'] === '', '6: missing BUSY labour leaves Account CR blank')
+  assert(missingLabour.unresolvedAccountCrCount === 1, '6: missing labour produces warning count')
+  assert(missingLabour.rows[0]['Account CR'] !== ownerFallback, '6: no owner-name reconstruction')
+  assert(missingLabour.rows[0].voucher_no === 'RApp/26-27/0001', '9: missing labour keeps voucher')
+
+  const pdiPay = buildMechanicalBusyPaymentExportRows({
+    cases: [{ ...provenCase, invoice_number: 'IMBTAI-PDI' }],
+    lines: [provenLines[0]],
+    busyPartyNameByInvoice: buildBusyPartyNameByInvoice([labour({ id: 41, sr_type: 'PDI', invoice_number: 'IMBTAI-PDI' })]).partyNameByInvoice,
+  })
+  assert(pdiPay.rows[0]['Account CR'] === PDI_PARTY_NAME, `7: PDI uses CASH AT SITAPURA, got ${pdiPay.rows[0]['Account CR']}`)
+  assert(pdiPay.rows[0].voucher_no === 'RApp/26-27/0001', '9: PDI keeps voucher')
+
+  const coPay = buildMechanicalBusyPaymentExportRows({
+    cases: [{ ...provenCase, invoice_number: 'IMBTAI-CO' }],
+    lines: [provenLines[0]],
+    busyPartyNameByInvoice: buildBusyPartyNameByInvoice([labour({
+      id: 42,
+      invoice_number: 'IMBTAI-CO',
+      account: 'ICICI LOMBARD GENERAL INSURANCE COMPANY LIMITED C/O RAMESH KUMAR',
+    })]).partyNameByInvoice,
+  })
+  assert(coPay.rows[0]['Account CR'] === 'ICICI LOMBARD RAMESH KUMAR', `7: C/O uses BUSY parse, got ${coPay.rows[0]['Account CR']}`)
+  assert(coPay.rows[0].voucher_no === 'RApp/26-27/0001', '9: C/O keeps voucher')
+
+  const threeModes = buildMechanicalBusyPaymentExportRows({
+    cases: [provenCase],
+    lines: [
+      { ...provenLines[0], id: 51, payment_mode: 'cash', amount: 1000, voucher_no: 'RApp/26-27/0001' },
+      { ...provenLines[0], id: 52, payment_mode: 'upi', amount: 2000, voucher_no: 'JApp/26-27/0001' },
+      { ...provenLines[0], id: 53, payment_mode: 'card', amount: 3000, voucher_no: 'JApp/26-27/0002' },
+    ],
+    busyPartyNameByInvoice: provenLookup.partyNameByInvoice,
+  })
+  assert(threeModes.rows.length === 3, '8: cash/upi/card all exported')
+  assert(threeModes.rows.every((r) => r['Account CR'] === busyName), '8: cash/upi/card share BUSY Account CR')
+  assert(threeModes.rows[0].voucher_no === 'RApp/26-27/0001', '9: cash voucher unchanged')
+  assert(threeModes.rows[1].voucher_no === 'JApp/26-27/0001', '9: upi voucher unchanged')
+  assert(threeModes.rows[2].voucher_no === 'JApp/26-27/0002', '9: card voucher unchanged')
 
   console.log('verify_accounts_split_payment_drafts: BUSY payment export checks passed')
 }

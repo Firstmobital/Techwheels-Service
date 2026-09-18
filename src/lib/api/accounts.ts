@@ -1,6 +1,6 @@
 import { AUTODOC_BUCKET } from '../autodocStorage'
-import { busyInvoiceLookupKey, isCancelledInvoiceStatus, normalizeInvoiceNumber } from '../busy/eligibility'
-import { normalizePersonName } from '../busy/partyName'
+import { busyInvoiceLookupKey, busyJobCardLookupKey, isCancelledInvoiceStatus, normalizeInvoiceNumber } from '../busy/eligibility'
+import { normalizePersonName, resolveBusyPaymentAccountCr } from '../busy/partyName'
 import type { IssuedGatePassRecord } from '../gatepass'
 import { supabase } from '../supabase'
 import type { OverallStatus, RepairCard } from './bodyshopRepair'
@@ -1090,6 +1090,7 @@ export interface MechanicalBusyPaymentExportResult {
   missingVoucherCount: number
   missingEligibleVoucherCount: number
   missingDateCount: number
+  unresolvedAccountCrCount: number
 }
 
 export function isMechanicalBusyPaymentExportBlocked(
@@ -1147,7 +1148,7 @@ export function uniqueDmsInvoiceDateByJc(
 ): Map<string, string> {
   const groups = new Map<string, string[]>()
   for (const row of labourRows) {
-    const jc = String(row.job_card_number ?? '').trim().toUpperCase()
+    const jc = busyJobCardLookupKey(row.job_card_number)
     const invoiceNo = normalizeInvoiceNumber(row.invoice_number)
     const invoiceDate = mechanicalInvoiceDateYmd(row.invoice_date)
     if (!jc || !invoiceNo || !invoiceDate) continue
@@ -1207,6 +1208,7 @@ export function buildMechanicalBusyPaymentExportRows(input: {
   lines: AccountsMechanicalPayment[]
   paymentModeFilter?: MechanicalPaymentModeFilter
   busyPartyNameByInvoice?: ReadonlyMap<string, string>
+  busyPartyNameByJc?: ReadonlyMap<string, string>
   dmsInvoiceDateByInvoice?: ReadonlyMap<string, string>
   dmsInvoiceDateByJc?: ReadonlyMap<string, string>
 }): MechanicalBusyPaymentExportResult {
@@ -1224,6 +1226,7 @@ export function buildMechanicalBusyPaymentExportRows(input: {
   let missingVoucherCount = 0
   let missingEligibleVoucherCount = 0
   let missingDateCount = 0
+  let unresolvedAccountCrCount = 0
 
   for (const caseRow of input.cases) {
     const caseLines = sortAccountsMechanicalPaymentLines(linesByCase.get(caseRow.reception_entry_id) ?? [])
@@ -1237,7 +1240,7 @@ export function buildMechanicalBusyPaymentExportRows(input: {
       if (wanted && mode !== wanted) continue
 
       const invoiceKey = busyInvoiceLookupKey(caseRow.invoice_number)
-      const jcKey = String(caseRow.jc_number ?? '').trim().toUpperCase()
+      const jcKey = busyJobCardLookupKey(caseRow.jc_number)
       const dmsInvoiceDate = (
         (invoiceKey ? input.dmsInvoiceDateByInvoice?.get(invoiceKey) : undefined)
         || (jcKey ? input.dmsInvoiceDateByJc?.get(jcKey) : undefined)
@@ -1265,18 +1268,20 @@ export function buildMechanicalBusyPaymentExportRows(input: {
         continue
       }
 
+      const accountCr = resolveBusyPaymentAccountCr({
+        invoiceNumber: caseRow.invoice_number,
+        jcNumber: caseRow.jc_number,
+        busyPartyNameByInvoice: input.busyPartyNameByInvoice,
+        busyPartyNameByJc: input.busyPartyNameByJc,
+      })
+      if (!accountCr) unresolvedAccountCrCount += 1
+
       const amount = Number(line.amount)
       rows.push({
         'Invoice date': exportDate,
         voucher_no: voucherNo,
         'Account DR': accountDr,
-        'Account CR': resolveAccountsExportAccountName({
-          invoiceNumber: caseRow.invoice_number,
-          ownerName: caseRow.owner_name,
-          branch: caseRow.branch,
-          regNumber: caseRow.reg_number,
-          busyPartyNameByInvoice: input.busyPartyNameByInvoice,
-        }),
+        'Account CR': accountCr,
         'Amount DR': amount,
         'Amount CR': amount,
         'Reference no': line.reference ?? '',
@@ -1290,6 +1295,7 @@ export function buildMechanicalBusyPaymentExportRows(input: {
     missingVoucherCount,
     missingEligibleVoucherCount,
     missingDateCount,
+    unresolvedAccountCrCount,
   }
 }
 

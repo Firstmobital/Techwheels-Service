@@ -12,6 +12,11 @@ export function busyInvoiceLookupKey(raw: unknown): string {
   return normalizeInvoiceNumber(raw).toUpperCase()
 }
 
+/** JC lookup key used by Accounts DMS uniqueness (`trim` + `toUpperCase`). */
+export function busyJobCardLookupKey(raw: unknown): string {
+  return String(raw ?? '').trim().toUpperCase()
+}
+
 /** Distinct trimmed invoice numbers plus case variants for one bulk `.in()` lookup. */
 export const BUSY_LABOUR_INVOICE_IN_CHUNK = 100
 

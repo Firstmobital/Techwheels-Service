@@ -5,6 +5,7 @@ export {
   PV_INVOICE_PREFIX,
   EV_INVOICE_PREFIX,
   busyInvoiceLookupKey,
+  busyJobCardLookupKey,
   busyLabourInvoiceInValues,
   BUSY_LABOUR_INVOICE_IN_CHUNK,
   normalizeInvoiceNumber,
@@ -23,10 +24,15 @@ export {
   classifyBusyInvoice,
   parseBodyshopPartyName,
   PDI_PARTY_NAME,
+  busyLabourRowIdentity,
+  dedupeBusyLabourRows,
   resolvePartyName,
   partyNameFromBusyLabour,
   buildBusyPartyNameByInvoice,
+  buildBusyPartyNameByJobCard,
+  resolveBusyPaymentAccountCr,
   type BusyPartyNameLookup,
+  type BusyPartyNameByJobCardLookup,
 } from './partyName.ts'
 export {
   mapPartsRows,

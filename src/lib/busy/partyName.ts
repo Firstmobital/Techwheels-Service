@@ -1,8 +1,34 @@
 import { busyBranchLabelForParty, resolveBusyBranch, type BusyBranch } from './branch.ts'
-import { busyInvoiceLookupKey } from './eligibility.ts'
+import { busyInvoiceLookupKey, busyJobCardLookupKey, isCancelledInvoiceStatus, normalizeInvoiceNumber } from './eligibility.ts'
 import type { BusyClassification, BusyLabourRow } from './types.ts'
 
 export const PDI_PARTY_NAME = 'CASH AT SITAPURA'
+
+/** `psf_revenue_dms.id` as a string. Null when the labour row has no identity. */
+export function busyLabourRowIdentity(row: { id?: number | string | null }): string | null {
+  if (row.id == null || row.id === '') return null
+  return String(row.id)
+}
+
+/**
+ * Keep the first row per DMS id. Copies of the same `psf_revenue_dms` row
+ * (invoice fetch + JC fetch) are not two invoices. Rows without id are kept.
+ */
+export function dedupeBusyLabourRows<T extends { id?: number | string | null }>(
+  rows: readonly T[],
+): T[] {
+  const seen = new Set<string>()
+  const out: T[] = []
+  for (const row of rows) {
+    const id = busyLabourRowIdentity(row)
+    if (id) {
+      if (seen.has(id)) continue
+      seen.add(id)
+    }
+    out.push(row)
+  }
+  return out
+}
 
 export function normalizePersonName(raw: unknown): string {
   return String(raw ?? '').replace(/\s+/g, ' ').trim()
@@ -94,6 +120,11 @@ export interface BusyPartyNameLookup {
   invoiceDateByInvoice: Map<string, string>
 }
 
+export interface BusyPartyNameByJobCardLookup {
+  partyNameByJc: Map<string, string>
+  duplicateJcKeys: string[]
+}
+
 /**
  * Exact BUSY Party Name from one labour row. Null when branch cannot be resolved
  * or resolvePartyName has no usable name. Does not persist; does not use account as the name.
@@ -144,4 +175,57 @@ export function buildBusyPartyNameByInvoice(labourRows: BusyLabourRow[]): BusyPa
     if (dmsDate) invoiceDateByInvoice.set(key, dmsDate)
   }
   return { partyNameByInvoice, duplicateInvoiceKeys, invoiceDateByInvoice }
+}
+
+/**
+ * JC lookup key → BUSY Party Name.
+ * Same uniqueness as lookup_accounts_mechanical_dms_invoice: skip cancelled and
+ * blank invoice numbers; two live labour rows for one JC are omitted (no arbitrary winner).
+ */
+export function buildBusyPartyNameByJobCard(labourRows: BusyLabourRow[]): BusyPartyNameByJobCardLookup {
+  const groups = new Map<string, BusyLabourRow[]>()
+  for (const row of labourRows) {
+    const key = busyJobCardLookupKey(row.job_card_number)
+    if (!key) continue
+    if (isCancelledInvoiceStatus(row.invoice_status)) continue
+    if (!normalizeInvoiceNumber(row.invoice_number)) continue
+    const list = groups.get(key) ?? []
+    list.push(row)
+    groups.set(key, list)
+  }
+
+  const partyNameByJc = new Map<string, string>()
+  const duplicateJcKeys: string[] = []
+  for (const [key, group] of groups) {
+    if (group.length > 1) {
+      duplicateJcKeys.push(key)
+      continue
+    }
+    const partyName = partyNameFromBusyLabour(group[0])
+    if (partyName) partyNameByJc.set(key, partyName)
+  }
+  return { partyNameByJc, duplicateJcKeys }
+}
+
+/**
+ * Mechanical Busy payment Account CR: unique invoice name, else unique JC name.
+ * Does not use Accounts owner/branch/VRN. Blank when neither map has a usable value.
+ */
+export function resolveBusyPaymentAccountCr(input: {
+  invoiceNumber?: unknown
+  jcNumber?: unknown
+  busyPartyNameByInvoice?: ReadonlyMap<string, string>
+  busyPartyNameByJc?: ReadonlyMap<string, string>
+}): string {
+  const invoiceKey = busyInvoiceLookupKey(input.invoiceNumber)
+  if (invoiceKey && input.busyPartyNameByInvoice) {
+    const byInvoice = input.busyPartyNameByInvoice.get(invoiceKey)
+    if (byInvoice) return byInvoice
+  }
+  const jcKey = busyJobCardLookupKey(input.jcNumber)
+  if (jcKey && input.busyPartyNameByJc) {
+    const byJc = input.busyPartyNameByJc.get(jcKey)
+    if (byJc) return byJc
+  }
+  return ''
 }
