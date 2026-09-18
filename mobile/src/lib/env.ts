@@ -8,8 +8,11 @@ function readFromBag(env: EnvBag, key: string): string | undefined {
 }
 
 function getViteEnv(): EnvBag {
-  if (typeof import.meta !== 'undefined' && typeof import.meta.env !== 'undefined') {
-    return import.meta.env as EnvBag
+  try {
+    const g = typeof globalThis !== 'undefined' ? (globalThis as any) : {}
+    if (g.import?.meta?.env) return g.import.meta.env as EnvBag
+  } catch {
+    // Ignore
   }
   return {}
 }

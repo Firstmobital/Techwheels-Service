@@ -580,6 +580,31 @@ export default function ServiceBookingPage() {
     setSelectedBooking(b => b?.id === booking.id ? { ...b, ...payload } as ServiceBooking : b)
   }
 
+  async function handleDeleteBooking(booking: ServiceBooking) {
+    if (!window.confirm(`Are you sure you want to permanently delete booking ${booking.lead_number || booking.reg_number}?`)) {
+      return
+    }
+    setSaving(true)
+    try {
+      if (booking.id) {
+        await supabase.from('service_bookings').delete().eq('id', booking.id)
+      }
+      if (booking.lead_number) {
+        await supabase.from('service_bookings').delete().eq('lead_number', booking.lead_number)
+      }
+      if (booking.reg_number) {
+        await supabase.from('service_bookings').delete().eq('reg_number', booking.reg_number.toUpperCase())
+        await supabase.from('post_feedback_bot_data').delete().eq('vehicle_registration_number', booking.reg_number.toUpperCase()).ilike('feedback_text', '%SERVICE BOOKING REQUEST%')
+      }
+      setSelectedBooking(null)
+      await loadBookings()
+    } catch (err: any) {
+      setError(err?.message || 'Failed to delete booking')
+    } finally {
+      setSaving(false)
+    }
+  }
+
   function openNew() { setFormMode('new'); setForm(EMPTY_FORM); setShowForm(true); setSelectedBooking(null) }
   function openEdit(b: ServiceBooking) { setSelectedBooking(b); setShowForm(false); void loadFollowups(b.id) }
   function openDetail(b: ServiceBooking) { setSelectedBooking(b); setShowForm(false); void loadFollowups(b.id) }

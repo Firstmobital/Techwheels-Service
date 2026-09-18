@@ -151,6 +151,7 @@ export default function PlatformHomeScreen() {
     'telecalling':      'telecalling',
     'bodyshop-repair':  'bodyshop_repair',
     'bodyshop-floor':   'bodyshop_floor',
+    driver_tasks:       'driver_tasks',
   }
 
   const modulesWithStatus = useMemo(() => {

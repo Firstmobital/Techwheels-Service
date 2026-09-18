@@ -73,6 +73,15 @@ export default function CustomerBookingScreen() {
   const [pincode, setPincode] = useState('')
   const [gpsCoords, setGpsCoords] = useState<{ lat: number; lng: number } | null>(null)
   const [locating, setLocating] = useState(false)
+  // Modals & UI states
+  const [toast, setToast] = useState<{ ok: boolean; msg: string } | null>(null)
+  const [submitting, setSubmitting] = useState(false)
+  const [showReviewModal, setShowReviewModal] = useState(false)
+  const [confirmationData, setConfirmationData] = useState<{
+    bookingId?: number
+    leadNumber?: string
+    status: string
+  } | null>(null)
 
   const handleFetchCurrentLocation = async () => {
     setLocating(true)
@@ -103,16 +112,6 @@ export default function CustomerBookingScreen() {
 
   // Complaints & remarks
   const [remarks, setRemarks] = useState('')
-
-  // Modals & UI states
-  const [submitting, setSubmitting] = useState(false)
-  const [toast, setToast] = useState<{ ok: boolean; msg: string } | null>(null)
-  const [showReviewModal, setShowReviewModal] = useState(false)
-  const [confirmationData, setConfirmationData] = useState<{
-    bookingId?: number
-    leadNumber?: string
-    status: string
-  } | null>(null)
 
   // Load dynamic active branches on mount
   useEffect(() => {

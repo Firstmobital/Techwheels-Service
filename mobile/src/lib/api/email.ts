@@ -544,8 +544,9 @@ export async function sendTechnicianDailyEarningsTestEmail(
       body.rows = params.rows
     }
 
+    const baseUrl = (process.env.EXPO_PUBLIC_SUPABASE_URL || 'https://jmdndcphkmaljhwgzqxq.supabase.co').replace(/\/$/, '')
     const response = await fetch(
-      `${(import.meta.env.VITE_SUPABASE_URL as string).replace(/\/$/, '')}/functions/v1/technician-daily-earnings-report`,
+      `${baseUrl}/functions/v1/technician-daily-earnings-report`,
       {
         method: 'POST',
         headers: {

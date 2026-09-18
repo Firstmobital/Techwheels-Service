@@ -10,14 +10,13 @@ declare global {
 }
 
 // Polyfill import.meta.env for mobile
-if (typeof import.meta === 'undefined') {
-  (globalThis as any).import = {
-    meta: {
-      env: process.env,
-    },
+try {
+  const g = typeof globalThis !== 'undefined' ? (globalThis as any) : {}
+  if (!g.import) {
+    g.import = { meta: { env: typeof process !== 'undefined' ? process.env : {} } }
   }
-} else if (typeof import.meta.env === 'undefined') {
-  import.meta.env = process.env as any
+} catch {
+  // Ignore in environments where strict object sealing prevents modification
 }
 
 export {}

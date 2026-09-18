@@ -27,7 +27,11 @@ import { OfflineProvider } from '../context/OfflineContext'
 import MandatoryUpdateModal from '../components/MandatoryUpdateModal'
 import { useMandatoryOTAUpdate } from '../hooks/useMandatoryOTAUpdate'
 
-SplashScreen.preventAutoHideAsync()
+try {
+  SplashScreen.preventAutoHideAsync().catch(() => {})
+} catch {
+  // Ignore splash prevention error on unsupported platforms
+}
 
 export default function RootLayout() {
   const [fontsLoaded, setFontsLoaded] = useState(false)
@@ -60,7 +64,7 @@ export default function RootLayout() {
         console.error('Error loading fonts:', e)
         setFontsLoaded(true) // Continue even if fonts fail to load
       } finally {
-        await SplashScreen.hideAsync()
+        await SplashScreen.hideAsync().catch(() => {})
       }
     }
 
