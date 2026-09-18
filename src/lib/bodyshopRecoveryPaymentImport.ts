@@ -6,6 +6,10 @@ export const PAYMENT_TEMPLATE_VISIBLE_HEADERS = [
   'Job Card No.',
   'Vehicle No.',
   'Invoice No.',
+  'Main Received',
+  'GST Received',
+  'TDS Received',
+  'CP Received',
   'Main Amount',
   'GST Amount',
   'TDS Amount',
@@ -127,6 +131,39 @@ export function hasPositiveAmount(amounts: PaymentImportAmounts): boolean {
   return (amounts.main ?? 0) + (amounts.gst ?? 0) + (amounts.tds ?? 0) + (amounts.cp ?? 0) > 0
 }
 
+/** Cumulative posted amounts for template reference columns. Null (nothing posted) exports as 0. */
+export function receivedReferenceCell(value: number | null | undefined): number {
+  const n = Number(value ?? 0)
+  if (!Number.isFinite(n)) return 0
+  return Math.round(n * 100) / 100
+}
+
+function parseNewPaymentAmounts(row: Record<string, string>): {
+  main: ReturnType<typeof parsePaymentAmount>
+  gst: ReturnType<typeof parsePaymentAmount>
+  tds: ReturnType<typeof parsePaymentAmount>
+  cp: ReturnType<typeof parsePaymentAmount>
+} {
+  // Official new-payment headers only. Received columns (main_received / gst_received /
+  // tds_received / cp_received) are reference data and must never be posted.
+  return {
+    main: parsePaymentAmount(row.main_amount),
+    gst: parsePaymentAmount(row.gst_amount),
+    tds: parsePaymentAmount(row.tds_amount),
+    cp: parsePaymentAmount(row.customer_payment_cp),
+  }
+}
+
+export function newPaymentPreviewMessage(remaining: PaymentImportAmounts, retry: boolean): string {
+  const parts: string[] = []
+  if (remaining.main != null) parts.push(`Main ${remaining.main}`)
+  if (remaining.gst != null) parts.push(`GST ${remaining.gst}`)
+  if (remaining.tds != null) parts.push(`TDS ${remaining.tds}`)
+  if (remaining.cp != null) parts.push(`CP ${remaining.cp}`)
+  const prefix = retry ? 'Remaining new payment' : 'New payment'
+  return `${prefix}: ${parts.join(' · ') || 'none'}`
+}
+
 function headerKey(value: string): string {
   return String(value ?? '').trim().toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '')
 }
@@ -170,11 +207,19 @@ export function buildPaymentTemplateWorkbook(rows: Array<{
   vehicleNo: string | null
   invoiceNo: string | null
   repairCardId: number
+  mainReceived?: number | null
+  gstReceived?: number | null
+  tdsReceived?: number | null
+  cpReceived?: number | null
 }>) {
   const bookRows = rows.map((r) => ({
     'Job Card No.': r.jobCardNo,
     'Vehicle No.': r.vehicleNo ?? '',
     'Invoice No.': r.invoiceNo ?? '',
+    'Main Received': receivedReferenceCell(r.mainReceived),
+    'GST Received': receivedReferenceCell(r.gstReceived),
+    'TDS Received': receivedReferenceCell(r.tdsReceived),
+    'CP Received': receivedReferenceCell(r.cpReceived),
     'Main Amount': '',
     'GST Amount': '',
     'TDS Amount': '',
@@ -191,6 +236,10 @@ export function buildPaymentTemplateWorkbook(rows: Array<{
     { wch: 24 },
     { wch: 14 },
     { wch: 16 },
+    { wch: 14 },
+    { wch: 14 },
+    { wch: 14 },
+    { wch: 14 },
     { wch: 14 },
     { wch: 12 },
     { wch: 12 },
@@ -226,10 +275,7 @@ export function previewPaymentImport(
     const idRaw = pick(row, 'repair_card_id')
     const referenceRaw = pick(row, 'reference_remark', 'reference', 'remark')
     const reference = referenceRaw || null
-    const mainParsed = parsePaymentAmount(row.main_amount ?? row.main)
-    const gstParsed = parsePaymentAmount(row.gst_amount ?? row.gst)
-    const tdsParsed = parsePaymentAmount(row.tds_amount ?? row.tds)
-    const cpParsed = parsePaymentAmount(row.customer_payment_cp ?? row.customer_payment ?? row.cp)
+    const { main: mainParsed, gst: gstParsed, tds: tdsParsed, cp: cpParsed } = parseNewPaymentAmounts(row)
 
     const base = {
       rowNumber,
@@ -321,7 +367,7 @@ export function previewPaymentImport(
       repairCardId,
       remaining,
       status: 'valid',
-      message: posted.size > 0 ? 'Remaining components ready to post' : 'Ready to post',
+      message: newPaymentPreviewMessage(remaining, posted.size > 0),
     })
   })
 

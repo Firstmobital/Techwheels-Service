@@ -509,6 +509,10 @@ export default function BodyshopRecoveryPage() {
           vehicleNo: r.reg_number,
           invoiceNo: r.invoice_number,
           repairCardId: r.repair_card_id,
+          mainReceived: r.basic_amount,
+          gstReceived: r.gst_amount,
+          tdsReceived: r.tds_amount,
+          cpReceived: r.customer_posted_amount,
         })),
       )
       XLSX.writeFile(wb, `bodyshop-recovery-payment-template-${new Date().toISOString().slice(0, 10)}.xlsx`)
@@ -635,7 +639,10 @@ export default function BodyshopRecoveryPage() {
             Total: {importPreview.totalRows} · Valid: {importPreview.valid} · Already imported: {importPreview.alreadyImported} · Rejected: {importPreview.rejected}
           </div>
           <div className="brx-recov-import__meta">
-            Posting: Main {inr(importPreview.totalMain)} · GST {inr(importPreview.totalGst)} · TDS {inr(importPreview.totalTds)} · CP {inr(importPreview.totalCp)}
+            New payment posting: Main {inr(importPreview.totalMain)} · GST {inr(importPreview.totalGst)} · TDS {inr(importPreview.totalTds)} · CP {inr(importPreview.totalCp)}
+          </div>
+          <div className="brx-recov-import__meta">
+            Received columns are reference only and are not posted. Enter additional amounts in Main Amount, GST Amount, TDS Amount, and Customer Payment (CP).
           </div>
           <div className="brx-recov-import__rows">
             {importPreview.rows.filter((r) => r.status === 'rejected').slice(0, 30).map((r) => (
@@ -645,7 +652,7 @@ export default function BodyshopRecoveryPage() {
               <div key={r.rowNumber}>{r.rowNumber}: {r.jobCardNo || '—'} — already imported</div>
             ))}
             {importPreview.rows.filter((r) => r.status === 'valid').slice(0, 10).map((r) => (
-              <div key={r.rowNumber}>{r.rowNumber}: {r.jobCardNo || '—'} — valid: {r.message}</div>
+              <div key={r.rowNumber}>{r.rowNumber}: {r.jobCardNo || '—'} — {r.message}</div>
             ))}
           </div>
           <div className="brx-recov-import__actions">

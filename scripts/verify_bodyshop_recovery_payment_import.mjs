@@ -35,6 +35,19 @@ function parsePaymentAmount(raw) {
   if (rounded === 0) return { ok: true, value: null }
   return { ok: true, value: rounded }
 }
+function receivedReferenceCell(value) {
+  const n = Number(value ?? 0)
+  if (!Number.isFinite(n)) return 0
+  return Math.round(n * 100) / 100
+}
+function parseNewPaymentAmounts(row) {
+  return {
+    main: parsePaymentAmount(row.main_amount),
+    gst: parsePaymentAmount(row.gst_amount),
+    tds: parsePaymentAmount(row.tds_amount),
+    cp: parsePaymentAmount(row.customer_payment_cp),
+  }
+}
 function remainingAmounts(requested, postedComponents) {
   return {
     main: postedComponents.has('MAIN') ? null : requested.main,
@@ -68,10 +81,7 @@ function previewPaymentImport(rows, liveById, postedByToken) {
     const invoiceNo = pick(row, 'invoice_no', 'invoice_number')
     const token = pick(row, 'import_row_token')
     const idRaw = pick(row, 'repair_card_id')
-    const mainParsed = parsePaymentAmount(row.main_amount ?? row.main)
-    const gstParsed = parsePaymentAmount(row.gst_amount ?? row.gst)
-    const tdsParsed = parsePaymentAmount(row.tds_amount ?? row.tds)
-    const cpParsed = parsePaymentAmount(row.customer_payment_cp ?? row.customer_payment ?? row.cp)
+    const { main: mainParsed, gst: gstParsed, tds: tdsParsed, cp: cpParsed } = parseNewPaymentAmounts(row)
     const base = {
       rowNumber, jobCardNo, vehicleNo, invoiceNo, importRowToken: token || null,
       amounts: { main: null, gst: null, tds: null, cp: null },
@@ -204,11 +214,32 @@ ok('TEST D unknown card rejected', previewPaymentImport([baseRow, { ...baseRow, 
 ok('TEST I identity mismatch rejected', /do not match/i.test(previewPaymentImport([{ ...baseRow, job_card_no: 'JC-OTHER' }], live, new Map()).rows[0].message))
 ok('TEST B CP only', previewPaymentImport([{ ...baseRow, main_amount: '', gst_amount: '', tds_amount: '', customer_payment_cp: '500' }], live, new Map()).totalCp === 500)
 
+ok('pending received cell is 0', receivedReferenceCell(null) === 0 && receivedReferenceCell(undefined) === 0)
+ok('partial received cell keeps posted amount', receivedReferenceCell(150000) === 150000)
+
+const VISIBLE_HEADERS = [
+  'Job Card No.',
+  'Vehicle No.',
+  'Invoice No.',
+  'Main Received',
+  'GST Received',
+  'TDS Received',
+  'CP Received',
+  'Main Amount',
+  'GST Amount',
+  'TDS Amount',
+  'Customer Payment (CP)',
+  'Reference / Remark',
+]
 const wb = XLSX.utils.book_new()
-const ws = XLSX.utils.json_to_sheet([{
+const pendingRow = {
   'Job Card No.': 'JC001',
   'Vehicle No.': 'RJ14AB1234',
   'Invoice No.': 'INV001',
+  'Main Received': receivedReferenceCell(null),
+  'GST Received': receivedReferenceCell(null),
+  'TDS Received': receivedReferenceCell(null),
+  'CP Received': receivedReferenceCell(0),
   'Main Amount': '',
   'GST Amount': '',
   'TDS Amount': '',
@@ -216,12 +247,106 @@ const ws = XLSX.utils.json_to_sheet([{
   'Reference / Remark': '',
   _repair_card_id: 11,
   _import_row_token: 'brp-hidden',
-}])
-ws['!cols'] = [ {}, {}, {}, {}, {}, {}, {}, {}, { hidden: true }, { hidden: true } ]
+}
+const partialRow = {
+  'Job Card No.': 'JC-PARTIAL',
+  'Vehicle No.': 'RJ14AB1234',
+  'Invoice No.': 'INV-P',
+  'Main Received': receivedReferenceCell(150000),
+  'GST Received': receivedReferenceCell(27000),
+  'TDS Received': receivedReferenceCell(5000),
+  'CP Received': receivedReferenceCell(10000),
+  'Main Amount': '',
+  'GST Amount': '',
+  'TDS Amount': '',
+  'Customer Payment (CP)': '',
+  'Reference / Remark': '',
+  _repair_card_id: 12,
+  _import_row_token: 'brp-partial',
+}
+const ws = XLSX.utils.json_to_sheet([pendingRow, partialRow], {
+  header: [...VISIBLE_HEADERS, '_repair_card_id', '_import_row_token'],
+})
+ws['!cols'] = [
+  {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {},
+  { hidden: true }, { hidden: true },
+]
 XLSX.utils.book_append_sheet(wb, ws, 'Payments')
-const parsed = XLSX.utils.sheet_to_json(wb.Sheets.Payments, { defval: '' })[0]
+const parsedRows = XLSX.utils.sheet_to_json(wb.Sheets.Payments, { defval: '' })
+const parsed = parsedRows[0]
+const parsedPartial = parsedRows[1]
+const headerOrder = XLSX.utils.sheet_to_json(wb.Sheets.Payments, { header: 1 })[0]
 ok('hidden technical fields round-trip', parsed._repair_card_id === 11 && parsed._import_row_token === 'brp-hidden')
-ok('eight visible columns present', ['Job Card No.', 'Vehicle No.', 'Invoice No.', 'Main Amount', 'GST Amount', 'TDS Amount', 'Customer Payment (CP)', 'Reference / Remark'].every((h) => Object.prototype.hasOwnProperty.call(parsed, h)))
-ok('payment cells blank by default', parsed['Main Amount'] === '' && parsed['Reference / Remark'] === '')
+ok('twelve visible columns present', VISIBLE_HEADERS.every((h) => Object.prototype.hasOwnProperty.call(parsed, h)))
+ok('visible column order', VISIBLE_HEADERS.every((h, i) => headerOrder[i] === h))
+ok('hidden columns after visible', headerOrder[12] === '_repair_card_id' && headerOrder[13] === '_import_row_token')
+ok('pending received columns are zero', parsed['Main Received'] === 0 && parsed['GST Received'] === 0 && parsed['TDS Received'] === 0 && parsed['CP Received'] === 0)
+ok('new payment cells blank by default', parsed['Main Amount'] === '' && parsed['GST Amount'] === '' && parsed['TDS Amount'] === '' && parsed['Customer Payment (CP)'] === '' && parsed['Reference / Remark'] === '')
+ok('partial received columns populated', parsedPartial['Main Received'] === 150000 && parsedPartial['GST Received'] === 27000 && parsedPartial['TDS Received'] === 5000 && parsedPartial['CP Received'] === 10000)
+ok('partial new payment cells stay blank', parsedPartial['Main Amount'] === '' && parsedPartial['Customer Payment (CP)'] === '')
+
+const liveWide = new Map([[11, { ...live.get(11), customerRemainingAmount: 20000 }]])
+
+const editedReceived = previewPaymentImport([{
+  ...baseRow,
+  main_received: '999999',
+  gst_received: '888888',
+  tds_received: '777777',
+  cp_received: '666666',
+  main_amount: '50000',
+  gst_amount: '9000',
+  tds_amount: '',
+  customer_payment_cp: '5000',
+}], liveWide, new Map())
+ok('manually edited received columns are ignored', editedReceived.valid === 1 && editedReceived.totalMain === 50000 && editedReceived.totalGst === 9000 && editedReceived.totalTds === 0 && editedReceived.totalCp === 5000)
+
+const partialPay = previewPaymentImport([{
+  ...baseRow,
+  main_received: '150000',
+  gst_received: '27000',
+  tds_received: '5000',
+  cp_received: '10000',
+  main_amount: '100000',
+  gst_amount: '',
+  tds_amount: '',
+  customer_payment_cp: '',
+}], liveWide, new Map())
+ok('partial case posts only new Main Amount', partialPay.valid === 1 && partialPay.totalMain === 100000 && partialPay.totalGst === 0 && partialPay.totalTds === 0 && partialPay.totalCp === 0)
+
+const pendingBlank = previewPaymentImport([{
+  ...baseRow,
+  main_received: '0',
+  gst_received: '0',
+  tds_received: '0',
+  cp_received: '0',
+  main_amount: '',
+  gst_amount: '',
+  tds_amount: '',
+  customer_payment_cp: '',
+}], liveWide, new Map())
+ok('pending received zeros do not count as new payment', pendingBlank.rejected === 1)
+
+function headerKey(value) {
+  return String(value ?? '').trim().toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '')
+}
+function toImportRow(obj) {
+  const out = {}
+  for (const [k, v] of Object.entries(obj)) out[headerKey(k)] = String(v ?? '').trim()
+  return out
+}
+const fromSheet = toImportRow({
+  ...parsed,
+  'Main Received': 150000,
+  'GST Received': 27000,
+  'TDS Received': 5000,
+  'CP Received': 10000,
+  'Main Amount': 50000,
+  'GST Amount': 9000,
+  'TDS Amount': 0,
+  'Customer Payment (CP)': 5000,
+})
+ok('excel keys split received vs new payment', fromSheet.main_received === '150000' && fromSheet.main_amount === '50000' && fromSheet.cp_received === '10000' && fromSheet.customer_payment_cp === '5000')
+const fromSheetPreview = previewPaymentImport([fromSheet], liveWide, new Map())
+ok('sheet received values do not post', fromSheetPreview.valid === 1 && fromSheetPreview.totalMain === 50000 && fromSheetPreview.totalGst === 9000 && fromSheetPreview.totalTds === 0 && fromSheetPreview.totalCp === 5000)
 
 console.log('bodyshop recovery payment import checks passed')
