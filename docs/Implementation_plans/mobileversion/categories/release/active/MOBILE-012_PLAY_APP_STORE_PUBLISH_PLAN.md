@@ -2,8 +2,8 @@
 
 **Plan ID:** MOBILE-012  
 **Date Created:** 2026-09-17  
-**Last Updated:** 2026-09-17 (Phases 0–2 and 3c implemented in `mobile/`; store submit not started)  
-**Status:** In Progress (native store-readiness in repo; Phase 4 screenshots + Phase 5–6 submit remain)  
+**Last Updated:** 2026-09-17 (Play rejected AAB 11: use system photo picker. Next AAB blocks `READ_MEDIA_*`, keeps CAMERA)  
+**Status:** In Progress (IPA 13 on TestFlight; Play production needs a new AAB without gallery-wide media permissions)  
 **Owner:** Mobile + Platform  
 **Platform:** mobile (Expo store binary + Play / App Store listings)  
 **Category:** release  
@@ -178,15 +178,16 @@ Status values: targeted | in-progress | blocked | completed
 | Phase 3a — privacy **copy** on promotional site | completed | `/Users/vkbin/TECHWHEELS-WEB/src/pages/PrivacyPolicyPage.jsx` — Techwheels Service section, `service@techwheels.in` deletion, staff-app “not covered” line removed. Last updated 17 Sep 2026 | Engineering | 2026-09-17 |
 | Phase 3b — deploy + browser check of `https://www.techwheels.in/privacy` | completed | 2026-09-17 live bundle `https://www.techwheels.in/assets/index-DxY4YcLI.js` contains H1 Privacy Policy, Last updated 17 September 2026, Techwheels Service workshop section, no-public-staff-signup, foreground geotag / no background location, `service@techwheels.in` deletion. Old “employee app is not covered” absent. HTML shell title remains “Techwheels Quotation” (index.html) — cosmetic only. | Operator + Engineering | 2026-09-17 |
 | Phase 3c — in-app Privacy / Support / Delete links in `mobile/` | completed | `LegalLinks` on audience, staff settings, staff profile, customer chrome/menu. Opens https://www.techwheels.in/privacy, https://www.techwheels.in, mailto:service@techwheels.in | Engineering | 2026-09-17 |
-| Phase 4 — listing copy + screenshots | targeted | | Engineering | 2026-09-17 |
-| Phase 5 — Play AAB internal testing then production | targeted | | Engineering | 2026-09-17 |
-| Phase 6 — App Store listing + review for `6774519420` | targeted | | Engineering | 2026-09-17 |
+| Phase 4A — screenshots from TW-icon binary | in-progress | TestFlight IPA build 13 installed. Capture 6.7" shots (no live PII) into `mobile/store/ios/screenshots/`. Android shots after Play internal install or matching AAB sideload. Shot list in `mobile/store/LISTING.md`. | Operator | 2026-09-17 |
+| Phase 4B–4D — listing paste | completed | Paste-ready Play + App Store copy in `mobile/store/LISTING.md` (demo accounts still operator fill-in before Add for Review). | Engineering | 2026-09-17 |
+| Phase 5 — Play AAB internal testing then production | in-progress | AAB 11 blocked by Play photo-picker policy. New AAB **versionCode 12** queued: https://expo.dev/accounts/tw_admin/projects/techwheels-service/builds/c58fbda2-2945-4873-87d8-6348b3122ab3 (`READ_MEDIA_*` blocked, CAMERA kept). Replace the production draft with this AAB. Advertising ID = No. Ignore R8 warning. | Operator + Engineering | 2026-09-17 |
+| Phase 6 — App Store listing + review for `6774519420` | in-progress | IPA finished + Connect submit done. TestFlight install of build 13 (`7ef042cd-f3fc-4a17-813d-5d5625e7df69`). Next: paste listing from `LISTING.md`, 1024 PNG, screenshots, privacy URL, demo accounts; **Add for Review**; **manually release**. Do not submit to other ASC ids. | Operator + Engineering | 2026-09-17 |
 
 ---
 
 ## 9) Implementation Phases
 
-Do not start Phase 0 until an operator is ready to change `mobile/` config. Phases 0–2 and 3a–3c are done in repo (plus live privacy URL). Next: Phase 4 screenshots from a new production/preview binary, then Phase 5–6 store submit.
+Phases 0–3c done. IPA 13 is on TestFlight. **Play: AAB 11 cannot go to production** (system photo-picker policy). Next: production AAB with `READ_MEDIA_*` blocked, then send for review. Advertising ID = No. **App Store next:** screenshots + listing + Add for Review. Do not run `ota:prod` expecting the Android permission strip.
 
 ### Phase 0 — Identity and EAS submit
 
@@ -270,7 +271,7 @@ Live production JS (`/assets/index-DxY4YcLI.js` on www.techwheels.in) includes t
 
 ### Phase 4 — Listing pack
 
-**Goal:** Paste-ready copy and screenshots. Capture screenshots **after** Phase 1–2 binary (TW icon on device).
+**Goal:** Paste-ready copy and screenshots. Capture screenshots **after** the 17 Sep production AAB/IPA (TW icon on device). Copy is already in `mobile/store/LISTING.md`.
 
 #### 4A — Screenshot shot list (no live customer PII)
 
@@ -287,7 +288,7 @@ Store under `mobile/store/ios/screenshots/` and `mobile/store/play/screenshots/`
 #### 4B — Play listing paste
 
 - **App name:** Techwheels Service
-- **Short description (80):** Dealership workshop app for staff and registered customers: job cards, service tracker, and bills.
+- **Short description (80, 76 used):** Workshop app for staff and customers: job cards, service tracker, and bills.
 - **Full description:**
 
 ```
@@ -308,20 +309,27 @@ Need help? Email service@techwheels.in or visit https://www.techwheels.in
 - **Website:** https://www.techwheels.in
 - **Graphics:** `mobile/store/play/icon-512.png`, `mobile/store/play/feature-graphic-1024x500.jpg`, ≥2 phone screenshots
 
-#### 4C — Play App content
+#### 4C — Play App content (paste 2026-09-17)
+
+Full operator paste also lives in `mobile/store/LISTING.md`. Package name is **`com.techwheels.service`** (from the AAB; do not type a different package).
 
 | Section | Fill with |
 |---|---|
 | Privacy policy | https://www.techwheels.in/privacy |
+| Delete data URL | https://www.techwheels.in/privacy |
 | Ads | **No** |
-| Content ratings | IARC. No violence, no public UGC social, no location for ads |
-| Target audience | Age **18 and over** |
+| Advertising ID | **No** (App content → Advertising ID). `AD_ID` is blocked in `app.json`. Incomplete ads-ID declaration blocks send-for-review. |
+| User content sharing / UGC | **No** (no in-app chat/voice/social feed; helpdesk opens phone/email/WhatsApp) |
+| Target age | **18 and over** only |
 | News app | **No** |
-| Data safety | See §9 Phase 5 table 5F |
-| App access | **All or some functionality is restricted** — staff demo + customer demo |
-| Advertising ID | **No** |
-| Photos and videos | Job-card / walkaround documentation only |
-| Location | Precise location, **app functionality**, not background after Phase 2 |
+| Account creation | **My app does not allow users to create an account** |
+| Log in with accounts created outside the app | **Yes** (admin-created staff email; reception-registered 10-digit mobile) |
+| Sign-in details / App access | **Yes, restricted.** Two sets: Staff account (email/password) + Customer account (10-digit mobile in **both** fields, no `+91`). Full-access checkbox **unchecked**. Other-info paste in `LISTING.md`. |
+| Content ratings | IARC. No violence, no public UGC social, no location for ads |
+| Data safety | Collects required types = **Yes**. Badges (independent security review, UPI) **off**. See §5B. |
+| Photos and videos (Data safety) | Job-card / walkaround documentation. Play **permission** policy: system picker; AAB 11 rejected; next AAB blocks `READ_MEDIA_*` (§5E). |
+| Location | Approximate + precise, **app functionality**, not background, **users can choose** |
+| R8 / deobfuscation warning on AAB 11 | **Ignore.** Not a store blocker. Do not rebuild. |
 
 #### 4D — App Store listing paste
 
@@ -380,34 +388,47 @@ Do not review Techwheels Customer (com.techwheels.customer) or Teela.
 
 #### 5B — Data safety (5F)
 
-| Data type | Collected | Shared | Purpose | Required |
+Does the app collect required user data types? **Yes**. Independent security review / UPI badges: **off**.
+
+Play “Shared” = third party. Do **not** check Shared (no advertisers; Supabase/AWS process on our behalf). All types: **Collected**, **not ephemeral**. Never Advertising or Personalisation.
+
+| Data type | Collected / Shared | Ephemeral | Required on listing | Why |
 |---|---|---|---|---|
-| Name | Yes (staff profile / vehicle owner on jobs) | With workshop staff as needed to complete service | App functionality | Yes for workshop use |
-| Email | Yes (staff login) | No (not sold) | Account | Yes for staff |
-| Phone | Yes (customer login; owner phone on jobs) | Workshop operations | Account / app functionality | Yes for customer path |
-| Photos / videos | Yes (job cards, walkaround) | Dealership systems | App functionality | Yes for staff job docs |
-| Precise location | Yes (staff geotag while in use) | Attached to job activity | App functionality | Yes for geotagged jobs |
-| User IDs | Yes (auth / session) | No (not sold) | Account | Yes |
-| Device IDs / diagnostics | Yes (device logs to S3) | Internal ops | Analytics / support | Optional |
+| Name | Collected | No | Required | App functionality + Account management |
+| Email address | Collected | No | Required | Account management |
+| User IDs | Collected | No | Required | Account management |
+| Address | Collected | No | Users can choose | App functionality |
+| Phone number | Collected | No | Required | Account management + App functionality |
+| Approximate location | Collected | No | Users can choose | App functionality (same as precise) |
+| Precise location | Collected | No | Users can choose | App functionality (job geotag, not ads) |
+| Photos | Collected | No | Users can choose | App functionality |
+| Videos | Collected | No | Users can choose | App functionality |
+| Files and docs | Collected | No | Users can choose | App functionality |
+| Other user-generated content | Collected | No | Users can choose | App functionality |
+| Crash logs | Collected | No | Users can choose | Analytics |
+| Diagnostics | Collected | No | Users can choose | Analytics |
+| Device or other IDs | Collected | No | Users can choose | Analytics |
 
-Not collected: contacts, SMS, calendar, health, ads personalization, background location (after Phase 2).
+Not collected: contacts, SMS, calendar, health, financial, ads, **background** location, standalone voice recordings (walkaround mic is part of **Videos**).
 
-Security: HTTPS in transit. Deletion: email `service@techwheels.in` (documented on https://www.techwheels.in/privacy).
+Encrypted in transit: **Yes**. Deletion: **Yes** — URL https://www.techwheels.in/privacy (`service@techwheels.in`).
 
 #### 5C — Build and upload
 
 ```bash
 cd mobile
 npm run build:prod:android
-# then either:
+# then either (after the AAB finishes — not OTA):
 npx eas-cli submit -p android --profile production --id <build-id>
 # or download the AAB from expo.dev and upload:
 # Play Console → Testing → Internal testing → Create new release
 ```
 
 - Profile `production` produces **.aab**, not APK. `versionCode` auto-increments remotely.
+- `npm run ota:prod` is **not** a substitute for this AAB. Latest EAS Android as of 2026-09-17 is `production-apk` only (sideload).
 - Enroll Play App Signing on first upload. Sideload APK and Play install will not update each other in place once Play App Signing is on. Testers uninstall the old APK first.
 - Do not start a second AAB unless this one fails.
+- `eas submit` for Play needs `mobile/play-service-account.json` (gitignored). Until that JSON exists, upload the AAB by hand. Do not add `serviceAccountKeyPath` until the file is on disk.
 
 #### 5D — Release tracks
 
@@ -417,18 +438,36 @@ npx eas-cli submit -p android --profile production --id <build-id>
 
 **Validation:** Internal testers install from Play, see TW icon, both audiences work. No policy warnings.
 
+#### 5E — Photo and video permissions (Play policy)
+
+**2026-09-17:** Play blocked send-for-review on AAB 11 with *Use alternative system pickers for photos / videos*. Staff only attach **selected** job photos/videos. This is not a gallery app. Do **not** declare broad `READ_MEDIA_*` access.
+
+**Fix (in repo, needs a new AAB — OTA cannot change the manifest):**
+
+- `android.blockedPermissions`: `READ_MEDIA_IMAGES`, `READ_MEDIA_VIDEO`, `READ_MEDIA_AUDIO`, `READ_EXTERNAL_STORAGE`, `WRITE_EXTERNAL_STORAGE` (plus existing `AD_ID`)
+- Keep `CAMERA` and `RECORD_AUDIO` (camera capture + walkaround video)
+- Android gallery uses `ImagePicker.launchImageLibraryAsync` (system picker) and does **not** call `requestMediaLibraryPermissionsAsync`
+- iOS still requests photo library (Apple, not this Play policy)
+
+Replace the production/internal draft with the new AAB (versionCode 12+). After Play sees no `READ_MEDIA_IMAGES` / `READ_MEDIA_VIDEO` in the bundle, the picker policy row should clear. Leave the photo-and-video **declaration** empty / not claiming gallery core.
+
+#### 5F — Advertising ID declaration
+
+App content → Advertising ID → **No**. Incomplete declaration blocks send-for-review. Matches `blockedPermissions` `AD_ID`. No ads, no ads measurement.
+
 ### Phase 6 — Apple App Store
 
 **Goal:** Public listing for ASC **6774519420**, bundle `com.techwheels.service`. Process from CUSTOMER-APK-001 7A–7F.
 
 **Do not reuse** Customer ASC `6807690158` or Teela `6808128907`.
 
-**Do not submit the May 2026 IPA** after Phase 1–2. Cut a new production IPA.
+**Do not submit the May 2026 IPA or the 2026-09-16 IPA (build 12)** after Phase 1–2. Cut a new production IPA. `--auto-submit` uploads that IPA to App Store Connect / TestFlight; it does **not** click Add for Review. This round queued the IPA **without** auto-submit (buildNumber 13); submit after the build finishes.
 
 ```bash
 cd mobile
-npm run build:prod:ios
-npx eas-cli submit -p ios --profile production --id <build-id>
+npm run build:prod:ios -- --non-interactive --no-wait
+# after https://expo.dev/.../builds/7ef042cd-f3fc-4a17-813d-5d5625e7df69 finishes:
+npx eas-cli submit -p ios --profile production --id 7ef042cd-f3fc-4a17-813d-5d5625e7df69
 ```
 
 Open [App Store Connect → app 6774519420](https://appstoreconnect.apple.com/apps/6774519420/appstore).
@@ -455,7 +494,10 @@ Open [App Store Connect → app 6774519420](https://appstoreconnect.apple.com/ap
 | OTA the TW icon | Icons are native; Customer locked decision 11 |
 | Public staff signup on the store binary | MOBILE-011; customers would create workshop users |
 | Split into two store apps in this plan | Product lock: one listing |
-| Copy Customer `blockedPermissions` for all media | Walkaround video and job photos are real |
+| Copy Customer `blockedPermissions` for **all** media (including CAMERA) | Walkaround video and job photos are real; keep CAMERA |
+| Declare Advertising ID = Yes, or skip the ads-ID form | App does not use AD_ID; incomplete form blocks send-for-review |
+| Claim the app is a gallery / needs broad `READ_MEDIA_*` as core product | Staff only pick job photos; Photo Picker is enough. Declaration explains attach-to-job, not library management |
+| Rebuild AAB 11 to fix the R8 deobfuscation warning | Warning only; ignore |
 | Use Expo default `assets/expo.icon` | TW mark is mandatory |
 | Host a second privacy policy on Techwheels-Service Vercel as the store URL | Promotional site is the legal URL for sales **and** service; two policies confuse review |
 | Point stores at a stub/blank `/privacy` before TECHWHEELS-WEB deploy | Play already rejected a placeholder on Customer |
@@ -473,7 +515,9 @@ Open [App Store Connect → app 6774519420](https://appstoreconnect.apple.com/ap
 | Combined app confused as a generic website | Medium | Medium | Listing names dealership workshop + both audiences; native screens, not a marketing WebView |
 | AWS keys in extra | Already true | Medium | Disclose logs in Data safety; logger rewrite is out of scope |
 | Play personal-account 12×14 testing | Low if First Mobital org | Medium | Confirm org vs personal on dashboard before promising production date |
-| Old May 2026 IPA submitted | Medium | High | New IPA after Phase 1–2 |
+| Play rejects `READ_MEDIA_IMAGES` / `READ_MEDIA_VIDEO` on AAB 11 | Happened 2026-09-17 | High | New AAB blocks those permissions; keep CAMERA + system picker. Do not declare gallery core. |
+| Incomplete Advertising ID declaration | High if skipped | High | App content → Advertising ID = **No** |
+| Old May 2026 IPA submitted | Low (build 13 is on TestFlight) | High | New IPA after Phase 1–2 is already submitted |
 
 ---
 
@@ -492,20 +536,28 @@ Open [App Store Connect → app 6774519420](https://appstoreconnect.apple.com/ap
 
 1. Read this file + [README.md](../README.md) + the [2026-09-17 audit](../evidence/MOBILE-012_STORE_READINESS_AUDIT_2026-09-17.md).
 2. Read [MOBILE-010](../../program/active/MOBILE-010_MOBILE_PROGRAM_MASTER_TRACKER.md) for program status.
-3. Continue the first **targeted** Activity Tracker row (Phase 4 screenshots after a new binary with TW icon).
-4. Do not start EAS store submit until Phase 4 screenshots exist. Native icon/permission blockers for Phases 0–2 are closed. Live privacy URL is green (Phase 3b).
-5. Never `eas submit` to `6807690158` / `6808128907` / `6760889688`.
+3. Native rebuild for this round is **done** (AAB 11 + IPA 13). Do not `ota:prod` expecting those native changes on older binaries.
+4. Play: AAB 11 failed photo-picker policy. Upload the **new** AAB (12+) with `READ_MEDIA_*` blocked. Advertising ID = **No**. Ignore R8 warning. Package `com.techwheels.service`.
+5. App Store: Phase 4A screenshots → listing from `mobile/store/LISTING.md` → **Add for Review** only after demo accounts. **Manually release.**
+6. Never `eas submit` to `6807690158` / `6808128907` / `6760889688`.
 
 ---
 
 ## 14) Daily command table (from `mobile/`)
 
-| Action | Command | Notes |
-|---|---|---|
-| Play AAB | `npm run build:prod:android` | Profile `production`, app-bundle |
-| Sideload APK | `npm run build:prod:apk` | Not for Play |
-| App Store IPA | `npm run build:prod:ios` | Then `eas submit -p ios --profile production` |
-| Daily OTA after a store binary is live | `npm run ota:prod` / `ota:prod:ios` / `ota:prod:all` | JS only; not icons/permissions |
+Scripts are unchanged since May 2026 (`ota:prod` is an alias of `ota:prod:all`). What changed for MOBILE-012 is **which command this round requires**.
+
+| Need | Command | Ships | Does not ship |
+|---|---|---|---|
+| **This round — Play binary** | `npm run build:prod:android` | New **AAB** (`production`, `buildType: app-bundle`). TW icon, permission strip, LegalLinks JS baked in. | APK. Not an OTA. |
+| **This round — App Store binary** | `npm run build:prod:ios -- --non-interactive --no-wait` then `eas submit` after finish | New **IPA**. Same native + JS as the AAB. This round: build `7ef042cd-f3fc-4a17-813d-5d5625e7df69` (buildNumber 13), submit separately. | “Add for Review”. Not an OTA. |
+| Sideload / workshop APK | `npm run build:prod:apk` | APK (`production-apk`) | Play Console. Do not upload this file to Play. |
+| Daily JS/UI after a store binary with this runtime is **already installed** | `npm run ota:prod` | Same as `ota:prod:all`: JS/TS on channel `production`, both platforms | Icons, splash, plugins, permissions, `supportsTablet`, native deps, versionCode/buildNumber |
+| iOS-only JS after that store binary is live | `npm run ota:prod:ios` | iOS JS on `production` | Android, anything native |
+
+**OTA vs native (this plan):** Phase 1 icon/splash/adaptiveIcon and Phase 2 permission/`supportsTablet` changes live in `app.json` / native plugins. Expo Updates cannot apply them. The Sept 15 APK, Sept 16 IPA (build 12), and May IPA all predate those native edits. Queue AAB + IPA now. After that binary is on devices, later JS-only fixes use `ota:prod`.
+
+**Play vs APK:** `build:prod:android` → AAB for Play. `build:prod:apk` → sideload only. They do not update each other in place once Play App Signing is on.
 
 ---
 

@@ -52,7 +52,7 @@ Firebase `google-services.json` and `GoogleService-Info.plist` match this packag
 | B-04 | ~~Face ID / biometric declared unused~~ **Closed 2026-09-17** | Plugin and permissions removed | Phase 2 done |
 | B-05 | ~~`ios.supportsTablet: true`~~ **Closed 2026-09-17** | Set `false` | Phase 2 done |
 | B-06 | ~~Live privacy must show Service-app copy~~ **Closed 2026-09-17** | Production bundle includes 17 Sep Techwheels Service policy. HTML title still “Techwheels Quotation” (not a store blocker) | Phase 3b done |
-| B-07 | No phone screenshots in `mobile/store/` | Listing cannot be submitted | Phase 4 |
+| B-07 | No phone screenshots in `mobile/store/` | Listing cannot be submitted for review until captured from the new TW-icon binary | Phase 4A (listing copy filed in `mobile/store/LISTING.md`) |
 | B-08 | ~~`eas.json` submit iOS-only~~ **Closed 2026-09-17** | Apple team fields + Android internal track | Phase 0 done |
 
 ---

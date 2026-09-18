@@ -9,6 +9,7 @@ import {
   ActivityIndicator,
   Alert,
   Image,
+  Platform,
   ScrollView,
   Text,
   TouchableOpacity,
@@ -99,16 +100,22 @@ export default function CapturePhotoScreen() {
         const cameraRes = await ImagePicker.requestCameraPermissionsAsync()
         setCameraPermission(cameraRes.granted)
 
-        const libraryRes = await ImagePicker.requestMediaLibraryPermissionsAsync()
-        setLibraryPermission(libraryRes.granted)
+        // Android uses the system photo picker (no READ_MEDIA_*). iOS still needs photo library.
+        let libraryGranted = true
+        if (Platform.OS === 'ios') {
+          const libraryRes = await ImagePicker.requestMediaLibraryPermissionsAsync()
+          libraryGranted = libraryRes.granted
+        }
+        setLibraryPermission(libraryGranted)
 
         const locGranted = await isLocationPermissionGranted()
         setLocationPermission(locGranted)
 
         logEvent('permissions_check_complete', {
           camera: cameraRes.granted,
-          library: libraryRes.granted,
+          library: libraryGranted,
           location: locGranted,
+          picker: Platform.OS === 'android' ? 'system' : 'photolibrary',
         }, 'capture-photo')
       } catch (err) {
         logEvent('permissions_check_error', { error: err }, 'capture-photo')

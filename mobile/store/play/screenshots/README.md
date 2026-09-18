@@ -1,0 +1,1 @@
+Capture Android phone screenshots from the 17 Sep (or later) production AAB (Play) or matching `production-apk` sideload with the TW launcher icon. Shot list: `mobile/store/LISTING.md`. Do not upload an APK to Play Console.

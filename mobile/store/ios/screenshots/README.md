@@ -1,0 +1,1 @@
+Capture iPhone 6.7" screenshots from the 17 Sep (or later) production IPA with the TW launcher icon. Shot list: `mobile/store/LISTING.md`. Do not use binaries built before Phase 1–2 (May IPA, 2026-09-16 build 12).

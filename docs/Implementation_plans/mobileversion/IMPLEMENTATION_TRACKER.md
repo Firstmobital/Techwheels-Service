@@ -27,7 +27,7 @@ Legend:
 | MOBILE-010 | program | Mobile program master tracker | Active | Mobile Team | docs/Implementation_plans/mobileversion/categories/program/active/MOBILE-010_MOBILE_PROGRAM_MASTER_TRACKER.md | 2026-09-17 |
 | MOBILE-BP-RD | redesign | Body & Paint redesign consolidated plan | IP | Mobile Team | docs/Implementation_plans/mobileversion/categories/redesign/active/redesign_bodypaint_module.md | 2026-06-18 |
 | MOBILE-011 | auth | One Expo app: Login as Customer / Login as Staff | IP | Mobile Team + Platform | docs/Implementation_plans/mobileversion/categories/auth/active/MOBILE-011_CUSTOMER_STAFF_SINGLE_APP_PLAN.md | 2026-09-16 |
-| MOBILE-012 | release | Play Store + App Store publish for com.techwheels.service | IP | Mobile Team + Platform | docs/Implementation_plans/mobileversion/categories/release/active/MOBILE-012_PLAY_APP_STORE_PUBLISH_PLAN.md | 2026-09-17 |
+| MOBILE-012 | release | Play Store + App Store publish for com.techwheels.service | IP | Mobile Team + Platform | docs/Implementation_plans/mobileversion/categories/release/active/MOBILE-012_PLAY_APP_STORE_PUBLISH_PLAN.md | 2026-09-17 (AAB+IPA queued; not OTA) |
 
 ---
 

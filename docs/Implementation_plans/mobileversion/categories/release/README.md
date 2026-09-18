@@ -10,7 +10,8 @@ Subfolder purpose:
 Navigation:
 - Plan: [active/MOBILE-012_PLAY_APP_STORE_PUBLISH_PLAN.md](active/MOBILE-012_PLAY_APP_STORE_PUBLISH_PLAN.md)
 - Audit: [evidence/MOBILE-012_STORE_READINESS_AUDIT_2026-09-17.md](evidence/MOBILE-012_STORE_READINESS_AUDIT_2026-09-17.md)
-- Binary: `mobile/` (Expo 54, EAS). Do not ship `bodyshop/`.
+- Listing paste: `mobile/store/LISTING.md` (screenshots after the new production AAB/IPA)
+- Binary: `mobile/` (Expo 54, EAS). This round is `build:prod:android` (AAB) + `build:prod:ios -- --auto-submit`, not `ota:prod`. Do not ship `bodyshop/`.
 - Privacy URL (sales + service): [https://www.techwheels.in/privacy](https://www.techwheels.in/privacy) — source `TECHWHEELS-WEB/src/pages/PrivacyPolicyPage.jsx`. This repo does not own the promotional site.
 
 Operator pattern (other repos, do not reuse their bundles):

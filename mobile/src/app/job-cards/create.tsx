@@ -639,10 +639,12 @@ export default function CreateJobCardScreen() {
   }
 
   const pickWalkaroundFromGallery = async () => {
-    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync()
-    if (!permission.granted) {
-      Alert.alert('Gallery Permission Needed', 'Allow media library access to select a walkaround video.')
-      return
+    if (Platform.OS === 'ios') {
+      const permission = await ImagePicker.requestMediaLibraryPermissionsAsync()
+      if (!permission.granted) {
+        Alert.alert('Gallery Permission Needed', 'Allow photo library access to select a walkaround video.')
+        return
+      }
     }
 
     const result = await ImagePicker.launchImageLibraryAsync({
@@ -702,10 +704,12 @@ export default function CreateJobCardScreen() {
   }
 
   const pickCarImageFromGallery = async () => {
-    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync()
-    if (!permission.granted) {
-      Alert.alert('Gallery Permission Needed', 'Allow media library access to select car images.')
-      return
+    if (Platform.OS === 'ios') {
+      const permission = await ImagePicker.requestMediaLibraryPermissionsAsync()
+      if (!permission.granted) {
+        Alert.alert('Gallery Permission Needed', 'Allow photo library access to select car images.')
+        return
+      }
     }
 
     const result = await ImagePicker.launchImageLibraryAsync({
