@@ -316,7 +316,7 @@ export default function CapturePhotoScreen() {
       // ── Step 3: Get file size ────────────────────────────────────────────────
       let fileSizeMb = 0
       try {
-        const info = await FileSystem.getInfoAsync(state.imageUri!, { size: true })
+        const info = await FileSystem.getInfoAsync(state.imageUri!, { size: true } as any)
         fileSizeMb = Number(((info as any).size ?? 0) / (1024 * 1024))
       } catch { /* ignore */ }
 
@@ -512,11 +512,11 @@ export default function CapturePhotoScreen() {
                   <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' }}>
                     <View style={{ width: '48.5%', borderRadius: 12, backgroundColor: '#f6f4ee', padding: 10, marginBottom: 8 }}>
                       <Text style={{ color: '#82858f', fontSize: 11, fontWeight: '700', textTransform: 'uppercase' }}>Latitude</Text>
-                      <Text style={{ color: '#1a1b21', fontWeight: '700', fontSize: 13, marginTop: 2 }}>{state.gpsLat.toFixed(6)}°</Text>
+                       <Text style={{ color: '#1a1b21', fontWeight: '700', fontSize: 13, marginTop: 2 }}>{(state.gpsLat ?? 0).toFixed(6)}°</Text>
                     </View>
                     <View style={{ width: '48.5%', borderRadius: 12, backgroundColor: '#f6f4ee', padding: 10, marginBottom: 8 }}>
                       <Text style={{ color: '#82858f', fontSize: 11, fontWeight: '700', textTransform: 'uppercase' }}>Longitude</Text>
-                      <Text style={{ color: '#1a1b21', fontWeight: '700', fontSize: 13, marginTop: 2 }}>{state.gpsLng.toFixed(6)}°</Text>
+                       <Text style={{ color: '#1a1b21', fontWeight: '700', fontSize: 13, marginTop: 2 }}>{(state.gpsLng ?? 0).toFixed(6)}°</Text>
                     </View>
                     <View style={{ width: '48.5%', borderRadius: 12, backgroundColor: '#f6f4ee', padding: 10 }}>
                       <Text style={{ color: '#82858f', fontSize: 11, fontWeight: '700', textTransform: 'uppercase' }}>Accuracy</Text>

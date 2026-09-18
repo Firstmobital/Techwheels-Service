@@ -1,4 +1,4 @@
-/**
+﻿/**
  * mobile/src/app/(tabs)/reception.tsx
  * Mobile mirror of web ReceptionPage — business logic 100% identical to web.
  * UI is mobile-specific (React Native). All data columns, filtering, validation,
@@ -9,7 +9,7 @@ import {
   ActivityIndicator, Alert, FlatList, KeyboardAvoidingView, Modal, Platform,
   RefreshControl, ScrollView, Text, TextInput, TouchableOpacity, View,
 } from 'react-native'
-import { useFocusEffect } from '@react-navigation/native'
+import { useFocusEffect } from 'expo-router'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { supabase } from '../../lib/supabase'
 import { isServiceAdvisorRole } from '../../lib/businessRoles'

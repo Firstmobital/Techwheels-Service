@@ -1,4 +1,4 @@
-/**
+﻿/**
  * mobile/src/app/(tabs)/floor-incharge.tsx
  * Mobile version of web FloorInchargePage.tsx
  * Business logic: 100% identical to web (same DB tables, queries, rules).
@@ -10,7 +10,7 @@ import {
   RefreshControl, ScrollView, Text, TextInput,
   TouchableOpacity, View, KeyboardAvoidingView,
   Dimensions} from 'react-native'
-import { useFocusEffect } from '@react-navigation/native'
+import { useFocusEffect } from 'expo-router'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { supabase } from '../../lib/supabase'
 import {
@@ -753,16 +753,16 @@ export default function FloorInchargeScreen() {
       let result: { data: unknown; error: { message?: string } | null } | null = null
       for (let i = 0; i < candidates.length; i++) {
         const ins = await supabase.from('job_card_support_assignments').insert({ ...base, support_role: candidates[i] }).select().single()
-        if (!ins.error) { result = ins as typeof result; break }
+        if (!ins.error) { result = ins as unknown as typeof result; break }
         const errText = String(ins.error.message ?? '').toLowerCase()
         const isRoleErr = errText.includes('support_role') && errText.includes('check')
-        if (i === candidates.length - 1 || !isRoleErr) { result = ins as typeof result; break }
+        if (i === candidates.length - 1 || !isRoleErr) { result = ins as unknown as typeof result; break }
       }
-      if (!result || result.error) throw result?.error ?? new Error('Failed')
+      if (!result || (result as any).error) throw (result as any)?.error ?? new Error('Failed')
 
       setSupportAssignments(p => ({
         ...p, [key]: [
-          { ...(result!.data as SupportAssignment), support_role: normalizeSupportRole((result!.data as SupportAssignment).support_role) ?? (supportModalRole as SupportRole) },
+          { ...((result as any)!.data as SupportAssignment), support_role: normalizeSupportRole(((result as any)!.data as SupportAssignment).support_role) ?? (supportModalRole as SupportRole) },
           ...(p[key] ?? []),
         ]
       }))

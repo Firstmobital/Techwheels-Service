@@ -7,7 +7,7 @@ import { hasBusinessRole } from '../lib/businessRoles'
 import { listReceptionRegCreatedSince } from '../lib/api'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
-const BOOKING_SOURCES = ['Telecalling', 'WhatsApp', 'Walk-in', 'Self', 'Driver Pickup', 'Referral'] as const
+const BOOKING_SOURCES = ['Customer App', 'Telecalling', 'WhatsApp', 'Walk-in', 'Self', 'Driver Pickup', 'Referral'] as const
 const STATUSES = ['New', 'Confirmed', 'Rescheduled', 'Arrived', 'In-Progress', 'Completed', 'Cancelled', 'No-Show'] as const
 const SERVICE_TYPES = [
   'Paid Service', 'Mini Paid Service', 'First Free Service', 'Second Free Service', 'Third Free Service',
@@ -42,8 +42,51 @@ const STATUS_META: Record<string, { bg: string; color: string; dot: string }> = 
 }
 
 const SOURCE_ICON: Record<string, string> = {
-  Telecalling: '📞', WhatsApp: '💬', 'Walk-in': '🚶', Self: '🙋',
+  'Customer App': '📱', Telecalling: '📞', WhatsApp: '💬', 'Walk-in': '🚶', Self: '🙋',
   'Driver Pickup': '🚗', Referral: '👥',
+}
+
+// ─── Helper: Parse Customer App Booking from post_feedback_bot_data ──────────
+function parseBotBookingToServiceBooking(bot: any): Partial<ServiceBooking> {
+  const text = bot.feedback_text || ''
+  const typeMatch = text.match(/Type:\s*([^\n\r]+)/i)
+  const dateMatch = text.match(/Date:\s*([0-9]{4}-[0-9]{2}-[0-9]{2})/i)
+  const slotMatch = text.match(/Slot:\s*([^\n\r]+)/i)
+  const branchMatch = text.match(/Branch:\s*([^\n\r]+)/i)
+  const pickupMatch = text.match(/Pickup:\s*([^\n\r]+)/i)
+  const complaintsMatch = text.match(/Complaints:\s*([\s\S]+)/i)
+
+  const isPickup = pickupMatch ? pickupMatch[1].toLowerCase().startsWith('yes') : false
+  let pickupAddress: string | null = null
+  if (isPickup && pickupMatch) {
+    const addrInParen = pickupMatch[1].match(/\((.+)\)/)
+    pickupAddress = addrInParen ? addrInParen[1].trim() : null
+  }
+
+  const bookingDate = (bot.created_at || bot.complaint_date_time || new Date().toISOString()).slice(0, 10)
+  const appointmentDate = dateMatch ? dateMatch[1] : bookingDate
+  const bookingTime = slotMatch ? slotMatch[1].trim() : '09:30 – 10:30'
+  const serviceType = typeMatch ? typeMatch[1].trim() : (bot.service_type || 'Running Repairs')
+  const branch = branchMatch ? branchMatch[1].trim() : (bot.branch || 'Sitapura')
+  const complaint = complaintsMatch ? complaintsMatch[1].trim() : (text.includes('Complaints:') ? null : text)
+
+  return {
+    booking_source: 'Customer App',
+    status: 'New',
+    booking_date: bookingDate,
+    appointment_date: appointmentDate,
+    booking_time: bookingTime,
+    reg_number: (bot.vehicle_registration_number || '').trim().toUpperCase().replace(/\s+/g, ''),
+    customer_name: bot.customer_name || 'Customer',
+    customer_phone: (bot.mobile_number || '').replace(/\D/g, '').slice(-10),
+    service_type: serviceType,
+    branch: branch,
+    model: bot.model || null,
+    pickup_required: isPickup,
+    drop_required: false,
+    pickup_address: pickupAddress,
+    complaint_description: complaint,
+  }
 }
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -73,7 +116,7 @@ type DateRange = { from: string; to: string }
 type FormMode = 'new' | 'edit'
 
 const EMPTY_FORM: Partial<ServiceBooking> = {
-  booking_source: 'Telecalling', status: 'New',
+  booking_source: 'Customer App', status: 'New',
   booking_date: new Date().toISOString().split('T')[0],
   pickup_required: false, drop_required: false, wa_opt_in: false, call_attempt: 1,
 }
@@ -146,6 +189,7 @@ export default function ServiceBookingPage() {
   const [followupForm, setFollowupForm] = useState({ channel: 'Call', note: '', outcome: '', next_follow_up: '', done_by: '' })
   const [showFollowupForm, setShowFollowupForm] = useState(false)
   const [waModal, setWaModal] = useState<{ booking: ServiceBooking; message: string } | null>(null)
+  const [showDriverModal, setShowDriverModal] = useState(false)
 
   useEffect(() => { void loadBranchesAndSAs() }, [])
   useEffect(() => { void loadReceptionEntries() }, [])
@@ -157,13 +201,45 @@ export default function ServiceBookingPage() {
     const creRes = await supabase.from('employee_master').select('id, employee_name, role').eq('is_active', true).order('employee_name')
     if (creRes.data) {
       setCreUsers((creRes.data as { id: string; employee_name: string; role: string | null }[])
-        .filter((u) => u.employee_name && hasBusinessRole(u.role, 'CRE')))
+        .filter((u) => u.employee_name && (hasBusinessRole(u.role, 'CRE') || (u.role && u.role.toUpperCase().includes('CRE')))))
     }
     const driverRes = await supabase.from('employee_master').select('id, employee_name, role').eq('is_active', true).order('employee_name')
     if (driverRes.data) {
       setDrivers((driverRes.data as { id: string; employee_name: string; role: string | null }[])
-        .filter((u) => u.employee_name && hasBusinessRole(u.role, 'DRIVER')))
+        .filter((u) => u.employee_name && (hasBusinessRole(u.role, 'DRIVER') || (u.role && u.role.toUpperCase().includes('DRIVER')))))
     }
+  }
+
+  async function updateBookingFields(booking: ServiceBooking, updates: Partial<ServiceBooking>) {
+    let updated = false
+    try {
+      const { data } = await supabase.from('service_bookings').update(updates).eq('id', booking.id).select()
+      if (data && data.length > 0) updated = true
+    } catch {}
+
+    if (!updated && booking.reg_number) {
+      try {
+        let q = supabase.from('service_bookings').update(updates).eq('reg_number', booking.reg_number.toUpperCase())
+        if (booking.appointment_date) q = q.eq('appointment_date', booking.appointment_date)
+        const { data } = await q.select()
+        if (data && data.length > 0) updated = true
+      } catch {}
+    }
+
+    if (!updated) {
+      try {
+        const fullRow = { ...booking, ...updates }
+        delete (fullRow as any).id
+        await supabase.from('service_bookings').insert([fullRow])
+      } catch {}
+    }
+
+    await loadBookings()
+    setSelectedBooking(b => b?.id === booking.id ? { ...b, ...updates } as ServiceBooking : b)
+  }
+
+  async function updateDriver(booking: ServiceBooking, driverName: string | null) {
+    await updateBookingFields(booking, { driver_name: driverName || null })
   }
 
   // Fetch reg_number + created_at from Reception so we can flag which booked vehicles have
@@ -177,13 +253,140 @@ export default function ServiceBookingPage() {
 
   async function loadBookings() {
     setLoading(true); setError('')
-    const { data, error: err } = await supabase
-      .from('service_bookings').select('*')
-      .gte('booking_date', dateRange.from).lte('booking_date', dateRange.to)
-      .order('created_at', { ascending: false })
-    if (err) setError(err.message)
-    else setBookings((data ?? []) as ServiceBooking[])
-    setLoading(false)
+    try {
+      // 1. Fetch from service_bookings
+      const { data: sbData, error: err } = await supabase
+        .from('service_bookings').select('*')
+        .gte('booking_date', dateRange.from).lte('booking_date', dateRange.to)
+        .order('created_at', { ascending: false })
+
+      if (err) throw err
+
+      const loadedBookings = [...((sbData ?? []) as ServiceBooking[])]
+
+      // 2. Fetch customer app submissions from post_feedback_bot_data
+      const { data: botRows } = await supabase
+        .from('post_feedback_bot_data')
+        .select('*')
+        .in('mode', ['customer_portal_concern', 'customer_booking_portal'])
+        .ilike('feedback_text', '%SERVICE BOOKING REQUEST%')
+        .order('id', { ascending: false })
+
+      if (botRows && Array.isArray(botRows)) {
+        for (const bot of botRows) {
+          const parsed = parseBotBookingToServiceBooking(bot)
+          const bDate = parsed.booking_date || (bot.created_at || bot.complaint_date_time || '').slice(0, 10)
+          
+          // Check if date falls in selected range
+          if (bDate && (bDate < dateRange.from || bDate > dateRange.to)) {
+            continue
+          }
+
+          const normVehicle = normReg(bot.vehicle_registration_number)
+          const existing = loadedBookings.find(b =>
+            normReg(b.reg_number) === normVehicle &&
+            (b.booking_date === bDate || (b.lead_number && b.lead_number.includes(String(bot.id))))
+          )
+
+          if (!existing) {
+            // Attempt to auto-persist into service_bookings so it gets full DB lead_number and triggers
+            let syncedRow: ServiceBooking | null = null
+            try {
+              const { data: inserted, error: insErr } = await supabase
+                .from('service_bookings')
+                .insert([parsed])
+                .select()
+                .single()
+
+              if (!insErr && inserted) {
+                syncedRow = inserted as ServiceBooking
+              }
+            } catch {
+              // Ignore persist error and fall back to local merge
+            }
+
+            if (syncedRow) {
+              loadedBookings.unshift(syncedRow)
+            } else {
+              // Local fallback record
+              loadedBookings.unshift({
+                id: Number(bot.id) || Date.now(),
+                lead_number: `BKG-APP-${bot.id}`,
+                booking_date: bDate || new Date().toISOString().slice(0, 10),
+                appointment_date: parsed.appointment_date || null,
+                booking_time: parsed.booking_time || null,
+                booking_source: 'Customer App',
+                reg_number: bot.vehicle_registration_number || '',
+                model: bot.model || null,
+                variant: null,
+                fuel_type: null,
+                mfg_year: null,
+                km_reading: null,
+                customer_name: bot.customer_name || 'Customer',
+                customer_phone: bot.mobile_number || '',
+                alt_phone: null,
+                customer_email: null,
+                customer_address: null,
+                service_type: parsed.service_type || 'Running Repairs',
+                complaint_description: parsed.complaint_description || null,
+                special_requests: null,
+                pickup_required: Boolean(parsed.pickup_required),
+                drop_required: false,
+                pickup_address: parsed.pickup_address || null,
+                branch: parsed.branch || 'Sitapura',
+                assigned_sa: null,
+                assigned_sa_name: null,
+                status: 'New',
+                status_reason: null,
+                rescheduled_date: null,
+                caller_name: null,
+                call_attempt: 1,
+                call_outcome: null,
+                wa_conversation_id: null,
+                wa_opt_in: false,
+                jc_number: null,
+                converted_at: null,
+                created_at: bot.created_at || bot.complaint_date_time || new Date().toISOString(),
+                updated_at: bot.created_at || new Date().toISOString(),
+                telecall_assignment_id: null,
+                telecall_campaign_id: null,
+                call_notes: null,
+                cre_name: null,
+                driver_name: null,
+              })
+            }
+          }
+        }
+      }
+
+      // 3. Strict Deduplication: ensure unique lead per ID and per vehicle+appointment_date
+      const seenKeys = new Set<string>()
+      const dedupedBookings: ServiceBooking[] = []
+
+      for (const b of loadedBookings) {
+        const idKey = `id-${b.id}`
+        const vehicleDateKey = b.reg_number && b.appointment_date && b.status !== 'Cancelled'
+          ? `veh-${normReg(b.reg_number)}-${b.appointment_date}`
+          : null
+
+        if (seenKeys.has(idKey)) {
+          continue
+        }
+        if (vehicleDateKey && seenKeys.has(vehicleDateKey)) {
+          continue
+        }
+
+        seenKeys.add(idKey)
+        if (vehicleDateKey) seenKeys.add(vehicleDateKey)
+        dedupedBookings.push(b)
+      }
+
+      setBookings(dedupedBookings)
+    } catch (loadErr: any) {
+      setError(loadErr?.message || 'Failed to load bookings')
+    } finally {
+      setLoading(false)
+    }
   }
 
   async function loadFollowups(bookingId: number) {
@@ -236,9 +439,23 @@ export default function ServiceBookingPage() {
   }, [receptionEntries])
 
   function hasArrivedAtReception(b: ServiceBooking): boolean {
+    if (b.status === 'Arrived') return true
     const entries = receptionByReg.get(normReg(b.reg_number))
     if (!entries || entries.length === 0) return false
-    return entries.some(createdAt => createdAt.slice(0, 10) >= b.booking_date)
+
+    const bookingTime = b.created_at ? new Date(b.created_at).getTime() : 0
+    const targetDate = b.appointment_date || b.booking_date
+
+    return entries.some(createdAt => {
+      const entryTime = new Date(createdAt).getTime()
+      const entryDate = createdAt.slice(0, 10)
+      
+      // Reception entry must be created AFTER this booking was created, and on/after the appointment date
+      const isAfterBookingCreation = entryTime > (bookingTime + 60000)
+      const isOnOrAfterApptDate = targetDate ? entryDate >= targetDate : true
+
+      return isAfterBookingCreation && isOnOrAfterApptDate
+    })
   }
 
   function handleExport() {
@@ -274,9 +491,10 @@ export default function ServiceBookingPage() {
     completed: filtered.filter(b => b.status === 'Completed').length,
     cancelled: filtered.filter(b => b.status === 'Cancelled' || b.status === 'No-Show').length,
     converted: filtered.filter(b => b.jc_number).length,
+    customerApp: filtered.filter(b => b.booking_source === 'Customer App' || b.booking_source === 'Self').length,
     telecalling: filtered.filter(b => b.booking_source === 'Telecalling').length,
     linked: filtered.filter(b => b.telecall_assignment_id !== null).length,
-    whatsapp: filtered.filter(b => b.booking_source === 'WhatsApp').length,
+    whatsapp: filtered.filter(b => b.booking_source === 'WhatsApp' || (b.booking_source && b.booking_source.includes('WhatsApp'))).length,
   }), [filtered])
 
   async function handleSave() {
@@ -319,13 +537,51 @@ export default function ServiceBookingPage() {
       const jc = prompt('Enter Job Card Number to convert:')
       if (jc) { payload.jc_number = jc.trim(); payload.converted_at = new Date().toISOString() }
     }
-    await supabase.from('service_bookings').update(payload).eq('id', booking.id)
+
+    let updated = false
+    try {
+      const { data: upData, error: upErr } = await supabase
+        .from('service_bookings')
+        .update(payload)
+        .eq('id', booking.id)
+        .select()
+      if (!upErr && upData && upData.length > 0) {
+        updated = true
+      }
+    } catch {
+      // fallback
+    }
+
+    if (!updated && booking.reg_number) {
+      try {
+        let q = supabase.from('service_bookings').update(payload).eq('reg_number', booking.reg_number.toUpperCase())
+        if (booking.appointment_date) q = q.eq('appointment_date', booking.appointment_date)
+        const { data: upData2 } = await q.select()
+        if (upData2 && upData2.length > 0) updated = true
+      } catch {
+        // fallback
+      }
+    }
+
+    if (!updated) {
+      try {
+        const fullRow = {
+          ...booking,
+          ...payload,
+        }
+        delete (fullRow as any).id
+        await supabase.from('service_bookings').insert([fullRow])
+      } catch (insCatch) {
+        console.warn('Failed to insert service_booking on status update:', insCatch)
+      }
+    }
+
     await loadBookings()
     setSelectedBooking(b => b?.id === booking.id ? { ...b, ...payload } as ServiceBooking : b)
   }
 
   function openNew() { setFormMode('new'); setForm(EMPTY_FORM); setShowForm(true); setSelectedBooking(null) }
-  function openEdit(b: ServiceBooking) { setFormMode('edit'); setForm({ ...b }); setSelectedBooking(b); setShowForm(true) }
+  function openEdit(b: ServiceBooking) { setSelectedBooking(b); setShowForm(false); void loadFollowups(b.id) }
   function openDetail(b: ServiceBooking) { setSelectedBooking(b); setShowForm(false); void loadFollowups(b.id) }
 
   function openWhatsApp(b: ServiceBooking) {
@@ -372,6 +628,10 @@ export default function ServiceBookingPage() {
             style={{ background: '#fff', color: '#334155', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '0.45rem 0.9rem', fontSize: '0.82rem', fontWeight: 700, cursor: filtered.length === 0 ? 'not-allowed' : 'pointer', opacity: filtered.length === 0 ? 0.5 : 1, whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
             <span style={{ fontSize: '0.9rem' }}>⬇</span> Export
           </button>
+          <button onClick={() => setShowDriverModal(true)} title="Manage Pickup & Drop Driver Allocations"
+            style={{ background: '#f8fafc', color: '#1e293b', border: '1px solid #cbd5e1', borderRadius: '8px', padding: '0.45rem 0.9rem', fontSize: '0.82rem', fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+            <span style={{ fontSize: '0.95rem' }}>🚗</span> Driver Management
+          </button>
           <button onClick={openNew} style={{ background: '#2563eb', color: '#fff', border: 'none', borderRadius: '8px', padding: '0.45rem 1rem', fontSize: '0.82rem', fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
             <span style={{ fontSize: '1rem' }}>＋</span> New Booking
           </button>
@@ -388,8 +648,9 @@ export default function ServiceBookingPage() {
           { label: 'Completed', value: stats.completed, color: '#15803d', bg: '#dcfce7', border: '#86efac' },
           { label: 'Cancelled', value: stats.cancelled, color: '#dc2626', bg: '#fef2f2', border: '#fecaca' },
           { label: 'Converted →JC', value: stats.converted, color: '#b45309', bg: '#fffbeb', border: '#fde68a' },
+          { label: '📱 Customer App', value: stats.customerApp, color: '#0284c7', bg: '#f0f9ff', border: '#bae6fd' },
           { label: '📞 Telecalling', value: stats.telecalling, color: '#0369a1', bg: '#f0f9ff', border: '#bae6fd' },
-        { label: '🔗 Linked from Telecaller', value: stats.linked, color: '#7c3aed', bg: '#faf5ff', border: '#e9d5ff' },
+          { label: '🔗 Linked from Telecaller', value: stats.linked, color: '#7c3aed', bg: '#faf5ff', border: '#e9d5ff' },
           { label: '💬 WhatsApp', value: stats.whatsapp, color: '#16a34a', bg: '#f0fdf4', border: '#bbf7d0' },
         ].map(({ label, value, color, bg, border }) => (
           <div key={label} style={{ background: bg, border: `1px solid ${border}`, borderRadius: '8px', padding: '0.3rem 0.7rem', textAlign: 'center', minWidth: '68px' }}>
@@ -549,30 +810,30 @@ export default function ServiceBookingPage() {
         {hasPanel && (
           <div style={{ flex: 1, overflow: 'auto', background: '#fff' }}>
 
-            {/* ══ BOOKING FORM ══ */}
+            {/* ══ NEW BOOKING FORM ══ */}
             {showForm ? (
               <div style={{ padding: '1.1rem 1.25rem' }}>
                 {/* Form Header */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '1.1rem', paddingBottom: '0.75rem', borderBottom: '1px solid #e2e8f0' }}>
-                  <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: formMode === 'new' ? '#eff6ff' : '#fffbeb', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1rem' }}>
-                    {formMode === 'new' ? '➕' : '✏️'}
+                  <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: '#eff6ff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1rem' }}>
+                    ➕
                   </div>
                   <div>
                     <h2 style={{ margin: 0, fontSize: '0.95rem', fontWeight: 800, color: '#1e293b' }}>
-                      {formMode === 'new' ? 'New Service Booking' : `Edit — ${form.lead_number || 'Booking'}`}
+                      New Service Booking
                     </h2>
                     <p style={{ margin: 0, fontSize: '0.7rem', color: '#94a3b8' }}>
-                      {formMode === 'new' ? 'Fill in the details to create a booking' : 'Update booking details below'}
+                      Fill in the details to create a new booking
                     </p>
                   </div>
                   <div style={{ flex: 1 }} />
-                  <button onClick={() => { setShowForm(false); if (formMode === 'new') setSelectedBooking(null) }}
+                  <button onClick={() => { setShowForm(false); setSelectedBooking(null); setForm(EMPTY_FORM) }}
                     style={{ background: '#f1f5f9', border: 'none', borderRadius: '6px', padding: '0.35rem 0.75rem', fontSize: '0.78rem', cursor: 'pointer', color: '#64748b', fontWeight: 600 }}>
                     Cancel
                   </button>
                   <button onClick={handleSave} disabled={saving}
                     style={{ background: saving ? '#93c5fd' : '#2563eb', color: '#fff', border: 'none', borderRadius: '6px', padding: '0.35rem 1rem', fontSize: '0.82rem', fontWeight: 700, cursor: saving ? 'not-allowed' : 'pointer' }}>
-                    {saving ? 'Saving…' : formMode === 'new' ? 'Create Booking' : 'Save Changes'}
+                    {saving ? 'Saving…' : 'Create Booking'}
                   </button>
                 </div>
 
@@ -660,6 +921,10 @@ export default function ServiceBookingPage() {
                     </select>
                   </Field>
 
+                  <Field label="Customer Complaint / Description" span>
+                    <textarea style={{ ...inp, resize: 'vertical' }} rows={2} placeholder="Customer issues, remarks, or requests" value={form.complaint_description ?? ''} onChange={e => setForm(p => ({ ...p, complaint_description: e.target.value || null }))} />
+                  </Field>
+
                   {/* Pickup / Drop */}
                   <div style={{ gridColumn: 'span 2', display: 'flex', gap: '1.5rem', alignItems: 'center', background: '#f8fafc', borderRadius: '8px', padding: '0.55rem 0.8rem', border: '1px solid #e2e8f0' }}>
                     <label style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', fontSize: '0.82rem', cursor: 'pointer', fontWeight: 500, color: '#475569' }}>
@@ -679,7 +944,7 @@ export default function ServiceBookingPage() {
                   )}
 
                   {form.pickup_required && (
-                    <Field label="Driver Name">
+                    <Field label="Assign Driver">
                       <select style={selInp} value={form.driver_name ?? ''} onChange={e => setForm(p => ({ ...p, driver_name: e.target.value || null }))}>
                         <option value="">Select driver…</option>
                         {drivers.map(d => <option key={d.id} value={d.employee_name}>{d.employee_name}</option>)}
@@ -687,15 +952,19 @@ export default function ServiceBookingPage() {
                     </Field>
                   )}
 
-                  {/* Telecalling section */}
-                  {form.booking_source === 'Telecalling' && (<>
-                    <FieldGroup title="Telecalling Details" icon="📞" />
-                    <Field label="CRE Name">
+                  {/* CRE assignment for Customer App / Telecalling / Edit */}
+                  {(form.booking_source === 'Customer App' || form.booking_source === 'Telecalling' || formMode === 'edit') && (
+                    <Field label="Assign CRE">
                       <select style={selInp} value={form.cre_name ?? ''} onChange={e => setForm(p => ({ ...p, cre_name: e.target.value || null }))}>
-                        <option value="">Select CRE…</option>
+                        <option value="">Select CRE to handle…</option>
                         {creUsers.map(u => <option key={u.id} value={u.employee_name}>{u.employee_name}</option>)}
                       </select>
                     </Field>
+                  )}
+
+                  {/* Telecalling section */}
+                  {form.booking_source === 'Telecalling' && (<>
+                    <FieldGroup title="Telecalling Details" icon="📞" />
                     <Field label="Caller Name">
                       <input style={inp} placeholder="Who made the call" value={form.caller_name ?? ''} onChange={e => setForm(p => ({ ...p, caller_name: e.target.value }))} />
                     </Field>
@@ -726,19 +995,6 @@ export default function ServiceBookingPage() {
                     </div>
                   </>)}
 
-                  {/* JC Conversion (edit only) */}
-                  {formMode === 'edit' && (<>
-                    <FieldGroup title="JC Conversion" icon="🔁" />
-                    <Field label="Job Card Number">
-                      <input style={inp} placeholder="e.g. JCXXXX" value={form.jc_number ?? ''} onChange={e => setForm(p => ({ ...p, jc_number: e.target.value }))} />
-                    </Field>
-                    <Field label="Status">
-                      <select style={selInp} value={form.status ?? ''} onChange={e => setForm(p => ({ ...p, status: e.target.value }))}>
-                        {STATUSES.map(s => <option key={s}>{s}</option>)}
-                      </select>
-                    </Field>
-                  </>)}
-
                 </div>
               </div>
 
@@ -759,133 +1015,522 @@ export default function ServiceBookingPage() {
                           {selectedBooking.status}
                         </span>
                       )})()}
-                      <span style={{ fontSize: '0.78rem' }}>{SOURCE_ICON[selectedBooking.booking_source] ?? '📋'}</span>
-                      <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>{selectedBooking.booking_source}</span>
+                      <select
+                        value={selectedBooking.booking_source}
+                        onChange={e => void updateBookingFields(selectedBooking, { booking_source: e.target.value })}
+                        style={{ ...selInp, width: 'auto', padding: '0.2rem 0.5rem', fontSize: '0.72rem', fontWeight: 700, borderColor: '#cbd5e1' }}
+                      >
+                        {BOOKING_SOURCES.map(s => <option key={s} value={s}>{SOURCE_ICON[s] ?? '📋'} {s}</option>)}
+                      </select>
                     </div>
                     <p style={{ margin: '0.2rem 0 0', fontSize: '0.7rem', color: '#94a3b8' }}>
                       Created {new Date(selectedBooking.created_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
                     </p>
                   </div>
-                  <button onClick={() => openEdit(selectedBooking)}
-                    style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: '7px', padding: '0.35rem 0.8rem', fontSize: '0.78rem', fontWeight: 700, cursor: 'pointer', color: '#b45309' }}>
-                    ✏️ Edit
+                  <a href={`tel:${selectedBooking.customer_phone}`}
+                    style={{ background: '#ecfdf5', border: '1px solid #a7f3d0', borderRadius: '7px', padding: '0.35rem 0.8rem', fontSize: '0.78rem', fontWeight: 700, cursor: 'pointer', color: '#059669', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}>
+                    📞 Call
+                  </a>
+                  <button onClick={() => openWhatsApp(selectedBooking)}
+                    style={{ background: '#f0fdf4', border: '1px solid #86efac', borderRadius: '7px', padding: '0.35rem 0.8rem', fontSize: '0.78rem', fontWeight: 700, cursor: 'pointer', color: '#16a34a', display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}>
+                    💬 WhatsApp
                   </button>
                   <button onClick={() => { setSelectedBooking(null); setFollowups([]) }}
                     style={{ background: '#f1f5f9', border: 'none', borderRadius: '7px', padding: '0.35rem 0.6rem', fontSize: '0.82rem', cursor: 'pointer', color: '#64748b' }}>✕</button>
                 </div>
 
-                {/* Quick Status Change */}
-                <div style={{ marginBottom: '1rem' }}>
-                  <div style={{ fontSize: '0.7rem', fontWeight: 700, color: '#64748b', marginBottom: '0.4rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Quick Status Update</div>
-                  <div style={{ display: 'flex', gap: '0.35rem', flexWrap: 'wrap' }}>
-                    {STATUSES.map(s => {
-                      const sc = STATUS_META[s] ?? { bg: '#f1f5f9', color: '#64748b', dot: '#94a3b8' }
-                      const isActive = selectedBooking.status === s
-                      return (
-                        <button key={s} onClick={() => updateStatus(selectedBooking, s)}
-                          style={{ background: isActive ? sc.bg : '#f8fafc', color: isActive ? sc.color : '#64748b', border: `1px solid ${isActive ? sc.dot + '60' : '#e2e8f0'}`, borderRadius: '20px', padding: '0.2rem 0.6rem', fontSize: '0.7rem', fontWeight: isActive ? 800 : 500, cursor: 'pointer', transition: 'all 0.1s' }}>
-                          {s}
-                        </button>
-                      )
-                    })}
+                {/* Status Update / Customer Booking Action */}
+                {selectedBooking.booking_source === 'Customer App' || selectedBooking.booking_source === 'Self' ? (
+                  <div style={{ background: '#f8fafc', padding: '0.65rem 0.75rem', borderRadius: '8px', border: '1px solid #e2e8f0', marginBottom: '1rem' }}>
+                    <div style={{ fontSize: '0.7rem', fontWeight: 700, color: '#475569', marginBottom: '0.5rem', textTransform: 'uppercase', letterSpacing: '0.05em', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                      <span>📱</span> Customer App Booking Action
+                    </div>
+                    <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
+                      <button
+                        type="button"
+                        onClick={() => updateStatus(selectedBooking, 'Confirmed')}
+                        style={{
+                          background: selectedBooking.status === 'Confirmed' ? '#059669' : '#10b981',
+                          color: '#fff',
+                          border: 'none',
+                          borderRadius: '6px',
+                          padding: '0.45rem 0.9rem',
+                          fontSize: '0.78rem',
+                          fontWeight: 800,
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '0.35rem',
+                          boxShadow: selectedBooking.status === 'Confirmed' ? 'none' : '0 1px 3px rgba(16,185,129,0.3)',
+                        }}
+                      >
+                        <span>✅</span> {selectedBooking.status === 'Confirmed' ? 'Confirmed & Approved' : 'Approve & Confirm Booking'}
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (window.confirm('Are you sure you want to reject / cancel this service booking?')) {
+                            void updateStatus(selectedBooking, 'Cancelled')
+                          }
+                        }}
+                        style={{
+                          background: selectedBooking.status === 'Cancelled' ? '#e11d48' : '#fff',
+                          color: selectedBooking.status === 'Cancelled' ? '#fff' : '#e11d48',
+                          border: '1px solid #fecdd3',
+                          borderRadius: '6px',
+                          padding: '0.45rem 0.9rem',
+                          fontSize: '0.78rem',
+                          fontWeight: 700,
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '0.35rem',
+                        }}
+                      >
+                        <span>❌</span> {selectedBooking.status === 'Cancelled' ? 'Rejected / Cancelled' : 'Reject / Cancel Booking'}
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => updateStatus(selectedBooking, 'Rescheduled')}
+                        style={{
+                          background: '#fff',
+                          color: '#d97706',
+                          border: '1px solid #fde68a',
+                          borderRadius: '6px',
+                          padding: '0.45rem 0.85rem',
+                          fontSize: '0.78rem',
+                          fontWeight: 700,
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '0.35rem',
+                        }}
+                      >
+                        <span>📅</span> Reschedule
+                      </button>
+                    </div>
+
+                    {/* Quick Status Pill selector */}
+                    <div style={{ display: 'flex', gap: '0.35rem', flexWrap: 'wrap', marginTop: '0.6rem', paddingTop: '0.5rem', borderTop: '1px dashed #e2e8f0' }}>
+                      <span style={{ fontSize: '0.68rem', color: '#94a3b8', alignSelf: 'center', fontWeight: 600 }}>All Statuses:</span>
+                      {STATUSES.map(s => {
+                        const sc = STATUS_META[s] ?? { bg: '#f1f5f9', color: '#64748b', dot: '#94a3b8' }
+                        const isActive = selectedBooking.status === s
+                        return (
+                          <button key={s} onClick={() => updateStatus(selectedBooking, s)}
+                            style={{ background: isActive ? sc.bg : '#fff', color: isActive ? sc.color : '#64748b', border: `1px solid ${isActive ? sc.dot + '60' : '#e2e8f0'}`, borderRadius: '20px', padding: '0.18rem 0.55rem', fontSize: '0.68rem', fontWeight: isActive ? 800 : 500, cursor: 'pointer', transition: 'all 0.1s' }}>
+                            {s}
+                          </button>
+                        )
+                      })}
+                    </div>
                   </div>
-                </div>
+                ) : (
+                  /* Standard Quick Status for Non-Customer App bookings (Telecalling, Walk-in, etc.) */
+                  <div style={{ marginBottom: '1rem' }}>
+                    <div style={{ fontSize: '0.7rem', fontWeight: 700, color: '#64748b', marginBottom: '0.4rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Quick Status Update</div>
+                    <div style={{ display: 'flex', gap: '0.35rem', flexWrap: 'wrap' }}>
+                      {STATUSES.map(s => {
+                        const sc = STATUS_META[s] ?? { bg: '#f1f5f9', color: '#64748b', dot: '#94a3b8' }
+                        const isActive = selectedBooking.status === s
+                        return (
+                          <button key={s} onClick={() => updateStatus(selectedBooking, s)}
+                            style={{ background: isActive ? sc.bg : '#f8fafc', color: isActive ? sc.color : '#64748b', border: `1px solid ${isActive ? sc.dot + '60' : '#e2e8f0'}`, borderRadius: '20px', padding: '0.2rem 0.6rem', fontSize: '0.7rem', fontWeight: isActive ? 800 : 500, cursor: 'pointer', transition: 'all 0.1s' }}>
+                            {s}
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )}
 
                 {/* Details grid */}
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.85rem', marginBottom: '1rem' }}>
 
-                  {/* Customer Card */}
+                  {/* Customer Card (Directly Editable) */}
                   <div style={{ background: '#f8fafc', borderRadius: '10px', padding: '0.85rem', border: '1px solid #e2e8f0' }}>
-                    <div style={{ fontSize: '0.68rem', fontWeight: 800, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.55rem' }}>👤 Customer</div>
-                    <div style={{ fontWeight: 700, fontSize: '0.9rem', color: '#1e293b' }}>{selectedBooking.customer_name}</div>
-                    <div style={{ fontSize: '0.82rem', color: '#2563eb', fontWeight: 600, marginTop: '0.2rem' }}>{selectedBooking.customer_phone}</div>
-                    {selectedBooking.alt_phone && <div style={{ fontSize: '0.75rem', color: '#64748b' }}>Alt: {selectedBooking.alt_phone}</div>}
-                    {selectedBooking.customer_email && <div style={{ fontSize: '0.72rem', color: '#64748b', marginTop: '0.15rem' }}>{selectedBooking.customer_email}</div>}
-                  </div>
-
-                  {/* Vehicle Card */}
-                  <div style={{ background: '#f8fafc', borderRadius: '10px', padding: '0.85rem', border: '1px solid #e2e8f0' }}>
-                    <div style={{ fontSize: '0.68rem', fontWeight: 800, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.55rem' }}>🚗 Vehicle</div>
-                    {selectedBooking.reg_number && selectedBooking.reg_number !== 'UNKNOWN'
-                      ? <div style={{ fontWeight: 800, fontSize: '0.95rem', color: '#1e293b', letterSpacing: '0.03em' }}>{selectedBooking.reg_number}</div>
-                      : null}
-                    <div style={{ fontSize: '0.82rem', color: '#475569', marginTop: '0.15rem' }}>{[selectedBooking.model, selectedBooking.variant].filter(Boolean).join(' ') || '—'}</div>
-                    <div style={{ fontSize: '0.72rem', color: '#64748b', marginTop: '0.15rem' }}>{[selectedBooking.fuel_type, selectedBooking.km_reading ? `${selectedBooking.km_reading.toLocaleString()} km` : null].filter(Boolean).join(' · ')}</div>
-                  </div>
-
-                  {/* Appointment Card */}
-                  <div style={{ background: '#eff6ff', borderRadius: '10px', padding: '0.85rem', border: '1px solid #bfdbfe' }}>
-                    <div style={{ fontSize: '0.68rem', fontWeight: 800, color: '#1d4ed8', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.55rem' }}>📅 Appointment</div>
-                    <div style={{ fontWeight: 700, fontSize: '0.9rem', color: '#1e293b' }}>
-                      {selectedBooking.appointment_date ? new Date(selectedBooking.appointment_date).toLocaleDateString('en-IN', { weekday: 'short', day: '2-digit', month: 'short', year: 'numeric' }) : 'Not scheduled'}
+                    <div style={{ fontSize: '0.68rem', fontWeight: 800, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.45rem' }}>👤 Customer Details</div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+                      <div>
+                        <div style={{ fontSize: '0.68rem', color: '#64748b', fontWeight: 600 }}>Name:</div>
+                        <input
+                          value={selectedBooking.customer_name || ''}
+                          onChange={e => setSelectedBooking(b => b ? { ...b, customer_name: e.target.value } : b)}
+                          onBlur={e => void updateBookingFields(selectedBooking, { customer_name: e.target.value })}
+                          style={{ ...inp, padding: '0.28rem 0.5rem', fontSize: '0.8rem', fontWeight: 700 }}
+                        />
+                      </div>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.4rem' }}>
+                        <div>
+                          <div style={{ fontSize: '0.68rem', color: '#64748b', fontWeight: 600 }}>Mobile:</div>
+                          <input
+                            inputMode="numeric"
+                            value={selectedBooking.customer_phone || ''}
+                            onChange={e => setSelectedBooking(b => b ? { ...b, customer_phone: e.target.value } : b)}
+                            onBlur={e => void updateBookingFields(selectedBooking, { customer_phone: e.target.value.replace(/\D/g, '') })}
+                            style={{ ...inp, padding: '0.28rem 0.5rem', fontSize: '0.78rem' }}
+                          />
+                        </div>
+                        <div>
+                          <div style={{ fontSize: '0.68rem', color: '#64748b', fontWeight: 600 }}>Alt Phone:</div>
+                          <input
+                            inputMode="numeric"
+                            placeholder="Optional"
+                            value={selectedBooking.alt_phone || ''}
+                            onChange={e => setSelectedBooking(b => b ? { ...b, alt_phone: e.target.value } : b)}
+                            onBlur={e => void updateBookingFields(selectedBooking, { alt_phone: e.target.value || null })}
+                            style={{ ...inp, padding: '0.28rem 0.5rem', fontSize: '0.78rem' }}
+                          />
+                        </div>
+                      </div>
                     </div>
-                    {timeLabel(selectedBooking.booking_time) && <div style={{ fontSize: '0.78rem', color: '#2563eb', fontWeight: 600 }}>⏰ {timeLabel(selectedBooking.booking_time)}</div>}
-                    {selectedBooking.branch && <div style={{ fontSize: '0.75rem', color: '#475569', marginTop: '0.15rem' }}>📍 {selectedBooking.branch}</div>}
+                  </div>
+
+                  {/* Vehicle Card (Directly Editable) */}
+                  <div style={{ background: '#f8fafc', borderRadius: '10px', padding: '0.85rem', border: '1px solid #e2e8f0' }}>
+                    <div style={{ fontSize: '0.68rem', fontWeight: 800, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.45rem' }}>🚗 Vehicle Details</div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '0.4rem' }}>
+                        <div>
+                          <div style={{ fontSize: '0.68rem', color: '#64748b', fontWeight: 600 }}>Reg No:</div>
+                          <input
+                            value={selectedBooking.reg_number || ''}
+                            onChange={e => setSelectedBooking(b => b ? { ...b, reg_number: e.target.value.toUpperCase() } : b)}
+                            onBlur={e => void updateBookingFields(selectedBooking, { reg_number: e.target.value.toUpperCase() })}
+                            style={{ ...inp, padding: '0.28rem 0.5rem', fontSize: '0.8rem', fontWeight: 800 }}
+                          />
+                        </div>
+                        <div>
+                          <div style={{ fontSize: '0.68rem', color: '#64748b', fontWeight: 600 }}>Fuel:</div>
+                          <select
+                            value={selectedBooking.fuel_type || ''}
+                            onChange={e => void updateBookingFields(selectedBooking, { fuel_type: e.target.value || null })}
+                            style={{ ...selInp, padding: '0.28rem 0.4rem', fontSize: '0.75rem' }}
+                          >
+                            <option value="">Select…</option>
+                            {FUEL_TYPES.map(f => <option key={f}>{f}</option>)}
+                          </select>
+                        </div>
+                      </div>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '0.4rem' }}>
+                        <div>
+                          <div style={{ fontSize: '0.68rem', color: '#64748b', fontWeight: 600 }}>Model:</div>
+                          <select
+                            value={selectedBooking.model || ''}
+                            onChange={e => void updateBookingFields(selectedBooking, { model: e.target.value || null })}
+                            style={{ ...selInp, padding: '0.28rem 0.4rem', fontSize: '0.75rem' }}
+                          >
+                            <option value="">Select model…</option>
+                            {!selectedBooking.fuel_type || selectedBooking.fuel_type === 'PV'
+                              ? PV_MODELS.map(m => <option key={m}>{m}</option>)
+                              : EV_MODELS.map(m => <option key={m}>{m}</option>)
+                            }
+                          </select>
+                        </div>
+                        <div>
+                          <div style={{ fontSize: '0.68rem', color: '#64748b', fontWeight: 600 }}>KM:</div>
+                          <input
+                            type="number"
+                            placeholder="Odo km"
+                            value={selectedBooking.km_reading ?? ''}
+                            onChange={e => setSelectedBooking(b => b ? { ...b, km_reading: parseInt(e.target.value) || null } : b)}
+                            onBlur={e => void updateBookingFields(selectedBooking, { km_reading: parseInt(e.target.value) || null })}
+                            style={{ ...inp, padding: '0.28rem 0.5rem', fontSize: '0.78rem' }}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Appointment Card (Editable Inline) */}
+                  <div style={{ background: '#eff6ff', borderRadius: '10px', padding: '0.85rem', border: '1px solid #bfdbfe' }}>
+                    <div style={{ fontSize: '0.68rem', fontWeight: 800, color: '#1d4ed8', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.45rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <span>📅 Booking & Appointment</span>
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.4rem' }}>
+                        <div>
+                          <div style={{ fontSize: '0.68rem', color: '#64748b', fontWeight: 600 }}>Booked On:</div>
+                          <input
+                            type="date"
+                            value={selectedBooking.booking_date || ''}
+                            onChange={e => void updateBookingFields(selectedBooking, { booking_date: e.target.value })}
+                            style={{ ...inp, padding: '0.3rem 0.5rem', fontSize: '0.78rem', background: '#fff' }}
+                          />
+                        </div>
+                        <div>
+                          <div style={{ fontSize: '0.68rem', color: '#64748b', fontWeight: 600 }}>Appointment:</div>
+                          <input
+                            type="date"
+                            value={selectedBooking.appointment_date || ''}
+                            onChange={e => void updateBookingFields(selectedBooking, { appointment_date: e.target.value || null })}
+                            style={{ ...inp, padding: '0.3rem 0.5rem', fontSize: '0.78rem', background: '#fff' }}
+                          />
+                        </div>
+                      </div>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.4rem' }}>
+                        <div>
+                          <div style={{ fontSize: '0.68rem', color: '#64748b', fontWeight: 600 }}>Slot:</div>
+                          <select
+                            value={selectedBooking.booking_time || ''}
+                            onChange={e => void updateBookingFields(selectedBooking, { booking_time: e.target.value || null })}
+                            style={{ ...selInp, padding: '0.3rem 0.4rem', fontSize: '0.75rem' }}
+                          >
+                            <option value="">Select slot…</option>
+                            {TIME_SLOTS.map(s => <option key={s} value={s}>{s}</option>)}
+                          </select>
+                        </div>
+                        <div>
+                          <div style={{ fontSize: '0.68rem', color: '#64748b', fontWeight: 600 }}>Branch:</div>
+                          <select
+                            value={selectedBooking.branch || ''}
+                            onChange={e => void updateBookingFields(selectedBooking, { branch: e.target.value || null })}
+                            style={{ ...selInp, padding: '0.3rem 0.4rem', fontSize: '0.75rem' }}
+                          >
+                            <option value="">Select branch…</option>
+                            {branches.map(b => <option key={b} value={b}>{b}</option>)}
+                          </select>
+                        </div>
+                      </div>
+                    </div>
                   </div>
 
                   {/* Service Card */}
                   <div style={{ background: '#f0fdf4', borderRadius: '10px', padding: '0.85rem', border: '1px solid #bbf7d0' }}>
-                    <div style={{ fontSize: '0.68rem', fontWeight: 800, color: '#15803d', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.55rem' }}>🔧 Service</div>
-                    <div style={{ fontWeight: 700, fontSize: '0.88rem', color: '#1e293b' }}>{selectedBooking.service_type || 'Not specified'}</div>
+                    <div style={{ fontSize: '0.68rem', fontWeight: 800, color: '#15803d', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.45rem' }}>🔧 Service Type</div>
+                    <select
+                      value={selectedBooking.service_type || ''}
+                      onChange={e => void updateBookingFields(selectedBooking, { service_type: e.target.value || null })}
+                      style={{ ...selInp, padding: '0.35rem 0.5rem', fontSize: '0.8rem', background: '#fff', fontWeight: 700, borderColor: '#bbf7d0' }}
+                    >
+                      <option value="">Select service type…</option>
+                      {SERVICE_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+                    </select>
                     {selectedBooking.jc_number && (
-                      <div style={{ marginTop: '0.35rem', display: 'inline-block', background: '#dcfce7', color: '#15803d', borderRadius: '20px', padding: '0.15rem 0.55rem', fontSize: '0.7rem', fontWeight: 800 }}>
+                      <div style={{ marginTop: '0.45rem', display: 'inline-block', background: '#dcfce7', color: '#15803d', borderRadius: '20px', padding: '0.15rem 0.55rem', fontSize: '0.7rem', fontWeight: 800 }}>
                         ✓ JC: {selectedBooking.jc_number}
-                      </div>
-                    )}
-                    {(selectedBooking.pickup_required || selectedBooking.drop_required) && (
-                      <div style={{ fontSize: '0.72rem', color: '#16a34a', marginTop: '0.25rem' }}>
-                        {[selectedBooking.pickup_required && '🚐 Pickup', selectedBooking.drop_required && '🏠 Drop'].filter(Boolean).join(' · ')}
                       </div>
                     )}
                   </div>
                 </div>
 
-                {/* JC Conversion highlight */}
-                {selectedBooking.jc_number && (
-                  <div style={{ background: '#f0fdf4', border: '1px solid #86efac', borderRadius: '10px', padding: '0.65rem 0.85rem', marginBottom: '0.85rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                    <span style={{ fontSize: '1.1rem' }}>✅</span>
+                {/* Staff & Driver Allocation Card */}
+                <div style={{ background: '#f8fafc', borderRadius: '10px', padding: '0.75rem 0.85rem', marginBottom: '0.85rem', border: '1px solid #e2e8f0' }}>
+                  <div style={{ fontSize: '0.68rem', fontWeight: 800, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.45rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <span>👥 Staff & Driver Allocation</span>
+                    {selectedBooking.pickup_required && (
+                      <span style={{ background: '#ecfdf5', color: '#059669', fontSize: '0.65rem', padding: '1px 6px', borderRadius: '4px', fontWeight: 700 }}>
+                        🚐 Pickup Active
+                      </span>
+                    )}
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.65rem' }}>
                     <div>
-                      <div style={{ fontWeight: 700, fontSize: '0.82rem', color: '#15803d' }}>Converted to Job Card</div>
-                      <div style={{ fontSize: '0.72rem', color: '#16a34a' }}>JC: {selectedBooking.jc_number}{selectedBooking.converted_at ? ` · ${new Date(selectedBooking.converted_at).toLocaleDateString('en-IN')}` : ''}</div>
+                      <div style={{ fontSize: '0.7rem', color: '#64748b', fontWeight: 600, marginBottom: '0.2rem' }}>🚗 Allocated Driver:</div>
+                      <select
+                        value={selectedBooking.driver_name || ''}
+                        onChange={e => void updateBookingFields(selectedBooking, { driver_name: e.target.value || null })}
+                        style={{ ...selInp, padding: '0.35rem 0.5rem', fontSize: '0.78rem', borderColor: selectedBooking.driver_name ? '#bbf7d0' : '#cbd5e1', background: selectedBooking.driver_name ? '#f0fdf4' : '#fff', fontWeight: 600 }}
+                      >
+                        <option value="">— Select Driver —</option>
+                        {drivers.map(d => (
+                          <option key={d.id} value={d.employee_name}>
+                            🚗 {d.employee_name}
+                          </option>
+                        ))}
+                      </select>
                     </div>
-                    <div style={{ flex: 1 }} />
-                    <button onClick={() => openWhatsApp(selectedBooking)}
-                      style={{ background: '#22c55e', color: '#fff', border: 'none', borderRadius: '7px', padding: '0.3rem 0.75rem', fontSize: '0.75rem', fontWeight: 700, cursor: 'pointer' }}>
-                      💬 Send Confirmation
-                    </button>
+                    <div>
+                      <div style={{ fontSize: '0.7rem', color: '#64748b', fontWeight: 600, marginBottom: '0.2rem' }}>👤 Assigned CRE:</div>
+                      <select
+                        value={selectedBooking.cre_name || ''}
+                        onChange={e => void updateBookingFields(selectedBooking, { cre_name: e.target.value || null })}
+                        style={{ ...selInp, padding: '0.35rem 0.5rem', fontSize: '0.78rem', borderColor: selectedBooking.cre_name ? '#bfdbfe' : '#cbd5e1', background: selectedBooking.cre_name ? '#eff6ff' : '#fff', fontWeight: 600 }}
+                      >
+                        <option value="">— Select CRE —</option>
+                        {creUsers.map(u => (
+                          <option key={u.id} value={u.employee_name}>
+                            👤 {u.employee_name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
                   </div>
-                )}
+                </div>
 
-                {/* Pickup address */}
-                {selectedBooking.pickup_address && (
-                  <div style={{ background: '#faf5ff', borderRadius: '8px', padding: '0.6rem 0.85rem', marginBottom: '0.85rem', fontSize: '0.8rem', color: '#7c3aed', border: '1px solid #e9d5ff' }}>
-                    📍 <strong>Pickup/Drop Address:</strong> {selectedBooking.pickup_address}
+                {/* Pickup & Drop Section (Directly Editable) */}
+                <div style={{ background: '#faf5ff', borderRadius: '10px', padding: '0.75rem 0.85rem', marginBottom: '0.85rem', border: '1px solid #e9d5ff' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.45rem' }}>
+                    <div style={{ fontSize: '0.68rem', fontWeight: 800, color: '#7c3aed', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                      🚐 Pickup & Drop Management
+                    </div>
+                    <div style={{ display: 'flex', gap: '0.85rem' }}>
+                      <label style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', fontSize: '0.75rem', fontWeight: 700, color: '#581c87', cursor: 'pointer' }}>
+                        <input
+                          type="checkbox"
+                          checked={!!selectedBooking.pickup_required}
+                          onChange={e => void updateBookingFields(selectedBooking, { pickup_required: e.target.checked })}
+                          style={{ width: '13px', height: '13px', cursor: 'pointer' }}
+                        />
+                        Pickup Required
+                      </label>
+                      <label style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', fontSize: '0.75rem', fontWeight: 700, color: '#581c87', cursor: 'pointer' }}>
+                        <input
+                          type="checkbox"
+                          checked={!!selectedBooking.drop_required}
+                          onChange={e => void updateBookingFields(selectedBooking, { drop_required: e.target.checked })}
+                          style={{ width: '13px', height: '13px', cursor: 'pointer' }}
+                        />
+                        Drop Required
+                      </label>
+                    </div>
                   </div>
-                )}
 
-                {/* Source-specific info */}
+                  <div>
+                    <div style={{ fontSize: '0.68rem', color: '#6b21a8', fontWeight: 600, marginBottom: '0.2rem' }}>Pickup / Drop Address:</div>
+                    <div style={{ display: 'flex', gap: '0.4rem' }}>
+                      <input
+                        placeholder="Enter full address for pickup / drop..."
+                        value={selectedBooking.pickup_address || ''}
+                        onChange={e => setSelectedBooking(b => b ? { ...b, pickup_address: e.target.value } : b)}
+                        onBlur={e => void updateBookingFields(selectedBooking, { pickup_address: e.target.value || null })}
+                        style={{ ...inp, padding: '0.35rem 0.6rem', fontSize: '0.78rem', background: '#fff', borderColor: '#d8b4fe' }}
+                      />
+                      {selectedBooking.pickup_address && (
+                        <a
+                          href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(selectedBooking.pickup_address)}`}
+                          target="_blank"
+                          rel="noreferrer"
+                          style={{ background: '#7c3aed', color: '#fff', borderRadius: '6px', padding: '0.35rem 0.65rem', fontSize: '0.72rem', fontWeight: 700, textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '0.25rem', whiteSpace: 'nowrap' }}
+                        >
+                          📍 Map
+                        </a>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Customer Complaints / Remarks (Directly Editable) */}
+                <div style={{ background: '#fefce8', borderRadius: '10px', padding: '0.75rem 0.85rem', marginBottom: '0.85rem', border: '1px solid #fef08a' }}>
+                  <div style={{ fontSize: '0.68rem', fontWeight: 800, color: '#854d0e', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.35rem' }}>
+                    📝 Customer Complaints / Remarks
+                  </div>
+                  <textarea
+                    rows={2}
+                    placeholder="Enter customer complaints or instructions..."
+                    value={selectedBooking.complaint_description || ''}
+                    onChange={e => setSelectedBooking(b => b ? { ...b, complaint_description: e.target.value } : b)}
+                    onBlur={e => void updateBookingFields(selectedBooking, { complaint_description: e.target.value || null })}
+                    style={{ ...inp, background: '#fff', borderColor: '#fde047', fontSize: '0.78rem', color: '#713f12', resize: 'vertical' }}
+                  />
+                </div>
+
+                {/* Job Card Conversion */}
+                <div style={{ background: '#f0fdf4', border: '1px solid #86efac', borderRadius: '10px', padding: '0.65rem 0.85rem', marginBottom: '0.85rem', display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+                  <span style={{ fontSize: '1.1rem' }}>🔁</span>
+                  <div style={{ fontSize: '0.78rem', fontWeight: 700, color: '#15803d' }}>
+                    Job Card:
+                  </div>
+                  <input
+                    placeholder="JC Number (e.g. JC1234)"
+                    value={selectedBooking.jc_number || ''}
+                    onChange={e => setSelectedBooking(b => b ? { ...b, jc_number: e.target.value } : b)}
+                    onBlur={e => {
+                      const jc = e.target.value.trim()
+                      if (jc) {
+                        void updateBookingFields(selectedBooking, { jc_number: jc, converted_at: new Date().toISOString() })
+                      } else {
+                        void updateBookingFields(selectedBooking, { jc_number: null, converted_at: null })
+                      }
+                    }}
+                    style={{ ...inp, width: '150px', padding: '0.28rem 0.5rem', fontSize: '0.78rem', background: '#fff' }}
+                  />
+                  {selectedBooking.jc_number && (
+                    <span style={{ fontSize: '0.7rem', color: '#16a34a', fontWeight: 700 }}>
+                      ✓ Converted
+                    </span>
+                  )}
+                </div>
+
+                {/* Source-specific Telecalling info / editable fields */}
                 {selectedBooking.booking_source === 'Telecalling' && (
-                  <div style={{ background: '#f0f9ff', borderRadius: '8px', padding: '0.75rem 1rem', marginBottom: '0.85rem', border: '1px solid #bae6fd', fontSize: '0.78rem', color: '#0369a1' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: selectedBooking.call_notes ? '0.4rem' : 0 }}>
-                      <span style={{ fontWeight: 800 }}>📞 Booked via Telecalling</span>
+                  <div style={{ background: '#f0f9ff', borderRadius: '10px', padding: '0.75rem 0.85rem', marginBottom: '0.85rem', border: '1px solid #bae6fd' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.45rem' }}>
+                      <span style={{ fontSize: '0.68rem', fontWeight: 800, color: '#0369a1', textTransform: 'uppercase', letterSpacing: '0.05em' }}>📞 Telecalling Details</span>
                       {selectedBooking.telecall_assignment_id && (
                         <span style={{ background: '#ddd6fe', color: '#5b21b6', borderRadius: 4, fontSize: '0.65rem', padding: '1px 6px', fontWeight: 700 }}>
                           🔗 Assignment #{selectedBooking.telecall_assignment_id}
                         </span>
                       )}
                     </div>
-                    {(selectedBooking.caller_name || selectedBooking.call_outcome) && (
-                      <div style={{ color: '#0369a1' }}>
-                        👤 <strong>{selectedBooking.caller_name || '—'}</strong>
-                        {selectedBooking.call_attempt ? ` · Attempt #${selectedBooking.call_attempt}` : ''}
-                        {selectedBooking.call_outcome ? ` · ${selectedBooking.call_outcome}` : ''}
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.4rem', marginBottom: '0.4rem' }}>
+                      <div>
+                        <div style={{ fontSize: '0.68rem', color: '#0369a1', fontWeight: 600 }}>Caller:</div>
+                        <input
+                          placeholder="Caller Name"
+                          value={selectedBooking.caller_name || ''}
+                          onChange={e => setSelectedBooking(b => b ? { ...b, caller_name: e.target.value } : b)}
+                          onBlur={e => void updateBookingFields(selectedBooking, { caller_name: e.target.value || null })}
+                          style={{ ...inp, padding: '0.28rem 0.45rem', fontSize: '0.75rem', background: '#fff' }}
+                        />
                       </div>
-                    )}
+                      <div>
+                        <div style={{ fontSize: '0.68rem', color: '#0369a1', fontWeight: 600 }}>Attempt:</div>
+                        <select
+                          value={selectedBooking.call_attempt ?? 1}
+                          onChange={e => void updateBookingFields(selectedBooking, { call_attempt: parseInt(e.target.value) })}
+                          style={{ ...selInp, padding: '0.28rem 0.4rem', fontSize: '0.75rem', background: '#fff' }}
+                        >
+                          {[1, 2, 3, 4, 5].map(n => <option key={n} value={n}>{n}{n===1?'st':n===2?'nd':n===3?'rd':'th'} Call</option>)}
+                        </select>
+                      </div>
+                      <div>
+                        <div style={{ fontSize: '0.68rem', color: '#0369a1', fontWeight: 600 }}>Outcome:</div>
+                        <select
+                          value={selectedBooking.call_outcome || ''}
+                          onChange={e => void updateBookingFields(selectedBooking, { call_outcome: e.target.value || null })}
+                          style={{ ...selInp, padding: '0.28rem 0.4rem', fontSize: '0.75rem', background: '#fff' }}
+                        >
+                          <option value="">Select…</option>
+                          {CALL_OUTCOMES.map(o => <option key={o} value={o}>{o}</option>)}
+                        </select>
+                      </div>
+                    </div>
                     {selectedBooking.call_notes && (
-                      <div style={{ marginTop: '0.35rem', color: '#1e40af', fontStyle: 'italic' }}>
+                      <div style={{ marginTop: '0.35rem', color: '#1e40af', fontStyle: 'italic', fontSize: '0.75rem' }}>
                         📝 &ldquo;{selectedBooking.call_notes}&rdquo;
                       </div>
                     )}
+                  </div>
+                )}
+
+                {/* Source-specific WhatsApp info */}
+                {selectedBooking.booking_source === 'WhatsApp' && (
+                  <div style={{ background: '#f0fdf4', borderRadius: '10px', padding: '0.75rem 0.85rem', marginBottom: '0.85rem', border: '1px solid #bbf7d0' }}>
+                    <div style={{ fontSize: '0.68rem', fontWeight: 800, color: '#15803d', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.45rem' }}>💬 WhatsApp Information</div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr', gap: '0.5rem', alignItems: 'center' }}>
+                      <div>
+                        <div style={{ fontSize: '0.68rem', color: '#15803d', fontWeight: 600 }}>Thread ID / Ref:</div>
+                        <input
+                          placeholder="WA Thread ID"
+                          value={selectedBooking.wa_conversation_id || ''}
+                          onChange={e => setSelectedBooking(b => b ? { ...b, wa_conversation_id: e.target.value } : b)}
+                          onBlur={e => void updateBookingFields(selectedBooking, { wa_conversation_id: e.target.value || null })}
+                          style={{ ...inp, padding: '0.28rem 0.5rem', fontSize: '0.75rem', background: '#fff' }}
+                        />
+                      </div>
+                      <label style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.75rem', fontWeight: 600, color: '#166534', cursor: 'pointer', marginTop: '1rem' }}>
+                        <input
+                          type="checkbox"
+                          checked={!!selectedBooking.wa_opt_in}
+                          onChange={e => void updateBookingFields(selectedBooking, { wa_opt_in: e.target.checked })}
+                          style={{ width: '13px', height: '13px' }}
+                        />
+                        WA Updates Opt-In
+                      </label>
+                    </div>
                   </div>
                 )}
 
@@ -997,6 +1642,259 @@ export default function ServiceBookingPage() {
           </div>
         </div>
       )}
+
+      {/* ── Driver Management Modal ── */}
+      {showDriverModal && (
+        <DriverManagementModal
+          bookings={bookings}
+          drivers={drivers}
+          onClose={() => setShowDriverModal(false)}
+          onAssignDriver={updateDriver}
+        />
+      )}
+    </div>
+  )
+}
+
+// ─── Driver Management Modal Sub-component ──────────────────────────────────
+interface DriverManagementModalProps {
+  bookings: ServiceBooking[]
+  drivers: { id: string; employee_name: string }[]
+  onClose: () => void
+  onAssignDriver: (booking: ServiceBooking, driverName: string | null) => Promise<void>
+}
+
+function DriverManagementModal({ bookings, drivers, onClose, onAssignDriver }: DriverManagementModalProps) {
+  const [selectedDriver, setSelectedDriver] = useState<string>('all')
+  const [dateFilter, setDateFilter] = useState<string>('')
+  const [search, setSearch] = useState<string>('')
+  const [savingId, setSavingId] = useState<number | null>(null)
+
+  // Filter bookings that require pickup OR drop OR have a driver assigned
+  const pickupBookings = useMemo(() => {
+    return bookings.filter(b => b.pickup_required || b.drop_required || b.driver_name)
+  }, [bookings])
+
+  const filtered = useMemo(() => {
+    return pickupBookings.filter(b => {
+      if (selectedDriver === 'unassigned' && b.driver_name) return false
+      if (selectedDriver !== 'all' && selectedDriver !== 'unassigned' && b.driver_name !== selectedDriver) return false
+      if (dateFilter && b.appointment_date !== dateFilter) return false
+      if (search.trim()) {
+        const q = search.trim().toLowerCase()
+        const matchVeh = (b.reg_number || '').toLowerCase().includes(q)
+        const matchCust = (b.customer_name || '').toLowerCase().includes(q)
+        const matchPhone = (b.customer_phone || '').includes(q)
+        const matchAddr = (b.pickup_address || '').toLowerCase().includes(q)
+        if (!matchVeh && !matchCust && !matchPhone && !matchAddr) return false
+      }
+      return true
+    })
+  }, [pickupBookings, selectedDriver, dateFilter, search])
+
+  const totalPickups = pickupBookings.length
+  const assignedPickups = pickupBookings.filter(b => Boolean(b.driver_name)).length
+  const unassignedPickups = totalPickups - assignedPickups
+
+  async function handleDriverChange(b: ServiceBooking, driverName: string) {
+    setSavingId(b.id)
+    try {
+      await onAssignDriver(b, driverName || null)
+    } finally {
+      setSavingId(null)
+    }
+  }
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(15, 23, 42, 0.65)', backdropFilter: 'blur(3px)', zIndex: 110, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem' }}>
+      <div style={{ background: '#fff', borderRadius: '16px', width: '100%', maxWidth: '980px', maxHeight: '90vh', display: 'flex', flexDirection: 'column', overflow: 'hidden', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)' }}>
+
+        {/* Modal Header */}
+        <div style={{ background: '#1e293b', color: '#fff', padding: '1rem 1.25rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
+            <span style={{ fontSize: '1.4rem' }}>🚗</span>
+            <div>
+              <h2 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 800 }}>Driver Pickup & Drop Management</h2>
+              <p style={{ margin: 0, fontSize: '0.72rem', color: '#94a3b8' }}>Assign and track drivers for scheduled customer vehicle pickups & drops</p>
+            </div>
+          </div>
+          <button onClick={onClose} style={{ background: 'rgba(255,255,255,0.1)', border: 'none', color: '#fff', width: '32px', height: '32px', borderRadius: '8px', cursor: 'pointer', fontSize: '1.1rem', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            ✕
+          </button>
+        </div>
+
+        {/* KPI Strip */}
+        <div style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0', padding: '0.75rem 1.25rem', display: 'flex', gap: '0.75rem', flexWrap: 'wrap', flexShrink: 0 }}>
+          <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '0.4rem 0.85rem', display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+            <span style={{ fontSize: '1.1rem' }}>📦</span>
+            <div>
+              <div style={{ fontSize: '0.65rem', color: '#64748b', fontWeight: 700, textTransform: 'uppercase' }}>Total Pickups</div>
+              <div style={{ fontSize: '1.05rem', fontWeight: 800, color: '#1e293b' }}>{totalPickups}</div>
+            </div>
+          </div>
+          <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '8px', padding: '0.4rem 0.85rem', display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+            <span style={{ fontSize: '1.1rem' }}>✅</span>
+            <div>
+              <div style={{ fontSize: '0.65rem', color: '#16a34a', fontWeight: 700, textTransform: 'uppercase' }}>Driver Allocated</div>
+              <div style={{ fontSize: '1.05rem', fontWeight: 800, color: '#15803d' }}>{assignedPickups}</div>
+            </div>
+          </div>
+          <div style={{ background: unassignedPickups > 0 ? '#fef2f2' : '#f8fafc', border: `1px solid ${unassignedPickups > 0 ? '#fecaca' : '#e2e8f0'}`, borderRadius: '8px', padding: '0.4rem 0.85rem', display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+            <span style={{ fontSize: '1.1rem' }}>⚠️</span>
+            <div>
+              <div style={{ fontSize: '0.65rem', color: unassignedPickups > 0 ? '#dc2626' : '#64748b', fontWeight: 700, textTransform: 'uppercase' }}>Unassigned (Pending)</div>
+              <div style={{ fontSize: '1.05rem', fontWeight: 800, color: unassignedPickups > 0 ? '#b91c1c' : '#1e293b' }}>{unassignedPickups}</div>
+            </div>
+          </div>
+        </div>
+
+        {/* Filters Toolbar */}
+        <div style={{ background: '#fff', borderBottom: '1px solid #e2e8f0', padding: '0.75rem 1.25rem', display: 'flex', gap: '0.75rem', flexWrap: 'wrap', alignItems: 'center', flexShrink: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', flex: 1, minWidth: '180px' }}>
+            <span style={{ fontSize: '0.8rem', color: '#64748b' }}>🔍</span>
+            <input
+              type="text"
+              placeholder="Search reg no, customer, address..."
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              style={{ width: '100%', border: '1px solid #e2e8f0', borderRadius: '6px', padding: '0.35rem 0.6rem', fontSize: '0.8rem', outline: 'none' }}
+            />
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+            <span style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 600 }}>Driver:</span>
+            <select
+              value={selectedDriver}
+              onChange={e => setSelectedDriver(e.target.value)}
+              style={{ border: '1px solid #e2e8f0', borderRadius: '6px', padding: '0.35rem 0.6rem', fontSize: '0.8rem', background: '#fff', outline: 'none' }}
+            >
+              <option value="all">All Drivers ({pickupBookings.length})</option>
+              <option value="unassigned">⚠️ Unassigned Only ({unassignedPickups})</option>
+              {drivers.map(d => (
+                <option key={d.id} value={d.employee_name}>
+                  🚗 {d.employee_name} ({pickupBookings.filter(b => b.driver_name === d.employee_name).length})
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+            <span style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 600 }}>Date:</span>
+            <input
+              type="date"
+              value={dateFilter}
+              onChange={e => setDateFilter(e.target.value)}
+              style={{ border: '1px solid #e2e8f0', borderRadius: '6px', padding: '0.35rem 0.6rem', fontSize: '0.8rem', background: '#fff', outline: 'none' }}
+            />
+            {dateFilter && (
+              <button onClick={() => setDateFilter('')} style={{ background: '#f1f5f9', border: 'none', borderRadius: '6px', padding: '0.35rem 0.5rem', fontSize: '0.72rem', cursor: 'pointer', color: '#64748b' }}>
+                Clear
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Bookings List */}
+        <div style={{ flex: 1, overflow: 'auto', padding: '1rem 1.25rem' }}>
+          {filtered.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: '3rem 1rem', color: '#94a3b8' }}>
+              <div style={{ fontSize: '2.5rem', marginBottom: '0.5rem' }}>🚗</div>
+              <div style={{ fontSize: '0.95rem', fontWeight: 700, color: '#475569' }}>No Pickup / Drop Bookings Found</div>
+              <div style={{ fontSize: '0.75rem', marginTop: '0.25rem' }}>Try adjusting your filters or date selection above</div>
+            </div>
+          ) : (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(420px, 1fr))', gap: '0.85rem' }}>
+              {filtered.map(b => {
+                const isAssigned = Boolean(b.driver_name)
+                const isSavingThis = savingId === b.id
+
+                return (
+                  <div key={b.id} style={{ background: '#fff', border: `1.5px solid ${isAssigned ? '#cbd5e1' : '#f87171'}`, borderRadius: '12px', padding: '0.85rem 1rem', boxShadow: '0 1px 3px rgba(0,0,0,0.05)', display: 'flex', flexDirection: 'column', gap: '0.55rem' }}>
+                    
+                    {/* Top Row */}
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <div>
+                        <span style={{ fontSize: '0.92rem', fontWeight: 800, color: '#1e293b' }}>
+                          {b.reg_number}
+                        </span>
+                        {b.model && <span style={{ fontSize: '0.75rem', color: '#64748b', marginLeft: '0.4rem' }}>· {b.model}</span>}
+                      </div>
+                      <span style={{ fontSize: '0.68rem', fontWeight: 700, padding: '0.15rem 0.5rem', borderRadius: '12px', background: isAssigned ? '#ecfdf5' : '#fef2f2', color: isAssigned ? '#059669' : '#dc2626', border: `1px solid ${isAssigned ? '#a7f3d0' : '#fecaca'}` }}>
+                        {isAssigned ? `🚗 ${b.driver_name}` : '⚠️ Unassigned'}
+                      </span>
+                    </div>
+
+                    {/* Customer & Slot */}
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '0.78rem', color: '#334155' }}>
+                      <div>
+                        <strong>{b.customer_name}</strong>
+                        <a href={`tel:${b.customer_phone}`} style={{ marginLeft: '0.5rem', color: '#2563eb', textDecoration: 'none', fontWeight: 700 }}>
+                          📞 {b.customer_phone}
+                        </a>
+                      </div>
+                      <div style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 600 }}>
+                        📅 {b.appointment_date || 'TBD'} {b.booking_time ? `(${b.booking_time})` : ''}
+                      </div>
+                    </div>
+
+                    {/* Address Box */}
+                    <div style={{ background: '#f8fafc', borderRadius: '8px', padding: '0.45rem 0.65rem', border: '1px solid #e2e8f0', fontSize: '0.74rem', color: '#475569', display: 'flex', alignItems: 'flex-start', gap: '0.4rem' }}>
+                      <span style={{ fontSize: '0.85rem' }}>📍</span>
+                      <div style={{ flex: 1, wordBreak: 'break-word' }}>
+                        {b.pickup_address || 'Address not specified'}
+                      </div>
+                      {b.pickup_address && (
+                        <a
+                          href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(b.pickup_address)}`}
+                          target="_blank"
+                          rel="noreferrer"
+                          title="Open in Google Maps"
+                          style={{ color: '#2563eb', fontSize: '0.7rem', fontWeight: 700, textDecoration: 'none', whiteSpace: 'nowrap' }}
+                        >
+                          Map ↗
+                        </a>
+                      )}
+                    </div>
+
+                    {/* Driver Allocation Dropdown */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginTop: '0.2rem' }}>
+                      <span style={{ fontSize: '0.72rem', fontWeight: 700, color: '#334155', whiteSpace: 'nowrap' }}>
+                        Assign Driver:
+                      </span>
+                      <select
+                        disabled={isSavingThis}
+                        value={b.driver_name || ''}
+                        onChange={e => void handleDriverChange(b, e.target.value)}
+                        style={{ flex: 1, border: '1px solid #cbd5e1', borderRadius: '6px', padding: '0.35rem 0.5rem', fontSize: '0.78rem', background: b.driver_name ? '#f0fdf4' : '#fff', fontWeight: 600, outline: 'none', cursor: 'pointer' }}
+                      >
+                        <option value="">— Select Driver from Master —</option>
+                        {drivers.map(d => (
+                          <option key={d.id} value={d.employee_name}>
+                            🚗 {d.employee_name}
+                          </option>
+                        ))}
+                      </select>
+                      {isSavingThis && <span style={{ fontSize: '0.7rem', color: '#2563eb' }}>Saving…</span>}
+                    </div>
+
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* Modal Footer */}
+        <div style={{ background: '#f8fafc', borderTop: '1px solid #e2e8f0', padding: '0.75rem 1.25rem', display: 'flex', justifyContent: 'flex-end', flexShrink: 0 }}>
+          <button
+            onClick={onClose}
+            style={{ background: '#1e293b', color: '#fff', border: 'none', borderRadius: '8px', padding: '0.45rem 1.2rem', fontSize: '0.82rem', fontWeight: 700, cursor: 'pointer' }}
+          >
+            Done
+          </button>
+        </div>
+
+      </div>
     </div>
   )
 }

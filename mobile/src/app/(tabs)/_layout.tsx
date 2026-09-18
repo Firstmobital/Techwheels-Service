@@ -264,6 +264,14 @@ export default function TabsLayout() {
           href: null,
         }}
       />
+      <Tabs.Screen
+        name="driver-tasks"
+        options={{
+          title: 'Driver Tasks',
+          headerShown: false,
+          href: null,
+        }}
+      />
     </Tabs>
   )
 }

@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Body & Paint Dashboard (BP-01)
  * 
  * Redesigned to match reference artboard `bp` from design-refactor-bundle.
@@ -29,7 +29,7 @@ import {
 } from '../../lib/api/jobCards'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../context/AuthContext'
-import { useFocusEffect } from '@react-navigation/native'
+import { useFocusEffect } from 'expo-router'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Icon, PrimaryButton } from '../../components/ui'
 import { StatusPill } from '../../components/ui/StatusPill'

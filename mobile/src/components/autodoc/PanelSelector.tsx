@@ -30,7 +30,7 @@ export function PanelSelector({ panels, selectedPanelId, onSelectPanel }: PanelS
               }`}
               numberOfLines={1}
             >
-              {item.name}
+              {item.panel_name}
             </Text>
           </TouchableOpacity>
         )}

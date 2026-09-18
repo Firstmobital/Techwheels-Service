@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { ScrollView, Text, TouchableOpacity, View } from 'react-native'
 import { useRouter } from 'expo-router'
 import { SafeAreaView } from 'react-native-safe-area-context'
-import { useFocusEffect } from '@react-navigation/native'
+import { useFocusEffect } from 'expo-router'
 import { useAuth } from '../../context/AuthContext'
 import { supabase } from '../../lib/supabase'
 import { Icon, type IconName } from '../../components/ui/Icon'
@@ -14,10 +14,11 @@ type ModuleRow = {
   icon: IconName
   iconBg: string
   description: string
-  route?: '/(tabs)/autodoc' | '/(tabs)/reports' | '/(tabs)/import' | '/(tabs)/admin' | '/(tabs)/settings' | '/(tabs)/floor-incharge' | '/(tabs)/reception' | '/(tabs)/telecalling' | '/(tabs)/bodyshop-repair' | '/(tabs)/bodyshop-floor'
+  route?: '/(tabs)/autodoc' | '/(tabs)/reports' | '/(tabs)/import' | '/(tabs)/admin' | '/(tabs)/settings' | '/(tabs)/floor-incharge' | '/(tabs)/reception' | '/(tabs)/telecalling' | '/(tabs)/bodyshop-repair' | '/(tabs)/bodyshop-floor' | '/(tabs)/driver-tasks'
 }
 
 const MODULES: ModuleRow[] = [
+  { key: 'driver_tasks', label: 'Driver Tasks', icon: 'navigation', iconBg: 'bg-emerald-100', description: 'Doorstep pickup & drop navigation', route: '/(tabs)/driver-tasks' },
   { key: 'autodoc', label: 'Body & Paint', icon: 'edit', iconBg: 'bg-orange-100', description: 'Job cards · damage · claims', route: '/(tabs)/autodoc' },
   { key: 'reports', label: 'Reports', icon: 'file-text', iconBg: 'bg-blue-100', description: '28 revenue & ops reports', route: '/(tabs)/reports' },
   { key: 'import', label: 'Import Data', icon: 'cloud-upload', iconBg: 'bg-purple-100', description: 'Bulk CSV / XLSX upload', route: '/(tabs)/import' },
@@ -89,7 +90,11 @@ export default function PlatformHomeScreen() {
       )
       // Admins get everything
       if ((profile as { role?: string } | null)?.role === 'admin') {
-        ;['reception','floor_incharge','service_advisor','reports','import','admin','settings','autodoc','telecalling','bodyshop_repair','bodyshop_floor'].forEach(m => mods.add(m))
+        ;['reception','floor_incharge','service_advisor','reports','import','admin','settings','autodoc','telecalling','bodyshop_repair','bodyshop_floor','driver_tasks'].forEach(m => mods.add(m))
+      }
+      // Driver role gets driver_tasks
+      if ((profile as { role?: string } | null)?.role === 'driver') {
+        mods.add('driver_tasks')
       }
       if (mounted) setAllowedModules(mods)
     }

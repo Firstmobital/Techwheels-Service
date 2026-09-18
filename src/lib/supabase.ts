@@ -12,21 +12,15 @@ const processEnv: EnvBag =
 		? (process.env as EnvBag)
 		: {}
 
+const FALLBACK_SUPABASE_URL = 'https://jmdndcphkmaljhwgzqxq.supabase.co'
+const FALLBACK_SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImptZG5kY3Boa21hbGpod2d6cXhxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzgwNTQwNTIsImV4cCI6MjA5MzYzMDA1Mn0.ZvYw9-2fsrQQbqgIUfiWlIlvklZZtnkJSJ-V-LvgDE0'
+
 const supabaseUrl =
-	viteEnv.VITE_SUPABASE_URL ?? processEnv.EXPO_PUBLIC_SUPABASE_URL ?? ''
+	viteEnv.VITE_SUPABASE_URL ?? processEnv.EXPO_PUBLIC_SUPABASE_URL ?? FALLBACK_SUPABASE_URL
 const supabaseAnonKey =
-	viteEnv.VITE_SUPABASE_ANON_KEY ?? processEnv.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? ''
+	viteEnv.VITE_SUPABASE_ANON_KEY ?? processEnv.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? FALLBACK_SUPABASE_ANON_KEY
 
 export { supabaseUrl, supabaseAnonKey }
 export const hasSupabaseEnv = Boolean(supabaseUrl && supabaseAnonKey)
 
-if (!hasSupabaseEnv) {
-	console.error(
-		'Missing Supabase configuration. Add VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY to your .env.local file.',
-	)
-}
-
-export const supabase = createClient(
-	hasSupabaseEnv ? supabaseUrl : 'http://127.0.0.1:54321',
-	hasSupabaseEnv ? supabaseAnonKey : 'missing-anon-key',
-)
+export const supabase = createClient(supabaseUrl, supabaseAnonKey)

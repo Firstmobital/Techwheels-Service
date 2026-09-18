@@ -12,7 +12,7 @@ import {
   View,
 } from 'react-native'
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router'
-import { useFocusEffect } from '@react-navigation/native'
+import { useFocusEffect } from 'expo-router'
 import {
   getJobCardSummary,
   updateJobCardStatus,
@@ -428,7 +428,7 @@ export default function SubmitStageScreen() {
       const fileName = `estimate_${regSlug}.xlsx`
 
       // Generate Paint Estimate Excel (official Tata Motors format)
-      const excelBytes = generatePaintEstimateExcelBlob(
+      const excelBytes = await generatePaintEstimateExcelBlob(
         {
           vin:           jobCard?.vin ?? null,
           reg_number:    jobCard?.reg_number ?? null,
@@ -501,7 +501,7 @@ export default function SubmitStageScreen() {
       if (!uploadOk) throw new Error('Upload failed after retries. Check your internet connection.')
 
       // Register document in DB (try edge function first, fallback to direct client insert)
-      const fileInfo = await FileSystem.getInfoAsync(tmpUri, { size: true }).catch(() => ({} as any))
+      const fileInfo = await FileSystem.getInfoAsync(tmpUri, { size: true } as any).catch(() => ({} as any))
       const sizeMb = Number(((fileInfo as any).size ?? 0) / (1024 * 1024))
       void FileSystem.deleteAsync(tmpUri, { idempotent: true }).catch(() => {})
 

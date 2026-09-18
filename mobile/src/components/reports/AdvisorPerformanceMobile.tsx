@@ -105,7 +105,7 @@ export default function AdvisorPerformanceMobile({ branch, dateFilter }: Props) 
             const { data, error: fetchError } = await query
             if (fetchError) throw new Error(fetchError.message)
 
-            const batch = (data as Record<string, unknown>[] | null) ?? []
+            const batch = (data as unknown as Record<string, unknown>[] | null) ?? []
             rows.push(...batch)
 
             if (batch.length < QUERY_PAGE_SIZE) break

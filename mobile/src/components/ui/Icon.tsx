@@ -8,7 +8,6 @@
  * "Standardize iconography via a single line-icon wrapper; remove emoji icon usage."
  */
 
-import React, { useMemo } from 'react'
 import {
   AlertCircle,
   ArrowDown,
@@ -262,27 +261,24 @@ const iconMap: Record<IconName, React.ComponentType<LucideProps>> = {
  * <Icon name="camera" size={32} className="text-brand" />
  * ```
  */
-export const Icon = React.forwardRef<React.ComponentType<any>, IconProps>(
-  ({ name, size = 24, color, strokeWidth = 2, testID, ...rest }, ref) => {
-    const Component = useMemo(() => iconMap[name], [name])
+export function Icon({ name, size = 24, color, strokeWidth = 2, testID, ...rest }: IconProps) {
+  const Component = iconMap[name]
 
-    if (!Component) {
-      console.warn(`Icon "${name}" not found in icon map`)
-      return null
-    }
-
-    return (
-      <Component
-        ref={ref}
-        size={size}
-        color={color}
-        strokeWidth={strokeWidth}
-        testID={testID || `icon-${name}`}
-        {...rest}
-      />
-    )
+  if (!Component) {
+    console.warn(`Icon "${name}" not found in icon map`)
+    return null
   }
-)
+
+  return (
+    <Component
+      size={size}
+      color={color}
+      strokeWidth={strokeWidth}
+      testID={testID || `icon-${name}`}
+      {...rest}
+    />
+  )
+}
 
 Icon.displayName = 'Icon'
 

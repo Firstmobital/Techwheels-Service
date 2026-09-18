@@ -15,7 +15,8 @@ const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL ?? extraSupabaseUrl
 const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? extraSupabaseAnonKey
 const hasSupabaseEnv = !!supabaseUrl && !!supabaseAnonKey
 const FALLBACK_SUPABASE_URL = 'https://jmdndcphkmaljhwgzqxq.supabase.co'
-const FALLBACK_SUPABASE_ANON_KEY = 'invalid-anon-key'
+const FALLBACK_SUPABASE_ANON_KEY =
+  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImptZG5kY3Boa21hbGpod2d6cXhxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzgwNTQwNTIsImV4cCI6MjA5MzYzMDA1Mn0.ZvYw9-2fsrQQbqgIUfiWlIlvklZZtnkJSJ-V-LvgDE0'
 
 if (!hasSupabaseEnv) {
   console.warn('[supabase] Missing Supabase config (EXPO_PUBLIC_* and expo.extra fallback both empty)')

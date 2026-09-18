@@ -410,6 +410,14 @@ export default function CustomerDashboardScreen() {
               onPress={() => router.push('/(customer)/booking')}
             />
             <ActionTile
+              emoji="📋"
+              title="My Bookings"
+              subtitle="Track appointments & status"
+              border="#bae6fd"
+              accent="#0284c7"
+              onPress={() => router.push('/(customer)/my-bookings')}
+            />
+            <ActionTile
               emoji="🛠️"
               title="Live Repair Tracker"
               subtitle="Workshop stages for this job"

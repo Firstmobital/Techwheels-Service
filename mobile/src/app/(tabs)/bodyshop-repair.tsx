@@ -1,4 +1,4 @@
-/**
+﻿/**
  * mobile/src/app/(tabs)/bodyshop-repair.tsx
  * Replaces the stale file entirely.
  * Ground truth: src/pages/BodyshopRepairPage.tsx (web) + src/lib/api/bodyshopRepair.ts
@@ -9,7 +9,7 @@ import {
   ActivityIndicator, Alert, FlatList, RefreshControl,
   ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View,
 } from 'react-native'
-import { useFocusEffect } from '@react-navigation/native'
+import { useFocusEffect } from 'expo-router'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { supabase } from '../../lib/supabase'
 import { BodyshopSettlementBilling } from '../../components/BodyshopSettlementBilling'

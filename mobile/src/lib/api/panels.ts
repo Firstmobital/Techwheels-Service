@@ -57,7 +57,7 @@ export async function syncDamagePanels(jobCardId: string, selectedPanels: string
     panels: PanelRow[]
     removedPanelNames: string[]
   }>> => {
-    const listRes = await listPanels(resolvedIdRes.data, hints)
+    const listRes = await listPanels(resolvedIdRes.data ?? '', hints)
     if (listRes.error || !listRes.data) {
       return fail(listRes.error ?? 'Unable to read existing panels')
     }
@@ -102,11 +102,11 @@ export async function syncDamagePanels(jobCardId: string, selectedPanels: string
 
     for (const panelName of normalizedSelected) {
       if (existingByName.has(panelName)) continue
-      const createRes = await createPanel(resolvedIdRes.data, panelName, hints)
+      const createRes = await createPanel(resolvedIdRes.data ?? '', panelName, hints)
       if (createRes.error) return fail(createRes.error)
     }
 
-    const finalRes = await listPanels(resolvedIdRes.data, hints)
+    const finalRes = await listPanels(resolvedIdRes.data ?? '', hints)
     if (finalRes.error || !finalRes.data) return fail(finalRes.error ?? 'Unable to fetch final panel list')
 
     return ok({

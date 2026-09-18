@@ -1,4 +1,4 @@
-/**
+﻿/**
  * mobile/src/app/(tabs)/telecalling.tsx
  * Full-featured mobile telecalling screen for Android/iOS (Android-optimized)
  * Features: campaign selector, get-next, service history, WhatsApp send,
@@ -11,7 +11,7 @@ import {
   RefreshControl, ScrollView, StyleSheet, Text,
   TextInput, TouchableOpacity, View,
 } from 'react-native'
-import { useFocusEffect } from '@react-navigation/native'
+import { useFocusEffect } from 'expo-router'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { supabase, SUPABASE_URL } from '../../lib/supabase'
 

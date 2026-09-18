@@ -1,10 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { View, Text, ScrollView, TouchableOpacity, ActivityIndicator, StyleSheet } from 'react-native'
-import { createClient } from '@supabase/supabase-js'
-
-const SUPABASE_URL  = process.env.EXPO_PUBLIC_SUPABASE_URL  ?? ''
-const SUPABASE_ANON = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? ''
-const sb = createClient(SUPABASE_URL, SUPABASE_ANON)
+import { supabase as sb } from '@/lib/supabase'
 
 interface ClaimRow {
   job_card_id:        string

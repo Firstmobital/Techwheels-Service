@@ -7,7 +7,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native'
-import { useFocusEffect } from '@react-navigation/native'
+import { useFocusEffect } from 'expo-router'
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router'
 import { getJobCardSummary, type JobCardStatus } from '../../../lib/api/jobCards'
 import { listActivePanelLabels } from '../../../lib/api/autodocRates'

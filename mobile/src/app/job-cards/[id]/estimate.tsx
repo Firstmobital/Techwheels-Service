@@ -9,7 +9,7 @@ import {
   View,
 } from 'react-native'
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router'
-import { useFocusEffect } from '@react-navigation/native'
+import { useFocusEffect } from 'expo-router'
 import {
   addEstimateRow,
   listEstimateRows,
@@ -555,7 +555,7 @@ export default function JobCardEstimateScreen() {
         user?.user_metadata?.dealer_code ?? user?.app_metadata?.dealer_code ?? 'unknown'
       ).trim() || 'unknown'
 
-      const storagePath = `${dealerCode}/${effectiveJobCardId}/documents/excel_estimate/${Date.now()}-${fileName}`
+      const storagePath = `${dealerCode}/${jobCardId}/documents/excel_estimate/${Date.now()}-${fileName}`
 
       // ── Step 4: Get signed upload URL ───────────────────────────────────────
       const { data: signedData, error: signedErr } = await supabase.storage
@@ -593,7 +593,7 @@ export default function JobCardEstimateScreen() {
       const token = sessionRes.session?.access_token
       if (supabaseUrl && token) {
         try {
-          const fileInfo = await FileSystem.getInfoAsync(tmpUri, { size: true })
+          const fileInfo = await FileSystem.getInfoAsync(tmpUri, { size: true } as any)
           const sizeMb = Number(((fileInfo as any).size ?? 0) / (1024 * 1024))
 
           let dbRegistered = false
@@ -601,20 +601,20 @@ export default function JobCardEstimateScreen() {
             const upsertRes = await fetch(`${supabaseUrl}/functions/v1/document-link-upsert`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-              body: JSON.stringify({ jobCardId: effectiveJobCardId, docType: 'excel_estimate', storagePath, fileSizeMb: sizeMb }),
+              body: JSON.stringify({ jobCardId: jobCardId, docType: 'excel_estimate', storagePath, fileSizeMb: sizeMb }),
             })
             if (upsertRes.ok) dbRegistered = true
           } catch (e) {
             console.warn('[estimate-export] Edge function failed, using direct insert:', e)
           }
           if (!dbRegistered) {
-            const insertRes = await addDocument({ jobCardId: effectiveJobCardId, docType: 'excel_estimate', storagePath, fileSizeMb: sizeMb })
+            const insertRes = await addDocument({ jobCardId: jobCardId ?? '', docType: 'excel_estimate', storagePath, fileSizeMb: sizeMb })
             if (insertRes.error) console.warn('[estimate-export] Direct insert also failed:', insertRes.error)
           }
 
           // ── Step 7: Universal Drive Upload (background) ─────────────────────
           void invokeUniversalDriveUpload({
-            jobCardId: effectiveJobCardId,
+            jobCardId: jobCardId ?? '',
             fileType: 'excel_estimate',
             storagePath,
             fileSizeMb: sizeMb,
@@ -682,7 +682,7 @@ export default function JobCardEstimateScreen() {
                 />
                 <Pill
                   label={resolvedCityCategory ? `City: ${resolvedCityCategory}` : 'City pending'}
-                  variant={resolvedCityCategory ? 'estimate' : 'warning'}
+                  variant={resolvedCityCategory ? 'neutral' : 'warning'}
                   size="sm"
                 />
               </View>

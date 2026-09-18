@@ -99,9 +99,9 @@ export default function CustomerGatePassScreen() {
   // Gate pass is authorized if issued by Accounts Desk or marked paid/cleared
   const isGatepassAuthorized = hasIssuedRecord || Boolean(pass?.qr_token) || pass?.payment_status === 'Paid' || settlement?.status === 'received' || (billedVal > 0 && remainingVal === 0) || Boolean(pass?.keep_on_credit)
 
-  const billed = formatInr(billedVal)
-  const received = formatInr(receivedVal)
-  const remaining = formatInr(remainingVal)
+  const billed = formatInr(billedVal) ?? '—'
+  const received = formatInr(receivedVal) ?? '—'
+  const remaining = formatInr(remainingVal) ?? '—'
 
   const effectiveJcNumber = asText(pass?.job_card_no) || asText(settlement?.jc_number) || selected?.jc_number || '—'
   const effectiveReg = asText(pass?.reg_number) || asText(settlement?.reg_number) || selected?.reg_number || '—'

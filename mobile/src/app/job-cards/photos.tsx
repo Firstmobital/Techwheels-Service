@@ -9,7 +9,7 @@ import {
   View,
 } from 'react-native'
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router'
-import { getJobCardSummary, listPanels, listPanelPhotos, type JobCardRow, type PanelRow, type PanelPhotoRow } from '../../lib/api'
+import { getJobCardSummary, listPanels, listPanelPhotos, type JobSummaryRow, type PanelRow, type PanelPhotoRow } from '../../lib/api'
 import { PanelSelector } from '../../components/autodoc/PanelSelector'
 import { StagePhotoSection } from '../../components/autodoc/StagePhotoSection'
 
@@ -22,7 +22,7 @@ export default function PhotoWorkflowScreen() {
   const { id } = useLocalSearchParams<Params>()
   const jobCardId = useMemo(() => (Array.isArray(id) ? id[0] : id), [id])
 
-  const [jobCard, setJobCard] = useState<JobCardRow | null>(null)
+  const [jobCard, setJobCard] = useState<JobSummaryRow | null>(null)
   const [panels, setPanels] = useState<PanelRow[]>([])
   const [photos, setPhotos] = useState<PanelPhotoRow[]>([])
   const [loading, setLoading] = useState(true)
@@ -91,7 +91,7 @@ export default function PhotoWorkflowScreen() {
     }
 
     panelPhotos.forEach((photo) => {
-      const stage = photo.repair_stage || 'pre-repair'
+      const stage = (photo as any).repair_stage || 'pre-repair'
       if (stage in map) {
         map[stage as keyof typeof map].push(photo)
       }
@@ -146,15 +146,15 @@ export default function PhotoWorkflowScreen() {
             {selectedPanelData && (
               <View className="px-4 pt-4 gap-4">
                 <Text className="text-lg font-semibold text-gray-800">
-                  Panel: {selectedPanelData.name}
+                  Panel: {selectedPanelData.panel_name}
                 </Text>
 
                 <StagePhotoSection
                   stage="pre-repair"
                   stageLabel="Pre-Repair Damage"
                   photos={stagePhotoMap['pre-repair']}
-                  panelId={selectedPanel}
-                  jobCardId={jobCardId}
+                  panelId={selectedPanel ?? ''}
+                  jobCardId={jobCardId ?? ''}
                   onPhotoAction={loadData}
                 />
 
@@ -162,8 +162,8 @@ export default function PhotoWorkflowScreen() {
                   stage="under-repair"
                   stageLabel="Under-Repair Progress"
                   photos={stagePhotoMap['under-repair']}
-                  panelId={selectedPanel}
-                  jobCardId={jobCardId}
+                  panelId={selectedPanel ?? ''}
+                  jobCardId={jobCardId ?? ''}
                   onPhotoAction={loadData}
                 />
 
@@ -171,8 +171,8 @@ export default function PhotoWorkflowScreen() {
                   stage="post-repair"
                   stageLabel="Post-Repair Completion"
                   photos={stagePhotoMap['post-repair']}
-                  panelId={selectedPanel}
-                  jobCardId={jobCardId}
+                  panelId={selectedPanel ?? ''}
+                  jobCardId={jobCardId ?? ''}
                   onPhotoAction={loadData}
                 />
               </View>

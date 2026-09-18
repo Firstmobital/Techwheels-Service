@@ -333,7 +333,7 @@ export async function uploadDocumentFileFromUri(input: {
   let sizeMb = input.fileSizeMb ?? 0
   if (!sizeMb) {
     try {
-      const info = await FileSystem.getInfoAsync(input.uri, { size: true })
+      const info = await FileSystem.getInfoAsync(input.uri, { size: true } as any)
       sizeMb = Number(((info as any).size ?? 0) / (1024 * 1024))
     } catch { /* ignore */ }
   }

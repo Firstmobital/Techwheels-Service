@@ -1,4 +1,4 @@
-/**
+﻿/**
  * mobile/src/app/(tabs)/bodyshop-floor.tsx
  * Mobile version of web BodyshopFloorPage.tsx
  * Business logic: 100% mirrors web (same DB tables, columns, rules).
@@ -10,7 +10,7 @@ import {
   RefreshControl, ScrollView, StyleSheet, Text,
   TextInput, TouchableOpacity, View,
 } from 'react-native'
-import { useFocusEffect } from '@react-navigation/native'
+import { useFocusEffect } from 'expo-router'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { supabase } from '../../lib/supabase'
 import { parseBodyshopFloorRoles } from '../../lib/businessRoles'

@@ -15,7 +15,7 @@ import {
   View,
 } from 'react-native'
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router'
-import { useFocusEffect } from '@react-navigation/native'
+import { useFocusEffect } from 'expo-router'
 import { listPanelPhotos, createAutodocSignedUrlMap, deletePanelPhoto, type PanelPhotoRow } from '../../../lib/api'
 import { logEvent } from '../../../utils/logger'
 import { Icon, PrimaryButton, SecondaryButton } from '../../../components/ui'

@@ -1,11 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { createClient } from '@supabase/supabase-js'
-
-// ── Supabase client ──────────────────────────────────────────────────────────
-const sb = createClient(
-  import.meta.env.VITE_SUPABASE_URL as string,
-  import.meta.env.VITE_SUPABASE_ANON_KEY as string
-)
+import { supabase as sb } from '../lib/supabase'
 
 // ── Types ────────────────────────────────────────────────────────────────────
 interface ClaimRow {

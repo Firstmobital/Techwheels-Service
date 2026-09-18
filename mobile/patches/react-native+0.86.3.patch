@@ -1,0 +1,44 @@
+diff --git a/node_modules/react-native/src/private/components/virtualview/VirtualViewExperimentalNativeComponent.js b/node_modules/react-native/src/private/components/virtualview/VirtualViewExperimentalNativeComponent.js
+index c640b5a..a50e35d 100644
+--- a/node_modules/react-native/src/private/components/virtualview/VirtualViewExperimentalNativeComponent.js
++++ b/node_modules/react-native/src/private/components/virtualview/VirtualViewExperimentalNativeComponent.js
+@@ -84,17 +84,8 @@ type VirtualViewExperimentalNativeProps = Readonly<{
+    * to convert `number` into an enum in `VirtualView`.
+    */
+   renderState: Int32,
+-
+-  /**
+-   * See `NativeModeChangeEvent`.
+-   */
+   onModeChange?: ?DirectEventHandler<NativeModeChangeEvent>,
+ }>;
+ 
+-// TODO: Rename to eliminate "Experimental" suffix in the name.
+-export default codegenNativeComponent<VirtualViewExperimentalNativeProps>(
+-  'VirtualViewExperimental',
+-  {
+-    interfaceOnly: true,
+-  },
+-) as HostComponent<VirtualViewExperimentalNativeProps>;
++const VirtualViewExperimentalNativeComponent = (null: any);
++export default VirtualViewExperimentalNativeComponent;
+diff --git a/node_modules/react-native/src/private/components/virtualview/VirtualViewNativeComponent.js b/node_modules/react-native/src/private/components/virtualview/VirtualViewNativeComponent.js
+index 4ba5b68..65016c3 100644
+--- a/node_modules/react-native/src/private/components/virtualview/VirtualViewNativeComponent.js
++++ b/node_modules/react-native/src/private/components/virtualview/VirtualViewNativeComponent.js
+@@ -84,13 +84,8 @@ type VirtualViewNativeProps = Readonly<{
+    * to convert `number` into an enum in `VirtualView`.
+    */
+   renderState: Int32,
+-
+-  /**
+-   * See `NativeModeChangeEvent`.
+-   */
+   onModeChange?: ?DirectEventHandler<NativeModeChangeEvent>,
+ }>;
+ 
+-export default codegenNativeComponent<VirtualViewNativeProps>('VirtualView', {
+-  interfaceOnly: true,
+-}) as HostComponent<VirtualViewNativeProps>;
++const VirtualViewNativeComponent = (null: any);
++export default VirtualViewNativeComponent;

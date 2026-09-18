@@ -243,7 +243,7 @@ export default function CustomerInvoicesScreen() {
               </TouchableOpacity>
             ) : null}
 
-            {pay.status === 'paid' || (pay.remaining != null && pay.remaining <= 0 && pay.billed > 0) ? (
+            {pay.status === 'paid' || (pay.remaining != null && pay.remaining <= 0 && (pay.billed ?? 0) > 0) ? (
               <View className="space-y-2">
                 <View className="bg-emerald-50 rounded-xl p-3 items-center border border-emerald-200">
                   <Text className="text-emerald-800 text-[13px] font-black">

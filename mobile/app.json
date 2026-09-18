@@ -7,11 +7,6 @@
     "scheme": "techwheelsservice",
     "userInterfaceStyle": "automatic",
     "icon": "./assets/icon.png",
-    "splash": {
-      "image": "./assets/splash-icon.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#FFFFFF"
-    },
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.techwheels.service",
@@ -81,6 +76,17 @@
       ],
       "expo-font",
       "expo-document-picker",
+      "expo-secure-store",
+      "expo-sharing",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash-icon.png",
+          "resizeMode": "contain",
+          "backgroundColor": "#FFFFFF"
+        }
+      ],
+      "@react-native-community/datetimepicker",
       [
         "expo-build-properties",
         {
@@ -92,8 +98,7 @@
       ]
     ],
     "experiments": {
-      "typedRoutes": true,
-      "reactCompiler": true
+      "typedRoutes": true
     },
     "runtimeVersion": {
       "policy": "appVersion"
