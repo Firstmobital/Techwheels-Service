@@ -46,6 +46,7 @@ export interface BodyshopSettlementLine {
   is_reversed: boolean
   actor_email: string | null
   created_at: string
+  import_row_token?: string | null
 }
 
 export interface SuggestedInvoice {
@@ -162,6 +163,15 @@ export async function upsertBodyshopSettlementHeader(input: {
   return asPayload(data)
 }
 
+function withImportRowToken<T extends Record<string, unknown>>(
+  args: T,
+  importRowToken?: string | null,
+): T | (T & { p_import_row_token: string }) {
+  const token = String(importRowToken ?? '').trim()
+  if (!token) return args
+  return { ...args, p_import_row_token: token }
+}
+
 export async function postDoRelease(input: {
   repairCardId: number
   mainAmount?: number | null
@@ -170,20 +180,27 @@ export async function postDoRelease(input: {
   txnDate?: string | null
   reference?: string | null
   remarks?: string | null
+  importRowToken?: string | null
 }): Promise<SettlementPayload> {
-  const { data, error } = await supabase.rpc('add_bodyshop_settlement_line', {
-    p_repair_card_id: input.repairCardId,
-    p_party: null,
-    p_line_type: null,
-    p_component: null,
-    p_amount: null,
-    p_txn_date: input.txnDate ?? null,
-    p_reference: input.reference ?? null,
-    p_remarks: input.remarks ?? null,
-    p_main_amount: money2(input.mainAmount),
-    p_gst_amount: money2(input.gstAmount),
-    p_tds_amount: money2(input.tdsAmount),
-  })
+  const { data, error } = await supabase.rpc(
+    'add_bodyshop_settlement_line',
+    withImportRowToken(
+      {
+        p_repair_card_id: input.repairCardId,
+        p_party: null,
+        p_line_type: null,
+        p_component: null,
+        p_amount: null,
+        p_txn_date: input.txnDate ?? null,
+        p_reference: input.reference ?? null,
+        p_remarks: input.remarks ?? null,
+        p_main_amount: money2(input.mainAmount),
+        p_gst_amount: money2(input.gstAmount),
+        p_tds_amount: money2(input.tdsAmount),
+      },
+      input.importRowToken,
+    ),
+  )
   if (error) throw new Error(settlementRpcError(error))
   return asPayload(data)
 }
@@ -194,20 +211,27 @@ export async function postCustomerAmount(input: {
   txnDate?: string | null
   reference?: string | null
   remarks?: string | null
+  importRowToken?: string | null
 }): Promise<SettlementPayload> {
-  const { data, error } = await supabase.rpc('add_bodyshop_settlement_line', {
-    p_repair_card_id: input.repairCardId,
-    p_party: 'customer',
-    p_line_type: null,
-    p_component: null,
-    p_amount: money2(input.amount),
-    p_txn_date: input.txnDate ?? null,
-    p_reference: input.reference ?? null,
-    p_remarks: input.remarks ?? null,
-    p_main_amount: null,
-    p_gst_amount: null,
-    p_tds_amount: null,
-  })
+  const { data, error } = await supabase.rpc(
+    'add_bodyshop_settlement_line',
+    withImportRowToken(
+      {
+        p_repair_card_id: input.repairCardId,
+        p_party: 'customer',
+        p_line_type: null,
+        p_component: null,
+        p_amount: money2(input.amount),
+        p_txn_date: input.txnDate ?? null,
+        p_reference: input.reference ?? null,
+        p_remarks: input.remarks ?? null,
+        p_main_amount: null,
+        p_gst_amount: null,
+        p_tds_amount: null,
+      },
+      input.importRowToken,
+    ),
+  )
   if (error) throw new Error(settlementRpcError(error))
   return asPayload(data)
 }

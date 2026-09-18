@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import * as XLSX from 'xlsx'
 import { BodyshopSettlementPanel } from '../components/BodyshopSettlementPanel'
 import {
@@ -16,6 +16,15 @@ import {
 } from '../lib/api/bodyshopRecovery'
 import type { RepairCard } from '../lib/api/bodyshopRepair'
 import { postedDoComponentAmounts } from '../lib/api/bodyshopSettlement'
+import {
+  buildPaymentTemplateWorkbook,
+  commitPaymentImportRow,
+  loadPaymentImportContext,
+  previewPaymentImport,
+  readPaymentWorkbookRows,
+  type PaymentImportCommitResult,
+  type PaymentImportPreview,
+} from '../lib/bodyshopRecoveryPaymentImport'
 import { supabase } from '../lib/supabase'
 
 function inr(v: number | null | undefined) {
@@ -134,6 +143,12 @@ export default function BodyshopRecoveryPage() {
   const [postRow, setPostRow] = useState<DoRecoveryRow | null>(null)
   const [postCard, setPostCard] = useState<RepairCard | null>(null)
   const [exporting, setExporting] = useState(false)
+  const [exportingTemplate, setExportingTemplate] = useState(false)
+  const [importPreview, setImportPreview] = useState<PaymentImportPreview | null>(null)
+  const [importCommit, setImportCommit] = useState<PaymentImportCommitResult | null>(null)
+  const [importing, setImporting] = useState(false)
+  const [committing, setCommitting] = useState(false)
+  const importFileRef = useRef<HTMLInputElement>(null)
 
   function flash(msg: string, ok = true) {
     setToast({ msg, ok })
@@ -484,6 +499,68 @@ export default function BodyshopRecoveryPage() {
     }
   }
 
+  function exportPaymentTemplate() {
+    if (visible.length === 0) return
+    setExportingTemplate(true)
+    try {
+      const wb = buildPaymentTemplateWorkbook(
+        visible.map((r) => ({
+          jobCardNo: r.job_card_no,
+          vehicleNo: r.reg_number,
+          invoiceNo: r.invoice_number,
+          repairCardId: r.repair_card_id,
+        })),
+      )
+      XLSX.writeFile(wb, `bodyshop-recovery-payment-template-${new Date().toISOString().slice(0, 10)}.xlsx`)
+    } catch (e) {
+      flash(e instanceof Error ? e.message : 'Payment template export failed', false)
+    } finally {
+      setExportingTemplate(false)
+    }
+  }
+
+  async function handleImportFile(file: File) {
+    setImporting(true)
+    setImportCommit(null)
+    try {
+      const workbookRows = await readPaymentWorkbookRows(file)
+      const repairCardIds = workbookRows.map((r) => Number(r.repair_card_id)).filter((id) => Number.isInteger(id) && id > 0)
+      const tokens = workbookRows.map((r) => String(r.import_row_token ?? '').trim()).filter(Boolean)
+      const ctx = await loadPaymentImportContext(repairCardIds, tokens)
+      setImportPreview(previewPaymentImport(workbookRows, ctx.liveById, ctx.postedByToken))
+    } catch (e) {
+      flash(e instanceof Error ? e.message : 'Unable to read payment workbook', false)
+      setImportPreview(null)
+    } finally {
+      setImporting(false)
+    }
+  }
+
+  async function commitImport() {
+    if (!importPreview) return
+    const toCommit = importPreview.rows.filter((r) => r.status === 'valid' || r.status === 'already_imported')
+    if (toCommit.length === 0) return
+    setCommitting(true)
+    try {
+      const resultRows = []
+      for (const row of toCommit) {
+        resultRows.push(await commitPaymentImportRow(row))
+      }
+      setImportCommit({
+        posted: resultRows.filter((r) => r.status === 'posted').length,
+        alreadyImported: resultRows.filter((r) => r.status === 'already_imported').length,
+        failed: resultRows.filter((r) => r.status === 'failed').length,
+        rows: resultRows,
+      })
+      setImportPreview(null)
+      await load()
+    } catch (e) {
+      flash(e instanceof Error ? e.message : 'Import commit failed', false)
+    } finally {
+      setCommitting(false)
+    }
+  }
+
   function openPost(row: DoRecoveryRow) {
     setPostRow(row)
     setPostCard(settlementCardFromRecoveryRow(row))
@@ -521,9 +598,26 @@ export default function BodyshopRecoveryPage() {
           <button type="button" className="btn" onClick={() => void load()} disabled={loading}>
             {loading ? 'Loading…' : 'Refresh'}
           </button>
-          <button type="button" className="btn btn--primary" onClick={() => void exportExcel()} disabled={visible.length === 0 || exporting}>
+          <button type="button" className="btn" onClick={() => void exportExcel()} disabled={visible.length === 0 || exporting}>
             {exporting ? 'Exporting…' : 'Export Excel'}
           </button>
+          <button type="button" className="btn" onClick={() => exportPaymentTemplate()} disabled={visible.length === 0 || exportingTemplate}>
+            {exportingTemplate ? 'Exporting…' : 'Export Payment Template'}
+          </button>
+          <button type="button" className="btn btn--primary" onClick={() => importFileRef.current?.click()} disabled={importing || committing}>
+            {importing ? 'Reading…' : 'Import Payments'}
+          </button>
+          <input
+            ref={importFileRef}
+            type="file"
+            accept=".xlsx,.xls"
+            hidden
+            onChange={(e) => {
+              const file = e.target.files?.[0]
+              if (file) void handleImportFile(file)
+              e.target.value = ''
+            }}
+          />
         </div>
       </div>
 
@@ -531,6 +625,52 @@ export default function BodyshopRecoveryPage() {
       {toast && (
         <div className={`brx-settle-banner ${toast.ok ? '' : 'is-error'}`}>
           {toast.msg}
+        </div>
+      )}
+
+      {importPreview && (
+        <div className="brx-recov-import">
+          <div className="brx-recov-import__h">Payment import preview</div>
+          <div className="brx-recov-import__meta">
+            Total: {importPreview.totalRows} · Valid: {importPreview.valid} · Already imported: {importPreview.alreadyImported} · Rejected: {importPreview.rejected}
+          </div>
+          <div className="brx-recov-import__meta">
+            Posting: Main {inr(importPreview.totalMain)} · GST {inr(importPreview.totalGst)} · TDS {inr(importPreview.totalTds)} · CP {inr(importPreview.totalCp)}
+          </div>
+          <div className="brx-recov-import__rows">
+            {importPreview.rows.filter((r) => r.status === 'rejected').slice(0, 30).map((r) => (
+              <div key={r.rowNumber}>{r.rowNumber}: {r.jobCardNo || '—'} — rejected: {r.message}</div>
+            ))}
+            {importPreview.rows.filter((r) => r.status === 'already_imported').slice(0, 10).map((r) => (
+              <div key={r.rowNumber}>{r.rowNumber}: {r.jobCardNo || '—'} — already imported</div>
+            ))}
+            {importPreview.rows.filter((r) => r.status === 'valid').slice(0, 10).map((r) => (
+              <div key={r.rowNumber}>{r.rowNumber}: {r.jobCardNo || '—'} — valid: {r.message}</div>
+            ))}
+          </div>
+          <div className="brx-recov-import__actions">
+            <button type="button" className="btn btn--primary" disabled={importPreview.valid === 0 || committing} onClick={() => void commitImport()}>
+              {committing ? 'Posting…' : 'Commit Valid Rows'}
+            </button>
+            <button type="button" className="btn" disabled={committing} onClick={() => setImportPreview(null)}>Cancel</button>
+          </div>
+        </div>
+      )}
+
+      {importCommit && (
+        <div className="brx-recov-import">
+          <div className="brx-recov-import__h">Payment import result</div>
+          <div className="brx-recov-import__meta">
+            Posted: {importCommit.posted} · Already imported: {importCommit.alreadyImported} · Failed: {importCommit.failed}
+          </div>
+          <div className="brx-recov-import__rows">
+            {importCommit.rows.slice(0, 40).map((r) => (
+              <div key={r.rowNumber}>{r.rowNumber}: {r.jobCardNo || '—'} — {r.status}: {r.message}</div>
+            ))}
+          </div>
+          <div className="brx-recov-import__actions">
+            <button type="button" className="btn" onClick={() => setImportCommit(null)}>Dismiss</button>
+          </div>
         </div>
       )}
 

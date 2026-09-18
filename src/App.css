@@ -1059,8 +1059,46 @@ table.tbl { width: 100%; border-collapse: collapse; font-size: 13.5px; }
   margin-bottom: 6px;
   gap: 10px;
   align-items: center;
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
   flex: none;
+}
+.recov-page .acct-pagehead-actions {
+  justify-content: flex-end;
+  gap: 6px;
+}
+.recov-page .acct-pagehead-actions .btn {
+  height: 34px;
+  font-size: 12.5px;
+  padding: 0 10px;
+}
+.brx-recov-import {
+  flex: none;
+  margin-bottom: 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 10px;
+  background: var(--card);
+}
+.brx-recov-import__h {
+  font-weight: 650;
+  font-size: 13px;
+}
+.brx-recov-import__meta {
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.brx-recov-import__rows {
+  margin-top: 6px;
+  max-height: 120px;
+  overflow: auto;
+  font-size: 12px;
+  line-height: 1.45;
+}
+.brx-recov-import__actions {
+  display: flex;
+  gap: 6px;
+  margin-top: 8px;
 }
 .recov-page .pagehead h1 {
   font-size: 20px;
