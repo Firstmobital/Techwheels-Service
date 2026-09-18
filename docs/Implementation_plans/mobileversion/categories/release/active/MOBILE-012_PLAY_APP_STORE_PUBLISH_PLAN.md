@@ -2,8 +2,8 @@
 
 **Plan ID:** MOBILE-012  
 **Date Created:** 2026-09-17  
-**Last Updated:** 2026-09-17 (Play rejected AAB 11: use system photo picker. Next AAB blocks `READ_MEDIA_*`, keeps CAMERA)  
-**Status:** In Progress (IPA 13 on TestFlight; Play production needs a new AAB without gallery-wide media permissions)  
+**Last Updated:** 2026-09-18 (App Store listing paste + Connect checklist; IPA 13 already in Connect — next is Add for Review, not another IPA)  
+**Status:** In Progress (complete ASC 6774519420 listing + Add for Review; Play still needs AAB 12+)  
 **Owner:** Mobile + Platform  
 **Platform:** mobile (Expo store binary + Play / App Store listings)  
 **Category:** release  
@@ -181,13 +181,13 @@ Status values: targeted | in-progress | blocked | completed
 | Phase 4A — screenshots from TW-icon binary | in-progress | TestFlight IPA build 13 installed. Capture 6.7" shots (no live PII) into `mobile/store/ios/screenshots/`. Android shots after Play internal install or matching AAB sideload. Shot list in `mobile/store/LISTING.md`. | Operator | 2026-09-17 |
 | Phase 4B–4D — listing paste | completed | Paste-ready Play + App Store copy in `mobile/store/LISTING.md` (demo accounts still operator fill-in before Add for Review). | Engineering | 2026-09-17 |
 | Phase 5 — Play AAB internal testing then production | in-progress | AAB 11 blocked by Play photo-picker policy. New AAB **versionCode 12** queued: https://expo.dev/accounts/tw_admin/projects/techwheels-service/builds/c58fbda2-2945-4873-87d8-6348b3122ab3 (`READ_MEDIA_*` blocked, CAMERA kept). Replace the production draft with this AAB. Advertising ID = No. Ignore R8 warning. | Operator + Engineering | 2026-09-17 |
-| Phase 6 — App Store listing + review for `6774519420` | in-progress | IPA finished + Connect submit done. TestFlight install of build 13 (`7ef042cd-f3fc-4a17-813d-5d5625e7df69`). Next: paste listing from `LISTING.md`, 1024 PNG, screenshots, privacy URL, demo accounts; **Add for Review**; **manually release**. Do not submit to other ASC ids. | Operator + Engineering | 2026-09-17 |
+| Phase 6 — App Store listing + review for `6774519420` | in-progress | IPA 1.0.0 (13) is in Connect / TestFlight. Do **not** cut another IPA. Operator: paste listing + privacy nutrition from `mobile/store/LISTING.md`, 1024 PNG, 6.7" screenshots, demo accounts, India + **manually release**, then **Add for Review**. | Operator + Engineering | 2026-09-18 |
 
 ---
 
 ## 9) Implementation Phases
 
-Phases 0–3c done. IPA 13 is on TestFlight. **Play: AAB 11 cannot go to production** (system photo-picker policy). Next: production AAB with `READ_MEDIA_*` blocked, then send for review. Advertising ID = No. **App Store next:** screenshots + listing + Add for Review. Do not run `ota:prod` expecting the Android permission strip.
+Phases 0–3c done. IPA 13 is in App Store Connect. **App Store next (this session):** finish the 1.0 listing in ASC `6774519420` and **Add for Review** — see `mobile/store/LISTING.md`. Do not upload a new IPA. **Play** still needs AAB 12+ (picker policy). Do not run `ota:prod` for store listing.
 
 ### Phase 0 — Identity and EAS submit
 
@@ -476,8 +476,8 @@ Open [App Store Connect → app 6774519420](https://appstoreconnect.apple.com/ap
 2. 1024 PNG from `mobile/store/ios/icon-1024.png`. iPhone screenshots only (tablet off).
 3. Privacy nutrition labels: name/email/phone, photos, precise location (app function, linked to identity for geotagged jobs), user ID, diagnostics. Not used for tracking/ads.
 4. Export compliance: **No** (already in Info.plist).
-5. Sign-in required: Yes. Paste reviewer accounts.
-6. **Add for Review**. **Manually release** after approval.
+5. Sign-in required: Yes. Paste reviewer accounts (same two sets as Play: staff email + customer 10-digit mobile in both fields).
+6. Select build **1.0.0 (13)**. **Add for Review**. **Manually release** after approval. Do not click Release Automatically.
 
 **After approval:** JS-only changes via `npm run ota:prod` / `ota:prod:ios` (`runtimeVersion` follows `appVersion`). Icon, splash, and permission changes require a **new store binary**.
 
@@ -538,7 +538,7 @@ Open [App Store Connect → app 6774519420](https://appstoreconnect.apple.com/ap
 2. Read [MOBILE-010](../../program/active/MOBILE-010_MOBILE_PROGRAM_MASTER_TRACKER.md) for program status.
 3. Native rebuild for this round is **done** (AAB 11 + IPA 13). Do not `ota:prod` expecting those native changes on older binaries.
 4. Play: AAB 11 failed photo-picker policy. Upload the **new** AAB (12+) with `READ_MEDIA_*` blocked. Advertising ID = **No**. Ignore R8 warning. Package `com.techwheels.service`.
-5. App Store: Phase 4A screenshots → listing from `mobile/store/LISTING.md` → **Add for Review** only after demo accounts. **Manually release.**
+5. App Store now: [ASC 6774519420](https://appstoreconnect.apple.com/apps/6774519420/appstore) → paste `LISTING.md` → 6.7" screenshots → demo accounts → build 13 → **Add for Review** → **manually release**. No new IPA.
 6. Never `eas submit` to `6807690158` / `6808128907` / `6760889688`.
 
 ---

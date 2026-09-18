@@ -69,7 +69,7 @@ Use: Not Started | In Progress | Blocked | Review | Done
 | M10-005 | GPS stamp parity closure | MOBILE-005 | In Progress | Mobile Team | Complete remaining phases and QA gates |
 | M10-006 | Satellite hybrid provider rollout decision | MOBILE-006 | Pending | Product + Mobile | Confirm budget/quota and backend proxy readiness |
 | M10-007 | Single-app customer + staff identity (RPCs, Expo shells) | MOBILE-011 | Not Started | Mobile + Platform | Phase 0: delete client `service_role` (no dashboard rotation); do not copy `bodyshop/` into Expo |
-| M10-008 | Play + App Store first public listing | MOBILE-012 | In Progress | Mobile + Platform | Play rejected AAB 11 photo picker policy. Next: AAB 12+ with READ_MEDIA blocked, then send for review. App Store: screenshots + Add for Review. |
+| M10-008 | Play + App Store first public listing | MOBILE-012 | In Progress | Mobile + Platform | App Store: finish ASC 6774519420 listing + Add for Review on IPA 13 (no new IPA). Play: still AAB 12+ after picker policy. |
 
 ### 4.1) Current Session Kickoff (2026-06-18)
 

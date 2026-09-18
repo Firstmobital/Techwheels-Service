@@ -417,9 +417,15 @@ function matchesLocationFilter(jc: JobCard, branchFilter: string): boolean {
   return getLocationLabel(jc.location ?? jc.branch) === branchFilter
 }
 
+function jobCardPortalLabel(jc: Pick<JobCard, 'portal' | 'fuel_type'>): string {
+  // SA employee_master.fuel_type is overlaid onto fuel_type in fetchAll.
+  // Prefer that over JC portal so PS2_3000840 (EV in master, PV dealer suffix) counts as EV.
+  return getPortalLabel(jc.fuel_type ?? jc.portal)
+}
+
 function matchesPortalFilter(jc: JobCard, fuelTypeFilter: string): boolean {
   if (fuelTypeFilter === 'all') return true
-  return getPortalLabel(jc.portal ?? jc.fuel_type) === fuelTypeFilter
+  return jobCardPortalLabel(jc) === fuelTypeFilter
 }
 
 function jobCardMatchesSearch(
@@ -1275,7 +1281,7 @@ export default function FloorInchargePage() {
   }, [locCountRows])
 
   const fuelTypeOptions = useMemo(() => {
-    const fuelTypes = new Set(portalCountRows.map((jc) => getPortalLabel(jc.portal ?? jc.fuel_type)))
+    const fuelTypes = new Set(portalCountRows.map((jc) => jobCardPortalLabel(jc)))
     return Array.from(fuelTypes).sort((a, b) => {
       if (a === UNKNOWN_PORTAL) return 1
       if (b === UNKNOWN_PORTAL) return -1
@@ -1476,7 +1482,7 @@ export default function FloorInchargePage() {
         <select className="cft__sel" value={fuelTypeFilter} onChange={e => setFuelTypeFilter(e.target.value)}>
           <option value="all">All ({portalCountRows.length})</option>
           {fuelTypeOptions.map(ft => (
-            <option key={ft} value={ft}>{ft} ({portalCountRows.filter(jc => getPortalLabel(jc.portal ?? jc.fuel_type) === ft).length})</option>
+            <option key={ft} value={ft}>{ft} ({portalCountRows.filter(jc => jobCardPortalLabel(jc) === ft).length})</option>
           ))}
         </select>
 

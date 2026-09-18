@@ -155,6 +155,9 @@ function getPortalLabel(v: string | null | undefined): string {
   const n = String(v ?? '').trim().toUpperCase()
   return (n === 'EV' || n === 'PV') ? n : UNKNOWN_PORTAL
 }
+function jobCardPortalLabel(jc: { portal?: string | null; fuel_type?: string | null }): string {
+  return getPortalLabel(jc.fuel_type ?? jc.portal)
+}
 function isServiceDepartment(v: string | null | undefined): boolean {
   return normalizeDepartmentValue(v).replace(/[^A-Z]/g, '') === 'SERVICE'
 }
@@ -536,13 +539,13 @@ export default function FloorInchargeScreen() {
     [searchScopedRows, branchFilter])
 
   const fuelTypeOptions = useMemo(() => {
-    const s = new Set(statusScopedBranchRows.map(jc => getPortalLabel(jc.portal ?? jc.fuel_type)))
+    const s = new Set(statusScopedBranchRows.map(jc => jobCardPortalLabel(jc)))
     return Array.from(s).sort((a, b) => a === UNKNOWN_PORTAL ? 1 : b === UNKNOWN_PORTAL ? -1 : a.localeCompare(b))
   }, [statusScopedBranchRows])
 
   const statusScopedFuelRows = useMemo(() =>
     fuelTypeFilter === 'all' ? statusScopedBranchRows
-      : statusScopedBranchRows.filter(jc => getPortalLabel(jc.portal ?? jc.fuel_type) === fuelTypeFilter),
+      : statusScopedBranchRows.filter(jc => jobCardPortalLabel(jc) === fuelTypeFilter),
     [statusScopedBranchRows, fuelTypeFilter])
 
   const technicianOptions = useMemo(() => {
@@ -799,7 +802,7 @@ export default function FloorInchargeScreen() {
     const statusKey = normalizeStatusValue(a?.work_status)
     const sc = STATUS_COLORS[statusKey] ?? STATUS_COLORS.work_inprocess
     const timeDiff = calculateTimeDiff(a?.assigned_at, a?.out_ts) || formatTimeDiff(a?.time_diff)
-    const portal = getPortalLabel(jc.portal ?? jc.fuel_type)
+    const portal = jobCardPortalLabel(jc)
     const loc    = getLocationLabel(jc.location ?? jc.branch)
 
     const hasStageChanges = Boolean(a) && (
@@ -1201,7 +1204,7 @@ export default function FloorInchargeScreen() {
                   {fuelTypeOptions.map(ft => (
                     <FilterOption key={ft}
                       label={ft}
-                      subLabel={`${statusScopedBranchRows.filter(jc => getPortalLabel(jc.portal ?? jc.fuel_type) === ft).length} job cards`}
+                      subLabel={`${statusScopedBranchRows.filter(jc => jobCardPortalLabel(jc) === ft).length} job cards`}
                       active={fuelTypeFilter === ft}
                       onPress={() => { setFuelTypeFilter(ft); setFilterModal(null) }}
                     />
@@ -1271,7 +1274,7 @@ export default function FloorInchargeScreen() {
           {techPickerCard && (
             <View style={{ padding: 12, backgroundColor: '#f8fafc', borderBottomWidth: 1, borderColor: '#e2e8f0' }}>
               <Text style={{ fontSize: 12, color: '#64748b' }}>
-                {techPickerCard.jc_number}  ·  {techPickerCard.reg_number}  ·  {getPortalLabel(techPickerCard.portal ?? techPickerCard.fuel_type)}  ·  {getLocationLabel(techPickerCard.location ?? techPickerCard.branch)}
+                {techPickerCard.jc_number}  ·  {techPickerCard.reg_number}  ·  {jobCardPortalLabel(techPickerCard)}  ·  {getLocationLabel(techPickerCard.location ?? techPickerCard.branch)}
               </Text>
               <Text style={{ fontSize: 12, color: '#94a3b8', marginTop: 2 }}>
                 {(techniciansByJobCard[techPickerCard.assignment_key] ?? []).length} eligible technicians
@@ -1305,7 +1308,7 @@ export default function FloorInchargeScreen() {
       <Modal visible={bayPickerCard !== null} animationType="slide" presentationStyle="pageSheet">
         <SafeAreaView style={{ flex: 1, backgroundColor: '#fff' }}>
           <View style={S.pickerHeader}>
-            <Text style={S.pickerTitle}>Select Bay — {bayPickerCard ? getPortalLabel(bayPickerCard.portal ?? bayPickerCard.fuel_type) : ''}</Text>
+            <Text style={S.pickerTitle}>Select Bay — {bayPickerCard ? jobCardPortalLabel(bayPickerCard) : ''}</Text>
             <TouchableOpacity onPress={() => setBayPickerCard(null)}>
               <Text style={{ fontSize: 22, color: '#64748b' }}>✕</Text>
             </TouchableOpacity>

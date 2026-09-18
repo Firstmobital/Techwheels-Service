@@ -77,7 +77,56 @@ Play rejected AAB 11: **Use alternative system pickers for photos / videos**. Do
 
 The next AAB blocks `READ_MEDIA_IMAGES`, `READ_MEDIA_VIDEO`, `READ_MEDIA_AUDIO` (keeps CAMERA). Android gallery uses the system picker. After that AAB is in the release draft, this policy row should clear.
 
-## Play — listing fields
+## App Store Connect — 1.0 listing (ASC 6774519420)
+
+Open https://appstoreconnect.apple.com/apps/6774519420/appstore  
+Use **this** app only. Not Customer `6807690158` or Teela `6808128907`.
+
+Binary already in Connect: **1.0.0 (13)** from TestFlight. Do not upload the May IPA or iOS build 12.
+
+**What's New**
+
+```
+First App Store release of Techwheels Service.
+
+Staff sign in with work email for job cards, reports, and floor operations.
+Customers enter the 10-digit reception mobile in both fields to track service, estimates, bills, and gate pass.
+
+No public staff sign-up.
+```
+
+**Promotional text** (optional, 170)
+
+```
+Official Techwheels workshop app: staff job cards and customer service tracker.
+```
+
+**App Privacy (nutrition)** — all **not used for tracking**, **not used for third-party ads**.
+
+| Data | Collected | Linked to identity | Purpose |
+|---|---|---|---|
+| Name | Yes | Yes | App Functionality, Account |
+| Email Address | Yes (staff) | Yes | Account |
+| Phone Number | Yes | Yes | App Functionality, Account |
+| Precise Location | Yes (staff, while in use) | Yes | App Functionality |
+| Photos or Videos | Yes | Yes | App Functionality |
+| User ID | Yes | Yes | Account |
+| Product Interaction / Diagnostics / Crash Data | Yes | No | Analytics (device logs) |
+| Physical Address | Yes (pickup / GPS line) | Yes | App Functionality |
+
+Not collected: contacts, browsing history, advertising data, sensitive info, purchases, health.
+
+**Export compliance:** No (uses only exempt encryption). Already in Info.plist.
+
+**Age rating:** 17+. Not Made for Kids. No unrestricted UGC, no gambling, no frequent/intense violence.
+
+**Availability:** India. **Pricing:** Free. **Release:** **Manually release** this version.
+
+**iPhone screenshots only** (tablet off). 6.7" required. File: `mobile/store/ios/icon-1024.png` for the 1024 icon.
+
+Then **Add for Review**. Connect submit of the IPA is not the same as Add for Review.
+
+## App Store — listing fields
 
 | Field | Value |
 |---|---|
