@@ -1,5 +1,5 @@
 import { supabase } from '../supabase'
-import { busyLabourInvoiceInValues, BUSY_LABOUR_INVOICE_IN_CHUNK } from './eligibility.ts'
+import { busyLabourInvoiceInValues, busyLabourVrnInValues, BUSY_LABOUR_INVOICE_IN_CHUNK } from './eligibility.ts'
 import type { BusyLabourRow } from './types.ts'
 import type { VehiclePortal } from './types.ts'
 
@@ -166,6 +166,47 @@ export async function fetchBusyLabourRowsByJobCardNumbers(
         .from('psf_revenue_dms' as never)
         .select(LABOUR_COLUMNS)
         .in('job_card_number', chunk)
+        .order('invoice_date', { ascending: true })
+        .order('invoice_number', { ascending: true })
+        .range(from, from + PAGE_SIZE - 1)
+
+      if (error) throw error
+      const batch = ((data ?? []) as unknown) as BusyLabourRow[]
+      for (const row of batch) {
+        const id = row.id == null ? '' : String(row.id)
+        if (id) {
+          if (seenIds.has(id)) continue
+          seenIds.add(id)
+        }
+        rows.push(row)
+      }
+      if (batch.length < PAGE_SIZE) break
+      from += PAGE_SIZE
+    }
+  }
+
+  return rows
+}
+
+/**
+ * Bulk labour fetch by vehicle registration. Same chunking as invoice-number lookup.
+ */
+export async function fetchBusyLabourRowsByVehicleRegistrationNumbers(
+  registrations: readonly unknown[],
+): Promise<BusyLabourRow[]> {
+  const values = busyLabourVrnInValues(registrations)
+  if (values.length === 0) return []
+
+  const rows: BusyLabourRow[] = []
+  const seenIds = new Set<string>()
+  for (let i = 0; i < values.length; i += BUSY_LABOUR_INVOICE_IN_CHUNK) {
+    const chunk = values.slice(i, i + BUSY_LABOUR_INVOICE_IN_CHUNK)
+    let from = 0
+    while (true) {
+      const { data, error } = await supabase
+        .from('psf_revenue_dms' as never)
+        .select(LABOUR_COLUMNS)
+        .in('vehicle_registration_number', chunk)
         .order('invoice_date', { ascending: true })
         .order('invoice_number', { ascending: true })
         .range(from, from + PAGE_SIZE - 1)

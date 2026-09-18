@@ -17,6 +17,11 @@ export function busyJobCardLookupKey(raw: unknown): string {
   return String(raw ?? '').trim().toUpperCase()
 }
 
+/** VRN lookup key: trim, uppercase, strip spaces and punctuation. Same idea as `normalizeRegNumber`. */
+export function busyVehicleRegistrationLookupKey(raw: unknown): string {
+  return String(raw ?? '').trim().toUpperCase().replace(/[^A-Z0-9]/g, '')
+}
+
 /** Distinct trimmed invoice numbers plus case variants for one bulk `.in()` lookup. */
 export const BUSY_LABOUR_INVOICE_IN_CHUNK = 100
 
@@ -30,6 +35,25 @@ export function busyLabourInvoiceInValues(invoiceNumbers: readonly unknown[]): s
     const lower = trimmed.toLowerCase()
     if (upper !== trimmed) variants.add(upper)
     if (lower !== trimmed) variants.add(lower)
+  }
+  return [...variants]
+}
+
+/** Distinct VRN strings plus case / punctuation variants for one bulk `.in()` lookup. */
+export function busyLabourVrnInValues(registrations: readonly unknown[]): string[] {
+  const variants = new Set<string>()
+  for (const raw of registrations) {
+    const trimmed = String(raw ?? '').trim()
+    if (!trimmed) continue
+    variants.add(trimmed)
+    const upper = trimmed.toUpperCase()
+    const lower = trimmed.toLowerCase()
+    if (upper !== trimmed) variants.add(upper)
+    if (lower !== trimmed) variants.add(lower)
+    const compact = busyVehicleRegistrationLookupKey(trimmed)
+    if (compact && compact !== trimmed && compact !== upper && compact !== lower) {
+      variants.add(compact)
+    }
   }
   return [...variants]
 }

@@ -1179,6 +1179,20 @@ export function mechanicalExportJcNumbers(cases: Array<{ jc_number?: string | nu
   return out
 }
 
+export function mechanicalExportRegNumbers(cases: Array<{ reg_number?: string | null }>): string[] {
+  const seen = new Set<string>()
+  const out: string[] = []
+  for (const row of cases) {
+    const trimmed = String(row.reg_number ?? '').trim()
+    if (!trimmed) continue
+    const key = trimmed.toUpperCase()
+    if (seen.has(key)) continue
+    seen.add(key)
+    out.push(trimmed)
+  }
+  return out
+}
+
 /**
  * BUSY payment voucher date (column "Invoice date"):
  * payment_received_date → Accounts invoice_date → unique DMS labour invoice_date.
@@ -1209,6 +1223,7 @@ export function buildMechanicalBusyPaymentExportRows(input: {
   paymentModeFilter?: MechanicalPaymentModeFilter
   busyPartyNameByInvoice?: ReadonlyMap<string, string>
   busyPartyNameByJc?: ReadonlyMap<string, string>
+  busyPartyNameByVrn?: ReadonlyMap<string, string>
   dmsInvoiceDateByInvoice?: ReadonlyMap<string, string>
   dmsInvoiceDateByJc?: ReadonlyMap<string, string>
 }): MechanicalBusyPaymentExportResult {
@@ -1271,8 +1286,10 @@ export function buildMechanicalBusyPaymentExportRows(input: {
       const accountCr = resolveBusyPaymentAccountCr({
         invoiceNumber: caseRow.invoice_number,
         jcNumber: caseRow.jc_number,
+        vehicleRegistration: caseRow.reg_number,
         busyPartyNameByInvoice: input.busyPartyNameByInvoice,
         busyPartyNameByJc: input.busyPartyNameByJc,
+        busyPartyNameByVrn: input.busyPartyNameByVrn,
       })
       if (!accountCr) unresolvedAccountCrCount += 1
 

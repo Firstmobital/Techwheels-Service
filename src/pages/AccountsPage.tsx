@@ -15,6 +15,7 @@ import {
   isMechanicalBusyPaymentExportBlocked,
   uniqueDmsInvoiceDateByJc,
   mechanicalExportJcNumbers,
+  mechanicalExportRegNumbers,
   deleteAccountsMechanicalInvoiceFile,
   filterAccountsCasesByViewDate,
   filterMechanicalAccountsTableCases,
@@ -69,9 +70,11 @@ import { issueAccountsGatePass, rememberIssuedGatePass } from '../lib/gatepass'
 import {
   buildBusyPartyNameByInvoice,
   buildBusyPartyNameByJobCard,
+  buildBusyPartyNameByVehicleRegistration,
   dedupeBusyLabourRows,
   fetchBusyLabourRowsByInvoiceNumbers,
   fetchBusyLabourRowsByJobCardNumbers,
+  fetchBusyLabourRowsByVehicleRegistrationNumbers,
 } from '../lib/busy'
 
 type Section = 'mechanical' | 'bodyshop'
@@ -871,19 +874,22 @@ export default function AccountsPage() {
     if (section !== 'mechanical' || exporting) return
     setExporting(true)
     try {
-      const [labourByInvoice, labourByJc] = await Promise.all([
+      const [labourByInvoice, labourByJc, labourByVrn] = await Promise.all([
         fetchBusyLabourRowsByInvoiceNumbers(mechanicalExportInvoiceNumbers(searchedMech)),
         fetchBusyLabourRowsByJobCardNumbers(mechanicalExportJcNumbers(searchedMech)),
+        fetchBusyLabourRowsByVehicleRegistrationNumbers(mechanicalExportRegNumbers(searchedMech)),
       ])
-      const labour = dedupeBusyLabourRows([...labourByInvoice, ...labourByJc])
+      const labour = dedupeBusyLabourRows([...labourByInvoice, ...labourByJc, ...labourByVrn])
       const { partyNameByInvoice, invoiceDateByInvoice } = buildBusyPartyNameByInvoice(labour)
       const { partyNameByJc } = buildBusyPartyNameByJobCard(labour)
+      const { partyNameByVrn } = buildBusyPartyNameByVehicleRegistration(labour)
       const result = buildMechanicalBusyPaymentExportRows({
         cases: searchedMech,
         lines: mechPayLines,
         paymentModeFilter: mechPaymentModeFilter,
         busyPartyNameByInvoice: partyNameByInvoice,
         busyPartyNameByJc: partyNameByJc,
+        busyPartyNameByVrn: partyNameByVrn,
         dmsInvoiceDateByInvoice: invoiceDateByInvoice,
         dmsInvoiceDateByJc: uniqueDmsInvoiceDateByJc(labour),
       })
@@ -923,7 +929,7 @@ export default function AccountsPage() {
       const notices: string[] = []
       if (result.unresolvedAccountCrCount > 0) {
         notices.push(
-          `Account CR left blank for ${result.unresolvedAccountCrCount} receipt(s); no unique BUSY party name by invoice or job card`,
+          `Account CR left blank for ${result.unresolvedAccountCrCount} receipt(s); no unique BUSY party name by invoice, job card, or vehicle registration`,
         )
       }
       if (result.skippedUnsupportedCount > 0) {

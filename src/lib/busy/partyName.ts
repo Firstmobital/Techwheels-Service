@@ -1,5 +1,5 @@
 import { busyBranchLabelForParty, resolveBusyBranch, type BusyBranch } from './branch.ts'
-import { busyInvoiceLookupKey, busyJobCardLookupKey, isCancelledInvoiceStatus, normalizeInvoiceNumber } from './eligibility.ts'
+import { busyInvoiceLookupKey, busyJobCardLookupKey, busyVehicleRegistrationLookupKey, isCancelledInvoiceStatus, normalizeInvoiceNumber } from './eligibility.ts'
 import type { BusyClassification, BusyLabourRow } from './types.ts'
 
 export const PDI_PARTY_NAME = 'CASH AT SITAPURA'
@@ -125,6 +125,11 @@ export interface BusyPartyNameByJobCardLookup {
   duplicateJcKeys: string[]
 }
 
+export interface BusyPartyNameByVehicleLookup {
+  partyNameByVrn: Map<string, string>
+  ambiguousVrnKeys: string[]
+}
+
 /**
  * Exact BUSY Party Name from one labour row. Null when branch cannot be resolved
  * or resolvePartyName has no usable name. Does not persist; does not use account as the name.
@@ -208,14 +213,54 @@ export function buildBusyPartyNameByJobCard(labourRows: BusyLabourRow[]): BusyPa
 }
 
 /**
- * Mechanical Busy payment Account CR: unique invoice name, else unique JC name.
- * Does not use Accounts owner/branch/VRN. Blank when neither map has a usable value.
+ * VRN lookup key → BUSY Party Name.
+ * Cancelled rows are ignored. One live row, or several live rows that all resolve
+ * to the same party name, are deterministic. Conflicting names or unresolvable
+ * rows are omitted (no arbitrary winner).
+ */
+export function buildBusyPartyNameByVehicleRegistration(
+  labourRows: BusyLabourRow[],
+): BusyPartyNameByVehicleLookup {
+  const groups = new Map<string, BusyLabourRow[]>()
+  for (const row of labourRows) {
+    const key = busyVehicleRegistrationLookupKey(row.vehicle_registration_number)
+    if (!key) continue
+    if (isCancelledInvoiceStatus(row.invoice_status)) continue
+    const list = groups.get(key) ?? []
+    list.push(row)
+    groups.set(key, list)
+  }
+
+  const partyNameByVrn = new Map<string, string>()
+  const ambiguousVrnKeys: string[] = []
+  for (const [key, group] of groups) {
+    const names = group.map((labour) => partyNameFromBusyLabour(labour))
+    if (names.some((name) => !name)) {
+      ambiguousVrnKeys.push(key)
+      continue
+    }
+    const unique = new Set(names as string[])
+    if (unique.size !== 1) {
+      ambiguousVrnKeys.push(key)
+      continue
+    }
+    partyNameByVrn.set(key, names[0] as string)
+  }
+  return { partyNameByVrn, ambiguousVrnKeys }
+}
+
+/**
+ * Mechanical Busy payment Account CR: unique invoice, else unique JC, else
+ * deterministic VRN. Does not use Accounts owner/branch/VRN construction.
+ * Blank when no map has a usable value.
  */
 export function resolveBusyPaymentAccountCr(input: {
   invoiceNumber?: unknown
   jcNumber?: unknown
+  vehicleRegistration?: unknown
   busyPartyNameByInvoice?: ReadonlyMap<string, string>
   busyPartyNameByJc?: ReadonlyMap<string, string>
+  busyPartyNameByVrn?: ReadonlyMap<string, string>
 }): string {
   const invoiceKey = busyInvoiceLookupKey(input.invoiceNumber)
   if (invoiceKey && input.busyPartyNameByInvoice) {
@@ -226,6 +271,11 @@ export function resolveBusyPaymentAccountCr(input: {
   if (jcKey && input.busyPartyNameByJc) {
     const byJc = input.busyPartyNameByJc.get(jcKey)
     if (byJc) return byJc
+  }
+  const vrnKey = busyVehicleRegistrationLookupKey(input.vehicleRegistration)
+  if (vrnKey && input.busyPartyNameByVrn) {
+    const byVrn = input.busyPartyNameByVrn.get(vrnKey)
+    if (byVrn) return byVrn
   }
   return ''
 }
