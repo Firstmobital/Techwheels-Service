@@ -326,20 +326,32 @@ export default function AdminPage({ onViewAsUser }: { onViewAsUser?: (id: string
 
   async function loadModules() {
     const { data } = await supabase.from('modules').select('*').order('sort_order')
-    const dbModules = [...(data ?? [])]
+    let dbModules = [...(data ?? [])]
     const hasDriverModule = dbModules.some((m) => m.name === 'driver_management')
     if (!hasDriverModule) {
       const maxSortOrder = dbModules.reduce((max, m) => Math.max(max, m.sort_order || 0), 0)
-      dbModules.push({
-        id: 9999,
-        name: 'driver_management',
-        label: 'Driver Management',
-        description: 'Driver assignment and daily vehicle pickup tracking',
-        icon: 'truck',
-        route: '/driver-management',
-        sort_order: maxSortOrder + 1,
-        is_active: true,
-      })
+      const { data: inserted } = await supabase
+        .from('modules')
+        .insert({
+          name: 'driver_management',
+          label: 'Driver Management',
+          description: 'Driver assignment and daily vehicle pickup tracking',
+          icon: 'truck',
+          route: '/driver-management',
+          sort_order: maxSortOrder + 1,
+          is_active: true,
+        })
+        .select()
+        .maybeSingle()
+
+      if (inserted) {
+        dbModules.push(inserted)
+      } else {
+        const refetch = await supabase.from('modules').select('*').order('sort_order')
+        if (refetch.data && refetch.data.length > 0) {
+          dbModules = refetch.data
+        }
+      }
     }
     setModules(dbModules)
   }
@@ -763,19 +775,51 @@ export default function AdminPage({ onViewAsUser }: { onViewAsUser?: (id: string
   async function savePerms() {
     if (!selectedUserId) return
     setSavingPerms(true)
-    const upserts = modules.filter(m => m.is_active).map(m => ({
-      user_id:    selectedUserId,
-      module_id:  m.id,
-      can_view:   pendingPerms[m.id]?.can_view   ?? false,
-      can_modify: pendingPerms[m.id]?.can_modify ?? false,
-      can_delete: pendingPerms[m.id]?.can_delete ?? false,
-    }))
+
+    // Ensure all active modules have genuine database IDs
+    const { data: dbModules } = await supabase.from('modules').select('id, name')
+    const dbModuleMap = new Map((dbModules ?? []).map((m) => [m.name, m.id]))
+
+    if (!dbModuleMap.has('driver_management')) {
+      const { data: inserted } = await supabase
+        .from('modules')
+        .insert({
+          name: 'driver_management',
+          label: 'Driver Management',
+          description: 'Driver assignment and daily vehicle pickup tracking',
+          icon: 'truck',
+          route: '/driver-management',
+          sort_order: (dbModules?.length ?? 0) + 1,
+          is_active: true,
+        })
+        .select()
+        .maybeSingle()
+      if (inserted) {
+        dbModuleMap.set(inserted.name, inserted.id)
+      }
+    }
+
+    const upserts = modules
+      .filter((m) => m.is_active)
+      .map((m) => {
+        const genuineId = dbModuleMap.get(m.name) ?? m.id
+        return {
+          user_id:    selectedUserId,
+          module_id:  genuineId,
+          can_view:   pendingPerms[m.id]?.can_view   ?? pendingPerms[genuineId]?.can_view   ?? false,
+          can_modify: pendingPerms[m.id]?.can_modify ?? pendingPerms[genuineId]?.can_modify ?? false,
+          can_delete: pendingPerms[m.id]?.can_delete ?? pendingPerms[genuineId]?.can_delete ?? false,
+        }
+      })
+      .filter((u) => typeof u.module_id === 'number' && u.module_id < 9000)
+
     const { error } = await supabase
       .from('user_module_permissions')
       .upsert(upserts, { onConflict: 'user_id,module_id' })
     setSavingPerms(false)
     if (error) { showToastMsg(error.message, 'error'); return }
     showToastMsg('Permissions saved')
+    await loadPermsForUser(selectedUserId)
   }
 
   // ── Modules ────────────────────────────────────────────────────────────────

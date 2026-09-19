@@ -1250,6 +1250,32 @@ function AppInner() {
         ALL_ROUTE_MODULES.forEach((moduleName) => nextModules.add(moduleName))
       }
 
+      // Check if user has active employee mapping with DRIVER role
+      if (!isUserAdmin && userId) {
+        const { data: userLinks } = await supabase
+          .from('user_employee_links')
+          .select('employee_code')
+          .eq('user_id', userId)
+          .eq('is_active', true)
+
+        if (userLinks && userLinks.length > 0) {
+          const empCodes = userLinks.map((l) => l.employee_code).filter(Boolean)
+          if (empCodes.length > 0) {
+            const { data: empRows } = await supabase
+              .from('employees')
+              .select('role')
+              .in('employee_code', empCodes)
+            const isDriverStaff = (empRows ?? []).some((e) =>
+              String(e.role ?? '').toLowerCase().includes('driver')
+            )
+            if (isDriverStaff) {
+              nextModules.add('driver_management')
+              nextModules.add('service_booking')
+            }
+          }
+        }
+      }
+
       if (mounted) {
         setAllowedModules(nextModules)
         setPermissionsLoading(false)
