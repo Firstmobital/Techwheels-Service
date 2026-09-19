@@ -886,38 +886,18 @@ function hasAnyModuleAccess(allowedModules: Set<string>, modules: readonly Modul
 function canAccessPath(pathname: string, allowedModules: Set<string>) {
   if (pathname === '/') return true
   if (pathname.startsWith('/home')) return true
-  if (pathname.startsWith('/reports')) return hasAnyModuleAccess(allowedModules, ROUTE_MODULE_MAP['/reports'])
-  if (pathname.startsWith('/import')) return hasAnyModuleAccess(allowedModules, ROUTE_MODULE_MAP['/import'])
-  if (pathname.startsWith('/settings')) return hasAnyModuleAccess(allowedModules, ROUTE_MODULE_MAP['/settings'])
-  if (pathname.startsWith('/admin')) return true // Admin always reachable (incl. during impersonation)
-  if (pathname.startsWith('/autodoc')) return hasAnyModuleAccess(allowedModules, ROUTE_MODULE_MAP['/autodoc'])
-  if (pathname.startsWith('/reception')) return hasAnyModuleAccess(allowedModules, ROUTE_MODULE_MAP['/reception'])
-  if (pathname.startsWith('/service-advisor')) return hasAnyModuleAccess(allowedModules, ROUTE_MODULE_MAP['/service-advisor'])
-  if (pathname.startsWith('/floor-incharge')) return hasAnyModuleAccess(allowedModules, ROUTE_MODULE_MAP['/floor-incharge'])
-  if (pathname.startsWith('/sa-tracker')) return hasAnyModuleAccess(allowedModules, ROUTE_MODULE_MAP['/sa-tracker'])
-  if (pathname.startsWith('/bodyshop-tracker')) return hasAnyModuleAccess(allowedModules, ROUTE_MODULE_MAP['/bodyshop-tracker'])
-  if (pathname.startsWith('/bodyshop-floor')) return hasAnyModuleAccess(allowedModules, ROUTE_MODULE_MAP['/bodyshop-floor'])
-  if (pathname.startsWith('/technician')) return hasAnyModuleAccess(allowedModules, ROUTE_MODULE_MAP['/technician'])
-  if (pathname.startsWith('/payroll')) return hasAnyModuleAccess(allowedModules, ROUTE_MODULE_MAP['/payroll'])
-  if (pathname.startsWith('/complaints')) return hasAnyModuleAccess(allowedModules, ROUTE_MODULE_MAP['/complaints'])
-  if (pathname.startsWith('/help-tickets')) return hasAnyModuleAccess(allowedModules, ROUTE_MODULE_MAP['/help-tickets'])
-  // Employee Get Help self-service — auth only; RPCs enforce employee link
   if (pathname.startsWith('/help')) return true
-  if (pathname.startsWith('/bodyshop-repair')) return hasAnyModuleAccess(allowedModules, ROUTE_MODULE_MAP['/bodyshop-repair'])
-  if (pathname.startsWith('/bodyshop-recovery')) return hasAnyModuleAccess(allowedModules, ROUTE_MODULE_MAP['/bodyshop-recovery'])
-  if (pathname.startsWith('/ew-reminder')) return hasAnyModuleAccess(allowedModules, ROUTE_MODULE_MAP['/ew-reminder'])
-  if (pathname.startsWith('/service-booking')) return hasAnyModuleAccess(allowedModules, ROUTE_MODULE_MAP['/service-booking'])
-  if (pathname.startsWith('/wa-agent')) return hasAnyModuleAccess(allowedModules, ROUTE_MODULE_MAP['/wa-agent'])
-  if (pathname.startsWith('/telecalling')) return hasAnyModuleAccess(allowedModules, ROUTE_MODULE_MAP['/telecalling'])
-  if (pathname.startsWith('/insurance-renewal-telecalling')) return hasAnyModuleAccess(allowedModules, ROUTE_MODULE_MAP['/insurance-renewal-telecalling'])
-  if (pathname.startsWith('/auto-service-reminder')) return hasAnyModuleAccess(allowedModules, ROUTE_MODULE_MAP['/auto-service-reminder'])
-  if (pathname.startsWith('/cre-incentive')) return hasAnyModuleAccess(allowedModules, ROUTE_MODULE_MAP['/cre-incentive'])
-  if (pathname.startsWith('/post-service-feedback')) return hasAnyModuleAccess(allowedModules, ROUTE_MODULE_MAP['/post-service-feedback'])
-  if (pathname.startsWith('/parts-spm')) return hasAnyModuleAccess(allowedModules, ROUTE_MODULE_MAP['/parts-spm'])
-  if (pathname.startsWith('/busy')) return hasAnyModuleAccess(allowedModules, ROUTE_MODULE_MAP['/busy'])
-  if (pathname.startsWith('/accounts')) return hasAnyModuleAccess(allowedModules, ROUTE_MODULE_MAP['/accounts'])
   if (pathname.startsWith('/c/')) return true
   if (pathname.startsWith('/reset-password') || pathname.startsWith('/auth/callback') || pathname.startsWith('/forgot-password')) return true
+  if (pathname.startsWith('/admin')) return true // Admin always reachable (incl. during impersonation)
+
+  // Dynamic route check against ROUTE_MODULE_MAP for all registered routes
+  for (const [route, modules] of Object.entries(ROUTE_MODULE_MAP)) {
+    if (pathname === route || pathname.startsWith(`${route}/`)) {
+      return hasAnyModuleAccess(allowedModules, modules as readonly ModuleName[])
+    }
+  }
+
   return false
 }
 
@@ -1236,14 +1216,21 @@ function AppInner() {
 
       setPermissionsLoading(true)
 
-      const [{ data: profile }, { data: permissionRows }] = await Promise.all([
-        supabase.from('users').select('role').eq('id', userId).maybeSingle(),
+      const [{ data: profile }, { data: permissionRows }, isAdminRpcRes] = await Promise.all([
+        supabase.from('users').select('role, is_active').eq('id', userId).maybeSingle(),
         supabase.rpc('get_all_my_permissions'),
+        Promise.resolve(supabase.rpc('is_admin')).then((res) => Boolean(res.data)).catch(() => false),
       ])
 
       const nextModules = new Set<string>(((permissionRows ?? []) as PermissionRow[]).map((row) => row.module_name))
 
-      if (profile?.role === 'admin') {
+      const profileRole = String(profile?.role ?? '').trim().toLowerCase()
+      const metaRole = String(user?.user_metadata?.role ?? user?.app_metadata?.role ?? '').trim().toLowerCase()
+      const effectiveRole = profileRole || metaRole || 'staff'
+
+      const isUserAdmin = isAdminRpcRes === true || effectiveRole === 'admin' || effectiveRole === 'super_admin'
+
+      if (isUserAdmin) {
         if (mounted) setIsAdmin(true)
         ALL_ROUTE_MODULES.forEach((moduleName) => nextModules.add(moduleName))
 
@@ -1256,6 +1243,11 @@ function AppInner() {
             nextModules.add(moduleRow.name)
           }
         })
+      } else if (effectiveRole === 'driver') {
+        nextModules.add('driver_management')
+        nextModules.add('service_booking')
+      } else if (effectiveRole === 'manager') {
+        ALL_ROUTE_MODULES.forEach((moduleName) => nextModules.add(moduleName))
       }
 
       if (mounted) {

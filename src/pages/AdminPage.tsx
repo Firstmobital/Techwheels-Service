@@ -326,7 +326,22 @@ export default function AdminPage({ onViewAsUser }: { onViewAsUser?: (id: string
 
   async function loadModules() {
     const { data } = await supabase.from('modules').select('*').order('sort_order')
-    setModules(data ?? [])
+    const dbModules = [...(data ?? [])]
+    const hasDriverModule = dbModules.some((m) => m.name === 'driver_management')
+    if (!hasDriverModule) {
+      const maxSortOrder = dbModules.reduce((max, m) => Math.max(max, m.sort_order || 0), 0)
+      dbModules.push({
+        id: 9999,
+        name: 'driver_management',
+        label: 'Driver Management',
+        description: 'Driver assignment and daily vehicle pickup tracking',
+        icon: 'truck',
+        route: '/driver-management',
+        sort_order: maxSortOrder + 1,
+        is_active: true,
+      })
+    }
+    setModules(dbModules)
   }
 
   async function loadMappings() {
