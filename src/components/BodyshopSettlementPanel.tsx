@@ -13,6 +13,7 @@ import {
   type SettlementPayload,
 } from '../lib/api/bodyshopSettlement'
 import {
+  CUSTOMER_DIFF_PAYMENT_MODE_REQUIRED,
   customerPaymentModeDisplay,
   validateDoPaymentCustomerMode,
 } from '../lib/bodyshopDoPaymentCpMode'
@@ -96,6 +97,7 @@ export function BodyshopSettlementPanel({
 
   const [custAmt, setCustAmt] = useState('')
   const [cpPaymentMode, setCpPaymentMode] = useState('')
+  const [custPaymentMode, setCustPaymentMode] = useState('')
   const [doReceiptAmt, setDoReceiptAmt] = useState('')
   const [doNote, setDoNote] = useState('')
   const [custNote, setCustNote] = useState('')
@@ -322,6 +324,12 @@ export function BodyshopSettlementPanel({
       toast(kind === 'refund' ? 'Enter refund amount' : 'Enter amount received from customer', false)
       return
     }
+    const modeError = validateDoPaymentCustomerMode(amt, custPaymentMode, CUSTOMER_DIFF_PAYMENT_MODE_REQUIRED)
+    if (modeError) {
+      setCustError(modeError)
+      toast(modeError, false)
+      return
+    }
     setCustError(null)
     setSavingCust(true)
     try {
@@ -331,10 +339,12 @@ export function BodyshopSettlementPanel({
         amount: amt,
         reference: note,
         remarks: note,
+        paymentMode: custPaymentMode,
       })
       setPayload(next)
       onCardChange(mergeSettlementCard(card, next))
       setCustAmt('')
+      setCustPaymentMode('')
       setCustNote('')
       toast(kind === 'refund' ? 'Refund posted' : 'Customer receipt posted')
     } catch (e: unknown) {
@@ -693,7 +703,34 @@ export function BodyshopSettlementPanel({
           <div className="brx-form-grid-2">
             <label className="brx-field">
               <span className="brx-field-label">{kind === 'refund' ? 'Amount refunded (₹)' : 'Amount received from Customer (₹)'}</span>
-              <input className="inp" type="number" value={custAmt} onChange={(e) => setCustAmt(e.target.value)} />
+              <input
+                className="inp"
+                type="number"
+                value={custAmt}
+                onChange={(e) => {
+                  setCustAmt(e.target.value)
+                  if (custError) setCustError(null)
+                }}
+              />
+            </label>
+            <label className="brx-field">
+              <span className="brx-field-label">
+                Mode of Payment
+                {Number(numOrNull(custAmt) ?? 0) > 0 && <span style={{ color: '#ef4444', marginLeft: 4 }}>*</span>}
+              </span>
+              <select
+                className="sel"
+                value={custPaymentMode}
+                onChange={(e) => {
+                  setCustPaymentMode(e.target.value)
+                  if (custError) setCustError(null)
+                }}
+              >
+                <option value="">Select mode</option>
+                {ACCOUNTS_PAYMENT_MODES.map((m) => (
+                  <option key={m.value} value={m.value}>{m.label}</option>
+                ))}
+              </select>
             </label>
             <label className="brx-field brx-grid-full">
               <span className="brx-field-label">Reference / Remark</span>

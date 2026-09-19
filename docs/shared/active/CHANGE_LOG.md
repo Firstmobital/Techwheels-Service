@@ -5,6 +5,7 @@ Tracks documentation-sync updates for business logic, architecture, and access c
 ## 2026-09-19
 
 - Stage 18 **DO Payment** Customer Payment (CP) now captures **CP Mode of Payment** (Cash / UPI / Card / Cheque / Bank transfer / Other). Mode is required only when CP amount > 0 and is stored on the existing customer receipt line. Main / GST / TDS stay insurance components with no payment mode. Historical CP rows without a mode still render as —. Ledger: DBL-0079. Plan: `BODYSHOP-SETTLEMENT-001`.
+- Accounts / Repair **Section B · Customer Difference Payment** uses the same Mode of Payment dropdown beside Amount received from Customer. Required when that amount > 0. Persists on the existing `bodyshop_settlement_lines.payment_mode` customer row (DBL-0079). No new table or column.
 
 ## 2026-09-17
 

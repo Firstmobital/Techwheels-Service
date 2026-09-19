@@ -1,10 +1,12 @@
 /**
- * Stage 18 DO Payment — Customer Payment (CP) mode helpers.
+ * Customer-side payment mode helpers for Stage 18 DO Payment (CP)
+ * and Accounts Section B Customer Difference.
  * Stored values stay aligned with AccountsPaymentMode / ACCOUNTS_PAYMENT_MODES
  * in src/lib/api/accounts.ts. Do not invent a second list.
  */
 
 export const CP_PAYMENT_MODE_REQUIRED = 'Select CP Mode of Payment'
+export const CUSTOMER_DIFF_PAYMENT_MODE_REQUIRED = 'Select Mode of Payment'
 
 const CP_PAYMENT_MODE_LABELS: Record<string, string> = {
   cash: 'Cash',
@@ -30,23 +32,33 @@ export function isCustomerPaymentLine(line: {
     && String(line.component ?? '').toUpperCase() === 'CUSTOMER'
 }
 
-/** Required only when the CP amount being posted is greater than 0. */
+/** Required only when the customer-side amount being posted is greater than 0. */
 export function validateDoPaymentCustomerMode(
   cpAmount: number | null | undefined,
   paymentMode: string | null | undefined,
+  requiredMessage: string = CP_PAYMENT_MODE_REQUIRED,
 ): string | null {
   if (!(Number(cpAmount ?? 0) > 0)) return null
-  return isCanonicalCpPaymentMode(paymentMode) ? null : CP_PAYMENT_MODE_REQUIRED
+  return isCanonicalCpPaymentMode(paymentMode) ? null : requiredMessage
 }
 
-/** CP rows only. Historical / insurance / refund lines stay —. Never invent a mode. */
+function isCustomerSideHistoryLine(line: {
+  party?: string | null
+  line_type?: string | null
+}): boolean {
+  const party = String(line.party ?? '').toLowerCase()
+  const type = String(line.line_type ?? '').toLowerCase()
+  return party === 'customer' && (type === 'receipt' || type === 'refund')
+}
+
+/** Customer receipt/refund rows only. Historical / insurance lines stay —. Never invent a mode. */
 export function customerPaymentModeDisplay(line: {
   party?: string | null
   line_type?: string | null
   component?: string | null
   payment_mode?: string | null
 }): string {
-  if (!isCustomerPaymentLine(line)) return '—'
+  if (!isCustomerSideHistoryLine(line)) return '—'
   const raw = String(line.payment_mode ?? '').trim()
   if (!raw) return '—'
   return CP_PAYMENT_MODE_LABELS[raw.toLowerCase()] ?? raw

@@ -25,7 +25,7 @@ END
 $$;
 
 COMMENT ON COLUMN public.bodyshop_settlement_lines.payment_mode IS
-  'Customer Payment (CP) receipt mode. Same stored values as accounts_mechanical_payment_lines.payment_mode. NULL for insurance Main/GST/TDS, refunds, and historical CP rows.';
+  'Customer receipt/refund mode. Same stored values as accounts_mechanical_payment_lines.payment_mode. NULL for insurance Main/GST/TDS and historical customer rows.';
 
 DROP FUNCTION IF EXISTS public.add_bodyshop_settlement_line(integer, text, text, text, numeric, date, text, text, numeric, numeric, numeric, text);
 
@@ -176,10 +176,10 @@ BEGIN
       END IF;
       INSERT INTO public.bodyshop_settlement_lines (
         settlement_id, repair_card_id, party, line_type, component, amount,
-        txn_date, reference, remarks, actor_id, actor_email, import_row_token
+        txn_date, reference, remarks, actor_id, actor_email, import_row_token, payment_mode
       ) VALUES (
         v_id, p_repair_card_id, 'customer', 'refund', 'CUSTOMER_REFUND', round(p_amount, 2),
-        v_date, p_reference, p_remarks, v_actor_id, v_actor_email, v_token
+        v_date, p_reference, p_remarks, v_actor_id, v_actor_email, v_token, v_mode
       );
     END IF;
     UPDATE public.bodyshop_settlements SET customer_not_received = false, updated_by = v_actor_email WHERE id = v_id;
@@ -193,7 +193,7 @@ END;
 $$;
 
 COMMENT ON FUNCTION public.add_bodyshop_settlement_line(integer, text, text, text, numeric, date, text, text, numeric, numeric, numeric, text, text) IS
-  'Post DO Main/GST/TDS (extra over DO allowed) or customer receipt/refund. Optional import_row_token is Excel bulk idempotency. Optional p_payment_mode applies only to customer receipt (CP) rows.';
+  'Post DO Main/GST/TDS (extra over DO allowed) or customer receipt/refund. Optional import_row_token is Excel bulk idempotency. Optional p_payment_mode applies only to customer receipt/refund rows.';
 
 GRANT EXECUTE ON FUNCTION public.add_bodyshop_settlement_line(integer, text, text, text, numeric, date, text, text, numeric, numeric, numeric, text, text) TO authenticated, service_role;
 

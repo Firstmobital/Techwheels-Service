@@ -7,6 +7,7 @@
 import { readFileSync } from 'node:fs'
 import {
   CP_PAYMENT_MODE_REQUIRED,
+  CUSTOMER_DIFF_PAYMENT_MODE_REQUIRED,
   customerPaymentModeDisplay,
   isCanonicalCpPaymentMode,
   isCustomerPaymentLine,
@@ -99,8 +100,12 @@ ok(
   customerPaymentModeDisplay({ party: 'insurance', line_type: 'do_component', component: 'TDS', payment_mode: 'bank' }) === '—',
 )
 ok(
-  'E.refund_never_shows_mode',
-  customerPaymentModeDisplay({ party: 'customer', line_type: 'refund', component: 'CUSTOMER_REFUND', payment_mode: 'upi' }) === '—',
+  'E.refund_historical_blank_mode',
+  customerPaymentModeDisplay({ party: 'customer', line_type: 'refund', component: 'CUSTOMER_REFUND', payment_mode: null }) === '—',
+)
+ok(
+  'E.refund_shows_stored_mode',
+  customerPaymentModeDisplay({ party: 'customer', line_type: 'refund', component: 'CUSTOMER_REFUND', payment_mode: 'upi' }) === 'UPI',
 )
 ok(
   'E.new_cp_shows_upi',
@@ -114,5 +119,43 @@ ok(
 
 // F. Layout contract: reference stays the larger field (3fr vs 1fr ≈ 75/25)
 ok('F.desktop_proportion_3fr_1fr', 3 / 4 >= 0.7 && 1 / 4 <= 0.3)
+
+function buildCustomerDiffPayload({ amount = null, paymentMode = null, reference = null, postRemaining = false, remaining = null }) {
+  let amt = amount
+  if (postRemaining) amt = remaining != null ? remaining : amt
+  if (amt == null || amt <= 0) {
+    return { blocked: true, error: 'Enter amount received from customer', customer: null }
+  }
+  const modeError = validateDoPaymentCustomerMode(amt, paymentMode, CUSTOMER_DIFF_PAYMENT_MODE_REQUIRED)
+  if (modeError) return { blocked: true, error: modeError, customer: null }
+  return { blocked: false, error: null, customer: { amount: amt, paymentMode, reference } }
+}
+
+const sbA = buildCustomerDiffPayload({ amount: 2200, paymentMode: 'upi', reference: 'section-b-ref' })
+ok('SB.A.receipt_with_mode', !sbA.blocked && sbA.customer?.paymentMode === 'upi' && sbA.customer?.reference === 'section-b-ref')
+
+const sbB = buildCustomerDiffPayload({ amount: 2200, paymentMode: '', reference: 'section-b-ref' })
+ok('SB.B.missing_mode_blocked', sbB.blocked && sbB.error === CUSTOMER_DIFF_PAYMENT_MODE_REQUIRED)
+
+const sbC = buildCustomerDiffPayload({ amount: null, paymentMode: '' })
+ok('SB.C.blank_amount_no_mode_required_as_mode_check', validateDoPaymentCustomerMode(null, '', CUSTOMER_DIFF_PAYMENT_MODE_REQUIRED) == null)
+ok('SB.C.blank_amount_still_needs_amount', sbC.blocked && sbC.error === 'Enter amount received from customer')
+
+const sbD = buildCustomerDiffPayload({ amount: 500, paymentMode: 'cash', reference: 'kept-ref' })
+ok('SB.D.reference_preserved', sbD.customer?.reference === 'kept-ref')
+
+const panelSrc = readFileSync(new URL('../src/components/BodyshopSettlementPanel.tsx', import.meta.url), 'utf8')
+ok('SB.E.amount_and_mode_in_existing_grid', panelSrc.includes('Amount received from Customer (₹)') && panelSrc.includes('Mode of Payment') && panelSrc.includes('className="brx-form-grid-2"'))
+ok('SB.E.reference_stays_full_width', panelSrc.includes('className="brx-field brx-grid-full"') && panelSrc.includes('Reference / Remark'))
+
+ok(
+  'SB.F.historical_section_b_blank_mode',
+  customerPaymentModeDisplay({ party: 'customer', line_type: 'receipt', component: 'CUSTOMER', payment_mode: null }) === '—',
+)
+
+const sbRemain = buildCustomerDiffPayload({ amount: null, paymentMode: 'bank', postRemaining: true, remaining: 1800 })
+ok('SB.remaining_with_mode', !sbRemain.blocked && sbRemain.customer?.amount === 1800 && sbRemain.customer?.paymentMode === 'bank')
+const sbRemainNoMode = buildCustomerDiffPayload({ amount: null, paymentMode: '', postRemaining: true, remaining: 1800 })
+ok('SB.remaining_without_mode_blocked', sbRemainNoMode.blocked && sbRemainNoMode.error === CUSTOMER_DIFF_PAYMENT_MODE_REQUIRED)
 
 console.log('verify_bodyshop_do_payment_cp_mode: all checks passed')
