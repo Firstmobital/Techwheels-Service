@@ -33,6 +33,7 @@ const SETTINGS_MODELS_STORAGE_KEY = 'settings.models.v1'
 const UNKNOWN_FUEL_TYPE = 'Unknown'
 const UNKNOWN_SERVICE_TYPE = 'Null'
 const UNKNOWN_LOCATION = 'Unknown'
+const UNKNOWN_SA = 'Unknown'
 
 const SERVICE_TYPE_ABBREVIATIONS: Record<string, string> = {
   'running repairs': 'RR',
@@ -316,6 +317,21 @@ function getServiceTypeLabel(value: string | null | undefined): string {
   return normalized || UNKNOWN_SERVICE_TYPE
 }
 
+function getSaLabel(entry: Pick<ReceptionEntryRow, 'sa_name' | 'sa_display_name'>): string {
+  const display = String(entry.sa_display_name ?? entry.sa_name ?? '').trim()
+  return display || UNKNOWN_SA
+}
+
+function getSaFilterKey(entry: Pick<ReceptionEntryRow, 'sa_employee_code' | 'sa_name' | 'sa_display_name'>): string {
+  const code = String(entry.sa_employee_code ?? '').trim().toUpperCase()
+  if (code) return `code:${code}`
+
+  const displayName = String(entry.sa_display_name ?? entry.sa_name ?? '').trim()
+  if (displayName) return `name:${displayName.toLowerCase()}`
+
+  return 'unknown'
+}
+
 function getServiceTypeAbbreviation(label: string): string {
   const key = normalizeServiceType(label).toLowerCase()
   const mapped = SERVICE_TYPE_ABBREVIATIONS[key]
@@ -356,6 +372,7 @@ export default function ReceptionPage() {
   const [selectedLocation] = useState<string | 'all'>('all')
   const [selectedFuelType, setSelectedFuelType] = useState<string | 'all'>('all')
   const [selectedServiceType, setSelectedServiceType] = useState<string | 'all'>('all')
+  const [selectedSa, setSelectedSa] = useState<string | 'all'>('all')
   const [listCursor, setListCursor] = useState<ReceptionEntryPageCursor | null>(null)
   const [hasMoreEntries, setHasMoreEntries] = useState(false)
   const [loadingMoreEntries, setLoadingMoreEntries] = useState(false)
@@ -560,14 +577,39 @@ export default function ReceptionPage() {
     return serviceTypeBaseEntries.filter((entry) => getServiceTypeLabel(entry.service_type) === selectedServiceType)
   }, [selectedServiceType, serviceTypeBaseEntries])
 
+  const saCounts = useMemo(() => {
+    const counts = new Map<string, { label: string; count: number }>()
+    serviceTypeFilteredEntries.forEach((entry) => {
+      const key = getSaFilterKey(entry)
+      const existing = counts.get(key)
+      if (existing) {
+        existing.count += 1
+        return
+      }
+      counts.set(key, { label: getSaLabel(entry), count: 1 })
+    })
+    return counts
+  }, [serviceTypeFilteredEntries])
+
+  const saOptions = useMemo(() => {
+    return Array.from(saCounts.entries())
+      .map(([value, option]) => ({ value, label: option.label, count: option.count }))
+      .sort((a, b) => a.label.localeCompare(b.label))
+  }, [saCounts])
+
+  const saFilteredEntries = useMemo(() => {
+    if (selectedSa === 'all') return serviceTypeFilteredEntries
+    return serviceTypeFilteredEntries.filter((entry) => getSaFilterKey(entry) === selectedSa)
+  }, [selectedSa, serviceTypeFilteredEntries])
+
   const visibleEntries = useMemo(() => {
     const query = search.trim()
     if (!query) {
-      return serviceTypeFilteredEntries
+      return saFilteredEntries
     }
 
     return globalSearchEntries
-  }, [globalSearchEntries, search, serviceTypeFilteredEntries])
+  }, [globalSearchEntries, search, saFilteredEntries])
 
   async function loadGlobalSearchPage(query: string, cursor: ReceptionEntryPageCursor | null) {
     const res = await searchReceptionEntriesForGlobalSearchPage(query, cursor)
@@ -639,6 +681,12 @@ export default function ReceptionPage() {
     if (serviceTypeOptions.includes(selectedServiceType)) return
     setSelectedServiceType('all')
   }, [selectedServiceType, serviceTypeOptions])
+
+  useEffect(() => {
+    if (selectedSa === 'all') return
+    if (saOptions.some((option) => option.value === selectedSa)) return
+    setSelectedSa('all')
+  }, [selectedSa, saOptions])
 
   useEffect(() => {
     // Location filter removed — no reset needed
@@ -806,6 +854,11 @@ export default function ReceptionPage() {
         filtered = filtered.filter((entry) => getServiceTypeLabel(entry.service_type) === selectedServiceType)
       }
 
+      // SA filter
+      if (selectedSa !== 'all') {
+        filtered = filtered.filter((entry) => getSaFilterKey(entry) === selectedSa)
+      }
+
       // Build Excel sheet
       const header = [
         'Reg Number',
@@ -870,10 +923,14 @@ export default function ReceptionPage() {
       const dateStr = dateRange.from === dateRange.to
         ? dateRange.from
         : `${dateRange.from}_to_${dateRange.to}`
+      const selectedSaLabel = selectedSa === 'all'
+        ? null
+        : saOptions.find((option) => option.value === selectedSa)?.label ?? selectedSa
       const filterStr = [
         null, // Location filter removed
         selectedFuelType !== 'all' ? selectedFuelType : null,
         selectedServiceType !== 'all' ? selectedServiceType : null,
+        selectedSaLabel,
       ].filter(Boolean).join('_')
       const suffix = filterStr ? `_${filterStr}` : ''
 
@@ -1319,6 +1376,14 @@ export default function ReceptionPage() {
           ))}
         </select>
 
+        <span className="cft__label">SA:</span>
+        <select className="cft__sel" value={selectedSa} onChange={e => setSelectedSa(e.target.value)}>
+          <option value="all">All ({serviceTypeFilteredEntries.length})</option>
+          {saOptions.map(sa => (
+            <option key={sa.value} value={sa.value}>{sa.label} ({sa.count})</option>
+          ))}
+        </select>
+
         <div className="cft__spacer" />
 
         <button type="button" className="btn btn--soft cft__action" onClick={() => void handleExportExcel()} disabled={exporting || loading || visibleEntries.length === 0}
@@ -1710,6 +1775,7 @@ export default function ReceptionPage() {
                 
                 {selectedFuelType !== 'all' ? ` · ${selectedFuelType}` : ''}
                 {selectedServiceType !== 'all' ? ` · ${selectedServiceType}` : ''}
+                {selectedSa !== 'all' ? ` · ${saOptions.find((option) => option.value === selectedSa)?.label ?? selectedSa}` : ''}
               </div>
             </div>
             <span className="inp-wrap recep-search">
