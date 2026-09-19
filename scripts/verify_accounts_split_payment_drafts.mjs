@@ -2980,4 +2980,300 @@ function sumAccountsBodyshopPaymentModeKpis({ cases, lines, range }) {
   console.log('verify_accounts_split_payment_drafts: Bodyshop payment-mode KPI checks passed')
 }
 
+// ---------------------------------------------------------------------------
+// Bodyshop payment-mode cards + BUSY export. Keep aligned with
+// filterBodyshopAccountsTableCases / buildBodyshopBusyPaymentExportRows.
+// Mechanical builder behaviour is unchanged (sibling out-of-Period lines stay).
+// ---------------------------------------------------------------------------
+
+function isBodyshopQualifyingReceiptLine(line, range, modeFilter = 'all') {
+  if (!isBodyshopAccountsCustomerReceiptLine(line)) return false
+  const amount = Number(line.amount ?? 0)
+  if (!Number.isFinite(amount) || amount === 0) return false
+  if (!isAccountsViewDateInRange(bodyshopSettlementReceiptDate(line), range)) return false
+  const mode = normalizeAccountsPaymentMode(line.payment_mode)
+  if (!mode) return false
+  if (modeFilter === 'all') return true
+  return mode === modeFilter
+}
+
+function filterBodyshopAccountsTableCases({ cases, lines, range, paymentModeFilter = 'all' }) {
+  if (paymentModeFilter === 'all') return cases
+  const ids = new Set()
+  for (const line of lines) {
+    if (!isBodyshopQualifyingReceiptLine(line, range, paymentModeFilter)) continue
+    ids.add(line.repair_card_id)
+  }
+  return cases.filter((row) => ids.has(row.repair_card_id))
+}
+
+function selectBsPaymentMode(prev, mode) {
+  return prev === mode ? 'all' : mode
+}
+
+function nextBodyshopVoucher(mode, invoiceDate, counters) {
+  if (!invoiceDate || invoiceDate < '2026-09-02') return null
+  const canonical = normalizeAccountsPaymentMode(mode)
+  if (canonical === 'cash') {
+    counters.rapp += 1
+    return `RApp/26-27/${String(counters.rapp).padStart(4, '0')}`
+  }
+  if (canonical === 'upi' || canonical === 'card') {
+    counters.japp += 1
+    return `JApp/26-27/${String(counters.japp).padStart(4, '0')}`
+  }
+  return null
+}
+
+function buildBodyshopBusyPaymentExportRows({
+  cases,
+  lines,
+  range,
+  paymentModeFilter = 'all',
+  busyPartyNameByInvoice,
+  busyPartyNameByJc,
+  busyPartyNameByVrn,
+  dmsInvoiceDateByInvoice,
+  dmsInvoiceDateByJc,
+}) {
+  const wanted = paymentModeFilter === 'all' ? null : normalizeAccountsPaymentMode(paymentModeFilter)
+  const linesByCase = new Map()
+  for (const line of lines) {
+    if (!isBodyshopAccountsCustomerReceiptLine(line)) continue
+    const list = linesByCase.get(line.repair_card_id) ?? []
+    list.push(line)
+    linesByCase.set(line.repair_card_id, list)
+  }
+  const rows = []
+  let skippedUnsupportedCount = 0
+  let missingEligibleVoucherCount = 0
+  for (const caseRow of cases) {
+    const accountCr = resolveBusyPaymentAccountCr({
+      invoiceNumber: caseRow.invoice_number,
+      jcNumber: caseRow.job_card_no,
+      vehicleRegistration: caseRow.reg_number,
+      busyPartyNameByInvoice,
+      busyPartyNameByJc,
+      busyPartyNameByVrn,
+    })
+    for (const line of linesByCase.get(caseRow.repair_card_id) ?? []) {
+      const mode = normalizeAccountsPaymentMode(line.payment_mode)
+      const accountDr = busyPaymentAccountDr(mode)
+      if (!accountDr) {
+        skippedUnsupportedCount += 1
+        continue
+      }
+      if (wanted && mode !== wanted) continue
+      if (!isAccountsViewDateInRange(bodyshopSettlementReceiptDate(line), range)) continue
+      const invoiceKey = busyInvoiceLookupKey(caseRow.invoice_number)
+      const jcKey = busyJobCardLookupKey(caseRow.job_card_no)
+      const dmsInvoiceDate = (
+        (invoiceKey ? dmsInvoiceDateByInvoice?.get(invoiceKey) : undefined)
+        || (jcKey ? dmsInvoiceDateByJc?.get(jcKey) : undefined)
+      )
+      const exportDate = mechanicalBusyPaymentExportDateYmd({
+        paymentReceivedDate: line.txn_date,
+        invoiceDate: caseRow.invoice_date,
+        dmsInvoiceDate,
+      })
+      if (!exportDate) continue
+      const voucherNo = String(line.voucher_no ?? '').trim()
+      if (!voucherNo) {
+        const eligibilityYmd = mechanicalVoucherEligibilityYmd({
+          invoiceDate: caseRow.invoice_date,
+          dmsInvoiceDate,
+        })
+        if (!eligibilityYmd || isMechanicalRappJappEligible(eligibilityYmd)) {
+          missingEligibleVoucherCount += 1
+        }
+        continue
+      }
+      rows.push({
+        'Invoice date': exportDate,
+        voucher_no: voucherNo,
+        'Account DR': accountDr,
+        'Account CR': accountCr,
+        'Amount DR': Number(line.amount),
+        'Amount CR': Number(line.amount),
+        'Reference no': line.reference ?? '',
+      })
+    }
+  }
+  return { rows, skippedUnsupportedCount, missingEligibleVoucherCount }
+}
+
+{
+  const day = { from: '2026-09-19', to: '2026-09-19' }
+  const otherDay = { from: '2026-09-18', to: '2026-09-18' }
+  const allRange = { from: '', to: '' }
+  const upiCase = {
+    repair_card_id: 916,
+    job_card_no: 'JC-MBTPLT-JP1-2627-006693',
+    reg_number: 'RJ45CK0001',
+    invoice_number: 'IMBTAI-BS-6693',
+    invoice_date: '2026-09-19',
+  }
+  const splitCase = {
+    repair_card_id: 917,
+    job_card_no: 'JC-SPLIT',
+    reg_number: 'RJ45CK0002',
+    invoice_number: 'IMBTAI-BS-SPLIT',
+    invoice_date: '2026-09-19',
+  }
+  const outsideCase = {
+    repair_card_id: 918,
+    job_card_no: 'JC-OUT',
+    reg_number: 'RJ45CK0003',
+    invoice_number: 'IMBTAI-BS-OUT',
+    invoice_date: '2026-09-10',
+  }
+  const cases = [upiCase, splitCase, outsideCase]
+  const upiLine = {
+    id: 303,
+    repair_card_id: 916,
+    party: 'customer',
+    line_type: 'receipt',
+    component: 'CUSTOMER',
+    amount: 38090,
+    payment_mode: 'upi',
+    txn_date: '2026-09-19',
+    reference: 'UPI-6693',
+    voucher_no: 'JApp/26-27/0267',
+    is_reversed: false,
+  }
+  const splitCash = {
+    id: 500,
+    repair_card_id: 917,
+    party: 'customer',
+    line_type: 'receipt',
+    component: 'CUSTOMER',
+    amount: 1000,
+    payment_mode: 'cash',
+    txn_date: '2026-09-19',
+    reference: 'CASH-SPLIT',
+    voucher_no: 'RApp/26-27/0058',
+    is_reversed: false,
+  }
+  const splitUpi = {
+    id: 501,
+    repair_card_id: 917,
+    party: 'customer',
+    line_type: 'receipt',
+    component: 'CUSTOMER',
+    amount: 2000,
+    payment_mode: 'upi',
+    txn_date: '2026-09-19',
+    reference: 'UPI-SPLIT',
+    voucher_no: 'JApp/26-27/0268',
+    is_reversed: false,
+  }
+  const siblingOutOfPeriod = {
+    ...splitUpi,
+    id: 502,
+    txn_date: '2026-09-10',
+    voucher_no: 'JApp/26-27/0200',
+    reference: 'UPI-OLD',
+    amount: 50,
+  }
+  const nullMode = {
+    ...upiLine,
+    id: 403,
+    repair_card_id: 916,
+    payment_mode: null,
+    amount: 777,
+    voucher_no: null,
+    reference: null,
+  }
+  const reversed = { ...upiLine, id: 402, is_reversed: true, amount: 999 }
+  const lines = [upiLine, splitCash, splitUpi, siblingOutOfPeriod, nullMode, reversed]
+
+  const upiOnly = filterBodyshopAccountsTableCases({ cases, lines, range: day, paymentModeFilter: 'upi' })
+  assert(upiOnly.map((r) => r.repair_card_id).join() === '916,917', `UPI card matches UPI + split, got ${upiOnly.map((r) => r.repair_card_id)}`)
+  const cashOnly = filterBodyshopAccountsTableCases({ cases, lines, range: day, paymentModeFilter: 'cash' })
+  assert(cashOnly.map((r) => r.repair_card_id).join() === '917', `Cash card matches split only, got ${cashOnly.map((r) => r.repair_card_id)}`)
+  const cardOnly = filterBodyshopAccountsTableCases({ cases, lines, range: day, paymentModeFilter: 'card' })
+  assert(cardOnly.length === 0, 'Credit Card excludes UPI-only and Cash+UPI')
+  const allModes = filterBodyshopAccountsTableCases({ cases, lines, range: day, paymentModeFilter: 'all' })
+  assert(allModes.length === 3, 'All keeps status/period case set')
+  const offDay = filterBodyshopAccountsTableCases({ cases, lines, range: otherDay, paymentModeFilter: 'upi' })
+  assert(offDay.length === 0, 'Period excludes out-of-range txn_date from mode cards')
+  assert(selectBsPaymentMode('upi', 'upi') === 'all', 'clicking selected UPI clears to All')
+  assert(selectBsPaymentMode('all', 'cash') === 'cash', 'clicking Cash from All selects Cash')
+  assert(!isBodyshopQualifyingReceiptLine(nullMode, day, 'upi'), 'NULL payment_mode never matches a card')
+
+  const counters = { rapp: 57, japp: 266 }
+  const nextCash = nextBodyshopVoucher('cash', '2026-09-19', counters)
+  const nextUpi = nextBodyshopVoucher('upi', '2026-09-19', counters)
+  const nextCard = nextBodyshopVoucher('card', '2026-09-19', counters)
+  const nextNull = nextBodyshopVoucher(null, '2026-09-19', counters)
+  const nextCheque = nextBodyshopVoucher('cheque', '2026-09-19', counters)
+  const nextPre = nextBodyshopVoucher('cash', '2026-09-01', counters)
+  assert(nextCash === 'RApp/26-27/0058', `next Cash RApp, got ${nextCash}`)
+  assert(nextUpi === 'JApp/26-27/0267', `next UPI JApp, got ${nextUpi}`)
+  assert(nextCard === 'JApp/26-27/0268', `next Card shares JApp, got ${nextCard}`)
+  assert(nextNull == null && nextCheque == null && nextPre == null, 'NULL/unsupported/pre-cutoff consume no voucher')
+  assert(counters.rapp === 58 && counters.japp === 268, 'sequences increment only for assigned receipts')
+
+  const partyByVrn = new Map([['RJ45CK0001', 'BUSY PARTY-SITAPURA RJ45CK0001']])
+  const exported = buildBodyshopBusyPaymentExportRows({
+    cases,
+    lines,
+    range: day,
+    paymentModeFilter: 'all',
+    busyPartyNameByVrn: partyByVrn,
+  })
+  assert(exported.rows.length === 3, `one row per in-Period cash/upi/card line, got ${exported.rows.length}`)
+  assert(exported.rows.every((row) => row['Invoice date'] === '2026-09-19'), 'export date is txn_date in Period')
+  assert(!exported.rows.some((row) => row.voucher_no === 'JApp/26-27/0200'), 'out-of-Period sibling is not exported')
+  assert(exported.rows.find((row) => row.voucher_no === 'JApp/26-27/0267')['Account DR'] === 'PAYTM WALLET', 'UPI Account DR reused')
+  assert(exported.rows.find((row) => row.voucher_no === 'RApp/26-27/0058')['Account DR'] === 'CASH AT SITAPURA', 'Cash Account DR reused')
+  assert(exported.rows.find((row) => row.voucher_no === 'JApp/26-27/0267')['Account CR'] === 'BUSY PARTY-SITAPURA RJ45CK0001', 'Account CR uses existing VRN authority')
+  assert(exported.rows.find((row) => row.voucher_no === 'JApp/26-27/0267')['Reference no'] === 'UPI-6693', 'reference exported')
+  assert(exported.missingEligibleVoucherCount === 0, 'vouchered rows do not fail-closed')
+
+  const cashExport = buildBodyshopBusyPaymentExportRows({
+    cases: cashOnly,
+    lines,
+    range: day,
+    paymentModeFilter: 'cash',
+    busyPartyNameByVrn: partyByVrn,
+  })
+  assert(cashExport.rows.length === 1 && cashExport.rows[0].voucher_no === 'RApp/26-27/0058', 'Cash card exports cash line only')
+
+  const again = buildBodyshopBusyPaymentExportRows({
+    cases,
+    lines,
+    range: day,
+    paymentModeFilter: 'upi',
+    busyPartyNameByVrn: partyByVrn,
+  })
+  assert(again.rows.map((r) => r.voucher_no).join() === 'JApp/26-27/0267,JApp/26-27/0268', 're-export keeps persisted vouchers')
+
+  const missing = buildBodyshopBusyPaymentExportRows({
+    cases: [upiCase],
+    lines: [{ ...upiLine, voucher_no: null }],
+    range: day,
+    paymentModeFilter: 'upi',
+  })
+  assert(missing.rows.length === 0 && missing.missingEligibleVoucherCount === 1, 'eligible blank voucher fails closed without allocating')
+  assert(isMechanicalBusyPaymentExportBlocked(missing), 'fail-closed helper treats Bodyshop missing voucher as blocked')
+
+  const mechSibling = buildMechanicalBusyPaymentExportRows({
+    cases: [{
+      reception_entry_id: 11,
+      jc_number: 'JC-MECH',
+      reg_number: 'RJ00MECH',
+      invoice_number: 'IMBTAI-MECH',
+      invoice_date: '2026-09-19',
+    }],
+    lines: [
+      { id: 1, reception_entry_id: 11, amount: 100, payment_mode: 'cash', payment_received_date: '2026-09-19', posted_at: '2026-09-19T10:00:00+05:30', voucher_no: 'RApp/26-27/0001', reference: 'IN' },
+      { id: 2, reception_entry_id: 11, amount: 50, payment_mode: 'upi', payment_received_date: '2026-09-10', posted_at: '2026-09-10T10:00:00+05:30', voucher_no: 'JApp/26-27/0001', reference: 'OUT' },
+    ],
+  })
+  assert(mechSibling.rows.length === 2, 'Mechanical sibling out-of-Period line remains exported (documented TD)')
+
+  console.log('verify_accounts_split_payment_drafts: Bodyshop payment-mode filter/export/voucher checks passed')
+}
+
 

@@ -8,7 +8,7 @@
 **Status:** Active (web implemented; DBL-0055 Accounts DO post pending apply)  
 **Platform:** webversion  
 **Category:** accounts  
-**Ledger:** DBL-0045/0046/0051/0052/0053/0054/0056/0057/0058/0059/0060/0061/0066 APPLIED. DBL-0068 APPLIED (Admin edit of posted Mechanical receipts). DBL-0069 APPLIED (SA invoice amount requires Floor completed). DBL-0073 PROPOSED (per-receipt remark on mechanical payment lines). DBL-0074 APPLIED (late RApp/JApp assign + JApp sequence reconcile + fail-closed Busy Export). DBL-0075 APPLIED (Mechanical Pending Remark reuses invoice `payment_notes`). DBL-0055 PROPOSED (Accounts may post insurer/DO lines). Mechanical vouchers recalculated from `invoice_date >= 2026-09-02`. Do not reuse DBL-0043 (`busy`) or DBL-0044 (`busy_parts`). Do not re-run DBL-0059.  
+**Ledger:** DBL-0045/0046/0051/0052/0053/0054/0056/0057/0058/0059/0060/0061/0066 APPLIED. DBL-0068 APPLIED (Admin edit of posted Mechanical receipts). DBL-0069 APPLIED (SA invoice amount requires Floor completed). DBL-0073 PROPOSED (per-receipt remark on mechanical payment lines). DBL-0074 APPLIED (late RApp/JApp assign + JApp sequence reconcile + fail-closed Busy Export). DBL-0075 APPLIED (Mechanical Pending Remark reuses invoice `payment_notes`). DBL-0055 PROPOSED (Accounts may post insurer/DO lines). DBL-0080 PROPOSED (Bodyshop RApp/JApp on customer receipts; shared Mechanical sequences). Mechanical vouchers recalculated from `invoice_date >= 2026-09-02`. Do not reuse DBL-0043 (`busy`) or DBL-0044 (`busy_parts`). Do not re-run DBL-0059.  
 **Route:** `/accounts`  
 **Module:** `accounts`  
 **Depends on:** BODYSHOP-SETTLEMENT-001 (`bodyshop_settlements`, Stage 18 lines); Service Advisor Mark Done (`invoice_done_at`)  
@@ -140,7 +140,7 @@ Pattern: `src/pages/BodyshopRecoveryPage.tsx` (KPIs, search, table, Excel, on-pa
 - Search: JC / reg / invoice
 - Period chips: Mechanical **table** date authority follows status. All / Pending use Mark Done (`invoice_done_at`). Received uses actual receipt date (`payment_received_date`, else Asia/Kolkata `posted_at`) — a Received case appears when it has at least one non-Discount receipt in Period, even if Mark Done is outside Period. Mark Done count / billed / remaining stay on Mark Done. Invoice date remains Bodyshop. Cash / UPI / Credit Card **monetary** KPIs mean actual money received in the selected Period: `payment_received_date` (else Asia/Kolkata `posted_at`). Mark Done / `invoice_done_at` / `invoice_date` do not decide whether a receipt belongs to the Period. Status All / Pending / Received still scopes which cases contribute to those three cards, using the search-filtered Mechanical set (not the Mark Done-period table). Discount `reference` lines contribute ₹0 regardless of stored `payment_mode` and never qualify a Received table row. Clicking Cash/UPI/Card filters the table only — it does not zero the other mode tiles. Received + Cash/UPI/Card requires a matching non-Discount receipt **in Period**, not all-time mode history.
 - Excel export per section. Mechanical export is receipt-line grain when payment lines exist (`voucher_no`, `account_name`, `Reference no`); Cash/UPI/Credit Card cards filter receipt lines, not header totals. Vouchers persist on `accounts_mechanical_payment_lines` (DBL-0057/0058). `account_name` prefers the exact BUSY Party Name for the invoice (`psf_revenue_dms` → `resolvePartyName`); unmatched invoices keep the Accounts owner/branch/VRN fallback.
-- **Busy Export** (Mechanical only) downloads `accounts-mechanical-busy-payments.xlsx`: Invoice date, voucher_no, Account DR, Account CR, Amount DR, Amount CR, Reference no. Cash/UPI/card receipt lines only. Account DR: `CASH AT SITAPURA` / `PAYTM WALLET` / `CREDIT CARD A/C`. Account CR is BUSY Party Name (same lookup as Excel `account_name`). cheque/bank/other are skipped with a warning. Pending cases without receipts are omitted. Column **Invoice date** is the payment voucher date: `payment_received_date` → Accounts `invoice_date` → unique DMS labour `invoice_date`. `posted_at` and Mark Done are not used. Voucher eligibility is separate: effective invoice date `>= 2026-09-02` (Accounts, else unique DMS labour). Eligible cash/UPI/card rows with blank persisted `voucher_no` **block** the download (DBL-0074). The exporter never fabricates voucher numbers.
+- **Busy Export** downloads the same workbook headers for both desks: Invoice date, voucher_no, Account DR, Account CR, Amount DR, Amount CR, Reference no. Cash/UPI/card receipt lines only. Account DR: `CASH AT SITAPURA` / `PAYTM WALLET` / `CREDIT CARD A/C`. Account CR is `resolveBusyPaymentAccountCr` (VRN, then invoice, then unique JC). cheque/bank/other and NULL modes are skipped with a warning and do not block. Pending cases without receipts are omitted. Mechanical column **Invoice date** is `payment_received_date` → Accounts `invoice_date` → unique DMS labour `invoice_date`. Bodyshop uses `txn_date` → settlement `invoice_date` → unique DMS labour `invoice_date`, and **drops out-of-Period sibling lines**. Mechanical still exports sibling out-of-Period lines on a visible case (documented technical debt). Voucher eligibility is `>= 2026-09-02` (Accounts/settlement invoice date, else unique DMS labour). Eligible cash/UPI/card rows with blank persisted `voucher_no` **block** the download. The exporter never fabricates voucher numbers and never calls `nextval`.
 
 **Mechanical desk**
 
@@ -153,7 +153,7 @@ Pattern: `src/pages/BodyshopRecoveryPage.tsx` (KPIs, search, table, Excel, on-pa
 
 - Columns: JC, reg, customer, branch, SA, invoice number, invoice date, billed amount, DO amount / remaining, customer diff, remaining, received, outstanding, overall payment status
 - Post Payment opens `variant="accounts_receipt"`
-- KPI: billed vehicles, outstanding sum, overall pending / partial / received split. Cash / UPI / Credit Card money is customer-receipt grain on `bodyshop_settlement_lines` (`party=customer`, `line_type=receipt`, `component=CUSTOMER`, not reversed) dated by `txn_date`. Stored modes `cash` / `upi` / `card` via `normalizeAccountsPaymentMode`. NULL historical modes, insurance/DO lines, refunds, and reversals contribute ₹0. Independent of overall Partial/Received. Mechanical payment-mode helpers stay Mechanical-only.
+- KPI: billed vehicles, outstanding sum, overall pending / partial / received split. Cash / UPI / Credit Card money is customer-receipt grain on `bodyshop_settlement_lines` (`party=customer`, `line_type=receipt`, `component=CUSTOMER`, not reversed) dated by `txn_date`. Stored modes `cash` / `upi` / `card` via `normalizeAccountsPaymentMode`. NULL historical modes, insurance/DO lines, refunds, and reversals contribute ₹0. Independent of overall Partial/Received. Cards are clickable filters (toggle-off to All) and compose with Search + invoice_date Period + remaining/received/pending. A case matches every cash/upi/card it contains. Eligible customer receipts persist `voucher_no` from the existing Mechanical RApp/JApp sequences (DBL-0080). Mechanical payment-mode helpers stay Mechanical-only.
 
 ---
 
@@ -182,6 +182,7 @@ Pattern: `src/pages/BodyshopRecoveryPage.tsx` (KPIs, search, table, Excel, on-pa
 - [x] **Task 3.15:** Mechanical table Pending Remark between Remaining and Status (DBL-0075). Persist on existing `accounts_mechanical_invoices.payment_notes`. Inline save. Do not clear on received. Do not change money or vouchers.
 - [x] **Task 3.16:** Mechanical table date authority by status: All/Pending = Mark Done; Received = receipt date. Received + Cash/UPI/Card uses Period-scoped receipts. Case-level dedupe. Do not change Received Amount, payment-mode KPIs, or Bodyshop.
 - [x] **Task 3.17:** Bodyshop Cash / UPI / Credit Card KPIs from `bodyshop_settlement_lines` customer receipts (`txn_date`, stored `payment_mode`). No status/recalc change. Mechanical helpers unchanged.
+- [x] **Task 3.18:** Bodyshop payment-mode card filters + shared RApp/JApp + BUSY export (DBL-0080). Mechanical voucher numbers unchanged. Do not re-run DBL-0059.
 
 ### Phase 4: Closeout
 - [x] **Task 4.1:** MODULE_ROUTE_CONTRACT (grant Accounts users after SQL apply).
@@ -232,6 +233,7 @@ Pattern: `src/pages/BodyshopRecoveryPage.tsx` (KPIs, search, table, Excel, on-pa
 ✅ 3.15 | Mechanical Pending Remark | Eng | 2026-09-17 | 2026-09-17 | DBL-0075 APPLIED; reuses invoice payment_notes; practical leftover_fail=0
 ✅ 3.16 | Mechanical table date authority by status | Eng | 2026-09-17 | 2026-09-17 | Received = receipt date; All/Pending = Mark Done; no schema
 ✅ 3.17 | Bodyshop payment-mode KPIs | Eng | 2026-09-19 | 2026-09-19 | Customer receipts + txn_date; no schema; Mechanical unchanged
+✅ 3.18 | Bodyshop card filter + RApp/JApp + BUSY export | Eng | 2026-09-19 | 2026-09-19 | DBL-0080 PROPOSED; shared Mechanical sequences; Period on txn_date lines
 ⏳ 3.5 | Capture Fetch from DMS | Eng | 2026-09-11 | 2026-09-11 | DBL-0048 applied; web button pending deploy
 ```
 
@@ -305,6 +307,15 @@ Pattern: `src/pages/BodyshopRecoveryPage.tsx` (KPIs, search, table, Excel, on-pa
 ---
 
 ## Notes & Lessons Learned
+
+### 2026-09-19 - Bodyshop payment-mode cards, shared vouchers, BUSY export
+
+- Cash / UPI / Credit Card tiles are clickable filters (`bsPaymentModeFilter`). Toggle-off returns All. Period change does not reset the selected mode. Section switch resets both desks' mode filters.
+- Mode matching uses qualifying customer receipts (`party=customer`, `line_type=receipt`, `component=CUSTOMER`, not reversed) with `txn_date` in Period. Split receipts match every stored cash/upi/card they contain. NULL mode is never inferred.
+- Status cards stay on invoice_date Period + remaining/received/pending/all. Mode filter composes after that. Outstanding / `derived_payment_status` / zero-DO are unchanged.
+- `voucher_no` on `bodyshop_settlement_lines` is assigned at customer-receipt insert via `accounts_mechanical_next_voucher_no` (existing RApp/JApp 26-27 sequences). Eligibility: settlement `invoice_date`, else unique DMS labour date, `>= 2026-09-02`. NULL-only late assign. The append-only trigger still blocks DELETE and general UPDATE; it allows only `voucher_no` NULL→value with every other column unchanged. Immutable once set. Do not re-run DBL-0059.
+- Bodyshop Busy Export reuses `buildBusyPaymentExportRows`. One row per in-Period cash/upi/card customer receipt. Account CR is `resolveBusyPaymentAccountCr`. Missing eligible `voucher_no` blocks the workbook. Mechanical sibling-line Period leak is unchanged technical debt.
+- Ledger: DBL-0080.
 
 ### 2026-09-19 - Bodyshop Cash/UPI/Credit Card KPIs
 

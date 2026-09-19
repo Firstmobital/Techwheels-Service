@@ -9,10 +9,12 @@ import {
   accountsMechanicalViewDateYmd,
   addAccountsMechanicalPayment,
   updateAccountsMechanicalPayment,
+  buildBodyshopBusyPaymentExportRows,
   buildMechanicalAccountsExportRows,
   buildMechanicalBusyPaymentExportRows,
   BUSY_PAYMENT_EXPORT_HEADERS,
-  isMechanicalBusyPaymentExportBlocked,
+  filterBodyshopAccountsTableCases,
+  isBusyPaymentExportBlocked,
   uniqueDmsInvoiceDateByJc,
   mechanicalExportJcNumbers,
   mechanicalExportRegNumbers,
@@ -61,6 +63,7 @@ import {
   type AccountsMechanicalCase,
   type AccountsMechanicalPayment,
   type AccountsPaymentMode,
+  type BodyshopPaymentModeFilter,
   type MechanicalDmsInvoiceLookup,
   type MechanicalStatusFilter,
   type MechanicalPaymentModeFilter,
@@ -230,6 +233,7 @@ export default function AccountsPage() {
   const [bsFilter, setBsFilter] = useState<BodyshopFilter>('remaining')
   const [mechStatusFilter, setMechStatusFilter] = useState<MechanicalStatusFilter>('all')
   const [mechPaymentModeFilter, setMechPaymentModeFilter] = useState<MechanicalPaymentModeFilter>('all')
+  const [bsPaymentModeFilter, setBsPaymentModeFilter] = useState<BodyshopPaymentModeFilter>('all')
   const [mechPayLines, setMechPayLines] = useState<AccountsMechanicalPayment[]>([])
   const [bsPayLines, setBsPayLines] = useState<AccountsBodyshopPaymentLine[]>([])
 
@@ -268,6 +272,10 @@ export default function AccountsPage() {
 
   function selectMechPaymentMode(mode: Exclude<MechanicalPaymentModeFilter, 'all'>) {
     setMechPaymentModeFilter((prev) => (prev === mode ? 'all' : mode))
+  }
+
+  function selectBsPaymentMode(mode: Exclude<BodyshopPaymentModeFilter, 'all'>) {
+    setBsPaymentModeFilter((prev) => (prev === mode ? 'all' : mode))
   }
 
   function flash(msg: string, ok = true) {
@@ -363,13 +371,19 @@ export default function AccountsPage() {
   }, [searchedBsAllDates, dateRange])
 
   const searchedBs = useMemo(() => {
-    if (bsFilter === 'remaining') return periodBs.filter((r) => isBodyshopOutstandingOpen(r))
-    if (bsFilter === 'received') return periodBs.filter((r) => isBodyshopOverallReceived(r))
-    if (bsFilter === 'pending') {
-      return periodBs.filter((r) => isAccountsStatusPending(r.derived_payment_status))
+    let rows = periodBs
+    if (bsFilter === 'remaining') rows = periodBs.filter((r) => isBodyshopOutstandingOpen(r))
+    else if (bsFilter === 'received') rows = periodBs.filter((r) => isBodyshopOverallReceived(r))
+    else if (bsFilter === 'pending') {
+      rows = periodBs.filter((r) => isAccountsStatusPending(r.derived_payment_status))
     }
-    return periodBs
-  }, [periodBs, bsFilter])
+    return filterBodyshopAccountsTableCases({
+      cases: rows,
+      lines: bsPayLines,
+      range: dateRange,
+      paymentModeFilter: bsPaymentModeFilter,
+    })
+  }, [periodBs, bsFilter, bsPayLines, dateRange, bsPaymentModeFilter])
 
   const mechKpis = useMemo(() => {
     const pending = periodMech.filter((r) => isAccountsStatusPending(r.payment_status)).length
@@ -886,31 +900,53 @@ export default function AccountsPage() {
   }
 
   async function exportBusyPayments() {
-    if (section !== 'mechanical' || exporting) return
+    if (exporting) return
+    const isMech = section === 'mechanical'
+    const exportCases = isMech
+      ? searchedMech
+      : searchedBs.map((row) => ({
+          invoice_number: row.invoice_number,
+          jc_number: row.job_card_no,
+          reg_number: row.reg_number,
+        }))
     setExporting(true)
     try {
       const [labourByInvoice, labourByJc, labourByVrn] = await Promise.all([
-        fetchBusyLabourRowsByInvoiceNumbers(mechanicalExportInvoiceNumbers(searchedMech)),
-        fetchBusyLabourRowsByJobCardNumbers(mechanicalExportJcNumbers(searchedMech)),
-        fetchBusyLabourRowsByVehicleRegistrationNumbers(mechanicalExportRegNumbers(searchedMech)),
+        fetchBusyLabourRowsByInvoiceNumbers(mechanicalExportInvoiceNumbers(exportCases)),
+        fetchBusyLabourRowsByJobCardNumbers(mechanicalExportJcNumbers(exportCases)),
+        fetchBusyLabourRowsByVehicleRegistrationNumbers(mechanicalExportRegNumbers(exportCases)),
       ])
       const labour = dedupeBusyLabourRows([...labourByInvoice, ...labourByJc, ...labourByVrn])
       const { partyNameByInvoice, invoiceDateByInvoice } = buildBusyPartyNameByInvoice(labour)
       const { partyNameByJc } = buildBusyPartyNameByJobCard(labour)
       const { partyNameByVrn } = buildBusyPartyNameByVehicleRegistration(labour)
-      const result = buildMechanicalBusyPaymentExportRows({
-        cases: searchedMech,
-        lines: mechPayLines,
-        paymentModeFilter: mechPaymentModeFilter,
-        busyPartyNameByInvoice: partyNameByInvoice,
-        busyPartyNameByJc: partyNameByJc,
-        busyPartyNameByVrn: partyNameByVrn,
-        dmsInvoiceDateByInvoice: invoiceDateByInvoice,
-        dmsInvoiceDateByJc: uniqueDmsInvoiceDateByJc(labour),
-      })
-      if (isMechanicalBusyPaymentExportBlocked(result)) {
+      const result = isMech
+        ? buildMechanicalBusyPaymentExportRows({
+            cases: searchedMech,
+            lines: mechPayLines,
+            paymentModeFilter: mechPaymentModeFilter,
+            busyPartyNameByInvoice: partyNameByInvoice,
+            busyPartyNameByJc: partyNameByJc,
+            busyPartyNameByVrn: partyNameByVrn,
+            dmsInvoiceDateByInvoice: invoiceDateByInvoice,
+            dmsInvoiceDateByJc: uniqueDmsInvoiceDateByJc(labour),
+          })
+        : buildBodyshopBusyPaymentExportRows({
+            cases: searchedBs,
+            lines: bsPayLines,
+            range: dateRange,
+            paymentModeFilter: bsPaymentModeFilter,
+            busyPartyNameByInvoice: partyNameByInvoice,
+            busyPartyNameByJc: partyNameByJc,
+            busyPartyNameByVrn: partyNameByVrn,
+            dmsInvoiceDateByInvoice: invoiceDateByInvoice,
+            dmsInvoiceDateByJc: uniqueDmsInvoiceDateByJc(labour),
+          })
+      if (isBusyPaymentExportBlocked(result)) {
         flash(
-          `BUSY export blocked: ${result.missingEligibleVoucherCount} cash/UPI/card receipt(s) eligible for RApp/JApp have no persisted voucher_no. Capture the invoice date or wait for unique DMS labour, then Refresh.`,
+          isMech
+            ? `BUSY export blocked: ${result.missingEligibleVoucherCount} cash/UPI/card receipt(s) eligible for RApp/JApp have no persisted voucher_no. Capture the invoice date or wait for unique DMS labour, then Refresh.`
+            : `BUSY export blocked: ${result.missingEligibleVoucherCount} Bodyshop cash/UPI/card receipt(s) eligible for RApp/JApp have no persisted voucher_no. Refresh after the receipt is posted with a supported mode, or wait for the invoice date / unique DMS labour.`,
           false,
         )
         return
@@ -940,7 +976,7 @@ export default function AccountsPage() {
       })
       const wb = XLSX.utils.book_new()
       XLSX.utils.book_append_sheet(wb, sheet, 'Payments')
-      XLSX.writeFile(wb, 'accounts-mechanical-busy-payments.xlsx')
+      XLSX.writeFile(wb, isMech ? 'accounts-mechanical-busy-payments.xlsx' : 'accounts-bodyshop-busy-payments.xlsx')
       const notices: string[] = []
       if (result.unresolvedAccountCrCount > 0) {
         notices.push(
@@ -975,16 +1011,14 @@ export default function AccountsPage() {
           <button type="button" className="btn" onClick={() => void load()} disabled={loading}>
             {loading ? 'Loading…' : 'Refresh'}
           </button>
-          {section === 'mechanical' && (
-            <button
-              type="button"
-              className="btn"
-              onClick={() => void exportBusyPayments()}
-              disabled={visibleCount === 0 || exporting}
-            >
-              {exporting ? 'Exporting…' : 'Busy Export'}
-            </button>
-          )}
+          <button
+            type="button"
+            className="btn"
+            onClick={() => void exportBusyPayments()}
+            disabled={visibleCount === 0 || exporting}
+          >
+            {exporting ? 'Exporting…' : 'Busy Export'}
+          </button>
           <button type="button" className="btn btn--primary" onClick={() => void exportExcel()} disabled={visibleCount === 0 || exporting}>
             {exporting ? 'Exporting…' : 'Export Excel'}
           </button>
@@ -1003,7 +1037,7 @@ export default function AccountsPage() {
           <button
             type="button"
             className={`brx-pipe-pill ${section === 'mechanical' ? 'is-active' : ''}`}
-            onClick={() => { setSection('mechanical'); setSearch(''); setMechStatusFilter('all'); setMechPaymentModeFilter('all') }}
+            onClick={() => { setSection('mechanical'); setSearch(''); setMechStatusFilter('all'); setMechPaymentModeFilter('all'); setBsPaymentModeFilter('all') }}
           >
             <span className="brx-pipe-pill__n">{mechRows.length}</span>
             <span className="brx-pipe-pill__l">Mechanical<small>Mark Done</small></span>
@@ -1011,7 +1045,7 @@ export default function AccountsPage() {
           <button
             type="button"
             className={`brx-pipe-pill ${section === 'bodyshop' ? 'is-active' : ''}`}
-            onClick={() => { setSection('bodyshop'); setSearch(''); setMechStatusFilter('all'); setMechPaymentModeFilter('all') }}
+            onClick={() => { setSection('bodyshop'); setSearch(''); setMechStatusFilter('all'); setMechPaymentModeFilter('all'); setBsPaymentModeFilter('all') }}
           >
             <span className="brx-pipe-pill__n">{bsRows.length}</span>
             <span className="brx-pipe-pill__l">Bodyshop<small>Invoice + billed</small></span>
@@ -1108,15 +1142,21 @@ export default function AccountsPage() {
           <KpiTile
             label="Cash"
             value={inrKpi(bsKpis.cash)}
+            active={bsPaymentModeFilter === 'cash'}
+            onClick={() => selectBsPaymentMode('cash')}
           />
           <KpiTile
             label="UPI"
             value={inrKpi(bsKpis.upi)}
+            active={bsPaymentModeFilter === 'upi'}
+            onClick={() => selectBsPaymentMode('upi')}
           />
           <KpiTile
             label="Credit Card"
             value={inrKpi(bsKpis.card)}
             title="Stored payment mode: card"
+            active={bsPaymentModeFilter === 'card'}
+            onClick={() => selectBsPaymentMode('card')}
           />
         </div>
       )}
@@ -1280,6 +1320,9 @@ export default function AccountsPage() {
             {bsFilter === 'all' && 'Bodyshop · Mark Done'}
             {bsFilter === 'received' && 'Bodyshop · Received'}
             {bsFilter === 'pending' && 'Bodyshop · Pending'}
+            {bsPaymentModeFilter === 'cash' && ' · Cash'}
+            {bsPaymentModeFilter === 'upi' && ' · UPI'}
+            {bsPaymentModeFilter === 'card' && ' · Credit Card'}
           </div>
           {loading && bsRows.length === 0 ? (
             <div className="brx-settle-status">Loading billed bodyshop cases…</div>

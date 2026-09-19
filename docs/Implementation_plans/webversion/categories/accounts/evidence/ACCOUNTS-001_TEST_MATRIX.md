@@ -79,3 +79,9 @@
 - [ ] Live JC-MBTPLT-JP1-2627-006693 / line 303 `upi` ₹38,090 is in UPI when Period includes 19-Sep-2026; Cash and Credit Card do not include it; Period excluding 19-Sep drops it
 - [ ] NULL `payment_mode`, reversed receipts, and insurance/DO lines contribute ₹0 to all three tiles
 - [ ] Mechanical Cash/UPI/Card helpers and Bodyshop Partial/Received status are unchanged
+- [ ] Clicking Bodyshop Cash/UPI/Credit Card filters cases to those with a qualifying in-Period customer receipt of that mode; clicking the selected card returns All
+- [ ] Cash+UPI split case appears under both Cash and UPI; selecting one card exports only that mode
+- [ ] NULL `payment_mode` never appears in a mode card and does not consume or block RApp/JApp
+- [ ] New eligible Bodyshop Cash/UPI/Card receipts persist the next Mechanical RApp/JApp number; re-export keeps it; Mechanical vouchers are unchanged
+- [ ] Bodyshop Busy Export is one row per in-Period customer cash/upi/card line; Account DR/CR reuse Mechanical constants and `resolveBusyPaymentAccountCr`; out-of-Period sibling lines are omitted
+- [ ] Eligible Bodyshop cash/UPI/card with blank `voucher_no` blocks Bodyshop Busy Export (no xlsx, no nextval in the exporter)

@@ -10,6 +10,7 @@ import { settlementRpcError } from './bodyshopSettlement'
 export type AccountsPaymentStatus = 'pending' | 'partial' | 'received' | 'not_received'
 export type AccountsPaymentMode = 'cash' | 'upi' | 'card' | 'cheque' | 'bank' | 'other'
 export type MechanicalPaymentModeFilter = 'all' | 'cash' | 'upi' | 'card'
+export type BodyshopPaymentModeFilter = MechanicalPaymentModeFilter
 export type MechanicalStatusFilter = 'all' | 'pending' | 'received'
 export type MechanicalGatepassReason = 'paid' | 'short_payment' | 'keep_on_credit'
 
@@ -120,6 +121,8 @@ export interface AccountsBodyshopPaymentLine {
   amount: number
   payment_mode: string | null
   txn_date: string
+  reference: string | null
+  voucher_no: string | null
   is_reversed: boolean
 }
 
@@ -155,10 +158,14 @@ export async function listAccountsBodyshopCases(): Promise<AccountsBodyshopCase[
   return asArray<AccountsBodyshopCase>(data)
 }
 
-/** Customer receipt lines for Accounts Bodyshop Cash/UPI/Card KPIs. Same ledger as Customer Received. */
+/** Customer receipt lines for Accounts Bodyshop Cash/UPI/Card KPIs and BUSY export. Same ledger as Customer Received. */
 export async function listAccountsBodyshopPaymentLines(): Promise<AccountsBodyshopPaymentLine[]> {
   const pageSize = 1000
-  const columns = 'id, repair_card_id, party, line_type, component, amount, payment_mode, txn_date, is_reversed'
+  const withVoucher =
+    'id, repair_card_id, party, line_type, component, amount, payment_mode, txn_date, reference, voucher_no, is_reversed'
+  const withoutVoucher =
+    'id, repair_card_id, party, line_type, component, amount, payment_mode, txn_date, reference, is_reversed'
+  let columns = withVoucher
   const rows: AccountsBodyshopPaymentLine[] = []
   for (let from = 0; ; from += pageSize) {
     const { data, error } = await supabase
@@ -171,7 +178,13 @@ export async function listAccountsBodyshopPaymentLines(): Promise<AccountsBodysh
       .order('id', { ascending: true })
       .range(from, from + pageSize - 1)
     if (error) {
-      if (/payment_mode/i.test(error.message || '')) return []
+      const msg = error.message || ''
+      if (/payment_mode/i.test(msg)) return []
+      if (columns === withVoucher && /voucher_no/i.test(msg)) {
+        columns = withoutVoucher
+        from -= pageSize
+        continue
+      }
       throw new Error(settlementRpcError(error))
     }
     const batch = asArray<AccountsBodyshopPaymentLine>(data)
@@ -843,6 +856,75 @@ export function sumAccountsBodyshopPaymentModeKpis<T extends { repair_card_id: n
   )
 }
 
+type BodyshopPaymentModeKpiLine = Pick<
+  AccountsBodyshopPaymentLine,
+  'repair_card_id' | 'party' | 'line_type' | 'component' | 'amount' | 'payment_mode' | 'txn_date' | 'is_reversed'
+>
+
+/**
+ * Bodyshop payment-mode table receipt: customer CUSTOMER receipt, not reversed,
+ * non-zero, txn_date in Period. NULL / cheque / bank / other never match a card.
+ * Split receipts match every stored cash/upi/card they contain.
+ */
+export function isBodyshopQualifyingReceiptLine(
+  line: BodyshopPaymentModeKpiLine,
+  range: { from: string; to: string },
+  modeFilter: BodyshopPaymentModeFilter = 'all',
+): boolean {
+  if (!isBodyshopAccountsCustomerReceiptLine(line)) return false
+  const amount = Number(line.amount ?? 0)
+  if (!Number.isFinite(amount) || amount === 0) return false
+  if (!isAccountsViewDateInRange(bodyshopSettlementReceiptDate(line), range)) return false
+  const mode = normalizeAccountsPaymentMode(line.payment_mode)
+  if (!mode) return false
+  if (modeFilter === 'all') return true
+  return mode === modeFilter
+}
+
+export function repairCardIdsWithQualifyingBodyshopReceiptInRange(
+  lines: BodyshopPaymentModeKpiLine[],
+  range: { from: string; to: string },
+  modeFilter: BodyshopPaymentModeFilter = 'all',
+): Set<number> {
+  const ids = new Set<number>()
+  for (const line of lines) {
+    if (!isBodyshopQualifyingReceiptLine(line, range, modeFilter)) continue
+    ids.add(line.repair_card_id)
+  }
+  return ids
+}
+
+export function filterBodyshopCasesByQualifyingReceiptInRange<T extends { repair_card_id: number }>(
+  rows: T[],
+  lines: BodyshopPaymentModeKpiLine[],
+  range: { from: string; to: string },
+  modeFilter: BodyshopPaymentModeFilter = 'all',
+): T[] {
+  const ids = repairCardIdsWithQualifyingBodyshopReceiptInRange(lines, range, modeFilter)
+  return rows.filter((row) => ids.has(row.repair_card_id))
+}
+
+/**
+ * Bodyshop table: caller applies Search, invoice_date Period, and status first.
+ * Cash/UPI/Card then keeps cases with a qualifying customer receipt in Period.
+ * Does not change remaining/received/pending/outstanding predicates.
+ */
+export function filterBodyshopAccountsTableCases<T extends { repair_card_id: number }>(input: {
+  cases: T[]
+  lines: BodyshopPaymentModeKpiLine[]
+  range: { from: string; to: string }
+  paymentModeFilter?: BodyshopPaymentModeFilter
+}): T[] {
+  const paymentModeFilter = input.paymentModeFilter ?? 'all'
+  if (paymentModeFilter === 'all') return input.cases
+  return filterBodyshopCasesByQualifyingReceiptInRange(
+    input.cases,
+    input.lines,
+    input.range,
+    paymentModeFilter,
+  )
+}
+
 type AccountsPaymentModeLine = Pick<AccountsMechanicalPayment, 'reception_entry_id' | 'amount' | 'payment_mode'>
 
 /** Cases that have at least one receipt line in the given canonical payment mode. Split receipts match every mode they contain. */
@@ -1027,6 +1109,18 @@ export function sortAccountsMechanicalPaymentLines<T extends {
   })
 }
 
+function sortBusyPaymentExportLines(lines: BusyPaymentExportLine[]): BusyPaymentExportLine[] {
+  return [...lines].sort((a, b) => {
+    const da = String(a.receiptDate ?? '').slice(0, 10)
+    const db = String(b.receiptDate ?? '').slice(0, 10)
+    if (da !== db) return da < db ? -1 : 1
+    const pa = String(a.posted_at ?? '')
+    const pb = String(b.posted_at ?? '')
+    if (pa !== pb) return pa < pb ? -1 : 1
+    return Number(a.id) - Number(b.id)
+  })
+}
+
 export interface MechanicalAccountsExportRow {
   'Mark Done': string
   JC: string
@@ -1177,6 +1271,8 @@ export function isMechanicalBusyPaymentExportBlocked(
   return result.missingEligibleVoucherCount > 0
 }
 
+export const isBusyPaymentExportBlocked = isMechanicalBusyPaymentExportBlocked
+
 export function busyPaymentAccountDr(mode: unknown): BusyPaymentAccountDr | null {
   const canonical = normalizeAccountsPaymentMode(typeof mode === 'string' ? mode : String(mode ?? ''))
   if (canonical === 'cash' || canonical === 'upi' || canonical === 'card') {
@@ -1288,17 +1384,37 @@ export function mechanicalBusyPaymentExportDateYmd(input: {
   )
 }
 
+export interface BusyPaymentExportCase {
+  caseKey: number
+  invoice_number?: string | null
+  jc_number?: string | null
+  reg_number?: string | null
+  invoice_date?: string | null
+}
+
+export interface BusyPaymentExportLine {
+  caseKey: number
+  id: number
+  amount: number
+  payment_mode: string | null | undefined
+  voucher_no?: string | null
+  reference?: string | null
+  receiptDate?: string | null
+  posted_at?: string | null
+}
+
 /**
- * BUSY payment workbook: one row per cash/upi/card receipt.
- * Pending cases without lines are omitted. cheque/bank/other are skipped, not mapped.
+ * Shared BUSY payment workbook. One row per cash/upi/card receipt.
  * voucher_no is persisted only — never generated here.
- * Eligible cash/UPI/card rows with blank voucher_no are counted and omitted so the
- * caller can refuse the workbook. Pre-cutoff blanks are omitted and do not block.
+ * restrictLinesToRange: Bodyshop only. Mechanical keeps sibling out-of-Period lines
+ * (pre-existing technical debt; do not change Mechanical in this task).
  */
-export function buildMechanicalBusyPaymentExportRows(input: {
-  cases: AccountsMechanicalCase[]
-  lines: AccountsMechanicalPayment[]
+export function buildBusyPaymentExportRows(input: {
+  cases: BusyPaymentExportCase[]
+  lines: BusyPaymentExportLine[]
   paymentModeFilter?: MechanicalPaymentModeFilter
+  range?: { from: string; to: string }
+  restrictLinesToRange?: boolean
   busyPartyNameByInvoice?: ReadonlyMap<string, string>
   busyPartyNameByJc?: ReadonlyMap<string, string>
   busyPartyNameByVrn?: ReadonlyMap<string, string>
@@ -1307,11 +1423,11 @@ export function buildMechanicalBusyPaymentExportRows(input: {
 }): MechanicalBusyPaymentExportResult {
   const modeFilter = input.paymentModeFilter ?? 'all'
   const wanted = modeFilter === 'all' ? null : normalizeAccountsPaymentMode(modeFilter)
-  const linesByCase = new Map<number, AccountsMechanicalPayment[]>()
+  const linesByCase = new Map<number, BusyPaymentExportLine[]>()
   for (const line of input.lines) {
-    const list = linesByCase.get(line.reception_entry_id) ?? []
+    const list = linesByCase.get(line.caseKey) ?? []
     list.push(line)
-    linesByCase.set(line.reception_entry_id, list)
+    linesByCase.set(line.caseKey, list)
   }
 
   const rows: MechanicalBusyPaymentExportRow[] = []
@@ -1322,7 +1438,7 @@ export function buildMechanicalBusyPaymentExportRows(input: {
   let unresolvedAccountCrCount = 0
 
   for (const caseRow of input.cases) {
-    const caseLines = sortAccountsMechanicalPaymentLines(linesByCase.get(caseRow.reception_entry_id) ?? [])
+    const caseLines = sortBusyPaymentExportLines(linesByCase.get(caseRow.caseKey) ?? [])
     const accountCr = resolveBusyPaymentAccountCr({
       invoiceNumber: caseRow.invoice_number,
       jcNumber: caseRow.jc_number,
@@ -1339,6 +1455,13 @@ export function buildMechanicalBusyPaymentExportRows(input: {
         continue
       }
       if (wanted && mode !== wanted) continue
+      if (
+        input.restrictLinesToRange
+        && input.range
+        && !isAccountsViewDateInRange(mechanicalInvoiceDateYmd(line.receiptDate) || null, input.range)
+      ) {
+        continue
+      }
 
       const invoiceKey = busyInvoiceLookupKey(caseRow.invoice_number)
       const jcKey = busyJobCardLookupKey(caseRow.jc_number)
@@ -1347,7 +1470,7 @@ export function buildMechanicalBusyPaymentExportRows(input: {
         || (jcKey ? input.dmsInvoiceDateByJc?.get(jcKey) : undefined)
       )
       const exportDate = mechanicalBusyPaymentExportDateYmd({
-        paymentReceivedDate: line.payment_received_date,
+        paymentReceivedDate: line.receiptDate,
         invoiceDate: caseRow.invoice_date,
         dmsInvoiceDate,
       })
@@ -1392,6 +1515,93 @@ export function buildMechanicalBusyPaymentExportRows(input: {
     missingDateCount,
     unresolvedAccountCrCount,
   }
+}
+
+/**
+ * Mechanical BUSY payment workbook. Does not re-apply Period to sibling receipt lines.
+ */
+export function buildMechanicalBusyPaymentExportRows(input: {
+  cases: AccountsMechanicalCase[]
+  lines: AccountsMechanicalPayment[]
+  paymentModeFilter?: MechanicalPaymentModeFilter
+  busyPartyNameByInvoice?: ReadonlyMap<string, string>
+  busyPartyNameByJc?: ReadonlyMap<string, string>
+  busyPartyNameByVrn?: ReadonlyMap<string, string>
+  dmsInvoiceDateByInvoice?: ReadonlyMap<string, string>
+  dmsInvoiceDateByJc?: ReadonlyMap<string, string>
+}): MechanicalBusyPaymentExportResult {
+  return buildBusyPaymentExportRows({
+    cases: input.cases.map((row) => ({
+      caseKey: row.reception_entry_id,
+      invoice_number: row.invoice_number,
+      jc_number: row.jc_number,
+      reg_number: row.reg_number,
+      invoice_date: row.invoice_date,
+    })),
+    lines: input.lines.map((line) => ({
+      caseKey: line.reception_entry_id,
+      id: line.id,
+      amount: line.amount,
+      payment_mode: line.payment_mode,
+      voucher_no: line.voucher_no,
+      reference: line.reference,
+      receiptDate: line.payment_received_date,
+      posted_at: line.posted_at,
+    })),
+    paymentModeFilter: input.paymentModeFilter,
+    restrictLinesToRange: false,
+    busyPartyNameByInvoice: input.busyPartyNameByInvoice,
+    busyPartyNameByJc: input.busyPartyNameByJc,
+    busyPartyNameByVrn: input.busyPartyNameByVrn,
+    dmsInvoiceDateByInvoice: input.dmsInvoiceDateByInvoice,
+    dmsInvoiceDateByJc: input.dmsInvoiceDateByJc,
+  })
+}
+
+/**
+ * Bodyshop BUSY payment workbook. One row per customer cash/upi/card receipt.
+ * Exported lines themselves must have txn_date in Period (unlike Mechanical).
+ * NULL / unsupported modes are skipped and do not block.
+ */
+export function buildBodyshopBusyPaymentExportRows(input: {
+  cases: AccountsBodyshopCase[]
+  lines: AccountsBodyshopPaymentLine[]
+  range: { from: string; to: string }
+  paymentModeFilter?: BodyshopPaymentModeFilter
+  busyPartyNameByInvoice?: ReadonlyMap<string, string>
+  busyPartyNameByJc?: ReadonlyMap<string, string>
+  busyPartyNameByVrn?: ReadonlyMap<string, string>
+  dmsInvoiceDateByInvoice?: ReadonlyMap<string, string>
+  dmsInvoiceDateByJc?: ReadonlyMap<string, string>
+}): MechanicalBusyPaymentExportResult {
+  return buildBusyPaymentExportRows({
+    cases: input.cases.map((row) => ({
+      caseKey: row.repair_card_id,
+      invoice_number: row.invoice_number,
+      jc_number: row.job_card_no,
+      reg_number: row.reg_number,
+      invoice_date: row.invoice_date,
+    })),
+    lines: input.lines
+      .filter((line) => isBodyshopAccountsCustomerReceiptLine(line))
+      .map((line) => ({
+        caseKey: line.repair_card_id,
+        id: line.id,
+        amount: line.amount,
+        payment_mode: line.payment_mode,
+        voucher_no: line.voucher_no,
+        reference: line.reference,
+        receiptDate: bodyshopSettlementReceiptDate(line),
+      })),
+    paymentModeFilter: input.paymentModeFilter,
+    range: input.range,
+    restrictLinesToRange: true,
+    busyPartyNameByInvoice: input.busyPartyNameByInvoice,
+    busyPartyNameByJc: input.busyPartyNameByJc,
+    busyPartyNameByVrn: input.busyPartyNameByVrn,
+    dmsInvoiceDateByInvoice: input.dmsInvoiceDateByInvoice,
+    dmsInvoiceDateByJc: input.dmsInvoiceDateByJc,
+  })
 }
 
 export async function listAccountsMechanicalPaymentLines(): Promise<AccountsMechanicalPayment[]> {
