@@ -13,7 +13,7 @@ import {
 import { collectBusinessRolesFromMappings } from '../lib/businessRoles'
 
 // ── Types ──────────────────────────────────────────────────────────────────────
-type UserRole = 'admin' | 'manager' | 'staff' | 'driver' | 'viewer'
+type UserRole = 'admin' | 'manager' | 'staff' | 'viewer'
 
 interface AppUser {
   id:          string
@@ -326,34 +326,7 @@ export default function AdminPage({ onViewAsUser }: { onViewAsUser?: (id: string
 
   async function loadModules() {
     const { data } = await supabase.from('modules').select('*').order('sort_order')
-    let dbModules = [...(data ?? [])]
-    const hasDriverModule = dbModules.some((m) => m.name === 'driver_management')
-    if (!hasDriverModule) {
-      const maxSortOrder = dbModules.reduce((max, m) => Math.max(max, m.sort_order || 0), 0)
-      const { data: inserted } = await supabase
-        .from('modules')
-        .insert({
-          name: 'driver_management',
-          label: 'Driver Management',
-          description: 'Driver assignment and daily vehicle pickup tracking',
-          icon: 'truck',
-          route: '/driver-management',
-          sort_order: maxSortOrder + 1,
-          is_active: true,
-        })
-        .select()
-        .maybeSingle()
-
-      if (inserted) {
-        dbModules.push(inserted)
-      } else {
-        const refetch = await supabase.from('modules').select('*').order('sort_order')
-        if (refetch.data && refetch.data.length > 0) {
-          dbModules = refetch.data
-        }
-      }
-    }
-    setModules(dbModules)
+    setModules(data ?? [])
   }
 
   async function loadMappings() {
@@ -775,51 +748,19 @@ export default function AdminPage({ onViewAsUser }: { onViewAsUser?: (id: string
   async function savePerms() {
     if (!selectedUserId) return
     setSavingPerms(true)
-
-    // Ensure all active modules have genuine database IDs
-    const { data: dbModules } = await supabase.from('modules').select('id, name')
-    const dbModuleMap = new Map((dbModules ?? []).map((m) => [m.name, m.id]))
-
-    if (!dbModuleMap.has('driver_management')) {
-      const { data: inserted } = await supabase
-        .from('modules')
-        .insert({
-          name: 'driver_management',
-          label: 'Driver Management',
-          description: 'Driver assignment and daily vehicle pickup tracking',
-          icon: 'truck',
-          route: '/driver-management',
-          sort_order: (dbModules?.length ?? 0) + 1,
-          is_active: true,
-        })
-        .select()
-        .maybeSingle()
-      if (inserted) {
-        dbModuleMap.set(inserted.name, inserted.id)
-      }
-    }
-
-    const upserts = modules
-      .filter((m) => m.is_active)
-      .map((m) => {
-        const genuineId = dbModuleMap.get(m.name) ?? m.id
-        return {
-          user_id:    selectedUserId,
-          module_id:  genuineId,
-          can_view:   pendingPerms[m.id]?.can_view   ?? pendingPerms[genuineId]?.can_view   ?? false,
-          can_modify: pendingPerms[m.id]?.can_modify ?? pendingPerms[genuineId]?.can_modify ?? false,
-          can_delete: pendingPerms[m.id]?.can_delete ?? pendingPerms[genuineId]?.can_delete ?? false,
-        }
-      })
-      .filter((u) => typeof u.module_id === 'number' && u.module_id < 9000)
-
+    const upserts = modules.filter(m => m.is_active).map(m => ({
+      user_id:    selectedUserId,
+      module_id:  m.id,
+      can_view:   pendingPerms[m.id]?.can_view   ?? false,
+      can_modify: pendingPerms[m.id]?.can_modify ?? false,
+      can_delete: pendingPerms[m.id]?.can_delete ?? false,
+    }))
     const { error } = await supabase
       .from('user_module_permissions')
       .upsert(upserts, { onConflict: 'user_id,module_id' })
     setSavingPerms(false)
     if (error) { showToastMsg(error.message, 'error'); return }
     showToastMsg('Permissions saved')
-    await loadPermsForUser(selectedUserId)
   }
 
   // ── Modules ────────────────────────────────────────────────────────────────
@@ -984,7 +925,6 @@ export default function AdminPage({ onViewAsUser }: { onViewAsUser?: (id: string
               <option value="admin">Admin</option>
               <option value="manager">Manager</option>
               <option value="staff">Staff</option>
-              <option value="driver">Driver</option>
               <option value="viewer">Viewer</option>
             </select>
             <label className="switch">
@@ -1462,7 +1402,6 @@ export default function AdminPage({ onViewAsUser }: { onViewAsUser?: (id: string
             <Field label="Platform Role">
               <select value={newRole} onChange={e => setNewRole(e.target.value as UserRole)} className={INPUT}>
                 <option value="viewer">Viewer — read only</option>
-                <option value="driver">Driver — doorstep pickup & app tasks</option>
                 <option value="staff">Staff — view + modify</option>
                 <option value="manager">Manager — view + modify + delete</option>
                 <option value="admin">Admin — full access</option>
@@ -1757,7 +1696,6 @@ export default function AdminPage({ onViewAsUser }: { onViewAsUser?: (id: string
                   <option value="admin">admin</option>
                   <option value="manager">manager</option>
                   <option value="staff">staff</option>
-                  <option value="driver">driver</option>
                   <option value="viewer">viewer</option>
                 </select>
               </div>

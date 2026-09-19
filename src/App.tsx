@@ -47,7 +47,6 @@ import {
 } from './lib/api/helpTickets'
 import EWReminderPage from './pages/EWReminderPage'
 import ServiceBookingPage from './pages/ServiceBookingPage'
-import DriverManagementPage from './pages/DriverManagementPage'
 import WAAgentPage from './pages/WAAgentPage'
 import TelecallingPage from './pages/TelecallingPage'
 import InsuranceRenewalTelecallingPage from './pages/InsuranceRenewalTelecallingPage'
@@ -94,7 +93,6 @@ const NAV_ITEMS = [
   { to: '/bodyshop-recovery', label: 'Bodyshop Recovery', icon: 'reports' },
   { to: '/ew-reminder', label: 'EW Reminder', icon: 'shield' },
   { to: '/service-booking', label: 'Service Booking', icon: 'calendar' },
-  { to: '/driver-management', label: 'Driver Management', icon: 'truck' },
   { to: '/wa-agent', label: 'WA AI Agent', icon: 'message-circle' },
   { to: '/telecalling', label: 'Telecalling', icon: 'phone' },
   { to: '/insurance-renewal-telecalling', label: 'Insurance Renewal Telecalling', icon: 'shield' },
@@ -129,7 +127,6 @@ type ModuleName =
   | 'bodyshop_recovery'
   | 'ew_reminder'
   | 'service_booking'
-  | 'driver_management'
   | 'wa_agent'
   | 'telecalling'
   | 'insurance_renewal_telecalling'
@@ -140,7 +137,7 @@ type ModuleName =
   | 'busy'
   | 'accounts'
 
-type AppRoute = '/import' | '/reports' | '/settings' | '/admin' | '/autodoc' | '/reception' | '/service-advisor' | '/floor-incharge' | '/sa-tracker' | '/bodyshop-tracker' | '/bodyshop-floor' | '/technician' | '/payroll' | '/complaints' | '/help-tickets' | '/bodyshop-repair' | '/bodyshop-recovery' | '/ew-reminder' | '/service-booking' | '/driver-management' | '/wa-agent' | '/telecalling' | '/insurance-renewal-telecalling' | '/auto-service-reminder' | '/cre-incentive' | '/post-service-feedback' | '/parts-spm' | '/busy' | '/accounts'
+type AppRoute = '/import' | '/reports' | '/settings' | '/admin' | '/autodoc' | '/reception' | '/service-advisor' | '/floor-incharge' | '/sa-tracker' | '/bodyshop-tracker' | '/bodyshop-floor' | '/technician' | '/payroll' | '/complaints' | '/help-tickets' | '/bodyshop-repair' | '/bodyshop-recovery' | '/ew-reminder' | '/service-booking' | '/wa-agent' | '/telecalling' | '/insurance-renewal-telecalling' | '/auto-service-reminder' | '/cre-incentive' | '/post-service-feedback' | '/parts-spm' | '/busy' | '/accounts'
 
 interface PermissionRow {
   module_name: string
@@ -166,7 +163,6 @@ const ROUTE_MODULE_MAP: Record<AppRoute, ModuleName[]> = {
   '/bodyshop-recovery': ['bodyshop_recovery'],
   '/ew-reminder': ['ew_reminder'],
   '/service-booking': ['service_booking'],
-  '/driver-management': ['driver_management', 'service_booking'],
   '/wa-agent': ['wa_agent'],
   '/telecalling': ['telecalling'],
   '/insurance-renewal-telecalling': ['insurance_renewal_telecalling'],
@@ -886,18 +882,38 @@ function hasAnyModuleAccess(allowedModules: Set<string>, modules: readonly Modul
 function canAccessPath(pathname: string, allowedModules: Set<string>) {
   if (pathname === '/') return true
   if (pathname.startsWith('/home')) return true
+  if (pathname.startsWith('/reports')) return hasAnyModuleAccess(allowedModules, ROUTE_MODULE_MAP['/reports'])
+  if (pathname.startsWith('/import')) return hasAnyModuleAccess(allowedModules, ROUTE_MODULE_MAP['/import'])
+  if (pathname.startsWith('/settings')) return hasAnyModuleAccess(allowedModules, ROUTE_MODULE_MAP['/settings'])
+  if (pathname.startsWith('/admin')) return true // Admin always reachable (incl. during impersonation)
+  if (pathname.startsWith('/autodoc')) return hasAnyModuleAccess(allowedModules, ROUTE_MODULE_MAP['/autodoc'])
+  if (pathname.startsWith('/reception')) return hasAnyModuleAccess(allowedModules, ROUTE_MODULE_MAP['/reception'])
+  if (pathname.startsWith('/service-advisor')) return hasAnyModuleAccess(allowedModules, ROUTE_MODULE_MAP['/service-advisor'])
+  if (pathname.startsWith('/floor-incharge')) return hasAnyModuleAccess(allowedModules, ROUTE_MODULE_MAP['/floor-incharge'])
+  if (pathname.startsWith('/sa-tracker')) return hasAnyModuleAccess(allowedModules, ROUTE_MODULE_MAP['/sa-tracker'])
+  if (pathname.startsWith('/bodyshop-tracker')) return hasAnyModuleAccess(allowedModules, ROUTE_MODULE_MAP['/bodyshop-tracker'])
+  if (pathname.startsWith('/bodyshop-floor')) return hasAnyModuleAccess(allowedModules, ROUTE_MODULE_MAP['/bodyshop-floor'])
+  if (pathname.startsWith('/technician')) return hasAnyModuleAccess(allowedModules, ROUTE_MODULE_MAP['/technician'])
+  if (pathname.startsWith('/payroll')) return hasAnyModuleAccess(allowedModules, ROUTE_MODULE_MAP['/payroll'])
+  if (pathname.startsWith('/complaints')) return hasAnyModuleAccess(allowedModules, ROUTE_MODULE_MAP['/complaints'])
+  if (pathname.startsWith('/help-tickets')) return hasAnyModuleAccess(allowedModules, ROUTE_MODULE_MAP['/help-tickets'])
+  // Employee Get Help self-service — auth only; RPCs enforce employee link
   if (pathname.startsWith('/help')) return true
+  if (pathname.startsWith('/bodyshop-repair')) return hasAnyModuleAccess(allowedModules, ROUTE_MODULE_MAP['/bodyshop-repair'])
+  if (pathname.startsWith('/bodyshop-recovery')) return hasAnyModuleAccess(allowedModules, ROUTE_MODULE_MAP['/bodyshop-recovery'])
+  if (pathname.startsWith('/ew-reminder')) return hasAnyModuleAccess(allowedModules, ROUTE_MODULE_MAP['/ew-reminder'])
+  if (pathname.startsWith('/service-booking')) return hasAnyModuleAccess(allowedModules, ROUTE_MODULE_MAP['/service-booking'])
+  if (pathname.startsWith('/wa-agent')) return hasAnyModuleAccess(allowedModules, ROUTE_MODULE_MAP['/wa-agent'])
+  if (pathname.startsWith('/telecalling')) return hasAnyModuleAccess(allowedModules, ROUTE_MODULE_MAP['/telecalling'])
+  if (pathname.startsWith('/insurance-renewal-telecalling')) return hasAnyModuleAccess(allowedModules, ROUTE_MODULE_MAP['/insurance-renewal-telecalling'])
+  if (pathname.startsWith('/auto-service-reminder')) return hasAnyModuleAccess(allowedModules, ROUTE_MODULE_MAP['/auto-service-reminder'])
+  if (pathname.startsWith('/cre-incentive')) return hasAnyModuleAccess(allowedModules, ROUTE_MODULE_MAP['/cre-incentive'])
+  if (pathname.startsWith('/post-service-feedback')) return hasAnyModuleAccess(allowedModules, ROUTE_MODULE_MAP['/post-service-feedback'])
+  if (pathname.startsWith('/parts-spm')) return hasAnyModuleAccess(allowedModules, ROUTE_MODULE_MAP['/parts-spm'])
+  if (pathname.startsWith('/busy')) return hasAnyModuleAccess(allowedModules, ROUTE_MODULE_MAP['/busy'])
+  if (pathname.startsWith('/accounts')) return hasAnyModuleAccess(allowedModules, ROUTE_MODULE_MAP['/accounts'])
   if (pathname.startsWith('/c/')) return true
   if (pathname.startsWith('/reset-password') || pathname.startsWith('/auth/callback') || pathname.startsWith('/forgot-password')) return true
-  if (pathname.startsWith('/admin')) return true // Admin always reachable (incl. during impersonation)
-
-  // Dynamic route check against ROUTE_MODULE_MAP for all registered routes
-  for (const [route, modules] of Object.entries(ROUTE_MODULE_MAP)) {
-    if (pathname === route || pathname.startsWith(`${route}/`)) {
-      return hasAnyModuleAccess(allowedModules, modules as readonly ModuleName[])
-    }
-  }
-
   return false
 }
 
@@ -1216,21 +1232,14 @@ function AppInner() {
 
       setPermissionsLoading(true)
 
-      const [{ data: profile }, { data: permissionRows }, isAdminRpcRes] = await Promise.all([
-        supabase.from('users').select('role, is_active').eq('id', userId).maybeSingle(),
+      const [{ data: profile }, { data: permissionRows }] = await Promise.all([
+        supabase.from('users').select('role').eq('id', userId).maybeSingle(),
         supabase.rpc('get_all_my_permissions'),
-        Promise.resolve(supabase.rpc('is_admin')).then((res) => Boolean(res.data)).catch(() => false),
       ])
 
       const nextModules = new Set<string>(((permissionRows ?? []) as PermissionRow[]).map((row) => row.module_name))
 
-      const profileRole = String(profile?.role ?? '').trim().toLowerCase()
-      const metaRole = String(user?.user_metadata?.role ?? user?.app_metadata?.role ?? '').trim().toLowerCase()
-      const effectiveRole = profileRole || metaRole || 'staff'
-
-      const isUserAdmin = isAdminRpcRes === true || effectiveRole === 'admin' || effectiveRole === 'super_admin'
-
-      if (isUserAdmin) {
+      if (profile?.role === 'admin') {
         if (mounted) setIsAdmin(true)
         ALL_ROUTE_MODULES.forEach((moduleName) => nextModules.add(moduleName))
 
@@ -1243,37 +1252,6 @@ function AppInner() {
             nextModules.add(moduleRow.name)
           }
         })
-      } else if (effectiveRole === 'driver') {
-        nextModules.add('driver_management')
-        nextModules.add('service_booking')
-      } else if (effectiveRole === 'manager') {
-        ALL_ROUTE_MODULES.forEach((moduleName) => nextModules.add(moduleName))
-      }
-
-      // Check if user has active employee mapping with DRIVER role
-      if (!isUserAdmin && userId) {
-        const { data: userLinks } = await supabase
-          .from('user_employee_links')
-          .select('employee_code')
-          .eq('user_id', userId)
-          .eq('is_active', true)
-
-        if (userLinks && userLinks.length > 0) {
-          const empCodes = userLinks.map((l) => l.employee_code).filter(Boolean)
-          if (empCodes.length > 0) {
-            const { data: empRows } = await supabase
-              .from('employees')
-              .select('role')
-              .in('employee_code', empCodes)
-            const isDriverStaff = (empRows ?? []).some((e) =>
-              String(e.role ?? '').toLowerCase().includes('driver')
-            )
-            if (isDriverStaff) {
-              nextModules.add('driver_management')
-              nextModules.add('service_booking')
-            }
-          }
-        }
       }
 
       if (mounted) {
@@ -1584,14 +1562,6 @@ VITE_SUPABASE_ANON_KEY=your-anon-key`}
                   element={(
                     <RequireAccess allowedModules={allowedModules} modules={ROUTE_MODULE_MAP['/service-booking']}>
                       <ServiceBookingPage />
-                    </RequireAccess>
-                  )}
-                />
-                <Route
-                  path="/driver-management"
-                  element={(
-                    <RequireAccess allowedModules={allowedModules} modules={ROUTE_MODULE_MAP['/driver-management']}>
-                      <DriverManagementPage />
                     </RequireAccess>
                   )}
                 />

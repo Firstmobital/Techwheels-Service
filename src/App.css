@@ -565,7 +565,6 @@ table.tbl { width: 100%; border-collapse: collapse; font-size: 13.5px; }
 .badge--admin   { background: var(--accent-soft); color: var(--accent); }
 .badge--manager { background: #F1ECFE; color: #6D28D9; }
 .badge--staff   { background: var(--success-bg); color: var(--success); }
-.badge--driver  { background: #e0f2fe; color: #0284c7; }
 .badge--viewer  { background: var(--canvas); color: var(--muted); }
 .badge--active  { background: var(--success-bg); color: var(--success); }
 .badge--inactive{ background: var(--danger-bg); color: var(--danger); }
