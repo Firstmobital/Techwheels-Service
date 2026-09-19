@@ -13,7 +13,7 @@ import {
 import { collectBusinessRolesFromMappings } from '../lib/businessRoles'
 
 // ── Types ──────────────────────────────────────────────────────────────────────
-type UserRole = 'admin' | 'manager' | 'staff' | 'viewer'
+type UserRole = 'admin' | 'manager' | 'staff' | 'driver' | 'viewer'
 
 interface AppUser {
   id:          string
@@ -925,6 +925,7 @@ export default function AdminPage({ onViewAsUser }: { onViewAsUser?: (id: string
               <option value="admin">Admin</option>
               <option value="manager">Manager</option>
               <option value="staff">Staff</option>
+              <option value="driver">Driver</option>
               <option value="viewer">Viewer</option>
             </select>
             <label className="switch">
@@ -1402,6 +1403,7 @@ export default function AdminPage({ onViewAsUser }: { onViewAsUser?: (id: string
             <Field label="Platform Role">
               <select value={newRole} onChange={e => setNewRole(e.target.value as UserRole)} className={INPUT}>
                 <option value="viewer">Viewer — read only</option>
+                <option value="driver">Driver — doorstep pickup & app tasks</option>
                 <option value="staff">Staff — view + modify</option>
                 <option value="manager">Manager — view + modify + delete</option>
                 <option value="admin">Admin — full access</option>
@@ -1696,6 +1698,7 @@ export default function AdminPage({ onViewAsUser }: { onViewAsUser?: (id: string
                   <option value="admin">admin</option>
                   <option value="manager">manager</option>
                   <option value="staff">staff</option>
+                  <option value="driver">driver</option>
                   <option value="viewer">viewer</option>
                 </select>
               </div>
