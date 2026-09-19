@@ -10,7 +10,7 @@ import {
   getReceptionRevisitContext,
   getReceptionUpdationContext,
   isFloorInchargeServiceType,
-  listReceptionEntriesByDateRangePage,
+  listReceptionEntriesByDateRange,
   searchReceptionEntriesForGlobalSearchPage,
   listReceptionEmployees,
   lookupVehicleByRegNumber,
@@ -147,6 +147,10 @@ const RECEPTION_SERVICE_TYPE_OPTIONS = [
   'Updation',
 ]
 const IMPORT_JC_NUMBER_ALIASES = ['jc_number', 'job card number', 'job card numbe', 'job card no']
+
+// Display-only cap for the Reception entries list. Never use this when
+// deriving header counts, toolbar options, or summary cards.
+const DEFAULT_RECEPTION_VISIBLE_LIMIT = 100
 
 function parseImportFile(file: File): Promise<{ rows: ReceptionEntryInput[]; skipped: number }> {
   return new Promise((resolve, reject) => {
@@ -373,9 +377,6 @@ export default function ReceptionPage() {
   const [selectedFuelType, setSelectedFuelType] = useState<string | 'all'>('all')
   const [selectedServiceType, setSelectedServiceType] = useState<string | 'all'>('all')
   const [selectedSa, setSelectedSa] = useState<string | 'all'>('all')
-  const [listCursor, setListCursor] = useState<ReceptionEntryPageCursor | null>(null)
-  const [hasMoreEntries, setHasMoreEntries] = useState(false)
-  const [loadingMoreEntries, setLoadingMoreEntries] = useState(false)
   const [exporting, setExporting] = useState(false)
   const [revisitContext, setRevisitContext] = useState<ReceptionRevisitContext | null>(null)
   // Ref for accessing latest revisit state inside async callbacks (avoids stale closure)
@@ -602,14 +603,16 @@ export default function ReceptionPage() {
     return serviceTypeFilteredEntries.filter((entry) => getSaFilterKey(entry) === selectedSa)
   }, [selectedSa, serviceTypeFilteredEntries])
 
+  const filteredEntries = saFilteredEntries
+
   const visibleEntries = useMemo(() => {
     const query = search.trim()
     if (!query) {
-      return saFilteredEntries
+      return filteredEntries.slice(0, DEFAULT_RECEPTION_VISIBLE_LIMIT)
     }
 
     return globalSearchEntries
-  }, [globalSearchEntries, search, saFilteredEntries])
+  }, [globalSearchEntries, search, filteredEntries])
 
   async function loadGlobalSearchPage(query: string, cursor: ReceptionEntryPageCursor | null) {
     const res = await searchReceptionEntriesForGlobalSearchPage(query, cursor)
@@ -739,7 +742,7 @@ export default function ReceptionPage() {
     // service_reception_entries and contributed to 57014 on page load.
 
     const [entriesRes, employeeRes, authRes] = await Promise.all([
-      listReceptionEntriesByDateRangePage(dateRange, null),
+      listReceptionEntriesByDateRange(dateRange),
       listReceptionEmployees(),
       supabase.auth.getSession(),
     ])
@@ -747,13 +750,8 @@ export default function ReceptionPage() {
     if (entriesRes.error) {
       setError(entriesRes.error)
       setEntries([])
-      setListCursor(null)
-      setHasMoreEntries(false)
     } else {
-      const page = entriesRes.data ?? { rows: [], nextCursor: null, hasMore: false }
-      setEntries(page.rows)
-      setListCursor(page.nextCursor)
-      setHasMoreEntries(page.hasMore)
+      setEntries(entriesRes.data ?? [])
     }
 
     if (!employeeRes.error) {
@@ -777,87 +775,10 @@ export default function ReceptionPage() {
     setLoading(false)
   }
 
-  async function loadMoreEntries() {
-    if (!hasMoreEntries || !listCursor || loadingMoreEntries || loading) return
-
-    setLoadingMoreEntries(true)
-    const res = await listReceptionEntriesByDateRangePage(dateRange, listCursor)
-
-    if (res.error) {
-      setError(res.error)
-      setLoadingMoreEntries(false)
-      return
-    }
-
-    const page = res.data ?? { rows: [], nextCursor: null, hasMore: false }
-    setEntries((prev) => {
-      const seen = new Set(prev.map((entry) => entry.id))
-      const merged = [...prev]
-      page.rows.forEach((entry) => {
-        if (seen.has(entry.id)) return
-        merged.push(entry)
-      })
-      return merged
-    })
-    setListCursor(page.nextCursor)
-    setHasMoreEntries(page.hasMore)
-    setLoadingMoreEntries(false)
-  }
-
   async function handleExportExcel() {
     setExporting(true)
     try {
-      // Fetch ALL records matching the date range (bypassing pagination)
-      let allRows: ReceptionEntryRow[] = []
-      let cursor: ReceptionEntryPageCursor | null = null
-      let hasMore = true
-      while (hasMore) {
-        const res = await listReceptionEntriesByDateRangePage(dateRange, cursor)
-        if (res.error) {
-          setError(res.error)
-          setExporting(false)
-          return
-        }
-        const page = res.data ?? { rows: [], nextCursor: null, hasMore: false }
-        allRows = allRows.concat(page.rows)
-        cursor = page.nextCursor
-        hasMore = page.hasMore
-      }
-
-      // Apply same client-side filters as the UI
-      let filtered = allRows
-
-      // Location filter
-      if (selectedListFilter === 'today') {
-        filtered = filtered.filter((entry) => {
-          const created = new Date(entry.created_at)
-          if (Number.isNaN(created.getTime())) return false
-          const createdKey = new Intl.DateTimeFormat('en-CA', {
-            timeZone: 'Asia/Kolkata',
-            year: 'numeric',
-            month: '2-digit',
-            day: '2-digit',
-          }).format(created)
-          return createdKey === todayKey
-        })
-      }
-
-      // Location filter removed per requirement — show all locations
-
-      // Portal / fuel type filter
-      if (selectedFuelType !== 'all') {
-        filtered = filtered.filter((entry) => getEntryFuelTypeLabel(entry) === selectedFuelType)
-      }
-
-      // Service type filter
-      if (selectedServiceType !== 'all') {
-        filtered = filtered.filter((entry) => getServiceTypeLabel(entry.service_type) === selectedServiceType)
-      }
-
-      // SA filter
-      if (selectedSa !== 'all') {
-        filtered = filtered.filter((entry) => getSaFilterKey(entry) === selectedSa)
-      }
+      const filtered = filteredEntries
 
       // Build Excel sheet
       const header = [
@@ -1386,7 +1307,7 @@ export default function ReceptionPage() {
 
         <div className="cft__spacer" />
 
-        <button type="button" className="btn btn--soft cft__action" onClick={() => void handleExportExcel()} disabled={exporting || loading || visibleEntries.length === 0}
+        <button type="button" className="btn btn--soft cft__action" onClick={() => void handleExportExcel()} disabled={exporting || loading || filteredEntries.length === 0}
           title="Export all filtered records to Excel">
           {exporting ? '⏳ Exporting…' : '📊 Download Excel'}
         </button>
@@ -1770,7 +1691,7 @@ export default function ReceptionPage() {
               <div className="sub">
                 {search.trim()
                   ? `${globalSearchLoading ? 'Searching all records...' : 'Global search'} · ${visibleEntries.length} shown${globalSearchHasMore ? ' (more available)' : ''}`
-                  : `Newest first · ${visibleEntries.length} loaded${hasMoreEntries ? ' (more available)' : ''}`}
+                  : `Newest first · ${visibleEntries.length} shown${filteredEntries.length > DEFAULT_RECEPTION_VISIBLE_LIMIT ? ` (latest ${DEFAULT_RECEPTION_VISIBLE_LIMIT})` : ''}`}
                 {selectedListFilter === 'today' ? ' · Today filter' : ''}
                 
                 {selectedFuelType !== 'all' ? ` · ${selectedFuelType}` : ''}
@@ -1859,18 +1780,6 @@ export default function ReceptionPage() {
                     onClick={() => void loadMoreGlobalSearch()}
                   >
                     {globalSearchLoadingMore ? 'Loading more…' : 'Load more search results'}
-                  </button>
-                </div>
-              )}
-              {!search.trim() && (hasMoreEntries || loadingMoreEntries) && (
-                <div style={{ display: 'flex', justifyContent: 'center', padding: '1rem' }}>
-                  <button
-                    type="button"
-                    className="btn btn--secondary"
-                    disabled={loadingMoreEntries || !hasMoreEntries}
-                    onClick={() => void loadMoreEntries()}
-                  >
-                    {loadingMoreEntries ? 'Loading more…' : 'Load more entries'}
                   </button>
                 </div>
               )}
