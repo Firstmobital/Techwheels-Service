@@ -2,7 +2,7 @@ import { useEffect, useState, useMemo, useRef } from 'react'
 import * as XLSX from 'xlsx'
 import DateRangeFilter, { currentMonthRange, type DateRange } from '../components/DateRangeFilter'
 import { supabase } from '../lib/supabase'
-import { listFloorInchargeEntries, type ReceptionEntryRow } from '../lib/api'
+import { FLOOR_INCHARGE_ALLOWED_SERVICE_TYPES, listFloorInchargeEntries, type ReceptionEntryRow } from '../lib/api'
 import RevisitBadge from '../components/RevisitBadge'
 import UpdationAvailableBadge from '../components/UpdationAvailableBadge'
 import {
@@ -402,6 +402,64 @@ function getErrorMessage(err: unknown, fallback: string): string {
   return fallback
 }
 
+const SERVICE_TYPE_ABBREVIATIONS: Record<string, string> = {
+  'running repairs': 'RR',
+  'first free service': 'FFS',
+  'second free service': 'SFS',
+  'third free service': 'TFS',
+  'paid service': 'PS',
+  'mini paid service': 'MPS',
+  'campaign': 'CMP',
+  'e breakdown': 'EBD',
+  'updation': 'UPD',
+}
+
+const FLOOR_SR_TYPE_CARD_ORDER = [
+  'first free service',
+  'second free service',
+  'third free service',
+  'paid service',
+  'mini paid service',
+  'running repairs',
+  'updation',
+  'e breakdown',
+  'campaign',
+]
+
+const FLOOR_SR_TYPE_ORDER_MAP = new Map(FLOOR_SR_TYPE_CARD_ORDER.map((key, index) => [key, index]))
+const FLOOR_SR_TYPE_CARDS = [...FLOOR_INCHARGE_ALLOWED_SERVICE_TYPES].sort((a, b) => {
+  const aOrder = FLOOR_SR_TYPE_ORDER_MAP.get(a.trim().toLowerCase())
+  const bOrder = FLOOR_SR_TYPE_ORDER_MAP.get(b.trim().toLowerCase())
+  if (aOrder !== undefined && bOrder !== undefined) return aOrder - bOrder
+  if (aOrder !== undefined) return -1
+  if (bOrder !== undefined) return 1
+  return a.localeCompare(b)
+})
+
+function normalizeServiceType(value: string | null | undefined): string {
+  return String(value ?? '').trim().replace(/\s+/g, ' ')
+}
+
+function getServiceTypeKey(value: string | null | undefined): string {
+  return normalizeServiceType(value).toLowerCase()
+}
+
+function getServiceTypeAbbreviation(label: string): string {
+  const key = getServiceTypeKey(label)
+  const mapped = SERVICE_TYPE_ABBREVIATIONS[key]
+  if (mapped) return mapped
+
+  const tokens = key.split(' ').filter(Boolean)
+  if (tokens.length === 0) return 'UNK'
+  if (tokens.length === 1) return tokens[0].slice(0, 3).toUpperCase()
+  return tokens.map((token) => token[0]).join('').slice(0, 4).toUpperCase()
+}
+
+function matchesServiceTypeFilter(jc: JobCard, selectedServiceType: string): boolean {
+  if (selectedServiceType === 'all') return true
+  return getServiceTypeKey(jc.service_type) === getServiceTypeKey(selectedServiceType)
+}
+
 function matchesTechnicianFilter(
   jc: JobCard,
   technicianFilter: string,
@@ -520,6 +578,7 @@ export default function FloorInchargePage() {
   const [branchFilter, setBranchFilter] = useState('all')
   const [fuelTypeFilter, setFuelTypeFilter] = useState('all')
   const [technicianFilter, setTechnicianFilter] = useState('all')
+  const [selectedServiceType, setSelectedServiceType] = useState('all')
   const [assignmentView, setAssignmentView] = useState<AssignmentView>('all')
   const [dataError, setDataError] = useState<string | null>(null)
   const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null)
@@ -1271,6 +1330,26 @@ export default function FloorInchargePage() {
     })
   }, [searchFilteredRows, branchFilter, fuelTypeFilter, technicianFilter, assignments])
 
+  const serviceTypeCounts = useMemo(() => {
+    const counts = new Map<string, number>()
+    toolbarScopedRows.forEach((jc) => {
+      const key = getServiceTypeKey(jc.service_type)
+      if (!key) return
+      counts.set(key, (counts.get(key) ?? 0) + 1)
+    })
+    return counts
+  }, [toolbarScopedRows])
+
+  const effectiveServiceType = useMemo(() => {
+    if (selectedServiceType === 'all') return 'all'
+    const selectedCount = serviceTypeCounts.get(getServiceTypeKey(selectedServiceType)) ?? 0
+    return selectedCount === 0 ? 'all' : selectedServiceType
+  }, [selectedServiceType, serviceTypeCounts])
+
+  const srFilteredRows = useMemo(() => {
+    return toolbarScopedRows.filter((jc) => matchesServiceTypeFilter(jc, effectiveServiceType))
+  }, [toolbarScopedRows, effectiveServiceType])
+
   const branches = useMemo(() => {
     const b = new Set(locCountRows.map((j) => getLocationLabel(j.location ?? j.branch)))
     return Array.from(b).sort((a, b) => {
@@ -1318,17 +1397,17 @@ export default function FloorInchargePage() {
     if (!isValid) setTechnicianFilter('all')
   }, [technicianFilter, technicianOptions])
 
-  const assignedCount = toolbarScopedRows.filter((jc) => !!assignments[jc.assignment_key]).length
-  const unassignedCount = toolbarScopedRows.filter((jc) => !assignments[jc.assignment_key]).length
-  const holdCount = toolbarScopedRows.filter((jc) => {
+  const assignedCount = srFilteredRows.filter((jc) => !!assignments[jc.assignment_key]).length
+  const unassignedCount = srFilteredRows.filter((jc) => !assignments[jc.assignment_key]).length
+  const holdCount = srFilteredRows.filter((jc) => {
     const assignment = assignments[jc.assignment_key]
     return Boolean(assignment) && normalizeStatusValue(assignment?.work_status) === 'hold'
   }).length
-  const inProcessCount = toolbarScopedRows.filter((jc) => {
+  const inProcessCount = srFilteredRows.filter((jc) => {
     const assignment = assignments[jc.assignment_key]
     return Boolean(assignment) && normalizeStatusValue(assignment?.work_status) === 'work_inprocess'
   }).length
-  const completedCount = toolbarScopedRows.filter((jc) => {
+  const completedCount = srFilteredRows.filter((jc) => {
     const assignment = assignments[jc.assignment_key]
     return Boolean(assignment) && normalizeStatusValue(assignment?.work_status) === 'completed'
   }).length
@@ -1344,12 +1423,13 @@ export default function FloorInchargePage() {
         if (!matchesLocationFilter(jc, branchFilter)) return false
         if (!matchesPortalFilter(jc, fuelTypeFilter)) return false
         if (!matchesTechnicianFilter(jc, technicianFilter, oldHoldWipAssignments)) return false
+        if (!matchesServiceTypeFilter(jc, effectiveServiceType)) return false
         if (!jobCardMatchesSearch(jc, search, oldHoldWipAssignments, {})) return false
         return true
       })
     }
-    return applyAssignmentViewFilter(toolbarScopedRows, assignmentView, assignments)
-  }, [toolbarScopedRows, assignmentView, assignments, oldHoldWipJobCards, oldHoldWipAssignments, branchFilter, fuelTypeFilter, technicianFilter, search])
+    return applyAssignmentViewFilter(srFilteredRows, assignmentView, assignments)
+  }, [srFilteredRows, assignmentView, assignments, oldHoldWipJobCards, oldHoldWipAssignments, branchFilter, fuelTypeFilter, technicianFilter, effectiveServiceType, search])
 
   function handleExportFloorIncharge() {
     setExporting(true)
@@ -1458,6 +1538,34 @@ export default function FloorInchargePage() {
         </div>
       )}
 
+      {/* ── SR TYPE METRIC STRIP ──────────────────────────────────────────── */}
+      <div className="msr">
+        <button
+          type="button"
+          onClick={() => setSelectedServiceType('all')}
+          className={`msr__tile msr__tile--btn ${effectiveServiceType === 'all' ? 'msr__tile--active' : ''}`}
+        >
+          <div className="msr__n">{toolbarScopedRows.length}</div>
+          <div className="msr__l">All SR</div>
+        </button>
+        {FLOOR_SR_TYPE_CARDS.map((serviceType) => {
+          const count = serviceTypeCounts.get(getServiceTypeKey(serviceType)) ?? 0
+          const isActive = getServiceTypeKey(effectiveServiceType) === getServiceTypeKey(serviceType)
+          return (
+            <button
+              key={serviceType}
+              type="button"
+              onClick={() => setSelectedServiceType(serviceType)}
+              disabled={count === 0}
+              className={`msr__tile msr__tile--btn ${isActive ? 'msr__tile--active' : ''}`}
+            >
+              <div className="msr__n">{count}</div>
+              <div className="msr__l" title={serviceType}>{getServiceTypeAbbreviation(serviceType)}</div>
+            </button>
+          )
+        })}
+      </div>
+
       {/* ── COMPACT FILTER TOOLBAR ─────────────────────────────────────────── */}
       <div className="cft">
         <div className="cft__brand">
@@ -1510,7 +1618,7 @@ export default function FloorInchargePage() {
       {/* ── METRIC SUMMARY ROW (status tabs) ─────────────────────────────── */}
       <div className="msr">
         {([
-          { key: 'all',            label: 'All',        count: toolbarScopedRows.length, accent: '#6366f1' },
+          { key: 'all',            label: 'All',        count: srFilteredRows.length, accent: '#6366f1' },
           { key: 'unassigned',     label: 'Unassigned', count: unassignedCount,        accent: '#ef4444' },
           { key: 'assigned',       label: 'Assigned',   count: assignedCount,          accent: '#2563eb' },
           { key: 'hold',           label: 'Hold',       count: holdCount,              accent: '#f59e0b' },
@@ -1556,7 +1664,7 @@ export default function FloorInchargePage() {
             <div className="empty-state">
               {dataError
                 ? 'Rows are hidden due to access/scope rules. Please verify Floor Incharge module permission.'
-                : search.trim() || branchFilter !== 'all' || fuelTypeFilter !== 'all' || technicianFilter !== 'all'
+                : search.trim() || branchFilter !== 'all' || fuelTypeFilter !== 'all' || technicianFilter !== 'all' || effectiveServiceType !== 'all'
                   ? 'No job cards match your filters'
                   : 'No job cards are visible in your Floor Incharge scope right now.'}
             </div>
