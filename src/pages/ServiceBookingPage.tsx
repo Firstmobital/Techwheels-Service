@@ -628,10 +628,6 @@ export default function ServiceBookingPage() {
             style={{ background: '#fff', color: '#334155', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '0.45rem 0.9rem', fontSize: '0.82rem', fontWeight: 700, cursor: filtered.length === 0 ? 'not-allowed' : 'pointer', opacity: filtered.length === 0 ? 0.5 : 1, whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
             <span style={{ fontSize: '0.9rem' }}>⬇</span> Export
           </button>
-          <button onClick={() => setShowDriverModal(true)} title="Manage Pickup & Drop Driver Allocations"
-            style={{ background: '#f8fafc', color: '#1e293b', border: '1px solid #cbd5e1', borderRadius: '8px', padding: '0.45rem 0.9rem', fontSize: '0.82rem', fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
-            <span style={{ fontSize: '0.95rem' }}>🚗</span> Driver Management
-          </button>
           <button onClick={openNew} style={{ background: '#2563eb', color: '#fff', border: 'none', borderRadius: '8px', padding: '0.45rem 1rem', fontSize: '0.82rem', fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
             <span style={{ fontSize: '1rem' }}>＋</span> New Booking
           </button>

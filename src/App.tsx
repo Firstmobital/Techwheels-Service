@@ -47,6 +47,7 @@ import {
 } from './lib/api/helpTickets'
 import EWReminderPage from './pages/EWReminderPage'
 import ServiceBookingPage from './pages/ServiceBookingPage'
+import DriverManagementPage from './pages/DriverManagementPage'
 import WAAgentPage from './pages/WAAgentPage'
 import TelecallingPage from './pages/TelecallingPage'
 import InsuranceRenewalTelecallingPage from './pages/InsuranceRenewalTelecallingPage'
@@ -93,6 +94,7 @@ const NAV_ITEMS = [
   { to: '/bodyshop-recovery', label: 'Bodyshop Recovery', icon: 'reports' },
   { to: '/ew-reminder', label: 'EW Reminder', icon: 'shield' },
   { to: '/service-booking', label: 'Service Booking', icon: 'calendar' },
+  { to: '/driver-management', label: 'Driver Management', icon: 'truck' },
   { to: '/wa-agent', label: 'WA AI Agent', icon: 'message-circle' },
   { to: '/telecalling', label: 'Telecalling', icon: 'phone' },
   { to: '/insurance-renewal-telecalling', label: 'Insurance Renewal Telecalling', icon: 'shield' },
@@ -127,6 +129,7 @@ type ModuleName =
   | 'bodyshop_recovery'
   | 'ew_reminder'
   | 'service_booking'
+  | 'driver_management'
   | 'wa_agent'
   | 'telecalling'
   | 'insurance_renewal_telecalling'
@@ -137,7 +140,7 @@ type ModuleName =
   | 'busy'
   | 'accounts'
 
-type AppRoute = '/import' | '/reports' | '/settings' | '/admin' | '/autodoc' | '/reception' | '/service-advisor' | '/floor-incharge' | '/sa-tracker' | '/bodyshop-tracker' | '/bodyshop-floor' | '/technician' | '/payroll' | '/complaints' | '/help-tickets' | '/bodyshop-repair' | '/bodyshop-recovery' | '/ew-reminder' | '/service-booking' | '/wa-agent' | '/telecalling' | '/insurance-renewal-telecalling' | '/auto-service-reminder' | '/cre-incentive' | '/post-service-feedback' | '/parts-spm' | '/busy' | '/accounts'
+type AppRoute = '/import' | '/reports' | '/settings' | '/admin' | '/autodoc' | '/reception' | '/service-advisor' | '/floor-incharge' | '/sa-tracker' | '/bodyshop-tracker' | '/bodyshop-floor' | '/technician' | '/payroll' | '/complaints' | '/help-tickets' | '/bodyshop-repair' | '/bodyshop-recovery' | '/ew-reminder' | '/service-booking' | '/driver-management' | '/wa-agent' | '/telecalling' | '/insurance-renewal-telecalling' | '/auto-service-reminder' | '/cre-incentive' | '/post-service-feedback' | '/parts-spm' | '/busy' | '/accounts'
 
 interface PermissionRow {
   module_name: string
@@ -163,6 +166,7 @@ const ROUTE_MODULE_MAP: Record<AppRoute, ModuleName[]> = {
   '/bodyshop-recovery': ['bodyshop_recovery'],
   '/ew-reminder': ['ew_reminder'],
   '/service-booking': ['service_booking'],
+  '/driver-management': ['driver_management', 'service_booking'],
   '/wa-agent': ['wa_agent'],
   '/telecalling': ['telecalling'],
   '/insurance-renewal-telecalling': ['insurance_renewal_telecalling'],
@@ -1562,6 +1566,14 @@ VITE_SUPABASE_ANON_KEY=your-anon-key`}
                   element={(
                     <RequireAccess allowedModules={allowedModules} modules={ROUTE_MODULE_MAP['/service-booking']}>
                       <ServiceBookingPage />
+                    </RequireAccess>
+                  )}
+                />
+                <Route
+                  path="/driver-management"
+                  element={(
+                    <RequireAccess allowedModules={allowedModules} modules={ROUTE_MODULE_MAP['/driver-management']}>
+                      <DriverManagementPage />
                     </RequireAccess>
                   )}
                 />
