@@ -2,6 +2,7 @@ import { ReactNode, useEffect, useMemo, useState } from 'react'
 import {
   Alert,
   BackHandler,
+  Image,
   Modal,
   Pressable,
   ScrollView,
@@ -141,12 +142,15 @@ export function CustomerScreen({
       <View className="bg-white border-b border-slate-100 px-4 pt-3 pb-3 shadow-xs">
         <View className="flex-row items-center justify-between gap-3">
           <View className="flex-row items-center flex-1 pr-2">
-            <View className="h-10 w-10 rounded-xl bg-blue-600 items-center justify-center mr-3 shadow-sm">
-              <Icon name="truck" size={20} color="#ffffff" strokeWidth={2.2} />
-            </View>
+            <Image
+              source={require('../../../assets/icon.png')}
+              style={{ width: 40, height: 40, borderRadius: 10 }}
+              resizeMode="contain"
+              className="mr-3"
+            />
             <View className="flex-1">
               <Text className="text-slate-900 text-[16px] font-black tracking-tight">Techwheels</Text>
-              <Text className="text-slate-500 text-[11px] font-medium">Authorized Tata Service Center</Text>
+              <Text className="text-slate-500 text-[11px] font-medium">Authorised Tata Motors Service Center</Text>
             </View>
           </View>
 
@@ -304,9 +308,11 @@ export function CustomerScreen({
           >
             <View className="flex-row items-center justify-between border-b border-slate-100 pb-3 mb-3">
               <View className="flex-row items-center gap-2.5">
-                <View className="w-9 h-9 rounded-xl bg-blue-600 items-center justify-center shadow-xs">
-                  <Icon name="truck" size={18} color="#ffffff" strokeWidth={2.2} />
-                </View>
+                <Image
+                  source={require('../../../assets/icon.png')}
+                  style={{ width: 38, height: 38, borderRadius: 10 }}
+                  resizeMode="contain"
+                />
                 <View>
                   <Text className="text-slate-900 text-[16px] font-black">Customer Services Menu</Text>
                   <Text className="text-slate-500 text-[11px] font-medium">Active: {selectedReg || 'No Vehicle'}</Text>

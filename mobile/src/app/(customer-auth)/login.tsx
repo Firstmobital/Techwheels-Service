@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import {
   ActivityIndicator,
+  Image,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -23,74 +24,58 @@ export default function CustomerLoginScreen() {
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const [error, setError] = useState('')
 
   const handleLogin = async () => {
-    setError(null)
     if (!username.trim() || !password.trim()) {
-      setError('Enter your 10-digit registered mobile number in both fields.')
+      setError('Please enter both mobile number and password')
       return
     }
-    setLoading(true)
+
     try {
+      setLoading(true)
+      setError('')
       const result = await signIn(username.trim(), password.trim())
       if (result.error) {
         setError(result.error)
-        return
+      } else {
+        router.replace('/(customer)')
       }
-      router.replace('/(customer)')
+    } catch (err: any) {
+      setError(err?.message || 'Login failed. Please check your connection.')
     } finally {
       setLoading(false)
     }
   }
 
   return (
-    <SafeAreaView className="flex-1 bg-slate-900" edges={['top', 'bottom']}>
-      <KeyboardAvoidingView className="flex-1" behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+    <SafeAreaView className="flex-1 bg-slate-950">
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        className="flex-1"
+      >
         <ScrollView
-          className="flex-1"
+          contentContainerStyle={{ flexGrow: 1, justifyContent: 'center' }}
+          className="px-6 py-8"
           keyboardShouldPersistTaps="handled"
-          contentContainerStyle={{ paddingHorizontal: 20, paddingTop: 16, paddingBottom: 32 }}
         >
-          {/* Back Action */}
-          <TouchableOpacity
-            onPress={() => router.replace('/(audience)')}
-            activeOpacity={0.7}
-            className="flex-row items-center gap-2 mb-6 self-start bg-white/10 px-3.5 py-2 rounded-xl"
-          >
-            <Icon name="arrow-left" size={16} color="#93c5fd" />
-            <Text className="text-blue-200 text-[14px] font-semibold">Back</Text>
-          </TouchableOpacity>
-
           {/* Hero Branding */}
           <View className="items-center mb-8">
-            <LinearGradient
-              colors={['#1e60ff', '#0b132b']}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
+            <Image
+              source={require('../../../assets/icon.png')}
               style={{
-                width: 72,
-                height: 72,
-                borderRadius: 24,
-                alignItems: 'center',
-                justifyContent: 'center',
+                width: 76,
+                height: 76,
+                borderRadius: 22,
                 marginBottom: 16,
-                borderWidth: 1,
-                borderColor: 'rgba(255,255,255,0.15)',
-                shadowColor: '#1e60ff',
-                shadowOffset: { width: 0, height: 8 },
-                shadowOpacity: 0.35,
-                shadowRadius: 16,
-                elevation: 8,
               }}
-            >
-              <Icon name="truck" size={34} color="#ffffff" strokeWidth={2.2} />
-            </LinearGradient>
+              resizeMode="contain"
+            />
             <Text className="text-[24px] font-black text-white tracking-tight text-center">
               Techwheels Customer Services
             </Text>
             <Text className="text-[13px] text-slate-400 text-center mt-1.5 font-medium">
-              Dealership Vehicle After-Purchase Portal
+              Authorised Tata Motors Service Center
             </Text>
           </View>
 
