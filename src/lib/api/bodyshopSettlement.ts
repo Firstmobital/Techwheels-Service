@@ -42,6 +42,7 @@ export interface BodyshopSettlementLine {
   txn_date: string
   reference: string | null
   remarks: string | null
+  payment_mode?: string | null
   reverses_line_id: number | null
   is_reversed: boolean
   actor_email: string | null
@@ -212,7 +213,9 @@ export async function postCustomerAmount(input: {
   reference?: string | null
   remarks?: string | null
   importRowToken?: string | null
+  paymentMode?: string | null
 }): Promise<SettlementPayload> {
+  const mode = String(input.paymentMode ?? '').trim().toLowerCase()
   const { data, error } = await supabase.rpc(
     'add_bodyshop_settlement_line',
     withImportRowToken(
@@ -228,6 +231,7 @@ export async function postCustomerAmount(input: {
         p_main_amount: null,
         p_gst_amount: null,
         p_tds_amount: null,
+        ...(mode ? { p_payment_mode: mode } : {}),
       },
       input.importRowToken,
     ),

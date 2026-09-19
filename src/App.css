@@ -6791,6 +6791,12 @@ tr.brx-recov-row--mismatch td:first-child {
   gap: 12px;
 }
 
+.brx-do-cp-note-row {
+  display: grid;
+  grid-template-columns: minmax(0, 3fr) minmax(160px, 1fr);
+  gap: 12px;
+}
+
 .brx-field {
   display: flex;
   flex-direction: column;
@@ -6878,6 +6884,7 @@ tr.brx-recov-row--mismatch td:first-child {
   .brx-sa-grid-3,
   .brx-floor-meta-grid,
   .brx-form-grid-2,
+  .brx-do-cp-note-row,
   .acct-modal-summary,
   .acct-pay-draft__row3,
   .acct-pay-draft__row2 {

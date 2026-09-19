@@ -2,6 +2,10 @@
 
 Tracks documentation-sync updates for business logic, architecture, and access control.
 
+## 2026-09-19
+
+- Stage 18 **DO Payment** Customer Payment (CP) now captures **CP Mode of Payment** (Cash / UPI / Card / Cheque / Bank transfer / Other). Mode is required only when CP amount > 0 and is stored on the existing customer receipt line. Main / GST / TDS stay insurance components with no payment mode. Historical CP rows without a mode still render as —. Ledger: DBL-0079. Plan: `BODYSHOP-SETTLEMENT-001`.
+
 ## 2026-09-17
 
 - Payroll **Employee Monthly Incentives** on Incentive Rules: manual employee/month lines (Parts / Rusting / VAS / Others), multiple rows per employee and month. Amount is derived `Value × % / 100` (2 dp). Month/Year dropdowns share `PayrollPage.payrollMonth`. Snapshot `payroll_entries.incentive_amount` is the month SUM, included in `computePayrollAmounts` as a distinct ungated earning (not variable, not custom additions). Existing historical `net_payable` is not rewritten. Ledger: DBL-0076.

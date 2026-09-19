@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { RepairCard } from '../lib/api/bodyshopRepair'
+import { ACCOUNTS_PAYMENT_MODES } from '../lib/api/accounts'
 import {
   applyDmsInvoiceAndAlignPayer,
   getBodyshopSettlement,
@@ -11,6 +12,10 @@ import {
   upsertBodyshopSettlementHeader,
   type SettlementPayload,
 } from '../lib/api/bodyshopSettlement'
+import {
+  customerPaymentModeDisplay,
+  validateDoPaymentCustomerMode,
+} from '../lib/bodyshopDoPaymentCpMode'
 
 function inr(v: number | null | undefined) {
   if (v === null || v === undefined || Number.isNaN(Number(v))) return '—'
@@ -90,6 +95,7 @@ export function BodyshopSettlementPanel({
   const [tdsAmt, setTdsAmt] = useState('')
 
   const [custAmt, setCustAmt] = useState('')
+  const [cpPaymentMode, setCpPaymentMode] = useState('')
   const [doReceiptAmt, setDoReceiptAmt] = useState('')
   const [doNote, setDoNote] = useState('')
   const [custNote, setCustNote] = useState('')
@@ -196,7 +202,7 @@ export function BodyshopSettlementPanel({
     let main = numOrNull(mainAmt)
     let gst = numOrNull(gstAmt)
     let tds = numOrNull(tdsAmt)
-    let cp = numOrNull(custAmt)
+    const cp = numOrNull(custAmt)
     if (postRemaining) {
       const due = Number(insuranceDue ?? 0)
       if (due <= 0) {
@@ -215,6 +221,12 @@ export function BodyshopSettlementPanel({
     if (!hasDo && !hasCp) {
       toast('Enter Main, GST, TDS, or Customer Payment (CP)', false)
       setDoError('Enter Main, GST, TDS, or Customer Payment (CP)')
+      return
+    }
+    const cpModeError = validateDoPaymentCustomerMode(cp, cpPaymentMode)
+    if (cpModeError) {
+      setDoError(cpModeError)
+      toast(cpModeError, false)
       return
     }
     setDoError(null)
@@ -238,6 +250,7 @@ export function BodyshopSettlementPanel({
           amount: cp,
           reference: note,
           remarks: note,
+          paymentMode: cpPaymentMode,
         })
       }
       if (next) {
@@ -248,6 +261,7 @@ export function BodyshopSettlementPanel({
       setGstAmt('')
       setTdsAmt('')
       setCustAmt('')
+      setCpPaymentMode('')
       setDoNote('')
       toast(hasDo && hasCp ? 'DO and Customer payments posted' : hasCp ? 'Customer payment posted' : 'DO payment posted')
     } catch (e: unknown) {
@@ -585,19 +599,43 @@ export function BodyshopSettlementPanel({
               className="inp"
               type="number"
               value={custAmt}
-              onChange={(e) => setCustAmt(e.target.value)}
+              onChange={(e) => {
+                setCustAmt(e.target.value)
+                if (doError) setDoError(null)
+              }}
               placeholder="0.00"
             />
           </label>
-          <label className="brx-field brx-grid-full">
-            <span className="brx-field-label">Reference / Remark</span>
-            <input
-              className="inp"
-              value={doNote}
-              onChange={(e) => setDoNote(e.target.value)}
-              placeholder="UTR, cheque, or note"
-            />
-          </label>
+          <div className="brx-do-cp-note-row brx-grid-full">
+            <label className="brx-field">
+              <span className="brx-field-label">Reference / Remark</span>
+              <input
+                className="inp"
+                value={doNote}
+                onChange={(e) => setDoNote(e.target.value)}
+                placeholder="UTR, cheque, or note"
+              />
+            </label>
+            <label className="brx-field">
+              <span className="brx-field-label">
+                CP Mode of Payment
+                {Number(numOrNull(custAmt) ?? 0) > 0 && <span style={{ color: '#ef4444', marginLeft: 4 }}>*</span>}
+              </span>
+              <select
+                className="sel"
+                value={cpPaymentMode}
+                onChange={(e) => {
+                  setCpPaymentMode(e.target.value)
+                  if (doError) setDoError(null)
+                }}
+              >
+                <option value="">Select mode</option>
+                {ACCOUNTS_PAYMENT_MODES.map((m) => (
+                  <option key={m.value} value={m.value}>{m.label}</option>
+                ))}
+              </select>
+            </label>
+          </div>
           <div className="brx-grid-full" style={{ fontSize: 13, color: 'var(--muted)' }}>
             Post any combination — Main, GST, TDS, and Customer Payment (CP) can be saved separately or together. Extra over the DO amount is allowed. Each save stores who posted it, when, and this reference.
           </div>
@@ -741,6 +779,7 @@ export function BodyshopSettlementPanel({
                 <th>When</th>
                 <th>Source</th>
                 <th>Type</th>
+                <th>Mode</th>
                 <th>Amount</th>
                 <th>Reference / Remark</th>
                 <th>By</th>
@@ -753,6 +792,7 @@ export function BodyshopSettlementPanel({
                   <td>{formatWhen(line.created_at)}</td>
                   <td>{partyLabel(line.party)}</td>
                   <td>{line.component}{line.line_type === 'reversal' ? ' · reversal' : ''}{line.is_reversed ? ' · reversed' : ''}</td>
+                  <td>{customerPaymentModeDisplay(line)}</td>
                   <td>{inr(line.amount)}</td>
                   <td className="brx-settle-ref">{lineRefRemark(line)}</td>
                   <td>{line.actor_email || '—'}</td>
