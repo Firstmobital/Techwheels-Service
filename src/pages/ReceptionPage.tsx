@@ -480,19 +480,49 @@ export default function ReceptionPage() {
     return values.sort((a, b) => a.localeCompare(b))
   }, [fuelFilterBaseEntries, employeeFuelTypeByCode, employeeFuelTypeByName])
 
+  // Filter hierarchy (single pipeline, full in-memory period population):
+  // period → Today (optional list base) → Location → Portal → SA
+  // → summary-card / SR Type dropdown population → optional SR Type/card filter
+  // → displayed list (100-row cap applies only here).
+  // Today card count stays a global period-today total, independent of other filters.
   const serviceTypeBaseEntries = useMemo(() => {
     if (selectedFuelType === 'all') return fuelFilterBaseEntries
     return fuelFilterBaseEntries.filter((entry) => getEntryFuelTypeLabel(entry) === selectedFuelType)
   }, [fuelFilterBaseEntries, selectedFuelType, employeeFuelTypeByCode, employeeFuelTypeByName])
 
+  const saCounts = useMemo(() => {
+    const counts = new Map<string, { label: string; count: number }>()
+    serviceTypeBaseEntries.forEach((entry) => {
+      const key = getSaFilterKey(entry)
+      const existing = counts.get(key)
+      if (existing) {
+        existing.count += 1
+        return
+      }
+      counts.set(key, { label: getSaLabel(entry), count: 1 })
+    })
+    return counts
+  }, [serviceTypeBaseEntries])
+
+  const saOptions = useMemo(() => {
+    return Array.from(saCounts.entries())
+      .map(([value, option]) => ({ value, label: option.label, count: option.count }))
+      .sort((a, b) => a.label.localeCompare(b.label))
+  }, [saCounts])
+
+  const saScopedEntries = useMemo(() => {
+    if (selectedSa === 'all') return serviceTypeBaseEntries
+    return serviceTypeBaseEntries.filter((entry) => getSaFilterKey(entry) === selectedSa)
+  }, [selectedSa, serviceTypeBaseEntries])
+
   const serviceTypeCounts = useMemo(() => {
     const counts = new Map<string, number>()
-    serviceTypeBaseEntries.forEach((entry) => {
+    saScopedEntries.forEach((entry) => {
       const label = getServiceTypeLabel(entry.service_type)
       counts.set(label, (counts.get(label) ?? 0) + 1)
     })
     return counts
-  }, [serviceTypeBaseEntries])
+  }, [saScopedEntries])
 
   const serviceTypeOptions = useMemo(() => {
     const orderMap = new Map(SERVICE_TYPE_CARD_ORDER.map((key, index) => [key, index]))
@@ -574,36 +604,11 @@ export default function ReceptionPage() {
   }, [editingId, form.sa_employee_code, hasSelectedSaInOptions, revisitContext?.is_revisit])
 
   const serviceTypeFilteredEntries = useMemo(() => {
-    if (selectedServiceType === 'all') return serviceTypeBaseEntries
-    return serviceTypeBaseEntries.filter((entry) => getServiceTypeLabel(entry.service_type) === selectedServiceType)
-  }, [selectedServiceType, serviceTypeBaseEntries])
+    if (selectedServiceType === 'all') return saScopedEntries
+    return saScopedEntries.filter((entry) => getServiceTypeLabel(entry.service_type) === selectedServiceType)
+  }, [selectedServiceType, saScopedEntries])
 
-  const saCounts = useMemo(() => {
-    const counts = new Map<string, { label: string; count: number }>()
-    serviceTypeFilteredEntries.forEach((entry) => {
-      const key = getSaFilterKey(entry)
-      const existing = counts.get(key)
-      if (existing) {
-        existing.count += 1
-        return
-      }
-      counts.set(key, { label: getSaLabel(entry), count: 1 })
-    })
-    return counts
-  }, [serviceTypeFilteredEntries])
-
-  const saOptions = useMemo(() => {
-    return Array.from(saCounts.entries())
-      .map(([value, option]) => ({ value, label: option.label, count: option.count }))
-      .sort((a, b) => a.label.localeCompare(b.label))
-  }, [saCounts])
-
-  const saFilteredEntries = useMemo(() => {
-    if (selectedSa === 'all') return serviceTypeFilteredEntries
-    return serviceTypeFilteredEntries.filter((entry) => getSaFilterKey(entry) === selectedSa)
-  }, [selectedSa, serviceTypeFilteredEntries])
-
-  const filteredEntries = saFilteredEntries
+  const filteredEntries = serviceTypeFilteredEntries
 
   const visibleEntries = useMemo(() => {
     const query = search.trim()
@@ -1291,7 +1296,7 @@ export default function ReceptionPage() {
 
         <span className="cft__label">SR Type:</span>
         <select className="cft__sel" value={selectedServiceType} onChange={e => { setSelectedListFilter('default'); setSelectedServiceType(e.target.value) }}>
-          <option value="all">All ({serviceTypeBaseEntries.length})</option>
+          <option value="all">All ({saScopedEntries.length})</option>
           {serviceTypeOptions.map(st => (
             <option key={st} value={st}>{st} ({serviceTypeCounts.get(st) ?? 0})</option>
           ))}
@@ -1299,7 +1304,7 @@ export default function ReceptionPage() {
 
         <span className="cft__label">SA:</span>
         <select className="cft__sel" value={selectedSa} onChange={e => setSelectedSa(e.target.value)}>
-          <option value="all">All ({serviceTypeFilteredEntries.length})</option>
+          <option value="all">All ({serviceTypeBaseEntries.length})</option>
           {saOptions.map(sa => (
             <option key={sa.value} value={sa.value}>{sa.label} ({sa.count})</option>
           ))}
@@ -1330,7 +1335,7 @@ export default function ReceptionPage() {
         </button>
         <button type="button" onClick={() => { setSelectedListFilter('default'); setSelectedServiceType('all') }}
           className={`msr__tile msr__tile--btn ${selectedListFilter === 'default' && selectedServiceType === 'all' ? 'msr__tile--active' : ''}`}>
-          <div className="msr__n">{serviceTypeBaseEntries.length}</div>
+          <div className="msr__n">{saScopedEntries.length}</div>
           <div className="msr__l">All SR</div>
         </button>
         {serviceTypeOptions.map(st => (
