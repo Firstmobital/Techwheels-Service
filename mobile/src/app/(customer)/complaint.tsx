@@ -4,7 +4,12 @@ import { useRouter } from 'expo-router'
 import { CustomerScreen } from '../../components/customer/CustomerScreen'
 import { CustomerCard, CustomerToast, PrimaryButton, asText, dash, formatWhen } from '../../components/customer/customerUi'
 import { useCustomerSession } from '../../context/CustomerSessionContext'
-import { customerListEstimates, customerGetServiceHistory, customerSubmitComplaint } from '../../lib/api/customerPortal'
+import {
+  customerListEstimates,
+  customerGetComplaints,
+  customerGetServiceHistory,
+  customerSubmitComplaint,
+} from '../../lib/api/customerPortal'
 
 export default function CustomerComplaintScreen() {
   const router = useRouter()
@@ -17,18 +22,23 @@ export default function CustomerComplaintScreen() {
   const [toast, setToast] = useState<{ ok: boolean; msg: string } | null>(null)
   const [history, setHistory] = useState<Record<string, unknown>[]>([])
   const [estimates, setEstimates] = useState<Record<string, unknown>[]>([])
+  const [complaintHistory, setComplaintHistory] = useState<
+    { id: string | number; text: string; sa_name?: string; branch?: string; created_at?: string }[]
+  >([])
   const [loadingPast, setLoadingPast] = useState(false)
 
   const loadPastData = useCallback(async () => {
     if (!token || !selectedReg) return
     setLoadingPast(true)
     try {
-      const [hist, ests] = await Promise.all([
+      const [hist, ests, complaints] = await Promise.all([
         customerGetServiceHistory(token, selectedReg).catch(() => []),
         customerListEstimates(token, selectedReg).catch(() => []),
+        customerGetComplaints(token, selectedReg).catch(() => []),
       ])
       setHistory(hist)
       setEstimates(ests)
+      setComplaintHistory(complaints as any[])
     } catch {
       // ignore
     } finally {
@@ -188,6 +198,76 @@ export default function CustomerComplaintScreen() {
           disabled={problems.every((item) => !item.trim())}
         />
       </CustomerCard>
+
+      {/* ── SECTION 3: REGISTERED COMPLAINTS & PROBLEMS HISTORY ── */}
+      <View className="mt-4">
+        <View className="flex-row items-center justify-between mb-2.5 px-1">
+          <Text className="text-slate-900 text-[15px] font-black tracking-tight">
+            📋 Your Reported Problems History
+          </Text>
+          <Text className="text-slate-500 text-xs font-bold">
+            {complaintHistory.length} Record{complaintHistory.length === 1 ? '' : 's'}
+          </Text>
+        </View>
+
+        {loadingPast && complaintHistory.length === 0 ? (
+          <ActivityIndicator color="#2563eb" className="py-4" />
+        ) : complaintHistory.length === 0 ? (
+          <CustomerCard>
+            <View className="items-center py-4">
+              <Text className="text-2xl mb-1.5">📝</Text>
+              <Text className="text-slate-800 text-[13.5px] font-bold">No Past Problems Logged</Text>
+              <Text className="text-slate-500 text-[11.5px] text-center mt-1">
+                Any issues or concerns you submit above will be saved here and sent to your Service Advisor.
+              </Text>
+            </View>
+          </CustomerCard>
+        ) : (
+          complaintHistory.map((item, idx) => (
+            <CustomerCard
+              key={item.id ? String(item.id) : `complaint-${idx}`}
+              style={{
+                borderLeftWidth: 3.5,
+                borderLeftColor: '#2563eb',
+                marginBottom: 12,
+              }}
+            >
+              <View className="flex-row items-center justify-between border-b border-slate-100 pb-2 mb-2.5">
+                <View className="flex-row items-center gap-1.5">
+                  <View className="w-2 h-2 rounded-full bg-emerald-500" />
+                  <Text className="text-slate-900 font-extrabold text-[12.5px]">
+                    Reported Request #{complaintHistory.length - idx}
+                  </Text>
+                </View>
+                <View className="bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full">
+                  <Text className="text-emerald-800 font-bold text-[10px]">
+                    ✅ Received by Advisor
+                  </Text>
+                </View>
+              </View>
+
+              {/* Problem Content Description */}
+              <View className="bg-slate-50 border border-slate-200/80 rounded-xl p-3 mb-2.5">
+                <Text className="text-slate-800 text-[13px] leading-5 font-medium select-text">
+                  {item.text}
+                </Text>
+              </View>
+
+              {/* Metadata row */}
+              <View className="flex-row flex-wrap items-center justify-between pt-1 text-slate-500">
+                <Text className="text-slate-500 text-[11px] font-medium">
+                  🕒 {item.created_at ? formatWhen(item.created_at) : 'Recently submitted'}
+                </Text>
+                {item.sa_name ? (
+                  <Text className="text-slate-700 text-[11px] font-bold">
+                    Advisor: {item.sa_name}
+                  </Text>
+                ) : null}
+              </View>
+            </CustomerCard>
+          ))
+        )}
+      </View>
     </CustomerScreen>
   )
 }

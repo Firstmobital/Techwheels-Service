@@ -1,5 +1,27 @@
 import { supabase } from '../supabase'
 
+const apiCache = new Map<string, { timestamp: number; data: any }>()
+const CACHE_TTL_MS = 6000 // 6 seconds cache
+
+function getCached<T>(key: string): T | null {
+  const entry = apiCache.get(key)
+  if (!entry) return null
+  if (Date.now() - entry.timestamp > CACHE_TTL_MS) {
+    apiCache.delete(key)
+    return null
+  }
+  return entry.data as T
+}
+
+function setCache<T>(key: string, data: T): T {
+  apiCache.set(key, { timestamp: Date.now(), data })
+  return data
+}
+
+export function clearCustomerPortalCache() {
+  apiCache.clear()
+}
+
 function rpcErrorMessage(error: { message?: string } | null, fallback: string): string {
   const raw = error?.message || ''
   if (raw.includes('Session expired')) return 'Session expired.'
@@ -9,6 +31,10 @@ function rpcErrorMessage(error: { message?: string } | null, fallback: string): 
 }
 
 export async function customerGetActiveJob(sessionToken: string, regNumber?: string | null) {
+  const cacheKey = `active_job_${sessionToken}_${regNumber || 'default'}`
+  const cached = getCached<any>(cacheKey)
+  if (cached) return cached
+
   const { data, error } = await supabase.rpc('customer_get_active_job', {
     p_session_token: sessionToken,
     p_reg_number: regNumber || null,
@@ -78,7 +104,7 @@ export async function customerGetActiveJob(sessionToken: string, regNumber?: str
     }
   }
 
-  return { ...res, job }
+  return setCache(cacheKey, { ...res, job })
 }
 
 export async function customerGetServiceHistory(sessionToken: string, regNumber?: string | null) {
@@ -102,6 +128,38 @@ export async function customerSubmitComplaint(
   })
   if (error) throw new Error(rpcErrorMessage(error, 'Unable to submit complaint.'))
   return data
+}
+
+export async function customerGetComplaints(sessionToken: string, regNumber?: string | null) {
+  const rawReg = (regNumber || '').trim().toUpperCase().replace(/\s+/g, '')
+  if (!rawReg) return []
+
+  try {
+    const { data: rows, error } = await supabase
+      .from('post_feedback_bot_data')
+      .select('id, feedback_text, service_type, service_advisor_name, branch, model, complaint_date_time, created_at')
+      .ilike('vehicle_registration_number', `%${rawReg}%`)
+      .eq('mode', 'customer_portal_concern')
+      .order('id', { ascending: false })
+
+    if (error) {
+      console.warn('customerGetComplaints error:', error)
+      return []
+    }
+
+    return (rows || []).map((r) => ({
+      id: r.id,
+      text: r.feedback_text,
+      service_type: r.service_type,
+      sa_name: r.service_advisor_name,
+      branch: r.branch,
+      model: r.model,
+      created_at: r.complaint_date_time || r.created_at,
+    }))
+  } catch (err) {
+    console.warn('customerGetComplaints error:', err)
+    return []
+  }
 }
 
 export async function customerSubmitFeedback(
@@ -144,6 +202,10 @@ export async function customerSetEstimateDecision(
 }
 
 export async function customerGetGatePass(sessionToken: string, regNumber?: string | null) {
+  const cacheKey = `gatepass_${sessionToken}_${regNumber || 'default'}`
+  const cached = getCached<Record<string, unknown>>(cacheKey)
+  if (cached) return cached
+
   const rawReg = (regNumber || '').trim()
   const regNorm = rawReg.toUpperCase()
   const regClean = regNorm.replace(/\s+/g, '')
@@ -163,7 +225,7 @@ export async function customerGetGatePass(sessionToken: string, regNumber?: stri
         try {
           const parsed = JSON.parse(botRows[0].feedback_text)
           if (parsed && (parsed.gate_pass_no || parsed.qr_token)) {
-            return parsed as Record<string, unknown>
+            return setCache(cacheKey, parsed as Record<string, unknown>)
           }
         } catch {
           // ignore
@@ -180,7 +242,7 @@ export async function customerGetGatePass(sessionToken: string, regNumber?: stri
       p_session_token: sessionToken,
       p_reg_number: regNumber || null,
     })
-    if (!error && data && (data as any).gate_pass_no) return data as Record<string, unknown>
+    if (!error && data && (data as any).gate_pass_no) return setCache(cacheKey, data as Record<string, unknown>)
   } catch {
     // fallback
   }
@@ -212,7 +274,7 @@ export async function customerGetGatePass(sessionToken: string, regNumber?: stri
           const gpNo = `GP-${entry.jc_number ? entry.jc_number.replace(/[^0-9]/g, '').slice(-5) : Date.now().toString().slice(-5)}`
           const reason = (billed > 0 && remaining <= 0) ? 'paid' : (billed > 0 && remaining <= billed * 0.02) ? 'short_payment' : Boolean(inv?.keep_on_credit) ? 'keep_on_credit' : 'released'
 
-          return {
+          return setCache(cacheKey, {
             gate_pass_no: gpNo,
             reg_number: entry.reg_number || regNorm,
             customer_name: entry.owner_name || 'Customer',
@@ -231,7 +293,7 @@ export async function customerGetGatePass(sessionToken: string, regNumber?: stri
             issued_by: 'Accounts Desk · Dealership',
             branch: entry.branch || 'Sitapura Workshop',
             qr_token: `GP_AUTH_${gpNo}_${regClean}_SECURE`,
-          }
+          })
         }
       }
     } catch (dbErr) {
@@ -243,6 +305,10 @@ export async function customerGetGatePass(sessionToken: string, regNumber?: stri
 }
 
 export async function customerGetSettlement(sessionToken: string, regNumber?: string | null) {
+  const cacheKey = `settlement_${sessionToken}_${regNumber || 'default'}`
+  const cached = getCached<Record<string, unknown>>(cacheKey)
+  if (cached) return cached
+
   const rawReg = (regNumber || '').trim()
   const regNorm = rawReg.toUpperCase()
   const regClean = regNorm.replace(/\s+/g, '')
@@ -307,7 +373,7 @@ export async function customerGetSettlement(sessionToken: string, regNumber?: st
         const remaining = Math.max(0, billed - received)
         const status = (billed > 0 && remaining <= 0) ? 'received' : (received > 0 ? 'partial' : 'pending')
 
-        return {
+        return setCache(cacheKey, {
           reception_entry_id: entry.id,
           jc_number: entry.jc_number || rpcResult?.jc_number,
           reg_number: entry.reg_number || regNorm,
@@ -326,14 +392,14 @@ export async function customerGetSettlement(sessionToken: string, regNumber?: st
           keep_on_credit_reason: inv?.keep_on_credit_reason || botPass?.keep_on_credit_reason || null,
           payments: payments || (rpcResult?.payments as any[]) || [],
           updated_at: inv?.updated_at || botPass?.issued_at || entry.invoice_done_at || new Date().toISOString(),
-        }
+        })
       }
     } catch (dbErr) {
       console.warn('customerGetSettlement direct query note:', dbErr)
     }
   }
 
-  return rpcResult
+  return rpcResult ? setCache(cacheKey, rpcResult) : null
 }
 
 export const DEFAULT_SERVICE_TYPES = [

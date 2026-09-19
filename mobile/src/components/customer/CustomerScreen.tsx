@@ -13,7 +13,7 @@ import { usePathname, useRouter } from 'expo-router'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { useCustomerSession } from '../../context/CustomerSessionContext'
 import { manualCheckForOTAUpdate } from '../../hooks/useMandatoryOTAUpdate'
-import { Icon } from '../ui/Icon'
+import { Icon, IconName } from '../ui/Icon'
 import { LegalLinks } from '../LegalLinks'
 import { VehiclePicker } from './VehiclePicker'
 
@@ -106,14 +106,14 @@ export function CustomerScreen({
     router.push(route as any)
   }
 
-  const menuItems = [
-    { label: 'Live Service Tracker', icon: '📊', route: '/(customer)/tracker', desc: 'Real-time job card stage & technician bay' },
-    { label: 'Bills, Quotations & Receipts', icon: '🧾', route: '/(customer)/invoices', desc: 'Invoices, estimates & payments' },
-    { label: 'Official Vehicle Gate Pass', icon: '🎟️', route: '/(customer)/gatepass', desc: 'Accounts approved gate clearance' },
-    { label: '24x7 Helpdesk Escalation', icon: '📞', route: '/(customer)/helpdesk', desc: 'CRM, Service Manager & Tata team' },
-    { label: 'Book Service Appointment', icon: '📅', route: '/(customer)/booking', desc: 'Schedule maintenance or pickup' },
-    { label: 'Report Problem / Complaint', icon: '🚨', route: '/(customer)/complaint', desc: 'Log service issues or concerns' },
-    { label: 'Dealership Feedback', icon: '⭐', route: '/(customer)/feedback', desc: 'Rate your service experience' },
+  const menuItems: { label: string; icon: IconName; route: string; desc: string }[] = [
+    { label: 'Live Service Tracker', icon: 'clock', route: '/(customer)/tracker', desc: 'Real-time job card stage & technician bay' },
+    { label: 'Bills, Quotations & Receipts', icon: 'file-text', route: '/(customer)/invoices', desc: 'Invoices, estimates & payments' },
+    { label: 'Official Vehicle Gate Pass', icon: 'shield-check', route: '/(customer)/gatepass', desc: 'Accounts approved gate clearance' },
+    { label: '24x7 Helpdesk Escalation', icon: 'phone', route: '/(customer)/helpdesk', desc: 'CRM, Service Manager & Tata team' },
+    { label: 'Book Service Appointment', icon: 'calendar', route: '/(customer)/booking', desc: 'Schedule maintenance or pickup' },
+    { label: 'Report Problem / Complaint', icon: 'alert-circle', route: '/(customer)/complaint', desc: 'Log service issues or concerns' },
+    { label: 'Dealership Feedback', icon: 'star', route: '/(customer)/feedback', desc: 'Rate your service experience' },
   ]
 
   const [hasSeenNotifications, setHasSeenNotifications] = useState(false)
@@ -138,15 +138,15 @@ export function CustomerScreen({
   return (
     <SafeAreaView className="flex-1 bg-slate-50" edges={['top']}>
       {/* Top App Header */}
-      <View className="bg-white border-b border-slate-200 px-4 pt-3 pb-3">
+      <View className="bg-white border-b border-slate-100 px-4 pt-3 pb-3 shadow-xs">
         <View className="flex-row items-center justify-between gap-3">
           <View className="flex-row items-center flex-1 pr-2">
             <View className="h-10 w-10 rounded-xl bg-blue-600 items-center justify-center mr-3 shadow-sm">
-              <Text className="text-xl">🚗</Text>
+              <Icon name="truck" size={20} color="#ffffff" strokeWidth={2.2} />
             </View>
             <View className="flex-1">
-              <Text className="text-slate-900 text-[15px] font-black">Techwheels Customer Services</Text>
-              <Text className="text-slate-500 text-[11px] font-semibold">Dealership Vehicle After-Purchase Portal</Text>
+              <Text className="text-slate-900 text-[16px] font-black tracking-tight">Techwheels</Text>
+              <Text className="text-slate-500 text-[11px] font-medium">Authorized Tata Service Center</Text>
             </View>
           </View>
 
@@ -164,24 +164,24 @@ export function CustomerScreen({
                 width: 40,
                 height: 40,
                 borderRadius: 12,
-                backgroundColor: '#f1f5f9',
+                backgroundColor: '#f8fafc',
                 borderWidth: 1,
-                borderColor: '#cbd5e1',
+                borderColor: '#e2e8f0',
                 alignItems: 'center',
                 justifyContent: 'center',
                 position: 'relative',
               }}
             >
-              <Text style={{ fontSize: 18 }}>🔔</Text>
+              <Icon name="bell" size={18} color="#475569" />
               {showNotificationDot && (
                 <View
                   style={{
                     position: 'absolute',
-                    top: 6,
-                    right: 6,
-                    width: 9,
-                    height: 9,
-                    borderRadius: 5,
+                    top: 8,
+                    right: 8,
+                    width: 8,
+                    height: 8,
+                    borderRadius: 4,
                     backgroundColor: '#10b981',
                     borderWidth: 1.5,
                     borderColor: '#ffffff',
@@ -190,7 +190,7 @@ export function CustomerScreen({
               )}
             </TouchableOpacity>
 
-            {/* High-Contrast 3-Column / Hamburger Menu Button (Solid Dark Box with Crisp 3 White Bars) */}
+            {/* High-Contrast Menu Button */}
             <TouchableOpacity
               onPress={() => setShowMenu(true)}
               accessibilityRole="button"
@@ -200,21 +200,17 @@ export function CustomerScreen({
                 width: 40,
                 height: 40,
                 borderRadius: 12,
-                backgroundColor: '#0f172a',
+                backgroundColor: '#0b132b',
                 alignItems: 'center',
                 justifyContent: 'center',
-                shadowColor: '#000',
+                shadowColor: '#0b132b',
                 shadowOffset: { width: 0, height: 2 },
-                shadowOpacity: 0.25,
+                shadowOpacity: 0.2,
                 shadowRadius: 3,
                 elevation: 4,
               }}
             >
-              <View style={{ width: 19, height: 13, justifyContent: 'space-between' }}>
-                <View style={{ width: 19, height: 2.4, backgroundColor: '#ffffff', borderRadius: 2 }} />
-                <View style={{ width: 13, height: 2.4, backgroundColor: '#ffffff', borderRadius: 2 }} />
-                <View style={{ width: 19, height: 2.4, backgroundColor: '#ffffff', borderRadius: 2 }} />
-              </View>
+              <Icon name="menu" size={18} color="#ffffff" strokeWidth={2.2} />
             </TouchableOpacity>
           </View>
         </View>
@@ -262,36 +258,65 @@ export function CustomerScreen({
         </View>
       </ScrollView>
 
-      {/* ── TOP-SLIDING MENU DRAWER (OPENS FROM TOP) ── */}
-      <Modal
-        visible={showMenu}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setShowMenu(false)}
-      >
-        <Pressable
-          className="flex-1 bg-black/60 justify-start"
-          onPress={() => setShowMenu(false)}
+      {/* ── TOP-SLIDING MENU DRAWER (IN-TREE OVERLAY TO PREVENT FREEZE) ── */}
+      {showMenu && (
+        <View
+          style={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            zIndex: 9999,
+            elevation: 9999,
+            backgroundColor: 'rgba(0, 0, 0, 0.65)',
+            justifyContent: 'flex-start',
+          }}
         >
           <Pressable
-            className="bg-white rounded-b-3xl pt-12 pb-6 px-5 max-h-[85%] shadow-2xl border-b-2 border-slate-900"
-            onPress={(e) => e.stopPropagation()}
+            style={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+            }}
+            onPress={() => setShowMenu(false)}
+          />
+          <SafeAreaView
+            edges={['top']}
+            style={{
+              backgroundColor: '#ffffff',
+              borderBottomLeftRadius: 28,
+              borderBottomRightRadius: 28,
+              paddingTop: 10,
+              paddingBottom: 20,
+              paddingHorizontal: 20,
+              maxHeight: '90%',
+              shadowColor: '#000',
+              shadowOffset: { width: 0, height: 10 },
+              shadowOpacity: 0.3,
+              shadowRadius: 20,
+              elevation: 25,
+              borderBottomWidth: 3,
+              borderBottomColor: '#0f172a',
+            }}
           >
             <View className="flex-row items-center justify-between border-b border-slate-100 pb-3 mb-3">
               <View className="flex-row items-center gap-2.5">
                 <View className="w-9 h-9 rounded-xl bg-blue-600 items-center justify-center shadow-xs">
-                  <Text className="text-lg">🚗</Text>
+                  <Icon name="truck" size={18} color="#ffffff" strokeWidth={2.2} />
                 </View>
                 <View>
                   <Text className="text-slate-900 text-[16px] font-black">Customer Services Menu</Text>
-                  <Text className="text-slate-500 text-[11px]">Active: {selectedReg || 'No Vehicle'}</Text>
+                  <Text className="text-slate-500 text-[11px] font-medium">Active: {selectedReg || 'No Vehicle'}</Text>
                 </View>
               </View>
               <TouchableOpacity
                 onPress={() => setShowMenu(false)}
-                className="w-9 h-9 rounded-full bg-slate-100 border border-slate-200 items-center justify-center"
+                className="w-8 h-8 rounded-full bg-slate-100 border border-slate-200 items-center justify-center"
               >
-                <Text className="text-slate-800 font-extrabold text-sm">✕</Text>
+                <Icon name="x" size={16} color="#334155" strokeWidth={2.5} />
               </TouchableOpacity>
             </View>
 
@@ -302,13 +327,13 @@ export function CustomerScreen({
                 className={`flex-row items-center p-3 rounded-2xl mb-1.5 ${isHomeScreen ? 'bg-blue-50 border border-blue-200' : 'bg-slate-50 active:bg-slate-100'}`}
               >
                 <View className="w-10 h-10 rounded-xl bg-white border border-slate-200 items-center justify-center mr-3 shadow-xs">
-                  <Text className="text-xl">🏠</Text>
+                  <Icon name="home" size={18} color="#1e60ff" strokeWidth={2} />
                 </View>
                 <View className="flex-1">
                   <Text className="text-slate-900 font-bold text-[14px]">Customer Home / Dashboard</Text>
                   <Text className="text-slate-500 text-[11px]">Overview, quick actions & service status</Text>
                 </View>
-                <Text className="text-slate-400 font-bold">›</Text>
+                <Icon name="chevron-right" size={16} color="#94a3b8" />
               </TouchableOpacity>
 
               {menuItems.map((item) => (
@@ -318,13 +343,13 @@ export function CustomerScreen({
                   className="flex-row items-center p-3 rounded-2xl bg-slate-50 active:bg-slate-100 mb-1.5"
                 >
                   <View className="w-10 h-10 rounded-xl bg-white border border-slate-200 items-center justify-center mr-3 shadow-xs">
-                    <Text className="text-xl">{item.icon}</Text>
+                    <Icon name={item.icon} size={18} color="#3b82f6" strokeWidth={2} />
                   </View>
                   <View className="flex-1">
                     <Text className="text-slate-900 font-bold text-[14px]">{item.label}</Text>
                     <Text className="text-slate-500 text-[11px]">{item.desc}</Text>
                   </View>
-                  <Text className="text-slate-400 font-bold">›</Text>
+                  <Icon name="chevron-right" size={16} color="#94a3b8" />
                 </TouchableOpacity>
               ))}
             </ScrollView>
@@ -335,8 +360,8 @@ export function CustomerScreen({
               disabled={checkingUpdate}
               className="flex-row items-center justify-center bg-blue-50 border border-blue-200 rounded-2xl py-3 mb-2"
             >
-              <Text className="text-base mr-2">{checkingUpdate ? '⏳' : '⚡'}</Text>
-              <Text className="text-blue-700 font-extrabold text-sm">
+              <Icon name="rotate-cw" size={16} color="#1d4ed8" strokeWidth={2.2} />
+              <Text className="text-blue-700 font-extrabold text-sm ml-2">
                 {checkingUpdate ? (updateStatusMsg || 'Checking for updates…') : 'Check for App Updates'}
               </Text>
             </TouchableOpacity>
@@ -353,24 +378,52 @@ export function CustomerScreen({
               <Icon name="log-out" size={17} color="#dc2626" strokeWidth={2} />
               <Text className="text-red-600 font-extrabold text-sm ml-2">Log Out of Customer Portal</Text>
             </TouchableOpacity>
-          </Pressable>
-        </Pressable>
-      </Modal>
+          </SafeAreaView>
+        </View>
+      )}
 
-      {/* ── NOTIFICATIONS POPUP MODAL ── */}
-      <Modal
-        visible={showNotifications}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setShowNotifications(false)}
-      >
-        <Pressable
-          className="flex-1 bg-black/60 justify-start"
-          onPress={() => setShowNotifications(false)}
+      {/* ── NOTIFICATIONS POPUP (IN-TREE OVERLAY TO PREVENT FREEZE) ── */}
+      {showNotifications && (
+        <View
+          style={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            zIndex: 9999,
+            elevation: 9999,
+            backgroundColor: 'rgba(0, 0, 0, 0.65)',
+            justifyContent: 'flex-start',
+          }}
         >
           <Pressable
-            className="bg-white rounded-b-3xl pt-12 pb-6 px-5 shadow-2xl border-b-2 border-blue-600"
-            onPress={(e) => e.stopPropagation()}
+            style={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+            }}
+            onPress={() => setShowNotifications(false)}
+          />
+          <SafeAreaView
+            edges={['top']}
+            style={{
+              backgroundColor: '#ffffff',
+              borderBottomLeftRadius: 28,
+              borderBottomRightRadius: 28,
+              paddingTop: 10,
+              paddingBottom: 20,
+              paddingHorizontal: 20,
+              shadowColor: '#000',
+              shadowOffset: { width: 0, height: 10 },
+              shadowOpacity: 0.3,
+              shadowRadius: 20,
+              elevation: 25,
+              borderBottomWidth: 3,
+              borderBottomColor: '#2563eb',
+            }}
           >
             <View className="flex-row items-center justify-between border-b border-slate-100 pb-3 mb-3">
               <View className="flex-row items-center gap-2">
@@ -413,9 +466,9 @@ export function CustomerScreen({
                 </View>
               )}
             </View>
-          </Pressable>
-        </Pressable>
-      </Modal>
+          </SafeAreaView>
+        </View>
+      )}
     </SafeAreaView>
   )
 }

@@ -4,13 +4,14 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useAuth } from '../../context/AuthContext'
 import { useCustomerSession } from '../../context/CustomerSessionContext'
 
-const TAB_ICON: Record<string, string> = {
-  index: '🏠',
-  complaint: '🚨',
-  estimate: '📋',
-  invoices: '🧾',
-  gatepass: '🎟️',
-  feedback: '⭐',
+import { Icon, IconName } from '../../components/ui/Icon'
+
+const TAB_CONFIG: Record<string, { icon: IconName; label: string }> = {
+  index: { icon: 'home', label: 'Home' },
+  tracker: { icon: 'clock', label: 'Tracker' },
+  invoices: { icon: 'file-text', label: 'Bills' },
+  gatepass: { icon: 'shield-check', label: 'Gate Pass' },
+  feedback: { icon: 'star', label: 'Review' },
 }
 
 function CustomerTabBar({ state, descriptors, navigation }: any) {
@@ -25,35 +26,67 @@ function CustomerTabBar({ state, descriptors, navigation }: any) {
         right: 0,
         bottom: 0,
         flexDirection: 'row',
-        borderTopColor: '#e5e7eb',
+        borderTopColor: '#e2e8f0',
         borderTopWidth: 1,
         backgroundColor: '#ffffff',
         paddingTop: 8,
-        paddingBottom: Math.max(8, insets.bottom),
+        paddingBottom: Math.max(10, insets.bottom),
         minHeight: tabBarHeight,
+        shadowColor: '#0f172a',
+        shadowOffset: { width: 0, height: -6 },
+        shadowOpacity: 0.06,
+        shadowRadius: 16,
+        elevation: 10,
       }}
     >
       {state.routes
-        .filter((route: any) => Boolean(TAB_ICON[route.name]))
+        .filter((route: any) => Boolean(TAB_CONFIG[route.name]))
         .map((route: any) => {
-        const index = state.routes.findIndex((candidate: any) => candidate.key === route.key)
-        const focused = state.index === index
-        const options = descriptors[route.key]?.options ?? {}
-        const label = options.tabBarLabel ?? options.title ?? route.name
-        const icon = TAB_ICON[route.name] ?? '•'
-        return (
-          <TouchableOpacity
-            key={route.key}
-            onPress={() => navigation.navigate({ name: route.name, merge: true })}
-            style={{ flex: 1, alignItems: 'center', justifyContent: 'center', minHeight: 48 }}
-          >
-            <Text style={{ fontSize: 18, opacity: focused ? 1 : 0.55 }}>{icon}</Text>
-            <Text style={{ fontSize: 10.5, fontWeight: '700', color: focused ? '#2563eb' : '#94a3b8' }}>
-              {String(label)}
-            </Text>
-          </TouchableOpacity>
-        )
-      })}
+          const index = state.routes.findIndex((candidate: any) => candidate.key === route.key)
+          const focused = state.index === index
+          const options = descriptors[route.key]?.options ?? {}
+          const config = TAB_CONFIG[route.name]
+          const label = options.tabBarLabel ?? options.title ?? config?.label ?? route.name
+          const iconName = config?.icon ?? 'home'
+
+          return (
+            <TouchableOpacity
+              key={route.key}
+              onPress={() => navigation.navigate({ name: route.name, merge: true })}
+              activeOpacity={0.7}
+              style={{ flex: 1, alignItems: 'center', justifyContent: 'center', minHeight: 48 }}
+            >
+              <View
+                style={{
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  paddingHorizontal: 16,
+                  paddingVertical: 5,
+                  borderRadius: 14,
+                  backgroundColor: focused ? '#eff6ff' : 'transparent',
+                }}
+              >
+                <Icon
+                  name={iconName}
+                  size={20}
+                  color={focused ? '#2563eb' : '#64748b'}
+                  strokeWidth={focused ? 2.4 : 1.8}
+                />
+              </View>
+              <Text
+                style={{
+                  fontSize: 11,
+                  fontWeight: focused ? '800' : '600',
+                  color: focused ? '#2563eb' : '#64748b',
+                  marginTop: 2,
+                  letterSpacing: 0.1,
+                }}
+              >
+                {String(label)}
+              </Text>
+            </TouchableOpacity>
+          )
+        })}
     </View>
   )
 }
@@ -65,7 +98,7 @@ export default function CustomerTabsLayout() {
   if (staffLoading || customerLoading) {
     return (
       <View className="flex-1 items-center justify-center bg-white">
-        <ActivityIndicator size="large" color="#0284c7" />
+        <ActivityIndicator size="large" color="#2563eb" />
       </View>
     )
   }
@@ -83,19 +116,19 @@ export default function CustomerTabsLayout() {
       tabBar={(props) => <CustomerTabBar {...props} />}
       screenOptions={{
         headerShown: false,
-        sceneStyle: { backgroundColor: '#ffffff', paddingBottom: 92 },
+        sceneStyle: { backgroundColor: '#f8fafc', paddingBottom: 94 },
       }}
     >
       <Tabs.Screen name="index" options={{ title: 'Home', tabBarLabel: 'Home' }} />
-      <Tabs.Screen name="complaint" options={{ title: 'Problem', tabBarLabel: 'Problem' }} />
-      <Tabs.Screen name="estimate" options={{ title: 'Estimate', tabBarLabel: 'Estimate' }} />
+      <Tabs.Screen name="tracker" options={{ title: 'Tracker', tabBarLabel: 'Tracker' }} />
       <Tabs.Screen name="invoices" options={{ title: 'Bills', tabBarLabel: 'Bills' }} />
       <Tabs.Screen name="gatepass" options={{ title: 'Gate Pass', tabBarLabel: 'Gate Pass' }} />
-      <Tabs.Screen name="feedback" options={{ title: 'Feedback', tabBarLabel: 'Feedback' }} />
+      <Tabs.Screen name="feedback" options={{ title: 'Review', tabBarLabel: 'Review' }} />
+      <Tabs.Screen name="helpdesk" options={{ href: null, title: 'Support' }} />
+      <Tabs.Screen name="complaint" options={{ href: null, title: 'Report Problem' }} />
+      <Tabs.Screen name="estimate" options={{ href: null, title: 'Digital Estimate' }} />
       <Tabs.Screen name="booking" options={{ href: null, title: 'Book Service' }} />
       <Tabs.Screen name="my-bookings" options={{ href: null, title: 'My Bookings' }} />
-      <Tabs.Screen name="tracker" options={{ href: null, title: 'Repair Tracker' }} />
-      <Tabs.Screen name="helpdesk" options={{ href: null, title: 'Helpdesk & Escalation' }} />
     </Tabs>
   )
 }

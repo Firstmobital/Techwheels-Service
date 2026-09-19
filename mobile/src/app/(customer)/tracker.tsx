@@ -47,18 +47,22 @@ export default function CustomerTrackerScreen() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (isInitial = false) => {
     if (!token) return
-    setLoading(true)
-    setError(null)
+    if (isInitial && !job && !card) {
+      setLoading(true)
+    }
     try {
       const [jobResult, repair] = await Promise.all([
-        customerGetActiveJob(token, selectedReg),
+        customerGetActiveJob(token, selectedReg).catch(() => ({ job: null })),
         customerGetRepairCard(token, selectedReg).catch(() => null),
       ])
       const activeJob = jobResult.job
-      setJob(activeJob)
-      setCard(repair)
+      if (activeJob) {
+        setJob(activeJob)
+        setError(null)
+      }
+      if (repair) setCard(repair)
 
       // Fetch live technician & bay details from Floor Incharge
       const activeJc = (activeJob?.jc_number as string) || (selected?.jc_number as string) || ''
@@ -89,15 +93,17 @@ export default function CustomerTrackerScreen() {
         }
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Unable to load tracker.')
+      if (!job && !card) {
+        setError(err instanceof Error ? err.message : 'Unable to load tracker.')
+      }
     } finally {
       setLoading(false)
     }
-  }, [token, selectedReg, selected?.jc_number])
+  }, [token, selectedReg, selected?.jc_number, job, card])
 
   useFocusEffect(
     useCallback(() => {
-      void load()
+      void load(false)
     }, [load])
   )
 
@@ -108,25 +114,29 @@ export default function CustomerTrackerScreen() {
   const currentStage = Number(card?.current_stage || 0)
   const qcDone = String(card?.qc_status || '').toLowerCase() === 'pass' || invoiced
 
-  const stages = [
+  const stages: { title: string; desc: string; completed: boolean; current?: boolean; icon: string }[] = [
     {
-      title: 'Reception & Job Card Opened',
-      desc: 'Vehicle checked in at workshop · Initial inspection completed',
-      completed: true,
-      icon: '📥',
+      title: 'Vehicle Received & Group Created',
+      desc: 'Vehicle safely checked into workshop and registered on floor',
+      completed: Boolean(selected?.created_at || jc),
+      icon: '🚗',
     },
     {
-      title: 'Advisor Inspection & Estimate',
-      desc: 'Job card created and itemized estimate generated',
-      completed: estimateIssued,
+      title: 'Job Card & Documentation',
+      desc: advisor ? `Assigned SA: ${advisor}` : 'Service Advisor assigned and initial inspection',
+      completed: Boolean(jc),
       icon: '📋',
     },
     {
-      title: 'Workshop & Repairs',
-      desc: techInfo
-        ? `Technician ${techInfo.name} working${techInfo.bay_no ? ` in Bay ${techInfo.bay_no}` : ''}`
-        : 'Technicians working on repairs & parts replacement',
-      completed: invoiced || currentStage >= 11,
+      title: 'Digital Estimate & Approval',
+      desc: estimateIssued ? 'Digital quotation prepared' : 'Awaiting parts & labour estimation',
+      completed: estimateIssued,
+      icon: '💰',
+    },
+    {
+      title: 'Workshop Bay Repair',
+      desc: techInfo?.name ? `Technician: ${techInfo.name} · Bay: ${techInfo.bay_no || 'Assigned'}` : 'Repairs in progress by certified workshop technicians',
+      completed: invoiced,
       current: !invoiced && Boolean(jc),
       icon: '🔧',
     },
@@ -151,8 +161,8 @@ export default function CustomerTrackerScreen() {
       title="Live Repair Tracker"
       subtitle={`Real-time repair and service stages for ${selected?.reg_number || 'your vehicle'}`}
     >
-      {error ? <CustomerToast ok={false} message={error} /> : null}
-      {loading ? (
+      {error && !job && !card ? <CustomerToast ok={false} message={error} /> : null}
+      {loading && !job && !card ? (
         <ActivityIndicator color="#2563eb" />
       ) : (
         <>

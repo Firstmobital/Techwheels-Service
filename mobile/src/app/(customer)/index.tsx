@@ -29,6 +29,7 @@ import {
 } from '../../lib/api/customerPortal'
 import { computeSettlement } from '../../lib/customer/math'
 import { manualCheckForOTAUpdate } from '../../hooks/useMandatoryOTAUpdate'
+import { Icon, IconName } from '../../components/ui/Icon'
 
 export default function CustomerDashboardScreen() {
   const router = useRouter()
@@ -39,7 +40,8 @@ export default function CustomerDashboardScreen() {
   const [gatePass, setGatePass] = useState<Record<string, unknown> | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [selectedStageModal, setSelectedStageModal] = useState<number | null>(null)
+  const [activeStageIndex, setActiveStageIndex] = useState<number | null>(null)
+  const [showTrackerDetails, setShowTrackerDetails] = useState<boolean>(false)
   const [checkingOta, setCheckingOta] = useState(false)
   const [otaStatusText, setOtaStatusText] = useState<string | null>(null)
 
@@ -61,39 +63,50 @@ export default function CustomerDashboardScreen() {
     }
   }
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (isInitial = false) => {
     if (!token) return
-    setError(null)
+    if (isInitial && !job && !selected) {
+      setLoading(true)
+    }
     try {
       const [jobResult, payResult, passResult] = await Promise.all([
-        customerGetActiveJob(token, selected?.reg_number),
+        customerGetActiveJob(token, selected?.reg_number).catch((err) => ({
+          job: null,
+          error: err instanceof Error ? err.message : 'Unable to load job.',
+        })),
         customerGetSettlement(token, selected?.reg_number).catch(() => null),
         customerGetGatePass(token, selected?.reg_number).catch(() => null),
       ])
-      setJob(jobResult.job)
-      setSettlement(payResult)
-      setGatePass(passResult)
+      if (jobResult.job) {
+        setJob(jobResult.job)
+        setError(null)
+      } else if (!job && !selected && 'error' in jobResult && jobResult.error) {
+        setError(String(jobResult.error))
+      }
+      if (payResult) setSettlement(payResult)
+      if (passResult) setGatePass(passResult)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Unable to load job.')
+      if (!job && !selected) {
+        setError(err instanceof Error ? err.message : 'Unable to load job.')
+      }
     } finally {
       setLoading(false)
     }
-  }, [token, selected?.reg_number])
+  }, [token, selected?.reg_number, job, selected])
 
-  // Fast & optimized 3.5s auto-refresh
+  // Fast & smooth 3.5s background auto-refresh without UI flicker
   useFocusEffect(
     useCallback(() => {
-      setLoading(true)
-      void load()
+      void load(false)
       const timer = setInterval(() => {
-        void load()
+        void load(false)
       }, 3500)
       return () => clearInterval(timer)
     }, [load])
   )
 
   useEffect(() => {
-    void load()
+    void load(true)
   }, [load])
 
   const model = asText(job?.model) || asText(selected?.model)
@@ -113,21 +126,21 @@ export default function CustomerDashboardScreen() {
   })
   const advisorPhone = pickAdvisorPhone(job) || pickAdvisorPhone(selected as unknown as Record<string, unknown>)
 
-  // 5 Service Stages for Flipkart-style Live Tracker
+  // 5 Service Stages for Clean Live Tracker
   const currentStageIndex = delivered ? 4 : job?.technician_name ? 3 : job?.estimate_done_at ? 2 : jc ? 1 : 0
 
-  const trackerStages = [
-    { title: 'Intake', icon: '📥', desc: 'Vehicle check-in & initial inspection' },
-    { title: 'Job Card', icon: '📋', desc: `Assigned SA: ${advisor || 'Service Advisor'} · JC #${jc || 'Pending'}` },
-    { title: 'Quote', icon: '📝', desc: 'Itemized parts & labour quotation' },
-    { title: 'Bay Work', icon: '🔧', desc: `Technician: ${technician || 'Assigned'} · Bay ${bayNo || 'Floor'}` },
-    { title: 'Ready', icon: '✅', desc: 'Repairs completed & tested for delivery' },
+  const trackerStages: { title: string; icon: IconName; desc: string }[] = [
+    { title: 'Intake', icon: 'arrow-down', desc: 'Vehicle check-in & initial inspection' },
+    { title: 'Job Card', icon: 'file-text', desc: `Assigned SA: ${advisor || 'Service Advisor'} · JC #${jc || 'Pending'}` },
+    { title: 'Quote', icon: 'file', desc: 'Itemized parts & labour quotation' },
+    { title: 'Bay Work', icon: 'sliders', desc: `Technician: ${technician || 'Assigned'} · Bay ${bayNo || 'Floor'}` },
+    { title: 'Ready', icon: 'check-circle', desc: 'Repairs completed & tested for delivery' },
   ]
 
   return (
     <CustomerScreen title="Dashboard" subtitle="Live service job card for the selected vehicle">
       {loading && !selected ? (
-        <ActivityIndicator color="#2563eb" className="py-8" />
+        <ActivityIndicator color="#1e60ff" className="py-8" />
       ) : error ? (
         <Text className="text-red-600 font-bold text-center py-4">{error}</Text>
       ) : !selected ? (
@@ -139,23 +152,23 @@ export default function CustomerDashboardScreen() {
             <TouchableOpacity
               activeOpacity={0.88}
               onPress={() => router.push('/(customer)/gatepass')}
-              className="bg-emerald-600 rounded-2xl p-4 mb-3.5 shadow-lg border-2 border-emerald-300 flex-row items-center justify-between"
+              className="bg-emerald-600 rounded-2xl p-4 mb-3.5 shadow-lg border border-emerald-400/40 flex-row items-center justify-between"
             >
               <View className="flex-row items-center gap-3 flex-1 pr-2">
-                <View className="w-11 h-11 rounded-2xl bg-white/20 items-center justify-center">
-                  <Text className="text-2xl">🎟️</Text>
+                <View className="w-10 h-10 rounded-xl bg-white/20 items-center justify-center">
+                  <Icon name="shield-check" size={22} color="#ffffff" />
                 </View>
                 <View className="flex-1">
                   <View className="flex-row items-center gap-1.5">
                     <Text className="text-emerald-100 text-[10px] font-black uppercase tracking-wider">
                       Official Departure Pass Issued
                     </Text>
-                    <View className="w-2 h-2 rounded-full bg-white animate-pulse" />
+                    <View className="w-2 h-2 rounded-full bg-white" />
                   </View>
                   <Text className="text-white text-[15px] font-black" numberOfLines={1}>
                     Gate Pass #{asText(gatePass.gate_pass_no)} Ready
                   </Text>
-                  <Text className="text-emerald-100 text-[11.5px] font-semibold mt-0.5" numberOfLines={1}>
+                  <Text className="text-emerald-100 text-[11.5px] font-medium mt-0.5" numberOfLines={1}>
                     Authorized by Accounts · Tap to View Pass
                   </Text>
                 </View>
@@ -166,211 +179,305 @@ export default function CustomerDashboardScreen() {
             </TouchableOpacity>
           ) : null}
 
-          {/* ── REGISTERED VEHICLE HERO CARD WITH PROMINENT JOB CARD NUMBER ── */}
+          {/* ── REGISTERED VEHICLE HERO CARD ── */}
           <LinearGradient
-            colors={['#0f172a', '#1e3a8a', '#2563eb']}
+            colors={['#0f172a', '#1e293b', '#1e3a8a']}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}
-            style={{ borderRadius: 16, padding: 16, marginBottom: 14, elevation: 4 }}
+            style={{
+              borderRadius: 22,
+              padding: 18,
+              marginBottom: 16,
+              shadowColor: '#0f172a',
+              shadowOffset: { width: 0, height: 6 },
+              shadowOpacity: 0.22,
+              shadowRadius: 14,
+              elevation: 5,
+              borderWidth: 1,
+              borderColor: 'rgba(255,255,255,0.12)',
+            }}
           >
             <View className="flex-row justify-between items-start">
               <View className="flex-1 pr-2">
-                <Text className="text-blue-200 text-[10px] font-black uppercase tracking-widest">
-                  REGISTERED VEHICLE
-                </Text>
-                <Text className="text-white text-2xl font-black mt-0.5 tracking-wider">
+                <View className="flex-row items-center gap-1.5 mb-1">
+                  <Icon name="truck" size={13} color="#60a5fa" strokeWidth={2.2} />
+                  <Text className="text-blue-300 text-[10px] font-black uppercase tracking-widest">
+                    REGISTERED VEHICLE
+                  </Text>
+                </View>
+                <Text className="text-white text-2xl font-black tracking-wider font-mono">
                   {selected.reg_number}
                 </Text>
-                <Text className="text-blue-100 text-[13px] mt-0.5 font-bold">
+                <Text className="text-slate-200 text-[13.5px] mt-0.5 font-bold" numberOfLines={1}>
                   {model || 'Tata Vehicle'}
                   {variant ? ` · ${variant}` : ''}
                 </Text>
               </View>
 
-              <View className="items-end gap-1.5" style={{ maxWidth: '52%' }}>
+              <View className="items-end gap-1.5 shrink-0" style={{ maxWidth: '48%' }}>
                 <View
                   style={{
                     paddingHorizontal: 10,
-                    paddingVertical: 4,
+                    paddingVertical: 4.5,
                     borderRadius: 999,
-                    backgroundColor: delivered ? 'rgba(16,185,129,0.35)' : 'rgba(245,158,11,0.35)',
-                    borderWidth: 1,
-                    borderColor: 'rgba(255,255,255,0.4)',
+                    backgroundColor: delivered ? 'rgba(16,185,129,0.25)' : 'rgba(245,158,11,0.25)',
+                    borderWidth: 1.2,
+                    borderColor: delivered ? '#34d399' : '#fbbf24',
+                    flexDirection: 'row',
+                    alignItems: 'center',
                   }}
                 >
-                  <Text className="text-white text-[11px] font-black" numberOfLines={1}>
-                    {delivered ? '✅ Delivered / Ready' : '⏳ In Service'}
+                  <View
+                    style={{
+                      width: 6,
+                      height: 6,
+                      borderRadius: 3,
+                      backgroundColor: delivered ? '#34d399' : '#fbbf24',
+                      marginRight: 5,
+                    }}
+                  />
+                  <Text style={{ color: '#ffffff', fontSize: 11, fontWeight: '800' }} numberOfLines={1}>
+                    {delivered ? 'Delivered / Ready' : 'In Service'}
                   </Text>
                 </View>
 
-                {/* PROMINENT JOB CARD NUMBER BADGE */}
                 {jc ? (
-                  <View className="bg-white/20 border border-white/30 px-2.5 py-1 rounded-xl">
+                  <View className="bg-white/15 border border-white/25 px-2.5 py-0.5 rounded-xl">
                     <Text className="text-white font-mono font-black text-[10px]" numberOfLines={1}>
-                      JC #{jc.length > 18 ? jc.slice(-12) : jc}
+                      JC #{jc.length > 16 ? jc.slice(-12) : jc}
                     </Text>
                   </View>
                 ) : null}
               </View>
             </View>
 
-            <View className="mt-4 pt-3 border-t border-white/20 flex-row flex-wrap">
-              <View className="w-1/2 pr-2 mb-2.5">
-                <Text className="text-blue-200 text-[10.5px] font-semibold">Customer Name</Text>
-                <Text className="text-white text-[13px] font-black uppercase" numberOfLines={1}>{dash(owner)}</Text>
+            {/* Quick Metrics Grid */}
+            <View className="mt-3.5 pt-3 border-t border-white/15 flex-row flex-wrap">
+              <View className="w-1/2 pr-2 mb-2">
+                <Text className="text-slate-400 text-[10px] font-medium">Customer Name</Text>
+                <Text className="text-white text-[12.5px] font-bold uppercase" numberOfLines={1}>{dash(owner)}</Text>
               </View>
-              <View className="w-1/2 pl-2 mb-2.5">
-                <Text className="text-blue-200 text-[10.5px] font-semibold">Live Job Card No</Text>
-                <Text className="text-white text-[12.5px] font-mono font-black" numberOfLines={1}>{jc ? `#${jc}` : 'Opening…'}</Text>
+              <View className="w-1/2 pl-2 mb-2">
+                <Text className="text-slate-400 text-[10px] font-medium">Odometer</Text>
+                <Text className="text-white text-[12.5px] font-mono font-bold" numberOfLines={1}>{km || '—'}</Text>
               </View>
-              <View className="w-1/2 pr-2 mb-2.5">
-                <Text className="text-blue-200 text-[10.5px] font-semibold">Assigned Technician</Text>
-                <Text className="text-white text-[12.5px] font-bold" numberOfLines={1}>{dash(technician)}</Text>
+              <View className="w-1/2 pr-2 mb-2">
+                <Text className="text-slate-400 text-[10px] font-medium">Assigned Technician</Text>
+                <Text className="text-white text-[12px] font-bold" numberOfLines={1}>{dash(technician)}</Text>
               </View>
-              <View className="w-1/2 pl-2 mb-2.5">
-                <Text className="text-blue-200 text-[10.5px] font-semibold">Workshop Bay No</Text>
-                <Text className="text-emerald-300 text-[12.5px] font-mono font-black" numberOfLines={1}>{dash(bayNo) || 'Floor Bay'}</Text>
+              <View className="w-1/2 pl-2 mb-2">
+                <Text className="text-slate-400 text-[10px] font-medium">Workshop Bay No</Text>
+                <Text className="text-emerald-400 text-[12px] font-mono font-black" numberOfLines={1}>{dash(bayNo) || 'Floor Bay'}</Text>
               </View>
-              <View className="w-1/2 pr-2 mb-1">
-                <Text className="text-blue-200 text-[10.5px] font-semibold">Service Type</Text>
-                <Text className="text-white text-[12px] font-bold" numberOfLines={1}>{dash(serviceType)}</Text>
+              <View className="w-1/2 pr-2 mb-0.5">
+                <Text className="text-slate-400 text-[10px] font-medium">Service Type</Text>
+                <Text className="text-white text-[11.5px] font-bold" numberOfLines={1}>{dash(serviceType)}</Text>
               </View>
-              <View className="w-1/2 pl-2 mb-1">
-                <Text className="text-blue-200 text-[10.5px] font-semibold">Assigned Advisor</Text>
-                <Text className="text-white text-[12px] font-bold" numberOfLines={1}>{dash(advisor)}</Text>
+              <View className="w-1/2 pl-2 mb-0.5">
+                <Text className="text-slate-400 text-[10px] font-medium">Assigned Advisor</Text>
+                <Text className="text-white text-[11.5px] font-bold" numberOfLines={1}>{dash(advisor)}</Text>
               </View>
             </View>
 
-            {/* Direct Call Advisor One-Tap Banner */}
+            {/* Direct Call Advisor Action */}
             <TouchableOpacity
               onPress={() => void Linking.openURL(`tel:${getDirectAdvisorOrWorkshopPhone(job || (selected as unknown as Record<string, unknown>))}`)}
-              className="mt-2 bg-emerald-500 active:bg-emerald-600 rounded-xl py-2.5 px-4 flex-row items-center justify-between shadow-sm"
+              activeOpacity={0.85}
+              className="mt-3 bg-emerald-600 active:bg-emerald-700 rounded-xl py-2 px-3.5 flex-row items-center justify-between shadow-sm"
             >
-              <View className="flex-row items-center gap-2">
-                <Text className="text-base">📞</Text>
-                <Text className="text-white text-xs font-black">
+              <View className="flex-row items-center gap-2 flex-1 pr-2">
+                <Icon name="phone" size={14} color="#ffffff" />
+                <Text className="text-white text-xs font-black flex-1" numberOfLines={1} ellipsizeMode="tail">
                   Call Advisor: {dash(advisor)} ({getDirectAdvisorOrWorkshopPhone(job || (selected as unknown as Record<string, unknown>))})
                 </Text>
               </View>
-              <View className="bg-white/25 px-2.5 py-0.5 rounded-full">
-                <Text className="text-white text-[11px] font-black">Call Now</Text>
+              <View className="bg-white/20 px-2.5 py-0.5 rounded-full shrink-0">
+                <Text className="text-white text-[10.5px] font-black">Call Now</Text>
               </View>
             </TouchableOpacity>
           </LinearGradient>
 
-          {/* ── GATE PASS READY ALERT BANNER ── */}
-          {gatePass ? (
-            <TouchableOpacity
-              activeOpacity={0.88}
-              onPress={() => router.push('/(customer)/gatepass')}
-              className="bg-purple-900 border-2 border-purple-400 rounded-2xl p-4 mb-4 shadow-lg overflow-hidden"
-            >
-              <View className="flex-row items-center justify-between">
-                <View className="flex-row items-center gap-2.5 flex-1 pr-2">
-                  <Text className="text-2xl">🎟️</Text>
-                  <View className="flex-1">
-                    <View className="flex-row items-center gap-2">
-                      <Text className="text-amber-300 text-xs font-black uppercase tracking-wider">
-                        Gate Pass Ready
-                      </Text>
-                      <View className="bg-emerald-500 px-2 py-0.5 rounded-full">
-                        <Text className="text-white text-[10px] font-black">CLEARED</Text>
-                      </View>
-                    </View>
-                    <Text className="text-white text-base font-black tracking-tight mt-0.5">
-                      Gate Pass #{String(gatePass.gate_pass_no || 'OFFICIAL')}
-                    </Text>
-                    <Text className="text-purple-200 text-[11px] font-semibold">
-                      Approved by Accounts · Tap to View & Download PDF
-                    </Text>
-                  </View>
-                </View>
-                <View className="bg-white px-3 py-1.5 rounded-xl shadow-sm">
-                  <Text className="text-purple-950 font-black text-xs">Open Pass ➔</Text>
-                </View>
-              </View>
-            </TouchableOpacity>
-          ) : null}
-
-          {/* ── FLIPKART-STYLE LIVE REPAIR TRACKER WITH MOVING LIGHT BEAM ── */}
+          {/* ── PRIMARY BOOK SERVICE CTA ── */}
           <TouchableOpacity
-            activeOpacity={0.9}
-            onPress={() => setSelectedStageModal(currentStageIndex)}
-            className="bg-white border-2 border-slate-900 rounded-2xl p-4 mb-4 shadow-md overflow-hidden relative"
+            onPress={() => router.push('/(customer)/booking')}
+            activeOpacity={0.88}
+            style={{
+              backgroundColor: '#2563eb',
+              borderRadius: 18,
+              paddingVertical: 14,
+              paddingHorizontal: 16,
+              marginBottom: 14,
+              flexDirection: 'row',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              shadowColor: '#2563eb',
+              shadowOffset: { width: 0, height: 4 },
+              shadowOpacity: 0.28,
+              shadowRadius: 10,
+              elevation: 4,
+            }}
           >
-            <View className="flex-row items-center justify-between mb-3">
-              <View className="flex-row items-center gap-2">
-                <Text className="text-lg">🛠️</Text>
-                <View>
-                  <Text className="text-slate-900 text-[14px] font-black tracking-tight">
-                    Live Workshop Repair Tracker
-                  </Text>
-                  <Text className="text-slate-500 text-[11px]">Tap for Advisor, Technician & Bay Details</Text>
-                </View>
+            <View className="flex-row items-center gap-3 flex-1 pr-2">
+              <View className="w-10 h-10 rounded-xl bg-white/20 items-center justify-center shrink-0">
+                <Icon name="calendar" size={20} color="#ffffff" strokeWidth={2.2} />
               </View>
-              <View className="bg-blue-600 px-2.5 py-1 rounded-full flex-row items-center gap-1">
-                <View className="w-2 h-2 bg-emerald-300 rounded-full animate-pulse" />
-                <Text className="text-white text-[10px] font-black">
-                  {trackerStages[currentStageIndex].title}
+              <View className="flex-1">
+                <Text className="text-white text-[15px] font-black tracking-tight" numberOfLines={1}>
+                  Book Service Appointment
+                </Text>
+                <Text className="text-blue-100 text-[11.5px]" numberOfLines={1} ellipsizeMode="tail">
+                  Schedule maintenance, repair or pickup
                 </Text>
               </View>
             </View>
-
-            {/* Clean Progress Track Bar */}
-            <View className="my-3 relative">
-              {/* Background Grey Track Line */}
-              <View className="h-2 bg-slate-200 rounded-full overflow-hidden relative">
-                {/* Active Filled Progress Line */}
-                <View
-                  className="h-full bg-blue-600 rounded-full"
-                  style={{ width: `${((currentStageIndex + 1) / trackerStages.length) * 100}%` }}
-                />
-              </View>
-
-              {/* 5 Stage Node Icons */}
-              <View className="flex-row justify-between -mt-3.5 px-1">
-                {trackerStages.map((stg, idx) => {
-                  const isDone = idx <= currentStageIndex
-                  const isCurrent = idx === currentStageIndex
-                  return (
-                    <View key={stg.title} className="items-center w-12">
-                      <View
-                        className={`w-7 h-7 rounded-full items-center justify-center border-2 ${
-                          isCurrent
-                            ? 'bg-blue-600 border-blue-600 shadow-md ring-2 ring-blue-300'
-                            : isDone
-                            ? 'bg-emerald-500 border-emerald-500'
-                            : 'bg-white border-slate-300'
-                        }`}
-                      >
-                        <Text className="text-xs">{isDone ? (isCurrent ? stg.icon : '✓') : stg.icon}</Text>
-                      </View>
-                      <Text
-                        className={`text-[9.5px] mt-1 text-center font-extrabold ${
-                          isCurrent ? 'text-blue-700' : isDone ? 'text-slate-800' : 'text-slate-400'
-                        }`}
-                      >
-                        {stg.title}
-                      </Text>
-                    </View>
-                  )
-                })}
-              </View>
-            </View>
-
-            {/* Bottom Tap Hint */}
-            <View className="bg-slate-50 border border-slate-200 rounded-xl p-2.5 mt-2 flex-row items-center justify-between">
-              <Text className="text-slate-700 text-xs font-bold flex-1 pr-2">
-                📍 {trackerStages[currentStageIndex].desc}
-              </Text>
-              <Text className="text-blue-600 text-xs font-black">View Details ➔</Text>
+            <View className="bg-white px-3 py-1.5 rounded-xl shadow-xs shrink-0">
+              <Text className="text-blue-700 font-black text-xs">Book ➔</Text>
             </View>
           </TouchableOpacity>
+
+          {/* ── LIVE REPAIR TRACKER (INLINE DETAILS ACCORDION) ── */}
+          {(() => {
+            const effectiveStage = activeStageIndex !== null ? activeStageIndex : currentStageIndex
+            return (
+              <View className="bg-white border border-slate-200 rounded-2xl p-4 mb-4 shadow-sm overflow-hidden">
+                <View className="flex-row items-center justify-between mb-3">
+                  <View className="flex-row items-center gap-2">
+                    <View className="w-8 h-8 rounded-lg bg-blue-50 items-center justify-center">
+                      <Icon name="clock" size={16} color="#1e60ff" />
+                    </View>
+                    <View>
+                      <Text className="text-slate-900 text-[14px] font-black tracking-tight">
+                        Live Workshop Repair Tracker
+                      </Text>
+                      <Text className="text-slate-500 text-[11px] font-medium">Tap stage for live bay details</Text>
+                    </View>
+                  </View>
+                  <View className="bg-blue-600 px-2.5 py-1 rounded-full flex-row items-center gap-1.5">
+                    <View className="w-1.5 h-1.5 bg-emerald-300 rounded-full" />
+                    <Text className="text-white text-[10px] font-black">
+                      {trackerStages[currentStageIndex].title}
+                    </Text>
+                  </View>
+                </View>
+
+                {/* Clean Progress Track Bar */}
+                <View className="my-3 relative">
+                  {/* Background Track Line */}
+                  <View className="h-1.5 bg-slate-100 rounded-full overflow-hidden relative">
+                    <View
+                      className="h-full bg-blue-600 rounded-full"
+                      style={{ width: `${((currentStageIndex + 1) / trackerStages.length) * 100}%` }}
+                    />
+                  </View>
+
+                  {/* 5 Stage Node Icons */}
+                  <View className="flex-row justify-between -mt-3 px-1">
+                    {trackerStages.map((stg, idx) => {
+                      const isDone = idx <= currentStageIndex
+                      const isCurrent = idx === currentStageIndex
+                      const isSelected = effectiveStage === idx
+                      return (
+                        <TouchableOpacity
+                          key={stg.title}
+                          onPress={() => {
+                            setActiveStageIndex(idx)
+                            setShowTrackerDetails(true)
+                          }}
+                          activeOpacity={0.7}
+                          className="items-center w-12"
+                        >
+                          <View
+                            className={`w-7 h-7 rounded-full items-center justify-center border-2 ${
+                              isSelected
+                                ? 'bg-blue-600 border-blue-600 shadow-md'
+                                : isDone
+                                ? 'bg-emerald-500 border-emerald-500'
+                                : 'bg-white border-slate-300'
+                            }`}
+                          >
+                            <Icon
+                              name={isDone && !isCurrent && !isSelected ? 'check' : stg.icon}
+                              size={12}
+                              color={isDone || isCurrent || isSelected ? '#ffffff' : '#94a3b8'}
+                              strokeWidth={2.5}
+                            />
+                          </View>
+                          <Text
+                            className={`text-[9.5px] mt-1 text-center font-bold ${
+                              isSelected ? 'text-blue-700 font-black' : isDone ? 'text-slate-800' : 'text-slate-400'
+                            }`}
+                          >
+                            {stg.title}
+                          </Text>
+                        </TouchableOpacity>
+                      )
+                    })}
+                  </View>
+                </View>
+
+                {/* Bottom Toggle Bar */}
+                <TouchableOpacity
+                  onPress={() => {
+                    if (activeStageIndex === null) {
+                      setActiveStageIndex(currentStageIndex)
+                    }
+                    setShowTrackerDetails((prev) => !prev)
+                  }}
+                  activeOpacity={0.8}
+                  className="bg-slate-50 border border-slate-200/80 rounded-xl p-2.5 mt-2 flex-row items-center justify-between"
+                >
+                  <Text className="text-slate-700 text-xs font-semibold flex-1 pr-2" numberOfLines={1}>
+                    📍 {trackerStages[effectiveStage].desc}
+                  </Text>
+                  <Text className="text-blue-600 text-xs font-black">
+                    {showTrackerDetails ? 'Hide Details ▲' : 'View Details ▼'}
+                  </Text>
+                </TouchableOpacity>
+
+                {/* Inline Expanded Stage Details Box */}
+                {showTrackerDetails && (
+                  <View className="mt-3 pt-3 border-t border-slate-100">
+                    <View className="flex-row items-center justify-between pb-2 mb-2 border-b border-slate-100">
+                      <View className="flex-row items-center gap-1.5">
+                        <Text className="text-slate-900 font-black text-xs">
+                          Stage {effectiveStage + 1}: {trackerStages[effectiveStage].title}
+                        </Text>
+                      </View>
+                      <View className="bg-blue-50 px-2 py-0.5 rounded-md border border-blue-100">
+                        <Text className="text-blue-700 text-[10.5px] font-bold">
+                          {effectiveStage <= currentStageIndex ? 'Active / Completed' : 'Pending Step'}
+                        </Text>
+                      </View>
+                    </View>
+
+                    <View className="space-y-1.5 bg-slate-50 p-3 rounded-xl border border-slate-200/70">
+                      <View className="flex-row justify-between py-1 border-b border-slate-200/60">
+                        <Text className="text-slate-600 font-semibold text-xs">Job Card Number:</Text>
+                        <Text className="text-slate-900 font-mono font-black text-xs">{jc ? `#${jc}` : '—'}</Text>
+                      </View>
+                      <View className="flex-row justify-between py-1 border-b border-slate-200/60">
+                        <Text className="text-slate-600 font-semibold text-xs">Assigned Advisor:</Text>
+                        <Text className="text-slate-900 font-bold text-xs">{dash(advisor)}</Text>
+                      </View>
+                      <View className="flex-row justify-between py-1 border-b border-slate-200/60">
+                        <Text className="text-slate-600 font-semibold text-xs">Assigned Technician:</Text>
+                        <Text className="text-slate-900 font-bold text-xs">{dash(technician)}</Text>
+                      </View>
+                      <View className="flex-row justify-between py-1">
+                        <Text className="text-slate-600 font-semibold text-xs">Workshop Bay No:</Text>
+                        <Text className="text-blue-700 font-black text-xs">{dash(bayNo) || 'Floor Bay'}</Text>
+                      </View>
+                    </View>
+                  </View>
+                )}
+              </View>
+            )
+          })()}
 
           {/* ── ACTION SHORTCUT TILES ── */}
           <View className="flex-row flex-wrap" style={{ gap: 10, marginBottom: 2 }}>
             <ActionTile
-              emoji="🚨"
+              icon="alert-circle"
               title="Tell Us Your Problem"
               subtitle="Register complaints & issues"
               border="#fed7aa"
@@ -378,7 +485,7 @@ export default function CustomerDashboardScreen() {
               onPress={() => router.push('/(customer)/complaint')}
             />
             <ActionTile
-              emoji="📋"
+              icon="file-text"
               title="Digital Estimate"
               subtitle="Approve or reject quotation"
               border="#bfdbfe"
@@ -386,7 +493,7 @@ export default function CustomerDashboardScreen() {
               onPress={() => router.push('/(customer)/estimate')}
             />
             <ActionTile
-              emoji="🧾"
+              icon="file"
               title="Bills & Receipts"
               subtitle="Invoices & payment records"
               border="#bbf7d0"
@@ -394,7 +501,7 @@ export default function CustomerDashboardScreen() {
               onPress={() => router.push('/(customer)/invoices')}
             />
             <ActionTile
-              emoji="🎟️"
+              icon="shield-check"
               title="Digital Gate Pass"
               subtitle="Official Dealership Clearance"
               border="#e9d5ff"
@@ -402,7 +509,7 @@ export default function CustomerDashboardScreen() {
               onPress={() => router.push('/(customer)/gatepass')}
             />
             <ActionTile
-              emoji="📅"
+              icon="calendar"
               title="Book Service"
               subtitle="Schedule next visit or pickup"
               border="#c7d2fe"
@@ -410,7 +517,7 @@ export default function CustomerDashboardScreen() {
               onPress={() => router.push('/(customer)/booking')}
             />
             <ActionTile
-              emoji="📋"
+              icon="list"
               title="My Bookings"
               subtitle="Track appointments & status"
               border="#bae6fd"
@@ -418,7 +525,7 @@ export default function CustomerDashboardScreen() {
               onPress={() => router.push('/(customer)/my-bookings')}
             />
             <ActionTile
-              emoji="🛠️"
+              icon="clock"
               title="Live Repair Tracker"
               subtitle="Workshop stages for this job"
               border="#fecdd3"
@@ -426,7 +533,7 @@ export default function CustomerDashboardScreen() {
               onPress={() => router.push('/(customer)/tracker')}
             />
             <ActionTile
-              emoji="🏛️"
+              icon="phone"
               title="Helpdesk & Escalation"
               subtitle="Dealership & Tata Motors support"
               border="#fed7aa"
@@ -469,19 +576,22 @@ export default function CustomerDashboardScreen() {
           </CustomerCard>
 
           {/* ── ADVISOR CALL CARD ── */}
-          <CustomerCard style={{ backgroundColor: '#f0fdf4', borderColor: '#bbf7d0' }}>
+          <CustomerCard style={{ backgroundColor: '#f0fdf4', borderColor: '#dcfce7' }}>
             <View className="flex-row items-center">
-              <Text className="text-2xl mr-3">📞</Text>
+              <View className="w-10 h-10 rounded-xl bg-emerald-100 items-center justify-center mr-3">
+                <Icon name="phone" size={18} color="#16a34a" />
+              </View>
               <View className="flex-1">
-                <Text className="text-[13.5px] font-bold text-green-800">Need Advisor Assistance?</Text>
-                <Text className="text-[12px] text-green-700">
+                <Text className="text-[13.5px] font-bold text-emerald-900">Need Advisor Assistance?</Text>
+                <Text className="text-[12px] text-emerald-700 font-medium">
                   Service Advisor: <Text className="font-bold">{dash(advisor)}</Text>
                 </Text>
               </View>
               {advisorPhone ? (
                 <TouchableOpacity
                   onPress={() => void Linking.openURL(`tel:${advisorPhone}`)}
-                  className="bg-green-600 px-3.5 py-2 rounded-xl"
+                  activeOpacity={0.8}
+                  className="bg-emerald-600 active:bg-emerald-700 px-3.5 py-2 rounded-xl"
                 >
                   <Text className="text-white text-xs font-black">Call SA</Text>
                 </TouchableOpacity>
@@ -494,17 +604,17 @@ export default function CustomerDashboardScreen() {
             activeOpacity={0.88}
             onPress={handleManualOtaUpdate}
             disabled={checkingOta}
-            className="bg-slate-900 rounded-2xl p-4 mb-3.5 flex-row items-center justify-between border border-slate-700 shadow-lg"
+            className="bg-slate-900 rounded-2xl p-4 mb-3.5 flex-row items-center justify-between border border-slate-800 shadow-md"
           >
             <View className="flex-row items-center gap-3 flex-1 pr-2">
-              <View className="w-10 h-10 rounded-xl bg-blue-500/20 items-center justify-center border border-blue-400/40">
-                <Text className="text-xl">⚡</Text>
+              <View className="w-10 h-10 rounded-xl bg-blue-500/20 items-center justify-center border border-blue-400/30">
+                <Icon name="rotate-cw" size={18} color="#60a5fa" />
               </View>
               <View className="flex-1">
                 <Text className="text-white text-xs font-black uppercase tracking-wider">
                   {checkingOta ? 'Checking for updates…' : 'App Version & Updates'}
                 </Text>
-                <Text className="text-slate-400 text-[11px] mt-0.5" numberOfLines={1}>
+                <Text className="text-slate-400 text-[11px] mt-0.5 font-medium" numberOfLines={1}>
                   {otaStatusText || 'Tap to check and install latest OTA updates'}
                 </Text>
               </View>
@@ -517,75 +627,19 @@ export default function CustomerDashboardScreen() {
           </TouchableOpacity>
         </>
       )}
-
-      {/* ── STAGE DETAILS POPUP MODAL (TAPPING IN MIDDLE OF TRACKER) ── */}
-      <Modal
-        visible={selectedStageModal !== null}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setSelectedStageModal(null)}
-      >
-        <View className="flex-1 bg-black/60 justify-end">
-          <View className="bg-white rounded-t-3xl p-5 shadow-2xl border-t-2 border-slate-900">
-            <View className="flex-row justify-between items-center border-b border-slate-100 pb-3 mb-3">
-              <View className="flex-row items-center gap-2">
-                <Text className="text-2xl">{selectedStageModal !== null ? trackerStages[selectedStageModal].icon : '🛠️'}</Text>
-                <View>
-                  <Text className="text-slate-900 font-black text-base">
-                    Stage {selectedStageModal !== null ? selectedStageModal + 1 : ''}: {selectedStageModal !== null ? trackerStages[selectedStageModal].title : ''}
-                  </Text>
-                  <Text className="text-slate-500 text-xs">Live Floor Incharge Updates</Text>
-                </View>
-              </View>
-              <TouchableOpacity
-                onPress={() => setSelectedStageModal(null)}
-                className="w-8 h-8 rounded-full bg-slate-100 items-center justify-center"
-              >
-                <Text className="text-slate-700 font-bold">✕</Text>
-              </TouchableOpacity>
-            </View>
-
-            <View className="space-y-2 mb-4 bg-slate-50 p-3 rounded-2xl border border-slate-200">
-              <View className="flex-row justify-between py-1 border-b border-slate-200">
-                <Text className="text-slate-600 font-semibold text-xs">Job Card Number:</Text>
-                <Text className="text-slate-900 font-mono font-black text-xs">{jc ? `#${jc}` : '—'}</Text>
-              </View>
-              <View className="flex-row justify-between py-1 border-b border-slate-200">
-                <Text className="text-slate-600 font-semibold text-xs">Assigned Advisor:</Text>
-                <Text className="text-slate-900 font-bold text-xs">{dash(advisor)}</Text>
-              </View>
-              <View className="flex-row justify-between py-1 border-b border-slate-200">
-                <Text className="text-slate-600 font-semibold text-xs">Assigned Technician:</Text>
-                <Text className="text-slate-900 font-bold text-xs">{dash(job?.technician_name)}</Text>
-              </View>
-              <View className="flex-row justify-between py-1">
-                <Text className="text-slate-600 font-semibold text-xs">Workshop Bay No:</Text>
-                <Text className="text-blue-700 font-black text-xs">{dash(job?.bay_no) || 'Floor Bay'}</Text>
-              </View>
-            </View>
-
-            <TouchableOpacity
-              onPress={() => setSelectedStageModal(null)}
-              className="bg-blue-600 py-3 rounded-xl items-center"
-            >
-              <Text className="text-white font-extrabold text-xs">Close Details</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
     </CustomerScreen>
   )
 }
 
 function ActionTile({
-  emoji,
+  icon,
   title,
   subtitle,
   border,
   accent,
   onPress,
 }: {
-  emoji: string
+  icon: IconName
   title: string
   subtitle: string
   border: string
@@ -595,22 +649,41 @@ function ActionTile({
   return (
     <TouchableOpacity
       onPress={onPress}
+      activeOpacity={0.8}
       style={{
         width: '48%',
         flexGrow: 1,
         backgroundColor: '#ffffff',
         borderWidth: 1,
-        borderColor: border,
-        borderLeftWidth: 4,
+        borderColor: '#f1f5f9',
+        borderLeftWidth: 3.5,
         borderLeftColor: accent,
-        borderRadius: 14,
+        borderRadius: 16,
         padding: 14,
+        shadowColor: '#0f172a',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.04,
+        shadowRadius: 6,
         elevation: 2,
       }}
     >
-      <Text style={{ fontSize: 24, marginBottom: 4 }}>{emoji}</Text>
-      <Text style={{ fontSize: 13.5, fontWeight: '900', color: '#0f172a' }}>{title}</Text>
-      <Text style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>{subtitle}</Text>
+      <View
+        style={{
+          width: 36,
+          height: 36,
+          borderRadius: 10,
+          backgroundColor: '#f8fafc',
+          alignItems: 'center',
+          justifyContent: 'center',
+          marginBottom: 8,
+          borderWidth: 1,
+          borderColor: border,
+        }}
+      >
+        <Icon name={icon} size={18} color={accent} strokeWidth={2} />
+      </View>
+      <Text style={{ fontSize: 13.5, fontWeight: '800', color: '#0f172a', letterSpacing: -0.2 }}>{title}</Text>
+      <Text style={{ fontSize: 11, color: '#64748b', marginTop: 3, fontWeight: '500' }}>{subtitle}</Text>
     </TouchableOpacity>
   )
 }

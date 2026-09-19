@@ -44,9 +44,11 @@ export default function RootLayout() {
   } = useMandatoryOTAUpdate()
 
   useEffect(() => {
+    let isMounted = true
+
     async function loadFonts() {
       try {
-        await Font.loadAsync({
+        const fontPromise = Font.loadAsync({
           'SpaceGrotesk_400Regular': SpaceGrotesk_400Regular,
           'SpaceGrotesk_500Medium': SpaceGrotesk_500Medium,
           'SpaceGrotesk_600SemiBold': SpaceGrotesk_600SemiBold,
@@ -59,16 +61,28 @@ export default function RootLayout() {
           'JetBrainsMono_500Medium': JetBrainsMono_500Medium,
           'JetBrainsMono_600SemiBold': JetBrainsMono_600SemiBold,
         })
-        setFontsLoaded(true)
+        const timeoutPromise = new Promise(resolve => setTimeout(resolve, 2000))
+        await Promise.race([fontPromise, timeoutPromise])
       } catch (e) {
         console.error('Error loading fonts:', e)
-        setFontsLoaded(true) // Continue even if fonts fail to load
       } finally {
+        if (isMounted) {
+          setFontsLoaded(true)
+        }
         await SplashScreen.hideAsync().catch(() => {})
       }
     }
 
     loadFonts()
+
+    const hideTimer = setTimeout(() => {
+      SplashScreen.hideAsync().catch(() => {})
+    }, 1500)
+
+    return () => {
+      isMounted = false
+      clearTimeout(hideTimer)
+    }
   }, [])
 
   return (
