@@ -29,6 +29,7 @@ import {
   mechanicalPendingRemark,
   setAccountsMechanicalPendingRemark,
   listAccountsBodyshopCases,
+  listAccountsBodyshopPaymentLines,
   listAccountsMechanicalCases,
   listAccountsMechanicalPaymentLines,
   listAccountsMechanicalPayments,
@@ -52,9 +53,11 @@ import {
   canAccountsMechanicalKeepOnCredit,
   issueMechanicalAccountsGatePass,
   settlementCardFromAccountsRow,
+  sumAccountsBodyshopPaymentModeKpis,
   sumAccountsMechanicalPaymentModeKpis,
   upsertAccountsMechanicalInvoice,
   type AccountsBodyshopCase,
+  type AccountsBodyshopPaymentLine,
   type AccountsMechanicalCase,
   type AccountsMechanicalPayment,
   type AccountsPaymentMode,
@@ -228,6 +231,7 @@ export default function AccountsPage() {
   const [mechStatusFilter, setMechStatusFilter] = useState<MechanicalStatusFilter>('all')
   const [mechPaymentModeFilter, setMechPaymentModeFilter] = useState<MechanicalPaymentModeFilter>('all')
   const [mechPayLines, setMechPayLines] = useState<AccountsMechanicalPayment[]>([])
+  const [bsPayLines, setBsPayLines] = useState<AccountsBodyshopPaymentLine[]>([])
 
   const [editRow, setEditRow] = useState<AccountsMechanicalCase | null>(null)
   const [invoiceNumber, setInvoiceNumber] = useState('')
@@ -275,14 +279,16 @@ export default function AccountsPage() {
     setLoading(true)
     setError(null)
     try {
-      const [mech, bs, lines] = await Promise.all([
+      const [mech, bs, lines, bsLines] = await Promise.all([
         listAccountsMechanicalCases(),
         listAccountsBodyshopCases(),
         listAccountsMechanicalPaymentLines().catch(() => [] as AccountsMechanicalPayment[]),
+        listAccountsBodyshopPaymentLines().catch(() => [] as AccountsBodyshopPaymentLine[]),
       ])
       setMechRows(mech)
       setBsRows(bs)
       setMechPayLines(lines)
+      setBsPayLines(bsLines)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load Accounts')
     } finally {
@@ -342,16 +348,19 @@ export default function AccountsPage() {
     [searchedMechAllDates, mechPayLines, dateRange, mechStatusFilter, mechPaymentModeFilter],
   )
 
-  const periodBs = useMemo(() => {
+  const searchedBsAllDates = useMemo(() => {
     const q = search.trim().toLowerCase()
-    let rows = filterAccountsCasesByViewDate(
-      bsRows,
+    if (!q) return bsRows
+    return bsRows.filter((r) => blobOf(r.job_card_no, r.reg_number, r.invoice_number, r.customer_name, r.sa_name).includes(q))
+  }, [bsRows, search])
+
+  const periodBs = useMemo(() => {
+    return filterAccountsCasesByViewDate(
+      searchedBsAllDates,
       (r) => accountsBodyshopViewDateYmd(r.invoice_date),
       dateRange,
     )
-    if (q) rows = rows.filter((r) => blobOf(r.job_card_no, r.reg_number, r.invoice_number, r.customer_name, r.sa_name).includes(q))
-    return rows
-  }, [bsRows, dateRange, search])
+  }, [searchedBsAllDates, dateRange])
 
   const searchedBs = useMemo(() => {
     if (bsFilter === 'remaining') return periodBs.filter((r) => isBodyshopOutstandingOpen(r))
@@ -387,14 +396,20 @@ export default function AccountsPage() {
     const pending = periodBs.filter((r) => isAccountsStatusPending(r.derived_payment_status)).length
     const received = periodBs.filter((r) => isBodyshopOverallReceived(r)).length
     const billed = periodBs.reduce((s, r) => s + Number(r.invoice_amount ?? r.billed_amount ?? 0), 0)
+    const modes = sumAccountsBodyshopPaymentModeKpis({
+      cases: searchedBsAllDates,
+      lines: bsPayLines,
+      range: dateRange,
+    })
     return {
       remaining,
       pending,
       received,
       billed,
       billedCount: periodBs.length,
+      ...modes,
     }
-  }, [periodBs])
+  }, [periodBs, searchedBsAllDates, bsPayLines, dateRange])
 
   function patchMechRow(saved: AccountsMechanicalCase) {
     setMechRows((prev) => prev.map((r) => (r.reception_entry_id === saved.reception_entry_id ? { ...r, ...saved } : r)))
@@ -1092,18 +1107,16 @@ export default function AccountsPage() {
           />
           <KpiTile
             label="Cash"
-            value="—"
-            title="Bodyshop settlement lines do not store payment mode"
+            value={inrKpi(bsKpis.cash)}
           />
           <KpiTile
             label="UPI"
-            value="—"
-            title="Bodyshop settlement lines do not store payment mode"
+            value={inrKpi(bsKpis.upi)}
           />
           <KpiTile
             label="Credit Card"
-            value="—"
-            title="Bodyshop settlement lines do not store payment mode"
+            value={inrKpi(bsKpis.card)}
+            title="Stored payment mode: card"
           />
         </div>
       )}

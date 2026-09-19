@@ -2849,4 +2849,135 @@ console.log('verify_accounts_split_payment_drafts: Received Amount Discount-excl
   console.log('verify_accounts_split_payment_drafts: Admin receipt-edit recalc/Gatepass/voucher checks passed')
 }
 
+// ---------------------------------------------------------------------------
+// Bodyshop Cash / UPI / Credit Card KPIs — keep aligned with
+// src/lib/api/accounts.ts sumAccountsBodyshopPaymentModeKpis
+// Customer receipts only. Period = txn_date. Stored modes cash / upi / card.
+// Does not change Mechanical helpers or settlement status.
+// ---------------------------------------------------------------------------
+
+function isBodyshopAccountsCustomerReceiptLine(line) {
+  if (line.is_reversed) return false
+  return String(line.party ?? '').toLowerCase() === 'customer'
+    && String(line.line_type ?? '').toLowerCase() === 'receipt'
+    && String(line.component ?? '').toUpperCase() === 'CUSTOMER'
+}
+
+function bodyshopSettlementReceiptDate(line) {
+  const raw = String(line.txn_date ?? '').trim()
+  if (!raw) return null
+  const ymd = raw.slice(0, 10)
+  return /^\d{4}-\d{2}-\d{2}$/.test(ymd) ? ymd : null
+}
+
+function sumAccountsBodyshopPaymentModeKpis({ cases, lines, range }) {
+  const ids = new Set(cases.map((row) => row.repair_card_id))
+  return sumAccountsPaymentModeTotals(
+    lines.filter((line) =>
+      ids.has(line.repair_card_id)
+      && isBodyshopAccountsCustomerReceiptLine(line)
+      && isAccountsViewDateInRange(bodyshopSettlementReceiptDate(line), range)
+    ),
+  )
+}
+
+{
+  const day = { from: '2026-09-19', to: '2026-09-19' }
+  const otherDay = { from: '2026-09-18', to: '2026-09-18' }
+  const allRange = { from: '', to: '' }
+  const cases = [{ repair_card_id: 916 }, { repair_card_id: 917 }, { repair_card_id: 918 }]
+  const audited = {
+    id: 303,
+    repair_card_id: 916,
+    party: 'customer',
+    line_type: 'receipt',
+    component: 'CUSTOMER',
+    amount: 38090,
+    payment_mode: 'upi',
+    txn_date: '2026-09-19',
+    is_reversed: false,
+  }
+  const cashLine = {
+    id: 400,
+    repair_card_id: 917,
+    party: 'customer',
+    line_type: 'receipt',
+    component: 'CUSTOMER',
+    amount: 1000,
+    payment_mode: 'cash',
+    txn_date: '2026-09-19',
+    is_reversed: false,
+  }
+  const cardLine = {
+    id: 401,
+    repair_card_id: 918,
+    party: 'customer',
+    line_type: 'receipt',
+    component: 'CUSTOMER',
+    amount: 2500,
+    payment_mode: 'card',
+    txn_date: '2026-09-19',
+    is_reversed: false,
+  }
+  const reversedUpi = { ...audited, id: 402, is_reversed: true, amount: 999 }
+  const nullMode = { ...audited, id: 403, payment_mode: null, amount: 777 }
+  const insurance = {
+    id: 404,
+    repair_card_id: 916,
+    party: 'insurance',
+    line_type: 'do_component',
+    component: 'MAIN',
+    amount: 5000,
+    payment_mode: null,
+    txn_date: '2026-09-19',
+    is_reversed: false,
+  }
+  const refund = {
+    id: 405,
+    repair_card_id: 916,
+    party: 'customer',
+    line_type: 'refund',
+    component: 'CUSTOMER_REFUND',
+    amount: 200,
+    payment_mode: 'upi',
+    txn_date: '2026-09-19',
+    is_reversed: false,
+  }
+  const lines = [audited, cashLine, cardLine, reversedUpi, nullMode, insurance, refund]
+
+  const onDay = sumAccountsBodyshopPaymentModeKpis({ cases, lines, range: day })
+  assert(onDay.upi === 38090, `BS KPI: audited UPI 38090 on 19-Sep, got ${onDay.upi}`)
+  assert(onDay.cash === 1000, `BS KPI: cash only 1000, got ${onDay.cash}`)
+  assert(onDay.card === 2500, `BS KPI: card only 2500, got ${onDay.card}`)
+
+  const offDay = sumAccountsBodyshopPaymentModeKpis({ cases, lines, range: otherDay })
+  assert(offDay.upi === 0 && offDay.cash === 0 && offDay.card === 0, `BS KPI: 18-Sep excludes txn_date 19-Sep, got ${JSON.stringify(offDay)}`)
+
+  const allDates = sumAccountsBodyshopPaymentModeKpis({ cases, lines, range: allRange })
+  assert(allDates.upi === 38090 && allDates.cash === 1000 && allDates.card === 2500, `BS KPI: All includes 19-Sep, got ${JSON.stringify(allDates)}`)
+
+  assert(normalizeAccountsPaymentMode('upi') === 'upi', 'BS KPI: canonical upi')
+  assert(normalizeAccountsPaymentMode('cash') === 'cash', 'BS KPI: canonical cash')
+  assert(normalizeAccountsPaymentMode('card') === 'card', 'BS KPI: credit card stored as card')
+  assert(normalizeAccountsPaymentMode('credit card') == null, 'BS KPI: display label is not stored')
+  assert(normalizeAccountsPaymentMode(null) == null, 'BS KPI: NULL mode is not inferred')
+
+  const mechUnchanged = sumAccountsMechanicalPaymentModeKpis({
+    cases: [{ reception_entry_id: 1, payment_status: 'received' }],
+    lines: [{
+      reception_entry_id: 1,
+      amount: 38090,
+      payment_mode: 'upi',
+      payment_received_date: '2026-09-19',
+      posted_at: '2026-09-19T13:41:00+05:30',
+      reference: null,
+    }],
+    range: day,
+    statusFilter: 'all',
+  })
+  assert(mechUnchanged.upi === 38090 && mechUnchanged.cash === 0 && mechUnchanged.card === 0, 'BS KPI: Mechanical helper still line-grain UPI')
+
+  console.log('verify_accounts_split_payment_drafts: Bodyshop payment-mode KPI checks passed')
+}
+
 

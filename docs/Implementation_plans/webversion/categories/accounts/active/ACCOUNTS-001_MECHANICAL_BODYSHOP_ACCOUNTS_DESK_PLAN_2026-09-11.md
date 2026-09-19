@@ -2,7 +2,7 @@
 
 **Plan ID:** ACCOUNTS-001  
 **Created:** 2026-09-11  
-**Last Updated:** 2026-09-17
+**Last Updated:** 2026-09-19
 **Priority:** HIGH
 **Owner:** Accounts + Platform Team  
 **Status:** Active (web implemented; DBL-0055 Accounts DO post pending apply)  
@@ -153,7 +153,7 @@ Pattern: `src/pages/BodyshopRecoveryPage.tsx` (KPIs, search, table, Excel, on-pa
 
 - Columns: JC, reg, customer, branch, SA, invoice number, invoice date, billed amount, DO amount / remaining, customer diff, remaining, received, outstanding, overall payment status
 - Post Payment opens `variant="accounts_receipt"`
-- KPI: billed vehicles, outstanding sum, overall pending / partial / received split
+- KPI: billed vehicles, outstanding sum, overall pending / partial / received split. Cash / UPI / Credit Card money is customer-receipt grain on `bodyshop_settlement_lines` (`party=customer`, `line_type=receipt`, `component=CUSTOMER`, not reversed) dated by `txn_date`. Stored modes `cash` / `upi` / `card` via `normalizeAccountsPaymentMode`. NULL historical modes, insurance/DO lines, refunds, and reversals contribute ₹0. Independent of overall Partial/Received. Mechanical payment-mode helpers stay Mechanical-only.
 
 ---
 
@@ -181,6 +181,7 @@ Pattern: `src/pages/BodyshopRecoveryPage.tsx` (KPIs, search, table, Excel, on-pa
 - [ ] **Task 3.13:** Per-receipt Remark on Mechanical payment entries (DBL-0073). Layout Amount / Mode / Date then Reference no. / Remark. Persist on `accounts_mechanical_payment_lines.remark`.
 - [x] **Task 3.15:** Mechanical table Pending Remark between Remaining and Status (DBL-0075). Persist on existing `accounts_mechanical_invoices.payment_notes`. Inline save. Do not clear on received. Do not change money or vouchers.
 - [x] **Task 3.16:** Mechanical table date authority by status: All/Pending = Mark Done; Received = receipt date. Received + Cash/UPI/Card uses Period-scoped receipts. Case-level dedupe. Do not change Received Amount, payment-mode KPIs, or Bodyshop.
+- [x] **Task 3.17:** Bodyshop Cash / UPI / Credit Card KPIs from `bodyshop_settlement_lines` customer receipts (`txn_date`, stored `payment_mode`). No status/recalc change. Mechanical helpers unchanged.
 
 ### Phase 4: Closeout
 - [x] **Task 4.1:** MODULE_ROUTE_CONTRACT (grant Accounts users after SQL apply).
@@ -230,6 +231,7 @@ Pattern: `src/pages/BodyshopRecoveryPage.tsx` (KPIs, search, table, Excel, on-pa
 ✅ 3.14 | Late voucher assign + fail-closed Busy Export | Eng | 2026-09-16 | 2026-09-16 | DBL-0074 APPLIED; line 222 JApp/26-27/0195; 221 stays 0140
 ✅ 3.15 | Mechanical Pending Remark | Eng | 2026-09-17 | 2026-09-17 | DBL-0075 APPLIED; reuses invoice payment_notes; practical leftover_fail=0
 ✅ 3.16 | Mechanical table date authority by status | Eng | 2026-09-17 | 2026-09-17 | Received = receipt date; All/Pending = Mark Done; no schema
+✅ 3.17 | Bodyshop payment-mode KPIs | Eng | 2026-09-19 | 2026-09-19 | Customer receipts + txn_date; no schema; Mechanical unchanged
 ⏳ 3.5 | Capture Fetch from DMS | Eng | 2026-09-11 | 2026-09-11 | DBL-0048 applied; web button pending deploy
 ```
 
@@ -303,6 +305,14 @@ Pattern: `src/pages/BodyshopRecoveryPage.tsx` (KPIs, search, table, Excel, on-pa
 ---
 
 ## Notes & Lessons Learned
+
+### 2026-09-19 - Bodyshop Cash/UPI/Credit Card KPIs
+
+- Tiles are customer-receipt money in the selected Period. Date is `bodyshop_settlement_lines.txn_date`. Not invoice_date / created_at / Mechanical `payment_received_date`.
+- Predicate: `party=customer` AND `line_type=receipt` AND `component=CUSTOMER` AND `is_reversed=false`. Same customer-posted ledger as Customer Received. Insurance Main/GST/TDS, refunds, waivers, and reversed rows are excluded.
+- Stored modes reuse `normalizeAccountsPaymentMode`: `cash` / `upi` / `card`. Credit Card display label is not a stored value. NULL historical `payment_mode` is not inferred and contributes ₹0 to all three tiles.
+- Search-filtered Bodyshop cases scope contributing cards. Remaining / Pending / Received status filters do not. Overall Partial/Received and `recalc_bodyshop_settlement` are unchanged.
+- Helper: `sumAccountsBodyshopPaymentModeKpis` in `src/lib/api/accounts.ts`. Lines: `listAccountsBodyshopPaymentLines`. Checks: `scripts/verify_accounts_split_payment_drafts.mjs`.
 
 ### 2026-09-15 - Mechanical table Received Amount
 

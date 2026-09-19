@@ -75,3 +75,7 @@
 - [ ] DO receipt posts via existing MAIN path; insurance due and overall status update
 - [ ] Example 43395 / 41195 / 2200: ₹30k DO → due 11195 overall Partial; ₹2200 customer → customer Received overall still Partial; remaining DO → overall Received
 - [ ] Recovery list still insurance due only; `/busy` still exports
+- [ ] Cash / UPI / Credit Card tiles sum customer receipts (`party=customer`, `line_type=receipt`, `component=CUSTOMER`, not reversed) by stored `payment_mode` `cash` / `upi` / `card` and `txn_date` in Period
+- [ ] Live JC-MBTPLT-JP1-2627-006693 / line 303 `upi` ₹38,090 is in UPI when Period includes 19-Sep-2026; Cash and Credit Card do not include it; Period excluding 19-Sep drops it
+- [ ] NULL `payment_mode`, reversed receipts, and insurance/DO lines contribute ₹0 to all three tiles
+- [ ] Mechanical Cash/UPI/Card helpers and Bodyshop Partial/Received status are unchanged

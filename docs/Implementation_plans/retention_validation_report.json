@@ -1,6 +1,6 @@
 {
-  "generated_at_utc": "2026-09-17T06:00:15.677Z",
-  "scanned_files": 72,
+  "generated_at_utc": "2026-09-19T10:24:31.262Z",
+  "scanned_files": 73,
   "violations": 0,
   "scanned": [
     {
@@ -181,6 +181,14 @@
     },
     {
       "file": "docs/Implementation_plans/mobileversion/categories/redesign/active/redesign_bodypaint_module.md",
+      "checks": {
+        "metrics_automated_rows": 0,
+        "changelog_automated_rows": 0,
+        "snapshot_blocks": 0
+      }
+    },
+    {
+      "file": "docs/Implementation_plans/mobileversion/categories/release/active/MOBILE-012_PLAY_APP_STORE_PUBLISH_PLAN.md",
       "checks": {
         "metrics_automated_rows": 0,
         "changelog_automated_rows": 0,

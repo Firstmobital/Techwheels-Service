@@ -2,6 +2,7 @@ import { AUTODOC_BUCKET } from '../autodocStorage'
 import { busyInvoiceLookupKey, busyJobCardLookupKey, isCancelledInvoiceStatus, normalizeInvoiceNumber } from '../busy/eligibility'
 import { normalizePersonName, resolveBusyPaymentAccountCr } from '../busy/partyName'
 import type { IssuedGatePassRecord } from '../gatepass'
+import { isCustomerPaymentLine } from '../bodyshopDoPaymentCpMode'
 import { supabase } from '../supabase'
 import type { OverallStatus, RepairCard } from './bodyshopRepair'
 import { settlementRpcError } from './bodyshopSettlement'
@@ -110,6 +111,18 @@ export interface AccountsBodyshopCase {
   derived_payment_status: string | null
 }
 
+export interface AccountsBodyshopPaymentLine {
+  id: number
+  repair_card_id: number
+  party: string
+  line_type: string
+  component: string
+  amount: number
+  payment_mode: string | null
+  txn_date: string
+  is_reversed: boolean
+}
+
 export interface UpsertMechanicalInvoiceInput {
   receptionEntryId: number
   invoiceNumber: string | null
@@ -140,6 +153,32 @@ export async function listAccountsBodyshopCases(): Promise<AccountsBodyshopCase[
   const { data, error } = await supabase.rpc('list_accounts_bodyshop_cases')
   if (error) throw new Error(settlementRpcError(error))
   return asArray<AccountsBodyshopCase>(data)
+}
+
+/** Customer receipt lines for Accounts Bodyshop Cash/UPI/Card KPIs. Same ledger as Customer Received. */
+export async function listAccountsBodyshopPaymentLines(): Promise<AccountsBodyshopPaymentLine[]> {
+  const pageSize = 1000
+  const columns = 'id, repair_card_id, party, line_type, component, amount, payment_mode, txn_date, is_reversed'
+  const rows: AccountsBodyshopPaymentLine[] = []
+  for (let from = 0; ; from += pageSize) {
+    const { data, error } = await supabase
+      .from('bodyshop_settlement_lines')
+      .select(columns)
+      .eq('party', 'customer')
+      .eq('line_type', 'receipt')
+      .eq('component', 'CUSTOMER')
+      .eq('is_reversed', false)
+      .order('id', { ascending: true })
+      .range(from, from + pageSize - 1)
+    if (error) {
+      if (/payment_mode/i.test(error.message || '')) return []
+      throw new Error(settlementRpcError(error))
+    }
+    const batch = asArray<AccountsBodyshopPaymentLine>(data)
+    rows.push(...batch)
+    if (batch.length < pageSize) break
+  }
+  return rows
 }
 
 export async function lookupAccountsMechanicalDmsInvoice(
@@ -721,7 +760,7 @@ export function normalizeAccountsPaymentMode(
 }
 
 export function sumAccountsPaymentModeTotals(
-  lines: Array<Pick<AccountsMechanicalPayment, 'amount' | 'payment_mode'>>,
+  lines: Array<{ amount: number | null | undefined; payment_mode: string | null | undefined }>,
 ): { cash: number; upi: number; card: number } {
   let cash = 0
   let upi = 0
@@ -761,6 +800,45 @@ export function sumAccountsMechanicalPaymentModeKpis<T extends { reception_entry
     filterMechanicalPaymentLinesByReceiptDate(
       input.lines.filter((line) => ids.has(line.reception_entry_id) && !isMechanicalDiscountPaymentLine(line)),
       input.range,
+    ),
+  )
+}
+
+export function isBodyshopAccountsCustomerReceiptLine(
+  line: Pick<AccountsBodyshopPaymentLine, 'party' | 'line_type' | 'component' | 'is_reversed'>,
+): boolean {
+  if (line.is_reversed) return false
+  return isCustomerPaymentLine(line)
+}
+
+/** Bodyshop KPI receipt date: settlement line `txn_date`. Not invoice_date / created_at. */
+export function bodyshopSettlementReceiptDate(
+  line: Pick<AccountsBodyshopPaymentLine, 'txn_date'>,
+): string | null {
+  const raw = String(line.txn_date ?? '').trim()
+  if (!raw) return null
+  const ymd = raw.slice(0, 10)
+  return /^\d{4}-\d{2}-\d{2}$/.test(ymd) ? ymd : null
+}
+
+/**
+ * Bodyshop Cash / UPI / Credit Card KPIs = customer receipts in the selected Period.
+ * Predicate: party=customer, line_type=receipt, component=CUSTOMER, not reversed.
+ * Date: `txn_date`. Stored modes cash / upi / card via normalizeAccountsPaymentMode.
+ * NULL / cheque / bank / other / insurance / refund / waiver contribute ₹0.
+ * Does not use Mechanical payment lines or settlement status.
+ */
+export function sumAccountsBodyshopPaymentModeKpis<T extends { repair_card_id: number }>(input: {
+  cases: T[]
+  lines: Array<Pick<AccountsBodyshopPaymentLine, 'repair_card_id' | 'party' | 'line_type' | 'component' | 'amount' | 'payment_mode' | 'txn_date' | 'is_reversed'>>
+  range: { from: string; to: string }
+}): { cash: number; upi: number; card: number } {
+  const ids = new Set(input.cases.map((row) => row.repair_card_id))
+  return sumAccountsPaymentModeTotals(
+    input.lines.filter((line) =>
+      ids.has(line.repair_card_id)
+      && isBodyshopAccountsCustomerReceiptLine(line)
+      && isAccountsViewDateInRange(bodyshopSettlementReceiptDate(line), input.range)
     ),
   )
 }
