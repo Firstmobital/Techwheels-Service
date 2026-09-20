@@ -16,69 +16,76 @@ export interface BackgroundSyncConfig {
   handlers: Record<string, (item: any) => Promise<void>>
 }
 
+let activeHandlers: Record<string, (item: any) => Promise<void>> = {}
 let isBackgroundSyncRegistered = false
+
+// TaskManager.defineTask must be defined at the top level of the JS bundle
+try {
+  TaskManager.defineTask(BACKGROUND_SYNC_TASK, async () => {
+    try {
+      logEvent('background_sync_triggered', {}, 'background-sync')
+
+      const queue = await syncQueue.getQueue()
+      const pending = queue.filter(item => item.retryCount < item.maxRetries)
+
+      if (pending.length === 0) {
+        return BackgroundFetch.BackgroundFetchResult.NoData
+      }
+
+      let syncedCount = 0
+
+      for (const item of pending) {
+        try {
+          const handler = activeHandlers[item.resource]
+          if (handler) {
+            await handler(item)
+            await syncQueue.dequeue(item.id)
+            syncedCount++
+          }
+        } catch (error) {
+          logEvent('background_sync_item_error', {
+            resource: item.resource,
+            id: item.id,
+            error: error instanceof Error ? error.message : 'Unknown error',
+          }, 'background-sync')
+        }
+      }
+
+      logEvent('background_sync_complete', {
+        synced_count: syncedCount,
+        total_pending: pending.length,
+      }, 'background-sync')
+
+      // Flush logs before task completes
+      await flushPendingLogsToS3({
+        reason: 'background-sync-complete',
+      }).catch(() => {})
+
+      return syncedCount > 0
+        ? BackgroundFetch.BackgroundFetchResult.NewData
+        : BackgroundFetch.BackgroundFetchResult.NoData
+    } catch (error) {
+      logEvent('background_sync_error', {
+        error: error instanceof Error ? error.message : 'Unknown error',
+      }, 'background-sync')
+
+      await flushPendingLogsToS3({
+        reason: 'background-sync-error',
+      }).catch(() => {})
+
+      return BackgroundFetch.BackgroundFetchResult.Failed
+    }
+  })
+} catch {
+  // Ignore in environments where task manager is unavailable
+}
 
 /**
  * Initialize background sync task
  */
 export const initializeBackgroundSync = async (config: BackgroundSyncConfig) => {
   try {
-    // Define the task
-    TaskManager.defineTask(BACKGROUND_SYNC_TASK, async () => {
-      try {
-        logEvent('background_sync_triggered', {}, 'background-sync')
-
-        const queue = await syncQueue.getQueue()
-        const pending = queue.filter(item => item.retryCount < item.maxRetries)
-
-        if (pending.length === 0) {
-          return BackgroundFetch.BackgroundFetchResult.NoData
-        }
-
-        let syncedCount = 0
-
-        for (const item of pending) {
-          try {
-            const handler = config.handlers[item.resource]
-            if (handler) {
-              await handler(item)
-              await syncQueue.dequeue(item.id)
-              syncedCount++
-            }
-          } catch (error) {
-            logEvent('background_sync_item_error', {
-              resource: item.resource,
-              id: item.id,
-              error: error instanceof Error ? error.message : 'Unknown error',
-            }, 'background-sync')
-          }
-        }
-
-        logEvent('background_sync_complete', {
-          synced_count: syncedCount,
-          total_pending: pending.length,
-        }, 'background-sync')
-
-        // Flush logs before task completes
-        await flushPendingLogsToS3({
-          reason: 'background-sync-complete',
-        })
-
-        return syncedCount > 0
-          ? BackgroundFetch.BackgroundFetchResult.NewData
-          : BackgroundFetch.BackgroundFetchResult.NoData
-      } catch (error) {
-        logEvent('background_sync_error', {
-          error: error instanceof Error ? error.message : 'Unknown error',
-        }, 'background-sync')
-
-        await flushPendingLogsToS3({
-          reason: 'background-sync-error',
-        })
-
-        return BackgroundFetch.BackgroundFetchResult.Failed
-      }
-    })
+    activeHandlers = { ...activeHandlers, ...config.handlers }
 
     // Register the task
     await BackgroundFetch.registerTaskAsync(BACKGROUND_SYNC_TASK, {
