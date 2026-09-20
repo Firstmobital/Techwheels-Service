@@ -14,3 +14,9 @@ declare module 'expo-splash-screen' {
   export function hide(): void
   export function setOptions(options: any): void
 }
+
+declare module '*.css' {
+  const content: any
+  export default content
+}
+

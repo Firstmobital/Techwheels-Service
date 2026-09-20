@@ -174,14 +174,18 @@ export function useMandatoryOTAUpdate() {
       }
 
       logOTAEvent('ota_reload_start', {})
-      await flushPendingLogsToS3({ reason: 'ota-reload' })
-      await Updates.reloadAsync()
+      await flushPendingLogsToS3({ reason: 'ota-reload' }).catch(() => {})
+      try {
+        await Updates.reloadAsync()
+      } catch (reloadErr) {
+        console.warn('Updates.reloadAsync error:', reloadErr)
+      }
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error)
       logOTAEvent('ota_apply_error', {
         error_message: msg,
       })
-      await flushPendingLogsToS3({ reason: 'ota-apply-error' })
+      await flushPendingLogsToS3({ reason: 'ota-apply-error' }).catch(() => {})
       setUpdateErrorMessage('Update download failed. Check internet and retry.')
       setModalVisible(true)
     } finally {
