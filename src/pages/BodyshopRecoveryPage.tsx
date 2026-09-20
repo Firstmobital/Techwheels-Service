@@ -93,6 +93,8 @@ const PRIMARY_DOCS: { key: string; label: string }[] = [
   { key: 'doc_claim_form', label: 'Claim Form' },
   { key: 'doc_insurance', label: 'Insurance Copy' },
   { key: 'doc_rc', label: 'RC' },
+  { key: 'doc_tp_affidavit', label: 'T/P Affidavit' },
+  { key: 'doc_kyc', label: 'KYC' },
 ]
 
 const DOC_LABELS: Record<string, string> = {
@@ -108,6 +110,7 @@ const DOC_LABELS: Record<string, string> = {
   doc_bank_detail: 'Bank detail',
   doc_estimate: 'Estimate',
   doc_survey_approval: 'Survey approval',
+  doc_tp_affidavit: 'T/P Affidavit',
 }
 
 type StatusFilter = 'all' | 'pending' | 'partial' | 'not_received' | 'received'

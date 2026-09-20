@@ -107,8 +107,16 @@ export function CustomerScreen({
     router.push(route as any)
   }
 
+  const isAccident = String(selectedVehicle?.service_type || '').toLowerCase().includes('accident')
+
   const menuItems: { label: string; icon: IconName; route: string; desc: string }[] = [
-    { label: 'Live Service Tracker', icon: 'clock', route: '/(customer)/tracker', desc: 'Real-time job card stage & technician bay' },
+    {
+      label: isAccident ? 'Bodyshop Repair Tracker' : 'Live Service Tracker',
+      icon: 'clock',
+      route: '/(customer)/tracker',
+      desc: isAccident ? '18-stage accident repair, surveyor inspection & DO tracking' : 'Real-time job card stage & technician bay',
+    },
+    { label: 'Insurance Claim Documents', icon: 'file-text', route: '/(customer)/documents', desc: 'Upload DL, RC, Claim Form & KYC docs' },
     { label: 'Bills, Quotations & Receipts', icon: 'file-text', route: '/(customer)/invoices', desc: 'Invoices, estimates & payments' },
     { label: 'Official Vehicle Gate Pass', icon: 'shield-check', route: '/(customer)/gatepass', desc: 'Accounts approved gate clearance' },
     { label: '24x7 Helpdesk Escalation', icon: 'phone', route: '/(customer)/helpdesk', desc: 'CRM, Service Manager & Tata team' },
@@ -220,29 +228,33 @@ export function CustomerScreen({
         </View>
 
         {/* Page Title Row with Back Navigation */}
-        <View className="flex-row items-center mt-3 pt-1">
-          {shouldShowBack && (
-            <TouchableOpacity
-              onPress={() => {
-                if (router.canGoBack()) {
-                  router.back()
-                } else {
-                  router.replace('/(customer)')
-                }
-              }}
-              accessibilityRole="button"
-              accessibilityLabel="Go back to Home"
-              className="flex-row items-center bg-slate-100 active:bg-slate-200 border border-slate-200 px-3 py-1.5 rounded-xl mr-3"
-            >
-              <Text className="text-slate-900 font-black text-sm mr-1.5">←</Text>
-              <Text className="text-slate-800 font-bold text-xs">Home</Text>
-            </TouchableOpacity>
-          )}
-          <View className="flex-1">
-            <Text className="text-slate-900 text-lg font-black leading-6">{title}</Text>
-            {subtitle ? <Text className="text-slate-500 text-[12px] mt-0.5">{subtitle}</Text> : null}
+        {(shouldShowBack || Boolean(title)) && (
+          <View className="flex-row items-center mt-3 pt-1">
+            {shouldShowBack && (
+              <TouchableOpacity
+                onPress={() => {
+                  if (router.canGoBack()) {
+                    router.back()
+                  } else {
+                    router.replace('/(customer)')
+                  }
+                }}
+                accessibilityRole="button"
+                accessibilityLabel="Go back to Home"
+                className="flex-row items-center bg-slate-100 active:bg-slate-200 border border-slate-200 px-3 py-1.5 rounded-xl mr-3"
+              >
+                <Text className="text-slate-900 font-black text-sm mr-1.5">←</Text>
+                <Text className="text-slate-800 font-bold text-xs">Home</Text>
+              </TouchableOpacity>
+            )}
+            {title ? (
+              <View className="flex-1">
+                <Text className="text-slate-900 text-lg font-black leading-6">{title}</Text>
+                {subtitle ? <Text className="text-slate-500 text-[12px] mt-0.5">{subtitle}</Text> : null}
+              </View>
+            ) : null}
           </View>
-        </View>
+        )}
       </View>
 
       {/* Main Content Body */}

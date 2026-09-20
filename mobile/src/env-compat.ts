@@ -19,4 +19,14 @@ try {
   // Ignore in environments where strict object sealing prevents modification
 }
 
+// Ensure CSS interop dark mode allows manual setting
+try {
+  const { StyleSheet } = require('react-native-css-interop')
+  if (StyleSheet && typeof StyleSheet.setFlag === 'function') {
+    StyleSheet.setFlag('darkMode', 'class')
+  }
+} catch {
+  // Ignore
+}
+
 export {}

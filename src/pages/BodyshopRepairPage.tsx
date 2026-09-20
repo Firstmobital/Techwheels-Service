@@ -875,6 +875,7 @@ type BodyshopDocKey =
   | 'doc_gst'
   | 'doc_company_pan'
   | 'doc_bank_detail'
+  | 'doc_tp_affidavit'
   | 'doc_estimate'
   | 'doc_survey_approval'
 
@@ -917,6 +918,7 @@ const BODYSHOP_DOCS: { k: Exclude<BodyshopDocKey, 'doc_estimate' | 'doc_survey_a
   { k: 'doc_gst', label: 'GST', mandatoryFor: ['firm'] },
   { k: 'doc_company_pan', label: 'Company PAN Card', mandatoryFor: ['firm'] },
   { k: 'doc_bank_detail', label: 'Bank Detail', mandatoryFor: ['firm'] },
+  { k: 'doc_tp_affidavit', label: 'T/P Affidavit', mandatoryFor: [] },
 ]
 
 const isLegacyBooleanDocKey = (docKey: BodyshopDocKey): docKey is Exclude<BodyshopDocKey, 'doc_estimate' | 'doc_survey_approval'> => (
@@ -5046,8 +5048,40 @@ export default function BodyshopRepairPage() {
                                 ? isStage18PaymentActive(selected)
                             : isStageConcurrentActive(num, effectiveCurrentStage, floorWorkStarted && !floorStageCompleted)
                       const grp     = getGroupForStage(num)
+                      const handleStepClick = (sNum: number) => {
+                        if (sNum <= 4) {
+                          setDetailTab('sa')
+                          setSaActiveCard('receiving')
+                        } else if (sNum === 5) {
+                          setDetailTab('sa')
+                          setSaActiveCard('docs')
+                        } else if (sNum === 6) {
+                          setDetailTab('sa')
+                          setSaActiveCard('estimate')
+                        } else if (sNum === 7) {
+                          setDetailTab('approval')
+                        } else if (sNum === 8) {
+                          setDetailTab('sa')
+                          setSaActiveCard('claim_intimation')
+                        } else if (sNum === 9 || sNum === 10) {
+                          setDetailTab('survey')
+                        } else if (sNum === 11 || sNum === 12) {
+                          setDetailTab('floor')
+                        } else if (sNum === 13 || sNum === 14) {
+                          setDetailTab('qc')
+                        } else if (sNum >= 15) {
+                          setDetailTab('billing')
+                        }
+                      }
+
                       return (
-                        <div key={num} className={`brx-overview-step ${isCur ? 'is-cur' : ''} ${isDone ? 'is-done' : ''}`} style={{ ['--sg' as any]: grp.color }}>
+                        <div
+                          key={num}
+                          onClick={() => handleStepClick(num)}
+                          className={`brx-overview-step ${isCur ? 'is-cur' : ''} ${isDone ? 'is-done' : ''}`}
+                          style={{ ['--sg' as any]: grp.color, cursor: 'pointer' }}
+                          title={`Click to open Stage ${num} details`}
+                        >
                           <div className="brx-overview-step-dot" />
                           <span className="brx-overview-step-label">
                             {num}. {label}
@@ -5104,7 +5138,7 @@ export default function BodyshopRepairPage() {
                 const visibleDocs = noDocsRequired ? [] : BODYSHOP_DOCS
                 const mandatoryDocs = isValidCustomerType(ct)
                   ? visibleDocs.filter(d => d.mandatoryFor.includes(ct as CustomerType))
-                  : []
+                  : visibleDocs.filter(d => d.mandatoryFor.includes('individual'))
                 const collectedMandatory = mandatoryDocs.filter(d => Boolean(bodyshopDocsByKey[d.k])).length
                 const allMandatoryDone = mandatoryDocs.length > 0 && collectedMandatory === mandatoryDocs.length
 
@@ -5164,11 +5198,13 @@ export default function BodyshopRepairPage() {
                       {groups.map((group) => {
                         const selectedCard = saActiveCard === group.key
                         return (
-                          <button
+                          <div
                             key={group.name}
-                            onClick={() => setSaActiveCard((prev) => prev === group.key ? null : group.key)}
+                            onClick={() => setSaActiveCard(group.key)}
                             className={`brx-sa-card ${selectedCard ? 'is-active' : ''}`}
-                            style={{ ['--sa' as any]: group.color, ['--sa-soft' as any]: `${group.color}22`, ['--sa-border' as any]: selectedCard ? group.color : `${group.color}33` }}
+                            style={{ ['--sa' as any]: group.color, ['--sa-soft' as any]: `${group.color}22`, ['--sa-border' as any]: selectedCard ? group.color : `${group.color}33`, cursor: 'pointer' }}
+                            role="button"
+                            tabIndex={0}
                           >
                             <div className="brx-sa-card-title">
                               {group.name}
@@ -5196,14 +5232,24 @@ export default function BodyshopRepairPage() {
                                 )
                               })}
                             </div>
-                          </button>
+                          </div>
                         )
                       })}
                     </div>
 
                     {!saActiveCard && (
-                      <div className="brx-sa-empty">
-                        Select Receiving, Docs, Estimate or Claim Intimation to view details.
+                      <div className="brx-sa-empty" style={{ padding: '24px', textAlign: 'center' }}>
+                        <div style={{ marginBottom: '12px', fontSize: '14px', color: '#475569' }}>
+                          Select a section to view and update details:
+                        </div>
+                        <div style={{ display: 'flex', gap: '10px', justifyContent: 'center', flexWrap: 'wrap' }}>
+                          <button className="btn btn--primary" onClick={() => setSaActiveCard('docs')} style={{ backgroundColor: '#7c3aed' }}>
+                            📁 Open Docs (Stage 5)
+                          </button>
+                          <button className="btn btn--primary" onClick={() => setSaActiveCard('receiving')}>
+                            🚗 Open Receiving (Stage 1-4)
+                          </button>
+                        </div>
                       </div>
                     )}
 
@@ -5375,10 +5421,26 @@ export default function BodyshopRepairPage() {
 
                       return (
                         <div className="brx-docs-wrap">
-                          <div className="brx-docs-ctype-box">
-                            <span className="brx-docs-ctype-text">
-                              Customer Type: {CT_LABELS[selected.customer_type ?? ''] ?? 'Not set'}
-                            </span>
+                          <div className="brx-docs-ctype-box" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', background: '#f8fafc', borderRadius: '12px', marginBottom: '14px', border: '1px solid #e2e8f0', flexWrap: 'wrap', gap: '8px' }}>
+                            <div>
+                              <span className="brx-docs-ctype-text" style={{ fontWeight: '800', fontSize: '13px', color: '#0f172a' }}>
+                                📋 Customer / Claim Case Type:
+                              </span>
+                              <div style={{ fontSize: '11px', color: '#64748b', marginTop: '2px' }}>
+                                Switch between Individual, Firm (GST) or Cash
+                              </div>
+                            </div>
+                            <select
+                              className="inp"
+                              style={{ width: 'auto', minWidth: '220px', fontWeight: 'bold', backgroundColor: '#ffffff', borderColor: '#cbd5e1' }}
+                              value={selected.customer_type ?? 'individual'}
+                              onChange={(e) => patch('customer_type', (e.target.value || null) as CustomerType | null)}
+                            >
+                              <option value="individual">👤 Individual (Personal Insurance)</option>
+                              <option value="firm">🏢 Firm / Company (Commercial/GST)</option>
+                              <option value="cash">💵 Cash (No Insurance Claim)</option>
+                              <option value="foc">🎁 FOC (Free of Cost)</option>
+                            </select>
                           </div>
 
                           {!noDocsRequired && (
@@ -5461,41 +5523,80 @@ export default function BodyshopRepairPage() {
                               <div className="brx-docs-grid brx-docs-grid--mb">
                                 {mandatoryDocs.map(({ k, label }) => {
                                   const attachedDoc = bodyshopDocsByKey[k]
-                                  const checked = Boolean(attachedDoc)
+                                  const checked = Boolean(attachedDoc || (selected as any)[k])
                                   const busy = uploadingDocKey === k
                                   return (
                                     <div key={k} className={`brx-doc-item ${checked ? 'is-checked' : 'is-required'}`}>
-                                      <button onClick={() => patch(k, !checked)} className={`brx-doc-check ${checked ? 'is-checked' : 'is-required'}`}>
-                                        {checked && <span className="brx-doc-check-mark">✓</span>}
+                                      <button
+                                        type="button"
+                                        onClick={() => patch(k, !checked)}
+                                        className={`brx-doc-check ${checked ? 'is-checked' : 'is-required'}`}
+                                        title={checked ? 'Click to unverify' : 'Click to approve/verify'}
+                                      >
+                                        {checked ? <span className="brx-doc-check-mark">✓</span> : <span style={{ color: '#94a3b8', fontSize: '11px' }}>○</span>}
                                       </button>
-                                      <div className="brx-doc-meta">
-                                        <div className="brx-doc-name">{label}</div>
+                                      <div className="brx-doc-meta" style={{ flex: 1 }}>
+                                        <div className="brx-doc-name" style={{ fontWeight: '700' }}>{label}</div>
                                         <div className={`brx-doc-state ${checked ? 'is-checked' : 'is-required'}`}>
-                                          {checked ? 'Collected' : 'Required'}
+                                          {checked ? '✅ Verified / Collected' : '⏳ Pending / Required'}
                                         </div>
                                       </div>
-                                      <div className="brx-doc-actions">
-                                        <button
-                                          className="btn brx-doc-btn"
-                                          onClick={() => startBodyshopDocUpload(k, 'upload')}
-                                          disabled={busy}
-                                        >
-                                          {busy ? 'Uploading…' : 'Upload'}
-                                        </button>
-                                        {attachedDoc && (
+                                      <div className="brx-doc-actions" style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                                        {attachedDoc ? (
                                           <>
                                             <button
+                                              type="button"
                                               className="btn brx-doc-btn"
+                                              style={{ backgroundColor: '#eff6ff', color: '#1d4ed8', borderColor: '#bfdbfe' }}
                                               onClick={() => void handleViewBodyshopDoc(k)}
                                             >
-                                              View
+                                              👁️ View
                                             </button>
                                             <button
+                                              type="button"
+                                              className="btn brx-doc-btn"
+                                              style={{ backgroundColor: '#ecfdf5', color: '#047857', borderColor: '#a7f3d0' }}
+                                              onClick={() => patch(k, true)}
+                                              title="Approve this document"
+                                            >
+                                              ✓ Approve
+                                            </button>
+                                            <button
+                                              type="button"
+                                              className="btn brx-doc-btn"
+                                              style={{ backgroundColor: '#fef2f2', color: '#b91c1c', borderColor: '#fecaca' }}
+                                              onClick={() => patch(k, false)}
+                                              title="Reject / Mark Missing"
+                                            >
+                                              ✕ Reject
+                                            </button>
+                                            <button
+                                              type="button"
                                               className="btn brx-doc-btn"
                                               onClick={() => startBodyshopDocUpload(k, 'replace')}
                                               disabled={busy}
                                             >
                                               Replace
+                                            </button>
+                                          </>
+                                        ) : (
+                                          <>
+                                            <button
+                                              type="button"
+                                              className="btn btn--primary brx-doc-btn"
+                                              onClick={() => startBodyshopDocUpload(k, 'upload')}
+                                              disabled={busy}
+                                            >
+                                              {busy ? 'Uploading…' : '📤 Upload'}
+                                            </button>
+                                            <button
+                                              type="button"
+                                              className="btn brx-doc-btn"
+                                              style={{ backgroundColor: '#f0fdf4', color: '#15803d', borderColor: '#bbf7d0' }}
+                                              onClick={() => patch(k, true)}
+                                              title="Mark Verified"
+                                            >
+                                              ✓ Approve
                                             </button>
                                           </>
                                         )}

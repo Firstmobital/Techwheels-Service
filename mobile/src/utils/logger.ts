@@ -135,8 +135,13 @@ export const getLogDeviceId = async (): Promise<string> => {
     return cachedLogDeviceId
   }
 
+  if (IS_WEB) {
+    cachedLogDeviceId = 'web-client'
+    return cachedLogDeviceId
+  }
+
   try {
-    const storedId = await SecureStore.getItemAsync(LOG_DEVICE_ID_KEY)
+    const storedId = await SecureStore.getItemAsync(LOG_DEVICE_ID_KEY).catch(() => null)
     if (storedId) {
       cachedLogDeviceId = sanitizeId(storedId)
       return cachedLogDeviceId
@@ -189,7 +194,7 @@ const getS3Options = () => {
 }
 
 export const logToFile = async (message: string, module = 'app', deviceId = 'global') => {
-  if (IS_STATIC_WEB_RENDER) {
+  if (IS_WEB || IS_STATIC_WEB_RENDER) {
     return
   }
 
@@ -201,12 +206,12 @@ export const logToFile = async (message: string, module = 'app', deviceId = 'glo
     const existingLogs = await LegacyFileSystem.readAsStringAsync(deviceLogFilePath).catch(() => '')
     await LegacyFileSystem.writeAsStringAsync(deviceLogFilePath, `${existingLogs}${logMessage}`)
   } catch (error) {
-    console.error('Failed to write log to file:', error)
+    console.warn('Failed to write log to file:', error)
   }
 }
 
 export const uploadLogsToS3 = async (deviceId: string, options: UploadLogsOptions = {}) => {
-  if (IS_STATIC_WEB_RENDER) {
+  if (IS_WEB || IS_STATIC_WEB_RENDER) {
     return
   }
 
@@ -218,7 +223,7 @@ export const uploadLogsToS3 = async (deviceId: string, options: UploadLogsOption
     const waitTime = requiredWaitTime - timeSinceLastUpload
     setTimeout(() => {
       uploadLogsToS3(deviceId, options).catch((error) => {
-        console.error('Deferred S3 log upload failed:', error)
+        console.warn('Deferred S3 log upload failed:', error)
       })
     }, waitTime + 100)
     return
@@ -243,7 +248,7 @@ export const uploadLogsToS3 = async (deviceId: string, options: UploadLogsOption
       logs = await LegacyFileSystem.readAsStringAsync(fallbackLogFilePath)
       selectedLogFilePath = fallbackLogFilePath
     } catch (fallbackError) {
-      console.error('Failed to read log file for S3 upload:', fallbackError)
+      console.warn('Failed to read log file for S3 upload:', fallbackError)
       return
     }
   }
@@ -256,13 +261,6 @@ export const uploadLogsToS3 = async (deviceId: string, options: UploadLogsOption
   if (!s3Options.bucket || !s3Options.region || !s3Options.accessKey || !s3Options.secretKey) {
     if (!hasLoggedMissingS3Config) {
       hasLoggedMissingS3Config = true
-      console.warn('S3 logger config missing required values; uploads are disabled for this session', {
-        hasBucket: Boolean(s3Options.bucket),
-        hasRegion: Boolean(s3Options.region),
-        hasAccessKey: Boolean(s3Options.accessKey),
-        hasSecretKey: Boolean(s3Options.secretKey),
-        reason: options.reason || 'not-set',
-      })
     }
     return
   }
@@ -284,17 +282,14 @@ export const uploadLogsToS3 = async (deviceId: string, options: UploadLogsOption
       s3UploadThrottleBackoff = 1
     } else if (response.status === 503) {
       s3UploadThrottleBackoff = Math.min(s3UploadThrottleBackoff * 2, 16)
-    } else {
-      console.error('[S3] Upload failed', response)
     }
-  } catch (error) {
-    console.error('[S3] Upload error', error)
+  } catch {
     s3UploadThrottleBackoff = Math.min(s3UploadThrottleBackoff * 1.5, 16)
   }
 }
 
 export const flushPendingLogsToS3 = async (options: { reason?: string } = {}) => {
-  if (IS_STATIC_WEB_RENDER) {
+  if (IS_WEB || IS_STATIC_WEB_RENDER) {
     return
   }
 
@@ -303,13 +298,13 @@ export const flushPendingLogsToS3 = async (options: { reason?: string } = {}) =>
     await uploadLogsToS3(deviceId, {
       reason: options.reason || 'startup-flush',
     })
-  } catch (error) {
-    console.error('flushPendingLogsToS3 failed', error)
+  } catch {
+    // Ignore
   }
 }
 
 const scheduleEventLogUpload = (reason = 'event-log') => {
-  if (IS_STATIC_WEB_RENDER) {
+  if (IS_WEB || IS_STATIC_WEB_RENDER) {
     return
   }
 
@@ -320,14 +315,12 @@ const scheduleEventLogUpload = (reason = 'event-log') => {
 
   pendingEventUploadTimer = setTimeout(() => {
     pendingEventUploadTimer = null
-    flushPendingLogsToS3({ reason }).catch((error) => {
-      console.error('scheduleEventLogUpload failed', error)
-    })
+    flushPendingLogsToS3({ reason }).catch(() => {})
   }, EVENT_UPLOAD_DEBOUNCE_MS)
 }
 
 export const initializeLogger = async () => {
-  if (IS_STATIC_WEB_RENDER) {
+  if (IS_WEB || IS_STATIC_WEB_RENDER) {
     return
   }
 

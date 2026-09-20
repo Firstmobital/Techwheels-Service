@@ -138,7 +138,7 @@ export default function CustomerDashboardScreen() {
   ]
 
   return (
-    <CustomerScreen title="Dashboard" subtitle="Live service job card for the selected vehicle">
+    <CustomerScreen title="" subtitle="">
       {loading && !selected ? (
         <ActivityIndicator color="#1e60ff" className="py-8" />
       ) : error ? (
@@ -197,24 +197,24 @@ export default function CustomerDashboardScreen() {
               borderColor: 'rgba(255,255,255,0.12)',
             }}
           >
-            <View className="flex-row justify-between items-start">
-              <View className="flex-1 pr-2">
-                <View className="flex-row items-center gap-1.5 mb-1">
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+              <View style={{ flex: 1, paddingRight: 8 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4 }}>
                   <Icon name="truck" size={13} color="#60a5fa" strokeWidth={2.2} />
-                  <Text className="text-blue-300 text-[10px] font-black uppercase tracking-widest">
+                  <Text style={{ color: '#93c5fd', fontSize: 10, fontWeight: '900', textTransform: 'uppercase', letterSpacing: 1 }}>
                     REGISTERED VEHICLE
                   </Text>
                 </View>
-                <Text className="text-white text-2xl font-black tracking-wider font-mono">
+                <Text style={{ color: '#ffffff', fontSize: 24, fontWeight: '900', letterSpacing: 1.5, fontFamily: 'monospace' }}>
                   {selected.reg_number}
                 </Text>
-                <Text className="text-slate-200 text-[13.5px] mt-0.5 font-bold" numberOfLines={1}>
+                <Text style={{ color: '#ffffff', fontSize: 14.5, fontWeight: '800', marginTop: 3 }} numberOfLines={1}>
                   {model || 'Tata Vehicle'}
                   {variant ? ` · ${variant}` : ''}
                 </Text>
               </View>
 
-              <View className="items-end gap-1.5 shrink-0" style={{ maxWidth: '48%' }}>
+              <View style={{ alignItems: 'flex-end', gap: 6, maxWidth: '48%' }}>
                 <View
                   style={{
                     paddingHorizontal: 10,
@@ -242,8 +242,8 @@ export default function CustomerDashboardScreen() {
                 </View>
 
                 {jc ? (
-                  <View className="bg-white/15 border border-white/25 px-2.5 py-0.5 rounded-xl">
-                    <Text className="text-white font-mono font-black text-[10px]" numberOfLines={1}>
+                  <View style={{ backgroundColor: 'rgba(255,255,255,0.15)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.25)', paddingHorizontal: 10, paddingVertical: 2, borderRadius: 10 }}>
+                    <Text style={{ color: '#ffffff', fontFamily: 'monospace', fontWeight: '900', fontSize: 10 }} numberOfLines={1}>
                       JC #{jc.length > 16 ? jc.slice(-12) : jc}
                     </Text>
                   </View>
@@ -252,30 +252,30 @@ export default function CustomerDashboardScreen() {
             </View>
 
             {/* Quick Metrics Grid */}
-            <View className="mt-3.5 pt-3 border-t border-white/15 flex-row flex-wrap">
-              <View className="w-1/2 pr-2 mb-2">
-                <Text className="text-slate-400 text-[10px] font-medium">Customer Name</Text>
-                <Text className="text-white text-[12.5px] font-bold uppercase" numberOfLines={1}>{dash(owner)}</Text>
+            <View style={{ marginTop: 14, paddingTop: 12, borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.15)', flexDirection: 'row', flexWrap: 'wrap' }}>
+              <View style={{ width: '50%', paddingRight: 8, marginBottom: 8 }}>
+                <Text style={{ color: '#94a3b8', fontSize: 10.5, fontWeight: '600' }}>Customer Name</Text>
+                <Text style={{ color: '#ffffff', fontSize: 13, fontWeight: '800', textTransform: 'uppercase' }} numberOfLines={1}>{dash(owner)}</Text>
               </View>
-              <View className="w-1/2 pl-2 mb-2">
-                <Text className="text-slate-400 text-[10px] font-medium">Odometer</Text>
-                <Text className="text-white text-[12.5px] font-mono font-bold" numberOfLines={1}>{km || '—'}</Text>
+              <View style={{ width: '50%', paddingLeft: 8, marginBottom: 8 }}>
+                <Text style={{ color: '#94a3b8', fontSize: 10.5, fontWeight: '600' }}>Odometer</Text>
+                <Text style={{ color: '#ffffff', fontSize: 13, fontFamily: 'monospace', fontWeight: '800' }} numberOfLines={1}>{km || '—'}</Text>
               </View>
-              <View className="w-1/2 pr-2 mb-2">
-                <Text className="text-slate-400 text-[10px] font-medium">Assigned Technician</Text>
-                <Text className="text-white text-[12px] font-bold" numberOfLines={1}>{dash(technician)}</Text>
+              <View style={{ width: '50%', paddingRight: 8, marginBottom: 8 }}>
+                <Text style={{ color: '#94a3b8', fontSize: 10.5, fontWeight: '600' }}>Assigned Technician</Text>
+                <Text style={{ color: '#ffffff', fontSize: 12.5, fontWeight: '800' }} numberOfLines={1}>{dash(technician)}</Text>
               </View>
-              <View className="w-1/2 pl-2 mb-2">
-                <Text className="text-slate-400 text-[10px] font-medium">Workshop Bay No</Text>
-                <Text className="text-emerald-400 text-[12px] font-mono font-black" numberOfLines={1}>{dash(bayNo) || 'Floor Bay'}</Text>
+              <View style={{ width: '50%', paddingLeft: 8, marginBottom: 8 }}>
+                <Text style={{ color: '#94a3b8', fontSize: 10.5, fontWeight: '600' }}>Workshop Bay No</Text>
+                <Text style={{ color: '#34d399', fontSize: 12.5, fontFamily: 'monospace', fontWeight: '900' }} numberOfLines={1}>{dash(bayNo) || 'Floor Bay'}</Text>
               </View>
-              <View className="w-1/2 pr-2 mb-0.5">
-                <Text className="text-slate-400 text-[10px] font-medium">Service Type</Text>
-                <Text className="text-white text-[11.5px] font-bold" numberOfLines={1}>{dash(serviceType)}</Text>
+              <View style={{ width: '50%', paddingRight: 8, marginBottom: 2 }}>
+                <Text style={{ color: '#94a3b8', fontSize: 10.5, fontWeight: '600' }}>Service Type</Text>
+                <Text style={{ color: '#ffffff', fontSize: 12, fontWeight: '800' }} numberOfLines={1}>{dash(serviceType)}</Text>
               </View>
-              <View className="w-1/2 pl-2 mb-0.5">
-                <Text className="text-slate-400 text-[10px] font-medium">Assigned Advisor</Text>
-                <Text className="text-white text-[11.5px] font-bold" numberOfLines={1}>{dash(advisor)}</Text>
+              <View style={{ width: '50%', paddingLeft: 8, marginBottom: 2 }}>
+                <Text style={{ color: '#94a3b8', fontSize: 10.5, fontWeight: '600' }}>Assigned Advisor</Text>
+                <Text style={{ color: '#ffffff', fontSize: 12, fontWeight: '800' }} numberOfLines={1}>{dash(advisor)}</Text>
               </View>
             </View>
 
@@ -486,6 +486,14 @@ export default function CustomerDashboardScreen() {
             />
             <ActionTile
               icon="file-text"
+              title="Insurance Claim Docs"
+              subtitle="DL, RC, Policy & KYC checklist"
+              border="#fde68a"
+              accent="#d97706"
+              onPress={() => router.push('/(customer)/documents')}
+            />
+            <ActionTile
+              icon="file"
               title="Digital Estimate"
               subtitle="Approve or reject quotation"
               border="#bfdbfe"

@@ -754,10 +754,41 @@ export async function customerListMyBookings(
 }
 
 export async function customerGetRepairCard(sessionToken: string, regNumber?: string | null) {
-  const { data, error } = await supabase.rpc('customer_get_repair_card', {
-    p_session_token: sessionToken,
-    p_reg_number: regNumber || null,
-  })
-  if (error) throw new Error(rpcErrorMessage(error, 'Unable to load repair tracker.'))
-  return data as Record<string, unknown> | null
+  const normReg = (regNumber || '').trim().toUpperCase().replace(/[\s-]/g, '')
+  if (!normReg) return null
+
+  const cacheKey = `repair_card_${sessionToken}_${normReg}`
+  const cached = getCached<Record<string, unknown>>(cacheKey)
+  if (cached) return cached
+
+  // 1. Direct RPC
+  try {
+    const { data, error } = await supabase.rpc('customer_get_repair_card', {
+      p_session_token: sessionToken,
+      p_reg_number: regNumber || null,
+    })
+    if (!error && data) {
+      return setCache(cacheKey, data as Record<string, unknown>)
+    }
+  } catch (rpcErr) {
+    console.warn('customer_get_repair_card RPC note:', rpcErr)
+  }
+
+  // 2. Direct table lookup in bodyshop_repair_cards
+  try {
+    const { data: rows, error } = await supabase
+      .from('bodyshop_repair_cards')
+      .select('*')
+      .ilike('reg_number', `%${normReg}%`)
+      .order('created_at', { ascending: false })
+      .limit(1)
+
+    if (!error && rows && rows.length > 0) {
+      return setCache(cacheKey, rows[0] as Record<string, unknown>)
+    }
+  } catch (dbErr) {
+    console.warn('bodyshop_repair_cards direct query error:', dbErr)
+  }
+
+  return null
 }

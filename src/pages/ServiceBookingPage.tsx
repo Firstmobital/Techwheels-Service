@@ -1718,9 +1718,17 @@ function DriverManagementModal({ bookings, drivers, onClose, onAssignDriver }: D
               <p style={{ margin: 0, fontSize: '0.72rem', color: '#94a3b8' }}>Assign and track drivers for scheduled customer vehicle pickups & drops</p>
             </div>
           </div>
-          <button onClick={onClose} style={{ background: 'rgba(255,255,255,0.1)', border: 'none', color: '#fff', width: '32px', height: '32px', borderRadius: '8px', cursor: 'pointer', fontSize: '1.1rem', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            ✕
-          </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <a
+              href="/driver-management"
+              style={{ background: '#1e60ff', color: '#fff', textDecoration: 'none', padding: '0.35rem 0.75rem', borderRadius: '8px', fontSize: '0.76rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '0.3rem' }}
+            >
+              Open Full Module ↗
+            </a>
+            <button onClick={onClose} style={{ background: 'rgba(255,255,255,0.1)', border: 'none', color: '#fff', width: '32px', height: '32px', borderRadius: '8px', cursor: 'pointer', fontSize: '1.1rem', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              ✕
+            </button>
+          </div>
         </div>
 
         {/* KPI Strip */}

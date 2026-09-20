@@ -17,6 +17,20 @@ const TAB_CONFIG: Record<string, { icon: IconName; label: string }> = {
 function CustomerTabBar({ state, descriptors, navigation }: any) {
   const insets = useSafeAreaInsets()
   const tabBarHeight = 64 + Math.max(10, insets.bottom)
+  const { vehicles, selectedReg } = useCustomerSession()
+  const selected = vehicles.find((v) => v.reg_number === selectedReg) || vehicles[0]
+  const isAccident = String(selected?.service_type || '').toLowerCase().includes('accident')
+
+  const dynamicConfig: Record<string, { icon: IconName; label: string }> = {
+    index: { icon: 'home', label: 'Home' },
+    tracker: {
+      icon: 'clock',
+      label: isAccident ? 'Bodyshop' : 'Tracker',
+    },
+    invoices: { icon: 'file-text', label: 'Bills' },
+    gatepass: { icon: 'shield-check', label: 'Gate Pass' },
+    feedback: { icon: 'star', label: 'Review' },
+  }
 
   return (
     <View
@@ -40,12 +54,12 @@ function CustomerTabBar({ state, descriptors, navigation }: any) {
       }}
     >
       {state.routes
-        .filter((route: any) => Boolean(TAB_CONFIG[route.name]))
+        .filter((route: any) => Boolean(dynamicConfig[route.name]))
         .map((route: any) => {
           const index = state.routes.findIndex((candidate: any) => candidate.key === route.key)
           const focused = state.index === index
           const options = descriptors[route.key]?.options ?? {}
-          const config = TAB_CONFIG[route.name]
+          const config = dynamicConfig[route.name]
           const label = options.tabBarLabel ?? options.title ?? config?.label ?? route.name
           const iconName = config?.icon ?? 'home'
 
@@ -124,6 +138,7 @@ export default function CustomerTabsLayout() {
       <Tabs.Screen name="invoices" options={{ title: 'Bills', tabBarLabel: 'Bills' }} />
       <Tabs.Screen name="gatepass" options={{ title: 'Gate Pass', tabBarLabel: 'Gate Pass' }} />
       <Tabs.Screen name="feedback" options={{ title: 'Review', tabBarLabel: 'Review' }} />
+      <Tabs.Screen name="documents" options={{ href: null, title: 'Claim Documents' }} />
       <Tabs.Screen name="helpdesk" options={{ href: null, title: 'Support' }} />
       <Tabs.Screen name="complaint" options={{ href: null, title: 'Report Problem' }} />
       <Tabs.Screen name="estimate" options={{ href: null, title: 'Digital Estimate' }} />

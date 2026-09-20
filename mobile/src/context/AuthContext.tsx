@@ -14,7 +14,17 @@ interface AuthContextType {
   refreshSession: () => Promise<void>
 }
 
-const AuthContext = createContext<AuthContextType | undefined>(undefined)
+const defaultAuthContext: AuthContextType = {
+  session: null,
+  user: null,
+  loading: false,
+  signOut: async () => {},
+  signIn: async () => ({ error: new Error('Not initialized') }),
+  signUp: async () => ({ error: new Error('Not initialized') }),
+  refreshSession: async () => {},
+}
+
+const AuthContext = createContext<AuthContextType>(defaultAuthContext)
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [session, setSession] = useState<Session | null>(null)
@@ -148,8 +158,5 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
 export function useAuth() {
   const context = useContext(AuthContext)
-  if (!context) {
-    throw new Error('useAuth must be used within an AuthProvider')
-  }
-  return context
+  return context || defaultAuthContext
 }

@@ -50,7 +50,7 @@
       ]
     },
     "web": {
-      "output": "static"
+      "output": "single"
     },
     "plugins": [
       "expo-router",
@@ -92,7 +92,7 @@
       ]
     ],
     "experiments": {
-      "typedRoutes": true,
+      "typedRoutes": false,
       "reactCompiler": true
     },
     "runtimeVersion": {

@@ -269,8 +269,9 @@ export function Icon({ name, size = 24, color, strokeWidth = 2, testID, ...rest 
     return null
   }
 
+  const Comp = Component as any
   return (
-    <Component
+    <Comp
       size={size}
       color={color}
       strokeWidth={strokeWidth}

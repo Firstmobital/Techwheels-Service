@@ -27,12 +27,6 @@ import { OfflineProvider } from '../context/OfflineContext'
 import MandatoryUpdateModal from '../components/MandatoryUpdateModal'
 import { useMandatoryOTAUpdate } from '../hooks/useMandatoryOTAUpdate'
 
-try {
-  SplashScreen.preventAutoHideAsync().catch(() => {})
-} catch {
-  // Ignore splash prevention error on unsupported platforms
-}
-
 export default function RootLayout() {
   const [fontsLoaded, setFontsLoaded] = useState(false)
   const {
@@ -44,11 +38,14 @@ export default function RootLayout() {
   } = useMandatoryOTAUpdate()
 
   useEffect(() => {
+    // Dismiss splash screen immediately so app never hangs on logo
+    SplashScreen.hideAsync().catch(() => {})
+
     let isMounted = true
 
     async function loadFonts() {
       try {
-        const fontPromise = Font.loadAsync({
+        await Font.loadAsync({
           'SpaceGrotesk_400Regular': SpaceGrotesk_400Regular,
           'SpaceGrotesk_500Medium': SpaceGrotesk_500Medium,
           'SpaceGrotesk_600SemiBold': SpaceGrotesk_600SemiBold,
@@ -61,27 +58,20 @@ export default function RootLayout() {
           'JetBrainsMono_500Medium': JetBrainsMono_500Medium,
           'JetBrainsMono_600SemiBold': JetBrainsMono_600SemiBold,
         })
-        const timeoutPromise = new Promise(resolve => setTimeout(resolve, 2000))
-        await Promise.race([fontPromise, timeoutPromise])
       } catch (e) {
-        console.error('Error loading fonts:', e)
+        console.warn('Font load non-critical error:', e)
       } finally {
         if (isMounted) {
           setFontsLoaded(true)
         }
-        await SplashScreen.hideAsync().catch(() => {})
+        SplashScreen.hideAsync().catch(() => {})
       }
     }
 
     loadFonts()
 
-    const hideTimer = setTimeout(() => {
-      SplashScreen.hideAsync().catch(() => {})
-    }, 1500)
-
     return () => {
       isMounted = false
-      clearTimeout(hideTimer)
     }
   }, [])
 
