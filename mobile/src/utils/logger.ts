@@ -204,9 +204,9 @@ export const logToFile = async (message: string, module = 'app', deviceId = 'glo
 
   try {
     const existingLogs = await LegacyFileSystem.readAsStringAsync(deviceLogFilePath).catch(() => '')
-    await LegacyFileSystem.writeAsStringAsync(deviceLogFilePath, `${existingLogs}${logMessage}`)
-  } catch (error) {
-    console.warn('Failed to write log to file:', error)
+    await LegacyFileSystem.writeAsStringAsync(deviceLogFilePath, `${existingLogs}${logMessage}`).catch(() => undefined)
+  } catch {
+    // silent — never crash the app for a logging failure
   }
 }
 

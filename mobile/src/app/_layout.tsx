@@ -27,8 +27,8 @@ import { OfflineProvider } from '../context/OfflineContext'
 import MandatoryUpdateModal from '../components/MandatoryUpdateModal'
 import { useMandatoryOTAUpdate } from '../hooks/useMandatoryOTAUpdate'
 
-export default function RootLayout() {
-  const [fontsLoaded, setFontsLoaded] = useState(false)
+// AppShell is inside all providers so hooks can safely access any context
+function AppShell() {
   const {
     modalVisible,
     checkingUpdate,
@@ -36,6 +36,31 @@ export default function RootLayout() {
     updateErrorMessage,
     applyMandatoryUpdate,
   } = useMandatoryOTAUpdate()
+
+  return (
+    <>
+      <Stack>
+        <Stack.Screen name="(audience)" options={{ headerShown: false }} />
+        <Stack.Screen name="(customer-auth)" options={{ headerShown: false }} />
+        <Stack.Screen name="(customer)" options={{ headerShown: false }} />
+        <Stack.Screen name="(auth)" options={{ headerShown: false }} />
+        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+        <Stack.Screen name="job-cards" options={{ headerShown: false }} />
+        <Stack.Screen name="help-tickets" options={{ headerShown: false }} />
+      </Stack>
+      <MandatoryUpdateModal
+        visible={modalVisible}
+        isApplyingUpdate={applyingUpdate}
+        isCheckingUpdate={checkingUpdate}
+        errorMessage={updateErrorMessage}
+        onUpdateNow={applyMandatoryUpdate}
+      />
+    </>
+  )
+}
+
+export default function RootLayout() {
+  const [fontsLoaded, setFontsLoaded] = useState(false)
 
   useEffect(() => {
     // Dismiss splash screen immediately so app never hangs on logo
@@ -78,60 +103,11 @@ export default function RootLayout() {
   return (
     <AuthProvider>
       <CustomerSessionProvider>
-      <OfflineProvider>
-        <Stack>
-          <Stack.Screen
-            name="(audience)"
-            options={{
-              headerShown: false,
-            }}
-          />
-          <Stack.Screen
-            name="(customer-auth)"
-            options={{
-              headerShown: false,
-            }}
-          />
-          <Stack.Screen
-            name="(customer)"
-            options={{
-              headerShown: false,
-            }}
-          />
-          <Stack.Screen
-            name="(auth)"
-            options={{
-              headerShown: false,
-            }}
-          />
-          <Stack.Screen
-            name="(tabs)"
-            options={{
-              headerShown: false,
-            }}
-          />
-          <Stack.Screen
-            name="job-cards"
-            options={{
-              headerShown: false,
-            }}
-          />
-          <Stack.Screen
-            name="help-tickets"
-            options={{
-              headerShown: false,
-            }}
-          />
-        </Stack>
-        <MandatoryUpdateModal
-          visible={modalVisible}
-          isApplyingUpdate={applyingUpdate}
-          isCheckingUpdate={checkingUpdate}
-          errorMessage={updateErrorMessage}
-          onUpdateNow={applyMandatoryUpdate}
-        />
-      </OfflineProvider>
+        <OfflineProvider>
+          <AppShell />
+        </OfflineProvider>
       </CustomerSessionProvider>
     </AuthProvider>
   )
 }
+

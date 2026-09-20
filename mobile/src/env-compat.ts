@@ -19,14 +19,8 @@ try {
   // Ignore in environments where strict object sealing prevents modification
 }
 
-// Ensure CSS interop dark mode allows manual setting
-try {
-  const { StyleSheet } = require('react-native-css-interop')
-  if (StyleSheet && typeof StyleSheet.setFlag === 'function') {
-    StyleSheet.setFlag('darkMode', 'class')
-  }
-} catch {
-  // Ignore
-}
+// Note: darkMode is configured via tailwind.config.js (darkMode: 'class').
+// Do NOT call StyleSheet.setFlag at runtime — it throws in SDK 57 nativewind
+// because the media-query strategy is already initialized before this runs.
 
 export {}
