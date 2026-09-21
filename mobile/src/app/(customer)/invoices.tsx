@@ -51,7 +51,6 @@ export default function CustomerInvoicesScreen() {
     }, [load])
   )
 
-  const estimateTotal = estimates.reduce((sum, row) => sum + (row.grand_total || 0), 0)
   const billed =
     payment?.total_billed ?? payment?.billed_amount ?? pass?.billed_amount ?? selected?.billed_amount
   const received =
@@ -59,9 +58,7 @@ export default function CustomerInvoicesScreen() {
   const pay = computeSettlement({
     billed,
     received,
-    estimateTotal: estimateTotal > 0 ? estimateTotal : null,
   })
-  const billedFromQuote = pay.status === 'quoted'
   const invoices = history.filter((row) => row.invoice_drive_url || row.invoice_storage_path || row.invoice_done_at)
   const latestInvoiceUrl = selected?.invoice_drive_url || invoices.find((row) => row.invoice_drive_url)?.invoice_drive_url
 
@@ -401,7 +398,7 @@ export default function CustomerInvoicesScreen() {
               </View>
 
               <View className="flex-row bg-slate-50 rounded-xl py-3 mb-3 border border-slate-200/80">
-                <MoneyCol label={billedFromQuote ? 'Quoted' : 'Total Billed'} value={formatInr(pay.billed)} />
+                <MoneyCol label="Total Billed" value={formatInr(pay.billed)} />
                 <MoneyCol
                   label="Received Amount"
                   value={pay.received != null ? formatInr(pay.received) : '—'}
@@ -479,22 +476,21 @@ export default function CustomerInvoicesScreen() {
               ) : null}
 
               {estimates.length > 0 ? (
-                <View className="border-t border-slate-200 pt-3 mb-3">
-                  <Text className="text-[12px] font-bold mb-2">
-                    📋 Estimate Breakdown ({estimates.length} Quotation{estimates.length > 1 ? 's' : ''}):
-                  </Text>
-                  {estimates.map((est) => (
-                    <View key={est.estimate_id} className="flex-row justify-between bg-slate-50 rounded-lg px-3 py-2 mb-1.5">
-                      <View className="flex-1 pr-2">
-                        <Text className="text-[12px] font-bold text-sky-800">#{est.estimate_no}</Text>
-                        <Text className="text-[11px] text-slate-500">
-                          ({est.items.length} items · {est.status})
-                        </Text>
-                      </View>
-                      <Text className="text-[12px] font-extrabold">{est.grand_total != null ? formatInr(est.grand_total) : '—'}</Text>
-                    </View>
-                  ))}
-                </View>
+                <TouchableOpacity
+                  activeOpacity={0.85}
+                  onPress={() => router.push('/(customer)/estimate')}
+                  className="bg-blue-50 border border-blue-200 rounded-xl p-3 mb-3 flex-row items-center justify-between"
+                >
+                  <View className="flex-1 pr-2">
+                    <Text className="text-[12.5px] font-bold text-blue-900">
+                      📋 Workshop Quotation / Estimate ({estimates.length})
+                    </Text>
+                    <Text className="text-[11px] text-blue-700 mt-0.5">
+                      To approve or reject parts & labour estimates, visit the Estimate tab.
+                    </Text>
+                  </View>
+                  <Text className="text-blue-700 font-extrabold text-xs">Review ➔</Text>
+                </TouchableOpacity>
               ) : null}
 
               {latestInvoiceUrl ? (

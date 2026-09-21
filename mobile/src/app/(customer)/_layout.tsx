@@ -9,9 +9,9 @@ import { Icon, IconName } from '../../components/ui/Icon'
 const TAB_CONFIG: Record<string, { icon: IconName; label: string }> = {
   index: { icon: 'home', label: 'Home' },
   tracker: { icon: 'clock', label: 'Tracker' },
+  estimate: { icon: 'file', label: 'Estimate' },
   invoices: { icon: 'file-text', label: 'Bills' },
   gatepass: { icon: 'shield-check', label: 'Gate Pass' },
-  feedback: { icon: 'star', label: 'Review' },
 }
 
 function CustomerTabBar({ state, descriptors, navigation }: any) {
@@ -27,9 +27,9 @@ function CustomerTabBar({ state, descriptors, navigation }: any) {
       icon: 'clock',
       label: isAccident ? 'Bodyshop' : 'Tracker',
     },
+    estimate: { icon: 'file', label: 'Estimate' },
     invoices: { icon: 'file-text', label: 'Bills' },
     gatepass: { icon: 'shield-check', label: 'Gate Pass' },
-    feedback: { icon: 'star', label: 'Review' },
   }
 
   return (
@@ -135,13 +135,13 @@ export default function CustomerTabsLayout() {
     >
       <Tabs.Screen name="index" options={{ title: 'Home', tabBarLabel: 'Home' }} />
       <Tabs.Screen name="tracker" options={{ title: 'Tracker', tabBarLabel: 'Tracker' }} />
+      <Tabs.Screen name="estimate" options={{ title: 'Estimate', tabBarLabel: 'Estimate' }} />
       <Tabs.Screen name="invoices" options={{ title: 'Bills', tabBarLabel: 'Bills' }} />
       <Tabs.Screen name="gatepass" options={{ title: 'Gate Pass', tabBarLabel: 'Gate Pass' }} />
-      <Tabs.Screen name="feedback" options={{ title: 'Review', tabBarLabel: 'Review' }} />
+      <Tabs.Screen name="feedback" options={{ href: null, title: 'Review' }} />
       <Tabs.Screen name="documents" options={{ href: null, title: 'Claim Documents' }} />
       <Tabs.Screen name="helpdesk" options={{ href: null, title: 'Support' }} />
       <Tabs.Screen name="complaint" options={{ href: null, title: 'Report Problem' }} />
-      <Tabs.Screen name="estimate" options={{ href: null, title: 'Digital Estimate' }} />
       <Tabs.Screen name="booking" options={{ href: null, title: 'Book Service' }} />
       <Tabs.Screen name="my-bookings" options={{ href: null, title: 'My Bookings' }} />
     </Tabs>
