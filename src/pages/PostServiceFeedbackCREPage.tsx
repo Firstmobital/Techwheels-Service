@@ -1,7 +1,10 @@
-import { Fragment, useEffect, useState, useMemo } from 'react'
+import { Fragment, useCallback, useEffect, useState, useMemo } from 'react'
 import { supabase } from '../lib/supabase'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
+
+type CreStatus = 'open' | 'in_progress' | 'resolved'
+type Tier = 'low' | 'unrated' | 'high'
 
 interface QueueRow {
   id: number
@@ -11,10 +14,11 @@ interface QueueRow {
   vehicle_registration_number: string | null
   job_card_number: string | null
   closed_date: string
-  rating: number
+  sent_at: string | null
+  rating: number | null
   feedback_text: string | null
   responded_at: string | null
-  cre_status: 'open' | 'in_progress' | 'resolved'
+  cre_status: CreStatus
   resolved_at: string | null
   resolved_by_name: string | null
   service_advisor_name: string | null
@@ -32,18 +36,21 @@ interface RemarkRow {
   created_at: string
 }
 
-interface Stats {
+interface Overview {
+  totalSent: number
+  positiveCount: number
+  needsFollowupCount: number
+  unratedCount: number
+}
+
+interface StatusStats {
   total: number
   open: number
   in_progress: number
   resolved: number
 }
 
-interface Overview {
-  totalSent: number
-  positiveCount: number
-  needsFollowupCount: number
-}
+const PAGE_SIZE = 50
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -64,6 +71,19 @@ function fmtDateTime(s: string | null): string {
   })
 }
 
+function daysSinceSent(sentAt: string | null): string {
+  if (!sentAt) return '—'
+  const sent = new Date(sentAt)
+  if (isNaN(sent.getTime())) return '—'
+  const ms = Date.now() - sent.getTime()
+  if (ms < 0) return '0'
+  return String(Math.floor(ms / 86_400_000))
+}
+
+function sanitizeSearch(raw: string): string {
+  return raw.trim().replace(/[%_,.()]/g, ' ').replace(/\s+/g, ' ').trim()
+}
+
 const STATUS_COLOR: Record<string, string> = {
   open:        'bg-red-100 text-red-700',
   in_progress: 'bg-yellow-100 text-yellow-700',
@@ -76,9 +96,10 @@ const STATUS_LABEL: Record<string, string> = {
   resolved:    'Resolved',
 }
 
-function Stars({ rating }: { rating: number }) {
+function Stars({ rating }: { rating: number | null }) {
+  if (rating == null) return <span className="text-gray-400 text-xs">—</span>
   return (
-    <span className={rating <= 2 ? 'text-red-600' : 'text-yellow-600'}>
+    <span className={rating <= 2 ? 'text-red-600' : rating <= 3 ? 'text-yellow-600' : 'text-green-600'}>
       {'★'.repeat(rating)}{'☆'.repeat(5 - rating)}
     </span>
   )
@@ -93,22 +114,42 @@ function StatCard({ label, value, color = 'text-gray-800' }: { label: string; va
   )
 }
 
+async function readCount(
+  pending: PromiseLike<{ count: number | null; error: { message: string } | null }>,
+): Promise<number> {
+  const { count, error } = await pending
+  if (error) throw error
+  return count || 0
+}
+
+function applyListFilters<Q extends { eq: (column: string, value: string) => Q; or: (filters: string) => Q }>(
+  query: Q,
+  opts: { search: string; filterStatus: 'all' | CreStatus; statusEnabled: boolean },
+): Q {
+  let next = query
+  if (opts.statusEnabled && opts.filterStatus !== 'all') {
+    next = next.eq('cre_status', opts.filterStatus)
+  }
+  const q = sanitizeSearch(opts.search)
+  if (q) {
+    const pattern = `%${q}%`
+    next = next.or(
+      `customer_name.ilike.${pattern},mobile_number.ilike.${pattern},vehicle_registration_number.ilike.${pattern},branch.ilike.${pattern}`,
+    )
+  }
+  return next
+}
+
 // ─── Row detail panel ───────────────────────────────────────────────────────
 
 function RowDetail({ row, onUpdated, showActions }: { row: QueueRow; onUpdated: () => void; showActions: boolean }) {
   const [remarks, setRemarks] = useState<RemarkRow[]>([])
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(showActions)
   const [draft, setDraft] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  useEffect(() => {
-    if (showActions) fetchRemarks()
-    else setLoading(false)
-  }, [row.id, showActions])
-
-  async function fetchRemarks() {
-    setLoading(true)
+  const fetchRemarks = useCallback(async () => {
     const { data, error: e } = await supabase
       .from('post_service_feedback_remarks')
       .select('*')
@@ -116,7 +157,23 @@ function RowDetail({ row, onUpdated, showActions }: { row: QueueRow; onUpdated: 
       .order('created_at', { ascending: true })
     if (!e) setRemarks((data || []) as RemarkRow[])
     setLoading(false)
-  }
+  }, [row.id])
+
+  useEffect(() => {
+    if (!showActions) return
+    let cancelled = false
+    void (async () => {
+      const { data, error: e } = await supabase
+        .from('post_service_feedback_remarks')
+        .select('*')
+        .eq('feedback_id', row.id)
+        .order('created_at', { ascending: true })
+      if (cancelled) return
+      if (!e) setRemarks((data || []) as RemarkRow[])
+      setLoading(false)
+    })()
+    return () => { cancelled = true }
+  }, [showActions, row.id])
 
   async function addRemark() {
     if (!draft.trim()) return
@@ -238,81 +295,137 @@ function RowDetail({ row, onUpdated, showActions }: { row: QueueRow; onUpdated: 
 
 export default function PostServiceFeedbackCREPage() {
   const [rows, setRows] = useState<QueueRow[]>([])
-  const [totalSent, setTotalSent] = useState(0)
+  const [overview, setOverview] = useState<Overview>({
+    totalSent: 0, positiveCount: 0, needsFollowupCount: 0, unratedCount: 0,
+  })
+  const [statusStats, setStatusStats] = useState<StatusStats>({
+    total: 0, open: 0, in_progress: 0, resolved: 0,
+  })
+  const [filteredTotal, setFilteredTotal] = useState(0)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [expandedId, setExpandedId] = useState<number | null>(null)
 
-  const [tier, setTier] = useState<'low' | 'high'>('low')
-  const [filterStatus, setFilterStatus] = useState<'all' | 'open' | 'in_progress' | 'resolved'>('all')
+  const [tier, setTier] = useState<Tier>('low')
+  const [filterStatus, setFilterStatus] = useState<'all' | CreStatus>('all')
   const [search, setSearch] = useState('')
+  const [debouncedSearch, setDebouncedSearch] = useState('')
+  const [page, setPage] = useState(1)
 
   useEffect(() => {
-    fetchAll()
+    const t = window.setTimeout(() => {
+      setDebouncedSearch(search)
+      setPage(1)
+      setExpandedId(null)
+    }, 300)
+    return () => window.clearTimeout(t)
+  }, [search])
+
+  const fetchQueue = useCallback(async () => {
+    const baseCount = () =>
+      supabase.from('post_service_feedback_messages').select('id', { count: 'exact', head: true }).not('sent_at', 'is', null)
+
+    const from = (page - 1) * PAGE_SIZE
+    const to = from + PAGE_SIZE - 1
+    const statusEnabled = tier === 'low' || tier === 'unrated'
+    const table = tier === 'unrated'
+      ? 'post_service_feedback_cre_unrated'
+      : 'post_service_feedback_cre_queue'
+
+    let query = supabase.from(table).select('*', { count: 'exact' })
+    if (tier === 'low') query = query.lte('rating', 3)
+    if (tier === 'high') query = query.gte('rating', 4)
+    query = applyListFilters(query, {
+      search: debouncedSearch,
+      filterStatus,
+      statusEnabled,
+    })
+    query = tier === 'unrated'
+      ? query.order('sent_at', { ascending: false })
+      : query.order('responded_at', { ascending: false })
+
+    const statusBase = () => (tier === 'low' ? baseCount().lte('rating', 3) : baseCount().is('rating', null))
+
+    const [totalSent, positiveCount, needsFollowupCount, unratedCount, pageRes, statusTotal, statusOpen, statusInProgress, statusResolved] = await Promise.all([
+      readCount(baseCount()),
+      readCount(baseCount().gte('rating', 4)),
+      readCount(baseCount().lte('rating', 3)),
+      readCount(baseCount().is('rating', null)),
+      query.range(from, to),
+      tier === 'high' ? Promise.resolve(0) : readCount(statusBase()),
+      tier === 'high' ? Promise.resolve(0) : readCount(statusBase().eq('cre_status', 'open')),
+      tier === 'high' ? Promise.resolve(0) : readCount(statusBase().eq('cre_status', 'in_progress')),
+      tier === 'high' ? Promise.resolve(0) : readCount(statusBase().eq('cre_status', 'resolved')),
+    ])
+
+    if (pageRes.error) throw pageRes.error
+
+    return {
+      overview: { totalSent, positiveCount, needsFollowupCount, unratedCount },
+      statusStats: {
+        total: statusTotal,
+        open: statusOpen,
+        in_progress: statusInProgress,
+        resolved: statusResolved,
+      },
+      rows: (pageRes.data || []) as QueueRow[],
+      filteredTotal: pageRes.count || 0,
+    }
+  }, [tier, filterStatus, debouncedSearch, page])
+
+  const applyQueue = useCallback((result: Awaited<ReturnType<typeof fetchQueue>>) => {
+    setOverview(result.overview)
+    setStatusStats(result.statusStats)
+    setRows(result.rows)
+    setFilteredTotal(result.filteredTotal)
+    setError(null)
+    setLoading(false)
   }, [])
 
-  async function fetchAll() {
-    setLoading(true)
+  const load = useCallback(async () => {
     setError(null)
-    const [queueRes, sentRes] = await Promise.all([
-      supabase
-        .from('post_service_feedback_cre_queue')
-        .select('*')
-        .order('responded_at', { ascending: false })
-        .limit(1000),
-      supabase
-        .from('post_service_feedback_messages')
-        .select('id', { count: 'exact', head: true })
-        .not('sent_at', 'is', null),
-    ])
-    if (queueRes.error) {
-      setError(queueRes.error.message)
-    } else {
-      setRows((queueRes.data || []) as QueueRow[])
+    try {
+      applyQueue(await fetchQueue())
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'Failed to load Post Service Feedback queue')
+      setLoading(false)
     }
-    if (!sentRes.error) setTotalSent(sentRes.count || 0)
-    setLoading(false)
-  }
+  }, [fetchQueue, applyQueue])
 
-  const overview = useMemo<Overview>(() => ({
-    totalSent,
-    positiveCount:       rows.filter(r => r.rating >= 4).length,
-    needsFollowupCount:  rows.filter(r => r.rating <= 3).length,
-  }), [rows, totalSent])
+  useEffect(() => {
+    let cancelled = false
+    void fetchQueue()
+      .then((result) => {
+        if (cancelled) return
+        applyQueue(result)
+      })
+      .catch((e: unknown) => {
+        if (cancelled) return
+        setError(e instanceof Error ? e.message : 'Failed to load Post Service Feedback queue')
+        setLoading(false)
+      })
+    return () => { cancelled = true }
+  }, [fetchQueue, applyQueue])
 
-  const tierRows = useMemo(
-    () => rows.filter(r => (tier === 'low' ? r.rating <= 3 : r.rating >= 4)),
-    [rows, tier],
-  )
+  const totalPages = Math.max(1, Math.ceil(filteredTotal / PAGE_SIZE))
+  const tabCount = useMemo(() => {
+    if (tier === 'low') return overview.needsFollowupCount
+    if (tier === 'unrated') return overview.unratedCount
+    return overview.positiveCount
+  }, [tier, overview])
 
-  const stats = useMemo<Stats>(() => ({
-    total:       tierRows.length,
-    open:        tierRows.filter(r => r.cre_status === 'open').length,
-    in_progress: tierRows.filter(r => r.cre_status === 'in_progress').length,
-    resolved:    tierRows.filter(r => r.cre_status === 'resolved').length,
-  }), [tierRows])
+  const showStatusFilter = tier === 'low' || tier === 'unrated'
+  const colCount = tier === 'unrated' ? 11 : 11
 
-  const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase()
-    return tierRows.filter(r => {
-      if (tier === 'low' && filterStatus !== 'all' && r.cre_status !== filterStatus) return false
-      if (q) {
-        const hay = `${r.customer_name || ''} ${r.mobile_number} ${r.vehicle_registration_number || ''} ${r.branch || ''}`.toLowerCase()
-        if (!hay.includes(q)) return false
-      }
-      return true
-    })
-  }, [tierRows, tier, filterStatus, search])
-
-  if (loading) {
+  if (loading && rows.length === 0) {
     return <div className="p-8 text-center text-gray-500">Loading Post Service Feedback queue…</div>
   }
 
-  if (error) {
+  if (error && rows.length === 0) {
     return (
       <div className="p-8">
         <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-red-700">{error}</div>
-        <button onClick={fetchAll} className="mt-4 px-4 py-2 bg-gray-100 rounded hover:bg-gray-200 text-sm">Retry</button>
+        <button onClick={() => void load()} className="mt-4 px-4 py-2 bg-gray-100 rounded hover:bg-gray-200 text-sm">Retry</button>
       </div>
     )
   }
@@ -323,11 +436,11 @@ export default function PostServiceFeedbackCREPage() {
         <div>
           <h1 className="text-xl font-semibold text-gray-900">Post Service Feedback</h1>
           <p className="text-sm text-gray-500 mt-0.5">
-            Customers who responded to the post-service feedback message — follow up on low ratings, review the positive ones.
+            Follow up on low ratings, call customers who have not responded, and review the positive ones.
           </p>
         </div>
         <button
-          onClick={fetchAll}
+          onClick={() => void load()}
           className="px-3 py-1.5 bg-gray-100 hover:bg-gray-200 rounded text-sm text-gray-700"
         >
           Refresh
@@ -343,39 +456,48 @@ export default function PostServiceFeedbackCREPage() {
         </div>
       </div>
 
-      <div className="border-b border-gray-200 flex gap-6">
+      <div className="border-b border-gray-200 flex flex-wrap gap-6">
         <button
-          onClick={() => { setTier('low'); setExpandedId(null) }}
+          onClick={() => { setTier('low'); setFilterStatus('all'); setPage(1); setExpandedId(null) }}
           className={`py-2 text-sm font-medium border-b-2 transition-colors ${tier === 'low' ? 'border-red-600 text-red-700' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
         >
           Needs Follow-up (≤3★)
+          <span className="ml-2 text-xs text-gray-400">{overview.needsFollowupCount}</span>
         </button>
         <button
-          onClick={() => { setTier('high'); setExpandedId(null) }}
+          onClick={() => { setTier('unrated'); setFilterStatus('all'); setPage(1); setExpandedId(null) }}
+          className={`py-2 text-sm font-medium border-b-2 transition-colors ${tier === 'unrated' ? 'border-amber-600 text-amber-700' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
+        >
+          No Rating / No Response
+          <span className="ml-2 text-xs text-gray-400">{overview.unratedCount}</span>
+        </button>
+        <button
+          onClick={() => { setTier('high'); setFilterStatus('all'); setPage(1); setExpandedId(null) }}
           className={`py-2 text-sm font-medium border-b-2 transition-colors ${tier === 'high' ? 'border-green-600 text-green-700' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
         >
           Positive (≥4★)
+          <span className="ml-2 text-xs text-gray-400">{overview.positiveCount}</span>
         </button>
       </div>
 
-      {tier === 'low' && (
+      {showStatusFilter && (
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          <StatCard label="Total Cases" value={stats.total} />
-          <StatCard label="Open" value={stats.open} color="text-red-700" />
-          <StatCard label="In Progress" value={stats.in_progress} color="text-yellow-700" />
-          <StatCard label="Resolved" value={stats.resolved} color="text-green-700" />
+          <StatCard label="Total Cases" value={statusStats.total} />
+          <StatCard label="Open" value={statusStats.open} color="text-red-700" />
+          <StatCard label="In Progress" value={statusStats.in_progress} color="text-yellow-700" />
+          <StatCard label="Resolved" value={statusStats.resolved} color="text-green-700" />
         </div>
       )}
 
       <div className="bg-white border border-gray-200 rounded-lg p-4">
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          {tier === 'low' && (
+          {showStatusFilter && (
             <div>
               <label className="block text-xs text-gray-500 mb-1">Status</label>
               <select
                 className="w-full border border-gray-300 rounded px-2 py-1.5 text-sm"
                 value={filterStatus}
-                onChange={e => setFilterStatus(e.target.value as typeof filterStatus)}
+                onChange={e => { setFilterStatus(e.target.value as typeof filterStatus); setPage(1); setExpandedId(null) }}
               >
                 <option value="all">All</option>
                 <option value="open">Open</option>
@@ -384,7 +506,7 @@ export default function PostServiceFeedbackCREPage() {
               </select>
             </div>
           )}
-          <div className={tier === 'low' ? 'sm:col-span-2' : 'sm:col-span-3'}>
+          <div className={showStatusFilter ? 'sm:col-span-2' : 'sm:col-span-3'}>
             <label className="block text-xs text-gray-500 mb-1">Search (name, mobile, reg no, branch)</label>
             <input
               type="text"
@@ -395,7 +517,12 @@ export default function PostServiceFeedbackCREPage() {
             />
           </div>
         </div>
-        <p className="text-xs text-gray-400 mt-2">{filtered.length} cases</p>
+        <p className="text-xs text-gray-400 mt-2">
+          {filteredTotal} cases
+          {filteredTotal !== tabCount ? ` of ${tabCount}` : ''}
+          {loading ? ' · Updating…' : ''}
+        </p>
+        {error && <p className="text-xs text-red-600 mt-1">{error}</p>}
       </div>
 
       <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
@@ -410,20 +537,29 @@ export default function PostServiceFeedbackCREPage() {
                 <th className="px-4 py-3 font-medium">Service Type</th>
                 <th className="px-4 py-3 font-medium">Service Advisor</th>
                 <th className="px-4 py-3 font-medium">Mobile</th>
-                <th className="px-4 py-3 font-medium">Rating</th>
-                <th className="px-4 py-3 font-medium">Remark</th>
-                <th className="px-4 py-3 font-medium">{tier === 'low' ? 'Status' : 'Review Link'}</th>
+                {tier === 'unrated' ? (
+                  <>
+                    <th className="px-4 py-3 font-medium">Message Sent At</th>
+                    <th className="px-4 py-3 font-medium">Days Since Sent</th>
+                  </>
+                ) : (
+                  <>
+                    <th className="px-4 py-3 font-medium">Rating</th>
+                    <th className="px-4 py-3 font-medium">Remark</th>
+                  </>
+                )}
+                <th className="px-4 py-3 font-medium">{tier === 'high' ? 'Review Link' : 'Status'}</th>
                 <th className="px-4 py-3 font-medium"></th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
-              {filtered.length === 0 ? (
+              {rows.length === 0 ? (
                 <tr>
-                  <td colSpan={11} className="px-4 py-8 text-center text-gray-400 text-sm">
+                  <td colSpan={colCount} className="px-4 py-8 text-center text-gray-400 text-sm">
                     No cases found.
                   </td>
                 </tr>
-              ) : filtered.map(r => (
+              ) : rows.map(r => (
                 <Fragment key={r.id}>
                   <tr className="hover:bg-gray-50 cursor-pointer" onClick={() => setExpandedId(expandedId === r.id ? null : r.id)}>
                     <td className="px-4 py-3 font-medium text-gray-800">{r.customer_name || '—'}</td>
@@ -433,18 +569,27 @@ export default function PostServiceFeedbackCREPage() {
                     <td className="px-4 py-3 text-gray-600">{r.service_type || '—'}</td>
                     <td className="px-4 py-3 text-gray-600">{r.service_advisor_name || '—'}</td>
                     <td className="px-4 py-3 text-gray-600 font-mono">{r.mobile_number}</td>
-                    <td className="px-4 py-3"><Stars rating={r.rating} /></td>
-                    <td className="px-4 py-3 text-xs text-gray-600 max-w-[220px] truncate" title={r.feedback_text || ''}>
-                      {r.feedback_text || '—'}
-                    </td>
+                    {tier === 'unrated' ? (
+                      <>
+                        <td className="px-4 py-3 text-gray-600 text-xs">{fmtDateTime(r.sent_at)}</td>
+                        <td className="px-4 py-3 text-gray-600">{daysSinceSent(r.sent_at)}</td>
+                      </>
+                    ) : (
+                      <>
+                        <td className="px-4 py-3"><Stars rating={r.rating} /></td>
+                        <td className="px-4 py-3 text-xs text-gray-600 max-w-[220px] truncate" title={r.feedback_text || ''}>
+                          {r.feedback_text || '—'}
+                        </td>
+                      </>
+                    )}
                     <td className="px-4 py-3">
-                      {tier === 'low' ? (
-                        <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_COLOR[r.cre_status]}`}>
-                          {STATUS_LABEL[r.cre_status]}
-                        </span>
-                      ) : (
+                      {tier === 'high' ? (
                         <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${r.review_link_sent ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
                           {r.review_link_sent ? 'Sent' : '—'}
+                        </span>
+                      ) : (
+                        <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_COLOR[r.cre_status]}`}>
+                          {STATUS_LABEL[r.cre_status]}
                         </span>
                       )}
                     </td>
@@ -452,8 +597,8 @@ export default function PostServiceFeedbackCREPage() {
                   </tr>
                   {expandedId === r.id && (
                     <tr>
-                      <td colSpan={11} className="p-0">
-                        <RowDetail row={r} onUpdated={fetchAll} showActions={tier === 'low'} />
+                      <td colSpan={colCount} className="p-0">
+                        <RowDetail row={r} onUpdated={() => void load()} showActions={tier !== 'high'} />
                       </td>
                     </tr>
                   )}
@@ -462,6 +607,27 @@ export default function PostServiceFeedbackCREPage() {
             </tbody>
           </table>
         </div>
+        {totalPages > 1 && (
+          <div className="px-4 py-3 border-t border-gray-100 flex items-center justify-between text-sm text-gray-500">
+            <span>Page {page} of {totalPages}</span>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setPage(p => Math.max(1, p - 1))}
+                disabled={page === 1}
+                className="px-3 py-1 rounded border border-gray-300 hover:bg-gray-50 disabled:opacity-40 text-xs"
+              >
+                Previous
+              </button>
+              <button
+                onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                disabled={page === totalPages}
+                className="px-3 py-1 rounded border border-gray-300 hover:bg-gray-50 disabled:opacity-40 text-xs"
+              >
+                Next
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   )

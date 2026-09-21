@@ -2,6 +2,10 @@
 
 Tracks documentation-sync updates for business logic, architecture, and access control.
 
+## 2026-09-21
+
+- `/post-service-feedback` adds a **No Rating / No Response** tab for successfully sent PSF messages with no rating (`sent_at IS NOT NULL AND rating IS NULL`). Overview cards and tab counts are exact database counts, not the first 1000 downloaded rows. The table is server-side paginated (PostgREST `.range()`, page size 50) with search/status against the full matching population. Calling still uses existing `cre_status`, `post_service_feedback_remarks`, `psf_add_remark`, and `psf_mark_resolved`. The responded CRE queue view is unchanged. Ledger: DBL-0081.
+
 ## 2026-09-19
 
 - Stage 18 **DO Payment** Customer Payment (CP) now captures **CP Mode of Payment** (Cash / UPI / Card / Cheque / Bank transfer / Other). Mode is required only when CP amount > 0 and is stored on the existing customer receipt line. Main / GST / TDS stay insurance components with no payment mode. Historical CP rows without a mode still render as —. Ledger: DBL-0079. Plan: `BODYSHOP-SETTLEMENT-001`.
