@@ -34,24 +34,38 @@ export default function CustomerEstimateScreen() {
   const [toast, setToast] = useState<{ ok: boolean; msg: string } | null>(null)
   const [error, setError] = useState<string | null>(null)
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (isSilent = false) => {
     if (!token) return
-    setLoading(true)
+    if (!isSilent) setLoading(true)
     setError(null)
     try {
       const list = (await customerListEstimates(token, selectedReg)).map(parseEstimate)
       setRows(list)
-      setSelectedIdx((prev) => (prev < list.length ? prev : 0))
+      // If there's an active pending estimate requiring action, auto-select it
+      const pendingIdx = list.findIndex(
+        (e) => !e.status.toLowerCase().includes('approv') && !e.status.toLowerCase().includes('reject')
+      )
+      if (pendingIdx >= 0) {
+        setSelectedIdx(pendingIdx)
+      } else {
+        setSelectedIdx((prev) => (prev < list.length ? prev : 0))
+      }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Unable to load estimates.')
+      if (!isSilent) {
+        setError(err instanceof Error ? err.message : 'Unable to load estimates.')
+      }
     } finally {
-      setLoading(false)
+      if (!isSilent) setLoading(false)
     }
   }, [token, selectedReg])
 
   useFocusEffect(
     useCallback(() => {
-      void load()
+      void load(false)
+      const timer = setInterval(() => {
+        void load(true)
+      }, 4000)
+      return () => clearInterval(timer)
     }, [load])
   )
 
@@ -60,6 +74,9 @@ export default function CustomerEstimateScreen() {
 
   const decide = async (decision: 'approve' | 'reject') => {
     if (!token || !estimate?.estimate_id) return
+    // Lock: if already approved, cannot reject or re-approve
+    if (kind === 'approved') return
+
     const reasonText = rejectReason.trim()
     if (decision === 'reject' && !reasonText) return
 
@@ -84,8 +101,8 @@ export default function CustomerEstimateScreen() {
       ok: decision === 'approve',
       msg:
         decision === 'approve'
-          ? `Estimate #${estimate.estimate_no} Approved! Assigned Technician has been notified to commence repairs.`
-          : `Estimate #${estimate.estimate_no} has been rejected. Service Advisor will connect with a revised estimate.`,
+          ? `Estimate #${estimate.estimate_no} Approved! Service Advisor & Technician notified.`
+          : `Estimate #${estimate.estimate_no} Rejected. Service Advisor will create & send a revised estimate.`,
     })
 
     setBusy(true)
@@ -96,7 +113,8 @@ export default function CustomerEstimateScreen() {
         token,
         estimate.estimate_id,
         decision,
-        decision === 'reject' ? reasonText : undefined
+        decision === 'reject' ? reasonText : undefined,
+        selectedReg
       )
       // Background sync fresh data
       const list = (await customerListEstimates(token, selectedReg)).map(parseEstimate)
