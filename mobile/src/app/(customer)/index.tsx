@@ -127,7 +127,14 @@ export default function CustomerDashboardScreen() {
   const advisorPhone = pickAdvisorPhone(job) || pickAdvisorPhone(selected as unknown as Record<string, unknown>)
 
   // 5 Service Stages for Clean Live Tracker
-  const currentStageIndex = delivered ? 4 : job?.technician_name ? 3 : job?.estimate_done_at ? 2 : jc ? 1 : 0
+  // Stage index: 0=Intake, 1=JobCard, 2=Quote, 3=BayWork, 4=Ready
+  // Any stage <= currentStageIndex is marked as done with green tick ✓
+  const hasJc = Boolean(jc && jc.trim().length > 0 && !['pending', 'null', '—'].includes(jc.trim().toLowerCase()))
+  const hasQuote = Boolean(job?.estimate_done_at)
+  const hasTech = Boolean(technician && technician.trim().length > 0)
+  const isDelivered = Boolean(delivered || gatePass?.gate_pass_no || settlement?.status === 'received')
+
+  const currentStageIndex = isDelivered ? 4 : hasTech ? 3 : hasQuote ? 2 : hasJc ? 1 : 0
 
   const trackerStages: { title: string; icon: IconName; desc: string }[] = [
     { title: 'Intake', icon: 'arrow-down', desc: 'Vehicle check-in & initial inspection' },
@@ -237,7 +244,7 @@ export default function CustomerDashboardScreen() {
                     }}
                   />
                   <Text style={{ color: '#ffffff', fontSize: 11, fontWeight: '800' }} numberOfLines={1}>
-                    {delivered ? 'Delivered / Ready' : 'In Service'}
+                    {delivered ? 'Delivered / Ready' : 'Processing'}
                   </Text>
                 </View>
 
@@ -388,23 +395,30 @@ export default function CustomerDashboardScreen() {
                         >
                           <View
                             className={`w-7 h-7 rounded-full items-center justify-center border-2 ${
-                              isSelected
-                                ? 'bg-blue-600 border-blue-600 shadow-md'
-                                : isDone
-                                ? 'bg-emerald-500 border-emerald-500'
+                              isDone
+                                ? 'bg-emerald-500 border-emerald-500 shadow-xs'
                                 : 'bg-white border-slate-300'
                             }`}
+                            style={
+                              isSelected
+                                ? { borderWidth: 2.5, borderColor: isDone ? '#047857' : '#2563eb' }
+                                : undefined
+                            }
                           >
                             <Icon
-                              name={isDone && !isCurrent && !isSelected ? 'check' : stg.icon}
+                              name={isDone ? 'check' : stg.icon}
                               size={12}
-                              color={isDone || isCurrent || isSelected ? '#ffffff' : '#94a3b8'}
+                              color={isDone ? '#ffffff' : '#94a3b8'}
                               strokeWidth={2.5}
                             />
                           </View>
                           <Text
                             className={`text-[9.5px] mt-1 text-center font-bold ${
-                              isSelected ? 'text-blue-700 font-black' : isDone ? 'text-slate-800' : 'text-slate-400'
+                              isSelected
+                                ? 'text-blue-700 font-black'
+                                : isDone
+                                ? 'text-emerald-800'
+                                : 'text-slate-400'
                             }`}
                           >
                             {stg.title}

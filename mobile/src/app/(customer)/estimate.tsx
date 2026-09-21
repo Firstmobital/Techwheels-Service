@@ -60,28 +60,52 @@ export default function CustomerEstimateScreen() {
 
   const decide = async (decision: 'approve' | 'reject') => {
     if (!token || !estimate?.estimate_id) return
-    if (decision === 'reject' && !rejectReason.trim()) return
+    const reasonText = rejectReason.trim()
+    if (decision === 'reject' && !reasonText) return
+
+    // ── Optimistic Update Snapshot ─────────────────────────────────────────
+    const prevRows = [...rows]
+    const updatedStatus = decision === 'approve' ? 'Approved' : 'Rejected'
+    const optimisticRows = rows.map((r, i) =>
+      i === selectedIdx
+        ? {
+            ...r,
+            status: updatedStatus,
+            rejection_reason: decision === 'reject' ? reasonText : r.rejection_reason,
+          }
+        : r
+    )
+
+    // Apply optimistic state instantly
+    setRows(optimisticRows)
+    setShowReject(false)
+    setRejectReason('')
+    setToast({
+      ok: decision === 'approve',
+      msg:
+        decision === 'approve'
+          ? `Estimate #${estimate.estimate_no} Approved! Assigned Technician has been notified to commence repairs.`
+          : `Estimate #${estimate.estimate_no} has been rejected. Service Advisor will connect with a revised estimate.`,
+    })
+
     setBusy(true)
     setError(null)
+
     try {
       await customerSetEstimateDecision(
         token,
         estimate.estimate_id,
         decision,
-        decision === 'reject' ? rejectReason.trim() : undefined
+        decision === 'reject' ? reasonText : undefined
       )
-      setShowReject(false)
-      setRejectReason('')
-      setToast({
-        ok: decision === 'approve',
-        msg:
-          decision === 'approve'
-            ? `Estimate #${estimate.estimate_no} Approved! Assigned Technician has been notified to commence repairs.`
-            : `Estimate #${estimate.estimate_no} has been rejected. Service Advisor will connect with a revised estimate.`,
-      })
-      await load()
+      // Background sync fresh data
+      const list = (await customerListEstimates(token, selectedReg)).map(parseEstimate)
+      if (list.length > 0) setRows(list)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Unable to update estimate.')
+      // Rollback to previous state on failure
+      setRows(prevRows)
+      setError(err instanceof Error ? err.message : 'Unable to update estimate. Changes rolled back.')
+      setToast(null)
     } finally {
       setBusy(false)
     }

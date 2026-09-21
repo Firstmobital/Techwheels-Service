@@ -17,25 +17,17 @@ import { useCustomerSession } from '../../context/CustomerSessionContext'
 import {
   DEFAULT_SERVICE_TYPES,
   DEFAULT_TIME_SLOTS,
+  SCHEDULE_SERVICE_SUBTYPES,
   customerFetchBranches,
   customerSubmitBooking,
 } from '../../lib/api/customerPortal'
 import { getMobileLocation } from '../../utils/locationService'
 
-const SERVICE_TYPE_ICONS: Record<string, string> = {
-  'Running Repairs': '🔧',
-  'First Free Service': '1️⃣',
-  'Second Free Service': '2️⃣',
-  'Third Free Service': '3️⃣',
-  'Paid Service': '⚙️',
-  'Mini Paid Service': '⏱️',
-  'Accident': '🚗',
-  'Rusting': '🛡️',
-  'PDI': '📋',
-  'Campaign': '📢',
-  'E Breakdown': '⚡',
-  'Updation': '🔄',
-}
+const OTHER_SERVICES = [
+  'Accidental',
+  'Running Repair',
+  'Campaign',
+] as const
 
 export default function CustomerBookingScreen() {
   const router = useRouter()
@@ -43,7 +35,9 @@ export default function CustomerBookingScreen() {
   const selected = vehicles.find((v) => v.reg_number === selectedReg) || vehicles[0]
 
   // Form states
-  const [serviceType, setServiceType] = useState<string>(DEFAULT_SERVICE_TYPES[0])
+  const [selectedScheduleSubtype, setSelectedScheduleSubtype] = useState<string>('1st Service')
+  const [serviceType, setServiceType] = useState<string>('Schedule Service – 1st Service')
+  const isScheduleSelected = serviceType.startsWith('Schedule Service')
   const [branches, setBranches] = useState<string[]>([])
   const [selectedBranch, setSelectedBranch] = useState<string>('Sitapura')
   const [selectedSlot, setSelectedSlot] = useState<string>(DEFAULT_TIME_SLOTS[0])
@@ -320,31 +314,97 @@ export default function CustomerBookingScreen() {
               </Text>
               <Text className="text-blue-600 text-xs font-bold">Required</Text>
             </View>
-            <View className="gap-2">
-              {DEFAULT_SERVICE_TYPES.map((type) => {
-                const isSelected = serviceType === type
-                const icon = SERVICE_TYPE_ICONS[type] || '🔧'
+            <View className="gap-2.5">
+              {/* Option 1: Schedule Service (Expandable with 5 Sub-options) */}
+              <View
+                className={`rounded-2xl border-2 transition-all overflow-hidden ${
+                  isScheduleSelected
+                    ? 'bg-blue-50/70 border-blue-600'
+                    : 'bg-white border-slate-200'
+                }`}
+              >
+                <TouchableOpacity
+                  activeOpacity={0.8}
+                  onPress={() => {
+                    if (!isScheduleSelected) {
+                      setSelectedScheduleSubtype('1st Service')
+                      setServiceType('Schedule Service – 1st Service')
+                    }
+                  }}
+                  className="flex-row items-center justify-between p-3.5"
+                >
+                  <Text
+                    className={`text-sm ${
+                      isScheduleSelected ? 'text-blue-950 font-black' : 'text-slate-800 font-bold'
+                    }`}
+                  >
+                    Schedule Service
+                  </Text>
+                  <View
+                    className={`w-5 h-5 rounded-full border-2 items-center justify-center ${
+                      isScheduleSelected ? 'border-blue-600 bg-blue-600' : 'border-slate-300'
+                    }`}
+                  >
+                    {isScheduleSelected && <View className="w-2 h-2 rounded-full bg-white" />}
+                  </View>
+                </TouchableOpacity>
+
+                {/* 5 Sub-Options under Schedule Service */}
+                {isScheduleSelected && (
+                  <View className="px-3 pb-3.5 pt-1 border-t border-blue-200/70">
+                    <View className="flex-row flex-wrap gap-2 pt-1">
+                      {SCHEDULE_SERVICE_SUBTYPES.map((sub) => {
+                        const isSubSelected = selectedScheduleSubtype === sub
+                        return (
+                          <TouchableOpacity
+                            key={sub}
+                            activeOpacity={0.7}
+                            onPress={() => {
+                              setSelectedScheduleSubtype(sub)
+                              setServiceType(`Schedule Service – ${sub}`)
+                            }}
+                            className={`px-3.5 py-2 rounded-xl border ${
+                              isSubSelected
+                                ? 'bg-blue-600 border-blue-600 shadow-xs'
+                                : 'bg-white border-slate-200'
+                            }`}
+                          >
+                            <Text
+                              className={`text-xs font-bold ${
+                                isSubSelected ? 'text-white' : 'text-slate-800'
+                              }`}
+                            >
+                              {sub}
+                            </Text>
+                          </TouchableOpacity>
+                        )
+                      })}
+                    </View>
+                  </View>
+                )}
+              </View>
+
+              {/* Option 2, 3, 4: Accidental, Running Repair, Campaign */}
+              {OTHER_SERVICES.map((name) => {
+                const isSelected = serviceType === name
                 return (
                   <TouchableOpacity
-                    key={type}
+                    key={name}
                     activeOpacity={0.8}
-                    onPress={() => setServiceType(type)}
-                    className={`flex-row items-center justify-between p-3 rounded-xl border-2 transition-all ${
+                    onPress={() => setServiceType(name)}
+                    className={`flex-row items-center justify-between p-3.5 rounded-2xl border-2 transition-all ${
                       isSelected
-                        ? 'bg-blue-50 border-blue-600 shadow-xs'
+                        ? 'bg-blue-50/70 border-blue-600 shadow-xs'
                         : 'bg-white border-slate-200'
                     }`}
                   >
-                    <View className="flex-row items-center gap-2.5 flex-1 pr-2">
-                      <Text className="text-lg">{icon}</Text>
-                      <Text
-                        className={`text-xs font-bold ${
-                          isSelected ? 'text-blue-900' : 'text-slate-700'
-                        }`}
-                      >
-                        {type}
-                      </Text>
-                    </View>
+                    <Text
+                      className={`text-sm ${
+                        isSelected ? 'text-blue-950 font-black' : 'text-slate-800 font-bold'
+                      }`}
+                    >
+                      {name}
+                    </Text>
                     <View
                       className={`w-5 h-5 rounded-full border-2 items-center justify-center ${
                         isSelected ? 'border-blue-600 bg-blue-600' : 'border-slate-300'
@@ -435,7 +495,7 @@ export default function CustomerBookingScreen() {
               4. Select Service Center Branch
             </Text>
             <View className="flex-row flex-wrap gap-2">
-              {(branches.length > 0 ? branches : ['Sitapura', 'Ajmer Road', 'Tonk', 'Shahpura', 'Paota']).map((b) => {
+              {(branches.length > 0 ? branches : ['Sitapura', 'Ajmer Road', 'Tonk', 'Shahpura']).map((b) => {
                 const isSelected = selectedBranch === b
                 return (
                   <TouchableOpacity

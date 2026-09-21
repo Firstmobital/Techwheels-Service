@@ -96,8 +96,8 @@ export default function CustomerGatePassScreen() {
   const receivedVal = Number(settlement?.amount_received ?? pass?.amount_received ?? selected?.amount_received ?? 0)
   const remainingVal = Math.max(0, billedVal - receivedVal)
 
-  // Gate pass is authorized if issued by Accounts Desk or marked paid/cleared
-  const isGatepassAuthorized = hasIssuedRecord || Boolean(pass?.qr_token) || pass?.payment_status === 'Paid' || settlement?.status === 'received' || (billedVal > 0 && remainingVal === 0) || Boolean(pass?.keep_on_credit)
+  // Gate pass is authorized if issued by Accounts Desk or marked paid/cleared with received > 0
+  const isGatepassAuthorized = hasIssuedRecord || Boolean(pass?.qr_token) || pass?.payment_status === 'Paid' || (settlement?.status === 'received' && receivedVal > 0) || (billedVal > 0 && receivedVal > 0 && remainingVal === 0) || Boolean(pass?.keep_on_credit)
 
   const billed = formatInr(billedVal) ?? '—'
   const received = formatInr(receivedVal) ?? '—'

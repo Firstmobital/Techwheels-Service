@@ -326,18 +326,106 @@ export async function customerGetSettlement(sessionToken: string, regNumber?: st
     console.warn('customer_get_settlement RPC note:', err)
   }
 
-  // Direct Live DB sync from accounts_mechanical_invoices & service_reception_entries
+  // Direct Live DB sync from accounts_mechanical_invoices & bodyshop_settlements
   if (regClean || regNorm) {
     try {
+      // 1. First check Bodyshop / Accident Repair Cards & Accounts Settlement
+      const { data: bsCards } = await supabase
+        .from('bodyshop_repair_cards')
+        .select('*')
+        .or(`reg_number.ilike.%${regClean}%,reg_number.ilike.%${rawReg}%`)
+        .order('created_at', { ascending: false })
+        .limit(1)
+
+      const bsCard = bsCards && bsCards.length > 0 ? (bsCards[0] as Record<string, unknown>) : null
+
+      if (bsCard) {
+        const repairCardId = Number(bsCard.id)
+        const { data: bsSettle } = await supabase
+          .from('bodyshop_settlements')
+          .select('*')
+          .eq('repair_card_id', repairCardId)
+          .maybeSingle()
+
+        const { data: bsLines } = await supabase
+          .from('bodyshop_settlement_lines')
+          .select('*')
+          .eq('repair_card_id', repairCardId)
+          .eq('party', 'customer')
+          .eq('is_reversed', false)
+          .order('txn_date', { ascending: false })
+
+        const doAmount = Number(bsSettle?.do_amount ?? 0)
+        const isCashCase = doAmount === 0 && (bsCard.customer_type === 'cash' || !bsCard.insurance_company)
+        const isInsuranceClaim = !isCashCase && (doAmount > 0 || Boolean(bsCard.insurance_company) || Boolean(bsCard.claim_intimation_no) || true)
+        const billed = Number(bsSettle?.invoice_amount ?? bsCard.expected_invoice_amount ?? 0)
+        const doRemaining = Number(bsSettle?.insurance_due_amount ?? doAmount)
+        const diffAmount = Number(bsSettle?.customer_diff_amount ?? (doAmount > 0 ? Math.max(0, billed - doAmount) : billed))
+        const customerReceived = Number(
+          bsSettle?.customer_posted_amount ??
+          (Array.isArray(bsLines) ? bsLines.reduce((sum, l) => sum + (Number((l as any).amount) || 0), 0) : 0)
+        )
+        const customerRemaining = bsSettle?.customer_remaining_amount != null
+          ? Number(bsSettle.customer_remaining_amount)
+          : Math.max(0, diffAmount - customerReceived)
+
+        const isCustomerCleared = customerRemaining <= 0 && (billed > 0 || diffAmount > 0 || isInsuranceClaim)
+        const overallStatus = isCustomerCleared ? 'received' : (customerReceived > 0 ? 'partial' : 'pending')
+
+        const paymentList = (Array.isArray(bsLines) ? bsLines : []).map((l: any) => ({
+          id: String(l.id),
+          amount: Number(l.amount) || 0,
+          payment_mode: l.payment_mode || 'Accounts Cleared',
+          reference: l.reference || 'Bodyshop Accounts Clearance',
+          posted_at: l.txn_date || l.created_at || new Date().toISOString(),
+          payment_received_date: l.txn_date ? new Date(l.txn_date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'Asia/Kolkata' }) : null,
+          voucher_no: l.voucher_no || null,
+        }))
+
+        return setCache(cacheKey, {
+          is_bodyshop: true,
+          is_insurance_claim: isInsuranceClaim,
+          insurance_company: bsCard.insurance_company || bsSettle?.invoice_account || null,
+          insurance_policy_no: bsCard.insurance_policy_no || null,
+          claim_intimation_no: bsCard.claim_intimation_no || null,
+          do_amount: doAmount,
+          do_remaining: doRemaining,
+          customer_diff_amount: diffAmount,
+          customer_settlement_kind: bsSettle?.customer_settlement_kind || 'due',
+          customer_remaining_amount: customerRemaining,
+          customer_posted_amount: customerReceived,
+          outstanding_amount: Number(bsSettle?.outstanding_amount ?? (doRemaining + customerRemaining)),
+          reception_entry_id: bsCard.reception_entry_id,
+          jc_number: bsCard.job_card_no || rpcResult?.jc_number,
+          reg_number: bsCard.reg_number || regNorm,
+          owner_name: bsCard.customer_name,
+          branch: bsCard.branch,
+          service_type: 'Accidental / Bodyshop Repair',
+          total_billed: billed,
+          billed_amount: billed,
+          amount_received: customerReceived,
+          remaining_amount: customerRemaining,
+          remaining_due: customerRemaining,
+          status: bsSettle?.derived_payment_status || overallStatus,
+          invoice_no: bsSettle?.invoice_number || null,
+          invoice_date: bsSettle?.invoice_date || null,
+          payments: paymentList,
+          updated_at: bsSettle?.updated_at || bsCard.created_at || new Date().toISOString(),
+        })
+      }
+
+      // 2. Mechanical Service Accounts & Reception Entries fallback
       const { data: entries } = await supabase
         .from('service_reception_entries')
         .select('id, jc_number, reg_number, owner_name, owner_phone, branch, service_type, created_at, invoice_done_at, expected_invoice_amount, billed_amount, amount_received')
-        .ilike('reg_number', `%${regClean}%`)
+        .or(`reg_number.ilike.%${regClean}%,reg_number.ilike.%${rawReg}%`)
         .order('created_at', { ascending: false })
         .limit(1)
 
       if (entries && entries.length > 0) {
         const entry = entries[0]
+        const isAccidentService = String(entry.service_type || '').toLowerCase().includes('accident') || String(entry.service_type || '').toLowerCase().includes('bodyshop')
+
         const { data: inv } = await supabase
           .from('accounts_mechanical_invoices')
           .select('id, invoice_number, invoice_date, billed_amount, amount_received, payment_status, keep_on_credit, keep_on_credit_reason, updated_at')
@@ -374,6 +462,8 @@ export async function customerGetSettlement(sessionToken: string, regNumber?: st
         const status = (billed > 0 && remaining <= 0) ? 'received' : (received > 0 ? 'partial' : 'pending')
 
         return setCache(cacheKey, {
+          is_bodyshop: isAccidentService,
+          is_insurance_claim: isAccidentService,
           reception_entry_id: entry.id,
           jc_number: entry.jc_number || rpcResult?.jc_number,
           reg_number: entry.reg_number || regNorm,
@@ -402,19 +492,23 @@ export async function customerGetSettlement(sessionToken: string, regNumber?: st
   return rpcResult ? setCache(cacheKey, rpcResult) : null
 }
 
-export const DEFAULT_SERVICE_TYPES = [
-  'Running Repairs',
-  'First Free Service',
-  'Second Free Service',
-  'Third Free Service',
-  'Paid Service',
+export const SCHEDULE_SERVICE_SUBTYPES = [
+  '1st Service',
+  '2nd Service',
+  '3rd Service',
   'Mini Paid Service',
-  'Accident',
-  'Rusting',
-  'PDI',
+  'Paid Service',
+] as const
+
+export const DEFAULT_SERVICE_TYPES = [
+  'Schedule Service – 1st Service',
+  'Schedule Service – 2nd Service',
+  'Schedule Service – 3rd Service',
+  'Schedule Service – Mini Paid Service',
+  'Schedule Service – Paid Service',
+  'Accidental',
+  'Running Repair',
   'Campaign',
-  'E Breakdown',
-  'Updation',
 ] as const
 
 export const DEFAULT_TIME_SLOTS = [
@@ -423,8 +517,6 @@ export const DEFAULT_TIME_SLOTS = [
   '11:30 AM – 12:30 PM',
   '12:30 PM – 01:30 PM',
   '02:30 PM – 03:30 PM',
-  '03:30 PM – 04:30 PM',
-  '04:30 PM – 05:30 PM',
 ] as const
 
 export const DEFAULT_BRANCHES = [
@@ -432,7 +524,6 @@ export const DEFAULT_BRANCHES = [
   'Ajmer Road',
   'Tonk',
   'Shahpura',
-  'Paota',
 ] as const
 
 export interface CustomerBookingItem {
