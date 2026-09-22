@@ -7,7 +7,7 @@ import assert from 'node:assert/strict'
 import { resolveBusyBranch, resolveDebtorGroup, BUSY_DEBTOR_GROUPS } from '../src/lib/busy/branch.ts'
 import { existsSync, readFileSync } from 'node:fs'
 import { isDateInInclusiveRange, dateRangeError, formatBusyBillDate, parsePartsInvoiceDate } from '../src/lib/busy/dates.ts'
-import { invoiceMatchesPortalSeries } from '../src/lib/busy/eligibility.ts'
+import { busyVoucherSeries, invoiceMatchesPortalSeries } from '../src/lib/busy/eligibility.ts'
 import { BUSY_INSURANCE_MASTER, matchBusyInsurance, readAuthoritativeGstin } from '../src/lib/busy/insuranceMaster.ts'
 import { inclusiveFromNet, nearestWholeRupee, roundOffToNearestRupee } from '../src/lib/busy/money.ts'
 import { classifyBusyInvoice, parseBodyshopPartyName, PDI_PARTY_NAME, resolvePartyName } from '../src/lib/busy/partyName.ts'
@@ -56,6 +56,15 @@ const labour = (overrides) => ({
   invoice_status: 'Active',
   portal: 'PV',
   ...overrides,
+})
+
+test('Series derivation uses bill-no prefix only', () => {
+  assert.equal(busyVoucherSeries('IMBTAI2627007762'), 'PV-S 26-27')
+  assert.equal(busyVoucherSeries('imbtai2627007762'), 'PV-S 26-27')
+  assert.equal(busyVoucherSeries('EMBTAI2627006634'), 'EV-S 26-27')
+  assert.equal(busyVoucherSeries('embtai2627006634'), 'EV-S 26-27')
+  assert.equal(busyVoucherSeries('XXXTAI2627000001'), '')
+  assert.equal(busyVoucherSeries(''), '')
 })
 
 test('1. PV + IMBTAI => included', () => {
@@ -202,12 +211,15 @@ function assertInvoiceVoucherContract(result) {
       ? ['SPARE PARTS @5%', 'SPARE PARTS @18%', 'LABOUR CHARGES @18%']
       : ['SPARE PARTS @18%', 'LABOUR CHARGES @18%']
     assert.deepEqual(items, needsRoundOff ? [...baseItems, 'Rounded Off (+)'] : baseItems)
+    const expectedSeries = busyVoucherSeries(preview.invoiceNumber)
     for (const row of rows) {
       assert.equal(row['Bill date'], formatBusyBillDate(preview.invoiceDate))
       assert.equal(row['Bill date'], rows[0]['Bill date'])
       assert.equal(row['bill no'], preview.invoiceNumber)
       assert.equal(row['Party Name'], preview.partyName)
       assert.equal(row.naration, rows[0].naration)
+      assert.equal(row.Series, expectedSeries)
+      assert.equal(row.Series, rows[0].Series)
       assert.equal(row.Qty, 0)
       assert.equal(row.Price, 0)
     }
@@ -409,10 +421,13 @@ test('workbook headers match BUSY contracts', () => {
     Price: 0,
     Amount: 1180,
     naration: 'RJ14AB1234',
+    Series: 'PV-S 26-27',
   }])
   assert.deepEqual(workbookHeaders(invoiceWb), [...INVOICE_VOUCHER_HEADERS])
+  assert.equal(workbookHeaders(invoiceWb).at(-1), 'Series')
   const invoiceRows = workbookDataRows(invoiceWb)
   assert.equal(invoiceRows[0]['bill no'], 'IMBTAI1')
+  assert.equal(invoiceRows[0].Series, 'PV-S 26-27')
   assert.equal(invoiceRows[0].Qty, 0)
   assert.equal(invoiceRows[0].Price, 0)
 
@@ -481,6 +496,7 @@ test('workbook round-trip keeps per-invoice voucher shape', () => {
   assert.deepEqual(without5.map((row) => row['Item Name']), ['SPARE PARTS @18%', 'LABOUR CHARGES @18%'])
   for (const row of workbookRows) {
     assert.equal(row['Bill date'], '01-09-2026')
+    assert.equal(row.Series, 'PV-S 26-27')
     assert.equal(row.Qty, 0)
     assert.equal(row.Price, 0)
   }
@@ -1036,6 +1052,57 @@ test('round off uses nearest whole rupee and existing half-up paise convention',
   assert.equal(nearestWholeRupee(10.50), 11)
   assert.equal(nearestWholeRupee(11.50), 12)
   assert.equal(String(roundOffToNearestRupee(10823.55)), '0.45')
+})
+
+test('Series is derived from bill no and repeated on every voucher row including Round Off', () => {
+  const result = transformBusyAccounting({
+    labourRows: [
+      labour({
+        invoice_number: 'IMBTAI2627007762',
+        job_card_number: 'JC-PV-SERIES',
+        final_labour_amount: 10823.55,
+      }),
+      labour({
+        invoice_number: 'EMBTAI2627006634',
+        portal: 'EV',
+        sr_assigned_to: 'EV_500A840',
+        first_name: 'SITA',
+        last_name: 'DEVI',
+        job_card_number: 'JC-EV-SERIES',
+        vehicle_registration_number: 'RJ14EV6634',
+        final_labour_amount: 10823.55,
+      }),
+    ],
+    partsLines: [],
+    fromDate: '2026-09-01',
+    toDate: '2026-09-10',
+  })
+  assertInvoiceVoucherContract(result)
+  const workbook = buildInvoiceVoucherWorkbook(result.invoiceRows)
+  const headers = workbookHeaders(workbook)
+  const workbookRows = workbookDataRows(workbook)
+  assert.equal(headers.includes('Series'), true)
+  assert.deepEqual(headers, [...INVOICE_VOUCHER_HEADERS])
+  assert.equal(headers.at(-1), 'Series')
+  assert.equal(workbookRows.length, result.invoiceRows.length)
+
+  const groups = voucherGroups(workbookRows)
+  const pvRows = groups.get('IMBTAI2627007762')
+  const evRows = groups.get('EMBTAI2627006634')
+  assert.ok(pvRows)
+  assert.ok(evRows)
+  assert.deepEqual(pvRows.map((row) => row['Item Name']), ['SPARE PARTS @18%', 'LABOUR CHARGES @18%', 'Rounded Off (+)'])
+  assert.deepEqual(evRows.map((row) => row['Item Name']), ['SPARE PARTS @18%', 'LABOUR CHARGES @18%', 'Rounded Off (+)'])
+  assert.equal(pvRows.every((row) => row.Series === 'PV-S 26-27'), true)
+  assert.equal(evRows.every((row) => row.Series === 'EV-S 26-27'), true)
+  assert.equal(pvRows.at(-1).Series, 'PV-S 26-27')
+  assert.equal(evRows.at(-1).Series, 'EV-S 26-27')
+  assert.equal(pvRows[1]['Party Name'], 'RAMESH KUMAR-SITAPURA RJ14AB1234')
+  assert.equal(evRows[1]['Party Name'], 'SITA DEVI-SITAPURA RJ14EV6634')
+  assert.equal(pvRows[1].Amount, 10823.55)
+  assert.equal(evRows[1].Amount, 10823.55)
+  assert.equal(pvRows.at(-1).Amount, 0.45)
+  assert.equal(evRows.at(-1).Amount, 0.45)
 })
 
 test('Rounded Off (+) is emitted only when labour+parts subtotal has a decimal part', () => {

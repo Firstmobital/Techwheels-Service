@@ -56,6 +56,7 @@ export const INVOICE_VOUCHER_HEADERS = [
   'Price',
   'Amount',
   'naration',
+  'Series',
 ] as const
 
 export const PARTY_ACCOUNT_HEADERS = ['Party Name', 'Group', 'GSTIN'] as const

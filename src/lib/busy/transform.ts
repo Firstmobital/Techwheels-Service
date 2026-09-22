@@ -1,6 +1,7 @@
 import { resolveBusyBranch, resolveDebtorGroup, type BusyBranch } from './branch.ts'
 import { formatBusyBillDate, isDateInInclusiveRange, isIsoDate } from './dates.ts'
 import {
+  busyVoucherSeries,
   expectedPrefixForPortal,
   invoiceMatchesPortalSeries,
   isCancelledInvoiceStatus,
@@ -50,6 +51,7 @@ export interface InvoiceVoucherRow {
   Price: number
   Amount: number
   naration: string
+  Series: string
 }
 
 export interface PartyAccountRow {
@@ -426,6 +428,7 @@ function voucherRow(row: BusyPreviewRow, itemName: string, amount: number, narra
     Price: 0,
     Amount: amount,
     naration: narration,
+    Series: busyVoucherSeries(row.invoiceNumber),
   }
 }
 

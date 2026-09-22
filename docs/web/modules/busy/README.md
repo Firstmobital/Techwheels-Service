@@ -21,6 +21,8 @@ Exact CRM columns inspected from `Parts - PV.csv` and `Parts - EV.csv`:
 
 Parts `invoice_no` and `invoice_date` are source evidence for traceability, reconciliation, validation, and mismatch detection. They never override Labour invoice number or date on BUSY vouchers. A Job Card mismatch is stored in `busy_parts` and surfaced as a warning.
 
+Invoice Voucher columns are `Bill date`, `bill no`, `Party Name`, `Item Name`, `Qty`, `Price`, `Amount`, `naration`, `Series`. `Series` is derived only from bill no: `IMBTAI*` → `PV-S 26-27`, `EMBTAI*` → `EV-S 26-27`, and is repeated on every voucher line of that invoice including `Rounded Off (+)`.
+
 Invoice Voucher rows are generated per eligible Labour invoice:
 
 - Always emit `SPARE PARTS @18%` and `LABOUR CHARGES @18%`, including Amount 0.

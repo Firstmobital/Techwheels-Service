@@ -2,6 +2,8 @@ import type { VehiclePortal } from './types.ts'
 
 export const PV_INVOICE_PREFIX = 'IMBTAI'
 export const EV_INVOICE_PREFIX = 'EMBTAI'
+export const BUSY_VOUCHER_SERIES_PV = 'PV-S 26-27'
+export const BUSY_VOUCHER_SERIES_EV = 'EV-S 26-27'
 
 export function normalizeInvoiceNumber(raw: unknown): string {
   return String(raw ?? '').trim()
@@ -71,6 +73,14 @@ export function expectedPrefixForPortal(portal: VehiclePortal): string {
 export function invoiceMatchesPortalSeries(invoiceNumber: string, portal: VehiclePortal): boolean {
   const invoice = normalizeInvoiceNumber(invoiceNumber).toUpperCase()
   return invoice.startsWith(expectedPrefixForPortal(portal))
+}
+
+/** BUSY voucher Series from bill no only. IMBTAI → PV-S 26-27, EMBTAI → EV-S 26-27. */
+export function busyVoucherSeries(invoiceNumber: unknown): string {
+  const invoice = normalizeInvoiceNumber(invoiceNumber).toUpperCase()
+  if (invoice.startsWith(PV_INVOICE_PREFIX)) return BUSY_VOUCHER_SERIES_PV
+  if (invoice.startsWith(EV_INVOICE_PREFIX)) return BUSY_VOUCHER_SERIES_EV
+  return ''
 }
 
 export function isCancelledInvoiceStatus(status: unknown): boolean {

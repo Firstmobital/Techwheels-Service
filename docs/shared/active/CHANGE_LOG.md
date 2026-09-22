@@ -4,6 +4,7 @@ Tracks documentation-sync updates for business logic, architecture, and access c
 
 ## 2026-09-22
 
+- BUSY Invoice Vouchers add `Series` after `naration`. Value comes only from bill no: `IMBTAI*` → `PV-S 26-27`, `EMBTAI*` → `EV-S 26-27`, repeated on every voucher line of the invoice including `Rounded Off (+)`. Existing voucher amounts, Party Name, grouping, and row generation are unchanged. Plan: `BUSY-001`.
 - Service Advisor **Invoice Amount (₹)** continues to update Accounts Mechanical **Billed** after invoice number/date capture, until any payment line exists (including Discount). Remaining, Billed KPI, gatepass math, and Excel follow `accounts_mechanical_invoices.billed_amount`. Cash/UPI/Card cards and Busy export stay receipt-line based. Ledger: DBL-0082. Plan: `ACCOUNTS-001`.
 
 ## 2026-09-21

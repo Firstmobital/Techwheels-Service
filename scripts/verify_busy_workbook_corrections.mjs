@@ -7,6 +7,7 @@ import assert from 'node:assert/strict'
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import * as XLSX from 'xlsx'
+import { busyVoucherSeries } from '../src/lib/busy/eligibility.ts'
 import { matchBusyInsurance } from '../src/lib/busy/insuranceMaster.ts'
 import { roundOffToNearestRupee, roundPaise } from '../src/lib/busy/money.ts'
 import { parseBodyshopPartyName } from '../src/lib/busy/partyName.ts'
@@ -75,6 +76,7 @@ for (const [billNo, rows] of byBill) {
       Price: 0,
       Amount: Number(row.Amount || 0),
       naration: row.naration,
+      Series: busyVoucherSeries(row['bill no']),
     })
   }
   if (roundOff !== 0) {
@@ -87,6 +89,7 @@ for (const [billNo, rows] of byBill) {
       Price: 0,
       Amount: roundOff,
       naration: template.naration,
+      Series: busyVoucherSeries(template['bill no']),
     })
   }
 }
@@ -147,6 +150,7 @@ for (const [billNo, rows] of rereadByBill) {
   assert.equal(rows.every((row) => row['Bill date'] === rows[0]['Bill date']), true, billNo)
   assert.equal(rows.every((row) => row['Party Name'] === rows[0]['Party Name']), true, billNo)
   assert.equal(rows.every((row) => row.naration === rows[0].naration), true, billNo)
+  assert.equal(rows.every((row) => row.Series === busyVoucherSeries(billNo)), true, billNo)
   assert.equal(rows.every((row) => row.Qty === 0 && row.Price === 0), true, billNo)
 }
 

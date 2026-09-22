@@ -2,8 +2,11 @@ export { resolveBusyBranch, resolveDebtorGroup, BUSY_DEBTOR_GROUPS, type BusyBra
 export { dateRangeError, formatBusyBillDate, parsePartsInvoiceDate } from './dates.ts'
 export {
   invoiceMatchesPortalSeries,
+  busyVoucherSeries,
   PV_INVOICE_PREFIX,
   EV_INVOICE_PREFIX,
+  BUSY_VOUCHER_SERIES_PV,
+  BUSY_VOUCHER_SERIES_EV,
   busyInvoiceLookupKey,
   busyJobCardLookupKey,
   busyVehicleRegistrationLookupKey,

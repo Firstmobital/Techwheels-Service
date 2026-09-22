@@ -21,6 +21,7 @@ export function buildInvoiceVoucherWorkbook(rows: InvoiceVoucherRow[]): XLSX.Wor
     { wch: 10 },
     { wch: 14 },
     { wch: 18 },
+    { wch: 14 },
   ]
   XLSX.utils.book_append_sheet(workbook, sheet, 'Invoice')
   return workbook
