@@ -128,6 +128,7 @@ export function ServiceEstimateBuilderModal({
   // Custom Item Form States (Part + Labour = Total & Master Catalogue Save)
   const [showCustomItem, setShowCustomItem] = useState(false)
   const [customDesc, setCustomDesc] = useState('')
+  const [customServiceType, setCustomServiceType] = useState<string>(serviceType || 'Third Free Service')
   const [customPartPrice, setCustomPartPrice] = useState<number>(0)
   const [customLabourPrice, setCustomLabourPrice] = useState<number>(0)
   const [customFuel, setCustomFuel] = useState<string>('All')
@@ -158,7 +159,10 @@ export function ServiceEstimateBuilderModal({
           }
           if (r.service_type) {
             setActiveServiceType(r.service_type)
-            if (!serviceType) setServiceTypeFilter(r.service_type)
+            if (!serviceType) {
+              setServiceTypeFilter(r.service_type)
+              setCustomServiceType(r.service_type)
+            }
           }
         }
       } catch (err) {
@@ -181,6 +185,7 @@ export function ServiceEstimateBuilderModal({
     if (serviceType) {
       setActiveServiceType(serviceType)
       setServiceTypeFilter(serviceType)
+      setCustomServiceType(serviceType)
     }
   }, [serviceType])
 
@@ -466,13 +471,13 @@ export function ServiceEstimateBuilderModal({
           service_name: customDesc.trim(),
           model: activeModel !== 'All' ? activeModel : 'Altroz',
           fuel: customFuel,
-          service_type: activeServiceType || 'Running Repairs',
+          service_type: customServiceType || activeServiceType || 'Running Repairs',
           price: partP,
           labour: labourP,
           make: 'BS6',
           requirement: 'Standard',
         })
-        setCatalogueNotice(`✓ Added "${customDesc.trim()}" to Master Catalogue for ${activeModel}!`)
+        setCatalogueNotice(`✓ Added "${customDesc.trim()}" (${customServiceType}) to Master Catalogue for ${activeModel}!`)
         setTimeout(() => setCatalogueNotice(null), 3500)
       } catch (err: any) {
         console.warn('Save to catalogue note:', err)
@@ -730,13 +735,16 @@ export function ServiceEstimateBuilderModal({
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-12 gap-2">
-                  <input
-                    type="text"
-                    className="md:col-span-5 rounded-lg border border-gray-300 bg-white px-2.5 py-1.5 text-xs text-gray-900 focus:border-indigo-500 focus:outline-none"
-                    placeholder="Description (e.g. Bumper Bracket & Fitting)"
-                    value={customDesc}
-                    onChange={(e) => setCustomDesc(e.target.value)}
-                  />
+                  <div className="md:col-span-3">
+                    <label className="text-[10px] font-bold text-gray-600 block mb-0.5">Item / Service Name</label>
+                    <input
+                      type="text"
+                      className="w-full rounded-lg border border-gray-300 bg-white px-2.5 py-1 text-xs text-gray-900 focus:border-indigo-500 focus:outline-none"
+                      placeholder="e.g. Bumper Bracket..."
+                      value={customDesc}
+                      onChange={(e) => setCustomDesc(e.target.value)}
+                    />
+                  </div>
 
                   <div className="md:col-span-2">
                     <label className="text-[10px] font-bold text-gray-600 block mb-0.5">Part ₹</label>
@@ -761,6 +769,21 @@ export function ServiceEstimateBuilderModal({
                   </div>
 
                   <div className="md:col-span-3">
+                    <label className="text-[10px] font-bold text-gray-600 block mb-0.5">Service Type</label>
+                    <select
+                      className="w-full rounded-lg border border-gray-300 bg-white px-2 py-1 text-xs font-semibold text-gray-700"
+                      value={customServiceType}
+                      onChange={(e) => setCustomServiceType(e.target.value)}
+                    >
+                      {serviceTypeOptions.map((st) => (
+                        <option key={st} value={st === 'All' ? 'All Services' : st}>
+                          {st === 'All' ? 'All Services' : st}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="md:col-span-2">
                     <label className="text-[10px] font-bold text-gray-600 block mb-0.5">Fuel Type</label>
                     <select
                       className="w-full rounded-lg border border-gray-300 bg-white px-2 py-1 text-xs font-medium text-gray-700"
@@ -790,7 +813,7 @@ export function ServiceEstimateBuilderModal({
                         onChange={(e) => setSaveToMasterCatalogue(e.target.checked)}
                         className="rounded text-indigo-600"
                       />
-                      <span>Save to Master Catalogue for {activeModel} (Reuse anytime)</span>
+                      <span>Save to Master Catalogue for {activeModel} ({customServiceType})</span>
                     </label>
                   </div>
 
