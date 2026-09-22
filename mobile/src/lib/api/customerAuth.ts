@@ -61,7 +61,9 @@ function mapVehicle(raw: Record<string, unknown>, index: number): CustomerVehicl
     estimate_drive_url: (raw.estimate_drive_url as string | null) ?? null,
     invoice_storage_path: (raw.invoice_storage_path as string | null) ?? null,
     invoice_drive_url: (raw.invoice_drive_url as string | null) ?? null,
-    billed_amount: raw.billed_amount == null || raw.billed_amount === '' ? null : Number(raw.billed_amount),
+    billed_amount: raw.billed_amount != null && raw.billed_amount !== ''
+      ? Number(raw.billed_amount)
+      : (raw.expected_invoice_amount != null && raw.expected_invoice_amount !== '' ? Number(raw.expected_invoice_amount) : null),
     amount_received: raw.amount_received == null || raw.amount_received === '' ? null : Number(raw.amount_received),
     payment_status: (raw.payment_status as string | null) ?? null,
     gate_pass_issued: Boolean(raw.gate_pass_issued),

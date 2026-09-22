@@ -462,60 +462,6 @@ export async function customerGetGatePass(sessionToken: string, regNumber?: stri
     // fallback
   }
 
-  // 3. Fallback: Query service_reception_entries directly if accounts approved or invoice completed
-  if (regClean || regNorm) {
-    try {
-      const { data: entries } = await supabase
-        .from('service_reception_entries')
-        .select('id, jc_number, reg_number, owner_name, owner_phone, branch, service_type, created_at, invoice_done_at, expected_invoice_amount, billed_amount, amount_received')
-        .ilike('reg_number', `%${regClean}%`)
-        .order('created_at', { ascending: false })
-        .limit(1)
-
-      if (entries && entries.length > 0) {
-        const entry = entries[0]
-        const { data: inv } = await supabase
-          .from('accounts_mechanical_invoices')
-          .select('invoice_number, invoice_date, billed_amount, amount_received, payment_status, keep_on_credit, keep_on_credit_reason')
-          .eq('reception_entry_id', entry.id)
-          .maybeSingle()
-
-        const billed = Number(inv?.billed_amount ?? entry.billed_amount ?? entry.expected_invoice_amount ?? 0)
-        const received = Number(inv?.amount_received ?? entry.amount_received ?? 0)
-        const remaining = Math.max(0, billed - received)
-        const isAccountsCleared = Boolean(inv?.keep_on_credit) || (billed > 0 && remaining <= 0) || Boolean(entry.invoice_done_at)
-
-        if (isAccountsCleared || inv?.invoice_number || billed > 0) {
-          const gpNo = `GP-${entry.jc_number ? entry.jc_number.replace(/[^0-9]/g, '').slice(-5) : Date.now().toString().slice(-5)}`
-          const reason = (billed > 0 && remaining <= 0) ? 'paid' : (billed > 0 && remaining <= billed * 0.02) ? 'short_payment' : Boolean(inv?.keep_on_credit) ? 'keep_on_credit' : 'released'
-
-          return setCache(cacheKey, {
-            gate_pass_no: gpNo,
-            reg_number: entry.reg_number || regNorm,
-            customer_name: entry.owner_name || 'Customer',
-            customer_phone: entry.owner_phone || null,
-            job_card_no: entry.jc_number || '—',
-            invoice_no: inv?.invoice_number || `INV-${gpNo.replace('GP-', '')}`,
-            invoice_date: inv?.invoice_date || null,
-            billed_amount: billed,
-            amount_received: received,
-            remaining_amount: remaining,
-            payment_status: remaining <= 0 ? 'Payment received' : 'Accounts Cleared',
-            settlement_reason: reason,
-            keep_on_credit: Boolean(inv?.keep_on_credit),
-            keep_on_credit_reason: inv?.keep_on_credit_reason || null,
-            issued_at: new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }),
-            issued_by: 'Accounts Desk · Dealership',
-            branch: entry.branch || 'Sitapura Workshop',
-            qr_token: `GP_AUTH_${gpNo}_${regClean}_SECURE`,
-          })
-        }
-      }
-    } catch (dbErr) {
-      console.warn('customerGetGatePass direct table query error:', dbErr)
-    }
-  }
-
   return null
 }
 
@@ -541,20 +487,69 @@ export async function customerGetSettlement(sessionToken: string, regNumber?: st
     console.warn('customer_get_settlement RPC note:', err)
   }
 
+  // If RPC returned valid billed data, trust it completely.
+  // The RPC is SECURITY DEFINER and already fetches accounts_mechanical_invoices
+  // + accounts_mechanical_payments which the anon client cannot read directly (RLS).
+  if (rpcResult && (rpcResult.total_billed != null || rpcResult.billed_amount != null)) {
+    const rpcBilled = Number(rpcResult.total_billed ?? rpcResult.billed_amount ?? 0)
+    // Only skip direct queries if we have a real amount; if 0 we still try direct path
+    if (rpcBilled > 0) {
+      const payments = Array.isArray(rpcResult.payments) ? rpcResult.payments : []
+      return setCache(cacheKey, {
+        ...rpcResult,
+        payments,
+        total_billed: rpcBilled,
+        billed_amount: rpcBilled,
+        amount_received: Number(rpcResult.amount_received ?? 0),
+        remaining_amount: Number(rpcResult.remaining_amount ?? rpcResult.remaining_due ?? Math.max(0, rpcBilled - Number(rpcResult.amount_received ?? 0))),
+        remaining_due: Number(rpcResult.remaining_due ?? rpcResult.remaining_amount ?? Math.max(0, rpcBilled - Number(rpcResult.amount_received ?? 0))),
+      })
+    }
+  }
+
   // Direct Live DB sync from accounts_mechanical_invoices & bodyshop_settlements
+  // (Only reached when RPC returned null or billed_amount = 0)
   if (regClean || regNorm) {
     try {
-      // 1. First check Bodyshop / Accident Repair Cards & Accounts Settlement
+      // 1. Fetch latest mechanical service reception entry
+      // Order: invoice_done_at DESC first (most recently invoiced), then created_at DESC
+      const { data: entries } = await supabase
+        .from('service_reception_entries')
+        .select('id, jc_number, reg_number, owner_name, owner_phone, branch, service_type, created_at, invoice_done_at, expected_invoice_amount, invoice_storage_path, invoice_file_name, invoice_drive_url')
+        .or(`reg_number.ilike.%${regClean}%,reg_number.ilike.%${rawReg}%`)
+        .order('invoice_done_at', { ascending: false, nullsFirst: false })
+        .order('created_at', { ascending: false })
+        .limit(1)
+
+      const entry = entries && entries.length > 0 ? entries[0] : null
+
+      // 2. Determine if the current service entry is a mechanical (non-bodyshop) service
+      const entryServiceType = String(entry?.service_type || '').toLowerCase()
+      const entryIsMechanical = entry && !entryServiceType.includes('accident') && !entryServiceType.includes('bodyshop')
+
+      // 3. Fetch latest bodyshop repair card (always fetch, routing is via priority logic below)
       const { data: bsCards } = await supabase
         .from('bodyshop_repair_cards')
         .select('*')
         .or(`reg_number.ilike.%${regClean}%,reg_number.ilike.%${rawReg}%`)
         .order('created_at', { ascending: false })
         .limit(1)
+      const bsCard: Record<string, unknown> | null = bsCards && bsCards.length > 0 ? (bsCards[0] as Record<string, unknown>) : null
 
-      const bsCard = bsCards && bsCards.length > 0 ? (bsCards[0] as Record<string, unknown>) : null
+      // Priority logic:
+      // - If we have a mechanical service entry (non-bodyshop service_type), ALWAYS prefer it.
+      //   The bodyshop path is only used when there's no mechanical entry or it's a bodyshop entry.
+      // - Bodyshop path is used when:
+      //   (a) No mechanical entry exists, but bodyshop card does, OR
+      //   (b) The entry is itself a bodyshop/accidental type
+      const entryTime = entry ? new Date(entry.invoice_done_at || entry.created_at || 0).getTime() : 0
+      const bsTime = bsCard ? new Date(String(bsCard.updated_at || bsCard.created_at || 0)).getTime() : 0
 
-      if (bsCard) {
+      // Use bodyshop path only when there is no mechanical service entry OR the entry is bodyshop type
+      const useBodyshopPath = bsCard && (!entry || !entryIsMechanical) && bsTime > 0
+
+      // If Bodyshop is the active case
+      if (useBodyshopPath) {
         const repairCardId = Number(bsCard.id)
         const { data: bsSettle } = await supabase
           .from('bodyshop_settlements')
@@ -573,7 +568,7 @@ export async function customerGetSettlement(sessionToken: string, regNumber?: st
         const doAmount = Number(bsSettle?.do_amount ?? 0)
         const isCashCase = doAmount === 0 && (bsCard.customer_type === 'cash' || !bsCard.insurance_company)
         const isInsuranceClaim = !isCashCase && (doAmount > 0 || Boolean(bsCard.insurance_company) || Boolean(bsCard.claim_intimation_no) || true)
-        const billed = Number(bsSettle?.invoice_amount ?? bsCard.expected_invoice_amount ?? 0)
+        const billed = Number(bsSettle?.invoice_amount ?? bsCard.expected_invoice_amount ?? (rpcResult?.total_billed ?? rpcResult?.billed_amount ?? 0))
         const doRemaining = Number(bsSettle?.insurance_due_amount ?? doAmount)
         const diffAmount = Number(bsSettle?.customer_diff_amount ?? (doAmount > 0 ? Math.max(0, billed - doAmount) : billed))
         const customerReceived = Number(
@@ -629,16 +624,8 @@ export async function customerGetSettlement(sessionToken: string, regNumber?: st
         })
       }
 
-      // 2. Mechanical Service Accounts & Reception Entries fallback
-      const { data: entries } = await supabase
-        .from('service_reception_entries')
-        .select('id, jc_number, reg_number, owner_name, owner_phone, branch, service_type, created_at, invoice_done_at, expected_invoice_amount, billed_amount, amount_received')
-        .or(`reg_number.ilike.%${regClean}%,reg_number.ilike.%${rawReg}%`)
-        .order('created_at', { ascending: false })
-        .limit(1)
-
-      if (entries && entries.length > 0) {
-        const entry = entries[0]
+      // 3. Mechanical Service Reception & Accounts Entry
+      if (entry) {
         const isAccidentService = String(entry.service_type || '').toLowerCase().includes('accident') || String(entry.service_type || '').toLowerCase().includes('bodyshop')
 
         const { data: inv } = await supabase
@@ -649,7 +636,7 @@ export async function customerGetSettlement(sessionToken: string, regNumber?: st
 
         // Fetch payment line items (UPI, Cash, Card, etc.)
         const { data: payments } = await supabase
-          .from('accounts_mechanical_payments')
+          .from('accounts_mechanical_payment_lines')
           .select('id, amount, payment_mode, reference, remark, posted_at, payment_received_date, voucher_no')
           .eq('reception_entry_id', entry.id)
           .order('posted_at', { ascending: false })
@@ -671,16 +658,35 @@ export async function customerGetSettlement(sessionToken: string, regNumber?: st
           // ignore
         }
 
-        const billed = Number(inv?.billed_amount ?? botPass?.billed_amount ?? entry.billed_amount ?? entry.expected_invoice_amount ?? rpcResult?.total_billed ?? rpcResult?.billed_amount ?? 0)
-        const received = Number(inv?.amount_received ?? botPass?.amount_received ?? entry.amount_received ?? rpcResult?.amount_received ?? 0)
+        const billed = Number(
+          inv?.billed_amount ??
+          entry.expected_invoice_amount ??
+          (rpcResult?.total_billed != null && Number(rpcResult.total_billed) > 0 ? rpcResult.total_billed : null) ??
+          (rpcResult?.billed_amount != null && Number(rpcResult.billed_amount) > 0 ? rpcResult.billed_amount : null) ??
+          (botPass?.billed_amount != null && Number(botPass.billed_amount) > 0 ? botPass.billed_amount : null) ??
+          0
+        )
+
+        const paymentLineSum = Array.isArray(payments) && payments.length > 0
+          ? payments.reduce((sum: number, p: any) => sum + (Number(p.amount) || 0), 0)
+          : null
+
+        const received = Number(
+          inv?.amount_received ??
+          paymentLineSum ??
+          (rpcResult?.amount_received != null ? rpcResult.amount_received : null) ??
+          botPass?.amount_received ??
+          0
+        )
+
         const remaining = Math.max(0, billed - received)
-        const status = (billed > 0 && remaining <= 0) ? 'received' : (received > 0 ? 'partial' : 'pending')
+        const status = inv?.payment_status || ((billed > 0 && remaining <= 0) ? 'received' : (received > 0 ? 'partial' : 'pending'))
 
         return setCache(cacheKey, {
           is_bodyshop: isAccidentService,
           is_insurance_claim: isAccidentService,
           reception_entry_id: entry.id,
-          jc_number: entry.jc_number || rpcResult?.jc_number,
+          jc_number: entry.jc_number || (rpcResult?.jc_number as string) || null,
           reg_number: entry.reg_number || regNorm,
           owner_name: entry.owner_name,
           branch: entry.branch,
@@ -690,13 +696,13 @@ export async function customerGetSettlement(sessionToken: string, regNumber?: st
           amount_received: received,
           remaining_amount: remaining,
           remaining_due: remaining,
-          status: inv?.payment_status || status,
-          invoice_no: inv?.invoice_number || botPass?.invoice_no || rpcResult?.invoice_no || null,
-          invoice_date: inv?.invoice_date || botPass?.invoice_date || rpcResult?.invoice_date || null,
+          status,
+          invoice_no: inv?.invoice_number || (rpcResult?.invoice_no as string) || (botPass?.invoice_no as string) || null,
+          invoice_date: inv?.invoice_date || (rpcResult?.invoice_date as string) || (botPass?.invoice_date as string) || (entry.invoice_done_at ? String(entry.invoice_done_at).slice(0, 10) : null),
           keep_on_credit: Boolean(inv?.keep_on_credit || botPass?.keep_on_credit),
-          keep_on_credit_reason: inv?.keep_on_credit_reason || botPass?.keep_on_credit_reason || null,
-          payments: payments || (rpcResult?.payments as any[]) || [],
-          updated_at: inv?.updated_at || botPass?.issued_at || entry.invoice_done_at || new Date().toISOString(),
+          keep_on_credit_reason: inv?.keep_on_credit_reason || (botPass?.keep_on_credit_reason as string) || null,
+          payments: (payments && payments.length > 0 ? payments : ((rpcResult?.payments as any[]) || [])),
+          updated_at: inv?.updated_at || (botPass?.issued_at as string) || entry.invoice_done_at || new Date().toISOString(),
         })
       }
     } catch (dbErr) {

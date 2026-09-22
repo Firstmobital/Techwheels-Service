@@ -29,13 +29,13 @@ export default function CustomerInvoicesScreen() {
     setError(null)
     try {
       const [hist, est, pay, passData] = await Promise.all([
-        customerGetServiceHistory(token, selectedReg),
-        customerListEstimates(token, selectedReg),
+        customerGetServiceHistory(token, selectedReg).catch(() => [] as Record<string, unknown>[]),
+        customerListEstimates(token, selectedReg).catch(() => [] as Record<string, unknown>[]),
         customerGetSettlement(token, selectedReg).catch(() => null),
         customerGetGatePass(token, selectedReg).catch(() => null),
       ])
       setHistory(hist)
-      setEstimates(est.map(parseEstimate))
+      setEstimates((est || []).map(parseEstimate))
       setPayment(pay)
       setPass(passData)
     } catch (err) {
@@ -52,9 +52,16 @@ export default function CustomerInvoicesScreen() {
   )
 
   const billed =
-    payment?.total_billed ?? payment?.billed_amount ?? pass?.billed_amount ?? selected?.billed_amount
+    (payment?.total_billed != null && Number(payment.total_billed) > 0 ? Number(payment.total_billed) : null) ??
+    (payment?.billed_amount != null && Number(payment.billed_amount) > 0 ? Number(payment.billed_amount) : null) ??
+    (pass?.billed_amount != null && Number(pass.billed_amount) > 0 ? Number(pass.billed_amount) : null) ??
+    (selected?.billed_amount != null && Number(selected.billed_amount) > 0 ? Number(selected.billed_amount) : null) ??
+    (estimates.length > 0 && estimates[0].grand_total != null && estimates[0].grand_total > 0 ? estimates[0].grand_total : null)
   const received =
-    payment?.amount_received ?? pass?.amount_received ?? selected?.amount_received
+    (payment?.amount_received != null ? Number(payment.amount_received) : null) ??
+    (pass?.amount_received != null ? Number(pass.amount_received) : null) ??
+    (selected?.amount_received != null ? Number(selected.amount_received) : null) ??
+    0
   const pay = computeSettlement({
     billed,
     received,
@@ -65,7 +72,7 @@ export default function CustomerInvoicesScreen() {
   const effectiveInvoiceNo = String(
     payment?.invoice_no ||
     pass?.invoice_no ||
-    (pay.billed && pay.billed > 0 ? `INV-${String(payment?.jc_number || pass?.job_card_no || selected?.jc_number || '00000').replace(/[^0-9]/g, '').slice(-5)}` : '')
+    ''
   )
   const effectiveInvoiceDate = String(
     payment?.invoice_date ||
