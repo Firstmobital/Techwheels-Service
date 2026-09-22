@@ -2,13 +2,13 @@
 
 **Plan ID:** ACCOUNTS-001  
 **Created:** 2026-09-11  
-**Last Updated:** 2026-09-19
+**Last Updated:** 2026-09-22
 **Priority:** HIGH
 **Owner:** Accounts + Platform Team  
 **Status:** Active (web implemented; DBL-0055 Accounts DO post pending apply)  
 **Platform:** webversion  
 **Category:** accounts  
-**Ledger:** DBL-0045/0046/0051/0052/0053/0054/0056/0057/0058/0059/0060/0061/0066 APPLIED. DBL-0068 APPLIED (Admin edit of posted Mechanical receipts). DBL-0069 APPLIED (SA invoice amount requires Floor completed). DBL-0073 PROPOSED (per-receipt remark on mechanical payment lines). DBL-0074 APPLIED (late RApp/JApp assign + JApp sequence reconcile + fail-closed Busy Export). DBL-0075 APPLIED (Mechanical Pending Remark reuses invoice `payment_notes`). DBL-0055 PROPOSED (Accounts may post insurer/DO lines). DBL-0080 PROPOSED (Bodyshop RApp/JApp on customer receipts; shared Mechanical sequences). Mechanical vouchers recalculated from `invoice_date >= 2026-09-02`. Do not reuse DBL-0043 (`busy`) or DBL-0044 (`busy_parts`). Do not re-run DBL-0059.  
+**Ledger:** DBL-0045/0046/0051/0052/0053/0054/0056/0057/0058/0059/0060/0061/0066 APPLIED. DBL-0068 APPLIED (Admin edit of posted Mechanical receipts). DBL-0069 APPLIED (SA invoice amount requires Floor completed). DBL-0073 PROPOSED (per-receipt remark on mechanical payment lines). DBL-0074 APPLIED (late RApp/JApp assign + JApp sequence reconcile + fail-closed Busy Export). DBL-0075 APPLIED (Mechanical Pending Remark reuses invoice `payment_notes`). DBL-0055 PROPOSED (Accounts may post insurer/DO lines). DBL-0080 PROPOSED (Bodyshop RApp/JApp on customer receipts; shared Mechanical sequences). DBL-0082 APPLIED (SA billed refresh until payment lines). Mechanical vouchers recalculated from `invoice_date >= 2026-09-02`. Do not reuse DBL-0043 (`busy`) or DBL-0044 (`busy_parts`). Do not re-run DBL-0059.  
 **Route:** `/accounts`  
 **Module:** `accounts`  
 **Depends on:** BODYSHOP-SETTLEMENT-001 (`bodyshop_settlements`, Stage 18 lines); Service Advisor Mark Done (`invoice_done_at`)  
@@ -146,6 +146,7 @@ Pattern: `src/pages/BodyshopRecoveryPage.tsx` (KPIs, search, table, Excel, on-pa
 
 - Columns: Mark Done at, JC, reg, model, service type, SA, branch, owner, invoice number, billed amount, **Received Amount** (sum of `accounts_mechanical_payment_lines` excluding `reference` Discount), remaining, **Pending Remark** (`accounts_mechanical_invoices.payment_notes`), payment status, notes
 - Capture / Payments modal: invoice number, date, billed amount, and invoice file (reuse unused SA `invoice_storage_path` upload). **Fetch from DMS** fills those fields when the JC has exactly one live DMS invoice; Accounts still taps Save. 0 or 2+ DMS rows shows “No unique DMS invoice”. Remaining stays billed minus receipts. Invoice header locks after the first receipt.
+- SA → Accounts billed (DBL-0051 / DBL-0082): a later qualifying Service Advisor invoice-amount save refreshes `accounts_mechanical_invoices.billed_amount` until any `accounts_mechanical_payment_lines` row exists (including Discount). Invoice number/date capture, Keep on Credit, and issued gatepass do not freeze billed. Accounts Billed / Remaining / KPIs / gatepass / Excel continue to read `billed_amount`, not `expected_invoice_amount`.
 - Receipts are posted as lines on `accounts_mechanical_payment_lines`: this amount + Payment mode (Cash/UPI/Card/Cheque/Bank/Other) + Payment received date + reference. `payment_received_date` is the business date (Asia/Kolkata); `posted_at` remains the original system insert timestamp. Platform Admin / Super Admin may edit a posted Mechanical receipt (`amount`, `payment_mode`, `reference`, `payment_received_date`) through `update_accounts_mechanical_payment` (`is_admin()` only). The client sends `accounts_mechanical_payment_lines.id`. Invoice id, previous values, and totals are read from persistence. `posted_by`, `posted_at`, `voucher_no`, `mechanical_invoice_id`, and `reception_entry_id` are not rewritten. `edited_by` / `edited_at` record the last trusted edit. Recalc reuses `accounts_mechanical_recalc`. Overpayment is stored as-is. Voucher series apply when the **effective invoice date** `>= 2026-09-02`: Accounts `invoice_date` when present, otherwise the unique live DMS labour `invoice_date` for the JC (DBL-0060; does not use `payment_received_date` / Mark Done). Cash gets `RApp/26-27/nnnn`; UPI+Card share `JApp/26-27/nnnn` at insert. If the line is still NULL and later becomes eligible (Accounts fills a still-NULL invoice date, or unique DMS labour arrives), `accounts_mechanical_assign_eligible_null_vouchers` assigns the next number (DBL-0074). Non-null vouchers are never rewritten — they have already been posted into BUSY. cheque/bank/other stay null. Editing a posted line never regenerates, deletes, or replaces `voucher_no`. If mode/date/amount/reference no longer match an already-exported voucher, the number is kept and BUSY must be re-exported; the UI warns. History shows Received Date plus an Admin-only Action/Edit column. Payment status is automatic from billed vs sum(receipts). Mechanical Gatepass is eligible when remaining ≤ 0, remaining ≤ 2% of billed, or a **valid** persisted Keep on Credit exists (`keep_on_credit` + non-blank `keep_on_credit_reason` + `keep_on_credit_approved_by` + `keep_on_credit_approved_at`). Financial remaining and `payment_status` are not rewritten for the 2% rule or Keep on Credit. Receipts may exceed remaining; the posted line keeps the entered amount. Create Gatepass goes through `issue_accounts_mechanical_gatepass`. Bodyshop settlement receipts are unchanged.
 - KPI: Mark Done count, invoice-pending count, billed sum, customer remaining / received still follow Mark Done Period. Cash / UPI / Credit Card money is actual receipt-line grain dated by `payment_received_date` (IST `posted_at` fallback), after status + Search, excluding Discount `reference`. Mark Done date does not restrict those three cards.
 
@@ -358,6 +359,13 @@ Pattern: `src/pages/BodyshopRecoveryPage.tsx` (KPIs, search, table, Excel, on-pa
 - Trusted RPC `set_accounts_mechanical_pending_remark`. Invoice capture omitting `p_payment_notes` preserves the saved remark. Recalc, receipts, vouchers, billed, remaining, payment-mode KPIs, and Bodyshop are unchanged.
 - Ledger: DBL-0075.
 
+### 2026-09-22 - SA billed refresh until payment lines
+
+- Latest qualifying SA `expected_invoice_amount` may refresh Accounts `billed_amount` while the case has no payment lines.
+- Invoice number/date alone is not a billed lock. Any payment line, including Discount, is.
+- Keep on Credit and issued gatepass stay gatepass rules; they do not freeze billed.
+- Ledger: DBL-0082. Extends DBL-0051.
+
 ### 2026-09-16 - Admin edit of posted Mechanical receipts
 
 - Platform Admin / Super Admin may edit a posted Mechanical receipt in the Accounts modal Receipts table (`isAdmin` in UI; `is_admin()` on the server).
@@ -418,5 +426,5 @@ Pattern: `src/pages/BodyshopRecoveryPage.tsx` (KPIs, search, table, Excel, on-pa
 
 ---
 
-**Last Updated:** 2026-09-16  
-**Status:** IN PROGRESS (Mechanical Admin receipt edit shipped as DBL-0068; Gatepass 2%/Keep on Credit/overpay as DBL-0061+0066; DBL-0055 SQL apply pending)
+**Last Updated:** 2026-09-22  
+**Status:** IN PROGRESS (DBL-0082 SA billed refresh until payment lines; Mechanical Admin receipt edit shipped as DBL-0068; Gatepass 2%/Keep on Credit/overpay as DBL-0061+0066; DBL-0055 SQL apply pending)

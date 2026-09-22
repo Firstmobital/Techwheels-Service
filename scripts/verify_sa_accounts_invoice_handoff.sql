@@ -51,7 +51,7 @@ FROM public.service_reception_entries e
 LEFT JOIN public.accounts_mechanical_invoices inv ON inv.reception_entry_id = e.id
 WHERE e.id = 8616;
 
--- TEST 6 write-lock: later SA amount must not replace saved Accounts billed/date
+-- TEST 6 DBL-0082: invoice_number / date capture does not freeze billed
 UPDATE public.accounts_mechanical_invoices
    SET invoice_number = 'INV-SAVED',
        invoice_date = DATE '2026-08-20',
@@ -61,13 +61,13 @@ SELECT public.service_advisor_seed_mechanical_billed_amount(8621, 111.11);
 
 INSERT INTO sa_accounts_handoff_demo
 SELECT
-  'TEST 6 saved Accounts amount/date win',
+  'TEST 6 invoice_number does not lock billed',
   e.id,
   e.expected_invoice_amount,
   inv.billed_amount,
   inv.invoice_number,
   inv.invoice_date,
-  (inv.billed_amount = 9999.00 AND inv.invoice_date = DATE '2026-08-20' AND inv.invoice_number = 'INV-SAVED')
+  (inv.billed_amount = 111.11 AND inv.invoice_date = DATE '2026-08-20' AND inv.invoice_number = 'INV-SAVED')
 FROM public.service_reception_entries e
 LEFT JOIN public.accounts_mechanical_invoices inv ON inv.reception_entry_id = e.id
 WHERE e.id = 8621;

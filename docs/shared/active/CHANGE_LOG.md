@@ -2,6 +2,10 @@
 
 Tracks documentation-sync updates for business logic, architecture, and access control.
 
+## 2026-09-22
+
+- Service Advisor **Invoice Amount (₹)** continues to update Accounts Mechanical **Billed** after invoice number/date capture, until any payment line exists (including Discount). Remaining, Billed KPI, gatepass math, and Excel follow `accounts_mechanical_invoices.billed_amount`. Cash/UPI/Card cards and Busy export stay receipt-line based. Ledger: DBL-0082. Plan: `ACCOUNTS-001`.
+
 ## 2026-09-21
 
 - `/post-service-feedback` adds a **No Rating / No Response** tab for successfully sent PSF messages with no rating (`sent_at IS NOT NULL AND rating IS NULL`). Overview cards and tab counts are exact database counts, not the first 1000 downloaded rows. The table is server-side paginated (PostgREST `.range()`, page size 50) with search/status against the full matching population. Calling still uses existing `cre_status`, `post_service_feedback_remarks`, `psf_add_remark`, and `psf_mark_resolved`. The responded CRE queue view is unchanged. Ledger: DBL-0081.
