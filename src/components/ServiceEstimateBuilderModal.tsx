@@ -116,7 +116,8 @@ export function ServiceEstimateBuilderModal({
     () => `EST-${vehicleReg.replace(/[^A-Z0-9]/g, '')}-${complaintId ? `C${complaintId}` : Date.now().toString().slice(-4)}`
   )
   const [items, setItems] = useState<EstimateItem[]>([])
-  const [modelFilter, setModelFilter] = useState('All')
+  const [modelFilter, setModelFilter] = useState(model || 'Altroz')
+  const [serviceTypeFilter, setServiceTypeFilter] = useState(serviceType || 'Third Free Service')
   const [fuelFilter, setFuelFilter] = useState('All')
   const [searchQuery, setSearchQuery] = useState('')
   const [discount, setDiscount] = useState<number>(0)
@@ -151,8 +152,14 @@ export function ServiceEstimateBuilderModal({
 
         if (data && data.length > 0) {
           const r = data[0]
-          if (r.model && !model) setActiveModel(r.model)
-          if (r.service_type && !serviceType) setActiveServiceType(r.service_type)
+          if (r.model) {
+            setActiveModel(r.model)
+            if (!model) setModelFilter(r.model)
+          }
+          if (r.service_type) {
+            setActiveServiceType(r.service_type)
+            if (!serviceType) setServiceTypeFilter(r.service_type)
+          }
         }
       } catch (err) {
         console.warn('Reception lookup notice:', err)
@@ -171,7 +178,10 @@ export function ServiceEstimateBuilderModal({
   }, [model])
 
   useEffect(() => {
-    if (serviceType) setActiveServiceType(serviceType)
+    if (serviceType) {
+      setActiveServiceType(serviceType)
+      setServiceTypeFilter(serviceType)
+    }
   }, [serviceType])
 
   useEffect(() => {
@@ -243,11 +253,12 @@ export function ServiceEstimateBuilderModal({
 
   if (!isOpen) return null
 
-  // Filter catalogue items
+  // Filter catalogue items with Model, Service Type, Fuel, and Query
   const filteredCatalogue = ALL_PARTS_PRICING.filter((item: PartPricingItem) => {
     const q = searchQuery.trim().toLowerCase()
     const tokens = q ? q.split(/\s+/).filter(Boolean) : []
     const selModel = modelFilter.trim().toLowerCase()
+    const selServiceType = serviceTypeFilter.trim().toLowerCase()
     const selFuel = fuelFilter.trim().toLowerCase()
 
     // Model match
@@ -259,6 +270,27 @@ export function ServiceEstimateBuilderModal({
           return false
         }
       }
+    }
+
+    // Service Type match (e.g., First Free Service, Second Free Service, Third Free Service, Paid Service, Running Repairs, etc.)
+    if (selServiceType !== 'all' && selServiceType) {
+      const itemType = (item.service_type || '').trim().toLowerCase()
+      const is1st = selServiceType.includes('first') || selServiceType.includes('1st')
+      const is2nd = selServiceType.includes('second') || selServiceType.includes('2nd')
+      const is3rd = selServiceType.includes('third') || selServiceType.includes('3rd')
+      const is4th = selServiceType.includes('fourth') || selServiceType.includes('4th')
+      const isPaid = selServiceType.includes('paid') && !is1st && !is2nd && !is3rd && !is4th
+      const isRunning = selServiceType.includes('running') || selServiceType.includes('repair')
+
+      let typeMatches = itemType.includes(selServiceType) || selServiceType.includes(itemType)
+      if (is1st) typeMatches = itemType.includes('first') || itemType.includes('1st')
+      else if (is2nd) typeMatches = itemType.includes('second') || itemType.includes('2nd')
+      else if (is3rd) typeMatches = itemType.includes('third') || itemType.includes('3rd')
+      else if (is4th) typeMatches = itemType.includes('fourth') || itemType.includes('4th')
+      else if (isPaid) typeMatches = itemType.includes('paid')
+      else if (isRunning) typeMatches = itemType.includes('running') || itemType.includes('repair')
+
+      if (!typeMatches) return false
     }
 
     // Fuel match
@@ -281,7 +313,7 @@ export function ServiceEstimateBuilderModal({
     }
 
     return true
-  }).slice(0, 40)
+  }).slice(0, 50)
 
   function getItemEffectivePrices(item: PartPricingItem) {
     const overrides = rowPriceEdits[item.id]
@@ -335,6 +367,53 @@ export function ServiceEstimateBuilderModal({
       total: labour,
     }
     setItems((prev) => [...prev, pItem, lItem])
+  }
+
+  function handleAddAllFiltered() {
+    if (filteredCatalogue.length === 0) {
+      alert('No catalogue items to add with current filters.')
+      return
+    }
+
+    const newItems: EstimateItem[] = []
+    const now = Date.now()
+
+    filteredCatalogue.forEach((item, idx) => {
+      const { price, labour } = getItemEffectivePrices(item)
+      if (price > 0) {
+        newItems.push({
+          id: `all-part-${item.id}-${now}-${idx}`,
+          type: 'part',
+          description: `${item.service_name} (${item.model || activeModel})`,
+          quantity: 1,
+          unit_price: price,
+          total: price,
+        })
+      }
+      if (labour > 0) {
+        newItems.push({
+          id: `all-labour-${item.id}-${now}-${idx}`,
+          type: 'labour',
+          description: `Labour: ${item.service_name} (${item.model || activeModel})`,
+          quantity: 1,
+          unit_price: labour,
+          total: labour,
+        })
+      }
+    })
+
+    setItems((prev) => {
+      const existingDesc = new Set(prev.map((i) => `${i.type}-${i.description.toLowerCase()}`))
+      const toAdd = newItems.filter((i) => !existingDesc.has(`${i.type}-${i.description.toLowerCase()}`))
+      if (toAdd.length === 0) {
+        alert('All filtered items are already added to the estimate.')
+        return prev
+      }
+      return [...prev, ...toAdd]
+    })
+
+    setCatalogueNotice(`✓ Added ${newItems.length} items from ${serviceTypeFilter !== 'All' ? serviceTypeFilter : 'filtered list'} to estimate!`)
+    setTimeout(() => setCatalogueNotice(null), 3000)
   }
 
   async function handleAddCustom() {
@@ -410,25 +489,6 @@ export function ServiceEstimateBuilderModal({
       setCatalogueNotice('✓ Estimate quotation cleared!')
       setTimeout(() => setCatalogueNotice(null), 2500)
     }
-  }
-
-  function handleAutoFillServiceChecklist() {
-    const autoItems = getMatchingStandardItems(activeModel, activeServiceType)
-    if (autoItems.length === 0) {
-      alert(`No pre-defined checklist items found for ${activeModel} · ${activeServiceType}.`)
-      return
-    }
-    setItems((prev) => {
-      // Append non-duplicate items
-      const existingDesc = new Set(prev.map((i) => i.description.toLowerCase()))
-      const toAdd = autoItems.filter((i) => !existingDesc.has(i.description.toLowerCase()))
-      if (toAdd.length === 0) {
-        return autoItems
-      }
-      return [...prev, ...toAdd]
-    })
-    setCatalogueNotice(`✓ Loaded ${autoItems.length} standard items for ${activeModel} · ${activeServiceType}!`)
-    setTimeout(() => setCatalogueNotice(null), 3000)
   }
 
   function handleUpdateQty(id: string, delta: number) {
@@ -512,6 +572,23 @@ export function ServiceEstimateBuilderModal({
     }
     return defaultModels
   }, [activeModel])
+
+  const serviceTypeOptions = useMemo(() => {
+    const defaults = [
+      'All',
+      'First Free Service',
+      'Second Free Service',
+      'Third Free Service',
+      'Fourth Free Service',
+      'Paid Service',
+      'Mini Paid Service',
+      'Running Repairs',
+    ]
+    if (activeServiceType && !defaults.includes(activeServiceType)) {
+      return [...defaults, activeServiceType]
+    }
+    return defaults
+  }, [activeServiceType])
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-3 backdrop-blur-sm">
@@ -610,23 +687,25 @@ export function ServiceEstimateBuilderModal({
             <div className="flex items-center justify-between mb-3">
               <div>
                 <h3 className="text-xs font-bold uppercase text-gray-700 tracking-wide">
-                  🏷️ Parts & Labour Catalogue (926 Master Items)
+                  🏷️ Parts & Labour Catalogue ({filteredCatalogue.length} Visible)
                 </h3>
                 <p className="text-[11px] text-gray-500">Pick replacement parts and labour operations</p>
               </div>
               <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={handleAutoFillServiceChecklist}
-                  title="Auto-fill standard parts and labour checklist for this model & service type"
-                  className="rounded-lg bg-emerald-50 border border-emerald-300 px-2.5 py-1 text-xs font-bold text-emerald-800 hover:bg-emerald-100 cursor-pointer flex items-center gap-1 shadow-xs"
-                >
-                  <span>⚡ Auto-Fill {activeServiceType}</span>
-                </button>
+                {filteredCatalogue.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={handleAddAllFiltered}
+                    title="Add all filtered catalogue items into estimate quotation"
+                    className="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-emerald-700 cursor-pointer flex items-center gap-1 shadow-sm transition-all"
+                  >
+                    <span>➕ Add All ({filteredCatalogue.length})</span>
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={() => setShowCustomItem(!showCustomItem)}
-                  className="rounded-lg bg-indigo-50 border border-indigo-200 px-2.5 py-1 text-xs font-bold text-indigo-700 hover:bg-indigo-100 cursor-pointer shadow-xs"
+                  className="rounded-lg bg-indigo-50 border border-indigo-200 px-2.5 py-1.5 text-xs font-bold text-indigo-700 hover:bg-indigo-100 cursor-pointer shadow-xs"
                 >
                   {showCustomItem ? '✕ Close Form' : '+ Custom Item'}
                 </button>
@@ -722,17 +801,17 @@ export function ServiceEstimateBuilderModal({
               </div>
             )}
 
-            {/* Filters */}
+            {/* ── FILTER BAR (Search + Model + Service Type + Fuel) ── */}
             <div className="flex flex-wrap items-center gap-2 mb-3">
               <input
                 type="text"
-                className="flex-1 min-w-[160px] rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs text-gray-900 focus:border-blue-500 focus:outline-none"
+                className="flex-1 min-w-[130px] rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs text-gray-900 focus:border-blue-500 focus:outline-none"
                 placeholder="Search part / service name…"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
               />
               <select
-                className="rounded-lg border border-gray-300 bg-white px-2.5 py-1.5 text-xs font-semibold text-gray-700"
+                className="rounded-lg border border-gray-300 bg-white px-2 py-1.5 text-xs font-semibold text-gray-700"
                 value={modelFilter}
                 onChange={(e) => setModelFilter(e.target.value)}
               >
@@ -741,7 +820,16 @@ export function ServiceEstimateBuilderModal({
                 ))}
               </select>
               <select
-                className="rounded-lg border border-gray-300 bg-white px-2.5 py-1.5 text-xs font-semibold text-gray-700"
+                className="rounded-lg border border-gray-300 bg-white px-2 py-1.5 text-xs font-semibold text-gray-700"
+                value={serviceTypeFilter}
+                onChange={(e) => setServiceTypeFilter(e.target.value)}
+              >
+                {serviceTypeOptions.map((st) => (
+                  <option key={st} value={st}>Service: {st}</option>
+                ))}
+              </select>
+              <select
+                className="rounded-lg border border-gray-300 bg-white px-2 py-1.5 text-xs font-semibold text-gray-700"
                 value={fuelFilter}
                 onChange={(e) => setFuelFilter(e.target.value)}
               >
@@ -876,7 +964,7 @@ export function ServiceEstimateBuilderModal({
             <div className="flex-1 overflow-y-auto rounded-xl border border-gray-200 p-2 space-y-2">
               {items.length === 0 ? (
                 <div className="py-16 text-center text-xs text-gray-400">
-                  No parts or labour added yet. Select from the catalogue on the left.
+                  No parts or labour added yet. Select from the catalogue on the left or use + Add All.
                 </div>
               ) : (
                 items.map((it) => (
