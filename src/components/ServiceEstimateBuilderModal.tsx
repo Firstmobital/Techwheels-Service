@@ -73,7 +73,7 @@ function getMatchingStandardItems(model: string, serviceType: string): EstimateI
       result.push({
         id: `auto-part-${m.id}-${now}-${idx}`,
         type: 'part',
-        description: `${m.service_name} (${m.model || model || 'Standard'})`,
+        description: m.service_name,
         quantity: 1,
         unit_price: m.price,
         total: m.price,
@@ -83,7 +83,7 @@ function getMatchingStandardItems(model: string, serviceType: string): EstimateI
       result.push({
         id: `auto-labour-${m.id}-${now}-${idx}`,
         type: 'labour',
-        description: `Labour: ${m.service_name} (${m.model || model || 'Standard'})`,
+        description: m.service_name.toLowerCase().startsWith('labour') ? m.service_name : `Labour: ${m.service_name}`,
         quantity: 1,
         unit_price: m.labour,
         total: m.labour,
@@ -202,7 +202,11 @@ export function ServiceEstimateBuilderModal({
 
       if (existing && existing.items && existing.items.length > 0) {
         setEstimateNo(existing.estimate_no || initialEstNo)
-        setItems(existing.items || [])
+        const cleanedItems = existing.items.map((it) => ({
+          ...it,
+          description: it.description.replace(/\s*\([A-Za-z0-9\s/+-]+\)$/, '').trim(),
+        }))
+        setItems(cleanedItems)
         setDiscount(existing.discount || 0)
         setEstimateStatus(existing.status || 'Draft')
         setRejectionReason(existing.rejection_reason || null)
@@ -327,7 +331,7 @@ export function ServiceEstimateBuilderModal({
     const newItem: EstimateItem = {
       id: `part-${item.id}-${Date.now()}`,
       type: 'part',
-      description: `${item.service_name} (${item.model || activeModel})`,
+      description: item.service_name,
       quantity: 1,
       unit_price: price,
       total: price,
@@ -340,7 +344,7 @@ export function ServiceEstimateBuilderModal({
     const newItem: EstimateItem = {
       id: `labour-${item.id}-${Date.now()}`,
       type: 'labour',
-      description: `Labour: ${item.service_name} (${item.model || activeModel})`,
+      description: item.service_name.toLowerCase().startsWith('labour') ? item.service_name : `Labour: ${item.service_name}`,
       quantity: 1,
       unit_price: labour,
       total: labour,
@@ -353,7 +357,7 @@ export function ServiceEstimateBuilderModal({
     const pItem: EstimateItem = {
       id: `part-${item.id}-${Date.now()}`,
       type: 'part',
-      description: `${item.service_name} (${item.model || activeModel})`,
+      description: item.service_name,
       quantity: 1,
       unit_price: price,
       total: price,
@@ -361,7 +365,7 @@ export function ServiceEstimateBuilderModal({
     const lItem: EstimateItem = {
       id: `labour-${item.id}-${Date.now()}`,
       type: 'labour',
-      description: `Labour: ${item.service_name} (${item.model || activeModel})`,
+      description: item.service_name.toLowerCase().startsWith('labour') ? item.service_name : `Labour: ${item.service_name}`,
       quantity: 1,
       unit_price: labour,
       total: labour,
@@ -384,7 +388,7 @@ export function ServiceEstimateBuilderModal({
         newItems.push({
           id: `all-part-${item.id}-${now}-${idx}`,
           type: 'part',
-          description: `${item.service_name} (${item.model || activeModel})`,
+          description: item.service_name,
           quantity: 1,
           unit_price: price,
           total: price,
@@ -394,7 +398,7 @@ export function ServiceEstimateBuilderModal({
         newItems.push({
           id: `all-labour-${item.id}-${now}-${idx}`,
           type: 'labour',
-          description: `Labour: ${item.service_name} (${item.model || activeModel})`,
+          description: item.service_name.toLowerCase().startsWith('labour') ? item.service_name : `Labour: ${item.service_name}`,
           quantity: 1,
           unit_price: labour,
           total: labour,
@@ -435,7 +439,7 @@ export function ServiceEstimateBuilderModal({
       newItems.push({
         id: `custom-part-${now}`,
         type: 'part',
-        description: `${customDesc.trim()} (${activeModel})`,
+        description: customDesc.trim(),
         quantity: 1,
         unit_price: partP,
         total: partP,
@@ -446,7 +450,7 @@ export function ServiceEstimateBuilderModal({
       newItems.push({
         id: `custom-labour-${now}`,
         type: 'labour',
-        description: `Labour: ${customDesc.trim()} (${activeModel})`,
+        description: customDesc.trim().toLowerCase().startsWith('labour') ? customDesc.trim() : `Labour: ${customDesc.trim()}`,
         quantity: 1,
         unit_price: labourP,
         total: labourP,
