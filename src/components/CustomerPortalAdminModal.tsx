@@ -456,6 +456,8 @@ export function CustomerPortalAdminModal({
           vehicleReg={activeReg}
           customerName={activeOwner}
           customerPhone={activePhone}
+          model={activeModel}
+          serviceType={vehicleInfo?.service_type || 'General Service'}
           problemDescription={complaints[0]?.feedback_text || 'Regular Service Inspection'}
           complaintId={complaints[0]?.id}
           onEstimateSent={() => {
