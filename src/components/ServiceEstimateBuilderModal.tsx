@@ -402,6 +402,16 @@ export function ServiceEstimateBuilderModal({
     setShowCustomItem(false)
   }
 
+  function handleClearEstimate() {
+    if (items.length === 0) return
+    if (window.confirm(`Are you sure you want to clear all ${items.length} items from this estimate?`)) {
+      setItems([])
+      setDiscount(0)
+      setCatalogueNotice('✓ Estimate quotation cleared!')
+      setTimeout(() => setCatalogueNotice(null), 2500)
+    }
+  }
+
   function handleAutoFillServiceChecklist() {
     const autoItems = getMatchingStandardItems(activeModel, activeServiceType)
     if (autoItems.length === 0) {
@@ -839,9 +849,22 @@ export function ServiceEstimateBuilderModal({
           <div className="lg:col-span-5 flex flex-col bg-white p-4 overflow-hidden">
             <div className="flex items-center justify-between mb-2">
               <div>
-                <h3 className="text-xs font-bold uppercase text-gray-700 tracking-wide">
-                  🧾 Estimate Quotation ({items.length} Items)
-                </h3>
+                <div className="flex items-center gap-2">
+                  <h3 className="text-xs font-bold uppercase text-gray-700 tracking-wide">
+                    🧾 Estimate Quotation ({items.length} Items)
+                  </h3>
+                  {items.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={handleClearEstimate}
+                      className="rounded-md bg-rose-50 border border-rose-200 px-2 py-0.5 text-[10px] font-bold text-rose-700 hover:bg-rose-100 hover:border-rose-300 cursor-pointer flex items-center gap-1 shadow-2xs transition-colors"
+                      title="Clear all items from this estimate quotation"
+                    >
+                      <span>🗑️</span>
+                      <span>Clear All</span>
+                    </button>
+                  )}
+                </div>
                 <p className="text-[11px] text-gray-500">Quotation #{estimateNo}</p>
               </div>
               <span className="font-mono text-sm font-bold text-blue-700">
