@@ -674,9 +674,6 @@ export function ServiceEstimateBuilderModal({
                 {activeServiceType}
               </span>
             </div>
-            <div>
-              <strong>Category:</strong> <span className="rounded bg-amber-200 px-1.5 py-0.5 font-bold">{category}</span>
-            </div>
           </div>
         </div>
 
