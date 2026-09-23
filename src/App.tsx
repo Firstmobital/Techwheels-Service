@@ -886,6 +886,8 @@ function hasAnyModuleAccess(allowedModules: Set<string>, modules: readonly Modul
 function canAccessPath(pathname: string, allowedModules: Set<string>) {
   if (pathname === '/') return true
   if (pathname.startsWith('/home')) return true
+  // Admin always has full access to all modules and routes
+  if (allowedModules.has('admin')) return true
   if (pathname.startsWith('/reports')) return hasAnyModuleAccess(allowedModules, ROUTE_MODULE_MAP['/reports'])
   if (pathname.startsWith('/import')) return hasAnyModuleAccess(allowedModules, ROUTE_MODULE_MAP['/import'])
   if (pathname.startsWith('/settings')) return hasAnyModuleAccess(allowedModules, ROUTE_MODULE_MAP['/settings'])
@@ -907,6 +909,7 @@ function canAccessPath(pathname: string, allowedModules: Set<string>) {
   if (pathname.startsWith('/bodyshop-recovery')) return hasAnyModuleAccess(allowedModules, ROUTE_MODULE_MAP['/bodyshop-recovery'])
   if (pathname.startsWith('/ew-reminder')) return hasAnyModuleAccess(allowedModules, ROUTE_MODULE_MAP['/ew-reminder'])
   if (pathname.startsWith('/service-booking')) return hasAnyModuleAccess(allowedModules, ROUTE_MODULE_MAP['/service-booking'])
+  if (pathname.startsWith('/driver-management')) return hasAnyModuleAccess(allowedModules, ROUTE_MODULE_MAP['/driver-management'])
   if (pathname.startsWith('/wa-agent')) return hasAnyModuleAccess(allowedModules, ROUTE_MODULE_MAP['/wa-agent'])
   if (pathname.startsWith('/telecalling')) return hasAnyModuleAccess(allowedModules, ROUTE_MODULE_MAP['/telecalling'])
   if (pathname.startsWith('/insurance-renewal-telecalling')) return hasAnyModuleAccess(allowedModules, ROUTE_MODULE_MAP['/insurance-renewal-telecalling'])
@@ -978,10 +981,10 @@ function RequireAccess({
   modules: readonly ModuleName[]
   children: React.ReactNode
 }) {
-  if (!hasAnyModuleAccess(allowedModules, modules)) {
-    return <AccessDenied />
+  if (allowedModules.has('admin') || hasAnyModuleAccess(allowedModules, modules)) {
+    return <>{children}</>
   }
-  return <>{children}</>
+  return <AccessDenied />
 }
 
 // ─── Auth wrapper ─────────────────────────────────────────────────────────────
@@ -1243,9 +1246,14 @@ function AppInner() {
 
       const nextModules = new Set<string>(((permissionRows ?? []) as PermissionRow[]).map((row) => row.module_name))
 
-      if (profile?.role === 'admin') {
+      const userRole = (profile?.role || user?.user_metadata?.role || '').toLowerCase()
+
+      if (userRole === 'admin') {
         if (mounted) setIsAdmin(true)
         ALL_ROUTE_MODULES.forEach((moduleName) => nextModules.add(moduleName))
+        nextModules.add('admin')
+        nextModules.add('driver_management')
+        nextModules.add('service_booking')
 
         const { data: activeModules } = await supabase
           .from('modules')
@@ -1256,6 +1264,10 @@ function AppInner() {
             nextModules.add(moduleRow.name)
           }
         })
+      }
+
+      if (nextModules.has('admin') || nextModules.has('service_booking')) {
+        nextModules.add('driver_management')
       }
 
       if (mounted) {
