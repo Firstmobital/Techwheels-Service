@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { exportToCSV, generateExportFilename } from '../lib/exportUtils'
 import { hasBusinessRole } from '../lib/businessRoles'
@@ -380,13 +379,11 @@ export default function DriverManagementPage() {
 
     let unassignedCount = 0
     bookings.forEach(b => {
-      const isTrip = b.pickup_required || b.drop_required || Boolean(b.driver_name) || Boolean(b.pickup_address)
-      if (!isTrip) return
-
-      if (!b.driver_name) {
+      const hasDriver = Boolean(b.driver_name && b.driver_name.toLowerCase() !== 'admin')
+      if (!hasDriver) {
         unassignedCount++
       } else {
-        const key = b.driver_name.toLowerCase()
+        const key = b.driver_name!.trim().toLowerCase()
         if (!counts[key]) {
           counts[key] = { total: 0, pickups: 0, drops: 0, completed: 0 }
         }
@@ -410,14 +407,14 @@ export default function DriverManagementPage() {
 
       if (selectedDriver !== 'all') {
         if (selectedDriver === '__unassigned__') {
-          if (b.driver_name) return false
+          if (b.driver_name && b.driver_name.toLowerCase() !== 'admin') return false
         } else if (b.driver_name?.toLowerCase() !== selectedDriver.toLowerCase()) {
           return false
         }
       }
 
-      if (allocationFilter === 'unassigned' && b.driver_name) return false
-      if (allocationFilter === 'assigned' && !b.driver_name) return false
+      if (allocationFilter === 'unassigned' && b.driver_name && b.driver_name.toLowerCase() !== 'admin') return false
+      if (allocationFilter === 'assigned' && (!b.driver_name || b.driver_name.toLowerCase() === 'admin')) return false
 
       if (selectedBranch !== 'all' && b.branch?.toLowerCase() !== selectedBranch.toLowerCase()) {
         return false
@@ -483,52 +480,42 @@ export default function DriverManagementPage() {
     <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh', background: '#f8fafc', color: '#0f172a', fontFamily: 'inherit' }}>
       
       {/* ── Top Header ── */}
-      <div style={{ background: '#0b132b', color: '#fff', padding: '0.85rem 1.4rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid #1e293b', flexShrink: 0 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.9rem' }}>
-          <div style={{ width: 44, height: 44, borderRadius: 12, background: 'rgba(37,99,235,0.25)', border: '1.5px solid rgba(59,130,246,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.5rem', boxShadow: '0 0 15px rgba(37,99,235,0.3)' }}>
+      <div style={{ background: '#0f172a', color: '#fff', padding: '0.85rem 1.4rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid #1e293b', flexShrink: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.85rem' }}>
+          <div style={{ width: 40, height: 40, borderRadius: 10, background: '#1e293b', border: '1px solid #334155', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.35rem' }}>
             🚗
           </div>
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-              <h1 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 900, letterSpacing: '-0.02em', color: '#ffffff' }}>
+              <h1 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 800, color: '#ffffff' }}>
                 Driver Management
               </h1>
-              <span style={{ fontSize: '0.68rem', fontWeight: 800, padding: '0.15rem 0.55rem', borderRadius: 12, background: '#1e3a8a', color: '#93c5fd', border: '1px solid #3b82f6' }}>
-                Staff Driver Dispatch & Live GPS
+              <span style={{ fontSize: '0.68rem', fontWeight: 700, padding: '0.15rem 0.5rem', borderRadius: 6, background: '#1e293b', color: '#94a3b8', border: '1px solid #334155' }}>
+                Staff Dispatch & Live GPS
               </span>
             </div>
-            <p style={{ margin: '0.15rem 0 0', fontSize: '0.76rem', color: '#94a3b8' }}>
-              Assign vehicles to staff drivers, track live customer app GPS pins, and monitor trip progress
+            <p style={{ margin: '0.15rem 0 0', fontSize: '0.75rem', color: '#94a3b8' }}>
+              Assign vehicles to staff drivers, view customer app location pins, and manage dispatch
             </p>
           </div>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', background: 'rgba(16, 185, 129, 0.15)', border: '1px solid rgba(16, 185, 129, 0.3)', padding: '0.35rem 0.7rem', borderRadius: 8, fontSize: '0.74rem', color: '#a7f3d0', fontWeight: 700 }}>
-            <span>⚡</span>
-            <span>Realtime App Sync</span>
-          </div>
-          <Link
-            to="/service-booking"
-            style={{ textDecoration: 'none', background: 'rgba(255,255,255,0.08)', color: '#e2e8f0', padding: '0.45rem 0.85rem', borderRadius: 8, fontSize: '0.8rem', fontWeight: 700, border: '1px solid rgba(255,255,255,0.15)', display: 'flex', alignItems: 'center', gap: '0.35rem' }}
-          >
-            📋 Service Bookings
-          </Link>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
           <button
             onClick={() => void loadBookings()}
-            style={{ background: '#1e293b', color: '#fff', border: '1px solid #334155', borderRadius: 8, padding: '0.45rem 0.85rem', fontSize: '0.8rem', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.35rem' }}
+            style={{ background: '#1e293b', color: '#f8fafc', border: '1px solid #334155', borderRadius: 6, padding: '0.4rem 0.8rem', fontSize: '0.78rem', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.35rem' }}
           >
             🔄 Refresh
           </button>
           <button
             onClick={() => setPrintModalOpen(true)}
-            style={{ background: '#334155', color: '#fff', border: '1px solid #475569', borderRadius: 8, padding: '0.45rem 0.85rem', fontSize: '0.8rem', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.35rem' }}
+            style={{ background: '#1e293b', color: '#f8fafc', border: '1px solid #334155', borderRadius: 6, padding: '0.4rem 0.8rem', fontSize: '0.78rem', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.35rem' }}
           >
             🖨️ Print Sheet
           </button>
           <button
             onClick={handleExport}
-            style={{ background: '#2563eb', color: '#fff', border: 'none', borderRadius: 8, padding: '0.45rem 1rem', fontSize: '0.8rem', fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.35rem', boxShadow: '0 2px 8px rgba(37,99,235,0.4)' }}
+            style={{ background: '#2563eb', color: '#fff', border: 'none', borderRadius: 6, padding: '0.4rem 0.95rem', fontSize: '0.78rem', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.35rem' }}
           >
             📥 Export CSV
           </button>
@@ -536,120 +523,148 @@ export default function DriverManagementPage() {
       </div>
 
       {/* ── KPI Metric Cards Strip ── */}
-      <div style={{ background: '#fff', borderBottom: '1px solid #e2e8f0', padding: '0.75rem 1.4rem', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '0.75rem', flexShrink: 0 }}>
+      <div style={{ background: '#fff', borderBottom: '1px solid #e2e8f0', padding: '0.6rem 1.4rem', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: '0.65rem', flexShrink: 0 }}>
         
         {/* Total Trips */}
-        <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 12, padding: '0.65rem 0.9rem', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-          <div style={{ fontSize: '1.6rem' }}>📦</div>
+        <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 8, padding: '0.55rem 0.8rem', display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
+          <div style={{ width: 34, height: 34, borderRadius: 6, background: '#e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.1rem' }}>📦</div>
           <div>
-            <div style={{ fontSize: '1.3rem', fontWeight: 900, color: '#0f172a', lineHeight: 1 }}>{stats.total}</div>
-            <div style={{ fontSize: '0.7rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginTop: 3 }}>Total Scheduled Trips</div>
+            <div style={{ fontSize: '1.2rem', fontWeight: 800, color: '#0f172a', lineHeight: 1 }}>{stats.total}</div>
+            <div style={{ fontSize: '0.68rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginTop: 2 }}>Total Trips</div>
           </div>
         </div>
 
         {/* Assigned */}
-        <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 12, padding: '0.65rem 0.9rem', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-          <div style={{ fontSize: '1.6rem' }}>✅</div>
+        <div
+          onClick={() => {
+            setAllocationFilter(allocationFilter === 'assigned' ? 'all' : 'assigned')
+            setSelectedDriver('all')
+          }}
+          style={{
+            background: allocationFilter === 'assigned' ? '#eff6ff' : '#f8fafc',
+            border: `1px solid ${allocationFilter === 'assigned' ? '#2563eb' : '#e2e8f0'}`,
+            borderRadius: 8,
+            padding: '0.55rem 0.8rem',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.65rem',
+            cursor: 'pointer',
+          }}
+        >
+          <div style={{ width: 34, height: 34, borderRadius: 6, background: '#dcfce7', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.1rem' }}>✅</div>
           <div>
-            <div style={{ fontSize: '1.3rem', fontWeight: 900, color: '#16a34a', lineHeight: 1 }}>{stats.assigned}</div>
-            <div style={{ fontSize: '0.7rem', fontWeight: 700, color: '#15803d', textTransform: 'uppercase', marginTop: 3 }}>Driver Allocated</div>
+            <div style={{ fontSize: '1.2rem', fontWeight: 800, color: '#16a34a', lineHeight: 1 }}>{stats.assigned}</div>
+            <div style={{ fontSize: '0.68rem', fontWeight: 700, color: '#15803d', textTransform: 'uppercase', marginTop: 2 }}>Driver Allocated</div>
           </div>
         </div>
 
         {/* Unassigned */}
         <div
           onClick={() => {
-            setAllocationFilter('unassigned')
-            setSelectedDriver('__unassigned__')
+            if (selectedDriver === '__unassigned__') {
+              setSelectedDriver('all')
+              setAllocationFilter('all')
+            } else {
+              setSelectedDriver('__unassigned__')
+              setAllocationFilter('unassigned')
+            }
           }}
           style={{
-            background: stats.unassigned > 0 ? '#fef2f2' : '#f8fafc',
-            border: `1.5px solid ${stats.unassigned > 0 ? '#f87171' : '#e2e8f0'}`,
-            borderRadius: 12,
-            padding: '0.65rem 0.9rem',
+            background: selectedDriver === '__unassigned__' || allocationFilter === 'unassigned' ? '#eff6ff' : '#f8fafc',
+            border: `1px solid ${selectedDriver === '__unassigned__' || allocationFilter === 'unassigned' ? '#2563eb' : '#e2e8f0'}`,
+            borderRadius: 8,
+            padding: '0.55rem 0.8rem',
             display: 'flex',
             alignItems: 'center',
-            gap: '0.75rem',
+            gap: '0.65rem',
             cursor: 'pointer',
           }}
-          title="Click to view all unassigned bookings"
+          title="Click to filter unassigned bookings"
         >
-          <div style={{ fontSize: '1.6rem' }}>⚠️</div>
+          <div style={{ width: 34, height: 34, borderRadius: 6, background: stats.unassigned > 0 ? '#fee2e2' : '#e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.1rem' }}>⚠️</div>
           <div>
-            <div style={{ fontSize: '1.3rem', fontWeight: 900, color: stats.unassigned > 0 ? '#dc2626' : '#64748b', lineHeight: 1 }}>
+            <div style={{ fontSize: '1.2rem', fontWeight: 800, color: stats.unassigned > 0 ? '#dc2626' : '#0f172a', lineHeight: 1 }}>
               {stats.unassigned}
             </div>
-            <div style={{ fontSize: '0.7rem', fontWeight: 800, color: stats.unassigned > 0 ? '#b91c1c' : '#64748b', textTransform: 'uppercase', marginTop: 3 }}>
+            <div style={{ fontSize: '0.68rem', fontWeight: 700, color: stats.unassigned > 0 ? '#b91c1c' : '#64748b', textTransform: 'uppercase', marginTop: 2 }}>
               Unassigned (Pending)
             </div>
           </div>
         </div>
 
         {/* Live GPS Pins */}
-        <div style={{ background: '#ecfdf5', border: '1px solid #a7f3d0', borderRadius: 12, padding: '0.65rem 0.9rem', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-          <div style={{ fontSize: '1.6rem' }}>🛰️</div>
+        <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 8, padding: '0.55rem 0.8rem', display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
+          <div style={{ width: 34, height: 34, borderRadius: 6, background: '#d1fae5', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.1rem' }}>🛰️</div>
           <div>
-            <div style={{ fontSize: '1.3rem', fontWeight: 900, color: '#059669', lineHeight: 1 }}>{stats.gpsPins}</div>
-            <div style={{ fontSize: '0.7rem', fontWeight: 700, color: '#047857', textTransform: 'uppercase', marginTop: 3 }}>App Live GPS Pins</div>
+            <div style={{ fontSize: '1.2rem', fontWeight: 800, color: '#059669', lineHeight: 1 }}>{stats.gpsPins}</div>
+            <div style={{ fontSize: '0.68rem', fontWeight: 700, color: '#047857', textTransform: 'uppercase', marginTop: 2 }}>App GPS Pins</div>
           </div>
         </div>
 
         {/* Staff Drivers */}
-        <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 12, padding: '0.65rem 0.9rem', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-          <div style={{ fontSize: '1.6rem' }}>👥</div>
+        <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 8, padding: '0.55rem 0.8rem', display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
+          <div style={{ width: 34, height: 34, borderRadius: 6, background: '#dbeafe', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.1rem' }}>👥</div>
           <div>
-            <div style={{ fontSize: '1.3rem', fontWeight: 900, color: '#2563eb', lineHeight: 1 }}>{drivers.length}</div>
-            <div style={{ fontSize: '0.7rem', fontWeight: 700, color: '#1d4ed8', textTransform: 'uppercase', marginTop: 3 }}>Staff Drivers on Roster</div>
+            <div style={{ fontSize: '1.2rem', fontWeight: 800, color: '#2563eb', lineHeight: 1 }}>{drivers.length}</div>
+            <div style={{ fontSize: '0.68rem', fontWeight: 700, color: '#1d4ed8', textTransform: 'uppercase', marginTop: 2 }}>Staff Drivers</div>
           </div>
         </div>
 
       </div>
 
       {/* ── Driver Workload Roster Strip ── */}
-      <div style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0', padding: '0.65rem 1.4rem', flexShrink: 0 }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.45rem' }}>
-          <div style={{ fontSize: '0.78rem', fontWeight: 800, color: '#334155', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+      <div style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0', padding: '0.55rem 1.4rem', flexShrink: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.4rem' }}>
+          <div style={{ fontSize: '0.76rem', fontWeight: 800, color: '#334155', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
             <span>🚗</span>
             <span>Staff Drivers Workload & Quick Filters:</span>
             <span style={{ fontSize: '0.7rem', color: '#64748b', fontWeight: 500 }}>(Select driver to view allocated vehicles)</span>
           </div>
-          {selectedDriver !== 'all' && (
+          {(selectedDriver !== 'all' || allocationFilter !== 'all') && (
             <button
-              onClick={() => setSelectedDriver('all')}
-              style={{ background: '#fff', border: '1px solid #cbd5e1', borderRadius: 6, padding: '0.2rem 0.6rem', fontSize: '0.7rem', fontWeight: 700, cursor: 'pointer', color: '#475569' }}
+              onClick={() => {
+                setSelectedDriver('all')
+                setAllocationFilter('all')
+              }}
+              style={{ background: '#fff', border: '1px solid #cbd5e1', borderRadius: 6, padding: '0.2rem 0.55rem', fontSize: '0.7rem', fontWeight: 700, cursor: 'pointer', color: '#475569' }}
             >
-              Clear Driver Filter (Show All)
+              Clear Filter (Show All)
             </button>
           )}
         </div>
 
-        <div style={{ display: 'flex', gap: '0.6rem', overflowX: 'auto', paddingBottom: '0.2rem' }}>
+        <div style={{ display: 'flex', gap: '0.5rem', overflowX: 'auto', paddingBottom: '0.15rem' }}>
           
           {/* Unassigned Quick Card */}
           <div
             onClick={() => {
-              setSelectedDriver(selectedDriver === '__unassigned__' ? 'all' : '__unassigned__')
-              setAllocationFilter('unassigned')
+              if (selectedDriver === '__unassigned__') {
+                setSelectedDriver('all')
+                setAllocationFilter('all')
+              } else {
+                setSelectedDriver('__unassigned__')
+                setAllocationFilter('unassigned')
+              }
             }}
             style={{
               flex: '0 0 auto',
-              background: selectedDriver === '__unassigned__' ? '#fef2f2' : '#ffffff',
-              border: `1.5px solid ${selectedDriver === '__unassigned__' ? '#dc2626' : '#fecaca'}`,
-              borderRadius: 10,
-              padding: '0.45rem 0.8rem',
+              background: selectedDriver === '__unassigned__' ? '#eff6ff' : '#ffffff',
+              border: `1.5px solid ${selectedDriver === '__unassigned__' ? '#2563eb' : '#e2e8f0'}`,
+              borderRadius: 8,
+              padding: '0.4rem 0.75rem',
               display: 'flex',
               alignItems: 'center',
-              gap: '0.6rem',
+              gap: '0.55rem',
               cursor: 'pointer',
-              boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
+              boxShadow: '0 1px 2px rgba(0,0,0,0.03)',
             }}
           >
-            <div style={{ width: 28, height: 28, borderRadius: '50%', background: '#fee2e2', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.9rem' }}>
+            <div style={{ width: 26, height: 26, borderRadius: '50%', background: '#fee2e2', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.85rem' }}>
               ⚠️
             </div>
             <div>
-              <div style={{ fontSize: '0.78rem', fontWeight: 900, color: '#b91c1c' }}>Pending Allocations</div>
-              <div style={{ fontSize: '0.68rem', color: '#dc2626', fontWeight: 700 }}>
+              <div style={{ fontSize: '0.76rem', fontWeight: 800, color: '#0f172a' }}>Pending Allocations</div>
+              <div style={{ fontSize: '0.68rem', color: driverWorkload.unassignedCount > 0 ? '#dc2626' : '#64748b', fontWeight: 700 }}>
                 {driverWorkload.unassignedCount} unassigned
               </div>
             </div>
@@ -663,33 +678,36 @@ export default function DriverManagementPage() {
             return (
               <div
                 key={d.id}
-                onClick={() => setSelectedDriver(isSelected ? 'all' : d.employee_name)}
+                onClick={() => {
+                  setSelectedDriver(isSelected ? 'all' : d.employee_name)
+                  setAllocationFilter('all')
+                }}
                 style={{
                   flex: '0 0 auto',
                   background: isSelected ? '#eff6ff' : '#ffffff',
-                  border: `1.5px solid ${isSelected ? '#2563eb' : '#cbd5e1'}`,
-                  borderRadius: 10,
-                  padding: '0.45rem 0.8rem',
+                  border: `1.5px solid ${isSelected ? '#2563eb' : '#e2e8f0'}`,
+                  borderRadius: 8,
+                  padding: '0.4rem 0.75rem',
                   display: 'flex',
                   alignItems: 'center',
-                  gap: '0.65rem',
+                  gap: '0.55rem',
                   cursor: 'pointer',
-                  boxShadow: '0 1px 3px rgba(0,0,0,0.03)',
+                  boxShadow: '0 1px 2px rgba(0,0,0,0.03)',
                   transition: 'all 0.15s ease',
                 }}
               >
-                <div style={{ width: 30, height: 30, borderRadius: '50%', background: isSelected ? '#dbeafe' : '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.95rem' }}>
+                <div style={{ width: 26, height: 26, borderRadius: '50%', background: isSelected ? '#dbeafe' : '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.85rem' }}>
                   👨‍✈️
                 </div>
                 <div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                    <span style={{ fontSize: '0.8rem', fontWeight: 900, color: '#0f172a' }}>{d.employee_name}</span>
-                    <span style={{ fontSize: '0.68rem', fontWeight: 800, padding: '0.1rem 0.4rem', borderRadius: 8, background: counts.total > 0 ? '#dbeafe' : '#f1f5f9', color: counts.total > 0 ? '#1d4ed8' : '#64748b' }}>
+                    <span style={{ fontSize: '0.78rem', fontWeight: 800, color: '#0f172a' }}>{d.employee_name}</span>
+                    <span style={{ fontSize: '0.66rem', fontWeight: 700, padding: '0.08rem 0.35rem', borderRadius: 6, background: counts.total > 0 ? '#dbeafe' : '#f1f5f9', color: counts.total > 0 ? '#1d4ed8' : '#64748b' }}>
                       {counts.total} Allocated
                     </span>
                   </div>
-                  <div style={{ fontSize: '0.66rem', color: '#64748b', display: 'flex', alignItems: 'center', gap: '0.4rem', marginTop: 1 }}>
-                    {d.phone ? <span>📞 {d.phone}</span> : <span>Staff Driver</span>}
+                  <div style={{ fontSize: '0.65rem', color: '#64748b', display: 'flex', alignItems: 'center', gap: '0.4rem', marginTop: 1 }}>
+                    <span>{d.role || 'Staff Driver'}</span>
                     {counts.completed > 0 && <span style={{ color: '#16a34a', fontWeight: 700 }}>✓ {counts.completed} Done</span>}
                   </div>
                 </div>
@@ -863,10 +881,10 @@ export default function DriverManagementPage() {
                   key={b.id}
                   style={{
                     background: '#ffffff',
-                    border: `1.5px solid ${isAssigned ? '#cbd5e1' : '#f87171'}`,
-                    borderRadius: 16,
-                    padding: '1.1rem 1.25rem',
-                    boxShadow: isAssigned ? '0 2px 6px rgba(0,0,0,0.03)' : '0 4px 14px rgba(239, 68, 68, 0.1)',
+                    border: '1px solid #e2e8f0',
+                    borderRadius: 12,
+                    padding: '1rem 1.2rem',
+                    boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
                     display: 'flex',
                     flexDirection: 'column',
                     gap: '0.75rem',
@@ -878,16 +896,16 @@ export default function DriverManagementPage() {
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid #f1f5f9', paddingBottom: '0.65rem' }}>
                     <div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', flexWrap: 'wrap' }}>
-                        <span style={{ fontSize: '1.18rem', fontWeight: 900, color: '#0f172a', letterSpacing: '0.02em' }}>
+                        <span style={{ fontSize: '1.15rem', fontWeight: 800, color: '#0f172a', letterSpacing: '0.01em' }}>
                           {b.reg_number}
                         </span>
                         {b.model && (
-                          <span style={{ fontSize: '0.82rem', fontWeight: 700, color: '#475569' }}>
+                          <span style={{ fontSize: '0.8rem', fontWeight: 600, color: '#475569' }}>
                             · {b.model}
                           </span>
                         )}
                         {b.fuel_type && (
-                          <span style={{ fontSize: '0.68rem', fontWeight: 900, padding: '0.12rem 0.45rem', borderRadius: 6, background: b.fuel_type === 'EV' ? '#dcfce7' : '#f1f5f9', color: b.fuel_type === 'EV' ? '#15803d' : '#475569' }}>
+                          <span style={{ fontSize: '0.68rem', fontWeight: 700, padding: '0.1rem 0.4rem', borderRadius: 4, background: b.fuel_type === 'EV' ? '#dcfce7' : '#f1f5f9', color: b.fuel_type === 'EV' ? '#15803d' : '#475569' }}>
                             {b.fuel_type}
                           </span>
                         )}
@@ -908,13 +926,13 @@ export default function DriverManagementPage() {
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.35rem' }}>
                       <span
                         style={{
-                          fontSize: '0.74rem',
-                          fontWeight: 800,
-                          padding: '0.2rem 0.65rem',
-                          borderRadius: 20,
-                          background: isAssigned ? '#e0f2fe' : '#fef2f2',
-                          color: isAssigned ? '#0369a1' : '#dc2626',
-                          border: `1px solid ${isAssigned ? '#bae6fd' : '#fecaca'}`,
+                          fontSize: '0.72rem',
+                          fontWeight: 700,
+                          padding: '0.18rem 0.55rem',
+                          borderRadius: 6,
+                          background: isAssigned ? '#f0fdf4' : '#f8fafc',
+                          color: isAssigned ? '#15803d' : '#64748b',
+                          border: `1px solid ${isAssigned ? '#bbf7d0' : '#e2e8f0'}`,
                           display: 'flex',
                           alignItems: 'center',
                           gap: '0.3rem',
@@ -922,7 +940,7 @@ export default function DriverManagementPage() {
                       >
                         {isAssigned ? `🚗 ${b.driver_name}` : '⚠️ Driver Not Assigned'}
                       </span>
-                      <span style={{ fontSize: '0.7rem', fontWeight: 800, padding: '0.18rem 0.55rem', borderRadius: 12, background: sm.bg, color: sm.color, border: `1px solid ${sm.border}` }}>
+                      <span style={{ fontSize: '0.68rem', fontWeight: 700, padding: '0.15rem 0.5rem', borderRadius: 6, background: sm.bg, color: sm.color, border: `1px solid ${sm.border}` }}>
                         {b.status}
                       </span>
                     </div>
@@ -1021,11 +1039,11 @@ export default function DriverManagementPage() {
                   )}
 
                   {/* Driver Allocation Dropdown & Trip Status Control */}
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', background: '#f1f5f9', padding: '0.65rem 0.85rem', borderRadius: 12 }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', background: '#f8fafc', padding: '0.65rem 0.85rem', borderRadius: 8, border: '1px solid #e2e8f0' }}>
                     
                     {/* Driver Select */}
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
-                      <span style={{ fontSize: '0.78rem', fontWeight: 900, color: '#0f172a', whiteSpace: 'nowrap' }}>
+                      <span style={{ fontSize: '0.78rem', fontWeight: 800, color: '#334155', whiteSpace: 'nowrap' }}>
                         Staff Driver:
                       </span>
                       <select
@@ -1034,10 +1052,10 @@ export default function DriverManagementPage() {
                         onChange={e => void handleAssignDriver(b, e.target.value)}
                         style={{
                           flex: '1 1 200px',
-                          border: '1.5px solid #cbd5e1',
-                          borderRadius: 8,
-                          padding: '0.38rem 0.6rem',
-                          fontSize: '0.82rem',
+                          border: '1px solid #cbd5e1',
+                          borderRadius: 6,
+                          padding: '0.35rem 0.6rem',
+                          fontSize: '0.8rem',
                           background: isAssigned ? '#f0fdf4' : '#fff',
                           fontWeight: 700,
                           color: isAssigned ? '#15803d' : '#334155',
@@ -1060,7 +1078,7 @@ export default function DriverManagementPage() {
                         <button
                           disabled={isSavingThis}
                           onClick={() => void handleAssignDriver(b, '')}
-                          style={{ background: '#fff', border: '1px solid #fca5a5', color: '#dc2626', borderRadius: 8, padding: '0.38rem 0.75rem', fontSize: '0.76rem', fontWeight: 800, cursor: 'pointer', whiteSpace: 'nowrap' }}
+                          style={{ background: '#fff', border: '1px solid #cbd5e1', color: '#dc2626', borderRadius: 6, padding: '0.35rem 0.65rem', fontSize: '0.74rem', fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}
                           title="Remove driver assignment"
                         >
                           ✕ Unassign Driver
