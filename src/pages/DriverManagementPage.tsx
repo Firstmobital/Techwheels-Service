@@ -126,11 +126,11 @@ function parseLocationDetails(rawAddress: string | null | undefined): ParsedLoca
 
   const mapsUrl = hasGps
     ? `https://www.google.com/maps/search/?api=1&query=${lat},${lng}`
-    : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(cleanAddress)}`
+    : ''
 
   const navUrl = hasGps
     ? `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`
-    : `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(cleanAddress)}`
+    : ''
 
   return {
     cleanAddress,
@@ -150,7 +150,6 @@ export default function DriverManagementPage() {
   const [loading, setLoading] = useState(true)
   const [savingId, setSavingId] = useState<number | null>(null)
   const [error, setError] = useState('')
-  const [copiedId, setCopiedId] = useState<number | null>(null)
   const [viewMode, setViewMode] = useState<'cards' | 'table' | 'workload'>('cards')
 
   // Filters
@@ -162,12 +161,6 @@ export default function DriverManagementPage() {
   const [selectedBranch, setSelectedBranch] = useState('all')
   const [tripType, setTripType] = useState<'all' | 'pickup' | 'drop'>('all')
   const [allocationFilter, setAllocationFilter] = useState<'all' | 'unassigned' | 'assigned'>('all')
-
-  // Edit Address / Pin Modal
-  const [editingBooking, setEditingBooking] = useState<ServiceBooking | null>(null)
-  const [editAddressInput, setEditAddressInput] = useState('')
-  const [editGpsLat, setEditGpsLat] = useState('')
-  const [editGpsLng, setEditGpsLng] = useState('')
 
   // Print Trip Sheet Dialog
   const [printModalOpen, setPrintModalOpen] = useState(false)
@@ -305,57 +298,6 @@ export default function DriverManagementPage() {
     } finally {
       setSavingId(null)
     }
-  }
-
-  async function handleSaveAddress() {
-    if (!editingBooking) return
-    setSavingId(editingBooking.id)
-    try {
-      let finalAddress = editAddressInput.trim()
-      if (editGpsLat.trim() && editGpsLng.trim()) {
-        const latNum = parseFloat(editGpsLat.trim())
-        const lngNum = parseFloat(editGpsLng.trim())
-        if (!isNaN(latNum) && !isNaN(lngNum)) {
-          finalAddress = `${finalAddress} [GPS: ${latNum.toFixed(6)}, ${lngNum.toFixed(6)} | https://maps.google.com/?q=${latNum},${lngNum}]`
-        }
-      }
-
-      const updates = { pickup_address: finalAddress || null }
-      const { error: updateErr } = await supabase
-        .from('service_bookings')
-        .update(updates)
-        .eq('id', editingBooking.id)
-
-      if (updateErr) throw updateErr
-
-      setBookings(prev =>
-        prev.map(b => (b.id === editingBooking.id ? { ...b, pickup_address: updates.pickup_address } : b))
-      )
-      setEditingBooking(null)
-    } catch (err: any) {
-      alert('Failed to save location details: ' + (err?.message || 'Unknown error'))
-    } finally {
-      setSavingId(null)
-    }
-  }
-
-  function openEditModal(b: ServiceBooking) {
-    const loc = parseLocationDetails(b.pickup_address || b.customer_address)
-    setEditingBooking(b)
-    setEditAddressInput(loc.cleanAddress)
-    setEditGpsLat(loc.lat ? String(loc.lat) : '')
-    setEditGpsLng(loc.lng ? String(loc.lng) : '')
-  }
-
-  function copyAddress(b: ServiceBooking) {
-    const loc = parseLocationDetails(b.pickup_address || b.customer_address)
-    const text = loc.hasGps
-      ? `${loc.cleanAddress}\nGPS Coordinates: ${loc.lat}, ${loc.lng}\nGoogle Maps: ${loc.mapsUrl}`
-      : loc.cleanAddress
-    if (!text) return
-    navigator.clipboard.writeText(text)
-    setCopiedId(b.id)
-    setTimeout(() => setCopiedId(null), 2000)
   }
 
   // Workload computation across all bookings
@@ -939,71 +881,33 @@ export default function DriverManagementPage() {
                     </div>
                   </div>
 
-                  {/* Location & Live GPS Pin Box */}
-                  <div style={{ background: '#f8fafc', borderRadius: 12, padding: '0.75rem 0.95rem', border: '1px solid #e2e8f0', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                    <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '0.5rem' }}>
-                      <div style={{ display: 'flex', alignItems: 'flex-start', gap: '0.45rem', flex: 1 }}>
-                        <span style={{ fontSize: '1.2rem', marginTop: -2 }}>📍</span>
-                        <div style={{ flex: 1, wordBreak: 'break-word', fontSize: '0.82rem', lineHeight: 1.45 }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginBottom: 2 }}>
-                            <strong style={{ color: '#0f172a' }}>Pickup / Drop Address:</strong>
-                            {loc.hasGps && (
-                              <span style={{ fontSize: '0.66rem', fontWeight: 900, background: '#dcfce7', color: '#15803d', padding: '0.1rem 0.45rem', borderRadius: 6, border: '1px solid #86efac' }}>
-                                ✓ Live Customer App GPS Pin
-                              </span>
-                            )}
-                          </div>
-                          <span style={{ color: loc.rawText ? '#334155' : '#94a3b8', fontStyle: loc.rawText ? 'normal' : 'italic' }}>
-                            {loc.cleanAddress}
-                          </span>
-                          {loc.hasGps && (
-                            <div style={{ fontSize: '0.72rem', color: '#059669', fontWeight: 700, marginTop: 2 }}>
-                              🛰️ Pin Coordinates: {loc.lat?.toFixed(6)}, {loc.lng?.toFixed(6)}
-                            </div>
-                          )}
-                        </div>
-                      </div>
-
-                      <button
-                        onClick={() => openEditModal(b)}
-                        style={{ background: '#fff', border: '1px solid #cbd5e1', borderRadius: 6, padding: '0.2rem 0.5rem', fontSize: '0.72rem', fontWeight: 700, color: '#475569', cursor: 'pointer', whiteSpace: 'nowrap' }}
-                      >
-                        ✏️ Edit Location
-                      </button>
-                    </div>
-
-                    {/* Google Maps Pin & GPS Navigation Buttons */}
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', flexWrap: 'wrap', paddingTop: '0.45rem', borderTop: '1px solid #f1f5f9' }}>
-                      {loc.rawText ? (
-                        <>
-                          <a
-                            href={loc.mapsUrl}
-                            target="_blank"
-                            rel="noreferrer"
-                            style={{ background: '#2563eb', color: '#fff', borderRadius: 6, padding: '0.3rem 0.65rem', fontSize: '0.74rem', fontWeight: 800, textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '0.3rem' }}
-                          >
-                            📍 View Pin on Maps ↗
-                          </a>
-                          <a
-                            href={loc.navUrl}
-                            target="_blank"
-                            rel="noreferrer"
-                            style={{ background: '#16a34a', color: '#fff', borderRadius: 6, padding: '0.3rem 0.65rem', fontSize: '0.74rem', fontWeight: 800, textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '0.3rem' }}
-                          >
-                            🧭 Turn-by-Turn GPS Nav ↗
-                          </a>
-                          <button
-                            onClick={() => copyAddress(b)}
-                            style={{ background: copiedId === b.id ? '#dcfce7' : '#fff', color: copiedId === b.id ? '#15803d' : '#475569', border: '1px solid #cbd5e1', borderRadius: 6, padding: '0.28rem 0.6rem', fontSize: '0.74rem', fontWeight: 700, cursor: 'pointer' }}
-                          >
-                            {copiedId === b.id ? '✓ Copied!' : '📋 Copy Address & Coords'}
-                          </button>
-                        </>
-                      ) : (
-                        <span style={{ fontSize: '0.72rem', color: '#94a3b8', fontStyle: 'italic' }}>
-                          Add customer address or GPS link to enable 1-tap navigation
-                        </span>
+                  {/* Pickup / Drop Address */}
+                  <div style={{ background: '#f8fafc', borderRadius: 8, padding: '0.6rem 0.85rem', border: '1px solid #e2e8f0', fontSize: '0.8rem', lineHeight: 1.45 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.5rem', marginBottom: 2 }}>
+                      <span style={{ fontSize: '0.72rem', fontWeight: 800, color: '#475569', textTransform: 'uppercase' }}>
+                        📍 Pickup / Drop Address
+                      </span>
+                      {loc.hasGps && loc.mapsUrl && (
+                        <a
+                          href={loc.mapsUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          style={{
+                            fontSize: '0.72rem',
+                            fontWeight: 700,
+                            color: '#2563eb',
+                            textDecoration: 'none',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '0.2rem',
+                          }}
+                        >
+                          📍 Open Pin on Maps ↗
+                        </a>
                       )}
+                    </div>
+                    <div style={{ color: loc.cleanAddress && loc.cleanAddress !== 'Address not specified' ? '#1e293b' : '#94a3b8', fontWeight: 500 }}>
+                      {loc.cleanAddress}
                     </div>
                   </div>
 
@@ -1159,12 +1063,13 @@ export default function DriverManagementPage() {
                       </td>
                       <td style={{ padding: '0.75rem 1rem', textAlign: 'right' }}>
                         <div style={{ display: 'flex', gap: '0.35rem', justifyContent: 'flex-end' }}>
-                          <a href={loc.mapsUrl} target="_blank" rel="noreferrer" style={{ fontSize: '0.74rem', color: '#fff', background: '#2563eb', padding: '0.25rem 0.55rem', borderRadius: 6, fontWeight: 700, textDecoration: 'none' }}>
-                            📍 Map ↗
-                          </a>
-                          <a href={loc.navUrl} target="_blank" rel="noreferrer" style={{ fontSize: '0.74rem', color: '#fff', background: '#16a34a', padding: '0.25rem 0.55rem', borderRadius: 6, fontWeight: 700, textDecoration: 'none' }}>
-                            🧭 GPS ↗
-                          </a>
+                          {loc.hasGps && loc.mapsUrl ? (
+                            <a href={loc.mapsUrl} target="_blank" rel="noreferrer" style={{ fontSize: '0.74rem', color: '#2563eb', fontWeight: 700, textDecoration: 'none' }}>
+                              📍 Map Pin ↗
+                            </a>
+                          ) : (
+                            <span style={{ fontSize: '0.72rem', color: '#94a3b8' }}>—</span>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -1287,16 +1192,15 @@ export default function DriverManagementPage() {
                             <div style={{ fontSize: '0.72rem', color: '#64748b', marginTop: 4 }}>
                               📍 {loc.cleanAddress}
                             </div>
-                            <div style={{ display: 'flex', gap: '0.4rem', marginTop: 6 }}>
-                              <a href={loc.mapsUrl} target="_blank" rel="noreferrer" style={{ flex: 1, textAlign: 'center', background: '#2563eb', color: '#fff', padding: '0.25rem', borderRadius: 6, fontSize: '0.7rem', fontWeight: 800, textDecoration: 'none' }}>
-                                📍 Map ↗
-                              </a>
-                              <a href={loc.navUrl} target="_blank" rel="noreferrer" style={{ flex: 1, textAlign: 'center', background: '#16a34a', color: '#fff', padding: '0.25rem', borderRadius: 6, fontSize: '0.7rem', fontWeight: 800, textDecoration: 'none' }}>
-                                🧭 GPS ↗
-                              </a>
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.4rem', marginTop: 6 }}>
+                              {loc.hasGps && loc.mapsUrl ? (
+                                <a href={loc.mapsUrl} target="_blank" rel="noreferrer" style={{ fontSize: '0.7rem', color: '#2563eb', fontWeight: 700, textDecoration: 'none' }}>
+                                  📍 Map Pin ↗
+                                </a>
+                              ) : <span />}
                               <button
                                 onClick={() => void handleAssignDriver(b, '')}
-                                style={{ background: '#fff', border: '1px solid #fca5a5', color: '#dc2626', borderRadius: 6, padding: '0.25rem 0.45rem', fontSize: '0.7rem', fontWeight: 700, cursor: 'pointer' }}
+                                style={{ background: '#fff', border: '1px solid #fca5a5', color: '#dc2626', borderRadius: 6, padding: '0.2rem 0.45rem', fontSize: '0.7rem', fontWeight: 700, cursor: 'pointer' }}
                                 title="Unassign vehicle from driver"
                               >
                                 ✕
@@ -1317,84 +1221,7 @@ export default function DriverManagementPage() {
 
       </div>
 
-      {/* ── Edit Address / Pin Modal ── */}
-      {editingBooking && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(3px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999, padding: '1rem' }}>
-          <div style={{ background: '#fff', borderRadius: 16, width: '100%', maxWidth: 520, padding: '1.4rem', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.2)' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid #f1f5f9', paddingBottom: '0.75rem', marginBottom: '1rem' }}>
-              <div>
-                <div style={{ fontWeight: 900, fontSize: '1.05rem', color: '#0f172a' }}>
-                  📍 Update Pickup Location & GPS Pin
-                </div>
-                <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: 2 }}>
-                  Vehicle: <strong>{editingBooking.reg_number}</strong> · Customer: {editingBooking.customer_name}
-                </div>
-              </div>
-              <button onClick={() => setEditingBooking(null)} style={{ background: 'none', border: 'none', fontSize: '1.1rem', cursor: 'pointer', color: '#64748b' }}>✕</button>
-            </div>
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
-              <label style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
-                <span style={{ fontSize: '0.78rem', fontWeight: 800, color: '#334155' }}>Street Address / Landmark:</span>
-                <textarea
-                  rows={3}
-                  value={editAddressInput}
-                  onChange={e => setEditAddressInput(e.target.value)}
-                  placeholder="House / Flat No, Street, Colony, Landmark, Jaipur…"
-                  style={{ border: '1.5px solid #cbd5e1', borderRadius: 8, padding: '0.55rem 0.75rem', fontSize: '0.82rem', outline: 'none', resize: 'vertical' }}
-                />
-              </label>
-
-              <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 10, padding: '0.75rem' }}>
-                <div style={{ fontSize: '0.76rem', fontWeight: 900, color: '#15803d', marginBottom: '0.4rem', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
-                  <span>🛰️</span>
-                  <span>Exact GPS Coordinates (Optional):</span>
-                </div>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.6rem' }}>
-                  <label style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
-                    <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#475569' }}>Latitude:</span>
-                    <input
-                      type="text"
-                      placeholder="e.g. 26.912433"
-                      value={editGpsLat}
-                      onChange={e => setEditGpsLat(e.target.value)}
-                      style={{ border: '1px solid #cbd5e1', borderRadius: 6, padding: '0.4rem 0.6rem', fontSize: '0.8rem', background: '#fff' }}
-                    />
-                  </label>
-                  <label style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
-                    <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#475569' }}>Longitude:</span>
-                    <input
-                      type="text"
-                      placeholder="e.g. 75.787270"
-                      value={editGpsLng}
-                      onChange={e => setEditGpsLng(e.target.value)}
-                      style={{ border: '1px solid #cbd5e1', borderRadius: 6, padding: '0.4rem 0.6rem', fontSize: '0.8rem', background: '#fff' }}
-                    />
-                  </label>
-                </div>
-                <div style={{ fontSize: '0.68rem', color: '#64748b', marginTop: '0.4rem' }}>
-                  Tip: When specified, Google Maps navigates driver directly to this exact pin!
-                </div>
-              </div>
-            </div>
-
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '0.6rem', marginTop: '1.2rem', paddingTop: '0.75rem', borderTop: '1px solid #f1f5f9' }}>
-              <button
-                onClick={() => setEditingBooking(null)}
-                style={{ background: '#f1f5f9', color: '#475569', border: '1px solid #cbd5e1', borderRadius: 8, padding: '0.45rem 1rem', fontSize: '0.8rem', fontWeight: 700, cursor: 'pointer' }}
-              >
-                Cancel
-              </button>
-              <button
-                onClick={() => void handleSaveAddress()}
-                style={{ background: '#2563eb', color: '#fff', border: 'none', borderRadius: 8, padding: '0.45rem 1.25rem', fontSize: '0.8rem', fontWeight: 800, cursor: 'pointer' }}
-              >
-                Save Location Pin
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* ── Print Dispatch Sheet Dialog ── */}
       {printModalOpen && (
