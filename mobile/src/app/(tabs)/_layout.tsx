@@ -3,13 +3,14 @@ import { useAuth } from '../../context/AuthContext'
 import { useCustomerSession } from '../../context/CustomerSessionContext'
 import { ActivityIndicator, TouchableOpacity, Text, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
+import { Icon, type IconName } from '../../components/ui/Icon'
 
-const TAB_ICON: Record<string, string> = {
-  home: '🏠',
-  search: '🔍',
-  new: '➕',
-  alerts: '🔔',
-  profile: '👤',
+const TAB_CONFIG: Record<string, { icon: IconName; label: string }> = {
+  home: { icon: 'home', label: 'Home' },
+  search: { icon: 'search', label: 'Search' },
+  new: { icon: 'plus', label: 'New' },
+  alerts: { icon: 'bell', label: 'Alerts' },
+  profile: { icon: 'user', label: 'Profile' },
 }
 
 const VISIBLE_TABS = ['home', 'search', 'new', 'alerts', 'profile']
@@ -27,22 +28,26 @@ function CustomTabBar({ state, descriptors, navigation }: any) {
         right: 0,
         bottom: 0,
         zIndex: 1000,
-        elevation: 24,
+        elevation: 12,
         flexDirection: 'row',
-        borderTopColor: '#e5e7eb',
+        borderTopColor: '#e2e8f0',
         borderTopWidth: 1,
         backgroundColor: '#ffffff',
         paddingTop: 8,
-        paddingBottom: Math.max(8, insets.bottom),
+        paddingBottom: Math.max(10, insets.bottom),
         minHeight: tabBarHeight,
+        shadowColor: '#0f172a',
+        shadowOffset: { width: 0, height: -6 },
+        shadowOpacity: 0.06,
+        shadowRadius: 16,
       }}
     >
       {visibleRoutes.map((route: any) => {
         const index = state.routes.findIndex((candidate: any) => candidate.key === route.key)
         const focused = state.index === index
         const options = descriptors[route.key]?.options ?? {}
-        const label = options.tabBarLabel ?? options.title ?? route.name
-        const icon = TAB_ICON[route.name] ?? '•'
+        const config = TAB_CONFIG[route.name] || { icon: 'home', label: route.name }
+        const label = options.tabBarLabel ?? options.title ?? config.label
         const isCenter = route.name === 'new'
 
         const onPress = () => {
@@ -62,44 +67,74 @@ function CustomTabBar({ state, descriptors, navigation }: any) {
             key={route.key}
             onPress={onPress}
             onLongPress={() => navigation.emit({ type: 'tabLongPress', target: route.key })}
-            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
             activeOpacity={0.7}
             style={{
               flex: 1,
               alignItems: 'center',
               justifyContent: 'center',
               minHeight: 48,
-              paddingTop: isCenter ? 0 : 4,
             }}
           >
             {isCenter ? (
               <>
                 <View
                   style={{
-                    width: 52,
-                    height: 52,
-                    borderRadius: 26,
-                    marginTop: -26,
+                    width: 46,
+                    height: 46,
+                    borderRadius: 23,
+                    marginTop: -20,
                     backgroundColor: '#2563eb',
                     alignItems: 'center',
                     justifyContent: 'center',
                     shadowColor: '#2563eb',
-                    shadowOpacity: 0.3,
-                    shadowRadius: 10,
+                    shadowOpacity: 0.35,
+                    shadowRadius: 8,
                     shadowOffset: { width: 0, height: 4 },
-                    elevation: 8,
+                    elevation: 6,
                   }}
                 >
-                  <Text style={{ fontSize: 22, color: '#fff' }}>{icon}</Text>
+                  <Icon name="plus" size={22} color="#ffffff" strokeWidth={2.6} />
                 </View>
-                <Text style={{ fontSize: 11, fontWeight: '700', color: focused ? '#2563eb' : '#999', marginTop: 2 }}>
+                <Text
+                  style={{
+                    fontSize: 11,
+                    fontWeight: focused ? '800' : '600',
+                    color: focused ? '#2563eb' : '#64748b',
+                    marginTop: 2,
+                  }}
+                >
                   {String(label)}
                 </Text>
               </>
             ) : (
               <>
-                <Text style={{ fontSize: 18, opacity: focused ? 1 : 0.55 }}>{icon}</Text>
-                <Text style={{ fontSize: 12, fontWeight: '600', color: focused ? '#2563eb' : '#999' }}>
+                <View
+                  style={{
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    paddingHorizontal: 14,
+                    paddingVertical: 4,
+                    borderRadius: 12,
+                    backgroundColor: focused ? '#eff6ff' : 'transparent',
+                  }}
+                >
+                  <Icon
+                    name={config.icon}
+                    size={20}
+                    color={focused ? '#2563eb' : '#64748b'}
+                    strokeWidth={focused ? 2.4 : 1.8}
+                  />
+                </View>
+                <Text
+                  style={{
+                    fontSize: 11,
+                    fontWeight: focused ? '800' : '600',
+                    color: focused ? '#2563eb' : '#64748b',
+                    marginTop: 2,
+                    letterSpacing: 0.1,
+                  }}
+                >
                   {String(label)}
                 </Text>
               </>
