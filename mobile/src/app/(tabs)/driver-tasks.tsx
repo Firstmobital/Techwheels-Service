@@ -185,13 +185,13 @@ export default function DriverTasksScreen() {
       }
 
       const taskDate = (t.appointment_date || t.booking_date || '').slice(0, 10)
-      if (taskDate === todayStr) {
+      if (taskDate === todayStr || (!taskDate || taskDate < todayStr)) {
         today++
       } else if (taskDate === tomorrowStr) {
         tomorrow++
       } else if (taskDate === dayAfterStr) {
         dayAfter++
-      } else {
+      } else if (taskDate > dayAfterStr) {
         upcoming++
       }
     }
@@ -235,7 +235,7 @@ export default function DriverTasksScreen() {
       const taskDate = (t.appointment_date || t.booking_date || '').slice(0, 10)
 
       if (activeDateTab === 'today') {
-        return taskDate === todayStr || (!taskDate && t.status !== 'Completed')
+        return taskDate === todayStr || (!taskDate || taskDate < todayStr)
       }
       if (activeDateTab === 'tomorrow') {
         return taskDate === tomorrowStr
@@ -244,7 +244,7 @@ export default function DriverTasksScreen() {
         return taskDate === dayAfterStr
       }
       if (activeDateTab === 'upcoming') {
-        return t.status !== 'Completed'
+        return taskDate > dayAfterStr
       }
       return true
     })
@@ -297,9 +297,10 @@ export default function DriverTasksScreen() {
     }
     const hasGps = task.pickup_address?.includes('GPS:') || task.pickup_address?.includes('maps.google')
     const taskDate = (task.appointment_date || task.booking_date || '').slice(0, 10)
-    const isToday = taskDate === todayStr
+    const isToday = taskDate === todayStr || (!taskDate || taskDate < todayStr)
     const isTomorrow = taskDate === tomorrowStr
     const isDayAfter = taskDate === dayAfterStr
+    const isUpcoming = taskDate > dayAfterStr
 
     return (
       <View className="bg-white rounded-2xl border border-slate-200 p-4 mb-3 shadow-xs">
@@ -332,6 +333,11 @@ export default function DriverTasksScreen() {
             {isDayAfter && (
               <View className="bg-indigo-50 px-2 py-0.5 rounded border border-indigo-200">
                 <Text className="text-indigo-800 text-[10px] font-bold">DAY AFTER</Text>
+              </View>
+            )}
+            {isUpcoming && (
+              <View className="bg-sky-50 px-2 py-0.5 rounded border border-sky-200">
+                <Text className="text-sky-800 text-[10px] font-bold">UPCOMING</Text>
               </View>
             )}
           </View>
