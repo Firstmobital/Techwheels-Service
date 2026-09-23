@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   ActivityIndicator,
   Alert,
+  FlatList,
   Linking,
   Platform,
   RefreshControl,
@@ -53,14 +54,13 @@ export default function DriverTasksScreen() {
   const [tasks, setTasks] = useState<DriverBookingTask[]>([])
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
-  const [activeTab, setActiveTab] = useState<'pending' | 'in_progress' | 'completed' | 'all'>('pending')
+  const [activeTab, setActiveTab] = useState<'pending' | 'completed' | 'all'>('pending')
   const [selectedDriverFilter, setSelectedDriverFilter] = useState<string>('all')
   const [driverNames, setDriverNames] = useState<string[]>([])
-  const [updatingId, setUpdatingId] = useState<number | null>(null)
   const [currentDriverName, setCurrentDriverName] = useState<string>('')
   const [isAdminUser, setIsAdminUser] = useState(false)
 
-  // Resolve logged-in driver name from user profile / metadata
+  // Resolve logged-in driver identity
   useEffect(() => {
     async function resolveDriverIdentity() {
       if (!user) return
@@ -93,7 +93,6 @@ export default function DriverTasksScreen() {
 
   const loadTasks = useCallback(async () => {
     try {
-      // Fetch bookings that require pickup/drop or have driver assigned
       const { data, error } = await supabase
         .from('service_bookings')
         .select('*')
@@ -108,10 +107,9 @@ export default function DriverTasksScreen() {
         const names = Array.from(new Set(data.map(b => b.driver_name).filter(Boolean))) as string[]
         setDriverNames(names)
 
-        // If logged-in user is a known driver, auto-select their filter if currently 'all'
         if (currentDriverName) {
           const match = names.find(n => n.toLowerCase() === currentDriverName.toLowerCase())
-          if (match && selectedDriverFilter === 'all') {
+          if (match && selectedDriverFilter === 'all' && !isAdminUser) {
             setSelectedDriverFilter(match)
           }
         }
@@ -122,13 +120,12 @@ export default function DriverTasksScreen() {
       setLoading(false)
       setRefreshing(false)
     }
-  }, [currentDriverName, selectedDriverFilter])
+  }, [currentDriverName, selectedDriverFilter, isAdminUser])
 
   useEffect(() => {
     void loadTasks()
   }, [loadTasks])
 
-  // If currentDriverName changes and matches a driver, auto-select
   useEffect(() => {
     if (currentDriverName && driverNames.length > 0) {
       const match = driverNames.find(
@@ -142,12 +139,25 @@ export default function DriverTasksScreen() {
     }
   }, [currentDriverName, driverNames, isAdminUser, selectedDriverFilter])
 
-  const onRefresh = () => {
+  const onRefresh = useCallback(() => {
     setRefreshing(true)
     void loadTasks()
-  }
+  }, [loadTasks])
 
-  // Filter tasks
+  // Compute counts for active driver filter
+  const counts = useMemo(() => {
+    const baseTasks = selectedDriverFilter === 'all'
+      ? tasks
+      : tasks.filter(t => t.driver_name === selectedDriverFilter)
+
+    const pending = baseTasks.filter(t => t.status !== 'Completed' && t.status !== 'Cancelled').length
+    const completed = baseTasks.filter(t => t.status === 'Completed').length
+    const total = baseTasks.length
+
+    return { pending, completed, total }
+  }, [tasks, selectedDriverFilter])
+
+  // Filter tasks based on selected tab and driver
   const filteredTasks = useMemo(() => {
     return tasks.filter((t) => {
       // Driver filter
@@ -155,35 +165,30 @@ export default function DriverTasksScreen() {
         return false
       }
 
-      // Status tab
+      // Status filter
       if (activeTab === 'pending') {
-        return t.status === 'New' || t.status === 'Confirmed'
-      }
-      if (activeTab === 'in_progress') {
-        return t.status === 'In-Progress' || t.status === 'Arrived'
+        return t.status !== 'Completed' && t.status !== 'Cancelled'
       }
       if (activeTab === 'completed') {
-        return t.status === 'Completed' || t.status === 'Cancelled'
+        return t.status === 'Completed'
       }
       return true
     })
   }, [tasks, activeTab, selectedDriverFilter])
 
-  // Extract navigation URL from address if embedded or create query
+  // Extract navigation URL from address or create maps link
   const openMapsNavigation = (address: string | null) => {
     if (!address) {
       Alert.alert('No Address', 'Customer address is not specified for this booking.')
       return
     }
 
-    // Check if URL is embedded
     const urlMatch = address.match(/(https:\/\/maps\.google\.com\/\S+)/i)
     if (urlMatch) {
       void Linking.openURL(urlMatch[1])
       return
     }
 
-    // Clean address by removing GPS brackets if any
     const cleanAddress = address.replace(/\[GPS:[^\]]+\]/g, '').trim()
     const query = encodeURIComponent(cleanAddress || address)
     const url = Platform.select({
@@ -205,58 +210,152 @@ export default function DriverTasksScreen() {
   const openWhatsApp = (phone: string, task: DriverBookingTask) => {
     const cleanPhone = phone.replace(/\D/g, '').slice(-10)
     if (!cleanPhone) return
-    const msg = `Hi ${task.customer_name},\nI am your Techwheels driver assigned for vehicle pickup/drop (${task.reg_number}). I am on my way to your location.`
+    const msg = `Hi ${task.customer_name},\nI am your driver assigned for vehicle ${task.reg_number} pickup/drop. I will be arriving at your location shortly.`
     void Linking.openURL(`https://wa.me/91${cleanPhone}?text=${encodeURIComponent(msg)}`)
   }
 
-  const updateTaskStatus = async (task: DriverBookingTask, newStatus: string) => {
-    setUpdatingId(task.id)
-    try {
-      const { error } = await supabase
-        .from('service_bookings')
-        .update({ status: newStatus, updated_at: new Date().toISOString() })
-        .eq('id', task.id)
-
-      if (error) {
-        Alert.alert('Error', error.message)
-      } else {
-        setTasks((prev) =>
-          prev.map((t) => (t.id === task.id ? { ...t, status: newStatus } : t))
-        )
-        Alert.alert('Status Updated', `Booking status changed to ${newStatus}`)
-      }
-    } catch (err: any) {
-      Alert.alert('Error', err.message || 'Failed to update status')
-    } finally {
-      setUpdatingId(null)
+  // Render individual task card with clean, high-performance UI
+  const renderTaskCard = useCallback(({ item: task }: { item: DriverBookingTask }) => {
+    const sc = STATUS_COLOR[task.status] || {
+      bg: 'bg-slate-100',
+      text: 'text-slate-700',
+      border: 'border-slate-200',
     }
-  }
+    const hasGps = task.pickup_address?.includes('GPS:') || task.pickup_address?.includes('maps.google')
+
+    return (
+      <View className="bg-white rounded-2xl border border-slate-200 p-4 mb-3 shadow-xs">
+        {/* Top Bar: Lead / Booking No + Badges + Status */}
+        <View className="flex-row items-center justify-between pb-2.5 border-b border-slate-100">
+          <View className="flex-row items-center gap-1.5 flex-wrap flex-1 mr-2">
+            <Text className="text-blue-700 font-bold text-xs">
+              {task.lead_number || `SB-${task.id}`}
+            </Text>
+            {task.pickup_required && (
+              <View className="bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                <Text className="text-emerald-800 text-[10px] font-bold">🚐 Pickup</Text>
+              </View>
+            )}
+            {task.drop_required && (
+              <View className="bg-purple-50 px-2 py-0.5 rounded border border-purple-200">
+                <Text className="text-purple-800 text-[10px] font-bold">🏠 Drop</Text>
+              </View>
+            )}
+          </View>
+          <View className={`px-2 py-0.5 rounded-full border ${sc.bg} ${sc.border}`}>
+            <Text className={`text-[10px] font-black uppercase ${sc.text}`}>
+              {task.status}
+            </Text>
+          </View>
+        </View>
+
+        {/* Customer & Vehicle Info */}
+        <View className="py-2.5">
+          <View className="flex-row justify-between items-start">
+            <View className="flex-1 pr-2">
+              <Text className="text-slate-900 text-base font-bold" numberOfLines={1}>
+                {task.customer_name}
+              </Text>
+              <Text className="text-slate-500 text-xs font-semibold mt-0.5">
+                📞 {task.customer_phone}
+              </Text>
+            </View>
+            <View className="items-end">
+              <Text className="text-slate-900 text-sm font-black tracking-wide">
+                {task.reg_number}
+              </Text>
+              <Text className="text-slate-500 text-xs font-semibold">
+                {task.model || 'Vehicle'}
+              </Text>
+            </View>
+          </View>
+
+          {/* Date & Time Slot */}
+          <View className="flex-row items-center justify-between bg-slate-50 px-3 py-2 rounded-xl border border-slate-100 mt-2.5">
+            <Text className="text-slate-700 text-xs font-semibold">
+              📅 {task.appointment_date ? new Date(task.appointment_date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : 'Today'}
+            </Text>
+            {task.booking_time ? (
+              <Text className="text-blue-900 text-xs font-bold">
+                ⏰ {task.booking_time}
+              </Text>
+            ) : null}
+          </View>
+        </View>
+
+        {/* Address & Google Maps Navigation Button */}
+        {task.pickup_address ? (
+          <View className="bg-amber-50/80 border border-amber-200 rounded-xl p-3 my-1">
+            <View className="flex-row items-center justify-between mb-1">
+              <Text className="text-amber-950 text-[11px] font-bold uppercase tracking-wider">
+                📍 Location / Address
+              </Text>
+              {hasGps && (
+                <View className="bg-emerald-100 px-1.5 py-0.5 rounded border border-emerald-300">
+                  <Text className="text-emerald-900 text-[9px] font-bold">GPS Pin Active</Text>
+                </View>
+              )}
+            </View>
+            <Text className="text-amber-950 text-xs font-semibold leading-relaxed" numberOfLines={2}>
+              {task.pickup_address}
+            </Text>
+
+            {/* Google Maps Button */}
+            <TouchableOpacity
+              onPress={() => openMapsNavigation(task.pickup_address)}
+              activeOpacity={0.8}
+              className="bg-blue-600 py-2.5 px-3 rounded-xl flex-row items-center justify-center gap-2 mt-2 active:bg-blue-700"
+            >
+              <Text className="text-white text-xs font-bold">📍 Open in Google Maps</Text>
+            </TouchableOpacity>
+          </View>
+        ) : null}
+
+        {/* Quick Contact Buttons: Call & WhatsApp */}
+        <View className="flex-row gap-2 mt-2 pt-2 border-t border-slate-100">
+          <TouchableOpacity
+            onPress={() => callCustomer(task.customer_phone)}
+            activeOpacity={0.7}
+            className="flex-1 bg-emerald-50 border border-emerald-200 py-2.5 rounded-xl flex-row items-center justify-center gap-1.5 active:bg-emerald-100"
+          >
+            <Text className="text-emerald-800 text-xs font-bold">📞 Call Customer</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            onPress={() => openWhatsApp(task.customer_phone, task)}
+            activeOpacity={0.7}
+            className="flex-1 bg-green-50 border border-green-200 py-2.5 rounded-xl flex-row items-center justify-center gap-1.5 active:bg-green-100"
+          >
+            <Text className="text-green-800 text-xs font-bold">💬 WhatsApp</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    )
+  }, [])
 
   return (
     <SafeAreaView className="flex-1 bg-slate-50" edges={['top']}>
       {/* Header */}
-      <View className="bg-white border-b border-slate-200 px-4 py-3.5">
+      <View className="bg-white border-b border-slate-200 px-4 py-3">
         <View className="flex-row items-center justify-between">
           <View>
-            <View className="flex-row items-center gap-1.5">
-              <Text className="text-xl font-black text-slate-900">🚗 Driver Tasks</Text>
-            </View>
+            <Text className="text-xl font-black text-slate-900">🚗 Driver Tasks</Text>
             <Text className="text-slate-500 text-xs font-semibold mt-0.5">
-              Pickup & Drop Navigation · Live Status Sync
+              Pickup & Drop Navigation · Fast Route & Contact
             </Text>
           </View>
           <TouchableOpacity
-            onPress={() => void loadTasks()}
+            onPress={onRefresh}
             className="w-9 h-9 rounded-full bg-slate-100 items-center justify-center border border-slate-200 active:bg-slate-200"
           >
             <Icon name="rotate-cw" size={16} color="#475569" />
           </TouchableOpacity>
         </View>
 
-        {/* Driver Filter Pills if multiple drivers exist */}
+        {/* Driver Filter Horizontal Scrollable Pills */}
         {driverNames.length > 0 && (
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} className="mt-3">
-            <View className="flex-row gap-1.5">
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} className="mt-2.5">
+            <View className="flex-row gap-1.5 py-1">
               <TouchableOpacity
                 onPress={() => setSelectedDriverFilter('all')}
                 className={`px-3 py-1.5 rounded-full border ${
@@ -270,7 +369,7 @@ export default function DriverTasksScreen() {
                     selectedDriverFilter === 'all' ? 'text-white' : 'text-slate-700'
                   }`}
                 >
-                  All Drivers ({tasks.length})
+                  All ({tasks.length})
                 </Text>
               </TouchableOpacity>
               {driverNames.map((name) => {
@@ -300,249 +399,89 @@ export default function DriverTasksScreen() {
           </ScrollView>
         )}
 
-        {/* Tab selector */}
-        <View className="flex-row bg-slate-100 p-1 rounded-xl mt-3 border border-slate-200">
-          {(
-            [
-              { key: 'pending', label: 'Pending / Confirmed' },
-              { key: 'in_progress', label: 'In-Transit / Arrived' },
-              { key: 'completed', label: 'Completed' },
-              { key: 'all', label: 'All' },
-            ] as const
-          ).map((tab) => {
-            const isSelected = activeTab === tab.key
-            return (
-              <TouchableOpacity
-                key={tab.key}
-                onPress={() => setActiveTab(tab.key)}
-                className={`flex-1 py-2 items-center rounded-lg ${
-                  isSelected ? 'bg-white shadow-xs' : ''
-                }`}
-              >
-                <Text
-                  className={`text-[11px] font-bold ${
-                    isSelected ? 'text-blue-700' : 'text-slate-600'
-                  }`}
-                  numberOfLines={1}
-                >
-                  {tab.label}
-                </Text>
-              </TouchableOpacity>
-            )
-          })}
+        {/* Clean Status Tabs: Pending, Completed, All */}
+        <View className="flex-row bg-slate-100 p-1 rounded-xl mt-2.5 border border-slate-200">
+          <TouchableOpacity
+            onPress={() => setActiveTab('pending')}
+            className={`flex-1 py-2 items-center rounded-lg ${
+              activeTab === 'pending' ? 'bg-white shadow-xs' : ''
+            }`}
+          >
+            <Text
+              className={`text-xs font-bold ${
+                activeTab === 'pending' ? 'text-blue-700' : 'text-slate-600'
+              }`}
+            >
+              Pending ({counts.pending})
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            onPress={() => setActiveTab('completed')}
+            className={`flex-1 py-2 items-center rounded-lg ${
+              activeTab === 'completed' ? 'bg-white shadow-xs' : ''
+            }`}
+          >
+            <Text
+              className={`text-xs font-bold ${
+                activeTab === 'completed' ? 'text-blue-700' : 'text-slate-600'
+              }`}
+            >
+              Completed ({counts.completed})
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            onPress={() => setActiveTab('all')}
+            className={`flex-1 py-2 items-center rounded-lg ${
+              activeTab === 'all' ? 'bg-white shadow-xs' : ''
+            }`}
+          >
+            <Text
+              className={`text-xs font-bold ${
+                activeTab === 'all' ? 'text-blue-700' : 'text-slate-600'
+              }`}
+            >
+              All ({counts.total})
+            </Text>
+          </TouchableOpacity>
         </View>
       </View>
 
-      {/* Main Task List */}
+      {/* Main Task FlatList (High performance, virtualized, no freezing) */}
       {loading ? (
         <View className="flex-1 items-center justify-center">
           <ActivityIndicator size="large" color="#2563eb" />
-          <Text className="text-slate-500 text-xs font-semibold mt-2">Loading driver tasks…</Text>
+          <Text className="text-slate-500 text-xs font-semibold mt-2">Loading tasks…</Text>
         </View>
-      ) : filteredTasks.length === 0 ? (
-        <ScrollView
-          contentContainerStyle={{ flexGrow: 1, alignItems: 'center', justifyContent: 'center', padding: 24 }}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
-        >
-          <View className="w-16 h-16 rounded-full bg-slate-100 items-center justify-center mb-3">
-            <Text className="text-3xl">🚗</Text>
-          </View>
-          <Text className="text-slate-900 text-base font-black">No pickup/drop tasks found</Text>
-          <Text className="text-slate-500 text-xs text-center mt-1">
-            There are no tasks matching the selected filter. Pull down to refresh.
-          </Text>
-        </ScrollView>
       ) : (
-        <ScrollView
-          className="flex-1 px-4 py-3"
-          contentContainerStyle={{ paddingBottom: 30 }}
+        <FlatList
+          data={filteredTasks}
+          keyExtractor={(item) => String(item.id)}
+          renderItem={renderTaskCard}
+          contentContainerStyle={{
+            paddingHorizontal: 16,
+            paddingTop: 12,
+            paddingBottom: 110, // Ensure bottom tab bar does not overlap items
+            flexGrow: filteredTasks.length === 0 ? 1 : undefined,
+          }}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
-        >
-          {filteredTasks.map((task) => {
-            const sc = STATUS_COLOR[task.status] || {
-              bg: 'bg-slate-100',
-              text: 'text-slate-700',
-              border: 'border-slate-200',
-            }
-            const isUpdating = updatingId === task.id
-            const hasGps = task.pickup_address?.includes('GPS:') || task.pickup_address?.includes('maps.google')
-
-            return (
-              <View
-                key={task.id}
-                className="bg-white rounded-2xl border border-slate-200 p-4 mb-3.5 shadow-xs"
-              >
-                {/* Header: Lead # + Status badge */}
-                <View className="flex-row items-center justify-between pb-3 border-b border-slate-100">
-                  <View className="flex-row items-center gap-2">
-                    <Text className="text-blue-700 font-black text-sm">
-                      {task.lead_number || `SB-${task.id}`}
-                    </Text>
-                    {task.pickup_required && (
-                      <View className="bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200">
-                        <Text className="text-emerald-800 text-[10px] font-bold">🚐 Pickup</Text>
-                      </View>
-                    )}
-                    {task.drop_required && (
-                      <View className="bg-purple-50 px-2 py-0.5 rounded-md border border-purple-200">
-                        <Text className="text-purple-800 text-[10px] font-bold">🏠 Drop</Text>
-                      </View>
-                    )}
-                  </View>
-                  <View className={`px-2.5 py-1 rounded-full border ${sc.bg} ${sc.border}`}>
-                    <Text className={`text-[11px] font-black uppercase ${sc.text}`}>
-                      {task.status}
-                    </Text>
-                  </View>
-                </View>
-
-                {/* Customer & Vehicle Info */}
-                <View className="py-3 gap-1.5">
-                  <View className="flex-row justify-between items-start">
-                    <View className="flex-1 pr-2">
-                      <Text className="text-slate-900 text-base font-black">{task.customer_name}</Text>
-                      <Text className="text-slate-500 text-xs font-semibold">
-                        📞 {task.customer_phone}
-                      </Text>
-                    </View>
-                    <View className="items-end">
-                      <Text className="text-slate-900 text-sm font-black tracking-wide">
-                        {task.reg_number}
-                      </Text>
-                      <Text className="text-slate-500 text-xs font-semibold">
-                        {task.model || 'Tata Vehicle'}
-                      </Text>
-                    </View>
-                  </View>
-
-                  <View className="flex-row items-center gap-3 pt-1">
-                    <Text className="text-slate-600 text-xs font-semibold">
-                      🔧 {task.service_type || 'General Service'}
-                    </Text>
-                    {task.branch && (
-                      <Text className="text-blue-700 text-xs font-bold">
-                        📍 {task.branch}
-                      </Text>
-                    )}
-                  </View>
-
-                  {task.appointment_date && (
-                    <View className="bg-slate-50 px-2.5 py-1.5 rounded-xl border border-slate-200 flex-row items-center justify-between mt-1">
-                      <Text className="text-slate-600 text-xs font-semibold">
-                        📅 {new Date(task.appointment_date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
-                      </Text>
-                      {task.booking_time && (
-                        <Text className="text-blue-900 text-xs font-bold">
-                          ⏰ {task.booking_time}
-                        </Text>
-                      )}
-                    </View>
-                  )}
-                </View>
-
-                {/* Address & GPS Navigation Box */}
-                {task.pickup_address && (
-                  <View className="bg-amber-50/70 border border-amber-200 rounded-xl p-3 my-1">
-                    <View className="flex-row items-center justify-between mb-1.5">
-                      <View className="flex-row items-center gap-1">
-                        <Text className="text-sm">📍</Text>
-                        <Text className="text-amber-950 text-xs font-black uppercase tracking-wider">
-                          Pickup / Drop Address
-                        </Text>
-                      </View>
-                      {hasGps && (
-                        <View className="bg-emerald-100 px-1.5 py-0.5 rounded border border-emerald-300">
-                          <Text className="text-emerald-900 text-[10px] font-bold">✓ Live GPS Pin</Text>
-                        </View>
-                      )}
-                    </View>
-                    <Text className="text-amber-950 text-xs font-semibold leading-relaxed">
-                      {task.pickup_address}
-                    </Text>
-
-                    {/* Google Maps 1-Tap Navigation button */}
-                    <TouchableOpacity
-                      onPress={() => openMapsNavigation(task.pickup_address)}
-                      activeOpacity={0.8}
-                      className="bg-blue-600 py-2.5 px-3 rounded-xl flex-row items-center justify-center gap-2 mt-2.5 active:bg-blue-700 shadow-xs"
-                    >
-                      <Text className="text-white text-xs font-black">📍 Open in Google Maps Navigation</Text>
-                    </TouchableOpacity>
-                  </View>
-                )}
-
-                {/* Action Buttons: Call, WhatsApp, Status Progress */}
-                <View className="pt-3 border-t border-slate-100 gap-2">
-                  <View className="flex-row gap-2">
-                    <TouchableOpacity
-                      onPress={() => callCustomer(task.customer_phone)}
-                      activeOpacity={0.7}
-                      className="flex-1 bg-emerald-50 border border-emerald-200 py-2 rounded-xl flex-row items-center justify-center gap-1.5"
-                    >
-                      <Text className="text-emerald-800 text-xs font-bold">📞 Call</Text>
-                    </TouchableOpacity>
-
-                    <TouchableOpacity
-                      onPress={() => openWhatsApp(task.customer_phone, task)}
-                      activeOpacity={0.7}
-                      className="flex-1 bg-green-50 border border-green-200 py-2 rounded-xl flex-row items-center justify-center gap-1.5"
-                    >
-                      <Text className="text-green-800 text-xs font-bold">💬 WhatsApp</Text>
-                    </TouchableOpacity>
-                  </View>
-
-                  {/* Driver Status Progression Buttons */}
-                  <View className="flex-row gap-2 mt-1">
-                    {task.status !== 'In-Progress' && task.status !== 'Arrived' && task.status !== 'Completed' && (
-                      <TouchableOpacity
-                        onPress={() => void updateTaskStatus(task, 'In-Progress')}
-                        disabled={isUpdating}
-                        activeOpacity={0.8}
-                        className="flex-1 bg-purple-600 py-2.5 rounded-xl items-center justify-center active:bg-purple-700"
-                      >
-                        {isUpdating ? (
-                          <ActivityIndicator size="small" color="#fff" />
-                        ) : (
-                          <Text className="text-white text-xs font-black">🚐 Start / Out for Pickup</Text>
-                        )}
-                      </TouchableOpacity>
-                    )}
-
-                    {task.status === 'In-Progress' && (
-                      <TouchableOpacity
-                        onPress={() => void updateTaskStatus(task, 'Arrived')}
-                        disabled={isUpdating}
-                        activeOpacity={0.8}
-                        className="flex-1 bg-sky-600 py-2.5 rounded-xl items-center justify-center active:bg-sky-700"
-                      >
-                        {isUpdating ? (
-                          <ActivityIndicator size="small" color="#fff" />
-                        ) : (
-                          <Text className="text-white text-xs font-black">🏁 Picked Up & Arrived at Workshop</Text>
-                        )}
-                      </TouchableOpacity>
-                    )}
-
-                    {task.status === 'Arrived' && (
-                      <TouchableOpacity
-                        onPress={() => void updateTaskStatus(task, 'Completed')}
-                        disabled={isUpdating}
-                        activeOpacity={0.8}
-                        className="flex-1 bg-emerald-600 py-2.5 rounded-xl items-center justify-center active:bg-emerald-700"
-                      >
-                        {isUpdating ? (
-                          <ActivityIndicator size="small" color="#fff" />
-                        ) : (
-                          <Text className="text-white text-xs font-black">🏠 Drop Delivered to Customer</Text>
-                        )}
-                      </TouchableOpacity>
-                    )}
-                  </View>
-                </View>
+          initialNumToRender={10}
+          maxToRenderPerBatch={10}
+          windowSize={7}
+          removeClippedSubviews={Platform.OS === 'android'}
+          ListEmptyComponent={
+            <View className="flex-1 items-center justify-center py-16">
+              <View className="w-16 h-16 rounded-full bg-slate-100 items-center justify-center mb-3">
+                <Text className="text-3xl">🚗</Text>
               </View>
-            )
-          })}
-        </ScrollView>
+              <Text className="text-slate-900 text-base font-bold">No tasks found</Text>
+              <Text className="text-slate-500 text-xs text-center mt-1">
+                There are no pickup/drop tasks under this filter.
+              </Text>
+            </View>
+          }
+        />
       )}
     </SafeAreaView>
   )
