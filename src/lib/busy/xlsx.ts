@@ -35,8 +35,24 @@ export function buildPartyAccountWorkbook(rows: PartyAccountRow[]): XLSX.WorkBoo
   return workbook
 }
 
+/**
+ * SheetJS otherwise writes text as formula-string cells (`t="str"`) and marks the
+ * used range, including Series, as number-stored-as-text. A BUSY-accepted Excel
+ * edit of that cell is a shared string (`t="s"`) outside that flag.
+ */
+export const BUSY_INVOICE_XLSX_WRITE_OPTIONS: XLSX.WritingOptions = {
+  bookType: 'xlsx',
+  bookSST: true,
+  ignoreEC: false,
+}
+
+export function busyXlsxWriteOptions(workbook: XLSX.WorkBook): XLSX.WritingOptions | undefined {
+  if (workbook.SheetNames[0] !== 'Invoice') return undefined
+  return BUSY_INVOICE_XLSX_WRITE_OPTIONS
+}
+
 export function downloadBusyWorkbook(workbook: XLSX.WorkBook, filename: string): void {
-  XLSX.writeFile(workbook, filename)
+  XLSX.writeFile(workbook, filename, busyXlsxWriteOptions(workbook))
 }
 
 export function workbookHeaders(workbook: XLSX.WorkBook, sheetName?: string): string[] {

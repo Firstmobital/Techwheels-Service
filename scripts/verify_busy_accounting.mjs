@@ -28,7 +28,8 @@ import {
 } from '../src/lib/busy/partsPersist.ts'
 import { evaluateBusyVoucherSourceAvailability, VOUCHER_SOURCE_WARNING } from '../src/lib/busy/sourceAvailability.ts'
 import { transformBusyAccounting } from '../src/lib/busy/transform.ts'
-import { buildInvoiceVoucherWorkbook, buildPartyAccountWorkbook, workbookHeaders, workbookDataRows } from '../src/lib/busy/xlsx.ts'
+import { buildInvoiceVoucherWorkbook, buildPartyAccountWorkbook, busyXlsxWriteOptions, workbookHeaders, workbookDataRows } from '../src/lib/busy/xlsx.ts'
+import * as XLSX from 'xlsx'
 import { INVOICE_VOUCHER_HEADERS, PARTY_ACCOUNT_HEADERS } from '../src/lib/busy/types.ts'
 
 let failed = 0
@@ -436,6 +437,48 @@ test('workbook headers match BUSY contracts', () => {
     { 'Party Name': 'RAMESH KUMAR-SITAPURA RJ14AB1234', Group: 'SERVICE CENTRE DEBTORS 2022-23', GSTIN: '' },
   ])
   assert.deepEqual(workbookHeaders(partyWb), [...PARTY_ACCOUNT_HEADERS])
+  assert.equal(busyXlsxWriteOptions(partyWb), undefined)
+})
+
+test('invoice Series cells serialize as shared strings without number-stored-as-text', () => {
+  const invoiceWb = buildInvoiceVoucherWorkbook([
+    {
+      'Bill date': '22-09-2026',
+      'bill no': 'IMBTAI2627007807',
+      'Party Name': 'MADHU JONWAL-SITAPURA RJ45CX0023',
+      'Item Name': 'LABOUR CHARGES @18%',
+      Qty: 0,
+      Price: 0,
+      Amount: 1180,
+      naration: 'RJ45CX0023',
+      Series: 'PV-S 26-27',
+    },
+    {
+      'Bill date': '22-09-2026',
+      'bill no': 'EMBTAI2627006668',
+      'Party Name': 'RAMSWAROOP YADAV-SITAPURA RJ60CM4009',
+      'Item Name': 'SPARE PARTS @18%',
+      Qty: 0,
+      Price: 0,
+      Amount: 0,
+      naration: 'RJ60CM4009',
+      Series: 'EV-S 26-27',
+    },
+  ])
+  const legacy = XLSX.write(invoiceWb, { bookType: 'xlsx', type: 'buffer' }).toString('latin1')
+  const corrected = XLSX.write(invoiceWb, { ...busyXlsxWriteOptions(invoiceWb), type: 'buffer' }).toString('latin1')
+  assert.match(legacy, /t="str"><v>PV-S 26-27<\/v>/)
+  assert.match(legacy, /t="str"><v>EV-S 26-27<\/v>/)
+  assert.match(legacy, /numberStoredAsText="1"/)
+  assert.doesNotMatch(corrected, /t="str"/)
+  assert.match(corrected, /<t>PV-S 26-27<\/t>/)
+  assert.match(corrected, /<t>EV-S 26-27<\/t>/)
+  assert.match(corrected, /t="s"/)
+  assert.doesNotMatch(corrected, /numberStoredAsText/)
+  const reread = XLSX.read(Buffer.from(corrected, 'latin1'), { type: 'buffer' })
+  const rows = XLSX.utils.sheet_to_json(reread.Sheets.Invoice, { defval: '', raw: true })
+  assert.deepEqual(rows.map((row) => row.Series), ['PV-S 26-27', 'EV-S 26-27'])
+  assert.deepEqual(rows.map((row) => row['bill no']), ['IMBTAI2627007807', 'EMBTAI2627006668'])
 })
 
 test('Labour amount is used GST-inclusive without * 1.18', () => {

@@ -79,7 +79,7 @@ export {
   type BusyVoucherSourceAvailability,
 } from './sourceAvailability.ts'
 export { transformBusyAccounting, type BusyPreviewRow, type InvoiceVoucherRow, type PartyAccountRow } from './transform.ts'
-export { buildInvoiceVoucherWorkbook, buildPartyAccountWorkbook, downloadBusyWorkbook, workbookHeaders, workbookDataRows } from './xlsx.ts'
+export { buildInvoiceVoucherWorkbook, buildPartyAccountWorkbook, busyXlsxWriteOptions, BUSY_INVOICE_XLSX_WRITE_OPTIONS, downloadBusyWorkbook, workbookHeaders, workbookDataRows } from './xlsx.ts'
 export {
   fetchBusyLabourRows,
   fetchBusyLabourRowsByInvoiceNumbers,
