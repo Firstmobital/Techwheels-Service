@@ -191,22 +191,31 @@ export default function DriverManagementPage() {
       const branchRes = await supabase.from('service_branches').select('name').order('name')
       if (branchRes.data) setBranches(branchRes.data.map(b => b.name))
 
-      // 2. Fetch driver list from employee_master
+      // 2. Fetch real staff driver list from employee_master
       const driverRes = await supabase
         .from('employee_master')
-        .select('id, employee_name, phone, role, is_active')
-        .eq('is_active', true)
+        .select('id, employee_name, role, department, is_active')
         .order('employee_name')
 
       if (driverRes.data) {
-        const list = (driverRes.data as DriverEmployee[]).filter(
-          u => u.employee_name && (hasBusinessRole(u.role, 'DRIVER') || (u.role && u.role.toUpperCase().includes('DRIVER')) || true)
-        )
-        // Ensure Admin option is always prominently at the top as primary handler
-        const nonAdmin = list.filter(u => u.employee_name.toLowerCase() !== 'admin')
-        setDrivers([{ id: 'admin-driver', employee_name: 'Admin', role: 'ADMIN', is_active: true }, ...nonAdmin])
-      } else {
-        setDrivers([{ id: 'admin-driver', employee_name: 'Admin', role: 'ADMIN', is_active: true }])
+        const list = (driverRes.data as { id: number; employee_name: string; role: string | null; department?: string | null; is_active: boolean | null }[])
+          .filter(u => {
+            if (!u.employee_name) return false
+            const name = u.employee_name.trim().toLowerCase()
+            if (name === 'admin' || name === 'administrator') return false
+            if (u.is_active === false) return false
+            const isDriverRole = hasBusinessRole(u.role, 'DRIVER') || (u.role && u.role.toUpperCase().includes('DRIVER'))
+            const isDriverDept = Boolean(u.department && u.department.toUpperCase().includes('DRIVER'))
+            return isDriverRole || isDriverDept
+          })
+          .map(u => ({
+            id: String(u.id),
+            employee_name: u.employee_name.trim(),
+            role: u.role || 'DRIVER',
+            is_active: u.is_active ?? true,
+          }))
+
+        setDrivers(list)
       }
     } catch (e: any) {
       console.error('Error loading initial driver data:', e)
@@ -229,7 +238,24 @@ export default function DriverManagementPage() {
       const { data, error: fetchErr } = await query
       if (fetchErr) throw fetchErr
 
-      setBookings(data || [])
+      const list = data || []
+      setBookings(list)
+
+      // Also collect any driver_name assigned to bookings (strictly excluding 'Admin' and 'Administrator')
+      const bookedDrivers = Array.from(new Set(list.map(b => b.driver_name).filter(Boolean))) as string[]
+      setDrivers(prev => {
+        const existingNames = new Set(prev.map(d => d.employee_name.toLowerCase()))
+        const additional: DriverEmployee[] = []
+        bookedDrivers.forEach(rawName => {
+          const name = rawName.trim()
+          const lower = name.toLowerCase()
+          if (lower !== 'admin' && lower !== 'administrator' && !existingNames.has(lower)) {
+            additional.push({ id: `driver-${name}`, employee_name: name, role: 'DRIVER', is_active: true })
+            existingNames.add(lower)
+          }
+        })
+        return additional.length > 0 ? [...prev, ...additional] : prev
+      })
     } catch (err: any) {
       console.error('loadBookings error:', err)
       setError(err?.message || 'Failed to load driver dispatch bookings')
@@ -270,36 +296,6 @@ export default function DriverManagementPage() {
       alert('Failed to update driver: ' + (err?.message || 'Unknown error'))
     } finally {
       setSavingId(null)
-    }
-  }
-
-  async function handleAssignAllPendingToAdmin() {
-    const unassigned = filtered.filter(b => !b.driver_name)
-    if (unassigned.length === 0) {
-      alert('No unassigned vehicles found in the current view.')
-      return
-    }
-    const confirmed = window.confirm(`Assign all ${unassigned.length} pending vehicles to Admin (Admin will personally bring vehicles)?`)
-    if (!confirmed) return
-
-    setLoading(true)
-    try {
-      const ids = unassigned.map(b => b.id)
-      const { error: batchErr } = await supabase
-        .from('service_bookings')
-        .update({ driver_name: 'Admin' })
-        .in('id', ids)
-
-      if (batchErr) throw batchErr
-
-      setBookings(prev =>
-        prev.map(b => (ids.includes(b.id) ? { ...b, driver_name: 'Admin' } : b))
-      )
-    } catch (err: any) {
-      console.error('Batch assign error:', err)
-      alert('Failed to batch assign to Admin: ' + (err?.message || 'Unknown error'))
-    } finally {
-      setLoading(false)
     }
   }
 
@@ -451,13 +447,12 @@ export default function DriverManagementPage() {
     const total = filtered.length
     const assigned = filtered.filter(b => Boolean(b.driver_name)).length
     const unassigned = total - assigned
-    const adminTrips = filtered.filter(b => b.driver_name?.toLowerCase() === 'admin').length
     const completed = filtered.filter(b => b.status === 'Completed' || b.status === 'Arrived').length
     const gpsPins = filtered.filter(b => {
       const loc = parseLocationDetails(b.pickup_address || b.customer_address)
       return loc.hasGps
     }).length
-    return { total, assigned, unassigned, adminTrips, completed, gpsPins }
+    return { total, assigned, unassigned, completed, gpsPins }
   }, [filtered])
 
   function handleExport() {
@@ -475,7 +470,7 @@ export default function DriverManagementPage() {
         'GPS Latitude': loc.lat || '',
         'GPS Longitude': loc.lng || '',
         'Google Maps URL': loc.mapsUrl || '',
-        'Assigned Driver / Handler': b.driver_name || 'Unassigned',
+        'Assigned Staff Driver': b.driver_name || 'Unassigned',
         'Trip Type': b.pickup_required && b.drop_required ? 'Pickup & Drop' : b.pickup_required ? 'Pickup' : b.drop_required ? 'Drop' : 'Standard',
         'Status': b.status,
         'Branch': b.branch || '',
@@ -499,11 +494,11 @@ export default function DriverManagementPage() {
                 Driver Management
               </h1>
               <span style={{ fontSize: '0.68rem', fontWeight: 800, padding: '0.15rem 0.55rem', borderRadius: 12, background: '#1e3a8a', color: '#93c5fd', border: '1px solid #3b82f6' }}>
-                Admin Operations & Live App GPS
+                Staff Driver Dispatch & Live GPS
               </span>
             </div>
             <p style={{ margin: '0.15rem 0 0', fontSize: '0.76rem', color: '#94a3b8' }}>
-              Vehicle pickup & drop allocations, live customer app pin locations, and driver workload
+              Assign vehicles to staff drivers, track live customer app GPS pins, and monitor trip progress
             </p>
           </div>
         </div>
@@ -549,33 +544,6 @@ export default function DriverManagementPage() {
           <div>
             <div style={{ fontSize: '1.3rem', fontWeight: 900, color: '#0f172a', lineHeight: 1 }}>{stats.total}</div>
             <div style={{ fontSize: '0.7rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginTop: 3 }}>Total Scheduled Trips</div>
-          </div>
-        </div>
-
-        {/* Admin Self Trips */}
-        <div
-          onClick={() => {
-            setSelectedDriver('Admin')
-            setAllocationFilter('assigned')
-          }}
-          style={{
-            background: stats.adminTrips > 0 ? '#eff6ff' : '#f8fafc',
-            border: `1.5px solid ${stats.adminTrips > 0 ? '#3b82f6' : '#e2e8f0'}`,
-            borderRadius: 12,
-            padding: '0.65rem 0.9rem',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '0.75rem',
-            cursor: 'pointer',
-          }}
-          title="Click to view all vehicles Admin is personally bringing in"
-        >
-          <div style={{ fontSize: '1.6rem' }}>🛡️</div>
-          <div>
-            <div style={{ fontSize: '1.3rem', fontWeight: 900, color: '#1d4ed8', lineHeight: 1 }}>{stats.adminTrips}</div>
-            <div style={{ fontSize: '0.7rem', fontWeight: 800, color: '#1e40af', textTransform: 'uppercase', marginTop: 3 }}>
-              Admin Bringing (Self)
-            </div>
           </div>
         </div>
 
@@ -626,12 +594,12 @@ export default function DriverManagementPage() {
           </div>
         </div>
 
-        {/* Active Drivers */}
+        {/* Staff Drivers */}
         <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 12, padding: '0.65rem 0.9rem', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
           <div style={{ fontSize: '1.6rem' }}>👥</div>
           <div>
             <div style={{ fontSize: '1.3rem', fontWeight: 900, color: '#2563eb', lineHeight: 1 }}>{drivers.length}</div>
-            <div style={{ fontSize: '0.7rem', fontWeight: 700, color: '#1d4ed8', textTransform: 'uppercase', marginTop: 3 }}>Drivers on Roster</div>
+            <div style={{ fontSize: '0.7rem', fontWeight: 700, color: '#1d4ed8', textTransform: 'uppercase', marginTop: 3 }}>Staff Drivers on Roster</div>
           </div>
         </div>
 
@@ -642,7 +610,7 @@ export default function DriverManagementPage() {
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.45rem' }}>
           <div style={{ fontSize: '0.78rem', fontWeight: 800, color: '#334155', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
             <span>🚗</span>
-            <span>Driver Workload & Quick Filters:</span>
+            <span>Staff Drivers Workload & Quick Filters:</span>
             <span style={{ fontSize: '0.7rem', color: '#64748b', fontWeight: 500 }}>(Select driver to view allocated vehicles)</span>
           </div>
           {selectedDriver !== 'all' && (
@@ -657,8 +625,12 @@ export default function DriverManagementPage() {
 
         <div style={{ display: 'flex', gap: '0.6rem', overflowX: 'auto', paddingBottom: '0.2rem' }}>
           
-          {/* Unassigned Quick Card with Instant "Assign All to Admin" */}
+          {/* Unassigned Quick Card */}
           <div
+            onClick={() => {
+              setSelectedDriver(selectedDriver === '__unassigned__' ? 'all' : '__unassigned__')
+              setAllocationFilter('unassigned')
+            }}
             style={{
               flex: '0 0 auto',
               background: selectedDriver === '__unassigned__' ? '#fef2f2' : '#ffffff',
@@ -668,47 +640,19 @@ export default function DriverManagementPage() {
               display: 'flex',
               alignItems: 'center',
               gap: '0.6rem',
+              cursor: 'pointer',
               boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
             }}
           >
-            <div
-              onClick={() => {
-                setSelectedDriver(selectedDriver === '__unassigned__' ? 'all' : '__unassigned__')
-                setAllocationFilter('unassigned')
-              }}
-              style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}
-            >
-              <div style={{ width: 28, height: 28, borderRadius: '50%', background: '#fee2e2', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.9rem' }}>
-                ⚠️
-              </div>
-              <div>
-                <div style={{ fontSize: '0.78rem', fontWeight: 900, color: '#b91c1c' }}>Pending Allocations</div>
-                <div style={{ fontSize: '0.68rem', color: '#dc2626', fontWeight: 700 }}>
-                  {driverWorkload.unassignedCount} unassigned
-                </div>
+            <div style={{ width: 28, height: 28, borderRadius: '50%', background: '#fee2e2', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.9rem' }}>
+              ⚠️
+            </div>
+            <div>
+              <div style={{ fontSize: '0.78rem', fontWeight: 900, color: '#b91c1c' }}>Pending Allocations</div>
+              <div style={{ fontSize: '0.68rem', color: '#dc2626', fontWeight: 700 }}>
+                {driverWorkload.unassignedCount} unassigned
               </div>
             </div>
-
-            {driverWorkload.unassignedCount > 0 && (
-              <button
-                onClick={() => void handleAssignAllPendingToAdmin()}
-                style={{
-                  background: '#2563eb',
-                  color: '#fff',
-                  border: 'none',
-                  borderRadius: 6,
-                  padding: '0.25rem 0.55rem',
-                  fontSize: '0.7rem',
-                  fontWeight: 800,
-                  cursor: 'pointer',
-                  whiteSpace: 'nowrap',
-                  marginLeft: '0.2rem',
-                }}
-                title="Admin will bring all pending vehicles"
-              >
-                ⚡ All to Admin
-              </button>
-            )}
           </div>
 
           {/* Individual Driver Cards */}
@@ -735,7 +679,7 @@ export default function DriverManagementPage() {
                 }}
               >
                 <div style={{ width: 30, height: 30, borderRadius: '50%', background: isSelected ? '#dbeafe' : '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.95rem' }}>
-                  {d.employee_name.toLowerCase() === 'admin' ? '🛡️' : '👨‍✈️'}
+                  👨‍✈️
                 </div>
                 <div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
@@ -909,7 +853,7 @@ export default function DriverManagementPage() {
           /* ── CARDS VIEW ── */
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(460px, 1fr))', gap: '1.1rem' }}>
             {filtered.map(b => {
-              const isAssigned = Boolean(b.driver_name)
+              const isAssigned = Boolean(b.driver_name && b.driver_name.toLowerCase() !== 'admin')
               const isSavingThis = savingId === b.id
               const sm = STATUS_META[b.status] || { bg: '#f1f5f9', color: '#475569', border: '#e2e8f0' }
               const loc = parseLocationDetails(b.pickup_address || b.customer_address)
@@ -968,33 +912,15 @@ export default function DriverManagementPage() {
                           fontWeight: 800,
                           padding: '0.2rem 0.65rem',
                           borderRadius: 20,
-                          background: b.driver_name?.toLowerCase() === 'admin'
-                            ? '#dbeafe'
-                            : isAssigned
-                            ? '#e0f2fe'
-                            : '#fef2f2',
-                          color: b.driver_name?.toLowerCase() === 'admin'
-                            ? '#1d4ed8'
-                            : isAssigned
-                            ? '#0369a1'
-                            : '#dc2626',
-                          border: `1px solid ${
-                            b.driver_name?.toLowerCase() === 'admin'
-                              ? '#93c5fd'
-                              : isAssigned
-                              ? '#bae6fd'
-                              : '#fecaca'
-                          }`,
+                          background: isAssigned ? '#e0f2fe' : '#fef2f2',
+                          color: isAssigned ? '#0369a1' : '#dc2626',
+                          border: `1px solid ${isAssigned ? '#bae6fd' : '#fecaca'}`,
                           display: 'flex',
                           alignItems: 'center',
                           gap: '0.3rem',
                         }}
                       >
-                        {b.driver_name?.toLowerCase() === 'admin'
-                          ? '🛡️ Admin Bringing (Self)'
-                          : isAssigned
-                          ? `🚗 ${b.driver_name}`
-                          : '⚠️ Not Assigned'}
+                        {isAssigned ? `🚗 ${b.driver_name}` : '⚠️ Driver Not Assigned'}
                       </span>
                       <span style={{ fontSize: '0.7rem', fontWeight: 800, padding: '0.18rem 0.55rem', borderRadius: 12, background: sm.bg, color: sm.color, border: `1px solid ${sm.border}` }}>
                         {b.status}
@@ -1100,67 +1026,44 @@ export default function DriverManagementPage() {
                     {/* Driver Select */}
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
                       <span style={{ fontSize: '0.78rem', fontWeight: 900, color: '#0f172a', whiteSpace: 'nowrap' }}>
-                        Vehicle Handler:
+                        Staff Driver:
                       </span>
                       <select
                         disabled={isSavingThis}
-                        value={b.driver_name || ''}
+                        value={b.driver_name && b.driver_name.toLowerCase() !== 'admin' ? b.driver_name : ''}
                         onChange={e => void handleAssignDriver(b, e.target.value)}
                         style={{
-                          flex: '1 1 180px',
+                          flex: '1 1 200px',
                           border: '1.5px solid #cbd5e1',
                           borderRadius: 8,
                           padding: '0.38rem 0.6rem',
                           fontSize: '0.82rem',
-                          background: b.driver_name?.toLowerCase() === 'admin' ? '#eff6ff' : b.driver_name ? '#f0fdf4' : '#fff',
+                          background: isAssigned ? '#f0fdf4' : '#fff',
                           fontWeight: 700,
-                          color: b.driver_name?.toLowerCase() === 'admin' ? '#1d4ed8' : b.driver_name ? '#15803d' : '#334155',
+                          color: isAssigned ? '#15803d' : '#334155',
                           outline: 'none',
                           cursor: 'pointer',
                         }}
                       >
-                        <option value="">— Select Driver / Handler —</option>
+                        <option value="">— Select Staff Driver —</option>
                         {drivers.map(d => {
-                          const isAdm = d.employee_name.toLowerCase() === 'admin'
                           const tripCount = driverWorkload.counts[d.employee_name.toLowerCase()]?.total || 0
                           return (
                             <option key={d.id} value={d.employee_name}>
-                              {isAdm ? '🛡️ Admin (Self - Admin hi layega)' : `🚗 ${d.employee_name}`} ({tripCount} allocated)
+                              🚗 {d.employee_name} ({tripCount} allocated)
                             </option>
                           )
                         })}
                       </select>
 
-                      <button
-                        disabled={isSavingThis}
-                        onClick={() => void handleAssignDriver(b, b.driver_name?.toLowerCase() === 'admin' ? '' : 'Admin')}
-                        style={{
-                          background: b.driver_name?.toLowerCase() === 'admin' ? '#dbeafe' : '#eff6ff',
-                          color: '#1d4ed8',
-                          border: `1.5px solid ${b.driver_name?.toLowerCase() === 'admin' ? '#3b82f6' : '#bfdbfe'}`,
-                          borderRadius: 8,
-                          padding: '0.38rem 0.75rem',
-                          fontSize: '0.78rem',
-                          fontWeight: 800,
-                          cursor: 'pointer',
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '0.35rem',
-                          whiteSpace: 'nowrap',
-                        }}
-                        title="Admin will personally bring this vehicle"
-                      >
-                        <span>🛡️</span>
-                        <span>{b.driver_name?.toLowerCase() === 'admin' ? '✓ Admin will bring' : 'Admin will bring'}</span>
-                      </button>
-
-                      {b.driver_name && b.driver_name.toLowerCase() !== 'admin' && (
+                      {b.driver_name && (
                         <button
+                          disabled={isSavingThis}
                           onClick={() => void handleAssignDriver(b, '')}
-                          style={{ background: '#fff', border: '1px solid #fca5a5', color: '#dc2626', borderRadius: 6, padding: '0.35rem 0.55rem', fontSize: '0.72rem', fontWeight: 700, cursor: 'pointer' }}
+                          style={{ background: '#fff', border: '1px solid #fca5a5', color: '#dc2626', borderRadius: 8, padding: '0.38rem 0.75rem', fontSize: '0.76rem', fontWeight: 800, cursor: 'pointer', whiteSpace: 'nowrap' }}
                           title="Remove driver assignment"
                         >
-                          ✕ Clear
+                          ✕ Unassign Driver
                         </button>
                       )}
                     </div>
@@ -1250,7 +1153,7 @@ export default function DriverManagementPage() {
               </thead>
               <tbody>
                 {filtered.map(b => {
-                  const isAssigned = Boolean(b.driver_name)
+                  const isAssigned = Boolean(b.driver_name && b.driver_name.toLowerCase() !== 'admin')
                   const loc = parseLocationDetails(b.pickup_address || b.customer_address)
                   const sm = STATUS_META[b.status] || { bg: '#f1f5f9', color: '#475569', border: '#e2e8f0' }
 
@@ -1283,45 +1186,34 @@ export default function DriverManagementPage() {
                       <td style={{ padding: '0.75rem 1rem' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
                           <select
-                            value={b.driver_name || ''}
+                            value={b.driver_name && b.driver_name.toLowerCase() !== 'admin' ? b.driver_name : ''}
                             onChange={e => void handleAssignDriver(b, e.target.value)}
                             style={{
                               border: '1px solid #cbd5e1',
                               borderRadius: 6,
                               padding: '0.3rem 0.5rem',
                               fontSize: '0.78rem',
-                              background: b.driver_name?.toLowerCase() === 'admin' ? '#eff6ff' : isAssigned ? '#f0fdf4' : '#fff',
+                              background: isAssigned ? '#f0fdf4' : '#fff',
                               fontWeight: 700,
-                              color: b.driver_name?.toLowerCase() === 'admin' ? '#1d4ed8' : isAssigned ? '#15803d' : '#334155',
+                              color: isAssigned ? '#15803d' : '#334155',
                             }}
                           >
                             <option value="">— Select Driver —</option>
-                            {drivers.map(d => {
-                              const isAdm = d.employee_name.toLowerCase() === 'admin'
-                              return (
-                                <option key={d.id} value={d.employee_name}>
-                                  {isAdm ? '🛡️ Admin (Self)' : `🚗 ${d.employee_name}`}
-                                </option>
-                              )
-                            })}
+                            {drivers.map(d => (
+                              <option key={d.id} value={d.employee_name}>
+                                🚗 {d.employee_name}
+                              </option>
+                            ))}
                           </select>
-                          <button
-                            onClick={() => void handleAssignDriver(b, b.driver_name?.toLowerCase() === 'admin' ? '' : 'Admin')}
-                            style={{
-                              background: b.driver_name?.toLowerCase() === 'admin' ? '#dbeafe' : '#f1f5f9',
-                              color: '#1d4ed8',
-                              border: `1px solid ${b.driver_name?.toLowerCase() === 'admin' ? '#3b82f6' : '#cbd5e1'}`,
-                              borderRadius: 6,
-                              padding: '0.28rem 0.5rem',
-                              fontSize: '0.72rem',
-                              fontWeight: 800,
-                              cursor: 'pointer',
-                              whiteSpace: 'nowrap',
-                            }}
-                            title="Admin will personally bring this vehicle"
-                          >
-                            🛡️ {b.driver_name?.toLowerCase() === 'admin' ? 'Admin (Self)' : 'Admin'}
-                          </button>
+                          {b.driver_name && (
+                            <button
+                              onClick={() => void handleAssignDriver(b, '')}
+                              style={{ background: '#fff', border: '1px solid #fca5a5', color: '#dc2626', borderRadius: 6, padding: '0.28rem 0.45rem', fontSize: '0.7rem', fontWeight: 700, cursor: 'pointer' }}
+                              title="Unassign driver"
+                            >
+                              ✕
+                            </button>
+                          )}
                         </div>
                       </td>
                       <td style={{ padding: '0.75rem 1rem' }}>
@@ -1357,43 +1249,25 @@ export default function DriverManagementPage() {
                 <span style={{ fontWeight: 900, fontSize: '0.88rem', color: '#b91c1c' }}>
                   ⚠️ Unassigned Queue
                 </span>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                  {filtered.filter(b => !b.driver_name).length > 0 && (
-                    <button
-                      onClick={() => void handleAssignAllPendingToAdmin()}
-                      style={{ background: '#b91c1c', color: '#fff', border: 'none', borderRadius: 6, padding: '0.2rem 0.5rem', fontSize: '0.68rem', fontWeight: 800, cursor: 'pointer' }}
-                      title="Admin will personally bring all pending vehicles"
-                    >
-                      ⚡ All to Admin
-                    </button>
-                  )}
-                  <span style={{ fontSize: '0.76rem', fontWeight: 900, background: '#b91c1c', color: '#fff', padding: '0.1rem 0.5rem', borderRadius: 10 }}>
-                    {filtered.filter(b => !b.driver_name).length}
-                  </span>
-                </div>
+                <span style={{ fontSize: '0.76rem', fontWeight: 900, background: '#b91c1c', color: '#fff', padding: '0.1rem 0.5rem', borderRadius: 10 }}>
+                  {filtered.filter(b => !b.driver_name || b.driver_name.toLowerCase() === 'admin').length}
+                </span>
               </div>
               <div style={{ flex: 1, overflowY: 'auto', padding: '0.75rem', display: 'flex', flexDirection: 'column', gap: '0.65rem' }}>
-                {filtered.filter(b => !b.driver_name).map(b => {
+                {filtered.filter(b => !b.driver_name || b.driver_name.toLowerCase() === 'admin').map(b => {
                   const loc = parseLocationDetails(b.pickup_address || b.customer_address)
                   return (
                     <div key={b.id} style={{ background: '#fff', border: '1.5px solid #fca5a5', borderRadius: 10, padding: '0.75rem', boxShadow: '0 1px 4px rgba(0,0,0,0.04)' }}>
                       <div style={{ fontWeight: 900, fontSize: '0.95rem', color: '#0f172a' }}>{b.reg_number}</div>
                       <div style={{ fontSize: '0.74rem', color: '#475569' }}>{b.customer_name} · 📞 {b.customer_phone}</div>
                       <div style={{ fontSize: '0.72rem', color: '#64748b', margin: '4px 0' }}>📍 {loc.cleanAddress}</div>
-                      <div style={{ display: 'flex', gap: '0.35rem', marginTop: 6 }}>
-                        <button
-                          onClick={() => void handleAssignDriver(b, 'Admin')}
-                          style={{ flex: 1, background: '#2563eb', color: '#fff', border: 'none', borderRadius: 6, padding: '0.3rem', fontSize: '0.72rem', fontWeight: 800, cursor: 'pointer' }}
-                          title="Admin will personally bring this car"
-                        >
-                          🛡️ Admin will bring
-                        </button>
+                      <div style={{ marginTop: 6 }}>
                         <select
                           onChange={e => void handleAssignDriver(b, e.target.value)}
-                          style={{ flex: 1, padding: '0.3rem', fontSize: '0.72rem', border: '1px solid #cbd5e1', borderRadius: 6, fontWeight: 700 }}
+                          style={{ width: '100%', padding: '0.38rem 0.5rem', fontSize: '0.75rem', border: '1.5px solid #cbd5e1', borderRadius: 6, fontWeight: 700, background: '#fff', cursor: 'pointer' }}
                         >
-                          <option value="">Other Driver…</option>
-                          {drivers.filter(d => d.employee_name.toLowerCase() !== 'admin').map(d => (
+                          <option value="">— Assign Staff Driver —</option>
+                          {drivers.map(d => (
                             <option key={d.id} value={d.employee_name}>🚗 {d.employee_name}</option>
                           ))}
                         </select>
@@ -1404,9 +1278,8 @@ export default function DriverManagementPage() {
               </div>
             </div>
 
-            {/* Columns for each driver */}
+            {/* Columns for each staff driver */}
             {drivers.map(d => {
-              const isAdminCol = d.employee_name.toLowerCase() === 'admin'
               const driverTrips = filtered.filter(b => b.driver_name?.toLowerCase() === d.employee_name.toLowerCase())
 
               return (
@@ -1416,7 +1289,7 @@ export default function DriverManagementPage() {
                     flex: '0 0 340px',
                     background: '#f8fafc',
                     borderRadius: 14,
-                    border: `1.5px solid ${isAdminCol ? '#3b82f6' : '#cbd5e1'}`,
+                    border: '1.5px solid #cbd5e1',
                     display: 'flex',
                     flexDirection: 'column',
                     maxHeight: 'calc(100vh - 300px)',
@@ -1425,28 +1298,28 @@ export default function DriverManagementPage() {
                   <div
                     style={{
                       padding: '0.8rem 1rem',
-                      background: isAdminCol ? '#dbeafe' : '#e2e8f0',
+                      background: '#e2e8f0',
                       borderTopLeftRadius: 12,
                       borderTopRightRadius: 12,
-                      borderBottom: `1px solid ${isAdminCol ? '#bfdbfe' : '#cbd5e1'}`,
+                      borderBottom: '1px solid #cbd5e1',
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'space-between',
                     }}
                   >
                     <div>
-                      <div style={{ fontWeight: 900, fontSize: '0.88rem', color: isAdminCol ? '#1d4ed8' : '#0f172a' }}>
-                        {isAdminCol ? '🛡️ Admin (Self Handler)' : `🚗 ${d.employee_name}`}
+                      <div style={{ fontWeight: 900, fontSize: '0.88rem', color: '#0f172a' }}>
+                        🚗 {d.employee_name}
                       </div>
-                      <div style={{ fontSize: '0.68rem', color: isAdminCol ? '#2563eb' : '#64748b' }}>
-                        {isAdminCol ? 'Admin will personally bring' : d.phone ? `📞 ${d.phone}` : 'Staff Driver'}
+                      <div style={{ fontSize: '0.68rem', color: '#64748b' }}>
+                        {d.role || 'Staff Driver'}
                       </div>
                     </div>
                     <span
                       style={{
                         fontSize: '0.76rem',
                         fontWeight: 900,
-                        background: isAdminCol ? '#1d4ed8' : '#2563eb',
+                        background: '#2563eb',
                         color: '#fff',
                         padding: '0.1rem 0.5rem',
                         borderRadius: 10,
@@ -1457,33 +1330,46 @@ export default function DriverManagementPage() {
                   </div>
 
                   <div style={{ flex: 1, overflowY: 'auto', padding: '0.75rem', display: 'flex', flexDirection: 'column', gap: '0.65rem' }}>
-                    {driverTrips.map(b => {
-                      const loc = parseLocationDetails(b.pickup_address || b.customer_address)
-                      return (
-                        <div key={b.id} style={{ background: '#fff', border: '1px solid #cbd5e1', borderRadius: 10, padding: '0.75rem', boxShadow: '0 1px 3px rgba(0,0,0,0.03)' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                            <span style={{ fontWeight: 900, fontSize: '0.92rem', color: '#0f172a' }}>{b.reg_number}</span>
-                            <span style={{ fontSize: '0.68rem', fontWeight: 800, padding: '0.1rem 0.4rem', borderRadius: 6, background: '#f1f5f9' }}>
-                              {b.booking_time || 'Slot'}
-                            </span>
+                    {driverTrips.length === 0 ? (
+                      <div style={{ textAlign: 'center', padding: '2rem 1rem', color: '#94a3b8', fontSize: '0.78rem' }}>
+                        No vehicles assigned
+                      </div>
+                    ) : (
+                      driverTrips.map(b => {
+                        const loc = parseLocationDetails(b.pickup_address || b.customer_address)
+                        return (
+                          <div key={b.id} style={{ background: '#fff', border: '1px solid #cbd5e1', borderRadius: 10, padding: '0.75rem', boxShadow: '0 1px 3px rgba(0,0,0,0.03)' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                              <span style={{ fontWeight: 900, fontSize: '0.92rem', color: '#0f172a' }}>{b.reg_number}</span>
+                              <span style={{ fontSize: '0.68rem', fontWeight: 800, padding: '0.1rem 0.4rem', borderRadius: 6, background: '#f1f5f9' }}>
+                                {b.booking_time || 'Slot'}
+                              </span>
+                            </div>
+                            <div style={{ fontSize: '0.74rem', color: '#475569', marginTop: 2 }}>
+                              {b.customer_name} (📞 {b.customer_phone})
+                            </div>
+                            <div style={{ fontSize: '0.72rem', color: '#64748b', marginTop: 4 }}>
+                              📍 {loc.cleanAddress}
+                            </div>
+                            <div style={{ display: 'flex', gap: '0.4rem', marginTop: 6 }}>
+                              <a href={loc.mapsUrl} target="_blank" rel="noreferrer" style={{ flex: 1, textAlign: 'center', background: '#2563eb', color: '#fff', padding: '0.25rem', borderRadius: 6, fontSize: '0.7rem', fontWeight: 800, textDecoration: 'none' }}>
+                                📍 Map ↗
+                              </a>
+                              <a href={loc.navUrl} target="_blank" rel="noreferrer" style={{ flex: 1, textAlign: 'center', background: '#16a34a', color: '#fff', padding: '0.25rem', borderRadius: 6, fontSize: '0.7rem', fontWeight: 800, textDecoration: 'none' }}>
+                                🧭 GPS ↗
+                              </a>
+                              <button
+                                onClick={() => void handleAssignDriver(b, '')}
+                                style={{ background: '#fff', border: '1px solid #fca5a5', color: '#dc2626', borderRadius: 6, padding: '0.25rem 0.45rem', fontSize: '0.7rem', fontWeight: 700, cursor: 'pointer' }}
+                                title="Unassign vehicle from driver"
+                              >
+                                ✕
+                              </button>
+                            </div>
                           </div>
-                          <div style={{ fontSize: '0.74rem', color: '#475569', marginTop: 2 }}>
-                            {b.customer_name} (📞 {b.customer_phone})
-                          </div>
-                          <div style={{ fontSize: '0.72rem', color: '#64748b', marginTop: 4 }}>
-                            📍 {loc.cleanAddress}
-                          </div>
-                          <div style={{ display: 'flex', gap: '0.4rem', marginTop: 6 }}>
-                            <a href={loc.mapsUrl} target="_blank" rel="noreferrer" style={{ flex: 1, textAlign: 'center', background: '#2563eb', color: '#fff', padding: '0.25rem', borderRadius: 6, fontSize: '0.7rem', fontWeight: 800, textDecoration: 'none' }}>
-                              📍 Map ↗
-                            </a>
-                            <a href={loc.navUrl} target="_blank" rel="noreferrer" style={{ flex: 1, textAlign: 'center', background: '#16a34a', color: '#fff', padding: '0.25rem', borderRadius: 6, fontSize: '0.7rem', fontWeight: 800, textDecoration: 'none' }}>
-                              🧭 GPS Nav ↗
-                            </a>
-                          </div>
-                        </div>
-                      )
-                    })}
+                        )
+                      })
+                    )}
                   </div>
                 </div>
               )
