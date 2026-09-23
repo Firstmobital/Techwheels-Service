@@ -57,6 +57,39 @@ export default function DriverTasksScreen() {
   const [selectedDriverFilter, setSelectedDriverFilter] = useState<string>('all')
   const [driverNames, setDriverNames] = useState<string[]>([])
   const [updatingId, setUpdatingId] = useState<number | null>(null)
+  const [currentDriverName, setCurrentDriverName] = useState<string>('')
+  const [isAdminUser, setIsAdminUser] = useState(false)
+
+  // Resolve logged-in driver name from user profile / metadata
+  useEffect(() => {
+    async function resolveDriverIdentity() {
+      if (!user) return
+      try {
+        const [{ data: profile }, { data: empLink }] = await Promise.all([
+          supabase.from('users').select('name, role, full_name').eq('id', user.id).maybeSingle(),
+          supabase.from('user_employee_links').select('employee_master(employee_name)').eq('user_id', user.id).maybeSingle(),
+        ])
+
+        const role = String((profile as any)?.role || user.user_metadata?.role || '').toLowerCase()
+        setIsAdminUser(role === 'admin')
+
+        const resolvedName =
+          (empLink as any)?.employee_master?.employee_name ||
+          (profile as any)?.name ||
+          (profile as any)?.full_name ||
+          user.user_metadata?.full_name ||
+          user.user_metadata?.name ||
+          ''
+
+        if (resolvedName) {
+          setCurrentDriverName(resolvedName.trim())
+        }
+      } catch (e) {
+        console.warn('Error resolving driver identity:', e)
+      }
+    }
+    void resolveDriverIdentity()
+  }, [user])
 
   const loadTasks = useCallback(async () => {
     try {
@@ -74,6 +107,14 @@ export default function DriverTasksScreen() {
         setTasks(data as DriverBookingTask[])
         const names = Array.from(new Set(data.map(b => b.driver_name).filter(Boolean))) as string[]
         setDriverNames(names)
+
+        // If logged-in user is a known driver, auto-select their filter if currently 'all'
+        if (currentDriverName) {
+          const match = names.find(n => n.toLowerCase() === currentDriverName.toLowerCase())
+          if (match && selectedDriverFilter === 'all') {
+            setSelectedDriverFilter(match)
+          }
+        }
       }
     } catch (err: any) {
       console.warn('Driver tasks catch:', err)
@@ -81,11 +122,25 @@ export default function DriverTasksScreen() {
       setLoading(false)
       setRefreshing(false)
     }
-  }, [])
+  }, [currentDriverName, selectedDriverFilter])
 
   useEffect(() => {
     void loadTasks()
   }, [loadTasks])
+
+  // If currentDriverName changes and matches a driver, auto-select
+  useEffect(() => {
+    if (currentDriverName && driverNames.length > 0) {
+      const match = driverNames.find(
+        n => n.toLowerCase() === currentDriverName.toLowerCase() ||
+             n.toLowerCase().includes(currentDriverName.toLowerCase()) ||
+             currentDriverName.toLowerCase().includes(n.toLowerCase())
+      )
+      if (match && selectedDriverFilter === 'all' && !isAdminUser) {
+        setSelectedDriverFilter(match)
+      }
+    }
+  }, [currentDriverName, driverNames, isAdminUser, selectedDriverFilter])
 
   const onRefresh = () => {
     setRefreshing(true)

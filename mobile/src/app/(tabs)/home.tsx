@@ -79,24 +79,39 @@ export default function PlatformHomeScreen() {
     let mounted = true
     async function loadPermissions() {
       if (!user) return
-      const [{ data: profile }, { data: permissionRows }] = await Promise.all([
-        supabase.from('users').select('role').eq('id', user.id).maybeSingle(),
-        supabase.rpc('get_all_my_permissions'),
-      ])
-      const mods = new Set<string>(
-        ((permissionRows ?? []) as Array<{ module_name?: string }>)
+      try {
+        const [{ data: profile }, { data: permissionRows }] = await Promise.all([
+          supabase.from('users').select('role, name, dealer_code').eq('id', user.id).maybeSingle(),
+          supabase.rpc('get_all_my_permissions'),
+        ])
+        const rawMods = ((permissionRows ?? []) as Array<{ module_name?: string }>)
           .map(r => String(r.module_name ?? '').trim().toLowerCase())
           .filter(Boolean)
-      )
-      // Admins get everything
-      if ((profile as { role?: string } | null)?.role === 'admin') {
-        ;['reception','floor_incharge','service_advisor','reports','import','admin','settings','autodoc','telecalling','bodyshop_repair','bodyshop_floor','driver_tasks'].forEach(m => mods.add(m))
+        const mods = new Set<string>(rawMods)
+
+        const userRole = String((profile as { role?: string } | null)?.role || user.user_metadata?.role || '').toLowerCase()
+
+        // Admins get everything
+        if (userRole === 'admin') {
+          ;['reception','floor_incharge','service_advisor','reports','import','admin','settings','autodoc','telecalling','bodyshop_repair','bodyshop_floor','driver_tasks','driver_management','service_booking'].forEach(m => mods.add(m))
+        }
+
+        // Driver role or permission aliases (driver_management, driver_tasks, driver)
+        if (
+          userRole === 'driver' ||
+          mods.has('driver_management') ||
+          mods.has('driver_tasks') ||
+          mods.has('driver') ||
+          mods.has('service_booking')
+        ) {
+          mods.add('driver_tasks')
+          mods.add('driver_management')
+        }
+
+        if (mounted) setAllowedModules(mods)
+      } catch (err) {
+        console.warn('Error loading user permissions:', err)
       }
-      // Driver role gets driver_tasks
-      if ((profile as { role?: string } | null)?.role === 'driver') {
-        mods.add('driver_tasks')
-      }
-      if (mounted) setAllowedModules(mods)
     }
     void loadPermissions()
     return () => { mounted = false }
@@ -139,20 +154,29 @@ export default function PlatformHomeScreen() {
     }, [loadDashboard])
   )
 
-  // Map mobile module key → DB module_name (from modules table)
-  const MODULE_KEY_TO_DB: Record<string, string> = {
-    autodoc:        'bodyshop_tracker',
-    reports:        'reports',
-    import:         'import',
-    admin:          'admin',
-    settings:       'settings',
-    reception:      'reception',
-    'floor-incharge':   'floor_incharge',
-    'telecalling':      'telecalling',
-    'bodyshop-repair':  'bodyshop_repair',
-    'bodyshop-floor':   'bodyshop_floor',
-    driver_tasks:       'driver_tasks',
+  // Map mobile module key → DB module_name aliases
+  const MODULE_KEY_TO_DB: Record<string, string[]> = {
+    autodoc:        ['bodyshop_tracker', 'autodoc'],
+    reports:        ['reports'],
+    import:         ['import'],
+    admin:          ['admin'],
+    settings:       ['settings'],
+    reception:      ['reception'],
+    'floor-incharge':   ['floor_incharge'],
+    'telecalling':      ['telecalling'],
+    'bodyshop-repair':  ['bodyshop_repair'],
+    'bodyshop-floor':   ['bodyshop_floor'],
+    driver_tasks:       ['driver_tasks', 'driver_management', 'driver'],
   }
+
+  const isDriverOnly = useMemo(() => {
+    if (allowedModules.size === 0) return false
+    if (allowedModules.has('admin')) return false
+    const nonDriverMods = Array.from(allowedModules).filter(
+      m => m !== 'driver_tasks' && m !== 'driver_management' && m !== 'driver'
+    )
+    return (allowedModules.has('driver_tasks') || allowedModules.has('driver_management')) && nonDriverMods.length === 0
+  }, [allowedModules])
 
   const modulesWithStatus = useMemo(() => {
     const statusByKey: Record<string, string> = {
@@ -169,8 +193,8 @@ export default function PlatformHomeScreen() {
         if (allowedModules.size === 0) return false
         // Admin always sees everything
         if (allowedModules.has('admin')) return true
-        const dbName = MODULE_KEY_TO_DB[module.key]
-        return dbName ? allowedModules.has(dbName) : false
+        const dbNames = MODULE_KEY_TO_DB[module.key]
+        return dbNames ? dbNames.some(name => allowedModules.has(name)) : false
       })
       .map((module) => ({
         ...module,

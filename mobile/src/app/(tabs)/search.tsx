@@ -6,7 +6,7 @@ type SearchItem = {
   id: string
   title: string
   subtitle: string
-  route: '/(tabs)/home' | '/(tabs)/autodoc' | '/(tabs)/import' | '/(tabs)/reports' | '/(tabs)/admin' | '/(tabs)/settings'
+  route: '/(tabs)/home' | '/(tabs)/autodoc' | '/(tabs)/import' | '/(tabs)/reports' | '/(tabs)/admin' | '/(tabs)/settings' | '/(tabs)/driver-tasks'
   icon: string
 }
 
@@ -17,6 +17,13 @@ const SEARCH_ITEMS: SearchItem[] = [
     subtitle: 'Launcher overview with module cards',
     route: '/(tabs)/home',
     icon: '🏠',
+  },
+  {
+    id: 'driver-tasks',
+    title: 'Driver Tasks',
+    subtitle: 'Pickup & drop navigation, customer calls and status sync',
+    route: '/(tabs)/driver-tasks',
+    icon: '🚗',
   },
   {
     id: 'autodoc',
