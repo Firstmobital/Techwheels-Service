@@ -61,7 +61,9 @@ export default function DriverTasksScreen() {
   const [tasks, setTasks] = useState<DriverBookingTask[]>([])
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
-  const [activeDateTab, setActiveDateTab] = useState<'today' | 'tomorrow' | 'upcoming' | 'completed'>('today')
+  const [activeDateTab, setActiveDateTab] = useState<'today' | 'tomorrow' | 'upcoming' | 'completed' | 'all'>('today')
+  const [serviceTypeFilter, setServiceTypeFilter] = useState<'all' | 'pickup' | 'drop'>('all')
+  const [searchQuery, setSearchQuery] = useState<string>('')
   const [driverNames, setDriverNames] = useState<string[]>([])
   const [currentDriverName, setCurrentDriverName] = useState<string>('')
   const [selectedDriverFilter, setSelectedDriverFilter] = useState<string>('')
@@ -146,7 +148,6 @@ export default function DriverTasksScreen() {
 
   // Isolate tasks for the logged in driver (or admin selected driver)
   const driverTasks = useMemo(() => {
-    // If admin and selected 'all'
     if (isAdminUser && (!selectedDriverFilter || selectedDriverFilter === 'all')) {
       return tasks
     }
@@ -160,7 +161,7 @@ export default function DriverTasksScreen() {
     })
   }, [tasks, selectedDriverFilter, currentDriverName, isAdminUser])
 
-  // Compute counts for Today, Tomorrow, Upcoming, Completed
+  // Compute counts for Today, Tomorrow, Upcoming, Completed, All
   const counts = useMemo(() => {
     let today = 0
     let tomorrow = 0
@@ -189,11 +190,32 @@ export default function DriverTasksScreen() {
     return { today, tomorrow, upcoming, completed, total: driverTasks.length }
   }, [driverTasks, todayStr, tomorrowStr])
 
-  // Filter tasks based on selected Date Tab
+  // Filter tasks based on selected Date Tab, Service Type and Search Query
   const filteredTasks = useMemo(() => {
+    const q = searchQuery.toLowerCase().trim()
+
     return driverTasks.filter((t) => {
+      // Search query filter
+      if (q) {
+        const matchesQuery =
+          (t.customer_name || '').toLowerCase().includes(q) ||
+          (t.reg_number || '').toLowerCase().includes(q) ||
+          (t.customer_phone || '').includes(q) ||
+          (t.pickup_address || '').toLowerCase().includes(q) ||
+          (t.lead_number || '').toLowerCase().includes(q)
+        if (!matchesQuery) return false
+      }
+
+      // Service type filter
+      if (serviceTypeFilter === 'pickup' && !t.pickup_required) return false
+      if (serviceTypeFilter === 'drop' && !t.drop_required) return false
+
+      // Date tab filter
       if (activeDateTab === 'completed') {
         return t.status === 'Completed'
+      }
+      if (activeDateTab === 'all') {
+        return true
       }
 
       // Ignore cancelled in active tabs
@@ -214,7 +236,7 @@ export default function DriverTasksScreen() {
       }
       return true
     })
-  }, [driverTasks, activeDateTab, todayStr, tomorrowStr])
+  }, [driverTasks, activeDateTab, serviceTypeFilter, searchQuery, todayStr, tomorrowStr])
 
   // Extract navigation URL from address or create maps link
   const openMapsNavigation = (address: string | null) => {
@@ -286,12 +308,12 @@ export default function DriverTasksScreen() {
             )}
             {isToday && (
               <View className="bg-amber-100 px-2 py-0.5 rounded border border-amber-300">
-                <Text className="text-amber-900 text-[10px] font-black">📅 TODAY</Text>
+                <Text className="text-amber-900 text-[10px] font-black">TODAY</Text>
               </View>
             )}
             {isTomorrow && (
               <View className="bg-blue-50 px-2 py-0.5 rounded border border-blue-200">
-                <Text className="text-blue-800 text-[10px] font-bold">📅 TOMORROW</Text>
+                <Text className="text-blue-800 text-[10px] font-bold">TOMORROW</Text>
               </View>
             )}
           </View>
@@ -345,7 +367,7 @@ export default function DriverTasksScreen() {
               </Text>
               {hasGps && (
                 <View className="bg-emerald-100 px-1.5 py-0.5 rounded border border-emerald-300">
-                  <Text className="text-emerald-900 text-[9px] font-bold">GPS Pin Active</Text>
+                  <Text className="text-emerald-900 text-[9px] font-bold">GPS Active</Text>
                 </View>
               )}
             </View>
@@ -392,11 +414,11 @@ export default function DriverTasksScreen() {
       <View className="bg-white border-b border-slate-200 px-4 py-3">
         <View className="flex-row items-center justify-between">
           <View>
-            <Text className="text-xl font-black text-slate-900">🚗 My Driver Tasks</Text>
+            <Text className="text-xl font-black text-slate-900">🚗 Driver Tasks</Text>
             <View className="flex-row items-center gap-1.5 mt-0.5">
               <View className="w-2 h-2 rounded-full bg-emerald-500" />
               <Text className="text-slate-700 text-xs font-bold">
-                {currentDriverName ? currentDriverName : 'Driver Portal'}
+                {currentDriverName ? currentDriverName : 'Driver Workspace'}
               </Text>
             </View>
           </View>
@@ -455,71 +477,152 @@ export default function DriverTasksScreen() {
           </ScrollView>
         )}
 
-        {/* Clean Date Filter Tabs: Aaj (Today), Kal (Tomorrow), Upcoming, Done */}
-        <View className="flex-row bg-slate-100 p-1 rounded-xl mt-3 border border-slate-200">
+        {/* Clean Date Filter Horizontal Tabs (English) */}
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} className="mt-2.5">
+          <View className="flex-row gap-2 py-0.5">
+            <TouchableOpacity
+              onPress={() => setActiveDateTab('today')}
+              className={`px-3.5 py-2 rounded-xl border ${
+                activeDateTab === 'today'
+                  ? 'bg-blue-600 border-blue-600'
+                  : 'bg-slate-100 border-slate-200'
+              }`}
+            >
+              <Text
+                className={`text-xs font-bold ${
+                  activeDateTab === 'today' ? 'text-white' : 'text-slate-700'
+                }`}
+              >
+                📅 Today ({counts.today})
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              onPress={() => setActiveDateTab('tomorrow')}
+              className={`px-3.5 py-2 rounded-xl border ${
+                activeDateTab === 'tomorrow'
+                  ? 'bg-blue-600 border-blue-600'
+                  : 'bg-slate-100 border-slate-200'
+              }`}
+            >
+              <Text
+                className={`text-xs font-bold ${
+                  activeDateTab === 'tomorrow' ? 'text-white' : 'text-slate-700'
+                }`}
+              >
+                📅 Tomorrow ({counts.tomorrow})
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              onPress={() => setActiveDateTab('upcoming')}
+              className={`px-3.5 py-2 rounded-xl border ${
+                activeDateTab === 'upcoming'
+                  ? 'bg-blue-600 border-blue-600'
+                  : 'bg-slate-100 border-slate-200'
+              }`}
+            >
+              <Text
+                className={`text-xs font-bold ${
+                  activeDateTab === 'upcoming' ? 'text-white' : 'text-slate-700'
+                }`}
+              >
+                📋 Upcoming ({counts.upcoming})
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              onPress={() => setActiveDateTab('all')}
+              className={`px-3.5 py-2 rounded-xl border ${
+                activeDateTab === 'all'
+                  ? 'bg-blue-600 border-blue-600'
+                  : 'bg-slate-100 border-slate-200'
+              }`}
+            >
+              <Text
+                className={`text-xs font-bold ${
+                  activeDateTab === 'all' ? 'text-white' : 'text-slate-700'
+                }`}
+              >
+                All Tasks ({counts.total})
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              onPress={() => setActiveDateTab('completed')}
+              className={`px-3.5 py-2 rounded-xl border ${
+                activeDateTab === 'completed'
+                  ? 'bg-emerald-600 border-emerald-600'
+                  : 'bg-slate-100 border-slate-200'
+              }`}
+            >
+              <Text
+                className={`text-xs font-bold ${
+                  activeDateTab === 'completed' ? 'text-white' : 'text-slate-700'
+                }`}
+              >
+                ✓ Completed ({counts.completed})
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </ScrollView>
+
+        {/* Task Type Filters (All / Pickup / Drop) */}
+        <View className="flex-row items-center gap-1.5 mt-2.5 pt-2 border-t border-slate-100">
           <TouchableOpacity
-            onPress={() => setActiveDateTab('today')}
-            className={`flex-1 py-2 items-center rounded-lg ${
-              activeDateTab === 'today' ? 'bg-white shadow-xs' : ''
+            onPress={() => setServiceTypeFilter('all')}
+            className={`px-2.5 py-1 rounded-lg border ${
+              serviceTypeFilter === 'all'
+                ? 'bg-slate-800 border-slate-800'
+                : 'bg-white border-slate-200'
             }`}
           >
             <Text
               className={`text-[11px] font-bold ${
-                activeDateTab === 'today' ? 'text-blue-700' : 'text-slate-600'
+                serviceTypeFilter === 'all' ? 'text-white' : 'text-slate-600'
               }`}
             >
-              📅 Aaj ({counts.today})
+              All Types
             </Text>
           </TouchableOpacity>
 
           <TouchableOpacity
-            onPress={() => setActiveDateTab('tomorrow')}
-            className={`flex-1 py-2 items-center rounded-lg ${
-              activeDateTab === 'tomorrow' ? 'bg-white shadow-xs' : ''
+            onPress={() => setServiceTypeFilter('pickup')}
+            className={`px-2.5 py-1 rounded-lg border ${
+              serviceTypeFilter === 'pickup'
+                ? 'bg-emerald-700 border-emerald-700'
+                : 'bg-emerald-50 border-emerald-200'
             }`}
           >
             <Text
               className={`text-[11px] font-bold ${
-                activeDateTab === 'tomorrow' ? 'text-blue-700' : 'text-slate-600'
+                serviceTypeFilter === 'pickup' ? 'text-white' : 'text-emerald-800'
               }`}
             >
-              📅 Kal ({counts.tomorrow})
+              🚐 Pickup Only
             </Text>
           </TouchableOpacity>
 
           <TouchableOpacity
-            onPress={() => setActiveDateTab('upcoming')}
-            className={`flex-1 py-2 items-center rounded-lg ${
-              activeDateTab === 'upcoming' ? 'bg-white shadow-xs' : ''
+            onPress={() => setServiceTypeFilter('drop')}
+            className={`px-2.5 py-1 rounded-lg border ${
+              serviceTypeFilter === 'drop'
+                ? 'bg-purple-700 border-purple-700'
+                : 'bg-purple-50 border-purple-200'
             }`}
           >
             <Text
               className={`text-[11px] font-bold ${
-                activeDateTab === 'upcoming' ? 'text-blue-700' : 'text-slate-600'
+                serviceTypeFilter === 'drop' ? 'text-white' : 'text-purple-800'
               }`}
             >
-              📋 Sabhi ({counts.today + counts.tomorrow + counts.upcoming})
-            </Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            onPress={() => setActiveDateTab('completed')}
-            className={`flex-1 py-2 items-center rounded-lg ${
-              activeDateTab === 'completed' ? 'bg-white shadow-xs' : ''
-            }`}
-          >
-            <Text
-              className={`text-[11px] font-bold ${
-                activeDateTab === 'completed' ? 'text-emerald-700' : 'text-slate-600'
-              }`}
-            >
-              ✅ Done ({counts.completed})
+              🏠 Drop Only
             </Text>
           </TouchableOpacity>
         </View>
       </View>
 
-      {/* Main Task FlatList (High performance, virtualized, no freezing) */}
+      {/* Main Task FlatList */}
       {loading ? (
         <View className="flex-1 items-center justify-center">
           <ActivityIndicator size="large" color="#2563eb" />
@@ -548,13 +651,15 @@ export default function DriverTasksScreen() {
               </View>
               <Text className="text-slate-900 text-base font-bold">
                 {activeDateTab === 'today'
-                  ? 'Aaj koi pickup/drop task nahi hai'
+                  ? 'No tasks scheduled for Today'
                   : activeDateTab === 'tomorrow'
-                  ? 'Kal ke liye koi task scheduled nahi hai'
-                  : 'Koi task nahi mila'}
+                  ? 'No tasks scheduled for Tomorrow'
+                  : activeDateTab === 'completed'
+                  ? 'No completed tasks found'
+                  : 'No pickup / drop tasks found'}
               </Text>
               <Text className="text-slate-500 text-xs text-center mt-1">
-                Aapke assigned pickup & drop tasks yahan live dikhenge.
+                Assigned pickup and drop tasks will appear here in real-time.
               </Text>
             </View>
           }
