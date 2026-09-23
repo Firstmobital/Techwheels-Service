@@ -64,16 +64,6 @@ const STATUS_META: Record<string, { bg: string; color: string; border: string }>
   Cancelled:           { bg: '#fef2f2', color: '#b91c1c', border: '#fecaca' },
 }
 
-const TRIP_STATUS_STEPS = [
-  'Confirmed',
-  'Out for Pickup',
-  'Vehicle Picked Up',
-  'Arrived',
-  'In-Progress',
-  'Out for Drop',
-  'Completed',
-]
-
 function parseLocationDetails(rawAddress: string | null | undefined): ParsedLocation {
   const text = (rawAddress || '').trim()
   if (!text) {
@@ -279,7 +269,19 @@ export default function DriverManagementPage() {
   async function handleAssignDriver(booking: ServiceBooking, driverName: string) {
     setSavingId(booking.id)
     try {
-      const updates = { driver_name: driverName || null }
+      const updates: { driver_name: string | null; status?: string } = { driver_name: driverName || null }
+
+      // Automatic status handling:
+      if (driverName) {
+        if (booking.status === 'Confirmed' || booking.status === 'New') {
+          updates.status = 'Driver Assigned'
+        }
+      } else {
+        if (booking.status === 'Driver Assigned') {
+          updates.status = 'Confirmed'
+        }
+      }
+
       const { error: updateErr } = await supabase
         .from('service_bookings')
         .update(updates)
@@ -288,32 +290,11 @@ export default function DriverManagementPage() {
       if (updateErr) throw updateErr
 
       setBookings(prev =>
-        prev.map(b => (b.id === booking.id ? { ...b, driver_name: driverName || null } : b))
+        prev.map(b => (b.id === booking.id ? { ...b, ...updates } : b))
       )
     } catch (err: any) {
       console.error('Assign driver error:', err)
       alert('Failed to update driver: ' + (err?.message || 'Unknown error'))
-    } finally {
-      setSavingId(null)
-    }
-  }
-
-  async function handleUpdateStatus(booking: ServiceBooking, newStatus: string) {
-    setSavingId(booking.id)
-    try {
-      const { error: updateErr } = await supabase
-        .from('service_bookings')
-        .update({ status: newStatus })
-        .eq('id', booking.id)
-
-      if (updateErr) throw updateErr
-
-      setBookings(prev =>
-        prev.map(b => (b.id === booking.id ? { ...b, status: newStatus } : b))
-      )
-    } catch (err: any) {
-      console.error('Update status error:', err)
-      alert('Failed to update trip status: ' + (err?.message || 'Unknown error'))
     } finally {
       setSavingId(null)
     }
@@ -1074,66 +1055,8 @@ export default function DriverManagementPage() {
                           ✕ Unassign Driver
                         </button>
                       )}
-                    </div>
 
-                    {/* Trip Status Quick-Picker */}
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.6rem', flexWrap: 'wrap', paddingTop: '0.4rem', borderTop: '1px solid #e2e8f0' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', flexWrap: 'wrap' }}>
-                        <span style={{ fontSize: '0.72rem', fontWeight: 700, color: '#64748b' }}>Status:</span>
-                        <select
-                          value={b.status}
-                          onChange={e => void handleUpdateStatus(b, e.target.value)}
-                          style={{
-                            padding: '0.25rem 0.5rem',
-                            fontSize: '0.74rem',
-                            fontWeight: 800,
-                            borderRadius: 6,
-                            border: '1px solid #cbd5e1',
-                            background: sm.bg,
-                            color: sm.color,
-                            outline: 'none',
-                            cursor: 'pointer',
-                          }}
-                        >
-                          {TRIP_STATUS_STEPS.map(opt => (
-                            <option key={opt} value={opt}>{opt}</option>
-                          ))}
-                        </select>
-
-                        {/* Next status quick stepper */}
-                        {(() => {
-                          const currentIdx = TRIP_STATUS_STEPS.indexOf(b.status)
-                          const nextStep = currentIdx >= 0 && currentIdx < TRIP_STATUS_STEPS.length - 1
-                            ? TRIP_STATUS_STEPS[currentIdx + 1]
-                            : null
-                          if (!nextStep) return null
-                          return (
-                            <button
-                              disabled={isSavingThis}
-                              onClick={() => void handleUpdateStatus(b, nextStep)}
-                              style={{
-                                background: '#16a34a',
-                                color: '#fff',
-                                border: 'none',
-                                borderRadius: 6,
-                                padding: '0.25rem 0.6rem',
-                                fontSize: '0.72rem',
-                                fontWeight: 800,
-                                cursor: 'pointer',
-                              }}
-                              title={`Advance to ${nextStep}`}
-                            >
-                              ▶ {nextStep}
-                            </button>
-                          )
-                        })()}
-
-                        {isSavingThis && <span style={{ fontSize: '0.7rem', color: '#2563eb' }}>Saving…</span>}
-                      </div>
-
-                      <div style={{ fontSize: '0.7rem', color: '#64748b', fontWeight: 600 }}>
-                        📲 Visible in Mobile App
-                      </div>
+                      {isSavingThis && <span style={{ fontSize: '0.72rem', color: '#2563eb', fontWeight: 700 }}>Saving…</span>}
                     </div>
 
                   </div>
