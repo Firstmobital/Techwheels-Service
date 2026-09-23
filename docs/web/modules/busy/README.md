@@ -34,7 +34,7 @@ Invoice Voucher rows are generated per eligible Labour invoice:
 - Emit a final `Rounded Off (+)` row (exact BUSY account name) only when labour + Parts inclusive subtotal has a non-zero decimal part. Amount is nearest whole rupee minus that subtotal, rounded to 2 decimals with the existing half-up paise helper (`Math.round`). Exact `.50` goes to the next rupee. A whole-rupee subtotal does not emit this row.
 - Order without 5%: 18% Parts, Labour, then `Rounded Off (+)` only if needed. Order with 5%: 5% Parts, 18% Parts, Labour, then `Rounded Off (+)` only if needed.
 
-Party Account columns are `Party Name`, `Group`, `GSTIN`.
+Party Account columns are `Party Name`, `Group`, `GSTIN`. Parties with classification `Dealer` (the Parts dealer/account master) are omitted from that export. Invoice Vouchers still include them. Exclusion is by classification, not by Group text such as `DEALER TRANSFER` or `sundry Creditors`.
 
 - Normal: branch debtor group; GSTIN only if an authoritative Labour/DMS GSTIN exists (`psf_revenue_dms` currently has no GSTIN column, so this stays blank).
 - PDI: Party `CASH AT SITAPURA`, Sitapura debtor group, GSTIN blank unless an authoritative source GSTIN exists.

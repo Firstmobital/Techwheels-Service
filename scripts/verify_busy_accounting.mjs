@@ -1400,14 +1400,68 @@ test('mapped Parts-only invoice exports with zero Labour and master party', () =
   assert.equal(result.invoiceRows[0].Series, 'PV-S 26-27')
   assert.equal(result.invoiceRows.find((row) => row['Item Name'] === 'LABOUR CHARGES @18%').Amount, 0)
   assert.equal(result.invoiceRows.find((row) => row['Item Name'] === 'SPARE PARTS @18%').Amount, result.preview[0].parts18)
-  assert.equal(result.partyRows[0]['Party Name'], 'AUTOPLEX AV')
-  assert.equal(result.partyRows[0].GSTIN, '08ABEFA9249C1ZH')
-  assert.equal(result.partyRows[0].Group, 'DEALER TRANSFER')
+  assert.equal(result.partyRows.some((row) => row['Party Name'] === 'AUTOPLEX AV'), false)
+  assert.equal(result.partyRows.length, 0)
   const workbook = buildInvoiceVoucherWorkbook(result.invoiceRows)
   const exported = workbookDataRows(workbook)
   assert.equal(exported[0]['Party Name'], result.preview[0].partyName)
   assert.equal(exported[0].Series, 'PV-S 26-27')
   assert.equal(exported.find((row) => row['Item Name'] === 'LABOUR CHARGES @18%').Amount, 0)
+})
+
+test('Party Account export omits dealer-master parties and keeps customer and Bodyshop rows', () => {
+  const result = transformBusyAccounting({
+    labourRows: [
+      labour({ invoice_number: 'IMBTAI2627007330', job_card_number: 'JC-CUSTOMER' }),
+      labour({
+        invoice_number: 'IMBTAI2627007340',
+        job_card_number: 'JC-BODY',
+        account: 'ICICI LOMBARD GENERAL INSURANCE COMPANY LIMITED C/O PREM CHAND KUMAWAT',
+        sr_type: 'Accidental Repair',
+        first_name: 'PREM',
+        last_name: 'KUMAWAT',
+      }),
+    ],
+    partsLines: [
+      partsLine({
+        jobCardNumber: 'CPOTC-PLEX',
+        invoiceNumber: 'IMBTAI2627007329',
+        invoiceDate: '2026-09-09',
+        netAmount: 5324.49153,
+        accountCode: '3004370',
+        sourceRowKey: 'plex',
+      }),
+      partsLine({
+        jobCardNumber: 'CPOTC-PRATAP',
+        invoiceNumber: 'IMBTAI2627007313',
+        invoiceDate: '2026-09-09',
+        netAmount: 2626.016949,
+        accountCode: '300A150',
+        sourceRowKey: 'pratap',
+      }),
+    ],
+    fromDate: '2026-09-01',
+    toDate: '2026-09-10',
+    partsAccountMaster: DEALER_MASTER,
+  })
+  const voucherParties = new Set(result.invoiceRows.map((row) => row['Party Name']))
+  assert.equal(voucherParties.has('AUTOPLEX AV'), true)
+  assert.equal(voucherParties.has('PRATAP NEXGEN CARS PRIVATE LIMITED'), true)
+  assert.equal(voucherParties.has('RAMESH KUMAR-SITAPURA RJ14AB1234'), true)
+  assert.equal(voucherParties.has('ICICI LOMBARD PREM CHAND KUMAWAT'), true)
+  const partyNames = result.partyRows.map((row) => row['Party Name'])
+  assert.deepEqual(partyNames, [
+    'RAMESH KUMAR-SITAPURA RJ14AB1234',
+    'ICICI LOMBARD PREM CHAND KUMAWAT',
+  ])
+  assert.equal(result.partyRows[1].Group, 'ICICI LOMBARD')
+  const partySheet = workbookDataRows(buildPartyAccountWorkbook(result.partyRows))
+  assert.equal(partySheet.some((row) => row['Party Name'] === 'AUTOPLEX AV'), false)
+  assert.equal(partySheet.some((row) => row['Party Name'] === 'PRATAP NEXGEN CARS PRIVATE LIMITED'), false)
+  assert.equal(partySheet.some((row) => row.Group === 'DEALER TRANSFER'), false)
+  const voucherSheet = workbookDataRows(buildInvoiceVoucherWorkbook(result.invoiceRows))
+  assert.equal(voucherSheet.some((row) => row['bill no'] === 'IMBTAI2627007329' && row['Party Name'] === 'AUTOPLEX AV'), true)
+  assert.equal(voucherSheet.some((row) => row['bill no'] === 'IMBTAI2627007313' && row['Party Name'] === 'PRATAP NEXGEN CARS PRIVATE LIMITED'), true)
 })
 
 test('alternate Account_Name for 3000080 uses the same master row', () => {

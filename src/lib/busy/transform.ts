@@ -547,6 +547,9 @@ export function transformBusyAccounting(input: {
   const partySeen = new Set<string>()
   const partyRows: PartyAccountRow[] = []
   for (const row of exportable) {
+    // Dealer-master parties already exist in BUSY ERP. Classification is the
+    // authority; BUSY Group text is not, because other parties can share it.
+    if (row.classification === 'Dealer') continue
     const key = row.partyName
     if (!key || partySeen.has(key)) continue
     partySeen.add(key)
