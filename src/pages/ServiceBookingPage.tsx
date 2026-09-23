@@ -1353,7 +1353,16 @@ export default function ServiceBookingPage() {
                       <div style={{ fontSize: '0.7rem', color: '#64748b', fontWeight: 600, marginBottom: '0.2rem' }}>🚗 Allocated Driver:</div>
                       <select
                         value={selectedBooking.driver_name || ''}
-                        onChange={e => void updateBookingFields(selectedBooking, { driver_name: e.target.value || null })}
+                        onChange={e => {
+                          const val = e.target.value || null
+                          const updates: Partial<ServiceBooking> = { driver_name: val }
+                          if (val && (selectedBooking.status === 'Confirmed' || selectedBooking.status === 'New')) {
+                            updates.status = 'Driver Assigned'
+                          } else if (!val && selectedBooking.status === 'Driver Assigned') {
+                            updates.status = 'Confirmed'
+                          }
+                          void updateBookingFields(selectedBooking, updates)
+                        }}
                         style={{ ...selInp, padding: '0.35rem 0.5rem', fontSize: '0.78rem', borderColor: selectedBooking.driver_name ? '#bbf7d0' : '#cbd5e1', background: selectedBooking.driver_name ? '#f0fdf4' : '#fff', fontWeight: 600 }}
                       >
                         <option value="">— Select Driver —</option>
