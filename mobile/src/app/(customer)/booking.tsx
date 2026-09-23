@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import {
   ActivityIndicator,
   Alert,
+  Linking,
   Modal,
   ScrollView,
   Switch,
@@ -22,6 +23,46 @@ import {
   customerSubmitBooking,
 } from '../../lib/api/customerPortal'
 import { getMobileLocation } from '../../utils/locationService'
+
+/**
+ * Parses coordinates from Google Maps URLs, WhatsApp location links, or raw lat/lng strings
+ */
+function parseGpsInput(input: string): { lat: number; lng: number } | null {
+  if (!input) return null
+  const text = input.trim()
+
+  // 1. Google Maps URL patterns (?q=lat,lng or @lat,lng or destination=lat,lng)
+  const urlCoordsMatch = text.match(/(?:[?&]q=|@|destination=)(-?\d+\.\d+),(-?\d+\.\d+)/)
+  if (urlCoordsMatch) {
+    const lat = parseFloat(urlCoordsMatch[1])
+    const lng = parseFloat(urlCoordsMatch[2])
+    if (!isNaN(lat) && !isNaN(lng) && lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180) {
+      return { lat, lng }
+    }
+  }
+
+  // 2. geo: URI scheme (geo:lat,lng)
+  const geoMatch = text.match(/geo:(-?\d+\.\d+),(-?\d+\.\d+)/)
+  if (geoMatch) {
+    const lat = parseFloat(geoMatch[1])
+    const lng = parseFloat(geoMatch[2])
+    if (!isNaN(lat) && !isNaN(lng) && lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180) {
+      return { lat, lng }
+    }
+  }
+
+  // 3. Raw lat, lng pair (e.g., "26.912433, 75.787270" or "26.912433 75.787270")
+  const rawCoordsMatch = text.match(/(-?\d{1,3}\.\d{3,8})[,\s]+(-?\d{1,3}\.\d{3,8})/)
+  if (rawCoordsMatch) {
+    const lat = parseFloat(rawCoordsMatch[1])
+    const lng = parseFloat(rawCoordsMatch[2])
+    if (!isNaN(lat) && !isNaN(lng) && lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180) {
+      return { lat, lng }
+    }
+  }
+
+  return null
+}
 
 const OTHER_SERVICES = [
   'Accidental',
@@ -67,6 +108,11 @@ export default function CustomerBookingScreen() {
   const [pincode, setPincode] = useState('')
   const [gpsCoords, setGpsCoords] = useState<{ lat: number; lng: number } | null>(null)
   const [locating, setLocating] = useState(false)
+  
+  // Location selection mode: 'live' (device GPS) or 'custom' (pasted link / coordinates)
+  const [locationMode, setLocationMode] = useState<'live' | 'custom'>('live')
+  const [customPinInput, setCustomPinInput] = useState('')
+
   // Modals & UI states
   const [toast, setToast] = useState<{ ok: boolean; msg: string } | null>(null)
   const [submitting, setSubmitting] = useState(false)
@@ -102,6 +148,35 @@ export default function CustomerBookingScreen() {
     } finally {
       setLocating(false)
     }
+  }
+
+  const handleApplyCustomPin = (rawInput?: string) => {
+    const textToParse = rawInput !== undefined ? rawInput : customPinInput
+    if (!textToParse.trim()) {
+      setToast({ ok: false, msg: 'Please enter or paste coordinates / Google Maps link.' })
+      return
+    }
+    const parsed = parseGpsInput(textToParse)
+    if (parsed) {
+      setGpsCoords(parsed)
+      setToast({ ok: true, msg: `📍 Custom Pin Attached: ${parsed.lat.toFixed(4)}, ${parsed.lng.toFixed(4)}` })
+    } else {
+      setToast({ ok: false, msg: 'Could not extract valid coordinates. Please check your map link or format (e.g. 26.9124, 75.7872).' })
+    }
+  }
+
+  const handleOpenMapPin = () => {
+    if (!gpsCoords) return
+    const url = `https://www.google.com/maps/search/?api=1&query=${gpsCoords.lat},${gpsCoords.lng}`
+    void Linking.openURL(url).catch(() => {
+      Alert.alert('Error', 'Could not open Google Maps.')
+    })
+  }
+
+  const handleClearPin = () => {
+    setGpsCoords(null)
+    setCustomPinInput('')
+    setToast({ ok: true, msg: '📍 GPS Pin removed.' })
   }
 
   // Complaints & remarks
@@ -236,9 +311,20 @@ export default function CustomerBookingScreen() {
               <Text className="text-blue-800 text-xs font-bold">📍 {selectedBranch}</Text>
             </View>
             {pickupRequired && (
-              <View className="flex-row justify-between pt-1 border-t border-slate-200">
-                <Text className="text-emerald-700 text-xs font-bold">Doorstep Pickup</Text>
-                <Text className="text-slate-900 text-xs font-semibold flex-1 text-right pl-2" numberOfLines={1}>
+              <View className="pt-2 border-t border-slate-200 gap-1">
+                <View className="flex-row justify-between items-center">
+                  <Text className="text-emerald-700 text-xs font-bold">Doorstep Pickup</Text>
+                  {gpsCoords && (
+                    <TouchableOpacity
+                      onPress={handleOpenMapPin}
+                      activeOpacity={0.7}
+                      className="bg-emerald-100 px-2 py-0.5 rounded border border-emerald-300"
+                    >
+                      <Text className="text-emerald-900 text-[10px] font-bold">📍 Open Map Pin ↗</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+                <Text className="text-slate-900 text-xs font-semibold" numberOfLines={2}>
                   🚗 {compiledAddress}
                 </Text>
               </View>
@@ -543,27 +629,146 @@ export default function CustomerBookingScreen() {
             </View>
 
             {pickupRequired && (
-              <View className="bg-slate-50 p-3.5 rounded-2xl border border-slate-200 gap-2.5">
+              <View className="bg-slate-50 p-3.5 rounded-2xl border border-slate-200 gap-3">
+                {/* Header with Title */}
                 <View className="flex-row items-center justify-between">
                   <Text className="text-slate-900 text-xs font-black uppercase tracking-wider">
-                    Pickup Address Details *
+                    Pickup Address & GPS Pin *
                   </Text>
+                  {gpsCoords && (
+                    <View className="bg-emerald-100 px-2 py-0.5 rounded-md border border-emerald-300">
+                      <Text className="text-emerald-900 text-[10px] font-bold">✓ Pin Attached</Text>
+                    </View>
+                  )}
+                </View>
+
+                {/* Location Selection Method Switcher */}
+                <View className="bg-white p-1 rounded-xl border border-slate-200 flex-row gap-1">
                   <TouchableOpacity
-                    onPress={handleFetchCurrentLocation}
-                    disabled={locating}
-                    activeOpacity={0.7}
-                    className="flex-row items-center gap-1 bg-blue-600 px-2.5 py-1.5 rounded-lg active:bg-blue-700"
+                    onPress={() => setLocationMode('live')}
+                    activeOpacity={0.8}
+                    className={`flex-1 py-2 rounded-lg items-center justify-center flex-row gap-1.5 ${
+                      locationMode === 'live' ? 'bg-blue-600 shadow-xs' : 'bg-transparent'
+                    }`}
                   >
-                    {locating ? (
-                      <ActivityIndicator size="small" color="#ffffff" />
-                    ) : (
-                      <Text className="text-[10px]">📍</Text>
-                    )}
-                    <Text className="text-white text-[11px] font-bold">
-                      {locating ? 'Fetching GPS…' : 'Fetch GPS Location'}
+                    <Text className="text-xs">📍</Text>
+                    <Text
+                      className={`text-xs font-bold ${
+                        locationMode === 'live' ? 'text-white font-black' : 'text-slate-600'
+                      }`}
+                    >
+                      Device GPS Pin
+                    </Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    onPress={() => setLocationMode('custom')}
+                    activeOpacity={0.8}
+                    className={`flex-1 py-2 rounded-lg items-center justify-center flex-row gap-1.5 ${
+                      locationMode === 'custom' ? 'bg-blue-600 shadow-xs' : 'bg-transparent'
+                    }`}
+                  >
+                    <Text className="text-xs">📌</Text>
+                    <Text
+                      className={`text-xs font-bold ${
+                        locationMode === 'custom' ? 'text-white font-black' : 'text-slate-600'
+                      }`}
+                    >
+                      Custom Pin / Link
                     </Text>
                   </TouchableOpacity>
                 </View>
+
+                {/* Mode 1: Device GPS Live Fetch */}
+                {locationMode === 'live' && (
+                  <View className="bg-blue-50/80 p-3 rounded-xl border border-blue-200 gap-2">
+                    <Text className="text-blue-950 text-[11px] font-bold leading-relaxed">
+                      Automatically capture your current device GPS coordinates for 100% accurate doorstep pickup navigation.
+                    </Text>
+                    <TouchableOpacity
+                      onPress={handleFetchCurrentLocation}
+                      disabled={locating}
+                      activeOpacity={0.7}
+                      className="bg-blue-600 py-2.5 px-3 rounded-xl flex-row items-center justify-center gap-2 active:bg-blue-700 shadow-xs"
+                    >
+                      {locating ? (
+                        <ActivityIndicator size="small" color="#ffffff" />
+                      ) : (
+                        <Text className="text-sm">📍</Text>
+                      )}
+                      <Text className="text-white text-xs font-black">
+                        {locating ? 'Fetching High-Precision GPS…' : 'Fetch Current Device GPS Pin'}
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                )}
+
+                {/* Mode 2: Custom Pin / WhatsApp Maps Link Input */}
+                {locationMode === 'custom' && (
+                  <View className="bg-amber-50/80 p-3 rounded-xl border border-amber-200 gap-2">
+                    <Text className="text-amber-950 text-[11px] font-bold leading-relaxed">
+                      Paste a Google Maps link, WhatsApp shared map link, or enter Latitude & Longitude (e.g. 26.9124, 75.7872):
+                    </Text>
+                    <View className="flex-row gap-2">
+                      <TextInput
+                        className="flex-1 bg-white border border-amber-300 rounded-xl px-3 py-2 text-xs font-semibold"
+                        placeholder="Paste maps.google.com link or 26.9124, 75.7872"
+                        value={customPinInput}
+                        onChangeText={(txt) => {
+                          setCustomPinInput(txt)
+                          const autoParsed = parseGpsInput(txt)
+                          if (autoParsed) {
+                            setGpsCoords(autoParsed)
+                          }
+                        }}
+                      />
+                      <TouchableOpacity
+                        onPress={() => handleApplyCustomPin()}
+                        activeOpacity={0.7}
+                        className="bg-amber-600 px-3.5 py-2 rounded-xl items-center justify-center active:bg-amber-700"
+                      >
+                        <Text className="text-white text-xs font-black">Set Pin</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                )}
+
+                {/* Active Pin Status Card */}
+                {gpsCoords && (
+                  <View className="bg-emerald-50 border border-emerald-300 rounded-xl p-3 gap-2">
+                    <View className="flex-row items-center justify-between">
+                      <View className="flex-row items-center gap-1.5 flex-1 pr-2">
+                        <Text className="text-base">🛰️</Text>
+                        <View>
+                          <Text className="text-emerald-950 text-xs font-black">
+                            GPS Pin Coordinates Locked
+                          </Text>
+                          <Text className="text-emerald-800 text-[11px] font-mono font-bold">
+                            {gpsCoords.lat.toFixed(6)}, {gpsCoords.lng.toFixed(6)}
+                          </Text>
+                        </View>
+                      </View>
+                      <TouchableOpacity
+                        onPress={handleClearPin}
+                        activeOpacity={0.7}
+                        className="bg-emerald-200/60 px-2 py-1 rounded-md border border-emerald-300"
+                      >
+                        <Text className="text-emerald-900 text-[10px] font-bold">✕ Clear</Text>
+                      </TouchableOpacity>
+                    </View>
+
+                    {/* Test in Google Maps Button */}
+                    <TouchableOpacity
+                      onPress={handleOpenMapPin}
+                      activeOpacity={0.8}
+                      className="bg-emerald-600 py-2 px-3 rounded-lg flex-row items-center justify-center gap-1.5 active:bg-emerald-700 shadow-xs"
+                    >
+                      <Text className="text-white text-xs font-black">🗺️ Test & Open Pin on Google Maps ↗</Text>
+                    </TouchableOpacity>
+                  </View>
+                )}
+
+                {/* Address Form Inputs */}
                 <View>
                   <Text className="text-slate-500 text-[11px] font-bold mb-1">House / Flat / Building No *</Text>
                   <TextInput
@@ -677,9 +882,21 @@ export default function CustomerBookingScreen() {
                   </Text>
                 </View>
                 {pickupRequired && (
-                  <View className="pt-1">
+                  <View className="pt-1 gap-1">
                     <Text className="text-slate-500 text-[11px] font-semibold">Pickup Address:</Text>
                     <Text className="text-slate-900 text-xs font-medium mt-0.5">{compiledAddress}</Text>
+                    {gpsCoords && (
+                      <TouchableOpacity
+                        onPress={handleOpenMapPin}
+                        activeOpacity={0.7}
+                        className="flex-row items-center gap-1 bg-emerald-50 self-start px-2.5 py-1 rounded-md border border-emerald-300 mt-1"
+                      >
+                        <Text className="text-[10px]">📍</Text>
+                        <Text className="text-emerald-800 text-[11px] font-bold">
+                          Verified GPS Pin: {gpsCoords.lat.toFixed(5)}, {gpsCoords.lng.toFixed(5)} (Test Map ↗)
+                        </Text>
+                      </TouchableOpacity>
+                    )}
                   </View>
                 )}
                 {remarks.trim() ? (
