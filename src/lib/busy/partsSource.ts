@@ -25,6 +25,8 @@ interface BusyPartsTableRow {
   net_amount: number
   source_row_key: string
   source_file_name: string | null
+  account_name?: string | null
+  account_code?: string | null
   uploaded_at?: string | null
 }
 
@@ -92,7 +94,7 @@ export async function fetchBusyPartsLines(): Promise<BusyPartsLine[]> {
   while (true) {
     const { data, error } = await supabase
       .from('busy_parts' as never)
-      .select('source_type, job_card_no, invoice_no, invoice_date, gst_rate, net_amount, source_row_key, source_file_name')
+      .select('source_type, job_card_no, invoice_no, invoice_date, gst_rate, net_amount, source_row_key, source_file_name, account_name, account_code')
       .order('source_type', { ascending: true })
       .order('job_card_no', { ascending: true })
       .range(from, from + PAGE_SIZE - 1)
@@ -112,16 +114,21 @@ export interface BusyPartsImportResult {
   newPartsRows: number
   skippedInvoices: number
   skippedPartsRows: number
+  accountsRefreshed: number
   persistRows: BusyPartsPersistRow[]
 }
 
-export function formatBusyPartsImportSummary(result: Pick<BusyPartsImportResult, 'newInvoices' | 'newPartsRows' | 'skippedInvoices' | 'skippedPartsRows'>): string {
-  return [
+export function formatBusyPartsImportSummary(result: Pick<BusyPartsImportResult, 'newInvoices' | 'newPartsRows' | 'skippedInvoices' | 'skippedPartsRows'> & { accountsRefreshed?: number }): string {
+  const lines = [
     `New invoices: ${result.newInvoices}`,
     `New Parts rows: ${result.newPartsRows}`,
     `Already uploaded invoices skipped: ${result.skippedInvoices}`,
     `Skipped Parts rows: ${result.skippedPartsRows}`,
-  ].join('\n')
+  ]
+  if ((result.accountsRefreshed ?? 0) > 0) {
+    lines.push(`Account fields refreshed: ${result.accountsRefreshed}`)
+  }
+  return lines.join('\n')
 }
 
 export async function importBusyPartsSource(
@@ -140,6 +147,8 @@ export async function importBusyPartsSource(
       gst_rate: row.gst_rate,
       net_amount: row.net_amount,
       source_row_key: row.source_row_key,
+      account_name: row.account_name || null,
+      account_code: row.account_code || null,
     })),
   } as never)
 
@@ -150,12 +159,14 @@ export async function importBusyPartsSource(
     skipped_invoices?: number
     skipped_parts_rows?: number
     inserted?: number
+    accounts_refreshed?: number
   }
   return {
     newInvoices: Number(result.new_invoices ?? 0),
     newPartsRows: Number(result.new_parts_rows ?? result.inserted ?? 0),
     skippedInvoices: Number(result.skipped_invoices ?? 0),
     skippedPartsRows: Number(result.skipped_parts_rows ?? 0),
+    accountsRefreshed: Number(result.accounts_refreshed ?? 0),
     persistRows,
   }
 }

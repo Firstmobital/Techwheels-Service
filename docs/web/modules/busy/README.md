@@ -16,10 +16,14 @@ Exact CRM columns inspected from `Parts - PV.csv` and `Parts - EV.csv`:
 | `net_amount` | `Net_Amount` |
 | `gst_rate` | `CGST Classification` + `SGST Classification` (or `IGST Classification` / `Tax Amount` ÷ `Net_Amount`) |
 | `source_type` | Upload slot `PV` / `EV` (not a CRM column) |
+| `account_name` | `Account_Name` (or `Account`). Trimmed source text. Null on rows imported before DBL-0083 |
+| `account_code` | Leading token of `Account_Name` before the first `-`, uppercased. Example: `3000080-Sv&Pa-Akarbdyshp-AkfPlt` and `3000080-Sv&Pa-Jaipur-AkfPlt` both store `3000080` |
 
 `Part #` and `Quantity` are used only to build `source_row_key`. They are not stored.
 
-Parts `invoice_no` and `invoice_date` are source evidence for traceability, reconciliation, validation, and mismatch detection. They never override Labour invoice number or date on BUSY vouchers. A Job Card mismatch is stored in `busy_parts` and surfaced as a warning.
+Parts `invoice_no` and `invoice_date` are source evidence for traceability, reconciliation, validation, and mismatch detection. They never override Labour invoice number or date on a Labour-backed BUSY voucher. A Job Card mismatch is stored in `busy_parts` and surfaced as a warning.
+
+A Parts invoice with no Labour row is exported only when every line shares one `account_code` present in `public.busy_parts_account_master` (DBL-0083). Party Name, GSTIN, and Group come from that row. Labour amount is 0. Parts 5%/18% aggregation, Round Off, and Series stay on the existing rules. Series is still bill-no only. Unmapped unmatched Parts lines stay unmatched. A Labour row for the same job card keeps the ordinary customer/PDI/Bodyshop path even if the Parts account code is mapped. Re-uploading an invoice that is already stored does not insert another amount row; it may fill `account_name` / `account_code` on the existing `source_row_key`. Admin insert/update of the dealer master is on `/busy`, same pattern as the Bodyshop Group of Account card. There is no delete action.
 
 Invoice Voucher columns are `Bill date`, `bill no`, `Party Name`, `Item Name`, `Qty`, `Price`, `Amount`, `naration`, `Series`. `Series` is derived only from bill no: `IMBTAI*` → `PV-S 26-27`, `EMBTAI*` → `EV-S 26-27`, and is repeated on every voucher line of that invoice including `Rounded Off (+)`.
 

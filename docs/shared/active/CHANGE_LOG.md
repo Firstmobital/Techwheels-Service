@@ -2,6 +2,10 @@
 
 Tracks documentation-sync updates for business logic, architecture, and access control.
 
+## 2026-09-23
+
+- BUSY Parts invoices with no Labour row export only when `Account_Name`’s leading code is in `public.busy_parts_account_master`. Party Name, GSTIN, and Group come from that master. Labour amount is 0. Parts GST rows, Round Off, and Series stay on the existing rules (`IMBTAI*` → `PV-S 26-27`, `EMBTAI*` → `EV-S 26-27`). Ordinary Labour invoices are unchanged. Re-import fills `busy_parts.account_name` / `account_code` without inserting duplicate amount rows. Admin maintains the master on `/busy`. Ledger: DBL-0083. Plan: `BUSY-001`.
+
 ## 2026-09-22
 
 - BUSY Invoice Vouchers add `Series` after `naration`. Value comes only from bill no: `IMBTAI*` → `PV-S 26-27`, `EMBTAI*` → `EV-S 26-27`, repeated on every voucher line of the invoice including `Rounded Off (+)`. Existing voucher amounts, Party Name, grouping, and row generation are unchanged. Plan: `BUSY-001`.

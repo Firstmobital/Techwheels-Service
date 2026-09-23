@@ -14,6 +14,7 @@ import { classifyBusyInvoice, PDI_PARTY_NAME, resolvePartyName } from './partyNa
 import type {
   BusyClassification,
   BusyLabourRow,
+  BusyPartsAccountMasterRow,
   BusyPartsLine,
   BusyRowStatus,
 } from './types.ts'
@@ -139,12 +140,180 @@ function aggregateParts(lines: BusyPartsLine[]): {
   }
 }
 
+function partsAccountCodeOf(line: BusyPartsLine): string {
+  return String(line.accountCode ?? '').trim().toUpperCase()
+}
+
+function partsAccountMasterByCode(
+  rows: readonly BusyPartsAccountMasterRow[] | undefined,
+): Map<string, BusyPartsAccountMasterRow> {
+  const map = new Map<string, BusyPartsAccountMasterRow>()
+  for (const row of rows ?? []) {
+    const code = String(row.code ?? '').trim().toUpperCase()
+    if (!code || map.has(code)) continue
+    map.set(code, {
+      code,
+      partyName: String(row.partyName ?? '').replace(/\s+/g, ' ').trim(),
+      gstin: String(row.gstin ?? '').replace(/[\s-]/g, '').toUpperCase(),
+      busyGroup: String(row.busyGroup ?? '').replace(/\s+/g, ' ').trim(),
+    })
+  }
+  return map
+}
+
+/**
+ * Parts invoices with no Labour row become vouchers only when every line
+ * shares one account code that exists in the dealer master. Labour-owned
+ * bill numbers and unmapped Parts stay on the existing path.
+ */
+function buildPartsOnlyDealerPreviews(input: {
+  preview: BusyPreviewRow[]
+  partsLines: BusyPartsLine[]
+  matchedPartKeys: Set<string>
+  fromDate: string
+  toDate: string
+  masterByCode: Map<string, BusyPartsAccountMasterRow>
+}): { previews: BusyPreviewRow[]; consumed: Set<BusyPartsLine> } {
+  const consumed = new Set<BusyPartsLine>()
+  const previews: BusyPreviewRow[] = []
+  if (input.masterByCode.size === 0) return { previews, consumed }
+
+  const labourOwnedInvoices = new Set(
+    input.preview
+      .map((row) => normalizeInvoiceNumber(row.invoiceNumber).toUpperCase())
+      .filter(Boolean),
+  )
+
+  const groups = new Map<string, BusyPartsLine[]>()
+  for (const line of input.partsLines) {
+    const jobKey = `${line.portal}::${normalizeJobCard(line.jobCardNumber)}`
+    if (input.matchedPartKeys.has(jobKey)) continue
+    const invoiceKey = normalizeInvoiceNumber(line.invoiceNumber).toUpperCase()
+    if (!invoiceKey || labourOwnedInvoices.has(invoiceKey)) continue
+    const groupKey = `${line.portal}::${invoiceKey}`
+    const list = groups.get(groupKey) ?? []
+    list.push(line)
+    groups.set(groupKey, list)
+  }
+
+  for (const lines of groups.values()) {
+    const invoiceNumber = normalizeInvoiceNumber(lines[0]?.invoiceNumber)
+    const portal = lines[0]?.portal
+    if (!invoiceNumber || !portal) continue
+
+    const dates = [...new Set(lines.map((line) => String(line.invoiceDate ?? '').slice(0, 10)).filter(Boolean))]
+    const codes = lines.map(partsAccountCodeOf)
+    const code = codes[0] ?? ''
+    const mapped = code ? input.masterByCode.get(code) : undefined
+    const uniformMapped = Boolean(
+      mapped
+      && dates.length === 1
+      && codes.every((value) => value === code),
+    )
+    if (!uniformMapped || !mapped) continue
+
+    for (const line of lines) consumed.add(line)
+
+    const invoiceDate = dates[0]
+    const jobCard = [...new Set(lines.map((line) => String(line.jobCardNumber ?? '').trim()).filter(Boolean))].join(', ')
+    const base = {
+      invoiceDate,
+      invoiceNumber,
+      portal,
+      jobCard,
+      classification: 'Dealer' as const,
+      partyName: mapped.partyName,
+      debtorGroup: mapped.busyGroup,
+      gstin: mapped.gstin,
+    }
+
+    if (!isDateInInclusiveRange(invoiceDate, input.fromDate, input.toDate)) {
+      previews.push({
+        ...emptyAmounts(base),
+        status: 'excluded',
+        issue: 'Invoice date is outside the selected range',
+        exclusionKind: 'date',
+      })
+      continue
+    }
+
+    if (!invoiceMatchesPortalSeries(invoiceNumber, portal)) {
+      previews.push({
+        ...emptyAmounts(base),
+        status: 'excluded',
+        issue: `${portal} invoices require prefix ${expectedPrefixForPortal(portal)}`,
+        exclusionKind: 'series',
+      })
+      continue
+    }
+
+    const partsAgg = aggregateParts(lines)
+    const blocked = Boolean(partsAgg.gstIssue)
+    const subtotal = roundPaise(partsAgg.parts5 + partsAgg.parts18)
+    const roundOff = roundOffToNearestRupee(subtotal)
+    previews.push({
+      status: blocked ? 'blocked' : 'ready',
+      invoiceDate,
+      invoiceNumber,
+      portal,
+      jobCard,
+      classification: 'Dealer',
+      branch: '',
+      partyName: mapped.partyName,
+      debtorGroup: mapped.busyGroup,
+      gstin: mapped.gstin,
+      vehicleRegistration: '',
+      parts5: partsAgg.parts5,
+      parts18: partsAgg.parts18,
+      labour: 0,
+      roundOff,
+      hasParts5Line: partsAgg.hasParts5Line,
+      total: roundPaise(subtotal + roundOff),
+      issue: partsAgg.gstIssue ?? '',
+      exclusionKind: '',
+    })
+  }
+
+  return { previews, consumed }
+}
+
+function emptyAmounts(input: {
+  invoiceDate: string
+  invoiceNumber: string
+  portal: VehiclePortal
+  jobCard: string
+  classification: BusyClassification
+  partyName: string
+  debtorGroup: string
+  gstin: string
+}): Omit<BusyPreviewRow, 'status' | 'issue' | 'exclusionKind'> {
+  return {
+    invoiceDate: input.invoiceDate,
+    invoiceNumber: input.invoiceNumber,
+    portal: input.portal,
+    jobCard: input.jobCard,
+    classification: input.classification,
+    branch: '',
+    partyName: input.partyName,
+    debtorGroup: input.debtorGroup,
+    gstin: input.gstin,
+    vehicleRegistration: '',
+    parts5: 0,
+    parts18: 0,
+    labour: 0,
+    roundOff: 0,
+    hasParts5Line: false,
+    total: 0,
+  }
+}
+
 export function transformBusyAccounting(input: {
   labourRows: BusyLabourRow[]
   partsLines: BusyPartsLine[]
   fromDate: string
   toDate: string
   insuranceMaster?: readonly BusyInsuranceMasterRow[]
+  partsAccountMaster?: readonly BusyPartsAccountMasterRow[]
 }): BusyTransformResult {
   const insuranceMaster = input.insuranceMaster && input.insuranceMaster.length > 0
     ? input.insuranceMaster
@@ -347,9 +516,19 @@ export function transformBusyAccounting(input: {
     row.issue = [row.issue, 'Duplicate Labour invoice number'].filter(Boolean).join('; ')
   }
 
+  const dealer = buildPartsOnlyDealerPreviews({
+    preview,
+    partsLines: input.partsLines,
+    matchedPartKeys,
+    fromDate: input.fromDate,
+    toDate: input.toDate,
+    masterByCode: partsAccountMasterByCode(input.partsAccountMaster),
+  })
+  preview.push(...dealer.previews)
+
   const unmatchedParts = input.partsLines.filter((line) => {
     const key = `${line.portal}::${normalizeJobCard(line.jobCardNumber)}`
-    return !matchedPartKeys.has(key)
+    return !matchedPartKeys.has(key) && !dealer.consumed.has(line)
   })
 
   const exportable = preview.filter((row) => row.status === 'ready' || row.status === 'warning')
@@ -415,6 +594,7 @@ function buildNarration(row: BusyPreviewRow): string {
   // Reference Invoice format.xlsx was not in the workspace. Vehicle registration
   // is the established DMS narration component available on Labour rows.
   if (row.classification === 'PDI') return PDI_PARTY_NAME
+  if (row.classification === 'Dealer') return row.jobCard
   return row.vehicleRegistration || row.jobCard
 }
 

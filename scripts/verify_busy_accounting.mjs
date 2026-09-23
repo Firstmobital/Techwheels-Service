@@ -12,6 +12,7 @@ import { BUSY_INSURANCE_MASTER, matchBusyInsurance, readAuthoritativeGstin } fro
 import { inclusiveFromNet, nearestWholeRupee, roundOffToNearestRupee } from '../src/lib/busy/money.ts'
 import { classifyBusyInvoice, parseBodyshopPartyName, PDI_PARTY_NAME, resolvePartyName } from '../src/lib/busy/partyName.ts'
 import {
+  extractPartsAccountCode,
   mapPartsRows,
   parseSpreadsheetBuffer,
   PARTS_CRM_INVOICE_DATE,
@@ -1324,6 +1325,263 @@ test('voucher source ignores other-period and upload-timestamp evidence', () => 
   })
   assert.equal(availability.sourcesComplete, false)
   assert.equal(availability.warning, VOUCHER_SOURCE_WARNING.both)
+})
+
+const DEALER_MASTER = [
+  { code: '3004370', partyName: 'AUTOPLEX AV', gstin: '08ABEFA9249C1ZH', busyGroup: 'DEALER TRANSFER' },
+  { code: '300A150', partyName: 'PRATAP NEXGEN CARS PRIVATE LIMITED', gstin: '08AANCP2243C1ZL', busyGroup: 'DEALER TRANSFER' },
+  { code: '3000080', partyName: 'AKAR FOURWHEEL PVT LTD', gstin: '08AARCA0391G1ZJ', busyGroup: 'DEALER TRANSFER' },
+]
+
+test('dealer code is the leading Account_Name token', () => {
+  assert.equal(extractPartsAccountCode('3004370-Sv&Pa-Jaipur-PleXav'), '3004370')
+  assert.equal(extractPartsAccountCode('300A150-Sv&Pa-Tonkroad-PrtPcr'), '300A150')
+  assert.equal(extractPartsAccountCode('3000080-Sv&Pa-Akarbdyshp-AkfPlt'), '3000080')
+  assert.equal(extractPartsAccountCode('3000080-Sv&Pa-Jaipur-AkfPlt'), '3000080')
+  assert.equal(extractPartsAccountCode(''), '')
+  assert.equal(extractPartsAccountCode('HDFC GROUP'), 'HDFCGROUP')
+})
+
+test('Account_Name is parsed and does not change the Parts row key', () => {
+  const mapped = mapPartsRows([
+    {
+      Account_Name: '3004370-Sv&Pa-Jaipur-PleXav',
+      Invoice_No: 'IMBTAI2627007329',
+      Invoice_Date: '09/09/2026 05:30:00 AM',
+      'Job Card_No': 'CPOTC-MbtPlt-JP1-2627-01789',
+      Net_Amount: '5324.49153',
+      'Part #': '544654200109',
+      Quantity: '1',
+      'CGST Classification': 'Output CGST @9%',
+      'SGST Classification': 'Output SGST @9%',
+    },
+  ], 'PV', 'PV.csv')
+  assert.equal(mapped.lines[0].accountName, '3004370-Sv&Pa-Jaipur-PleXav')
+  assert.equal(mapped.lines[0].accountCode, '3004370')
+  const persisted = toBusyPartsPersistRows(mapped.lines, 'PV', 'PV.csv')
+  assert.equal(persisted[0].account_name, '3004370-Sv&Pa-Jaipur-PleXav')
+  assert.equal(persisted[0].account_code, '3004370')
+  assert.equal(persisted[0].source_row_key, buildBusyPartsSourceRowKey({
+    sourceType: 'PV',
+    jobCardNo: 'CPOTC-MbtPlt-JP1-2627-01789',
+    invoiceNo: 'IMBTAI2627007329',
+    invoiceDate: '2026-09-09',
+    gstRate: 18,
+    netAmount: 5324.49153,
+    partNo: '544654200109',
+    quantity: '1',
+  }))
+})
+
+test('mapped Parts-only invoice exports with zero Labour and master party', () => {
+  const line = partsLine({
+    jobCardNumber: 'CPOTC-1',
+    invoiceNumber: 'IMBTAI2627007329',
+    invoiceDate: '2026-09-09',
+    netAmount: 5324.49153,
+    accountName: '3004370-Sv&Pa-Jaipur-PleXav',
+    accountCode: '3004370',
+  })
+  const result = transformBusyAccounting({
+    labourRows: [],
+    partsLines: [line],
+    fromDate: '2026-09-09',
+    toDate: '2026-09-09',
+    partsAccountMaster: DEALER_MASTER,
+  })
+  assertInvoiceVoucherContract(result)
+  assert.equal(result.preview.length, 1)
+  assert.equal(result.preview[0].classification, 'Dealer')
+  assert.equal(result.preview[0].partyName, 'AUTOPLEX AV')
+  assert.equal(result.preview[0].gstin, '08ABEFA9249C1ZH')
+  assert.equal(result.preview[0].debtorGroup, 'DEALER TRANSFER')
+  assert.equal(result.preview[0].labour, 0)
+  assert.equal(result.preview[0].parts18, inclusiveFromNet(5324.49153, 18))
+  assert.equal(result.invoiceRows[0].Series, 'PV-S 26-27')
+  assert.equal(result.invoiceRows.find((row) => row['Item Name'] === 'LABOUR CHARGES @18%').Amount, 0)
+  assert.equal(result.invoiceRows.find((row) => row['Item Name'] === 'SPARE PARTS @18%').Amount, result.preview[0].parts18)
+  assert.equal(result.partyRows[0]['Party Name'], 'AUTOPLEX AV')
+  assert.equal(result.partyRows[0].GSTIN, '08ABEFA9249C1ZH')
+  assert.equal(result.partyRows[0].Group, 'DEALER TRANSFER')
+  const workbook = buildInvoiceVoucherWorkbook(result.invoiceRows)
+  const exported = workbookDataRows(workbook)
+  assert.equal(exported[0]['Party Name'], result.preview[0].partyName)
+  assert.equal(exported[0].Series, 'PV-S 26-27')
+  assert.equal(exported.find((row) => row['Item Name'] === 'LABOUR CHARGES @18%').Amount, 0)
+})
+
+test('alternate Account_Name for 3000080 uses the same master row', () => {
+  const result = transformBusyAccounting({
+    labourRows: [],
+    partsLines: [partsLine({
+      jobCardNumber: 'CPOTC-2',
+      invoiceNumber: 'IMBTAI2627007319',
+      invoiceDate: '2026-09-09',
+      netAmount: 1610.084745,
+      accountName: '3000080-Sv&Pa-Akarbdyshp-AkfPlt',
+      accountCode: extractPartsAccountCode('3000080-Sv&Pa-Akarbdyshp-AkfPlt'),
+    })],
+    fromDate: '2026-09-09',
+    toDate: '2026-09-09',
+    partsAccountMaster: DEALER_MASTER,
+  })
+  assert.equal(result.preview[0].partyName, 'AKAR FOURWHEEL PVT LTD')
+  assert.equal(result.preview[0].gstin, '08AARCA0391G1ZJ')
+  assert.equal(result.preview[0].debtorGroup, 'DEALER TRANSFER')
+  assert.equal(result.preview[0].labour, 0)
+  assert.equal(result.invoiceRows[0].Series, 'PV-S 26-27')
+})
+
+test('EMBTAI Parts-only invoice keeps EV series and does not use Account_Name for portal', () => {
+  const result = transformBusyAccounting({
+    labourRows: [],
+    partsLines: [partsLine({
+      portal: 'EV',
+      jobCardNumber: 'CPOTC-EV',
+      invoiceNumber: 'EMBTAI2627007001',
+      invoiceDate: '2026-09-09',
+      netAmount: 100,
+      accountCode: '3004370',
+    })],
+    fromDate: '2026-09-09',
+    toDate: '2026-09-09',
+    partsAccountMaster: DEALER_MASTER,
+  })
+  assert.equal(result.preview[0].portal, 'EV')
+  assert.equal(result.invoiceRows[0].Series, 'EV-S 26-27')
+  assert.equal(result.preview[0].labour, 0)
+  assert.equal(result.preview[0].parts18, inclusiveFromNet(100, 18))
+})
+
+test('unmapped unmatched Parts stay unmatched', () => {
+  const result = transformBusyAccounting({
+    labourRows: [],
+    partsLines: [partsLine({
+      jobCardNumber: 'CPOTC-X',
+      invoiceNumber: 'IMBTAI2627007999',
+      invoiceDate: '2026-09-09',
+      accountCode: '9999999',
+      accountName: '9999999-Sv&Pa-Jaipur-Nobody',
+    })],
+    fromDate: '2026-09-09',
+    toDate: '2026-09-09',
+    partsAccountMaster: DEALER_MASTER,
+  })
+  assert.equal(result.preview.length, 0)
+  assert.equal(result.invoiceRows.length, 0)
+  assert.equal(result.unmatchedParts.length, 1)
+})
+
+test('dealer code on a Labour-backed job card does not replace the customer party', () => {
+  const result = transformBusyAccounting({
+    labourRows: [labour({ final_labour_amount: 1180 })],
+    partsLines: [partsLine({
+      jobCardNumber: 'JC-1001',
+      invoiceNumber: 'IMBTAI2627000001',
+      netAmount: 100,
+      accountCode: '3004370',
+      accountName: '3004370-Sv&Pa-Jaipur-PleXav',
+    })],
+    fromDate: '2026-09-01',
+    toDate: '2026-09-10',
+    partsAccountMaster: DEALER_MASTER,
+  })
+  assertInvoiceVoucherContract(result)
+  assert.equal(result.summary.eligible, 1)
+  assert.equal(result.preview[0].classification, 'Normal')
+  assert.equal(result.preview[0].partyName, 'RAMESH KUMAR-SITAPURA RJ14AB1234')
+  assert.equal(result.preview[0].labour, 1180)
+  assert.equal(result.preview[0].parts18, inclusiveFromNet(100, 18))
+  assert.equal(result.unmatchedParts.length, 0)
+  assert.equal(result.invoiceRows.some((row) => row['Party Name'] === 'AUTOPLEX AV'), false)
+})
+
+test('Parts-only GST split keeps 5% and 18% and rounds off the parts subtotal', () => {
+  const result = transformBusyAccounting({
+    labourRows: [],
+    partsLines: [
+      partsLine({
+        jobCardNumber: 'CPOTC-GST',
+        invoiceNumber: 'IMBTAI2627007401',
+        invoiceDate: '2026-09-09',
+        netAmount: 100,
+        gstRate: 5,
+        gstRateRaw: 5,
+        accountCode: '300A150',
+        sourceRowKey: 'five',
+      }),
+      partsLine({
+        jobCardNumber: 'CPOTC-GST',
+        invoiceNumber: 'IMBTAI2627007401',
+        invoiceDate: '2026-09-09',
+        netAmount: 10.5,
+        gstRate: 18,
+        gstRateRaw: 18,
+        accountCode: '300A150',
+        sourceRowKey: 'eighteen',
+      }),
+    ],
+    fromDate: '2026-09-09',
+    toDate: '2026-09-09',
+    partsAccountMaster: DEALER_MASTER,
+  })
+  assertInvoiceVoucherContract(result)
+  assert.equal(result.preview[0].partyName, 'PRATAP NEXGEN CARS PRIVATE LIMITED')
+  assert.equal(result.preview[0].parts5, 105)
+  assert.equal(result.preview[0].parts18, inclusiveFromNet(10.5, 18))
+  assert.equal(result.preview[0].labour, 0)
+  assert.equal(result.preview[0].roundOff, roundOffToNearestRupee(result.preview[0].parts5 + result.preview[0].parts18))
+  assert.deepEqual(result.invoiceRows.map((row) => row['Item Name']), [
+    'SPARE PARTS @5%',
+    'SPARE PARTS @18%',
+    'LABOUR CHARGES @18%',
+    'Rounded Off (+)',
+  ])
+})
+
+test('supplied PV.csv dealer invoices resolve by code when the file is present', () => {
+  const path = '/Users/apple/Downloads/PV.csv'
+  if (!existsSync(path)) return
+  const buffer = readFileSync(path)
+  const rows = parseSpreadsheetBuffer(buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength), path)
+  const wanted = new Set(['IMBTAI2627007329', 'IMBTAI2627007313', 'IMBTAI2627007319'])
+  const mapped = mapPartsRows(rows.filter((row) => wanted.has(String(row.Invoice_No ?? '').replaceAll('"', '').trim())), 'PV', 'PV.csv')
+  assert.equal(mapped.lines.length, 3)
+  const persistedShape = mapped.lines.map((line) => ({ ...line, taxAmount: null }))
+  const result = transformBusyAccounting({
+    labourRows: [labour({ invoice_number: 'IMBTAI2627007330', invoice_date: '2026-09-09', job_card_number: 'JC-OTHER' })],
+    partsLines: persistedShape,
+    fromDate: '2026-09-09',
+    toDate: '2026-09-09',
+    partsAccountMaster: DEALER_MASTER,
+  })
+  const byInvoice = new Map(result.preview.map((row) => [row.invoiceNumber, row]))
+  assert.equal(byInvoice.get('IMBTAI2627007330').partyName, 'RAMESH KUMAR-SITAPURA RJ14AB1234')
+  assert.equal(byInvoice.get('IMBTAI2627007330').classification, 'Normal')
+  const plex = byInvoice.get('IMBTAI2627007329')
+  assert.equal(plex.partyName, 'AUTOPLEX AV')
+  assert.equal(plex.gstin, '08ABEFA9249C1ZH')
+  assert.equal(plex.debtorGroup, 'DEALER TRANSFER')
+  assert.equal(plex.labour, 0)
+  assert.equal(plex.parts18, inclusiveFromNet(5324.49153, 18))
+  assert.equal(busyVoucherSeries(plex.invoiceNumber), 'PV-S 26-27')
+  const pratap = byInvoice.get('IMBTAI2627007313')
+  assert.equal(pratap.partyName, 'PRATAP NEXGEN CARS PRIVATE LIMITED')
+  assert.equal(pratap.labour, 0)
+  assert.equal(pratap.parts18, inclusiveFromNet(2626.016949, 18))
+  const akar = byInvoice.get('IMBTAI2627007319')
+  assert.equal(akar.partyName, 'AKAR FOURWHEEL PVT LTD')
+  assert.equal(extractPartsAccountCode(mapped.lines.find((line) => line.invoiceNumber === 'IMBTAI2627007319').accountName), '3000080')
+  const workbook = buildInvoiceVoucherWorkbook(result.invoiceRows)
+  const exported = workbookDataRows(workbook).filter((row) => row['bill no'] === 'IMBTAI2627007329')
+  assert.equal(exported.length >= 3, true)
+  assert.equal(exported.every((row) => row['Party Name'] === 'AUTOPLEX AV'), true)
+  assert.equal(exported.every((row) => row.Series === 'PV-S 26-27'), true)
+  assert.equal(exported.find((row) => row['Item Name'] === 'LABOUR CHARGES @18%').Amount, 0)
+  assert.equal(exported.find((row) => row['Item Name'] === 'SPARE PARTS @18%').Amount, plex.parts18)
+  if (plex.roundOff !== 0) {
+    assert.equal(exported.find((row) => row['Item Name'] === 'Rounded Off (+)').Amount, plex.roundOff)
+  }
 })
 
 if (failed > 0) {

@@ -2,10 +2,10 @@
 
 **Plan ID:** BUSY-001  
 **Created:** 2026-09-10  
-**Last Updated:** 2026-09-16  
+**Last Updated:** 2026-09-23  
 **Priority:** HIGH  
 **Owner:** Accounts + Platform Team  
-**Status:** Active (web implemented; GSTIN + ROUND OFF corrections in code; BUSY import pending)  
+**Status:** Active (web implemented; Parts dealer master for Parts-only invoices; BUSY import pending)  
 **Platform:** webversion  
 **Category:** operations  
 **Reference page:** `/busy`
@@ -37,7 +37,7 @@ Add a web **BUSY** page that reads persisted PV/EV Labour from `public.psf_reven
 
 Labour columns live on `psf_revenue_dms` (`invoice_number`, `invoice_date`, `job_card_number` from Order #, `first_name`, `last_name`, `account`, `sr_type`, `sr_assigned_to`, `vehicle_registration_number`, `final_labour_amount`, `portal`). Reports treat `final_labour_amount` as GST-inclusive.
 
-Parts persist in `public.busy_parts` (DBL-0044, DBL-0050). Inspected CRM files `Parts - PV.csv` and `Parts - EV.csv` use `Invoice_No` and `Invoice_Date`. Those values are stored for evidence, duplicate detection, and mismatch detection. Labour invoice number/date remain BUSY voucher identity. Parts uploads append new invoices and skip invoices already uploaded for that source type.
+Parts persist in `public.busy_parts` (DBL-0044, DBL-0050, DBL-0083). Inspected CRM files `Parts - PV.csv` and `Parts - EV.csv` use `Invoice_No` and `Invoice_Date`. Those values are stored for evidence, duplicate detection, and mismatch detection. Labour invoice number/date remain BUSY voucher identity for Labour-backed invoices. A Parts invoice with no Labour row exports only when its `Account_Name` code is in `busy_parts_account_master`; Labour amount is then 0. Parts uploads append new invoices and skip invoices already uploaded for that source type, refreshing account columns on the existing row instead of duplicating amounts.
 
 ---
 
@@ -53,6 +53,7 @@ Parts persist in `public.busy_parts` (DBL-0044, DBL-0050). Inspected CRM files `
 - [x] **Task 2.1:** `/busy` page with date range, Labour status, Parts PV/EV uploads, preview, exports.
 - [x] **Task 2.2:** Module `busy`, nav, `ROUTE_MODULE_MAP`, `RequireAccess`.
 - [x] **Task 2.3:** Persist Bodyshop Group of Account mapping in `public.busy_insurance_master` (DBL-0067). Admin insert/update UI on `/busy` only.
+- [x] **Task 2.4:** Persist Parts dealer account mapping in `public.busy_parts_account_master` (DBL-0083). Match the leading `Account_Name` code. Parts-only mapped invoices export with Labour 0. Admin insert/update on `/busy`. Unmapped unmatched Parts stay unmatched.
 
 ### Phase 3: Verification
 - [x] **Task 3.1:** `scripts/verify_busy_accounting.mjs` (required cases + per-invoice voucher contract: 18% Parts and Labour always; 5% only when a genuine 5% Parts line exists).
@@ -73,6 +74,7 @@ Parts persist in `public.busy_parts` (DBL-0044, DBL-0050). Inspected CRM files `
 ✅ 1.3 | GSTIN + insurance master | Agent | 2026-09-12 | 2026-09-12 | insuranceMaster.ts
 ✅ 1.4 | Rounded Off (+) voucher row | Agent | 2026-09-12 | 2026-09-12 | money.ts / transform.ts
 ✅ 2.3 | Persist insurance Group of Account | Agent | 2026-09-16 | 2026-09-16 | busy_insurance_master / DBL-0067
+✅ 2.4 | Parts dealer account master + Parts-only vouchers | Agent | 2026-09-23 | 2026-09-23 | busy_parts_account_master / DBL-0083
 ⏳ 3.2 | Apply module + Parts table + BUSY import | Operator | - | - | Pending DBL-0043, DBL-0044, and DBL-0067
 ```
 
@@ -80,7 +82,7 @@ Parts persist in `public.busy_parts` (DBL-0044, DBL-0050). Inspected CRM files `
 
 ## Next actions
 
-1. Apply `supabase/migrations/20260910120000_busy_accounting_module.sql`, `supabase/migrations/20260911120000_busy_parts.sql`, and `supabase/migrations/20260916120000_busy_insurance_master.sql`, then run paired sql_checks.
+1. DBL-0083 applied 2026-09-23 on the linked project: `supabase/migrations/20260923061311_busy_parts_account_master.sql` plus paired sql_checks. Earlier module, Parts, and insurance migrations remain the prior apply set.
 2. Grant `busy` in Admin → Permissions (admins already receive every route module).
 3. Import a generated workbook into BUSY when the accounting app is available.
 

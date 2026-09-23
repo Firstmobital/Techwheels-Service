@@ -2,7 +2,7 @@ export type VehiclePortal = 'PV' | 'EV'
 
 export type BusyRowStatus = 'ready' | 'excluded' | 'blocked' | 'warning'
 
-export type BusyClassification = 'PDI' | 'Bodyshop' | 'Normal'
+export type BusyClassification = 'PDI' | 'Bodyshop' | 'Normal' | 'Dealer'
 
 export type BusyGstBucket = 5 | 18
 
@@ -37,6 +37,17 @@ export interface BusyPartsLine {
   sourceRowNumber: number
   sourceRowKey: string
   sourceFileName: string
+  /** CRM Account_Name, trimmed. Empty when the source column is blank. */
+  accountName?: string
+  /** Leading token of accountName before the first hyphen. */
+  accountCode?: string
+}
+
+export interface BusyPartsAccountMasterRow {
+  code: string
+  partyName: string
+  gstin: string
+  busyGroup: string
 }
 
 export interface BusyPartsParseResult {

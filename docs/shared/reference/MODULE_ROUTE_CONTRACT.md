@@ -35,7 +35,7 @@ This document defines the authoritative mapping between database modules and fro
 | 11 | `payroll` | `/payroll` | `/payroll` | PayrollPage | Active | Payroll management: attendance, advances, processing, salary slips |
 | — | `help_tickets` | `/help-tickets` | `/help-tickets` | HelpTicketsAdminPage | Active | Support inbox (org-wide). Employee self-service at `/help/tickets*` is auth-only (no module grant). |
 | — | `bodyshop_recovery` | `/bodyshop-recovery` | `/bodyshop-recovery` | BodyshopRecoveryPage | Active | DO / insurance-due book. Org-wide. More + Post Payment (Stage 18 DO) on-page. |
-| — | `busy` | `/busy` | `/busy` | BusyAccountingPage | Active | BUSY Party Account + Invoice Voucher export from `psf_revenue_dms` + persisted `busy_parts`. |
+| — | `busy` | `/busy` | `/busy` | BusyAccountingPage | Active | BUSY Party Account + Invoice Voucher export from `psf_revenue_dms` + persisted `busy_parts`. Mapped Parts-only dealer invoices use `busy_parts_account_master` when no Labour row exists. |
 | — | `accounts` | `/accounts` | `/accounts` | AccountsPage | Active | Mechanical Mark Done invoice capture from 11-Sep-2026 + Bodyshop Stage 18 settlement receipts (DO/insurance and customer-diff on `bodyshop_settlement_lines`). Not BUSY. Recovery remains the insurance-due follow-up book. |
 | — | `accounts_keep_on_credit` | *(none)* | *(No frontend page)* | N/A | Active | Capability-only Admin → Permissions grant for Mechanical Keep on Credit. Not a nav/route module. Platform `is_admin()` and linked active GM also qualify. Not `accounts.can_modify`. Desk access still requires module `accounts`. |
 

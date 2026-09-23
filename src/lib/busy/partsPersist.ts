@@ -10,6 +10,8 @@ export interface BusyPartsPersistRow {
   net_amount: number
   source_row_key: string
   source_file_name: string
+  account_name: string
+  account_code: string
 }
 
 export interface BusyPartsImportPartition {
@@ -37,6 +39,8 @@ export function toBusyPartsPersistRows(lines: BusyPartsLine[], sourceType: Vehic
       net_amount: line.netAmount,
       source_row_key: line.sourceRowKey,
       source_file_name: sourceFileName || line.sourceFileName,
+      account_name: String(line.accountName ?? '').trim(),
+      account_code: String(line.accountCode ?? '').trim().toUpperCase(),
     })
   }
   return [...byKey.values()]
@@ -80,6 +84,8 @@ export function persistedRowToPartsLine(row: {
   net_amount: number
   source_row_key: string
   source_file_name: string | null
+  account_name?: string | null
+  account_code?: string | null
 }): BusyPartsLine {
   const gstRateRaw = row.gst_rate
   const gstRate = gstRateRaw == null ? null : classifyGstRate(gstRateRaw)
@@ -100,5 +106,7 @@ export function persistedRowToPartsLine(row: {
     sourceRowNumber: 0,
     sourceRowKey: row.source_row_key,
     sourceFileName: row.source_file_name ?? '',
+    accountName: String(row.account_name ?? '').trim(),
+    accountCode: String(row.account_code ?? '').trim().toUpperCase(),
   }
 }

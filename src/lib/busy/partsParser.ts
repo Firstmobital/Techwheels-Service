@@ -18,6 +18,20 @@ export const PARTS_CRM_OUTPUT_CGST = 'Output CGST'
 export const PARTS_CRM_OUTPUT_SGST = 'Output SGST'
 export const PARTS_CRM_OUTPUT_IGST = 'Output IGST'
 export const PARTS_CRM_TAX_AMOUNT = 'Tax Amount'
+export const PARTS_CRM_ACCOUNT_NAME = 'Account_Name'
+
+/**
+ * Stable dealer code: the leading token before the first "-".
+ * `3000080-Sv&Pa-Akarbdyshp-AkfPlt` and `3000080-Sv&Pa-Jaipur-AkfPlt` both yield `3000080`.
+ * A bare code with no hyphen is kept. Anything that is not letters and digits yields ''.
+ */
+export function extractPartsAccountCode(raw: unknown): string {
+  const text = String(raw ?? '').replace(/\s+/g, ' ').trim()
+  if (!text) return ''
+  const head = text.split('-')[0]?.trim() ?? ''
+  const code = head.replace(/\s+/g, '').toUpperCase()
+  return /^[0-9A-Z]+$/.test(code) ? code : ''
+}
 
 function normalizeHeader(header: string): string {
   return header.toLowerCase().replace(/[^a-z0-9]/g, '')
@@ -76,6 +90,7 @@ export function mapPartsRows(
   const outputSgstHeader = findHeader(headers, [PARTS_CRM_OUTPUT_SGST])
   const outputIgstHeader = findHeader(headers, [PARTS_CRM_OUTPUT_IGST])
   const taxAmountHeader = findHeader(headers, [PARTS_CRM_TAX_AMOUNT])
+  const accountNameHeader = findHeader(headers, [PARTS_CRM_ACCOUNT_NAME, 'Account'])
 
   const errors: string[] = []
   if (!jobCardHeader) errors.push(`Missing ${PARTS_CRM_JOB_CARD_NO} column`)
@@ -136,6 +151,8 @@ export function mapPartsRows(
 
     const partNo = String(cell(row, partHeader) ?? '').trim()
     const quantity = cell(row, quantityHeader)
+    const accountName = String(cell(row, accountNameHeader) ?? '').replace(/\s+/g, ' ').trim()
+    const accountCode = extractPartsAccountCode(accountName)
     const sourceRowKey = buildBusyPartsSourceRowKey({
       sourceType: portal,
       jobCardNo: jobCardNumber,
@@ -160,6 +177,8 @@ export function mapPartsRows(
       sourceRowNumber,
       sourceRowKey,
       sourceFileName: fileName,
+      accountName,
+      accountCode,
     })
   })
 

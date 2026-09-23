@@ -28,8 +28,13 @@ import {
   isBusyAdmin,
   masterRowsForTransform,
   BUSY_INSURANCE_MASTER,
+  fetchBusyPartsAccountMaster,
+  insertBusyPartsAccountMaster,
+  updateBusyPartsAccountMaster,
+  partsAccountRowsForTransform,
   type BusyPreviewRow,
   type BusyInsuranceStoredRow,
+  type BusyPartsAccountStoredRow,
 } from '../lib/busy'
 import type { BusyLabourSourceStatus } from '../lib/busy/labourSource'
 import type { BusyPartsSourceStatus } from '../lib/busy/partsSource'
@@ -81,6 +86,9 @@ export default function BusyAccountingPage() {
   const [insuranceStored, setInsuranceStored] = useState<BusyInsuranceStoredRow[]>([])
   const [insuranceLoadError, setInsuranceLoadError] = useState<string | null>(null)
   const [insuranceLoading, setInsuranceLoading] = useState(true)
+  const [partsAccountStored, setPartsAccountStored] = useState<BusyPartsAccountStoredRow[]>([])
+  const [partsAccountLoadError, setPartsAccountLoadError] = useState<string | null>(null)
+  const [partsAccountLoading, setPartsAccountLoading] = useState(true)
   const pvInputRef = useRef<HTMLInputElement>(null)
   const evInputRef = useRef<HTMLInputElement>(null)
 
@@ -100,6 +108,20 @@ export default function BusyAccountingPage() {
   useEffect(() => {
     setVoucherHandlerWarning(null)
   }, [fromDate, toDate])
+
+  const reloadPartsAccountMaster = useCallback(async () => {
+    setPartsAccountLoading(true)
+    try {
+      const rows = await fetchBusyPartsAccountMaster()
+      setPartsAccountStored(rows)
+      setPartsAccountLoadError(null)
+    } catch (error) {
+      setPartsAccountStored([])
+      setPartsAccountLoadError(error instanceof Error ? error.message : String(error))
+    } finally {
+      setPartsAccountLoading(false)
+    }
+  }, [])
 
   const reloadInsuranceMaster = useCallback(async () => {
     setInsuranceLoading(true)
@@ -121,8 +143,9 @@ export default function BusyAccountingPage() {
       if (active) setIsAdmin(admin)
     })
     reloadInsuranceMaster()
+    reloadPartsAccountMaster()
     return () => { active = false }
-  }, [reloadInsuranceMaster])
+  }, [reloadInsuranceMaster, reloadPartsAccountMaster])
 
   useEffect(() => {
     let active = true
@@ -217,6 +240,11 @@ export default function BusyAccountingPage() {
     [insuranceStored],
   )
 
+  const partsAccountMaster = useMemo(
+    () => partsAccountRowsForTransform(partsAccountStored),
+    [partsAccountStored],
+  )
+
   const result = useMemo(() => {
     if (rangeIssue) return null
     return transformBusyAccounting({
@@ -225,8 +253,9 @@ export default function BusyAccountingPage() {
       fromDate,
       toDate,
       insuranceMaster,
+      partsAccountMaster,
     })
-  }, [labourRows, partsLines, fromDate, toDate, rangeIssue, insuranceMaster])
+  }, [labourRows, partsLines, fromDate, toDate, rangeIssue, insuranceMaster, partsAccountMaster])
 
   const handlePartsFile = useCallback(async (file: File, portal: VehiclePortal) => {
     const setter = portal === 'PV' ? setPvParts : setEvParts
@@ -383,7 +412,7 @@ export default function BusyAccountingPage() {
 
         <PartsUploadCard
           title="Parts - PV"
-          description="Persisted for 5% / 18% GST amounts. Invoice_No and Invoice_Date are source evidence; Labour remains voucher truth."
+          description="Persisted for 5% / 18% GST amounts. Invoice_No and Invoice_Date are source evidence. Labour remains voucher identity unless Account_Name maps to a dealer code with no Labour row."
           slot={pvParts}
           inputRef={pvInputRef}
           onPick={() => pvInputRef.current?.click()}
@@ -391,7 +420,7 @@ export default function BusyAccountingPage() {
         />
         <PartsUploadCard
           title="Parts - EV"
-          description="Persisted for 5% / 18% GST amounts. Invoice_No and Invoice_Date are source evidence; Labour remains voucher truth."
+          description="Persisted for 5% / 18% GST amounts. Invoice_No and Invoice_Date are source evidence. Labour remains voucher identity unless Account_Name maps to a dealer code with no Labour row."
           slot={evParts}
           inputRef={evInputRef}
           onPick={() => evInputRef.current?.click()}
@@ -412,6 +441,13 @@ export default function BusyAccountingPage() {
         </div>
       )}
 
+      {partsAccountLoadError && !isAdmin && (
+        <div className="toast error" style={{ marginBottom: 12 }}>
+          <Icon name="alert" size={14} />
+          Parts dealer accounts: {partsAccountLoadError}
+        </div>
+      )}
+
       {isAdmin && (
         <BusyInsuranceMasterCard
           rows={insuranceStored}
@@ -420,6 +456,15 @@ export default function BusyAccountingPage() {
           usingFallback={insuranceStored.length === 0}
           fallbackCount={BUSY_INSURANCE_MASTER.length}
           onReload={() => void reloadInsuranceMaster()}
+        />
+      )}
+
+      {isAdmin && (
+        <BusyPartsAccountMasterCard
+          rows={partsAccountStored}
+          loading={partsAccountLoading}
+          loadError={partsAccountLoadError}
+          onReload={() => void reloadPartsAccountMaster()}
         />
       )}
 
@@ -619,6 +664,198 @@ function PartsUploadCard({
           </div>
         )}
       </div>
+    </div>
+  )
+}
+
+function emptyPartsAccountDraft() {
+  return { code: '', partyName: '', gstin: '', busyGroup: '' }
+}
+
+function BusyPartsAccountMasterCard({
+  rows,
+  loading,
+  loadError,
+  onReload,
+}: {
+  rows: BusyPartsAccountStoredRow[]
+  loading: boolean
+  loadError: string | null
+  onReload: () => void
+}) {
+  const [draft, setDraft] = useState(emptyPartsAccountDraft)
+  const [editingId, setEditingId] = useState<number | null>(null)
+  const [editDraft, setEditDraft] = useState(emptyPartsAccountDraft)
+  const [saving, setSaving] = useState(false)
+  const [formError, setFormError] = useState<string | null>(null)
+  const [open, setOpen] = useState(false)
+
+  async function handleInsert() {
+    setSaving(true)
+    setFormError(null)
+    try {
+      await insertBusyPartsAccountMaster(draft)
+      setDraft(emptyPartsAccountDraft())
+      onReload()
+    } catch (error) {
+      setFormError(error instanceof Error ? error.message : String(error))
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function handleUpdate(id: number) {
+    setSaving(true)
+    setFormError(null)
+    try {
+      await updateBusyPartsAccountMaster(id, editDraft)
+      setEditingId(null)
+      onReload()
+    } catch (error) {
+      setFormError(error instanceof Error ? error.message : String(error))
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  function startEdit(row: BusyPartsAccountStoredRow) {
+    setEditingId(row.id)
+    setEditDraft({ code: row.code, partyName: row.partyName, gstin: row.gstin, busyGroup: row.busyGroup })
+    setFormError(null)
+  }
+
+  function toggleOpen() {
+    setOpen((current) => {
+      if (current) {
+        setEditingId(null)
+        setFormError(null)
+      }
+      return !current
+    })
+  }
+
+  return (
+    <div className="card mb-gap">
+      <div className="card__head">
+        <div>
+          <h3>Parts dealer accounts</h3>
+          <div className="sub">
+            Admin insert or update. The code is the leading token of Parts Account_Name. It sets Party Name, GSTIN, and Group only when that invoice has no Labour row.
+            {loading ? ' Loading…' : ` ${rows.length} mapping${rows.length === 1 ? '' : 's'}.`}
+          </div>
+        </div>
+        <div className="toolbar toolbar--tight">
+          <button type="button" className="btn btn--ghost btn--sm" onClick={toggleOpen}>
+            {open ? 'Hide accounts' : 'Show accounts'}
+          </button>
+        </div>
+      </div>
+      {open && (
+      <div className="card__body dense">
+        {loadError && (
+          <div className="toast error" style={{ marginBottom: 12 }}>
+            <Icon name="alert" size={14} />
+            {loadError}
+          </div>
+        )}
+        {formError && (
+          <div className="toast error" style={{ marginBottom: 12 }}>
+            <Icon name="alert" size={14} />
+            {formError}
+          </div>
+        )}
+
+        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(110px, 0.7fr) minmax(180px, 1.6fr) minmax(150px, 1fr) minmax(160px, 1.2fr) auto', gap: 8, marginBottom: 12, alignItems: 'end' }}>
+          <label>
+            <div style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 4 }}>Code</div>
+            <input className="inp" value={draft.code} onChange={(e) => setDraft((current) => ({ ...current, code: e.target.value }))} placeholder="3004370" />
+          </label>
+          <label>
+            <div style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 4 }}>Party Name</div>
+            <input className="inp" value={draft.partyName} onChange={(e) => setDraft((current) => ({ ...current, partyName: e.target.value }))} placeholder="BUSY party name" />
+          </label>
+          <label>
+            <div style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 4 }}>GSTIN</div>
+            <input className="inp" value={draft.gstin} onChange={(e) => setDraft((current) => ({ ...current, gstin: e.target.value }))} placeholder="22AAAAA0000A1Z5" />
+          </label>
+          <label>
+            <div style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 4 }}>Group of Account</div>
+            <input className="inp" value={draft.busyGroup} onChange={(e) => setDraft((current) => ({ ...current, busyGroup: e.target.value }))} placeholder="BUSY group spelling" />
+          </label>
+          <button type="button" className="btn btn--primary btn--sm" disabled={saving || Boolean(loadError)} onClick={() => void handleInsert()}>
+            {saving && editingId == null ? 'Saving…' : 'Add account'}
+          </button>
+        </div>
+
+        {rows.length === 0 ? (
+          <div className="empty-state">No persisted Parts dealer accounts.</div>
+        ) : (
+          <div className="tbl-wrap scroll">
+            <table className="tbl">
+              <thead>
+                <tr>
+                  <th>Code</th>
+                  <th>Party Name</th>
+                  <th>GSTIN</th>
+                  <th>Group of Account</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((row) => {
+                  const editing = editingId === row.id
+                  return (
+                    <tr key={row.id}>
+                      <td>
+                        {editing ? (
+                          <input className="inp" value={editDraft.code} onChange={(e) => setEditDraft((current) => ({ ...current, code: e.target.value }))} />
+                        ) : (
+                          <code style={{ fontSize: 11 }}>{row.code}</code>
+                        )}
+                      </td>
+                      <td>
+                        {editing ? (
+                          <input className="inp" value={editDraft.partyName} onChange={(e) => setEditDraft((current) => ({ ...current, partyName: e.target.value }))} />
+                        ) : row.partyName}
+                      </td>
+                      <td>
+                        {editing ? (
+                          <input className="inp" value={editDraft.gstin} onChange={(e) => setEditDraft((current) => ({ ...current, gstin: e.target.value }))} />
+                        ) : (
+                          <code style={{ fontSize: 11 }}>{row.gstin}</code>
+                        )}
+                      </td>
+                      <td>
+                        {editing ? (
+                          <input className="inp" value={editDraft.busyGroup} onChange={(e) => setEditDraft((current) => ({ ...current, busyGroup: e.target.value }))} />
+                        ) : row.busyGroup}
+                      </td>
+                      <td style={{ whiteSpace: 'nowrap' }}>
+                        {editing ? (
+                          <>
+                            <button type="button" className="btn btn--primary btn--sm" disabled={saving} onClick={() => void handleUpdate(row.id)}>
+                              Save
+                            </button>
+                            {' '}
+                            <button type="button" className="btn btn--ghost btn--sm" disabled={saving} onClick={() => setEditingId(null)}>
+                              Cancel
+                            </button>
+                          </>
+                        ) : (
+                          <button type="button" className="btn btn--ghost btn--sm" disabled={saving} onClick={() => startEdit(row)}>
+                            Edit
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+      )}
     </div>
   )
 }
