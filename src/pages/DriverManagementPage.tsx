@@ -41,15 +41,7 @@ interface DriverEmployee {
   is_active: boolean
 }
 
-interface ParsedLocation {
-  cleanAddress: string
-  lat: number | null
-  lng: number | null
-  mapsUrl: string
-  navUrl: string
-  hasGps: boolean
-  rawText: string
-}
+import { parseLocationDetails } from '../lib/locationParser'
 
 const STATUS_META: Record<string, { bg: string; color: string; border: string }> = {
   New:                 { bg: '#eff6ff', color: '#1d4ed8', border: '#bfdbfe' },
@@ -68,78 +60,6 @@ export function isPickupDropTrip(b: ServiceBooking): boolean {
   const hasPickupOrDrop = Boolean(b.pickup_required || b.drop_required)
   const hasAssignedDriver = Boolean(b.driver_name && b.driver_name.toLowerCase() !== 'admin')
   return hasPickupOrDrop && hasAssignedDriver
-}
-
-function parseLocationDetails(rawAddress: string | null | undefined): ParsedLocation {
-  const text = (rawAddress || '').trim()
-  if (!text) {
-    return {
-      cleanAddress: 'Address not specified',
-      lat: null,
-      lng: null,
-      mapsUrl: '',
-      navUrl: '',
-      hasGps: false,
-      rawText: '',
-    }
-  }
-
-  let lat: number | null = null
-  let lng: number | null = null
-
-  // 1. Check for [GPS: 26.912433, 75.787270] or [GPS: lat, lng | https://...]
-  const gpsBracketMatch = text.match(/\[GPS:\s*(-?\d+\.?\d*)\s*,\s*(-?\d+\.?\d*)/i)
-  if (gpsBracketMatch) {
-    lat = parseFloat(gpsBracketMatch[1])
-    lng = parseFloat(gpsBracketMatch[2])
-  } else {
-    // 2. Check for URL with coordinates like ?q=26.912433,75.787270 or @26.912433,75.787270
-    const urlCoordsMatch = text.match(/(?:[?&]q=|@)(-?\d+\.\d+),(-?\d+\.\d+)/)
-    if (urlCoordsMatch) {
-      lat = parseFloat(urlCoordsMatch[1])
-      lng = parseFloat(urlCoordsMatch[2])
-    } else {
-      // 3. Check for standalone lat, lng pattern like "26.912433, 75.787270"
-      const rawCoordsMatch = text.match(/(-?\d{1,3}\.\d{4,8}),\s*(-?\d{1,3}\.\d{4,8})/)
-      if (rawCoordsMatch) {
-        const testLat = parseFloat(rawCoordsMatch[1])
-        const testLng = parseFloat(rawCoordsMatch[2])
-        if (testLat >= 6 && testLat <= 38 && testLng >= 68 && testLng <= 98) {
-          lat = testLat
-          lng = testLng
-        }
-      }
-    }
-  }
-
-  // Clean the human-readable text by stripping bracketed [GPS: ...] and URLs
-  let cleanAddress = text.replace(/\[GPS:[^\]]+\]/gi, '').trim()
-  cleanAddress = cleanAddress.replace(/https?:\/\/(?:maps\.google\.com|goo\.gl|maps\.app\.goo\.gl)\S*/gi, '').trim()
-  cleanAddress = cleanAddress.replace(/^[,\s-]+|[,\s-]+$/g, '').trim()
-
-  const hasGps = lat !== null && lng !== null && !isNaN(lat) && !isNaN(lng)
-
-  if (!cleanAddress) {
-    cleanAddress = hasGps ? `GPS Pin: ${lat?.toFixed(6)}, ${lng?.toFixed(6)}` : text
-  }
-
-  const mapsUrl = hasGps
-    ? `https://www.google.com/maps/search/?api=1&query=${lat},${lng}`
-    : ''
-
-  const navUrl = hasGps
-    ? `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`
-    : ''
-
-  return {
-    cleanAddress,
-    lat,
-    lng,
-    mapsUrl,
-    navUrl,
-    hasGps,
-    rawText: text,
-  }
 }
 
 export default function DriverManagementPage() {
@@ -759,9 +679,26 @@ export default function DriverManagementPage() {
                       </td>
                       <td style={{ padding: '0.75rem 1rem', textAlign: 'right' }}>
                         <div style={{ display: 'flex', gap: '0.35rem', justifyContent: 'flex-end' }}>
-                          {loc.hasGps && loc.mapsUrl ? (
-                            <a href={loc.mapsUrl} target="_blank" rel="noreferrer" style={{ fontSize: '0.74rem', color: '#2563eb', fontWeight: 700, textDecoration: 'none' }}>
-                              📍 Map Pin ↗
+                          {loc.mapsUrl ? (
+                            <a
+                              href={loc.mapsUrl}
+                              target="_blank"
+                              rel="noreferrer"
+                              style={{
+                                fontSize: '0.74rem',
+                                color: loc.hasGps ? '#15803d' : '#2563eb',
+                                background: loc.hasGps ? '#f0fdf4' : '#eff6ff',
+                                border: `1px solid ${loc.hasGps ? '#bbf7d0' : '#bfdbfe'}`,
+                                fontWeight: 800,
+                                textDecoration: 'none',
+                                padding: '0.3rem 0.65rem',
+                                borderRadius: 6,
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '0.3rem',
+                              }}
+                            >
+                              {loc.hasGps ? '🛰️ Open GPS Pin ↗' : '🗺️ Open in Map ↗'}
                             </a>
                           ) : (
                             <span style={{ fontSize: '0.72rem', color: '#94a3b8' }}>—</span>
@@ -851,11 +788,33 @@ export default function DriverManagementPage() {
                             </div>
                             <div style={{ fontSize: '0.72rem', color: '#64748b', marginTop: 4 }}>
                               📍 {loc.cleanAddress}
+                              {loc.hasGps && (
+                                <div style={{ fontSize: '0.66rem', color: '#16a34a', fontWeight: 700, marginTop: 1 }}>
+                                  🛰️ Live GPS: {loc.lat?.toFixed(5)}, {loc.lng?.toFixed(5)}
+                                </div>
+                              )}
                             </div>
                             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.4rem', marginTop: 6 }}>
-                              {loc.hasGps && loc.mapsUrl ? (
-                                <a href={loc.mapsUrl} target="_blank" rel="noreferrer" style={{ fontSize: '0.7rem', color: '#2563eb', fontWeight: 700, textDecoration: 'none' }}>
-                                  📍 Map Pin ↗
+                              {loc.mapsUrl ? (
+                                <a
+                                  href={loc.mapsUrl}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  style={{
+                                    fontSize: '0.7rem',
+                                    color: loc.hasGps ? '#15803d' : '#2563eb',
+                                    background: loc.hasGps ? '#f0fdf4' : '#eff6ff',
+                                    border: `1px solid ${loc.hasGps ? '#bbf7d0' : '#bfdbfe'}`,
+                                    fontWeight: 800,
+                                    textDecoration: 'none',
+                                    padding: '0.15rem 0.5rem',
+                                    borderRadius: 4,
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '2px',
+                                  }}
+                                >
+                                  {loc.hasGps ? '🛰️ Map Pin ↗' : '🗺️ Map ↗'}
                                 </a>
                               ) : <span />}
                               <select

@@ -600,19 +600,19 @@ export function ServiceEstimateBuilderModal({
   }, [activeServiceType])
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-3 backdrop-blur-sm">
-      <div className="flex h-[92vh] max-h-[880px] w-full max-w-6xl flex-col rounded-2xl bg-white shadow-2xl overflow-hidden border border-gray-200">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-3 backdrop-blur-xs">
+      <div className="flex h-[92vh] max-h-[880px] w-full max-w-6xl flex-col rounded-2xl bg-white shadow-2xl overflow-hidden border border-slate-200">
         
         {/* ── HEADER ── */}
-        <div className="flex items-center justify-between border-b border-gray-200 bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 px-6 py-4 text-white">
+        <div className="flex items-center justify-between border-b border-slate-800 bg-slate-900 px-6 py-4 text-white">
           <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-600 text-xl font-bold shadow-md">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-600 text-xl font-bold shadow-xs">
               📝
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h2 className="text-base font-bold text-white">Service Estimate & Parts Quotation Builder</h2>
-                <span className="font-mono rounded-md bg-blue-500/20 px-2 py-0.5 text-xs font-bold text-blue-300 border border-blue-400/30">
+                <h2 className="text-base font-black text-white">Service Estimate & Parts Quotation Builder</h2>
+                <span className="font-mono rounded-lg bg-blue-500/20 px-2.5 py-0.5 text-xs font-black text-blue-300 border border-blue-400/30">
                   {vehicleReg}
                 </span>
                 <span
@@ -635,42 +635,42 @@ export function ServiceEstimateBuilderModal({
                     : '📝 Draft Estimate'}
                 </span>
               </div>
-              <p className="text-xs text-slate-300">
-                Select parts & labour from Tata catalogue (926 items), create quotation and send directly to customer app
+              <p className="text-xs text-slate-300 mt-0.5">
+                Select parts & labour from Tata catalogue ({ALL_PARTS_PRICING.length} items), create quotation and send directly to customer app
               </p>
             </div>
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="flex h-8 w-8 items-center justify-center rounded-lg bg-white/10 text-slate-300 hover:bg-white/20 hover:text-white cursor-pointer"
+            className="flex h-8 w-8 items-center justify-center rounded-full bg-white/10 text-slate-300 hover:bg-white/20 hover:text-white cursor-pointer transition-colors"
           >
             ✕
           </button>
         </div>
 
-        {/* ── CUSTOMER & VEHICLE DETAILS BANNER (Model & Service Type Prominently Displayed) ── */}
-        <div className="border-b border-amber-200 bg-amber-50/90 px-6 py-3 text-xs text-amber-950 flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-2 flex-1 min-w-[280px]">
+        {/* ── CUSTOMER & VEHICLE DETAILS BANNER ── */}
+        <div className="border-b border-slate-200 bg-slate-50 px-6 py-3 text-xs text-slate-700 flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-2 flex-1 min-w-[280px] bg-rose-50/80 border border-rose-200/80 rounded-lg px-3 py-1.5">
             <span className="text-base">🚨</span>
             <div>
-              <span className="font-bold text-amber-900">Customer Reported Problem: </span>
-              <span className="font-medium text-amber-800">{problemDescription || 'General checkup and service requested.'}</span>
+              <span className="font-bold text-rose-900">Customer Reported Problem: </span>
+              <span className="font-medium text-rose-800">{problemDescription || 'General checkup and service requested.'}</span>
             </div>
           </div>
           <div className="flex flex-wrap items-center gap-3 text-xs">
             <div>
-              <strong>Customer:</strong> {customerName} ({customerPhone || '—'})
+              <strong className="text-slate-900">Customer:</strong> <span className="text-slate-700">{customerName} ({customerPhone || '—'})</span>
             </div>
             <div className="flex items-center gap-1">
-              <strong>Model:</strong>{' '}
-              <span className="rounded bg-indigo-100 text-indigo-900 font-bold px-2 py-0.5 border border-indigo-200">
+              <strong className="text-slate-900">Model:</strong>{' '}
+              <span className="rounded bg-blue-100 text-blue-900 font-bold px-2 py-0.5 border border-blue-200">
                 {activeModel}
               </span>
             </div>
             <div className="flex items-center gap-1">
-              <strong>Service Type:</strong>{' '}
-              <span className="rounded bg-blue-100 text-blue-900 font-bold px-2 py-0.5 border border-blue-200">
+              <strong className="text-slate-900">Service Type:</strong>{' '}
+              <span className="rounded bg-purple-100 text-purple-900 font-bold px-2 py-0.5 border border-purple-200">
                 {activeServiceType}
               </span>
             </div>
@@ -689,13 +689,13 @@ export function ServiceEstimateBuilderModal({
         <div className="flex-1 grid grid-cols-1 lg:grid-cols-12 overflow-hidden">
           
           {/* ── LEFT: Catalogue Selector (7 Cols) ── */}
-          <div className="lg:col-span-7 flex flex-col border-r border-gray-200 bg-gray-50/50 p-4 overflow-hidden">
+          <div className="lg:col-span-7 flex flex-col border-r border-slate-200 bg-slate-50/50 p-4 overflow-hidden">
             <div className="flex items-center justify-between mb-3">
               <div>
-                <h3 className="text-xs font-bold uppercase text-gray-700 tracking-wide">
+                <h3 className="text-xs font-black uppercase text-slate-800 tracking-wider">
                   🏷️ Parts & Labour Catalogue ({filteredCatalogue.length} Visible)
                 </h3>
-                <p className="text-[11px] text-gray-500">Pick replacement parts and labour operations</p>
+                <p className="text-[11px] text-slate-500">Pick replacement parts and labour operations</p>
               </div>
               <div className="flex items-center gap-2">
                 {filteredCatalogue.length > 0 && (
@@ -703,7 +703,7 @@ export function ServiceEstimateBuilderModal({
                     type="button"
                     onClick={handleAddAllFiltered}
                     title="Add all filtered catalogue items into estimate quotation"
-                    className="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-emerald-700 cursor-pointer flex items-center gap-1 shadow-sm transition-all"
+                    className="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-emerald-700 cursor-pointer flex items-center gap-1 shadow-xs transition-all"
                   >
                     <span>➕ Add All ({filteredCatalogue.length})</span>
                   </button>
@@ -711,7 +711,7 @@ export function ServiceEstimateBuilderModal({
                 <button
                   type="button"
                   onClick={() => setShowCustomItem(!showCustomItem)}
-                  className="rounded-lg bg-indigo-50 border border-indigo-200 px-2.5 py-1.5 text-xs font-bold text-indigo-700 hover:bg-indigo-100 cursor-pointer shadow-xs"
+                  className="rounded-lg bg-blue-50 border border-blue-200 px-2.5 py-1.5 text-xs font-bold text-blue-700 hover:bg-blue-100 cursor-pointer shadow-xs"
                 >
                   {showCustomItem ? '✕ Close Form' : '+ Custom Item'}
                 </button>
@@ -720,23 +720,23 @@ export function ServiceEstimateBuilderModal({
 
             {/* ── CUSTOM ITEM & MASTER CATALOGUE BUILDER (Part + Labour = Total) ── */}
             {showCustomItem && (
-              <div className="mb-3 rounded-xl border border-indigo-200 bg-indigo-50/90 p-3.5 text-xs space-y-2.5 shadow-sm">
+              <div className="mb-3 rounded-xl border border-blue-200 bg-blue-50/70 p-3.5 text-xs space-y-2.5 shadow-xs">
                 <div className="flex items-center justify-between">
-                  <div className="font-black text-indigo-950 flex items-center gap-1.5">
+                  <div className="font-black text-blue-950 flex items-center gap-1.5">
                     <span>✨</span>
                     <span>Add Custom Part & Labour (with Total calculation)</span>
                   </div>
-                  <span className="rounded bg-indigo-200 text-indigo-900 font-bold px-2 py-0.5 text-[11px]">
+                  <span className="rounded bg-blue-200 text-blue-900 font-bold px-2 py-0.5 text-[11px]">
                     Target Model: {activeModel}
                   </span>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-12 gap-2">
                   <div className="md:col-span-3">
-                    <label className="text-[10px] font-bold text-gray-600 block mb-0.5">Item / Service Name</label>
+                    <label className="text-[10px] font-bold text-slate-600 block mb-0.5">Item / Service Name</label>
                     <input
                       type="text"
-                      className="w-full rounded-lg border border-gray-300 bg-white px-2.5 py-1 text-xs text-gray-900 focus:border-indigo-500 focus:outline-none"
+                      className="w-full rounded-lg border border-slate-300 bg-white px-2.5 py-1 text-xs text-slate-900 focus:border-blue-500 focus:outline-none"
                       placeholder="e.g. Bumper Bracket..."
                       value={customDesc}
                       onChange={(e) => setCustomDesc(e.target.value)}
@@ -744,10 +744,10 @@ export function ServiceEstimateBuilderModal({
                   </div>
 
                   <div className="md:col-span-2">
-                    <label className="text-[10px] font-bold text-gray-600 block mb-0.5">Part ₹</label>
+                    <label className="text-[10px] font-bold text-slate-600 block mb-0.5">Part ₹</label>
                     <input
                       type="number"
-                      className="w-full rounded-lg border border-gray-300 bg-white px-2 py-1 text-xs font-mono font-bold text-emerald-800"
+                      className="w-full rounded-lg border border-slate-300 bg-white px-2 py-1 text-xs font-mono font-bold text-emerald-800"
                       placeholder="Part ₹"
                       value={customPartPrice || ''}
                       onChange={(e) => setCustomPartPrice(Math.max(0, Number(e.target.value)))}
@@ -755,10 +755,10 @@ export function ServiceEstimateBuilderModal({
                   </div>
 
                   <div className="md:col-span-2">
-                    <label className="text-[10px] font-bold text-gray-600 block mb-0.5">Labour ₹</label>
+                    <label className="text-[10px] font-bold text-slate-600 block mb-0.5">Labour ₹</label>
                     <input
                       type="number"
-                      className="w-full rounded-lg border border-gray-300 bg-white px-2 py-1 text-xs font-mono font-bold text-purple-800"
+                      className="w-full rounded-lg border border-slate-300 bg-white px-2 py-1 text-xs font-mono font-bold text-purple-800"
                       placeholder="Labour ₹"
                       value={customLabourPrice || ''}
                       onChange={(e) => setCustomLabourPrice(Math.max(0, Number(e.target.value)))}
@@ -766,9 +766,9 @@ export function ServiceEstimateBuilderModal({
                   </div>
 
                   <div className="md:col-span-3">
-                    <label className="text-[10px] font-bold text-gray-600 block mb-0.5">Service Type</label>
+                    <label className="text-[10px] font-bold text-slate-600 block mb-0.5">Service Type</label>
                     <select
-                      className="w-full rounded-lg border border-gray-300 bg-white px-2 py-1 text-xs font-semibold text-gray-700"
+                      className="w-full rounded-lg border border-slate-300 bg-white px-2 py-1 text-xs font-semibold text-slate-700"
                       value={customServiceType}
                       onChange={(e) => setCustomServiceType(e.target.value)}
                     >
@@ -781,9 +781,9 @@ export function ServiceEstimateBuilderModal({
                   </div>
 
                   <div className="md:col-span-2">
-                    <label className="text-[10px] font-bold text-gray-600 block mb-0.5">Fuel Type</label>
+                    <label className="text-[10px] font-bold text-slate-600 block mb-0.5">Fuel Type</label>
                     <select
-                      className="w-full rounded-lg border border-gray-300 bg-white px-2 py-1 text-xs font-medium text-gray-700"
+                      className="w-full rounded-lg border border-slate-300 bg-white px-2 py-1 text-xs font-medium text-slate-700"
                       value={customFuel}
                       onChange={(e) => setCustomFuel(e.target.value)}
                     >
@@ -797,18 +797,18 @@ export function ServiceEstimateBuilderModal({
                 </div>
 
                 {/* Calculation breakdown & Action row */}
-                <div className="flex flex-wrap items-center justify-between gap-2 pt-1 border-t border-indigo-200/60">
+                <div className="flex flex-wrap items-center justify-between gap-2 pt-1 border-t border-blue-200/60">
                   <div className="flex items-center gap-2">
-                    <div className="rounded-lg bg-white border border-indigo-200 px-3 py-1 font-mono text-xs text-indigo-950 font-bold">
+                    <div className="rounded-lg bg-white border border-blue-200 px-3 py-1 font-mono text-xs text-blue-950 font-bold">
                       Part: ₹{customPartPrice || 0} + Labour: ₹{customLabourPrice || 0} = <span className="text-blue-700 font-extrabold text-[13px]">Total: ₹{(Number(customPartPrice) || 0) + (Number(customLabourPrice) || 0)}</span>
                     </div>
 
-                    <label className="flex items-center gap-1.5 text-[11px] font-bold text-indigo-900 cursor-pointer select-none">
+                    <label className="flex items-center gap-1.5 text-[11px] font-bold text-blue-900 cursor-pointer select-none">
                       <input
                         type="checkbox"
                         checked={saveToMasterCatalogue}
                         onChange={(e) => setSaveToMasterCatalogue(e.target.checked)}
-                        className="rounded text-indigo-600"
+                        className="rounded text-blue-600"
                       />
                       <span>Save to Master Catalogue for {activeModel} ({customServiceType})</span>
                     </label>
@@ -817,7 +817,7 @@ export function ServiceEstimateBuilderModal({
                   <button
                     type="button"
                     onClick={handleAddCustom}
-                    className="rounded-lg bg-indigo-600 px-4 py-1.5 font-bold text-white hover:bg-indigo-700 shadow-sm cursor-pointer"
+                    className="rounded-lg bg-blue-600 px-4 py-1.5 font-bold text-white hover:bg-blue-700 shadow-xs cursor-pointer"
                   >
                     + Add to Estimate
                   </button>
@@ -829,13 +829,13 @@ export function ServiceEstimateBuilderModal({
             <div className="flex flex-wrap items-center gap-2 mb-3">
               <input
                 type="text"
-                className="flex-1 min-w-[130px] rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs text-gray-900 focus:border-blue-500 focus:outline-none"
+                className="flex-1 min-w-[130px] rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs text-slate-900 focus:border-blue-500 focus:outline-none"
                 placeholder="Search part / service name…"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
               />
               <select
-                className="rounded-lg border border-gray-300 bg-white px-2 py-1.5 text-xs font-semibold text-gray-700"
+                className="rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-xs font-semibold text-slate-700"
                 value={modelFilter}
                 onChange={(e) => setModelFilter(e.target.value)}
               >
@@ -844,7 +844,7 @@ export function ServiceEstimateBuilderModal({
                 ))}
               </select>
               <select
-                className="rounded-lg border border-gray-300 bg-white px-2 py-1.5 text-xs font-semibold text-gray-700"
+                className="rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-xs font-semibold text-slate-700"
                 value={serviceTypeFilter}
                 onChange={(e) => setServiceTypeFilter(e.target.value)}
               >
@@ -853,7 +853,7 @@ export function ServiceEstimateBuilderModal({
                 ))}
               </select>
               <select
-                className="rounded-lg border border-gray-300 bg-white px-2 py-1.5 text-xs font-semibold text-gray-700"
+                className="rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-xs font-semibold text-slate-700"
                 value={fuelFilter}
                 onChange={(e) => setFuelFilter(e.target.value)}
               >
@@ -864,25 +864,25 @@ export function ServiceEstimateBuilderModal({
             </div>
 
             {/* Scrollable Catalogue Table with Editable Price/Labour inputs */}
-            <div className="flex-1 overflow-y-auto rounded-xl border border-gray-200 bg-white shadow-xs">
+            <div className="flex-1 overflow-y-auto rounded-xl border border-slate-200 bg-white shadow-xs">
               <table className="w-full text-left text-xs">
-                <thead className="sticky top-0 bg-gray-100 text-[10px] font-bold uppercase text-gray-600 border-b border-gray-200 z-10">
+                <thead className="sticky top-0 bg-slate-50 text-[10px] font-black uppercase text-slate-600 border-b border-slate-200 z-10">
                   <tr>
-                    <th className="px-3 py-2">Service / Part Name</th>
-                    <th className="px-2 py-2">Model</th>
-                    <th className="px-2 py-2 text-right">Part ₹</th>
-                    <th className="px-2 py-2 text-right">Labour ₹</th>
-                    <th className="px-3 py-2 text-center">Add Action</th>
+                    <th className="px-3 py-2.5">Service / Part Name</th>
+                    <th className="px-2 py-2.5">Model</th>
+                    <th className="px-2 py-2.5 text-right">Part ₹</th>
+                    <th className="px-2 py-2.5 text-right">Labour ₹</th>
+                    <th className="px-3 py-2.5 text-center">Add Action</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-100">
+                <tbody className="divide-y divide-slate-100">
                   {filteredCatalogue.map((item) => {
                     const { price, labour } = getItemEffectivePrices(item)
                     return (
-                      <tr key={item.id} className="hover:bg-blue-50/60">
+                      <tr key={item.id} className="hover:bg-slate-50">
                         <td className="px-3 py-2">
-                          <div className="font-semibold text-gray-900">{item.service_name}</div>
-                          <div className="text-[10px] text-gray-400">{item.service_type}</div>
+                          <div className="font-bold text-slate-900">{item.service_name}</div>
+                          <div className="text-[10px] text-slate-400 font-medium">{item.service_type}</div>
                         </td>
                         <td className="px-2 py-2 whitespace-nowrap">
                           <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-bold text-slate-700">
@@ -892,7 +892,7 @@ export function ServiceEstimateBuilderModal({
                         <td className="px-2 py-2 text-right whitespace-nowrap">
                           <input
                             type="number"
-                            className="w-16 text-right rounded border border-gray-200 bg-emerald-50/50 px-1.5 py-0.5 text-xs font-mono font-bold text-emerald-800 focus:bg-white focus:border-emerald-500 focus:outline-none"
+                            className="w-16 text-right rounded border border-slate-200 bg-emerald-50/50 px-1.5 py-0.5 text-xs font-mono font-bold text-emerald-800 focus:bg-white focus:border-emerald-500 focus:outline-none"
                             value={price}
                             onChange={(e) =>
                               setRowPriceEdits((prev) => ({
@@ -905,7 +905,7 @@ export function ServiceEstimateBuilderModal({
                         <td className="px-2 py-2 text-right whitespace-nowrap">
                           <input
                             type="number"
-                            className="w-16 text-right rounded border border-gray-200 bg-purple-50/50 px-1.5 py-0.5 text-xs font-mono font-semibold text-purple-800 focus:bg-white focus:border-purple-500 focus:outline-none"
+                            className="w-16 text-right rounded border border-slate-200 bg-purple-50/50 px-1.5 py-0.5 text-xs font-mono font-semibold text-purple-800 focus:bg-white focus:border-purple-500 focus:outline-none"
                             value={labour}
                             onChange={(e) =>
                               setRowPriceEdits((prev) => ({
@@ -922,7 +922,7 @@ export function ServiceEstimateBuilderModal({
                                 type="button"
                                 onClick={() => handleAddPart(item)}
                                 title="Add Part only"
-                                className="rounded bg-emerald-50 border border-emerald-300 px-1.5 py-0.5 text-[10px] font-bold text-emerald-800 hover:bg-emerald-100 cursor-pointer"
+                                className="rounded bg-emerald-50 border border-emerald-300 px-2 py-0.5 text-[10px] font-bold text-emerald-800 hover:bg-emerald-100 cursor-pointer"
                               >
                                 +Part
                               </button>
@@ -932,7 +932,7 @@ export function ServiceEstimateBuilderModal({
                                 type="button"
                                 onClick={() => handleAddLabour(item)}
                                 title="Add Labour only"
-                                className="rounded bg-purple-50 border border-purple-300 px-1.5 py-0.5 text-[10px] font-bold text-purple-800 hover:bg-purple-100 cursor-pointer"
+                                className="rounded bg-purple-50 border border-purple-300 px-2 py-0.5 text-[10px] font-bold text-purple-800 hover:bg-purple-100 cursor-pointer"
                               >
                                 +Labour
                               </button>
@@ -942,7 +942,7 @@ export function ServiceEstimateBuilderModal({
                                 type="button"
                                 onClick={() => handleAddBoth(item)}
                                 title="Add Both Part & Labour"
-                                className="rounded bg-blue-600 px-1.5 py-0.5 text-[10px] font-bold text-white hover:bg-blue-700 cursor-pointer"
+                                className="rounded bg-blue-600 px-2 py-0.5 text-[10px] font-bold text-white hover:bg-blue-700 cursor-pointer"
                               >
                                 +Both
                               </button>
@@ -962,7 +962,7 @@ export function ServiceEstimateBuilderModal({
             <div className="flex items-center justify-between mb-2">
               <div>
                 <div className="flex items-center gap-2">
-                  <h3 className="text-xs font-bold uppercase text-gray-700 tracking-wide">
+                  <h3 className="text-xs font-black uppercase text-slate-800 tracking-wider">
                     🧾 Estimate Quotation ({items.length} Items)
                   </h3>
                   {items.length > 0 && (
@@ -977,48 +977,48 @@ export function ServiceEstimateBuilderModal({
                     </button>
                   )}
                 </div>
-                <p className="text-[11px] text-gray-500">Quotation #{estimateNo}</p>
+                <p className="text-[11px] text-slate-500">Quotation #{estimateNo}</p>
               </div>
-              <span className="font-mono text-sm font-bold text-blue-700">
+              <span className="font-mono text-base font-black text-blue-600">
                 ₹{grandTotal.toLocaleString()}
               </span>
             </div>
 
             {/* Line items list with inline price & qty editing */}
-            <div className="flex-1 overflow-y-auto rounded-xl border border-gray-200 p-2 space-y-2">
+            <div className="flex-1 overflow-y-auto rounded-xl border border-slate-200 p-2 space-y-2 bg-slate-50/40">
               {items.length === 0 ? (
-                <div className="py-16 text-center text-xs text-gray-400">
+                <div className="py-16 text-center text-xs text-slate-400 font-medium">
                   No parts or labour added yet. Select from the catalogue on the left or use + Add All.
                 </div>
               ) : (
                 items.map((it) => (
                   <div
                     key={it.id}
-                    className="flex items-center justify-between gap-2 rounded-lg border border-gray-100 bg-gray-50/80 p-2 text-xs hover:border-gray-200 shadow-xs"
+                    className="flex items-center justify-between gap-2 rounded-xl border border-slate-200 bg-white p-2.5 text-xs hover:border-slate-300 shadow-xs"
                   >
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-1.5">
                         <span
-                          className={`rounded px-1.5 py-0.2 text-[9px] font-bold uppercase ${
-                            it.type === 'part' ? 'bg-sky-100 text-sky-800' : 'bg-purple-100 text-purple-800'
+                          className={`rounded px-1.5 py-0.5 text-[9px] font-bold uppercase ${
+                            it.type === 'part' ? 'bg-blue-100 text-blue-800' : 'bg-purple-100 text-purple-800'
                           }`}
                         >
                           {it.type}
                         </span>
-                        <span className="font-semibold text-gray-900 truncate">{it.description}</span>
+                        <span className="font-bold text-slate-900 truncate">{it.description}</span>
                       </div>
 
                       {/* Inline Editable Unit Price */}
-                      <div className="flex items-center gap-1.5 text-[11px] text-gray-600 font-mono mt-1">
+                      <div className="flex items-center gap-1.5 text-[11px] text-slate-600 font-mono mt-1">
                         <span>₹</span>
                         <input
                           type="number"
-                          className="w-16 rounded border border-gray-300 bg-white px-1 py-0.5 text-xs font-mono font-bold text-gray-900 focus:border-blue-500 focus:outline-none"
+                          className="w-16 rounded border border-slate-300 bg-white px-1 py-0.5 text-xs font-mono font-bold text-slate-900 focus:border-blue-500 focus:outline-none"
                           value={it.unit_price}
                           onChange={(e) => handleUpdateUnitPrice(it.id, Number(e.target.value))}
                         />
                         <span>× {it.quantity} =</span>
-                        <strong className="text-gray-900 font-bold">₹{it.total.toLocaleString()}</strong>
+                        <strong className="text-slate-900 font-bold">₹{it.total.toLocaleString()}</strong>
                       </div>
                     </div>
 
@@ -1026,7 +1026,7 @@ export function ServiceEstimateBuilderModal({
                       <button
                         type="button"
                         onClick={() => handleUpdateQty(it.id, -1)}
-                        className="h-6 w-6 rounded bg-gray-200 text-xs font-bold text-gray-700 hover:bg-gray-300 cursor-pointer"
+                        className="h-6 w-6 rounded bg-slate-100 text-xs font-bold text-slate-700 hover:bg-slate-200 cursor-pointer"
                       >
                         -
                       </button>
@@ -1034,14 +1034,14 @@ export function ServiceEstimateBuilderModal({
                       <button
                         type="button"
                         onClick={() => handleUpdateQty(it.id, 1)}
-                        className="h-6 w-6 rounded bg-gray-200 text-xs font-bold text-gray-700 hover:bg-gray-300 cursor-pointer"
+                        className="h-6 w-6 rounded bg-slate-100 text-xs font-bold text-slate-700 hover:bg-slate-200 cursor-pointer"
                       >
                         +
                       </button>
                       <button
                         type="button"
                         onClick={() => handleRemoveItem(it.id)}
-                        className="ml-1 text-xs text-red-500 hover:text-red-700 cursor-pointer"
+                        className="ml-1 text-xs text-rose-500 hover:text-rose-700 cursor-pointer p-1"
                         title="Remove item"
                       >
                         🗑️
@@ -1053,47 +1053,47 @@ export function ServiceEstimateBuilderModal({
             </div>
 
             {/* Pricing Calculation Summary */}
-            <div className="mt-3 rounded-xl border border-gray-200 bg-slate-50 p-3 text-xs space-y-1.5">
-              <div className="flex justify-between text-gray-600">
+            <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50 p-3.5 text-xs space-y-1.5">
+              <div className="flex justify-between text-slate-600">
                 <span>Parts Subtotal</span>
-                <span className="font-mono font-medium">₹{partsTotal.toLocaleString()}</span>
+                <span className="font-mono font-bold text-slate-900">₹{partsTotal.toLocaleString()}</span>
               </div>
-              <div className="flex justify-between text-gray-600">
+              <div className="flex justify-between text-slate-600">
                 <span>Labour Subtotal</span>
-                <span className="font-mono font-medium">₹{labourTotal.toLocaleString()}</span>
+                <span className="font-mono font-bold text-slate-900">₹{labourTotal.toLocaleString()}</span>
               </div>
               <div className="flex items-center justify-between text-emerald-700">
-                <span>Special Dealership Discount</span>
+                <span className="font-semibold">Special Dealership Discount</span>
                 <div className="flex items-center gap-1 font-mono">
                   <span>- ₹</span>
                   <input
                     type="number"
-                    className="w-16 rounded border border-gray-300 bg-white px-1.5 py-0.5 text-right text-xs font-mono font-bold"
+                    className="w-16 rounded border border-slate-300 bg-white px-1.5 py-0.5 text-right text-xs font-mono font-bold text-emerald-700"
                     value={discount}
                     onChange={(e) => setDiscount(Math.max(0, Number(e.target.value)))}
                   />
                 </div>
               </div>
-              <div className="flex justify-between text-gray-600">
+              <div className="flex justify-between text-slate-600">
                 <span>GST (18%)</span>
-                <span className="font-mono font-medium">₹{gstTax.toLocaleString()}</span>
+                <span className="font-mono font-bold text-slate-900">₹{gstTax.toLocaleString()}</span>
               </div>
-              <div className="flex justify-between border-t border-gray-300 pt-1.5 text-sm font-bold text-gray-900">
+              <div className="flex justify-between border-t border-slate-200 pt-2 text-sm font-black text-slate-900">
                 <span>Grand Total (Estimate)</span>
-                <span className="font-mono text-blue-700">₹{grandTotal.toLocaleString()}</span>
+                <span className="font-mono text-blue-600 text-base">₹{grandTotal.toLocaleString()}</span>
               </div>
             </div>
 
             {/* Approval Status alert */}
             {estimateStatus === 'Approved' && (
-              <div className="mt-2 rounded-lg bg-emerald-50 p-2.5 border border-emerald-200 text-xs text-emerald-900 font-bold text-center flex items-center justify-center gap-1.5">
+              <div className="mt-2 rounded-xl bg-emerald-50 p-2.5 border border-emerald-200 text-xs text-emerald-900 font-bold text-center flex items-center justify-center gap-1.5">
                 <span>✅</span>
                 <span>Customer has Approved this estimate! Repairs are authorized.</span>
               </div>
             )}
 
             {estimateStatus === 'Rejected' && (
-              <div className="mt-2 rounded-lg bg-rose-50 p-2.5 border border-rose-200 text-xs text-rose-900 font-medium">
+              <div className="mt-2 rounded-xl bg-rose-50 p-2.5 border border-rose-200 text-xs text-rose-900 font-medium">
                 <div className="font-bold text-rose-950">❌ Estimate Rejected by Customer</div>
                 <div>Reason: {rejectionReason || 'Customer requested revision.'}</div>
               </div>
@@ -1105,7 +1105,7 @@ export function ServiceEstimateBuilderModal({
                 type="button"
                 onClick={handleSendEstimate}
                 disabled={isSaving || items.length === 0}
-                className="w-full rounded-xl bg-blue-600 py-2.5 text-xs font-bold text-white shadow-md hover:bg-blue-700 disabled:opacity-50 flex items-center justify-center gap-2 cursor-pointer"
+                className="w-full rounded-xl bg-blue-600 hover:bg-blue-700 active:bg-blue-800 py-3 text-xs font-black text-white shadow-xs disabled:opacity-50 flex items-center justify-center gap-2 cursor-pointer transition-all"
               >
                 <span>{isSaving ? '⏳ Saving…' : '🚀 Send Estimate to Customer for Approval'}</span>
               </button>

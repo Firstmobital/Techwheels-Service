@@ -435,10 +435,10 @@ export function CustomerPortalAdminModal({
         </div>
 
         {/* ── FOOTER ── */}
-        <div className="bg-slate-100 px-6 py-3.5 border-t border-slate-200 flex items-center justify-end">
+        <div className="bg-slate-50 px-6 py-3.5 border-t border-slate-200 flex items-center justify-end gap-2">
           <button
             onClick={onClose}
-            className="bg-slate-900 hover:bg-black text-white px-5 py-2 rounded-xl text-xs font-extrabold shadow-sm transition-all cursor-pointer"
+            className="bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 px-5 py-2 rounded-xl text-xs font-bold shadow-2xs transition-all cursor-pointer"
           >
             Close
           </button>
