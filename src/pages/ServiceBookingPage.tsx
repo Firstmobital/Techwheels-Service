@@ -237,10 +237,6 @@ export default function ServiceBookingPage() {
     setSelectedBooking(b => b?.id === booking.id ? { ...b, ...updates } as ServiceBooking : b)
   }
 
-  async function updateDriver(booking: ServiceBooking, driverName: string | null) {
-    await updateBookingFields(booking, { driver_name: driverName || null })
-  }
-
   // Fetch reg_number + created_at from Reception so we can flag which booked vehicles have
   // already physically arrived / checked in at Reception (verified by reg number, per Reception team).
   async function loadReceptionEntries() {
