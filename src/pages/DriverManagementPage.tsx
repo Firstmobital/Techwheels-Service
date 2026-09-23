@@ -64,6 +64,13 @@ const STATUS_META: Record<string, { bg: string; color: string; border: string }>
   Cancelled:           { bg: '#fef2f2', color: '#b91c1c', border: '#fecaca' },
 }
 
+export function isPickupDropTrip(b: ServiceBooking): boolean {
+  const hasPickup = Boolean(b.pickup_required)
+  const hasDrop = Boolean(b.drop_required)
+  const hasAssignedDriver = Boolean(b.driver_name && b.driver_name.toLowerCase() !== 'admin')
+  return hasPickup || hasDrop || hasAssignedDriver
+}
+
 function parseLocationDetails(rawAddress: string | null | undefined): ParsedLocation {
   const text = (rawAddress || '').trim()
   if (!text) {
@@ -227,7 +234,7 @@ export default function DriverManagementPage() {
       const { data, error: fetchErr } = await query
       if (fetchErr) throw fetchErr
 
-      const list = data || []
+      const list = (data || []).filter(isPickupDropTrip)
       setBookings(list)
 
       // Also collect any driver_name assigned to bookings (strictly excluding 'Admin' and 'Administrator')
@@ -360,6 +367,7 @@ export default function DriverManagementPage() {
 
     let unassignedCount = 0
     bookings.forEach(b => {
+      if (!isPickupDropTrip(b)) return
       const hasDriver = Boolean(b.driver_name && b.driver_name.toLowerCase() !== 'admin')
       if (!hasDriver) {
         unassignedCount++
@@ -381,10 +389,7 @@ export default function DriverManagementPage() {
   // Filtered dataset
   const filtered = useMemo(() => {
     return bookings.filter(b => {
-      const isTrip = b.pickup_required || b.drop_required || Boolean(b.driver_name) || Boolean(b.pickup_address)
-      if (!isTrip && allocationFilter === 'all' && selectedDriver === 'all' && !searchQuery) {
-        // Show general bookings if requested
-      }
+      if (!isPickupDropTrip(b)) return false
 
       if (selectedDriver !== 'all') {
         if (selectedDriver === '__unassigned__') {

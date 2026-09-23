@@ -7,7 +7,18 @@ import { hasBusinessRole } from '../lib/businessRoles'
 import { listReceptionRegCreatedSince } from '../lib/api'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
-const BOOKING_SOURCES = ['Customer App', 'Telecalling', 'WhatsApp', 'Walk-in', 'Self', 'Driver Pickup', 'Referral'] as const
+const BOOKING_SOURCES = [
+  'Customer App',
+  'Telecalling',
+  'WhatsApp',
+  'WhatsApp Updation Reminder',
+  'WhatsApp Auto Reminder',
+  'WhatsApp EW Service Reminder',
+  'Walk-in',
+  'Self',
+  'Driver Pickup',
+  'Referral',
+] as const
 const STATUSES = ['New', 'Confirmed', 'Rescheduled', 'Arrived', 'In-Progress', 'Completed', 'Cancelled', 'No-Show'] as const
 const SERVICE_TYPES = [
   'Paid Service', 'Mini Paid Service', 'First Free Service', 'Second Free Service', 'Third Free Service',
@@ -42,8 +53,26 @@ const STATUS_META: Record<string, { bg: string; color: string; dot: string }> = 
 }
 
 const SOURCE_ICON: Record<string, string> = {
-  'Customer App': '📱', Telecalling: '📞', WhatsApp: '💬', 'Walk-in': '🚶', Self: '🙋',
-  'Driver Pickup': '🚗', Referral: '👥',
+  'Customer App': '📱',
+  Telecalling: '📞',
+  WhatsApp: '💬',
+  'WhatsApp Updation Reminder': '💬',
+  'WhatsApp Auto Reminder': '💬',
+  'WhatsApp EW Service Reminder': '💬',
+  'Walk-in': '🚶',
+  Self: '🙋',
+  'Driver Pickup': '🚗',
+  Referral: '👥',
+}
+
+function getSourceIcon(src?: string | null): string {
+  if (!src) return '📋'
+  if (SOURCE_ICON[src]) return SOURCE_ICON[src]
+  const lower = src.toLowerCase()
+  if (lower.includes('whatsapp')) return '💬'
+  if (lower.includes('app') || lower.includes('portal')) return '📱'
+  if (lower.includes('call') || lower.includes('tele')) return '📞'
+  return '📋'
 }
 
 // ─── Helper: Parse Customer App Booking from post_feedback_bot_data ──────────
@@ -415,8 +444,10 @@ export default function ServiceBookingPage() {
   const sourceFilterOptions = useMemo(() => {
     const set = new Set<string>(BOOKING_SOURCES)
     bookings.forEach(b => { if (b.booking_source) set.add(b.booking_source) })
+    if (selectedBooking?.booking_source) set.add(selectedBooking.booking_source)
+    if (form.booking_source) set.add(form.booking_source)
     return Array.from(set).sort((a, b) => a.localeCompare(b))
-  }, [bookings])
+  }, [bookings, selectedBooking?.booking_source, form.booking_source])
 
   // Reg numbers considered "arrived at Reception": a Reception entry exists for that reg number
   // created on/after the booking was made (so an old, unrelated past visit for the same reg number
@@ -749,7 +780,7 @@ export default function ServiceBookingPage() {
                       {/* Source (full view only) */}
                       {!hasPanel && (
                         <td style={{ padding: '0.5rem 0.65rem', whiteSpace: 'nowrap' }}>
-                          <span style={{ fontSize: '0.9rem' }}>{SOURCE_ICON[b.booking_source] ?? '📋'}</span>
+                          <span style={{ fontSize: '0.9rem' }}>{getSourceIcon(b.booking_source)}</span>
                           <span style={{ marginLeft: '0.3rem', color: '#64748b', fontSize: '0.75rem' }}>{b.booking_source}</span>
                         </td>
                       )}
@@ -836,7 +867,7 @@ export default function ServiceBookingPage() {
                   <Field label="Booking Source" required>
                     <select style={selInp} value={form.booking_source ?? ''} onChange={e => setForm(p => ({ ...p, booking_source: e.target.value }))}>
                       <option value="">Select source…</option>
-                      {BOOKING_SOURCES.map(s => <option key={s}>{s}</option>)}
+                      {sourceFilterOptions.map(s => <option key={s} value={s}>{getSourceIcon(s)} {s}</option>)}
                     </select>
                   </Field>
 
@@ -1011,7 +1042,7 @@ export default function ServiceBookingPage() {
                         onChange={e => void updateBookingFields(selectedBooking, { booking_source: e.target.value })}
                         style={{ ...selInp, width: 'auto', padding: '0.2rem 0.5rem', fontSize: '0.72rem', fontWeight: 700, borderColor: '#cbd5e1' }}
                       >
-                        {BOOKING_SOURCES.map(s => <option key={s} value={s}>{SOURCE_ICON[s] ?? '📋'} {s}</option>)}
+                        {sourceFilterOptions.map(s => <option key={s} value={s}>{getSourceIcon(s)} {s}</option>)}
                       </select>
                     </div>
                     <p style={{ margin: '0.2rem 0 0', fontSize: '0.7rem', color: '#94a3b8' }}>
@@ -1498,7 +1529,7 @@ export default function ServiceBookingPage() {
                 )}
 
                 {/* Source-specific WhatsApp info */}
-                {selectedBooking.booking_source === 'WhatsApp' && (
+                {(selectedBooking.booking_source === 'WhatsApp' || selectedBooking.booking_source?.includes('WhatsApp')) && (
                   <div style={{ background: '#f0fdf4', borderRadius: '10px', padding: '0.75rem 0.85rem', marginBottom: '0.85rem', border: '1px solid #bbf7d0' }}>
                     <div style={{ fontSize: '0.68rem', fontWeight: 800, color: '#15803d', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.45rem' }}>💬 WhatsApp Information</div>
                     <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr', gap: '0.5rem', alignItems: 'center' }}>
