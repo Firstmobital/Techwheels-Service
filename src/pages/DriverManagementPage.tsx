@@ -149,7 +149,7 @@ export default function DriverManagementPage() {
   const [loading, setLoading] = useState(true)
   const [savingId, setSavingId] = useState<number | null>(null)
   const [error, setError] = useState('')
-  const [viewMode, setViewMode] = useState<'cards' | 'table' | 'workload'>('cards')
+  const [viewMode, setViewMode] = useState<'table' | 'workload'>('table')
 
   // Filters
   const todayStr = new Date().toISOString().split('T')[0]
@@ -515,15 +515,11 @@ export default function DriverManagementPage() {
                   padding: '0.4rem 0.75rem',
                   display: 'flex',
                   alignItems: 'center',
-                  gap: '0.55rem',
                   cursor: 'pointer',
                   boxShadow: '0 1px 2px rgba(0,0,0,0.03)',
                   transition: 'all 0.15s ease',
                 }}
               >
-                <div style={{ width: 26, height: 26, borderRadius: '50%', background: isSelected ? '#dbeafe' : '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.85rem' }}>
-                  👨‍✈️
-                </div>
                 <div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
                     <span style={{ fontSize: '0.78rem', fontWeight: 800, color: '#0f172a' }}>{d.employee_name}</span>
@@ -633,12 +629,6 @@ export default function DriverManagementPage() {
         {/* View Mode Toggle */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', background: '#f1f5f9', padding: '0.2rem', borderRadius: 8, marginLeft: 'auto' }}>
           <button
-            onClick={() => setViewMode('cards')}
-            style={{ padding: '0.35rem 0.65rem', border: 'none', borderRadius: 6, fontSize: '0.74rem', fontWeight: 800, cursor: 'pointer', background: viewMode === 'cards' ? '#2563eb' : 'transparent', color: viewMode === 'cards' ? '#fff' : '#64748b' }}
-          >
-            🗂️ Cards
-          </button>
-          <button
             onClick={() => setViewMode('table')}
             style={{ padding: '0.35rem 0.65rem', border: 'none', borderRadius: 6, fontSize: '0.74rem', fontWeight: 800, cursor: 'pointer', background: viewMode === 'table' ? '#2563eb' : 'transparent', color: viewMode === 'table' ? '#fff' : '#64748b' }}
           >
@@ -689,185 +679,6 @@ export default function DriverManagementPage() {
               Reset All Filters
             </button>
           </div>
-        ) : viewMode === 'cards' ? (
-          
-          /* ── CARDS VIEW ── */
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(460px, 1fr))', gap: '1.1rem' }}>
-            {filtered.map(b => {
-              const isAssigned = Boolean(b.driver_name && b.driver_name.toLowerCase() !== 'admin')
-              const isSavingThis = savingId === b.id
-              const sm = STATUS_META[b.status] || { bg: '#f1f5f9', color: '#475569', border: '#e2e8f0' }
-              const loc = parseLocationDetails(b.pickup_address || b.customer_address)
-
-              return (
-                <div
-                  key={b.id}
-                  style={{
-                    background: '#ffffff',
-                    border: '1px solid #e2e8f0',
-                    borderRadius: 12,
-                    padding: '1rem 1.2rem',
-                    boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: '0.75rem',
-                    position: 'relative',
-                  }}
-                >
-                  
-                  {/* Top Header: Reg Number + Driver Pill + Status */}
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid #f1f5f9', paddingBottom: '0.65rem' }}>
-                    <div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', flexWrap: 'wrap' }}>
-                        <span style={{ fontSize: '1.15rem', fontWeight: 800, color: '#0f172a', letterSpacing: '0.01em' }}>
-                          {b.reg_number}
-                        </span>
-                        {b.model && (
-                          <span style={{ fontSize: '0.8rem', fontWeight: 600, color: '#475569' }}>
-                            · {b.model}
-                          </span>
-                        )}
-                        {b.fuel_type && (
-                          <span style={{ fontSize: '0.68rem', fontWeight: 700, padding: '0.1rem 0.4rem', borderRadius: 4, background: b.fuel_type === 'EV' ? '#dcfce7' : '#f1f5f9', color: b.fuel_type === 'EV' ? '#15803d' : '#475569' }}>
-                            {b.fuel_type}
-                          </span>
-                        )}
-                      </div>
-                      <div style={{ fontSize: '0.68rem', color: '#64748b', marginTop: 2, display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                        <span>Ref #{b.lead_number || `SB-${b.id}`}</span>
-                        <span>·</span>
-                        <span>{b.booking_source || 'Direct'}</span>
-                        {b.branch && (
-                          <>
-                            <span>·</span>
-                            <span>🏢 {b.branch}</span>
-                          </>
-                        )}
-                      </div>
-                    </div>
-
-                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.35rem' }}>
-                      <span
-                        style={{
-                          fontSize: '0.72rem',
-                          fontWeight: 700,
-                          padding: '0.18rem 0.55rem',
-                          borderRadius: 6,
-                          background: isAssigned ? '#f0fdf4' : '#f8fafc',
-                          color: isAssigned ? '#15803d' : '#64748b',
-                          border: `1px solid ${isAssigned ? '#bbf7d0' : '#e2e8f0'}`,
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '0.3rem',
-                        }}
-                      >
-                        {isAssigned ? `🚗 ${b.driver_name}` : '⚠️ Driver Not Assigned'}
-                      </span>
-                      <span style={{ fontSize: '0.68rem', fontWeight: 700, padding: '0.15rem 0.5rem', borderRadius: 6, background: sm.bg, color: sm.color, border: `1px solid ${sm.border}` }}>
-                        {b.status}
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* Customer, Slot & Trip Type Info */}
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '0.84rem', color: '#1e293b' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
-                      <strong>{b.customer_name}</strong>
-                      <a
-                        href={`tel:${b.customer_phone}`}
-                        style={{ color: '#2563eb', textDecoration: 'none', fontWeight: 700, fontSize: '0.78rem', background: '#eff6ff', padding: '0.15rem 0.5rem', borderRadius: 6, border: '1px solid #bfdbfe' }}
-                      >
-                        📞 Call: {b.customer_phone}
-                      </a>
-                    </div>
-
-                    <div style={{ fontSize: '0.76rem', color: '#64748b', fontWeight: 700, textAlign: 'right' }}>
-                      📅 {b.appointment_date || b.booking_date || 'Today'} {b.booking_time ? `(${b.booking_time})` : ''}
-                    </div>
-                  </div>
-
-                  {/* Pickup / Drop Address */}
-                  <div style={{ background: '#f8fafc', borderRadius: 8, padding: '0.6rem 0.85rem', border: '1px solid #e2e8f0', fontSize: '0.8rem', lineHeight: 1.45 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.5rem', marginBottom: 2 }}>
-                      <span style={{ fontSize: '0.72rem', fontWeight: 800, color: '#475569', textTransform: 'uppercase' }}>
-                        📍 Pickup / Drop Address
-                      </span>
-                      {loc.hasGps && loc.mapsUrl && (
-                        <a
-                          href={loc.mapsUrl}
-                          target="_blank"
-                          rel="noreferrer"
-                          style={{
-                            fontSize: '0.72rem',
-                            fontWeight: 700,
-                            color: '#2563eb',
-                            textDecoration: 'none',
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: '0.2rem',
-                          }}
-                        >
-                          📍 Open Pin on Maps ↗
-                        </a>
-                      )}
-                    </div>
-                    <div style={{ color: loc.cleanAddress && loc.cleanAddress !== 'Address not specified' ? '#1e293b' : '#94a3b8', fontWeight: 500 }}>
-                      {loc.cleanAddress}
-                    </div>
-                  </div>
-
-                  {/* Complaint / Customer Request notes */}
-                  {b.complaint_description && (
-                    <div style={{ fontSize: '0.76rem', color: '#64748b', background: '#fffbeb', padding: '0.45rem 0.75rem', borderRadius: 8, border: '1px solid #fef3c7' }}>
-                      <strong>Service Request:</strong> {b.complaint_description}
-                    </div>
-                  )}
-
-                  {/* Driver Allocation Dropdown & Trip Status Control */}
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', background: '#f8fafc', padding: '0.65rem 0.85rem', borderRadius: 8, border: '1px solid #e2e8f0' }}>
-                    
-                    {/* Driver Change Control */}
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
-                      <span style={{ fontSize: '0.78rem', fontWeight: 800, color: '#334155', whiteSpace: 'nowrap' }}>
-                        🔄 Change Driver:
-                      </span>
-                      <select
-                        disabled={isSavingThis}
-                        value={b.driver_name && b.driver_name.toLowerCase() !== 'admin' ? b.driver_name : ''}
-                        onChange={e => void handleAssignDriver(b, e.target.value)}
-                        style={{
-                          flex: '1 1 200px',
-                          border: '1px solid #cbd5e1',
-                          borderRadius: 6,
-                          padding: '0.35rem 0.6rem',
-                          fontSize: '0.8rem',
-                          background: '#fff',
-                          fontWeight: 700,
-                          color: '#15803d',
-                          outline: 'none',
-                          cursor: 'pointer',
-                        }}
-                      >
-                        {drivers.map(d => {
-                          const tripCount = driverWorkload.counts[d.employee_name.toLowerCase()]?.total || 0
-                          return (
-                            <option key={d.id} value={d.employee_name}>
-                              🚗 {d.employee_name} ({tripCount} allocated)
-                            </option>
-                          )
-                        })}
-                      </select>
-
-                      {isSavingThis && <span style={{ fontSize: '0.72rem', color: '#2563eb', fontWeight: 700 }}>Saving…</span>}
-                    </div>
-
-                  </div>
-
-                </div>
-              )
-            })}
-          </div>
-
         ) : viewMode === 'table' ? (
           
           /* ── TABLE VIEW ── */
@@ -919,6 +730,7 @@ export default function DriverManagementPage() {
                       <td style={{ padding: '0.75rem 1rem' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
                           <select
+                            disabled={savingId === b.id}
                             value={b.driver_name && b.driver_name.toLowerCase() !== 'admin' ? b.driver_name : ''}
                             onChange={e => void handleAssignDriver(b, e.target.value)}
                             style={{
@@ -1047,6 +859,7 @@ export default function DriverManagementPage() {
                                 </a>
                               ) : <span />}
                               <select
+                                disabled={savingId === b.id}
                                 value={b.driver_name || ''}
                                 onChange={e => void handleAssignDriver(b, e.target.value)}
                                 style={{ fontSize: '0.7rem', padding: '0.15rem 0.3rem', borderRadius: 4, border: '1px solid #cbd5e1', fontWeight: 700, background: '#fff', color: '#15803d', cursor: 'pointer' }}
