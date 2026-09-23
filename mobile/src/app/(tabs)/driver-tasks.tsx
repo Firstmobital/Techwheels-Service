@@ -49,16 +49,33 @@ const STATUS_COLOR: Record<string, { bg: string; text: string; border: string }>
   Cancelled: { bg: 'bg-rose-50', text: 'text-rose-700', border: 'border-rose-200' },
 }
 
+function getLocalDateString(date: Date): string {
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
 export default function DriverTasksScreen() {
   const { user } = useAuth()
   const [tasks, setTasks] = useState<DriverBookingTask[]>([])
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
-  const [activeTab, setActiveTab] = useState<'pending' | 'completed' | 'all'>('pending')
-  const [selectedDriverFilter, setSelectedDriverFilter] = useState<string>('all')
+  const [activeDateTab, setActiveDateTab] = useState<'today' | 'tomorrow' | 'upcoming' | 'completed'>('today')
   const [driverNames, setDriverNames] = useState<string[]>([])
   const [currentDriverName, setCurrentDriverName] = useState<string>('')
+  const [selectedDriverFilter, setSelectedDriverFilter] = useState<string>('')
   const [isAdminUser, setIsAdminUser] = useState(false)
+
+  // Calculate Today & Tomorrow ISO date strings (YYYY-MM-DD)
+  const { todayStr, tomorrowStr } = useMemo(() => {
+    const now = new Date()
+    const today = getLocalDateString(now)
+    const tomDate = new Date(now)
+    tomDate.setDate(tomDate.getDate() + 1)
+    const tomorrow = getLocalDateString(tomDate)
+    return { todayStr: today, tomorrowStr: tomorrow }
+  }, [])
 
   // Resolve logged-in driver identity
   useEffect(() => {
@@ -71,7 +88,8 @@ export default function DriverTasksScreen() {
         ])
 
         const role = String((profile as any)?.role || user.user_metadata?.role || '').toLowerCase()
-        setIsAdminUser(role === 'admin')
+        const isAdmin = role === 'admin'
+        setIsAdminUser(isAdmin)
 
         const resolvedName =
           (empLink as any)?.employee_master?.employee_name ||
@@ -82,7 +100,9 @@ export default function DriverTasksScreen() {
           ''
 
         if (resolvedName) {
-          setCurrentDriverName(resolvedName.trim())
+          const trimmed = resolvedName.trim()
+          setCurrentDriverName(trimmed)
+          setSelectedDriverFilter(trimmed)
         }
       } catch (e) {
         console.warn('Error resolving driver identity:', e)
@@ -106,13 +126,6 @@ export default function DriverTasksScreen() {
         setTasks(data as DriverBookingTask[])
         const names = Array.from(new Set(data.map(b => b.driver_name).filter(Boolean))) as string[]
         setDriverNames(names)
-
-        if (currentDriverName) {
-          const match = names.find(n => n.toLowerCase() === currentDriverName.toLowerCase())
-          if (match && selectedDriverFilter === 'all' && !isAdminUser) {
-            setSelectedDriverFilter(match)
-          }
-        }
       }
     } catch (err: any) {
       console.warn('Driver tasks catch:', err)
@@ -120,61 +133,88 @@ export default function DriverTasksScreen() {
       setLoading(false)
       setRefreshing(false)
     }
-  }, [currentDriverName, selectedDriverFilter, isAdminUser])
+  }, [])
 
   useEffect(() => {
     void loadTasks()
   }, [loadTasks])
-
-  useEffect(() => {
-    if (currentDriverName && driverNames.length > 0) {
-      const match = driverNames.find(
-        n => n.toLowerCase() === currentDriverName.toLowerCase() ||
-             n.toLowerCase().includes(currentDriverName.toLowerCase()) ||
-             currentDriverName.toLowerCase().includes(n.toLowerCase())
-      )
-      if (match && selectedDriverFilter === 'all' && !isAdminUser) {
-        setSelectedDriverFilter(match)
-      }
-    }
-  }, [currentDriverName, driverNames, isAdminUser, selectedDriverFilter])
 
   const onRefresh = useCallback(() => {
     setRefreshing(true)
     void loadTasks()
   }, [loadTasks])
 
-  // Compute counts for active driver filter
-  const counts = useMemo(() => {
-    const baseTasks = selectedDriverFilter === 'all'
-      ? tasks
-      : tasks.filter(t => t.driver_name === selectedDriverFilter)
+  // Isolate tasks for the logged in driver (or admin selected driver)
+  const driverTasks = useMemo(() => {
+    // If admin and selected 'all'
+    if (isAdminUser && (!selectedDriverFilter || selectedDriverFilter === 'all')) {
+      return tasks
+    }
 
-    const pending = baseTasks.filter(t => t.status !== 'Completed' && t.status !== 'Cancelled').length
-    const completed = baseTasks.filter(t => t.status === 'Completed').length
-    const total = baseTasks.length
+    const targetName = (selectedDriverFilter || currentDriverName || '').toLowerCase().trim()
+    if (!targetName) return tasks
 
-    return { pending, completed, total }
-  }, [tasks, selectedDriverFilter])
-
-  // Filter tasks based on selected tab and driver
-  const filteredTasks = useMemo(() => {
     return tasks.filter((t) => {
-      // Driver filter
-      if (selectedDriverFilter !== 'all' && t.driver_name !== selectedDriverFilter) {
+      const dName = (t.driver_name || '').toLowerCase().trim()
+      return dName === targetName || dName.includes(targetName) || targetName.includes(dName)
+    })
+  }, [tasks, selectedDriverFilter, currentDriverName, isAdminUser])
+
+  // Compute counts for Today, Tomorrow, Upcoming, Completed
+  const counts = useMemo(() => {
+    let today = 0
+    let tomorrow = 0
+    let upcoming = 0
+    let completed = 0
+
+    for (const t of driverTasks) {
+      if (t.status === 'Completed') {
+        completed++
+        continue
+      }
+      if (t.status === 'Cancelled') {
+        continue
+      }
+
+      const taskDate = (t.appointment_date || t.booking_date || '').slice(0, 10)
+      if (taskDate === todayStr) {
+        today++
+      } else if (taskDate === tomorrowStr) {
+        tomorrow++
+      } else {
+        upcoming++
+      }
+    }
+
+    return { today, tomorrow, upcoming, completed, total: driverTasks.length }
+  }, [driverTasks, todayStr, tomorrowStr])
+
+  // Filter tasks based on selected Date Tab
+  const filteredTasks = useMemo(() => {
+    return driverTasks.filter((t) => {
+      if (activeDateTab === 'completed') {
+        return t.status === 'Completed'
+      }
+
+      // Ignore cancelled in active tabs
+      if (t.status === 'Cancelled') {
         return false
       }
 
-      // Status filter
-      if (activeTab === 'pending') {
-        return t.status !== 'Completed' && t.status !== 'Cancelled'
+      const taskDate = (t.appointment_date || t.booking_date || '').slice(0, 10)
+
+      if (activeDateTab === 'today') {
+        return taskDate === todayStr || (!taskDate && t.status !== 'Completed')
       }
-      if (activeTab === 'completed') {
-        return t.status === 'Completed'
+      if (activeDateTab === 'tomorrow') {
+        return taskDate === tomorrowStr
+      }
+      if (activeDateTab === 'upcoming') {
+        return t.status !== 'Completed'
       }
       return true
     })
-  }, [tasks, activeTab, selectedDriverFilter])
+  }, [driverTasks, activeDateTab, todayStr, tomorrowStr])
 
   // Extract navigation URL from address or create maps link
   const openMapsNavigation = (address: string | null) => {
@@ -214,7 +254,7 @@ export default function DriverTasksScreen() {
     void Linking.openURL(`https://wa.me/91${cleanPhone}?text=${encodeURIComponent(msg)}`)
   }
 
-  // Render individual task card with clean, high-performance UI
+  // Render individual task card
   const renderTaskCard = useCallback(({ item: task }: { item: DriverBookingTask }) => {
     const sc = STATUS_COLOR[task.status] || {
       bg: 'bg-slate-100',
@@ -222,6 +262,9 @@ export default function DriverTasksScreen() {
       border: 'border-slate-200',
     }
     const hasGps = task.pickup_address?.includes('GPS:') || task.pickup_address?.includes('maps.google')
+    const taskDate = (task.appointment_date || task.booking_date || '').slice(0, 10)
+    const isToday = taskDate === todayStr
+    const isTomorrow = taskDate === tomorrowStr
 
     return (
       <View className="bg-white rounded-2xl border border-slate-200 p-4 mb-3 shadow-xs">
@@ -239,6 +282,16 @@ export default function DriverTasksScreen() {
             {task.drop_required && (
               <View className="bg-purple-50 px-2 py-0.5 rounded border border-purple-200">
                 <Text className="text-purple-800 text-[10px] font-bold">🏠 Drop</Text>
+              </View>
+            )}
+            {isToday && (
+              <View className="bg-amber-100 px-2 py-0.5 rounded border border-amber-300">
+                <Text className="text-amber-900 text-[10px] font-black">📅 TODAY</Text>
+              </View>
+            )}
+            {isTomorrow && (
+              <View className="bg-blue-50 px-2 py-0.5 rounded border border-blue-200">
+                <Text className="text-blue-800 text-[10px] font-bold">📅 TOMORROW</Text>
               </View>
             )}
           </View>
@@ -304,7 +357,7 @@ export default function DriverTasksScreen() {
             <TouchableOpacity
               onPress={() => openMapsNavigation(task.pickup_address)}
               activeOpacity={0.8}
-              className="bg-blue-600 py-2.5 px-3 rounded-xl flex-row items-center justify-center gap-2 mt-2 active:bg-blue-700"
+              className="bg-blue-600 py-2.5 px-3 rounded-xl flex-row items-center justify-center gap-2 mt-2 active:bg-blue-700 shadow-xs"
             >
               <Text className="text-white text-xs font-bold">📍 Open in Google Maps</Text>
             </TouchableOpacity>
@@ -331,7 +384,7 @@ export default function DriverTasksScreen() {
         </View>
       </View>
     )
-  }, [])
+  }, [todayStr, tomorrowStr])
 
   return (
     <SafeAreaView className="flex-1 bg-slate-50" edges={['top']}>
@@ -339,10 +392,13 @@ export default function DriverTasksScreen() {
       <View className="bg-white border-b border-slate-200 px-4 py-3">
         <View className="flex-row items-center justify-between">
           <View>
-            <Text className="text-xl font-black text-slate-900">🚗 Driver Tasks</Text>
-            <Text className="text-slate-500 text-xs font-semibold mt-0.5">
-              Pickup & Drop Navigation · Fast Route & Contact
-            </Text>
+            <Text className="text-xl font-black text-slate-900">🚗 My Driver Tasks</Text>
+            <View className="flex-row items-center gap-1.5 mt-0.5">
+              <View className="w-2 h-2 rounded-full bg-emerald-500" />
+              <Text className="text-slate-700 text-xs font-bold">
+                {currentDriverName ? currentDriverName : 'Driver Portal'}
+              </Text>
+            </View>
           </View>
           <TouchableOpacity
             onPress={onRefresh}
@@ -352,8 +408,8 @@ export default function DriverTasksScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* Driver Filter Horizontal Scrollable Pills */}
-        {driverNames.length > 0 && (
+        {/* For Admin Only: Driver Switcher */}
+        {isAdminUser && driverNames.length > 0 && (
           <ScrollView horizontal showsHorizontalScrollIndicator={false} className="mt-2.5">
             <View className="flex-row gap-1.5 py-1">
               <TouchableOpacity
@@ -369,7 +425,7 @@ export default function DriverTasksScreen() {
                     selectedDriverFilter === 'all' ? 'text-white' : 'text-slate-700'
                   }`}
                 >
-                  All ({tasks.length})
+                  All Drivers ({tasks.length})
                 </Text>
               </TouchableOpacity>
               {driverNames.map((name) => {
@@ -399,50 +455,65 @@ export default function DriverTasksScreen() {
           </ScrollView>
         )}
 
-        {/* Clean Status Tabs: Pending, Completed, All */}
-        <View className="flex-row bg-slate-100 p-1 rounded-xl mt-2.5 border border-slate-200">
+        {/* Clean Date Filter Tabs: Aaj (Today), Kal (Tomorrow), Upcoming, Done */}
+        <View className="flex-row bg-slate-100 p-1 rounded-xl mt-3 border border-slate-200">
           <TouchableOpacity
-            onPress={() => setActiveTab('pending')}
+            onPress={() => setActiveDateTab('today')}
             className={`flex-1 py-2 items-center rounded-lg ${
-              activeTab === 'pending' ? 'bg-white shadow-xs' : ''
+              activeDateTab === 'today' ? 'bg-white shadow-xs' : ''
             }`}
           >
             <Text
-              className={`text-xs font-bold ${
-                activeTab === 'pending' ? 'text-blue-700' : 'text-slate-600'
+              className={`text-[11px] font-bold ${
+                activeDateTab === 'today' ? 'text-blue-700' : 'text-slate-600'
               }`}
             >
-              Pending ({counts.pending})
+              📅 Aaj ({counts.today})
             </Text>
           </TouchableOpacity>
 
           <TouchableOpacity
-            onPress={() => setActiveTab('completed')}
+            onPress={() => setActiveDateTab('tomorrow')}
             className={`flex-1 py-2 items-center rounded-lg ${
-              activeTab === 'completed' ? 'bg-white shadow-xs' : ''
+              activeDateTab === 'tomorrow' ? 'bg-white shadow-xs' : ''
             }`}
           >
             <Text
-              className={`text-xs font-bold ${
-                activeTab === 'completed' ? 'text-blue-700' : 'text-slate-600'
+              className={`text-[11px] font-bold ${
+                activeDateTab === 'tomorrow' ? 'text-blue-700' : 'text-slate-600'
               }`}
             >
-              Completed ({counts.completed})
+              📅 Kal ({counts.tomorrow})
             </Text>
           </TouchableOpacity>
 
           <TouchableOpacity
-            onPress={() => setActiveTab('all')}
+            onPress={() => setActiveDateTab('upcoming')}
             className={`flex-1 py-2 items-center rounded-lg ${
-              activeTab === 'all' ? 'bg-white shadow-xs' : ''
+              activeDateTab === 'upcoming' ? 'bg-white shadow-xs' : ''
             }`}
           >
             <Text
-              className={`text-xs font-bold ${
-                activeTab === 'all' ? 'text-blue-700' : 'text-slate-600'
+              className={`text-[11px] font-bold ${
+                activeDateTab === 'upcoming' ? 'text-blue-700' : 'text-slate-600'
               }`}
             >
-              All ({counts.total})
+              📋 Sabhi ({counts.today + counts.tomorrow + counts.upcoming})
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            onPress={() => setActiveDateTab('completed')}
+            className={`flex-1 py-2 items-center rounded-lg ${
+              activeDateTab === 'completed' ? 'bg-white shadow-xs' : ''
+            }`}
+          >
+            <Text
+              className={`text-[11px] font-bold ${
+                activeDateTab === 'completed' ? 'text-emerald-700' : 'text-slate-600'
+              }`}
+            >
+              ✅ Done ({counts.completed})
             </Text>
           </TouchableOpacity>
         </View>
@@ -462,7 +533,7 @@ export default function DriverTasksScreen() {
           contentContainerStyle={{
             paddingHorizontal: 16,
             paddingTop: 12,
-            paddingBottom: 110, // Ensure bottom tab bar does not overlap items
+            paddingBottom: 110,
             flexGrow: filteredTasks.length === 0 ? 1 : undefined,
           }}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
@@ -475,9 +546,15 @@ export default function DriverTasksScreen() {
               <View className="w-16 h-16 rounded-full bg-slate-100 items-center justify-center mb-3">
                 <Text className="text-3xl">🚗</Text>
               </View>
-              <Text className="text-slate-900 text-base font-bold">No tasks found</Text>
+              <Text className="text-slate-900 text-base font-bold">
+                {activeDateTab === 'today'
+                  ? 'Aaj koi pickup/drop task nahi hai'
+                  : activeDateTab === 'tomorrow'
+                  ? 'Kal ke liye koi task scheduled nahi hai'
+                  : 'Koi task nahi mila'}
+              </Text>
               <Text className="text-slate-500 text-xs text-center mt-1">
-                There are no pickup/drop tasks under this filter.
+                Aapke assigned pickup & drop tasks yahan live dikhenge.
               </Text>
             </View>
           }
