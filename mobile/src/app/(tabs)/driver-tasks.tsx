@@ -61,7 +61,7 @@ export default function DriverTasksScreen() {
   const [tasks, setTasks] = useState<DriverBookingTask[]>([])
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
-  const [activeDateTab, setActiveDateTab] = useState<'today' | 'tomorrow' | 'upcoming' | 'completed' | 'all'>('today')
+  const [activeDateTab, setActiveDateTab] = useState<'today' | 'tomorrow' | 'day_after' | 'upcoming' | 'completed' | 'all'>('today')
   const [serviceTypeFilter, setServiceTypeFilter] = useState<'all' | 'pickup' | 'drop'>('all')
   const [searchQuery, setSearchQuery] = useState<string>('')
   const [driverNames, setDriverNames] = useState<string[]>([])
@@ -69,14 +69,20 @@ export default function DriverTasksScreen() {
   const [selectedDriverFilter, setSelectedDriverFilter] = useState<string>('')
   const [isAdminUser, setIsAdminUser] = useState(false)
 
-  // Calculate Today & Tomorrow ISO date strings (YYYY-MM-DD)
-  const { todayStr, tomorrowStr } = useMemo(() => {
+  // Calculate Today, Tomorrow & Day After Tomorrow ISO date strings (YYYY-MM-DD)
+  const { todayStr, tomorrowStr, dayAfterStr } = useMemo(() => {
     const now = new Date()
     const today = getLocalDateString(now)
+
     const tomDate = new Date(now)
     tomDate.setDate(tomDate.getDate() + 1)
     const tomorrow = getLocalDateString(tomDate)
-    return { todayStr: today, tomorrowStr: tomorrow }
+
+    const dayAfterDate = new Date(now)
+    dayAfterDate.setDate(dayAfterDate.getDate() + 2)
+    const dayAfter = getLocalDateString(dayAfterDate)
+
+    return { todayStr: today, tomorrowStr: tomorrow, dayAfterStr: dayAfter }
   }, [])
 
   // Resolve logged-in driver identity
@@ -161,10 +167,11 @@ export default function DriverTasksScreen() {
     })
   }, [tasks, selectedDriverFilter, currentDriverName, isAdminUser])
 
-  // Compute counts for Today, Tomorrow, Upcoming, Completed, All
+  // Compute counts for Today, Tomorrow, Day After, Upcoming, Completed, All
   const counts = useMemo(() => {
     let today = 0
     let tomorrow = 0
+    let dayAfter = 0
     let upcoming = 0
     let completed = 0
 
@@ -182,13 +189,15 @@ export default function DriverTasksScreen() {
         today++
       } else if (taskDate === tomorrowStr) {
         tomorrow++
+      } else if (taskDate === dayAfterStr) {
+        dayAfter++
       } else {
         upcoming++
       }
     }
 
-    return { today, tomorrow, upcoming, completed, total: driverTasks.length }
-  }, [driverTasks, todayStr, tomorrowStr])
+    return { today, tomorrow, dayAfter, upcoming, completed, total: driverTasks.length }
+  }, [driverTasks, todayStr, tomorrowStr, dayAfterStr])
 
   // Filter tasks based on selected Date Tab, Service Type and Search Query
   const filteredTasks = useMemo(() => {
@@ -231,12 +240,15 @@ export default function DriverTasksScreen() {
       if (activeDateTab === 'tomorrow') {
         return taskDate === tomorrowStr
       }
+      if (activeDateTab === 'day_after') {
+        return taskDate === dayAfterStr
+      }
       if (activeDateTab === 'upcoming') {
         return t.status !== 'Completed'
       }
       return true
     })
-  }, [driverTasks, activeDateTab, serviceTypeFilter, searchQuery, todayStr, tomorrowStr])
+  }, [driverTasks, activeDateTab, serviceTypeFilter, searchQuery, todayStr, tomorrowStr, dayAfterStr])
 
   // Extract navigation URL from address or create maps link
   const openMapsNavigation = (address: string | null) => {
@@ -287,6 +299,7 @@ export default function DriverTasksScreen() {
     const taskDate = (task.appointment_date || task.booking_date || '').slice(0, 10)
     const isToday = taskDate === todayStr
     const isTomorrow = taskDate === tomorrowStr
+    const isDayAfter = taskDate === dayAfterStr
 
     return (
       <View className="bg-white rounded-2xl border border-slate-200 p-4 mb-3 shadow-xs">
@@ -314,6 +327,11 @@ export default function DriverTasksScreen() {
             {isTomorrow && (
               <View className="bg-blue-50 px-2 py-0.5 rounded border border-blue-200">
                 <Text className="text-blue-800 text-[10px] font-bold">TOMORROW</Text>
+              </View>
+            )}
+            {isDayAfter && (
+              <View className="bg-indigo-50 px-2 py-0.5 rounded border border-indigo-200">
+                <Text className="text-indigo-800 text-[10px] font-bold">DAY AFTER</Text>
               </View>
             )}
           </View>
@@ -406,7 +424,7 @@ export default function DriverTasksScreen() {
         </View>
       </View>
     )
-  }, [todayStr, tomorrowStr])
+  }, [todayStr, tomorrowStr, dayAfterStr])
 
   return (
     <SafeAreaView className="flex-1 bg-slate-50" edges={['top']}>
@@ -511,6 +529,23 @@ export default function DriverTasksScreen() {
                 }`}
               >
                 📅 Tomorrow ({counts.tomorrow})
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              onPress={() => setActiveDateTab('day_after')}
+              className={`px-3.5 py-2 rounded-xl border ${
+                activeDateTab === 'day_after'
+                  ? 'bg-blue-600 border-blue-600'
+                  : 'bg-slate-100 border-slate-200'
+              }`}
+            >
+              <Text
+                className={`text-xs font-bold ${
+                  activeDateTab === 'day_after' ? 'text-white' : 'text-slate-700'
+                }`}
+              >
+                📅 Day After Tomorrow ({counts.dayAfter})
               </Text>
             </TouchableOpacity>
 
@@ -654,6 +689,8 @@ export default function DriverTasksScreen() {
                   ? 'No tasks scheduled for Today'
                   : activeDateTab === 'tomorrow'
                   ? 'No tasks scheduled for Tomorrow'
+                  : activeDateTab === 'day_after'
+                  ? 'No tasks scheduled for Day After Tomorrow'
                   : activeDateTab === 'completed'
                   ? 'No completed tasks found'
                   : 'No pickup / drop tasks found'}
