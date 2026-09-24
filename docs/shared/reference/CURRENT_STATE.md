@@ -145,6 +145,25 @@ Snapshot Basis: Code and dump audit only (no inferred/assumed behavior)
 - `job-cards/[id]/submit`
 - `job-cards/photos`
 
+### Customer Portal / Accidental Bodyshop Flow
+
+Customer routes under `mobile/src/app/(customer)/` include:
+- `index` — customer home with two primary service entries: **Accidental Repair** and **General Service**.
+- `documents` — "Needed from you" accidental-repair checklist. Customers can upload required claim documents from Camera, Gallery, or Files, plus guided vehicle-damage photos.
+- `tracker` — customer-facing 18-stage bodyshop tracker with current-stage status, customer action prompts, customer/workshop upload counts, survey/floor/QC/billing/DO/delivery visibility.
+- `estimate` — customer estimate review and approve/reject decision.
+- `invoices` — billing, settlement and payment visibility.
+- `gatepass` — final dealership clearance / gate pass.
+- `feedback`, `helpdesk`, `complaint`, `booking`, `my-bookings` — support and service follow-up flows.
+
+Accidental customer uploads are linked to the existing bodyshop case:
+- Edge function: `customer-portal-upload`
+- Customer API wrapper: `mobile/src/lib/api/customerBodyshopUploads.ts`
+- Documents persist to `bodyshop_repair_card_documents`.
+- Damage photos persist to `bodyshop_intake_vehicle_photos`.
+- Existing bodyshop repair-card boolean document flags are updated when a customer document upload completes.
+- Upload access uses the custom customer session token and a service-role Edge Function; the app receives short-lived signed upload tickets rather than direct service-role credentials.
+
 ## Database Authority Snapshot (Audited From full_database.sql)
 
 ### Dump Authority and Access Mirror
