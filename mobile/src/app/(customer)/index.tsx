@@ -30,8 +30,6 @@ import {
 import { computeSettlement } from '../../lib/customer/math'
 import { manualCheckForOTAUpdate } from '../../hooks/useMandatoryOTAUpdate'
 import { Icon, IconName } from '../../components/ui/Icon'
-import { ClaimFormWidget } from '../../components/ClaimFormWidget'
-import { matchInsuranceProviderId } from '../../config/insuranceProviders'
 
 export default function CustomerDashboardScreen() {
   const router = useRouter()
@@ -395,46 +393,6 @@ export default function CustomerDashboardScreen() {
               </TouchableOpacity>
             </View>
           </CustomerCard>
-
-          {/* ── PRIMARY BOOK SERVICE CTA (TATA.EV TEAL ACCENT) ── */}
-          <TouchableOpacity
-            onPress={() => router.push('/(customer)/booking')}
-            activeOpacity={0.88}
-            style={{
-              backgroundColor: '#00D2C4',
-              borderRadius: 18,
-              paddingVertical: 14,
-              paddingHorizontal: 16,
-              marginBottom: 14,
-              flexDirection: 'row',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              shadowColor: '#00D2C4',
-              shadowOffset: { width: 0, height: 4 },
-              shadowOpacity: 0.35,
-              shadowRadius: 10,
-              elevation: 5,
-            }}
-          >
-            <View className="flex-row items-center gap-3 flex-1 pr-2">
-              <View className="w-10 h-10 rounded-xl bg-[#002B49]/20 items-center justify-center shrink-0">
-                <Icon name="calendar" size={20} color="#002B49" strokeWidth={2.4} />
-              </View>
-              <View className="flex-1">
-                <Text className="text-[#002B49] text-[15px] font-black tracking-tight" numberOfLines={1}>
-                  Book Service Appointment
-                </Text>
-                <Text className="text-[#002B49]/80 text-[11.5px] font-medium" numberOfLines={1} ellipsizeMode="tail">
-                  Schedule maintenance, repair or doorstep pickup
-                </Text>
-              </View>
-            </View>
-            <View className="bg-[#002B49] px-3 py-1.5 rounded-xl shadow-xs shrink-0">
-              <Text className="text-[#00D2C4] font-black text-xs">Book ➔</Text>
-            </View>
-          </TouchableOpacity>
-
-          <ClaimFormWidget userInsurerId={matchInsuranceProviderId(asText(job?.insurance_company))} />
 
           {/* ── LIVE REPAIR TRACKER (TATA.EV GLOWING TRACKER) ── */}
           {(() => {
