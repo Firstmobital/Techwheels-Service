@@ -16,6 +16,8 @@ interface QueueRow {
   closed_date: string
   sent_at: string | null
   rating: number | null
+  cre_rating: number | null
+  effective_rating: number | null
   feedback_text: string | null
   responded_at: string | null
   cre_status: CreStatus
@@ -98,12 +100,48 @@ const STATUS_LABEL: Record<string, string> = {
   resolved:    'Resolved',
 }
 
+function starColor(rating: number): string {
+  return rating <= 2 ? 'text-red-600' : rating <= 3 ? 'text-yellow-600' : 'text-green-600'
+}
+
 function Stars({ rating }: { rating: number | null }) {
   if (rating == null) return <span className="text-gray-400 text-xs">—</span>
   return (
-    <span className={rating <= 2 ? 'text-red-600' : rating <= 3 ? 'text-yellow-600' : 'text-green-600'}>
+    <span className={starColor(rating)}>
       {'★'.repeat(rating)}{'☆'.repeat(5 - rating)}
     </span>
+  )
+}
+
+function RatingPicker({
+  value,
+  disabled,
+  onSelect,
+}: {
+  value: number | null
+  disabled: boolean
+  onSelect: (rating: number) => void
+}) {
+  return (
+    <div className="flex items-center gap-1" role="group" aria-label="Rating">
+      <span className="text-xs text-gray-500 mr-1">Rating</span>
+      {[1, 2, 3, 4, 5].map(n => {
+        const selected = value != null && n <= value
+        return (
+          <button
+            key={n}
+            type="button"
+            aria-label={`${n} star${n === 1 ? '' : 's'}`}
+            aria-pressed={value === n}
+            disabled={disabled}
+            onClick={() => onSelect(n)}
+            className={`text-lg leading-none disabled:opacity-50 ${selected ? starColor(value) : 'text-gray-300 hover:text-gray-500'}`}
+          >
+            {selected ? '★' : '☆'}
+          </button>
+        )
+      })}
+    </div>
   )
 }
 
@@ -164,11 +202,14 @@ function RowDetail({ row, onUpdated, showActions }: { row: QueueRow; onUpdated: 
   const [draft, setDraft] = useState('')
   const [followUpDate, setFollowUpDate] = useState(row.next_follow_up_date ?? '')
   const [submitting, setSubmitting] = useState(false)
+  const [savingRating, setSavingRating] = useState(false)
+  const [selectedRating, setSelectedRating] = useState<number | null>(row.effective_rating)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     setFollowUpDate(row.next_follow_up_date ?? '')
-  }, [row.id, row.next_follow_up_date])
+    setSelectedRating(row.effective_rating)
+  }, [row.id, row.next_follow_up_date, row.effective_rating])
 
   const fetchRemarks = useCallback(async () => {
     const { data, error: e } = await supabase
@@ -218,6 +259,27 @@ function RowDetail({ row, onUpdated, showActions }: { row: QueueRow; onUpdated: 
     }
   }
 
+  async function saveRating(next: number) {
+    if (savingRating || submitting) return
+    if (next === row.cre_rating) return
+    setSavingRating(true)
+    setSelectedRating(next)
+    setError(null)
+    try {
+      const { error: e } = await supabase.rpc('psf_set_cre_rating', {
+        p_feedback_id: row.id,
+        p_cre_rating: next,
+      })
+      if (e) throw e
+      onUpdated()
+    } catch (e: unknown) {
+      setSelectedRating(row.effective_rating)
+      setError(e instanceof Error ? e.message : 'Failed to save rating')
+    } finally {
+      setSavingRating(false)
+    }
+  }
+
   async function markResolved() {
     if (!draft.trim()) {
       setError('A closing remark is required to mark this resolved.')
@@ -248,6 +310,11 @@ function RowDetail({ row, onUpdated, showActions }: { row: QueueRow; onUpdated: 
     <div className="bg-gray-50 border-t border-gray-200 p-4 space-y-3">
       <div>
         <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Customer's Original Feedback</h3>
+        {row.rating != null && (
+          <p className="text-sm text-gray-600 mb-2">
+            Customer rating: <Stars rating={row.rating} />
+          </p>
+        )}
         <div className="bg-white border border-gray-200 rounded p-3 text-sm text-gray-800 whitespace-pre-wrap">
           {row.feedback_text || <span className="text-gray-400">No remark text provided.</span>}
         </div>
@@ -313,6 +380,12 @@ function RowDetail({ row, onUpdated, showActions }: { row: QueueRow; onUpdated: 
             >
               Mark Resolved
             </button>
+            <RatingPicker
+              value={selectedRating}
+              disabled={savingRating || submitting}
+              onSelect={next => { void saveRating(next) }}
+            />
+            {savingRating && <span className="text-xs text-gray-400">Saving…</span>}
           </div>
         </div>
       )}
@@ -385,8 +458,8 @@ export default function PostServiceFeedbackCREPage() {
         : 'post_service_feedback_cre_queue'
 
     let query = supabase.from(table).select('*', { count: 'exact' })
-    if (tier === 'low') query = query.lte('rating', 3)
-    if (tier === 'high') query = query.gte('rating', 4)
+    if (tier === 'low') query = query.lte('effective_rating', 3)
+    if (tier === 'high') query = query.gte('effective_rating', 4)
     query = applyListFilters(query, {
       search: debouncedSearch,
       filterStatus,
@@ -404,8 +477,8 @@ export default function PostServiceFeedbackCREPage() {
       let q = tier === 'today'
         ? supabase.from('post_service_feedback_cre_due_today').select('id', { count: 'exact', head: true })
         : tier === 'low'
-          ? baseCount().lte('rating', 3)
-          : baseCount().is('rating', null)
+          ? baseCount().lte('effective_rating', 3)
+          : baseCount().is('effective_rating', null)
       if (serviceDateFrom) q = q.gte('closed_date', serviceDateFrom)
       if (serviceDateTo) q = q.lte('closed_date', serviceDateTo)
       return q
@@ -416,9 +489,9 @@ export default function PostServiceFeedbackCREPage() {
 
     const [totalSent, positiveCount, needsFollowupCount, unratedCount, todayCount, pageRes, statusTotal, statusOpen, statusInProgress, statusResolved] = await Promise.all([
       readCount(baseCount()),
-      readCount(baseCount().gte('rating', 4)),
-      readCount(baseCount().lte('rating', 3)),
-      readCount(baseCount().is('rating', null)),
+      readCount(baseCount().gte('effective_rating', 4)),
+      readCount(baseCount().lte('effective_rating', 3)),
+      readCount(baseCount().is('effective_rating', null)),
       readCount(dueTodayCount()),
       query.range(from, to),
       tier === 'high' ? Promise.resolve(0) : readCount(statusBase()),
@@ -689,7 +762,7 @@ export default function PostServiceFeedbackCREPage() {
                       </>
                     ) : (
                       <>
-                        <td className="px-4 py-3"><Stars rating={r.rating} /></td>
+                        <td className="px-4 py-3"><Stars rating={r.effective_rating} /></td>
                         <td className="px-4 py-3 text-xs text-gray-600 max-w-[220px] truncate" title={r.feedback_text || ''}>
                           {r.feedback_text || '—'}
                         </td>
