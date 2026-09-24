@@ -4,7 +4,7 @@ import { supabase } from '../lib/supabase'
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 type CreStatus = 'open' | 'in_progress' | 'resolved'
-type Tier = 'low' | 'unrated' | 'high'
+type Tier = 'low' | 'unrated' | 'high' | 'today'
 
 interface QueueRow {
   id: number
@@ -25,6 +25,7 @@ interface QueueRow {
   service_type: string | null
   review_link_sent: boolean
   branch: string | null
+  next_follow_up_date: string | null
 }
 
 interface RemarkRow {
@@ -41,6 +42,7 @@ interface Overview {
   positiveCount: number
   needsFollowupCount: number
   unratedCount: number
+  todayCount: number
 }
 
 interface StatusStats {
@@ -160,8 +162,13 @@ function RowDetail({ row, onUpdated, showActions }: { row: QueueRow; onUpdated: 
   const [remarks, setRemarks] = useState<RemarkRow[]>([])
   const [loading, setLoading] = useState(showActions)
   const [draft, setDraft] = useState('')
+  const [followUpDate, setFollowUpDate] = useState(row.next_follow_up_date ?? '')
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    setFollowUpDate(row.next_follow_up_date ?? '')
+  }, [row.id, row.next_follow_up_date])
 
   const fetchRemarks = useCallback(async () => {
     const { data, error: e } = await supabase
@@ -194,7 +201,12 @@ function RowDetail({ row, onUpdated, showActions }: { row: QueueRow; onUpdated: 
     setSubmitting(true)
     setError(null)
     try {
-      const { error: e } = await supabase.rpc('psf_add_remark', { p_feedback_id: row.id, p_remark: draft.trim() })
+      const { error: e } = await supabase.rpc('psf_add_remark', {
+        p_feedback_id: row.id,
+        p_remark: draft.trim(),
+        p_next_follow_up_date: followUpDate || null,
+        p_set_next_follow_up_date: true,
+      })
       if (e) throw e
       setDraft('')
       await fetchRemarks()
@@ -215,7 +227,12 @@ function RowDetail({ row, onUpdated, showActions }: { row: QueueRow; onUpdated: 
     setSubmitting(true)
     setError(null)
     try {
-      const { error: e } = await supabase.rpc('psf_mark_resolved', { p_feedback_id: row.id, p_remark: draft.trim() })
+      const { error: e } = await supabase.rpc('psf_mark_resolved', {
+        p_feedback_id: row.id,
+        p_remark: draft.trim(),
+        p_next_follow_up_date: followUpDate || null,
+        p_set_next_follow_up_date: true,
+      })
       if (e) throw e
       setDraft('')
       await fetchRemarks()
@@ -261,13 +278,25 @@ function RowDetail({ row, onUpdated, showActions }: { row: QueueRow; onUpdated: 
 
       {showActions && row.cre_status !== 'resolved' && (
         <div className="space-y-2">
-          <textarea
-            className="w-full border border-gray-300 rounded px-3 py-2 text-sm"
-            rows={2}
-            placeholder="Add a call remark…"
-            value={draft}
-            onChange={e => setDraft(e.target.value)}
-          />
+          <div className="flex flex-col md:flex-row gap-2 md:items-end">
+            <textarea
+              className="w-full flex-1 border border-gray-300 rounded px-3 py-2 text-sm"
+              rows={2}
+              placeholder="Add a call remark…"
+              value={draft}
+              onChange={e => setDraft(e.target.value)}
+            />
+            <label className="md:w-52 shrink-0">
+              <span className="block text-xs text-gray-500 mb-1">Next Follow-up Date</span>
+              <input
+                type="date"
+                aria-label="Next Follow-up Date"
+                className="w-full border border-gray-300 rounded px-2 py-1.5 text-sm"
+                value={followUpDate}
+                onChange={e => setFollowUpDate(e.target.value)}
+              />
+            </label>
+          </div>
           {error && <p className="text-xs text-red-600">{error}</p>}
           <div className="flex items-center gap-2">
             <button
@@ -289,9 +318,14 @@ function RowDetail({ row, onUpdated, showActions }: { row: QueueRow; onUpdated: 
       )}
 
       {showActions && row.cre_status === 'resolved' && (
-        <p className="text-sm text-green-700">
-          ✓ Resolved by <span className="font-medium">{row.resolved_by_name}</span> on {fmtDateTime(row.resolved_at)}
-        </p>
+        <div className="space-y-1">
+          <p className="text-sm text-green-700">
+            ✓ Resolved by <span className="font-medium">{row.resolved_by_name}</span> on {fmtDateTime(row.resolved_at)}
+          </p>
+          <p className="text-sm text-gray-600">
+            Next Follow-up Date: <span className="font-medium">{fmtDate(row.next_follow_up_date)}</span>
+          </p>
+        </div>
       )}
 
       {!showActions && (
@@ -310,7 +344,7 @@ function RowDetail({ row, onUpdated, showActions }: { row: QueueRow; onUpdated: 
 export default function PostServiceFeedbackCREPage() {
   const [rows, setRows] = useState<QueueRow[]>([])
   const [overview, setOverview] = useState<Overview>({
-    totalSent: 0, positiveCount: 0, needsFollowupCount: 0, unratedCount: 0,
+    totalSent: 0, positiveCount: 0, needsFollowupCount: 0, unratedCount: 0, todayCount: 0,
   })
   const [statusStats, setStatusStats] = useState<StatusStats>({
     total: 0, open: 0, in_progress: 0, resolved: 0,
@@ -343,10 +377,12 @@ export default function PostServiceFeedbackCREPage() {
 
     const from = (page - 1) * PAGE_SIZE
     const to = from + PAGE_SIZE - 1
-    const statusEnabled = tier === 'low' || tier === 'unrated'
-    const table = tier === 'unrated'
-      ? 'post_service_feedback_cre_unrated'
-      : 'post_service_feedback_cre_queue'
+    const statusEnabled = tier === 'low' || tier === 'unrated' || tier === 'today'
+    const table = tier === 'today'
+      ? 'post_service_feedback_cre_due_today'
+      : tier === 'unrated'
+        ? 'post_service_feedback_cre_unrated'
+        : 'post_service_feedback_cre_queue'
 
     let query = supabase.from(table).select('*', { count: 'exact' })
     if (tier === 'low') query = query.lte('rating', 3)
@@ -360,31 +396,41 @@ export default function PostServiceFeedbackCREPage() {
     })
     query = tier === 'unrated'
       ? query.order('sent_at', { ascending: false })
-      : query.order('responded_at', { ascending: false })
+      : tier === 'today'
+        ? query.order('closed_date', { ascending: false })
+        : query.order('responded_at', { ascending: false })
 
     const statusBase = () => {
-      let q = tier === 'low' ? baseCount().lte('rating', 3) : baseCount().is('rating', null)
+      let q = tier === 'today'
+        ? supabase.from('post_service_feedback_cre_due_today').select('id', { count: 'exact', head: true })
+        : tier === 'low'
+          ? baseCount().lte('rating', 3)
+          : baseCount().is('rating', null)
       if (serviceDateFrom) q = q.gte('closed_date', serviceDateFrom)
       if (serviceDateTo) q = q.lte('closed_date', serviceDateTo)
       return q
     }
 
-    const [totalSent, positiveCount, needsFollowupCount, unratedCount, pageRes, statusTotal, statusOpen, statusInProgress, statusResolved] = await Promise.all([
+    const dueTodayCount = () =>
+      supabase.from('post_service_feedback_cre_due_today').select('id', { count: 'exact', head: true })
+
+    const [totalSent, positiveCount, needsFollowupCount, unratedCount, todayCount, pageRes, statusTotal, statusOpen, statusInProgress, statusResolved] = await Promise.all([
       readCount(baseCount()),
       readCount(baseCount().gte('rating', 4)),
       readCount(baseCount().lte('rating', 3)),
       readCount(baseCount().is('rating', null)),
+      readCount(dueTodayCount()),
       query.range(from, to),
       tier === 'high' ? Promise.resolve(0) : readCount(statusBase()),
       tier === 'high' ? Promise.resolve(0) : readCount(statusBase().eq('cre_status', 'open')),
       tier === 'high' ? Promise.resolve(0) : readCount(statusBase().eq('cre_status', 'in_progress')),
-      tier === 'high' ? Promise.resolve(0) : readCount(statusBase().eq('cre_status', 'resolved')),
+      tier === 'high' || tier === 'today' ? Promise.resolve(0) : readCount(statusBase().eq('cre_status', 'resolved')),
     ])
 
     if (pageRes.error) throw pageRes.error
 
     return {
-      overview: { totalSent, positiveCount, needsFollowupCount, unratedCount },
+      overview: { totalSent, positiveCount, needsFollowupCount, unratedCount, todayCount },
       statusStats: {
         total: statusTotal,
         open: statusOpen,
@@ -434,10 +480,11 @@ export default function PostServiceFeedbackCREPage() {
   const tabCount = useMemo(() => {
     if (tier === 'low') return overview.needsFollowupCount
     if (tier === 'unrated') return overview.unratedCount
+    if (tier === 'today') return overview.todayCount
     return overview.positiveCount
   }, [tier, overview])
 
-  const showStatusFilter = tier === 'low' || tier === 'unrated'
+  const showStatusFilter = tier === 'low' || tier === 'unrated' || tier === 'today'
   const colCount = tier === 'unrated' ? 11 : 11
 
   if (loading && rows.length === 0) {
@@ -500,6 +547,13 @@ export default function PostServiceFeedbackCREPage() {
         >
           Positive (≥4★)
           <span className="ml-2 text-xs text-gray-400">{overview.positiveCount}</span>
+        </button>
+        <button
+          onClick={() => { setTier('today'); setFilterStatus('all'); setPage(1); setExpandedId(null) }}
+          className={`py-2 text-sm font-medium border-b-2 transition-colors ${tier === 'today' ? 'border-sky-600 text-sky-700' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
+        >
+          Today's Follow-ups
+          <span className="ml-2 text-xs text-gray-400">{overview.todayCount}</span>
         </button>
       </div>
 
