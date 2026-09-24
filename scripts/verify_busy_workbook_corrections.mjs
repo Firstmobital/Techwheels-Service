@@ -65,7 +65,6 @@ for (const [billNo, rows] of byBill) {
   ordered.push(...five, ...parts18, ...labour)
   const subtotal = roundPaise(ordered.reduce((sum, row) => sum + Number(row.Amount || 0), 0))
   const roundOff = roundOffToNearestRupee(subtotal)
-  const template = ordered[0]
   for (const row of ordered) {
     correctedRows.push({
       'Bill date': row['Bill date'],
@@ -77,19 +76,8 @@ for (const [billNo, rows] of byBill) {
       Amount: Number(row.Amount || 0),
       naration: row.naration,
       Series: busyVoucherSeries(row['bill no']),
-    })
-  }
-  if (roundOff !== 0) {
-    correctedRows.push({
-      'Bill date': template['Bill date'],
-      'bill no': template['bill no'],
-      'Party Name': template['Party Name'],
-      'Item Name': 'Rounded Off',
-      Qty: 0,
-      Price: 0,
-      Amount: roundOff,
-      naration: template.naration,
-      Series: busyVoucherSeries(template['bill no']),
+      'Rounded Off (-)': row === labour[0] && roundOff < 0 ? Math.abs(roundOff) : '',
+      'Rounded Off (+)': row === labour[0] && roundOff > 0 ? roundOff : '',
     })
   }
 }
@@ -124,27 +112,32 @@ for (const [billNo, rows] of rereadByBill) {
   const parts5 = rows.filter((row) => row['Item Name'] === 'SPARE PARTS @5%')
   const parts18 = rows.filter((row) => row['Item Name'] === 'SPARE PARTS @18%')
   const labour = rows.filter((row) => row['Item Name'] === 'LABOUR CHARGES @18%')
-  const roundOff = rows.filter((row) => row['Item Name'] === 'Rounded Off')
+  const roundOffItems = rows.filter((row) => /round/i.test(String(row['Item Name'])))
   if (parts18.length !== 1) missingParts18 += 1
   if (labour.length !== 1) missingLabour += 1
   if (parts5.length !== 0) unexpectedParts5 += 1
+  if (roundOffItems.length > 0) duplicateRoundOff += 1
 
   const subtotal = roundPaise(
     [...parts5, ...parts18, ...labour].reduce((sum, row) => sum + Number(row.Amount || 0), 0),
   )
   const expectedRoundOff = roundOffToNearestRupee(subtotal)
-  const needsRoundOff = expectedRoundOff !== 0
-  if (needsRoundOff && roundOff.length === 0) missingRoundOff += 1
-  if (!needsRoundOff && roundOff.length > 0) unexpectedRoundOffOnWhole += 1
-  if (roundOff.length > 1) duplicateRoundOff += 1
+  const hosts = rows.filter((row) => row['Rounded Off (-)'] !== '' || row['Rounded Off (+)'] !== '')
+  if (expectedRoundOff !== 0 && hosts.length === 0) missingRoundOff += 1
+  if (expectedRoundOff === 0 && hosts.length > 0) unexpectedRoundOffOnWhole += 1
+  if (hosts.length > 1) duplicateRoundOff += 1
   const baseItems = parts5.length > 0
     ? ['SPARE PARTS @5%', 'SPARE PARTS @18%', 'LABOUR CHARGES @18%']
     : ['SPARE PARTS @18%', 'LABOUR CHARGES @18%']
-  assert.deepEqual(items, needsRoundOff ? [...baseItems, 'Rounded Off'] : baseItems, billNo)
+  assert.deepEqual(items, baseItems, billNo)
 
-  const actualRoundOff = needsRoundOff ? Number(roundOff[0]?.Amount ?? NaN) : 0
-  if (actualRoundOff !== expectedRoundOff) signedMismatch += 1
-  const finalPaise = Math.round(subtotal * 100) + Math.round(actualRoundOff * 100)
+  const host = labour[0]
+  const minus = Number(host?.['Rounded Off (-)'] || 0)
+  const plus = Number(host?.['Rounded Off (+)'] || 0)
+  if (expectedRoundOff > 0 && (plus !== expectedRoundOff || minus !== 0)) signedMismatch += 1
+  if (expectedRoundOff < 0 && (minus !== Math.abs(expectedRoundOff) || plus !== 0)) signedMismatch += 1
+  if (expectedRoundOff === 0 && (minus !== 0 || plus !== 0)) signedMismatch += 1
+  const finalPaise = Math.round(subtotal * 100) + Math.round(plus * 100) - Math.round(minus * 100)
   if (finalPaise % 100 !== 0) notWholeRupee += 1
 
   assert.equal(rows.every((row) => row['Bill date'] === rows[0]['Bill date']), true, billNo)

@@ -203,16 +203,15 @@ function assertInvoiceVoucherContract(result) {
     const parts5 = rows.filter((row) => row['Item Name'] === 'SPARE PARTS @5%')
     const parts18 = rows.filter((row) => row['Item Name'] === 'SPARE PARTS @18%')
     const labour = rows.filter((row) => row['Item Name'] === 'LABOUR CHARGES @18%')
-    const roundOff = rows.filter((row) => row['Item Name'] === 'Rounded Off')
-    const needsRoundOff = preview.roundOff !== 0
+    const roundOffItems = rows.filter((row) => /round/i.test(String(row['Item Name'])))
     assert.equal(parts18.length, 1)
     assert.equal(labour.length, 1)
-    assert.equal(roundOff.length, needsRoundOff ? 1 : 0)
+    assert.equal(roundOffItems.length, 0)
     assert.equal(parts5.length, preview.hasParts5Line ? 1 : 0)
     const baseItems = preview.hasParts5Line
       ? ['SPARE PARTS @5%', 'SPARE PARTS @18%', 'LABOUR CHARGES @18%']
       : ['SPARE PARTS @18%', 'LABOUR CHARGES @18%']
-    assert.deepEqual(items, needsRoundOff ? [...baseItems, 'Rounded Off'] : baseItems)
+    assert.deepEqual(items, baseItems)
     const expectedSeries = busyVoucherSeries(preview.invoiceNumber)
     for (const row of rows) {
       assert.equal(row['Bill date'], formatBusyBillDate(preview.invoiceDate))
@@ -227,8 +226,22 @@ function assertInvoiceVoucherContract(result) {
     }
     assert.equal(parts18[0].Amount, preview.parts18)
     assert.equal(labour[0].Amount, preview.labour)
-    if (needsRoundOff) assert.equal(roundOff[0].Amount, preview.roundOff)
     if (preview.hasParts5Line) assert.equal(parts5[0].Amount, preview.parts5)
+    const hosts = rows.filter((row) => row['Rounded Off (-)'] !== '' || row['Rounded Off (+)'] !== '')
+    assert.equal(hosts.length, preview.roundOff === 0 ? 0 : 1)
+    if (preview.roundOff > 0) {
+      assert.equal(labour[0]['Rounded Off (+)'], preview.roundOff)
+      assert.equal(labour[0]['Rounded Off (-)'], '')
+    } else if (preview.roundOff < 0) {
+      assert.equal(labour[0]['Rounded Off (-)'], Math.abs(preview.roundOff))
+      assert.equal(labour[0]['Rounded Off (+)'], '')
+    }
+    for (const row of rows) {
+      if (row === labour[0] && preview.roundOff !== 0) continue
+      assert.equal(row['Rounded Off (-)'], '')
+      assert.equal(row['Rounded Off (+)'], '')
+      assert.equal(row['Rounded Off (-)'] !== '' && row['Rounded Off (+)'] !== '', false)
+    }
     const subtotalPaise = Math.round((preview.parts5 + preview.parts18 + preview.labour) * 100)
     const finalPaise = subtotalPaise + Math.round(preview.roundOff * 100)
     assert.equal(finalPaise % 100, 0)
@@ -280,7 +293,7 @@ test('18. multiple Parts rows for same invoice aggregate correctly', () => {
   })
   assertInvoiceVoucherContract(result)
   assert.equal(result.preview[0].parts5, 157.5)
-  assert.equal(result.invoiceRows.length, 4)
+  assert.equal(result.invoiceRows.length, 3)
   assert.equal(result.invoiceRows.find((row) => row['Item Name'] === 'SPARE PARTS @18%').Amount, 0)
   assert.equal(result.invoiceRows.find((row) => row['Item Name'] === 'LABOUR CHARGES @18%').Amount, 0)
 })
@@ -426,7 +439,9 @@ test('workbook headers match BUSY contracts', () => {
     Series: 'PV-S 26-27',
   }])
   assert.deepEqual(workbookHeaders(invoiceWb), [...INVOICE_VOUCHER_HEADERS])
-  assert.equal(workbookHeaders(invoiceWb).at(-1), 'Series')
+  assert.equal(workbookHeaders(invoiceWb).at(-3), 'Series')
+  assert.equal(workbookHeaders(invoiceWb).at(-2), 'Rounded Off (-)')
+  assert.equal(workbookHeaders(invoiceWb).at(-1), 'Rounded Off (+)')
   const invoiceRows = workbookDataRows(invoiceWb)
   assert.equal(invoiceRows[0]['bill no'], 'IMBTAI1')
   assert.equal(invoiceRows[0].Series, 'PV-S 26-27')
@@ -1127,7 +1142,8 @@ test('Series is derived from bill no and repeated on every voucher row including
   const workbookRows = workbookDataRows(workbook)
   assert.equal(headers.includes('Series'), true)
   assert.deepEqual(headers, [...INVOICE_VOUCHER_HEADERS])
-  assert.equal(headers.at(-1), 'Series')
+  assert.equal(headers.at(-1), 'Rounded Off (+)')
+  assert.equal(headers.at(-3), 'Series')
   assert.equal(workbookRows.length, result.invoiceRows.length)
 
   const groups = voucherGroups(workbookRows)
@@ -1135,8 +1151,8 @@ test('Series is derived from bill no and repeated on every voucher row including
   const evRows = groups.get('EMBTAI2627006634')
   assert.ok(pvRows)
   assert.ok(evRows)
-  assert.deepEqual(pvRows.map((row) => row['Item Name']), ['SPARE PARTS @18%', 'LABOUR CHARGES @18%', 'Rounded Off'])
-  assert.deepEqual(evRows.map((row) => row['Item Name']), ['SPARE PARTS @18%', 'LABOUR CHARGES @18%', 'Rounded Off'])
+  assert.deepEqual(pvRows.map((row) => row['Item Name']), ['SPARE PARTS @18%', 'LABOUR CHARGES @18%'])
+  assert.deepEqual(evRows.map((row) => row['Item Name']), ['SPARE PARTS @18%', 'LABOUR CHARGES @18%'])
   assert.equal(pvRows.every((row) => row.Series === 'PV-S 26-27'), true)
   assert.equal(evRows.every((row) => row.Series === 'EV-S 26-27'), true)
   assert.equal(pvRows.at(-1).Series, 'PV-S 26-27')
@@ -1145,11 +1161,15 @@ test('Series is derived from bill no and repeated on every voucher row including
   assert.equal(evRows[1]['Party Name'], 'SITA DEVI-SITAPURA RJ14EV6634')
   assert.equal(pvRows[1].Amount, 10823.55)
   assert.equal(evRows[1].Amount, 10823.55)
-  assert.equal(pvRows.at(-1).Amount, 0.45)
-  assert.equal(evRows.at(-1).Amount, 0.45)
+  assert.equal(pvRows[1]['Rounded Off (+)'], 0.45)
+  assert.equal(pvRows[1]['Rounded Off (-)'], '')
+  assert.equal(evRows[1]['Rounded Off (+)'], 0.45)
+  assert.equal(evRows[1]['Rounded Off (-)'], '')
+  assert.equal(pvRows[0]['Rounded Off (+)'], '')
+  assert.equal(evRows[0]['Rounded Off (-)'], '')
 })
 
-test('Rounded Off is emitted only when labour+parts subtotal has a decimal part', () => {
+test('Round Off columns hold the magnitude once on the Labour row', () => {
   const result = transformBusyAccounting({
     labourRows: [
       labour({ invoice_number: 'IMBTAI1', job_card_number: 'JC-A', final_labour_amount: 10823.55 }),
@@ -1162,12 +1182,20 @@ test('Rounded Off is emitted only when labour+parts subtotal has a decimal part'
   })
   assertInvoiceVoucherContract(result)
   const groups = voucherGroups(result.invoiceRows)
-  assert.equal(groups.get('IMBTAI1').at(-1)['Item Name'], 'Rounded Off')
-  assert.equal(groups.get('IMBTAI1').at(-1).Amount, 0.45)
-  assert.equal(groups.get('IMBTAI2').at(-1)['Item Name'], 'Rounded Off')
-  assert.equal(groups.get('IMBTAI2').at(-1).Amount, -0.20)
-  assert.equal(groups.get('IMBTAI3').some((row) => row['Item Name'] === 'Rounded Off'), false)
-  assert.equal(groups.get('IMBTAI3').length, 2)
+  const positive = groups.get('IMBTAI1')
+  const negative = groups.get('IMBTAI2')
+  const whole = groups.get('IMBTAI3')
+  assert.deepEqual(positive.map((row) => row['Item Name']), ['SPARE PARTS @18%', 'LABOUR CHARGES @18%'])
+  assert.equal(positive[1]['Rounded Off (+)'], 0.45)
+  assert.equal(positive[1]['Rounded Off (-)'], '')
+  assert.equal(positive[0]['Rounded Off (+)'], '')
+  assert.equal(negative[1].Amount, 9003.20)
+  assert.equal(negative[1]['Rounded Off (-)'], 0.20)
+  assert.equal(negative[1]['Rounded Off (+)'], '')
+  assert.equal(whole.some((row) => /round/i.test(String(row['Item Name']))), false)
+  assert.equal(whole.length, 2)
+  assert.equal(whole[1]['Rounded Off (-)'], '')
+  assert.equal(whole[1]['Rounded Off (+)'], '')
   assert.equal(result.preview.find((row) => row.invoiceNumber === 'IMBTAI1').total, 10824)
   assert.equal(result.preview.find((row) => row.invoiceNumber === 'IMBTAI2').total, 9003)
   assert.equal(result.preview.find((row) => row.invoiceNumber === 'IMBTAI3').roundOff, 0)
@@ -1187,6 +1215,54 @@ const partsLine = (overrides = {}) => ({
   sourceRowKey: 'row-1',
   sourceFileName: 'parts-pv.csv',
   ...overrides,
+})
+
+test('practical Round Off cases A-D stay on one Labour cell', () => {
+  const result = transformBusyAccounting({
+    labourRows: [
+      labour({ invoice_number: 'EMBTAI2627006724', portal: 'EV', sr_assigned_to: 'EV_500A840', job_card_number: 'JC-A', final_labour_amount: 6390.88 }),
+      labour({ invoice_number: 'IMBTAI2627000002', job_card_number: 'JC-B', final_labour_amount: 4613.80 }),
+      labour({ invoice_number: 'IMBTAI2627000003', job_card_number: 'JC-C', final_labour_amount: 1180 }),
+      labour({ invoice_number: 'IMBTAI2627000004', job_card_number: 'JC-D', final_labour_amount: 1000.15 }),
+    ],
+    partsLines: [
+      partsLine({ portal: 'EV', jobCardNumber: 'JC-A', invoiceNumber: 'EMBTAI2627006724', netAmount: 430, taxAmount: 0, gstRate: 18, sourceRowKey: 'a' }),
+      partsLine({ jobCardNumber: 'JC-B', invoiceNumber: 'IMBTAI2627000002', netAmount: 2836.51, taxAmount: 0, gstRate: 18, sourceRowKey: 'b' }),
+      partsLine({ jobCardNumber: 'JC-D', invoiceNumber: 'IMBTAI2627000004', netAmount: 100, taxAmount: 0, gstRate: 5, sourceRowKey: 'd5' }),
+      partsLine({ jobCardNumber: 'JC-D', invoiceNumber: 'IMBTAI2627000004', netAmount: 10, taxAmount: 0, gstRate: 18, sourceRowKey: 'd18' }),
+    ],
+    fromDate: '2026-09-01',
+    toDate: '2026-09-10',
+  })
+  assertInvoiceVoucherContract(result)
+  const groups = voucherGroups(result.invoiceRows)
+  const blank = (row) => {
+    assert.equal(row['Rounded Off (-)'], '')
+    assert.equal(row['Rounded Off (+)'], '')
+  }
+  const caseA = groups.get('EMBTAI2627006724')
+  assert.equal(caseA[0].Amount, 430)
+  assert.equal(caseA[1].Amount, 6390.88)
+  blank(caseA[0])
+  assert.equal(caseA[1]['Rounded Off (-)'], '')
+  assert.equal(caseA[1]['Rounded Off (+)'], 0.12)
+  assert.equal(caseA.length, 2)
+  const caseB = groups.get('IMBTAI2627000002')
+  assert.equal(caseB[0].Amount, 2836.51)
+  assert.equal(caseB[1].Amount, 4613.80)
+  blank(caseB[0])
+  assert.equal(caseB[1]['Rounded Off (-)'], 0.31)
+  assert.equal(caseB[1]['Rounded Off (+)'], '')
+  const caseC = groups.get('IMBTAI2627000003')
+  assert.equal(caseC.length, 2)
+  blank(caseC[0])
+  blank(caseC[1])
+  const caseD = groups.get('IMBTAI2627000004')
+  assert.deepEqual(caseD.map((row) => row['Item Name']), ['SPARE PARTS @5%', 'SPARE PARTS @18%', 'LABOUR CHARGES @18%'])
+  blank(caseD[0])
+  blank(caseD[1])
+  assert.equal(caseD[2]['Rounded Off (-)'], 0.15)
+  assert.equal(caseD[2]['Rounded Off (+)'], '')
 })
 
 function attemptInvoiceVoucherExport(input) {
@@ -1632,8 +1708,10 @@ test('Parts-only GST split keeps 5% and 18% and rounds off the parts subtotal', 
     'SPARE PARTS @5%',
     'SPARE PARTS @18%',
     'LABOUR CHARGES @18%',
-    'Rounded Off',
   ])
+  const host = result.invoiceRows.find((row) => row['Item Name'] === 'LABOUR CHARGES @18%')
+  const filled = [host['Rounded Off (-)'], host['Rounded Off (+)']].filter((value) => value !== '')
+  assert.equal(filled.length, result.preview[0].roundOff === 0 ? 0 : 1)
 })
 
 test('supplied PV.csv dealer invoices resolve by code when the file is present', () => {
@@ -1671,13 +1749,18 @@ test('supplied PV.csv dealer invoices resolve by code when the file is present',
   assert.equal(extractPartsAccountCode(mapped.lines.find((line) => line.invoiceNumber === 'IMBTAI2627007319').accountName), '3000080')
   const workbook = buildInvoiceVoucherWorkbook(result.invoiceRows)
   const exported = workbookDataRows(workbook).filter((row) => row['bill no'] === 'IMBTAI2627007329')
-  assert.equal(exported.length >= 3, true)
+  assert.equal(exported.length >= 2, true)
   assert.equal(exported.every((row) => row['Party Name'] === 'AUTOPLEX AV'), true)
   assert.equal(exported.every((row) => row.Series === 'PV-S 26-27'), true)
   assert.equal(exported.find((row) => row['Item Name'] === 'LABOUR CHARGES @18%').Amount, 0)
   assert.equal(exported.find((row) => row['Item Name'] === 'SPARE PARTS @18%').Amount, plex.parts18)
   if (plex.roundOff !== 0) {
-    assert.equal(exported.find((row) => row['Item Name'] === 'Rounded Off').Amount, plex.roundOff)
+    const host = exported.find((row) => row['Item Name'] === 'LABOUR CHARGES @18%')
+    const column = plex.roundOff > 0 ? 'Rounded Off (+)' : 'Rounded Off (-)'
+    const other = plex.roundOff > 0 ? 'Rounded Off (-)' : 'Rounded Off (+)'
+    assert.equal(host[column], Math.abs(plex.roundOff))
+    assert.equal(host[other], '')
+    assert.equal(exported.filter((row) => row['Rounded Off (-)'] !== '' || row['Rounded Off (+)'] !== '').length, 1)
   }
 })
 

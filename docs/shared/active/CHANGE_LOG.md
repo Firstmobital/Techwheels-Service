@@ -5,7 +5,7 @@ Tracks documentation-sync updates for business logic, architecture, and access c
 ## 2026-09-24
 
 - Recovery **DMS bill-to** stays filled when `psf_revenue_dms.account` exists. An empty `bodyshop_settlements.invoice_account` is copied from the latest live DMS invoice on settlement open and on each DMS import statement. A bill-to that is already stored is left as-is. Policy company is not changed. Customer first/last name is not used as the bill-to. Ledger: DBL-0084. Plan: `BODYSHOP-SETTLEMENT-001`.
-- BUSY Invoice Voucher Round Off Item Name is the BUSY master `Rounded Off` for both positive and negative amounts. The previous export name `Rounded Off (+)` is not used. Round Off calculation, Parts/Labour names, and other voucher fields are unchanged. Plan: `BUSY-001`.
+- BUSY Invoice Vouchers put Round Off in columns `Rounded Off (-)` and `Rounded Off (+)` on the Labour row only. The cell is the unsigned magnitude. A positive difference fills the plus column, a negative difference fills the minus column, and a whole-rupee subtotal leaves both blank. There is no Round Off item row. Plan: `BUSY-001`.
 
 ## 2026-09-23
 

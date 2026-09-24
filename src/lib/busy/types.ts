@@ -68,6 +68,8 @@ export const INVOICE_VOUCHER_HEADERS = [
   'Amount',
   'naration',
   'Series',
+  'Rounded Off (-)',
+  'Rounded Off (+)',
 ] as const
 
 export const PARTY_ACCOUNT_HEADERS = ['Party Name', 'Group', 'GSTIN'] as const
@@ -75,4 +77,5 @@ export const PARTY_ACCOUNT_HEADERS = ['Party Name', 'Group', 'GSTIN'] as const
 export const ITEM_SPARE_PARTS_5 = 'SPARE PARTS @5%'
 export const ITEM_SPARE_PARTS_18 = 'SPARE PARTS @18%'
 export const ITEM_LABOUR_18 = 'LABOUR CHARGES @18%'
-export const ITEM_ROUND_OFF = 'Rounded Off'
+export const ROUND_OFF_MINUS = 'Rounded Off (-)'
+export const ROUND_OFF_PLUS = 'Rounded Off (+)'

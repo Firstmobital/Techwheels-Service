@@ -1,11 +1,15 @@
 import * as XLSX from 'xlsx'
-import { INVOICE_VOUCHER_HEADERS, PARTY_ACCOUNT_HEADERS } from './types.ts'
+import { INVOICE_VOUCHER_HEADERS, PARTY_ACCOUNT_HEADERS, ROUND_OFF_MINUS, ROUND_OFF_PLUS } from './types.ts'
 import type { InvoiceVoucherRow, PartyAccountRow } from './transform.ts'
 
 function aoaFromObjects(headers: readonly string[], rows: Array<Record<string, unknown>>): unknown[][] {
   return [
     [...headers],
-    ...rows.map((row) => headers.map((header) => row[header] ?? '')),
+    ...rows.map((row) => headers.map((header) => {
+      const value = row[header]
+      if ((header === ROUND_OFF_MINUS || header === ROUND_OFF_PLUS) && (value === '' || value == null)) return null
+      return value ?? ''
+    })),
   ]
 }
 
@@ -22,6 +26,8 @@ export function buildInvoiceVoucherWorkbook(rows: InvoiceVoucherRow[]): XLSX.Wor
     { wch: 14 },
     { wch: 18 },
     { wch: 14 },
+    { wch: 16 },
+    { wch: 16 },
   ]
   XLSX.utils.book_append_sheet(workbook, sheet, 'Invoice')
   return workbook

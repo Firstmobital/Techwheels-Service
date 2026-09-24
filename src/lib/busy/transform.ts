@@ -18,7 +18,7 @@ import type {
   BusyPartsLine,
   BusyRowStatus,
 } from './types.ts'
-import { ITEM_LABOUR_18, ITEM_ROUND_OFF, ITEM_SPARE_PARTS_18, ITEM_SPARE_PARTS_5 } from './types.ts'
+import { ITEM_LABOUR_18, ITEM_SPARE_PARTS_18, ITEM_SPARE_PARTS_5, ROUND_OFF_MINUS, ROUND_OFF_PLUS } from './types.ts'
 import type { VehiclePortal } from './types.ts'
 
 export interface BusyPreviewRow {
@@ -53,6 +53,8 @@ export interface InvoiceVoucherRow {
   Amount: number
   naration: string
   Series: string
+  'Rounded Off (-)': number | ''
+  'Rounded Off (+)': number | ''
 }
 
 export interface PartyAccountRow {
@@ -538,10 +540,15 @@ export function transformBusyAccounting(input: {
     const voucherNarration = buildNarration(row)
     // 5% row only when matched Parts data has a genuine 5% GST line (not amount > 0).
     // 18% Parts and Labour rows are always emitted, including Amount 0.
-    if (row.hasParts5Line) invoiceRows.push(voucherRow(row, ITEM_SPARE_PARTS_5, row.parts5, voucherNarration))
-    invoiceRows.push(voucherRow(row, ITEM_SPARE_PARTS_18, row.parts18, voucherNarration))
-    invoiceRows.push(voucherRow(row, ITEM_LABOUR_18, row.labour, voucherNarration))
-    if (row.roundOff !== 0) invoiceRows.push(voucherRow(row, ITEM_ROUND_OFF, row.roundOff, voucherNarration))
+    // Round Off is columns J/K on one host row, never an Item Name line.
+    const itemRows: Array<{ itemName: string; amount: number }> = []
+    if (row.hasParts5Line) itemRows.push({ itemName: ITEM_SPARE_PARTS_5, amount: row.parts5 })
+    itemRows.push({ itemName: ITEM_SPARE_PARTS_18, amount: row.parts18 })
+    itemRows.push({ itemName: ITEM_LABOUR_18, amount: row.labour })
+    const hostItem = selectRoundOffHostItem(itemRows.map((item) => item.itemName))
+    for (const item of itemRows) {
+      invoiceRows.push(voucherRow(row, item.itemName, item.amount, voucherNarration, item.itemName === hostItem))
+    }
   }
 
   const partySeen = new Set<string>()
@@ -601,7 +608,29 @@ function buildNarration(row: BusyPreviewRow): string {
   return row.vehicleRegistration || row.jobCard
 }
 
-function voucherRow(row: BusyPreviewRow, itemName: string, amount: number, narration: string): InvoiceVoucherRow {
+/** Labour, then 18% Parts, then the first item row. Eligible invoices always have Labour. */
+export function selectRoundOffHostItem(itemNames: readonly string[]): string {
+  if (itemNames.includes(ITEM_LABOUR_18)) return ITEM_LABOUR_18
+  if (itemNames.includes(ITEM_SPARE_PARTS_18)) return ITEM_SPARE_PARTS_18
+  return itemNames[0] ?? ''
+}
+
+/**
+ * Signed difference stays in preview.roundOff.
+ * The workbook writes the magnitude in only one column, and only on the host row.
+ * The other column, non-host rows, and a zero difference stay blank.
+ */
+export function roundOffExportCells(signedRoundOff: number, isHost: boolean): Pick<InvoiceVoucherRow, 'Rounded Off (-)' | 'Rounded Off (+)'> {
+  if (!isHost || signedRoundOff === 0) {
+    return { [ROUND_OFF_MINUS]: '', [ROUND_OFF_PLUS]: '' }
+  }
+  if (signedRoundOff < 0) {
+    return { [ROUND_OFF_MINUS]: roundPaise(Math.abs(signedRoundOff)), [ROUND_OFF_PLUS]: '' }
+  }
+  return { [ROUND_OFF_MINUS]: '', [ROUND_OFF_PLUS]: roundPaise(signedRoundOff) }
+}
+
+function voucherRow(row: BusyPreviewRow, itemName: string, amount: number, narration: string, isRoundOffHost: boolean): InvoiceVoucherRow {
   return {
     'Bill date': formatBusyBillDate(row.invoiceDate),
     'bill no': row.invoiceNumber,
@@ -612,6 +641,7 @@ function voucherRow(row: BusyPreviewRow, itemName: string, amount: number, narra
     Amount: amount,
     naration: narration,
     Series: busyVoucherSeries(row.invoiceNumber),
+    ...roundOffExportCells(row.roundOff, isRoundOffHost),
   }
 }
 

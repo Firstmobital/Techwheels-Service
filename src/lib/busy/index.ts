@@ -78,7 +78,7 @@ export {
   VOUCHER_SOURCE_WARNING,
   type BusyVoucherSourceAvailability,
 } from './sourceAvailability.ts'
-export { transformBusyAccounting, type BusyPreviewRow, type InvoiceVoucherRow, type PartyAccountRow } from './transform.ts'
+export { transformBusyAccounting, selectRoundOffHostItem, roundOffExportCells, type BusyPreviewRow, type InvoiceVoucherRow, type PartyAccountRow } from './transform.ts'
 export { buildInvoiceVoucherWorkbook, buildPartyAccountWorkbook, busyXlsxWriteOptions, BUSY_INVOICE_XLSX_WRITE_OPTIONS, downloadBusyWorkbook, workbookHeaders, workbookDataRows } from './xlsx.ts'
 export {
   fetchBusyLabourRows,
@@ -87,4 +87,4 @@ export {
   fetchBusyLabourRowsByVehicleRegistrationNumbers,
   loadBusyLabourSourceStatus,
 } from './labourSource.ts'
-export { INVOICE_VOUCHER_HEADERS, PARTY_ACCOUNT_HEADERS, ITEM_LABOUR_18, ITEM_ROUND_OFF, ITEM_SPARE_PARTS_5, ITEM_SPARE_PARTS_18 } from './types.ts'
+export { INVOICE_VOUCHER_HEADERS, PARTY_ACCOUNT_HEADERS, ITEM_LABOUR_18, ITEM_SPARE_PARTS_5, ITEM_SPARE_PARTS_18, ROUND_OFF_MINUS, ROUND_OFF_PLUS } from './types.ts'
