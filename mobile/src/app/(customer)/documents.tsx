@@ -17,6 +17,8 @@ import { CustomerScreen } from '../../components/customer/CustomerScreen'
 import { CustomerCard } from '../../components/customer/customerUi'
 import { useCustomerSession } from '../../context/CustomerSessionContext'
 import { Icon } from '../../components/ui/Icon'
+import { ClaimFormWidget } from '../../components/ClaimFormWidget'
+import { matchInsuranceProviderId } from '../../config/insuranceProviders'
 import {
   customerListBodyshopAssets,
   customerUploadBodyshopAsset,
@@ -319,6 +321,10 @@ export default function CustomerDocumentsScreen() {
               </>
             ) : null}
           </CustomerCard>
+
+          {claimMode === 'insurance' ? (
+            <ClaimFormWidget userInsurerId={matchInsuranceProviderId(String(repairCard?.insurance_company || ''))} />
+          ) : null}
 
           {claimMode === 'insurance' ? (
             <CustomerCard style={{ backgroundColor: '#ffffff', borderColor: '#D9E5F5' }}>
