@@ -344,6 +344,8 @@ export default function CustomerDashboardScreen() {
             </View>
           </TouchableOpacity>
 
+          <ClaimFormWidget userInsurerId={matchInsuranceProviderId(asText(job?.insurance_company))} />
+
           {/* ── LIVE REPAIR TRACKER (INLINE DETAILS ACCORDION) ── */}
           {(() => {
             const effectiveStage = activeStageIndex !== null ? activeStageIndex : currentStageIndex
@@ -489,8 +491,6 @@ export default function CustomerDashboardScreen() {
               </View>
             )
           })()}
-
-          <ClaimFormWidget userInsurerId={matchInsuranceProviderId(asText(job?.insurance_company))} />
 
           {/* ── ACTION SHORTCUT TILES ── */}
           <View className="flex-row flex-wrap" style={{ gap: 10, marginBottom: 2 }}>
