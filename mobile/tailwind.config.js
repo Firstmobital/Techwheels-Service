@@ -5,6 +5,7 @@ module.exports = {
   presets: [require('nativewind/preset')],
   theme: {
     extend: {
+      colors: {
         // Tata.cars & Tata.ev Brand Palette
         'tata-navy': '#002B49',
         'tata-blue': '#003366',
