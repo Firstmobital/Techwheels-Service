@@ -46,6 +46,7 @@ export default function CustomerDashboardScreen() {
   const [showTrackerDetails, setShowTrackerDetails] = useState<boolean>(false)
   const [checkingOta, setCheckingOta] = useState(false)
   const [otaStatusText, setOtaStatusText] = useState<string | null>(null)
+  const [showAccidentalIntro, setShowAccidentalIntro] = useState(false)
 
   const handleManualOtaUpdate = async () => {
     setCheckingOta(true)
@@ -127,6 +128,7 @@ export default function CustomerDashboardScreen() {
     received: settlement?.amount_received ?? job?.amount_received ?? selected?.amount_received,
   })
   const advisorPhone = pickAdvisorPhone(job) || pickAdvisorPhone(selected as unknown as Record<string, unknown>)
+  const isAccident = String(serviceType || '').toLowerCase().includes('accident') || String(serviceType || '').toLowerCase().includes('body')
 
   // 5 Service Stages for Clean Live Tracker
   // Stage index: 0=Intake, 1=JobCard, 2=Quote, 3=BayWork, 4=Ready
@@ -338,6 +340,61 @@ export default function CustomerDashboardScreen() {
               </TouchableOpacity>
             </View>
           </LinearGradient>
+
+          {/* ── SIMPLE CUSTOMER SERVICE TYPE ENTRY ── */}
+          <CustomerCard style={{ backgroundColor: '#ffffff', borderColor: '#D9E5F5', padding: 16 }}>
+            <Text style={{ color: '#0f172a', fontSize: 16, fontWeight: '900' }}>Select Service Type</Text>
+            <Text style={{ color: '#64748b', fontSize: 12, marginTop: 3, marginBottom: 12 }}>
+              Choose what you want to manage in the Techwheels customer app.
+            </Text>
+            <View style={{ flexDirection: 'row', gap: 10 }}>
+              <TouchableOpacity
+                onPress={() => setShowAccidentalIntro(true)}
+                activeOpacity={0.82}
+                style={{
+                  flex: 1,
+                  minHeight: 112,
+                  borderRadius: 18,
+                  padding: 14,
+                  justifyContent: 'space-between',
+                  backgroundColor: isAccident ? '#E8F1FF' : '#F8FBFF',
+                  borderWidth: isAccident ? 2 : 1.2,
+                  borderColor: isAccident ? '#0B5FFF' : '#D9E5F5',
+                }}
+              >
+                <View style={{ width: 42, height: 42, borderRadius: 13, backgroundColor: '#0B5FFF', alignItems: 'center', justifyContent: 'center' }}>
+                  <Icon name="car" size={21} color="#ffffff" />
+                </View>
+                <View>
+                  <Text style={{ color: '#0f172a', fontSize: 14, fontWeight: '900' }}>Accidental Repair</Text>
+                  <Text style={{ color: '#64748b', fontSize: 10.5, marginTop: 2 }}>Documents, photos, claim & bodyshop tracking</Text>
+                </View>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                onPress={() => router.push('/(customer)/booking')}
+                activeOpacity={0.82}
+                style={{
+                  flex: 1,
+                  minHeight: 112,
+                  borderRadius: 18,
+                  padding: 14,
+                  justifyContent: 'space-between',
+                  backgroundColor: '#F8FBFF',
+                  borderWidth: 1.2,
+                  borderColor: '#D9E5F5',
+                }}
+              >
+                <View style={{ width: 42, height: 42, borderRadius: 13, backgroundColor: '#062B62', alignItems: 'center', justifyContent: 'center' }}>
+                  <Icon name="sliders" size={21} color="#ffffff" />
+                </View>
+                <View>
+                  <Text style={{ color: '#0f172a', fontSize: 14, fontWeight: '900' }}>General Service</Text>
+                  <Text style={{ color: '#64748b', fontSize: 10.5, marginTop: 2 }}>Schedule service, running repair & maintenance</Text>
+                </View>
+              </TouchableOpacity>
+            </View>
+          </CustomerCard>
 
           {/* ── PRIMARY BOOK SERVICE CTA (TATA.EV TEAL ACCENT) ── */}
           <TouchableOpacity
@@ -715,6 +772,69 @@ export default function CustomerDashboardScreen() {
           </TouchableOpacity>
         </>
       )}
+      <Modal
+        visible={showAccidentalIntro}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowAccidentalIntro(false)}
+      >
+        <View style={{ flex: 1, backgroundColor: 'rgba(2,17,38,0.72)', justifyContent: 'flex-end' }}>
+          <TouchableOpacity style={{ flex: 1 }} activeOpacity={1} onPress={() => setShowAccidentalIntro(false)} />
+          <View style={{ backgroundColor: '#ffffff', borderTopLeftRadius: 28, borderTopRightRadius: 28, padding: 20, paddingBottom: 32 }}>
+            <View style={{ width: 48, height: 48, borderRadius: 15, backgroundColor: '#E8F1FF', alignItems: 'center', justifyContent: 'center', marginBottom: 12 }}>
+              <Icon name="file-text" size={24} color="#0B5FFF" />
+            </View>
+            <Text style={{ color: '#0f172a', fontSize: 22, fontWeight: '900' }}>Needed from you</Text>
+            <Text style={{ color: '#64748b', fontSize: 12.5, lineHeight: 19, marginTop: 5 }}>
+              Help us start and process your accidental repair faster by uploading the customer-side paperwork directly into your bodyshop case.
+            </Text>
+
+            <View style={{ backgroundColor: '#F8FBFF', borderWidth: 1, borderColor: '#D9E5F5', borderRadius: 16, padding: 13, marginTop: 15 }}>
+              {[
+                'RC / Registration Certificate',
+                'Insurance Policy Copy',
+                'Driving Licence',
+                'Signed Claim Form',
+                'Aadhaar / KYC & PAN',
+                'Bank details / Cancelled cheque',
+                'GST / Company PAN when applicable',
+                'T/P affidavit for major cases',
+                'Damage photos',
+              ].map((item) => (
+                <View key={item} style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>
+                  <View style={{ width: 20, height: 20, borderRadius: 10, backgroundColor: '#E8F1FF', alignItems: 'center', justifyContent: 'center', marginRight: 9 }}>
+                    <Icon name="check" size={12} color="#0B5FFF" strokeWidth={2.5} />
+                  </View>
+                  <Text style={{ color: '#334155', fontSize: 12, fontWeight: '700', flex: 1 }}>{item}</Text>
+                </View>
+              ))}
+            </View>
+
+            <Text style={{ color: '#64748b', fontSize: 11.5, lineHeight: 17, marginTop: 12 }}>
+              You can use Camera, Gallery or Files. Anything uploaded here becomes visible to the Techwheels bodyshop team in the same 18-stage repair case.
+            </Text>
+
+            <TouchableOpacity
+              onPress={() => {
+                setShowAccidentalIntro(false)
+                router.push('/(customer)/documents')
+              }}
+              style={{ backgroundColor: '#0B5FFF', borderRadius: 16, paddingVertical: 14, alignItems: 'center', marginTop: 16 }}
+            >
+              <Text style={{ color: '#ffffff', fontWeight: '900', fontSize: 14 }}>Start Uploading →</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={() => {
+                setShowAccidentalIntro(false)
+                router.push('/(customer)/tracker')
+              }}
+              style={{ paddingVertical: 12, alignItems: 'center', marginTop: 3 }}
+            >
+              <Text style={{ color: '#0B5FFF', fontWeight: '800', fontSize: 12.5 }}>I have already uploaded • View Repair Tracker</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </CustomerScreen>
   )
 }
