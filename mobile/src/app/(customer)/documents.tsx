@@ -1,1140 +1,595 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   ActivityIndicator,
   Alert,
   Image,
+  Linking,
   Modal,
   Pressable,
-  ScrollView,
   Text,
   TouchableOpacity,
   View,
 } from 'react-native'
 import * as ImagePicker from 'expo-image-picker'
 import * as DocumentPicker from 'expo-document-picker'
-import AsyncStorage from '@react-native-async-storage/async-storage'
+import { useFocusEffect, useRouter } from 'expo-router'
 import { CustomerScreen } from '../../components/customer/CustomerScreen'
 import { CustomerCard } from '../../components/customer/customerUi'
 import { useCustomerSession } from '../../context/CustomerSessionContext'
 import { Icon } from '../../components/ui/Icon'
+import {
+  customerListBodyshopAssets,
+  customerUploadBodyshopAsset,
+  type CustomerBodyshopAsset,
+} from '../../lib/api/customerBodyshopUploads'
+import { customerGetRepairCard } from '../../lib/api/customerPortal'
 
-export type ClaimMode = 'insurance' | 'cash'
-export type OwnershipType = 'individual' | 'firm'
-export type DamageSeverity = 'standard' | 'major'
+type ClaimMode = 'insurance' | 'cash'
+type OwnershipType = 'individual' | 'firm'
+type DamageSeverity = 'standard' | 'major'
 
-export interface DocumentSlot {
-  id: string
+type RequiredDocument = {
   docKey: string
   title: string
-  slotLabel: string
-  category: 'individual' | 'firm' | 'major'
-  pageNumber?: number
-  totalPages?: number
-  isMandatory: boolean
-  description: string
+  subtitle: string
+  required: boolean
+  condition?: 'firm' | 'major'
+  hint: string
 }
 
-export interface UploadedSlotState {
-  uri: string
-  fileName?: string
-  uploadedAt: string
-  fileType: 'image' | 'pdf'
-  remotePath?: string
-  status: 'uploaded' | 'verified' | 'rejected' | 'pending'
-  rejectionReason?: string
+type DamagePhotoSlot = {
+  id: string
+  title: string
+  hint: string
 }
 
-const ALL_SLOTS: DocumentSlot[] = [
-  // 1. Driving Licence (2 photos: Front & Back)
-  {
-    id: 'dl_front',
-    docKey: 'doc_dl',
-    title: 'Driving Licence',
-    slotLabel: 'Front Side Photo',
-    category: 'individual',
-    pageNumber: 1,
-    totalPages: 2,
-    isMandatory: true,
-    description: "Clear photo of the driver's licence front side showing name & licence number.",
-  },
-  {
-    id: 'dl_back',
-    docKey: 'doc_dl',
-    title: 'Driving Licence',
-    slotLabel: 'Back Side Photo',
-    category: 'individual',
-    pageNumber: 2,
-    totalPages: 2,
-    isMandatory: true,
-    description: 'Photo of the back side showing validity & vehicle class endorsement.',
-  },
-
-  // 2. PAN Card (1 photo)
-  {
-    id: 'pan_card',
-    docKey: 'doc_pan',
-    title: 'PAN Card',
-    slotLabel: 'Front Photo',
-    category: 'individual',
-    pageNumber: 1,
-    totalPages: 1,
-    isMandatory: true,
-    description: "Clear photo of the vehicle owner's PAN card.",
-  },
-
-  // 3. Aadhaar Card (2 photos: Front & Back)
-  {
-    id: 'aadhaar_front',
-    docKey: 'doc_aadhaar',
-    title: 'Aadhaar Card',
-    slotLabel: 'Front Side Photo',
-    category: 'individual',
-    pageNumber: 1,
-    totalPages: 2,
-    isMandatory: true,
-    description: 'Front side of Aadhaar card showing photo, name & DOB.',
-  },
-  {
-    id: 'aadhaar_back',
-    docKey: 'doc_aadhaar',
-    title: 'Aadhaar Card',
-    slotLabel: 'Back Side Photo',
-    category: 'individual',
-    pageNumber: 2,
-    totalPages: 2,
-    isMandatory: true,
-    description: 'Back side of Aadhaar card showing complete address.',
-  },
-
-  // 4. RC Copy (2 photos: Front & Back)
-  {
-    id: 'rc_front',
-    docKey: 'doc_rc',
-    title: 'RC (Registration Certificate)',
-    slotLabel: 'Front Side Photo',
-    category: 'individual',
-    pageNumber: 1,
-    totalPages: 2,
-    isMandatory: true,
-    description: 'Front side of Vehicle RC / Smart Card showing Chassis & Engine No.',
-  },
-  {
-    id: 'rc_back',
-    docKey: 'doc_rc',
-    title: 'RC (Registration Certificate)',
-    slotLabel: 'Back Side Photo',
-    category: 'individual',
-    pageNumber: 2,
-    totalPages: 2,
-    isMandatory: true,
-    description: 'Back side of Vehicle RC showing registration & tax validity.',
-  },
-
-  // 5. Insurance Copy (3 pages / PDF)
-  {
-    id: 'insurance_p1',
-    docKey: 'doc_insurance',
-    title: 'Insurance Policy Copy',
-    slotLabel: 'Page 1 (Policy Schedule)',
-    category: 'individual',
-    pageNumber: 1,
-    totalPages: 3,
-    isMandatory: true,
-    description: 'First page of insurance policy showing policy number, IDV & validity dates.',
-  },
-  {
-    id: 'insurance_p2',
-    docKey: 'doc_insurance',
-    title: 'Insurance Policy Copy',
-    slotLabel: 'Page 2 (Coverage Details)',
-    category: 'individual',
-    pageNumber: 2,
-    totalPages: 3,
-    isMandatory: true,
-    description: 'Second page showing OD/TP premium breakup and add-on covers (Zero Dep, etc.).',
-  },
-  {
-    id: 'insurance_p3',
-    docKey: 'doc_insurance',
-    title: 'Insurance Policy Copy',
-    slotLabel: 'Page 3 (Terms & Conditions)',
-    category: 'individual',
-    pageNumber: 3,
-    totalPages: 3,
-    isMandatory: true,
-    description: 'Third page / policy terms or endorsement sheet.',
-  },
-
-  // 6. Claim Form (4 pages / PDF)
-  {
-    id: 'claim_p1',
-    docKey: 'doc_claim_form',
-    title: 'Insurance Claim Form',
-    slotLabel: 'Page 1 (Accident Details)',
-    category: 'individual',
-    pageNumber: 1,
-    totalPages: 4,
-    isMandatory: true,
-    description: 'Claim form page 1 filled with accident date, time, location & description.',
-  },
-  {
-    id: 'claim_p2',
-    docKey: 'doc_claim_form',
-    title: 'Insurance Claim Form',
-    slotLabel: 'Page 2 (Driver & Witness Info)',
-    category: 'individual',
-    pageNumber: 2,
-    totalPages: 4,
-    isMandatory: true,
-    description: 'Page 2 with driver details at time of accident and third party details.',
-  },
-  {
-    id: 'claim_p3',
-    docKey: 'doc_claim_form',
-    title: 'Insurance Claim Form',
-    slotLabel: 'Page 3 (Damaged Parts List)',
-    category: 'individual',
-    pageNumber: 3,
-    totalPages: 4,
-    isMandatory: true,
-    description: 'Page 3 detailing damage overview and repair workshop name.',
-  },
-  {
-    id: 'claim_p4',
-    docKey: 'doc_claim_form',
-    title: 'Insurance Claim Form',
-    slotLabel: 'Page 4 (Signature & Declaration)',
-    category: 'individual',
-    pageNumber: 4,
-    totalPages: 4,
-    isMandatory: true,
-    description: 'Final declaration signed by the insured customer/company.',
-  },
-
-  // 7. Firm / Company Specific Documents
-  {
-    id: 'firm_gst',
-    docKey: 'doc_gst',
-    title: 'GST Registration Certificate',
-    slotLabel: 'GST Certificate Photo/PDF',
-    category: 'firm',
-    pageNumber: 1,
-    totalPages: 1,
-    isMandatory: true,
-    description: 'Official GST Certificate of the registered firm/company.',
-  },
-  {
-    id: 'firm_pan',
-    docKey: 'doc_company_pan',
-    title: 'Firm / Company PAN Card',
-    slotLabel: 'Company PAN Photo',
-    category: 'firm',
-    pageNumber: 1,
-    totalPages: 1,
-    isMandatory: true,
-    description: "PAN Card registered in the firm or company's name.",
-  },
-
-  // 8. Major Accident / Recovery Specific Documents
-  // T/P Affidavit (2 pages)
-  {
-    id: 'major_tp_affidavit_p1',
-    docKey: 'doc_tp_affidavit',
-    title: 'T/P Affidavit (Third-Party Undertaking)',
-    slotLabel: 'Page 1 (Notarized Stamp Paper)',
-    category: 'major',
-    pageNumber: 1,
-    totalPages: 2,
-    isMandatory: true,
-    description: 'First page of notarized T/P Affidavit / Third-Party Undertaking on stamp paper.',
-  },
-  {
-    id: 'major_tp_affidavit_p2',
-    docKey: 'doc_tp_affidavit',
-    title: 'T/P Affidavit (Third-Party Undertaking)',
-    slotLabel: 'Page 2 (Notary Stamp & Sign)',
-    category: 'major',
-    pageNumber: 2,
-    totalPages: 2,
-    isMandatory: true,
-    description: 'Second page showing advocate/notary seal, verification & customer signature.',
-  },
-
-  // KYC Form (2 pages)
-  {
-    id: 'major_kyc_p1',
-    docKey: 'doc_kyc',
-    title: 'KYC Form & Verification',
-    slotLabel: 'Page 1 (Identity & Bank Details)',
-    category: 'major',
-    pageNumber: 1,
-    totalPages: 2,
-    isMandatory: true,
-    description: 'First page of KYC form showing customer details and bank account verification.',
-  },
-  {
-    id: 'major_kyc_p2',
-    docKey: 'doc_kyc',
-    title: 'KYC Form & Verification',
-    slotLabel: 'Page 2 (Signature & Declaration)',
-    category: 'major',
-    pageNumber: 2,
-    totalPages: 2,
-    isMandatory: true,
-    description: 'Second page with customer signature, photo attestation & declaration.',
-  },
+const REQUIRED_DOCUMENTS: RequiredDocument[] = [
+  { docKey: 'doc_rc', title: 'Registration Certificate (RC)', subtitle: 'Vehicle ownership proof', required: true, hint: 'Upload clear RC front/back or a PDF copy.' },
+  { docKey: 'doc_insurance', title: 'Insurance Policy Copy', subtitle: 'Current policy schedule', required: true, hint: 'Upload the current insurance policy PDF or clear photos.' },
+  { docKey: 'doc_dl', title: 'Driving Licence', subtitle: 'Driver at time of accident', required: true, hint: 'Upload front and back of the valid driving licence.' },
+  { docKey: 'doc_claim_form', title: 'Insurance Claim Form', subtitle: 'Signed claim declaration', required: true, hint: 'Upload the filled and signed insurer claim form.' },
+  { docKey: 'doc_aadhaar', title: 'Aadhaar / Identity Proof', subtitle: 'KYC identity proof', required: true, hint: 'Upload a clear Aadhaar or accepted identity proof.' },
+  { docKey: 'doc_pan', title: 'PAN Card', subtitle: 'Customer PAN', required: true, hint: 'Upload a clear PAN card image.' },
+  { docKey: 'doc_bank_detail', title: 'Bank Details / Cancelled Cheque', subtitle: 'If required by insurer', required: true, hint: 'Upload cancelled cheque or bank detail proof.' },
+  { docKey: 'doc_gst', title: 'GST Registration Certificate', subtitle: 'For firm/company vehicles', required: true, condition: 'firm', hint: 'Required when the vehicle is registered to a firm/company.' },
+  { docKey: 'doc_company_pan', title: 'Company PAN', subtitle: 'For firm/company vehicles', required: true, condition: 'firm', hint: 'Required when the vehicle is registered to a firm/company.' },
+  { docKey: 'doc_kyc', title: 'KYC Form', subtitle: 'For major/insurer-specific cases', required: true, condition: 'major', hint: 'Upload completed KYC if requested for the claim.' },
+  { docKey: 'doc_tp_affidavit', title: 'T/P Affidavit / Undertaking', subtitle: 'For major/third-party cases', required: true, condition: 'major', hint: 'Upload notarized undertaking when applicable.' },
 ]
 
-export default function CustomerDocumentsScreen() {
-  const { selectedReg } = useCustomerSession()
+const DAMAGE_PHOTOS: DamagePhotoSlot[] = [
+  { id: 'front', title: 'Front View', hint: 'Full front side of the vehicle' },
+  { id: 'rear', title: 'Rear View', hint: 'Full rear side of the vehicle' },
+  { id: 'left', title: 'Left Side', hint: 'Full left profile' },
+  { id: 'right', title: 'Right Side', hint: 'Full right profile' },
+  { id: 'close', title: 'Damage Close-up', hint: 'Clear close photo of damaged area' },
+]
 
-  // Filter States
+function fileNameForPhoto(slot: DamagePhotoSlot) {
+  return `customer_${slot.id}_${Date.now()}.jpg`
+}
+
+function assetMatchesPhoto(asset: CustomerBodyshopAsset, slot: DamagePhotoSlot) {
+  return String(asset.file_name || '').toLowerCase().includes(`customer_${slot.id}_`)
+}
+
+export default function CustomerDocumentsScreen() {
+  const router = useRouter()
+  const { token, selectedReg } = useCustomerSession()
+  const [repairCard, setRepairCard] = useState<Record<string, unknown> | null>(null)
+  const [assets, setAssets] = useState<{ documents: CustomerBodyshopAsset[]; photos: CustomerBodyshopAsset[] }>({
+    documents: [],
+    photos: [],
+  })
+  const [loading, setLoading] = useState(true)
+  const [uploadingKey, setUploadingKey] = useState<string | null>(null)
   const [claimMode, setClaimMode] = useState<ClaimMode>('insurance')
   const [ownershipType, setOwnershipType] = useState<OwnershipType>('individual')
   const [damageSeverity, setDamageSeverity] = useState<DamageSeverity>('standard')
+  const [actionDoc, setActionDoc] = useState<RequiredDocument | null>(null)
+  const [actionPhoto, setActionPhoto] = useState<DamagePhotoSlot | null>(null)
 
-  // Upload States
-  const [uploads, setUploads] = useState<Record<string, UploadedSlotState>>({})
-  const [activeSlotForAction, setActiveSlotForAction] = useState<DocumentSlot | null>(null)
-  const [previewUri, setPreviewUri] = useState<string | null>(null)
-
-  const storageKey = `claim_docs_${selectedReg || 'default'}`
-
-  // Load saved slots
-  useEffect(() => {
-    async function loadSaved() {
-      try {
-        const raw = await AsyncStorage.getItem(storageKey)
-        if (raw) {
-          const parsed = JSON.parse(raw)
-          if (parsed.uploads) setUploads(parsed.uploads)
-          if (parsed.claimMode) setClaimMode(parsed.claimMode)
-          if (parsed.ownershipType) setOwnershipType(parsed.ownershipType)
-          if (parsed.damageSeverity) setDamageSeverity(parsed.damageSeverity)
-        }
-      } catch (err) {
-        console.warn('Failed to load local claim docs state:', err)
-      }
-    }
-    loadSaved()
-  }, [storageKey])
-
-  // Save changes
-  const persistState = async (
-    nextUploads: Record<string, UploadedSlotState>,
-    nextMode: ClaimMode,
-    nextOwner: OwnershipType,
-    nextDamage: DamageSeverity
-  ) => {
+  const load = useCallback(async () => {
+    if (!token || !selectedReg) return
+    setLoading(true)
     try {
-      await AsyncStorage.setItem(
-        storageKey,
-        JSON.stringify({
-          uploads: nextUploads,
-          claimMode: nextMode,
-          ownershipType: nextOwner,
-          damageSeverity: nextDamage,
-          updatedAt: new Date().toISOString(),
-        })
-      )
-    } catch (e) {
-      console.warn('Failed to persist claim docs:', e)
+      const [card, uploaded] = await Promise.all([
+        customerGetRepairCard(token, selectedReg),
+        customerListBodyshopAssets(token, selectedReg),
+      ])
+      setRepairCard(card)
+      setAssets(uploaded)
+      const cardType = String(card?.customer_type || '').toLowerCase()
+      setOwnershipType(cardType.includes('firm') || cardType.includes('company') ? 'firm' : 'individual')
+      const insured = Boolean(card?.insurance_company || card?.insurance_policy_no || card?.claim_intimation_no)
+      setClaimMode(insured ? 'insurance' : 'cash')
+      const major = String(card?.additional_approval || '').toLowerCase().includes('major')
+      setDamageSeverity(major ? 'major' : 'standard')
+    } catch (error) {
+      Alert.alert('Unable to load documents', error instanceof Error ? error.message : 'Please try again.')
+    } finally {
+      setLoading(false)
     }
-  }
+  }, [token, selectedReg])
 
-  // Active slots based on filters
-  const activeSlots = useMemo(() => {
+  useEffect(() => {
+    void load()
+  }, [load])
+
+  useFocusEffect(
+    useCallback(() => {
+      void load()
+    }, [load])
+  )
+
+  const activeDocs = useMemo(() => {
     if (claimMode === 'cash') return []
-
-    return ALL_SLOTS.filter((slot) => {
-      if (slot.category === 'individual') return true
-      if (slot.category === 'firm' && ownershipType === 'firm') return true
-      if (slot.category === 'major' && damageSeverity === 'major') return true
-      return false
+    return REQUIRED_DOCUMENTS.filter((doc) => {
+      if (doc.condition === 'firm') return ownershipType === 'firm'
+      if (doc.condition === 'major') return damageSeverity === 'major'
+      return true
     })
   }, [claimMode, ownershipType, damageSeverity])
 
-  // Stats
-  const totalRequired = activeSlots.length
-  const uploadedCount = activeSlots.filter((s) => Boolean(uploads[s.id]?.uri)).length
-  const progressPercent = totalRequired > 0 ? Math.round((uploadedCount / totalRequired) * 100) : 100
+  const uploadedDocKeys = useMemo(() => {
+    return new Set(assets.documents.map((item) => String(item.doc_key || '')))
+  }, [assets.documents])
 
-  // Camera Handler
-  const handleCameraCapture = async (slot: DocumentSlot) => {
+  const requiredDone = activeDocs.filter((doc) => uploadedDocKeys.has(doc.docKey)).length
+  const requiredTotal = activeDocs.length
+  const photoDone = DAMAGE_PHOTOS.filter((slot) => assets.photos.some((asset) => assetMatchesPhoto(asset, slot))).length
+  const everythingReady = claimMode === 'cash' || (requiredTotal > 0 && requiredDone === requiredTotal)
+  const overallPercent = requiredTotal > 0 ? Math.round((requiredDone / requiredTotal) * 100) : 100
+
+  const uploadPickedFile = async (
+    kind: 'document' | 'photo',
+    uri: string,
+    fileName: string,
+    contentType: string,
+    docKey?: string
+  ) => {
+    if (!token || !selectedReg) return
+    const key = kind === 'document' ? String(docKey) : fileName
+    setUploadingKey(key)
     try {
-      setActiveSlotForAction(null)
-      const { status } = await ImagePicker.requestCameraPermissionsAsync()
-      if (status !== 'granted') {
-        Alert.alert('Permission Denied', 'Camera permission is required to capture documents.')
-        return
-      }
-
-      const res = await ImagePicker.launchCameraAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        quality: 0.85,
-        allowsEditing: true,
+      await customerUploadBodyshopAsset({
+        sessionToken: token,
+        regNumber: selectedReg,
+        kind,
+        docKey,
+        uri,
+        fileName,
+        contentType,
       })
-
-      if (!res.canceled && res.assets && res.assets[0]?.uri) {
-        const asset = res.assets[0]
-        const nextState: Record<string, UploadedSlotState> = {
-          ...uploads,
-          [slot.id]: {
-            uri: asset.uri,
-            fileName: `${slot.id}_${Date.now()}.jpg`,
-            uploadedAt: new Date().toISOString(),
-            fileType: 'image',
-            status: 'uploaded',
-          },
-        }
-        setUploads(nextState)
-        await persistState(nextState, claimMode, ownershipType, damageSeverity)
-      }
-    } catch (err: any) {
-      Alert.alert('Capture Failed', err?.message || 'Unable to capture document.')
+      await load()
+      Alert.alert('Uploaded', kind === 'document' ? 'Document added to your bodyshop case.' : 'Damage photo added to your bodyshop case.')
+    } catch (error) {
+      Alert.alert('Upload failed', error instanceof Error ? error.message : 'Please try again.')
+    } finally {
+      setUploadingKey(null)
+      setActionDoc(null)
+      setActionPhoto(null)
     }
   }
 
-  // Gallery Handler
-  const handleGalleryPick = async (slot: DocumentSlot) => {
-    try {
-      setActiveSlotForAction(null)
-      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync()
-      if (status !== 'granted') {
-        Alert.alert('Permission Denied', 'Gallery access permission is required.')
-        return
-      }
-
-      const res = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        quality: 0.85,
-        allowsEditing: true,
-      })
-
-      if (!res.canceled && res.assets && res.assets[0]?.uri) {
-        const asset = res.assets[0]
-        const nextState: Record<string, UploadedSlotState> = {
-          ...uploads,
-          [slot.id]: {
-            uri: asset.uri,
-            fileName: asset.fileName || `${slot.id}_${Date.now()}.jpg`,
-            uploadedAt: new Date().toISOString(),
-            fileType: 'image',
-            status: 'uploaded',
-          },
-        }
-        setUploads(nextState)
-        await persistState(nextState, claimMode, ownershipType, damageSeverity)
-      }
-    } catch (err: any) {
-      Alert.alert('Selection Failed', err?.message || 'Unable to pick photo.')
-    }
-  }
-
-  // PDF / Document Picker Handler
-  const handleDocPick = async (slot: DocumentSlot) => {
-    try {
-      setActiveSlotForAction(null)
-      const res = await DocumentPicker.getDocumentAsync({
-        type: ['application/pdf', 'image/*'],
-        copyToCacheDirectory: true,
-      })
-
-      if (!res.canceled && res.assets && res.assets[0]?.uri) {
-        const asset = res.assets[0]
-        const isPdf = (asset.mimeType?.includes('pdf') || asset.name?.toLowerCase().endsWith('.pdf')) ?? false
-        const nextState: Record<string, UploadedSlotState> = {
-          ...uploads,
-          [slot.id]: {
-            uri: asset.uri,
-            fileName: asset.name,
-            uploadedAt: new Date().toISOString(),
-            fileType: isPdf ? 'pdf' : 'image',
-            status: 'uploaded',
-          },
-        }
-        setUploads(nextState)
-        await persistState(nextState, claimMode, ownershipType, damageSeverity)
-      }
-    } catch (err: any) {
-      Alert.alert('Document Pick Failed', err?.message || 'Unable to pick document.')
-    }
-  }
-
-  // Remove Slot
-  const handleRemove = async (slotId: string) => {
-    const executeDelete = async () => {
-      const nextState = { ...uploads }
-      delete nextState[slotId]
-      setUploads(nextState)
-      await persistState(nextState, claimMode, ownershipType, damageSeverity)
-    }
-
-    if (typeof window !== 'undefined' && typeof window.confirm === 'function') {
-      if (window.confirm('Are you sure you want to delete this uploaded document?')) {
-        await executeDelete()
-      }
+  const captureDocument = async (doc: RequiredDocument) => {
+    const perm = await ImagePicker.requestCameraPermissionsAsync()
+    if (perm.status !== 'granted') {
+      Alert.alert('Camera permission required', 'Please allow camera access to photograph documents.')
       return
     }
-
-    Alert.alert('Remove Document', 'Are you sure you want to remove this uploaded document?', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Remove',
-        style: 'destructive',
-        onPress: executeDelete,
-      },
-    ])
+    const result = await ImagePicker.launchCameraAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      quality: 0.88,
+      allowsEditing: true,
+    })
+    if (!result.canceled && result.assets[0]?.uri) {
+      await uploadPickedFile('document', result.assets[0].uri, `${doc.docKey}_${Date.now()}.jpg`, 'image/jpeg', doc.docKey)
+    }
   }
+
+  const chooseDocumentPhoto = async (doc: RequiredDocument) => {
+    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync()
+    if (perm.status !== 'granted') {
+      Alert.alert('Photos permission required', 'Please allow photo library access.')
+      return
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      quality: 0.9,
+    })
+    if (!result.canceled && result.assets[0]?.uri) {
+      await uploadPickedFile(
+        'document',
+        result.assets[0].uri,
+        result.assets[0].fileName || `${doc.docKey}_${Date.now()}.jpg`,
+        result.assets[0].mimeType || 'image/jpeg',
+        doc.docKey
+      )
+    }
+  }
+
+  const chooseDocumentFile = async (doc: RequiredDocument) => {
+    const result = await DocumentPicker.getDocumentAsync({
+      type: ['application/pdf', 'image/*'],
+      copyToCacheDirectory: true,
+      multiple: false,
+    })
+    if (!result.canceled && result.assets[0]?.uri) {
+      const item = result.assets[0]
+      await uploadPickedFile(
+        'document',
+        item.uri,
+        item.name || `${doc.docKey}_${Date.now()}`,
+        item.mimeType || 'application/octet-stream',
+        doc.docKey
+      )
+    }
+  }
+
+  const captureDamagePhoto = async (slot: DamagePhotoSlot) => {
+    const perm = await ImagePicker.requestCameraPermissionsAsync()
+    if (perm.status !== 'granted') {
+      Alert.alert('Camera permission required', 'Please allow camera access to photograph vehicle damage.')
+      return
+    }
+    const result = await ImagePicker.launchCameraAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      quality: 0.88,
+      allowsEditing: false,
+    })
+    if (!result.canceled && result.assets[0]?.uri) {
+      await uploadPickedFile('photo', result.assets[0].uri, fileNameForPhoto(slot), 'image/jpeg')
+    }
+  }
+
+  const chooseDamagePhoto = async (slot: DamagePhotoSlot) => {
+    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync()
+    if (perm.status !== 'granted') {
+      Alert.alert('Photos permission required', 'Please allow photo library access.')
+      return
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      quality: 0.9,
+    })
+    if (!result.canceled && result.assets[0]?.uri) {
+      await uploadPickedFile('photo', result.assets[0].uri, fileNameForPhoto(slot), result.assets[0].mimeType || 'image/jpeg')
+    }
+  }
+
+  const latestDocument = (docKey: string) => assets.documents.find((item) => item.doc_key === docKey)
 
   return (
     <CustomerScreen
-      title="Claim Documents"
-      subtitle={`Insurance checklist for ${selectedReg || 'your vehicle'}`}
+      title="Needed from you"
+      subtitle="Complete customer-side requirements for your accidental repair"
       showBackButton
     >
-      {/* ── Filter 1: Claim Mode Selector (Cash vs Insurance) ── */}
-      <CustomerCard>
-        <Text style={{ color: '#0f172a', fontWeight: '900', fontSize: 13, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 12 }}>
-          1. Repair & Billing Type
-        </Text>
-        <View style={{ flexDirection: 'row', gap: 10 }}>
-          <TouchableOpacity
-            onPress={() => {
-              setClaimMode('insurance')
-              persistState(uploads, 'insurance', ownershipType, damageSeverity)
-            }}
-            style={{
-              flex: 1,
-              paddingVertical: 14,
-              paddingHorizontal: 12,
-              borderRadius: 16,
-              alignItems: 'center',
-              backgroundColor: claimMode === 'insurance' ? '#2563eb' : '#f8fafc',
-              borderColor: claimMode === 'insurance' ? '#1d4ed8' : '#cbd5e1',
-              borderWidth: 1.5,
-            }}
-          >
-            <Icon
-              name="shield-check"
-              size={22}
-              color={claimMode === 'insurance' ? '#ffffff' : '#475569'}
-            />
-            <Text
-              style={{
-                fontWeight: '900',
-                fontSize: 13.5,
-                marginTop: 6,
-                color: claimMode === 'insurance' ? '#ffffff' : '#0f172a',
-              }}
-            >
-              Insurance Claim
-            </Text>
-            <Text
-              style={{
-                fontSize: 10.5,
-                textAlign: 'center',
-                marginTop: 2,
-                color: claimMode === 'insurance' ? '#dbeafe' : '#64748b',
-                fontWeight: '600',
-              }}
-            >
-              Cashless / Surveyor Case
-            </Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            onPress={() => {
-              setClaimMode('cash')
-              persistState(uploads, 'cash', ownershipType, damageSeverity)
-            }}
-            style={{
-              flex: 1,
-              paddingVertical: 14,
-              paddingHorizontal: 12,
-              borderRadius: 16,
-              alignItems: 'center',
-              backgroundColor: claimMode === 'cash' ? '#059669' : '#f8fafc',
-              borderColor: claimMode === 'cash' ? '#047857' : '#cbd5e1',
-              borderWidth: 1.5,
-            }}
-          >
-            <Icon
-              name="file-text"
-              size={22}
-              color={claimMode === 'cash' ? '#ffffff' : '#475569'}
-            />
-            <Text
-              style={{
-                fontWeight: '900',
-                fontSize: 13.5,
-                marginTop: 6,
-                color: claimMode === 'cash' ? '#ffffff' : '#0f172a',
-              }}
-            >
-              Cash Bodyshop
-            </Text>
-            <Text
-              style={{
-                fontSize: 10.5,
-                textAlign: 'center',
-                marginTop: 2,
-                color: claimMode === 'cash' ? '#d1fae5' : '#64748b',
-                fontWeight: '600',
-              }}
-            >
-              No Insurance Claim
-            </Text>
-          </TouchableOpacity>
+      {loading ? (
+        <View style={{ paddingVertical: 48, alignItems: 'center' }}>
+          <ActivityIndicator size="large" color="#0B5FFF" />
+          <Text style={{ marginTop: 12, color: '#64748b', fontWeight: '700' }}>Loading your bodyshop case…</Text>
         </View>
-      </CustomerCard>
+      ) : (
+        <>
+          <View style={{ backgroundColor: '#062B62', borderRadius: 22, padding: 18, marginBottom: 14 }}>
+            <Text style={{ color: '#8EC5FF', fontSize: 11, fontWeight: '900', letterSpacing: 1.1, textTransform: 'uppercase' }}>
+              Accidental Repair • Customer Self-Service
+            </Text>
+            <Text style={{ color: '#ffffff', fontSize: 22, fontWeight: '900', marginTop: 4 }}>
+              Needed from you
+            </Text>
+            <Text style={{ color: '#DCEBFF', fontSize: 13, lineHeight: 19, marginTop: 5 }}>
+              Upload the documents and damage photos you already have. Your bodyshop team can immediately use them in the same repair case.
+            </Text>
 
-      {/* ── Filter 2 & 3: Additional Insurance Claim Filters ── */}
-      {claimMode === 'insurance' && (
-        <CustomerCard>
-          <Text style={{ color: '#0f172a', fontWeight: '900', fontSize: 13, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 12 }}>
-            2. Claim Categories & Filters
-          </Text>
-
-          {/* Ownership Category */}
-          <Text style={{ color: '#475569', fontWeight: '800', fontSize: 11.5, marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.3 }}>
-            Vehicle Registration Name
-          </Text>
-          <View style={{ flexDirection: 'row', gap: 10, marginBottom: 16 }}>
-            <TouchableOpacity
-              onPress={() => {
-                setOwnershipType('individual')
-                persistState(uploads, claimMode, 'individual', damageSeverity)
-              }}
-              style={{
-                flex: 1,
-                flexDirection: 'row',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: 8,
-                paddingVertical: 12,
-                paddingHorizontal: 10,
-                borderRadius: 14,
-                backgroundColor: ownershipType === 'individual' ? '#0f172a' : '#ffffff',
-                borderColor: ownershipType === 'individual' ? '#0f172a' : '#cbd5e1',
-                borderWidth: 1.5,
-              }}
-            >
-              <Text style={{ fontSize: 18 }}>👤</Text>
-              <View>
-                <Text
-                  style={{
-                    fontWeight: '900',
-                    fontSize: 12.5,
-                    color: ownershipType === 'individual' ? '#ffffff' : '#0f172a',
-                  }}
-                >
-                  Individual
-                </Text>
-                <Text
-                  style={{
-                    fontWeight: '600',
-                    fontSize: 10,
-                    color: ownershipType === 'individual' ? '#94a3b8' : '#64748b',
-                  }}
-                >
-                  Personal Car
-                </Text>
+            <View style={{ marginTop: 16, backgroundColor: 'rgba(255,255,255,0.10)', borderRadius: 14, padding: 12 }}>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 }}>
+                <Text style={{ color: '#ffffff', fontWeight: '800', fontSize: 12 }}>Required documents</Text>
+                <Text style={{ color: '#8EC5FF', fontWeight: '900', fontSize: 12 }}>{requiredDone}/{requiredTotal || 0}</Text>
               </View>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              onPress={() => {
-                setOwnershipType('firm')
-                persistState(uploads, claimMode, 'firm', damageSeverity)
-              }}
-              style={{
-                flex: 1,
-                flexDirection: 'row',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: 8,
-                paddingVertical: 12,
-                paddingHorizontal: 10,
-                borderRadius: 14,
-                backgroundColor: ownershipType === 'firm' ? '#0f172a' : '#ffffff',
-                borderColor: ownershipType === 'firm' ? '#0f172a' : '#cbd5e1',
-                borderWidth: 1.5,
-              }}
-            >
-              <Text style={{ fontSize: 18 }}>🏢</Text>
-              <View>
-                <Text
-                  style={{
-                    fontWeight: '900',
-                    fontSize: 12.5,
-                    color: ownershipType === 'firm' ? '#ffffff' : '#0f172a',
-                  }}
-                >
-                  Firm / Company
-                </Text>
-                <Text
-                  style={{
-                    fontWeight: '600',
-                    fontSize: 10,
-                    color: ownershipType === 'firm' ? '#94a3b8' : '#64748b',
-                  }}
-                >
-                  GST Registered
-                </Text>
+              <View style={{ height: 7, borderRadius: 99, backgroundColor: 'rgba(255,255,255,0.16)', overflow: 'hidden' }}>
+                <View style={{ height: '100%', width: `${Math.max(4, overallPercent)}%`, backgroundColor: '#55C2FF', borderRadius: 99 }} />
               </View>
-            </TouchableOpacity>
-          </View>
-
-          {/* Accident Damage Severity */}
-          <Text style={{ color: '#475569', fontWeight: '800', fontSize: 11.5, marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.3 }}>
-            Accident Damage Severity
-          </Text>
-          <View style={{ flexDirection: 'row', gap: 10 }}>
-            <TouchableOpacity
-              onPress={() => {
-                setDamageSeverity('standard')
-                persistState(uploads, claimMode, ownershipType, 'standard')
-              }}
-              style={{
-                flex: 1,
-                flexDirection: 'row',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: 8,
-                paddingVertical: 12,
-                paddingHorizontal: 10,
-                borderRadius: 14,
-                backgroundColor: damageSeverity === 'standard' ? '#0f172a' : '#ffffff',
-                borderColor: damageSeverity === 'standard' ? '#0f172a' : '#cbd5e1',
-                borderWidth: 1.5,
-              }}
-            >
-              <Text style={{ fontSize: 18 }}>🚗</Text>
-              <View>
-                <Text
-                  style={{
-                    fontWeight: '900',
-                    fontSize: 12.5,
-                    color: damageSeverity === 'standard' ? '#ffffff' : '#0f172a',
-                  }}
-                >
-                  Standard Repair
-                </Text>
-                <Text
-                  style={{
-                    fontWeight: '600',
-                    fontSize: 10,
-                    color: damageSeverity === 'standard' ? '#94a3b8' : '#64748b',
-                  }}
-                >
-                  Normal Damage
-                </Text>
-              </View>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              onPress={() => {
-                setDamageSeverity('major')
-                persistState(uploads, claimMode, ownershipType, 'major')
-              }}
-              style={{
-                flex: 1,
-                flexDirection: 'row',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: 8,
-                paddingVertical: 12,
-                paddingHorizontal: 10,
-                borderRadius: 14,
-                backgroundColor: damageSeverity === 'major' ? '#b91c1c' : '#ffffff',
-                borderColor: damageSeverity === 'major' ? '#991b1b' : '#cbd5e1',
-                borderWidth: 1.5,
-              }}
-            >
-              <Text style={{ fontSize: 18 }}>⚠️</Text>
-              <View>
-                <Text
-                  style={{
-                    fontWeight: '900',
-                    fontSize: 12.5,
-                    color: damageSeverity === 'major' ? '#ffffff' : '#0f172a',
-                  }}
-                >
-                  Major / T-Party
-                </Text>
-                <Text
-                  style={{
-                    fontWeight: '600',
-                    fontSize: 10,
-                    color: damageSeverity === 'major' ? '#fecaca' : '#64748b',
-                  }}
-                >
-                  Affidavit + KYC
-                </Text>
-              </View>
-            </TouchableOpacity>
-          </View>
-        </CustomerCard>
-      )}
-
-      {/* ── Cash Mode Banner ── */}
-      {claimMode === 'cash' && (
-        <CustomerCard style={{ backgroundColor: '#f0fdf4', borderColor: '#bbf7d0' }}>
-          <View className="flex-row items-center gap-3">
-            <View className="w-12 h-12 rounded-2xl bg-emerald-100 items-center justify-center">
-              <Icon name="check-circle" size={24} color="#059669" />
-            </View>
-            <View className="flex-1">
-              <Text className="text-emerald-950 font-black text-[15px]">
-                No Claim Documents Required
-              </Text>
-              <Text className="text-emerald-800 text-[12px] leading-4 mt-0.5">
-                Since this vehicle is in Bodyshop on a Cash basis, no insurance forms, policy copies, or KYC affidavits are required from your end.
+              <Text style={{ color: '#DCEBFF', fontSize: 11, marginTop: 8 }}>
+                Damage photos: {photoDone}/{DAMAGE_PHOTOS.length} • Job Card: {String(repairCard?.job_card_no || 'Pending')}
               </Text>
             </View>
           </View>
-        </CustomerCard>
-      )}
 
-      {/* ── Insurance Progress Tracker ── */}
-      {claimMode === 'insurance' && (
-        <CustomerCard>
-          <View className="flex-row items-center justify-between mb-2">
-            <View className="flex-row items-center gap-2">
-              <Text className="text-slate-900 font-black text-base">Documents Progress</Text>
-              <View
-                className={`px-2.5 py-0.5 rounded-full ${
-                  uploadedCount === totalRequired ? 'bg-emerald-100' : 'bg-blue-100'
-                }`}
-              >
-                <Text
-                  className={`text-[11px] font-black ${
-                    uploadedCount === totalRequired ? 'text-emerald-800' : 'text-blue-800'
-                  }`}
-                >
-                  {uploadedCount}/{totalRequired} Uploaded
-                </Text>
-              </View>
+          <CustomerCard style={{ backgroundColor: '#ffffff', borderColor: '#D9E5F5' }}>
+            <Text style={{ color: '#0f172a', fontSize: 15, fontWeight: '900', marginBottom: 10 }}>Claim setup</Text>
+            <View style={{ flexDirection: 'row', gap: 8, marginBottom: claimMode === 'insurance' ? 12 : 0 }}>
+              <Choice label="Insurance / Cashless" active={claimMode === 'insurance'} onPress={() => setClaimMode('insurance')} />
+              <Choice label="Cash Repair" active={claimMode === 'cash'} onPress={() => setClaimMode('cash')} />
             </View>
-            <Text className="text-slate-900 font-black text-base">{progressPercent}%</Text>
-          </View>
-
-          {/* Progress Bar */}
-          <View className="w-full h-2.5 bg-slate-100 rounded-full overflow-hidden mb-2">
-            <View
-              style={{ width: `${progressPercent}%` }}
-              className={`h-full rounded-full ${
-                progressPercent === 100 ? 'bg-emerald-500' : 'bg-blue-600'
-              }`}
-            />
-          </View>
-
-          <Text className="text-slate-500 text-[11px]">
-            {progressPercent === 100
-              ? '🎉 All required documents have been uploaded for claim processing!'
-              : 'Please upload the pending document pages below so the insurance surveyor can approve the claim quickly.'}
-          </Text>
-        </CustomerCard>
-      )}
-
-      {/* ── Document Slots List ── */}
-      {claimMode === 'insurance' && (
-        <View className="space-y-3">
-          {activeSlots.map((slot) => {
-            const uploaded = uploads[slot.id]
-            const isDone = Boolean(uploaded?.uri)
-            const isRejected = uploaded?.status === 'rejected'
-            const isVerified = uploaded?.status === 'verified'
-
-            return (
-              <CustomerCard
-                key={slot.id}
-                style={{
-                  borderColor: isRejected ? '#fca5a5' : isDone ? '#cbd5e1' : '#fde68a',
-                  backgroundColor: isRejected ? '#fffafa' : '#ffffff',
-                }}
-              >
-                <View className="flex-row items-start justify-between gap-2 mb-2">
-                  <View className="flex-1">
-                    <View className="flex-row items-center gap-1.5 flex-wrap">
-                      <Text className="text-slate-900 font-black text-[15px]">{slot.title}</Text>
-                      {slot.totalPages && slot.totalPages > 1 && (
-                        <View className="bg-slate-100 border border-slate-200 px-2 py-0.5 rounded-md">
-                          <Text className="text-slate-700 text-[10px] font-extrabold">
-                            Page {slot.pageNumber} of {slot.totalPages}
-                          </Text>
-                        </View>
-                      )}
-                    </View>
-                    <Text className="text-blue-700 font-bold text-xs mt-0.5">{slot.slotLabel}</Text>
-                    <Text className="text-slate-500 text-[11px] leading-4 mt-1">
-                      {slot.description}
-                    </Text>
-                  </View>
-
-                  {/* Status Badge */}
-                  <View
-                    style={{
-                      paddingHorizontal: 10,
-                      paddingVertical: 4,
-                      borderRadius: 12,
-                      flexDirection: 'row',
-                      alignItems: 'center',
-                      gap: 4,
-                      backgroundColor: isRejected
-                        ? '#fee2e2'
-                        : isVerified
-                        ? '#d1fae5'
-                        : isDone
-                        ? '#dcfce7'
-                        : '#fef3c7',
-                      borderColor: isRejected
-                        ? '#fca5a5'
-                        : isVerified
-                        ? '#6ee7b7'
-                        : isDone
-                        ? '#86efac'
-                        : '#fde68a',
-                      borderWidth: 1,
-                    }}
-                  >
-                    <Icon
-                      name={isRejected ? 'alert-circle' : isDone ? 'check' : 'clock'}
-                      size={12}
-                      color={isRejected ? '#dc2626' : isDone ? '#059669' : '#d97706'}
-                    />
-                    <Text
-                      style={{
-                        fontSize: 10,
-                        fontWeight: '900',
-                        textTransform: 'uppercase',
-                        color: isRejected ? '#991b1b' : isDone ? '#166534' : '#92400e',
-                      }}
-                    >
-                      {isRejected ? 'Rejected' : isVerified ? 'Verified' : isDone ? 'Uploaded' : 'Required'}
-                    </Text>
-                  </View>
+            {claimMode === 'insurance' ? (
+              <>
+                <Text style={{ color: '#64748b', fontSize: 11, fontWeight: '800', marginBottom: 7 }}>REGISTERED OWNER</Text>
+                <View style={{ flexDirection: 'row', gap: 8, marginBottom: 12 }}>
+                  <Choice label="Individual" active={ownershipType === 'individual'} onPress={() => setOwnershipType('individual')} />
+                  <Choice label="Firm / Company" active={ownershipType === 'firm'} onPress={() => setOwnershipType('firm')} />
                 </View>
+                <Text style={{ color: '#64748b', fontSize: 11, fontWeight: '800', marginBottom: 7 }}>CASE TYPE</Text>
+                <View style={{ flexDirection: 'row', gap: 8 }}>
+                  <Choice label="Standard" active={damageSeverity === 'standard'} onPress={() => setDamageSeverity('standard')} />
+                  <Choice label="Major / T.P." active={damageSeverity === 'major'} onPress={() => setDamageSeverity('major')} />
+                </View>
+              </>
+            ) : null}
+          </CustomerCard>
 
-                {/* Rejection Alert Banner if this specific doc was rejected */}
-                {isRejected && (
-                  <View
-                    style={{
-                      backgroundColor: '#fef2f2',
-                      borderColor: '#fecaca',
-                      borderWidth: 1,
-                      borderRadius: 12,
-                      padding: 10,
-                      marginBottom: 8,
-                      flexDirection: 'row',
-                      alignItems: 'center',
-                      gap: 8,
-                    }}
-                  >
-                    <Icon name="alert-circle" size={16} color="#dc2626" />
-                    <View style={{ flex: 1 }}>
-                      <Text style={{ color: '#991b1b', fontWeight: '800', fontSize: 11.5 }}>
-                        Document Rejected by Workshop
-                      </Text>
-                      <Text style={{ color: '#b91c1c', fontSize: 10.5, marginTop: 2 }}>
-                        {uploaded.rejectionReason || 'Photo is unclear or invalid. Please tap below to re-upload this document.'}
-                      </Text>
-                    </View>
-                  </View>
-                )}
+          {claimMode === 'insurance' ? (
+            <CustomerCard style={{ backgroundColor: '#ffffff', borderColor: '#D9E5F5' }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+                <Text style={{ color: '#0f172a', fontSize: 16, fontWeight: '900' }}>Required documents</Text>
+                <View style={{ backgroundColor: everythingReady ? '#DCFCE7' : '#EFF6FF', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 999 }}>
+                  <Text style={{ color: everythingReady ? '#166534' : '#1D4ED8', fontSize: 11, fontWeight: '900' }}>
+                    {everythingReady ? 'Complete' : `${requiredTotal - requiredDone} pending`}
+                  </Text>
+                </View>
+              </View>
+              <Text style={{ color: '#64748b', fontSize: 12, lineHeight: 18, marginBottom: 12 }}>
+                Tap any pending item and choose Camera, Gallery or Files. Documents uploaded by your workshop also appear here automatically.
+              </Text>
 
-                {/* Uploaded File View or Action Button */}
-                {isDone ? (
-                  <View>
-                    <View className="bg-slate-50 border border-slate-200 rounded-xl p-2.5 flex-row items-center justify-between mt-1">
-                      <TouchableOpacity
-                        onPress={() => setPreviewUri(uploaded.uri)}
-                        className="flex-row items-center flex-1 mr-2"
-                      >
-                        {uploaded.fileType === 'image' ? (
-                          <Image
-                            source={{ uri: uploaded.uri }}
-                            className="w-12 h-12 rounded-lg bg-slate-200 mr-2.5 border border-slate-300"
-                            resizeMode="cover"
-                          />
-                        ) : (
-                          <View className="w-12 h-12 rounded-lg bg-red-100 border border-red-200 items-center justify-center mr-2.5">
-                            <Icon name="file-text" size={20} color="#dc2626" />
-                          </View>
-                        )}
-                        <View className="flex-1">
-                          <Text className="text-slate-900 font-bold text-xs" numberOfLines={1}>
-                            {uploaded.fileName || 'Attached Document'}
-                          </Text>
-                          <Text className="text-slate-500 text-[10px]">
-                            Tap to preview • {new Date(uploaded.uploadedAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
-                          </Text>
-                        </View>
-                      </TouchableOpacity>
-
-                      <View className="flex-row items-center gap-1.5">
-                        <TouchableOpacity
-                          onPress={() => setActiveSlotForAction(slot)}
-                          className="p-2 bg-white border border-slate-200 rounded-lg active:bg-slate-100"
-                        >
-                          <Icon name="rotate-cw" size={14} color="#475569" />
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                          onPress={() => handleRemove(slot.id)}
-                          className="p-2 bg-red-50 border border-red-200 rounded-lg active:bg-red-100"
-                        >
-                          <Icon name="trash-2" size={14} color="#dc2626" />
-                        </TouchableOpacity>
-                      </View>
-                    </View>
-
-                    {/* Quick Re-upload prompt if rejected */}
-                    {isRejected && (
-                      <TouchableOpacity
-                        onPress={() => setActiveSlotForAction(slot)}
-                        style={{
-                          marginTop: 6,
-                          backgroundColor: '#fee2e2',
-                          borderColor: '#f87171',
-                          borderWidth: 1,
-                          borderRadius: 12,
-                          paddingVertical: 8,
-                          paddingHorizontal: 12,
-                          flexDirection: 'row',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          gap: 6,
-                        }}
-                      >
-                        <Icon name="camera" size={14} color="#dc2626" />
-                        <Text style={{ color: '#991b1b', fontWeight: '800', fontSize: 11.5 }}>
-                          📸 Re-upload This Document Only
-                        </Text>
-                      </TouchableOpacity>
-                    )}
-                  </View>
-                ) : (
+              {activeDocs.map((doc) => {
+                const uploaded = latestDocument(doc.docKey)
+                const busy = uploadingKey === doc.docKey
+                return (
                   <TouchableOpacity
-                    onPress={() => setActiveSlotForAction(slot)}
+                    key={doc.docKey}
                     activeOpacity={0.8}
-                    className="mt-2 bg-blue-50 active:bg-blue-100 border border-dashed border-blue-300 rounded-xl py-2.5 px-3 flex-row items-center justify-center gap-2"
+                    onPress={() => uploaded?.view_url ? void Linking.openURL(String(uploaded.view_url)) : setActionDoc(doc)}
+                    style={{
+                      borderWidth: 1,
+                      borderColor: uploaded ? '#BBF7D0' : '#D9E5F5',
+                      backgroundColor: uploaded ? '#F0FDF4' : '#F8FBFF',
+                      borderRadius: 15,
+                      padding: 13,
+                      marginBottom: 9,
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                    }}
                   >
-                    <Icon name="cloud-upload" size={16} color="#2563eb" />
-                    <Text className="text-blue-700 font-black text-xs">
-                      Take Photo / Upload {slot.slotLabel}
-                    </Text>
+                    <View style={{ width: 40, height: 40, borderRadius: 12, alignItems: 'center', justifyContent: 'center', backgroundColor: uploaded ? '#DCFCE7' : '#E8F1FF', marginRight: 11 }}>
+                      {busy ? <ActivityIndicator color="#0B5FFF" /> : <Icon name={uploaded ? 'check-circle' : 'file-text'} size={20} color={uploaded ? '#16A34A' : '#0B5FFF'} />}
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ color: '#0f172a', fontSize: 13.5, fontWeight: '900' }}>{doc.title}</Text>
+                      <Text style={{ color: '#64748b', fontSize: 11.5, marginTop: 2 }}>{uploaded ? `Uploaded • ${uploaded.uploaded_by || 'Workshop/Customer'}` : doc.subtitle}</Text>
+                    </View>
+                    <View style={{ alignItems: 'flex-end', marginLeft: 8 }}>
+                      <Text style={{ color: uploaded ? '#16A34A' : '#DC2626', fontSize: 10.5, fontWeight: '900' }}>
+                        {uploaded ? 'VIEW' : 'REQUIRED'}
+                      </Text>
+                      <Icon name="chevron-right" size={16} color="#94A3B8" />
+                    </View>
                   </TouchableOpacity>
-                )}
-              </CustomerCard>
-            )
-          })}
-        </View>
+                )
+              })}
+            </CustomerCard>
+          ) : (
+            <CustomerCard style={{ backgroundColor: '#F0FDF4', borderColor: '#BBF7D0' }}>
+              <Text style={{ color: '#166534', fontWeight: '900', fontSize: 15 }}>Cash repair selected</Text>
+              <Text style={{ color: '#15803D', fontSize: 12, marginTop: 4, lineHeight: 18 }}>
+                Insurance claim paperwork is not required. Please upload damage photos so your bodyshop team can keep the case visual record complete.
+              </Text>
+            </CustomerCard>
+          )}
+
+          <CustomerCard style={{ backgroundColor: '#ffffff', borderColor: '#D9E5F5' }}>
+            <Text style={{ color: '#0f172a', fontSize: 16, fontWeight: '900' }}>Damage photos</Text>
+            <Text style={{ color: '#64748b', fontSize: 12, marginTop: 3, marginBottom: 12 }}>
+              These photos go directly into the same bodyshop repair record used by your workshop team.
+            </Text>
+
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
+              {DAMAGE_PHOTOS.map((slot) => {
+                const uploaded = assets.photos.find((asset) => assetMatchesPhoto(asset, slot))
+                const busy = uploadingKey?.includes(`customer_${slot.id}_`) || false
+                return (
+                  <TouchableOpacity
+                    key={slot.id}
+                    onPress={() => uploaded?.view_url ? void Linking.openURL(String(uploaded.view_url)) : setActionPhoto(slot)}
+                    activeOpacity={0.8}
+                    style={{
+                      width: '47.5%',
+                      minHeight: 142,
+                      borderWidth: 1,
+                      borderStyle: uploaded ? 'solid' : 'dashed',
+                      borderColor: uploaded ? '#93C5FD' : '#B8C7DA',
+                      borderRadius: 15,
+                      overflow: 'hidden',
+                      backgroundColor: '#F8FBFF',
+                    }}
+                  >
+                    {uploaded?.view_url ? (
+                      <Image source={{ uri: String(uploaded.view_url) }} style={{ width: '100%', height: 88 }} resizeMode="cover" />
+                    ) : (
+                      <View style={{ height: 88, alignItems: 'center', justifyContent: 'center', backgroundColor: '#EEF5FF' }}>
+                        {busy ? <ActivityIndicator color="#0B5FFF" /> : <Icon name="camera" size={26} color="#0B5FFF" />}
+                      </View>
+                    )}
+                    <View style={{ padding: 9 }}>
+                      <Text style={{ color: '#0f172a', fontWeight: '900', fontSize: 12 }}>{slot.title}</Text>
+                      <Text style={{ color: uploaded ? '#16A34A' : '#64748b', fontSize: 10.5, marginTop: 2 }}>
+                        {uploaded ? 'Uploaded • tap to view' : slot.hint}
+                      </Text>
+                    </View>
+                  </TouchableOpacity>
+                )
+              })}
+            </View>
+          </CustomerCard>
+
+          <View style={{ flexDirection: 'row', gap: 10, marginBottom: 10 }}>
+            <TouchableOpacity
+              onPress={() => router.push('/(customer)/tracker')}
+              style={{ flex: 1, borderRadius: 15, borderWidth: 1.5, borderColor: '#0B5FFF', paddingVertical: 13, alignItems: 'center', backgroundColor: '#ffffff' }}
+            >
+              <Text style={{ color: '#0B5FFF', fontWeight: '900' }}>View 18-Stage Tracker</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={() => router.push('/(customer)/estimate')}
+              style={{ flex: 1, borderRadius: 15, paddingVertical: 13, alignItems: 'center', backgroundColor: '#0B5FFF' }}
+            >
+              <Text style={{ color: '#ffffff', fontWeight: '900' }}>Estimate & Approval</Text>
+            </TouchableOpacity>
+          </View>
+
+          <View style={{ backgroundColor: '#EFF6FF', borderWidth: 1, borderColor: '#BFDBFE', borderRadius: 15, padding: 13, marginBottom: 12 }}>
+            <Text style={{ color: '#1E3A8A', fontSize: 12.5, fontWeight: '900' }}>One shared bodyshop case</Text>
+            <Text style={{ color: '#1D4ED8', fontSize: 11.5, lineHeight: 17, marginTop: 4 }}>
+              Customer uploads, workshop documents, estimate approvals, survey updates, floor repair, QC, billing, DO and delivery all remain connected to the same repair card.
+            </Text>
+          </View>
+        </>
       )}
 
-      {/* ── Action Modal (Camera / Gallery / PDF) ── */}
-      <Modal
-        visible={Boolean(activeSlotForAction)}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setActiveSlotForAction(null)}
-      >
-        <Pressable
-          onPress={() => setActiveSlotForAction(null)}
-          className="flex-1 bg-black/60 items-center justify-end p-4"
-        >
-          <Pressable
-            onPress={(e) => e.stopPropagation()}
-            className="w-full bg-white rounded-3xl p-5 shadow-2xl border-t-2 border-slate-900"
-          >
-            <View className="flex-row items-center justify-between border-b border-slate-100 pb-3 mb-3">
-              <View>
-                <Text className="text-slate-900 font-black text-base">
-                  Upload {activeSlotForAction?.title}
-                </Text>
-                <Text className="text-blue-600 font-bold text-xs">
-                  {activeSlotForAction?.slotLabel}
-                </Text>
-              </View>
-              <TouchableOpacity
-                onPress={() => setActiveSlotForAction(null)}
-                className="w-8 h-8 rounded-full bg-slate-100 items-center justify-center"
-              >
-                <Icon name="x" size={16} color="#475569" />
-              </TouchableOpacity>
-            </View>
+      <UploadChoiceModal
+        visible={Boolean(actionDoc)}
+        title={actionDoc?.title || 'Upload document'}
+        description={actionDoc?.hint || ''}
+        onClose={() => setActionDoc(null)}
+        onCamera={() => actionDoc && void captureDocument(actionDoc)}
+        onGallery={() => actionDoc && void chooseDocumentPhoto(actionDoc)}
+        onFiles={() => actionDoc && void chooseDocumentFile(actionDoc)}
+      />
 
-            <View className="space-y-2 mb-2">
-              {/* Option 1: Camera */}
-              <TouchableOpacity
-                onPress={() => activeSlotForAction && handleCameraCapture(activeSlotForAction)}
-                className="flex-row items-center p-3.5 bg-blue-50 active:bg-blue-100 border border-blue-200 rounded-2xl mb-2"
-              >
-                <View className="w-10 h-10 rounded-xl bg-blue-600 items-center justify-center mr-3">
-                  <Icon name="camera" size={20} color="#ffffff" />
-                </View>
-                <View className="flex-1">
-                  <Text className="text-slate-900 font-black text-sm">Take Photo with Camera</Text>
-                  <Text className="text-slate-500 text-[11px]">Capture clear, well-lit document</Text>
-                </View>
-              </TouchableOpacity>
-
-              {/* Option 2: Gallery */}
-              <TouchableOpacity
-                onPress={() => activeSlotForAction && handleGalleryPick(activeSlotForAction)}
-                className="flex-row items-center p-3.5 bg-slate-50 active:bg-slate-100 border border-slate-200 rounded-2xl mb-2"
-              >
-                <View className="w-10 h-10 rounded-xl bg-slate-800 items-center justify-center mr-3">
-                  <Icon name="image" size={20} color="#ffffff" />
-                </View>
-                <View className="flex-1">
-                  <Text className="text-slate-900 font-black text-sm">Choose from Photo Gallery</Text>
-                  <Text className="text-slate-500 text-[11px]">Select existing image from phone</Text>
-                </View>
-              </TouchableOpacity>
-
-              {/* Option 3: PDF / Document */}
-              <TouchableOpacity
-                onPress={() => activeSlotForAction && handleDocPick(activeSlotForAction)}
-                className="flex-row items-center p-3.5 bg-slate-50 active:bg-slate-100 border border-slate-200 rounded-2xl"
-              >
-                <View className="w-10 h-10 rounded-xl bg-slate-800 items-center justify-center mr-3">
-                  <Icon name="file-text" size={20} color="#ffffff" />
-                </View>
-                <View className="flex-1">
-                  <Text className="text-slate-900 font-black text-sm">Upload PDF or Document File</Text>
-                  <Text className="text-slate-500 text-[11px]">Browse phone files and downloads</Text>
-                </View>
-              </TouchableOpacity>
-            </View>
-          </Pressable>
-        </Pressable>
-      </Modal>
-
-      {/* ── Document Full Preview Modal ── */}
-      <Modal
-        visible={Boolean(previewUri)}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setPreviewUri(null)}
-      >
-        <View className="flex-1 bg-black/90 items-center justify-center p-4">
-          <TouchableOpacity
-            onPress={() => setPreviewUri(null)}
-            className="absolute top-12 right-6 w-10 h-10 rounded-full bg-white/20 items-center justify-center z-50"
-          >
-            <Icon name="x" size={20} color="#ffffff" />
-          </TouchableOpacity>
-
-          {previewUri ? (
-            <Image
-              source={{ uri: previewUri }}
-              style={{ width: '100%', height: '80%' }}
-              resizeMode="contain"
-            />
-          ) : null}
-        </View>
-      </Modal>
+      <PhotoChoiceModal
+        visible={Boolean(actionPhoto)}
+        title={actionPhoto?.title || 'Damage photo'}
+        onClose={() => setActionPhoto(null)}
+        onCamera={() => actionPhoto && void captureDamagePhoto(actionPhoto)}
+        onGallery={() => actionPhoto && void chooseDamagePhoto(actionPhoto)}
+      />
     </CustomerScreen>
+  )
+}
+
+function Choice({ label, active, onPress }: { label: string; active: boolean; onPress: () => void }) {
+  return (
+    <TouchableOpacity
+      onPress={onPress}
+      style={{
+        flex: 1,
+        minHeight: 42,
+        borderRadius: 12,
+        borderWidth: 1.3,
+        borderColor: active ? '#0B5FFF' : '#CBD5E1',
+        backgroundColor: active ? '#E8F1FF' : '#ffffff',
+        alignItems: 'center',
+        justifyContent: 'center',
+        paddingHorizontal: 8,
+      }}
+    >
+      <Text style={{ color: active ? '#0B5FFF' : '#334155', fontWeight: '900', fontSize: 11.5, textAlign: 'center' }}>{label}</Text>
+    </TouchableOpacity>
+  )
+}
+
+function UploadChoiceModal({
+  visible,
+  title,
+  description,
+  onClose,
+  onCamera,
+  onGallery,
+  onFiles,
+}: {
+  visible: boolean
+  title: string
+  description: string
+  onClose: () => void
+  onCamera: () => void
+  onGallery: () => void
+  onFiles: () => void
+}) {
+  return (
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+      <View style={{ flex: 1, backgroundColor: 'rgba(2, 17, 38, 0.70)', justifyContent: 'flex-end' }}>
+        <Pressable style={{ flex: 1 }} onPress={onClose} />
+        <View style={{ backgroundColor: '#ffffff', borderTopLeftRadius: 28, borderTopRightRadius: 28, padding: 20, paddingBottom: 32 }}>
+          <Text style={{ color: '#0f172a', fontSize: 18, fontWeight: '900' }}>{title}</Text>
+          <Text style={{ color: '#64748b', fontSize: 12.5, lineHeight: 18, marginTop: 5, marginBottom: 16 }}>{description}</Text>
+          <UploadOption icon="camera" title="Take photo" subtitle="Use your phone camera" onPress={onCamera} />
+          <UploadOption icon="image" title="Choose from gallery" subtitle="Select an existing photo" onPress={onGallery} />
+          <UploadOption icon="file-text" title="Choose from Files" subtitle="Upload PDF or image file" onPress={onFiles} />
+          <TouchableOpacity onPress={onClose} style={{ marginTop: 6, paddingVertical: 12, alignItems: 'center' }}>
+            <Text style={{ color: '#64748b', fontWeight: '800' }}>Cancel</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    </Modal>
+  )
+}
+
+function PhotoChoiceModal({
+  visible,
+  title,
+  onClose,
+  onCamera,
+  onGallery,
+}: {
+  visible: boolean
+  title: string
+  onClose: () => void
+  onCamera: () => void
+  onGallery: () => void
+}) {
+  return (
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+      <View style={{ flex: 1, backgroundColor: 'rgba(2, 17, 38, 0.70)', justifyContent: 'flex-end' }}>
+        <Pressable style={{ flex: 1 }} onPress={onClose} />
+        <View style={{ backgroundColor: '#ffffff', borderTopLeftRadius: 28, borderTopRightRadius: 28, padding: 20, paddingBottom: 32 }}>
+          <Text style={{ color: '#0f172a', fontSize: 18, fontWeight: '900' }}>{title}</Text>
+          <Text style={{ color: '#64748b', fontSize: 12.5, marginTop: 5, marginBottom: 16 }}>Keep the vehicle and damaged area clearly visible.</Text>
+          <UploadOption icon="camera" title="Take photo" subtitle="Capture a fresh damage photo" onPress={onCamera} />
+          <UploadOption icon="image" title="Choose from gallery" subtitle="Select an existing damage photo" onPress={onGallery} />
+          <TouchableOpacity onPress={onClose} style={{ marginTop: 6, paddingVertical: 12, alignItems: 'center' }}>
+            <Text style={{ color: '#64748b', fontWeight: '800' }}>Cancel</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    </Modal>
+  )
+}
+
+function UploadOption({
+  icon,
+  title,
+  subtitle,
+  onPress,
+}: {
+  icon: 'camera' | 'image' | 'file-text'
+  title: string
+  subtitle: string
+  onPress: () => void
+}) {
+  return (
+    <TouchableOpacity
+      onPress={onPress}
+      style={{
+        flexDirection: 'row',
+        alignItems: 'center',
+        borderWidth: 1,
+        borderColor: '#D9E5F5',
+        backgroundColor: '#F8FBFF',
+        borderRadius: 15,
+        padding: 13,
+        marginBottom: 9,
+      }}
+    >
+      <View style={{ width: 40, height: 40, borderRadius: 12, backgroundColor: '#E8F1FF', alignItems: 'center', justifyContent: 'center', marginRight: 11 }}>
+        <Icon name={icon} size={20} color="#0B5FFF" />
+      </View>
+      <View style={{ flex: 1 }}>
+        <Text style={{ color: '#0f172a', fontWeight: '900', fontSize: 13 }}>{title}</Text>
+        <Text style={{ color: '#64748b', fontSize: 11.5, marginTop: 2 }}>{subtitle}</Text>
+      </View>
+      <Icon name="chevron-right" size={17} color="#94A3B8" />
+    </TouchableOpacity>
   )
 }
