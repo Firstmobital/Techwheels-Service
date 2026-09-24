@@ -30,6 +30,8 @@ import {
 import { computeSettlement } from '../../lib/customer/math'
 import { manualCheckForOTAUpdate } from '../../hooks/useMandatoryOTAUpdate'
 import { Icon, IconName } from '../../components/ui/Icon'
+import { ClaimFormWidget } from '../../components/ClaimFormWidget'
+import { matchInsuranceProviderId } from '../../config/insuranceProviders'
 
 export default function CustomerDashboardScreen() {
   const router = useRouter()
@@ -487,6 +489,8 @@ export default function CustomerDashboardScreen() {
               </View>
             )
           })()}
+
+          <ClaimFormWidget userInsurerId={matchInsuranceProviderId(asText(job?.insurance_company))} />
 
           {/* ── ACTION SHORTCUT TILES ── */}
           <View className="flex-row flex-wrap" style={{ gap: 10, marginBottom: 2 }}>
