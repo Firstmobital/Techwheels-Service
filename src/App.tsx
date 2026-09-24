@@ -1056,11 +1056,29 @@ function AuthGate({ children }: { children: React.ReactNode }) {
     setAuthView('login')
   }, [location.pathname, user, customerVehicle])
 
-  if (customerVehicle) {
+  const isPreviewCustomer = location.pathname === '/customer-preview' || location.search.includes('preview=customer')
+  if (customerVehicle || isPreviewCustomer) {
+    const activeVehicle: CustomerVehicle = customerVehicle || {
+      reg_number: 'RJ-14-EA-2024',
+      owner_name: 'Rahul Sharma',
+      owner_phone: '9876543210',
+      model: 'Tata Nexon EV Creative Plus',
+      variant: 'Empowered Plus LR',
+      branch: 'Sitapura Main Workshop',
+      service_type: 'Periodic Maintenance & Battery Health',
+      jc_number: 'JC-84920',
+      sa_name: 'Vikram Singh',
+      sa_display_name: 'Vikram Singh (Senior Advisor)',
+      km_reading: 14250,
+      payment_status: 'Pending',
+      gate_pass_issued: false,
+      billed_amount: 6450,
+      amount_received: 0,
+    }
     return (
       <CustomerPortalPage
-        vehicle={customerVehicle}
-        allVehicles={allCustomerVehicles}
+        vehicle={activeVehicle}
+        allVehicles={allCustomerVehicles.length > 0 ? allCustomerVehicles : [activeVehicle]}
         sessionToken={customerSessionToken}
         onLogout={() => {
           void customerEndSession(customerSessionToken)
@@ -1069,6 +1087,9 @@ function AuthGate({ children }: { children: React.ReactNode }) {
           setCustomerVehicle(null)
           setAllCustomerVehicles([])
           setCustomerSessionToken(null)
+          if (isPreviewCustomer) {
+            navigate('/', { replace: true })
+          }
         }}
         onSelectVehicle={(v) => {
           setCustomerVehicle(v)

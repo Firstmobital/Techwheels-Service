@@ -262,6 +262,24 @@ export default function ServiceBookingPage() {
       } catch {}
     }
 
+    // Bidirectional sync to post_feedback_bot_data so customer mobile portal always reflects real status
+    if (booking.reg_number) {
+      try {
+        const botUpdates: Record<string, any> = {}
+        if (updates.status) botUpdates.robot_status = updates.status
+        if (updates.assigned_sa_name) botUpdates.service_advisor_name = updates.assigned_sa_name
+        if (Object.keys(botUpdates).length > 0) {
+          await supabase
+            .from('post_feedback_bot_data')
+            .update(botUpdates)
+            .eq('vehicle_registration_number', normReg(booking.reg_number))
+            .in('mode', ['customer_portal_concern', 'customer_booking_portal'])
+        }
+      } catch (botSyncErr) {
+        console.warn('Sync to post_feedback_bot_data warning:', botSyncErr)
+      }
+    }
+
     await loadBookings()
     setSelectedBooking(b => b?.id === booking.id ? { ...b, ...updates } as ServiceBooking : b)
   }
@@ -312,7 +330,18 @@ export default function ServiceBookingPage() {
             (b.booking_date === bDate || (b.lead_number && b.lead_number.includes(String(bot.id))))
           )
 
-          if (!existing) {
+          if (existing) {
+            // Auto-heal / sync live status from service_bookings back to post_feedback_bot_data so mobile app updates immediately
+            if (existing.status && bot.robot_status !== existing.status) {
+              void supabase
+                .from('post_feedback_bot_data')
+                .update({
+                  robot_status: existing.status,
+                  service_advisor_name: existing.assigned_sa_name || bot.service_advisor_name || null,
+                })
+                .eq('id', bot.id)
+            }
+          } else {
             // Attempt to auto-persist into service_bookings so it gets full DB lead_number and triggers
             let syncedRow: ServiceBooking | null = null
             try {
@@ -599,6 +628,19 @@ export default function ServiceBookingPage() {
         await supabase.from('service_bookings').insert([fullRow])
       } catch (insCatch) {
         console.warn('Failed to insert service_booking on status update:', insCatch)
+      }
+    }
+
+    // Bidirectional sync to post_feedback_bot_data so customer mobile portal always reflects real status
+    if (booking.reg_number) {
+      try {
+        await supabase
+          .from('post_feedback_bot_data')
+          .update({ robot_status: newStatus })
+          .eq('vehicle_registration_number', normReg(booking.reg_number))
+          .in('mode', ['customer_portal_concern', 'customer_booking_portal'])
+      } catch (botSyncErr) {
+        console.warn('Failed to sync robot_status in updateStatus:', botSyncErr)
       }
     }
 

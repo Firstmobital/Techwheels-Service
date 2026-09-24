@@ -1,4 +1,6 @@
-import { supabase } from '../supabase'
+import { Linking } from 'react-native'
+import { getSupabaseBaseUrl } from '../env'
+import { supabase, SUPABASE_ANON_KEY } from '../supabase'
 
 const apiCache = new Map<string, { timestamp: number; data: any }>()
 const CACHE_TTL_MS = 6000 // 6 seconds cache
@@ -765,6 +767,7 @@ export interface CustomerBookingItem {
   pickup_address: string | null
   branch: string | null
   status: string
+  status_reason?: string | null
   assigned_sa_name: string | null
   created_at: string
 }
@@ -845,10 +848,10 @@ export async function customerSubmitBooking(
       }
     }
 
-    // Check post_feedback_bot_data for customer portal bookings
+    // Check post_feedback_bot_data for customer portal bookings (excluding cancelled / rejected)
     const { data: existingBot } = await supabase
       .from('post_feedback_bot_data')
-      .select('id, vehicle_registration_number, feedback_text, complaint_date_time')
+      .select('id, vehicle_registration_number, feedback_text, complaint_date_time, robot_status')
       .eq('vehicle_registration_number', normReg)
       .in('mode', ['customer_portal_concern', 'customer_booking_portal'])
       .ilike('feedback_text', '%SERVICE BOOKING REQUEST%')
@@ -857,6 +860,8 @@ export async function customerSubmitBooking(
 
     if (existingBot && Array.isArray(existingBot) && existingBot.length > 0) {
       for (const b of existingBot) {
+        const isBotCancelled = b.robot_status === 'Cancelled' || b.robot_status?.toLowerCase().includes('cancel') || b.robot_status?.toLowerCase().includes('reject')
+        if (isBotCancelled) continue
         const txt = b.feedback_text || ''
         if (txt.includes(payload.appointment_date)) {
           throw new Error(`A service booking request is already submitted for vehicle ${normReg} on ${payload.appointment_date}. Please contact our service team for any modifications.`)
@@ -960,9 +965,23 @@ export async function customerListMyBookings(
   const normReg = (regNumber || '').trim().toUpperCase().replace(/\s+/g, '')
   const normPhone = (phone || '').trim()
 
+  // 1. Primary: Use dedicated security-definer RPC that has full access to service_bookings
+  try {
+    const { data: rpcData, error: rpcErr } = await supabase.rpc('customer_list_my_bookings', {
+      p_session_token: sessionToken,
+      p_reg_number: normReg || null,
+    })
+
+    if (!rpcErr && Array.isArray(rpcData) && rpcData.length > 0) {
+      return rpcData as CustomerBookingItem[]
+    }
+  } catch (rpcErr) {
+    console.warn('customer_list_my_bookings RPC fallback:', rpcErr)
+  }
+
   const items: CustomerBookingItem[] = []
 
-  // 1. Fetch from service_bookings if accessible
+  // 2. Direct table fetch from service_bookings (if authenticated or RLS permitted)
   try {
     let query = supabase.from('service_bookings').select('*')
 
@@ -982,12 +1001,12 @@ export async function customerListMyBookings(
     console.warn('Error fetching service_bookings:', err)
   }
 
-  // 2. Fetch from post_feedback_bot_data for bookings submitted via RPC
+  // 3. Fallback: Fetch from post_feedback_bot_data for bookings submitted via bot RPC
   if (normReg) {
     try {
       const { data: botRows } = await supabase
         .from('post_feedback_bot_data')
-        .select('id, vehicle_registration_number, customer_name, mobile_number, service_type, branch, model, feedback_text, complaint_date_time')
+        .select('id, vehicle_registration_number, customer_name, mobile_number, service_type, branch, model, feedback_text, complaint_date_time, robot_status, service_advisor_name')
         .eq('vehicle_registration_number', normReg)
         .in('mode', ['customer_portal_concern', 'customer_booking_portal'])
         .order('id', { ascending: false })
@@ -1022,17 +1041,19 @@ export async function customerListMyBookings(
             const normItemReg = (it.reg_number || '').trim().toUpperCase().replace(/\s+/g, '')
             const isSameVeh = normItemReg === normBotReg
             const isSameAppt = apptDate && it.appointment_date === apptDate
-            const isSameId = it.id === Number(b.id) || (it.lead_number && it.lead_number.includes(String(b.id)))
+            const isSameId = it.id === Number(b.id) || (it.lead_number && (it.lead_number.includes(String(b.id)) || it.lead_number === `SB-${b.id}`))
             return isSameVeh && (isSameAppt || isSameId)
           })
 
           if (existingSB) {
-            // Update any missing fields in existingSB
+            // Update any missing fields in existingSB while preserving its authoritative status
             if (!existingSB.appointment_date && apptDate) existingSB.appointment_date = apptDate
             if (!existingSB.booking_time && apptSlot) existingSB.booking_time = apptSlot
             if (!existingSB.pickup_address && pickupAddress) existingSB.pickup_address = pickupAddress
             if (!existingSB.complaint_description && complaint) existingSB.complaint_description = complaint
+            if (!existingSB.assigned_sa_name && b.service_advisor_name) existingSB.assigned_sa_name = b.service_advisor_name
           } else {
+            const botStatus = b.robot_status || 'New'
             items.push({
               id: Number(b.id),
               lead_number: `SB-${b.id}`,
@@ -1050,8 +1071,8 @@ export async function customerListMyBookings(
               pickup_required: isPickup,
               pickup_address: pickupAddress,
               branch: branch,
-              status: 'New',
-              assigned_sa_name: null,
+              status: botStatus,
+              assigned_sa_name: b.service_advisor_name || null,
               created_at: b.complaint_date_time || new Date().toISOString(),
             })
           }
@@ -1103,4 +1124,71 @@ export async function customerGetRepairCard(sessionToken: string, regNumber?: st
   }
 
   return null
+}
+
+export type CustomerBodyshopEstimateDocument = {
+  doc_key?: string | null
+  file_name?: string | null
+  content_type?: string | null
+  drive_url?: string | null
+  storage_bucket?: string | null
+  storage_path?: string | null
+  uploaded_at?: string | null
+  uploaded_by?: string | null
+}
+
+export function parseBodyshopEstimateDocument(
+  card: Record<string, unknown> | null | undefined
+): CustomerBodyshopEstimateDocument | null {
+  const raw = card?.estimate_document
+  if (!raw || typeof raw !== 'object') return null
+  const doc = raw as Record<string, unknown>
+  const driveUrl = String(doc.drive_url ?? '').trim()
+  const storagePath = String(doc.storage_path ?? '').trim()
+  if (!driveUrl && !storagePath) return null
+  return doc as CustomerBodyshopEstimateDocument
+}
+
+export async function customerOpenBodyshopEstimateDocument(
+  sessionToken: string,
+  regNumber: string | null | undefined,
+  doc?: CustomerBodyshopEstimateDocument | null
+): Promise<void> {
+  const reg = (regNumber || '').trim()
+  if (!sessionToken || !reg) {
+    throw new Error('Session or vehicle not available.')
+  }
+
+  const driveUrl = String(doc?.drive_url ?? '').trim()
+  if (driveUrl) {
+    await Linking.openURL(driveUrl)
+    return
+  }
+
+  const supabaseUrl = getSupabaseBaseUrl()
+  if (!supabaseUrl) {
+    throw new Error('App is not configured for document viewing.')
+  }
+
+  const res = await fetch(`${supabaseUrl}/functions/v1/customer-portal-doc-view`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+      apikey: SUPABASE_ANON_KEY,
+    },
+    body: JSON.stringify({
+      session_token: sessionToken,
+      reg_number: reg,
+      doc_key: 'doc_estimate',
+    }),
+  })
+
+  const payload = (await res.json().catch(() => ({}))) as { view_url?: string; error?: string }
+  const viewUrl = String(payload.view_url ?? '').trim()
+  if (!res.ok || !viewUrl) {
+    throw new Error(payload.error || 'Unable to open workshop estimate document.')
+  }
+
+  await Linking.openURL(viewUrl)
 }

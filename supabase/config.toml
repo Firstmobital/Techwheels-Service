@@ -33,3 +33,6 @@ verify_jwt = true
 
 [functions.insurance-renewal-telecalling]
 verify_jwt = false
+
+[functions.customer-portal-doc-view]
+verify_jwt = false

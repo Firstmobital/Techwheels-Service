@@ -188,37 +188,37 @@ export default function CustomerDashboardScreen() {
             </TouchableOpacity>
           ) : null}
 
-          {/* ── REGISTERED VEHICLE HERO CARD ── */}
+          {/* ── REGISTERED VEHICLE HERO CARD (TATA.CARS BRAND THEME) ── */}
           <LinearGradient
-            colors={['#0f172a', '#1e293b', '#1e3a8a']}
+            colors={['#002B49', '#071A2E', '#0A1118']}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}
             style={{
               borderRadius: 22,
               padding: 18,
               marginBottom: 16,
-              shadowColor: '#0f172a',
+              shadowColor: '#002B49',
               shadowOffset: { width: 0, height: 6 },
-              shadowOpacity: 0.22,
-              shadowRadius: 14,
-              elevation: 5,
-              borderWidth: 1,
-              borderColor: 'rgba(255,255,255,0.12)',
+              shadowOpacity: 0.45,
+              shadowRadius: 16,
+              elevation: 6,
+              borderWidth: 1.5,
+              borderColor: 'rgba(0, 210, 196, 0.35)',
             }}
           >
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
               <View style={{ flex: 1, paddingRight: 8 }}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4 }}>
-                  <Icon name="truck" size={13} color="#60a5fa" strokeWidth={2.2} />
-                  <Text style={{ color: '#93c5fd', fontSize: 10, fontWeight: '900', textTransform: 'uppercase', letterSpacing: 1 }}>
-                    REGISTERED VEHICLE
+                  <Text style={{ fontSize: 13 }}>🚘</Text>
+                  <Text style={{ color: '#00D2C4', fontSize: 10, fontWeight: '900', textTransform: 'uppercase', letterSpacing: 1.2 }}>
+                    TATA MOTORS SERVICE
                   </Text>
                 </View>
                 <Text style={{ color: '#ffffff', fontSize: 24, fontWeight: '900', letterSpacing: 1.5, fontFamily: 'monospace' }}>
                   {selected.reg_number}
                 </Text>
                 <Text style={{ color: '#ffffff', fontSize: 14.5, fontWeight: '800', marginTop: 3 }} numberOfLines={1}>
-                  {model || 'Tata Vehicle'}
+                  {model || 'Tata Motors Vehicle'}
                   {variant ? ` · ${variant}` : ''}
                 </Text>
               </View>
@@ -229,9 +229,9 @@ export default function CustomerDashboardScreen() {
                     paddingHorizontal: 10,
                     paddingVertical: 4.5,
                     borderRadius: 999,
-                    backgroundColor: delivered ? 'rgba(16,185,129,0.25)' : 'rgba(245,158,11,0.25)',
+                    backgroundColor: delivered ? 'rgba(0, 210, 196, 0.2)' : 'rgba(245, 158, 11, 0.2)',
                     borderWidth: 1.2,
-                    borderColor: delivered ? '#34d399' : '#fbbf24',
+                    borderColor: delivered ? '#00D2C4' : '#fbbf24',
                     flexDirection: 'row',
                     alignItems: 'center',
                   }}
@@ -241,18 +241,18 @@ export default function CustomerDashboardScreen() {
                       width: 6,
                       height: 6,
                       borderRadius: 3,
-                      backgroundColor: delivered ? '#34d399' : '#fbbf24',
+                      backgroundColor: delivered ? '#00D2C4' : '#fbbf24',
                       marginRight: 5,
                     }}
                   />
-                  <Text style={{ color: '#ffffff', fontSize: 11, fontWeight: '800' }} numberOfLines={1}>
-                    {delivered ? 'Delivered / Ready' : 'Processing'}
+                  <Text style={{ color: delivered ? '#00D2C4' : '#fbbf24', fontSize: 11, fontWeight: '800' }} numberOfLines={1}>
+                    {delivered ? 'Delivered / Ready' : 'In Service'}
                   </Text>
                 </View>
 
                 {jc ? (
-                  <View style={{ backgroundColor: 'rgba(255,255,255,0.15)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.25)', paddingHorizontal: 10, paddingVertical: 2, borderRadius: 10 }}>
-                    <Text style={{ color: '#ffffff', fontFamily: 'monospace', fontWeight: '900', fontSize: 10 }} numberOfLines={1}>
+                  <View style={{ backgroundColor: 'rgba(0, 210, 196, 0.15)', borderWidth: 1, borderColor: 'rgba(0, 210, 196, 0.35)', paddingHorizontal: 10, paddingVertical: 2, borderRadius: 10 }}>
+                    <Text style={{ color: '#00D2C4', fontFamily: 'monospace', fontWeight: '900', fontSize: 10 }} numberOfLines={1}>
                       JC #{jc.length > 16 ? jc.slice(-12) : jc}
                     </Text>
                   </View>
@@ -261,14 +261,14 @@ export default function CustomerDashboardScreen() {
             </View>
 
             {/* Quick Metrics Grid */}
-            <View style={{ marginTop: 14, paddingTop: 12, borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.15)', flexDirection: 'row', flexWrap: 'wrap' }}>
+            <View style={{ marginTop: 14, paddingTop: 12, borderTopWidth: 1, borderTopColor: 'rgba(0, 210, 196, 0.2)', flexDirection: 'row', flexWrap: 'wrap' }}>
               <View style={{ width: '50%', paddingRight: 8, marginBottom: 8 }}>
                 <Text style={{ color: '#94a3b8', fontSize: 10.5, fontWeight: '600' }}>Customer Name</Text>
                 <Text style={{ color: '#ffffff', fontSize: 13, fontWeight: '800', textTransform: 'uppercase' }} numberOfLines={1}>{dash(owner)}</Text>
               </View>
               <View style={{ width: '50%', paddingLeft: 8, marginBottom: 8 }}>
                 <Text style={{ color: '#94a3b8', fontSize: 10.5, fontWeight: '600' }}>Odometer</Text>
-                <Text style={{ color: '#ffffff', fontSize: 13, fontFamily: 'monospace', fontWeight: '800' }} numberOfLines={1}>{km || '—'}</Text>
+                <Text style={{ color: '#00D2C4', fontSize: 13, fontFamily: 'monospace', fontWeight: '900' }} numberOfLines={1}>{km || '—'}</Text>
               </View>
               <View style={{ width: '50%', paddingRight: 8, marginBottom: 8 }}>
                 <Text style={{ color: '#94a3b8', fontSize: 10.5, fontWeight: '600' }}>Assigned Technician</Text>
@@ -276,7 +276,7 @@ export default function CustomerDashboardScreen() {
               </View>
               <View style={{ width: '50%', paddingLeft: 8, marginBottom: 8 }}>
                 <Text style={{ color: '#94a3b8', fontSize: 10.5, fontWeight: '600' }}>Workshop Bay No</Text>
-                <Text style={{ color: '#34d399', fontSize: 12.5, fontFamily: 'monospace', fontWeight: '900' }} numberOfLines={1}>{dash(bayNo) || 'Floor Bay'}</Text>
+                <Text style={{ color: '#00D2C4', fontSize: 12.5, fontFamily: 'monospace', fontWeight: '900' }} numberOfLines={1}>{dash(bayNo) || 'Floor Bay'}</Text>
               </View>
               <View style={{ width: '50%', paddingRight: 8, marginBottom: 2 }}>
                 <Text style={{ color: '#94a3b8', fontSize: 10.5, fontWeight: '600' }}>Service Type</Text>
@@ -288,30 +288,63 @@ export default function CustomerDashboardScreen() {
               </View>
             </View>
 
-            {/* Direct Call Advisor Action */}
-            <TouchableOpacity
-              onPress={() => void Linking.openURL(`tel:${getDirectAdvisorOrWorkshopPhone(job || (selected as unknown as Record<string, unknown>))}`)}
-              activeOpacity={0.85}
-              className="mt-3 bg-emerald-600 active:bg-emerald-700 rounded-xl py-2 px-3.5 flex-row items-center justify-between shadow-sm"
-            >
-              <View className="flex-row items-center gap-2 flex-1 pr-2">
+            {/* Direct Connect Buttons (WhatsApp & Call) */}
+            <View style={{ marginTop: 12, flexDirection: 'row', gap: 8 }}>
+              <TouchableOpacity
+                onPress={() => {
+                  const phoneClean = (getDirectAdvisorOrWorkshopPhone(job || (selected as unknown as Record<string, unknown>)) || '').replace(/\D/g, '').slice(-10)
+                  if (phoneClean) {
+                    void Linking.openURL(`https://wa.me/91${phoneClean}?text=${encodeURIComponent(`Hello, I am tracking my Tata vehicle ${selected.reg_number} (Job Card: ${jc || 'Active'}). Please update on current status.`)}`)
+                  }
+                }}
+                activeOpacity={0.85}
+                style={{
+                  flex: 1,
+                  backgroundColor: 'rgba(0, 210, 196, 0.15)',
+                  borderWidth: 1,
+                  borderColor: 'rgba(0, 210, 196, 0.4)',
+                  borderRadius: 14,
+                  paddingVertical: 10,
+                  paddingHorizontal: 12,
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 6,
+                }}
+              >
+                <Text style={{ fontSize: 13 }}>💬</Text>
+                <Text style={{ color: '#00D2C4', fontSize: 12, fontWeight: '800' }}>WhatsApp</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                onPress={() => void Linking.openURL(`tel:${getDirectAdvisorOrWorkshopPhone(job || (selected as unknown as Record<string, unknown>))}`)}
+                activeOpacity={0.85}
+                style={{
+                  flex: 1,
+                  backgroundColor: '#003366',
+                  borderWidth: 1,
+                  borderColor: 'rgba(0, 210, 196, 0.3)',
+                  borderRadius: 14,
+                  paddingVertical: 10,
+                  paddingHorizontal: 12,
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 6,
+                }}
+              >
                 <Icon name="phone" size={14} color="#ffffff" />
-                <Text className="text-white text-xs font-black flex-1" numberOfLines={1} ellipsizeMode="tail">
-                  Call Advisor: {dash(advisor)} ({getDirectAdvisorOrWorkshopPhone(job || (selected as unknown as Record<string, unknown>))})
-                </Text>
-              </View>
-              <View className="bg-white/20 px-2.5 py-0.5 rounded-full shrink-0">
-                <Text className="text-white text-[10.5px] font-black">Call Now</Text>
-              </View>
-            </TouchableOpacity>
+                <Text style={{ color: '#ffffff', fontSize: 12, fontWeight: '800' }}>Direct Call</Text>
+              </TouchableOpacity>
+            </View>
           </LinearGradient>
 
-          {/* ── PRIMARY BOOK SERVICE CTA ── */}
+          {/* ── PRIMARY BOOK SERVICE CTA (TATA.EV TEAL ACCENT) ── */}
           <TouchableOpacity
             onPress={() => router.push('/(customer)/booking')}
             activeOpacity={0.88}
             style={{
-              backgroundColor: '#2563eb',
+              backgroundColor: '#00D2C4',
               borderRadius: 18,
               paddingVertical: 14,
               paddingHorizontal: 16,
@@ -319,53 +352,67 @@ export default function CustomerDashboardScreen() {
               flexDirection: 'row',
               alignItems: 'center',
               justifyContent: 'space-between',
-              shadowColor: '#2563eb',
+              shadowColor: '#00D2C4',
               shadowOffset: { width: 0, height: 4 },
-              shadowOpacity: 0.28,
+              shadowOpacity: 0.35,
               shadowRadius: 10,
-              elevation: 4,
+              elevation: 5,
             }}
           >
             <View className="flex-row items-center gap-3 flex-1 pr-2">
-              <View className="w-10 h-10 rounded-xl bg-white/20 items-center justify-center shrink-0">
-                <Icon name="calendar" size={20} color="#ffffff" strokeWidth={2.2} />
+              <View className="w-10 h-10 rounded-xl bg-[#002B49]/20 items-center justify-center shrink-0">
+                <Icon name="calendar" size={20} color="#002B49" strokeWidth={2.4} />
               </View>
               <View className="flex-1">
-                <Text className="text-white text-[15px] font-black tracking-tight" numberOfLines={1}>
+                <Text className="text-[#002B49] text-[15px] font-black tracking-tight" numberOfLines={1}>
                   Book Service Appointment
                 </Text>
-                <Text className="text-blue-100 text-[11.5px]" numberOfLines={1} ellipsizeMode="tail">
-                  Schedule maintenance, repair or pickup
+                <Text className="text-[#002B49]/80 text-[11.5px] font-medium" numberOfLines={1} ellipsizeMode="tail">
+                  Schedule maintenance, repair or doorstep pickup
                 </Text>
               </View>
             </View>
-            <View className="bg-white px-3 py-1.5 rounded-xl shadow-xs shrink-0">
-              <Text className="text-blue-700 font-black text-xs">Book ➔</Text>
+            <View className="bg-[#002B49] px-3 py-1.5 rounded-xl shadow-xs shrink-0">
+              <Text className="text-[#00D2C4] font-black text-xs">Book ➔</Text>
             </View>
           </TouchableOpacity>
 
           <ClaimFormWidget userInsurerId={matchInsuranceProviderId(asText(job?.insurance_company))} />
 
-          {/* ── LIVE REPAIR TRACKER (INLINE DETAILS ACCORDION) ── */}
+          {/* ── LIVE REPAIR TRACKER (TATA.EV GLOWING TRACKER) ── */}
           {(() => {
             const effectiveStage = activeStageIndex !== null ? activeStageIndex : currentStageIndex
             return (
-              <View className="bg-white border border-slate-200 rounded-2xl p-4 mb-4 shadow-sm overflow-hidden">
+              <View
+                style={{
+                  backgroundColor: '#0F1A28',
+                  borderWidth: 1.2,
+                  borderColor: 'rgba(0, 210, 196, 0.25)',
+                  borderRadius: 22,
+                  padding: 16,
+                  marginBottom: 16,
+                  shadowColor: '#002B49',
+                  shadowOffset: { width: 0, height: 4 },
+                  shadowOpacity: 0.35,
+                  shadowRadius: 12,
+                  elevation: 5,
+                }}
+              >
                 <View className="flex-row items-center justify-between mb-3">
                   <View className="flex-row items-center gap-2">
-                    <View className="w-8 h-8 rounded-lg bg-blue-50 items-center justify-center">
-                      <Icon name="clock" size={16} color="#1e60ff" />
+                    <View className="w-8 h-8 rounded-lg bg-[#002B49] border border-[#00D2C4]/30 items-center justify-center">
+                      <Icon name="clock" size={16} color="#00D2C4" />
                     </View>
                     <View>
-                      <Text className="text-slate-900 text-[14px] font-black tracking-tight">
-                        Live Workshop Repair Tracker
+                      <Text className="text-white text-[14px] font-black tracking-tight">
+                        Live Service Progress Tracker
                       </Text>
-                      <Text className="text-slate-500 text-[11px] font-medium">Tap stage for live bay details</Text>
+                      <Text className="text-slate-400 text-[11px] font-medium">Tap stage for live workshop bay details</Text>
                     </View>
                   </View>
-                  <View className="bg-blue-600 px-2.5 py-1 rounded-full flex-row items-center gap-1.5">
-                    <View className="w-1.5 h-1.5 bg-emerald-300 rounded-full" />
-                    <Text className="text-white text-[10px] font-black">
+                  <View className="bg-[#00D2C4]/15 border border-[#00D2C4]/40 px-2.5 py-1 rounded-full flex-row items-center gap-1.5">
+                    <View className="w-1.5 h-1.5 bg-[#00D2C4] rounded-full" />
+                    <Text className="text-[#00D2C4] text-[10px] font-black">
                       {trackerStages[currentStageIndex].title}
                     </Text>
                   </View>
@@ -374,10 +421,13 @@ export default function CustomerDashboardScreen() {
                 {/* Clean Progress Track Bar */}
                 <View className="my-3 relative">
                   {/* Background Track Line */}
-                  <View className="h-1.5 bg-slate-100 rounded-full overflow-hidden relative">
+                  <View className="h-1.5 bg-[#071524] rounded-full overflow-hidden relative border border-white/5">
                     <View
-                      className="h-full bg-blue-600 rounded-full"
-                      style={{ width: `${((currentStageIndex + 1) / trackerStages.length) * 100}%` }}
+                      style={{
+                        height: '100%',
+                        backgroundColor: '#00D2C4',
+                        width: `${((currentStageIndex + 1) / trackerStages.length) * 100}%`,
+                      }}
                     />
                   </View>
 
@@ -398,32 +448,34 @@ export default function CustomerDashboardScreen() {
                           className="items-center w-12"
                         >
                           <View
-                            className={`w-7 h-7 rounded-full items-center justify-center border-2 ${
-                              isDone
-                                ? 'bg-emerald-500 border-emerald-500 shadow-xs'
-                                : 'bg-white border-slate-300'
-                            }`}
-                            style={
-                              isSelected
-                                ? { borderWidth: 2.5, borderColor: isDone ? '#047857' : '#2563eb' }
-                                : undefined
-                            }
+                            className="w-7 h-7 rounded-full items-center justify-center border-2"
+                            style={{
+                              backgroundColor: isDone ? '#00D2C4' : '#071524',
+                              borderColor: isSelected
+                                ? '#00E5BE'
+                                : isDone
+                                ? '#00D2C4'
+                                : 'rgba(255, 255, 255, 0.15)',
+                              borderWidth: isSelected || isCurrent ? 2.5 : 1.5,
+                            }}
                           >
                             <Icon
                               name={isDone ? 'check' : stg.icon}
                               size={12}
-                              color={isDone ? '#ffffff' : '#94a3b8'}
-                              strokeWidth={2.5}
+                              color={isDone ? '#002B49' : '#94a3b8'}
+                              strokeWidth={2.8}
                             />
                           </View>
                           <Text
-                            className={`text-[9.5px] mt-1 text-center font-bold ${
-                              isSelected
-                                ? 'text-blue-700 font-black'
+                            className="text-[9.5px] mt-1 text-center font-bold"
+                            style={{
+                              color: isSelected
+                                ? '#00E5BE'
                                 : isDone
-                                ? 'text-emerald-800'
-                                : 'text-slate-400'
-                            }`}
+                                ? '#00D2C4'
+                                : '#64748b',
+                              fontWeight: isSelected || isCurrent ? '900' : '700',
+                            }}
                           >
                             {stg.title}
                           </Text>
@@ -442,13 +494,23 @@ export default function CustomerDashboardScreen() {
                     setShowTrackerDetails((prev) => !prev)
                   }}
                   activeOpacity={0.8}
-                  className="bg-slate-50 border border-slate-200/80 rounded-xl p-2.5 mt-2 flex-row items-center justify-between"
+                  style={{
+                    backgroundColor: '#071524',
+                    borderWidth: 1,
+                    borderColor: 'rgba(0, 210, 196, 0.2)',
+                    borderRadius: 14,
+                    padding: 10,
+                    marginTop: 8,
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                  }}
                 >
-                  <Text className="text-slate-700 text-xs font-semibold flex-1 pr-2" numberOfLines={1}>
+                  <Text style={{ color: '#cbd5e1', fontSize: 11, fontWeight: '600', flex: 1, paddingRight: 8 }} numberOfLines={1}>
                     📍 {trackerStages[effectiveStage].desc}
                   </Text>
-                  <Text className="text-blue-600 text-xs font-black">
-                    {showTrackerDetails ? 'Hide Details ▲' : 'View Details ▼'}
+                  <Text style={{ color: '#00D2C4', fontSize: 11, fontWeight: '800' }}>
+                    {showTrackerDetails ? 'Hide ▲' : 'Details ▼'}
                   </Text>
                 </TouchableOpacity>
 

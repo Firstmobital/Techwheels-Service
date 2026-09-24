@@ -1557,23 +1557,26 @@ export default function CustomerPortalPage({
       </div>
 
       <div className="relative z-10 max-w-lg mx-auto px-4 pt-3 pb-24 space-y-4">
-        {/* ── TOP APP BAR: BRAND & 3-LINE MENU DRAWER TRIGGER ── */}
-        <div className="mobile-glass-dark rounded-3xl p-4 shadow-xl relative overflow-hidden border border-white/10">
-          {/* Subtle Top Gradient Accent */}
-          <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-blue-500 via-indigo-500 to-emerald-400" />
+        {/* ── TOP APP BAR: TATA MOTORS BRAND & 3-LINE MENU DRAWER TRIGGER ── */}
+        <div className="tata-glass-card rounded-3xl p-4 shadow-2xl relative overflow-hidden border border-[#00D2C4]/20 bg-gradient-to-r from-[#002B49]/90 via-[#071727]/90 to-[#0A1A2F]/90">
+          {/* Official Tata Cyan Accent Line */}
+          <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-[#002B49] via-[#00D2C4] to-[#00E5BE]" />
 
           {/* Brand Header & Top Actions */}
           <div className="flex items-center justify-between gap-2">
             <div className="flex items-center gap-2.5 min-w-0">
-              <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-blue-600 to-indigo-700 flex items-center justify-center text-white shadow-lg shadow-blue-500/25 ring-2 ring-white/15 shrink-0">
+              <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-[#003366] to-[#002B49] border border-[#00D2C4]/40 flex items-center justify-center text-white shadow-lg shadow-[#002B49]/40 ring-1 ring-white/10 shrink-0">
                 <span className="text-xl">🚘</span>
               </div>
               <div className="min-w-0">
                 <div className="flex items-center gap-1.5">
-                  <span className="text-xs font-bold uppercase tracking-wider text-blue-400 truncate">Tata Motors Service</span>
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 pulse-live-indicator shrink-0" />
+                  <span className="text-[11px] font-black uppercase tracking-wider text-[#00D2C4] truncate">Tata Motors Service</span>
+                  <span className="w-1.5 h-1.5 rounded-full bg-[#00D2C4] pulse-live-indicator shrink-0" />
                 </div>
-                <h1 className="text-base font-extrabold text-white tracking-tight truncate">Techwheels Service</h1>
+                <h1 className="text-base font-black text-white tracking-tight truncate flex items-center gap-1.5">
+                  <span>Techwheels Service</span>
+                  <span className="text-[10px] px-1.5 py-0.2 rounded-md bg-[#00D2C4]/15 text-[#00D2C4] border border-[#00D2C4]/30 font-mono">tata.cars</span>
+                </h1>
               </div>
             </div>
 
@@ -1582,7 +1585,7 @@ export default function CustomerPortalPage({
                 <button
                   type="button"
                   onClick={() => setActiveTab('dashboard')}
-                  className="tap-bounce px-2.5 py-1.5 rounded-xl bg-blue-600/20 hover:bg-blue-600/30 text-xs font-bold text-blue-300 border border-blue-400/30 flex items-center gap-1 transition"
+                  className="tap-bounce px-2.5 py-1.5 rounded-xl bg-[#00D2C4]/15 hover:bg-[#00D2C4]/25 text-xs font-bold text-[#00D2C4] border border-[#00D2C4]/30 flex items-center gap-1 transition"
                   title="Back to Overview"
                 >
                   <span>🏠</span>
@@ -1594,42 +1597,42 @@ export default function CustomerPortalPage({
               <button
                 type="button"
                 onClick={() => setShowMenuDrawer(true)}
-                className="tap-bounce relative w-10 h-10 rounded-2xl bg-white/10 hover:bg-white/15 active:bg-white/20 text-white flex flex-col items-center justify-center gap-1 border border-white/15 shadow-md transition"
+                className="tap-bounce relative w-10 h-10 rounded-2xl bg-[#002B49]/70 hover:bg-[#003366] text-white flex flex-col items-center justify-center gap-1 border border-[#00D2C4]/30 shadow-md transition"
                 title="Open Menu"
                 aria-label="Open Navigation Menu"
               >
+                <span className="w-4 h-0.5 bg-[#00D2C4] rounded-full transition-all" />
                 <span className="w-4 h-0.5 bg-white rounded-full transition-all" />
-                <span className="w-4 h-0.5 bg-white rounded-full transition-all" />
-                <span className="w-4 h-0.5 bg-white rounded-full transition-all" />
+                <span className="w-4 h-0.5 bg-[#00D2C4] rounded-full transition-all" />
 
                 {/* Notification Badge if Gatepass is approved or estimate pending */}
                 {(isGatepassAccountsApproved || isPendingApproval) && (
-                  <span className="absolute -top-1 -right-1 w-3 h-3 rounded-full bg-emerald-400 ring-2 ring-slate-950 animate-pulse" />
+                  <span className="absolute -top-1 -right-1 w-3 h-3 rounded-full bg-[#00D2C4] ring-2 ring-[#0A1118] animate-pulse" />
                 )}
               </button>
             </div>
           </div>
         </div>
 
-        {/* ── TAB 1: HOME PAGE OVERVIEW (MINIMALIST COCKPIT CARD & QUICK DOCK) ── */}
+        {/* ── TAB 1: HOME PAGE OVERVIEW (TATA COCKPIT CARD & LIVE TRACKER) ── */}
         {activeTab === 'dashboard' && (
           <div className="space-y-4 animate-in fade-in duration-200">
-            {/* Minimalist Vehicle Hero Cockpit Card */}
-            <div className="mobile-glass-dark rounded-3xl p-5 shadow-2xl relative overflow-hidden border border-white/10 bg-gradient-to-b from-slate-900/90 via-slate-900/60 to-slate-950/80">
-              {/* Top Accent Line */}
-              <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-blue-500 via-indigo-500 to-emerald-400" />
+            {/* Tata Hero Vehicle Cockpit Card */}
+            <div className="tata-hero-card rounded-3xl p-5 shadow-2xl relative overflow-hidden">
+              {/* Top Cyan Glowing Line */}
+              <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-[#002B49] via-[#00D2C4] to-[#00E5BE]" />
 
               {/* Vehicle Title & License Plate */}
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0 flex-1">
                   {/* License Plate Style Badge */}
                   <div className="flex items-center gap-2 flex-wrap">
-                    <span className="font-mono text-xl sm:text-2xl font-black text-white tracking-wider bg-slate-950 px-3 py-1 rounded-xl border border-white/15 shadow-inner ring-1 ring-white/5">
+                    <span className="font-mono text-xl sm:text-2xl font-black text-white tracking-wider bg-[#06101D] px-3.5 py-1 rounded-xl border border-[#00D2C4]/30 shadow-inner ring-1 ring-white/5">
                       {vehicle.reg_number}
                     </span>
-                    <span className="bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1">
-                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 pulse-live-indicator" />
-                      <span>In Workshop</span>
+                    <span className="tata-ev-badge text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1">
+                      <span className="w-1.5 h-1.5 rounded-full bg-[#00D2C4] pulse-live-indicator" />
+                      <span>Tata Official Service</span>
                     </span>
                     {Boolean(vehicle.remark?.toLowerCase().includes('revisit')) && (
                       <span className="bg-amber-500/20 text-amber-300 border border-amber-500/30 text-[10px] font-bold px-2 py-0.5 rounded-md uppercase tracking-wider">
@@ -1640,10 +1643,10 @@ export default function CustomerPortalPage({
 
                   {/* Model & Owner Subtitle */}
                   <div className="mt-2.5 space-y-0.5">
-                    <h2 className="text-sm font-extrabold text-white flex items-center gap-1.5">
-                      <span className="text-blue-400">🚘</span>
+                    <h2 className="text-base font-extrabold text-white flex items-center gap-1.5">
+                      <span className="text-[#00D2C4]">🚘</span>
                       <span>{vehicle.model || 'Tata Motors Vehicle'}</span>
-                      {vehicle.variant && <span className="text-slate-400 font-medium text-xs">· {vehicle.variant}</span>}
+                      {vehicle.variant && <span className="text-slate-300 font-medium text-xs">· {vehicle.variant}</span>}
                     </h2>
                     <p className="text-xs text-slate-300 font-medium flex items-center gap-1">
                       <span className="text-slate-400">👤 Owner:</span>
@@ -1657,7 +1660,7 @@ export default function CustomerPortalPage({
                   <button
                     type="button"
                     onClick={() => setShowVehiclePicker(true)}
-                    className="tap-bounce px-3 py-1.5 rounded-xl bg-blue-600/20 hover:bg-blue-600/30 text-blue-300 border border-blue-400/30 text-xs font-bold flex flex-col items-center gap-0.5 shrink-0"
+                    className="tap-bounce px-3 py-1.5 rounded-xl bg-[#00D2C4]/15 hover:bg-[#00D2C4]/25 text-[#00D2C4] border border-[#00D2C4]/30 text-xs font-bold flex flex-col items-center gap-0.5 shrink-0"
                   >
                     <span>Switch</span>
                     <span className="text-[10px] opacity-75">{allVehicles.length} Cars</span>
@@ -1668,11 +1671,11 @@ export default function CustomerPortalPage({
               {/* 3-Pill Essential Metrics Grid (Odometer, Job Card, Advisor) */}
               <div className="mt-4 grid grid-cols-3 gap-2 pt-3 border-t border-white/10 text-center">
                 {/* 1. Verified Odometer KM (Strictly Read-Only) */}
-                <div className="bg-slate-950/60 p-2.5 rounded-2xl border border-white/5 flex flex-col justify-between">
+                <div className="bg-[#06101D]/80 p-2.5 rounded-2xl border border-[#00D2C4]/15 flex flex-col justify-between">
                   <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
                     🛣️ Odometer
                   </span>
-                  <span className="font-mono font-black text-emerald-400 text-xs sm:text-sm mt-1 truncate">
+                  <span className="font-mono font-black text-[#00D2C4] text-xs sm:text-sm mt-1 truncate">
                     {vehicle.km_reading != null && vehicle.km_reading > 0
                       ? `${vehicle.km_reading.toLocaleString('en-IN')} KM`
                       : '—'}
@@ -1680,7 +1683,7 @@ export default function CustomerPortalPage({
                 </div>
 
                 {/* 2. Job Card Number from DB */}
-                <div className="bg-slate-950/60 p-2.5 rounded-2xl border border-white/5 flex flex-col justify-between">
+                <div className="bg-[#06101D]/80 p-2.5 rounded-2xl border border-[#00D2C4]/15 flex flex-col justify-between">
                   <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
                     📋 Job Card
                   </span>
@@ -1690,7 +1693,7 @@ export default function CustomerPortalPage({
                 </div>
 
                 {/* 3. Service Advisor Name from DB */}
-                <div className="bg-slate-950/60 p-2.5 rounded-2xl border border-white/5 flex flex-col justify-between">
+                <div className="bg-[#06101D]/80 p-2.5 rounded-2xl border border-[#00D2C4]/15 flex flex-col justify-between">
                   <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
                     👨‍💼 Advisor
                   </span>
@@ -1979,30 +1982,30 @@ export default function CustomerPortalPage({
               )}
             </div>
 
-            {/* ── 5-STAGE LIVE SERVICE JOURNEY STEPPER (INTERACTIVE ON CLICK) ── */}
-            <div className="mobile-glass-dark rounded-3xl p-5 border border-white/10 shadow-xl space-y-4">
+            {/* ── 5-STAGE LIVE SERVICE JOURNEY STEPPER (TATA.EV GLOWING PROGRESS) ── */}
+            <div className="tata-glass-card rounded-3xl p-5 border border-[#00D2C4]/20 shadow-2xl space-y-4 bg-gradient-to-b from-[#081524]/90 to-[#0A1A2F]/90">
               <div className="flex items-center justify-between">
                 <div>
-                  <h3 className="text-xs font-extrabold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
-                    <span>🚀</span> Live Service Journey
+                  <h3 className="text-xs font-black uppercase tracking-wider text-[#00D2C4] flex items-center gap-1.5">
+                    <span>⚡</span> Live Service Journey
                   </h3>
                   <div className="flex items-center gap-2 mt-0.5">
                     <span className="font-mono text-xs font-bold text-amber-300">
                       {vehicle.jc_number ? `JC #${vehicle.jc_number}` : 'JC Pending'}
                     </span>
-                    <span className="text-[10px] text-slate-500">· Tap stage for details</span>
+                    <span className="text-[10px] text-slate-400">· Tap any step for details</span>
                   </div>
                 </div>
-                <span className="bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-[10px] font-bold px-2.5 py-0.5 rounded-full">
+                <span className="tata-ev-badge text-[10px] font-extrabold px-2.5 py-0.5 rounded-full">
                   Stage {currentStageIndex + 1} of {stages.length}
                 </span>
               </div>
 
-              {/* Progress Line with Clickable Nodes */}
+              {/* Progress Line with Clickable Glowing Nodes */}
               <div className="relative flex justify-between items-center px-1 pt-2 pb-1">
-                <div className="absolute top-[26px] left-4 right-4 -translate-y-1/2 h-1 bg-slate-800 z-0 rounded-full" />
+                <div className="absolute top-[26px] left-4 right-4 -translate-y-1/2 h-1 bg-[#06101D] z-0 rounded-full border border-white/5" />
                 <div
-                  className="absolute top-[26px] left-4 -translate-y-1/2 h-1 bg-gradient-to-r from-blue-500 via-indigo-500 to-emerald-500 z-0 rounded-full transition-all duration-500"
+                  className="absolute top-[26px] left-4 -translate-y-1/2 h-1 bg-gradient-to-r from-[#003366] via-[#00D2C4] to-[#00E5BE] z-0 rounded-full transition-all duration-500 shadow-[0_0_12px_#00D2C4]"
                   style={{ width: `${(currentStageIndex / (stages.length - 1)) * 92}%` }}
                 />
 
@@ -2018,19 +2021,19 @@ export default function CustomerPortalPage({
                       title={`Click to view ${stg.label} details`}
                     >
                       <div
-                        className={`w-9 h-9 sm:w-10 sm:h-10 rounded-full flex items-center justify-center text-xs sm:text-sm font-bold transition-all duration-300 shadow-md group-hover:ring-4 group-hover:ring-blue-400/50 ${
+                        className={`w-9 h-9 sm:w-10 sm:h-10 rounded-full flex items-center justify-center text-xs sm:text-sm font-black transition-all duration-300 shadow-lg ${
                           isDone
-                            ? 'bg-emerald-500 text-slate-950 ring-4 ring-emerald-500/20'
+                            ? 'bg-[#00D2C4] text-[#002B49] ring-4 ring-[#00D2C4]/25'
                             : isCurrent
-                            ? 'bg-blue-600 text-white ring-4 ring-blue-500/40 scale-110 pulse-live-indicator'
-                            : 'bg-slate-800 text-slate-500 border border-white/10'
+                            ? 'tata-step-active text-[#002B49] ring-4 ring-[#00D2C4]/50 scale-110'
+                            : 'bg-[#06101D] text-slate-500 border border-white/10 group-hover:border-[#00D2C4]/40'
                         }`}
                       >
                         {isDone ? '✓' : stg.icon}
                       </div>
                       <span
                         className={`text-[10px] sm:text-[11px] mt-2 font-bold tracking-tight text-center transition group-hover:text-white ${
-                          isCurrent ? 'text-blue-400 font-extrabold' : isDone ? 'text-emerald-400' : 'text-slate-500'
+                          isCurrent ? 'text-[#00D2C4] font-black' : isDone ? 'text-emerald-300' : 'text-slate-400'
                         }`}
                       >
                         {stg.label}
@@ -2040,26 +2043,72 @@ export default function CustomerPortalPage({
                 })}
               </div>
 
-              {/* Current Status Callout (Clickable for full details) */}
+              {/* Current Status Callout */}
               <div
                 onClick={() => setSelectedStageModal(currentStageIndex)}
-                className="tap-bounce bg-slate-900/90 hover:bg-slate-900 rounded-2xl p-4 border border-white/10 hover:border-blue-400/40 flex items-start gap-3 cursor-pointer transition group"
+                className="tap-bounce bg-[#06101D]/90 hover:bg-[#06101D] rounded-2xl p-4 border border-[#00D2C4]/20 hover:border-[#00D2C4]/50 flex items-start gap-3 cursor-pointer transition group shadow-inner"
               >
                 <span className="text-2xl mt-0.5 group-hover:scale-110 transition">{stages[currentStageIndex].icon}</span>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center justify-between">
                     <div className="text-sm font-bold text-white flex items-center gap-1.5">
                       <span>Current Stage: {stages[currentStageIndex].label}</span>
-                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 pulse-live-indicator" />
+                      <span className="w-1.5 h-1.5 rounded-full bg-[#00D2C4] pulse-live-indicator" />
                     </div>
-                    <span className="text-[10px] font-bold text-blue-400 group-hover:underline flex items-center gap-0.5">
+                    <span className="text-[10px] font-bold text-[#00D2C4] group-hover:underline flex items-center gap-0.5">
                       Details ➔
                     </span>
                   </div>
-                  <p className="text-xs text-slate-400 mt-0.5 leading-relaxed">
+                  <p className="text-xs text-slate-300 mt-0.5 leading-relaxed">
                     {stages[currentStageIndex].desc}
                   </p>
                 </div>
+              </div>
+            </div>
+
+            {/* ── ASSIGNED TATA SERVICE ADVISOR & WORKSHOP CONNECT ── */}
+            <div className="tata-glass-card rounded-3xl p-5 border border-[#00D2C4]/20 shadow-xl space-y-3.5 bg-gradient-to-r from-[#002B49]/80 to-[#0B1E36]/80">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-black uppercase tracking-wider text-[#00D2C4] flex items-center gap-1">
+                  <span>👨‍💼</span> Assigned Tata Service Advisor
+                </span>
+                <span className="text-[10px] bg-[#00D2C4]/15 text-[#00D2C4] px-2 py-0.5 rounded-md font-mono border border-[#00D2C4]/30">
+                  Dealership Verified
+                </span>
+              </div>
+
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-[#003366] to-[#002B49] border border-[#00D2C4]/40 flex items-center justify-center text-xl text-white shadow-md ring-1 ring-white/10 shrink-0">
+                  👨‍🔧
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="text-sm font-extrabold text-white truncate">
+                    {cleanAdvisorPersonName(vehicle.sa_display_name || vehicle.sa_name) || 'Tata Service Advisor Desk'}
+                  </div>
+                  <div className="text-[11px] text-slate-300 truncate">
+                    {vehicle.branch || 'Sitapura Main Workshop'} · Techwheels Tata Motors
+                  </div>
+                </div>
+              </div>
+
+              {/* 1-Tap Direct WhatsApp & Phone Call Buttons */}
+              <div className="grid grid-cols-2 gap-2 pt-1">
+                <a
+                  href={`https://wa.me/91${(vehicle.owner_phone || '').replace(/\D/g, '').slice(-10)}?text=${encodeURIComponent(`Hello, I am tracking my Tata vehicle ${vehicle.reg_number} (Job Card: ${vehicle.jc_number || 'Active'}). Please update on current status.`)}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="tap-bounce py-2.5 px-3 rounded-2xl bg-[#00D2C4]/15 hover:bg-[#00D2C4]/25 text-[#00D2C4] border border-[#00D2C4]/35 font-bold text-xs flex items-center justify-center gap-1.5 transition text-center"
+                >
+                  <span>💬</span>
+                  <span>WhatsApp</span>
+                </a>
+                <a
+                  href={`tel:${vehicle.owner_phone || ''}`}
+                  className="tap-bounce py-2.5 px-3 rounded-2xl bg-[#003366] hover:bg-[#002B49] text-white border border-[#00D2C4]/30 font-bold text-xs flex items-center justify-center gap-1.5 transition text-center shadow-md"
+                >
+                  <span>📞</span>
+                  <span>Direct Call</span>
+                </a>
               </div>
             </div>
           </div>

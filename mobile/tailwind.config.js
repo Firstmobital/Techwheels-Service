@@ -5,14 +5,23 @@ module.exports = {
   presets: [require('nativewind/preset')],
   theme: {
     extend: {
-      colors: {
+        // Tata.cars & Tata.ev Brand Palette
+        'tata-navy': '#002B49',
+        'tata-blue': '#003366',
+        'tata-teal': '#00D2C4',
+        'tata-cyan': '#00E5BE',
+        'tata-dark': '#0A1118',
+        'tata-card': '#0F1A28',
+        'tata-silver': '#E2E8F0',
+        'tata-gold': '#F59E0B',
+
         // Brand palette
-        brand: '#2a4cd0',
-        'brand-600': '#1f38a0',
-        'brand-700': '#152770',
-        'brand-soft': '#e9effe',
-        'brand-line': '#b3c9f0',
-        'on-brand': '#ffffff',
+        brand: '#002B49',
+        'brand-600': '#003366',
+        'brand-700': '#001A2C',
+        'brand-soft': '#E6FAF8',
+        'brand-line': '#00D2C4',
+        'on-brand': '#00D2C4',
 
         // Semantic colors
         amber: '#e07d24',

@@ -1,6 +1,7 @@
 import { useCallback, useState } from 'react'
 import {
   ActivityIndicator,
+  Alert,
   Linking,
   Modal,
   ScrollView,
@@ -19,7 +20,13 @@ import {
   formatInr,
 } from '../../components/customer/customerUi'
 import { useCustomerSession } from '../../context/CustomerSessionContext'
-import { customerListEstimates, customerSetEstimateDecision } from '../../lib/api/customerPortal'
+import {
+  customerGetRepairCard,
+  customerListEstimates,
+  customerOpenBodyshopEstimateDocument,
+  customerSetEstimateDecision,
+  parseBodyshopEstimateDocument,
+} from '../../lib/api/customerPortal'
 import { estimateStatusKind, parseEstimate, type EstimateView } from '../../lib/customer/math'
 
 export default function CustomerEstimateScreen() {
@@ -33,14 +40,24 @@ export default function CustomerEstimateScreen() {
   const [rejectReason, setRejectReason] = useState('')
   const [toast, setToast] = useState<{ ok: boolean; msg: string } | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [bodyshopEstimateDoc, setBodyshopEstimateDoc] = useState<ReturnType<typeof parseBodyshopEstimateDocument>>(null)
+  const [bodyshopEstimateAmount, setBodyshopEstimateAmount] = useState<number | null>(null)
+  const [openingWorkshopDoc, setOpeningWorkshopDoc] = useState(false)
 
   const load = useCallback(async (isSilent = false) => {
     if (!token) return
     if (!isSilent) setLoading(true)
     setError(null)
     try {
-      const list = (await customerListEstimates(token, selectedReg)).map(parseEstimate)
+      const [listResult, repairCard] = await Promise.all([
+        customerListEstimates(token, selectedReg).catch(() => [] as Record<string, unknown>[]),
+        customerGetRepairCard(token, selectedReg).catch(() => null),
+      ])
+      const list = listResult.map(parseEstimate)
       setRows(list)
+      setBodyshopEstimateDoc(parseBodyshopEstimateDocument(repairCard))
+      const amt = repairCard?.estimated_amount
+      setBodyshopEstimateAmount(amt != null && !Number.isNaN(Number(amt)) ? Number(amt) : null)
       // If there's an active pending estimate requiring action, auto-select it
       const pendingIdx = list.findIndex(
         (e) => !e.status.toLowerCase().includes('approv') && !e.status.toLowerCase().includes('reject')
@@ -71,6 +88,21 @@ export default function CustomerEstimateScreen() {
 
   const estimate = rows[selectedIdx]
   const kind = estimate ? estimateStatusKind(estimate.status) : 'pending'
+
+  const openWorkshopEstimate = async () => {
+    if (!token) return
+    setOpeningWorkshopDoc(true)
+    try {
+      await customerOpenBodyshopEstimateDocument(token, selectedReg, bodyshopEstimateDoc)
+    } catch (err) {
+      Alert.alert(
+        'Workshop estimate',
+        err instanceof Error ? err.message : 'Unable to open estimate document.'
+      )
+    } finally {
+      setOpeningWorkshopDoc(false)
+    }
+  }
 
   const decide = async (decision: 'approve' | 'reject') => {
     if (!token || !estimate?.estimate_id) return
@@ -149,11 +181,33 @@ export default function CustomerEstimateScreen() {
       {loading ? (
         <ActivityIndicator color="#2563eb" />
       ) : !estimate ? (
-        <CustomerCard>
-          <Text className="text-slate-700">
-            No estimate has been issued for this vehicle yet. Line items and totals appear only after the workshop sends a quotation.
-          </Text>
-        </CustomerCard>
+        bodyshopEstimateDoc ? (
+          <CustomerCard>
+            <Text className="text-slate-900 text-[16px] font-bold mb-1">Workshop Repair Estimate</Text>
+            <Text className="text-slate-500 text-[12px] mb-3">
+              Uploaded by your Service Advisor for insurance / bodyshop repair (same file as workshop portal).
+            </Text>
+            {bodyshopEstimateAmount != null ? (
+              <Text className="text-emerald-700 font-extrabold text-[15px] mb-2">
+                Estimate amount: {formatInr(bodyshopEstimateAmount)}
+              </Text>
+            ) : null}
+            <Text className="text-slate-600 text-[12.5px] mb-3" numberOfLines={2}>
+              {String(bodyshopEstimateDoc.file_name || 'Estimate document')}
+            </Text>
+            <PrimaryButton
+              label={openingWorkshopDoc ? 'Opening…' : '📄 View Workshop Estimate Document'}
+              onPress={() => void openWorkshopEstimate()}
+              loading={openingWorkshopDoc}
+            />
+          </CustomerCard>
+        ) : (
+          <CustomerCard>
+            <Text className="text-slate-700">
+              No estimate has been issued for this vehicle yet. Line items and totals appear only after the workshop sends a quotation.
+            </Text>
+          </CustomerCard>
+        )
       ) : (
         <>
           {rows.length > 1 ? (

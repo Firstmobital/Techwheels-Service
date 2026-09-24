@@ -45,3 +45,5 @@ mobile/dist-android-local-check-2/
 mobile/dist-android-local-check-3/
 mobile/play-service-account.json
 *.zip
+Techwheels-Service/
+.agents/plugins/

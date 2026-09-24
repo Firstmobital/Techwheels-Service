@@ -1,12 +1,18 @@
-import { useCallback, useState } from 'react'
-import { ActivityIndicator, Modal, ScrollView, Text, TouchableOpacity, View } from 'react-native'
+import { useCallback, useMemo, useState } from 'react'
+import { ActivityIndicator, Alert, Modal, ScrollView, Text, TouchableOpacity, View } from 'react-native'
 import { useFocusEffect, useRouter } from 'expo-router'
 import { CustomerScreen } from '../../components/customer/CustomerScreen'
 import { CustomerCard, CustomerToast, asText, dash, formatInr } from '../../components/customer/customerUi'
 import { useCustomerSession } from '../../context/CustomerSessionContext'
-import { customerGetActiveJob, customerGetRepairCard } from '../../lib/api/customerPortal'
+import {
+  customerGetActiveJob,
+  customerGetRepairCard,
+  customerOpenBodyshopEstimateDocument,
+  parseBodyshopEstimateDocument,
+} from '../../lib/api/customerPortal'
 import { supabase } from '../../lib/supabase'
 import { Icon } from '../../components/ui/Icon'
+import { getBodyshopStageDetailRows } from '../../lib/customer/bodyshopStageDetails'
 
 export const BODYSHOP_18_STAGES = [
   { stage: 1, name: '1. Vehicle Receiving', shortName: 'Vehicle Receiving', desc: 'Accident vehicle intake & initial workshop security check-in.', group: 'SA Intake' },
@@ -70,6 +76,26 @@ export default function CustomerTrackerScreen() {
   const [selectedServiceStageIndex, setSelectedServiceStageIndex] = useState<number | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [openingEstimateDoc, setOpeningEstimateDoc] = useState(false)
+
+  const bodyshopEstimateDoc = parseBodyshopEstimateDocument(card)
+  const showEstimateDocInStage =
+    selectedBodyshopStage?.stage === 6 || selectedBodyshopStage?.stage === 7
+
+  const openWorkshopEstimateDoc = async () => {
+    if (!token) return
+    setOpeningEstimateDoc(true)
+    try {
+      await customerOpenBodyshopEstimateDocument(token, selectedReg, bodyshopEstimateDoc)
+    } catch (err) {
+      Alert.alert(
+        'Estimate document',
+        err instanceof Error ? err.message : 'Unable to open workshop estimate.'
+      )
+    } finally {
+      setOpeningEstimateDoc(false)
+    }
+  }
 
   const load = useCallback(async (isInitial = false) => {
     if (!token) return
@@ -136,6 +162,16 @@ export default function CustomerTrackerScreen() {
   const estimateIssued = Boolean(job?.estimate_drive_url || job?.estimate_storage_path || jc)
   const advisor = asText(job?.sa_display_name) || asText(job?.sa_name) || asText(selected?.sa_display_name) || asText(selected?.sa_name)
   const qcDone = String(card?.qc_status || '').toLowerCase() === 'pass' || invoiced
+
+  const activeStageDetailRows = useMemo(() => {
+    if (!selectedBodyshopStage) return []
+    return getBodyshopStageDetailRows(selectedBodyshopStage.stage, card, {
+      jc: asText(job?.jc_number) || asText(selected?.jc_number) || asText(card?.job_card_no) || undefined,
+      advisor: advisor || undefined,
+      techBay: techInfo?.bay_no ? `Bay ${techInfo.bay_no}` : null,
+      techName: techInfo?.name ?? null,
+    })
+  }, [selectedBodyshopStage, card, job?.jc_number, selected?.jc_number, advisor, techInfo])
 
   // Determine if this is an accident / bodyshop vehicle
   const isAccident =
@@ -639,7 +675,7 @@ export default function CustomerTrackerScreen() {
               onRequestClose={() => setSelectedBodyshopStage(null)}
             >
               <View className="flex-1 bg-black/70 justify-center items-center p-4">
-                <View className="w-full max-w-sm bg-white rounded-3xl p-5 shadow-2xl">
+                <View className="w-full max-w-sm max-h-[88%] bg-white rounded-3xl p-5 shadow-2xl">
                   {/* Header */}
                   <View className="flex-row justify-between items-center pb-3 border-b border-slate-100">
                     <View className="flex-1 pr-2">
@@ -682,48 +718,79 @@ export default function CustomerTrackerScreen() {
                     </View>
                   </View>
 
+                  <ScrollView showsVerticalScrollIndicator={false} className="max-h-[420px]">
+                  <View className="bg-slate-100 border border-slate-200 rounded-xl px-3 py-2 mb-3">
+                    <Text className="text-slate-600 text-[10.5px] font-bold text-center">
+                      Read-only · Live updates from your Service Advisor & workshop team
+                    </Text>
+                  </View>
+
                   {/* Stage Description */}
                   <Text className="text-slate-700 text-xs leading-relaxed my-3 bg-slate-50 p-3 rounded-2xl">
                     {selectedBodyshopStage.desc}
                   </Text>
 
-                  {/* Contextual Details */}
-                  <View className="bg-slate-50 rounded-2xl p-3.5 space-y-2 mb-4">
-                    <View className="flex-row justify-between items-center py-1 border-b border-slate-200">
-                      <Text className="text-slate-500 text-xs">📋 Job Card</Text>
-                      <Text className="font-bold font-mono text-slate-900 text-xs">{dash(jc)}</Text>
+                  {showEstimateDocInStage ? (
+                    <View className="bg-blue-50 border border-blue-200 rounded-2xl p-3.5 mb-4">
+                      <Text className="text-blue-900 text-xs font-black uppercase tracking-wide mb-1">
+                        Workshop Estimate Upload
+                      </Text>
+                      {card?.estimated_amount != null ? (
+                        <Text className="text-slate-800 text-sm font-bold mb-2">
+                          Estimate amount: {formatInr(Number(card.estimated_amount))}
+                        </Text>
+                      ) : null}
+                      {bodyshopEstimateDoc ? (
+                        <>
+                          <Text className="text-slate-600 text-[11.5px] mb-2" numberOfLines={2}>
+                            {String(bodyshopEstimateDoc.file_name || 'Estimate document')} — uploaded by workshop
+                          </Text>
+                          <TouchableOpacity
+                            onPress={() => void openWorkshopEstimateDoc()}
+                            disabled={openingEstimateDoc}
+                            activeOpacity={0.85}
+                            className="bg-blue-600 rounded-xl py-2.5 items-center"
+                          >
+                            <Text className="text-white font-black text-xs">
+                              {openingEstimateDoc ? 'Opening…' : '📄 View Workshop Estimate'}
+                            </Text>
+                          </TouchableOpacity>
+                        </>
+                      ) : (
+                        <Text className="text-slate-600 text-[11.5px]">
+                          Workshop estimate document is not uploaded yet. Your Service Advisor will share it after
+                          preparation.
+                        </Text>
+                      )}
                     </View>
+                  ) : null}
 
-                    <View className="flex-row justify-between items-center py-1 border-b border-slate-200">
-                      <Text className="text-slate-500 text-xs">🛡️ Insurance Claim</Text>
-                      <Text className="font-bold font-mono text-slate-900 text-xs">{dash(card?.claim_intimation_no)}</Text>
-                    </View>
-
-                    <View className="flex-row justify-between items-center py-1 border-b border-slate-200">
-                      <Text className="text-slate-500 text-xs">👨‍💼 Service Advisor</Text>
-                      <Text className="font-bold text-slate-900 text-xs">{dash(advisor)}</Text>
-                    </View>
-
-                    {card?.surveyor_name ? (
-                      <View className="flex-row justify-between items-center py-1 border-b border-slate-200">
-                        <Text className="text-slate-500 text-xs">🔍 Surveyor</Text>
-                        <Text className="font-bold text-slate-900 text-xs">{dash(card.surveyor_name)}</Text>
+                  <View className="bg-slate-50 rounded-2xl p-3.5 mb-4 border border-slate-200">
+                    <Text className="text-slate-800 text-xs font-black uppercase tracking-wide mb-2">
+                      Workshop stage details
+                    </Text>
+                    {activeStageDetailRows.map((row, idx) => (
+                      <View
+                        key={`${row.label}-${idx}`}
+                        className={`py-2 ${idx < activeStageDetailRows.length - 1 ? 'border-b border-slate-200' : ''}`}
+                      >
+                        <Text className="text-slate-500 text-[11px] font-semibold mb-0.5">{row.label}</Text>
+                        <Text
+                          className="text-slate-900 text-xs font-bold leading-snug"
+                          selectable
+                        >
+                          {row.value}
+                        </Text>
                       </View>
-                    ) : null}
-
-                    {techInfo?.bay_no ? (
-                      <View className="flex-row justify-between items-center py-1 border-b border-slate-200">
-                        <Text className="text-slate-500 text-xs">🏢 Workshop Bay</Text>
-                        <Text className="font-bold font-mono text-blue-700 text-xs">Bay {techInfo.bay_no}</Text>
-                      </View>
-                    ) : null}
+                    ))}
                   </View>
+                  </ScrollView>
 
                   {/* Close Modal Button */}
                   <TouchableOpacity
                     onPress={() => setSelectedBodyshopStage(null)}
                     activeOpacity={0.8}
-                    className="w-full py-3 bg-purple-600 rounded-2xl items-center"
+                    className="w-full py-3 bg-purple-600 rounded-2xl items-center mt-2"
                   >
                     <Text className="text-white font-bold text-xs">Close Details</Text>
                   </TouchableOpacity>

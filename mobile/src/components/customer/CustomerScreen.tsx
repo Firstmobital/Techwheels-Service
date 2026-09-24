@@ -145,9 +145,9 @@ export function CustomerScreen({
   const showNotificationDot = !hasSeenNotifications && isDeliveredToday
 
   return (
-    <SafeAreaView className="flex-1 bg-slate-50" edges={['top']}>
-      {/* Top App Header */}
-      <View className="bg-white border-b border-slate-100 px-4 pt-3 pb-3 shadow-xs">
+    <SafeAreaView className="flex-1 bg-[#0A1118]" edges={['top']}>
+      {/* Top App Header (Tata Motors Theme) */}
+      <View style={{ backgroundColor: '#071524', borderBottomWidth: 1, borderBottomColor: 'rgba(0, 210, 196, 0.2)', paddingHorizontal: 16, paddingTop: 12, paddingBottom: 12 }}>
         <View className="flex-row items-center justify-between gap-3">
           <View className="flex-row items-center flex-1 pr-2">
             <Image
@@ -157,8 +157,8 @@ export function CustomerScreen({
               className="mr-3"
             />
             <View className="flex-1">
-              <Text className="text-slate-900 text-[16px] font-black tracking-tight">Techwheels</Text>
-              <Text className="text-slate-500 text-[11px] font-medium">Authorised Tata Motors Service Center</Text>
+              <Text className="text-white text-[16px] font-black tracking-tight">Techwheels</Text>
+              <Text className="text-[#00D2C4] text-[11px] font-bold">Authorised Tata Motors Service Center</Text>
             </View>
           </View>
 
@@ -176,15 +176,15 @@ export function CustomerScreen({
                 width: 40,
                 height: 40,
                 borderRadius: 12,
-                backgroundColor: '#f8fafc',
+                backgroundColor: '#0F1A28',
                 borderWidth: 1,
-                borderColor: '#e2e8f0',
+                borderColor: 'rgba(0, 210, 196, 0.25)',
                 alignItems: 'center',
                 justifyContent: 'center',
                 position: 'relative',
               }}
             >
-              <Icon name="bell" size={18} color="#475569" />
+              <Icon name="bell" size={18} color="#00D2C4" />
               {showNotificationDot && (
                 <View
                   style={{
@@ -194,9 +194,9 @@ export function CustomerScreen({
                     width: 8,
                     height: 8,
                     borderRadius: 4,
-                    backgroundColor: '#10b981',
+                    backgroundColor: '#00D2C4',
                     borderWidth: 1.5,
-                    borderColor: '#ffffff',
+                    borderColor: '#071524',
                   }}
                 />
               )}
@@ -212,17 +212,19 @@ export function CustomerScreen({
                 width: 40,
                 height: 40,
                 borderRadius: 12,
-                backgroundColor: '#0b132b',
+                backgroundColor: '#002B49',
+                borderWidth: 1,
+                borderColor: 'rgba(0, 210, 196, 0.35)',
                 alignItems: 'center',
                 justifyContent: 'center',
-                shadowColor: '#0b132b',
+                shadowColor: '#002B49',
                 shadowOffset: { width: 0, height: 2 },
-                shadowOpacity: 0.2,
+                shadowOpacity: 0.35,
                 shadowRadius: 3,
                 elevation: 4,
               }}
             >
-              <Icon name="menu" size={18} color="#ffffff" strokeWidth={2.2} />
+              <Icon name="menu" size={18} color="#00D2C4" strokeWidth={2.4} />
             </TouchableOpacity>
           </View>
         </View>
@@ -241,16 +243,16 @@ export function CustomerScreen({
                 }}
                 accessibilityRole="button"
                 accessibilityLabel="Go back to Home"
-                className="flex-row items-center bg-slate-100 active:bg-slate-200 border border-slate-200 px-3 py-1.5 rounded-xl mr-3"
+                className="flex-row items-center bg-[#0F1A28] active:bg-[#002B49] border border-[#00D2C4]/30 px-3 py-1.5 rounded-xl mr-3"
               >
-                <Text className="text-slate-900 font-black text-sm mr-1.5">←</Text>
-                <Text className="text-slate-800 font-bold text-xs">Home</Text>
+                <Text className="text-[#00D2C4] font-black text-sm mr-1.5">←</Text>
+                <Text className="text-white font-bold text-xs">Home</Text>
               </TouchableOpacity>
             )}
             {title ? (
               <View className="flex-1">
-                <Text className="text-slate-900 text-lg font-black leading-6">{title}</Text>
-                {subtitle ? <Text className="text-slate-500 text-[12px] mt-0.5">{subtitle}</Text> : null}
+                <Text className="text-white text-lg font-black leading-6">{title}</Text>
+                {subtitle ? <Text className="text-slate-400 text-[12px] mt-0.5">{subtitle}</Text> : null}
               </View>
             ) : null}
           </View>

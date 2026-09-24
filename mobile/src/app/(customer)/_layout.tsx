@@ -40,17 +40,17 @@ function CustomerTabBar({ state, descriptors, navigation }: any) {
         right: 0,
         bottom: 0,
         flexDirection: 'row',
-        borderTopColor: '#e2e8f0',
+        borderTopColor: 'rgba(0, 210, 196, 0.22)',
         borderTopWidth: 1,
-        backgroundColor: '#ffffff',
+        backgroundColor: '#071524',
         paddingTop: 8,
         paddingBottom: Math.max(10, insets.bottom),
         minHeight: tabBarHeight,
-        shadowColor: '#0f172a',
+        shadowColor: '#002B49',
         shadowOffset: { width: 0, height: -6 },
-        shadowOpacity: 0.06,
+        shadowOpacity: 0.35,
         shadowRadius: 16,
-        elevation: 10,
+        elevation: 12,
       }}
     >
       {state.routes
@@ -77,21 +77,23 @@ function CustomerTabBar({ state, descriptors, navigation }: any) {
                   paddingHorizontal: 16,
                   paddingVertical: 5,
                   borderRadius: 14,
-                  backgroundColor: focused ? '#eff6ff' : 'transparent',
+                  backgroundColor: focused ? 'rgba(0, 210, 196, 0.16)' : 'transparent',
+                  borderWidth: focused ? 1 : 0,
+                  borderColor: focused ? 'rgba(0, 210, 196, 0.35)' : 'transparent',
                 }}
               >
                 <Icon
                   name={iconName}
                   size={20}
-                  color={focused ? '#2563eb' : '#64748b'}
-                  strokeWidth={focused ? 2.4 : 1.8}
+                  color={focused ? '#00D2C4' : '#94a3b8'}
+                  strokeWidth={focused ? 2.5 : 1.8}
                 />
               </View>
               <Text
                 style={{
                   fontSize: 11,
                   fontWeight: focused ? '800' : '600',
-                  color: focused ? '#2563eb' : '#64748b',
+                  color: focused ? '#00D2C4' : '#94a3b8',
                   marginTop: 2,
                   letterSpacing: 0.1,
                 }}
@@ -111,8 +113,8 @@ export default function CustomerTabsLayout() {
 
   if (staffLoading || customerLoading) {
     return (
-      <View className="flex-1 items-center justify-center bg-white">
-        <ActivityIndicator size="large" color="#2563eb" />
+      <View className="flex-1 items-center justify-center bg-[#0A1118]">
+        <ActivityIndicator size="large" color="#00D2C4" />
       </View>
     )
   }
@@ -130,7 +132,7 @@ export default function CustomerTabsLayout() {
       tabBar={(props) => <CustomerTabBar {...props} />}
       screenOptions={{
         headerShown: false,
-        sceneStyle: { backgroundColor: '#f8fafc', paddingBottom: 94 },
+        sceneStyle: { backgroundColor: '#0A1118', paddingBottom: 94 },
       }}
     >
       <Tabs.Screen name="index" options={{ title: 'Home', tabBarLabel: 'Home' }} />

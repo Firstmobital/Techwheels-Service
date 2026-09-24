@@ -114,10 +114,21 @@ export default function CustomerMyBookingsScreen() {
                 Service Bookings & Status ({activeBookings.length})
               </Text>
               {activeBookings.map((b) => {
-                const badge = STATUS_BADGE_STYLE[b.status] || STATUS_BADGE_STYLE.New
-                const isApproved = b.status === 'Confirmed'
-                const isRejected = b.status === 'Cancelled'
-                const isPending = b.status === 'New'
+                const rawStatus = (b.status || 'New').trim()
+                const badge =
+                  STATUS_BADGE_STYLE[rawStatus] ||
+                  (rawStatus.toLowerCase().includes('cancel') || rawStatus.toLowerCase().includes('reject')
+                    ? STATUS_BADGE_STYLE.Cancelled
+                    : rawStatus.toLowerCase().includes('confirm')
+                    ? STATUS_BADGE_STYLE.Confirmed
+                    : STATUS_BADGE_STYLE.New)
+
+                const isApproved = rawStatus === 'Confirmed' || rawStatus.toLowerCase().includes('confirm')
+                const isRejected =
+                  rawStatus === 'Cancelled' ||
+                  rawStatus.toLowerCase().includes('cancel') ||
+                  rawStatus.toLowerCase().includes('reject')
+                const isPending = !isApproved && !isRejected
 
                 return (
                   <View
@@ -161,12 +172,14 @@ export default function CustomerMyBookingsScreen() {
                         </View>
                       </View>
                     ) : isRejected ? (
-                      <View className="bg-rose-50 border border-rose-200 rounded-xl p-2.5 mb-2 flex-row items-center gap-2">
-                        <Text className="text-sm">❌</Text>
+                      <View className="bg-rose-50 border border-rose-200 rounded-xl p-3 mb-2 flex-row items-start gap-2.5">
+                        <Text className="text-base mt-0.5">❌</Text>
                         <View className="flex-1">
-                          <Text className="text-rose-900 text-xs font-black">Booking Request Rejected / Declined</Text>
-                          <Text className="text-rose-700 text-[11px]">
-                            This slot was declined by our workshop team. Please submit a new slot or contact us.
+                          <Text className="text-rose-900 text-xs font-black">Booking Cancelled / Declined</Text>
+                          <Text className="text-rose-700 text-[11px] mt-0.5">
+                            {b.status_reason
+                              ? `Reason: ${b.status_reason}`
+                              : 'This booking request was declined or cancelled by the workshop team. You can book a new slot below.'}
                           </Text>
                         </View>
                       </View>
@@ -226,12 +239,21 @@ export default function CustomerMyBookingsScreen() {
                       </View>
                     ) : null}
 
-                    <View className="mt-2.5 bg-slate-100 border border-slate-200 rounded-xl p-2.5 flex-row items-center gap-2">
-                      <Text className="text-xs">🔒</Text>
-                      <Text className="text-slate-700 text-[11px] font-medium flex-1">
-                        Booking is locked. To modify or reschedule, please contact our calling desk.
-                      </Text>
-                    </View>
+                    {isRejected ? (
+                      <TouchableOpacity
+                        onPress={() => router.push('/(customer)/booking')}
+                        className="mt-2.5 bg-rose-600 active:bg-rose-700 py-2.5 px-4 rounded-xl flex-row items-center justify-center gap-2"
+                      >
+                        <Text className="text-white text-xs font-black">📅 Book A New Appointment Slot</Text>
+                      </TouchableOpacity>
+                    ) : (
+                      <View className="mt-2.5 bg-slate-100 border border-slate-200 rounded-xl p-2.5 flex-row items-center gap-2">
+                        <Text className="text-xs">🔒</Text>
+                        <Text className="text-slate-700 text-[11px] font-medium flex-1">
+                          Booking is locked. To modify or reschedule, please contact our calling desk.
+                        </Text>
+                      </View>
+                    )}
                   </View>
                 )
               })}

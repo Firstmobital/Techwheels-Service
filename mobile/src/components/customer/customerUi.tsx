@@ -71,17 +71,17 @@ export function CustomerCard({
     <View
       style={[
         {
-          backgroundColor: '#ffffff',
-          borderWidth: 1,
-          borderColor: '#e2e8f0',
+          backgroundColor: '#0F1A28',
+          borderWidth: 1.2,
+          borderColor: 'rgba(0, 210, 196, 0.22)',
           borderRadius: 20,
           padding: noPadding ? 0 : 18,
           marginBottom: 14,
-          shadowColor: '#0f172a',
+          shadowColor: '#002B49',
           shadowOffset: { width: 0, height: 4 },
-          shadowOpacity: 0.05,
+          shadowOpacity: 0.35,
           shadowRadius: 12,
-          elevation: 3,
+          elevation: 4,
         },
         style,
       ]}
@@ -95,8 +95,8 @@ export function CustomerToast({ ok, message }: { ok: boolean; message: string })
   return (
     <View
       style={{
-        backgroundColor: ok ? '#ecfdf5' : '#fef2f2',
-        borderColor: ok ? '#a7f3d0' : '#fecaca',
+        backgroundColor: ok ? 'rgba(0, 210, 196, 0.15)' : 'rgba(239, 68, 68, 0.15)',
+        borderColor: ok ? 'rgba(0, 210, 196, 0.4)' : '#f87171',
         borderWidth: 1,
         borderRadius: 14,
         paddingHorizontal: 16,
@@ -104,9 +104,9 @@ export function CustomerToast({ ok, message }: { ok: boolean; message: string })
         marginBottom: 14,
         flexDirection: 'row',
         alignItems: 'center',
-        shadowColor: ok ? '#059669' : '#dc2626',
+        shadowColor: ok ? '#00D2C4' : '#dc2626',
         shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.08,
+        shadowOpacity: 0.2,
         shadowRadius: 6,
         elevation: 2,
       }}
@@ -116,11 +116,11 @@ export function CustomerToast({ ok, message }: { ok: boolean; message: string })
           width: 8,
           height: 8,
           borderRadius: 4,
-          backgroundColor: ok ? '#10b981' : '#ef4444',
+          backgroundColor: ok ? '#00D2C4' : '#ef4444',
           marginRight: 10,
         }}
       />
-      <Text style={{ color: ok ? '#065f46' : '#991b1b', fontSize: 13.5, fontWeight: '700', flex: 1 }}>
+      <Text style={{ color: ok ? '#00D2C4' : '#fca5a5', fontSize: 13.5, fontWeight: '700', flex: 1 }}>
         {message}
       </Text>
     </View>
@@ -135,11 +135,11 @@ export function StatusBadge({
   variant?: 'success' | 'warning' | 'error' | 'info' | 'default'
 }) {
   const stylesByVariant = {
-    success: { bg: '#ecfdf5', text: '#059669', border: '#a7f3d0', dot: '#10b981' },
-    warning: { bg: '#fffbeb', text: '#d97706', border: '#fde68a', dot: '#f59e0b' },
-    error: { bg: '#fef2f2', text: '#dc2626', border: '#fecaca', dot: '#ef4444' },
-    info: { bg: '#eff6ff', text: '#2563eb', border: '#bfdbfe', dot: '#3b82f6' },
-    default: { bg: '#f1f5f9', text: '#475569', border: '#cbd5e1', dot: '#94a3b8' },
+    success: { bg: 'rgba(0, 210, 196, 0.15)', text: '#00D2C4', border: 'rgba(0, 210, 196, 0.4)', dot: '#00D2C4' },
+    warning: { bg: 'rgba(245, 158, 11, 0.15)', text: '#fbbf24', border: 'rgba(245, 158, 11, 0.4)', dot: '#f59e0b' },
+    error: { bg: 'rgba(239, 68, 68, 0.15)', text: '#f87171', border: 'rgba(239, 68, 68, 0.4)', dot: '#ef4444' },
+    info: { bg: 'rgba(0, 51, 102, 0.35)', text: '#00D2C4', border: 'rgba(0, 210, 196, 0.35)', dot: '#00D2C4' },
+    default: { bg: '#071524', text: '#94a3b8', border: 'rgba(255, 255, 255, 0.12)', dot: '#94a3b8' },
   }
 
   const s = stylesByVariant[variant] || stylesByVariant.default
@@ -184,14 +184,14 @@ export function RecordRow({
         paddingBottom: last ? 0 : 10,
         marginBottom: last ? 0 : 10,
         borderBottomWidth: last ? 0 : 1,
-        borderBottomColor: '#f1f5f9',
+        borderBottomColor: 'rgba(0, 210, 196, 0.12)',
         gap: 12,
       }}
     >
-      <Text style={{ color: '#64748b', fontSize: 13, fontWeight: '500' }}>{label}</Text>
+      <Text style={{ color: '#94a3b8', fontSize: 13, fontWeight: '500' }}>{label}</Text>
       <Text
         style={{
-          color: highlight ? '#2563eb' : '#0f172a',
+          color: highlight ? '#00D2C4' : '#ffffff',
           fontSize: 13.5,
           fontWeight: highlight ? '800' : '700',
           flexShrink: 1,
@@ -209,7 +209,7 @@ export function PrimaryButton({
   onPress,
   disabled,
   loading,
-  color = '#2563eb',
+  color = '#00D2C4',
   icon,
 }: {
   label: string
