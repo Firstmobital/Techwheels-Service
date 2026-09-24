@@ -122,14 +122,28 @@ async function readCount(
   return count || 0
 }
 
-function applyListFilters<Q extends { eq: (column: string, value: string) => Q; or: (filters: string) => Q }>(
+function applyListFilters<Q extends {
+  eq: (column: string, value: string) => Q
+  or: (filters: string) => Q
+  gte: (column: string, value: string) => Q
+  lte: (column: string, value: string) => Q
+}>(
   query: Q,
-  opts: { search: string; filterStatus: 'all' | CreStatus; statusEnabled: boolean },
+  opts: {
+    search: string
+    filterStatus: 'all' | CreStatus
+    statusEnabled: boolean
+    serviceDateFrom: string
+    serviceDateTo: string
+  },
 ): Q {
   let next = query
   if (opts.statusEnabled && opts.filterStatus !== 'all') {
     next = next.eq('cre_status', opts.filterStatus)
   }
+  // closed_date is a Postgres date. Compare calendar dates only — no timestamps.
+  if (opts.serviceDateFrom) next = next.gte('closed_date', opts.serviceDateFrom)
+  if (opts.serviceDateTo) next = next.lte('closed_date', opts.serviceDateTo)
   const q = sanitizeSearch(opts.search)
   if (q) {
     const pattern = `%${q}%`
@@ -308,6 +322,8 @@ export default function PostServiceFeedbackCREPage() {
 
   const [tier, setTier] = useState<Tier>('low')
   const [filterStatus, setFilterStatus] = useState<'all' | CreStatus>('all')
+  const [serviceDateFrom, setServiceDateFrom] = useState('')
+  const [serviceDateTo, setServiceDateTo] = useState('')
   const [search, setSearch] = useState('')
   const [debouncedSearch, setDebouncedSearch] = useState('')
   const [page, setPage] = useState(1)
@@ -339,12 +355,19 @@ export default function PostServiceFeedbackCREPage() {
       search: debouncedSearch,
       filterStatus,
       statusEnabled,
+      serviceDateFrom,
+      serviceDateTo,
     })
     query = tier === 'unrated'
       ? query.order('sent_at', { ascending: false })
       : query.order('responded_at', { ascending: false })
 
-    const statusBase = () => (tier === 'low' ? baseCount().lte('rating', 3) : baseCount().is('rating', null))
+    const statusBase = () => {
+      let q = tier === 'low' ? baseCount().lte('rating', 3) : baseCount().is('rating', null)
+      if (serviceDateFrom) q = q.gte('closed_date', serviceDateFrom)
+      if (serviceDateTo) q = q.lte('closed_date', serviceDateTo)
+      return q
+    }
 
     const [totalSent, positiveCount, needsFollowupCount, unratedCount, pageRes, statusTotal, statusOpen, statusInProgress, statusResolved] = await Promise.all([
       readCount(baseCount()),
@@ -371,7 +394,7 @@ export default function PostServiceFeedbackCREPage() {
       rows: (pageRes.data || []) as QueueRow[],
       filteredTotal: pageRes.count || 0,
     }
-  }, [tier, filterStatus, debouncedSearch, page])
+  }, [tier, filterStatus, serviceDateFrom, serviceDateTo, debouncedSearch, page])
 
   const applyQueue = useCallback((result: Awaited<ReturnType<typeof fetchQueue>>) => {
     setOverview(result.overview)
@@ -490,7 +513,7 @@ export default function PostServiceFeedbackCREPage() {
       )}
 
       <div className="bg-white border border-gray-200 rounded-lg p-4">
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 lg:items-end">
           {showStatusFilter && (
             <div>
               <label className="block text-xs text-gray-500 mb-1">Status</label>
@@ -506,7 +529,43 @@ export default function PostServiceFeedbackCREPage() {
               </select>
             </div>
           )}
-          <div className={showStatusFilter ? 'sm:col-span-2' : 'sm:col-span-3'}>
+          <div>
+            <div className="flex items-center justify-between mb-1">
+              <label className="block text-xs text-gray-500">Service Date</label>
+              {(serviceDateFrom || serviceDateTo) && (
+                <button
+                  type="button"
+                  className="text-xs text-gray-500 hover:text-gray-800"
+                  onClick={() => {
+                    setServiceDateFrom('')
+                    setServiceDateTo('')
+                    setPage(1)
+                    setExpandedId(null)
+                  }}
+                >
+                  Clear
+                </button>
+              )}
+            </div>
+            <div className="flex items-center gap-1">
+              <input
+                type="date"
+                aria-label="Service Date from"
+                className="w-full min-w-0 border border-gray-300 rounded px-2 py-1.5 text-sm"
+                value={serviceDateFrom}
+                onChange={e => { setServiceDateFrom(e.target.value); setPage(1); setExpandedId(null) }}
+              />
+              <span className="text-xs text-gray-400 shrink-0">–</span>
+              <input
+                type="date"
+                aria-label="Service Date to"
+                className="w-full min-w-0 border border-gray-300 rounded px-2 py-1.5 text-sm"
+                value={serviceDateTo}
+                onChange={e => { setServiceDateTo(e.target.value); setPage(1); setExpandedId(null) }}
+              />
+            </div>
+          </div>
+          <div className={showStatusFilter ? '' : 'lg:col-span-2'}>
             <label className="block text-xs text-gray-500 mb-1">Search (name, mobile, reg no, branch)</label>
             <input
               type="text"
