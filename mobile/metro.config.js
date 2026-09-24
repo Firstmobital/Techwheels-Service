@@ -24,5 +24,6 @@ config.watchFolders = [
 ]
 
 module.exports = withNativeWind(config, {
-  input: './src/global.css',
+  input: path.resolve(__dirname, 'src/global.css'),
+  configPath: path.resolve(__dirname, 'tailwind.config.js'),
 })
