@@ -17,6 +17,7 @@ import {
   Bell,
   Calendar,
   Camera,
+  Car,
   Check,
   CheckCircle,
   ChevronDown,
@@ -95,6 +96,7 @@ export type IconName =
   | 'bell'
   | 'calendar'
   | 'camera'
+  | 'car'
   | 'check'
   | 'check-circle'
   | 'chevron-down'
@@ -182,6 +184,7 @@ const iconMap: Record<IconName, React.ComponentType<LucideProps>> = {
   bell: Bell,
   calendar: Calendar,
   camera: Camera,
+  car: Car,
   check: Check,
   'check-circle': CheckCircle,
   'chevron-down': ChevronDown,
