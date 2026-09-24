@@ -203,7 +203,7 @@ function assertInvoiceVoucherContract(result) {
     const parts5 = rows.filter((row) => row['Item Name'] === 'SPARE PARTS @5%')
     const parts18 = rows.filter((row) => row['Item Name'] === 'SPARE PARTS @18%')
     const labour = rows.filter((row) => row['Item Name'] === 'LABOUR CHARGES @18%')
-    const roundOff = rows.filter((row) => row['Item Name'] === 'Rounded Off (+)')
+    const roundOff = rows.filter((row) => row['Item Name'] === 'Rounded Off')
     const needsRoundOff = preview.roundOff !== 0
     assert.equal(parts18.length, 1)
     assert.equal(labour.length, 1)
@@ -212,7 +212,7 @@ function assertInvoiceVoucherContract(result) {
     const baseItems = preview.hasParts5Line
       ? ['SPARE PARTS @5%', 'SPARE PARTS @18%', 'LABOUR CHARGES @18%']
       : ['SPARE PARTS @18%', 'LABOUR CHARGES @18%']
-    assert.deepEqual(items, needsRoundOff ? [...baseItems, 'Rounded Off (+)'] : baseItems)
+    assert.deepEqual(items, needsRoundOff ? [...baseItems, 'Rounded Off'] : baseItems)
     const expectedSeries = busyVoucherSeries(preview.invoiceNumber)
     for (const row of rows) {
       assert.equal(row['Bill date'], formatBusyBillDate(preview.invoiceDate))
@@ -1135,8 +1135,8 @@ test('Series is derived from bill no and repeated on every voucher row including
   const evRows = groups.get('EMBTAI2627006634')
   assert.ok(pvRows)
   assert.ok(evRows)
-  assert.deepEqual(pvRows.map((row) => row['Item Name']), ['SPARE PARTS @18%', 'LABOUR CHARGES @18%', 'Rounded Off (+)'])
-  assert.deepEqual(evRows.map((row) => row['Item Name']), ['SPARE PARTS @18%', 'LABOUR CHARGES @18%', 'Rounded Off (+)'])
+  assert.deepEqual(pvRows.map((row) => row['Item Name']), ['SPARE PARTS @18%', 'LABOUR CHARGES @18%', 'Rounded Off'])
+  assert.deepEqual(evRows.map((row) => row['Item Name']), ['SPARE PARTS @18%', 'LABOUR CHARGES @18%', 'Rounded Off'])
   assert.equal(pvRows.every((row) => row.Series === 'PV-S 26-27'), true)
   assert.equal(evRows.every((row) => row.Series === 'EV-S 26-27'), true)
   assert.equal(pvRows.at(-1).Series, 'PV-S 26-27')
@@ -1149,7 +1149,7 @@ test('Series is derived from bill no and repeated on every voucher row including
   assert.equal(evRows.at(-1).Amount, 0.45)
 })
 
-test('Rounded Off (+) is emitted only when labour+parts subtotal has a decimal part', () => {
+test('Rounded Off is emitted only when labour+parts subtotal has a decimal part', () => {
   const result = transformBusyAccounting({
     labourRows: [
       labour({ invoice_number: 'IMBTAI1', job_card_number: 'JC-A', final_labour_amount: 10823.55 }),
@@ -1162,11 +1162,11 @@ test('Rounded Off (+) is emitted only when labour+parts subtotal has a decimal p
   })
   assertInvoiceVoucherContract(result)
   const groups = voucherGroups(result.invoiceRows)
-  assert.equal(groups.get('IMBTAI1').at(-1)['Item Name'], 'Rounded Off (+)')
+  assert.equal(groups.get('IMBTAI1').at(-1)['Item Name'], 'Rounded Off')
   assert.equal(groups.get('IMBTAI1').at(-1).Amount, 0.45)
-  assert.equal(groups.get('IMBTAI2').at(-1)['Item Name'], 'Rounded Off (+)')
+  assert.equal(groups.get('IMBTAI2').at(-1)['Item Name'], 'Rounded Off')
   assert.equal(groups.get('IMBTAI2').at(-1).Amount, -0.20)
-  assert.equal(groups.get('IMBTAI3').some((row) => row['Item Name'] === 'Rounded Off (+)'), false)
+  assert.equal(groups.get('IMBTAI3').some((row) => row['Item Name'] === 'Rounded Off'), false)
   assert.equal(groups.get('IMBTAI3').length, 2)
   assert.equal(result.preview.find((row) => row.invoiceNumber === 'IMBTAI1').total, 10824)
   assert.equal(result.preview.find((row) => row.invoiceNumber === 'IMBTAI2').total, 9003)
@@ -1632,7 +1632,7 @@ test('Parts-only GST split keeps 5% and 18% and rounds off the parts subtotal', 
     'SPARE PARTS @5%',
     'SPARE PARTS @18%',
     'LABOUR CHARGES @18%',
-    'Rounded Off (+)',
+    'Rounded Off',
   ])
 })
 
@@ -1677,7 +1677,7 @@ test('supplied PV.csv dealer invoices resolve by code when the file is present',
   assert.equal(exported.find((row) => row['Item Name'] === 'LABOUR CHARGES @18%').Amount, 0)
   assert.equal(exported.find((row) => row['Item Name'] === 'SPARE PARTS @18%').Amount, plex.parts18)
   if (plex.roundOff !== 0) {
-    assert.equal(exported.find((row) => row['Item Name'] === 'Rounded Off (+)').Amount, plex.roundOff)
+    assert.equal(exported.find((row) => row['Item Name'] === 'Rounded Off').Amount, plex.roundOff)
   }
 })
 

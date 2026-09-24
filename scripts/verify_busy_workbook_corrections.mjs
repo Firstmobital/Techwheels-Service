@@ -84,7 +84,7 @@ for (const [billNo, rows] of byBill) {
       'Bill date': template['Bill date'],
       'bill no': template['bill no'],
       'Party Name': template['Party Name'],
-      'Item Name': 'Rounded Off (+)',
+      'Item Name': 'Rounded Off',
       Qty: 0,
       Price: 0,
       Amount: roundOff,
@@ -124,7 +124,7 @@ for (const [billNo, rows] of rereadByBill) {
   const parts5 = rows.filter((row) => row['Item Name'] === 'SPARE PARTS @5%')
   const parts18 = rows.filter((row) => row['Item Name'] === 'SPARE PARTS @18%')
   const labour = rows.filter((row) => row['Item Name'] === 'LABOUR CHARGES @18%')
-  const roundOff = rows.filter((row) => row['Item Name'] === 'Rounded Off (+)')
+  const roundOff = rows.filter((row) => row['Item Name'] === 'Rounded Off')
   if (parts18.length !== 1) missingParts18 += 1
   if (labour.length !== 1) missingLabour += 1
   if (parts5.length !== 0) unexpectedParts5 += 1
@@ -140,7 +140,7 @@ for (const [billNo, rows] of rereadByBill) {
   const baseItems = parts5.length > 0
     ? ['SPARE PARTS @5%', 'SPARE PARTS @18%', 'LABOUR CHARGES @18%']
     : ['SPARE PARTS @18%', 'LABOUR CHARGES @18%']
-  assert.deepEqual(items, needsRoundOff ? [...baseItems, 'Rounded Off (+)'] : baseItems, billNo)
+  assert.deepEqual(items, needsRoundOff ? [...baseItems, 'Rounded Off'] : baseItems, billNo)
 
   const actualRoundOff = needsRoundOff ? Number(roundOff[0]?.Amount ?? NaN) : 0
   if (actualRoundOff !== expectedRoundOff) signedMismatch += 1

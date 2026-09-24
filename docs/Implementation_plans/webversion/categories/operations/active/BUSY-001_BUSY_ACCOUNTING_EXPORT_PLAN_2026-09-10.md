@@ -28,7 +28,7 @@ Add a web **BUSY** page that reads persisted PV/EV Labour from `public.psf_reven
 2. Filter eligible invoices: PV `IMBTAI*`, EV `EMBTAI*`, inclusive Labour invoice date range.
 3. Resolve branch from `sr_assigned_to`, Party Name, and exact BUSY debtor group strings.
 4. Export Party and Invoice XLSX files from ready invoices only.
-5. Invoice Voucher rows: always emit `SPARE PARTS @18%` and `LABOUR CHARGES @18%` (including Amount 0). Emit `SPARE PARTS @5%` only when matched Parts data contains a genuine 5% GST line. Emit a final `Rounded Off (+)` row only when labour + Parts subtotal has a +/− decimal. Do not use `eligible × 3` as a row-count rule.
+5. Invoice Voucher rows: always emit `SPARE PARTS @18%` and `LABOUR CHARGES @18%` (including Amount 0). Emit `SPARE PARTS @5%` only when matched Parts data contains a genuine 5% GST line. Emit a final `Rounded Off` row only when labour + Parts subtotal has a +/− decimal. Do not use `eligible × 3` as a row-count rule.
 6. Party Account columns are `Party Name`, `Group`, `GSTIN`. Bodyshop (`Account` contains `C/O`) takes Group/GSTIN from `public.busy_insurance_master`, not the branch debtor group. Unmapped insurers are blocked. Admin insert/update of mappings is on `/busy` only.
 
 ---
