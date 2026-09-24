@@ -1,5 +1,6 @@
 import { ReactNode } from 'react'
 import { ActivityIndicator, Text, TouchableOpacity, View } from 'react-native'
+import { CustomerTheme } from '../../lib/customer/customerTheme'
 
 export function dash(value: unknown): string {
   if (value == null) return '—'
@@ -71,17 +72,17 @@ export function CustomerCard({
     <View
       style={[
         {
-          backgroundColor: '#0F1A28',
-          borderWidth: 1.2,
-          borderColor: 'rgba(0, 210, 196, 0.22)',
-          borderRadius: 20,
-          padding: noPadding ? 0 : 18,
+          backgroundColor: CustomerTheme.card,
+          borderWidth: 1,
+          borderColor: CustomerTheme.border,
+          borderRadius: 18,
+          padding: noPadding ? 0 : 16,
           marginBottom: 14,
-          shadowColor: '#002B49',
-          shadowOffset: { width: 0, height: 4 },
-          shadowOpacity: 0.35,
-          shadowRadius: 12,
-          elevation: 4,
+          shadowColor: '#131F3D',
+          shadowOffset: { width: 0, height: 2 },
+          shadowOpacity: 0.06,
+          shadowRadius: 10,
+          elevation: 2,
         },
         style,
       ]}
@@ -95,8 +96,8 @@ export function CustomerToast({ ok, message }: { ok: boolean; message: string })
   return (
     <View
       style={{
-        backgroundColor: ok ? 'rgba(0, 210, 196, 0.15)' : 'rgba(239, 68, 68, 0.15)',
-        borderColor: ok ? 'rgba(0, 210, 196, 0.4)' : '#f87171',
+        backgroundColor: ok ? '#ECFDF5' : '#FEF2F2',
+        borderColor: ok ? '#A7F3D0' : '#FECACA',
         borderWidth: 1,
         borderRadius: 14,
         paddingHorizontal: 16,
@@ -104,11 +105,6 @@ export function CustomerToast({ ok, message }: { ok: boolean; message: string })
         marginBottom: 14,
         flexDirection: 'row',
         alignItems: 'center',
-        shadowColor: ok ? '#00D2C4' : '#dc2626',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.2,
-        shadowRadius: 6,
-        elevation: 2,
       }}
     >
       <View
@@ -116,11 +112,18 @@ export function CustomerToast({ ok, message }: { ok: boolean; message: string })
           width: 8,
           height: 8,
           borderRadius: 4,
-          backgroundColor: ok ? '#00D2C4' : '#ef4444',
+          backgroundColor: ok ? CustomerTheme.success : '#EF4444',
           marginRight: 10,
         }}
       />
-      <Text style={{ color: ok ? '#00D2C4' : '#fca5a5', fontSize: 13.5, fontWeight: '700', flex: 1 }}>
+      <Text
+        style={{
+          color: ok ? '#065F46' : '#991B1B',
+          fontSize: 13.5,
+          fontWeight: '700',
+          flex: 1,
+        }}
+      >
         {message}
       </Text>
     </View>
@@ -135,11 +138,11 @@ export function StatusBadge({
   variant?: 'success' | 'warning' | 'error' | 'info' | 'default'
 }) {
   const stylesByVariant = {
-    success: { bg: 'rgba(0, 210, 196, 0.15)', text: '#00D2C4', border: 'rgba(0, 210, 196, 0.4)', dot: '#00D2C4' },
-    warning: { bg: 'rgba(245, 158, 11, 0.15)', text: '#fbbf24', border: 'rgba(245, 158, 11, 0.4)', dot: '#f59e0b' },
-    error: { bg: 'rgba(239, 68, 68, 0.15)', text: '#f87171', border: 'rgba(239, 68, 68, 0.4)', dot: '#ef4444' },
-    info: { bg: 'rgba(0, 51, 102, 0.35)', text: '#00D2C4', border: 'rgba(0, 210, 196, 0.35)', dot: '#00D2C4' },
-    default: { bg: '#071524', text: '#94a3b8', border: 'rgba(255, 255, 255, 0.12)', dot: '#94a3b8' },
+    success: { bg: '#DCFCE7', text: '#166534', border: '#BBF7D0', dot: '#16A34A' },
+    warning: { bg: '#FEF3C7', text: '#92400E', border: '#FDE68A', dot: '#D97706' },
+    error: { bg: '#FEE2E2', text: '#991B1B', border: '#FECACA', dot: '#DC2626' },
+    info: { bg: CustomerTheme.tabActiveBg, text: CustomerTheme.teal, border: '#BAE6FD', dot: CustomerTheme.teal },
+    default: { bg: '#F1F5F9', text: CustomerTheme.inkMuted, border: CustomerTheme.border, dot: CustomerTheme.inkSoft },
   }
 
   const s = stylesByVariant[variant] || stylesByVariant.default
@@ -169,33 +172,42 @@ export function RecordRow({
   value,
   last,
   highlight,
+  mono,
 }: {
   label: string
   value: string
   last?: boolean
   highlight?: boolean
+  mono?: boolean
 }) {
   return (
     <View
       style={{
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        paddingBottom: last ? 0 : 10,
-        marginBottom: last ? 0 : 10,
+        paddingBottom: last ? 0 : 12,
+        marginBottom: last ? 0 : 12,
         borderBottomWidth: last ? 0 : 1,
-        borderBottomColor: 'rgba(0, 210, 196, 0.12)',
-        gap: 12,
+        borderBottomColor: CustomerTheme.border,
       }}
     >
-      <Text style={{ color: '#94a3b8', fontSize: 13, fontWeight: '500' }}>{label}</Text>
       <Text
         style={{
-          color: highlight ? '#00D2C4' : '#ffffff',
-          fontSize: 13.5,
-          fontWeight: highlight ? '800' : '700',
-          flexShrink: 1,
-          textAlign: 'right',
+          color: CustomerTheme.inkMuted,
+          fontSize: 11,
+          fontWeight: '700',
+          textTransform: 'uppercase',
+          letterSpacing: 0.4,
+        }}
+      >
+        {label}
+      </Text>
+      <Text
+        style={{
+          color: highlight ? CustomerTheme.teal : CustomerTheme.ink,
+          fontSize: 15,
+          fontWeight: '800',
+          marginTop: 4,
+          lineHeight: 21,
+          fontFamily: mono ? 'monospace' : undefined,
         }}
       >
         {value}
@@ -209,7 +221,7 @@ export function PrimaryButton({
   onPress,
   disabled,
   loading,
-  color = '#00D2C4',
+  color = CustomerTheme.teal,
   icon,
 }: {
   label: string

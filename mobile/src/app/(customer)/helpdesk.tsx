@@ -11,7 +11,6 @@ interface ContactTier {
   desc: string
   phone: string
   email: string
-  whatsapp: string
   icon: string
   badgeColor: string
   textColor: string
@@ -25,7 +24,6 @@ const DEALERSHIP_TIERS: ContactTier[] = [
     desc: 'Vehicle service queries, appointment coordination, delay issues & prompt resolution.',
     phone: '9116667296',
     email: 'Crmservice@techwheels.in',
-    whatsapp: '9116667296',
     icon: '👩‍💼',
     badgeColor: 'bg-blue-100',
     textColor: 'text-blue-800',
@@ -37,7 +35,6 @@ const DEALERSHIP_TIERS: ContactTier[] = [
     desc: 'Technical disputes, repair quality oversight & workshop floor management.',
     phone: '9116667274',
     email: 'service@techwheels.in',
-    whatsapp: '9116667274',
     icon: '👨‍💼',
     badgeColor: 'bg-amber-100',
     textColor: 'text-amber-800',
@@ -49,7 +46,6 @@ const DEALERSHIP_TIERS: ContactTier[] = [
     desc: 'Executive escalation, unresolved grievances, critical repeat issues & billing disputes.',
     phone: '9257051606',
     email: 'gmservice@techwheels.in',
-    whatsapp: '9257051606',
     icon: '🏛️',
     badgeColor: 'bg-rose-100',
     textColor: 'text-rose-800',
@@ -64,7 +60,6 @@ const TATA_MOTORS_TIERS: ContactTier[] = [
     desc: 'Official Tata Motors OEM customer care, warranty policies & vehicle escalation.',
     phone: '9328726988',
     email: 'AJJ820986@tatamotors.com',
-    whatsapp: '9328726988',
     icon: '🚘',
     badgeColor: 'bg-indigo-100',
     textColor: 'text-indigo-800',
@@ -76,7 +71,6 @@ const TATA_MOTORS_TIERS: ContactTier[] = [
     desc: 'Regional OEM leadership intervention for state-level unresolved customer complaints.',
     phone: '8288004301',
     email: 'gumeet.singh@tatamotors.com',
-    whatsapp: '8288004301',
     icon: '🌐',
     badgeColor: 'bg-emerald-100',
     textColor: 'text-emerald-800',
@@ -107,18 +101,6 @@ export default function CustomerHelpdeskScreen() {
       await Linking.openURL(`mailto:${email}?subject=${subject}&body=${body}`)
     } catch {
       setToast({ ok: false, msg: `Unable to open email app for ${email}` })
-    }
-  }
-
-  const handleWhatsApp = async (phone: string) => {
-    const reg = selected?.reg_number || 'Vehicle'
-    const text = encodeURIComponent(
-      `Hello, I am the owner of Tata vehicle ${reg}. I have a query regarding my vehicle service.`
-    )
-    try {
-      await Linking.openURL(`https://wa.me/91${phone}?text=${text}`)
-    } catch {
-      setToast({ ok: false, msg: `Unable to open WhatsApp for ${phone}` })
     }
   }
 
@@ -160,15 +142,6 @@ export default function CustomerHelpdeskScreen() {
           <Text className="text-xs">✉️</Text>
           <Text className="text-white font-bold text-xs">Mail</Text>
         </TouchableOpacity>
-
-        <TouchableOpacity
-          onPress={() => handleWhatsApp(tier.whatsapp)}
-          activeOpacity={0.8}
-          className="flex-1 py-2.5 bg-emerald-600 rounded-xl items-center flex-row justify-center gap-1 shadow-sm"
-        >
-          <Text className="text-xs">💬</Text>
-          <Text className="text-white font-bold text-xs">WhatsApp</Text>
-        </TouchableOpacity>
       </View>
     </CustomerCard>
   )
@@ -203,26 +176,6 @@ export default function CustomerHelpdeskScreen() {
           {TATA_MOTORS_TIERS.map(renderTierCard)}
         </View>
 
-        {/* 24x7 Roadside Assistance Card */}
-        <CustomerCard style={{ backgroundColor: '#fff1f2', borderColor: '#fecdd3', marginBottom: 20 }}>
-          <View className="flex-row items-center justify-between">
-            <View className="flex-row items-center gap-2.5 flex-1 pr-2">
-              <Text className="text-2xl">🚨</Text>
-              <View className="flex-1">
-                <Text className="text-[10px] font-bold uppercase text-rose-800">24x7 Breakdown & Towing</Text>
-                <Text className="text-xs font-bold text-slate-900">Tata Motors Roadside Assistance</Text>
-              </View>
-            </View>
-            <TouchableOpacity
-              onPress={() => handleCall('18002098282')}
-              activeOpacity={0.8}
-              className="py-2 px-3 bg-rose-600 rounded-xl flex-row items-center gap-1"
-            >
-              <Text className="text-xs">📞</Text>
-              <Text className="text-white font-bold text-xs">1800-209-8282</Text>
-            </TouchableOpacity>
-          </View>
-        </CustomerCard>
       </ScrollView>
     </CustomerScreen>
   )

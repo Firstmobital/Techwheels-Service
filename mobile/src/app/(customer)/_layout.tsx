@@ -3,34 +3,21 @@ import { ActivityIndicator, Text, TouchableOpacity, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useAuth } from '../../context/AuthContext'
 import { useCustomerSession } from '../../context/CustomerSessionContext'
+import { CustomerTheme } from '../../lib/customer/customerTheme'
 
 import { Icon, IconName } from '../../components/ui/Icon'
 
 const TAB_CONFIG: Record<string, { icon: IconName; label: string }> = {
   index: { icon: 'home', label: 'Home' },
-  tracker: { icon: 'clock', label: 'Tracker' },
-  estimate: { icon: 'file', label: 'Estimate' },
-  invoices: { icon: 'file-text', label: 'Bills' },
-  gatepass: { icon: 'shield-check', label: 'Gate Pass' },
+  tracker: { icon: 'map', label: 'Journey' },
+  documents: { icon: 'file-text', label: 'Documents' },
+  invoices: { icon: 'file', label: 'Payments' },
+  helpdesk: { icon: 'info', label: 'Help' },
 }
 
 function CustomerTabBar({ state, descriptors, navigation }: any) {
   const insets = useSafeAreaInsets()
   const tabBarHeight = 64 + Math.max(10, insets.bottom)
-  const { vehicles, selectedReg } = useCustomerSession()
-  const selected = vehicles.find((v) => v.reg_number === selectedReg) || vehicles[0]
-  const isAccident = String(selected?.service_type || '').toLowerCase().includes('accident')
-
-  const dynamicConfig: Record<string, { icon: IconName; label: string }> = {
-    index: { icon: 'home', label: 'Home' },
-    tracker: {
-      icon: 'clock',
-      label: isAccident ? 'Bodyshop' : 'Tracker',
-    },
-    estimate: { icon: 'file', label: 'Estimate' },
-    invoices: { icon: 'file-text', label: 'Bills' },
-    gatepass: { icon: 'shield-check', label: 'Gate Pass' },
-  }
 
   return (
     <View
@@ -40,26 +27,26 @@ function CustomerTabBar({ state, descriptors, navigation }: any) {
         right: 0,
         bottom: 0,
         flexDirection: 'row',
-        borderTopColor: 'rgba(0, 210, 196, 0.22)',
+        borderTopColor: CustomerTheme.border,
         borderTopWidth: 1,
-        backgroundColor: '#071524',
+        backgroundColor: '#FFFFFF',
         paddingTop: 8,
         paddingBottom: Math.max(10, insets.bottom),
         minHeight: tabBarHeight,
-        shadowColor: '#002B49',
-        shadowOffset: { width: 0, height: -6 },
-        shadowOpacity: 0.35,
-        shadowRadius: 16,
-        elevation: 12,
+        shadowColor: '#131F3D',
+        shadowOffset: { width: 0, height: -4 },
+        shadowOpacity: 0.06,
+        shadowRadius: 12,
+        elevation: 8,
       }}
     >
       {state.routes
-        .filter((route: any) => Boolean(dynamicConfig[route.name]))
+        .filter((route: any) => Boolean(TAB_CONFIG[route.name]))
         .map((route: any) => {
           const index = state.routes.findIndex((candidate: any) => candidate.key === route.key)
           const focused = state.index === index
           const options = descriptors[route.key]?.options ?? {}
-          const config = dynamicConfig[route.name]
+          const config = TAB_CONFIG[route.name]
           const label = options.tabBarLabel ?? options.title ?? config?.label ?? route.name
           const iconName = config?.icon ?? 'home'
 
@@ -74,28 +61,25 @@ function CustomerTabBar({ state, descriptors, navigation }: any) {
                 style={{
                   alignItems: 'center',
                   justifyContent: 'center',
-                  paddingHorizontal: 16,
+                  paddingHorizontal: 14,
                   paddingVertical: 5,
-                  borderRadius: 14,
-                  backgroundColor: focused ? 'rgba(0, 210, 196, 0.16)' : 'transparent',
-                  borderWidth: focused ? 1 : 0,
-                  borderColor: focused ? 'rgba(0, 210, 196, 0.35)' : 'transparent',
+                  borderRadius: 999,
+                  backgroundColor: focused ? CustomerTheme.tabActiveBg : 'transparent',
                 }}
               >
                 <Icon
                   name={iconName}
                   size={20}
-                  color={focused ? '#00D2C4' : '#94a3b8'}
-                  strokeWidth={focused ? 2.5 : 1.8}
+                  color={focused ? CustomerTheme.teal : CustomerTheme.inkSoft}
+                  strokeWidth={focused ? 2.4 : 1.8}
                 />
               </View>
               <Text
                 style={{
-                  fontSize: 11,
+                  fontSize: 10.5,
                   fontWeight: focused ? '800' : '600',
-                  color: focused ? '#00D2C4' : '#94a3b8',
+                  color: focused ? CustomerTheme.teal : CustomerTheme.inkSoft,
                   marginTop: 2,
-                  letterSpacing: 0.1,
                 }}
               >
                 {String(label)}
@@ -113,8 +97,8 @@ export default function CustomerTabsLayout() {
 
   if (staffLoading || customerLoading) {
     return (
-      <View className="flex-1 items-center justify-center bg-[#0A1118]">
-        <ActivityIndicator size="large" color="#00D2C4" />
+      <View className="flex-1 items-center justify-center" style={{ backgroundColor: CustomerTheme.bg }}>
+        <ActivityIndicator size="large" color={CustomerTheme.teal} />
       </View>
     )
   }
@@ -132,17 +116,17 @@ export default function CustomerTabsLayout() {
       tabBar={(props) => <CustomerTabBar {...props} />}
       screenOptions={{
         headerShown: false,
-        sceneStyle: { backgroundColor: '#0A1118', paddingBottom: 94 },
+        sceneStyle: { backgroundColor: CustomerTheme.bg, paddingBottom: 94 },
       }}
     >
       <Tabs.Screen name="index" options={{ title: 'Home', tabBarLabel: 'Home' }} />
-      <Tabs.Screen name="tracker" options={{ title: 'Tracker', tabBarLabel: 'Tracker' }} />
-      <Tabs.Screen name="estimate" options={{ title: 'Estimate', tabBarLabel: 'Estimate' }} />
-      <Tabs.Screen name="invoices" options={{ title: 'Bills', tabBarLabel: 'Bills' }} />
-      <Tabs.Screen name="gatepass" options={{ title: 'Gate Pass', tabBarLabel: 'Gate Pass' }} />
+      <Tabs.Screen name="tracker" options={{ title: 'Journey', tabBarLabel: 'Journey' }} />
+      <Tabs.Screen name="documents" options={{ title: 'Documents', tabBarLabel: 'Documents' }} />
+      <Tabs.Screen name="invoices" options={{ title: 'Payments', tabBarLabel: 'Payments' }} />
+      <Tabs.Screen name="helpdesk" options={{ title: 'Help', tabBarLabel: 'Help' }} />
+      <Tabs.Screen name="estimate" options={{ href: null, title: 'Estimate' }} />
+      <Tabs.Screen name="gatepass" options={{ href: null, title: 'Gate Pass' }} />
       <Tabs.Screen name="feedback" options={{ href: null, title: 'Review' }} />
-      <Tabs.Screen name="documents" options={{ href: null, title: 'Claim Documents' }} />
-      <Tabs.Screen name="helpdesk" options={{ href: null, title: 'Support' }} />
       <Tabs.Screen name="complaint" options={{ href: null, title: 'Report Problem' }} />
       <Tabs.Screen name="booking" options={{ href: null, title: 'Book Service' }} />
       <Tabs.Screen name="my-bookings" options={{ href: null, title: 'My Bookings' }} />

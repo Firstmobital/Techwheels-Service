@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState } from 'react'
-import { ActivityIndicator, Alert, Modal, ScrollView, Text, TouchableOpacity, View } from 'react-native'
+import { ActivityIndicator, Alert, Image, Linking, Modal, ScrollView, Text, TouchableOpacity, View } from 'react-native'
 import { useFocusEffect, useRouter } from 'expo-router'
 import { CustomerScreen } from '../../components/customer/CustomerScreen'
 import { CustomerCard, CustomerToast, asText, dash, formatInr } from '../../components/customer/customerUi'
@@ -7,13 +7,44 @@ import { useCustomerSession } from '../../context/CustomerSessionContext'
 import {
   customerGetActiveJob,
   customerGetRepairCard,
-  customerOpenBodyshopEstimateDocument,
+  customerGetBodyshopEstimateViewUrl,
   parseBodyshopEstimateDocument,
 } from '../../lib/api/customerPortal'
 import { supabase } from '../../lib/supabase'
 import { Icon } from '../../components/ui/Icon'
 import { getBodyshopStageDetailRows } from '../../lib/customer/bodyshopStageDetails'
-import { customerListBodyshopAssets } from '../../lib/api/customerBodyshopUploads'
+import { CustomerTheme } from '../../lib/customer/customerTheme'
+
+const BODYSHOP_JOURNEY_PHASES = [
+  { phase: 1, title: 'Intake', from: 1, to: 4 },
+  { phase: 2, title: 'Paperwork', from: 5, to: 8 },
+  { phase: 3, title: 'Survey & parts', from: 9, to: 12 },
+  { phase: 4, title: 'Workshop & QC', from: 13, to: 14 },
+  { phase: 5, title: 'Billing & handover', from: 15, to: 18 },
+] as const
+
+type JourneyPhaseStatus = 'complete' | 'active' | 'upcoming'
+
+function phaseStatus(from: number, to: number, current: number, allDone: boolean): JourneyPhaseStatus {
+  if (allDone || current > to) return 'complete'
+  if (current >= from && current <= to) return 'active'
+  return 'upcoming'
+}
+
+function PhaseStatusBadge({ status }: { status: JourneyPhaseStatus }) {
+  const styles =
+    status === 'complete'
+      ? { bg: '#DCFCE7', text: '#166534', label: 'Complete' }
+      : status === 'active'
+        ? { bg: CustomerTheme.tabActiveBg, text: CustomerTheme.teal, label: 'In progress' }
+        : { bg: '#F1F5F9', text: CustomerTheme.inkMuted, label: 'Up next' }
+
+  return (
+    <View style={{ backgroundColor: styles.bg, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 999 }}>
+      <Text style={{ color: styles.text, fontSize: 10.5, fontWeight: '800' }}>{styles.label}</Text>
+    </View>
+  )
+}
 
 export const BODYSHOP_18_STAGES = [
   { stage: 1, name: '1. Vehicle Receiving', shortName: 'Vehicle Receiving', desc: 'Accident vehicle intake & initial workshop security check-in.', group: 'SA Intake' },
@@ -78,7 +109,7 @@ export default function CustomerTrackerScreen() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [openingEstimateDoc, setOpeningEstimateDoc] = useState(false)
-  const [bodyshopAssets, setBodyshopAssets] = useState<{ documents: any[]; photos: any[] }>({ documents: [], photos: [] })
+  const [estimatePreviewUri, setEstimatePreviewUri] = useState<string | null>(null)
 
   const bodyshopEstimateDoc = parseBodyshopEstimateDocument(card)
   const showEstimateDocInStage =
@@ -88,7 +119,16 @@ export default function CustomerTrackerScreen() {
     if (!token) return
     setOpeningEstimateDoc(true)
     try {
-      await customerOpenBodyshopEstimateDocument(token, selectedReg, bodyshopEstimateDoc)
+      const resolved = await customerGetBodyshopEstimateViewUrl(token, selectedReg, bodyshopEstimateDoc)
+      if (resolved.isImage) {
+        setEstimatePreviewUri(resolved.viewUrl)
+        return
+      }
+      const canOpen = await Linking.canOpenURL(resolved.viewUrl)
+      if (!canOpen) {
+        throw new Error('Unable to open this document on your device.')
+      }
+      await Linking.openURL(resolved.viewUrl)
     } catch (err) {
       Alert.alert(
         'Estimate document',
@@ -105,10 +145,9 @@ export default function CustomerTrackerScreen() {
       setLoading(true)
     }
     try {
-      const [jobResult, repair, uploadedAssets] = await Promise.all([
+      const [jobResult, repair] = await Promise.all([
         customerGetActiveJob(token, selectedReg).catch(() => ({ job: null })),
         customerGetRepairCard(token, selectedReg).catch(() => null),
-        selectedReg ? customerListBodyshopAssets(token, selectedReg).catch(() => ({ documents: [], photos: [] })) : Promise.resolve({ documents: [], photos: [] }),
       ])
       const activeJob = jobResult.job
       if (activeJob) {
@@ -116,7 +155,6 @@ export default function CustomerTrackerScreen() {
         setError(null)
       }
       if (repair) setCard(repair)
-      setBodyshopAssets(uploadedAssets)
 
       // Fetch live technician & bay details from Floor Incharge
       const activeJc = (activeJob?.jc_number as string) || (selected?.jc_number as string) || ''
@@ -196,31 +234,6 @@ export default function CustomerTrackerScreen() {
 
   const bodyshopProgressPercent = Math.round((completedBodyshopCount / 18) * 100)
 
-  const customerUploadedDocs = bodyshopAssets.documents.filter((d) =>
-    String(d.uploaded_by || '').toLowerCase().startsWith('customer:')
-  ).length
-  const workshopUploadedDocs = Math.max(0, bodyshopAssets.documents.length - customerUploadedDocs)
-  const baseRequiredDocKeys = [
-    'doc_claim_form',
-    'doc_rc',
-    'doc_insurance',
-    'doc_dl',
-    'doc_aadhaar',
-    'doc_pan',
-    'doc_bank_detail',
-  ]
-  const pendingCustomerDocs = baseRequiredDocKeys.filter((key) => card?.[key] !== true).length
-  const needsEstimateDecision =
-    (currentBodyshopStage === 6 || currentBodyshopStage === 7) &&
-    card?.customer_approved !== true
-  const needsAdditionalApproval =
-    currentBodyshopStage === 12 &&
-    Boolean(String(card?.additional_approval || '').trim())
-  const needsPaymentAction =
-    currentBodyshopStage >= 17 &&
-    String(card?.customer_payment_status || '').toLowerCase() !== 'paid' &&
-    String(card?.payment_status || '').toLowerCase() !== 'received'
-
   // Standard 6 Service Stages (for non-accident maintenance vehicles)
   const standardStages = [
     {
@@ -266,11 +279,11 @@ export default function CustomerTrackerScreen() {
 
   return (
     <CustomerScreen
-      title={isAccident ? 'Bodyshop Tracker' : 'Live Repair Tracker'}
+      title={isAccident ? 'Repair journey' : 'Service journey'}
       subtitle={
         isAccident
-          ? `18-Stage Live Accident Repair & Insurance Tracking for ${selected?.reg_number || 'your vehicle'}`
-          : `Real-time repair and service stages for ${selected?.reg_number || 'your vehicle'}`
+          ? `18 workshop phases for ${selected?.reg_number || 'your vehicle'}`
+          : `Live service phases for ${selected?.reg_number || 'your vehicle'}`
       }
     >
       {error && !job && !card ? <CustomerToast ok={false} message={error} /> : null}
@@ -283,74 +296,6 @@ export default function CustomerTrackerScreen() {
           {/* ═══════════════════════════════════════════════════════════════════ */}
           {isAccident ? (
             <>
-              {/* Customer action center: only show what the customer needs to do now */}
-              <CustomerCard style={{ backgroundColor: '#F8FBFF', borderColor: '#BFDBFE', padding: 15 }}>
-                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <View style={{ flex: 1, paddingRight: 10 }}>
-                    <Text style={{ color: '#0B5FFF', fontSize: 11, fontWeight: '900', textTransform: 'uppercase', letterSpacing: 0.6 }}>
-                      Your action
-                    </Text>
-                    <Text style={{ color: '#0f172a', fontSize: 16, fontWeight: '900', marginTop: 2 }}>
-                      {pendingCustomerDocs > 0 && currentBodyshopStage <= 7
-                        ? `${pendingCustomerDocs} document${pendingCustomerDocs === 1 ? '' : 's'} still needed`
-                        : needsEstimateDecision
-                          ? 'Estimate approval is pending'
-                          : needsAdditionalApproval
-                            ? 'Additional repair approval required'
-                            : needsPaymentAction
-                              ? 'Customer payment / settlement pending'
-                              : 'No action required from you right now'}
-                    </Text>
-                    <Text style={{ color: '#64748b', fontSize: 11.5, lineHeight: 17, marginTop: 3 }}>
-                      {pendingCustomerDocs > 0 && currentBodyshopStage <= 7
-                        ? 'Upload missing claim documents directly into this repair case.'
-                        : needsEstimateDecision
-                          ? 'Review the workshop estimate and approve or request changes.'
-                          : needsAdditionalApproval
-                            ? 'Review supplementary work before the workshop proceeds.'
-                            : needsPaymentAction
-                              ? 'Check billing and settlement before vehicle handover.'
-                              : 'We will keep updating the tracker as the workshop moves to the next stage.'}
-                    </Text>
-                  </View>
-                  <View style={{ width: 42, height: 42, borderRadius: 13, backgroundColor: '#E8F1FF', alignItems: 'center', justifyContent: 'center' }}>
-                    <Icon name={pendingCustomerDocs > 0 ? 'file-text' : needsEstimateDecision || needsAdditionalApproval ? 'check-circle' : needsPaymentAction ? 'file' : 'clock'} size={21} color="#0B5FFF" />
-                  </View>
-                </View>
-
-                <View style={{ flexDirection: 'row', gap: 8, marginTop: 12 }}>
-                  {(pendingCustomerDocs > 0 && currentBodyshopStage <= 7) ? (
-                    <TouchableOpacity
-                      onPress={() => router.push('/(customer)/documents')}
-                      style={{ flex: 1, backgroundColor: '#0B5FFF', borderRadius: 12, paddingVertical: 11, alignItems: 'center' }}
-                    >
-                      <Text style={{ color: '#ffffff', fontSize: 12, fontWeight: '900' }}>Upload Documents</Text>
-                    </TouchableOpacity>
-                  ) : needsEstimateDecision || needsAdditionalApproval ? (
-                    <TouchableOpacity
-                      onPress={() => router.push('/(customer)/estimate')}
-                      style={{ flex: 1, backgroundColor: '#0B5FFF', borderRadius: 12, paddingVertical: 11, alignItems: 'center' }}
-                    >
-                      <Text style={{ color: '#ffffff', fontSize: 12, fontWeight: '900' }}>Review & Approve</Text>
-                    </TouchableOpacity>
-                  ) : needsPaymentAction ? (
-                    <TouchableOpacity
-                      onPress={() => router.push('/(customer)/invoices')}
-                      style={{ flex: 1, backgroundColor: '#0B5FFF', borderRadius: 12, paddingVertical: 11, alignItems: 'center' }}
-                    >
-                      <Text style={{ color: '#ffffff', fontSize: 12, fontWeight: '900' }}>View Billing</Text>
-                    </TouchableOpacity>
-                  ) : (
-                    <TouchableOpacity
-                      onPress={() => router.push('/(customer)/documents')}
-                      style={{ flex: 1, borderWidth: 1.2, borderColor: '#0B5FFF', borderRadius: 12, paddingVertical: 11, alignItems: 'center', backgroundColor: '#ffffff' }}
-                    >
-                      <Text style={{ color: '#0B5FFF', fontSize: 12, fontWeight: '900' }}>Documents & Photos</Text>
-                    </TouchableOpacity>
-                  )}
-                </View>
-              </CustomerCard>
-
               {/* Top Bodyshop Status Banner */}
               <CustomerCard style={{ borderColor: '#e2e8f0', padding: 16 }}>
                 <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 14 }}>
@@ -403,38 +348,23 @@ export default function CustomerTrackerScreen() {
                 {/* Current Stage Highlight Box */}
                 <View
                   style={{
-                    backgroundColor: '#EFF6FF',
-                    borderColor: '#BFDBFE',
+                    backgroundColor: '#faf5ff',
+                    borderColor: '#e9d5ff',
                     borderWidth: 1.5,
                     borderRadius: 16,
                     padding: 14,
                     marginBottom: 14,
                   }}
                 >
-                  <Text style={{ color: '#1D4ED8', fontSize: 11, fontWeight: '800', textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                  <Text style={{ color: '#7e22ce', fontSize: 11, fontWeight: '800', textTransform: 'uppercase', letterSpacing: 0.5 }}>
                     Current Stage
                   </Text>
-                  <Text style={{ color: '#0B5FFF', fontSize: 19, fontWeight: '900', marginTop: 3 }}>
+                  <Text style={{ color: '#9333ea', fontSize: 19, fontWeight: '900', marginTop: 3 }}>
                     Stage {currentBodyshopStage} – {currentStageName}
                   </Text>
-                  <Text style={{ color: '#1E3A8A', fontSize: 11.5, marginTop: 4, fontWeight: '500' }}>
+                  <Text style={{ color: '#6b21a8', fontSize: 11.5, marginTop: 4, fontWeight: '500' }}>
                     {BODYSHOP_18_STAGES[currentBodyshopStage - 1]?.desc || 'Repairs and inspection proceeding on workshop floor.'}
                   </Text>
-                </View>
-
-                <View style={{ flexDirection: 'row', gap: 8, marginBottom: 12 }}>
-                  <View style={{ flex: 1, backgroundColor: '#EFF6FF', borderRadius: 12, padding: 10 }}>
-                    <Text style={{ color: '#1D4ED8', fontSize: 10, fontWeight: '800' }}>CUSTOMER PROVIDED</Text>
-                    <Text style={{ color: '#0f172a', fontSize: 18, fontWeight: '900', marginTop: 2 }}>{customerUploadedDocs}</Text>
-                  </View>
-                  <View style={{ flex: 1, backgroundColor: '#F1F5F9', borderRadius: 12, padding: 10 }}>
-                    <Text style={{ color: '#475569', fontSize: 10, fontWeight: '800' }}>WORKSHOP PROVIDED</Text>
-                    <Text style={{ color: '#0f172a', fontSize: 18, fontWeight: '900', marginTop: 2 }}>{workshopUploadedDocs}</Text>
-                  </View>
-                  <View style={{ flex: 1, backgroundColor: '#F0FDF4', borderRadius: 12, padding: 10 }}>
-                    <Text style={{ color: '#15803D', fontSize: 10, fontWeight: '800' }}>CASE PHOTOS</Text>
-                    <Text style={{ color: '#0f172a', fontSize: 18, fontWeight: '900', marginTop: 2 }}>{bodyshopAssets.photos.length}</Text>
-                  </View>
                 </View>
 
                 {/* Progress Bar */}
@@ -443,7 +373,7 @@ export default function CustomerTrackerScreen() {
                     <Text style={{ color: '#334155', fontSize: 12, fontWeight: '800' }}>
                       Bodyshop Progress
                     </Text>
-                    <Text style={{ color: '#0B5FFF', fontSize: 12, fontWeight: '900' }}>
+                    <Text style={{ color: '#7c3aed', fontSize: 12, fontWeight: '900' }}>
                       {completedBodyshopCount} / 18 Completed ({bodyshopProgressPercent}%)
                     </Text>
                   </View>
@@ -452,7 +382,7 @@ export default function CustomerTrackerScreen() {
                       style={{
                         width: `${Math.max(5, bodyshopProgressPercent)}%`,
                         height: '100%',
-                        backgroundColor: bodyshopProgressPercent === 100 ? '#10b981' : '#0B5FFF',
+                        backgroundColor: bodyshopProgressPercent === 100 ? '#10b981' : '#8b5cf6',
                         borderRadius: 999,
                       }}
                     />
@@ -460,170 +390,121 @@ export default function CustomerTrackerScreen() {
                 </View>
               </CustomerCard>
 
-              {/* ── 18 STAGES 2-COLUMN WORKFLOW GRID (MATCHING SCREENSHOT) ── */}
-              <CustomerCard style={{ borderColor: '#e2e8f0' }}>
-                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-                  <Text style={{ color: '#0f172a', fontSize: 14, fontWeight: '900', textTransform: 'uppercase', letterSpacing: 0.5 }}>
-                    18 Bodyshop Repair Stages
-                  </Text>
-                  <Text style={{ color: '#0B5FFF', fontSize: 11, fontWeight: '700' }}>
-                    Tap stage for details ➔
-                  </Text>
-                </View>
+              {/* ── Vertical repair journey (column timeline) ── */}
+              <CustomerCard style={{ borderColor: CustomerTheme.border }}>
+                <Text style={{ color: CustomerTheme.inkMuted, fontSize: 11, fontWeight: '700', marginBottom: 4 }}>
+                  ORDER JOURNEY
+                </Text>
+                <Text style={{ color: CustomerTheme.ink, fontSize: 15, fontWeight: '900', marginBottom: 14 }}>
+                  Tap any step for workshop details
+                </Text>
 
-                {/* 2-Column Responsive Flow */}
-                <View style={{ gap: 8 }}>
-                  {Array.from({ length: 9 }).map((_, pairIdx) => {
-                    const leftStage = BODYSHOP_18_STAGES[pairIdx * 2]
-                    const rightStage = BODYSHOP_18_STAGES[pairIdx * 2 + 1]
+                {BODYSHOP_JOURNEY_PHASES.map((phaseBlock) => {
+                  const status = phaseStatus(
+                    phaseBlock.from,
+                    phaseBlock.to,
+                    currentBodyshopStage,
+                    Boolean(invoiced || card?.overall_status === 'delivered')
+                  )
+                  const steps = BODYSHOP_18_STAGES.filter(
+                    (s) => s.stage >= phaseBlock.from && s.stage <= phaseBlock.to
+                  )
 
-                    const isLeftDone = invoiced || card?.overall_status === 'delivered' || leftStage.stage < currentBodyshopStage
-                    const isLeftCurrent = !isLeftDone && leftStage.stage === currentBodyshopStage
-
-                    const isRightDone = invoiced || card?.overall_status === 'delivered' || rightStage.stage < currentBodyshopStage
-                    const isRightCurrent = !isRightDone && rightStage.stage === currentBodyshopStage
-
-                    return (
-                      <View key={pairIdx} style={{ flexDirection: 'row', gap: 8 }}>
-                        {/* Left Stage Pill */}
-                        <TouchableOpacity
-                          onPress={() => setSelectedBodyshopStage(leftStage)}
-                          activeOpacity={0.75}
-                          style={{
-                            flex: 1,
-                            flexDirection: 'row',
-                            alignItems: 'center',
-                            justifyContent: 'space-between',
-                            paddingVertical: 10,
-                            paddingHorizontal: 10,
-                            borderRadius: 12,
-                            backgroundColor: isLeftCurrent
-                              ? '#EFF6FF'
-                              : isLeftDone
-                              ? '#f0fdf4'
-                              : '#f8fafc',
-                            borderColor: isLeftCurrent
-                              ? '#60A5FA'
-                              : isLeftDone
-                              ? '#bbf7d0'
-                              : '#e2e8f0',
-                            borderWidth: isLeftCurrent ? 2 : 1,
-                          }}
-                        >
-                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flex: 1, paddingRight: 4 }}>
-                            <View
-                              style={{
-                                width: 8,
-                                height: 8,
-                                borderRadius: 4,
-                                backgroundColor: isLeftCurrent
-                                  ? '#0B5FFF'
-                                  : isLeftDone
-                                  ? '#16a34a'
-                                  : '#cbd5e1',
-                              }}
-                            />
-                            <Text
-                              style={{
-                                fontSize: 11.5,
-                                fontWeight: isLeftCurrent || isLeftDone ? '800' : '600',
-                                color: isLeftCurrent
-                                  ? '#1D4ED8'
-                                  : isLeftDone
-                                  ? '#15803d'
-                                  : '#64748b',
-                              }}
-                              numberOfLines={1}
-                            >
-                              {leftStage.name}
-                            </Text>
-                          </View>
-                          <Text
-                            style={{
-                              fontSize: 12,
-                              fontWeight: '900',
-                              color: isLeftCurrent
-                                ? '#1D4ED8'
-                                : isLeftDone
-                                ? '#16a34a'
-                                : '#94a3b8',
-                            }}
-                          >
-                            {isLeftDone ? '✓' : isLeftCurrent ? '--' : '○'}
-                          </Text>
-                        </TouchableOpacity>
-
-                        {/* Right Stage Pill */}
-                        <TouchableOpacity
-                          onPress={() => setSelectedBodyshopStage(rightStage)}
-                          activeOpacity={0.75}
-                          style={{
-                            flex: 1,
-                            flexDirection: 'row',
-                            alignItems: 'center',
-                            justifyContent: 'space-between',
-                            paddingVertical: 10,
-                            paddingHorizontal: 10,
-                            borderRadius: 12,
-                            backgroundColor: isRightCurrent
-                              ? '#EFF6FF'
-                              : isRightDone
-                              ? '#f0fdf4'
-                              : '#f8fafc',
-                            borderColor: isRightCurrent
-                              ? '#60A5FA'
-                              : isRightDone
-                              ? '#bbf7d0'
-                              : '#e2e8f0',
-                            borderWidth: isRightCurrent ? 2 : 1,
-                          }}
-                        >
-                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flex: 1, paddingRight: 4 }}>
-                            <View
-                              style={{
-                                width: 8,
-                                height: 8,
-                                borderRadius: 4,
-                                backgroundColor: isRightCurrent
-                                  ? '#0B5FFF'
-                                  : isRightDone
-                                  ? '#16a34a'
-                                  : '#cbd5e1',
-                              }}
-                            />
-                            <Text
-                              style={{
-                                fontSize: 11.5,
-                                fontWeight: isRightCurrent || isRightDone ? '800' : '600',
-                                color: isRightCurrent
-                                  ? '#1D4ED8'
-                                  : isRightDone
-                                  ? '#15803d'
-                                  : '#64748b',
-                              }}
-                              numberOfLines={1}
-                            >
-                              {rightStage.name}
-                            </Text>
-                          </View>
-                          <Text
-                            style={{
-                              fontSize: 12,
-                              fontWeight: '900',
-                              color: isRightCurrent
-                                ? '#1D4ED8'
-                                : isRightDone
-                                ? '#16a34a'
-                                : '#94a3b8',
-                            }}
-                          >
-                            {isRightDone ? '✓' : isRightCurrent ? '--' : '○'}
-                          </Text>
-                        </TouchableOpacity>
+                  return (
+                    <View
+                      key={phaseBlock.phase}
+                      style={{
+                        marginBottom: 16,
+                        padding: 12,
+                        borderRadius: 14,
+                        borderWidth: 1,
+                        borderColor: CustomerTheme.border,
+                        backgroundColor: '#FFFFFF',
+                      }}
+                    >
+                      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+                        <Text style={{ color: CustomerTheme.ink, fontSize: 12, fontWeight: '900', flex: 1, paddingRight: 8 }}>
+                          PHASE {phaseBlock.phase} OF {BODYSHOP_JOURNEY_PHASES.length}: {phaseBlock.title}
+                        </Text>
+                        <PhaseStatusBadge status={status} />
                       </View>
-                    )
-                  })}
-                </View>
+
+                      {steps.map((step, stepIdx) => {
+                        const isDone =
+                          invoiced || card?.overall_status === 'delivered' || step.stage < currentBodyshopStage
+                        const isCurrent = !isDone && step.stage === currentBodyshopStage
+                        const isLast = stepIdx === steps.length - 1
+                        const lineColor = isDone ? CustomerTheme.success : CustomerTheme.border
+
+                        return (
+                          <TouchableOpacity
+                            key={step.stage}
+                            onPress={() => setSelectedBodyshopStage(step)}
+                            activeOpacity={0.75}
+                            style={{ flexDirection: 'row', minHeight: 56 }}
+                          >
+                            <View style={{ width: 28, alignItems: 'center' }}>
+                              <View
+                                style={{
+                                  width: 22,
+                                  height: 22,
+                                  borderRadius: 11,
+                                  borderWidth: 2,
+                                  borderColor: isDone
+                                    ? CustomerTheme.success
+                                    : isCurrent
+                                      ? CustomerTheme.teal
+                                      : CustomerTheme.border,
+                                  backgroundColor: isDone ? CustomerTheme.success : isCurrent ? '#FFFFFF' : '#FFFFFF',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                }}
+                              >
+                                {isDone ? (
+                                  <Text style={{ color: '#fff', fontSize: 11, fontWeight: '900' }}>✓</Text>
+                                ) : isCurrent ? (
+                                  <View
+                                    style={{
+                                      width: 8,
+                                      height: 8,
+                                      borderRadius: 4,
+                                      backgroundColor: CustomerTheme.teal,
+                                    }}
+                                  />
+                                ) : null}
+                              </View>
+                              {!isLast ? (
+                                <View style={{ flex: 1, width: 2, backgroundColor: lineColor, marginVertical: 2 }} />
+                              ) : null}
+                            </View>
+
+                            <View style={{ flex: 1, paddingBottom: isLast ? 0 : 12, paddingLeft: 4 }}>
+                              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                                <Text
+                                  style={{
+                                    color: CustomerTheme.ink,
+                                    fontSize: 14,
+                                    fontWeight: isCurrent ? '900' : '700',
+                                    flex: 1,
+                                    paddingRight: 6,
+                                  }}
+                                >
+                                  {step.shortName}
+                                </Text>
+                                {isCurrent ? (
+                                  <Text style={{ color: CustomerTheme.teal, fontSize: 16, fontWeight: '700' }}>›</Text>
+                                ) : null}
+                              </View>
+                              <Text style={{ color: CustomerTheme.inkMuted, fontSize: 11.5, marginTop: 3, lineHeight: 16 }}>
+                                {step.desc}
+                              </Text>
+                            </View>
+                          </TouchableOpacity>
+                        )
+                      })}
+                    </View>
+                  )
+                })}
               </CustomerCard>
 
               {/* Bodyshop Case Summary Details */}
@@ -707,38 +588,78 @@ export default function CustomerTrackerScreen() {
                 </View>
               </CustomerCard>
 
-              {/* Interactive Standard Service Stages */}
-              <CustomerCard>
-                <View className="flex-row justify-between items-center mb-3">
-                  <Text className="text-[16px] font-bold">Service Stages</Text>
-                  <Text className="text-xs text-blue-600 font-semibold">Tap stage for details ➔</Text>
+              {/* Service journey — vertical column timeline */}
+              <CustomerCard style={{ borderColor: CustomerTheme.border }}>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                  <Text style={{ color: CustomerTheme.ink, fontSize: 15, fontWeight: '900' }}>Service journey</Text>
+                  <PhaseStatusBadge
+                    status={
+                      invoiced
+                        ? 'complete'
+                        : standardStages.some((s) => s.current)
+                          ? 'active'
+                          : standardStages.every((s) => s.completed)
+                            ? 'complete'
+                            : 'active'
+                    }
+                  />
                 </View>
 
-                {standardStages.map((stage, index) => (
-                  <TouchableOpacity
-                    key={stage.title}
-                    onPress={() => setSelectedServiceStageIndex(index)}
-                    activeOpacity={0.7}
-                    className="flex-row mb-4 p-2 rounded-xl active:bg-slate-50 border border-transparent active:border-slate-200"
-                  >
-                    <View
-                      className={`h-9 w-9 rounded-full items-center justify-center mr-3 ${
-                        stage.completed ? 'bg-green-600' : stage.current ? 'bg-amber-500' : 'bg-slate-200'
-                      }`}
+                {standardStages.map((stage, index) => {
+                  const isLast = index === standardStages.length - 1
+                  const lineColor = stage.completed ? CustomerTheme.success : CustomerTheme.border
+                  return (
+                    <TouchableOpacity
+                      key={stage.title}
+                      onPress={() => setSelectedServiceStageIndex(index)}
+                      activeOpacity={0.75}
+                      style={{ flexDirection: 'row', minHeight: 58 }}
                     >
-                      <Text className={`font-bold text-xs ${stage.completed || stage.current ? 'text-white' : 'text-slate-600'}`}>
-                        {stage.completed ? '✓' : stage.current ? '⏳' : String(index + 1)}
-                      </Text>
-                    </View>
-                    <View className="flex-1 justify-center">
-                      <View className="flex-row justify-between items-center">
-                        <Text className="font-bold text-slate-900 text-[14px]">{stage.title}</Text>
-                        <Text className="text-[11px] font-bold text-slate-400">ℹ️</Text>
+                      <View style={{ width: 28, alignItems: 'center' }}>
+                        <View
+                          style={{
+                            width: 22,
+                            height: 22,
+                            borderRadius: 11,
+                            borderWidth: 2,
+                            borderColor: stage.completed
+                              ? CustomerTheme.success
+                              : stage.current
+                                ? CustomerTheme.teal
+                                : CustomerTheme.border,
+                            backgroundColor: stage.completed ? CustomerTheme.success : '#fff',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                          }}
+                        >
+                          {stage.completed ? (
+                            <Text style={{ color: '#fff', fontSize: 11, fontWeight: '900' }}>✓</Text>
+                          ) : stage.current ? (
+                            <View
+                              style={{
+                                width: 8,
+                                height: 8,
+                                borderRadius: 4,
+                                backgroundColor: CustomerTheme.teal,
+                              }}
+                            />
+                          ) : null}
+                        </View>
+                        {!isLast ? (
+                          <View style={{ flex: 1, width: 2, backgroundColor: lineColor, marginVertical: 2 }} />
+                        ) : null}
                       </View>
-                      <Text className="text-[12px] text-slate-500 mt-0.5 leading-tight">{stage.desc}</Text>
-                    </View>
-                  </TouchableOpacity>
-                ))}
+                      <View style={{ flex: 1, paddingBottom: isLast ? 0 : 14, paddingLeft: 4 }}>
+                        <Text style={{ color: CustomerTheme.ink, fontSize: 14, fontWeight: stage.current ? '900' : '700' }}>
+                          {stage.title}
+                        </Text>
+                        <Text style={{ color: CustomerTheme.inkMuted, fontSize: 11.5, marginTop: 3, lineHeight: 16 }}>
+                          {stage.desc}
+                        </Text>
+                      </View>
+                    </TouchableOpacity>
+                  )
+                })}
               </CustomerCard>
             </>
           )}
@@ -793,7 +714,7 @@ export default function CustomerTrackerScreen() {
                     <View className="flex-1 pr-2">
                       <View className="flex-row items-center gap-1.5 mb-1">
                         <View style={{ paddingHorizontal: 8, paddingVertical: 2, borderRadius: 6, backgroundColor: '#f3e8ff' }}>
-                          <Text style={{ color: '#1D4ED8', fontSize: 10, fontWeight: '800' }}>
+                          <Text style={{ color: '#7e22ce', fontSize: 10, fontWeight: '800' }}>
                             {selectedBodyshopStage.group}
                           </Text>
                         </View>
@@ -1001,6 +922,32 @@ export default function CustomerTrackerScreen() {
           )}
         </>
       )}
+
+      <Modal
+        visible={Boolean(estimatePreviewUri)}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setEstimatePreviewUri(null)}
+      >
+        <View className="flex-1 bg-black/92 items-center justify-center p-4">
+          <TouchableOpacity
+            onPress={() => setEstimatePreviewUri(null)}
+            className="absolute top-12 right-6 w-10 h-10 rounded-full bg-white/20 items-center justify-center z-50"
+          >
+            <Text className="text-white font-black text-lg">×</Text>
+          </TouchableOpacity>
+          {estimatePreviewUri ? (
+            <Image
+              source={{ uri: estimatePreviewUri }}
+              style={{ width: '100%', height: '82%' }}
+              resizeMode="contain"
+            />
+          ) : null}
+          <Text className="text-white/80 text-xs font-semibold mt-3 text-center">
+            Workshop estimate · pinch to zoom if supported
+          </Text>
+        </View>
+      </Modal>
     </CustomerScreen>
   )
 }

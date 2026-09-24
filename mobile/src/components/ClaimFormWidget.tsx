@@ -1,91 +1,156 @@
-import { useState } from 'react'
-import { ActivityIndicator, Alert, Text, TouchableOpacity, View } from 'react-native'
-import { Picker } from '@react-native-picker/picker'
-import * as FileSystem from 'expo-file-system/legacy'
-import * as Sharing from 'expo-sharing'
-import { INSURANCE_PROVIDERS } from '../config/insuranceProviders'
+import { useEffect, useMemo, useState } from 'react'
+import { ActivityIndicator, ScrollView, Text, TouchableOpacity, View } from 'react-native'
+import {
+  INSURANCE_PROVIDER_LIST,
+  INSURANCE_PROVIDERS,
+  type InsuranceProvider,
+} from '../config/insuranceProviders'
+import { CustomerTheme } from '../lib/customer/customerTheme'
+import { downloadInsuranceClaimForm } from '../lib/customer/downloadInsuranceClaimForm'
+import { Icon } from './ui/Icon'
 
 interface ClaimFormWidgetProps {
   userInsurerId?: string
+  /** When set, shown as “your insurer on file”. */
+  insurerNameOnFile?: string | null
 }
 
-export function ClaimFormWidget({ userInsurerId }: ClaimFormWidgetProps) {
+export function ClaimFormWidget({ userInsurerId, insurerNameOnFile }: ClaimFormWidgetProps) {
+  const sortedProviders = useMemo(
+    () => [...INSURANCE_PROVIDER_LIST].sort((a, b) => a.name.localeCompare(b.name)),
+    []
+  )
+
   const [selectedProvider, setSelectedProvider] = useState(userInsurerId || '')
   const [isDownloading, setIsDownloading] = useState(false)
-  const provider = INSURANCE_PROVIDERS[selectedProvider]
 
-  const handleDownloadAndShare = async () => {
-    if (!provider?.claimFormUrl) return
+  useEffect(() => {
+    if (userInsurerId) {
+      setSelectedProvider(userInsurerId)
+    }
+  }, [userInsurerId])
 
+  const provider: InsuranceProvider | undefined = INSURANCE_PROVIDERS[selectedProvider]
+
+  const handleDownload = async () => {
+    if (!provider) return
     setIsDownloading(true)
     try {
-      const cacheDir = FileSystem.cacheDirectory
-      if (!cacheDir) {
-        Alert.alert('Download failed', 'Unable to save the form on this device.')
-        return
-      }
-
-      const fileName = `${provider.name.replace(/\s+/g, '_')}_Claim_Form.pdf`
-      const fileUri = `${cacheDir}${fileName}`
-      const { uri } = await FileSystem.downloadAsync(provider.claimFormUrl, fileUri)
-      const canShare = await Sharing.isAvailableAsync()
-      if (!canShare) {
-        Alert.alert('Saved', 'The claim form was downloaded, but sharing is not available on this device.')
-        return
-      }
-
-      await Sharing.shareAsync(uri, {
-        mimeType: 'application/pdf',
-        dialogTitle: 'Save or Share Claim Form',
-        UTI: 'com.adobe.pdf',
-      })
-    } catch (error) {
-      console.error('Error downloading claim form:', error)
-      Alert.alert('Download failed', 'Unable to download the form. Please check your connection.')
+      await downloadInsuranceClaimForm(provider)
     } finally {
       setIsDownloading(false)
     }
   }
 
   return (
-    <View className="bg-white rounded-2xl p-4 mb-4 border border-slate-200">
-      <Text className="text-[18px] font-bold text-slate-900 mb-1">Insurance Claim Form</Text>
-      <Text className="text-[14px] text-slate-500 mb-4">
+    <View
+      style={{
+        backgroundColor: CustomerTheme.card,
+        borderRadius: 18,
+        padding: 16,
+        marginBottom: 14,
+        borderWidth: 1,
+        borderColor: CustomerTheme.border,
+      }}
+    >
+      <Text style={{ color: CustomerTheme.ink, fontSize: 18, fontWeight: '900', marginBottom: 4 }}>
+        Insurance claim form
+      </Text>
+      <Text style={{ color: CustomerTheme.inkMuted, fontSize: 13, lineHeight: 19, marginBottom: 12 }}>
         Get the official paperwork needed to start your repair approval.
       </Text>
 
-      {!userInsurerId ? (
-        <View className="border border-slate-200 rounded-lg mb-4 bg-slate-50 overflow-hidden">
-          <Picker
-            selectedValue={selectedProvider}
-            onValueChange={(itemValue) => setSelectedProvider(String(itemValue))}
-          >
-            <Picker.Item label="Select Insurance Company..." value="" />
-            {Object.values(INSURANCE_PROVIDERS).map((insurer) => (
-              <Picker.Item key={insurer.id} label={insurer.name} value={insurer.id} />
-            ))}
-          </Picker>
-        </View>
+      {insurerNameOnFile ? (
+        <Text style={{ color: CustomerTheme.teal, fontSize: 12, fontWeight: '700', marginBottom: 8 }}>
+          On your job card: {insurerNameOnFile}
+        </Text>
       ) : null}
 
+      <Text style={{ color: CustomerTheme.ink, fontSize: 12, fontWeight: '800', marginBottom: 6 }}>
+        Select insurance company
+      </Text>
+
+      <View
+        style={{
+          borderWidth: 1,
+          borderColor: CustomerTheme.border,
+          borderRadius: 14,
+          backgroundColor: CustomerTheme.bg,
+          maxHeight: 200,
+          marginBottom: 14,
+          overflow: 'hidden',
+        }}
+      >
+        <ScrollView nestedScrollEnabled keyboardShouldPersistTaps="handled">
+          {sortedProviders.map((insurer) => {
+            const selected = selectedProvider === insurer.id
+            return (
+              <TouchableOpacity
+                key={insurer.id}
+                onPress={() => setSelectedProvider(insurer.id)}
+                activeOpacity={0.75}
+                style={{
+                  paddingVertical: 11,
+                  paddingHorizontal: 14,
+                  backgroundColor: selected ? '#E2E8F0' : 'transparent',
+                  borderBottomWidth: 1,
+                  borderBottomColor: CustomerTheme.border,
+                }}
+              >
+                <Text
+                  style={{
+                    color: CustomerTheme.ink,
+                    fontSize: 14,
+                    fontWeight: selected ? '800' : '600',
+                  }}
+                >
+                  {insurer.name}
+                </Text>
+              </TouchableOpacity>
+            )
+          })}
+        </ScrollView>
+      </View>
+
       {provider?.isPaperless ? (
-        <View className="bg-emerald-50 border border-emerald-200 rounded-lg p-3">
-          <Text className="text-emerald-800 text-[14px] leading-5">
-            <Text className="font-bold">{provider.name}</Text> is 100% paperless. No physical form required. We will process your claim digitally.
+        <View
+          style={{
+            backgroundColor: '#ECFDF5',
+            borderWidth: 1,
+            borderColor: '#A7F3D0',
+            borderRadius: 12,
+            padding: 12,
+          }}
+        >
+          <Text style={{ color: '#065F46', fontSize: 13, lineHeight: 20 }}>
+            <Text style={{ fontWeight: '900', color: CustomerTheme.teal }}>{provider.name}</Text> is 100%
+            paperless. No physical form required — we will process your claim digitally.
           </Text>
         </View>
       ) : (
         <TouchableOpacity
-          className={`rounded-lg py-3.5 items-center ${!selectedProvider || isDownloading ? 'bg-slate-400' : 'bg-blue-600'}`}
           disabled={!selectedProvider || isDownloading}
-          onPress={() => void handleDownloadAndShare()}
+          onPress={() => void handleDownload()}
+          activeOpacity={0.88}
+          style={{
+            backgroundColor: !selectedProvider || isDownloading ? CustomerTheme.inkSoft : CustomerTheme.teal,
+            borderRadius: 14,
+            paddingVertical: 14,
+            flexDirection: 'row',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 8,
+          }}
         >
           {isDownloading ? (
             <ActivityIndicator color="#fff" />
           ) : (
-            <Text className="text-white font-semibold text-[16px]">
-              {selectedProvider && provider ? `Download ${provider.name} Form` : 'Select Provider First'}
-            </Text>
+            <>
+              <Icon name="download" size={18} color="#fff" />
+              <Text style={{ color: '#fff', fontWeight: '800', fontSize: 15 }}>
+                {provider ? `Download ${provider.name} form` : 'Select insurer first'}
+              </Text>
+            </>
           )}
         </TouchableOpacity>
       )}

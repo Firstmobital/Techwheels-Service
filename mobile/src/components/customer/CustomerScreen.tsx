@@ -1,4 +1,4 @@
-import { ReactNode, useEffect, useMemo, useState } from 'react'
+import { ReactNode, useCallback, useEffect, useMemo, useState } from 'react'
 import {
   Alert,
   BackHandler,
@@ -17,6 +17,11 @@ import { manualCheckForOTAUpdate } from '../../hooks/useMandatoryOTAUpdate'
 import { Icon, IconName } from '../ui/Icon'
 import { LegalLinks } from '../LegalLinks'
 import { VehiclePicker } from './VehiclePicker'
+import { CustomerTheme } from '../../lib/customer/customerTheme'
+import { ClaimFormWidget } from '../ClaimFormWidget'
+import { matchInsuranceProviderId } from '../../config/insuranceProviders'
+import { customerGetRepairCard } from '../../lib/api/customerPortal'
+import { downloadTpAffidavitForm } from '../../lib/customer/downloadInsuranceClaimForm'
 
 export function CustomerScreen({
   title,
@@ -31,8 +36,10 @@ export function CustomerScreen({
 }) {
   const router = useRouter()
   const pathname = usePathname()
-  const { vehicles, selectedReg, setSelectedReg, signOut } = useCustomerSession()
+  const { vehicles, selectedReg, setSelectedReg, signOut, token } = useCustomerSession()
   const [showMenu, setShowMenu] = useState(false)
+  const [showClaimFormModal, setShowClaimFormModal] = useState(false)
+  const [insuranceCompanyOnCard, setInsuranceCompanyOnCard] = useState<string | null>(null)
   const [showNotifications, setShowNotifications] = useState(false)
   const [checkingUpdate, setCheckingUpdate] = useState(false)
   const [updateStatusMsg, setUpdateStatusMsg] = useState<string | null>(null)
@@ -64,6 +71,10 @@ export function CustomerScreen({
   // Hardware Back Button handler on Android
   useEffect(() => {
     const onBackPress = () => {
+      if (showClaimFormModal) {
+        setShowClaimFormModal(false)
+        return true
+      }
       if (showMenu) {
         setShowMenu(false)
         return true
@@ -85,7 +96,7 @@ export function CustomerScreen({
 
     const backSubscription = BackHandler.addEventListener('hardwareBackPress', onBackPress)
     return () => backSubscription.remove()
-  }, [isHomeScreen, showMenu, showNotifications, router])
+  }, [isHomeScreen, showMenu, showNotifications, showClaimFormModal, router])
 
   const handleLogout = () => {
     setShowMenu(false)
@@ -107,16 +118,66 @@ export function CustomerScreen({
     router.push(route as any)
   }
 
+  const openClaimFormDownload = useCallback(async () => {
+    setShowMenu(false)
+    setShowClaimFormModal(true)
+    if (!token) {
+      setInsuranceCompanyOnCard(null)
+      return
+    }
+    try {
+      const card = await customerGetRepairCard(token, selectedReg)
+      const name = String(card?.insurance_company ?? '').trim()
+      setInsuranceCompanyOnCard(name || null)
+    } catch {
+      setInsuranceCompanyOnCard(null)
+    }
+  }, [token, selectedReg])
+
+  const handleMenuAction = (action: 'claim-form' | 'tp-affidavit') => {
+    if (action === 'claim-form') {
+      void openClaimFormDownload()
+      return
+    }
+    setShowMenu(false)
+    void downloadTpAffidavitForm()
+  }
+
   const isAccident = String(selectedVehicle?.service_type || '').toLowerCase().includes('accident')
 
-  const menuItems: { label: string; icon: IconName; route: string; desc: string }[] = [
+  type CustomerMenuItem = {
+    label: string
+    icon: IconName
+    desc: string
+    route?: string
+    menuAction?: 'claim-form' | 'tp-affidavit'
+  }
+
+  const menuItems: CustomerMenuItem[] = [
     {
-      label: isAccident ? 'Bodyshop Repair Tracker' : 'Live Service Tracker',
-      icon: 'clock',
+      label: isAccident ? 'Bodyshop Repair Journey' : 'Service Journey',
+      icon: 'map',
       route: '/(customer)/tracker',
       desc: isAccident ? '18-stage accident repair, surveyor inspection & DO tracking' : 'Real-time job card stage & technician bay',
     },
-    { label: 'Insurance Claim Documents', icon: 'file-text', route: '/(customer)/documents', desc: 'Upload DL, RC, Claim Form & KYC docs' },
+    {
+      label: 'Upload Claim Documents',
+      icon: 'cloud-upload',
+      route: '/(customer)/documents',
+      desc: 'Upload DL, RC, policy, signed claim form & T/P affidavit',
+    },
+    {
+      label: 'Download Insurance Claim Form',
+      icon: 'download',
+      menuAction: 'claim-form',
+      desc: 'Official motor claim PDF for your insurance company',
+    },
+    {
+      label: 'Download T/P Affidavit',
+      icon: 'download',
+      menuAction: 'tp-affidavit',
+      desc: 'Third-party affidavit template for notarization',
+    },
     { label: 'Bills, Quotations & Receipts', icon: 'file-text', route: '/(customer)/invoices', desc: 'Invoices, estimates & payments' },
     { label: 'Official Vehicle Gate Pass', icon: 'shield-check', route: '/(customer)/gatepass', desc: 'Accounts approved gate clearance' },
     { label: '24x7 Helpdesk Escalation', icon: 'phone', route: '/(customer)/helpdesk', desc: 'CRM, Service Manager & Tata team' },
@@ -145,9 +206,18 @@ export function CustomerScreen({
   const showNotificationDot = !hasSeenNotifications && isDeliveredToday
 
   return (
-    <SafeAreaView className="flex-1 bg-[#0A1118]" edges={['top']}>
-      {/* Top App Header (Tata Motors Theme) */}
-      <View style={{ backgroundColor: '#071524', borderBottomWidth: 1, borderBottomColor: 'rgba(0, 210, 196, 0.2)', paddingHorizontal: 16, paddingTop: 12, paddingBottom: 12 }}>
+    <SafeAreaView className="flex-1" style={{ backgroundColor: CustomerTheme.bg }} edges={['top']}>
+      {/* Top App Header */}
+      <View
+        style={{
+          backgroundColor: '#FFFFFF',
+          borderBottomWidth: 1,
+          borderBottomColor: CustomerTheme.border,
+          paddingHorizontal: 16,
+          paddingTop: 12,
+          paddingBottom: 12,
+        }}
+      >
         <View className="flex-row items-center justify-between gap-3">
           <View className="flex-row items-center flex-1 pr-2">
             <Image
@@ -157,8 +227,10 @@ export function CustomerScreen({
               className="mr-3"
             />
             <View className="flex-1">
-              <Text className="text-white text-[16px] font-black tracking-tight">Techwheels</Text>
-              <Text className="text-[#00D2C4] text-[11px] font-bold">Authorised Tata Motors Service Center</Text>
+              <Text style={{ color: CustomerTheme.ink, fontSize: 16, fontWeight: '900' }}>Techwheels</Text>
+              <Text style={{ color: CustomerTheme.teal, fontSize: 11, fontWeight: '700' }}>
+                Authorised Tata Motors Service Center
+              </Text>
             </View>
           </View>
 
@@ -176,15 +248,15 @@ export function CustomerScreen({
                 width: 40,
                 height: 40,
                 borderRadius: 12,
-                backgroundColor: '#0F1A28',
+                backgroundColor: CustomerTheme.bgMuted,
                 borderWidth: 1,
-                borderColor: 'rgba(0, 210, 196, 0.25)',
+                borderColor: CustomerTheme.border,
                 alignItems: 'center',
                 justifyContent: 'center',
                 position: 'relative',
               }}
             >
-              <Icon name="bell" size={18} color="#00D2C4" />
+              <Icon name="bell" size={18} color={CustomerTheme.teal} />
               {showNotificationDot && (
                 <View
                   style={{
@@ -212,7 +284,7 @@ export function CustomerScreen({
                 width: 40,
                 height: 40,
                 borderRadius: 12,
-                backgroundColor: '#002B49',
+                backgroundColor: CustomerTheme.bgMuted,
                 borderWidth: 1,
                 borderColor: 'rgba(0, 210, 196, 0.35)',
                 alignItems: 'center',
@@ -224,7 +296,7 @@ export function CustomerScreen({
                 elevation: 4,
               }}
             >
-              <Icon name="menu" size={18} color="#00D2C4" strokeWidth={2.4} />
+              <Icon name="menu" size={18} color={CustomerTheme.navy} strokeWidth={2.4} />
             </TouchableOpacity>
           </View>
         </View>
@@ -243,16 +315,19 @@ export function CustomerScreen({
                 }}
                 accessibilityRole="button"
                 accessibilityLabel="Go back to Home"
-                className="flex-row items-center bg-[#0F1A28] active:bg-[#002B49] border border-[#00D2C4]/30 px-3 py-1.5 rounded-xl mr-3"
+                className="flex-row items-center border px-3 py-1.5 rounded-xl mr-3"
+                style={{ backgroundColor: CustomerTheme.bgMuted, borderColor: CustomerTheme.border }}
               >
-                <Text className="text-[#00D2C4] font-black text-sm mr-1.5">←</Text>
-                <Text className="text-white font-bold text-xs">Home</Text>
+                <Text style={{ color: CustomerTheme.teal, fontWeight: '900', fontSize: 14, marginRight: 6 }}>←</Text>
+                <Text style={{ color: CustomerTheme.ink, fontWeight: '700', fontSize: 12 }}>Home</Text>
               </TouchableOpacity>
             )}
             {title ? (
               <View className="flex-1">
-                <Text className="text-white text-lg font-black leading-6">{title}</Text>
-                {subtitle ? <Text className="text-slate-400 text-[12px] mt-0.5">{subtitle}</Text> : null}
+                <Text style={{ color: CustomerTheme.ink, fontSize: 18, fontWeight: '900' }}>{title}</Text>
+                {subtitle ? (
+                  <Text style={{ color: CustomerTheme.inkMuted, fontSize: 12, marginTop: 2 }}>{subtitle}</Text>
+                ) : null}
               </View>
             ) : null}
           </View>
@@ -358,8 +433,14 @@ export function CustomerScreen({
 
               {menuItems.map((item) => (
                 <TouchableOpacity
-                  key={item.route}
-                  onPress={() => navigateTo(item.route)}
+                  key={item.route || item.menuAction || item.label}
+                  onPress={() => {
+                    if (item.menuAction) {
+                      handleMenuAction(item.menuAction)
+                    } else if (item.route) {
+                      navigateTo(item.route)
+                    }
+                  }}
                   className="flex-row items-center p-3 rounded-2xl bg-slate-50 active:bg-slate-100 mb-1.5"
                 >
                   <View className="w-10 h-10 rounded-xl bg-white border border-slate-200 items-center justify-center mr-3 shadow-xs">
@@ -401,6 +482,51 @@ export function CustomerScreen({
           </SafeAreaView>
         </View>
       )}
+
+      <Modal
+        visible={showClaimFormModal}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setShowClaimFormModal(false)}
+      >
+        <Pressable
+          style={{
+            flex: 1,
+            backgroundColor: 'rgba(0,0,0,0.55)',
+            justifyContent: 'flex-end',
+          }}
+          onPress={() => setShowClaimFormModal(false)}
+        >
+          <Pressable
+            style={{
+              backgroundColor: '#ffffff',
+              borderTopLeftRadius: 24,
+              borderTopRightRadius: 24,
+              paddingHorizontal: 20,
+              paddingTop: 16,
+              paddingBottom: 28,
+              maxHeight: '88%',
+            }}
+            onPress={(e) => e.stopPropagation()}
+          >
+            <View className="flex-row items-center justify-between mb-2">
+              <Text className="text-slate-900 text-[17px] font-black">Insurance claim form</Text>
+              <TouchableOpacity
+                onPress={() => setShowClaimFormModal(false)}
+                className="w-8 h-8 rounded-full bg-slate-100 items-center justify-center"
+              >
+                <Icon name="x" size={16} color="#334155" strokeWidth={2.5} />
+              </TouchableOpacity>
+            </View>
+            <ScrollView showsVerticalScrollIndicator={false}>
+              <ClaimFormWidget
+                userInsurerId={matchInsuranceProviderId(insuranceCompanyOnCard)}
+                insurerNameOnFile={insuranceCompanyOnCard}
+              />
+            </ScrollView>
+          </Pressable>
+        </Pressable>
+      </Modal>
 
       {/* ── NOTIFICATIONS POPUP (IN-TREE OVERLAY TO PREVENT FREEZE) ── */}
       {showNotifications && (

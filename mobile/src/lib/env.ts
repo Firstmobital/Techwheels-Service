@@ -1,4 +1,16 @@
+import Constants from 'expo-constants'
+
 type EnvBag = Record<string, string | undefined>
+
+const FALLBACK_SUPABASE_URL = 'https://jmdndcphkmaljhwgzqxq.supabase.co'
+
+function getExpoExtra(): Record<string, unknown> {
+  return (
+    (Constants.expoConfig?.extra as Record<string, unknown> | undefined) ??
+    (Constants.manifest2?.extra as Record<string, unknown> | undefined) ??
+    {}
+  )
+}
 
 function readFromBag(env: EnvBag, key: string): string | undefined {
   const value = env[key]
@@ -42,7 +54,13 @@ export function readEnv(preferredKey: string, fallbackKeys: string[] = []): stri
 
 export function getSupabaseBaseUrl(): string {
   const value = readEnv('EXPO_PUBLIC_SUPABASE_URL', ['VITE_SUPABASE_URL'])
-  return value ? value.replace(/\/$/, '') : ''
+  if (value) return value.replace(/\/$/, '')
+
+  const extra = getExpoExtra()
+  const fromExtra = typeof extra.supabaseUrl === 'string' ? extra.supabaseUrl.trim() : ''
+  if (fromExtra) return fromExtra.replace(/\/$/, '')
+
+  return FALLBACK_SUPABASE_URL
 }
 
 export function getAutodocBucketEnv(): string {

@@ -1,6 +1,6 @@
 import { Linking } from 'react-native'
 import { getSupabaseBaseUrl } from '../env'
-import { supabase, SUPABASE_ANON_KEY } from '../supabase'
+import { supabase, SUPABASE_ANON_KEY, SUPABASE_URL } from '../supabase'
 
 const apiCache = new Map<string, { timestamp: number; data: any }>()
 const CACHE_TTL_MS = 6000 // 6 seconds cache
@@ -1149,27 +1149,45 @@ export function parseBodyshopEstimateDocument(
   return doc as CustomerBodyshopEstimateDocument
 }
 
-export async function customerOpenBodyshopEstimateDocument(
+function isLikelyImageViewUrl(viewUrl: string, contentType?: string | null, fileName?: string | null) {
+  const type = String(contentType ?? '').toLowerCase()
+  if (type.startsWith('image/')) return true
+  const name = String(fileName ?? viewUrl).toLowerCase()
+  return /\.(jpe?g|png|gif|webp|heic|bmp)(\?|$)/i.test(name)
+}
+
+async function fetchCustomerBodyshopDocViewUrl(
   sessionToken: string,
-  regNumber: string | null | undefined,
-  doc?: CustomerBodyshopEstimateDocument | null
-): Promise<void> {
-  const reg = (regNumber || '').trim()
-  if (!sessionToken || !reg) {
-    throw new Error('Session or vehicle not available.')
+  reg: string,
+  docKey = 'doc_estimate'
+): Promise<{ view_url: string; file_name?: string | null; content_type?: string | null }> {
+  const invokeBody = {
+    session_token: sessionToken,
+    reg_number: reg,
+    doc_key: docKey,
   }
 
-  const driveUrl = String(doc?.drive_url ?? '').trim()
-  if (driveUrl) {
-    await Linking.openURL(driveUrl)
-    return
+  try {
+    const { data, error } = await supabase.functions.invoke('customer-portal-doc-view', {
+      body: invokeBody,
+    })
+    if (!error && data && typeof data === 'object') {
+      const row = data as { view_url?: string; error?: string; ok?: boolean }
+      const viewUrl = String(row.view_url ?? '').trim()
+      if (viewUrl) {
+        return {
+          view_url: viewUrl,
+          file_name: (row as { file_name?: string }).file_name ?? null,
+          content_type: (row as { content_type?: string }).content_type ?? null,
+        }
+      }
+      if (row.error) throw new Error(String(row.error))
+    }
+  } catch (invokeErr) {
+    console.warn('customer-portal-doc-view invoke failed, trying HTTP fallback:', invokeErr)
   }
 
-  const supabaseUrl = getSupabaseBaseUrl()
-  if (!supabaseUrl) {
-    throw new Error('App is not configured for document viewing.')
-  }
-
+  const supabaseUrl = (getSupabaseBaseUrl() || SUPABASE_URL).replace(/\/$/, '')
   const res = await fetch(`${supabaseUrl}/functions/v1/customer-portal-doc-view`, {
     method: 'POST',
     headers: {
@@ -1177,18 +1195,66 @@ export async function customerOpenBodyshopEstimateDocument(
       Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
       apikey: SUPABASE_ANON_KEY,
     },
-    body: JSON.stringify({
-      session_token: sessionToken,
-      reg_number: reg,
-      doc_key: 'doc_estimate',
-    }),
+    body: JSON.stringify(invokeBody),
   })
 
-  const payload = (await res.json().catch(() => ({}))) as { view_url?: string; error?: string }
+  const payload = (await res.json().catch(() => ({}))) as {
+    view_url?: string
+    error?: string
+    file_name?: string
+    content_type?: string
+  }
   const viewUrl = String(payload.view_url ?? '').trim()
   if (!res.ok || !viewUrl) {
     throw new Error(payload.error || 'Unable to open workshop estimate document.')
   }
 
-  await Linking.openURL(viewUrl)
+  return {
+    view_url: viewUrl,
+    file_name: payload.file_name ?? null,
+    content_type: payload.content_type ?? null,
+  }
+}
+
+export async function customerGetBodyshopEstimateViewUrl(
+  sessionToken: string,
+  regNumber: string | null | undefined,
+  doc?: CustomerBodyshopEstimateDocument | null
+): Promise<{ viewUrl: string; fileName?: string | null; contentType?: string | null; isImage: boolean }> {
+  const reg = (regNumber || '').trim()
+  if (!sessionToken || !reg) {
+    throw new Error('Session or vehicle not available.')
+  }
+
+  const driveUrl = String(doc?.drive_url ?? '').trim()
+  if (driveUrl) {
+    return {
+      viewUrl: driveUrl,
+      fileName: doc?.file_name ?? null,
+      contentType: doc?.content_type ?? null,
+      isImage: isLikelyImageViewUrl(driveUrl, doc?.content_type, doc?.file_name),
+    }
+  }
+
+  const resolved = await fetchCustomerBodyshopDocViewUrl(sessionToken, reg, 'doc_estimate')
+  const viewUrl = resolved.view_url
+  return {
+    viewUrl,
+    fileName: resolved.file_name ?? doc?.file_name ?? null,
+    contentType: resolved.content_type ?? doc?.content_type ?? null,
+    isImage: isLikelyImageViewUrl(viewUrl, resolved.content_type, resolved.file_name ?? doc?.file_name),
+  }
+}
+
+export async function customerOpenBodyshopEstimateDocument(
+  sessionToken: string,
+  regNumber: string | null | undefined,
+  doc?: CustomerBodyshopEstimateDocument | null
+): Promise<void> {
+  const resolved = await customerGetBodyshopEstimateViewUrl(sessionToken, regNumber, doc)
+  const canOpen = await Linking.canOpenURL(resolved.viewUrl)
+  if (!canOpen) {
+    throw new Error('Unable to open this document on your device.')
+  }
+  await Linking.openURL(resolved.viewUrl)
 }

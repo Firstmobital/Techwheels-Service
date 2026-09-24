@@ -1,10 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import {
   ActivityIndicator,
-  Alert,
   Linking,
-  Modal,
-  ScrollView,
   Text,
   TouchableOpacity,
   View,
@@ -19,7 +16,6 @@ import {
   dash,
   formatKm,
   getDirectAdvisorOrWorkshopPhone,
-  pickAdvisorPhone,
 } from '../../components/customer/customerUi'
 import { useCustomerSession } from '../../context/CustomerSessionContext'
 import {
@@ -28,8 +24,9 @@ import {
   customerGetSettlement,
 } from '../../lib/api/customerPortal'
 import { computeSettlement } from '../../lib/customer/math'
-import { manualCheckForOTAUpdate } from '../../hooks/useMandatoryOTAUpdate'
 import { Icon, IconName } from '../../components/ui/Icon'
+import { RemainingDocumentsCard } from '../../components/customer/RemainingDocumentsCard'
+import { CustomerTheme } from '../../lib/customer/customerTheme'
 
 export default function CustomerDashboardScreen() {
   const router = useRouter()
@@ -40,30 +37,6 @@ export default function CustomerDashboardScreen() {
   const [gatePass, setGatePass] = useState<Record<string, unknown> | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [activeStageIndex, setActiveStageIndex] = useState<number | null>(null)
-  const [showTrackerDetails, setShowTrackerDetails] = useState<boolean>(false)
-  const [checkingOta, setCheckingOta] = useState(false)
-  const [otaStatusText, setOtaStatusText] = useState<string | null>(null)
-  const [showAccidentalIntro, setShowAccidentalIntro] = useState(false)
-
-  const handleManualOtaUpdate = async () => {
-    setCheckingOta(true)
-    setOtaStatusText('Checking for updates…')
-    try {
-      const res = await manualCheckForOTAUpdate((msg) => setOtaStatusText(msg))
-      if (res.isAvailable) {
-        Alert.alert('🚀 Update Installed', 'The app has been updated and is restarting now!')
-      } else {
-        Alert.alert('App Update Status', res.message || 'You have the latest version of the app.')
-      }
-    } catch (e: any) {
-      Alert.alert('Update Error', e?.message || 'Could not verify update status. Check your connection.')
-    } finally {
-      setCheckingOta(false)
-      setOtaStatusText(null)
-    }
-  }
-
   const load = useCallback(async (isInitial = false) => {
     if (!token) return
     if (isInitial && !job && !selected) {
@@ -125,27 +98,6 @@ export default function CustomerDashboardScreen() {
     billed: settlement?.total_billed ?? settlement?.billed_amount ?? job?.billed_amount ?? selected?.billed_amount,
     received: settlement?.amount_received ?? job?.amount_received ?? selected?.amount_received,
   })
-  const advisorPhone = pickAdvisorPhone(job) || pickAdvisorPhone(selected as unknown as Record<string, unknown>)
-  const isAccident = String(serviceType || '').toLowerCase().includes('accident') || String(serviceType || '').toLowerCase().includes('body')
-
-  // 5 Service Stages for Clean Live Tracker
-  // Stage index: 0=Intake, 1=JobCard, 2=Quote, 3=BayWork, 4=Ready
-  // Any stage <= currentStageIndex is marked as done with green tick ✓
-  const hasJc = Boolean(jc && jc.trim().length > 0 && !['pending', 'null', '—'].includes(jc.trim().toLowerCase()))
-  const hasQuote = Boolean(job?.estimate_done_at)
-  const hasTech = Boolean(technician && technician.trim().length > 0)
-  const isDelivered = Boolean(delivered || gatePass?.gate_pass_no || settlement?.status === 'received')
-
-  const currentStageIndex = isDelivered ? 4 : hasTech ? 3 : hasQuote ? 2 : hasJc ? 1 : 0
-
-  const trackerStages: { title: string; icon: IconName; desc: string }[] = [
-    { title: 'Intake', icon: 'arrow-down', desc: 'Vehicle check-in & initial inspection' },
-    { title: 'Job Card', icon: 'file-text', desc: `Assigned SA: ${advisor || 'Service Advisor'} · JC #${jc || 'Pending'}` },
-    { title: 'Quote', icon: 'file', desc: 'Itemized parts & labour quotation' },
-    { title: 'Bay Work', icon: 'sliders', desc: `Technician: ${technician || 'Assigned'} · Bay ${bayNo || 'Floor'}` },
-    { title: 'Ready', icon: 'check-circle', desc: 'Repairs completed & tested for delivery' },
-  ]
-
   return (
     <CustomerScreen title="" subtitle="">
       {loading && !selected ? (
@@ -288,9 +240,11 @@ export default function CustomerDashboardScreen() {
               </View>
             </View>
 
-            {/* Direct Connect Buttons (WhatsApp & Call) */}
+            {/* Chat & call */}
             <View style={{ marginTop: 12, flexDirection: 'row', gap: 8 }}>
               <TouchableOpacity
+                accessibilityRole="button"
+                accessibilityLabel="Chat"
                 onPress={() => {
                   const phoneClean = (getDirectAdvisorOrWorkshopPhone(job || (selected as unknown as Record<string, unknown>)) || '').replace(/\D/g, '').slice(-10)
                   if (phoneClean) {
@@ -312,8 +266,8 @@ export default function CustomerDashboardScreen() {
                   gap: 6,
                 }}
               >
-                <Text style={{ fontSize: 13 }}>💬</Text>
-                <Text style={{ color: '#00D2C4', fontSize: 12, fontWeight: '800' }}>WhatsApp</Text>
+                <Icon name="message-square" size={14} color="#00D2C4" strokeWidth={2.2} />
+                <Text style={{ color: '#00D2C4', fontSize: 12, fontWeight: '800' }}>Chat</Text>
               </TouchableOpacity>
 
               <TouchableOpacity
@@ -339,324 +293,57 @@ export default function CustomerDashboardScreen() {
             </View>
           </LinearGradient>
 
-          {/* ── SIMPLE CUSTOMER SERVICE TYPE ENTRY ── */}
-          <CustomerCard style={{ backgroundColor: '#ffffff', borderColor: '#D9E5F5', padding: 16 }}>
-            <Text style={{ color: '#0f172a', fontSize: 16, fontWeight: '900' }}>Select Service Type</Text>
-            <Text style={{ color: '#64748b', fontSize: 12, marginTop: 3, marginBottom: 12 }}>
-              Choose what you want to manage in the Techwheels customer app.
-            </Text>
-            <View style={{ flexDirection: 'row', gap: 10 }}>
-              <TouchableOpacity
-                onPress={() => setShowAccidentalIntro(true)}
-                activeOpacity={0.82}
-                style={{
-                  flex: 1,
-                  minHeight: 112,
-                  borderRadius: 18,
-                  padding: 14,
-                  justifyContent: 'space-between',
-                  backgroundColor: isAccident ? '#E8F1FF' : '#F8FBFF',
-                  borderWidth: isAccident ? 2 : 1.2,
-                  borderColor: isAccident ? '#0B5FFF' : '#D9E5F5',
-                }}
-              >
-                <View style={{ width: 42, height: 42, borderRadius: 13, backgroundColor: '#0B5FFF', alignItems: 'center', justifyContent: 'center' }}>
-                  <Icon name="car" size={21} color="#ffffff" />
-                </View>
-                <View>
-                  <Text style={{ color: '#0f172a', fontSize: 14, fontWeight: '900' }}>Accidental Repair</Text>
-                  <Text style={{ color: '#64748b', fontSize: 10.5, marginTop: 2 }}>Documents, photos, claim & bodyshop tracking</Text>
-                </View>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                onPress={() => router.push('/(customer)/booking')}
-                activeOpacity={0.82}
-                style={{
-                  flex: 1,
-                  minHeight: 112,
-                  borderRadius: 18,
-                  padding: 14,
-                  justifyContent: 'space-between',
-                  backgroundColor: '#F8FBFF',
-                  borderWidth: 1.2,
-                  borderColor: '#D9E5F5',
-                }}
-              >
-                <View style={{ width: 42, height: 42, borderRadius: 13, backgroundColor: '#062B62', alignItems: 'center', justifyContent: 'center' }}>
-                  <Icon name="sliders" size={21} color="#ffffff" />
-                </View>
-                <View>
-                  <Text style={{ color: '#0f172a', fontSize: 14, fontWeight: '900' }}>General Service</Text>
-                  <Text style={{ color: '#64748b', fontSize: 10.5, marginTop: 2 }}>Schedule service, running repair & maintenance</Text>
-                </View>
-              </TouchableOpacity>
-            </View>
-          </CustomerCard>
-
-          {/* ── LIVE REPAIR TRACKER (TATA.EV GLOWING TRACKER) ── */}
-          {(() => {
-            const effectiveStage = activeStageIndex !== null ? activeStageIndex : currentStageIndex
-            return (
-              <View
-                style={{
-                  backgroundColor: '#0F1A28',
-                  borderWidth: 1.2,
-                  borderColor: 'rgba(0, 210, 196, 0.25)',
-                  borderRadius: 22,
-                  padding: 16,
-                  marginBottom: 16,
-                  shadowColor: '#002B49',
-                  shadowOffset: { width: 0, height: 4 },
-                  shadowOpacity: 0.35,
-                  shadowRadius: 12,
-                  elevation: 5,
-                }}
-              >
-                <View className="flex-row items-center justify-between mb-3">
-                  <View className="flex-row items-center gap-2">
-                    <View className="w-8 h-8 rounded-lg bg-[#002B49] border border-[#00D2C4]/30 items-center justify-center">
-                      <Icon name="clock" size={16} color="#00D2C4" />
-                    </View>
-                    <View>
-                      <Text className="text-white text-[14px] font-black tracking-tight">
-                        Live Service Progress Tracker
-                      </Text>
-                      <Text className="text-slate-400 text-[11px] font-medium">Tap stage for live workshop bay details</Text>
-                    </View>
-                  </View>
-                  <View className="bg-[#00D2C4]/15 border border-[#00D2C4]/40 px-2.5 py-1 rounded-full flex-row items-center gap-1.5">
-                    <View className="w-1.5 h-1.5 bg-[#00D2C4] rounded-full" />
-                    <Text className="text-[#00D2C4] text-[10px] font-black">
-                      {trackerStages[currentStageIndex].title}
-                    </Text>
-                  </View>
-                </View>
-
-                {/* Clean Progress Track Bar */}
-                <View className="my-3 relative">
-                  {/* Background Track Line */}
-                  <View className="h-1.5 bg-[#071524] rounded-full overflow-hidden relative border border-white/5">
-                    <View
-                      style={{
-                        height: '100%',
-                        backgroundColor: '#00D2C4',
-                        width: `${((currentStageIndex + 1) / trackerStages.length) * 100}%`,
-                      }}
-                    />
-                  </View>
-
-                  {/* 5 Stage Node Icons */}
-                  <View className="flex-row justify-between -mt-3 px-1">
-                    {trackerStages.map((stg, idx) => {
-                      const isDone = idx <= currentStageIndex
-                      const isCurrent = idx === currentStageIndex
-                      const isSelected = effectiveStage === idx
-                      return (
-                        <TouchableOpacity
-                          key={stg.title}
-                          onPress={() => {
-                            setActiveStageIndex(idx)
-                            setShowTrackerDetails(true)
-                          }}
-                          activeOpacity={0.7}
-                          className="items-center w-12"
-                        >
-                          <View
-                            className="w-7 h-7 rounded-full items-center justify-center border-2"
-                            style={{
-                              backgroundColor: isDone ? '#00D2C4' : '#071524',
-                              borderColor: isSelected
-                                ? '#00E5BE'
-                                : isDone
-                                ? '#00D2C4'
-                                : 'rgba(255, 255, 255, 0.15)',
-                              borderWidth: isSelected || isCurrent ? 2.5 : 1.5,
-                            }}
-                          >
-                            <Icon
-                              name={isDone ? 'check' : stg.icon}
-                              size={12}
-                              color={isDone ? '#002B49' : '#94a3b8'}
-                              strokeWidth={2.8}
-                            />
-                          </View>
-                          <Text
-                            className="text-[9.5px] mt-1 text-center font-bold"
-                            style={{
-                              color: isSelected
-                                ? '#00E5BE'
-                                : isDone
-                                ? '#00D2C4'
-                                : '#64748b',
-                              fontWeight: isSelected || isCurrent ? '900' : '700',
-                            }}
-                          >
-                            {stg.title}
-                          </Text>
-                        </TouchableOpacity>
-                      )
-                    })}
-                  </View>
-                </View>
-
-                {/* Bottom Toggle Bar */}
-                <TouchableOpacity
-                  onPress={() => {
-                    if (activeStageIndex === null) {
-                      setActiveStageIndex(currentStageIndex)
-                    }
-                    setShowTrackerDetails((prev) => !prev)
-                  }}
-                  activeOpacity={0.8}
-                  style={{
-                    backgroundColor: '#071524',
-                    borderWidth: 1,
-                    borderColor: 'rgba(0, 210, 196, 0.2)',
-                    borderRadius: 14,
-                    padding: 10,
-                    marginTop: 8,
-                    flexDirection: 'row',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                  }}
-                >
-                  <Text style={{ color: '#cbd5e1', fontSize: 11, fontWeight: '600', flex: 1, paddingRight: 8 }} numberOfLines={1}>
-                    📍 {trackerStages[effectiveStage].desc}
-                  </Text>
-                  <Text style={{ color: '#00D2C4', fontSize: 11, fontWeight: '800' }}>
-                    {showTrackerDetails ? 'Hide ▲' : 'Details ▼'}
-                  </Text>
-                </TouchableOpacity>
-
-                {/* Inline Expanded Stage Details Box */}
-                {showTrackerDetails && (
-                  <View className="mt-3 pt-3 border-t border-slate-100">
-                    <View className="flex-row items-center justify-between pb-2 mb-2 border-b border-slate-100">
-                      <View className="flex-row items-center gap-1.5">
-                        <Text className="text-slate-900 font-black text-xs">
-                          Stage {effectiveStage + 1}: {trackerStages[effectiveStage].title}
-                        </Text>
-                      </View>
-                      <View className="bg-blue-50 px-2 py-0.5 rounded-md border border-blue-100">
-                        <Text className="text-blue-700 text-[10.5px] font-bold">
-                          {effectiveStage <= currentStageIndex ? 'Active / Completed' : 'Pending Step'}
-                        </Text>
-                      </View>
-                    </View>
-
-                    <View className="space-y-1.5 bg-slate-50 p-3 rounded-xl border border-slate-200/70">
-                      <View className="flex-row justify-between py-1 border-b border-slate-200/60">
-                        <Text className="text-slate-600 font-semibold text-xs">Job Card Number:</Text>
-                        <Text className="text-slate-900 font-mono font-black text-xs">{jc ? `#${jc}` : '—'}</Text>
-                      </View>
-                      <View className="flex-row justify-between py-1 border-b border-slate-200/60">
-                        <Text className="text-slate-600 font-semibold text-xs">Assigned Advisor:</Text>
-                        <Text className="text-slate-900 font-bold text-xs">{dash(advisor)}</Text>
-                      </View>
-                      <View className="flex-row justify-between py-1 border-b border-slate-200/60">
-                        <Text className="text-slate-600 font-semibold text-xs">Assigned Technician:</Text>
-                        <Text className="text-slate-900 font-bold text-xs">{dash(technician)}</Text>
-                      </View>
-                      <View className="flex-row justify-between py-1">
-                        <Text className="text-slate-600 font-semibold text-xs">Workshop Bay No:</Text>
-                        <Text className="text-blue-700 font-black text-xs">{dash(bayNo) || 'Floor Bay'}</Text>
-                      </View>
-                    </View>
-                  </View>
-                )}
-              </View>
-            )
-          })()}
+          <RemainingDocumentsCard regNumber={selected?.reg_number} />
 
           {/* ── ACTION SHORTCUT TILES ── */}
           <View className="flex-row flex-wrap" style={{ gap: 10, marginBottom: 2 }}>
             <ActionTile
               icon="alert-circle"
-              title="Tell Us Your Problem"
-              subtitle="Register complaints & issues"
+              title="Report Issue"
+              subtitle="Register complaints & concerns"
               border="#fed7aa"
               accent="#f97316"
               onPress={() => router.push('/(customer)/complaint')}
             />
             <ActionTile
-              icon="file-text"
-              title="Insurance Claim Docs"
-              subtitle="DL, RC, Policy & KYC checklist"
-              border="#fde68a"
-              accent="#d97706"
-              onPress={() => router.push('/(customer)/documents')}
-            />
-            <ActionTile
-              icon="file"
-              title="Digital Estimate"
-              subtitle="Approve or reject quotation"
-              border="#bfdbfe"
-              accent="#2563eb"
-              onPress={() => router.push('/(customer)/estimate')}
-            />
-            <ActionTile
-              icon="file"
-              title="Bills & Receipts"
-              subtitle="Invoices & payment records"
-              border="#bbf7d0"
-              accent="#16a34a"
-              onPress={() => router.push('/(customer)/invoices')}
-            />
-            <ActionTile
-              icon="shield-check"
-              title="Digital Gate Pass"
-              subtitle="Official Dealership Clearance"
-              border="#e9d5ff"
-              accent="#9333ea"
-              onPress={() => router.push('/(customer)/gatepass')}
-            />
-            <ActionTile
-              icon="calendar"
-              title="Book Service"
-              subtitle="Schedule next visit or pickup"
-              border="#c7d2fe"
-              accent="#4f46e5"
-              onPress={() => router.push('/(customer)/booking')}
-            />
-            <ActionTile
-              icon="list"
-              title="My Bookings"
-              subtitle="Track appointments & status"
+              icon="map"
+              title="Service Journey"
+              subtitle="Full workshop stage timeline"
               border="#bae6fd"
-              accent="#0284c7"
-              onPress={() => router.push('/(customer)/my-bookings')}
-            />
-            <ActionTile
-              icon="clock"
-              title="Live Repair Tracker"
-              subtitle="Workshop stages for this job"
-              border="#fecdd3"
-              accent="#e11d48"
+              accent={CustomerTheme.teal}
               onPress={() => router.push('/(customer)/tracker')}
-            />
-            <ActionTile
-              icon="phone"
-              title="Helpdesk & Escalation"
-              subtitle="Dealership & Tata Motors support"
-              border="#fed7aa"
-              accent="#ea580c"
-              onPress={() => router.push('/(customer)/helpdesk')}
             />
           </View>
 
           {/* ── WORKSHOP CURRENT RECORD CARD ── */}
-          <CustomerCard>
-            <View className="flex-row items-start justify-between mb-3">
-              <View>
-                <Text className="text-slate-900 text-[16px] font-bold">Workshop Record</Text>
-                <Text className="text-slate-500 text-[12px]">Current Job Card Details</Text>
+          <CustomerCard
+            style={{
+              backgroundColor: '#FFFFFF',
+              borderColor: CustomerTheme.border,
+              borderWidth: 1,
+            }}
+          >
+            <View style={{ flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 14 }}>
+              <View style={{ flex: 1, paddingRight: 10 }}>
+                <Text style={{ color: CustomerTheme.ink, fontSize: 17, fontWeight: '900' }}>Workshop record</Text>
+                <Text style={{ color: CustomerTheme.inkMuted, fontSize: 13, marginTop: 3, fontWeight: '600' }}>
+                  Current job card details
+                </Text>
               </View>
-              <View className="bg-blue-50 px-2 py-1 rounded-full">
-                <Text className="text-blue-700 text-[11px] font-bold">{dash(serviceType)}</Text>
+              <View
+                style={{
+                  backgroundColor: CustomerTheme.tabActiveBg,
+                  paddingHorizontal: 10,
+                  paddingVertical: 5,
+                  borderRadius: 999,
+                  borderWidth: 1,
+                  borderColor: '#BAE6FD',
+                }}
+              >
+                <Text style={{ color: CustomerTheme.teal, fontSize: 11, fontWeight: '800' }}>{dash(serviceType)}</Text>
               </View>
             </View>
-            <RecordRow label="Job Card Number" value={dash(jc)} />
+            <RecordRow label="Job Card Number" value={dash(jc)} mono />
             <RecordRow label="Service Advisor" value={dash(advisor)} />
             <RecordRow label="Assigned Technician" value={dash(technician)} />
             <RecordRow label="Workshop Bay No" value={dash(bayNo) || 'Floor Bay'} />
@@ -664,13 +351,14 @@ export default function CustomerDashboardScreen() {
             <RecordRow
               last
               label="Settlement Status"
+              highlight={pay.status === 'paid'}
               value={
                 pay.status === 'paid'
-                  ? '✓ Fully Paid'
+                  ? 'Fully paid'
                   : pay.status === 'partial'
-                    ? `⚡ Partially Paid (₹${pay.received?.toLocaleString('en-IN')})`
+                    ? `Partially paid · ₹${pay.received?.toLocaleString('en-IN')}`
                     : pay.status === 'due'
-                      ? '⏳ Payment Due'
+                      ? 'Payment due'
                       : pay.status === 'quoted'
                         ? 'Quoted · awaiting accounts'
                         : '—'
@@ -678,121 +366,8 @@ export default function CustomerDashboardScreen() {
             />
           </CustomerCard>
 
-          {/* ── ADVISOR CALL CARD ── */}
-          <CustomerCard style={{ backgroundColor: '#f0fdf4', borderColor: '#dcfce7' }}>
-            <View className="flex-row items-center">
-              <View className="w-10 h-10 rounded-xl bg-emerald-100 items-center justify-center mr-3">
-                <Icon name="phone" size={18} color="#16a34a" />
-              </View>
-              <View className="flex-1">
-                <Text className="text-[13.5px] font-bold text-emerald-900">Need Advisor Assistance?</Text>
-                <Text className="text-[12px] text-emerald-700 font-medium">
-                  Service Advisor: <Text className="font-bold">{dash(advisor)}</Text>
-                </Text>
-              </View>
-              {advisorPhone ? (
-                <TouchableOpacity
-                  onPress={() => void Linking.openURL(`tel:${advisorPhone}`)}
-                  activeOpacity={0.8}
-                  className="bg-emerald-600 active:bg-emerald-700 px-3.5 py-2 rounded-xl"
-                >
-                  <Text className="text-white text-xs font-black">Call SA</Text>
-                </TouchableOpacity>
-              ) : null}
-            </View>
-          </CustomerCard>
-
-          {/* ── APP UPDATE QUICK BANNER ── */}
-          <TouchableOpacity
-            activeOpacity={0.88}
-            onPress={handleManualOtaUpdate}
-            disabled={checkingOta}
-            className="bg-slate-900 rounded-2xl p-4 mb-3.5 flex-row items-center justify-between border border-slate-800 shadow-md"
-          >
-            <View className="flex-row items-center gap-3 flex-1 pr-2">
-              <View className="w-10 h-10 rounded-xl bg-blue-500/20 items-center justify-center border border-blue-400/30">
-                <Icon name="rotate-cw" size={18} color="#60a5fa" />
-              </View>
-              <View className="flex-1">
-                <Text className="text-white text-xs font-black uppercase tracking-wider">
-                  {checkingOta ? 'Checking for updates…' : 'App Version & Updates'}
-                </Text>
-                <Text className="text-slate-400 text-[11px] mt-0.5 font-medium" numberOfLines={1}>
-                  {otaStatusText || 'Tap to check and install latest OTA updates'}
-                </Text>
-              </View>
-            </View>
-            <View className="bg-blue-600 px-3 py-1.5 rounded-xl">
-              <Text className="text-white text-xs font-black">
-                {checkingOta ? 'Checking…' : 'Update ➔'}
-              </Text>
-            </View>
-          </TouchableOpacity>
         </>
       )}
-      <Modal
-        visible={showAccidentalIntro}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setShowAccidentalIntro(false)}
-      >
-        <View style={{ flex: 1, backgroundColor: 'rgba(2,17,38,0.72)', justifyContent: 'flex-end' }}>
-          <TouchableOpacity style={{ flex: 1 }} activeOpacity={1} onPress={() => setShowAccidentalIntro(false)} />
-          <View style={{ backgroundColor: '#ffffff', borderTopLeftRadius: 28, borderTopRightRadius: 28, padding: 20, paddingBottom: 32 }}>
-            <View style={{ width: 48, height: 48, borderRadius: 15, backgroundColor: '#E8F1FF', alignItems: 'center', justifyContent: 'center', marginBottom: 12 }}>
-              <Icon name="file-text" size={24} color="#0B5FFF" />
-            </View>
-            <Text style={{ color: '#0f172a', fontSize: 22, fontWeight: '900' }}>Needed from you</Text>
-            <Text style={{ color: '#64748b', fontSize: 12.5, lineHeight: 19, marginTop: 5 }}>
-              Help us start and process your accidental repair faster by uploading the customer-side paperwork directly into your bodyshop case.
-            </Text>
-
-            <View style={{ backgroundColor: '#F8FBFF', borderWidth: 1, borderColor: '#D9E5F5', borderRadius: 16, padding: 13, marginTop: 15 }}>
-              {[
-                'RC / Registration Certificate',
-                'Insurance Policy Copy',
-                'Driving Licence',
-                'Signed Claim Form',
-                'Aadhaar / KYC & PAN',
-                'Bank details / Cancelled cheque',
-                'GST / Company PAN when applicable',
-                'T/P affidavit for major cases',
-                'Damage photos',
-              ].map((item) => (
-                <View key={item} style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>
-                  <View style={{ width: 20, height: 20, borderRadius: 10, backgroundColor: '#E8F1FF', alignItems: 'center', justifyContent: 'center', marginRight: 9 }}>
-                    <Icon name="check" size={12} color="#0B5FFF" strokeWidth={2.5} />
-                  </View>
-                  <Text style={{ color: '#334155', fontSize: 12, fontWeight: '700', flex: 1 }}>{item}</Text>
-                </View>
-              ))}
-            </View>
-
-            <Text style={{ color: '#64748b', fontSize: 11.5, lineHeight: 17, marginTop: 12 }}>
-              You can use Camera, Gallery or Files. Anything uploaded here becomes visible to the Techwheels bodyshop team in the same 18-stage repair case.
-            </Text>
-
-            <TouchableOpacity
-              onPress={() => {
-                setShowAccidentalIntro(false)
-                router.push('/(customer)/documents')
-              }}
-              style={{ backgroundColor: '#0B5FFF', borderRadius: 16, paddingVertical: 14, alignItems: 'center', marginTop: 16 }}
-            >
-              <Text style={{ color: '#ffffff', fontWeight: '900', fontSize: 14 }}>Start Uploading →</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              onPress={() => {
-                setShowAccidentalIntro(false)
-                router.push('/(customer)/tracker')
-              }}
-              style={{ paddingVertical: 12, alignItems: 'center', marginTop: 3 }}
-            >
-              <Text style={{ color: '#0B5FFF', fontWeight: '800', fontSize: 12.5 }}>I have already uploaded • View Repair Tracker</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
     </CustomerScreen>
   )
 }

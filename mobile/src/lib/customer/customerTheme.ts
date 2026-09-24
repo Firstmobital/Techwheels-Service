@@ -1,0 +1,20 @@
+/** Reference UI palette (Tata / Techwheels customer portal) */
+export const CustomerTheme = {
+  navy: '#131F3D',
+  navyDeep: '#0B0E37',
+  teal: '#006782',
+  tealBright: '#00889F',
+  bg: '#F7F9FC',
+  bgMuted: '#EEF2F7',
+  card: '#FFFFFF',
+  ink: '#131F3D',
+  inkMuted: '#64748B',
+  inkSoft: '#94A3B8',
+  border: '#E2E8F0',
+  cream: '#F5E6D3',
+  creamInk: '#7C4A1E',
+  peach: '#FDEAD7',
+  peachInk: '#C2410C',
+  success: '#059669',
+  tabActiveBg: '#E0F2FE',
+} as const
