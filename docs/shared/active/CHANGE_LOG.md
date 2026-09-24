@@ -2,6 +2,10 @@
 
 Tracks documentation-sync updates for business logic, architecture, and access control.
 
+## 2026-09-24
+
+- Recovery **DMS bill-to** stays filled when `psf_revenue_dms.account` exists. An empty `bodyshop_settlements.invoice_account` is copied from the latest live DMS invoice on settlement open and on each DMS import statement. A bill-to that is already stored is left as-is. Policy company is not changed. Customer first/last name is not used as the bill-to. Ledger: DBL-0084. Plan: `BODYSHOP-SETTLEMENT-001`.
+
 ## 2026-09-23
 
 - BUSY Export Party Accounts omits parties whose voucher classification is `Dealer`. Those parties stay on the Invoice Voucher export. Normal, Bodyshop, and PDI party rows are unchanged. Group text is not the exclusion key.
