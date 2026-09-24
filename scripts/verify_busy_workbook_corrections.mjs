@@ -76,8 +76,8 @@ for (const [billNo, rows] of byBill) {
       Amount: Number(row.Amount || 0),
       naration: row.naration,
       Series: busyVoucherSeries(row['bill no']),
-      'Rounded Off (-)': row === labour[0] && roundOff < 0 ? Math.abs(roundOff) : '',
-      'Rounded Off (+)': row === labour[0] && roundOff > 0 ? roundOff : '',
+      'Rounded Off (-)': row === ordered[0] && roundOff < 0 ? Math.abs(roundOff) : '',
+      'Rounded Off (+)': row === ordered[0] && roundOff > 0 ? roundOff : '',
     })
   }
 }
@@ -131,7 +131,9 @@ for (const [billNo, rows] of rereadByBill) {
     : ['SPARE PARTS @18%', 'LABOUR CHARGES @18%']
   assert.deepEqual(items, baseItems, billNo)
 
-  const host = labour[0]
+  const host = rows[0]
+  const hostIndex = rows.findIndex((row) => row['Rounded Off (-)'] !== '' || row['Rounded Off (+)'] !== '')
+  if (expectedRoundOff !== 0 && hostIndex !== 0) duplicateRoundOff += 1
   const minus = Number(host?.['Rounded Off (-)'] || 0)
   const plus = Number(host?.['Rounded Off (+)'] || 0)
   if (expectedRoundOff > 0 && (plus !== expectedRoundOff || minus !== 0)) signedMismatch += 1

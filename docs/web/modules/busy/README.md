@@ -31,7 +31,7 @@ Invoice Voucher rows are generated per eligible Labour invoice:
 
 - Always emit `SPARE PARTS @18%` and `LABOUR CHARGES @18%`, including Amount 0.
 - Emit `SPARE PARTS @5%` only when matched Parts data contains a genuine 5% GST line item. Do not emit it merely because the calculated 5% amount is 0.
-- Emit `Rounded Off (-)` or `Rounded Off (+)` on the Labour row only. The value is the magnitude of nearest whole rupee minus the labour + Parts inclusive subtotal. A positive difference fills `Rounded Off (+)` and leaves `Rounded Off (-)` blank. A negative difference fills `Rounded Off (-)` and leaves `Rounded Off (+)` blank. A whole-rupee subtotal leaves both blank. Exact `.50` goes to the next rupee. Other rows of the same invoice leave both columns blank. There is no Round Off item row.
+- Emit `Rounded Off (-)` or `Rounded Off (+)` on the first exported row of the invoice only. The value is the magnitude of nearest whole rupee minus the labour + Parts inclusive subtotal. A positive difference fills `Rounded Off (+)` and leaves `Rounded Off (-)` blank. A negative difference fills `Rounded Off (-)` and leaves `Rounded Off (+)` blank. A whole-rupee subtotal leaves both blank. Exact `.50` goes to the next rupee. Later rows of the same invoice leave both columns blank. There is no Round Off item row.
 - Order without 5%: 18% Parts, Labour. Order with 5%: 5% Parts, 18% Parts, Labour.
 
 Party Account columns are `Party Name`, `Group`, `GSTIN`. Parties with classification `Dealer` (the Parts dealer/account master) are omitted from that export. Invoice Vouchers still include them. Exclusion is by classification, not by Group text such as `DEALER TRANSFER` or `sundry Creditors`.

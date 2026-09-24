@@ -230,17 +230,17 @@ function assertInvoiceVoucherContract(result) {
     const hosts = rows.filter((row) => row['Rounded Off (-)'] !== '' || row['Rounded Off (+)'] !== '')
     assert.equal(hosts.length, preview.roundOff === 0 ? 0 : 1)
     if (preview.roundOff > 0) {
-      assert.equal(labour[0]['Rounded Off (+)'], preview.roundOff)
-      assert.equal(labour[0]['Rounded Off (-)'], '')
+      assert.equal(rows[0]['Rounded Off (+)'], preview.roundOff)
+      assert.equal(rows[0]['Rounded Off (-)'], '')
     } else if (preview.roundOff < 0) {
-      assert.equal(labour[0]['Rounded Off (-)'], Math.abs(preview.roundOff))
-      assert.equal(labour[0]['Rounded Off (+)'], '')
+      assert.equal(rows[0]['Rounded Off (-)'], Math.abs(preview.roundOff))
+      assert.equal(rows[0]['Rounded Off (+)'], '')
     }
-    for (const row of rows) {
-      if (row === labour[0] && preview.roundOff !== 0) continue
+    const hostIndex = rows.findIndex((row) => row['Rounded Off (-)'] !== '' || row['Rounded Off (+)'] !== '')
+    if (preview.roundOff !== 0) assert.equal(hostIndex, 0)
+    for (const row of rows.slice(1)) {
       assert.equal(row['Rounded Off (-)'], '')
       assert.equal(row['Rounded Off (+)'], '')
-      assert.equal(row['Rounded Off (-)'] !== '' && row['Rounded Off (+)'] !== '', false)
     }
     const subtotalPaise = Math.round((preview.parts5 + preview.parts18 + preview.labour) * 100)
     const finalPaise = subtotalPaise + Math.round(preview.roundOff * 100)
@@ -1161,12 +1161,12 @@ test('Series is derived from bill no and repeated on every voucher row including
   assert.equal(evRows[1]['Party Name'], 'SITA DEVI-SITAPURA RJ14EV6634')
   assert.equal(pvRows[1].Amount, 10823.55)
   assert.equal(evRows[1].Amount, 10823.55)
-  assert.equal(pvRows[1]['Rounded Off (+)'], 0.45)
-  assert.equal(pvRows[1]['Rounded Off (-)'], '')
-  assert.equal(evRows[1]['Rounded Off (+)'], 0.45)
-  assert.equal(evRows[1]['Rounded Off (-)'], '')
-  assert.equal(pvRows[0]['Rounded Off (+)'], '')
+  assert.equal(pvRows[0]['Rounded Off (+)'], 0.45)
+  assert.equal(pvRows[0]['Rounded Off (-)'], '')
+  assert.equal(evRows[0]['Rounded Off (+)'], 0.45)
   assert.equal(evRows[0]['Rounded Off (-)'], '')
+  assert.equal(pvRows[1]['Rounded Off (+)'], '')
+  assert.equal(evRows[1]['Rounded Off (-)'], '')
 })
 
 test('Round Off columns hold the magnitude once on the Labour row', () => {
@@ -1186,12 +1186,12 @@ test('Round Off columns hold the magnitude once on the Labour row', () => {
   const negative = groups.get('IMBTAI2')
   const whole = groups.get('IMBTAI3')
   assert.deepEqual(positive.map((row) => row['Item Name']), ['SPARE PARTS @18%', 'LABOUR CHARGES @18%'])
-  assert.equal(positive[1]['Rounded Off (+)'], 0.45)
-  assert.equal(positive[1]['Rounded Off (-)'], '')
-  assert.equal(positive[0]['Rounded Off (+)'], '')
+  assert.equal(positive[0]['Rounded Off (+)'], 0.45)
+  assert.equal(positive[0]['Rounded Off (-)'], '')
+  assert.equal(positive[1]['Rounded Off (+)'], '')
   assert.equal(negative[1].Amount, 9003.20)
-  assert.equal(negative[1]['Rounded Off (-)'], 0.20)
-  assert.equal(negative[1]['Rounded Off (+)'], '')
+  assert.equal(negative[0]['Rounded Off (-)'], 0.20)
+  assert.equal(negative[0]['Rounded Off (+)'], '')
   assert.equal(whole.some((row) => /round/i.test(String(row['Item Name']))), false)
   assert.equal(whole.length, 2)
   assert.equal(whole[1]['Rounded Off (-)'], '')
@@ -1243,26 +1243,27 @@ test('practical Round Off cases A-D stay on one Labour cell', () => {
   const caseA = groups.get('EMBTAI2627006724')
   assert.equal(caseA[0].Amount, 430)
   assert.equal(caseA[1].Amount, 6390.88)
-  blank(caseA[0])
-  assert.equal(caseA[1]['Rounded Off (-)'], '')
-  assert.equal(caseA[1]['Rounded Off (+)'], 0.12)
+  assert.equal(caseA[0]['Rounded Off (-)'], '')
+  assert.equal(caseA[0]['Rounded Off (+)'], 0.12)
+  blank(caseA[1])
   assert.equal(caseA.length, 2)
   const caseB = groups.get('IMBTAI2627000002')
   assert.equal(caseB[0].Amount, 2836.51)
   assert.equal(caseB[1].Amount, 4613.80)
-  blank(caseB[0])
-  assert.equal(caseB[1]['Rounded Off (-)'], 0.31)
-  assert.equal(caseB[1]['Rounded Off (+)'], '')
+  assert.equal(caseB[0]['Rounded Off (-)'], 0.31)
+  assert.equal(caseB[0]['Rounded Off (+)'], '')
+  blank(caseB[1])
   const caseC = groups.get('IMBTAI2627000003')
   assert.equal(caseC.length, 2)
   blank(caseC[0])
   blank(caseC[1])
   const caseD = groups.get('IMBTAI2627000004')
   assert.deepEqual(caseD.map((row) => row['Item Name']), ['SPARE PARTS @5%', 'SPARE PARTS @18%', 'LABOUR CHARGES @18%'])
-  blank(caseD[0])
+  assert.equal(caseD[0]['Item Name'], 'SPARE PARTS @5%')
+  assert.equal(caseD[0]['Rounded Off (-)'], 0.15)
+  assert.equal(caseD[0]['Rounded Off (+)'], '')
   blank(caseD[1])
-  assert.equal(caseD[2]['Rounded Off (-)'], 0.15)
-  assert.equal(caseD[2]['Rounded Off (+)'], '')
+  blank(caseD[2])
 })
 
 function attemptInvoiceVoucherExport(input) {
@@ -1709,7 +1710,7 @@ test('Parts-only GST split keeps 5% and 18% and rounds off the parts subtotal', 
     'SPARE PARTS @18%',
     'LABOUR CHARGES @18%',
   ])
-  const host = result.invoiceRows.find((row) => row['Item Name'] === 'LABOUR CHARGES @18%')
+  const host = result.invoiceRows[0]
   const filled = [host['Rounded Off (-)'], host['Rounded Off (+)']].filter((value) => value !== '')
   assert.equal(filled.length, result.preview[0].roundOff === 0 ? 0 : 1)
 })
@@ -1755,7 +1756,7 @@ test('supplied PV.csv dealer invoices resolve by code when the file is present',
   assert.equal(exported.find((row) => row['Item Name'] === 'LABOUR CHARGES @18%').Amount, 0)
   assert.equal(exported.find((row) => row['Item Name'] === 'SPARE PARTS @18%').Amount, plex.parts18)
   if (plex.roundOff !== 0) {
-    const host = exported.find((row) => row['Item Name'] === 'LABOUR CHARGES @18%')
+    const host = exported[0]
     const column = plex.roundOff > 0 ? 'Rounded Off (+)' : 'Rounded Off (-)'
     const other = plex.roundOff > 0 ? 'Rounded Off (-)' : 'Rounded Off (+)'
     assert.equal(host[column], Math.abs(plex.roundOff))

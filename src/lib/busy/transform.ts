@@ -545,9 +545,9 @@ export function transformBusyAccounting(input: {
     if (row.hasParts5Line) itemRows.push({ itemName: ITEM_SPARE_PARTS_5, amount: row.parts5 })
     itemRows.push({ itemName: ITEM_SPARE_PARTS_18, amount: row.parts18 })
     itemRows.push({ itemName: ITEM_LABOUR_18, amount: row.labour })
-    const hostItem = selectRoundOffHostItem(itemRows.map((item) => item.itemName))
-    for (const item of itemRows) {
-      invoiceRows.push(voucherRow(row, item.itemName, item.amount, voucherNarration, item.itemName === hostItem))
+    for (let index = 0; index < itemRows.length; index += 1) {
+      const item = itemRows[index]
+      invoiceRows.push(voucherRow(row, item.itemName, item.amount, voucherNarration, index === 0))
     }
   }
 
@@ -608,10 +608,8 @@ function buildNarration(row: BusyPreviewRow): string {
   return row.vehicleRegistration || row.jobCard
 }
 
-/** Labour, then 18% Parts, then the first item row. Eligible invoices always have Labour. */
+/** First name in final export order. BUSY reads Round Off only from that row. */
 export function selectRoundOffHostItem(itemNames: readonly string[]): string {
-  if (itemNames.includes(ITEM_LABOUR_18)) return ITEM_LABOUR_18
-  if (itemNames.includes(ITEM_SPARE_PARTS_18)) return ITEM_SPARE_PARTS_18
   return itemNames[0] ?? ''
 }
 
