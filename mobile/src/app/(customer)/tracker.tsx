@@ -13,6 +13,7 @@ import {
 import { supabase } from '../../lib/supabase'
 import { Icon } from '../../components/ui/Icon'
 import { getBodyshopStageDetailRows } from '../../lib/customer/bodyshopStageDetails'
+import { customerListBodyshopAssets } from '../../lib/api/customerBodyshopUploads'
 
 export const BODYSHOP_18_STAGES = [
   { stage: 1, name: '1. Vehicle Receiving', shortName: 'Vehicle Receiving', desc: 'Accident vehicle intake & initial workshop security check-in.', group: 'SA Intake' },
@@ -77,6 +78,7 @@ export default function CustomerTrackerScreen() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [openingEstimateDoc, setOpeningEstimateDoc] = useState(false)
+  const [bodyshopAssets, setBodyshopAssets] = useState<{ documents: any[]; photos: any[] }>({ documents: [], photos: [] })
 
   const bodyshopEstimateDoc = parseBodyshopEstimateDocument(card)
   const showEstimateDocInStage =
@@ -103,9 +105,10 @@ export default function CustomerTrackerScreen() {
       setLoading(true)
     }
     try {
-      const [jobResult, repair] = await Promise.all([
+      const [jobResult, repair, uploadedAssets] = await Promise.all([
         customerGetActiveJob(token, selectedReg).catch(() => ({ job: null })),
         customerGetRepairCard(token, selectedReg).catch(() => null),
+        selectedReg ? customerListBodyshopAssets(token, selectedReg).catch(() => ({ documents: [], photos: [] })) : Promise.resolve({ documents: [], photos: [] }),
       ])
       const activeJob = jobResult.job
       if (activeJob) {
@@ -113,6 +116,7 @@ export default function CustomerTrackerScreen() {
         setError(null)
       }
       if (repair) setCard(repair)
+      setBodyshopAssets(uploadedAssets)
 
       // Fetch live technician & bay details from Floor Incharge
       const activeJc = (activeJob?.jc_number as string) || (selected?.jc_number as string) || ''
@@ -192,6 +196,31 @@ export default function CustomerTrackerScreen() {
 
   const bodyshopProgressPercent = Math.round((completedBodyshopCount / 18) * 100)
 
+  const customerUploadedDocs = bodyshopAssets.documents.filter((d) =>
+    String(d.uploaded_by || '').toLowerCase().startsWith('customer:')
+  ).length
+  const workshopUploadedDocs = Math.max(0, bodyshopAssets.documents.length - customerUploadedDocs)
+  const baseRequiredDocKeys = [
+    'doc_claim_form',
+    'doc_rc',
+    'doc_insurance',
+    'doc_dl',
+    'doc_aadhaar',
+    'doc_pan',
+    'doc_bank_detail',
+  ]
+  const pendingCustomerDocs = baseRequiredDocKeys.filter((key) => card?.[key] !== true).length
+  const needsEstimateDecision =
+    (currentBodyshopStage === 6 || currentBodyshopStage === 7) &&
+    card?.customer_approved !== true
+  const needsAdditionalApproval =
+    currentBodyshopStage === 12 &&
+    Boolean(String(card?.additional_approval || '').trim())
+  const needsPaymentAction =
+    currentBodyshopStage >= 17 &&
+    String(card?.customer_payment_status || '').toLowerCase() !== 'paid' &&
+    String(card?.payment_status || '').toLowerCase() !== 'received'
+
   // Standard 6 Service Stages (for non-accident maintenance vehicles)
   const standardStages = [
     {
@@ -254,6 +283,74 @@ export default function CustomerTrackerScreen() {
           {/* ═══════════════════════════════════════════════════════════════════ */}
           {isAccident ? (
             <>
+              {/* Customer action center: only show what the customer needs to do now */}
+              <CustomerCard style={{ backgroundColor: '#F8FBFF', borderColor: '#BFDBFE', padding: 15 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <View style={{ flex: 1, paddingRight: 10 }}>
+                    <Text style={{ color: '#0B5FFF', fontSize: 11, fontWeight: '900', textTransform: 'uppercase', letterSpacing: 0.6 }}>
+                      Your action
+                    </Text>
+                    <Text style={{ color: '#0f172a', fontSize: 16, fontWeight: '900', marginTop: 2 }}>
+                      {pendingCustomerDocs > 0 && currentBodyshopStage <= 7
+                        ? `${pendingCustomerDocs} document${pendingCustomerDocs === 1 ? '' : 's'} still needed`
+                        : needsEstimateDecision
+                          ? 'Estimate approval is pending'
+                          : needsAdditionalApproval
+                            ? 'Additional repair approval required'
+                            : needsPaymentAction
+                              ? 'Customer payment / settlement pending'
+                              : 'No action required from you right now'}
+                    </Text>
+                    <Text style={{ color: '#64748b', fontSize: 11.5, lineHeight: 17, marginTop: 3 }}>
+                      {pendingCustomerDocs > 0 && currentBodyshopStage <= 7
+                        ? 'Upload missing claim documents directly into this repair case.'
+                        : needsEstimateDecision
+                          ? 'Review the workshop estimate and approve or request changes.'
+                          : needsAdditionalApproval
+                            ? 'Review supplementary work before the workshop proceeds.'
+                            : needsPaymentAction
+                              ? 'Check billing and settlement before vehicle handover.'
+                              : 'We will keep updating the tracker as the workshop moves to the next stage.'}
+                    </Text>
+                  </View>
+                  <View style={{ width: 42, height: 42, borderRadius: 13, backgroundColor: '#E8F1FF', alignItems: 'center', justifyContent: 'center' }}>
+                    <Icon name={pendingCustomerDocs > 0 ? 'file-text' : needsEstimateDecision || needsAdditionalApproval ? 'check-circle' : needsPaymentAction ? 'file' : 'clock'} size={21} color="#0B5FFF" />
+                  </View>
+                </View>
+
+                <View style={{ flexDirection: 'row', gap: 8, marginTop: 12 }}>
+                  {(pendingCustomerDocs > 0 && currentBodyshopStage <= 7) ? (
+                    <TouchableOpacity
+                      onPress={() => router.push('/(customer)/documents')}
+                      style={{ flex: 1, backgroundColor: '#0B5FFF', borderRadius: 12, paddingVertical: 11, alignItems: 'center' }}
+                    >
+                      <Text style={{ color: '#ffffff', fontSize: 12, fontWeight: '900' }}>Upload Documents</Text>
+                    </TouchableOpacity>
+                  ) : needsEstimateDecision || needsAdditionalApproval ? (
+                    <TouchableOpacity
+                      onPress={() => router.push('/(customer)/estimate')}
+                      style={{ flex: 1, backgroundColor: '#0B5FFF', borderRadius: 12, paddingVertical: 11, alignItems: 'center' }}
+                    >
+                      <Text style={{ color: '#ffffff', fontSize: 12, fontWeight: '900' }}>Review & Approve</Text>
+                    </TouchableOpacity>
+                  ) : needsPaymentAction ? (
+                    <TouchableOpacity
+                      onPress={() => router.push('/(customer)/invoices')}
+                      style={{ flex: 1, backgroundColor: '#0B5FFF', borderRadius: 12, paddingVertical: 11, alignItems: 'center' }}
+                    >
+                      <Text style={{ color: '#ffffff', fontSize: 12, fontWeight: '900' }}>View Billing</Text>
+                    </TouchableOpacity>
+                  ) : (
+                    <TouchableOpacity
+                      onPress={() => router.push('/(customer)/documents')}
+                      style={{ flex: 1, borderWidth: 1.2, borderColor: '#0B5FFF', borderRadius: 12, paddingVertical: 11, alignItems: 'center', backgroundColor: '#ffffff' }}
+                    >
+                      <Text style={{ color: '#0B5FFF', fontSize: 12, fontWeight: '900' }}>Documents & Photos</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+              </CustomerCard>
+
               {/* Top Bodyshop Status Banner */}
               <CustomerCard style={{ borderColor: '#e2e8f0', padding: 16 }}>
                 <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 14 }}>
@@ -306,23 +403,38 @@ export default function CustomerTrackerScreen() {
                 {/* Current Stage Highlight Box */}
                 <View
                   style={{
-                    backgroundColor: '#faf5ff',
-                    borderColor: '#e9d5ff',
+                    backgroundColor: '#EFF6FF',
+                    borderColor: '#BFDBFE',
                     borderWidth: 1.5,
                     borderRadius: 16,
                     padding: 14,
                     marginBottom: 14,
                   }}
                 >
-                  <Text style={{ color: '#7e22ce', fontSize: 11, fontWeight: '800', textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                  <Text style={{ color: '#1D4ED8', fontSize: 11, fontWeight: '800', textTransform: 'uppercase', letterSpacing: 0.5 }}>
                     Current Stage
                   </Text>
-                  <Text style={{ color: '#9333ea', fontSize: 19, fontWeight: '900', marginTop: 3 }}>
+                  <Text style={{ color: '#0B5FFF', fontSize: 19, fontWeight: '900', marginTop: 3 }}>
                     Stage {currentBodyshopStage} – {currentStageName}
                   </Text>
-                  <Text style={{ color: '#6b21a8', fontSize: 11.5, marginTop: 4, fontWeight: '500' }}>
+                  <Text style={{ color: '#1E3A8A', fontSize: 11.5, marginTop: 4, fontWeight: '500' }}>
                     {BODYSHOP_18_STAGES[currentBodyshopStage - 1]?.desc || 'Repairs and inspection proceeding on workshop floor.'}
                   </Text>
+                </View>
+
+                <View style={{ flexDirection: 'row', gap: 8, marginBottom: 12 }}>
+                  <View style={{ flex: 1, backgroundColor: '#EFF6FF', borderRadius: 12, padding: 10 }}>
+                    <Text style={{ color: '#1D4ED8', fontSize: 10, fontWeight: '800' }}>CUSTOMER PROVIDED</Text>
+                    <Text style={{ color: '#0f172a', fontSize: 18, fontWeight: '900', marginTop: 2 }}>{customerUploadedDocs}</Text>
+                  </View>
+                  <View style={{ flex: 1, backgroundColor: '#F1F5F9', borderRadius: 12, padding: 10 }}>
+                    <Text style={{ color: '#475569', fontSize: 10, fontWeight: '800' }}>WORKSHOP PROVIDED</Text>
+                    <Text style={{ color: '#0f172a', fontSize: 18, fontWeight: '900', marginTop: 2 }}>{workshopUploadedDocs}</Text>
+                  </View>
+                  <View style={{ flex: 1, backgroundColor: '#F0FDF4', borderRadius: 12, padding: 10 }}>
+                    <Text style={{ color: '#15803D', fontSize: 10, fontWeight: '800' }}>CASE PHOTOS</Text>
+                    <Text style={{ color: '#0f172a', fontSize: 18, fontWeight: '900', marginTop: 2 }}>{bodyshopAssets.photos.length}</Text>
+                  </View>
                 </View>
 
                 {/* Progress Bar */}
@@ -331,7 +443,7 @@ export default function CustomerTrackerScreen() {
                     <Text style={{ color: '#334155', fontSize: 12, fontWeight: '800' }}>
                       Bodyshop Progress
                     </Text>
-                    <Text style={{ color: '#7c3aed', fontSize: 12, fontWeight: '900' }}>
+                    <Text style={{ color: '#0B5FFF', fontSize: 12, fontWeight: '900' }}>
                       {completedBodyshopCount} / 18 Completed ({bodyshopProgressPercent}%)
                     </Text>
                   </View>
@@ -340,7 +452,7 @@ export default function CustomerTrackerScreen() {
                       style={{
                         width: `${Math.max(5, bodyshopProgressPercent)}%`,
                         height: '100%',
-                        backgroundColor: bodyshopProgressPercent === 100 ? '#10b981' : '#8b5cf6',
+                        backgroundColor: bodyshopProgressPercent === 100 ? '#10b981' : '#0B5FFF',
                         borderRadius: 999,
                       }}
                     />
@@ -354,7 +466,7 @@ export default function CustomerTrackerScreen() {
                   <Text style={{ color: '#0f172a', fontSize: 14, fontWeight: '900', textTransform: 'uppercase', letterSpacing: 0.5 }}>
                     18 Bodyshop Repair Stages
                   </Text>
-                  <Text style={{ color: '#6366f1', fontSize: 11, fontWeight: '700' }}>
+                  <Text style={{ color: '#0B5FFF', fontSize: 11, fontWeight: '700' }}>
                     Tap stage for details ➔
                   </Text>
                 </View>
@@ -386,12 +498,12 @@ export default function CustomerTrackerScreen() {
                             paddingHorizontal: 10,
                             borderRadius: 12,
                             backgroundColor: isLeftCurrent
-                              ? '#faf5ff'
+                              ? '#EFF6FF'
                               : isLeftDone
                               ? '#f0fdf4'
                               : '#f8fafc',
                             borderColor: isLeftCurrent
-                              ? '#c084fc'
+                              ? '#60A5FA'
                               : isLeftDone
                               ? '#bbf7d0'
                               : '#e2e8f0',
@@ -405,7 +517,7 @@ export default function CustomerTrackerScreen() {
                                 height: 8,
                                 borderRadius: 4,
                                 backgroundColor: isLeftCurrent
-                                  ? '#9333ea'
+                                  ? '#0B5FFF'
                                   : isLeftDone
                                   ? '#16a34a'
                                   : '#cbd5e1',
@@ -416,7 +528,7 @@ export default function CustomerTrackerScreen() {
                                 fontSize: 11.5,
                                 fontWeight: isLeftCurrent || isLeftDone ? '800' : '600',
                                 color: isLeftCurrent
-                                  ? '#7e22ce'
+                                  ? '#1D4ED8'
                                   : isLeftDone
                                   ? '#15803d'
                                   : '#64748b',
@@ -431,7 +543,7 @@ export default function CustomerTrackerScreen() {
                               fontSize: 12,
                               fontWeight: '900',
                               color: isLeftCurrent
-                                ? '#7e22ce'
+                                ? '#1D4ED8'
                                 : isLeftDone
                                 ? '#16a34a'
                                 : '#94a3b8',
@@ -454,12 +566,12 @@ export default function CustomerTrackerScreen() {
                             paddingHorizontal: 10,
                             borderRadius: 12,
                             backgroundColor: isRightCurrent
-                              ? '#faf5ff'
+                              ? '#EFF6FF'
                               : isRightDone
                               ? '#f0fdf4'
                               : '#f8fafc',
                             borderColor: isRightCurrent
-                              ? '#c084fc'
+                              ? '#60A5FA'
                               : isRightDone
                               ? '#bbf7d0'
                               : '#e2e8f0',
@@ -473,7 +585,7 @@ export default function CustomerTrackerScreen() {
                                 height: 8,
                                 borderRadius: 4,
                                 backgroundColor: isRightCurrent
-                                  ? '#9333ea'
+                                  ? '#0B5FFF'
                                   : isRightDone
                                   ? '#16a34a'
                                   : '#cbd5e1',
@@ -484,7 +596,7 @@ export default function CustomerTrackerScreen() {
                                 fontSize: 11.5,
                                 fontWeight: isRightCurrent || isRightDone ? '800' : '600',
                                 color: isRightCurrent
-                                  ? '#7e22ce'
+                                  ? '#1D4ED8'
                                   : isRightDone
                                   ? '#15803d'
                                   : '#64748b',
@@ -499,7 +611,7 @@ export default function CustomerTrackerScreen() {
                               fontSize: 12,
                               fontWeight: '900',
                               color: isRightCurrent
-                                ? '#7e22ce'
+                                ? '#1D4ED8'
                                 : isRightDone
                                 ? '#16a34a'
                                 : '#94a3b8',
@@ -681,7 +793,7 @@ export default function CustomerTrackerScreen() {
                     <View className="flex-1 pr-2">
                       <View className="flex-row items-center gap-1.5 mb-1">
                         <View style={{ paddingHorizontal: 8, paddingVertical: 2, borderRadius: 6, backgroundColor: '#f3e8ff' }}>
-                          <Text style={{ color: '#7e22ce', fontSize: 10, fontWeight: '800' }}>
+                          <Text style={{ color: '#1D4ED8', fontSize: 10, fontWeight: '800' }}>
                             {selectedBodyshopStage.group}
                           </Text>
                         </View>
