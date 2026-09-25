@@ -211,6 +211,37 @@ function isPublicAuthPath(pathname: string): boolean {
   return pathname === '/' || pathname === '/signup' || pathname === '/forgot-password' || pathname === '/auth/callback' || pathname.startsWith('/c/')
 }
 
+/** Demo preview only. Staff /home stays the workshop dashboard. */
+function isCustomerPreviewPath(pathname: string): boolean {
+  return pathname === '/customer-preview'
+}
+
+function isDemoCustomerVehicle(vehicle: CustomerVehicle | null): boolean {
+  if (!vehicle) return false
+  return vehicle.id === 0 || vehicle.reg_number === 'RJ-14-EA-2024'
+}
+
+const CUSTOMER_PORTAL_PREVIEW_VEHICLE: CustomerVehicle = {
+  id: 0,
+  reg_number: 'RJ-14-EA-2024',
+  owner_name: 'Rahul Sharma',
+  owner_phone: '9876543210',
+  model: 'Tata Nexon EV Creative Plus',
+  variant: 'Empowered Plus LR',
+  branch: 'Sitapura Main Workshop',
+  service_type: 'Periodic Maintenance & Battery Health',
+  jc_number: 'JC-84920',
+  sa_name: 'Vikram Singh',
+  sa_display_name: 'Vikram Singh (Senior Advisor)',
+  km_reading: 14250,
+  payment_status: 'Pending',
+  gate_pass_issued: false,
+  billed_amount: 6450,
+  amount_received: 0,
+  created_at: '2026-01-01T00:00:00.000Z',
+  invoice_done_at: null,
+}
+
 function isNavItemActive(pathname: string, route: AppRoute) {
   if (route === '/reports') return pathname.startsWith('/reports')
   return pathname === route || pathname.startsWith(`${route}/`)
@@ -1023,7 +1054,13 @@ function AuthGate({ children }: { children: React.ReactNode }) {
   const [customerVehicle, setCustomerVehicle] = useState<CustomerVehicle | null>(() => {
     try {
       const saved = localStorage.getItem('active_customer_vehicle')
-      return saved ? JSON.parse(saved) : null
+      const parsed = saved ? (JSON.parse(saved) as CustomerVehicle) : null
+      if (isDemoCustomerVehicle(parsed)) {
+        localStorage.removeItem('active_customer_vehicle')
+        localStorage.removeItem('customer_session_token')
+        return null
+      }
+      return parsed
     } catch {
       return null
     }
@@ -1049,6 +1086,17 @@ function AuthGate({ children }: { children: React.ReactNode }) {
     })
     return () => subscription.unsubscribe()
   }, [location.pathname, navigate])
+
+  useEffect(() => {
+    if (!user) return
+    setCustomerVehicle(null)
+    setAllCustomerVehicles([])
+    setCustomerSessionToken(null)
+    try {
+      localStorage.removeItem('active_customer_vehicle')
+      localStorage.removeItem('customer_session_token')
+    } catch {}
+  }, [user])
 
   useEffect(() => {
     if (user || customerVehicle || !customerSessionToken) return
@@ -1082,28 +1130,25 @@ function AuthGate({ children }: { children: React.ReactNode }) {
     setAuthView('login')
   }, [location.pathname, user, customerVehicle])
 
-  const isPreviewCustomer = location.pathname === '/customer-preview' || location.search.includes('preview=customer')
-  if (customerVehicle || isPreviewCustomer) {
-    const activeVehicle: CustomerVehicle = customerVehicle || {
-      id: 0,
-      reg_number: 'RJ-14-EA-2024',
-      owner_name: 'Rahul Sharma',
-      owner_phone: '9876543210',
-      model: 'Tata Nexon EV Creative Plus',
-      variant: 'Empowered Plus LR',
-      branch: 'Sitapura Main Workshop',
-      service_type: 'Periodic Maintenance & Battery Health',
-      jc_number: 'JC-84920',
-      sa_name: 'Vikram Singh',
-      sa_display_name: 'Vikram Singh (Senior Advisor)',
-      km_reading: 14250,
-      payment_status: 'Pending',
-      gate_pass_issued: false,
-      billed_amount: 6450,
-      amount_received: 0,
-      created_at: '2026-01-01T00:00:00.000Z',
-      invoice_done_at: null,
-    }
+  if (user === undefined) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="w-8 h-8 rounded-full border-2 border-blue-600 border-t-transparent animate-spin" />
+      </div>
+    )
+  }
+  const isPreviewCustomer = isCustomerPreviewPath(location.pathname)
+  const hasRealCustomerSession = Boolean(
+    customerVehicle && customerSessionToken && !isDemoCustomerVehicle(customerVehicle),
+  )
+  // Logged-in staff always get the workshop app (/home = dashboard with live data).
+  const showCustomerPortal = !user && (isPreviewCustomer || hasRealCustomerSession)
+
+  if (showCustomerPortal) {
+    const activeVehicle: CustomerVehicle =
+      hasRealCustomerSession && customerVehicle
+        ? customerVehicle
+        : CUSTOMER_PORTAL_PREVIEW_VEHICLE
     return (
       <CustomerPortalPage
         vehicle={activeVehicle}
@@ -1128,13 +1173,6 @@ function AuthGate({ children }: { children: React.ReactNode }) {
     )
   }
 
-  if (user === undefined) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="w-8 h-8 rounded-full border-2 border-blue-600 border-t-transparent animate-spin" />
-      </div>
-    )
-  }
   if (!user) {
     if (authView === 'forgot') {
       return (
