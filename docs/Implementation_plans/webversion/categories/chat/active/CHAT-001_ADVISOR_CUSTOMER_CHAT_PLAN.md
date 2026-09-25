@@ -4,7 +4,7 @@
 **Created:** 2026-09-25  
 **Priority:** HIGH  
 **Owner:** Web Team + Mobile Team + Platform  
-**Status:** In progress — migration applied 2026-09-25. Web inbox and customer screen are in the repo. Live two-way check still needs a customer session and a second staff user.  
+**Status:** In progress — chat and push migrations applied 2026-09-25. `send-chat-push` is deployed and FCM secrets are set for `techwheels-service`. A live phone delivery check is still open.  
 **Mobile companion:** [MOBILE-014](../../../../mobileversion/categories/customer/active/MOBILE-014_CUSTOMER_ADVISOR_CHAT_PLAN.md)
 
 ---
@@ -16,6 +16,8 @@ The customer home **Chat** button opens WhatsApp (`wa.me`) with the advisor or w
 This plan adds one workshop thread per dealer + vehicle number + customer phone. The web app gets a **Chat** module: a header icon immediately left of the notification bell, route `/chat`, and a split inbox. The customer app opens that same thread inside the app. Any user who has the `chat` module can send. The bubble records who on the workshop side spoke.
 
 Staff screens update from Supabase realtime on the new tables. The customer app keeps using the session-token RPCs and refreshes while the screen is open, the same way Home already refreshes. Customers do not have a staff JWT.
+
+A sent message also pushes the other side’s phone. Android uses Firebase Cloud Messaging. iOS uses the Expo push service. The phone app collects the token with `expo-notifications`. This matches the working pipeline in TECHWHEELS-WEB.
 
 **Risk Level:** MEDIUM  
 **Estimated Duration:** 3–4 working days  
@@ -33,6 +35,7 @@ Staff screens update from Supabase realtime on the new tables. The customer app 
 | Permission | `has_module_view('chat')` or `is_admin()` can list and send |
 | Dealer scope | `my_dealer_code()` for staff. Customer dealer is taken from the vehicle row the session already owns |
 | Realtime | Staff `postgres_changes` on the two new tables. Customer poll through RPCs |
+| Push | Android: FCM HTTP v1. iOS: Expo push. Token collected by `expo-notifications` |
 
 ---
 
@@ -46,6 +49,7 @@ Staff screens update from Supabase realtime on the new tables. The customer app 
 - Web header icon, `/chat` split inbox, nav entry, module row
 - Customer screen that replaces the WhatsApp link on Home
 - Unread counts on the web icon and on each inbox row
+- Device push to the other side when a chat message is saved (Phase 5)
 
 ### Out of scope
 
@@ -55,7 +59,8 @@ Staff screens update from Supabase realtime on the new tables. The customer app 
 - Bodyshop stage WhatsApp groups and WA AI Agent
 - Photos, files, voice notes, internal-only notes
 - Staff starting a thread for a vehicle that has never sent a message
-- Push notifications outside the app (no FCM / APNs in this plan)
+- SMS or WhatsApp to the mobile number. Push goes to the installed app on that person’s phone
+- A second Firebase client SDK in the app. `expo-notifications` is the only phone client
 
 ---
 
@@ -253,6 +258,63 @@ Summary: add `mobile/src/app/(customer)/chat.tsx` with `href: null` (same as `co
 
 ---
 
+## 8.1) Push when a message is sent
+
+Audit of this app on 2026-09-25: push is not active. `expo-notifications` is installed and listed in `mobile/app.json`, Android declares `POST_NOTIFICATIONS`, and `google-services.json` / `GoogleService-Info.plist` belong to Firebase project `techwheels-service` (`com.techwheels.service`). Nothing registers a token or sends a push. The staff Settings switch only flips local state. The customer bell is an in-app panel.
+
+### Channel
+
+Use the same split TECHWHEELS-WEB already runs in `mobile/src/services/notifications/pushRegistration.ts` and `supabase/functions/send_push_notifications/index.ts`.
+
+| Phone | Token the app stores | Who delivers it |
+|---|---|---|
+| Android | Native FCM token from `Notifications.getDevicePushTokenAsync()` | FCM HTTP v1, `https://fcm.googleapis.com/v1/projects/techwheels-service/messages:send` |
+| iOS | Expo token from `Notifications.getExpoPushTokenAsync()` | Expo push API, `https://exp.host/--/api/v2/push/send` |
+
+Android prefers FCM so delivery does not depend on the Expo gateway. iOS stays on Expo, which is how that project reaches APNs. One worker reads `token_provider` (`fcm` or `expo`) and sends on that path. An Expo-shaped token is always sent through Expo, even if the row says otherwise.
+
+Do not copy TECHWHEELS-WEB’s `employee_device_tokens` table, employee id, or FCM secrets. That app is a different Firebase project. This app uses project `techwheels-service`. Secrets `FCM_PROJECT_ID`, `FCM_CLIENT_EMAIL`, and `FCM_PRIVATE_KEY` are new Supabase function secrets for this project. Do not put them in the phone binary.
+
+### Who gets the push
+
+The push goes to the other side’s installed app, not to an SMS.
+
+| Sender | Recipients |
+|---|---|
+| Customer | Every active device registered to a staff user who has `chat` view for that thread’s `dealer_code` |
+| Staff (advisor or anyone else with the module) | Every active device registered to the thread’s `phone_10` |
+
+The sender’s own devices are skipped. A staff user with no registered phone gets no push; the web inbox and header badge stay the in-app path. A customer who has not allowed notifications gets no push; the thread still saves.
+
+Tap payload is `chat_id`. Customer opens `/(customer)/chat`. Staff opens the staff shell’s chat route for that id when that screen exists; until then the tap opens the staff home.
+
+### Store
+
+New table `device_push_tokens`:
+
+| Column | Notes |
+|---|---|
+| `id` | uuid |
+| `audience` | `staff` or `customer` |
+| `user_id` | staff auth user, null for customer |
+| `phone_10` | customer phone from the session, null for staff |
+| `device_token` | unique |
+| `token_provider` | `fcm` or `expo` |
+| `token_platform` | `ios` or `android` |
+| `app_version` | nullable |
+| `is_active` | default true |
+| `last_used_at` | timestamptz |
+
+Staff register with a SECURITY DEFINER RPC after staff login, keyed by `auth.uid()`. Customer register with a session-token RPC, keyed by `customer_require_session` phone. Direct table access stays closed to anon.
+
+New table `chat_push_outbox`: one row per recipient device after `customer_send_advisor_message` or `advisor_chat_send` commits the message. Columns: `message_id`, `token_id`, `title`, `body`, `chat_id`, `status` (`pending`, `sent`, `failed`), `error_text`, `created_at`, `sent_at`. The send RPC only inserts the outbox. It does not call FCM.
+
+Worker: Supabase edge function `send_chat_push`, same branching as WEB’s `send_push_notifications`. A scheduled call drains `pending` rows. Deactivate a token when FCM or Expo reports it unregistered.
+
+Title is the vehicle number. Body is the message preview. Do not put the full phone number in the notification text.
+
+---
+
 ## 9) Phases
 
 ### Phase 1 — Store and RPCs
@@ -285,6 +347,15 @@ Summary: add `mobile/src/app/(customer)/chat.tsx` with `href: null` (same as `co
 - [ ] **4.3** A customer session cannot read another registration
 - [ ] **4.4** Complaints, Help Tickets, Call advisor, and bodyshop WhatsApp group actions still behave as before
 - [ ] **4.5** Evidence note under `docs/Implementation_plans/webversion/categories/chat/evidence/`
+
+### Phase 5 — Chat push
+
+- [x] **5.1** `device_push_tokens` and `chat_push_outbox`, plus staff and customer register RPCs
+- [x] **5.2** Enqueue one outbox row per other-side device on message insert. Skip the sender. Applied send RPCs are unchanged; `enqueue_advisor_chat_push` runs after insert
+- [x] **5.3** Edge function `send-chat-push` is deployed: FCM HTTP v1 for `fcm`, Expo push for `expo`. Secrets `FCM_PROJECT_ID`, `FCM_CLIENT_EMAIL`, and `FCM_PRIVATE_KEY` are set for Firebase project `techwheels-service`
+- [x] **5.4** `send-chat-push` cron every minute calls `invoke_send_chat_push`. A failed or unregistered token is marked inactive. The message insert does not roll back if the HTTP call fails
+- [x] **5.5** Staff login and customer session register the device with `expo-notifications`. Android stores the native FCM token. iOS stores the Expo token. Settings switch registers or deactivates instead of flipping local state only
+- [x] **5.6** Tap payload is `chat_id`. Customer opens `/(customer)/chat`. Staff opens home until a staff chat screen exists. A live wake-up still needs the deployed worker and FCM secrets
 
 ---
 
@@ -329,6 +400,16 @@ Legend: PENDING | IN PROGRESS | COMPLETED | BLOCKED
 ⏳ 4.5 | Evidence note | Platform | | | not started
 ```
 
+### Phase 5
+```
+✅ 5.1 | Token table and outbox | Platform | 2026-09-25 | 2026-09-25 | 20260925092319_chat_push_tokens_outbox.sql
+✅ 5.2 | Enqueue on message insert | Platform | 2026-09-25 | 2026-09-25 | trigger, send RPCs unchanged
+✅ 5.3 | send-chat-push FCM + Expo | Platform | 2026-09-25 | 2026-09-25 | deployed; FCM secrets set for techwheels-service
+✅ 5.4 | Scheduled drain | Platform | 2026-09-25 | 2026-09-25 | cron send-chat-push every minute
+✅ 5.5 | Register token on staff and customer login | Mobile | 2026-09-25 | 2026-09-25 | expo-notifications; not verified on a device
+✅ 5.6 | Tap routing coded | Mobile | 2026-09-25 | 2026-09-25 | customer chat; staff home until that screen exists
+```
+
 ---
 
 ## 11) Risks
@@ -354,6 +435,7 @@ Legend: PENDING | IN PROGRESS | COMPLETED | BLOCKED
 - The open web thread updates from realtime. The open customer thread updates from its refresh loop
 - A customer session cannot read or write another vehicle
 - Complaints, Help Tickets, Call advisor, and bodyshop WhatsApp groups are unchanged
+- A customer message pushes staff phones with `chat` view for that dealer. A staff message pushes the customer phone for that vehicle. The sender is not pushed
 
 ---
 
@@ -372,6 +454,8 @@ Legend: PENDING | IN PROGRESS | COMPLETED | BLOCKED
 | `mobile/src/app/(customer)/_layout.tsx` | `href: null` screen |
 | `mobile/src/app/(customer)/index.tsx` | Chat navigates in-app |
 | `mobile/src/lib/api/customerPortal.ts` | Customer RPC wrappers |
+| `mobile/src/lib/notifications/pushRegistration.ts` | Android FCM token, iOS Expo token |
+| `supabase/functions/send-chat-push/index.ts` | Drain `chat_push_outbox` |
 
 ---
 
@@ -385,8 +469,9 @@ Legend: PENDING | IN PROGRESS | COMPLETED | BLOCKED
 - [HELP-001](../../help-tickets/active/HELP-001_COMPREHENSIVE_PLAN.md) — peer for module insert, RPC-only writes, and the mobile companion split
 - [CMP-01](../../complaints/active/01_COMPREHENSIVE_PLAN.md) — peer for customer/staff bubbles. Do not share tables
 - [MODULE-ROUTE-001](../../../../shared/reference/MODULE_ROUTE_CONTRACT.md)
+- TECHWHEELS-WEB push reference: `mobile/src/services/notifications/pushRegistration.ts`, `supabase/functions/send_push_notifications/index.ts`
 
 ---
 
 **Last Updated:** 2026-09-25  
-**Status:** In progress — database applied. Phase 4 live check is still open.
+**Status:** In progress — chat and push migrations applied. Phase 4 live check is still open. Phase 5 worker is deployed and FCM secrets are set. A live phone delivery check is still open.

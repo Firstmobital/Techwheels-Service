@@ -7,7 +7,7 @@
 **Status:** In progress  
 **Category:** customer  
 **Shared backend authority:** [CHAT-001](../../../../webversion/categories/chat/active/CHAT-001_ADVISOR_CUSTOMER_CHAT_PLAN.md)  
-**Phase alignment:** CHAT-001 Phase 3. RPCs are applied. Task 4.5 is the remaining live check.
+**Phase alignment:** CHAT-001 Phase 3 for the screen. Customer push registration is in CHAT-001 Phase 5. The worker is deployed and FCM secrets are set. A live phone delivery check is still open.
 
 ---
 
@@ -41,6 +41,7 @@ Login as Customer taps **Chat** on the vehicle card and stays in the app. The sc
 - Attachments
 - Changing Call advisor, complaint, or helpdesk
 - Subscribing the anon client to `advisor_chat_messages`
+- Choosing a different push provider than CHAT-001 section 8.1. Customer registration stores an FCM token on Android and an Expo token on iOS, then the shared worker delivers it
 
 ---
 

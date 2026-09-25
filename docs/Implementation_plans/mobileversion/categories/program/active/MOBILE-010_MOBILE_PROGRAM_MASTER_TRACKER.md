@@ -73,7 +73,7 @@ Use: Not Started | In Progress | Blocked | Review | Done
 | M10-007 | Single-app customer + staff identity (RPCs, Expo shells) | MOBILE-011 | Not Started | Mobile + Platform | Phase 0: delete client `service_role` (no dashboard rotation); do not copy `bodyshop/` into Expo |
 | M10-008 | Play + App Store first public listing | MOBILE-012 | In Progress | Mobile + Platform | App Store: finish ASC 6774519420 listing + Add for Review on IPA 13 (no new IPA). Play: still AAB 12+ after picker policy. |
 | M10-009 | Customer claim document Drive offload | MOBILE-013 | In Progress | Mobile + Platform | App and broker coded. Next: deploy the two edge functions, then upload one claim document as a customer and confirm `drive_url`. |
-| M10-010 | In-app customer advisor chat | MOBILE-014, CHAT-001 | In Progress | Mobile + Web + Platform | Migration applied. Next: grant `chat` view, then send one message from the customer app and reply from `/chat`. |
+| M10-010 | In-app customer advisor chat | MOBILE-014, CHAT-001 | In Progress | Mobile + Web + Platform | Chat and push migrations applied. `send-chat-push` is deployed and FCM secrets are set. Next live check is a customer send on `/chat` and a phone notification. |
 
 ### 4.1) Current Session Kickoff (2026-06-18)
 

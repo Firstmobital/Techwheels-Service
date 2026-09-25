@@ -14,6 +14,13 @@ import { getDealerSettings, saveDealerSetting } from '../../lib/api/dealerSettin
 import { LegalLinks } from '../../components/LegalLinks'
 import * as Application from 'expo-application'
 import * as Updates from 'expo-updates'
+import {
+  deactivateStaffPush,
+  readStaffPushEnabled,
+  registerStaffPush,
+  staffPushPermissionGranted,
+  writeStaffPushEnabled,
+} from '../../lib/notifications/pushRegistration'
 
 // ─── Colours ─────────────────────────────────────────────────────────────────
 const C = {
@@ -74,7 +81,7 @@ export default function SettingsScreen() {
   const router = useRouter()
 
   // Toggles
-  const [notifications, setNotifications] = useState(true)
+  const [notifications, setNotifications] = useState(false)
   const [autoSync, setAutoSync] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
 
@@ -85,6 +92,29 @@ export default function SettingsScreen() {
   const [savingEmail, setSavingEmail] = useState(false)
   const [loadingSettings, setLoadingSettings] = useState(true)
   const [emailSaved, setEmailSaved] = useState(false)
+
+  useEffect(() => {
+    let mounted = true
+    void (async () => {
+      const enabled = await readStaffPushEnabled()
+      const granted = await staffPushPermissionGranted()
+      if (mounted) setNotifications(enabled && granted)
+    })()
+    return () => {
+      mounted = false
+    }
+  }, [])
+
+  async function onPushChange(next: boolean) {
+    setNotifications(next)
+    await writeStaffPushEnabled(next)
+    if (!next) {
+      await deactivateStaffPush()
+      return
+    }
+    const result = await registerStaffPush()
+    if (!result.ok) setNotifications(false)
+  }
 
   // ── Load settings from DB ──────────────────────────────────────────────────
   const loadSettings = async () => {
@@ -313,11 +343,11 @@ export default function SettingsScreen() {
           <View style={{ backgroundColor: C.card, marginHorizontal: 16, borderRadius: 12, borderWidth: 1, borderColor: C.border, overflow: 'hidden' }}>
             <SettingRow
               label="Push Notifications"
-              sublabel="Receive job and system alerts"
+              sublabel="Chat alerts on this phone"
               right={
                 <Switch
                   value={notifications}
-                  onValueChange={setNotifications}
+                  onValueChange={(next) => { void onPushChange(next) }}
                   trackColor={{ false: '#d1d5db', true: '#93c5fd' }}
                   thumbColor={notifications ? C.primary : '#f3f4f6'}
                 />

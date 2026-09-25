@@ -82,6 +82,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const signOut = async () => {
     try {
+      const { deactivateStaffPush } = await import('../lib/notifications/pushRegistration')
+      await deactivateStaffPush()
       const { error } = await supabase.auth.signOut()
       if (error) {
         throw error

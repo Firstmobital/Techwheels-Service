@@ -47,3 +47,15 @@
 - [ ] Complaints and Help Tickets smoke still load
 - [ ] Evidence note filed
 - [ ] CHAT-001 activity tracker and PHASES.md updated in the same session
+
+## Phase 5
+
+Setup is applied. These rows stay open until a real phone receives a chat push.
+
+- [ ] Token row is `fcm` on Android and `expo` on iOS
+- [ ] Customer send enqueues staff devices for that dealer’s `chat` users
+- [ ] Staff send enqueues devices for the thread `phone_10`
+- [ ] Sender devices are not enqueued
+- [ ] Worker uses Firebase project `techwheels-service`, not the TECHWHEELS-WEB project
+- [ ] Closed app shows the vehicle number and message preview
+- [ ] Tap opens the thread

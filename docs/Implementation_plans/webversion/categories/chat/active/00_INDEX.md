@@ -49,7 +49,8 @@ This is not Complaints and not Help Tickets. Do not reuse `complaint_messages`, 
 1. Read **[CHAT-001_ADVISOR_CUSTOMER_CHAT_PLAN.md](CHAT-001_ADVISOR_CUSTOMER_CHAT_PLAN.md)**.
 2. Execute Phase 1 before any screen.
 3. Web inbox is Phase 2. Customer screen is Phase 3 via **[MOBILE-014](../../../../mobileversion/categories/customer/active/MOBILE-014_CUSTOMER_ADVISOR_CHAT_PLAN.md)**.
-4. Drop evidence under `../evidence/` when a phase is verified.
+4. Push is Phase 5. Android uses FCM. iOS uses Expo. See section 8.1 of the plan.
+5. Drop evidence under `../evidence/` when a phase is verified.
 
 ---
 
