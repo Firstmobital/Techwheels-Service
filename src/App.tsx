@@ -1085,6 +1085,7 @@ function AuthGate({ children }: { children: React.ReactNode }) {
   const isPreviewCustomer = location.pathname === '/customer-preview' || location.search.includes('preview=customer')
   if (customerVehicle || isPreviewCustomer) {
     const activeVehicle: CustomerVehicle = customerVehicle || {
+      id: 0,
       reg_number: 'RJ-14-EA-2024',
       owner_name: 'Rahul Sharma',
       owner_phone: '9876543210',
@@ -1100,6 +1101,8 @@ function AuthGate({ children }: { children: React.ReactNode }) {
       gate_pass_issued: false,
       billed_amount: 6450,
       amount_received: 0,
+      created_at: '2026-01-01T00:00:00.000Z',
+      invoice_done_at: null,
     }
     return (
       <CustomerPortalPage
