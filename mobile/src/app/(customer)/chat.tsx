@@ -54,7 +54,7 @@ export default function CustomerAdvisorChatScreen() {
     if (!token || !regNumber) return
     if (isInitial) setLoading(true)
     try {
-      const thread = await customerListAdvisorMessages(token, regNumber, contactKey)
+      const thread = await customerListAdvisorMessages(token, regNumber)
       setMessages(thread.messages)
       setError(null)
     } catch (err) {
@@ -88,7 +88,7 @@ export default function CustomerAdvisorChatScreen() {
     setSending(true)
     setError(null)
     try {
-      await customerSendAdvisorMessage(token, regNumber, body, contactKey)
+      await customerSendAdvisorMessage(token, regNumber, body)
       setDraft('')
       await load(false)
     } catch (err) {
