@@ -908,6 +908,30 @@ type DocUploadFeedback = {
   text: string
 }
 
+async function postUniversalDriveWithRetry(
+  supabaseUrl: string,
+  token: string,
+  payload: Record<string, unknown>,
+  timeoutMs?: number,
+) {
+  const send = () => fetch(`${supabaseUrl}/functions/v1/universal-drive-upload`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify(payload),
+    signal: timeoutMs ? AbortSignal.timeout(timeoutMs) : undefined,
+  })
+  let res = await send()
+  let body = await res.json().catch(() => ({} as { error?: string; ok?: boolean }))
+  if (!res.ok || body?.error || body?.ok === false) {
+    res = await send()
+    body = await res.json().catch(() => ({} as { error?: string; ok?: boolean }))
+  }
+  return { res, body }
+}
+
 const BODYSHOP_DOCS: { k: Exclude<BodyshopDocKey, 'doc_estimate' | 'doc_survey_approval'>; label: string; mandatoryFor: CustomerType[] }[] = [
   { k: 'doc_claim_form', label: 'Claim Form', mandatoryFor: ['individual', 'firm'] },
   { k: 'doc_rc', label: 'RC', mandatoryFor: ['individual', 'firm'] },
@@ -2848,24 +2872,14 @@ export default function BodyshopRepairPage() {
           fileName: file.name,
           photoMetaId: photoMeta.id,
         })
-        const driveRes = await fetch(`${supabaseUrl}/functions/v1/universal-drive-upload`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify({
-            resource_type: 'bodyshop_intake_photo',
-            resource_id: photoMeta.id,
-            bucket_id: AUTODOC_BUCKET,
-            object_name: storagePath,
-            file_type: 'intake_photo',
-            file_size_mb: Number((file.size / (1024 * 1024)).toFixed(3)),
-          }),
-          signal: AbortSignal.timeout(25000),
-        })
-
-        const drivePayload = await driveRes.json().catch(() => ({} as { error?: string }))
+        const { res: driveRes, body: drivePayload } = await postUniversalDriveWithRetry(supabaseUrl, token, {
+          resource_type: 'bodyshop_intake_photo',
+          resource_id: photoMeta.id,
+          bucket_id: AUTODOC_BUCKET,
+          object_name: storagePath,
+          file_type: 'intake_photo',
+          file_size_mb: Number((file.size / (1024 * 1024)).toFixed(3)),
+        }, 25000)
         if (!driveRes.ok || drivePayload?.error) {
           console.warn('[BodyshopIntakeUpload] drive sync failed (photo still uploaded)', {
             uploadDebugId,
@@ -3101,23 +3115,14 @@ export default function BodyshopRepairPage() {
         return
       }
 
-      const driveRes = await fetch(`${supabaseUrl}/functions/v1/universal-drive-upload`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          resource_type: 'bodyshop_document',
-          resource_id: row.id,
-          bucket_id: AUTODOC_BUCKET,
-          object_name: storagePath,
-          file_type: docKey,
-          file_size_mb: Number((file.size / (1024 * 1024)).toFixed(3)),
-        }),
+      const { res: driveRes, body: drivePayload } = await postUniversalDriveWithRetry(supabaseUrl, token, {
+        resource_type: 'bodyshop_document',
+        resource_id: row.id,
+        bucket_id: AUTODOC_BUCKET,
+        object_name: storagePath,
+        file_type: docKey,
+        file_size_mb: Number((file.size / (1024 * 1024)).toFixed(3)),
       })
-
-      const drivePayload = await driveRes.json().catch(() => ({} as { error?: string }))
       if (!driveRes.ok || drivePayload?.error) {
         setDocUploadFeedbackByKey((prev) => ({
           ...prev,
@@ -3888,22 +3893,14 @@ export default function BodyshopRepairPage() {
       const sessionRes = await supabase.auth.getSession()
       const token = sessionRes.data.session?.access_token
       if (supabaseUrl && token) {
-        const driveRes = await fetch(`${supabaseUrl}/functions/v1/universal-drive-upload`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify({
-            resource_type: 'bodyshop_intake_photo',
-            resource_id: photoMetaRes.data.id,
-            bucket_id: AUTODOC_BUCKET,
-            object_name: objectPath,
-            file_type: 'additional_approval_approval_photo',
-            file_size_mb: Number((file.size / (1024 * 1024)).toFixed(3)),
-          }),
+        const { res: driveRes, body: drivePayload } = await postUniversalDriveWithRetry(supabaseUrl, token, {
+          resource_type: 'bodyshop_intake_photo',
+          resource_id: photoMetaRes.data.id,
+          bucket_id: AUTODOC_BUCKET,
+          object_name: objectPath,
+          file_type: 'additional_approval_approval_photo',
+          file_size_mb: Number((file.size / (1024 * 1024)).toFixed(3)),
         })
-        const drivePayload = await driveRes.json().catch(() => ({} as { error?: string }))
         if (!driveRes.ok || drivePayload?.error) {
           toast_(`Upload saved, but Drive sync failed: ${drivePayload?.error || `HTTP ${driveRes.status}`}`, false)
         }

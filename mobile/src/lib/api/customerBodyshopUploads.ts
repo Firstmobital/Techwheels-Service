@@ -10,7 +10,18 @@ export type CustomerBodyshopAsset = {
   content_type?: string | null
   uploaded_at?: string | null
   uploaded_by?: string | null
+  drive_url?: string | null
   view_url?: string | null
+  drive_pending?: boolean
+}
+
+export type CustomerUploadResult = {
+  ok: boolean
+  drivePending: boolean
+  driveUrl: string | null
+  resourceId: number | string | null
+  docKey: string | null
+  error: string | null
 }
 
 type UploadKind = 'document' | 'photo'
@@ -48,10 +59,21 @@ async function callUploadBroker(
   })
 
   const body = await res.json().catch(() => ({}))
-  if (!res.ok || body?.ok === false) {
+  if (!res.ok || (body?.ok === false && !body?.drive_pending)) {
     throw new Error(body?.error || 'Customer upload request failed.')
   }
   return body
+}
+
+function asUploadResult(body: any): CustomerUploadResult {
+  return {
+    ok: body?.ok === true && Boolean(String(body?.drive_url || '').trim()),
+    drivePending: body?.drive_pending === true || body?.ok !== true,
+    driveUrl: String(body?.drive_url || '').trim() || null,
+    resourceId: body?.resource_id ?? null,
+    docKey: body?.doc_key ? String(body.doc_key) : null,
+    error: body?.error ? String(body.error) : null,
+  }
 }
 
 function base64ToArrayBuffer(base64: string): ArrayBuffer {
@@ -63,7 +85,7 @@ function base64ToArrayBuffer(base64: string): ArrayBuffer {
   return bytes.buffer
 }
 
-export async function customerUploadBodyshopAsset(input: UploadRequest) {
+export async function customerUploadBodyshopAsset(input: UploadRequest): Promise<CustomerUploadResult> {
   const fileInfo = await FileSystem.getInfoAsync(input.uri)
   const fileSize = fileInfo.exists && 'size' in fileInfo ? Number(fileInfo.size || 0) : 0
   if (!fileSize) throw new Error('Unable to read the selected file.')
@@ -95,7 +117,7 @@ export async function customerUploadBodyshopAsset(input: UploadRequest) {
     throw new Error(uploadError.message || 'File upload failed.')
   }
 
-  await callUploadBroker(input.sessionToken, input.regNumber, {
+  const completed = await callUploadBroker(input.sessionToken, input.regNumber, {
     action: 'complete_upload',
     kind: input.kind,
     doc_key: input.docKey || null,
@@ -104,6 +126,21 @@ export async function customerUploadBodyshopAsset(input: UploadRequest) {
     content_type: input.contentType,
     file_size_bytes: fileSize,
   })
+  return asUploadResult(completed)
+}
+
+export async function customerRetryBodyshopDrive(input: {
+  sessionToken: string
+  regNumber: string
+  resourceId?: number | string | null
+  docKey?: string | null
+}): Promise<CustomerUploadResult> {
+  const body = await callUploadBroker(input.sessionToken, input.regNumber, {
+    action: 'retry_drive',
+    resource_id: input.resourceId ?? null,
+    doc_key: input.docKey || null,
+  })
+  return asUploadResult(body)
 }
 
 export async function customerListBodyshopAssets(

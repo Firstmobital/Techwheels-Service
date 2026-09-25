@@ -1,18 +1,20 @@
 import { useCallback, useState } from 'react'
 import { Text, TouchableOpacity, View } from 'react-native'
 import { useFocusEffect, useRouter } from 'expo-router'
+import { useCustomerSession } from '../../context/CustomerSessionContext'
 import { CustomerTheme } from '../../lib/customer/customerTheme'
 import { loadClaimDocumentProgress, type ClaimDocumentProgress } from '../../lib/customer/claimDocumentProgress'
 import { Icon } from '../ui/Icon'
 
 export function RemainingDocumentsCard({ regNumber }: { regNumber?: string | null }) {
   const router = useRouter()
+  const { token } = useCustomerSession()
   const [progress, setProgress] = useState<ClaimDocumentProgress | null>(null)
 
   const refresh = useCallback(async () => {
-    const p = await loadClaimDocumentProgress(regNumber)
+    const p = await loadClaimDocumentProgress(token, regNumber)
     setProgress(p)
-  }, [regNumber])
+  }, [token, regNumber])
 
   useFocusEffect(
     useCallback(() => {

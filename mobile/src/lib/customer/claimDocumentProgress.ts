@@ -1,9 +1,11 @@
-import AsyncStorage from '@react-native-async-storage/async-storage'
+import { customerGetRepairCard } from '../api/customerPortal'
+import { customerListBodyshopAssets } from '../api/customerBodyshopUploads'
 import {
-  getActiveClaimDocumentSlots,
+  claimModeFromRepairCard,
+  listMandatoryClaimDocuments,
+  ownershipFromRepairCard,
   type ClaimMode,
-  type OwnershipType,
-} from '../../app/(customer)/documents'
+} from './customerClaimDocuments'
 
 export type ClaimDocumentProgress = {
   claimMode: ClaimMode
@@ -22,51 +24,52 @@ function buildMissingSummary(titles: string[]): string {
   return `${titles[0]} is missing and ${titles[1]} is missing, and ${titles.length - 2} more`
 }
 
-export async function loadClaimDocumentProgress(regNumber: string | null | undefined): Promise<ClaimDocumentProgress> {
-  const storageKey = `claim_docs_${regNumber || 'default'}`
-  let claimMode: ClaimMode = 'insurance'
-  let ownershipType: OwnershipType = 'individual'
-  let uploads: Record<string, { uri?: string }> = {}
+export async function loadClaimDocumentProgress(
+  sessionToken: string | null | undefined,
+  regNumber: string | null | undefined
+): Promise<ClaimDocumentProgress> {
+  const empty: ClaimDocumentProgress = {
+    claimMode: 'insurance',
+    totalRequired: 0,
+    uploadedCount: 0,
+    remainingCount: 0,
+    progressPercent: 100,
+    missingSummary: '',
+    missingTitles: [],
+  }
+  if (!sessionToken || !regNumber) return empty
 
-  try {
-    const raw = await AsyncStorage.getItem(storageKey)
-    if (raw) {
-      const parsed = JSON.parse(raw) as {
-        uploads?: Record<string, { uri?: string }>
-        claimMode?: ClaimMode
-        ownershipType?: OwnershipType
-      }
-      uploads = parsed.uploads || {}
-      if (parsed.claimMode) claimMode = parsed.claimMode
-      if (parsed.ownershipType) ownershipType = parsed.ownershipType
-    }
-  } catch {
-    // ignore
+  const card = await customerGetRepairCard(sessionToken, regNumber).catch(() => null)
+  const claimMode = claimModeFromRepairCard(card)
+  const ownershipType = ownershipFromRepairCard(card)
+  const mandatory = listMandatoryClaimDocuments(claimMode, ownershipType)
+  if (mandatory.length === 0) {
+    return { ...empty, claimMode }
   }
 
-  const activeSlots = getActiveClaimDocumentSlots(claimMode, ownershipType)
-  const mandatorySlots = activeSlots.filter((s) => s.isMandatory)
-  const totalRequired = mandatorySlots.length
-  const uploadedCount = mandatorySlots.filter((s) => Boolean(uploads[s.id]?.uri)).length
-  const remainingCount = Math.max(0, totalRequired - uploadedCount)
-  const progressPercent = totalRequired > 0 ? Math.round((uploadedCount / totalRequired) * 100) : 100
+  const assets = await customerListBodyshopAssets(sessionToken, regNumber).catch(() => ({
+    documents: [],
+    photos: [],
+  }))
+  const submittedKeys = new Set(
+    assets.documents
+      .filter((doc) => Boolean(String(doc.drive_url || doc.view_url || '').trim()) && !doc.drive_pending)
+      .map((doc) => String(doc.doc_key || ''))
+      .filter(Boolean)
+  )
 
-  const missingTitles = mandatorySlots
-    .filter((s) => !uploads[s.id]?.uri)
-    .map((s) => {
-      if (s.pageNumber && s.totalPages && s.totalPages > 1) {
-        return `${s.title} (${s.slotLabel})`
-      }
-      return s.title
-    })
+  const missing = mandatory.filter((doc) => !submittedKeys.has(doc.docKey))
+  const uploadedCount = mandatory.length - missing.length
+  const totalRequired = mandatory.length
+  const progressPercent = Math.round((uploadedCount / totalRequired) * 100)
 
   return {
     claimMode,
     totalRequired,
     uploadedCount,
-    remainingCount,
+    remainingCount: missing.length,
     progressPercent,
-    missingSummary: buildMissingSummary(missingTitles.slice(0, 3)),
-    missingTitles,
+    missingSummary: buildMissingSummary(missing.map((doc) => doc.title).slice(0, 3)),
+    missingTitles: missing.map((doc) => doc.title),
   }
 }

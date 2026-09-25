@@ -44,7 +44,7 @@ If any child tracker conflicts with this file, this file wins until explicitly u
 | MOBILE-BP-RD | `docs/Implementation_plans/mobileversion/categories/redesign/active/redesign_bodypaint_module.md` | Body & Paint redesign (consolidated) | In Progress | Critical | Single source of truth for BP-01..BP-08 redesign execution |
 | MOBILE-011 | `docs/Implementation_plans/mobileversion/categories/auth/active/MOBILE-011_CUSTOMER_STAFF_SINGLE_APP_PLAN.md` | One Expo binary: customer + staff login shells + customer RPCs | In Progress | High | Phase 0 done. Phase 1–3 implemented in `mobile/` + web cutover. Apply `20260916120000_mobile_011_customer_sessions.sql` before the next prod APK/iOS. Do not ship `bodyshop/`. |
 | MOBILE-012 | `docs/Implementation_plans/mobileversion/categories/release/active/MOBILE-012_PLAY_APP_STORE_PUBLISH_PLAN.md` | Play Store + App Store publish for `com.techwheels.service` (ASC `6774519420`) | In Progress | High | AAB 11 on Play + IPA 13 TestFlight. Next: finish Play App content (Advertising ID No + photo/video declaration), then send for review. App Store listing + screenshots. |
-| MOBILE-013 | `docs/Implementation_plans/mobileversion/categories/customer/active/MOBILE-013_CUSTOMER_DOCUMENT_DRIVE_UPLOAD_PLAN.md` | Customer claim documents: autodoc staging, bodyshop document upsert, universal-drive-upload | Not Started | High | Depends on DRIVE-001 `bodyshop_document` and MOBILE-011 customer session RPCs. Does not preempt M10-002. |
+| MOBILE-013 | `docs/Implementation_plans/mobileversion/categories/customer/active/MOBILE-013_CUSTOMER_DOCUMENT_DRIVE_UPLOAD_PLAN.md` | Customer claim documents: autodoc staging, bodyshop document upsert, universal-drive-upload | In Progress | High | Code written 2026-09-25. Deploy `customer-portal-upload` and `universal-drive-upload` before customer Drive sync works. |
 
 ---
 
@@ -71,7 +71,7 @@ Use: Not Started | In Progress | Blocked | Review | Done
 | M10-006 | Satellite hybrid provider rollout decision | MOBILE-006 | Pending | Product + Mobile | Confirm budget/quota and backend proxy readiness |
 | M10-007 | Single-app customer + staff identity (RPCs, Expo shells) | MOBILE-011 | Not Started | Mobile + Platform | Phase 0: delete client `service_role` (no dashboard rotation); do not copy `bodyshop/` into Expo |
 | M10-008 | Play + App Store first public listing | MOBILE-012 | In Progress | Mobile + Platform | App Store: finish ASC 6774519420 listing + Add for Review on IPA 13 (no new IPA). Play: still AAB 12+ after picker policy. |
-| M10-009 | Customer claim document Drive offload | MOBILE-013 | Not Started | Mobile + Platform | Execute MOBILE-013 Phase 1 broker upsert + universal-drive-upload, then Documents tab and home card |
+| M10-009 | Customer claim document Drive offload | MOBILE-013 | In Progress | Mobile + Platform | App and broker coded. Next: deploy the two edge functions, then upload one claim document as a customer and confirm `drive_url`. |
 
 ### 4.1) Current Session Kickoff (2026-06-18)
 

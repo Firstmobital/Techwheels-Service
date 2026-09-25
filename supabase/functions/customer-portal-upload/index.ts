@@ -33,7 +33,6 @@ const ALLOWED_DOC_KEYS = new Set([
   'doc_gst',
   'doc_company_pan',
   'doc_bank_detail',
-  'doc_tp_affidavit',
 ])
 
 function json(status: number, body: Record<string, unknown>) {
@@ -125,6 +124,68 @@ async function resolveContext(
     receptionEntryId: cardRow.reception_entry_id ? Number(cardRow.reception_entry_id) : null,
     jobCardNo: text(cardRow.job_card_no),
     customerType: text(cardRow.customer_type),
+  }
+}
+
+async function setRepairCardDocFlag(
+  supabase: ReturnType<typeof createClient>,
+  repairCardId: number,
+  docKey: string,
+  value: boolean
+) {
+  if (!ALLOWED_DOC_KEYS.has(docKey)) return
+  const { error } = await supabase
+    .from('bodyshop_repair_cards')
+    .update({ [docKey]: value, updated_at: new Date().toISOString() })
+    .eq('id', repairCardId)
+  if (error) throw new Error(error.message)
+}
+
+async function offloadBodyshopDocument(
+  supabaseUrl: string,
+  serviceRoleKey: string,
+  input: { resourceId: number; objectName: string; docKey: string; fileSizeBytes: number }
+): Promise<{ ok: true; drive_url: string } | { ok: false; error: string }> {
+  try {
+    const res = await fetch(`${supabaseUrl}/functions/v1/universal-drive-upload`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${serviceRoleKey}`,
+      },
+      body: JSON.stringify({
+        resource_type: 'bodyshop_document',
+        resource_id: input.resourceId,
+        bucket_id: BUCKET,
+        object_name: input.objectName,
+        file_type: input.docKey,
+        file_size_mb: Number(((input.fileSizeBytes || 0) / (1024 * 1024)).toFixed(3)),
+      }),
+    })
+    const payload = await res.json().catch(() => ({} as { ok?: boolean; error?: string; drive_url?: string; link?: string }))
+    const driveUrl = text(payload.drive_url || payload.link)
+    if (!res.ok || payload.ok === false || !driveUrl) {
+      return { ok: false, error: text(payload.error) || `Drive upload failed (${res.status})` }
+    }
+    return { ok: true, drive_url: driveUrl }
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : 'Drive upload failed' }
+  }
+}
+
+function presentDocument(row: Record<string, unknown>) {
+  const driveUrl = text(row.drive_url)
+  return {
+    kind: 'document' as const,
+    id: row.id,
+    doc_key: row.doc_key ?? null,
+    file_name: row.file_name ?? null,
+    content_type: row.content_type ?? null,
+    uploaded_at: row.uploaded_at ?? row.created_at ?? null,
+    uploaded_by: row.uploaded_by ?? null,
+    drive_url: driveUrl || null,
+    view_url: driveUrl || null,
+    drive_pending: !driveUrl,
   }
 }
 
@@ -273,31 +334,65 @@ Deno.serve(async (req) => {
     const uploader = ctx.phone ? `customer:${ctx.phone}` : 'customer-app'
 
     if (kind === 'document') {
-      const { error: insertError } = await supabase.from('bodyshop_repair_card_documents').insert({
-        dealer_code: ctx.dealerCode,
-        repair_card_id: ctx.repairCardId,
-        reception_entry_id: ctx.receptionEntryId,
-        reg_number: ctx.regNumber,
-        doc_key: docKey,
-        storage_bucket: BUCKET,
-        storage_path: storagePath,
-        file_name: fileName,
-        content_type: contentType,
-        file_size_bytes: Number.isFinite(fileSize) ? fileSize : null,
-        uploaded_by: uploader,
-        uploaded_at: new Date().toISOString(),
+      const uploadedAt = new Date().toISOString()
+      const { data: upserted, error: upsertError } = await supabase
+        .from('bodyshop_repair_card_documents')
+        .upsert({
+          dealer_code: ctx.dealerCode,
+          repair_card_id: ctx.repairCardId,
+          reception_entry_id: ctx.receptionEntryId,
+          reg_number: ctx.regNumber,
+          doc_key: docKey,
+          storage_bucket: BUCKET,
+          storage_path: storagePath,
+          file_name: fileName,
+          content_type: contentType,
+          file_size_bytes: Number.isFinite(fileSize) ? fileSize : null,
+          uploaded_by: uploader,
+          uploaded_at: uploadedAt,
+          drive_url: null,
+        }, { onConflict: 'repair_card_id,doc_key' })
+        .select('id, doc_key, storage_path, file_size_bytes')
+        .single()
+
+      if (upsertError || !upserted?.id) {
+        return json(500, { ok: false, error: upsertError?.message || 'Failed to save document' })
+      }
+
+      const drive = await offloadBodyshopDocument(supabaseUrl, serviceRoleKey, {
+        resourceId: Number(upserted.id),
+        objectName: storagePath,
+        docKey,
+        fileSizeBytes: Number.isFinite(fileSize) ? fileSize : Number(upserted.file_size_bytes || 0),
       })
 
-      if (insertError) return json(500, { ok: false, error: insertError.message })
-
-      const { error: updateError } = await supabase
-        .from('bodyshop_repair_cards')
-        .update({ [docKey]: true, updated_at: new Date().toISOString() })
-        .eq('id', ctx.repairCardId)
-
-      if (updateError) {
-        return json(500, { ok: false, error: updateError.message })
+      if (!drive.ok) {
+        try {
+          await setRepairCardDocFlag(supabase, ctx.repairCardId, docKey, false)
+        } catch (flagError) {
+          return json(500, { ok: false, error: flagError instanceof Error ? flagError.message : 'Failed to update repair card' })
+        }
+        return json(200, {
+          ok: false,
+          drive_pending: true,
+          resource_id: upserted.id,
+          doc_key: docKey,
+          error: drive.error,
+        })
       }
+
+      try {
+        await setRepairCardDocFlag(supabase, ctx.repairCardId, docKey, true)
+      } catch (flagError) {
+        return json(500, { ok: false, error: flagError instanceof Error ? flagError.message : 'Failed to update repair card' })
+      }
+
+      return json(200, {
+        ok: true,
+        drive_url: drive.drive_url,
+        resource_id: upserted.id,
+        doc_key: docKey,
+      })
     } else {
       const { error: insertError } = await supabase.from('bodyshop_intake_vehicle_photos').insert({
         dealer_code: ctx.dealerCode,
@@ -321,6 +416,64 @@ Deno.serve(async (req) => {
     return json(200, { ok: true })
   }
 
+  if (action === 'retry_drive') {
+    const resourceId = Number(body.resource_id)
+    const docKey = text(body.doc_key)
+    let query = supabase
+      .from('bodyshop_repair_card_documents')
+      .select('id, doc_key, storage_path, file_size_bytes')
+      .eq('repair_card_id', ctx.repairCardId)
+
+    if (Number.isFinite(resourceId) && resourceId > 0) {
+      query = query.eq('id', resourceId)
+    } else if (ALLOWED_DOC_KEYS.has(docKey)) {
+      query = query.eq('doc_key', docKey)
+    } else {
+      return json(400, { ok: false, error: 'resource_id or doc_key is required' })
+    }
+
+    const { data: row, error: rowError } = await query.maybeSingle()
+    if (rowError) return json(500, { ok: false, error: rowError.message })
+    if (!row?.id || !text(row.storage_path) || !ALLOWED_DOC_KEYS.has(text(row.doc_key))) {
+      return json(404, { ok: false, error: 'Document not found for this repair card' })
+    }
+
+    const drive = await offloadBodyshopDocument(supabaseUrl, serviceRoleKey, {
+      resourceId: Number(row.id),
+      objectName: text(row.storage_path),
+      docKey: text(row.doc_key),
+      fileSizeBytes: Number(row.file_size_bytes || 0),
+    })
+
+    if (!drive.ok) {
+      try {
+        await setRepairCardDocFlag(supabase, ctx.repairCardId, text(row.doc_key), false)
+      } catch (flagError) {
+        return json(500, { ok: false, error: flagError instanceof Error ? flagError.message : 'Failed to update repair card' })
+      }
+      return json(200, {
+        ok: false,
+        drive_pending: true,
+        resource_id: row.id,
+        doc_key: row.doc_key,
+        error: drive.error,
+      })
+    }
+
+    try {
+      await setRepairCardDocFlag(supabase, ctx.repairCardId, text(row.doc_key), true)
+    } catch (flagError) {
+      return json(500, { ok: false, error: flagError instanceof Error ? flagError.message : 'Failed to update repair card' })
+    }
+
+    return json(200, {
+      ok: true,
+      drive_url: drive.drive_url,
+      resource_id: row.id,
+      doc_key: row.doc_key,
+    })
+  }
+
   if (action === 'list_assets') {
     const [{ data: documents, error: documentsError }, { data: photos, error: photosError }] = await Promise.all([
       supabase
@@ -338,9 +491,7 @@ Deno.serve(async (req) => {
     if (documentsError) return json(500, { ok: false, error: documentsError.message })
     if (photosError) return json(500, { ok: false, error: photosError.message })
 
-    const docAssets = (
-      await Promise.all((documents || []).map((row) => signAsset(supabase, row as Record<string, unknown>, 'document')))
-    ).filter(Boolean)
+    const docAssets = (documents || []).map((row) => presentDocument(row as Record<string, unknown>))
 
     const photoAssets = (
       await Promise.all((photos || []).map((row) => signAsset(supabase, row as Record<string, unknown>, 'photo')))

@@ -119,30 +119,30 @@ Do not write customer claim files into the autodoc `documents` table. That table
 ## Implementation Tasks
 
 ### Phase 1: Broker finishes the staff sequence
-- [ ] **Task 1.1:** In `supabase/functions/customer-portal-upload/index.ts`, change document `complete_upload` from insert to upsert on `(repair_card_id, doc_key)`, returning `id`. Keep dealer, reception, registration, storage, file, and `uploaded_by` (`customer:<phone>`) fields aligned with the staff upsert.
-- [ ] **Task 1.2:** After the upsert, call `universal-drive-upload` from the function with the service-role bearer, `resource_type: 'bodyshop_document'`, `resource_id`, `bucket_id: 'autodoc'`, `object_name`, and `file_type` = `doc_key`.
-- [ ] **Task 1.3:** Set `bodyshop_repair_cards[doc_key] = true` only after the Drive call returns `drive_url`. On Drive failure, leave the flag false, keep the staged object and row, and return a pending payload (`ok: false` or `drive_pending: true` plus `resource_id`) the app can retry.
-- [ ] **Task 1.4:** Add action `retry_drive` for an existing document row owned by the resolved repair card. Re-call `universal-drive-upload` with the stored path. On success, set the `doc_*` flag.
-- [ ] **Task 1.5:** Narrow the broker document allow-list to the nine customer keys in the target contract. Remove `doc_tp_affidavit`.
-- [ ] **Task 1.6:** Add `supabase/config.toml` entries: `customer-portal-upload` `verify_jwt = false` (session token in the body, same as the function comment); `universal-drive-upload` `verify_jwt = true` so the anon key alone cannot invoke Drive offload. Confirm the deployed function matches before release.
+- [x] **Task 1.1:** In `supabase/functions/customer-portal-upload/index.ts`, change document `complete_upload` from insert to upsert on `(repair_card_id, doc_key)`, returning `id`. Keep dealer, reception, registration, storage, file, and `uploaded_by` (`customer:<phone>`) fields aligned with the staff upsert.
+- [x] **Task 1.2:** After the upsert, call `universal-drive-upload` from the function with the service-role bearer, `resource_type: 'bodyshop_document'`, `resource_id`, `bucket_id: 'autodoc'`, `object_name`, and `file_type` = `doc_key`.
+- [x] **Task 1.3:** Set `bodyshop_repair_cards[doc_key] = true` only after the Drive call returns `drive_url`. On Drive failure, leave the flag false, keep the staged object and row, and return a pending payload (`ok: false` or `drive_pending: true` plus `resource_id`) the app can retry.
+- [x] **Task 1.4:** Add action `retry_drive` for an existing document row owned by the resolved repair card. Re-call `universal-drive-upload` with the stored path. On success, set the `doc_*` flag.
+- [x] **Task 1.5:** Narrow the broker document allow-list to the nine customer keys in the target contract. Remove `doc_tp_affidavit`.
+- [x] **Task 1.6:** Add `supabase/config.toml` entries: `customer-portal-upload` `verify_jwt = false` (session token in the body, same as the function comment); `universal-drive-upload` `verify_jwt = true` so the anon key alone cannot invoke Drive offload. Confirm the deployed function matches before release.
 
 ### Phase 2: One customer catalog
-- [ ] **Task 2.1:** Make `mobile/src/lib/customer/customerClaimDocuments.ts` the only slot list: one entry per `doc_key` in the table above, with firm and optional conditions. Remove front/back slot ids.
-- [ ] **Task 2.2:** Stop exporting a second slot list from `mobile/src/app/(customer)/documents.tsx`. Point `claimDocumentProgress.ts` at the shared catalog.
+- [x] **Task 2.1:** Make `mobile/src/lib/customer/customerClaimDocuments.ts` the only slot list: one entry per `doc_key` in the table above, with firm and optional conditions. Remove front/back slot ids.
+- [x] **Task 2.2:** Stop exporting a second slot list from `mobile/src/app/(customer)/documents.tsx`. Point `claimDocumentProgress.ts` at the shared catalog.
 
 ### Phase 3: Documents tab uses the broker
-- [ ] **Task 3.1:** Wire camera, gallery, and PDF through `customerUploadBodyshopAsset` (`mobile/src/lib/api/customerBodyshopUploads.ts`). Extend that helper to surface `drive_url` and the pending/retry result from `complete_upload`.
-- [ ] **Task 3.2:** Load existing files with `customerListBodyshopAssets`. Show submitted only when `view_url` / `drive_url` is present. Show a retry action when the row exists and Drive is still pending.
-- [ ] **Task 3.3:** Replace uses the same `complete_upload` upsert. Remove is a local clear only until a server delete exists; do not pretend a local delete removed the workshop file. If the row exists on the server, keep showing it.
-- [ ] **Task 3.4:** Read claim mode and ownership from the repair card returned for the selected registration. Remove the phone toggles as the source of which slots are required.
+- [x] **Task 3.1:** Wire camera, gallery, and PDF through `customerUploadBodyshopAsset` (`mobile/src/lib/api/customerBodyshopUploads.ts`). Extend that helper to surface `drive_url` and the pending/retry result from `complete_upload`.
+- [x] **Task 3.2:** Load existing files with `customerListBodyshopAssets`. Show submitted only when `view_url` / `drive_url` is present. Show a retry action when the row exists and Drive is still pending.
+- [x] **Task 3.3:** Replace uses the same `complete_upload` upsert. Remove is a local clear only until a server delete exists; do not pretend a local delete removed the workshop file. If the row exists on the server, keep showing it.
+- [x] **Task 3.4:** Read claim mode and ownership from the repair card returned for the selected registration. Remove the phone toggles as the source of which slots are required.
 
 ### Phase 4: Home progress matches the server
-- [ ] **Task 4.1:** Change `loadClaimDocumentProgress` so `RemainingDocumentsCard` counts mandatory keys that have a Drive URL from `list_assets`. AsyncStorage may hold an in-flight local URI only. It must not increment `uploadedCount`.
-- [ ] **Task 4.2:** Home (`mobile/src/app/(customer)/index.tsx`) keeps using `RemainingDocumentsCard`. No second progress formula.
+- [x] **Task 4.1:** Change `loadClaimDocumentProgress` so `RemainingDocumentsCard` counts mandatory keys that have a Drive URL from `list_assets`. AsyncStorage may hold an in-flight local URI only. It must not increment `uploadedCount`.
+- [x] **Task 4.2:** Home (`mobile/src/app/(customer)/index.tsx`) keeps using `RemainingDocumentsCard`. No second progress formula.
 
 ### Phase 5: Staff recovery alignment (after customer path is live)
-- [ ] **Task 5.1:** When staff bodyshop Drive sync fails, record it through the existing `pending_drive_uploads` path and retry with the same `resource_id`. Do not add a second uploader.
-- [ ] **Task 5.2:** Leave `doc_estimate` and `doc_survey_approval` on the staff screen. Add them to `BODYSHOP_DOC_KEYS` only if those staff uploads must offload too. Do not open them to the customer broker.
+- [x] **Task 5.1:** When staff bodyshop Drive sync fails, record it through the existing `pending_drive_uploads` path and retry with the same `resource_id`. Do not add a second uploader.
+- [x] **Task 5.2:** Leave `doc_estimate` and `doc_survey_approval` on the staff screen. Add them to `BODYSHOP_DOC_KEYS` only if those staff uploads must offload too. Do not open them to the customer broker.
 
 ---
 
@@ -158,38 +158,38 @@ Do not write customer claim files into the autodoc `documents` table. That table
 
 ### Phase 1
 ```
-⏳ 1.1 | Upsert bodyshop document on complete_upload | Mobile + Platform | | | Not started
-⏳ 1.2 | Service-role call to universal-drive-upload | Mobile + Platform | | | Not started
-⏳ 1.3 | Flip doc_* flag only after drive_url | Mobile + Platform | | | Not started
-⏳ 1.4 | retry_drive action | Mobile + Platform | | | Not started
-⏳ 1.5 | Allow-list matches dump customer keys | Mobile + Platform | | | Not started
-⏳ 1.6 | config.toml verify_jwt for both functions | Mobile + Platform | | | Not started
+✅ 1.1 | Upsert bodyshop document on complete_upload | Mobile + Platform | 2026-09-25 | 2026-09-25 | customer-portal-upload
+✅ 1.2 | Service-role call to universal-drive-upload | Mobile + Platform | 2026-09-25 | 2026-09-25 | customer-portal-upload
+✅ 1.3 | Flip doc_* flag only after drive_url | Mobile + Platform | 2026-09-25 | 2026-09-25 | flag stays false on pending
+✅ 1.4 | retry_drive action | Mobile + Platform | 2026-09-25 | 2026-09-25 | customer-portal-upload
+✅ 1.5 | Allow-list matches dump customer keys | Mobile + Platform | 2026-09-25 | 2026-09-25 | doc_tp_affidavit removed
+✅ 1.6 | config.toml verify_jwt for both functions | Mobile + Platform | 2026-09-25 | 2026-09-25 | Deploy still required
 ```
 
 ### Phase 2
 ```
-⏳ 2.1 | Single doc_key catalog | Mobile | | | Not started
-⏳ 2.2 | Progress helper uses that catalog | Mobile | | | Not started
+✅ 2.1 | Single doc_key catalog | Mobile | 2026-09-25 | 2026-09-25 | customerClaimDocuments.ts
+✅ 2.2 | Progress helper uses that catalog | Mobile | 2026-09-25 | 2026-09-25 | claimDocumentProgress.ts
 ```
 
 ### Phase 3
 ```
-⏳ 3.1 | Documents tab calls customerUploadBodyshopAsset | Mobile | | | Not started
-⏳ 3.2 | List assets; submitted means drive_url | Mobile | | | Not started
-⏳ 3.3 | Replace via upsert; server row survives local remove | Mobile | | | Not started
-⏳ 3.4 | Claim mode and ownership from repair card | Mobile | | | Not started
+✅ 3.1 | Documents tab calls customerUploadBodyshopAsset | Mobile | 2026-09-25 | 2026-09-25 | documents.tsx
+✅ 3.2 | List assets; submitted means drive_url | Mobile | 2026-09-25 | 2026-09-25 | documents.tsx
+✅ 3.3 | Replace via upsert; server row survives local remove | Mobile | 2026-09-25 | 2026-09-25 | no local delete
+✅ 3.4 | Claim mode and ownership from repair card | Mobile | 2026-09-25 | 2026-09-25 | documents.tsx
 ```
 
 ### Phase 4
 ```
-⏳ 4.1 | Home card ignores AsyncStorage submitted count | Mobile | | | Not started
-⏳ 4.2 | index.tsx keeps RemainingDocumentsCard only | Mobile | | | Not started
+✅ 4.1 | Home card ignores AsyncStorage submitted count | Mobile | 2026-09-25 | 2026-09-25 | list_assets drive_url
+✅ 4.2 | index.tsx keeps RemainingDocumentsCard only | Mobile | 2026-09-25 | 2026-09-25 | unchanged call site
 ```
 
 ### Phase 5
 ```
-⏳ 5.1 | Staff Drive failure uses pending_drive_uploads retry | Platform | | | After Phase 1–4
-⏳ 5.2 | Workshop-only keys stay off the customer allow-list | Platform | | | After Phase 1–4
+✅ 5.1 | Staff Drive failure uses pending_drive_uploads retry | Platform | 2026-09-25 | 2026-09-25 | one retry; function logs drive_failed
+✅ 5.2 | Workshop-only keys stay off the customer allow-list | Platform | 2026-09-25 | 2026-09-25 | added to BODYSHOP_DOC_KEYS only
 ```
 
 ---
@@ -264,4 +264,4 @@ Do not write customer claim files into the autodoc `documents` table. That table
 ---
 
 **Last Updated:** 2026-09-25 by implementation planning  
-**Status:** 🔴 PENDING
+**Status:** 🟡 IN PROGRESS — code complete; deploy `customer-portal-upload` and `universal-drive-upload` before a customer can sync to Drive

@@ -59,6 +59,8 @@ const BODYSHOP_DOC_KEYS = new Set([
   'doc_gst',
   'doc_company_pan',
   'doc_bank_detail',
+  'doc_estimate',
+  'doc_survey_approval',
 ])
 
 // Techwheels canonical Drive root: all registration subfolders must be created only under this folder.
@@ -396,6 +398,8 @@ Deno.serve(async (req) => {
   if (req.method !== 'POST') {
     return json(405, { ok: false, error: 'Method not allowed', error_code: 'VALIDATION_ERROR' })
   }
+
+  let pendingOnFailure: Record<string, unknown> | null = null
 
   try {
     const body = normalizeBody(await req.json() as UploadBody)
@@ -810,11 +814,27 @@ Deno.serve(async (req) => {
       effectiveFileType = body.fileType || (body.resourceType === 'reception_invoice' ? 'invoice' : 'estimate')
     }
 
+    pendingOnFailure = {
+      resource_type: body.resourceType,
+      resource_id: rowId,
+      job_card_id: body.jobCardId || null,
+      doc_type: effectiveFileType,
+      registration_no: registrationNo,
+      storage_bucket: body.bucketId,
+      storage_path: body.objectName,
+      status: 'drive_failed',
+    }
+
     const { data: blob, error: dlErr } = await supabase.storage
       .from(body.bucketId)
       .download(body.objectName)
 
     if (dlErr || !blob) {
+      await logPendingUpload(supabase, {
+        ...pendingOnFailure,
+        status: 'drive_failed',
+        error_message: dlErr?.message ?? 'Storage download failed',
+      })
       return json(500, {
         ok: false,
         error: dlErr?.message ?? 'Storage download failed',
@@ -1035,9 +1055,21 @@ Deno.serve(async (req) => {
       result,
     })
   } catch (err) {
+    const message = (err as Error).message
+    if (pendingOnFailure) {
+      const supabaseUrl = Deno.env.get('SUPABASE_URL')
+      const serviceRole = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
+      if (supabaseUrl && serviceRole) {
+        await logPendingUpload(createClient(supabaseUrl, serviceRole), {
+          ...pendingOnFailure,
+          status: 'drive_failed',
+          error_message: message,
+        })
+      }
+    }
     return json(500, {
       ok: false,
-      error: (err as Error).message,
+      error: message,
       error_code: 'DRIVE_ERROR',
     })
   }

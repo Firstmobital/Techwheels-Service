@@ -36,3 +36,9 @@ verify_jwt = false
 
 [functions.customer-portal-doc-view]
 verify_jwt = false
+
+[functions.customer-portal-upload]
+verify_jwt = false
+
+[functions.universal-drive-upload]
+verify_jwt = true
