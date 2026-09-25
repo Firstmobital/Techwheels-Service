@@ -22,13 +22,12 @@ import {
   customerGetActiveJob,
   customerGetGatePass,
   customerGetRepairCard,
-  customerGetSettlement,
 } from '../../lib/api/customerPortal'
-import { computeSettlement } from '../../lib/customer/math'
 import { Icon, IconName } from '../../components/ui/Icon'
 import { RemainingDocumentsCard } from '../../components/customer/RemainingDocumentsCard'
 import { CustomerPrimaryActionCard } from '../../components/customer/CustomerPrimaryActionCard'
 import { CustomerTheme } from '../../lib/customer/customerTheme'
+import { useCustomerScreenRefresh } from '../../components/customer/customerScreenRefresh'
 
 export default function CustomerDashboardScreen() {
   const router = useRouter()
@@ -37,7 +36,6 @@ export default function CustomerDashboardScreen() {
   const [job, setJob] = useState<Record<string, unknown> | null>(null)
   const [activeVehicle, setActiveVehicle] = useState<Record<string, unknown> | null>(null)
   const [repairCard, setRepairCard] = useState<Record<string, unknown> | null>(null)
-  const [settlement, setSettlement] = useState<Record<string, unknown> | null>(null)
   const [gatePass, setGatePass] = useState<Record<string, unknown> | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -47,13 +45,12 @@ export default function CustomerDashboardScreen() {
       setLoading(true)
     }
     try {
-      const [jobResult, payResult, passResult, cardResult] = await Promise.all([
+      const [jobResult, passResult, cardResult] = await Promise.all([
         customerGetActiveJob(token, selected?.reg_number).catch((err) => ({
           job: null,
           vehicle: null,
           error: err instanceof Error ? err.message : 'Unable to load job.',
         })),
-        customerGetSettlement(token, selected?.reg_number).catch(() => null),
         customerGetGatePass(token, selected?.reg_number).catch(() => null),
         customerGetRepairCard(token, selected?.reg_number).catch(() => null),
       ])
@@ -67,7 +64,6 @@ export default function CustomerDashboardScreen() {
         setActiveVehicle(jobResult.vehicle as Record<string, unknown>)
       }
       if (cardResult) setRepairCard(cardResult)
-      if (payResult) setSettlement(payResult)
       if (passResult) setGatePass(passResult)
     } catch (err) {
       if (!job && !selected) {
@@ -93,9 +89,13 @@ export default function CustomerDashboardScreen() {
     void load(true)
   }, [load])
 
+  const onPullRefresh = useCallback(async () => {
+    await load(false)
+  }, [load])
+  useCustomerScreenRefresh(onPullRefresh)
+
   const model = asText(job?.model) || asText(selected?.model)
   const variant = asText(job?.variant) || asText(selected?.variant)
-  const owner = asText(job?.owner_name) || asText(selected?.owner_name)
   const km = formatKm(job?.km_reading ?? selected?.km_reading)
   const serviceType = asText(job?.service_type) || asText(selected?.service_type)
   const advisor =
@@ -108,15 +108,19 @@ export default function CustomerDashboardScreen() {
     asText(repairCard?.sa_display_name) ||
     asText(repairCard?.sa_name) ||
     asText(repairCard?.service_advisor_name)
-  const technician = asText(job?.technician_name)
-  const bayNo = asText(job?.bay_no)
+  const insuranceCompany =
+    asText(repairCard?.insurance_company) ||
+    asText(job?.insurance_company) ||
+    asText(activeVehicle?.insurance_company)
+  const surveyorName = asText(repairCard?.surveyor_name) || asText(job?.surveyor_name)
+  const surveyorMobile =
+    asText(repairCard?.surveyor_contact) ||
+    asText(repairCard?.surveyor_mobile) ||
+    asText(repairCard?.surveyor_phone) ||
+    asText(job?.surveyor_contact) ||
+    asText(job?.surveyor_mobile)
   const jc = asText(job?.jc_number) || asText(selected?.jc_number)
-  const branch = asText(job?.branch) || asText(selected?.branch)
   const delivered = Boolean(job?.invoice_done_at || selected?.invoice_done_at)
-  const pay = computeSettlement({
-    billed: settlement?.total_billed ?? settlement?.billed_amount ?? job?.billed_amount ?? selected?.billed_amount,
-    received: settlement?.amount_received ?? job?.amount_received ?? selected?.amount_received,
-  })
   const isAccidentFlow = /accident|body|insurance|claim/i.test(String(serviceType || ''))
   return (
     <CustomerScreen title="" subtitle="">
@@ -360,25 +364,9 @@ export default function CustomerDashboardScreen() {
             </View>
             <RecordRow label="Job Card Number" value={dash(jc)} mono />
             <RecordRow label="Service Advisor" value={dash(advisor)} />
-            <RecordRow label="Assigned Technician" value={dash(technician)} />
-            <RecordRow label="Workshop Bay No" value={dash(bayNo) || 'Floor Bay'} />
-            <RecordRow label="Service Branch" value={dash(branch)} />
-            <RecordRow
-              last
-              label="Settlement Status"
-              highlight={pay.status === 'paid'}
-              value={
-                pay.status === 'paid'
-                  ? 'Fully paid'
-                  : pay.status === 'partial'
-                    ? `Partially paid · ₹${pay.received?.toLocaleString('en-IN')}`
-                    : pay.status === 'due'
-                      ? 'Payment due'
-                      : pay.status === 'quoted'
-                        ? 'Quoted · awaiting accounts'
-                        : '—'
-              }
-            />
+            <RecordRow label="Insurance Company" value={dash(insuranceCompany)} />
+            <RecordRow label="Surveyor Name" value={dash(surveyorName)} />
+            <RecordRow last label="Surveyor Mob No" value={dash(surveyorMobile)} mono />
           </CustomerCard>
 
         </>

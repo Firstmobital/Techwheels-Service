@@ -1,6 +1,7 @@
-import { useState } from 'react'
-import { Linking, ScrollView, Text, TouchableOpacity, View } from 'react-native'
+import { useCallback, useState } from 'react'
+import { Linking, Text, TouchableOpacity, View } from 'react-native'
 import { CustomerScreen } from '../../components/customer/CustomerScreen'
+import { useCustomerScreenRefresh } from '../../components/customer/customerScreenRefresh'
 import { CustomerCard, CustomerToast } from '../../components/customer/customerUi'
 import { useCustomerSession } from '../../context/CustomerSessionContext'
 
@@ -146,6 +147,9 @@ export default function CustomerHelpdeskScreen() {
     </CustomerCard>
   )
 
+  const onPullRefresh = useCallback(async () => {}, [])
+  useCustomerScreenRefresh(onPullRefresh)
+
   return (
     <CustomerScreen
       title="Helpdesk & Escalation"
@@ -153,7 +157,7 @@ export default function CustomerHelpdeskScreen() {
     >
       {toast ? <CustomerToast ok={toast.ok} message={toast.msg} /> : null}
 
-      <ScrollView showsVerticalScrollIndicator={false}>
+      <View>
         {/* Dealership Management Section */}
         <View className="mb-4">
           <View className="flex-row justify-between items-center mb-2 px-1">
@@ -176,7 +180,7 @@ export default function CustomerHelpdeskScreen() {
           {TATA_MOTORS_TIERS.map(renderTierCard)}
         </View>
 
-      </ScrollView>
+      </View>
     </CustomerScreen>
   )
 }

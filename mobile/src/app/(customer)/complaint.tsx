@@ -4,6 +4,7 @@ import { useRouter } from 'expo-router'
 import { CustomerScreen } from '../../components/customer/CustomerScreen'
 import { CustomerCard, CustomerToast, PrimaryButton, asText, dash, formatWhen } from '../../components/customer/customerUi'
 import { useCustomerSession } from '../../context/CustomerSessionContext'
+import { useCustomerScreenRefresh } from '../../components/customer/customerScreenRefresh'
 import {
   customerListEstimates,
   customerGetComplaints,
@@ -51,6 +52,8 @@ export default function CustomerComplaintScreen() {
     const km = selected?.km_reading
     setKmReading(km != null && Number(km) > 0 ? String(km) : '')
   }, [selected?.reg_number, selected?.km_reading, loadPastData])
+
+  useCustomerScreenRefresh(loadPastData)
 
   const submit = async () => {
     const validProblems = problems.map((item) => item.trim()).filter(Boolean)

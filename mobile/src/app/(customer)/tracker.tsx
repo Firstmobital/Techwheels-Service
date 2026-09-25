@@ -20,9 +20,10 @@ import {
 } from '../../lib/api/customerPortal'
 import { supabase } from '../../lib/supabase'
 import { Icon } from '../../components/ui/Icon'
-import { getBodyshopStageDetailRows } from '../../lib/customer/bodyshopStageDetails'
+import { getBodyshopStageDetailRows, getBodyshopStageTimelineDate } from '../../lib/customer/bodyshopStageDetails'
 import { CustomerTheme } from '../../lib/customer/customerTheme'
 import { CustomerPrimaryActionCard } from '../../components/customer/CustomerPrimaryActionCard'
+import { useCustomerScreenRefresh } from '../../components/customer/customerScreenRefresh'
 
 const BODYSHOP_JOURNEY_PHASES = [
   { phase: 1, title: 'Intake', from: 1, to: 4 },
@@ -207,6 +208,11 @@ export default function CustomerTrackerScreen() {
       void load(false)
     }, [load])
   )
+
+  const onPullRefresh = useCallback(async () => {
+    await load(false)
+  }, [load])
+  useCustomerScreenRefresh(onPullRefresh)
 
   const invoiced = Boolean(job?.invoice_done_at || selected?.invoice_done_at)
   const jc = asText(job?.jc_number) || asText(selected?.jc_number)
@@ -460,6 +466,7 @@ export default function CustomerTrackerScreen() {
                         const isCurrent = !isDone && step.stage === currentBodyshopStage
                         const isLast = stepIdx === steps.length - 1
                         const lineColor = isDone ? CustomerTheme.success : CustomerTheme.border
+                        const stageWhen = getBodyshopStageTimelineDate(step.stage, card)
 
                         return (
                           <TouchableOpacity
@@ -504,20 +511,36 @@ export default function CustomerTrackerScreen() {
                             </View>
 
                             <View style={{ flex: 1, paddingBottom: isLast ? 0 : 12, paddingLeft: 4 }}>
-                              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                              <View style={{ flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
                                 <Text
                                   style={{
                                     color: CustomerTheme.ink,
                                     fontSize: 14,
                                     fontWeight: isCurrent ? '900' : '700',
                                     flex: 1,
-                                    paddingRight: 6,
+                                    paddingRight: 4,
                                   }}
                                 >
                                   {step.shortName}
                                 </Text>
-                                {isCurrent ? (
-                                  <Text style={{ color: CustomerTheme.primary, fontSize: 16, fontWeight: '700' }}>›</Text>
+                                {isDone && stageWhen ? (
+                                  <Text
+                                    style={{
+                                      color: CustomerTheme.inkMuted,
+                                      fontSize: 10,
+                                      fontWeight: '700',
+                                      textAlign: 'right',
+                                      maxWidth: '46%',
+                                      lineHeight: 14,
+                                    }}
+                                    numberOfLines={2}
+                                  >
+                                    {stageWhen}
+                                  </Text>
+                                ) : isCurrent ? (
+                                  <Text style={{ color: CustomerTheme.primary, fontSize: 10, fontWeight: '800' }}>
+                                    In progress
+                                  </Text>
                                 ) : null}
                               </View>
                               <Text style={{ color: CustomerTheme.inkMuted, fontSize: 11.5, marginTop: 3, lineHeight: 16 }}>

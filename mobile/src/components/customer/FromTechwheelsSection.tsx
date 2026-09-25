@@ -2,6 +2,7 @@ import { useCallback, useState } from 'react'
 import { ActivityIndicator, Alert, Linking, Text, TouchableOpacity, View } from 'react-native'
 import { useFocusEffect } from 'expo-router'
 import { CustomerTheme } from '../../lib/customer/customerTheme'
+import { useCustomerScreenRefresh } from './customerScreenRefresh'
 import { useCustomerSession } from '../../context/CustomerSessionContext'
 import {
   customerGetGatePass,
@@ -128,6 +129,8 @@ export function FromTechwheelsSection() {
       void load()
     }, [load])
   )
+
+  useCustomerScreenRefresh(load)
 
   return (
     <View style={{ marginTop: 8 }}>

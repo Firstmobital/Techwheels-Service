@@ -11,6 +11,7 @@ import {
   customerListEstimates,
 } from '../../lib/api/customerPortal'
 import { computeSettlement, parseEstimate } from '../../lib/customer/math'
+import { useCustomerScreenRefresh } from '../../components/customer/customerScreenRefresh'
 
 export default function CustomerInvoicesScreen() {
   const router = useRouter()
@@ -50,6 +51,8 @@ export default function CustomerInvoicesScreen() {
       void load()
     }, [load])
   )
+
+  useCustomerScreenRefresh(load)
 
   const billed =
     (payment?.total_billed != null && Number(payment.total_billed) > 0 ? Number(payment.total_billed) : null) ??

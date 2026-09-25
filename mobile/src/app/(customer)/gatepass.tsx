@@ -15,6 +15,7 @@ import {
 } from '../../components/customer/customerUi'
 import { useCustomerSession } from '../../context/CustomerSessionContext'
 import { customerGetGatePass, customerGetSettlement } from '../../lib/api/customerPortal'
+import { useCustomerScreenRefresh } from '../../components/customer/customerScreenRefresh'
 
 // Helper to parse date strings in various formats (DD/MM/YYYY, ISO, toLocaleString)
 function parseKolkataDateOnly(dateString: string | null | undefined): string | null {
@@ -87,6 +88,8 @@ export default function CustomerGatePassScreen() {
       return () => clearInterval(timer)
     }, [load])
   )
+
+  useCustomerScreenRefresh(load)
 
   const hasIssuedRecord = Boolean(asText(pass?.gate_pass_no))
   const issuedAtDate = asText(pass?.issued_at) || asText(settlement?.updated_at) || asText(selected?.invoice_done_at)

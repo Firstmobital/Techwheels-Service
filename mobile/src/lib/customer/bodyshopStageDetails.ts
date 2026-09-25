@@ -254,3 +254,67 @@ export function getBodyshopStageDetailRows(
 
   return rows
 }
+
+function firstFormattedDate(card: Record<string, unknown> | null, keys: string[]): string {
+  if (!card) return ''
+  for (const key of keys) {
+    const formatted = fmtDate(card[key])
+    if (formatted) return formatted
+  }
+  return ''
+}
+
+/** Primary date/time shown on the journey timeline (matches modal detail fields). */
+export function getBodyshopStageTimelineDate(
+  stage: number,
+  card: Record<string, unknown> | null
+): string {
+  if (!card) return ''
+
+  switch (stage) {
+    case 1:
+      return firstFormattedDate(card, ['received_at'])
+    case 2:
+      return Number(card.intake_photo_count ?? 0) > 0 ? firstFormattedDate(card, ['updated_at']) : ''
+    case 3:
+      return firstFormattedDate(card, ['created_at'])
+    case 4:
+      return firstFormattedDate(card, ['customer_group_wa_sent_at'])
+    case 5: {
+      const hasDoc = INTAKE_DOC_KEYS.some((k) => card[k] === true)
+      return hasDoc ? firstFormattedDate(card, ['updated_at']) : ''
+    }
+    case 6:
+      return firstFormattedDate(card, ['estimation_at'])
+    case 7:
+      return card.customer_approved ? firstFormattedDate(card, ['updated_at']) : ''
+    case 8:
+      return asText(card.claim_intimation_no) ? firstFormattedDate(card, ['updated_at']) : ''
+    case 9:
+      return firstFormattedDate(card, ['survey_date', 'updated_at'])
+    case 10:
+      return asText(card.parts_entry_status) ? firstFormattedDate(card, ['updated_at']) : ''
+    case 11:
+      return asText(card.bodyshop_floor || card.denter_name || card.painter_name)
+        ? firstFormattedDate(card, ['updated_at'])
+        : ''
+    case 12:
+      return asText(card.additional_approval) ? firstFormattedDate(card, ['updated_at']) : ''
+    case 13:
+      return firstFormattedDate(card, ['qc_passed_at', 'qc_checked_at'])
+    case 14:
+      return firstFormattedDate(card, ['reinspection_at'])
+    case 15:
+      return firstFormattedDate(card, ['invoice_date']) || fmtDate(settlementField(card, 'invoice_date'))
+    case 16:
+      return asText(card.do_status) ? firstFormattedDate(card, ['updated_at']) : ''
+    case 17:
+      return firstFormattedDate(card, ['delivery_marked_at', 'delivered_at'])
+    case 18:
+      return asText(card.payment_status || card.customer_payment_status)
+        ? firstFormattedDate(card, ['updated_at'])
+        : ''
+    default:
+      return ''
+  }
+}

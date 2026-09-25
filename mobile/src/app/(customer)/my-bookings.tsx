@@ -1,7 +1,8 @@
 import { useCallback, useState } from 'react'
-import { ActivityIndicator, RefreshControl, ScrollView, Text, TouchableOpacity, View } from 'react-native'
+import { ActivityIndicator, Text, TouchableOpacity, View } from 'react-native'
 import { useFocusEffect, useRouter } from 'expo-router'
 import { CustomerScreen } from '../../components/customer/CustomerScreen'
+import { useCustomerScreenRefresh } from '../../components/customer/customerScreenRefresh'
 import { CustomerCard, dash } from '../../components/customer/customerUi'
 import { useCustomerSession } from '../../context/CustomerSessionContext'
 import { customerListMyBookings, type CustomerBookingItem } from '../../lib/api/customerPortal'
@@ -23,7 +24,6 @@ export default function CustomerMyBookingsScreen() {
   const selected = vehicles.find((v) => v.reg_number === selectedReg) || vehicles[0]
   const [bookings, setBookings] = useState<CustomerBookingItem[]>([])
   const [loading, setLoading] = useState(true)
-  const [refreshing, setRefreshing] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   const load = useCallback(async () => {
@@ -36,7 +36,6 @@ export default function CustomerMyBookingsScreen() {
       setError(err instanceof Error ? err.message : 'Unable to load bookings.')
     } finally {
       setLoading(false)
-      setRefreshing(false)
     }
   }, [token, selected?.reg_number, phone])
 
@@ -47,10 +46,7 @@ export default function CustomerMyBookingsScreen() {
     }, [load])
   )
 
-  const onRefresh = () => {
-    setRefreshing(true)
-    void load()
-  }
+  useCustomerScreenRefresh(load)
 
   const activeBookings = bookings.filter((b) => b.status !== 'Completed')
   const completedBookings = bookings.filter((b) => b.status === 'Completed')
@@ -75,7 +71,7 @@ export default function CustomerMyBookingsScreen() {
         </TouchableOpacity>
       </View>
 
-      {loading && !refreshing ? (
+      {loading ? (
         <ActivityIndicator color="#2563eb" className="py-12" />
       ) : error ? (
         <CustomerCard>
@@ -104,9 +100,7 @@ export default function CustomerMyBookingsScreen() {
           </View>
         </CustomerCard>
       ) : (
-        <ScrollView
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={['#2563eb']} />}
-        >
+        <View>
           {/* Active & Recent Bookings */}
           {activeBookings.length > 0 && (
             <View className="mb-5">
@@ -290,7 +284,7 @@ export default function CustomerMyBookingsScreen() {
               })}
             </View>
           )}
-        </ScrollView>
+        </View>
       )}
     </CustomerScreen>
   )

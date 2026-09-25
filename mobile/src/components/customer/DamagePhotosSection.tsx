@@ -8,6 +8,7 @@ import { DAMAGE_PHOTO_SLOTS, matchPhotoToSlot } from '../../lib/customer/bodysho
 import { uploadDamagePhoto } from '../../lib/customer/documentUploadFlow'
 import { customerListBodyshopAssets, type CustomerBodyshopAsset } from '../../lib/api/customerBodyshopUploads'
 import { Icon } from '../ui/Icon'
+import { useCustomerScreenRefresh } from './customerScreenRefresh'
 
 type SlotView = {
   slotId: string
@@ -54,6 +55,8 @@ export function DamagePhotosSection({
       void refresh()
     }, [refresh])
   )
+
+  useCustomerScreenRefresh(refresh)
 
   const pickAndUpload = async (slotId: string, filePrefix: string, source: 'camera' | 'gallery') => {
     if (!sessionToken || !regNumber) {

@@ -28,6 +28,7 @@ import {
   parseBodyshopEstimateDocument,
 } from '../../lib/api/customerPortal'
 import { estimateStatusKind, parseEstimate, type EstimateView } from '../../lib/customer/math'
+import { useCustomerScreenRefresh } from '../../components/customer/customerScreenRefresh'
 
 export default function CustomerEstimateScreen() {
   const { token, selectedReg, vehicles } = useCustomerSession()
@@ -85,6 +86,11 @@ export default function CustomerEstimateScreen() {
       return () => clearInterval(timer)
     }, [load])
   )
+
+  const onPullRefresh = useCallback(async () => {
+    await load(true)
+  }, [load])
+  useCustomerScreenRefresh(onPullRefresh)
 
   const estimate = rows[selectedIdx]
   const kind = estimate ? estimateStatusKind(estimate.status) : 'pending'

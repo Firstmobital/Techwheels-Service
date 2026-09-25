@@ -1,9 +1,10 @@
-import { useState } from 'react'
+import { useCallback, useState } from 'react'
 import { Text, TextInput, TouchableOpacity, View } from 'react-native'
 import { CustomerScreen } from '../../components/customer/CustomerScreen'
 import { CustomerCard, CustomerToast, PrimaryButton } from '../../components/customer/customerUi'
 import { useCustomerSession } from '../../context/CustomerSessionContext'
 import { customerSubmitFeedback } from '../../lib/api/customerPortal'
+import { useCustomerScreenRefresh } from '../../components/customer/customerScreenRefresh'
 
 const FEEDBACK_TAGS = [
   'Prompt & courteous service',
@@ -30,6 +31,9 @@ export default function CustomerFeedbackScreen() {
         : rating === 3
           ? '⭐⭐⭐ Average'
           : 'Needs Improvement'
+
+  const onPullRefresh = useCallback(async () => {}, [])
+  useCustomerScreenRefresh(onPullRefresh)
 
   const submit = async () => {
     if (!token || !selected?.reg_number) {

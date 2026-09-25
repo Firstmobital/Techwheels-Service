@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   ActivityIndicator,
   Alert,
@@ -13,6 +13,7 @@ import {
 } from 'react-native'
 import { useRouter } from 'expo-router'
 import { CustomerScreen } from '../../components/customer/CustomerScreen'
+import { useCustomerScreenRefresh } from '../../components/customer/customerScreenRefresh'
 import { CustomerCard, CustomerToast, PrimaryButton, dash, formatKm } from '../../components/customer/customerUi'
 import { useCustomerSession } from '../../context/CustomerSessionContext'
 import {
@@ -124,17 +125,19 @@ export default function CustomerBookingScreen() {
   // Complaints & remarks
   const [remarks, setRemarks] = useState('')
 
-  // Load dynamic active branches on mount
-  useEffect(() => {
-    async function load() {
-      const bList = await customerFetchBranches()
-      setBranches(bList)
-      if (bList.length > 0) {
-        setSelectedBranch(selected?.branch && bList.includes(selected.branch) ? selected.branch : bList[0])
-      }
+  const reloadBranches = useCallback(async () => {
+    const bList = await customerFetchBranches()
+    setBranches(bList)
+    if (bList.length > 0) {
+      setSelectedBranch(selected?.branch && bList.includes(selected.branch) ? selected.branch : bList[0])
     }
-    void load()
   }, [selected?.branch])
+
+  useEffect(() => {
+    void reloadBranches()
+  }, [reloadBranches])
+
+  useCustomerScreenRefresh(reloadBranches)
 
   const compiledAddress = useMemo(() => {
     if (!pickupRequired) return ''

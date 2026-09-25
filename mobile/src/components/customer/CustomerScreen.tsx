@@ -1,10 +1,11 @@
-import { ReactNode, useCallback, useEffect, useMemo, useState } from 'react'
+import { ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   Alert,
   BackHandler,
   Image,
   Modal,
   Pressable,
+  RefreshControl,
   ScrollView,
   Text,
   TouchableOpacity,
@@ -21,6 +22,10 @@ import { ClaimFormWidget } from '../ClaimFormWidget'
 import { matchInsuranceProviderId } from '../../config/insuranceProviders'
 import { customerGetRepairCard } from '../../lib/api/customerPortal'
 import { downloadTpAffidavitForm } from '../../lib/customer/downloadInsuranceClaimForm'
+import {
+  CustomerScreenRefreshContext,
+  type CustomerScreenRefreshFn,
+} from './customerScreenRefresh'
 
 export function CustomerScreen({
   title,
@@ -33,6 +38,26 @@ export function CustomerScreen({
   showBackButton?: boolean
   children: ReactNode
 }) {
+  const refreshHandlersRef = useRef(new Set<CustomerScreenRefreshFn>())
+  const [pullRefreshing, setPullRefreshing] = useState(false)
+
+  const addRefreshHandler = useCallback((fn: CustomerScreenRefreshFn) => {
+    refreshHandlersRef.current.add(fn)
+    return () => {
+      refreshHandlersRef.current.delete(fn)
+    }
+  }, [])
+
+  const handlePullRefresh = useCallback(async () => {
+    const handlers = [...refreshHandlersRef.current]
+    if (handlers.length === 0) return
+    setPullRefreshing(true)
+    try {
+      await Promise.all(handlers.map((fn) => Promise.resolve(fn())))
+    } finally {
+      setPullRefreshing(false)
+    }
+  }, [])
   const router = useRouter()
   const pathname = usePathname()
   const { vehicles, selectedReg, setSelectedReg, signOut, token } = useCustomerSession()
@@ -334,10 +359,23 @@ export function CustomerScreen({
       </View>
 
       {/* Main Content Body */}
-      <ScrollView className="flex-1" contentContainerStyle={{ padding: 16, paddingBottom: 36 }}>
-        <VehiclePicker vehicles={vehicles} selectedReg={selectedReg} onSelect={setSelectedReg} />
-        {children}
-      </ScrollView>
+      <CustomerScreenRefreshContext.Provider value={{ addHandler: addRefreshHandler }}>
+        <ScrollView
+          className="flex-1"
+          contentContainerStyle={{ padding: 16, paddingBottom: 36 }}
+          refreshControl={
+            <RefreshControl
+              refreshing={pullRefreshing}
+              onRefresh={() => void handlePullRefresh()}
+              tintColor={CustomerTheme.primary}
+              colors={[CustomerTheme.primary]}
+            />
+          }
+        >
+          <VehiclePicker vehicles={vehicles} selectedReg={selectedReg} onSelect={setSelectedReg} />
+          {children}
+        </ScrollView>
+      </CustomerScreenRefreshContext.Provider>
 
       {/* ── TOP-SLIDING MENU DRAWER (IN-TREE OVERLAY TO PREVENT FREEZE) ── */}
       {showMenu && (

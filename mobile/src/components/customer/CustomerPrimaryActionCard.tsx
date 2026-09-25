@@ -12,6 +12,7 @@ import {
 } from '../../lib/customer/customerPrimaryAction'
 import { CustomerTheme } from '../../lib/customer/customerTheme'
 import { Icon } from '../ui/Icon'
+import { useCustomerScreenRefresh } from './customerScreenRefresh'
 
 /** PRD §8 — single prioritized customer action (gate pass handled separately). */
 export function CustomerPrimaryActionCard({ includeDocumentAction = true }: { includeDocumentAction?: boolean }) {
@@ -52,6 +53,8 @@ export function CustomerPrimaryActionCard({ includeDocumentAction = true }: { in
       void refresh()
     }, [refresh])
   )
+
+  useCustomerScreenRefresh(refresh)
 
   if (!action) return null
 

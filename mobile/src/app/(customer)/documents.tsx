@@ -19,6 +19,7 @@ import { Icon } from '../../components/ui/Icon'
 import { FromTechwheelsSection } from '../../components/customer/FromTechwheelsSection'
 import { DamagePhotosSection } from '../../components/customer/DamagePhotosSection'
 import { CustomerTheme } from '../../lib/customer/customerTheme'
+import { useCustomerScreenRefresh } from '../../components/customer/customerScreenRefresh'
 import { customerGetRepairCard } from '../../lib/api/customerPortal'
 import {
   customerListBodyshopAssets,
@@ -103,6 +104,8 @@ export default function CustomerDocumentsScreen() {
       void load()
     }, [load])
   )
+
+  useCustomerScreenRefresh(load)
 
   const uploadSlot = async (
     slot: CustomerClaimDocumentDef,

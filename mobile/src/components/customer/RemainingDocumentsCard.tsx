@@ -5,6 +5,7 @@ import { useCustomerSession } from '../../context/CustomerSessionContext'
 import { CustomerTheme } from '../../lib/customer/customerTheme'
 import { loadClaimDocumentProgress, type ClaimDocumentProgress } from '../../lib/customer/claimDocumentProgress'
 import { Icon } from '../ui/Icon'
+import { useCustomerScreenRefresh } from './customerScreenRefresh'
 
 export function RemainingDocumentsCard({ regNumber }: { regNumber?: string | null }) {
   const router = useRouter()
@@ -21,6 +22,8 @@ export function RemainingDocumentsCard({ regNumber }: { regNumber?: string | nul
       void refresh()
     }, [refresh])
   )
+
+  useCustomerScreenRefresh(refresh)
 
   if (!progress || progress.claimMode === 'cash' || progress.remainingCount === 0) {
     return null
