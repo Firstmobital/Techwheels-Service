@@ -24,6 +24,10 @@ import { getBodyshopStageDetailRows, getBodyshopStageTimelineDate } from '../../
 import { CustomerTheme } from '../../lib/customer/customerTheme'
 import { CustomerPrimaryActionCard } from '../../components/customer/CustomerPrimaryActionCard'
 import { useCustomerScreenRefresh } from '../../components/customer/customerScreenRefresh'
+import {
+  resolveBodyshopEffectiveStage,
+  resolveBodyshopStageLabel,
+} from '../../lib/customer/bodyshopEffectiveStage'
 
 const BODYSHOP_JOURNEY_PHASES = [
   { phase: 1, title: 'Intake', from: 1, to: 4 },
@@ -237,9 +241,11 @@ export default function CustomerTrackerScreen() {
     String(selected?.service_type || '').toLowerCase().includes('accident') ||
     String(card?.service_type || '').toLowerCase().includes('accident')
 
-  // Calculate current stage for bodyshop (defaults to 9 - Survey if card stage is 0 but active, or 1 if new)
-  const currentBodyshopStage = Number(card?.current_stage || (invoiced ? 18 : jc ? 9 : 1))
-  const currentStageName = asText(card?.current_stage_name) || STAGE_LABELS[currentBodyshopStage] || `Stage ${currentBodyshopStage}`
+  const currentBodyshopStage = resolveBodyshopEffectiveStage(card, { invoiced })
+  const currentStageName =
+    resolveBodyshopStageLabel(card, currentBodyshopStage) ||
+    STAGE_LABELS[currentBodyshopStage] ||
+    `Stage ${currentBodyshopStage}`
 
   // 18 Bodyshop Stages State
   const completedBodyshopCount = BODYSHOP_18_STAGES.filter((s) => {
