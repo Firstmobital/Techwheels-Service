@@ -1,6 +1,6 @@
 # Mobile Version Plans Index
 
-Last Updated: 2026-09-17
+Last Updated: 2026-09-25
 Scope: Mobile app implementation plans only
 Authority: This index is the routing source for mobileversion plans
 
@@ -14,6 +14,7 @@ All mobile planning documents must be inside:
 Mobile categories currently in use:
 - `auth`
 - `autodoc`
+- `customer`
 - `core-shell`
 - `help-tickets`
 - `import`
@@ -48,6 +49,7 @@ Use this file as daily command center:
 | MOBILE-BP-RD | redesign | In Progress | Mobile Team | `docs/Implementation_plans/mobileversion/categories/redesign/active/redesign_bodypaint_module.md` |
 | MOBILE-011 | auth | In Progress | Mobile Team + Platform | `docs/Implementation_plans/mobileversion/categories/auth/active/MOBILE-011_CUSTOMER_STAFF_SINGLE_APP_PLAN.md` |
 | MOBILE-012 | release | In Progress | Mobile Team + Platform | `docs/Implementation_plans/mobileversion/categories/release/active/MOBILE-012_PLAY_APP_STORE_PUBLISH_PLAN.md` |
+| MOBILE-013 | customer | Pending | Mobile Team + Platform | `docs/Implementation_plans/mobileversion/categories/customer/active/MOBILE-013_CUSTOMER_DOCUMENT_DRIVE_UPLOAD_PLAN.md` |
 
 ---
 
