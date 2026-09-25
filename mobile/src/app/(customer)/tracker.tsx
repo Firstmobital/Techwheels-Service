@@ -24,13 +24,6 @@ import { getBodyshopStageDetailRows, getBodyshopStageTimelineDate } from '../../
 import { CustomerTheme } from '../../lib/customer/customerTheme'
 import { CustomerPrimaryActionCard } from '../../components/customer/CustomerPrimaryActionCard'
 import { useCustomerScreenRefresh } from '../../components/customer/customerScreenRefresh'
-import {
-  countBodyshopCompletedStages,
-  getBodyshopStageVisualState,
-  parseBodyshopWorklistStages,
-  resolveBodyshopDisplayStage,
-  resolveBodyshopStageLabel,
-} from '../../lib/customer/bodyshopEffectiveStage'
 
 const BODYSHOP_JOURNEY_PHASES = [
   { phase: 1, title: 'Intake', from: 1, to: 4 },
@@ -244,46 +237,29 @@ export default function CustomerTrackerScreen() {
     String(selected?.service_type || '').toLowerCase().includes('accident') ||
     String(card?.service_type || '').toLowerCase().includes('accident')
 
-  const allBodyshopDone = Boolean(invoiced || card?.overall_status === 'delivered')
-  const bodyshopStageOpts = { invoiced, allDelivered: card?.overall_status === 'delivered' }
-  const currentBodyshopStage = resolveBodyshopDisplayStage(card, { invoiced })
-  const currentStageName =
-    resolveBodyshopStageLabel(card, currentBodyshopStage) ||
-    STAGE_LABELS[currentBodyshopStage] ||
-    `Stage ${currentBodyshopStage}`
+  // Calculate current stage for bodyshop (defaults to 9 - Survey if card stage is 0 but active, or 1 if new)
+  const currentBodyshopStage = Number(card?.current_stage || (invoiced ? 18 : jc ? 9 : 1))
+  const currentStageName = asText(card?.current_stage_name) || STAGE_LABELS[currentBodyshopStage] || `Stage ${currentBodyshopStage}`
 
-  const completedBodyshopCount = countBodyshopCompletedStages(card, bodyshopStageOpts)
+  // 18 Bodyshop Stages State
+  const completedBodyshopCount = BODYSHOP_18_STAGES.filter((s) => {
+    if (invoiced || card?.overall_status === 'delivered') return true
+    return s.stage < currentBodyshopStage
+  }).length
+
   const bodyshopProgressPercent = Math.round((completedBodyshopCount / 18) * 100)
 
   const bodyshopPhaseStepper = useMemo(() => {
+    const allDone = Boolean(invoiced || card?.overall_status === 'delivered')
     const shortLabels = ['Intake', 'Paperwork', 'Survey', 'Workshop', 'Handover']
-    const worklist = parseBodyshopWorklistStages(card)
     return BODYSHOP_JOURNEY_PHASES.map((phase, idx) => {
-      let status: JourneyPhaseStatus
-      if (allBodyshopDone) {
-        status = 'complete'
-      } else if (worklist.length > 0) {
-        const inPhase = worklist.filter((row) => row.stage_no >= phase.from && row.stage_no <= phase.to)
-        if (inPhase.length > 0 && inPhase.every((row) => row.is_done)) {
-          status = 'complete'
-        } else if (inPhase.some((row) => row.is_pending)) {
-          status = 'active'
-        } else if (currentBodyshopStage >= phase.from && currentBodyshopStage <= phase.to) {
-          status = 'active'
-        } else if (inPhase.some((row) => row.is_done)) {
-          status = 'active'
-        } else {
-          status = 'upcoming'
-        }
-      } else {
-        status = phaseStatus(phase.from, phase.to, currentBodyshopStage, allBodyshopDone)
-      }
+      const status = phaseStatus(phase.from, phase.to, currentBodyshopStage, allDone)
       return {
         label: shortLabels[idx] || phase.title,
         status: status as PhaseStepStatus,
       }
     })
-  }, [allBodyshopDone, card, currentBodyshopStage, invoiced])
+  }, [card?.overall_status, currentBodyshopStage, invoiced])
 
   // Standard 6 Service Stages (for non-accident maintenance vehicles)
   const standardStages = [
@@ -454,8 +430,13 @@ export default function CustomerTrackerScreen() {
                   Tap any step for workshop details
                 </Text>
 
-                {BODYSHOP_JOURNEY_PHASES.map((phaseBlock, phaseIdx) => {
-                  const status = bodyshopPhaseStepper[phaseIdx]?.status ?? 'upcoming'
+                {BODYSHOP_JOURNEY_PHASES.map((phaseBlock) => {
+                  const status = phaseStatus(
+                    phaseBlock.from,
+                    phaseBlock.to,
+                    currentBodyshopStage,
+                    Boolean(invoiced || card?.overall_status === 'delivered')
+                  )
                   const steps = BODYSHOP_18_STAGES.filter(
                     (s) => s.stage >= phaseBlock.from && s.stage <= phaseBlock.to
                   )
@@ -476,15 +457,13 @@ export default function CustomerTrackerScreen() {
                         <Text style={{ color: CustomerTheme.ink, fontSize: 12, fontWeight: '900', flex: 1, paddingRight: 8 }}>
                           PHASE {phaseBlock.phase} OF {BODYSHOP_JOURNEY_PHASES.length}: {phaseBlock.title}
                         </Text>
-                        <PhaseStatusBadge status={status as JourneyPhaseStatus} />
+                        <PhaseStatusBadge status={status} />
                       </View>
 
                       {steps.map((step, stepIdx) => {
-                        const { isDone, isCurrent } = getBodyshopStageVisualState(
-                          card,
-                          step.stage,
-                          bodyshopStageOpts
-                        )
+                        const isDone =
+                          invoiced || card?.overall_status === 'delivered' || step.stage < currentBodyshopStage
+                        const isCurrent = !isDone && step.stage === currentBodyshopStage
                         const isLast = stepIdx === steps.length - 1
                         const lineColor = isDone ? CustomerTheme.success : CustomerTheme.border
                         const stageWhen = getBodyshopStageTimelineDate(step.stage, card)
@@ -726,32 +705,31 @@ export default function CustomerTrackerScreen() {
                       </View>
                       <Text className="text-[16px] font-black text-slate-900">{selectedBodyshopStage.name}</Text>
                     </View>
-                    {(() => {
-                      const detailState = getBodyshopStageVisualState(
-                        card,
-                        selectedBodyshopStage.stage,
-                        bodyshopStageOpts
-                      )
-                      return (
                     <View
                       className={`px-2.5 py-1 rounded-full ${
-                        detailState.isDone ? 'bg-green-100' : detailState.isCurrent ? 'bg-sky-100' : 'bg-slate-100'
+                        selectedBodyshopStage.stage < currentBodyshopStage || invoiced
+                          ? 'bg-green-100'
+                          : selectedBodyshopStage.stage === currentBodyshopStage
+                          ? 'bg-sky-100'
+                          : 'bg-slate-100'
                       }`}
                     >
                       <Text
                         className={`text-[10.5px] font-black uppercase ${
-                          detailState.isDone ? 'text-green-800' : detailState.isCurrent ? 'text-sky-900' : 'text-slate-600'
+                          selectedBodyshopStage.stage < currentBodyshopStage || invoiced
+                            ? 'text-green-800'
+                            : selectedBodyshopStage.stage === currentBodyshopStage
+                            ? 'text-sky-900'
+                            : 'text-slate-600'
                         }`}
                       >
-                        {detailState.isDone
+                        {selectedBodyshopStage.stage < currentBodyshopStage || invoiced
                           ? '✓ Done'
-                          : detailState.isCurrent
+                          : selectedBodyshopStage.stage === currentBodyshopStage
                           ? '⏳ In Progress'
                           : 'Upcoming'}
                       </Text>
                     </View>
-                      )
-                    })()}
                   </View>
 
                   <ScrollView showsVerticalScrollIndicator={false} className="max-h-[420px]">
