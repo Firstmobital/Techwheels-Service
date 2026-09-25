@@ -33,11 +33,8 @@ function formatWhen(value: string): string {
 export default function CustomerAdvisorChatScreen() {
   const router = useRouter()
   const insets = useSafeAreaInsets()
-  const params = useLocalSearchParams<{ contact?: string; reg?: string }>()
-  const { token, vehicles, selectedReg, setSelectedReg } = useCustomerSession()
-  useEffect(() => {
-    if (typeof params.reg === 'string' && params.reg) setSelectedReg(params.reg)
-  }, [params.reg, setSelectedReg])
+  const params = useLocalSearchParams<{ contact?: string }>()
+  const { token, vehicles, selectedReg } = useCustomerSession()
   const selected = vehicles.find((vehicle) => vehicle.reg_number === selectedReg) || vehicles[0]
   const regNumber = selected?.reg_number || ''
   const contactKey = normalizeHelpdeskChatContactKey(

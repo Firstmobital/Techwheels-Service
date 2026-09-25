@@ -131,10 +131,6 @@ export function CustomerSessionProvider({ children }: { children: React.ReactNod
 
   const signOut = useCallback(async () => {
     try {
-      if (token) {
-        const { deactivateCustomerPush } = await import('../lib/notifications/pushRegistration')
-        await deactivateCustomerPush(token)
-      }
       await customerEndSession(token)
     } catch {
       // ignore

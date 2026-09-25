@@ -27,7 +27,6 @@ import { OfflineProvider } from '../context/OfflineContext'
 import MandatoryUpdateModal from '../components/MandatoryUpdateModal'
 import { SessionBootstrapGate } from '../components/auth/SessionBootstrapGate'
 import { useMandatoryOTAUpdate } from '../hooks/useMandatoryOTAUpdate'
-import { useChatPush } from '../lib/notifications/useChatPush'
 
 void SplashScreen.preventAutoHideAsync().catch(() => {})
 
@@ -40,7 +39,6 @@ function AppShell() {
     updateErrorMessage,
     applyMandatoryUpdate,
   } = useMandatoryOTAUpdate()
-  useChatPush()
 
   return (
     <>

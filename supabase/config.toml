@@ -42,6 +42,3 @@ verify_jwt = false
 
 [functions.universal-drive-upload]
 verify_jwt = true
-
-[functions.send-chat-push]
-verify_jwt = false

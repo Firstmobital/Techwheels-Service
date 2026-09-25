@@ -1,6 +1,5 @@
 import { useCallback, useState } from 'react'
 import { Linking, Text, TouchableOpacity, View } from 'react-native'
-import { useRouter } from 'expo-router'
 import { CustomerScreen } from '../../components/customer/CustomerScreen'
 import { useCustomerScreenRefresh } from '../../components/customer/customerScreenRefresh'
 import { CustomerCard, CustomerToast } from '../../components/customer/customerUi'
@@ -80,7 +79,6 @@ const TATA_MOTORS_TIERS: ContactTier[] = [
 ]
 
 export default function CustomerHelpdeskScreen() {
-  const router = useRouter()
   const { selectedReg, vehicles } = useCustomerSession()
   const selected = vehicles.find((v) => v.reg_number === selectedReg) || vehicles[0]
   const [toast, setToast] = useState<{ ok: boolean; msg: string } | null>(null)
@@ -91,10 +89,6 @@ export default function CustomerHelpdeskScreen() {
     } catch {
       setToast({ ok: false, msg: `Unable to open phone dialer for ${phone}` })
     }
-  }
-
-  const handleChat = () => {
-    router.push('/(customer)/chat')
   }
 
   const handleEmail = async (email: string, title: string) => {
@@ -132,15 +126,6 @@ export default function CustomerHelpdeskScreen() {
 
       {/* 1-Tap Action Buttons */}
       <View className="flex-row gap-2 pt-1 border-t border-slate-100">
-        <TouchableOpacity
-          onPress={handleChat}
-          activeOpacity={0.8}
-          className="flex-1 py-2.5 bg-emerald-600 rounded-xl items-center flex-row justify-center gap-1 shadow-sm"
-        >
-          <Text className="text-xs">💬</Text>
-          <Text className="text-white font-bold text-xs">Chat</Text>
-        </TouchableOpacity>
-
         <TouchableOpacity
           onPress={() => handleCall(tier.phone)}
           activeOpacity={0.8}
