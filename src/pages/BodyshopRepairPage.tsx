@@ -5993,18 +5993,6 @@ export default function BodyshopRepairPage() {
                         <option value="approved">Approved</option>
                       </select>
                     </label>
-                    {[
-                      { k: 'approved_parts', label: 'Approved Parts' },
-                    ].map(({ k, label }) => (
-                      <label key={k} className="brx-survey-field">
-                        <span className="brx-survey-label">{label}</span>
-                        <input
-                          className="inp"
-                          value={(selected as any)[k] ?? ''}
-                          onChange={(e) => patch(k as keyof RepairCard, e.target.value)}
-                        />
-                      </label>
-                    ))}
 
                     {isSurveyHold && (
                       <label className="brx-survey-field brx-grid-full">
