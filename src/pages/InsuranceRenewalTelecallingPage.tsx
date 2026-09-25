@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { supabase, supabaseAnonKey, supabaseUrl } from '../lib/supabase'
 import { uploadInsuranceRenewalQuote } from '../lib/api/insuranceRenewalTelecalling'
+import { getWhatsAppLink } from '../lib/whatsappLink'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 interface Customer {
@@ -327,11 +328,6 @@ function filterQueueByExpiryRange(items: Assignment[], from: string, to: string)
 function formatCurrency(v: number | null): string {
   if (v === null || v === undefined) return '—'
   return `₹${v.toLocaleString('en-IN')}`
-}
-
-function getWhatsAppLink(phone: string, message: string): string {
-  const cleaned = phone.replace(/\D/g, '').slice(-10)
-  return `https://wa.me/91${cleaned}?text=${encodeURIComponent(message)}`
 }
 
 function buildRenewalReminderMsg(c: Customer): string {

@@ -1,5 +1,6 @@
 import { Fragment, useCallback, useEffect, useState, useMemo } from 'react'
 import { supabase } from '../lib/supabase'
+import { getWhatsAppLink, whatsappLocal10 } from '../lib/whatsappLink'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -56,6 +57,19 @@ interface StatusStats {
 
 const PAGE_SIZE = 50
 
+const PSF_WA_MESSAGE = `नमस्ते! 🚗
+टाटा टेकव्हील्स, सीतापुरा की ओर से नमस्कार।
+
+हाल ही में आपकी गाड़ी हमारे वर्कशॉप में सर्विस के लिए आई थी। हम जानना चाहेंगे कि सर्विस के बाद आपकी गाड़ी कैसी चल रही है।
+
+🔹 सब ठीक है: जवाब में A लिखें।
+🔹 कोई समस्या है: जवाब में B लिखें या हमें इसी नंबर पर कॉल करें।
+
+आपका फीडबैक हमारे लिए बहुत महत्वपूर्ण है।
+
+धन्यवाद! 🙏
+टीम टाटा टेकव्हील्स, सीतापुरा`
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function fmtDate(s: string | null): string {
@@ -110,6 +124,37 @@ function Stars({ rating }: { rating: number | null }) {
     <span className={starColor(rating)}>
       {'★'.repeat(rating)}{'☆'.repeat(5 - rating)}
     </span>
+  )
+}
+
+function PsfWhatsAppButton({ mobile }: { mobile: string }) {
+  const chip = 'rounded-lg border border-green-200 bg-green-50 px-2.5 py-1 text-xs font-medium text-green-700 whitespace-nowrap'
+  const local10 = whatsappLocal10(mobile || '')
+  if (!local10) {
+    return (
+      <span onClick={e => e.stopPropagation()}>
+        <button
+          type="button"
+          disabled
+          title="Mobile number missing or invalid"
+          className={`${chip} cursor-not-allowed opacity-50`}
+        >
+          💬 WA
+        </button>
+      </span>
+    )
+  }
+  return (
+    <a
+      href={getWhatsAppLink(mobile, PSF_WA_MESSAGE)}
+      target="_blank"
+      rel="noreferrer"
+      title="Open WhatsApp"
+      onClick={e => e.stopPropagation()}
+      className={`${chip} hover:bg-green-100`}
+    >
+      💬 WA
+    </a>
   )
 }
 
@@ -779,7 +824,12 @@ export default function PostServiceFeedbackCREPage() {
                         </span>
                       )}
                     </td>
-                    <td className="px-4 py-3 text-gray-400 text-xs">{expandedId === r.id ? '▲' : '▼'}</td>
+                    <td className="px-4 py-3 text-gray-400 text-xs">
+                      <div className="flex items-center justify-end gap-2">
+                        <PsfWhatsAppButton mobile={r.mobile_number} />
+                        <span>{expandedId === r.id ? '▲' : '▼'}</span>
+                      </div>
+                    </td>
                   </tr>
                   {expandedId === r.id && (
                     <tr>
