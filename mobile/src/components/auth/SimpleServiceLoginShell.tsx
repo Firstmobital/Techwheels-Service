@@ -55,18 +55,29 @@ export function SimpleServiceLoginShell({
             {children}
           </View>
 
-          <Text
-            style={{
-              textAlign: 'center',
-              color: CustomerTheme.inkMuted,
-              fontSize: 13,
-              fontWeight: '700',
-              marginTop: 'auto',
-              paddingTop: 28,
-            }}
-          >
-            Techwheels Service
-          </Text>
+          <View style={{ marginTop: 'auto', paddingTop: 28, alignItems: 'center' }}>
+            <Text
+              style={{
+                textAlign: 'center',
+                color: CustomerTheme.inkMuted,
+                fontSize: 13,
+                fontWeight: '700',
+              }}
+            >
+              Techwheels Service
+            </Text>
+            <Text
+              style={{
+                textAlign: 'center',
+                color: CustomerTheme.inkSoft,
+                fontSize: 11,
+                fontWeight: '600',
+                marginTop: 6,
+              }}
+            >
+              © 2026 Techwheels. All rights reserved.
+            </Text>
+          </View>
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>

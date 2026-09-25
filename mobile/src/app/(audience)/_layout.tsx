@@ -2,6 +2,7 @@ import { Redirect, Stack } from 'expo-router'
 import { ActivityIndicator, View } from 'react-native'
 import { useAuth } from '../../context/AuthContext'
 import { useCustomerSession } from '../../context/CustomerSessionContext'
+import { CustomerTheme } from '../../lib/customer/customerTheme'
 
 export default function AudienceLayout() {
   const { loading: staffLoading, session } = useAuth()
@@ -9,8 +10,8 @@ export default function AudienceLayout() {
 
   if (staffLoading || customerLoading) {
     return (
-      <View className="flex-1 items-center justify-center bg-white">
-        <ActivityIndicator size="large" color="#2563eb" />
+      <View className="flex-1 items-center justify-center" style={{ backgroundColor: CustomerTheme.bg }}>
+        <ActivityIndicator size="large" color={CustomerTheme.primary} />
       </View>
     )
   }

@@ -7,13 +7,15 @@ import { CustomerTheme } from '../../lib/customer/customerTheme'
 
 import { Icon, IconName } from '../../components/ui/Icon'
 
-/** Bottom bar: Home → Documents → Journey (Payments & Help stay in menu / home tiles). */
-const TAB_ORDER = ['index', 'documents', 'tracker'] as const
+/** Bottom bar: Home · Documents · Journey · Payments · Help */
+const TAB_ORDER = ['index', 'documents', 'tracker', 'invoices', 'helpdesk'] as const
 
 const TAB_CONFIG: Record<string, { icon: IconName; label: string }> = {
   index: { icon: 'home', label: 'Home' },
-  documents: { icon: 'file-text', label: 'Documents' },
   tracker: { icon: 'map', label: 'Journey' },
+  documents: { icon: 'file-text', label: 'Documents' },
+  invoices: { icon: 'file', label: 'Payments' },
+  helpdesk: { icon: 'info', label: 'Help' },
 }
 
 function CustomerTabBar({ state, descriptors, navigation }: any) {
@@ -128,8 +130,8 @@ export default function CustomerTabsLayout() {
       <Tabs.Screen name="index" options={{ title: 'Home', tabBarLabel: 'Home' }} />
       <Tabs.Screen name="documents" options={{ title: 'Documents', tabBarLabel: 'Documents' }} />
       <Tabs.Screen name="tracker" options={{ title: 'Journey', tabBarLabel: 'Journey' }} />
-      <Tabs.Screen name="invoices" options={{ href: null, title: 'Payments' }} />
-      <Tabs.Screen name="helpdesk" options={{ href: null, title: 'Help' }} />
+      <Tabs.Screen name="invoices" options={{ title: 'Payments', tabBarLabel: 'Payments' }} />
+      <Tabs.Screen name="helpdesk" options={{ title: 'Help', tabBarLabel: 'Help' }} />
       <Tabs.Screen name="estimate" options={{ href: null, title: 'Estimate' }} />
       <Tabs.Screen name="gatepass" options={{ href: null, title: 'Gate Pass' }} />
       <Tabs.Screen name="feedback" options={{ href: null, title: 'Review' }} />
