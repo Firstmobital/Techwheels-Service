@@ -913,6 +913,10 @@ function advisorVerifiedDoc(card: object | null | undefined, key: string): boole
   return Boolean((card as Record<string, unknown>)[key])
 }
 
+function rejectedDocKeys(card: { doc_rejected_keys?: string[] | null } | null | undefined): string[] {
+  return Array.isArray(card?.doc_rejected_keys) ? card.doc_rejected_keys : []
+}
+
 async function postUniversalDriveWithRetry(
   supabaseUrl: string,
   token: string,
@@ -3608,6 +3612,18 @@ export default function BodyshopRepairPage() {
     }
   }
 
+  function approveDoc(key: keyof RepairCard) {
+    if (advisorVerifiedDoc(selected, String(key))) return
+    patch('doc_rejected_keys', rejectedDocKeys(selected).filter((item) => item !== key))
+    patch(key, true)
+  }
+
+  function rejectDoc(key: keyof RepairCard) {
+    if (advisorVerifiedDoc(selected, String(key))) return
+    patch('doc_rejected_keys', [...new Set([...rejectedDocKeys(selected), String(key)])])
+    patch(key, false)
+  }
+
   function patch(key: keyof RepairCard, val: any) {
     setEditPatch((p) => ({ ...p, [key]: val }))
     setSelected((s) => s ? { ...s, [key]: val } : s)
@@ -5553,25 +5569,38 @@ export default function BodyshopRepairPage() {
                                 {mandatoryDocs.map(({ k, label }) => {
                                   const attachedDoc = bodyshopDocsByKey[k]
                                   const checked = advisorVerifiedDoc(selected, k)
+                                  const rejected = !checked && rejectedDocKeys(selected).includes(k)
                                   const busy = uploadingDocKey === k
                                   return (
                                     <div key={k} className={`brx-doc-item ${checked ? 'is-checked' : 'is-required'}`}>
                                       <button
                                         type="button"
-                                        onClick={() => patch(k, !checked)}
+                                        onClick={() => { if (!checked) approveDoc(k) }}
                                         className={`brx-doc-check ${checked ? 'is-checked' : 'is-required'}`}
-                                        title={checked ? 'Click to unverify' : 'Click to approve/verify'}
+                                        title={checked ? 'Approved — cannot be changed' : 'Approve this document'}
+                                        disabled={checked}
                                       >
                                         {checked ? <span className="brx-doc-check-mark">✓</span> : <span style={{ color: '#94a3b8', fontSize: '11px' }}>○</span>}
                                       </button>
                                       <div className="brx-doc-meta" style={{ flex: 1 }}>
                                         <div className="brx-doc-name" style={{ fontWeight: '700' }}>{label}</div>
                                         <div className={`brx-doc-state ${checked ? 'is-checked' : 'is-required'}`}>
-                                          {checked ? '✅ Verified / Collected' : attachedDoc ? '📄 Uploaded — not verified' : '⏳ Pending / Required'}
+                                          {checked ? '✅ Approved' : rejected ? '✕ Rejected' : attachedDoc ? '📄 Uploaded — not verified' : '⏳ Pending / Required'}
                                         </div>
                                       </div>
                                       <div className="brx-doc-actions" style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
-                                        {attachedDoc ? (
+                                        {checked ? (
+                                          attachedDoc ? (
+                                            <button
+                                              type="button"
+                                              className="btn brx-doc-btn"
+                                              style={{ backgroundColor: '#eff6ff', color: '#1d4ed8', borderColor: '#bfdbfe' }}
+                                              onClick={() => void handleViewBodyshopDoc(k)}
+                                            >
+                                              👁️ View
+                                            </button>
+                                          ) : null
+                                        ) : attachedDoc ? (
                                           <>
                                             <button
                                               type="button"
@@ -5585,7 +5614,7 @@ export default function BodyshopRepairPage() {
                                               type="button"
                                               className="btn brx-doc-btn"
                                               style={{ backgroundColor: '#ecfdf5', color: '#047857', borderColor: '#a7f3d0' }}
-                                              onClick={() => patch(k, true)}
+                                              onClick={() => approveDoc(k)}
                                               title="Approve this document"
                                             >
                                               ✓ Approve
@@ -5594,40 +5623,21 @@ export default function BodyshopRepairPage() {
                                               type="button"
                                               className="btn brx-doc-btn"
                                               style={{ backgroundColor: '#fef2f2', color: '#b91c1c', borderColor: '#fecaca' }}
-                                              onClick={() => patch(k, false)}
-                                              title="Reject / Mark Missing"
+                                              onClick={() => rejectDoc(k)}
+                                              title="Reject this document"
                                             >
                                               ✕ Reject
                                             </button>
-                                            <button
-                                              type="button"
-                                              className="btn brx-doc-btn"
-                                              onClick={() => startBodyshopDocUpload(k, 'replace')}
-                                              disabled={busy}
-                                            >
-                                              Replace
-                                            </button>
                                           </>
                                         ) : (
-                                          <>
-                                            <button
-                                              type="button"
-                                              className="btn btn--primary brx-doc-btn"
-                                              onClick={() => startBodyshopDocUpload(k, 'upload')}
-                                              disabled={busy}
-                                            >
-                                              {busy ? 'Uploading…' : '📤 Upload'}
-                                            </button>
-                                            <button
-                                              type="button"
-                                              className="btn brx-doc-btn"
-                                              style={{ backgroundColor: '#f0fdf4', color: '#15803d', borderColor: '#bbf7d0' }}
-                                              onClick={() => patch(k, true)}
-                                              title="Mark Verified"
-                                            >
-                                              ✓ Approve
-                                            </button>
-                                          </>
+                                          <button
+                                            type="button"
+                                            className="btn btn--primary brx-doc-btn"
+                                            onClick={() => startBodyshopDocUpload(k, 'upload')}
+                                            disabled={busy}
+                                          >
+                                            {busy ? 'Uploading…' : '📤 Upload'}
+                                          </button>
                                         )}
                                       </div>
                                     </div>

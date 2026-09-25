@@ -276,7 +276,13 @@ export default function CustomerDocumentsScreen() {
     const driveUrl = String(row?.drive_url || '').trim()
     const submitted = Boolean(row && driveUrl && !row.drive_pending)
     const pending = Boolean(row && !submitted)
+    const approved = repairCard?.[slot.docKey] === true
+    const rejectedKeys = Array.isArray(repairCard?.doc_rejected_keys) ? repairCard.doc_rejected_keys.map(String) : []
+    const rejected = !approved && rejectedKeys.includes(slot.docKey)
     const busy = busyKey === slot.docKey
+    const badgeBg = approved ? '#ECFDF5' : rejected ? '#FEF2F2' : submitted ? '#EFF6FF' : pending ? '#FEF3C7' : '#F1F5F9'
+    const badgeColor = approved ? '#047857' : rejected ? '#B91C1C' : submitted ? '#1D4ED8' : pending ? '#92400E' : CustomerTheme.inkMuted
+    const badgeLabel = approved ? 'Approved' : rejected ? 'Rejected' : submitted ? 'With advisor' : pending ? 'Pending' : slot.required ? 'Required' : 'Optional'
 
     return (
       <CustomerCard key={slot.docKey} style={{ marginBottom: 12, padding: 16 }}>
@@ -285,9 +291,9 @@ export default function CustomerDocumentsScreen() {
             <Text style={{ color: CustomerTheme.ink, fontSize: 15, fontWeight: '900' }}>{slot.title}</Text>
             <Text style={{ color: CustomerTheme.inkMuted, fontSize: 12, marginTop: 4, lineHeight: 17 }}>{slot.hint}</Text>
           </View>
-          <View style={{ backgroundColor: submitted ? '#ECFDF5' : pending ? '#FEF3C7' : '#F1F5F9', borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3 }}>
-            <Text style={{ fontSize: 10, fontWeight: '800', color: submitted ? '#047857' : pending ? '#92400E' : CustomerTheme.inkMuted }}>
-              {submitted ? 'Done' : pending ? 'Pending' : slot.required ? 'Required' : 'Optional'}
+          <View style={{ backgroundColor: badgeBg, borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3 }}>
+            <Text style={{ fontSize: 10, fontWeight: '800', color: badgeColor }}>
+              {badgeLabel}
             </Text>
           </View>
         </View>
@@ -322,10 +328,20 @@ export default function CustomerDocumentsScreen() {
           </View>
         ) : null}
 
-        {!busy ? renderActions(slot) : null}
-        {submitted ? (
+        {!busy && !approved ? renderActions(slot) : null}
+        {approved ? (
+          <Text style={{ color: '#047857', fontSize: 11, marginTop: 8, fontWeight: '700' }}>
+            Advisor approved this document. It cannot be changed.
+          </Text>
+        ) : null}
+        {rejected ? (
+          <Text style={{ color: '#B91C1C', fontSize: 11, marginTop: 8, fontWeight: '700' }}>
+            Advisor rejected this document. Upload a new copy.
+          </Text>
+        ) : null}
+        {submitted && !approved && !rejected ? (
           <Text style={{ color: CustomerTheme.inkMuted, fontSize: 11, marginTop: 8 }}>
-            Choose again to replace this file. The workshop copy stays until the new Drive link is saved.
+            Waiting for the advisor to approve or reject this file.
           </Text>
         ) : null}
       </CustomerCard>
