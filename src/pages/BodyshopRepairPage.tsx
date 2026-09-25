@@ -908,6 +908,11 @@ type DocUploadFeedback = {
   text: string
 }
 
+function advisorVerifiedDoc(card: object | null | undefined, key: string): boolean {
+  if (!card) return false
+  return Boolean((card as Record<string, unknown>)[key])
+}
+
 async function postUniversalDriveWithRetry(
   supabaseUrl: string,
   token: string,
@@ -1407,7 +1412,7 @@ export default function BodyshopRepairPage() {
       : []
     if (mandatoryDocs.length === 0) return
 
-    const collectedMandatory = mandatoryDocs.filter((d) => Boolean(bodyshopDocsByKey[d.k])).length
+    const collectedMandatory = mandatoryDocs.filter((d) => advisorVerifiedDoc(selected, d.k)).length
     const allMandatoryDone = collectedMandatory === mandatoryDocs.length
     if (!allMandatoryDone) return
 
@@ -4633,7 +4638,7 @@ export default function BodyshopRepairPage() {
                 const mandatoryDocs = isValidCustomerType(ct)
                   ? visibleDocs.filter(d => d.mandatoryFor.includes(ct as CustomerType))
                   : []
-                const collectedMandatory = mandatoryDocs.filter(d => Boolean(bodyshopDocsByKey[d.k])).length
+                const collectedMandatory = mandatoryDocs.filter(d => advisorVerifiedDoc(selected, d.k)).length
                 const docsDone = mandatoryDocs.length > 0 && collectedMandatory === mandatoryDocs.length
                 const inGroup = g.stages.includes(effectiveCurrentStage)
                   || (effectiveCurrentStage === 10 && floorWorkStarted && !floorStageCompleted && g.stages.includes(11))
@@ -4689,7 +4694,7 @@ export default function BodyshopRepairPage() {
                   const mandatoryDocs = isValidCustomerType(ct)
                     ? visibleDocs.filter(d => d.mandatoryFor.includes(ct as CustomerType))
                     : []
-                  const collectedMandatory = mandatoryDocs.filter(d => Boolean(bodyshopDocsByKey[d.k])).length
+                  const collectedMandatory = mandatoryDocs.filter(d => advisorVerifiedDoc(selected, d.k)).length
                   const docsDone = mandatoryDocs.length > 0 && collectedMandatory === mandatoryDocs.length
                   const surveyStatusNormalized = String(selected.survey_status ?? '').trim().toLowerCase()
                   const surveyHoldReason = String(selected.survey_hold_reason ?? '').trim()
@@ -4702,7 +4707,7 @@ export default function BodyshopRepairPage() {
                   const stage10Done = surveyApproved && surveyApprovalDoc && approvedPartsFinalized
                   const additionalApprovalRequested = selectedAdditionalApproval.status !== 'none'
                   const stage5Done = noDocsRequired
-                    || mandatoryDocs.every((doc) => Boolean(bodyshopDocsByKey[doc.k]))
+                    || mandatoryDocs.every((doc) => advisorVerifiedDoc(selected, doc.k))
                     || effectiveCurrentStage > 5
                   const stage6Done = Number(selected.estimated_amount ?? 0) > 0 || effectiveCurrentStage > 6
                   const stage7Done = Boolean(String(selected.estimation_approved_by ?? '').trim()) || effectiveCurrentStage > 7
@@ -5006,7 +5011,7 @@ export default function BodyshopRepairPage() {
                       const stage10Done = surveyApproved && surveyApprovalDoc && approvedPartsFinalized
                       const additionalApprovalRequested = selectedAdditionalApproval.status !== 'none'
                       const stage5Done = noDocsRequired
-                        || mandatoryDocs.every((doc) => Boolean(bodyshopDocsByKey[doc.k]))
+                        || mandatoryDocs.every((doc) => advisorVerifiedDoc(selected, doc.k))
                         || effectiveCurrentStage > 5
                       const stage6Done = Number(selected.estimated_amount ?? 0) > 0 || effectiveCurrentStage > 6
                       const stage7Done = Boolean(String(selected.estimation_approved_by ?? '').trim()) || effectiveCurrentStage > 7
@@ -5179,7 +5184,7 @@ export default function BodyshopRepairPage() {
                 const mandatoryDocs = isValidCustomerType(ct)
                   ? visibleDocs.filter(d => d.mandatoryFor.includes(ct as CustomerType))
                   : visibleDocs.filter(d => d.mandatoryFor.includes('individual'))
-                const collectedMandatory = mandatoryDocs.filter(d => Boolean(bodyshopDocsByKey[d.k])).length
+                const collectedMandatory = mandatoryDocs.filter(d => advisorVerifiedDoc(selected, d.k)).length
                 const allMandatoryDone = mandatoryDocs.length > 0 && collectedMandatory === mandatoryDocs.length
 
                 const stageDone = (stage: number): boolean => {
@@ -5276,22 +5281,6 @@ export default function BodyshopRepairPage() {
                         )
                       })}
                     </div>
-
-                    {!saActiveCard && (
-                      <div className="brx-sa-empty" style={{ padding: '24px', textAlign: 'center' }}>
-                        <div style={{ marginBottom: '12px', fontSize: '14px', color: '#475569' }}>
-                          Select a section to view and update details:
-                        </div>
-                        <div style={{ display: 'flex', gap: '10px', justifyContent: 'center', flexWrap: 'wrap' }}>
-                          <button className="btn btn--primary" onClick={() => setSaActiveCard('docs')} style={{ backgroundColor: '#7c3aed' }}>
-                            📁 Open Docs (Stage 5)
-                          </button>
-                          <button className="btn btn--primary" onClick={() => setSaActiveCard('receiving')}>
-                            🚗 Open Receiving (Stage 1-4)
-                          </button>
-                        </div>
-                      </div>
-                    )}
 
                     {saActiveCard === 'receiving' && (
                       <div className="brx-sa-panel is-receiving">
@@ -5563,7 +5552,7 @@ export default function BodyshopRepairPage() {
                               <div className="brx-docs-grid brx-docs-grid--mb">
                                 {mandatoryDocs.map(({ k, label }) => {
                                   const attachedDoc = bodyshopDocsByKey[k]
-                                  const checked = Boolean(attachedDoc || (selected as any)[k])
+                                  const checked = advisorVerifiedDoc(selected, k)
                                   const busy = uploadingDocKey === k
                                   return (
                                     <div key={k} className={`brx-doc-item ${checked ? 'is-checked' : 'is-required'}`}>
@@ -5578,7 +5567,7 @@ export default function BodyshopRepairPage() {
                                       <div className="brx-doc-meta" style={{ flex: 1 }}>
                                         <div className="brx-doc-name" style={{ fontWeight: '700' }}>{label}</div>
                                         <div className={`brx-doc-state ${checked ? 'is-checked' : 'is-required'}`}>
-                                          {checked ? '✅ Verified / Collected' : '⏳ Pending / Required'}
+                                          {checked ? '✅ Verified / Collected' : attachedDoc ? '📄 Uploaded — not verified' : '⏳ Pending / Required'}
                                         </div>
                                       </div>
                                       <div className="brx-doc-actions" style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
@@ -5654,7 +5643,7 @@ export default function BodyshopRepairPage() {
                                   <div className="brx-docs-grid">
                                     {optionalDocs.map(({ k, label }) => {
                                       const attachedDoc = bodyshopDocsByKey[k]
-                                      const checked = Boolean(attachedDoc)
+                                      const checked = advisorVerifiedDoc(selected, k)
                                       const busy = uploadingDocKey === k
                                       return (
                                         <div key={k} className={`brx-doc-item ${checked ? 'is-checked' : 'is-optional'}`}>
