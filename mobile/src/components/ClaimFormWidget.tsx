@@ -6,7 +6,10 @@ import {
   type InsuranceProvider,
 } from '../config/insuranceProviders'
 import { CustomerTheme } from '../lib/customer/customerTheme'
-import { downloadInsuranceClaimForm } from '../lib/customer/downloadInsuranceClaimForm'
+import {
+  downloadInsuranceClaimForm,
+  openInsuranceClaimIntimation,
+} from '../lib/customer/downloadInsuranceClaimForm'
 import { Icon } from './ui/Icon'
 
 interface ClaimFormWidgetProps {
@@ -23,6 +26,7 @@ export function ClaimFormWidget({ userInsurerId, insurerNameOnFile }: ClaimFormW
 
   const [selectedProvider, setSelectedProvider] = useState(userInsurerId || '')
   const [isDownloading, setIsDownloading] = useState(false)
+  const [isOpeningPortal, setIsOpeningPortal] = useState(false)
 
   useEffect(() => {
     if (userInsurerId) {
@@ -31,6 +35,8 @@ export function ClaimFormWidget({ userInsurerId, insurerNameOnFile }: ClaimFormW
   }, [userInsurerId])
 
   const provider: InsuranceProvider | undefined = INSURANCE_PROVIDERS[selectedProvider]
+  const canDownloadPdf = Boolean(provider && !provider.isPaperless && String(provider.claimFormUrl || '').trim())
+  const canOpenPortal = Boolean(provider && String(provider.claimIntimationUrl || '').trim())
 
   const handleDownload = async () => {
     if (!provider) return
@@ -39,6 +45,16 @@ export function ClaimFormWidget({ userInsurerId, insurerNameOnFile }: ClaimFormW
       await downloadInsuranceClaimForm(provider)
     } finally {
       setIsDownloading(false)
+    }
+  }
+
+  const handleOpenPortal = async () => {
+    if (!provider) return
+    setIsOpeningPortal(true)
+    try {
+      await openInsuranceClaimIntimation(provider)
+    } finally {
+      setIsOpeningPortal(false)
     }
   }
 
@@ -57,7 +73,7 @@ export function ClaimFormWidget({ userInsurerId, insurerNameOnFile }: ClaimFormW
         Insurance claim form
       </Text>
       <Text style={{ color: CustomerTheme.inkMuted, fontSize: 13, lineHeight: 19, marginBottom: 12 }}>
-        Get the official paperwork needed to start your repair approval.
+        Download the official motor claim PDF or register your claim on the insurer portal.
       </Text>
 
       {insurerNameOnFile ? (
@@ -76,7 +92,7 @@ export function ClaimFormWidget({ userInsurerId, insurerNameOnFile }: ClaimFormW
           borderColor: CustomerTheme.border,
           borderRadius: 14,
           backgroundColor: CustomerTheme.bg,
-          maxHeight: 200,
+          maxHeight: 220,
           marginBottom: 14,
           overflow: 'hidden',
         }}
@@ -92,7 +108,7 @@ export function ClaimFormWidget({ userInsurerId, insurerNameOnFile }: ClaimFormW
                 style={{
                   paddingVertical: 11,
                   paddingHorizontal: 14,
-                  backgroundColor: selected ? '#E2E8F0' : 'transparent',
+                  backgroundColor: selected ? CustomerTheme.primaryLight : 'transparent',
                   borderBottomWidth: 1,
                   borderBottomColor: CustomerTheme.border,
                 }}
@@ -106,6 +122,11 @@ export function ClaimFormWidget({ userInsurerId, insurerNameOnFile }: ClaimFormW
                 >
                   {insurer.name}
                 </Text>
+                {insurer.isPaperless ? (
+                  <Text style={{ color: CustomerTheme.inkMuted, fontSize: 11, marginTop: 2, fontWeight: '600' }}>
+                    Digital / paperless claims
+                  </Text>
+                ) : null}
               </TouchableOpacity>
             )
           })}
@@ -120,14 +141,17 @@ export function ClaimFormWidget({ userInsurerId, insurerNameOnFile }: ClaimFormW
             borderColor: '#A7F3D0',
             borderRadius: 12,
             padding: 12,
+            marginBottom: canOpenPortal ? 12 : 0,
           }}
         >
           <Text style={{ color: '#065F46', fontSize: 13, lineHeight: 20 }}>
-            <Text style={{ fontWeight: '900', color: CustomerTheme.teal }}>{provider.name}</Text> is 100%
-            paperless. No physical form required — we will process your claim digitally.
+            <Text style={{ fontWeight: '900', color: CustomerTheme.teal }}>{provider.name}</Text> handles claims
+            digitally — no printed claim form is usually required.
           </Text>
         </View>
-      ) : (
+      ) : null}
+
+      {canDownloadPdf ? (
         <TouchableOpacity
           disabled={!selectedProvider || isDownloading}
           onPress={() => void handleDownload()}
@@ -140,6 +164,7 @@ export function ClaimFormWidget({ userInsurerId, insurerNameOnFile }: ClaimFormW
             alignItems: 'center',
             justifyContent: 'center',
             gap: 8,
+            marginBottom: canOpenPortal ? 10 : 0,
           }}
         >
           {isDownloading ? (
@@ -147,13 +172,51 @@ export function ClaimFormWidget({ userInsurerId, insurerNameOnFile }: ClaimFormW
           ) : (
             <>
               <Icon name="download" size={18} color="#fff" />
-              <Text style={{ color: '#fff', fontWeight: '800', fontSize: 15 }}>
-                {provider ? `Download ${provider.name} form` : 'Select insurer first'}
+              <Text style={{ color: '#fff', fontWeight: '800', fontSize: 15 }}>Download claim form (PDF)</Text>
+            </>
+          )}
+        </TouchableOpacity>
+      ) : null}
+
+      {canOpenPortal ? (
+        <TouchableOpacity
+          disabled={!selectedProvider || isOpeningPortal}
+          onPress={() => void handleOpenPortal()}
+          activeOpacity={0.88}
+          style={{
+            backgroundColor: '#FFFFFF',
+            borderRadius: 14,
+            paddingVertical: 14,
+            flexDirection: 'row',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 8,
+            borderWidth: 1.5,
+            borderColor: CustomerTheme.primary,
+          }}
+        >
+          {isOpeningPortal ? (
+            <ActivityIndicator color={CustomerTheme.primary} />
+          ) : (
+            <>
+              <Icon name="navigation" size={18} color={CustomerTheme.primary} />
+              <Text style={{ color: CustomerTheme.primary, fontWeight: '800', fontSize: 15 }}>
+                Register claim online
               </Text>
             </>
           )}
         </TouchableOpacity>
-      )}
+      ) : null}
+
+      {!selectedProvider ? (
+        <Text style={{ color: CustomerTheme.inkMuted, fontSize: 13, textAlign: 'center', fontWeight: '600' }}>
+          Select your insurance company to see download and registration options.
+        </Text>
+      ) : provider && !canDownloadPdf && !canOpenPortal ? (
+        <Text style={{ color: CustomerTheme.inkMuted, fontSize: 13, textAlign: 'center', fontWeight: '600' }}>
+          Links for this insurer are not available in the app yet. Your service advisor can help.
+        </Text>
+      ) : null}
     </View>
   )
 }

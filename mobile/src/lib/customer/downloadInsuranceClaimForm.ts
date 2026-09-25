@@ -47,9 +47,35 @@ async function downloadPdfToDevice(url: string, fileName: string, missingMessage
   }
 }
 
+/** Open insurer online claim intimation / registration portal in the browser. */
+export async function openInsuranceClaimIntimation(provider: InsuranceProvider): Promise<void> {
+  const url = String(provider.claimIntimationUrl || '').trim()
+  if (!url) {
+    Alert.alert(
+      `${provider.name}`,
+      'We do not have an online claim link for this insurer yet. Please call your insurer or ask your service advisor.'
+    )
+    return
+  }
+
+  try {
+    if (await Linking.canOpenURL(url)) {
+      await Linking.openURL(url)
+      return
+    }
+  } catch {
+    // fall through
+  }
+  Alert.alert('Could not open link', 'Please check your connection or copy the link from the insurer website.')
+}
+
 /** Download insurer motor claim PDF to cache and open the system share / save sheet. */
 export async function downloadInsuranceClaimForm(provider: InsuranceProvider): Promise<void> {
   if (provider.isPaperless) {
+    if (provider.claimIntimationUrl) {
+      await openInsuranceClaimIntimation(provider)
+      return
+    }
     Alert.alert(
       `${provider.name}`,
       `${provider.name} is paperless. Techwheels will process your claim digitally — no printed claim form is required.`
