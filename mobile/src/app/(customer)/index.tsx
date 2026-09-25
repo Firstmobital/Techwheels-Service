@@ -28,6 +28,7 @@ import { RemainingDocumentsCard } from '../../components/customer/RemainingDocum
 import { CustomerPrimaryActionCard } from '../../components/customer/CustomerPrimaryActionCard'
 import { CustomerTheme } from '../../lib/customer/customerTheme'
 import { useCustomerScreenRefresh } from '../../components/customer/customerScreenRefresh'
+import { syncCustomerDocumentsFromServer } from '../../lib/customer/customerDocumentsCache'
 
 export default function CustomerDashboardScreen() {
   const router = useRouter()
@@ -65,6 +66,9 @@ export default function CustomerDashboardScreen() {
       }
       if (cardResult) setRepairCard(cardResult)
       if (passResult) setGatePass(passResult)
+      if (selected?.reg_number) {
+        void syncCustomerDocumentsFromServer(token, selected.reg_number).catch(() => {})
+      }
     } catch (err) {
       if (!job && !selected) {
         setError(err instanceof Error ? err.message : 'Unable to load job.')

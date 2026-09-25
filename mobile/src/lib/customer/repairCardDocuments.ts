@@ -1,3 +1,4 @@
+import type { CustomerBodyshopAsset } from '../api/customerBodyshopUploads'
 import {
   claimModeFromRepairCard,
   listMandatoryClaimDocuments,
@@ -17,10 +18,28 @@ export function isRepairCardDocComplete(card: Record<string, unknown> | null, do
   return uploaded.some((row) => String(row.doc_key || '').trim() === docKey)
 }
 
+export function isDriveDocumentComplete(
+  docKey: string,
+  driveDocuments?: CustomerBodyshopAsset[] | null
+): boolean {
+  if (!driveDocuments?.length) return false
+  const row = driveDocuments.find((d) => String(d.doc_key || '').trim() === docKey)
+  return Boolean(row && String(row.drive_url || '').trim() && !row.drive_pending)
+}
+
+export function isClaimDocComplete(
+  card: Record<string, unknown> | null,
+  docKey: string,
+  driveDocuments?: CustomerBodyshopAsset[] | null
+): boolean {
+  return isRepairCardDocComplete(card, docKey) || isDriveDocumentComplete(docKey, driveDocuments)
+}
+
 export function countMandatoryDocumentProgress(
   card: Record<string, unknown> | null,
   claimMode?: ClaimMode,
-  ownershipType?: OwnershipType
+  ownershipType?: OwnershipType,
+  driveDocuments?: CustomerBodyshopAsset[] | null
 ): {
   claimMode: ClaimMode
   ownershipType: OwnershipType
@@ -38,7 +57,7 @@ export function countMandatoryDocumentProgress(
 
   let uploadedCount = 0
   for (const doc of mandatory) {
-    if (isRepairCardDocComplete(card, doc.docKey)) {
+    if (isClaimDocComplete(card, doc.docKey, driveDocuments)) {
       uploadedCount += 1
     } else {
       missingTitles.push(doc.title)

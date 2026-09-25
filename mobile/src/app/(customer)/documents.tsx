@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useFocusEffect } from 'expo-router'
 import {
   ActivityIndicator,
@@ -20,13 +20,16 @@ import { FromTechwheelsSection } from '../../components/customer/FromTechwheelsS
 import { DamagePhotosSection } from '../../components/customer/DamagePhotosSection'
 import { CustomerTheme } from '../../lib/customer/customerTheme'
 import { useCustomerScreenRefresh } from '../../components/customer/customerScreenRefresh'
-import { customerGetRepairCard } from '../../lib/api/customerPortal'
 import {
-  customerListBodyshopAssets,
   customerRetryBodyshopDrive,
   customerUploadBodyshopAsset,
   type CustomerBodyshopAsset,
 } from '../../lib/api/customerBodyshopUploads'
+import {
+  peekCustomerDocumentsMemory,
+  readCustomerDocumentsCache,
+  syncCustomerDocumentsFromServer,
+} from '../../lib/customer/customerDocumentsCache'
 import {
   claimModeFromRepairCard,
   listClaimDocumentsForUpload,
@@ -42,9 +45,12 @@ function isImageName(name?: string | null, contentType?: string | null) {
 
 export default function CustomerDocumentsScreen() {
   const { token, selectedReg } = useCustomerSession()
-  const [repairCard, setRepairCard] = useState<Record<string, unknown> | null>(null)
-  const [documents, setDocuments] = useState<CustomerBodyshopAsset[]>([])
-  const [loading, setLoading] = useState(true)
+  const bootMem = peekCustomerDocumentsMemory(selectedReg)
+  const [repairCard, setRepairCard] = useState<Record<string, unknown> | null>(bootMem?.repairCard ?? null)
+  const [documents, setDocuments] = useState<CustomerBodyshopAsset[]>(bootMem?.documents ?? [])
+  const [loading, setLoading] = useState(!bootMem)
+  const [syncing, setSyncing] = useState(false)
+  const initialFocusDone = useRef(false)
   const [busyKey, setBusyKey] = useState<string | null>(null)
   const [previewUri, setPreviewUri] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
@@ -75,37 +81,77 @@ export default function CustomerDocumentsScreen() {
     ? Math.round((submittedCount / requiredSlots.length) * 100)
     : 100
 
-  const load = useCallback(async () => {
-    if (!token || !selectedReg) {
-      setRepairCard(null)
-      setDocuments([])
-      setLoading(false)
-      return
-    }
-    setLoading(true)
-    try {
-      const [card, assets] = await Promise.all([
-        customerGetRepairCard(token, selectedReg).catch(() => null),
-        customerListBodyshopAssets(token, selectedReg).catch(() => ({ documents: [], photos: [] })),
-      ])
-      setRepairCard(card)
-      setDocuments(assets.documents)
-    } finally {
-      setLoading(false)
-    }
-  }, [token, selectedReg])
+  const applySnapshot = useCallback(
+    (snapshot: { repairCard: Record<string, unknown> | null; documents: CustomerBodyshopAsset[] }) => {
+      setRepairCard(snapshot.repairCard)
+      setDocuments(snapshot.documents)
+    },
+    []
+  )
+
+  const load = useCallback(
+    async (mode: 'initial' | 'background' | 'force' = 'initial') => {
+      if (!token || !selectedReg) {
+        setRepairCard(null)
+        setDocuments([])
+        setLoading(false)
+        return
+      }
+
+      let showedCache = false
+      if (mode !== 'force') {
+        const instant = peekCustomerDocumentsMemory(selectedReg)
+        if (instant) {
+          applySnapshot(instant)
+          setLoading(false)
+          showedCache = true
+        }
+        const cached = instant ?? (await readCustomerDocumentsCache(selectedReg))
+        if (cached) {
+          applySnapshot(cached)
+          setLoading(false)
+          showedCache = true
+        }
+      }
+
+      if (mode === 'initial' && !showedCache) {
+        setLoading(true)
+      } else if (mode !== 'force') {
+        setSyncing(true)
+      }
+
+      try {
+        const fresh = await syncCustomerDocumentsFromServer(token, selectedReg)
+        applySnapshot(fresh)
+      } catch {
+        if (!showedCache) {
+          setRepairCard(null)
+          setDocuments([])
+        }
+      } finally {
+        setLoading(false)
+        setSyncing(false)
+      }
+    },
+    [token, selectedReg, applySnapshot]
+  )
 
   useEffect(() => {
-    void load()
+    initialFocusDone.current = false
+    void load('initial')
   }, [load])
 
   useFocusEffect(
     useCallback(() => {
-      void load()
+      if (!initialFocusDone.current) {
+        initialFocusDone.current = true
+        return
+      }
+      void load('background')
     }, [load])
   )
 
-  useCustomerScreenRefresh(load)
+  useCustomerScreenRefresh(() => load('background'))
 
   const uploadSlot = async (
     slot: CustomerClaimDocumentDef,
@@ -157,7 +203,7 @@ export default function CustomerDocumentsScreen() {
         fileName,
         contentType,
       })
-      await load()
+      await load('force')
       setNotice(result.ok
         ? `${slot.title} is saved on Drive.`
         : `${slot.title} is saved. Drive sync is still pending.`)
@@ -179,7 +225,7 @@ export default function CustomerDocumentsScreen() {
         resourceId: row.id,
         docKey: slot.docKey,
       })
-      await load()
+      await load('force')
       setNotice(result.ok ? `${slot.title} is saved on Drive.` : (result.error || 'Drive sync is still pending.'))
     } catch (error) {
       Alert.alert('Retry failed', error instanceof Error ? error.message : 'Unable to retry Drive sync.')
@@ -287,7 +333,14 @@ export default function CustomerDocumentsScreen() {
   }
 
   return (
-    <CustomerScreen title="Documents" subtitle={`Needed from you · ${selectedReg || 'your vehicle'}`}>
+    <CustomerScreen
+      title="Documents"
+      subtitle={
+        syncing && !loading
+          ? `Syncing latest · ${selectedReg || 'your vehicle'}`
+          : `Needed from you · ${selectedReg || 'your vehicle'}`
+      }
+    >
       <CustomerCard>
         <Text style={{ color: CustomerTheme.ink, fontWeight: '900', fontSize: 13, marginBottom: 6 }}>
           {claimMode === 'cash' ? 'Cash bodyshop' : 'Insurance claim'}

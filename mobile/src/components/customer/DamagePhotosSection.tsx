@@ -6,7 +6,12 @@ import { CustomerCard } from './customerUi'
 import { CustomerTheme } from '../../lib/customer/customerTheme'
 import { DAMAGE_PHOTO_SLOTS, matchPhotoToSlot } from '../../lib/customer/bodyshopDamagePhotos'
 import { uploadDamagePhoto } from '../../lib/customer/documentUploadFlow'
-import { customerListBodyshopAssets, type CustomerBodyshopAsset } from '../../lib/api/customerBodyshopUploads'
+import type { CustomerBodyshopAsset } from '../../lib/api/customerBodyshopUploads'
+import {
+  peekCustomerDocumentsMemory,
+  readCustomerDocumentsCache,
+  syncCustomerDocumentsFromServer,
+} from '../../lib/customer/customerDocumentsCache'
 import { Icon } from '../ui/Icon'
 import { useCustomerScreenRefresh } from './customerScreenRefresh'
 
@@ -27,28 +32,45 @@ export function DamagePhotosSection({
   const [previewUri, setPreviewUri] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
 
+  const applyPhotos = useCallback((photos: CustomerBodyshopAsset[]) => {
+    const next: Record<string, SlotView> = {}
+    for (const slot of DAMAGE_PHOTO_SLOTS) {
+      next[slot.id] = { slotId: slot.id }
+    }
+    for (const photo of photos) {
+      const slotId = matchPhotoToSlot(photo.file_name)
+      if (slotId && photo.view_url) {
+        next[slotId] = { slotId, viewUrl: photo.view_url }
+      }
+    }
+    setSlots(next)
+  }, [])
+
   const refresh = useCallback(async () => {
     if (!sessionToken || !regNumber) return
-    setLoading(true)
+
+    const instant = peekCustomerDocumentsMemory(regNumber)
+    if (instant?.photos?.length) {
+      applyPhotos(instant.photos)
+      setLoading(false)
+    } else {
+      setLoading(true)
+    }
+
     try {
-      const { photos } = await customerListBodyshopAssets(sessionToken, regNumber)
-      const next: Record<string, SlotView> = {}
-      for (const slot of DAMAGE_PHOTO_SLOTS) {
-        next[slot.id] = { slotId: slot.id }
+      const cached = instant ?? (await readCustomerDocumentsCache(regNumber))
+      if (cached?.photos?.length) {
+        applyPhotos(cached.photos)
+        setLoading(false)
       }
-      for (const photo of photos as CustomerBodyshopAsset[]) {
-        const slotId = matchPhotoToSlot(photo.file_name)
-        if (slotId && photo.view_url) {
-          next[slotId] = { slotId, viewUrl: photo.view_url }
-        }
-      }
-      setSlots(next)
+      const fresh = await syncCustomerDocumentsFromServer(sessionToken, regNumber)
+      applyPhotos(fresh.photos)
     } catch {
       // keep UI usable offline
     } finally {
       setLoading(false)
     }
-  }, [sessionToken, regNumber])
+  }, [sessionToken, regNumber, applyPhotos])
 
   useFocusEffect(
     useCallback(() => {

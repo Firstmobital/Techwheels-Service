@@ -25,7 +25,10 @@ import { AuthProvider } from '../context/AuthContext'
 import { CustomerSessionProvider } from '../context/CustomerSessionContext'
 import { OfflineProvider } from '../context/OfflineContext'
 import MandatoryUpdateModal from '../components/MandatoryUpdateModal'
+import { SessionBootstrapGate } from '../components/auth/SessionBootstrapGate'
 import { useMandatoryOTAUpdate } from '../hooks/useMandatoryOTAUpdate'
+
+void SplashScreen.preventAutoHideAsync().catch(() => {})
 
 // AppShell is inside all providers so hooks can safely access any context
 function AppShell() {
@@ -39,7 +42,8 @@ function AppShell() {
 
   return (
     <>
-      <Stack>
+      <Stack screenOptions={{ headerShown: false }}>
+        <Stack.Screen name="index" />
         <Stack.Screen name="(audience)" options={{ headerShown: false }} />
         <Stack.Screen name="(customer-auth)" options={{ headerShown: false }} />
         <Stack.Screen name="(customer)" options={{ headerShown: false }} />
@@ -63,9 +67,6 @@ export default function RootLayout() {
   const [fontsLoaded, setFontsLoaded] = useState(false)
 
   useEffect(() => {
-    // Dismiss splash screen immediately so app never hangs on logo
-    SplashScreen.hideAsync().catch(() => {})
-
     let isMounted = true
 
     async function loadFonts() {
@@ -89,11 +90,10 @@ export default function RootLayout() {
         if (isMounted) {
           setFontsLoaded(true)
         }
-        SplashScreen.hideAsync().catch(() => {})
       }
     }
 
-    loadFonts()
+    void loadFonts()
 
     return () => {
       isMounted = false
@@ -104,7 +104,9 @@ export default function RootLayout() {
     <AuthProvider>
       <CustomerSessionProvider>
         <OfflineProvider>
-          <AppShell />
+          <SessionBootstrapGate fontsLoaded={fontsLoaded}>
+            <AppShell />
+          </SessionBootstrapGate>
         </OfflineProvider>
       </CustomerSessionProvider>
     </AuthProvider>

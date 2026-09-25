@@ -3,16 +3,30 @@ import { Text, TouchableOpacity, View } from 'react-native'
 import { useFocusEffect, useRouter } from 'expo-router'
 import { useCustomerSession } from '../../context/CustomerSessionContext'
 import { CustomerTheme } from '../../lib/customer/customerTheme'
-import { loadClaimDocumentProgress, type ClaimDocumentProgress } from '../../lib/customer/claimDocumentProgress'
+import { peekCustomerDocumentsMemory } from '../../lib/customer/customerDocumentsCache'
+import {
+  claimDocumentProgressFromSnapshot,
+  loadClaimDocumentProgress,
+  loadClaimDocumentProgressFromCache,
+  type ClaimDocumentProgress,
+} from '../../lib/customer/claimDocumentProgress'
 import { Icon } from '../ui/Icon'
 import { useCustomerScreenRefresh } from './customerScreenRefresh'
 
 export function RemainingDocumentsCard({ regNumber }: { regNumber?: string | null }) {
   const router = useRouter()
   const { token } = useCustomerSession()
-  const [progress, setProgress] = useState<ClaimDocumentProgress | null>(null)
+  const [progress, setProgress] = useState<ClaimDocumentProgress | null>(() => {
+    const mem = peekCustomerDocumentsMemory(regNumber)
+    if (!mem?.repairCard && !mem?.documents?.length) return null
+    return claimDocumentProgressFromSnapshot(mem.repairCard, mem.documents)
+  })
 
   const refresh = useCallback(async () => {
+    const cached = await loadClaimDocumentProgressFromCache(regNumber)
+    if (cached) {
+      setProgress(cached)
+    }
     const p = await loadClaimDocumentProgress(regNumber, token)
     setProgress(p)
   }, [regNumber, token])

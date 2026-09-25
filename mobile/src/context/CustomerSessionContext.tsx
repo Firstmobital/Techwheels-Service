@@ -6,6 +6,11 @@ import {
   customerStartSession,
   type CustomerVehicle,
 } from '../lib/api/customerAuth'
+import {
+  clearAllCustomerDocumentsCaches,
+  syncCustomerDocumentsFromServer,
+  warmCustomerDocumentsMemoryForRegs,
+} from '../lib/customer/customerDocumentsCache'
 
 const TOKEN_KEY = 'customer_session_token'
 const PHONE_KEY = 'customer_session_phone'
@@ -63,16 +68,26 @@ export function CustomerSessionProvider({ children }: { children: React.ReactNod
           setLastAudience(savedAudience)
         }
         if (savedToken) {
-          const list = await customerListMyVehicles(savedToken)
-          if (!mounted) return
-          if (list.length > 0) {
-            setToken(savedToken)
-            setPhone(savedPhone)
-            setVehicles(list)
-            setSelectedReg(list[0].reg_number)
-          } else {
-            await safeStorage.deleteItem(TOKEN_KEY)
-            await safeStorage.deleteItem(PHONE_KEY)
+          setToken(savedToken)
+          setPhone(savedPhone)
+          try {
+            const list = await customerListMyVehicles(savedToken)
+            if (!mounted) return
+            if (list.length > 0) {
+              setVehicles(list)
+              setSelectedReg(list[0].reg_number)
+              const regs = list.map((v) => v.reg_number).filter(Boolean)
+              void warmCustomerDocumentsMemoryForRegs(regs)
+              void syncCustomerDocumentsFromServer(savedToken, list[0].reg_number).catch(() => {})
+            } else {
+              setToken(null)
+              setPhone(null)
+              await safeStorage.deleteItem(TOKEN_KEY)
+              await safeStorage.deleteItem(PHONE_KEY)
+            }
+          } catch (error) {
+            console.error('Failed to refresh customer vehicles on boot:', error)
+            // Keep saved token so a slow network does not bounce the user to the audience screen.
           }
         }
       } catch (error) {
@@ -103,8 +118,14 @@ export function CustomerSessionProvider({ children }: { children: React.ReactNod
     setToken(result.data.session_token)
     setPhone(result.data.phone)
     setVehicles(result.data.vehicles)
-    setSelectedReg(result.data.vehicles[0]?.reg_number ?? null)
+    const primaryReg = result.data.vehicles[0]?.reg_number ?? null
+    setSelectedReg(primaryReg)
     setLastAudience('customer')
+    if (primaryReg) {
+      const regs = result.data.vehicles.map((v) => v.reg_number).filter(Boolean)
+      void warmCustomerDocumentsMemoryForRegs(regs)
+      void syncCustomerDocumentsFromServer(result.data.session_token, primaryReg).catch(() => {})
+    }
     return {}
   }, [])
 
@@ -116,6 +137,7 @@ export function CustomerSessionProvider({ children }: { children: React.ReactNod
     }
     await safeStorage.deleteItem(TOKEN_KEY)
     await safeStorage.deleteItem(PHONE_KEY)
+    await clearAllCustomerDocumentsCaches()
     setToken(null)
     setPhone(null)
     setVehicles([])

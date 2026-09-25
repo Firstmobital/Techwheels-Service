@@ -1,27 +1,25 @@
-import { Redirect } from 'expo-router'
-import { ActivityIndicator, View } from 'react-native'
+import { useEffect } from 'react'
+import { useRouter } from 'expo-router'
 import { useAuth } from '../context/AuthContext'
 import { useCustomerSession } from '../context/CustomerSessionContext'
 
+/** Invisible entry — SessionBootstrapGate keeps splash up until sessions are ready. */
 export default function IndexRoute() {
-  const { loading: staffLoading, session } = useAuth()
-  const { loading: customerLoading, token } = useCustomerSession()
+  const router = useRouter()
+  const { session } = useAuth()
+  const { token } = useCustomerSession()
 
-  if (staffLoading || customerLoading) {
-    return (
-      <View className="flex-1 items-center justify-center bg-white">
-        <ActivityIndicator size="large" color="#2563eb" />
-      </View>
-    )
-  }
+  useEffect(() => {
+    if (token) {
+      router.replace('/(customer)')
+      return
+    }
+    if (session) {
+      router.replace('/(tabs)/home')
+      return
+    }
+    router.replace('/(audience)')
+  }, [token, session, router])
 
-  if (token) {
-    return <Redirect href="/(customer)" />
-  }
-
-  if (session) {
-    return <Redirect href="/(tabs)/home" />
-  }
-
-  return <Redirect href="/(audience)" />
+  return null
 }
