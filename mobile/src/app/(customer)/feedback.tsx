@@ -1,10 +1,11 @@
 import { useCallback, useState } from 'react'
-import { Text, TextInput, TouchableOpacity, View } from 'react-native'
+import { Linking, Text, TextInput, TouchableOpacity, View } from 'react-native'
 import { CustomerScreen } from '../../components/customer/CustomerScreen'
 import { CustomerCard, CustomerToast, PrimaryButton } from '../../components/customer/customerUi'
 import { useCustomerSession } from '../../context/CustomerSessionContext'
 import { customerSubmitFeedback } from '../../lib/api/customerPortal'
 import { useCustomerScreenRefresh } from '../../components/customer/customerScreenRefresh'
+import { GOOGLE_BUSINESS_REVIEW_URL, openGoogleBusinessReview } from '../../config/customerGoogleReview'
 
 const FEEDBACK_TAGS = [
   'Prompt & courteous service',
@@ -57,8 +58,15 @@ export default function CustomerFeedbackScreen() {
         branch: selected.branch,
         model: selected.model,
       })
-      setToast({ ok: true, msg: 'Thank you! Your feedback has been recorded.' })
       setText('')
+
+      const opened = await openGoogleBusinessReview()
+      setToast({
+        ok: true,
+        msg: opened
+          ? 'Thank you! Opening Google Review…'
+          : `Thank you! Your feedback was saved. Open Google Review: ${GOOGLE_BUSINESS_REVIEW_URL}`,
+      })
     } catch (err) {
       setToast({ ok: false, msg: err instanceof Error ? err.message : 'Failed to submit feedback' })
     } finally {
@@ -120,9 +128,16 @@ export default function CustomerFeedbackScreen() {
           disabled={!text.trim()}
         />
       </CustomerCard>
-      <Text className="text-center text-[11.5px] text-slate-400 mt-1">
-        Feedback is securely stored and reviewed by workshop management.
+      <Text className="text-center text-[11.5px] text-slate-400 mt-1 px-2 leading-relaxed">
+        Feedback is stored for workshop management. After you submit, Google Review opens so you can rate Techwheels
+        publicly.
       </Text>
+      <TouchableOpacity
+        onPress={() => void Linking.openURL(GOOGLE_BUSINESS_REVIEW_URL)}
+        className="mt-2 py-2"
+      >
+        <Text className="text-center text-[12px] font-bold text-blue-700">Open Google Review</Text>
+      </TouchableOpacity>
     </CustomerScreen>
   )
 }
