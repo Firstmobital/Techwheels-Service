@@ -478,7 +478,7 @@ export default function CustomerTrackerScreen() {
                                   borderColor: isDone
                                     ? CustomerTheme.success
                                     : isCurrent
-                                      ? CustomerTheme.teal
+                                      ? CustomerTheme.primary
                                       : CustomerTheme.border,
                                   backgroundColor: isDone ? CustomerTheme.success : isCurrent ? '#FFFFFF' : '#FFFFFF',
                                   alignItems: 'center',
@@ -493,7 +493,7 @@ export default function CustomerTrackerScreen() {
                                       width: 8,
                                       height: 8,
                                       borderRadius: 4,
-                                      backgroundColor: CustomerTheme.teal,
+                                      backgroundColor: CustomerTheme.primary,
                                     }}
                                   />
                                 ) : null}
@@ -517,7 +517,7 @@ export default function CustomerTrackerScreen() {
                                   {step.shortName}
                                 </Text>
                                 {isCurrent ? (
-                                  <Text style={{ color: CustomerTheme.teal, fontSize: 16, fontWeight: '700' }}>›</Text>
+                                  <Text style={{ color: CustomerTheme.primary, fontSize: 16, fontWeight: '700' }}>›</Text>
                                 ) : null}
                               </View>
                               <Text style={{ color: CustomerTheme.inkMuted, fontSize: 11.5, marginTop: 3, lineHeight: 16 }}>
@@ -650,7 +650,7 @@ export default function CustomerTrackerScreen() {
                             borderColor: stage.completed
                               ? CustomerTheme.success
                               : stage.current
-                                ? CustomerTheme.teal
+                                ? CustomerTheme.primary
                                 : CustomerTheme.border,
                             backgroundColor: stage.completed ? CustomerTheme.success : '#fff',
                             alignItems: 'center',
@@ -665,7 +665,7 @@ export default function CustomerTrackerScreen() {
                                 width: 8,
                                 height: 8,
                                 borderRadius: 4,
-                                backgroundColor: CustomerTheme.teal,
+                                backgroundColor: CustomerTheme.primary,
                               }}
                             />
                           ) : null}
