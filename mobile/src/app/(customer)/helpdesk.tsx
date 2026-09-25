@@ -1,6 +1,8 @@
 import { useCallback, useState } from 'react'
 import { Linking, Text, TouchableOpacity, View } from 'react-native'
+import { useRouter } from 'expo-router'
 import { CustomerScreen } from '../../components/customer/CustomerScreen'
+import type { HelpdeskChatContactKey } from '../../lib/customer/helpdeskChatContacts'
 import { useCustomerScreenRefresh } from '../../components/customer/customerScreenRefresh'
 import { CustomerCard, CustomerToast } from '../../components/customer/customerUi'
 import { useCustomerSession } from '../../context/CustomerSessionContext'
@@ -12,6 +14,7 @@ interface ContactTier {
   desc: string
   phone: string
   email: string
+  chatKey: HelpdeskChatContactKey
   icon: string
   badgeColor: string
   textColor: string
@@ -25,6 +28,7 @@ const DEALERSHIP_TIERS: ContactTier[] = [
     desc: 'Vehicle service queries, appointment coordination, delay issues & prompt resolution.',
     phone: '9116667296',
     email: 'Crmservice@techwheels.in',
+    chatKey: 'payal',
     icon: '👩‍💼',
     badgeColor: 'bg-blue-100',
     textColor: 'text-blue-800',
@@ -36,6 +40,7 @@ const DEALERSHIP_TIERS: ContactTier[] = [
     desc: 'Technical disputes, repair quality oversight & workshop floor management.',
     phone: '9116667274',
     email: 'service@techwheels.in',
+    chatKey: 'govind',
     icon: '👨‍💼',
     badgeColor: 'bg-amber-100',
     textColor: 'text-amber-800',
@@ -47,6 +52,7 @@ const DEALERSHIP_TIERS: ContactTier[] = [
     desc: 'Executive escalation, unresolved grievances, critical repeat issues & billing disputes.',
     phone: '9257051606',
     email: 'gmservice@techwheels.in',
+    chatKey: 'rajesh',
     icon: '🏛️',
     badgeColor: 'bg-rose-100',
     textColor: 'text-rose-800',
@@ -61,6 +67,7 @@ const TATA_MOTORS_TIERS: ContactTier[] = [
     desc: 'Official Tata Motors OEM customer care, warranty policies & vehicle escalation.',
     phone: '9328726988',
     email: 'AJJ820986@tatamotors.com',
+    chatKey: 'tata_akshay',
     icon: '🚘',
     badgeColor: 'bg-indigo-100',
     textColor: 'text-indigo-800',
@@ -72,6 +79,7 @@ const TATA_MOTORS_TIERS: ContactTier[] = [
     desc: 'Regional OEM leadership intervention for state-level unresolved customer complaints.',
     phone: '8288004301',
     email: 'gumeet.singh@tatamotors.com',
+    chatKey: 'tata_gurmeet',
     icon: '🌐',
     badgeColor: 'bg-emerald-100',
     textColor: 'text-emerald-800',
@@ -79,6 +87,7 @@ const TATA_MOTORS_TIERS: ContactTier[] = [
 ]
 
 export default function CustomerHelpdeskScreen() {
+  const router = useRouter()
   const { selectedReg, vehicles } = useCustomerSession()
   const selected = vehicles.find((v) => v.reg_number === selectedReg) || vehicles[0]
   const [toast, setToast] = useState<{ ok: boolean; msg: string } | null>(null)
@@ -89,6 +98,13 @@ export default function CustomerHelpdeskScreen() {
     } catch {
       setToast({ ok: false, msg: `Unable to open phone dialer for ${phone}` })
     }
+  }
+
+  const handleChat = (chatKey: HelpdeskChatContactKey) => {
+    router.push({
+      pathname: '/(customer)/chat',
+      params: { contact: chatKey },
+    })
   }
 
   const handleEmail = async (email: string, title: string) => {
@@ -126,6 +142,15 @@ export default function CustomerHelpdeskScreen() {
 
       {/* 1-Tap Action Buttons */}
       <View className="flex-row gap-2 pt-1 border-t border-slate-100">
+        <TouchableOpacity
+          onPress={() => handleChat(tier.chatKey)}
+          activeOpacity={0.8}
+          className="flex-1 py-2.5 bg-emerald-600 rounded-xl items-center flex-row justify-center gap-1 shadow-sm"
+        >
+          <Text className="text-xs">💬</Text>
+          <Text className="text-white font-bold text-xs">Chat</Text>
+        </TouchableOpacity>
+
         <TouchableOpacity
           onPress={() => handleCall(tier.phone)}
           activeOpacity={0.8}

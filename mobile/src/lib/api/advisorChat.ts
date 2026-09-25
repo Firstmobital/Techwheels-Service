@@ -39,10 +39,12 @@ function rpcErrorMessage(error: { message?: string } | null, fallback: string): 
 export async function customerListAdvisorMessages(
   sessionToken: string,
   regNumber: string,
+  contactKey = 'advisor',
 ): Promise<CustomerAdvisorThread> {
   const { data, error } = await supabase.rpc('customer_list_advisor_messages', {
     p_session_token: sessionToken,
     p_reg_number: regNumber,
+    p_contact_key: contactKey,
   })
   if (error) throw new Error(rpcErrorMessage(error, 'Unable to load chat.'))
   const payload = (data || {}) as CustomerAdvisorThread
@@ -56,11 +58,13 @@ export async function customerSendAdvisorMessage(
   sessionToken: string,
   regNumber: string,
   body: string,
+  contactKey = 'advisor',
 ): Promise<void> {
   const { error } = await supabase.rpc('customer_send_advisor_message', {
     p_session_token: sessionToken,
     p_reg_number: regNumber,
     p_body: body,
+    p_contact_key: contactKey,
   })
   if (error) throw new Error(rpcErrorMessage(error, 'Unable to send message.'))
 }

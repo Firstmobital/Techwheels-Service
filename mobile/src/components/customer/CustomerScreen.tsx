@@ -265,6 +265,27 @@ export function CustomerScreen({
           </View>
 
           <View className="flex-row items-center gap-2">
+            {isHomeScreen ? (
+              <TouchableOpacity
+                onPress={() => router.push('/(customer)/chat')}
+                accessibilityRole="button"
+                accessibilityLabel="Chat with service advisor"
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                style={{
+                  width: 40,
+                  height: 40,
+                  borderRadius: 12,
+                  backgroundColor: CustomerTheme.bgMuted,
+                  borderWidth: 1,
+                  borderColor: CustomerTheme.border,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
+                <Icon name="message-square" size={18} color={CustomerTheme.primary} strokeWidth={2.2} />
+              </TouchableOpacity>
+            ) : null}
+
             {/* Notification Bell Icon */}
             <TouchableOpacity
               onPress={() => {

@@ -15,6 +15,7 @@ import {
   asText,
   dash,
   formatKm,
+  formatInr,
   getDirectAdvisorOrWorkshopPhone,
 } from '../../components/customer/customerUi'
 import { useCustomerSession } from '../../context/CustomerSessionContext'
@@ -124,6 +125,17 @@ export default function CustomerDashboardScreen() {
     asText(job?.surveyor_contact) ||
     asText(job?.surveyor_mobile)
   const jc = asText(job?.jc_number) || asText(selected?.jc_number)
+  const claimIntimation =
+    asText(repairCard?.claim_intimation_no) ||
+    asText(job?.claim_intimation_no) ||
+    asText(activeVehicle?.claim_intimation_no)
+  const insurancePolicyNo =
+    asText(repairCard?.insurance_policy_no) ||
+    asText(job?.insurance_policy_no) ||
+    asText(activeVehicle?.insurance_policy_no)
+  const approvedEstimateRaw = repairCard?.estimated_amount ?? job?.estimated_amount
+  const approvedEstimate =
+    approvedEstimateRaw != null && approvedEstimateRaw !== '' ? formatInr(Number(approvedEstimateRaw)) : null
   const delivered = Boolean(job?.invoice_done_at || selected?.invoice_done_at)
   return (
     <CustomerScreen title="" subtitle="">
@@ -297,15 +309,26 @@ export default function CustomerDashboardScreen() {
                 <Text style={{ color: '#ffffff', fontSize: 12.5, fontWeight: '800' }}>Call advisor</Text>
               </TouchableOpacity>
             </View>
+            <Text
+              style={{
+                color: CustomerTheme.inkMuted,
+                fontSize: 11.5,
+                lineHeight: 16,
+                marginTop: 10,
+                textAlign: 'center',
+                fontWeight: '500',
+              }}
+            >
+              We prefer chat for faster updates and a clear record of your request. Call when you need to speak directly.
+            </Text>
           </CustomerCard>
 
           <RemainingDocumentsCard regNumber={selected?.reg_number} />
           <CustomerPrimaryActionCard includeDocumentAction={false} />
 
-          {/* ── Home-only shortcut (journey, documents, payments via tabs / menu) ── */}
-          <Text style={{ color: CustomerTheme.ink, fontSize: 16, fontWeight: '900', marginBottom: 10 }}>Services</Text>
-          <View className="flex-row flex-wrap" style={{ gap: 10, marginBottom: 14 }}>
+          <View style={{ marginBottom: 14 }}>
             <ActionTile
+              highlighted
               icon="alert-circle"
               title="Report issue"
               subtitle="Complaints & concerns"
@@ -343,9 +366,21 @@ export default function CustomerDashboardScreen() {
             </View>
             <RecordRow label="Job Card Number" value={dash(jc)} mono />
             <RecordRow label="Service Advisor" value={dash(advisor)} />
+            <RecordRow label="Claim Intimation No" value={dash(claimIntimation)} mono />
             <RecordRow label="Insurance Company" value={dash(insuranceCompany)} />
+            {insurancePolicyNo ? (
+              <RecordRow label="Insurance Policy No" value={dash(insurancePolicyNo)} mono />
+            ) : null}
             <RecordRow label="Surveyor Name" value={dash(surveyorName)} />
-            <RecordRow last label="Surveyor Mob No" value={dash(surveyorMobile)} mono />
+            <RecordRow
+              label="Surveyor Mob No"
+              value={dash(surveyorMobile)}
+              mono
+              last={!approvedEstimate}
+            />
+            {approvedEstimate ? (
+              <RecordRow label="Approved Estimate" value={approvedEstimate} highlight last />
+            ) : null}
           </CustomerCard>
 
         </>
@@ -372,35 +407,42 @@ function ActionTile({
       onPress={onPress}
       activeOpacity={0.8}
       style={{
-        width: '48%',
+        width: highlighted ? '100%' : '48%',
         flexGrow: 1,
         backgroundColor: highlighted ? CustomerTheme.primaryLight : CustomerTheme.card,
         borderWidth: highlighted ? 2 : 1,
         borderColor: highlighted ? CustomerTheme.primary : CustomerTheme.border,
+        borderLeftWidth: highlighted ? 4 : 1,
+        borderLeftColor: highlighted ? CustomerTheme.primary : CustomerTheme.border,
         borderRadius: CustomerTheme.radiusCard,
-        padding: 14,
+        padding: highlighted ? 16 : 14,
         shadowColor: CustomerTheme.navy,
         shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.05,
-        shadowRadius: 8,
-        elevation: 2,
+        shadowOpacity: highlighted ? 0.1 : 0.05,
+        shadowRadius: highlighted ? 12 : 8,
+        elevation: highlighted ? 3 : 2,
       }}
     >
-      <View
-        style={{
-          width: 36,
-          height: 36,
-          borderRadius: 10,
-          backgroundColor: highlighted ? '#FFFFFF' : CustomerTheme.bgMuted,
-          alignItems: 'center',
-          justifyContent: 'center',
-          marginBottom: 8,
-        }}
-      >
-        <Icon name={icon} size={18} color={CustomerTheme.primary} strokeWidth={2} />
+      <View style={{ flexDirection: highlighted ? 'row' : 'column', alignItems: highlighted ? 'center' : 'flex-start', gap: highlighted ? 12 : 0 }}>
+        <View
+          style={{
+            width: highlighted ? 44 : 36,
+            height: highlighted ? 44 : 36,
+            borderRadius: 12,
+            backgroundColor: highlighted ? '#FFFFFF' : CustomerTheme.bgMuted,
+            alignItems: 'center',
+            justifyContent: 'center',
+            marginBottom: highlighted ? 0 : 8,
+          }}
+        >
+          <Icon name={icon} size={highlighted ? 20 : 18} color={CustomerTheme.primary} strokeWidth={2.2} />
+        </View>
+        <View style={{ flex: highlighted ? 1 : undefined }}>
+          <Text style={{ fontSize: highlighted ? 15 : 13.5, fontWeight: '900', color: CustomerTheme.ink, letterSpacing: -0.2 }}>{title}</Text>
+          <Text style={{ fontSize: 11.5, color: CustomerTheme.inkMuted, marginTop: 3, fontWeight: '500' }}>{subtitle}</Text>
+        </View>
+        {highlighted ? <Icon name="chevron-right" size={20} color={CustomerTheme.primary} strokeWidth={2.2} /> : null}
       </View>
-      <Text style={{ fontSize: 13.5, fontWeight: '800', color: CustomerTheme.ink, letterSpacing: -0.2 }}>{title}</Text>
-      <Text style={{ fontSize: 11, color: CustomerTheme.inkMuted, marginTop: 3, fontWeight: '500' }}>{subtitle}</Text>
     </TouchableOpacity>
   )
 }

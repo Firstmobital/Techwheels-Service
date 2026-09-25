@@ -554,53 +554,6 @@ export default function CustomerTrackerScreen() {
                   )
                 })}
               </CustomerCard>
-
-              {/* Bodyshop Case Summary Details */}
-              <CustomerCard style={{ borderColor: '#cbd5e1' }}>
-                <Text style={{ color: '#0f172a', fontSize: 13, fontWeight: '900', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 10 }}>
-                  Accident Claim Details
-                </Text>
-                <View style={{ flexDirection: 'row', flexWrap: 'wrap' }}>
-                  <View style={{ width: '50%', marginBottom: 10, paddingRight: 6 }}>
-                    <Text style={{ color: '#64748b', fontSize: 11 }}>Job Card No</Text>
-                    <Text style={{ color: '#0f172a', fontSize: 13, fontWeight: '800', fontFamily: 'monospace' }}>
-                      {dash(jc)}
-                    </Text>
-                  </View>
-                  <View style={{ width: '50%', marginBottom: 10, paddingLeft: 6 }}>
-                    <Text style={{ color: '#64748b', fontSize: 11 }}>Claim Intimation No</Text>
-                    <Text style={{ color: '#0f172a', fontSize: 13, fontWeight: '800', fontFamily: 'monospace' }}>
-                      {dash(card?.claim_intimation_no)}
-                    </Text>
-                  </View>
-                  <View style={{ width: '50%', marginBottom: 10, paddingRight: 6 }}>
-                    <Text style={{ color: '#64748b', fontSize: 11 }}>Insurance Company</Text>
-                    <Text style={{ color: '#0f172a', fontSize: 12.5, fontWeight: '800' }}>
-                      {dash(card?.insurance_company)}
-                    </Text>
-                  </View>
-                  <View style={{ width: '50%', marginBottom: 10, paddingLeft: 6 }}>
-                    <Text style={{ color: '#64748b', fontSize: 11 }}>Surveyor Name</Text>
-                    <Text style={{ color: '#0f172a', fontSize: 12.5, fontWeight: '800' }}>
-                      {dash(card?.surveyor_name)}
-                    </Text>
-                  </View>
-                  {card?.estimated_amount != null ? (
-                    <View style={{ width: '50%', paddingRight: 6 }}>
-                      <Text style={{ color: '#64748b', fontSize: 11 }}>Approved Estimate</Text>
-                      <Text style={{ color: '#16a34a', fontSize: 13, fontWeight: '900' }}>
-                        {formatInr(Number(card.estimated_amount))}
-                      </Text>
-                    </View>
-                  ) : null}
-                  <View style={{ width: '50%', paddingLeft: 6 }}>
-                    <Text style={{ color: '#64748b', fontSize: 11 }}>Service Advisor</Text>
-                    <Text style={{ color: '#0f172a', fontSize: 12.5, fontWeight: '800' }}>
-                      {dash(advisor)}
-                    </Text>
-                  </View>
-                </View>
-              </CustomerCard>
             </>
           ) : (
             /* ═══════════════════════════════════════════════════════════════════ */

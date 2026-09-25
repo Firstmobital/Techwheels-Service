@@ -9,7 +9,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native'
-import { useFocusEffect, useRouter } from 'expo-router'
+import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Icon } from '../../components/ui/Icon'
 import { useCustomerSession } from '../../context/CustomerSessionContext'
@@ -19,6 +19,10 @@ import {
   type CustomerAdvisorMessage,
 } from '../../lib/api/advisorChat'
 import { CustomerTheme } from '../../lib/customer/customerTheme'
+import {
+  helpdeskChatPeerName,
+  normalizeHelpdeskChatContactKey,
+} from '../../lib/customer/helpdeskChatContacts'
 
 function formatWhen(value: string): string {
   const date = new Date(value)
@@ -29,10 +33,16 @@ function formatWhen(value: string): string {
 export default function CustomerAdvisorChatScreen() {
   const router = useRouter()
   const insets = useSafeAreaInsets()
+  const params = useLocalSearchParams<{ contact?: string }>()
   const { token, vehicles, selectedReg } = useCustomerSession()
   const selected = vehicles.find((vehicle) => vehicle.reg_number === selectedReg) || vehicles[0]
   const regNumber = selected?.reg_number || ''
-  const advisor = selected?.sa_display_name || selected?.sa_name || 'Service advisor'
+  const contactKey = normalizeHelpdeskChatContactKey(
+    typeof params.contact === 'string' ? params.contact : undefined
+  )
+  const vehicleAdvisor = selected?.sa_display_name || selected?.sa_name || 'Service advisor'
+  const peerName =
+    contactKey === 'advisor' ? vehicleAdvisor : helpdeskChatPeerName(contactKey)
   const [messages, setMessages] = useState<CustomerAdvisorMessage[]>([])
   const [draft, setDraft] = useState('')
   const [loading, setLoading] = useState(true)
@@ -44,7 +54,7 @@ export default function CustomerAdvisorChatScreen() {
     if (!token || !regNumber) return
     if (isInitial) setLoading(true)
     try {
-      const thread = await customerListAdvisorMessages(token, regNumber)
+      const thread = await customerListAdvisorMessages(token, regNumber, contactKey)
       setMessages(thread.messages)
       setError(null)
     } catch (err) {
@@ -52,7 +62,7 @@ export default function CustomerAdvisorChatScreen() {
     } finally {
       if (isInitial) setLoading(false)
     }
-  }, [token, regNumber])
+  }, [token, regNumber, contactKey])
 
   useEffect(() => {
     void load(true)
@@ -78,7 +88,7 @@ export default function CustomerAdvisorChatScreen() {
     setSending(true)
     setError(null)
     try {
-      await customerSendAdvisorMessage(token, regNumber, body)
+      await customerSendAdvisorMessage(token, regNumber, body, contactKey)
       setDraft('')
       await load(false)
     } catch (err) {
@@ -114,7 +124,7 @@ export default function CustomerAdvisorChatScreen() {
             {regNumber || 'Chat'}
           </Text>
           <Text style={{ color: CustomerTheme.inkMuted, fontSize: 12, fontWeight: '700' }} numberOfLines={1}>
-            {advisor}
+            {peerName}
           </Text>
         </View>
       </View>
@@ -132,7 +142,7 @@ export default function CustomerAdvisorChatScreen() {
         >
           {messages.length === 0 && (
             <Text style={{ color: CustomerTheme.inkMuted, textAlign: 'center', marginTop: 24 }}>
-              Send a message to your service advisor.
+              Send a message to {peerName}.
             </Text>
           )}
           {messages.map((message) => {
@@ -151,7 +161,7 @@ export default function CustomerAdvisorChatScreen() {
                   }}
                 >
                   <Text style={{ color: mine ? '#D6E8F8' : CustomerTheme.primary, fontSize: 11, fontWeight: '800' }}>
-                    {mine ? 'You' : message.author_name || advisor}
+                    {mine ? 'You' : message.author_name || peerName}
                   </Text>
                   <Text style={{ color: mine ? '#FFFFFF' : CustomerTheme.ink, fontSize: 15, marginTop: 2 }}>
                     {message.body}
