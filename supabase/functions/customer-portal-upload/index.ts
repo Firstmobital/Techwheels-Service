@@ -141,6 +141,32 @@ async function setRepairCardDocFlag(
   if (error) throw new Error(error.message)
 }
 
+/** Customer upload is not advisor approval. Clear approval and any earlier rejection. */
+async function markDocAwaitingAdvisor(
+  supabase: ReturnType<typeof createClient>,
+  repairCardId: number,
+  docKey: string
+) {
+  if (!ALLOWED_DOC_KEYS.has(docKey)) return
+  const { data, error: readError } = await supabase
+    .from('bodyshop_repair_cards')
+    .select('doc_rejected_keys')
+    .eq('id', repairCardId)
+    .maybeSingle()
+  if (readError) throw new Error(readError.message)
+  const current = Array.isArray(data?.doc_rejected_keys) ? data.doc_rejected_keys.map(String) : []
+  const nextRejected = current.filter((key) => key !== docKey)
+  const { error } = await supabase
+    .from('bodyshop_repair_cards')
+    .update({
+      [docKey]: false,
+      doc_rejected_keys: nextRejected,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', repairCardId)
+  if (error) throw new Error(error.message)
+}
+
 async function offloadBodyshopDocument(
   supabaseUrl: string,
   serviceRoleKey: string,
@@ -382,7 +408,7 @@ Deno.serve(async (req) => {
       }
 
       try {
-        await setRepairCardDocFlag(supabase, ctx.repairCardId, docKey, true)
+        await markDocAwaitingAdvisor(supabase, ctx.repairCardId, docKey)
       } catch (flagError) {
         return json(500, { ok: false, error: flagError instanceof Error ? flagError.message : 'Failed to update repair card' })
       }
@@ -461,7 +487,7 @@ Deno.serve(async (req) => {
     }
 
     try {
-      await setRepairCardDocFlag(supabase, ctx.repairCardId, text(row.doc_key), true)
+      await markDocAwaitingAdvisor(supabase, ctx.repairCardId, text(row.doc_key))
     } catch (flagError) {
       return json(500, { ok: false, error: flagError instanceof Error ? flagError.message : 'Failed to update repair card' })
     }

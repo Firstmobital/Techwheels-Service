@@ -99,6 +99,11 @@ export default function CustomerDashboardScreen() {
   }, [load])
   useCustomerScreenRefresh(onPullRefresh)
 
+  const customerName =
+    asText(selected?.owner_name) ||
+    asText(repairCard?.customer_name) ||
+    asText(job?.owner_name) ||
+    asText(activeVehicle?.owner_name)
   const model = asText(job?.model) || asText(selected?.model)
   const variant = asText(job?.variant) || asText(selected?.variant)
   const km = formatKm(job?.km_reading ?? selected?.km_reading)
@@ -204,7 +209,9 @@ export default function CustomerDashboardScreen() {
           <CustomerCard style={{ marginTop: -4, marginBottom: 14 }}>
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
               <View style={{ flex: 1, paddingRight: 10 }}>
-                <Text style={{ color: CustomerTheme.inkMuted, fontSize: 11, fontWeight: '700' }}>Your vehicle</Text>
+                <Text style={{ color: CustomerTheme.inkMuted, fontSize: 11, fontWeight: '700' }}>
+                  {customerName || 'Your vehicle'}
+                </Text>
                 <Text style={{ color: CustomerTheme.ink, fontSize: 22, fontWeight: '900', fontFamily: 'monospace', letterSpacing: 1, marginTop: 2 }}>
                   {selected.reg_number}
                 </Text>
