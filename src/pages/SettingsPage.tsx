@@ -5,6 +5,7 @@ import { normalizeDepartmentDisplay } from '../lib/department'
 import { validateAndCanonicalizeRoles } from '../lib/businessRoles'
 import { supabase } from '../lib/supabase'
 import Icon from '../components/Icon'
+import { HelpdeskContactsSettingsSection } from '../components/settings/HelpdeskContactsSettingsSection'
 import {
   activateRateCard,
   createBodyshopSurveyor,
@@ -12,6 +13,7 @@ import {
   deleteBodyshopSurveyor,
   exportActiveRateRowsByCityCategory,
   listBodyshopSurveyors,
+  listCustomerHelpdeskContacts,
   listRateCards,
   updateBodyshopSurveyor,
   type BodyshopSurveyor,
@@ -136,6 +138,7 @@ const SETTINGS_SECTION_IDS = [
   'autodoc-rate-cards',
   'unmapped-sr-entries',
   'estimate-parts-master',
+  'customer-helpdesk',
 ] as const
 
 type SettingsSectionId = (typeof SETTINGS_SECTION_IDS)[number]
@@ -498,6 +501,7 @@ export default function SettingsPage() {
   const [fuelSelectionByProductLine, setFuelSelectionByProductLine] = useState<Record<string, FuelPowertrainType | ''>>({})
   const [resolvingFuelProductLine, setResolvingFuelProductLine] = useState<string | null>(null)
   const [loadingBodyshopSurveyors, setLoadingBodyshopSurveyors] = useState(false)
+  const [helpdeskContactCount, setHelpdeskContactCount] = useState<number | null>(null)
   const [bodyshopSurveyorTableReady, setBodyshopSurveyorTableReady] = useState(true)
   const [newBodyshopSurveyor, setNewBodyshopSurveyor] = useState<BodyshopSurveyorDraft>({
     surveyor_name: '',
@@ -914,9 +918,20 @@ export default function SettingsPage() {
     })
   }
 
+  async function loadHelpdeskContactCount() {
+    const result = await listCustomerHelpdeskContacts()
+    if (result.error) {
+      setHelpdeskContactCount(null)
+      return
+    }
+    const active = (result.data ?? []).filter((row) => row.is_active).length
+    setHelpdeskContactCount(active)
+  }
+
   useEffect(() => {
     void loadModelOptions()
     void loadBodyshopSurveyors()
+    void loadHelpdeskContactCount()
   }, [])
 
   useEffect(() => {
@@ -1033,6 +1048,16 @@ export default function SettingsPage() {
         description: 'Maintain catalogue parts pricing, labour rates, and estimate rate cards.',
         stat: `${estimatePricingList.length} items`,
       },
+      {
+        id: 'customer-helpdesk',
+        icon: 'phone',
+        title: 'Helpdesk',
+        description: 'Customer escalation contacts for the mobile Help tab (CRM, service head, OEM).',
+        stat:
+          helpdeskContactCount === null
+            ? 'Open section'
+            : `${helpdeskContactCount} contact${helpdeskContactCount === 1 ? '' : 's'}`,
+      },
     ],
     [
       bodyshopSurveyors.length,
@@ -1043,6 +1068,7 @@ export default function SettingsPage() {
       modelOptions.length,
       rateCards.length,
       estimatePricingList.length,
+      helpdeskContactCount,
     ],
   )
 
@@ -2887,6 +2913,14 @@ export default function SettingsPage() {
             </div>
           </div>
         </section>
+        )}
+
+        {selectedSectionId === 'customer-helpdesk' && (
+          <HelpdeskContactsSettingsSection
+            onMessage={(msg) => setMessage(msg)}
+            onError={(msg) => setError(msg)}
+            onContactsChanged={() => void loadHelpdeskContactCount()}
+          />
         )}
 
         {selectedSectionId === 'bodyshop-surveyor' && (

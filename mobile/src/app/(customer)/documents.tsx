@@ -182,10 +182,10 @@ export default function CustomerDocumentsScreen() {
         fileName = res.assets[0].fileName || `${slot.docKey}.jpg`
         contentType = res.assets[0].mimeType || 'image/jpeg'
       } else {
-        const res = await DocumentPicker.getDocumentAsync({
-          type: ['application/pdf', 'image/*'],
-          copyToCacheDirectory: true,
-        })
+      const res = await DocumentPicker.getDocumentAsync({
+        type: ['application/pdf', 'image/*'],
+        copyToCacheDirectory: true,
+      })
         if (res.canceled || !res.assets?.[0]?.uri) return
         uri = res.assets[0].uri
         fileName = res.assets[0].name || `${slot.docKey}.pdf`
@@ -254,7 +254,7 @@ export default function CustomerDocumentsScreen() {
       >
         <Text style={{ color: '#fff', fontWeight: '800', fontSize: 12 }}>Photo</Text>
       </TouchableOpacity>
-      <TouchableOpacity
+          <TouchableOpacity
         onPress={() => void uploadSlot(slot, 'gallery')}
         disabled={busyKey === slot.docKey}
         style={{ flex: 1, backgroundColor: '#fff', borderRadius: 12, paddingVertical: 12, alignItems: 'center', borderWidth: 1.5, borderColor: CustomerTheme.border }}
@@ -344,19 +344,19 @@ export default function CustomerDocumentsScreen() {
       <CustomerCard>
         <Text style={{ color: CustomerTheme.ink, fontWeight: '900', fontSize: 13, marginBottom: 6 }}>
           {claimMode === 'cash' ? 'Cash bodyshop' : 'Insurance claim'}
-        </Text>
+                </Text>
         <Text style={{ color: CustomerTheme.inkMuted, fontSize: 12, lineHeight: 17 }}>
           {ownershipType === 'firm'
             ? 'This vehicle is registered to a firm, so GST and company PAN are included.'
             : 'This vehicle is registered to an individual.'}
           {' '}Taken from your repair card.
-        </Text>
+                </Text>
       </CustomerCard>
 
       {loading ? (
         <View style={{ paddingVertical: 24, alignItems: 'center' }}>
           <ActivityIndicator color={CustomerTheme.primary} />
-        </View>
+              </View>
       ) : null}
 
       {notice ? (
@@ -370,7 +370,7 @@ export default function CustomerDocumentsScreen() {
           <Text style={{ color: '#064E3B', fontWeight: '900', fontSize: 15 }}>No claim documents required</Text>
           <Text style={{ color: '#065F46', fontSize: 12, marginTop: 4, lineHeight: 17 }}>
             This repair is cash. Insurance documents are not collected here.
-          </Text>
+              </Text>
         </CustomerCard>
       ) : null}
 
@@ -378,7 +378,7 @@ export default function CustomerDocumentsScreen() {
         <CustomerCard>
           <Text style={{ color: CustomerTheme.ink, fontWeight: '900', fontSize: 15 }}>
             {submittedCount} of {requiredSlots.length} submitted
-          </Text>
+                </Text>
           <View style={{ height: 8, borderRadius: 999, backgroundColor: '#E2E8F0', marginTop: 10, overflow: 'hidden' }}>
             <View style={{ width: `${progressPercent}%`, height: '100%', backgroundColor: progressPercent === 100 ? CustomerTheme.success : CustomerTheme.primary }} />
           </View>

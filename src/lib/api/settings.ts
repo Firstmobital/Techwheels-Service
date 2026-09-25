@@ -19,6 +19,27 @@ export interface BodyshopSurveyor {
   updated_at: string
 }
 
+export type HelpdeskContactGroup = 'dealership' | 'tata_motors'
+export type HelpdeskBadgeVariant = 'blue' | 'amber' | 'rose' | 'indigo' | 'emerald'
+
+export interface CustomerHelpdeskContact {
+  id: number
+  group_key: HelpdeskContactGroup
+  sort_order: number
+  level_label: string
+  contact_name: string
+  role_title: string
+  description: string | null
+  phone: string
+  email: string | null
+  icon_emoji: string | null
+  badge_variant: HelpdeskBadgeVariant
+  chat_contact_key: string | null
+  is_active: boolean
+  created_at: string
+  updated_at: string
+}
+
 export type FuelPowertrainType = 'EV' | 'CNG' | 'DIESEL' | 'PETROL'
 
 export interface FuelQueueItem {
@@ -319,6 +340,116 @@ export async function updateBodyshopSurveyor(
 export async function deleteBodyshopSurveyor(id: number): Promise<ApiResult<null>> {
   const { error } = await supabase.from('settings_bodyshop_surveyors').delete().eq('id', id)
 
+  if (error) return fail(error)
+  return ok(null)
+}
+
+const HELPDESK_CONTACT_SELECT =
+  'id, group_key, sort_order, level_label, contact_name, role_title, description, phone, email, icon_emoji, badge_variant, chat_contact_key, is_active, created_at, updated_at'
+
+export async function listCustomerHelpdeskContacts(): Promise<ApiResult<CustomerHelpdeskContact[]>> {
+  const { data, error } = await supabase
+    .from('settings_customer_helpdesk_contacts')
+    .select(HELPDESK_CONTACT_SELECT)
+    .order('group_key', { ascending: true })
+    .order('sort_order', { ascending: true })
+    .order('id', { ascending: true })
+
+  if (error) return fail(error)
+  return ok((data ?? []) as CustomerHelpdeskContact[])
+}
+
+export async function createCustomerHelpdeskContact(input: {
+  groupKey: HelpdeskContactGroup
+  sortOrder?: number
+  levelLabel: string
+  contactName: string
+  roleTitle: string
+  description?: string | null
+  phone: string
+  email?: string | null
+  iconEmoji?: string | null
+  badgeVariant?: HelpdeskBadgeVariant
+  chatContactKey?: string | null
+  isActive?: boolean
+}): Promise<ApiResult<CustomerHelpdeskContact>> {
+  const levelLabel = input.levelLabel.trim()
+  const contactName = input.contactName.trim()
+  const roleTitle = input.roleTitle.trim()
+  const phone = input.phone.trim()
+  if (!levelLabel || !contactName || !roleTitle || !phone) {
+    return fail('Level label, name, role, and phone are required.')
+  }
+
+  const { data, error } = await supabase
+    .from('settings_customer_helpdesk_contacts')
+    .insert({
+      group_key: input.groupKey,
+      sort_order: input.sortOrder ?? 0,
+      level_label: levelLabel,
+      contact_name: contactName,
+      role_title: roleTitle,
+      description: input.description?.trim() || null,
+      phone,
+      email: input.email?.trim() || null,
+      icon_emoji: input.iconEmoji?.trim() || '👤',
+      badge_variant: input.badgeVariant ?? 'blue',
+      chat_contact_key: input.chatContactKey?.trim() || null,
+      is_active: input.isActive ?? true,
+    })
+    .select(HELPDESK_CONTACT_SELECT)
+    .single()
+
+  if (error) return fail(error)
+  return ok(data as CustomerHelpdeskContact)
+}
+
+export async function updateCustomerHelpdeskContact(
+  id: number,
+  updates: Partial<{
+    groupKey: HelpdeskContactGroup
+    sortOrder: number
+    levelLabel: string
+    contactName: string
+    roleTitle: string
+    description: string | null
+    phone: string
+    email: string | null
+    iconEmoji: string | null
+    badgeVariant: HelpdeskBadgeVariant
+    chatContactKey: string | null
+    isActive: boolean
+  }>,
+): Promise<ApiResult<CustomerHelpdeskContact>> {
+  const payload: Record<string, unknown> = {}
+  if (updates.groupKey !== undefined) payload.group_key = updates.groupKey
+  if (updates.sortOrder !== undefined) payload.sort_order = updates.sortOrder
+  if (updates.levelLabel !== undefined) payload.level_label = updates.levelLabel.trim()
+  if (updates.contactName !== undefined) payload.contact_name = updates.contactName.trim()
+  if (updates.roleTitle !== undefined) payload.role_title = updates.roleTitle.trim()
+  if (updates.description !== undefined) payload.description = updates.description?.trim() || null
+  if (updates.phone !== undefined) payload.phone = updates.phone.trim()
+  if (updates.email !== undefined) payload.email = updates.email?.trim() || null
+  if (updates.iconEmoji !== undefined) payload.icon_emoji = updates.iconEmoji?.trim() || '👤'
+  if (updates.badgeVariant !== undefined) payload.badge_variant = updates.badgeVariant
+  if (updates.chatContactKey !== undefined) payload.chat_contact_key = updates.chatContactKey?.trim() || null
+  if (updates.isActive !== undefined) payload.is_active = updates.isActive
+
+  if (Object.keys(payload).length === 0) return fail('No updates provided.')
+
+  const { data, error } = await supabase
+    .from('settings_customer_helpdesk_contacts')
+    .update(payload)
+    .eq('id', id)
+    .select(HELPDESK_CONTACT_SELECT)
+    .single()
+
+  if (error) return fail(error)
+  return ok(data as CustomerHelpdeskContact)
+}
+
+export async function deleteCustomerHelpdeskContact(id: number): Promise<ApiResult<null>> {
+  const { error } = await supabase.from('settings_customer_helpdesk_contacts').delete().eq('id', id)
   if (error) return fail(error)
   return ok(null)
 }
