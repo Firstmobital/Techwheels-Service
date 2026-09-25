@@ -7,12 +7,13 @@ import { CustomerTheme } from '../../lib/customer/customerTheme'
 
 import { Icon, IconName } from '../../components/ui/Icon'
 
+/** Bottom bar: Home → Documents → Journey (Payments & Help stay in menu / home tiles). */
+const TAB_ORDER = ['index', 'documents', 'tracker'] as const
+
 const TAB_CONFIG: Record<string, { icon: IconName; label: string }> = {
   index: { icon: 'home', label: 'Home' },
-  tracker: { icon: 'map', label: 'Journey' },
   documents: { icon: 'file-text', label: 'Documents' },
-  invoices: { icon: 'file', label: 'Payments' },
-  helpdesk: { icon: 'info', label: 'Help' },
+  tracker: { icon: 'map', label: 'Journey' },
 }
 
 function CustomerTabBar({ state, descriptors, navigation }: any) {
@@ -41,7 +42,12 @@ function CustomerTabBar({ state, descriptors, navigation }: any) {
       }}
     >
       {state.routes
-        .filter((route: any) => Boolean(TAB_CONFIG[route.name]))
+        .filter((route: any) => TAB_ORDER.includes(route.name as (typeof TAB_ORDER)[number]))
+        .sort(
+          (a: any, b: any) =>
+            TAB_ORDER.indexOf(a.name as (typeof TAB_ORDER)[number]) -
+            TAB_ORDER.indexOf(b.name as (typeof TAB_ORDER)[number])
+        )
         .map((route: any) => {
           const index = state.routes.findIndex((candidate: any) => candidate.key === route.key)
           const focused = state.index === index
@@ -120,10 +126,10 @@ export default function CustomerTabsLayout() {
       }}
     >
       <Tabs.Screen name="index" options={{ title: 'Home', tabBarLabel: 'Home' }} />
-      <Tabs.Screen name="tracker" options={{ title: 'Journey', tabBarLabel: 'Journey' }} />
       <Tabs.Screen name="documents" options={{ title: 'Documents', tabBarLabel: 'Documents' }} />
-      <Tabs.Screen name="invoices" options={{ title: 'Payments', tabBarLabel: 'Payments' }} />
-      <Tabs.Screen name="helpdesk" options={{ title: 'Help', tabBarLabel: 'Help' }} />
+      <Tabs.Screen name="tracker" options={{ title: 'Journey', tabBarLabel: 'Journey' }} />
+      <Tabs.Screen name="invoices" options={{ href: null, title: 'Payments' }} />
+      <Tabs.Screen name="helpdesk" options={{ href: null, title: 'Help' }} />
       <Tabs.Screen name="estimate" options={{ href: null, title: 'Estimate' }} />
       <Tabs.Screen name="gatepass" options={{ href: null, title: 'Gate Pass' }} />
       <Tabs.Screen name="feedback" options={{ href: null, title: 'Review' }} />

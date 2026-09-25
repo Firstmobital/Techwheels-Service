@@ -121,7 +121,6 @@ export default function CustomerDashboardScreen() {
     asText(job?.surveyor_mobile)
   const jc = asText(job?.jc_number) || asText(selected?.jc_number)
   const delivered = Boolean(job?.invoice_done_at || selected?.invoice_done_at)
-  const isAccidentFlow = /accident|body|insurance|claim/i.test(String(serviceType || ''))
   return (
     <CustomerScreen title="" subtitle="">
       {loading && !selected ? (
@@ -181,7 +180,7 @@ export default function CustomerDashboardScreen() {
               Accidental & bodyshop care
             </Text>
             <Text style={{ color: '#FFFFFF', fontSize: 20, fontWeight: '900', marginTop: 6, lineHeight: 26, maxWidth: '92%' }}>
-              We're here to get you back on the road
+              Care That Keeps You Moving.
             </Text>
           </LinearGradient>
 
@@ -304,28 +303,9 @@ export default function CustomerDashboardScreen() {
           <RemainingDocumentsCard regNumber={selected?.reg_number} />
           <CustomerPrimaryActionCard includeDocumentAction={false} />
 
-          {/* ── Service shortcuts (2×2 mockup grid) ── */}
+          {/* ── Home-only shortcut (journey, documents, payments via tabs / menu) ── */}
           <Text style={{ color: CustomerTheme.ink, fontSize: 16, fontWeight: '900', marginBottom: 10 }}>Services</Text>
           <View className="flex-row flex-wrap" style={{ gap: 10, marginBottom: 14 }}>
-            <ActionTile
-              icon="map"
-              title="Repair journey"
-              subtitle="Track workshop progress"
-              highlighted={isAccidentFlow}
-              onPress={() => router.push('/(customer)/tracker')}
-            />
-            <ActionTile
-              icon="file-text"
-              title="Documents & photos"
-              subtitle="RC, insurance & damage pics"
-              onPress={() => router.push('/(customer)/documents')}
-            />
-            <ActionTile
-              icon="file"
-              title="Bills & payments"
-              subtitle="Invoices and settlement"
-              onPress={() => router.push('/(customer)/invoices')}
-            />
             <ActionTile
               icon="alert-circle"
               title="Report issue"

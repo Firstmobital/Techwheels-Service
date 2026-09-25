@@ -191,6 +191,12 @@ export function CustomerScreen({
       desc: 'Upload DL, RC, policy, signed claim form & T/P affidavit',
     },
     {
+      label: 'Workshop Estimate Approval',
+      icon: 'check',
+      route: '/(customer)/estimate',
+      desc: 'Review your Service Advisor quotation and approve or reject',
+    },
+    {
       label: 'Download Insurance Claim Form',
       icon: 'download',
       menuAction: 'claim-form',
