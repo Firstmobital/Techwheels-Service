@@ -1,11 +1,6 @@
-import { customerGetRepairCard } from '../api/customerPortal'
-import { customerListBodyshopAssets } from '../api/customerBodyshopUploads'
-import {
-  claimModeFromRepairCard,
-  listMandatoryClaimDocuments,
-  ownershipFromRepairCard,
-  type ClaimMode,
-} from './customerClaimDocuments'
+﻿import { customerGetRepairCard } from '../api/customerPortal'
+import type { ClaimMode } from './customerClaimDocuments'
+import { countMandatoryDocumentProgress } from './repairCardDocuments'
 
 export type ClaimDocumentProgress = {
   claimMode: ClaimMode
@@ -24,52 +19,29 @@ function buildMissingSummary(titles: string[]): string {
   return `${titles[0]} is missing and ${titles[1]} is missing, and ${titles.length - 2} more`
 }
 
+/** PRD ┬º5.3 / AC-02 ΓÇö progress from repair card + mandatory doc matrix (not local-only storage). */
 export async function loadClaimDocumentProgress(
-  sessionToken: string | null | undefined,
-  regNumber: string | null | undefined
+  regNumber: string | null | undefined,
+  sessionToken?: string | null
 ): Promise<ClaimDocumentProgress> {
-  const empty: ClaimDocumentProgress = {
-    claimMode: 'insurance',
-    totalRequired: 0,
-    uploadedCount: 0,
-    remainingCount: 0,
-    progressPercent: 100,
-    missingSummary: '',
-    missingTitles: [],
-  }
-  if (!sessionToken || !regNumber) return empty
-
-  const card = await customerGetRepairCard(sessionToken, regNumber).catch(() => null)
-  const claimMode = claimModeFromRepairCard(card)
-  const ownershipType = ownershipFromRepairCard(card)
-  const mandatory = listMandatoryClaimDocuments(claimMode, ownershipType)
-  if (mandatory.length === 0) {
-    return { ...empty, claimMode }
+  let card: Record<string, unknown> | null = null
+  if (sessionToken && regNumber) {
+    try {
+      card = await customerGetRepairCard(sessionToken, regNumber)
+    } catch {
+      card = null
+    }
   }
 
-  const assets = await customerListBodyshopAssets(sessionToken, regNumber).catch(() => ({
-    documents: [],
-    photos: [],
-  }))
-  const submittedKeys = new Set(
-    assets.documents
-      .filter((doc) => Boolean(String(doc.drive_url || doc.view_url || '').trim()) && !doc.drive_pending)
-      .map((doc) => String(doc.doc_key || ''))
-      .filter(Boolean)
-  )
-
-  const missing = mandatory.filter((doc) => !submittedKeys.has(doc.docKey))
-  const uploadedCount = mandatory.length - missing.length
-  const totalRequired = mandatory.length
-  const progressPercent = Math.round((uploadedCount / totalRequired) * 100)
+  const stats = countMandatoryDocumentProgress(card)
 
   return {
-    claimMode,
-    totalRequired,
-    uploadedCount,
-    remainingCount: missing.length,
-    progressPercent,
-    missingSummary: buildMissingSummary(missing.map((doc) => doc.title).slice(0, 3)),
-    missingTitles: missing.map((doc) => doc.title),
+    claimMode: stats.claimMode,
+    totalRequired: stats.totalRequired,
+    uploadedCount: stats.uploadedCount,
+    remainingCount: stats.remainingCount,
+    progressPercent: stats.progressPercent,
+    missingSummary: buildMissingSummary(stats.missingTitles.slice(0, 3)),
+    missingTitles: stats.missingTitles,
   }
 }

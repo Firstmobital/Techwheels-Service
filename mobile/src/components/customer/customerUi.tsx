@@ -1,5 +1,5 @@
 import { ReactNode } from 'react'
-import { ActivityIndicator, Text, TouchableOpacity, View } from 'react-native'
+import { ActivityIndicator, ScrollView, Text, TouchableOpacity, View } from 'react-native'
 import { CustomerTheme } from '../../lib/customer/customerTheme'
 
 export function dash(value: unknown): string {
@@ -75,10 +75,10 @@ export function CustomerCard({
           backgroundColor: CustomerTheme.card,
           borderWidth: 1,
           borderColor: CustomerTheme.border,
-          borderRadius: 18,
+          borderRadius: CustomerTheme.radiusCard,
           padding: noPadding ? 0 : 16,
           marginBottom: 14,
-          shadowColor: '#131F3D',
+          shadowColor: CustomerTheme.navy,
           shadowOffset: { width: 0, height: 2 },
           shadowOpacity: 0.06,
           shadowRadius: 10,
@@ -221,7 +221,7 @@ export function PrimaryButton({
   onPress,
   disabled,
   loading,
-  color = CustomerTheme.teal,
+  color = CustomerTheme.primary,
   icon,
 }: {
   label: string
@@ -238,7 +238,7 @@ export function PrimaryButton({
       activeOpacity={0.85}
       style={{
         backgroundColor: disabled || loading ? '#93c5fd' : color,
-        borderRadius: 16,
+        borderRadius: CustomerTheme.radiusButton,
         paddingVertical: 15,
         paddingHorizontal: 20,
         flexDirection: 'row',
@@ -285,8 +285,8 @@ export function SecondaryButton({
       style={{
         backgroundColor: '#ffffff',
         borderWidth: 1.5,
-        borderColor: '#cbd5e1',
-        borderRadius: 16,
+        borderColor: CustomerTheme.primary,
+        borderRadius: CustomerTheme.radiusButton,
         paddingVertical: 14,
         paddingHorizontal: 18,
         flexDirection: 'row',
@@ -296,14 +296,91 @@ export function SecondaryButton({
       }}
     >
       {loading ? (
-        <ActivityIndicator color="#475569" size="small" />
+        <ActivityIndicator color={CustomerTheme.primary} size="small" />
       ) : (
         <>
           {icon}
-          <Text style={{ color: '#1e293b', fontSize: 14.5, fontWeight: '700' }}>{label}</Text>
+          <Text style={{ color: CustomerTheme.primary, fontSize: 14.5, fontWeight: '700' }}>{label}</Text>
         </>
       )}
     </TouchableOpacity>
+  )
+}
+
+export type PhaseStepStatus = 'complete' | 'active' | 'upcoming'
+
+export function HorizontalPhaseStepper({
+  steps,
+}: {
+  steps: { label: string; status: PhaseStepStatus }[]
+}) {
+  return (
+    <ScrollView
+      horizontal
+      showsHorizontalScrollIndicator={false}
+      contentContainerStyle={{ paddingVertical: 4, gap: 0, minWidth: '100%' }}
+    >
+      {steps.map((step, idx) => {
+        const isLast = idx === steps.length - 1
+        const dotColor =
+          step.status === 'complete'
+            ? CustomerTheme.success
+            : step.status === 'active'
+              ? CustomerTheme.primary
+              : CustomerTheme.border
+        const labelColor =
+          step.status === 'active' ? CustomerTheme.primary : step.status === 'complete' ? CustomerTheme.ink : CustomerTheme.inkSoft
+
+        return (
+          <View key={`${step.label}-${idx}`} style={{ flexDirection: 'row', alignItems: 'center', flexShrink: 0 }}>
+            <View style={{ alignItems: 'center', minWidth: 72, maxWidth: 88 }}>
+              <View
+                style={{
+                  width: 28,
+                  height: 28,
+                  borderRadius: 14,
+                  backgroundColor: step.status === 'active' ? CustomerTheme.primaryLight : '#FFFFFF',
+                  borderWidth: 2,
+                  borderColor: dotColor,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
+                {step.status === 'complete' ? (
+                  <Text style={{ color: CustomerTheme.success, fontSize: 14, fontWeight: '900' }}>✓</Text>
+                ) : (
+                  <Text style={{ color: labelColor, fontSize: 12, fontWeight: '800' }}>{idx + 1}</Text>
+                )}
+              </View>
+              <Text
+                numberOfLines={2}
+                style={{
+                  marginTop: 6,
+                  fontSize: 10,
+                  fontWeight: step.status === 'active' ? '800' : '600',
+                  color: labelColor,
+                  textAlign: 'center',
+                  lineHeight: 13,
+                }}
+              >
+                {step.label}
+              </Text>
+            </View>
+            {!isLast ? (
+              <View
+                style={{
+                  width: 24,
+                  height: 2,
+                  backgroundColor: step.status === 'complete' ? CustomerTheme.success : CustomerTheme.border,
+                  marginTop: -18,
+                  marginHorizontal: 2,
+                }}
+              />
+            ) : null}
+          </View>
+        )
+      })}
+    </ScrollView>
   )
 }
 

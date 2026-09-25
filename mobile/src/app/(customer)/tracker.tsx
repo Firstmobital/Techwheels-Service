@@ -2,7 +2,15 @@ import { useCallback, useMemo, useState } from 'react'
 import { ActivityIndicator, Alert, Image, Linking, Modal, ScrollView, Text, TouchableOpacity, View } from 'react-native'
 import { useFocusEffect, useRouter } from 'expo-router'
 import { CustomerScreen } from '../../components/customer/CustomerScreen'
-import { CustomerCard, CustomerToast, asText, dash, formatInr } from '../../components/customer/customerUi'
+import {
+  CustomerCard,
+  CustomerToast,
+  HorizontalPhaseStepper,
+  asText,
+  dash,
+  formatInr,
+  type PhaseStepStatus,
+} from '../../components/customer/customerUi'
 import { useCustomerSession } from '../../context/CustomerSessionContext'
 import {
   customerGetActiveJob,
@@ -14,6 +22,7 @@ import { supabase } from '../../lib/supabase'
 import { Icon } from '../../components/ui/Icon'
 import { getBodyshopStageDetailRows } from '../../lib/customer/bodyshopStageDetails'
 import { CustomerTheme } from '../../lib/customer/customerTheme'
+import { CustomerPrimaryActionCard } from '../../components/customer/CustomerPrimaryActionCard'
 
 const BODYSHOP_JOURNEY_PHASES = [
   { phase: 1, title: 'Intake', from: 1, to: 4 },
@@ -36,7 +45,7 @@ function PhaseStatusBadge({ status }: { status: JourneyPhaseStatus }) {
     status === 'complete'
       ? { bg: '#DCFCE7', text: '#166534', label: 'Complete' }
       : status === 'active'
-        ? { bg: CustomerTheme.tabActiveBg, text: CustomerTheme.teal, label: 'In progress' }
+        ? { bg: CustomerTheme.tabActiveBg, text: CustomerTheme.primary, label: 'In progress' }
         : { bg: '#F1F5F9', text: CustomerTheme.inkMuted, label: 'Up next' }
 
   return (
@@ -234,6 +243,18 @@ export default function CustomerTrackerScreen() {
 
   const bodyshopProgressPercent = Math.round((completedBodyshopCount / 18) * 100)
 
+  const bodyshopPhaseStepper = useMemo(() => {
+    const allDone = Boolean(invoiced || card?.overall_status === 'delivered')
+    const shortLabels = ['Intake', 'Paperwork', 'Survey', 'Workshop', 'Handover']
+    return BODYSHOP_JOURNEY_PHASES.map((phase, idx) => {
+      const status = phaseStatus(phase.from, phase.to, currentBodyshopStage, allDone)
+      return {
+        label: shortLabels[idx] || phase.title,
+        status: status as PhaseStepStatus,
+      }
+    })
+  }, [card?.overall_status, currentBodyshopStage, invoiced])
+
   // Standard 6 Service Stages (for non-accident maintenance vehicles)
   const standardStages = [
     {
@@ -345,24 +366,28 @@ export default function CustomerTrackerScreen() {
                   </View>
                 </View>
 
+                <View style={{ marginBottom: 16 }}>
+                  <HorizontalPhaseStepper steps={bodyshopPhaseStepper} />
+                </View>
+
                 {/* Current Stage Highlight Box */}
                 <View
                   style={{
-                    backgroundColor: '#faf5ff',
-                    borderColor: '#e9d5ff',
+                    backgroundColor: CustomerTheme.primaryLight,
+                    borderColor: 'rgba(0,82,155,0.2)',
                     borderWidth: 1.5,
-                    borderRadius: 16,
+                    borderRadius: CustomerTheme.radiusCard,
                     padding: 14,
                     marginBottom: 14,
                   }}
                 >
-                  <Text style={{ color: '#7e22ce', fontSize: 11, fontWeight: '800', textTransform: 'uppercase', letterSpacing: 0.5 }}>
-                    Current Stage
+                  <Text style={{ color: CustomerTheme.primary, fontSize: 11, fontWeight: '800', textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                    Current stage
                   </Text>
-                  <Text style={{ color: '#9333ea', fontSize: 19, fontWeight: '900', marginTop: 3 }}>
+                  <Text style={{ color: CustomerTheme.navy, fontSize: 19, fontWeight: '900', marginTop: 3 }}>
                     Stage {currentBodyshopStage} – {currentStageName}
                   </Text>
-                  <Text style={{ color: '#6b21a8', fontSize: 11.5, marginTop: 4, fontWeight: '500' }}>
+                  <Text style={{ color: CustomerTheme.inkMuted, fontSize: 11.5, marginTop: 4, fontWeight: '500' }}>
                     {BODYSHOP_18_STAGES[currentBodyshopStage - 1]?.desc || 'Repairs and inspection proceeding on workshop floor.'}
                   </Text>
                 </View>
@@ -370,19 +395,19 @@ export default function CustomerTrackerScreen() {
                 {/* Progress Bar */}
                 <View style={{ marginBottom: 6 }}>
                   <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-                    <Text style={{ color: '#334155', fontSize: 12, fontWeight: '800' }}>
-                      Bodyshop Progress
+                    <Text style={{ color: CustomerTheme.ink, fontSize: 12, fontWeight: '800' }}>
+                      Bodyshop progress
                     </Text>
-                    <Text style={{ color: '#7c3aed', fontSize: 12, fontWeight: '900' }}>
-                      {completedBodyshopCount} / 18 Completed ({bodyshopProgressPercent}%)
+                    <Text style={{ color: CustomerTheme.primary, fontSize: 12, fontWeight: '900' }}>
+                      {completedBodyshopCount} / 18 completed ({bodyshopProgressPercent}%)
                     </Text>
                   </View>
-                  <View style={{ width: '100%', height: 7, backgroundColor: '#f1f5f9', borderRadius: 999, overflow: 'hidden' }}>
+                  <View style={{ width: '100%', height: 7, backgroundColor: CustomerTheme.primaryLight, borderRadius: 999, overflow: 'hidden' }}>
                     <View
                       style={{
                         width: `${Math.max(5, bodyshopProgressPercent)}%`,
                         height: '100%',
-                        backgroundColor: bodyshopProgressPercent === 100 ? '#10b981' : '#8b5cf6',
+                        backgroundColor: bodyshopProgressPercent === 100 ? CustomerTheme.success : CustomerTheme.primary,
                         borderRadius: 999,
                       }}
                     />
@@ -664,27 +689,7 @@ export default function CustomerTrackerScreen() {
             </>
           )}
 
-          {/* ── INSURANCE CLAIM DOCUMENTS SHORTCUT BANNER ── */}
-          <CustomerCard style={{ backgroundColor: '#fffbeb', borderColor: '#fef3c7' }}>
-            <View className="flex-row items-center justify-between">
-              <View className="flex-row items-center flex-1 mr-2">
-                <Text className="text-2xl mr-3">📁</Text>
-                <View className="flex-1">
-                  <Text className="text-[13.5px] font-bold text-amber-900">Insurance Claim Documents</Text>
-                  <Text className="text-[11.5px] text-amber-800">
-                    Upload DL, RC, Claim Form & KYC to speed up surveyor approval.
-                  </Text>
-                </View>
-              </View>
-              <TouchableOpacity
-                onPress={() => router.push('/(customer)/documents')}
-                activeOpacity={0.8}
-                className="bg-amber-600 active:bg-amber-700 px-3 py-2 rounded-xl"
-              >
-                <Text className="text-white text-xs font-black">Upload ➔</Text>
-              </TouchableOpacity>
-            </View>
-          </CustomerCard>
+          <CustomerPrimaryActionCard />
 
           {/* ── ADVISOR QUICK CONTACT CARD ── */}
           <CustomerCard style={{ backgroundColor: '#f0fdf4', borderColor: '#bbf7d0' }}>
@@ -713,8 +718,8 @@ export default function CustomerTrackerScreen() {
                   <View className="flex-row justify-between items-center pb-3 border-b border-slate-100">
                     <View className="flex-1 pr-2">
                       <View className="flex-row items-center gap-1.5 mb-1">
-                        <View style={{ paddingHorizontal: 8, paddingVertical: 2, borderRadius: 6, backgroundColor: '#f3e8ff' }}>
-                          <Text style={{ color: '#7e22ce', fontSize: 10, fontWeight: '800' }}>
+                        <View style={{ paddingHorizontal: 8, paddingVertical: 2, borderRadius: 6, backgroundColor: CustomerTheme.primaryLight }}>
+                          <Text style={{ color: CustomerTheme.primary, fontSize: 10, fontWeight: '800' }}>
                             {selectedBodyshopStage.group}
                           </Text>
                         </View>
@@ -729,7 +734,7 @@ export default function CustomerTrackerScreen() {
                         selectedBodyshopStage.stage < currentBodyshopStage || invoiced
                           ? 'bg-green-100'
                           : selectedBodyshopStage.stage === currentBodyshopStage
-                          ? 'bg-purple-100'
+                          ? 'bg-sky-100'
                           : 'bg-slate-100'
                       }`}
                     >
@@ -738,7 +743,7 @@ export default function CustomerTrackerScreen() {
                           selectedBodyshopStage.stage < currentBodyshopStage || invoiced
                             ? 'text-green-800'
                             : selectedBodyshopStage.stage === currentBodyshopStage
-                            ? 'text-purple-800'
+                            ? 'text-sky-900'
                             : 'text-slate-600'
                         }`}
                       >
@@ -823,7 +828,8 @@ export default function CustomerTrackerScreen() {
                   <TouchableOpacity
                     onPress={() => setSelectedBodyshopStage(null)}
                     activeOpacity={0.8}
-                    className="w-full py-3 bg-purple-600 rounded-2xl items-center mt-2"
+                    className="w-full py-3 rounded-2xl items-center mt-2"
+                    style={{ backgroundColor: CustomerTheme.primary }}
                   >
                     <Text className="text-white font-bold text-xs">Close Details</Text>
                   </TouchableOpacity>

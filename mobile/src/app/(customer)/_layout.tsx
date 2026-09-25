@@ -33,7 +33,7 @@ function CustomerTabBar({ state, descriptors, navigation }: any) {
         paddingTop: 8,
         paddingBottom: Math.max(10, insets.bottom),
         minHeight: tabBarHeight,
-        shadowColor: '#131F3D',
+        shadowColor: CustomerTheme.navy,
         shadowOffset: { width: 0, height: -4 },
         shadowOpacity: 0.06,
         shadowRadius: 12,
@@ -70,7 +70,7 @@ function CustomerTabBar({ state, descriptors, navigation }: any) {
                 <Icon
                   name={iconName}
                   size={20}
-                  color={focused ? CustomerTheme.teal : CustomerTheme.inkSoft}
+                  color={focused ? CustomerTheme.primary : CustomerTheme.inkSoft}
                   strokeWidth={focused ? 2.4 : 1.8}
                 />
               </View>
@@ -78,7 +78,7 @@ function CustomerTabBar({ state, descriptors, navigation }: any) {
                 style={{
                   fontSize: 10.5,
                   fontWeight: focused ? '800' : '600',
-                  color: focused ? CustomerTheme.teal : CustomerTheme.inkSoft,
+                  color: focused ? CustomerTheme.primary : CustomerTheme.inkSoft,
                   marginTop: 2,
                 }}
               >
@@ -98,7 +98,7 @@ export default function CustomerTabsLayout() {
   if (staffLoading || customerLoading) {
     return (
       <View className="flex-1 items-center justify-center" style={{ backgroundColor: CustomerTheme.bg }}>
-        <ActivityIndicator size="large" color={CustomerTheme.teal} />
+        <ActivityIndicator size="large" color={CustomerTheme.primary} />
       </View>
     )
   }
@@ -127,7 +127,7 @@ export default function CustomerTabsLayout() {
       <Tabs.Screen name="estimate" options={{ href: null, title: 'Estimate' }} />
       <Tabs.Screen name="gatepass" options={{ href: null, title: 'Gate Pass' }} />
       <Tabs.Screen name="feedback" options={{ href: null, title: 'Review' }} />
-      <Tabs.Screen name="complaint" options={{ href: null, title: 'Report Problem' }} />
+      <Tabs.Screen name="complaint" options={{ href: null, title: 'Report Issue' }} />
       <Tabs.Screen name="booking" options={{ href: null, title: 'Book Service' }} />
       <Tabs.Screen name="my-bookings" options={{ href: null, title: 'My Bookings' }} />
     </Tabs>

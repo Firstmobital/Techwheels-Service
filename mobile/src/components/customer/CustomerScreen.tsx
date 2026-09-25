@@ -15,7 +15,6 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 import { useCustomerSession } from '../../context/CustomerSessionContext'
 import { manualCheckForOTAUpdate } from '../../hooks/useMandatoryOTAUpdate'
 import { Icon, IconName } from '../ui/Icon'
-import { LegalLinks } from '../LegalLinks'
 import { VehiclePicker } from './VehiclePicker'
 import { CustomerTheme } from '../../lib/customer/customerTheme'
 import { ClaimFormWidget } from '../ClaimFormWidget'
@@ -182,7 +181,7 @@ export function CustomerScreen({
     { label: 'Official Vehicle Gate Pass', icon: 'shield-check', route: '/(customer)/gatepass', desc: 'Accounts approved gate clearance' },
     { label: '24x7 Helpdesk Escalation', icon: 'phone', route: '/(customer)/helpdesk', desc: 'CRM, Service Manager & Tata team' },
     { label: 'Book Service Appointment', icon: 'calendar', route: '/(customer)/booking', desc: 'Schedule maintenance or pickup' },
-    { label: 'Report Problem / Complaint', icon: 'alert-circle', route: '/(customer)/complaint', desc: 'Log service issues or concerns' },
+    { label: 'Report Issue', icon: 'alert-circle', route: '/(customer)/complaint', desc: 'Log service issues or concerns' },
     { label: 'Dealership Feedback', icon: 'star', route: '/(customer)/feedback', desc: 'Rate your service experience' },
   ]
 
@@ -227,9 +226,9 @@ export function CustomerScreen({
               className="mr-3"
             />
             <View className="flex-1">
-              <Text style={{ color: CustomerTheme.ink, fontSize: 16, fontWeight: '900' }}>Techwheels</Text>
-              <Text style={{ color: CustomerTheme.teal, fontSize: 11, fontWeight: '700' }}>
-                Authorised Tata Motors Service Center
+              <Text style={{ color: CustomerTheme.navy, fontSize: 16, fontWeight: '900' }}>TechWheels Service</Text>
+              <Text style={{ color: CustomerTheme.inkMuted, fontSize: 10.5, fontWeight: '700', letterSpacing: 0.4 }}>
+                TATA.CARS · Authorised Service
               </Text>
             </View>
           </View>
@@ -256,7 +255,7 @@ export function CustomerScreen({
                 position: 'relative',
               }}
             >
-              <Icon name="bell" size={18} color={CustomerTheme.teal} />
+              <Icon name="bell" size={18} color={CustomerTheme.primary} />
               {showNotificationDot && (
                 <View
                   style={{
@@ -266,9 +265,9 @@ export function CustomerScreen({
                     width: 8,
                     height: 8,
                     borderRadius: 4,
-                    backgroundColor: '#00D2C4',
+                    backgroundColor: CustomerTheme.teal,
                     borderWidth: 1.5,
-                    borderColor: '#071524',
+                    borderColor: CustomerTheme.navyDeep,
                   }}
                 />
               )}
@@ -286,7 +285,7 @@ export function CustomerScreen({
                 borderRadius: 12,
                 backgroundColor: CustomerTheme.bgMuted,
                 borderWidth: 1,
-                borderColor: 'rgba(0, 210, 196, 0.35)',
+                borderColor: CustomerTheme.border,
                 alignItems: 'center',
                 justifyContent: 'center',
                 shadowColor: '#002B49',
@@ -338,17 +337,6 @@ export function CustomerScreen({
       <ScrollView className="flex-1" contentContainerStyle={{ padding: 16, paddingBottom: 36 }}>
         <VehiclePicker vehicles={vehicles} selectedReg={selectedReg} onSelect={setSelectedReg} />
         {children}
-        <View className="mt-4 items-center">
-          <Text className="text-slate-500 text-[12px] font-semibold text-center">
-            Techwheels Dealership Vehicle Services · Powered by Firstmobital
-          </Text>
-          <Text className="text-slate-400 text-[11px] mt-1 text-center">
-            After-Purchase Service & Bodyshop Management System · SRD v1.0
-          </Text>
-          <View className="mt-3">
-            <LegalLinks compact />
-          </View>
-        </View>
       </ScrollView>
 
       {/* ── TOP-SLIDING MENU DRAWER (IN-TREE OVERLAY TO PREVENT FREEZE) ── */}
@@ -466,10 +454,6 @@ export function CustomerScreen({
                 {checkingUpdate ? (updateStatusMsg || 'Checking for updates…') : 'Check for App Updates'}
               </Text>
             </TouchableOpacity>
-
-            <View className="mb-3">
-              <LegalLinks compact />
-            </View>
 
             {/* Logout Action */}
             <TouchableOpacity

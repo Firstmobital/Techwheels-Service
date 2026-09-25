@@ -96,8 +96,8 @@ export default function CustomerComplaintScreen() {
 
   return (
     <CustomerScreen
-      title="Tell Us Your Problem"
-      subtitle="Enter current odometer and add all vehicle problems to share directly with your Service Advisor."
+      title="Report Issue"
+      subtitle="Enter current odometer and describe issues to share directly with your Service Advisor."
     >
       {toast ? <CustomerToast ok={toast.ok} message={toast.msg} /> : null}
 

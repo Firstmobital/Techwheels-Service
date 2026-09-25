@@ -21,7 +21,7 @@ export const CUSTOMER_CLAIM_DOCUMENTS: CustomerClaimDocumentDef[] = [
   { docKey: 'doc_pan', title: 'PAN Card', subtitle: 'Customer PAN', required: true, hint: 'Upload a clear PAN card image.' },
   { docKey: 'doc_gst', title: 'GST Registration Certificate', subtitle: 'For firm/company vehicles', required: true, condition: 'firm', hint: 'Required when the vehicle is registered to a firm/company.' },
   { docKey: 'doc_company_pan', title: 'Company PAN', subtitle: 'For firm/company vehicles', required: true, condition: 'firm', hint: 'Required when the vehicle is registered to a firm/company.' },
-  { docKey: 'doc_bank_detail', title: 'Bank Account Proof', subtitle: 'If required by insurer', required: false, condition: 'optional_major', hint: 'Upload cancelled cheque or passbook if requested.' },
+  { docKey: 'doc_bank_detail', title: 'Bank details / cancelled cheque', subtitle: 'Claim settlement account', required: true, hint: 'Upload cancelled cheque or bank passbook for claim credit.' },
   { docKey: 'doc_kyc', title: 'KYC Form', subtitle: 'For major/insurer-specific cases', required: false, condition: 'optional_major', hint: 'Upload completed KYC if requested for the claim.' },
 ]
 

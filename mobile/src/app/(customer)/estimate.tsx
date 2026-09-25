@@ -319,7 +319,7 @@ export default function CustomerEstimateScreen() {
                 {estimate.grand_total != null ? (
                   <View className="flex-row justify-between pt-2 mt-1 border-t border-dashed border-slate-300">
                     <Text className="font-extrabold">Grand Total (Net Payable)</Text>
-                    <Text className="font-extrabold text-blue-700">{formatInr(estimate.grand_total)}</Text>
+                    <Text className="font-extrabold text-[#00529B] text-[17px]">{formatInr(estimate.grand_total)}</Text>
                   </View>
                 ) : null}
               </View>
