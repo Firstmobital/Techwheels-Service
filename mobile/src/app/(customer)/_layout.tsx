@@ -136,6 +136,7 @@ export default function CustomerTabsLayout() {
       <Tabs.Screen name="gatepass" options={{ href: null, title: 'Gate Pass' }} />
       <Tabs.Screen name="feedback" options={{ href: null, title: 'Review' }} />
       <Tabs.Screen name="complaint" options={{ href: null, title: 'Report Issue' }} />
+      <Tabs.Screen name="chat" options={{ href: null, title: 'Chat' }} />
       <Tabs.Screen name="booking" options={{ href: null, title: 'Book Service' }} />
       <Tabs.Screen name="my-bookings" options={{ href: null, title: 'My Bookings' }} />
     </Tabs>

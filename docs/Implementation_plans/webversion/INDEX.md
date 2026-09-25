@@ -1,6 +1,6 @@
 # Web Version Plans Index
 
-Last Updated: 2026-09-16
+Last Updated: 2026-09-25
 Scope: Web project implementation plans only
 Authority: This index is the routing source for webversion plans
 
@@ -15,6 +15,7 @@ Web categories currently in use:
 - `accounts`
 - `autodoc`
 - `bodyshop`
+- `chat`
 - `complaints`
 - `drive`
 - `help-tickets`
@@ -41,6 +42,7 @@ Use this file as daily command center:
 | Plan ID | Category | Status | Owner | File |
 |---|---|---|---|---|
 | ACCOUNTS-001 | accounts | Active (DBL-0068 APPLIED Admin Mechanical receipt edit; DBL-0061 Gatepass 2% / Keep on Credit / overpay) | Accounts + Platform Team | `docs/Implementation_plans/webversion/categories/accounts/active/ACCOUNTS-001_MECHANICAL_BODYSHOP_ACCOUNTS_DESK_PLAN_2026-09-11.md` |
+| CHAT-001 | chat | In progress (migration applied; live two-way check pending) | Web + Mobile + Platform | `docs/Implementation_plans/webversion/categories/chat/active/CHAT-001_ADVISOR_CUSTOMER_CHAT_PLAN.md` |
 | BODYSHOP-FLOW | bodyshop | In Progress | Bodyshop Team | `docs/Implementation_plans/webversion/categories/bodyshop/active/Bodyshop-Flow.md` |
 | BODYSHOP-QUEUE-001 | bodyshop | Active | Bodyshop Team + Platform Team | `docs/Implementation_plans/webversion/categories/bodyshop/active/BODYSHOP-QUEUE-001_CANONICAL_STAGE_WORKLIST_BACKEND_PLAN_2026-06-20.md` |
 | BODYSHOP-EARNINGS-001 | bodyshop | Active | Bodyshop Team + Platform Team | `docs/Implementation_plans/webversion/categories/bodyshop/active/BODYSHOP-EARNINGS-001_BODYSHOP_TRACKER_SOLO_BONUS_SUPPORT_SPLIT_PLAN_2026-07-17.md` |
@@ -88,6 +90,7 @@ Use this file as daily command center:
 | Category | File |
 |---|---|
 | accounts | `docs/Implementation_plans/webversion/categories/accounts/evidence/ACCOUNTS-001_TEST_MATRIX.md` |
+| chat | `docs/Implementation_plans/webversion/categories/chat/evidence/CHAT-001_PHASE1_APPLY_2026-09-25.md` |
 | autodoc | `docs/Implementation_plans/webversion/categories/autodoc/evidence/AUTODOC_EXECUTION_STATUS_2026-05-22.md` |
 | bodyshop | `docs/Implementation_plans/webversion/categories/bodyshop/evidence/BP-01_DASHBOARD_DEEP_AUDIT.md` |
 | bodyshop | `docs/Implementation_plans/webversion/categories/bodyshop/evidence/BODYSHOP-QUEUE-001_PARITY_CHECKLIST_2026-06-20.md` |

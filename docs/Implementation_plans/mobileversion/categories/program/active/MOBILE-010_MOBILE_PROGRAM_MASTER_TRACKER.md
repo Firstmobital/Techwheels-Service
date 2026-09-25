@@ -45,6 +45,7 @@ If any child tracker conflicts with this file, this file wins until explicitly u
 | MOBILE-011 | `docs/Implementation_plans/mobileversion/categories/auth/active/MOBILE-011_CUSTOMER_STAFF_SINGLE_APP_PLAN.md` | One Expo binary: customer + staff login shells + customer RPCs | In Progress | High | Phase 0 done. Phase 1–3 implemented in `mobile/` + web cutover. Apply `20260916120000_mobile_011_customer_sessions.sql` before the next prod APK/iOS. Do not ship `bodyshop/`. |
 | MOBILE-012 | `docs/Implementation_plans/mobileversion/categories/release/active/MOBILE-012_PLAY_APP_STORE_PUBLISH_PLAN.md` | Play Store + App Store publish for `com.techwheels.service` (ASC `6774519420`) | In Progress | High | AAB 11 on Play + IPA 13 TestFlight. Next: finish Play App content (Advertising ID No + photo/video declaration), then send for review. App Store listing + screenshots. |
 | MOBILE-013 | `docs/Implementation_plans/mobileversion/categories/customer/active/MOBILE-013_CUSTOMER_DOCUMENT_DRIVE_UPLOAD_PLAN.md` | Customer claim documents: autodoc staging, bodyshop document upsert, universal-drive-upload | In Progress | High | Code written 2026-09-25. Deploy `customer-portal-upload` and `universal-drive-upload` before customer Drive sync works. |
+| MOBILE-014 | `docs/Implementation_plans/mobileversion/categories/customer/active/MOBILE-014_CUSTOMER_ADVISOR_CHAT_PLAN.md` | Customer Chat screen for the CHAT-001 vehicle thread | In Progress | High | Screen is in the app. Next live check: customer send appears on web `/chat`. |
 
 ---
 
@@ -72,6 +73,7 @@ Use: Not Started | In Progress | Blocked | Review | Done
 | M10-007 | Single-app customer + staff identity (RPCs, Expo shells) | MOBILE-011 | Not Started | Mobile + Platform | Phase 0: delete client `service_role` (no dashboard rotation); do not copy `bodyshop/` into Expo |
 | M10-008 | Play + App Store first public listing | MOBILE-012 | In Progress | Mobile + Platform | App Store: finish ASC 6774519420 listing + Add for Review on IPA 13 (no new IPA). Play: still AAB 12+ after picker policy. |
 | M10-009 | Customer claim document Drive offload | MOBILE-013 | In Progress | Mobile + Platform | App and broker coded. Next: deploy the two edge functions, then upload one claim document as a customer and confirm `drive_url`. |
+| M10-010 | In-app customer advisor chat | MOBILE-014, CHAT-001 | In Progress | Mobile + Web + Platform | Migration applied. Next: grant `chat` view, then send one message from the customer app and reply from `/chat`. |
 
 ### 4.1) Current Session Kickoff (2026-06-18)
 

@@ -261,12 +261,7 @@ export default function CustomerDashboardScreen() {
               <TouchableOpacity
                 accessibilityRole="button"
                 accessibilityLabel="Chat"
-                onPress={() => {
-                  const phoneClean = (getDirectAdvisorOrWorkshopPhone(job || (selected as unknown as Record<string, unknown>)) || '').replace(/\D/g, '').slice(-10)
-                  if (phoneClean) {
-                    void Linking.openURL(`https://wa.me/91${phoneClean}?text=${encodeURIComponent(`Hello, I am tracking my Tata vehicle ${selected.reg_number} (Job Card: ${jc || 'Active'}). Please update on current status.`)}`)
-                  }
-                }}
+                onPress={() => router.push('/(customer)/chat')}
                 activeOpacity={0.85}
                 style={{
                   flex: 1,

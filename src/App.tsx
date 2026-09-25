@@ -56,6 +56,8 @@ import PartsSPMDashboardPage from './pages/PartsSPMDashboardPage'
 import DriverManagementPage from './pages/DriverManagementPage'
 import BusyAccountingPage from './pages/BusyAccountingPage'
 import AccountsPage from './pages/AccountsPage'
+import ChatPage from './pages/ChatPage'
+import { getAdvisorChatUnreadCount } from './lib/api/advisorChat'
 import VerifyScreenPreview from './pages/VerifyScreenPreview'
 import HelpTicketsAdminPage from './pages/HelpTicketsAdminPage'
 import MyHelpTicketsPage from './pages/help/MyHelpTicketsPage'
@@ -88,6 +90,7 @@ const NAV_ITEMS = [
   { to: '/settings', label: 'Settings', icon: 'settings' },
   { to: '/admin', label: 'Admin', icon: 'admin' },
 
+  { to: '/chat', label: 'Chat', icon: 'message-circle' },
   { to: '/complaints', label: 'Complaints', icon: 'complaints' },
   { to: '/help-tickets', label: 'Help Tickets', icon: 'message-circle' },
   { to: '/bodyshop-repair', label: 'Repair Tracker', icon: 'floor' },
@@ -123,6 +126,7 @@ type ModuleName =
   | 'bodyshop_floor'
   | 'technician'
   | 'payroll'
+  | 'chat'
   | 'complaints'
   | 'help_tickets'
   | 'bodyshop_repair'
@@ -140,7 +144,7 @@ type ModuleName =
   | 'busy'
   | 'accounts'
 
-type AppRoute = '/import' | '/reports' | '/settings' | '/admin' | '/autodoc' | '/reception' | '/service-advisor' | '/floor-incharge' | '/sa-tracker' | '/bodyshop-tracker' | '/bodyshop-floor' | '/technician' | '/payroll' | '/complaints' | '/help-tickets' | '/bodyshop-repair' | '/bodyshop-recovery' | '/ew-reminder' | '/service-booking' | '/driver-management' | '/wa-agent' | '/telecalling' | '/insurance-renewal-telecalling' | '/auto-service-reminder' | '/cre-incentive' | '/post-service-feedback' | '/parts-spm' | '/busy' | '/accounts'
+type AppRoute = '/import' | '/reports' | '/settings' | '/admin' | '/autodoc' | '/reception' | '/service-advisor' | '/floor-incharge' | '/sa-tracker' | '/bodyshop-tracker' | '/bodyshop-floor' | '/technician' | '/payroll' | '/chat' | '/complaints' | '/help-tickets' | '/bodyshop-repair' | '/bodyshop-recovery' | '/ew-reminder' | '/service-booking' | '/driver-management' | '/wa-agent' | '/telecalling' | '/insurance-renewal-telecalling' | '/auto-service-reminder' | '/cre-incentive' | '/post-service-feedback' | '/parts-spm' | '/busy' | '/accounts'
 
 interface PermissionRow {
   module_name: string
@@ -160,6 +164,7 @@ const ROUTE_MODULE_MAP: Record<AppRoute, ModuleName[]> = {
   '/bodyshop-floor': ['bodyshop_floor'],
   '/technician': ['technician'],
   '/payroll': ['payroll'],
+  '/chat': ['chat'],
   '/complaints': ['complaints'],
   '/help-tickets': ['help_tickets'],
   '/bodyshop-repair': ['bodyshop_repair'],
@@ -253,6 +258,8 @@ function TopNav({
   const [notificationRows, setNotificationRows] = useState<UnifiedNavNotification[]>([])
   const [notificationLoading, setNotificationLoading] = useState(false)
   const [notificationUnread, setNotificationUnread] = useState(0)
+  const [chatUnread, setChatUnread] = useState(0)
+  const canOpenChat = visibleItems.some((item) => item.to === '/chat')
   const [windowWidth, setWindowWidth] = useState<number>(
     typeof window !== 'undefined' ? window.innerWidth : 1440,
   )
@@ -276,11 +283,13 @@ function TopNav({
       return
     }
     try {
-      const [complaintCount, helpCount] = await Promise.all([
+      const [complaintCount, helpCount, chatCount] = await Promise.all([
         getUnreadComplaintNotificationCount().catch(() => 0),
         getUnreadHelpTicketNotificationCount().catch(() => 0),
+        canOpenChat ? getAdvisorChatUnreadCount().catch(() => 0) : Promise.resolve(0),
       ])
       setNotificationUnread(Number(complaintCount || 0) + Number(helpCount || 0))
+      setChatUnread(Number(chatCount || 0))
     } catch {
       // Keep header resilient even if notifications endpoint is unavailable.
       setNotificationUnread(0)
@@ -343,7 +352,7 @@ function TopNav({
     }, 30000)
 
     return () => window.clearInterval(intervalId)
-  }, [user?.id])
+  }, [user?.id, canOpenChat, pathname])
 
   useEffect(() => {
     if (open !== 'notifications') return
@@ -604,6 +613,22 @@ function TopNav({
         <button type="button" className="util__icon" title="Search">
           <Icon name="search" size={17} strokeWidth={1.9} />
         </button>
+        {canOpenChat && (
+          <button
+            type="button"
+            className="util__icon"
+            title="Chat"
+            onClick={() => onNavigate('/chat')}
+          >
+            <Icon name="message-circle" size={17} strokeWidth={1.9} />
+            {chatUnread > 0 && (
+              <>
+                <span className="dot" />
+                <span className="dot-count">{chatUnread > 9 ? '9+' : chatUnread}</span>
+              </>
+            )}
+          </button>
+        )}
         <div className="navrel">
           <button
             type="button"
@@ -901,6 +926,7 @@ function canAccessPath(pathname: string, allowedModules: Set<string>) {
   if (pathname.startsWith('/bodyshop-floor')) return hasAnyModuleAccess(allowedModules, ROUTE_MODULE_MAP['/bodyshop-floor'])
   if (pathname.startsWith('/technician')) return hasAnyModuleAccess(allowedModules, ROUTE_MODULE_MAP['/technician'])
   if (pathname.startsWith('/payroll')) return hasAnyModuleAccess(allowedModules, ROUTE_MODULE_MAP['/payroll'])
+  if (pathname.startsWith('/chat')) return hasAnyModuleAccess(allowedModules, ROUTE_MODULE_MAP['/chat'])
   if (pathname.startsWith('/complaints')) return hasAnyModuleAccess(allowedModules, ROUTE_MODULE_MAP['/complaints'])
   if (pathname.startsWith('/help-tickets')) return hasAnyModuleAccess(allowedModules, ROUTE_MODULE_MAP['/help-tickets'])
   // Employee Get Help self-service — auth only; RPCs enforce employee link
@@ -1403,7 +1429,7 @@ VITE_SUPABASE_ANON_KEY=your-anon-key`}
         {userId ? <GetHelpFab /> : null}
 
         <main className="main">
-          <div className="page">
+          <div className={location.pathname.startsWith('/chat') ? 'page page--chat' : 'page'}>
             {!defaultRoute ? (
               <AccessDenied />
             ) : !canSeeCurrentPath ? (
@@ -1548,6 +1574,14 @@ VITE_SUPABASE_ANON_KEY=your-anon-key`}
                   element={(
                     <RequireAccess allowedModules={allowedModules} modules={ROUTE_MODULE_MAP['/autodoc']}>
                       <JobCardPage />
+                    </RequireAccess>
+                  )}
+                />
+                <Route
+                  path="/chat"
+                  element={(
+                    <RequireAccess allowedModules={allowedModules} modules={ROUTE_MODULE_MAP['/chat']}>
+                      <ChatPage />
                     </RequireAccess>
                   )}
                 />

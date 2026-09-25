@@ -2,7 +2,7 @@
 
 **Document ID:** MODULE-ROUTE-001  
 **Version:** 1.0  
-**Last Updated:** 2026-09-15  
+**Last Updated:** 2026-09-25  
 **Owner:** Techwheels Dev Team + GitHub Copilot  
 
 ---
@@ -34,6 +34,7 @@ This document defines the authoritative mapping between database modules and fro
 | 10 | `reception` | `/reception` | `/reception` | ReceptionPage | Active | Front desk vehicle intake and SA assignment |
 | 11 | `payroll` | `/payroll` | `/payroll` | PayrollPage | Active | Payroll management: attendance, advances, processing, salary slips |
 | — | `help_tickets` | `/help-tickets` | `/help-tickets` | HelpTicketsAdminPage | Active | Support inbox (org-wide). Employee self-service at `/help/tickets*` is auth-only (no module grant). |
+| — | `chat` | `/chat` | `/chat` | ChatPage | Active | Dealer-scoped customer vehicle inbox. Header icon sits left of the notification bell. View permission can list and send. |
 | — | `bodyshop_recovery` | `/bodyshop-recovery` | `/bodyshop-recovery` | BodyshopRecoveryPage | Active | DO / insurance-due book. Org-wide. More + Post Payment (Stage 18 DO) on-page. |
 | — | `busy` | `/busy` | `/busy` | BusyAccountingPage | Active | BUSY Party Account + Invoice Voucher export from `psf_revenue_dms` + persisted `busy_parts`. Mapped Parts-only dealer invoices use `busy_parts_account_master` when no Labour row exists. |
 | — | `accounts` | `/accounts` | `/accounts` | AccountsPage | Active | Mechanical Mark Done invoice capture from 11-Sep-2026 + Bodyshop Stage 18 settlement receipts (DO/insurance and customer-diff on `bodyshop_settlement_lines`). Not BUSY. Recovery remains the insurance-due follow-up book. |
@@ -64,6 +65,7 @@ const ROUTE_MODULE_MAP: Record<AppRoute, ModuleName[]> = {
   '/parts-spm': ['parts_spm'],
   '/busy': ['busy'],
   '/accounts': ['accounts'],
+  '/chat': ['chat'],
 }
 ```
 
