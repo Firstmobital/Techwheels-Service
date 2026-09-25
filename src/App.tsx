@@ -1082,32 +1082,11 @@ function AuthGate({ children }: { children: React.ReactNode }) {
     setAuthView('login')
   }, [location.pathname, user, customerVehicle])
 
-  const isPreviewCustomer = location.pathname === '/customer-preview' || location.search.includes('preview=customer')
-  if (customerVehicle || isPreviewCustomer) {
-    const activeVehicle: CustomerVehicle = customerVehicle || {
-      id: 0,
-      reg_number: 'RJ-14-EA-2024',
-      owner_name: 'Rahul Sharma',
-      owner_phone: '9876543210',
-      model: 'Tata Nexon EV Creative Plus',
-      variant: 'Empowered Plus LR',
-      branch: 'Sitapura Main Workshop',
-      service_type: 'Periodic Maintenance & Battery Health',
-      jc_number: 'JC-84920',
-      sa_name: 'Vikram Singh',
-      sa_display_name: 'Vikram Singh (Senior Advisor)',
-      km_reading: 14250,
-      payment_status: 'Pending',
-      gate_pass_issued: false,
-      billed_amount: 6450,
-      amount_received: 0,
-      created_at: '2026-01-01T00:00:00.000Z',
-      invoice_done_at: null,
-    }
+  if (customerVehicle) {
     return (
       <CustomerPortalPage
-        vehicle={activeVehicle}
-        allVehicles={allCustomerVehicles.length > 0 ? allCustomerVehicles : [activeVehicle]}
+        vehicle={customerVehicle}
+        allVehicles={allCustomerVehicles.length > 0 ? allCustomerVehicles : [customerVehicle]}
         sessionToken={customerSessionToken}
         onLogout={() => {
           void customerEndSession(customerSessionToken)
@@ -1116,9 +1095,6 @@ function AuthGate({ children }: { children: React.ReactNode }) {
           setCustomerVehicle(null)
           setAllCustomerVehicles([])
           setCustomerSessionToken(null)
-          if (isPreviewCustomer) {
-            navigate('/', { replace: true })
-          }
         }}
         onSelectVehicle={(v) => {
           setCustomerVehicle(v)
@@ -1167,13 +1143,6 @@ function AuthGate({ children }: { children: React.ReactNode }) {
         onSwitchToForgot={() => {
           setAuthView('forgot')
           navigate('/forgot-password', { replace: true })
-        }}
-        onCustomerLogin={(veh, all, token) => {
-          setCustomerVehicle(veh)
-          setAllCustomerVehicles(all)
-          setCustomerSessionToken(token)
-          localStorage.setItem('active_customer_vehicle', JSON.stringify(veh))
-          localStorage.setItem('customer_session_token', token)
         }}
       />
     )

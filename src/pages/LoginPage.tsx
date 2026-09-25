@@ -6,7 +6,6 @@ import { supabase } from '../lib/supabase'
 interface Props {
   onSwitchToSignUp: () => void
   onSwitchToForgot?: () => void
-  onCustomerLogin?: (vehicle: any, allVehicles: any[], sessionToken: string) => void
 }
 
 const PITCH = {
@@ -116,34 +115,13 @@ export default function LoginPage({ onSwitchToSignUp, onSwitchToForgot }: Props)
         </button>
       </form>
 
-      <div className="divider-or">Customer App & Themes</div>
-      <a
-        href="/customer-preview"
-        className="btn btn--block"
-        style={{
-          background: 'linear-gradient(135deg, #002B49 0%, #061A2D 100%)',
-          color: '#00D2C4',
-          border: '1px solid rgba(0, 210, 196, 0.4)',
-          fontWeight: 700,
-          textDecoration: 'none',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          gap: '8px',
-          boxShadow: '0 4px 16px rgba(0, 43, 73, 0.3)'
-        }}
-      >
-        <span>🚘</span>
-        <span>View Tata.cars Theme Preview</span>
-      </a>
-
-      <div className="divider-or" style={{ marginTop: '16px' }}>New to Techwheels?</div>
+      <div className="divider-or">New to Techwheels?</div>
       <button type="button" className="btn btn--ghost btn--block" onClick={onSwitchToSignUp}>
         Request staff access
       </button>
 
       <p className="authfine" style={{ marginTop: 24 }}>
-        Techwheels Service v1.0 · Firstmobital · Tata.cars Inspired Theme
+        Techwheels Service v1.0 · Firstmobital
       </p>
     </AuthShell>
   )
