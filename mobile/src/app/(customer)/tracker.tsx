@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { ActivityIndicator, Alert, Image, Linking, Modal, ScrollView, Text, TouchableOpacity, View } from 'react-native'
 import { useFocusEffect, useRouter } from 'expo-router'
 import { CustomerScreen } from '../../components/customer/CustomerScreen'
@@ -14,15 +14,13 @@ import {
 import { useCustomerSession } from '../../context/CustomerSessionContext'
 import {
   customerGetActiveJob,
-  customerGetMechanicalCase,
   customerGetRepairCard,
   customerOpenBodyshopEstimateDocument,
   parseBodyshopEstimateDocument,
 } from '../../lib/api/customerPortal'
 import { supabase } from '../../lib/supabase'
 import { MechanicalJourneyContent } from '../../components/customer/MechanicalJourneyContent'
-import { resolveCustomerVisitKind } from '../../lib/customer/mechanicalServiceType'
-import type { MechanicalCasePayload } from '../../lib/customer/mechanicalCustomerUi'
+import { useCustomerVisit } from '../../context/CustomerVisitContext'
 import { Icon } from '../../components/ui/Icon'
 import { getBodyshopStageDetailRows, getBodyshopStageTimelineDate } from '../../lib/customer/bodyshopStageDetails'
 import { resolveBodyshopEffectiveStage, resolveBodyshopStageLabel } from '../../lib/customer/bodyshopEffectiveStage'
@@ -125,7 +123,8 @@ export default function CustomerTrackerScreen() {
   const [error, setError] = useState<string | null>(null)
   const [openingEstimateDoc, setOpeningEstimateDoc] = useState(false)
   const [estimatePreviewUri, setEstimatePreviewUri] = useState<string | null>(null)
-  const [mechCase, setMechCase] = useState<MechanicalCasePayload | null>(null)
+  const { isMechanical: isMechanicalVisit, isBodyshop, mechCase, job: visitJob, refresh: refreshVisit } =
+    useCustomerVisit()
 
   const bodyshopEstimateDoc = parseBodyshopEstimateDocument(card)
   const showEstimateDocInStage =
@@ -166,25 +165,8 @@ export default function CustomerTrackerScreen() {
       }
       if (repair) setCard(repair)
 
-      const visitKind = resolveCustomerVisitKind(activeJob as Record<string, unknown> | null)
-      if (visitKind === 'mechanical') {
-        const mech = (await customerGetMechanicalCase(token, selectedReg).catch(() => null)) as MechanicalCasePayload | null
-        setMechCase(mech)
-        const floor = mech?.floor
-        if (floor?.technician_name && floor.technician_name.toLowerCase() !== 'not required') {
-          setTechInfo({
-            name: floor.technician_name,
-            code: floor.technician_code ?? null,
-            bay_no: floor.bay_no ?? null,
-            assigned_at: floor.assigned_at ?? null,
-            work_status: floor.work_status ?? null,
-            remark: null,
-          })
-        } else {
-          setTechInfo(null)
-        }
-      } else {
-        setMechCase(null)
+      const visitKind = await refreshVisit()
+      if (visitKind !== 'mechanical') {
         const activeJc = (activeJob?.jc_number as string) || (selected?.jc_number as string) || ''
         if (activeJc) {
           try {
@@ -220,7 +202,24 @@ export default function CustomerTrackerScreen() {
     } finally {
       setLoading(false)
     }
-  }, [token, selectedReg, selected?.jc_number, job, card])
+  }, [token, selectedReg, selected?.jc_number, job, card, refreshVisit])
+
+  useEffect(() => {
+    if (!isMechanicalVisit) return
+    const floor = mechCase?.floor
+    if (floor?.technician_name && floor.technician_name.toLowerCase() !== 'not required') {
+      setTechInfo({
+        name: floor.technician_name,
+        code: floor.technician_code ?? null,
+        bay_no: floor.bay_no ?? null,
+        assigned_at: floor.assigned_at ?? null,
+        work_status: floor.work_status ?? null,
+        remark: null,
+      })
+    } else {
+      setTechInfo(null)
+    }
+  }, [isMechanicalVisit, mechCase])
 
   useFocusEffect(
     useCallback(() => {
@@ -249,9 +248,7 @@ export default function CustomerTrackerScreen() {
     })
   }, [selectedBodyshopStage, card, job?.jc_number, selected?.jc_number, advisor, techInfo])
 
-  const visitKind = resolveCustomerVisitKind(job)
-  const isMechanicalVisit = visitKind === 'mechanical'
-  const isAccident = visitKind === 'bodyshop'
+  const isAccident = isBodyshop
 
   // Same pointer as workshop web: bodyshop_repair_cards.current_stage
   const currentBodyshopStage = resolveBodyshopEffectiveStage(card, { invoiced })

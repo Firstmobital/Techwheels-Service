@@ -21,7 +21,15 @@ export function isMechanicalServiceType(serviceType: string | null | undefined):
 
 export type CustomerVisitKind = 'mechanical' | 'bodyshop' | 'other'
 
-export function resolveCustomerVisitKind(job: Record<string, unknown> | null | undefined): CustomerVisitKind {
+/** Prefer `serverVisitKind` from `customer_get_active_job` / `customer_get_visit_context`. */
+export function resolveCustomerVisitKind(
+  job: Record<string, unknown> | null | undefined,
+  serverVisitKind?: string | null
+): CustomerVisitKind {
+  const fromServer = String(serverVisitKind ?? '').trim()
+  if (fromServer === 'mechanical' || fromServer === 'bodyshop' || fromServer === 'other') {
+    return fromServer
+  }
   if (!job) return 'other'
   const st = String(job.service_type ?? '').trim()
   if (isMechanicalServiceType(st)) return 'mechanical'

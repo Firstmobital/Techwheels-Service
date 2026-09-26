@@ -3,6 +3,7 @@ import { ActivityIndicator, Text, TouchableOpacity, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useAuth } from '../../context/AuthContext'
 import { useCustomerSession } from '../../context/CustomerSessionContext'
+import { CustomerVisitProvider } from '../../context/CustomerVisitContext'
 import { CustomerTheme } from '../../lib/customer/customerTheme'
 
 import { Icon, IconName } from '../../components/ui/Icon'
@@ -120,6 +121,7 @@ export default function CustomerTabsLayout() {
   }
 
   return (
+    <CustomerVisitProvider>
     <Tabs
       tabBar={(props) => <CustomerTabBar {...props} />}
       screenOptions={{
@@ -140,5 +142,6 @@ export default function CustomerTabsLayout() {
       <Tabs.Screen name="booking" options={{ href: null, title: 'Book Service' }} />
       <Tabs.Screen name="my-bookings" options={{ href: null, title: 'My Bookings' }} />
     </Tabs>
+    </CustomerVisitProvider>
   )
 }

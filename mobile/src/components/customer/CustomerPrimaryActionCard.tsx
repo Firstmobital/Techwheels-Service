@@ -11,9 +11,7 @@ import {
   resolveCustomerPrimaryAction,
   resolveMechanicalPrimaryAction,
 } from '../../lib/customer/customerPrimaryAction'
-import { customerGetActiveJob, customerGetMechanicalCase } from '../../lib/api/customerPortal'
-import { resolveCustomerVisitKind } from '../../lib/customer/mechanicalServiceType'
-import type { MechanicalCasePayload } from '../../lib/customer/mechanicalCustomerUi'
+import { useCustomerVisit } from '../../context/CustomerVisitContext'
 import { CustomerTheme } from '../../lib/customer/customerTheme'
 import { Icon } from '../ui/Icon'
 import { useCustomerScreenRefresh } from './customerScreenRefresh'
@@ -24,22 +22,21 @@ export function CustomerPrimaryActionCard({ includeDocumentAction = true }: { in
   const { token, selectedReg } = useCustomerSession()
   const [action, setAction] = useState<ReturnType<typeof resolveCustomerPrimaryAction>>(null)
 
+  const { ready: visitReady, isMechanical, mechCase, repairCard } = useCustomerVisit()
+
   const refresh = useCallback(async () => {
-    if (!token) {
+    if (!token || !visitReady) {
       setAction(null)
       return
     }
-    const jobRes = await customerGetActiveJob(token, selectedReg).catch(() => ({ job: null }))
-    const visitKind = resolveCustomerVisitKind(jobRes.job as Record<string, unknown> | null)
-    if (visitKind === 'mechanical') {
-      const mech = (await customerGetMechanicalCase(token, selectedReg).catch(() => null)) as MechanicalCasePayload | null
-      setAction(resolveMechanicalPrimaryAction(mech))
+    if (isMechanical) {
+      setAction(resolveMechanicalPrimaryAction(mechCase))
       return
     }
 
     const [progress, card] = await Promise.all([
       loadClaimDocumentProgress(selectedReg, token),
-      customerGetRepairCard(token, selectedReg).catch(() => null),
+      Promise.resolve(repairCard ?? customerGetRepairCard(token, selectedReg).catch(() => null)),
     ])
     const stage = Number(card?.current_stage || 0)
     const pay = computeSettlement({
@@ -58,7 +55,7 @@ export function CustomerPrimaryActionCard({ includeDocumentAction = true }: { in
         includeDocumentAction,
       })
     )
-  }, [token, selectedReg, includeDocumentAction])
+  }, [token, selectedReg, includeDocumentAction, visitReady, isMechanical, mechCase, repairCard])
 
   useFocusEffect(
     useCallback(() => {

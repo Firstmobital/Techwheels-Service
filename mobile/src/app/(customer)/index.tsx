@@ -19,14 +19,9 @@ import {
   getDirectAdvisorOrWorkshopPhone,
 } from '../../components/customer/customerUi'
 import { useCustomerSession } from '../../context/CustomerSessionContext'
-import {
-  customerGetActiveJob,
-  customerGetGatePass,
-  customerGetMechanicalCase,
-  customerGetRepairCard,
-} from '../../lib/api/customerPortal'
-import { useCustomerVisitKind } from '../../hooks/useCustomerVisitKind'
-import { mechanicalStatusLabel, type MechanicalCasePayload } from '../../lib/customer/mechanicalCustomerUi'
+import { customerGetGatePass } from '../../lib/api/customerPortal'
+import { useCustomerVisit } from '../../context/CustomerVisitContext'
+import { mechanicalStatusLabel } from '../../lib/customer/mechanicalCustomerUi'
 import { Icon, IconName } from '../../components/ui/Icon'
 import { RemainingDocumentsCard } from '../../components/customer/RemainingDocumentsCard'
 import { CustomerPrimaryActionCard } from '../../components/customer/CustomerPrimaryActionCard'
@@ -37,77 +32,54 @@ export default function CustomerDashboardScreen() {
   const router = useRouter()
   const { token, vehicles, selectedReg } = useCustomerSession()
   const selected = vehicles.find((v) => v.reg_number === selectedReg) || vehicles[0]
-  const [job, setJob] = useState<Record<string, unknown> | null>(null)
-  const [activeVehicle, setActiveVehicle] = useState<Record<string, unknown> | null>(null)
-  const [repairCard, setRepairCard] = useState<Record<string, unknown> | null>(null)
+  const {
+    ready: visitReady,
+    job,
+    repairCard,
+    mechCase,
+    isMechanical,
+    isBodyshop,
+    refresh: refreshVisit,
+  } = useCustomerVisit()
   const [gatePass, setGatePass] = useState<Record<string, unknown> | null>(null)
-  const [mechCase, setMechCase] = useState<MechanicalCasePayload | null>(null)
-  const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const { isMechanical, refresh: refreshVisitKind } = useCustomerVisitKind(token, selected?.reg_number)
-  const load = useCallback(async (isInitial = false) => {
-    if (!token) return
-    if (isInitial && !job && !selected) {
-      setLoading(true)
-    }
+
+  const load = useCallback(async () => {
+    if (!token || !selectedReg) return
     try {
-      const [jobResult, passResult, cardResult, mechResult] = await Promise.all([
-        customerGetActiveJob(token, selected?.reg_number).catch((err) => ({
-          job: null,
-          vehicle: null,
-          error: err instanceof Error ? err.message : 'Unable to load job.',
-        })),
-        customerGetGatePass(token, selected?.reg_number).catch(() => null),
-        customerGetRepairCard(token, selected?.reg_number).catch(() => null),
-        customerGetMechanicalCase(token, selected?.reg_number).catch(() => null),
-      ])
-      if (jobResult.job) {
-        setJob(jobResult.job)
-        setError(null)
-      } else if (!job && !selected && 'error' in jobResult && jobResult.error) {
-        setError(String(jobResult.error))
-      }
-      if ('vehicle' in jobResult && jobResult.vehicle) {
-        setActiveVehicle(jobResult.vehicle as Record<string, unknown>)
-      }
-      if (cardResult) setRepairCard(cardResult)
-      if (passResult) setGatePass(passResult)
-      setMechCase((mechResult as MechanicalCasePayload | null) ?? null)
-      void refreshVisitKind()
+      const passResult = await customerGetGatePass(token, selectedReg).catch(() => null)
+      setGatePass(passResult)
+      setError(null)
+      await refreshVisit()
     } catch (err) {
-      if (!job && !selected) {
-        setError(err instanceof Error ? err.message : 'Unable to load job.')
-      }
-    } finally {
-      setLoading(false)
+      setError(err instanceof Error ? err.message : 'Unable to load job.')
     }
-  }, [token, selected?.reg_number, job, selected, refreshVisitKind])
+  }, [token, selectedReg, refreshVisit])
 
   // Fast & smooth 3.5s background auto-refresh without UI flicker
   useFocusEffect(
     useCallback(() => {
-      void load(false)
+      void load()
       const timer = setInterval(() => {
-        void load(false)
+        void load()
       }, 3500)
       return () => clearInterval(timer)
     }, [load])
   )
 
   useEffect(() => {
-    void load(true)
+    void load()
   }, [load])
 
   const onPullRefresh = useCallback(async () => {
-    await load(false)
+    await load()
   }, [load])
   useCustomerScreenRefresh(onPullRefresh)
 
   const customerName =
     asText(selected?.owner_name) ||
     asText(repairCard?.customer_name) ||
-    asText(job?.owner_name) ||
-    asText(activeVehicle?.owner_name)
+    asText(job?.owner_name)
   const model = asText(job?.model) || asText(selected?.model)
   const variant = asText(job?.variant) || asText(selected?.variant)
   const km = formatKm(job?.km_reading ?? selected?.km_reading)
@@ -115,8 +87,6 @@ export default function CustomerDashboardScreen() {
   const advisor =
     asText(job?.sa_display_name) ||
     asText(job?.sa_name) ||
-    asText(activeVehicle?.sa_display_name) ||
-    asText(activeVehicle?.sa_name) ||
     asText(selected?.sa_display_name) ||
     asText(selected?.sa_name) ||
     asText(repairCard?.sa_display_name) ||
@@ -125,7 +95,7 @@ export default function CustomerDashboardScreen() {
   const insuranceCompany =
     asText(repairCard?.insurance_company) ||
     asText(job?.insurance_company) ||
-    asText(activeVehicle?.insurance_company)
+    asText(job?.insurance_company)
   const surveyorName = asText(repairCard?.surveyor_name) || asText(job?.surveyor_name)
   const surveyorMobile =
     asText(repairCard?.surveyor_contact) ||
@@ -137,20 +107,21 @@ export default function CustomerDashboardScreen() {
   const claimIntimation =
     asText(repairCard?.claim_intimation_no) ||
     asText(job?.claim_intimation_no) ||
-    asText(activeVehicle?.claim_intimation_no)
+    asText(job?.claim_intimation_no)
   const insurancePolicyNo =
     asText(repairCard?.insurance_policy_no) ||
     asText(job?.insurance_policy_no) ||
-    asText(activeVehicle?.insurance_policy_no)
+    asText(job?.insurance_policy_no)
   const approvedEstimateRaw = repairCard?.estimated_amount ?? job?.estimated_amount
   const approvedEstimate =
     approvedEstimateRaw != null && approvedEstimateRaw !== '' ? formatInr(Number(approvedEstimateRaw)) : null
   const delivered = Boolean(job?.invoice_done_at || selected?.invoice_done_at)
   const mechanicalStatus = isMechanical ? mechanicalStatusLabel(mechCase) : null
-  const showBodyshopFields = !isMechanical
+  const showBodyshopFields = visitReady && isBodyshop
+  const homeContentReady = visitReady && Boolean(selected)
   return (
     <CustomerScreen title="" subtitle="">
-      {loading && !selected ? (
+      {!homeContentReady ? (
         <ActivityIndicator color={CustomerTheme.primary} className="py-8" />
       ) : error ? (
         <Text className="text-red-600 font-bold text-center py-4">{error}</Text>
@@ -336,7 +307,7 @@ export default function CustomerDashboardScreen() {
             </Text>
           </CustomerCard>
 
-          {!isMechanical ? <RemainingDocumentsCard regNumber={selected?.reg_number} /> : null}
+          {showBodyshopFields ? <RemainingDocumentsCard regNumber={selected?.reg_number} /> : null}
           <CustomerPrimaryActionCard includeDocumentAction={false} />
 
           <View style={{ marginBottom: 14 }}>

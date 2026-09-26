@@ -7,6 +7,7 @@ import {
   type CustomerVehicle,
 } from '../lib/api/customerAuth'
 import { resetCustomerDocumentsInflight } from '../lib/customer/customerDocumentsCache'
+import { clearCustomerPortalCache } from '../lib/api/customerPortal'
 
 const TOKEN_KEY = 'customer_session_token'
 const PHONE_KEY = 'customer_session_phone'
@@ -114,6 +115,7 @@ export function CustomerSessionProvider({ children }: { children: React.ReactNod
     const primaryReg = result.data.vehicles[0]?.reg_number ?? null
     setSelectedReg(primaryReg)
     setLastAudience('customer')
+    clearCustomerPortalCache()
     return {}
   }, [])
 
@@ -126,6 +128,7 @@ export function CustomerSessionProvider({ children }: { children: React.ReactNod
     await safeStorage.deleteItem(TOKEN_KEY)
     await safeStorage.deleteItem(PHONE_KEY)
     resetCustomerDocumentsInflight()
+    clearCustomerPortalCache()
     setToken(null)
     setPhone(null)
     setVehicles([])

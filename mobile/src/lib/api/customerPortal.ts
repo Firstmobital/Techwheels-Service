@@ -1,5 +1,7 @@
 import { Linking } from 'react-native'
 import { getSupabaseBaseUrl } from '../env'
+import type { CustomerVisitKind } from '../customer/mechanicalServiceType'
+import { resolveCustomerVisitKind } from '../customer/mechanicalServiceType'
 import { supabase, SUPABASE_ANON_KEY, SUPABASE_URL } from '../supabase'
 
 const apiCache = new Map<string, { timestamp: number; data: any }>()
@@ -32,35 +34,25 @@ function rpcErrorMessage(error: { message?: string } | null, fallback: string): 
   return fallback
 }
 
-export async function customerGetActiveJob(sessionToken: string, regNumber?: string | null) {
-  const cacheKey = `active_job_${sessionToken}_${regNumber || 'default'}`
-  const cached = getCached<any>(cacheKey)
-  if (cached) return cached
-
-  const { data, error } = await supabase.rpc('customer_get_active_job', {
-    p_session_token: sessionToken,
-    p_reg_number: regNumber || null,
-  })
-  if (error) throw new Error(rpcErrorMessage(error, 'Unable to load job.'))
-
-  const res = (data || {}) as {
-    phone?: string
-    vehicle?: Record<string, unknown> | null
-    job?: Record<string, unknown> | null
-  }
-
-  const job = res.job ? { ...res.job } : null
-  const regNorm = (regNumber || (res.vehicle?.reg_number as string) || (job?.reg_number as string) || '').trim().toUpperCase().replace(/\s+/g, '')
-  const jc = (job?.jc_number as string) || (res.vehicle?.jc_number as string) || ''
+async function enrichCustomerActiveJob(
+  job: Record<string, unknown>,
+  regNumber: string,
+  vehicle?: Record<string, unknown> | null
+): Promise<Record<string, unknown>> {
+  const regNorm = (regNumber || (vehicle?.reg_number as string) || (job.reg_number as string) || '')
+    .trim()
+    .toUpperCase()
+    .replace(/\s+/g, '')
+  const jc = (job.jc_number as string) || (vehicle?.jc_number as string) || ''
   const jcNorm = jc.trim().toUpperCase()
 
-  // Enrich with technician & bay if missing from RPC
-  if (job && (!job.technician_name || !job.bay_no)) {
+  if (!job.technician_name || !job.bay_no) {
     try {
-      // 1. Check technician_assignments by JC or digits
       if (jcNorm) {
         const lastDigits = jcNorm.replace(/[^0-9]/g, '').slice(-6)
-        const orClause = lastDigits ? `job_card_number.eq.${jcNorm},job_card_number.ilike.%${lastDigits}%` : `job_card_number.eq.${jcNorm}`
+        const orClause = lastDigits
+          ? `job_card_number.eq.${jcNorm},job_card_number.ilike.%${lastDigits}%`
+          : `job_card_number.eq.${jcNorm}`
         const { data: assignRows } = await supabase
           .from('technician_assignments')
           .select('technician_name, technician_code, bay_no, work_status, assigned_at')
@@ -78,7 +70,6 @@ export async function customerGetActiveJob(sessionToken: string, regNumber?: str
         }
       }
 
-      // 2. Check post_feedback_bot_data for technician_allocation_payload
       if (!job.technician_name && regNorm) {
         const { data: botRows } = await supabase
           .from('post_feedback_bot_data')
@@ -106,17 +97,152 @@ export async function customerGetActiveJob(sessionToken: string, regNumber?: str
     }
   }
 
-  return setCache(cacheKey, { ...res, job })
+  return job
+}
+
+export type CustomerVisitContextPayload = {
+  phone?: string
+  vehicle?: Record<string, unknown> | null
+  job?: Record<string, unknown> | null
+  visit_kind: CustomerVisitKind
+  mechanical_case?: Record<string, unknown> | null
+  repair_card?: Record<string, unknown> | null
+}
+
+export async function customerGetVisitContext(
+  sessionToken: string,
+  regNumber: string
+): Promise<CustomerVisitContextPayload> {
+  const reg = String(regNumber).trim()
+  if (!reg) {
+    return {
+      vehicle: null,
+      job: null,
+      visit_kind: 'other',
+      mechanical_case: null,
+      repair_card: null,
+    }
+  }
+
+  const cacheKey = `visit_ctx_${sessionToken}_${reg}`
+  const cached = getCached<CustomerVisitContextPayload>(cacheKey)
+  if (cached) return cached
+
+  const { data, error } = await supabase.rpc('customer_get_visit_context', {
+    p_session_token: sessionToken,
+    p_reg_number: reg,
+  })
+  if (error) {
+    // Pre-migration fallback: active job + client-side kind + conditional fetches
+    if (error.message?.includes('Could not find the function') || error.code === 'PGRST202') {
+      const legacy = await customerGetActiveJob(sessionToken, reg)
+      const job = legacy.job ? { ...legacy.job } : null
+      const visitKind = resolveCustomerVisitKind(job, legacy.visit_kind as string | undefined)
+      let mechanical_case: Record<string, unknown> | null = null
+      let repair_card: Record<string, unknown> | null = null
+      if (visitKind === 'mechanical') {
+        mechanical_case = (await customerGetMechanicalCase(sessionToken, reg).catch(() => null)) as Record<
+          string,
+          unknown
+        > | null
+      } else if (visitKind === 'bodyshop') {
+        repair_card = (await customerGetRepairCard(sessionToken, reg).catch(() => null)) as Record<
+          string,
+          unknown
+        > | null
+      }
+      return setCache(cacheKey, {
+        ...legacy,
+        visit_kind: visitKind,
+        mechanical_case,
+        repair_card,
+      })
+    }
+    throw new Error(rpcErrorMessage(error, 'Unable to load visit.'))
+  }
+
+  const res = (data || {}) as {
+    phone?: string
+    vehicle?: Record<string, unknown> | null
+    job?: Record<string, unknown> | null
+    visit_kind?: string
+    mechanical_case?: Record<string, unknown> | null
+    repair_card?: Record<string, unknown> | null
+  }
+
+  let job = res.job ? { ...res.job } : null
+  if (job) {
+    job = await enrichCustomerActiveJob(job, reg, res.vehicle)
+  }
+
+  const visitKind = resolveCustomerVisitKind(job, res.visit_kind)
+
+  const payload: CustomerVisitContextPayload = {
+    phone: res.phone,
+    vehicle: res.vehicle ?? null,
+    job,
+    visit_kind: visitKind,
+    mechanical_case: res.mechanical_case ?? null,
+    repair_card: res.repair_card ?? null,
+  }
+
+  setCache(`active_job_${sessionToken}_${reg}`, {
+    phone: payload.phone,
+    vehicle: payload.vehicle,
+    job: payload.job,
+    visit_kind: payload.visit_kind,
+  })
+  if (visitKind === 'mechanical') {
+    setCache(`mech_case_${sessionToken}_${reg}`, payload.mechanical_case)
+  }
+
+  return setCache(cacheKey, payload)
+}
+
+export async function customerGetActiveJob(sessionToken: string, regNumber?: string | null) {
+  const reg = regNumber != null ? String(regNumber).trim() : ''
+  if (!reg) {
+    return { phone: undefined, vehicle: null, job: null, visit_kind: 'other' as CustomerVisitKind }
+  }
+
+  const cacheKey = `active_job_${sessionToken}_${reg}`
+  const cached = getCached<any>(cacheKey)
+  if (cached) return cached
+
+  const { data, error } = await supabase.rpc('customer_get_active_job', {
+    p_session_token: sessionToken,
+    p_reg_number: reg,
+  })
+  if (error) throw new Error(rpcErrorMessage(error, 'Unable to load job.'))
+
+  const res = (data || {}) as {
+    phone?: string
+    vehicle?: Record<string, unknown> | null
+    job?: Record<string, unknown> | null
+    visit_kind?: string
+  }
+
+  let job = res.job ? { ...res.job } : null
+  if (job) {
+    job = await enrichCustomerActiveJob(job, reg, res.vehicle)
+  }
+
+  const visit_kind = resolveCustomerVisitKind(job, res.visit_kind)
+
+  return setCache(cacheKey, { ...res, job, visit_kind })
 }
 
 export async function customerGetMechanicalCase(sessionToken: string, regNumber?: string | null) {
-  const cacheKey = `mech_case_${sessionToken}_${regNumber || 'default'}`
+  const reg = regNumber != null ? String(regNumber).trim() : ''
+  if (!reg) return null
+
+  const cacheKey = `mech_case_${sessionToken}_${reg}`
   const cached = getCached<Record<string, unknown> | null>(cacheKey)
   if (cached !== null && cached !== undefined) return cached
 
   const { data, error } = await supabase.rpc('customer_get_mechanical_case', {
     p_session_token: sessionToken,
-    p_reg_number: regNumber || null,
+    p_reg_number: reg,
   })
   if (error) throw new Error(rpcErrorMessage(error, 'Unable to load service visit.'))
   const row = (data as Record<string, unknown> | null) ?? null

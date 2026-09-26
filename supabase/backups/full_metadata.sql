@@ -5582,9 +5582,73 @@ begin
   return jsonb_build_object(
     'phone', v_sess.phone,
     'vehicle', v_vehicle,
-    'job', v_job
+    'job', v_job,
+    'visit_kind', public.customer_resolve_visit_kind(v_job)
   );
 end;
+$$;
+
+
+--
+-- Name: customer_resolve_visit_kind(jsonb); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.customer_resolve_visit_kind(p_job jsonb) RETURNS text
+    LANGUAGE sql IMMUTABLE
+    AS $$
+  SELECT CASE
+    WHEN p_job IS NULL THEN 'other'
+    WHEN public.is_floor_incharge_service_type(p_job->>'service_type') THEN 'mechanical'
+    WHEN COALESCE(p_job->>'source', '') = 'bodyshop' THEN 'bodyshop'
+    WHEN COALESCE(p_job->>'service_type', '') = 'Accident' THEN 'bodyshop'
+    WHEN lower(COALESCE(p_job->>'service_type', '')) LIKE '%accident%' THEN 'bodyshop'
+    ELSE 'other'
+  END;
+$$;
+
+
+--
+-- Name: customer_get_visit_context(text, text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.customer_get_visit_context(p_session_token text, p_reg_number text DEFAULT NULL::text) RETURNS jsonb
+    LANGUAGE plpgsql STABLE SECURITY DEFINER
+    SET search_path TO 'public', 'extensions'
+    AS $$
+DECLARE
+  v_base jsonb;
+  v_kind text;
+BEGIN
+  IF p_reg_number IS NULL OR btrim(p_reg_number) = '' THEN
+    RAISE EXCEPTION 'reg_number required';
+  END IF;
+
+  v_base := public.customer_get_active_job(p_session_token, p_reg_number);
+  v_kind := COALESCE(v_base->>'visit_kind', public.customer_resolve_visit_kind(v_base->'job'));
+
+  IF v_kind = 'mechanical' THEN
+    RETURN v_base
+      || jsonb_build_object(
+        'visit_kind', v_kind,
+        'mechanical_case', public.customer_get_mechanical_case(p_session_token, p_reg_number),
+        'repair_card', NULL
+      );
+  ELSIF v_kind = 'bodyshop' THEN
+    RETURN v_base
+      || jsonb_build_object(
+        'visit_kind', v_kind,
+        'mechanical_case', NULL,
+        'repair_card', public.customer_get_repair_card(p_session_token, p_reg_number)
+      );
+  END IF;
+
+  RETURN v_base
+    || jsonb_build_object(
+      'visit_kind', v_kind,
+      'mechanical_case', NULL,
+      'repair_card', NULL
+    );
+END;
 $$;
 
 
@@ -55804,6 +55868,12 @@ GRANT ALL ON FUNCTION public.customer_get_gate_pass(p_session_token text, p_reg_
 GRANT ALL ON FUNCTION public.customer_get_repair_card(p_session_token text, p_reg_number text) TO anon;
 GRANT ALL ON FUNCTION public.customer_get_repair_card(p_session_token text, p_reg_number text) TO authenticated;
 GRANT ALL ON FUNCTION public.customer_get_repair_card(p_session_token text, p_reg_number text) TO service_role;
+GRANT ALL ON FUNCTION public.customer_resolve_visit_kind(jsonb) TO anon;
+GRANT ALL ON FUNCTION public.customer_resolve_visit_kind(jsonb) TO authenticated;
+GRANT ALL ON FUNCTION public.customer_resolve_visit_kind(jsonb) TO service_role;
+GRANT ALL ON FUNCTION public.customer_get_visit_context(p_session_token text, p_reg_number text) TO anon;
+GRANT ALL ON FUNCTION public.customer_get_visit_context(p_session_token text, p_reg_number text) TO authenticated;
+GRANT ALL ON FUNCTION public.customer_get_visit_context(p_session_token text, p_reg_number text) TO service_role;
 
 
 --

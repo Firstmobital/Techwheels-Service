@@ -5,16 +5,13 @@ import { CustomerScreen } from '../../components/customer/CustomerScreen'
 import { CustomerCard, CustomerToast, dash, formatInr, formatWhen } from '../../components/customer/customerUi'
 import { useCustomerSession } from '../../context/CustomerSessionContext'
 import {
-  customerGetActiveJob,
   customerGetGatePass,
-  customerGetMechanicalCase,
   customerGetServiceHistory,
   customerGetSettlement,
   customerListEstimates,
 } from '../../lib/api/customerPortal'
 import { MechanicalInvoicesContent } from '../../components/customer/MechanicalInvoicesContent'
-import { resolveCustomerVisitKind } from '../../lib/customer/mechanicalServiceType'
-import type { MechanicalCasePayload } from '../../lib/customer/mechanicalCustomerUi'
+import { useCustomerVisit } from '../../context/CustomerVisitContext'
 import { computeSettlement, parseEstimate } from '../../lib/customer/math'
 import { useCustomerScreenRefresh } from '../../components/customer/customerScreenRefresh'
 
@@ -28,26 +25,22 @@ export default function CustomerInvoicesScreen() {
   const [pass, setPass] = useState<Record<string, unknown> | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [mechCase, setMechCase] = useState<MechanicalCasePayload | null>(null)
-  const [isMechanicalVisit, setIsMechanicalVisit] = useState(false)
+  const { isMechanical: isMechanicalVisit, mechCase, ready: visitReady, refresh: refreshVisit } =
+    useCustomerVisit()
 
   const load = useCallback(async () => {
     if (!token) return
     setLoading(true)
     setError(null)
     try {
-      const jobRes = await customerGetActiveJob(token, selectedReg).catch(() => ({ job: null }))
-      const mechanical = resolveCustomerVisitKind(jobRes.job as Record<string, unknown> | null) === 'mechanical'
-      setIsMechanicalVisit(mechanical)
+      const visitKind = await refreshVisit()
 
-      if (mechanical) {
-        const [hist, mech, passData] = await Promise.all([
+      if (visitKind === 'mechanical') {
+        const [hist, passData] = await Promise.all([
           customerGetServiceHistory(token, selectedReg).catch(() => [] as Record<string, unknown>[]),
-          customerGetMechanicalCase(token, selectedReg).catch(() => null),
           customerGetGatePass(token, selectedReg).catch(() => null),
         ])
         setHistory(hist)
-        setMechCase((mech as MechanicalCasePayload | null) ?? null)
         setPayment(null)
         setEstimates([])
         setPass(passData)
@@ -62,14 +55,13 @@ export default function CustomerInvoicesScreen() {
         setEstimates((est || []).map(parseEstimate))
         setPayment(pay)
         setPass(passData)
-        setMechCase(null)
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unable to load bills.')
     } finally {
       setLoading(false)
     }
-  }, [token, selectedReg])
+  }, [token, selectedReg, refreshVisit])
 
   useFocusEffect(
     useCallback(() => {
@@ -158,7 +150,7 @@ export default function CustomerInvoicesScreen() {
         <ActivityIndicator color="#2563eb" />
       ) : (
         <>
-          {isMechanicalVisit ? (
+          {visitReady && isMechanicalVisit ? (
             mechCase ? (
               <MechanicalInvoicesContent
                 mechCase={mechCase}

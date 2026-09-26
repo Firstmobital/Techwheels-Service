@@ -1,38 +1,15 @@
-import { useCallback, useEffect, useState } from 'react'
-import { customerGetActiveJob } from '../lib/api/customerPortal'
-import {
-  resolveCustomerVisitKind,
-  type CustomerVisitKind,
-} from '../lib/customer/mechanicalServiceType'
+import { useCustomerVisit } from '../context/CustomerVisitContext'
 
-export function useCustomerVisitKind(token: string | null, regNumber?: string | null) {
-  const [kind, setKind] = useState<CustomerVisitKind>('other')
-  const [job, setJob] = useState<Record<string, unknown> | null>(null)
-  const [loading, setLoading] = useState(true)
-
-  const refresh = useCallback(async () => {
-    if (!token) {
-      setKind('other')
-      setJob(null)
-      setLoading(false)
-      return
-    }
-    try {
-      const res = await customerGetActiveJob(token, regNumber)
-      const activeJob = (res.job as Record<string, unknown> | null) ?? null
-      setJob(activeJob)
-      setKind(resolveCustomerVisitKind(activeJob))
-    } catch {
-      setJob(null)
-      setKind('other')
-    } finally {
-      setLoading(false)
-    }
-  }, [token, regNumber])
-
-  useEffect(() => {
-    void refresh()
-  }, [refresh])
-
-  return { kind, job, loading, refresh, isMechanical: kind === 'mechanical', isBodyshop: kind === 'bodyshop' }
+/** @deprecated Prefer useCustomerVisit() — kept for existing imports. */
+export function useCustomerVisitKind(_token: string | null, _regNumber?: string | null) {
+  const visit = useCustomerVisit()
+  return {
+    kind: visit.kind,
+    job: visit.job,
+    loading: visit.loading || !visit.ready,
+    refresh: visit.refresh,
+    isMechanical: visit.isMechanical,
+    isBodyshop: visit.isBodyshop,
+    visitReady: visit.ready,
+  }
 }

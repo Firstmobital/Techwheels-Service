@@ -4,7 +4,7 @@
 **Created:** 2026-09-26  
 **Priority:** HIGH  
 **Owner:** Mobile Team + Platform  
-**Status:** In progress (code + migration; apply SQL before live QA)  
+**Status:** In progress (apply migrations `20260926153000` + `20260926163000` before live QA)  
 **Category:** customer  
 **DB authority:** `supabase/backups/full_metadata.sql`  
 **Web desk reference:** [ACCOUNTS-001](../../../../webversion/categories/accounts/active/ACCOUNTS-001_MECHANICAL_BODYSHOP_ACCOUNTS_DESK_PLAN_2026-09-11.md) (`/accounts`)  
@@ -65,7 +65,7 @@ Match `src/lib/api/reception.ts` `FLOOR_INCHARGE_ALLOWED_SERVICE_TYPES`:
 - E Breakdown  
 - Campaign  
 
-Customer classification and `customer_get_mechanical_case` use `public.is_floor_incharge_service_type(service_type)` after Phase 1 adds Mini Paid Service to that function.
+Customer classification uses **`customer_resolve_visit_kind`** on the active job row (same rules as `is_floor_incharge_service_type` + Accident/bodyshop source). The mobile app must not infer visit type from the vehicle list or from “any repair card on this reg”.
 
 ### What Login as Customer does today
 
@@ -96,15 +96,32 @@ Customer classification and `customer_get_mechanical_case` use `public.is_floor_
 
 ## Target contract
 
-### Classification
+### Classification (server-owned)
 
 ```text
-mechanical := is_floor_incharge_service_type(active_job.service_type)
-bodyshop   := active_job.service_type = 'Accident' (or bodyshop-only visit with no floor reception row)
-other      := Rusting, PDI, no open visit — keep today’s generic screens until a later plan
+visit_kind := customer_resolve_visit_kind(active_job)
+  mechanical := is_floor_incharge_service_type(active_job.service_type)
+  bodyshop   := source = bodyshop OR service_type Accident / accident substring
+  other      := Rusting, PDI, no visit — generic screens
 ```
 
-Shared helper: `mobile/src/lib/customer/mechanicalServiceType.ts` — `isMechanicalServiceType(type)` mirrors the nine-type allowlist; server RPC is authoritative at runtime.
+**RPCs**
+
+| RPC | Role |
+|-----|------|
+| `customer_get_active_job` | Returns `job`, `vehicle`, and top-level **`visit_kind`**. |
+| `customer_get_visit_context` | One round trip: active job + `visit_kind` + **`mechanical_case`** or **`repair_card`** (never both). Requires non-empty `p_reg_number`. |
+| `customer_get_mechanical_case` | Mechanical Payments/Journey detail when context already loaded or tab refresh needs fresh invoice lines. |
+
+**Mobile:** `CustomerVisitProvider` calls `customerGetVisitContext(selectedReg)` only — no parallel `customerGetRepairCard` on mechanical login, no client-only classification when `visit_kind` is present. `mechanicalServiceType.ts` keeps a fallback mirror for pre-migration RPCs.
+
+### Login regression fix (2026-09-26)
+
+**Symptom:** After customer login, Home briefly showed bodyshop (insurance, surveyor, claim docs) until hard refresh.
+
+**Cause:** Client inferred bodyshop from stale repair card / default `other` + bodyshop UI gates; `customer_get_active_job` without reg picked wrong job; home fetched repair card in parallel.
+
+**Fix:** Session-scoped `CustomerVisitProvider`, mandatory reg on portal cache keys, Home waits on `visitReady`, and **server `visit_kind` + bundled visit context** (migration `20260926163000`).
 
 ### Screen behaviour (mechanical only)
 
@@ -162,10 +179,11 @@ Phase 1 also updates `is_floor_incharge_service_type` to include `'Mini Paid Ser
 - [ ] **Task 1.3:** sql_checks: wrong phone/reg rejected; expired session rejected; floor visit returns technician fields without `payment_notes` / keep_on_credit columns.
 - [ ] **Task 1.4:** Refresh `supabase/backups/full_metadata.sql` after operator apply.
 
-### Phase 2: Shared classification in the app
+### Phase 2: Visit context in the app
 - [ ] **Task 2.1:** Add `mechanicalServiceType.ts` with the nine-type allowlist (same as `reception.ts`).
-- [ ] **Task 2.2:** Add `customerGetMechanicalCase` wrapper in `mobile/src/lib/api/customerPortal.ts`.
-- [ ] **Task 2.3:** Hook `useCustomerVisitKind` (or equivalent) from active job + optional mechanical RPC result. Use on Home, Documents, Journey, Payments, menu — not “repair card exists” and not substring `accident` on vehicle list alone.
+- [ ] **Task 2.2:** Add `customerGetMechanicalCase` and **`customerGetVisitContext`** wrappers in `mobile/src/lib/api/customerPortal.ts`.
+- [ ] **Task 2.3:** `CustomerVisitProvider` + `useCustomerVisit()` on Home, Documents, Journey, Payments, menu — **server `visit_kind`**, no vehicle-list routing.
+- [ ] **Task 2.4:** Migration `20260926163000`: `customer_resolve_visit_kind`, extend `customer_get_active_job`, add `customer_get_visit_context`. Paired sql_checks.
 
 ### Phase 3: Home + menu
 - [ ] **Task 3.1:** `index.tsx` — mechanical hero, status chip, trimmed workshop record; hide claim rows and `RemainingDocumentsCard` when mechanical.
@@ -200,14 +218,15 @@ Phase 1 also updates `is_floor_incharge_service_type` to include `'Mini Paid Ser
 ✅ 1.1 | Mini Paid Service in is_floor_incharge_service_type | Platform | 2026-09-26 | 2026-09-26 | 20260926153000 migration
 ✅ 1.2 | customer_get_mechanical_case RPC | Platform | 2026-09-26 | 2026-09-26 | same migration
 ✅ 1.3 | Paired sql_checks | Platform | 2026-09-26 | 2026-09-26 | sql_checks file added
-⏳ 1.4 | Refresh full_metadata.sql | Platform | | | after operator apply
+✅ 1.4 | Refresh full_metadata.sql (visit_kind RPCs) | Platform | 2026-09-26 | 2026-09-26 | restore + patch; apply 1530 migration for mechanical_case in DB
 ```
 
 ### Phase 2
 ```
 ✅ 2.1 | mechanicalServiceType.ts | Mobile | 2026-09-26 | 2026-09-26 |
-✅ 2.2 | customerPortal wrapper | Mobile | 2026-09-26 | 2026-09-26 |
-✅ 2.3 | Visit kind hook wired | Mobile | 2026-09-26 | 2026-09-26 | useCustomerVisitKind
+✅ 2.2 | customerPortal wrappers | Mobile | 2026-09-26 | 2026-09-26 | mech case + visit context
+✅ 2.3 | CustomerVisitProvider | Mobile | 2026-09-26 | 2026-09-26 | useCustomerVisit
+✅ 2.4 | visit_kind + visit_context SQL | Platform | 2026-09-26 | 2026-09-26 | 20260926163000
 ```
 
 ### Phase 3
@@ -285,6 +304,10 @@ Phase 1 also updates `is_floor_incharge_service_type` to include `'Mini Paid Ser
 - Mini Paid Service is mechanical; Phase 1 aligns SQL `is_floor_incharge_service_type` with reception allowlist.
 - Help tab and MOBILE-014 chat stay shared; do not fork helpdesk RPCs.
 
+### 2026-09-26 — Server visit contract
+- Added `customer_resolve_visit_kind`, `customer_get_visit_context`, and `visit_kind` on `customer_get_active_job`.
+- Mobile visit shell loads one bundled context per selected reg; fixes bodyshop flash on mechanical login.
+
 ---
 
 ## Related Documentation
@@ -303,4 +326,4 @@ Phase 1 also updates `is_floor_incharge_service_type` to include `'Mini Paid Ser
 ---
 
 **Last Updated:** 2026-09-26  
-**Status:** ⏳ NOT STARTED — plan aligned to MOBILE-013 structure; Mini Paid Service included in mechanical scope and Phase 1 SQL
+**Status:** In progress — mechanical screens + server visit_kind shipped in repo; operator apply migrations before device QA

@@ -1,5 +1,5 @@
 import { ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { useCustomerVisitKind } from '../../hooks/useCustomerVisitKind'
+import { useCustomerVisit } from '../../context/CustomerVisitContext'
 import {
   Alert,
   BackHandler,
@@ -88,7 +88,7 @@ export function CustomerScreen({
   }
 
   const selectedVehicle = vehicles.find((v) => v.reg_number === selectedReg) || vehicles[0]
-  const { isMechanical } = useCustomerVisitKind(token, selectedReg)
+  const { isMechanical, isBodyshop, ready: visitReady } = useCustomerVisit()
 
   // Determine if this screen is the root customer home screen
   const isHomeScreen =
@@ -174,7 +174,7 @@ export function CustomerScreen({
     void downloadTpAffidavitForm()
   }
 
-  const isAccident = String(selectedVehicle?.service_type || '').toLowerCase().includes('accident')
+  const isAccident = visitReady ? isBodyshop : String(selectedVehicle?.service_type || '').toLowerCase().includes('accident')
 
   type CustomerMenuItem = {
     label: string
@@ -225,7 +225,7 @@ export function CustomerScreen({
       { label: 'Report Issue', icon: 'alert-circle', route: '/(customer)/complaint', desc: 'Log service issues or concerns' },
       { label: 'Dealership Feedback', icon: 'star', route: '/(customer)/feedback', desc: 'Rate your service experience' },
     ]
-    if (!isMechanical) return all
+    if (!visitReady || !isMechanical) return all
     return all.filter(
       (item) =>
         item.label !== 'Upload Claim Documents' &&
@@ -233,7 +233,7 @@ export function CustomerScreen({
         item.label !== 'Download Insurance Claim Form' &&
         item.label !== 'Download T/P Affidavit'
     )
-  }, [isAccident, isMechanical])
+  }, [isAccident, isMechanical, visitReady])
 
   const [hasSeenNotifications, setHasSeenNotifications] = useState(false)
 
