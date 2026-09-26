@@ -14,11 +14,15 @@ import {
 import { useCustomerSession } from '../../context/CustomerSessionContext'
 import {
   customerGetActiveJob,
+  customerGetMechanicalCase,
   customerGetRepairCard,
   customerOpenBodyshopEstimateDocument,
   parseBodyshopEstimateDocument,
 } from '../../lib/api/customerPortal'
 import { supabase } from '../../lib/supabase'
+import { MechanicalJourneyContent } from '../../components/customer/MechanicalJourneyContent'
+import { resolveCustomerVisitKind } from '../../lib/customer/mechanicalServiceType'
+import type { MechanicalCasePayload } from '../../lib/customer/mechanicalCustomerUi'
 import { Icon } from '../../components/ui/Icon'
 import { getBodyshopStageDetailRows, getBodyshopStageTimelineDate } from '../../lib/customer/bodyshopStageDetails'
 import { resolveBodyshopEffectiveStage, resolveBodyshopStageLabel } from '../../lib/customer/bodyshopEffectiveStage'
@@ -121,6 +125,7 @@ export default function CustomerTrackerScreen() {
   const [error, setError] = useState<string | null>(null)
   const [openingEstimateDoc, setOpeningEstimateDoc] = useState(false)
   const [estimatePreviewUri, setEstimatePreviewUri] = useState<string | null>(null)
+  const [mechCase, setMechCase] = useState<MechanicalCasePayload | null>(null)
 
   const bodyshopEstimateDoc = parseBodyshopEstimateDocument(card)
   const showEstimateDocInStage =
@@ -161,32 +166,51 @@ export default function CustomerTrackerScreen() {
       }
       if (repair) setCard(repair)
 
-      // Fetch live technician & bay details from Floor Incharge
-      const activeJc = (activeJob?.jc_number as string) || (selected?.jc_number as string) || ''
-      if (activeJc) {
-        try {
-          const { data: assignData } = await supabase
-            .from('technician_assignments')
-            .select('*')
-            .eq('job_card_number', activeJc.trim().toUpperCase())
-            .order('id', { ascending: false })
-            .limit(1)
+      const visitKind = resolveCustomerVisitKind(activeJob as Record<string, unknown> | null)
+      if (visitKind === 'mechanical') {
+        const mech = (await customerGetMechanicalCase(token, selectedReg).catch(() => null)) as MechanicalCasePayload | null
+        setMechCase(mech)
+        const floor = mech?.floor
+        if (floor?.technician_name && floor.technician_name.toLowerCase() !== 'not required') {
+          setTechInfo({
+            name: floor.technician_name,
+            code: floor.technician_code ?? null,
+            bay_no: floor.bay_no ?? null,
+            assigned_at: floor.assigned_at ?? null,
+            work_status: floor.work_status ?? null,
+            remark: null,
+          })
+        } else {
+          setTechInfo(null)
+        }
+      } else {
+        setMechCase(null)
+        const activeJc = (activeJob?.jc_number as string) || (selected?.jc_number as string) || ''
+        if (activeJc) {
+          try {
+            const { data: assignData } = await supabase
+              .from('technician_assignments')
+              .select('*')
+              .eq('job_card_number', activeJc.trim().toUpperCase())
+              .order('id', { ascending: false })
+              .limit(1)
 
-          if (assignData && assignData.length > 0) {
-            const row = assignData[0]
-            if (row.technician_name && row.technician_name.toLowerCase() !== 'not required') {
-              setTechInfo({
-                name: row.technician_name,
-                code: row.technician_code,
-                bay_no: row.bay_no,
-                assigned_at: row.assigned_at,
-                work_status: row.work_status,
-                remark: row.remark,
-              })
+            if (assignData && assignData.length > 0) {
+              const row = assignData[0]
+              if (row.technician_name && row.technician_name.toLowerCase() !== 'not required') {
+                setTechInfo({
+                  name: row.technician_name,
+                  code: row.technician_code,
+                  bay_no: row.bay_no,
+                  assigned_at: row.assigned_at,
+                  work_status: row.work_status,
+                  remark: row.remark,
+                })
+              }
             }
+          } catch {
+            // ignore fallback
           }
-        } catch {
-          // ignore fallback
         }
       }
     } catch (err) {
@@ -225,12 +249,9 @@ export default function CustomerTrackerScreen() {
     })
   }, [selectedBodyshopStage, card, job?.jc_number, selected?.jc_number, advisor, techInfo])
 
-  // Determine if this is an accident / bodyshop vehicle
-  const isAccident =
-    Boolean(card) ||
-    String(job?.service_type || '').toLowerCase().includes('accident') ||
-    String(selected?.service_type || '').toLowerCase().includes('accident') ||
-    String(card?.service_type || '').toLowerCase().includes('accident')
+  const visitKind = resolveCustomerVisitKind(job)
+  const isMechanicalVisit = visitKind === 'mechanical'
+  const isAccident = visitKind === 'bodyshop'
 
   // Same pointer as workshop web: bodyshop_repair_cards.current_stage
   const currentBodyshopStage = resolveBodyshopEffectiveStage(card, { invoiced })
@@ -304,11 +325,13 @@ export default function CustomerTrackerScreen() {
 
   return (
     <CustomerScreen
-      title={isAccident ? 'Repair journey' : 'Service journey'}
+      title={isAccident ? 'Repair journey' : isMechanicalVisit ? 'Service journey' : 'Service journey'}
       subtitle={
         isAccident
           ? `18 workshop phases for ${selected?.reg_number || 'your vehicle'}`
-          : `Live service phases for ${selected?.reg_number || 'your vehicle'}`
+          : isMechanicalVisit
+            ? `Floor service progress for ${selected?.reg_number || 'your vehicle'}`
+            : `Live service phases for ${selected?.reg_number || 'your vehicle'}`
       }
     >
       {error && !job && !card ? <CustomerToast ok={false} message={error} /> : null}
@@ -319,7 +342,9 @@ export default function CustomerTrackerScreen() {
           {/* ═══════════════════════════════════════════════════════════════════ */}
           {/* ── CASE 1: ACCIDENT / BODYSHOP VEHICLE (18 STAGES VIEW) ─────────── */}
           {/* ═══════════════════════════════════════════════════════════════════ */}
-          {isAccident ? (
+          {isMechanicalVisit ? (
+            <MechanicalJourneyContent mechCase={mechCase} advisor={advisor} />
+          ) : isAccident ? (
             <>
               {/* Top Bodyshop Status Banner */}
               <CustomerCard style={{ borderColor: '#e2e8f0', padding: 16 }}>

@@ -1,10 +1,53 @@
 import type { ClaimMode } from './customerClaimDocuments'
+import type { MechanicalCasePayload } from './mechanicalCustomerUi'
+import { mechanicalStatusLabel } from './mechanicalCustomerUi'
 
 export type CustomerPrimaryAction = {
   message: string
   detail?: string
   ctaLabel: string
-  route: '/(customer)/documents' | '/(customer)/estimate' | '/(customer)/invoices'
+  route:
+    | '/(customer)/documents'
+    | '/(customer)/estimate'
+    | '/(customer)/invoices'
+    | '/(customer)/gatepass'
+    | '/(customer)/chat'
+}
+
+export function resolveMechanicalPrimaryAction(
+  mechCase: MechanicalCasePayload | null
+): CustomerPrimaryAction | null {
+  if (!mechCase) return null
+  const label = mechanicalStatusLabel(mechCase)
+  if (label === 'On hold') {
+    return {
+      message: 'Your vehicle is on hold',
+      detail: 'Message your service advisor for the latest update.',
+      ctaLabel: 'Chat',
+      route: '/(customer)/chat',
+    }
+  }
+  if (label === 'Payment due') {
+    const remaining = Number(mechCase.invoice?.remaining_amount ?? 0)
+    return {
+      message: 'Payment due at billing desk',
+      detail:
+        remaining > 0
+          ? `Remaining balance ${remaining.toLocaleString('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 })} before gate pass.`
+          : 'View your bill and receipts.',
+      ctaLabel: 'View billing',
+      route: '/(customer)/invoices',
+    }
+  }
+  if (label === 'Ready for collection') {
+    return {
+      message: 'Your gate pass is ready',
+      detail: 'Collect your vehicle with the official departure pass.',
+      ctaLabel: 'View gate pass',
+      route: '/(customer)/gatepass',
+    }
+  }
+  return null
 }
 
 export function resolveCustomerPrimaryAction(input: {

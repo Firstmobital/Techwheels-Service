@@ -1,4 +1,5 @@
 import { ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCustomerVisitKind } from '../../hooks/useCustomerVisitKind'
 import {
   Alert,
   BackHandler,
@@ -87,6 +88,7 @@ export function CustomerScreen({
   }
 
   const selectedVehicle = vehicles.find((v) => v.reg_number === selectedReg) || vehicles[0]
+  const { isMechanical } = useCustomerVisitKind(token, selectedReg)
 
   // Determine if this screen is the root customer home screen
   const isHomeScreen =
@@ -182,44 +184,56 @@ export function CustomerScreen({
     menuAction?: 'claim-form' | 'tp-affidavit'
   }
 
-  const menuItems: CustomerMenuItem[] = [
-    {
-      label: isAccident ? 'Bodyshop Repair Journey' : 'Service Journey',
-      icon: 'map',
-      route: '/(customer)/tracker',
-      desc: isAccident ? '18-stage accident repair, surveyor inspection & DO tracking' : 'Real-time job card stage & technician bay',
-    },
-    {
-      label: 'Upload Claim Documents',
-      icon: 'cloud-upload',
-      route: '/(customer)/documents',
-      desc: 'Upload DL, RC, policy, signed claim form & T/P affidavit',
-    },
-    {
-      label: 'Workshop Estimate Approval',
-      icon: 'check',
-      route: '/(customer)/estimate',
-      desc: 'Review your Service Advisor quotation and approve or reject',
-    },
-    {
-      label: 'Download Insurance Claim Form',
-      icon: 'download',
-      menuAction: 'claim-form',
-      desc: 'Official motor claim PDF for your insurance company',
-    },
-    {
-      label: 'Download T/P Affidavit',
-      icon: 'download',
-      menuAction: 'tp-affidavit',
-      desc: 'Third-party affidavit template for notarization',
-    },
-    { label: 'Bills, Quotations & Receipts', icon: 'file-text', route: '/(customer)/invoices', desc: 'Invoices, estimates & payments' },
-    { label: 'Official Vehicle Gate Pass', icon: 'shield-check', route: '/(customer)/gatepass', desc: 'Accounts approved gate clearance' },
-    { label: '24x7 Helpdesk Escalation', icon: 'phone', route: '/(customer)/helpdesk', desc: 'CRM, Service Manager & Tata team' },
-    { label: 'Book Service Appointment', icon: 'calendar', route: '/(customer)/booking', desc: 'Schedule maintenance or pickup' },
-    { label: 'Report Issue', icon: 'alert-circle', route: '/(customer)/complaint', desc: 'Log service issues or concerns' },
-    { label: 'Dealership Feedback', icon: 'star', route: '/(customer)/feedback', desc: 'Rate your service experience' },
-  ]
+  const menuItems: CustomerMenuItem[] = useMemo(() => {
+    const all: CustomerMenuItem[] = [
+      {
+        label: isAccident ? 'Bodyshop Repair Journey' : 'Service Journey',
+        icon: 'map',
+        route: '/(customer)/tracker',
+        desc: isAccident
+          ? '18-stage accident repair, surveyor inspection & DO tracking'
+          : 'Real-time job card stage & technician bay',
+      },
+      {
+        label: 'Upload Claim Documents',
+        icon: 'cloud-upload',
+        route: '/(customer)/documents',
+        desc: 'Upload DL, RC, policy, signed claim form & T/P affidavit',
+      },
+      {
+        label: 'Workshop Estimate Approval',
+        icon: 'check',
+        route: '/(customer)/estimate',
+        desc: 'Review your Service Advisor quotation and approve or reject',
+      },
+      {
+        label: 'Download Insurance Claim Form',
+        icon: 'download',
+        menuAction: 'claim-form',
+        desc: 'Official motor claim PDF for your insurance company',
+      },
+      {
+        label: 'Download T/P Affidavit',
+        icon: 'download',
+        menuAction: 'tp-affidavit',
+        desc: 'Third-party affidavit template for notarization',
+      },
+      { label: 'Bills, Quotations & Receipts', icon: 'file-text', route: '/(customer)/invoices', desc: 'Invoices, estimates & payments' },
+      { label: 'Official Vehicle Gate Pass', icon: 'shield-check', route: '/(customer)/gatepass', desc: 'Accounts approved gate clearance' },
+      { label: '24x7 Helpdesk Escalation', icon: 'phone', route: '/(customer)/helpdesk', desc: 'CRM, Service Manager & Tata team' },
+      { label: 'Book Service Appointment', icon: 'calendar', route: '/(customer)/booking', desc: 'Schedule maintenance or pickup' },
+      { label: 'Report Issue', icon: 'alert-circle', route: '/(customer)/complaint', desc: 'Log service issues or concerns' },
+      { label: 'Dealership Feedback', icon: 'star', route: '/(customer)/feedback', desc: 'Rate your service experience' },
+    ]
+    if (!isMechanical) return all
+    return all.filter(
+      (item) =>
+        item.label !== 'Upload Claim Documents' &&
+        item.label !== 'Workshop Estimate Approval' &&
+        item.label !== 'Download Insurance Claim Form' &&
+        item.label !== 'Download T/P Affidavit'
+    )
+  }, [isAccident, isMechanical])
 
   const [hasSeenNotifications, setHasSeenNotifications] = useState(false)
 

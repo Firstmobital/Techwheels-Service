@@ -3,7 +3,7 @@
 Created: 2026-06-17
 Owner: Techwheels Product + Mobile Engineering + GitHub Copilot
 Status: ACTIVE (Canonical Authority)
-Last Updated: 2026-09-25
+Last Updated: 2026-09-26
 
 ---
 
@@ -46,6 +46,7 @@ If any child tracker conflicts with this file, this file wins until explicitly u
 | MOBILE-012 | `docs/Implementation_plans/mobileversion/categories/release/active/MOBILE-012_PLAY_APP_STORE_PUBLISH_PLAN.md` | Play Store + App Store publish for `com.techwheels.service` (ASC `6774519420`) | In Progress | High | AAB 11 on Play + IPA 13 TestFlight. Next: finish Play App content (Advertising ID No + photo/video declaration), then send for review. App Store listing + screenshots. |
 | MOBILE-013 | `docs/Implementation_plans/mobileversion/categories/customer/active/MOBILE-013_CUSTOMER_DOCUMENT_DRIVE_UPLOAD_PLAN.md` | Customer claim documents: autodoc staging, bodyshop document upsert, universal-drive-upload | In Progress | High | Code written 2026-09-25. Deploy `customer-portal-upload` and `universal-drive-upload` before customer Drive sync works. |
 | MOBILE-014 | `docs/Implementation_plans/mobileversion/categories/customer/active/MOBILE-014_CUSTOMER_ADVISOR_CHAT_PLAN.md` | Customer Chat screen for the CHAT-001 vehicle thread | In Progress | High | Screen is in the app. Next live check: customer send appears on web `/chat`. |
+| MOBILE-015 | `docs/Implementation_plans/mobileversion/categories/customer/active/MOBILE-015_MECHANICAL_CUSTOMER_SCREENS_PLAN.md` | Mechanical customer screens for Floor Incharge visits | Not Started | High | Plan written 2026-09-26. Next: `customer_get_mechanical_case`, then branch Home, Documents, Journey, and Payments. Accident screens stay. |
 
 ---
 
@@ -74,6 +75,7 @@ Use: Not Started | In Progress | Blocked | Review | Done
 | M10-008 | Play + App Store first public listing | MOBILE-012 | In Progress | Mobile + Platform | App Store: finish ASC 6774519420 listing + Add for Review on IPA 13 (no new IPA). Play: still AAB 12+ after picker policy. |
 | M10-009 | Customer claim document Drive offload | MOBILE-013 | In Progress | Mobile + Platform | App and broker coded. Next: deploy the two edge functions, then upload one claim document as a customer and confirm `drive_url`. |
 | M10-010 | In-app customer advisor chat | MOBILE-014, CHAT-001 | In Progress | Mobile + Web + Platform | Chat and push migrations applied. `send-chat-push` is deployed and FCM secrets are set. Next live check is a customer send on `/chat` and a phone notification. |
+| M10-011 | Mechanical customer screens | MOBILE-015 | Not Started | Mobile + Platform | Audit is in MOBILE-015. Next is the session RPC, then the four customer tabs for Floor Incharge visits. |
 
 ### 4.1) Current Session Kickoff (2026-06-18)
 

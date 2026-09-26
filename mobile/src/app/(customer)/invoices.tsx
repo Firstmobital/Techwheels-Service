@@ -5,11 +5,16 @@ import { CustomerScreen } from '../../components/customer/CustomerScreen'
 import { CustomerCard, CustomerToast, dash, formatInr, formatWhen } from '../../components/customer/customerUi'
 import { useCustomerSession } from '../../context/CustomerSessionContext'
 import {
+  customerGetActiveJob,
   customerGetGatePass,
+  customerGetMechanicalCase,
   customerGetServiceHistory,
   customerGetSettlement,
   customerListEstimates,
 } from '../../lib/api/customerPortal'
+import { MechanicalInvoicesContent } from '../../components/customer/MechanicalInvoicesContent'
+import { resolveCustomerVisitKind } from '../../lib/customer/mechanicalServiceType'
+import type { MechanicalCasePayload } from '../../lib/customer/mechanicalCustomerUi'
 import { computeSettlement, parseEstimate } from '../../lib/customer/math'
 import { useCustomerScreenRefresh } from '../../components/customer/customerScreenRefresh'
 
@@ -23,22 +28,42 @@ export default function CustomerInvoicesScreen() {
   const [pass, setPass] = useState<Record<string, unknown> | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [mechCase, setMechCase] = useState<MechanicalCasePayload | null>(null)
+  const [isMechanicalVisit, setIsMechanicalVisit] = useState(false)
 
   const load = useCallback(async () => {
     if (!token) return
     setLoading(true)
     setError(null)
     try {
-      const [hist, est, pay, passData] = await Promise.all([
-        customerGetServiceHistory(token, selectedReg).catch(() => [] as Record<string, unknown>[]),
-        customerListEstimates(token, selectedReg).catch(() => [] as Record<string, unknown>[]),
-        customerGetSettlement(token, selectedReg).catch(() => null),
-        customerGetGatePass(token, selectedReg).catch(() => null),
-      ])
-      setHistory(hist)
-      setEstimates((est || []).map(parseEstimate))
-      setPayment(pay)
-      setPass(passData)
+      const jobRes = await customerGetActiveJob(token, selectedReg).catch(() => ({ job: null }))
+      const mechanical = resolveCustomerVisitKind(jobRes.job as Record<string, unknown> | null) === 'mechanical'
+      setIsMechanicalVisit(mechanical)
+
+      if (mechanical) {
+        const [hist, mech, passData] = await Promise.all([
+          customerGetServiceHistory(token, selectedReg).catch(() => [] as Record<string, unknown>[]),
+          customerGetMechanicalCase(token, selectedReg).catch(() => null),
+          customerGetGatePass(token, selectedReg).catch(() => null),
+        ])
+        setHistory(hist)
+        setMechCase((mech as MechanicalCasePayload | null) ?? null)
+        setPayment(null)
+        setEstimates([])
+        setPass(passData)
+      } else {
+        const [hist, est, pay, passData] = await Promise.all([
+          customerGetServiceHistory(token, selectedReg).catch(() => [] as Record<string, unknown>[]),
+          customerListEstimates(token, selectedReg).catch(() => [] as Record<string, unknown>[]),
+          customerGetSettlement(token, selectedReg).catch(() => null),
+          customerGetGatePass(token, selectedReg).catch(() => null),
+        ])
+        setHistory(hist)
+        setEstimates((est || []).map(parseEstimate))
+        setPayment(pay)
+        setPass(passData)
+        setMechCase(null)
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unable to load bills.')
     } finally {
@@ -133,7 +158,22 @@ export default function CustomerInvoicesScreen() {
         <ActivityIndicator color="#2563eb" />
       ) : (
         <>
-          {isAccidentalCase ? (
+          {isMechanicalVisit ? (
+            mechCase ? (
+              <MechanicalInvoicesContent
+                mechCase={mechCase}
+                jcLabel={`Job Card #${dash(mechCase.jc_number || selected?.jc_number)} · ${mechCase.service_type || 'Service'}`}
+              />
+            ) : (
+              <CustomerCard>
+                <Text className="text-slate-800 font-bold">Service billing</Text>
+                <Text className="text-slate-600 text-[12px] mt-2 leading-5">
+                  Billing details will appear after the workshop database update is applied (`customer_get_mechanical_case`).
+                </Text>
+              </CustomerCard>
+            )
+          ) : null}
+          {!isMechanicalVisit && isAccidentalCase ? (
             /* ── DEDICATED BODYSHOP & INSURANCE CLAIM SETTLEMENT CARD ── */
             <CustomerCard>
               <View className="flex-row items-start justify-between mb-3">
@@ -371,7 +411,7 @@ export default function CustomerInvoicesScreen() {
                 </View>
               )}
             </CustomerCard>
-          ) : (
+          ) : !isMechanicalVisit ? (
             /* ── STANDARD CASH / DIRECT SETTLEMENT SUMMARY CARD ── */
             <CustomerCard>
               <View className="flex-row items-start justify-between mb-3">
@@ -547,7 +587,7 @@ export default function CustomerInvoicesScreen() {
                 </Text>
               )}
             </CustomerCard>
-          )}
+          ) : null}
 
           {invoices.map((row) => (
             <CustomerCard key={String(row.id)}>

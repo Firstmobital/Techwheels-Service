@@ -26,6 +26,10 @@ import {
   type CustomerBodyshopAsset,
 } from '../../lib/api/customerBodyshopUploads'
 import { fetchCustomerDocuments } from '../../lib/customer/customerDocumentsCache'
+import { useCustomerVisitKind } from '../../hooks/useCustomerVisitKind'
+import { customerGetMechanicalCase } from '../../lib/api/customerPortal'
+import { MechanicalDocumentsContent } from '../../components/customer/MechanicalDocumentsContent'
+import type { MechanicalCasePayload } from '../../lib/customer/mechanicalCustomerUi'
 import {
   claimModeFromRepairCard,
   listClaimDocumentsForUpload,
@@ -49,6 +53,8 @@ export default function CustomerDocumentsScreen() {
   const [busyKey, setBusyKey] = useState<string | null>(null)
   const [previewUri, setPreviewUri] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
+  const [mechCase, setMechCase] = useState<MechanicalCasePayload | null>(null)
+  const { isMechanical } = useCustomerVisitKind(token, selectedReg)
 
   const claimMode = claimModeFromRepairCard(repairCard)
   const ownershipType = ownershipFromRepairCard(repairCard)
@@ -101,8 +107,16 @@ export default function CustomerDocumentsScreen() {
       }
 
       try {
-        const fresh = await fetchCustomerDocuments(token, selectedReg)
-        applySnapshot(fresh)
+        if (isMechanical) {
+          const mech = (await customerGetMechanicalCase(token, selectedReg).catch(() => null)) as MechanicalCasePayload | null
+          setMechCase(mech)
+          setRepairCard(null)
+          setDocuments([])
+        } else {
+          const fresh = await fetchCustomerDocuments(token, selectedReg)
+          applySnapshot(fresh)
+          setMechCase(null)
+        }
       } catch {
         setRepairCard(null)
         setDocuments([])
@@ -111,7 +125,7 @@ export default function CustomerDocumentsScreen() {
         setRefreshing(false)
       }
     },
-    [token, selectedReg, applySnapshot]
+    [token, selectedReg, applySnapshot, isMechanical]
   )
 
   useEffect(() => {
@@ -323,6 +337,23 @@ export default function CustomerDocumentsScreen() {
           </Text>
         ) : null}
       </CustomerCard>
+    )
+  }
+
+  if (isMechanical) {
+    return (
+      <CustomerScreen
+        title="Documents"
+        subtitle={`Workshop paperwork · ${selectedReg || 'your vehicle'}`}
+      >
+        {loading ? (
+          <View style={{ paddingVertical: 24, alignItems: 'center' }}>
+            <ActivityIndicator color={CustomerTheme.primary} />
+          </View>
+        ) : (
+          <MechanicalDocumentsContent mechCase={mechCase} />
+        )}
+      </CustomerScreen>
     )
   }
 

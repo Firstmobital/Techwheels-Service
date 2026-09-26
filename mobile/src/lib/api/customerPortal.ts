@@ -109,6 +109,20 @@ export async function customerGetActiveJob(sessionToken: string, regNumber?: str
   return setCache(cacheKey, { ...res, job })
 }
 
+export async function customerGetMechanicalCase(sessionToken: string, regNumber?: string | null) {
+  const cacheKey = `mech_case_${sessionToken}_${regNumber || 'default'}`
+  const cached = getCached<Record<string, unknown> | null>(cacheKey)
+  if (cached !== null && cached !== undefined) return cached
+
+  const { data, error } = await supabase.rpc('customer_get_mechanical_case', {
+    p_session_token: sessionToken,
+    p_reg_number: regNumber || null,
+  })
+  if (error) throw new Error(rpcErrorMessage(error, 'Unable to load service visit.'))
+  const row = (data as Record<string, unknown> | null) ?? null
+  return setCache(cacheKey, row)
+}
+
 export async function customerGetServiceHistory(sessionToken: string, regNumber?: string | null) {
   const { data, error } = await supabase.rpc('customer_get_service_history', {
     p_session_token: sessionToken,

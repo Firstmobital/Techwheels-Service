@@ -2,12 +2,12 @@
 -- PostgreSQL database dump
 --
 
-\restrict TU4g2RD6DoWMmNRbFtmBZSqEY5tnakZO5e3VZKTjJrkT0j3TxhvqSclcPeMfluU
+\restrict 0IigKqVaBGa0C7CpobL5HrVfRkAdcdoQbPxR5VZrQX7RNQN7klJSOilZiRGuLTf
 
 -- Dumped from database version 17.6
 -- Dumped by pg_dump version 17.7 (Homebrew)
 
--- Started on 2026-09-26 09:55:53 IST
+-- Started on 2026-09-26 13:36:49 IST
 
 SET statement_timeout = 0;
 SET lock_timeout = 0;
@@ -5194,31 +5194,8 @@ COMMENT ON COLUMN public.bodyshop_repair_cards.doc_rejected_keys IS 'Document ke
 CREATE FUNCTION public.customer_bodyshop_effective_stage(p_card public.bodyshop_repair_cards) RETURNS integer
     LANGUAGE plpgsql STABLE
     AS $$
-declare
-  v_stage integer := greatest(1, least(18, coalesce(p_card.current_stage, 1)));
-  v_min_pending integer;
-  v_qc_pass boolean := lower(btrim(coalesce(p_card.qc_status, ''))) = 'pass';
-  v_ri_done boolean := lower(btrim(coalesce(p_card.reinspection_status, ''))) = 'completed';
 begin
-  select min(p.stage_no)::int
-  into v_min_pending
-  from public.bodyshop_stage_worklist_projection p
-  where p.repair_card_id = p_card.id
-    and p.is_pending = true;
-
-  if v_min_pending is not null then
-    v_stage := greatest(v_stage, v_min_pending);
-  end if;
-
-  if v_qc_pass and not v_ri_done then
-    return 14;
-  end if;
-
-  if not v_qc_pass and v_stage > 13 then
-    return 13;
-  end if;
-
-  return v_stage;
+  return greatest(1, least(18, coalesce(p_card.current_stage, 1)));
 end;
 $$;
 
@@ -5946,6 +5923,7 @@ $$;
 CREATE FUNCTION public.customer_get_settlement(p_session_token text, p_reg_number text DEFAULT NULL::text) RETURNS jsonb
     LANGUAGE plpgsql STABLE SECURITY DEFINER
     SET search_path TO 'public', 'extensions'
+    SET row_security TO 'off'
     AS $_$
 declare
   v_sess record;
@@ -5961,7 +5939,77 @@ begin
     v_reg := public.customer_assert_reg(p_session_token, p_reg_number);
   end if;
 
-  -- 1. Check for an explicit customer_payment_payload pushed by accounts desk
+  select jsonb_build_object(
+    'source', 'bodyshop_settlements',
+    'is_bodyshop', true,
+    'is_insurance_claim',
+      coalesce(s.do_amount, 0) > 0
+      or nullif(btrim(coalesce(b.insurance_company, '')), '') is not null
+      or nullif(btrim(coalesce(b.claim_intimation_no, '')), '') is not null,
+    'repair_card_id', b.id,
+    'reception_entry_id', b.reception_entry_id,
+    'reg_number', b.reg_number,
+    'jc_number', coalesce(s.job_card_no, b.job_card_no),
+    'owner_name', b.customer_name,
+    'branch', b.branch,
+    'service_type', 'Accidental / Bodyshop Repair',
+    'insurance_company', nullif(btrim(coalesce(b.insurance_company, s.invoice_account, '')), ''),
+    'insurance_policy_no', b.insurance_policy_no,
+    'claim_intimation_no', b.claim_intimation_no,
+    'invoice_no', s.invoice_number,
+    'invoice_date', s.invoice_date,
+    'total_billed', coalesce(s.invoice_amount, 0),
+    'billed_amount', coalesce(s.invoice_amount, 0),
+    'do_amount', coalesce(s.do_amount, 0),
+    'do_remaining', coalesce(s.insurance_due_amount, 0),
+    'customer_diff_amount', coalesce(s.customer_diff_amount, 0),
+    'customer_posted_amount', coalesce(s.customer_posted_amount, 0),
+    'customer_remaining_amount', coalesce(s.customer_remaining_amount, 0),
+    'customer_settlement_kind', s.customer_settlement_kind,
+    'outstanding_amount', coalesce(s.outstanding_amount, 0),
+    'amount_received', coalesce(s.customer_posted_amount, 0),
+    'remaining_amount', coalesce(s.customer_remaining_amount, 0),
+    'remaining_due', coalesce(s.customer_remaining_amount, 0),
+    'status', coalesce(s.derived_payment_status, s.customer_payment_status, 'pending'),
+    'do_payment_status', s.do_payment_status,
+    'customer_payment_status', s.customer_payment_status,
+    'updated_at', coalesce(s.updated_at, s.created_at),
+    'payments', coalesce((
+      select jsonb_agg(
+        jsonb_build_object(
+          'id', l.id,
+          'amount', l.amount,
+          'payment_mode', coalesce(nullif(btrim(l.payment_mode), ''), 'Accounts Cleared'),
+          'reference', l.reference,
+          'posted_at', coalesce(l.created_at, l.txn_date::timestamptz),
+          'payment_received_date', to_char(l.txn_date, 'DD Mon YYYY'),
+          'voucher_no', l.voucher_no
+        )
+        order by l.txn_date desc nulls last, l.id desc
+      )
+      from public.bodyshop_settlement_lines l
+      where l.repair_card_id = b.id
+        and l.party = 'customer'
+        and coalesce(l.is_reversed, false) = false
+        and l.line_type = 'receipt'
+    ), '[]'::jsonb)
+  )
+  into v_row
+  from public.bodyshop_settlements s
+  join public.bodyshop_repair_cards b on b.id = s.repair_card_id
+  where public.customer_norm_reg(b.reg_number) = any(v_regs)
+    and (v_reg is null or public.customer_norm_reg(b.reg_number) = v_reg)
+    and (
+      s.invoice_amount is not null
+      or nullif(btrim(coalesce(s.invoice_number, '')), '') is not null
+    )
+  order by coalesce(s.updated_at, s.created_at) desc nulls last
+  limit 1;
+
+  if v_row is not null then
+    return v_row;
+  end if;
+
   select b.feedback_text
   into v_text
   from public.post_feedback_bot_data b
@@ -5980,52 +6028,44 @@ begin
     exception when others then
       v_payload := null;
     end;
-    if v_payload is not null and (
-      v_payload ? 'total_billed' or v_payload ? 'billed_amount' or v_payload ? 'amount_received'
-    ) then
+    if v_payload is not null
+      and coalesce((v_payload->>'total_billed')::numeric, (v_payload->>'billed_amount')::numeric, 0) > 0
+    then
       return v_payload || jsonb_build_object('source', 'customer_payment_payload');
     end if;
   end if;
 
-  -- 2. accounts_mechanical_invoices with payments aggregated inline.
   if to_regclass('public.accounts_mechanical_invoices') is not null then
     execute
       $q$
       select jsonb_build_object(
-        'source',              'accounts_mechanical_invoices',
-        'reception_entry_id',  s.id,
-        'reg_number',          s.reg_number,
-        'jc_number',           coalesce(inv.jc_number, s.jc_number),
-        'owner_name',          s.owner_name,
-        'branch',              s.branch,
-        'service_type',        s.service_type,
-        'invoice_no',          inv.invoice_number,
-        'invoice_date',        inv.invoice_date,
-        'total_billed',        inv.billed_amount,
-        'billed_amount',       inv.billed_amount,
-        'amount_received',     coalesce(inv.amount_received, 0),
-        'remaining_amount',    public.accounts_mechanical_remaining_amount(inv.billed_amount, inv.amount_received),
-        'remaining_due',       public.accounts_mechanical_remaining_amount(inv.billed_amount, inv.amount_received),
-        'status',              inv.payment_status,
-        'keep_on_credit',      coalesce(inv.keep_on_credit, false),
+        'source', 'accounts_mechanical_invoices',
+        'is_bodyshop', false,
+        'reception_entry_id', s.id,
+        'reg_number', s.reg_number,
+        'jc_number', coalesce(inv.jc_number, s.jc_number),
+        'owner_name', s.owner_name,
+        'branch', s.branch,
+        'service_type', s.service_type,
+        'invoice_no', inv.invoice_number,
+        'invoice_date', inv.invoice_date,
+        'total_billed', inv.billed_amount,
+        'billed_amount', inv.billed_amount,
+        'amount_received', coalesce(inv.amount_received, 0),
+        'remaining_amount', public.accounts_mechanical_remaining_amount(inv.billed_amount, inv.amount_received),
+        'remaining_due', public.accounts_mechanical_remaining_amount(inv.billed_amount, inv.amount_received),
+        'status', inv.payment_status,
+        'keep_on_credit', coalesce(inv.keep_on_credit, false),
         'keep_on_credit_reason', inv.keep_on_credit_reason,
-        'invoice_drive_url',   s.invoice_drive_url,
+        'invoice_drive_url', s.invoice_drive_url,
         'invoice_storage_path', s.invoice_storage_path,
-        'updated_at',          coalesce(inv.updated_at, inv.captured_at, s.created_at),
-        'payments',            coalesce((
-          select jsonb_agg(
-            jsonb_build_object(
-              'id',                   p.id,
-              'amount',               p.amount,
-              'payment_mode',         p.payment_mode,
-              'reference',            p.reference,
-              'remark',               p.remark,
-              'posted_at',            p.posted_at,
-              'payment_received_date', p.payment_received_date,
-              'voucher_no',           p.voucher_no
-            )
-            order by p.posted_at desc
-          )
+        'updated_at', coalesce(inv.updated_at, inv.captured_at, s.created_at),
+        'payments', coalesce((
+          select jsonb_agg(jsonb_build_object(
+            'id', p.id, 'amount', p.amount, 'payment_mode', p.payment_mode,
+            'reference', p.reference, 'remark', p.remark, 'posted_at', p.posted_at,
+            'payment_received_date', p.payment_received_date, 'voucher_no', p.voucher_no
+          ) order by p.posted_at desc)
           from public.accounts_mechanical_payment_lines p
           where p.reception_entry_id = s.id
         ), '[]'::jsonb)
@@ -6045,25 +6085,24 @@ begin
     end if;
   end if;
 
-  -- 3. Fallback: service_reception_entries expected_invoice_amount
   select jsonb_build_object(
-    'source',             'reception_expected',
+    'source', 'reception_expected',
     'reception_entry_id', s.id,
-    'reg_number',         s.reg_number,
-    'jc_number',          s.jc_number,
-    'owner_name',         s.owner_name,
-    'branch',             s.branch,
-    'service_type',       s.service_type,
-    'total_billed',       s.expected_invoice_amount,
-    'billed_amount',      s.expected_invoice_amount,
-    'amount_received',    0,
-    'remaining_amount',   s.expected_invoice_amount,
-    'remaining_due',      s.expected_invoice_amount,
-    'status',             case when s.invoice_done_at is null then 'pending' else 'invoiced' end,
-    'invoice_drive_url',  s.invoice_drive_url,
+    'reg_number', s.reg_number,
+    'jc_number', s.jc_number,
+    'owner_name', s.owner_name,
+    'branch', s.branch,
+    'service_type', s.service_type,
+    'total_billed', s.expected_invoice_amount,
+    'billed_amount', s.expected_invoice_amount,
+    'amount_received', 0,
+    'remaining_amount', s.expected_invoice_amount,
+    'remaining_due', s.expected_invoice_amount,
+    'status', case when s.invoice_done_at is null then 'pending' else 'invoiced' end,
+    'invoice_drive_url', s.invoice_drive_url,
     'invoice_storage_path', s.invoice_storage_path,
-    'payments',           '[]'::jsonb,
-    'updated_at',         coalesce(s.invoice_done_at, s.created_at)
+    'payments', '[]'::jsonb,
+    'updated_at', coalesce(s.invoice_done_at, s.created_at)
   )
   into v_row
   from public.service_reception_entries s
@@ -6085,10 +6124,7 @@ $_$;
 -- Name: FUNCTION customer_get_settlement(p_session_token text, p_reg_number text); Type: COMMENT; Schema: public; Owner: -
 --
 
-COMMENT ON FUNCTION public.customer_get_settlement(p_session_token text, p_reg_number text) IS 'MOBILE-012 / DBL-0068: Full mechanical settlement with payments list.
-   Priority: customer_payment_payload > accounts_mechanical_invoices+payments > reception_expected.
-   SECURITY DEFINER bypasses RLS so anon callers get accounts data via RPC.
-   payments field is always jsonb array (empty = []).';
+COMMENT ON FUNCTION public.customer_get_settlement(p_session_token text, p_reg_number text) IS 'Customer payments. Priority: bodyshop_settlements (Accounts desk) > payment payload > mechanical invoice > reception expected.';
 
 
 --
@@ -72589,11 +72625,11 @@ CREATE EVENT TRIGGER trg_auto_admin_bypass_policy_on_ddl ON ddl_command_end
    EXECUTE FUNCTION public.apply_admin_bypass_policy_on_ddl();
 
 
--- Completed on 2026-09-26 09:57:07 IST
+-- Completed on 2026-09-26 13:38:03 IST
 
 --
 -- PostgreSQL database dump complete
 --
 
-\unrestrict TU4g2RD6DoWMmNRbFtmBZSqEY5tnakZO5e3VZKTjJrkT0j3TxhvqSclcPeMfluU
+\unrestrict 0IigKqVaBGa0C7CpobL5HrVfRkAdcdoQbPxR5VZrQX7RNQN7klJSOilZiRGuLTf
 

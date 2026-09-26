@@ -9,7 +9,11 @@ import {
   readAdditionalApprovalPending,
   readEstimateApprovalPending,
   resolveCustomerPrimaryAction,
+  resolveMechanicalPrimaryAction,
 } from '../../lib/customer/customerPrimaryAction'
+import { customerGetActiveJob, customerGetMechanicalCase } from '../../lib/api/customerPortal'
+import { resolveCustomerVisitKind } from '../../lib/customer/mechanicalServiceType'
+import type { MechanicalCasePayload } from '../../lib/customer/mechanicalCustomerUi'
 import { CustomerTheme } from '../../lib/customer/customerTheme'
 import { Icon } from '../ui/Icon'
 import { useCustomerScreenRefresh } from './customerScreenRefresh'
@@ -25,6 +29,14 @@ export function CustomerPrimaryActionCard({ includeDocumentAction = true }: { in
       setAction(null)
       return
     }
+    const jobRes = await customerGetActiveJob(token, selectedReg).catch(() => ({ job: null }))
+    const visitKind = resolveCustomerVisitKind(jobRes.job as Record<string, unknown> | null)
+    if (visitKind === 'mechanical') {
+      const mech = (await customerGetMechanicalCase(token, selectedReg).catch(() => null)) as MechanicalCasePayload | null
+      setAction(resolveMechanicalPrimaryAction(mech))
+      return
+    }
+
     const [progress, card] = await Promise.all([
       loadClaimDocumentProgress(selectedReg, token),
       customerGetRepairCard(token, selectedReg).catch(() => null),

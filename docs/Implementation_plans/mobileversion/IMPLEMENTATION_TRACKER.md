@@ -1,6 +1,6 @@
 # Mobile Version Implementation Tracker
 
-Last Updated: 2026-09-25
+Last Updated: 2026-09-26
 Scope: All mobileversion plans under active execution or review
 
 Legend:
@@ -30,6 +30,7 @@ Legend:
 | MOBILE-012 | release | Play Store + App Store publish for com.techwheels.service | IP | Mobile Team + Platform | docs/Implementation_plans/mobileversion/categories/release/active/MOBILE-012_PLAY_APP_STORE_PUBLISH_PLAN.md | 2026-09-17 (AAB+IPA queued; not OTA) |
 | MOBILE-013 | customer | Customer claim documents through universal drive upload | IP | Mobile Team + Platform | docs/Implementation_plans/mobileversion/categories/customer/active/MOBILE-013_CUSTOMER_DOCUMENT_DRIVE_UPLOAD_PLAN.md | 2026-09-25 (coded; edge functions not deployed) |
 | MOBILE-014 | customer | In-app advisor chat (customer screen; backend is CHAT-001) | IP | Mobile Team + Platform | docs/Implementation_plans/mobileversion/categories/customer/active/MOBILE-014_CUSTOMER_ADVISOR_CHAT_PLAN.md | 2026-09-25 |
+| MOBILE-015 | customer | Mechanical customer Home, Documents, Journey, Payments | NS | Mobile Team + Platform | docs/Implementation_plans/mobileversion/categories/customer/active/MOBILE-015_MECHANICAL_CUSTOMER_SCREENS_PLAN.md | 2026-09-26 |
 
 ---
 

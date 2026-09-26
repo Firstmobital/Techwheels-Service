@@ -22,8 +22,11 @@ import { useCustomerSession } from '../../context/CustomerSessionContext'
 import {
   customerGetActiveJob,
   customerGetGatePass,
+  customerGetMechanicalCase,
   customerGetRepairCard,
 } from '../../lib/api/customerPortal'
+import { useCustomerVisitKind } from '../../hooks/useCustomerVisitKind'
+import { mechanicalStatusLabel, type MechanicalCasePayload } from '../../lib/customer/mechanicalCustomerUi'
 import { Icon, IconName } from '../../components/ui/Icon'
 import { RemainingDocumentsCard } from '../../components/customer/RemainingDocumentsCard'
 import { CustomerPrimaryActionCard } from '../../components/customer/CustomerPrimaryActionCard'
@@ -38,15 +41,17 @@ export default function CustomerDashboardScreen() {
   const [activeVehicle, setActiveVehicle] = useState<Record<string, unknown> | null>(null)
   const [repairCard, setRepairCard] = useState<Record<string, unknown> | null>(null)
   const [gatePass, setGatePass] = useState<Record<string, unknown> | null>(null)
+  const [mechCase, setMechCase] = useState<MechanicalCasePayload | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const { isMechanical, refresh: refreshVisitKind } = useCustomerVisitKind(token, selected?.reg_number)
   const load = useCallback(async (isInitial = false) => {
     if (!token) return
     if (isInitial && !job && !selected) {
       setLoading(true)
     }
     try {
-      const [jobResult, passResult, cardResult] = await Promise.all([
+      const [jobResult, passResult, cardResult, mechResult] = await Promise.all([
         customerGetActiveJob(token, selected?.reg_number).catch((err) => ({
           job: null,
           vehicle: null,
@@ -54,6 +59,7 @@ export default function CustomerDashboardScreen() {
         })),
         customerGetGatePass(token, selected?.reg_number).catch(() => null),
         customerGetRepairCard(token, selected?.reg_number).catch(() => null),
+        customerGetMechanicalCase(token, selected?.reg_number).catch(() => null),
       ])
       if (jobResult.job) {
         setJob(jobResult.job)
@@ -66,6 +72,8 @@ export default function CustomerDashboardScreen() {
       }
       if (cardResult) setRepairCard(cardResult)
       if (passResult) setGatePass(passResult)
+      setMechCase((mechResult as MechanicalCasePayload | null) ?? null)
+      void refreshVisitKind()
     } catch (err) {
       if (!job && !selected) {
         setError(err instanceof Error ? err.message : 'Unable to load job.')
@@ -73,7 +81,7 @@ export default function CustomerDashboardScreen() {
     } finally {
       setLoading(false)
     }
-  }, [token, selected?.reg_number, job, selected])
+  }, [token, selected?.reg_number, job, selected, refreshVisitKind])
 
   // Fast & smooth 3.5s background auto-refresh without UI flicker
   useFocusEffect(
@@ -138,6 +146,8 @@ export default function CustomerDashboardScreen() {
   const approvedEstimate =
     approvedEstimateRaw != null && approvedEstimateRaw !== '' ? formatInr(Number(approvedEstimateRaw)) : null
   const delivered = Boolean(job?.invoice_done_at || selected?.invoice_done_at)
+  const mechanicalStatus = isMechanical ? mechanicalStatusLabel(mechCase) : null
+  const showBodyshopFields = !isMechanical
   return (
     <CustomerScreen title="" subtitle="">
       {loading && !selected ? (
@@ -194,10 +204,10 @@ export default function CustomerDashboardScreen() {
             }}
           >
             <Text style={{ color: 'rgba(255,255,255,0.85)', fontSize: 11, fontWeight: '700', letterSpacing: 0.6, textTransform: 'uppercase' }}>
-              Accidental & bodyshop care
+              {isMechanical ? dash(serviceType) || 'Workshop service' : 'Accidental & bodyshop care'}
             </Text>
             <Text style={{ color: '#FFFFFF', fontSize: 20, fontWeight: '900', marginTop: 6, lineHeight: 26, maxWidth: '92%' }}>
-              Care That Keeps You Moving.
+              {isMechanical ? (mechanicalStatus || 'Your service visit') : 'Care That Keeps You Moving.'}
             </Text>
           </LinearGradient>
 
@@ -326,7 +336,7 @@ export default function CustomerDashboardScreen() {
             </Text>
           </CustomerCard>
 
-          <RemainingDocumentsCard regNumber={selected?.reg_number} />
+          {!isMechanical ? <RemainingDocumentsCard regNumber={selected?.reg_number} /> : null}
           <CustomerPrimaryActionCard includeDocumentAction={false} />
 
           <View style={{ marginBottom: 14 }}>
@@ -369,21 +379,33 @@ export default function CustomerDashboardScreen() {
             </View>
             <RecordRow label="Job Card Number" value={dash(jc)} mono />
             <RecordRow label="Service Advisor" value={dash(advisor)} />
-            <RecordRow label="Claim Intimation No" value={dash(claimIntimation)} mono />
-            <RecordRow label="Insurance Company" value={dash(insuranceCompany)} />
-            {insurancePolicyNo ? (
-              <RecordRow label="Insurance Policy No" value={dash(insurancePolicyNo)} mono />
+            {isMechanical && mechCase?.floor?.technician_name ? (
+              <RecordRow
+                label="Technician"
+                value={`${mechCase.floor.technician_name}${mechCase.floor.bay_no ? ` · Bay ${mechCase.floor.bay_no}` : ''}`}
+              />
             ) : null}
-            <RecordRow label="Surveyor Name" value={dash(surveyorName)} />
-            <RecordRow
-              label="Surveyor Mob No"
-              value={dash(surveyorMobile)}
-              mono
-              last={!approvedEstimate}
-            />
-            {approvedEstimate ? (
-              <RecordRow label="Approved Estimate" value={approvedEstimate} highlight last />
-            ) : null}
+            {showBodyshopFields ? (
+              <>
+                <RecordRow label="Claim Intimation No" value={dash(claimIntimation)} mono />
+                <RecordRow label="Insurance Company" value={dash(insuranceCompany)} />
+                {insurancePolicyNo ? (
+                  <RecordRow label="Insurance Policy No" value={dash(insurancePolicyNo)} mono />
+                ) : null}
+                <RecordRow label="Surveyor Name" value={dash(surveyorName)} />
+                <RecordRow
+                  label="Surveyor Mob No"
+                  value={dash(surveyorMobile)}
+                  mono
+                  last={!approvedEstimate}
+                />
+                {approvedEstimate ? (
+                  <RecordRow label="Approved Estimate" value={approvedEstimate} highlight last />
+                ) : null}
+              </>
+            ) : (
+              <RecordRow label="KM reading" value={km || '—'} last />
+            )}
           </CustomerCard>
 
         </>
