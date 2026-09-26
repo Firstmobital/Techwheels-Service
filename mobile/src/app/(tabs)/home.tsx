@@ -7,6 +7,8 @@ import { useAuth } from '../../context/AuthContext'
 import { supabase } from '../../lib/supabase'
 import { Icon, type IconName } from '../../components/ui/Icon'
 import { getHomeDashboardMetrics, type HomeDashboardMetrics } from '../../lib/api/homeDashboard'
+import { getStaffAdvisorChatUnreadCount } from '../../lib/api/advisorChat'
+import { registerStaffPush } from '../../lib/notifications/pushRegistration'
 
 type ModuleRow = {
   key: string
@@ -117,6 +119,7 @@ export default function PlatformHomeScreen() {
     return () => { mounted = false }
   }, [user])
   const [metrics, setMetrics] = useState<HomeDashboardMetrics>(DEFAULT_METRICS)
+  const [chatUnread, setChatUnread] = useState(0)
 
   const displayName = useMemo(() => {
     const fromMetadata = String(user?.user_metadata?.full_name ?? '').trim()
@@ -151,6 +154,10 @@ export default function PlatformHomeScreen() {
   useFocusEffect(
     useCallback(() => {
       void loadDashboard()
+      void getStaffAdvisorChatUnreadCount()
+        .then(setChatUnread)
+        .catch(() => setChatUnread(0))
+      void registerStaffPush()
     }, [loadDashboard])
   )
 
@@ -227,6 +234,19 @@ export default function PlatformHomeScreen() {
               </View>
             </View>
             <View className="flex-row items-center gap-3">
+              <TouchableOpacity
+                accessibilityRole="button"
+                accessibilityLabel="Chats"
+                className="h-10 w-10 rounded-full bg-blue-500 items-center justify-center"
+                onPress={() => router.push('/(tabs)/chat')}
+              >
+                <Icon name="message-square" size={20} color="#ffffff" strokeWidth={2} />
+                {chatUnread > 0 ? (
+                  <View style={{ position: 'absolute', top: -4, right: -4, minWidth: 18, height: 18, borderRadius: 9, backgroundColor: '#ef4444', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 4 }}>
+                    <Text style={{ color: '#fff', fontSize: 10, fontWeight: '800' }}>{chatUnread > 9 ? '9+' : chatUnread}</Text>
+                  </View>
+                ) : null}
+              </TouchableOpacity>
               <TouchableOpacity
                 className="h-10 w-10 rounded-full bg-blue-500 items-center justify-center"
                 onPress={() => router.push('/(tabs)/alerts')}

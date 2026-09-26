@@ -32,7 +32,7 @@ A sent message also pushes the other side’s phone. Android uses Firebase Cloud
 | Kind | New module + customer screen |
 | Module name | `chat` |
 | Route | `/chat` |
-| Permission | `has_module_view('chat')` or `is_admin()` can list and send |
+| Permission | Web inbox: `has_module_view('chat')` or `is_admin()` sees every dealer thread. Mobile: a staff user without that module still opens a thread when they are the vehicle advisor, already replied, or are the helpdesk contact |
 | Dealer scope | `my_dealer_code()` for staff. Customer dealer is taken from the vehicle row the session already owns |
 | Realtime | Staff `postgres_changes` on the two new tables. Customer poll through RPCs |
 | Push | Android: FCM HTTP v1. iOS: Expo push. Token collected by `expo-notifications` |
@@ -48,6 +48,7 @@ A sent message also pushes the other side’s phone. Android uses Firebase Cloud
 - SELECT-only RLS so signed-in staff with `chat` receive realtime events
 - Web header icon, `/chat` split inbox, nav entry, module row
 - Customer screen that replaces the WhatsApp link on Home
+- Helpdesk Chat button for each escalation contact. Same vehicle thread model, separated by `contact_key`. Anyone with `chat` view replies on the web inbox
 - Unread counts on the web icon and on each inbox row
 - Device push to the other side when a chat message is saved (Phase 5)
 
@@ -281,12 +282,12 @@ The push goes to the other side’s installed app, not to an SMS.
 
 | Sender | Recipients |
 |---|---|
-| Customer | Every active device registered to a staff user who has `chat` view for that thread’s `dealer_code` |
+| Customer | Every active device of a staff user at that dealer who has `chat` view, plus the involved advisor or helpdesk contact even without the module |
 | Staff (advisor or anyone else with the module) | Every active device registered to the thread’s `phone_10` |
 
 The sender’s own devices are skipped. A staff user with no registered phone gets no push; the web inbox and header badge stay the in-app path. A customer who has not allowed notifications gets no push; the thread still saves.
 
-Tap payload is `chat_id`. Customer opens `/(customer)/chat`. Staff opens the staff shell’s chat route for that id when that screen exists; until then the tap opens the staff home.
+Tap payload is `chat_id`. Customer opens `/(customer)/chat`. Staff opens `/(tabs)/chat` for that thread. The staff home header shows a chat icon immediately left of the bell, with the unread count.
 
 ### Store
 
@@ -312,6 +313,14 @@ New table `chat_push_outbox`: one row per recipient device after `customer_send_
 Worker: Supabase edge function `send_chat_push`, same branching as WEB’s `send_push_notifications`. A scheduled call drains `pending` rows. Deactivate a token when FCM or Expo reports it unregistered.
 
 Title is the vehicle number. Body is the message preview. Do not put the full phone number in the notification text.
+
+---
+
+## 8.2) Helpdesk contacts
+
+Each row on Helpdesk & Escalation has a Chat button beside Call and Mail. The thread key is the existing vehicle key plus `contact_key` (`payal`, `govind`, `rajesh`, `tata_akshay`, `tata_gurmeet`, or a key stored on `settings_customer_helpdesk_contacts`). Home Chat stays `advisor`.
+
+The web inbox lists every thread. A helpdesk row shows the contact name with the phone. Anyone with `chat` view can reply. The customer sees that reply on the contact thread, not on the advisor thread.
 
 ---
 
@@ -343,7 +352,7 @@ Title is the vehicle number. Body is the message preview. Do not put the full ph
 ### Phase 4 — Acceptance
 
 - [ ] **4.1** Two staff users with `chat` view reply on one thread. Both names show. Customer sees both
-- [ ] **4.2** A user without `chat` view cannot open `/chat` and the RPCs reject them
+- [ ] **4.2** A user without `chat` view cannot open web `/chat`. The phone list shows only threads they are part of
 - [ ] **4.3** A customer session cannot read another registration
 - [ ] **4.4** Complaints, Help Tickets, Call advisor, and bodyshop WhatsApp group actions still behave as before
 - [ ] **4.5** Evidence note under `docs/Implementation_plans/webversion/categories/chat/evidence/`
@@ -355,7 +364,7 @@ Title is the vehicle number. Body is the message preview. Do not put the full ph
 - [x] **5.3** Edge function `send-chat-push` is deployed: FCM HTTP v1 for `fcm`, Expo push for `expo`. Secrets `FCM_PROJECT_ID`, `FCM_CLIENT_EMAIL`, and `FCM_PRIVATE_KEY` are set for Firebase project `techwheels-service`
 - [x] **5.4** `send-chat-push` cron every minute calls `invoke_send_chat_push`. A failed or unregistered token is marked inactive. The message insert does not roll back if the HTTP call fails
 - [x] **5.5** Staff login and customer session register the device with `expo-notifications`. Android stores the native FCM token. iOS stores the Expo token. Settings switch registers or deactivates instead of flipping local state only
-- [x] **5.6** Tap payload is `chat_id`. Customer opens `/(customer)/chat`. Staff opens home until a staff chat screen exists. A live wake-up still needs the deployed worker and FCM secrets
+- [x] **5.6** Tap payload is `chat_id`. Customer opens `/(customer)/chat`. Staff opens `/(tabs)/chat` for that thread
 
 ---
 
@@ -407,7 +416,7 @@ Legend: PENDING | IN PROGRESS | COMPLETED | BLOCKED
 ✅ 5.3 | send-chat-push FCM + Expo | Platform | 2026-09-25 | 2026-09-25 | deployed; FCM secrets set for techwheels-service
 ✅ 5.4 | Scheduled drain | Platform | 2026-09-25 | 2026-09-25 | cron send-chat-push every minute
 ✅ 5.5 | Register token on staff and customer login | Mobile | 2026-09-25 | 2026-09-25 | expo-notifications; not verified on a device
-✅ 5.6 | Tap routing coded | Mobile | 2026-09-25 | 2026-09-25 | customer chat; staff home until that screen exists
+✅ 5.6 | Tap routing coded | Mobile | 2026-09-25 | 2026-09-25 | customer chat; staff inbox at /(tabs)/chat
 ```
 
 ---

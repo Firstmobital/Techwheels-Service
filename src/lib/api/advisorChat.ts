@@ -11,6 +11,7 @@ export interface AdvisorChatThread {
   customer_name: string | null
   jc_number: string | null
   sa_name: string | null
+  contact_key?: string | null
   last_message_at: string | null
   last_message_preview: string | null
   last_author_side: AdvisorChatSide | null

@@ -13,15 +13,20 @@ function openFromNotificationData(data: Record<string, unknown> | undefined) {
   if (!data?.chat_id) return
   const audience = String(data.audience || '')
   const reg = typeof data.reg_number === 'string' ? data.reg_number : ''
+  const contact = typeof data.contact_key === 'string' ? data.contact_key : ''
   if (audience === 'customer') {
     if (reg) {
-      router.push({ pathname: '/(customer)/chat', params: { reg } })
+      router.push({
+        pathname: '/(customer)/chat',
+        params: contact && contact !== 'advisor' ? { reg, contact } : { reg },
+      })
       return
     }
     router.push('/(customer)/chat')
     return
   }
-  router.push('/(tabs)/home')
+  const chatId = String(data.chat_id)
+  router.push({ pathname: '/(tabs)/chat', params: { chat: chatId } })
 }
 
 export function useChatPush() {

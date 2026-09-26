@@ -96,6 +96,8 @@ export default function ChatPage() {
       row.reg_number.toLowerCase().includes(needle)
       || row.phone_10.includes(needle)
       || (row.customer_name || '').toLowerCase().includes(needle)
+      || (row.sa_name || '').toLowerCase().includes(needle)
+      || (row.contact_key || '').toLowerCase().includes(needle)
     )
   }, [query, threads])
 
@@ -152,7 +154,11 @@ export default function ChatPage() {
               >
                 <span className="chat-row__main">
                   <div className="chat-row__title">{row.reg_number}</div>
-                  <div className="chat-row__sub">{row.phone_10}</div>
+                  <div className="chat-row__sub">
+                    {row.contact_key && row.contact_key !== 'advisor' && row.sa_name
+                      ? `${row.sa_name} · ${row.phone_10}`
+                      : row.phone_10}
+                  </div>
                   <div className="chat-row__preview">{row.last_message_preview || ''}</div>
                 </span>
                 <span className="chat-row__side">
@@ -175,6 +181,9 @@ export default function ChatPage() {
               <header className="chat-thread__head">
                 <div className="chat-thread__title">{selected.reg_number}</div>
                 <div className="chat-thread__sub">
+                  {selected.contact_key && selected.contact_key !== 'advisor' && selected.sa_name
+                    ? `${selected.sa_name} · `
+                    : ''}
                   {selected.phone_10}
                   {selected.customer_name ? ` · ${selected.customer_name}` : ''}
                   {selected.jc_number ? ` · ${selected.jc_number}` : ''}

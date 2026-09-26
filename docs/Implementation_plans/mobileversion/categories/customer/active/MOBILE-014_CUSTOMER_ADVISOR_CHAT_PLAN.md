@@ -22,6 +22,7 @@ Login as Customer taps **Chat** on the vehicle card and stays in the app. The sc
 - A message sent here appears on web `/chat` for that vehicle and phone
 - A workshop reply appears on this screen while it is focused, using the same refresh interval Home already uses
 - Call advisor still places a phone call
+- Helpdesk Chat opens the same screen for that contact and the vehicle already selected on Home. Call and Mail stay
 
 ---
 
@@ -32,6 +33,7 @@ Login as Customer taps **Chat** on the vehicle card and stays in the app. The sc
 - `mobile/src/app/(customer)/chat.tsx`
 - Hidden tab registration in `mobile/src/app/(customer)/_layout.tsx` (`href: null`, same as `complaint`)
 - Home button in `mobile/src/app/(customer)/index.tsx`
+- Helpdesk Chat button on each escalation contact in `mobile/src/app/(customer)/helpdesk.tsx`
 - Wrappers in `mobile/src/lib/api/customerPortal.ts` (or a sibling `advisorChat.ts` under `mobile/src/lib/api/`)
 
 ### Out of scope
@@ -39,7 +41,7 @@ Login as Customer taps **Chat** on the vehicle card and stays in the app. The sc
 - A new bottom tab
 - Staff inbox on mobile
 - Attachments
-- Changing Call advisor, complaint, or helpdesk
+- Replacing Call or Mail on helpdesk. Chat is an extra button that opens the same screen with that contact's thread
 - Subscribing the anon client to `advisor_chat_messages`
 - Choosing a different push provider than CHAT-001 section 8.1. Customer registration stores an FCM token on Android and an Expo token on iOS, then the shared worker delivers it
 

@@ -300,6 +300,14 @@ export default function TabsLayout() {
         }}
       />
       <Tabs.Screen
+        name="chat"
+        options={{
+          title: 'Chat',
+          headerShown: false,
+          href: null,
+        }}
+      />
+      <Tabs.Screen
         name="driver-tasks"
         options={{
           title: 'Driver Tasks',

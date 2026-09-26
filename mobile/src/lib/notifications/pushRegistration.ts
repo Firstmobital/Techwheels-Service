@@ -65,7 +65,10 @@ async function collectDeviceToken(): Promise<{
   const current = await Notifications.getPermissionsAsync()
   let status = current.status
   if (status !== 'granted') {
-    status = (await Notifications.requestPermissionsAsync()).status
+    const asked = await Notifications.requestPermissionsAsync({
+      ios: { allowAlert: true, allowBadge: true, allowSound: true },
+    })
+    status = asked.status
   }
   if (status !== 'granted') return null
 
