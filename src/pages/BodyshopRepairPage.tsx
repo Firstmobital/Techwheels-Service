@@ -985,13 +985,6 @@ export default function BodyshopRepairPage() {
   const [selected, setSelected]         = useState<RepairCard | null>(null)
   const [detailTab, setDetailTab]       = useState<DetailTab>('overview')
   const [saActiveCard, setSaActiveCard] = useState<'receiving' | 'docs' | 'estimate' | 'claim_intimation' | null>(null)
-  const [estimatePreview, setEstimatePreview] = useState<{
-    url: string
-    fileName: string
-    uploadedBy: string
-    uploadedAt: string
-    contentType: string
-  } | null>(null)
   const [approvalActiveCard, setApprovalActiveCard] = useState<'estimation_approval' | null>(null)
   const [editPatch, setEditPatch]       = useState<Partial<RepairCard>>({})
   const [saving, setSaving]             = useState(false)
@@ -3176,40 +3169,7 @@ export default function BodyshopRepairPage() {
     }
   }
 
-  async function openEmployeeEstimatePreview() {
-    const row = bodyshopDocsByKey.doc_estimate
-    if (!row) {
-      toast_('No estimate uploaded by the employee yet', false)
-      return
-    }
-
-    let url = row.drive_url || ''
-    if (!url) {
-      const { data, error } = await supabase.storage
-        .from(row.storage_bucket || AUTODOC_BUCKET)
-        .createSignedUrl(row.storage_path, 300)
-      if (error || !data?.signedUrl) {
-        toast_(error?.message ?? 'Unable to open the uploaded estimate', false)
-        return
-      }
-      url = data.signedUrl
-    }
-
-    setEstimatePreview({
-      url,
-      fileName: row.file_name || 'Estimate',
-      uploadedBy: row.uploaded_by || selected?.estimation_by || 'Employee',
-      uploadedAt: row.uploaded_at,
-      contentType: row.content_type || '',
-    })
-  }
-
   async function handleViewBodyshopDoc(docKey: BodyshopDocKey) {
-    if (docKey === 'doc_estimate') {
-      await openEmployeeEstimatePreview()
-      return
-    }
-
     const row = bodyshopDocsByKey[docKey]
     if (!row) {
       toast_('No uploaded file found for this document', false)
@@ -3221,12 +3181,20 @@ export default function BodyshopRepairPage() {
       return
     }
 
+    const previewTab = window.open('', '_blank')
     const { data, error } = await supabase.storage
       .from(row.storage_bucket || AUTODOC_BUCKET)
       .createSignedUrl(row.storage_path, 300)
 
     if (error || !data?.signedUrl) {
+      previewTab?.close()
       toast_(error?.message ?? 'Unable to open file', false)
+      return
+    }
+
+    if (previewTab) {
+      previewTab.opener = null
+      previewTab.location.replace(data.signedUrl)
       return
     }
 
@@ -4654,12 +4622,11 @@ export default function BodyshopRepairPage() {
 
       {/* ── Detail Full-Screen (Portal — escapes stacking context of .main) ── */}
       {selected && createPortal((
-        <>
         <div className="brx-detail">
 
           {/* ── Top Bar ── */}
           <div className="brx-dtop">
-            <button onClick={() => { setSelected(null); setSaActiveCard(null); setApprovalActiveCard(null); setEstimatePreview(null) }} className="brx-dback">
+            <button onClick={() => { setSelected(null); setSaActiveCard(null); setApprovalActiveCard(null) }} className="brx-dback">
               ← Back
             </button>
             <div className="brx-dsep" />
@@ -5145,7 +5112,6 @@ export default function BodyshopRepairPage() {
                         } else if (sNum === 6) {
                           setDetailTab('sa')
                           setSaActiveCard('estimate')
-                          if (bodyshopDocsByKey.doc_estimate) void openEmployeeEstimatePreview()
                         } else if (sNum === 7) {
                           setDetailTab('approval')
                         } else if (sNum === 8) {
@@ -6588,56 +6554,6 @@ export default function BodyshopRepairPage() {
             </div>
           </div>
         </div>
-        {estimatePreview && (
-          <div
-            role="dialog"
-            aria-modal="true"
-            aria-label="Employee uploaded estimate"
-            onClick={() => setEstimatePreview(null)}
-            style={{
-              position: 'fixed',
-              inset: 0,
-              zIndex: 80,
-              background: 'rgba(15, 23, 42, 0.55)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              padding: 24,
-            }}
-          >
-            <div
-              onClick={(event) => event.stopPropagation()}
-              style={{
-                width: 'min(960px, 100%)',
-                height: 'min(86vh, 820px)',
-                background: '#fff',
-                borderRadius: 16,
-                display: 'flex',
-                flexDirection: 'column',
-                overflow: 'hidden',
-                boxShadow: '0 24px 60px rgba(15, 23, 42, 0.28)',
-              }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: '14px 16px', borderBottom: '1px solid #e2e8f0' }}>
-                <div>
-                  <div style={{ fontWeight: 800, color: '#0f172a' }}>Estimate uploaded by employee</div>
-                  <div style={{ fontSize: 13, color: '#64748b', marginTop: 2 }}>
-                    {estimatePreview.uploadedBy} · {fmt(estimatePreview.uploadedAt)} · {estimatePreview.fileName}
-                  </div>
-                </div>
-                <button type="button" className="btn" onClick={() => setEstimatePreview(null)}>Close</button>
-              </div>
-              <div style={{ flex: 1, background: '#f8fafc' }}>
-                {estimatePreview.contentType.startsWith('image/') ? (
-                  <img src={estimatePreview.url} alt={estimatePreview.fileName} style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
-                ) : (
-                  <iframe title={estimatePreview.fileName} src={estimatePreview.url} style={{ width: '100%', height: '100%', border: 0 }} />
-                )}
-              </div>
-            </div>
-          </div>
-        )}
-        </>
       ), document.body)}
     </div>
   )
