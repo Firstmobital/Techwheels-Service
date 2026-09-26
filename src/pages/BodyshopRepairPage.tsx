@@ -3612,16 +3612,43 @@ export default function BodyshopRepairPage() {
     }
   }
 
+  async function saveDocDecision(key: keyof RepairCard, approved: boolean) {
+    if (!selected) return
+    if (approved && advisorVerifiedDoc(selected, String(key))) return
+    if (!approved && advisorVerifiedDoc(selected, String(key))) return
+    const nextRejected = approved
+      ? rejectedDocKeys(selected).filter((item) => item !== key)
+      : [...new Set([...rejectedDocKeys(selected), String(key)])]
+    const payload = {
+      [key]: approved,
+      doc_rejected_keys: nextRejected,
+    } as Partial<RepairCard>
+    setSelected((current) => (current ? { ...current, ...payload } : current))
+    setSaving(true)
+    try {
+      const updated = await updateRepairCard(selected.id, payload)
+      setSelected(updated)
+      setCards((prev) => prev.map((card) => (card.id === updated.id ? updated : card)))
+      setEditPatch((current) => {
+        const next = { ...current }
+        delete next[key]
+        delete next.doc_rejected_keys
+        return next
+      })
+      toast_(approved ? 'Approved. Customer can see this status.' : 'Rejected. Customer can upload again.')
+    } catch (error: any) {
+      toast_(error?.message ?? 'Unable to save document decision', false)
+    } finally {
+      setSaving(false)
+    }
+  }
+
   function approveDoc(key: keyof RepairCard) {
-    if (advisorVerifiedDoc(selected, String(key))) return
-    patch('doc_rejected_keys', rejectedDocKeys(selected).filter((item) => item !== key))
-    patch(key, true)
+    void saveDocDecision(key, true)
   }
 
   function rejectDoc(key: keyof RepairCard) {
-    if (advisorVerifiedDoc(selected, String(key))) return
-    patch('doc_rejected_keys', [...new Set([...rejectedDocKeys(selected), String(key)])])
-    patch(key, false)
+    void saveDocDecision(key, false)
   }
 
   function patch(key: keyof RepairCard, val: any) {

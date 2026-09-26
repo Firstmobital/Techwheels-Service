@@ -205,7 +205,7 @@ export default function CustomerDocumentsScreen() {
       })
       await load('force')
       setNotice(result.ok
-        ? `${slot.title} is saved on Drive.`
+        ? `${slot.title} uploaded again. Waiting for the advisor to approve it.`
         : `${slot.title} is saved. Drive sync is still pending.`)
     } catch (error) {
       Alert.alert('Upload failed', error instanceof Error ? error.message : 'Unable to upload this document.')
@@ -328,15 +328,15 @@ export default function CustomerDocumentsScreen() {
           </View>
         ) : null}
 
+        {rejected ? (
+          <Text style={{ color: '#B91C1C', fontSize: 12, marginTop: 10, fontWeight: '800' }}>
+            Rejected by advisor. Upload this document again.
+          </Text>
+        ) : null}
         {!busy && !approved ? renderActions(slot) : null}
         {approved ? (
           <Text style={{ color: '#047857', fontSize: 11, marginTop: 8, fontWeight: '700' }}>
             Advisor approved this document. It cannot be changed.
-          </Text>
-        ) : null}
-        {rejected ? (
-          <Text style={{ color: '#B91C1C', fontSize: 11, marginTop: 8, fontWeight: '700' }}>
-            Advisor rejected this document. Upload a new copy.
           </Text>
         ) : null}
         {submitted && !approved && !rejected ? (
