@@ -48,6 +48,51 @@ function fmtBool(v: unknown, yes = 'Done', no = 'Pending'): string {
   return ''
 }
 
+/** Workshop saves `approved_parts` as JSON (see web BodyshopRepairPage). */
+function formatApprovedPartsSummary(raw: unknown): string {
+  const s = asText(raw)
+  if (!s) return ''
+
+  if (!s.startsWith('{') && !s.startsWith('[')) {
+    return s
+  }
+
+  try {
+    const payload = JSON.parse(s) as {
+      parts?: Array<{
+        part_no?: string
+        part_description?: string
+        approved_at?: string
+      }>
+      finalized_at?: string | null
+      finalized_by?: string | null
+    }
+    const parts = Array.isArray(payload.parts) ? payload.parts : []
+    if (parts.length === 0) return 'No approved parts recorded yet'
+
+    const lines = parts.map((p, i) => {
+      const partNo = asText(p.part_no) || '—'
+      const desc = asText(p.part_description)
+      if (desc && desc.toLowerCase() !== partNo.toLowerCase()) {
+        return `${i + 1}. ${partNo} — ${desc}`
+      }
+      return `${i + 1}. ${partNo}`
+    })
+
+    if (payload.finalized_at) {
+      lines.push(`Finalized: ${fmtDate(payload.finalized_at)}`)
+      const by = asText(payload.finalized_by)
+      if (by) lines.push(`Finalized by: ${by}`)
+    } else {
+      lines.push('Status: Draft (workshop has not finalized the list yet)')
+    }
+
+    return lines.join('\n')
+  } catch {
+    return s.length > 240 ? `${s.slice(0, 240)}…` : s
+  }
+}
+
 function fmtStatus(v: unknown): string {
   const s = asText(v)
   if (!s) return ''
@@ -183,7 +228,7 @@ export function getBodyshopStageDetailRows(
       break
     case 10:
       push('Parts Entry Status', fmtStatus(card?.parts_entry_status))
-      push('Approved Parts Summary', card?.approved_parts)
+      push('Approved Parts Summary', formatApprovedPartsSummary(card?.approved_parts))
       break
     case 11:
       push('Bodyshop Floor', card?.bodyshop_floor)

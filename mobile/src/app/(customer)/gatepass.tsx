@@ -96,8 +96,23 @@ export default function CustomerGatePassScreen() {
   const isPastDate = hasIssuedRecord && issuedAtDate ? !isIssuedToday(issuedAtDate) : false
 
   const billedVal = Number(settlement?.total_billed ?? settlement?.billed_amount ?? pass?.billed_amount ?? selected?.billed_amount ?? 0)
-  const receivedVal = Number(settlement?.amount_received ?? pass?.amount_received ?? selected?.amount_received ?? 0)
-  const remainingVal = Math.max(0, billedVal - receivedVal)
+  const isBodyshopBill = Boolean(settlement?.is_bodyshop)
+  const doAmount = Number(settlement?.do_amount ?? 0)
+  const doRemaining = Number(settlement?.do_remaining ?? 0)
+  const customerPosted = Number(settlement?.customer_posted_amount ?? settlement?.amount_received ?? 0)
+  const customerRemaining = Number(settlement?.customer_remaining_amount ?? 0)
+  const outstanding = settlement?.outstanding_amount != null ? Number(settlement.outstanding_amount) : null
+
+  // Bodyshop bills split the invoice: customer share + insurance DO.
+  // amount_received on the settlement is the customer receipt only.
+  // Gate pass remaining must be the Accounts outstanding (both sides), not billed − customer paid.
+  const receivedVal = isBodyshopBill
+    ? customerPosted + Math.max(0, doAmount - doRemaining)
+    : Number(settlement?.amount_received ?? pass?.amount_received ?? selected?.amount_received ?? 0)
+  const remainingVal = isBodyshopBill
+    ? Math.max(0, outstanding != null && Number.isFinite(outstanding) ? outstanding : doRemaining + customerRemaining)
+    : Math.max(0, billedVal - receivedVal)
+  const paymentStatusLabel = remainingVal <= 0.009 ? 'received' : 'pending'
 
   // Gate pass is authorized if issued by Accounts Desk or marked paid/cleared with received > 0
   const isGatepassAuthorized = hasIssuedRecord || Boolean(pass?.qr_token) || pass?.payment_status === 'Paid' || (settlement?.status === 'received' && receivedVal > 0) || (billedVal > 0 && receivedVal > 0 && remainingVal === 0) || Boolean(pass?.keep_on_credit)
@@ -173,7 +188,7 @@ export default function CustomerGatePassScreen() {
     <tr><th>Billed amount</th><td>₹${billedVal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td></tr>
     <tr><th>Amount received</th><td>₹${receivedVal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td></tr>
     <tr><th>Remaining</th><td>₹${remainingVal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td></tr>
-    <tr><th>Payment status</th><td><span style="font-weight: 600; color: #16a34a;">${remainingVal === 0 ? 'received' : 'pending'}</span></td></tr>
+    <tr><th>Payment status</th><td><span style="font-weight: 600; color: ${remainingVal <= 0.009 ? '#16a34a' : '#d97706'};">${paymentStatusLabel}</span></td></tr>
     <tr><th>Gatepass clearance</th><td><strong style="color: #15803d;">${clearanceStatus}</strong></td></tr>
   </table>
   <div class="signs">
@@ -318,8 +333,8 @@ export default function CustomerGatePassScreen() {
                 <Row label="Remaining" value={remaining} mono />
                 <Row
                   label="Payment status"
-                  value={remainingVal === 0 ? 'received' : 'pending'}
-                  color={remainingVal === 0 ? '#16a34a' : '#d97706'}
+                  value={paymentStatusLabel}
+                  color={remainingVal <= 0.009 ? '#16a34a' : '#d97706'}
                   isBold
                 />
                 <Row
