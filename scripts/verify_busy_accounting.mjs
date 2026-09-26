@@ -152,6 +152,63 @@ test('11b. Normal Party Name uses DMS account when first and last are missing', 
   assert.equal(party.issue, null)
 })
 
+test('11c. Blank first and last name with Account stays Ready and is exported on Party Accounts', () => {
+  const partyName = 'DRISTI CREATION-SITAPURA RJ60CK7805'
+  const result = transformBusyAccounting({
+    labourRows: [labour({
+      invoice_number: 'EMBTAI2627006840',
+      invoice_date: '2026-09-25',
+      portal: 'EV',
+      account: 'DRISTI CREATION',
+      first_name: null,
+      last_name: null,
+      job_card_number: 'JC-MBTPLT-JP2-2627-006251',
+      vehicle_registration_number: 'RJ60CK7805',
+      sr_type: 'Running Repairs',
+      sr_assigned_to: 'YS_500A840',
+      final_labour_amount: 0,
+      invoice_status: 'New',
+    })],
+    partsLines: [],
+    fromDate: '2026-09-01',
+    toDate: '2026-09-30',
+  })
+  assert.equal(result.preview[0].status, 'ready')
+  assert.equal(result.preview[0].issue, '')
+  assert.equal(result.preview[0].partyName, partyName)
+  assert.equal(result.summary.blocked, 0)
+  assert.equal(result.summary.eligible, 1)
+  assert.equal(result.partyRows.length, 1)
+  assert.equal(result.partyRows[0]['Party Name'], partyName)
+  assert.equal(result.partyRows[0].Group, 'SERVICE CENTRE DEBTORS 2022-23')
+  assert.equal(result.invoiceRows.every((row) => row['Party Name'] === partyName), true)
+  const partySheet = workbookDataRows(buildPartyAccountWorkbook(result.partyRows))
+  assert.deepEqual(workbookHeaders(buildPartyAccountWorkbook(result.partyRows)), [...PARTY_ACCOUNT_HEADERS])
+  assert.equal(partySheet.length, 1)
+  assert.equal(partySheet[0]['Party Name'], partyName)
+  assert.equal(partySheet[0].Group, 'SERVICE CENTRE DEBTORS 2022-23')
+
+  const stillBlocked = transformBusyAccounting({
+    labourRows: [labour({
+      invoice_number: 'EMBTAI2627006841',
+      invoice_date: '2026-09-25',
+      portal: 'EV',
+      account: null,
+      first_name: null,
+      last_name: null,
+      job_card_number: 'JC-NO-NAME',
+      vehicle_registration_number: 'RJ60CK7805',
+      sr_assigned_to: 'YS_500A840',
+    })],
+    partsLines: [],
+    fromDate: '2026-09-01',
+    toDate: '2026-09-30',
+  })
+  assert.equal(stillBlocked.preview[0].status, 'blocked')
+  assert.equal(stillBlocked.preview[0].issue, 'Missing Customer First Name')
+  assert.equal(stillBlocked.partyRows.length, 0)
+})
+
 test('12. PDI => CASH AT SITAPURA', () => {
   assert.equal(classifyBusyInvoice('PDI', 'ICICI C/O X'), 'PDI')
   const party = resolvePartyName({
