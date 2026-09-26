@@ -15,7 +15,7 @@ import { useCustomerSession } from '../../context/CustomerSessionContext'
 import {
   customerGetActiveJob,
   customerGetRepairCard,
-  customerGetBodyshopEstimateViewUrl,
+  customerOpenBodyshopEstimateDocument,
   parseBodyshopEstimateDocument,
 } from '../../lib/api/customerPortal'
 import { supabase } from '../../lib/supabase'
@@ -129,16 +129,10 @@ export default function CustomerTrackerScreen() {
     if (!token) return
     setOpeningEstimateDoc(true)
     try {
-      const resolved = await customerGetBodyshopEstimateViewUrl(token, selectedReg, bodyshopEstimateDoc)
-      if (resolved.isImage) {
-        setEstimatePreviewUri(resolved.viewUrl)
-        return
+      const result = await customerOpenBodyshopEstimateDocument(token, selectedReg, bodyshopEstimateDoc)
+      if (result.mode === 'preview') {
+        setEstimatePreviewUri(result.uri)
       }
-      const canOpen = await Linking.canOpenURL(resolved.viewUrl)
-      if (!canOpen) {
-        throw new Error('Unable to open this document on your device.')
-      }
-      await Linking.openURL(resolved.viewUrl)
     } catch (err) {
       Alert.alert(
         'Estimate document',

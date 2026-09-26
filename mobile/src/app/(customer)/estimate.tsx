@@ -2,6 +2,7 @@ import { useCallback, useState } from 'react'
 import {
   ActivityIndicator,
   Alert,
+  Image,
   Linking,
   Modal,
   ScrollView,
@@ -44,6 +45,7 @@ export default function CustomerEstimateScreen() {
   const [bodyshopEstimateDoc, setBodyshopEstimateDoc] = useState<ReturnType<typeof parseBodyshopEstimateDocument>>(null)
   const [bodyshopEstimateAmount, setBodyshopEstimateAmount] = useState<number | null>(null)
   const [openingWorkshopDoc, setOpeningWorkshopDoc] = useState(false)
+  const [workshopPreviewUri, setWorkshopPreviewUri] = useState<string | null>(null)
 
   const load = useCallback(async (isSilent = false) => {
     if (!token) return
@@ -99,7 +101,10 @@ export default function CustomerEstimateScreen() {
     if (!token) return
     setOpeningWorkshopDoc(true)
     try {
-      await customerOpenBodyshopEstimateDocument(token, selectedReg, bodyshopEstimateDoc)
+      const result = await customerOpenBodyshopEstimateDocument(token, selectedReg, bodyshopEstimateDoc)
+      if (result.mode === 'preview') {
+        setWorkshopPreviewUri(result.uri)
+      }
     } catch (err) {
       Alert.alert(
         'Workshop estimate',
@@ -407,6 +412,25 @@ export default function CustomerEstimateScreen() {
               </TouchableOpacity>
             </View>
           </View>
+        </View>
+      </Modal>
+
+      <Modal
+        visible={Boolean(workshopPreviewUri)}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setWorkshopPreviewUri(null)}
+      >
+        <View className="flex-1 bg-black/92 items-center justify-center p-4">
+          <TouchableOpacity
+            onPress={() => setWorkshopPreviewUri(null)}
+            className="absolute top-12 right-6 w-10 h-10 rounded-full bg-white/20 items-center justify-center z-50"
+          >
+            <Text className="text-white font-black text-lg">×</Text>
+          </TouchableOpacity>
+          {workshopPreviewUri ? (
+            <Image source={{ uri: workshopPreviewUri }} style={{ width: '100%', height: '82%' }} resizeMode="contain" />
+          ) : null}
         </View>
       </Modal>
     </CustomerScreen>

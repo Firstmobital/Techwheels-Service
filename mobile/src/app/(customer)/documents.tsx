@@ -399,7 +399,7 @@ export default function CustomerDocumentsScreen() {
 
       <DamagePhotosSection sessionToken={token} regNumber={selectedReg} />
 
-      <FromTechwheelsSection />
+      <FromTechwheelsSection repairCard={repairCard} workshopDocuments={documents} />
     </CustomerScreen>
   )
 }

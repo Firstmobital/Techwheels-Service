@@ -30,7 +30,7 @@ export async function fetchCustomerDocuments(
 
   const job = (async () => {
     const [repairCard, assets] = await Promise.all([
-      customerGetRepairCard(sessionToken, regNumber).catch(() => null),
+      customerGetRepairCard(sessionToken, regNumber, { bypassCache: true }).catch(() => null),
       customerListBodyshopAssets(sessionToken, regNumber).catch(() => ({
         documents: [] as CustomerBodyshopAsset[],
         photos: [] as CustomerBodyshopAsset[],

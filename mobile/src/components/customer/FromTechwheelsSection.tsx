@@ -1,16 +1,26 @@
 import { useCallback, useState } from 'react'
-import { ActivityIndicator, Alert, Linking, Text, TouchableOpacity, View } from 'react-native'
+import {
+  ActivityIndicator,
+  Alert,
+  Image,
+  Linking,
+  Modal,
+  Text,
+  TouchableOpacity,
+  View,
+} from 'react-native'
 import { useFocusEffect } from 'expo-router'
 import { CustomerTheme } from '../../lib/customer/customerTheme'
 import { useCustomerScreenRefresh } from './customerScreenRefresh'
 import { useCustomerSession } from '../../context/CustomerSessionContext'
+import type { CustomerBodyshopAsset } from '../../lib/api/customerBodyshopUploads'
 import {
   customerGetGatePass,
   customerGetRepairCard,
   customerGetSettlement,
   customerListEstimates,
   customerOpenBodyshopEstimateDocument,
-  parseBodyshopEstimateDocument,
+  resolveWorkshopEstimateDocument,
 } from '../../lib/api/customerPortal'
 import { Icon } from '../ui/Icon'
 
@@ -22,25 +32,66 @@ type WorkshopDoc = {
   onView?: () => void
 }
 
-export function FromTechwheelsSection() {
+type FromTechwheelsSectionProps = {
+  /** Reuse repair card already loaded on Documents (avoids stale / partial fetches). */
+  repairCard?: Record<string, unknown> | null
+  /** Bodyshop asset list from the same screen (includes workshop `doc_estimate`). */
+  workshopDocuments?: CustomerBodyshopAsset[]
+}
+
+export function FromTechwheelsSection({
+  repairCard: repairCardProp,
+  workshopDocuments: workshopDocumentsProp,
+}: FromTechwheelsSectionProps = {}) {
   const { token, selectedReg } = useCustomerSession()
   const [loading, setLoading] = useState(true)
   const [items, setItems] = useState<WorkshopDoc[]>([])
+  const [estimatePreviewUri, setEstimatePreviewUri] = useState<string | null>(null)
+  const [openingEstimate, setOpeningEstimate] = useState(false)
+
+  const openEstimate = useCallback(
+    async (estimateDoc: ReturnType<typeof resolveWorkshopEstimateDocument>) => {
+      if (!token || !selectedReg) return
+      setOpeningEstimate(true)
+      try {
+        const result = await customerOpenBodyshopEstimateDocument(token, selectedReg, estimateDoc)
+        if (result.mode === 'preview') {
+          setEstimatePreviewUri(result.uri)
+        }
+      } catch (err) {
+        Alert.alert(
+          'Repair quotation',
+          err instanceof Error ? err.message : 'Unable to open workshop estimate.'
+        )
+      } finally {
+        setOpeningEstimate(false)
+      }
+    },
+    [token, selectedReg]
+  )
 
   const load = useCallback(async () => {
-    if (!token) return
+    if (!token || !selectedReg) {
+      setItems([])
+      setLoading(false)
+      return
+    }
     setLoading(true)
     try {
       const [card, estimates, settlement, gatePass] = await Promise.all([
-        customerGetRepairCard(token, selectedReg).catch(() => null),
+        repairCardProp !== undefined
+          ? Promise.resolve(repairCardProp)
+          : customerGetRepairCard(token, selectedReg, { bypassCache: true }).catch(() => null),
         customerListEstimates(token, selectedReg).catch(() => []),
         customerGetSettlement(token, selectedReg).catch(() => null),
         customerGetGatePass(token, selectedReg).catch(() => null),
       ])
 
-      const estimateDoc = parseBodyshopEstimateDocument(card)
+      const estimateDoc = resolveWorkshopEstimateDocument(card, workshopDocumentsProp)
       const estRow = estimates[0] as Record<string, unknown> | undefined
       const estUrl = String(estRow?.estimate_drive_url ?? '').trim()
+      const hasQuotation = Boolean(estimateDoc || estUrl)
+
       const settlementRow = settlement as Record<string, unknown> | null
       const billed = Number(settlementRow?.total_billed ?? settlementRow?.billed_amount ?? 0)
       const hasGate = Boolean(gatePass?.gate_pass_no || gatePass?.qr_token)
@@ -67,11 +118,11 @@ export function FromTechwheelsSection() {
         {
           id: 'quotation',
           title: 'Repair quotation',
-          subtitle: estimateDoc || estUrl ? 'Ready to view' : 'Available after workshop estimate is prepared',
-          ready: Boolean(estimateDoc || estUrl),
+          subtitle: hasQuotation ? 'Ready to view' : 'Available after workshop estimate is prepared',
+          ready: hasQuotation,
           onView: async () => {
-            if (estimateDoc && token) {
-              await customerOpenBodyshopEstimateDocument(token, selectedReg, estimateDoc)
+            if (estimateDoc) {
+              await openEstimate(estimateDoc)
               return
             }
             if (estUrl) await openUrl(estUrl, 'Quotation')
@@ -122,7 +173,7 @@ export function FromTechwheelsSection() {
     } finally {
       setLoading(false)
     }
-  }, [token, selectedReg])
+  }, [token, selectedReg, repairCardProp, workshopDocumentsProp, openEstimate])
 
   useFocusEffect(
     useCallback(() => {
@@ -189,21 +240,44 @@ export function FromTechwheelsSection() {
               {item.ready && item.onView ? (
                 <TouchableOpacity
                   onPress={() => void item.onView?.()}
+                  disabled={item.id === 'quotation' && openingEstimate}
                   style={{
                     borderWidth: 1,
                     borderColor: CustomerTheme.navy,
                     borderRadius: 10,
                     paddingHorizontal: 14,
                     paddingVertical: 7,
+                    opacity: item.id === 'quotation' && openingEstimate ? 0.6 : 1,
                   }}
                 >
-                  <Text style={{ color: CustomerTheme.navy, fontSize: 12, fontWeight: '800' }}>View</Text>
+                  <Text style={{ color: CustomerTheme.navy, fontSize: 12, fontWeight: '800' }}>
+                    {item.id === 'quotation' && openingEstimate ? 'Opening…' : 'View'}
+                  </Text>
                 </TouchableOpacity>
               ) : null}
             </View>
           ))
         )}
       </View>
+
+      <Modal
+        visible={Boolean(estimatePreviewUri)}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setEstimatePreviewUri(null)}
+      >
+        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.92)', justifyContent: 'center', padding: 16 }}>
+          <TouchableOpacity
+            onPress={() => setEstimatePreviewUri(null)}
+            style={{ alignSelf: 'flex-end', marginBottom: 12, padding: 8 }}
+          >
+            <Icon name="x" size={22} color="#fff" />
+          </TouchableOpacity>
+          {estimatePreviewUri ? (
+            <Image source={{ uri: estimatePreviewUri }} style={{ width: '100%', height: '78%' }} resizeMode="contain" />
+          ) : null}
+        </View>
+      </Modal>
     </View>
   )
 }

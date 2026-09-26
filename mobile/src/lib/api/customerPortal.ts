@@ -1086,11 +1086,37 @@ export async function customerListMyBookings(
   return items
 }
 
-export async function customerGetRepairCard(sessionToken: string, regNumber?: string | null) {
+async function attachEstimateDocumentToRepairCard(
+  sessionToken: string,
+  regNumber: string,
+  card: Record<string, unknown>
+): Promise<Record<string, unknown>> {
+  if (parseBodyshopEstimateDocument(card)) return card
+  try {
+    const { data, error } = await supabase.rpc('customer_get_bodyshop_document', {
+      p_session_token: sessionToken,
+      p_reg_number: regNumber,
+      p_doc_key: 'doc_estimate',
+    })
+    if (error || !data || typeof data !== 'object') return card
+    const estimate = normalizeEstimateDocRow(data as Record<string, unknown>)
+    if (!estimate) return card
+    return { ...card, estimate_document: estimate }
+  } catch {
+    return card
+  }
+}
+
+export async function customerGetRepairCard(
+  sessionToken: string,
+  regNumber?: string | null,
+  opts?: { bypassCache?: boolean }
+) {
   const normReg = (regNumber || '').trim().toUpperCase().replace(/[\s-]/g, '')
   if (!normReg) return null
 
   const cacheKey = `repair_card_${sessionToken}_${normReg}`
+  if (opts?.bypassCache) apiCache.delete(cacheKey)
   const cached = getCached<Record<string, unknown>>(cacheKey)
   if (cached) return cached
 
@@ -1101,7 +1127,12 @@ export async function customerGetRepairCard(sessionToken: string, regNumber?: st
       p_reg_number: regNumber || null,
     })
     if (!error && data) {
-      return setCache(cacheKey, data as Record<string, unknown>)
+      const row = await attachEstimateDocumentToRepairCard(
+        sessionToken,
+        regNumber || normReg,
+        data as Record<string, unknown>
+      )
+      return setCache(cacheKey, row)
     }
   } catch (rpcErr) {
     console.warn('customer_get_repair_card RPC note:', rpcErr)
@@ -1117,7 +1148,12 @@ export async function customerGetRepairCard(sessionToken: string, regNumber?: st
       .limit(1)
 
     if (!error && rows && rows.length > 0) {
-      return setCache(cacheKey, rows[0] as Record<string, unknown>)
+      const row = await attachEstimateDocumentToRepairCard(
+        sessionToken,
+        regNumber || normReg,
+        rows[0] as Record<string, unknown>
+      )
+      return setCache(cacheKey, row)
     }
   } catch (dbErr) {
     console.warn('bodyshop_repair_cards direct query error:', dbErr)
@@ -1131,22 +1167,106 @@ export type CustomerBodyshopEstimateDocument = {
   file_name?: string | null
   content_type?: string | null
   drive_url?: string | null
+  drive_file_id?: string | null
   storage_bucket?: string | null
   storage_path?: string | null
   uploaded_at?: string | null
   uploaded_by?: string | null
 }
 
-export function parseBodyshopEstimateDocument(
-  card: Record<string, unknown> | null | undefined
-): CustomerBodyshopEstimateDocument | null {
-  const raw = card?.estimate_document
+function normalizeEstimateDocRow(raw: Record<string, unknown> | null | undefined): CustomerBodyshopEstimateDocument | null {
   if (!raw || typeof raw !== 'object') return null
   const doc = raw as Record<string, unknown>
   const driveUrl = String(doc.drive_url ?? '').trim()
   const storagePath = String(doc.storage_path ?? '').trim()
-  if (!driveUrl && !storagePath) return null
+  const fileName = String(doc.file_name ?? '').trim()
+  if (!driveUrl && !storagePath && !fileName) return null
   return doc as CustomerBodyshopEstimateDocument
+}
+
+export function parseBodyshopEstimateDocument(
+  card: Record<string, unknown> | null | undefined
+): CustomerBodyshopEstimateDocument | null {
+  const fromField = normalizeEstimateDocRow(
+    card?.estimate_document && typeof card.estimate_document === 'object'
+      ? (card.estimate_document as Record<string, unknown>)
+      : null
+  )
+  if (fromField) return fromField
+
+  const uploaded = Array.isArray(card?.uploaded_documents)
+    ? (card!.uploaded_documents as Record<string, unknown>[])
+    : []
+  for (const row of uploaded) {
+    if (String(row.doc_key ?? '').trim() !== 'doc_estimate') continue
+    const parsed = normalizeEstimateDocRow(row)
+    if (parsed) return parsed
+  }
+
+  return null
+}
+
+/** Workshop estimate row from list_assets (includes storage-only uploads). */
+export function parseWorkshopEstimateFromAsset(row: {
+  id?: number | string
+  doc_key?: string | null
+  file_name?: string | null
+  content_type?: string | null
+  drive_url?: string | null
+  view_url?: string | null
+  drive_pending?: boolean
+} | null | undefined): CustomerBodyshopEstimateDocument | null {
+  if (!row || String(row.doc_key ?? '').trim() !== 'doc_estimate') return null
+  const driveUrl = String(row.drive_url ?? row.view_url ?? '').trim()
+  const fileName = String(row.file_name ?? '').trim()
+  const hasRow = row.id != null && String(row.id).length > 0
+  if (!fileName && !driveUrl && !hasRow) return null
+  return {
+    doc_key: 'doc_estimate',
+    file_name: fileName || 'Workshop estimate',
+    content_type: row.content_type ?? null,
+    drive_url: driveUrl || null,
+  }
+}
+
+export function resolveWorkshopEstimateDocument(
+  card: Record<string, unknown> | null | undefined,
+  workshopDocuments?: Array<{
+    doc_key?: string | null
+    file_name?: string | null
+    content_type?: string | null
+    drive_url?: string | null
+    view_url?: string | null
+    drive_pending?: boolean
+  }> | null
+): CustomerBodyshopEstimateDocument | null {
+  const fromCard = parseBodyshopEstimateDocument(card)
+  if (fromCard) return fromCard
+  const assetRow = (workshopDocuments ?? []).find((d) => String(d.doc_key ?? '').trim() === 'doc_estimate')
+  return parseWorkshopEstimateFromAsset(assetRow)
+}
+
+function googleDriveFileIdFromUrl(url: string): string | null {
+  const trimmed = url.trim()
+  if (!trimmed) return null
+  const byPath = trimmed.match(/\/file\/d\/([^/]+)/i)
+  if (byPath?.[1]) return byPath[1]
+  const byQuery = trimmed.match(/[?&]id=([^&]+)/i)
+  if (byQuery?.[1]) return byQuery[1]
+  return null
+}
+
+function preferDirectViewUrl(
+  viewUrl: string,
+  doc?: CustomerBodyshopEstimateDocument | null
+): string {
+  const trimmed = viewUrl.trim()
+  if (!trimmed) return trimmed
+  const fileId = String(doc?.drive_file_id ?? '').trim() || googleDriveFileIdFromUrl(trimmed)
+  if (fileId && /drive\.google\.com/i.test(trimmed)) {
+    return `https://drive.google.com/uc?export=view&id=${fileId}`
+  }
+  return trimmed
 }
 
 function isLikelyImageViewUrl(viewUrl: string, contentType?: string | null, fileName?: string | null) {
@@ -1226,35 +1346,51 @@ export async function customerGetBodyshopEstimateViewUrl(
     throw new Error('Session or vehicle not available.')
   }
 
-  const driveUrl = String(doc?.drive_url ?? '').trim()
-  if (driveUrl) {
-    return {
-      viewUrl: driveUrl,
-      fileName: doc?.file_name ?? null,
-      contentType: doc?.content_type ?? null,
-      isImage: isLikelyImageViewUrl(driveUrl, doc?.content_type, doc?.file_name),
+  let viewUrl = ''
+  let fileName = doc?.file_name ?? null
+  let contentType = doc?.content_type ?? null
+
+  try {
+    const resolved = await fetchCustomerBodyshopDocViewUrl(sessionToken, reg, 'doc_estimate')
+    viewUrl = preferDirectViewUrl(resolved.view_url, doc)
+    fileName = resolved.file_name ?? fileName
+    contentType = resolved.content_type ?? contentType
+  } catch (edgeErr) {
+    const driveUrl = String(doc?.drive_url ?? '').trim()
+    if (!driveUrl) {
+      throw edgeErr instanceof Error ? edgeErr : new Error('Unable to open workshop estimate document.')
     }
+    viewUrl = preferDirectViewUrl(driveUrl, doc)
   }
 
-  const resolved = await fetchCustomerBodyshopDocViewUrl(sessionToken, reg, 'doc_estimate')
-  const viewUrl = resolved.view_url
   return {
     viewUrl,
-    fileName: resolved.file_name ?? doc?.file_name ?? null,
-    contentType: resolved.content_type ?? doc?.content_type ?? null,
-    isImage: isLikelyImageViewUrl(viewUrl, resolved.content_type, resolved.file_name ?? doc?.file_name),
+    fileName,
+    contentType,
+    isImage: isLikelyImageViewUrl(viewUrl, contentType, fileName),
   }
 }
 
+/** Opens estimate in browser, or returns a URL for in-app image preview (Supabase signed URLs). */
 export async function customerOpenBodyshopEstimateDocument(
   sessionToken: string,
   regNumber: string | null | undefined,
   doc?: CustomerBodyshopEstimateDocument | null
-): Promise<void> {
+): Promise<{ mode: 'preview'; uri: string } | { mode: 'external' }> {
   const resolved = await customerGetBodyshopEstimateViewUrl(sessionToken, regNumber, doc)
-  const canOpen = await Linking.canOpenURL(resolved.viewUrl)
-  if (!canOpen) {
+  const useInAppPreview =
+    resolved.isImage &&
+    !/drive\.google\.com/i.test(resolved.viewUrl) &&
+    !resolved.viewUrl.toLowerCase().includes('googleusercontent.com')
+
+  if (useInAppPreview) {
+    return { mode: 'preview', uri: resolved.viewUrl }
+  }
+
+  try {
+    await Linking.openURL(resolved.viewUrl)
+  } catch {
     throw new Error('Unable to open this document on your device.')
   }
-  await Linking.openURL(resolved.viewUrl)
+  return { mode: 'external' }
 }
