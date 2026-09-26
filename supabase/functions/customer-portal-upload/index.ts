@@ -33,6 +33,7 @@ const ALLOWED_DOC_KEYS = new Set([
   'doc_gst',
   'doc_company_pan',
   'doc_bank_detail',
+  'doc_tp_affidavit',
 ])
 
 function json(status: number, body: Record<string, unknown>) {

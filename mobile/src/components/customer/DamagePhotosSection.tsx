@@ -7,11 +7,7 @@ import { CustomerTheme } from '../../lib/customer/customerTheme'
 import { DAMAGE_PHOTO_SLOTS, matchPhotoToSlot } from '../../lib/customer/bodyshopDamagePhotos'
 import { uploadDamagePhoto } from '../../lib/customer/documentUploadFlow'
 import type { CustomerBodyshopAsset } from '../../lib/api/customerBodyshopUploads'
-import {
-  peekCustomerDocumentsMemory,
-  readCustomerDocumentsCache,
-  syncCustomerDocumentsFromServer,
-} from '../../lib/customer/customerDocumentsCache'
+import { fetchCustomerDocuments } from '../../lib/customer/customerDocumentsCache'
 import { Icon } from '../ui/Icon'
 import { useCustomerScreenRefresh } from './customerScreenRefresh'
 
@@ -48,25 +44,12 @@ export function DamagePhotosSection({
 
   const refresh = useCallback(async () => {
     if (!sessionToken || !regNumber) return
-
-    const instant = peekCustomerDocumentsMemory(regNumber)
-    if (instant?.photos?.length) {
-      applyPhotos(instant.photos)
-      setLoading(false)
-    } else {
-      setLoading(true)
-    }
-
+    setLoading(true)
     try {
-      const cached = instant ?? (await readCustomerDocumentsCache(regNumber))
-      if (cached?.photos?.length) {
-        applyPhotos(cached.photos)
-        setLoading(false)
-      }
-      const fresh = await syncCustomerDocumentsFromServer(sessionToken, regNumber)
+      const fresh = await fetchCustomerDocuments(sessionToken, regNumber)
       applyPhotos(fresh.photos)
     } catch {
-      // keep UI usable offline
+      // ignore
     } finally {
       setLoading(false)
     }

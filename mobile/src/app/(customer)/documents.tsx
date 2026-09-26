@@ -25,11 +25,7 @@ import {
   customerUploadBodyshopAsset,
   type CustomerBodyshopAsset,
 } from '../../lib/api/customerBodyshopUploads'
-import {
-  peekCustomerDocumentsMemory,
-  readCustomerDocumentsCache,
-  syncCustomerDocumentsFromServer,
-} from '../../lib/customer/customerDocumentsCache'
+import { fetchCustomerDocuments } from '../../lib/customer/customerDocumentsCache'
 import {
   claimModeFromRepairCard,
   listClaimDocumentsForUpload,
@@ -45,11 +41,10 @@ function isImageName(name?: string | null, contentType?: string | null) {
 
 export default function CustomerDocumentsScreen() {
   const { token, selectedReg } = useCustomerSession()
-  const bootMem = peekCustomerDocumentsMemory(selectedReg)
-  const [repairCard, setRepairCard] = useState<Record<string, unknown> | null>(bootMem?.repairCard ?? null)
-  const [documents, setDocuments] = useState<CustomerBodyshopAsset[]>(bootMem?.documents ?? [])
-  const [loading, setLoading] = useState(!bootMem)
-  const [syncing, setSyncing] = useState(false)
+  const [repairCard, setRepairCard] = useState<Record<string, unknown> | null>(null)
+  const [documents, setDocuments] = useState<CustomerBodyshopAsset[]>([])
+  const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
   const initialFocusDone = useRef(false)
   const [busyKey, setBusyKey] = useState<string | null>(null)
   const [previewUri, setPreviewUri] = useState<string | null>(null)
@@ -90,47 +85,30 @@ export default function CustomerDocumentsScreen() {
   )
 
   const load = useCallback(
-    async (mode: 'initial' | 'background' | 'force' = 'initial') => {
+    async (mode: 'initial' | 'refresh' = 'initial') => {
       if (!token || !selectedReg) {
         setRepairCard(null)
         setDocuments([])
         setLoading(false)
+        setRefreshing(false)
         return
       }
 
-      let showedCache = false
-      if (mode !== 'force') {
-        const instant = peekCustomerDocumentsMemory(selectedReg)
-        if (instant) {
-          applySnapshot(instant)
-          setLoading(false)
-          showedCache = true
-        }
-        const cached = instant ?? (await readCustomerDocumentsCache(selectedReg))
-        if (cached) {
-          applySnapshot(cached)
-          setLoading(false)
-          showedCache = true
-        }
-      }
-
-      if (mode === 'initial' && !showedCache) {
+      if (mode === 'initial') {
         setLoading(true)
-      } else if (mode !== 'force') {
-        setSyncing(true)
+      } else {
+        setRefreshing(true)
       }
 
       try {
-        const fresh = await syncCustomerDocumentsFromServer(token, selectedReg)
+        const fresh = await fetchCustomerDocuments(token, selectedReg)
         applySnapshot(fresh)
       } catch {
-        if (!showedCache) {
-          setRepairCard(null)
-          setDocuments([])
-        }
+        setRepairCard(null)
+        setDocuments([])
       } finally {
         setLoading(false)
-        setSyncing(false)
+        setRefreshing(false)
       }
     },
     [token, selectedReg, applySnapshot]
@@ -147,11 +125,11 @@ export default function CustomerDocumentsScreen() {
         initialFocusDone.current = true
         return
       }
-      void load('background')
+      void load('refresh')
     }, [load])
   )
 
-  useCustomerScreenRefresh(() => load('background'))
+  useCustomerScreenRefresh(() => load('refresh'))
 
   const uploadSlot = async (
     slot: CustomerClaimDocumentDef,
@@ -203,7 +181,7 @@ export default function CustomerDocumentsScreen() {
         fileName,
         contentType,
       })
-      await load('force')
+      await load('refresh')
       setNotice(result.ok
         ? `${slot.title} uploaded again. Waiting for the advisor to approve it.`
         : `${slot.title} is saved. Drive sync is still pending.`)
@@ -225,7 +203,7 @@ export default function CustomerDocumentsScreen() {
         resourceId: row.id,
         docKey: slot.docKey,
       })
-      await load('force')
+      await load('refresh')
       setNotice(result.ok ? `${slot.title} is saved on Drive.` : (result.error || 'Drive sync is still pending.'))
     } catch (error) {
       Alert.alert('Retry failed', error instanceof Error ? error.message : 'Unable to retry Drive sync.')
@@ -352,8 +330,8 @@ export default function CustomerDocumentsScreen() {
     <CustomerScreen
       title="Documents"
       subtitle={
-        syncing && !loading
-          ? `Syncing latest · ${selectedReg || 'your vehicle'}`
+        refreshing && !loading
+          ? `Refreshing · ${selectedReg || 'your vehicle'}`
           : `Needed from you · ${selectedReg || 'your vehicle'}`
       }
     >
@@ -363,10 +341,10 @@ export default function CustomerDocumentsScreen() {
                 </Text>
         <Text style={{ color: CustomerTheme.inkMuted, fontSize: 12, lineHeight: 17 }}>
           {ownershipType === 'firm'
-            ? 'This vehicle is registered to a firm, so GST and company PAN are included.'
-            : 'This vehicle is registered to an individual.'}
-          {' '}Taken from your repair card.
-                </Text>
+            ? 'Firm / company case: RC, insurance, DL, claim form, Aadhaar, PAN, GST, company PAN, and bank details are required (same as workshop SA screen).'
+            : 'Individual case: RC, insurance, DL, claim form, Aadhaar, and PAN are required.'}
+          {' '}Type is taken from your repair card.
+        </Text>
       </CustomerCard>
 
       {loading ? (
