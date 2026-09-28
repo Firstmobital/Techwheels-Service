@@ -25,9 +25,12 @@ const MAX_FILE_SIZE = 15 * 1024 * 1024
 const ALLOWED_DOC_KEYS = new Set([
   'doc_claim_form',
   'doc_rc',
+  'doc_rc_back',
   'doc_insurance',
   'doc_dl',
+  'doc_dl_back',
   'doc_aadhaar',
+  'doc_aadhaar_back',
   'doc_pan',
   'doc_kyc',
   'doc_gst',

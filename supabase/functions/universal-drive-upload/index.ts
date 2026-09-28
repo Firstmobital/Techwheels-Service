@@ -51,14 +51,18 @@ const PHOTO_TYPES = new Set([
 const BODYSHOP_DOC_KEYS = new Set([
   'doc_claim_form',
   'doc_rc',
+  'doc_rc_back',
   'doc_insurance',
   'doc_dl',
+  'doc_dl_back',
   'doc_aadhaar',
+  'doc_aadhaar_back',
   'doc_pan',
   'doc_kyc',
   'doc_gst',
   'doc_company_pan',
   'doc_bank_detail',
+  'doc_tp_affidavit',
   'doc_estimate',
   'doc_survey_approval',
 ])
