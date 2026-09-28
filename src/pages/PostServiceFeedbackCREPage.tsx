@@ -557,8 +557,6 @@ export default function PostServiceFeedbackCREPage() {
     const dueTodayCount = () =>
       supabase.from('post_service_feedback_cre_due_today').select('id', { count: 'exact', head: true })
 
-    const todayBounds = getAsiaKolkataTodayBounds()
-
     const [
       totalSent, positiveCount, needsFollowupCount, unratedCount, todayCount, pageRes, statusTotal, statusOpen, statusInProgress, statusResolved,
       prodRes
