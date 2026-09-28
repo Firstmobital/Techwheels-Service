@@ -154,6 +154,59 @@ function StatusBadge({ status }: { status: string }) {
 }
 
 // ── Main Component ─────────────────────────────────────────────────────────────
+interface AgentStat {
+  email: string
+  calls_made: number
+  calls_connected: number
+  booked: number
+  callback_later: number
+  no_answer: number
+  not_interested: number
+  wrong_number: number
+  already_serviced: number
+  sold_vehicle: number
+  still_assigned: number
+}
+
+interface TeleBooking {
+  customer?: { first_name?: string; last_name?: string; model?: string; vehicle_registration_number?: string; contact_phones?: string; assumed_next_service_type?: string }
+  booking_date?: string | null
+  booking_time?: string | null
+  assigned_to?: string
+  whatsapp_sent?: boolean
+  whatsapp_status?: string
+  call_notes?: string
+}
+
+interface OverdueCustomer {
+  first_name?: string
+  last_name?: string
+  vehicle_registration_number?: string
+  model?: string
+  powertrain_type?: string
+  contact_phones?: string
+  assumed_next_service_date?: string | null
+  assumed_next_service_type?: string
+  last_service_dealer?: string
+  sold_dealer?: string
+}
+
+interface TelePreviewCounts {
+  filtered_count?: number
+  date_from?: string
+  date_to?: string
+  counts?: {
+    total?: number
+    retain_loyal?: number
+    retain_atrisk?: number
+    retain_service_loyal?: number
+    conquest?: number
+    ev?: number
+    pv?: number
+    warranty_soon?: number
+  }
+}
+
 export default function TelecallingPage({ userRole }: { userRole?: string }) {
   const [role, setRole] = useState<string>(userRole || 'staff')
   const [activeTab, setActiveTab] = useState<'dashboard' | 'admin'>('dashboard')
@@ -802,7 +855,7 @@ function AdminDashboard({ campaigns, activeCampaign, onRefresh }: { campaigns: C
   const [priorityMode, setPriorityMode] = useState('service_date')
   const [powertrainFilter, setPowertrainFilter] = useState('all')
   const [warrantyDays, setWarrantyDays] = useState(90)
-  const [previewCounts, setPreviewCounts] = useState<any>(null)
+  const [previewCounts, setPreviewCounts] = useState<TelePreviewCounts | null>(null)
   const [previewing, setPreviewing] = useState(false)
   const [campaignName, setCampaignName] = useState('')
   const [upcomingDays, setUpcomingDays] = useState<number>(20)
@@ -813,13 +866,13 @@ function AdminDashboard({ campaigns, activeCampaign, onRefresh }: { campaigns: C
   const [creating, setCreating] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
-  const [agentStats, setAgentStats] = useState<any[]>([])
+  const [agentStats, setAgentStats] = useState<AgentStat[]>([])
   const [refreshingCampaign, setRefreshingCampaign] = useState(false)
   const [refreshResult, setRefreshResult] = useState<string | null>(null)
   const [statsDateFrom, setStatsDateFrom] = useState('')
   const [statsDateTo, setStatsDateTo] = useState('')
-  const [bookings, setBookings] = useState<any[]>([])
-  const [overdueList, setOverdueList] = useState<any[]>([])
+  const [bookings, setBookings] = useState<TeleBooking[]>([])
+  const [overdueList, setOverdueList] = useState<OverdueCustomer[]>([])
   const [loadingTab, setLoadingTab] = useState(false)
 
   useEffect(() => {
@@ -861,7 +914,7 @@ function AdminDashboard({ campaigns, activeCampaign, onRefresh }: { campaigns: C
         setRefreshResult('No active service-date campaigns to refresh.')
       }
       await onRefresh()
-    } catch (e: any) {
+    } catch (e) {
       setRefreshResult(`❌ Refresh failed: ${e.message}`)
     } finally {
       setRefreshingCampaign(false)
@@ -1141,8 +1194,8 @@ function AdminDashboard({ campaigns, activeCampaign, onRefresh }: { campaigns: C
                       {c.powertrain_filter && c.powertrain_filter !== 'all' && <span className="rounded-full bg-blue-50 border border-blue-200 px-2 py-0.5 text-xs text-blue-700">{c.powertrain_filter}</span>}
                     </div>
                     <p className="mt-1 text-sm text-gray-500">
-                      {(c as any).upcoming_days
-                        ? <span>Next <strong>{(c as any).upcoming_days} days</strong> from creation · {formatDate(c.date_from)} → {formatDate(c.date_to)}</span>
+                      {(c as unknown as Record<string, unknown>)['upcoming_days']
+                        ? <span>Next <strong>{String((c as unknown as Record<string, unknown>)['upcoming_days'])} days</strong> from creation · {formatDate(c.date_from)} → {formatDate(c.date_to)}</span>
                         : <span>{formatDate(c.date_from)} → {formatDate(c.date_to)}</span>
                       }
                       {' · by '}{c.created_by || '—'}
@@ -1206,7 +1259,7 @@ function AdminDashboard({ campaigns, activeCampaign, onRefresh }: { campaigns: C
           </div>
 
           {agentStats.length > 0 && (() => {
-            const totals = agentStats.reduce((acc: any, a: any) => ({
+            const totals = agentStats.reduce((acc, a) => ({
               calls: acc.calls + (a.calls_made || 0),
               connected: acc.connected + (a.calls_connected || 0),
               booked: acc.booked + (a.booked || 0),
@@ -1252,7 +1305,7 @@ function AdminDashboard({ campaigns, activeCampaign, onRefresh }: { campaigns: C
                       <tr><td colSpan={13} className="px-4 py-8 text-center text-gray-400">
                         {statsDateFrom || statsDateTo ? 'No call activity in this date range' : 'No call activity yet for this campaign'}
                       </td></tr>
-                    ) : agentStats.map((a: any, i: number) => {
+                    ) : agentStats.map((a, i: number) => {
                       const bookRate = a.calls_connected > 0 ? ((a.booked / a.calls_connected) * 100).toFixed(0) + '%' : '—'
                       return (
                         <tr key={i} className={`hover:bg-gray-50 ${i === 0 ? 'bg-green-50' : ''}`}>
@@ -1305,7 +1358,7 @@ function AdminDashboard({ campaigns, activeCampaign, onRefresh }: { campaigns: C
                       <td className="px-4 py-3 font-medium text-gray-900">{b.customer?.first_name} {b.customer?.last_name || ''}</td>
                       <td className="px-4 py-3 text-gray-600">{b.customer?.model} · {b.customer?.vehicle_registration_number || '—'}</td>
                       <td className="px-4 py-3 text-gray-600">{b.customer?.contact_phones}</td>
-                      <td className="px-4 py-3 font-medium text-green-700">{formatDate(b.booking_date)}{b.booking_time ? ` ${b.booking_time}` : ''}</td>
+                      <td className="px-4 py-3 font-medium text-green-700">{formatDate(b.booking_date ?? null)}{b.booking_time ? ` ${b.booking_time}` : ''}</td>
                       <td className="px-4 py-3 text-gray-600">{b.customer?.assumed_next_service_type || '—'}</td>
                       <td className="px-4 py-3 text-gray-600">{b.assigned_to || '—'}</td>
                       <td className="px-4 py-3">{b.whatsapp_sent ? <span className="text-green-600 font-medium">✓ {b.whatsapp_status || 'sent'}</span> : <span className="text-gray-300">—</span>}</td>
@@ -1343,14 +1396,14 @@ function AdminDashboard({ campaigns, activeCampaign, onRefresh }: { campaigns: C
                   {overdueList.length === 0 ? (
                     <tr><td colSpan={9} className="px-4 py-8 text-center text-gray-400">No overdue customers found</td></tr>
                   ) : overdueList.map((o, i) => {
-                    const days = daysFromToday(o.assumed_next_service_date)
+                    const days = daysFromToday(o.assumed_next_service_date ?? null)
                     return (
                       <tr key={i} className="hover:bg-gray-50">
                         <td className="px-4 py-3 font-medium text-gray-900">{o.first_name} {o.last_name || ''}</td>
                         <td className="px-4 py-3 text-gray-600">{o.vehicle_registration_number || '—'}</td>
                         <td className="px-4 py-3 text-gray-600">{o.model} <span className="text-xs text-gray-400">{o.powertrain_type || ''}</span></td>
                         <td className="px-4 py-3 text-gray-600">{o.contact_phones}</td>
-                        <td className="px-4 py-3 text-red-600 font-medium">{formatDate(o.assumed_next_service_date)}</td>
+                        <td className="px-4 py-3 text-red-600 font-medium">{formatDate(o.assumed_next_service_date ?? null)}</td>
                         <td className="px-4 py-3 font-bold text-red-700">{days !== null ? Math.abs(days) : '—'}d</td>
                         <td className="px-4 py-3 text-gray-600">{o.assumed_next_service_type || '—'}</td>
                         <td className="px-4 py-3 text-gray-500">{o.last_service_dealer || '—'}</td>

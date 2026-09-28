@@ -3011,7 +3011,7 @@ Estimates attached as per the warranty policy. Need your kind approval for the s
       setShowComposeModal(false)
       setComposePendingPayload(null)
       showToast('Claim email sent and status updated to submitted.', true)
-    } catch (err: any) {
+    } catch (err) {
       showToast(String(err?.message ?? 'Send failed'), false)
     } finally {
       setComposeSendBusy(false)

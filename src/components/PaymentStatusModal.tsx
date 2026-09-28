@@ -265,7 +265,7 @@ export function PaymentStatusModal({
               <select
                 className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-xs font-medium text-gray-800"
                 value={paymentMode}
-                onChange={(e) => setPaymentMode(e.target.value as any)}
+                onChange={(e) => setPaymentMode(e.target.value as 'UPI' | 'Cash' | 'Card' | 'Net Banking' | 'Mixed')}
               >
                 <option value="UPI">UPI (GPay / PhonePe / Paytm)</option>
                 <option value="Cash">Cash at Counter</option>

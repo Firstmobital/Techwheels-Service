@@ -2,6 +2,17 @@
 
 Tracks documentation-sync updates for business logic, architecture, and access control.
 
+## 2026-09-28
+
+- Date: 2026-09-28
+- Change summary: CI baseline repair — TypeScript 6.0 type annotation fixes across ~50 src files, ESLint config improvements (react-hooks v7 rule classification, no-explicit-any maintained), tsconfig `useUnknownInCatchVariables: false` for TS6 catch-var compatibility, `branchOptions` memoization fix in ReportsPage.
+- Impacted files: `tsconfig.app.json`, `eslint.config.js`, `src/pages/ReportsPage.tsx`, ~48 other `src/**` files (type-annotation changes only)
+- Business logic change: No — all changes are type annotations, lint config, or compiler config. No runtime behavior changed.
+- Function-level contract change: No
+- RBAC/RLS change: No
+- Data/schema change: No
+- Docs updated by: CI repair pass (Part 8 governance, SYNC_PROTOCOL.md Self-Heal Check)
+
 ## 2026-09-24
 
 - Recovery **DMS bill-to** stays filled when `psf_revenue_dms.account` exists. An empty `bodyshop_settlements.invoice_account` is copied from the latest live DMS invoice on settlement open and on each DMS import statement. A bill-to that is already stored is left as-is. Policy company is not changed. Customer first/last name is not used as the bill-to. Ledger: DBL-0084. Plan: `BODYSHOP-SETTLEMENT-001`.

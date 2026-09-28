@@ -306,7 +306,7 @@ export function EstimateMasterModal({ isOpen, onClose }: EstimateMasterModalProp
         const wb = XLSX.read(bstr, { type: 'binary' })
         const wsName = wb.SheetNames[0]
         const ws = wb.Sheets[wsName]
-        const rawData: any[] = XLSX.utils.sheet_to_json(ws)
+        const rawData = XLSX.utils.sheet_to_json(ws) as Record<string, unknown>[]
 
         if (!Array.isArray(rawData) || rawData.length === 0) {
           showToast('No data found in uploaded file', false)

@@ -31,17 +31,18 @@ export default function PartsValuationReport({ branch }: ReportViewProps) {
 
   const sortedRows = useMemo(() => {
     const sorted = [...rows].sort((a, b) => {
-      let aVal: any = a[sortConfig.key]
-      let bVal: any = b[sortConfig.key]
+      const aRaw = a[sortConfig.key]
+      const bRaw = b[sortConfig.key]
+      const aVal = aRaw == null ? Infinity : aRaw
+      const bVal = bRaw == null ? Infinity : bRaw
 
-      if (aVal === null || aVal === undefined) aVal = Infinity
-      if (bVal === null || bVal === undefined) bVal = Infinity
-
-      if (typeof aVal === 'string') {
+      if (typeof aVal === 'string' && typeof bVal === 'string') {
         return sortConfig.direction === 'asc' ? aVal.localeCompare(bVal) : bVal.localeCompare(aVal)
       }
 
-      return sortConfig.direction === 'asc' ? aVal - bVal : bVal - aVal
+      const aN = typeof aVal === 'number' ? aVal : Number(aVal)
+      const bN = typeof bVal === 'number' ? bVal : Number(bVal)
+      return sortConfig.direction === 'asc' ? aN - bN : bN - aN
     })
     return sorted
   }, [rows, sortConfig])

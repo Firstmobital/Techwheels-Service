@@ -124,7 +124,7 @@ export default function DriverManagementPage() {
 
         setDrivers(list)
       }
-    } catch (e: any) {
+    } catch (e) {
       console.error('Error loading initial driver data:', e)
     }
   }
@@ -163,7 +163,7 @@ export default function DriverManagementPage() {
         })
         return additional.length > 0 ? [...prev, ...additional] : prev
       })
-    } catch (err: any) {
+    } catch (err) {
       console.error('loadBookings error:', err)
       setError(err?.message || 'Failed to load driver dispatch bookings')
     } finally {
@@ -210,7 +210,7 @@ export default function DriverManagementPage() {
       setBookings(prev =>
         prev.map(b => (b.id === booking.id ? { ...b, ...updates } : b))
       )
-    } catch (err: any) {
+    } catch (err) {
       console.error('Assign driver error:', err)
       alert('Failed to update driver: ' + (err?.message || 'Unknown error'))
     } finally {

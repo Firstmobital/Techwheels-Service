@@ -111,14 +111,14 @@ function BackOrderPartsStatusTab({ branch }: ReportViewProps) {
         if (batch.length === 0) break
 
         const processedRows = batch
-          .filter((row: any) => {
+          .filter((row) => {
             // Keep only records where invoice number is blank
             const invoiceNumber = String(
               row.invoice_number ?? row.invoice_no ?? row.invoice_num ?? row.invoiceNumber ?? '',
             ).trim()
             return !invoiceNumber
           })
-          .map((row: any) => {
+          .map((row) => {
             const orderQty = Number(row.ordered_quantity ?? row.order_quantity ?? row.order_qty) || 0
             const receivedQty = Number(row.received_quantity ?? row.received_qty) || 0
             const intransitQty = Number(row.intransit_qty ?? row.in_transit_quantity ?? row.in_transit_qty) || 0
@@ -235,7 +235,8 @@ function BackOrderPartsStatusTab({ branch }: ReportViewProps) {
       const { monthName } = getDateParts(row.orderDate)
       if (monthName) monthSet.add(monthName)
     })
-    return Array.from(monthSet).sort((a, b) => MONTHS.indexOf(a as any) - MONTHS.indexOf(b as any))
+    type MonthName = typeof MONTHS[number]
+    return Array.from(monthSet).sort((a, b) => MONTHS.indexOf(a as MonthName) - MONTHS.indexOf(b as MonthName))
   }, [rows])
 
   useEffect(() => {

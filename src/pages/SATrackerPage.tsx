@@ -530,12 +530,12 @@ export default function SATrackerPage() {
 
       if (err) throw err
       const completedYesterdayJobCards = await fetchCompletedJobCards(
-        (data ?? []).map((r: any) => r.job_card_number),
+        (data ?? []).map((r) => r.job_card_number),
       )
 
       const saRows: YesterdaySARow[] = (data ?? [])
-        .filter((r: any) => r.sr_assigned_to)
-        .map((r: any) => {
+        .filter((r) => r.sr_assigned_to)
+        .map((r) => {
           const labour  = parseAmount(r.dms_final_labour_amount)
           const saName  = String(r.sr_assigned_to ?? '').trim()
           const fuel    = normFuelBucket(resolveSaEmployee(saName, r.employee_code)?.fuel_type)
@@ -556,7 +556,7 @@ export default function SATrackerPage() {
 
       const waText = buildSAWAText(saRows, dateStr, saSharePercent, evSharePercent)
       setYesterdaySAReport({ rows: saRows, date: dateStr, waText })
-    } catch (e: any) {
+    } catch (e) {
       alert('Failed to generate SA report: ' + (e.message ?? 'Unknown error'))
     } finally {
       setGeneratingReport(false)
@@ -705,7 +705,7 @@ export default function SATrackerPage() {
       ws['!cols'] = [18, 22, 14, 18, 12, 18, 28, 14, 24, 18, 14, 18, 14, 42, 52, 16, 12, 22, 22, 16].map((wch) => ({ wch }))
       XLSX.utils.book_append_sheet(wb, ws, 'SA Issues')
       XLSX.writeFile(wb, `SA_Tracker_Issues_${fromDate}_to_${toDate}.xlsx`)
-    } catch (e: any) {
+    } catch (e) {
       alert('SA issue export failed: ' + (e.message ?? 'Unknown error'))
     }
   }

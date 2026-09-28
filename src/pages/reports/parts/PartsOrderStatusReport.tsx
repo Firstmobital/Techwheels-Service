@@ -287,19 +287,19 @@ export default function PartsOrderStatusReport({ branch }: ReportViewProps) {
           </div>
           <div className="p-4 bg-green-50 rounded border border-green-200">
             <p className="text-sm text-green-700">Received</p>
-            <p className="text-2xl font-bold text-green-700">{(stats as any).Received}</p>
+            <p className="text-2xl font-bold text-green-700">{(stats as Record<string, number>)['Received']}</p>
           </div>
           <div className="p-4 bg-blue-50 rounded border border-blue-200">
             <p className="text-sm text-blue-700">In-Transit</p>
-            <p className="text-2xl font-bold text-blue-700">{(stats as any)['In-Transit']}</p>
+            <p className="text-2xl font-bold text-blue-700">{(stats as Record<string, number>)['In-Transit']}</p>
           </div>
           <div className="p-4 bg-yellow-50 rounded border border-yellow-200">
             <p className="text-sm text-yellow-700">Confirmed</p>
-            <p className="text-2xl font-bold text-yellow-700">{(stats as any).Confirmed}</p>
+            <p className="text-2xl font-bold text-yellow-700">{(stats as Record<string, number>)['Confirmed']}</p>
           </div>
           <div className="p-4 bg-gray-50 rounded border">
             <p className="text-sm text-gray-600">Total Qty</p>
-            <p className="text-2xl font-bold">{(stats as any).totalOrdered.toLocaleString()}</p>
+            <p className="text-2xl font-bold">{(stats as Record<string, number>)['totalOrdered'].toLocaleString()}</p>
           </div>
         </div>
       )}

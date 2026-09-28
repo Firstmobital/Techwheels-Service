@@ -71,11 +71,11 @@ export function cleanAdvisorPersonName(name: string | null | undefined): string 
   return trimmed
 }
 
-export function extractKmFromFeedback(item: any): number | null {
+export function extractKmFromFeedback(item: Record<string, unknown>): number | null {
   if (!item) return null
-  const text = item.feedback_text || ''
+  const text = typeof item.feedback_text === 'string' ? item.feedback_text : ''
   if (!text) return null
-  if (typeof text === 'string' && text.trim().startsWith('{') && text.trim().endsWith('}')) {
+  if (text.trim().startsWith('{') && text.trim().endsWith('}')) {
     try {
       const parsed = JSON.parse(text)
       if (parsed.km_reading != null && Number(parsed.km_reading) > 0) return Number(parsed.km_reading)

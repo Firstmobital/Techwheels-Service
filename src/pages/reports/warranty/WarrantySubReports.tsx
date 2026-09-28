@@ -80,12 +80,12 @@ const SSPL = SEL + ',code_label'
 async function loadAll(table: string, sel: string, portal: Portal): Promise<Row[]> {
   const acc: Row[] = []; let from = 0
   for (;;) {
-    let q = (supabase.from(table) as any).select(sel).range(from, from+999)
+    let q = supabase.from(table).select(sel).range(from, from+999)
     if (portal !== 'ALL') q = q.eq('portal', portal)
     const { data, error } = await q
     if (error) throw error
     if (!data?.length) break
-    acc.push(...data as Row[])
+    acc.push(...(data as unknown as Row[]))
     if (data.length < 1000) break
     from += 1000
   }

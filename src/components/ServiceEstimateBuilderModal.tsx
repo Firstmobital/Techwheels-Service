@@ -504,7 +504,7 @@ export function ServiceEstimateBuilderModal({
         })
         setCatalogueNotice(`✓ Added "${customDesc.trim()}" (${customServiceType}) to Master Catalogue for ${activeModel}!`)
         setTimeout(() => setCatalogueNotice(null), 3500)
-      } catch (err: any) {
+      } catch (err) {
         console.warn('Save to catalogue note:', err)
       }
     }

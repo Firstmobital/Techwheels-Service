@@ -5,7 +5,7 @@
 /**
  * Convert array of objects to CSV content
  */
-export function convertToCSV(data: Array<Record<string, any>>, headers?: string[]): string {
+export function convertToCSV(data: Array<Record<string, unknown>>, headers?: string[]): string {
   if (data.length === 0) {
     return ''
   }
@@ -64,7 +64,7 @@ export function downloadCSV(content: string, filename: string): void {
 /**
  * Export data to CSV and trigger download
  */
-export function exportToCSV(data: Array<Record<string, any>>, filename: string, headers?: string[]): void {
+export function exportToCSV(data: Array<Record<string, unknown>>, filename: string, headers?: string[]): void {
   const csv = convertToCSV(data, headers)
   downloadCSV(csv, `${filename}.csv`)
 }

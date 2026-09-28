@@ -76,8 +76,9 @@ function getSourceIcon(src?: string | null): string {
 }
 
 // ─── Helper: Parse Customer App Booking from post_feedback_bot_data ──────────
-function parseBotBookingToServiceBooking(bot: any): Partial<ServiceBooking> {
-  const text = bot.feedback_text || ''
+function parseBotBookingToServiceBooking(bot: Record<string, unknown>): Partial<ServiceBooking> {
+  const str = (v: unknown) => typeof v === 'string' ? v : ''
+  const text = str(bot.feedback_text)
   const typeMatch = text.match(/Type:\s*([^\n\r]+)/i)
   const dateMatch = text.match(/Date:\s*([0-9]{4}-[0-9]{2}-[0-9]{2})/i)
   const slotMatch = text.match(/Slot:\s*([^\n\r]+)/i)
@@ -92,11 +93,11 @@ function parseBotBookingToServiceBooking(bot: any): Partial<ServiceBooking> {
     pickupAddress = addrInParen ? addrInParen[1].trim() : null
   }
 
-  const bookingDate = (bot.created_at || bot.complaint_date_time || new Date().toISOString()).slice(0, 10)
+  const bookingDate = (str(bot.created_at) || str(bot.complaint_date_time) || new Date().toISOString()).slice(0, 10)
   const appointmentDate = dateMatch ? dateMatch[1] : bookingDate
   const bookingTime = slotMatch ? slotMatch[1].trim() : '09:30 – 10:30'
-  const serviceType = typeMatch ? typeMatch[1].trim() : (bot.service_type || 'Running Repairs')
-  const branch = branchMatch ? branchMatch[1].trim() : (bot.branch || 'Sitapura')
+  const serviceType = typeMatch ? typeMatch[1].trim() : (str(bot.service_type) || 'Running Repairs')
+  const branch = branchMatch ? branchMatch[1].trim() : (str(bot.branch) || 'Sitapura')
   const complaint = complaintsMatch ? complaintsMatch[1].trim() : (text.includes('Complaints:') ? null : text)
 
   return {
@@ -105,12 +106,12 @@ function parseBotBookingToServiceBooking(bot: any): Partial<ServiceBooking> {
     booking_date: bookingDate,
     appointment_date: appointmentDate,
     booking_time: bookingTime,
-    reg_number: (bot.vehicle_registration_number || '').trim().toUpperCase().replace(/\s+/g, ''),
-    customer_name: bot.customer_name || 'Customer',
-    customer_phone: (bot.mobile_number || '').replace(/\D/g, '').slice(-10),
+    reg_number: (str(bot.vehicle_registration_number) || '').trim().toUpperCase().replace(/\s+/g, ''),
+    customer_name: str(bot.customer_name) || 'Customer',
+    customer_phone: (str(bot.mobile_number) || '').replace(/\D/g, '').slice(-10),
     service_type: serviceType,
     branch: branch,
-    model: bot.model || null,
+    model: str(bot.model) || null,
     pickup_required: isPickup,
     drop_required: false,
     pickup_address: pickupAddress,
@@ -256,8 +257,7 @@ export default function ServiceBookingPage() {
 
     if (!updated) {
       try {
-        const fullRow = { ...booking, ...updates }
-        delete (fullRow as any).id
+        const { id: _omitId, ...fullRow } = { ...booking, ...updates }
         await supabase.from('service_bookings').insert([fullRow])
       } catch { /* intentional */ }
     }
@@ -265,7 +265,7 @@ export default function ServiceBookingPage() {
     // Bidirectional sync to post_feedback_bot_data so customer mobile portal always reflects real status
     if (booking.reg_number) {
       try {
-        const botUpdates: Record<string, any> = {}
+        const botUpdates: Record<string, unknown> = {}
         if (updates.status) botUpdates.robot_status = updates.status
         if (updates.assigned_sa_name) botUpdates.service_advisor_name = updates.assigned_sa_name
         if (Object.keys(botUpdates).length > 0) {
@@ -435,7 +435,7 @@ export default function ServiceBookingPage() {
       }
 
       setBookings(dedupedBookings)
-    } catch (loadErr: any) {
+    } catch (loadErr) {
       setError(loadErr?.message || 'Failed to load bookings')
     } finally {
       setLoading(false)
@@ -620,11 +620,10 @@ export default function ServiceBookingPage() {
 
     if (!updated) {
       try {
-        const fullRow = {
+        const { id: _omitId2, ...fullRow } = {
           ...booking,
           ...payload,
         }
-        delete (fullRow as any).id
         await supabase.from('service_bookings').insert([fullRow])
       } catch (insCatch) {
         console.warn('Failed to insert service_booking on status update:', insCatch)

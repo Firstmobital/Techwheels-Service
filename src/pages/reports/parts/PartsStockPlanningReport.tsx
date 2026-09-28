@@ -108,17 +108,19 @@ export default function PartsStockPlanningReport({ branch }: ReportViewProps) {
 
   const sortedRows = useMemo(() => {
     const sorted = [...enrichedRows].sort((a, b) => {
-      let aVal: any = a[sortConfig.key]
-      let bVal: any = b[sortConfig.key]
+      const aRaw = a[sortConfig.key]
+      const bRaw = b[sortConfig.key]
 
-      if (aVal === null || aVal === undefined) aVal = Infinity
-      if (bVal === null || bVal === undefined) bVal = Infinity
+      const aVal = aRaw == null ? Infinity : aRaw
+      const bVal = bRaw == null ? Infinity : bRaw
 
-      if (typeof aVal === 'string') {
+      if (typeof aVal === 'string' && typeof bVal === 'string') {
         return sortConfig.direction === 'asc' ? aVal.localeCompare(bVal) : bVal.localeCompare(aVal)
       }
 
-      return sortConfig.direction === 'asc' ? aVal - bVal : bVal - aVal
+      const aN = typeof aVal === 'number' ? aVal : Number(aVal)
+      const bN = typeof bVal === 'number' ? bVal : Number(bVal)
+      return sortConfig.direction === 'asc' ? aN - bN : bN - aN
     })
     return sorted
   }, [enrichedRows, sortConfig])
@@ -292,31 +294,31 @@ export default function PartsStockPlanningReport({ branch }: ReportViewProps) {
           </div>
           <div className="p-4 bg-red-50 rounded border border-red-200">
             <p className="text-sm text-red-700">Urgent Reorder</p>
-            <p className="text-2xl font-bold text-red-700">{(stats as any).urgent_reorder}</p>
+            <p className="text-2xl font-bold text-red-700">{(stats as Record<string, number>)['urgent_reorder']}</p>
           </div>
           <div className="p-4 bg-orange-50 rounded border border-orange-200">
             <p className="text-sm text-orange-700">Reorder Soon</p>
-            <p className="text-2xl font-bold text-orange-700">{(stats as any).reorder_soon}</p>
+            <p className="text-2xl font-bold text-orange-700">{(stats as Record<string, number>)['reorder_soon']}</p>
           </div>
           <div className="p-4 bg-green-50 rounded border border-green-200">
             <p className="text-sm text-green-700">Adequate</p>
-            <p className="text-2xl font-bold text-green-700">{(stats as any).adequate}</p>
+            <p className="text-2xl font-bold text-green-700">{(stats as Record<string, number>)['adequate']}</p>
           </div>
           <div className="p-4 bg-yellow-50 rounded border border-yellow-200">
             <p className="text-sm text-yellow-700">Overstocked</p>
-            <p className="text-2xl font-bold text-yellow-700">{(stats as any).overstocked}</p>
+            <p className="text-2xl font-bold text-yellow-700">{(stats as Record<string, number>)['overstocked']}</p>
           </div>
           <div className="p-4 bg-red-50 rounded border border-red-200">
             <p className="text-sm text-red-700">Dead Stock</p>
-            <p className="text-2xl font-bold text-red-700">{(stats as any).deadStockCount}</p>
+            <p className="text-2xl font-bold text-red-700">{(stats as Record<string, number>)['deadStockCount']}</p>
           </div>
           <div className="p-4 bg-slate-50 rounded border border-slate-200">
             <p className="text-sm text-slate-700">Zero Stock</p>
-            <p className="text-2xl font-bold text-slate-700">{(stats as any).zeroStockCount}</p>
+            <p className="text-2xl font-bold text-slate-700">{(stats as Record<string, number>)['zeroStockCount']}</p>
           </div>
           <div className="p-4 bg-indigo-50 rounded border border-indigo-200">
             <p className="text-sm text-indigo-700">MOS &lt; 2</p>
-            <p className="text-2xl font-bold text-indigo-700">{(stats as any).mosBelowTwoCount}</p>
+            <p className="text-2xl font-bold text-indigo-700">{(stats as Record<string, number>)['mosBelowTwoCount']}</p>
           </div>
           <div className="p-4 bg-blue-50 rounded border border-blue-200 flex items-center justify-center">
             <button

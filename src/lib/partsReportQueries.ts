@@ -3,7 +3,7 @@ import { applyBranchFilterToQuery } from './branches'
 
 const QUERY_PAGE_SIZE = 1000
 
-async function fetchAllRows<T = any>(buildQuery: (from: number, to: number) => PromiseLike<{ data: T[] | null; error: { message: string } | null }>): Promise<T[]> {
+async function fetchAllRows<T = Record<string, unknown>>(buildQuery: (from: number, to: number) => PromiseLike<{ data: T[] | null; error: { message: string } | null }>): Promise<T[]> {
   let from = 0
   const rows: T[] = []
 
@@ -251,11 +251,11 @@ export async function getMonthlyConsumptionTrend(
     if (filters.fiscalYear) query = query.eq('fiscal_year', filters.fiscalYear)
     if (filters.monthName) query = query.eq('month_name', filters.monthName)
 
-    const data = await fetchAllRows<any>((from, to) =>
+    const data = await fetchAllRows((from, to) =>
       query.order('part_number').order('fiscal_year').order('month_name').range(from, to),
     )
 
-    return applyPortalFilter(data, filters.portal).map((row: any) => ({
+    return applyPortalFilter(data, filters.portal).map((row) => ({
       partNumber: row.part_number,
       partDescription: row.part_description,
       fiscalYear: row.fiscal_year,
@@ -269,6 +269,15 @@ export async function getMonthlyConsumptionTrend(
     console.error('Error fetching monthly consumption trend:', err)
     return []
   }
+}
+
+interface PartWiseAggregator {
+  part_number: string
+  part_description: string | null
+  total_consumption: number
+  avg_monthly_consumption: number
+  vendor: string | null
+  product_category: string | null
 }
 
 // Part-wise Consumption Analysis
@@ -285,13 +294,13 @@ export async function getPartWiseConsumption(filters: PartsReportFilters): Promi
     if (filters.fiscalYear) query = query.eq('fiscal_year', filters.fiscalYear)
 
     const data = applyPortalFilter(
-      await fetchAllRows<any>((from, to) => query.order('part_number').range(from, to)),
+      await fetchAllRows((from, to) => query.order('part_number').range(from, to)),
       filters.portal,
     )
 
     // Aggregate consumption by part
-    const partMap = new Map<string, any>()
-    ;(data || []).forEach((row: any) => {
+    const partMap = new Map<string, PartWiseAggregator>()
+    ;(data || []).forEach((row) => {
       if (!partMap.has(row.part_number)) {
         partMap.set(row.part_number, {
           part_number: row.part_number,
@@ -303,15 +312,16 @@ export async function getPartWiseConsumption(filters: PartsReportFilters): Promi
         })
       }
       const part = partMap.get(row.part_number)
+      if (!part) return
       part.total_consumption += row.total_consumption || 0
     })
 
     // Calculate averages
-    Array.from(partMap.values()).forEach((part: any) => {
-      part.avg_monthly_consumption = part.total_consumption / Math.max((data || []).filter((r: any) => r.part_number === part.part_number).length, 1)
+    Array.from(partMap.values()).forEach((part) => {
+      part.avg_monthly_consumption = part.total_consumption / Math.max((data || []).filter((r) => r.part_number === part.part_number).length, 1)
     })
 
-    return Array.from(partMap.values()).map((row: any) => ({
+    return Array.from(partMap.values()).map((row) => ({
       partNumber: row.part_number,
       partDescription: row.part_description,
       totalConsumption: row.total_consumption,
@@ -335,9 +345,9 @@ export async function getStockPlanningData(filters: PartsReportFilters): Promise
 
     query = applyBranchFilterToQuery(query, filters.branch)
 
-    const data = applyPortalFilter(await fetchAllRows<any>((from, to) => query.range(from, to)), filters.portal)
+    const data = applyPortalFilter(await fetchAllRows((from, to) => query.range(from, to)), filters.portal)
 
-    return (data || []).map((row: any) => {
+    return (data || []).map((row) => {
       const weeksOfSupply = row.weeks_of_supply || 0
       let recommendation: StockPlanningData['recommendation'] = 'adequate'
 
@@ -376,7 +386,7 @@ export async function getSlowMovingParts(filters: PartsReportFilters): Promise<S
 
     stockQuery = applyBranchFilterToQuery(stockQuery, filters.branch)
 
-    const stock = applyPortalFilter(await fetchAllRows<any>((from, to) => stockQuery.range(from, to)), filters.portal)
+    const stock = applyPortalFilter(await fetchAllRows((from, to) => stockQuery.range(from, to)), filters.portal)
 
     // Get last consumption date for each part (fetch all and process in JS)
     let consumptionQuery = supabase
@@ -387,17 +397,17 @@ export async function getSlowMovingParts(filters: PartsReportFilters): Promise<S
 
     consumptionQuery = applyBranchFilterToQuery(consumptionQuery, filters.branch)
 
-    const consumption = await fetchAllRows<any>((from, to) => consumptionQuery.range(from, to))
+    const consumption = await fetchAllRows((from, to) => consumptionQuery.range(from, to))
 
     const consumptionMap = new Map()
-    ;(consumption || []).forEach((row: any) => {
+    ;(consumption || []).forEach((row) => {
       if (!consumptionMap.has(row.part_number)) {
         consumptionMap.set(row.part_number, row.created_at)
       }
     })
 
     return (stock || [])
-      .map((row: any) => {
+      .map((row) => {
         const lastConsumptionDate = consumptionMap.get(row.part_number)
         const daysWithoutConsumption = lastConsumptionDate
           ? Math.floor((Date.now() - new Date(lastConsumptionDate as string).getTime()) / (1000 * 60 * 60 * 24))
@@ -430,10 +440,10 @@ export async function getFastMovingParts(filters: PartsReportFilters): Promise<F
 
     query = applyBranchFilterToQuery(query, filters.branch)
 
-    const data = applyPortalFilter(await fetchAllRows<any>((from, to) => query.range(from, to)), filters.portal)
+    const data = applyPortalFilter(await fetchAllRows((from, to) => query.range(from, to)), filters.portal)
 
     return (data || [])
-      .map((row: any) => {
+      .map((row) => {
         const daysOfSupply = row.days_of_supply || 0
         let stockoutRisk: FastMovingPart['stockoutRisk'] = 'low'
 
@@ -468,7 +478,7 @@ export async function getOrderStatusReport(filters: PartsReportFilters): Promise
         .toLowerCase()
         .replace(/[^a-z0-9]/g, '')
 
-    const resolveStatus = (row: any): string | null => {
+    const resolveStatus = (row: Record<string, unknown>): string | null => {
       const candidates = [row.order_status, row.status, row.spares_order_type]
       for (const candidate of candidates) {
         const text = String(candidate ?? '').trim()
@@ -486,11 +496,11 @@ export async function getOrderStatusReport(filters: PartsReportFilters): Promise
     query = applyBranchFilterToQuery(query, filters.branch)
 
     const data = applyPortalFilter(
-      await fetchAllRows<any>((from, to) => query.order('order_date', { ascending: false }).range(from, to)),
+      await fetchAllRows((from, to) => query.order('order_date', { ascending: false }).range(from, to)),
       filters.portal,
     )
 
-    const partNumbers = Array.from(new Set((data || []).map((row: any) => row.part_number).filter(Boolean)))
+    const partNumbers = Array.from(new Set((data || []).map((row) => row.part_number).filter(Boolean)))
 
     const partMeta = new Map<string, { vendor: string | null; product_category: string | null }>()
 
@@ -510,9 +520,9 @@ export async function getOrderStatusReport(filters: PartsReportFilters): Promise
     }
 
     return (data || [])
-      .filter((row: any) => {
+      .filter((row) => {
         // Only include rows WITH invoice numbers (not blank/null)
-        const invoiceNumber = String(row.invoice_number ?? row.invoice_no ?? row.invoice_num ?? '').trim()
+        const invoiceNumber = String(row.invoice_number ?? '').trim()
         if (!invoiceNumber) return false
 
         const rowStatus = resolveStatus(row)
@@ -523,7 +533,7 @@ export async function getOrderStatusReport(filters: PartsReportFilters): Promise
         if (filters.productCategory && meta?.product_category !== filters.productCategory) return false
         return true
       })
-      .map((row: any) => ({
+      .map((row) => ({
         partNumber: row.part_number,
         partDescription: row.part_description,
         status: resolveStatus(row),
@@ -552,10 +562,10 @@ export async function getInTransitVisibility(filters: PartsReportFilters): Promi
 
     query = applyBranchFilterToQuery(query, filters.branch)
 
-    const data = applyPortalFilter(await fetchAllRows<any>((from, to) => query.range(from, to)), filters.portal)
+    const data = applyPortalFilter(await fetchAllRows((from, to) => query.range(from, to)), filters.portal)
 
     return (data || [])
-      .map((row: any) => {
+      .map((row) => {
         const nearestEta = row.eta_1 || row.eta_2 || row.eta_3
         const daysToEta = nearestEta ? Math.ceil((new Date(nearestEta).getTime() - Date.now()) / (1000 * 60 * 60 * 24)) : null
 
@@ -590,10 +600,10 @@ export async function getDelayedOrders(filters: PartsReportFilters): Promise<Del
 
     query = applyBranchFilterToQuery(query, filters.branch)
 
-    const data = applyPortalFilter(await fetchAllRows<any>((from, to) => query.range(from, to)), filters.portal)
+    const data = applyPortalFilter(await fetchAllRows((from, to) => query.range(from, to)), filters.portal)
 
     return (data || [])
-      .map((row: any) => {
+      .map((row) => {
         const eta = new Date(row.eta_1)
         const daysOverdue = Math.floor((Date.now() - eta.getTime()) / (1000 * 60 * 60 * 24))
 
@@ -624,7 +634,7 @@ export async function getDealerPerformance(filters: PartsReportFilters): Promise
 
     query = applyBranchFilterToQuery(query, filters.branch)
 
-    const data = applyPortalFilter(await fetchAllRows<any>((from, to) => query.range(from, to)), filters.portal)
+    const data = applyPortalFilter(await fetchAllRows((from, to) => query.range(from, to)), filters.portal)
 
     const dealerMap = new Map<string | null, DealerPerformance>()
 
@@ -672,7 +682,7 @@ export async function getVendorPerformance(filters: PartsReportFilters): Promise
 
     query = applyBranchFilterToQuery(query, filters.branch)
 
-    const data = applyPortalFilter(await fetchAllRows<any>((from, to) => query.range(from, to)), filters.portal)
+    const data = applyPortalFilter(await fetchAllRows((from, to) => query.range(from, to)), filters.portal)
 
     // Join with part_master to get vendor info
     const vendorMap = new Map<string | null, VendorPerformance>()
@@ -710,7 +720,7 @@ export async function getPartValuationData(filters: PartsReportFilters): Promise
 
     stockQuery = applyBranchFilterToQuery(stockQuery, filters.branch)
 
-    const stock = applyPortalFilter(await fetchAllRows<any>((from, to) => stockQuery.range(from, to)), filters.portal)
+    const stock = applyPortalFilter(await fetchAllRows((from, to) => stockQuery.range(from, to)), filters.portal)
 
     // Get avg consumption for each part
     let consumptionQuery = supabase
@@ -720,15 +730,15 @@ export async function getPartValuationData(filters: PartsReportFilters): Promise
     consumptionQuery = applyBranchFilterToQuery(consumptionQuery, filters.branch)
 
     const consumption = applyPortalFilter(
-      await fetchAllRows<any>((from, to) => consumptionQuery.range(from, to)),
+      await fetchAllRows((from, to) => consumptionQuery.range(from, to)),
       filters.portal,
     )
 
     const consumptionMap = new Map(
-      (consumption || []).map((row: any) => [row.part_number, row.avg_4week_consumption]),
+      (consumption || []).map((row) => [row.part_number, row.avg_4week_consumption]),
     )
 
-    return (stock || []).map((row: any) => {
+    return (stock || []).map((row) => {
       const avgConsumption: number = (consumptionMap.get(row.part_number) as number) || 0
       const costPerUnit = row.on_hand_quantity > 0 ? (row.total_price_value || 0) / row.on_hand_quantity : 0
       const valuePerUnitConsumed = avgConsumption > 0 ? (row.total_price_value || 0) / (avgConsumption * 4) : 0
@@ -808,7 +818,7 @@ export async function getInventoryTurnover(filters: PartsReportFilters): Promise
 
     stockQuery = applyBranchFilterToQuery(stockQuery, filters.branch)
 
-    const stock = applyPortalFilter(await fetchAllRows<any>((from, to) => stockQuery.range(from, to)), filters.portal)
+    const stock = applyPortalFilter(await fetchAllRows((from, to) => stockQuery.range(from, to)), filters.portal)
 
     // Get avg consumption for each part
     let consumptionQuery = supabase
@@ -818,16 +828,16 @@ export async function getInventoryTurnover(filters: PartsReportFilters): Promise
     consumptionQuery = applyBranchFilterToQuery(consumptionQuery, filters.branch)
 
     const consumption = applyPortalFilter(
-      await fetchAllRows<any>((from, to) => consumptionQuery.range(from, to)),
+      await fetchAllRows((from, to) => consumptionQuery.range(from, to)),
       filters.portal,
     )
 
     const consumptionMap = new Map(
-      (consumption || []).map((row: any) => [row.part_number, row.avg_4week_consumption]),
+      (consumption || []).map((row) => [row.part_number, row.avg_4week_consumption]),
     )
 
     return (stock || [])
-      .map((row: any) => {
+      .map((row) => {
         const avgMonthlyConsumption: number = ((consumptionMap.get(row.part_number) as number) || 0) / 4
         const avgStock = row.on_hand_quantity // Simplified; could calculate rolling average
         const turnoverRatio = avgMonthlyConsumption > 0 && avgStock > 0 ? avgMonthlyConsumption / avgStock : 0

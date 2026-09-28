@@ -205,7 +205,7 @@ export default function EWReminderPage() {
       }
 
       setRecords(allRecords)
-    } catch (e: any) {
+    } catch (e) {
       setError(e.message ?? 'Failed to load data')
     } finally {
       setLoading(false)

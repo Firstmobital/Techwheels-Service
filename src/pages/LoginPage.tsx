@@ -2,11 +2,12 @@ import { useState } from 'react'
 import { AuthShell } from '../components/AuthShell'
 import { Icon } from '../components/Icon'
 import { supabase } from '../lib/supabase'
+import type { CustomerVehicle } from '../lib/api/customer'
 
 interface Props {
   onSwitchToSignUp: () => void
   onSwitchToForgot?: () => void
-  onCustomerLogin?: (vehicle: any, allVehicles: any[], sessionToken: string) => void
+  onCustomerLogin?: (vehicle: CustomerVehicle, allVehicles: CustomerVehicle[], sessionToken: string) => void
 }
 
 const PITCH = {
