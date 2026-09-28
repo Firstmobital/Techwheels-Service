@@ -5908,18 +5908,6 @@ export default function BodyshopRepairPage() {
                                               >
                                                 👁️ View
                                               </button>
-                                              {attachedDoc.drive_url && (
-                                                <a
-                                                  href={attachedDoc.drive_url}
-                                                  target="_blank"
-                                                  rel="noopener noreferrer"
-                                                  className="btn brx-doc-btn"
-                                                  style={{ backgroundColor: '#f0fdf4', color: '#15803d', borderColor: '#bbf7d0', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '3px' }}
-                                                  title="Open file in Google Drive"
-                                                >
-                                                  📁 Drive
-                                                </a>
-                                              )}
                                             </>
                                           ) : null
                                         ) : attachedDoc ? (
@@ -5932,18 +5920,6 @@ export default function BodyshopRepairPage() {
                                             >
                                               👁️ View
                                             </button>
-                                            {attachedDoc.drive_url && (
-                                              <a
-                                                href={attachedDoc.drive_url}
-                                                target="_blank"
-                                                rel="noopener noreferrer"
-                                                className="btn brx-doc-btn"
-                                                style={{ backgroundColor: '#f0fdf4', color: '#15803d', borderColor: '#bbf7d0', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '3px' }}
-                                                title="Open file in Google Drive"
-                                              >
-                                                📁 Drive
-                                              </a>
-                                            )}
                                             <button
                                               type="button"
                                               className="btn brx-doc-btn"
@@ -6014,18 +5990,6 @@ export default function BodyshopRepairPage() {
                                                 >
                                                   View
                                                 </button>
-                                                {attachedDoc.drive_url && (
-                                                  <a
-                                                    href={attachedDoc.drive_url}
-                                                    target="_blank"
-                                                    rel="noopener noreferrer"
-                                                    className="btn brx-doc-btn"
-                                                    style={{ backgroundColor: '#f0fdf4', color: '#15803d', borderColor: '#bbf7d0', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '3px' }}
-                                                    title="Open file in Google Drive"
-                                                  >
-                                                    📁 Drive
-                                                  </a>
-                                                )}
                                                 <button
                                                   className="btn brx-doc-btn"
                                                   onClick={() => startBodyshopDocUpload(k, 'replace')}
@@ -6098,18 +6062,6 @@ export default function BodyshopRepairPage() {
                                 <button type="button" className="btn btn--ghost" onClick={() => void handleViewBodyshopDoc('doc_estimate')}>
                                   View
                                 </button>
-                                {estimateDoc.drive_url && (
-                                  <a
-                                    href={estimateDoc.drive_url}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="btn btn--ghost"
-                                    style={{ backgroundColor: '#f0fdf4', color: '#15803d', borderColor: '#bbf7d0', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '3px' }}
-                                    title="Open file in Google Drive"
-                                  >
-                                    📁 Drive
-                                  </a>
-                                )}
                                 <button
                                   type="button"
                                   className="btn btn--primary"
@@ -6398,18 +6350,6 @@ export default function BodyshopRepairPage() {
                               <button type="button" className="btn btn--ghost" onClick={() => void handleViewBodyshopDoc('doc_survey_approval')}>
                                 View
                               </button>
-                              {surveyApprovalDoc.drive_url && (
-                                <a
-                                  href={surveyApprovalDoc.drive_url}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="btn btn--ghost"
-                                  style={{ backgroundColor: '#f0fdf4', color: '#15803d', borderColor: '#bbf7d0', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '3px' }}
-                                  title="Open file in Google Drive"
-                                >
-                                  📁 Drive
-                                </a>
-                              )}
                               <button
                                 type="button"
                                 className="btn"
