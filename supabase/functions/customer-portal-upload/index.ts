@@ -39,6 +39,24 @@ const ALLOWED_DOC_KEYS = new Set([
   'doc_tp_affidavit',
 ])
 
+/** Boolean approval columns that exist on bodyshop_repair_cards. */
+const REPAIR_CARD_DOC_FLAG_KEYS = new Set([
+  'doc_claim_form',
+  'doc_rc',
+  'doc_rc_back',
+  'doc_insurance',
+  'doc_dl',
+  'doc_dl_back',
+  'doc_aadhaar',
+  'doc_aadhaar_back',
+  'doc_pan',
+  'doc_kyc',
+  'doc_gst',
+  'doc_company_pan',
+  'doc_bank_detail',
+  'doc_tp_affidavit',
+])
+
 function json(status: number, body: Record<string, unknown>) {
   return new Response(JSON.stringify(body), {
     status,
@@ -137,7 +155,7 @@ async function setRepairCardDocFlag(
   docKey: string,
   value: boolean
 ) {
-  if (!ALLOWED_DOC_KEYS.has(docKey)) return
+  if (!REPAIR_CARD_DOC_FLAG_KEYS.has(docKey)) return
   const { error } = await supabase
     .from('bodyshop_repair_cards')
     .update({ [docKey]: value, updated_at: new Date().toISOString() })
@@ -160,13 +178,16 @@ async function markDocAwaitingAdvisor(
   if (readError) throw new Error(readError.message)
   const current = Array.isArray(data?.doc_rejected_keys) ? data.doc_rejected_keys.map(String) : []
   const nextRejected = current.filter((key) => key !== docKey)
+  const patch: Record<string, unknown> = {
+    doc_rejected_keys: nextRejected,
+    updated_at: new Date().toISOString(),
+  }
+  if (REPAIR_CARD_DOC_FLAG_KEYS.has(docKey)) {
+    patch[docKey] = false
+  }
   const { error } = await supabase
     .from('bodyshop_repair_cards')
-    .update({
-      [docKey]: false,
-      doc_rejected_keys: nextRejected,
-      updated_at: new Date().toISOString(),
-    })
+    .update(patch)
     .eq('id', repairCardId)
   if (error) throw new Error(error.message)
 }
