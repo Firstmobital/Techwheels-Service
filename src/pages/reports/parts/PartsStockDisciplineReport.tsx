@@ -137,7 +137,7 @@ async function resolveActiveWindow(
   //
   // Selecting only the distinct (fiscal_month, month_name) combinations
   // returns at most 12 rows for a full fiscal year regardless of data volume.
-  let q = (supabase.from('service_parts_consumption_data') as any)
+  let q = supabase.from('service_parts_consumption_data')
     .select('fiscal_year,fiscal_month,month_name,transaction_date')
     .eq('portal', portal)
     .eq('fiscal_year', fyStart)
@@ -161,7 +161,7 @@ async function resolveActiveWindow(
 
   // Fallback — use whatever months are available in DB for current FY
   // No LIMIT here either — we need to see all distinct months available.
-  let qLatest = (supabase.from('service_parts_consumption_data') as any)
+  let qLatest = supabase.from('service_parts_consumption_data')
     .select('fiscal_year,fiscal_month,month_name,transaction_date')
     .eq('portal', portal)
     .eq('fiscal_year', fyStart)
@@ -195,7 +195,7 @@ async function fetchAll<T>(
   const results: T[] = []
   let from = 0
   for (;;) {
-    let q = (supabase.from(tableName) as any).select(select).range(from, from + pageSize - 1)
+    let q = supabase.from(tableName).select(select).range(from, from + pageSize - 1)
     for (const [k, v] of Object.entries(filters)) {
       if (Array.isArray(v)) {
         q = q.in(k, v)

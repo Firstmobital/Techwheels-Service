@@ -159,7 +159,7 @@ function normalizeVehicleSearchInput(raw: string): string {
 }
 
 function sanitizeVehicleSearchToken(raw: string): string {
-  return raw.replace(/[^A-Z0-9\-]/gi, '')
+  return raw.replace(/[^A-Z0-9-]/gi, '')
 }
 
 type VehicleSearchable = { job_card_number: string; vehicle_registration_number?: string | null }

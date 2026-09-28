@@ -1095,7 +1095,7 @@ function AuthGate({ children }: { children: React.ReactNode }) {
     try {
       localStorage.removeItem('active_customer_vehicle')
       localStorage.removeItem('customer_session_token')
-    } catch {}
+    } catch { /* intentional */ }
   }, [user])
 
   useEffect(() => {
@@ -1106,12 +1106,12 @@ function AuthGate({ children }: { children: React.ReactNode }) {
         setAllCustomerVehicles(vehicles)
         try {
           localStorage.setItem('active_customer_vehicle', JSON.stringify(vehicles[0]))
-        } catch {}
+        } catch { /* intentional */ }
       } else {
         try {
           localStorage.removeItem('customer_session_token')
           localStorage.removeItem('active_customer_vehicle')
-        } catch {}
+        } catch { /* intentional */ }
         setCustomerSessionToken(null)
       }
     })

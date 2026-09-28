@@ -460,7 +460,7 @@ async function fetchTechnicianCodeSet(): Promise<Set<string>> {
   }
 
   const set = new Set<string>()
-  ;(techRes.data ?? []).forEach((row: any) => {
+  ;(techRes.data ?? []).forEach((row) => {
     if (!isTechnicianBusinessRole(row.role)) return
     const code = normalizeJobCardNumber(row.employee_code)
     if (!code) return
@@ -806,7 +806,7 @@ async function fetchYesterdayReportData(
       .select('job_card_number, dms_final_labour_amount')
       .in('job_card_number', completedJcs)
     if (!revRes.error && revRes.data) {
-      revRes.data.forEach((r: any) => {
+      revRes.data.forEach((r) => {
         const key = normalizeJobCardNumber(r.job_card_number)
         const amt = parseRevenueAmount(r.dms_final_labour_amount)
         if (amt > 0 && !revenueMap.has(key)) revenueMap.set(key, amt)
@@ -822,7 +822,7 @@ async function fetchYesterdayReportData(
 
   const floorRes = await listFloorInchargeEntries()
   if (!floorRes.error && floorRes.data) {
-    floorRes.data.forEach((r: any) => {
+    floorRes.data.forEach((r) => {
       const key = String(r.jc_number ?? '').trim().toUpperCase()
       if (!allJcs.has(key)) return
       if (r.reg_number && !regMap.has(key)) regMap.set(key, String(r.reg_number).trim())
@@ -999,7 +999,7 @@ export default function TechnicianPage() {
             return
           }
 
-          ;(invoiceRes.data ?? []).forEach((row: any) => {
+          ;(invoiceRes.data ?? []).forEach((row) => {
             const key = normalizeJobCardNumber((row as { job_card_number?: string | null }).job_card_number)
             if (!key) return
             invoiceDateMap.set(key, row.invoice_date ?? null)
@@ -1081,12 +1081,12 @@ export default function TechnicianPage() {
       ))
 
       // Reuse Floor Incharge API enrichment path to keep location/fuel logic consistent.
-      let regNumberMap = new Map<string, string>()
-      let isRevisitMap = new Map<string, boolean>()
-      let isUpdationMap = new Map<string, boolean>()
-      let locationMap = new Map<string, string>()
-      let fuelTypeMap = new Map<string, string>()
-      let revenueMap = new Map<string, RevenueRow>()
+      const regNumberMap = new Map<string, string>()
+      const isRevisitMap = new Map<string, boolean>()
+      const isUpdationMap = new Map<string, boolean>()
+      const locationMap = new Map<string, string>()
+      const fuelTypeMap = new Map<string, string>()
+      const revenueMap = new Map<string, RevenueRow>()
 
       if (assignmentJcNumbers.length > 0) {
         const assignmentJcSet = new Set(assignmentJcNumbers)
@@ -1177,7 +1177,7 @@ export default function TechnicianPage() {
             return
           }
 
-          ;(revenueRes.data ?? []).forEach((row: any) => {
+          ;(revenueRes.data ?? []).forEach((row) => {
             const key = normalizeJobCardNumber((row as { job_card_number?: string | null }).job_card_number)
             if (!key) return
 
@@ -1262,7 +1262,7 @@ export default function TechnicianPage() {
       const { rows, date } = await fetchYesterdayReportData(pvSharePercent, evSharePercent, scope)
       const waText = buildWAText(rows, date, pvSharePercent, evSharePercent)
       setYesterdayReport({ rows, date, waText })
-    } catch (e: any) {
+    } catch (e) {
       alert('Failed to generate report: ' + (e.message ?? 'Unknown error'))
     } finally {
       setGeneratingReport(false)
@@ -1310,7 +1310,7 @@ export default function TechnicianPage() {
           return
         }
 
-        ;(taRes.data ?? []).forEach((row: any) => {
+        ;(taRes.data ?? []).forEach((row) => {
           const key = normalizeJobCardNumber(row.job_card_number)
           if (!key) return
           const candidate = row as TechnicianAssignmentRow
@@ -1475,7 +1475,7 @@ export default function TechnicianPage() {
       ws['!cols'] = [18, 20, 20, 14, 16, 10, 10, 10, 24, 25, 26, 24, 15, 25, 15, 25, 14, 15].map((w) => ({ wch: w }))
       XLSX.utils.book_append_sheet(wb, ws, 'Date Issues')
       XLSX.writeFile(wb, `JC_Date_Issues_${exportFrom}_to_${exportTo}.xlsx`)
-    } catch (e: any) {
+    } catch (e) {
       alert('Export failed: ' + (e.message ?? 'Unknown error'))
     }
   }

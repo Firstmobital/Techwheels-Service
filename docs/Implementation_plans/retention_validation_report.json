@@ -1,5 +1,5 @@
 {
-  "generated_at_utc": "2026-09-26T10:37:42.253Z",
+  "generated_at_utc": "2026-09-28T09:59:10.161Z",
   "scanned_files": 80,
   "violations": 0,
   "scanned": [
@@ -236,14 +236,6 @@
       }
     },
     {
-      "file": "docs/Implementation_plans/webversion/categories/bodyshop/active/Bodyshop-Flow.md",
-      "checks": {
-        "metrics_automated_rows": 0,
-        "changelog_automated_rows": 0,
-        "snapshot_blocks": 0
-      }
-    },
-    {
       "file": "docs/Implementation_plans/webversion/categories/bodyshop/active/BODYSHOP-INSURER-001_INSURANCE_COMPANY_MASTER_PLAN_2026-09-04.md",
       "checks": {
         "metrics_automated_rows": 0,
@@ -277,6 +269,14 @@
     },
     {
       "file": "docs/Implementation_plans/webversion/categories/bodyshop/active/BODYSHOP-SETTLEMENT-001_PAYMENT_RECONCILIATION_LEDGER_PLAN_2026-09-04.md",
+      "checks": {
+        "metrics_automated_rows": 0,
+        "changelog_automated_rows": 0,
+        "snapshot_blocks": 0
+      }
+    },
+    {
+      "file": "docs/Implementation_plans/webversion/categories/bodyshop/active/Bodyshop-Flow.md",
       "checks": {
         "metrics_automated_rows": 0,
         "changelog_automated_rows": 0,
@@ -476,22 +476,6 @@
       }
     },
     {
-      "file": "docs/Implementation_plans/webversion/categories/operations/active/income_technician.md",
-      "checks": {
-        "metrics_automated_rows": 0,
-        "changelog_automated_rows": 0,
-        "snapshot_blocks": 0
-      }
-    },
-    {
-      "file": "docs/Implementation_plans/webversion/categories/operations/active/income_technician_rollback_snapshot.md",
-      "checks": {
-        "metrics_automated_rows": 0,
-        "changelog_automated_rows": 0,
-        "snapshot_blocks": 0
-      }
-    },
-    {
       "file": "docs/Implementation_plans/webversion/categories/operations/active/OPS-PSF-BOT-001_POST_FEEDBACK_BOT_ROUTING_PLAN_2026-09-11.md",
       "checks": {
         "metrics_automated_rows": 0,
@@ -517,6 +501,22 @@
     },
     {
       "file": "docs/Implementation_plans/webversion/categories/operations/active/WA_GROUP_CREATION_IMPLEMENTATION_PLAN.md",
+      "checks": {
+        "metrics_automated_rows": 0,
+        "changelog_automated_rows": 0,
+        "snapshot_blocks": 0
+      }
+    },
+    {
+      "file": "docs/Implementation_plans/webversion/categories/operations/active/income_technician.md",
+      "checks": {
+        "metrics_automated_rows": 0,
+        "changelog_automated_rows": 0,
+        "snapshot_blocks": 0
+      }
+    },
+    {
+      "file": "docs/Implementation_plans/webversion/categories/operations/active/income_technician_rollback_snapshot.md",
       "checks": {
         "metrics_automated_rows": 0,
         "changelog_automated_rows": 0,

@@ -71,11 +71,11 @@ export function cleanAdvisorPersonName(name: string | null | undefined): string 
   return trimmed
 }
 
-export function extractKmFromFeedback(item: any): number | null {
+export function extractKmFromFeedback(item: Record<string, unknown>): number | null {
   if (!item) return null
-  const text = item.feedback_text || ''
+  const text = typeof item.feedback_text === 'string' ? item.feedback_text : ''
   if (!text) return null
-  if (typeof text === 'string' && text.trim().startsWith('{') && text.trim().endsWith('}')) {
+  if (text.trim().startsWith('{') && text.trim().endsWith('}')) {
     try {
       const parsed = JSON.parse(text)
       if (parsed.km_reading != null && Number(parsed.km_reading) > 0) return Number(parsed.km_reading)
@@ -234,8 +234,8 @@ export async function fetchCustomerVehicles(searchQuery: string): Promise<Custom
         }
       }
     }
-  } catch (err) {
-    console.warn('service_reception_entries lookup failed:', err)
+  } catch (_err) {
+    console.warn('service_reception_entries lookup failed:', _err)
   }
 
   // 2. Active Intake & Live Feedback DB Table: post_feedback_bot_data
@@ -319,8 +319,8 @@ export async function fetchCustomerVehicles(searchQuery: string): Promise<Custom
         }
       }
     }
-  } catch (err) {
-    console.warn('post_feedback_bot_data lookup failed:', err)
+  } catch (_err) {
+    console.warn('post_feedback_bot_data lookup failed:', _err)
   }
 
   // 2.5. Check job_card_closed_data for active/recent Job Card Number & Service Advisor
@@ -360,8 +360,8 @@ export async function fetchCustomerVehicles(searchQuery: string): Promise<Custom
         }
       }
     }
-  } catch (err) {
-    console.warn('job_card_closed_data lookup failed:', err)
+  } catch (_err) {
+    console.warn('job_card_closed_data lookup failed:', _err)
   }
 
   // 3. Authoritative DB Table: all_service_data (75,000+ customer records)
@@ -435,8 +435,8 @@ export async function fetchCustomerVehicles(searchQuery: string): Promise<Custom
         }
       }
     }
-  } catch (err) {
-    console.warn('all_service_data lookup failed:', err)
+  } catch (_err) {
+    console.warn('all_service_data lookup failed:', _err)
   }
 
   return results
@@ -544,8 +544,8 @@ export async function fetchVehicleServiceHistory(regNumber: string): Promise<Pas
         }
       }
     }
-  } catch (err) {
-    console.warn('Failed to fetch history from all_service_data:', err)
+  } catch (_err) {
+    console.warn('Failed to fetch history from all_service_data:', _err)
   }
 
   // B. Fetch closed job cards from job_card_closed_data
@@ -578,7 +578,7 @@ export async function fetchVehicleServiceHistory(regNumber: string): Promise<Pas
         }
       }
     }
-  } catch (err) {
+  } catch (_err) {
     // ignore
   }
 
@@ -613,7 +613,7 @@ export async function fetchVehicleServiceHistory(regNumber: string): Promise<Pas
         }
       }
     }
-  } catch (err) {
+  } catch (_err) {
     // ignore
   }
 

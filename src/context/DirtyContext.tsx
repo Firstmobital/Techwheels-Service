@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components -- context file exports both provider and hook */
 import { createContext, useContext, useState } from 'react'
 
 interface Ctx { isDirty: boolean; setDirty: (v: boolean) => void }

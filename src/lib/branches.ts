@@ -12,6 +12,7 @@ export function normalizeBranchLabel(raw: unknown): string {
 
 	return String(raw)
 		.replace(/[\u200B-\u200D\uFEFF]/g, '')
+    // eslint-disable-next-line no-control-regex -- intentional: strip ASCII control chars
 		.replace(/[\u0000-\u001F\u007F]/g, '')
 		.trim()
 		.replace(/\s+/g, ' ')
@@ -44,6 +45,7 @@ export function matchesBranchSelection(rawBranch: unknown, selectedBranch: 'ALL'
 	return aliases.some((alias) => alias.toLowerCase() === rowBranch)
 }
 
+// eslint-disable-next-line @typescript-eslint/no-unsafe-function-type -- Supabase builder accepts any callable
 export function applyBranchFilterToQuery<T extends { eq: Function; in: Function }>(query: T, branch: 'ALL' | string): T {
 	if (branch === 'ALL') return query
 

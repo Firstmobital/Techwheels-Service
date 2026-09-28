@@ -640,6 +640,7 @@ function getFuelScopedBranch(branch: BranchFilter): BranchFilter {
   return 'ALL'
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- Supabase query builder: untyped client yields any; narrowing the chain type requires a generated Database schema
 function applyJobCardClosedScopeFilterToQuery(query: any, branch: BranchFilter): any {
   const normalized = String(branch ?? '').trim().toLowerCase().replace(/\s+/g, ' ')
 
@@ -710,12 +711,14 @@ function normalizeFuelBucket(rawFuel: unknown): 'PV' | 'EV' | null {
   return null
 }
 
+/* eslint-disable @typescript-eslint/no-explicit-any -- Supabase query builder: untyped client yields any; narrowing the chain type requires a generated Database schema */
 function applyDateFilterToQuery(
   query: any,
 
   bounds: { from: string; toExclusive: string } | null,
   options: { closedDateField?: string; invoiceDateField?: string | null } = {},
 ): any {
+/* eslint-enable @typescript-eslint/no-explicit-any */
   if (!bounds) return query
 
   const invoiceDateField = options.invoiceDateField

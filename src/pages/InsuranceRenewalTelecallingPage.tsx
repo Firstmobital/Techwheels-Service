@@ -165,7 +165,7 @@ async function callEdge(action: string, body: Record<string, unknown> = {}): Pro
       )
     }
     const text = await res.text()
-    let data: any
+    let data
     try {
       data = text ? JSON.parse(text) : {}
     } catch {
@@ -174,7 +174,7 @@ async function callEdge(action: string, body: Record<string, unknown> = {}): Pro
     return { res, data }
   }
 
-  let token = await getEdgeAccessToken()
+  const token = await getEdgeAccessToken()
   let { res, data } = await doFetch(token)
   if (res.status === 401 || data.error === 'Not authenticated') {
     await supabase.auth.getUser()
@@ -189,6 +189,7 @@ async function callEdge(action: string, body: Record<string, unknown> = {}): Pro
 }
 
 /** RC fetch may return success:false with a body; never throw before caller reads customer / outcome. */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- edge function returns heterogeneous JSON
 async function callEdgeRcFetchSingle(body: Record<string, unknown>): Promise<any> {
   const doFetch = async (token: string) => {
     let res: Response
@@ -211,7 +212,7 @@ async function callEdgeRcFetchSingle(body: Record<string, unknown>): Promise<any
       throw e
     }
     const text = await res.text()
-    let data: any
+    let data
     try {
       data = text ? JSON.parse(text) : {}
     } catch {
@@ -220,7 +221,7 @@ async function callEdgeRcFetchSingle(body: Record<string, unknown>): Promise<any
     return { res, data }
   }
 
-  let token = await getEdgeAccessToken()
+  const token = await getEdgeAccessToken()
   let { res, data } = await doFetch(token)
   if (res.status === 401 || data.error === 'Not authenticated') {
     await supabase.auth.getUser()
@@ -382,6 +383,88 @@ function StatusBadge({ status }: { status: string }) {
 }
 
 // ── Main Component ─────────────────────────────────────────────────────────────
+interface InsuranceAgentStat {
+  telecaller_id?: string
+  telecaller_name?: string
+  email?: string
+  calls_made?: number
+  calls_connected?: number
+  renewed_via_us?: number
+  renewed_elsewhere?: number
+  callback_later?: number
+  todays_pending?: number
+  quote_needed?: number
+  policy_requested?: number
+  quote_sent?: number
+  no_answer?: number
+  not_interested?: number
+  wrong_number?: number
+  policy_done?: number
+  in_progress?: number
+  still_assigned?: number
+}
+
+interface InsurancePolicyDoneItem {
+  id?: number
+  customer?: { first_name?: string; last_name?: string; model?: string; vehicle_registration_number?: string; contact_phones?: string }
+  completed_at?: string
+  quoted_premium?: number
+  renewal_company?: string
+  assigned_to?: string
+  call_notes?: string
+}
+
+interface LeaderboardEntry {
+  telecaller_name: string
+  calls_made: number
+  calls_connected: number
+  renewed_via_us: number
+  premium_collected: number | null
+  score: number
+  conversion_rate?: number
+}
+
+interface PreviewCounts {
+  filtered_count: number
+  date_from: string
+  date_to: string
+  raw_count: number
+  excluded_cross_campaign?: number
+}
+
+interface RoiByCompany {
+  company: string
+  count: number
+  premium?: number
+}
+
+interface RoiData {
+  total_premium_collected?: number
+  conversion_rate?: number
+  avg_premium?: number
+  target_achievement?: number
+  total_leads?: number
+  renewed_via_us?: number
+  renewed_elsewhere?: number
+  pending?: number
+  by_company?: RoiByCompany[]
+}
+
+interface ExpiredLeadCustomer {
+  id: string
+  first_name: string
+  last_name?: string
+  contact_phones: string
+  model: string
+  vehicle_registration_number?: string
+  last_insurance_expiry_date: string
+}
+
+interface ExpiredLead {
+  customer: ExpiredLeadCustomer
+  days_expired: number
+}
+
 export default function InsuranceRenewalTelecallingPage() {
   const [role, setRole] = useState<string>('staff')
   const [activeTab, setActiveTab] = useState<'dashboard' | 'admin'>('dashboard')
@@ -1392,7 +1475,7 @@ function CallCard({
                 })
                 if (res.success) alert(`WhatsApp drip step ${res.step} sent!`)
                 else alert(`Failed: ${res.error}`)
-              } catch (err: any) { alert(err.message) }
+              } catch (err) { alert(err.message) }
             }}
             disabled={busy}
             className="rounded-xl border border-blue-300 bg-blue-50 px-4 py-3 text-sm font-semibold text-blue-700 hover:bg-blue-100 disabled:opacity-50"
@@ -1411,7 +1494,7 @@ function CallCard({
                   navigator.clipboard.writeText(res.link.link_url)
                   alert('Self-renewal link copied to clipboard!')
                 }
-              } catch (err: any) { alert(err.message) }
+              } catch (err) { alert(err.message) }
             }}
             disabled={busy}
             className="rounded-xl border border-purple-300 bg-purple-50 px-4 py-3 text-sm font-semibold text-purple-700 hover:bg-purple-100 disabled:opacity-50"
@@ -1656,15 +1739,15 @@ function AdminDashboard({ campaigns, activeCampaign, onRefresh }: { campaigns: C
   })
 
   // Leaderboard state
-  const [leaderboard, setLeaderboard] = useState<any[]>([])
+  const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([])
   const [leaderboardDate, setLeaderboardDate] = useState(new Date().toISOString().split('T')[0])
 
   // ROI dashboard state
-  const [roiData, setRoiData] = useState<any>(null)
+  const [roiData, setRoiData] = useState<RoiData | null>(null)
   const [roiTarget, setRoiTarget] = useState(0)
 
   // Expired leads state
-  const [expiredLeads, setExpiredLeads] = useState<any[]>([])
+  const [expiredLeads, setExpiredLeads] = useState<ExpiredLead[]>([])
   const [showCreate, setShowCreate] = useState(false)
   const [editingCampaign, setEditingCampaign] = useState<Campaign | null>(null)
   const [editName, setEditName] = useState('')
@@ -1678,22 +1761,22 @@ function AdminDashboard({ campaigns, activeCampaign, onRefresh }: { campaigns: C
   const [windowDays, setWindowDays] = useState(30)
   const [customWindowDays, setCustomWindowDays] = useState(30)
   const [useCustomDays, setUseCustomDays] = useState(false)
-  const [previewCounts, setPreviewCounts] = useState<any>(null)
+  const [previewCounts, setPreviewCounts] = useState<PreviewCounts | null>(null)
   const [previewing, setPreviewing] = useState(false)
   const [campaignName, setCampaignName] = useState('')
   const [creating, setCreating] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
-  const [agentStats, setAgentStats] = useState<any[]>([])
+  const [agentStats, setAgentStats] = useState<InsuranceAgentStat[]>([])
   const [todaysPendingTotal, setTodaysPendingTotal] = useState(0)
   const [todaysPendingAsOf, setTodaysPendingAsOf] = useState<string | null>(null)
   const [refreshingCampaign, setRefreshingCampaign] = useState(false)
   const [refreshResult, setRefreshResult] = useState<string | null>(null)
   const [statsDateFrom, setStatsDateFrom] = useState('')
   const [statsDateTo, setStatsDateTo] = useState('')
-  const [policyDoneList, setPolicyDoneList] = useState<any[]>([])
+  const [policyDoneList, setPolicyDoneList] = useState<InsurancePolicyDoneItem[]>([])
   const [loadingTab, setLoadingTab] = useState(false)
-  const [rcStatusByCampaign, setRcStatusByCampaign] = useState<Record<string, any>>({})
+  const [rcStatusByCampaign, setRcStatusByCampaign] = useState<Record<string, RcCampaignStatus>>({})
   const [rcEnqueueingId, setRcEnqueueingId] = useState<number | null>(null)
   const [rcStatusLoaded, setRcStatusLoaded] = useState(false)
   const [rcStatusLoadError, setRcStatusLoadError] = useState<string | null>(null)
@@ -1761,7 +1844,7 @@ function AdminDashboard({ campaigns, activeCampaign, onRefresh }: { campaigns: C
     }
   }
 
-  const loadRcStatus = useCallback(async (): Promise<Record<string, any>> => {
+  const loadRcStatus = useCallback(async (): Promise<Record<string, RcCampaignStatus>> => {
     if (campaigns.length === 0) {
       setRcStatusByCampaign({})
       setRcStatusLoaded(true)
@@ -1865,7 +1948,7 @@ function AdminDashboard({ campaigns, activeCampaign, onRefresh }: { campaigns: C
       })
       setSuccess('✅ Meta WhatsApp settings saved!')
       onRefresh()
-    } catch (e: any) { setError(e.message) }
+    } catch (e) { setError(e.message) }
   }
 
   useEffect(() => {
@@ -1918,7 +2001,7 @@ function AdminDashboard({ campaigns, activeCampaign, onRefresh }: { campaigns: C
       else setRefreshResult('No active campaigns to refresh.')
       await onRefresh()
       await loadRcStatus()
-    } catch (e: any) { setRefreshResult(`❌ Refresh failed: ${e.message}`) }
+    } catch (e) { setRefreshResult(`❌ Refresh failed: ${e.message}`) }
     finally { setRefreshingCampaign(false) }
   }
 
@@ -2136,7 +2219,7 @@ function AdminDashboard({ campaigns, activeCampaign, onRefresh }: { campaigns: C
                     })
                     alert(`Conquest campaign created with ${t.total_leads} leads!`)
                     onRefresh()
-                  } catch (err: any) { alert(err.message) }
+                  } catch (err) { alert(err.message) }
                 }}
                 className="rounded-lg border border-purple-300 bg-purple-50 px-4 py-2 text-sm font-medium text-purple-700 hover:bg-purple-100"
               >
@@ -2539,7 +2622,7 @@ function AdminDashboard({ campaigns, activeCampaign, onRefresh }: { campaigns: C
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
-                  {leaderboard.map((agent: any, i: number) => (
+                  {leaderboard.map((agent, i: number) => (
                     <tr key={i} className={i === 0 ? 'bg-yellow-50' : i === 1 ? 'bg-gray-50' : i === 2 ? 'bg-orange-50' : ''}>
                       <td className="px-3 py-3 font-bold">{i + 1}{i === 0 ? ' 🥇' : i === 1 ? ' 🥈' : i === 2 ? ' 🥉' : ''}</td>
                       <td className="px-3 py-3 font-medium text-gray-900">{agent.telecaller_name}</td>
@@ -2587,7 +2670,7 @@ function AdminDashboard({ campaigns, activeCampaign, onRefresh }: { campaigns: C
             <div className="rounded-lg border bg-white p-3"><div className="text-xs text-gray-500">Pending</div><div className="text-lg font-semibold text-gray-600">{roiData?.pending || 0}</div></div>
           </div>
           
-          {roiData?.by_company?.length > 0 && (
+          {(roiData?.by_company?.length ?? 0) > 0 && (
             <div className="rounded-xl border border-gray-200 bg-white overflow-hidden shadow-sm">
               <div className="px-5 py-4 border-b border-gray-100"><h3 className="font-semibold text-gray-900">Revenue by Insurance Company</h3></div>
               <table className="w-full text-sm">
@@ -2599,7 +2682,7 @@ function AdminDashboard({ campaigns, activeCampaign, onRefresh }: { campaigns: C
                   </tr>
                 </thead>
                 <tbody>
-                  {roiData.by_company.map((c: any) => (
+                  {roiData?.by_company?.map((c) => (
                     <tr key={c.company} className="border-b">
                       <td className="px-4 py-2 font-medium">{c.company}</td>
                       <td className="px-4 py-2 text-right">{c.count}</td>
@@ -2622,7 +2705,7 @@ function AdminDashboard({ campaigns, activeCampaign, onRefresh }: { campaigns: C
           {expiredLeads.length === 0 ? (
             <div className="rounded-xl border border-gray-200 bg-white p-8 text-center text-sm text-gray-400">No expired leads 🎉</div>
           ) : (
-            expiredLeads.map((lead: any) => (
+            expiredLeads.map((lead) => (
               <div key={lead.customer.id} className="rounded-xl border border-red-200 bg-white p-4 shadow-sm">
                 <div className="flex items-start justify-between">
                   <div>

@@ -182,7 +182,7 @@ function parseDateLike(
   if (!raw) return null
 
   const ddmmyy = raw.match(
-    /^(\d{1,2})[\/-](\d{1,2})[\/-](\d{2}|\d{4})(?:\s+(\d{1,2}):(\d{2})(?::(\d{2}))?)?$/,
+    /^(\d{1,2})[/-](\d{1,2})[/-](\d{2}|\d{4})(?:\s+(\d{1,2}):(\d{2})(?::(\d{2}))?)?$/,
   )
 
   if (ddmmyy) {

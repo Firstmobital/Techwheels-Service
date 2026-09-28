@@ -114,13 +114,13 @@ function parseInsuranceDateForInput(value: unknown): string | null {
 
   if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw
 
-  const dmy = raw.match(/^(\d{2})[\/-](\d{2})[\/-](\d{4})$/)
+  const dmy = raw.match(/^(\d{2})[/-](\d{2})[/-](\d{4})$/)
   if (dmy) {
     const [, dd, mm, yyyy] = dmy
     return `${yyyy}-${mm}-${dd}`
   }
 
-  const ymd = raw.match(/^(\d{4})[\/-](\d{2})[\/-](\d{2})$/)
+  const ymd = raw.match(/^(\d{4})[/-](\d{2})[/-](\d{2})$/)
   if (ymd) {
     const [, yyyy, mm, dd] = ymd
     return `${yyyy}-${mm}-${dd}`
@@ -1427,7 +1427,7 @@ export default function BodyshopRepairPage() {
         setCards((prev) => prev.map((c) => c.id === updated.id ? updated : c))
         toast_('Documentation complete. Stage moved to Estimation ✅')
       })
-      .catch((e: any) => {
+      .catch((e) => {
         toast_(e?.message ?? 'Failed to auto-move to Estimation', false)
       })
       .finally(() => {
@@ -1634,7 +1634,7 @@ export default function BodyshopRepairPage() {
         setCards((prev) => prev.map((card) => card.id === updated.id ? updated : card))
         toast_('Stage 11 completed. Auto-moved to Stage 13 ✅')
         void reloadVisibleList()
-      } catch (e: any) {
+      } catch (e) {
         // Allow retry if the update fails due to transient network or policy issues.
         delete autoAdvanceStage11LockRef.current[cardId]
         toast_(e?.message ?? 'Unable to auto-advance from Stage 11', false)
@@ -2141,7 +2141,7 @@ export default function BodyshopRepairPage() {
       setShowNew(false)
       setNf({ job_card_no: '', reg_number: '', customer_name: '', customer_phone: '', customer_type: '', branch: '', sa_name: '' })
       void reloadVisibleList()
-    } catch (e: any) { toast_(e.message, false) }
+    } catch (e) { toast_(e.message, false) }
     setSaving(false)
   }
 
@@ -2212,7 +2212,7 @@ export default function BodyshopRepairPage() {
       setCards((prev) => prev.map((c) => c.id === updated.id ? updated : c))
       toast_(`Advanced to Stage ${updated.current_stage}`)
       void reloadVisibleList()
-    } catch (e: any) { toast_(e.message, false) }
+    } catch (e) { toast_(e.message, false) }
     setSaving(false)
   }
 
@@ -2227,7 +2227,7 @@ export default function BodyshopRepairPage() {
       setSelected(updated)
       setCards((prev) => prev.map((c) => c.id === updated.id ? updated : c))
       toast_('Customer Group completed via Send WA ✅')
-    } catch (e: any) {
+    } catch (e) {
       toast_(e.message, false)
     }
     setSaving(false)
@@ -2285,7 +2285,7 @@ export default function BodyshopRepairPage() {
       setCards((prev) => prev.map((c) => c.id === updated.id ? updated : c))
       setEditPatch({})
       toast_('Saved ✅')
-    } catch (e: any) { toast_(e.message, false) }
+    } catch (e) { toast_(e.message, false) }
     setSaving(false)
   }
 
@@ -2301,7 +2301,7 @@ export default function BodyshopRepairPage() {
       setSelected(updated)
       setCards((prev) => prev.map((c) => (c.id === updated.id ? updated : c)))
       toast_('Repair cancelled')
-    } catch (e: any) {
+    } catch (e) {
       toast_(e.message ?? 'Cancel failed', false)
     }
     setSaving(false)
@@ -2368,7 +2368,7 @@ export default function BodyshopRepairPage() {
       setCards((prev) => prev.map((c) => c.id === updated.id ? updated : c))
       setEditPatch({})
       toast_('Survey info saved ✅')
-    } catch (e: any) {
+    } catch (e) {
       toast_(e.message ?? 'Unable to save survey info', false)
     } finally {
       setSaving(false)
@@ -2454,7 +2454,7 @@ export default function BodyshopRepairPage() {
       toast_(selected.current_stage === 9
         ? `Sent to ${floorValue}. Stage moved to Parts Status ✅`
         : `Sent to ${floorValue} ✅`)
-    } catch (e: any) {
+    } catch (e) {
       toast_(e.message ?? 'Unable to send to floor', false)
     } finally {
       setSaving(false)
@@ -2508,7 +2508,7 @@ export default function BodyshopRepairPage() {
       })
 
       toast_(selected.current_stage === 6 ? 'Estimate saved. Stage moved to Estimation Approval ✅' : 'Estimate saved ✅')
-    } catch (e: any) {
+    } catch (e) {
       toast_(e.message ?? 'Unable to save estimate', false)
     } finally {
       setSaving(false)
@@ -2536,7 +2536,7 @@ export default function BodyshopRepairPage() {
       setSelected(updated)
       setCards((prev) => prev.map((c) => c.id === updated.id ? updated : c))
       toast_(selected.current_stage === 7 ? 'Estimation approved. Stage moved to Claim Intimation ✅' : 'Estimation approval saved ✅')
-    } catch (e: any) {
+    } catch (e) {
       toast_(e.message ?? 'Unable to approve estimation', false)
     } finally {
       setSaving(false)
@@ -2598,7 +2598,7 @@ export default function BodyshopRepairPage() {
       })
 
       toast_(selected.current_stage === 8 ? 'Claim Intimation saved. Stage moved to Survey ✅' : 'Claim Intimation saved ✅')
-    } catch (e: any) {
+    } catch (e) {
       toast_(e.message ?? 'Unable to save claim intimation', false)
     } finally {
       setSaving(false)
@@ -2917,7 +2917,7 @@ export default function BodyshopRepairPage() {
         nextCount,
       })
       toast_(`Uploaded ${uploadedCount} photo${uploadedCount === 1 ? '' : 's'} (${nextCount}/20)`)
-    } catch (e: any) {
+    } catch (e) {
       console.error('[BodyshopIntakeUpload] unexpected failure', {
         uploadDebugId,
         name: e?.name,
@@ -2988,7 +2988,7 @@ export default function BodyshopRepairPage() {
 
     try {
       const dealerCtx = await getDealerContext()
-      const dealerCode = String((selected as any).dealer_code || dealerCtx.data?.dealerCode?.trim() || 'TATA_DEFAULT').trim()
+      const dealerCode = String((selected as unknown as Record<string, unknown>)['dealer_code'] || dealerCtx.data?.dealerCode?.trim() || 'TATA_DEFAULT').trim()
       const regNo = String(selected.reg_number ?? selectedReception?.reg_number ?? '').trim().toUpperCase()
       const folder = `${dealerCode}/service-advisor-bodyshop-docs/${selected.id}/${docKey}`
       const safeName = sanitizeFileNamePart(file.name || `${docKey}.bin`)
@@ -3164,7 +3164,7 @@ export default function BodyshopRepairPage() {
       }))
 
       toast_(action.mode === 'replace' ? 'Document replaced ✅' : 'Document uploaded ✅')
-    } catch (e: any) {
+    } catch (e) {
       setDocUploadFeedbackByKey((prev) => ({
         ...prev,
         [docKey]: { tone: 'error', text: e.message ?? 'Upload failed' },
@@ -3478,9 +3478,9 @@ export default function BodyshopRepairPage() {
           cacheRow = {
             registration_no: regNo,
             cached_at: null,
-            api_rc_vehicle_insurance_policy_number: String((rcLookupRes.data as any).api_rc_vehicle_insurance_policy_number ?? '').trim() || null,
-            api_rc_vehicle_insurance_company_name: String((rcLookupRes.data as any).api_rc_vehicle_insurance_company_name ?? '').trim() || null,
-            api_rc_vehicle_insurance_upto: String((rcLookupRes.data as any).api_rc_vehicle_insurance_upto ?? '').trim() || null,
+            api_rc_vehicle_insurance_policy_number: String((rcLookupRes.data as Record<string, unknown>).api_rc_vehicle_insurance_policy_number ?? '').trim() || null,
+            api_rc_vehicle_insurance_company_name: String((rcLookupRes.data as Record<string, unknown>).api_rc_vehicle_insurance_company_name ?? '').trim() || null,
+            api_rc_vehicle_insurance_upto: String((rcLookupRes.data as Record<string, unknown>).api_rc_vehicle_insurance_upto ?? '').trim() || null,
           }
         }
       }
@@ -3524,7 +3524,7 @@ export default function BodyshopRepairPage() {
 
       setInsuranceFetched(true)
       toast_(usedFreshCache ? 'Insurance details fetched from cache ✅' : 'Insurance details refreshed from RC API ✅')
-    } catch (e: any) {
+    } catch (e) {
       toast_(e.message ?? 'Unable to fetch insurance details', false)
     } finally {
       setFetchingInsurance(false)
@@ -3599,9 +3599,9 @@ export default function BodyshopRepairPage() {
           receptionEntryId: selectedReception.id,
           payloadKm: parsedKm,
           errorMessage: error.message,
-          errorCode: (error as any)?.code ?? null,
-          errorDetails: (error as any)?.details ?? null,
-          errorHint: (error as any)?.hint ?? null,
+          errorCode: (error as { code?: string })?.code ?? null,
+          errorDetails: (error as { details?: string })?.details ?? null,
+          errorHint: (error as { hint?: string })?.hint ?? null,
         })
         setReceivingSaveError(error.message)
         toast_(error.message, false)
@@ -3634,7 +3634,7 @@ export default function BodyshopRepairPage() {
         [selectedReception.id]: parsedKm != null,
       }))
       setReceivingSaveError(null)
-    } catch (e: any) {
+    } catch (e) {
       console.error('[BodyshopSA:KM] blur-save exception', {
         receptionEntryId: selectedReception.id,
         errorMessage: e?.message ?? 'Unknown error',
@@ -3713,9 +3713,9 @@ export default function BodyshopRepairPage() {
             jcDirty,
             kmDirty,
             errorMessage: kmError.message,
-            errorCode: (kmError as any)?.code ?? null,
-            errorDetails: (kmError as any)?.details ?? null,
-            errorHint: (kmError as any)?.hint ?? null,
+            errorCode: (kmError as { code?: string })?.code ?? null,
+            errorDetails: (kmError as { details?: string })?.details ?? null,
+            errorHint: (kmError as { hint?: string })?.hint ?? null,
           })
           failReceivingSave(kmError.message)
           return
@@ -3781,7 +3781,7 @@ export default function BodyshopRepairPage() {
       ].filter(Boolean)
       setReceivingSaveError(null)
       toast_(`Saved ${saveParts.join(' + ')} ✅`)
-    } catch (e: any) {
+    } catch (e) {
       setReceivingSaveError(e.message ?? 'Unable to save receiving details')
       toast_(e.message, false)
     } finally {
@@ -3813,7 +3813,7 @@ export default function BodyshopRepairPage() {
         return next
       })
       toast_(approved ? 'Approved. Customer can see this status.' : 'Rejected. Customer can upload again.')
-    } catch (error: any) {
+    } catch (error) {
       toast_(error?.message ?? 'Unable to save document decision', false)
     } finally {
       setSaving(false)
@@ -3828,7 +3828,7 @@ export default function BodyshopRepairPage() {
     void saveDocDecision(key, false)
   }
 
-  function patch(key: keyof RepairCard, val: any) {
+  function patch(key: keyof RepairCard, val: RepairCard[keyof RepairCard]) {
     setEditPatch((p) => ({ ...p, [key]: val }))
     setSelected((s) => s ? { ...s, [key]: val } : s)
   }
@@ -4179,7 +4179,7 @@ export default function BodyshopRepairPage() {
       setSelected(updated)
       setCards((prev) => prev.map((c) => c.id === updated.id ? updated : c))
       toast_(`Approval photo uploaded for Part ${partIndex + 1} ✅`)
-    } catch (e: any) {
+    } catch (e) {
       toast_(e?.message ?? 'Failed to upload approval photo', false)
     } finally {
       setUploadingAdditionalApprovalPhoto(false)
@@ -4265,7 +4265,7 @@ export default function BodyshopRepairPage() {
       setSelected(updated)
       setCards((prev) => prev.map((c) => c.id === updated.id ? updated : c))
       toast_(nextStatus === 'approved' ? `Part ${partIndex + 1} marked Approved ✅` : `Part ${partIndex + 1} marked Rejected ✅`)
-    } catch (e: any) {
+    } catch (e) {
       toast_(e?.message ?? 'Failed to save additional approval decision', false)
     } finally {
       setSaving(false)
@@ -4340,7 +4340,7 @@ export default function BodyshopRepairPage() {
       setEditingApprovedParts(false)
       setTempApprovedParts([])
       toast_(`${tempApprovedParts.length} approved part(s) saved successfully ✅`)
-    } catch (e: any) {
+    } catch (e) {
       toast_(e?.message ?? 'Failed to save approved parts', false)
     } finally {
       setSavingApprovedParts(false)
@@ -4572,7 +4572,7 @@ export default function BodyshopRepairPage() {
             key={g.label}
             type="button"
             className={`brx-pipe-pill ${pipelineFilter === g.label ? 'is-active' : ''}`}
-            style={{ ['--pc' as any]: g.color }}
+            style={{ '--pc': g.color } as React.CSSProperties}
             onClick={() => {
               const label = g.label as Exclude<PipelineFilter, 'all' | 'Delivered'>
               setPipelineFilter((prev) => prev === label ? 'all' : label)
@@ -4745,7 +4745,7 @@ export default function BodyshopRepairPage() {
               const doneStages = Math.max(0, Math.min(18, effectiveStage - 1))
               return (
                 <div key={card.id} onClick={() => { setSelected(card); setDetailTab('overview'); setSaActiveCard(null); setApprovalActiveCard(null); setEditPatch({}) }}
-                  className="brx-card" style={{ ['--sc' as any]: grp.color }}>
+                  className="brx-card" style={{ '--sc': grp.color } as React.CSSProperties}>
                   <div className="brx-card__head">
                     <span className="brx-card__jc">{card.job_card_no}</span>
                     <span className={`brx-statusbadge ${statusClass}`}>{card.overall_status}</span>
@@ -4757,7 +4757,7 @@ export default function BodyshopRepairPage() {
                     <div className="brx-card__meta">
                       {card.branch ?? '—'} · {CT_LABELS[card.customer_type ?? ''] ?? '—'} · SA: {card.sa_name ?? '—'}
                     </div>
-                    <div className="brx-card__stage" style={{ ['--sc' as any]: grp.color }}>
+                    <div className="brx-card__stage" style={{ '--sc': grp.color } as React.CSSProperties}>
                       Stage {effectiveStage} — {STAGE_LABELS[effectiveStage]}
                     </div>
                     <div className="brx-card__progress">
@@ -4794,7 +4794,7 @@ export default function BodyshopRepairPage() {
                 ].map(({ k, label }) => (
                   <label key={k} className="brx-new-field">
                     <span className="brx-new-label">{label}</span>
-                    <input className="inp" value={(nf as any)[k]}
+                    <input className="inp" value={nf[k as keyof typeof nf]}
                       onChange={(e) => setNf((f) => ({ ...f, [k]: e.target.value }))} />
                   </label>
                 ))}
@@ -4868,7 +4868,7 @@ export default function BodyshopRepairPage() {
                   <div
                     key={g.label}
                     className={`brx-dgchip ${done ? 'is-done' : inGroup ? 'is-cur' : ''}`}
-                    style={{ ['--gc' as any]: g.color, ['--gc-soft' as any]: `${g.color}20` }}
+                    style={{ '--gc': g.color, '--gc-soft': `${g.color}20` } as React.CSSProperties}
                   >
                     {done ? '✓ ' : inGroup ? '● ' : ''}{g.label}
                   </div>
@@ -4895,7 +4895,7 @@ export default function BodyshopRepairPage() {
                 {(() => {
                   const effectiveCurrentStage = getEffectiveStageForCard(selected)
                   return (
-                <div className="brx-stp-head-v" style={{ ['--sc' as any]: getGroupForStage(effectiveCurrentStage).color }}>
+                <div className="brx-stp-head-v" style={{ '--sc': getGroupForStage(effectiveCurrentStage).color } as React.CSSProperties}>
                   {getCurrentStageDisplay(effectiveCurrentStage, floorWorkStarted && !floorStageCompleted, additionalApprovalPending)}
                 </div>
                   )
@@ -5022,7 +5022,7 @@ export default function BodyshopRepairPage() {
                     <div
                       key={`stage-${num}`}
                       className={`brx-stp ${isCur ? 'is-cur' : ''} ${isDone ? 'is-done' : ''}`}
-                      style={{ ['--sg' as any]: grp.color }}
+                      style={{ '--sg': grp.color } as React.CSSProperties}
                     >
                       <div className="brx-stp-num">
                         {isDone ? '✓' : num}
@@ -5058,11 +5058,11 @@ export default function BodyshopRepairPage() {
                             }}
                             className="brx-substp"
                             style={{
-                              ['--ss-border' as any]: subDone ? '#86efac' : subHold ? '#fcd34d' : subWip ? '#93c5fd' : '#cbd5e1',
-                              ['--ss-bg' as any]: subDone ? '#f0fdf4' : subHold ? '#fffbeb' : subWip ? '#eff6ff' : '#f8fafc',
-                              ['--ss-tone' as any]: subDone ? '#166534' : subHold ? '#92400e' : subWip ? '#1d4ed8' : '#475569',
-                              ['--ss-dot' as any]: subDone ? '#16a34a' : subHold ? '#d97706' : subWip ? '#2563eb' : '#94a3b8',
-                            }}>
+                              '--ss-border': subDone ? '#86efac' : subHold ? '#fcd34d' : subWip ? '#93c5fd' : '#cbd5e1',
+                              '--ss-bg': subDone ? '#f0fdf4' : subHold ? '#fffbeb' : subWip ? '#eff6ff' : '#f8fafc',
+                              '--ss-tone': subDone ? '#166534' : subHold ? '#92400e' : subWip ? '#1d4ed8' : '#475569',
+                              '--ss-dot': subDone ? '#16a34a' : subHold ? '#d97706' : subWip ? '#2563eb' : '#94a3b8',
+                            } as React.CSSProperties}>
                             <span className="brx-substp-dot" />
                             <span className="brx-substp-lab">
                               {sub.roleLabel}
@@ -5087,11 +5087,11 @@ export default function BodyshopRepairPage() {
                             onClick={() => setDetailTab('survey')}
                             className="brx-substp"
                             style={{
-                              ['--ss-border' as any]: tone,
-                              ['--ss-bg' as any]: bg,
-                              ['--ss-tone' as any]: fg,
-                              ['--ss-dot' as any]: fg,
-                            }}
+                              '--ss-border': tone,
+                              '--ss-bg': bg,
+                              '--ss-tone': fg,
+                              '--ss-dot': fg,
+                            } as React.CSSProperties}
                           >
                             <span className="brx-substp-stage">12</span>
                             <span className="brx-substp-lab">Additional Approval</span>
@@ -5199,7 +5199,7 @@ export default function BodyshopRepairPage() {
                       {(() => {
                         const effectiveCurrentStage = getEffectiveStageForCard(selected)
                         return (
-                          <div className="brx-overview-stagebox-v" style={{ ['--sc' as any]: getGroupForStage(effectiveCurrentStage).color }}>
+                          <div className="brx-overview-stagebox-v" style={{ '--sc': getGroupForStage(effectiveCurrentStage).color } as React.CSSProperties}>
                             {getCurrentStageDisplay(effectiveCurrentStage, floorWorkStarted && !floorStageCompleted, additionalApprovalPending)}
                           </div>
                         )
@@ -5342,7 +5342,7 @@ export default function BodyshopRepairPage() {
                           key={num}
                           onClick={() => handleStepClick(num)}
                           className={`brx-overview-step ${isCur ? 'is-cur' : ''} ${isDone ? 'is-done' : ''}`}
-                          style={{ ['--sg' as any]: grp.color, cursor: 'pointer' }}
+                          style={{ '--sg': grp.color, cursor: 'pointer' } as React.CSSProperties}
                           title={`Click to open Stage ${num} details`}
                         >
                           <div className="brx-overview-step-dot" />
@@ -5465,7 +5465,7 @@ export default function BodyshopRepairPage() {
                             key={group.name}
                             onClick={() => setSaActiveCard(group.key)}
                             className={`brx-sa-card ${selectedCard ? 'is-active' : ''}`}
-                            style={{ ['--sa' as any]: group.color, ['--sa-soft' as any]: `${group.color}22`, ['--sa-border' as any]: selectedCard ? group.color : `${group.color}33`, cursor: 'pointer' }}
+                            style={{ '--sa': group.color, '--sa-soft': `${group.color}22`, '--sa-border': selectedCard ? group.color : `${group.color}33`, cursor: 'pointer' } as React.CSSProperties}
                             role="button"
                             tabIndex={0}
                           >
@@ -5484,11 +5484,11 @@ export default function BodyshopRepairPage() {
                                 const textColor = done ? '#166534' : current ? group.color : '#6b7280'
 
                                 return (
-                                  <div key={stage} className="brx-sa-pill" style={{ ['--pill-border' as any]: borderColor, ['--pill-bg' as any]: bgColor }}>
-                                    <span className="brx-sa-pill-b" style={{ ['--pill-b-bg' as any]: done ? '#16a34a' : current ? group.color : '#d1d5db' }}>
+                                  <div key={stage} className="brx-sa-pill" style={{ '--pill-border': borderColor, '--pill-bg': bgColor } as React.CSSProperties}>
+                                    <span className="brx-sa-pill-b" style={{ '--pill-b-bg': done ? '#16a34a' : current ? group.color : '#d1d5db' } as React.CSSProperties}>
                                       {done ? '✓' : STAGE_ABBR[stage] ?? `S${stage}`}
                                     </span>
-                                    <span className="brx-sa-pill-l" style={{ ['--pill-l' as any]: textColor }}>
+                                    <span className="brx-sa-pill-l" style={{ '--pill-l': textColor } as React.CSSProperties}>
                                       {done ? 'Done' : current ? 'Pending' : notStarted ? 'Not Started' : ''}
                                     </span>
                                   </div>
@@ -5762,7 +5762,7 @@ export default function BodyshopRepairPage() {
                                 <div className="brx-docs-progress-bar">
                                   <div
                                     className={`brx-docs-progress-fill ${allMandatoryDone ? 'is-done' : 'is-pending'}`}
-                                    style={{ ['--w' as any]: mandatoryDocs.length ? `${(collectedMandatory / mandatoryDocs.length) * 100}%` : '0%' }}
+                                    style={{ '--w': mandatoryDocs.length ? `${(collectedMandatory / mandatoryDocs.length) * 100}%` : '0%' } as React.CSSProperties}
                                   />
                                 </div>
                               </div>

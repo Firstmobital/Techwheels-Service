@@ -119,7 +119,7 @@ async function fetchOrders(portal?: string, branchArg?: string): Promise<OrderRo
   const acc: OrderRow[] = []
   let from = 0
   for (;;) {
-    let q = (supabase.from('service_parts_order_data') as any)
+    let q = supabase.from('service_parts_order_data')
       .select('id,part_number,part_description,ordered_quantity,confirmation_qty,challan_qty,invoice_qty,docket_number,received_quantity,order_date,confirmation_date,sap_order_number,spares_order_type,dealer_code,branch,portal,order_status')
       .range(from, from + 999)
     if (portal)    q = q.eq('portal', portal)

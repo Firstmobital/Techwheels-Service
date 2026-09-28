@@ -26,6 +26,7 @@ interface ReportRow {
 
 const QUERY_PAGE_SIZE = 1000
 
+// eslint-disable-next-line @typescript-eslint/no-unsafe-function-type -- Supabase builder accepts any callable
 function applyJobCardClosedScopeFilterToQuery<T extends { eq: Function; in: Function }>(query: T, branch: BranchFilter): T {
   const normalized = String(branch ?? '').trim().toLowerCase().replace(/\s+/g, ' ')
 

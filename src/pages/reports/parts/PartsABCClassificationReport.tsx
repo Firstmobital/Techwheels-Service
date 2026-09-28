@@ -39,17 +39,19 @@ export default function PartsABCClassificationReport({ branch }: ReportViewProps
 
   const sortedRows = useMemo(() => {
     const sorted = [...rows].sort((a, b) => {
-      let aVal: any = a[sortConfig.key]
-      let bVal: any = b[sortConfig.key]
+      const aRaw = a[sortConfig.key]
+      const bRaw = b[sortConfig.key]
 
-      if (aVal === null || aVal === undefined) aVal = Infinity
-      if (bVal === null || bVal === undefined) bVal = Infinity
+      const aVal = aRaw == null ? Infinity : aRaw
+      const bVal = bRaw == null ? Infinity : bRaw
 
-      if (typeof aVal === 'string') {
+      if (typeof aVal === 'string' && typeof bVal === 'string') {
         return sortConfig.direction === 'asc' ? aVal.localeCompare(bVal) : bVal.localeCompare(aVal)
       }
 
-      return sortConfig.direction === 'asc' ? aVal - bVal : bVal - aVal
+      const aN = typeof aVal === 'number' ? aVal : Number(aVal)
+      const bN = typeof bVal === 'number' ? bVal : Number(bVal)
+      return sortConfig.direction === 'asc' ? aN - bN : bN - aN
     })
     return sorted
   }, [rows, sortConfig])
@@ -185,18 +187,18 @@ export default function PartsABCClassificationReport({ branch }: ReportViewProps
           </div>
           <div className="p-4 bg-red-50 rounded border border-red-200">
             <p className="text-sm text-red-700">Class A Parts</p>
-            <p className="text-2xl font-bold text-red-700">{(stats as any).A}</p>
-            <p className="text-xs text-red-600">₹{((stats as any).A_value / 100000).toFixed(1)}L</p>
+            <p className="text-2xl font-bold text-red-700">{(stats as Record<string, number>)['A']}</p>
+            <p className="text-xs text-red-600">₹{((stats as Record<string, number>)['A_value'] / 100000).toFixed(1)}L</p>
           </div>
           <div className="p-4 bg-yellow-50 rounded border border-yellow-200">
             <p className="text-sm text-yellow-700">Class B Parts</p>
-            <p className="text-2xl font-bold text-yellow-700">{(stats as any).B}</p>
-            <p className="text-xs text-yellow-600">₹{((stats as any).B_value / 100000).toFixed(1)}L</p>
+            <p className="text-2xl font-bold text-yellow-700">{(stats as Record<string, number>)['B']}</p>
+            <p className="text-xs text-yellow-600">₹{((stats as Record<string, number>)['B_value'] / 100000).toFixed(1)}L</p>
           </div>
           <div className="p-4 bg-green-50 rounded border border-green-200">
             <p className="text-sm text-green-700">Class C Parts</p>
-            <p className="text-2xl font-bold text-green-700">{(stats as any).C}</p>
-            <p className="text-xs text-green-600">₹{((stats as any).C_value / 100000).toFixed(1)}L</p>
+            <p className="text-2xl font-bold text-green-700">{(stats as Record<string, number>)['C']}</p>
+            <p className="text-xs text-green-600">₹{((stats as Record<string, number>)['C_value'] / 100000).toFixed(1)}L</p>
           </div>
         </div>
       )}

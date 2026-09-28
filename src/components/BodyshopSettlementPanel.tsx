@@ -120,7 +120,7 @@ export function BodyshopSettlementPanel({
       const dAmt = c.do_amount ?? h?.do_amount ?? card.do_amount
       setDoAmount(dAmt != null ? String(dAmt) : '')
       onCardChange(mergeSettlementCard(card, next))
-    } catch (e: any) {
+    } catch (e) {
       toast(e?.message ?? 'Failed to load settlement', false)
     } finally {
       setLoading(false)
@@ -161,14 +161,14 @@ export function BodyshopSettlementPanel({
       setPayload(next)
       onCardChange(mergeSettlementCard(card, next))
       toast('Billing saved')
-    } catch (e: any) {
+    } catch (e) {
       toast(e?.message ?? 'Save failed', false)
     } finally {
       setSavingHeader(false)
     }
   }
 
-  async function useDmsInvoice() {
+  async function applyDmsInvoice() {
     const inv = payload?.suggested_invoice
     if (!inv?.total_invoice_amount) {
       toast('No DMS invoice found for this job card', false)
@@ -193,7 +193,7 @@ export function BodyshopSettlementPanel({
           ? `Invoice attached. Policy company set to DMS bill-to.`
           : `Attached invoice ${inv.invoice_number ?? ''}`.trim(),
       )
-    } catch (e: any) {
+    } catch (e) {
       toast(e?.message ?? 'Could not attach DMS invoice', false)
     } finally {
       setSavingHeader(false)
@@ -362,7 +362,7 @@ export function BodyshopSettlementPanel({
       setPayload(next)
       onCardChange(mergeSettlementCard(card, next))
       toast('Line reversed')
-    } catch (e: any) {
+    } catch (e) {
       toast(e?.message ?? 'Reverse failed', false)
     }
   }
@@ -469,7 +469,7 @@ export function BodyshopSettlementPanel({
                 <span style={{ color: 'var(--text-2)' }}>{payload?.suggested_invoice?.account ?? header?.invoice_account}</span>
               )}
               {payload?.suggested_invoice?.total_invoice_amount != null && (
-                <button type="button" className="btn" onClick={() => void useDmsInvoice()} disabled={savingHeader}>
+                <button type="button" className="btn" onClick={() => void applyDmsInvoice()} disabled={savingHeader}>
                   Use DMS invoice
                 </button>
               )}

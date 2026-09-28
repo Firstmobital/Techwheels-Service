@@ -488,8 +488,9 @@ export function determineSLAHealth(tat: number, threshold: number): 'Good' | 'Wa
  * Check if record matches rejection criteria (reason not filled)
  * Used by TR-037 (Rejection Analysis)
  */
-export function isRejectionReasonBlank(row: any): boolean {
-  return !row.source_row_data?.rejection_reason || row.source_row_data.rejection_reason === ''
+export function isRejectionReasonBlank(row: Record<string, unknown>): boolean {
+  const src = row.source_row_data as Record<string, unknown> | null | undefined
+  return !src?.rejection_reason || src.rejection_reason === ''
 }
 
 // ============================================================================

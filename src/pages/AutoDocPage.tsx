@@ -1888,7 +1888,7 @@ export default function AutoDocPage() {
             panelName,
             error: createRes.error,
           })
-          showToast(`Unable to save panel \"${panelName}\": ${createRes.error}`, false)
+          showToast(`Unable to save panel "${panelName}": ${createRes.error}`, false)
           return
         }
         existing.add(panelName)
@@ -3011,7 +3011,7 @@ Estimates attached as per the warranty policy. Need your kind approval for the s
       setShowComposeModal(false)
       setComposePendingPayload(null)
       showToast('Claim email sent and status updated to submitted.', true)
-    } catch (err: any) {
+    } catch (err) {
       showToast(String(err?.message ?? 'Send failed'), false)
     } finally {
       setComposeSendBusy(false)
@@ -3112,9 +3112,7 @@ Estimates attached as per the warranty policy. Need your kind approval for the s
 
     // Email recipients are resolved server-side from dealer_settings
     const targetEmails2 = ['vinodexodus@gmail.com'] // fallback; overridden by edge fn via dealer_settings
-    if (false) {
-      showToast('⚠️ No report email configured. Go to Settings → Report Email to set one. Using fallback.', false)
-    }
+
     const sendRes = await sendClaimEmail(activeJobCardId, {
       to: targetEmails2,
       subject: `[POST-REPAIR] ${content.subject}`,

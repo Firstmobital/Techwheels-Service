@@ -51,7 +51,7 @@ export default function ReportsPage() {
   const params = useParams<{ categoryId?: string; reportId?: string }>()
 
   const [branch, setBranch] = useState<BranchFilter>('ALL')
-  const branchOptions: string[] = [...REPORT_BRANCH_OPTIONS]
+  const branchOptions = useMemo<string[]>(() => [...REPORT_BRANCH_OPTIONS], [])
   const [fuelType, setFuelType] = useState<'ALL' | 'PV' | 'EV'>('ALL')
 
   const [datePreset, setDatePreset] = useState<DateRangePreset>('this-month')
@@ -221,8 +221,7 @@ export default function ReportsPage() {
           totalVasCount: 0,
         })
       } finally {
-        if (!active) return
-        setHeaderStatsLoading(false)
+        if (active) setHeaderStatsLoading(false)
       }
     }
 

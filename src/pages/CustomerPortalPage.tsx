@@ -1,5 +1,18 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
 import { App as CapApp } from '@capacitor/app'
+
+interface SpeechRecognition {
+  continuous: boolean
+  interimResults: boolean
+  lang: string
+  onresult: ((event: SpeechRecognitionEvent) => void) | null
+  onerror: ((event: SpeechRecognitionErrorEvent) => void) | null
+  onend: (() => void) | null
+  start(): void
+  stop(): void
+  abort(): void
+}
+type SpeechRecognitionCtor = new () => SpeechRecognition
 import { supabase } from '../lib/supabase'
 import {
   fetchEstimatesForVehicle,
@@ -97,7 +110,7 @@ export default function CustomerPortalPage({
   const [isListening, setIsListening] = useState(false)
   const [listeningTarget, setListeningTarget] = useState<string | null>(null)
   const [voiceStatusMsg, setVoiceStatusMsg] = useState<string | null>(null)
-  const recognitionRef = useRef<any>(null)
+  const recognitionRef = useRef<SpeechRecognition | null>(null)
   const isUserActiveListeningRef = useRef<boolean>(false)
   const listeningTargetRef = useRef<string | null>(null)
   const initialBaseTextRef = useRef<string>('')
@@ -137,7 +150,7 @@ export default function CustomerPortalPage({
 
   // ── BACK BUTTON HANDLING: Go to Overview (Home) tab if inside any sub-window ──
   useEffect(() => {
-    let listenerHandle: any = null
+    let listenerHandle: { remove: () => void } | null = null
 
     // 1. Native Android Hardware/Gesture Back Button Listener via Capacitor
     try {
@@ -339,7 +352,7 @@ export default function CustomerPortalPage({
                   advisorName = cleanAdvisorPersonName(parsed.advisor_name || parsed.sa_name) || advisorName
                 }
                 if (parsed.status) status = parsed.status
-              } catch { }
+              } catch { /* intentional */ }
             }
 
             if (problems.length === 0 && text) {
@@ -939,18 +952,17 @@ export default function CustomerPortalPage({
     isUserActiveListeningRef.current = false
     try {
       recognitionRef.current?.stop()
-    } catch { }
+    } catch { /* intentional */ }
     setIsListening(false)
     setListeningTarget(null)
     setVoiceStatusMsg(null)
   }
 
   async function startVoiceRecognition(targetId: string = 'notes') {
-    const SpeechRecognition =
-      (window as any).SpeechRecognition ||
-      (window as any).webkitSpeechRecognition ||
-      (window as any).mozSpeechRecognition ||
-      (window as any).msSpeechRecognition
+    type Win = { SpeechRecognition?: SpeechRecognitionCtor; webkitSpeechRecognition?: SpeechRecognitionCtor; mozSpeechRecognition?: SpeechRecognitionCtor; msSpeechRecognition?: SpeechRecognitionCtor }
+    const w = window as unknown as Win
+    const SpeechRecognitionImpl: SpeechRecognitionCtor | undefined =
+      w.SpeechRecognition || w.webkitSpeechRecognition || w.mozSpeechRecognition || w.msSpeechRecognition
 
     // If currently listening to this exact target, toggle stop
     if (isListening && listeningTarget === targetId) {
@@ -973,7 +985,7 @@ export default function CustomerPortalPage({
       console.warn('Microphone permission pre-check:', permErr)
     }
 
-    if (!SpeechRecognition) {
+    if (!SpeechRecognitionImpl) {
       alert('Voice Speech Recognition is not supported on this browser/device. Please type your concerns.')
       return
     }
@@ -991,7 +1003,7 @@ export default function CustomerPortalPage({
       listeningTargetRef.current = targetId
       isUserActiveListeningRef.current = true
 
-      const recognition = new SpeechRecognition()
+      const recognition = new SpeechRecognitionImpl()
       recognitionRef.current = recognition
       recognition.continuous = true
       recognition.interimResults = true
@@ -1001,7 +1013,7 @@ export default function CustomerPortalPage({
       setListeningTarget(targetId)
       setVoiceStatusMsg('🔴 Mic चालू है (हिंदी / English में बोलते रहें - बंद करने के लिए ⏹️ Stop दबाएं)')
 
-      recognition.onresult = (event: any) => {
+      recognition.onresult = (event: SpeechRecognitionEvent) => {
         let sessionFinal = ''
         let sessionInterim = ''
 
@@ -1027,9 +1039,9 @@ export default function CustomerPortalPage({
         }
       }
 
-      recognition.onerror = (event: any) => {
+      recognition.onerror = (event: SpeechRecognitionErrorEvent) => {
         console.warn('Speech recognition event:', event.error)
-        if (event.error === 'not-allowed' || event.error === 'permission-denied') {
+        if (event.error === 'not-allowed' || (event.error as string) === 'permission-denied') {
           isUserActiveListeningRef.current = false
           setIsListening(false)
           setListeningTarget(null)
@@ -1058,7 +1070,7 @@ export default function CustomerPortalPage({
               if (isUserActiveListeningRef.current) {
                 try {
                   recognition.start()
-                } catch { }
+                } catch { /* intentional */ }
               }
             }, 300)
           }
@@ -1070,7 +1082,7 @@ export default function CustomerPortalPage({
       }
 
       recognition.start()
-    } catch (err: any) {
+    } catch (err) {
       console.error('Speech recognition start failed:', err)
       isUserActiveListeningRef.current = false
       setIsListening(false)
