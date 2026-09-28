@@ -373,8 +373,8 @@ export default function CustomerDocumentsScreen() {
 
           const frontRow = byKey.get(pair.frontKey)
           const backRow = byKey.get(pair.backKey)
-          const frontUrl = String(frontRow?.drive_url || frontRow?.view_url || '').trim()
-          const backUrl = String(backRow?.drive_url || backRow?.view_url || '').trim()
+          const frontUrl = String(frontRow?.view_url || frontRow?.drive_url || '').trim()
+          const backUrl = String(backRow?.view_url || backRow?.drive_url || '').trim()
 
           if (frontUrl && backUrl) {
             return (

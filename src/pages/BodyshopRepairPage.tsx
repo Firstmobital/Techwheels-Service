@@ -3184,12 +3184,59 @@ export default function BodyshopRepairPage() {
     doc_rc_back: { frontKey: 'doc_rc', backKey: 'doc_rc_back', name: 'Registration Certificate (RC)' },
   }
 
-  async function getDocUrl(row: BodyshopRepairCardDocumentRow): Promise<string | null> {
-    if (row.drive_url) return row.drive_url
-    const { data } = await supabase.storage
-      .from(row.storage_bucket || AUTODOC_BUCKET)
-      .createSignedUrl(row.storage_path, 600)
-    return data?.signedUrl || null
+  function extractDriveFileId(urlOrId: string | null | undefined): string | null {
+    if (!urlOrId) return null
+    const trimmed = String(urlOrId).trim()
+    const match = trimmed.match(/\/file\/d\/([a-zA-Z0-9_-]+)/)
+    if (match?.[1]) return match[1]
+    const idMatch = trimmed.match(/[?&]id=([a-zA-Z0-9_-]+)/)
+    if (idMatch?.[1]) return idMatch[1]
+    if (/^[a-zA-Z0-9_-]{20,}$/.test(trimmed)) return trimmed
+    return null
+  }
+
+  async function getDirectDocViewInfo(row: BodyshopRepairCardDocumentRow): Promise<{
+    displayUrl: string
+    driveUrl: string | null
+    isPdf: boolean
+    fileName: string
+  }> {
+    const fileName = row.file_name || 'document'
+    const isPdf = Boolean(
+      row.content_type?.toLowerCase().includes('pdf') ||
+      fileName.toLowerCase().endsWith('.pdf')
+    )
+    const driveUrl = String(row.drive_url || '').trim() || null
+
+    // 1. Try Supabase Storage first - returns direct binary image URL with valid CORS headers
+    if (row.storage_path) {
+      try {
+        const { data, error } = await supabase.storage
+          .from(row.storage_bucket || AUTODOC_BUCKET)
+          .createSignedUrl(row.storage_path, 3600)
+        if (!error && data?.signedUrl) {
+          return { displayUrl: data.signedUrl, driveUrl, isPdf, fileName }
+        }
+      } catch (err) {
+        console.warn('[BodyshopDocs] Storage signed URL failed, falling back to Drive:', err)
+      }
+    }
+
+    // 2. If storage signed URL failed or object is in Drive, handle Drive URL
+    if (driveUrl) {
+      const fileId = extractDriveFileId(row.drive_file_id || driveUrl)
+      if (fileId && !isPdf) {
+        return {
+          displayUrl: `https://drive.google.com/thumbnail?id=${fileId}&sz=w1600`,
+          driveUrl,
+          isPdf,
+          fileName,
+        }
+      }
+      return { displayUrl: driveUrl, driveUrl, isPdf, fileName }
+    }
+
+    return { displayUrl: '', driveUrl: null, isPdf, fileName }
   }
 
   async function handleViewBodyshopDoc(docKey: BodyshopDocKey) {
@@ -3199,12 +3246,50 @@ export default function BodyshopRepairPage() {
 
     // If both Front and Back exist, open 1-page merged printable layout!
     if (pair && frontRow && backRow) {
-      const frontUrl = await getDocUrl(frontRow)
-      const backUrl = await getDocUrl(backRow)
-      if (frontUrl && backUrl) {
+      const frontInfo = await getDirectDocViewInfo(frontRow)
+      const backInfo = await getDirectDocViewInfo(backRow)
+
+      if (frontInfo.displayUrl && backInfo.displayUrl) {
         const previewTab = window.open('', '_blank')
         if (previewTab) {
-          const regNo = selected?.reg_number || 'Vehicle'
+          const regNo = selected?.reg_number || selectedReception?.reg_number || 'Vehicle'
+          const frontDriveId = extractDriveFileId(frontInfo.driveUrl)
+          const backDriveId = extractDriveFileId(backInfo.driveUrl)
+
+          const renderSideHtml = (title: string, info: typeof frontInfo, driveId: string | null) => {
+            if (info.isPdf) {
+              return `
+              <div class="side-block">
+                <div class="side-title">${title} (PDF Document)</div>
+                <iframe src="${info.displayUrl}#toolbar=0" class="side-frame" title="${title}"></iframe>
+                ${info.driveUrl ? `<div class="side-meta"><a href="${info.driveUrl}" target="_blank" rel="noopener noreferrer" class="drive-link">Open in Google Drive ↗</a></div>` : ''}
+              </div>`
+            }
+
+            const driveThumbnailFallback = driveId ? `https://drive.google.com/thumbnail?id=${driveId}&sz=w1600` : ''
+
+            return `
+            <div class="side-block">
+              <div class="side-title">${title}</div>
+              <div class="img-container">
+                <img
+                  src="${info.displayUrl}"
+                  class="side-img"
+                  alt="${title}"
+                  loading="eager"
+                  onerror="if(!this.dataset.fallback && '${driveThumbnailFallback}'){this.dataset.fallback='1';this.src='${driveThumbnailFallback}';}else{this.style.display='none';this.nextElementSibling.style.display='block';}"
+                />
+                <div class="img-fallback" style="display:none;">
+                  <p>⚠️ Unable to display image preview directly.</p>
+                  ${info.driveUrl ? `<a href="${info.driveUrl}" target="_blank" rel="noopener noreferrer" class="btn btn-sm">Open on Google Drive</a>` : ''}
+                </div>
+              </div>
+              <div class="side-meta">
+                ${info.driveUrl ? `<a href="${info.driveUrl}" target="_blank" rel="noopener noreferrer" class="drive-link">Open Full Size in Google Drive ↗</a>` : ''}
+              </div>
+            </div>`
+          }
+
           previewTab.document.write(`<!doctype html>
 <html>
 <head>
@@ -3213,37 +3298,42 @@ export default function BodyshopRepairPage() {
   <style>
     * { box-sizing: border-box; }
     body { font-family: ui-sans-serif, system-ui, -apple-system, sans-serif; background: #f8fafc; margin: 20px; color: #0f172a; text-align: center; }
-    .print-actions { display: flex; justify-content: center; gap: 12px; margin-bottom: 20px; }
-    .btn { background: #2563eb; color: #fff; border: none; padding: 10px 20px; font-weight: 800; border-radius: 8px; cursor: pointer; font-size: 14px; }
+    .print-actions { display: flex; justify-content: center; align-items: center; gap: 12px; margin-bottom: 20px; flex-wrap: wrap; }
+    .btn { background: #2563eb; color: #fff; border: none; padding: 10px 20px; font-weight: 800; border-radius: 8px; cursor: pointer; font-size: 14px; text-decoration: none; display: inline-flex; align-items: center; gap: 6px; }
+    .btn:hover { background: #1d4ed8; }
+    .btn-secondary { background: #475569; }
+    .btn-secondary:hover { background: #334155; }
     .btn-close { background: #64748b; }
-    .page-box { max-width: 750px; margin: 0 auto; border: 1.5px solid #cbd5e1; padding: 24px; border-radius: 12px; background: #fff; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); }
-    .doc-header { font-size: 18px; font-weight: 900; color: #1e293b; margin-bottom: 20px; padding-bottom: 10px; border-bottom: 2px solid #e2e8f0; text-transform: uppercase; letter-spacing: 0.5px; }
-    .side-block { margin-bottom: 24px; text-align: center; }
-    .side-title { font-size: 13px; font-weight: 800; color: #475569; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 1px; }
-    .side-img { max-width: 100%; max-height: 380px; object-fit: contain; border: 1px solid #94a3b8; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.06); }
+    .btn-sm { font-size: 12px; padding: 6px 12px; }
+    .page-box { max-width: 780px; margin: 0 auto; border: 1.5px solid #cbd5e1; padding: 24px; border-radius: 12px; background: #fff; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); }
+    .doc-header { font-size: 19px; font-weight: 900; color: #1e293b; margin-bottom: 20px; padding-bottom: 12px; border-bottom: 2px solid #e2e8f0; text-transform: uppercase; letter-spacing: 0.5px; }
+    .side-block { margin-bottom: 28px; text-align: center; }
+    .side-title { font-size: 13px; font-weight: 800; color: #475569; margin-bottom: 10px; text-transform: uppercase; letter-spacing: 1px; }
+    .img-container { min-height: 120px; display: flex; align-items: center; justify-content: center; }
+    .side-img { max-width: 100%; max-height: 420px; object-fit: contain; border: 1px solid #94a3b8; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.06); }
+    .side-frame { width: 100%; height: 440px; border: 1px solid #94a3b8; border-radius: 8px; }
+    .side-meta { margin-top: 8px; font-size: 12px; }
+    .drive-link { color: #2563eb; text-decoration: underline; font-weight: 600; }
+    .img-fallback { padding: 16px; background: #fef2f2; border: 1.5px dashed #f87171; border-radius: 8px; color: #991b1b; font-size: 13px; }
     @media print {
-      .print-actions { display: none !important; }
+      .print-actions, .side-meta { display: none !important; }
       body { margin: 0; padding: 0; background: #fff; }
       .page-box { border: none; padding: 0; max-width: 100%; box-shadow: none; }
-      .side-img { max-height: 420px; }
+      .side-img { max-height: 460px; }
     }
   </style>
 </head>
 <body>
   <div class="print-actions">
     <button class="btn" onclick="window.print()">🖨️ Print 1-Page (Merged Front + Back)</button>
-    <button class="btn btn-close" onclick="window.close()">Close</button>
+    ${frontInfo.driveUrl ? `<a href="${frontInfo.driveUrl}" target="_blank" rel="noopener noreferrer" class="btn btn-secondary">Open Front on Drive</a>` : ''}
+    ${backInfo.driveUrl ? `<a href="${backInfo.driveUrl}" target="_blank" rel="noopener noreferrer" class="btn btn-secondary">Open Back on Drive</a>` : ''}
+    <button class="btn btn-close" onclick="window.close()">✕ Close</button>
   </div>
   <div class="page-box">
     <div class="doc-header">${pair.name} — ${regNo}</div>
-    <div class="side-block">
-      <div class="side-title">FRONT SIDE</div>
-      <img src="${frontUrl}" class="side-img" />
-    </div>
-    <div class="side-block">
-      <div class="side-title">BACK SIDE</div>
-      <img src="${backUrl}" class="side-img" />
-    </div>
+    ${renderSideHtml('FRONT SIDE', frontInfo, frontDriveId)}
+    ${renderSideHtml('BACK SIDE', backInfo, backDriveId)}
   </div>
 </body>
 </html>`)
@@ -3259,13 +3349,14 @@ export default function BodyshopRepairPage() {
       return
     }
 
-    const url = await getDocUrl(row)
-    if (!url) {
+    const info = await getDirectDocViewInfo(row)
+    const targetUrl = info.driveUrl || info.displayUrl
+    if (!targetUrl) {
       toast_('Unable to load file URL', false)
       return
     }
 
-    window.open(url, '_blank', 'noopener,noreferrer')
+    window.open(targetUrl, '_blank', 'noopener,noreferrer')
   }
 
   async function getLatestRtoInsuranceRow(regNumber: string): Promise<RtoInsuranceCacheRow | null> {
