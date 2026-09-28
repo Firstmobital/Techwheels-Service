@@ -59,6 +59,7 @@ interface TodayProductivity {
   positive: number
   needsFollowup: number
   inProgress: number
+  resolved: number
   total: number
 }
 
@@ -489,7 +490,7 @@ export default function PostServiceFeedbackCREPage() {
     total: 0, open: 0, in_progress: 0, resolved: 0,
   })
   const [todayProductivity, setTodayProductivity] = useState<TodayProductivity>({
-    positive: 0, needsFollowup: 0, inProgress: 0, total: 0,
+    positive: 0, needsFollowup: 0, inProgress: 0, resolved: 0, total: 0,
   })
   const [filteredTotal, setFilteredTotal] = useState(0)
   const [loading, setLoading] = useState(true)
@@ -557,15 +558,10 @@ export default function PostServiceFeedbackCREPage() {
       supabase.from('post_service_feedback_cre_due_today').select('id', { count: 'exact', head: true })
 
     const todayBounds = getAsiaKolkataTodayBounds()
-    const prodBase = () => 
-      supabase.from('post_service_feedback_messages')
-        .select('id', { count: 'exact', head: true })
-        .gte('updated_at', todayBounds.start)
-        .lte('updated_at', todayBounds.end)
 
     const [
       totalSent, positiveCount, needsFollowupCount, unratedCount, todayCount, pageRes, statusTotal, statusOpen, statusInProgress, statusResolved,
-      prodPositive, prodNeedsFollowup, prodInProgress, prodTotal
+      prodRes
     ] = await Promise.all([
       readCount(baseCount()),
       readCount(baseCount().gte('effective_rating', 4)),
@@ -577,13 +573,13 @@ export default function PostServiceFeedbackCREPage() {
       tier === 'high' ? Promise.resolve(0) : readCount(statusBase().eq('cre_status', 'open')),
       tier === 'high' ? Promise.resolve(0) : readCount(statusBase().eq('cre_status', 'in_progress')),
       tier === 'high' || tier === 'today' ? Promise.resolve(0) : readCount(statusBase().eq('cre_status', 'resolved')),
-      readCount(prodBase().gte('effective_rating', 4)),
-      readCount(prodBase().lte('effective_rating', 3)),
-      readCount(prodBase().eq('cre_status', 'in_progress')),
-      readCount(prodBase()),
+      supabase.rpc('psf_get_today_productivity'),
     ])
 
     if (pageRes.error) throw pageRes.error
+    if (prodRes.error) throw prodRes.error
+
+    const prod = prodRes.data as { positive: number, needsFollowup: number, inProgress: number, resolved: number, total: number } || { positive: 0, needsFollowup: 0, inProgress: 0, resolved: 0, total: 0 }
 
     return {
       overview: { totalSent, positiveCount, needsFollowupCount, unratedCount, todayCount },
@@ -594,10 +590,11 @@ export default function PostServiceFeedbackCREPage() {
         resolved: statusResolved,
       },
       todayProductivity: {
-        positive: prodPositive,
-        needsFollowup: prodNeedsFollowup,
-        inProgress: prodInProgress,
-        total: prodTotal,
+        positive: prod.positive,
+        needsFollowup: prod.needsFollowup,
+        inProgress: prod.inProgress,
+        resolved: prod.resolved,
+        total: prod.total,
       },
       rows: (pageRes.data || []) as QueueRow[],
       filteredTotal: pageRes.count || 0,
@@ -729,11 +726,12 @@ export default function PostServiceFeedbackCREPage() {
         </div>
       )}
 
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
         <StatCard label="Today's 4★ & Above" value={todayProductivity.positive} color="text-green-700" />
         <StatCard label="Today's 3★ & Below" value={todayProductivity.needsFollowup} color="text-red-700" />
         <StatCard label="Today's In Progress" value={todayProductivity.inProgress} color="text-yellow-700" />
-        <StatCard label="Today's Total Calls" value={todayProductivity.total} color="text-blue-700" />
+        <StatCard label="Today's Resolved" value={todayProductivity.resolved} color="text-green-700" />
+        <StatCard label="Today's Total Unique Calls" value={todayProductivity.total} color="text-blue-700" />
       </div>
 
       <div className="bg-white border border-gray-200 rounded-lg p-4">
