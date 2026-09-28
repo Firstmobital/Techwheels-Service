@@ -195,7 +195,7 @@ async function markDocAwaitingAdvisor(
 async function offloadBodyshopDocument(
   supabaseUrl: string,
   serviceRoleKey: string,
-  input: { resourceId: number; objectName: string; docKey: string; fileSizeBytes: number }
+  input: { resourceId: number; objectName: string; docKey: string; fileSizeBytes: number; regNumber?: string }
 ): Promise<{ ok: true; drive_url: string } | { ok: false; error: string }> {
   try {
     const res = await fetch(`${supabaseUrl}/functions/v1/universal-drive-upload`, {
@@ -203,6 +203,7 @@ async function offloadBodyshopDocument(
       headers: {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${serviceRoleKey}`,
+        apikey: serviceRoleKey,
       },
       body: JSON.stringify({
         resource_type: 'bodyshop_document',
@@ -211,6 +212,7 @@ async function offloadBodyshopDocument(
         object_name: input.objectName,
         file_type: input.docKey,
         file_size_mb: Number(((input.fileSizeBytes || 0) / (1024 * 1024)).toFixed(3)),
+        registration_no: input.regNumber || undefined,
       }),
     })
     const payload = await res.json().catch(() => ({} as { ok?: boolean; error?: string; drive_url?: string; link?: string }))
@@ -408,6 +410,7 @@ Deno.serve(async (req) => {
         objectName: storagePath,
         docKey,
         fileSizeBytes: Number.isFinite(fileSize) ? fileSize : Number(upserted.file_size_bytes || 0),
+        regNumber: ctx.regNumber,
       })
 
       if (!drive.ok) {
@@ -490,6 +493,7 @@ Deno.serve(async (req) => {
       objectName: text(row.storage_path),
       docKey: text(row.doc_key),
       fileSizeBytes: Number(row.file_size_bytes || 0),
+      regNumber: text(row.reg_number) || ctx.regNumber,
     })
 
     const bucket = text(row.storage_bucket) || BUCKET

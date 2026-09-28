@@ -649,7 +649,7 @@ Deno.serve(async (req) => {
 
       const { data: docRows, error: bodyshopDocErr } = await supabase
         .from('bodyshop_repair_card_documents')
-        .select('id, created_at, reg_number, drive_file_id, doc_key')
+        .select('id, created_at, reg_number, drive_file_id, doc_key, repair_card_id, reception_entry_id')
         .eq('id', bodyshopDocId)
         .limit(1)
 
@@ -668,11 +668,38 @@ Deno.serve(async (req) => {
 
       registrationNo = String(docRow.reg_number ?? '').trim()
       if (!registrationNo) {
+        registrationNo = body.registrationNoHint
+      }
+      if (!registrationNo && docRow.repair_card_id) {
+        const { data: cardRow } = await supabase
+          .from('bodyshop_repair_cards')
+          .select('reg_number')
+          .eq('id', docRow.repair_card_id)
+          .maybeSingle()
+        registrationNo = String(cardRow?.reg_number ?? '').trim()
+      }
+      if (!registrationNo && docRow.reception_entry_id) {
+        const { data: recRow } = await supabase
+          .from('service_reception_entries')
+          .select('reg_number')
+          .eq('id', docRow.reception_entry_id)
+          .maybeSingle()
+        registrationNo = String(recRow?.reg_number ?? '').trim()
+      }
+      if (!registrationNo) {
         return json(400, {
           ok: false,
           error: 'Registration number not found for bodyshop document row',
           error_code: 'REGISTRATION_NOT_FOUND',
         })
+      }
+
+      // If docRow had null reg_number, heal it in the table
+      if (!docRow.reg_number && registrationNo) {
+        await supabase
+          .from('bodyshop_repair_card_documents')
+          .update({ reg_number: registrationNo })
+          .eq('id', docRow.id)
       }
 
       rowId = String(docRow.id)
