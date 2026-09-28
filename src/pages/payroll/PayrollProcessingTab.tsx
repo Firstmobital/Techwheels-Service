@@ -43,6 +43,7 @@ function PayrollSummaryCard({
   tone,
   onExport,
   hint,
+  employeeCount,
 }: {
   value: ReactNode
   label: string
@@ -50,6 +51,7 @@ function PayrollSummaryCard({
   tone: string
   onExport: () => void
   hint?: ReactNode
+  employeeCount?: number
 }) {
   return (
     <div className={`kpi payroll-kpi--${tone}`}>
@@ -63,9 +65,16 @@ function PayrollSummaryCard({
             <div className="kpi__lab">{label}</div>
           </div>
         </div>
-        <button type="button" className="btn btn--ghost btn--sm" onClick={onExport}>
-          Export
-        </button>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.25rem' }}>
+          <button type="button" className="btn btn--ghost btn--sm" onClick={onExport}>
+            Export
+          </button>
+          {employeeCount !== undefined && (
+            <span style={{ fontSize: '0.65rem', color: '#64748b', fontWeight: 600, lineHeight: 1 }}>
+              {employeeCount} Employees
+            </span>
+          )}
+        </div>
       </div>
       {hint}
     </div>
@@ -523,20 +532,11 @@ export default function PayrollProcessingTab({
 
       <div className="kpis payroll-kpis">
         <PayrollSummaryCard
-          tone="employees"
-          icon="user"
-          value={totals.employeeCount}
-          label="Total Employees"
-          onExport={() => exportCardBankCsv(
-            (entry) => Number(entry.net_payable),
-            payrollCardExportFilename('total-employees', monthInput),
-          )}
-        />
-        <PayrollSummaryCard
           tone="gross"
           icon="reports"
           value={formatCurrency(totals.gross)}
           label="Total Gross"
+          employeeCount={totals.employeeCount}
           onExport={() => exportCardBankCsv(
             (entry) => Number(entry.gross_payout),
             payrollCardExportFilename('total-gross', monthInput),
@@ -547,6 +547,7 @@ export default function PayrollProcessingTab({
           icon="download"
           value={formatCurrency(totals.advance)}
           label="Total Advance Deducted"
+          employeeCount={totals.employeeCount}
           onExport={() => exportCardBankCsv(
             (entry) => Number(entry.advance_deduction),
             payrollCardExportFilename('advance-deducted', monthInput),
@@ -557,6 +558,7 @@ export default function PayrollProcessingTab({
           icon="check"
           value={formatCurrency(totals.net)}
           label="Net Payable Total"
+          employeeCount={totals.employeeCount}
           onExport={() => exportCardBankCsv(
             (entry) => Number(entry.net_payable),
             payrollCardExportFilename('net-payable', monthInput),
@@ -567,6 +569,7 @@ export default function PayrollProcessingTab({
           icon="autodoc"
           value={formatCurrency(totals.earnedBase)}
           label="Earned Base Total"
+          employeeCount={totals.employeeCount}
           onExport={exportEarnedBaseBankPayout}
         />
         <PayrollSummaryCard
@@ -574,6 +577,7 @@ export default function PayrollProcessingTab({
           icon="admin"
           value={formatCurrency(totals.saVariable)}
           label="SA Variable Total"
+          employeeCount={totals.employeeCount}
           onExport={() => exportCardBankCsv(
             (entry) => Number(entry.sa_variable_earning),
             payrollCardExportFilename('sa-variable', monthInput),
@@ -584,6 +588,7 @@ export default function PayrollProcessingTab({
           icon="tech"
           value={formatCurrency(totals.technicianVariable)}
           label="Technician Variable Total"
+          employeeCount={totals.employeeCount}
           onExport={() => exportCardBankCsv(
             (entry) => Number(entry.technician_variable_earning),
             payrollCardExportFilename('technician-variable', monthInput),
@@ -594,6 +599,7 @@ export default function PayrollProcessingTab({
           icon="truck"
           value={formatCurrency(bodyshopScope.displayedTotal)}
           label="Bodyshop Variable Total"
+          employeeCount={totals.employeeCount}
           onExport={exportBodyshopBankPayout}
           hint={bodyshopHint}
         />
@@ -602,6 +608,7 @@ export default function PayrollProcessingTab({
           icon="sparkles"
           value={formatCurrency(totals.incentive)}
           label="Incentive Total"
+          employeeCount={totals.employeeCount}
           onExport={() => exportCardBankCsv(
             (entry) => Number(entry.incentive_amount ?? 0),
             payrollCardExportFilename('incentive', monthInput),
