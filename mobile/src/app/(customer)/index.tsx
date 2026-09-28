@@ -307,7 +307,7 @@ export default function CustomerDashboardScreen() {
             </Text>
           </CustomerCard>
 
-          {showBodyshopFields ? <RemainingDocumentsCard regNumber={selected?.reg_number} /> : null}
+          <RemainingDocumentsCard regNumber={selected?.reg_number} />
           <CustomerPrimaryActionCard includeDocumentAction={false} />
 
           <View style={{ marginBottom: 14 }}>

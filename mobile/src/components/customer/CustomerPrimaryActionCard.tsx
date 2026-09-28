@@ -1,10 +1,10 @@
-import { useCallback, useState, type ReactNode } from 'react'
+import { useCallback, useMemo, useState, type ReactNode } from 'react'
 import { Text, TouchableOpacity, View } from 'react-native'
 import { useFocusEffect, useRouter } from 'expo-router'
 import { useCustomerSession } from '../../context/CustomerSessionContext'
 import { customerGetRepairCard } from '../../lib/api/customerPortal'
 import { computeSettlement } from '../../lib/customer/math'
-import { loadClaimDocumentProgress } from '../../lib/customer/claimDocumentProgress'
+import { claimDocumentProgressFromSnapshot, loadClaimDocumentProgress } from '../../lib/customer/claimDocumentProgress'
 import {
   readAdditionalApprovalPending,
   readEstimateApprovalPending,
@@ -22,12 +22,33 @@ export function CustomerPrimaryActionCard({ includeDocumentAction = true }: { in
   const router = useRouter()
   const { token, selectedReg, vehicles } = useCustomerSession()
   const selected = vehicles.find((v) => v.reg_number === selectedReg) || vehicles[0]
-  const [action, setAction] = useState<ReturnType<typeof resolveCustomerPrimaryAction>>(null)
-
   const { ready: visitReady, isMechanical, mechCase, repairCard } = useCustomerVisit()
   const isEffectiveMechanical =
     isMechanical ||
     isMechanicalServiceType(String(selected?.service_type || ''))
+
+  const initialAction = useMemo(() => {
+    if (isEffectiveMechanical) return resolveMechanicalPrimaryAction(mechCase)
+    if (!repairCard) return null
+    const progress = claimDocumentProgressFromSnapshot(repairCard, null)
+    const stage = Number(repairCard.current_stage || 0)
+    const pay = computeSettlement({
+      billed: (repairCard.total_billed ?? repairCard.billed_amount) as number | null | undefined,
+      received: (repairCard.amount_received ?? repairCard.customer_amount_received) as number | null | undefined,
+    })
+    return resolveCustomerPrimaryAction({
+      claimMode: progress.claimMode,
+      missingMandatoryDocs: progress.remainingCount,
+      currentStage: stage,
+      estimateApprovalPending: readEstimateApprovalPending(repairCard),
+      additionalApprovalPending: readAdditionalApprovalPending(repairCard),
+      customerSettlementDue: pay.status === 'due' || pay.status === 'partial',
+      includeDocumentAction,
+      isMechanical: false,
+    })
+  }, [isEffectiveMechanical, mechCase, repairCard, includeDocumentAction])
+
+  const [action, setAction] = useState<ReturnType<typeof resolveCustomerPrimaryAction>>(initialAction)
 
   const refresh = useCallback(async () => {
     if (!token || !visitReady) {
@@ -71,7 +92,9 @@ export function CustomerPrimaryActionCard({ includeDocumentAction = true }: { in
 
   useCustomerScreenRefresh(refresh)
 
-  if (!action) return null
+  const activeAction = action ?? initialAction
+
+  if (!activeAction) return null
 
   return (
     <CustomerCardShell>
@@ -89,12 +112,12 @@ export function CustomerPrimaryActionCard({ includeDocumentAction = true }: { in
           <Icon name="alert-circle" size={20} color={CustomerTheme.primary} strokeWidth={2.2} />
         </View>
         <View style={{ flex: 1 }}>
-          <Text style={{ color: CustomerTheme.ink, fontSize: 15, fontWeight: '900' }}>{action.message}</Text>
-          {action.detail ? (
-            <Text style={{ color: CustomerTheme.inkMuted, fontSize: 12.5, marginTop: 4, lineHeight: 18 }}>{action.detail}</Text>
+          <Text style={{ color: CustomerTheme.ink, fontSize: 15, fontWeight: '900' }}>{activeAction.message}</Text>
+          {activeAction.detail ? (
+            <Text style={{ color: CustomerTheme.inkMuted, fontSize: 12.5, marginTop: 4, lineHeight: 18 }}>{activeAction.detail}</Text>
           ) : null}
           <TouchableOpacity
-            onPress={() => router.push(action.route)}
+            onPress={() => router.push(activeAction.route)}
             activeOpacity={0.88}
             style={{
               marginTop: 12,
@@ -105,7 +128,7 @@ export function CustomerPrimaryActionCard({ includeDocumentAction = true }: { in
               borderRadius: CustomerTheme.radiusButton,
             }}
           >
-            <Text style={{ color: '#FFFFFF', fontWeight: '800', fontSize: 13 }}>{action.ctaLabel}</Text>
+            <Text style={{ color: '#FFFFFF', fontWeight: '800', fontSize: 13 }}>{activeAction.ctaLabel}</Text>
           </TouchableOpacity>
         </View>
       </View>

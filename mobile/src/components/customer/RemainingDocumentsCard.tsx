@@ -1,9 +1,10 @@
-import { useCallback, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import { Text, TouchableOpacity, View } from 'react-native'
 import { useFocusEffect, useRouter } from 'expo-router'
 import { useCustomerSession } from '../../context/CustomerSessionContext'
 import { CustomerTheme } from '../../lib/customer/customerTheme'
 import {
+  claimDocumentProgressFromSnapshot,
   loadClaimDocumentProgress,
   type ClaimDocumentProgress,
 } from '../../lib/customer/claimDocumentProgress'
@@ -16,20 +17,43 @@ export function RemainingDocumentsCard({ regNumber }: { regNumber?: string | nul
   const router = useRouter()
   const { token, vehicles, selectedReg } = useCustomerSession()
   const selected = vehicles.find((v) => v.reg_number === (regNumber || selectedReg)) || vehicles[0]
-  const { isMechanical } = useCustomerVisit()
+  const { isMechanical, repairCard, isBodyshop } = useCustomerVisit()
   const isEffectiveMechanical =
     isMechanical ||
     isMechanicalServiceType(String(selected?.service_type || ''))
-  const [progress, setProgress] = useState<ClaimDocumentProgress | null>(null)
+
+  const initialProgress = useMemo(() => {
+    if (isEffectiveMechanical || (!isBodyshop && !repairCard)) return null
+    const snapshot = claimDocumentProgressFromSnapshot(repairCard, null)
+    return snapshot.remainingCount > 0 && snapshot.claimMode !== 'cash' ? snapshot : null
+  }, [isEffectiveMechanical, isBodyshop, repairCard])
+
+  const [progress, setProgress] = useState<ClaimDocumentProgress | null>(initialProgress)
 
   const refresh = useCallback(async () => {
     if (isEffectiveMechanical) {
       setProgress(null)
       return
     }
-    const p = await loadClaimDocumentProgress(regNumber, token)
-    setProgress(p)
-  }, [regNumber, token, isEffectiveMechanical])
+    const targetReg = regNumber || selectedReg || selected?.reg_number
+    if (!targetReg) return
+
+    if (repairCard) {
+      const snapshotProgress = claimDocumentProgressFromSnapshot(repairCard, null)
+      if (snapshotProgress.remainingCount > 0 && snapshotProgress.claimMode !== 'cash') {
+        setProgress(snapshotProgress)
+      }
+    }
+
+    const p = await loadClaimDocumentProgress(targetReg, token)
+    if (p) {
+      if (p.claimMode === 'cash' || p.remainingCount === 0) {
+        setProgress(null)
+      } else {
+        setProgress(p)
+      }
+    }
+  }, [regNumber, selectedReg, selected, token, isEffectiveMechanical, repairCard])
 
   useFocusEffect(
     useCallback(() => {
@@ -39,11 +63,13 @@ export function RemainingDocumentsCard({ regNumber }: { regNumber?: string | nul
 
   useCustomerScreenRefresh(refresh)
 
-  if (isEffectiveMechanical || !progress || progress.claimMode === 'cash' || progress.remainingCount === 0) {
+  const activeProgress = progress ?? initialProgress
+
+  if (isEffectiveMechanical || !activeProgress || activeProgress.claimMode === 'cash' || activeProgress.remainingCount === 0) {
     return null
   }
 
-  const pct = progress.progressPercent
+  const pct = activeProgress.progressPercent
 
   return (
     <TouchableOpacity
@@ -74,18 +100,18 @@ export function RemainingDocumentsCard({ regNumber }: { regNumber?: string | nul
       </View>
 
       <Text style={{ color: CustomerTheme.ink, fontSize: 18, fontWeight: '900', marginBottom: 6 }}>
-        Upload {progress.remainingCount} more document{progress.remainingCount === 1 ? '' : 's'}
+        Upload {activeProgress.remainingCount} more document{activeProgress.remainingCount === 1 ? '' : 's'}
       </Text>
 
-      {progress.missingSummary ? (
+      {activeProgress.missingSummary ? (
         <Text style={{ color: CustomerTheme.inkMuted, fontSize: 12.5, lineHeight: 18, marginBottom: 14 }}>
-          {progress.missingSummary}
+          {activeProgress.missingSummary}
         </Text>
       ) : null}
 
       <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 }}>
         <Text style={{ color: CustomerTheme.inkMuted, fontSize: 11.5, fontWeight: '600' }}>
-          {progress.uploadedCount} of {progress.totalRequired} documents submitted
+          {activeProgress.uploadedCount} of {activeProgress.totalRequired} documents submitted
         </Text>
         <Text style={{ color: CustomerTheme.primary, fontSize: 11.5, fontWeight: '800' }}>{pct}%</Text>
       </View>
