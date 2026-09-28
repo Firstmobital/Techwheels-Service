@@ -99,8 +99,7 @@ const PRIMARY_DOCS: { key: string; label: string }[] = [
 
 const DOC_LABELS: Record<string, string> = {
   doc_pan: 'PAN Card',
-  doc_company_pan: 'Company PAN (Front)',
-  doc_company_pan_back: 'Company PAN (Back)',
+  doc_company_pan: 'Company PAN Card',
   doc_dl: 'Driving Licence (Front)',
   doc_dl_back: 'Driving Licence (Back)',
   doc_claim_form: 'Claim Form (PDF)',

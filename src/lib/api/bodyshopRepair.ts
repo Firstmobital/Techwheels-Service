@@ -84,7 +84,6 @@ export interface RepairCard {
   doc_rc_back?: boolean
   doc_dl_back?: boolean
   doc_aadhaar_back?: boolean
-  doc_company_pan_back?: boolean
   doc_rejected_keys?: string[] | null
   doc_tp_affidavit?: boolean
   doc_survey_approval: boolean | null

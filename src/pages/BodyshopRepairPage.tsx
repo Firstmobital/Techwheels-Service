@@ -877,7 +877,6 @@ type BodyshopDocKey =
   | 'doc_kyc'
   | 'doc_gst'
   | 'doc_company_pan'
-  | 'doc_company_pan_back'
   | 'doc_bank_detail'
   | 'doc_tp_affidavit'
   | 'doc_estimate'
@@ -957,8 +956,7 @@ const BODYSHOP_DOCS: { k: Exclude<BodyshopDocKey, 'doc_estimate' | 'doc_survey_a
   { k: 'doc_pan', label: 'PAN Card', mandatoryFor: ['individual', 'firm'] },
   { k: 'doc_kyc', label: 'KYC (PDF)', mandatoryFor: [] },
   { k: 'doc_gst', label: 'GST (PDF)', mandatoryFor: ['firm'] },
-  { k: 'doc_company_pan', label: 'Company PAN Card (Front)', mandatoryFor: ['firm'] },
-  { k: 'doc_company_pan_back', label: 'Company PAN Card (Back)', mandatoryFor: ['firm'] },
+  { k: 'doc_company_pan', label: 'Company PAN Card', mandatoryFor: ['firm'] },
   { k: 'doc_bank_detail', label: 'Bank Detail (PDF)', mandatoryFor: ['firm'] },
   { k: 'doc_tp_affidavit', label: 'T/P Affidavit (PDF)', mandatoryFor: [] },
 ]
@@ -3184,8 +3182,6 @@ export default function BodyshopRepairPage() {
     doc_dl_back: { frontKey: 'doc_dl', backKey: 'doc_dl_back', name: 'Driving Licence' },
     doc_rc: { frontKey: 'doc_rc', backKey: 'doc_rc_back', name: 'Registration Certificate (RC)' },
     doc_rc_back: { frontKey: 'doc_rc', backKey: 'doc_rc_back', name: 'Registration Certificate (RC)' },
-    doc_company_pan: { frontKey: 'doc_company_pan', backKey: 'doc_company_pan_back', name: 'Company PAN Card' },
-    doc_company_pan_back: { frontKey: 'doc_company_pan', backKey: 'doc_company_pan_back', name: 'Company PAN Card' },
   }
 
   async function getDocUrl(row: BodyshopRepairCardDocumentRow): Promise<string | null> {

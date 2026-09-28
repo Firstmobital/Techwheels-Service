@@ -103,19 +103,11 @@ export const CUSTOMER_CLAIM_DOCUMENTS: CustomerClaimDocumentDef[] = [
   },
   {
     docKey: 'doc_company_pan',
-    title: 'Company PAN Card (Front)',
-    subtitle: 'Firm / company PAN - Front side',
+    title: 'Company PAN Card',
+    subtitle: 'Firm / company PAN card',
     required: true,
     mandatoryFor: ['firm'],
-    hint: 'Upload clear photo of Company PAN Front side.',
-  },
-  {
-    docKey: 'doc_company_pan_back',
-    title: 'Company PAN Card (Back)',
-    subtitle: 'Firm / company PAN - Back side',
-    required: true,
-    mandatoryFor: ['firm'],
-    hint: 'Upload clear photo of Company PAN Back side.',
+    hint: 'Upload clear photo of Company PAN card.',
   },
   {
     docKey: 'doc_bank_detail',
