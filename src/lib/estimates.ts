@@ -400,7 +400,7 @@ export async function updateEstimateApproval(
     localList[idx].updated_at = updated_at
     if (rejectionReason) localList[idx].rejection_reason = rejectionReason
     if (approved_at) localList[idx].approved_at = approved_at
-    if (updatedItems !== undefined) (localList[idx] as Record<string, unknown>).items = updatedItems
+    if (updatedItems !== undefined) (localList[idx] as unknown as Record<string, unknown>).items = updatedItems
     if (updatedTotals?.subtotal !== undefined) localList[idx].subtotal = updatedTotals.subtotal ?? 0
     if (updatedTotals?.gst_tax !== undefined) localList[idx].gst_tax = updatedTotals.gst_tax ?? 0
     if (updatedTotals?.grand_total !== undefined) localList[idx].grand_total = updatedTotals.grand_total ?? 0
