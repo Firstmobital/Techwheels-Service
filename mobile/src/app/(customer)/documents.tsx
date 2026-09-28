@@ -37,6 +37,7 @@ import {
   ownershipFromRepairCard,
   type CustomerClaimDocumentDef,
 } from '../../lib/customer/customerClaimDocuments'
+import { printMergedTwoSidedDocument } from '../../lib/customer/customerTwoSidedPrint'
 
 function isImageName(name?: string | null, contentType?: string | null) {
   const type = String(contentType || '').toLowerCase()
@@ -354,6 +355,49 @@ export default function CustomerDocumentsScreen() {
             Waiting for the advisor to approve or reject this file.
           </Text>
         ) : null}
+
+        {(() => {
+          const TWO_SIDED_PAIRS: Record<string, { backKey: string; name: string }> = {
+            doc_aadhaar: { backKey: 'doc_aadhaar_back', name: 'Aadhaar Card' },
+            doc_dl: { backKey: 'doc_dl_back', name: 'Driving Licence' },
+            doc_rc: { backKey: 'doc_rc_back', name: 'Registration Certificate (RC)' },
+          }
+
+          const pair = TWO_SIDED_PAIRS[slot.docKey]
+          const backRow = pair ? byKey.get(pair.backKey) : null
+          const frontUrl = String(row?.drive_url || row?.view_url || '').trim()
+          const backUrl = String(backRow?.drive_url || backRow?.view_url || '').trim()
+          if (!pair || !frontUrl || !backUrl) return null
+
+          return (
+            <TouchableOpacity
+              onPress={() =>
+                void printMergedTwoSidedDocument({
+                  docName: pair.name,
+                  regNumber: selectedReg || 'Vehicle',
+                  frontUrl,
+                  backUrl,
+                })
+              }
+              style={{
+                marginTop: 12,
+                backgroundColor: '#0284c7',
+                borderRadius: 10,
+                paddingVertical: 10,
+                paddingHorizontal: 12,
+                flexDirection: 'row',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 6,
+              }}
+            >
+              <Icon name="printer" size={16} color="#ffffff" />
+              <Text style={{ color: '#fff', fontWeight: '800', fontSize: 12 }}>
+                Print 1-Page Merged (Front + Back)
+              </Text>
+            </TouchableOpacity>
+          )
+        })()}
       </CustomerCard>
     )
   }
