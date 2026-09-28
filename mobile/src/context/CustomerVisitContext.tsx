@@ -10,7 +10,7 @@ import {
 } from 'react'
 import { customerGetVisitContext } from '../lib/api/customerPortal'
 import type { MechanicalCasePayload } from '../lib/customer/mechanicalCustomerUi'
-import type { CustomerVisitKind } from '../lib/customer/mechanicalServiceType'
+import { type CustomerVisitKind, resolveCustomerVisitKind } from '../lib/customer/mechanicalServiceType'
 import { useCustomerSession } from './CustomerSessionContext'
 
 type CustomerVisitContextValue = {
@@ -67,12 +67,14 @@ export function CustomerVisitProvider({ children }: { children: ReactNode }) {
       const ctx = await customerGetVisitContext(token, selectedReg)
       if (seq !== loadSeq.current) return 'other'
 
-      const visitKind = ctx.visit_kind
-      setJob((ctx.job as Record<string, unknown> | null) ?? null)
-      setKind(visitKind)
+      const card = (ctx.repair_card as Record<string, unknown> | null) ?? null
+      const jobObj = (ctx.job as Record<string, unknown> | null) ?? null
+      const resolvedKind = card ? 'bodyshop' : resolveCustomerVisitKind(jobObj, ctx.visit_kind, card)
+      setJob(jobObj)
+      setKind(resolvedKind)
       setMechCase((ctx.mechanical_case as MechanicalCasePayload | null) ?? null)
-      setRepairCard((ctx.repair_card as Record<string, unknown> | null) ?? null)
-      return visitKind
+      setRepairCard(card)
+      return resolvedKind
     } catch {
       if (seq !== loadSeq.current) return 'other'
       setJob(null)

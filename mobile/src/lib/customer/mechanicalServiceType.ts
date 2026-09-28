@@ -24,17 +24,31 @@ export type CustomerVisitKind = 'mechanical' | 'bodyshop' | 'other'
 /** Prefer `serverVisitKind` from `customer_get_active_job` / `customer_get_visit_context`. */
 export function resolveCustomerVisitKind(
   job: Record<string, unknown> | null | undefined,
-  serverVisitKind?: string | null
+  serverVisitKind?: string | null,
+  repairCard?: Record<string, unknown> | null | undefined
 ): CustomerVisitKind {
-  const fromServer = String(serverVisitKind ?? '').trim()
-  if (fromServer === 'mechanical' || fromServer === 'bodyshop' || fromServer === 'other') {
-    return fromServer
-  }
-  if (!job) return 'other'
-  const st = String(job.service_type ?? '').trim()
-  if (isMechanicalServiceType(st)) return 'mechanical'
-  if (st === 'Accident' || st.toLowerCase().includes('accident') || job.source === 'bodyshop') {
+  // CRITICAL RULE: If a Bodyshop Repair Card exists for this vehicle, IT IS STRICTLY A BODYSHOP CLAIM VISIT!
+  if (repairCard || job?.repair_card_id || job?.source === 'bodyshop') {
     return 'bodyshop'
+  }
+
+  const fromServer = String(serverVisitKind ?? '').trim()
+  if (fromServer === 'bodyshop') {
+    return 'bodyshop'
+  }
+  if (fromServer === 'mechanical') {
+    return 'mechanical'
+  }
+
+  if (!job) return 'other'
+
+  const st = String(job.service_type ?? '').trim()
+  const stLower = st.toLowerCase()
+  if (st === 'Accident' || stLower.includes('accident') || stLower.includes('bodyshop') || stLower.includes('claim')) {
+    return 'bodyshop'
+  }
+  if (isMechanicalServiceType(st)) {
+    return 'mechanical'
   }
   return 'other'
 }
