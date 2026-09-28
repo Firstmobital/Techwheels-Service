@@ -1,0 +1,39 @@
+name: Mobile Customer App CI
+
+on:
+  pull_request:
+    paths:
+      - 'mobile/**'
+      - 'supabase/functions/customer-portal-upload/**'
+      - '.github/workflows/mobile-customer-ci.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'mobile/**'
+      - '.github/workflows/mobile-customer-ci.yml'
+  workflow_dispatch:
+
+jobs:
+  validate-mobile:
+    name: Validate Expo customer app
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: mobile
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Native dependency compatibility check
+        run: npm run check:native-deps
+
+      - name: TypeScript check
+        run: npx tsc --noEmit

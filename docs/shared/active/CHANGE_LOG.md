@@ -5,6 +5,15 @@ Tracks documentation-sync updates for business logic, architecture, and access c
 ## 2026-09-28
 
 - Date: 2026-09-28
+- Change summary: Dead native surface cleanup — removed root Capacitor Android project (`android/`, `capacitor.config.json`, root `eas.json`, root `app.json`), removed standalone Bodyshop Capacitor prototype (`bodyshop/`), removed Capacitor deps and dead scripts from root `package.json`, removed `@capacitor/app` import from `CustomerPortalPage.tsx` (browser popstate fallback retained), deleted `build-bodyshop-apk.yml` CI workflow, renamed mobile CI workflow to `mobile-customer-ci.yml` with automatic production OTA removed. No web routes, database, or business logic changed.
+- Impacted files: `android/` (removed), `bodyshop/` (removed), `capacitor.config.json` (removed), `eas.json` (removed), `app.json` (removed), `package.json` (scripts + deps), `package-lock.json`, `src/pages/CustomerPortalPage.tsx`, `.github/workflows/build-bodyshop-apk.yml` (removed), `.github/workflows/mobile-customer-ci-ota.yml` (removed), `.github/workflows/mobile-customer-ci.yml` (new)
+- Business logic change: No — web Bodyshop module (`src/`) and mobile app (`mobile/`) are unchanged.
+- Function-level contract change: No
+- RBAC/RLS change: No
+- Data/schema change: No
+- Docs updated: `docs/shared/reference/CURRENT_STATE.md` (added Removed Native Surfaces section), `docs/Implementation_plans/mobileversion/categories/auth/active/CHECKLIST.md` (item 5.5 marked done)
+
+- Date: 2026-09-28
 - Change summary: CI baseline repair — TypeScript 6.0 type annotation fixes across ~50 src files, ESLint config improvements (react-hooks v7 rule classification, no-explicit-any maintained), tsconfig `useUnknownInCatchVariables: false` for TS6 catch-var compatibility, `branchOptions` memoization fix in ReportsPage.
 - Impacted files: `tsconfig.app.json`, `eslint.config.js`, `src/pages/ReportsPage.tsx`, ~48 other `src/**` files (type-annotation changes only)
 - Business logic change: No — all changes are type annotations, lint config, or compiler config. No runtime behavior changed.
