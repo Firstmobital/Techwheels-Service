@@ -215,9 +215,7 @@ export default function CustomerDocumentsScreen() {
         contentType,
       })
       await load('refresh')
-      setNotice(result.ok
-        ? `${slot.title} uploaded again. Waiting for the advisor to approve it.`
-        : `${slot.title} is saved. Drive sync is still pending.`)
+      setNotice(`${slot.title} uploaded successfully. Waiting for the advisor to approve it.`)
     } catch (error) {
       Alert.alert('Upload failed', error instanceof Error ? error.message : 'Unable to upload this document.')
     } finally {
@@ -237,7 +235,7 @@ export default function CustomerDocumentsScreen() {
         docKey: slot.docKey,
       })
       await load('refresh')
-      setNotice(result.ok ? `${slot.title} is saved on Drive.` : (result.error || 'Drive sync is still pending.'))
+      setNotice(result.ok ? `${slot.title} Drive sync complete.` : (result.error || 'Drive sync retry in progress.'))
     } catch (error) {
       Alert.alert('Retry failed', error instanceof Error ? error.message : 'Unable to retry Drive sync.')
     } finally {
@@ -285,15 +283,17 @@ export default function CustomerDocumentsScreen() {
   const renderSlot = (slot: CustomerClaimDocumentDef) => {
     const row = byKey.get(slot.docKey)
     const driveUrl = String(row?.drive_url || '').trim()
-    const submitted = Boolean(row && driveUrl && !row.drive_pending)
-    const pending = Boolean(row && !submitted)
+    const viewUrl = String(row?.view_url || '').trim()
+    const fileAvailable = Boolean(row && (driveUrl || viewUrl))
+    const driveSynced = Boolean(row && driveUrl && !row.drive_pending)
+    const submitted = fileAvailable
     const approved = repairCard?.[slot.docKey] === true
     const rejectedKeys = Array.isArray(repairCard?.doc_rejected_keys) ? repairCard.doc_rejected_keys.map(String) : []
     const rejected = !approved && rejectedKeys.includes(slot.docKey)
     const busy = busyKey === slot.docKey
-    const badgeBg = approved ? '#ECFDF5' : rejected ? '#FEF2F2' : submitted ? '#EFF6FF' : pending ? '#FEF3C7' : '#F1F5F9'
-    const badgeColor = approved ? '#047857' : rejected ? '#B91C1C' : submitted ? '#1D4ED8' : pending ? '#92400E' : CustomerTheme.inkMuted
-    const badgeLabel = approved ? 'Approved' : rejected ? 'Rejected' : submitted ? 'With advisor' : pending ? 'Pending' : slot.required ? 'Required' : 'Optional'
+    const badgeBg = approved ? '#ECFDF5' : rejected ? '#FEF2F2' : submitted ? '#EFF6FF' : slot.required ? '#FEF3C7' : '#F1F5F9'
+    const badgeColor = approved ? '#047857' : rejected ? '#B91C1C' : submitted ? '#1D4ED8' : slot.required ? '#92400E' : CustomerTheme.inkMuted
+    const badgeLabel = approved ? 'Approved' : rejected ? 'Rejected' : submitted ? 'With advisor' : slot.required ? 'Required' : 'Optional'
 
     return (
       <CustomerCard key={slot.docKey} style={{ marginBottom: 12, padding: 16 }}>
@@ -312,29 +312,31 @@ export default function CustomerDocumentsScreen() {
         {busy ? (
           <View style={{ marginTop: 12, flexDirection: 'row', alignItems: 'center', gap: 8 }}>
             <ActivityIndicator color={CustomerTheme.primary} />
-            <Text style={{ color: CustomerTheme.inkMuted, fontSize: 12 }}>Saving to Drive…</Text>
+            <Text style={{ color: CustomerTheme.inkMuted, fontSize: 12 }}>Saving document…</Text>
           </View>
         ) : null}
 
-        {submitted && row ? (
+        {fileAvailable && row ? (
           <TouchableOpacity onPress={() => void openRow(row)} style={{ marginTop: 12 }}>
-            <Text style={{ color: CustomerTheme.ink, fontWeight: '700', fontSize: 12 }} numberOfLines={1}>
+            <Text style={{ color: CustomerTheme.ink, fontWeight: '700', fontSize: 13 }} numberOfLines={1}>
               {row.file_name || slot.title}
             </Text>
-            <Text style={{ color: CustomerTheme.primary, fontSize: 11, marginTop: 2, fontWeight: '700' }}>Open Drive file</Text>
+            <Text style={{ color: CustomerTheme.primary, fontSize: 12, marginTop: 3, fontWeight: '700' }}>
+              {driveSynced ? 'Open Drive file' : 'View uploaded file'}
+            </Text>
           </TouchableOpacity>
         ) : null}
 
-        {pending && row && !busy ? (
-          <View style={{ marginTop: 12 }}>
-            <Text style={{ color: '#92400E', fontSize: 12, lineHeight: 17 }}>
-              File is stored. Drive sync is still pending, so this is not submitted yet.
+        {fileAvailable && !driveSynced && row && !busy ? (
+          <View style={{ marginTop: 8, padding: 8, backgroundColor: '#FEF3C7', borderRadius: 8, borderWidth: 1, borderColor: '#FDE68A', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+            <Text style={{ color: '#92400E', fontSize: 11, flex: 1, marginRight: 8 }}>
+              File is saved. Drive backup sync is pending.
             </Text>
             <TouchableOpacity
               onPress={() => void retrySlot(slot, row)}
-              style={{ marginTop: 8, alignSelf: 'flex-start', backgroundColor: CustomerTheme.primary, borderRadius: CustomerTheme.radiusButton, paddingHorizontal: 12, paddingVertical: 8 }}
+              style={{ backgroundColor: CustomerTheme.primary, borderRadius: 6, paddingHorizontal: 10, paddingVertical: 5 }}
             >
-              <Text style={{ color: '#fff', fontWeight: '800', fontSize: 12 }}>Retry Drive sync</Text>
+              <Text style={{ color: '#fff', fontWeight: '800', fontSize: 11 }}>Retry sync</Text>
             </TouchableOpacity>
           </View>
         ) : null}
@@ -357,46 +359,77 @@ export default function CustomerDocumentsScreen() {
         ) : null}
 
         {(() => {
-          const TWO_SIDED_PAIRS: Record<string, { backKey: string; name: string }> = {
-            doc_aadhaar: { backKey: 'doc_aadhaar_back', name: 'Aadhaar Card' },
-            doc_dl: { backKey: 'doc_dl_back', name: 'Driving Licence' },
-            doc_rc: { backKey: 'doc_rc_back', name: 'Registration Certificate (RC)' },
+          const TWO_SIDED_PAIRS: Record<string, { frontKey: string; backKey: string; name: string }> = {
+            doc_aadhaar: { frontKey: 'doc_aadhaar', backKey: 'doc_aadhaar_back', name: 'Aadhaar Card' },
+            doc_aadhaar_back: { frontKey: 'doc_aadhaar', backKey: 'doc_aadhaar_back', name: 'Aadhaar Card' },
+            doc_dl: { frontKey: 'doc_dl', backKey: 'doc_dl_back', name: 'Driving Licence' },
+            doc_dl_back: { frontKey: 'doc_dl', backKey: 'doc_dl_back', name: 'Driving Licence' },
+            doc_rc: { frontKey: 'doc_rc', backKey: 'doc_rc_back', name: 'Registration Certificate (RC)' },
+            doc_rc_back: { frontKey: 'doc_rc', backKey: 'doc_rc_back', name: 'Registration Certificate (RC)' },
           }
 
           const pair = TWO_SIDED_PAIRS[slot.docKey]
-          const backRow = pair ? byKey.get(pair.backKey) : null
-          const frontUrl = String(row?.drive_url || row?.view_url || '').trim()
-          const backUrl = String(backRow?.drive_url || backRow?.view_url || '').trim()
-          if (!pair || !frontUrl || !backUrl) return null
+          if (!pair) return null
 
-          return (
-            <TouchableOpacity
-              onPress={() =>
-                void printMergedTwoSidedDocument({
-                  docName: pair.name,
-                  regNumber: selectedReg || 'Vehicle',
-                  frontUrl,
-                  backUrl,
-                })
-              }
-              style={{
-                marginTop: 12,
-                backgroundColor: '#0284c7',
-                borderRadius: 10,
-                paddingVertical: 10,
-                paddingHorizontal: 12,
-                flexDirection: 'row',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: 6,
-              }}
-            >
-              <Icon name="printer" size={16} color="#ffffff" />
-              <Text style={{ color: '#fff', fontWeight: '800', fontSize: 12 }}>
-                Print 1-Page Merged (Front + Back)
-              </Text>
-            </TouchableOpacity>
-          )
+          const frontRow = byKey.get(pair.frontKey)
+          const backRow = byKey.get(pair.backKey)
+          const frontUrl = String(frontRow?.drive_url || frontRow?.view_url || '').trim()
+          const backUrl = String(backRow?.drive_url || backRow?.view_url || '').trim()
+
+          if (frontUrl && backUrl) {
+            return (
+              <TouchableOpacity
+                onPress={() =>
+                  void printMergedTwoSidedDocument({
+                    docName: pair.name,
+                    regNumber: selectedReg || 'Vehicle',
+                    frontUrl,
+                    backUrl,
+                  })
+                }
+                style={{
+                  marginTop: 12,
+                  backgroundColor: '#0284c7',
+                  borderRadius: 10,
+                  paddingVertical: 11,
+                  paddingHorizontal: 12,
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 8,
+                }}
+              >
+                <Icon name="printer" size={16} color="#ffffff" />
+                <Text style={{ color: '#fff', fontWeight: '800', fontSize: 13 }}>
+                  Print 1-Page Merged (Front + Back)
+                </Text>
+              </TouchableOpacity>
+            )
+          }
+
+          if (frontUrl || backUrl) {
+            const missingSide = frontUrl ? 'Back' : 'Front'
+            return (
+              <View
+                style={{
+                  marginTop: 10,
+                  padding: 8,
+                  backgroundColor: '#F1F5F9',
+                  borderRadius: 8,
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  gap: 6,
+                }}
+              >
+                <Icon name="info" size={14} color="#64748B" />
+                <Text style={{ color: '#475569', fontSize: 11, flex: 1 }}>
+                  Upload {missingSide} side as well to enable 1-Page Merged Print.
+                </Text>
+              </View>
+            )
+          }
+
+          return null
         })()}
       </CustomerCard>
     )

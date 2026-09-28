@@ -9,8 +9,26 @@ export interface TwoSidedDocPrintParams {
   backUrl: string
 }
 
+function normalizeToDirectImageUrl(url: string): string {
+  const trimmed = String(url || '').trim()
+  if (!trimmed) return ''
+  // Google Drive file link: convert to direct thumbnail / viewable image link
+  const fileIdMatch = trimmed.match(/\/file\/d\/([a-zA-Z0-9_-]+)/)
+  if (fileIdMatch?.[1]) {
+    return `https://drive.google.com/thumbnail?id=${fileIdMatch[1]}&sz=w1600`
+  }
+  const idParamMatch = trimmed.match(/[?&]id=([a-zA-Z0-9_-]+)/)
+  if (idParamMatch?.[1] && trimmed.includes('drive.google.com')) {
+    return `https://drive.google.com/thumbnail?id=${idParamMatch[1]}&sz=w1600`
+  }
+  // Supabase storage signed URLs or any standard image URLs: use as-is
+  return trimmed
+}
+
 export function generateTwoSidedDocHtml(params: TwoSidedDocPrintParams): string {
   const { docName, regNumber, frontUrl, backUrl } = params
+  const safeFrontUrl = normalizeToDirectImageUrl(frontUrl)
+  const safeBackUrl = normalizeToDirectImageUrl(backUrl)
   const printedDate = new Date().toLocaleString('en-IN', {
     day: 'numeric',
     month: 'short',
@@ -118,11 +136,11 @@ export function generateTwoSidedDocHtml(params: TwoSidedDocPrintParams): string 
     </div>
     <div class="side-block">
       <div class="side-title">FRONT SIDE</div>
-      <img src="${frontUrl}" class="side-img" />
+      <img src="${safeFrontUrl}" class="side-img" />
     </div>
     <div class="side-block">
       <div class="side-title">BACK SIDE</div>
-      <img src="${backUrl}" class="side-img" />
+      <img src="${safeBackUrl}" class="side-img" />
     </div>
   </div>
 </body>

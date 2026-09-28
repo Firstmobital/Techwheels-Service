@@ -134,6 +134,15 @@ jobs:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
 
 
+      - name: Deploy universal-drive-upload
+        continue-on-error: true
+        run: |
+          supabase functions deploy universal-drive-upload \
+            --project-ref ${{ secrets.SUPABASE_PROJECT_REF || 'jmdndcphkmaljhwgzqxq' }} \
+            --no-verify-jwt
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+
       - name: Deploy customer-portal-upload
         continue-on-error: false
         run: |

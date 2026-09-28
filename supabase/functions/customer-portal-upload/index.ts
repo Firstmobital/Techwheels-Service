@@ -246,25 +246,16 @@ async function signAsset(
   kind: 'document' | 'photo'
 ) {
   const driveUrl = text(row.drive_url)
-  if (driveUrl) {
-    return {
-      kind,
-      id: row.id,
-      doc_key: row.doc_key ?? null,
-      file_name: row.file_name ?? null,
-      content_type: row.content_type ?? null,
-      uploaded_at: row.uploaded_at ?? row.created_at ?? null,
-      uploaded_by: row.uploaded_by ?? null,
-      view_url: driveUrl,
-    }
-  }
-
   const bucket = text(row.storage_bucket) || BUCKET
   const path = text(row.storage_path)
-  if (!path) return null
 
-  const { data: signed, error } = await supabase.storage.from(bucket).createSignedUrl(path, 600)
-  if (error || !signed?.signedUrl) return null
+  let viewUrl: string | null = driveUrl || null
+  if (!viewUrl && path) {
+    const { data: signed } = await supabase.storage.from(bucket).createSignedUrl(path, 3600)
+    if (signed?.signedUrl) {
+      viewUrl = signed.signedUrl
+    }
+  }
 
   return {
     kind,
@@ -274,7 +265,9 @@ async function signAsset(
     content_type: row.content_type ?? null,
     uploaded_at: row.uploaded_at ?? row.created_at ?? null,
     uploaded_by: row.uploaded_by ?? null,
-    view_url: signed.signedUrl,
+    drive_url: driveUrl || null,
+    view_url: viewUrl,
+    drive_pending: !driveUrl,
   }
 }
 
@@ -419,13 +412,15 @@ Deno.serve(async (req) => {
 
       if (!drive.ok) {
         try {
-          await setRepairCardDocFlag(supabase, ctx.repairCardId, docKey, false)
+          await markDocAwaitingAdvisor(supabase, ctx.repairCardId, docKey)
         } catch (flagError) {
           return json(500, { ok: false, error: flagError instanceof Error ? flagError.message : 'Failed to update repair card' })
         }
+        const { data: signed } = await supabase.storage.from(BUCKET).createSignedUrl(storagePath, 3600)
         return json(200, {
-          ok: false,
+          ok: true,
           drive_pending: true,
+          view_url: signed?.signedUrl || null,
           resource_id: upserted.id,
           doc_key: docKey,
           error: drive.error,
@@ -441,6 +436,7 @@ Deno.serve(async (req) => {
       return json(200, {
         ok: true,
         drive_url: drive.drive_url,
+        view_url: drive.drive_url,
         resource_id: upserted.id,
         doc_key: docKey,
       })
@@ -472,7 +468,7 @@ Deno.serve(async (req) => {
     const docKey = text(body.doc_key)
     let query = supabase
       .from('bodyshop_repair_card_documents')
-      .select('id, doc_key, storage_path, file_size_bytes')
+      .select('id, doc_key, storage_bucket, storage_path, file_size_bytes')
       .eq('repair_card_id', ctx.repairCardId)
 
     if (Number.isFinite(resourceId) && resourceId > 0) {
@@ -496,15 +492,14 @@ Deno.serve(async (req) => {
       fileSizeBytes: Number(row.file_size_bytes || 0),
     })
 
+    const bucket = text(row.storage_bucket) || BUCKET
+    const { data: signed } = await supabase.storage.from(bucket).createSignedUrl(text(row.storage_path), 3600)
+
     if (!drive.ok) {
-      try {
-        await setRepairCardDocFlag(supabase, ctx.repairCardId, text(row.doc_key), false)
-      } catch (flagError) {
-        return json(500, { ok: false, error: flagError instanceof Error ? flagError.message : 'Failed to update repair card' })
-      }
       return json(200, {
         ok: false,
         drive_pending: true,
+        view_url: signed?.signedUrl || null,
         resource_id: row.id,
         doc_key: row.doc_key,
         error: drive.error,
@@ -520,6 +515,7 @@ Deno.serve(async (req) => {
     return json(200, {
       ok: true,
       drive_url: drive.drive_url,
+      view_url: drive.drive_url,
       resource_id: row.id,
       doc_key: row.doc_key,
     })
@@ -542,7 +538,9 @@ Deno.serve(async (req) => {
     if (documentsError) return json(500, { ok: false, error: documentsError.message })
     if (photosError) return json(500, { ok: false, error: photosError.message })
 
-    const docAssets = (documents || []).map((row) => presentDocument(row as Record<string, unknown>))
+    const docAssets = (
+      await Promise.all((documents || []).map((row) => signAsset(supabase, row as Record<string, unknown>, 'document')))
+    ).filter(Boolean)
 
     const photoAssets = (
       await Promise.all((photos || []).map((row) => signAsset(supabase, row as Record<string, unknown>, 'photo')))
