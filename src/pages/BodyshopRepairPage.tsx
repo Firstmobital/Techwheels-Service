@@ -2988,7 +2988,7 @@ export default function BodyshopRepairPage() {
 
     try {
       const dealerCtx = await getDealerContext()
-      const dealerCode = dealerCtx.data?.dealerCode?.trim() || 'unknown'
+      const dealerCode = String(selected.dealer_code || dealerCtx.data?.dealerCode?.trim() || 'TATA_DEFAULT').trim()
       const regNo = String(selected.reg_number ?? selectedReception?.reg_number ?? '').trim().toUpperCase()
       const folder = `${dealerCode}/service-advisor-bodyshop-docs/${selected.id}/${docKey}`
       const safeName = sanitizeFileNamePart(file.name || `${docKey}.bin`)

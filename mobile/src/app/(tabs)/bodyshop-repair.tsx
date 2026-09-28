@@ -1,4 +1,4 @@
-﻿/**
+/**
  * mobile/src/app/(tabs)/bodyshop-repair.tsx
  * Replaces the stale file entirely.
  * Ground truth: src/pages/BodyshopRepairPage.tsx (web) + src/lib/api/bodyshopRepair.ts
@@ -40,14 +40,18 @@ interface RepairCard {
   insurance_valid_date: string | null
   doc_claim_form: boolean
   doc_rc: boolean
+  doc_rc_back?: boolean
   doc_insurance: boolean
   doc_dl: boolean
+  doc_dl_back?: boolean
   doc_aadhaar: boolean
+  doc_aadhaar_back?: boolean
   doc_pan: boolean
   doc_kyc: boolean
   doc_gst: boolean
   doc_company_pan: boolean
   doc_bank_detail: boolean
+  doc_tp_affidavit?: boolean
   doc_survey_approval: boolean | null
   survey_date: string | null
   survey_status: string | null
@@ -138,15 +142,19 @@ function labelForRiDoneBy(raw: string | null | undefined): string {
 type DocDef = { key: keyof RepairCard; label: string; mandatoryFor: CustomerType[] }
 const DOC_DEFS: DocDef[] = [
   { key: 'doc_claim_form',  label: 'Claim Form',   mandatoryFor: ['individual', 'firm'] },
-  { key: 'doc_rc',          label: 'RC',           mandatoryFor: ['individual', 'firm'] },
+  { key: 'doc_rc',          label: 'RC (Front)',   mandatoryFor: ['individual', 'firm'] },
+  { key: 'doc_rc_back',     label: 'RC (Back)',    mandatoryFor: ['individual', 'firm'] },
   { key: 'doc_insurance',   label: 'Insurance',    mandatoryFor: ['individual', 'firm'] },
-  { key: 'doc_dl',          label: 'DL',           mandatoryFor: ['individual', 'firm'] },
-  { key: 'doc_aadhaar',     label: 'Aadhaar',      mandatoryFor: ['individual', 'firm'] },
+  { key: 'doc_dl',          label: 'DL (Front)',   mandatoryFor: ['individual', 'firm'] },
+  { key: 'doc_dl_back',     label: 'DL (Back)',    mandatoryFor: ['individual', 'firm'] },
+  { key: 'doc_aadhaar',     label: 'Aadhaar (Front)', mandatoryFor: ['individual', 'firm'] },
+  { key: 'doc_aadhaar_back',label: 'Aadhaar (Back)',  mandatoryFor: ['individual', 'firm'] },
   { key: 'doc_pan',         label: 'PAN',          mandatoryFor: ['individual', 'firm'] },
-  { key: 'doc_kyc',         label: 'KYC',          mandatoryFor: ['individual'] },
+  { key: 'doc_kyc',         label: 'KYC',          mandatoryFor: [] },
   { key: 'doc_gst',         label: 'GST',          mandatoryFor: ['firm'] },
   { key: 'doc_company_pan', label: 'Company PAN',  mandatoryFor: ['firm'] },
   { key: 'doc_bank_detail', label: 'Bank Detail',  mandatoryFor: [] },
+  { key: 'doc_tp_affidavit', label: 'T/P Affidavit', mandatoryFor: [] },
   { key: 'doc_survey_approval', label: 'Survey Approval', mandatoryFor: [] },
 ]
 
