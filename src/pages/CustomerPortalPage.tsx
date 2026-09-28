@@ -1,5 +1,4 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
-import { App as CapApp } from '@capacitor/app'
 
 interface SpeechRecognition {
   continuous: boolean
@@ -150,40 +149,6 @@ export default function CustomerPortalPage({
 
   // ── BACK BUTTON HANDLING: Go to Overview (Home) tab if inside any sub-window ──
   useEffect(() => {
-    let listenerHandle: { remove: () => void } | null = null
-
-    // 1. Native Android Hardware/Gesture Back Button Listener via Capacitor
-    try {
-      CapApp.addListener('backButton', () => {
-        if (selectedStageModal !== null) {
-          setSelectedStageModal(null)
-        } else if (showMenuDrawer) {
-          setShowMenuDrawer(false)
-        } else if (showPendingApprovalModal) {
-          setShowPendingApprovalModal(false)
-        } else if (showGatepassModal) {
-          setShowGatepassModal(false)
-        } else if (showPaymentModal) {
-          setShowPaymentModal(false)
-        } else if (showHistoryModal) {
-          setShowHistoryModal(false)
-        } else if (showVehiclePicker) {
-          setShowVehiclePicker(false)
-        } else if (activeTabRef.current !== 'dashboard') {
-          setActiveTab('dashboard')
-        } else {
-          CapApp.exitApp()
-        }
-      }).then((handle) => {
-        listenerHandle = handle
-      }).catch((err) => {
-        console.warn('Capacitor backButton setup error:', err)
-      })
-    } catch (e) {
-      console.warn('CapApp listener error:', e)
-    }
-
-    // 2. Browser History fallback
     const handlePopState = (e: PopStateEvent) => {
       if (selectedStageModal !== null) {
         setSelectedStageModal(null)
@@ -204,9 +169,6 @@ export default function CustomerPortalPage({
     window.addEventListener('popstate', handlePopState)
 
     return () => {
-      if (listenerHandle && typeof listenerHandle.remove === 'function') {
-        listenerHandle.remove()
-      }
       window.removeEventListener('popstate', handlePopState)
     }
   }, [selectedStageModal, showPendingApprovalModal, showGatepassModal, showPaymentModal, showHistoryModal, showMenuDrawer, showVehiclePicker])

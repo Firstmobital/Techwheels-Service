@@ -113,7 +113,7 @@ Legend: `[ ]` pending · `[x]` done · `N/A` skipped with note
 - [ ] **5.2** Customer mode never requests background location
 - [ ] **5.3** EAS OTA (and native build if required)
 - [ ] **5.4** Device smoke: both audiences on one install
-- [ ] **5.5** Mark `bodyshop/` do-not-ship; do not submit `com.techwheels.bodyshop`
+- [x] **5.5** `bodyshop/` removed from repository 2026-09-28; `com.techwheels.bodyshop` never submitted to any store
 - [ ] **5.6** Confirm no `service_role` in client bundles
 - [ ] **5.7** Update mobile INDEX + IMPLEMENTATION_TRACKER + MOBILE-010 when verified Done
 - [ ] **5.8** Evidence: `../evidence/MOBILE-011_PHASE5_RELEASE.md`

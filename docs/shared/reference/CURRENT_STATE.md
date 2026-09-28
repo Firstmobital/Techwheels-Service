@@ -206,6 +206,39 @@ See `docs/shared/reference/DATABASE_TRUTH.md` for the full, current Database Aut
 - Warranty domain: `warranty_amc_data`, `warranty_claim_settlement_report_data`, `warranty_fsb_data`, `warranty_goodwill_data`, `warranty_part_wc_data`, `warranty_updation_claim_data`, `warranty_wc_data`.
 - WhatsApp domain: `wa_templates`, `wa_messages`, `wa_campaigns`, `wa_campaign_contacts`, `wa_followup_queue`, `wa_followup_steps`, `wa_conversations`, `wa_agent_config`, `auto_service_reminders` (added 2026-06-29 — tracks automated WhatsApp service-reminder sends; `wa_agent_config` gained matching `auto_reminder_*` config columns in the same migration), `post_service_feedback_messages` / `post_service_feedback_cre_queue` (all responded ratings for CRE UI) / `post_service_feedback_cre_unrated` (DBL-0081: successfully sent messages with `rating` null for CRE calling), `post_feedback_bot_data` (bot work items; DBL-0049 routes eligible low-rating open CRE rows from the messages table via `source_feedback_message_id`).
 
+## Removed Native Surfaces (2026-09-28)
+
+The following surfaces were removed from the repository as of commit SHA TBD:
+
+### Root Capacitor Android project (dead — removed)
+
+- `android/` — Capacitor native Android wrapper for the web app. No production release path; never published to Play Store under this path.
+- `capacitor.config.json` — Capacitor config (`com.techwheels.service`, `webDir: dist`).
+- `eas.json` (root) — EAS build stub for the root Capacitor project (not `mobile/eas.json`).
+- `app.json` (root) — Expo/EAS stub for the root Capacitor project (`tw.techwheels.mobile`; not the production app ID).
+- Root `package.json` scripts removed: `cap:sync`, `cap:open`.
+- Root `package.json` dependencies removed: `@capacitor/android`, `@capacitor/app`, `@capacitor/cli`, `@capacitor/core`.
+- `src/pages/CustomerPortalPage.tsx` — removed the dead `@capacitor/app` back-button listener that was only active inside the removed Capacitor WebView; browser `popstate` fallback retained.
+
+### Standalone Bodyshop Capacitor app (prototype — removed)
+
+- `bodyshop/` — standalone Vite + React DOM + Capacitor 8 app (`com.techwheels.bodyshop`). Android-only prototype; never published to any store. Customer UX is being ported to `mobile/` via MOBILE-011.
+- Root `package.json` scripts removed: `bodyshop:dev`, `bodyshop:build`.
+
+### Bodyshop APK CI workflow (removed)
+
+- `.github/workflows/build-bodyshop-apk.yml` — automatic debug APK build on every push to main; deleted.
+
+### Mobile CI workflow (updated)
+
+- `.github/workflows/mobile-customer-ci-ota.yml` — renamed to `mobile-customer-ci.yml`; automatic production OTA job removed. Mobile CI now validates only (TypeScript check + native-dep check). Production OTA and native builds are explicit operator commands via `mobile/package.json`.
+
+### Current supported native app
+
+- `mobile/` — Expo 54 + React Native, `com.techwheels.service`, EAS. Production releases are explicit operator commands; git commits trigger validation only.
+- Release commands: `ota:prod:all`, `ota:prod`, `ota:prod:ios`, `build:prod:android`, `build:prod:apk`, `build:prod:ios`.
+- Web Bodyshop module (`src/` routes `/bodyshop-tracker`, `/bodyshop-floor`, `/bodyshop-repair`) is unaffected and remains active.
+
 ## Change Control Notes
 
 - This file is the current-state snapshot authority for runtime surface and DB object baseline.
