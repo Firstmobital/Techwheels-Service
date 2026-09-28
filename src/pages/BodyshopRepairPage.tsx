@@ -3296,30 +3296,81 @@ export default function BodyshopRepairPage() {
   <meta charset="utf-8" />
   <title>Merged 1-Page Print · ${pair.name} - ${regNo}</title>
   <style>
+    @page {
+      size: A4 portrait;
+      margin: 8mm 10mm;
+    }
     * { box-sizing: border-box; }
-    body { font-family: ui-sans-serif, system-ui, -apple-system, sans-serif; background: #f8fafc; margin: 20px; color: #0f172a; text-align: center; }
-    .print-actions { display: flex; justify-content: center; align-items: center; gap: 12px; margin-bottom: 20px; flex-wrap: wrap; }
-    .btn { background: #2563eb; color: #fff; border: none; padding: 10px 20px; font-weight: 800; border-radius: 8px; cursor: pointer; font-size: 14px; text-decoration: none; display: inline-flex; align-items: center; gap: 6px; }
+    body { font-family: ui-sans-serif, system-ui, -apple-system, sans-serif; background: #f8fafc; margin: 16px; color: #0f172a; text-align: center; }
+    .print-actions { display: flex; justify-content: center; align-items: center; gap: 10px; margin-bottom: 14px; flex-wrap: wrap; }
+    .btn { background: #2563eb; color: #fff; border: none; padding: 9px 18px; font-weight: 800; border-radius: 8px; cursor: pointer; font-size: 13px; text-decoration: none; display: inline-flex; align-items: center; gap: 6px; }
     .btn:hover { background: #1d4ed8; }
     .btn-secondary { background: #475569; }
     .btn-secondary:hover { background: #334155; }
     .btn-close { background: #64748b; }
-    .btn-sm { font-size: 12px; padding: 6px 12px; }
-    .page-box { max-width: 780px; margin: 0 auto; border: 1.5px solid #cbd5e1; padding: 24px; border-radius: 12px; background: #fff; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); }
-    .doc-header { font-size: 19px; font-weight: 900; color: #1e293b; margin-bottom: 20px; padding-bottom: 12px; border-bottom: 2px solid #e2e8f0; text-transform: uppercase; letter-spacing: 0.5px; }
-    .side-block { margin-bottom: 28px; text-align: center; }
-    .side-title { font-size: 13px; font-weight: 800; color: #475569; margin-bottom: 10px; text-transform: uppercase; letter-spacing: 1px; }
-    .img-container { min-height: 120px; display: flex; align-items: center; justify-content: center; }
-    .side-img { max-width: 100%; max-height: 420px; object-fit: contain; border: 1px solid #94a3b8; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.06); }
-    .side-frame { width: 100%; height: 440px; border: 1px solid #94a3b8; border-radius: 8px; }
-    .side-meta { margin-top: 8px; font-size: 12px; }
+    .btn-sm { font-size: 11px; padding: 5px 10px; }
+    .page-box { max-width: 680px; margin: 0 auto; border: 1.5px solid #cbd5e1; padding: 16px 20px; border-radius: 12px; background: #fff; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); }
+    .doc-header { font-size: 17px; font-weight: 900; color: #1e293b; margin-bottom: 12px; padding-bottom: 8px; border-bottom: 2px solid #e2e8f0; text-transform: uppercase; letter-spacing: 0.5px; }
+    .side-block { margin-bottom: 10px; text-align: center; }
+    .side-title { font-size: 11px; font-weight: 800; color: #475569; margin-bottom: 4px; text-transform: uppercase; letter-spacing: 0.5px; }
+    .img-container { min-height: 80px; display: flex; align-items: center; justify-content: center; }
+    .side-img { max-width: 100%; max-height: 290px; object-fit: contain; border: 1px solid #94a3b8; border-radius: 6px; box-shadow: 0 2px 4px rgba(0,0,0,0.06); }
+    .side-frame { width: 100%; height: 290px; border: 1px solid #94a3b8; border-radius: 6px; }
+    .side-meta { margin-top: 4px; font-size: 11px; }
     .drive-link { color: #2563eb; text-decoration: underline; font-weight: 600; }
-    .img-fallback { padding: 16px; background: #fef2f2; border: 1.5px dashed #f87171; border-radius: 8px; color: #991b1b; font-size: 13px; }
+    .img-fallback { padding: 12px; background: #fef2f2; border: 1.5px dashed #f87171; border-radius: 8px; color: #991b1b; font-size: 12px; }
     @media print {
+      @page {
+        size: A4 portrait;
+        margin: 6mm 8mm;
+      }
+      html, body {
+        height: 100% !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        background: #fff !important;
+        overflow: hidden !important;
+      }
       .print-actions, .side-meta { display: none !important; }
-      body { margin: 0; padding: 0; background: #fff; }
-      .page-box { border: none; padding: 0; max-width: 100%; box-shadow: none; }
-      .side-img { max-height: 460px; }
+      .page-box {
+        border: none !important;
+        padding: 0 !important;
+        max-width: 100% !important;
+        box-shadow: none !important;
+        page-break-inside: avoid !important;
+        break-inside: avoid !important;
+      }
+      .doc-header {
+        font-size: 15px !important;
+        margin-bottom: 6px !important;
+        padding-bottom: 4px !important;
+        border-bottom: 1.5px solid #cbd5e1 !important;
+      }
+      .side-block {
+        margin-bottom: 6px !important;
+        page-break-inside: avoid !important;
+        break-inside: avoid !important;
+      }
+      .side-title {
+        font-size: 10px !important;
+        margin-bottom: 3px !important;
+        font-weight: 800 !important;
+      }
+      .img-container {
+        min-height: auto !important;
+      }
+      .side-img {
+        max-height: 290px !important;
+        max-width: 96% !important;
+        object-fit: contain !important;
+        page-break-inside: avoid !important;
+        break-inside: avoid !important;
+      }
+      .side-frame {
+        height: 290px !important;
+        page-break-inside: avoid !important;
+        break-inside: avoid !important;
+      }
     }
   </style>
 </head>

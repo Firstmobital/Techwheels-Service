@@ -44,12 +44,16 @@ export function generateTwoSidedDocHtml(params: TwoSidedDocPrintParams): string 
   <meta charset="utf-8" />
   <title>Merged 1-Page Print · ${docName} - ${regNumber}</title>
   <style>
+    @page {
+      size: A4 portrait;
+      margin: 8mm 10mm;
+    }
     * { box-sizing: border-box; }
     body {
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
       background: #f8fafc;
       margin: 0;
-      padding: 16px;
+      padding: 12px;
       color: #0f172a;
       text-align: center;
     }
@@ -57,13 +61,13 @@ export function generateTwoSidedDocHtml(params: TwoSidedDocPrintParams): string 
       display: flex;
       justify-content: center;
       gap: 12px;
-      margin-bottom: 16px;
+      margin-bottom: 12px;
     }
     .btn {
       background: #2563eb;
       color: #ffffff;
       border: none;
-      padding: 10px 18px;
+      padding: 9px 16px;
       font-weight: 800;
       border-radius: 8px;
       cursor: pointer;
@@ -73,54 +77,90 @@ export function generateTwoSidedDocHtml(params: TwoSidedDocPrintParams): string 
       background: #64748b;
     }
     .page-box {
-      max-width: 720px;
+      max-width: 680px;
       margin: 0 auto;
       border: 1.5px solid #cbd5e1;
-      padding: 20px;
+      padding: 14px 18px;
       border-radius: 12px;
       background: #ffffff;
       box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);
     }
     .doc-header {
-      font-size: 17px;
+      font-size: 16px;
       font-weight: 900;
       color: #1e293b;
-      margin-bottom: 16px;
-      padding-bottom: 8px;
+      margin-bottom: 10px;
+      padding-bottom: 6px;
       border-bottom: 2px solid #e2e8f0;
       text-transform: uppercase;
       letter-spacing: 0.5px;
     }
     .doc-sub {
-      font-size: 11px;
+      font-size: 10px;
       color: #64748b;
       margin-top: 2px;
     }
     .side-block {
-      margin-bottom: 20px;
+      margin-bottom: 10px;
       text-align: center;
     }
     .side-title {
-      font-size: 12px;
+      font-size: 11px;
       font-weight: 800;
       color: #475569;
-      margin-bottom: 6px;
+      margin-bottom: 4px;
       text-transform: uppercase;
-      letter-spacing: 1px;
+      letter-spacing: 0.5px;
     }
     .side-img {
       max-width: 100%;
-      max-height: 380px;
+      max-height: 290px;
       object-fit: contain;
       border: 1px solid #94a3b8;
-      border-radius: 8px;
+      border-radius: 6px;
       box-shadow: 0 2px 4px rgba(0,0,0,0.06);
     }
     @media print {
+      @page {
+        size: A4 portrait;
+        margin: 6mm 8mm;
+      }
+      html, body {
+        height: 100% !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        background: #fff !important;
+        overflow: hidden !important;
+      }
       .print-actions { display: none !important; }
-      body { margin: 0; padding: 0; background: #fff; }
-      .page-box { border: none; padding: 0; max-width: 100%; box-shadow: none; }
-      .side-img { max-height: 420px; }
+      .page-box {
+        border: none !important;
+        padding: 0 !important;
+        max-width: 100% !important;
+        box-shadow: none !important;
+        page-break-inside: avoid !important;
+        break-inside: avoid !important;
+      }
+      .doc-header {
+        font-size: 15px !important;
+        margin-bottom: 6px !important;
+        padding-bottom: 4px !important;
+      }
+      .side-block {
+        margin-bottom: 6px !important;
+        page-break-inside: avoid !important;
+        break-inside: avoid !important;
+      }
+      .side-title {
+        font-size: 10px !important;
+        margin-bottom: 3px !important;
+      }
+      .side-img {
+        max-height: 290px !important;
+        max-width: 96% !important;
+        page-break-inside: avoid !important;
+        break-inside: avoid !important;
+      }
     }
   </style>
 </head>
