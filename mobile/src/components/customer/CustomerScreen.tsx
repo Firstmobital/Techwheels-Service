@@ -23,6 +23,7 @@ import { ClaimFormWidget } from '../ClaimFormWidget'
 import { matchInsuranceProviderId } from '../../config/insuranceProviders'
 import { customerGetRepairCard } from '../../lib/api/customerPortal'
 import { downloadTpAffidavitForm } from '../../lib/customer/downloadInsuranceClaimForm'
+import { isMechanicalServiceType } from '../../lib/customer/mechanicalServiceType'
 import {
   CustomerScreenRefreshContext,
   type CustomerScreenRefreshFn,
@@ -88,7 +89,7 @@ export function CustomerScreen({
   }
 
   const selectedVehicle = vehicles.find((v) => v.reg_number === selectedReg) || vehicles[0]
-  const { isMechanical, isBodyshop, ready: visitReady } = useCustomerVisit()
+  const { isMechanical, isBodyshop, ready: visitReady, job } = useCustomerVisit()
 
   // Determine if this screen is the root customer home screen
   const isHomeScreen =
@@ -174,7 +175,13 @@ export function CustomerScreen({
     void downloadTpAffidavitForm()
   }
 
-  const isAccident = visitReady ? isBodyshop : String(selectedVehicle?.service_type || '').toLowerCase().includes('accident')
+  const activeServiceType = String(job?.service_type || selectedVehicle?.service_type || '')
+  const isEffectiveMechanical =
+    isMechanical ||
+    isMechanicalServiceType(activeServiceType)
+  const isAccident = visitReady
+    ? isBodyshop
+    : !isEffectiveMechanical && activeServiceType.toLowerCase().includes('accident')
 
   type CustomerMenuItem = {
     label: string
@@ -195,10 +202,12 @@ export function CustomerScreen({
           : 'Real-time job card stage & technician bay',
       },
       {
-        label: 'Upload Claim Documents',
-        icon: 'cloud-upload',
+        label: isEffectiveMechanical ? 'Workshop Documents & Paperwork' : 'Upload Claim Documents',
+        icon: isEffectiveMechanical ? 'file-text' : 'cloud-upload',
         route: '/(customer)/documents',
-        desc: 'Upload DL, RC, policy, signed claim form & T/P affidavit',
+        desc: isEffectiveMechanical
+          ? 'View digital estimate and tax invoice from your advisor'
+          : 'Upload DL, RC, policy, signed claim form & T/P affidavit',
       },
       {
         label: 'Workshop Estimate Approval',
@@ -225,15 +234,13 @@ export function CustomerScreen({
       { label: 'Report Issue', icon: 'alert-circle', route: '/(customer)/complaint', desc: 'Log service issues or concerns' },
       { label: 'Dealership Feedback', icon: 'star', route: '/(customer)/feedback', desc: 'Rate your service experience' },
     ]
-    if (!visitReady || !isMechanical) return all
+    if (!isEffectiveMechanical) return all
     return all.filter(
       (item) =>
-        item.label !== 'Upload Claim Documents' &&
-        item.label !== 'Workshop Estimate Approval' &&
         item.label !== 'Download Insurance Claim Form' &&
         item.label !== 'Download T/P Affidavit'
     )
-  }, [isAccident, isMechanical, visitReady])
+  }, [isAccident, isEffectiveMechanical])
 
   const [hasSeenNotifications, setHasSeenNotifications] = useState(false)
 

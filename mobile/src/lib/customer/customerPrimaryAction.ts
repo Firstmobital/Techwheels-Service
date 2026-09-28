@@ -59,8 +59,10 @@ export function resolveCustomerPrimaryAction(input: {
   customerSettlementDue?: boolean
   /** Home uses Needs You card for documents; journey screen sets true. */
   includeDocumentAction?: boolean
+  isMechanical?: boolean
 }): CustomerPrimaryAction | null {
   if (
+    !input.isMechanical &&
     input.includeDocumentAction !== false &&
     input.claimMode === 'insurance' &&
     input.missingMandatoryDocs > 0

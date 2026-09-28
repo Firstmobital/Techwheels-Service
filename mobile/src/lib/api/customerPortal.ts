@@ -446,7 +446,9 @@ export async function customerSetEstimateDecision(
   estimateId: string,
   decision: 'approve' | 'reject',
   reason?: string,
-  regNumber?: string | null
+  regNumber?: string | null,
+  updatedItems?: unknown[],
+  updatedTotals?: { subtotal?: number | null; gst_tax?: number | null; grand_total?: number | null }
 ) {
   const isApproved = decision === 'approve'
   const finalStatus = isApproved ? 'Approved' : 'Rejected'
@@ -479,6 +481,19 @@ export async function customerSetEstimateDecision(
     }
     if (isApproved) {
       updatePayload.approved_at = nowIso
+    }
+    if (updatedItems !== undefined) {
+      updatePayload.items = updatedItems
+    }
+    if (updatedTotals?.subtotal !== undefined) {
+      updatePayload.subtotal = updatedTotals.subtotal
+    }
+    if (updatedTotals?.gst_tax !== undefined) {
+      updatePayload.gst_tax = updatedTotals.gst_tax
+    }
+    if (updatedTotals?.grand_total !== undefined) {
+      updatePayload.grand_total = updatedTotals.grand_total
+      updatePayload.final_amount = updatedTotals.grand_total
     }
 
     const { error: estErr } = await supabase
@@ -514,6 +529,10 @@ export async function customerSetEstimateDecision(
               if (finalReason) parsed.rejection_reason = finalReason
               if (isApproved) parsed.approved_at = nowIso
               parsed.updated_at = nowIso
+              if (updatedItems !== undefined) parsed.items = updatedItems
+              if (updatedTotals?.subtotal !== undefined) parsed.subtotal = updatedTotals.subtotal
+              if (updatedTotals?.gst_tax !== undefined) parsed.gst_tax = updatedTotals.gst_tax
+              if (updatedTotals?.grand_total !== undefined) parsed.grand_total = updatedTotals.grand_total
 
               await supabase
                 .from('post_feedback_bot_data')

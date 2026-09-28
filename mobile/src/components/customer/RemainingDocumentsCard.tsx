@@ -7,18 +7,29 @@ import {
   loadClaimDocumentProgress,
   type ClaimDocumentProgress,
 } from '../../lib/customer/claimDocumentProgress'
+import { useCustomerVisit } from '../../context/CustomerVisitContext'
+import { isMechanicalServiceType } from '../../lib/customer/mechanicalServiceType'
 import { Icon } from '../ui/Icon'
 import { useCustomerScreenRefresh } from './customerScreenRefresh'
 
 export function RemainingDocumentsCard({ regNumber }: { regNumber?: string | null }) {
   const router = useRouter()
-  const { token } = useCustomerSession()
+  const { token, vehicles, selectedReg } = useCustomerSession()
+  const selected = vehicles.find((v) => v.reg_number === (regNumber || selectedReg)) || vehicles[0]
+  const { isMechanical } = useCustomerVisit()
+  const isEffectiveMechanical =
+    isMechanical ||
+    isMechanicalServiceType(String(selected?.service_type || ''))
   const [progress, setProgress] = useState<ClaimDocumentProgress | null>(null)
 
   const refresh = useCallback(async () => {
+    if (isEffectiveMechanical) {
+      setProgress(null)
+      return
+    }
     const p = await loadClaimDocumentProgress(regNumber, token)
     setProgress(p)
-  }, [regNumber, token])
+  }, [regNumber, token, isEffectiveMechanical])
 
   useFocusEffect(
     useCallback(() => {
@@ -28,7 +39,7 @@ export function RemainingDocumentsCard({ regNumber }: { regNumber?: string | nul
 
   useCustomerScreenRefresh(refresh)
 
-  if (!progress || progress.claimMode === 'cash' || progress.remainingCount === 0) {
+  if (isEffectiveMechanical || !progress || progress.claimMode === 'cash' || progress.remainingCount === 0) {
     return null
   }
 

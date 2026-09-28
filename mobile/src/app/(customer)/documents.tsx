@@ -27,7 +27,10 @@ import {
 } from '../../lib/api/customerBodyshopUploads'
 import { fetchCustomerDocuments } from '../../lib/customer/customerDocumentsCache'
 import { useCustomerVisit } from '../../context/CustomerVisitContext'
+import { customerListEstimates } from '../../lib/api/customerPortal'
+import { parseEstimate, type EstimateView } from '../../lib/customer/math'
 import { MechanicalDocumentsContent } from '../../components/customer/MechanicalDocumentsContent'
+import { isMechanicalServiceType } from '../../lib/customer/mechanicalServiceType'
 import {
   claimModeFromRepairCard,
   listClaimDocumentsForUpload,
@@ -42,16 +45,27 @@ function isImageName(name?: string | null, contentType?: string | null) {
 }
 
 export default function CustomerDocumentsScreen() {
-  const { token, selectedReg } = useCustomerSession()
+  const { token, selectedReg, vehicles } = useCustomerSession()
   const [repairCard, setRepairCard] = useState<Record<string, unknown> | null>(null)
   const [documents, setDocuments] = useState<CustomerBodyshopAsset[]>([])
+  const [estimates, setEstimates] = useState<EstimateView[]>([])
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
   const initialFocusDone = useRef(false)
   const [busyKey, setBusyKey] = useState<string | null>(null)
   const [previewUri, setPreviewUri] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
-  const { isMechanical, mechCase, ready: visitReady, refresh: refreshVisit } = useCustomerVisit()
+  const { isMechanical, mechCase, ready: visitReady, refresh: refreshVisit, job } = useCustomerVisit()
+
+  const selected = useMemo(() => {
+    const norm = (selectedReg || '').trim().toUpperCase()
+    return vehicles.find(
+      (v) => (v.reg_no || v.registration_number || v.reg_number || '').trim().toUpperCase() === norm
+    ) || vehicles[0] || null
+  }, [vehicles, selectedReg])
+
+  const activeServiceType = String(job?.service_type || selected?.service_type || '')
+  const isEffectiveMechanical = isMechanical || isMechanicalServiceType(activeServiceType)
 
   const claimMode = claimModeFromRepairCard(repairCard)
   const ownershipType = ownershipFromRepairCard(repairCard)
@@ -92,6 +106,7 @@ export default function CustomerDocumentsScreen() {
       if (!token || !selectedReg) {
         setRepairCard(null)
         setDocuments([])
+        setEstimates([])
         setLoading(false)
         setRefreshing(false)
         return
@@ -104,8 +119,13 @@ export default function CustomerDocumentsScreen() {
       }
 
       try {
-        await refreshVisit()
-        if (isMechanical) {
+        const [activeKind, estList] = await Promise.all([
+          refreshVisit(),
+          customerListEstimates(token, selectedReg).catch(() => [] as Record<string, unknown>[]),
+        ])
+        setEstimates((estList || []).map(parseEstimate))
+        const currentServiceType = String(job?.service_type || selected?.service_type || '')
+        if (activeKind === 'mechanical' || isMechanical || isMechanicalServiceType(currentServiceType)) {
           setRepairCard(null)
           setDocuments([])
         } else {
@@ -120,7 +140,7 @@ export default function CustomerDocumentsScreen() {
         setRefreshing(false)
       }
     },
-    [token, selectedReg, applySnapshot, isMechanical, refreshVisit]
+    [token, selectedReg, applySnapshot, isMechanical, refreshVisit, job, selected]
   )
 
   useEffect(() => {
@@ -169,10 +189,10 @@ export default function CustomerDocumentsScreen() {
         fileName = res.assets[0].fileName || `${slot.docKey}.jpg`
         contentType = res.assets[0].mimeType || 'image/jpeg'
       } else {
-      const res = await DocumentPicker.getDocumentAsync({
-        type: ['application/pdf', 'image/*'],
-        copyToCacheDirectory: true,
-      })
+        const res = await DocumentPicker.getDocumentAsync({
+          type: ['application/pdf', 'image/*'],
+          copyToCacheDirectory: true,
+        })
         if (res.canceled || !res.assets?.[0]?.uri) return
         uri = res.assets[0].uri
         fileName = res.assets[0].name || `${slot.docKey}.pdf`
@@ -241,7 +261,7 @@ export default function CustomerDocumentsScreen() {
       >
         <Text style={{ color: '#fff', fontWeight: '800', fontSize: 12 }}>Photo</Text>
       </TouchableOpacity>
-          <TouchableOpacity
+      <TouchableOpacity
         onPress={() => void uploadSlot(slot, 'gallery')}
         disabled={busyKey === slot.docKey}
         style={{ flex: 1, backgroundColor: '#fff', borderRadius: 12, paddingVertical: 12, alignItems: 'center', borderWidth: 1.5, borderColor: CustomerTheme.border }}
@@ -335,18 +355,18 @@ export default function CustomerDocumentsScreen() {
     )
   }
 
-  if (visitReady && isMechanical) {
+  if (isEffectiveMechanical) {
     return (
       <CustomerScreen
         title="Documents"
         subtitle={`Workshop paperwork · ${selectedReg || 'your vehicle'}`}
       >
-        {loading || !visitReady ? (
+        {loading && !visitReady ? (
           <View style={{ paddingVertical: 24, alignItems: 'center' }}>
             <ActivityIndicator color={CustomerTheme.primary} />
           </View>
         ) : (
-          <MechanicalDocumentsContent mechCase={mechCase} />
+          <MechanicalDocumentsContent mechCase={mechCase} fallbackJob={job || (selected as unknown as Record<string, unknown> | null)} estimates={estimates} />
         )}
       </CustomerScreen>
     )
@@ -364,7 +384,7 @@ export default function CustomerDocumentsScreen() {
       <CustomerCard>
         <Text style={{ color: CustomerTheme.ink, fontWeight: '900', fontSize: 13, marginBottom: 6 }}>
           {claimMode === 'cash' ? 'Cash bodyshop' : 'Insurance claim'}
-                </Text>
+        </Text>
         <Text style={{ color: CustomerTheme.inkMuted, fontSize: 12, lineHeight: 17 }}>
           {ownershipType === 'firm'
             ? 'Firm / company case: RC, insurance, DL, claim form, Aadhaar, PAN, GST, company PAN, and bank details are required (same as workshop SA screen).'
@@ -376,7 +396,7 @@ export default function CustomerDocumentsScreen() {
       {loading ? (
         <View style={{ paddingVertical: 24, alignItems: 'center' }}>
           <ActivityIndicator color={CustomerTheme.primary} />
-              </View>
+        </View>
       ) : null}
 
       {notice ? (
@@ -390,7 +410,7 @@ export default function CustomerDocumentsScreen() {
           <Text style={{ color: '#064E3B', fontWeight: '900', fontSize: 15 }}>No claim documents required</Text>
           <Text style={{ color: '#065F46', fontSize: 12, marginTop: 4, lineHeight: 17 }}>
             This repair is cash. Insurance documents are not collected here.
-              </Text>
+          </Text>
         </CustomerCard>
       ) : null}
 
@@ -398,7 +418,7 @@ export default function CustomerDocumentsScreen() {
         <CustomerCard>
           <Text style={{ color: CustomerTheme.ink, fontWeight: '900', fontSize: 15 }}>
             {submittedCount} of {requiredSlots.length} submitted
-                </Text>
+          </Text>
           <View style={{ height: 8, borderRadius: 999, backgroundColor: '#E2E8F0', marginTop: 10, overflow: 'hidden' }}>
             <View style={{ width: `${progressPercent}%`, height: '100%', backgroundColor: progressPercent === 100 ? CustomerTheme.success : CustomerTheme.primary }} />
           </View>
@@ -429,3 +449,4 @@ export default function CustomerDocumentsScreen() {
     </CustomerScreen>
   )
 }
+

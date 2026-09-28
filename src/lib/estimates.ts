@@ -144,49 +144,49 @@ export async function fetchEstimatesForVehicle(regNumber: string): Promise<Custo
         if (estAmount > 0) {
           const estNo = `EST-${norm.replace(/[^A-Z0-9]/g, '')}-${rec.jc_number ? rec.jc_number.replace(/[^0-9]/g, '') : 'WEB'}`
 
-        const dynamicEst: CustomerEstimateRecord = {
-          estimate_no: estNo,
-          vehicle_registration_number: norm,
-          customer_name: rec.customer_name || 'Customer',
-          customer_phone: rec.mobile_number || null,
-          model: rec.model || 'Tata Motors',
-          fuel: rec.fuel_type || 'Petrol',
-          service_advisor_name: rec.sa_display_name || rec.sa_name || 'Assigned SA',
-          branch: rec.branch || 'Main Workshop',
-          items: [
-            {
-              id: 'item-rec-01',
-              type: 'labour',
-              description: `Inspection & Initial Service Work (${rec.service_type || 'General Service'})`,
-              quantity: 1,
-              unit_price: Math.round(estAmount * 0.4),
-              total: Math.round(estAmount * 0.4),
-            },
-            {
-              id: 'item-rec-02',
-              type: 'part',
-              description: rec.remark ? `Parts for: ${rec.remark}` : 'Standard Consumables & Oil Replacement',
-              quantity: 1,
-              unit_price: Math.round(estAmount * 0.45),
-              total: Math.round(estAmount * 0.45),
-            },
-          ],
-          subtotal: Math.round(estAmount * 0.85),
-          discount: 0,
-          gst_tax: Math.round(estAmount * 0.15),
-          grand_total: estAmount,
-          status: rec.estimate_status === 'Approved' ? 'Approved' : 'Sent',
-          created_at: rec.created_at || new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        }
+          const dynamicEst: CustomerEstimateRecord = {
+            estimate_no: estNo,
+            vehicle_registration_number: norm,
+            customer_name: rec.customer_name || 'Customer',
+            customer_phone: rec.mobile_number || null,
+            model: rec.model || 'Tata Motors',
+            fuel: rec.fuel_type || 'Petrol',
+            service_advisor_name: rec.sa_display_name || rec.sa_name || 'Assigned SA',
+            branch: rec.branch || 'Main Workshop',
+            items: [
+              {
+                id: 'item-rec-01',
+                type: 'labour',
+                description: `Inspection & Initial Service Work (${rec.service_type || 'General Service'})`,
+                quantity: 1,
+                unit_price: Math.round(estAmount * 0.4),
+                total: Math.round(estAmount * 0.4),
+              },
+              {
+                id: 'item-rec-02',
+                type: 'part',
+                description: rec.remark ? `Parts for: ${rec.remark}` : 'Standard Consumables & Oil Replacement',
+                quantity: 1,
+                unit_price: Math.round(estAmount * 0.45),
+                total: Math.round(estAmount * 0.45),
+              },
+            ],
+            subtotal: Math.round(estAmount * 0.85),
+            discount: 0,
+            gst_tax: Math.round(estAmount * 0.15),
+            grand_total: estAmount,
+            status: rec.estimate_status === 'Approved' ? 'Approved' : 'Sent',
+            created_at: rec.created_at || new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          }
 
-        if (!seenEstNos.has(dynamicEst.estimate_no)) {
-          seenEstNos.add(dynamicEst.estimate_no)
-          results.push(dynamicEst)
+          if (!seenEstNos.has(dynamicEst.estimate_no)) {
+            seenEstNos.add(dynamicEst.estimate_no)
+            results.push(dynamicEst)
+          }
         }
       }
-    }
-  } catch (err) {
+    } catch (err) {
       console.warn('Fallback reception query error:', err)
     }
   }
@@ -385,7 +385,9 @@ export async function saveAndSendEstimate(estimate: CustomerEstimateRecord): Pro
 export async function updateEstimateApproval(
   estimateNo: string,
   status: 'Approved' | 'Rejected',
-  rejectionReason?: string
+  rejectionReason?: string,
+  updatedItems?: unknown[],
+  updatedTotals?: { subtotal?: number | null; gst_tax?: number | null; grand_total?: number | null }
 ): Promise<void> {
   const updated_at = new Date().toISOString()
   const approved_at = status === 'Approved' ? updated_at : null
@@ -398,6 +400,10 @@ export async function updateEstimateApproval(
     localList[idx].updated_at = updated_at
     if (rejectionReason) localList[idx].rejection_reason = rejectionReason
     if (approved_at) localList[idx].approved_at = approved_at
+    if (updatedItems !== undefined) (localList[idx] as Record<string, unknown>).items = updatedItems
+    if (updatedTotals?.subtotal !== undefined) localList[idx].subtotal = updatedTotals.subtotal ?? 0
+    if (updatedTotals?.gst_tax !== undefined) localList[idx].gst_tax = updatedTotals.gst_tax ?? 0
+    if (updatedTotals?.grand_total !== undefined) localList[idx].grand_total = updatedTotals.grand_total ?? 0
     saveLocalEstimates(localList)
   }
 
@@ -411,14 +417,23 @@ export async function updateEstimateApproval(
 
   // B. Update customer_estimates table
   try {
+    const updatePayload: Record<string, unknown> = {
+      status,
+      rejection_reason: rejectionReason || null,
+      approved_at,
+      updated_at,
+    }
+    if (updatedItems !== undefined) updatePayload.items = updatedItems
+    if (updatedTotals?.subtotal !== undefined) updatePayload.subtotal = updatedTotals.subtotal
+    if (updatedTotals?.gst_tax !== undefined) updatePayload.gst_tax = updatedTotals.gst_tax
+    if (updatedTotals?.grand_total !== undefined) {
+      updatePayload.grand_total = updatedTotals.grand_total
+      updatePayload.final_amount = updatedTotals.grand_total
+    }
+
     await supabase
       .from('customer_estimates')
-      .update({
-        status,
-        rejection_reason: rejectionReason || null,
-        approved_at,
-        updated_at,
-      })
+      .update(updatePayload)
       .eq('estimate_no', estimateNo)
   } catch (err) {
     console.warn('Failed to update estimate status in customer_estimates:', err)
@@ -440,6 +455,10 @@ export async function updateEstimateApproval(
             if (rejectionReason) parsed.rejection_reason = rejectionReason
             if (approved_at) parsed.approved_at = approved_at
             parsed.updated_at = updated_at
+            if (updatedItems !== undefined) parsed.items = updatedItems
+            if (updatedTotals?.subtotal !== undefined) parsed.subtotal = updatedTotals.subtotal
+            if (updatedTotals?.gst_tax !== undefined) parsed.gst_tax = updatedTotals.gst_tax
+            if (updatedTotals?.grand_total !== undefined) parsed.grand_total = updatedTotals.grand_total
 
             await supabase
               .from('post_feedback_bot_data')

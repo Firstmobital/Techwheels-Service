@@ -867,13 +867,17 @@ type ReceptionVehicleSnapshot = {
 type BodyshopDocKey =
   | 'doc_claim_form'
   | 'doc_rc'
+  | 'doc_rc_back'
   | 'doc_insurance'
   | 'doc_dl'
+  | 'doc_dl_back'
   | 'doc_aadhaar'
+  | 'doc_aadhaar_back'
   | 'doc_pan'
   | 'doc_kyc'
   | 'doc_gst'
   | 'doc_company_pan'
+  | 'doc_company_pan_back'
   | 'doc_bank_detail'
   | 'doc_tp_affidavit'
   | 'doc_estimate'
@@ -942,17 +946,21 @@ async function postUniversalDriveWithRetry(
 }
 
 const BODYSHOP_DOCS: { k: Exclude<BodyshopDocKey, 'doc_estimate' | 'doc_survey_approval'>; label: string; mandatoryFor: CustomerType[] }[] = [
-  { k: 'doc_claim_form', label: 'Claim Form', mandatoryFor: ['individual', 'firm'] },
-  { k: 'doc_rc', label: 'RC', mandatoryFor: ['individual', 'firm'] },
-  { k: 'doc_insurance', label: 'Insurance Copy', mandatoryFor: ['individual', 'firm'] },
-  { k: 'doc_dl', label: 'Driving Licence', mandatoryFor: ['individual', 'firm'] },
-  { k: 'doc_aadhaar', label: 'Aadhaar Card', mandatoryFor: ['individual', 'firm'] },
+  { k: 'doc_claim_form', label: 'Claim Form (PDF)', mandatoryFor: ['individual', 'firm'] },
+  { k: 'doc_rc', label: 'RC (Front)', mandatoryFor: ['individual', 'firm'] },
+  { k: 'doc_rc_back', label: 'RC (Back)', mandatoryFor: ['individual', 'firm'] },
+  { k: 'doc_insurance', label: 'Insurance Copy (PDF)', mandatoryFor: ['individual', 'firm'] },
+  { k: 'doc_dl', label: 'Driving Licence (Front)', mandatoryFor: ['individual', 'firm'] },
+  { k: 'doc_dl_back', label: 'Driving Licence (Back)', mandatoryFor: ['individual', 'firm'] },
+  { k: 'doc_aadhaar', label: 'Aadhaar Card (Front)', mandatoryFor: ['individual', 'firm'] },
+  { k: 'doc_aadhaar_back', label: 'Aadhaar Card (Back)', mandatoryFor: ['individual', 'firm'] },
   { k: 'doc_pan', label: 'PAN Card', mandatoryFor: ['individual', 'firm'] },
-  { k: 'doc_kyc', label: 'KYC', mandatoryFor: [] },
-  { k: 'doc_gst', label: 'GST', mandatoryFor: ['firm'] },
-  { k: 'doc_company_pan', label: 'Company PAN Card', mandatoryFor: ['firm'] },
-  { k: 'doc_bank_detail', label: 'Bank Detail', mandatoryFor: ['firm'] },
-  { k: 'doc_tp_affidavit', label: 'T/P Affidavit', mandatoryFor: [] },
+  { k: 'doc_kyc', label: 'KYC (PDF)', mandatoryFor: [] },
+  { k: 'doc_gst', label: 'GST (PDF)', mandatoryFor: ['firm'] },
+  { k: 'doc_company_pan', label: 'Company PAN Card (Front)', mandatoryFor: ['firm'] },
+  { k: 'doc_company_pan_back', label: 'Company PAN Card (Back)', mandatoryFor: ['firm'] },
+  { k: 'doc_bank_detail', label: 'Bank Detail (PDF)', mandatoryFor: ['firm'] },
+  { k: 'doc_tp_affidavit', label: 'T/P Affidavit (PDF)', mandatoryFor: [] },
 ]
 
 const isLegacyBooleanDocKey = (docKey: BodyshopDocKey): docKey is Exclude<BodyshopDocKey, 'doc_estimate' | 'doc_survey_approval'> => (
@@ -1401,7 +1409,7 @@ export default function BodyshopRepairPage() {
     if (!selected?.id || selected.current_stage !== 5 || autoAdvanceDocsLockRef.current) return
 
     const ct = String(selected.customer_type ?? '').trim().toLowerCase()
-    const noDocsRequired = ct === 'cash' || ct === 'foc'
+    const noDocsRequired = ct === 'cash' || ct === 'foc' || ct === 'mechanical' || ct === 'paid'
     if (noDocsRequired) return
 
     const mandatoryDocs = isValidCustomerType(ct)
@@ -3169,36 +3177,99 @@ export default function BodyshopRepairPage() {
     }
   }
 
+  const PAIR_DOC_NAMES: Record<string, { frontKey: BodyshopDocKey; backKey: BodyshopDocKey; name: string }> = {
+    doc_aadhaar: { frontKey: 'doc_aadhaar', backKey: 'doc_aadhaar_back', name: 'Aadhaar Card' },
+    doc_aadhaar_back: { frontKey: 'doc_aadhaar', backKey: 'doc_aadhaar_back', name: 'Aadhaar Card' },
+    doc_dl: { frontKey: 'doc_dl', backKey: 'doc_dl_back', name: 'Driving Licence' },
+    doc_dl_back: { frontKey: 'doc_dl', backKey: 'doc_dl_back', name: 'Driving Licence' },
+    doc_rc: { frontKey: 'doc_rc', backKey: 'doc_rc_back', name: 'Registration Certificate (RC)' },
+    doc_rc_back: { frontKey: 'doc_rc', backKey: 'doc_rc_back', name: 'Registration Certificate (RC)' },
+    doc_company_pan: { frontKey: 'doc_company_pan', backKey: 'doc_company_pan_back', name: 'Company PAN Card' },
+    doc_company_pan_back: { frontKey: 'doc_company_pan', backKey: 'doc_company_pan_back', name: 'Company PAN Card' },
+  }
+
+  async function getDocUrl(row: BodyshopRepairCardDocumentRow): Promise<string | null> {
+    if (row.drive_url) return row.drive_url
+    const { data } = await supabase.storage
+      .from(row.storage_bucket || AUTODOC_BUCKET)
+      .createSignedUrl(row.storage_path, 600)
+    return data?.signedUrl || null
+  }
+
   async function handleViewBodyshopDoc(docKey: BodyshopDocKey) {
+    const pair = PAIR_DOC_NAMES[docKey]
+    const frontRow = pair ? bodyshopDocsByKey[pair.frontKey] : null
+    const backRow = pair ? bodyshopDocsByKey[pair.backKey] : null
+
+    // If both Front and Back exist, open 1-page merged printable layout!
+    if (pair && frontRow && backRow) {
+      const frontUrl = await getDocUrl(frontRow)
+      const backUrl = await getDocUrl(backRow)
+      if (frontUrl && backUrl) {
+        const previewTab = window.open('', '_blank')
+        if (previewTab) {
+          const regNo = selected?.reg_number || 'Vehicle'
+          previewTab.document.write(`<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Merged 1-Page Print · ${pair.name} - ${regNo}</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { font-family: ui-sans-serif, system-ui, -apple-system, sans-serif; background: #f8fafc; margin: 20px; color: #0f172a; text-align: center; }
+    .print-actions { display: flex; justify-content: center; gap: 12px; margin-bottom: 20px; }
+    .btn { background: #2563eb; color: #fff; border: none; padding: 10px 20px; font-weight: 800; border-radius: 8px; cursor: pointer; font-size: 14px; }
+    .btn-close { background: #64748b; }
+    .page-box { max-width: 750px; margin: 0 auto; border: 1.5px solid #cbd5e1; padding: 24px; border-radius: 12px; background: #fff; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); }
+    .doc-header { font-size: 18px; font-weight: 900; color: #1e293b; margin-bottom: 20px; padding-bottom: 10px; border-bottom: 2px solid #e2e8f0; text-transform: uppercase; letter-spacing: 0.5px; }
+    .side-block { margin-bottom: 24px; text-align: center; }
+    .side-title { font-size: 13px; font-weight: 800; color: #475569; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 1px; }
+    .side-img { max-width: 100%; max-height: 380px; object-fit: contain; border: 1px solid #94a3b8; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.06); }
+    @media print {
+      .print-actions { display: none !important; }
+      body { margin: 0; padding: 0; background: #fff; }
+      .page-box { border: none; padding: 0; max-width: 100%; box-shadow: none; }
+      .side-img { max-height: 420px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="print-actions">
+    <button class="btn" onclick="window.print()">🖨️ Print 1-Page (Merged Front + Back)</button>
+    <button class="btn btn-close" onclick="window.close()">Close</button>
+  </div>
+  <div class="page-box">
+    <div class="doc-header">${pair.name} — ${regNo}</div>
+    <div class="side-block">
+      <div class="side-title">FRONT SIDE</div>
+      <img src="${frontUrl}" class="side-img" />
+    </div>
+    <div class="side-block">
+      <div class="side-title">BACK SIDE</div>
+      <img src="${backUrl}" class="side-img" />
+    </div>
+  </div>
+</body>
+</html>`)
+          previewTab.document.close()
+          return
+        }
+      }
+    }
+
     const row = bodyshopDocsByKey[docKey]
     if (!row) {
       toast_('No uploaded file found for this document', false)
       return
     }
 
-    if (row.drive_url) {
-      window.open(row.drive_url, '_blank', 'noopener,noreferrer')
+    const url = await getDocUrl(row)
+    if (!url) {
+      toast_('Unable to load file URL', false)
       return
     }
 
-    const previewTab = window.open('', '_blank')
-    const { data, error } = await supabase.storage
-      .from(row.storage_bucket || AUTODOC_BUCKET)
-      .createSignedUrl(row.storage_path, 300)
-
-    if (error || !data?.signedUrl) {
-      previewTab?.close()
-      toast_(error?.message ?? 'Unable to open file', false)
-      return
-    }
-
-    if (previewTab) {
-      previewTab.opener = null
-      previewTab.location.replace(data.signedUrl)
-      return
-    }
-
-    window.open(data.signedUrl, '_blank', 'noopener,noreferrer')
+    window.open(url, '_blank', 'noopener,noreferrer')
   }
 
   async function getLatestRtoInsuranceRow(regNumber: string): Promise<RtoInsuranceCacheRow | null> {

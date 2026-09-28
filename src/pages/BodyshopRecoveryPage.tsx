@@ -99,18 +99,22 @@ const PRIMARY_DOCS: { key: string; label: string }[] = [
 
 const DOC_LABELS: Record<string, string> = {
   doc_pan: 'PAN Card',
-  doc_company_pan: 'Company PAN',
-  doc_dl: 'Driving Licence',
-  doc_claim_form: 'Claim Form',
-  doc_insurance: 'Insurance Copy',
-  doc_rc: 'RC',
-  doc_aadhaar: 'Aadhaar',
-  doc_kyc: 'KYC',
-  doc_gst: 'GST',
-  doc_bank_detail: 'Bank detail',
+  doc_company_pan: 'Company PAN (Front)',
+  doc_company_pan_back: 'Company PAN (Back)',
+  doc_dl: 'Driving Licence (Front)',
+  doc_dl_back: 'Driving Licence (Back)',
+  doc_claim_form: 'Claim Form (PDF)',
+  doc_insurance: 'Insurance Copy (PDF)',
+  doc_rc: 'RC (Front)',
+  doc_rc_back: 'RC (Back)',
+  doc_aadhaar: 'Aadhaar (Front)',
+  doc_aadhaar_back: 'Aadhaar (Back)',
+  doc_kyc: 'KYC (PDF)',
+  doc_gst: 'GST (PDF)',
+  doc_bank_detail: 'Bank detail (PDF)',
   doc_estimate: 'Estimate',
   doc_survey_approval: 'Survey approval',
-  doc_tp_affidavit: 'T/P Affidavit',
+  doc_tp_affidavit: 'T/P Affidavit (PDF)',
 }
 
 type StatusFilter = 'all' | 'pending' | 'partial' | 'not_received' | 'received'

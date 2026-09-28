@@ -81,9 +81,8 @@ export default function CustomerComplaintScreen() {
       })
       setToast({
         ok: true,
-        msg: `✅ ${validProblems.length} Problem(s) registered successfully! Your Service Advisor (${
-          selected.sa_display_name || selected.sa_name || 'Advisor'
-        }) has been notified to inspect and prepare the estimate.`,
+        msg: `✅ ${validProblems.length} Problem(s) registered successfully! Your Service Advisor (${selected.sa_display_name || selected.sa_name || 'Advisor'
+          }) has been notified to inspect and prepare the estimate.`,
       })
       setProblems([''])
       setComments('')
@@ -100,7 +99,7 @@ export default function CustomerComplaintScreen() {
   return (
     <CustomerScreen
       title="Report Issue"
-      subtitle="Enter current odometer and describe issues to share directly with your Service Advisor."
+      subtitle="Describe issue(s) and enter current odometer."
     >
       {toast ? <CustomerToast ok={toast.ok} message={toast.msg} /> : null}
 
@@ -129,43 +128,46 @@ export default function CustomerComplaintScreen() {
         </CustomerCard>
       )}
 
-      {/* ── SECTION 2: ADD NEW PROBLEMS FORM ── */}
+      {/* ── SECTION 2: ADD NEW PROBLEMS FORM (MINIMALIST DESIGN) ── */}
       <CustomerCard>
-        <Text className="text-slate-800 text-[14px] font-black mb-1">Current Odometer (KM Reading)</Text>
-        <Text className="text-slate-400 text-[11px] mb-2">From dashboard instrument cluster</Text>
-        <TextInput
-          className="border border-slate-300 rounded-xl px-4 py-3 text-[16px] font-bold bg-slate-50/50"
-          keyboardType="number-pad"
-          placeholder="e.g. 32825"
-          value={kmReading}
-          onChangeText={setKmReading}
-          editable={!submitting}
-        />
+        {/* Odometer Field */}
+        <Text className="text-slate-900 text-[14px] font-black mb-0.5">Current Odometer (KM Reading)</Text>
+        <Text className="text-slate-500 text-[11.5px] mb-2">From dashboard instrument cluster</Text>
+        <View className="flex-row items-center border border-slate-300 rounded-2xl px-4 py-2 bg-white mb-5">
+          <TextInput
+            className="flex-1 text-[16px] font-bold text-slate-900 py-1.5"
+            keyboardType="number-pad"
+            placeholder="e.g. 104100"
+            value={kmReading}
+            onChangeText={setKmReading}
+            editable={!submitting}
+          />
+          <Text className="text-slate-400 font-medium text-[15px] ml-2">km</Text>
+        </View>
 
-        <View className="flex-row items-center justify-between mt-5 mb-2">
+        {/* Problem Description Section */}
+        <View className="flex-row items-center justify-between mb-2">
           <Text className="text-slate-900 text-[14px] font-black">
-            Vehicle Problems & Concerns <Text className="text-red-600">*</Text>
+            Problem Description <Text className="text-red-600">*</Text>
           </Text>
-          <Text className="text-blue-700 text-[11.5px] font-extrabold">
+          <Text className="text-slate-400 text-[12px] font-medium">
             {problems.length} Problem{problems.length > 1 ? 's' : ''}
           </Text>
         </View>
 
         {problems.map((problem, index) => (
-          <View key={index} className="bg-slate-50 border border-slate-200 rounded-xl p-3 mb-3">
-            <View className="flex-row items-center justify-between mb-2">
-              <Text className="text-[11px] font-extrabold uppercase tracking-wide bg-blue-100 text-blue-800 px-2 py-0.5 rounded">
-                Problem #{index + 1}
-              </Text>
-              {problems.length > 1 ? (
+          <View key={index} className="mb-3">
+            {problems.length > 1 ? (
+              <View className="flex-row items-center justify-between mb-1">
+                <Text className="text-[11px] font-bold text-slate-500">Problem #{index + 1}</Text>
                 <TouchableOpacity onPress={() => setProblems((prev) => prev.filter((_, i) => i !== index))}>
-                  <Text className="text-red-500 text-xs font-bold">🗑️ Remove</Text>
+                  <Text className="text-red-500 text-xs font-bold">Remove</Text>
                 </TouchableOpacity>
-              ) : null}
-            </View>
+              </View>
+            ) : null}
             <TextInput
-              className="bg-white border border-slate-300 rounded-lg px-3 py-2 text-[14px] min-h-[64px]"
-              placeholder={`Describe Problem #${index + 1} (e.g. AC cooling is slow, noise on rough roads, wheel alignment issue...)`}
+              className="bg-white border border-slate-300 rounded-2xl p-4 text-[14px] text-slate-900 min-h-[100px]"
+              placeholder="Describe the problem here (e.g., AC cooling, rough roads...)"
               value={problem}
               onChangeText={(value) =>
                 setProblems((prev) => prev.map((item, i) => (i === index ? value : item)))
@@ -179,27 +181,40 @@ export default function CustomerComplaintScreen() {
 
         <TouchableOpacity
           onPress={() => setProblems((prev) => [...prev, ''])}
-          className="border border-dashed border-blue-400 bg-blue-50/70 rounded-xl py-3 items-center mb-4 active:bg-blue-100"
+          className="bg-slate-100 active:bg-slate-200 border border-slate-200 rounded-2xl py-3.5 items-center mb-5"
         >
-          <Text className="text-blue-700 font-extrabold text-xs">➕ Add Another Problem</Text>
+          <Text className="text-slate-800 font-bold text-[14px]">Add Another Problem</Text>
         </TouchableOpacity>
 
-        <Text className="text-slate-800 text-[13px] font-bold mb-1.5">Special Instruction / Additional Notes</Text>
+        {/* Special Instructions Field */}
+        <Text className="text-slate-900 text-[14px] font-black mb-2">Special Instructions</Text>
         <TextInput
-          className="border border-slate-300 rounded-xl px-4 py-3 text-[14px] mb-4 bg-slate-50/50 min-h-[50px]"
+          className="bg-white border border-slate-300 rounded-2xl p-4 text-[14px] text-slate-900 min-h-[72px] mb-5"
           placeholder="e.g. Please clean air filter, check brake oil level, need car by 5 PM"
           value={comments}
           onChangeText={setComments}
           multiline
+          textAlignVertical="top"
           editable={!submitting}
         />
 
-        <PrimaryButton
-          label={submitting ? 'Submitting to Advisor…' : '🚀 Submit Problems to Service Advisor'}
+        {/* Submit Button */}
+        <TouchableOpacity
+          disabled={submitting || problems.every((item) => !item.trim())}
           onPress={() => void submit()}
-          loading={submitting}
-          disabled={problems.every((item) => !item.trim())}
-        />
+          className={`rounded-2xl py-4 items-center shadow-xs ${submitting || problems.every((item) => !item.trim())
+              ? 'bg-blue-400'
+              : 'bg-blue-700 active:bg-blue-800'
+            }`}
+        >
+          {submitting ? (
+            <ActivityIndicator color="#fff" />
+          ) : (
+            <Text className="text-white font-black text-[14px] tracking-wide">
+              SUBMIT REPORT TO SERVICE ADVISOR
+            </Text>
+          )}
+        </TouchableOpacity>
       </CustomerCard>
 
       {/* ── SECTION 3: REGISTERED COMPLAINTS & PROBLEMS HISTORY ── */}

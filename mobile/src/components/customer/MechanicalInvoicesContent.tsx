@@ -1,9 +1,12 @@
-import { Text, TouchableOpacity, View } from 'react-native'
+import { useState } from 'react'
+import { ActivityIndicator, Text, TouchableOpacity, View } from 'react-native'
 import { useRouter } from 'expo-router'
 import { CustomerCard } from './customerUi'
 import { formatInr, formatWhen } from './customerUi'
+import { CustomerTheme } from '../../lib/customer/customerTheme'
 import type { MechanicalCasePayload } from '../../lib/customer/mechanicalCustomerUi'
 import { openReceptionDocument } from '../../lib/customer/openReceptionDocument'
+import { printOrDownloadPaymentReceiptPdf } from '../../lib/customer/customerPaymentPrint'
 
 function MoneyCol({ label, value, color }: { label: string; value: string; color?: string }) {
   return (
@@ -24,6 +27,7 @@ export function MechanicalInvoicesContent({
   jcLabel: string
 }) {
   const router = useRouter()
+  const [busy, setBusy] = useState(false)
   const inv = mechCase.invoice
   const billed = inv?.billed_amount != null ? Number(inv.billed_amount) : null
   const received = inv?.amount_received != null ? Number(inv.amount_received) : 0
@@ -33,6 +37,33 @@ export function MechanicalInvoicesContent({
   const estimate = mechCase.expected_invoice_amount != null ? Number(mechCase.expected_invoice_amount) : null
   const payStatus = String(inv?.payment_status || '').toLowerCase()
   const cleared = hasBill && remaining != null && remaining <= 0 && (payStatus === 'received' || received >= (billed || 0))
+
+  const handlePrintReceipt = async () => {
+    setBusy(true)
+    try {
+      await printOrDownloadPaymentReceiptPdf({
+        jobCardNo: String(mechCase.jc_number || '—'),
+        regNumber: String(mechCase.registration_number || 'Vehicle'),
+        customerName: String(mechCase.customer_name || 'Customer'),
+        serviceType: String(mechCase.service_type || 'Mechanical Service'),
+        saName: mechCase.sa_display_name ? String(mechCase.sa_display_name) : undefined,
+        invoiceNo: inv?.invoice_number ? String(inv.invoice_number) : undefined,
+        invoiceDate: inv?.invoice_date ? String(inv.invoice_date) : undefined,
+        billedAmount: billed ?? 0,
+        receivedAmount: received ?? 0,
+        remainingAmount: remaining ?? 0,
+        payments: payments.map((p) => ({
+          amount: Number(p.amount) || 0,
+          payment_mode: p.payment_mode ? String(p.payment_mode) : undefined,
+          posted_at: p.posted_at ? String(p.posted_at) : undefined,
+          payment_received_date: p.payment_received_date ? String(p.payment_received_date) : undefined,
+          reference: p.reference ? String(p.reference) : undefined,
+        })),
+      })
+    } finally {
+      setBusy(false)
+    }
+  }
 
   return (
     <CustomerCard>
@@ -54,11 +85,6 @@ export function MechanicalInvoicesContent({
           <Text style={{ color: '#64748b', fontSize: 12, marginTop: 4, lineHeight: 17 }}>
             Accounts will publish the tax invoice after service advisor mark done and billing capture.
           </Text>
-          {estimate != null && estimate > 0 ? (
-            <Text style={{ color: '#475569', fontSize: 12, marginTop: 8 }}>
-              Estimate (not amount due): <Text style={{ fontWeight: '800' }}>{formatInr(estimate)}</Text>
-            </Text>
-          ) : null}
         </View>
       ) : (
         <>
@@ -109,9 +135,32 @@ export function MechanicalInvoicesContent({
               ))}
             </View>
           ) : null}
+
+          {hasBill || payments.length > 0 ? (
+            <TouchableOpacity
+              style={{
+                backgroundColor: CustomerTheme.primary,
+                borderRadius: CustomerTheme.radiusButton,
+                paddingVertical: 14,
+                alignItems: 'center',
+                marginBottom: 10,
+              }}
+              disabled={busy}
+              onPress={() => void handlePrintReceipt()}
+            >
+              {busy ? (
+                <ActivityIndicator color="#fff" size="small" />
+              ) : (
+                <Text style={{ color: '#fff', fontWeight: '900', fontSize: 14 }}>
+                  📥 Download Payment Receipt (PDF)
+                </Text>
+              )}
+            </TouchableOpacity>
+          ) : null}
+
           {(mechCase.invoice_drive_url || mechCase.invoice_storage_path) ? (
             <TouchableOpacity
-              style={{ backgroundColor: '#2563eb', borderRadius: 12, paddingVertical: 12, alignItems: 'center', marginBottom: 8 }}
+              style={{ backgroundColor: '#fff', borderWidth: 1.5, borderColor: CustomerTheme.border, borderRadius: CustomerTheme.radiusButton, paddingVertical: 12, alignItems: 'center', marginBottom: 10 }}
               onPress={() =>
                 void openReceptionDocument({
                   driveUrl: mechCase.invoice_drive_url,
@@ -119,19 +168,20 @@ export function MechanicalInvoicesContent({
                 })
               }
             >
-              <Text style={{ color: '#fff', fontWeight: '800' }}>Download tax invoice</Text>
+              <Text style={{ color: CustomerTheme.ink, fontWeight: '800', fontSize: 13 }}>📄 Download Tax Invoice</Text>
             </TouchableOpacity>
           ) : null}
+
           {mechCase.gate_pass_issued ? (
             <TouchableOpacity
-              style={{ backgroundColor: '#059669', borderRadius: 12, paddingVertical: 12, alignItems: 'center' }}
+              style={{ paddingVertical: 8, alignItems: 'center' }}
               onPress={() => router.push('/(customer)/gatepass')}
             >
-              <Text style={{ color: '#fff', fontWeight: '800' }}>View gate pass</Text>
+              <Text style={{ color: CustomerTheme.teal, fontWeight: '800', fontSize: 12 }}>🎟️ View Gate Pass Clearance →</Text>
             </TouchableOpacity>
           ) : hasBill && remaining != null && remaining > 0 ? (
-            <Text style={{ textAlign: 'center', color: '#64748b', fontSize: 12, marginTop: 8, lineHeight: 18 }}>
-              Pay the remaining balance at the workshop billing desk to release your gate pass.
+            <Text style={{ textAlign: 'center', color: '#64748b', fontSize: 12, marginTop: 4, lineHeight: 18 }}>
+              Pay remaining balance at workshop billing desk to release gate pass.
             </Text>
           ) : null}
         </>

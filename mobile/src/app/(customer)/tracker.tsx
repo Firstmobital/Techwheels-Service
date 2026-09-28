@@ -353,12 +353,12 @@ export default function CustomerTrackerScreen() {
                     <Text style={{ color: '#0f172a', fontSize: 13, fontWeight: '800', marginTop: 2 }}>
                       {card?.received_at
                         ? new Date(card.received_at as string).toLocaleDateString('en-IN', {
-                            day: 'numeric',
-                            month: 'short',
-                            year: 'numeric',
-                            hour: '2-digit',
-                            minute: '2-digit',
-                          })
+                          day: 'numeric',
+                          month: 'short',
+                          year: 'numeric',
+                          hour: '2-digit',
+                          minute: '2-digit',
+                        })
                         : 'Active in Workshop'}
                     </Text>
                   </View>
@@ -726,98 +726,96 @@ export default function CustomerTrackerScreen() {
                       <Text className="text-[16px] font-black text-slate-900">{selectedBodyshopStage.name}</Text>
                     </View>
                     <View
-                      className={`px-2.5 py-1 rounded-full ${
-                        selectedBodyshopStage.stage < currentBodyshopStage || invoiced
+                      className={`px-2.5 py-1 rounded-full ${selectedBodyshopStage.stage < currentBodyshopStage || invoiced
                           ? 'bg-green-100'
                           : selectedBodyshopStage.stage === currentBodyshopStage
-                          ? 'bg-sky-100'
-                          : 'bg-slate-100'
-                      }`}
+                            ? 'bg-sky-100'
+                            : 'bg-slate-100'
+                        }`}
                     >
                       <Text
-                        className={`text-[10.5px] font-black uppercase ${
-                          selectedBodyshopStage.stage < currentBodyshopStage || invoiced
+                        className={`text-[10.5px] font-black uppercase ${selectedBodyshopStage.stage < currentBodyshopStage || invoiced
                             ? 'text-green-800'
                             : selectedBodyshopStage.stage === currentBodyshopStage
-                            ? 'text-sky-900'
-                            : 'text-slate-600'
-                        }`}
+                              ? 'text-sky-900'
+                              : 'text-slate-600'
+                          }`}
                       >
                         {selectedBodyshopStage.stage < currentBodyshopStage || invoiced
                           ? '✓ Done'
                           : selectedBodyshopStage.stage === currentBodyshopStage
-                          ? '⏳ In Progress'
-                          : 'Upcoming'}
+                            ? '⏳ In Progress'
+                            : 'Upcoming'}
                       </Text>
                     </View>
                   </View>
 
                   <ScrollView showsVerticalScrollIndicator={false} className="max-h-[420px]">
-                  <View className="bg-slate-100 border border-slate-200 rounded-xl px-3 py-2 mb-3">
-                    <Text className="text-slate-600 text-[10.5px] font-bold text-center">
-                      Read-only · Live updates from your Service Advisor & workshop team
-                    </Text>
-                  </View>
-
-                  {/* Stage Description */}
-                  <Text className="text-slate-700 text-xs leading-relaxed my-3 bg-slate-50 p-3 rounded-2xl">
-                    {selectedBodyshopStage.desc}
-                  </Text>
-
-                  {showEstimateDocInStage ? (
-                    <View className="bg-blue-50 border border-blue-200 rounded-2xl p-3.5 mb-4">
-                      <Text className="text-blue-900 text-xs font-black uppercase tracking-wide mb-1">
-                        Workshop Estimate Upload
+                    <View className="bg-slate-100 border border-slate-200 rounded-xl px-3 py-2 mb-3">
+                      <Text className="text-slate-600 text-[10.5px] font-bold text-center">
+                        Read-only · Live updates from your Service Advisor & workshop team
                       </Text>
-                      {card?.estimated_amount != null ? (
-                        <Text className="text-slate-800 text-sm font-bold mb-2">
-                          Estimate amount: {formatInr(Number(card.estimated_amount))}
-                        </Text>
-                      ) : null}
-                      {bodyshopEstimateDoc ? (
-                        <>
-                          <Text className="text-slate-600 text-[11.5px] mb-2" numberOfLines={2}>
-                            {String(bodyshopEstimateDoc.file_name || 'Estimate document')} — uploaded by workshop
-                          </Text>
-                          <TouchableOpacity
-                            onPress={() => void openWorkshopEstimateDoc()}
-                            disabled={openingEstimateDoc}
-                            activeOpacity={0.85}
-                            className="bg-blue-600 rounded-xl py-2.5 items-center"
-                          >
-                            <Text className="text-white font-black text-xs">
-                              {openingEstimateDoc ? 'Opening…' : '📄 View Workshop Estimate'}
-                            </Text>
-                          </TouchableOpacity>
-                        </>
-                      ) : (
-                        <Text className="text-slate-600 text-[11.5px]">
-                          Workshop estimate document is not uploaded yet. Your Service Advisor will share it after
-                          preparation.
-                        </Text>
-                      )}
                     </View>
-                  ) : null}
 
-                  <View className="bg-slate-50 rounded-2xl p-3.5 mb-4 border border-slate-200">
-                    <Text className="text-slate-800 text-xs font-black uppercase tracking-wide mb-2">
-                      Workshop stage details
+                    {/* Stage Description */}
+                    <Text className="text-slate-700 text-xs leading-relaxed my-3 bg-slate-50 p-3 rounded-2xl">
+                      {selectedBodyshopStage.desc}
                     </Text>
-                    {activeStageDetailRows.map((row, idx) => (
-                      <View
-                        key={`${row.label}-${idx}`}
-                        className={`py-2 ${idx < activeStageDetailRows.length - 1 ? 'border-b border-slate-200' : ''}`}
-                      >
-                        <Text className="text-slate-500 text-[11px] font-semibold mb-0.5">{row.label}</Text>
-                        <Text
-                          className="text-slate-900 text-xs font-bold leading-snug"
-                          selectable
-                        >
-                          {row.value}
+
+                    {showEstimateDocInStage ? (
+                      <View className="bg-blue-50 border border-blue-200 rounded-2xl p-3.5 mb-4">
+                        <Text className="text-blue-900 text-xs font-black uppercase tracking-wide mb-1">
+                          Workshop Estimate Upload
                         </Text>
+                        {card?.estimated_amount != null ? (
+                          <Text className="text-slate-800 text-sm font-bold mb-2">
+                            Estimate amount: {formatInr(Number(card.estimated_amount))}
+                          </Text>
+                        ) : null}
+                        {bodyshopEstimateDoc ? (
+                          <>
+                            <Text className="text-slate-600 text-[11.5px] mb-2" numberOfLines={2}>
+                              {String(bodyshopEstimateDoc.file_name || 'Estimate document')} — uploaded by workshop
+                            </Text>
+                            <TouchableOpacity
+                              onPress={() => void openWorkshopEstimateDoc()}
+                              disabled={openingEstimateDoc}
+                              activeOpacity={0.85}
+                              className="bg-blue-600 rounded-xl py-2.5 items-center"
+                            >
+                              <Text className="text-white font-black text-xs">
+                                {openingEstimateDoc ? 'Opening…' : '📄 View Workshop Estimate'}
+                              </Text>
+                            </TouchableOpacity>
+                          </>
+                        ) : (
+                          <Text className="text-slate-600 text-[11.5px]">
+                            Workshop estimate document is not uploaded yet. Your Service Advisor will share it after
+                            preparation.
+                          </Text>
+                        )}
                       </View>
-                    ))}
-                  </View>
+                    ) : null}
+
+                    <View className="bg-slate-50 rounded-2xl p-3.5 mb-4 border border-slate-200">
+                      <Text className="text-slate-800 text-xs font-black uppercase tracking-wide mb-2">
+                        Workshop stage details
+                      </Text>
+                      {activeStageDetailRows.map((row, idx) => (
+                        <View
+                          key={`${row.label}-${idx}`}
+                          className={`py-2 ${idx < activeStageDetailRows.length - 1 ? 'border-b border-slate-200' : ''}`}
+                        >
+                          <Text className="text-slate-500 text-[11px] font-semibold mb-0.5">{row.label}</Text>
+                          <Text
+                            className="text-slate-900 text-xs font-bold leading-snug"
+                            selectable
+                          >
+                            {row.value}
+                          </Text>
+                        </View>
+                      ))}
+                    </View>
                   </ScrollView>
 
                   {/* Close Modal Button */}
@@ -856,22 +854,20 @@ export default function CustomerTrackerScreen() {
                       </View>
                     </View>
                     <View
-                      className={`px-2.5 py-0.5 rounded-full ${
-                        activeStandardStage.completed
+                      className={`px-2.5 py-0.5 rounded-full ${activeStandardStage.completed
                           ? 'bg-green-100'
                           : activeStandardStage.current
-                          ? 'bg-amber-100'
-                          : 'bg-slate-100'
-                      }`}
+                            ? 'bg-amber-100'
+                            : 'bg-slate-100'
+                        }`}
                     >
                       <Text
-                        className={`text-[10px] font-bold uppercase ${
-                          activeStandardStage.completed
+                        className={`text-[10px] font-bold uppercase ${activeStandardStage.completed
                             ? 'text-green-800'
                             : activeStandardStage.current
-                            ? 'text-amber-800'
-                            : 'text-slate-600'
-                        }`}
+                              ? 'text-amber-800'
+                              : 'text-slate-600'
+                          }`}
                       >
                         {activeStandardStage.completed ? 'Completed' : activeStandardStage.current ? 'Active Now' : 'Upcoming'}
                       </Text>

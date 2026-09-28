@@ -254,10 +254,10 @@ export default function CustomerPortalPage({
             id: String(row.id || ''),
             service_date: row.service_date
               ? new Date(String(row.service_date)).toLocaleDateString('en-IN', {
-                  day: '2-digit',
-                  month: 'short',
-                  year: 'numeric',
-                })
+                day: '2-digit',
+                month: 'short',
+                year: 'numeric',
+              })
               : 'Completed',
             jc_number: String(row.jc_number || ''),
             service_type: String(row.service_type || 'Service'),
@@ -339,7 +339,7 @@ export default function CustomerPortalPage({
                   advisorName = cleanAdvisorPersonName(parsed.advisor_name || parsed.sa_name) || advisorName
                 }
                 if (parsed.status) status = parsed.status
-              } catch {}
+              } catch { }
             }
 
             if (problems.length === 0 && text) {
@@ -402,7 +402,7 @@ export default function CustomerPortalPage({
         const active = await customerGetActiveJob(sessionToken, vehicle.reg_number)
         const job = active.job
         if (job) {
-          liveSa = cleanAdvisorPersonName((job.sa_display_name as string) || (job.sa_name as string)) 
+          liveSa = cleanAdvisorPersonName((job.sa_display_name as string) || (job.sa_name as string))
           liveJc = (job.jc_number as string | null) || null
           liveKm = job.km_reading == null ? null : Number(job.km_reading)
           liveServiceType = (job.service_type as string | null) || null
@@ -939,7 +939,7 @@ export default function CustomerPortalPage({
     isUserActiveListeningRef.current = false
     try {
       recognitionRef.current?.stop()
-    } catch {}
+    } catch { }
     setIsListening(false)
     setListeningTarget(null)
     setVoiceStatusMsg(null)
@@ -1058,7 +1058,7 @@ export default function CustomerPortalPage({
               if (isUserActiveListeningRef.current) {
                 try {
                   recognition.start()
-                } catch {}
+                } catch { }
               }
             }, 300)
           }
@@ -1349,8 +1349,8 @@ export default function CustomerPortalPage({
   const effectiveReceivedMoney = (issuedGatePass?.amount_received != null && issuedGatePass.amount_received > 0)
     ? issuedGatePass.amount_received
     : ((vehicle.payment_status === 'Paid' || balanceDue === 0 || effectiveReceived > 0)
-        ? (effectiveReceived > 0 ? effectiveReceived : effectiveBilledMoney)
-        : 0)
+      ? (effectiveReceived > 0 ? effectiveReceived : effectiveBilledMoney)
+      : 0)
   const effectiveRemainingMoney = Math.max(0, effectiveBilledMoney - effectiveReceivedMoney)
 
   function generateOfficialGatepassHtml(): string {
@@ -2021,20 +2021,18 @@ export default function CustomerPortalPage({
                       title={`Click to view ${stg.label} details`}
                     >
                       <div
-                        className={`w-9 h-9 sm:w-10 sm:h-10 rounded-full flex items-center justify-center text-xs sm:text-sm font-black transition-all duration-300 shadow-lg ${
-                          isDone
+                        className={`w-9 h-9 sm:w-10 sm:h-10 rounded-full flex items-center justify-center text-xs sm:text-sm font-black transition-all duration-300 shadow-lg ${isDone
                             ? 'bg-[#00D2C4] text-[#002B49] ring-4 ring-[#00D2C4]/25'
                             : isCurrent
-                            ? 'tata-step-active text-[#002B49] ring-4 ring-[#00D2C4]/50 scale-110'
-                            : 'bg-[#06101D] text-slate-500 border border-white/10 group-hover:border-[#00D2C4]/40'
-                        }`}
+                              ? 'tata-step-active text-[#002B49] ring-4 ring-[#00D2C4]/50 scale-110'
+                              : 'bg-[#06101D] text-slate-500 border border-white/10 group-hover:border-[#00D2C4]/40'
+                          }`}
                       >
                         {isDone ? '✓' : stg.icon}
                       </div>
                       <span
-                        className={`text-[10px] sm:text-[11px] mt-2 font-bold tracking-tight text-center transition group-hover:text-white ${
-                          isCurrent ? 'text-[#00D2C4] font-black' : isDone ? 'text-emerald-300' : 'text-slate-400'
-                        }`}
+                        className={`text-[10px] sm:text-[11px] mt-2 font-bold tracking-tight text-center transition group-hover:text-white ${isCurrent ? 'text-[#00D2C4] font-black' : isDone ? 'text-emerald-300' : 'text-slate-400'
+                          }`}
                       >
                         {stg.label}
                       </span>
@@ -2161,23 +2159,22 @@ export default function CustomerPortalPage({
                         <div className="text-sm font-bold text-white">{est.model || 'Repair Estimate'}</div>
                       </div>
                       <span
-                        className={`text-xs font-extrabold px-3 py-1 rounded-full uppercase tracking-wider ${
-                          isApproved
+                        className={`text-xs font-extrabold px-3 py-1 rounded-full uppercase tracking-wider ${isApproved
                             ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
                             : isSupplementaryPending
-                            ? 'bg-purple-500/20 text-purple-300 border border-purple-500/40 pulse-live-indicator'
-                            : isRejected
-                            ? 'bg-rose-500/20 text-rose-300 border border-rose-500/40'
-                            : 'bg-amber-500/20 text-amber-300 border border-amber-500/40 pulse-live-indicator'
-                        }`}
+                              ? 'bg-purple-500/20 text-purple-300 border border-purple-500/40 pulse-live-indicator'
+                              : isRejected
+                                ? 'bg-rose-500/20 text-rose-300 border border-rose-500/40'
+                                : 'bg-amber-500/20 text-amber-300 border border-amber-500/40 pulse-live-indicator'
+                          }`}
                       >
                         {isApproved
                           ? '✓ Approved'
                           : isSupplementaryPending
-                          ? '✨ Extra Work Added'
-                          : isRejected
-                          ? '✕ Rejected'
-                          : 'Action Required'}
+                            ? '✨ Extra Work Added'
+                            : isRejected
+                              ? '✕ Rejected'
+                              : 'Action Required'}
                       </span>
                     </div>
 
@@ -2375,11 +2372,10 @@ export default function CustomerPortalPage({
                             })}
                           </span>
                           <span
-                            className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full border ${
-                              item.advisor_solution
+                            className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full border ${item.advisor_solution
                                 ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
                                 : 'bg-amber-500/20 text-amber-300 border-amber-500/30'
-                            }`}
+                              }`}
                           >
                             {item.advisor_solution ? '✓ Resolved & Tested' : '🟡 Under Inspection'}
                           </span>
@@ -2408,11 +2404,10 @@ export default function CustomerPortalPage({
 
                       {/* Dedicated Advisor & Technician Solution Box */}
                       <div
-                        className={`rounded-2xl p-3.5 border ${
-                          item.advisor_solution
+                        className={`rounded-2xl p-3.5 border ${item.advisor_solution
                             ? 'bg-gradient-to-r from-emerald-950/40 via-teal-950/30 to-slate-900 border-emerald-500/30'
                             : 'bg-gradient-to-r from-amber-950/30 via-slate-900 to-slate-900 border-amber-500/30'
-                        } space-y-1.5 shadow-inner`}
+                          } space-y-1.5 shadow-inner`}
                       >
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-1.5">
@@ -2422,11 +2417,10 @@ export default function CustomerPortalPage({
                             </span>
                           </div>
                           <span
-                            className={`text-[9px] font-mono px-1.5 py-0.5 rounded ${
-                              item.advisor_solution
+                            className={`text-[9px] font-mono px-1.5 py-0.5 rounded ${item.advisor_solution
                                 ? 'bg-emerald-500/20 text-emerald-300'
                                 : 'bg-amber-500/20 text-amber-300'
-                            }`}
+                              }`}
                           >
                             {item.advisor_name || vehicle.sa_display_name || vehicle.sa_name || 'Assigned Advisor'}
                           </span>
@@ -2530,11 +2524,10 @@ export default function CustomerPortalPage({
                         <button
                           type="button"
                           onClick={() => startVoiceRecognition(prob.id)}
-                          className={`absolute right-1.5 top-1/2 -translate-y-1/2 w-8 h-8 rounded-xl flex items-center justify-center text-sm transition ${
-                            isListening && listeningTarget === prob.id
+                          className={`absolute right-1.5 top-1/2 -translate-y-1/2 w-8 h-8 rounded-xl flex items-center justify-center text-sm transition ${isListening && listeningTarget === prob.id
                               ? 'bg-rose-600 text-white animate-pulse ring-2 ring-rose-400'
                               : 'bg-white/5 hover:bg-white/10 text-slate-300'
-                          }`}
+                            }`}
                           title="बोल कर बताएं"
                         >
                           🎙️
@@ -2564,11 +2557,10 @@ export default function CustomerPortalPage({
                     <button
                       type="button"
                       onClick={() => startVoiceRecognition('notes')}
-                      className={`text-[11px] font-bold px-2 py-0.5 rounded-lg flex items-center gap-1 transition ${
-                        isListening && listeningTarget === 'notes'
+                      className={`text-[11px] font-bold px-2 py-0.5 rounded-lg flex items-center gap-1 transition ${isListening && listeningTarget === 'notes'
                           ? 'bg-rose-600 text-white animate-pulse'
                           : 'bg-blue-600/15 text-blue-300 border border-blue-500/20 hover:bg-blue-600/25'
-                      }`}
+                        }`}
                     >
                       <span>🎙️</span>
                       <span>{isListening && listeningTarget === 'notes' ? 'Stop Listening' : 'Speak Notes'}</span>
@@ -2815,55 +2807,50 @@ export default function CustomerPortalPage({
                     <button
                       type="button"
                       onClick={() => setEscalationTarget('crm')}
-                      className={`py-2 px-1 rounded-xl transition truncate ${
-                        escalationTarget === 'crm'
+                      className={`py-2 px-1 rounded-xl transition truncate ${escalationTarget === 'crm'
                           ? 'bg-blue-600 text-white shadow-md'
                           : 'text-slate-400 hover:text-white'
-                      }`}
+                        }`}
                     >
                       Payal (CRM)
                     </button>
                     <button
                       type="button"
                       onClick={() => setEscalationTarget('sm')}
-                      className={`py-2 px-1 rounded-xl transition truncate ${
-                        escalationTarget === 'sm'
+                      className={`py-2 px-1 rounded-xl transition truncate ${escalationTarget === 'sm'
                           ? 'bg-amber-600 text-white shadow-md'
                           : 'text-slate-400 hover:text-white'
-                      }`}
+                        }`}
                     >
                       Govind (SM)
                     </button>
                     <button
                       type="button"
                       onClick={() => setEscalationTarget('gm')}
-                      className={`py-2 px-1 rounded-xl transition truncate ${
-                        escalationTarget === 'gm'
+                      className={`py-2 px-1 rounded-xl transition truncate ${escalationTarget === 'gm'
                           ? 'bg-rose-600 text-white shadow-md'
                           : 'text-slate-400 hover:text-white'
-                      }`}
+                        }`}
                     >
                       Rajesh Panday (GM)
                     </button>
                     <button
                       type="button"
                       onClick={() => setEscalationTarget('tataccm')}
-                      className={`py-2 px-1 rounded-xl transition truncate ${
-                        escalationTarget === 'tataccm'
+                      className={`py-2 px-1 rounded-xl transition truncate ${escalationTarget === 'tataccm'
                           ? 'bg-indigo-600 text-white shadow-md'
                           : 'text-slate-400 hover:text-white'
-                      }`}
+                        }`}
                     >
                       Akshay (Tata CCM)
                     </button>
                     <button
                       type="button"
                       onClick={() => setEscalationTarget('tataregional')}
-                      className={`py-2 px-1 rounded-xl transition truncate ${
-                        escalationTarget === 'tataregional'
+                      className={`py-2 px-1 rounded-xl transition truncate ${escalationTarget === 'tataregional'
                           ? 'bg-emerald-600 text-white shadow-md'
                           : 'text-slate-400 hover:text-white'
-                      }`}
+                        }`}
                     >
                       Gurmeet (Tata RCCM)
                     </button>
@@ -2955,11 +2942,10 @@ export default function CustomerPortalPage({
                         key={star}
                         type="button"
                         onClick={() => setRating(star)}
-                        className={`w-11 h-11 rounded-2xl flex items-center justify-center text-xl transition ${
-                          rating >= star
+                        className={`w-11 h-11 rounded-2xl flex items-center justify-center text-xl transition ${rating >= star
                             ? 'bg-amber-500 text-slate-950 shadow-lg shadow-amber-500/25 scale-105'
                             : 'bg-slate-900 text-slate-600 border border-white/5'
-                        }`}
+                          }`}
                       >
                         ★
                       </button>
@@ -3002,9 +2988,8 @@ export default function CustomerPortalPage({
           <button
             type="button"
             onClick={() => setActiveTab('dashboard')}
-            className={`tap-bounce flex flex-col items-center justify-center py-1.5 px-0.5 rounded-2xl transition w-full ${
-              activeTab === 'dashboard' ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/30' : 'text-slate-400 hover:text-white'
-            }`}
+            className={`tap-bounce flex flex-col items-center justify-center py-1.5 px-0.5 rounded-2xl transition w-full ${activeTab === 'dashboard' ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/30' : 'text-slate-400 hover:text-white'
+              }`}
           >
             <span className="text-base sm:text-lg">🏠</span>
             <span className="text-[9px] sm:text-[10px] font-bold mt-0.5 whitespace-nowrap">Home</span>
@@ -3014,9 +2999,8 @@ export default function CustomerPortalPage({
           <button
             type="button"
             onClick={() => setActiveTab('complaint')}
-            className={`tap-bounce flex flex-col items-center justify-center py-1.5 px-0.5 rounded-2xl transition relative w-full ${
-              activeTab === 'complaint' ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/30' : 'text-slate-400 hover:text-white'
-            }`}
+            className={`tap-bounce flex flex-col items-center justify-center py-1.5 px-0.5 rounded-2xl transition relative w-full ${activeTab === 'complaint' ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/30' : 'text-slate-400 hover:text-white'
+              }`}
           >
             <span className="text-base sm:text-lg">🚨</span>
             <span className="text-[9px] sm:text-[10px] font-bold mt-0.5 whitespace-nowrap">Issues</span>
@@ -3029,9 +3013,8 @@ export default function CustomerPortalPage({
           <button
             type="button"
             onClick={() => setActiveTab('estimate')}
-            className={`tap-bounce flex flex-col items-center justify-center py-1.5 px-0.5 rounded-2xl transition relative w-full ${
-              activeTab === 'estimate' ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/30' : 'text-slate-400 hover:text-white'
-            }`}
+            className={`tap-bounce flex flex-col items-center justify-center py-1.5 px-0.5 rounded-2xl transition relative w-full ${activeTab === 'estimate' ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/30' : 'text-slate-400 hover:text-white'
+              }`}
           >
             <span className="text-base sm:text-lg">📋</span>
             <span className="text-[9px] sm:text-[10px] font-bold mt-0.5 whitespace-nowrap">Bills</span>
@@ -3044,9 +3027,8 @@ export default function CustomerPortalPage({
           <button
             type="button"
             onClick={() => setActiveTab('escalation')}
-            className={`tap-bounce flex flex-col items-center justify-center py-1.5 px-0.5 rounded-2xl transition w-full ${
-              activeTab === 'escalation' ? 'bg-purple-600 text-white shadow-lg shadow-purple-500/30' : 'text-slate-400 hover:text-white'
-            }`}
+            className={`tap-bounce flex flex-col items-center justify-center py-1.5 px-0.5 rounded-2xl transition w-full ${activeTab === 'escalation' ? 'bg-purple-600 text-white shadow-lg shadow-purple-500/30' : 'text-slate-400 hover:text-white'
+              }`}
           >
             <span className="text-base sm:text-lg">📞</span>
             <span className="text-[9px] sm:text-[10px] font-bold mt-0.5 whitespace-nowrap">Helpdesk</span>
@@ -3056,9 +3038,8 @@ export default function CustomerPortalPage({
           <button
             type="button"
             onClick={() => setActiveTab('feedback')}
-            className={`tap-bounce flex flex-col items-center justify-center py-1.5 px-0.5 rounded-2xl transition w-full ${
-              activeTab === 'feedback' ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/30' : 'text-slate-400 hover:text-white'
-            }`}
+            className={`tap-bounce flex flex-col items-center justify-center py-1.5 px-0.5 rounded-2xl transition w-full ${activeTab === 'feedback' ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/30' : 'text-slate-400 hover:text-white'
+              }`}
           >
             <span className="text-base sm:text-lg">⭐</span>
             <span className="text-[9px] sm:text-[10px] font-bold mt-0.5 whitespace-nowrap">Review</span>
@@ -3134,11 +3115,10 @@ export default function CustomerPortalPage({
                     setActiveTab('dashboard')
                     setShowMenuDrawer(false)
                   }}
-                  className={`tap-bounce w-full p-3 rounded-2xl flex items-center justify-between transition ${
-                    activeTab === 'dashboard'
+                  className={`tap-bounce w-full p-3 rounded-2xl flex items-center justify-between transition ${activeTab === 'dashboard'
                       ? 'bg-blue-600 text-white font-extrabold shadow-lg shadow-blue-500/25'
                       : 'bg-white/5 hover:bg-white/10 text-slate-200'
-                  }`}
+                    }`}
                 >
                   <div className="flex items-center gap-3">
                     <span className="text-lg">🏠</span>
@@ -3157,11 +3137,10 @@ export default function CustomerPortalPage({
                     setActiveTab('complaint')
                     setShowMenuDrawer(false)
                   }}
-                  className={`tap-bounce w-full p-3 rounded-2xl flex items-center justify-between transition ${
-                    activeTab === 'complaint'
+                  className={`tap-bounce w-full p-3 rounded-2xl flex items-center justify-between transition ${activeTab === 'complaint'
                       ? 'bg-blue-600 text-white font-extrabold shadow-lg shadow-blue-500/25'
                       : 'bg-white/5 hover:bg-white/10 text-slate-200'
-                  }`}
+                    }`}
                 >
                   <div className="flex items-center gap-3">
                     <span className="text-lg">🚨</span>
@@ -3180,11 +3159,10 @@ export default function CustomerPortalPage({
                     setActiveTab('estimate')
                     setShowMenuDrawer(false)
                   }}
-                  className={`tap-bounce w-full p-3 rounded-2xl flex items-center justify-between transition ${
-                    activeTab === 'estimate'
+                  className={`tap-bounce w-full p-3 rounded-2xl flex items-center justify-between transition ${activeTab === 'estimate'
                       ? 'bg-blue-600 text-white font-extrabold shadow-lg shadow-blue-500/25'
                       : 'bg-white/5 hover:bg-white/10 text-slate-200'
-                  }`}
+                    }`}
                 >
                   <div className="flex items-center gap-3">
                     <span className="text-lg">📋</span>
@@ -3241,11 +3219,10 @@ export default function CustomerPortalPage({
                     setActiveTab('escalation')
                     setShowMenuDrawer(false)
                   }}
-                  className={`tap-bounce w-full p-3 rounded-2xl flex items-center justify-between transition ${
-                    activeTab === 'escalation'
+                  className={`tap-bounce w-full p-3 rounded-2xl flex items-center justify-between transition ${activeTab === 'escalation'
                       ? 'bg-purple-600 text-white font-extrabold shadow-lg shadow-purple-500/25'
                       : 'bg-white/5 hover:bg-white/10 text-slate-200'
-                  }`}
+                    }`}
                 >
                   <div className="flex items-center gap-3">
                     <span className="text-lg">📞</span>
@@ -3264,11 +3241,10 @@ export default function CustomerPortalPage({
                     setActiveTab('feedback')
                     setShowMenuDrawer(false)
                   }}
-                  className={`tap-bounce w-full p-3 rounded-2xl flex items-center justify-between transition ${
-                    activeTab === 'feedback'
+                  className={`tap-bounce w-full p-3 rounded-2xl flex items-center justify-between transition ${activeTab === 'feedback'
                       ? 'bg-amber-600 text-white font-extrabold shadow-lg shadow-amber-500/25'
                       : 'bg-white/5 hover:bg-white/10 text-slate-200'
-                  }`}
+                    }`}
                 >
                   <div className="flex items-center gap-3">
                     <span className="text-lg">⭐</span>
@@ -3353,11 +3329,10 @@ export default function CustomerPortalPage({
                     onSelectVehicle?.(v)
                     setShowVehiclePicker(false)
                   }}
-                  className={`w-full p-3 rounded-2xl text-left border flex justify-between items-center transition ${
-                    v.reg_number === vehicle.reg_number
+                  className={`w-full p-3 rounded-2xl text-left border flex justify-between items-center transition ${v.reg_number === vehicle.reg_number
                       ? 'bg-blue-600/30 border-blue-400 text-white'
                       : 'bg-slate-900 border-white/5 text-slate-300 hover:bg-slate-800'
-                  }`}
+                    }`}
                 >
                   <div>
                     <div className="font-mono font-bold">{v.reg_number}</div>
@@ -3467,11 +3442,10 @@ export default function CustomerPortalPage({
               <button
                 type="button"
                 onClick={() => setPaymentMethod('upi')}
-                className={`py-2 rounded-xl transition flex items-center justify-center gap-1.5 ${
-                  paymentMethod === 'upi'
+                className={`py-2 rounded-xl transition flex items-center justify-center gap-1.5 ${paymentMethod === 'upi'
                     ? 'bg-blue-600 text-white shadow-md shadow-blue-600/30'
                     : 'text-slate-400 hover:text-white'
-                }`}
+                  }`}
               >
                 <span>📱</span>
                 <span>UPI / QR</span>
@@ -3479,11 +3453,10 @@ export default function CustomerPortalPage({
               <button
                 type="button"
                 onClick={() => setPaymentMethod('card')}
-                className={`py-2 rounded-xl transition flex items-center justify-center gap-1.5 ${
-                  paymentMethod === 'card'
+                className={`py-2 rounded-xl transition flex items-center justify-center gap-1.5 ${paymentMethod === 'card'
                     ? 'bg-blue-600 text-white shadow-md shadow-blue-600/30'
                     : 'text-slate-400 hover:text-white'
-                }`}
+                  }`}
               >
                 <span>💳</span>
                 <span>Debit / Card</span>
@@ -3866,19 +3839,18 @@ export default function CustomerPortalPage({
               </div>
 
               <span
-                className={`text-[10px] font-extrabold px-2.5 py-1 rounded-full uppercase tracking-wider ${
-                  selectedStageModal < currentStageIndex
+                className={`text-[10px] font-extrabold px-2.5 py-1 rounded-full uppercase tracking-wider ${selectedStageModal < currentStageIndex
                     ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
                     : selectedStageModal === currentStageIndex
-                    ? 'bg-blue-500/20 text-blue-300 border border-blue-500/40 pulse-live-indicator'
-                    : 'bg-slate-800 text-slate-400 border border-white/10'
-                }`}
+                      ? 'bg-blue-500/20 text-blue-300 border border-blue-500/40 pulse-live-indicator'
+                      : 'bg-slate-800 text-slate-400 border border-white/10'
+                  }`}
               >
                 {selectedStageModal < currentStageIndex
                   ? '✓ Completed'
                   : selectedStageModal === currentStageIndex
-                  ? '⏳ Active Now'
-                  : 'Upcoming'}
+                    ? '⏳ Active Now'
+                    : 'Upcoming'}
               </span>
             </div>
 

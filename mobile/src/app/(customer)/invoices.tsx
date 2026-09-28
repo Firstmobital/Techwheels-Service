@@ -14,6 +14,7 @@ import { MechanicalInvoicesContent } from '../../components/customer/MechanicalI
 import { useCustomerVisit } from '../../context/CustomerVisitContext'
 import { computeSettlement, parseEstimate } from '../../lib/customer/math'
 import { useCustomerScreenRefresh } from '../../components/customer/customerScreenRefresh'
+import { printOrDownloadPaymentReceiptPdf } from '../../lib/customer/customerPaymentPrint'
 
 export default function CustomerInvoicesScreen() {
   const router = useRouter()
@@ -76,7 +77,7 @@ export default function CustomerInvoicesScreen() {
     (payment?.billed_amount != null && Number(payment.billed_amount) > 0 ? Number(payment.billed_amount) : null) ??
     (pass?.billed_amount != null && Number(pass.billed_amount) > 0 ? Number(pass.billed_amount) : null) ??
     (selected?.billed_amount != null && Number(selected.billed_amount) > 0 ? Number(selected.billed_amount) : null) ??
-    (estimates.length > 0 && estimates[0].grand_total != null && estimates[0].grand_total > 0 ? estimates[0].grand_total : null)
+    null
   const received =
     (payment?.amount_received != null ? Number(payment.amount_received) : null) ??
     (pass?.amount_received != null ? Number(pass.amount_received) : null) ??
@@ -134,6 +135,42 @@ export default function CustomerInvoicesScreen() {
   const customerRemaining = Number(payment?.customer_remaining_amount ?? Math.max(0, customerDiff - customerReceived))
   const isBillGenerated = billedTotal > 0 || customerDiff > 0 || (effectiveInvoiceNo.length > 0 && !effectiveInvoiceNo.includes('00000'))
   const isCustomerCleared = isBillGenerated && customerReceived > 0 && customerRemaining <= 0
+  const [printingPdf, setPrintingPdf] = useState(false)
+
+  const handlePrintBodyshopReceipt = async () => {
+    setPrintingPdf(true)
+    try {
+      await printOrDownloadPaymentReceiptPdf({
+        jobCardNo: String(payment?.jc_number || pass?.job_card_no || selected?.jc_number || '—'),
+        regNumber: String(selectedReg || selected?.reg_number || 'Vehicle'),
+        customerName: String(selected?.owner_name || 'Customer'),
+        serviceType: String(payment?.service_type || selected?.service_type || 'Vehicle Repair'),
+        saName: selected?.sa_display_name || selected?.sa_name || undefined,
+        invoiceNo: effectiveInvoiceNo || undefined,
+        invoiceDate: effectiveInvoiceDate || undefined,
+        billedAmount: billedTotal || (pay.billed ?? 0),
+        receivedAmount: isAccidentalCase ? (customerReceived + Math.max(0, doAmount - doRemaining)) : (pay.received ?? 0),
+        remainingAmount: isAccidentalCase ? (doRemaining + customerRemaining) : (pay.remaining ?? 0),
+        isBodyshop: isAccidentalCase,
+        insuranceCompany: insuranceCompany || undefined,
+        doAmount: doAmount,
+        doRemaining: doRemaining,
+        customerDiff: customerDiff,
+        customerReceived: customerReceived,
+        customerRemaining: customerRemaining,
+        payments: paymentList.map((p: any) => ({
+          amount: Number(p.amount) || 0,
+          payment_mode: p.payment_mode ? String(p.payment_mode) : undefined,
+          posted_at: p.posted_at ? String(p.posted_at) : undefined,
+          payment_received_date: p.payment_received_date ? String(p.payment_received_date) : undefined,
+          voucher_no: p.voucher_no ? String(p.voucher_no) : undefined,
+          reference: p.reference ? String(p.reference) : undefined,
+        })),
+      })
+    } finally {
+      setPrintingPdf(false)
+    }
+  }
 
   return (
     <CustomerScreen
@@ -354,12 +391,26 @@ export default function CustomerInvoicesScreen() {
                 </View>
               ) : null}
 
+              {(isBillGenerated || paymentList.length > 0) ? (
+                <TouchableOpacity
+                  disabled={printingPdf}
+                  className="bg-blue-600 active:bg-blue-700 rounded-xl py-3.5 items-center mb-2 shadow-sm"
+                  onPress={() => void handlePrintBodyshopReceipt()}
+                >
+                  {printingPdf ? (
+                    <ActivityIndicator color="#fff" size="small" />
+                  ) : (
+                    <Text className="text-white font-black text-sm">📥 Download Payment Receipt (PDF)</Text>
+                  )}
+                </TouchableOpacity>
+              ) : null}
+
               {latestInvoiceUrl ? (
                 <TouchableOpacity
-                  className="bg-blue-600 rounded-xl py-3 items-center mb-2"
+                  className="bg-slate-100 border border-slate-300 rounded-xl py-3 items-center mb-2"
                   onPress={() => void Linking.openURL(String(latestInvoiceUrl))}
                 >
-                  <Text className="text-white font-extrabold">📥 Download Tax Invoice</Text>
+                  <Text className="text-slate-800 font-extrabold text-xs">📄 Download Tax Invoice</Text>
                 </TouchableOpacity>
               ) : null}
 
@@ -374,10 +425,10 @@ export default function CustomerInvoicesScreen() {
                     </Text>
                   </View>
                   <TouchableOpacity
-                    className="bg-emerald-600 active:bg-emerald-700 rounded-xl py-3.5 items-center mt-2 shadow-sm"
+                    className="py-2 items-center"
                     onPress={() => router.push('/(customer)/gatepass')}
                   >
-                    <Text className="text-white font-black text-sm">🎟️ View & Print Official Gate Pass (PDF)</Text>
+                    <Text className="text-emerald-800 font-extrabold text-xs">🎟️ View Gate Pass Status →</Text>
                   </TouchableOpacity>
                 </View>
               ) : isBillGenerated ? (
@@ -535,12 +586,26 @@ export default function CustomerInvoicesScreen() {
                 </TouchableOpacity>
               ) : null}
 
+              {((pay.billed ?? 0) > 0 || paymentList.length > 0) ? (
+                <TouchableOpacity
+                  disabled={printingPdf}
+                  className="bg-blue-600 active:bg-blue-700 rounded-xl py-3.5 items-center mb-2 shadow-sm"
+                  onPress={() => void handlePrintBodyshopReceipt()}
+                >
+                  {printingPdf ? (
+                    <ActivityIndicator color="#fff" size="small" />
+                  ) : (
+                    <Text className="text-white font-black text-sm">📥 Download Payment Receipt (PDF)</Text>
+                  )}
+                </TouchableOpacity>
+              ) : null}
+
               {latestInvoiceUrl ? (
                 <TouchableOpacity
-                  className="bg-blue-600 rounded-xl py-3 items-center mb-2"
+                  className="bg-slate-100 border border-slate-300 rounded-xl py-3 items-center mb-2"
                   onPress={() => void Linking.openURL(String(latestInvoiceUrl))}
                 >
-                  <Text className="text-white font-extrabold">📥 Download Tax Invoice</Text>
+                  <Text className="text-slate-800 font-extrabold text-xs">📄 Download Tax Invoice</Text>
                 </TouchableOpacity>
               ) : null}
 
@@ -555,10 +620,10 @@ export default function CustomerInvoicesScreen() {
                     </Text>
                   </View>
                   <TouchableOpacity
-                    className="bg-emerald-600 active:bg-emerald-700 rounded-xl py-3.5 items-center mt-2 shadow-sm"
+                    className="py-2 items-center"
                     onPress={() => router.push('/(customer)/gatepass')}
                   >
-                    <Text className="text-white font-black text-sm">🎟️ View & Print Official Gate Pass (PDF)</Text>
+                    <Text className="text-emerald-800 font-extrabold text-xs">🎟️ View Gate Pass Status →</Text>
                   </TouchableOpacity>
                 </View>
               ) : pay.remaining != null && pay.remaining > 0 ? (

@@ -12,6 +12,7 @@ import {
   resolveMechanicalPrimaryAction,
 } from '../../lib/customer/customerPrimaryAction'
 import { useCustomerVisit } from '../../context/CustomerVisitContext'
+import { isMechanicalServiceType } from '../../lib/customer/mechanicalServiceType'
 import { CustomerTheme } from '../../lib/customer/customerTheme'
 import { Icon } from '../ui/Icon'
 import { useCustomerScreenRefresh } from './customerScreenRefresh'
@@ -19,17 +20,21 @@ import { useCustomerScreenRefresh } from './customerScreenRefresh'
 /** PRD §8 — single prioritized customer action (gate pass handled separately). */
 export function CustomerPrimaryActionCard({ includeDocumentAction = true }: { includeDocumentAction?: boolean }) {
   const router = useRouter()
-  const { token, selectedReg } = useCustomerSession()
+  const { token, selectedReg, vehicles } = useCustomerSession()
+  const selected = vehicles.find((v) => v.reg_number === selectedReg) || vehicles[0]
   const [action, setAction] = useState<ReturnType<typeof resolveCustomerPrimaryAction>>(null)
 
   const { ready: visitReady, isMechanical, mechCase, repairCard } = useCustomerVisit()
+  const isEffectiveMechanical =
+    isMechanical ||
+    isMechanicalServiceType(String(selected?.service_type || ''))
 
   const refresh = useCallback(async () => {
     if (!token || !visitReady) {
       setAction(null)
       return
     }
-    if (isMechanical) {
+    if (isEffectiveMechanical) {
       setAction(resolveMechanicalPrimaryAction(mechCase))
       return
     }
@@ -53,9 +58,10 @@ export function CustomerPrimaryActionCard({ includeDocumentAction = true }: { in
         additionalApprovalPending: readAdditionalApprovalPending(card),
         customerSettlementDue: pay.status === 'due' || pay.status === 'partial',
         includeDocumentAction,
+        isMechanical: isEffectiveMechanical,
       })
     )
-  }, [token, selectedReg, includeDocumentAction, visitReady, isMechanical, mechCase, repairCard])
+  }, [token, selectedReg, includeDocumentAction, visitReady, isEffectiveMechanical, mechCase, repairCard])
 
   useFocusEffect(
     useCallback(() => {

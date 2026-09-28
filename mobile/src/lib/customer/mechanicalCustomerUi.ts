@@ -1,6 +1,8 @@
 export type MechanicalCasePayload = {
   reception_entry_id?: number
   reg_number?: string
+  registration_number?: string | null
+  customer_name?: string | null
   model?: string | null
   service_type?: string | null
   jc_number?: string | null

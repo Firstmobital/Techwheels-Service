@@ -28,6 +28,9 @@ export interface CustomerVehicle {
   gate_pass_issued?: boolean
   gate_pass_number?: string | null
   variant?: string | null
+  reg_no?: string | null
+  registration_number?: string | null
+  expected_invoice_amount?: number | null
 }
 
 export interface CustomerSessionResult {

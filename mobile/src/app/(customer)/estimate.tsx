@@ -21,6 +21,9 @@ import {
   formatInr,
 } from '../../components/customer/customerUi'
 import { useCustomerSession } from '../../context/CustomerSessionContext'
+import { useCustomerVisit } from '../../context/CustomerVisitContext'
+import { isMechanicalServiceType } from '../../lib/customer/mechanicalServiceType'
+import { openReceptionDocument } from '../../lib/customer/openReceptionDocument'
 import {
   customerGetRepairCard,
   customerListEstimates,
@@ -34,6 +37,10 @@ import { useCustomerScreenRefresh } from '../../components/customer/customerScre
 export default function CustomerEstimateScreen() {
   const { token, selectedReg, vehicles } = useCustomerSession()
   const selected = vehicles.find((v) => v.reg_number === selectedReg) || vehicles[0]
+  const { isMechanical, mechCase } = useCustomerVisit()
+  const isEffectiveMechanical =
+    isMechanical ||
+    isMechanicalServiceType(String(selected?.service_type || ''))
   const [rows, setRows] = useState<EstimateView[]>([])
   const [selectedIdx, setSelectedIdx] = useState(0)
   const [loading, setLoading] = useState(true)
@@ -46,6 +53,11 @@ export default function CustomerEstimateScreen() {
   const [bodyshopEstimateAmount, setBodyshopEstimateAmount] = useState<number | null>(null)
   const [openingWorkshopDoc, setOpeningWorkshopDoc] = useState(false)
   const [workshopPreviewUri, setWorkshopPreviewUri] = useState<string | null>(null)
+
+  const mechEstimateUrl = mechCase?.estimate_drive_url || selected?.estimate_drive_url
+  const mechEstimatePath = mechCase?.estimate_storage_path || selected?.estimate_storage_path
+  const hasMechEstimateDoc = Boolean(mechEstimateUrl || mechEstimatePath)
+  const mechEstimateAmount = mechCase?.expected_invoice_amount ?? selected?.expected_invoice_amount
 
   const load = useCallback(async (isSilent = false) => {
     if (!token) return
@@ -101,6 +113,13 @@ export default function CustomerEstimateScreen() {
     if (!token) return
     setOpeningWorkshopDoc(true)
     try {
+      if (isEffectiveMechanical && hasMechEstimateDoc) {
+        await openReceptionDocument({
+          driveUrl: mechEstimateUrl,
+          storagePath: mechEstimatePath,
+        })
+        return
+      }
       const result = await customerOpenBodyshopEstimateDocument(token, selectedReg, bodyshopEstimateDoc)
       if (result.mode === 'preview') {
         setWorkshopPreviewUri(result.uri)
@@ -113,6 +132,56 @@ export default function CustomerEstimateScreen() {
     } finally {
       setOpeningWorkshopDoc(false)
     }
+  }
+
+  const handleRemoveItem = (itemId: string) => {
+    if (kind === 'approved') {
+      Alert.alert('Locked', 'This quotation has been approved and locked. Items cannot be removed.')
+      return
+    }
+
+    Alert.alert(
+      'Remove Item',
+      'Are you sure you want to remove this item from your quotation before approval?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Remove',
+          style: 'destructive',
+          onPress: () => {
+            if (!estimate) return
+            const updatedItems = estimate.items.filter((it) => it.id !== itemId)
+            const updatedSubtotal = updatedItems.reduce(
+              (sum, item) => sum + (item.total ?? ((item.quantity || 1) * (item.unit_price || 0))),
+              0
+            )
+
+            let updatedGstTax: number | null = null
+            if (estimate.gst_tax != null) {
+              const origSub = estimate.subtotal || 0
+              const gstRatio = origSub > 0 ? (estimate.gst_tax / origSub) : 0.18
+              updatedGstTax = Math.round(updatedSubtotal * gstRatio)
+            }
+
+            const discount = estimate.discount || 0
+            const updatedGrandTotal = Math.max(0, updatedSubtotal - discount + (updatedGstTax || 0))
+
+            const updatedRows = rows.map((r, idx) =>
+              idx === selectedIdx
+                ? {
+                    ...r,
+                    items: updatedItems,
+                    subtotal: updatedSubtotal,
+                    gst_tax: updatedGstTax,
+                    grand_total: updatedGrandTotal,
+                  }
+                : r
+            )
+            setRows(updatedRows)
+          },
+        },
+      ]
+    )
   }
 
   const decide = async (decision: 'approve' | 'reject') => {
@@ -157,7 +226,13 @@ export default function CustomerEstimateScreen() {
         estimate.estimate_id,
         decision,
         decision === 'reject' ? reasonText : undefined,
-        selectedReg
+        selectedReg,
+        estimate.items,
+        {
+          subtotal: estimate.subtotal,
+          gst_tax: estimate.gst_tax,
+          grand_total: estimate.grand_total,
+        }
       )
       // Background sync fresh data
       const list = (await customerListEstimates(token, selectedReg)).map(parseEstimate)
@@ -192,7 +267,24 @@ export default function CustomerEstimateScreen() {
       {loading ? (
         <ActivityIndicator color="#2563eb" />
       ) : !estimate ? (
-        bodyshopEstimateDoc ? (
+        isEffectiveMechanical && hasMechEstimateDoc ? (
+          <CustomerCard>
+            <Text className="text-slate-900 text-[16px] font-bold mb-1">Workshop Service Estimate</Text>
+            <Text className="text-slate-500 text-[12px] mb-3">
+              Quotation prepared by your Service Advisor for this service visit.
+            </Text>
+            {mechEstimateAmount != null && Number(mechEstimateAmount) > 0 ? (
+              <Text className="text-emerald-700 font-extrabold text-[15px] mb-2">
+                Estimated amount: {formatInr(Number(mechEstimateAmount))}
+              </Text>
+            ) : null}
+            <PrimaryButton
+              label={openingWorkshopDoc ? 'Opening…' : '📄 View Workshop Estimate Document'}
+              onPress={() => void openWorkshopEstimate()}
+              loading={openingWorkshopDoc}
+            />
+          </CustomerCard>
+        ) : bodyshopEstimateDoc ? (
           <CustomerCard>
             <Text className="text-slate-900 text-[16px] font-bold mb-1">Workshop Repair Estimate</Text>
             <Text className="text-slate-500 text-[12px] mb-3">
@@ -271,13 +363,19 @@ export default function CustomerEstimateScreen() {
 
             {estimate.items.length > 0 ? (
               <View className="mb-3">
-                <View className="flex-row border-b border-slate-200 pb-2 mb-1">
+                {kind !== 'approved' ? (
+                  <Text className="text-[11.5px] text-blue-700 bg-blue-50 px-2.5 py-1.5 rounded-lg mb-2.5 font-medium">
+                    💡 You can remove any unnecessary item before approving the quotation.
+                  </Text>
+                ) : null}
+                <View className="flex-row border-b border-slate-200 pb-2 mb-1 items-center">
                   <Text className="flex-1 text-[11px] font-bold text-slate-500">Item / Description</Text>
-                  <Text className="w-16 text-[11px] font-bold text-slate-500 text-center">Type</Text>
+                  <Text className="w-14 text-[11px] font-bold text-slate-500 text-center">Type</Text>
                   <Text className="w-20 text-[11px] font-bold text-slate-500 text-right">Amount</Text>
+                  {kind !== 'approved' ? <View className="w-8" /> : null}
                 </View>
                 {estimate.items.map((item) => (
-                  <View key={item.id} className="flex-row py-2 border-b border-slate-100">
+                  <View key={item.id} className="flex-row py-2 border-b border-slate-100 items-center">
                     <View className="flex-1 pr-2">
                       <Text className="text-[12.5px] font-semibold text-slate-900">{item.description}</Text>
                       {item.quantity != null && item.unit_price != null ? (
@@ -286,7 +384,7 @@ export default function CustomerEstimateScreen() {
                         </Text>
                       ) : null}
                     </View>
-                    <View className="w-16 items-center">
+                    <View className="w-14 items-center">
                       <Text
                         className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
                           item.type.toLowerCase() === 'part' ? 'bg-sky-100 text-sky-800' : 'bg-purple-100 text-purple-800'
@@ -298,6 +396,15 @@ export default function CustomerEstimateScreen() {
                     <Text className="w-20 text-right text-[12.5px] font-bold">
                       {item.total != null ? formatInr(item.total) : '—'}
                     </Text>
+                    {kind !== 'approved' ? (
+                      <TouchableOpacity
+                        onPress={() => handleRemoveItem(item.id)}
+                        className="w-8 items-end pl-1 py-1"
+                        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                      >
+                        <Text className="text-red-500 text-[14px]">🗑️</Text>
+                      </TouchableOpacity>
+                    ) : null}
                   </View>
                 ))}
               </View>
