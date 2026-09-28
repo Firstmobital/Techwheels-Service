@@ -1013,8 +1013,6 @@ export default function BodyshopRepairPage() {
   const [bodyshopDocsByKey, setBodyshopDocsByKey] = useState<Partial<Record<BodyshopDocKey, BodyshopRepairCardDocumentRow>>>({})
   const [bodyshopDocsLoadError, setBodyshopDocsLoadError] = useState<string | null>(null)
   const [uploadingDocKey, setUploadingDocKey] = useState<BodyshopDocKey | null>(null)
-  const [syncingDocKey, setSyncingDocKey] = useState<BodyshopDocKey | null>(null)
-  const [isSyncingAllDocs, setIsSyncingAllDocs] = useState(false)
   const [pendingDocAction, setPendingDocAction] = useState<{ docKey: BodyshopDocKey; mode: 'upload' | 'replace' } | null>(null)
   const [docUploadFeedbackByKey, setDocUploadFeedbackByKey] = useState<Partial<Record<BodyshopDocKey, DocUploadFeedback>>>({})
   const [bodyshopSurveyors, setBodyshopSurveyors] = useState<BodyshopSurveyor[]>([])
@@ -2974,6 +2972,12 @@ export default function BodyshopRepairPage() {
 
     setBodyshopDocsLoadError(null)
     setBodyshopDocsByKey(nextMap)
+
+    const loadedDocs = Object.values(nextMap).filter((d): d is BodyshopRepairCardDocumentRow => Boolean(d && d.id && d.storage_path && !d.drive_url))
+    if (loadedDocs.length > 0) {
+      const regHint = String(selected?.reg_number || selectedReception?.reg_number || '').trim().toUpperCase()
+      triggerDirectDriveSync(loadedDocs, regHint)
+    }
   }
 
   function startBodyshopDocUpload(docKey: BodyshopDocKey, mode: 'upload' | 'replace') {
@@ -3133,7 +3137,7 @@ export default function BodyshopRepairPage() {
         return
       }
 
-      const { res: driveRes, body: drivePayload } = await postUniversalDriveWithRetry(supabaseUrl, token, {
+      const { body: drivePayload } = await postUniversalDriveWithRetry(supabaseUrl, token, {
         resource_type: 'bodyshop_document',
         resource_id: row.id,
         bucket_id: AUTODOC_BUCKET,
@@ -3141,27 +3145,33 @@ export default function BodyshopRepairPage() {
         file_type: docKey,
         file_size_mb: Number((file.size / (1024 * 1024)).toFixed(3)),
         registration_no: regNo,
-      })
-      if (!driveRes.ok || drivePayload?.error) {
-        setDocUploadFeedbackByKey((prev) => ({
+      }, 35000)
+
+      const driveUrl = drivePayload?.drive_url || drivePayload?.link || (drivePayload?.result as any)?.driveUrl || null
+      const driveFileId = drivePayload?.drive_file_id || (drivePayload?.result as any)?.fileId || null
+
+      if (driveUrl) {
+        setBodyshopDocsByKey((prev) => ({
           ...prev,
-          [docKey]: { tone: 'info', text: `Uploaded. Drive sync failed: ${drivePayload?.error || `HTTP ${driveRes.status}`}` },
+          [docKey]: {
+            ...row,
+            reg_number: regNo,
+            drive_url: driveUrl,
+            drive_file_id: driveFileId,
+          },
         }))
-        toast_(`Document uploaded, but Drive sync failed: ${drivePayload?.error || `HTTP ${driveRes.status}`}`, false)
+        await supabase
+          .from('bodyshop_repair_card_documents')
+          .update({
+            drive_url: driveUrl,
+            drive_file_id: driveFileId,
+            reg_number: regNo,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', row.id)
       } else {
-        const driveUrl = drivePayload.drive_url || drivePayload.link || (drivePayload.result as any)?.driveUrl || null
-        const driveFileId = drivePayload.drive_file_id || (drivePayload.result as any)?.fileId || null
-        if (driveUrl) {
-          setBodyshopDocsByKey((prev) => ({
-            ...prev,
-            [docKey]: {
-              ...row,
-              drive_url: driveUrl,
-              drive_file_id: driveFileId,
-            },
-          }))
-        }
-        await loadBodyshopDocuments(selected.id, selected.reception_entry_id)
+        // Direct background auto-sync retry
+        void autoSyncBodyshopDocToDriveDirect(row, regNo)
       }
 
       if (isLegacyBooleanDocKey(docKey)) {
@@ -3198,24 +3208,21 @@ export default function BodyshopRepairPage() {
     }
   }
 
-  async function syncBodyshopDocToDrive(docKey: BodyshopDocKey): Promise<boolean> {
-    const docRow = bodyshopDocsByKey[docKey]
-    if (!docRow || !docRow.id || !docRow.storage_path) {
-      toast_('No uploaded document found to sync', false)
-      return false
-    }
+  const autoSyncingDocKeysRef = useRef<Set<string>>(new Set())
 
-    setSyncingDocKey(docKey)
+  async function autoSyncBodyshopDocToDriveDirect(docRow: BodyshopRepairCardDocumentRow, regNoHint?: string): Promise<boolean> {
+    const docKey = docRow.doc_key
+    if (!docRow.id || !docRow.storage_path || docRow.drive_url) return true
+    if (autoSyncingDocKeysRef.current.has(docKey)) return false
+
+    autoSyncingDocKeysRef.current.add(docKey)
     try {
       const supabaseUrl = (import.meta.env.VITE_SUPABASE_URL as string | undefined)?.replace(/\/$/, '')
       const sessionRes = await supabase.auth.getSession()
       const token = sessionRes.data.session?.access_token
-      if (!supabaseUrl) {
-        toast_('Supabase URL missing', false)
-        return false
-      }
+      if (!supabaseUrl) return false
 
-      const regNo = String(docRow.reg_number || selected?.reg_number || selectedReception?.reg_number || '').trim().toUpperCase()
+      const regNo = String(docRow.reg_number || regNoHint || selected?.reg_number || selectedReception?.reg_number || '').trim().toUpperCase()
 
       const { res, body } = await postUniversalDriveWithRetry(supabaseUrl, token || '', {
         resource_type: 'bodyshop_document',
@@ -3225,59 +3232,52 @@ export default function BodyshopRepairPage() {
         file_type: docKey,
         file_size_mb: docRow.file_size_bytes ? Number((docRow.file_size_bytes / (1024 * 1024)).toFixed(3)) : undefined,
         registration_no: regNo,
-      })
+      }, 35000)
 
       if (!res.ok || body?.error || body?.ok === false) {
-        const errMsg = body?.error || `HTTP ${res.status}`
-        toast_(`Drive sync failed: ${errMsg}`, false)
         return false
       }
 
       const driveUrl = body.drive_url || body.link || (body.result as any)?.driveUrl || null
       const driveFileId = body.drive_file_id || (body.result as any)?.fileId || null
 
-      setBodyshopDocsByKey((prev) => ({
-        ...prev,
-        [docKey]: {
-          ...docRow,
-          reg_number: regNo || docRow.reg_number,
-          drive_url: driveUrl ?? docRow.drive_url,
-          drive_file_id: driveFileId ?? docRow.drive_file_id,
-        },
-      }))
+      if (driveUrl) {
+        setBodyshopDocsByKey((prev) => ({
+          ...prev,
+          [docKey]: {
+            ...docRow,
+            reg_number: regNo || docRow.reg_number,
+            drive_url: driveUrl,
+            drive_file_id: driveFileId,
+          },
+        }))
 
-      if (selected) {
-        await loadBodyshopDocuments(selected.id, selected.reception_entry_id)
+        await supabase
+          .from('bodyshop_repair_card_documents')
+          .update({
+            drive_url: driveUrl,
+            drive_file_id: driveFileId,
+            reg_number: regNo || docRow.reg_number,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', docRow.id)
+
+        return true
       }
-      toast_(`Synced to Google Drive successfully!`)
-      return true
+      return false
     } catch (e: any) {
-      toast_(`Drive sync error: ${e?.message || 'Unknown error'}`, false)
+      console.warn(`[BodyshopDocs] Auto-sync to Drive error for ${docKey}:`, e?.message)
       return false
     } finally {
-      setSyncingDocKey(null)
+      autoSyncingDocKeysRef.current.delete(docKey)
     }
   }
 
-  async function syncAllPendingDocsToDrive() {
-    if (!selected) return
-    const pendingKeys = Object.entries(bodyshopDocsByKey)
-      .filter(([_, doc]) => doc && doc.storage_path && !doc.drive_url)
-      .map(([k]) => k as BodyshopDocKey)
-
-    if (pendingKeys.length === 0) {
-      toast_('All uploaded documents are already synced to Google Drive!')
-      return
+  function triggerDirectDriveSync(docs: BodyshopRepairCardDocumentRow[], regNoHint?: string) {
+    const unsynced = docs.filter((d) => d && d.storage_path && !d.drive_url)
+    for (const doc of unsynced) {
+      void autoSyncBodyshopDocToDriveDirect(doc, regNoHint)
     }
-
-    setIsSyncingAllDocs(true)
-    let successCount = 0
-    for (const k of pendingKeys) {
-      const ok = await syncBodyshopDocToDrive(k)
-      if (ok) successCount++
-    }
-    setIsSyncingAllDocs(false)
-    toast_(`Drive sync complete: ${successCount} of ${pendingKeys.length} documents synced`)
   }
 
   const PAIR_DOC_NAMES: Record<string, { frontKey: BodyshopDocKey; backKey: BodyshopDocKey; name: string }> = {
@@ -5857,43 +5857,13 @@ export default function BodyshopRepairPage() {
                           ) : (
                             <>
                               <div className="brx-docs-progress-wrap">
-                                <div className="brx-docs-progress-head" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
+                                <div className="brx-docs-progress-head">
                                   <span className="brx-docs-progress-title">
                                     Mandatory Documents
                                   </span>
-                                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                                    {(() => {
-                                      const unsyncedCount = Object.values(bodyshopDocsByKey).filter((doc) => doc && doc.storage_path && !doc.drive_url).length
-                                      if (unsyncedCount === 0) return null
-                                      return (
-                                        <button
-                                          type="button"
-                                          className="btn btn--sm"
-                                          style={{
-                                            backgroundColor: '#fef3c7',
-                                            color: '#92400e',
-                                            borderColor: '#fcd34d',
-                                            fontSize: '12px',
-                                            padding: '3px 10px',
-                                            borderRadius: '6px',
-                                            cursor: 'pointer',
-                                            fontWeight: '700',
-                                            display: 'inline-flex',
-                                            alignItems: 'center',
-                                            gap: '4px',
-                                          }}
-                                          onClick={() => void syncAllPendingDocsToDrive()}
-                                          disabled={isSyncingAllDocs}
-                                          title="Sync all pending documents to Google Drive"
-                                        >
-                                          {isSyncingAllDocs ? '⏳ Syncing Drive…' : `☁️ Sync ${unsyncedCount} to Drive`}
-                                        </button>
-                                      )
-                                    })()}
-                                    <span className={`brx-docs-progress-stat ${allMandatoryDone ? 'is-done' : 'is-pending'}`}>
-                                      {collectedMandatory} / {mandatoryDocs.length} {allMandatoryDone ? '✓ Complete' : '⚠ Pending'}
-                                    </span>
-                                  </div>
+                                  <span className={`brx-docs-progress-stat ${allMandatoryDone ? 'is-done' : 'is-pending'}`}>
+                                    {collectedMandatory} / {mandatoryDocs.length} {allMandatoryDone ? '✓ Complete' : '⚠ Pending'}
+                                  </span>
                                 </div>
                                 <div className="brx-docs-progress-bar">
                                   <div
@@ -5938,7 +5908,7 @@ export default function BodyshopRepairPage() {
                                               >
                                                 👁️ View
                                               </button>
-                                              {attachedDoc.drive_url ? (
+                                              {attachedDoc.drive_url && (
                                                 <a
                                                   href={attachedDoc.drive_url}
                                                   target="_blank"
@@ -5949,17 +5919,6 @@ export default function BodyshopRepairPage() {
                                                 >
                                                   📁 Drive
                                                 </a>
-                                              ) : (
-                                                <button
-                                                  type="button"
-                                                  className="btn brx-doc-btn"
-                                                  style={{ backgroundColor: '#fffbeb', color: '#b45309', borderColor: '#fde68a', display: 'inline-flex', alignItems: 'center', gap: '3px' }}
-                                                  onClick={() => void syncBodyshopDocToDrive(k)}
-                                                  disabled={syncingDocKey === k || isSyncingAllDocs}
-                                                  title="Sync this document to Google Drive"
-                                                >
-                                                  {syncingDocKey === k ? 'Syncing…' : '☁️ Sync Drive'}
-                                                </button>
                                               )}
                                             </>
                                           ) : null
@@ -5973,7 +5932,7 @@ export default function BodyshopRepairPage() {
                                             >
                                               👁️ View
                                             </button>
-                                            {attachedDoc.drive_url ? (
+                                            {attachedDoc.drive_url && (
                                               <a
                                                 href={attachedDoc.drive_url}
                                                 target="_blank"
@@ -5984,17 +5943,6 @@ export default function BodyshopRepairPage() {
                                               >
                                                 📁 Drive
                                               </a>
-                                            ) : (
-                                              <button
-                                                type="button"
-                                                className="btn brx-doc-btn"
-                                                style={{ backgroundColor: '#fffbeb', color: '#b45309', borderColor: '#fde68a', display: 'inline-flex', alignItems: 'center', gap: '3px' }}
-                                                onClick={() => void syncBodyshopDocToDrive(k)}
-                                                disabled={syncingDocKey === k || isSyncingAllDocs}
-                                                title="Sync this document to Google Drive"
-                                              >
-                                                {syncingDocKey === k ? 'Syncing…' : '☁️ Sync Drive'}
-                                              </button>
                                             )}
                                             <button
                                               type="button"
@@ -6066,7 +6014,7 @@ export default function BodyshopRepairPage() {
                                                 >
                                                   View
                                                 </button>
-                                                {attachedDoc.drive_url ? (
+                                                {attachedDoc.drive_url && (
                                                   <a
                                                     href={attachedDoc.drive_url}
                                                     target="_blank"
@@ -6077,17 +6025,6 @@ export default function BodyshopRepairPage() {
                                                   >
                                                     📁 Drive
                                                   </a>
-                                                ) : (
-                                                  <button
-                                                    type="button"
-                                                    className="btn brx-doc-btn"
-                                                    style={{ backgroundColor: '#fffbeb', color: '#b45309', borderColor: '#fde68a', display: 'inline-flex', alignItems: 'center', gap: '3px' }}
-                                                    onClick={() => void syncBodyshopDocToDrive(k)}
-                                                    disabled={syncingDocKey === k || isSyncingAllDocs}
-                                                    title="Sync this document to Google Drive"
-                                                  >
-                                                    {syncingDocKey === k ? 'Syncing…' : '☁️ Sync Drive'}
-                                                  </button>
                                                 )}
                                                 <button
                                                   className="btn brx-doc-btn"
@@ -6161,7 +6098,7 @@ export default function BodyshopRepairPage() {
                                 <button type="button" className="btn btn--ghost" onClick={() => void handleViewBodyshopDoc('doc_estimate')}>
                                   View
                                 </button>
-                                {estimateDoc.drive_url ? (
+                                {estimateDoc.drive_url && (
                                   <a
                                     href={estimateDoc.drive_url}
                                     target="_blank"
@@ -6172,17 +6109,6 @@ export default function BodyshopRepairPage() {
                                   >
                                     📁 Drive
                                   </a>
-                                ) : (
-                                  <button
-                                    type="button"
-                                    className="btn btn--ghost"
-                                    style={{ backgroundColor: '#fffbeb', color: '#b45309', borderColor: '#fde68a', display: 'inline-flex', alignItems: 'center', gap: '3px' }}
-                                    onClick={() => void syncBodyshopDocToDrive('doc_estimate')}
-                                    disabled={syncingDocKey === 'doc_estimate' || isSyncingAllDocs}
-                                    title="Sync estimate to Google Drive"
-                                  >
-                                    {syncingDocKey === 'doc_estimate' ? 'Syncing…' : '☁️ Sync Drive'}
-                                  </button>
                                 )}
                                 <button
                                   type="button"
@@ -6472,7 +6398,7 @@ export default function BodyshopRepairPage() {
                               <button type="button" className="btn btn--ghost" onClick={() => void handleViewBodyshopDoc('doc_survey_approval')}>
                                 View
                               </button>
-                              {surveyApprovalDoc.drive_url ? (
+                              {surveyApprovalDoc.drive_url && (
                                 <a
                                   href={surveyApprovalDoc.drive_url}
                                   target="_blank"
@@ -6483,17 +6409,6 @@ export default function BodyshopRepairPage() {
                                 >
                                   📁 Drive
                                 </a>
-                              ) : (
-                                <button
-                                  type="button"
-                                  className="btn btn--ghost"
-                                  style={{ backgroundColor: '#fffbeb', color: '#b45309', borderColor: '#fde68a', display: 'inline-flex', alignItems: 'center', gap: '3px' }}
-                                  onClick={() => void syncBodyshopDocToDrive('doc_survey_approval')}
-                                  disabled={syncingDocKey === 'doc_survey_approval' || isSyncingAllDocs}
-                                  title="Sync survey approval photo to Google Drive"
-                                >
-                                  {syncingDocKey === 'doc_survey_approval' ? 'Syncing…' : '☁️ Sync Drive'}
-                                </button>
                               )}
                               <button
                                 type="button"
