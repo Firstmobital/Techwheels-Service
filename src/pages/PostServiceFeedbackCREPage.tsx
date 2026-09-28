@@ -55,6 +55,13 @@ interface StatusStats {
   resolved: number
 }
 
+interface TodayProductivity {
+  positive: number
+  needsFollowup: number
+  inProgress: number
+  total: number
+}
+
 const PAGE_SIZE = 50
 
 const PSF_WA_MESSAGE = `नमस्ते! 🚗
@@ -100,6 +107,20 @@ function daysSinceSent(sentAt: string | null): string {
 
 function sanitizeSearch(raw: string): string {
   return raw.trim().replace(/[%_,.()]/g, ' ').replace(/\s+/g, ' ').trim()
+}
+
+function getAsiaKolkataTodayBounds() {
+  const d = new Date()
+  const dateString = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Kolkata',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  }).format(d)
+  return {
+    start: `${dateString}T00:00:00.000+05:30`,
+    end: `${dateString}T23:59:59.999+05:30`
+  }
 }
 
 const STATUS_COLOR: Record<string, string> = {
@@ -467,6 +488,9 @@ export default function PostServiceFeedbackCREPage() {
   const [statusStats, setStatusStats] = useState<StatusStats>({
     total: 0, open: 0, in_progress: 0, resolved: 0,
   })
+  const [todayProductivity, setTodayProductivity] = useState<TodayProductivity>({
+    positive: 0, needsFollowup: 0, inProgress: 0, total: 0,
+  })
   const [filteredTotal, setFilteredTotal] = useState(0)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -532,7 +556,17 @@ export default function PostServiceFeedbackCREPage() {
     const dueTodayCount = () =>
       supabase.from('post_service_feedback_cre_due_today').select('id', { count: 'exact', head: true })
 
-    const [totalSent, positiveCount, needsFollowupCount, unratedCount, todayCount, pageRes, statusTotal, statusOpen, statusInProgress, statusResolved] = await Promise.all([
+    const todayBounds = getAsiaKolkataTodayBounds()
+    const prodBase = () => 
+      supabase.from('post_service_feedback_messages')
+        .select('id', { count: 'exact', head: true })
+        .gte('updated_at', todayBounds.start)
+        .lte('updated_at', todayBounds.end)
+
+    const [
+      totalSent, positiveCount, needsFollowupCount, unratedCount, todayCount, pageRes, statusTotal, statusOpen, statusInProgress, statusResolved,
+      prodPositive, prodNeedsFollowup, prodInProgress, prodTotal
+    ] = await Promise.all([
       readCount(baseCount()),
       readCount(baseCount().gte('effective_rating', 4)),
       readCount(baseCount().lte('effective_rating', 3)),
@@ -543,6 +577,10 @@ export default function PostServiceFeedbackCREPage() {
       tier === 'high' ? Promise.resolve(0) : readCount(statusBase().eq('cre_status', 'open')),
       tier === 'high' ? Promise.resolve(0) : readCount(statusBase().eq('cre_status', 'in_progress')),
       tier === 'high' || tier === 'today' ? Promise.resolve(0) : readCount(statusBase().eq('cre_status', 'resolved')),
+      readCount(prodBase().gte('effective_rating', 4)),
+      readCount(prodBase().lte('effective_rating', 3)),
+      readCount(prodBase().eq('cre_status', 'in_progress')),
+      readCount(prodBase()),
     ])
 
     if (pageRes.error) throw pageRes.error
@@ -555,6 +593,12 @@ export default function PostServiceFeedbackCREPage() {
         in_progress: statusInProgress,
         resolved: statusResolved,
       },
+      todayProductivity: {
+        positive: prodPositive,
+        needsFollowup: prodNeedsFollowup,
+        inProgress: prodInProgress,
+        total: prodTotal,
+      },
       rows: (pageRes.data || []) as QueueRow[],
       filteredTotal: pageRes.count || 0,
     }
@@ -563,6 +607,7 @@ export default function PostServiceFeedbackCREPage() {
   const applyQueue = useCallback((result: Awaited<ReturnType<typeof fetchQueue>>) => {
     setOverview(result.overview)
     setStatusStats(result.statusStats)
+    setTodayProductivity(result.todayProductivity)
     setRows(result.rows)
     setFilteredTotal(result.filteredTotal)
     setError(null)
@@ -683,6 +728,13 @@ export default function PostServiceFeedbackCREPage() {
           <StatCard label="Resolved" value={statusStats.resolved} color="text-green-700" />
         </div>
       )}
+
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <StatCard label="Today's 4★ & Above" value={todayProductivity.positive} color="text-green-700" />
+        <StatCard label="Today's 3★ & Below" value={todayProductivity.needsFollowup} color="text-red-700" />
+        <StatCard label="Today's In Progress" value={todayProductivity.inProgress} color="text-yellow-700" />
+        <StatCard label="Today's Total Calls" value={todayProductivity.total} color="text-blue-700" />
+      </div>
 
       <div className="bg-white border border-gray-200 rounded-lg p-4">
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 lg:items-end">
