@@ -570,7 +570,7 @@ export default function PostServiceFeedbackCREPage() {
 
     const [
       totalSent, positiveCount, needsFollowupCount, unratedCount, todayCount, pageRes, statusTotal, statusOpen, statusInProgress, statusResolved,
-      prodRes
+      prodRes, todayWaSentCount
     ] = await Promise.all([
       readCount(baseCount()),
       readCount(baseCount().gte('effective_rating', 4)),
