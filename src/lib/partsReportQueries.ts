@@ -761,9 +761,9 @@ export async function getAbcClassification(filters: PartsReportFilters): Promise
 
     const totalValue = sorted.reduce((sum, p) => sum + (p.totalValue || 0), 0)
     let cumulativeValue = 0
-    let aCount = 0,
-      bCount = 0,
-      cCount = 0
+    let _aCount = 0,
+      _bCount = 0,
+      _cCount = 0
     const aThreshold = totalValue * 0.7
     const bThreshold = totalValue * 0.9
 
@@ -774,13 +774,13 @@ export async function getAbcClassification(filters: PartsReportFilters): Promise
       let classification: 'A' | 'B' | 'C' = 'C'
       if (cumulativeValue <= aThreshold) {
         classification = 'A'
-        aCount += 1
+        _aCount += 1
       } else if (cumulativeValue <= bThreshold) {
         classification = 'B'
-        bCount += 1
+        _bCount += 1
       } else {
         classification = 'C'
-        cCount += 1
+        _cCount += 1
       }
 
       return {

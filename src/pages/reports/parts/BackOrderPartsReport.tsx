@@ -177,7 +177,7 @@ function BackOrderPartsStatusTab({ branch }: ReportViewProps) {
   }, [rows, filters.fiscalYear, filters.monthName])
 
   const filteredRows = useMemo(() => {
-    let filtered = dateFilteredRows.filter((row) => {
+    const filtered = dateFilteredRows.filter((row) => {
       // Status filter
       if (filters.status && row.status !== filters.status) return false
 

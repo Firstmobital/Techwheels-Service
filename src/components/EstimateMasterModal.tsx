@@ -130,7 +130,7 @@ export function EstimateMasterModal({ isOpen, onClose }: EstimateMasterModalProp
         const itemModel = (item.model || '').trim().toLowerCase()
         if (!itemModel) return false
         if (itemModel !== 'all' && itemModel !== selModel) {
-          const models = itemModel.split(/[\/,|+]/).map((m) => m.trim())
+          const models = itemModel.split(/[/,|+]/).map((m) => m.trim())
           if (!models.includes(selModel) && !itemModel.startsWith(`${selModel} `) && !itemModel.endsWith(` ${selModel}`)) {
             return false
           }
@@ -142,7 +142,7 @@ export function EstimateMasterModal({ isOpen, onClose }: EstimateMasterModalProp
         const itemFuel = (item.fuel || '').trim().toLowerCase()
         if (!itemFuel) return false
         if (itemFuel !== 'all' && itemFuel !== selFuel) {
-          const fuels = itemFuel.split(/[\/,|+]/).map((f) => f.trim())
+          const fuels = itemFuel.split(/[/,|+]/).map((f) => f.trim())
           if (!fuels.includes(selFuel)) {
             return false
           }

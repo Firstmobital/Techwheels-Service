@@ -260,6 +260,31 @@ export function ServiceEstimateBuilderModal({
     }
   }, [vehicleReg])
 
+  const modelOptions = useMemo(() => {
+    const defaultModels = ['All', 'Altroz', 'Tiago', 'Nexon', 'Punch', 'Tigor', 'Curvv', 'Harrier', 'Safari']
+    if (activeModel && !defaultModels.includes(activeModel)) {
+      return [...defaultModels, activeModel]
+    }
+    return defaultModels
+  }, [activeModel])
+
+  const serviceTypeOptions = useMemo(() => {
+    const defaults = [
+      'All',
+      'First Free Service',
+      'Second Free Service',
+      'Third Free Service',
+      'Fourth Free Service',
+      'Paid Service',
+      'Mini Paid Service',
+      'Running Repairs',
+    ]
+    if (activeServiceType && !defaults.includes(activeServiceType)) {
+      return [...defaults, activeServiceType]
+    }
+    return defaults
+  }, [activeServiceType])
+
   if (!isOpen) return null
 
   // Filter catalogue items with Model, Service Type, Fuel, and Query
@@ -274,7 +299,7 @@ export function ServiceEstimateBuilderModal({
     if (selModel !== 'all' && selModel) {
       const itemModel = (item.model || '').trim().toLowerCase()
       if (itemModel && itemModel !== 'all') {
-        const models = itemModel.split(/[\/,|+]/).map((m) => m.trim())
+        const models = itemModel.split(/[/,|+]/).map((m) => m.trim())
         if (itemModel !== selModel && !models.includes(selModel) && !itemModel.includes(selModel)) {
           return false
         }
@@ -306,7 +331,7 @@ export function ServiceEstimateBuilderModal({
     if (selFuel !== 'all' && selFuel) {
       const itemFuel = (item.fuel || '').trim().toLowerCase()
       if (itemFuel && itemFuel !== 'all') {
-        const fuels = itemFuel.split(/[\/,|+]/).map((f) => f.trim())
+        const fuels = itemFuel.split(/[/,|+]/).map((f) => f.trim())
         if (itemFuel !== selFuel && !fuels.includes(selFuel)) {
           return false
         }
@@ -573,31 +598,6 @@ export function ServiceEstimateBuilderModal({
       setIsSaving(false)
     }
   }
-
-  const modelOptions = useMemo(() => {
-    const defaultModels = ['All', 'Altroz', 'Tiago', 'Nexon', 'Punch', 'Tigor', 'Curvv', 'Harrier', 'Safari']
-    if (activeModel && !defaultModels.includes(activeModel)) {
-      return [...defaultModels, activeModel]
-    }
-    return defaultModels
-  }, [activeModel])
-
-  const serviceTypeOptions = useMemo(() => {
-    const defaults = [
-      'All',
-      'First Free Service',
-      'Second Free Service',
-      'Third Free Service',
-      'Fourth Free Service',
-      'Paid Service',
-      'Mini Paid Service',
-      'Running Repairs',
-    ]
-    if (activeServiceType && !defaults.includes(activeServiceType)) {
-      return [...defaults, activeServiceType]
-    }
-    return defaults
-  }, [activeServiceType])
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-3 backdrop-blur-xs">

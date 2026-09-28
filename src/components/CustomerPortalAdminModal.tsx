@@ -85,7 +85,7 @@ export function CustomerPortalAdminModal({
         .order('complaint_date_time', { ascending: false })
         .limit(20)
 
-      let parsedComplaints: ComplaintRecord[] = []
+      const parsedComplaints: ComplaintRecord[] = []
       let botEstimateDecision: { status: 'Approved' | 'Rejected'; reason?: string; dt?: string } | null = null
 
       if (botData) {

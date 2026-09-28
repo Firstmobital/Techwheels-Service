@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components -- utility helpers co-located with the component they serve */
 // src/components/DateRangeFilter.tsx
 // Shared date-range bar used across all CRM modules
 

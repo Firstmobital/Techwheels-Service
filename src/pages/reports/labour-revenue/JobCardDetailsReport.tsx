@@ -356,7 +356,7 @@ export default function JobCardDetailsReport({ branch, dateFilter }: ReportViewP
 
     let cancelledCount = 0
     let closedNotInvoicedCount = 0
-    let openCount = 0
+    let _openCount = 0
 
     for (const row of serviceTypeFilteredRows) {
       const invoiced = isTruthyInvoiceValue(row.invoiced)
@@ -370,7 +370,7 @@ export default function JobCardDetailsReport({ branch, dateFilter }: ReportViewP
         closedNotInvoicedCount += 1
       }
       else {
-        openCount += 1
+        _openCount += 1
       }
     }
 

@@ -167,8 +167,8 @@ export default function BodyshopRecoveryPage() {
     try {
       const data = await listBodyshopDoRecovery()
       const cardIds = data.map((r) => r.repair_card_id)
-      let settleMap = new Map<number, number>()
-      let policyMap = new Map<number, string>()
+      const settleMap = new Map<number, number>()
+      const policyMap = new Map<number, string>()
       const doLinesByCard = new Map<number, Parameters<typeof postedDoComponentAmounts>[0]>()
       if (cardIds.length > 0) {
         try {

@@ -210,7 +210,7 @@ export default function WAAgentPage() {
   const [testConvId, setTestConvId] = useState<number|null>(null)
   // Follow-up state
   const [followupSteps, setFollowupSteps] = useState<Array<{id:number;day_offset:number;message_template:string;sort_order:number;is_active:boolean}>>([])
-  const [followupQueue, setFollowupQueue] = useState<Array<{id:number;phone:string;customer_name:string;model:string;scheduled_at:string;status:string;skip_reason:string;wa_followup_steps:{message_template:string;day_offset:number}}>>([])
+  const [_followupQueue, setFollowupQueue] = useState<Array<{id:number;phone:string;customer_name:string;model:string;scheduled_at:string;status:string;skip_reason:string;wa_followup_steps:{message_template:string;day_offset:number}}>>([])
   const [enrollingCamp, setEnrollingCamp] = useState<number|null>(null)
   // followupFilter state reserved for future use
   const [editingStep, setEditingStep] = useState<number|null>(null)
@@ -256,7 +256,7 @@ export default function WAAgentPage() {
     if (campRes.data) setCampaigns(campRes.data as Campaign[])
     if (convRes.data) setConversations(convRes.data as Conversation[])
     if (stepsRes.data) setFollowupSteps(stepsRes.data as typeof followupSteps)
-    if (queueRes.data) setFollowupQueue(queueRes.data as typeof followupQueue)
+    if (queueRes.data) setFollowupQueue(queueRes.data as typeof _followupQueue)
     if (tplRes.data) setTemplates(tplRes.data as WATemplate[])
   }
 
@@ -417,7 +417,7 @@ export default function WAAgentPage() {
         setTestModalNumbers('')
       }
       else setError(data?.error || 'Test send failed')
-    } catch (e) {
+    } catch (_e) {
       setError('Network error. Check edge function deployment.')
     }
     await loadAll()
@@ -435,7 +435,7 @@ export default function WAAgentPage() {
       if (fnErr) setError(fnErr.message || 'Send failed')
       else if (data?.ok) showToast(`✅ Sent: ${data.sent}, Failed: ${data.failed}`)
       else setError(data?.error || 'Send failed')
-    } catch (e) {
+    } catch (_e) {
       setError('Network error. Check edge function deployment.')
     }
     await loadAll()
@@ -592,8 +592,8 @@ export default function WAAgentPage() {
       setTestChat(p => [...p, { role: 'agent', text: reply, ts: replyTs }])
 
       await loadAll()
-    } catch (e) {
-      setTestChat(p => [...p, { role: 'agent', text: '⚠️ Error: ' + String(e), ts: new Date().toLocaleTimeString() }])
+    } catch (_e) {
+      setTestChat(p => [...p, { role: 'agent', text: '⚠️ Error: ' + String(_e), ts: new Date().toLocaleTimeString() }])
     }
     setTestLoading(false)
   }
@@ -1129,8 +1129,8 @@ export default function WAAgentPage() {
                     const { ok, status, body } = await callTemplateSubmitApi({ action: 'import_from_meta' })
                     if (!ok) setToast(`❌ ${String(body.error || `Import failed (${status})`)}`)  
                     else { setToast(`✅ Imported ${String(body.imported ?? 0)} new, updated ${String(body.updated ?? 0)} from Meta`); await loadAll() }
-                  } catch (e) {
-                    setToast(`❌ Network error: ${String(e)}`)
+                  } catch (_e) {
+                    setToast(`❌ Network error: ${String(_e)}`)
                   } finally {
                     setSyncingTemplates(false)
                   }
@@ -1144,8 +1144,8 @@ export default function WAAgentPage() {
                     const { ok, status, body } = await callTemplateSubmitApi({ action: 'sync_all' })
                     if (!ok) setToast(`❌ ${String(body.error || `Sync failed (${status})`)}`)  
                     else { setToast(`✅ Synced ${String(body.synced || 0)} templates from Meta`); await loadAll() }
-                  } catch (e) {
-                    setToast(`❌ Network error: ${String(e)}`)
+                  } catch (_e) {
+                    setToast(`❌ Network error: ${String(_e)}`)
                   } finally {
                     setSyncingTemplates(false)
                   }
@@ -1234,8 +1234,8 @@ export default function WAAgentPage() {
                               const { ok, status, body } = await callTemplateSubmitApi({ action:'submit', template_id:tpl.id })
                               if (!ok) setToast(`❌ ${String(body.error || `Submit failed (${status})`)}`)  
                               else { setToast(`✅ ${String(body.message || 'Template submitted')}`); await loadAll() }
-                            } catch (e) {
-                              setToast(`❌ Network error: ${String(e)}`)
+                            } catch (_e) {
+                              setToast(`❌ Network error: ${String(_e)}`)
                             } finally {
                               setSubmittingTemplate(null)
                             }
@@ -1250,8 +1250,8 @@ export default function WAAgentPage() {
                               const { ok, status, body } = await callTemplateSubmitApi({ action:'sync_status', template_id:tpl.id })
                               if (!ok) setToast(`❌ ${String(body.error || `Status check failed (${status})`)}`)  
                               else { setToast(`Status: ${String(body.status || 'unknown')}`); await loadAll() }
-                            } catch (e) {
-                              setToast(`❌ Network error: ${String(e)}`)
+                            } catch (_e) {
+                              setToast(`❌ Network error: ${String(_e)}`)
                             }
                           }}>🔄 Check Status</button>
                       )}
@@ -1269,8 +1269,8 @@ export default function WAAgentPage() {
                               const { ok, status, body } = await callTemplateSubmitApi({ action:'delete', template_id:tpl.id })
                               if (!ok) setToast(`❌ ${String(body.error || `Delete failed (${status})`)}`)  
                               else { setToast('🗑 Template deleted'); await loadAll() }
-                            } catch (e) {
-                              setToast(`❌ Network error: ${String(e)}`)
+                            } catch (_e) {
+                              setToast(`❌ Network error: ${String(_e)}`)
                             }
                           }}>🗑 Delete</button>
                       )}

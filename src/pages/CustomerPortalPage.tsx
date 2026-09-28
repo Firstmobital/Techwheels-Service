@@ -339,7 +339,7 @@ export default function CustomerPortalPage({
                   advisorName = cleanAdvisorPersonName(parsed.advisor_name || parsed.sa_name) || advisorName
                 }
                 if (parsed.status) status = parsed.status
-              } catch { }
+              } catch { /* intentional */ }
             }
 
             if (problems.length === 0 && text) {
@@ -939,7 +939,7 @@ export default function CustomerPortalPage({
     isUserActiveListeningRef.current = false
     try {
       recognitionRef.current?.stop()
-    } catch { }
+    } catch { /* intentional */ }
     setIsListening(false)
     setListeningTarget(null)
     setVoiceStatusMsg(null)
@@ -1058,7 +1058,7 @@ export default function CustomerPortalPage({
               if (isUserActiveListeningRef.current) {
                 try {
                   recognition.start()
-                } catch { }
+                } catch { /* intentional */ }
               }
             }, 300)
           }

@@ -114,13 +114,13 @@ function parseInsuranceDateForInput(value: unknown): string | null {
 
   if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw
 
-  const dmy = raw.match(/^(\d{2})[\/-](\d{2})[\/-](\d{4})$/)
+  const dmy = raw.match(/^(\d{2})[/-](\d{2})[/-](\d{4})$/)
   if (dmy) {
     const [, dd, mm, yyyy] = dmy
     return `${yyyy}-${mm}-${dd}`
   }
 
-  const ymd = raw.match(/^(\d{4})[\/-](\d{2})[\/-](\d{2})$/)
+  const ymd = raw.match(/^(\d{4})[/-](\d{2})[/-](\d{2})$/)
   if (ymd) {
     const [, yyyy, mm, dd] = ymd
     return `${yyyy}-${mm}-${dd}`

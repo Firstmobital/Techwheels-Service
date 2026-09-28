@@ -269,7 +269,7 @@ export function previewAttendanceImport(
   let valid = 0
   let updates = 0
   let unchanged = 0
-  let warnings = 0
+  const warnings = 0
   let rejected = 0
 
   rows.forEach((row, idx) => {

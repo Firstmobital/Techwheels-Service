@@ -221,8 +221,7 @@ export default function ReportsPage() {
           totalVasCount: 0,
         })
       } finally {
-        if (!active) return
-        setHeaderStatsLoading(false)
+        if (active) setHeaderStatsLoading(false)
       }
     }
 

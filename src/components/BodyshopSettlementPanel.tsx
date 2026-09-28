@@ -168,7 +168,7 @@ export function BodyshopSettlementPanel({
     }
   }
 
-  async function useDmsInvoice() {
+  async function applyDmsInvoice() {
     const inv = payload?.suggested_invoice
     if (!inv?.total_invoice_amount) {
       toast('No DMS invoice found for this job card', false)
@@ -469,7 +469,7 @@ export function BodyshopSettlementPanel({
                 <span style={{ color: 'var(--text-2)' }}>{payload?.suggested_invoice?.account ?? header?.invoice_account}</span>
               )}
               {payload?.suggested_invoice?.total_invoice_amount != null && (
-                <button type="button" className="btn" onClick={() => void useDmsInvoice()} disabled={savingHeader}>
+                <button type="button" className="btn" onClick={() => void applyDmsInvoice()} disabled={savingHeader}>
                   Use DMS invoice
                 </button>
               )}

@@ -74,6 +74,7 @@ export interface InvoiceParseError {
 function normalizeHeader(header: string): string {
   return header
     .replace(/^\uFEFF/, '')
+    // eslint-disable-next-line no-control-regex -- intentional: strip ASCII control chars
     .replace(/[\u0000-\u001F\u007F]/g, '')
     .replace(/\s+/g, ' ')
     .trim()

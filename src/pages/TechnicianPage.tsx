@@ -1081,12 +1081,12 @@ export default function TechnicianPage() {
       ))
 
       // Reuse Floor Incharge API enrichment path to keep location/fuel logic consistent.
-      let regNumberMap = new Map<string, string>()
-      let isRevisitMap = new Map<string, boolean>()
-      let isUpdationMap = new Map<string, boolean>()
-      let locationMap = new Map<string, string>()
-      let fuelTypeMap = new Map<string, string>()
-      let revenueMap = new Map<string, RevenueRow>()
+      const regNumberMap = new Map<string, string>()
+      const isRevisitMap = new Map<string, boolean>()
+      const isUpdationMap = new Map<string, boolean>()
+      const locationMap = new Map<string, string>()
+      const fuelTypeMap = new Map<string, string>()
+      const revenueMap = new Map<string, RevenueRow>()
 
       if (assignmentJcNumbers.length > 0) {
         const assignmentJcSet = new Set(assignmentJcNumbers)

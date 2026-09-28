@@ -113,7 +113,7 @@ export function MasterDataUploadSection({ onUploadComplete }: { onUploadComplete
       const obj: Record<string, unknown> = {}
       for (const [fileCol, dbCol] of Object.entries(columnMapping)) {
         if (dbCol) {
-          let val = row[fileCol]
+          const val = row[fileCol]
           if (val === '' || val === undefined || val === null) obj[dbCol] = null
           else if (typeof val === 'number') obj[dbCol] = String(val)
           else obj[dbCol] = String(val).trim()

@@ -174,7 +174,7 @@ async function callEdge(action: string, body: Record<string, unknown> = {}): Pro
     return { res, data }
   }
 
-  let token = await getEdgeAccessToken()
+  const token = await getEdgeAccessToken()
   let { res, data } = await doFetch(token)
   if (res.status === 401 || data.error === 'Not authenticated') {
     await supabase.auth.getUser()
@@ -220,7 +220,7 @@ async function callEdgeRcFetchSingle(body: Record<string, unknown>): Promise<any
     return { res, data }
   }
 
-  let token = await getEdgeAccessToken()
+  const token = await getEdgeAccessToken()
   let { res, data } = await doFetch(token)
   if (res.status === 401 || data.error === 'Not authenticated') {
     await supabase.auth.getUser()

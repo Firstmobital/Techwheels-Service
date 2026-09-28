@@ -363,7 +363,7 @@ export default function PartsRequirementSection({ isAdmin = false }: Props) {
   const loadBackOrderData = useCallback(async () => {
     try {
       // Fetch all VOR BO REPORT part numbers (Sheet 1 — Back Order parts)
-      let vorParts = new Set<string>()
+      const vorParts = new Set<string>()
       let vorOffset = 0
       while (true) {
         const { data: vorData } = await supabase

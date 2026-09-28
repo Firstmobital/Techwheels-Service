@@ -164,7 +164,7 @@ export default function PartsSPMDashboardPage() {
   const loadBackOrderData = useCallback(async () => {
     try {
       // Fetch all VOR BO REPORT part numbers (Sheet 1 — Back Order parts)
-      let vorParts = new Set<string>()
+      const vorParts = new Set<string>()
       let vorOffset = 0
       while (true) {
         const { data: vorData } = await supabase
@@ -328,8 +328,8 @@ export default function PartsSPMDashboardPage() {
 
   const sorted = useMemo(() => {
     return [...filtered].sort((a, b) => {
-      let av = String(a[sortKey] ?? '')
-      let bv = String(b[sortKey] ?? '')
+      const av = String(a[sortKey] ?? '')
+      const bv = String(b[sortKey] ?? '')
       return sortDir === 'asc' ? av.localeCompare(bv) : bv.localeCompare(av)
     })
   }, [filtered, sortKey, sortDir])

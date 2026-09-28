@@ -163,7 +163,7 @@ function parseTimestamp(value: unknown, fieldName: string): string | null {
   // Handle DD/MM/YY, DD/MM/YYYY, DD-MM-YY, DD-MM-YYYY,
   // with optional time and optional AM/PM.
   const ddmmyyyy12h = raw.match(
-    /^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})(?:\s+(\d{1,2})(?::(\d{1,2}))?(?::(\d{1,2}))?\s*(AM|PM)?)?$/i,
+    /^(\d{1,2})[/-](\d{1,2})[/-](\d{2,4})(?:\s+(\d{1,2})(?::(\d{1,2}))?(?::(\d{1,2}))?\s*(AM|PM)?)?$/i,
   )
   if (ddmmyyyy12h) {
     const [, dStr, mStr, yStr, hStr = '0', minStr = '00', secStr = '00', meridiemRaw] = ddmmyyyy12h
@@ -238,7 +238,7 @@ function parseDate(value: unknown, fieldName: string): string | null {
   const raw = String(value).trim()
   if (!raw) return null
 
-  const ddmmyyyy = raw.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})$/)
+  const ddmmyyyy = raw.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{2,4})$/)
   if (ddmmyyyy) {
     const [, dStr, mStr, yStr] = ddmmyyyy
     const day = Number.parseInt(dStr, 10)

@@ -499,7 +499,7 @@ function parsePotentialDate(value: string): string | null {
   }
 
   const ddmmyyyyWithTime = text.match(
-    /^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})(?:\s+(\d{1,2}):(\d{2})(?::(\d{2}))?\s*(AM|PM)?)?$/i,
+    /^(\d{1,2})[/-](\d{1,2})[/-](\d{2,4})(?:\s+(\d{1,2}):(\d{2})(?::(\d{2}))?\s*(AM|PM)?)?$/i,
   )
   if (ddmmyyyyWithTime) {
     const day = Number(ddmmyyyyWithTime[1])
@@ -523,7 +523,7 @@ function parsePotentialDate(value: string): string | null {
     return direct.toISOString()
   }
 
-  const ddmmyyyy = text.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})$/)
+  const ddmmyyyy = text.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{2,4})$/)
   if (ddmmyyyy) {
     const day = Number(ddmmyyyy[1])
     const month = Number(ddmmyyyy[2]) - 1
@@ -815,8 +815,7 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
         setError(err instanceof Error ? err.message : String(err))
         setRecords([])
       } finally {
-        if (!active) return
-        setIsLoading(false)
+        if (active) setIsLoading(false)
       }
     }
 
@@ -853,8 +852,7 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
         if (!active) return
         setSplCodes(all)
       } finally {
-        if (!active) return
-        setSplLoading(false)
+        if (active) setSplLoading(false)
       }
     }
     void loadSplCodes()
@@ -885,8 +883,7 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
         if (!active) return
         setLabourData(all)
       } finally {
-        if (!active) return
-        setLabourLoading(false)
+        if (active) setLabourLoading(false)
       }
     }
     void loadLabour()

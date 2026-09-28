@@ -243,7 +243,7 @@ export default function ServiceBookingPage() {
     try {
       const { data } = await supabase.from('service_bookings').update(updates).eq('id', booking.id).select()
       if (data && data.length > 0) updated = true
-    } catch {}
+    } catch { /* intentional */ }
 
     if (!updated && booking.reg_number) {
       try {
@@ -251,7 +251,7 @@ export default function ServiceBookingPage() {
         if (booking.appointment_date) q = q.eq('appointment_date', booking.appointment_date)
         const { data } = await q.select()
         if (data && data.length > 0) updated = true
-      } catch {}
+      } catch { /* intentional */ }
     }
 
     if (!updated) {
@@ -259,7 +259,7 @@ export default function ServiceBookingPage() {
         const fullRow = { ...booking, ...updates }
         delete (fullRow as any).id
         await supabase.from('service_bookings').insert([fullRow])
-      } catch {}
+      } catch { /* intentional */ }
     }
 
     // Bidirectional sync to post_feedback_bot_data so customer mobile portal always reflects real status

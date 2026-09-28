@@ -56,7 +56,7 @@ const STATUS_META: Record<string, { bg: string; color: string; border: string }>
   Cancelled:           { bg: '#fef2f2', color: '#b91c1c', border: '#fecaca' },
 }
 
-export function isPickupDropTrip(b: ServiceBooking): boolean {
+function isPickupDropTrip(b: ServiceBooking): boolean {
   const hasPickupOrDrop = Boolean(b.pickup_required || b.drop_required)
   const hasAssignedDriver = Boolean(b.driver_name && b.driver_name.toLowerCase() !== 'admin')
   return hasPickupOrDrop && hasAssignedDriver
