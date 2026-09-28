@@ -109,21 +109,6 @@ function daysSinceSent(sentAt: string | null): string {
 function sanitizeSearch(raw: string): string {
   return raw.trim().replace(/[%_,.()]/g, ' ').replace(/\s+/g, ' ').trim()
 }
-
-function getAsiaKolkataTodayBounds() {
-  const d = new Date()
-  const dateString = new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'Asia/Kolkata',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit'
-  }).format(d)
-  return {
-    start: `${dateString}T00:00:00.000+05:30`,
-    end: `${dateString}T23:59:59.999+05:30`
-  }
-}
-
 const STATUS_COLOR: Record<string, string> = {
   open:        'bg-red-100 text-red-700',
   in_progress: 'bg-yellow-100 text-yellow-700',
