@@ -175,7 +175,14 @@ export async function customerGetVisitContext(
     job = await enrichCustomerActiveJob(job, reg, res.vehicle)
   }
 
-  const visitKind = resolveCustomerVisitKind(job, res.visit_kind)
+  let repair_card: Record<string, unknown> | null = res.repair_card ?? null
+  const jcNo = (job?.jc_number as string) || (res.vehicle?.jc_number as string) || null
+  repair_card = await resolveLatestRepairCardRow(reg, jcNo, repair_card)
+  if (repair_card) {
+    repair_card = await attachEstimateDocumentToRepairCard(sessionToken, reg, repair_card)
+  }
+
+  const visitKind = resolveCustomerVisitKind(job, res.visit_kind, repair_card)
 
   const payload: CustomerVisitContextPayload = {
     phone: res.phone,
@@ -183,7 +190,7 @@ export async function customerGetVisitContext(
     job,
     visit_kind: visitKind,
     mechanical_case: res.mechanical_case ?? null,
-    repair_card: res.repair_card ?? null,
+    repair_card,
   }
 
   setCache(`active_job_${sessionToken}_${reg}`, {
@@ -693,9 +700,21 @@ export async function customerGetSettlement(sessionToken: string, regNumber?: st
         .from('bodyshop_repair_cards')
         .select('*')
         .or(`reg_number.ilike.%${regClean}%,reg_number.ilike.%${rawReg}%`)
+        .order('id', { ascending: false })
+        .order('current_stage', { ascending: false })
         .order('created_at', { ascending: false })
-        .limit(1)
-      const bsCard: Record<string, unknown> | null = bsCards && bsCards.length > 0 ? (bsCards[0] as Record<string, unknown>) : null
+        .limit(10)
+
+      let bsCard: Record<string, unknown> | null = null
+      if (bsCards && bsCards.length > 0) {
+        const sorted = [...bsCards].sort((a, b) => {
+          const stageA = Number(a.current_stage || 0)
+          const stageB = Number(b.current_stage || 0)
+          if (stageA !== stageB) return stageB - stageA
+          return Number(b.id || 0) - Number(a.id || 0)
+        })
+        bsCard = sorted[0] as Record<string, unknown>
+      }
 
       // Priority logic:
       // - If we have a mechanical service entry (non-bodyshop service_type), ALWAYS prefer it.
@@ -710,7 +729,7 @@ export async function customerGetSettlement(sessionToken: string, regNumber?: st
       const useBodyshopPath = bsCard && (!entry || !entryIsMechanical) && bsTime > 0
 
       // If Bodyshop is the active case
-      if (useBodyshopPath) {
+      if (useBodyshopPath && bsCard) {
         const repairCardId = Number(bsCard.id)
         const { data: bsSettle } = await supabase
           .from('bodyshop_settlements')
@@ -1266,18 +1285,88 @@ async function attachEstimateDocumentToRepairCard(
   }
 }
 
+async function resolveLatestRepairCardRow(
+  regNumber: string,
+  jcNumber?: string | null,
+  rpcCard?: Record<string, unknown> | null
+): Promise<Record<string, unknown> | null> {
+  const normReg = regNumber.trim().toUpperCase().replace(/[\s-]/g, '')
+  const normJc = String(jcNumber ?? '').trim().toUpperCase()
+
+  if (!normReg && !normJc) return rpcCard ?? null
+
+  try {
+    let q = supabase.from('bodyshop_repair_cards').select('*')
+
+    if (normJc && normReg) {
+      q = q.or(`job_card_no.eq.${normJc},reg_number.ilike.%${normReg}%`)
+    } else if (normJc) {
+      q = q.eq('job_card_no', normJc)
+    } else {
+      q = q.ilike('reg_number', `%${normReg}%`)
+    }
+
+    const { data: rows, error } = await q
+      .order('id', { ascending: false })
+      .order('created_at', { ascending: false })
+      .limit(10)
+
+    if (!error && rows && rows.length > 0) {
+      const candidates = [...rows].sort((a, b) => {
+        const stageA = Number(a.current_stage || 0)
+        const stageB = Number(b.current_stage || 0)
+        if (stageA !== stageB) return stageB - stageA
+        return Number(b.id || 0) - Number(a.id || 0)
+      })
+
+      let best = candidates[0] as Record<string, unknown>
+      if (normJc) {
+        const exactMatches = candidates.filter(
+          (r) => String(r.job_card_no ?? '').trim().toUpperCase() === normJc
+        )
+        if (exactMatches.length > 0) {
+          best = exactMatches[0] as Record<string, unknown>
+        }
+      }
+
+      if (rpcCard) {
+        const rpcId = Number(rpcCard.id || 0)
+        const dbId = Number(best.id || 0)
+        const rpcStage = Number(rpcCard.current_stage || 0)
+        const dbStage = Number(best.current_stage || 0)
+
+        const rpcJc = String(rpcCard.job_card_no ?? '').trim().toUpperCase()
+        if (normJc && rpcJc === normJc && rpcStage >= dbStage) {
+          return rpcCard
+        }
+
+        if (rpcId > dbId || (rpcId === dbId && rpcStage > dbStage)) {
+          return rpcCard
+        }
+      }
+      return best
+    }
+  } catch (err) {
+    console.warn('resolveLatestRepairCardRow error:', err)
+  }
+
+  return rpcCard ?? null
+}
+
 export async function customerGetRepairCard(
   sessionToken: string,
   regNumber?: string | null,
-  opts?: { bypassCache?: boolean }
+  opts?: { bypassCache?: boolean; jobCardNo?: string | null }
 ) {
   const normReg = (regNumber || '').trim().toUpperCase().replace(/[\s-]/g, '')
-  if (!normReg) return null
+  if (!normReg && !opts?.jobCardNo) return null
 
-  const cacheKey = `repair_card_${sessionToken}_${normReg}`
+  const cacheKey = `repair_card_${sessionToken}_${normReg}_${opts?.jobCardNo || ''}`
   if (opts?.bypassCache) apiCache.delete(cacheKey)
   const cached = getCached<Record<string, unknown>>(cacheKey)
   if (cached) return cached
+
+  let rpcCard: Record<string, unknown> | null = null
 
   // 1. Direct RPC
   try {
@@ -1286,36 +1375,21 @@ export async function customerGetRepairCard(
       p_reg_number: regNumber || null,
     })
     if (!error && data) {
-      const row = await attachEstimateDocumentToRepairCard(
-        sessionToken,
-        regNumber || normReg,
-        data as Record<string, unknown>
-      )
-      return setCache(cacheKey, row)
+      rpcCard = data as Record<string, unknown>
     }
   } catch (rpcErr) {
     console.warn('customer_get_repair_card RPC note:', rpcErr)
   }
 
-  // 2. Direct table lookup in bodyshop_repair_cards
-  try {
-    const { data: rows, error } = await supabase
-      .from('bodyshop_repair_cards')
-      .select('*')
-      .ilike('reg_number', `%${normReg}%`)
-      .order('created_at', { ascending: false })
-      .limit(1)
-
-    if (!error && rows && rows.length > 0) {
-      const row = await attachEstimateDocumentToRepairCard(
-        sessionToken,
-        regNumber || normReg,
-        rows[0] as Record<string, unknown>
-      )
-      return setCache(cacheKey, row)
-    }
-  } catch (dbErr) {
-    console.warn('bodyshop_repair_cards direct query error:', dbErr)
+  // 2. Direct table lookup comparing ID DESC & current_stage DESC
+  const latest = await resolveLatestRepairCardRow(normReg, opts?.jobCardNo, rpcCard)
+  if (latest) {
+    const row = await attachEstimateDocumentToRepairCard(
+      sessionToken,
+      regNumber || normReg,
+      latest
+    )
+    return setCache(cacheKey, row)
   }
 
   return null

@@ -154,9 +154,10 @@ export default function CustomerTrackerScreen() {
       setLoading(true)
     }
     try {
+      const activeJcNo = (selected?.jc_number as string) || null
       const [jobResult, repair] = await Promise.all([
         customerGetActiveJob(token, selectedReg).catch(() => ({ job: null })),
-        customerGetRepairCard(token, selectedReg).catch(() => null),
+        customerGetRepairCard(token, selectedReg, { jobCardNo: activeJcNo }).catch(() => null),
       ])
       const activeJob = jobResult.job
       if (activeJob) {
